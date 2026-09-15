@@ -26,6 +26,7 @@ import {
   usePropertyOperationsSummary,
 } from "@/features/payments";
 import { canMutateProperty, useProperty } from "@/features/properties";
+import { operationsFeedGate } from "../lib/operations-feed-gate";
 import { PaymentsStateCard } from "./payments-sections";
 import {
   OperationsDateList,

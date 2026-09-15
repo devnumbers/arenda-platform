@@ -57,23 +57,24 @@ test.describe('экраны операций — пустые состояния
     await captureScreen(page, testInfo, 'operations-never-had-mobile');
   });
 
-  test('направления пустого объекта — «Нет доходов»/«Нет трат» с чипами; скриншот', async ({
+  test('направления пустого объекта — «Операций еще не было» без чипов и поиска; скриншот', async ({
     page,
     seededUser,
   }, testInfo) => {
     await openCabinetWithSeededSession(page, seededUser);
 
+    // Канон направлений #679: на совсем пустом объекте направление, как и
+    // главный список (#478), показывает «Операций еще не было» с CTA —
+    // прежние «Нет доходов»/«Нет трат» (1510-76177/1510-75650) остались в
+    // макетах, но зона живёт конвенцией #478/#571.
     await page.goto(`${GARAGE_OPERATIONS_URL}/income`);
-    await expect(page.getByText('Нет доходов', { exact: true })).toBeVisible();
-    await expect(page.getByText(EMPTY_PERIOD_CAPTION)).toBeVisible();
-    await expect(page.locator('img[src*="operations-empty"]')).toBeVisible();
-    // Чипы и поиск остаются (макет 1510-76177).
-    await expect(page.getByRole('button', { name: 'Поиск операций' })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Все категории/ })).toBeVisible();
+    await expect(page.getByText('Операций еще не было')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Поиск операций' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Все категории/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Добавить операцию' })).toBeVisible();
 
     await page.goto(`${GARAGE_OPERATIONS_URL}/expense`);
-    await expect(page.getByText('Нет трат', { exact: true })).toBeVisible();
-    await expect(page.getByText(EMPTY_PERIOD_CAPTION)).toBeVisible();
+    await expect(page.getByText('Операций еще не было')).toBeVisible();
 
     await captureScreen(page, testInfo, 'operations-type-empty-mobile');
   });
@@ -93,7 +94,7 @@ test.describe('экраны операций — пустые состояния
     await captureScreen(page, testInfo, 'operations-categories-empty-mobile');
   });
 
-  test('операции квартиры: сводка (доходы 0 ₽ серым), список по датам', async ({
+  test('операции квартиры: сводка направлений за всё время, список по датам', async ({
     page,
     seededUser,
   }) => {
@@ -104,27 +105,32 @@ test.describe('экраны операций — пустые состояния
     await expect(page.getByRole('button', { name: 'Поиск операций' })).toBeVisible();
     await expect(page.getByRole('button', { name: /Все категории/ })).toBeVisible();
 
-    // Сидовые оплаченные операции — только расходы («Интернет»); доходов
-    // нет ни в сиде, ни в других сценариях: карточка «Доходы» — 0 ₽.
+    // Дефолт «весь период» (#674): карточки направлений показывают итоги
+    // за всё время — доход один (оверлей живой приёмки, «Аренда
+    // машиноместа»), расходы — 57 сидовых «Интернет» по 1000 ₽.
     const incomeCard = page.getByRole('button', { name: 'Открыть доходы объекта' });
-    await expect(incomeCard.getByText('0 ₽')).toBeVisible();
+    await expect(incomeCard.getByText(/2\s000\s₽/)).toBeVisible();
     const expenseCard = page.getByRole('button', { name: 'Открыть расходы объекта' });
-    await expect(expenseCard.getByText(/₽/)).toBeVisible();
+    await expect(expenseCard.getByText(/57\s000\s₽/)).toBeVisible();
 
     await expect(page.getByText('Сегодня').first()).toBeVisible();
     await expect(page.getByText('Интернет').first()).toBeVisible();
     await expect(page.getByText('Операций еще не было')).toHaveCount(0);
   });
 
-  test('направления квартиры: доходы пусты («Нет доходов»), расходы — со списком', async ({
+  test('направления квартиры: доходы — карточка и строка оверлея, расходы — со списком', async ({
     page,
     seededUser,
   }) => {
     await openCabinetWithSeededSession(page, seededUser);
 
+    // Дефолт «весь период» (#675): карточка направления показывает итог за
+    // всё время. Доход у квартиры один — «Аренда машиноместа» из оверлея
+    // живой приёмки (2 000 ₽), объект не пуст — без neverHad-гейта.
     await page.goto(`${APARTMENT_OPERATIONS_URL}/income`);
-    await expect(page.getByText('Нет доходов', { exact: true })).toBeVisible();
-    await expect(page.getByText(EMPTY_PERIOD_CAPTION)).toBeVisible();
+    await expect(page.getByText('2 000 ₽', { exact: true })).toBeVisible();
+    await expect(page.getByText('Аренда машиноместа').first()).toBeVisible();
+    await expect(page.getByText('Операций еще не было')).toHaveCount(0);
 
     await page.goto(`${APARTMENT_OPERATIONS_URL}/expense`);
     await expect(page.getByText('Расходы объекта')).toBeVisible();
@@ -157,8 +163,10 @@ test.describe('экраны операций — пустые состояния
     await openCabinetWithSeededSession(page, seededUser);
 
     await page.goto(`${APARTMENT_OPERATIONS_URL}/expense${EMPTY_PERIOD_QUERY}`);
-    await expect(page.getByText('Нет трат', { exact: true })).toBeVisible();
+    // Пустое окно на направлении (#679): карточка с нулём и общая подпись
+    // пустой ленты — H1 «Нет трат» ушёл вместе с листанием периода.
     await expect(page.getByText(EMPTY_PERIOD_CAPTION)).toBeVisible();
+    await expect(page.getByText('0 ₽')).toBeVisible();
 
     await page.goto(`${APARTMENT_OPERATIONS_URL}/categories${EMPTY_PERIOD_QUERY}`);
     await expect(page.locator('img[src*="operations-categories"]')).toBeVisible();
@@ -197,9 +205,10 @@ test.describe('экраны операций — сквозной флоу', () 
     await page.getByRole('button', { name: 'Назад' }).click();
     await expect(page).toHaveURL(new RegExp('/operations$'));
 
-    // Чип периода открывает канонический пикер поверх списка; «Назад»
-    // пикера закрывает его, адрес списка не меняется.
-    await page.getByRole('button', { name: /\d{4}/ }).click();
+    // Чип «Период» — нейтральный в дефолте «весь период» (#670) — открывает
+    // канонический пикер поверх списка; «Назад» пикера закрывает его,
+    // адрес списка не меняется.
+    await page.getByRole('button', { name: 'Период', exact: true }).click();
     await expect(page.getByText('Выберите период')).toBeVisible();
     await page.getByRole('dialog').getByRole('button', { name: 'Назад' }).click();
     await expect(page).toHaveURL(new RegExp('/operations$'));
@@ -220,9 +229,9 @@ test.describe('экраны операций — сквозной флоу', () 
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto(APARTMENT_OPERATIONS_URL);
 
-    // Лейбл чипа периода зависит от применённого выбора («Сентябрь 2026»,
-    // «5 — 10 сент.»…), поэтому берём его как соседа стабильного «Все
-    // категории». Диапазон выбираем в прошлом месяце — все его дни
+    // Чип периода в дефолте «весь период» нейтральный («Период», #670),
+    // с применённым выбором — диапазон; берём его как соседа стабильного
+    // «Все категории». Диапазон выбираем в прошлом месяце — все его дни
     // доступны при любом дне прогона.
     const periodChip = page
       .getByRole('button', { name: 'Все категории' })
@@ -266,23 +275,51 @@ test.describe('экраны операций — сквозной флоу', () 
     seededUser,
   }) => {
     await openCabinetWithSeededSession(page, seededUser);
+    // Дефолт «весь период» (#675): all-time сводка расходов квартиры —
+    // 57 оплаченных «Интернет» по 1000 ₽ (55 базового сида + 2 оверлея),
+    // значение стабильно при любом дне прогона.
+    await page.goto(`${APARTMENT_OPERATIONS_URL}/expense`);
+    await expect(page.getByText(/57\s000\s₽/)).toBeVisible();
+
     // Замедляем сводку: детерминированное окно «загрузка идёт», в котором
     // раньше страница целиком подменялась скелетонами.
     await page.route('**/operations/summary*', async (route) => {
       await new Promise((resolve) => setTimeout(resolve, 600));
       await route.continue();
     });
-    await page.goto(`${APARTMENT_OPERATIONS_URL}/expense`);
-    await expect(page.getByRole('button', { name: 'Предыдущий месяц' })).toBeVisible();
-    await expect(page.getByText(/2\s000\s₽/)).toBeVisible();
 
-    await page.getByRole('button', { name: 'Предыдущий месяц' }).click();
+    // Период применяем чипом и пикером (#675): окно «1 — конец месяца» два
+    // месяца назад — там ровно одна сидовая операция при любом дне прогона
+    // (дневные «сегодня/вчера» туда не попадают, помесячные — по одной).
+    await page.getByRole('button', { name: 'Период', exact: true }).click();
+    await expect(page.getByText('Выберите период')).toBeVisible();
+    const twoMonthsAgo = new Date();
+    twoMonthsAgo.setDate(1);
+    twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
+    const monthBlock = page.locator('section').filter({
+      has: page.getByRole('heading', {
+        name: `${PICKER_MONTH_NAMES[twoMonthsAgo.getMonth()]}, ${twoMonthsAgo.getFullYear()}`,
+      }),
+    });
+    const lastDay = new Date(
+      twoMonthsAgo.getFullYear(),
+      twoMonthsAgo.getMonth() + 1,
+      0,
+    ).getDate();
+    await monthBlock.getByRole('button', { name: '1', exact: true }).click();
+    await monthBlock.getByRole('button', { name: String(lastDay), exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Выбрать', exact: true }).click();
+    await expect(page).toHaveURL(/\?from=/);
 
-    // Пока сводка августа в полёте: скелетона нет, H1-сумма (прежнего
-    // периода) не исчезает — страница не дёргается.
+    // Пока сводка окна в полёте: скелетона нет, прежняя all-time сумма не
+    // исчезает — страница не дёргается.
     await expect(page.locator('section[aria-hidden] .animate-pulse')).toHaveCount(0);
-    await expect(page.getByText(/2\s000\s₽/)).toBeVisible();
-    await expect(page.getByText(/3\s000\s₽/)).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText(/57\s000\s₽/)).toBeVisible();
+
+    // Сводка окна доехала: одна операция месяца = 1 000 ₽, all-time сумма
+    // ушла вместе со сменой данных — без скелетона и мигания.
+    await expect(page.getByText(/57\s000\s₽/)).toHaveCount(0, { timeout: 5_000 });
+    await expect(page.getByText(/1\s000\s₽/).first()).toBeVisible();
   });
 
   test('фильтры периода и категории не сбрасываются при переходе между списками', async ({
@@ -311,36 +348,5 @@ test.describe('экраны операций — сквозной флоу', () 
     await expect(page).toHaveURL(
       new RegExp(`/operations\\?from=${from}&to=${to}&category=internet$`),
     );
-  });
-
-  test('стрелки сдвигают произвольный период на его же длину — 3–14 становится соседними 12 днями', async ({
-    page,
-    seededUser,
-  }) => {
-    const first = new Date();
-    first.setDate(1);
-    first.setMonth(first.getMonth() - 1);
-    const second = new Date(first);
-    second.setMonth(second.getMonth() - 1);
-    const ym = (date: Date): string =>
-      `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-
-    await openCabinetWithSeededSession(page, seededUser);
-    await page.goto(`${APARTMENT_OPERATIONS_URL}/expense?from=${ym(first)}-03&to=${ym(first)}-14`);
-    await expect(page.getByRole('button', { name: 'Предыдущий месяц' })).toBeVisible();
-
-    // 3–14 <прошлый месяц> при листании назад — предыдущие 12 дней:
-    // 22 <позапрошлый> — 2 <прошлый>, окна стыкуются без нахлёста.
-    await page.getByRole('button', { name: 'Предыдущий месяц' }).click();
-    await expect(page).toHaveURL(new RegExp(`from=${ym(second)}-22&to=${ym(first)}-02$`));
-
-    // Вперёд — исходное окно 3–14 (листание обратимо).
-    await expect(page.getByRole('button', { name: 'Следующий месяц' })).toBeEnabled();
-    await page.getByRole('button', { name: 'Следующий месяц' }).click();
-    await expect(page).toHaveURL(new RegExp(`from=${ym(first)}-03&to=${ym(first)}-14$`));
-
-    // Дефолтный период — текущий месяц: следующее окно ушло бы в будущее.
-    await page.goto(`${APARTMENT_OPERATIONS_URL}/expense`);
-    await expect(page.getByRole('button', { name: 'Следующий месяц' })).toBeDisabled();
   });
 });
