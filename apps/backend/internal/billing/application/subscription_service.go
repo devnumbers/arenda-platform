@@ -575,8 +575,10 @@ func (s *SubscriptionService) executePlannedPayment(ctx context.Context, plan ch
 // — the server-side expiry is the truth (issue #616) — or persists a fresh
 // pending payment: the durable record of the user's decision that survives a
 // crash before the provider call, with its form deadline anchored at creation
-// so the same absolute instant is passed to the provider. The pending-payments
-// partial unique index is the durable backstop for concurrent initiations.
+// so the same absolute instant is passed to the provider. Concurrency is
+// guarded in two layers: the subscription row lock serializes initiations
+// across different targets, while the pending-payments partial unique index
+// (same user, tariff, period) durably backstops same-target duplicates.
 func (s *SubscriptionService) planPayment(
 	ctx context.Context,
 	stores *txStores,

@@ -12,6 +12,10 @@ const (
 	// addCard flag.
 	AddCardReturnPath = "/profile/tariff/payment-methods"
 
+	// PaymentReturnPath — the change-success screen: it polls the payment
+	// status by its paymentId query param until the outcome settles.
+	PaymentReturnPath = "/profile/tariff/change/success"
+
 	// AddCardResultSuccess and AddCardResultFailed are the values of the
 	// addCard query flag the screen's mount effect reads.
 	AddCardResultSuccess = "success"

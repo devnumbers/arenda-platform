@@ -278,19 +278,14 @@ func (h *FakeConfirmHandlers) writeConfirmAck(r *http.Request, w http.ResponseWr
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, map[string]any{"status": "ok"})
 }
 
-// The frontend return route the GET bank-redirects land on (issue #663).
-// It mirrors an existing frontend route (ROUTES in apps/frontend): the
-// change success screen polls the payment status by its paymentId query
-// param. The card-binding return shares httpsupport.AddCardReturnURL with
-// the T-Kassa add-card return — the same entry point by design.
-const paymentReturnPath = "/profile/tariff/change/success"
-
 // paymentReturnURL builds the frontend redirect target of a completed form
-// payment: the payment screen keyed by paymentId — its polling resolves the
-// actual outcome (succeeded, failed, still pending).
+// payment (issue #663): the change-success screen keyed by paymentId — its
+// polling resolves the actual outcome (succeeded, failed, still pending).
+// The card-binding return shares httpsupport.AddCardReturnURL with the
+// T-Kassa add-card return — the same entry point by design.
 func (h *FakeConfirmHandlers) paymentReturnURL(paymentID uuid.UUID) string {
 	q := url.Values{"paymentId": {paymentID.String()}}
-	return h.webOrigin + paymentReturnPath + "?" + q.Encode()
+	return h.webOrigin + httpsupport.PaymentReturnPath + "?" + q.Encode()
 }
 
 // bindingReturnURL builds the frontend redirect target of a completed card

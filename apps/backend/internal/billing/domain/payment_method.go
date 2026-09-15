@@ -30,22 +30,21 @@ const (
 // masked card number. Everything it cannot classify is unknown, never an
 // error: the field is display metadata, not identity.
 func CardSystemFromMask(displayMask string) CardSystem {
-	for _, c := range []byte(displayMask) {
-		if c < '0' || c > '9' {
-			break
-		}
-		switch c {
-		case '2':
-			return CardSystemMir
-		case '4':
-			return CardSystemVisa
-		case '5':
-			return CardSystemMastercard
-		default:
-			return CardSystemUnknown
-		}
+	if displayMask == "" {
+		return CardSystemUnknown
 	}
-	return CardSystemUnknown
+	// Only the first byte classifies; a mask starting outside the digits
+	// (e.g. the bullet tail) is unknown, never an error.
+	switch c := displayMask[0]; c {
+	case '2':
+		return CardSystemMir
+	case '4':
+		return CardSystemVisa
+	case '5':
+		return CardSystemMastercard
+	default:
+		return CardSystemUnknown
+	}
 }
 
 // PaymentMethod is a saved payment instrument of a user (a bound card,
