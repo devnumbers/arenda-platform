@@ -18,24 +18,16 @@ function method(overrides: Partial<PaymentMethod> = {}): PaymentMethod {
 }
 
 describe('paymentMethodTitle', () => {
-  it('название системы и хвост маски — «Мир •••• 0700» (макет 1879-71079)', () => {
-    expect(paymentMethodTitle(method())).toBe('Мир •••• 0700');
-  });
-
-  it('Visa и Mastercard — латиницей', () => {
-    expect(paymentMethodTitle(method({ cardSystem: 'visa' }))).toBe('Visa •••• 0700');
-    expect(paymentMethodTitle(method({ cardSystem: 'mastercard' }))).toBe(
-      'Mastercard •••• 0700',
-    );
-  });
-
-  it('без распознанной системы — только хвост (как в «Операциях», #624)', () => {
+  it('только хвост маски при любой системе — бренд не выводим (решение владельца 15.09, #611)', () => {
+    expect(paymentMethodTitle(method({ cardSystem: 'mir' }))).toBe('•••• 0700');
+    expect(paymentMethodTitle(method({ cardSystem: 'visa' }))).toBe('•••• 0700');
+    expect(paymentMethodTitle(method({ cardSystem: 'mastercard' }))).toBe('•••• 0700');
     expect(paymentMethodTitle(method({ cardSystem: 'unknown' }))).toBe('•••• 0700');
   });
 
   it('маска короче 4 цифр — как есть', () => {
-    expect(paymentMethodTitle(method({ displayMask: '41' }))).toBe('Мир 41');
-    expect(paymentMethodTitle(method({ displayMask: '4111' }))).toBe('Мир •••• 4111');
+    expect(paymentMethodTitle(method({ displayMask: '41' }))).toBe('41');
+    expect(paymentMethodTitle(method({ displayMask: '4111' }))).toBe('•••• 4111');
   });
 });
 
