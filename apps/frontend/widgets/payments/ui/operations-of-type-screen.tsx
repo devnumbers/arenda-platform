@@ -19,13 +19,11 @@ import {
 } from "@/shared/ui/design";
 import { clientTodayIso, type PaymentOperation } from "@/entities/payment";
 import {
-  defaultOperationsPeriod,
   groupOperationsByDate,
   operationsCategoryChipLabel,
   operationsCategoryRows,
   operationsFiltersHref,
-  operationsPeriodDefaultChipLabel,
-  operationsPeriodRangeChipLabel,
+  operationsPeriodChipLabel,
   shiftOperationsPeriod,
   useOperationsFilters,
   usePropertyOperationsScopedPaged,
@@ -52,10 +50,13 @@ const SCREEN_COPY = {
  * маркер до правильных иконок владельца); ниже — список операций одного
  * типа за период, группировка и строки как на главном (общий
  * OperationsDateList). Скоуп сужен `type` — фильтр списка и сводки #473.
- * Период и категории живут в адресе (#477): дефолт — текущий месяц,
- * стрелки сдвигают применённый период (правая гасится, когда период
- * упёрся в текущий месяц — на экранах только paid-операции, резолюция
- * #474), выбор чипами — шиты #477. Порции по 50 с бесконечным скроллом.
+ * Период и категории живут в адресе (#477): дефолт — весь период (#675,
+ * карта #669, как на главном #674) — без явного выбора даты в запрос не
+ * уходят, чип «Период» нейтральный; стрелки сдвигают применённый период
+ * (правая гасится, когда период упёрся в текущий месяц — на экранах только
+ * paid-операции, резолюция #474), без применённого периода обе погашены —
+ * листать нечего, заголовок показывает итог за всё время. Порции по 50 с
+ * бесконечным скроллом.
  */
 export function OperationsOfTypeScreen({
   propertyId,
@@ -69,21 +70,25 @@ export function OperationsOfTypeScreen({
   const { filters, applyPeriod } = useOperationsFilters();
 
   const today = clientTodayIso();
-  const period = filters.period ?? defaultOperationsPeriod(today);
   // Пикер периода — канонический оверлей поверх списка (решение владельца
   // 2026-09-04, раньше — отдельный маршрут /operations/period).
   const [periodOpen, setPeriodOpen] = useState(false);
-  // Правая стрелка гасится, когда следующее окно уходит в будущее (экраны
-  // операций — только paid, резолюция #474): период листается на свою же
-  // длину (решение владельца, #472).
-  const nextIsFuture = shiftOperationsPeriod(period, 1).from > today;
+  // Дефолт — весь период (#675): период в запросе только с явным выбором,
+  // без него даты не уходят; пикер открывается пустым, «Сбросить»
+  // возвращает к дефолту. Стрелки листают применённый период на свою же
+  // длину (решение владельца, #472); без применённого периода обе погашены
+  // — листать нечего. Правая гасится, когда следующее окно уходит в
+  // будущее (экраны операций — только paid, резолюция #474).
+  const nextIsFuture =
+    filters.period !== null &&
+    shiftOperationsPeriod(filters.period, 1).from > today;
 
   const periodScope: PaymentOperationScope = {
     status: "paid",
     order: "desc",
     type,
-    dateFrom: period.from,
-    dateTo: period.to,
+    dateFrom: filters.period?.from,
+    dateTo: filters.period?.to,
   };
   const listScope: PaymentOperationScope =
     filters.categories.length > 0
@@ -165,14 +170,12 @@ export function OperationsOfTypeScreen({
       <PageContent>
         <div className="flex flex-col gap-6 pt-4">
           {/* Чипы фильтров — как на главном (Figma 1502:65149): период
-           * следует за листанием; выбор — отдельные страницы (#477). */}
+           * применён — синий, дефолт «весь период» — нейтральный серый
+           * (#675); выбор — отдельные страницы (#477). */}
           <OperationsFilterChips
             className="px-6"
-            periodLabel={
-              filters.period !== null
-                ? operationsPeriodRangeChipLabel(period)
-                : operationsPeriodDefaultChipLabel(period)
-            }
+            periodLabel={operationsPeriodChipLabel(filters.period)}
+            periodActive={filters.period !== null}
             categoriesLabel={operationsCategoryChipLabel(
               filters.categories,
               categoryRows,
@@ -209,14 +212,19 @@ export function OperationsOfTypeScreen({
                 <>
                   {/* Сумма периода с листанием по месяцам (Figma 1502:65151):
                    * стрелки 44×44, H1 28/32 по центру; период применяется
-                   * в адрес (#477), дефолт — текущий месяц. */}
+                   * в адрес (#477), дефолт — весь период (#675): без
+                   * применённого периода стрелки погашены, H1 — итог за
+                   * всё время. */}
                   <div className="flex items-stretch px-3.5">
                     <IconButton
                       icon={<ArrowLeft className="text-error" />}
                       label="Предыдущий месяц"
-                      onClick={() =>
-                        applyPeriod(shiftOperationsPeriod(period, -1))
-                      }
+                      disabled={filters.period === null}
+                      onClick={() => {
+                        if (filters.period !== null) {
+                          applyPeriod(shiftOperationsPeriod(filters.period, -1));
+                        }
+                      }}
                     />
                     <div className="flex min-w-0 flex-1 items-center justify-center">
                       <span className="truncate text-[28px] font-semibold leading-8 text-content">
@@ -228,10 +236,12 @@ export function OperationsOfTypeScreen({
                     <IconButton
                       icon={<SmallArrowRight className="text-error" />}
                       label="Следующий месяц"
-                      disabled={nextIsFuture}
-                      onClick={() =>
-                        applyPeriod(shiftOperationsPeriod(period, 1))
-                      }
+                      disabled={filters.period === null || nextIsFuture}
+                      onClick={() => {
+                        if (filters.period !== null) {
+                          applyPeriod(shiftOperationsPeriod(filters.period, 1));
+                        }
+                      }}
                     />
                   </div>
 
