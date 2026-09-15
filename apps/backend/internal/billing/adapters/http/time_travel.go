@@ -31,6 +31,12 @@ const TimeShiftRoute = "/admin/users/{id}/subscription/time-shift"
 // billing worker phases, so a shifted boundary is picked up immediately.
 const BillingTickRoute = "/admin/billing/tick"
 
+// TimeTravelStatusRoute is GET /admin/billing/time-travel — the discovery
+// probe the admin panel (issue #666) uses to show itself only where the rig
+// exists: in a rig-less build the route is not mounted, the probe answers
+// 404, and the panel stays hidden.
+const TimeTravelStatusRoute = "/admin/billing/time-travel"
+
 // TimeShiftBackend is the application slice the time-shift endpoint needs —
 // declared here, at the consumer, per ADR 0035.
 type TimeShiftBackend interface {
@@ -63,8 +69,22 @@ func NewTimeTravelHandlers(subscriptions TimeShiftBackend, tick BillingTickRunne
 // single source of truth the HTTP wiring uses, called only when the rig is
 // enabled.
 func (h *TimeTravelHandlers) MountRoutes(r chi.Router) {
+	r.With(httpsupport.AdminOnlyMiddleware).Get(TimeTravelStatusRoute, h.Status)
 	r.With(httpsupport.AdminOnlyMiddleware).Post(TimeShiftRoute, h.ShiftTime)
 	r.With(httpsupport.AdminOnlyMiddleware).Post(BillingTickRoute, h.RunTick)
+}
+
+// timeTravelStatus is the wire shape of the discovery answer: the mounted rig
+// is enabled by construction, so the marker is a constant.
+type timeTravelStatus struct {
+	Enabled bool `json:"enabled"`
+}
+
+// Status implements GET /admin/billing/time-travel (issue #666) — the probe
+// the admin panel fires before showing itself. Existence of the route is the
+// signal; the body only makes the contract self-describing.
+func (h *TimeTravelHandlers) Status(w http.ResponseWriter, r *http.Request) {
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, timeTravelStatus{Enabled: true})
 }
 
 // timeShiftBody is the wire shape of a shift request: shiftHours for the raw

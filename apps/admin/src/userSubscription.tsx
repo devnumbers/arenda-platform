@@ -42,7 +42,7 @@ import {
 // dataProvider, каждая пишет запись в историю переходов и аудит с актёром-админом.
 
 /** Подписка карточки пользователя: record.subscription из GET /admin/users/{id}. */
-const useUserSubscription = (): UserSubscriptionRecord => {
+export const useUserSubscription = (): UserSubscriptionRecord => {
   const record = useRecordContext();
   const subscription = (record as Record<string, unknown> | undefined)?.subscription;
   return subscription && typeof subscription === 'object' ? subscription : {};

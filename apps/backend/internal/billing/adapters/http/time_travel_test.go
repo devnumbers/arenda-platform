@@ -77,6 +77,15 @@ func timeTravelRequest(t *testing.T, target string, adminID uuid.UUID, body stri
 	return req
 }
 
+// timeTravelGetRequest builds an admin-authenticated GET request.
+func timeTravelGetRequest(t *testing.T, target string, adminID uuid.UUID) *http.Request {
+	t.Helper()
+	return httptest.NewRequestWithContext(
+		httpsupport.WithActor(t.Context(), adminID, actor.RoleAdmin),
+		http.MethodGet, target, http.NoBody,
+	)
+}
+
 func TestTimeShift_ForwardsRawShiftAndAdmin(t *testing.T) {
 	t.Parallel()
 	adminID := uuid.Must(uuid.NewV7())
@@ -222,27 +231,57 @@ func TestRunTick_TriggersOnePass(t *testing.T) {
 	}
 }
 
+// TestTimeTravelStatus_ProbesEnabledRig proves GET /admin/billing/time-travel
+// answers 200 with the enabled marker — the discovery call the admin panel
+// (issue #666) uses to show itself only where the rig exists. In a rig-less
+// build the route is not mounted at all (404), so the panel stays hidden.
+func TestTimeTravelStatus_ProbesEnabledRig(t *testing.T) {
+	t.Parallel()
+	adminID := uuid.Must(uuid.NewV7())
+
+	w := httptest.NewRecorder()
+	newTimeTravelRouter(&fakeTimeShiftBackend{}, &fakeTickRunner{}).ServeHTTP(w,
+		timeTravelGetRequest(t, "/admin/billing/time-travel", adminID))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	if got := strings.TrimSpace(w.Body.String()); got != `{"enabled":true}` {
+		t.Errorf(`body = %q, want {"enabled":true}`, got)
+	}
+}
+
 func TestTimeTravelRoutes_RequireAdminRole(t *testing.T) {
 	t.Parallel()
 	userID := uuid.Must(uuid.NewV7())
+	adminID := uuid.Must(uuid.NewV7())
 
-	// A non-admin session is refused by the mounted middleware before the
-	// handlers run.
-	req := httptest.NewRequestWithContext(
-		httpsupport.WithActor(t.Context(), userID, actor.RoleOwner),
-		http.MethodPost, "/admin/billing/tick", http.NoBody,
-	)
-	w := httptest.NewRecorder()
-	newTimeTravelRouter(&fakeTimeShiftBackend{}, &fakeTickRunner{}).ServeHTTP(w, req)
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("owner on the tick route: status = %d, want 403", w.Code)
+	// Every rig route sits behind the mounted middleware: a non-admin session
+	// is refused before the handlers run, an anonymous one too.
+	routes := []string{
+		"/admin/billing/time-travel",
+		"/admin/billing/tick",
+		"/admin/users/" + userID.String() + "/subscription/time-shift",
 	}
+	for _, route := range routes {
+		method := http.MethodPost
+		if route == TimeTravelStatusRoute {
+			method = http.MethodGet
+		}
+		w := httptest.NewRecorder()
+		newTimeTravelRouter(&fakeTimeShiftBackend{}, &fakeTickRunner{}).ServeHTTP(w,
+			httptest.NewRequestWithContext(
+				httpsupport.WithActor(t.Context(), adminID, actor.RoleOwner),
+				method, route, http.NoBody,
+			))
+		if w.Code != http.StatusForbidden {
+			t.Errorf("owner on %s: status = %d, want 403", route, w.Code)
+		}
 
-	// An anonymous request answers 401.
-	w = httptest.NewRecorder()
-	newTimeTravelRouter(&fakeTimeShiftBackend{}, &fakeTickRunner{}).ServeHTTP(w,
-		httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/admin/billing/tick", http.NoBody))
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("anonymous on the tick route: status = %d, want 401", w.Code)
+		w = httptest.NewRecorder()
+		newTimeTravelRouter(&fakeTimeShiftBackend{}, &fakeTickRunner{}).ServeHTTP(w,
+			httptest.NewRequestWithContext(t.Context(), method, route, http.NoBody))
+		if w.Code != http.StatusUnauthorized {
+			t.Errorf("anonymous on %s: status = %d, want 401", route, w.Code)
+		}
 	}
 }

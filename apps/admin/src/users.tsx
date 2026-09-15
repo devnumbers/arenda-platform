@@ -24,6 +24,7 @@ import {
 } from './fields';
 import { AuditLogDatagrid } from './auditLogs';
 import { SubscriptionActions, SubscriptionStateFields, SubscriptionTransitionsPanel } from './userSubscription';
+import { TimeTravelPanel } from './timeTravel';
 
 const userFilters = [
   <TextInput key="phone" source="phone" label="Телефон" />,
@@ -107,6 +108,7 @@ export const UserShow = () => (
       <Tab label="Подписка">
         <SubscriptionActions />
         <SubscriptionStateFields />
+        <TimeTravelPanel />
         <SubscriptionTransitionsPanel />
       </Tab>
       <Tab label="Статистика">
