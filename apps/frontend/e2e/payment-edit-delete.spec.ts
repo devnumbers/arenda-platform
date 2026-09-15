@@ -192,19 +192,23 @@ test.describe('экран правки платежа', () => {
     await page.goto(URLS.insuranceEdit);
 
     await page.getByRole('button', { name: 'Окончание платежа' }).click();
-    await expect(page.getByText('Выбор даты')).toBeVisible();
-    // Сегодняшний день активен в текущем гриде (minDate = сегодня).
-    const day = String(new Date().getDate());
+    // Канон (04.09): бесконечный календарь поверх формы; черновик при
+    // открытии — сегодня (день читаем из маркера aria-current), коммит —
+    // «Выбрать» (тап по выбранному дню снял бы черновик).
+    const calendar = page.getByRole('dialog', { name: 'Выбрать дату' });
+    await expect(calendar).toBeVisible();
+    const todayCell = calendar.locator('button[aria-current="date"]');
+    const todayLabel = ((await todayCell.textContent()) ?? '').trim();
+    await calendar.getByRole('button', { name: 'Выбрать', exact: true }).click();
+    await expect(calendar).toHaveCount(0);
+    // Дата применена к форме (правка не сохранена — после перезагрузки
+    // снова «Бессрочно»); дата текущего года — без года, месяц родительный.
     const monthGen = [
       'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
       'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
     ][new Date().getMonth()];
-    await page.getByRole('button', { name: day, exact: true }).click();
-
-    // Дата применена к форме (правка не сохранена — после перезагрузки
-    // снова «Бессрочно»).
     await expect(page.getByRole('button', { name: 'Окончание платежа' })).toHaveText(
-      new RegExp(`${day} ${monthGen}`),
+      new RegExp(`${todayLabel} ${monthGen}`),
     );
     await expect(page.getByRole('button', { name: 'Сохранить изменения' })).toBeEnabled();
     await page.reload();

@@ -142,6 +142,10 @@ log "Starting backend on $BACKEND_URL"
 # спека гейтится на DADATA_BASE_URL); экспортированный настоящий ключ
 # (например, из корневого .env) включает живой DaData в локальных прогонах.
 E2E_DADATA_API_KEY="${DADATA_API_KEY:-e2e-dadata-dummy}"
+# IP-лимитер ослаблен: сюит прогревает ~14 API на маунт хаба (#626) и живёт
+# одним IP — дефолт 20 rps/burst 40 пробивается 429 на мутациях (#688).
+E2E_RATE_LIMIT_IP_RPS=200
+E2E_RATE_LIMIT_IP_BURST=400
 (
   cd "$PROJECT_ROOT"
   APP_ENV=local \
@@ -155,6 +159,8 @@ E2E_DADATA_API_KEY="${DADATA_API_KEY:-e2e-dadata-dummy}"
   WEB_ORIGIN="$FRONTEND_URL" \
   ENCRYPTION_KEY="$E2E_ENCRYPTION_KEY" \
   DADATA_API_KEY="$E2E_DADATA_API_KEY" \
+  RATE_LIMIT_IP_RPS="$E2E_RATE_LIMIT_IP_RPS" \
+  RATE_LIMIT_IP_BURST="$E2E_RATE_LIMIT_IP_BURST" \
   LOG_FORMAT=json \
   LOG_LEVEL=info \
   LOG_SUCCESSFUL_REQUESTS=false \
