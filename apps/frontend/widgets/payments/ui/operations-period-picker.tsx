@@ -3,43 +3,68 @@
 import type { JSX } from 'react';
 import { clientTodayIso } from '@/entities/payment';
 import {
-  defaultOperationsPeriod,
+  type OperationsPeriod,
   useGlobalOperationsFilters,
   useOperationsFilters,
 } from '@/features/payments';
 import { CalendarRangePicker } from '@/shared/ui/design';
 
-/** Пикер периода операций — канон CalendarRangePicker поверх списков
- * (решение владельца 2026-09-04, вместо маршрута /operations/period):
- * подтверждение пишет диапазон в адрес списка с заменой записи истории
- * (пикер в ней не остаётся, как прежняя страница периода). Подтверждение
- * неизменённого дефолта не делает период «явным» — чип остаётся
- * «Сентябрь 2026» (период не пишется в URL). Чип прыжка «Месяц Год ⌄»
- * скрыт (решение владельца 2026-09-05) — вглубь прошлого ведёт прокрутка
- * ленты с дорисовкой. */
+/** Тело пикера периода — канон CalendarRangePicker поверх списков (решение
+ * владельца 2026-09-04): подтверждение пишет диапазон с заменой записи
+ * истории (пикер в ней не остаётся), пустой старт и «Сбросить» — канон
+ * #670: без применённого периода открывается ничего не предвыбранным,
+ * «Сбросить» возвращает к дефолту (null — from/to уходят из адреса). Чип
+ * прыжка «Месяц Год ⌄» скрыт (решение владельца 2026-09-05) — вглубь
+ * прошлого ведёт прокрутка ленты с дорисовкой. Состояние передаёт
+ * вызывающий хук — объектный или глобальный. */
+function PeriodPickerDialogBody({
+  period,
+  applyPeriod,
+  onClose,
+}: {
+  readonly period: OperationsPeriod | null;
+  readonly applyPeriod: (
+    period: OperationsPeriod | null,
+    options?: { readonly replace?: boolean },
+  ) => void;
+  readonly onClose: () => void;
+}): JSX.Element {
+  const today = clientTodayIso();
+
+  return (
+    <CalendarRangePicker
+      today={today}
+      value={period}
+      monthJump={false}
+      onClose={onClose}
+      onConfirm={(range) => {
+        applyPeriod(range, { replace: true });
+        onClose();
+      }}
+      onReset={() => {
+        applyPeriod(null, { replace: true });
+        onClose();
+      }}
+    />
+  );
+}
+
+/** Пикер периода объектных экранов. Пустой старт и «Сбросить» — как в
+ * глобальном (#674, канон #670); диалог разделяют все объектные экраны
+ * операций — экраны направлений/категорий наследуют в своих тикетах
+ * (#675/#676), до тех пор их данные при null держат месячный дефолт. */
 export function OperationsPeriodPickerDialog({
   onClose,
 }: {
   readonly onClose: () => void;
 }): JSX.Element {
   const { filters, applyPeriod } = useOperationsFilters();
-  const today = clientTodayIso();
-  const applied = filters.period ?? defaultOperationsPeriod(today);
 
   return (
-    <CalendarRangePicker
-      today={today}
-      value={applied}
-      monthJump={false}
+    <PeriodPickerDialogBody
+      period={filters.period}
+      applyPeriod={applyPeriod}
       onClose={onClose}
-      onConfirm={(range) => {
-        const stillDefault =
-          filters.period === null && range.from === applied.from && range.to === applied.to;
-        if (!stillDefault) {
-          applyPeriod(range, { replace: true });
-        }
-        onClose();
-      }}
     />
   );
 }
@@ -55,22 +80,12 @@ export function OperationsGlobalPeriodPickerDialog({
   readonly onClose: () => void;
 }): JSX.Element {
   const { filters, applyPeriod } = useGlobalOperationsFilters();
-  const today = clientTodayIso();
 
   return (
-    <CalendarRangePicker
-      today={today}
-      value={filters.period}
-      monthJump={false}
+    <PeriodPickerDialogBody
+      period={filters.period}
+      applyPeriod={applyPeriod}
       onClose={onClose}
-      onConfirm={(range) => {
-        applyPeriod(range, { replace: true });
-        onClose();
-      }}
-      onReset={() => {
-        applyPeriod(null, { replace: true });
-        onClose();
-      }}
     />
   );
 }
