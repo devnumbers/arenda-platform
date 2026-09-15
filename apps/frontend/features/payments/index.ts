@@ -75,13 +75,11 @@ export {
 } from './lib/sort-payments-by-next-occurrence';
 export { overduePaymentIdsOf } from './lib/overdue-payment-ids';
 export {
-  defaultOperationsPeriod,
   operationsCategoryChipLabel,
   operationsCategoryRows,
   operationsFiltersHref,
   operationsFiltersParams,
   operationsPeriodChipLabel,
-  operationsPeriodDefaultChipLabel,
   operationsPeriodRangeChipLabel,
   readOperationsFilters,
   resolveFilterReturnPath,

@@ -3,13 +3,11 @@ import { describe, expect, it } from 'vitest';
 import type { OperationsCategorySummary } from '@/entities/payment';
 
 import {
-  defaultOperationsPeriod,
   operationsCategoryChipLabel,
   operationsCategoryRows,
   operationsFiltersHref,
   operationsFiltersParams,
   operationsPeriodChipLabel,
-  operationsPeriodDefaultChipLabel,
   operationsPeriodRangeChipLabel,
   readOperationsFilters,
   shiftOperationsPeriod,
@@ -21,14 +19,8 @@ const paramsOf = (record: Record<string, string>) => ({
   get: (name: string) => record[name] ?? null,
 });
 
-describe('defaultOperationsPeriod', () => {
-  it('текущий календарный месяц «сегодня»', () => {
-    expect(defaultOperationsPeriod(TODAY)).toEqual({ from: '2026-09-01', to: '2026-09-30' });
-  });
-});
-
 describe('readOperationsFilters', () => {
-  it('пустой URL — дефолт: текущий месяц без категорий', () => {
+  it('пустой URL — дефолт: период null (весь период #676), без категорий', () => {
     expect(readOperationsFilters(paramsOf({}), TODAY)).toEqual({
       period: null,
       categories: [],
@@ -179,13 +171,7 @@ describe('operationsFiltersHref', () => {
   });
 });
 
-describe('лейблы чипа периода', () => {
-  it('дефолт (не явный выбор) — «Месяц год»', () => {
-    expect(operationsPeriodDefaultChipLabel({ from: '2026-09-01', to: '2026-09-30' })).toBe(
-      'Сентябрь 2026',
-    );
-  });
-
+describe('operationsPeriodRangeChipLabel', () => {
   it('явный выбор всегда в формате диапазона — «1 — 30 ноя» (Figma 1506-72116)', () => {
     expect(operationsPeriodRangeChipLabel({ from: '2026-11-01', to: '2026-11-30' })).toBe(
       '1 — 30 ноя',

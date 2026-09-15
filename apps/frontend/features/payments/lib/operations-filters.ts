@@ -30,9 +30,9 @@ export function resolveFilterReturnPath(raw: string | null, propertyId: string):
  * включительные границы диапазона, категории — слаги из сводки (контракт
  * `category` списка операций #473). Состояние живёт в адресе
  * (?from=&to=&category=) — шарабельные ссылки, назад по истории возвращает
- * к списку; дефолт (без параметров) на экранах операций объекта —
- * весь период (#674/#675, карта #669), «Все категории». До своего тикета
- * (#676) экран категорий объекта держит месячный дефолт в данных.
+ * к списку; дефолт (без параметров) на всех экранах операций объекта —
+ * весь период (null, карта #669: главный #674, направления #675,
+ * категории #676), «Все категории».
  */
 
 export type OperationsPeriod = {
@@ -47,19 +47,9 @@ export type OperationsFilters = {
 };
 
 /**
- * Текущий календарный месяц «сегодня» (клиентское, та же оговорка про TZ,
- * что в operations-month) — переходный дефолт экрана категорий объекта до
- * своего тикета (#676); ленты операций объекта дефолт-месяц больше не
- * применяют (#674/#675), сводка «за месяц» на странице объекта —
- * отдельный потребитель (#473).
+ * Минимальный источник параметров — ReadonlyURLSearchParams Next ему
+ * удовлетворяет; структурный тип держит модуль чистым для vitest.
  */
-export function defaultOperationsPeriod(today: IsoDate): OperationsPeriod {
-  const { from, to } = operationsMonthRange(operationsMonthOf(today));
-  return { from, to };
-}
-
-/** Минимальный источник параметров — ReadonlyURLSearchParams Next ему
- * удовлетворяет; структурный тип держит модуль чистым для vitest. */
 export type OperationsParamsSource = {
   readonly get: (name: string) => string | null;
 };
@@ -184,11 +174,6 @@ const MONTH_SHORT: ReadonlyArray<string> = [
   'ноя',
   'дек',
 ];
-
-/** Лейбл чипа дефолтного периода — «Сентябрь 2026». */
-export function operationsPeriodDefaultChipLabel(period: OperationsPeriod): string {
-  return operationsMonthRange(operationsMonthOf(period.from)).label;
-}
 
 /**
  * Лейбл чипа выбранного периода — всегда формат диапазона, даже полный

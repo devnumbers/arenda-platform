@@ -7,9 +7,8 @@ import { Cancel } from '@/shared/assets/icons';
 import { goBack } from '@/shared/lib/navigation';
 import { clientTodayIso } from '@/entities/payment';
 import {
-  defaultOperationsPeriod,
   operationsCategoryRows,
-  operationsPeriodRangeChipLabel,
+  operationsPeriodChipLabel,
   readOperationsFilters,
   resolveFilterReturnPath,
   usePropertyOperationsSummary,
@@ -36,12 +35,15 @@ export type OperationsCategoriesScreenProps = {
 /**
  * Страница «Выбрать категорию» (#477, Figma 1506-72116, 1510-74149) —
  * не попап, а отдельный маршрут. Верх закреплён: крестик + заголовок и
- * контекстные чипы (период в формате диапазона + «Все категории») —
- * контекст всегда перед глазами; строки категорий скроллятся. Строки —
- * «иконка + название + сумма за период + чекбокс», только категории
- * с операциями за период (разбивка сводки #473). «Выбрать» — закреплённая
- * нижняя панель, видна при непустом черновике или применённом фильтре
- * (иначе возврат к «Все категории» был бы недостижим); применяет выбор
+ * контекстные чипы (период + «Все категории») — контекст всегда перед
+ * глазами; строки категорий скроллятся. Дефолт периода — весь период
+ * (#676, карта #669, как на глобальных категориях #672): без явного
+ * диапазона суммы за всё время, чип нейтральный «Период»; период
+ * наследуется от списка через return-параметры. Строки — «иконка +
+ * название + сумма за период + чекбокс», только категории с операциями
+ * за период (разбивка сводки #473). «Выбрать» — закреплённая нижняя
+ * панель, видна при непустом черновике или применённом фильтре (иначе
+ * возврат к «Все категории» был бы недостижим); применяет выбор
  * возвратом на список (router.replace), крестик — goBack без изменений.
  * Пустой период — иллюстрация и подпись вместо строк (Figma 1518-92530,
  * #478), «Выбрать» в этом состоянии не нужен и не показывается.
@@ -54,7 +56,9 @@ export function OperationsCategoriesScreen({
 
   const today = clientTodayIso();
   const filters = readOperationsFilters(searchParams, today);
-  const period = filters.period ?? defaultOperationsPeriod(today);
+  // Дефолт категорий — весь период (#676, как на глобальных #672):
+  // без явного выбора даты в запрос не уходят, чип нейтральный.
+  const period = filters.period;
   const [draft, setDraft] = useState<ReadonlyArray<string>>(filters.categories);
 
   // Куда возвращаться: список, открывший страницу (только маршруты операций
@@ -64,8 +68,8 @@ export function OperationsCategoriesScreen({
   const summaryQuery = usePropertyOperationsSummary(propertyId, {
     status: 'paid',
     order: 'desc',
-    dateFrom: period.from,
-    dateTo: period.to,
+    dateFrom: period?.from,
+    dateTo: period?.to,
   });
   const rows: ReadonlyArray<OperationsCategoryRow> = operationsCategoryRows(
     summaryQuery.data?.categories ?? [],
@@ -112,11 +116,16 @@ export function OperationsCategoriesScreen({
 
       <PageContent className="flex h-[calc(100dvh-72px)] flex-col pb-0">
         <div className="flex shrink-0 flex-wrap gap-1.5 px-6">
+          {/* Чип периода — дисплейный (период наследуется от ленты через
+           * return-параметры): синий только с явным диапазоном, в дефолте
+           * серый «Период» (#676, канон #670/#672). */}
           <span
             aria-hidden
-            className="inline-flex h-11 items-center rounded-pill bg-primary px-5 text-sm font-medium text-white"
+            className={`inline-flex h-11 items-center rounded-pill px-5 text-sm font-medium ${
+              period !== null ? 'bg-primary text-white' : 'bg-surface-muted text-content'
+            }`}
           >
-            {operationsPeriodRangeChipLabel(period)}
+            {operationsPeriodChipLabel(period)}
           </span>
           <span
             aria-hidden
