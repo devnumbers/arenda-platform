@@ -29,9 +29,8 @@ test.describe('вход «Контакты» на карточке объект�
   }) => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto(PROPERTY_URL);
-    // Секция-ссылка идёт по образцу «Платежей» (#463): заголовок со
-    // стрелкой, aria-label «Перейти в раздел «Контакты»».
-    await page.getByRole('link', { name: 'Перейти в раздел «Контакты»' }).click();
+    // Карточка объекта #583/#588: секция-ссылка несёт имя заголовка секции.
+    await page.getByRole('link', { name: 'Контакты' }).click();
 
     await expect(page).toHaveURL(new RegExp(`/properties/${SEEDED_APARTMENT_PROPERTY_ID}/contacts$`));
     await expect(page.getByText('Контакты объекта', { exact: true })).toBeVisible();

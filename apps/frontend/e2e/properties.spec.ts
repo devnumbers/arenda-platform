@@ -17,8 +17,12 @@ test('список объектов: карточки сид-объектов и
   await page.goto('/properties');
 
   // Хаб нового хрома (карта #556, тикет #562): заголовок 28, «+» создания.
+  // Поверхностей создания в хабе три (#586); на десктопном ярусе кликабельна
+  // «+» пилюли — компакт-бар шапки скрыт до скролла, якоримся к пилюле.
   await expect(page.getByRole('heading', { name: 'Объекты', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Создать объект' })).toBeVisible();
+  await expect(
+    page.getByTestId('properties-search-pill').getByRole('button', { name: 'Создать объект' }),
+  ).toBeVisible();
   for (const name of SEEDED_PROPERTIES) {
     await expect(page.getByText(name, { exact: true })).toBeVisible();
   }
@@ -30,10 +34,10 @@ test('архив объектов: шапка подэкрана с «Назад
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto('/properties/archive');
 
-  // Подэкран: ведущая «Назад» на список, заголовок в хедере, «+» в trailing.
+  // Подэкран: ведущая «Назад» на список, заголовок в хедере; «+» создания
+  // в архиве нет — принятый канон #587.
   await expect(page.getByRole('button', { name: 'Назад' })).toBeVisible();
   await expect(page.getByText('Архивные объекты')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Создать объект' })).toBeVisible();
 
   await captureScreen(page, testInfo, 'properties-archive');
 });

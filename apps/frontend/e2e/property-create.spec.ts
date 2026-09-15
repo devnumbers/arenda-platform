@@ -25,7 +25,10 @@ const dadataStubConfigured = process.env.DADATA_BASE_URL !== undefined;
 async function openWizard(page: Parameters<typeof openCabinetWithSeededSession>[0], user: Parameters<typeof openCabinetWithSeededSession>[1]): Promise<void> {
   await openCabinetWithSeededSession(page, user);
   await page.goto('/properties');
-  await page.getByRole('button', { name: 'Создать объект' }).click();
+  // Поверхностей создания в хабе три (#586): на десктопном ярусе кликабельна
+  // «+» поисковой пилюли — компакт-бар шапки скрыт (opacity-0, канон
+  // сворачивания #556), пилюля живёт в контенте на всех ширинах.
+  await page.getByTestId('properties-search-pill').getByRole('button', { name: 'Создать объект' }).click();
   await expect(page.getByRole('heading', { name: 'Выберите, какая у вас недвижимость' })).toBeVisible();
 }
 

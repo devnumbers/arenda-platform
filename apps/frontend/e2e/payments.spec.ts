@@ -33,7 +33,8 @@ test.describe('экран «Платежи объекта»', () => {
     await page.goto('/properties');
     // Карточка объекта — ссылка-оверлей поверх контента карточки.
     await page.getByRole('link', { name: 'Открыть объект Квартира на Ленина' }).click();
-    await page.getByRole('link', { name: /Платежи/ }).click();
+    // Секция карточки #583/#588: ссылка называется заголовком секции.
+    await page.getByRole('link', { name: 'Регулярные платежи' }).click();
 
     await expect(page).toHaveURL(new RegExp(`/properties/${SEEDED_APARTMENT_PROPERTY_ID}/payments$`));
     await expect(page.getByText('Платежи объекта', { exact: true })).toBeVisible();
