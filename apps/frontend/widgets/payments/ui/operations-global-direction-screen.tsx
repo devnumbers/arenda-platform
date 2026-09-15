@@ -10,7 +10,6 @@ import {
   globalOperationsFiltersParams,
   groupOperationsByDate,
   operationsCategoryChipLabel,
-  operationsCategoryRows,
   operationsPeriodChipLabel,
   operationsPropertyChipLabel,
   useGlobalOperationsFilters,
@@ -31,7 +30,7 @@ import { OperationsDateList, OperationsNeverHad } from './operations-list';
 import { OperationsFilterChips } from './operations-filter-chips';
 import { OperationsGlobalPeriodPickerDialog } from './operations-period-picker';
 import { OperationsSummaryCard } from './operations-summary-card';
-import { hasNoPaidOperationsEver } from '../lib/operations-empty-states';
+import { operationsFeedGate } from '../lib/operations-feed-gate';
 import { summaryBarSegments } from '@/features/payment-categories';
 import {
   globalDirectionListScope,
@@ -96,17 +95,12 @@ export function OperationsGlobalDirectionScreen({
   });
 
   const groups = groupOperationsByDate(listQuery.data ?? [], today);
-  // Скелетон — только пока данных нет вовсе (первая загрузка); ошибка без
-  // данных показывает карточку повтора, не скелетон.
-  const pending =
-    (listQuery.data === undefined ||
-      summaryQuery.data === undefined ||
-      everQuery.data === undefined) &&
-    !listQuery.isError &&
-    !summaryQuery.isError &&
-    !everQuery.isError;
-  const neverHad = !listQuery.isError && hasNoPaidOperationsEver(everQuery.data);
-  const categoryRows = operationsCategoryRows(summaryQuery.data?.categories ?? []);
+  // Скелетон / neverHad / разбивка категорий — общий каркас ленты (#478).
+  const { pending, neverHad, categoryRows } = operationsFeedGate(
+    listQuery,
+    summaryQuery,
+    everQuery,
+  );
 
   const openOperation = (operation: {
     readonly propertyId: string;

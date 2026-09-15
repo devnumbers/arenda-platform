@@ -18,7 +18,6 @@ import { clientTodayIso, type PaymentOperation } from "@/entities/payment";
 import {
   groupOperationsByDate,
   operationsCategoryChipLabel,
-  operationsCategoryRows,
   operationsFiltersHref,
   operationsFiltersParams,
   operationsPeriodChipLabel,
@@ -27,7 +26,6 @@ import {
   usePropertyOperationsSummary,
 } from "@/features/payments";
 import { canMutateProperty, useProperty } from "@/features/properties";
-import { hasNoPaidOperationsEver } from "../lib/operations-empty-states";
 import { PaymentsStateCard } from "./payments-sections";
 import {
   OperationsDateList,
@@ -114,20 +112,12 @@ export function OperationsOfTypeScreen({
   });
 
   const groups = groupOperationsByDate(listQuery.data ?? [], today);
-  // Скелетон — только пока данных нет вовсе (первая загрузка): смена
-  // периода держит прежние данные (keepPreviousData) и не дёргает
-  // страницу; ошибка без данных показывает карточку повтора, не скелетон.
-  const pending =
-    (listQuery.data === undefined ||
-      summaryQuery.data === undefined ||
-      everQuery.data === undefined) &&
-    !listQuery.isError &&
-    !summaryQuery.isError &&
-    !everQuery.isError;
-  const neverHad =
-    !listQuery.isError && hasNoPaidOperationsEver(everQuery.data);
-  const categoryRows = operationsCategoryRows(
-    summaryQuery.data?.categories ?? [],
+  // Скелетон / neverHad / разбивка категорий — общий каркас ленты (#478);
+  // смена периода держит прежние данные (keepPreviousData), не скелетон.
+  const { pending, neverHad, categoryRows } = operationsFeedGate(
+    listQuery,
+    summaryQuery,
+    everQuery,
   );
 
   const openOperation = (operation: PaymentOperation): void =>

@@ -9,7 +9,6 @@ import type { PaymentOperationScope } from "@/shared/api/query-keys";
 import {
   groupOperationsByDate,
   operationsCategoryChipLabel,
-  operationsCategoryRows,
   operationsFiltersHref,
   operationsFiltersParams,
   operationsPeriodChipLabel,
@@ -33,7 +32,7 @@ import {
 } from "./operations-list";
 import { OperationsFilterChips } from "./operations-filter-chips";
 import { OperationsPeriodPickerDialog } from "./operations-period-picker";
-import { hasNoPaidOperationsEver } from "../lib/operations-empty-states";
+import { operationsFeedGate } from "../lib/operations-feed-gate";
 import { summaryBarSegments } from "@/features/payment-categories";
 import { OperationsSummaryCard } from "./operations-summary-card";
 
@@ -108,20 +107,12 @@ export function OperationsOfPropertyScreen({
   });
 
   const groups = groupOperationsByDate(listQuery.data ?? [], today);
-  // Скелетон — только пока данных нет вовсе (первая загрузка): смена
-  // фильтров держит прежние данные (keepPreviousData) и не дёргает
-  // страницу; ошибка без данных показывает карточку повтора, не скелетон.
-  const pending =
-    (listQuery.data === undefined ||
-      summaryQuery.data === undefined ||
-      everQuery.data === undefined) &&
-    !listQuery.isError &&
-    !summaryQuery.isError &&
-    !everQuery.isError;
-  const neverHad =
-    !listQuery.isError && hasNoPaidOperationsEver(everQuery.data);
-  const categoryRows = operationsCategoryRows(
-    summaryQuery.data?.categories ?? [],
+  // Скелетон / neverHad / разбивка категорий — общий каркас ленты (#478);
+  // смена фильтров держит прежние данные (keepPreviousData), не скелетон.
+  const { pending, neverHad, categoryRows } = operationsFeedGate(
+    listQuery,
+    summaryQuery,
+    everQuery,
   );
 
   const openOperation = (operation: { readonly id: string }): void =>
