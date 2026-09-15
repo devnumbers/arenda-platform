@@ -55,7 +55,9 @@ test.describe('жизненный цикл контакта', () => {
     // обязательным полем «Имя».
     await page.getByRole('button', { name: 'Добавить контакт' }).click();
     await expect(page.getByRole('button', { name: 'Отменить создание' })).toBeVisible();
-    await page.getByRole('textbox', { name: 'Имя *' }).fill(contactName);
+    // Обязательное поле «Имя»: доступное имя без звёздочки — маркер
+    // обязательности aria-hidden и из accname исключён (design TextField).
+    await page.getByRole('textbox', { name: 'Имя', exact: true }).fill(contactName);
     await page.getByRole('textbox', { name: 'Роль' }).fill('сантехник');
     // Сабмит двумя поверхностями — ✓ в шапке и полноширинная кнопка,
     // появляющаяся по готовности формы; жмём нижнюю.

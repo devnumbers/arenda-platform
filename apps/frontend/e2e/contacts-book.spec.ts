@@ -60,7 +60,9 @@ test.describe('книга контактов — хаб нового хрома'
     // exact — сама пилюля тоже role=button и содержит этот текст.
     await page.getByRole('button', { name: 'Добавить контакт', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Отменить создание' })).toBeVisible();
-    await page.getByRole('textbox', { name: 'Имя *' }).fill(contactName);
+    // Обязательное поле «Имя»: доступное имя без звёздочки — маркер
+    // обязательности aria-hidden и из accname исключён (design TextField).
+    await page.getByRole('textbox', { name: 'Имя', exact: true }).fill(contactName);
     await page.getByRole('button', { name: 'Создать контакт' }).last().click();
 
     // Возврат в корень книги; карточка находится поиском книги.
