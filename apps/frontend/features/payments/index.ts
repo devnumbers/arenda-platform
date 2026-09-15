@@ -79,7 +79,6 @@ export {
   operationsFiltersHref,
   operationsFiltersParams,
   operationsPeriodChipLabel,
-  operationsPeriodRangeChipLabel,
   readOperationsFilters,
   resolveFilterReturnPath,
   type OperationsCategoryRow,
