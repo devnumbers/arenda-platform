@@ -1,14 +1,8 @@
 import type { IsoDate, OperationsCategorySummary } from '@/entities/payment';
-import { addDays, inclusiveDays } from '@/entities/payment';
 import { lastDayOfMonth } from '@/shared/lib/calendar';
 import { formatDottedDate } from '@/shared/lib/date-format';
 import { pluralize } from '@/shared/lib/pluralize';
 import { safeInternalPath } from '@/shared/lib/safe-internal-path';
-import {
-  operationsMonthOf,
-  operationsMonthRange,
-  shiftOperationsMonth,
-} from './operations-month';
 
 /**
  * Куда возвращаться со страниц выбора фильтров (#477): только маршруты
@@ -117,32 +111,6 @@ export function operationsFiltersParams(filters: OperationsFilters): Record<stri
     result.category = filters.categories.join(',');
   }
   return result;
-}
-
-/**
- * Листание периода стрелками экранов направлений (#475) — период сдвигается
- * на свою же длину (решение владельца, #472): 3–14 августа при листании
- * назад становится 22 июля — 2 августа, окна стыкуются без нахлёста и дыр;
- * один день листается по одному дню. Целый календарный месяц листается
- * соседним месяцем (1–30 сентября → 1–31 августа), чтобы дефолтные экраны
- * не «плыли» по дням.
- */
-export function shiftOperationsPeriod(period: OperationsPeriod, delta: number): OperationsPeriod {
-  const from = isoParts(period.from);
-  const to = isoParts(period.to);
-  const wholeMonth =
-    from.day === 1
-    && from.year === to.year
-    && from.month === to.month
-    && to.day === lastDayOfMonth(to.year, to.month - 1);
-  if (wholeMonth) {
-    const shifted = operationsMonthRange(
-      shiftOperationsMonth(operationsMonthOf(period.from), delta),
-    );
-    return { from: shifted.from, to: shifted.to };
-  }
-  const length = inclusiveDays(period.from, period.to);
-  return { from: addDays(period.from, length * delta), to: addDays(period.to, length * delta) };
 }
 
 /**

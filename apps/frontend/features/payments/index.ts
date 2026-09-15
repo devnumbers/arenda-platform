@@ -67,7 +67,6 @@ export {
 export {
   operationsMonthOf,
   operationsMonthRange,
-  shiftOperationsMonth,
   type OperationsMonth,
 } from './lib/operations-month';
 export {
@@ -83,7 +82,6 @@ export {
   operationsPeriodRangeChipLabel,
   readOperationsFilters,
   resolveFilterReturnPath,
-  shiftOperationsPeriod,
   type OperationsCategoryRow,
   type OperationsFilters,
   type OperationsPeriod,
