@@ -267,29 +267,6 @@ export function useSubscriptionPayments(): UseQueryResult<
   });
 }
 
-export function usePendingPayment(): UseQueryResult<
-  SubscriptionPayment | undefined,
-  ApiError
-> {
-  return useQuery({
-    queryKey: billingKeys.payments,
-    queryFn: () =>
-      apiClient<components['schemas']['SubscriptionPaymentsResponse']>('/subscription/payments'),
-    select: (data) =>
-      data.items
-        .map(mapSubscriptionPaymentResponse)
-        .filter((payment) => payment.status === 'pending')
-        .sort(
-          (a, b) =>
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-        )[0],
-    refetchInterval: (query) =>
-      hasRecentPendingPayment(query.state.data)
-        ? PAYMENT_POLL_INTERVAL_MS
-        : false,
-  });
-}
-
 export function useSubscriptionPayment(
   id: string,
   enabled = true,

@@ -40,6 +40,7 @@ const transitionReasonNames: Record<string, string> = {
   refunded: 'Возврат платежа',
   service_assigned: 'Назначена служебная',
   forced_change: 'Принудительная смена тарифа',
+  time_shifted: 'Сдвиг времени (стенд)',
 };
 
 export const transitionReasonLabel = (reason: string): string => transitionReasonNames[reason] ?? reason;
