@@ -27,6 +27,12 @@ var (
 	// cancelled state, or its paid period has already expired — restoration
 	// of an expired period goes through paying for a tariff (ADR 0008).
 	ErrResumeNotAvailable = errors.New("resume not available")
+	// ErrResumeRequired is returned when a cancelled subscription with a live
+	// paid remainder is asked to pay for the tariff and period it is already
+	// on (issue #691): while the period is paid, only the free resume
+	// restores the subscription — a duplicate payment would burn the
+	// remainder for the same outcome.
+	ErrResumeRequired = errors.New("resume required")
 	// ErrInvalidTransition is returned when a subscription transition record is
 	// built from an incomplete or inconsistent subscription state.
 	ErrInvalidTransition = errors.New("invalid subscription transition")

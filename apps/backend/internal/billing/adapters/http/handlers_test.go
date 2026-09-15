@@ -842,6 +842,41 @@ func writePendingConflict(t *testing.T, target string, err error) *httptest.Resp
 	return w
 }
 
+// TestBillingErrors_ResumeRequiredConflictCarriesCode proves the change
+// endpoint answers 409 with the machine-readable resume_required code when
+// a cancelled subscription asks to pay for its own live tariff and period
+// (issue #691) — the screen reads the code and offers the free resume.
+func TestBillingErrors_ResumeRequiredConflictCarriesCode(t *testing.T) {
+	t.Parallel()
+	ownerID := uuid.Must(uuid.NewV7())
+	h := newTestHandlers(nil, nil, &fakeSubscriptionManager{
+		changeTariff: func(context.Context, uuid.UUID, billingapp.ChangeTariffRequest) (billingapp.ChangeTariffResult, error) {
+			return billingapp.ChangeTariffResult{}, domain.ErrResumeRequired
+		},
+	})
+
+	w := httptest.NewRecorder()
+	h.ChangeTariff(w, ownerJSONRequest(t, http.MethodPost, "/subscription/change", ownerID, `{"tariffName":"pro","period":"month"}`))
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409; body: %s", w.Code, w.Body.String())
+	}
+	var problem struct {
+		Status int    `json:"status"`
+		Code   string `json:"code"`
+		Title  string `json:"title"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &problem); err != nil {
+		t.Fatalf("decode problem: %v", err)
+	}
+	if problem.Code != "resume_required" {
+		t.Errorf("code = %q, want resume_required", problem.Code)
+	}
+	if problem.Status != http.StatusConflict || problem.Title != httpsupport.ProblemTitleConflict {
+		t.Errorf("problem = %d/%q, want 409/%q", problem.Status, problem.Title, httpsupport.ProblemTitleConflict)
+	}
+}
+
 // TestBillingErrors_PendingPaymentConflictCarriesCode proves both blocking
 // endpoints answer 409 with the machine-readable pending_payment_exists code.
 func TestBillingErrors_PendingPaymentConflictCarriesCode(t *testing.T) {

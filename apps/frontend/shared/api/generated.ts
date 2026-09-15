@@ -3080,7 +3080,7 @@ export interface components {
                 "application/json": components["schemas"]["Problem"];
             };
         };
-        /** @description Conflict. `pending_payment_exists` — a live pending payment holds the user's tariff decision (issue #616): the tariff change, the cancellation and the resume stay locked until the payment resolves or expires. `invalid_keep_property` — the cancellation's keepPropertyId is not one of the owner's active properties (issue #617). `resume_not_available` — the resume endpoint was called on a subscription that is not cancelled or whose paid period has already expired: restoration of an expired period goes through paying for a tariff (issue #617). */
+        /** @description Conflict. `pending_payment_exists` — a live pending payment holds the user's tariff decision (issue #616): the tariff change, the cancellation and the resume stay locked until the payment resolves or expires. `invalid_keep_property` — the cancellation's keepPropertyId is not one of the owner's active properties (issue #617). `resume_not_available` — the resume endpoint was called on a subscription that is not cancelled or whose paid period has already expired: restoration of an expired period goes through paying for a tariff (issue #617). `resume_required` — the tariff change asked a cancelled subscription with a live paid remainder to pay for the tariff and period it is already on: the paid remainder is kept only through the free resume (issue #691). */
         SubscriptionConflict: {
             headers: {
                 [name: string]: unknown;

@@ -134,6 +134,8 @@ describe('currentBadgeVisible', () => {
 });
 
 describe('tariffChangeFooter', () => {
+  const now = new Date('2026-09-15T12:00:00Z');
+
   it('active + same tariff and period is connected', () => {
     expect(tariffChangeFooter(subscription({}), proTariff, 'month')).toStrictEqual({
       kind: 'connected',
@@ -153,10 +155,41 @@ describe('tariffChangeFooter', () => {
     ).toStrictEqual({ kind: 'connect', label: 'Подключить за 490 ₽ в месяц' });
   });
 
-  it('cancelled reactivation of the same tariff goes through payment (owner decision)', () => {
+  it('cancelled on own tariff and period with a live remainder offers the free resume (#691)', () => {
     expect(
-      tariffChangeFooter(subscription({ status: 'cancelled' }), proTariff, 'month'),
+      tariffChangeFooter(
+        subscription({ status: 'cancelled', autoRenewEnabled: false }),
+        proTariff,
+        'month',
+        now,
+      ),
+    ).toStrictEqual({ kind: 'resume', label: 'Возобновить Про' });
+  });
+
+  it('cancelled on own tariff and period with an expired period goes through payment (#429)', () => {
+    expect(
+      tariffChangeFooter(
+        subscription({
+          status: 'cancelled',
+          autoRenewEnabled: false,
+          validUntil: '2026-09-01T12:00:00Z',
+        }),
+        proTariff,
+        'month',
+        now,
+      ),
     ).toStrictEqual({ kind: 'connect', label: 'Подключить за 490 ₽ в месяц' });
+  });
+
+  it('cancelled with a live remainder switching the period goes through payment (#691 boundary)', () => {
+    expect(
+      tariffChangeFooter(
+        subscription({ status: 'cancelled', autoRenewEnabled: false }),
+        proTariff,
+        'year',
+        now,
+      ),
+    ).toStrictEqual({ kind: 'connect', label: 'Подключить за 4\u00A0400 ₽ в год' });
   });
 
   it('another paid tariff offers its price', () => {

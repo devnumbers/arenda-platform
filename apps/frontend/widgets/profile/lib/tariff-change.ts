@@ -84,18 +84,22 @@ export function currentBadgeVisible(
 /** Состояние футера (#623): «Подключен»-дизейбл — только активная
  * подписка на выбранном тарифе и периоде; выбор базового с платной
  * подписки ведёт во флоу отключения (#622); в grace оплата того же
- * тарифа — продление (#250), в «Остановлен» — платная реактивация
- * (#429), обе идут платёжным путём с кнопкой цены (решения владельца,
- * 12.09.2026). */
+ * тарифа — продление (#250) с кнопкой цены; в «Остановлен» на своём
+ * тарифе и периоде при живом остатке — бесплатная «Возобновить» (#691:
+ * платная реактивация оплаченного периода закрыта, остаток восстанавливает
+ * бесплатное возобновление #617), на истёкшем периоде — платная
+ * реактивация (#429) с кнопкой цены. */
 export type TariffChangeFooter =
   | { kind: 'connect'; label: string }
   | { kind: 'connected' }
+  | { kind: 'resume'; label: string }
   | { kind: 'disable' };
 
 export function tariffChangeFooter(
   subscription: Subscription,
   selectedTariff: Tariff,
   selectedPeriod: PaymentPeriod,
+  now: Date = new Date(),
 ): TariffChangeFooter {
   if (!isPaidTariff(selectedTariff.name)) {
     // Базовый вне периодов и всегда active на бэке (grace/отмена — только
@@ -108,6 +112,17 @@ export function tariffChangeFooter(
     subscription.currentPeriod === selectedPeriod;
   if (isSame && subscription.status === 'active') {
     return { kind: 'connected' };
+  }
+  if (
+    isSame &&
+    subscription.status === 'cancelled' &&
+    subscription.validUntil !== undefined &&
+    new Date(subscription.validUntil).getTime() > now.getTime()
+  ) {
+    return {
+      kind: 'resume',
+      label: `Возобновить ${getTariffLabel(selectedTariff.name)}`,
+    };
   }
 
   return {

@@ -490,14 +490,17 @@ func TestResumeSubscription_LivePendingBlocked(t *testing.T) {
 	if err := h.subs.CancelSubscription(t.Context(), sub.UserID, nil); err != nil {
 		t.Fatalf("seed CancelSubscription() error = %v", err)
 	}
-	// The reactivation payment (issue #429) is a same-tariff request on the
-	// cancelled subscription: the user already holds the form for it, so the
-	// free resume would supersede the decision being paid for.
+	// A live pending payment blocks the free resume: the user already holds
+	// a form for a tariff decision. The recovery upgrade (issue #429) is the
+	// paid path still open on a cancelled subscription with a live remainder —
+	// the same-tariff reactivation of a live period is refused in favour of
+	// the resume itself (issue #691), so the upgrade is the reachable way a
+	// cancelled subscription comes to hold a live form.
 	if _, err := h.subs.ChangeTariff(t.Context(), sub.UserID, ChangeTariffRequest{
-		TariffName: domain.TariffPro,
+		TariffName: domain.TariffBusiness,
 		Period:     domain.PeriodMonth,
 	}); err != nil {
-		t.Fatalf("seed reactivation payment error = %v", err)
+		t.Fatalf("seed pending payment error = %v", err)
 	}
 	if err := h.subs.ResumeSubscription(t.Context(), sub.UserID); !errors.Is(err, ErrPendingPaymentExists) {
 		t.Fatalf("err = %v, want ErrPendingPaymentExists", err)

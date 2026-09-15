@@ -193,11 +193,13 @@ func TestPaymentFlow_UpgradeEndToEnd(t *testing.T) {
 
 // TestPaymentFlow_CancelledSameTariffReactivationEndToEnd proves the
 // reactivation of issue #429 against real PostgreSQL through the full webhook
-// path: a cancelled subscription paying for the plan it is already on goes
-// through the payment flow (no "already on this tariff" rejection), and the
-// confirmed payment returns it to active with auto-renew on, the period
-// counted from the payment moment, and the transition log recording the move
-// out of cancelled.
+// path: a cancelled subscription with an expired paid period paying for the
+// plan it is already on goes through the payment flow (no "already on this
+// tariff" rejection), and the confirmed payment returns it to active with
+// auto-renew on, the period counted from the payment moment, and the
+// transition log recording the move out of cancelled. While the period is
+// live the same request is refused in favour of the free resume (issue #691),
+// so the paid path here is the expired-period restoration.
 func TestPaymentFlow_CancelledSameTariffReactivationEndToEnd(t *testing.T) {
 	t.Parallel()
 	h := newPaymentIntegrationHarness(t)
@@ -205,6 +207,11 @@ func TestPaymentFlow_CancelledSameTariffReactivationEndToEnd(t *testing.T) {
 	if err := h.subscriptionsSvc.CancelSubscription(h.ctx(), sub.UserID, nil); err != nil {
 		t.Fatalf("CancelSubscription(): %v", err)
 	}
+	cancelled, err := h.subscriptions.GetByUserID(h.ctx(), sub.UserID)
+	if err != nil {
+		t.Fatalf("GetByUserID(cancelled): %v", err)
+	}
+	h.clock.now = cancelled.ValidUntil.Add(time.Hour)
 
 	result, err := h.subscriptionsSvc.ChangeTariff(h.ctx(), sub.UserID, billingapp.ChangeTariffRequest{
 		TariffName: domain.TariffPro,
