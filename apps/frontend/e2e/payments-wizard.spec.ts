@@ -56,6 +56,34 @@ async function passTitleStep(page: Parameters<typeof openCabinetWithSeededSessio
   await expect(page.getByRole('heading', { name: 'Периодичность платежа' })).toBeVisible();
 }
 
+/**
+ * Тап по дню в канонном бесконечном календаре (04.09): секция месяца
+ * опознаётся по заголовку «Месяц, год» — в ленте остаются и прошлые
+ * месяцы, где тот же день был бы disabled. Сам тап только кладёт черновик;
+ * коммит — отдельная кнопка «Выбрать» (choose via `confirm`).
+ */
+async function pickCalendarDay(
+  page: Parameters<typeof openCabinetWithSeededSession>[0],
+  date: Date,
+): Promise<void> {
+  const monthLabel = date
+    .toLocaleDateString('ru-RU', { month: 'long' })
+    .replace(/^./, (ch) => ch.toUpperCase());
+  const section = page
+    .locator('section')
+    .filter({ has: page.getByRole('heading', { name: `${monthLabel}, ${date.getFullYear()}` }) });
+  await section.getByRole('button', { name: String(date.getDate()), exact: true }).click();
+}
+
+/** Подтвердить черновик канонного календаря кнопкой «Выбрать» —
+ * диалог закрывается (точка отличия от до-канонных поверхностей). */
+async function confirmCalendar(page: Parameters<typeof openCabinetWithSeededSession>[0]): Promise<void> {
+  await page
+    .getByRole('dialog', { name: 'Выбрать дату' })
+    .getByRole('button', { name: 'Выбрать', exact: true })
+    .click();
+}
+
 type PaymentFromApi = {
   id: string;
   title: string;
@@ -281,11 +309,16 @@ test.describe('визард создания платежа', () => {
     await passTitleStep(page, title);
 
     await page.getByRole('button', { name: 'Каждый год' }).click();
-    // Месяц остаётся текущим (дефолт от «сегодня»), ничего не предвыбрано;
-    // выбираем 13-е на календаре одного месяца.
+    // Канон (04.09): ветка года — бесконечный календарь; чип показывает
+    // текущий месяц, прошлые дни недоступны.
     const monthName = new Date().toLocaleDateString('ru-RU', { month: 'long' });
     await expect(page.getByRole('button', { name: new RegExp(monthName, 'i') })).toBeVisible();
-    await page.getByRole('button', { name: '13', exact: true }).first().click();
+    const target = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    await pickCalendarDay(page, target);
+    await confirmCalendar(page);
+
+    // Ветка закрылась — правило готово, «Продолжить» на меню периодичности.
+    await expect(page.getByRole('heading', { name: 'Периодичность платежа' })).toBeVisible();
     await page.getByRole('button', { name: 'Продолжить' }).click();
 
     await expect(page.getByRole('heading', { name: 'Окончание платежа' })).toBeVisible();
@@ -298,9 +331,9 @@ test.describe('визард создания платежа', () => {
     const items = await fetchPayments(page);
     const created = items.find((payment) => payment.title === title);
     expect(created?.recurrence.kind).toBe('yearly');
-    expect(created?.recurrence.day).toBe(13);
-    const todayMonth = Number(new Date().toISOString().slice(5, 7));
-    expect(created?.recurrence.month).toBe(todayMonth);
+    expect(created?.recurrence.day).toBe(target.getDate());
+    const targetMonth = target.getMonth() + 1;
+    expect(created?.recurrence.month).toBe(targetMonth);
   });
 
   test('ежегодная ветка: пикер месяца и года — месяц меняется, год не раньше текущего', async ({
@@ -314,7 +347,7 @@ test.describe('визард создания платежа', () => {
 
     await page.getByRole('button', { name: 'Каждый год' }).click();
     // Чип открывает шит-пикер: колесо месяцев (все 12) и годы от текущего.
-    await page.getByRole('button', { name: /месяц год|\d{4}/i }).first().click();
+    await page.getByRole('dialog', { name: 'Выбрать дату' }).getByRole('button', { name: /\d{4}/ }).click();
     await expect(page.getByText('Отменить')).toBeVisible();
     await expect(page.getByText(String(new Date().getFullYear())).first()).toBeVisible();
 
@@ -328,17 +361,28 @@ test.describe('визард создания платежа', () => {
     ).toHaveText('Сентябрь');
 
     // Годы без верхней границы: упор в конец списка удлиняет его вперёд.
+    // End ставит selected на текущий конец ленты; следующий End жмём только
+    // после монтирования дорисованных строк: 2029 (текущий+3) → 2039 (+13),
+    // лента после второго упора достаёт до +23 — год+20 виден.
     const yearWheel = page.getByRole('listbox', { name: 'Год' });
+    const year = new Date().getFullYear();
     await yearWheel.press('End');
+    await expect(yearWheel.getByRole('option', { selected: true })).toHaveText(String(year + 3));
+    await expect(yearWheel.getByText(String(year + 13)).first()).toBeVisible();
     await yearWheel.press('End');
-    await expect(
-      page.getByText(String(new Date().getFullYear() + 20)).first(),
-    ).toBeVisible();
+    await expect(yearWheel.getByRole('option', { selected: true })).toHaveText(String(year + 13));
+    await expect(yearWheel.getByText(String(year + 23)).first()).toBeVisible();
+    await expect(page.getByText(String(year + 20)).first()).toBeVisible();
 
-    await page.getByRole('button', { name: 'Выбрать' }).click();
+    // Подтверждаем колёса: календарь прыгает на сентябрь выбранного года.
+    await page.getByRole('dialog', { name: 'Месяц и год' }).getByRole('button', { name: 'Выбрать' }).click();
+    const jumpedYear = year + 13;
 
-    // Календарь переключился на сентябрь; выбираем 10-е.
-    await page.getByRole('button', { name: '10', exact: true }).first().click();
+    // Календарь переключился на сентябрь прыжка; выбираем 10-е — секция
+    // именно этого месяца: в ленте остаются и прошлые месяцы с тем же днём.
+    await pickCalendarDay(page, new Date(jumpedYear, 8, 10));
+    await confirmCalendar(page);
+    await expect(page.getByRole('heading', { name: 'Периодичность платежа' })).toBeVisible();
     await page.getByRole('button', { name: 'Продолжить' }).click();
 
     await expect(page.getByRole('heading', { name: 'Окончание платежа' })).toBeVisible();
@@ -368,23 +412,22 @@ test.describe('визард создания платежа', () => {
     await page.getByRole('button', { name: '15', exact: true }).first().click();
     await page.getByRole('button', { name: 'Продолжить' }).click();
 
-    // Шаг 4: «Выбрать дату» открывает модалку годового календаря;
-    // прыжок на последний год — все дни заведомо в будущем.
+    // Шаг 4: «Выбрать дату» открывает канонический бесконечный календарь;
+    // черновик при открытии — сегодня (первый доступный день), «Выбрать»
+    // его коммитит. Тап по выбранному дню снял бы выбор (канон снятия).
     await page.getByRole('button', { name: 'Выбрать дату' }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
-    // Чип «Месяц Год» открывает колёса; год — не раньше текущего.
-    await dialog.getByRole('button', { name: /\d{4}/ }).click();
-    const yearWheel = page.getByRole('listbox', { name: 'Год' });
-    await expect(yearWheel).toBeVisible();
-    await yearWheel.press('End');
-    await page.getByRole('button', { name: 'Выбрать' }).click();
-    // Календарь переключился на далёкий год — все дни доступны.
-    const enabledDay = dialog.locator('button:enabled').filter({ hasText: /^\d{1,2}$/ });
-    await enabledDay.first().click();
-    // Модалка закрылась, дата вернулась на экран окончания.
+    await confirmCalendar(page);
+    // Модалка закрылась, дата вернулась на экран окончания; дата текущего
+    // года рендерится без года (formatDayMonthWithYear), месяц — родительный.
     await expect(dialog).toHaveCount(0);
-    await expect(page.getByText(/\d{1,2} [а-я]+, \d{4}/)).toBeVisible();
+    const monthGenitive = [
+      'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+      'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
+    ][new Date().getMonth()];
+    const dayExpected = String(new Date().getDate());
+    await expect(page.getByText(new RegExp(`^${dayExpected} ${monthGenitive}$`))).toBeVisible();
 
     await page.getByRole('button', { name: 'Далее' }).click();
     await page.getByRole('textbox', { name: 'Сумма' }).fill('15000');
@@ -465,12 +508,13 @@ test.describe('визард создания платежа', () => {
 
     await page.getByRole('button', { name: 'Каждый день' }).click();
     await expect(page.getByRole('heading', { name: 'Окончание платежа' })).toBeVisible();
-    // Окончание = сегодня: правило из единственного вхождения.
+    // Окончание = сегодня: правило стартует сегодня, единственное вхождение
+    // — сегодняшнее. Черновик канона при открытии уже сегодня, «Выбрать»
+    // коммитит его; тап по выбранному дню снял бы выбор (канон снятия).
     await page.getByRole('button', { name: 'Выбрать дату' }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
-    const todayNum = String(new Date().getDate());
-    await dialog.getByRole('button', { name: new RegExp(`^${todayNum}$`) }).first().click();
+    await confirmCalendar(page);
     await expect(dialog).toHaveCount(0);
     await page.getByRole('button', { name: 'Далее' }).click();
     await page.getByRole('textbox', { name: 'Сумма' }).fill('600');
@@ -489,7 +533,10 @@ test.describe('визард создания платежа', () => {
     await expect(page.getByText('Платеж оплачен')).toBeVisible();
     await page.getByRole('button', { name: 'Хорошо', exact: true }).click();
     await expect(page.getByText('Выполнена')).toBeVisible();
+    // goBack возвращает по кэшу (staleTime 30с, прогрев #626) — платёж ещё
+    // старый; перезагрузка читает с сервера завершённое состояние.
     await page.goBack();
+    await page.reload();
     await expect(page.getByText('Платеж завершен')).toBeVisible();
 
     // И в графике — то же завершённое состояние вместо «ближайших» дат.
