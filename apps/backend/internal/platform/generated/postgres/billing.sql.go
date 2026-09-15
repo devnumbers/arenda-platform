@@ -385,11 +385,16 @@ type CreateSubscriptionPaymentParams struct {
 	CardMask              pgtype.Text        `json:"card_mask"`
 }
 
-// Subscription payments (issue #250). The partial unique index
+// Subscription payments (issue #250). Two partial unique indexes are the
+// durable backstops of the one-pending-payment rule: the same-target
 // idx_subscription_payments_one_pending_upgrade (user_id, tariff_id, period)
-// WHERE status = 'pending' is the durable idempotency backstop against double
-// payment initiation; Create surfaces its violation as a unique-constraint
-// error the application maps to ErrAlreadyExists.
+// WHERE status = 'pending' against double payment initiation, and the
+// user-level idx_subscription_payments_one_pending_form (user_id)
+// WHERE status = 'pending' AND expires_at IS NOT NULL — at most one payer
+// form per user, whatever the target (issue #690). Create narrows the
+// violation by index: the form index is the pending-exists conflict, any
+// other is a duplicate initiation the application resolves to the existing
+// pending payment.
 func (q *Queries) CreateSubscriptionPayment(ctx context.Context, arg CreateSubscriptionPaymentParams) (SubscriptionPayment, error) {
 	row := q.db.QueryRow(ctx, createSubscriptionPayment,
 		arg.ID,

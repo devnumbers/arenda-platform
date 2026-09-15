@@ -14,6 +14,14 @@ func IsUniqueViolation(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation
 }
 
+// IsUniqueViolationOnConstraint reports whether err is a PostgreSQL unique
+// violation raised by the named constraint or index — the narrowing a table
+// with several partial unique indexes needs to tell their races apart.
+func IsUniqueViolationOnConstraint(err error, constraint string) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation && pgErr.ConstraintName == constraint
+}
+
 // IsForeignKeyViolation reports whether err is a PostgreSQL foreign-key
 // violation.
 func IsForeignKeyViolation(err error) bool {

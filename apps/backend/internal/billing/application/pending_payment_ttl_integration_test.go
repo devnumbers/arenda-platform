@@ -159,6 +159,116 @@ func TestPendingPaymentTTL_ExpiryWorker_Integration(t *testing.T) {
 	}
 }
 
+// seedFormPayment persists a live pending form payment of the given target.
+func (h *paymentIntegrationHarness) seedFormPayment(
+	t *testing.T, sub domain.Subscription, name domain.TariffName, period domain.SubscriptionPeriod, amount int64,
+) domain.SubscriptionPayment {
+	t.Helper()
+	return h.seedFormPaymentAt(t, sub, name, period, amount, h.clock.Now(), 15*time.Minute)
+}
+
+// seedDeadFormPayment persists a pending form payment of the given target
+// whose deadline has already run out — the state the TTL worker's lag leaves
+// behind (issue #690). The domain only attaches a future deadline, so both
+// instants are backdated.
+func (h *paymentIntegrationHarness) seedDeadFormPayment(
+	t *testing.T, sub domain.Subscription, name domain.TariffName, period domain.SubscriptionPeriod, amount int64,
+) domain.SubscriptionPayment {
+	t.Helper()
+	return h.seedFormPaymentAt(t, sub, name, period, amount, h.clock.Now().Add(-16*time.Minute), time.Minute)
+}
+
+// seedFormPaymentAt persists a pending form payment created at createdAt with
+// its deadline lifetime minutes later.
+func (h *paymentIntegrationHarness) seedFormPaymentAt(
+	t *testing.T, sub domain.Subscription, name domain.TariffName, period domain.SubscriptionPeriod,
+	amount int64, createdAt time.Time, lifetime time.Duration,
+) domain.SubscriptionPayment {
+	t.Helper()
+	deadline := createdAt.Add(lifetime)
+	payment, err := domain.NewSubscriptionPayment(
+		sub.UserID, sub.ID, h.tariffIDByName(t, name), period, amount, testProviderFake, createdAt)
+	if err != nil {
+		t.Fatalf("new payment: %v", err)
+	}
+	if err := payment.AttachFormDeadline(deadline, createdAt); err != nil {
+		t.Fatalf("attach deadline: %v", err)
+	}
+	stored, err := h.payments.Create(h.ctx(), payment)
+	if err != nil {
+		t.Fatalf("create payment: %v", err)
+	}
+	return stored
+}
+
+// TestPendingPaymentTTL_OneFormPerUser_Index_Integration proves the schema
+// backstop of issue #690 on the real database: a second live form of another
+// tariff and period violates the user-level partial unique index and the
+// adapter narrows exactly that index to ErrPendingPaymentExists — while a
+// merchant-initiated charge (no deadline) still coexists with the live form,
+// the deliberate #616 invariant the index predicate keeps out of its way.
+func TestPendingPaymentTTL_OneFormPerUser_Index_Integration(t *testing.T) {
+	t.Parallel()
+	h := newPaymentIntegrationHarness(t)
+	sub := h.seedPaidSubscription(t, domain.TariffBasic)
+	live := h.seedFormPayment(t, sub, domain.TariffPro, domain.PeriodMonth, 49000)
+
+	form, err := domain.NewSubscriptionPayment(
+		sub.UserID, sub.ID, h.tariffIDByName(t, domain.TariffBusiness),
+		domain.PeriodYear, 890000, testProviderFake, h.clock.Now())
+	if err != nil {
+		t.Fatalf("new payment: %v", err)
+	}
+	if err := form.AttachFormDeadline(h.clock.Now().Add(15*time.Minute), h.clock.Now()); err != nil {
+		t.Fatalf("attach deadline: %v", err)
+	}
+	if _, err := h.payments.Create(h.ctx(), form); !errors.Is(err, billingapp.ErrPendingPaymentExists) {
+		t.Fatalf("second live form err = %v, want ErrPendingPaymentExists", err)
+	}
+
+	mit, err := domain.NewSubscriptionPayment(
+		sub.UserID, sub.ID, h.tariffIDByName(t, domain.TariffBusiness),
+		domain.PeriodMonth, 99000, testProviderFake, h.clock.Now())
+	if err != nil {
+		t.Fatalf("new merchant-initiated payment: %v", err)
+	}
+	if _, err := h.payments.Create(h.ctx(), mit); err != nil {
+		t.Fatalf("merchant-initiated charge next to a live form: %v", err)
+	}
+	if _, err := h.payments.GetByID(h.ctx(), live.ID); err != nil {
+		t.Fatalf("GetByID(live): %v", err)
+	}
+}
+
+// TestPendingPaymentTTL_SweepsDeadFormsOfAnyTarget_Integration proves the
+// planning sweep of issue #690 against the real schema: a dead pending form
+// of another target — the state the TTL worker's lag leaves behind — is
+// expired by the planning transaction itself, so a fresh selection starts
+// instead of dying on the user-level unique index.
+func TestPendingPaymentTTL_SweepsDeadFormsOfAnyTarget_Integration(t *testing.T) {
+	t.Parallel()
+	h := newPaymentIntegrationHarness(t)
+	sub := h.seedPaidSubscription(t, domain.TariffBasic)
+	dead := h.seedDeadFormPayment(t, sub, domain.TariffBusiness, domain.PeriodYear, 890000)
+
+	result, err := h.subscriptionsSvc.ChangeTariff(h.ctx(), sub.UserID, billingapp.ChangeTariffRequest{
+		TariffName: domain.TariffPro,
+		Period:     domain.PeriodYear,
+	})
+	if err != nil {
+		t.Fatalf("ChangeTariff() with a dead form of another target: %v", err)
+	}
+	if result.PaymentID == dead.ID {
+		t.Fatal("ChangeTariff() returned the dead payment, want a fresh one")
+	}
+	swept := storedPaymentByID(t, h, dead.ID)
+	if swept.Status != domain.PaymentStatusFailed || swept.ErrorCode == nil ||
+		*swept.ErrorCode != domain.PaymentErrorCodeFormExpired {
+		t.Errorf("dead form = %q/%v, want failed with %q",
+			swept.Status, swept.ErrorCode, domain.PaymentErrorCodeFormExpired)
+	}
+}
+
 // TestPendingPaymentTTL_LateSuccessWebhook_Integration proves the race of
 // issue #616 point 6: the user pays at the last second, the webhook arrives
 // after the TTL worker expired the payment — the provider (the source of

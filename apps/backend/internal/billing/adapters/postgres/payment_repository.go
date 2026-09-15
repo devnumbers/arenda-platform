@@ -50,14 +50,24 @@ func (r *SubscriptionPaymentRepository) WithTx(tx transaction.Tx) (application.S
 	return NewSubscriptionPaymentRepository(dbtx, r.enc), nil
 }
 
-// Create inserts a new payment. A unique violation on the pending-payments
-// partial index is narrowed to ErrAlreadyExists: a concurrent request won the
-// initiation race and the caller returns the existing pending payment.
+// onePendingFormIndex is the user-level partial unique index backing the
+// one-pending-form-per-user invariant (issue #690): at most one pending
+// payment with a payer form per user, whatever the tariff and period.
+const onePendingFormIndex = "idx_subscription_payments_one_pending_form"
+
+// Create inserts a new payment. Unique violations are narrowed by index: the
+// user-level form index means a concurrent initiation's live form already
+// holds the user's slot — the pending-exists conflict; any other index (the
+// same-target pending backstop, the provider reference) means a duplicate
+// initiation the caller resolves to the existing pending payment.
 func (r *SubscriptionPaymentRepository) Create(
 	ctx context.Context, payment domain.SubscriptionPayment,
 ) (domain.SubscriptionPayment, error) {
 	row, err := r.q().CreateSubscriptionPayment(ctx, mapCreatePaymentParams(payment))
 	if err != nil {
+		if pgerr.IsUniqueViolationOnConstraint(err, onePendingFormIndex) {
+			return domain.SubscriptionPayment{}, application.ErrPendingPaymentExists
+		}
 		if pgerr.IsUniqueViolation(err) {
 			return domain.SubscriptionPayment{}, application.ErrAlreadyExists
 		}

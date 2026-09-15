@@ -413,14 +413,26 @@ func newFakePaymentRepo() *fakePaymentRepo {
 	return &fakePaymentRepo{payments: make(map[uuid.UUID]domain.SubscriptionPayment)}
 }
 
+// Create mirrors the database's pending-payment backstops (issue #690): the
+// same-target duplicate answers ErrAlreadyExists — the caller resolves it to
+// the existing pending payment; a form insert (deadline set) meets any other
+// pending form of the user — even a dead one the TTL worker has not reached
+// yet — and answers ErrPendingPaymentExists, the conflict the sweep must
+// clear first. A merchant-initiated charge (no deadline) is outside the form
+// index entirely, in either role.
 func (r *fakePaymentRepo) Create(_ context.Context, payment domain.SubscriptionPayment) (domain.SubscriptionPayment, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, existing := range r.payments {
-		if existing.Status == domain.PaymentStatusPending &&
-			existing.UserID == payment.UserID && existing.TariffID == payment.TariffID &&
-			existing.Period == payment.Period && existing.ID != payment.ID {
+		if existing.Status != domain.PaymentStatusPending || existing.ID == payment.ID {
+			continue
+		}
+		if existing.UserID == payment.UserID && existing.TariffID == payment.TariffID &&
+			existing.Period == payment.Period {
 			return domain.SubscriptionPayment{}, ErrAlreadyExists
+		}
+		if existing.UserID == payment.UserID && payment.ExpiresAt != nil && existing.ExpiresAt != nil {
+			return domain.SubscriptionPayment{}, ErrPendingPaymentExists
 		}
 	}
 	r.payments[payment.ID] = payment

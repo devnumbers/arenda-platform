@@ -569,16 +569,19 @@ func (s *SubscriptionService) executePlannedPayment(ctx context.Context, plan ch
 	return s.initiatePaymentAtProvider(ctx, *payment, plan.paymentTariff, plan.paymentPurpose)
 }
 
-// planPayment is the transactional half of the payment path: it returns an
-// existing live pending payment for the same tariff and period when there is
-// one (no duplicate initiation), expires one whose form deadline has run out
-// — the server-side expiry is the truth (issue #616) — or persists a fresh
+// planPayment is the transactional half of the payment path: it expires the
+// user's dead pending forms of every target (issue #690) so the one-form slot
+// is free, returns an existing live pending payment for the same tariff and
+// period when there is one (no duplicate initiation), or persists a fresh
 // pending payment: the durable record of the user's decision that survives a
 // crash before the provider call, with its form deadline anchored at creation
 // so the same absolute instant is passed to the provider. Concurrency is
 // guarded in two layers: the subscription row lock serializes initiations
-// across different targets, while the pending-payments partial unique index
-// (same user, tariff, period) durably backstops same-target duplicates.
+// across different targets, while the pending-payments partial unique indexes
+// durably backstop the races — same-target duplicates violate the
+// (user, tariff, period) index and resolve to the existing payment, a
+// concurrent live form of any target violates the user-level form index and
+// answers the pending-exists conflict.
 func (s *SubscriptionService) planPayment(
 	ctx context.Context,
 	stores *txStores,
@@ -587,15 +590,11 @@ func (s *SubscriptionService) planPayment(
 	period domain.SubscriptionPeriod,
 ) (created, existing *domain.SubscriptionPayment, err error) {
 	now := s.clock.Now().UTC()
+	if err := expireDeadPendingForms(ctx, stores, sub.UserID, now); err != nil {
+		return nil, nil, err
+	}
 	if pending := findPendingPayment(stores, ctx, sub.UserID, newTariff.ID, period); pending != nil {
-		if pending.IsLivePending(now) {
-			return nil, pending, nil
-		}
-		// The pending payment's form deadline ran out while still pending:
-		// fail it in this transaction and start fresh.
-		if err := expireDeadPendingPayment(ctx, stores, pending, now); err != nil {
-			return nil, nil, err
-		}
+		return nil, pending, nil
 	}
 
 	amount, err := newTariff.Price(period)
@@ -611,6 +610,11 @@ func (s *SubscriptionService) planPayment(
 	}
 	payment, err = stores.payments.Create(ctx, payment)
 	if err != nil {
+		if errors.Is(err, ErrPendingPaymentExists) {
+			// A concurrent initiation's live form holds the user's one-form
+			// slot: the conflict itself is the answer, not a lost race.
+			return nil, nil, ErrPendingPaymentExists
+		}
 		if !errors.Is(err, ErrAlreadyExists) {
 			return nil, nil, fmt.Errorf("save pending payment: %w", err)
 		}
@@ -638,11 +642,33 @@ func (s *SubscriptionService) planPayment(
 	return &payment, nil, nil
 }
 
+// expireDeadPendingForms fails every pending form payment of the user whose
+// deadline has run out — the server-side expiry is the truth (issue #616) —
+// not just the request's own target, so a dead form of another tariff or
+// period cannot occupy the user's one-form slot at the unique index
+// (issue #690). Form payments carry the deadline; merchant-initiated charges
+// (no deadline) are always live and never swept.
+func expireDeadPendingForms(ctx context.Context, stores *txStores, userID uuid.UUID, now time.Time) error {
+	pending, err := stores.payments.ListPendingByUserID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("list pending payments: %w", err)
+	}
+	for i := range pending {
+		p := &pending[i]
+		if p.IsLivePending(now) || p.ExpiresAt == nil {
+			continue
+		}
+		if err := expireDeadPendingPayment(ctx, stores, p, now); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // expireDeadPendingPayment finalizes a pending payment whose form deadline
 // ran out (issue #616) — the server-side expiry is the truth — inside the
-// caller's transaction. Shared by the tariff-change planner and the renewal
-// planner, which both meet dead pendings when reusing the same tariff and
-// period.
+// caller's transaction. Shared by the user-level sweep and the renewal
+// planner, which both meet dead pendings.
 func expireDeadPendingPayment(
 	ctx context.Context, stores *txStores, payment *domain.SubscriptionPayment, now time.Time,
 ) error {
