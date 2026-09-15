@@ -1805,6 +1805,11 @@ export interface components {
             status: components["schemas"]["SubscriptionPaymentStatus"];
             provider: string;
             paymentUrl?: string | null;
+            /**
+             * Format: date-time
+             * @description The payment form's absolute deadline (issue #680): the same instant the provider got as its redirect deadline, so the client closes the return-to-payment link by server truth instead of duplicating the form TTL. Null on merchant-initiated charges — they carry no payer form.
+             */
+            expiresAt?: string | null;
             paymentMethod?: components["schemas"]["SubscriptionPaymentCard"];
             /** Format: date-time */
             succeededAt?: string | null;

@@ -87,6 +87,19 @@ describe('mapSubscriptionPaymentResponse', () => {
     expect(payment.succeededAt).toBeUndefined();
   });
 
+  it('переносит срок жизни формы (#680)', () => {
+    expect(
+      mapSubscriptionPaymentResponse({
+        ...chargedPayment,
+        expiresAt: '2026-08-10T08:11:00Z',
+      }).expiresAt,
+    ).toBe('2026-08-10T08:11:00Z');
+  });
+
+  it('у платежа без формы (MIT-списание) expiresAt null', () => {
+    expect(mapSubscriptionPaymentResponse(chargedPayment).expiresAt).toBeNull();
+  });
+
   it('служебный refunding показывается как pending (решение владельца, #614)', () => {
     const payment = mapSubscriptionPaymentResponse({
       ...chargedPayment,

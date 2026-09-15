@@ -11,7 +11,6 @@ import {
   SubScreenShell,
 } from '@/shared/ui/design';
 import {
-  PAYMENT_STALE_MS,
   useSubscriptionPayment,
 } from '@/features/billing';
 import type { SubscriptionPayment } from '@/entities/billing';
@@ -25,7 +24,9 @@ import { formatDateTimeHeading } from '@/shared/lib/date-format';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import { ROUTES } from '@/shared/config/routes';
 import {
+  isPaymentFormExpired,
   paymentCardMask,
+  paymentFormDeadline,
   paymentPeriodLabel,
   paymentRowAmountProps,
   paymentStatusTone,
@@ -35,8 +36,8 @@ import {
  * 1883-72212): в шапке — дата-время платежа, герой — аватар тарифа 96,
  * название и сумма 40pt (знак и цвет по статусу), блок «Подробнее» —
  * способ оплаты / период / статус. У живого pending с формой банка —
- * «Вернуться к оплате» и поллинг статуса (useSubscriptionPayment);
- * зависший платёж (старше PAYMENT_STALE_MS, #616) ссылку прячет.
+ * «Вернуться к оплате» и поллинг статуса (useSubscriptionPayment); после
+ * серверного дедлайна формы (expiresAt, #680) ссылку прячет.
  * Shell собирается внутри: заголовок шапки зависит от данных. */
 export function PaymentDetail({ id }: PaymentDetailProps): JSX.Element {
   const { data: payment, isPending, isError, refetch } = useSubscriptionPayment(id);
@@ -123,16 +124,14 @@ function DetailRow({
 function PaymentDetailBody({ payment }: { readonly payment: SubscriptionPayment }): JSX.Element {
   const amount = paymentRowAmountProps(payment);
   const cardMask = paymentCardMask(payment);
-  // «Вернуться к оплате» живёт только у свежего pending (PAYMENT_STALE_MS,
-  // #616): тикающий канон-хук владеет временем — рендер остаётся чистым
+  // «Вернуться к оплате» живёт у банковской pending, чья форма не истекла:
+  // дедлайн — серверный expiresAt (#680, та же истина, что у провайдера).
+  // Тикающий канон-хук владеет временем — рендер остаётся чистым
   // (react-hooks/purity), после дедлайна ссылка исчезает сама.
-  const isBankPending = payment.status === 'pending' && payment.paymentUrl !== null;
-  const resumeDeadline = new Date(
-    new Date(payment.createdAt).getTime() + PAYMENT_STALE_MS,
-  ).toISOString();
-  const now = usePaymentTimer(resumeDeadline, isBankPending);
+  const resumeDeadline = paymentFormDeadline(payment);
+  const now = usePaymentTimer(resumeDeadline ?? '', resumeDeadline !== null);
   const resumeUrl =
-    isBankPending && now.getTime() < new Date(resumeDeadline).getTime()
+    resumeDeadline !== null && !isPaymentFormExpired(payment, now)
       ? payment.paymentUrl
       : null;
 

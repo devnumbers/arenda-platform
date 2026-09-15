@@ -448,6 +448,13 @@ func (h *BillingHandlers) ListSubscriptionPayments(w http.ResponseWriter, r *htt
 			url := *v.Payment.PaymentURL
 			item.PaymentUrl = &url
 		}
+		// The form deadline rides to the client (issue #680): server truth —
+		// the same instant the provider got as its redirect deadline — instead
+		// of the client duplicating the form TTL.
+		if v.Payment.ExpiresAt != nil {
+			deadline := *v.Payment.ExpiresAt
+			item.ExpiresAt = &deadline
+		}
 		items = append(items, item)
 	}
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.SubscriptionPaymentsResponse{Items: items})
