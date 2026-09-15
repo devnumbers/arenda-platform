@@ -278,17 +278,12 @@ func (h *FakeConfirmHandlers) writeConfirmAck(r *http.Request, w http.ResponseWr
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, map[string]any{"status": "ok"})
 }
 
-// The frontend return routes the GET bank-redirects land on (issue #663).
-// They mirror existing frontend routes (ROUTES in apps/frontend): the change
-// success screen polls the payment status by its paymentId query param; the
-// payment-methods screen consumes the addCard flag with its mount effect.
-const (
-	// Form-payment return: the screen polls the payment status by its
-	// paymentId query param and flips itself to the actual outcome.
-	paymentReturnPath = "/profile/tariff/change/success"
-	// «Способы оплаты» screen — its mount effect consumes the addCard flag.
-	bindingReturnPath = "/profile/tariff/payment-methods"
-)
+// The frontend return route the GET bank-redirects land on (issue #663).
+// It mirrors an existing frontend route (ROUTES in apps/frontend): the
+// change success screen polls the payment status by its paymentId query
+// param. The card-binding return shares httpsupport.AddCardReturnURL with
+// the T-Kassa add-card return — the same entry point by design.
+const paymentReturnPath = "/profile/tariff/change/success"
 
 // paymentReturnURL builds the frontend redirect target of a completed form
 // payment: the payment screen keyed by paymentId — its polling resolves the
@@ -302,7 +297,7 @@ func (h *FakeConfirmHandlers) paymentReturnURL(paymentID uuid.UUID) string {
 // binding: «Способы оплаты» with the addCardResult flag its mount effect
 // consumes (the same entry point the T-Kassa add-card return uses).
 func (h *FakeConfirmHandlers) bindingReturnURL() string {
-	return h.webOrigin + bindingReturnPath + "?addCard=success"
+	return httpsupport.AddCardReturnURL(h.webOrigin, httpsupport.AddCardResultSuccess)
 }
 
 // badRequest answers a malformed path parameter with a 400 problem.

@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"net/url"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -263,17 +262,11 @@ func New(deps Deps) http.Handler {
 
 func addCardReturnHandler(baseURL string, success bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		target := baseURL
-		if path, err := url.JoinPath(baseURL, "/profile/tariff/payment-methods"); err == nil {
-			target = path
-		}
-		q := url.Values{}
+		result := httpsupport.AddCardResultFailed
 		if success {
-			q.Set("addCard", "success")
-		} else {
-			q.Set("addCard", "fail")
+			result = httpsupport.AddCardResultSuccess
 		}
-		http.Redirect(w, r, target+"?"+q.Encode(), http.StatusFound)
+		http.Redirect(w, r, httpsupport.AddCardReturnURL(baseURL, result), http.StatusFound)
 	}
 }
 
