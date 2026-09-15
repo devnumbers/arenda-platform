@@ -9,7 +9,6 @@ import {
   Skeleton,
   StickyBottomBar,
   SubScreenShell,
-  buttonVariants,
 } from '@/shared/ui/design';
 import {
   PAYMENT_STALE_MS,
@@ -20,6 +19,7 @@ import { PAYMENT_STATUS_LABELS } from '@/entities/billing';
 import { getTariffLabel } from '@/entities/user';
 import { goBack } from '@/shared/lib/navigation';
 import { usePaymentTimer } from './tariff/use-payment-timer';
+import { PendingPaymentLink } from './tariff/pending-payment-cta';
 import { cn } from '@/shared/lib/cn';
 import { formatDateTimeHeading } from '@/shared/lib/date-format';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
@@ -179,16 +179,7 @@ function PaymentDetailBody({ payment }: { readonly payment: SubscriptionPayment 
       </div>
       {resumeUrl !== null && (
         <StickyBottomBar>
-          <div className="w-full text-white">
-            <a
-              href={resumeUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={buttonVariants({ className: 'w-full' })}
-            >
-              Вернуться к оплате
-            </a>
-          </div>
+          <PendingPaymentLink confirmUrl={resumeUrl} />
         </StickyBottomBar>
       )}
     </>

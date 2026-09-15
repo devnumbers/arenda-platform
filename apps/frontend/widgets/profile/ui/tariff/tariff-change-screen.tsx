@@ -10,7 +10,6 @@ import {
   RadioGroupItem,
   Skeleton,
   StickyBottomBar,
-  buttonVariants,
 } from '@/shared/ui/design';
 import { notify } from '@/shared/lib/notifications';
 import { billingKeys } from '@/shared/api/query-keys';
@@ -37,10 +36,9 @@ import {
   yearlyDiscountPercent,
   yearlyPerMonthLine,
 } from '@/widgets/profile/lib/tariff-change';
-import { formatPaymentCountdown } from '@/widgets/profile/lib/tariff-overview';
 import { TariffFaq } from './tariff-faq';
 import { FEATURE_IMAGES } from './tariff-about-cards';
-import { usePaymentTimer } from './use-payment-timer';
+import { PendingPaymentCta } from './pending-payment-cta';
 
 /** Экран «Выбрать тариф» (#623, макеты 1919-74867 год, 1929-76367 месяц,
  * 1929-75957 pending) — редизайн TariffChangeForm на канон: сегмент
@@ -367,9 +365,8 @@ function ChangeFooter({
 
 /** Блок живой pending-оплаты (макет 1929-75957): кнопка «Вернуться к
  * оплате» на confirmUrl банка, отсчёт «Время на оплату MM:SS» и серый
- * дисклеймер; кнопки подключения нет, пока платёж жив. Ссылка, а не
- * Button — confirmUrl ведёт на форму банка в новой вкладке (обёртка
- * text-white против легаси-сброса цвета ссылок, #620). */
+ * дисклеймер; кнопки подключения нет, пока платёж жив. CTA общий —
+ * PendingPaymentCta. */
 function PendingFooter({
   pending,
   onExpired,
@@ -377,24 +374,9 @@ function PendingFooter({
   readonly pending: PendingPayment;
   readonly onExpired: () => void;
 }): JSX.Element {
-  const now = usePaymentTimer(pending.expiresAt, true, onExpired);
-
   return (
     <div className="flex flex-col items-center gap-4">
-      <div className="w-full text-white">
-        <a
-          href={pending.confirmUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={buttonVariants({ className: 'w-full' })}
-        >
-          Вернуться к оплате
-        </a>
-      </div>
-      <p className="m-0 flex items-center gap-1 text-sm font-medium leading-4 text-primary">
-        Время на оплату
-        <span className="font-mono">{formatPaymentCountdown(pending.expiresAt, now)}</span>
-      </p>
+      <PendingPaymentCta pending={pending} onExpired={onExpired} />
       <p className="m-0 text-center text-sm leading-4 text-content-tertiary">
         Чтобы выбрать другой тариф, дождитесь завершения времени на оплату
       </p>
