@@ -103,9 +103,10 @@ export function OperationsPeriodChipDisplay({
   return (
     <span
       aria-hidden
-      className={`inline-flex h-11 items-center rounded-pill px-5 text-sm font-medium ${
-        period !== null ? "bg-primary text-white" : "bg-surface-muted text-content"
-      }`}
+      className={clsx(
+        "inline-flex h-11 items-center rounded-pill px-5 text-sm font-medium",
+        period !== null ? "bg-primary text-white" : "bg-surface-muted text-content",
+      )}
     >
       {operationsPeriodChipLabel(period)}
     </span>
