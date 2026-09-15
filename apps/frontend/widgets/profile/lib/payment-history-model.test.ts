@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { SubscriptionPayment } from '@/entities/billing';
 import {
   groupSubscriptionPaymentsByDate,
+  isPaymentFormExpired,
   paymentCardMask,
+  paymentFormDeadline,
   paymentPeriodLabel,
   paymentRowAmountProps,
   paymentRowSubtitle,
@@ -26,6 +28,7 @@ function payment(overrides: Partial<SubscriptionPayment>): SubscriptionPayment {
     status: 'succeeded',
     provider: 'tkassa',
     paymentUrl: null,
+    expiresAt: null,
     createdAt: '2026-08-10T10:56:00',
     ...overrides,
   };
@@ -119,6 +122,57 @@ describe('paymentPeriodLabel', () => {
   it('копия макета детали: «В месяц» / «В год»', () => {
     expect(paymentPeriodLabel('month')).toBe('В месяц');
     expect(paymentPeriodLabel('year')).toBe('В год');
+  });
+});
+
+describe('paymentFormDeadline', () => {
+  const deadline = '2026-09-15T12:15:00Z';
+
+  it('у банковской pending — серверный expiresAt (#680)', () => {
+    expect(
+      paymentFormDeadline(
+        payment({ status: 'pending', paymentUrl: 'https://pay.tbank.ru/x', expiresAt: deadline }),
+      ),
+    ).toBe(deadline);
+  });
+
+  it('у платежа без формы срока нет: не-banking статус, MIT-pending, legacy-строка', () => {
+    expect(paymentFormDeadline(payment({ status: 'succeeded', expiresAt: deadline }))).toBeNull();
+    expect(
+      paymentFormDeadline(payment({ status: 'pending', expiresAt: deadline })),
+    ).toBeNull();
+    expect(
+      paymentFormDeadline(payment({ status: 'pending', paymentUrl: 'https://pay.tbank.ru/x' })),
+    ).toBeNull();
+  });
+});
+
+describe('isPaymentFormExpired', () => {
+  const deadline = '2026-09-15T12:15:00Z';
+  const pending = payment({
+    status: 'pending',
+    paymentUrl: 'https://pay.tbank.ru/x',
+    expiresAt: deadline,
+  });
+
+  it('после серверного дедлайна форма просрочена, до — жива (#680)', () => {
+    expect(isPaymentFormExpired(pending, new Date('2026-09-15T12:16:00Z'))).toBe(true);
+    expect(isPaymentFormExpired(pending, new Date('2026-09-15T12:14:00Z'))).toBe(false);
+  });
+
+  it('платёж без формы не бывает просроченным', () => {
+    expect(
+      isPaymentFormExpired(payment({ status: 'pending' }), new Date('2027-01-01T00:00:00Z')),
+    ).toBe(false);
+  });
+
+  it('не-pending платёж с унаследованным expiresAt — не просрочен (единый предикат с paymentFormDeadline)', () => {
+    expect(
+      isPaymentFormExpired(
+        payment({ status: 'succeeded', expiresAt: deadline }),
+        new Date('2027-01-01T00:00:00Z'),
+      ),
+    ).toBe(false);
   });
 });
 

@@ -9,9 +9,9 @@ import { PAYMENT_STATUS_LABELS } from '@/entities/billing';
 import { cardNumberTail } from '@/entities/billing';
 
 /**
- * Презентационная модель экрана «Операции» (#624): группировка истории
- * подписочных платежей по датам, знаки и тона сумм, маски карт, копия
- * макета.
+ * Презентационная модель платёжных экранов профиля (#624): группировка
+ * истории подписочных платежей по датам, знаки и тона сумм, маски карт,
+ * срок жизни платёжной формы, копия макета.
  *
  * Группировка — канон дат shared/lib («10 августа», год вне текущего);
  * день берётся по локальным часам смотрящего (dateToIsoLocal): бэк для
@@ -20,6 +20,33 @@ import { cardNumberTail } from '@/entities/billing';
  * клиентского «сегодня»). Порядок групп повторяет серверную сортировку
  * входа (новые сверху, #619).
  */
+
+/** Дедлайн «Вернуться к оплате» (#680) — серверная истина: у банковской
+ * pending это expiresAt (тот же момент, что ушёл провайдеру как дедлайн
+ * редиректа), поэтому клиент больше не дублирует TTL формы. У платежа
+ * без формы срока нет: не-banking статус, MIT-pending, legacy-строка.
+ * Единственный предикат «у платежа есть форма» для обоих потребителей. */
+export function paymentFormDeadline(payment: SubscriptionPayment): string | null {
+  if (
+    payment.status !== 'pending' ||
+    payment.paymentUrl === null ||
+    payment.expiresAt === null
+  ) {
+    return null;
+  }
+  return payment.expiresAt;
+}
+
+/** Форма просрочена по серверному дедлайну: pending пережил свой срок
+ * жизни (#616) — копия экрана меняется с успокаивающей на «проверяем
+ * у банка». У платежа без формы просрочки нет. */
+export function isPaymentFormExpired(payment: SubscriptionPayment, now: Date): boolean {
+  const deadline = paymentFormDeadline(payment);
+  if (deadline === null) {
+    return false;
+  }
+  return now.getTime() >= new Date(deadline).getTime();
+}
 
 /** Пропсы суммы для канонической строки (PaymentRowButton): знак и тон
  * выводятся из статуса платежа (сумма в DTO — сумма списания, всегда

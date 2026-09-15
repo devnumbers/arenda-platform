@@ -94,6 +94,7 @@ export function mapSubscriptionPaymentResponse(
     status: mapPaymentStatus(response.status),
     provider: response.provider,
     paymentUrl: response.paymentUrl ?? null,
+    expiresAt: response.expiresAt ?? null,
     paymentMethod: response.paymentMethod,
     succeededAt: response.succeededAt ?? undefined,
     createdAt: response.createdAt,

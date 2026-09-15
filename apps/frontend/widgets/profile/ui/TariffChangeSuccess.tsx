@@ -6,7 +6,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Button, StickyBottomBar } from '@/shared/ui/design';
 import { CheckNoneLine, StatusIconDanger, Sync } from '@/shared/assets/icons';
 import {
-  PAYMENT_STALE_MS,
   useSubscription,
   useSubscriptionPayment,
 } from '@/features/billing';
@@ -14,10 +13,7 @@ import { billingKeys } from '@/shared/api/query-keys';
 import { formatDate } from '@/shared/lib/format-date';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
-
-function isPaymentStale(createdAt: string): boolean {
-  return Date.now() - new Date(createdAt).getTime() > PAYMENT_STALE_MS;
-}
+import { isPaymentFormExpired } from '../lib/payment-history-model';
 
 type TariffChangeSuccessState = {
   readonly icon: JSX.Element;
@@ -50,7 +46,9 @@ export function TariffChangeSuccess(): JSX.Element {
   let state: TariffChangeSuccessState;
 
   if (paymentId && (isPaymentPending || payment?.status === 'pending')) {
-    const isStale = payment ? isPaymentStale(payment.createdAt) : false;
+    // Зависшая pending — по серверному дедлайну формы (expiresAt, #680):
+    // экран поллит раз в 5 секунд, время берём на рендере.
+    const isStale = payment ? isPaymentFormExpired(payment, new Date()) : false;
     state = {
       icon: <Sync className="h-16 w-16 animate-spin text-error" aria-hidden />,
       title: 'Платёж обрабатывается',

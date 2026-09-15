@@ -41,9 +41,6 @@ type AddPaymentMethodRequest = components['schemas']['AddPaymentMethodRequest'];
 type SubscriptionPaymentsResponse =
   components['schemas']['SubscriptionPaymentsResponse'];
 
-/** Pending-платёж старше этого возраста считается «зависшим» — UI меняет текст. */
-export const PAYMENT_STALE_MS = 15 * 60 * 1000;
-
 const PAYMENT_POLL_INTERVAL_MS = 5000;
 const PAYMENT_POLL_MAX_AGE_MS = 30 * 60 * 1000;
 

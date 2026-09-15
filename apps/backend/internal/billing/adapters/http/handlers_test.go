@@ -1743,6 +1743,71 @@ func TestListSubscriptionPayments_MapsCardAndSucceededAt(t *testing.T) {
 	}
 }
 
+// TestListSubscriptionPayments_MapsExpiresAt proves the payment form's
+// absolute deadline crosses to the client (issue #680): a pending
+// customer-initiated payment answers the persisted expiresAt — the same
+// instant the provider got as its redirect deadline — so the UI hides the
+// "return to payment" link by server truth, and a merchant-initiated
+// charge carries no form and answers nothing.
+func TestListSubscriptionPayments_MapsExpiresAt(t *testing.T) {
+	t.Parallel()
+	ownerID := uuid.Must(uuid.NewV7())
+	deadline := time.Date(2026, 9, 15, 12, 15, 0, 0, time.UTC)
+	url := "http://localhost:8080/internal/fake-subscription-payment/x/confirm"
+	h := newTestHandlersOpts(nil, nil, nil, &fakePaymentManager{list: func(
+		_ context.Context, _ uuid.UUID,
+	) ([]billingapp.SubscriptionPaymentView, error) {
+		base := domain.SubscriptionPayment{
+			UserID:        ownerID,
+			TariffID:      uuid.Must(uuid.NewV7()),
+			Period:        domain.PeriodMonth,
+			AmountKopecks: 49000,
+			Provider:      testProviderFake,
+			CreatedAt:     deadline.Add(-15 * time.Minute),
+		}
+		pendingWithForm := base
+		pendingWithForm.ID = uuid.Must(uuid.NewV7())
+		pendingWithForm.Status = domain.PaymentStatusPending
+		pendingWithForm.PaymentURL = &url
+		pendingWithForm.ExpiresAt = &deadline
+		chargeWithoutForm := base
+		chargeWithoutForm.ID = uuid.Must(uuid.NewV7())
+		chargeWithoutForm.Status = domain.PaymentStatusSucceeded
+		return []billingapp.SubscriptionPaymentView{
+			{Payment: pendingWithForm, Tariff: domain.Tariff{Name: domain.TariffPro, ActivePropertyLimit: 5, IsActive: true}},
+			{Payment: chargeWithoutForm, Tariff: domain.Tariff{Name: domain.TariffPro, ActivePropertyLimit: 5, IsActive: true}},
+		}, nil
+	}}, nil, nil)
+
+	w := httptest.NewRecorder()
+	h.ListSubscriptionPayments(w, ownerRequest(t, http.MethodGet, "/subscription/payments", ownerID))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Items []struct {
+			Status     string  `json:"status"`
+			PaymentURL *string `json:"paymentUrl"`
+			ExpiresAt  *string `json:"expiresAt"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(resp.Items) != 2 {
+		t.Fatalf("items = %d, want 2", len(resp.Items))
+	}
+	pending := resp.Items[0]
+	if pending.ExpiresAt == nil || *pending.ExpiresAt != deadline.Format(time.RFC3339Nano) {
+		t.Errorf("pending expiresAt = %v, want %v", pending.ExpiresAt, deadline)
+	}
+	charge := resp.Items[1]
+	if charge.ExpiresAt != nil {
+		t.Errorf("merchant-initiated expiresAt = %v, want absent", *charge.ExpiresAt)
+	}
+}
+
 // TestListSubscriptionPayments_MapsInt64AmountBoundary proves the payment
 // amount crosses the DTO boundary as a 64-bit integer without truncation: a
 // value far beyond the int32 range answers intact (issue #425).

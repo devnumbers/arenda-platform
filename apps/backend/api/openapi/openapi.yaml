@@ -4440,6 +4440,16 @@ components:
         paymentUrl:
           type: string
           nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            The payment form's absolute deadline (issue #680): the same instant
+            the provider got as its redirect deadline, so the client closes the
+            return-to-payment link by server truth instead of duplicating the
+            form TTL. Null on merchant-initiated charges — they carry no payer
+            form.
         paymentMethod:
           $ref: '#/components/schemas/SubscriptionPaymentCard'
         succeededAt:

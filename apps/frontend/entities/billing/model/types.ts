@@ -92,6 +92,10 @@ export type SubscriptionPayment = {
   status: PaymentStatus;
   provider: string;
   paymentUrl: string | null;
+  /** Срок жизни платёжной формы (#680) — серверная истина, тот же момент,
+   * что ушёл провайдеру как дедлайн редиректа; у платежей без формы
+   * (MIT-списание, legacy-строки) — null. */
+  expiresAt: string | null;
   paymentMethod?: SubscriptionPaymentCard;
   succeededAt?: string;
   createdAt: string;
