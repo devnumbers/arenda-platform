@@ -6,7 +6,7 @@ import type {
   SubscriptionPayment,
 } from '@/entities/billing';
 import { PAYMENT_STATUS_LABELS } from '@/entities/billing';
-import { cardNumberTail } from './tariff-about';
+import { cardNumberTail } from '@/entities/billing';
 
 /**
  * Презентационная модель экрана «Операции» (#624): группировка истории

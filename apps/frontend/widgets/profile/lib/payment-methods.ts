@@ -1,5 +1,5 @@
 import type { PaymentMethod } from '@/entities/billing';
-import { cardNumberTail } from './tariff-about';
+import { cardNumberTail } from '@/entities/billing';
 
 /** Заголовок строки способа оплаты: только хвост маски «•••• 0700» —
  * бренд платёжной системы (Мир/Visa/Mastercard) в интерфейсе не
