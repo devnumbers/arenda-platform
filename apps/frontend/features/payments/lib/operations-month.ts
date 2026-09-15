@@ -1,4 +1,5 @@
 import type { IsoDate } from '@/entities/payment';
+import { lastDayOfMonth } from '@/shared/lib/calendar';
 
 /**
  * Календарный месяц в модели операций: month — 0..11, как у Date.
@@ -22,7 +23,7 @@ export function operationsMonthRange(month: OperationsMonth): {
   from: IsoDate;
   to: IsoDate;
 } {
-  const lastDay = new Date(month.year, month.month + 1, 0).getDate();
+  const lastDay = lastDayOfMonth(month.year, month.month);
   const prefix = `${month.year}-${String(month.month + 1).padStart(2, '0')}`;
   return {
     from: `${prefix}-01`,

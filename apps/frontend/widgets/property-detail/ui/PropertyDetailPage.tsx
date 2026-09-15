@@ -165,7 +165,7 @@ export function PropertyDetailPage(): JSX.Element {
     const paymentsQuery = usePayments(id);
     const overdueQuery = usePropertyOverdueOperations(id);
     // Сводка секции «Операции в <месяц>» — за текущий календарный месяц
-    // (карта #669: своди объекта месячная и после дефолта «весь период»
+    // (карта #669: сводка объекта месячная и после дефолта «весь период»
     // на лентах); границы берутся напрямую из модели месяца.
     const operationsPeriod = operationsMonthRange(operationsMonthOf(today));
     const operationsQuery = usePropertyOperationsSummary(id, {
