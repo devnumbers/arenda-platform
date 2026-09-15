@@ -1,0 +1,121 @@
+# Рентли: пять публичных блоков rentlee.ru — зеркало серверного
+# /etc/caddy/conf.d/rentlee.caddy. Источник правды — этот файл в репо: правки
+# только через репо и деплой (deploy-stage/prod раскатывают фрагмент в conf.d),
+# руками на сервере не редактировать. Остальные проекты живут своими файлами
+# в /etc/caddy/conf.d/ и правятся руками — пайплайн их не трогает
+# (docs/deployment.md, раздел «Caddy»).
+#
+# Контракт публичного сайта — инверсия фолбэка (карта #649): кабинет Next.js
+# дефолтный catch-all, лендинг — явное исключение. Новый top-level роут фронта
+# работает без правок прокси; новый публичный путь лендинга = добавление
+# в матчер @landing. На /sw.js никаких заголовков Caddy не ставит —
+# Cache-Control: no-store приходит от Next (ADR 0032).
+
+# Один публичный сайт кабинета: /api и /webhooks — бэкенд, лендинг —
+# исключение, всё остальное — кабинет. handle-блоки взаимоисключающие;
+# порядок гарантируется алгоритмом сортировки Caddy (матчерные до безматчерного
+# fallback), выписан в порядке приоритета для читаемости.
+# Аргументы: {args[0]} — backend, {args[1]} — landing, {args[2]} — frontend.
+(rentlee_site) {
+	encode zstd gzip
+
+	# Префикс /api снимается: бэкенд ждёт пути без /api.
+	handle_path /api/* {
+		reverse_proxy 127.0.0.1:{args[0]}
+	}
+
+	# /webhooks — БЕЗ снятия префикса: T-Kassa шлёт колбэки на полный путь.
+	handle /webhooks/* {
+		reverse_proxy 127.0.0.1:{args[0]}
+	}
+
+	# Лендинг — явное исключение: корень, юрстраницы, robots/sitemap,
+	# Vite-бандлы и шрифты. handle, НЕ handle_path: nginx-контейнер лендинга
+	# ждёт полный путь (/assets/index-<hash>.js). Форма префиксов — только
+	# /prefix/* (со слешем перед *), не /prefix*.
+	@landing path / /privacy /terms /robots.txt /sitemap.xml /assets/* /landing-fonts/*
+	handle @landing {
+		reverse_proxy 127.0.0.1:{args[1]}
+	}
+
+	# Всё остальное — кабинет Next.js.
+	handle {
+		reverse_proxy 127.0.0.1:{args[2]}
+	}
+}
+
+www.rentlee.ru {
+	redir https://rentlee.ru{uri} permanent
+
+	log {
+		output file /var/log/caddy/access.log {
+			roll_size 50mb
+			roll_keep 5
+		}
+		format json
+	}
+}
+
+rentlee.ru {
+	import rentlee_site 18080 13002 13000
+
+	log {
+		output file /var/log/caddy/access.log {
+			roll_size 50mb
+			roll_keep 5
+		}
+		format json
+	}
+}
+
+dev.rentlee.ru {
+	import rentlee_site 28080 23002 23000
+
+	log {
+		output file /var/log/caddy/access.log {
+			roll_size 50mb
+			roll_keep 5
+		}
+		format json
+	}
+}
+
+admin.rentlee.ru {
+	encode zstd gzip
+
+	handle_path /api/* {
+		reverse_proxy 127.0.0.1:18080
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:13001
+	}
+
+	log {
+		output file /var/log/caddy/access.log {
+			roll_size 50mb
+			roll_keep 5
+		}
+		format json
+	}
+}
+
+admin.dev.rentlee.ru {
+	encode zstd gzip
+
+	handle_path /api/* {
+		reverse_proxy 127.0.0.1:28080
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:23001
+	}
+
+	log {
+		output file /var/log/caddy/access.log {
+			roll_size 50mb
+			roll_keep 5
+		}
+		format json
+	}
+}

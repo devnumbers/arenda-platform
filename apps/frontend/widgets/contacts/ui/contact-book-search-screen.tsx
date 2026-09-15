@@ -7,7 +7,13 @@ import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { useDebounce } from '@/shared/lib/hooks/useDebounce';
 import { useContactBook } from '@/features/contacts';
-import { IconButton, PageContent, SearchField, TopNav } from '@/shared/ui/design';
+import {
+  IconButton,
+  InfiniteQueryTail,
+  PageContent,
+  SearchField,
+  TopNav,
+} from '@/shared/ui/design';
 import { contactBookRowSubtitle } from '../lib/contact-book-model';
 import { ContactRowButton } from '@/entities/contact';
 import {
@@ -95,6 +101,7 @@ export function ContactBookSearchScreen(): JSX.Element {
                 onSelect={() => router.push(ROUTES.contact(contact.id))}
               />
             ))}
+            <InfiniteQueryTail query={contactsQuery} />
           </div>
         )}
       </PageContent>

@@ -42,6 +42,13 @@ export function formatDayMonthWithYear(iso: IsoDate, today: IsoDate): string {
   return `${base}, ${isoYear(iso)}`;
 }
 
+/** Месяцы в предложном падеже (индекс 0..11): заголовки «Операции в
+ * сентябре» (#589). Словарь склонений живёт в каноне дат, не на местах. */
+export const MONTH_PREPOSITIONAL: ReadonlyArray<string> = [
+  'январе', 'феврале', 'марте', 'апреле', 'мае', 'июне',
+  'июле', 'августе', 'сентябре', 'октябре', 'ноябре', 'декабре',
+];
+
 /** Русское склонение «день/дня/дней»: 1 день, 3 дня, 5 дней, 21 день. */
 export function formatOverdueDays(days: number): string {
   return `${days} ${pluralize(Math.abs(days), 'день', 'дня', 'дней')}`;
@@ -50,6 +57,11 @@ export function formatOverdueDays(days: number): string {
 /** Полноширинная дата «01.01.2025» — границы диапазона другого года. */
 export function formatDottedDate(iso: IsoDate): string {
   return `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`;
+}
+
+/** Короткая точечная дата «01.01» без года — бейдж «Аренда с DD.MM» (#586). */
+export function formatDayMonthDotted(iso: IsoDate): string {
+  return `${iso.slice(8, 10)}.${iso.slice(5, 7)}`;
 }
 
 /** Подпись границы диапазона в пикере периода: текущий год — «1 ноября»

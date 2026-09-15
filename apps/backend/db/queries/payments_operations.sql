@@ -219,6 +219,14 @@ WHERE owner_id = sqlc.arg('owner')
 -- ordering (op.date, id tiebreak) and filter vocabulary minus the status
 -- filter: paid is the feed's only stored status. property_name is the row's
 -- property label — the global screen's row label.
+--
+-- The page walks the feed's own order by keyset (ticket #597): the window
+-- resumes strictly after the (date, id) the previous page ended on, so
+-- rows created, deleted or renamed between loads never duplicate or drop.
+-- The id tiebreak runs DESC in both directions, so the continuation is
+-- (date ahead of the cursor) or (same date, id below it); the direction
+-- only flips the date comparison. Both cursor args travel together; NULL
+-- (no cursor) reads from the beginning.
 SELECT op.id,
        op.owner_id,
        op.property_id,
@@ -260,11 +268,53 @@ WHERE op.status = 'paid'
   AND (sqlc.arg('type')::text = '' OR op.type = sqlc.arg('type')::text)
   AND (sqlc.arg('categories')::text = ''
        OR op.category_slug = ANY(string_to_array(sqlc.arg('categories')::text, ',')))
+  AND (sqlc.narg('after_id')::uuid IS NULL
+       OR (sqlc.arg('order')::text = 'asc'
+           AND (op.date > sqlc.narg('after_date')::date
+                OR (op.date = sqlc.narg('after_date') AND op.id < sqlc.narg('after_id')::uuid)))
+       OR (sqlc.arg('order')::text <> 'asc'
+           AND (op.date < sqlc.narg('after_date')::date
+                OR (op.date = sqlc.narg('after_date') AND op.id < sqlc.narg('after_id')::uuid))))
 ORDER BY
   CASE WHEN sqlc.arg('order')::text = 'asc' THEN op.date END ASC,
   CASE WHEN sqlc.arg('order')::text = 'desc' THEN op.date END DESC,
   op.id DESC
-LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
+LIMIT sqlc.arg('limit');
+
+-- name: CountPaidOperationsGlobal :one
+-- The global feed's whole-scope count (ticket #599): the list query's
+-- predicate — paid, the visibility, the archive cut, the propertyIds
+-- multi-select, the period, the search over title/category label/amount
+-- digits, the direction and category filters — without the keyset key, the
+-- ordering and the window. The count is the scope's own, identical on every
+-- walked page; the search screen shows it as «найдено N».
+SELECT COUNT(*)
+FROM operations op
+JOIN properties p ON p.id = op.property_id
+WHERE op.status = 'paid'
+  AND (
+       op.owner_id = sqlc.arg('actor')
+       OR EXISTS (
+            SELECT 1 FROM property_members pm
+            WHERE pm.property_id = op.property_id
+              AND pm.user_id = sqlc.arg('actor')
+              AND pm.status = 'active'
+          )
+      )
+  AND (sqlc.arg('include_archived')::bool OR p.status != 'archived')
+  AND (sqlc.arg('property_ids')::text = ''
+       OR op.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[])
+       OR (sqlc.arg('include_archived')::bool AND p.status = 'archived'))
+  AND (sqlc.narg('date_from')::date IS NULL OR op.date >= sqlc.narg('date_from'))
+  AND (sqlc.narg('date_to')::date IS NULL OR op.date <= sqlc.narg('date_to'))
+  AND (sqlc.arg('search')::text = ''
+       OR op.title ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
+       OR op.category_label ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
+       OR (sqlc.arg('search_digits')::text <> ''
+           AND CAST(op.amount_kopecks AS text) LIKE '%' || sqlc.arg('search_digits')::text || '%'))
+  AND (sqlc.arg('type')::text = '' OR op.type = sqlc.arg('type')::text)
+  AND (sqlc.arg('categories')::text = ''
+       OR op.category_slug = ANY(string_to_array(sqlc.arg('categories')::text, ',')));
 
 -- name: SumPaidOperationTotalsGlobal :many
 -- The period totals by direction of the actor's visible merged feed (ticket
@@ -337,3 +387,17 @@ WHERE op.status = 'paid'
        OR op.category_slug = ANY(string_to_array(sqlc.arg('categories')::text, ',')))
 GROUP BY op.category_slug, op.category_label, op.type
 ORDER BY total_kopecks DESC, op.category_slug;
+
+-- name: ListPropertyIDsWithOverdueOperations :many
+-- The payments half of the list red dot (ticket #585, резолюция #584): the
+-- subset of the given properties holding at least one overdue planned
+-- operation — a stored planned row dated before the owner's today, the same
+-- predicate ListOperations resolves as the overdue view status in exactly
+-- one place. One batched read per data owner; cancelled tombstones are not
+-- planned rows and never match.
+SELECT DISTINCT op.property_id
+FROM operations op
+WHERE op.owner_id = sqlc.arg('owner')
+  AND op.status = 'planned'
+  AND op.date < sqlc.arg('today')
+  AND op.property_id = ANY(sqlc.arg('property_ids')::uuid[]);

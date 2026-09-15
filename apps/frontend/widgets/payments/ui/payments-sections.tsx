@@ -6,7 +6,7 @@ import {
   formatOverdueDays,
   PaymentRowButton,
 } from '@/entities/payment';
-import { EmptyState, Skeleton } from '@/shared/ui/design';
+import { EmptyState, Skeleton, SkeletonListRow, skeletonRowWidths } from '@/shared/ui/design';
 import type { GlobalPayment, IsoDate, Payment, PaymentOperation } from '@/entities/payment';
 import { CategoryIcon, categoryStyle, type CategoryIconSurface } from '@/features/payment-categories';
 import { daysOverdue } from '../lib/overdue-days';
@@ -292,6 +292,20 @@ export function PaymentsSkeleton({ withHeading }: { readonly withHeading?: boole
         <Skeleton className="h-11 w-4/5 bg-surface-muted-hover" />
       </div>
     </section>
+  );
+}
+
+/** Скелетон плоского списка строк правил (#605): строки канона
+ * PaymentRowButton px-6 py-2 — иконка 44, название + объект, справа сумма и
+ * дата (списки избранного #579 и просроченных #580). */
+export function PaymentsRowsSkeleton({ rows = 5 }: { readonly rows?: number }): JSX.Element {
+  const widths = skeletonRowWidths(rows);
+  return (
+    <div aria-hidden className="flex flex-col">
+      {widths.map((rowWidths, index) => (
+        <SkeletonListRow key={index} value description widths={rowWidths} />
+      ))}
+    </div>
   );
 }
 

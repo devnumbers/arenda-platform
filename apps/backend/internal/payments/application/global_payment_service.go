@@ -63,10 +63,16 @@ type GlobalPaymentFeed struct {
 }
 
 // GlobalPaymentSearch is the global payment rules search's response (ticket
-// #575): the matched rows plus the matched categories — the chips.
+// #575): the matched rows plus the matched categories — the chips, one
+// category identity each (ticket #602). NextCursor is the keyset
+// continuation (ticket #597) — ” when the matches are exhausted. Total is
+// the whole scope's match count under the query and the chip filter
+// (ticket #599) — «найдено N», the same on every walked page.
 type GlobalPaymentSearch struct {
 	Items             []GlobalPaymentItem
-	MatchedCategories []GlobalPaymentSearchCategory
+	MatchedCategories []domain.CategoryRef
+	NextCursor        string
+	Total             int64
 }
 
 // GlobalPaymentObjectKey is one key of a property's stack (ticket #575):
@@ -147,13 +153,14 @@ func (s *GlobalPaymentService) ListGlobalPayments(ctx context.Context, actor uui
 // GlobalPaymentSearchPage is the search list's page request (map #573
 // rework): the server-side chip filter plus the 50-per-page window the
 // search screen's infinite scroll walks. The zero limit means the
-// contract's default page. The filter narrows the rules list only — the
+// contract's default page; Cursor is the previous page's opaque continuation
+// (” = from the beginning). The filter narrows the rules list only — the
 // matched categories always describe the query's whole matched scope.
 type GlobalPaymentSearchPage struct {
 	Category string
 	Type     domain.PaymentType
 	Limit    int32
-	Offset   int32
+	Cursor   string
 }
 
 const (
@@ -161,16 +168,25 @@ const (
 	MaxPaymentRulesPageSize     = 100
 )
 
-// prepareGlobalPaymentSearchPage applies the page-size default and rejects
-// the out-of-range numbers with ErrInvalidInput (the operations' canon).
-func prepareGlobalPaymentSearchPage(page *GlobalPaymentSearchPage) error {
+// prepareGlobalPaymentSearchPage applies the page-size default, rejects the
+// out-of-range numbers with ErrInvalidInput (the operations' canon) and
+// decodes the page's continuation cursor (ticket #597); the empty cursor is
+// the list's beginning, no keyset key.
+func prepareGlobalPaymentSearchPage(page *GlobalPaymentSearchPage) (time.Time, uuid.UUID, bool, error) {
 	if page.Limit == 0 {
 		page.Limit = DefaultPaymentRulesPageSize
 	}
-	if page.Limit < 1 || page.Limit > MaxPaymentRulesPageSize || page.Offset < 0 {
-		return ErrInvalidInput
+	if page.Limit < 1 || page.Limit > MaxPaymentRulesPageSize {
+		return time.Time{}, uuid.Nil, false, ErrInvalidInput
 	}
-	return nil
+	if page.Cursor == "" {
+		return time.Time{}, uuid.Nil, false, nil
+	}
+	afterCreatedAt, afterID, err := decodeRuleCursor(page.Cursor)
+	if err != nil {
+		return time.Time{}, uuid.Nil, false, err
+	}
+	return afterCreatedAt, afterID, true, nil
 }
 
 // SearchGlobalPayments narrows the feed by the search query — a
@@ -179,25 +195,42 @@ func prepareGlobalPaymentSearchPage(page *GlobalPaymentSearchPage) error {
 // returns the matched categories of the matched rules: the chips. The list
 // runs in pages of 50 under the chip's category/type filter (the search
 // screen's infinite scroll); the counters are not part of the search
-// contract.
+// contract. The window is the feed's keyset walk (ticket #597): the page
+// resumes strictly after the cursor's (created_at, id) and answers with the
+// next page's cursor once it came back full.
 func (s *GlobalPaymentService) SearchGlobalPayments(
 	ctx context.Context, actor uuid.UUID, search string, page GlobalPaymentSearchPage,
 ) (GlobalPaymentSearch, error) {
-	if err := prepareGlobalPaymentSearchPage(&page); err != nil {
+	afterCreatedAt, afterID, hasCursor, err := prepareGlobalPaymentSearchPage(&page)
+	if err != nil {
 		return GlobalPaymentSearch{}, err
 	}
 	todays, err := s.ownerTodays(ctx, actor)
 	if err != nil {
 		return GlobalPaymentSearch{}, err
 	}
-	items, err := s.feedItems(ctx, actor, todays, GlobalPaymentRulesQuery{
+	// The rows and the enriched items stay index-aligned (enrichItems keeps
+	// the rows' order), so the page's last row carries the continuation's
+	// keyset key (ticket #597).
+	query := GlobalPaymentRulesQuery{
 		Search:        search,
 		CategorySlugs: defaultCategorySlugsMatching(search),
 		Category:      page.Category,
 		Type:          page.Type,
 		Limit:         page.Limit,
-		Offset:        page.Offset,
-	})
+	}
+	if hasCursor {
+		query.AfterCreatedAt = &afterCreatedAt
+		query.AfterID = &afterID
+	}
+	rows := []GlobalPaymentRuleRow{}
+	if len(todays) > 0 {
+		rows, err = s.reader.ListGlobalPaymentRules(ctx, actor, todays, query)
+		if err != nil {
+			return GlobalPaymentSearch{}, fmt.Errorf("list global payment rules: %w", err)
+		}
+	}
+	items, err := s.enrichItems(ctx, rows)
 	if err != nil {
 		return GlobalPaymentSearch{}, err
 	}
@@ -210,7 +243,35 @@ func (s *GlobalPaymentService) SearchGlobalPayments(
 	if err != nil {
 		return GlobalPaymentSearch{}, fmt.Errorf("sum global payment search categories: %w", err)
 	}
-	return GlobalPaymentSearch{Items: items, MatchedCategories: categories}, nil
+	// A full page answers with the last row's continuation; a short one has
+	// walked the matches to the end — the '' cursor stops the scroll.
+	nextCursor := ""
+	if len(rows) == int(page.Limit) {
+		last := rows[len(rows)-1]
+		nextCursor = encodeRuleCursor(last.CreatedAt, last.ID)
+	}
+	// The total counts the whole matched scope (ticket #599): the list's
+	// search and chip filters, no keyset key — the cursor only positions
+	// the window, the count is the same on every walked page. An empty
+	// visible scope counts nothing, the store untouched.
+	total := int64(0)
+	if len(todays) > 0 {
+		total, err = s.reader.CountGlobalPaymentRules(ctx, actor, todays, GlobalPaymentRulesQuery{
+			Search:        search,
+			CategorySlugs: defaultCategorySlugsMatching(search),
+			Category:      page.Category,
+			Type:          page.Type,
+		})
+		if err != nil {
+			return GlobalPaymentSearch{}, fmt.Errorf("count global payment rules: %w", err)
+		}
+	}
+	return GlobalPaymentSearch{
+		Items:             items,
+		MatchedCategories: categories,
+		NextCursor:        nextCursor,
+		Total:             total,
+	}, nil
 }
 
 // ListGlobalPaymentObjects returns the actor's visible non-archived

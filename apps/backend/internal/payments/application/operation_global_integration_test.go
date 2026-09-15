@@ -10,6 +10,7 @@ package application_test
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 	"testing"
 	"time"
@@ -143,11 +144,11 @@ func TestListGlobalOperations_MergedFeed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list global: %v", err)
 	}
-	if !titlesEqual(feedTitles(items), "Охрана", "ЖКУ", "Аренда", "Аренда") {
-		t.Fatalf("feed = %v, want the four paid rows newest-first (planned, cancelled, archived, foreign cut)", feedTitles(items))
+	if !titlesEqual(feedTitles(items.Items), "Охрана", "ЖКУ", "Аренда", "Аренда") {
+		t.Fatalf("feed = %v, want the four paid rows newest-first (planned, cancelled, archived, foreign cut)", feedTitles(items.Items))
 	}
 	nameOf := map[uuid.UUID]string{h.propID: "Квартира", ownB: "Дом", shared: "Чужая дача"}
-	for _, item := range items {
+	for _, item := range items.Items {
 		if item.ViewStatus != domain.ViewStatusPaid {
 			t.Errorf("row %q status = %s, want paid — the feed is paid-only", item.Operation.Title, item.ViewStatus)
 		}
@@ -170,8 +171,8 @@ func TestListGlobalOperations_SuspendedMemberSeesNothing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list global: %v", err)
 	}
-	if len(items) != 0 {
-		t.Fatalf("suspended member's feed = %+v, want empty — a suspended membership grants no read", items)
+	if len(items.Items) != 0 {
+		t.Fatalf("suspended member's feed = %+v, want empty — a suspended membership grants no read", items.Items)
 	}
 }
 
@@ -188,8 +189,8 @@ func TestListGlobalOperations_PropertyIdsFilter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("filter by ownB: %v", err)
 	}
-	if !titlesEqual(feedTitles(one), "Охрана") {
-		t.Fatalf("propertyIds=[ownB] = %v, want the single Дом row", feedTitles(one))
+	if !titlesEqual(feedTitles(one.Items), "Охрана") {
+		t.Fatalf("propertyIds=[ownB] = %v, want the single Дом row", feedTitles(one.Items))
 	}
 
 	both, err := h.ops.ListGlobalOperations(h.ctx(), h.owner,
@@ -197,8 +198,8 @@ func TestListGlobalOperations_PropertyIdsFilter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("filter by ownA+shared: %v", err)
 	}
-	if !titlesEqual(feedTitles(both), "ЖКУ", "Аренда", "Аренда") {
-		t.Fatalf("propertyIds=[ownA,shared] = %v, want the two properties' paid rows", feedTitles(both))
+	if !titlesEqual(feedTitles(both.Items), "ЖКУ", "Аренда", "Аренда") {
+		t.Fatalf("propertyIds=[ownA,shared] = %v, want the two properties' paid rows", feedTitles(both.Items))
 	}
 
 	// Privacy: a foreign or unknown id is the privacy 404 — the filter never
@@ -219,8 +220,8 @@ func TestListGlobalOperations_PropertyIdsFilter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("filter by archived: %v", err)
 	}
-	if len(empty) != 0 {
-		t.Fatalf("propertyIds=[archived] = %+v, want empty — the archive cut holds under an explicit filter", empty)
+	if len(empty.Items) != 0 {
+		t.Fatalf("propertyIds=[archived] = %+v, want empty — the archive cut holds under an explicit filter", empty.Items)
 	}
 
 	// The cut holds in a mixed selection too.
@@ -229,8 +230,8 @@ func TestListGlobalOperations_PropertyIdsFilter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("filter by archived+ownB: %v", err)
 	}
-	if !titlesEqual(feedTitles(mixed), "Охрана") {
-		t.Fatalf("propertyIds=[archived,ownB] = %v, want only the Дом row", feedTitles(mixed))
+	if !titlesEqual(feedTitles(mixed.Items), "Охрана") {
+		t.Fatalf("propertyIds=[archived,ownB] = %v, want only the Дом row", feedTitles(mixed.Items))
 	}
 }
 
@@ -246,8 +247,8 @@ func TestListGlobalOperations_FiltersOrderPagination(t *testing.T) {
 	if err != nil {
 		t.Fatalf("period filter: %v", err)
 	}
-	if !titlesEqual(feedTitles(window), "Охрана", "ЖКУ") {
-		t.Fatalf("period [12–18] = %v, want the two in-window rows", feedTitles(window))
+	if !titlesEqual(feedTitles(window.Items), "Охрана", "ЖКУ") {
+		t.Fatalf("period [12–18] = %v, want the two in-window rows", feedTitles(window.Items))
 	}
 
 	// The amount search reads the display amount's digits — «2 500» finds
@@ -257,8 +258,8 @@ func TestListGlobalOperations_FiltersOrderPagination(t *testing.T) {
 	if err != nil {
 		t.Fatalf("amount search: %v", err)
 	}
-	if !titlesEqual(feedTitles(amount), "Охрана") {
-		t.Fatalf("search «2 500» = %v, want the single Охрана row", feedTitles(amount))
+	if !titlesEqual(feedTitles(amount.Items), "Охрана") {
+		t.Fatalf("search «2 500» = %v, want the single Охрана row", feedTitles(amount.Items))
 	}
 
 	income := domain.TypeIncome
@@ -267,8 +268,8 @@ func TestListGlobalOperations_FiltersOrderPagination(t *testing.T) {
 	if err != nil {
 		t.Fatalf("type filter: %v", err)
 	}
-	if !titlesEqual(feedTitles(incomes), "Аренда") || incomes[0].Operation.AmountKopecks != 5650000 {
-		t.Fatalf("type=income = %+v, want the own book's rent row only", feedTitles(incomes))
+	if !titlesEqual(feedTitles(incomes.Items), "Аренда") || incomes.Items[0].Operation.AmountKopecks != 5650000 {
+		t.Fatalf("type=income = %+v, want the own book's rent row only", feedTitles(incomes.Items))
 	}
 
 	utilities, err := h.ops.ListGlobalOperations(h.ctx(), h.owner,
@@ -276,8 +277,8 @@ func TestListGlobalOperations_FiltersOrderPagination(t *testing.T) {
 	if err != nil {
 		t.Fatalf("categories filter: %v", err)
 	}
-	if !titlesEqual(feedTitles(utilities), "ЖКУ") {
-		t.Fatalf("categories=[utilities] = %v, want the own ЖКУ row — the archived one stays cut", feedTitles(utilities))
+	if !titlesEqual(feedTitles(utilities.Items), "ЖКУ") {
+		t.Fatalf("categories=[utilities] = %v, want the own ЖКУ row — the archived one stays cut", feedTitles(utilities.Items))
 	}
 
 	asc, err := h.ops.ListGlobalOperations(h.ctx(), h.owner,
@@ -285,17 +286,48 @@ func TestListGlobalOperations_FiltersOrderPagination(t *testing.T) {
 	if err != nil {
 		t.Fatalf("asc: %v", err)
 	}
-	if !titlesEqual(feedTitles(asc), "Аренда", "Аренда", "ЖКУ", "Охрана") {
-		t.Fatalf("asc feed = %v, want oldest-first", feedTitles(asc))
+	if !titlesEqual(feedTitles(asc.Items), "Аренда", "Аренда", "ЖКУ", "Охрана") {
+		t.Fatalf("asc feed = %v, want oldest-first", feedTitles(asc.Items))
 	}
+}
+
+// The window walks the feed's own order by keyset (ticket #597): the cursor
+// resumes strictly after the previous page's last row, and a full page
+// still answers with a continuation — the walk stops on the short page it
+// produces.
+func TestListGlobalOperations_KeysetWindow(t *testing.T) {
+	t.Parallel()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+	h.globalFeedFixture()
 
 	page, err := h.ops.ListGlobalOperations(h.ctx(), h.owner,
-		paymentsapp.GlobalOperationsListQuery{Limit: 2, Offset: 1})
+		paymentsapp.GlobalOperationsListQuery{Limit: 2})
 	if err != nil {
-		t.Fatalf("pagination: %v", err)
+		t.Fatalf("page one: %v", err)
 	}
-	if !titlesEqual(feedTitles(page), "ЖКУ", "Аренда") {
-		t.Fatalf("page [limit 2, offset 1] = %v, want the middle of the desc feed", feedTitles(page))
+	if !titlesEqual(feedTitles(page.Items), "Охрана", "ЖКУ") {
+		t.Fatalf("page one [limit 2] = %v, want the desc feed's head", feedTitles(page.Items))
+	}
+	if page.NextCursor == "" {
+		t.Fatal("page one nextCursor = '', want the continuation of the four-row feed")
+	}
+
+	page, err = h.ops.ListGlobalOperations(h.ctx(), h.owner,
+		paymentsapp.GlobalOperationsListQuery{Limit: 2, Cursor: page.NextCursor})
+	if err != nil {
+		t.Fatalf("page two: %v", err)
+	}
+	if !titlesEqual(feedTitles(page.Items), "Аренда", "Аренда") {
+		t.Fatalf("page two [cursor] = %v, want the desc feed's tail", feedTitles(page.Items))
+	}
+
+	page, err = h.ops.ListGlobalOperations(h.ctx(), h.owner,
+		paymentsapp.GlobalOperationsListQuery{Limit: 2, Cursor: page.NextCursor})
+	if err != nil {
+		t.Fatalf("page three: %v", err)
+	}
+	if len(page.Items) != 0 || page.NextCursor != "" {
+		t.Fatalf("page three = %v/%q, want the empty exhausted page", feedTitles(page.Items), page.NextCursor)
 	}
 }
 
@@ -443,8 +475,8 @@ func TestListGlobalOperations_ViewerReadsSharedFeed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("viewer list: %v", err)
 	}
-	if len(items) != 4 {
-		t.Fatalf("viewer feed = %+v, want the same four paid rows — a viewer reads the merged feed", items)
+	if len(items.Items) != 4 {
+		t.Fatalf("viewer feed = %+v, want the same four paid rows — a viewer reads the merged feed", items.Items)
 	}
 }
 
@@ -461,8 +493,8 @@ func TestListGlobalOperations_IncludeArchived(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list global: %v", err)
 	}
-	if !titlesEqual(feedTitles(without), "Охрана", "ЖКУ", "Аренда", "Аренда") {
-		t.Fatalf("feed without the flag = %v, want the archive cut to hold", feedTitles(without))
+	if !titlesEqual(feedTitles(without.Items), "Охрана", "ЖКУ", "Аренда", "Аренда") {
+		t.Fatalf("feed without the flag = %v, want the archive cut to hold", feedTitles(without.Items))
 	}
 
 	with, err := h.ops.ListGlobalOperations(h.ctx(), h.owner,
@@ -470,10 +502,10 @@ func TestListGlobalOperations_IncludeArchived(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list global includeArchived: %v", err)
 	}
-	if !titlesEqual(feedTitles(with), "Охрана", "ЖКУ", "ЖКУ", "Аренда", "Аренда") {
-		t.Fatalf("feed with the flag = %v, want the archived row back in date order", feedTitles(with))
+	if !titlesEqual(feedTitles(with.Items), "Охрана", "ЖКУ", "ЖКУ", "Аренда", "Аренда") {
+		t.Fatalf("feed with the flag = %v, want the archived row back in date order", feedTitles(with.Items))
 	}
-	for _, item := range with {
+	for _, item := range with.Items {
 		if item.Operation.Title == "ЖКУ" && item.PropertyName == "Старый объект" && item.ViewStatus != domain.ViewStatusPaid {
 			t.Errorf("archived row status = %s, want paid", item.ViewStatus)
 		}
@@ -491,8 +523,8 @@ func TestListGlobalOperations_IncludeArchived(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list global ownA+includeArchived: %v", err)
 	}
-	if !titlesEqual(feedTitles(mixed), "ЖКУ", "ЖКУ", "Аренда") {
-		t.Fatalf("propertyIds=[ownA]+flag = %v, want ownA's rows plus the archived one", feedTitles(mixed))
+	if !titlesEqual(feedTitles(mixed.Items), "ЖКУ", "ЖКУ", "Аренда") {
+		t.Fatalf("propertyIds=[ownA]+flag = %v, want ownA's rows plus the archived one", feedTitles(mixed.Items))
 	}
 }
 
@@ -516,5 +548,201 @@ func TestSummarizeGlobalOperations_IncludeArchived(t *testing.T) {
 		if got.Slug == testIntegrationSlugUtilities && got.Type == domain.TypeExpense && got.TotalKopecks != 1827000 {
 			t.Errorf("utilities expense = %d, want 1 827 000 (1 050 000 + 777 000)", got.TotalKopecks)
 		}
+	}
+}
+
+// The ticket's acceptance on the operations feed (map #596, ticket #597):
+// 150 paid rows walk three full 50-row pages, and the mutations between the
+// loads — the property rename, a new paid fact — never duplicate or drop a
+// row, both in the descending default and the ascending order.
+func TestListGlobalOperationsKeyset_MutationsBetweenPages(t *testing.T) {
+	t.Parallel()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+
+	const total = 150
+	const pageSize = 50
+	// Distinct dates pin the (date, id) reading order: oldest first.
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	dateOf := func(i int) string { return base.Add(time.Duration(i) * 24 * time.Hour).Format("2006-01-02") }
+	for i := range total {
+		h.seedGlobalOperation(h.propID, h.owner, dateOf(i), opPaid, "expense",
+			fmt.Sprintf("Операция %03d", i), 100000+int64(i),
+			testIntegrationSlugUtilities, "Коммунальные услуги")
+	}
+
+	page := func(cursor string, asc bool) paymentsapp.GlobalOperationsPage {
+		h.t.Helper()
+		result, err := h.ops.ListGlobalOperations(h.ctx(), h.owner,
+			paymentsapp.GlobalOperationsListQuery{Limit: pageSize, Cursor: cursor, Asc: asc})
+		if err != nil {
+			h.t.Fatalf("operations page (cursor %q): %v", cursor, err)
+		}
+		return result
+	}
+	collect := func(pages []paymentsapp.GlobalOperationsPage) []string {
+		h.t.Helper()
+		titles := make([]string, 0, total)
+		for _, page := range pages {
+			titles = append(titles, feedTitles(page.Items)...)
+		}
+		return titles
+	}
+
+	// The descending default: newest first, three pages under the mutations.
+	first := page("", false)
+	if _, err := h.pool.Exec(h.ctx(),
+		`UPDATE properties SET name = 'Переименовано' WHERE id = $1`, h.propID); err != nil {
+		h.t.Fatalf("rename property: %v", err)
+	}
+	// A paid fact created between the loads carries the newest date — it
+	// lands past both walks, never inside an unwalked window.
+	h.seedGlobalOperation(h.propID, h.owner, "2026-12-31", opPaid, "expense",
+		"Между порциями", 999000, testIntegrationSlugUtilities, "Коммунальные услуги")
+	second := page(first.NextCursor, false)
+	third := page(second.NextCursor, false)
+
+	got := collect([]paymentsapp.GlobalOperationsPage{first, second, third})
+	if len(got) != total {
+		t.Fatalf("three pages carry %d rows, want %d — rows dropped or duplicated", len(got), total)
+	}
+	seen := make(map[string]bool, total)
+	for _, title := range got {
+		if seen[title] {
+			t.Errorf("row %q arrived twice", title)
+		}
+		seen[title] = true
+	}
+	for i := range total {
+		if want := fmt.Sprintf("Операция %03d", total-1-i); got[i] != want {
+			t.Fatalf("desc row %d = %q, want %q — the walk broke the (date, id) order", i, got[i], want)
+		}
+	}
+	// The third page came back full, so it still answers with a
+	// continuation — the walk stops on the short page it produces.
+	fourth := page(third.NextCursor, false)
+	if len(fourth.Items) != 0 || fourth.NextCursor != "" {
+		t.Errorf("fourth page = %d rows/%q, want the empty exhausted page", len(fourth.Items), fourth.NextCursor)
+	}
+
+	// The ascending order walks the same feed the other way with the same
+	// guarantee.
+	ascFirst := page("", true)
+	ascSecond := page(ascFirst.NextCursor, true)
+	ascThird := page(ascSecond.NextCursor, true)
+	ascGot := collect([]paymentsapp.GlobalOperationsPage{ascFirst, ascSecond, ascThird})
+	if len(ascGot) != total {
+		t.Fatalf("ascending pages carry %d rows, want %d", len(ascGot), total)
+	}
+	for i := range total {
+		if want := fmt.Sprintf("Операция %03d", i); ascGot[i] != want {
+			t.Fatalf("asc row %d = %q, want %q", i, ascGot[i], want)
+		}
+	}
+}
+
+// rentFeedTitle is the recurring seeded feed title (goconst).
+const rentFeedTitle = "Аренда"
+
+// The global feed's total (ticket #599): the whole scope's paid count under
+// the query's filters — the same predicate as the rows — constant across
+// the keyset pages, independent of the window's position.
+func TestListGlobalOperations_TotalMatchesScope(t *testing.T) {
+	t.Parallel()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+	h.globalFeedFixture()
+
+	// The visible scope: the fixture's four paid facts — the planned, the
+	// cancelled, the archived and the foreign rows stay out.
+	page, err := h.ops.ListGlobalOperations(h.ctx(), h.owner, paymentsapp.GlobalOperationsListQuery{})
+	if err != nil {
+		t.Fatalf("list global: %v", err)
+	}
+	if len(page.Items) != 4 {
+		t.Fatalf("items = %d, want the four paid rows", len(page.Items))
+	}
+	if page.Total != 4 {
+		t.Fatalf("total = %d, want 4", page.Total)
+	}
+
+	// The total answers the query's scope, not the window: a half-page walk
+	// counts the whole feed on both pages.
+	pageOne, err := h.ops.ListGlobalOperations(h.ctx(), h.owner, paymentsapp.GlobalOperationsListQuery{Limit: 2})
+	if err != nil {
+		t.Fatalf("page one: %v", err)
+	}
+	if pageOne.NextCursor == "" {
+		t.Fatal("page one nextCursor = '', want the continuation of the four-row feed")
+	}
+	pageTwo, err := h.ops.ListGlobalOperations(h.ctx(), h.owner, paymentsapp.GlobalOperationsListQuery{
+		Limit: 2, Cursor: pageOne.NextCursor,
+	})
+	if err != nil {
+		t.Fatalf("page two: %v", err)
+	}
+	if pageOne.Total != 4 || pageTwo.Total != 4 {
+		t.Fatalf("totals = %d/%d, want 4/4 — the scope's count on every page", pageOne.Total, pageTwo.Total)
+	}
+
+	// The search narrows the total with the rows: the two Аренда facts.
+	searched, err := h.ops.ListGlobalOperations(h.ctx(), h.owner,
+		paymentsapp.GlobalOperationsListQuery{Search: rentFeedTitle})
+	if err != nil {
+		t.Fatalf("searched: %v", err)
+	}
+	if searched.Total != 2 {
+		t.Fatalf("searched total = %d, want 2", searched.Total)
+	}
+
+	// The direction filter: the one income (the shared «Аренда» is the
+	// fixture's expense twin) against the three expenses.
+	income := domain.TypeIncome
+	incomes, err := h.ops.ListGlobalOperations(h.ctx(), h.owner,
+		paymentsapp.GlobalOperationsListQuery{Type: &income})
+	if err != nil {
+		t.Fatalf("incomes: %v", err)
+	}
+	if incomes.Total != 1 {
+		t.Fatalf("income total = %d, want 1", incomes.Total)
+	}
+	expense := domain.TypeExpense
+	expenses, err := h.ops.ListGlobalOperations(h.ctx(), h.owner,
+		paymentsapp.GlobalOperationsListQuery{Type: &expense})
+	if err != nil {
+		t.Fatalf("expenses: %v", err)
+	}
+	if expenses.Total != 3 {
+		t.Fatalf("expense total = %d, want 3", expenses.Total)
+	}
+}
+
+// The total's filter vocabulary (ticket #599): the propertyIds multi-select
+// and the archive cut narrow the scope's count exactly as they narrow the
+// rows.
+func TestListGlobalOperations_TotalMatchesFilters(t *testing.T) {
+	t.Parallel()
+	// The shared book's entry resolves through the production membership
+	// policy in TestListGlobalOperations_PropertyIdsFilter; this harness's
+	// nil policy gates the filter to the actor's own properties.
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+	ownB, _, archived, _ := h.globalFeedFixture()
+
+	// The propertyIds multi-select: the one Дом row.
+	byProperty, err := h.ops.ListGlobalOperations(h.ctx(), h.owner,
+		paymentsapp.GlobalOperationsListQuery{PropertyIDs: []uuid.UUID{ownB}})
+	if err != nil {
+		t.Fatalf("by property: %v", err)
+	}
+	if byProperty.Total != 1 {
+		t.Fatalf("ownB total = %d, want 1", byProperty.Total)
+	}
+
+	// The archive cut lifts: the archived ЖКУ rejoins the scope's count.
+	lifted, err := h.ops.ListGlobalOperations(h.ctx(), h.owner,
+		paymentsapp.GlobalOperationsListQuery{IncludeArchived: true, PropertyIDs: []uuid.UUID{archived}})
+	if err != nil {
+		t.Fatalf("archived: %v", err)
+	}
+	if lifted.Total != 1 {
+		t.Fatalf("archived total = %d, want 1 — the lifted cut lets the archived row count", lifted.Total)
 	}
 }

@@ -1,18 +1,30 @@
 'use client';
 
 import type { JSX } from 'react';
+import { useRouter } from 'next/navigation';
+import { Cancel } from '@/shared/assets/icons';
+import { ROUTES } from '@/shared/config/routes';
+import { goBack } from '@/shared/lib/navigation';
 import { useProperty } from '@/features/properties';
 import {
   useOperationWizardDraft,
   type OperationWizardMode,
 } from '@/features/payments';
 import type { PaymentType } from '@/entities/payment';
-import { Button, PageContent, TopNav } from '@/shared/ui/design';
+import {
+  Button,
+  IconButton,
+  PageContent,
+  StickyBottomBar,
+  TopNav,
+  TopNavTitle,
+} from '@/shared/ui/design';
 import {
   PaymentsEmptyCard,
-  PaymentsSkeleton,
   PaymentsStateCard,
 } from '../payments-sections';
+import { OperationAmountStepSkeleton } from '../payments-skeletons';
+import { WizardBottomBar } from '../payment-create-wizard/wizard-chrome';
 import { OperationCreateWizardFlow } from './operation-create-wizard-flow';
 
 /**
@@ -23,6 +35,11 @@ import { OperationCreateWizardFlow } from './operation-create-wizard-flow';
  * монтируется только после гидрации хранилища; у входа с объекта
  * мутационный вход закрыт для смотрящего и архива (read-only, как у
  * визарда платежа).
+ *
+ * Загрузка (#607, паритет §7): холодный вход открывает шаг «Добавить
+ * операцию» — хром шага («Закрыть», название) и нижняя панель
+ * «Продолжить» рендерятся сразу, скелетон закрывает только поле суммы
+ * с сегментом направления.
  */
 
 export type OperationCreateWizardScreenProps = {
@@ -36,6 +53,7 @@ export function OperationCreateWizardScreen({
   propertyId,
   presetType,
 }: OperationCreateWizardScreenProps): JSX.Element {
+  const router = useRouter();
   // У глобального входа объект не читается: пустой id глушит запрос.
   const propertyQuery = useProperty(propertyId ?? '');
   const draftState = useOperationWizardDraft();
@@ -48,17 +66,39 @@ export function OperationCreateWizardScreen({
     mode === 'global'
     || (property !== undefined && role !== undefined && role !== 'viewer' && property.status !== 'archived');
 
+  // Выход с шага 1 — куда ведет «Закрыть» потока (шаг восстановится сам).
+  const closeDestination =
+    mode === 'property' && propertyId !== undefined
+      ? ROUTES.propertyOperations(propertyId)
+      : ROUTES.operations;
+
   return (
     <>
       {loading && (
         <>
-          <TopNav />
-          <PageContent>
-            <div className="flex flex-col gap-4 pt-6">
-              <PaymentsSkeleton />
-              <PaymentsSkeleton />
-            </div>
+          <TopNav
+            leading={
+              <IconButton
+                icon={<Cancel />}
+                label="Закрыть"
+                onClick={() => goBack(router, closeDestination)}
+              />
+            }
+          >
+            <TopNavTitle title="Добавить операцию" />
+          </TopNav>
+          <PageContent className="pt-0">
+            <OperationAmountStepSkeleton />
           </PageContent>
+          {/* Панель «Продолжить» видна на шаге всегда — в загрузке та же
+              кнопка в покое, поток подменяет её без сдвига. */}
+          <StickyBottomBar>
+            <WizardBottomBar>
+              <Button className="w-full" disabled>
+                Продолжить
+              </Button>
+            </WizardBottomBar>
+          </StickyBottomBar>
         </>
       )}
 

@@ -13,7 +13,6 @@ export type {
   GlobalPaymentObject,
   GlobalPaymentObjectKey,
   GlobalPaymentSearch,
-  PaymentSearchCategoryView,
   IsoDate,
   OperationCreateCommand,
   OperationsCategorySummary,

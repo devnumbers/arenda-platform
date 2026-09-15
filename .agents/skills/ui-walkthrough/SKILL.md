@@ -1,6 +1,6 @@
 ---
 name: ui-walkthrough
-description: Live UI acceptance in a visible browser — the agent raises the seeded frontend stack and clicks through a ticket's screens itself, black-box, reporting a screenshot-backed checklist. Use before shipping any frontend ticket with screens or interactions, when the user asks to "протестировать в браузере", "прокликать", "провести живую приёмку", or wants to watch the testing live; also the entry for watching existing e2e specs headed.
+description: Live UI acceptance in a visible browser — the agent raises the seeded frontend stack and clicks through a ticket's screens itself, black-box, verifying server truth (API responses, backend log, database rows) alongside the screens, reporting a screenshot-backed checklist. Use before shipping any frontend ticket with screens or interactions, when the user asks to "протестировать в браузере", "прокликать", "провести живую приёмку", "проверить, что в базе создалось", or wants to watch the testing live; also the entry for watching existing e2e specs headed.
 ---
 
 # Live UI walkthrough («живая приёмка»)
@@ -26,9 +26,9 @@ Work through five steps. Testing is **black-box** while it runs: interact only w
 
 3. **Open and log in** — `browser_navigate` to the frontend URL; the user watches the session's own browser window. Log in through the real login screen: type the seeded phone, take the code from the backend log (`.tmp/e2e-frontend/backend.log`, pattern «Код для входа в Рентли» — parse the 6 digits from the log line's `text` field, not from anywhere else in the line: its timestamp also contains six-digit runs), type it. Re-requesting a code too soon hits the product's resend cooldown (429; the button shows «Отправить новый код MM:SS») — wait out the timer. The in-memory profile holds no state between browser closes, so every walkthrough logs in fresh; `--storage-state` (a per-session config override, not the committed one) is the optional shortcut when a storage-state file exists. Done when the cabinet's «Мои объекты» is on screen.
 
-4. **Walk the plan** — one action per observation cycle: act, then capture the cheapest proof (`browser_snapshot` for state and locators; `browser_take_screenshot` whenever vision decides the verdict — pass the full artifacts path as the filename, `.playwright-mcp/artifacts/<ticket>-NN-<slug>.png`: a bare filename is written to the session cwd, not the artifacts dir (0.0.80 behavior, #517) — and view it before judging the check passed; copying a per-ticket bundle to `.scratch/ui-walkthroughs/<ticket>/` is an optional extra, never the primary location). A blocked path gets recorded and skipped, never forced. Width-varying checks from the P3 tier go through «Adaptive widths» below. Every screen that renders query data additionally carries the loading-stability checks of «Loading stability» below. Done when every numbered check carries a viewed screenshot and a verdict.
+4. **Walk the plan** — one action per observation cycle: act, then capture the cheapest proof (`browser_snapshot` for state and locators; `browser_take_screenshot` whenever vision decides the verdict — pass the full artifacts path as the filename, `.playwright-mcp/artifacts/<ticket>-NN-<slug>.png`: a bare filename is written to the session cwd, not the artifacts dir (0.0.80 behavior, #517) — and view it before judging the check passed; copying a per-ticket bundle to `.scratch/ui-walkthroughs/<ticket>/` is an optional extra, never the primary location). A blocked path gets recorded and skipped, never forced. Width-varying checks from the P3 tier go through «Adaptive widths» below. Every screen that renders query data additionally carries the loading-stability checks of «Loading stability» below. Every mutation check (create, edit, delete, archive, any state flip) additionally carries the server-truth layers of «Server truth» below — the UI verdict alone does not close a mutation. Done when every numbered check carries a viewed screenshot, its server-truth verdicts, and a verdict.
 
-5. **Report and gate** — post the checklist to chat: per tier, passed/failed/blocked, each item linked to its screenshot; failed items become Issues. Acceptance gate: the ticket ships only with **P0 + P1 green**; P2/P3 findings report without blocking. Loading-stability failures are **P1** (blocking) — a page that jumps when data arrives does not ship. Close with `make frontend-e2e-live-down`. Done when the commit message can honestly carry «живая приёмка N/N».
+5. **Report and gate** — post the checklist to chat: per tier, passed/failed/blocked, each item linked to its screenshot; failed items become Issues. Acceptance gate: the ticket ships only with **P0 + P1 green**; P2/P3 findings report without blocking. Loading-stability failures are **P1** (blocking) — a page that jumps when data arrives does not ship. Server truth: a database mismatch is **P0** (blocking); an unexpected API status, console error, or backend-log error is **P1**. Close with `make frontend-e2e-live-down` — only after every DB assertion has run (the teardown wipes the volume). Done when the commit message can honestly carry «живая приёмка N/N».
 
 ## Loading stability (скелетоны и layout shift)
 
@@ -39,26 +39,64 @@ Data surfaces are judged not only on their loaded state but on the **transition*
 3. **No naked data surface**: every query has a loading state at all (CODING_STANDARDS «Naked data surface») — nothing pops in unannounced.
 4. **In-place updates stay in place**: typing in search, switching filter chips or period keeps previous results on screen (keepPreviousData) — a skeleton flash per keystroke or per chip is a failure.
 
-Mechanics: local stacks answer in tens of milliseconds — too fast to judge a skeleton honestly, so slow the API down and meter the shifts:
+Mechanics: local stacks answer in tens of milliseconds — too fast to judge a skeleton honestly, so slow the API down and meter the shifts. Pitfalls verified live on #605 (2026-09-10):
+
+- **Never busy-wait inside a `page.route` handler** — it blocks the runner's event loop, so goto/timers/screenshots all stall until the wait is over and the "loading" frame is shot after data has already arrived. Delay with `page.waitForTimeout` inside the handler (there is no `setTimeout` in the JS sandbox, but Playwright's own timer works).
+- **Neutralize the service worker first**: the PWA `sw.js` intercepts navigations and its controlled fetches bypass `page.route` («route.continue: already handled»). Fix: `page.route('**/sw.js', r => r.fulfill({ body: '', contentType: 'application/javascript' }))` + unregister existing registrations, then reload.
+- **Never `unroute` mid-flight** — requests parked in a removed handler hang forever. Release by time (release-at deadline inside the handler) and unroute only after the loaded screenshot.
+- **SPA navigation can be legitimately instant** (react-query `staleTime`), so shoot the loading frame on a cold hard `goto`, not an in-app click.
 
 ```js
-// 1) Delay every API response (~1.2 s) for the transition under test:
+// Delay every API response (~4 s release deadline) for the transition under test:
+await page.route('**/sw.js', (r) => r.fulfill({ body: '', contentType: 'application/javascript' }));
+const releaseAt = Date.now() + 4000;
 await page.route('**/api/**', async (route) => {
-  const end = Date.now() + 1200;           // busy-wait: no timers in the sandbox
-  while (Date.now() < end) {}
+  const wait = releaseAt - Date.now();
+  if (wait > 0) await page.waitForTimeout(wait);
   await route.continue();
 });
-// … navigate, screenshot the loading frame, wait for data, screenshot loaded, then:
-await page.unroute('**/api/**');
+// … goto (hard load), screenshot the loading frame at ~700 ms, waitForTimeout past
+// the deadline, screenshot loaded, then: await page.unrouteAll({ behavior: 'ignoreErrors' });
 
-// 2) Shift meter (install before the transition, read after):
+// Shift meter (install before the transition, read after; buffered replays earlier shifts):
 window.__cls = 0;
 new PerformanceObserver((list) => {
   for (const e of list.getEntries()) if (!e.hadRecentInput) window.__cls += e.value;
-}).observe({ type: 'layout-shift', buffered: false });
+}).observe({ type: 'layout-shift', buffered: true });
 ```
 
 Caveat: on a fast local stack a swap can land inside the platform's 500 ms `hadRecentInput` window after the click and be filtered out of the score — the screenshot pair (loading vs loaded) is the primary evidence, the CLS number is corroborating. Record per check: pass / fail with both screenshots; a fail is a P1 finding and blocks the ticket (step 5).
+
+## Server truth (серверная правда)
+
+A green screenshot is the UI's claim; server truth is what the server actually recorded. The black-box discipline governs the driving — the server-truth layers read the aftermath after the UI step is judged. Three layers over every mutation check, gated in step 5:
+
+1. **API layer (P1)** — after each mutation and again at scenario end, sweep `browser_network_requests`: a `/api/*` status outside the ticket's intent (an unexpected 4xx/5xx) is a finding; `browser_console_messages` rides the same sweep. The login screen's 429 resend cooldown (step 3) is expected noise. Response bodies double as the evidence source: capture the `id` of each entity the flow created — the DB layer anchors on it.
+2. **Log layer (P1)** — at scenario end, grep the backend JSON log (`.tmp/e2e-frontend/backend.log` of the walkthrough's checkout) for `"level":"error"` and read any `"level":"warn"`. Successful requests are not logged, so every hit gets a verdict; the 429-cooldown warn is expected.
+3. **Database layer (P0)** — each mutation check carries 1–3 SQL assertions stating what the row should look like, run right after the UI claims success. A success that did not persist, persisted wrong, or left duplicates is a failed check.
+
+DB mechanics:
+
+- Tool: `mcp__postgres__pg_execute_query` — SELECT-only by construction (`operation`: `select`/`count`/`exists`; a non-SELECT query is refused, and every mutating tool is unregistered by the allowlist `.zcode/postgres-mcp.tools.json`). The connection string is passed **per call** — `postgresql://arenda:arenda@localhost:<PG port>/arenda?sslmode=disable` — with the port live-up printed (default 5436; slots override via `E2E_PG_PORT`). DSNs never live in configs.
+- Fallback: the `mcp__postgres__*` tools absent from the session → `docker exec "${E2E_COMPOSE_PROJECT:-arenda-e2e}-postgres-1" psql -U arenda -d arenda -tAc "<sql>"` and continue.
+- Anchors: assert by ids and names. Phone and email are encrypted at rest (`users.phone` holds a deterministic ciphertext), so the seeded owner anchors as `owner_id = '11111111-1111-4111-8111-111111111111'` — the fixed UUID from `tools/e2e/frontend/seed.sql`.
+- Money: assert integer kopecks — the UI's «1 200,00 ₽» is `amount_kopecks = 120000`.
+- Ticket-specific assertions are written from the schema sources (migrations, sqlc queries) in the shape of these common invariants:
+
+```sql
+-- created and owned: the new row exists, in the expected state
+SELECT count(*) FROM properties
+WHERE owner_id = '11111111-1111-4111-8111-111111111111'
+  AND name = '<имя из сценария>' AND status = 'active';   -- expect 1
+
+-- exact money: the formatted «1 200,00 ₽» is stored as integer kopecks
+SELECT amount_kopecks FROM operations WHERE id = '<id>';   -- expect 120000
+
+-- soft delete: the row survives, the flag flipped
+SELECT deleted_at IS NOT NULL FROM operations WHERE id = '<id>';  -- expect t
+```
+
+The tool output (or pasted psql row) is the assertion's evidence, attached to the check like a screenshot.
 
 ## Adaptive widths
 

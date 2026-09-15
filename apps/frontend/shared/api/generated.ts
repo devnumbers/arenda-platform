@@ -148,6 +148,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/properties/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search the actor's visible properties (the «Объекты» search)
+         * @description The hub's visible slice narrowed by the search query (ticket #601): a case-insensitive substring over the property's name and address. The slice is the main list's — the actor's own properties plus the ones shared with an active membership (ADR 0028), archived excluded. The list runs in pages of 50 the search screen's infinite scroll walks; the window is keyset pagination over (name, id) (ticket #597's pattern) — the hub's own default order, so rows shifting between loads never duplicate or drop, the previous page's nextCursor comes back as cursor. A rename can move a row across a window boundary — inherent to the visible-name sort (the contacts book, #600).
+         */
+        get: operations["searchProperties"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/dadata/suggestions/address": {
         parameters: {
             query?: never;
@@ -174,7 +194,7 @@ export interface paths {
         get: operations["getProperty"];
         put?: never;
         post?: never;
-        /** @description Deletes the property in the given mode. */
+        /** @description Deletes the property together with all its data: rentals, payments, operations, tasks and attached contacts. Irreversible. Blocked while the property has an unfinished rental — complete it first. */
         delete: operations["deleteProperty"];
         options?: never;
         head?: never;
@@ -598,7 +618,7 @@ export interface paths {
         };
         /**
          * List the actor's visible paid operations (the global «Операции» screen)
-         * @description The global read side of the operations context (ticket #540). The response is the actor's visible merged feed: the paid operations of their own properties plus those of the properties they can view (ADR 0028; an actor-scoped cross-property read — the visibility predicate lives in the store's SQL, the tasks global feed's rule). The feed is paid-only: planned and overdue occurrences are the property screens' vocabulary, cancelled operations do not exist for reads. The operations of archived properties are not in the feed unless includeArchived lifts the cut (#549). The propertyIds filter narrows the feed to the listed properties, each resolved through its view gate — an unknown or non-visible id is the privacy 404. Every row carries propertyName, the bound property's display name — the global screen's row label. The period, search, type, category, order and pagination vocabulary is the property listing's. Reads never tick.
+         * @description The global read side of the operations context (ticket #540). The response is the actor's visible merged feed: the paid operations of their own properties plus those of the properties they can view (ADR 0028; an actor-scoped cross-property read — the visibility predicate lives in the store's SQL, the tasks global feed's rule). The feed is paid-only: planned and overdue occurrences are the property screens' vocabulary, cancelled operations do not exist for reads. The operations of archived properties are not in the feed unless includeArchived lifts the cut (#549). The propertyIds filter narrows the feed to the listed properties, each resolved through its view gate — an unknown or non-visible id is the privacy 404. Every row carries propertyName, the bound property's display name. The period, search, type and category vocabulary is the property listing's; the window is keyset pagination over (date, id) (ticket #597): rows shifting between loads never duplicate or drop — pass the previous page's nextCursor back as cursor. Reads never tick.
          */
         get: operations["listOperations"];
         put?: never;
@@ -658,7 +678,7 @@ export interface paths {
         };
         /**
          * Search the actor's visible payment rules (the global «Платежи» search)
-         * @description The global feed narrowed by the search query (ticket #575): a case-insensitive substring over the rule title and the category — the default catalog label of the rule's slug or the user category's current name. The row composition is GET /payments's, the counters are not part of the search contract. matchedCategories lists the distinct categories of the matched rules — the search screen's category chips — one row per (category, direction), the largest count first. An empty query degenerates to the unfiltered feed with every category of the scope. The list runs in pages of 50 the search screen's infinite scroll walks (map #573 rework); under the category/type chip filter the page narrows to the chip's rules while matchedCategories always describe the whole matched scope — the chips never shrink (the operations' canon).
+         * @description The global feed narrowed by the search query (ticket #575): a case-insensitive substring over the rule title and the category — the default catalog label of the rule's slug or the user category's current name. The row composition is GET /payments's, the counters are not part of the search contract. matchedCategories lists the distinct categories of the matched rules — the search screen's category chips — one row per category (ticket #602), the largest match count first. An empty query degenerates to the unfiltered feed with every category of the scope. The list runs in pages of 50 the search category of the scope. The list runs in pages of 50 the search screen's infinite scroll walks (map #573 rework); the window is keyset pagination over (created_at, id) (ticket #597) — the feed's own order, stable under renames and creations: rows shifting between loads never duplicate or drop, the previous page's nextCursor comes back as cursor. Under the category/type chip filter the page narrows to the chip's rules while matchedCategories always describe the whole matched scope — the chips never shrink (the operations' canon).
          */
         get: operations["searchGlobalPayments"];
         put?: never;
@@ -2187,9 +2207,30 @@ export interface components {
             updated_at: string;
             /**
              * Format: date-time
-             * @description The global pin (ticket #577): null — not pinned, a moment — pinned since then. The lists order the pinned first, among themselves by this time. Archiving clears the pin.
+             * @description The global pin (ticket #577): null — not pinned, a moment — pinned since then. The lists order the pinned first, among themselves by this time. Archiving clears the pin. The domain language calls the concept «основной объект / primary property» (резолюция #584); the contract keeps the pin name.
              */
             pinned_at: string | null;
+            occupancy?: components["schemas"]["PropertyOccupancy"];
+            /** @description The payments half of the card's red dot (резолюция #584): the property holds at least one overdue planned operation — a stored planned row dated before the data owner's today (ADR 0048), the same predicate the payments listings report as the overdue view status. Red dot = needs_attention occupancy OR this flag. Populated by the list endpoints only (ticket #585); omitted elsewhere. */
+            has_overdue_operations?: boolean;
+        };
+        /** @description Занятость объекта (property occupancy, резолюция #584, ticket #585): the property's computed state from its single unfinished rental against the data owner's today (ADR 0048) — the canon for the «По статусу» grouping, the card's rental badges and the red dot. The property lifecycle status (active/maintenance) is a different concept: a rental property under maintenance stays in its rental group. Populated by the list endpoints only; omitted on the write and detail responses. */
+        PropertyOccupancy: {
+            /**
+             * @description The unfinished rental's status in the rentals vocabulary (rentals/CONTEXT.md): upcoming — the start has not come yet («Аренда с DD.MM» badge); active — the rental runs; needs_attention — the planned end has passed and the rental is not completed (the «Аренда завершена» badge, a red dot reason); none — no unfinished rental (an explicitly completed rental is history and reports none).
+             * @enum {string}
+             */
+            status: "upcoming" | "active" | "needs_attention" | "none";
+            /**
+             * Format: date
+             * @description The unfinished rental's start date; null without one.
+             */
+            start_date?: string | null;
+            /**
+             * Format: date
+             * @description The unfinished rental's planned end date («Осталось N месяцев» — the client counts the full months from today); null for an open-ended rental or without one.
+             */
+            planned_end_date?: string | null;
         };
         PropertyPhoto: {
             /** Format: uuid */
@@ -2254,6 +2295,8 @@ export interface components {
         };
         ContactsResponse: {
             items: components["schemas"]["ContactResponse"][];
+            /** @description The opaque continuation cursor of the keyset window (ticket #600): pass it back as the cursor query parameter to fetch the next page. null — the matches are exhausted. */
+            nextCursor: string | null;
         };
         /** @description The schedule anchor of a payment rule, discriminated by kind. The anchor lives in the recurrence itself; the lower bound of generation is the rule's server-set since date. Weekdays are 0=Sunday..6=Saturday. Day 31 clamps to the month's last day; Feb 29 clamps in non-leap years — the schedule never drifts. */
         Recurrence: components["schemas"]["RecurrenceDaily"] | components["schemas"]["RecurrenceWeekly"] | components["schemas"]["RecurrenceMonthly"] | components["schemas"]["RecurrenceYearly"];
@@ -2424,18 +2467,17 @@ export interface components {
             /** @description The favorite rules in their new order; the server assigns dense 1-based positions in this order (ticket #576). */
             paymentIds: string[];
         };
-        /** @description One matched category of the payment rules search (ticket #575) — the chip's identity plus the number of matched rules behind it. */
-        PaymentSearchCategory: {
-            category: components["schemas"]["CategoryView"];
-            /** @enum {string} */
-            type: "income" | "expense";
-            /** @description The matched rules of this category and direction. */
-            count: number;
-        };
-        /** @description The global payment rules search (ticket #575): the matched rows plus the matched-category chips. */
+        /** @description The global payment rules search (ticket #575): the matched rows plus the matched-category chips and the whole scope's match count. */
         PaymentsSearchGlobalResponse: {
             items: components["schemas"]["PaymentGlobalItem"][];
-            matchedCategories: components["schemas"]["PaymentSearchCategory"][];
+            matchedCategories: components["schemas"]["CategoryView"][];
+            /** @description The opaque continuation cursor of the keyset window (ticket #597): pass it back as the cursor query parameter to fetch the next page. null — the matches are exhausted. */
+            nextCursor: string | null;
+            /**
+             * Format: int64
+             * @description The whole scope's match count under the query and the chip filter (ticket #599) — «найдено N»: the same predicate as the rows, independent of the window, identical on every walked page.
+             */
+            total: number;
         };
         /** @description One key of a property's stack (ticket #575): the rule behind it and its overdue flag — the red dot. */
         PaymentObjectKey: {
@@ -2519,6 +2561,13 @@ export interface components {
         };
         OperationsResponse: {
             items: components["schemas"]["OperationResponse"][];
+            /** @description The opaque continuation cursor of the keyset window (ticket #597): pass it back as the cursor query parameter to fetch the next page. null — the feed is exhausted. */
+            nextCursor: string | null;
+            /**
+             * Format: int64
+             * @description The whole scope's paid count under the query's filters (ticket #599) — «найдено N»: the same predicate as the rows, independent of the window, identical on every walked page. The global feed's field (GET /operations): the property-scoped listings sharing this schema omit it.
+             */
+            total?: number;
         };
         /** @description One category's total over the summarized scope. Rows without a category snapshot never appear here — their amounts still count in the totals. */
         OperationsSummaryCategory: {
@@ -2703,10 +2752,21 @@ export interface components {
         PropertiesResponse: {
             items: components["schemas"]["PropertyResponse"][];
             /**
+             * Format: date
+             * @description The reading actor's calendar date (ADR 0048) — the «today» the client counts the «Осталось N месяцев» rental badge against (ticket #586; the tasks feed's today rule, #521).
+             */
+            today: string;
+            /**
              * @description Number of shared properties hidden from the recipient due to a tariff slot shortage (suspended memberships). Zero for owners and when the recipient is within their limit.
              * @default 0
              */
             hidden_shared_count: number;
+        };
+        /** @description The properties search page (ticket #601): the matched cards in the keyset window's order. */
+        PropertiesSearchResponse: {
+            items: components["schemas"]["PropertyResponse"][];
+            /** @description The opaque continuation cursor of the keyset window (ticket #601): pass it back as the cursor query parameter to fetch the next page. null — the matches are exhausted. */
+            nextCursor: string | null;
         };
         /** @enum {string} */
         PropertyType: "apartment" | "room" | "apartments" | "house" | "commercial" | "office" | "warehouse" | "garage" | "parking" | "land";
@@ -3058,10 +3118,16 @@ export interface components {
         PaymentsSearchQuery: string;
         /** @description The search screen's chip filter (map #573 rework): the selected chip's category — the default catalog's slug or the user category's id — narrowing the matched rules to that category. Empty or missing — no filter. It never narrows matchedCategories. */
         PaymentsCategoryFilter: string;
-        /** @description The chip filter's direction (map #573 rework): the chip is the pair (category, direction), so the filter carries both. Missing — no filter. It never narrows matchedCategories. */
+        /** @description The rules list's direction filter (map #573 rework): narrows the matched rules to income or expense. The category chips carry no direction (ticket #602), so nothing on the search screen sends it today. Missing — no filter. It never narrows matchedCategories. */
         PaymentsTypeFilter: "income" | "expense";
         PaymentsLimit: number;
-        PaymentsOffset: number;
+        /** @description The opaque continuation cursor from the previous page's nextCursor (keyset pagination over (created_at, id), ticket #597). A missing or empty value starts the list from the beginning; a malformed value is a 400. */
+        PaymentsCursor: string;
+        /** @description The case-insensitive substring the matches run over — the property's name or its address (ticket #601). Leading and trailing whitespace never takes part in the match. */
+        PropertiesSearchQuery: string;
+        PropertiesSearchLimit: number;
+        /** @description The opaque continuation cursor from the previous page's nextCursor (keyset pagination over (name, id), ticket #597's pattern). A missing or empty value starts the list from the beginning; a malformed value is a 400. */
+        PropertiesSearchCursor: string;
         /** @description Filter by the operation's view status. overdue is not stored anywhere — the server computes it against today in the property owner's timezone (planned with the date already past), so clients never need the owner's timezone. */
         OperationsStatusFilter: "planned" | "paid" | "overdue";
         /** @description Inclusive lower bound of the period on the operation date. */
@@ -3071,7 +3137,13 @@ export interface components {
         /** @description Sort by the operation date; asc (oldest first) or desc (default, newest first). */
         OperationsOrder: "asc" | "desc";
         OperationsLimit: number;
+        /** @description The opaque continuation cursor from the previous page's nextCursor (keyset pagination over (date, id), ticket #597) — the global feed's window; the property listings keep the offset vocabulary. A missing or empty value starts the feed from the beginning; a malformed value is a 400. */
+        OperationsCursor: string;
         OperationsOffset: number;
+        /** @description The page size of the keyset window (ticket #600). A missing value means the default page; an out-of-range value is a 400. */
+        ContactsLimit: number;
+        /** @description The opaque continuation cursor from the previous page's nextCursor (keyset pagination over the listing's sort key and id, ticket #600). A missing or empty value starts the list from the beginning; a malformed value is a 400. */
+        ContactsCursor: string;
         TasksLimit: number;
         TasksOffset: number;
         /** @description Case-insensitive substring search by title. A missing or empty value disables the filter; LIKE metacharacters in the value are literals. */
@@ -3367,6 +3439,34 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
         };
     };
+    searchProperties: {
+        parameters: {
+            query: {
+                /** @description The case-insensitive substring the matches run over — the property's name or its address (ticket #601). Leading and trailing whitespace never takes part in the match. */
+                search: components["parameters"]["PropertiesSearchQuery"];
+                limit?: components["parameters"]["PropertiesSearchLimit"];
+                /** @description The opaque continuation cursor from the previous page's nextCursor (keyset pagination over (name, id), ticket #597's pattern). A missing or empty value starts the list from the beginning; a malformed value is a 400. */
+                cursor?: components["parameters"]["PropertiesSearchCursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The matched properties; nextCursor carries the next page's continuation (null — the matches are exhausted). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertiesSearchResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
     getAddressSuggestions: {
         parameters: {
             query: {
@@ -3419,10 +3519,7 @@ export interface operations {
     };
     deleteProperty: {
         parameters: {
-            query: {
-                /** @description Deletion mode. `cascade` deletes the property outright. `detach` first suspends the property's billing lifecycle (same as archiving) and then deletes the property. */
-                mode: "cascade" | "detach";
-            };
+            query?: never;
             header?: never;
             path: {
                 id: string;
@@ -3438,10 +3535,10 @@ export interface operations {
                 };
                 content?: never;
             };
-            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["SubscriptionBlocked"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     updateProperty: {
@@ -3592,6 +3689,10 @@ export interface operations {
                 sort?: "name" | "property";
                 /** @description The sort direction: ascending (default) or descending. */
                 order?: "asc" | "desc";
+                /** @description The page size of the keyset window (ticket #600). A missing value means the default page; an out-of-range value is a 400. */
+                limit?: components["parameters"]["ContactsLimit"];
+                /** @description The opaque continuation cursor from the previous page's nextCursor (keyset pagination over the listing's sort key and id, ticket #600). A missing or empty value starts the list from the beginning; a malformed value is a 400. */
+                cursor?: components["parameters"]["ContactsCursor"];
             };
             header?: never;
             path?: never;
@@ -3599,7 +3700,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Contacts list */
+            /** @description Contacts page. The window is keyset pagination over the listing's own sort key and id (ticket #600): the page always resumes strictly after the cursor's key, so cards created or deleted between loads never duplicate or drop. The sort keys are mutable (display name, property binding): a rename or rebind of a card the walk has already passed can move it across the window boundary. The cursor is bound to the sort/order it was issued under — echoing it with a different sort is a 400. nextCursor is null once the matches are exhausted. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4427,7 +4528,8 @@ export interface operations {
                 /** @description Sort by the operation date; asc (oldest first) or desc (default, newest first). */
                 order?: components["parameters"]["OperationsOrder"];
                 limit?: components["parameters"]["OperationsLimit"];
-                offset?: components["parameters"]["OperationsOffset"];
+                /** @description The opaque continuation cursor from the previous page's nextCursor (keyset pagination over (date, id), ticket #597) — the global feed's window; the property listings keep the offset vocabulary. A missing or empty value starts the feed from the beginning; a malformed value is a 400. */
+                cursor?: components["parameters"]["OperationsCursor"];
             };
             header?: never;
             path?: never;
@@ -4435,7 +4537,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Paid operations page. status is always paid (the feed's only view status); propertyName is the bound property's display name. */
+            /** @description Paid operations page. status is always paid (the feed's only view status); propertyName is the bound property's display name; nextCursor carries the next page's continuation (null — the feed is exhausted). */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4515,10 +4617,11 @@ export interface operations {
                 search?: components["parameters"]["PaymentsSearchQuery"];
                 /** @description The search screen's chip filter (map #573 rework): the selected chip's category — the default catalog's slug or the user category's id — narrowing the matched rules to that category. Empty or missing — no filter. It never narrows matchedCategories. */
                 category?: components["parameters"]["PaymentsCategoryFilter"];
-                /** @description The chip filter's direction (map #573 rework): the chip is the pair (category, direction), so the filter carries both. Missing — no filter. It never narrows matchedCategories. */
+                /** @description The rules list's direction filter (map #573 rework): narrows the matched rules to income or expense. The category chips carry no direction (ticket #602), so nothing on the search screen sends it today. Missing — no filter. It never narrows matchedCategories. */
                 type?: components["parameters"]["PaymentsTypeFilter"];
                 limit?: components["parameters"]["PaymentsLimit"];
-                offset?: components["parameters"]["PaymentsOffset"];
+                /** @description The opaque continuation cursor from the previous page's nextCursor (keyset pagination over (created_at, id), ticket #597). A missing or empty value starts the list from the beginning; a malformed value is a 400. */
+                cursor?: components["parameters"]["PaymentsCursor"];
             };
             header?: never;
             path?: never;
@@ -4526,7 +4629,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The matched rules with their matched-category chips. */
+            /** @description The matched rules with their matched-category chips; nextCursor carries the next page's continuation (null — the matches are exhausted). */
             200: {
                 headers: {
                     [name: string]: unknown;

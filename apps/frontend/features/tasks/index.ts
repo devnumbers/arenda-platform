@@ -1,4 +1,5 @@
 export {
+  fetchGlobalTasks,
   useActiveTasks,
   useCompleteAllTasks,
   useCompletedTasks,
@@ -51,3 +52,9 @@ export {
   type TaskEditDraft,
   type TaskRuleUpdateCommand,
 } from './lib/task-edit';
+export {
+  taskRowTone,
+  taskSectionTone,
+  type TaskRowTone,
+} from './lib/task-tone';
+export { TaskRow, type TaskRowProps } from './ui/task-row';

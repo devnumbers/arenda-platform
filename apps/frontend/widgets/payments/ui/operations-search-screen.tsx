@@ -5,7 +5,6 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { useInfiniteScroll } from '@/shared/lib/hooks/useInfiniteScroll';
 import { useSearchQueryState } from '@/shared/lib/hooks/useSearchQueryState';
 import { clientTodayIso, formatDayMonthWithYear } from '@/entities/payment';
 import {
@@ -16,11 +15,12 @@ import {
   Button,
   ChipButton,
   IconButton,
+  InfiniteQueryTail,
   PageContent,
   SearchField,
   TopNav,
 } from '@/shared/ui/design';
-import { LoadingMoreIndicator, OperationRow } from './operations-list';
+import { OperationRow } from './operations-list';
 import { PaymentsHeading, PaymentsSkeleton, PaymentsStateCard } from './payments-sections';
 import {
   searchCategoryChips,
@@ -73,15 +73,6 @@ export function OperationsSearchScreen({
     propertyId,
     searchListScope(debounced, effectiveSlug),
     { enabled: debounced !== '' },
-  );
-
-  const sentinelRef = useInfiniteScroll(
-    () => {
-      if (listQuery.hasNextPage && !listQuery.isFetchingNextPage) {
-        void listQuery.fetchNextPage();
-      }
-    },
-    listQuery.hasNextPage === true,
   );
 
   const today = clientTodayIso();
@@ -191,8 +182,7 @@ export function OperationsSearchScreen({
                       onSelect={() => openOperation(operation)}
                     />
                   ))}
-                  {listQuery.hasNextPage === true && <div ref={sentinelRef} aria-hidden />}
-                  {listQuery.isFetchingNextPage && <LoadingMoreIndicator />}
+                  <InfiniteQueryTail query={listQuery} />
                 </div>
               </section>
             </div>

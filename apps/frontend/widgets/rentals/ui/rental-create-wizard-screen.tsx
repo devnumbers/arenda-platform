@@ -1,9 +1,15 @@
 'use client';
 
 import type { JSX } from 'react';
+import { useRouter } from 'next/navigation';
+import { Cancel } from '@/shared/assets/icons';
+import { ROUTES } from '@/shared/config/routes';
+import { goBack } from '@/shared/lib/navigation';
 import { useProperty, canMutateProperty } from '@/features/properties';
-import { useRentalWizardDraft } from '@/features/rentals';
-import { Button, PageContent, Skeleton, TopNav } from '@/shared/ui/design';
+import { useRentalWizardDraft, WIZARD_TOTAL_STEPS } from '@/features/rentals';
+import { Button, IconButton, PageContent, StepsChip, TopNav } from '@/shared/ui/design';
+import { RentalAmountDayStepSkeleton } from './rental-skeletons';
+import { WizardHeading } from './wizard-chrome';
 import { RentalCreateWizardFlow } from './rental-create-wizard-flow';
 
 /**
@@ -11,6 +17,11 @@ import { RentalCreateWizardFlow } from './rental-create-wizard-flow';
  * Черновик монтируется только после гидрации хранилища — до этого скелет;
  * мутационный вход закрыт для смотрящего и архива (создание — Full Access,
  * ADR 0053 §3; предикат общий с платежами и контактами).
+ *
+ * Загрузка (#607, паритет §7): холодный вход открывает шаг 1 «Цена и число
+ * оплаты» — хром шага (крестик, чип шага) и заголовок рендерятся сразу,
+ * скелетон закрывает только поля; кнопка шага скрыта до готовности, в
+ * загрузке её тоже нет.
  */
 
 export type RentalCreateWizardScreenProps = {
@@ -20,6 +31,7 @@ export type RentalCreateWizardScreenProps = {
 export function RentalCreateWizardScreen({
   propertyId,
 }: RentalCreateWizardScreenProps): JSX.Element {
+  const router = useRouter();
   const propertyQuery = useProperty(propertyId);
   const draftState = useRentalWizardDraft(propertyId);
 
@@ -31,13 +43,20 @@ export function RentalCreateWizardScreen({
     <>
       {loading && (
         <>
-          <TopNav />
-          <PageContent>
-            <div className="flex flex-col gap-4 pt-6">
-              <Skeleton className="h-14 w-full" />
-              <Skeleton className="h-14 w-full" />
-              <Skeleton className="h-14 w-full" />
-            </div>
+          <TopNav
+            leading={
+              <IconButton
+                icon={<Cancel />}
+                label="Закрыть"
+                onClick={() => goBack(router, ROUTES.property(propertyId))}
+              />
+            }
+          >
+            <StepsChip step={1} total={WIZARD_TOTAL_STEPS} size="m" />
+          </TopNav>
+          <PageContent className="pt-0">
+            <WizardHeading title="Цена и число оплаты" />
+            <RentalAmountDayStepSkeleton />
           </PageContent>
         </>
       )}

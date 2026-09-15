@@ -8,11 +8,11 @@ import {
   Search,
 } from "@/shared/assets/icons";
 import { ROUTES } from "@/shared/config/routes";
-import { useInfiniteScroll } from "@/shared/lib/hooks/useInfiniteScroll";
 import type { PaymentOperationScope } from "@/shared/api/query-keys";
 import {
   Button,
   IconButton,
+  InfiniteQueryTail,
   PageContent,
   TopNav,
   TopNavTitle,
@@ -33,7 +33,7 @@ import {
 } from "@/features/payments";
 import { operationsTypeHeadline } from "../lib/operations-empty-states";
 import { PaymentsSkeleton, PaymentsStateCard } from "./payments-sections";
-import { LoadingMoreIndicator, OperationsDateList } from "./operations-list";
+import { OperationsDateList } from "./operations-list";
 import { OperationsFilterChips } from "./operations-filter-chips";
 import { OperationsPeriodPickerDialog } from "./operations-period-picker";
 
@@ -92,12 +92,6 @@ export function OperationsOfTypeScreen({
 
   const listQuery = usePropertyOperationsScopedPaged(propertyId, listScope);
   const summaryQuery = usePropertyOperationsSummary(propertyId, periodScope);
-
-  const sentinelRef = useInfiniteScroll(() => {
-    if (listQuery.hasNextPage && !listQuery.isFetchingNextPage) {
-      void listQuery.fetchNextPage();
-    }
-  }, listQuery.hasNextPage === true);
 
   const groups = groupOperationsByDate(listQuery.data ?? [], today);
   const totalKopecks =
@@ -244,16 +238,7 @@ export function OperationsOfTypeScreen({
                   <OperationsDateList
                     groups={groups}
                     onSelectOperation={openOperation}
-                    tail={
-                      <>
-                        {listQuery.hasNextPage === true && (
-                          <div ref={sentinelRef} aria-hidden />
-                        )}
-                        {listQuery.isFetchingNextPage && (
-                          <LoadingMoreIndicator />
-                        )}
-                      </>
-                    }
+                    tail={<InfiniteQueryTail query={listQuery} />}
                   />
                 </>
               )}

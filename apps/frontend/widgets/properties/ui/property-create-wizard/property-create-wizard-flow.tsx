@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Cancel } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { buildReturnUrl, goBack } from '@/shared/lib/navigation';
-import { fieldsForType, toWireAttributes, validateAttributes } from '@/features/property-attributes';
 import {
   buildPropertyCreateCommand,
   initialPropertyCreateStep,
@@ -14,9 +13,9 @@ import {
   PROPERTY_CREATE_TOTAL_STEPS,
   useCreateProperty,
   usePropertyCreateDraft,
-  type PropertyAttributesPort,
   type PropertyCreateStep,
 } from '@/features/properties';
+import { attributeCatalog } from '../property-fields/attribute-catalog';
 import {
   Button,
   IconButton,
@@ -49,14 +48,6 @@ import { WizardSuccess } from './wizard-success';
  * успеха пропускается: визард заменяет запись истории на адрес returnTo,
  * дополненный параметром propertyId созданного объекта.
  */
-
-// Порт каталога характеристик для сабмит-либы: реальные реализации
-// соседней фичи инжектятся здесь (виджету доступны обе фичи).
-const attributeCatalog: PropertyAttributesPort = {
-  toWireAttributes,
-  validateAttributes,
-  fieldKeys: (type) => new Set(fieldsForType(type).map((field) => field.key)),
-};
 
 const SUBMIT_ERROR_MESSAGE =
   'Не удалось создать объект. Проверьте соединение и попробуйте ещё раз';

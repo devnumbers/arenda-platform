@@ -44,7 +44,7 @@ import {
   PickerMenu,
   TopNav,
 } from '@/shared/ui/design';
-import { TaskRow } from './task-row';
+import { TaskRow } from '@/features/tasks';
 import { TaskSectionCard } from './task-section-card';
 import { TasksDeleteCompletedDialog } from './tasks-delete-completed-dialog';
 import {
@@ -52,8 +52,10 @@ import {
   TasksPropertySelectPage,
   type TasksFilterDraft,
 } from './tasks-property-select';
-import { TasksSkeleton, TasksStateCard } from './tasks-of-property-screen';
-import { sectionKey, sectionTone } from './tasks-section-utils';
+import { TasksFeedSkeleton } from './tasks-skeletons';
+import { TasksStateCard } from './tasks-of-property-screen';
+import { taskSectionTone } from '@/features/tasks';
+import { sectionKey } from './tasks-section-utils';
 import { SortChip, sortPickerGroups } from './tasks-sort';
 
 /**
@@ -272,11 +274,9 @@ export function TasksFeedScreen(): JSX.Element {
 
         <div className="mt-6 flex flex-col gap-6 pb-6">
           {activeQuery.isPending || completedQuery.isPending ? (
-            <>
-              <TasksSkeleton />
-              <TasksSkeleton />
-              <TasksSkeleton />
-            </>
+            // Паритет §7: секции-карточки со строками задач и свёрнутые
+            // «Выполненные»; чипы выше — вне фазы загрузки.
+            <TasksFeedSkeleton />
           ) : activeQuery.isError ? (
             <TasksStateCard
               title="Не удалось загрузить задачи"
@@ -351,7 +351,7 @@ function FeedSection({
       key={task.id}
       task={task}
       today={today}
-      tone={sectionTone(section.kind)}
+      tone={taskSectionTone(section.kind)}
       canMutate={canMutateFeedTask(task, propertyOf)}
       toggling={toggling(task)}
       onToggle={() => onToggle(task)}

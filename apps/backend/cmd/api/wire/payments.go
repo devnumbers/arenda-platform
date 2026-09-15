@@ -17,6 +17,9 @@ type Payments struct {
 	OperationService *paymentsapp.OperationService
 	GlobalPayments   *paymentsapp.GlobalPaymentService
 	TickService      *paymentsapp.TickService
+	// OverdueOperations serves the properties list red-dot projection
+	// (ticket #585): which properties hold overdue planned operations.
+	OverdueOperations *paymentspg.OverdueOperationsReader
 }
 
 // WirePayments constructs the payments context (ADR 0049): the tick store,
@@ -51,9 +54,10 @@ func WirePayments(p platformDeps) (*Payments, error) {
 	}
 
 	return &Payments{
-		PaymentService:   paymentsapp.NewPaymentService(factory, calendar, p.Policy),
-		OperationService: paymentsapp.NewOperationService(factory, calendar, p.Policy),
-		GlobalPayments:   paymentsapp.NewGlobalPaymentService(globalPayments, calendar, factory),
-		TickService:      paymentsapp.NewTickService(factory, zones, calendar, metrics),
+		PaymentService:    paymentsapp.NewPaymentService(factory, calendar, p.Policy),
+		OperationService:  paymentsapp.NewOperationService(factory, calendar, p.Policy),
+		GlobalPayments:    paymentsapp.NewGlobalPaymentService(globalPayments, calendar, factory),
+		TickService:       paymentsapp.NewTickService(factory, zones, calendar, metrics),
+		OverdueOperations: paymentspg.NewOverdueOperationsReader(p.DB, calendar),
 	}, nil
 }

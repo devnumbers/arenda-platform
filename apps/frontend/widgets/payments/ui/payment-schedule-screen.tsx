@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, type JSX } from 'react';
+import { useMemo, useState, useTransition, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Star } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
@@ -25,8 +25,16 @@ import {
   usePaymentOperationsByStatus,
   type ScheduleEntry,
 } from '@/features/payments';
-import { Button, IconButton, PageContent, TopNav, TopNavTitle } from '@/shared/ui/design';
-import { PaymentsEmptyCard, PaymentsHeading, PaymentsSkeleton, PaymentsStateCard } from './payments-sections';
+import {
+  Button,
+  IconButton,
+  LoadingMoreIndicator,
+  PageContent,
+  TopNav,
+  TopNavTitle,
+} from '@/shared/ui/design';
+import { PaymentsEmptyCard, PaymentsHeading, PaymentsStateCard } from './payments-sections';
+import { PaymentGroupedListSkeleton } from './payments-skeletons';
 
 /**
  * Подэкран «График платежей» (#466, Figma 671:7358): «Ближайший» —
@@ -74,12 +82,7 @@ export function PaymentScheduleScreen({
 
       <PageContent>
         <div className="flex flex-col gap-6">
-          {loading && (
-            <>
-              <PaymentsSkeleton withHeading />
-              <PaymentsSkeleton withHeading />
-            </>
-          )}
+          {loading && <PaymentGroupedListSkeleton rowsPerGroup={[1, 2]} />}
 
           {failed && (
             <PaymentsStateCard
@@ -154,8 +157,13 @@ function ScheduleList({
 
   const totalFollowing = materialized.length - 1 + projection.dates.length;
   const hasMore = visibleCount - 1 < totalFollowing || !projection.exhausted;
+  // Проекция растёт синхронно (страницы генерируются на лету), поэтому
+  // индикатор догрузки живёт в переходе: пока React наращивает окно,
+  // старый список остаётся на экране с индикатором — своя форма общего
+  // паттерна (#633, график — не react-query-лента).
+  const [isExtending, startExtension] = useTransition();
   const sentinelRef = useInfiniteScroll(
-    () => setVisibleCount((count) => count + SCHEDULE_PAGE_SIZE),
+    () => startExtension(() => setVisibleCount((count) => count + SCHEDULE_PAGE_SIZE)),
     hasMore,
   );
 
@@ -247,7 +255,12 @@ function ScheduleList({
         </section>
       )}
 
-      {hasMore && <div ref={sentinelRef} aria-hidden />}
+      {hasMore && (
+        <>
+          <div ref={sentinelRef} aria-hidden />
+          {isExtending && <LoadingMoreIndicator />}
+        </>
+      )}
     </>
   );
 }

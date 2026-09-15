@@ -130,21 +130,15 @@ const globalItemDto: components['schemas']['PaymentGlobalItem'] = {
   oldestOverdueOperationId: null,
 };
 
-describe('mapGlobalPaymentSearch — DTO → entity (поиск #575, чипы #581)', () => {
+describe('mapGlobalPaymentSearch — DTO → entity (поиск #575, чипы #581, курсор #597, total #599)', () => {
   const searchDto: components['schemas']['PaymentsSearchGlobalResponse'] = {
     items: [globalItemDto],
     matchedCategories: [
-      {
-        category: { source: 'default', slug: 'rent', label: 'Арендная плата' },
-        type: 'expense',
-        count: 2,
-      },
-      {
-        category: { source: 'custom', id: '0198b6a7-user', label: 'Своя категория' },
-        type: 'income',
-        count: 1,
-      },
+      { source: 'default', slug: 'rent', label: 'Арендная плата' },
+      { source: 'custom', id: '0198b6a7-user', label: 'Своя категория' },
     ],
+    nextCursor: 'cursor-of-page-two',
+    total: 2,
   };
 
   const search = mapGlobalPaymentSearch(searchDto);
@@ -161,28 +155,25 @@ describe('mapGlobalPaymentSearch — DTO → entity (поиск #575, чипы #
     });
   });
 
-  it('чипы несут категорию, направление и число совпавших правил', () => {
+  it('чипы — чистые категории: по одной на категорию, без направления и счётчика (#602)', () => {
     expect(search.matchedCategories).toStrictEqual([
       {
-        category: {
-          source: 'default',
-          slug: 'rent',
-          id: undefined,
-          label: 'Арендная плата',
-        },
-        type: 'expense',
-        count: 2,
+        source: 'default',
+        slug: 'rent',
+        id: undefined,
+        label: 'Арендная плата',
       },
       {
-        category: {
-          source: 'custom',
-          slug: undefined,
-          id: '0198b6a7-user',
-          label: 'Своя категория',
-        },
-        type: 'income',
-        count: 1,
+        source: 'custom',
+        slug: undefined,
+        id: '0198b6a7-user',
+        label: 'Своя категория',
       },
     ]);
+  });
+
+  it('nextCursor проходит opaque-строкой, null — исчерпано (#597)', () => {
+    expect(search.nextCursor).toBe('cursor-of-page-two');
+    expect(mapGlobalPaymentSearch({ ...searchDto, nextCursor: null }).nextCursor).toBeNull();
   });
 });

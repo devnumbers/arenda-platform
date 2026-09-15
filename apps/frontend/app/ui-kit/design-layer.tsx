@@ -33,6 +33,7 @@ import {
     HubTitle,
     SubScreenShell,
     IconButton,
+    InfiniteQueryTail,
     ListRow,
     Modal,
     ModalClose,
@@ -45,6 +46,12 @@ import {
     PickerMenu,
     PickerField,
     Skeleton,
+    SkeletonButton,
+    SkeletonCard,
+    SkeletonFormField,
+    SkeletonListRow,
+    SkeletonMedia,
+    SkeletonSection,
     RadioGroup,
     RadioGroupItem,
     SearchField,
@@ -137,6 +144,22 @@ const showcaseObjects: ReadonlyArray<PickerOption> = [
     { value: 'kv-3', label: 'Дача', hint: 'Приозёрная, 2', icon: <ObjectAvatar /> },
 ];
 
+/** Заглушка запроса для витрины хвоста: фаза «едет следующая порция» —
+ * индикатор виден постоянно, fetchNextPage никуда не ходит. */
+const STUB_FETCHING_QUERY = {
+    hasNextPage: true,
+    isFetchingNextPage: true,
+    fetchNextPage: () => Promise.resolve(),
+} as const;
+
+/** Холостая фаза той же ленты: продолжение есть (sentinel в DOM), порция
+ * не едет — хвост безмолвен, пока sentinel не войдёт во вьюпорт. */
+const STUB_IDLE_QUERY = {
+    hasNextPage: true,
+    isFetchingNextPage: false,
+    fetchNextPage: () => Promise.resolve(),
+} as const;
+
 /** Витрина дизайн-слоя (ADR 0050, тикет #455): шадкн/ui поверх Radix,
  * Tailwind на токенах, шрифт Onest. Внешний вид сверен с экспортами
  * Figma-фреймов «Рентли. Новые экраны сервиса» (node-id — резолюция #449). */
@@ -184,6 +207,8 @@ export function DesignLayerShowcase(): JSX.Element {
     const [pickerEmpty, setPickerEmpty] = useState<string | null>(null);
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
+    const [confirmLargeOpen, setConfirmLargeOpen] = useState(false);
+    const [deletePropertyOpen, setDeletePropertyOpen] = useState(false);
     const [moreSheetOpen, setMoreSheetOpen] = useState(false);
 
     return (
@@ -222,6 +247,16 @@ export function DesignLayerShowcase(): JSX.Element {
         </Button>
         <Button size="small" disabled>
             disabled
+        </Button>
+        {/* Радиус m (12px, токен Figma radius/m) — CTA пустых состояний
+         * секций объекта (#588, решение владельца 11.09). */}
+        {dlButtonVariants.map((variant) => (
+            <Button key={`m-${variant}`} variant={variant} size="small" radius="m">
+                small · m
+            </Button>
+        ))}
+        <Button variant="primary" radius="m">
+            default · m
         </Button>
     </div>
                 </div>
@@ -952,14 +987,16 @@ export function DesignLayerShowcase(): JSX.Element {
                         Один компонент вместо ручной сборки подэкранной шапки: TopNav с
                         ведущим «Назад» (TopNavBackButton), TopNavTitle в центре и
                         PageContent с боковым паддингом 24. trailing — действия экрана
-                        (кебаб объекта), contentClassName переопределяет паддинг контента.
-                        Шапка в этой сборке — fixed на планшете и ПК, поэтому вживую она
-                        видна на любом подэкране (дерево профиля, детализация и правка
-                        объекта); ниже — контентная колонка каркаса.
+                        (кебаб объекта), subtitle — серый подзаголовок под заголовком
+                        (#587, счётчик архива), contentClassName переопределяет паддинг
+                        контента. Шапка в этой сборке — fixed на планшете и ПК, поэтому
+                        вживую она видна на любом подэкране (дерево профиля, детализация
+                        и правка объекта); ниже — контентная колонка каркаса.
                     </p>
                     <div className={styles.column} style={{ maxWidth: 480 }}>
                         <SubScreenShell
                             title="Информация об объекте"
+                            subtitle="7 объектов"
                             fallbackHref="/ui-kit"
                             contentClassName="pt-4 pb-4"
                         >
@@ -1135,6 +1172,107 @@ export function DesignLayerShowcase(): JSX.Element {
                 </div>
 
                 <div className={styles.group}>
+                    <h3 className={styles.groupTitle}>
+                        Skeleton-примитивы · составные заглушки загрузки
+                    </h3>
+                    <p className={styles.groupTitle}>
+                        Композиции канона Skeleton под анатомию реальных блоков (#604,
+                        паритет — §7 DESIGN.md): контент занимает место скелетона без
+                        сдвига. API финализирован на хабах карты #603 (#605).
+                    </p>
+                    <div className={styles.grid}>
+                        <div className="flex w-full flex-col gap-2">
+                            <h4 className={styles.groupTitle}>SkeletonListRow · строка списка</h4>
+                            <div className="rounded-card border border-dashed border-content-tertiary">
+                                <SkeletonListRow widths={{title: 'w-2/5', subtitle: 'w-3/5'}} />
+                                <SkeletonListRow
+                                    value
+                                    description
+                                    widths={{title: 'w-1/2', subtitle: 'w-2/5'}}
+                                />
+                                <SkeletonListRow value widths={{title: 'w-3/5', subtitle: 'w-1/2'}} />
+                                <SkeletonListRow
+                                    value
+                                    trailing
+                                    leading={false}
+                                    widths={{title: 'w-2/5', subtitle: 'w-3/5'}}
+                                />
+                                <SkeletonListRow
+                                    subtitle={false}
+                                    value
+                                    trailing
+                                    widths={{title: 'w-2/5', subtitle: 'w-3/5'}}
+                                />
+                            </div>
+                        </div>
+                        <div className="flex w-full flex-col gap-2">
+                            <h4 className={styles.groupTitle}>SkeletonSection · серая секция</h4>
+                            <SkeletonSection rows={3} />
+                            <SkeletonSection rows={2} className="mx-6" />
+                        </div>
+                        <div className="flex w-full flex-col gap-2">
+                            <h4 className={styles.groupTitle}>SkeletonCard · карточка-плитка</h4>
+                            <div className="flex gap-2 overflow-hidden">
+                                <SkeletonCard />
+                                <SkeletonCard className="w-40" />
+                            </div>
+                        </div>
+                        <div className="flex w-full flex-col gap-2">
+                            <h4 className={styles.groupTitle}>SkeletonMedia · фото/баннер</h4>
+                            <SkeletonMedia />
+                            <div className="flex items-center gap-2">
+                                <SkeletonMedia className="h-20 w-20 rounded-full" />
+                                <SkeletonMedia className="h-20 flex-1" />
+                            </div>
+                        </div>
+                        <div className="flex w-full flex-col gap-2">
+                            <h4 className={styles.groupTitle}>SkeletonButton · CTA-кнопка</h4>
+                            <SkeletonButton />
+                            <SkeletonButton className="w-2/3" />
+                        </div>
+                        <div className="flex w-full flex-col gap-2">
+                            <h4 className={styles.groupTitle}>SkeletonFormField · поле формы</h4>
+                            <div className="flex flex-col gap-6 rounded-card border border-dashed border-content-tertiary p-6">
+                                <SkeletonFormField />
+                                <SkeletonFormField labelWidth="w-36" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className={styles.group}>
+                    <h3 className={styles.groupTitle}>InfiniteQueryTail · хвост бесконечной ленты</h3>
+                    <p className={styles.groupTitle}>
+                        Sentinel дозагрузки и индикатор «Загружаем еще» одной строкой на
+                        экран (#633): компонент сам держит sentinel, подключает
+                        useInfiniteScroll и жив при тёплом кэше (#631). Ниже — оба тона
+                        индикатора догрузки (LoadingMoreIndicator) на статичной заглушке
+                        запроса; в приложении хвост ставится последним элементом ленты.
+                    </p>
+                    <div className={styles.grid}>
+                        <div className="flex w-full flex-col gap-2">
+                            <h4 className={styles.groupTitle}>Хвост без догрузки · sentinel ждёт</h4>
+                            <div className="rounded-card border border-dashed border-content-tertiary p-4 text-center text-sm text-content-secondary">
+                                <InfiniteQueryTail query={STUB_IDLE_QUERY} />
+                                ↑ sentinel (пустой div) — невидим, продолжение появится при подходе к краю
+                            </div>
+                        </div>
+                        <div className="flex w-full flex-col gap-2">
+                            <h4 className={styles.groupTitle}>LoadingMoreIndicator · тон base</h4>
+                            <div className="rounded-card border border-dashed border-content-tertiary">
+                                <InfiniteQueryTail query={STUB_FETCHING_QUERY} />
+                            </div>
+                        </div>
+                        <div className="flex w-full flex-col gap-2">
+                            <h4 className={styles.groupTitle}>LoadingMoreIndicator · тон muted</h4>
+                            <div className="flex flex-col gap-2 rounded-card bg-surface-muted p-3">
+                                <InfiniteQueryTail query={STUB_FETCHING_QUERY} tone="muted" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className={styles.group}>
                     <h3 className={styles.groupTitle}>ConfirmDialog · подтверждение</h3>
                     <p className={styles.groupTitle}>
                         Карточка на десктопе, нижний шит на мобиле: отмена secondary +
@@ -1145,6 +1283,12 @@ export function DesignLayerShowcase(): JSX.Element {
                         <Button onClick={() => setConfirmOpen(true)}>Подтвердить действие</Button>
                         <Button variant="danger" onClick={() => setDeleteOpen(true)}>
                             Удалить (danger)
+                        </Button>
+                        <Button onClick={() => setConfirmLargeOpen(true)}>
+                            Подтвердить (описание 16)
+                        </Button>
+                        <Button variant="danger" onClick={() => setDeletePropertyOpen(true)}>
+                            Удалить объект (столбиком)
                         </Button>
                     </div>
                     <ConfirmDialog
@@ -1164,6 +1308,40 @@ export function DesignLayerShowcase(): JSX.Element {
                         confirmVariant="danger"
                         onConfirm={() => setDeleteOpen(false)}
                     />
+                    {/* #627: подпись макета R/400 16/18 — descriptionClassName
+                     * поверх каноничных 14px. */}
+                    <ConfirmDialog
+                        open={confirmLargeOpen}
+                        onOpenChange={setConfirmLargeOpen}
+                        title="Завершить аренду?"
+                        description="Объект станет свободным, арендный платеж завершится. Данные аренды сохранятся в разделе «Прошлые аренды»"
+                        descriptionClassName="text-base leading-[18px]"
+                        confirmLabel="Завершить"
+                        cancelLabel="Отменить"
+                        onConfirm={() => setConfirmLargeOpen(false)}
+                    />
+                    {/* #629: stacked + children + titleClassName — кнопки
+                     * столбиком (danger сверху, решение владельца 12.09),
+                     * заголовок H1 28/32, красное предупреждение о
+                     * последствиях (danger-soft) между описанием и кнопками.
+                     * Figma 1583:56558. */}
+                    <ConfirmDialog
+                        open={deletePropertyOpen}
+                        onOpenChange={setDeletePropertyOpen}
+                        title="Удалить объект?"
+                        titleClassName="text-[28px] leading-8"
+                        description="Объект будет удален. Вместо удаления объект можно перевести в архив"
+                        descriptionClassName="text-base leading-[18px]"
+                        confirmLabel="Удалить"
+                        cancelLabel="Отменить"
+                        confirmVariant="danger"
+                        stacked
+                        onConfirm={() => setDeletePropertyOpen(false)}
+                    >
+                        <p className="text-sm leading-4 text-danger-soft">
+                            Будут удалены данные аренд объекта, все операции объекта, платежи, контакты и задачи, связанные с объектом. Это действие нельзя отменить
+                        </p>
+                    </ConfirmDialog>
                 </div>
 
                 <div className={styles.group}>

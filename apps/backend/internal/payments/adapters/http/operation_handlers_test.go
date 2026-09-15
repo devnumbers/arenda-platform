@@ -45,7 +45,7 @@ type fakeOperationsManager struct {
 	get        func(ctx context.Context, actor, propertyID, operationID uuid.UUID) (application.OperationListItem, error)
 	globalList func(
 		ctx context.Context, actor uuid.UUID, cmd application.GlobalOperationsListQuery,
-	) ([]application.OperationListItem, error)
+	) (application.GlobalOperationsPage, error)
 	globalSummarize func(
 		ctx context.Context, actor uuid.UUID, cmd application.GlobalOperationsSummaryQuery,
 	) (application.OperationsSummary, error)
@@ -122,9 +122,9 @@ func (f *fakeOperationsManager) SummarizePropertyOperations(
 
 func (f *fakeOperationsManager) ListGlobalOperations(
 	ctx context.Context, actor uuid.UUID, cmd application.GlobalOperationsListQuery,
-) ([]application.OperationListItem, error) {
+) (application.GlobalOperationsPage, error) {
 	if f.globalList == nil {
-		return nil, errors.New("unexpected ListGlobalOperations call")
+		return application.GlobalOperationsPage{}, errors.New("unexpected ListGlobalOperations call")
 	}
 	return f.globalList(ctx, actor, cmd)
 }
@@ -939,14 +939,14 @@ func globalFeedCall(gotCmd *application.GlobalOperationsListQuery, propertyName 
 	return &fakeOperationsManager{
 		globalList: func(
 			_ context.Context, _ uuid.UUID, cmd application.GlobalOperationsListQuery,
-		) ([]application.OperationListItem, error) {
+		) (application.GlobalOperationsPage, error) {
 			*gotCmd = cmd
 			item := application.OperationListItem{
 				Operation:  fixtureOperation(domain.StatusPaid),
 				ViewStatus: domain.ViewStatusPaid,
 			}
 			item.PropertyName = propertyName
-			return []application.OperationListItem{item}, nil
+			return application.GlobalOperationsPage{Items: []application.OperationListItem{item}}, nil
 		},
 	}
 }
@@ -966,6 +966,7 @@ func TestListOperations_FoldsParamsIntoCommand(t *testing.T) {
 	asc := openapi.ListOperationsParamsOrderAsc
 	from := openapi_types.Date{Time: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)}
 	to := openapi_types.Date{Time: time.Date(2026, 8, 31, 0, 0, 0, 0, time.UTC)}
+	cursor := testEchoedCursor
 	req := httptest.NewRequestWithContext(
 		httpsupport.WithUserID(t.Context(), actor), http.MethodGet, "/operations", nil,
 	)
@@ -978,7 +979,7 @@ func TestListOperations_FoldsParamsIntoCommand(t *testing.T) {
 		DateFrom:    &from,
 		DateTo:      &to,
 		Limit:       intPtr(10),
-		Offset:      intPtr(30),
+		Cursor:      &cursor,
 	})
 
 	if w.Code != http.StatusOK {
@@ -993,8 +994,8 @@ func TestListOperations_FoldsParamsIntoCommand(t *testing.T) {
 	if len(gotCmd.Categories) != 2 || gotCmd.Categories[0] != testSlugRent {
 		t.Errorf("cmd.Categories = %v, want [%s utilities]", gotCmd.Categories, testSlugRent)
 	}
-	if !gotCmd.Asc || gotCmd.Limit != 10 || gotCmd.Offset != 30 {
-		t.Errorf("cmd pagination/order = %+v, want asc 10/30", gotCmd)
+	if !gotCmd.Asc || gotCmd.Limit != 10 || gotCmd.Cursor != testEchoedCursor {
+		t.Errorf("cmd pagination/order = %+v, want asc 10 with the echoed cursor", gotCmd)
 	}
 	if gotCmd.DateFrom == nil || gotCmd.DateTo == nil {
 		t.Errorf("period = %v..%v, want both bounds carried", gotCmd.DateFrom, gotCmd.DateTo)
@@ -1059,9 +1060,9 @@ func TestListOperations_RejectsBadPropertyIdsAndMapsPrivacy(t *testing.T) {
 		svc := &fakeOperationsManager{
 			globalList: func(
 				_ context.Context, _ uuid.UUID, cmd application.GlobalOperationsListQuery,
-			) ([]application.OperationListItem, error) {
+			) (application.GlobalOperationsPage, error) {
 				gotCmd = cmd
-				return []application.OperationListItem{}, nil
+				return application.GlobalOperationsPage{}, nil
 			},
 		}
 		h := NewOperationsHandlers(svc, nil)
@@ -1085,8 +1086,8 @@ func TestListOperations_RejectsBadPropertyIdsAndMapsPrivacy(t *testing.T) {
 	t.Run("a foreign filter id is the privacy 404", func(t *testing.T) {
 		t.Parallel()
 		svc := &fakeOperationsManager{
-			globalList: func(context.Context, uuid.UUID, application.GlobalOperationsListQuery) ([]application.OperationListItem, error) {
-				return nil, application.ErrNotFound
+			globalList: func(context.Context, uuid.UUID, application.GlobalOperationsListQuery) (application.GlobalOperationsPage, error) {
+				return application.GlobalOperationsPage{}, application.ErrNotFound
 			},
 		}
 		h := NewOperationsHandlers(svc, nil)
@@ -1295,4 +1296,73 @@ func TestCreateOperation_ErrorMapping(t *testing.T) {
 			t.Fatalf("status = %d, want 400", w.Code)
 		}
 	})
+}
+
+// The scope's match count (ticket #599): the global feed's wire carries
+// «найдено N» — the whole scope's paid count under the query's filters —
+// while the property-scoped listing sharing the schema omits the field.
+func TestListOperations_CarriesScopeTotal(t *testing.T) {
+	t.Parallel()
+
+	global := &fakeOperationsManager{
+		globalList: func(
+			_ context.Context, _ uuid.UUID, _ application.GlobalOperationsListQuery,
+		) (application.GlobalOperationsPage, error) {
+			item := application.OperationListItem{
+				Operation:  fixtureOperation(domain.StatusPaid),
+				ViewStatus: domain.ViewStatusPaid,
+			}
+			return application.GlobalOperationsPage{
+				Items: []application.OperationListItem{item},
+				Total: 7,
+			}, nil
+		},
+	}
+	h := NewOperationsHandlers(global, nil)
+	req := httptest.NewRequestWithContext(
+		httpsupport.WithUserID(t.Context(), uuid.Must(uuid.NewV7())), http.MethodGet, "/operations", nil,
+	)
+	w := httptest.NewRecorder()
+	h.ListOperations(w, req, openapi.ListOperationsParams{})
+	if w.Code != http.StatusOK {
+		t.Fatalf("global status = %d, want 200: %s", w.Code, w.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode global response: %v", err)
+	}
+	if total, ok := body["total"].(float64); !ok || total != 7 {
+		t.Fatalf("global total = %v, want 7 on the wire", body["total"])
+	}
+
+	// The offset-based property listing has no scope count to answer — the
+	// field stays off its wire.
+	prop := &fakeOperationsManager{
+		byProp: func(
+			_ context.Context, _, _ uuid.UUID, _ application.OperationsListQuery,
+		) ([]application.OperationListItem, error) {
+			item := application.OperationListItem{
+				Operation:  fixtureOperation(domain.StatusPaid),
+				ViewStatus: domain.ViewStatusPaid,
+			}
+			return []application.OperationListItem{item}, nil
+		},
+	}
+	h = NewOperationsHandlers(prop, nil)
+	propID := uuid.Must(uuid.NewV7())
+	req = httptest.NewRequestWithContext(
+		httpsupport.WithUserID(t.Context(), uuid.Must(uuid.NewV7())), http.MethodGet, "/operations", nil,
+	)
+	w = httptest.NewRecorder()
+	h.ListPropertyOperations(w, req, propID, openapi.ListPropertyOperationsParams{})
+	if w.Code != http.StatusOK {
+		t.Fatalf("property status = %d, want 200: %s", w.Code, w.Body.String())
+	}
+	body = nil
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode property response: %v", err)
+	}
+	if _, ok := body["total"]; ok {
+		t.Fatalf("property wire carries total: %s", w.Body.String())
+	}
 }

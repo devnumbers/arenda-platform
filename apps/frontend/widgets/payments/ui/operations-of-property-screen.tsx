@@ -5,7 +5,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { Add, ArrowLeft, Search } from "@/shared/assets/icons";
 import { ROUTES } from "@/shared/config/routes";
 import { clientTodayIso } from "@/entities/payment";
-import { useInfiniteScroll } from "@/shared/lib/hooks/useInfiniteScroll";
 import type { PaymentOperationScope } from "@/shared/api/query-keys";
 import {
   defaultOperationsPeriod,
@@ -23,20 +22,20 @@ import { canMutateProperty, useProperty } from "@/features/properties";
 import {
   Button,
   IconButton,
+  InfiniteQueryTail,
   PageContent,
   TopNav,
   TopNavTitle,
 } from "@/shared/ui/design";
 import { PaymentsSkeleton, PaymentsStateCard } from "./payments-sections";
 import {
-  LoadingMoreIndicator,
   OperationsDateList,
   OperationsNeverHad,
 } from "./operations-list";
 import { OperationsFilterChips } from "./operations-filter-chips";
 import { OperationsPeriodPickerDialog } from "./operations-period-picker";
 import { hasNoPaidOperationsEver } from "../lib/operations-empty-states";
-import { summaryBarSegments } from "../lib/summary-bar";
+import { summaryBarSegments } from "@/features/payment-categories";
 import { OperationsSummaryCard } from "./operations-summary-card";
 
 /**
@@ -106,12 +105,6 @@ export function OperationsOfPropertyScreen({
     status: "paid",
     order: "desc",
   });
-
-  const sentinelRef = useInfiniteScroll(() => {
-    if (listQuery.hasNextPage && !listQuery.isFetchingNextPage) {
-      void listQuery.fetchNextPage();
-    }
-  }, listQuery.hasNextPage === true);
 
   const groups = groupOperationsByDate(listQuery.data ?? [], today);
   // Скелетон — только пока данных нет вовсе (первая загрузка): смена
@@ -295,16 +288,7 @@ export function OperationsOfPropertyScreen({
                     <OperationsDateList
                       groups={groups}
                       onSelectOperation={openOperation}
-                      tail={
-                        <>
-                          {listQuery.hasNextPage === true && (
-                            <div ref={sentinelRef} aria-hidden />
-                          )}
-                          {listQuery.isFetchingNextPage && (
-                            <LoadingMoreIndicator />
-                          )}
-                        </>
-                      }
+                      tail={<InfiniteQueryTail query={listQuery} />}
                     />
                   </>
                 )}

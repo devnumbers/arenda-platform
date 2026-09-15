@@ -49,6 +49,13 @@ WHERE (
 -- the default catalog's label is not in the database — the application
 -- layer expands the query into the matching slugs (category_slugs, '' when
 -- none) and they match as a set.
+--
+-- The reading order is (created_at, id) and the page walks it by keyset
+-- (ticket #597): the window resumes strictly after the (created_at, id)
+-- the previous page ended on, so rows created, deleted or renamed between
+-- loads never duplicate or drop. The property name is deliberately not a
+-- sort key — a rename would move rows across the window. Both cursor args
+-- travel together; NULL (no cursor) reads from the beginning.
 SELECT pay.id,
        pay.owner_id,
        pay.property_id,
@@ -60,6 +67,7 @@ SELECT pay.id,
        pay.favorite_order,
        pay.category_slug,
        pay.user_category_id,
+       pay.created_at,
        pc.name AS user_category_name,
        p.name AS property_name,
        t.today::date AS owner_today,
@@ -111,10 +119,50 @@ WHERE (
        OR pay.user_category_id::text = sqlc.arg('category_filter')::text)
   AND (sqlc.arg('type_filter')::text = ''
        OR pay.type = sqlc.arg('type_filter')::text)
-ORDER BY p.name, pay.created_at, pay.id
+  AND (sqlc.narg('after_created_at')::timestamptz IS NULL
+       OR (pay.created_at, pay.id) > (sqlc.narg('after_created_at'),
+                                      sqlc.narg('after_id')::uuid))
+ORDER BY pay.created_at, pay.id
 LIMIT CASE WHEN sqlc.arg('page_limit')::int = 0 THEN NULL::bigint
-           ELSE sqlc.arg('page_limit')::bigint END
-OFFSET COALESCE(sqlc.arg('page_offset'), 0)::bigint;
+           ELSE sqlc.arg('page_limit')::bigint END;
+
+-- name: CountGlobalPaymentRules :one
+-- The search's whole-scope match count (ticket #599): the list query's
+-- predicate — the visibility, the search over title/user category/catalog
+-- slugs, the chip's category+type filter — without the per-row schedule
+-- aggregates, the ordering, the window and the keyset key. The count is the
+-- scope's own, identical on every walked page; the search screen shows it
+-- as «найдено N». The owner→today join travels with the predicate: the map
+-- covers every visible owner (ListGlobalPaymentOwnerTodays), so its rows
+-- are the list's rows.
+SELECT COUNT(*)
+FROM payments pay
+JOIN properties p ON p.id = pay.property_id
+JOIN (
+       SELECT unnest(string_to_array(sqlc.arg('owner_ids')::text, ',')::uuid[]) AS owner_id,
+              unnest(string_to_array(sqlc.arg('todays')::text, ',')::date[]) AS today
+     ) AS t ON t.owner_id = pay.owner_id
+LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
+WHERE (
+       pay.owner_id = sqlc.arg('actor')
+       OR EXISTS (
+            SELECT 1 FROM property_members pm
+            WHERE pm.property_id = pay.property_id
+              AND pm.user_id = sqlc.arg('actor')
+              AND pm.status = 'active'
+          )
+      )
+  AND p.status != 'archived'
+  AND (sqlc.arg('search')::text = ''
+       OR pay.title ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
+       OR pc.name ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
+       OR (sqlc.arg('category_slugs')::text <> ''
+           AND pay.category_slug = ANY(string_to_array(sqlc.arg('category_slugs')::text, ','))))
+  AND (sqlc.arg('category_filter')::text = ''
+       OR pay.category_slug = sqlc.arg('category_filter')::text
+       OR pay.user_category_id::text = sqlc.arg('category_filter')::text)
+  AND (sqlc.arg('type_filter')::text = ''
+       OR pay.type = sqlc.arg('type_filter')::text);
 
 -- name: SumGlobalPaymentCounters :one
 -- The main screen's two counters over the whole visible scope (ticket
@@ -150,17 +198,16 @@ WHERE (
 
 -- name: SumGlobalPaymentSearchCategories :many
 -- The matched categories of the payment rules search (ticket #575): one
--- row per (category, direction) present among the matched rules — the
--- search screen's chips — the largest count first. The identity is the
--- rule's category reference resolved: a default catalog slug or the user
--- category. Rules without any category reference cannot appear (the XOR
--- is a durable schema invariant; no such rules exist today). The search
--- predicate is the feed query's.
+-- row per category present among the matched rules — the search screen's
+-- chips — the largest match count first (ticket #602: the count orders the
+-- rows and stays out of the contract; a category's directions are one
+-- chip). The identity is the rule's category reference resolved: a default
+-- catalog slug or the user category. Rules without any category reference
+-- cannot appear (the XOR is a durable schema invariant; no such rules exist
+-- today). The search predicate is the feed query's.
 SELECT pay.category_slug,
        pay.user_category_id,
-       pc.name AS user_category_label,
-       pay.type,
-       COUNT(*)::bigint AS rule_count
+       pc.name AS user_category_label
 FROM payments pay
 JOIN properties p ON p.id = pay.property_id
 LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
@@ -180,8 +227,8 @@ WHERE (
        OR pc.name ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
        OR (sqlc.arg('category_slugs')::text <> ''
            AND pay.category_slug = ANY(string_to_array(sqlc.arg('category_slugs')::text, ','))))
-GROUP BY pay.category_slug, pay.user_category_id, pc.name, pay.type
-ORDER BY rule_count DESC, pay.category_slug NULLS LAST, pc.name NULLS LAST, pay.type;
+GROUP BY pay.category_slug, pay.user_category_id, pc.name
+ORDER BY COUNT(*) DESC, pay.category_slug NULLS LAST, pc.name NULLS LAST;
 
 -- name: ListGlobalPaymentObjects :many
 -- The actor's visible non-archived properties — the «Объекты» screen's

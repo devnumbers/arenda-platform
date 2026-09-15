@@ -57,12 +57,28 @@ type Querier interface {
 	// Every started session counts, whatever its later outcome (ticket #427).
 	CountCardBindingSessionsByUserSince(ctx context.Context, arg CountCardBindingSessionsByUserSinceParams) (int64, error)
 	CountContactsAdmin(ctx context.Context, propertyID pgtype.UUID) (int64, error)
+	// The search's whole-scope match count (ticket #599): the list query's
+	// predicate — the visibility, the search over title/user category/catalog
+	// slugs, the chip's category+type filter — without the per-row schedule
+	// aggregates, the ordering, the window and the keyset key. The count is the
+	// scope's own, identical on every walked page; the search screen shows it
+	// as «найдено N». The owner→today join travels with the predicate: the map
+	// covers every visible owner (ListGlobalPaymentOwnerTodays), so its rows
+	// are the list's rows.
+	CountGlobalPaymentRules(ctx context.Context, arg CountGlobalPaymentRulesParams) (int64, error)
 	CountNewUsersLast30dAdmin(ctx context.Context) (int64, error)
 	// The paid-operations count of one rule (ADR 0053 §2: the rentals progress'
 	// paidMonths — «N из M месяцев» counts the managed payment's paid facts).
 	// Cancelled tombstones never count; the nested payment→property path is
 	// enforced in the WHERE clause.
 	CountPaidOperationsByPayment(ctx context.Context, arg CountPaidOperationsByPaymentParams) (int64, error)
+	// The global feed's whole-scope count (ticket #599): the list query's
+	// predicate — paid, the visibility, the archive cut, the propertyIds
+	// multi-select, the period, the search over title/category label/amount
+	// digits, the direction and category filters — without the keyset key, the
+	// ordering and the window. The count is the scope's own, identical on every
+	// walked page; the search screen shows it as «найдено N».
+	CountPaidOperationsGlobal(ctx context.Context, arg CountPaidOperationsGlobalParams) (int64, error)
 	CountPropertiesAdmin(ctx context.Context, arg CountPropertiesAdminParams) (int64, error)
 	CountPropertyPhotosByPropertyID(ctx context.Context, propertyID pgtype.UUID) (int64, error)
 	CountSubscriptionPaymentsAdmin(ctx context.Context, arg CountSubscriptionPaymentsAdminParams) (int64, error)
@@ -206,6 +222,12 @@ type Querier interface {
 	// Hard delete of the rental row; it must run before the payment's own delete
 	// (the RESTRICT FK releases only after the rental row is gone, ADR 0053 §3).
 	DeleteRental(ctx context.Context, arg DeleteRentalParams) (int64, error)
+	// The property-delete teardown (issue #632): every rental row of the
+	// property goes before the property row itself, inside the caller's
+	// transaction — the explicit order keeps the payment_id RESTRICT FK from
+	// racing the payments cascade off the property row (ADR 0025 §2), the
+	// completed rentals included. Scope is the owner like every rentals mutation.
+	DeleteRentalsByProperty(ctx context.Context, arg DeleteRentalsByPropertyParams) (int64, error)
 	// The edit invalidation (resolution #496): the rule's uncompleted tasks that
 	// have not fallen due yet — the undated one and the strictly future ones —
 	// are removed; the in-transaction tick stands the single future again with
@@ -485,12 +507,27 @@ type Querier interface {
 	// move), and the service has already gated the actor's view capability on
 	// the property. property_id must be set for the property scope.
 	// search ('' = no filter) is a case-insensitive substring match over the
-	// name fields, role, phone, email and messenger username; the application
-	// layer escapes the ILIKE metacharacters (ESCAPE '\').
+	// name fields, role, phone, email and messenger username, glued by
+	// contacts_search_text — the same IMMUTABLE expression the trigram index
+	// (migration 000124) is built on; the application layer escapes the ILIKE
+	// metacharacters (ESCAPE '\').
 	// sort 'name' orders by the display name; 'property' — by the bound
 	// property's name, unbound cards first in both directions («Общие
 	// контакты»), contact name ordering inside the groups. Both keys use the
 	// Russian ICU collation to match the client's letter grouping; id ties off.
+	//
+	// The page walks the listing's own order by keyset (ticket #600): the
+	// window resumes strictly after the (sort key, id) the previous page ended
+	// on, so cards created or deleted between loads never duplicate or drop.
+	// The sort keys are mutable (display name, property binding): a rename or
+	// rebind of a card the walk has already passed can move it across the
+	// window boundary — inherent to the visible name/property sort. The
+	// predicate mirrors the ORDER BY branch by branch — the same CASE-gated
+	// keys, the same ICU collations, the unbound-flag leading the property sort
+	// and id tying off ascending in both directions. The cursor blob carries
+	// its sort/order: the application rejects a cursor echoed under another
+	// walk. All cursor args travel together; NULL (no cursor) reads from the
+	// beginning.
 	ListContacts(ctx context.Context, arg ListContactsParams) ([]ListContactsRow, error)
 	// The admin read of one property's contacts (ADR 0054 consequences): the
 	// bound cards only — an unbound contact belongs to no property card.
@@ -548,6 +585,13 @@ type Querier interface {
 	// the default catalog's label is not in the database — the application
 	// layer expands the query into the matching slugs (category_slugs, '' when
 	// none) and they match as a set.
+	//
+	// The reading order is (created_at, id) and the page walks it by keyset
+	// (ticket #597): the window resumes strictly after the (created_at, id)
+	// the previous page ended on, so rows created, deleted or renamed between
+	// loads never duplicate or drop. The property name is deliberately not a
+	// sort key — a rename would move rows across the window. Both cursor args
+	// travel together; NULL (no cursor) reads from the beginning.
 	ListGlobalPaymentRules(ctx context.Context, arg ListGlobalPaymentRulesParams) ([]ListGlobalPaymentRulesRow, error)
 	ListNotificationChannelPreferences(ctx context.Context, userID pgtype.UUID) ([]UserNotificationChannelPreference, error)
 	ListOpenCardBindingSessionsByUserID(ctx context.Context, userID pgtype.UUID) ([]CardBindingSession, error)
@@ -583,6 +627,14 @@ type Querier interface {
 	// ordering (op.date, id tiebreak) and filter vocabulary minus the status
 	// filter: paid is the feed's only stored status. property_name is the row's
 	// property label — the global screen's row label.
+	//
+	// The page walks the feed's own order by keyset (ticket #597): the window
+	// resumes strictly after the (date, id) the previous page ended on, so
+	// rows created, deleted or renamed between loads never duplicate or drop.
+	// The id tiebreak runs DESC in both directions, so the continuation is
+	// (date ahead of the cursor) or (same date, id below it); the direction
+	// only flips the date comparison. Both cursor args travel together; NULL
+	// (no cursor) reads from the beginning.
 	ListPaidOperationsGlobal(ctx context.Context, arg ListPaidOperationsGlobalParams) ([]ListPaidOperationsGlobalRow, error)
 	ListPaymentMethodsByUserID(ctx context.Context, userID pgtype.UUID) ([]PaymentMethod, error)
 	// The property's rules in creation order (stable for the list response).
@@ -594,6 +646,13 @@ type Querier interface {
 	ListPendingInvitationsByEmail(ctx context.Context, email string) ([]PropertyMemberInvitation, error)
 	ListPendingSubscriptionPaymentsByUserID(ctx context.Context, userID pgtype.UUID) ([]SubscriptionPayment, error)
 	ListPropertiesAdmin(ctx context.Context, arg ListPropertiesAdminParams) ([]ListPropertiesAdminRow, error)
+	// The payments half of the list red dot (ticket #585, резолюция #584): the
+	// subset of the given properties holding at least one overdue planned
+	// operation — a stored planned row dated before the owner's today, the same
+	// predicate ListOperations resolves as the overdue view status in exactly
+	// one place. One batched read per data owner; cancelled tombstones are not
+	// planned rows and never match.
+	ListPropertyIDsWithOverdueOperations(ctx context.Context, arg ListPropertyIDsWithOverdueOperationsParams) ([]pgtype.UUID, error)
 	ListPropertyMemberInvitations(ctx context.Context, propertyID pgtype.UUID) ([]PropertyMemberInvitation, error)
 	ListPropertyMembers(ctx context.Context, propertyID pgtype.UUID) ([]PropertyMember, error)
 	ListPropertyMembersByUser(ctx context.Context, userID pgtype.UUID) ([]ListPropertyMembersByUserRow, error)
@@ -692,6 +751,13 @@ type Querier interface {
 	// without rules on such properties are not sweep targets. Stateless — every
 	// run re-lists, no per-zone or per-owner tick state is kept.
 	ListTickZones(ctx context.Context) ([]ListTickZonesRow, error)
+	// The occupancy projection of the properties list (ticket #585, резолюция
+	// #584): the unfinished rentals of the given properties in one batched read
+	// — exactly one per property (invariant №12), so the result over a listed
+	// property is either one row or none. The status itself computes in Go
+	// against the data owner's today (ADR 0048), from the same dates the
+	// rentals responses report.
+	ListUnfinishedRentalsByPropertyIDs(ctx context.Context, propertyIds []pgtype.UUID) ([]ListUnfinishedRentalsByPropertyIDsRow, error)
 	ListUsersAdmin(ctx context.Context, arg ListUsersAdminParams) ([]ListUsersAdminRow, error)
 	// The favorites order save's lock pass (ticket #576): FOR UPDATE row locks
 	// on the submitted rules — the caller passes the ids sorted, the ORDER BY
@@ -754,6 +820,24 @@ type Querier interface {
 	// window is new or has expired (TTL reset) and the failure counter must be set
 	// to an absolute value rather than incremented.
 	ResetLoginAttempt(ctx context.Context, arg ResetLoginAttemptParams) error
+	// The search endpoint's window (ticket #601): the actor's visible
+	// non-archived properties — own plus actively shared (the merged visibility
+	// of the main list, ADR 0028) — matching the search as a case-insensitive
+	// substring over the name or the address (the store escapes the ILIKE
+	// metacharacters; the trgm indexes of migration 000124 serve both fields).
+	//
+	// The walk is keyset over the display name and id (ticket #597's pattern):
+	// the window resumes strictly after the (name, id) the previous page ended
+	// on, so rows created, deleted or renamed between loads never duplicate or
+	// drop. The name sort mirrors the hub's own default (the client orders the
+	// list by name) with the Russian ICU collation matching the contacts book's
+	// letter order (#600); id ties off. A rename moving a row across the window
+	// boundary is inherent to the visible-name sort. The cursor args travel
+	// together; NULL (no cursor) reads from the beginning.
+	// access_role names the actor's role on the row: 'owner' for own
+	// properties, the active membership's role for shared ones (T11) — the
+	// LEFT JOIN row is unique per (property, user).
+	SearchVisibleProperties(ctx context.Context, arg SearchVisiblePropertiesParams) ([]SearchVisiblePropertiesRow, error)
 	// Atomic PUT favorite (no read-modify-write): the flag is set in one UPDATE.
 	// Existence is already proven inside the same transaction under the property
 	// lock; :execrows keeps the store honest independently of that ordering.
@@ -785,12 +869,13 @@ type Querier interface {
 	// describe the scope, the search screens' rows are the feed query's.
 	SumGlobalPaymentCounters(ctx context.Context, arg SumGlobalPaymentCountersParams) (SumGlobalPaymentCountersRow, error)
 	// The matched categories of the payment rules search (ticket #575): one
-	// row per (category, direction) present among the matched rules — the
-	// search screen's chips — the largest count first. The identity is the
-	// rule's category reference resolved: a default catalog slug or the user
-	// category. Rules without any category reference cannot appear (the XOR
-	// is a durable schema invariant; no such rules exist today). The search
-	// predicate is the feed query's.
+	// row per category present among the matched rules — the search screen's
+	// chips — the largest match count first (ticket #602: the count orders the
+	// rows and stays out of the contract; a category's directions are one
+	// chip). The identity is the rule's category reference resolved: a default
+	// catalog slug or the user category. Rules without any category reference
+	// cannot appear (the XOR is a durable schema invariant; no such rules exist
+	// today). The search predicate is the feed query's.
 	SumGlobalPaymentSearchCategories(ctx context.Context, arg SumGlobalPaymentSearchCategoriesParams) ([]SumGlobalPaymentSearchCategoriesRow, error)
 	// The period totals of one property's operations by direction (ticket #473):
 	// the same status/period predicate as ListOperations, aggregated in SQL so

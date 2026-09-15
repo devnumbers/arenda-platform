@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -23,6 +24,9 @@ const (
 	feedInsuranceSlug = "insurance"
 )
 
+// feedInsuranceTitle is the recurring seeded rule title (goconst).
+const feedInsuranceTitle = "Страхование"
+
 // fakeGlobalCalendar answers the owner→today map with canned dates.
 type fakeGlobalCalendar struct {
 	todays map[uuid.UUID]time.Time
@@ -38,14 +42,17 @@ type fakeGlobalReader struct {
 	owners     []uuid.UUID
 	rules      []GlobalPaymentRuleRow
 	counters   GlobalPaymentCounters
-	categories []GlobalPaymentSearchCategory
+	categories []domain.CategoryRef
 	objects    []GlobalPaymentObject
 	lastDates  map[uuid.UUID]time.Time
 	rulesByID  map[uuid.UUID]domain.Payment
+	countRules int64
 
+	countCalled     bool
 	gotTodays       map[uuid.UUID]time.Time
 	gotQuery        GlobalPaymentRulesQuery
 	gotSumQuery     GlobalPaymentRulesQuery
+	gotCountQuery   GlobalPaymentRulesQuery
 	gotObjectSearch string
 }
 
@@ -69,9 +76,17 @@ func (f *fakeGlobalReader) SumGlobalPaymentCounters(
 
 func (f *fakeGlobalReader) SumGlobalPaymentSearchCategories(
 	_ context.Context, _ uuid.UUID, q GlobalPaymentRulesQuery,
-) ([]GlobalPaymentSearchCategory, error) {
+) ([]domain.CategoryRef, error) {
 	f.gotSumQuery = q
 	return f.categories, nil
+}
+
+func (f *fakeGlobalReader) CountGlobalPaymentRules(
+	_ context.Context, _ uuid.UUID, _ map[uuid.UUID]time.Time, q GlobalPaymentRulesQuery,
+) (int64, error) {
+	f.countCalled = true
+	f.gotCountQuery = q
+	return f.countRules, nil
 }
 
 func (f *fakeGlobalReader) ListGlobalPaymentObjects(
@@ -122,7 +137,7 @@ func TestListGlobalPaymentsEnrichesRows(t *testing.T) {
 		rules: []GlobalPaymentRuleRow{
 			{
 				ID: uuid.Must(uuid.NewV7()), OwnerID: ownerA, PropertyID: propertyA,
-				PropertyName: feedPropertyName, Type: domain.TypeExpense, Title: "Страхование",
+				PropertyName: feedPropertyName, Type: domain.TypeExpense, Title: feedInsuranceTitle,
 				AmountKopecks: 3200000, Category: domain.CategoryRef{Slug: &slug},
 				IsFavorite: true, Today: todayA, NextPlannedDate: &nextA,
 			},
@@ -294,7 +309,9 @@ func newSearchPageService(reader *fakeGlobalReader, owner uuid.UUID) *GlobalPaym
 
 // The search page (map #573, rework): the zero page degenerates to the
 // contract's default — the first 50-row page — and the chip filter travels
-// to the rules read beside the raw search query.
+// to the rules read beside the raw search query; the keyset continuation
+// (ticket #597) decodes into the After* keyset key, the empty cursor being
+// the list's beginning.
 func TestSearchGlobalPaymentsPage(t *testing.T) {
 	t.Parallel()
 
@@ -304,19 +321,22 @@ func TestSearchGlobalPaymentsPage(t *testing.T) {
 	actor := uuid.Must(uuid.NewV7())
 
 	// The zero page (the contract's omitted params) is the default first
-	// page: 50 rows, no chip filter.
+	// page: 50 rows, no chip filter, no keyset key.
 	if _, err := service.SearchGlobalPayments(t.Context(), actor, "аренд", GlobalPaymentSearchPage{}); err != nil {
 		t.Fatalf("SearchGlobalPayments: %v", err)
 	}
-	if got := reader.gotQuery; got.Limit != DefaultPaymentRulesPageSize || got.Offset != 0 {
-		t.Errorf("zero page = limit %d offset %d, want limit %d offset 0", got.Limit, got.Offset, DefaultPaymentRulesPageSize)
+	if got := reader.gotQuery; got.Limit != DefaultPaymentRulesPageSize {
+		t.Errorf("zero page = limit %d, want limit %d", got.Limit, DefaultPaymentRulesPageSize)
 	}
 	if got := reader.gotQuery; got.Category != "" || got.Type != "" {
 		t.Errorf("zero page filter = %q/%q, want none", got.Category, got.Type)
 	}
+	if got := reader.gotQuery; got.AfterCreatedAt != nil || got.AfterID != nil {
+		t.Errorf("zero page keyset key = %v/%v, want none", got.AfterCreatedAt, got.AfterID)
+	}
 
 	// The explicit page carries the chip's identity and the window through.
-	page := GlobalPaymentSearchPage{Category: parkingSlug, Type: domain.TypeExpense, Limit: 50, Offset: 100}
+	page := GlobalPaymentSearchPage{Category: parkingSlug, Type: domain.TypeExpense, Limit: 50}
 	if _, err := service.SearchGlobalPayments(t.Context(), actor, "", page); err != nil {
 		t.Fatalf("SearchGlobalPayments: %v", err)
 	}
@@ -324,8 +344,35 @@ func TestSearchGlobalPaymentsPage(t *testing.T) {
 	if got.Category != parkingSlug || got.Type != domain.TypeExpense {
 		t.Errorf("page filter = %q/%q, want parking/expense", got.Category, got.Type)
 	}
-	if got.Limit != 50 || got.Offset != 100 {
-		t.Errorf("page window = limit %d offset %d, want limit 50 offset 100", got.Limit, got.Offset)
+	if got.Limit != 50 {
+		t.Errorf("page window = limit %d, want limit 50", got.Limit)
+	}
+}
+
+// The continuation cursor (ticket #597) decodes into the keyset key the
+// page resumes after; a malformed one is the contract's 400.
+func TestSearchGlobalPaymentsPageCursor(t *testing.T) {
+	t.Parallel()
+
+	owner := uuid.Must(uuid.NewV7())
+	reader := &fakeGlobalReader{owners: []uuid.UUID{owner}}
+	service := newSearchPageService(reader, owner)
+	actor := uuid.Must(uuid.NewV7())
+
+	cursorAt := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
+	cursorID := uuid.Must(uuid.NewV7())
+	page := GlobalPaymentSearchPage{Limit: 50, Cursor: encodeRuleCursor(cursorAt, cursorID)}
+	if _, err := service.SearchGlobalPayments(t.Context(), actor, "", page); err != nil {
+		t.Fatalf("SearchGlobalPayments with cursor: %v", err)
+	}
+	got := reader.gotQuery
+	if got.AfterCreatedAt == nil || !got.AfterCreatedAt.Equal(cursorAt) || got.AfterID == nil || *got.AfterID != cursorID {
+		t.Errorf("keyset key = %v/%v, want %v/%s", got.AfterCreatedAt, got.AfterID, cursorAt, cursorID)
+	}
+
+	page = GlobalPaymentSearchPage{Limit: 50, Cursor: "!!!"}
+	if _, err := service.SearchGlobalPayments(t.Context(), actor, "", page); !errors.Is(err, ErrInvalidInput) {
+		t.Errorf("malformed cursor err = %v, want ErrInvalidInput", err)
 	}
 }
 
@@ -412,7 +459,7 @@ func TestDefaultCategorySlugsMatching(t *testing.T) {
 	}{
 		{"empty query matches nothing", "", nil},
 		{"case-insensitive label substring", "страхов", []string{feedInsuranceSlug}},
-		{"full label", "Страхование", []string{feedInsuranceSlug}},
+		{"full label", feedInsuranceTitle, []string{feedInsuranceSlug}},
 		{"no such label", "бассейн", nil},
 	}
 	for _, tc := range cases {
@@ -428,5 +475,74 @@ func TestDefaultCategorySlugsMatching(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// The search's total (ticket #599): the whole scope's match count under the
+// current query travels with every page — the count's predicate mirrors the
+// list's search and chip filters but carries no keyset key (the cursor only
+// positions the window), and an empty visible scope counts nothing.
+func TestSearchGlobalPaymentsCountsMatches(t *testing.T) {
+	t.Parallel()
+
+	owner := uuid.Must(uuid.NewV7())
+	today := utcDate(2026, time.September, 11)
+	reader := &fakeGlobalReader{
+		owners: []uuid.UUID{owner},
+		rules: []GlobalPaymentRuleRow{
+			{
+				ID: uuid.Must(uuid.NewV7()), OwnerID: owner, PropertyID: uuid.Must(uuid.NewV7()),
+				PropertyName: feedPropertyName, Type: domain.TypeExpense, Title: feedInsuranceTitle,
+				AmountKopecks: 3200000, Today: today,
+			},
+		},
+		countRules: 7,
+	}
+	service := NewGlobalPaymentService(reader, fakeGlobalCalendar{todays: map[uuid.UUID]time.Time{
+		owner: today,
+	}}, txStoreFactory{})
+
+	// A full page walks on with the cursor; the total still counts the whole
+	// matched scope (7), not the window or its remainder.
+	search, err := service.SearchGlobalPayments(t.Context(), owner, "страх", GlobalPaymentSearchPage{
+		Limit: 1, Category: feedInsuranceSlug, Type: domain.TypeExpense,
+	})
+	if err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	if search.Total != 7 {
+		t.Fatalf("total = %d, want 7", search.Total)
+	}
+	if search.NextCursor == "" {
+		t.Fatal("nextCursor = '', want the continuation of the full page")
+	}
+	if !reader.countCalled {
+		t.Fatal("CountGlobalPaymentRules was not called")
+	}
+	if reader.gotCountQuery.Search != "страх" ||
+		reader.gotCountQuery.Category != feedInsuranceSlug ||
+		reader.gotCountQuery.Type != domain.TypeExpense {
+		t.Fatalf("count query = %+v, want the list's search and chip filter", reader.gotCountQuery)
+	}
+	if len(reader.gotCountQuery.CategorySlugs) != len(defaultCategorySlugsMatching("страх")) {
+		t.Fatalf("count query slugs = %v, want the expanded label slugs", reader.gotCountQuery.CategorySlugs)
+	}
+	if reader.gotCountQuery.AfterCreatedAt != nil || reader.gotCountQuery.AfterID != nil {
+		t.Fatalf("count query keyset key = %v/%v, want nil/nil",
+			reader.gotCountQuery.AfterCreatedAt, reader.gotCountQuery.AfterID)
+	}
+
+	// An empty visible scope counts nothing and does not reach the store.
+	empty := &fakeGlobalReader{}
+	service = NewGlobalPaymentService(empty, fakeGlobalCalendar{}, txStoreFactory{})
+	search, err = service.SearchGlobalPayments(t.Context(), owner, "", GlobalPaymentSearchPage{})
+	if err != nil {
+		t.Fatalf("empty-scope search: %v", err)
+	}
+	if search.Total != 0 {
+		t.Fatalf("empty scope total = %d, want 0", search.Total)
+	}
+	if empty.countCalled {
+		t.Fatal("count reached the store on an empty scope")
 	}
 }

@@ -6,7 +6,6 @@ import { ArrowLeft, Star } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { useSearchQueryState } from '@/shared/lib/hooks/useSearchQueryState';
-import { useInfiniteScroll } from '@/shared/lib/hooks/useInfiniteScroll';
 import { useGlobalPaymentSearch, useGlobalPaymentSearchCategories } from '@/features/payments';
 import type { GlobalPayment } from '@/entities/payment';
 import { PaymentRowButton } from '@/entities/payment';
@@ -15,11 +14,11 @@ import {
   ChipButton,
   EmptyState,
   IconButton,
+  InfiniteQueryTail,
   PageContent,
   SearchField,
   TopNav,
 } from '@/shared/ui/design';
-import { LoadingMoreIndicator } from './operations-list';
 import { GlobalPaymentRuleIcon, PaymentsHeading, PaymentsSkeleton, PaymentsStateCard } from './payments-sections';
 import { nearestDateLine } from '../lib/payments-global-model';
 import {
@@ -35,8 +34,8 @@ import {
  * «Поиск платежа». Старт — «Введите название платежа», пустой результат —
  * «Такого платежа нет» (одна иллюстрация). Результаты: чипы совпавших
  * категорий (серверные matchedCategories #575; тап сужает список
- * серверным фильтром категории — без направления, склейка дублей —
- * решение владельца; повторный тап снимает — выбранная
+ * серверным фильтром категории — направление в чип не входит, одна
+ * категория — один чип #602; повторный тап снимает — выбранная
  * синяя заливка; чипы при выборе не сужаются — канон операций) и
  * «Платежи» строками канона PaymentRowButton — как в списках карты
  * (звезда-индикатор только у избранных, пассивная — решение владельца
@@ -70,7 +69,7 @@ export function PaymentsGlobalSearchScreen(): JSX.Element {
   const matched = categoriesQuery.data ?? [];
   const chips = searchCategoryChips(matched, selectedKey);
   // Выбор валиден, только пока чип есть в выдаче текущего запроса; фильтр
-  // уезжает на сервер парой (категория, направление).
+  // уезжает на сервер категорией чипа (направления в контракте нет — #602).
   const activeKey = effectiveChipKey(matched, selectedKey);
   const activeChip =
     activeKey !== null
@@ -82,12 +81,6 @@ export function PaymentsGlobalSearchScreen(): JSX.Element {
     activeChip !== undefined ? searchChipFilter(activeChip) : {},
     { enabled: debounced.trim() !== '' },
   );
-
-  const sentinelRef = useInfiniteScroll(() => {
-    if (searchQuery.hasNextPage && !searchQuery.isFetchingNextPage) {
-      void searchQuery.fetchNextPage();
-    }
-  }, searchQuery.hasNextPage === true);
 
   const items = searchQuery.data?.items ?? [];
 
@@ -210,8 +203,7 @@ export function PaymentsGlobalSearchScreen(): JSX.Element {
                     />
                   ))}
 
-                  {searchQuery.hasNextPage === true && <div ref={sentinelRef} aria-hidden />}
-                  {searchQuery.isFetchingNextPage && <LoadingMoreIndicator />}
+                  <InfiniteQueryTail query={searchQuery} />
                 </div>
               </section>
             </div>

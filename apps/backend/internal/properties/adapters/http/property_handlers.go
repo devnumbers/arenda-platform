@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -86,9 +87,10 @@ var staticPropertyProblems = []httpsupport.ErrorProblem{
 }
 
 // handlePropertyError maps an application error of the property endpoints onto
-// the wire contract: the coded suspended-membership 403 first (T9 — the flat
-// table cannot carry the extension code), then the fixed table, then the
-// dynamic ones whose detail derives from the error itself.
+// the wire contract: the coded suspended-membership 403 and the coded
+// occupied-property 409 first (T9, #632 — the flat table cannot carry the
+// extension codes), then the fixed table, then the dynamic ones whose detail
+// derives from the error itself.
 func (h *PropertyHandlers) handlePropertyError(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, propertiesapp.ErrAccessSuspended) {
 		httpsupport.WriteProblem(r.Context(), w, http.StatusForbidden,
@@ -96,6 +98,14 @@ func (h *PropertyHandlers) handlePropertyError(w http.ResponseWriter, r *http.Re
 				httpsupport.ProblemTitleForbidden,
 				"Доступ к объекту приостановлен: превышен лимит объектов по тарифу",
 				"membership_suspended"))
+		return
+	}
+	if errors.Is(err, propertiesapp.ErrPropertyOccupied) {
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
+			httpsupport.ProblemWithCode(r.Context(),
+				httpsupport.ProblemTitleConflict,
+				"Нельзя удалить объект, пока он арендован",
+				"property_occupied"))
 		return
 	}
 	if httpsupport.WriteErrorProblem(r.Context(), w, err, staticPropertyProblems) {
@@ -193,14 +203,14 @@ func (h *PropertyHandlers) ListProperties(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	properties, err := h.svc.ListProperties(r.Context(), actor)
+	page, err := h.svc.ListProperties(r.Context(), actor)
 	if err != nil {
 		h.handlePropertyError(w, r, err)
 		return
 	}
 
-	items := make([]openapi.PropertyResponse, 0, len(properties))
-	for _, property := range properties {
+	items := make([]openapi.PropertyResponse, 0, len(page.Items))
+	for _, property := range page.Items {
 		items = append(items, h.propertyResponse(property))
 	}
 
@@ -217,6 +227,7 @@ func (h *PropertyHandlers) ListProperties(w http.ResponseWriter, r *http.Request
 
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.PropertiesResponse{
 		Items:             items,
+		Today:             openapi_types.Date{Time: page.Today},
 		HiddenSharedCount: &hiddenSharedCount,
 	})
 }
@@ -230,7 +241,48 @@ func (h *PropertyHandlers) ListArchivedProperties(w http.ResponseWriter, r *http
 		return
 	}
 
-	properties, err := h.svc.ListArchivedProperties(r.Context(), actor)
+	page, err := h.svc.ListArchivedProperties(r.Context(), actor)
+	if err != nil {
+		h.handlePropertyError(w, r, err)
+		return
+	}
+
+	items := make([]openapi.PropertyResponse, 0, len(page.Items))
+	for _, property := range page.Items {
+		items = append(items, h.propertyResponse(property))
+	}
+
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.PropertiesResponse{
+		Items: items,
+		Today: openapi_types.Date{Time: page.Today},
+	})
+}
+
+// SearchProperties implements GET /properties/search (ticket #601): the
+// search screen's keyset window over the visible slice, the matched cards
+// plus the next page's continuation (null once the matches are exhausted).
+func (h *PropertyHandlers) SearchProperties(w http.ResponseWriter, r *http.Request, params openapi.SearchPropertiesParams) {
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
+	if !ok {
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	page := propertiesapp.SearchPropertiesPage{}
+	if params.Limit != nil {
+		// A number that does not even fit int32 cannot be a valid page: mark
+		// it out of range for the service's own 1..100 validation (the
+		// contract's 400), never silently truncate it.
+		page.Limit = -1
+		if l := *params.Limit; l >= 1 && l <= math.MaxInt32 {
+			page.Limit = int32(l)
+		}
+	}
+	if params.Cursor != nil {
+		page.Cursor = *params.Cursor
+	}
+	properties, nextCursor, err := h.svc.SearchProperties(r.Context(), actor, params.Search, page)
 	if err != nil {
 		h.handlePropertyError(w, r, err)
 		return
@@ -241,7 +293,15 @@ func (h *PropertyHandlers) ListArchivedProperties(w http.ResponseWriter, r *http
 		items = append(items, h.propertyResponse(property))
 	}
 
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.PropertiesResponse{Items: items})
+	var cursor *string
+	if nextCursor != "" {
+		cursor = &nextCursor
+	}
+
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.PropertiesSearchResponse{
+		Items:      items,
+		NextCursor: cursor,
+	})
 }
 
 // GetProperty implements GET /properties/{id}.
@@ -297,9 +357,10 @@ func (h *PropertyHandlers) UpdateProperty(w http.ResponseWriter, r *http.Request
 	h.respondWithProperty(w, r, property, http.StatusOK)
 }
 
-// DeleteProperty implements DELETE /properties/{id}.
+// DeleteProperty implements DELETE /properties/{id}. Deletion is total
+// (ADR 0049): the property and all its data go together.
 func (h *PropertyHandlers) DeleteProperty(
-	w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params openapi.DeletePropertyParams,
+	w http.ResponseWriter, r *http.Request, id openapi_types.UUID,
 ) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
@@ -308,14 +369,7 @@ func (h *PropertyHandlers) DeleteProperty(
 		return
 	}
 
-	mode, err := domain.ParseDeletePropertyMode(string(params.Mode))
-	if err != nil {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
-			httpsupport.Problem(r.Context(), "Bad request", "Некорректный режим удаления"))
-		return
-	}
-
-	if err := h.svc.DeleteProperty(r.Context(), actor, id, mode); err != nil {
+	if err := h.svc.DeleteProperty(r.Context(), actor, id); err != nil {
 		h.handlePropertyError(w, r, err)
 		return
 	}
@@ -565,6 +619,27 @@ func (h *PropertyHandlers) propertyResponse(property domain.Property) openapi.Pr
 		PinnedAt:     property.PinnedAt,
 	}
 	resp.Attributes = propertyAttributesResponse(property.Attributes)
+	// The list projections ride the list reads only (ticket #585): nil
+	// occupancy means the row was not enriched, and neither field is
+	// reported. The service fills both together, so the overdue flag
+	// serializes under the same guard — an unwired overdue port would
+	// silence it, which only the partial wiring of tests can produce.
+	if property.Occupancy != nil {
+		occupancy := &openapi.PropertyOccupancy{
+			Status: openapi.PropertyOccupancyStatus(property.Occupancy.Status),
+		}
+		if property.Occupancy.StartDate != nil {
+			start := openapi_types.Date{Time: *property.Occupancy.StartDate}
+			occupancy.StartDate = &start
+		}
+		if property.Occupancy.PlannedEndDate != nil {
+			end := openapi_types.Date{Time: *property.Occupancy.PlannedEndDate}
+			occupancy.PlannedEndDate = &end
+		}
+		resp.Occupancy = occupancy
+		overdue := property.HasOverdueOperations
+		resp.HasOverdueOperations = &overdue
+	}
 	if property.AccessRole != "" {
 		resp.Access = &openapi.PropertyAccessContext{
 			Role: openapi.PropertyAccessContextRole(property.AccessRole),

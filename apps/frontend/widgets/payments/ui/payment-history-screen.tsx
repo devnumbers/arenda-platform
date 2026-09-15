@@ -6,7 +6,6 @@ import Image from 'next/image';
 import { ArrowLeft, ChangeVertical } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
-import { useInfiniteScroll } from '@/shared/lib/hooks/useInfiniteScroll';
 import {
   clientTodayIso,
   PaymentRowButton,
@@ -17,13 +16,21 @@ import {
   groupPaidOperations,
   usePaymentOperationsPaged,
 } from '@/features/payments';
-import { Button, ChipButton, IconButton, PageContent, Skeleton, TopNav, TopNavTitle } from '@/shared/ui/design';
+import {
+  Button,
+  ChipButton,
+  IconButton,
+  InfiniteQueryTail,
+  PageContent,
+  TopNav,
+  TopNavTitle,
+} from '@/shared/ui/design';
 import { operationStatusLabel } from '../lib/operation-status-label';
 import {
   PaymentsHeading,
-  PaymentsSkeleton,
   PaymentsStateCard,
 } from './payments-sections';
+import { PaymentGroupedListSkeleton } from './payments-skeletons';
 
 /**
  * Подэкран «История операций» (#466, Figma 671:7776): только paid-вхождения,
@@ -53,15 +60,6 @@ export function PaymentHistoryScreen({
     setOrder((current) => (current === 'desc' ? 'asc' : 'desc'));
   };
 
-  const sentinelRef = useInfiniteScroll(
-    () => {
-      if (historyQuery.hasNextPage && !historyQuery.isFetchingNextPage) {
-        void historyQuery.fetchNextPage();
-      }
-    },
-    historyQuery.hasNextPage === true,
-  );
-
   const today = clientTodayIso();
   const groups = groupPaidOperations(historyQuery.data ?? [], today);
 
@@ -81,11 +79,26 @@ export function PaymentHistoryScreen({
 
       <PageContent>
         <div className="flex flex-col gap-2">
+          {/* Чип сортировки — вне фазы загрузки (канон хабов #605); на
+              пустой истории и ошибке прячется вместе с контентом. */}
+          {(historyQuery.isPending || groups.length > 0) && (
+            <div className="px-6 pb-2">
+              <ChipButton
+                trailingIcon={<ChangeVertical />}
+                onClick={toggleOrder}
+                aria-label={
+                  order === 'desc'
+                    ? 'Сортировка: сначала новые — переключить на «сначала старые»'
+                    : 'Сортировка: сначала старые — переключить на «сначала новые»'
+                }
+              >
+                {order === 'desc' ? 'Новые' : 'Старые'}
+              </ChipButton>
+            </div>
+          )}
+
           {historyQuery.isPending && (
-            <>
-              <PaymentsSkeleton withHeading />
-              <PaymentsSkeleton withHeading />
-            </>
+            <PaymentGroupedListSkeleton rowsPerGroup={[1, 1, 1]} />
           )}
 
           {historyQuery.isError && (
@@ -123,20 +136,6 @@ export function PaymentHistoryScreen({
                 </div>
               ) : (
                 <>
-                  <div className="px-6 pb-2">
-                    <ChipButton
-                      trailingIcon={<ChangeVertical />}
-                      onClick={toggleOrder}
-                      aria-label={
-                        order === 'desc'
-                          ? 'Сортировка: сначала новые — переключить на «сначала старые»'
-                          : 'Сортировка: сначала старые — переключить на «сначала новые»'
-                      }
-                    >
-                      {order === 'desc' ? 'Новые' : 'Старые'}
-                    </ChipButton>
-                  </div>
-
                   {groups.map((group) => (
                     <section key={group.label} className="flex flex-col">
                       <PaymentsHeading>{group.label}</PaymentsHeading>
@@ -150,8 +149,7 @@ export function PaymentHistoryScreen({
                     </section>
                   ))}
 
-                  {historyQuery.hasNextPage === true && <div ref={sentinelRef} aria-hidden />}
-                  {historyQuery.isFetchingNextPage && <LoadingMoreIndicator />}
+                  <InfiniteQueryTail query={historyQuery} />
                 </>
               )}
             </>
@@ -189,13 +187,5 @@ function HistoryRow({
       signedAmount
       onSelect={onSelect}
     />
-  );
-}
-
-function LoadingMoreIndicator(): JSX.Element {
-  return (
-    <div className="flex justify-center py-4" role="status" aria-label="Загружаем еще">
-      <Skeleton className="h-8 w-8" />
-    </div>
   );
 }

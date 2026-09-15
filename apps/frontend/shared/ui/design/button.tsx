@@ -6,15 +6,18 @@ import { cn } from '@/shared/lib/cn';
 
 /**
  * Кнопка дизайн-слоя (ADR 0050, Figma 939:46118 — «Рентли. Новые экраны
- * сервиса»). Два размера: default — 56px, radius 16, паддинг 24, зазор 8,
- * кегль R/500 16/18; small — 44px, пилюля radius 100, паддинг 20, зазор 6,
- * кегль M/500 14/16. Варианты Primary (#2B7FFF→hover #2175F5→active
- * #176BEB), Secondary (серый фон с шагами hover/active), Danger (розовый
- * фон, красный текст — hover/active фон не меняют), Clear (белая пилюля,
- * серый текст) и White (белая пилюля, тёмный текст); Clear/White — пилюли
- * с кеглем M в ОБОИХ размерах (Figma 1134:55051, 1185:41649). Focus-visible
- * — ring 4px синий поверх 2px белого смещения (State/Focus), только с
- * клавиатуры.
+ * сервиса»). Два размера: default — 56px, паддинг 24, зазор 8, кегль
+ * R/500 16/18; small — 44px, паддинг 20, зазор 6, кегль M/500 14/16.
+ * Радиусы: default — у размера (default — 16px radius-button, small —
+ * пилюля); radius="m" — 12px (токен Figma radius/m) для любого размера —
+ * CTA пустых состояний секций объекта (решение владельца 11.09, #588:
+ * Figma 1554:99567 — small, 1550:97392 — default). Варианты Primary
+ * (#2B7FFF→hover #2175F5→active #176BEB), Secondary (серый фон с шагами
+ * hover/active), Danger (розовый фон, красный текст — hover/active фон
+ * не меняют), Clear (белая пилюля, серый текст) и White (белая пилюля,
+ * тёмный текст); Clear/White — пилюли с кеглем M в ОБОИХ размерах (Figma
+ * 1134:55051, 1185:41649). Focus-visible — ring 4px синий поверх 2px
+ * белого смещения (State/Focus), только с клавиатуры.
  */
 
 /** Заливка Primary — базовый вариант и выбранное состояние пилюли (Figma
@@ -37,8 +40,12 @@ export const buttonVariants = cva(
         white: 'bg-surface text-content',
       },
       size: {
-        default: 'h-14 gap-2 rounded-button px-6 text-base',
-        small: 'h-11 gap-1.5 rounded-pill px-5 text-sm',
+        default: 'h-14 gap-2 px-6 text-base',
+        small: 'h-11 gap-1.5 px-5 text-sm',
+      },
+      radius: {
+        default: '',
+        m: 'rounded-m',
       },
       selected: {
         false: '',
@@ -46,16 +53,17 @@ export const buttonVariants = cva(
       },
     },
     compoundVariants: [
-      // Clear и White — пилюли с кеглем M/500 и зазором 6 в обоих размерах
-      // (Figma 1134:55051, 1185:41649), не прямоугольники 16px/8px.
-      {
-        variant: ['clear', 'white'],
-        class: 'gap-1.5 rounded-pill text-sm',
-      },
+      // Радиусы по умолчанию: default — 16px, small и Clear/White —
+      // пилюли; radius="m" перекрывает их для любого размера (компаунд
+      // с radius default не применяется — конфликтных пар нет).
+      { size: 'default', radius: 'default', class: 'rounded-button' },
+      { size: 'small', radius: 'default', class: 'rounded-pill' },
+      { variant: ['clear', 'white'], radius: 'default', class: 'gap-1.5 rounded-pill text-sm' },
     ],
     defaultVariants: {
       variant: 'primary',
       size: 'default',
+      radius: 'default',
       selected: false,
     },
   },
@@ -73,6 +81,7 @@ export function Button({
   className,
   variant,
   size,
+  radius,
   selected,
   asChild = false,
   leadingIcon,
@@ -88,7 +97,7 @@ export function Button({
     <Comp
       data-loading={loading ? 'true' : undefined}
       aria-busy={loading || undefined}
-      className={cn(buttonVariants({ variant, size, selected }), className)}
+      className={cn(buttonVariants({ variant, size, radius, selected }), className)}
       disabled={asChild ? undefined : (disabled ?? loading)}
       {...props}
     >

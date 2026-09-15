@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
-import { TasksFeedScreen } from '@/widgets/tasks';
+import { TasksFeedScreen, TasksLoading } from '@/widgets/tasks';
 
 /**
  * Глобальная лента «Задачи» (#523, Figma 1733-27411/1726-86913/1733-92349):
@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 
 export default function TasksRoutePage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<TasksLoading />}>
       <TasksFeedScreen />
     </Suspense>
   );

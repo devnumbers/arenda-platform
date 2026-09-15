@@ -1,5 +1,4 @@
 import { ApiError } from '@/shared/api/errors';
-import { ROUTES } from '@/shared/config/routes';
 import { notify } from './base';
 import type {
   ErrorScenarioFn,
@@ -96,15 +95,22 @@ const property = {
     notify.error('Не удалось загрузить объект', options)) satisfies ScenarioFn,
   movedToMaintenance: ((options?) =>
     notify.success('Объект переведён на ремонт', options)) satisfies ScenarioFn,
-  returnedToWork: ((options?) =>
-    notify.success('Объект возвращён в работу', options)) satisfies ScenarioFn,
+  /** Завершение ремонта (деталь объекта #588, Figma 1581:54666). */
+  maintenanceFinished: ((options?) =>
+    notify.success('Ремонт завершен. Объект готов к аренде', options)) satisfies ScenarioFn,
+  /** Возврат из архива (деталь объекта #588, Figma 1581:55041). */
   returnedFromArchive: ((options?) =>
-    notify.success('Объект возвращён из архива', options)) satisfies ScenarioFn,
+    notify.success('Объект возвращен из архива', options)) satisfies ScenarioFn,
+  /** Архивация (деталь объекта #588, Figma 1581:55564) — тост без
+   * действия, как в макете. */
   movedToArchive: ((options?) =>
-    notify.success('Объект переведён в архив', {
-      action: {label: 'В архив', href: ROUTES.propertyArchive},
-      ...options,
-    })) satisfies ScenarioFn,
+    notify.success('Объект переведен в архив', options)) satisfies ScenarioFn,
+  /** Guard-шит #628: «Завершить» завершает аренду и меняет статус одним
+   * действием — один объединённый тост (решение владельца 12.09). */
+  maintenanceAfterRental: ((options?) =>
+    notify.success('Аренда завершена. Объект переведен на ремонт', options)) satisfies ScenarioFn,
+  archivedAfterRental: ((options?) =>
+    notify.success('Аренда завершена. Объект переведен в архив', options)) satisfies ScenarioFn,
   updated: ((options?) =>
     notify.success('Объект обновлён', options)) satisfies ScenarioFn,
   saveError: ((options?) =>
@@ -226,7 +232,9 @@ const payments = {
 /** Контекст «Аренда» (#530): успех дублирует экран успеха визарда — как у
  * платежей; ошибка создания (вторая незавершённая аренда — 409 с detail).
  * Оплата аренды идёт со страницы операции — её тосты в контексте операций.
- * Правка условий (#532) — формулировки как у правки платежа. */
+ * Правка условий (#532) — формулировки как у правки платежа. Завершение:
+ * мастер (#534) показывает полноэкранный финал — тост только на ошибку;
+ * шит с детали объекта (#627) остаётся на детали — успех тостом. */
 const rentals = {
   created: ((options?) =>
     notify.success('Аренда создана', options)) satisfies ScenarioFn,
@@ -234,8 +242,8 @@ const rentals = {
   updated: ((options?) =>
     notify.success('Изменения сохранены', options)) satisfies ScenarioFn,
   updateError: errorScenario('Не удалось сохранить изменения'),
-  /** Завершение (#534): успех — полноэкранный финал мастера, тост только
-   * на ошибку мутации. */
+  completed: ((options?) =>
+    notify.success('Аренда завершена', options)) satisfies ScenarioFn,
   completeError: errorScenario('Не удалось завершить аренду'),
 } as const;
 

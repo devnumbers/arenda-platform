@@ -222,12 +222,12 @@ func TestPropertyService_ListProperties_PinnedFirstStable(t *testing.T) {
 		t.Fatalf("list properties: %v", err)
 	}
 	want := []uuid.UUID{pinnedA.ID, sharedPinnedB.ID, unpinned.ID}
-	if len(list) != len(want) {
-		t.Fatalf("list len = %d, want %d", len(list), len(want))
+	if len(list.Items) != len(want) {
+		t.Fatalf("list len = %d, want %d", len(list.Items), len(want))
 	}
 	for i, id := range want {
-		if list[i].ID != id {
-			t.Errorf("list[%d] = %s, want %s", i, list[i].ID, id)
+		if list.Items[i].ID != id {
+			t.Errorf("list[%d] = %s, want %s", i, list.Items[i].ID, id)
 		}
 	}
 }

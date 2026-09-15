@@ -25,6 +25,7 @@ import {
   Button,
   ChipButton,
   IconButton,
+  InfiniteQueryTail,
   PageContent,
   PickerMenu,
   SearchField,
@@ -159,6 +160,9 @@ export function ContactsOfPropertyScreen({
                 onSelect={() => router.push(ROUTES.propertyContact(propertyId, contact.id))}
               />
             ))}
+            {/* Хвост порций (#633): sentinel + индикатор догрузки — белые
+             * строки поиска. */}
+            <InfiniteQueryTail query={contactsQuery} />
           </div>
         ) : contacts.length === 0 ? (
           <ContactsEmptyState />
@@ -189,6 +193,9 @@ export function ContactsOfPropertyScreen({
                   </div>
                 </div>
               ))}
+              {/* Хвост порций (#633): sentinel + индикатор догрузки —
+               * серая карточка книги, тон muted. */}
+              <InfiniteQueryTail query={contactsQuery} tone="muted" />
             </section>
           </>
         )}

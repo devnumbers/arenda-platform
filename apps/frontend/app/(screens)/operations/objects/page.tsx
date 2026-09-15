@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
-import { OperationsObjectsSelectScreen } from '@/widgets/payments';
+import { OperationsObjectsSelectScreen, OperationsObjectsLoading } from '@/widgets/payments';
 
 /**
  * Страница «Выбрать объект» (#542, Figma 1733-26805): мультивыбор объектов
@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 
 export default function OperationsObjectsRoutePage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<OperationsObjectsLoading />}>
       <OperationsObjectsSelectScreen />
     </Suspense>
   );

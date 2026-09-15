@@ -82,30 +82,40 @@ func (s PropertyStatus) Valid() bool {
 	return false
 }
 
-// DeletePropertyMode selects how a property is deleted.
-type DeletePropertyMode string
+// OccupancyStatus is the computed occupancy state of a property («Занятость
+// объекта», резолюция #584): derived from the property's single unfinished
+// rental against the data owner's today (ADR 0048) — never from the property
+// lifecycle status (active/maintenance/archived).
+type OccupancyStatus string
 
+// The four occupancy states: the three unfinished-rental statuses (the
+// rentals vocabulary, rentals/CONTEXT.md «Статусы Аренды») plus the
+// no-rental state.
 const (
-	DeletePropertyModeCascade DeletePropertyMode = "cascade"
-	DeletePropertyModeDetach  DeletePropertyMode = "detach"
+	// OccupancyUpcoming — the unfinished rental starts later («Аренда с DD.MM»).
+	OccupancyUpcoming OccupancyStatus = "upcoming"
+	// OccupancyActive — the unfinished rental runs.
+	OccupancyActive OccupancyStatus = "active"
+	// OccupancyNeedsAttention — the rental's planned end has passed and the
+	// rental is not completed («Аренда завершена» badge, the red dot).
+	OccupancyNeedsAttention OccupancyStatus = "needs_attention"
+	// OccupancyNone — no unfinished rental.
+	OccupancyNone OccupancyStatus = "none"
 )
 
-var ErrInvalidDeletePropertyMode = errors.New("invalid delete property mode")
-
-func ParseDeletePropertyMode(s string) (DeletePropertyMode, error) {
-	m := DeletePropertyMode(s)
-	if !m.Valid() {
-		return "", fmt.Errorf("%w: %q", ErrInvalidDeletePropertyMode, s)
-	}
-	return m, nil
-}
-
-func (m DeletePropertyMode) Valid() bool {
-	switch m {
-	case DeletePropertyModeCascade, DeletePropertyModeDetach:
-		return true
-	}
-	return false
+// Occupancy is the per-property occupancy projection (ticket #585): the
+// read-side view the lists report for the badges, the red dot and the «По
+// статусу» sorting (резолюция #584). The rental fields describe the
+// property's single unfinished rental; a property without one reports
+// OccupancyNone with both dates nil.
+type Occupancy struct {
+	Status OccupancyStatus
+	// StartDate is the unfinished rental's start («Аренда с DD.MM» of an
+	// upcoming rental).
+	StartDate *time.Time
+	// PlannedEndDate is the unfinished rental's planned end («Осталось N
+	// месяцев»); nil for an open-ended rental.
+	PlannedEndDate *time.Time
 }
 
 type Property struct {
@@ -134,6 +144,15 @@ type Property struct {
 	// pinned since then. The lists order the pinned first, among themselves
 	// by this time; archiving clears it.
 	PinnedAt *time.Time
+	// Occupancy is the «Занятость» projection of the list reads (ticket
+	// #585, резолюция #584): nil when not computed — the write paths and an
+	// unwired projection port; the list reads always report it.
+	Occupancy *Occupancy
+	// HasOverdueOperations is the payments half of the red dot (ticket #585,
+	// резолюция #584): the property has overdue planned operations — stored
+	// planned rows dated before the data owner's today (ADR 0048). Reported
+	// by the list reads alongside Occupancy; false when not computed.
+	HasOverdueOperations bool
 	// OwnerName is the public display name of the property owner ("Name
 	// Surname" or a masked phone, never an email), filled only by the detail
 	// read path when the actor is not the owner (issue T11); empty otherwise.

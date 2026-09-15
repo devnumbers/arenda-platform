@@ -191,19 +191,15 @@ export type GlobalPaymentFeed = {
   readonly overdueOperationsCount: number;
 };
 
-/** Чип категорий поиска платежей (#575, экран #581): категория с
- * направлением и числом совпавших правил; порядок отдаёт сервер. */
-export type PaymentSearchCategoryView = {
-  readonly category: PaymentCategoryView;
-  readonly type: PaymentType;
-  readonly count: number;
-};
-
 /** Ответ поиска глобальных платежей (#575): совпавшие строки — состав
- * фида без счётчиков — и чипы совпавших категорий. */
+ * фида без счётчиков — и чипы совпавших категорий: по одной на категорию,
+ * без направления и счётчика (#602). nextCursor — keyset-продолжение
+ * порции (#597): opaque-курсор следующей страницы, null = совпадения
+ * исчерпаны. */
 export type GlobalPaymentSearch = {
   readonly items: ReadonlyArray<GlobalPayment>;
-  readonly matchedCategories: ReadonlyArray<PaymentSearchCategoryView>;
+  readonly matchedCategories: ReadonlyArray<PaymentCategoryView>;
+  readonly nextCursor: string | null;
 };
 
 /** Ключ стопки объекта (#575): правило за карточкой стека и его флаг

@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, ChangeVertical } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
-import { useInfiniteScroll } from '@/shared/lib/hooks/useInfiniteScroll';
 import {
   clientTodayIso,
   PaymentRowButton,
@@ -14,7 +13,17 @@ import {
 import { paidPaymentNumber, paymentOrdinalLabel, useRentals } from '@/features/rentals';
 import { CategoryIcon, categoryStyle } from '@/features/payment-categories';
 import { groupPaidOperations, usePaymentOperationsPaged } from '@/features/payments';
-import { Button, ChipButton, EmptyState, IconButton, PageContent, Skeleton, TopNav, TopNavTitle } from '@/shared/ui/design';
+import {
+  Button,
+  ChipButton,
+  EmptyState,
+  IconButton,
+  InfiniteQueryTail,
+  PageContent,
+  Skeleton,
+  TopNav,
+  TopNavTitle,
+} from '@/shared/ui/design';
 
 /**
  * «История операций» завершённой аренды (#535, Figma 1302:52209):
@@ -45,15 +54,6 @@ export function RentalHistoryScreen({
   const toggleOrder = (): void => {
     setOrder((current) => (current === 'desc' ? 'asc' : 'desc'));
   };
-
-  const sentinelRef = useInfiniteScroll(
-    () => {
-      if (historyQuery.hasNextPage && !historyQuery.isFetchingNextPage) {
-        void historyQuery.fetchNextPage();
-      }
-    },
-    historyQuery.hasNextPage === true,
-  );
 
   const operations = historyQuery.data ?? [];
   const groups = groupPaidOperations(operations, clientTodayIso());
@@ -150,8 +150,7 @@ export function RentalHistoryScreen({
                     </section>
                   ))}
 
-                  {historyQuery.hasNextPage === true && <div ref={sentinelRef} aria-hidden />}
-                  {historyQuery.isFetchingNextPage && <LoadingMoreIndicator />}
+                  <InfiniteQueryTail query={historyQuery} />
                 </>
               )}
             </>
@@ -196,10 +195,3 @@ function HistoryRow({
   );
 }
 
-function LoadingMoreIndicator(): JSX.Element {
-  return (
-    <div className="flex justify-center py-4" role="status" aria-label="Загружаем еще">
-      <Skeleton className="h-8 w-8" />
-    </div>
-  );
-}

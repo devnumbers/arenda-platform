@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"math"
 	"net/http"
 	"time"
 
@@ -96,10 +95,11 @@ func (h *GlobalPaymentHandlers) SearchGlobalPayments(
 
 // searchPageFromParams folds the search's query parameters onto the page
 // request: the chip's identity (category + direction, the generated enum
-// validated) plus the page window, bounded before the int32 narrowing —
-// the wire carries any int. Out-of-range numbers are ErrInvalidInput (the
-// contract's 400); the zero limit stays zero — the service applies its
-// default, one validation home for the page shape.
+// validated) plus the page window — the limit bounded before the int32
+// narrowing (the wire carries any int) and the continuation cursor as the
+// opaque string the service decodes. Out-of-range numbers are
+// ErrInvalidInput (the contract's 400); the zero limit stays zero — the
+// service applies its default, one validation home for the page shape.
 func searchPageFromParams(params openapi.SearchGlobalPaymentsParams) (application.GlobalPaymentSearchPage, error) {
 	page := application.GlobalPaymentSearchPage{Category: derefString(params.Category)}
 	if params.Type != nil {
@@ -114,12 +114,7 @@ func searchPageFromParams(params openapi.SearchGlobalPaymentsParams) (applicatio
 		}
 		page.Limit = int32(*params.Limit)
 	}
-	if params.Offset != nil {
-		if *params.Offset < 0 || *params.Offset > math.MaxInt32 {
-			return page, fmt.Errorf("offset %d: %w", *params.Offset, application.ErrInvalidInput)
-		}
-		page.Offset = int32(*params.Offset)
-	}
+	page.Cursor = derefString(params.Cursor)
 	return page, nil
 }
 
@@ -233,15 +228,20 @@ func paymentsSearchGlobalResponse(search application.GlobalPaymentSearch) openap
 	for _, item := range search.Items {
 		items = append(items, paymentGlobalItem(item))
 	}
-	categories := make([]openapi.PaymentSearchCategory, 0, len(search.MatchedCategories))
+	categories := make([]openapi.CategoryView, 0, len(search.MatchedCategories))
 	for _, category := range search.MatchedCategories {
-		categories = append(categories, openapi.PaymentSearchCategory{
-			Category: categoryView(category.Category),
-			Type:     openapi.PaymentSearchCategoryType(category.Type),
-			Count:    int(category.RuleCount),
-		})
+		categories = append(categories, categoryView(category))
 	}
-	return openapi.PaymentsSearchGlobalResponse{Items: items, MatchedCategories: categories}
+	return openapi.PaymentsSearchGlobalResponse{
+		Items:             items,
+		MatchedCategories: categories,
+		// The keyset continuation (ticket #597): '' is the wire's null — the
+		// matches are exhausted.
+		NextCursor: httpsupport.StringPtr(search.NextCursor),
+		// The scope's match count (ticket #599): the same on every walked
+		// page.
+		Total: search.Total,
+	}
 }
 
 // paymentObjectsGlobalResponse maps the «Объекты» stacks onto the wire

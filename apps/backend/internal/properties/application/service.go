@@ -12,7 +12,9 @@ import (
 	"path"
 	"slices"
 	"sort"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
@@ -68,6 +70,10 @@ type PropertyService struct {
 	suspendedCounter   SuspendedSharedCounter
 	slots              RecipientSlotPolicy
 	sharedDeleteMailer SharedMembersDeleteMailer
+	rentalOccupancy    RentalOccupancyReader
+	overdueOperations  OverdueOperationsReader
+	rentalDeletion     RentalDeletionGuard
+	ownerCalendar      OwnerCalendar
 	logger             *slog.Logger
 }
 
@@ -124,6 +130,76 @@ func (s *PropertyService) SetRecipientSlotPolicy(slots RecipientSlotPolicy) {
 // T6). Optional: when not set, deleting a property sends no such emails.
 func (s *PropertyService) SetSharedMembersDeleteMailer(mailer SharedMembersDeleteMailer) {
 	s.sharedDeleteMailer = mailer
+}
+
+// SetRentalOccupancyReader injects the rentals-context adapter that resolves
+// the per-property occupancy («Занятость», резолюция #584) for the list
+// reads. Optional: when not set, the lists report no occupancy (ticket #585).
+func (s *PropertyService) SetRentalOccupancyReader(reader RentalOccupancyReader) {
+	s.rentalOccupancy = reader
+}
+
+// SetRentalDeletionGuard injects the rentals-context adapter that gates the
+// property deletion on the rentals state (issue #632): an unfinished rental
+// conflicts (ErrPropertyOccupied), completed ones are torn down before the
+// property row. Optional: when not set, deletion skips both steps (the
+// pre-#632 behaviour).
+func (s *PropertyService) SetRentalDeletionGuard(guard RentalDeletionGuard) {
+	s.rentalDeletion = guard
+}
+
+// SetOverdueOperationsReader injects the payments-context adapter that
+// resolves which properties have overdue planned operations (the payments
+// half of the red dot, резолюция #584). Optional: when not set, the lists
+// report no overdue flags (ticket #585).
+func (s *PropertyService) SetOverdueOperationsReader(reader OverdueOperationsReader) {
+	s.overdueOperations = reader
+}
+
+// SetOwnerCalendar injects the calendar adapter that resolves the reading
+// actor's calendar date (ADR 0048) for the list responses (ticket #586).
+// Optional: when not set, the lists fall back to the server clock's UTC date.
+func (s *PropertyService) SetOwnerCalendar(calendar OwnerCalendar) {
+	s.ownerCalendar = calendar
+}
+
+// enrichListProjections fills the per-property occupancy and the overdue flag
+// over the merged list (own + shared rows alike; ticket #585): one batched
+// read per projection, the owners resolved from the rows themselves. The
+// readers are optional: an unwired projection stays unreported. Every listed
+// property gets an occupancy — the reader reports OccupancyNone for a
+// property without an unfinished rental.
+func (s *PropertyService) enrichListProjections(ctx context.Context, properties []domain.Property) error {
+	if len(properties) == 0 {
+		return nil
+	}
+	owners := make(PropertyOwners, len(properties))
+	for i := range properties {
+		owners[properties[i].ID] = properties[i].OwnerID
+	}
+	if s.rentalOccupancy != nil {
+		occupancy, err := s.rentalOccupancy.OccupancyByProperty(ctx, owners)
+		if err != nil {
+			return fmt.Errorf("read property occupancy: %w", err)
+		}
+		for i := range properties {
+			if o, ok := occupancy[properties[i].ID]; ok {
+				properties[i].Occupancy = &o
+				continue
+			}
+			properties[i].Occupancy = &domain.Occupancy{Status: domain.OccupancyNone}
+		}
+	}
+	if s.overdueOperations != nil {
+		overdue, err := s.overdueOperations.OverdueByProperty(ctx, owners)
+		if err != nil {
+			return fmt.Errorf("read property overdue operations: %w", err)
+		}
+		for i := range properties {
+			properties[i].HasOverdueOperations = overdue[properties[i].ID]
+		}
+	}
+	return nil
 }
 
 // NewPropertyService creates a PropertyService. Persistence, the audit
@@ -216,10 +292,15 @@ func (s *PropertyService) CreateProperty(ctx context.Context, actor uuid.UUID, c
 	return created, nil
 }
 
-func (s *PropertyService) ListProperties(ctx context.Context, actor uuid.UUID) ([]domain.Property, error) {
+func (s *PropertyService) ListProperties(ctx context.Context, actor uuid.UUID) (PropertiesPage, error) {
+	today, err := s.listToday(ctx, actor)
+	if err != nil {
+		return PropertiesPage{}, err
+	}
+
 	properties, err := s.repo.ListActiveByOwner(ctx, actor)
 	if err != nil {
-		return nil, fmt.Errorf("list properties: %w", err)
+		return PropertiesPage{}, fmt.Errorf("list properties: %w", err)
 	}
 
 	// Own properties are read with the owner role (issue T11).
@@ -231,10 +312,18 @@ func (s *PropertyService) ListProperties(ctx context.Context, actor uuid.UUID) (
 	properties, err = s.appendSharedProperties(ctx, actor, properties,
 		domain.PropertyStatusActive, domain.PropertyStatusMaintenance)
 	if err != nil {
-		return nil, err
+		return PropertiesPage{}, err
 	}
 
-	return s.withPhotos(ctx, s.pinnedFirst(properties)...)
+	if err := s.enrichListProjections(ctx, properties); err != nil {
+		return PropertiesPage{}, err
+	}
+
+	items, err := s.withPhotos(ctx, s.pinnedFirst(properties)...)
+	if err != nil {
+		return PropertiesPage{}, err
+	}
+	return PropertiesPage{Items: items, Today: today}, nil
 }
 
 // pinnedFirst lifts the pinned properties above the unpinned ones (ticket
@@ -318,10 +407,15 @@ func isSharedAccessRole(role sharedpolicy.Role) bool {
 	return role == sharedpolicy.RoleFullAccess || role == sharedpolicy.RoleViewer
 }
 
-func (s *PropertyService) ListArchivedProperties(ctx context.Context, actor uuid.UUID) ([]domain.Property, error) {
+func (s *PropertyService) ListArchivedProperties(ctx context.Context, actor uuid.UUID) (PropertiesPage, error) {
+	today, err := s.listToday(ctx, actor)
+	if err != nil {
+		return PropertiesPage{}, err
+	}
+
 	properties, err := s.repo.ListArchivedByOwner(ctx, actor)
 	if err != nil {
-		return nil, fmt.Errorf("list archived properties: %w", err)
+		return PropertiesPage{}, fmt.Errorf("list archived properties: %w", err)
 	}
 
 	// Own properties are read with the owner role (issue T11).
@@ -332,10 +426,105 @@ func (s *PropertyService) ListArchivedProperties(ctx context.Context, actor uuid
 	// The archive list carries archived objects only.
 	properties, err = s.appendSharedProperties(ctx, actor, properties, domain.PropertyStatusArchived)
 	if err != nil {
-		return nil, err
+		return PropertiesPage{}, err
 	}
 
-	return s.withPhotos(ctx, properties...)
+	if err := s.enrichListProjections(ctx, properties); err != nil {
+		return PropertiesPage{}, err
+	}
+
+	items, err := s.withPhotos(ctx, properties...)
+	if err != nil {
+		return PropertiesPage{}, err
+	}
+	return PropertiesPage{Items: items, Today: today}, nil
+}
+
+// listToday resolves the reading actor's calendar date (ADR 0048) for the
+// list responses (ticket #586). The calendar port is optional: unwired (unit
+// tests), the server clock's UTC date stands in.
+func (s *PropertyService) listToday(ctx context.Context, actor uuid.UUID) (time.Time, error) {
+	if s.ownerCalendar != nil {
+		today, err := s.ownerCalendar.Today(ctx, actor)
+		if err != nil {
+			return time.Time{}, fmt.Errorf("resolve actor today: %w", err)
+		}
+		return today, nil
+	}
+	now := s.clock.Now().UTC()
+	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC), nil
+}
+
+const (
+	// DefaultPropertySearchPageSize is the search page the contract serves
+	// when the client names no limit (ticket #601) — the other searches'
+	// canon (#597).
+	DefaultPropertySearchPageSize = 50
+	MaxPropertySearchPageSize     = 100
+	// MaxSearchQueryLength is the contract's search-parameter bound.
+	maxSearchQueryLength = 255
+)
+
+// SearchPropertiesPage is the search list's page request (ticket #601): the
+// 50-per-page window the search screen's infinite scroll walks. The zero
+// limit means the contract's default page; Cursor is the previous page's
+// opaque continuation ("" = from the beginning).
+type SearchPropertiesPage struct {
+	Limit  int32
+	Cursor string
+}
+
+// SearchProperties narrows the actor's visible slice by the search query —
+// a case-insensitive substring over the property's name and address — and
+// returns the matched cards in pages of 50, the search screen's infinite
+// scroll walking them (ticket #601). The window is the keyset walk over
+// (name, id) (ticket #597's pattern): the page resumes strictly after the
+// cursor's key and answers with the next page's cursor once it came back
+// full. The name sort mirrors the hub's own default (the client sorts the
+// list by name), so the search results read in the same order the hub
+// shows; a rename shifting a row across a window boundary is inherent to
+// the visible-name sort, as in the contacts book (#600).
+func (s *PropertyService) SearchProperties(
+	ctx context.Context, actor uuid.UUID, search string, page SearchPropertiesPage,
+) ([]domain.Property, string, error) {
+	if trimmed := strings.TrimSpace(search); trimmed == "" {
+		return nil, "", fmt.Errorf("%w: empty search", ErrInvalidInput)
+	} else if utf8.RuneCountInString(trimmed) > maxSearchQueryLength {
+		// The contract's maxLength counts characters (codepoints), not bytes —
+		// a 130-letter Cyrillic query is legal and must not 400.
+		return nil, "", fmt.Errorf("%w: search exceeds %d characters", ErrInvalidInput, maxSearchQueryLength)
+	}
+	if page.Limit == 0 {
+		page.Limit = DefaultPropertySearchPageSize
+	}
+	if page.Limit < 1 || page.Limit > MaxPropertySearchPageSize {
+		return nil, "", fmt.Errorf("%w: limit out of range", ErrInvalidInput)
+	}
+	query := PropertySearchQuery{Search: search, Limit: page.Limit}
+	if page.Cursor != "" {
+		afterName, afterID, err := DecodePropertySearchCursor(page.Cursor)
+		if err != nil {
+			return nil, "", err
+		}
+		query.AfterName = &afterName
+		query.AfterID = &afterID
+	}
+	properties, err := s.repo.SearchVisible(ctx, actor, query)
+	if err != nil {
+		return nil, "", fmt.Errorf("search visible properties: %w", err)
+	}
+	properties, err = s.withPhotos(ctx, properties...)
+	if err != nil {
+		return nil, "", err
+	}
+	// A full page answers with the last row's continuation; a short one has
+	// walked the matches to the end — the empty cursor stops the scroll.
+	nextCursor := ""
+	if len(properties) == int(page.Limit) {
+		last := properties[len(properties)-1]
+		nextCursor = EncodePropertySearchCursor(last.Name, last.ID)
+	}
+	return properties, nextCursor, nil
 }
 
 func (s *PropertyService) GetProperty(ctx context.Context, actor, id uuid.UUID) (domain.Property, error) {
@@ -644,15 +833,14 @@ func (s *PropertyService) ArchiveProperty(ctx context.Context, actor, id uuid.UU
 	return properties[0], nil
 }
 
+// DeleteProperty removes the property together with all its data: the FKs
+// cascade rentals, payments, operations, tasks and photos off the property
+// row, contacts unbind (ADR 0054). ADR 0049 closed the ADR 0025 detach
+// branch — deletion is total, there is no mode (issue #629).
 func (s *PropertyService) DeleteProperty(
 	ctx context.Context,
 	actor, id uuid.UUID,
-	mode domain.DeletePropertyMode,
 ) error {
-	if !mode.Valid() {
-		return fmt.Errorf("%w: invalid delete mode %q", ErrInvalidInput, mode)
-	}
-
 	if _, err := s.resolveLifecycleProperty(ctx, actor, id); err != nil {
 		return err
 	}
@@ -669,6 +857,26 @@ func (s *PropertyService) DeleteProperty(
 		property, err = lockDeletableProperty(ctx, stores, actor, id)
 		if err != nil {
 			return err
+		}
+
+		// Deletion guard (issue #632): the check and the rentals teardown
+		// run under the property row lock — CreateRental locks the same row
+		// (ADR 0025 §5), so a rental cannot slip in between the check and
+		// the delete. DeleteByProperty goes before the property row: the
+		// rentals.payment_id RESTRICT FK must not race the payments cascade
+		// off the property row, completed rentals included — every rental
+		// row restricts its managed payment (ADR 0025 §2 explicit order).
+		if s.rentalDeletion != nil {
+			occupied, err := s.rentalDeletion.HasUnfinished(ctx, stores.tx, property.OwnerID, id)
+			if err != nil {
+				return fmt.Errorf("check unfinished rental: %w", err)
+			}
+			if occupied {
+				return ErrPropertyOccupied
+			}
+			if err := s.rentalDeletion.DeleteByProperty(ctx, stores.tx, property.OwnerID, id); err != nil {
+				return fmt.Errorf("delete property rentals: %w", err)
+			}
 		}
 
 		photos, err = stores.photos.GetByPropertyID(ctx, id)
@@ -694,7 +902,6 @@ func (s *PropertyService) DeleteProperty(
 			Action:     auditdomain.ActionPropertyDeleted,
 			EntityType: auditdomain.EntityProperty,
 			EntityID:   &id,
-			Context:    map[string]any{"mode": string(mode)},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
 		}

@@ -21,6 +21,7 @@ export {
   type OperationWizardStep,
 } from './lib/operation-wizard-model';
 export { matchesTitleSearch } from './lib/title-search';
+export { OPERATIONS_PAGE_SIZE } from './lib/operations-pages';
 export {
   FORM_OF_PAYMENT_LABELS,
   TYPE_LABELS,
@@ -70,6 +71,10 @@ export {
   type OperationsMonth,
 } from './lib/operations-month';
 export {
+  sortPaymentsByNextOccurrence,
+} from './lib/sort-payments-by-next-occurrence';
+export { overduePaymentIdsOf } from './lib/overdue-payment-ids';
+export {
   defaultOperationsPeriod,
   operationsCategoryChipLabel,
   operationsCategoryRows,
@@ -100,7 +105,10 @@ export {
   type PaymentEditForm,
 } from './lib/update-model';
 export {
-  OPERATIONS_PAGE_SIZE,
+  fetchGlobalOperationsPage,
+  fetchGlobalOperationsSummary,
+  fetchGlobalPaymentObjects,
+  fetchGlobalPaymentsFeed,
   useCreateOperation,
   useCreatePayment,
   useDeleteOperation,

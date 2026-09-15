@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
-import { OperationsGlobalDirectionScreen } from '@/widgets/payments';
+import { OperationsGlobalDirectionScreen, OperationsDirectionLoading } from '@/widgets/payments';
 
 /**
  * Страница «Расходы» (#548): все расходы выбранного скоупа за период.
@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 
 export default function OperationsExpensesRoutePage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<OperationsDirectionLoading title="Расходы" />}>
       <OperationsGlobalDirectionScreen type="expense" />
     </Suspense>
   );

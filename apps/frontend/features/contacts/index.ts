@@ -1,4 +1,5 @@
 export {
+  contactBookQuery,
   useContacts,
   useContactBook,
   useCreateContact,
@@ -9,6 +10,7 @@ export {
 export type {
   ContactBookSort,
   ContactBookOrder,
+  ContactsPageData,
 } from './api/hooks';
 export {
   buildContactCreateCommand,

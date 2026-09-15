@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
-import { PaymentsGlobalSearchScreen } from '@/widgets/payments';
+import { PaymentsGlobalSearchScreen, PaymentsSearchLoading } from '@/widgets/payments';
 
 /**
  * Страница поиска платежей (#581, Figma 706:12168/12649/13008, 862:24128,
@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 
 export default function PaymentsGlobalSearchRoutePage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<PaymentsSearchLoading />}>
       <PaymentsGlobalSearchScreen />
     </Suspense>
   );

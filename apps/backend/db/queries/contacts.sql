@@ -20,12 +20,27 @@ WHERE id = $1;
 -- move), and the service has already gated the actor's view capability on
 -- the property. property_id must be set for the property scope.
 -- search ('' = no filter) is a case-insensitive substring match over the
--- name fields, role, phone, email and messenger username; the application
--- layer escapes the ILIKE metacharacters (ESCAPE '\').
+-- name fields, role, phone, email and messenger username, glued by
+-- contacts_search_text — the same IMMUTABLE expression the trigram index
+-- (migration 000124) is built on; the application layer escapes the ILIKE
+-- metacharacters (ESCAPE '\').
 -- sort 'name' orders by the display name; 'property' — by the bound
 -- property's name, unbound cards first in both directions («Общие
 -- контакты»), contact name ordering inside the groups. Both keys use the
 -- Russian ICU collation to match the client's letter grouping; id ties off.
+--
+-- The page walks the listing's own order by keyset (ticket #600): the
+-- window resumes strictly after the (sort key, id) the previous page ended
+-- on, so cards created or deleted between loads never duplicate or drop.
+-- The sort keys are mutable (display name, property binding): a rename or
+-- rebind of a card the walk has already passed can move it across the
+-- window boundary — inherent to the visible name/property sort. The
+-- predicate mirrors the ORDER BY branch by branch — the same CASE-gated
+-- keys, the same ICU collations, the unbound-flag leading the property sort
+-- and id tying off ascending in both directions. The cursor blob carries
+-- its sort/order: the application rejects a cursor echoed under another
+-- walk. All cursor args travel together; NULL (no cursor) reads from the
+-- beginning.
 SELECT c.*, p.name AS property_name
 FROM contacts c
 LEFT JOIN properties p ON p.id = c.property_id
@@ -57,8 +72,53 @@ WHERE (
       )
   AND (
         sqlc.arg('search')::text = ''
-        OR concat_ws(' ', c.first_name, c.last_name, c.patronymic, c.role, c.phone, c.email, c.messenger_username)
+        OR contacts_search_text(c.first_name, c.last_name, c.patronymic, c.role, c.phone, c.email, c.messenger_username)
            ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
+      )
+  AND (
+        sqlc.narg('after_id')::uuid IS NULL
+        OR (sqlc.arg('sort')::text = 'name'
+            AND sqlc.arg('order')::text = 'asc'
+            AND (concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" > sqlc.narg('after_name')::text
+                 OR (concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" = sqlc.narg('after_name')::text
+                     AND c.id > sqlc.narg('after_id')::uuid)))
+        OR (sqlc.arg('sort')::text = 'name'
+            AND sqlc.arg('order')::text = 'desc'
+            AND (concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" < sqlc.narg('after_name')::text
+                 OR (concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" = sqlc.narg('after_name')::text
+                     AND c.id > sqlc.narg('after_id')::uuid)))
+        OR (sqlc.arg('sort')::text = 'property'
+            AND sqlc.arg('order')::text = 'asc'
+            AND (
+                  (c.property_id IS NULL
+                   AND sqlc.narg('after_unbound')::bool = TRUE
+                   AND (concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" > sqlc.narg('after_name')::text
+                        OR (concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" = sqlc.narg('after_name')::text
+                            AND c.id > sqlc.narg('after_id')::uuid)))
+               OR (c.property_id IS NOT NULL
+                   AND (sqlc.narg('after_unbound')::bool = TRUE
+                        OR (p.name COLLATE "ru-RU-x-icu" > sqlc.narg('after_property_name')::text
+                            OR (p.name COLLATE "ru-RU-x-icu" = sqlc.narg('after_property_name')::text
+                                AND (concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" > sqlc.narg('after_name')::text
+                                     OR (concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" = sqlc.narg('after_name')::text
+                                         AND c.id > sqlc.narg('after_id')::uuid))))))
+                       ))
+        OR (sqlc.arg('sort')::text = 'property'
+            AND sqlc.arg('order')::text = 'desc'
+            AND (
+                  (c.property_id IS NULL
+                   AND sqlc.narg('after_unbound')::bool = TRUE
+                   AND (concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" < sqlc.narg('after_name')::text
+                        OR (concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" = sqlc.narg('after_name')::text
+                            AND c.id > sqlc.narg('after_id')::uuid)))
+               OR (c.property_id IS NOT NULL
+                   AND (sqlc.narg('after_unbound')::bool = TRUE
+                        OR (p.name COLLATE "ru-RU-x-icu" < sqlc.narg('after_property_name')::text
+                            OR (p.name COLLATE "ru-RU-x-icu" = sqlc.narg('after_property_name')::text
+                                AND (concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" < sqlc.narg('after_name')::text
+                                     OR (concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" = sqlc.narg('after_name')::text
+                                         AND c.id > sqlc.narg('after_id')::uuid))))))
+                       ))
       )
 ORDER BY
   CASE WHEN sqlc.arg('sort')::text = 'property'
@@ -75,7 +135,8 @@ ORDER BY
        THEN p.name COLLATE "ru-RU-x-icu" END DESC,
   CASE WHEN sqlc.arg('sort')::text = 'property' AND sqlc.arg('order')::text = 'desc'
        THEN concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" END DESC,
-  c.id ASC;
+  c.id ASC
+LIMIT sqlc.arg('page_limit');
 
 -- name: InsertContact :one
 INSERT INTO contacts (id, owner_id, property_id, first_name, last_name, patronymic,

@@ -50,6 +50,70 @@ func (q *Queries) ClearGlobalPaymentFavoriteOrders(ctx context.Context, arg Clea
 	return result.RowsAffected(), nil
 }
 
+const countGlobalPaymentRules = `-- name: CountGlobalPaymentRules :one
+SELECT COUNT(*)
+FROM payments pay
+JOIN properties p ON p.id = pay.property_id
+JOIN (
+       SELECT unnest(string_to_array($1::text, ',')::uuid[]) AS owner_id,
+              unnest(string_to_array($2::text, ',')::date[]) AS today
+     ) AS t ON t.owner_id = pay.owner_id
+LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
+WHERE (
+       pay.owner_id = $3
+       OR EXISTS (
+            SELECT 1 FROM property_members pm
+            WHERE pm.property_id = pay.property_id
+              AND pm.user_id = $3
+              AND pm.status = 'active'
+          )
+      )
+  AND p.status != 'archived'
+  AND ($4::text = ''
+       OR pay.title ILIKE '%' || $4::text || '%' ESCAPE '\'
+       OR pc.name ILIKE '%' || $4::text || '%' ESCAPE '\'
+       OR ($5::text <> ''
+           AND pay.category_slug = ANY(string_to_array($5::text, ','))))
+  AND ($6::text = ''
+       OR pay.category_slug = $6::text
+       OR pay.user_category_id::text = $6::text)
+  AND ($7::text = ''
+       OR pay.type = $7::text)
+`
+
+type CountGlobalPaymentRulesParams struct {
+	OwnerIds       string      `json:"owner_ids"`
+	Todays         string      `json:"todays"`
+	Actor          pgtype.UUID `json:"actor"`
+	Search         string      `json:"search"`
+	CategorySlugs  string      `json:"category_slugs"`
+	CategoryFilter string      `json:"category_filter"`
+	TypeFilter     string      `json:"type_filter"`
+}
+
+// The search's whole-scope match count (ticket #599): the list query's
+// predicate — the visibility, the search over title/user category/catalog
+// slugs, the chip's category+type filter — without the per-row schedule
+// aggregates, the ordering, the window and the keyset key. The count is the
+// scope's own, identical on every walked page; the search screen shows it
+// as «найдено N». The owner→today join travels with the predicate: the map
+// covers every visible owner (ListGlobalPaymentOwnerTodays), so its rows
+// are the list's rows.
+func (q *Queries) CountGlobalPaymentRules(ctx context.Context, arg CountGlobalPaymentRulesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countGlobalPaymentRules,
+		arg.OwnerIds,
+		arg.Todays,
+		arg.Actor,
+		arg.Search,
+		arg.CategorySlugs,
+		arg.CategoryFilter,
+		arg.TypeFilter,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const lastOperationDatesOfPayments = `-- name: LastOperationDatesOfPayments :many
 SELECT op.payment_id,
        MAX(op.date)::date AS last_date
@@ -239,6 +303,7 @@ SELECT pay.id,
        pay.favorite_order,
        pay.category_slug,
        pay.user_category_id,
+       pay.created_at,
        pc.name AS user_category_name,
        p.name AS property_name,
        t.today::date AS owner_today,
@@ -290,43 +355,47 @@ WHERE (
        OR pay.user_category_id::text = $6::text)
   AND ($7::text = ''
        OR pay.type = $7::text)
-ORDER BY p.name, pay.created_at, pay.id
-LIMIT CASE WHEN $9::int = 0 THEN NULL::bigint
-           ELSE $9::bigint END
-OFFSET COALESCE($8, 0)::bigint
+  AND ($8::timestamptz IS NULL
+       OR (pay.created_at, pay.id) > ($8,
+                                      $9::uuid))
+ORDER BY pay.created_at, pay.id
+LIMIT CASE WHEN $10::int = 0 THEN NULL::bigint
+           ELSE $10::bigint END
 `
 
 type ListGlobalPaymentRulesParams struct {
-	OwnerIds       string      `json:"owner_ids"`
-	Todays         string      `json:"todays"`
-	Actor          pgtype.UUID `json:"actor"`
-	Search         string      `json:"search"`
-	CategorySlugs  string      `json:"category_slugs"`
-	CategoryFilter string      `json:"category_filter"`
-	TypeFilter     string      `json:"type_filter"`
-	PageOffset     int64       `json:"page_offset"`
-	PageLimit      int32       `json:"page_limit"`
+	OwnerIds       string             `json:"owner_ids"`
+	Todays         string             `json:"todays"`
+	Actor          pgtype.UUID        `json:"actor"`
+	Search         string             `json:"search"`
+	CategorySlugs  string             `json:"category_slugs"`
+	CategoryFilter string             `json:"category_filter"`
+	TypeFilter     string             `json:"type_filter"`
+	AfterCreatedAt pgtype.Timestamptz `json:"after_created_at"`
+	AfterID        pgtype.UUID        `json:"after_id"`
+	PageLimit      int32              `json:"page_limit"`
 }
 
 type ListGlobalPaymentRulesRow struct {
-	ID                       pgtype.UUID `json:"id"`
-	OwnerID                  pgtype.UUID `json:"owner_id"`
-	PropertyID               pgtype.UUID `json:"property_id"`
-	Type                     string      `json:"type"`
-	Title                    string      `json:"title"`
-	AmountKopecks            int64       `json:"amount_kopecks"`
-	AutoPay                  bool        `json:"auto_pay"`
-	IsFavorite               bool        `json:"is_favorite"`
-	FavoriteOrder            pgtype.Int8 `json:"favorite_order"`
-	CategorySlug             pgtype.Text `json:"category_slug"`
-	UserCategoryID           pgtype.UUID `json:"user_category_id"`
-	UserCategoryName         pgtype.Text `json:"user_category_name"`
-	PropertyName             string      `json:"property_name"`
-	OwnerToday               pgtype.Date `json:"owner_today"`
-	AggNextPlannedDate       pgtype.Date `json:"agg_next_planned_date"`
-	OverdueCount             int64       `json:"overdue_count"`
-	AggOldestOverdueDate     pgtype.Date `json:"agg_oldest_overdue_date"`
-	OldestOverdueOperationID pgtype.UUID `json:"oldest_overdue_operation_id"`
+	ID                       pgtype.UUID        `json:"id"`
+	OwnerID                  pgtype.UUID        `json:"owner_id"`
+	PropertyID               pgtype.UUID        `json:"property_id"`
+	Type                     string             `json:"type"`
+	Title                    string             `json:"title"`
+	AmountKopecks            int64              `json:"amount_kopecks"`
+	AutoPay                  bool               `json:"auto_pay"`
+	IsFavorite               bool               `json:"is_favorite"`
+	FavoriteOrder            pgtype.Int8        `json:"favorite_order"`
+	CategorySlug             pgtype.Text        `json:"category_slug"`
+	UserCategoryID           pgtype.UUID        `json:"user_category_id"`
+	CreatedAt                pgtype.Timestamptz `json:"created_at"`
+	UserCategoryName         pgtype.Text        `json:"user_category_name"`
+	PropertyName             string             `json:"property_name"`
+	OwnerToday               pgtype.Date        `json:"owner_today"`
+	AggNextPlannedDate       pgtype.Date        `json:"agg_next_planned_date"`
+	OverdueCount             int64              `json:"overdue_count"`
+	AggOldestOverdueDate     pgtype.Date        `json:"agg_oldest_overdue_date"`
+	OldestOverdueOperationID pgtype.UUID        `json:"oldest_overdue_operation_id"`
 }
 
 // The actor's visible merged feed of payment rules (ticket #575): one row
@@ -342,6 +411,13 @@ type ListGlobalPaymentRulesRow struct {
 // the default catalog's label is not in the database — the application
 // layer expands the query into the matching slugs (category_slugs, ” when
 // none) and they match as a set.
+//
+// The reading order is (created_at, id) and the page walks it by keyset
+// (ticket #597): the window resumes strictly after the (created_at, id)
+// the previous page ended on, so rows created, deleted or renamed between
+// loads never duplicate or drop. The property name is deliberately not a
+// sort key — a rename would move rows across the window. Both cursor args
+// travel together; NULL (no cursor) reads from the beginning.
 func (q *Queries) ListGlobalPaymentRules(ctx context.Context, arg ListGlobalPaymentRulesParams) ([]ListGlobalPaymentRulesRow, error) {
 	rows, err := q.db.Query(ctx, listGlobalPaymentRules,
 		arg.OwnerIds,
@@ -351,7 +427,8 @@ func (q *Queries) ListGlobalPaymentRules(ctx context.Context, arg ListGlobalPaym
 		arg.CategorySlugs,
 		arg.CategoryFilter,
 		arg.TypeFilter,
-		arg.PageOffset,
+		arg.AfterCreatedAt,
+		arg.AfterID,
 		arg.PageLimit,
 	)
 	if err != nil {
@@ -373,6 +450,7 @@ func (q *Queries) ListGlobalPaymentRules(ctx context.Context, arg ListGlobalPaym
 			&i.FavoriteOrder,
 			&i.CategorySlug,
 			&i.UserCategoryID,
+			&i.CreatedAt,
 			&i.UserCategoryName,
 			&i.PropertyName,
 			&i.OwnerToday,
@@ -522,9 +600,7 @@ func (q *Queries) SumGlobalPaymentCounters(ctx context.Context, arg SumGlobalPay
 const sumGlobalPaymentSearchCategories = `-- name: SumGlobalPaymentSearchCategories :many
 SELECT pay.category_slug,
        pay.user_category_id,
-       pc.name AS user_category_label,
-       pay.type,
-       COUNT(*)::bigint AS rule_count
+       pc.name AS user_category_label
 FROM payments pay
 JOIN properties p ON p.id = pay.property_id
 LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
@@ -544,8 +620,8 @@ WHERE (
        OR pc.name ILIKE '%' || $2::text || '%' ESCAPE '\'
        OR ($3::text <> ''
            AND pay.category_slug = ANY(string_to_array($3::text, ','))))
-GROUP BY pay.category_slug, pay.user_category_id, pc.name, pay.type
-ORDER BY rule_count DESC, pay.category_slug NULLS LAST, pc.name NULLS LAST, pay.type
+GROUP BY pay.category_slug, pay.user_category_id, pc.name
+ORDER BY COUNT(*) DESC, pay.category_slug NULLS LAST, pc.name NULLS LAST
 `
 
 type SumGlobalPaymentSearchCategoriesParams struct {
@@ -558,17 +634,16 @@ type SumGlobalPaymentSearchCategoriesRow struct {
 	CategorySlug      pgtype.Text `json:"category_slug"`
 	UserCategoryID    pgtype.UUID `json:"user_category_id"`
 	UserCategoryLabel pgtype.Text `json:"user_category_label"`
-	Type              string      `json:"type"`
-	RuleCount         int64       `json:"rule_count"`
 }
 
 // The matched categories of the payment rules search (ticket #575): one
-// row per (category, direction) present among the matched rules — the
-// search screen's chips — the largest count first. The identity is the
-// rule's category reference resolved: a default catalog slug or the user
-// category. Rules without any category reference cannot appear (the XOR
-// is a durable schema invariant; no such rules exist today). The search
-// predicate is the feed query's.
+// row per category present among the matched rules — the search screen's
+// chips — the largest match count first (ticket #602: the count orders the
+// rows and stays out of the contract; a category's directions are one
+// chip). The identity is the rule's category reference resolved: a default
+// catalog slug or the user category. Rules without any category reference
+// cannot appear (the XOR is a durable schema invariant; no such rules exist
+// today). The search predicate is the feed query's.
 func (q *Queries) SumGlobalPaymentSearchCategories(ctx context.Context, arg SumGlobalPaymentSearchCategoriesParams) ([]SumGlobalPaymentSearchCategoriesRow, error) {
 	rows, err := q.db.Query(ctx, sumGlobalPaymentSearchCategories, arg.Actor, arg.Search, arg.CategorySlugs)
 	if err != nil {
@@ -578,13 +653,7 @@ func (q *Queries) SumGlobalPaymentSearchCategories(ctx context.Context, arg SumG
 	items := []SumGlobalPaymentSearchCategoriesRow{}
 	for rows.Next() {
 		var i SumGlobalPaymentSearchCategoriesRow
-		if err := rows.Scan(
-			&i.CategorySlug,
-			&i.UserCategoryID,
-			&i.UserCategoryLabel,
-			&i.Type,
-			&i.RuleCount,
-		); err != nil {
+		if err := rows.Scan(&i.CategorySlug, &i.UserCategoryID, &i.UserCategoryLabel); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

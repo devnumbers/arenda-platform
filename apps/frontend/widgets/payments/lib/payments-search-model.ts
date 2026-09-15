@@ -1,4 +1,4 @@
-import type { PaymentSearchCategoryView } from '@/entities/payment';
+import type { PaymentCategoryView } from '@/entities/payment';
 
 /**
  * Модель экрана поиска платежей (#581, Figma 706:12168/12649/13008,
@@ -7,8 +7,9 @@ import type { PaymentSearchCategoryView } from '@/entities/payment';
  * чипы совпавших категорий приходят в ответе (matchedCategories, по числу
  * совпадений убывание). Выбор чипа сужает список серверным фильтром по
  * категории; направление в чип не входит (решение владельца: серверная
- * разбивка (категория, направление) склеивается — иначе чип-дубль
- * подписи, как «Парковка | Парковка»).
+ * разбивка (категория, направление) склеивалась — иначе чип-дубль
+ * подписи, как «Парковка | Парковка»; с #602 сервер отдаёт и вовсе одну
+ * строку на категорию — без направления и счётчика).
  */
 
 /** Чип секции «Категории» (Figma 860:22842): ключ-снапшот, подпись и флаг
@@ -20,9 +21,9 @@ export type SearchCategoryChip = {
 };
 
 /** Идентичность чипа: дефолтная категория — по слагу каталога,
- * пользовательская — по id. Направление не входит. */
-export function searchCategoryChipKey(chip: PaymentSearchCategoryView): string {
-  return categoryIdentityKey(chip.category.source, chip.category.slug, chip.category.id);
+ * пользовательская — по id. */
+export function searchCategoryChipKey(category: PaymentCategoryView): string {
+  return categoryIdentityKey(category.source, category.slug, category.id);
 }
 
 function categoryIdentityKey(
@@ -33,45 +34,38 @@ function categoryIdentityKey(
   return source === 'default' ? `default:${slug ?? ''}` : `custom:${id ?? ''}`;
 }
 
-/** Чипы «Категорий» — matchedCategories ответа; сервер считает их парой
- * (категория, направление), склеиваем по идентичности категории (первая
- * строка сервера — с большим числом совпадений — побеждает), порядок
- * сервера сохраняется, выбор помечает единственный чип. */
+/** Чипы «Категорий» — matchedCategories ответа: по одному на категорию
+ * (#602), порядок сервера (по числу совпадений) сохраняется, выбор
+ * помечает единственный чип. */
 export function searchCategoryChips(
-  categories: ReadonlyArray<PaymentSearchCategoryView>,
+  categories: ReadonlyArray<PaymentCategoryView>,
   selectedKey: string | null,
 ): ReadonlyArray<SearchCategoryChip> {
-  const chips: SearchCategoryChip[] = [];
-  const seen = new Set<string>();
-  for (const view of categories) {
-    const key = searchCategoryChipKey(view);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    chips.push({ key, label: view.category.label, selected: key === selectedKey });
-  }
-  return chips;
+  return categories.map((category) => {
+    const key = searchCategoryChipKey(category);
+    return { key, label: category.label, selected: key === selectedKey };
+  });
 }
 
-/** Выбор валиден, только пока чип есть в разбивке текущего запроса: после
+/** Выбор валиден, только пока чип есть в выдаче текущего запроса: после
  * смены запроса исчезнувший чип молча перестаёт сужать список. */
 export function effectiveChipKey(
-  categories: ReadonlyArray<PaymentSearchCategoryView>,
+  categories: ReadonlyArray<PaymentCategoryView>,
   selectedKey: string | null,
 ): string | null {
   const known = selectedKey !== null
-    && categories.some((chip) => searchCategoryChipKey(chip) === selectedKey);
+    && categories.some((category) => searchCategoryChipKey(category) === selectedKey);
   return known ? selectedKey : null;
 }
 
 /** Фильтр чипа для серверного запроса (#581, порции по 50 + догрузка
- * скроллом): категория — слаг дефолтного каталога или id пользовательской,
- * направление не фильтруется. Сужает только список «Платежей»; чипы
- * сервер всегда считает по всему скоупу. */
-export function searchChipFilter(chip: PaymentSearchCategoryView): {
+ * скроллом): категория — слаг дефолтного каталога или id пользовательской.
+ * Сужает только список «Платежей»; чипы сервер всегда считает по всему
+ * скоупу. */
+export function searchChipFilter(category: PaymentCategoryView): {
   readonly category: string;
 } {
   return {
-    category:
-      chip.category.source === 'default' ? (chip.category.slug ?? '') : (chip.category.id ?? ''),
+    category: category.source === 'default' ? (category.slug ?? '') : (category.id ?? ''),
   };
 }

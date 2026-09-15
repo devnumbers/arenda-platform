@@ -6,7 +6,6 @@ import { Add, Search } from "@/shared/assets/icons";
 import { ROUTES } from "@/shared/config/routes";
 import { clientTodayIso } from "@/entities/payment";
 import { useKeyboardActivation } from "@/shared/lib/hooks/useKeyboardActivation";
-import { useInfiniteScroll } from "@/shared/lib/hooks/useInfiniteScroll";
 import {
   defaultOperationsPeriod,
   globalOperationsFiltersParams,
@@ -20,10 +19,10 @@ import {
   useGlobalOperationsPaged,
   useGlobalOperationsSummary,
 } from "@/features/payments";
-import { Button, HubCollapseAnchor, HubTitle, IconButton, PageContent, TopNav } from "@/shared/ui/design";
-import { PaymentsSkeleton, PaymentsStateCard } from "./payments-sections";
+import { HubCollapseAnchor, HubTitle, IconButton, InfiniteQueryTail, Button, PageContent, TopNav } from "@/shared/ui/design";
+import { PaymentsStateCard } from "./payments-sections";
+import { OperationsDateFeedSkeleton, OperationsSummarySkeleton } from "./operations-skeletons";
 import {
-  LoadingMoreIndicator,
   OperationsDateList,
   OperationsNeverHad,
 } from "./operations-list";
@@ -31,7 +30,7 @@ import { OperationsFilterChips } from "./operations-filter-chips";
 import { OperationsGlobalPeriodPickerDialog } from "./operations-period-picker";
 import { OperationsSummaryCard } from "./operations-summary-card";
 import { hasNoPaidOperationsEver } from "../lib/operations-empty-states";
-import { summaryBarSegments } from "../lib/summary-bar";
+import { summaryBarSegments } from "@/features/payment-categories";
 
 /**
  * Экран «Операции» — глобальная лента по всем объектам (#541, макеты
@@ -85,12 +84,6 @@ export function OperationsGlobalScreen(): JSX.Element {
     propertyIds: filters.propertyIds,
     includeArchived: filters.archived,
   });
-
-  const sentinelRef = useInfiniteScroll(() => {
-    if (listQuery.hasNextPage && !listQuery.isFetchingNextPage) {
-      void listQuery.fetchNextPage();
-    }
-  }, listQuery.hasNextPage === true);
 
   const groups = groupOperationsByDate(listQuery.data ?? [], today);
   // Скелетон — только пока данных нет вовсе (первая загрузка); ошибка без
@@ -211,8 +204,10 @@ export function OperationsGlobalScreen(): JSX.Element {
 
             {pending && (
               <>
-                <PaymentsSkeleton withHeading />
-                <PaymentsSkeleton withHeading />
+                {/* Паритет §7: копия контента — ряд карточек сводки и
+                 * группы дат со строками; чипы выше — вне фазы загрузки. */}
+                <OperationsSummarySkeleton cards={2} />
+                <OperationsDateFeedSkeleton />
               </>
             )}
 
@@ -277,16 +272,7 @@ export function OperationsGlobalScreen(): JSX.Element {
                       groups={groups}
                       onSelectOperation={openOperation}
                       renderSubtitle={(operation) => operation.propertyName}
-                      tail={
-                        <>
-                          {listQuery.hasNextPage === true && (
-                            <div ref={sentinelRef} aria-hidden />
-                          )}
-                          {listQuery.isFetchingNextPage && (
-                            <LoadingMoreIndicator />
-                          )}
-                        </>
-                      }
+                      tail={<InfiniteQueryTail query={listQuery} />}
                     />
                   </>
                 )}
@@ -311,7 +297,8 @@ export function OperationsGlobalScreen(): JSX.Element {
  * лупа и подпись «Найти операцию»; тап открывает страницу поиска #543.
  * Кнопка «+» рядом с пилюлей переехала в шапку страницы (решение
  * владельца 2026-09-08 #571 — отмена решения #539). */
-function OperationsSearchPill({
+/** Пилюля поиска операций (#543) — экспорт для route-loading (#609). */
+export function OperationsSearchPill({
   onOpenSearch,
 }: {
   readonly onOpenSearch: () => void;

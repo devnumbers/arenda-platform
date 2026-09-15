@@ -225,11 +225,7 @@ func TestSearchGlobalPayments_FoldsQueryAndMapsChips(t *testing.T) {
 			gotPage = page
 			id := uuid.Must(uuid.NewV7())
 			return application.GlobalPaymentSearch{
-				MatchedCategories: []application.GlobalPaymentSearchCategory{{
-					Category:  customCategoryRef(id, "Кофейни"),
-					Type:      "income",
-					RuleCount: 3,
-				}},
+				MatchedCategories: []domain.CategoryRef{customCategoryRef(id, "Кофейни")},
 			}, nil
 		},
 	}
@@ -256,17 +252,21 @@ func TestSearchGlobalPayments_FoldsQueryAndMapsChips(t *testing.T) {
 	if len(body.MatchedCategories) != 1 {
 		t.Fatalf("chips = %d, want 1", len(body.MatchedCategories))
 	}
+	// The chip rides out as the bare category view — no direction, no count
+	// in the contract (ticket #602).
 	chip := body.MatchedCategories[0]
-	if chip.Category.Source != openapi.CategoryViewSourceCustom || chip.Category.Label != "Кофейни" {
-		t.Errorf("chip category = %+v, want the custom identity", chip.Category)
-	}
-	if chip.Type != openapi.PaymentSearchCategoryTypeIncome || chip.Count != 3 {
-		t.Errorf("chip = (%q, %d), want (income, 3)", chip.Type, chip.Count)
+	if chip.Source != openapi.CategoryViewSourceCustom || chip.Label != "Кофейни" {
+		t.Errorf("chip = %+v, want the custom identity", chip)
 	}
 }
 
 // The chip filter and the page window ride the query parameters into the
-// use case (map #573 rework): category + type + limit/offset.
+// use case (map #573 rework): category + type + limit/cursor — the keyset
+// continuation echoes through as the opaque string (ticket #597).
+// TestEchoedCursor is the continuation cursor the folding tests echo
+// through (ticket #597).
+const testEchoedCursor = "cursor-from-previous-page"
+
 func TestSearchGlobalPayments_CarriesChipFilterAndPage(t *testing.T) {
 	t.Parallel()
 
@@ -281,17 +281,19 @@ func TestSearchGlobalPayments_CarriesChipFilterAndPage(t *testing.T) {
 	}
 	h := NewGlobalPaymentHandlers(svc, nil)
 
-	limit, offset := 50, 100
+	limit := 50
+	cursor := testEchoedCursor
 	category := "parking"
 	paymentType := openapi.SearchGlobalPaymentsParamsTypeExpense
 	w := httptest.NewRecorder()
-	h.SearchGlobalPayments(w, globalRequest(t.Context(), "/payments/search?search=&category=parking&type=expense&limit=50&offset=100"),
+	request := "/payments/search?search=&category=parking&type=expense&limit=50&cursor=" + testEchoedCursor
+	h.SearchGlobalPayments(w, globalRequest(t.Context(), request),
 		openapi.SearchGlobalPaymentsParams{
 			Search:   nil,
 			Category: &category,
 			Type:     &paymentType,
 			Limit:    &limit,
-			Offset:   &offset,
+			Cursor:   &cursor,
 		})
 
 	if w.Code != http.StatusOK {
@@ -300,8 +302,8 @@ func TestSearchGlobalPayments_CarriesChipFilterAndPage(t *testing.T) {
 	if gotPage.Category != "parking" || gotPage.Type != domain.TypeExpense {
 		t.Errorf("page filter = %q/%q, want parking/expense", gotPage.Category, gotPage.Type)
 	}
-	if gotPage.Limit != 50 || gotPage.Offset != 100 {
-		t.Errorf("page window = %d/%d, want 50/100", gotPage.Limit, gotPage.Offset)
+	if gotPage.Limit != 50 || gotPage.Cursor != testEchoedCursor {
+		t.Errorf("page window = %d/%q, want 50 with the echoed cursor", gotPage.Limit, gotPage.Cursor)
 	}
 }
 
@@ -318,7 +320,7 @@ func TestSearchGlobalPayments_RejectsInvalidPage(t *testing.T) {
 	}
 	h := NewGlobalPaymentHandlers(svc, nil)
 
-	limit0, limit101, offsetNeg := 0, 101, -1
+	limit0, limit101 := 0, 101
 	unknownType := openapi.SearchGlobalPaymentsParamsType("foobar")
 	cases := []struct {
 		name   string
@@ -326,7 +328,6 @@ func TestSearchGlobalPayments_RejectsInvalidPage(t *testing.T) {
 	}{
 		{"limit below the minimum", openapi.SearchGlobalPaymentsParams{Limit: &limit0}},
 		{"limit above the maximum", openapi.SearchGlobalPaymentsParams{Limit: &limit101}},
-		{"negative offset", openapi.SearchGlobalPaymentsParams{Offset: &offsetNeg}},
 		{"unknown direction", openapi.SearchGlobalPaymentsParams{Type: &unknownType}},
 	}
 	for _, tc := range cases {
@@ -542,5 +543,33 @@ func TestListGlobalPayments_FavoriteOrderWire(t *testing.T) {
 	}
 	if body.Items[1].FavoriteOrder != nil {
 		t.Errorf("nil favoriteOrder = %v, want null", body.Items[1].FavoriteOrder)
+	}
+}
+
+// The search wire's total (ticket #599): the scope's match count travels on
+// every page — the contract's required field.
+func TestSearchGlobalPayments_CarriesScopeTotal(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeGlobalPaymentsManager{
+		search: func(
+			_ context.Context, _ uuid.UUID, _ string, _ application.GlobalPaymentSearchPage,
+		) (application.GlobalPaymentSearch, error) {
+			return application.GlobalPaymentSearch{Total: 7}, nil
+		},
+	}
+	h := NewGlobalPaymentHandlers(svc, nil)
+
+	w := httptest.NewRecorder()
+	h.SearchGlobalPayments(w, globalRequest(t.Context(), "/payments/search"), openapi.SearchGlobalPaymentsParams{})
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", w.Code, w.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if total, ok := body["total"].(float64); !ok || total != 7 {
+		t.Fatalf("total = %v, want 7 on the wire", body["total"])
 	}
 }

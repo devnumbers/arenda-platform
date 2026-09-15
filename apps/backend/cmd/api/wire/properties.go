@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	billingpg "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/postgres"
+	paymentspg "github.com/nambers/arenda-planform/apps/backend/internal/payments/adapters/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/dadata"
 	propertiespg "github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/storage"
@@ -79,6 +80,10 @@ func WireProperties(
 		p.Policy,
 		p.Logger,
 	)
+
+	// The reading actor's calendar date for the list responses (ticket #586):
+	// the same adapter rentals/payments wire their owner-today reads with.
+	propertyService.SetOwnerCalendar(paymentspg.NewOwnerCalendar(p.DB, p.Clock))
 
 	dadataClient := dadata.NewClient(dadata.Config{
 		BaseURL:   p.Cfg.DaDataBaseURL,

@@ -63,6 +63,71 @@ func (q *Queries) CountPaidOperationsByPayment(ctx context.Context, arg CountPai
 	return column_1, err
 }
 
+const countPaidOperationsGlobal = `-- name: CountPaidOperationsGlobal :one
+SELECT COUNT(*)
+FROM operations op
+JOIN properties p ON p.id = op.property_id
+WHERE op.status = 'paid'
+  AND (
+       op.owner_id = $1
+       OR EXISTS (
+            SELECT 1 FROM property_members pm
+            WHERE pm.property_id = op.property_id
+              AND pm.user_id = $1
+              AND pm.status = 'active'
+          )
+      )
+  AND ($2::bool OR p.status != 'archived')
+  AND ($3::text = ''
+       OR op.property_id = ANY(string_to_array($3::text, ',')::uuid[])
+       OR ($2::bool AND p.status = 'archived'))
+  AND ($4::date IS NULL OR op.date >= $4)
+  AND ($5::date IS NULL OR op.date <= $5)
+  AND ($6::text = ''
+       OR op.title ILIKE '%' || $6::text || '%' ESCAPE '\'
+       OR op.category_label ILIKE '%' || $6::text || '%' ESCAPE '\'
+       OR ($7::text <> ''
+           AND CAST(op.amount_kopecks AS text) LIKE '%' || $7::text || '%'))
+  AND ($8::text = '' OR op.type = $8::text)
+  AND ($9::text = ''
+       OR op.category_slug = ANY(string_to_array($9::text, ',')))
+`
+
+type CountPaidOperationsGlobalParams struct {
+	Actor           pgtype.UUID `json:"actor"`
+	IncludeArchived bool        `json:"include_archived"`
+	PropertyIds     string      `json:"property_ids"`
+	DateFrom        pgtype.Date `json:"date_from"`
+	DateTo          pgtype.Date `json:"date_to"`
+	Search          string      `json:"search"`
+	SearchDigits    string      `json:"search_digits"`
+	Type            string      `json:"type"`
+	Categories      string      `json:"categories"`
+}
+
+// The global feed's whole-scope count (ticket #599): the list query's
+// predicate — paid, the visibility, the archive cut, the propertyIds
+// multi-select, the period, the search over title/category label/amount
+// digits, the direction and category filters — without the keyset key, the
+// ordering and the window. The count is the scope's own, identical on every
+// walked page; the search screen shows it as «найдено N».
+func (q *Queries) CountPaidOperationsGlobal(ctx context.Context, arg CountPaidOperationsGlobalParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countPaidOperationsGlobal,
+		arg.Actor,
+		arg.IncludeArchived,
+		arg.PropertyIds,
+		arg.DateFrom,
+		arg.DateTo,
+		arg.Search,
+		arg.SearchDigits,
+		arg.Type,
+		arg.Categories,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createManualOperation = `-- name: CreateManualOperation :exec
 INSERT INTO operations (
     id, owner_id, property_id, payment_id, origin, date, paid_date, status,
@@ -368,11 +433,18 @@ WHERE op.status = 'paid'
   AND ($8::text = '' OR op.type = $8::text)
   AND ($9::text = ''
        OR op.category_slug = ANY(string_to_array($9::text, ',')))
+  AND ($10::uuid IS NULL
+       OR ($11::text = 'asc'
+           AND (op.date > $12::date
+                OR (op.date = $12 AND op.id < $10::uuid)))
+       OR ($11::text <> 'asc'
+           AND (op.date < $12::date
+                OR (op.date = $12 AND op.id < $10::uuid))))
 ORDER BY
-  CASE WHEN $10::text = 'asc' THEN op.date END ASC,
-  CASE WHEN $10::text = 'desc' THEN op.date END DESC,
+  CASE WHEN $11::text = 'asc' THEN op.date END ASC,
+  CASE WHEN $11::text = 'desc' THEN op.date END DESC,
   op.id DESC
-LIMIT $12 OFFSET $11
+LIMIT $13
 `
 
 type ListPaidOperationsGlobalParams struct {
@@ -385,8 +457,9 @@ type ListPaidOperationsGlobalParams struct {
 	SearchDigits    string      `json:"search_digits"`
 	Type            string      `json:"type"`
 	Categories      string      `json:"categories"`
+	AfterID         pgtype.UUID `json:"after_id"`
 	Order           string      `json:"order"`
-	Offset          int32       `json:"offset"`
+	AfterDate       pgtype.Date `json:"after_date"`
 	Limit           int32       `json:"limit"`
 }
 
@@ -425,6 +498,14 @@ type ListPaidOperationsGlobalRow struct {
 // ordering (op.date, id tiebreak) and filter vocabulary minus the status
 // filter: paid is the feed's only stored status. property_name is the row's
 // property label — the global screen's row label.
+//
+// The page walks the feed's own order by keyset (ticket #597): the window
+// resumes strictly after the (date, id) the previous page ended on, so
+// rows created, deleted or renamed between loads never duplicate or drop.
+// The id tiebreak runs DESC in both directions, so the continuation is
+// (date ahead of the cursor) or (same date, id below it); the direction
+// only flips the date comparison. Both cursor args travel together; NULL
+// (no cursor) reads from the beginning.
 func (q *Queries) ListPaidOperationsGlobal(ctx context.Context, arg ListPaidOperationsGlobalParams) ([]ListPaidOperationsGlobalRow, error) {
 	rows, err := q.db.Query(ctx, listPaidOperationsGlobal,
 		arg.Actor,
@@ -436,8 +517,9 @@ func (q *Queries) ListPaidOperationsGlobal(ctx context.Context, arg ListPaidOper
 		arg.SearchDigits,
 		arg.Type,
 		arg.Categories,
+		arg.AfterID,
 		arg.Order,
-		arg.Offset,
+		arg.AfterDate,
 		arg.Limit,
 	)
 	if err != nil {
@@ -467,6 +549,47 @@ func (q *Queries) ListPaidOperationsGlobal(ctx context.Context, arg ListPaidOper
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPropertyIDsWithOverdueOperations = `-- name: ListPropertyIDsWithOverdueOperations :many
+SELECT DISTINCT op.property_id
+FROM operations op
+WHERE op.owner_id = $1
+  AND op.status = 'planned'
+  AND op.date < $2
+  AND op.property_id = ANY($3::uuid[])
+`
+
+type ListPropertyIDsWithOverdueOperationsParams struct {
+	Owner       pgtype.UUID   `json:"owner"`
+	Today       pgtype.Date   `json:"today"`
+	PropertyIds []pgtype.UUID `json:"property_ids"`
+}
+
+// The payments half of the list red dot (ticket #585, резолюция #584): the
+// subset of the given properties holding at least one overdue planned
+// operation — a stored planned row dated before the owner's today, the same
+// predicate ListOperations resolves as the overdue view status in exactly
+// one place. One batched read per data owner; cancelled tombstones are not
+// planned rows and never match.
+func (q *Queries) ListPropertyIDsWithOverdueOperations(ctx context.Context, arg ListPropertyIDsWithOverdueOperationsParams) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listPropertyIDsWithOverdueOperations, arg.Owner, arg.Today, arg.PropertyIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var property_id pgtype.UUID
+		if err := rows.Scan(&property_id); err != nil {
+			return nil, err
+		}
+		items = append(items, property_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

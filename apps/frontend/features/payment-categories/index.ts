@@ -9,3 +9,8 @@ export {
   type CategoryIconProps,
   type CategoryIconSurface,
 } from '@/features/payment-categories/ui/category-icon';
+export {
+  summaryBarSegments,
+  type SummaryBarSegment,
+} from '@/features/payment-categories/lib/summary-bar';
+export { SummaryBarStrip } from '@/features/payment-categories/ui/summary-bar-strip';

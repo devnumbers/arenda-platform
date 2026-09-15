@@ -16,7 +16,7 @@ import { DesktopMenuButton } from './desktop-menu-button';
  * ≥1024 (hidden desktop:block; ярусы владельца 08.09: мобайл 320–560,
  * планшет 561–1023, ПК от 1024 — боковое меню есть только у ПК-версии,
  * в 561–1023 планшетный хром с TabBar). Рендерит ScreenLayout. */
-export function DesktopSidebar(): JSX.Element {
+export function DesktopSidebar({ propertiesHref }: { readonly propertiesHref?: string } = {}): JSX.Element {
   const pathname = usePathname();
   const activeSectionId = getActiveNavItem(pathname, mainNavSections)?.id;
 
@@ -30,6 +30,7 @@ export function DesktopSidebar(): JSX.Element {
           <DesktopMenuButton
             key={section.id}
             section={section}
+            href={section.id === 'properties' && propertiesHref !== undefined ? propertiesHref : undefined}
             active={activeSectionId === section.id}
           />
         ))}

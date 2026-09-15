@@ -17,12 +17,15 @@ push в dev (stage) или main (prod)
   → _deploy.yml: cosign verify → рендер env из секрета ENV_FILE (со сверкой
     ключей против deploy/.env.<env>.example) → передача env на сервер через base64
     в envs ssh-шага → pg_dump-бэкап →
-    миграции → up -d --wait → внешние smoke → точечная чистка старых образов
+    миграции → up -d --wait → Caddy-фрагмент (guard → .prev → mv →
+    validate → reload → smoke, откат фрагмента при провале) →
+    внешние smoke → точечная чистка старых образов
 ```
 
 При падении раскатки или smoke — автоматический откат образов на предыдущие
-(`.previous-images` в deploy-каталоге). БД автоматически НЕ откатывается —
-см. разделы «Миграции» и «Rollback».
+(`.previous-images` в deploy-каталоге); при падении шага Caddy-фрагмента —
+откат самого фрагмента на `rentlee.caddy.prev`. БД автоматически НЕ
+откатывается — см. разделы «Миграции» и «Rollback».
 
 Workflow-файлы: `.github/workflows/{ci,security,_deploy,deploy-stage,deploy-prod}.yml`.
 `security.yml` — это SAST (semgrep) и trivy-fs (ежедневный ночной прогон + non-blocking на PR);
@@ -50,8 +53,11 @@ updates + сгруппированные weekly version updates в ветку `d
 - Deploy-каталоги на сервере содержат только `docker-compose.<env>.yml`,
   `.env.<env>` (+ `.prev`), `.previous-images`, `.deploy-run-id`; репозитория
   и git-чекаута на сервере нет.
-- Лендинг (`apps/landing`) слушает `127.0.0.1:13002` в prod и `127.0.0.1:23002` в stage; Caddy отдаёт его как fallback для `/`.
+- Лендинг (`apps/landing`) слушает `127.0.0.1:13002` в prod и `127.0.0.1:23002` в stage; Caddy отдаёт его как явное исключение на публичном домене (`/`, `/assets/*`, юрстраницы, `robots.txt`), всё остальное уходит кабинету — см. раздел «Caddy».
 - При каждом деплое backend недоступен 5–15 секунд (один инстанс) — принято.
+- Каждый деплой stage/prod также раскатывает Caddy-фрагмент rentlee
+  (`deploy/caddy/rentlee.caddy` → `/etc/caddy/conf.d/rentlee.caddy`) —
+  см. раздел «Caddy».
 
 ## DNS
 
@@ -271,107 +277,111 @@ docker compose --env-file .env.$ENV -f docker-compose.$ENV.yml up -d --wait
 `.env.<env>`-файлы старой схемы держать как fallback, после — удалить вместе
 с git-чекаутом.
 
-## Caddyfile
+## Caddy
 
-```caddyfile
-www.rentlee.ru {
-	redir https://rentlee.ru{uri} permanent
-}
+Caddy работает на хосте как systemd-сервис и проксирует публичные домены на
+localhost-порты контейнеров. Конфигурация — модель import conf.d (карта #649):
 
-rentlee.ru {
-	encode zstd gzip
+- главный файл `/etc/caddy/Caddyfile` сводится к глобальному блоку и
+  `import /etc/caddy/conf.d/*.caddy`;
+- каждый проект — свой файл в `/etc/caddy/conf.d/`; чужие проекты правятся
+  руками на сервере, пайплайн их не трогает;
+- рентли-часть — `/etc/caddy/conf.d/rentlee.caddy`, её источник правды —
+  репозиторий: `deploy/caddy/rentlee.caddy`. Раскатывается пайплайном при
+  каждом деплое stage/prod, руками на сервере не редактировать — правка будет
+  затёрта следующим деплоем.
 
-	handle_path /api/* {
-		reverse_proxy 127.0.0.1:18080
-	}
+### Контракт маршрутизации (инверсия фолбэка)
 
-	handle /webhooks/* {
-		reverse_proxy 127.0.0.1:18080
-	}
+Кабинет Next.js — дефолтный catch-all; лендинг — явное исключение:
 
-	@frontend path /login* /dashboard* /properties* /profile* /subscription* /support* /ui-kit* /tasks* /operations* /contacts* /payments* /participants* /_next/* /fonts/* /images/* /file.svg /globe.svg /next.svg /vercel.svg /window.svg /icon.png /manifest.webmanifest /sw.js /offline.html /icons/* /apple-icon.png
-	handle @frontend {
-		reverse_proxy 127.0.0.1:13000
-	}
+- `/api/*` → бэкенд через `handle_path` (префикс `/api` снимается);
+- `/webhooks/*` → бэкенд через `handle` (префикс НЕ снимается — T-Kassa шлёт
+  колбэки на полный путь);
+- лендинг (`@landing`): `/` (точный), `/privacy`, `/terms`, `/robots.txt`,
+  `/sitemap.xml`, `/assets/*` (Vite-бандлы и favicon лендинга),
+  `/landing-fonts/*` — через `handle`, НЕ `handle_path`: nginx-контейнер
+  лендинга ждёт полный путь;
+- всё остальное → кабинет (`127.0.0.1:13000` prod / `:23000` stage).
 
-	handle {
-		reverse_proxy 127.0.0.1:13002
-	}
-}
+Следствия:
 
-admin.rentlee.ru {
-	encode zstd gzip
+- новый top-level роут фронта работает без правок прокси;
+- новый публичный путь лендинга = добавление в матчер `@landing`
+  (`deploy/caddy/rentlee.caddy`) + файл в `apps/landing/public/`;
+- `robots.txt` и `sitemap.xml` отдаёт лендинг (`apps/landing/public/`);
+  `Disallow`-список robots.txt зеркалит `APP_ROUTE_PREFIXES` фронта минус
+  `/login`;
+- `/sw.js` уходит фронту catch-all'ом; `Cache-Control: no-store` ставит Next
+  (`headers()` в `next.config.ts`), на `/sw.js` никаких заголовков Caddy не
+  добавлять (ADR 0032); `Content-Type` обязан быть
+  `text/javascript`/`application/javascript`, иначе регистрация SW упадёт
+  (требование спецификации — JS MIME);
+- дедупликация prod/stage-блоков — snippet `(rentlee_site)` с позиционными
+  аргументами `{args[0]}` (канон Caddy ≥2.7; на сервере v2.11.4);
+- `www.rentlee.ru` — permanent redir на канон; admin-блоки — catch-all на
+  админку с тем же `handle_path /api/*`;
+- access-лог — общий `/var/log/caddy/access.log` (JSON, roll 50mb × 5),
+  пишут все блоки хоста, включая чужие; ротацию делает сам Caddy.
 
-	handle_path /api/* {
-		reverse_proxy 127.0.0.1:18080
-	}
+### Раскатка фрагмента пайплайном
 
-	handle {
-		reverse_proxy 127.0.0.1:13001
-	}
-}
+Шаг «Deploy Caddy fragment» в `_deploy.yml` (общий для stage и prod), после
+раскатки образов и перед внешним smoke:
 
-dev.rentlee.ru {
-	encode zstd gzip
+1. upload `deploy/caddy/rentlee.caddy` → `/tmp/arenda-caddy-<env>/`;
+2. guard: в `/etc/caddy/Caddyfile` есть `import /etc/caddy/conf.d` — иначе
+   шаг падает громко (защита от «фрагмент уехал, но не импортируется»; до
+   разового расщепления монолита — runbook ниже — деплой останавливается
+   здесь);
+3. install как `/etc/caddy/conf.d/rentlee.caddy.new` (суффикс `.new` не
+   матчит glob `*.caddy` — случайный подхват на лету исключён);
+4. backup текущего фрагмента → `rentlee.caddy.prev`;
+5. атомарный `mv` на место фрагмента;
+6. `caddy validate --config /etc/caddy/Caddyfile` — главный файл с импортами
+   (фрагмент резолвится только через import);
+7. `systemctl reload caddy` — graceful, zero-downtime; при невалидном конфиге
+   работающий инстанс остаётся на старом;
+8. smoke инвертированной маршрутизации: лендинг-исключения = 200, кабинет =
+   catch-all (200/307), чужой путь = 404, `/api/healthz` = ok, `/sw.js` =
+   no-store + JS MIME, `robots.txt` = text/plain;
+9. провал validate/reload/smoke → откат: `rentlee.caddy.prev` на место +
+   reload, шаг падает громко (образы при провале смоука откатит штатный
+   «Rollback on failure»).
 
-	handle_path /api/* {
-		reverse_proxy 127.0.0.1:28080
-	}
+Sudo: deploy-пользователю нужны passwordless-права на
+`caddy validate --config /etc/caddy/Caddyfile`, `systemctl reload caddy` и
+`install`/`cp`/`mv`/`rm` над файлами `/etc/caddy/conf.d/rentlee.caddy*`
+(точечный sudoers — настроить один раз при расщеплении монолита).
 
-	handle /webhooks/* {
-		reverse_proxy 127.0.0.1:28080
-	}
+Изменение конфига — только через репо: править `deploy/caddy/rentlee.caddy` →
+влить в `dev` (stage) / `main` (prod) → деплой. Ручной сценарий «поправить
+файл на сервере и reload» остаётся аварийным: файл фрагмента —
+`/etc/caddy/conf.d/rentlee.caddy`, проверка и применение —
+`sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy`;
+следующая раскатка перезапишет ручную правку.
 
-	@frontend path /login* /dashboard* /properties* /profile* /subscription* /support* /ui-kit* /tasks* /operations* /contacts* /payments* /participants* /_next/* /fonts/* /images/* /file.svg /globe.svg /next.svg /vercel.svg /window.svg /icon.png /manifest.webmanifest /sw.js /offline.html /icons/* /apple-icon.png
-	handle @frontend {
-		reverse_proxy 127.0.0.1:23000
-	}
+### Разовое расщепление монолита (одноразовый runbook)
 
-	handle {
-		reverse_proxy 127.0.0.1:23002
-	}
-}
+Строго до первого пайплайн-выката фрагмента (иначе guard остановит деплой).
+Поведение-сохраняющее: инверсию делает первый выкат фрагмента, не
+расщепление. Выполняется руками, ад-хок SSH-командами (без скрипта в репо).
 
-admin.dev.rentlee.ru {
-	encode zstd gzip
-
-	handle_path /api/* {
-		reverse_proxy 127.0.0.1:28080
-	}
-
-	handle {
-		reverse_proxy 127.0.0.1:23001
-	}
-}
-```
-
-При добавлении нового top-level роута в Next.js-фронт его нужно добавить в
-`@frontend path` и перечитать Caddy: `sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy`.
-
-### PWA-ассеты в Caddyfile
-
-PWA-оболочка кабинета (тикет #179) добавляет четыре новых path в `@frontend`:
-
-- `/manifest.webmanifest` — Web App Manifest (`app/manifest.ts`);
-- `/sw.js` — service worker (`public/sw.js`, scope `/`);
-- `/offline.html` — брендированный офлайн-экран, precache'ится SW;
-- `/icons/*` — PWA-иконки 192/512 (`public/icons/`) и iOS splash-изображения (`public/icons/splash/`, тикет #185); glob `/icons/*` уже покрывает оба подкаталога, отдельных правил не требуется.
-
-`/sw.js` должен отдаваться без агрессивного кеширования, иначе браузер не
-подтянет обновление SW (byte-compare update check). Next.js ставит
-`Cache-Control: no-store` через `headers()` в `next.config.ts`; убедиться, что
-Caddy не переписывает этот заголовок на path `/sw.js` (проверить на stage:
-`curl -I https://dev.rentlee.ru/sw.js`). `Content-Type` ответа обязан быть
-`text/javascript`/`application/javascript`, иначе регистрация SW упадёт
-(требование спецификации — JS MIME).
-
-Проверка и применение:
-
-```bash
-sudo caddy validate --config /etc/caddy/Caddyfile
-sudo systemctl reload caddy
-```
-
+1. Снять монолит: `scp alterix-server:/etc/caddy/Caddyfile ./live`.
+2. Расщепить руками: top-level site-блоки → `conf.d/<домен>.caddy`; пятёрка
+   rentlee-блоков — в `conf.d/rentlee.caddy` в текущем живом виде (протухший
+   whitelist и `log`-блоки переехать как есть).
+3. Доказать эквивалентность: `caddy adapt` старого монолита vs собранного
+   нового (импорты резолвятся), нормализация `jq -S`, дифф пустой — иначе не
+   устанавливать.
+4. Бэкапы: живой файл → `Caddyfile.prev-monolith`; 12 `Caddyfile.bak-*` →
+   tarball `/root/caddy-bak-<дата>.tar.gz` + снос из `/etc/caddy`.
+5. Установить (`install -m 644`), настроить sudoers deploy-пользователя
+   (см. выше), `caddy validate --config /etc/caddy/Caddyfile` серверным
+   бинарём, `systemctl reload caddy`.
+6. Smoke: rentlee (`/login`, `/dashboard`, `/api/healthz`) и 2–3 чужих
+   домена (byron-lounge, inten, kb-3) живы. При провале — откат из
+   `Caddyfile.prev-monolith` + reload.
 ## Smoke Checks
 
 Эти же проверки (плюс сверка `version` в `/api/healthz` с sha коммита)
@@ -400,6 +410,31 @@ esac
 `/api/healthz` подтверждает, что Caddy попал в backend и `/api` был снят
 через `handle_path`. Поле `version` в ответе равно sha задеплоенного коммита
 (при ручном dispatch — `manual`). `/api/me` без cookie должен отвечать `401`.
+
+Контракт инвертированной маршрутизации (после переезда на `conf.d`,
+карта #649) — вручную на любом окружении:
+
+```bash
+# Лендинг — явное исключение.
+curl -fsS https://dev.rentlee.ru/privacy | grep -q 'id="root"'
+curl -fsS https://dev.rentlee.ru/robots.txt           # text/plain, Disallow-правила
+curl -fsS https://dev.rentlee.ru/sitemap.xml          # xml, три URL
+# Кабинет — catch-all.
+test "$(curl -sS -o /dev/null -w '%{http_code}' https://dev.rentlee.ru/properties)" = "200"
+test "$(curl -sS -o /dev/null -w '%{http_code}' https://dev.rentlee.ru/nosuchpath)" = "404"
+# SW: no-store доходит от Next, Caddy его не перезаписывает (ADR 0032).
+curl -sSI https://dev.rentlee.ru/sw.js | grep -i '^cache-control: no-store'
+```
+
+Пересекающиеся проверки выполняет шаг «Deploy Caddy fragment» после каждой
+раскатки (он дополнительно грейтит `/login`, лендинг-ассеты и 404); их провал
+откатывает фрагмент на `.prev` (см. раздел «Caddy»). Фрагмент один на оба
+окружения: stage-деплой гоняет smoke против `dev.rentlee.ru`, prod-часть
+фрагмента (`rentlee.ru`, admin) реально проверяется смоуком только на
+prod-выкате — там её подстраховывают validate и откат.
+
+Домен в `robots.txt` (`Sitemap:`) и в `sitemap.xml` (`<loc>`) — продовый
+канон `https://rentlee.ru`; stage-зеркало этим файлом не индексируется.
 
 ## Runtime Guards
 

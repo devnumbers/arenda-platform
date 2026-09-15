@@ -28,7 +28,7 @@ import {
 import { clientTodayIso } from '@/entities/payment';
 import type { Payment } from '@/entities/payment';
 import { daysOverdue } from '../lib/overdue-days';
-import { sortPaymentsByNextOccurrence } from '../lib/sort-payments-by-next-occurrence';
+import { overduePaymentIdsOf, sortPaymentsByNextOccurrence } from '@/features/payments';
 import { PaymentsAddSheet } from './payments-add-sheet';
 import {
   PaymentRow,
@@ -73,9 +73,7 @@ export function PaymentsOfPropertyScreen({
   // Платежи с накопленной просрочкой — красная точка на иконке в секциях
   // (1323:61133, State=Expired). Просрочки приходят порцией 50 (asc) —
   // долгов поверх первой порции на плашках не бейджим.
-  const overduePaymentIds = new Set(
-    overdue.flatMap((operation) => (operation.paymentId !== null ? [operation.paymentId] : [])),
-  );
+  const overduePaymentIds = overduePaymentIdsOf(overdue);
 
   // Паузные правила не выводятся на экране (1043:57611) — их место на
   // странице платежа; накопленный ими долг остаётся в секции просроченных.
