@@ -1,4 +1,5 @@
 import {
+  captureScreen,
   execE2eSql,
   expect,
   openCabinetWithSeededSession,
@@ -44,7 +45,7 @@ test.describe('выбор тарифа в «Остановлен» — бесп�
   test('своя подписка и период: «Возобновить Про» вместо цены, успех возобновления', async ({
     page,
     seededUser,
-  }) => {
+  }, testInfo) => {
     expect(await execE2eSql(SEED_STOPPED)).toBe('UPDATE 1');
 
     await openCabinetWithSeededSession(page, seededUser);
@@ -60,6 +61,7 @@ test.describe('выбор тарифа в «Остановлен» — бесп�
     const resume = page.getByRole('button', { name: 'Возобновить Про' });
     await expect(resume).toBeVisible();
     await expect(page.getByRole('button', { name: /Подключить за/ })).toHaveCount(0);
+    await captureScreen(page, testInfo, 'tariff-change-stopped-resume');
 
     // Бесплатный путь: POST /subscription/resume → экран успеха возобновления.
     await resume.click();
