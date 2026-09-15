@@ -20,6 +20,7 @@ import {
   operationsCategoryChipLabel,
   operationsCategoryRows,
   operationsFiltersHref,
+  operationsFiltersParams,
   operationsPeriodChipLabel,
   useOperationsFilters,
   usePropertyOperationsScopedPaged,
@@ -133,14 +134,9 @@ export function OperationsOfTypeScreen({
     router.push(ROUTES.propertyOperation(propertyId, operation.id));
 
   const openCategories = (): void => {
-    const params = new URLSearchParams();
-    if (filters.period !== null) {
-      params.set("from", filters.period.from);
-      params.set("to", filters.period.to);
-    }
-    if (filters.categories.length > 0) {
-      params.set("category", filters.categories.join(","));
-    }
+    // Формат query — один хелпер с operationsFiltersHref (#472): знание
+    // «как period/categories кодируются в адрес» живёт в одном модуле.
+    const params = new URLSearchParams(operationsFiltersParams(filters));
     params.set("return", pathname);
     router.push(
       `${ROUTES.propertyOperationsCategories(propertyId)}?${params.toString()}`,

@@ -8,6 +8,7 @@ import { goBack } from '@/shared/lib/navigation';
 import { clientTodayIso } from '@/entities/payment';
 import {
   operationsCategoryRows,
+  operationsFiltersParams,
   operationsPeriodChipLabel,
   readOperationsFilters,
   resolveFilterReturnPath,
@@ -46,7 +47,9 @@ export type OperationsCategoriesScreenProps = {
  * возврат к «Все категории» был бы недостижим); применяет выбор
  * возвратом на список (router.replace), крестик — goBack без изменений.
  * Пустой период — иллюстрация и подпись вместо строк (Figma 1518-92530,
- * #478), «Выбрать» в этом состоянии не нужен и не показывается.
+ * #478); «Выбрать» скрыта, только пока нет ни черновика, ни применённого
+ * фильтра категорий — опустевшая разбивка с непустым черновиком (период
+ * сменили, строк не осталось) по-прежнему подтверждается.
  */
 export function OperationsCategoriesScreen({
   propertyId,
@@ -91,14 +94,11 @@ export function OperationsCategoriesScreen({
   };
 
   const apply = (): void => {
-    const query = new URLSearchParams();
-    if (filters.period !== null) {
-      query.set('from', filters.period.from);
-      query.set('to', filters.period.to);
-    }
-    if (draft.length > 0) {
-      query.set('category', draft.join(','));
-    }
+    // Формат query — один хелпер с operationsFiltersHref (#472); черновик
+    // подаётся как выбор категорий того же фильтр-шейпа.
+    const query = new URLSearchParams(
+      operationsFiltersParams({ period: filters.period, categories: draft }),
+    );
     const queryString = query.toString();
     router.replace(`${returnTo}${queryString ? `?${queryString}` : ''}`);
   };
