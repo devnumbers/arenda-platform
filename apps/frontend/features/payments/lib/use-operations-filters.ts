@@ -14,18 +14,20 @@ import {
  * readOperationsFilters (битые значения отбрасываются), запись — router.push,
  * поэтому «назад» по истории возвращает к списку без фильтра, а ссылка с
  * ?from=&to=&category= восстанавливает выбор. Открытие шитов историю не
- * трогает — черновик выбора живёт внутри шита. Дефолт (без параметров) —
- * текущий месяц, «Все категории».
+ * трогает — черновик выбора живёт внутри шита. null (#674) — сброс периода:
+ * from/to уходят из URL; дефолт (без параметров) на всех экранах операций
+ * объекта — весь период (карта #669).
  */
 export function useOperationsFilters(): {
   readonly filters: OperationsFilters;
   /**
    * Запись периода в адрес; `replace` — заменить запись истории вместо
    * новой (пикер периода: применений в истории не остаётся, как на
-   * прежней странице периода).
+   * прежней странице периода). null — сброс периода (#674), как в
+   * глобальном хуке (#670).
    */
   readonly applyPeriod: (
-    period: OperationsPeriod,
+    period: OperationsPeriod | null,
     options?: { readonly replace?: boolean },
   ) => void;
   readonly applyCategories: (categories: ReadonlyArray<string>) => void;

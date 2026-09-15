@@ -3,73 +3,88 @@
 import type { JSX } from 'react';
 import { clientTodayIso } from '@/entities/payment';
 import {
-  defaultOperationsPeriod,
+  type OperationsPeriod,
   useGlobalOperationsFilters,
   useOperationsFilters,
 } from '@/features/payments';
 import { CalendarRangePicker } from '@/shared/ui/design';
 
-/** Пикер периода операций — канон CalendarRangePicker поверх списков
- * (решение владельца 2026-09-04, вместо маршрута /operations/period):
- * подтверждение пишет диапазон в адрес списка с заменой записи истории
- * (пикер в ней не остаётся, как прежняя страница периода). Подтверждение
- * неизменённого дефолта не делает период «явным» — чип остаётся
- * «Сентябрь 2026» (период не пишется в URL). Чип прыжка «Месяц Год ⌄»
- * скрыт (решение владельца 2026-09-05) — вглубь прошлого ведёт прокрутка
- * ленты с дорисовкой. */
-export function OperationsPeriodPickerDialog({
+/** Тело пикера периода — канон CalendarRangePicker поверх списков (решение
+ * владельца 2026-09-04): подтверждение пишет диапазон с заменой записи
+ * истории (пикер в ней не остаётся), пустой старт и «Сбросить» — канон
+ * #670: без применённого периода открывается ничего не предвыбранным,
+ * «Сбросить» возвращает к дефолту (null — from/to уходят из адреса). Чип
+ * прыжка «Месяц Год ⌄» скрыт (решение владельца 2026-09-05) — вглубь
+ * прошлого ведёт прокрутка ленты с дорисовкой. Состояние передаёт
+ * вызывающий хук — объектный или глобальный. */
+function PeriodPickerDialogBody({
+  period,
+  applyPeriod,
   onClose,
 }: {
+  readonly period: OperationsPeriod | null;
+  readonly applyPeriod: (
+    period: OperationsPeriod | null,
+    options?: { readonly replace?: boolean },
+  ) => void;
   readonly onClose: () => void;
 }): JSX.Element {
-  const { filters, applyPeriod } = useOperationsFilters();
   const today = clientTodayIso();
-  const applied = filters.period ?? defaultOperationsPeriod(today);
 
   return (
     <CalendarRangePicker
       today={today}
-      value={applied}
+      value={period}
       monthJump={false}
       onClose={onClose}
       onConfirm={(range) => {
-        const stillDefault =
-          filters.period === null && range.from === applied.from && range.to === applied.to;
-        if (!stillDefault) {
-          applyPeriod(range, { replace: true });
-        }
+        applyPeriod(range, { replace: true });
+        onClose();
+      }}
+      onReset={() => {
+        applyPeriod(null, { replace: true });
         onClose();
       }}
     />
   );
 }
 
-/** Пикер периода глобальной ленты «Операции» (#541): тот же канон поверх
- * глобальных фильтров — пишет period с заменой записи истории, прочие
- * фильтры (объекты, категории) не трогает. */
+/** Пикер периода объектных экранов. Пустой старт и «Сбросить» — как в
+ * глобальном (#674, канон #670); диалог разделяют все объектные экраны
+ * операций — все на дефолте «весь период» (#674–#676, карта #669). */
+export function OperationsPeriodPickerDialog({
+  onClose,
+}: {
+  readonly onClose: () => void;
+}): JSX.Element {
+  const { filters, applyPeriod } = useOperationsFilters();
+
+  return (
+    <PeriodPickerDialogBody
+      period={filters.period}
+      applyPeriod={applyPeriod}
+      onClose={onClose}
+    />
+  );
+}
+
+/** Пикер периода глобальной ленты «Операции» (#541, дефолт «весь период»
+ * #670): открывается пустым, пока период не применён; любой подтверждённый
+ * диапазон пишется в URL с заменой записи истории, «Сбросить» возвращает к
+ * «всему периоду» (from/to уходят из адреса). Прочие фильтры (объекты,
+ * категории) не трогаются. */
 export function OperationsGlobalPeriodPickerDialog({
   onClose,
 }: {
   readonly onClose: () => void;
 }): JSX.Element {
   const { filters, applyPeriod } = useGlobalOperationsFilters();
-  const today = clientTodayIso();
-  const applied = filters.period ?? defaultOperationsPeriod(today);
 
   return (
-    <CalendarRangePicker
-      today={today}
-      value={applied}
-      monthJump={false}
+    <PeriodPickerDialogBody
+      period={filters.period}
+      applyPeriod={applyPeriod}
       onClose={onClose}
-      onConfirm={(range) => {
-        const stillDefault =
-          filters.period === null && range.from === applied.from && range.to === applied.to;
-        if (!stillDefault) {
-          applyPeriod(range, { replace: true });
-        }
-        onClose();
-      }}
     />
   );
 }

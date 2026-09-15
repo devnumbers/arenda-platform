@@ -9,7 +9,7 @@ import type { OperationsPeriod } from '@/features/payments';
  * скоуп поиска — только оплаченные операции без ограничения периода
  * (решение карты #472). Глобальный поиск (#543) ищет тем же контрактом
  * `search`, но по всем видимым объектам и с фильтрами ленты из адреса
- * (#541): объекты (#542) и период.
+ * (#541): объекты (#542) и период (дефолт — весь период #673).
  */
 
 /** Чип секции «Категории» (Figma 1494-61657): подпись-снапшот и флаг
@@ -55,12 +55,13 @@ export function searchSummaryScope(query: string): PaymentOperationScope {
 }
 
 /** Скоуп списка глобального поиска (#543): фильтры ленты из адреса —
- * объекты (#542) и период, дефолт периода решает экран — плюс поисковый
- * запрос серверу и выбранный чип-категория (сужение тем же контрактом
- * `category`, что у объектного поиска). Пустой выбор объектов проходит
- * как есть — хук сам опускает пустой параметр (#541). */
+ * объекты (#542) и период (null — весь период #673: дат в скоупе нет,
+ * поиск в дефолте ищет за всё время — прецедент объектного поиска) —
+ * плюс поисковый запрос серверу и выбранный чип-категория (сужение тем же
+ * контрактом `category`, что у объектного поиска). Пустой выбор объектов
+ * проходит как есть — хук сам опускает пустой параметр (#541). */
 export function globalSearchListScope(
-  period: OperationsPeriod,
+  period: OperationsPeriod | null,
   propertyIds: ReadonlyArray<string>,
   query: string,
   selectedSlug: string | null,
@@ -68,8 +69,7 @@ export function globalSearchListScope(
   return {
     order: 'desc',
     propertyIds,
-    dateFrom: period.from,
-    dateTo: period.to,
+    ...(period !== null ? { dateFrom: period.from, dateTo: period.to } : {}),
     search: query,
     ...(selectedSlug !== null ? { categories: [selectedSlug] } : {}),
   };
@@ -79,15 +79,14 @@ export function globalSearchListScope(
  * чипу — чипы всегда показывают все совпавшие категории запроса (сводка
  * категорийный фильтр не принимает — контракт #540). */
 export function globalSearchSummaryScope(
-  period: OperationsPeriod,
+  period: OperationsPeriod | null,
   propertyIds: ReadonlyArray<string>,
   query: string,
 ): GlobalOperationScope {
   return {
     order: 'desc',
     propertyIds,
-    dateFrom: period.from,
-    dateTo: period.to,
+    ...(period !== null ? { dateFrom: period.from, dateTo: period.to } : {}),
     search: query,
   };
 }

@@ -196,6 +196,8 @@ export function DesignLayerShowcase(): JSX.Element {
     const [datePickerMaxValue, setDatePickerMaxValue] = useState<string | null>(null);
     const [rangePickerOpen, setRangePickerOpen] = useState(false);
     const [rangePickerValue, setRangePickerValue] = useState<IsoRange | null>(null);
+    const [rangePickerEmptyOpen, setRangePickerEmptyOpen] = useState(false);
+    const [rangePickerEmptyValue, setRangePickerEmptyValue] = useState<IsoRange | null>(null);
     const [monthDays, setMonthDays] = useState<ReadonlySet<number>>(new Set([10]));
     const [lastDayOfMonth, setLastDayOfMonth] = useState(false);
     const [amount, setAmount] = useState('');
@@ -706,6 +708,42 @@ export function DesignLayerShowcase(): JSX.Element {
                             onConfirm={(range) => {
                                 setRangePickerValue(range);
                                 setRangePickerOpen(false);
+                            }}
+                        />
+                    )}
+                </div>
+
+                <div className={styles.group}>
+                    <h3 className={styles.groupTitle}>CalendarRangePicker · пустой старт и сброс</h3>
+                    <p className={styles.groupTitle}>
+                        Без применённого периода (#670, решение владельца 2026-09-14): value не
+                        задан — ничего не предвыбрано, поля «с …/по …» — плейсхолдеры, «Выбрать»
+                        активна только при выборе; опциональный onReset рисует «Сбросить» рядом
+                        с «Выбрать» — потребитель решает, что сброс означает.
+                    </p>
+                    <div className={styles.column}>
+                        <Button onClick={() => setRangePickerEmptyOpen(true)}>
+                            Открыть пикер (пустой старт)
+                        </Button>
+                        {rangePickerEmptyValue !== null && (
+                            <p className="px-6 text-base text-content-secondary">
+                                Выбрано: с {rangePickerEmptyValue.from} по {rangePickerEmptyValue.to}
+                            </p>
+                        )}
+                    </div>
+                    {rangePickerEmptyOpen && (
+                        <CalendarRangePicker
+                            today={dateToIso(new Date())}
+                            monthJump={false}
+                            value={rangePickerEmptyValue}
+                            onClose={() => setRangePickerEmptyOpen(false)}
+                            onConfirm={(range) => {
+                                setRangePickerEmptyValue(range);
+                                setRangePickerEmptyOpen(false);
+                            }}
+                            onReset={() => {
+                                setRangePickerEmptyValue(null);
+                                setRangePickerEmptyOpen(false);
                             }}
                         />
                     )}

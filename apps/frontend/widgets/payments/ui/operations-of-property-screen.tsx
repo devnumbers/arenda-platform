@@ -7,13 +7,11 @@ import { ROUTES } from "@/shared/config/routes";
 import { clientTodayIso } from "@/entities/payment";
 import type { PaymentOperationScope } from "@/shared/api/query-keys";
 import {
-  defaultOperationsPeriod,
   groupOperationsByDate,
   operationsCategoryChipLabel,
-  operationsCategoryRows,
   operationsFiltersHref,
-  operationsPeriodDefaultChipLabel,
-  operationsPeriodRangeChipLabel,
+  operationsFiltersParams,
+  operationsPeriodChipLabel,
   useOperationsFilters,
   usePropertyOperationsScopedPaged,
   usePropertyOperationsSummary,
@@ -34,33 +32,35 @@ import {
 } from "./operations-list";
 import { OperationsFilterChips } from "./operations-filter-chips";
 import { OperationsPeriodPickerDialog } from "./operations-period-picker";
-import { hasNoPaidOperationsEver } from "../lib/operations-empty-states";
+import { operationsFeedGate } from "../lib/operations-feed-gate";
 import { summaryBarSegments } from "@/features/payment-categories";
 import { OperationsSummaryCard } from "./operations-summary-card";
 
 /**
  * Экран «Операции объекта» (#474, Figma 1492-41825): оплаченные операции
- * за период, сгруппированные по датам; сверху — чипы «Период» (выбран,
- * синий; дефолт — текущий месяц) и «Категория» («Все категории», синий с
- * активным фильтром); под ними карточки «Расходы»/«Доходы» с суммой за
- * период; у обоих — полоса-разбивка пилюлями категорий (все категории с
- * операциями, зазор 2px, пропорционально суммам — Figma 1510-77101,
- * решение владельца 2026-09-01 отменяет схему #474 «топ-4 + остаток
- * белым, доходы белым»). Карточки ведут на экраны «Расходы
- * объекта»/«Доходы объекта» (#475). Список сужается категориями (#477),
- * сводка категорийный фильтр не принимает — карточки всегда за весь
- * период, а строки шита категорий показывают суммы периода. Фильтры живут
- * в адресе (?from=&to=&category= — шарабельно, назад возвращает к
- * списку), пересчёт сводки при смене периода — ключ react-query. Порции
- * по 50 с бесконечным скроллом; строка ведёт на страницу операции. Поиск —
- * иконка в хедере (экран поиска — тикет #476). «+» в хедере ведёт в визард
- * одиночной операции без шага объекта (#570/#571, макет 1492-41825;
- * решение владельца 2026-09-08 отменяет решение #539 о скрытой «+») —
- * только у того, кто может создавать операции (CanEdit, не архив —
- * контракт #569; зритель кнопки не видит). Совсем пустой объект
- * (all-time сводка без операций, #478) вместо всего контента показывает
- * «Операций еще не было» (Figma 1518-92899) — без чипов, сводки, поиска
- * и «+», но с CTA «Добавить операцию» (#571).
+ * за период, сгруппированные по датам; сверху — чипы «Период» и
+ * «Категория» («Все категории», синий с активным фильтром); под ними
+ * карточки «Расходы»/«Доходы» с суммой за период; у обоих — полоса-разбивка
+ * пилюлями категорий (все категории с операциями, зазор 2px,
+ * пропорционально суммам — Figma 1510-77101, решение владельца 2026-09-01
+ * отменяет схему #474 «топ-4 + остаток белым, доходы белым»). Карточки
+ * ведут на экраны «Расходы объекта»/«Доходы объекта» (#475). Дефолт
+ * периода — весь период (#674, карта #669, как в глобальной ленте #670):
+ * без явного диапазона даты в запрос не уходят, чип «Период» нейтральный
+ * (серый); выбор/сброс — пикер (пустой старт, «Сбросить»). Список сужается
+ * категориями (#477), сводка категорийный фильтр не принимает — карточки
+ * всегда за выбранный период. Фильтры живут в адресе (?from=&to=&category=
+ * — шарабельно, назад возвращает к списку), пересчёт сводки при смене
+ * периода — ключ react-query. Порции по 50 с бесконечным скроллом; строка
+ * ведёт на страницу операции. Поиск — иконка в хедере (экран поиска —
+ * тикет #476). «+» в хедере ведёт в визард одиночной операции без шага
+ * объекта (#570/#571, макет 1492-41825; решение владельца 2026-09-08
+ * отменяет решение #539 о скрытой «+») — только у того, кто может
+ * создавать операции (CanEdit, не архив — контракт #569; зритель кнопки
+ * не видит). Совсем пустой объект (all-time сводка без операций, #478)
+ * вместо всего контента показывает «Операций еще не было» (Figma
+ * 1518-92899) — без чипов, сводки, поиска и «+», но с CTA «Добавить
+ * операцию» (#571).
  */
 export function OperationsOfPropertyScreen({
   propertyId,
@@ -79,18 +79,18 @@ export function OperationsOfPropertyScreen({
   );
 
   const today = clientTodayIso();
-  const period = filters.period ?? defaultOperationsPeriod(today);
-  // Пикер периода — канонический оверлей поверх списка (решение владельца
-  // 2026-09-04, раньше — отдельный маршрут /operations/period): состояние
-  // живёт в адресе, черновик — в пикере.
+  // Дефолт — весь период (#674): период в запросе только с явным выбором,
+  // без него даты не уходят; пикер открывается пустым, «Сбросить»
+  // возвращает к дефолту.
   const [periodOpen, setPeriodOpen] = useState(false);
   // Список сужается выбранными категориями; сводка (#473) категорийный
-  // фильтр не принимает — карточки всегда показывают весь период.
+  // фильтр не принимает — карточки всегда за выбранный период.
+  // Без применённого периода (#674) даты не уходят в запрос — весь период.
   const periodScope: PaymentOperationScope = {
     status: "paid",
     order: "desc",
-    dateFrom: period.from,
-    dateTo: period.to,
+    dateFrom: filters.period?.from,
+    dateTo: filters.period?.to,
   };
   const listScope: PaymentOperationScope =
     filters.categories.length > 0
@@ -107,34 +107,21 @@ export function OperationsOfPropertyScreen({
   });
 
   const groups = groupOperationsByDate(listQuery.data ?? [], today);
-  // Скелетон — только пока данных нет вовсе (первая загрузка): смена
-  // фильтров держит прежние данные (keepPreviousData) и не дёргает
-  // страницу; ошибка без данных показывает карточку повтора, не скелетон.
-  const pending =
-    (listQuery.data === undefined ||
-      summaryQuery.data === undefined ||
-      everQuery.data === undefined) &&
-    !listQuery.isError &&
-    !summaryQuery.isError &&
-    !everQuery.isError;
-  const neverHad =
-    !listQuery.isError && hasNoPaidOperationsEver(everQuery.data);
-  const categoryRows = operationsCategoryRows(
-    summaryQuery.data?.categories ?? [],
+  // Скелетон / neverHad / разбивка категорий — общий каркас ленты (#478);
+  // смена фильтров держит прежние данные (keepPreviousData), не скелетон.
+  const { pending, neverHad, categoryRows } = operationsFeedGate(
+    listQuery,
+    summaryQuery,
+    everQuery,
   );
 
   const openOperation = (operation: { readonly id: string }): void =>
     router.push(ROUTES.propertyOperation(propertyId, operation.id));
 
   const openCategories = (): void => {
-    const params = new URLSearchParams();
-    if (filters.period !== null) {
-      params.set("from", filters.period.from);
-      params.set("to", filters.period.to);
-    }
-    if (filters.categories.length > 0) {
-      params.set("category", filters.categories.join(","));
-    }
+    // Формат query — один хелпер с operationsFiltersHref (#472): знание
+    // «как period/categories кодируются в адрес» живёт в одном модуле.
+    const params = new URLSearchParams(operationsFiltersParams(filters));
     params.set("return", pathname);
     router.push(
       `${ROUTES.propertyOperationsCategories(propertyId)}?${params.toString()}`,
@@ -199,16 +186,14 @@ export function OperationsOfPropertyScreen({
           />
         ) : (
           <div className="flex flex-col gap-6 pt-4">
-            {/* Чипы фильтров (Figma 1492:59532): период выбран — синий; категории
-             * подсвечиваются при активном фильтре. Выбор — отдельные страницы
-             * (#477), состояние живёт в адресе. */}
+            {/* Чипы фильтров (Figma 1492:59532): период применён — синий,
+             * дефолт «весь период» — нейтральный серый (#674); категории
+             * подсвечиваются при активном фильтре. Выбор — отдельные
+             * страницы (#477), состояние живёт в адресе. */}
             <OperationsFilterChips
               className="px-6"
-              periodLabel={
-                filters.period !== null
-                  ? operationsPeriodRangeChipLabel(period)
-                  : operationsPeriodDefaultChipLabel(period)
-              }
+              periodLabel={operationsPeriodChipLabel(filters.period)}
+              periodActive={filters.period !== null}
               categoriesLabel={operationsCategoryChipLabel(
                 filters.categories,
                 categoryRows,

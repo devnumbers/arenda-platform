@@ -12,7 +12,6 @@ import {
   type GlobalOperationScope,
 } from '@/shared/api/query-keys';
 import {
-  defaultOperationsPeriod,
   fetchGlobalOperationsPage,
   fetchGlobalOperationsSummary,
   fetchGlobalPaymentObjects,
@@ -22,7 +21,6 @@ import { keysetNextPageParam } from '@/shared/lib/keyset';
 import { fetchGlobalTasks } from '@/features/tasks';
 import { contactBookQuery } from '@/features/contacts';
 import { fetchProperties } from '@/features/properties';
-import { clientTodayIso } from '@/entities/payment';
 
 /**
  * Прогрев верхнеуровневых данных хабов на маунте оболочки (#626, карта
@@ -45,17 +43,6 @@ import { clientTodayIso } from '@/entities/payment';
 interface HubPrefetchEntry {
   readonly prefix: string;
   readonly prefetch: (client: QueryClient) => void;
-}
-
-/** Скоуп операций хаба по умолчанию: текущий месяц, все объекты, без
- * категорий (тот же расчёт периода, что на экране). */
-function defaultOperationsScope(today: string): GlobalOperationScope {
-  const period = defaultOperationsPeriod(today);
-  return {
-    order: 'desc',
-    dateFrom: period.from,
-    dateTo: period.to,
-  };
 }
 
 /** Реестр хабов: навигационный префикс → прогрев верхнеуровневых данных. */
@@ -81,8 +68,12 @@ const HUB_ENTRIES: ReadonlyArray<HubPrefetchEntry> = [
   },
   {
     prefix: ROUTES.operations,
+    // Дефолтный срез ленты — весь период (#670), все объекты, без
+    // категорий: те же ключи, что читает экран без применённого периода.
+    // Сводка без периода — она же all-time, гейт «Операций еще не было»
+    // на экране в дефолтном состоянии.
     prefetch: (client) => {
-      const scope = defaultOperationsScope(clientTodayIso());
+      const scope: GlobalOperationScope = { order: 'desc' };
       void client.prefetchInfiniteQuery({
         queryKey: globalOperationKeys.listPaged(scope),
         queryFn: ({ pageParam }) => fetchGlobalOperationsPage(scope, pageParam),
@@ -92,11 +83,6 @@ const HUB_ENTRIES: ReadonlyArray<HubPrefetchEntry> = [
       void client.prefetchQuery({
         queryKey: globalOperationKeys.summary(scope),
         queryFn: () => fetchGlobalOperationsSummary(scope),
-      });
-      // All-time сводка — гейт «Операций еще не было» на экране.
-      void client.prefetchQuery({
-        queryKey: globalOperationKeys.summary({ order: 'desc' }),
-        queryFn: () => fetchGlobalOperationsSummary({ order: 'desc' }),
       });
     },
   },

@@ -3,15 +3,13 @@ import { describe, expect, it } from 'vitest';
 import type { OperationsCategorySummary } from '@/entities/payment';
 
 import {
-  defaultOperationsPeriod,
   operationsCategoryChipLabel,
   operationsCategoryRows,
   operationsFiltersHref,
   operationsFiltersParams,
-  operationsPeriodDefaultChipLabel,
+  operationsPeriodChipLabel,
   operationsPeriodRangeChipLabel,
   readOperationsFilters,
-  shiftOperationsPeriod,
 } from './operations-filters';
 
 const TODAY = '2026-09-02';
@@ -20,14 +18,8 @@ const paramsOf = (record: Record<string, string>) => ({
   get: (name: string) => record[name] ?? null,
 });
 
-describe('defaultOperationsPeriod', () => {
-  it('текущий календарный месяц «сегодня»', () => {
-    expect(defaultOperationsPeriod(TODAY)).toEqual({ from: '2026-09-01', to: '2026-09-30' });
-  });
-});
-
 describe('readOperationsFilters', () => {
-  it('пустой URL — дефолт: текущий месяц без категорий', () => {
+  it('пустой URL — дефолт: период null (весь период #676), без категорий', () => {
     expect(readOperationsFilters(paramsOf({}), TODAY)).toEqual({
       period: null,
       categories: [],
@@ -103,58 +95,6 @@ describe('operationsFiltersParams', () => {
   });
 });
 
-describe('shiftOperationsPeriod', () => {
-  it('целый месяц сдвигается в соседний целый месяц', () => {
-    expect(shiftOperationsPeriod({ from: '2026-09-01', to: '2026-09-30' }, -1)).toEqual({
-      from: '2026-08-01',
-      to: '2026-08-31',
-    });
-    expect(shiftOperationsPeriod({ from: '2026-11-01', to: '2026-11-30' }, 1)).toEqual({
-      from: '2026-12-01',
-      to: '2026-12-31',
-    });
-    expect(shiftOperationsPeriod({ from: '2026-01-01', to: '2026-01-31' }, -1)).toEqual({
-      from: '2025-12-01',
-      to: '2025-12-31',
-    });
-  });
-
-  it('произвольный диапазон сдвигается на свою же длину: 3–14 августа назад — 22 июля — 2 августа (решение владельца #472)', () => {
-    expect(shiftOperationsPeriod({ from: '2026-08-03', to: '2026-08-14' }, -1)).toEqual({
-      from: '2026-07-22',
-      to: '2026-08-02',
-    });
-    expect(shiftOperationsPeriod({ from: '2026-08-03', to: '2026-08-14' }, 1)).toEqual({
-      from: '2026-08-15',
-      to: '2026-08-26',
-    });
-  });
-
-  it('окна стыкуются: назад и вперёд возвращает исходный период, без нахлёста и дыр', () => {
-    const period = { from: '2026-08-03', to: '2026-08-14' };
-    expect(shiftOperationsPeriod(shiftOperationsPeriod(period, -1), 1)).toEqual(period);
-    expect(shiftOperationsPeriod(shiftOperationsPeriod(period, 1), -1)).toEqual(period);
-  });
-
-  it('один день листается по одному дню', () => {
-    expect(shiftOperationsPeriod({ from: '2026-11-05', to: '2026-11-05' }, -1)).toEqual({
-      from: '2026-11-04',
-      to: '2026-11-04',
-    });
-    expect(shiftOperationsPeriod({ from: '2026-11-05', to: '2026-11-05' }, 1)).toEqual({
-      from: '2026-11-06',
-      to: '2026-11-06',
-    });
-  });
-
-  it('диапазон через границу года сдвигается своей длиной', () => {
-    expect(shiftOperationsPeriod({ from: '2025-12-25', to: '2026-01-05' }, -1)).toEqual({
-      from: '2025-12-13',
-      to: '2025-12-24',
-    });
-  });
-});
-
 describe('operationsFiltersHref', () => {
   it('явные фильтры — from/to/category в query поверх базы', () => {
     expect(
@@ -178,13 +118,7 @@ describe('operationsFiltersHref', () => {
   });
 });
 
-describe('лейблы чипа периода', () => {
-  it('дефолт (не явный выбор) — «Месяц год»', () => {
-    expect(operationsPeriodDefaultChipLabel({ from: '2026-09-01', to: '2026-09-30' })).toBe(
-      'Сентябрь 2026',
-    );
-  });
-
+describe('operationsPeriodRangeChipLabel', () => {
   it('явный выбор всегда в формате диапазона — «1 — 30 ноя» (Figma 1506-72116)', () => {
     expect(operationsPeriodRangeChipLabel({ from: '2026-11-01', to: '2026-11-30' })).toBe(
       '1 — 30 ноя',
@@ -205,6 +139,17 @@ describe('лейблы чипа периода', () => {
     expect(operationsPeriodRangeChipLabel({ from: '2025-01-01', to: '2026-01-01' })).toBe(
       '01.01.2025 — 01.01.2026',
     );
+  });
+});
+
+describe('operationsPeriodChipLabel', () => {
+  it('без периода (#670) — нейтральный «Период» (весь период)', () => {
+    expect(operationsPeriodChipLabel(null)).toBe('Период');
+  });
+
+  it('с применённым периодом — лейбл диапазона', () => {
+    expect(operationsPeriodChipLabel({ from: '2026-11-01', to: '2026-11-30' })).toBe('1 — 30 ноя');
+    expect(operationsPeriodChipLabel({ from: '2026-11-05', to: '2026-11-05' })).toBe('5 ноя');
   });
 });
 

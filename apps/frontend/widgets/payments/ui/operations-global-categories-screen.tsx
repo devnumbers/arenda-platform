@@ -6,10 +6,8 @@ import { Cancel } from '@/shared/assets/icons';
 import { buildReturnUrl, goBack } from '@/shared/lib/navigation';
 import { clientTodayIso } from '@/entities/payment';
 import {
-  defaultOperationsPeriod,
   globalOperationsFiltersParams,
   operationsCategoryRows,
-  operationsPeriodRangeChipLabel,
   readGlobalOperationsFilters,
   resolveGlobalFilterReturnPath,
   useGlobalOperationsSummary,
@@ -28,6 +26,7 @@ import {
   TopNavTitle,
 } from '@/shared/ui/design';
 import { PaymentsStateCard } from './payments-sections';
+import { OperationsPeriodChipDisplay } from './operations-filter-chips';
 import { OperationsCategoriesSkeleton } from './operations-skeletons';
 import { globalCategoriesSummaryScope } from '../lib/operations-global-categories-model';
 
@@ -36,13 +35,15 @@ import { globalCategoriesSummaryScope } from '../lib/operations-global-categorie
  * страницы (#477, Figma 1506-72116) по всем видимым объектам: чипы контекста
  * (период диапазоном + «Все категории»), строки «иконка + название + сумма
  * периода + чекбокс» из разбивки глобальной сводки (#540) — только категории
- * с операциями в скоупе. Строгий черновик: тапы меняют подсветку, применяются
+ * с операциями в скоупе. Дефолт периода — весь период (#672, как на лентах
+ * #670/#671): без явного диапазона суммы за всё время, чип нейтральный.
+ * Строгий черновик: тапы меняют подсветку, применяются
  * «Выбрать» (возврат на список, router.replace), «назад» отбрасывает; период
  * и объекты (#542) переживают применение — categories мержится в return через
  * buildReturnUrl + globalOperationsFiltersParams (единый wire-формат с лентой).
  * Кнопка видна при непустом черновике или применённом фильтре (иначе возврат
- * к «Все категории» был бы недостижим); пустой период — EmptyState (Figma
- * 1518-92530, #478), «Выбрать» в этом состоянии не нужен. Шапка — канон
+ * к «Все категории» был бы недостижим); пустая разбивка — EmptyState
+ * (Figma 1518-92530, #478). Шапка — канон
  * выборщика (как у объектной страницы: ✕ «Закрыть» + заголовок в TopNav,
  * #564).
  */
@@ -52,7 +53,9 @@ export function OperationsGlobalCategoriesScreen(): JSX.Element {
 
   const today = clientTodayIso();
   const filters = readGlobalOperationsFilters(searchParams, today);
-  const period = filters.period ?? defaultOperationsPeriod(today);
+  // Дефолт периода страницы — весь период (#672): даты в запросе только
+  // с явным выбором.
+  const period = filters.period;
   // Черновик живёт от монтирования до монтирования: страница монтируется
   // заново на каждый вход, useState инициализируется применённым выбором.
   const [draft, setDraft] = useState<ReadonlyArray<string>>(filters.categories);
@@ -95,12 +98,9 @@ export function OperationsGlobalCategoriesScreen(): JSX.Element {
       <PageContent>
         <div className="flex flex-col gap-6 pt-4">
           <div className="flex flex-wrap gap-1.5 px-6">
-            <span
-              aria-hidden
-              className="inline-flex h-11 items-center rounded-pill bg-primary px-5 text-sm font-medium text-white"
-            >
-              {operationsPeriodRangeChipLabel(period)}
-            </span>
+            {/* Чип периода — дисплейный (период наследуется от ленты
+             * через return-параметры), серый «Период» без явного диапазона. */}
+            <OperationsPeriodChipDisplay period={period} />
             <span
               aria-hidden
               className="inline-flex h-11 items-center rounded-pill bg-surface-muted px-5 text-sm font-medium text-content"
@@ -128,7 +128,7 @@ export function OperationsGlobalCategoriesScreen(): JSX.Element {
               }
             />
           ) : rows.length === 0 ? (
-            // Пустой период (Figma 1518-92530, #478) — канон EmptyState.
+            // Пустая разбивка (Figma 1518-92530, #478) — канон EmptyState.
             <EmptyState
               imageSrc="/images/payments/operations-categories.png"
               className="py-16"

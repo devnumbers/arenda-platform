@@ -7,13 +7,10 @@ import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { clientTodayIso, type PaymentType } from '@/entities/payment';
 import {
-  defaultOperationsPeriod,
   globalOperationsFiltersParams,
   groupOperationsByDate,
   operationsCategoryChipLabel,
-  operationsCategoryRows,
-  operationsPeriodDefaultChipLabel,
-  operationsPeriodRangeChipLabel,
+  operationsPeriodChipLabel,
   operationsPropertyChipLabel,
   useGlobalOperationsFilters,
   useGlobalOperationsPaged,
@@ -33,7 +30,7 @@ import { OperationsDateList, OperationsNeverHad } from './operations-list';
 import { OperationsFilterChips } from './operations-filter-chips';
 import { OperationsGlobalPeriodPickerDialog } from './operations-period-picker';
 import { OperationsSummaryCard } from './operations-summary-card';
-import { hasNoPaidOperationsEver } from '../lib/operations-empty-states';
+import { operationsFeedGate } from '../lib/operations-feed-gate';
 import { summaryBarSegments } from '@/features/payment-categories';
 import {
   globalDirectionListScope,
@@ -46,7 +43,9 @@ export type OperationsGlobalDirectionScreenProps = {
 
 /**
  * Страница направления глобальной ленты (#548, Figma 1858-104152): все
- * доходы или все расходы выбранного скоупа за период. Вход — карточки
+ * доходы или все расходы выбранного скоупа; дефолт периода — весь период
+ * (#671, как на главной #670): без явного диапазона даты в запрос не
+ * уходят, чип «Период» нейтральный. Вход — карточки
  * сводки на главной (отменяет решение #539 о некликабельных карточках).
  * Фильтры — те же глобальные, живут в адресе: чипы периода/объекта/
  * категории открывают общие пикеры и выборщики (#542/#544) с ?return=
@@ -73,16 +72,17 @@ export function OperationsGlobalDirectionScreen({
   const selfRoute = type === 'income' ? ROUTES.operationsIncomes : ROUTES.operationsExpenses;
 
   const today = clientTodayIso();
-  const period = filters.period ?? defaultOperationsPeriod(today);
-  // Пикер периода — канонический оверлей поверх списка.
+  // Дефолт направления — весь период (#671): период в запросе только с
+  // явным выбором, без него даты не уходят; пикер открывается пустым,
+  // «Сбросить» возвращает к дефолту.
   const [periodOpen, setPeriodOpen] = useState(false);
 
   const listQuery = useGlobalOperationsPaged({
-    ...globalDirectionListScope(period, filters.propertyIds, filters.categories, type),
+    ...globalDirectionListScope(filters.period, filters.propertyIds, filters.categories, type),
     includeArchived: filters.archived,
   });
   const summaryQuery = useGlobalOperationsSummary({
-    ...globalDirectionSummaryScope(period, filters.propertyIds, type),
+    ...globalDirectionSummaryScope(filters.period, filters.propertyIds, type),
     includeArchived: filters.archived,
   });
   // All-time сводка направления (без периода/категорий): отличает «операций
@@ -95,17 +95,12 @@ export function OperationsGlobalDirectionScreen({
   });
 
   const groups = groupOperationsByDate(listQuery.data ?? [], today);
-  // Скелетон — только пока данных нет вовсе (первая загрузка); ошибка без
-  // данных показывает карточку повтора, не скелетон.
-  const pending =
-    (listQuery.data === undefined ||
-      summaryQuery.data === undefined ||
-      everQuery.data === undefined) &&
-    !listQuery.isError &&
-    !summaryQuery.isError &&
-    !everQuery.isError;
-  const neverHad = !listQuery.isError && hasNoPaidOperationsEver(everQuery.data);
-  const categoryRows = operationsCategoryRows(summaryQuery.data?.categories ?? []);
+  // Скелетон / neverHad / разбивка категорий — общий каркас ленты (#478).
+  const { pending, neverHad, categoryRows } = operationsFeedGate(
+    listQuery,
+    summaryQuery,
+    everQuery,
+  );
 
   const openOperation = (operation: {
     readonly propertyId: string;
@@ -174,11 +169,8 @@ export function OperationsGlobalDirectionScreen({
           <div className="flex flex-col gap-6 pt-4">
             <OperationsFilterChips
               className="px-6"
-              periodLabel={
-                filters.period !== null
-                  ? operationsPeriodRangeChipLabel(period)
-                  : operationsPeriodDefaultChipLabel(period)
-              }
+              periodLabel={operationsPeriodChipLabel(filters.period)}
+              periodActive={filters.period !== null}
               propertyLabel={operationsPropertyChipLabel(filters.propertyIds)}
               propertyActive={filters.propertyIds.length > 0}
               categoriesLabel={operationsCategoryChipLabel(filters.categories, categoryRows)}

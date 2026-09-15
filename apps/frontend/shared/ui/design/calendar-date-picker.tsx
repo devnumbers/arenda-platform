@@ -400,8 +400,10 @@ export type CalendarRangePickerProps = {
   readonly confirmLabel?: string;
   /** «Сегодня» собственника (ADR 0048) — граница доступных дней. */
   readonly today: IsoDate;
-  /** Применённый диапазон — преселект и стартовое окно ленты. */
-  readonly value: IsoRange;
+  /** Применённый диапазон — преселект и стартовое окно ленты; null или
+   * не задан — пустой старт: ничего не выбрано, диапазон строится тапами
+   * (дефолт «весь период» фильтра операций, #670). */
+  readonly value?: IsoRange | null;
   /** Чип «Месяц Год ⌄» прыжка по ленте (по умолчанию показан). На фильтре
    * периода операций скрыт (решение владельца 2026-09-05): путь вглубь
    * прошлого — прокрутка с дорисовкой. */
@@ -409,6 +411,9 @@ export type CalendarRangePickerProps = {
   readonly onClose: () => void;
   /** «Выбрать»: коммитит завершённый диапазон (неполный — один день). */
   readonly onConfirm: (range: IsoRange) => void;
+  /** «Сбросить» рядом с «Выбрать» (#670): возврат к состоянию «без
+   * периода». Без пропа кнопки нет — прежним потребителям пикер не меняется. */
+  readonly onReset?: () => void;
 };
 
 /** Полноэкранный пикер диапазона дат — канон периода операций (решение
@@ -429,25 +434,31 @@ export type CalendarRangePickerProps = {
  * включён): колесо годов уходит в прошлое без предела (onNearStart),
  * будущее закрыто границей max; на фильтре периода операций чип скрыт
  * (решение владельца 2026-09-05) — вглубь прошлого ведёт прокрутка с
- * дорисовкой. Футер на планшете тянется вместе с шитом (fullWidthContent).
- * Рендерится только в открытом состоянии — лента и черновик живут, пока
- * пикер смонтирован. */
+ * дорисовкой. Пустой старт (value не задан, #670 — дефолт «весь период»
+ * фильтра операций): ничего не предвыбрано, поля границ — плейсхолдеры,
+ * диапазон строится тапами, «Выбрать» активна только при выборе; лента
+ * открывается пятью месяцами контекста у текущего. Опциональный onReset
+ * добавляет «Сбросить» рядом с «Выбрать» (secondary слева) — потребитель
+ * решает, что сброс означает. Футер на планшете тянется вместе с шитом
+ * (fullWidthContent). Рендерится только в открытом состоянии — лента и
+ * черновик живут, пока пикер смонтирован. */
 export function CalendarRangePicker({
   title = 'Выберите период',
   confirmLabel = 'Выбрать',
   today,
-  value,
+  value = null,
   monthJump = true,
   onClose,
   onConfirm,
+  onReset,
 }: CalendarRangePickerProps): JSX.Element {
-  // Черновик открывается по применённому диапазону — обе границы заданы.
-  const [draft, setDraft] = useState<IsoRangeDraft>(() => ({
-    start: value.from,
-    end: value.to,
-  }));
-  const shown = settleIsoRange(draft);
-  const draftMonth = calendarMonthOf(shown.from);
+  // Черновик открывается по применённому диапазону; без него (#670) —
+  // пустой: ничего не выбрано, первый тап задаёт границу.
+  const [draft, setDraft] = useState<IsoRangeDraft | null>(() =>
+    value !== null ? { start: value.from, end: value.to } : null,
+  );
+  const shown = draft !== null ? settleIsoRange(draft) : null;
+  const draftMonth = calendarMonthOf(shown !== null ? shown.from : today);
 
   // Окно ленты: стартовое — по rangeFeedWindow, назад дорисовывается
   // порциями без предела, вперёд — жёсткий край у приглушённого будущего.
@@ -558,12 +569,14 @@ export function CalendarRangePicker({
           прокруткой; на десктопе TopNav зафиксирован над экраном. */}
       <div className="shrink-0 tablet:mt-[72px]">
         <div className="mx-auto w-full max-w-[560px]">
+          {/* Поля границ «с …/по …» следуют за тапами вживую; без выбора
+              (#670) — плейсхолдеры, пока диапазон не начат. */}
           <div aria-live="polite" className="grid grid-cols-2 gap-2 px-6 pt-6">
             <span className="flex h-12 items-center rounded-2xl bg-surface-muted px-4 text-base font-medium leading-[18px] text-content">
-              с {formatRangeBound(shown.from, today)}
+              {shown !== null ? `с ${formatRangeBound(shown.from, today)}` : 'с …'}
             </span>
             <span className="flex h-12 items-center rounded-2xl bg-surface-muted px-4 text-base font-medium leading-[18px] text-content">
-              по {formatRangeBound(shown.to, today)}
+              {shown !== null ? `по ${formatRangeBound(shown.to, today)}` : 'по …'}
             </span>
           </div>
 
@@ -602,7 +615,11 @@ export function CalendarRangePicker({
                   } else {
                     monthRefs.current.delete(key);
                   }
-                  if (year === calendarMonthOf(shown.to).year && month0 === calendarMonthOf(shown.to).month0) {
+                  // Первый кадр — к месяцу конца диапазона; без выбора
+                  // (#670) — к текущему месяцу (лента стартует пятью
+                  // месяцами раньше).
+                  const anchorIso = shown !== null ? shown.to : today;
+                  if (year === calendarMonthOf(anchorIso).year && month0 === calendarMonthOf(anchorIso).month0) {
                     attachTarget(node);
                   }
                 }}
@@ -626,10 +643,29 @@ export function CalendarRangePicker({
         </div>
       </div>
 
+      {/* «Выбрать» активна только при выборе (#670): пустой черновик
+          подтверждать нечего. «Сбросить» — рядом, когда потребителю нужен
+          возврат к состоянию «без периода» (канон пары: secondary слева,
+          primary справа, как в WizardBottomBar потоков). */}
       <StickyBottomBar fullWidthContent>
-        <Button className="w-full" onClick={() => onConfirm(settleIsoRange(draft))}>
-          {confirmLabel}
-        </Button>
+        <div className="flex w-full gap-2">
+          {onReset !== undefined && (
+            <Button variant="secondary" className="w-full" onClick={onReset}>
+              Сбросить
+            </Button>
+          )}
+          <Button
+            className="w-full"
+            disabled={draft === null}
+            onClick={() => {
+              if (draft !== null) {
+                onConfirm(settleIsoRange(draft));
+              }
+            }}
+          >
+            {confirmLabel}
+          </Button>
+        </div>
       </StickyBottomBar>
 
       {/* Шит месяца и года — только вместе с чипом прыжка (monthJump):
@@ -655,7 +691,8 @@ export function CalendarRangePicker({
 /** Недельная сетка одного месяца диапазона: серые «пилюли»-подложки
  * недель диапазона и синие граничные ячейки (визуал — 1:1 со страницей
  * периода #477). Будущие дни «сегодня» недоступны. Первый тап задаёт
- * границу, второй завершает диапазон в любую сторону. */
+ * границу, второй завершает диапазон в любую сторону; без начатого
+ * выбора (#670) подложек и выделений нет. */
 function RangeMonthGrid({
   year,
   month0,
@@ -665,7 +702,7 @@ function RangeMonthGrid({
 }: {
   readonly year: number;
   readonly month0: number;
-  readonly draft: IsoRangeDraft;
+  readonly draft: IsoRangeDraft | null;
   readonly today: IsoDate;
   readonly onPick: (day: IsoDate) => void;
 }): JSX.Element {
@@ -686,7 +723,8 @@ function RangeMonthGrid({
     weeks.push([...week, ...Array.from({ length: 7 - week.length }, () => null)]);
   }
 
-  const complete = draft.end !== null ? { from: draft.start, to: draft.end } : null;
+  const complete =
+    draft !== null && draft.end !== null ? { from: draft.start, to: draft.end } : null;
 
   return (
     <div className="mt-4 flex flex-col gap-0.5 px-4">
@@ -713,7 +751,7 @@ function RangeWeekRow({
   onPick,
 }: {
   readonly days: ReadonlyArray<IsoDate | null>;
-  readonly draft: IsoRangeDraft;
+  readonly draft: IsoRangeDraft | null;
   readonly complete: IsoRange | null;
   readonly today: IsoDate;
   readonly onPick: (day: IsoDate) => void;
@@ -746,12 +784,12 @@ function RangeWeekRow({
             type="button"
             disabled={day > today}
             onClick={() => onPick(day)}
-            aria-pressed={day === draft.start || day === draft.end}
+            aria-pressed={draft !== null && (day === draft.start || day === draft.end)}
             className={cn(
               'aspect-square w-full cursor-pointer rounded-xl text-center font-sans text-base font-medium leading-[18px] text-content outline-none transition-colors',
               'focus-visible:ring-2 focus-visible:ring-primary',
               'disabled:pointer-events-none disabled:opacity-50',
-              day === draft.start || day === draft.end
+              draft !== null && (day === draft.start || day === draft.end)
                 ? 'bg-primary text-white hover:bg-primary-hover active:bg-primary-active'
                 : inRange[column] === true
                   ? 'bg-transparent hover:bg-black/5 active:bg-black/10'

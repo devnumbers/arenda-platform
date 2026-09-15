@@ -3,9 +3,10 @@ import type { Metadata } from 'next';
 import { OperationsOfTypeScreen } from '@/widgets/payments';
 
 /**
- * Экран «Доходы объекта» (#475, Figma 1494-61191): оплаченные доходы за
- * период с листанием и H1-суммой; фильтры (#477) живут в query-параметрах —
- * useSearchParams за Suspense-границей (требование App Router).
+ * Экран «Доходы объекта» (#475): оплаченные доходы за период — карточка-
+ * сводка и лента по канону глобальных направлений (#679); фильтры (#477)
+ * живут в query-параметрах — useSearchParams за Suspense-границей
+ * (требование App Router).
  */
 
 export const metadata: Metadata = {

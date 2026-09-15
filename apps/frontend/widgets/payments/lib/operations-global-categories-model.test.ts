@@ -29,4 +29,11 @@ describe('globalCategoriesSummaryScope', () => {
     const scope = globalCategoriesSummaryScope(period, ['p1']);
     expect('categories' in scope).toBe(false);
   });
+
+  it('период null (дефолт «весь период» #672) — дат в скоупе нет, суммы за всё время', () => {
+    expect(globalCategoriesSummaryScope(null, ['p1'])).toStrictEqual({
+      order: 'desc',
+      propertyIds: ['p1'],
+    });
+  });
 });

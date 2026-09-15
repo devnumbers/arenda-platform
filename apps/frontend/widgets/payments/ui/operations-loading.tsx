@@ -3,13 +3,8 @@
 import type { JSX } from 'react';
 import { Add, ArrowLeft, BoldObjects, Cancel, Check, Search } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { clientTodayIso } from '@/entities/payment';
-import {
-  defaultOperationsPeriod,
-  operationsPeriodDefaultChipLabel,
-  operationsPeriodRangeChipLabel,
-  operationsPropertyChipLabel,
-} from '@/features/payments';
+import { operationsPeriodChipLabel, operationsPropertyChipLabel } from '@/features/payments';
+import { OperationsPeriodChipDisplay } from './operations-filter-chips';
 import {
   Button,
   Checkbox,
@@ -46,14 +41,14 @@ import { WizardBottomBar } from './payment-create-wizard/wizard-chrome';
  * без сдвига.
  */
 
-/** Дефолтные чипы фильтров глобальной ленты (текущий месяц, без срезов). */
+/** Дефолтные чипы фильтров глобальной ленты (весь период — нейтральный
+ * «Период» #670, без срезов). */
 function OperationsFilterChipsLoading(): JSX.Element {
   return (
     <OperationsFilterChips
       className="px-6"
-      periodLabel={operationsPeriodDefaultChipLabel(
-        defaultOperationsPeriod(clientTodayIso()),
-      )}
+      periodLabel={operationsPeriodChipLabel(null)}
+      periodActive={false}
       propertyLabel={operationsPropertyChipLabel([])}
       propertyActive={false}
       categoriesLabel="Все категории"
@@ -143,14 +138,7 @@ export function OperationsCategoriesLoading(): JSX.Element {
       <PageContent>
         <div className="flex flex-col gap-6 pt-4">
           <div className="flex flex-wrap gap-1.5 px-6">
-            <span
-              aria-hidden
-              className="inline-flex h-11 items-center rounded-pill bg-primary px-5 text-sm font-medium text-white"
-            >
-              {operationsPeriodRangeChipLabel(
-                defaultOperationsPeriod(clientTodayIso()),
-              )}
-            </span>
+            <OperationsPeriodChipDisplay period={null} />
             <span
               aria-hidden
               className="inline-flex h-11 items-center rounded-pill bg-surface-muted px-5 text-sm font-medium text-content"

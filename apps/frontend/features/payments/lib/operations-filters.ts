@@ -1,14 +1,8 @@
 import type { IsoDate, OperationsCategorySummary } from '@/entities/payment';
-import { addDays, inclusiveDays } from '@/entities/payment';
 import { lastDayOfMonth } from '@/shared/lib/calendar';
 import { formatDottedDate } from '@/shared/lib/date-format';
 import { pluralize } from '@/shared/lib/pluralize';
 import { safeInternalPath } from '@/shared/lib/safe-internal-path';
-import {
-  operationsMonthOf,
-  operationsMonthRange,
-  shiftOperationsMonth,
-} from './operations-month';
 
 /**
  * Куда возвращаться со страниц выбора фильтров (#477): только маршруты
@@ -30,7 +24,9 @@ export function resolveFilterReturnPath(raw: string | null, propertyId: string):
  * включительные границы диапазона, категории — слаги из сводки (контракт
  * `category` списка операций #473). Состояние живёт в адресе
  * (?from=&to=&category=) — шарабельные ссылки, назад по истории возвращает
- * к списку; дефолт (без параметров) — текущий месяц, «Все категории».
+ * к списку; дефолт (без параметров) на всех экранах операций объекта —
+ * весь период (null, карта #669: главный #674, направления #675,
+ * категории #676), «Все категории».
  */
 
 export type OperationsPeriod = {
@@ -44,15 +40,10 @@ export type OperationsFilters = {
   readonly categories: ReadonlyArray<string>;
 };
 
-/** Дефолтный период — текущий календарный месяц «сегодня» (клиентское,
- * та же оговорка про TZ, что в operations-month). */
-export function defaultOperationsPeriod(today: IsoDate): OperationsPeriod {
-  const { from, to } = operationsMonthRange(operationsMonthOf(today));
-  return { from, to };
-}
-
-/** Минимальный источник параметров — ReadonlyURLSearchParams Next ему
- * удовлетворяет; структурный тип держит модуль чистым для vitest. */
+/**
+ * Минимальный источник параметров — ReadonlyURLSearchParams Next ему
+ * удовлетворяет; структурный тип держит модуль чистым для vitest.
+ */
 export type OperationsParamsSource = {
   readonly get: (name: string) => string | null;
 };
@@ -123,32 +114,6 @@ export function operationsFiltersParams(filters: OperationsFilters): Record<stri
 }
 
 /**
- * Листание периода стрелками экранов направлений (#475) — период сдвигается
- * на свою же длину (решение владельца, #472): 3–14 августа при листании
- * назад становится 22 июля — 2 августа, окна стыкуются без нахлёста и дыр;
- * один день листается по одному дню. Целый календарный месяц листается
- * соседним месяцем (1–30 сентября → 1–31 августа), чтобы дефолтные экраны
- * не «плыли» по дням.
- */
-export function shiftOperationsPeriod(period: OperationsPeriod, delta: number): OperationsPeriod {
-  const from = isoParts(period.from);
-  const to = isoParts(period.to);
-  const wholeMonth =
-    from.day === 1
-    && from.year === to.year
-    && from.month === to.month
-    && to.day === lastDayOfMonth(to.year, to.month - 1);
-  if (wholeMonth) {
-    const shifted = operationsMonthRange(
-      shiftOperationsMonth(operationsMonthOf(period.from), delta),
-    );
-    return { from: shifted.from, to: shifted.to };
-  }
-  const length = inclusiveDays(period.from, period.to);
-  return { from: addDays(period.from, length * delta), to: addDays(period.to, length * delta) };
-}
-
-/**
  * Ссылка на список операций с текущими фильтрами (#472): период и
  * категории переживают переход между списками (главный ↔ направления) —
  * решению владельца о несбрасываемых фильтрах. Дефолтные фильтры дают
@@ -178,11 +143,6 @@ const MONTH_SHORT: ReadonlyArray<string> = [
   'дек',
 ];
 
-/** Лейбл чипа дефолтного периода — «Сентябрь 2026». */
-export function operationsPeriodDefaultChipLabel(period: OperationsPeriod): string {
-  return operationsMonthRange(operationsMonthOf(period.from)).label;
-}
-
 /**
  * Лейбл чипа выбранного периода — всегда формат диапазона, даже полный
  * месяц: «1 — 30 ноя» (Figma 1506-72116), через месяцы — «10 окт —
@@ -204,6 +164,15 @@ export function operationsPeriodRangeChipLabel(period: OperationsPeriod): string
   }
   const toLabel = `${to.day} ${MONTH_SHORT[to.month - 1] ?? ''}`.trim();
   return `${fromLabel} — ${toLabel}`;
+}
+
+/**
+ * Лейбл чипа периода глобальной ленты (#670): без применённого периода —
+ * нейтральный «Период» (дефолт «весь период»), с применённым — формат
+ * диапазона, как operationsPeriodRangeChipLabel.
+ */
+export function operationsPeriodChipLabel(period: OperationsPeriod | null): string {
+  return period !== null ? operationsPeriodRangeChipLabel(period) : 'Период';
 }
 
 /**

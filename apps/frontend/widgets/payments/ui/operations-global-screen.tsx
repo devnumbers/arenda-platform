@@ -7,13 +7,10 @@ import { ROUTES } from "@/shared/config/routes";
 import { clientTodayIso } from "@/entities/payment";
 import { useKeyboardActivation } from "@/shared/lib/hooks/useKeyboardActivation";
 import {
-  defaultOperationsPeriod,
   globalOperationsFiltersParams,
   groupOperationsByDate,
   operationsCategoryChipLabel,
-  operationsCategoryRows,
-  operationsPeriodDefaultChipLabel,
-  operationsPeriodRangeChipLabel,
+  operationsPeriodChipLabel,
   operationsPropertyChipLabel,
   useGlobalOperationsFilters,
   useGlobalOperationsPaged,
@@ -29,7 +26,7 @@ import {
 import { OperationsFilterChips } from "./operations-filter-chips";
 import { OperationsGlobalPeriodPickerDialog } from "./operations-period-picker";
 import { OperationsSummaryCard } from "./operations-summary-card";
-import { hasNoPaidOperationsEver } from "../lib/operations-empty-states";
+import { operationsFeedGate } from "../lib/operations-feed-gate";
 import { summaryBarSegments } from "@/features/payment-categories";
 
 /**
@@ -37,7 +34,9 @@ import { summaryBarSegments } from "@/features/payment-categories";
  * 1726-90017/1733-26973): платёжные факты видимой книги (свои объекты плюс
  * объекты с активным членством, архив сервером исключён — контракт #540),
  * сгруппированные по датам; у строки — подзаголовок-объект. Сверху — чипы
- * «Период» (дефолт — текущий месяц), «Объект» («Все объекты»/«1 объект»/
+ * «Период» (дефолт — весь период #670: нейтральный серый чип, даты в
+ * запрос не уходят; с явным диапазоном — синий с датами), «Объект»
+ * («Все объекты»/«1 объект»/
  * «N объектов» — ведёт на мультивыбор #542) и «Категория» (#544); карточки
  * «Расходы»/«Доходы» ведут на страницы направления (#548 — отменяет
  * решение #539 о некликабельных карточках); полоса
@@ -58,16 +57,16 @@ export function OperationsGlobalScreen(): JSX.Element {
   const { filters } = useGlobalOperationsFilters();
 
   const today = clientTodayIso();
-  const period = filters.period ?? defaultOperationsPeriod(today);
   // Пикер периода — канонический оверлей поверх списка.
   const [periodOpen, setPeriodOpen] = useState(false);
   // Список сужается выбранными категориями; сводка (#540) категорийный
   // фильтр не принимает — карточки показывают объекты и период целиком.
+  // Без применённого периода (#670) даты не уходят в запрос — весь период.
   const periodScope = {
     order: "desc" as const,
     propertyIds: filters.propertyIds,
-    dateFrom: period.from,
-    dateTo: period.to,
+    dateFrom: filters.period?.from,
+    dateTo: filters.period?.to,
     includeArchived: filters.archived,
   };
   const listScope =
@@ -86,19 +85,11 @@ export function OperationsGlobalScreen(): JSX.Element {
   });
 
   const groups = groupOperationsByDate(listQuery.data ?? [], today);
-  // Скелетон — только пока данных нет вовсе (первая загрузка); ошибка без
-  // данных показывает карточку повтора, не скелетон.
-  const pending =
-    (listQuery.data === undefined ||
-      summaryQuery.data === undefined ||
-      everQuery.data === undefined) &&
-    !listQuery.isError &&
-    !summaryQuery.isError &&
-    !everQuery.isError;
-  const neverHad =
-    !listQuery.isError && hasNoPaidOperationsEver(everQuery.data);
-  const categoryRows = operationsCategoryRows(
-    summaryQuery.data?.categories ?? [],
+  // Скелетон / neverHad / разбивка категорий — общий каркас ленты (#478).
+  const { pending, neverHad, categoryRows } = operationsFeedGate(
+    listQuery,
+    summaryQuery,
+    everQuery,
   );
 
   const openOperation = (operation: {
@@ -173,11 +164,8 @@ export function OperationsGlobalScreen(): JSX.Element {
           <div className="mt-4 flex flex-col gap-6">
             <OperationsFilterChips
               className="px-6"
-              periodLabel={
-                filters.period !== null
-                  ? operationsPeriodRangeChipLabel(period)
-                  : operationsPeriodDefaultChipLabel(period)
-              }
+              periodLabel={operationsPeriodChipLabel(filters.period)}
+              periodActive={filters.period !== null}
               propertyLabel={operationsPropertyChipLabel(filters.propertyIds)}
               propertyActive={filters.propertyIds.length > 0}
               categoriesLabel={operationsCategoryChipLabel(

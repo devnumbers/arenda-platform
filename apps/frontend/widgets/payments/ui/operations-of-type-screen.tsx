@@ -2,13 +2,10 @@
 
 import { useState, type JSX } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import {
-  ArrowLeft,
-  SmallArrowRight,
-  Search,
-} from "@/shared/assets/icons";
+import { Add, ArrowLeft, Search } from "@/shared/assets/icons";
 import { ROUTES } from "@/shared/config/routes";
 import type { PaymentOperationScope } from "@/shared/api/query-keys";
+import { summaryBarSegments } from "@/features/payment-categories";
 import {
   Button,
   IconButton,
@@ -19,43 +16,57 @@ import {
 } from "@/shared/ui/design";
 import { clientTodayIso, type PaymentOperation } from "@/entities/payment";
 import {
-  defaultOperationsPeriod,
   groupOperationsByDate,
   operationsCategoryChipLabel,
-  operationsCategoryRows,
   operationsFiltersHref,
-  operationsPeriodDefaultChipLabel,
-  operationsPeriodRangeChipLabel,
-  shiftOperationsPeriod,
+  operationsFiltersParams,
+  operationsPeriodChipLabel,
   useOperationsFilters,
   usePropertyOperationsScopedPaged,
   usePropertyOperationsSummary,
 } from "@/features/payments";
-import { operationsTypeHeadline } from "../lib/operations-empty-states";
-import { PaymentsSkeleton, PaymentsStateCard } from "./payments-sections";
-import { OperationsDateList } from "./operations-list";
+import { canMutateProperty, useProperty } from "@/features/properties";
+import { operationsFeedGate } from "../lib/operations-feed-gate";
+import { PaymentsStateCard } from "./payments-sections";
+import {
+  OperationsDateList,
+  OperationsNeverHad,
+} from "./operations-list";
 import { OperationsFilterChips } from "./operations-filter-chips";
 import { OperationsPeriodPickerDialog } from "./operations-period-picker";
+import { OperationsSummaryCard } from "./operations-summary-card";
+import {
+  OperationsDateFeedSkeleton,
+  OperationsSummarySkeleton,
+} from "./operations-skeletons";
 
-/** Копия экрана по направлению (Figma 1494-61191 / 1492-59865). */
+/** Копия экрана по направлению (Figma 1863-35008 / 1863-35816): title —
+ * шапка, label — карточка-сводка направления. */
 const SCREEN_COPY = {
-  income: { title: "Доходы объекта" },
-  expense: { title: "Расходы объекта" },
+  income: { title: "Доходы объекта", label: "Доходы" },
+  expense: { title: "Расходы объекта", label: "Расходы" },
 } as const;
 
 /**
- * Экран «Доходы объекта» / «Расходы объекта» (#475, Figma 1494-61191 и
- * 1492-59865): те же чипы, что на главном экране операций, вместо двух
- * карточек — H1 направления за период («Нет доходов»/«Нет трат» при
- * пустом периоде, #478) с круглыми стрелками листания
- * по месяцам (ArrowLeft/SmallArrowRight 44×44 — канон; класс text-error —
- * маркер до правильных иконок владельца); ниже — список операций одного
- * типа за период, группировка и строки как на главном (общий
+ * Экран «Доходы объекта» / «Расходы объекта» (#475): список операций
+ * одного типа за период, группировка и строки как на главном (общий
  * OperationsDateList). Скоуп сужен `type` — фильтр списка и сводки #473.
- * Период и категории живут в адресе (#477): дефолт — текущий месяц,
- * стрелки сдвигают применённый период (правая гасится, когда период
- * упёрся в текущий месяц — на экранах только paid-операции, резолюция
- * #474), выбор чипами — шиты #477. Порции по 50 с бесконечным скроллом.
+ * Логика — канон глобальных направлений #548 (решение владельца #679,
+ * Figma 1863-35008/1863-35816): листание периода стрелками с H1-суммой
+ * снесено — период управляется только чипом «Период», вместо H1 —
+ * некликабельная карточка-сводка направления с полосой разбивки.
+ * Дефолт периода — весь период (#675, карта #669): без явного выбора
+ * даты в запрос не уходят, чип «Период» нейтральный; пикер — объектный
+ * (пустой старт, «Сбросить»). Шапка — «Назад» на главный список
+ * операций с текущими фильтрами (#472), лупа объектного поиска и «+»
+ * в визард с пресетом направления (?type=) — только у того, кто может
+ * создавать операции (canMutateProperty, контракт #569, как на главном
+ * #674). Совсем пустой объект (all-time сводка без операций, #478)
+ * вместо контента показывает «Операций еще не было» с CTA — лупа и «+»
+ * скрыты (конвенция зоны #478/#571); пустой период/категория при живой
+ * книге — обычная пустая лента. Подзаголовка имени объекта в строках
+ * нет — свой объект (в отличие от глобальных направлений). Порции по 50
+ * с бесконечным скроллом.
  */
 export function OperationsOfTypeScreen({
   propertyId,
@@ -66,24 +77,26 @@ export function OperationsOfTypeScreen({
 }): JSX.Element {
   const router = useRouter();
   const pathname = usePathname();
-  const { filters, applyPeriod } = useOperationsFilters();
+  const { filters } = useOperationsFilters();
+
+  // Доступ к объекту — для «+» (#679): общий мутационный предикат
+  // (зритель — только чтение, архив read-only, контракт #569).
+  const propertyQuery = useProperty(propertyId);
+  const canMutate = canMutateProperty(
+    propertyQuery.isSuccess ? propertyQuery.data : undefined,
+  );
 
   const today = clientTodayIso();
-  const period = filters.period ?? defaultOperationsPeriod(today);
   // Пикер периода — канонический оверлей поверх списка (решение владельца
   // 2026-09-04, раньше — отдельный маршрут /operations/period).
   const [periodOpen, setPeriodOpen] = useState(false);
-  // Правая стрелка гасится, когда следующее окно уходит в будущее (экраны
-  // операций — только paid, резолюция #474): период листается на свою же
-  // длину (решение владельца, #472).
-  const nextIsFuture = shiftOperationsPeriod(period, 1).from > today;
 
   const periodScope: PaymentOperationScope = {
     status: "paid",
     order: "desc",
     type,
-    dateFrom: period.from,
-    dateTo: period.to,
+    dateFrom: filters.period?.from,
+    dateTo: filters.period?.to,
   };
   const listScope: PaymentOperationScope =
     filters.categories.length > 0
@@ -92,45 +105,47 @@ export function OperationsOfTypeScreen({
 
   const listQuery = usePropertyOperationsScopedPaged(propertyId, listScope);
   const summaryQuery = usePropertyOperationsSummary(propertyId, periodScope);
+  // All-time сводка объекта (тот же контракт #473 без периода): отличает
+  // «операций не было никогда» (#478) от пустого периода/категории.
+  const everQuery = usePropertyOperationsSummary(propertyId, {
+    status: "paid",
+    order: "desc",
+  });
 
   const groups = groupOperationsByDate(listQuery.data ?? [], today);
-  const totalKopecks =
-    summaryQuery.data === undefined
-      ? undefined
-      : type === "expense"
-        ? summaryQuery.data.expenseTotalKopecks
-        : summaryQuery.data.incomeTotalKopecks;
-  // Скелетон — только пока данных нет вовсе (первая загрузка): смена
-  // периода держит прежние данные (keepPreviousData) и не дёргает
-  // страницу; ошибка без данных показывает карточку повтора, не скелетон.
-  const pending =
-    (listQuery.data === undefined || summaryQuery.data === undefined) &&
-    !listQuery.isError &&
-    !summaryQuery.isError;
-  const categoryRows = operationsCategoryRows(
-    summaryQuery.data?.categories ?? [],
+  // Скелетон / neverHad / разбивка категорий — общий каркас ленты (#478);
+  // смена периода держит прежние данные (keepPreviousData), не скелетон.
+  const { pending, neverHad, categoryRows } = operationsFeedGate(
+    listQuery,
+    summaryQuery,
+    everQuery,
   );
 
   const openOperation = (operation: PaymentOperation): void =>
     router.push(ROUTES.propertyOperation(propertyId, operation.id));
 
   const openCategories = (): void => {
-    const params = new URLSearchParams();
-    if (filters.period !== null) {
-      params.set("from", filters.period.from);
-      params.set("to", filters.period.to);
-    }
-    if (filters.categories.length > 0) {
-      params.set("category", filters.categories.join(","));
-    }
+    // Формат query — один хелпер с operationsFiltersHref (#472): знание
+    // «как period/categories кодируются в адрес» живёт в одном модуле.
+    const params = new URLSearchParams(operationsFiltersParams(filters));
     params.set("return", pathname);
     router.push(
       `${ROUTES.propertyOperationsCategories(propertyId)}?${params.toString()}`,
     );
   };
 
+  // Визард с пресетами объект+направление от точки входа (#679): с
+  // «Доходов объекта» — Доход, с «Расходов» — Расход (маршрут распознаёт
+  // ?type=).
+  const newOperationHref = `${ROUTES.propertyOperationsNew(propertyId)}?type=${type}`;
+
   return (
     <>
+      {/* Шапка направления — «Назад» на главный список (фильтры переживают
+       * переход, #472), лупа объектного поиска и «+» с пресетом
+       * направления (#679, как на глобальных #571); в neverHad-состоянии
+       * иконки скрыты — конвенция зоны (#478), действие — CTA пустого
+       * состояния. */}
       <TopNav
         leading={
           <IconButton
@@ -150,101 +165,112 @@ export function OperationsOfTypeScreen({
           />
         }
         trailing={
-          <IconButton
-            icon={<Search />}
-            label="Поиск операций"
-            onClick={() =>
-              router.push(ROUTES.propertyOperationsSearch(propertyId))
-            }
-          />
+          neverHad ? undefined : (
+            <>
+              <IconButton
+                icon={<Search />}
+                label="Поиск операций"
+                onClick={() =>
+                  router.push(ROUTES.propertyOperationsSearch(propertyId))
+                }
+              />
+              {canMutate && (
+                <IconButton
+                  icon={<Add />}
+                  label="Добавить операцию"
+                  onClick={() => router.push(newOperationHref)}
+                />
+              )}
+            </>
+          )
         }
       >
         <TopNavTitle title={SCREEN_COPY[type].title} />
       </TopNav>
 
       <PageContent>
-        <div className="flex flex-col gap-6 pt-4">
-          {/* Чипы фильтров — как на главном (Figma 1502:65149): период
-           * следует за листанием; выбор — отдельные страницы (#477). */}
-          <OperationsFilterChips
-            className="px-6"
-            periodLabel={
-              filters.period !== null
-                ? operationsPeriodRangeChipLabel(period)
-                : operationsPeriodDefaultChipLabel(period)
+        {neverHad ? (
+          <OperationsNeverHad
+            action={
+              canMutate ? (
+                <Button onClick={() => router.push(newOperationHref)}>
+                  Добавить операцию
+                </Button>
+              ) : undefined
             }
-            categoriesLabel={operationsCategoryChipLabel(
-              filters.categories,
-              categoryRows,
-            )}
-            categoriesActive={filters.categories.length > 0}
-            onOpenPeriod={() => setPeriodOpen(true)}
-            onOpenCategories={openCategories}
           />
-
-          {pending && (
-            <>
-              <PaymentsSkeleton withHeading />
-              <PaymentsSkeleton withHeading />
-            </>
-          )}
-
-          {!pending && (
-            <>
-              {listQuery.isError ? (
-                <PaymentsStateCard
-                  title="Не удалось загрузить операции"
-                  hint="Проверьте подключение и попробуйте еще раз"
-                  action={
-                    <Button
-                      variant="secondary"
-                      size="small"
-                      onClick={() => void listQuery.refetch()}
-                    >
-                      Повторить
-                    </Button>
-                  }
-                />
-              ) : (
-                <>
-                  {/* Сумма периода с листанием по месяцам (Figma 1502:65151):
-                   * стрелки 44×44, H1 28/32 по центру; период применяется
-                   * в адрес (#477), дефолт — текущий месяц. */}
-                  <div className="flex items-stretch px-3.5">
-                    <IconButton
-                      icon={<ArrowLeft className="text-error" />}
-                      label="Предыдущий месяц"
-                      onClick={() =>
-                        applyPeriod(shiftOperationsPeriod(period, -1))
-                      }
-                    />
-                    <div className="flex min-w-0 flex-1 items-center justify-center">
-                      <span className="truncate text-[28px] font-semibold leading-8 text-content">
-                        {/* Пустой период — «Нет доходов»/«Нет трат» вместо
-                         * «0 ₽» (Figma 1510-76177, 1510-75650, #478). */}
-                        {operationsTypeHeadline(type, totalKopecks)}
-                      </span>
-                    </div>
-                    <IconButton
-                      icon={<SmallArrowRight className="text-error" />}
-                      label="Следующий месяц"
-                      disabled={nextIsFuture}
-                      onClick={() =>
-                        applyPeriod(shiftOperationsPeriod(period, 1))
-                      }
-                    />
-                  </div>
-
-                  <OperationsDateList
-                    groups={groups}
-                    onSelectOperation={openOperation}
-                    tail={<InfiniteQueryTail query={listQuery} />}
-                  />
-                </>
+        ) : (
+          <div className="flex flex-col gap-6 pt-4">
+            {/* Чипы фильтров — как на главном (Figma 1502:65149): период
+             * применён — синий, дефолт «весь период» — нейтральный серый
+             * (#675); выбор — отдельные страницы (#477). */}
+            <OperationsFilterChips
+              className="px-6"
+              periodLabel={operationsPeriodChipLabel(filters.period)}
+              periodActive={filters.period !== null}
+              categoriesLabel={operationsCategoryChipLabel(
+                filters.categories,
+                categoryRows,
               )}
-            </>
-          )}
-        </div>
+              categoriesActive={filters.categories.length > 0}
+              onOpenPeriod={() => setPeriodOpen(true)}
+              onOpenCategories={openCategories}
+            />
+
+            {pending && (
+              <>
+                {/* Паритет §7: одна карточка направления во всю ширину и
+                 * группы дат со строками — как у глобальных направлений
+                 * (#548); чипы выше — вне фазы загрузки. */}
+                <OperationsSummarySkeleton cards={1} />
+                <OperationsDateFeedSkeleton />
+              </>
+            )}
+
+            {!pending && (
+              <>
+                {listQuery.isError ? (
+                  <PaymentsStateCard
+                    title="Не удалось загрузить операции"
+                    hint="Проверьте подключение и попробуйте еще раз"
+                    action={
+                      <Button
+                        variant="secondary"
+                        size="small"
+                        onClick={() => void listQuery.refetch()}
+                      >
+                        Повторить
+                      </Button>
+                    }
+                  />
+                ) : (
+                  <>
+                    {/* Карточка направления (Figma 1863-35008/1863-35816):
+                     * некликабельна, полоса разбивки та же — вход на
+                     * направление только с главного экрана операций. */}
+                    <div className="px-6">
+                      <OperationsSummaryCard
+                        label={SCREEN_COPY[type].label}
+                        totalKopecks={
+                          type === "expense"
+                            ? summaryQuery.data?.expenseTotalKopecks
+                            : summaryQuery.data?.incomeTotalKopecks
+                        }
+                        segments={summaryBarSegments(summaryQuery.data, type)}
+                      />
+                    </div>
+
+                    <OperationsDateList
+                      groups={groups}
+                      onSelectOperation={openOperation}
+                      tail={<InfiniteQueryTail query={listQuery} />}
+                    />
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        )}
       </PageContent>
 
       {/* Пикер периода — рендер только в открытом состоянии: лента и

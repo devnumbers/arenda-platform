@@ -4,10 +4,19 @@ import type { JSX } from "react";
 import clsx from "clsx";
 import { SmallArrowDown } from "@/shared/assets/icons";
 import { ChipButton } from "@/shared/ui/design";
+import {
+  operationsPeriodChipLabel,
+  type OperationsPeriod,
+} from "@/features/payments";
 
 export type OperationsFilterChipsProps = {
-  /** Лейбл чипа периода: дефолт — «Сентябрь 2026», выбор — «1 — 30 ноя». */
+  /** Лейбл чипа периода: применённый диапазон — «1 — 30 ноя», без
+   * применённого периода — нейтральный «Период» (#670/#674/#675). */
   readonly periodLabel: string;
+  /** Период применён — чип синий; в дефолте «весь период» (карта #669)
+   * все экраны передают `filters.period !== null` — без применённого
+   * периода чип серый «Период». */
+  readonly periodActive: boolean;
   /** Лейбл чипа категорий: «Все категории», имя или счётчик. */
   readonly categoriesLabel: string;
   /** Активный фильтр категорий подсвечивает чип синим, как период. */
@@ -30,14 +39,17 @@ export type OperationsFilterChipsProps = {
 };
 
 /**
- * Строка чипов фильтров экранов операций (#474/#477): «Период» всегда
- * выбран (период применён всегда), «Категория» — синий только с активным
- * фильтром. Чипы открывают свои шиты выбора (#477, Figma 1492-41825).
- * Глобальная лента (#541) добавляет между ними чип «Объект» — лейбл
- * «Все объекты»/«1 объект»/«N объектов», синий с активным фильтром.
+ * Строка чипов фильтров экранов операций (#474/#477): «Период» синий, пока
+ * период применён (periodActive; на дефолте «весь период» — карте #669 —
+ * все экраны передают `filters.period !== null`, без периода чип серый
+ * «Период»), «Категория» — синий только с активным фильтром. Чипы открывают
+ * свои шиты выбора (#477, Figma 1492-41825). Глобальная лента (#541)
+ * добавляет между ними чип «Объект» — лейбл «Все объекты»/«1 объект»/
+ * «N объектов», синий с активным фильтром.
  */
 export function OperationsFilterChips({
   periodLabel,
+  periodActive,
   categoriesLabel,
   categoriesActive,
   onOpenPeriod,
@@ -50,7 +62,7 @@ export function OperationsFilterChips({
   return (
     <div className={clsx("flex gap-1.5 overflow-x-auto", className)}>
       <ChipButton
-        selected
+        selected={periodActive}
         trailingIcon={<SmallArrowDown />}
         onClick={onOpenPeriod}
       >
@@ -73,5 +85,30 @@ export function OperationsFilterChips({
         {categoriesLabel}
       </ChipButton>
     </div>
+  );
+}
+
+/**
+ * Дисплейный чип периода (не кликает): рядом с интерактивными чипами на
+ * страницах выбора категорий (объектной #477 и глобальной #544), где
+ * период наследуется от ленты через return-параметры и меняется нельзя, и
+ * в скелетонах (#474/#544). С применённым периодом — синий с диапазоном,
+ * в дефолте «весь период» — серый «Период» (канон #670).
+ */
+export function OperationsPeriodChipDisplay({
+  period,
+}: {
+  readonly period: OperationsPeriod | null;
+}): JSX.Element {
+  return (
+    <span
+      aria-hidden
+      className={clsx(
+        "inline-flex h-11 items-center rounded-pill px-5 text-sm font-medium",
+        period !== null ? "bg-primary text-white" : "bg-surface-muted text-content",
+      )}
+    >
+      {operationsPeriodChipLabel(period)}
+    </span>
   );
 }
