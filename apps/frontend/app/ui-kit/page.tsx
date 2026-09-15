@@ -217,7 +217,7 @@ export default function UiKitPage(): JSX.Element {
                     <Button
                         onClick={() =>
                             notify.scenarios.paymentMethods.cardAdded({
-                                description: 'Visa •• 4242',
+                                description: '•••• 4242',
                                 action: {
                                     label: 'Открыть',
                                     onPress: () => console.log('action'),

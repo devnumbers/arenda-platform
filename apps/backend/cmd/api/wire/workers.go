@@ -29,6 +29,11 @@ var (
 // tasks tick worker and starts all five goroutines.
 type Workers struct {
 	wg sync.WaitGroup
+	// Billing is the billing worker shell the time-travel rig's admin tick
+	// endpoint triggers (issue #665): the same leader-elected pass the loop
+	// below runs on its interval. Exposed so the HTTP wiring can mount the
+	// tick route only when the rig is enabled.
+	Billing *scheduler.BillingWorker
 }
 
 // NewWorkers builds and starts the five background workers: the identity
@@ -59,7 +64,7 @@ func NewWorkers(
 	dataCleaner := identityscheduler.NewCleaner(
 		sessionRepo, codeRepo, attemptRepo, p.Clock, p.Cfg.IdentityCleanerInterval, p.Cfg.IdentityCleanerRetention, p.Logger)
 
-	w := &Workers{}
+	w := &Workers{Billing: billingWorker}
 	w.wg.Add(5)
 	go func() { defer w.wg.Done(); dataCleaner.Run(ctx) }()
 	go func() { defer w.wg.Done(); billingWorker.Run(ctx) }()

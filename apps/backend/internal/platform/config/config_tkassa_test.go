@@ -28,7 +28,7 @@ func setRequiredLocalEnv(t *testing.T) {
 
 func TestTKassaTimeoutDefault(t *testing.T) {
 	setRequiredLocalEnv(t)
-	t.Setenv("PAYMENT_PROVIDER", "tkassa")
+	t.Setenv("PAYMENT_PROVIDER", providerTKassa)
 	t.Setenv("T_KASSA_TERMINAL_KEY", "term")
 	t.Setenv("T_KASSA_PASSWORD", "pass")
 
@@ -47,7 +47,7 @@ func TestTKassaTimeoutDefault(t *testing.T) {
 
 func TestTKassaRetryMutationsEnv(t *testing.T) {
 	setRequiredLocalEnv(t)
-	t.Setenv("PAYMENT_PROVIDER", "tkassa")
+	t.Setenv("PAYMENT_PROVIDER", providerTKassa)
 	t.Setenv("T_KASSA_TERMINAL_KEY", "term")
 	t.Setenv("T_KASSA_PASSWORD", "pass")
 	t.Setenv("T_KASSA_RETRY_MUTATIONS", "true")
@@ -63,7 +63,7 @@ func TestTKassaRetryMutationsEnv(t *testing.T) {
 
 func TestTKassaRetryMutationsInvalid(t *testing.T) {
 	setRequiredLocalEnv(t)
-	t.Setenv("PAYMENT_PROVIDER", "tkassa")
+	t.Setenv("PAYMENT_PROVIDER", providerTKassa)
 	t.Setenv("T_KASSA_TERMINAL_KEY", "term")
 	t.Setenv("T_KASSA_PASSWORD", "pass")
 	t.Setenv("T_KASSA_RETRY_MUTATIONS", "maybe")
@@ -79,7 +79,7 @@ func TestTKassaRetryMutationsInvalid(t *testing.T) {
 
 func TestTKassaTimeoutEnv(t *testing.T) {
 	setRequiredLocalEnv(t)
-	t.Setenv("PAYMENT_PROVIDER", "tkassa")
+	t.Setenv("PAYMENT_PROVIDER", providerTKassa)
 	t.Setenv("T_KASSA_TERMINAL_KEY", "term")
 	t.Setenv("T_KASSA_PASSWORD", "pass")
 	t.Setenv("T_KASSA_TIMEOUT", "45s")
@@ -95,7 +95,7 @@ func TestTKassaTimeoutEnv(t *testing.T) {
 
 func TestTKassaTimeoutInvalid(t *testing.T) {
 	setRequiredLocalEnv(t)
-	t.Setenv("PAYMENT_PROVIDER", "tkassa")
+	t.Setenv("PAYMENT_PROVIDER", providerTKassa)
 	t.Setenv("T_KASSA_TERMINAL_KEY", "term")
 	t.Setenv("T_KASSA_PASSWORD", "pass")
 	t.Setenv("T_KASSA_TIMEOUT", "not-a-duration")
@@ -108,7 +108,7 @@ func TestTKassaTimeoutInvalid(t *testing.T) {
 
 func TestTKassaTimeoutNonPositive(t *testing.T) {
 	setRequiredLocalEnv(t)
-	t.Setenv("PAYMENT_PROVIDER", "tkassa")
+	t.Setenv("PAYMENT_PROVIDER", providerTKassa)
 	t.Setenv("T_KASSA_TERMINAL_KEY", "term")
 	t.Setenv("T_KASSA_PASSWORD", "pass")
 	t.Setenv("T_KASSA_TIMEOUT", "0")
@@ -121,7 +121,7 @@ func TestTKassaTimeoutNonPositive(t *testing.T) {
 
 func TestTKassaTerminalKeyRequired(t *testing.T) {
 	setRequiredLocalEnv(t)
-	t.Setenv("PAYMENT_PROVIDER", "tkassa")
+	t.Setenv("PAYMENT_PROVIDER", providerTKassa)
 	t.Setenv("T_KASSA_PASSWORD", "pass")
 
 	_, err := Load()
@@ -135,7 +135,7 @@ func TestTKassaTerminalKeyRequired(t *testing.T) {
 
 func TestTKassaPasswordRequired(t *testing.T) {
 	setRequiredLocalEnv(t)
-	t.Setenv("PAYMENT_PROVIDER", "tkassa")
+	t.Setenv("PAYMENT_PROVIDER", providerTKassa)
 	t.Setenv("T_KASSA_TERMINAL_KEY", "term")
 
 	_, err := Load()
@@ -149,7 +149,7 @@ func TestTKassaPasswordRequired(t *testing.T) {
 
 func TestTKassaAppBaseURLRequired(t *testing.T) {
 	setRequiredLocalEnv(t)
-	t.Setenv("PAYMENT_PROVIDER", "tkassa")
+	t.Setenv("PAYMENT_PROVIDER", providerTKassa)
 	t.Setenv("T_KASSA_TERMINAL_KEY", "term")
 	t.Setenv("T_KASSA_PASSWORD", "pass")
 	t.Setenv("APP_BASE_URL", "")
@@ -165,15 +165,15 @@ func TestTKassaAppBaseURLRequired(t *testing.T) {
 
 func TestTKassaAppBaseURLRequiresHttpsOutsideLocalDev(t *testing.T) {
 	setRequiredLocalEnv(t)
-	t.Setenv("APP_ENV", "staging")
-	t.Setenv("PAYMENT_PROVIDER", "tkassa")
+	t.Setenv("APP_ENV", envStage)
+	t.Setenv("PAYMENT_PROVIDER", providerTKassa)
 	t.Setenv("T_KASSA_TERMINAL_KEY", "term")
 	t.Setenv("T_KASSA_PASSWORD", "pass")
 	t.Setenv("APP_BASE_URL", "http://example.com")
 
 	_, err := Load()
 	if err == nil {
-		t.Fatal("expected error for http APP_BASE_URL in staging")
+		t.Fatal("expected error for http APP_BASE_URL on stage")
 	}
 	if !strings.Contains(err.Error(), "https") {
 		t.Fatalf("unexpected error: %v", err)
@@ -182,7 +182,7 @@ func TestTKassaAppBaseURLRequiresHttpsOutsideLocalDev(t *testing.T) {
 
 func TestTKassaBaseURLEmptyAllowedInLocal(t *testing.T) {
 	setRequiredLocalEnv(t)
-	t.Setenv("PAYMENT_PROVIDER", "tkassa")
+	t.Setenv("PAYMENT_PROVIDER", providerTKassa)
 	t.Setenv("T_KASSA_TERMINAL_KEY", "term")
 	t.Setenv("T_KASSA_PASSWORD", "pass")
 
@@ -197,15 +197,15 @@ func TestTKassaBaseURLEmptyAllowedInLocal(t *testing.T) {
 
 func TestTKassaBaseURLRequiredOutsideLocalDev(t *testing.T) {
 	setRequiredLocalEnv(t)
-	t.Setenv("APP_ENV", "staging")
-	t.Setenv("PAYMENT_PROVIDER", "tkassa")
+	t.Setenv("APP_ENV", envStage)
+	t.Setenv("PAYMENT_PROVIDER", providerTKassa)
 	t.Setenv("T_KASSA_TERMINAL_KEY", "term")
 	t.Setenv("T_KASSA_PASSWORD", "pass")
 	t.Setenv("APP_BASE_URL", "https://example.com")
 
 	_, err := Load()
 	if err == nil {
-		t.Fatal("expected error for missing T_KASSA_BASE_URL in staging")
+		t.Fatal("expected error for missing T_KASSA_BASE_URL on stage")
 	}
 	if !strings.Contains(err.Error(), "T_KASSA_BASE_URL") {
 		t.Fatalf("unexpected error: %v", err)
@@ -214,9 +214,9 @@ func TestTKassaBaseURLRequiredOutsideLocalDev(t *testing.T) {
 
 func TestTKassaBaseURLAcceptsSandboxInProduction(t *testing.T) {
 	setRequiredLocalEnv(t)
-	t.Setenv("APP_ENV", "production")
+	t.Setenv("APP_ENV", envProduction)
 	t.Setenv("ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef")
-	t.Setenv("PAYMENT_PROVIDER", "tkassa")
+	t.Setenv("PAYMENT_PROVIDER", providerTKassa)
 	t.Setenv("T_KASSA_TERMINAL_KEY", "term")
 	t.Setenv("T_KASSA_PASSWORD", "pass")
 	t.Setenv("APP_BASE_URL", "https://example.com")
@@ -233,9 +233,9 @@ func TestTKassaBaseURLAcceptsSandboxInProduction(t *testing.T) {
 
 func TestTKassaBaseURLRejectsUnknownHostInProduction(t *testing.T) {
 	setRequiredLocalEnv(t)
-	t.Setenv("APP_ENV", "production")
+	t.Setenv("APP_ENV", envProduction)
 	t.Setenv("ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef")
-	t.Setenv("PAYMENT_PROVIDER", "tkassa")
+	t.Setenv("PAYMENT_PROVIDER", providerTKassa)
 	t.Setenv("T_KASSA_TERMINAL_KEY", "term")
 	t.Setenv("T_KASSA_PASSWORD", "pass")
 	t.Setenv("APP_BASE_URL", "https://example.com")
@@ -252,9 +252,9 @@ func TestTKassaBaseURLRejectsUnknownHostInProduction(t *testing.T) {
 
 func TestTKassaBaseURLAcceptsProductionURL(t *testing.T) {
 	setRequiredLocalEnv(t)
-	t.Setenv("APP_ENV", "production")
+	t.Setenv("APP_ENV", envProduction)
 	t.Setenv("ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef")
-	t.Setenv("PAYMENT_PROVIDER", "tkassa")
+	t.Setenv("PAYMENT_PROVIDER", providerTKassa)
 	t.Setenv("T_KASSA_TERMINAL_KEY", "term")
 	t.Setenv("T_KASSA_PASSWORD", "pass")
 	t.Setenv("APP_BASE_URL", "https://example.com")

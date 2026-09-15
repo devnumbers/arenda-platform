@@ -102,7 +102,7 @@ func TestSubscriptionLifecycle_Integration_Cancel(t *testing.T) {
 		t.Fatalf("ChangeTariff() error = %v", err)
 	}
 
-	if err := h.subscriptionsSvc.CancelSubscription(h.ctx(), userID); err != nil {
+	if err := h.subscriptionsSvc.CancelSubscription(h.ctx(), userID, nil); err != nil {
 		t.Fatalf("CancelSubscription() error = %v", err)
 	}
 

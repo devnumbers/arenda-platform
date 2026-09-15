@@ -377,6 +377,20 @@ func (r *fakeTransitionRepo) ListBySubscriptionID(_ context.Context, subscriptio
 	return result, nil
 }
 
+func (r *fakeTransitionRepo) ShiftGraceEntryTimes(_ context.Context, subscriptionID uuid.UUID, delta time.Duration) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	moved := 0
+	for i := range r.transitions {
+		t := &r.transitions[i]
+		if t.SubscriptionID == subscriptionID && t.Reason == domain.TransitionReasonGraceEntered {
+			t.CreatedAt = t.CreatedAt.Add(delta)
+			moved++
+		}
+	}
+	return moved, nil
+}
+
 func (r *fakeTransitionRepo) WithTx(transaction.Tx) (SubscriptionTransitionRepository, error) {
 	return r, nil
 }
@@ -429,6 +443,12 @@ func (r *fakePaymentRepo) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (d
 func (r *fakePaymentRepo) ListByUserID(_ context.Context, userID uuid.UUID) ([]domain.SubscriptionPayment, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	return r.listByUserIDLocked(userID), nil
+}
+
+// listByUserIDLocked collects the user's payments newest-first; r.mu must be
+// held.
+func (r *fakePaymentRepo) listByUserIDLocked(userID uuid.UUID) []domain.SubscriptionPayment {
 	result := make([]domain.SubscriptionPayment, 0, len(r.payments))
 	for _, p := range r.payments {
 		if p.UserID == userID {
@@ -442,6 +462,17 @@ func (r *fakePaymentRepo) ListByUserID(_ context.Context, userID uuid.UUID) ([]d
 		}
 		return bytes.Compare(b.ID[:], a.ID[:])
 	})
+	return result
+}
+
+func (r *fakePaymentRepo) ListByUserIDWithCard(_ context.Context, userID uuid.UUID) ([]SubscriptionPaymentWithCard, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	payments := r.listByUserIDLocked(userID)
+	result := make([]SubscriptionPaymentWithCard, 0, len(payments))
+	for _, p := range payments {
+		result = append(result, SubscriptionPaymentWithCard{Payment: p, ResolvedCardMask: p.CardMask})
+	}
 	return result, nil
 }
 
@@ -457,6 +488,34 @@ func (r *fakePaymentRepo) ListPendingByUserID(_ context.Context, userID uuid.UUI
 		if p.UserID == userID && p.Status == domain.PaymentStatusPending {
 			result = append(result, p)
 		}
+	}
+	return result, nil
+}
+
+// ListExpiredPending mirrors the SQL predicate of the TTL-expiry batch
+// (issue #616): still-pending payments with a deadline in the past, oldest
+// deadline first.
+func (r *fakePaymentRepo) ListExpiredPending(_ context.Context, before time.Time, limit int) ([]domain.SubscriptionPayment, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	result := make([]domain.SubscriptionPayment, 0)
+	for _, p := range r.payments {
+		if p.UserID == uuid.Nil || p.Status != domain.PaymentStatusPending {
+			continue
+		}
+		if p.ExpiresAt == nil || !p.ExpiresAt.Before(before) {
+			continue
+		}
+		result = append(result, p)
+	}
+	slices.SortFunc(result, func(a, b domain.SubscriptionPayment) int {
+		if c := a.ExpiresAt.Compare(*b.ExpiresAt); c != 0 {
+			return c
+		}
+		return bytes.Compare(a.ID[:], b.ID[:])
+	})
+	if len(result) > limit {
+		result = result[:limit]
 	}
 	return result, nil
 }
@@ -537,6 +596,20 @@ func paymentInSelection(p domain.SubscriptionPayment, sel PaymentSelection, tari
 		}
 	}
 	return true
+}
+
+func (r *fakePaymentRepo) ShiftCreatedAt(_ context.Context, subscriptionID uuid.UUID, delta time.Duration) (int64, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	moved := int64(0)
+	for id, p := range r.payments {
+		if p.SubscriptionID == subscriptionID {
+			p.CreatedAt = p.CreatedAt.Add(delta)
+			r.payments[id] = p
+			moved++
+		}
+	}
+	return moved, nil
 }
 
 func (r *fakePaymentRepo) WithTx(transaction.Tx) (SubscriptionPaymentRepository, error) {

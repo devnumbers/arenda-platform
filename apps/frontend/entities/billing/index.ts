@@ -1,3 +1,3 @@
 export { mapAddPaymentMethodResponse, mapChangeTariffResponse, mapPaymentMethodResponse, mapSubscriptionPaymentResponse, mapSubscriptionResponse, mapTariffResponse } from './model/mappers';
-export { PAYMENT_PERIOD_LABELS, PAYMENT_STATUS_LABELS } from './model/types';
-export type { AddPaymentMethodResult, ChangeTariffResult, PaymentMethod, PaymentPeriod, PaymentStatus, Subscription, SubscriptionPayment, Tariff } from './model/types';
+export { PAYMENT_PERIOD_LABELS, PAYMENT_STATUS_LABELS, cardNumberTail } from './model/types';
+export type { AddPaymentMethodResult, ChangeTariffResult, PaymentMethod, PaymentPeriod, PaymentStatus, PendingPayment, Subscription, SubscriptionPayment, SubscriptionPaymentCard, Tariff } from './model/types';

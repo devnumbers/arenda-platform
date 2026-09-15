@@ -18,6 +18,16 @@ const dayMonthFormatter = new Intl.DateTimeFormat('ru-RU', {
   timeZone: 'UTC',
 });
 
+const localDayMonthFormatter = new Intl.DateTimeFormat('ru-RU', {
+  day: 'numeric',
+  month: 'long',
+});
+
+const localTimeFormatter = new Intl.DateTimeFormat('ru-RU', {
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
 /** День и склонённый месяц без года: «11 августа». */
 export function formatDayMonth(iso: IsoDate): string {
   return dayMonthFormatter.format(fromIso(iso));
@@ -58,4 +68,15 @@ export function formatDayMonthDotted(iso: IsoDate): string {
  * (склонённый месяц, как в строках списков), другой год — «01.01.2025». */
 export function formatRangeBound(bound: IsoDate, today: IsoDate): string {
   return isoYear(bound) === isoYear(today) ? formatDayMonth(bound) : formatDottedDate(bound);
+}
+
+/** Заголовок-дата в шапке детали подписочного платежа (#624, Figma
+ * 1883-71611): «10 августа 2026, 10:56» — год всегда, локальное время
+ * смотрящего (метка момента, не календарный день; иначе крайние часы
+ * суток показывали бы чужую дату). Невалидная строка даёт «—», как
+ * formatDate легаси-профиля. */
+export function formatDateTimeHeading(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return `${localDayMonthFormatter.format(date)} ${date.getFullYear()}, ${localTimeFormatter.format(date)}`;
 }

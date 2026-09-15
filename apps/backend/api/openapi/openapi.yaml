@@ -2497,6 +2497,12 @@ paths:
       operationId: cancelSubscription
       security:
         - sessionCookie: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelSubscriptionRequest'
       responses:
         '204':
           description: Subscription cancelled
@@ -2505,7 +2511,27 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          $ref: '#/components/responses/Conflict'
+          $ref: '#/components/responses/SubscriptionConflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /subscription/resume:
+    post:
+      operationId: resumeSubscription
+      security:
+        - sessionCookie: []
+      responses:
+        '204':
+          description: >-
+            Cancellation undone without a charge: the subscription is active
+            again inside its already paid period, auto-renew is enabled and
+            the paid remainder is kept
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/SubscriptionConflict'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -2534,7 +2560,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          $ref: '#/components/responses/Conflict'
+          $ref: '#/components/responses/SubscriptionConflict'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -4334,10 +4360,18 @@ components:
         activePaymentMethod:
           $ref: '#/components/schemas/PaymentMethod'
           nullable: true
+        pendingPayment:
+          $ref: '#/components/schemas/SubscriptionPendingPayment'
+          nullable: true
+          description: >-
+            The user's live pending payment (issue #616) — present only while
+            an unpaid payment form holds the tariff decision. Its expiry is
+            the server-side truth: past expiresAt the payment turns failed and
+            the tariff choice unlocks.
 
     PaymentMethod:
       type: object
-      required: [id, provider, displayMask, isActive, createdAt]
+      required: [id, provider, displayMask, cardSystem, isActive, createdAt]
       properties:
         id:
           type: string
@@ -4346,15 +4380,48 @@ components:
           type: string
         displayMask:
           type: string
+        cardSystem:
+          $ref: '#/components/schemas/CardSystem'
+        expDate:
+          type: string
+          nullable: true
+          description: Card expiry in the provider's display format (MMYY); null when unknown.
         isActive:
           type: boolean
         createdAt:
           type: string
           format: date-time
 
+    SubscriptionPendingPayment:
+      type: object
+      required: [tariffName, period, amountKopecks, confirmUrl, expiresAt]
+      description: >-
+        The live pending subscription payment (issue #616): one per user, with
+        the confirm URL and the absolute expiry instant the countdown anchors
+        to. The TTL itself is a backend constant and does not surface here.
+      properties:
+        tariffName:
+          $ref: '#/components/schemas/TariffName'
+        period:
+          $ref: '#/components/schemas/AdminSubscriptionPaymentPeriod'
+        amountKopecks:
+          type: integer
+          format: int64
+        confirmUrl:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+
     SubscriptionPayment:
       type: object
       required: [id, tariff, period, amountKopecks, status, provider, createdAt]
+      description: >-
+        One subscription charge (issue #619): one list row is one payment — a
+        refunded payment keeps its own row with the refunded status and the
+        same positive amount. The sign and the status label are a UI
+        convention the frontend renders on top of the status; amounts in the
+        contract are always positive kopecks.
       properties:
         id:
           type: string
@@ -4373,9 +4440,38 @@ components:
         paymentUrl:
           type: string
           nullable: true
+        paymentMethod:
+          $ref: '#/components/schemas/SubscriptionPaymentCard'
+        succeededAt:
+          type: string
+          format: date-time
+          nullable: true
         createdAt:
           type: string
           format: date-time
+
+    SubscriptionPaymentCard:
+      type: object
+      required: [displayMask, cardSystem]
+      description: >-
+        The card a payment was charged with (issue #619): a snapshot taken at
+        creation or finalization of the payment, so the history survives
+        payment-method deletion. Null for payments the provider reported no
+        card for.
+      properties:
+        displayMask:
+          type: string
+          description: Masked card number, e.g. "4300********1234".
+        cardSystem:
+          $ref: '#/components/schemas/CardSystem'
+
+    CardSystem:
+      type: string
+      enum: [mir, visa, mastercard, unknown]
+      description: >-
+        Card system derived by the backend from the BIN prefix of the masked
+        number (2 — Mir, 4 — Visa, 5 — Mastercard); unknown for old or
+        unrecognized cards.
 
     ChangeTariffRequest:
       type: object
@@ -4403,6 +4499,21 @@ components:
       properties:
         enabled:
           type: boolean
+
+    CancelSubscriptionRequest:
+      type: object
+      properties:
+        keepPropertyId:
+          type: string
+          format: uuid
+          description: |
+            The property the owner chooses to keep when the cancelled
+            subscription later expires and the basic tariff's property limit
+            is applied: the chosen property survives, the excess ones are
+            archived. Must be one of the owner's active properties, otherwise
+            the cancellation answers 409 `invalid_keep_property`. Omitted
+            when there is no choice to make (0 or 1 active properties) — the
+            most recently updated property survives.
 
     AddPaymentMethodRequest:
       type: object
@@ -4649,7 +4760,7 @@ components:
         reason:
           type: string
           description: |
-            Why the transition happened: registered, cancelled,
+            Why the transition happened: registered, cancelled, resumed,
             downgrade_scheduled, payment_applied, grace_entered,
             grace_extended, scheduled_change_applied, expired, refunded,
             service_assigned, forced_change.
@@ -6327,7 +6438,12 @@ components:
 
     SubscriptionPaymentStatus:
       type: string
-      enum: [pending, succeeded, failed, refunded, partial_refunded, refunding]
+      enum: [pending, succeeded, failed, refunded, refunding]
+      description: >-
+        Lifecycle states of a subscription payment. Refunds are full-amount
+        only (ADR 0037): the legacy partial_refunded is not part of the
+        vocabulary, refunding is the internal reservation shown to the user
+        as pending.
 
     AdminSubscriptionPaymentPeriod:
       type: string
@@ -6815,6 +6931,21 @@ components:
             $ref: '#/components/schemas/Problem'
     SubscriptionBlocked:
       description: Subscription is blocked; renew to continue mutating data
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    SubscriptionConflict:
+      description: >-
+        Conflict. `pending_payment_exists` — a live pending payment holds the
+        user's tariff decision (issue #616): the tariff change, the
+        cancellation and the resume stay locked until the payment resolves or
+        expires. `invalid_keep_property` — the cancellation's keepPropertyId
+        is not one of the owner's active properties (issue #617).
+        `resume_not_available` — the resume endpoint was called on a
+        subscription that is not cancelled or whose paid period has already
+        expired: restoration of an expired period goes through paying for a
+        tariff (issue #617).
       content:
         application/json:
           schema:

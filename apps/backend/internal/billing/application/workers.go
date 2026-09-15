@@ -20,12 +20,33 @@ import (
 // thin: every decision lives here, behind the module's stores and provider
 // port.
 
-// ExcessPropertyArchiver archives the owner's active properties beyond a tariff
-// limit inside the caller's transaction. Declared here, at the consumer (the
-// worker phases), per ADR 0035; the composition root adapts the properties
-// context to it.
+// ExcessPropertyArchiver is the properties-context bridge of the billing
+// lifecycle inside the caller's transaction: it archives the owner's active
+// properties beyond a tariff limit — keeping the most recently updated, or
+// the property the owner chose (issue #617) — restores the properties a
+// grace entry archived (ADR 0055) and answers whether a property of the
+// owner is active. Declared here, at the consumer (the worker phases, the
+// payment application seam and the cancel flow), per ADR 0035; the
+// composition root adapts the properties context to it.
 type ExcessPropertyArchiver interface {
-	ArchiveExcess(ctx context.Context, ownerID uuid.UUID, limit int) error
+	// ArchiveExcess archives the owner's active properties beyond the limit
+	// and returns their ids in restoration-priority order — the newest
+	// archived property first. When keepPropertyID is set, that property is
+	// kept among the survivors as long as it is one of the owner's active
+	// properties; the remaining survivor slots go to the most recently
+	// updated ones.
+	ArchiveExcess(ctx context.Context, ownerID uuid.UUID, limit int, keepPropertyID *uuid.UUID) ([]uuid.UUID, error)
+	// RestoreGraceArchive unarchives the given owner's properties — the ids
+	// snapshot taken at the grace entry — while the owner's active count
+	// stays under the limit (a negative limit is unlimited); already-active
+	// and missing properties are skipped as settled. Returns the ids it
+	// could not restore — the debt remainder still archived beyond the
+	// limit, in the given order.
+	RestoreGraceArchive(ctx context.Context, ownerID uuid.UUID, ids []uuid.UUID, limit int) ([]uuid.UUID, error)
+	// ActivePropertyExists reports whether the property belongs to the owner
+	// and is active (not archived) — the keep-choice validation of the
+	// cancel flow (issue #617).
+	ActivePropertyExists(ctx context.Context, ownerID, propertyID uuid.UUID) (bool, error)
 }
 
 // ExcessPropertyArchiverSource produces transaction-bound archivers.
@@ -165,6 +186,7 @@ const (
 	triggerFreeDowngrade      = "free_downgrade"
 	triggerRenewalDowngrade   = "renewal_downgrade"
 	triggerGraceExpired       = "grace_expired"
+	triggerGraceEntry         = "grace_entry"
 	triggerNonRenewingExpired = "non_renewing_expired"
 	triggerCancelledExpired   = "cancelled_expired"
 	triggerRefund             = "refund"
@@ -298,7 +320,7 @@ func (w *Workers) applyScheduledChange(ctx context.Context, listed domain.Subscr
 			return err
 		}
 		if transitionChangedTariff(transition, target.ID) {
-			if err := stores.enforceTariffLimit(ctx, sub.UserID, target.ActivePropertyLimit, triggerScheduledDowngrade); err != nil {
+			if err := stores.enforceTariffLimit(ctx, sub.UserID, target.ActivePropertyLimit, triggerScheduledDowngrade, nil); err != nil {
 				return fmt.Errorf("enforce tariff limit after scheduled downgrade: %w", err)
 			}
 		}
@@ -566,37 +588,63 @@ func (w *Workers) planRenewal(
 
 	// Reuse a pending renewal payment from a crashed run instead of initiating
 	// a duplicate; the pending-payments unique index is the durable backstop.
-	pending := findPendingPayment(stores, ctx, sub.UserID, renewalTariff.ID, period)
-	if pending == nil {
-		payment, err := domain.NewSubscriptionPayment(sub.UserID, sub.ID, renewalTariff.ID, period, amount, w.provider.Name(), now)
-		if err != nil {
+	pending, err := pendingRenewalPayment(ctx, stores, sub, renewalTariff, period, amount, w.provider.Name(), now)
+	if err != nil {
+		return renewalPlan{}, err
+	}
+	// A recovered pending payment may predate a card switch, or the card
+	// snapshot (issue #619): point it at the method the subscription charges
+	// now, so the record matches the token and the card actually charged.
+	if pending.PaymentMethodID == nil || *pending.PaymentMethodID != method.ID || pending.CardMask == nil {
+		if err := pending.AttachMethodSnapshot(method.ID, method.DisplayMask, now); err != nil {
 			return renewalPlan{}, err
 		}
-		payment.PaymentMethodID = &method.ID
-		payment, err = stores.payments.Create(ctx, payment)
-		if err != nil {
-			if !errors.Is(err, ErrAlreadyExists) {
-				return renewalPlan{}, fmt.Errorf("save renewal payment: %w", err)
-			}
-			pending = findPendingPayment(stores, ctx, sub.UserID, renewalTariff.ID, period)
-			if pending == nil {
-				return renewalPlan{}, fmt.Errorf("pending renewal payment lost after unique-race: %w", err)
-			}
-			payment = *pending
-		}
-		pending = &payment
-	}
-	// A recovered pending payment may predate a card switch: point it at the
-	// method the subscription charges now, so the record matches the token
-	// actually charged.
-	if pending.PaymentMethodID == nil || *pending.PaymentMethodID != method.ID {
-		methodID := method.ID
-		pending.PaymentMethodID = &methodID
 		if err := stores.payments.Update(ctx, *pending); err != nil {
 			return renewalPlan{}, fmt.Errorf("update renewal payment method: %w", err)
 		}
 	}
 	return renewalPlan{ready: true, payment: *pending, method: method, tariff: renewalTariff}, nil
+}
+
+// pendingRenewalPayment resolves the charge target of a renewal: a live
+// pending payment for the same tariff and period from a crashed run — or a
+// fresh pending payment persisted as the durable record that survives a crash
+// before the provider call. A pending form payment whose deadline ran out
+// (issue #616) is expired in the same transaction and replaced. The charge
+// method is pointed at the payment by the caller.
+func pendingRenewalPayment(
+	ctx context.Context, stores *txStores, sub domain.Subscription,
+	renewalTariff domain.Tariff, period domain.SubscriptionPeriod,
+	amount int64, provider domain.PaymentProvider, now time.Time,
+) (*domain.SubscriptionPayment, error) {
+	pending := findPendingPayment(stores, ctx, sub.UserID, renewalTariff.ID, period)
+	if pending != nil && !pending.IsLivePending(now) {
+		// The pending form payment's deadline ran out (issue #616): fail it
+		// and start a fresh charge instead of reusing a dead payment.
+		if err := expireDeadPendingPayment(ctx, stores, pending, now); err != nil {
+			return nil, err
+		}
+		pending = nil
+	}
+	if pending != nil {
+		return pending, nil
+	}
+	payment, err := domain.NewSubscriptionPayment(sub.UserID, sub.ID, renewalTariff.ID, period, amount, provider, now)
+	if err != nil {
+		return nil, err
+	}
+	payment, err = stores.payments.Create(ctx, payment)
+	if err != nil {
+		if !errors.Is(err, ErrAlreadyExists) {
+			return nil, fmt.Errorf("save renewal payment: %w", err)
+		}
+		pending = findPendingPayment(stores, ctx, sub.UserID, renewalTariff.ID, period)
+		if pending == nil {
+			return nil, fmt.Errorf("pending renewal payment lost after unique-race: %w", err)
+		}
+		return pending, nil
+	}
+	return &payment, nil
 }
 
 // renewalTerms resolves what a renewal buys: a due scheduled change renews
@@ -679,7 +727,7 @@ func (w *Workers) applyFreeRenewal(
 		return err
 	}
 	if transitionChangedTariff(applied, sub.TariffID) {
-		if err := stores.enforceTariffLimit(ctx, sub.UserID, tariff.ActivePropertyLimit, triggerFreeDowngrade); err != nil {
+		if err := stores.enforceTariffLimit(ctx, sub.UserID, tariff.ActivePropertyLimit, triggerFreeDowngrade, nil); err != nil {
 			return fmt.Errorf("enforce tariff limit after free renewal: %w", err)
 		}
 	}
@@ -800,17 +848,20 @@ func (w *Workers) mitInitRequest(payment domain.SubscriptionPayment, tariff doma
 
 // failRenewalPayment finalizes a definitively failed renewal charge and moves
 // the subscription into grace in the same transaction: the pending window for
-// the user to fix the payment method (ADR 0008). The freshness guard of issue
-// #426 keeps a superseded charge out of grace: a subscription renewed or
-// upgraded by a newer payment while this charge was in flight stays active,
-// and the failure is recorded on the payment alone. A payment finalized by
-// another flow first is a no-op. The grace-entered event is captured by the
-// grace-events module inside the transaction and published strictly after the
-// commit — best-effort, a publication failure is logged and never fails the
-// finalized payment (issue #284).
+// the user to fix the payment method (ADR 0008). Grace v2 (ADR 0055) makes
+// the entry archive excess properties, so the transaction carries the
+// lifecycle bridges — the archiving and the snapshot commit with the grace
+// transition. The freshness guard of issue #426 keeps a superseded charge out
+// of grace: a subscription renewed or upgraded by a newer payment while this
+// charge was in flight stays active, and the failure is recorded on the
+// payment alone. A payment finalized by another flow first is a no-op. The
+// grace-entered event is captured by the grace-events module inside the
+// transaction and published strictly after the commit — best-effort, a
+// publication failure is logged and never fails the finalized payment
+// (issue #284).
 func (w *Workers) failRenewalPayment(ctx context.Context, paymentID uuid.UUID, errorCode *string, now time.Time) error {
 	grace := newGraceEvents(w.publisher, w.log)
-	return grace.run(ctx, w.runInTx, func(stores *txStores) error {
+	return grace.run(ctx, w.runLifecycleTx, func(stores *txStores) error {
 		payment, err := stores.paymentForUpdate(ctx, paymentID)
 		if err != nil {
 			return err
@@ -1009,8 +1060,10 @@ func (w *Workers) remindGraceExpiring(ctx context.Context, listed domain.Subscri
 // expireSubscription applies the shared expiry path in one transaction: it
 // locks the subscription, re-checks the selection under the lock (the state the
 // listing saw may be gone), downgrades to basic with its transition-log entry,
-// archives the excess properties and enforces the recipient slots. An
-// out-of-selection subscription is a no-op, not an error.
+// archives the excess properties — keeping the property the owner chose at
+// cancel time, when the falling subscription carries one (issue #617) — and
+// enforces the recipient slots. An out-of-selection subscription is a no-op,
+// not an error.
 func (w *Workers) expireSubscription(
 	ctx context.Context, listed domain.Subscription, basicTariff domain.Tariff, trigger string, sel SubscriptionSelection,
 ) error {
@@ -1022,6 +1075,9 @@ func (w *Workers) expireSubscription(
 		if !inBatch {
 			return nil
 		}
+		// The keep choice is read before the downgrade consumes it: it names
+		// the property the basic-limit enforcement below must keep alive.
+		keepPropertyID := sub.KeepPropertyID
 		if _, err := stores.applyTransition(ctx, &sub,
 			func(s *domain.Subscription) error { s.DowngradeToBasic(basicTariff.ID); return nil },
 			transitionSpec{
@@ -1031,7 +1087,7 @@ func (w *Workers) expireSubscription(
 		); err != nil {
 			return err
 		}
-		if err := stores.enforceTariffLimit(ctx, sub.UserID, basicTariff.ActivePropertyLimit, trigger); err != nil {
+		if err := stores.enforceTariffLimit(ctx, sub.UserID, basicTariff.ActivePropertyLimit, trigger, keepPropertyID); err != nil {
 			return fmt.Errorf("enforce tariff limit after expiry downgrade: %w", err)
 		}
 		return nil
@@ -1046,6 +1102,91 @@ func (w *Workers) expireSubscription(
 func (w *Workers) ProcessPendingUpgradePayments(ctx context.Context, now time.Time) (int, error) {
 	return w.reconcileStalePendingPayments(ctx, "pending upgrade payments",
 		w.phases.stalePendingUpgrades(now, w.config.WorkerBatchSize))
+}
+
+// ProcessExpiredPendingPayments expires still-pending form payments whose
+// deadline ran out (issue #616): the server-side expiry is the truth, so the
+// payment becomes failed and the user's locked tariff choice unlocks. There
+// are no subscription effects — a customer-initiated payment carries no
+// charge method — and no provider call: the provider's own redirect deadline
+// is the same persisted instant, so a success that slipped past the expiry
+// arrives as a late webhook and is reconciled against the provider by the
+// shared out-of-order seam. Every row is re-checked and locked inside its own
+// transaction: a payment resolved between listing and locking is a no-op.
+// Returns the number of payments expired.
+func (w *Workers) ProcessExpiredPendingPayments(ctx context.Context, now time.Time) (int, error) {
+	expired := 0
+	for {
+		payments, err := w.txStoreFactory.payments.ListExpiredPending(ctx, now, w.config.WorkerBatchSize)
+		if err != nil {
+			return expired, fmt.Errorf("list expired pending payments: %w", err)
+		}
+		if len(payments) == 0 {
+			break
+		}
+		batch := 0
+		for _, payment := range payments {
+			if err := w.expirePendingPayment(ctx, payment, now); err != nil {
+				w.log.ErrorContext(ctx, "failed to expire pending payment past its deadline",
+					slog.String(auditKeyPaymentID, payment.ID.String()),
+					slog.String("error", sanitize.Error(err)))
+				continue
+			}
+			batch++
+		}
+		expired += batch
+		if len(payments) < w.config.WorkerBatchSize {
+			break
+		}
+		if batch == 0 {
+			w.log.WarnContext(ctx, "batch made no progress; deferring to next tick",
+				slog.String("op", "expire pending payments"))
+			break
+		}
+	}
+	return expired, nil
+}
+
+// expirePendingPayment expires one listed payment inside its own transaction:
+// the row is locked and re-checked, so a payment finalized by another flow
+// between listing and locking is a no-op, not an error. The audit entry
+// matches every other payment failure's shape.
+func (w *Workers) expirePendingPayment(ctx context.Context, listed domain.SubscriptionPayment, now time.Time) error {
+	return w.runInTx(ctx, func(stores *txStores) error {
+		payment, err := stores.paymentForUpdate(ctx, listed.ID)
+		if err != nil {
+			return err
+		}
+		if payment.Status != domain.PaymentStatusPending {
+			// Finalized by another flow between listing and locking: the
+			// persisted state wins.
+			return nil
+		}
+		if payment.IsLivePending(now) {
+			// Its deadline moved back between listing and locking.
+			return nil
+		}
+		if err := payment.MarkExpired(now); err != nil {
+			return err
+		}
+		if err := stores.payments.Update(ctx, payment); err != nil {
+			return fmt.Errorf("mark expired pending payment: %w", err)
+		}
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorRole:  auditdomain.ActorRoleSystem,
+			Action:     auditdomain.ActionSubscriptionPaymentFailed,
+			EntityType: auditdomain.EntitySubscriptionPayment,
+			EntityID:   &payment.ID,
+			Context: map[string]any{
+				auditKeyPaymentID: payment.ID,
+				auditKeyProvider:  string(payment.Provider),
+				auditKeyReason:    domain.PaymentErrorCodeFormExpired,
+			},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
 }
 
 // ReconcilePendingPayments pulls the lost webhooks of every stale pending

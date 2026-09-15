@@ -30,6 +30,7 @@ DDD modular monolith (Go, `apps/backend/internal/`). Domain glossary is split by
 - **Rentals → Contacts**: a rental may reference a contact from the owner's book as the tenant; deleting the contact nulls the reference (ADR 0054).
 - **Properties → Tasks**: a task rule and its tasks belong to exactly one property (`property_id`) or, created explicitly without one, live in the owner's book as propertyless tasks (ADR 0052). Access to property-bound tasks follows the property access roles (ADR 0028); propertyless tasks are owner-only. Archive is read-only for tasks (the tick skips archived properties); deleting a property cascades its rules and tasks in both ADR 0025 modes (ADR 0051) — propertyless tasks are unaffected. Propertyless rules resolve «today», overdue, and completion in the owner's timezone (ADR 0048).
 - **Properties → Billing**: Active property count feeds subscription tariff limits.
+- **Billing → Properties**: Grace entry (ADR 0055) archives the owner's active properties beyond one — the snapshot of archived ids on the subscription is the debt a later successful payment restores through the same bridge.
 - **Billing → Access**: Downgrade/grace-period may suspend shared access when limits shrink.
 - **All → Audit**: Every context records user/admin/system actions to the audit log.
 
@@ -52,6 +53,6 @@ Terms shared across contexts, documented once here:
 **Money vocabularies** (ADR 0036, updated by ADR 0046 and ADR 0047) — never mix them:
 
 - **Record-keeping (Payments)**: Платёж (правило), Операция (вхождение), Доход/Расход, Автоплатёж, Просрочка, Долг, Пауза, Категория, Форма оплаты — the world defined by the Payments context (ADR 0047). «Платёж» returned to the active language as the rule; «транзакция» stays banned here.
-- **Processing (Billing only)**: Оплата подписки, Способ оплаты, Возврат, PaymentId, CIT/MIT — the T-Kassa payment world. The «операция» in CIT/MIT definitions is a quoted provider term, not a Payments Операция. «Способ оплаты» (card) is Billing-only — the Payments-side term is «Форма оплаты». UI-copy exception: the mobile payment-edit screen carries the mockup's field label «Способ оплаты» for its Форма оплаты field (Figma 705:10034, owner decision 2026-08-31); the domain term remains «Форма оплаты».
+- **Processing (Billing only)**: Оплата подписки, Способ оплаты, Возврат, PaymentId, CIT/MIT — the T-Kassa payment world. The «операция» in CIT/MIT definitions is a quoted provider term, not a Payments Операция. «Способ оплаты» (card) is Billing-only — the Payments-side term is «Форма оплаты». UI-copy exception: the mobile payment-edit screen carries the mockup's field label «Способ оплаты» for its Форма оплаты field (Figma 705:10034, owner decision 2026-08-31); the domain term remains «Форма оплаты». UI-copy exception: the tariff hub's history entry and screen are labelled «Операции» (owner decision 2026-09-11) — the domain term remains «Оплата подписки» / Subscription Payment; never mix with the Payments Операция.
 
 **Money / Деньги**: all product amounts are in Russian rubles (RUB); there is no multi-currency support. Storage, transport, and formatting rules: root `AGENTS.md` and ADR 0008.

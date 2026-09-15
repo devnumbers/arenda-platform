@@ -15,6 +15,7 @@ import {
   type UpdateParams,
   type UpdateResult,
 } from 'react-admin';
+import type { TimeShiftPreset } from './lib/time-travel';
 
 const API_PREFIX = import.meta.env.VITE_API_PREFIX ?? '/api';
 
@@ -44,6 +45,17 @@ export interface AdminDataProvider extends DataProvider {
   }) => Promise<{ data: unknown }>;
   extendSubscriptionGrace: (payload: { userId: string | number; days: number }) => Promise<{ data: unknown }>;
   cancelSubscription: (payload: { userId: string | number }) => Promise<{ data: unknown }>;
+  // Стендовый риг времени подписки (issue #666): разведка включённости рига,
+  // когерентный сдвиг границ (сырой сдвиг или пресет — ровно одно) и ручной
+  // тик. Роуты смонтированы только при BILLING_TIME_TRAVEL — вне стенда
+  // панель по 404 разведки не показывается.
+  billingTimeTravelStatus: () => Promise<{ data: { enabled: boolean } }>;
+  shiftSubscriptionTime: (payload: {
+    userId: string | number;
+    shiftHours?: number;
+    preset?: TimeShiftPreset;
+  }) => Promise<{ data: unknown }>;
+  billingTick: () => Promise<{ data: unknown }>;
   // Статистика дашборда (issue #307): обращения к backend — только через
   // dataProvider, сырой fetch в компонентах запрещён ESLint-гейтом.
   getStats: () => Promise<{ data: unknown }>;
@@ -384,6 +396,33 @@ export const dataProvider: AdminDataProvider = {
 
   cancelSubscription: async ({ userId }) => {
     const { json } = await httpClient(`${API_PREFIX}/admin/users/${userId}/subscription/cancel`, { method: 'POST' });
+    return { data: json };
+  },
+
+  billingTimeTravelStatus: async () => {
+    const { json } = await httpClient(`${API_PREFIX}/admin/billing/time-travel`, { method: 'GET' });
+    return { data: json as { enabled: boolean } };
+  },
+
+  shiftSubscriptionTime: async ({ userId, shiftHours, preset }) => {
+    // Ровно одно из двух: бэкенд отвергает тело без сдвига и без пресета.
+    const body: Record<string, unknown> = {};
+    if (shiftHours !== undefined) {
+      body.shiftHours = shiftHours;
+    }
+    if (preset !== undefined) {
+      body.preset = preset;
+    }
+    const { json } = await httpClient(`${API_PREFIX}/admin/users/${userId}/subscription/time-shift`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    return { data: json };
+  },
+
+  billingTick: async () => {
+    const { json } = await httpClient(`${API_PREFIX}/admin/billing/tick`, { method: 'POST' });
     return { data: json };
   },
 

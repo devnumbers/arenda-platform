@@ -126,6 +126,7 @@ var userFacingDetails = []struct {
 	{billingdomain.ErrInvalidPaymentStatus, "Некорректный статус платежа для этой операции"},
 	{billingdomain.ErrInvalidTerm, "Некорректный срок служебной подписки"},
 	{billingdomain.ErrInvalidGraceExtension, "Некорректное продление льготного периода"},
+	{billingdomain.ErrInvalidTimeShift, "Некорректный сдвиг времени подписки"},
 	{billingdomain.ErrInvalidTariffPricing, "Некорректные цены или лимит тарифа"},
 
 	// Admin.

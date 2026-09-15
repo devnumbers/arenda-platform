@@ -1,13 +1,13 @@
 import type { Metadata } from 'next';
-import { SubScreenShell } from '@/shared/ui/design';
-import { ROUTES } from '@/shared/config/routes';
 import { PaymentDetail } from '@/widgets/profile';
 
 export const metadata: Metadata = {
   title: 'Платёж — Рентли',
-  description: 'Детали платежа по тарифу',
+  description: 'Детали платежа по подписке',
 };
 
+/** Каркас (SubScreenShell) собирает сам PaymentDetail: заголовок шапки —
+ * дата-время платежа, он известен только после загрузки (#624). */
 export default async function PaymentDetailPage({
   params,
 }: {
@@ -15,11 +15,5 @@ export default async function PaymentDetailPage({
 }) {
   const { id } = await params;
 
-  return (
-    <>
-      <SubScreenShell title="Платёж" fallbackHref={ROUTES.profilePayments}>
-        <PaymentDetail id={id} />
-      </SubScreenShell>
-    </>
-  );
+  return <PaymentDetail id={id} />;
 }

@@ -36,6 +36,10 @@ export type PaymentRowButtonProps = {
    * плюсом зелёным (доход). У плашек правил не включается — их сумма всегда
    * без знака. */
   readonly signedAmount?: boolean;
+  /** Оверрайд тона суммы без `danger` (красит и описание): подписочные
+   * платежи #624 — у не выполненного красным становится только сумма,
+   * описание-маска остаётся серым (макет 1877-68603). */
+  readonly valueClassName?: string;
   readonly onSelect?: () => void;
   readonly disabled?: boolean;
   readonly className?: string;
@@ -54,6 +58,7 @@ export function PaymentRowButton({
   variant = 'white',
   danger = false,
   signedAmount = false,
+  valueClassName,
   onSelect,
   disabled = false,
   className,
@@ -105,6 +110,7 @@ export function PaymentRowButton({
                         : signedAmount && amountKopecks > 0
                           ? 'text-success'
                           : 'text-content group-hover/row:text-content-secondary',
+                      valueClassName,
                     )}
                   >
                     {signedAmount && amountKopecks > 0 && '+'}

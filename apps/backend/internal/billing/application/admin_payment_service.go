@@ -312,7 +312,7 @@ func (s *PaymentService) applyRefundedPayment(
 		return err
 	}
 
-	if err := stores.enforceTariffLimit(ctx, sub.UserID, basicTariff.ActivePropertyLimit, triggerRefund); err != nil {
+	if err := stores.enforceTariffLimit(ctx, sub.UserID, basicTariff.ActivePropertyLimit, triggerRefund, nil); err != nil {
 		return fmt.Errorf("enforce tariff limit after refund: %w", err)
 	}
 
@@ -473,6 +473,7 @@ func notificationFromStatus(payment domain.SubscriptionPayment, status PaymentSt
 		Status:            status.Status,
 		ErrorCode:         errorCode,
 		AmountKopecks:     payment.AmountKopecks,
+		CardMask:          status.CardMask,
 	}
 }
 
@@ -525,9 +526,9 @@ func normalizeAdminPaymentFilters(filters AdminPaymentFilters) (AdminPaymentFilt
 	return filters, nil
 }
 
-// validAdminPaymentStatus accepts the payment statuses of the API contract,
-// including the legacy partial_refunded: no row can carry it any more
-// (ADR 0037), so filtering by it simply matches nothing.
+// validAdminPaymentStatus accepts the payment statuses of the API contract
+// (ADR 0037): refunds are full-amount only, so the legacy partial_refunded is
+// not part of the vocabulary and cannot be filtered by.
 func validAdminPaymentStatus(status string) bool {
 	switch domain.PaymentStatus(status) {
 	case domain.PaymentStatusPending,
@@ -535,8 +536,6 @@ func validAdminPaymentStatus(status string) bool {
 		domain.PaymentStatusFailed,
 		domain.PaymentStatusRefunded,
 		domain.PaymentStatusRefunding:
-		return true
-	case "partial_refunded":
 		return true
 	}
 	return false

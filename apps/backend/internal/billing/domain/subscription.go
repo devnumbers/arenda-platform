@@ -68,6 +68,35 @@ type Subscription struct {
 	// reminded this grace window (issue #253). Nil means the current window
 	// has not been reminded yet; entering a new grace window resets it.
 	GraceRemindedAt *time.Time
+	// GraceArchivedPropertyIDs is the snapshot of the properties billing
+	// archived when this subscription entered its grace window (grace v2,
+	// ADR 0055): grace keeps one active property, and the owner is owed the
+	// restoration of these ids on the next successful payment. The order is
+	// the restoration priority — the newest archived property first. The debt
+	// is settled by the payment that restores them (the application seam
+	// clears the field) and dropped when the subscription falls to basic or
+	// is overwritten by a service assignment.
+	GraceArchivedPropertyIDs []uuid.UUID
+	// KeepPropertyID is the property the owner chose to keep when cancelling
+	// (issue #617): when the cancelled subscription later expires and the
+	// worker applies the basic limit, this property survives and the excess
+	// ones are archived. Set by Cancel, consumed by the first lifecycle move
+	// that makes it moot (the fall to basic, a resume, a reactivation, a
+	// service overwrite).
+	KeepPropertyID *uuid.UUID
+}
+
+// SetGraceArchive records the ids the grace entry archived, replacing any
+// previous snapshot: a fresh grace window owes a fresh restoration.
+func (s *Subscription) SetGraceArchive(ids []uuid.UUID) {
+	s.GraceArchivedPropertyIDs = ids
+}
+
+// ClearGraceArchive drops the restoration debt: the snapshot ids were restored
+// (or the subscription state they belonged to is gone), so a later payment
+// must not restore them again.
+func (s *Subscription) ClearGraceArchive() {
+	s.GraceArchivedPropertyIDs = nil
 }
 
 // NewBasicSubscription creates the free basic subscription for a
@@ -246,6 +275,7 @@ func (s *Subscription) ApplyTariffChange(
 	s.PendingTariffID = nil
 	s.PendingChangeAt = nil
 	s.PendingPeriod = nil
+	s.KeepPropertyID = nil
 	s.Status = SubscriptionStatusActive
 	return nil
 }
@@ -283,6 +313,9 @@ func (s *Subscription) ApplyRenewal(paymentID uuid.UUID, period SubscriptionPeri
 	s.PendingTariffID = nil
 	s.PendingChangeAt = nil
 	s.PendingPeriod = nil
+	// A reactivation payment (issue #429) supersedes the keep choice of the
+	// cancelled state it pulls the subscription out of (issue #617).
+	s.KeepPropertyID = nil
 	return nil
 }
 
@@ -369,14 +402,37 @@ func (s *Subscription) SetAutoRenew(enabled bool) error {
 // The validity date is retained so the worker can downgrade the subscription to
 // basic once the period expires. Auto-renew is disabled immediately and any
 // scheduled tariff change is dropped: a cancelled subscription no longer
-// switches tariffs, it runs out its paid period and falls to basic.
-func (s *Subscription) Cancel() error {
+// switches tariffs, it runs out its paid period and falls to basic. The
+// optional keepPropertyID (issue #617) records which property the owner wants
+// to survive that fall; the expiry worker honours it when applying the basic
+// limit.
+func (s *Subscription) Cancel(keepPropertyID *uuid.UUID) error {
 	if s.Status != SubscriptionStatusActive && s.Status != SubscriptionStatusGrace {
 		return ErrInvalidSubscriptionState
 	}
 	s.Status = SubscriptionStatusCancelled
 	s.AutoRenewEnabled = false
 	s.ClearPendingChange()
+	s.KeepPropertyID = keepPropertyID
+	return nil
+}
+
+// Resume undoes a cancellation without a charge (issue #617): a cancelled
+// subscription inside its already paid period returns to active with
+// auto-renew switched back on, and the paid remainder is kept as is. The free
+// resume is the counterpart of the paid reactivation (ADR 0008: restoration
+// goes through paying for a tariff) — that one stays for periods that have
+// already expired. The keep choice of the undone cancellation is dropped.
+func (s *Subscription) Resume(now time.Time) error {
+	if s.Status != SubscriptionStatusCancelled {
+		return ErrResumeNotAvailable
+	}
+	if s.ValidUntil == nil || now.After(*s.ValidUntil) {
+		return ErrResumeNotAvailable
+	}
+	s.Status = SubscriptionStatusActive
+	s.AutoRenewEnabled = true
+	s.KeepPropertyID = nil
 	return nil
 }
 
@@ -399,6 +455,10 @@ func (s *Subscription) AssignService(tariffID uuid.UUID, validUntil time.Time) {
 	s.PendingPeriod = nil
 	s.CurrentPeriod = nil
 	s.GraceRemindedAt = nil
+	// The overwrite discards the previous subscription's state, the grace
+	// restoration debt with it (issue #255).
+	s.ClearGraceArchive()
+	s.KeepPropertyID = nil
 }
 
 // ForceApplyTariffChange switches the subscription to the given tariff
@@ -426,6 +486,7 @@ func (s *Subscription) ForceApplyTariffChange(newTariffID uuid.UUID, period Subs
 	s.PendingTariffID = nil
 	s.PendingChangeAt = nil
 	s.PendingPeriod = nil
+	s.KeepPropertyID = nil
 	s.GraceRemindedAt = nil
 	return nil
 }
@@ -449,6 +510,37 @@ func (s *Subscription) ExtendGrace(now time.Time, extra time.Duration) error {
 	return nil
 }
 
+// ShiftTime moves the subscription's own temporal boundaries by the signed
+// delta (issue #665): valid_until — the paid-period end or the grace deadline,
+// whatever the current status means by it — and any pending-change deadline
+// travel by the same delta, so the pending-change CHECK
+// (pending_change_at >= valid_until) survives. The reminder flag resets: the
+// shifted window counts as a fresh one for the grace-expiry reminder (#253),
+// the same rule ExtendGrace applies. Status, tariff, source and every
+// non-temporal field stay untouched — the lifecycle phases pick the moved
+// boundaries up on their next tick, unchanged. The caller owns the size limit
+// and the enabling railguard; this method only refuses a zero delta and a
+// subscription without a validity boundary (the free basic state has no time
+// to travel). The dunning retry anchor and the payments' created_at are
+// store-side boundaries the application shift moves alongside (issue #665) —
+// they live outside the aggregate.
+func (s *Subscription) ShiftTime(delta time.Duration) error {
+	if delta == 0 {
+		return ErrInvalidTimeShift
+	}
+	if s.ValidUntil == nil {
+		return ErrInvalidTimeShift
+	}
+	validUntil := s.ValidUntil.Add(delta)
+	s.ValidUntil = &validUntil
+	if s.PendingChangeAt != nil {
+		pendingAt := s.PendingChangeAt.Add(delta)
+		s.PendingChangeAt = &pendingAt
+	}
+	s.GraceRemindedAt = nil
+	return nil
+}
+
 // DowngradeToBasic resets the subscription to the free basic tariff. It clears
 // any validity period, current period, pending change and auto-renewal state,
 // and returns the subscription to the paid track: the free basic plan is the
@@ -464,6 +556,14 @@ func (s *Subscription) DowngradeToBasic(basicTariffID uuid.UUID) {
 	s.PendingChangeAt = nil
 	s.PendingPeriod = nil
 	s.CurrentPeriod = nil
+	// The fall to basic ends the grace window without payment: the
+	// restoration debt is dropped, the grace archive stays archived
+	// (grace v2, ADR 0055).
+	s.ClearGraceArchive()
+	// The fall to basic is where the cancel keep choice is consumed: the
+	// expiry enforcement that follows keeps this very property alive
+	// (issue #617).
+	s.KeepPropertyID = nil
 }
 
 // FailedRenewalIsCurrent reports whether a failed renewal charge with the

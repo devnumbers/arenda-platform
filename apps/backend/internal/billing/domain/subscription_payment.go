@@ -8,6 +8,12 @@ import (
 	"github.com/google/uuid"
 )
 
+// PaymentErrorCodeFormExpired is the error code persisted on a pending
+// payment the TTL worker expired (issue #616): the provider form deadline —
+// the same TTL passed to the provider as its redirect deadline — ran out
+// before any provider outcome arrived.
+const PaymentErrorCodeFormExpired = "form_expired"
+
 // SubscriptionPayment is a processing-world money event (ADR 0036): one charge
 // of a subscription tariff through the payment provider. The lifecycle states
 // and transitions mirror the subscription_payments table of migration 000104:
@@ -32,6 +38,17 @@ type SubscriptionPayment struct {
 	CreatedAt             time.Time
 	UpdatedAt             time.Time
 	SucceededAt           *time.Time
+	// ExpiresAt bounds a customer-initiated payment's form: the same absolute
+	// deadline is passed to the provider as its redirect deadline, so both
+	// sides close the form at the same instant. Nil on merchant-initiated
+	// charges — they carry no payer form.
+	ExpiresAt *time.Time
+	// CardMask is the snapshot of the masked card number the payment was
+	// charged with (issue #619) — "4300********1234" shape. Taken at creation
+	// (the merchant-initiated method being charged) or at finalization (the
+	// card the provider reports), so the payment history survives payment
+	// method deletion. Nil when no card is known for the payment.
+	CardMask *string
 }
 
 // NewSubscriptionPayment builds a pending payment for a tariff purchase. The
@@ -170,6 +187,97 @@ func (p *SubscriptionPayment) MarkFailed(errorCode *string, now time.Time) error
 	p.ErrorCode = errorCode
 	p.UpdatedAt = now.UTC()
 	return nil
+}
+
+// AttachMethodSnapshot records the payment method a merchant-initiated charge
+// runs on together with the snapshot of its card mask (issue #619): the
+// history must describe the card actually charged even after the method is
+// deleted. A pending payment accepts the snapshot — a recovered payment whose
+// card was switched is re-pointed at the method being charged now, mask
+// following; a finalized payment rejects it, history never rewrites.
+func (p *SubscriptionPayment) AttachMethodSnapshot(methodID uuid.UUID, displayMask string, now time.Time) error {
+	if p.Status != PaymentStatusPending {
+		return ErrInvalidPaymentStatus
+	}
+	if methodID == uuid.Nil {
+		return ErrInvalidPayment
+	}
+	p.PaymentMethodID = &methodID
+	if displayMask != "" {
+		p.CardMask = &displayMask
+	}
+	p.UpdatedAt = now.UTC()
+	return nil
+}
+
+// AttachCardMask records the masked card number a provider notification
+// reports for the charge (issue #619) — the customer-initiated payments'
+// snapshot path, taken inside the finalizing transaction. Fill-once: a
+// repeated or later delivery never replaces the recorded card, and a
+// notification without card data changes nothing.
+func (p *SubscriptionPayment) AttachCardMask(mask string, now time.Time) {
+	if mask == "" || p.CardMask != nil {
+		return
+	}
+	p.CardMask = &mask
+	p.UpdatedAt = now.UTC()
+}
+
+// AttachFormDeadline records the payer-form deadline of a customer-initiated
+// payment (issue #616): the TTL is the module's constant, computed at the
+// initiation and passed to the provider as the same absolute instant, so the
+// persisted value is the single source both the user-facing countdown and the
+// provider's redirect deadline anchor to. Only a pending payment without a
+// deadline accepts one, and the deadline must still be in the future.
+func (p *SubscriptionPayment) AttachFormDeadline(deadline, now time.Time) error {
+	if p.Status != PaymentStatusPending {
+		return ErrInvalidPaymentStatus
+	}
+	if p.ExpiresAt != nil {
+		return ErrInvalidPaymentStatus
+	}
+	if !deadline.After(now) {
+		return ErrInvalidPayment
+	}
+	p.ExpiresAt = new(deadline.UTC())
+	p.UpdatedAt = now.UTC()
+	return nil
+}
+
+// MarkExpired finalizes a pending payment whose form deadline ran out without
+// a provider outcome (issue #616): the server-side expiry is the truth, so
+// the payment becomes failed with the form-expired code and the user's tariff
+// choice unlocks. Expiry only applies to a still-pending payment past its own
+// persisted deadline.
+func (p *SubscriptionPayment) MarkExpired(now time.Time) error {
+	if p.Status != PaymentStatusPending {
+		return ErrInvalidPaymentStatus
+	}
+	if p.ExpiresAt == nil || now.Before(*p.ExpiresAt) {
+		return ErrInvalidPaymentStatus
+	}
+	return p.MarkFailed(new(PaymentErrorCodeFormExpired), now)
+}
+
+// IsLivePending reports whether a pending payment still holds the user's
+// tariff-change decision (issue #616): a payment with a deadline is live only
+// until it; one without a deadline — a merchant-initiated charge — stays live
+// until the worker or provider resolves it. Finalized payments are never
+// live.
+func (p *SubscriptionPayment) IsLivePending(now time.Time) bool {
+	if p.Status != PaymentStatusPending {
+		return false
+	}
+	return p.ExpiresAt == nil || now.Before(*p.ExpiresAt)
+}
+
+// IsLiveFormPayment reports whether a pending payment is a live payer-form
+// payment (issue #616): only form payments carry the user's tariff decision,
+// so only they block the tariff screens and surface as the subscription
+// view's pendingPayment. Merchant-initiated charges have no deadline and
+// never qualify.
+func (p *SubscriptionPayment) IsLiveFormPayment(now time.Time) bool {
+	return p.ExpiresAt != nil && p.IsLivePending(now)
 }
 
 // ReconcileToSucceeded moves a failed payment back to succeeded after the

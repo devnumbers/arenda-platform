@@ -15,7 +15,8 @@ import {
  * /profile/notifications — хабы (без «Назад», крылья), в таблицу не входят.
  * /profile/tariff/payments/[id] не входит — требует id платежа, канон его
  * шапки совпадает со списком. /profile/personal снесён в #593 — поглощён
- * экраном /profile/account. */
+ * экраном /profile/account. /profile/tariff/change/success не входит —
+ * канонный полноэкранный успех (#623) без SubScreenShell. */
 const SUBPAGE_TITLES: ReadonlyArray<readonly [string, string]> = [
   ['/profile/account', 'Аккаунт'],
   ['/profile/account/phone', 'Изменение телефона'],
@@ -23,11 +24,12 @@ const SUBPAGE_TITLES: ReadonlyArray<readonly [string, string]> = [
   ['/profile/info/privacy', 'Политика конфиденциальности'],
   ['/profile/info/terms', 'Пользовательское соглашение'],
   ['/profile/tariff', 'Тариф'],
-  ['/profile/tariff/change', 'Сменить тариф'],
-  ['/profile/tariff/change/success', 'Тариф изменён'],
+  ['/profile/tariff/about', 'О тарифе'],
+  ['/profile/tariff/disable', 'Отключение тарифа'],
+  ['/profile/tariff/change', 'Выбрать тариф'],
   ['/profile/tariff/payment-methods', 'Способы оплаты'],
   ['/profile/tariff/payment-methods/add', 'Добавить карту'],
-  ['/profile/tariff/payments', 'История платежей'],
+  ['/profile/tariff/payments', 'Операции'],
 ];
 
 const SCREEN_HEADER = 'header[aria-label="Навигация экрана"]';

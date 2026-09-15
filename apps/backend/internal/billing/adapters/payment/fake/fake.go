@@ -36,6 +36,27 @@ const (
 	fakeExpDate                 = "1230"
 )
 
+// The form-payment sentinel amounts (issue #663) — the fake counterpart of
+// Stripe's test cards, letting a stand encode the outcome of a subscription
+// form payment in the amount itself (the tariff price a user pays). The
+// kopecks part of the init amount carries the outcome:
+//
+//   - kopecks 01 → the confirmation completes the payment as failed
+//     (the bank declined), e.g. a 399.01 ₽ tariff;
+//   - kopecks 02 → the confirmation resolves nothing and the payment stays
+//     pending until the TTL («the bank never answers»), e.g. 399.02 ₽. The
+//     stuck entry refuses every completion attempt — the manual fail
+//     endpoint included — only the TTL purge ends the session;
+//   - any other amount confirms as succeeded.
+//
+// The sentinels shape the CIT form-payment flow only; merchant-initiated
+// charges keep the fake_fail_ charge-token prefix. A declined card binding
+// stays available through the binding-refusal webhook delivery.
+const (
+	sentinelFailKopecks    = int64(1)
+	sentinelPendingKopecks = int64(2)
+)
+
 type pendingEntry struct {
 	event         application.WebhookEvent
 	savedMethod   application.SavedMethod
@@ -176,6 +197,8 @@ func (p *Provider) InitPayment(ctx context.Context, req application.InitPaymentR
 	savedMethod := application.SavedMethod{
 		ChargeToken: "fake_token_" + uuid.Must(uuid.NewV7()).String(),
 		CustomerRef: req.CustomerRef,
+		MaskedPan:   fakeMaskedPan,
+		ExpDate:     fakeExpDate,
 	}
 
 	p.pending[req.PaymentID.String()] = pendingEntry{
@@ -307,6 +330,7 @@ func (p *Provider) ChargePayment(ctx context.Context, req application.ChargeRequ
 		p.finalStates[req.PaymentID.String()] = application.PaymentStatusResult{
 			Status:    domain.PaymentStatusFailed,
 			ErrorCode: defaultErrorCode,
+			CardMask:  fakeMaskedPan,
 		}
 		log.InfoContext(ctx, "fake charge failed",
 			"provider_payment_id", providerPaymentID,
@@ -320,7 +344,8 @@ func (p *Provider) ChargePayment(ctx context.Context, req application.ChargeRequ
 	}
 
 	p.finalStates[req.PaymentID.String()] = application.PaymentStatusResult{
-		Status: domain.PaymentStatusSucceeded,
+		Status:   domain.PaymentStatusSucceeded,
+		CardMask: fakeMaskedPan,
 	}
 	log.InfoContext(ctx, "fake charge succeeded",
 		"provider_payment_id", providerPaymentID,
@@ -738,15 +763,26 @@ func (p *Provider) confirm(internalPaymentID string, failed bool, errorCode *str
 	defer p.mu.Unlock()
 	p.purgeLocked()
 	entry, ok := p.pending[internalPaymentID]
-	if ok {
-		delete(p.pending, internalPaymentID)
-	}
 	if !ok {
 		// The provider no longer tracks the entry (TTL purge or an earlier
 		// confirmation); the sentinel lets the caller fall back to the
 		// provider status as the source of truth.
 		return application.WebhookEvent{}, fmt.Errorf("fake: payment not found: %w", application.ErrProviderPaymentNotFound)
 	}
+
+	// The sentinel amounts reshape the form-payment outcome (issue #663).
+	switch entry.amountKopecks % 100 {
+	case sentinelPendingKopecks:
+		// «The bank never answers»: the entry stays pending and the not-found
+		// sentinel sends the caller to the provider status — still pending.
+		return application.WebhookEvent{}, fmt.Errorf("fake: payment left pending by sentinel amount: %w", application.ErrProviderPaymentNotFound)
+	case sentinelFailKopecks:
+		if !failed {
+			failed = true
+			errorCode = nil
+		}
+	}
+	delete(p.pending, internalPaymentID)
 
 	status := domain.PaymentStatusSucceeded
 	if failed {
@@ -763,7 +799,7 @@ func (p *Provider) confirm(internalPaymentID string, failed bool, errorCode *str
 	// The finalized outcome stays known to the provider: a later status read —
 	// the reconciliation of a lost webhook, or the confirm endpoint's
 	// lost-entry fallback — resolves the actual outcome instead of a guess.
-	finalState := application.PaymentStatusResult{Status: status}
+	finalState := application.PaymentStatusResult{Status: status, CardMask: entry.savedMethod.MaskedPan}
 	if errorCode != nil {
 		finalState.ErrorCode = *errorCode
 	}
@@ -776,6 +812,7 @@ func (p *Provider) confirm(internalPaymentID string, failed bool, errorCode *str
 			Status:            status,
 			ErrorCode:         errorCode,
 			AmountKopecks:     entry.amountKopecks,
+			CardMask:          entry.savedMethod.MaskedPan,
 		},
 	}
 	if !failed {

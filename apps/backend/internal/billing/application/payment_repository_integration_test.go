@@ -197,3 +197,137 @@ func TestPaymentRepository_Integration_ListSelection(t *testing.T) {
 		})
 	}
 }
+
+// The card snapshot shared by the card-resolution fixtures.
+const integrationSnapshotCardMask = "2202********4242"
+
+// requireResolvedCard asserts one resolved card mask of the history read
+// (nil expects no card).
+func requireResolvedCard(t *testing.T, byID map[uuid.UUID]*string, id uuid.UUID, want *string, label string) {
+	t.Helper()
+	got, ok := byID[id]
+	if !ok {
+		t.Fatalf("%s payment %s is missing from the history read", label, id)
+	}
+	switch {
+	case want == nil && got != nil:
+		t.Errorf("%s payment resolves %v, want nil", label, got)
+	case want != nil && (got == nil || *got != *want):
+		t.Errorf("%s payment resolves %v, want %q", label, got, *want)
+	}
+}
+
+// cardSnapshotSeeder seeds the card-resolution fixtures of the
+// CardSnapshotResolves test.
+type cardSnapshotSeeder struct {
+	h   *integrationHarness
+	pro domain.Tariff
+	now time.Time
+}
+
+// userWithSubscription onboards one user and returns their subscription.
+func (s cardSnapshotSeeder) userWithSubscription(t *testing.T) domain.Subscription {
+	t.Helper()
+	userID := s.h.seedUser()
+	if err := s.h.onboarding.OnUserRegistered(s.h.ctx(), userID); err != nil {
+		t.Fatalf("OnUserRegistered error = %v", err)
+	}
+	sub, err := s.h.subscriptions.GetByUserID(s.h.ctx(), userID)
+	if err != nil {
+		t.Fatalf("GetByUserID error = %v", err)
+	}
+	return sub
+}
+
+// method stores one payment method with the given mask.
+func (s cardSnapshotSeeder) method(t *testing.T, userID uuid.UUID, mask string) uuid.UUID {
+	t.Helper()
+	method, err := domain.NewPaymentMethod(userID, "fake", "token_"+uuid.Must(uuid.NewV7()).String(), s.now)
+	if err != nil {
+		t.Fatalf("NewPaymentMethod error = %v", err)
+	}
+	method.DisplayMask = mask
+	stored, err := s.h.methods.UpsertByTokenHash(s.h.ctx(), method)
+	if err != nil {
+		t.Fatalf("UpsertByTokenHash error = %v", err)
+	}
+	return stored.ID
+}
+
+// payment stores one succeeded payment for the subscription, charged by the
+// given method (nil = no method) with the given card snapshot (nil = none).
+func (s cardSnapshotSeeder) payment(
+	t *testing.T, name string, sub domain.Subscription, methodID *uuid.UUID, mask *string,
+) uuid.UUID {
+	t.Helper()
+	payment, err := domain.NewSubscriptionPayment(sub.UserID, sub.ID, s.pro.ID, domain.PeriodMonth, s.pro.MonthlyPriceKopecks, "fake", s.now)
+	if err != nil {
+		t.Fatalf("NewSubscriptionPayment(%s) error = %v", name, err)
+	}
+	payment.PaymentMethodID = methodID
+	payment.CardMask = mask
+	if err := payment.MarkSucceeded(s.now); err != nil {
+		t.Fatalf("MarkSucceeded(%s) error = %v", name, err)
+	}
+	stored, err := s.h.payments.Create(s.h.ctx(), payment)
+	if err != nil {
+		t.Fatalf("Create(%s) error = %v", name, err)
+	}
+	return stored.ID
+}
+
+// TestPaymentRepository_Integration_CardSnapshotResolves proves the payment
+// history's card resolution (issue #619) against the real schema: a
+// payment's own snapshot wins, a snapshot-less payment falls back to the
+// bound method's mask, a deleted method behind a snapshot-less payment
+// resolves to nil, and a snapshotted payment keeps its card across method
+// deletion.
+func TestPaymentRepository_Integration_CardSnapshotResolves(t *testing.T) {
+	t.Parallel()
+	h := newIntegrationHarness(t)
+	pro, err := h.tariffs.GetByName(h.ctx(), domain.TariffPro)
+	if err != nil {
+		t.Fatalf("GetByName(pro) error = %v", err)
+	}
+	s := cardSnapshotSeeder{h: h, pro: pro, now: h.clock.Now().UTC()}
+
+	// The snapshot itself round-trips: a customer-initiated payment carries a
+	// card snapshot without any bound method.
+	snapSub := s.userWithSubscription(t)
+	snapID := s.payment(t, "snap", snapSub, nil, new(integrationSnapshotCardMask))
+	got, err := h.payments.GetByID(h.ctx(), snapID)
+	if err != nil {
+		t.Fatalf("GetByID(snap) error = %v", err)
+	}
+	if got.CardMask == nil || *got.CardMask != integrationSnapshotCardMask {
+		t.Errorf("CardMask = %v, want %q round-tripped", got.CardMask, integrationSnapshotCardMask)
+	}
+
+	// The remaining fixtures share one user with three payments: method
+	// fallback, deleted method, snapshot surviving deletion.
+	sub := s.userWithSubscription(t)
+	methodA := s.method(t, sub.UserID, "4300********1234")
+	fallbackID := s.payment(t, "fallback", sub, &methodA, nil)
+	deletedMethod := s.method(t, sub.UserID, "5100********0099")
+	deletedID := s.payment(t, "deleted", sub, &deletedMethod, nil)
+	keptMethod := s.method(t, sub.UserID, "4400********0420")
+	survivorID := s.payment(t, "survivor", sub, &keptMethod, new(integrationSnapshotCardMask))
+	if err := h.methods.Delete(h.ctx(), sub.UserID, deletedMethod); err != nil {
+		t.Fatalf("Delete(deleted method) error = %v", err)
+	}
+	if err := h.methods.Delete(h.ctx(), sub.UserID, keptMethod); err != nil {
+		t.Fatalf("Delete(survivor method) error = %v", err)
+	}
+
+	rows, err := h.payments.ListByUserIDWithCard(h.ctx(), sub.UserID)
+	if err != nil {
+		t.Fatalf("ListByUserIDWithCard() error = %v", err)
+	}
+	byID := make(map[uuid.UUID]*string, len(rows))
+	for _, row := range rows {
+		byID[row.Payment.ID] = row.ResolvedCardMask
+	}
+	requireResolvedCard(t, byID, fallbackID, new("4300********1234"), "fallback")
+	requireResolvedCard(t, byID, deletedID, nil, "deleted-method")
+	requireResolvedCard(t, byID, survivorID, new(integrationSnapshotCardMask), "snapshotted")
+}

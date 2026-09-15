@@ -367,3 +367,250 @@ func TestNewAppliedPaymentTransition(t *testing.T) {
 		t.Errorf("nil payment err = %v, want ErrInvalidTransition", err)
 	}
 }
+
+// snapshotMethodAttachesIDAndMask proves the charged-method snapshot of a
+// merchant-initiated payment records the method and the card mask together
+// (issue #619).
+func snapshotMethodAttachesIDAndMask(t *testing.T) {
+	t.Parallel()
+	payment := newTestPayment(t)
+	methodID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+	if err := payment.AttachMethodSnapshot(methodID, testMaskVisa, paymentNow); err != nil {
+		t.Fatalf("AttachMethodSnapshot() error = %v", err)
+	}
+	if payment.PaymentMethodID == nil || *payment.PaymentMethodID != methodID {
+		t.Errorf("PaymentMethodID = %v, want %v", payment.PaymentMethodID, methodID)
+	}
+	if payment.CardMask == nil || *payment.CardMask != testMaskVisa {
+		t.Errorf("CardMask = %v, want the charged card mask", payment.CardMask)
+	}
+}
+
+// rePointedPaymentFollowsTheChargedCard proves a recovered pending payment
+// pointed at a switched card carries the new card's mask: the snapshot must
+// describe the card actually charged, not the one planned first.
+func rePointedPaymentFollowsTheChargedCard(t *testing.T) {
+	t.Parallel()
+	payment := newTestPayment(t)
+	first := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+	if err := payment.AttachMethodSnapshot(first, testMaskVisa, paymentNow); err != nil {
+		t.Fatalf("first AttachMethodSnapshot() error = %v", err)
+	}
+	second := uuid.MustParse("55555555-5555-5555-5555-555555555555")
+	if err := payment.AttachMethodSnapshot(second, "2202********9876", paymentNow); err != nil {
+		t.Fatalf("re-point AttachMethodSnapshot() error = %v", err)
+	}
+	if payment.PaymentMethodID == nil || *payment.PaymentMethodID != second {
+		t.Errorf("PaymentMethodID = %v, want the switched method", payment.PaymentMethodID)
+	}
+	if payment.CardMask == nil || *payment.CardMask != "2202********9876" {
+		t.Errorf("CardMask = %v, want the switched card mask", payment.CardMask)
+	}
+}
+
+// finalizedPaymentRejectsMethodSnapshot proves the snapshot never rewrites
+// history: only a pending payment accepts it.
+func finalizedPaymentRejectsMethodSnapshot(t *testing.T) {
+	t.Parallel()
+	payment := newTestPayment(t)
+	if err := payment.MarkSucceeded(paymentNow); err != nil {
+		t.Fatalf("MarkSucceeded() error = %v", err)
+	}
+	methodID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+	if err := payment.AttachMethodSnapshot(methodID, testMaskVisa, paymentNow); !errors.Is(err, ErrInvalidPaymentStatus) {
+		t.Errorf("err = %v, want ErrInvalidPaymentStatus", err)
+	}
+}
+
+// cardMaskRecordsProviderReportedCard proves a customer-initiated payment
+// snapshot lands from the provider notification (issue #619).
+func cardMaskRecordsProviderReportedCard(t *testing.T) {
+	t.Parallel()
+	payment := newTestPayment(t)
+	payment.AttachCardMask(testMaskVisa, paymentNow)
+	if payment.CardMask == nil || *payment.CardMask != testMaskVisa {
+		t.Errorf("CardMask = %v, want the provider-reported mask", payment.CardMask)
+	}
+}
+
+// cardMaskNeverOverwrites proves the snapshot is fill-once: a repeated or
+// later delivery cannot replace the recorded card.
+func cardMaskNeverOverwrites(t *testing.T) {
+	t.Parallel()
+	payment := newTestPayment(t)
+	payment.AttachCardMask(testMaskVisa, paymentNow)
+	payment.AttachCardMask("2202********9876", paymentNow)
+	if payment.CardMask == nil || *payment.CardMask != testMaskVisa {
+		t.Errorf("CardMask = %v, want the first recorded mask", payment.CardMask)
+	}
+}
+
+// emptyCardMaskIsNoOp proves a notification without card data leaves an
+// existing snapshot (and the empty one) untouched.
+func emptyCardMaskIsNoOp(t *testing.T) {
+	t.Parallel()
+	payment := newTestPayment(t)
+	payment.AttachCardMask("", paymentNow)
+	if payment.CardMask != nil {
+		t.Errorf("CardMask = %v, want nil", payment.CardMask)
+	}
+}
+
+func TestSubscriptionPayment_CardSnapshot(t *testing.T) {
+	t.Parallel()
+	t.Run("method snapshot attaches id and mask", snapshotMethodAttachesIDAndMask)
+	t.Run("re-pointed payment follows the charged card", rePointedPaymentFollowsTheChargedCard)
+	t.Run("finalized payment rejects the method snapshot", finalizedPaymentRejectsMethodSnapshot)
+	t.Run("card mask records the provider-reported card", cardMaskRecordsProviderReportedCard)
+	t.Run("card mask never overwrites", cardMaskNeverOverwrites)
+	t.Run("empty card mask is a no-op", emptyCardMaskIsNoOp)
+}
+
+func TestSubscriptionPayment_AttachFormDeadline(t *testing.T) {
+	t.Parallel()
+	t.Run("persists the deadline on a fresh pending payment", func(t *testing.T) {
+		t.Parallel()
+		payment := newTestPayment(t)
+		deadline := paymentNow.Add(15 * time.Minute)
+		if err := payment.AttachFormDeadline(deadline, paymentNow); err != nil {
+			t.Fatalf("AttachFormDeadline() error = %v", err)
+		}
+		if payment.ExpiresAt == nil || !payment.ExpiresAt.Equal(deadline) {
+			t.Errorf("ExpiresAt = %v, want %v", payment.ExpiresAt, deadline)
+		}
+	})
+
+	t.Run("second attach is rejected (the deadline never changes)", func(t *testing.T) {
+		t.Parallel()
+		payment := newTestPayment(t)
+		if err := payment.AttachFormDeadline(paymentNow.Add(15*time.Minute), paymentNow); err != nil {
+			t.Fatalf("first AttachFormDeadline() error = %v", err)
+		}
+		if err := payment.AttachFormDeadline(paymentNow.Add(30*time.Minute), paymentNow); err == nil {
+			t.Error("second AttachFormDeadline() = nil error, want an error")
+		}
+	})
+
+	t.Run("past deadline is rejected", func(t *testing.T) {
+		t.Parallel()
+		payment := newTestPayment(t)
+		if err := payment.AttachFormDeadline(paymentNow.Add(-time.Minute), paymentNow); !errors.Is(err, ErrInvalidPayment) {
+			t.Errorf("err = %v, want ErrInvalidPayment", err)
+		}
+	})
+
+	t.Run("finalized payment rejects the deadline", func(t *testing.T) {
+		t.Parallel()
+		payment := newTestPayment(t)
+		if err := payment.MarkSucceeded(paymentNow); err != nil {
+			t.Fatalf("MarkSucceeded() error = %v", err)
+		}
+		if err := payment.AttachFormDeadline(paymentNow.Add(15*time.Minute), paymentNow); !errors.Is(err, ErrInvalidPaymentStatus) {
+			t.Errorf("err = %v, want ErrInvalidPaymentStatus", err)
+		}
+	})
+}
+
+func TestSubscriptionPayment_MarkExpired(t *testing.T) {
+	t.Parallel()
+	deadline := paymentNow.Add(15 * time.Minute)
+
+	t.Run("past the deadline marks failed with the form-expired code", func(t *testing.T) {
+		t.Parallel()
+		payment := newTestPayment(t)
+		if err := payment.AttachFormDeadline(deadline, paymentNow); err != nil {
+			t.Fatalf("AttachFormDeadline() error = %v", err)
+		}
+		if err := payment.MarkExpired(deadline.Add(time.Minute)); err != nil {
+			t.Fatalf("MarkExpired() error = %v", err)
+		}
+		if payment.Status != PaymentStatusFailed {
+			t.Errorf("Status = %q, want failed", payment.Status)
+		}
+		if payment.ErrorCode == nil || *payment.ErrorCode != PaymentErrorCodeFormExpired {
+			t.Errorf("ErrorCode = %v, want %q", payment.ErrorCode, PaymentErrorCodeFormExpired)
+		}
+	})
+
+	t.Run("before the deadline is rejected", func(t *testing.T) {
+		t.Parallel()
+		payment := newTestPayment(t)
+		if err := payment.AttachFormDeadline(deadline, paymentNow); err != nil {
+			t.Fatalf("AttachFormDeadline() error = %v", err)
+		}
+		if err := payment.MarkExpired(deadline.Add(-time.Second)); !errors.Is(err, ErrInvalidPaymentStatus) {
+			t.Errorf("err = %v, want ErrInvalidPaymentStatus", err)
+		}
+	})
+
+	t.Run("payment without a deadline is rejected", func(t *testing.T) {
+		t.Parallel()
+		payment := newTestPayment(t)
+		if err := payment.MarkExpired(deadline.Add(time.Minute)); !errors.Is(err, ErrInvalidPaymentStatus) {
+			t.Errorf("err = %v, want ErrInvalidPaymentStatus", err)
+		}
+	})
+
+	t.Run("finalized payment is rejected", func(t *testing.T) {
+		t.Parallel()
+		payment := newTestPayment(t)
+		if err := payment.AttachFormDeadline(deadline, paymentNow); err != nil {
+			t.Fatalf("AttachFormDeadline() error = %v", err)
+		}
+		if err := payment.MarkSucceeded(paymentNow); err != nil {
+			t.Fatalf("MarkSucceeded() error = %v", err)
+		}
+		if err := payment.MarkExpired(deadline.Add(time.Minute)); !errors.Is(err, ErrInvalidPaymentStatus) {
+			t.Errorf("err = %v, want ErrInvalidPaymentStatus", err)
+		}
+	})
+}
+
+func TestSubscriptionPayment_IsLivePending(t *testing.T) {
+	t.Parallel()
+	deadline := paymentNow.Add(15 * time.Minute)
+
+	t.Run("pending without a deadline is live (merchant-initiated charges)", func(t *testing.T) {
+		t.Parallel()
+		payment := newTestPayment(t)
+		if !payment.IsLivePending(paymentNow.Add(time.Hour)) {
+			t.Error("a pending payment without a deadline must stay live")
+		}
+	})
+
+	t.Run("pending within the deadline is live", func(t *testing.T) {
+		t.Parallel()
+		payment := newTestPayment(t)
+		if err := payment.AttachFormDeadline(deadline, paymentNow); err != nil {
+			t.Fatalf("AttachFormDeadline() error = %v", err)
+		}
+		if !payment.IsLivePending(deadline.Add(-time.Second)) {
+			t.Error("a pending payment before its deadline must be live")
+		}
+	})
+
+	t.Run("pending past the deadline is dead", func(t *testing.T) {
+		t.Parallel()
+		payment := newTestPayment(t)
+		if err := payment.AttachFormDeadline(deadline, paymentNow); err != nil {
+			t.Fatalf("AttachFormDeadline() error = %v", err)
+		}
+		if payment.IsLivePending(deadline) || payment.IsLivePending(deadline.Add(time.Minute)) {
+			t.Error("a pending payment past its deadline must not be live")
+		}
+	})
+
+	t.Run("non-pending payment is never live", func(t *testing.T) {
+		t.Parallel()
+		payment := newTestPayment(t)
+		if err := payment.AttachFormDeadline(deadline, paymentNow); err != nil {
+			t.Fatalf("AttachFormDeadline() error = %v", err)
+		}
+		if err := payment.MarkSucceeded(paymentNow); err != nil {
+			t.Fatalf("MarkSucceeded() error = %v", err)
+		}
+		if payment.IsLivePending(paymentNow) {
+			t.Error("a finalized payment must not be live-pending")
+		}
+	})
+}

@@ -32,6 +32,21 @@ func SubscriptionResponse(view billingapp.SubscriptionView) openapi.Subscription
 		period := openapi.AdminSubscriptionPaymentPeriod(*sub.PendingPeriod)
 		resp.PendingPeriod = &period
 	}
+	if view.PendingPayment != nil {
+		pending := view.PendingPayment
+		pp := openapi.SubscriptionPendingPayment{
+			TariffName:    openapi.TariffName(pending.Tariff.Name),
+			Period:        openapi.AdminSubscriptionPaymentPeriod(pending.Payment.Period),
+			AmountKopecks: pending.Payment.AmountKopecks,
+		}
+		if pending.Payment.ExpiresAt != nil {
+			pp.ExpiresAt = *pending.Payment.ExpiresAt
+		}
+		if pending.Payment.HasPaymentURL() {
+			pp.ConfirmUrl = *pending.Payment.PaymentURL
+		}
+		resp.PendingPayment = &pp
+	}
 	if view.ActivePaymentMethod != nil {
 		method := PaymentMethodResponse(*view.ActivePaymentMethod)
 		resp.ActivePaymentMethod = &method
@@ -41,14 +56,32 @@ func SubscriptionResponse(view billingapp.SubscriptionView) openapi.Subscription
 
 // PaymentMethodResponse maps a billing PaymentMethod domain value to the
 // OpenAPI PaymentMethod DTO (issue #251): display fields only — the charge
-// token stays server-side.
+// token stays server-side. The card system derives from the display mask's
+// BIN prefix (issue #619).
 func PaymentMethodResponse(m domain.PaymentMethod) openapi.PaymentMethod {
-	return openapi.PaymentMethod{
+	resp := openapi.PaymentMethod{
 		Id:          m.ID,
 		Provider:    string(m.Provider),
 		DisplayMask: m.DisplayMask,
+		CardSystem:  openapi.CardSystem(domain.CardSystemFromMask(m.DisplayMask)),
 		IsActive:    m.IsActive,
 		CreatedAt:   m.CreatedAt,
+	}
+	if m.ExpDate != "" {
+		resp.ExpDate = &m.ExpDate
+	}
+	return resp
+}
+
+// SubscriptionPaymentCardResponse maps a payment's resolved card mask to the
+// contract DTO (issue #619); nil when no card is known for the payment.
+func SubscriptionPaymentCardResponse(cardMask *string) *openapi.SubscriptionPaymentCard {
+	if cardMask == nil || *cardMask == "" {
+		return nil
+	}
+	return &openapi.SubscriptionPaymentCard{
+		DisplayMask: *cardMask,
+		CardSystem:  openapi.CardSystem(domain.CardSystemFromMask(*cardMask)),
 	}
 }
 

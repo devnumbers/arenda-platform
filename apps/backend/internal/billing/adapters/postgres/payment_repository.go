@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -90,13 +91,48 @@ func (r *SubscriptionPaymentRepository) GetByIDForUpdate(ctx context.Context, id
 	return mapSubscriptionPayment(row)
 }
 
-// ListByUserID returns the user's payments, newest first.
-func (r *SubscriptionPaymentRepository) ListByUserID(ctx context.Context, userID uuid.UUID) ([]domain.SubscriptionPayment, error) {
-	rows, err := r.q().ListSubscriptionPaymentsByUserID(ctx, pgtype.UUID{Bytes: userID, Valid: true})
+// ListByUserIDWithCard returns the user's payments, newest first, each with
+// the masked card it was charged with resolved for display (issue #619): the
+// payment's own snapshot first, the bound method's mask as the fallback for
+// payments created before the snapshot existed.
+func (r *SubscriptionPaymentRepository) ListByUserIDWithCard(
+	ctx context.Context, userID uuid.UUID,
+) ([]application.SubscriptionPaymentWithCard, error) {
+	rows, err := r.q().ListSubscriptionPaymentsWithCardByUserID(ctx, pgtype.UUID{Bytes: userID, Valid: true})
 	if err != nil {
-		return nil, fmt.Errorf("list subscription payments: %w", err)
+		return nil, fmt.Errorf("list subscription payments with card: %w", err)
 	}
-	return mapSubscriptionPayments(rows)
+	result := make([]application.SubscriptionPaymentWithCard, 0, len(rows))
+	for _, row := range rows {
+		payment, err := mapSubscriptionPaymentFromColumns(
+			row.ID, row.UserID, row.SubscriptionID, row.TariffID, row.PaymentMethodID,
+			row.Period, row.AmountKopecks, row.Provider, row.ProviderPaymentID, row.PaymentUrl,
+			row.Status, row.RefundedAmountKopecks, row.ChargeAttempts, row.ErrorCode,
+			row.CreatedAt, row.UpdatedAt, row.SucceededAt, row.ExpiresAt, row.CardMask,
+		)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, application.SubscriptionPaymentWithCard{
+			Payment:          payment,
+			ResolvedCardMask: pgconv.TextToPtrString(row.ResolvedCardMask),
+		})
+	}
+	return result, nil
+}
+
+// ListByUserID returns the user's payments without the resolved card — the
+// inspection convenience over ListByUserIDWithCard.
+func (r *SubscriptionPaymentRepository) ListByUserID(ctx context.Context, userID uuid.UUID) ([]domain.SubscriptionPayment, error) {
+	rows, err := r.ListByUserIDWithCard(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	payments := make([]domain.SubscriptionPayment, 0, len(rows))
+	for _, row := range rows {
+		payments = append(payments, row.Payment)
+	}
+	return payments, nil
 }
 
 // ListPendingByUserID returns the user's pending payments, newest first. The
@@ -106,6 +142,23 @@ func (r *SubscriptionPaymentRepository) ListPendingByUserID(ctx context.Context,
 	rows, err := r.q().ListPendingSubscriptionPaymentsByUserID(ctx, pgtype.UUID{Bytes: userID, Valid: true})
 	if err != nil {
 		return nil, fmt.Errorf("list pending subscription payments: %w", err)
+	}
+	return mapSubscriptionPayments(rows)
+}
+
+// ListExpiredPending returns a batch of still-pending payments whose form
+// deadline ran out (issue #616): the TTL-expiry phase locks and fails each
+// row in its own transaction. No provider reference is required — a crashed
+// initiation must expire too.
+func (r *SubscriptionPaymentRepository) ListExpiredPending(
+	ctx context.Context, before time.Time, limit int,
+) ([]domain.SubscriptionPayment, error) {
+	rows, err := r.q().ListExpiredPendingSubscriptionPayments(ctx, postgres.ListExpiredPendingSubscriptionPaymentsParams{
+		ExpiresAt: pgconv.TimePtrToPgtype(&before),
+		Limit:     batchLimit(limit),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list expired pending subscription payments: %w", err)
 	}
 	return mapSubscriptionPayments(rows)
 }
@@ -215,7 +268,7 @@ func (r *SubscriptionPaymentRepository) GetAdminPayment(ctx context.Context, pay
 		row.ID, row.UserID, row.SubscriptionID, row.TariffID, row.PaymentMethodID,
 		row.Period, row.AmountKopecks, row.Provider, row.ProviderPaymentID, row.PaymentUrl,
 		row.Status, row.RefundedAmountKopecks, row.ChargeAttempts, row.ErrorCode,
-		row.CreatedAt, row.UpdatedAt, row.SucceededAt,
+		row.CreatedAt, row.UpdatedAt, row.SucceededAt, row.ExpiresAt, row.CardMask,
 	)
 	if err != nil {
 		return application.AdminPaymentRow{}, err
@@ -238,7 +291,7 @@ func mapAdminPaymentRows(
 			row.ID, row.UserID, row.SubscriptionID, row.TariffID, row.PaymentMethodID,
 			row.Period, row.AmountKopecks, row.Provider, row.ProviderPaymentID, row.PaymentUrl,
 			row.Status, row.RefundedAmountKopecks, row.ChargeAttempts, row.ErrorCode,
-			row.CreatedAt, row.UpdatedAt, row.SucceededAt,
+			row.CreatedAt, row.UpdatedAt, row.SucceededAt, row.ExpiresAt, row.CardMask,
 		)
 		if err != nil {
 			return nil, err
@@ -282,7 +335,8 @@ func mapSubscriptionPaymentFromColumns(
 	chargeAttempts int32,
 	errorCode pgtype.Text,
 	createdAt, updatedAt pgtype.Timestamptz,
-	succeededAt pgtype.Timestamptz,
+	succeededAt, expiresAt pgtype.Timestamptz,
+	cardMask pgtype.Text,
 ) (domain.SubscriptionPayment, error) {
 	return mapSubscriptionPayment(postgres.SubscriptionPayment{
 		ID:                    id,
@@ -302,6 +356,8 @@ func mapSubscriptionPaymentFromColumns(
 		CreatedAt:             createdAt,
 		UpdatedAt:             updatedAt,
 		SucceededAt:           succeededAt,
+		ExpiresAt:             expiresAt,
+		CardMask:              cardMask,
 	})
 }
 
@@ -315,6 +371,24 @@ func (r *SubscriptionPaymentRepository) Update(ctx context.Context, payment doma
 		return fmt.Errorf("update subscription payment: %w", err)
 	}
 	return nil
+}
+
+// ShiftCreatedAt moves created_at of every payment of the subscription by the
+// signed delta (issue #665) — the stand-only time travel that keeps the
+// dunning retry predicate's relative order (payments counted from the
+// grace-entry anchor) invariant under the shift. Runs inside the caller's
+// transaction. Returns how many rows moved.
+func (r *SubscriptionPaymentRepository) ShiftCreatedAt(
+	ctx context.Context, subscriptionID uuid.UUID, delta time.Duration,
+) (int64, error) {
+	moved, err := r.q().ShiftSubscriptionPaymentsCreatedAt(ctx, postgres.ShiftSubscriptionPaymentsCreatedAtParams{
+		DeltaSeconds:   delta.Seconds(),
+		SubscriptionID: pgtype.UUID{Bytes: subscriptionID, Valid: true},
+	})
+	if err != nil {
+		return 0, fmt.Errorf("shift subscription payments created_at: %w", err)
+	}
+	return moved, nil
 }
 
 func mapCreatePaymentParams(p domain.SubscriptionPayment) postgres.CreateSubscriptionPaymentParams {
@@ -335,6 +409,8 @@ func mapCreatePaymentParams(p domain.SubscriptionPayment) postgres.CreateSubscri
 		ChargeAttempts: shared.ToInt32Clamped(p.ChargeAttempts),
 		ErrorCode:      pgconv.StringPtrToPgtype(p.ErrorCode),
 		SucceededAt:    pgconv.TimePtrToPgtype(p.SucceededAt),
+		ExpiresAt:      pgconv.TimePtrToPgtype(p.ExpiresAt),
+		CardMask:       pgconv.StringPtrToPgtype(p.CardMask),
 	}
 }
 
@@ -350,6 +426,8 @@ func mapUpdatePaymentParams(p domain.SubscriptionPayment) postgres.UpdateSubscri
 		ChargeAttempts: shared.ToInt32Clamped(p.ChargeAttempts),
 		ErrorCode:      pgconv.StringPtrToPgtype(p.ErrorCode),
 		SucceededAt:    pgconv.TimePtrToPgtype(p.SucceededAt),
+		ExpiresAt:      pgconv.TimePtrToPgtype(p.ExpiresAt),
+		CardMask:       pgconv.StringPtrToPgtype(p.CardMask),
 	}
 }
 
@@ -372,6 +450,8 @@ func mapSubscriptionPayment(row postgres.SubscriptionPayment) (domain.Subscripti
 		CreatedAt:             pgconv.TimestamptzToTime(row.CreatedAt),
 		UpdatedAt:             pgconv.TimestamptzToTime(row.UpdatedAt),
 		SucceededAt:           pgconv.TimestamptzToPtrTime(row.SucceededAt),
+		ExpiresAt:             pgconv.TimestamptzToPtrTime(row.ExpiresAt),
+		CardMask:              pgconv.TextToPtrString(row.CardMask),
 	})
 }
 

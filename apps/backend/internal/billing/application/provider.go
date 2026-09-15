@@ -162,6 +162,10 @@ type PaymentStatusResult struct {
 	// ErrorCode is the provider error code reported for a failed payment;
 	// empty on success or when the provider does not report one.
 	ErrorCode string
+	// CardMask is the masked card number the provider reports for the
+	// charge (issue #619), so a payment finalized through a status
+	// reconciliation still gets its card snapshot.
+	CardMask string
 }
 
 // RefundRequest asks the provider to return the full payment amount
@@ -202,6 +206,10 @@ type PaymentNotification struct {
 	ErrorCode *string
 	// AmountKopecks is the payment amount for payment notifications.
 	AmountKopecks int64
+	// CardMask is the masked card number the provider reports for the
+	// charge (issue #619) — the payment history's snapshot of the card used.
+	// Empty when the provider reports none.
+	CardMask string
 	// SavedMethod is set when the notification also produced a saved
 	// payment method — the token delivery moment of a save-method chain.
 	SavedMethod *SavedMethod

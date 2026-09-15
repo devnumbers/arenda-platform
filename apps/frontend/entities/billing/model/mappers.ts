@@ -4,6 +4,7 @@ import type {
   ChangeTariffResult,
   PaymentMethod,
   PaymentStatus,
+  PendingPayment,
   Subscription,
   SubscriptionPayment,
   Tariff,
@@ -32,6 +33,8 @@ export function mapPaymentMethodResponse(
   return {
     id: response.id,
     displayMask: response.displayMask,
+    cardSystem: response.cardSystem,
+    expDate: response.expDate ?? undefined,
     provider: response.provider,
     isActive: response.isActive,
     createdAt: response.createdAt,
@@ -56,7 +59,28 @@ export function mapSubscriptionResponse(
       : undefined,
     pendingChangeAt: response.pendingChangeAt ?? undefined,
     pendingPeriod: response.pendingPeriod ?? undefined,
+    pendingPayment: response.pendingPayment
+      ? mapPendingPaymentResponse(response.pendingPayment)
+      : undefined,
   };
+}
+
+function mapPendingPaymentResponse(
+  response: NonNullable<SubscriptionResponse['pendingPayment']>,
+): PendingPayment {
+  return {
+    tariffName: response.tariffName,
+    period: response.period,
+    amountKopecks: response.amountKopecks,
+    confirmUrl: response.confirmUrl,
+    expiresAt: response.expiresAt,
+  };
+}
+
+/** Служебный `refunding` (возврат в полёте) наружу — как pending:
+ * «В ожидании» без знака (решение владельца 11.09, #614). */
+function mapPaymentStatus(status: SubscriptionPaymentResponse['status']): PaymentStatus {
+  return status === 'refunding' ? 'pending' : status;
 }
 
 export function mapSubscriptionPaymentResponse(
@@ -67,9 +91,11 @@ export function mapSubscriptionPaymentResponse(
     tariff: mapTariffResponse(response.tariff),
     period: response.period,
     amountKopecks: response.amountKopecks,
-    status: response.status as PaymentStatus,
+    status: mapPaymentStatus(response.status),
     provider: response.provider,
     paymentUrl: response.paymentUrl ?? null,
+    paymentMethod: response.paymentMethod,
+    succeededAt: response.succeededAt ?? undefined,
     createdAt: response.createdAt,
   };
 }

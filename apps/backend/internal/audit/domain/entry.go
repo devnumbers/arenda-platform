@@ -170,6 +170,7 @@ const (
 
 	ActionSubscriptionTariffChanged    Action = "subscription.tariff_changed"
 	ActionSubscriptionCancelled        Action = "subscription.cancelled"
+	ActionSubscriptionResumed          Action = "subscription.resumed"
 	ActionSubscriptionAutoRenewToggled Action = "subscription.auto_renew_toggled"
 	// ActionSubscriptionServiceAssigned and its neighbours below are the
 	// admin subscription operations of issue #255: service assignment, force
@@ -178,6 +179,10 @@ const (
 	ActionSubscriptionServiceAssigned Action = "subscription.service_assigned"
 	ActionSubscriptionTariffForced    Action = "subscription.tariff_forced"
 	ActionSubscriptionGraceExtended   Action = "subscription.grace_extended"
+	// ActionSubscriptionTimeShifted is the stand-only time-travel shift of
+	// the subscription lifecycle (issue #665): the rig moves the temporal
+	// boundaries for the acceptance scenarios and audits every move.
+	ActionSubscriptionTimeShifted Action = "subscription.time_shifted"
 
 	ActionPaymentMethodAdded     Action = "payment_method.added"
 	ActionPaymentMethodActivated Action = "payment_method.activated"

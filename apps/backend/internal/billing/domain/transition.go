@@ -41,6 +41,11 @@ const (
 	// TransitionReasonCancelled marks a user-initiated cancellation (issue
 	// #249): the tariff keeps working until the paid period ends.
 	TransitionReasonCancelled TransitionReason = "cancelled"
+	// TransitionReasonResumed marks the free undo of a cancellation (issue
+	// #617): a cancelled subscription inside its already paid period returns
+	// to active with auto-renew on, no payment involved. The initiator is the
+	// user.
+	TransitionReasonResumed TransitionReason = "resumed"
 	// TransitionReasonDowngradeScheduled marks a user-initiated downgrade
 	// scheduled for the end of the paid period (issue #249); the tariff
 	// transition itself lands when the worker applies the change (#252).
@@ -84,6 +89,13 @@ const (
 	// The status and tariff stay as they were — the reason and the validity
 	// date tell the story. The initiator is the acting admin.
 	TransitionReasonGraceExtended TransitionReason = "grace_extended"
+	// TransitionReasonTimeShifted marks the stand-only time-travel shift of
+	// the subscription's temporal boundaries (issue #665): the validity, the
+	// dunning anchor and the payment timestamps moved by one signed delta
+	// while the status and tariff stayed. The rig lives only on the
+	// non-production stands (the BILLING_TIME_TRAVEL railguard); the entry
+	// keeps the stand's history readable about what the acceptance moved.
+	TransitionReasonTimeShifted TransitionReason = "time_shifted"
 )
 
 // Transition is one immutable entry of the subscription transition log: the

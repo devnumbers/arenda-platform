@@ -8,7 +8,7 @@ Accepted
 
 ## Context
 
-`PAYMENT_PROVIDER` selects the active adapter at startup (`fake` or `tkassa`; local defaults to `fake`, non-local environments require an explicit value and reject `fake`). Provider-side identities — the provider's payment id, the saved-card charge tokens, the card ids — live in the provider's own namespace: a reference issued by one processor is meaningless at another. The rewritten schema keeps `subscription_payments.provider` (and `payment_methods` provider-scoped references) precisely so historical payments stay interpretable regardless of which adapter is active now.
+`PAYMENT_PROVIDER` selects the active adapter at startup (`fake` or `tkassa`; local defaults to `fake`, other environments require an explicit value; `fake` is rejected in production and allowed in local, dev, and stage — the stage stand tests payments without real money). Provider-side identities — the provider's payment id, the saved-card charge tokens, the card ids — live in the provider's own namespace: a reference issued by one processor is meaningless at another. The rewritten schema keeps `subscription_payments.provider` (and `payment_methods` provider-scoped references) precisely so historical payments stay interpretable regardless of which adapter is active now.
 
 ## Decision
 

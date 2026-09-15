@@ -1,88 +1,88 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
-import clsx from 'clsx';
-import { Card } from '@heroui/react/card';
-import { Skeleton } from '@/shared/ui/design';
-import { Modal } from '@heroui/react';
-import { notify } from '@/shared/lib/notifications';
-import { Button } from '@/shared/ui/button';
+import { useEffect, useRef, useState, type JSX } from 'react';
 import {
-  usePaymentMethods,
+  Button,
+  ConfirmDialog,
+  IconButton,
+  Modal,
+  ModalContent,
+  RadioGroup,
+  RadioGroupItem,
+  Skeleton,
+} from '@/shared/ui/design';
+import { Add, CheckmarkCircle, Info, TrashBin } from '@/shared/assets/icons';
+import { notify } from '@/shared/lib/notifications';
+import {
   useActivatePaymentMethod,
+  useAddPaymentMethod,
   useDeletePaymentMethod,
+  usePaymentMethods,
   useSyncPaymentMethods,
 } from '@/features/billing';
-import { formatDate } from '@/shared/lib/format-date';
 import type { ApiError } from '@/shared/api/errors';
-import styles from './PaymentMethodList.module.css';
+import type { PaymentMethod } from '@/entities/billing';
+import {
+  paymentMethodDeleteGuard,
+  paymentMethodTitle,
+} from '../lib/payment-methods';
 
-type DeleteModalProps = {
-  readonly isOpen: boolean;
-  readonly onClose: () => void;
-  readonly onConfirm: () => void;
-  readonly displayMask?: string;
-  readonly isLoading: boolean;
+/** Тексты гардов удаления (#625): активная карта обслуживает
+ * автопродление (бэк отвечает 409 in use), единственную нечем заменить. */
+const DELETE_GUARD_COPY: Record<'active' | 'only', { title: string; description: string }> = {
+  active: {
+    title: 'Нельзя удалить активный способ оплаты',
+    description:
+      'Активная карта используется для автопродления подписки. Сначала выберите другой способ оплаты',
+  },
+  only: {
+    title: 'Нельзя удалить единственный способ оплаты',
+    description: 'Чтобы удалить карту, сначала привяжите другой способ оплаты',
+  },
 };
 
-function DeletePaymentMethodModal({
-  isOpen,
-  onClose,
-  onConfirm,
-  displayMask,
-  isLoading,
-}: DeleteModalProps): JSX.Element {
-  const handleOpenChange = (open: boolean): void => {
-    if (!open) {
-      onClose();
-    }
-  };
-
+/** Серый баннер под шапкой (макеты 1879-71079 / 1886-109725): с картами —
+ * про списание за тариф с канон-иконкой Checkmark; без карт текст
+ * меняется на «нет сохраненных способов оплаты» с Icon/R/Info. */
+function MethodsBanner({ empty }: { readonly empty: boolean }): JSX.Element {
   return (
-    <Modal>
-      <Modal.Backdrop isOpen={isOpen} onOpenChange={handleOpenChange}>
-        <Modal.Container placement="center" size="sm">
-          <Modal.Dialog aria-label="Удалить карту">
-            <Modal.Header>
-              <Modal.Heading>Удалить карту?</Modal.Heading>
-            </Modal.Header>
-            <Modal.Body>
-              <p>
-                {displayMask
-                  ? `Карта ${displayMask} будет удалена. Платежи по ней больше не будут проводиться.`
-                  : 'Карта будет удалена. Платежи по ней больше не будут проводиться.'}
-              </p>
-            </Modal.Body>
-            <Modal.Footer>
-              <Button variant="secondary" onClick={onClose} type="button">
-                Отменить
-              </Button>
-              <Button
-                variant="primary"
-                onClick={onConfirm}
-                type="button"
-                loading={isLoading}
-              >
-                Удалить
-              </Button>
-            </Modal.Footer>
-          </Modal.Dialog>
-        </Modal.Container>
-      </Modal.Backdrop>
-    </Modal>
+    <div className="flex items-center gap-2 rounded-[24px] bg-surface-muted px-6 py-5">
+      {empty ? (
+        <Info className="h-6 w-6 shrink-0" aria-hidden />
+      ) : (
+        <CheckmarkCircle className="h-6 w-6 shrink-0" aria-hidden />
+      )}
+      <p className="m-0 text-base font-medium leading-[18px] text-content">
+        {empty
+          ? 'У вас нет сохраненных способов оплаты'
+          : 'С выбранной карты будет списываться оплата за тариф'}
+      </p>
+    </div>
   );
 }
 
-/** Скелетон способов оплаты — экспорт для route-loading (#609). */
-export function PaymentMethodListSkeleton(): JSX.Element {
+function MethodsSkeleton(): JSX.Element {
   return (
-    <div className={styles.list}>
-      {[1, 2].map((key) => (
-        <Card key={key} className={styles.card}>
-          <Skeleton className="h-6 w-1/2 rounded-lg" />
-          <Skeleton className="h-[18px] w-[35%] rounded-md" />
-        </Card>
+    <div
+      className="flex flex-col gap-4"
+      role="status"
+      aria-label="Загружаем способы оплаты"
+    >
+      <Skeleton className="h-[76px] rounded-[24px]" />
+      {[0, 1].map((row) => (
+        <div key={row} className="flex min-h-[68px] items-center gap-3 px-3 py-3">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center">
+            <Skeleton className="h-6 w-6 rounded-full" />
+          </span>
+          <Skeleton className="h-[18px] w-44" />
+          <span className="flex-1" />
+          <Skeleton className="h-6 w-6" />
+        </div>
       ))}
+      <div className="flex min-h-[68px] items-center gap-3 px-3 py-3">
+        <Skeleton className="h-6 w-6" />
+        <Skeleton className="h-[18px] w-56" />
+      </div>
     </div>
   );
 }
@@ -91,11 +91,20 @@ type PaymentMethodListProps = {
   readonly addCardResult?: string;
 };
 
+/** Экран «Способы оплаты» (#625, макеты 1879-71079 список, 1886-109725
+ * пусто): баннер, радио-строки карт («•••• 0700» — бренд платёжной
+ * системы не выводим, решение владельца 15.09 #611; лейбл банка не
+ * выводится — решение владельца #614; активная = выбранное радио, тап по
+ * строке активирует), корзина с подтверждением и двумя гардами, строка
+ * «Добавить способ оплаты» в flow привязки Т-Кассы (confirmUrl, возврат
+ * на экран с ?addCard=success|fail). Синк с провайдером — раз при
+ * монтировании (#251). Старый HeroUI-список с кнопками «Сделать
+ * основной»/«Обновить» заменён целиком. */
 export function PaymentMethodList({
   addCardResult,
 }: PaymentMethodListProps): JSX.Element {
   const {
-    data: items,
+    data,
     isPending,
     isError,
     refetch,
@@ -103,7 +112,10 @@ export function PaymentMethodList({
   const activate = useActivatePaymentMethod();
   const remove = useDeletePaymentMethod();
   const sync = useSyncPaymentMethods();
+  const add = useAddPaymentMethod();
+  const methods: PaymentMethod[] = data ?? [];
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteGuard, setDeleteGuard] = useState<'active' | 'only' | null>(null);
   const hasAutoSyncedRef = useRef(false);
 
   useEffect(() => {
@@ -121,32 +133,38 @@ export function PaymentMethodList({
     }
   }, [addCardResult, refetch]);
 
-  const notifySyncError = useCallback((error: ApiError) => {
-    notify.scenarios.paymentMethods.listUpdateWarning({description: error.detail});
-  }, []);
-
-  const handleSync = useCallback(() => {
-    sync.mutate(undefined, { onError: notifySyncError });
-  }, [sync, notifySyncError]);
-
-  // Sync with the provider once on mount, so a card linked on the bank
-  // form appears without a manual refresh. The ref guards against the
-  // StrictMode double effect run in dev; the mutation is idempotent anyway.
+  // Синк с провайдером один раз при монтировании: карта, привязанная в
+  // банковской форме без возврата на экран, появляется сама. Ref гасит
+  // повторный запуск StrictMode в dev; мутация идемпотентна.
   useEffect(() => {
     if (hasAutoSyncedRef.current) return;
     hasAutoSyncedRef.current = true;
-    handleSync();
-  }, [handleSync]);
+    sync.mutate(undefined, {
+      onError: (error: ApiError) => {
+        notify.scenarios.paymentMethods.listUpdateWarning({
+          description: error.detail,
+        });
+      },
+    });
+  }, [sync]);
 
-  const handleActivate = useCallback(
-    (id: string) => {
-      void notify.scenarios.paymentMethods.activated(activate.mutateAsync(id));
-    },
-    [activate],
-  );
+  const handleActivate = (id: string): void => {
+    void notify.scenarios.paymentMethods.activated(activate.mutateAsync(id));
+  };
 
-  const handleConfirmDelete = useCallback(() => {
-    if (!deletingId) {
+  const handleTrash = (method: PaymentMethod): void => {
+    // Кнопка внутри label-строки: preventDefault гасит активацию радио
+    // (default action лейбла), иначе тап по корзине меняет активную карту.
+    const guard = paymentMethodDeleteGuard(method, methods.length);
+    if (guard !== undefined) {
+      setDeleteGuard(guard);
+      return;
+    }
+    setDeletingId(method.id);
+  };
+
+  const handleConfirmDelete = (): void => {
+    if (deletingId === null) {
       return;
     }
 
@@ -158,16 +176,33 @@ export function PaymentMethodList({
       .finally(() => {
         setDeletingId(null);
       })
-      .catch(() => {}); // error is already reported by notify.promise
-  }, [deletingId, remove]);
+      .catch(() => {}); // ошибка уже показана тостом сценария
+  };
 
-  const deletingMethod = items?.find((method) => method.id === deletingId);
-  const isMutating = activate.isPending || remove.isPending;
+  const handleAdd = (): void => {
+    add.mutate(
+      {},
+      {
+        onSuccess: (result) => {
+          if (result.confirmUrl !== undefined) {
+            // Банковская форма привязки — уход с экрана; возврат на
+            // /profile/tariff/payment-methods?addCard=success|fail.
+            window.location.assign(result.confirmUrl);
+            return;
+          }
+          notify.scenarios.paymentMethods.cardAddError();
+        },
+        onError: (error: ApiError) => {
+          notify.scenarios.auth.addCardStartError({ description: error.detail });
+        },
+      },
+    );
+  };
 
   if (isError) {
     return (
-      <div className={styles.error}>
-        <p className={styles.errorText}>
+      <div className="flex flex-col items-center gap-4 py-16 text-center">
+        <p className="m-0 text-base leading-[18px] text-content-secondary">
           Не удалось загрузить способы оплаты
         </p>
         <Button onClick={() => void refetch()} variant="secondary">
@@ -178,96 +213,99 @@ export function PaymentMethodList({
   }
 
   if (isPending) {
-    return <PaymentMethodListSkeleton />;
+    return <MethodsSkeleton />;
   }
 
-  if (items.length === 0) {
-    return (
-      <div className={styles.empty}>
-        <p className={styles.emptyText}>У вас пока нет сохранённых карт</p>
-        <Button
-          variant="secondary"
-          size="small"
-          onClick={handleSync}
-          loading={sync.isPending}
-        >
-          Обновить
-        </Button>
-      </div>
-    );
-  }
+  const activeId = methods.find((method) => method.isActive)?.id;
 
   return (
-    <div className={styles.root}>
-      <div className={styles.toolbar}>
-        <Button
-          variant="secondary"
-          size="small"
-          onClick={handleSync}
-          loading={sync.isPending}
+    <>
+      <MethodsBanner empty={methods.length === 0} />
+
+      <div className="mt-4 flex flex-col">
+        <RadioGroup
+          value={activeId}
+          onValueChange={handleActivate}
+          className="flex flex-col"
         >
-          Обновить
-        </Button>
-      </div>
-      <div className={styles.list}>
-        {items.map((method) => (
-          <Card
-            key={method.id}
-            className={clsx(
-              styles.card,
-              method.isActive && styles.activeCard,
-            )}
-          >
-            <div className={styles.cardHeader}>
-              <span className={styles.mask}>{method.displayMask}</span>
-              {method.isActive && (
-                <span className={styles.activeBadge}>Основная</span>
-              )}
-            </div>
+          {methods.map((method) => (
+            <label
+              key={method.id}
+              className="flex min-h-[68px] cursor-pointer items-center gap-3 px-3 py-3"
+            >
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center">
+                <RadioGroupItem value={method.id} className="h-6 w-6" />
+              </span>
+              <span className="min-w-0 flex-1 truncate text-base font-medium leading-[18px] text-content">
+                {paymentMethodTitle(method)}
+              </span>
+              <IconButton
+                variant="primary"
+                icon={<TrashBin className="h-6 w-6" />}
+                label={`Удалить карту ${paymentMethodTitle(method)}`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  handleTrash(method);
+                }}
+              />
+            </label>
+          ))}
+        </RadioGroup>
 
-            <p className={styles.meta}>
-              {method.provider}
-              {method.createdAt && (
-                <span className={styles.date}>
-                  {' · Добавлена '}
-                  {formatDate(method.createdAt)}
-                </span>
-              )}
-            </p>
-
-            {!method.isActive && (
-              <div className={styles.actions}>
-                <Button
-                  variant="secondary"
-                  size="small"
-                  onClick={() => handleActivate(method.id)}
-                  loading={activate.isPending}
-                  disabled={isMutating}
-                >
-                  Сделать основной
-                </Button>
-                <Button
-                  variant="clear"
-                  size="small"
-                  className={styles.deleteButton}
-                  onClick={() => setDeletingId(method.id)}
-                  disabled={isMutating}
-                >
-                  Удалить
-                </Button>
-              </div>
-            )}
-          </Card>
-        ))}
+        <button
+          type="button"
+          data-testid="add-payment-method"
+          onClick={handleAdd}
+          disabled={add.isPending}
+          className="flex min-h-[68px] w-full cursor-pointer items-center gap-3 px-3 py-3 text-left font-sans outline-none transition-opacity hover:opacity-80 active:opacity-80 disabled:pointer-events-none disabled:opacity-50 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2"
+        >
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center">
+            <Add className="h-6 w-6" aria-hidden />
+          </span>
+          <span className="text-base font-medium leading-[18px] text-content">
+            Добавить способ оплаты
+          </span>
+        </button>
       </div>
 
-      <DeletePaymentMethodModal
-        isOpen={Boolean(deletingId)}
-        onClose={() => setDeletingId(null)}
+      <ConfirmDialog
+        open={deletingId !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeletingId(null);
+          }
+        }}
+        title="Уверены, что хотите удалить способ оплаты?"
+        description="Карта будет удалена"
+        confirmLabel="Удалить"
+        confirmVariant="danger"
+        pending={remove.isPending}
         onConfirm={handleConfirmDelete}
-        displayMask={deletingMethod?.displayMask}
-        isLoading={remove.isPending}
       />
-    </div>
+
+      <Modal
+        open={deleteGuard !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteGuard(null);
+          }
+        }}
+      >
+        <ModalContent
+          title={
+            deleteGuard === null ? undefined : DELETE_GUARD_COPY[deleteGuard].title
+          }
+          description={
+            deleteGuard === null
+              ? undefined
+              : DELETE_GUARD_COPY[deleteGuard].description
+          }
+        >
+          <Button className="w-full" onClick={() => setDeleteGuard(null)}>
+            Понятно
+          </Button>
+        </ModalContent>
+      </Modal>
+    </>
   );
 }

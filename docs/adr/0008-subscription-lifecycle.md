@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted (grace semantics amended by ADR 0055: one active property in grace, billing archive and restoration)
 
 ## Context
 

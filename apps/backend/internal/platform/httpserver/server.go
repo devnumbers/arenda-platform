@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"net/url"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -59,7 +58,11 @@ type Deps struct {
 	// non-nil only when the fake provider is active (the billing wiring
 	// constructs it there), so the routes are mounted only in that case —
 	// a production build has no such endpoints at all (issue #287).
-	BillingFakeConfirms      *billinghttp.FakeConfirmHandlers
+	BillingFakeConfirms *billinghttp.FakeConfirmHandlers
+	// BillingTimeTravel serves the stand-only admin time-shift and tick
+	// endpoints (issue #665); non-nil only when the BILLING_TIME_TRAVEL
+	// railguard is on, so a production build mounts no such routes at all.
+	BillingTimeTravel        *billinghttp.TimeTravelHandlers
 	ReadonlyGate             httpsupport.SubscriptionMutationChecker
 	Admin                    *adminapp.AdminService
 	Properties               *propertiesapp.PropertyService
@@ -240,10 +243,18 @@ func New(deps Deps) http.Handler {
 	// The local-only fake confirmation endpoints (issues #250/#251) live
 	// outside the generated contract: the billing wiring constructs their
 	// handlers only under the fake provider, so a production build mounts no
-	// such routes at all (issue #287).
+	// such routes at all (issue #287). The handler owns the route set — the
+	// auto simulator mode adds the GET bank-return routes, the manual one the
+	// fail endpoint (issue #663).
 	if deps.BillingFakeConfirms != nil {
-		r.Post(billinghttp.FakePaymentConfirmRoute, deps.BillingFakeConfirms.ConfirmPayment)
-		r.Post(billinghttp.FakeCardBindingConfirmRoute, deps.BillingFakeConfirms.ConfirmCardBinding)
+		deps.BillingFakeConfirms.MountRoutes(r)
+	}
+
+	// The stand-only time-travel rig (issue #665) mounts its admin endpoints
+	// only when the composition root enabled it — the railguard keeps a
+	// production build free of the routes entirely.
+	if deps.BillingTimeTravel != nil {
+		deps.BillingTimeTravel.MountRoutes(r)
 	}
 
 	return generated
@@ -251,17 +262,11 @@ func New(deps Deps) http.Handler {
 
 func addCardReturnHandler(baseURL string, success bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		target := baseURL
-		if path, err := url.JoinPath(baseURL, "/profile/tariff/payment-methods"); err == nil {
-			target = path
-		}
-		q := url.Values{}
+		result := httpsupport.AddCardResultFailed
 		if success {
-			q.Set("addCard", "success")
-		} else {
-			q.Set("addCard", "fail")
+			result = httpsupport.AddCardResultSuccess
 		}
-		http.Redirect(w, r, target+"?"+q.Encode(), http.StatusFound)
+		http.Redirect(w, r, httpsupport.AddCardReturnURL(baseURL, result), http.StatusFound)
 	}
 }
 

@@ -143,14 +143,30 @@ func (l *scriptedLifecycle) resolutions() []refundResolution {
 }
 
 // fakeArchiverSource records archive calls for the lifecycle-bridge tests.
+// ArchiveIDs is what ArchiveExcess returns as the archived ids; RemainingAs is
+// what RestoreGraceArchive returns as the debt remainder.
 type fakeArchiverSource struct {
-	mu    sync.Mutex
-	calls []archiveCall
-	err   error
+	mu          sync.Mutex
+	calls       []archiveCall
+	restores    []restoreCall
+	existsCalls []uuid.UUID
+	err         error
+	archiveIDs  []uuid.UUID
+	remainingAs []uuid.UUID
+	// The ActivePropertyExists answers come from this map; an id absent
+	// from it does not exist (issue #617 keep-choice validation).
+	activeExists map[uuid.UUID]bool
 }
 
 type archiveCall struct {
 	ownerID uuid.UUID
+	limit   int
+	keep    *uuid.UUID
+}
+
+type restoreCall struct {
+	ownerID uuid.UUID
+	ids     []uuid.UUID
 	limit   int
 }
 
@@ -160,17 +176,37 @@ func (s *fakeArchiverSource) WithTx(transaction.Tx) (ExcessPropertyArchiver, err
 
 type fakeArchiver struct{ src *fakeArchiverSource }
 
-func (a fakeArchiver) ArchiveExcess(_ context.Context, ownerID uuid.UUID, limit int) error {
+func (a fakeArchiver) ArchiveExcess(_ context.Context, ownerID uuid.UUID, limit int, keepPropertyID *uuid.UUID) ([]uuid.UUID, error) {
 	a.src.mu.Lock()
 	defer a.src.mu.Unlock()
-	a.src.calls = append(a.src.calls, archiveCall{ownerID: ownerID, limit: limit})
-	return a.src.err
+	a.src.calls = append(a.src.calls, archiveCall{ownerID: ownerID, limit: limit, keep: keepPropertyID})
+	return a.src.archiveIDs, a.src.err
+}
+
+func (a fakeArchiver) ActivePropertyExists(_ context.Context, _, propertyID uuid.UUID) (bool, error) {
+	a.src.mu.Lock()
+	defer a.src.mu.Unlock()
+	a.src.existsCalls = append(a.src.existsCalls, propertyID)
+	return a.src.activeExists[propertyID], a.src.err
+}
+
+func (a fakeArchiver) RestoreGraceArchive(_ context.Context, ownerID uuid.UUID, ids []uuid.UUID, limit int) ([]uuid.UUID, error) {
+	a.src.mu.Lock()
+	defer a.src.mu.Unlock()
+	a.src.restores = append(a.src.restores, restoreCall{ownerID: ownerID, ids: ids, limit: limit})
+	return a.src.remainingAs, a.src.err
 }
 
 func (s *fakeArchiverSource) recorded() []archiveCall {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]archiveCall(nil), s.calls...)
+}
+
+func (s *fakeArchiverSource) restoreCalls() []restoreCall {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]restoreCall(nil), s.restores...)
 }
 
 // fakeSlotSource records enforce calls for the lifecycle-bridge tests.
@@ -938,6 +974,35 @@ func TestWorkers_RenewalRecoversPendingPaymentFromCreateRace(t *testing.T) {
 	}
 }
 
+// TestWorkers_RenewalPaymentSnapshotsChargedCard proves the renewal planning
+// records the charged method's card mask on the payment (issue #619): the
+// history keeps describing the card even after the method is deleted.
+func TestWorkers_RenewalPaymentSnapshotsChargedCard(t *testing.T) {
+	t.Parallel()
+	h := newWorkersHarness(t, Config{})
+	sub := h.seedSubscription(t, nil)
+	method := h.seedActiveMethod(t, sub, testProviderFake, "token_good")
+	method.DisplayMask = "2202********4242"
+	if _, err := h.stores.methods.UpsertByTokenHash(t.Context(), method); err != nil {
+		t.Fatalf("seed method mask: %v", err)
+	}
+
+	if _, err := h.workers.ProcessRenewals(t.Context(), h.now); err != nil {
+		t.Fatalf("ProcessRenewals() error = %v", err)
+	}
+
+	all, err := h.stores.payments.ListByUserID(t.Context(), sub.UserID)
+	if err != nil || len(all) != 1 {
+		t.Fatalf("payments = %d (err %v), want the single renewal payment", len(all), err)
+	}
+	if all[0].PaymentMethodID == nil || *all[0].PaymentMethodID != method.ID {
+		t.Errorf("payment method = %v, want the active method", all[0].PaymentMethodID)
+	}
+	if all[0].CardMask == nil || *all[0].CardMask != "2202********4242" {
+		t.Errorf("CardMask = %v, want the charged method's mask", all[0].CardMask)
+	}
+}
+
 // TestWorkers_RenewalFreeBasicTermsFallToBasic proves the free-terms renewal:
 // a basic subscription left with a validity window and auto-renew on (the
 // state a scheduled downgrade to basic produces) falls to the permanent basic
@@ -1128,7 +1193,7 @@ func TestWorkers_RenewalsExpireNonRenewingAndCancelled(t *testing.T) {
 
 	nonRenewing := h.seedSubscription(t, func(s *domain.Subscription) { s.AutoRenewEnabled = false })
 	cancelled := h.seedSubscription(t, func(s *domain.Subscription) { s.AutoRenewEnabled = false })
-	if err := cancelled.Cancel(); err != nil {
+	if err := cancelled.Cancel(nil); err != nil {
 		t.Fatalf("cancel: %v", err)
 	}
 	if err := h.stores.subscriptions.Update(t.Context(), cancelled); err != nil {
@@ -1154,6 +1219,45 @@ func TestWorkers_RenewalsExpireNonRenewingAndCancelled(t *testing.T) {
 	}
 	if got := slots.recorded(); len(got) != 2 || !containsAll(got, "non_renewing_expired", "cancelled_expired") {
 		t.Errorf("slot calls = %v, want one non_renewing_expired and one cancelled_expired", got)
+	}
+}
+
+// TestWorkers_CancelledExpiryHonoursKeepChoice proves the cancel keep-choice
+// hand-off (issue #617): the cancelled subscription's chosen property rides
+// into the basic-limit enforcement, and the fall to basic consumes the choice
+// on the stored subscription.
+func TestWorkers_CancelledExpiryHonoursKeepChoice(t *testing.T) {
+	t.Parallel()
+	h := newWorkersHarness(t, Config{})
+	archiver := &fakeArchiverSource{}
+	h.workers.SetLifecycleBridges(archiver, &fakeSlotSource{})
+
+	keepID := uuid.Must(uuid.NewV7())
+	cancelled := h.seedSubscription(t, func(s *domain.Subscription) { s.AutoRenewEnabled = false })
+	if err := cancelled.Cancel(&keepID); err != nil {
+		t.Fatalf("cancel: %v", err)
+	}
+	if err := h.stores.subscriptions.Update(t.Context(), cancelled); err != nil {
+		t.Fatalf("store cancelled: %v", err)
+	}
+
+	if _, err := h.workers.ProcessRenewals(t.Context(), h.now); err != nil {
+		t.Fatalf("ProcessRenewals() error = %v", err)
+	}
+
+	calls := archiver.recorded()
+	if len(calls) != 1 {
+		t.Fatalf("archive calls = %d, want 1", len(calls))
+	}
+	if calls[0].keep == nil || *calls[0].keep != keepID {
+		t.Errorf("archive keep = %v, want %v", calls[0].keep, keepID)
+	}
+	if calls[0].limit != h.basic.ActivePropertyLimit {
+		t.Errorf("archive limit = %d, want the basic limit %d", calls[0].limit, h.basic.ActivePropertyLimit)
+	}
+	stored := h.storedSubscription(t, cancelled)
+	if stored.KeepPropertyID != nil {
+		t.Errorf("stored KeepPropertyID = %v, want consumed by the fall to basic", stored.KeepPropertyID)
 	}
 }
 

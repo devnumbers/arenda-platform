@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -486,7 +487,7 @@ func TestSubscriptionCancel(t *testing.T) {
 		PendingPeriod:    &period,
 	}
 
-	if err := sub.Cancel(); err != nil {
+	if err := sub.Cancel(nil); err != nil {
 		t.Fatalf("Cancel() error = %v", err)
 	}
 	if sub.Status != SubscriptionStatusCancelled {
@@ -505,7 +506,7 @@ func TestSubscriptionCancel(t *testing.T) {
 	}
 
 	cancelled := Subscription{Status: SubscriptionStatusCancelled}
-	if err := cancelled.Cancel(); !errors.Is(err, ErrInvalidSubscriptionState) {
+	if err := cancelled.Cancel(nil); !errors.Is(err, ErrInvalidSubscriptionState) {
 		t.Errorf("second Cancel() error = %v, want ErrInvalidSubscriptionState", err)
 	}
 }
@@ -531,6 +532,9 @@ func TestSubscriptionDowngradeToBasic(t *testing.T) {
 		PendingChangeAt:  &pendingAt,
 		PendingPeriod:    &period,
 		CurrentPeriod:    &period,
+		GraceArchivedPropertyIDs: []uuid.UUID{
+			uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a16"),
+		},
 	}
 
 	sub.DowngradeToBasic(basicID)
@@ -552,6 +556,143 @@ func TestSubscriptionDowngradeToBasic(t *testing.T) {
 	}
 	if sub.CurrentPeriod != nil {
 		t.Errorf("CurrentPeriod = %v, want nil", sub.CurrentPeriod)
+	}
+	// The fall to basic ends the grace window without payment: the restoration
+	// debt is dropped (ADR 0055).
+	if sub.GraceArchivedPropertyIDs != nil {
+		t.Errorf("GraceArchivedPropertyIDs = %v, want nil", sub.GraceArchivedPropertyIDs)
+	}
+}
+
+func TestSubscriptionCancelKeepProperty(t *testing.T) {
+	t.Parallel()
+	validUntil := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	keepID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a17")
+
+	// The keep choice (issue #617) rides on the cancellation: the expiry
+	// worker honours it when the subscription falls to basic.
+	sub := Subscription{Status: SubscriptionStatusActive, ValidUntil: &validUntil, AutoRenewEnabled: true}
+	if err := sub.Cancel(&keepID); err != nil {
+		t.Fatalf("Cancel(keep) error = %v", err)
+	}
+	if sub.KeepPropertyID == nil || *sub.KeepPropertyID != keepID {
+		t.Errorf("KeepPropertyID = %v, want %v", sub.KeepPropertyID, keepID)
+	}
+
+	noKeep := Subscription{Status: SubscriptionStatusActive, ValidUntil: &validUntil}
+	if err := noKeep.Cancel(nil); err != nil {
+		t.Fatalf("Cancel(nil) error = %v", err)
+	}
+	if noKeep.KeepPropertyID != nil {
+		t.Errorf("KeepPropertyID = %v, want nil", noKeep.KeepPropertyID)
+	}
+}
+
+func TestSubscriptionResume(t *testing.T) {
+	t.Parallel()
+	validUntil := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	now := time.Date(2026, 6, 17, 12, 0, 0, 0, time.UTC)
+	keepID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a17")
+
+	t.Run("resumes a cancelled subscription inside its paid period", func(t *testing.T) {
+		t.Parallel()
+		sub := Subscription{
+			Status:           SubscriptionStatusCancelled,
+			ValidUntil:       &validUntil,
+			AutoRenewEnabled: false,
+			KeepPropertyID:   &keepID,
+		}
+
+		if err := sub.Resume(now); err != nil {
+			t.Fatalf("Resume(now) error = %v", err)
+		}
+		if sub.Status != SubscriptionStatusActive {
+			t.Errorf("Status = %v, want %v", sub.Status, SubscriptionStatusActive)
+		}
+		if !sub.AutoRenewEnabled {
+			t.Error("expected auto-renew enabled after resume")
+		}
+		if sub.ValidUntil == nil || !sub.ValidUntil.Equal(validUntil) {
+			t.Errorf("ValidUntil = %v, want retained %v", sub.ValidUntil, validUntil)
+		}
+		// The keep choice belonged to the cancellation the resume undoes.
+		if sub.KeepPropertyID != nil {
+			t.Errorf("KeepPropertyID = %v, want nil", sub.KeepPropertyID)
+		}
+	})
+
+	t.Run("rejects a subscription that is not cancelled", func(t *testing.T) {
+		t.Parallel()
+		for _, status := range []SubscriptionStatus{SubscriptionStatusActive, SubscriptionStatusGrace} {
+			sub := Subscription{Status: status, ValidUntil: &validUntil}
+			if err := sub.Resume(now); !errors.Is(err, ErrResumeNotAvailable) {
+				t.Errorf("Resume(now) on %q error = %v, want ErrResumeNotAvailable", status, err)
+			}
+		}
+	})
+
+	t.Run("rejects an expired paid period", func(t *testing.T) {
+		t.Parallel()
+		expired := now.Add(-time.Hour)
+		sub := Subscription{Status: SubscriptionStatusCancelled, ValidUntil: &expired}
+		if err := sub.Resume(now); !errors.Is(err, ErrResumeNotAvailable) {
+			t.Errorf("Resume(now) after expiry error = %v, want ErrResumeNotAvailable", err)
+		}
+		withoutPeriod := Subscription{Status: SubscriptionStatusCancelled, ValidUntil: nil}
+		if err := withoutPeriod.Resume(now); !errors.Is(err, ErrResumeNotAvailable) {
+			t.Errorf("Resume(now) without period error = %v, want ErrResumeNotAvailable", err)
+		}
+	})
+}
+
+func TestSubscriptionKeepPropertyClearedOnLifecycleMoves(t *testing.T) {
+	t.Parallel()
+	basicID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
+	proID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13")
+	businessID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a18")
+	keepID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a17")
+	validUntil := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	now := time.Date(2026, 6, 17, 12, 0, 0, 0, time.UTC)
+	period := PeriodMonth
+	paymentID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a19")
+
+	// The keep choice (issue #617) is consumed by the first move that makes
+	// it moot: the fall to basic, a service overwrite, and the paid paths
+	// that take the subscription off the cancelled track.
+	fallToBasic := Subscription{Status: SubscriptionStatusCancelled, ValidUntil: &validUntil, KeepPropertyID: &keepID}
+	fallToBasic.DowngradeToBasic(basicID)
+	if fallToBasic.KeepPropertyID != nil {
+		t.Errorf("DowngradeToBasic: KeepPropertyID = %v, want nil", fallToBasic.KeepPropertyID)
+	}
+
+	service := Subscription{Status: SubscriptionStatusCancelled, ValidUntil: &validUntil, KeepPropertyID: &keepID}
+	service.AssignService(proID, validUntil)
+	if service.KeepPropertyID != nil {
+		t.Errorf("AssignService: KeepPropertyID = %v, want nil", service.KeepPropertyID)
+	}
+
+	reactivation := Subscription{Status: SubscriptionStatusCancelled, KeepPropertyID: &keepID}
+	if err := reactivation.ApplyRenewal(paymentID, period, now); err != nil {
+		t.Fatalf("ApplyRenewal error = %v", err)
+	}
+	if reactivation.KeepPropertyID != nil {
+		t.Errorf("ApplyRenewal: KeepPropertyID = %v, want nil", reactivation.KeepPropertyID)
+	}
+
+	proTariff := Tariff{
+		ID: proID, Name: TariffPro, ActivePropertyLimit: 5,
+		MonthlyPriceKopecks: 49000, YearlyPriceKopecks: 440000,
+	}
+	businessTariff := Tariff{
+		ID: businessID, Name: TariffBusiness, ActivePropertyLimit: UnlimitedPropertyLimit,
+		MonthlyPriceKopecks: 99000, YearlyPriceKopecks: 890000,
+	}
+	upgrade := Subscription{TariffID: proID, Status: SubscriptionStatusCancelled, ValidUntil: &validUntil, KeepPropertyID: &keepID}
+	if err := upgrade.ApplyTariffChange(paymentID, proTariff, businessTariff, period, now); err != nil {
+		t.Fatalf("ApplyTariffChange error = %v", err)
+	}
+	if upgrade.KeepPropertyID != nil {
+		t.Errorf("ApplyTariffChange: KeepPropertyID = %v, want nil", upgrade.KeepPropertyID)
 	}
 }
 
@@ -927,7 +1068,7 @@ func TestSubscriptionApplyScheduledDowngrade(t *testing.T) {
 	if err := subInvalid.ApplyScheduledDowngrade(basic, SubscriptionPeriod("weekly"), now); !errors.Is(err, ErrInvalidPeriod) {
 		t.Errorf("ApplyScheduledDowngrade invalid period error = %v, want ErrInvalidPeriod", err)
 	}
-	if subInvalid != baseline {
+	if !reflect.DeepEqual(subInvalid, baseline) {
 		t.Errorf("ApplyScheduledDowngrade mutated fields on invalid period: got %+v, want %+v", subInvalid, baseline)
 	}
 
@@ -939,7 +1080,7 @@ func TestSubscriptionApplyScheduledDowngrade(t *testing.T) {
 	if err := subSame.ApplyScheduledDowngrade(pro, PeriodMonth, now); !errors.Is(err, ErrAlreadyOnTariff) {
 		t.Errorf("ApplyScheduledDowngrade same tariff error = %v, want ErrAlreadyOnTariff", err)
 	}
-	if subSame != baseline {
+	if !reflect.DeepEqual(subSame, baseline) {
 		t.Errorf("ApplyScheduledDowngrade mutated fields on same tariff: got %+v, want %+v", subSame, baseline)
 	}
 }
@@ -977,7 +1118,7 @@ func TestSubscriptionClearPendingChange(t *testing.T) {
 	baseline.PendingTariffID = nil
 	baseline.PendingChangeAt = nil
 	baseline.PendingPeriod = nil
-	if sub != baseline {
+	if !reflect.DeepEqual(sub, baseline) {
 		t.Errorf("ClearPendingChange mutated non-pending fields: got %+v, want %+v", sub, baseline)
 	}
 }
@@ -1036,7 +1177,7 @@ func TestSubscriptionApplyScheduledDowngradePreconditions(t *testing.T) {
 			if err := sub.ApplyScheduledDowngrade(basic, PeriodMonth, now); !errors.Is(err, ErrInvalidSubscriptionState) {
 				t.Errorf("ApplyScheduledDowngrade() error = %v, want ErrInvalidSubscriptionState", err)
 			}
-			if sub != before {
+			if !reflect.DeepEqual(sub, before) {
 				t.Errorf("ApplyScheduledDowngrade mutated fields on precondition failure: got %+v, want %+v", sub, before)
 			}
 		})
@@ -1071,7 +1212,7 @@ func TestReconstituteSubscription(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ReconstituteSubscription() error = %v", err)
 		}
-		if got != want {
+		if !reflect.DeepEqual(got, want) {
 			t.Errorf("ReconstituteSubscription() = %+v, want %+v", got, want)
 		}
 	})
@@ -1164,6 +1305,9 @@ func TestSubscriptionAssignService(t *testing.T) {
 		PendingPeriod:    &pendingPeriod,
 		CurrentPeriod:    &pendingPeriod,
 		GraceRemindedAt:  &remindedAt,
+		GraceArchivedPropertyIDs: []uuid.UUID{
+			uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a17"),
+		},
 	}
 	sub.SetActivePaymentMethod(methodID)
 
@@ -1192,6 +1336,11 @@ func TestSubscriptionAssignService(t *testing.T) {
 	}
 	if sub.GraceRemindedAt != nil {
 		t.Errorf("GraceRemindedAt = %v, want nil", sub.GraceRemindedAt)
+	}
+	// The overwrite discards the previous subscription's state, the grace
+	// restoration debt with it (ADR 0055).
+	if sub.GraceArchivedPropertyIDs != nil {
+		t.Errorf("GraceArchivedPropertyIDs = %v, want nil", sub.GraceArchivedPropertyIDs)
 	}
 	if sub.ActivePaymentMethodID == nil || *sub.ActivePaymentMethodID != methodID {
 		t.Errorf("ActivePaymentMethodID = %v, want the surviving method", sub.ActivePaymentMethodID)
@@ -1369,5 +1518,114 @@ func TestSubscriptionPaymentFlipsServiceSourceToPaid(t *testing.T) {
 	}
 	if sub.Source != SubscriptionSourcePaid {
 		t.Errorf("Source = %v, want paid after the applied renewal", sub.Source)
+	}
+}
+
+// TestSubscriptionShiftTime proves the stand-only time travel of the
+// subscription's own temporal boundaries (issue #665): a signed shift moves
+// valid_until and any pending-change deadline coherently, resets the grace
+// reminder the way a fresh window does, and touches nothing else — the
+// lifecycle phases pick the moved boundaries up on their next tick. A
+// subscription without a validity boundary (the free basic state) has no time
+// to travel.
+func TestSubscriptionShiftTime(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC)
+	graceUntil := now.Add(7 * 24 * time.Hour)
+	remindedAt := now.Add(-6 * time.Hour)
+	pendingAt := now.Add(3 * 24 * time.Hour)
+	pendingTariff := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a21")
+	pendingPeriod := PeriodYear
+
+	sub := Subscription{
+		ID:              uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"),
+		UserID:          uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12"),
+		TariffID:        uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13"),
+		Source:          SubscriptionSourcePaid,
+		Status:          SubscriptionStatusGrace,
+		ValidUntil:      &graceUntil,
+		GraceRemindedAt: &remindedAt,
+		PendingTariffID: &pendingTariff,
+		PendingChangeAt: &pendingAt,
+		PendingPeriod:   &pendingPeriod,
+	}
+
+	// A backward shift moves every temporal boundary by the same delta — the
+	// pending-change CHECK (pending_change_at >= valid_until) survives
+	// because both sides travel together.
+	delta := -25 * time.Hour
+	if err := sub.ShiftTime(delta); err != nil {
+		t.Fatalf("ShiftTime() error = %v", err)
+	}
+	wantValid := graceUntil.Add(delta)
+	if sub.ValidUntil == nil || !sub.ValidUntil.Equal(wantValid) {
+		t.Errorf("ValidUntil = %v, want %v", sub.ValidUntil, wantValid)
+	}
+	wantPending := pendingAt.Add(delta)
+	if sub.PendingChangeAt == nil || !sub.PendingChangeAt.Equal(wantPending) {
+		t.Errorf("PendingChangeAt = %v, want %v", sub.PendingChangeAt, wantPending)
+	}
+	if sub.GraceRemindedAt != nil {
+		t.Errorf("GraceRemindedAt = %v, want nil for the fresh reminder window", sub.GraceRemindedAt)
+	}
+	tariffID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13")
+	if sub.Status != SubscriptionStatusGrace || sub.Source != SubscriptionSourcePaid || sub.TariffID != tariffID {
+		t.Errorf("status/source/tariff changed: %v/%v/%v", sub.Status, sub.Source, sub.TariffID)
+	}
+	if !sub.HasPendingChange() {
+		t.Error("HasPendingChange() = false, want the scheduled change preserved")
+	}
+
+	// A forward shift works the same way (the raw lever allows both
+	// directions; the presets move the boundary backward).
+	sub2 := Subscription{
+		ID:         uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14"),
+		UserID:     uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12"),
+		TariffID:   tariffID,
+		Source:     SubscriptionSourcePaid,
+		Status:     SubscriptionStatusActive,
+		ValidUntil: &graceUntil,
+	}
+	if err := sub2.ShiftTime(48 * time.Hour); err != nil {
+		t.Fatalf("ShiftTime(forward) error = %v", err)
+	}
+	wantForward := graceUntil.Add(48 * time.Hour)
+	if sub2.ValidUntil == nil || !sub2.ValidUntil.Equal(wantForward) {
+		t.Errorf("ValidUntil = %v, want %v", sub2.ValidUntil, wantForward)
+	}
+}
+
+// TestSubscriptionShiftTimeRefusals pins the two rejections of the time
+// travel: a zero delta and a subscription without a validity boundary — the
+// free basic state has no time to travel.
+func TestSubscriptionShiftTimeRefusals(t *testing.T) {
+	t.Parallel()
+	validUntil := time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC)
+	tariffID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13")
+	userID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
+
+	// A subscription without a validity boundary has nothing to shift.
+	basic := Subscription{
+		ID:       uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a15"),
+		UserID:   userID,
+		TariffID: tariffID,
+		Source:   SubscriptionSourcePaid,
+		Status:   SubscriptionStatusActive,
+	}
+	if err := basic.ShiftTime(-time.Hour); !errors.Is(err, ErrInvalidTimeShift) {
+		t.Errorf("ShiftTime(no valid_until) error = %v, want ErrInvalidTimeShift", err)
+	}
+
+	// A zero shift is a rejected no-op, not a silent pass.
+	paid := Subscription{
+		ID:         uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a16"),
+		UserID:     userID,
+		TariffID:   tariffID,
+		Source:     SubscriptionSourcePaid,
+		Status:     SubscriptionStatusActive,
+		ValidUntil: &validUntil,
+	}
+	if err := paid.ShiftTime(0); !errors.Is(err, ErrInvalidTimeShift) {
+		t.Errorf("ShiftTime(0) error = %v, want ErrInvalidTimeShift", err)
 	}
 }

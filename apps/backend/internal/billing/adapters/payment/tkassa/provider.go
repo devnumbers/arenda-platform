@@ -397,6 +397,7 @@ func (p *Provider) PaymentStatus(
 	res = application.PaymentStatusResult{
 		Status:      mapStatus(resp.Status),
 		ChargeToken: resp.RebillID,
+		CardMask:    resp.Pan,
 	}
 	if res.Status == domain.PaymentStatusFailed && resp.ErrorCode != "0" {
 		res.ErrorCode = resp.ErrorCode

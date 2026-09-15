@@ -52,11 +52,18 @@ func (l *SubscriptionPropertyLimiter) WithTx(tx transaction.Tx) (*SubscriptionPr
 	return &SubscriptionPropertyLimiter{subscriptions: subRepo, tariffs: tariffRepo, clock: l.clock, lock: true}, nil
 }
 
+// gracePropertyLimit is the effective active-property limit while a
+// subscription is inside its grace window (grace v2, ADR 0055): data
+// mutations stay open, but create and restore count against one property —
+// the survivor of the grace-entry archiving.
+const gracePropertyLimit = 1
+
 // ActivePropertyLimit returns the limit for the user. If the user has no paid
 // active subscription, the limit is 0. A cancelled subscription keeps the paid
 // tariff limit until ValidUntil passes (ADR 0008: data mutations are allowed
-// until the end of the already paid period). Unlimited tariffs are represented
-// as math.MaxInt32.
+// until the end of the already paid period). A subscription inside its grace
+// window is capped at one active property regardless of the tariff (ADR 0055).
+// Unlimited tariffs are represented as math.MaxInt32.
 func (l *SubscriptionPropertyLimiter) ActivePropertyLimit(ctx context.Context, userID uuid.UUID) (int, error) {
 	var sub domain.Subscription
 	var err error
@@ -72,7 +79,10 @@ func (l *SubscriptionPropertyLimiter) ActivePropertyLimit(ctx context.Context, u
 		return 0, fmt.Errorf("get subscription: %w", err)
 	}
 
-	if sub.Status != domain.SubscriptionStatusActive && sub.Status != domain.SubscriptionStatusGrace {
+	if sub.Status == domain.SubscriptionStatusGrace {
+		return gracePropertyLimit, nil
+	}
+	if sub.Status != domain.SubscriptionStatusActive {
 		// ADR 0008: cancelled subscriptions keep the paid tariff limit until
 		// valid_until; after that (or without it) mutations are blocked.
 		if sub.Status != domain.SubscriptionStatusCancelled || sub.ValidUntil == nil || !sub.ValidUntil.After(l.clock.Now()) {

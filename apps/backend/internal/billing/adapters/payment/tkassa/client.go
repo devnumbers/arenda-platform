@@ -88,6 +88,7 @@ type getStateResponse struct {
 	OrderID   string `json:"OrderId"`
 	Amount    int64  `json:"Amount"`
 	RebillID  string `json:"RebillId"`
+	Pan       string `json:"Pan"`
 }
 
 type addCustomerResponse struct {

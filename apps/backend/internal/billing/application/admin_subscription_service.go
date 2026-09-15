@@ -90,7 +90,7 @@ func (s *SubscriptionService) AssignServiceSubscription(
 		}
 
 		if transitionChangedTariff(applied, tariff.ID) {
-			if err := stores.enforceTariffLimit(ctx, sub.UserID, tariff.ActivePropertyLimit, triggerServiceAssigned); err != nil {
+			if err := stores.enforceTariffLimit(ctx, sub.UserID, tariff.ActivePropertyLimit, triggerServiceAssigned, nil); err != nil {
 				return fmt.Errorf("enforce tariff limit after service assignment: %w", err)
 			}
 		}
@@ -157,7 +157,7 @@ func (s *SubscriptionService) ForceChangeTariff(ctx context.Context, adminID, us
 			return err
 		}
 
-		if err := stores.enforceTariffLimit(ctx, sub.UserID, tariff.ActivePropertyLimit, triggerForcedChange); err != nil {
+		if err := stores.enforceTariffLimit(ctx, sub.UserID, tariff.ActivePropertyLimit, triggerForcedChange, nil); err != nil {
 			return fmt.Errorf("enforce tariff limit after forced change: %w", err)
 		}
 		return nil
@@ -212,7 +212,7 @@ func (s *SubscriptionService) CancelSubscriptionAsAdmin(ctx context.Context, adm
 			return domain.ErrInvalidSubscriptionState
 		}
 		if _, err := stores.applyTransition(ctx, &sub,
-			func(s *domain.Subscription) error { return s.Cancel() },
+			func(s *domain.Subscription) error { return s.Cancel(nil) },
 			transitionSpec{
 				reason:      domain.TransitionReasonCancelled,
 				initiator:   domain.InitiatorAdmin,

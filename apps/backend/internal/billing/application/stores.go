@@ -31,14 +31,49 @@ type txStores struct {
 }
 
 // archiveExcessProperties archives the owner's active properties beyond the
-// limit inside the current transaction. Without a wired bridge it is a no-op:
-// the subscription-side phase still applies, only the excess properties wait
-// (issue #252).
-func (s *txStores) archiveExcessProperties(ctx context.Context, ownerID uuid.UUID, limit int) error {
+// limit inside the current transaction and returns the archived ids in
+// restoration-priority order (newest first). When keepPropertyID is set
+// (issue #617), that property survives as long as it is one of the owner's
+// active ones. Without a wired bridge it is a no-op: the subscription-side
+// phase still applies, only the excess properties wait (issue #252).
+func (s *txStores) archiveExcessProperties(
+	ctx context.Context, ownerID uuid.UUID, limit int, keepPropertyID *uuid.UUID,
+) ([]uuid.UUID, error) {
 	if s.archiver == nil {
-		return nil
+		return nil, nil
 	}
-	return s.archiver.ArchiveExcess(ctx, ownerID, limit)
+	return s.archiver.ArchiveExcess(ctx, ownerID, limit, keepPropertyID)
+}
+
+// archiveExcessForGraceEntry is the grace-entry tail of ADR 0055: the owner's
+// active properties beyond the grace limit of one are archived — the survivor
+// is the most recently updated — and the affected recipients' excess shared
+// memberships are suspended, inside the caller's transaction. The archived ids
+// (restoration-priority order) become the subscription's snapshot: the
+// restoration debt the next successful payment settles.
+func (s *txStores) archiveExcessForGraceEntry(ctx context.Context, ownerID uuid.UUID) ([]uuid.UUID, error) {
+	ids, err := s.archiveExcessProperties(ctx, ownerID, gracePropertyLimit, nil)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.enforceRecipientSlots(ctx, ownerID, triggerGraceEntry); err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
+// restoreGraceArchive unarchives the grace snapshot inside the caller's
+// transaction, respecting the given (possibly changed) tariff limit: the ids
+// restore in snapshot order while the owner's active count stays under the
+// limit, and the affected recipients' memberships follow the properties
+// bridge. It returns the ids the bridge could not restore — the debt
+// remainder (nil when the snapshot settled). Without a wired bridge the
+// snapshot is returned untouched (issue #252 wiring shape).
+func (s *txStores) restoreGraceArchive(ctx context.Context, ownerID uuid.UUID, ids []uuid.UUID, limit int) ([]uuid.UUID, error) {
+	if s.archiver == nil || len(ids) == 0 {
+		return ids, nil
+	}
+	return s.archiver.RestoreGraceArchive(ctx, ownerID, ids, limit)
 }
 
 // enforceRecipientSlots suspends the excess shared memberships after a billing
@@ -51,12 +86,13 @@ func (s *txStores) enforceRecipientSlots(ctx context.Context, userID uuid.UUID, 
 }
 
 // enforceTariffLimit is the shared tail of every worker phase that lowers a
-// tariff limit: the owner's excess active properties are archived and the
-// affected recipients' excess shared memberships
-// suspended, inside the caller's transaction so a bridge failure rolls the
-// whole phase back (issue #252).
-func (s *txStores) enforceTariffLimit(ctx context.Context, ownerID uuid.UUID, limit int, trigger string) error {
-	if err := s.archiveExcessProperties(ctx, ownerID, limit); err != nil {
+// tariff limit: the owner's excess active properties are archived — keeping
+// the keepPropertyID choice when one is given (issue #617) — and the
+// affected recipients' excess shared memberships suspended, inside the
+// caller's transaction so a bridge failure rolls the whole phase back
+// (issue #252).
+func (s *txStores) enforceTariffLimit(ctx context.Context, ownerID uuid.UUID, limit int, trigger string, keepPropertyID *uuid.UUID) error {
+	if _, err := s.archiveExcessProperties(ctx, ownerID, limit, keepPropertyID); err != nil {
 		return err
 	}
 	return s.enforceRecipientSlots(ctx, ownerID, trigger)
