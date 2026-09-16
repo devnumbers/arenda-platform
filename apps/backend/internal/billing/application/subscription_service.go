@@ -404,7 +404,7 @@ func (s *SubscriptionService) planTariffChange(
 	// A same-tariff request is a manual payment while the subscription is in
 	// grace (a renewal, issue #250) or cancelled (its reactivation, issue
 	// #429); both share the payment path with upgrades.
-	manualPayment, err := sameTariffManualPayment(sub, newTariff, now)
+	manualPayment, err := sameTariffManualPayment(sub, newTariff, req.Period, now)
 	if err != nil {
 		return changeTariffPlan{}, err
 	}
@@ -468,8 +468,16 @@ func selectableTariff(ctx context.Context, stores *txStores, name domain.TariffN
 // payment path: a renewal of a subscription currently in its grace window
 // (issue #250) or the reactivation of a cancelled one (issue #429, ADR 0008:
 // restoration goes through paying for a tariff). The expired grace window and
-// the active same-tariff state are rejections.
-func sameTariffManualPayment(sub domain.Subscription, newTariff domain.Tariff, now time.Time) (bool, error) {
+// the active same-tariff state are rejections. A cancelled subscription with
+// a live paid remainder is refused too (issue #691): paying for its own
+// tariff and period would burn the remainder for the outcome the free resume
+// already delivers — the boundary holds only while the requested period
+// matches the current one; a period switch stays paid (the remainder is lost
+// either way) and an unknown current period cannot match, so it stays paid
+// as well.
+func sameTariffManualPayment(
+	sub domain.Subscription, newTariff domain.Tariff, period domain.SubscriptionPeriod, now time.Time,
+) (bool, error) {
 	if sub.TariffID != newTariff.ID {
 		return false, nil
 	}
@@ -480,6 +488,10 @@ func sameTariffManualPayment(sub domain.Subscription, newTariff domain.Tariff, n
 		// Paying for the plan the subscription is already on restores it:
 		// the "already on this tariff" rejection is reserved for active
 		// subscriptions.
+		if sub.ValidUntil != nil && sub.ValidUntil.After(now) &&
+			sub.CurrentPeriod != nil && *sub.CurrentPeriod == period {
+			return false, domain.ErrResumeRequired
+		}
 		return true, nil
 	case sub.Status == domain.SubscriptionStatusGrace:
 		// The grace window has expired; the worker downgrade to basic

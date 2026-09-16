@@ -15,6 +15,7 @@ import { notify } from '@/shared/lib/notifications';
 import { billingKeys } from '@/shared/api/query-keys';
 import {
   useChangeTariff,
+  useResumeSubscription,
   useSubscription,
   useTariffs,
 } from '@/features/billing';
@@ -39,19 +40,23 @@ import {
 import { TariffFaq } from './tariff-faq';
 import { FEATURE_IMAGES } from './tariff-about-cards';
 import { PendingPaymentCta } from './pending-payment-cta';
+import { ResumeSuccessScreen } from './resume-success-screen';
 
 /** Экран «Выбрать тариф» (#623, макеты 1919-74867 год, 1929-76367 месяц,
  * 1929-75957 pending) — редизайн TariffChangeForm на канон: сегмент
  * «Год/Месяц» с бейджем скидки из данных, радио-строки всех трёх тарифов
  * (базовый — «Бесплатно»), карточки возможностей, общий с главным экраном
- * FAQ и липкий футер трёх состояний: «Подключить за X ₽» (апгрейд →
- * confirmUrl банка; grace-продление #250 и реактивация #429 — тоже
+ * FAQ и липкий футер: «Подключить за X ₽» (апгрейд → confirmUrl банка;
+ * grace-продление #250 и реактивация истёкшего периода #429 — тоже
  * платёжный путь), disabled «Подключен» (активная подписка на выбранном
- * тарифе и периоде), выбор базового — во флоу отключения (#622). Живая
- * pending-оплата заменяет футер блоком «Вернуться к оплате» с таймером:
- * плашка не меняется при переключениях (аннотация макета), по истечении
- * срока refetch разблокирует выбор. Дефолт выбора: своя подписка — свой
- * тариф и период, после регистрации — «Год» + «Про» (решение владельца). */
+ * тарифе и периоде), бесплатная «Возобновить» в «Остановлен» на своём
+ * тарифе и периоде при живом остатке (#691: платная реактивация оплаченного
+ * периода закрыта — после resume экран успеха возобновления), выбор
+ * базового — во флоу отключения (#622). Живая pending-оплата заменяет футер
+ * блоком «Вернуться к оплате» с таймером: плашка не меняется при
+ * переключениях (аннотация макета), по истечении срока refetch разблокирует
+ * выбор. Дефолт выбора: своя подписка — свой тариф и период, после
+ * регистрации — «Год» + «Про» (решение владельца). */
 export function TariffChangeScreen(): JSX.Element {
   const {
     data: tariffs,
@@ -118,6 +123,8 @@ function TariffChangeContent({
   const router = useRouter();
   const queryClient = useQueryClient();
   const changeTariff = useChangeTariff();
+  const resume = useResumeSubscription();
+  const [resumed, setResumed] = useState(false);
 
   const defaults = tariffChangeDefaults(subscription);
   const [period, setPeriod] = useState<PaymentPeriod>(defaults.period);
@@ -129,6 +136,10 @@ function TariffChangeContent({
     pendingPayment === undefined && selectedTariff !== undefined
       ? tariffChangeFooter(subscription, selectedTariff, period)
       : undefined;
+
+  if (resumed) {
+    return <ResumeSuccessScreen tariffName={subscription.tariff.name} />;
+  }
 
   const handleConnect = () => {
     if (selectedTariff === undefined) {
@@ -156,6 +167,15 @@ function TariffChangeContent({
         notify.close(loadingToastId);
         notify.scenarios.tariff.changeError({ description: error.detail });
       });
+  };
+
+  const handleResume = () => {
+    resume
+      .mutateAsync()
+      .then(() => setResumed(true))
+      .catch((error: ApiError) =>
+        notify.scenarios.tariff.resumeError({ description: error.detail }),
+      );
   };
 
   const handlePendingExpired = () => {
@@ -210,8 +230,10 @@ function TariffChangeContent({
             <ChangeFooter
               footer={footer}
               onConnect={handleConnect}
+              onResume={handleResume}
               onDisable={() => router.push(ROUTES.profileTariffDisable)}
               loading={changeTariff.isPending}
+              resuming={resume.isPending}
             />
           )
         )}
@@ -341,13 +363,17 @@ function TariffFeatureCard({
 function ChangeFooter({
   footer,
   onConnect,
+  onResume,
   onDisable,
   loading,
+  resuming,
 }: {
   readonly footer: ReturnType<typeof tariffChangeFooter>;
   readonly onConnect: () => void;
+  readonly onResume: () => void;
   readonly onDisable: () => void;
   readonly loading: boolean;
+  readonly resuming: boolean;
 }): JSX.Element {
   if (footer.kind === 'connected') {
     return <Button disabled>Подключен</Button>;
@@ -355,6 +381,15 @@ function ChangeFooter({
   if (footer.kind === 'disable') {
     // Выбор Базового с платной подписки — во флоу отключения (#622).
     return <Button onClick={onDisable}>Отключить тариф</Button>;
+  }
+  if (footer.kind === 'resume') {
+    // «Остановлен» на своём тарифе и периоде при живом остатке: бесплатное
+    // возобновление вместо платной реактивации (#691).
+    return (
+      <Button loading={resuming} onClick={onResume}>
+        {footer.label}
+      </Button>
+    );
   }
   return (
     <Button loading={loading} onClick={onConnect}>

@@ -989,6 +989,15 @@ func writeBillingError(w http.ResponseWriter, r *http.Request, err error) {
 			httpsupport.ProblemWithCode(r.Context(), httpsupport.ProblemTitleConflict,
 				"Возобновление недоступно: оплаченный период истёк, оплатите тариф",
 				"resume_not_available"))
+	case errors.Is(err, domain.ErrResumeRequired):
+		// The paid-path closure of issue #691: while the paid period is live,
+		// paying for the tariff and period the cancelled subscription is
+		// already on is refused — the free resume restores it without a
+		// charge.
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
+			httpsupport.ProblemWithCode(r.Context(), httpsupport.ProblemTitleConflict,
+				"Период уже оплачен: возобновите подписку бесплатно",
+				"resume_required"))
 	case errors.Is(err, billingapp.ErrBindingSessionLimitExceeded):
 		// The per-user binding-session limit (ticket #427): the sliding
 		// window releases the oldest sessions over time, so the standard
