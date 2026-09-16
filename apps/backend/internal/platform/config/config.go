@@ -147,6 +147,7 @@ type RateLimit struct {
 	EmailVerifyPer15Min       int
 	PhoneChangeSendPerHour    int
 	PhoneChangeVerifyPer15Min int
+	EmailChangeSendPerHour    int
 }
 
 // DBPoolConfig holds PostgreSQL connection pool settings.
@@ -384,6 +385,9 @@ func (c *Config) loadRateLimit() error {
 	if err := c.overrideRateLimitPhoneChange(); err != nil {
 		return err
 	}
+	if err := c.overrideRateLimitEmailChange(); err != nil {
+		return err
+	}
 	return c.validateRateLimit()
 }
 
@@ -397,6 +401,7 @@ func defaultRateLimit() RateLimit {
 		EmailVerifyPer15Min:       30,
 		PhoneChangeSendPerHour:    5,
 		PhoneChangeVerifyPer15Min: 10,
+		EmailChangeSendPerHour:    5,
 	}
 }
 
@@ -458,6 +463,22 @@ func (c *Config) overrideRateLimitPhoneChange() error {
 		c.RateLimit.PhoneChangeVerifyPer15Min = n
 	} else if c.RateLimit.PhoneChangeVerifyPer15Min <= 0 {
 		c.RateLimit.PhoneChangeVerifyPer15Min = 10
+	}
+	return nil
+}
+
+// overrideRateLimitEmailChange applies the email-change send override
+// (codes to NEW addresses, issue #721), keeping the built-in default when the
+// value arrives unset or non-positive.
+func (c *Config) overrideRateLimitEmailChange() error {
+	if v := os.Getenv("RATE_LIMIT_EMAIL_CHANGE_SEND_PER_HOUR"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return fmt.Errorf("invalid RATE_LIMIT_EMAIL_CHANGE_SEND_PER_HOUR %q: %w", v, err)
+		}
+		c.RateLimit.EmailChangeSendPerHour = n
+	} else if c.RateLimit.EmailChangeSendPerHour <= 0 {
+		c.RateLimit.EmailChangeSendPerHour = 5
 	}
 	return nil
 }

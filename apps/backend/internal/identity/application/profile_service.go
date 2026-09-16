@@ -31,10 +31,10 @@ func (s *ProfileService) Me(ctx context.Context, userID uuid.UUID) (domain.User,
 	return s.users.GetByID(ctx, userID)
 }
 
-// UpdateProfile updates the user's personal data. The email-change →
-// unverified reset is owned by domain.User.UpdatePersonalData; the mutation
-// and the audit entry run in a single transaction through runInTx (ADR 0033,
-// ADR 0020).
+// UpdateProfile updates the user's personal data. The email is not part of
+// the profile contract: it changes only through the confirmed two-code flow
+// (issue #721). The mutation and the audit entry run in a single transaction
+// through runInTx (ADR 0033, ADR 0020).
 func (s *ProfileService) UpdateProfile(ctx context.Context, userID uuid.UUID, cmd UpdateProfileCommand) (domain.User, error) {
 	var updated domain.User
 
@@ -44,7 +44,7 @@ func (s *ProfileService) UpdateProfile(ctx context.Context, userID uuid.UUID, cm
 			return fmt.Errorf("get user: %w", err)
 		}
 
-		if err := user.UpdatePersonalData(cmd.Name, cmd.Surname, cmd.Patronymic, cmd.Email, cmd.Timezone); err != nil {
+		if err := user.UpdatePersonalData(cmd.Name, cmd.Surname, cmd.Patronymic, cmd.Timezone); err != nil {
 			return fmt.Errorf("update personal data: %w", err)
 		}
 

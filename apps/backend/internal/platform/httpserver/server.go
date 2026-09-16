@@ -40,6 +40,7 @@ import (
 type Deps struct {
 	Auth                 identityhttp.Authenticator
 	PhoneChange          identityhttp.PhoneChanger
+	EmailChange          identityhttp.EmailChanger
 	Profile              identityhttp.Profiler
 	Logout               identityhttp.Logout
 	Sessions             httpsupport.SessionLoader
@@ -140,6 +141,7 @@ func New(deps Deps) http.Handler {
 	authHandlers := identityhttp.NewAuthHandlers(
 		deps.Auth,
 		deps.PhoneChange,
+		deps.EmailChange,
 		deps.Profile,
 		deps.Logout,
 		deps.CookieSecure,

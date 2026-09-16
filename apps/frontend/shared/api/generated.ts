@@ -116,6 +116,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/email/send-code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["sendEmailChangeCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/email/confirm-current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["confirmCurrentEmail"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/email/change": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["changeEmail"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/properties": {
         parameters: {
             query?: never;
@@ -1727,8 +1775,6 @@ export interface components {
             name?: string | null;
             surname?: string | null;
             patronymic?: string | null;
-            /** @description Email is stored in lowercase. */
-            email?: string | null;
             /** @description IANA timezone identifier, e.g. Europe/Moscow. */
             timezone?: string | null;
         };
@@ -1741,6 +1787,28 @@ export interface components {
             phone: string;
             /** @example 123456 */
             code: string;
+        };
+        ConfirmCurrentEmailRequest: {
+            /**
+             * @description The code sent to the current email.
+             * @example 123456
+             */
+            code: string;
+            /** @description The new address; stored in lowercase. */
+            newEmail: string;
+        };
+        EmailChangeGrantResponse: {
+            /** @description One-time grant token binding the confirmed new email to the user. Present it at /me/email/change together with the code delivered to the new address; it expires in about 10 minutes. */
+            grant: string;
+        };
+        ChangeEmailRequest: {
+            /**
+             * @description The code sent to the new email.
+             * @example 123456
+             */
+            code: string;
+            /** @description The grant token returned by /me/email/confirm-current. */
+            grant: string;
         };
         Tariff: {
             name: components["schemas"]["TariffName"];
@@ -3360,6 +3428,87 @@ export interface operations {
         };
         responses: {
             /** @description Phone changed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    sendEmailChangeCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Code sent to the current email */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    confirmCurrentEmail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmCurrentEmailRequest"];
+            };
+        };
+        responses: {
+            /** @description Current email confirmed; a one-time grant and a code for the new email */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailChangeGrantResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    changeEmail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeEmailRequest"];
+            };
+        };
+        responses: {
+            /** @description Email changed */
             200: {
                 headers: {
                     [name: string]: unknown;

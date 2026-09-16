@@ -48,10 +48,11 @@ func TestProfileIntegration_UpdatePersonalData(t *testing.T) {
 	}
 }
 
-// TestProfileIntegration_EmailChangeResetsVerified proves changing the email
-// clears EmailVerifiedAt on the persisted row, while re-submitting the same
-// email leaves verification intact.
-func TestProfileIntegration_EmailChangeResetsVerified(t *testing.T) {
+// TestProfileIntegration_EmailIsUntouchable proves the profile update cannot
+// move the email on the persisted row (issue #721): the command carries no
+// email field, so the address and its verification stamp survive a profile
+// edit — the address changes only through the confirmed two-code flow.
+func TestProfileIntegration_EmailIsUntouchable(t *testing.T) {
 	t.Parallel()
 	h := newIntegrationHarness(t)
 	phone := mustPhone(t, "+79160000401")
@@ -59,30 +60,28 @@ func TestProfileIntegration_EmailChangeResetsVerified(t *testing.T) {
 	_, user := h.registerAndLogin(t, phone, email)
 	ctx := h.ctx()
 
-	// Change the email: verified must be reset.
 	updated, err := h.profile.UpdateProfile(ctx, user.ID, application.UpdateProfileCommand{
-		Email: new("new@example.com"),
+		Name: new("Иван"),
 	})
 	if err != nil {
-		t.Fatalf("UpdateProfile email change: %v", err)
+		t.Fatalf("UpdateProfile: %v", err)
 	}
-	if updated.EmailVerifiedAt != nil {
-		t.Fatalf("EmailVerifiedAt = %v, want nil after email change", updated.EmailVerifiedAt)
+	if updated.Email == nil || updated.Email.String() != "verified@example.com" {
+		t.Fatalf("updated email = %v, want verified@example.com (untouched)", updated.Email)
 	}
-	if updated.Email == nil || updated.Email.String() != "new@example.com" {
-		t.Fatalf("updated email = %v, want new@example.com", updated.Email)
+	if updated.EmailVerifiedAt == nil {
+		t.Fatal("EmailVerifiedAt = nil, want preserved")
 	}
 
-	// Re-submitting the same email must NOT flip verified back — it stays nil
-	// until a new login/verify marks it. This documents the contract: the reset
-	// is keyed on the email value changing, not on the command being present.
-	same, err := h.profile.UpdateProfile(ctx, user.ID, application.UpdateProfileCommand{
-		Email: new("new@example.com"),
-	})
+	// The persisted row agrees.
+	reloaded, err := h.users.GetByID(ctx, user.ID)
 	if err != nil {
-		t.Fatalf("UpdateProfile same email: %v", err)
+		t.Fatalf("GetByID: %v", err)
 	}
-	if same.EmailVerifiedAt != nil {
-		t.Fatalf("EmailVerifiedAt = %v, want nil (unchanged from reset)", same.EmailVerifiedAt)
+	if reloaded.Email == nil || reloaded.Email.String() != "verified@example.com" {
+		t.Fatalf("persisted email = %v, want verified@example.com", reloaded.Email)
+	}
+	if reloaded.EmailVerifiedAt == nil {
+		t.Fatal("persisted EmailVerifiedAt = nil, want preserved")
 	}
 }

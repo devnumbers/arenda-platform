@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
 	identityemail "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/email"
 	identityevents "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/events"
 	identityhttp "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/http"
@@ -31,6 +32,7 @@ type Identity struct {
 	EventPublisher *identityevents.Publisher
 	Authentication *identityapp.AuthenticationService
 	PhoneChange    *identityapp.PhoneChangeService
+	EmailChange    *identityapp.EmailChangeService
 	Profile        *identityapp.ProfileService
 	Logout         *identityapp.LogoutService
 	// EmailMailer is the configured mailer.Sender (smtp or fake). It is exposed
@@ -42,24 +44,27 @@ type Identity struct {
 
 // WireIdentity constructs the identity repositories, session service, event
 // publisher, selects the email mailer based on config, and builds the
-// authentication, phone-change, profile and logout services. It takes the event
-// dispatcher (for the publisher).
+// authentication, phone-change, email-change, profile and logout services.
+// It takes the event dispatcher (for the publisher) and the shared rate
+// limiters (the email-change send budget).
 func WireIdentity(
 	_ context.Context,
 	p platformDeps,
 	eventDispatcher *events.InProcessDispatcher,
+	rateLimits *RateLimiters,
 ) (*Identity, error) {
 	userRepo := identitypg.NewUserRepository(p.DB, p.Encryptor)
 	codeRepo := identitypg.NewLoginCodeRepository(p.DB, p.Encryptor)
 	attemptRepo := identitypg.NewAttemptRepository(p.DB, p.Encryptor)
 	sessionRepo := identitypg.NewSessionRepository(p.DB, p.Encryptor)
+	emailChangeGrantRepo := identitypg.NewEmailChangeGrantRepository(p.DB)
 
 	// The single canonical txStoreFactory bundles the four identity
 	// repositories, the audit recorder, and the UoW (ADR 0033 γ-factory). It is
 	// passed to every identity service so adding an Nth repository is a change
 	// here, not in six constructors.
 	factory := identityapp.NewTxStoreFactory(
-		userRepo, codeRepo, attemptRepo, sessionRepo,
+		userRepo, codeRepo, attemptRepo, sessionRepo, emailChangeGrantRepo,
 		p.AuditRecorder, p.UoW,
 	)
 
@@ -124,6 +129,21 @@ func WireIdentity(
 		},
 	)
 
+	// The 5/hour budget lives with the transport limiter (wire/ratelimits.go)
+	// and is consulted by the service on each actual send to a new address.
+	emailChangeService := identityapp.NewEmailChangeService(
+		factory,
+		identityapp.EmailChangeServiceConfig{
+			LoginCodes: loginCodeService,
+			Clock:      p.Clock,
+			Hasher:     p.Encryptor,
+			Logger:     p.Logger,
+			AllowNewAddressSend: func(userID uuid.UUID) bool {
+				return rateLimits.EmailChangeSendLimiter.Allow(userID.String())
+			},
+		},
+	)
+
 	profileService := identityapp.NewProfileService(factory)
 
 	logoutService := identityapp.NewLogoutService(
@@ -144,6 +164,7 @@ func WireIdentity(
 		EventPublisher: eventPublisher,
 		Authentication: authenticationService,
 		PhoneChange:    phoneChangeService,
+		EmailChange:    emailChangeService,
 		Profile:        profileService,
 		Logout:         logoutService,
 		EmailMailer:    emailMailer,

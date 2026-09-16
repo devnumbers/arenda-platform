@@ -66,7 +66,7 @@ func TestLogoutService_Logout_WrapsDeleteError(t *testing.T) {
 	attempts := newFakeAttemptRepo()
 	sessions := &errorSessionRepo{err: errors.New("db down")}
 	beginner := &fakeBeginner{}
-	factory := NewTxStoreFactory(users, codes, attempts, sessions, nil, &fakeUoW{beginner: beginner})
+	factory := NewTxStoreFactory(users, codes, attempts, sessions, newFakeGrantRepo(), nil, &fakeUoW{beginner: beginner})
 	svc := NewLogoutService(
 		factory,
 		LogoutServiceConfig{
@@ -129,7 +129,7 @@ func TestLogoutService_UsesRunInTx(t *testing.T) {
 	attempts := newFakeAttemptRepo()
 	sessions := &countingSessionRepo{fakeSessionRepo: newFakeSessionRepo()}
 	beginner := &fakeBeginner{}
-	factory := NewTxStoreFactory(users, codes, attempts, sessions, nil, &fakeUoW{beginner: beginner})
+	factory := NewTxStoreFactory(users, codes, attempts, sessions, newFakeGrantRepo(), nil, &fakeUoW{beginner: beginner})
 	svc := NewLogoutService(
 		factory,
 		LogoutServiceConfig{
@@ -160,7 +160,7 @@ func TestLogoutService_RecordsAuditInTx(t *testing.T) {
 	sessions := newFakeSessionRepo()
 	audit := &recordingRecorder{}
 	beginner := &fakeBeginner{}
-	factory := NewTxStoreFactory(users, codes, attempts, sessions, audit, &fakeUoW{beginner: beginner})
+	factory := NewTxStoreFactory(users, codes, attempts, sessions, newFakeGrantRepo(), audit, &fakeUoW{beginner: beginner})
 	svc := NewLogoutService(
 		factory,
 		LogoutServiceConfig{
@@ -210,7 +210,7 @@ func TestLogoutService_LogoutAll_RecordsAuditInTx(t *testing.T) {
 	sessions := newFakeSessionRepo()
 	audit := &recordingRecorder{}
 	beginner := &fakeBeginner{}
-	factory := NewTxStoreFactory(users, codes, attempts, sessions, audit, &fakeUoW{beginner: beginner})
+	factory := NewTxStoreFactory(users, codes, attempts, sessions, newFakeGrantRepo(), audit, &fakeUoW{beginner: beginner})
 	svc := NewLogoutService(
 		factory,
 		LogoutServiceConfig{
@@ -245,7 +245,7 @@ func TestLogoutService_AuditFailOpen(t *testing.T) {
 	sessions := newFakeSessionRepo()
 	audit := &recordingRecorder{err: errors.New("audit db down")}
 	beginner := &fakeBeginner{}
-	factory := NewTxStoreFactory(users, codes, attempts, sessions, audit, &fakeUoW{beginner: beginner})
+	factory := NewTxStoreFactory(users, codes, attempts, sessions, newFakeGrantRepo(), audit, &fakeUoW{beginner: beginner})
 	svc := NewLogoutService(
 		factory,
 		LogoutServiceConfig{

@@ -176,6 +176,8 @@ type Querier interface {
 	// tasks of live rules stay — the tick's dedup keys (ADR 0051).
 	DeleteCompletedJournalOwnerBook(ctx context.Context, ownerID pgtype.UUID) (int64, error)
 	DeleteContact(ctx context.Context, arg DeleteContactParams) (int64, error)
+	DeleteEmailChangeGrantByID(ctx context.Context, id pgtype.UUID) error
+	DeleteEmailChangeGrantsByUserID(ctx context.Context, userID pgtype.UUID) error
 	// The hygiene batch (ticket #433): sessions past their lifetime, whatever
 	// their status — an expired session never produces a payment method, and the
 	// only later read of an old row is the binding limit's sliding window, which
@@ -278,6 +280,7 @@ type Querier interface {
 	// The contacts view of the property a use case targets: just the data owner
 	// whose book the property-bound cards belong to (ADR 0028).
 	GetContactPropertyRef(ctx context.Context, id pgtype.UUID) (GetContactPropertyRefRow, error)
+	GetEmailChangeGrantByUserIDForUpdate(ctx context.Context, userID pgtype.UUID) (EmailChangeGrant, error)
 	// GetLatestLoginCodeByPhoneAndEmailAndPurpose reads the newest non-expired unused
 	// login code for a (phone, email, purpose) tuple. It is served by the partial unique
 	// index idx_login_codes_unique_unused (phone, COALESCE(email, empty-string), purpose)
@@ -418,6 +421,7 @@ type Querier interface {
 	// rule_repeat is the same live-rule read projection as in GetTask.
 	GetTaskWithoutProperty(ctx context.Context, arg GetTaskWithoutPropertyParams) (GetTaskWithoutPropertyRow, error)
 	GetUserByEmail(ctx context.Context, dollar_1 string) (User, error)
+	GetUserByEmailForUpdate(ctx context.Context, dollar_1 string) (User, error)
 	GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 	GetUserByIDForUpdate(ctx context.Context, id pgtype.UUID) (User, error)
 	GetUserByPhone(ctx context.Context, phone string) (User, error)
@@ -430,6 +434,7 @@ type Querier interface {
 	IncrementLoginAttempt(ctx context.Context, arg IncrementLoginAttemptParams) error
 	InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) (pgtype.UUID, error)
 	InsertContact(ctx context.Context, arg InsertContactParams) (Contact, error)
+	InsertEmailChangeGrant(ctx context.Context, arg InsertEmailChangeGrantParams) error
 	// Idempotent by the partial unique (payment_id, date): a concurrent or
 	// repeated run inserts nothing. Always planned — the auto-pay closes today's
 	// occurrence separately, strictly on its day (ADR 0049 §2).
@@ -946,6 +951,7 @@ type Querier interface {
 	UpdateTaskRule(ctx context.Context, arg UpdateTaskRuleParams) error
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
 	UpdateUserEmailVerified(ctx context.Context, arg UpdateUserEmailVerifiedParams) (UpdateUserEmailVerifiedRow, error)
+	UpdateUserEmailVerifiedAt(ctx context.Context, arg UpdateUserEmailVerifiedAtParams) (UpdateUserEmailVerifiedAtRow, error)
 	UpdateUserPhone(ctx context.Context, arg UpdateUserPhoneParams) (User, error)
 	UpsertNotificationChannelPreference(ctx context.Context, arg UpsertNotificationChannelPreferenceParams) error
 	// Payment methods (issue #251). Token uniqueness is enforced per user by the

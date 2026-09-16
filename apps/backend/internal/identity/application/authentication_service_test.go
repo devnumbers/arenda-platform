@@ -116,6 +116,10 @@ func (r *fakeUserRepo) GetByEmail(_ context.Context, email domain.Email) (domain
 	return domain.User{}, ErrNotFound
 }
 
+func (r *fakeUserRepo) GetByEmailForUpdate(ctx context.Context, email domain.Email) (domain.User, error) {
+	return r.GetByEmail(ctx, email)
+}
+
 func (r *fakeUserRepo) Create(_ context.Context, user domain.User) (domain.User, error) {
 	r.byPhone[user.Phone.String()] = user
 	return user, nil
@@ -153,7 +157,58 @@ func (r *fakeUserRepo) UpdateEmailVerified(
 	return u, nil
 }
 
+func (r *fakeUserRepo) MarkEmailVerified(
+	ctx context.Context,
+	id uuid.UUID,
+	verifiedAt time.Time,
+) (domain.User, error) {
+	u, err := r.GetByID(ctx, id)
+	if err != nil {
+		return domain.User{}, err
+	}
+	u.EmailVerifiedAt = &verifiedAt
+	r.byPhone[u.Phone.String()] = u
+	return u, nil
+}
+
 func (r *fakeUserRepo) WithTx(transaction.Tx) (UserRepository, error) { return r, nil }
+
+type fakeGrantRepo struct {
+	grants map[uuid.UUID]domain.EmailChangeGrant
+}
+
+func newFakeGrantRepo() *fakeGrantRepo {
+	return &fakeGrantRepo{grants: map[uuid.UUID]domain.EmailChangeGrant{}}
+}
+
+func (r *fakeGrantRepo) Save(_ context.Context, grant domain.EmailChangeGrant) error {
+	r.grants[grant.UserID] = grant
+	return nil
+}
+
+func (r *fakeGrantRepo) GetByUserIDForUpdate(_ context.Context, userID uuid.UUID) (domain.EmailChangeGrant, error) {
+	g, ok := r.grants[userID]
+	if !ok {
+		return domain.EmailChangeGrant{}, ErrNotFound
+	}
+	return g, nil
+}
+
+func (r *fakeGrantRepo) DeleteByID(_ context.Context, id uuid.UUID) error {
+	for userID, g := range r.grants {
+		if g.ID == id {
+			delete(r.grants, userID)
+		}
+	}
+	return nil
+}
+
+func (r *fakeGrantRepo) DeleteByUserID(_ context.Context, userID uuid.UUID) error {
+	delete(r.grants, userID)
+	return nil
+}
+
+func (r *fakeGrantRepo) WithTx(transaction.Tx) (EmailChangeGrantRepository, error) { return r, nil }
 
 type fakeCodeRepo struct {
 	codes map[uuid.UUID]domain.LoginCode
@@ -885,7 +940,7 @@ func TestAuthenticationService_SendCode_GetByPhoneError(t *testing.T) {
 
 	factory := NewTxStoreFactory(
 		&errorUserRepo{err: dbErr}, stores.codes, stores.attempts, stores.sessions,
-		auditapp.Noop{}, &fakeUoW{beginner: stores.beginner},
+		newFakeGrantRepo(), auditapp.Noop{}, &fakeUoW{beginner: stores.beginner},
 	)
 	loginCodes := NewLoginCodeService(factory, LoginCodeServiceConfig{
 		CodeSender: sender, Clock: &fakeClock{now: testNow},
@@ -925,7 +980,7 @@ func TestAuthenticationService_SendCode_GetByEmailError(t *testing.T) {
 	users := &errorOnGetByEmailRepo{fakeUserRepo: newFakeUserRepo(), err: dbErr}
 	factory := NewTxStoreFactory(
 		users, stores.codes, stores.attempts, stores.sessions,
-		auditapp.Noop{}, &fakeUoW{beginner: stores.beginner},
+		newFakeGrantRepo(), auditapp.Noop{}, &fakeUoW{beginner: stores.beginner},
 	)
 	loginCodes := NewLoginCodeService(factory, LoginCodeServiceConfig{
 		CodeSender: sender, Clock: &fakeClock{now: testNow},
@@ -961,7 +1016,7 @@ func TestAuthenticationService_SendCodeByPhone_GetByPhoneError(t *testing.T) {
 
 	factory := NewTxStoreFactory(
 		&errorUserRepo{err: dbErr}, stores.codes, stores.attempts, stores.sessions,
-		auditapp.Noop{}, &fakeUoW{beginner: stores.beginner},
+		newFakeGrantRepo(), auditapp.Noop{}, &fakeUoW{beginner: stores.beginner},
 	)
 	svc := NewAuthenticationService(factory, AuthenticationServiceConfig{
 		LoginCodes: NewLoginCodeService(factory, LoginCodeServiceConfig{
@@ -1005,6 +1060,10 @@ func (r *errorUserRepo) GetByEmail(context.Context, domain.Email) (domain.User, 
 	return domain.User{}, r.err
 }
 
+func (r *errorUserRepo) GetByEmailForUpdate(context.Context, domain.Email) (domain.User, error) {
+	return domain.User{}, r.err
+}
+
 func (r *errorUserRepo) Create(_ context.Context, user domain.User) (domain.User, error) {
 	return user, nil
 }
@@ -1018,6 +1077,10 @@ func (r *errorUserRepo) UpdatePhone(context.Context, uuid.UUID, domain.Phone) (d
 }
 
 func (r *errorUserRepo) UpdateEmailVerified(context.Context, uuid.UUID, *domain.Email, *time.Time) (domain.User, error) {
+	return domain.User{}, nil
+}
+
+func (r *errorUserRepo) MarkEmailVerified(context.Context, uuid.UUID, time.Time) (domain.User, error) {
 	return domain.User{}, nil
 }
 func (r *errorUserRepo) WithTx(transaction.Tx) (UserRepository, error) { return r, nil }

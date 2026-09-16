@@ -231,6 +231,15 @@ type Contact struct {
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 }
 
+type EmailChangeGrant struct {
+	ID        pgtype.UUID        `json:"id"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	Email     string             `json:"email"`
+	TokenHash string             `json:"token_hash"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type LoginAttempt struct {
 	ID             pgtype.UUID        `json:"id"`
 	Phone          string             `json:"phone"`

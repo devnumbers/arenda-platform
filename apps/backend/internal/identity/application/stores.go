@@ -18,6 +18,7 @@ type txStores struct {
 	codes    LoginCodeRepository
 	attempts AttemptRepository
 	sessions SessionRepository
+	grants   EmailChangeGrantRepository
 	audit    auditapp.Recorder
 }
 
@@ -35,6 +36,7 @@ type txStoreFactory struct {
 	codes    LoginCodeRepository
 	attempts AttemptRepository
 	sessions SessionRepository
+	grants   EmailChangeGrantRepository
 	audit    auditapp.Recorder
 	uow      transaction.UoW
 }
@@ -50,6 +52,7 @@ func NewTxStoreFactory(
 	codes LoginCodeRepository,
 	attempts AttemptRepository,
 	sessions SessionRepository,
+	grants EmailChangeGrantRepository,
 	audit auditapp.Recorder,
 	uow transaction.UoW,
 ) txStoreFactory {
@@ -61,6 +64,7 @@ func NewTxStoreFactory(
 		codes:    codes,
 		attempts: attempts,
 		sessions: sessions,
+		grants:   grants,
 		audit:    audit,
 		uow:      uow,
 	}
@@ -99,11 +103,16 @@ func (f *txStoreFactory) runInTx(ctx context.Context, work func(*txStores) error
 		if err != nil {
 			return fmt.Errorf("bind session repository to tx: %w", err)
 		}
+		grants, err := f.grants.WithTx(tx)
+		if err != nil {
+			return fmt.Errorf("bind email change grant repository to tx: %w", err)
+		}
 		stores := &txStores{
 			users:    users,
 			codes:    codes,
 			attempts: attempts,
 			sessions: sessions,
+			grants:   grants,
 			audit:    f.audit.WithTx(tx),
 		}
 		return work(stores)

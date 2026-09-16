@@ -10,6 +10,7 @@ func TestLoginCodePurpose_KnownValues(t *testing.T) {
 	known := map[string]LoginCodePurpose{
 		"login":        LoginCodePurposeLogin,
 		"phone_change": LoginCodePurposePhoneChange,
+		"email_change": LoginCodePurposeEmailChange,
 	}
 	for raw, want := range known {
 		got, err := NewLoginCodePurpose(raw)

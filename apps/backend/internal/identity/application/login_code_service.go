@@ -109,21 +109,24 @@ func (s *LoginCodeService) Send(
 
 	err := s.runInTx(ctx, func(stores *txStores) error {
 		var err error
-		loginCode, plaintextCode, err = s.issueCodeInTx(ctx, stores, phone, email, purpose, userID)
+		loginCode, plaintextCode, err = s.IssueInTx(ctx, stores, phone, email, purpose, userID)
 		return err
 	})
 	if err != nil {
 		return err
 	}
 
-	return s.deliverCode(ctx, phone, email, purpose, loginCode, plaintextCode)
+	return s.Deliver(ctx, phone, email, purpose, loginCode, plaintextCode)
 }
 
-// issueCodeInTx is the transactional half of Send: it guards the phone against
+// IssueInTx is the transactional half of Send: it guards the phone against
 // the attempt-window block, clears the way past superseded codes and the send
 // throttle, and persists a freshly generated code for the triple. It returns
 // the persisted code together with its plaintext for post-commit delivery.
-func (s *LoginCodeService) issueCodeInTx(
+// Orchestrators that verify another code in the same transaction (email-change
+// step 2, issue #721) call it directly so verify, burn, and issue share one
+// commit, and deliver the returned plaintext themselves after that commit.
+func (s *LoginCodeService) IssueInTx(
 	ctx context.Context,
 	stores *txStores,
 	phone domain.Phone,
@@ -209,11 +212,12 @@ func (s *LoginCodeService) persistNewCode(
 	return loginCode, plaintextCode, nil
 }
 
-// deliverCode sends the plaintext after the issuing transaction has committed.
+// Deliver sends the plaintext after the issuing transaction has committed.
 // Delivery runs post-commit: the code is already persisted, so a delivery
 // failure cleans up the unsent row rather than leaving a code the user never
-// received.
-func (s *LoginCodeService) deliverCode(
+// received. Send calls it itself; an orchestrator that issued through IssueInTx
+// inside its own transaction calls it after that transaction commits.
+func (s *LoginCodeService) Deliver(
 	ctx context.Context,
 	phone domain.Phone,
 	email domain.Email,

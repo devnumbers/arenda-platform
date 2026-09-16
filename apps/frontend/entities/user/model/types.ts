@@ -18,7 +18,6 @@ export type UserUpdateCommand = {
   name?: string | null;
   surname?: string | null;
   patronymic?: string | null;
-  email?: string | null;
   timezone?: string | null;
 };
 

@@ -196,6 +196,24 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 	return i, err
 }
 
+const deleteEmailChangeGrantByID = `-- name: DeleteEmailChangeGrantByID :exec
+DELETE FROM email_change_grants WHERE id = $1
+`
+
+func (q *Queries) DeleteEmailChangeGrantByID(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteEmailChangeGrantByID, id)
+	return err
+}
+
+const deleteEmailChangeGrantsByUserID = `-- name: DeleteEmailChangeGrantsByUserID :exec
+DELETE FROM email_change_grants WHERE user_id = $1
+`
+
+func (q *Queries) DeleteEmailChangeGrantsByUserID(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteEmailChangeGrantsByUserID, userID)
+	return err
+}
+
 const deleteExpiredLoginCodesBatch = `-- name: DeleteExpiredLoginCodesBatch :execrows
 DELETE FROM login_codes t WHERE t.ctid IN (
     SELECT s.ctid FROM login_codes s WHERE s.expires_at < $1 LIMIT $2
@@ -357,6 +375,24 @@ type DeleteUnusedLoginCodesByPhoneAndEmailParams struct {
 func (q *Queries) DeleteUnusedLoginCodesByPhoneAndEmail(ctx context.Context, arg DeleteUnusedLoginCodesByPhoneAndEmailParams) error {
 	_, err := q.db.Exec(ctx, deleteUnusedLoginCodesByPhoneAndEmail, arg.Phone, arg.Email, arg.Purpose)
 	return err
+}
+
+const getEmailChangeGrantByUserIDForUpdate = `-- name: GetEmailChangeGrantByUserIDForUpdate :one
+SELECT id, user_id, email, token_hash, expires_at, created_at FROM email_change_grants WHERE user_id = $1 FOR UPDATE
+`
+
+func (q *Queries) GetEmailChangeGrantByUserIDForUpdate(ctx context.Context, userID pgtype.UUID) (EmailChangeGrant, error) {
+	row := q.db.QueryRow(ctx, getEmailChangeGrantByUserIDForUpdate, userID)
+	var i EmailChangeGrant
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Email,
+		&i.TokenHash,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const getLatestLoginCodeByPhoneAndEmailAndPurpose = `-- name: GetLatestLoginCodeByPhoneAndEmailAndPurpose :one
@@ -535,6 +571,30 @@ func (q *Queries) GetUserByEmail(ctx context.Context, dollar_1 string) (User, er
 	return i, err
 }
 
+const getUserByEmailForUpdate = `-- name: GetUserByEmailForUpdate :one
+SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone FROM users WHERE LOWER(email) = LOWER($1::text) FOR UPDATE
+`
+
+func (q *Queries) GetUserByEmailForUpdate(ctx context.Context, dollar_1 string) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByEmailForUpdate, dollar_1)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Phone,
+		&i.Role,
+		&i.Name,
+		&i.Surname,
+		&i.Patronymic,
+		&i.Email,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PhoneEncrypted,
+		&i.EmailVerifiedAt,
+		&i.Timezone,
+	)
+	return i, err
+}
+
 const getUserByID = `-- name: GetUserByID :one
 SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone FROM users WHERE id = $1
 `
@@ -676,6 +736,32 @@ func (q *Queries) IncrementLoginAttempt(ctx context.Context, arg IncrementLoginA
 		arg.LastFailureAt,
 		arg.UserID,
 		arg.PhoneEncrypted,
+	)
+	return err
+}
+
+const insertEmailChangeGrant = `-- name: InsertEmailChangeGrant :exec
+INSERT INTO email_change_grants (id, user_id, email, token_hash, expires_at, created_at)
+VALUES ($1, $2, $3, $4, $5, $6)
+`
+
+type InsertEmailChangeGrantParams struct {
+	ID        pgtype.UUID        `json:"id"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	Email     string             `json:"email"`
+	TokenHash string             `json:"token_hash"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) InsertEmailChangeGrant(ctx context.Context, arg InsertEmailChangeGrantParams) error {
+	_, err := q.db.Exec(ctx, insertEmailChangeGrant,
+		arg.ID,
+		arg.UserID,
+		arg.Email,
+		arg.TokenHash,
+		arg.ExpiresAt,
+		arg.CreatedAt,
 	)
 	return err
 }
@@ -958,6 +1044,54 @@ type UpdateUserEmailVerifiedRow struct {
 func (q *Queries) UpdateUserEmailVerified(ctx context.Context, arg UpdateUserEmailVerifiedParams) (UpdateUserEmailVerifiedRow, error) {
 	row := q.db.QueryRow(ctx, updateUserEmailVerified, arg.ID, arg.Email, arg.EmailVerifiedAt)
 	var i UpdateUserEmailVerifiedRow
+	err := row.Scan(
+		&i.ID,
+		&i.Phone,
+		&i.Role,
+		&i.Name,
+		&i.Surname,
+		&i.Patronymic,
+		&i.Email,
+		&i.EmailVerifiedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PhoneEncrypted,
+		&i.Timezone,
+	)
+	return i, err
+}
+
+const updateUserEmailVerifiedAt = `-- name: UpdateUserEmailVerifiedAt :one
+UPDATE users
+SET email_verified_at = $2,
+    updated_at = now()
+WHERE id = $1
+RETURNING id, phone, role, name, surname, patronymic, email, email_verified_at, created_at, updated_at, phone_encrypted, timezone
+`
+
+type UpdateUserEmailVerifiedAtParams struct {
+	ID              pgtype.UUID        `json:"id"`
+	EmailVerifiedAt pgtype.Timestamptz `json:"email_verified_at"`
+}
+
+type UpdateUserEmailVerifiedAtRow struct {
+	ID              pgtype.UUID        `json:"id"`
+	Phone           string             `json:"phone"`
+	Role            string             `json:"role"`
+	Name            pgtype.Text        `json:"name"`
+	Surname         pgtype.Text        `json:"surname"`
+	Patronymic      pgtype.Text        `json:"patronymic"`
+	Email           pgtype.Text        `json:"email"`
+	EmailVerifiedAt pgtype.Timestamptz `json:"email_verified_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	PhoneEncrypted  bool               `json:"phone_encrypted"`
+	Timezone        string             `json:"timezone"`
+}
+
+func (q *Queries) UpdateUserEmailVerifiedAt(ctx context.Context, arg UpdateUserEmailVerifiedAtParams) (UpdateUserEmailVerifiedAtRow, error) {
+	row := q.db.QueryRow(ctx, updateUserEmailVerifiedAt, arg.ID, arg.EmailVerifiedAt)
+	var i UpdateUserEmailVerifiedAtRow
 	err := row.Scan(
 		&i.ID,
 		&i.Phone,

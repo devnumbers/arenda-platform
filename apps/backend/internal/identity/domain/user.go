@@ -33,7 +33,11 @@ func NewOwner(phone Phone) (User, error) {
 	}, nil
 }
 
-func (u *User) UpdatePersonalData(name, surname, patronymic, email, timezone *string) error {
+// UpdatePersonalData applies the free-edit profile fields. The email is
+// deliberately absent: since #721 the address changes only through the
+// confirmed two-code flow, so the old "free edit resets verification" rule is
+// gone with it.
+func (u *User) UpdatePersonalData(name, surname, patronymic, timezone *string) error {
 	if name != nil {
 		u.Name = nonEmptyPtr(strings.TrimSpace(*name))
 	}
@@ -42,20 +46,6 @@ func (u *User) UpdatePersonalData(name, surname, patronymic, email, timezone *st
 	}
 	if patronymic != nil {
 		u.Patronymic = nonEmptyPtr(strings.TrimSpace(*patronymic))
-	}
-	if email != nil {
-		v, err := NewEmail(*email)
-		if err != nil {
-			return err
-		}
-		// Changing the email invalidates verification: a new address must be
-		// confirmed again before it is trusted. Compare the normalized values
-		// before overwriting u.Email so an identical resubmit leaves the
-		// verified flag untouched.
-		if u.Email != nil && u.Email.String() != v.String() {
-			u.EmailVerifiedAt = nil
-		}
-		u.Email = &v
 	}
 	if timezone != nil {
 		v, err := NewTimezone(*timezone)

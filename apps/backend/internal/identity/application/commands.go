@@ -1,11 +1,12 @@
 package application
 
-// UpdateProfileCommand carries the optional personal data fields for a profile update.
+// UpdateProfileCommand carries the optional personal data fields for a profile
+// update. Email is deliberately absent: the address changes only through the
+// confirmed two-code flow (issue #721), never through a profile edit.
 type UpdateProfileCommand struct {
 	Name       *string
 	Surname    *string
 	Patronymic *string
-	Email      *string
 	Timezone   *string
 }
 
@@ -13,7 +14,7 @@ type UpdateProfileCommand struct {
 // names are audited, never their values. Co-located with the struct definition
 // so adding a new field is less likely to drift from this mirror.
 func (c UpdateProfileCommand) ChangedFields() []string {
-	fields := make([]string, 0, 5)
+	fields := make([]string, 0, 4)
 	if c.Name != nil {
 		fields = append(fields, "name")
 	}
@@ -22,9 +23,6 @@ func (c UpdateProfileCommand) ChangedFields() []string {
 	}
 	if c.Patronymic != nil {
 		fields = append(fields, "patronymic")
-	}
-	if c.Email != nil {
-		fields = append(fields, "email")
 	}
 	if c.Timezone != nil {
 		fields = append(fields, "timezone")

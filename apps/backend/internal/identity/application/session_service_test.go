@@ -174,7 +174,7 @@ func TestSessionService_Load_DelegatesToRepositoryWithHashedToken(t *testing.T) 
 	}
 	factory := NewTxStoreFactory(
 		newFakeUserRepo(), newFakeCodeRepo(), newFakeAttemptRepo(), repo,
-		nil, &fakeUoW{beginner: beginner},
+		newFakeGrantRepo(), nil, &fakeUoW{beginner: beginner},
 	)
 	svc := NewSessionService(factory, SessionServiceConfig{Hasher: fakeHasher{}})
 

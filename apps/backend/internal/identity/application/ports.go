@@ -32,10 +32,16 @@ type UserRepository interface {
 	// GetByPhoneForUpdate acquires a row-level pessimistic lock and must only be called inside a transaction.
 	GetByPhoneForUpdate(ctx context.Context, phone domain.Phone) (domain.User, error)
 	GetByEmail(ctx context.Context, email domain.Email) (domain.User, error)
+	// GetByEmailForUpdate acquires a row-level pessimistic lock and must only be called inside a transaction.
+	GetByEmailForUpdate(ctx context.Context, email domain.Email) (domain.User, error)
 	Create(ctx context.Context, user domain.User) (domain.User, error)
 	Update(ctx context.Context, user domain.User) (domain.User, error)
 	UpdatePhone(ctx context.Context, id uuid.UUID, phone domain.Phone) (domain.User, error)
 	UpdateEmailVerified(ctx context.Context, id uuid.UUID, email *domain.Email, verifiedAt *time.Time) (domain.User, error)
+	// MarkEmailVerified stamps the user's stored email as verified without
+	// touching the address itself (email-change step 1: a delivered code
+	// confirms the current address, #721).
+	MarkEmailVerified(ctx context.Context, id uuid.UUID, verifiedAt time.Time) (domain.User, error)
 	WithTx(tx transaction.Tx) (UserRepository, error)
 }
 
@@ -86,4 +92,18 @@ type SessionRepository interface {
 	DeleteByUserID(ctx context.Context, userID uuid.UUID) error
 	DeleteByUserIDExcept(ctx context.Context, userID uuid.UUID, tokenHash string) error
 	WithTx(tx transaction.Tx) (SessionRepository, error)
+}
+
+// EmailChangeGrantRepository stores the one grant binding a confirmed new
+// email to a user between email-change steps 2 and 3 (issue #721). The grant
+// is server-side state: the client only sees the plaintext token once, the
+// store keeps the hash. A user holds at most one grant — issuing a new one
+// replaces the previous (DeleteByUserID + Save in the issuing transaction).
+type EmailChangeGrantRepository interface {
+	Save(ctx context.Context, grant domain.EmailChangeGrant) error
+	// GetByUserIDForUpdate acquires a row-level pessimistic lock and must only be called inside a transaction.
+	GetByUserIDForUpdate(ctx context.Context, userID uuid.UUID) (domain.EmailChangeGrant, error)
+	DeleteByID(ctx context.Context, id uuid.UUID) error
+	DeleteByUserID(ctx context.Context, userID uuid.UUID) error
+	WithTx(tx transaction.Tx) (EmailChangeGrantRepository, error)
 }
