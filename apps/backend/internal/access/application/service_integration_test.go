@@ -223,6 +223,37 @@ func (r *memRepo) ListActiveByUser(_ context.Context, userID uuid.UUID) ([]domai
 	return out, nil
 }
 
+// ListForRemovalByUser mirrors the SQL removal scope (issue #694): the
+// person's memberships (any status, archived included) on properties the
+// actor owns or manages as an active full_access member.
+func (r *memRepo) ListForRemovalByUser(_ context.Context, personID, actorID uuid.UUID) ([]domain.Membership, error) {
+	var out []domain.Membership
+	for _, m := range r.rows {
+		if m.UserID == personID && r.inManageScope(m.PropertyID, actorID) {
+			out = append(out, m)
+		}
+	}
+	slices.SortFunc(out, func(a, b domain.Membership) int {
+		return a.CreatedAt.Compare(b.CreatedAt)
+	})
+	return out, nil
+}
+
+// inManageScope is the in-memory twin of the SQL manage-scope predicate: the
+// actor owns the property or holds an active full_access membership on it.
+func (r *memRepo) inManageScope(propertyID, actorID uuid.UUID) bool {
+	if r.owners[propertyID] == actorID {
+		return true
+	}
+	for _, m := range r.rows {
+		if m.PropertyID == propertyID && m.UserID == actorID &&
+			m.Status == domain.MemberStatusActive && m.Role == domain.RoleFullAccess {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *memRepo) CreateWithStatus(_ context.Context, m domain.Membership) (domain.Membership, error) {
 	if m.Status == domain.MemberStatusActive {
 		if _, ok := r.byPropUsr[[2]uuid.UUID{m.PropertyID, m.UserID}]; ok {

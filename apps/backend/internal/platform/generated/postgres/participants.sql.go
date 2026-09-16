@@ -44,6 +44,55 @@ func (q *Queries) ListParticipantInvitationsByProperties(ctx context.Context, pr
 	return items, nil
 }
 
+const listParticipantInvitationsForRemoval = `-- name: ListParticipantInvitationsForRemoval :many
+SELECT i.id, i.property_id, i.email
+FROM property_member_invitations i
+JOIN properties p ON p.id = i.property_id
+WHERE lower(i.email) = lower($1::text)
+  AND (
+    p.owner_id = $2::uuid
+    OR EXISTS (
+      SELECT 1 FROM property_members am
+      WHERE am.property_id = p.id
+        AND am.user_id = $2::uuid
+        AND am.status = 'active'
+        AND am.role = 'full_access'
+    )
+  )
+ORDER BY i.created_at ASC
+`
+
+type ListParticipantInvitationsForRemovalParams struct {
+	PersonEmail string      `json:"person_email"`
+	ActorID     pgtype.UUID `json:"actor_id"`
+}
+
+type ListParticipantInvitationsForRemovalRow struct {
+	ID         pgtype.UUID `json:"id"`
+	PropertyID pgtype.UUID `json:"property_id"`
+	Email      string      `json:"email"`
+}
+
+func (q *Queries) ListParticipantInvitationsForRemoval(ctx context.Context, arg ListParticipantInvitationsForRemovalParams) ([]ListParticipantInvitationsForRemovalRow, error) {
+	rows, err := q.db.Query(ctx, listParticipantInvitationsForRemoval, arg.PersonEmail, arg.ActorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListParticipantInvitationsForRemovalRow{}
+	for rows.Next() {
+		var i ListParticipantInvitationsForRemovalRow
+		if err := rows.Scan(&i.ID, &i.PropertyID, &i.Email); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listParticipantMembershipsByProperties = `-- name: ListParticipantMembershipsByProperties :many
 SELECT m.property_id, m.user_id, m.role, m.status
 FROM property_members m
@@ -71,6 +120,69 @@ func (q *Queries) ListParticipantMembershipsByProperties(ctx context.Context, pr
 			&i.PropertyID,
 			&i.UserID,
 			&i.Role,
+			&i.Status,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listParticipantMembershipsForRemoval = `-- name: ListParticipantMembershipsForRemoval :many
+
+SELECT m.id, m.property_id, m.user_id, m.status
+FROM property_members m
+JOIN properties p ON p.id = m.property_id
+WHERE m.user_id = $1::uuid
+  AND (
+    p.owner_id = $2::uuid
+    OR EXISTS (
+      SELECT 1 FROM property_members am
+      WHERE am.property_id = m.property_id
+        AND am.user_id = $2::uuid
+        AND am.status = 'active'
+        AND am.role = 'full_access'
+    )
+  )
+ORDER BY m.created_at ASC
+`
+
+type ListParticipantMembershipsForRemovalParams struct {
+	PersonID pgtype.UUID `json:"person_id"`
+	ActorID  pgtype.UUID `json:"actor_id"`
+}
+
+type ListParticipantMembershipsForRemovalRow struct {
+	ID         pgtype.UUID `json:"id"`
+	PropertyID pgtype.UUID `json:"property_id"`
+	UserID     pgtype.UUID `json:"user_id"`
+	Status     string      `json:"status"`
+}
+
+// The mutation side of the owner's participant aggregate (issue #694):
+// «Отозвать и удалить» enumerates one person's legs within the acting
+// actor's manage scope. Unlike the read scope above, archived properties are
+// INCLUDED here: revoking access keeps working on archived objects (issue
+// #163) — an archived leg must not survive a full removal, or the person
+// would silently reappear on unarchive. The scope predicate is the
+// authorization: rows outside it never leave the database.
+func (q *Queries) ListParticipantMembershipsForRemoval(ctx context.Context, arg ListParticipantMembershipsForRemovalParams) ([]ListParticipantMembershipsForRemovalRow, error) {
+	rows, err := q.db.Query(ctx, listParticipantMembershipsForRemoval, arg.PersonID, arg.ActorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListParticipantMembershipsForRemovalRow{}
+	for rows.Next() {
+		var i ListParticipantMembershipsForRemovalRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PropertyID,
+			&i.UserID,
 			&i.Status,
 		); err != nil {
 			return nil, err

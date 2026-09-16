@@ -220,6 +220,7 @@ func run() error {
 		Access:                   accessMod.AccessService,
 		Invitations:              accessMod.InvitationService,
 		Participants:             accessMod.ParticipantService,
+		ParticipantMutations:     accessMod.ParticipantMutationSvc,
 		NotificationPreferences:  notificationsMod.PreferenceService,
 		PushSubscriptions:        notificationsMod.PushSubscriptionService,
 		VAPIDPublicKey:           p.Cfg.VAPIDPublicKey,

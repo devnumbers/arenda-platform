@@ -583,5 +583,5 @@ func (s *InvitationService) sendInviteEmail(ctx context.Context, email string, p
 			title = resolved
 		}
 	}
-	return s.mailer.SendInvite(ctx, email, title, role)
+	return s.mailer.SendInvite(ctx, email, []string{title}, role)
 }

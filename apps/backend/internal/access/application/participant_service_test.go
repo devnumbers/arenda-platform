@@ -91,7 +91,7 @@ func newParticipantFixture(t *testing.T) *participantFixture {
 	}
 	f.p1, f.p2 = uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
 	f.scope = []ParticipantScopeProperty{
-		{ID: f.p1, OwnerID: f.owner, Title: "Вторая"},
+		{ID: f.p1, OwnerID: f.owner, Title: testSecondTitle},
 		{ID: f.p2, OwnerID: f.owner, Title: "Первая"},
 	}
 	fullOnFirst := ParticipantMembershipRow{

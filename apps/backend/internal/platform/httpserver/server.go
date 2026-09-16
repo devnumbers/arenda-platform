@@ -77,6 +77,7 @@ type Deps struct {
 	Access                   *accessapp.AccessService
 	Invitations              *accessapp.InvitationService
 	Participants             accessapp.ParticipantsManager
+	ParticipantMutations     accessapp.ParticipantMutations
 	NotificationPreferences  *notificationsapp.PreferenceService
 	PushSubscriptions        *notificationsapp.PushSubscriptionService
 	VAPIDPublicKey           string
@@ -162,7 +163,7 @@ func New(deps Deps) http.Handler {
 	contactHandlers := contactshttp.NewContactHandlers(deps.Contacts, deps.Logger)
 	accessMemberHandlers := accesshttp.NewMemberHandlers(deps.Access, deps.Logger)
 	accessInvitationHandlers := accesshttp.NewInvitationHandlers(deps.Invitations, deps.Logger)
-	accessParticipantHandlers := accesshttp.NewParticipantHandlers(deps.Participants, deps.Logger)
+	accessParticipantHandlers := accesshttp.NewParticipantHandlers(deps.Participants, deps.ParticipantMutations, deps.Logger)
 	notificationPreferenceHandlers := notificationshttp.NewNotificationPreferenceHandlers(deps.NotificationPreferences, deps.Logger)
 	pushSubscriptionHandlers := notificationshttp.NewPushSubscriptionHandlers(deps.PushSubscriptions, deps.VAPIDPublicKey, deps.Logger)
 	popupHandlers := popupshttp.NewPopupHandlers(deps.Popups, deps.Logger)

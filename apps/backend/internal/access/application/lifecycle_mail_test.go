@@ -47,8 +47,8 @@ func (f *fakeAccessMailer) record(m sentMail) error {
 	return nil
 }
 
-func (f *fakeAccessMailer) SendInvite(_ context.Context, to, title string, role domain.Role) error {
-	return f.record(sentMail{kind: "invite", to: to, title: title, role: role})
+func (f *fakeAccessMailer) SendInvite(_ context.Context, to string, titles []string, role domain.Role) error {
+	return f.record(sentMail{kind: "invite", to: to, titles: titles, role: role})
 }
 
 func (f *fakeAccessMailer) SendAccessRevoked(_ context.Context, to, title string) error {

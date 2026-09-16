@@ -642,7 +642,16 @@ type Querier interface {
 	// (no cursor) reads from the beginning.
 	ListPaidOperationsGlobal(ctx context.Context, arg ListPaidOperationsGlobalParams) ([]ListPaidOperationsGlobalRow, error)
 	ListParticipantInvitationsByProperties(ctx context.Context, propertyIds string) ([]ListParticipantInvitationsByPropertiesRow, error)
+	ListParticipantInvitationsForRemoval(ctx context.Context, arg ListParticipantInvitationsForRemovalParams) ([]ListParticipantInvitationsForRemovalRow, error)
 	ListParticipantMembershipsByProperties(ctx context.Context, propertyIds string) ([]ListParticipantMembershipsByPropertiesRow, error)
+	// The mutation side of the owner's participant aggregate (issue #694):
+	// «Отозвать и удалить» enumerates one person's legs within the acting
+	// actor's manage scope. Unlike the read scope above, archived properties are
+	// INCLUDED here: revoking access keeps working on archived objects (issue
+	// #163) — an archived leg must not survive a full removal, or the person
+	// would silently reappear on unarchive. The scope predicate is the
+	// authorization: rows outside it never leave the database.
+	ListParticipantMembershipsForRemoval(ctx context.Context, arg ListParticipantMembershipsForRemovalParams) ([]ListParticipantMembershipsForRemovalRow, error)
 	// The «Участник (владельца)» read model (issue #693): an aggregate over
 	// property_members ∪ property_member_invitations with no table of its own
 	// (chart decision of map #692). The reading actor's scope is the set of

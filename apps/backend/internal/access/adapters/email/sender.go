@@ -44,11 +44,13 @@ func NewSender(sender mailer.Sender, renderer *mailer.Renderer, appBaseURL strin
 
 var _ application.AccessMailer = (*Sender)(nil)
 
-// SendInvite renders and sends the invite email. An empty propertyTitle
-// degrades to a generic text (the template handles it).
-func (s *Sender) SendInvite(ctx context.Context, to, propertyTitle string, role domain.Role) error {
+// SendInvite renders and sends the invite email. Since the multi-object
+// invitation (issue #694) PropertyTitles carries the whole batch — a single
+// title renders exactly like the pre-#694 text; empty titles degrade to a
+// generic text (the template handles it).
+func (s *Sender) SendInvite(ctx context.Context, to string, propertyTitles []string, role domain.Role) error {
 	return s.send(ctx, to, inviteSubject, "property_invite", map[string]any{
-		propertyTitleKey: propertyTitle,
+		"PropertyTitles": propertyTitles,
 		"Role":           roleLabel(role),
 		"AppURL":         s.appBaseURL,
 	})

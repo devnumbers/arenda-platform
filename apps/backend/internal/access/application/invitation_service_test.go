@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -28,6 +29,11 @@ const (
 	testRecipientEmail = "recipient@example.com"
 	testNevskyTitle    = "Квартира на Невском"
 	testApartmentTitle = "Квартира"
+	// The ordered display titles of the two-property fixtures.
+	testOwnTitle     = "Мой"
+	testForeignTitle = "Чужой"
+	testFirstTitle   = "Первая"
+	testSecondTitle  = "Вторая"
 )
 
 // In-memory port stubs for the invitation dependencies.
@@ -35,6 +41,11 @@ const (
 // memInvitationsRepo is an in-memory InvitationRepository.
 type memInvitationsRepo struct {
 	rows []domain.Invitation
+	// The manage-scope predicate for ListForRemovalByEmail (issue #694). The
+	// fixture wires it to the shared membership repo's inManageScope so the
+	// in-memory predicate matches the SQL one (owner or active full_access
+	// member, archived included).
+	removalScope func(propertyID, actorID uuid.UUID) bool
 }
 
 func (r *memInvitationsRepo) Create(_ context.Context, inv domain.Invitation) (domain.Invitation, error) {
@@ -87,6 +98,22 @@ func (r *memInvitationsRepo) ListPendingByEmail(_ context.Context, email string)
 		}
 	}
 	// FIFO activation: oldest first (matches the SQL ORDER BY created_at ASC).
+	slices.SortFunc(out, func(a, b domain.Invitation) int {
+		return a.CreatedAt.Compare(b.CreatedAt)
+	})
+	return out, nil
+}
+
+// ListForRemovalByEmail mirrors the SQL removal scope (issue #694): the
+// pending invitations for the email on properties inside the actor's manage
+// scope, oldest first.
+func (r *memInvitationsRepo) ListForRemovalByEmail(_ context.Context, email string, actorID uuid.UUID) ([]domain.Invitation, error) {
+	var out []domain.Invitation
+	for _, e := range r.rows {
+		if strings.EqualFold(e.Email, email) && (r.removalScope == nil || r.removalScope(e.PropertyID, actorID)) {
+			out = append(out, e)
+		}
+	}
 	slices.SortFunc(out, func(a, b domain.Invitation) int {
 		return a.CreatedAt.Compare(b.CreatedAt)
 	})
@@ -186,7 +213,7 @@ type invitationFixture struct {
 
 func newInvitationFixture() *invitationFixture {
 	repo := newMemRepo()
-	invitations := &memInvitationsRepo{}
+	invitations := &memInvitationsRepo{removalScope: repo.inManageScope}
 	owners := staticResolver{}
 	statuses := fakeStatuses{}
 	policy := NewMembershipPolicy(owners, repo)
@@ -320,8 +347,8 @@ func TestInvitationService_InviteUnregisteredCreatesPending(t *testing.T) {
 	if len(f.mailer.sent) != 1 || f.mailer.sent[0].to != testNewUserEmail {
 		t.Fatalf("expected exactly one invite email, got %+v", f.mailer.sent)
 	}
-	if f.mailer.sent[0].title != testNevskyTitle {
-		t.Errorf("mail title = %q", f.mailer.sent[0].title)
+	if !slices.Equal(f.mailer.sent[0].titles, []string{testNevskyTitle}) {
+		t.Errorf("mail titles = %v", f.mailer.sent[0].titles)
 	}
 
 	// A duplicate pending invite is a conflict and sends no second email.

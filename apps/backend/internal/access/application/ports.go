@@ -55,6 +55,13 @@ type MembershipRepository interface {
 	// property-id+role projection. Used by the slot coordinator to build the
 	// recipient's shared-property pool. See issue #158 (T4).
 	ListActiveByUser(ctx context.Context, userID uuid.UUID) ([]domain.Membership, error)
+	// ListForRemovalByUser returns the person's memberships (any status, with
+	// ids) on the properties the given actor manages — owner or active
+	// full_access member — including archived properties: revoking keeps
+	// working on archived objects (issue #163), so «Отозвать и удалить»
+	// (issue #694) must not leave archived legs behind. The scope predicate
+	// is the authorization (issue #693).
+	ListForRemovalByUser(ctx context.Context, personID, actorID uuid.UUID) ([]domain.Membership, error)
 	// CreateWithStatus inserts a membership with an explicit status, used to
 	// create a suspended grant directly (so it can be activated later without
 	// occupying a slot until a slot frees up).
@@ -141,6 +148,12 @@ type InvitationRepository interface {
 	// email across properties, oldest first: activation at registration is
 	// FIFO.
 	ListPendingByEmail(ctx context.Context, email string) ([]domain.Invitation, error)
+	// ListForRemovalByEmail returns the pending invitations for the email on
+	// the properties the given actor manages — owner or active full_access
+	// member — including archived properties (issue #163): «Отозвать и
+	// удалить» (issue #694) removes every invitation leg in the actor's
+	// scope. The scope predicate is the authorization (issue #693).
+	ListForRemovalByEmail(ctx context.Context, email string, actorID uuid.UUID) ([]domain.Invitation, error)
 	UpdateRole(ctx context.Context, id, propertyID uuid.UUID, role domain.Role) (domain.Invitation, error)
 	UpdateLastSentAt(ctx context.Context, id, propertyID uuid.UUID, sentAt time.Time) error
 	Delete(ctx context.Context, id, propertyID uuid.UUID) error
@@ -154,7 +167,11 @@ type InvitationRepository interface {
 // suspension / downgrade / recovery, and to the owner on invitation activation
 // and member self-exit.
 type AccessMailer interface {
-	SendInvite(ctx context.Context, to, propertyTitle string, role domain.Role) error
+	// SendInvite is the invite email to an unregistered invitee. Since the
+	// multi-object invitation (issue #694) one email covers the whole batch:
+	// PropertyTitles are the display titles of the objects the person was
+	// invited to.
+	SendInvite(ctx context.Context, to string, propertyTitles []string, role domain.Role) error
 	SendAccessRevoked(ctx context.Context, to, propertyTitle string) error
 	SendPropertyDeleted(ctx context.Context, to, propertyTitle string) error
 	SendAccessSuspended(ctx context.Context, to, propertyTitle string) error

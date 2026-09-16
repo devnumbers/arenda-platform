@@ -15,14 +15,15 @@ import (
 // Access holds the access module's policy, member-management service and the
 // recipient tariff slot coordinator wired by WireAccess.
 type Access struct {
-	Policy               *accessapp.MembershipPolicy
-	AccessService        *accessapp.AccessService
-	InvitationService    *accessapp.InvitationService
-	ParticipantService   *accessapp.ParticipantService
-	SlotCoordinator      *accessapp.SlotCoordinator
-	PropertyDeleteMailer *accessapp.PropertyDeleteMailer
-	SharedProperties     *accesspg.SharedProperties
-	SuspendedCounter     *accesspg.SuspendedCounter
+	Policy                 *accessapp.MembershipPolicy
+	AccessService          *accessapp.AccessService
+	InvitationService      *accessapp.InvitationService
+	ParticipantService     *accessapp.ParticipantService
+	ParticipantMutationSvc *accessapp.ParticipantMutationService
+	SlotCoordinator        *accessapp.SlotCoordinator
+	PropertyDeleteMailer   *accessapp.PropertyDeleteMailer
+	SharedProperties       *accesspg.SharedProperties
+	SuspendedCounter       *accesspg.SuspendedCounter
 }
 
 // Compile-time checks that the access SlotCoordinator satisfies the cross-
@@ -140,19 +141,38 @@ func WireAccess(_ context.Context, p platformDeps, billing *Billing, emailMailer
 		p.Logger,
 	)
 
+	// The mutation side of the participant aggregate (issue #694): the
+	// multi-object invite, «Пригласить в объект» and «Отозвать и удалить» —
+	// over the same per-property gates and the slot coordinator.
+	participantMutations := accessapp.NewParticipantMutationService(
+		accessService,
+		ownerResolver,
+		ownerResolver,
+		userLookup,
+		emailResolver,
+		policy,
+		slotCoordinator,
+		accessMailer,
+		ownerResolver,
+		factory,
+		p.Clock,
+		p.Logger,
+	)
+
 	// The "object deleted" emails to former shared members (issue #162, T6):
 	// collected inside the property delete transaction, sent after commit by
 	// the properties service.
 	propertyDeleteMailer := accessapp.NewPropertyDeleteMailer(memberRepo, emailResolver, accessMailer, p.Logger)
 
 	return &Access{
-		Policy:               policy,
-		AccessService:        accessService,
-		InvitationService:    invitationService,
-		ParticipantService:   participantService,
-		SlotCoordinator:      slotCoordinator,
-		PropertyDeleteMailer: propertyDeleteMailer,
-		SharedProperties:     sharedProperties,
-		SuspendedCounter:     suspendedCounter,
+		Policy:                 policy,
+		AccessService:          accessService,
+		InvitationService:      invitationService,
+		ParticipantService:     participantService,
+		ParticipantMutationSvc: participantMutations,
+		SlotCoordinator:        slotCoordinator,
+		PropertyDeleteMailer:   propertyDeleteMailer,
+		SharedProperties:       sharedProperties,
+		SuspendedCounter:       suspendedCounter,
 	}, nil
 }
