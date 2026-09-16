@@ -613,3 +613,37 @@ func firstRow(rows []domain.Membership, propertyID uuid.UUID) *domain.Membership
 	}
 	return nil
 }
+
+func TestParticipantMutation_AddProperties_ArchivedPropertySkipped(t *testing.T) {
+	t.Parallel()
+	f := newMutationFixture()
+	pActive, pArchived := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	f.addProperty(pActive, f.owner, testFirstTitle)
+	f.addProperty(pArchived, f.owner, testSecondTitle)
+	f.statuses[pArchived] = true
+	member := uuid.Must(uuid.NewV7())
+	f.emails[member] = testMemberEmail
+	// An existing participant (a pending invitation on the active property),
+	// so the batch passes the existence gate.
+	if _, err := f.invitations.Create(t.Context(), domain.Invitation{
+		ID: uuid.Must(uuid.NewV7()), PropertyID: pActive, Email: testMemberEmail,
+		Role: domain.RoleViewer, InvitedBy: f.owner, LastSentAt: f.clk.now, CreatedAt: f.clk.now,
+	}); err != nil {
+		t.Fatalf("seed invitation: %v", err)
+	}
+	f.lookup.add(testMemberEmail, member)
+	f.limiter.set(member, 1)
+
+	results, err := f.svc.AddProperties(t.Context(), f.owner, testMemberEmail, domain.RoleViewer,
+		[]uuid.UUID{pArchived, pActive})
+	if err != nil {
+		t.Fatalf("add properties: %v", err)
+	}
+	// The archived object gets no grant (issue #163); the active one does.
+	if results[0].Outcome != ParticipantGrantArchived || results[0].MembershipID != (uuid.UUID{}) {
+		t.Errorf("results[0] = %+v, want skipped_archived", results[0])
+	}
+	if results[1].Outcome != ParticipantGrantActive || results[1].MembershipID == uuid.Nil {
+		t.Errorf("results[1] = %+v, want active", results[1])
+	}
+}

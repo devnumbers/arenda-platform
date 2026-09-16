@@ -80,7 +80,8 @@ type ParticipantMutations interface {
 
 // grantTarget is the resolved person of a grant batch: a registered user's
 // id, or a pending invitee's normalized email. UserID is zero for a pending
-// email; email is empty for a registered user resolved by uuid.
+// email; email is empty for a pending target and for a registered user
+// without one.
 type grantTarget struct {
 	userID uuid.UUID
 	email  string
@@ -256,10 +257,12 @@ func (s *ParticipantMutationService) grantOne(
 ) (ParticipantGrantResult, error) {
 	owner, actorRole, err := requireManageAccess(ctx, s.policy, s.owners, actor, propertyID)
 	if err != nil {
-		// Not in the actor's manage scope (the gate maps every resolution
-		// failure to the privacy-preserving not-found): a per-property skip,
-		// not a batch failure.
-		//nolint:nilerr // the gate error IS the skip outcome.
+		// Not in the actor's manage scope: the gate signals it with the
+		// privacy-preserving not-found — a per-property skip, not a batch
+		// failure. Any other error is infrastructural and aborts the batch.
+		if !errors.Is(err, domain.ErrMemberNotFound) {
+			return ParticipantGrantResult{}, fmt.Errorf("resolve manage scope: %w", err)
+		}
 		return ParticipantGrantResult{PropertyID: propertyID, Outcome: ParticipantGrantUnavailable}, nil
 	}
 	if target.userID != (uuid.UUID{}) && target.userID == owner {
@@ -528,27 +531,28 @@ func (s *ParticipantMutationService) removeInvitationLegs(
 
 // resolveTarget resolves a participant identifier to the mutation target: a
 // registered user's uuid, or an invitee email (which may already belong to a
-// registered user). Everything unresolvable is the privacy-preserving
-// ErrParticipantNotFound. The returned email is normalized: set for the
-// pending and the registered-by-email targets, and resolved through the email
-// port for uuid targets (an empty email means the user has none or the
-// lookup failed — the invitation legs are then out of reach).
+// registered user). An unresolvable identifier is the privacy-preserving
+// ErrParticipantNotFound; a resolution failure (user/email lookup) is a real
+// error so the caller aborts instead of silently operating on partial data.
+// The returned email is normalized: set for the pending and the registered
+// targets — resolved through the email port for uuid targets; empty means the
+// user has none, so the invitation legs are out of reach.
 func (s *ParticipantMutationService) resolveTarget(ctx context.Context, participantID string) (uuid.UUID, string, error) {
 	id := strings.TrimSpace(participantID)
 	if userID, err := uuid.Parse(id); err == nil {
 		if _, err := s.users.GetByID(ctx, userID); err != nil {
-			return uuid.UUID{}, "", domain.ErrParticipantNotFound
+			if errors.Is(err, domain.ErrUserNotFound) {
+				return uuid.UUID{}, "", domain.ErrParticipantNotFound
+			}
+			return uuid.UUID{}, "", fmt.Errorf("lookup user by id: %w", err)
 		}
 		email := ""
 		if s.emails != nil {
 			resolved, err := s.emails.GetEmail(ctx, userID)
 			if err != nil {
-				s.logger.WarnContext(ctx, "access: participant email lookup for mutation failed",
-					slog.String(auditKeyUserID, userID.String()),
-					slog.String("error", err.Error()))
-			} else {
-				email = strings.ToLower(resolved)
+				return uuid.UUID{}, "", fmt.Errorf("resolve participant email: %w", err)
 			}
+			email = strings.ToLower(resolved)
 		}
 		return userID, email, nil
 	}
@@ -591,8 +595,10 @@ func (s *ParticipantMutationService) sendInviteEmail(ctx context.Context, email 
 		}
 	}
 	if err := s.mailer.SendInvite(ctx, email, titles, role); err != nil {
+		// The recipient email is PII and never reaches the log (ADR 0020);
+		// the granted-object count is the correlation handle.
 		s.logger.ErrorContext(ctx, "access: invite email send failed",
-			slog.String(auditKeyUserID, email),
+			slog.Int("granted_properties", len(propertyIDs)),
 			slog.String("error", err.Error()))
 	}
 }

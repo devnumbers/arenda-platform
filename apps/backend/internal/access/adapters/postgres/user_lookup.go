@@ -30,10 +30,16 @@ func NewUserLookup(users UserReader) *UserLookupAdapter {
 	return &UserLookupAdapter{users: users}
 }
 
-// GetByID resolves a registered user by id for member display.
+// GetByID resolves a registered user by id for member display and the
+// participant mutations (issue #694). A missing user maps to
+// domain.ErrUserNotFound, mirroring GetByEmail and the port contract — real
+// failures stay wrapped so callers can abort on them.
 func (a *UserLookupAdapter) GetByID(ctx context.Context, id uuid.UUID) (application.MemberUser, error) {
 	u, err := a.users.GetByID(ctx, id)
 	if err != nil {
+		if errors.Is(err, identityapp.ErrNotFound) {
+			return application.MemberUser{}, domain.ErrUserNotFound
+		}
 		return application.MemberUser{}, fmt.Errorf("get user by id: %w", err)
 	}
 	return toMemberUser(u), nil
