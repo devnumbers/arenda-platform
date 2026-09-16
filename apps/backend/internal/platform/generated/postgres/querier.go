@@ -641,6 +641,16 @@ type Querier interface {
 	// only flips the date comparison. Both cursor args travel together; NULL
 	// (no cursor) reads from the beginning.
 	ListPaidOperationsGlobal(ctx context.Context, arg ListPaidOperationsGlobalParams) ([]ListPaidOperationsGlobalRow, error)
+	ListParticipantInvitationsByProperties(ctx context.Context, propertyIds string) ([]ListParticipantInvitationsByPropertiesRow, error)
+	ListParticipantMembershipsByProperties(ctx context.Context, propertyIds string) ([]ListParticipantMembershipsByPropertiesRow, error)
+	// The «Участник (владельца)» read model (issue #693): an aggregate over
+	// property_members ∪ property_member_invitations with no table of its own
+	// (chart decision of map #692). The reading actor's scope is the set of
+	// non-archived properties the actor owns or manages as an active full_access
+	// member; archived properties stay invisible like everywhere else on the
+	// platform (issue #163). The scope doubles as the authorization: rows outside
+	// it never leave the database.
+	ListParticipantScopeProperties(ctx context.Context, actorID pgtype.UUID) ([]ListParticipantScopePropertiesRow, error)
 	ListPaymentMethodsByUserID(ctx context.Context, userID pgtype.UUID) ([]PaymentMethod, error)
 	// The property's rules in creation order (stable for the list response).
 	// search ('' = no filter) is a case-insensitive substring match on the title;

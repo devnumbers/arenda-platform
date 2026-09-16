@@ -2309,6 +2309,80 @@ paths:
               schema:
                 $ref: '#/components/schemas/Problem'
 
+  /participants:
+    get:
+      operationId: listParticipants
+      summary: List the owner's participants (aggregate over all properties)
+      description: >
+        The «Ваши участники» list (issue #693): one aggregate row per person —
+        a registered user or a pending email — across every non-archived
+        property the reading actor owns or manages as an active full_access
+        member. The actor themself never appears. A person's identifier (id)
+        is the registered user's uuid, or the invitee email for a pending row.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: The owner's participants sorted by display name, pending emails last
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParticipantsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /participants/summary:
+    get:
+      operationId: getParticipantsSummary
+      summary: Counters of the «Совместный доступ» hub
+      description: >
+        The hub card counters (issue #693): the number of the reading actor's
+        participants (the same aggregate the list endpoint returns) and the
+        number of other people's objects the actor has access to (the active
+        shared memberships — the recipient tariff-slot counter).
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: The hub counters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParticipantsSummaryResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /participants/{participantId}:
+    get:
+      operationId: getParticipant
+      summary: One participant's aggregate (the participant page)
+      description: >
+        The same aggregate the list returns for one person: display data, the
+        aggregate status and every access leg with its per-object role and
+        lifecycle status (issue #693). A uuid resolves a registered user, an
+        email resolves a pending invitee (and after the registration resolves
+        to the same user's aggregate). Everything outside the reading actor's
+        scope — including a person whose access was fully revoked — is a
+        privacy-preserving 404 (the deep-link policy of the participant page).
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: participantId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: A registered user's uuid or a pending invitee email.
+      responses:
+        '200':
+          description: The participant's aggregate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParticipantResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /notification-preferences:
     get:
       operationId: getNotificationPreferences
@@ -6383,6 +6457,93 @@ components:
         role:
           type: string
           enum: [full_access, viewer]
+
+    ParticipantsResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ParticipantResponse'
+
+    ParticipantResponse:
+      type: object
+      required: [id, aggregate_status, accessible_properties_count, properties]
+      properties:
+        id:
+          type: string
+          description: >
+            The stable person identifier to address this aggregate by: the
+            registered user's uuid, or the invitee email for a pending row.
+        user_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Registered user id; null for a pending email row.
+        email:
+          type: string
+          format: email
+          nullable: true
+          description: >
+            The invitee email of a pending row; for a registered user, their
+            email resolved for display (null when the user has none).
+        display_name:
+          type: string
+          nullable: true
+          description: >
+            The person's display name (name and surname, or a masked phone);
+            null for a pending row (the email is the label).
+        aggregate_status:
+          type: string
+          enum: [all_properties, partial, limit_exceeded]
+          description: >
+            The aggregate badge (issue #693): "all_properties" — active access
+            to every property in the reading scope; "partial" — active access
+            to accessible_properties_count of them; "limit_exceeded" — at
+            least one suspended membership (the recipient's tariff limit was
+            hit). Display copy: «Доступ ко всем объектам» / «Доступно N
+            объектов» / «Превышен лимит объектов».
+        accessible_properties_count:
+          type: integer
+          description: The number of properties with active access.
+        properties:
+          type: array
+          description: The person's access legs on the reading scope's properties.
+          items:
+            $ref: '#/components/schemas/ParticipantPropertyResponse'
+
+    ParticipantPropertyResponse:
+      type: object
+      required: [property_id, title, role, status]
+      properties:
+        property_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        role:
+          type: string
+          enum: [full_access, viewer]
+        status:
+          type: string
+          enum: [active, suspended, pending]
+          description: >
+            The access lifecycle on this property: "active"/"suspended"
+            memberships, "pending" email invitation.
+
+    ParticipantsSummaryResponse:
+      type: object
+      required: [participants_count, accessible_properties_count]
+      properties:
+        participants_count:
+          type: integer
+          description: The reading actor's participants across their scope.
+        accessible_properties_count:
+          type: integer
+          description: >
+            Other people's objects the reading actor has active access to
+            (the recipient tariff-slot counter; issue #163).
 
     PropertyAccessMemberUpdateRequest:
       type: object

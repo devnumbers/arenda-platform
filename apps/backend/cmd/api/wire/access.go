@@ -18,6 +18,7 @@ type Access struct {
 	Policy               *accessapp.MembershipPolicy
 	AccessService        *accessapp.AccessService
 	InvitationService    *accessapp.InvitationService
+	ParticipantService   *accessapp.ParticipantService
 	SlotCoordinator      *accessapp.SlotCoordinator
 	PropertyDeleteMailer *accessapp.PropertyDeleteMailer
 	SharedProperties     *accesspg.SharedProperties
@@ -60,6 +61,7 @@ var (
 func WireAccess(_ context.Context, p platformDeps, billing *Billing, emailMailer mailer.Sender) (*Access, error) {
 	memberRepo := accesspg.NewMembershipRepository(p.DB)
 	invitationRepo := accesspg.NewInvitationRepository(p.DB)
+	participantRepo := accesspg.NewParticipantRepository(p.DB)
 	ownerResolver := accesspg.NewOwnerResolver(p.DB)
 	userRepo := identitypg.NewUserRepository(p.DB, p.Encryptor)
 	userLookup := accesspg.NewUserLookup(userRepo)
@@ -128,6 +130,16 @@ func WireAccess(_ context.Context, p platformDeps, billing *Billing, emailMailer
 		p.Logger,
 	)
 
+	// The owner's participant read model (issue #693): the aggregate over
+	// memberships ∪ invitations scoped to the reading actor's manage scope.
+	participantService := accessapp.NewParticipantService(
+		participantRepo,
+		userLookup,
+		emailResolver,
+		memberRepo,
+		p.Logger,
+	)
+
 	// The "object deleted" emails to former shared members (issue #162, T6):
 	// collected inside the property delete transaction, sent after commit by
 	// the properties service.
@@ -137,6 +149,7 @@ func WireAccess(_ context.Context, p platformDeps, billing *Billing, emailMailer
 		Policy:               policy,
 		AccessService:        accessService,
 		InvitationService:    invitationService,
+		ParticipantService:   participantService,
 		SlotCoordinator:      slotCoordinator,
 		PropertyDeleteMailer: propertyDeleteMailer,
 		SharedProperties:     sharedProperties,

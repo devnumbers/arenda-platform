@@ -219,6 +219,7 @@ func run() error {
 		PropertyTasks:            tasksMod.TaskService,
 		Access:                   accessMod.AccessService,
 		Invitations:              accessMod.InvitationService,
+		Participants:             accessMod.ParticipantService,
 		NotificationPreferences:  notificationsMod.PreferenceService,
 		PushSubscriptions:        notificationsMod.PushSubscriptionService,
 		VAPIDPublicKey:           p.Cfg.VAPIDPublicKey,

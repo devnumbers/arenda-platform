@@ -76,6 +76,7 @@ type Deps struct {
 	PropertyTasks            *tasksapp.TaskService
 	Access                   *accessapp.AccessService
 	Invitations              *accessapp.InvitationService
+	Participants             accessapp.ParticipantsManager
 	NotificationPreferences  *notificationsapp.PreferenceService
 	PushSubscriptions        *notificationsapp.PushSubscriptionService
 	VAPIDPublicKey           string
@@ -161,6 +162,7 @@ func New(deps Deps) http.Handler {
 	contactHandlers := contactshttp.NewContactHandlers(deps.Contacts, deps.Logger)
 	accessMemberHandlers := accesshttp.NewMemberHandlers(deps.Access, deps.Logger)
 	accessInvitationHandlers := accesshttp.NewInvitationHandlers(deps.Invitations, deps.Logger)
+	accessParticipantHandlers := accesshttp.NewParticipantHandlers(deps.Participants, deps.Logger)
 	notificationPreferenceHandlers := notificationshttp.NewNotificationPreferenceHandlers(deps.NotificationPreferences, deps.Logger)
 	pushSubscriptionHandlers := notificationshttp.NewPushSubscriptionHandlers(deps.PushSubscriptions, deps.VAPIDPublicKey, deps.Logger)
 	popupHandlers := popupshttp.NewPopupHandlers(deps.Popups, deps.Logger)
@@ -183,6 +185,7 @@ func New(deps Deps) http.Handler {
 		ContactHandlers:                contactHandlers,
 		MemberHandlers:                 accessMemberHandlers,
 		InvitationHandlers:             accessInvitationHandlers,
+		ParticipantHandlers:            accessParticipantHandlers,
 		NotificationPreferenceHandlers: notificationPreferenceHandlers,
 		PushSubscriptionHandlers:       pushSubscriptionHandlers,
 		PopupHandlers:                  popupHandlers,
@@ -311,6 +314,7 @@ type composedHandler struct {
 	*contactshttp.ContactHandlers
 	*accesshttp.MemberHandlers
 	*accesshttp.InvitationHandlers
+	*accesshttp.ParticipantHandlers
 	*notificationshttp.NotificationPreferenceHandlers
 	*notificationshttp.PushSubscriptionHandlers
 	*popupshttp.PopupHandlers
