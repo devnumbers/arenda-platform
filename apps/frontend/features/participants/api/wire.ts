@@ -3,6 +3,8 @@ import type { ParticipantAccessRole } from '@/entities/participants';
 
 type ParticipantPropertiesAddRequest =
   components['schemas']['ParticipantPropertiesAddRequest'];
+type ParticipantInviteRequest =
+  components['schemas']['ParticipantInviteRequest'];
 
 /** Команда «Пригласить в объект» (#698, POST
  * /participants/{participantId}/properties #694): одна роль на выбранные
@@ -18,6 +20,28 @@ export function toAddParticipantPropertiesWireRequest(
   command: AddParticipantPropertiesCommand,
 ): ParticipantPropertiesAddRequest {
   return {
+    role: command.role,
+    property_ids: [...command.propertyIds],
+  };
+}
+
+/** Команда приглашения участника из хаба (#699, POST /participants/invite
+ * #694): одна почта и одна роль на снапшот выбранных объектов.
+ * Зарегистрированная почта получает членства сразу (per-property слоты),
+ * незарегистрированная — pending-приглашения и одно письмо со списком. */
+export type InviteParticipantCommand = {
+  readonly email: string;
+  readonly role: ParticipantAccessRole;
+  readonly propertyIds: readonly string[];
+};
+
+/** Entity → wire: сериализатор контракта #694; дубликаты id сворачивает
+ * бэк (первое вхождение). */
+export function toInviteParticipantWireRequest(
+  command: InviteParticipantCommand,
+): ParticipantInviteRequest {
+  return {
+    email: command.email,
     role: command.role,
     property_ids: [...command.propertyIds],
   };

@@ -4,3 +4,4 @@ export { ParticipantsPlaceholderScreen } from './ui/participants-placeholder-scr
 export { ParticipantScreen } from './ui/participant-screen';
 export { ParticipantRightsScreen } from './ui/participant-rights-screen';
 export { ParticipantInviteScreen } from './ui/participant-invite-screen';
+export { ParticipantsInviteScreen } from './ui/participants-invite-screen';

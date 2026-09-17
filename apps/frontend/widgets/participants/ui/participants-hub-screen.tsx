@@ -21,7 +21,9 @@ import {
   participantsCountLabel,
   sharedPropertiesCountLabel,
 } from '../lib/participants-counters';
+import { popParticipantPopup, useParticipantPopup } from '../lib/participant-popups';
 import { ParticipantsHubSkeleton } from './participants-hub-skeletons';
+import { ParticipantSuccessPopup } from './participant-success-popup';
 
 /**
  * Хаб «Совместный доступ» (карта #692, тикет #696; Figma 2008-47013 —
@@ -37,6 +39,10 @@ import { ParticipantsHubSkeleton } from './participants-hub-skeletons';
 export function ParticipantsHubScreen(): JSX.Element {
   const router = useRouter();
   const summaryQuery = useParticipantsSummary();
+
+  // «Участник приглашен» (2010-134458, #699): приглашение открывают и с
+  // хаба — возврат по канону истории может привести сюда, попап не теряется.
+  const invitedPopup = useParticipantPopup() === 'invited';
 
   const inviteButton = (
     <IconButton
@@ -98,6 +104,13 @@ export function ParticipantsHubScreen(): JSX.Element {
           Пригласить участника
         </Button>
       </StickyBottomBar>
+
+      {invitedPopup && (
+        <ParticipantSuccessPopup
+          title="Участник приглашен"
+          onClose={() => popParticipantPopup()}
+        />
+      )}
     </>
   );
 }

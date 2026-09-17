@@ -76,8 +76,12 @@ export function ParticipantsListScreen(): JSX.Element {
   const [showSuccess, setShowSuccess] = useState(false);
   // «Участник удален» (макет 2008-83716): отзыв одного участника со
   // страницы участника (#698) возвращается на список по канону истории
-  // (goBack) — попап рендерится здесь по staged-флагу.
-  const deletedPopup = useParticipantPopup() === 'deleted';
+  // (goBack) — попап рендерится здесь по staged-флагу. «Участник
+  // приглашен» (2010-134458, #699) — тот же механизм из приглашения хаба;
+  // вход туда есть и у хаба, поэтому попап рисует и он.
+  const stagedPopup = useParticipantPopup();
+  const deletedPopup = stagedPopup === 'deleted';
+  const invitedPopup = stagedPopup === 'invited';
 
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   // Открытие поиска сразу делает поле активным (программный фокус —
@@ -257,6 +261,15 @@ export function ParticipantsListScreen(): JSX.Element {
       {deletedPopup && (
         <ParticipantSuccessPopup
           title="Участник удален"
+          onClose={() => popParticipantPopup()}
+        />
+      )}
+
+      {/* «Участник приглашен» (макет 2010-134458): возврат из приглашения
+       * (#699); список под попапом перечитан инвалидацией участников. */}
+      {invitedPopup && (
+        <ParticipantSuccessPopup
+          title="Участник приглашен"
           onClose={() => popParticipantPopup()}
         />
       )}

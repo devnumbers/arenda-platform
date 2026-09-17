@@ -2,7 +2,7 @@
 
 import { useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
-import { Cancel, CheckBoxFalse, CheckBoxTrue, Minus } from '@/shared/assets/icons';
+import { Cancel } from '@/shared/assets/icons';
 import { goBack } from '@/shared/lib/navigation';
 import { ROUTES } from '@/shared/config/routes';
 import {
@@ -31,6 +31,7 @@ import {
   ObjectAvatarGlyph,
   PARTICIPANT_ROW_BASE_CLASS,
   ParticipantNotFound,
+  SelectionGlyph,
 } from './participant-fragments';
 import { stageParticipantPopup } from '../lib/participant-popups';
 import { ParticipantRoleSegmented } from './participant-role-segmented';
@@ -267,32 +268,5 @@ export function ParticipantInviteScreen({
         </ModalContent>
       </Modal>
     </>
-  );
-}
-
-/** Пикторальный Selection Button (Figma 1031:21053; канон-иконки
- * CheckBoxTrue/False — решение владельца 07.09, вне канон-набора):
- * «mixed» («Все объекты» — выбрана часть, 1858:105670) — синий квадрат
- * радиусом 8 с белым Icon/R/Minus 16. Ряд несёт role="checkbox" —
- * глиф только рисует состояние (прецедент селектов задач/контактов). */
-function SelectionGlyph({
-  state,
-}: {
-  readonly state: 'on' | 'off' | 'mixed';
-}): JSX.Element {
-  if (state === 'mixed') {
-    return (
-      <span
-        aria-hidden
-        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-primary"
-      >
-        <Minus className="h-4 w-4 text-white" />
-      </span>
-    );
-  }
-  return state === 'on' ? (
-    <CheckBoxTrue className="h-6 w-6 shrink-0" aria-hidden />
-  ) : (
-    <CheckBoxFalse className="h-6 w-6 shrink-0" aria-hidden />
   );
 }

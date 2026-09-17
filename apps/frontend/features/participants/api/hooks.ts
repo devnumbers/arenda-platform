@@ -9,7 +9,9 @@ import { mapParticipant } from '@/entities/participants';
 import type { Participant } from '@/entities/participants';
 import {
   toAddParticipantPropertiesWireRequest,
+  toInviteParticipantWireRequest,
   type AddParticipantPropertiesCommand,
+  type InviteParticipantCommand,
 } from './wire';
 
 type ParticipantsSummaryResponse =
@@ -170,6 +172,53 @@ export function useAddParticipantProperties(
         {
           method: 'POST',
           body: JSON.stringify(toAddParticipantPropertiesWireRequest(command)),
+        },
+      );
+      let granted = 0;
+      let skipped = 0;
+      for (const item of response.items) {
+        if (item.outcome === 'active' || item.outcome === 'suspended' || item.outcome === 'pending') {
+          granted += 1;
+        } else {
+          skipped += 1;
+        }
+      }
+      return { granted, skipped };
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: participantsKeys.all });
+    },
+  });
+}
+
+/** Исход приглашения участника (#699, POST /participants/invite #694):
+ * per-object исходы партии — успехи и skipped_* (тот же ответ, что у
+ * «Пригласить в объект» #698). */
+export type InviteParticipantResult = {
+  readonly granted: number;
+  readonly skipped: number;
+};
+
+/** Приглашение участника из хаба (#699): одна почта и роль на снапшот
+ * выбранных объектов. granted = активные + suspended (слоты получателя) +
+ * pending (письмо) — человек приглашён в любом из этих исходов; когда
+ * granted=0 при выбранных объектах, все ушли в skipped_* — экран
+ * показывает ошибку и остаётся на месте. Инвалидация в onSettled — канон
+ * useAddParticipantProperties: успех уводит назад по истории, агрегаты и
+ * счётчики перечитает целевой экран. */
+export function useInviteParticipant(): UseMutationResult<
+  InviteParticipantResult,
+  ApiError,
+  InviteParticipantCommand
+> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (command) => {
+      const response = await apiClient<components['schemas']['ParticipantGrantResultsResponse']>(
+        '/participants/invite',
+        {
+          method: 'POST',
+          body: JSON.stringify(toInviteParticipantWireRequest(command)),
         },
       );
       let granted = 0;

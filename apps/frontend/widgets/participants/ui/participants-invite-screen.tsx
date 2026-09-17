@@ -1,0 +1,372 @@
+'use client';
+
+import { useEffect, useState, type JSX } from 'react';
+import Image from 'next/image';
+import { useRouter } from 'next/navigation';
+import { Cancel, SmallArrowDown } from '@/shared/assets/icons';
+import { goBack } from '@/shared/lib/navigation';
+import { ROUTES } from '@/shared/config/routes';
+import { isEmailValid } from '@/shared/lib/email';
+import { pluralize } from '@/shared/lib/pluralize';
+import {
+  allInvitedProperties,
+  collapsedInviteRows,
+  inviteSelectionState,
+  toInvitePropertyOption,
+  toggleAllInvitedProperties,
+  toggleInvitedProperty,
+  type InvitePropertyOption,
+  type ParticipantAccessRole,
+} from '@/entities/participants';
+import { useInviteParticipant } from '@/features/participants';
+import { useProperties } from '@/features/properties';
+import {
+  Button,
+  EmptyState,
+  ErrorCard,
+  IconButton,
+  PageContent,
+  StickyBottomBar,
+  TextField,
+  TopNav,
+  TopNavBackButton,
+  TopNavTitle,
+} from '@/shared/ui/design';
+import { ObjectAvatarGlyph, PARTICIPANT_ROW_BASE_CLASS, SelectionGlyph } from './participant-fragments';
+import { stageParticipantPopup } from '../lib/participant-popups';
+import { ParticipantRoleSegmented } from './participant-role-segmented';
+import { ParticipantsInviteSkeleton } from './participants-skeletons';
+
+/**
+ * Экран «Пригласите участника» (карта #692, тикет #699; Figma 2008-46375,
+ * 2010-134350): иллюстрация и заголовок, почта приглашаемого (плавающая
+ * подпись «Электронная почта», очистка), сегмент роли «Просмотр |
+ * Редактирование» (копирайт ролей — решение чарта карты #692, домен не
+ * меняется) и свёрнутый выбор объектов.
+ *
+ * Выбор объектов: по умолчанию «Все N объектов / Поделиться всеми
+ * объектами» — снапшот всех текущих активных объектов читающего (решение
+ * чарта: будущие автоматически не шарятся; пустое состояние в макетах не
+ * нарисовано — старт «все» выбран приёмкой). Строка открывает полноэкранный
+ * пикер «Выбрать объект» (2008-46627): tri-state «Все объекты» и мультичек;
+ * «Выбрать» коммитит черновик, крестик/Esc закрывают без изменений.
+ *
+ * «Пригласить» → POST /participants/invite (#694): зарегистрированная
+ * почта получает членства сразу (per-property слоты — партия может
+ * смешать active и suspended), незарегистрированная — pending-приглашения
+ * и одно письмо. Любой granted (включая suspended) — попап «Участник
+ * приглашен» (2010-134458) на цели goBack по канону истории; granted=0
+ * или ошибка — сообщение под полем почты, экран остаётся на месте.
+ */
+export function ParticipantsInviteScreen(): JSX.Element {
+  const router = useRouter();
+
+  const propertiesQuery = useProperties();
+  const invite = useInviteParticipant();
+
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState<ParticipantAccessRole>('viewer');
+  /** null — «не трогали» = дефолт «Все объекты»; конкретный Set — после
+   * первого тапа или коммита пикера (пустой Set = осознанный ноль). */
+  const [committedSelection, setCommittedSelection] = useState<ReadonlySet<string> | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [serverError, setServerError] = useState<string | null>(null);
+
+  // access отсутствует у собственных объектов (владелец); viewer — чужие
+  // объекты, где читающий не управляет выдачей: бэк вернул бы
+  // skipped_unavailable, поэтому такие строки даже не показываем.
+  const properties = propertiesQuery.data;
+  const options: InvitePropertyOption[] = (properties ?? [])
+    .filter((property) => property.access?.role !== 'viewer')
+    .map(toInvitePropertyOption);
+  const optionIds = options.map((option) => option.id);
+
+  const selection = committedSelection ?? allInvitedProperties(optionIds);
+  const collapsedRows = collapsedInviteRows(options, selection);
+
+  const trimmedEmail = email.trim();
+  const canSubmit = trimmedEmail.length > 0 && selection.size > 0 && !invite.isPending;
+
+  const setEmailValue = (value: string): void => {
+    setEmail(value);
+    setEmailError(null);
+    setServerError(null);
+  };
+
+  const submitInvite = (): void => {
+    if (!isEmailValid(trimmedEmail)) {
+      setEmailError('Укажите корректную электронную почту');
+      return;
+    }
+    invite.mutate(
+      { email: trimmedEmail, role, propertyIds: [...selection] },
+      {
+        onSuccess: (result) => {
+          if (result.granted === 0) {
+            setServerError('Не удалось пригласить — попробуйте еще раз');
+            return;
+          }
+          stageParticipantPopup('invited');
+          goBack(router, ROUTES.participants);
+        },
+        onError: (error) => {
+          // Семантические 400 (#694: свой email, некорректная почта) бэк
+          // объясняет по-человечески — показываем его текст; остальное —
+          // инфраструктура, общая фраза.
+          setServerError(
+            error.status === 400 && error.detail.length > 0
+              ? error.detail
+              : 'Не удалось пригласить — попробуйте еще раз',
+          );
+        },
+      },
+    );
+  };
+
+  let content: JSX.Element;
+  if (propertiesQuery.isPending) {
+    content = <ParticipantsInviteSkeleton />;
+  } else if (propertiesQuery.isError) {
+    content = (
+      <ErrorCard
+        title="Не удалось загрузить объекты"
+        onRetry={() => void propertiesQuery.refetch()}
+        className="mt-6"
+      />
+    );
+  } else if (options.length === 0) {
+    // Гард тикета: приглашать некуда — объектов читающего нет.
+    content = (
+      <EmptyState
+        imageSrc="/images/tariff/tariff-about-sharing.png"
+        title="Объектов пока нет"
+        description="Чтобы пригласить участника, добавьте хотя бы один объект"
+      />
+    );
+  } else {
+    content = (
+      <div className="flex flex-col pt-4">
+        <Image
+          src="/images/tariff/tariff-about-sharing.png"
+          alt=""
+          width={96}
+          height={96}
+          className="h-24 w-24 self-center"
+        />
+        <h1 className="mt-8 text-[28px] font-semibold leading-8 text-content">
+          Пригласите участника
+        </h1>
+        <p className="mt-2 text-sm leading-4 text-content-secondary">
+          Укажите электронную почту и выберите роль — просмотр или
+          редактирование. Мы отправим приглашение в ваш объект
+        </p>
+
+        <div className="mt-8">
+          <TextField
+            variant="titleIn"
+            title="Электронная почта"
+            type="email"
+            autoComplete="email"
+            value={email}
+            error={emailError ?? serverError ?? undefined}
+            onClear={() => setEmailValue('')}
+            onChange={(event) => setEmailValue(event.target.value)}
+          />
+        </div>
+
+        <div className="mt-8">
+          <ParticipantRoleSegmented value={role} disabled={invite.isPending} onChange={setRole} />
+        </div>
+
+        <div className="mt-6 flex flex-col">
+          {collapsedRows.map((row) => (
+            <button
+              key={row.kind === 'all' ? 'all' : row.option.id}
+              type="button"
+              onClick={() => setPickerOpen(true)}
+              className={PARTICIPANT_ROW_BASE_CLASS}
+            >
+              {row.kind === 'all' ? (
+                <>
+                  <ObjectAvatarGlyph photoUrl={undefined} isAll />
+                  <span className="flex min-w-0 flex-1 flex-col gap-1">
+                    <span className="truncate text-base font-medium leading-[18px] text-content">
+                      Все {options.length}{' '}
+                      {pluralize(options.length, 'объект', 'объекта', 'объектов')}
+                    </span>
+                    <span className="truncate text-sm leading-4 text-content-secondary">
+                      Поделиться всеми объектами
+                    </span>
+                  </span>
+                </>
+              ) : (
+                <>
+                  <ObjectAvatarGlyph photoUrl={row.option.photoUrl} />
+                  <span className="flex min-w-0 flex-1 flex-col gap-1">
+                    <span className="truncate text-base font-medium leading-[18px] text-content">
+                      {row.option.name}
+                    </span>
+                    <span className="truncate text-sm leading-4 text-content-secondary">
+                      {row.option.address}
+                    </span>
+                  </span>
+                </>
+              )}
+              <SmallArrowDown className="h-6 w-6 shrink-0 text-content-tertiary" />
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <TopNav leading={<TopNavBackButton fallbackHref={ROUTES.participants} />} />
+
+      {/* Ряды макета edge-to-edge живут в центральной колонке канона —
+       * на мобайле это совпадает с макетом, на планшете/ПК ряды не
+       * разъезжаются из-под шапки (канон PageContent 948:47567). */}
+      <PageContent>{content}</PageContent>
+
+      {options.length > 0 && (
+        <StickyBottomBar>
+          <Button
+            className="w-full"
+            disabled={!canSubmit}
+            loading={invite.isPending}
+            onClick={submitInvite}
+          >
+            Пригласить
+          </Button>
+        </StickyBottomBar>
+      )}
+
+      {pickerOpen && (
+        <InviteObjectsPicker
+          options={options}
+          initialSelection={selection}
+          onClose={() => setPickerOpen(false)}
+          onConfirm={(draft) => {
+            setCommittedSelection(draft);
+            setPickerOpen(false);
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+/**
+ * Полноэкранный пикер «Выбрать объект» (макет 2008-46627; канвас
+ * полноэкранного пикера — CalendarDatePicker #500): крестик, tri-state
+ * «Все объекты / Поделиться всеми объектами», разделитель и мультичек
+ * объектов. Черновик живёт, пока пикер смонтирован: «Выбрать» коммитит
+ * выбор целиком, крестик или Esc закрывают без изменений. Коммит пустого
+ * выбора легален — CTA приглашения на экране погашен.
+ */
+function InviteObjectsPicker({
+  options,
+  initialSelection,
+  onClose,
+  onConfirm,
+}: {
+  readonly options: ReadonlyArray<InvitePropertyOption>;
+  readonly initialSelection: ReadonlySet<string>;
+  readonly onClose: () => void;
+  readonly onConfirm: (selection: ReadonlySet<string>) => void;
+}): JSX.Element {
+  const [draft, setDraft] = useState<ReadonlySet<string>>(initialSelection);
+
+  const optionIds = options.map((option) => option.id);
+  const allState = inviteSelectionState(draft, optionIds);
+  // Tri-state домена ('all'|'partial'|'none') → глиф макета (on/mixed/off).
+  const allGlyphState: 'on' | 'off' | 'mixed' =
+    allState === 'all' ? 'on' : allState === 'partial' ? 'mixed' : 'off';
+
+  // Esc закрывает пикер без коммита (канон CalendarDatePicker).
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.defaultPrevented || event.key !== 'Escape') {
+        return;
+      }
+      onClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Выбрать объект"
+      className="fixed inset-0 z-50 flex flex-col bg-surface font-sans"
+    >
+      <TopNav
+        leading={
+          <IconButton icon={<Cancel />} label="Закрыть выбор объектов" onClick={onClose} />
+        }
+      >
+        <TopNavTitle title="Выбрать объект" />
+      </TopNav>
+
+      {/* На десктопе TopNav зафиксирован над экраном (tablet:fixed) —
+       * контент встаёт под ним на высоту шапки (канон CalendarDatePicker
+       * #500); на мобайле шапка в потоке и отступ не нужен. */}
+      <div className="min-h-0 flex-1 overflow-y-auto tablet:mt-[72px]">
+        <div className="mx-auto w-full max-w-[560px] pb-[136px]">
+          <div className="flex flex-col pt-2">
+            <button
+              type="button"
+              role="checkbox"
+              aria-checked={allGlyphState === 'mixed' ? 'mixed' : allGlyphState === 'on'}
+              onClick={() => setDraft(toggleAllInvitedProperties(draft, optionIds))}
+              className={PARTICIPANT_ROW_BASE_CLASS}
+            >
+              <ObjectAvatarGlyph photoUrl={undefined} isAll />
+              <span className="flex min-w-0 flex-1 flex-col gap-1">
+                <span className="truncate text-base font-medium leading-[18px] text-content">
+                  Все объекты
+                </span>
+                <span className="truncate text-sm leading-4 text-content-secondary">
+                  Поделиться всеми объектами
+                </span>
+              </span>
+              <SelectionGlyph state={allGlyphState} />
+            </button>
+            <div aria-hidden className="mx-6 h-px bg-surface-muted" />
+            {options.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                role="checkbox"
+                aria-checked={draft.has(option.id)}
+                onClick={() => setDraft(toggleInvitedProperty(draft, option.id))}
+                className={PARTICIPANT_ROW_BASE_CLASS}
+              >
+                <ObjectAvatarGlyph photoUrl={option.photoUrl} />
+                <span className="flex min-w-0 flex-1 flex-col gap-1">
+                  <span className="truncate text-base font-medium leading-[18px] text-content">
+                    {option.name}
+                  </span>
+                  <span className="truncate text-sm leading-4 text-content-secondary">
+                    {option.address}
+                  </span>
+                </span>
+                <SelectionGlyph state={draft.has(option.id) ? 'on' : 'off'} />
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <StickyBottomBar>
+        <Button className="w-full" onClick={() => onConfirm(draft)}>
+          Выбрать
+        </Button>
+      </StickyBottomBar>
+    </div>
+  );
+}

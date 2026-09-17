@@ -75,3 +75,29 @@ export function ParticipantInviteSkeleton(): JSX.Element {
     </div>
   );
 }
+
+/** Скелетон экрана «Пригласите участника» (#699, паритет — §7 DESIGN.md):
+ * иллюстрация 96 — заголовок 32 — описание 16×2 — поле 56 — сегмент 44 —
+ * строка выбора 68. */
+export function ParticipantsInviteSkeleton(): JSX.Element {
+  return (
+    <div aria-hidden className="flex flex-col pt-4">
+      <Skeleton className="h-24 w-24 self-center rounded-pill" />
+      <Skeleton className="mt-8 h-8 w-64" />
+      <span className="mt-4 flex flex-col gap-2">
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-4/5" />
+      </span>
+      <Skeleton className="mt-8 h-14 w-full rounded-button" />
+      <Skeleton className="mt-8 h-11 w-full rounded-2xl" />
+      <span className="mt-6 flex w-full items-center gap-3 py-3">
+        <Skeleton className="h-11 w-11 shrink-0 rounded-pill" />
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <Skeleton className="h-[18px] w-2/5" />
+          <Skeleton className="h-4 w-3/5" />
+        </span>
+        <Skeleton className="h-6 w-6 shrink-0" />
+      </span>
+    </div>
+  );
+}

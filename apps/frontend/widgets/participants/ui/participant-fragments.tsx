@@ -1,7 +1,7 @@
 'use client';
 
 import type { JSX } from 'react';
-import { BoldHome, BoldObjects } from '@/shared/assets/icons';
+import { BoldHome, BoldObjects, CheckBoxFalse, CheckBoxTrue, Minus } from '@/shared/assets/icons';
 
 /** Базовый класс кликабельного ряда списков участника (Row Button
  * 936:39348): общий для страницы участника, экрана прав и мультичека
@@ -43,5 +43,33 @@ export function ParticipantNotFound(): JSX.Element {
     <p className="pt-16 text-center text-base leading-[18px] text-content-secondary">
       Участник не найден
     </p>
+  );
+}
+
+/** Пикторальный Selection Button (Figma 1031:21053; канон-иконки
+ * CheckBoxTrue/False — решение владельца 07.09, вне канон-набора):
+ * «mixed» («Все объекты» — выбрана часть, 1858:105670) — синий квадрат
+ * радиусом 8 с белым Icon/R/Minus 16. Ряд несёт role="checkbox" —
+ * глиф только рисует состояние (прецедент селектов задач/контактов).
+ * Общий для мультичеков приглашений #698 и #699. */
+export function SelectionGlyph({
+  state,
+}: {
+  readonly state: 'on' | 'off' | 'mixed';
+}): JSX.Element {
+  if (state === 'mixed') {
+    return (
+      <span
+        aria-hidden
+        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-primary"
+      >
+        <Minus className="h-4 w-4 text-white" />
+      </span>
+    );
+  }
+  return state === 'on' ? (
+    <CheckBoxTrue className="h-6 w-6 shrink-0" aria-hidden />
+  ) : (
+    <CheckBoxFalse className="h-6 w-6 shrink-0" aria-hidden />
   );
 }

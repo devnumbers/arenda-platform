@@ -65,7 +65,11 @@ test('цели карточек хаба — живые маршруты-кар�
   await expect(header.getByText('Объекты пользователей')).toBeVisible();
 
   await page.goto('/participants/invite');
-  await expect(header.getByText('Пригласить участника')).toBeVisible();
+  // Живой экран #699: по макету (2008-46375) заголовок в контенте, шапка —
+  // только «Назад».
+  await expect(
+    page.getByRole('heading', { name: 'Пригласите участника' }),
+  ).toBeVisible();
 });
 
 test('вход из профиля: строка «Участники» ведёт на хаб', async ({ page, seededUser }) => {
