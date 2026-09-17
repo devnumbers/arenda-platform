@@ -1099,6 +1099,31 @@ func TestResendEmailCode_BudgetExhaustedReturns429(t *testing.T) {
 	}
 }
 
+// TestResendEmailCode_UserWithoutEmailReturns409 proves the no-email case
+// (#720 Q9) keeps its pinned text on the resend endpoint. The mapping is
+// defensive: a user without an email never holds a live grant (the grant
+// seam refuses first — see the service test), the endpoint still promises
+// the 409 contract.
+func TestResendEmailCode_UserWithoutEmailReturns409(t *testing.T) {
+	t.Parallel()
+	emailChange := &fakeEmailChanger{
+		resendNewEmailCode: func(context.Context, uuid.UUID, string) error {
+			return application.ErrEmailDoesNotMatch
+		},
+	}
+	h := newHandlersWithEmailChange(emailChange, nil, nil, nil)
+
+	r := authedRequest(t, http.MethodPost, "/me/email/resend-code", `{"grant":"grant-token"}`, uuid.Must(uuid.NewV7()))
+	rr := doHandler(t, h.ResendEmailCode, r)
+
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "У аккаунта нет электронной почты") {
+		t.Fatalf("body = %s, want the no-email detail", rr.Body.String())
+	}
+}
+
 func TestChangeEmail_SuccessReturnsMe(t *testing.T) {
 	t.Parallel()
 	userID := uuid.Must(uuid.NewV7())

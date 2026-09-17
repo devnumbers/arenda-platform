@@ -47,30 +47,34 @@ export function useCodeStep({ isSubmitAttempted, onAttemptReset }: UseCodeStepOp
   const [deadline, setDeadline] = useState<number | null>(null);
   const remainingSeconds = useCountdown(deadline);
 
-  const handleChange = useCallback((event: ChangeEvent<HTMLInputElement>): void => {
-    setValue(loginCodeFromInput(event.currentTarget.value));
-    setInlineError(null);
-  }, []);
-
-  const clear = useCallback((): void => {
+  const resetField = (): void => {
     setValue('');
     setInlineError(null);
     onAttemptReset();
-  }, [onAttemptReset]);
+  };
 
+  // Единственная мемоизация хука (CODING_STANDARDS: ручная мемоизация — не
+  // дефолт): restartCooldown — зависимость маунт-эффекта email-флоу, ему
+  // нужна стабильная идентичность; остальные обработчики — события полей.
   const restartCooldown = useCallback((): void => {
     setDeadline(Date.now() + RESEND_COOLDOWN_MS);
   }, []);
 
-  const rearm = useCallback((): void => {
-    setValue('');
-    setInlineError(null);
-    setDeadline(Date.now() + RESEND_COOLDOWN_MS);
-    onAttemptReset();
-  }, [onAttemptReset]);
-
-  const routeVerifyError = useCallback(
-    (error: ApiError, toastScenario: (error: ApiError) => void): void => {
+  return {
+    value,
+    error: codeFieldError(isSubmitAttempted, value, inlineError),
+    remainingSeconds,
+    handleChange: (event: ChangeEvent<HTMLInputElement>): void => {
+      setValue(loginCodeFromInput(event.currentTarget.value));
+      setInlineError(null);
+    },
+    clear: resetField,
+    restartCooldown,
+    rearm: (): void => {
+      resetField();
+      restartCooldown();
+    },
+    routeVerifyError: (error: ApiError, toastScenario: (error: ApiError) => void): void => {
       const inline = invalidCodeDetail(error);
       if (inline !== null) {
         setInlineError(inline);
@@ -78,17 +82,5 @@ export function useCodeStep({ isSubmitAttempted, onAttemptReset }: UseCodeStepOp
       }
       toastScenario(error);
     },
-    [],
-  );
-
-  return {
-    value,
-    error: codeFieldError(isSubmitAttempted, value, inlineError),
-    remainingSeconds,
-    handleChange,
-    clear,
-    restartCooldown,
-    rearm,
-    routeVerifyError,
   };
 }

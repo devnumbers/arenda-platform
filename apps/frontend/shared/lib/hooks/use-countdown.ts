@@ -3,6 +3,9 @@
 import { useCallback, useSyncExternalStore } from 'react';
 import { remainingSecondsUntil } from '@/shared/lib/countdown';
 
+/** Секунда наблюдения, квантованная вверх: стабильна внутри секунды. */
+const getSecond = (): number => Math.ceil(Date.now() / 1000);
+
 /** Тикающий остаток секунд до дедлайна (epoch ms) для подписи-таймера
  * resend-плитки: снимок — текущая секунда, квантованная вверх (снимок
  * стабилен внутри секунды, перерисовка — ровно при её смене; округление
@@ -10,9 +13,6 @@ import { remainingSecondsUntil } from '@/shared/lib/countdown';
  * Значение всегда свежее, без «застывшего» now между тиками — рестарт
  * дедлайна перерисовывает подпись сразу. Дедлайна нет — подписки и тиков
  * нет (ленивая подписка). На сервере времени нет — 0. */
-/** Секунда наблюдения, квантованная вверх: стабильна внутри секунды. */
-const getSecond = (): number => Math.ceil(Date.now() / 1000);
-
 export function useCountdown(deadlineMs: number | null): number {
   const subscribe = useCallback(
     (onStoreChange: () => void): (() => void) => {

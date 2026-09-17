@@ -967,6 +967,28 @@ func TestEmailChangeService_ResendNewEmailCode(t *testing.T) {
 			t.Fatalf("error = %v, want ErrNotFound", err)
 		}
 	})
+
+	t.Run("user without email never holds a live grant — the grant seam refuses first", func(t *testing.T) {
+		t.Parallel()
+		h := newEmailChangeHarness()
+		phone := mustPhone(t, "+79160000406")
+		user, err := domain.NewOwner(phone)
+		if err != nil {
+			t.Fatalf("create user: %v", err)
+		}
+		h.users.byPhone[phone.String()] = user
+
+		// A user without an email cannot pass step 1, so no live grant can
+		// exist: the grant seam answers before the email seam ever runs —
+		// the handler-side no-email mapping (#720 Q9) stays defensive.
+		err = h.svc.ResendNewEmailCode(t.Context(), user.ID, "grant")
+		if !errors.Is(err, ErrEmailChangeGrantInvalid) {
+			t.Fatalf("error = %v, want ErrEmailChangeGrantInvalid", err)
+		}
+		if len(h.sender.sent) != 0 {
+			t.Fatalf("sender calls = %d, want 0", len(h.sender.sent))
+		}
+	})
 }
 
 func TestEmailChangeService_ChangeEmail(t *testing.T) {

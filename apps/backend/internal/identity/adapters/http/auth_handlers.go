@@ -535,8 +535,8 @@ const detailEmailTakenForChange = "Эта электронная почта уж
 
 // writeEmailChangeError maps the email-change-specific errors ahead of the
 // shared identity mapping: these texts are pinned by the grilling decisions
-// (#720-4, #720-2) and differ from the login-flow fixtures. Returns false when
-// err is not one of them.
+// (#720-4, #720-2, #720 Q9) and differ from the login-flow fixtures. Returns
+// false when err is not one of them.
 func writeEmailChangeError(w http.ResponseWriter, r *http.Request, err error) bool {
 	switch {
 	case errors.Is(err, application.ErrEmailUnchanged):
@@ -545,6 +545,9 @@ func writeEmailChangeError(w http.ResponseWriter, r *http.Request, err error) bo
 	case errors.Is(err, application.ErrEmailAlreadyTaken):
 		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
 			httpsupport.Problem(r.Context(), "Conflict", detailEmailTakenForChange))
+	case errors.Is(err, application.ErrEmailDoesNotMatch):
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
+			httpsupport.Problem(r.Context(), "Conflict", "У аккаунта нет электронной почты"))
 	case errors.Is(err, application.ErrEmailChangeGrantInvalid):
 		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
 			httpsupport.Problem(r.Context(), "Conflict", "Подтверждение истекло, начните смену почты заново"))
@@ -573,11 +576,7 @@ func (h *AuthHandlers) SendEmailChangeCode(w http.ResponseWriter, r *http.Reques
 	// this request is covered by the domain's 1-minute throttle and the global
 	// IP limiter.
 	if err := h.emailChange.SendCurrentEmailCode(r.Context(), userID); err != nil {
-		// The flow-specific case runs before the shared mapping, which would
-		// answer with the login-flow fixture text.
-		if errors.Is(err, application.ErrEmailDoesNotMatch) {
-			httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
-				httpsupport.Problem(r.Context(), "Conflict", "У аккаунта нет электронной почты"))
+		if writeEmailChangeError(w, r, err) {
 			return
 		}
 		if writeSharedIdentityError(w, r, err, "") {
@@ -656,11 +655,6 @@ func (h *AuthHandlers) ResendEmailCode(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.emailChange.ResendNewEmailCode(r.Context(), userID, body.Grant); err != nil {
 		if writeEmailChangeError(w, r, err) {
-			return
-		}
-		if errors.Is(err, application.ErrEmailDoesNotMatch) {
-			httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
-				httpsupport.Problem(r.Context(), "Conflict", "У аккаунта нет электронной почты"))
 			return
 		}
 		if writeSharedIdentityError(w, r, err, "") {
