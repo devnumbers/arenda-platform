@@ -23,10 +23,13 @@ import {
 // user (burst 3, RATE_LIMIT_EMAIL_CHANGE_SEND_PER_HOUR) held in the backend
 // process memory. That is safe only because the e2e harness starts a fresh
 // backend per run; a long-lived backend process would 429 the next runs.
+// The resend-tile test below is fully route-mocked (send-code,
+// confirm-current, resend-code) and spends none of that budget.
 const NEW_EMAIL = 'e2e-email-change@example.com';
 
 const CODE_FIELD = { name: 'Код', exact: true };
 const CONTINUE_BUTTON = { name: 'Продолжить' };
+const RESEND_BUTTON = { name: 'Отправить новый код' };
 
 /**
  * Enters the flow from the account screen and waits for the auto-sent code
@@ -43,7 +46,7 @@ async function openEmailChangeFlow(
   const codesBefore = await countCodesSentTo(user, currentEmail);
   await page.getByRole('link', { name: currentEmail }).click();
   await expect(page.getByRole('heading', { name: 'Подтвердите текущую почту' })).toBeVisible();
-  await expect(page.getByText(`на почту ${currentEmail}`, { exact: false })).toBeVisible();
+  await expect(page.getByText(`на вашу почту ${currentEmail}`, { exact: false })).toBeVisible();
   return extractCodeSentTo(user, currentEmail, codesBefore);
 }
 
@@ -79,20 +82,29 @@ test('смена почты двойным кодом и возврат адре
   await page.getByRole('button', CONTINUE_BUTTON).click();
 
   await expect(page.getByRole('heading', { name: 'Подтвердите новую почту' })).toBeVisible();
-  await expect(page.getByText(`на почту ${NEW_EMAIL}`, { exact: false })).toBeVisible();
+  await expect(page.getByText(`на вашу почту ${NEW_EMAIL}`, { exact: false })).toBeVisible();
 
-  // One wrong attempt first: the backend detail surfaces as a toast
-  // («Неверный код»); a single failure is far below the 15-failure
-  // attempt-window block.
+  // The resend tile waits out the 60s server throttling (#733, mockup
+  // 1869-68137): disabled with the countdown caption while the timer runs.
+  const resendButton = page.getByRole('button', RESEND_BUTTON);
+  await expect(resendButton).toBeDisabled();
+  await expect(page.getByText(/Запросить новый код можно через 00:5/)).toBeVisible();
+
+  // One wrong attempt: the 401 «Неверный код» surfaces INLINE in the code
+  // field (mockup 2343-51004), not as a toast; typing replaces it. A single
+  // failure is far below the 15-failure attempt-window block.
   const newCode = await extractCodeSentTo(seededUser, NEW_EMAIL);
   const wrongCode = newCode === '000000' ? '111111' : '000000';
   await submitCode(page, wrongCode);
   await expect(page.getByText('Неверный код', { exact: true })).toBeVisible();
+  await expect(page.getByText('Не удалось изменить электронную почту')).toHaveCount(0);
   await captureScreen(page, test.info(), '04-code-new-wrong');
 
-  await submitCode(page, newCode);
+  await page.getByRole('textbox', CODE_FIELD).fill(newCode);
+  await expect(page.getByText('Неверный код', { exact: true })).toBeHidden();
+  await page.getByRole('button', CONTINUE_BUTTON).click();
   await expect(
-    page.getByRole('heading', { name: `Электронная почта изменена на ${NEW_EMAIL}` }),
+    page.getByRole('heading', { name: `Новая электронная почта ${NEW_EMAIL}` }),
   ).toBeVisible();
   await captureScreen(page, test.info(), '05-success');
 
@@ -112,10 +124,53 @@ test('смена почты двойным кодом и возврат адре
   const revertNewCode = await extractCodeSentTo(seededUser, seededUser.email, revertCodesBefore);
   await submitCode(page, revertNewCode);
   await expect(
-    page.getByRole('heading', { name: `Электронная почта изменена на ${seededUser.email}` }),
+    page.getByRole('heading', { name: `Новая электронная почта ${seededUser.email}` }),
   ).toBeVisible();
   await captureScreen(page, test.info(), '06-reverted');
 
   await page.getByRole('button', { name: 'Хорошо' }).click();
   await expect(page.getByRole('link', { name: seededUser.email })).toBeVisible();
+});
+
+// The resend tile of the «Подтвердите новую почту» step (#733) on virtual
+// time: every identity call is route-mocked, so the backend budget is
+// untouched, and page.clock freezes Date.now — the countdown deterministically
+// shows «00:59» right after the send and unlocks only after a clock jump.
+// Real backend semantics of resend-code live in the backend suite (#732).
+test('resend-плитка шага новой почты: таймер, разблокировка, очистка поля', async ({ page, seededUser }) => {
+  let resendCalls = 0;
+  await page.route('**/api/me/email/send-code', (route) => route.fulfill({ status: 204 }));
+  await page.route('**/api/me/email/confirm-current', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ grant: 'e2e-grant-token' }),
+    }));
+  await page.route('**/api/me/email/resend-code', (route) => {
+    resendCalls += 1;
+    return route.fulfill({ status: 204 });
+  });
+  await page.clock.install();
+  await openCabinetWithSeededSession(page, seededUser);
+  await page.goto('/profile/account/email');
+
+  await expect(page.getByRole('heading', { name: 'Подтвердите текущую почту' })).toBeVisible();
+  await submitCode(page, '000000');
+  await page.getByRole('textbox', { name: 'Электронная почта' }).fill(NEW_EMAIL);
+  await page.getByRole('button', CONTINUE_BUTTON).click();
+
+  await expect(page.getByRole('heading', { name: 'Подтвердите новую почту' })).toBeVisible();
+  const resendButton = page.getByRole('button', RESEND_BUTTON);
+  await expect(resendButton).toBeDisabled();
+  await expect(page.getByText('Запросить новый код можно через 00:59')).toBeVisible();
+
+  await page.clock.fastForward(62_000);
+  await expect(resendButton).toBeEnabled();
+  await expect(page.getByText(/Запросить новый код можно через/)).toHaveCount(0);
+
+  await resendButton.click();
+  await expect(resendButton).toBeDisabled();
+  await expect(page.getByText('Запросить новый код можно через 00:59')).toBeVisible();
+  await expect(page.getByRole('textbox', CODE_FIELD)).toHaveValue('');
+  expect(resendCalls).toBe(1);
 });

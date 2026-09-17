@@ -102,10 +102,11 @@ type PhoneChanger interface {
 
 // EmailChanger handles confirmed email change for authenticated users
 // (issue #721): a code to the current address, then — against the grant — a
-// code to the new one and the change itself.
+// code to the new one, a resend of that code (#732), and the change itself.
 type EmailChanger interface {
 	SendCurrentEmailCode(ctx context.Context, userID uuid.UUID) error
 	ConfirmCurrentEmail(ctx context.Context, userID uuid.UUID, code string, newEmail domain.Email) (string, error)
+	ResendNewEmailCode(ctx context.Context, userID uuid.UUID, grant string) error
 	ChangeEmail(ctx context.Context, userID uuid.UUID, code, grant string) (domain.User, error)
 }
 
@@ -534,8 +535,8 @@ const detailEmailTakenForChange = "Эта электронная почта уж
 
 // writeEmailChangeError maps the email-change-specific errors ahead of the
 // shared identity mapping: these texts are pinned by the grilling decisions
-// (#720-4, #720-2) and differ from the login-flow fixtures. Returns false when
-// err is not one of them.
+// (#720-4, #720-2, #720 Q9) and differ from the login-flow fixtures. Returns
+// false when err is not one of them.
 func writeEmailChangeError(w http.ResponseWriter, r *http.Request, err error) bool {
 	switch {
 	case errors.Is(err, application.ErrEmailUnchanged):
@@ -544,6 +545,9 @@ func writeEmailChangeError(w http.ResponseWriter, r *http.Request, err error) bo
 	case errors.Is(err, application.ErrEmailAlreadyTaken):
 		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
 			httpsupport.Problem(r.Context(), "Conflict", detailEmailTakenForChange))
+	case errors.Is(err, application.ErrEmailDoesNotMatch):
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
+			httpsupport.Problem(r.Context(), "Conflict", "У аккаунта нет электронной почты"))
 	case errors.Is(err, application.ErrEmailChangeGrantInvalid):
 		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
 			httpsupport.Problem(r.Context(), "Conflict", "Подтверждение истекло, начните смену почты заново"))
@@ -572,11 +576,7 @@ func (h *AuthHandlers) SendEmailChangeCode(w http.ResponseWriter, r *http.Reques
 	// this request is covered by the domain's 1-minute throttle and the global
 	// IP limiter.
 	if err := h.emailChange.SendCurrentEmailCode(r.Context(), userID); err != nil {
-		// The flow-specific case runs before the shared mapping, which would
-		// answer with the login-flow fixture text.
-		if errors.Is(err, application.ErrEmailDoesNotMatch) {
-			httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
-				httpsupport.Problem(r.Context(), "Conflict", "У аккаунта нет электронной почты"))
+		if writeEmailChangeError(w, r, err) {
 			return
 		}
 		if writeSharedIdentityError(w, r, err, "") {
@@ -630,6 +630,41 @@ func (h *AuthHandlers) ConfirmCurrentEmail(w http.ResponseWriter, r *http.Reques
 	}
 
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.EmailChangeGrantResponse{Grant: grant})
+}
+
+// ResendEmailCode implements POST /me/email/resend-code — a fresh code for the
+// pending new address, anchored on the still-live grant (#732): the step-1
+// code is burned by ConfirmCurrentEmail, so the resend cannot re-run step 2
+// and must ride the grant instead. The budget (#720-3) and the send throttle
+// are spent inside the service, on the actual re-issuance.
+func (h *AuthHandlers) ResendEmailCode(w http.ResponseWriter, r *http.Request) {
+	userID, ok := httpsupport.UserIDFromContext(r.Context())
+	if !ok {
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	var body openapi.ResendEmailCodeRequest
+	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
+		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		return
+	}
+
+	if err := h.emailChange.ResendNewEmailCode(r.Context(), userID, body.Grant); err != nil {
+		if writeEmailChangeError(w, r, err) {
+			return
+		}
+		if writeSharedIdentityError(w, r, err, "") {
+			return
+		}
+		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // ChangeEmail implements POST /me/email/change — step 3: verify the code from

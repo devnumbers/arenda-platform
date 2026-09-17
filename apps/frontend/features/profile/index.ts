@@ -4,5 +4,6 @@ export {
   useConfirmCurrentEmail,
   useChangeEmail,
   useEmailChangeSendCode,
+  useResendEmailCode,
   useUpdateMe,
 } from './api/hooks';

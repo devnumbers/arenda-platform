@@ -45,6 +45,11 @@ func (s *EmailChangeService) hashGrantToken(token string) string {
 //     address as verified, consumes the grant, and audits — sessions are
 //     untouched (the email is a delivery channel, not the login).
 //
+// ResendNewEmailCode (#732) re-issues the step-2 code against the still-live
+// grant: ConfirmCurrentEmail burned the step-1 code, so the grant is the
+// resend's anchor — same prechecks, budget and send throttle; the grant
+// itself survives for step 3.
+//
 // The grant is server-side state: the client sees a one-time plaintext token,
 // the store keeps only its hash; a user holds at most one live grant.
 type EmailChangeService struct {
@@ -271,6 +276,58 @@ func (s *EmailChangeService) ChangeEmail(
 		return domain.User{}, err
 	}
 	return updated, nil
+}
+
+// ResendNewEmailCode re-issues and re-delivers the code for the pending new
+// address (issue #732, resend button on the step-2 screen). The grant is the
+// anchor: the step-1 code was burned by ConfirmCurrentEmail, so what proves
+// the passed step 1 — and pins the delivery address — is the still-live grant.
+//
+// One runInTx covers lock user → check grant → re-check the address is still
+// free (it may have been snatched while the user waited; failing before the
+// budget means a dead flow costs nothing) → spend the new-address budget
+// (every delivery counts, #720-3) → issue through IssueInTx, whose send
+// throttle rejects a re-issuance within a minute of the live code. The stale
+// step-2 code is deleted by that same issuance path, so only the fresh code
+// verifies at step 3. The grant itself survives — step 3 consumes it. No
+// audit: resend changes no state.
+func (s *EmailChangeService) ResendNewEmailCode(ctx context.Context, userID uuid.UUID, grantToken string) error {
+	var phone domain.Phone
+	var issued domain.LoginCode
+	var plaintextCode string
+
+	err := s.runInTx(ctx, func(stores *txStores) error {
+		user, err := stores.users.GetByIDForUpdate(ctx, userID)
+		if err != nil {
+			return fmt.Errorf("get user: %w", err)
+		}
+		phone = user.Phone
+
+		grant, err := s.liveGrant(ctx, stores, userID, grantToken)
+		if err != nil {
+			return err
+		}
+
+		currentEmail, err := userEmail(user)
+		if err != nil {
+			return err
+		}
+		if err := s.checkNewEmailFree(ctx, stores, user.ID, currentEmail, grant.Email); err != nil {
+			return err
+		}
+
+		if s.sendBudget != nil && !s.sendBudget(user.ID) {
+			return ErrEmailChangeBudgetExhausted
+		}
+
+		issued, plaintextCode, err = s.loginCodes.IssueInTx(ctx, stores, phone, grant.Email, domain.LoginCodePurposeEmailChange, &user.ID)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+
+	return s.loginCodes.Deliver(ctx, phone, issued.Email, domain.LoginCodePurposeEmailChange, issued, plaintextCode)
 }
 
 // checkNewEmailFree guards the address switch: the new email must differ from

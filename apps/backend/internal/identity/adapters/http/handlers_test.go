@@ -85,9 +85,13 @@ func (f *fakePhoneChanger) ChangePhone(ctx context.Context, userID uuid.UUID, ph
 	return domain.User{}, errors.New("unexpected ChangePhone call")
 }
 
+// grantTokenFixture is the grant plaintext the fakes and request bodies share.
+const grantTokenFixture = "grant-token"
+
 type fakeEmailChanger struct {
 	sendCurrentEmailCode func(ctx context.Context, userID uuid.UUID) error
 	confirmCurrentEmail  func(ctx context.Context, userID uuid.UUID, code string, newEmail domain.Email) (string, error)
+	resendNewEmailCode   func(ctx context.Context, userID uuid.UUID, grant string) error
 	changeEmail          func(ctx context.Context, userID uuid.UUID, code, grant string) (domain.User, error)
 }
 
@@ -102,7 +106,14 @@ func (f *fakeEmailChanger) ConfirmCurrentEmail(ctx context.Context, userID uuid.
 	if f.confirmCurrentEmail != nil {
 		return f.confirmCurrentEmail(ctx, userID, code, newEmail)
 	}
-	return "grant-token", nil
+	return grantTokenFixture, nil
+}
+
+func (f *fakeEmailChanger) ResendNewEmailCode(ctx context.Context, userID uuid.UUID, grant string) error {
+	if f.resendNewEmailCode != nil {
+		return f.resendNewEmailCode(ctx, userID, grant)
+	}
+	return nil
 }
 
 func (f *fakeEmailChanger) ChangeEmail(ctx context.Context, userID uuid.UUID, code, grant string) (domain.User, error) {
@@ -986,6 +997,133 @@ func TestConfirmCurrentEmail_BudgetExhaustedReturns429(t *testing.T) {
 	}
 }
 
+// ResendEmailCode (POST /me/email/resend-code, #732).
+
+// TestResendEmailCode_SuccessPassesGrantAndReturns204 proves the resend
+// delivers the grant token to the service and answers 204.
+func TestResendEmailCode_SuccessPassesGrantAndReturns204(t *testing.T) {
+	t.Parallel()
+	userID := uuid.Must(uuid.NewV7())
+	var gotGrant string
+	emailChange := &fakeEmailChanger{
+		resendNewEmailCode: func(_ context.Context, _ uuid.UUID, grant string) error {
+			gotGrant = grant
+			return nil
+		},
+	}
+	h := newHandlersWithEmailChange(emailChange, nil, nil, nil)
+
+	r := authedRequest(t, http.MethodPost, "/me/email/resend-code", `{"grant":"grant-token"}`, userID)
+	rr := doHandler(t, h.ResendEmailCode, r)
+
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204: %s", rr.Code, rr.Body.String())
+	}
+	if gotGrant != grantTokenFixture {
+		t.Fatalf("grant = %q, want passed through", gotGrant)
+	}
+}
+
+func TestResendEmailCode_BadBodyReturns400(t *testing.T) {
+	t.Parallel()
+	h := newHandlersWithEmailChange(&fakeEmailChanger{}, nil, nil, nil)
+
+	r := authedRequest(t, http.MethodPost, "/me/email/resend-code", `{"grant"`, uuid.Must(uuid.NewV7()))
+	rr := doHandler(t, h.ResendEmailCode, r)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rr.Code)
+	}
+}
+
+// TestResendEmailCode_ExpiredGrantReturns409 proves the restart decision text
+// (#720-2) is served by the resend endpoint too.
+func TestResendEmailCode_ExpiredGrantReturns409(t *testing.T) {
+	t.Parallel()
+	emailChange := &fakeEmailChanger{
+		resendNewEmailCode: func(context.Context, uuid.UUID, string) error {
+			return application.ErrEmailChangeGrantInvalid
+		},
+	}
+	h := newHandlersWithEmailChange(emailChange, nil, nil, nil)
+
+	r := authedRequest(t, http.MethodPost, "/me/email/resend-code", `{"grant":"stale"}`, uuid.Must(uuid.NewV7()))
+	rr := doHandler(t, h.ResendEmailCode, r)
+
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "Подтверждение истекло, начните смену почты заново") {
+		t.Fatalf("body = %s, want the restart text (#720-2)", rr.Body.String())
+	}
+}
+
+// TestResendEmailCode_ThrottledReturns429 proves the 1-minute send throttle
+// surfaces as 429 with its dedicated text — the resend button's timer guard.
+func TestResendEmailCode_ThrottledReturns429(t *testing.T) {
+	t.Parallel()
+	emailChange := &fakeEmailChanger{
+		resendNewEmailCode: func(context.Context, uuid.UUID, string) error {
+			return application.ErrCodeSentTooRecently
+		},
+	}
+	h := newHandlersWithEmailChange(emailChange, nil, nil, nil)
+
+	r := authedRequest(t, http.MethodPost, "/me/email/resend-code", `{"grant":"grant-token"}`, uuid.Must(uuid.NewV7()))
+	rr := doHandler(t, h.ResendEmailCode, r)
+
+	if rr.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want 429", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "Код отправлен слишком недавно") {
+		t.Fatalf("body = %s, want the throttle text", rr.Body.String())
+	}
+}
+
+// TestResendEmailCode_BudgetExhaustedReturns429 proves the 5/hour budget on
+// new-address sends (#720-3) covers resends as well.
+func TestResendEmailCode_BudgetExhaustedReturns429(t *testing.T) {
+	t.Parallel()
+	emailChange := &fakeEmailChanger{
+		resendNewEmailCode: func(context.Context, uuid.UUID, string) error {
+			return application.ErrEmailChangeBudgetExhausted
+		},
+	}
+	h := newHandlersWithEmailChange(emailChange, nil, nil, nil)
+
+	r := authedRequest(t, http.MethodPost, "/me/email/resend-code", `{"grant":"grant-token"}`, uuid.Must(uuid.NewV7()))
+	rr := doHandler(t, h.ResendEmailCode, r)
+
+	if rr.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want 429", rr.Code)
+	}
+}
+
+// TestResendEmailCode_UserWithoutEmailReturns409 proves the no-email case
+// (#720 Q9) keeps its pinned text on the resend endpoint. The mapping is
+// defensive: a user without an email never holds a live grant (the grant
+// seam refuses first — see the service test), the endpoint still promises
+// the 409 contract.
+func TestResendEmailCode_UserWithoutEmailReturns409(t *testing.T) {
+	t.Parallel()
+	emailChange := &fakeEmailChanger{
+		resendNewEmailCode: func(context.Context, uuid.UUID, string) error {
+			return application.ErrEmailDoesNotMatch
+		},
+	}
+	h := newHandlersWithEmailChange(emailChange, nil, nil, nil)
+
+	r := authedRequest(t, http.MethodPost, "/me/email/resend-code", `{"grant":"grant-token"}`, uuid.Must(uuid.NewV7()))
+	rr := doHandler(t, h.ResendEmailCode, r)
+
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "У аккаунта нет электронной почты") {
+		t.Fatalf("body = %s, want the no-email detail", rr.Body.String())
+	}
+}
+
 func TestChangeEmail_SuccessReturnsMe(t *testing.T) {
 	t.Parallel()
 	userID := uuid.Must(uuid.NewV7())
@@ -1006,7 +1144,7 @@ func TestChangeEmail_SuccessReturnsMe(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200: %s", rr.Code, rr.Body.String())
 	}
-	if gotCode != "123456" || gotGrant != "grant-token" {
+	if gotCode != "123456" || gotGrant != grantTokenFixture {
 		t.Fatalf("service args = (%q, %q), want code and grant passed through", gotCode, gotGrant)
 	}
 	if !strings.Contains(rr.Body.String(), `"email":"new@example.com"`) {
