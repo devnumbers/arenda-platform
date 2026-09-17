@@ -214,6 +214,7 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
 
   const isCodeCurrentStep = step === 'code-current';
   const isNewEmailStep = step === 'new-email';
+  const isNewCodeStep = step === 'code-new';
   const formId = `email-change-${step}`;
 
   return (
@@ -282,7 +283,7 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
         </PageContent>
       )}
 
-      {step === 'code-new' && (
+      {isNewCodeStep && (
         <PageContent className="px-6">
           <form id={formId} onSubmit={handleNewCodeSubmit} className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
@@ -334,7 +335,7 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
             Продолжить
           </Button>
         )}
-        {step === 'code-new' && (
+        {isNewCodeStep && (
           <Button
             type="submit"
             form={formId}

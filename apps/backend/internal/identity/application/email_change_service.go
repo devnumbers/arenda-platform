@@ -23,6 +23,13 @@ const grantTokenSpace = 32
 // the "login_code:" prefix LoginCodeService.hashCode uses for codes.
 const grantTokenPrefix = "email_change_grant:"
 
+// hashGrantToken is the single hashing point for grant tokens: the hash a
+// grant is created with and the hash a live-grant check compares against
+// must stay byte-identical, or every step-3 verification silently fails.
+func (s *EmailChangeService) hashGrantToken(token string) string {
+	return s.hasher.HashToken(grantTokenPrefix + token)
+}
+
 // EmailChangeService handles confirmed email change for authenticated users
 // (issue #721). It reuses LoginCodeService with purpose = email_change instead
 // of duplicating the login-code flow, mirroring PhoneChangeService.
@@ -303,7 +310,7 @@ func (s *EmailChangeService) replaceGrant(
 	if err != nil {
 		return "", err
 	}
-	grant := domain.NewEmailChangeGrant(userID, newEmail, s.hasher.HashToken(grantTokenPrefix+token), s.clock.Now())
+	grant := domain.NewEmailChangeGrant(userID, newEmail, s.hashGrantToken(token), s.clock.Now())
 	if err := stores.grants.DeleteByUserID(ctx, userID); err != nil {
 		return "", fmt.Errorf("clear previous grant: %w", err)
 	}
@@ -329,7 +336,7 @@ func (s *EmailChangeService) liveGrant(
 		}
 		return domain.EmailChangeGrant{}, fmt.Errorf("get grant: %w", err)
 	}
-	if grant.Expired(s.clock.Now()) || grant.TokenHash != s.hasher.HashToken(grantTokenPrefix+grantToken) {
+	if grant.Expired(s.clock.Now()) || grant.TokenHash != s.hashGrantToken(grantToken) {
 		return domain.EmailChangeGrant{}, ErrEmailChangeGrantInvalid
 	}
 	return grant, nil

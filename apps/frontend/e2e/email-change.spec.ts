@@ -17,11 +17,12 @@ import {
 // and swapped back in one test: the suite shares one seeded user, and the
 // other specs expect its original email.
 //
-// Budget note: this spec sends codes to NEW addresses 4 times per run
-// (both legs × 2), and the backend budget on such sends is 5/hour per
-// user held in the backend process memory (RATE_LIMIT_EMAIL_CHANGE_SEND_
-// PER_HOUR). That is safe only because the e2e harness starts a fresh
-// backend per run; a long-lived backend process would 429 the fifth send.
+// Budget note: each leg of the swap sends one code to the address being
+// changed TO — at that moment a "new" address for the user — so a run
+// consumes 2 of the backend's new-address sends. The budget is 5/hour per
+// user (burst 3, RATE_LIMIT_EMAIL_CHANGE_SEND_PER_HOUR) held in the backend
+// process memory. That is safe only because the e2e harness starts a fresh
+// backend per run; a long-lived backend process would 429 the next runs.
 const NEW_EMAIL = 'e2e-email-change@example.com';
 
 const CODE_FIELD = { name: 'Код', exact: true };
