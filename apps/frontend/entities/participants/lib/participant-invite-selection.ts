@@ -22,8 +22,15 @@ export function inviteSelectionState(
   if (selected.size === 0) {
     return 'none';
   }
-  // Ноль опций при пустом выборе — none: «все выбраны из ничего» не бывает.
-  return optionIds.length > 0 && selected.size === optionIds.length ? 'all' : 'partial';
+  return isAllSelected(selected, optionIds) ? 'all' : 'partial';
+}
+
+/** «Выбраны все опции»: ноль опций всем selections не считается. */
+function isAllSelected(
+  selected: ReadonlySet<string>,
+  optionIds: readonly string[],
+): boolean {
+  return optionIds.length > 0 && selected.size === optionIds.length;
 }
 
 /** Тап по «Все объекты»: полный выбор снимает всё, иначе чекает все. */
@@ -31,9 +38,7 @@ export function toggleAllInvitedProperties(
   selected: ReadonlySet<string>,
   optionIds: readonly string[],
 ): ReadonlySet<string> {
-  const isAll =
-    optionIds.length > 0 && selected.size === optionIds.length;
-  return isAll ? new Set() : new Set(optionIds);
+  return isAllSelected(selected, optionIds) ? new Set() : new Set(optionIds);
 }
 
 export function toggleInvitedProperty(
@@ -68,7 +73,7 @@ export function collapsedInviteRows<T extends { readonly id: string }>(
   if (selected.size === 0) {
     return [];
   }
-  if (options.length > 0 && selected.size === options.length) {
+  if (isAllSelected(selected, options.map((option) => option.id))) {
     return [{ kind: 'all' }];
   }
   return options

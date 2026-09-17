@@ -66,6 +66,7 @@ test('пикер «Выбрать объект»: tri-state «Все объек�
 
   const apartmentRow = picker.getByRole('checkbox', { name: /Квартира на Ленина/ });
   const garageRow = picker.getByRole('checkbox', { name: /Гараж на Садовой/ });
+  const studioRow = picker.getByRole('checkbox', { name: /Студия на Полевой/ });
   await expect(apartmentRow).toHaveAttribute('aria-checked', 'true');
   await expect(garageRow).toHaveAttribute('aria-checked', 'true');
 
@@ -80,14 +81,22 @@ test('пикер «Выбрать объект»: tri-state «Все объек�
 
   // Повторное открытие: черновик стартует от коммиченного выбора;
   // «Выбрать» коммитит — свёрнутыми остаются гараж и студия (квартира
-  // снята).
+  // снята). Пустой черновик «Выбрать» не подтверждает (гард тупика:
+  // сводка — единственная точка входа в пикер).
   await page.getByText('Все 3 объекта').click();
   await expect(picker).toBeVisible();
+  await apartmentRow.click();
+  await garageRow.click();
+  await studioRow.click();
+  await expect(allRow).toHaveAttribute('aria-checked', 'false');
+  await expect(picker.getByRole('button', { name: 'Выбрать' })).toBeDisabled();
   await apartmentRow.click();
   await expect(allRow).toHaveAttribute('aria-checked', 'mixed');
   await picker.getByRole('button', { name: 'Выбрать' }).click();
   await expect(picker).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Гараж на Садовой/ })).toBeVisible();
+  // Коммичен один объект — свёрнутая строка «Квартира на Ленина».
+  await expect(page.getByRole('button', { name: /Квартира на Ленина/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Гараж на Садовой/ })).toHaveCount(0);
   await expect(page.getByText('Все 3 объекта')).toHaveCount(0);
 
   // Некорректная почта при непустом поле: клик показывает ошибку, экран

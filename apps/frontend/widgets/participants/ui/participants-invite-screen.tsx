@@ -263,8 +263,9 @@ export function ParticipantsInviteScreen(): JSX.Element {
  * полноэкранного пикера — CalendarDatePicker #500): крестик, tri-state
  * «Все объекты / Поделиться всеми объектами», разделитель и мультичек
  * объектов. Черновик живёт, пока пикер смонтирован: «Выбрать» коммитит
- * выбор целиком, крестик или Esc закрывают без изменений. Коммит пустого
- * выбора легален — CTA приглашения на экране погашен.
+ * выбор целиком, крестик или Esc закрывают без изменений. Пустой черновик
+ * «Выбрать» не подтверждает: свёрнутая сводка — единственная точка входа в
+ * пикер, нулевой коммит оставил бы экран без способа вернуть выбор.
  */
 function InviteObjectsPicker({
   options,
@@ -363,7 +364,11 @@ function InviteObjectsPicker({
       </div>
 
       <StickyBottomBar>
-        <Button className="w-full" onClick={() => onConfirm(draft)}>
+        <Button
+          className="w-full"
+          disabled={draft.size === 0}
+          onClick={() => onConfirm(draft)}
+        >
           Выбрать
         </Button>
       </StickyBottomBar>
