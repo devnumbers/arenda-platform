@@ -27,7 +27,7 @@ WHERE user_id = $1
        OR (created_at, id) < (sqlc.narg('after_created_at'),
                               sqlc.narg('after_id')::uuid))
 ORDER BY created_at DESC, id DESC
-LIMIT CASE WHEN sqlc.arg('page_limit')::int = 0 THEN NULL::bigint
+LIMIT CASE WHEN sqlc.arg('page_limit')::bigint = 0 THEN NULL::bigint
            ELSE sqlc.arg('page_limit')::bigint END;
 
 -- name: CountUnreadNotifications :one

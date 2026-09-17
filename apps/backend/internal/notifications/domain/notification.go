@@ -4,6 +4,7 @@
 package domain
 
 import (
+	"slices"
 	"strings"
 	"time"
 
@@ -48,40 +49,39 @@ const (
 	EventSystemMaintenance            EventType = "system_maintenance"
 )
 
-// IsFeedEvent reports whether the event type belongs to the stored feed
-// catalog. The grace event is the direct path's own and is not a feed row.
-func (e EventType) IsFeedEvent() bool {
-	_, ok := e.FeedCategory()
-	return ok
+// feedCatalog is the single source of the catalog v1 (решение #737): every
+// feed event type with its category and its possible actions. Adding a
+// catalog v2 event is one entry here plus the migration's enum value.
+var feedCatalog = map[EventType]struct {
+	category Category
+	actions  []ActionKind
+}{
+	EventRentalCompleted:              {CategoryRental, []ActionKind{ActionRentalExtend, ActionRentalComplete}},
+	EventPaymentDue:                   {CategoryPaymentsOperations, []ActionKind{ActionOpenPayment}},
+	EventPaymentOverdue:               {CategoryPaymentsOperations, []ActionKind{ActionOpenPayment}},
+	EventTaskOverdue:                  {CategoryTasks, []ActionKind{ActionOpenTask}},
+	EventPropertyInvitation:           {CategorySharedAccess, []ActionKind{ActionOpenProperty}},
+	EventInvitationAccepted:           {CategorySharedAccess, []ActionKind{ActionOpenPropertyMembers}},
+	EventAccessRevoked:                {CategorySharedAccess, nil},
+	EventAccessPaused:                 {CategorySharedAccess, nil},
+	EventAccessResumed:                {CategorySharedAccess, nil},
+	EventMemberLeft:                   {CategorySharedAccess, nil},
+	EventSubscriptionPaymentFailed:    {CategoryTariff, []ActionKind{ActionOpenTariffs}},
+	EventSubscriptionPaymentReminder:  {CategoryTariff, []ActionKind{ActionOpenTariffs}},
+	EventSubscriptionPaymentSucceeded: {CategoryTariff, nil},
+	EventSubscriptionPlanChanged:      {CategoryTariff, []ActionKind{ActionOpenTariffs}},
+	EventSystemMaintenance:            {CategorySystem, nil},
 }
 
 // FeedCategory returns the event type's category per the catalog v1. The
-// second return is false for event types outside the feed catalog.
+// second return is false for event types outside the feed catalog — the
+// grace event among them.
 func (e EventType) FeedCategory() (Category, bool) {
-	switch e {
-	case EventRentalCompleted:
-		return CategoryRental, true
-	case EventPaymentDue, EventPaymentOverdue:
-		return CategoryPaymentsOperations, true
-	case EventTaskOverdue:
-		return CategoryTasks, true
-	case EventPropertyInvitation,
-		EventInvitationAccepted,
-		EventAccessRevoked,
-		EventAccessPaused,
-		EventAccessResumed,
-		EventMemberLeft:
-		return CategorySharedAccess, true
-	case EventSubscriptionPaymentFailed,
-		EventSubscriptionPaymentReminder,
-		EventSubscriptionPaymentSucceeded,
-		EventSubscriptionPlanChanged:
-		return CategoryTariff, true
-	case EventSystemMaintenance:
-		return CategorySystem, true
-	default:
+	entry, ok := feedCatalog[e]
+	if !ok {
 		return "", false
 	}
+	return entry.category, true
 }
 
 // Category is the notification category (Категория уведомлений, решение
@@ -99,34 +99,6 @@ const (
 	CategoryTariff             Category = "tariff"
 	CategorySystem             Category = "system"
 )
-
-// AllCategories lists every category in stable order (the settings matrix
-// order first, the service categories last).
-func AllCategories() []Category {
-	return []Category{
-		CategoryRental,
-		CategoryPaymentsOperations,
-		CategoryTasks,
-		CategorySharedAccess,
-		CategoryTariff,
-		CategorySystem,
-	}
-}
-
-// IsValid reports whether the value is a known category.
-func (c Category) IsValid() bool {
-	switch c {
-	case CategoryRental,
-		CategoryPaymentsOperations,
-		CategoryTasks,
-		CategorySharedAccess,
-		CategoryTariff,
-		CategorySystem:
-		return true
-	default:
-		return false
-	}
-}
 
 // ActionKind is a feed action button (Действие, решение #737): a transition
 // to an entity's screen, never a mutation. Availability is computed at read
@@ -149,24 +121,7 @@ const (
 // What is possible is catalog knowledge; what is available right now is the
 // reading side's call (#743).
 func ActionsForEvent(e EventType) []ActionKind {
-	switch e {
-	case EventRentalCompleted:
-		return []ActionKind{ActionRentalExtend, ActionRentalComplete}
-	case EventPaymentDue, EventPaymentOverdue:
-		return []ActionKind{ActionOpenPayment}
-	case EventTaskOverdue:
-		return []ActionKind{ActionOpenTask}
-	case EventPropertyInvitation:
-		return []ActionKind{ActionOpenProperty}
-	case EventInvitationAccepted:
-		return []ActionKind{ActionOpenPropertyMembers}
-	case EventSubscriptionPaymentFailed,
-		EventSubscriptionPaymentReminder,
-		EventSubscriptionPlanChanged:
-		return []ActionKind{ActionOpenTariffs}
-	default:
-		return nil
-	}
+	return slices.Clone(feedCatalog[e].actions)
 }
 
 // EntityRef is a payload link with a name snapshot: the id for navigation,
@@ -223,12 +178,14 @@ func NewDedupKey(raw string) (DedupKey, error) {
 // personal flags (read, deleted). One event = one row per recipient (fan-out);
 // rewriting a template never touches stored rows.
 type Notification struct {
-	ID           uuid.UUID
-	UserID       uuid.UUID
-	Category     Category
-	EventType    EventType
-	Title        string
-	Body         string
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	Category  Category
+	EventType EventType
+	Title     string
+	Body      string
+	// ContextLabel is the optional line above the title (имя объекта/тарифа,
+	// «Системные уведомления»); the empty string means no label (SQL NULL).
 	ContextLabel string
 	Payload      Payload
 	DedupKey     DedupKey
@@ -237,8 +194,9 @@ type Notification struct {
 	CreatedAt    time.Time
 }
 
-// NewNotification creates a feed row for one recipient. The category is
-// derived from the event type — a row cannot disagree with the catalog.
+// NewNotification creates a feed row for one recipient. The id is the
+// caller's app-generated UUIDv7 (ADR 0019); the category is derived from the
+// event type — a row cannot disagree with the catalog.
 // ReadAt/DeletedAt/CreatedAt start empty: they belong to the database and
 // the reading side, not to publication.
 func NewNotification(
@@ -255,7 +213,10 @@ func NewNotification(
 	if !ok {
 		return nil, ErrInvalidNotification
 	}
-	if title == "" || body == "" || dedupKey == "" {
+	if _, err := NewDedupKey(string(dedupKey)); err != nil {
+		return nil, ErrInvalidNotification
+	}
+	if title == "" || body == "" {
 		return nil, ErrInvalidNotification
 	}
 	return &Notification{

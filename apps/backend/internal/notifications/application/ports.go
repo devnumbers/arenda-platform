@@ -20,7 +20,8 @@ type NotificationRepository interface {
 	// ListPage walks the user's feed newest-first by the (created_at, id)
 	// keyset (канон #597). Deleted rows never appear. UnreadOnly filters the
 	// page to unread rows. The afterCreatedAt/afterID pair resumes strictly
-	// after the previous page's last row; nil reads from the beginning. A
+	// after the previous page's last row; nil reads from the beginning, and
+	// a half-set pair (timestamp without id) falls back to the beginning. A
 	// zero limit removes the page size.
 	ListPage(
 		ctx context.Context,

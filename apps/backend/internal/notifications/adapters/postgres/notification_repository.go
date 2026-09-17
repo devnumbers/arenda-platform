@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -68,12 +67,18 @@ func (r *NotificationRepository) ListPage(
 	afterID uuid.UUID,
 	limit int,
 ) ([]domain.Notification, error) {
+	// The cursor pair travels together: a half-set pair (timestamp without
+	// id) falls back to the beginning, so a lost id can never silently empty
+	// the page — the SQL checks only the timestamp for NULL.
+	if afterID == uuid.Nil {
+		afterCreatedAt = nil
+	}
 	rows, err := r.q().ListNotifications(ctx, postgres.ListNotificationsParams{
 		UserID:         pgconv.UUIDToPgtype(userID),
 		UnreadOnly:     unreadOnly,
 		AfterCreatedAt: pgconv.TimePtrToPgtype(afterCreatedAt),
 		AfterID:        pgconv.UUIDToPgtype(afterID),
-		PageLimit:      pageLimitToInt32(limit),
+		PageLimit:      int64(limit),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list notifications: %w", err)
@@ -140,15 +145,6 @@ func notificationToDomain(row postgres.Notification) (domain.Notification, error
 		DeletedAt:    pgconv.TimestamptzToPtrTime(row.DeletedAt),
 		CreatedAt:    pgconv.TimestamptzToTime(row.CreatedAt),
 	}, nil
-}
-
-// pageLimitToInt32 narrows the application-side page size to sqlc's int32
-// LIMIT parameter; non-positive limits mean "no page size" (query canon).
-func pageLimitToInt32(limit int) int32 {
-	if limit <= 0 {
-		return 0
-	}
-	return int32(min(limit, math.MaxInt32)) //nolint:gosec // min clamps the value into the int32 range.
 }
 
 // stringToPgtypeText maps the empty context label to SQL NULL.

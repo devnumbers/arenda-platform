@@ -82,7 +82,7 @@ WHERE user_id = $1
        OR (created_at, id) < ($3,
                               $4::uuid))
 ORDER BY created_at DESC, id DESC
-LIMIT CASE WHEN $5::int = 0 THEN NULL::bigint
+LIMIT CASE WHEN $5::bigint = 0 THEN NULL::bigint
            ELSE $5::bigint END
 `
 
@@ -91,7 +91,7 @@ type ListNotificationsParams struct {
 	UnreadOnly     bool               `json:"unread_only"`
 	AfterCreatedAt pgtype.Timestamptz `json:"after_created_at"`
 	AfterID        pgtype.UUID        `json:"after_id"`
-	PageLimit      int32              `json:"page_limit"`
+	PageLimit      int64              `json:"page_limit"`
 }
 
 // The user's feed page, newest first, deleted rows never appear. The walk
