@@ -43,7 +43,8 @@ type Deps struct {
 	EmailChange          identityhttp.EmailChanger
 	Profile              identityhttp.Profiler
 	Logout               identityhttp.Logout
-	Sessions             httpsupport.SessionLoader
+	Sessions             identityhttp.SessionLister
+	SessionLoader        httpsupport.SessionLoader
 	Audit                auditapp.Recorder
 	MeEnricher           identityhttp.MeEnricher
 	Tariffs              billinghttp.TariffLister
@@ -114,6 +115,22 @@ func securityHeaders(secure bool) func(http.Handler) http.Handler {
 	}
 }
 
+// crossOriginProtection is the second CSRF layer beside SameSite=Lax
+// (ADR 0056): non-safe cross-origin browser requests are rejected with 403
+// by the stdlib Fetch-Metadata/Origin check. The bypassed paths are the
+// non-browser endpoints — the T-Kassa payment webhooks and the internal
+// performance diagnostics — which no browser may call anyway.
+func crossOriginProtection() func(http.Handler) http.Handler {
+	protection := http.NewCrossOriginProtection()
+	protection.AddInsecureBypassPattern("POST /webhooks/")
+	protection.AddInsecureBypassPattern("/internal/perf/")
+	protection.SetDenyHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		httpsupport.WriteProblem(r.Context(), w, http.StatusForbidden,
+			httpsupport.Problem(r.Context(), "Forbidden", "Запрос отклонён: кросс-сайтовый запрос"))
+	}))
+	return protection.Handler
+}
+
 // New builds the HTTP handler with routing and middleware wired.
 func New(deps Deps) http.Handler {
 	r := chi.NewRouter()
@@ -129,7 +146,8 @@ func New(deps Deps) http.Handler {
 	r.Use(rateLimitMiddleware(deps.IPRateLimiter))
 	r.Use(clientErrorsBodyLimitMiddleware)
 	r.Use(securityHeaders(deps.CookieSecure))
-	r.Use(httpsupport.SessionMiddleware(deps.Logger, deps.Sessions, deps.CookieSecure, deps.Clock))
+	r.Use(httpsupport.SessionMiddleware(deps.Logger, deps.SessionLoader, deps.CookieSecure, deps.Clock))
+	r.Use(crossOriginProtection())
 	r.Use(httpsupport.ReadonlyMiddleware(deps.ReadonlyGate, deps.Logger))
 
 	r.Get("/healthz", httpsupport.HealthHandler(deps.AppVersion))
@@ -144,6 +162,7 @@ func New(deps Deps) http.Handler {
 		deps.EmailChange,
 		deps.Profile,
 		deps.Logout,
+		deps.Sessions,
 		deps.CookieSecure,
 		deps.Logger,
 		identityhttp.AuthRateLimits{

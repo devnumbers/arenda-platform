@@ -219,7 +219,7 @@ func (h *integrationHarness) registerAndLogin(t *testing.T, phone domain.Phone, 
 		t.Fatalf("SendCode: %v", err)
 	}
 	code := h.sender.lastCode(t)
-	raw, user, err := h.auth.VerifyCode(ctx, phone, &email, code, nil)
+	raw, user, err := h.auth.VerifyCode(ctx, phone, &email, code, nil, identityapp.DeviceContext{})
 	if err != nil {
 		t.Fatalf("VerifyCode: %v", err)
 	}

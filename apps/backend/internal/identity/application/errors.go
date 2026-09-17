@@ -15,4 +15,8 @@ var (
 	// ErrEmailChangeBudgetExhausted reports the per-user hourly budget on code
 	// sends to NEW addresses is spent (decision #720-3).
 	ErrEmailChangeBudgetExhausted = errors.New("email change send budget is exhausted")
+	// ErrCurrentSession reports the requested session revocation targets the
+	// caller's own live session; the devices list ends it through logout
+	// instead (issue #728).
+	ErrCurrentSession = errors.New("cannot revoke the current session")
 )

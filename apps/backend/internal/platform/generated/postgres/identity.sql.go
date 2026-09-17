@@ -7,6 +7,7 @@ package postgres
 
 import (
 	"context"
+	"net/netip"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -106,27 +107,53 @@ func (q *Queries) CreateLoginCode(ctx context.Context, arg CreateLoginCodeParams
 }
 
 const createSession = `-- name: CreateSession :one
-INSERT INTO sessions (id, user_id, token_hash, expires_at, last_used_at)
-VALUES ($1, $2, $3, $4, $5) RETURNING id, user_id, token_hash, expires_at, created_at, last_used_at
+INSERT INTO sessions (id, user_id, token_hash, expires_at, last_used_at, rotated_at, last_ip, user_agent, device_type, browser, browser_major, os, city)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+RETURNING id, user_id, token_hash, expires_at, created_at, last_used_at
 `
 
 type CreateSessionParams struct {
+	ID           pgtype.UUID        `json:"id"`
+	UserID       pgtype.UUID        `json:"user_id"`
+	TokenHash    string             `json:"token_hash"`
+	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
+	LastUsedAt   pgtype.Timestamptz `json:"last_used_at"`
+	RotatedAt    pgtype.Timestamptz `json:"rotated_at"`
+	LastIp       *netip.Addr        `json:"last_ip"`
+	UserAgent    string             `json:"user_agent"`
+	DeviceType   string             `json:"device_type"`
+	Browser      string             `json:"browser"`
+	BrowserMajor pgtype.Int4        `json:"browser_major"`
+	Os           string             `json:"os"`
+	City         pgtype.Text        `json:"city"`
+}
+
+type CreateSessionRow struct {
 	ID         pgtype.UUID        `json:"id"`
 	UserID     pgtype.UUID        `json:"user_id"`
 	TokenHash  string             `json:"token_hash"`
 	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
 }
 
-func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error) {
+func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (CreateSessionRow, error) {
 	row := q.db.QueryRow(ctx, createSession,
 		arg.ID,
 		arg.UserID,
 		arg.TokenHash,
 		arg.ExpiresAt,
 		arg.LastUsedAt,
+		arg.RotatedAt,
+		arg.LastIp,
+		arg.UserAgent,
+		arg.DeviceType,
+		arg.Browser,
+		arg.BrowserMajor,
+		arg.Os,
+		arg.City,
 	)
-	var i Session
+	var i CreateSessionRow
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
@@ -310,8 +337,25 @@ func (q *Queries) DeleteLoginCodesByUserID(ctx context.Context, userID pgtype.UU
 	return err
 }
 
+const deleteSessionByIDForUser = `-- name: DeleteSessionByIDForUser :execrows
+DELETE FROM sessions WHERE id = $1 AND user_id = $2
+`
+
+type DeleteSessionByIDForUserParams struct {
+	ID     pgtype.UUID `json:"id"`
+	UserID pgtype.UUID `json:"user_id"`
+}
+
+func (q *Queries) DeleteSessionByIDForUser(ctx context.Context, arg DeleteSessionByIDForUserParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteSessionByIDForUser, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteSessionByTokenHash = `-- name: DeleteSessionByTokenHash :exec
-DELETE FROM sessions WHERE token_hash = $1
+DELETE FROM sessions WHERE token_hash = $1::text OR previous_token_hash = $1::text
 `
 
 func (q *Queries) DeleteSessionByTokenHash(ctx context.Context, tokenHash string) error {
@@ -328,8 +372,8 @@ func (q *Queries) DeleteSessionsByUserID(ctx context.Context, userID pgtype.UUID
 	return err
 }
 
-const deleteSessionsByUserIDExcept = `-- name: DeleteSessionsByUserIDExcept :exec
-DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2
+const deleteSessionsByUserIDExcept = `-- name: DeleteSessionsByUserIDExcept :execrows
+DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2 AND (previous_token_hash IS NULL OR previous_token_hash <> $2)
 `
 
 type DeleteSessionsByUserIDExceptParams struct {
@@ -337,9 +381,12 @@ type DeleteSessionsByUserIDExceptParams struct {
 	TokenHash string      `json:"token_hash"`
 }
 
-func (q *Queries) DeleteSessionsByUserIDExcept(ctx context.Context, arg DeleteSessionsByUserIDExceptParams) error {
-	_, err := q.db.Exec(ctx, deleteSessionsByUserIDExcept, arg.UserID, arg.TokenHash)
-	return err
+func (q *Queries) DeleteSessionsByUserIDExcept(ctx context.Context, arg DeleteSessionsByUserIDExceptParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteSessionsByUserIDExcept, arg.UserID, arg.TokenHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const deleteStaleLoginAttemptsBatch = `-- name: DeleteStaleLoginAttemptsBatch :execrows
@@ -493,46 +540,111 @@ func (q *Queries) GetLoginAttemptByPhoneForUpdate(ctx context.Context, phone str
 	return i, err
 }
 
+const getSessionByID = `-- name: GetSessionByID :one
+SELECT id, user_id, token_hash, device_type, browser, browser_major, os, city, last_ip, last_used_at, created_at, expires_at
+FROM sessions
+WHERE id = $1
+`
+
+type GetSessionByIDRow struct {
+	ID           pgtype.UUID        `json:"id"`
+	UserID       pgtype.UUID        `json:"user_id"`
+	TokenHash    string             `json:"token_hash"`
+	DeviceType   string             `json:"device_type"`
+	Browser      string             `json:"browser"`
+	BrowserMajor pgtype.Int4        `json:"browser_major"`
+	Os           string             `json:"os"`
+	City         pgtype.Text        `json:"city"`
+	LastIp       *netip.Addr        `json:"last_ip"`
+	LastUsedAt   pgtype.Timestamptz `json:"last_used_at"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) GetSessionByID(ctx context.Context, id pgtype.UUID) (GetSessionByIDRow, error) {
+	row := q.db.QueryRow(ctx, getSessionByID, id)
+	var i GetSessionByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TokenHash,
+		&i.DeviceType,
+		&i.Browser,
+		&i.BrowserMajor,
+		&i.Os,
+		&i.City,
+		&i.LastIp,
+		&i.LastUsedAt,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
 const getSessionByTokenHash = `-- name: GetSessionByTokenHash :one
-SELECT s.id, s.token_hash, s.expires_at, s.created_at, s.last_used_at,
+SELECT s.id, s.token_hash, s.previous_token_hash, s.expires_at, s.created_at, s.last_used_at, s.rotated_at,
+       s.last_ip, s.user_agent, s.device_type, s.browser, s.browser_major, s.os, s.city,
        u.id AS user_id, u.phone, u.role, u.name, u.surname, u.patronymic, u.email, u.email_verified_at, u.phone_encrypted, u.timezone
 FROM sessions s
 JOIN users u ON s.user_id = u.id
-WHERE s.token_hash = $1 AND s.expires_at > $2
+WHERE (s.token_hash = $1::text OR (s.previous_token_hash = $1::text AND s.rotated_at > $2)) AND s.expires_at > $3
 `
 
 type GetSessionByTokenHashParams struct {
-	TokenHash string             `json:"token_hash"`
-	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	TokenHash   string             `json:"token_hash"`
+	GraceCutoff pgtype.Timestamptz `json:"grace_cutoff"`
+	SeenAfter   pgtype.Timestamptz `json:"seen_after"`
 }
 
 type GetSessionByTokenHashRow struct {
-	ID              pgtype.UUID        `json:"id"`
-	TokenHash       string             `json:"token_hash"`
-	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	LastUsedAt      pgtype.Timestamptz `json:"last_used_at"`
-	UserID          pgtype.UUID        `json:"user_id"`
-	Phone           string             `json:"phone"`
-	Role            string             `json:"role"`
-	Name            pgtype.Text        `json:"name"`
-	Surname         pgtype.Text        `json:"surname"`
-	Patronymic      pgtype.Text        `json:"patronymic"`
-	Email           pgtype.Text        `json:"email"`
-	EmailVerifiedAt pgtype.Timestamptz `json:"email_verified_at"`
-	PhoneEncrypted  bool               `json:"phone_encrypted"`
-	Timezone        string             `json:"timezone"`
+	ID                pgtype.UUID        `json:"id"`
+	TokenHash         string             `json:"token_hash"`
+	PreviousTokenHash pgtype.Text        `json:"previous_token_hash"`
+	ExpiresAt         pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	LastUsedAt        pgtype.Timestamptz `json:"last_used_at"`
+	RotatedAt         pgtype.Timestamptz `json:"rotated_at"`
+	LastIp            *netip.Addr        `json:"last_ip"`
+	UserAgent         string             `json:"user_agent"`
+	DeviceType        string             `json:"device_type"`
+	Browser           string             `json:"browser"`
+	BrowserMajor      pgtype.Int4        `json:"browser_major"`
+	Os                string             `json:"os"`
+	City              pgtype.Text        `json:"city"`
+	UserID            pgtype.UUID        `json:"user_id"`
+	Phone             string             `json:"phone"`
+	Role              string             `json:"role"`
+	Name              pgtype.Text        `json:"name"`
+	Surname           pgtype.Text        `json:"surname"`
+	Patronymic        pgtype.Text        `json:"patronymic"`
+	Email             pgtype.Text        `json:"email"`
+	EmailVerifiedAt   pgtype.Timestamptz `json:"email_verified_at"`
+	PhoneEncrypted    bool               `json:"phone_encrypted"`
+	Timezone          string             `json:"timezone"`
 }
 
+// GetSessionByTokenHash resolves a live session by its token hash. The
+// previous_token_hash branch keeps in-flight requests working during the
+// rotation grace window: the old token is accepted until rotated_at falls
+// behind $2 (now - SessionRotationGrace).
 func (q *Queries) GetSessionByTokenHash(ctx context.Context, arg GetSessionByTokenHashParams) (GetSessionByTokenHashRow, error) {
-	row := q.db.QueryRow(ctx, getSessionByTokenHash, arg.TokenHash, arg.ExpiresAt)
+	row := q.db.QueryRow(ctx, getSessionByTokenHash, arg.TokenHash, arg.GraceCutoff, arg.SeenAfter)
 	var i GetSessionByTokenHashRow
 	err := row.Scan(
 		&i.ID,
 		&i.TokenHash,
+		&i.PreviousTokenHash,
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.LastUsedAt,
+		&i.RotatedAt,
+		&i.LastIp,
+		&i.UserAgent,
+		&i.DeviceType,
+		&i.Browser,
+		&i.BrowserMajor,
+		&i.Os,
+		&i.City,
 		&i.UserID,
 		&i.Phone,
 		&i.Role,
@@ -809,6 +921,59 @@ func (q *Queries) ListRecentUsersAdmin(ctx context.Context) ([]ListRecentUsersAd
 	return items, nil
 }
 
+const listSessionsByUserID = `-- name: ListSessionsByUserID :many
+SELECT id, token_hash, device_type, browser, browser_major, os, city, last_ip, last_used_at, created_at, expires_at
+FROM sessions
+WHERE user_id = $1
+ORDER BY last_used_at DESC, id DESC
+`
+
+type ListSessionsByUserIDRow struct {
+	ID           pgtype.UUID        `json:"id"`
+	TokenHash    string             `json:"token_hash"`
+	DeviceType   string             `json:"device_type"`
+	Browser      string             `json:"browser"`
+	BrowserMajor pgtype.Int4        `json:"browser_major"`
+	Os           string             `json:"os"`
+	City         pgtype.Text        `json:"city"`
+	LastIp       *netip.Addr        `json:"last_ip"`
+	LastUsedAt   pgtype.Timestamptz `json:"last_used_at"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) ListSessionsByUserID(ctx context.Context, userID pgtype.UUID) ([]ListSessionsByUserIDRow, error) {
+	rows, err := q.db.Query(ctx, listSessionsByUserID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListSessionsByUserIDRow{}
+	for rows.Next() {
+		var i ListSessionsByUserIDRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TokenHash,
+			&i.DeviceType,
+			&i.Browser,
+			&i.BrowserMajor,
+			&i.Os,
+			&i.City,
+			&i.LastIp,
+			&i.LastUsedAt,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUsersAdmin = `-- name: ListUsersAdmin :many
 SELECT u.id, u.phone, u.role, u.name, u.surname, u.patronymic, u.email, u.created_at, u.updated_at, u.phone_encrypted, u.email_verified_at, u.timezone, us.status AS subscription_status
 FROM users u
@@ -941,6 +1106,79 @@ func (q *Queries) ResetLoginAttempt(ctx context.Context, arg ResetLoginAttemptPa
 		arg.LastFailureAt,
 		arg.UserID,
 		arg.PhoneEncrypted,
+	)
+	return err
+}
+
+const rotateSessionToken = `-- name: RotateSessionToken :execrows
+UPDATE sessions SET
+    token_hash = $1::text,
+    previous_token_hash = $2::text,
+    rotated_at = $3,
+    expires_at = $4,
+    last_used_at = $5,
+    last_ip = $6,
+    city = $7
+WHERE id = $8 AND token_hash = $2::text
+`
+
+type RotateSessionTokenParams struct {
+	NewTokenHash string             `json:"new_token_hash"`
+	OldTokenHash string             `json:"old_token_hash"`
+	RotatedAt    pgtype.Timestamptz `json:"rotated_at"`
+	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
+	LastUsedAt   pgtype.Timestamptz `json:"last_used_at"`
+	LastIp       *netip.Addr        `json:"last_ip"`
+	City         pgtype.Text        `json:"city"`
+	ID           pgtype.UUID        `json:"id"`
+}
+
+// RotateSessionToken swaps the session token in place: the fresh hash replaces
+// the old one, which moves to previous_token_hash (accepted for the in-flight
+// grace window by GetSessionByTokenHash) and rotated_at restarts the renewal
+// window. The token_hash = $3 guard makes a concurrent rotation a no-op for
+// the loser, so exactly one swap wins per window.
+func (q *Queries) RotateSessionToken(ctx context.Context, arg RotateSessionTokenParams) (int64, error) {
+	result, err := q.db.Exec(ctx, rotateSessionToken,
+		arg.NewTokenHash,
+		arg.OldTokenHash,
+		arg.RotatedAt,
+		arg.ExpiresAt,
+		arg.LastUsedAt,
+		arg.LastIp,
+		arg.City,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const touchSession = `-- name: TouchSession :exec
+UPDATE sessions SET expires_at = $1, last_used_at = $2, last_ip = $3, city = $4
+WHERE token_hash = $5::text
+`
+
+type TouchSessionParams struct {
+	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
+	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
+	LastIp     *netip.Addr        `json:"last_ip"`
+	City       pgtype.Text        `json:"city"`
+	TokenHash  string             `json:"token_hash"`
+}
+
+// TouchSession persists one request's activity: the sliding expiry, the
+// throttled last-seen stamp, and the client IP with its GeoIP city (null when
+// unresolvable — an existing city is never erased by an unknown one, the
+// application only writes cities it actually resolved).
+func (q *Queries) TouchSession(ctx context.Context, arg TouchSessionParams) error {
+	_, err := q.db.Exec(ctx, touchSession,
+		arg.ExpiresAt,
+		arg.LastUsedAt,
+		arg.LastIp,
+		arg.City,
+		arg.TokenHash,
 	)
 	return err
 }

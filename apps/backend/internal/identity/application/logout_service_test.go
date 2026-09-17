@@ -279,7 +279,23 @@ func (r *errorSessionRepo) GetByTokenHash(context.Context, string, time.Time) (d
 func (r *errorSessionRepo) Update(context.Context, domain.Session) error    { return nil }
 func (r *errorSessionRepo) DeleteByTokenHash(context.Context, string) error { return r.err }
 func (r *errorSessionRepo) DeleteByUserID(context.Context, uuid.UUID) error { return r.err }
-func (r *errorSessionRepo) DeleteByUserIDExcept(context.Context, uuid.UUID, string) error {
-	return r.err
+func (r *errorSessionRepo) DeleteByUserIDExcept(context.Context, uuid.UUID, string) (int64, error) {
+	return 0, r.err
+}
+func (r *errorSessionRepo) Touch(context.Context, domain.Session) error { return nil }
+func (r *errorSessionRepo) Rotate(context.Context, domain.Session, string) (bool, error) {
+	return true, nil
+}
+
+func (r *errorSessionRepo) ListByUserID(context.Context, uuid.UUID) ([]domain.Session, error) {
+	return nil, nil
+}
+
+func (r *errorSessionRepo) GetByID(context.Context, uuid.UUID) (domain.Session, error) {
+	return domain.Session{}, ErrNotFound
+}
+
+func (r *errorSessionRepo) DeleteByIDForUser(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
+	return false, r.err
 }
 func (r *errorSessionRepo) WithTx(transaction.Tx) (SessionRepository, error) { return r, nil }

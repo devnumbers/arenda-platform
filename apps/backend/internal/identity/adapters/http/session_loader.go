@@ -45,32 +45,46 @@ func (l sessionLoader) Load(ctx context.Context, token string, now time.Time) (h
 	return toPlatformSession(sess), user.ID, user.Role, nil
 }
 
-func (l sessionLoader) Update(ctx context.Context, sess httpsupport.Session) error {
-	return l.svc.Update(ctx, fromPlatformSession(sess))
+func (l sessionLoader) Touch(
+	ctx context.Context, sess httpsupport.Session, clientIP string, now time.Time,
+) (httpsupport.Session, string, error) {
+	updated, rotatedToken, err := l.svc.Touch(ctx, fromPlatformSession(sess), clientIP, now)
+	if err != nil {
+		return httpsupport.Session{}, "", err
+	}
+	return toPlatformSession(updated), rotatedToken, nil
 }
 
 // toPlatformSession maps the identity session aggregate onto the platform-neutral
-// [httpsupport.Session] view. Only the fields the session middleware touches are
-// carried; domain-only fields (ID, UserID) are intentionally dropped.
+// [httpsupport.Session] view. Only the fields the session middleware and its
+// Touch seam read or write are carried; UserID — the one field with no meaning
+// outside the aggregate — is intentionally dropped.
 func toPlatformSession(sess domain.Session) httpsupport.Session {
 	return httpsupport.Session{
+		ID:         sess.ID,
 		TokenHash:  sess.TokenHash,
 		ExpiresAt:  sess.ExpiresAt,
 		CreatedAt:  sess.CreatedAt,
 		LastUsedAt: sess.LastUsedAt,
+		RotatedAt:  sess.RotatedAt,
+		LastIP:     sess.LastIP,
+		City:       sess.City,
 	}
 }
 
 // fromPlatformSession rebuilds the identity session aggregate from the
-// platform-neutral view for persistence. The TokenHash identifies the row;
-// ExpiresAt and LastUsedAt are the sliding-window fields persisted by Update.
-// ID, UserID and CreatedAt are not known to the platform view and are left zero,
-// which is correct for the update path (see SessionRepository.Update).
+// platform-neutral view for maintenance. UserID, the device description and
+// the raw User-Agent are not part of the platform view; the maintenance paths
+// key rows by TokenHash/ID and never rewrite them, so the zero values are safe.
 func fromPlatformSession(sess httpsupport.Session) domain.Session {
 	return domain.Session{
+		ID:         sess.ID,
 		TokenHash:  sess.TokenHash,
 		ExpiresAt:  sess.ExpiresAt,
 		CreatedAt:  sess.CreatedAt,
 		LastUsedAt: sess.LastUsedAt,
+		RotatedAt:  sess.RotatedAt,
+		LastIP:     sess.LastIP,
+		City:       sess.City,
 	}
 }

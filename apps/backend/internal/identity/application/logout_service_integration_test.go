@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 )
 
@@ -24,7 +25,7 @@ func TestLogoutIntegration_ByToken(t *testing.T) {
 	if err := h.auth.SendCode(ctx, phone, email, domain.LoginCodePurposeLogin); err != nil {
 		t.Fatalf("SendCode second session: %v", err)
 	}
-	token2Raw, _, err := h.auth.VerifyCode(ctx, phone, &email, h.sender.lastCode(t), nil)
+	token2Raw, _, err := h.auth.VerifyCode(ctx, phone, &email, h.sender.lastCode(t), nil, application.DeviceContext{})
 	if err != nil {
 		t.Fatalf("VerifyCode second session: %v", err)
 	}
@@ -62,7 +63,7 @@ func TestLogoutIntegration_LogoutAll(t *testing.T) {
 	if err := h.auth.SendCode(ctx, phone, email, domain.LoginCodePurposeLogin); err != nil {
 		t.Fatalf("SendCode second session: %v", err)
 	}
-	if _, _, err := h.auth.VerifyCode(ctx, phone, &email, h.sender.lastCode(t), nil); err != nil {
+	if _, _, err := h.auth.VerifyCode(ctx, phone, &email, h.sender.lastCode(t), nil, application.DeviceContext{}); err != nil {
 		t.Fatalf("VerifyCode second session: %v", err)
 	}
 	if n := h.countSessionsForUser(t, user.ID); n != 2 {

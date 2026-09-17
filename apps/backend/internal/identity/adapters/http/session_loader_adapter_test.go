@@ -14,10 +14,10 @@ import (
 )
 
 // fakeSessionRepoForLoader is a minimal SessionRepository for sessionLoader
-// tests. It only needs GetByTokenHash (for Load) and Update (for Update).
+// tests. It only needs GetByTokenHash (for Load) and Touch (for Touch).
 type fakeSessionRepoForLoader struct {
 	getByTokenHash func(tokenHash string, now time.Time) (domain.Session, domain.User, error)
-	updateFn       func(session domain.Session) error
+	touchFn        func(session domain.Session) error
 }
 
 func (r *fakeSessionRepoForLoader) Create(context.Context, domain.Session) error { return nil }
@@ -28,16 +28,34 @@ func (r *fakeSessionRepoForLoader) GetByTokenHash(_ context.Context, hash string
 	return domain.Session{}, domain.User{}, identityapp.ErrNotFound
 }
 
-func (r *fakeSessionRepoForLoader) Update(_ context.Context, session domain.Session) error {
-	if r.updateFn != nil {
-		return r.updateFn(session)
+func (r *fakeSessionRepoForLoader) Update(context.Context, domain.Session) error { return nil }
+
+func (r *fakeSessionRepoForLoader) Touch(_ context.Context, session domain.Session) error {
+	if r.touchFn != nil {
+		return r.touchFn(session)
 	}
 	return nil
 }
 func (r *fakeSessionRepoForLoader) DeleteByTokenHash(context.Context, string) error { return nil }
 func (r *fakeSessionRepoForLoader) DeleteByUserID(context.Context, uuid.UUID) error { return nil }
-func (r *fakeSessionRepoForLoader) DeleteByUserIDExcept(context.Context, uuid.UUID, string) error {
-	return nil
+func (r *fakeSessionRepoForLoader) DeleteByUserIDExcept(context.Context, uuid.UUID, string) (int64, error) {
+	return 0, nil
+}
+
+func (r *fakeSessionRepoForLoader) Rotate(context.Context, domain.Session, string) (bool, error) {
+	return true, nil
+}
+
+func (r *fakeSessionRepoForLoader) ListByUserID(context.Context, uuid.UUID) ([]domain.Session, error) {
+	return nil, nil
+}
+
+func (r *fakeSessionRepoForLoader) GetByID(context.Context, uuid.UUID) (domain.Session, error) {
+	return domain.Session{}, identityapp.ErrNotFound
+}
+
+func (r *fakeSessionRepoForLoader) DeleteByIDForUser(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
+	return false, nil
 }
 
 func (r *fakeSessionRepoForLoader) WithTx(_ transaction.Tx) (identityapp.SessionRepository, error) {
@@ -156,11 +174,11 @@ func TestSessionLoader_Load_OtherErrorPropagated(t *testing.T) {
 	}
 }
 
-func TestSessionLoader_Update_Delegates(t *testing.T) {
+func TestSessionLoader_Touch_DelegatesWithMappedSession(t *testing.T) {
 	t.Parallel()
 	var gotSession domain.Session
 	repo := &fakeSessionRepoForLoader{
-		updateFn: func(session domain.Session) error {
+		touchFn: func(session domain.Session) error {
 			gotSession = session
 			return nil
 		},
@@ -168,14 +186,28 @@ func TestSessionLoader_Update_Delegates(t *testing.T) {
 	loader := NewSessionLoader(newSessionSvcForLoader(t, repo))
 
 	platformSess := httpsupport.Session{
-		TokenHash:  "hash-update",
+		ID:         uuid.Must(uuid.NewV7()),
+		TokenHash:  "hash-touch",
 		ExpiresAt:  time.Date(2026, 8, 14, 0, 0, 0, 0, time.UTC),
 		LastUsedAt: time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC),
+		RotatedAt:  time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC),
+		LastIP:     "203.0.113.9",
+		City:       "Тестгород",
 	}
-	if err := loader.Update(t.Context(), platformSess); err != nil {
-		t.Fatalf("Update error = %v", err)
+	_, rotatedToken, err := loader.Touch(t.Context(), platformSess, "198.51.100.2", time.Date(2026, 8, 13, 13, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("Touch error = %v", err)
 	}
-	if gotSession.TokenHash != "hash-update" {
-		t.Fatalf("update received TokenHash = %q, want hash-update", gotSession.TokenHash)
+	if gotSession.TokenHash != "hash-touch" {
+		t.Fatalf("touch received TokenHash = %q, want hash-touch", gotSession.TokenHash)
+	}
+	// The real service applied the Touch policy before persisting: the changed
+	// client IP replaced the stored one, the unknown new city kept the stored
+	// value, and the sliding window moved to now + base TTL.
+	if gotSession.LastIP != "198.51.100.2" || gotSession.City != "Тестгород" || gotSession.ID == uuid.Nil {
+		t.Fatalf("touch received session = %+v, want the applied maintenance", gotSession)
+	}
+	if rotatedToken != "" {
+		t.Fatalf("rotatedToken = %q, want empty (no rotation wired in the repo)", rotatedToken)
 	}
 }

@@ -10,6 +10,21 @@ RUN go mod download
 COPY apps/backend ./
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/arenda-api ./cmd/api
 
+# The offline GeoIP city database (DB-IP City Lite, CC BY 4.0) is baked into
+# the image at build time and refreshed by the monthly image rebuild
+# (ticket #728). CI passes DBIP_MONTH=$(date +%Y-%m); a local build falls
+# back to the current month, then to the previous one (the file for the
+# running month may not be published yet in its first days).
+ARG DBIP_MONTH=""
+RUN set -eux; \
+    month="${DBIP_MONTH:-$(date +%Y-%m)}"; \
+    prev="$(date -d "$month-01 -1 month" +%Y-%m)"; \
+    mkdir -p /out/geoip; \
+    curl -fsSL -o /out/geoip/dbip-city-lite.mmdb \
+      "https://download.db-ip.com/free/dbip-city-lite-${month}.mmdb" \
+    || curl -fsSL -o /out/geoip/dbip-city-lite.mmdb \
+      "https://download.db-ip.com/free/dbip-city-lite-${prev}.mmdb"
+
 FROM debian:bookworm-slim AS runtime
 
 ARG APP_VERSION=dev
@@ -36,6 +51,11 @@ WORKDIR /app
 COPY --from=build /out/arenda-api /app/arenda-api
 COPY --from=build /src/apps/backend/db/migrations /app/db/migrations
 COPY --from=build /src/apps/backend/templates/email /app/templates/email
+COPY --from=build /out/geoip/dbip-city-lite.mmdb /app/geoip/dbip-city-lite.mmdb
+
+# The baked-in GeoIP base enables city resolution in the image; a host-run
+# local build without GEOIP_DB_PATH simply skips geolocation.
+ENV GEOIP_DB_PATH=/app/geoip/dbip-city-lite.mmdb
 
 USER arenda
 

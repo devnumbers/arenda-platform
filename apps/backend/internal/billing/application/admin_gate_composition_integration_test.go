@@ -67,6 +67,12 @@ func (l gateSessionLoader) Load(_ context.Context, token string, now time.Time) 
 
 func (gateSessionLoader) Update(context.Context, httpsupport.Session) error { return nil }
 
+func (l gateSessionLoader) Touch(
+	_ context.Context, session httpsupport.Session, _ string, _ time.Time,
+) (httpsupport.Session, string, error) {
+	return session, "", nil
+}
+
 // adminGateHarness extends the refund harness (it already knows how to grow a
 // succeeded payment) with the production HTTP router and the two sessions.
 type adminGateHarness struct {
@@ -103,7 +109,8 @@ func newAdminGateHarness(t *testing.T) *adminGateHarness {
 	// stays nil: those routes are never hit, and the constructors only store
 	// their dependencies.
 	router := httpserver.New(httpserver.Deps{
-		Sessions:             loader,
+		Sessions:             nil,
+		SessionLoader:        loader,
 		Tariffs:              base.services.Tariffs,
 		AdminTariffs:         base.services.Tariffs,
 		Subscriptions:        base.services.Subscriptions,
@@ -138,6 +145,9 @@ func (h *adminGateHarness) doAs(t *testing.T, cookie, method, path string, body 
 		payload = bytes.NewReader(encoded)
 	}
 	req := httptest.NewRequestWithContext(t.Context(), method, path, payload)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	req.AddCookie(&http.Cookie{Name: httpsupport.SessionCookieName(false), Value: cookie})
 	w := httptest.NewRecorder()
 	h.router.ServeHTTP(w, req)

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/requestctx"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/actor"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 )
@@ -60,66 +61,44 @@ type fallbackClock struct{}
 func (fallbackClock) Now() time.Time { return time.Now().UTC() }
 
 // Session is the platform-neutral view of an authenticated session. It carries
-// only the fields the session middleware touches (sliding-window refresh and the
-// cookie expiry); it deliberately avoids any bounded-context type so that
-// platform/httpsupport does not depend on identity/domain (ADR 0034).
-//
-// The Refresh sliding-window logic mirrors identity/domain.Session.Refresh; the
-// TTL constants are identical. The duplication is the price of layer isolation:
-// the platform cannot import the identity aggregate, and the identity aggregate
-// is not lifted into the shared kernel.
+// the fields the session middleware and its Touch seam read or write (the
+// sliding expiry for the cookie, the rotation/IP/city bookkeeping the
+// per-request maintenance updates); it deliberately avoids any bounded-context
+// type so that platform/httpsupport does not depend on identity/domain
+// (ADR 0034). The sliding/rotation policy itself lives behind Touch, in the
+// identity application — the platform stays a dumb orchestrator.
 type Session struct {
+	ID         uuid.UUID
 	TokenHash  string
 	ExpiresAt  time.Time
 	CreatedAt  time.Time
 	LastUsedAt time.Time
+	RotatedAt  time.Time
+	LastIP     string
+	City       string
 }
-
-// SessionBaseTTL is the per-request sliding window for an active session.
-const SessionBaseTTL = 7 * 24 * time.Hour
-
-// SessionMaxTTL is the hard upper bound for a session since creation.
-const SessionMaxTTL = 30 * 24 * time.Hour
 
 // IsExpired reports whether the session has passed its expiry at now.
 func (s *Session) IsExpired(now time.Time) bool {
 	return now.After(s.ExpiresAt)
 }
 
-// Refresh extends the session expiration by SessionBaseTTL, capped at
-// CreatedAt + SessionMaxTTL. It returns true when the expiration was actually
-// moved forward. Expired sessions are never refreshed. Mirrors
-// identity/domain.Session.Refresh (ADR 0034).
-func (s *Session) Refresh(now time.Time) bool {
-	if s.IsExpired(now) {
-		return false
-	}
-
-	maxExpires := s.CreatedAt.Add(SessionMaxTTL)
-	candidate := now.Add(SessionBaseTTL)
-	if candidate.After(maxExpires) {
-		candidate = maxExpires
-	}
-	if !candidate.After(s.ExpiresAt) {
-		return false
-	}
-
-	s.ExpiresAt = candidate
-	s.LastUsedAt = now
-	return true
-}
-
-// SessionLoader loads and persists the platform-neutral session view. It is the
-// seam through which the session middleware reads a session without depending
-// on identity/domain: an adapter in the identity context maps the identity
-// session/user aggregate onto (Session, userID, actor.Role) (ADR 0034).
+// SessionLoader loads and maintains the platform-neutral session view. It is
+// the seam through which the session middleware reads a session without
+// depending on identity/domain: an adapter in the identity context maps the
+// identity session/user aggregate onto (Session, userID, actor.Role)
+// (ADR 0034).
 type SessionLoader interface {
 	// Load resolves a raw session token to the platform-neutral session together
 	// with the actor identity (user ID and role). The now argument seeds the
 	// sliding window.
 	Load(ctx context.Context, token string, now time.Time) (Session, uuid.UUID, actor.Role, error)
-	// Update persists a refreshed session's sliding-window fields.
-	Update(ctx context.Context, session Session) error
+	// Touch performs the per-request session maintenance and persists it: the
+	// sliding expiry (pure sliding, ADR 0056), the throttled last-seen stamp,
+	// the client IP with its city on change, and the 14-day token rotation.
+	// When rotatedToken is non-empty the token was replaced and the transport
+	// must deliver it as the new cookie value.
+	Touch(ctx context.Context, session Session, clientIP string, now time.Time) (updated Session, rotatedToken string, err error)
 }
 
 // publicSessionSkippedPaths are paths that never require a session lookup.
@@ -186,7 +165,7 @@ func (m sessionMiddleware) wrap(next http.Handler) http.Handler {
 			return
 		}
 
-		m.refreshSession(w, r, token, session, now)
+		m.touchSession(w, r, token, session, now)
 
 		ctx := WithUserID(r.Context(), userID)
 		ctx = WithActor(ctx, userID, role)
@@ -216,20 +195,27 @@ func (m sessionMiddleware) serveWithClearedCookie(w http.ResponseWriter, r *http
 	next.ServeHTTP(w, r)
 }
 
-// refreshSession extends the sliding window, persists it and re-issues the
-// cookie when the expiration actually moved forward. A persistence failure is
-// logged once and leaves the previous cookie in place.
-func (m sessionMiddleware) refreshSession(w http.ResponseWriter, r *http.Request, token string, session Session, now time.Time) {
-	if !session.Refresh(now) {
-		return
-	}
-	if err := m.loader.Update(r.Context(), session); err != nil {
+// touchSession runs the per-request session maintenance (sliding expiry,
+// throttled last-seen, IP/city refresh, token rotation) and re-issues the
+// cookie when the session state changed the cookie: a rotation delivers the
+// fresh token, a sliding move re-stamps the expiry. A maintenance failure is
+// logged once and leaves the previous cookie in place — the request still
+// proceeds authenticated.
+func (m sessionMiddleware) touchSession(w http.ResponseWriter, r *http.Request, token string, session Session, now time.Time) {
+	updated, rotatedToken, err := m.loader.Touch(r.Context(), session, requestctx.ClientIPFromContext(r.Context()), now)
+	if err != nil {
 		if m.logger != nil {
-			m.logger.ErrorContext(r.Context(), "failed to refresh session", slog.String("error", SanitizeError(err)))
+			m.logger.ErrorContext(r.Context(), "failed to touch session", slog.String("error", SanitizeError(err)))
 		}
 		return
 	}
-	SetSessionCookie(w, token, session.ExpiresAt, m.secure)
+	if rotatedToken != "" {
+		SetSessionCookie(w, rotatedToken, updated.ExpiresAt, m.secure)
+		return
+	}
+	if !updated.ExpiresAt.Equal(session.ExpiresAt) {
+		SetSessionCookie(w, token, updated.ExpiresAt, m.secure)
+	}
 }
 
 // errSessionNotFound is the sentinel the SessionLoader seam uses to signal that

@@ -280,6 +280,57 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
         '500':
           $ref: '#/components/responses/InternalServerError'
+  /me/sessions:
+    get:
+      operationId: listSessions
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Active sessions of the current user, most recent activity first
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /me/sessions/logout-others:
+    post:
+      operationId: logoutOtherSessions
+      security:
+        - sessionCookie: []
+      responses:
+        '204':
+          description: Every other session of the user is terminated
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /me/sessions/{sessionId}:
+    delete:
+      operationId: revokeSession
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: The session is terminated
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /properties:
     post:
       operationId: createProperty
@@ -4357,6 +4408,54 @@ components:
         subscription:
           $ref: '#/components/schemas/Subscription'
           nullable: true
+
+    SessionListResponse:
+      type: object
+      required: [sessions]
+      properties:
+        sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionDevice'
+
+    SessionDevice:
+      type: object
+      required: [id, deviceType, browser, os, city, lastIp, lastSeenAt, createdAt, current]
+      properties:
+        id:
+          type: string
+          format: uuid
+        deviceType:
+          type: string
+          enum: [computer, phone, tablet, tv, unknown]
+          description: Device class captured from the User-Agent at session creation.
+        browser:
+          type: string
+          description: Browser name, e.g. Chrome or YaBrowser; empty when unparsed.
+        browserMajor:
+          type: integer
+          nullable: true
+          description: Browser major version; null when unknown.
+        os:
+          type: string
+          description: Operating system name; empty when unparsed.
+        city:
+          type: string
+          nullable: true
+          description: GeoIP-resolved city for the last IP in the ru locale; null when unknown.
+        lastIp:
+          type: string
+          nullable: true
+          description: Client IP of the most recent request.
+        lastSeenAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        current:
+          type: boolean
+          description: True when the session belongs to the caller's own cookie.
 
     UserUpdateRequest:
       type: object

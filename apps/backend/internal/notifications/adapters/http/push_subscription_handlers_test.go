@@ -82,7 +82,9 @@ func newPushJSONRequest(t *testing.T, method, target string, userID *uuid.UUID, 
 	if userID != nil {
 		ctx = httpsupport.WithUserID(ctx, *userID)
 	}
-	return httptest.NewRequestWithContext(ctx, method, target, bytes.NewReader(raw))
+	req := httptest.NewRequestWithContext(ctx, method, target, bytes.NewReader(raw))
+	req.Header.Set("Content-Type", "application/json")
+	return req
 }
 
 func TestGetVapidPublicKey_ReturnsKey(t *testing.T) {

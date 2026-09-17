@@ -141,6 +141,9 @@ func sessionCookie(value string) *http.Cookie {
 func authedRequest(t *testing.T, method, path, body string, userID uuid.UUID) *http.Request {
 	t.Helper()
 	r := httptest.NewRequestWithContext(t.Context(), method, path, bodyReader(body))
+	if body != "" {
+		r.Header.Set("Content-Type", "application/json")
+	}
 	return r.WithContext(httpsupport.WithUserID(r.Context(), userID))
 }
 
@@ -180,7 +183,7 @@ func newHandlersWithLimits(
 	phoneChange PhoneChanger,
 	limits AuthRateLimits,
 ) *AuthHandlers {
-	return NewAuthHandlers(nil, phoneChange, emailChange, profile, logout, false, slog.New(slog.DiscardHandler), limits, nil)
+	return NewAuthHandlers(nil, phoneChange, emailChange, profile, logout, nil, false, slog.New(slog.DiscardHandler), limits, nil)
 }
 
 func mustPhoneHandler(t *testing.T, raw string) domain.Phone {
@@ -415,7 +418,7 @@ func TestGetMe_EnricherSuccess(t *testing.T) {
 		resp.Name = &sub
 		return nil
 	}
-	h := NewAuthHandlers(nil, nil, nil, profile, nil, false, slog.New(slog.DiscardHandler), AuthRateLimits{}, enricher)
+	h := NewAuthHandlers(nil, nil, nil, profile, nil, nil, false, slog.New(slog.DiscardHandler), AuthRateLimits{}, enricher)
 
 	r := authedRequest(t, http.MethodGet, "/me", "", userID)
 	rr := doHandler(t, h.GetMe, r)
@@ -437,7 +440,7 @@ func TestGetMe_EnricherErrorReturns500(t *testing.T) {
 	enricher := func(context.Context, uuid.UUID, *openapi.MeResponse) error {
 		return errors.New("billing unavailable")
 	}
-	h := NewAuthHandlers(nil, nil, nil, profile, nil, false, slog.New(slog.DiscardHandler), AuthRateLimits{}, enricher)
+	h := NewAuthHandlers(nil, nil, nil, profile, nil, nil, false, slog.New(slog.DiscardHandler), AuthRateLimits{}, enricher)
 
 	r := authedRequest(t, http.MethodGet, "/me", "", userID)
 	rr := doHandler(t, h.GetMe, r)

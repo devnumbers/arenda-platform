@@ -378,13 +378,53 @@ func (r *fakeSessionRepo) DeleteByUserID(_ context.Context, userID uuid.UUID) er
 	return nil
 }
 
-func (r *fakeSessionRepo) DeleteByUserIDExcept(_ context.Context, userID uuid.UUID, tokenHash string) error {
+func (r *fakeSessionRepo) DeleteByUserIDExcept(_ context.Context, userID uuid.UUID, tokenHash string) (int64, error) {
+	var removed int64
 	for hash, s := range r.sessions {
 		if s.UserID == userID && hash != tokenHash {
 			delete(r.sessions, hash)
+			removed++
 		}
 	}
+	return removed, nil
+}
+
+func (r *fakeSessionRepo) Touch(_ context.Context, session domain.Session) error {
+	r.sessions[session.TokenHash] = session
 	return nil
+}
+
+func (r *fakeSessionRepo) Rotate(context.Context, domain.Session, string) (bool, error) {
+	return true, nil
+}
+
+func (r *fakeSessionRepo) ListByUserID(_ context.Context, userID uuid.UUID) ([]domain.Session, error) {
+	var out []domain.Session
+	for _, s := range r.sessions {
+		if s.UserID == userID {
+			out = append(out, s)
+		}
+	}
+	return out, nil
+}
+
+func (r *fakeSessionRepo) GetByID(_ context.Context, id uuid.UUID) (domain.Session, error) {
+	for _, s := range r.sessions {
+		if s.ID == id {
+			return s, nil
+		}
+	}
+	return domain.Session{}, ErrNotFound
+}
+
+func (r *fakeSessionRepo) DeleteByIDForUser(_ context.Context, id, userID uuid.UUID) (bool, error) {
+	for hash, s := range r.sessions {
+		if s.ID == id && s.UserID == userID {
+			delete(r.sessions, hash)
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (r *fakeSessionRepo) WithTx(transaction.Tx) (SessionRepository, error) { return r, nil }
@@ -559,7 +599,7 @@ func TestAuthenticationService_VerifyCode_ResolvesEmailFromUser(t *testing.T) {
 	}
 	code := h.sender.sent[0].code
 
-	raw, got, err := h.svc.VerifyCode(ctx, phone, nil, code, nil)
+	raw, got, err := h.svc.VerifyCode(ctx, phone, nil, code, nil, DeviceContext{})
 	if err != nil {
 		t.Fatalf("VerifyCode error = %v", err)
 	}
@@ -582,7 +622,7 @@ func TestAuthenticationService_VerifyCode_UnknownPhoneWithoutEmail(t *testing.T)
 	h := newAuthServiceHarness()
 	phone := mustPhone(t, "+79150000009")
 
-	_, _, err := h.svc.VerifyCode(t.Context(), phone, nil, "123456", nil)
+	_, _, err := h.svc.VerifyCode(t.Context(), phone, nil, "123456", nil, DeviceContext{})
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("VerifyCode error = %v, want ErrNotFound", err)
 	}
@@ -594,7 +634,7 @@ func TestAuthenticationService_VerifyCode_UserWithoutEmailWithoutEmail(t *testin
 	phone := mustPhone(t, "+79150000008")
 	h.seedUser(t, phone, nil)
 
-	_, _, err := h.svc.VerifyCode(t.Context(), phone, nil, "123456", nil)
+	_, _, err := h.svc.VerifyCode(t.Context(), phone, nil, "123456", nil, DeviceContext{})
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("VerifyCode error = %v, want ErrNotFound", err)
 	}
@@ -614,7 +654,7 @@ func TestAuthenticationService_ExplicitEmailFlow(t *testing.T) {
 		}
 		code := h.sender.sent[0].code
 
-		raw, user, err := h.svc.VerifyCode(ctx, phone, &email, code, nil)
+		raw, user, err := h.svc.VerifyCode(ctx, phone, &email, code, nil, DeviceContext{})
 		if err != nil {
 			t.Fatalf("VerifyCode error = %v", err)
 		}
@@ -694,7 +734,7 @@ func TestAuthenticationService_VerifyCode_RegistrationTimezone_NewUser(t *testin
 	code := h.sender.sent[0].code
 	timezone := "Asia/Yekaterinburg"
 
-	_, user, err := h.svc.VerifyCode(ctx, phone, &email, code, &timezone)
+	_, user, err := h.svc.VerifyCode(ctx, phone, &email, code, &timezone, DeviceContext{})
 	if err != nil {
 		t.Fatalf("VerifyCode error = %v", err)
 	}
@@ -723,7 +763,7 @@ func TestAuthenticationService_VerifyCode_RegistrationTimezone_InvalidFallsBack(
 	code := h.sender.sent[0].code
 	timezone := "Mars/Olympus"
 
-	_, _, err := h.svc.VerifyCode(ctx, phone, &email, code, &timezone)
+	_, _, err := h.svc.VerifyCode(ctx, phone, &email, code, &timezone, DeviceContext{})
 	if err != nil {
 		t.Fatalf("VerifyCode error = %v", err)
 	}
@@ -753,7 +793,7 @@ func TestAuthenticationService_VerifyCode_RegistrationTimezone_ExistingUntouched
 	code := h.sender.sent[0].code
 	timezone := "Asia/Yekaterinburg"
 
-	_, user, err := h.svc.VerifyCode(ctx, phone, &email, code, &timezone)
+	_, user, err := h.svc.VerifyCode(ctx, phone, &email, code, &timezone, DeviceContext{})
 	if err != nil {
 		t.Fatalf("VerifyCode error = %v", err)
 	}
@@ -828,7 +868,7 @@ func TestAuthenticationService_VerifyCode_InvalidCodeRecordsAttemptAndAudit(t *t
 		t.Fatalf("SendCodeByPhone error = %v", err)
 	}
 
-	_, _, err := h.svc.VerifyCode(ctx, phone, &email, "000000", nil)
+	_, _, err := h.svc.VerifyCode(ctx, phone, &email, "000000", nil, DeviceContext{})
 	if !errors.Is(err, domain.ErrLoginCodeInvalid) {
 		t.Fatalf("VerifyCode error = %v, want ErrLoginCodeInvalid", err)
 	}
@@ -869,7 +909,7 @@ func TestAuthenticationService_VerifyCode_TooManyAttemptsBlocks(t *testing.T) {
 
 	var lastErr error
 	for range domain.MaxLoginFailures {
-		_, _, lastErr = h.svc.VerifyCode(ctx, phone, &email, "000000", nil)
+		_, _, lastErr = h.svc.VerifyCode(ctx, phone, &email, "000000", nil, DeviceContext{})
 	}
 	if !errors.Is(lastErr, domain.ErrTooManyAttempts) {
 		t.Fatalf("last VerifyCode error = %v, want ErrTooManyAttempts", lastErr)
@@ -904,7 +944,7 @@ func TestAuthenticationService_VerifyCode_BlockedPhoneSkipsRecovery(t *testing.T
 	// Drive exactly MaxLoginFailures invalid verifications to reach the block.
 	var lastErr error
 	for range domain.MaxLoginFailures {
-		_, _, lastErr = h.svc.VerifyCode(ctx, phone, &email, "000000", nil)
+		_, _, lastErr = h.svc.VerifyCode(ctx, phone, &email, "000000", nil, DeviceContext{})
 	}
 	if !errors.Is(lastErr, domain.ErrTooManyAttempts) {
 		t.Fatalf("last VerifyCode error = %v, want ErrTooManyAttempts", lastErr)
@@ -912,7 +952,7 @@ func TestAuthenticationService_VerifyCode_BlockedPhoneSkipsRecovery(t *testing.T
 
 	// The phone is now blocked. A further verify must return ErrUserBlocked
 	// straight from LoginCodeService.Verify, without recovery.
-	_, _, err := h.svc.VerifyCode(ctx, phone, &email, "000000", nil)
+	_, _, err := h.svc.VerifyCode(ctx, phone, &email, "000000", nil, DeviceContext{})
 	if !errors.Is(err, ErrUserBlocked) {
 		t.Fatalf("VerifyCode on blocked phone error = %v, want ErrUserBlocked", err)
 	}

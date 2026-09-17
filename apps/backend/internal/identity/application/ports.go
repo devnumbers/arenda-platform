@@ -84,13 +84,55 @@ type AttemptRepository interface {
 	WithTx(tx transaction.Tx) (AttemptRepository, error)
 }
 
+// DeviceInfoParser parses a raw User-Agent string into the device description
+// stored on a session. Parsing happens once per session, at creation.
+type DeviceInfoParser interface {
+	Parse(userAgent string) domain.DeviceInfo
+}
+
+// GeoResolver resolves a public client IP to a city name in the ru locale
+// (fallback en) from the offline GeoIP base. A lookup that finds nothing —
+// unknown, private, or missing-from-base IP — reports found=false; resolution
+// is a best-effort enrichment and never fails a session operation.
+type GeoResolver interface {
+	ResolveCity(ctx context.Context, ip string) (city string, found bool)
+}
+
 type SessionRepository interface {
 	Create(ctx context.Context, session domain.Session) error
+	// GetByTokenHash resolves a live (unexpired) session by the hash of the
+	// presented token. It also accepts the session's previous token hash within
+	// the rotation grace window (domain.SessionRotationGrace), so in-flight
+	// requests survive a token rotation. The returned session always carries
+	// the canonical current TokenHash.
 	GetByTokenHash(ctx context.Context, tokenHash string, now time.Time) (domain.Session, domain.User, error)
+	// Update persists the sliding-window fields (expiry and last seen) by token
+	// hash. Session bookkeeping beyond the sliding window goes through Touch
+	// and Rotate.
 	Update(ctx context.Context, session domain.Session) error
+	// Touch persists one request's activity by token hash: the sliding expiry,
+	// the last-seen stamp, and the client IP with its resolved city (an empty
+	// city never erases a stored one).
+	Touch(ctx context.Context, session domain.Session) error
+	// Rotate swaps the session's token in place: newTokenHash becomes the
+	// canonical hash, the old hash moves to the grace slot and RotatedAt (plus
+	// the sliding fields) restart. It reports whether the swap won the race —
+	// a concurrent rotation of the same session makes it a no-op.
+	Rotate(ctx context.Context, session domain.Session, newTokenHash string) (rotated bool, err error)
+	// ListByUserID returns the user's sessions, most recently active first.
+	ListByUserID(ctx context.Context, userID uuid.UUID) ([]domain.Session, error)
+	// GetByID loads one session row regardless of expiry (revocation needs the
+	// row even near its end of life).
+	GetByID(ctx context.Context, id uuid.UUID) (domain.Session, error)
 	DeleteByTokenHash(ctx context.Context, tokenHash string) error
 	DeleteByUserID(ctx context.Context, userID uuid.UUID) error
-	DeleteByUserIDExcept(ctx context.Context, userID uuid.UUID, tokenHash string) error
+	// DeleteByUserIDExcept removes every session of the user except the one
+	// carrying tokenHash (its previous hash within the grace window also
+	// protects it) and reports how many rows were removed.
+	DeleteByUserIDExcept(ctx context.Context, userID uuid.UUID, tokenHash string) (int64, error)
+	// DeleteByIDForUser removes the session with id owned by userID and
+	// reports whether a row was removed.
+	DeleteByIDForUser(ctx context.Context, id, userID uuid.UUID) (bool, error)
 	WithTx(tx transaction.Tx) (SessionRepository, error)
 }
 

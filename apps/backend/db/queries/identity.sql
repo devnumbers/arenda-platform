@@ -115,32 +115,76 @@ DELETE FROM login_attempts t WHERE t.ctid IN (
 );
 
 -- name: CreateSession :one
-INSERT INTO sessions (id, user_id, token_hash, expires_at, last_used_at)
-VALUES ($1, $2, $3, $4, $5) RETURNING id, user_id, token_hash, expires_at, created_at, last_used_at;
+INSERT INTO sessions (id, user_id, token_hash, expires_at, last_used_at, rotated_at, last_ip, user_agent, device_type, browser, browser_major, os, city)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+RETURNING id, user_id, token_hash, expires_at, created_at, last_used_at;
 
 -- name: UpdateSession :exec
 UPDATE sessions SET expires_at = $1, last_used_at = $2 WHERE token_hash = $3;
 
+-- TouchSession persists one request's activity: the sliding expiry, the
+-- throttled last-seen stamp, and the client IP with its GeoIP city (null when
+-- unresolvable — an existing city is never erased by an unknown one, the
+-- application only writes cities it actually resolved).
+-- name: TouchSession :exec
+UPDATE sessions SET expires_at = sqlc.arg('expires_at'), last_used_at = sqlc.arg('last_used_at'), last_ip = sqlc.arg('last_ip'), city = sqlc.arg('city')
+WHERE token_hash = sqlc.arg('token_hash')::text;
+
+-- RotateSessionToken swaps the session token in place: the fresh hash replaces
+-- the old one, which moves to previous_token_hash (accepted for the in-flight
+-- grace window by GetSessionByTokenHash) and rotated_at restarts the renewal
+-- window. The token_hash = $3 guard makes a concurrent rotation a no-op for
+-- the loser, so exactly one swap wins per window.
+-- name: RotateSessionToken :execrows
+UPDATE sessions SET
+    token_hash = sqlc.arg('new_token_hash')::text,
+    previous_token_hash = sqlc.arg('old_token_hash')::text,
+    rotated_at = sqlc.arg('rotated_at'),
+    expires_at = sqlc.arg('expires_at'),
+    last_used_at = sqlc.arg('last_used_at'),
+    last_ip = sqlc.arg('last_ip'),
+    city = sqlc.arg('city')
+WHERE id = sqlc.arg('id') AND token_hash = sqlc.arg('old_token_hash')::text;
+
 -- name: DeleteSessionByTokenHash :exec
-DELETE FROM sessions WHERE token_hash = $1;
+DELETE FROM sessions WHERE token_hash = sqlc.arg('token_hash')::text OR previous_token_hash = sqlc.arg('token_hash')::text;
 
 -- name: DeleteSessionsByUserID :exec
 DELETE FROM sessions WHERE user_id = $1;
 
--- name: DeleteSessionsByUserIDExcept :exec
-DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2;
+-- name: DeleteSessionsByUserIDExcept :execrows
+DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2 AND (previous_token_hash IS NULL OR previous_token_hash <> $2);
 
 -- name: DeleteExpiredSessionsBatch :execrows
 DELETE FROM sessions t WHERE t.ctid IN (
     SELECT s.ctid FROM sessions s WHERE s.expires_at < $1 LIMIT $2
 );
 
+-- GetSessionByTokenHash resolves a live session by its token hash. The
+-- previous_token_hash branch keeps in-flight requests working during the
+-- rotation grace window: the old token is accepted until rotated_at falls
+-- behind $2 (now - SessionRotationGrace).
 -- name: GetSessionByTokenHash :one
-SELECT s.id, s.token_hash, s.expires_at, s.created_at, s.last_used_at,
+SELECT s.id, s.token_hash, s.previous_token_hash, s.expires_at, s.created_at, s.last_used_at, s.rotated_at,
+       s.last_ip, s.user_agent, s.device_type, s.browser, s.browser_major, s.os, s.city,
        u.id AS user_id, u.phone, u.role, u.name, u.surname, u.patronymic, u.email, u.email_verified_at, u.phone_encrypted, u.timezone
 FROM sessions s
 JOIN users u ON s.user_id = u.id
-WHERE s.token_hash = $1 AND s.expires_at > $2;
+WHERE (s.token_hash = sqlc.arg('token_hash')::text OR (s.previous_token_hash = sqlc.arg('token_hash')::text AND s.rotated_at > sqlc.arg('grace_cutoff'))) AND s.expires_at > sqlc.arg('seen_after');
+
+-- name: ListSessionsByUserID :many
+SELECT id, token_hash, device_type, browser, browser_major, os, city, last_ip, last_used_at, created_at, expires_at
+FROM sessions
+WHERE user_id = $1
+ORDER BY last_used_at DESC, id DESC;
+
+-- name: GetSessionByID :one
+SELECT id, user_id, token_hash, device_type, browser, browser_major, os, city, last_ip, last_used_at, created_at, expires_at
+FROM sessions
+WHERE id = $1;
+
+-- name: DeleteSessionByIDForUser :execrows
+DELETE FROM sessions WHERE id = $1 AND user_id = $2;
 
 -- name: GetVerifiedEmailByUserID :one
 SELECT email

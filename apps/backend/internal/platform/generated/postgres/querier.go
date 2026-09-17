@@ -144,7 +144,7 @@ type Querier interface {
 	CreatePropertyMemberInvitation(ctx context.Context, arg CreatePropertyMemberInvitationParams) (PropertyMemberInvitation, error)
 	CreatePropertyMemberWithStatus(ctx context.Context, arg CreatePropertyMemberWithStatusParams) (PropertyMember, error)
 	CreatePropertyPhoto(ctx context.Context, arg CreatePropertyPhotoParams) (PropertyPhoto, error)
-	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
+	CreateSession(ctx context.Context, arg CreateSessionParams) (CreateSessionRow, error)
 	CreateSubscription(ctx context.Context, arg CreateSubscriptionParams) (UserSubscription, error)
 	// Subscription payments (issue #250). Two partial unique indexes are the
 	// durable backstops of the one-pending-payment rule: the same-target
@@ -245,9 +245,10 @@ type Querier interface {
 	// the rule — planned, overdue, today's and the single future — is physically
 	// removed; completed rows stay in the journal.
 	DeleteRuleUncompleted(ctx context.Context, ruleID pgtype.UUID) error
+	DeleteSessionByIDForUser(ctx context.Context, arg DeleteSessionByIDForUserParams) (int64, error)
 	DeleteSessionByTokenHash(ctx context.Context, tokenHash string) error
 	DeleteSessionsByUserID(ctx context.Context, userID pgtype.UUID) error
-	DeleteSessionsByUserIDExcept(ctx context.Context, arg DeleteSessionsByUserIDExceptParams) error
+	DeleteSessionsByUserIDExcept(ctx context.Context, arg DeleteSessionsByUserIDExceptParams) (int64, error)
 	DeleteStaleLoginAttemptsBatch(ctx context.Context, arg DeleteStaleLoginAttemptsBatchParams) (int64, error)
 	// The stand-only time-travel rig of issue #665 is the one deliberate writer
 	// that moves history: the dunning retry schedule anchors at the latest
@@ -377,6 +378,11 @@ type Querier interface {
 	// One rental by id within the owner's scope on the given property, with the
 	// tenant's contact fields resolved for the embedded tenant view.
 	GetRentalByID(ctx context.Context, arg GetRentalByIDParams) (GetRentalByIDRow, error)
+	GetSessionByID(ctx context.Context, id pgtype.UUID) (GetSessionByIDRow, error)
+	// GetSessionByTokenHash resolves a live session by its token hash. The
+	// previous_token_hash branch keeps in-flight requests working during the
+	// rotation grace window: the old token is accepted until rotated_at falls
+	// behind $2 (now - SessionRotationGrace).
 	GetSessionByTokenHash(ctx context.Context, arg GetSessionByTokenHashParams) (GetSessionByTokenHashRow, error)
 	GetSubscriptionByID(ctx context.Context, id pgtype.UUID) (UserSubscription, error)
 	GetSubscriptionByIDForUpdate(ctx context.Context, id pgtype.UUID) (UserSubscription, error)
@@ -675,6 +681,7 @@ type Querier interface {
 	// completed ones by completion date, fresh on top (ADR 0053 §4).
 	ListRentalsByProperty(ctx context.Context, arg ListRentalsByPropertyParams) ([]ListRentalsByPropertyRow, error)
 	ListSeenPopups(ctx context.Context, userID pgtype.UUID) ([]string, error)
+	ListSessionsByUserID(ctx context.Context, userID pgtype.UUID) ([]ListSessionsByUserIDRow, error)
 	// Admin payment views (issue #254). The phone filter matches the stored
 	// ciphertext (deterministic encryption) or the plaintext of a not-yet-
 	// encrypted row, mirroring ListUsersAdmin; user input is never interpolated
@@ -830,6 +837,12 @@ type Querier interface {
 	// window is new or has expired (TTL reset) and the failure counter must be set
 	// to an absolute value rather than incremented.
 	ResetLoginAttempt(ctx context.Context, arg ResetLoginAttemptParams) error
+	// RotateSessionToken swaps the session token in place: the fresh hash replaces
+	// the old one, which moves to previous_token_hash (accepted for the in-flight
+	// grace window by GetSessionByTokenHash) and rotated_at restarts the renewal
+	// window. The token_hash = $3 guard makes a concurrent rotation a no-op for
+	// the loser, so exactly one swap wins per window.
+	RotateSessionToken(ctx context.Context, arg RotateSessionTokenParams) (int64, error)
 	// The search endpoint's window (ticket #601): the actor's visible
 	// non-archived properties — own plus actively shared (the merged visibility
 	// of the main list, ADR 0028) — matching the search as a case-insensitive
@@ -916,6 +929,11 @@ type Querier interface {
 	// type and the category filters narrow this read only.
 	SumPaidOperationsByCategoryGlobal(ctx context.Context, arg SumPaidOperationsByCategoryGlobalParams) ([]SumPaidOperationsByCategoryGlobalRow, error)
 	SuspendPropertyMember(ctx context.Context, arg SuspendPropertyMemberParams) error
+	// TouchSession persists one request's activity: the sliding expiry, the
+	// throttled last-seen stamp, and the client IP with its GeoIP city (null when
+	// unresolvable — an existing city is never erased by an unknown one, the
+	// application only writes cities it actually resolved).
+	TouchSession(ctx context.Context, arg TouchSessionParams) error
 	UnarchiveProperty(ctx context.Context, arg UnarchivePropertyParams) (Property, error)
 	// «Отменить выполнение»: the completion fact cleared; rows affected = 0
 	// surfaces as ErrNotCompleted.
