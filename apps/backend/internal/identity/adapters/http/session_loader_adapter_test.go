@@ -58,6 +58,7 @@ func newSessionSvcForLoader(t *testing.T, sessions *fakeSessionRepoForLoader) id
 		nil, // Codes.
 		nil, // Attempts.
 		sessions,
+		nil, // Grants.
 		nil, // Audit.
 		nil, // UoW — not needed for Load/Update (they don't use runInTx).
 	)

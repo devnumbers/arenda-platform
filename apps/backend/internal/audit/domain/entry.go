@@ -41,6 +41,13 @@ const (
 	// audit gap where phone-change failures left no trail while the success
 	// path was fully audited.
 	ActionAuthPhoneChangeFailed Action = "auth.phone_change_failed"
+	// ActionAuthEmailChanged records a successful email change (issue #721).
+	// The email is the login-code delivery channel, not the login itself, so
+	// sessions are intentionally left untouched.
+	ActionAuthEmailChanged Action = "auth.email_changed"
+	// ActionAuthEmailChangeFailed records a failed email-change verification
+	// attempt, mirroring ActionAuthPhoneChangeFailed (issue #721).
+	ActionAuthEmailChangeFailed Action = "auth.email_change_failed"
 	ActionProfileUpdated        Action = "profile.updated"
 
 	ActionNotificationPreferencesUpdated Action = "notification_preferences.updated"

@@ -82,41 +82,30 @@ func TestProfileService_UpdateProfile_UpdatesPersonalData(t *testing.T) {
 	}
 }
 
-// TestProfileService_UpdateProfile_EmailChangeResetsVerified proves changing
-// the email clears EmailVerifiedAt, while an unchanged email leaves it intact.
-func TestProfileService_UpdateProfile_EmailChangeResetsVerified(t *testing.T) {
+// TestProfileService_UpdateProfile_EmailIsUntouchable proves the profile
+// update cannot move the email (issue #721): the command carries no email
+// field, so the stored address and its verification stamp survive any profile
+// edit — the address changes only through the confirmed two-code flow.
+func TestProfileService_UpdateProfile_EmailIsUntouchable(t *testing.T) {
 	t.Parallel()
 	h := newProfileHarness(t)
 	user := seedProfileUser(t, h.users)
 
-	t.Run("new email clears verified", func(t *testing.T) {
-		t.Parallel()
-		updated, err := h.svc.UpdateProfile(context.Background(), user.ID, UpdateProfileCommand{Email: new("new@example.com")})
-		if err != nil {
-			t.Fatalf("UpdateProfile error = %v", err)
-		}
-		if updated.EmailVerifiedAt != nil {
-			t.Fatalf("EmailVerifiedAt = %v, want nil after email change", updated.EmailVerifiedAt)
-		}
-		if updated.Email == nil || updated.Email.String() != "new@example.com" {
-			t.Fatalf("updated email = %v, want new@example.com", updated.Email)
-		}
+	updated, err := h.svc.UpdateProfile(context.Background(), user.ID, UpdateProfileCommand{
+		Name: new("Ivan"),
 	})
-
-	t.Run("same email keeps verified", func(t *testing.T) {
-		t.Parallel()
-		// Re-seed: the first subtest already mutated the shared user.
-		h := newProfileHarness(t)
-		user := seedProfileUser(t, h.users)
-
-		updated, err := h.svc.UpdateProfile(context.Background(), user.ID, UpdateProfileCommand{Email: new("owner@example.com")})
-		if err != nil {
-			t.Fatalf("UpdateProfile error = %v", err)
-		}
-		if updated.EmailVerifiedAt == nil {
-			t.Fatal("EmailVerifiedAt = nil, want preserved when email is unchanged")
-		}
-	})
+	if err != nil {
+		t.Fatalf("UpdateProfile error = %v", err)
+	}
+	if updated.Email == nil || updated.Email.String() != "owner@example.com" {
+		t.Fatalf("email = %v, want owner@example.com (untouched)", updated.Email)
+	}
+	if updated.EmailVerifiedAt == nil {
+		t.Fatal("EmailVerifiedAt = nil, want preserved")
+	}
+	if updated.Name == nil || *updated.Name != "Ivan" {
+		t.Fatalf("name = %v, want Ivan (the edit itself applied)", updated.Name)
+	}
 }
 
 // TestProfileService_UpdateProfile_RecordsAuditInTx proves the audit entry is
@@ -206,7 +195,7 @@ func TestProfileService_UsesRunInTx(t *testing.T) {
 	attempts := newFakeAttemptRepo()
 	sessions := newFakeSessionRepo()
 	beginner := &fakeBeginner{}
-	factory := NewTxStoreFactory(users, codes, attempts, sessions, &recordingRecorder{}, &fakeUoW{beginner: beginner})
+	factory := NewTxStoreFactory(users, codes, attempts, sessions, newFakeGrantRepo(), &recordingRecorder{}, &fakeUoW{beginner: beginner})
 	svc := NewProfileService(factory)
 	seedProfileUser(t, users.fakeUserRepo)
 

@@ -18,7 +18,6 @@ export type UserUpdateCommand = {
   name?: string | null;
   surname?: string | null;
   patronymic?: string | null;
-  email?: string | null;
   timezone?: string | null;
 };
 
@@ -28,6 +27,20 @@ export type SendPhoneChangeCodeCommand = {
 
 export type ChangePhoneCommand = {
   phone: string;
+  code: string;
+};
+
+/** Шаг 2 флоу смены почты (#721/#722): подтверждение кода с текущего
+ * адреса + сам новый адрес одним запросом — в ответ приходит одноразовый
+ * грант и код уходит на новый адрес. */
+export type ConfirmCurrentEmailCommand = {
+  newEmail: string;
+  code: string;
+};
+
+/** Шаг 3 флоу смены почты: код с нового адреса + грант из шага 2. */
+export type ChangeEmailCommand = {
+  grant: string;
   code: string;
 };
 

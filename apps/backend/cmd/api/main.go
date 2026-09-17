@@ -65,9 +65,14 @@ func run() error {
 	//    push-subscription services.
 	notificationsMod := wire.WireNotifications(p)
 
+	// 3.5. HTTP rate limiters (built early: the email-change service's
+	//      new-address send budget consumes the email-change limiter).
+	limiters := wire.WireRateLimiters(p.Cfg)
+	defer limiters.Stop()
+
 	// 4. Identity: repos, session service, event publisher, email mailer
-	//    switch, auth/phone-change/profile/logout services.
-	identityMod, err := wire.WireIdentity(ctx, p, eventDispatcher)
+	//    switch, auth/phone-change/email-change/profile/logout services.
+	identityMod, err := wire.WireIdentity(ctx, p, eventDispatcher, limiters)
 	if err != nil {
 		return err
 	}
@@ -180,16 +185,13 @@ func run() error {
 			billingMod.Services.Subscriptions, workers.Billing, p.Logger)
 	}
 
-	// 13. HTTP rate limiters.
-	limiters := wire.WireRateLimiters(p.Cfg)
-	defer limiters.Stop()
-
 	poolStats := newPoolStats(p.Cfg, p.Pool)
 
 	// 14. HTTP handler + server.
 	handler := httpserver.New(httpserver.Deps{
 		Auth:                     identityMod.Authentication,
 		PhoneChange:              identityMod.PhoneChange,
+		EmailChange:              identityMod.EmailChange,
 		Profile:                  identityMod.Profile,
 		Logout:                   identityMod.Logout,
 		Sessions:                 identityMod.SessionLoader,

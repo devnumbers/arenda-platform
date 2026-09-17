@@ -3,11 +3,16 @@ package application
 import "errors"
 
 var (
-	ErrNotFound            = errors.New("not found")
-	ErrUserBlocked         = errors.New("user is temporarily blocked")
-	ErrCodeSentTooRecently = errors.New("code sent too recently")
-	ErrPhoneAlreadyTaken   = errors.New("phone already taken")
-	ErrPhoneUnchanged      = errors.New("new phone must differ from current phone")
-	ErrEmailAlreadyTaken   = errors.New("email already taken")
-	ErrEmailDoesNotMatch   = errors.New("email does not match the phone number")
+	ErrNotFound                = errors.New("not found")
+	ErrUserBlocked             = errors.New("user is temporarily blocked")
+	ErrCodeSentTooRecently     = errors.New("code sent too recently")
+	ErrPhoneAlreadyTaken       = errors.New("phone already taken")
+	ErrPhoneUnchanged          = errors.New("new phone must differ from current phone")
+	ErrEmailAlreadyTaken       = errors.New("email already taken")
+	ErrEmailUnchanged          = errors.New("new email must differ from current email")
+	ErrEmailDoesNotMatch       = errors.New("email does not match the phone number")
+	ErrEmailChangeGrantInvalid = errors.New("email change grant is invalid, expired, or already used")
+	// ErrEmailChangeBudgetExhausted reports the per-user hourly budget on code
+	// sends to NEW addresses is spent (decision #720-3).
+	ErrEmailChangeBudgetExhausted = errors.New("email change send budget is exhausted")
 )

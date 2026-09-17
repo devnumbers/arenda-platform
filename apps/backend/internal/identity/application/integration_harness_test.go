@@ -95,11 +95,13 @@ type integrationHarness struct {
 	codes    *postgres.LoginCodeRepository
 	attempts *postgres.AttemptRepository
 	sessions *postgres.SessionRepository
+	grants   *postgres.EmailChangeGrantRepository
 	uow      transaction.UoW
 	audit    auditapp.Recorder
 
 	auth       *identityapp.AuthenticationService
 	phone      *identityapp.PhoneChangeService
+	email      *identityapp.EmailChangeService
 	profile    *identityapp.ProfileService
 	logout     *identityapp.LogoutService
 	sessionsvc identityapp.SessionService
@@ -125,11 +127,12 @@ func newIntegrationHarness(t *testing.T) *integrationHarness {
 	codes := postgres.NewLoginCodeRepository(pool, enc)
 	attempts := postgres.NewAttemptRepository(pool, enc)
 	sessions := postgres.NewSessionRepository(pool, enc)
+	grants := postgres.NewEmailChangeGrantRepository(pool)
 	uow := pgdb.NewUoW(pool, logger)
 	auditWriter := auditpg.NewWriter(pool)
 	audit := auditapp.NewService(auditWriter, clk)
 
-	factory := identityapp.NewTxStoreFactory(users, codes, attempts, sessions, audit, uow)
+	factory := identityapp.NewTxStoreFactory(users, codes, attempts, sessions, grants, audit, uow)
 
 	loginCodes := identityapp.NewLoginCodeService(factory, identityapp.LoginCodeServiceConfig{
 		CodeSender: sender,
@@ -152,6 +155,7 @@ func newIntegrationHarness(t *testing.T) *integrationHarness {
 		codes:     codes,
 		attempts:  attempts,
 		sessions:  sessions,
+		grants:    grants,
 		uow:       uow,
 		audit:     audit,
 		auth: identityapp.NewAuthenticationService(factory, identityapp.AuthenticationServiceConfig{
@@ -162,6 +166,12 @@ func newIntegrationHarness(t *testing.T) *integrationHarness {
 			Logger:     logger,
 		}),
 		phone: identityapp.NewPhoneChangeService(factory, identityapp.PhoneChangeServiceConfig{
+			LoginCodes: loginCodes,
+			Clock:      clk,
+			Hasher:     enc,
+			Logger:     logger,
+		}),
+		email: identityapp.NewEmailChangeService(factory, identityapp.EmailChangeServiceConfig{
 			LoginCodes: loginCodes,
 			Clock:      clk,
 			Hasher:     enc,

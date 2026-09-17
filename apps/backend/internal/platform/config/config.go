@@ -147,6 +147,7 @@ type RateLimit struct {
 	EmailVerifyPer15Min       int
 	PhoneChangeSendPerHour    int
 	PhoneChangeVerifyPer15Min int
+	EmailChangeSendPerHour    int
 }
 
 // DBPoolConfig holds PostgreSQL connection pool settings.
@@ -384,6 +385,9 @@ func (c *Config) loadRateLimit() error {
 	if err := c.overrideRateLimitPhoneChange(); err != nil {
 		return err
 	}
+	if err := c.overrideRateLimitEmailChange(); err != nil {
+		return err
+	}
 	return c.validateRateLimit()
 }
 
@@ -397,6 +401,7 @@ func defaultRateLimit() RateLimit {
 		EmailVerifyPer15Min:       30,
 		PhoneChangeSendPerHour:    5,
 		PhoneChangeVerifyPer15Min: 10,
+		EmailChangeSendPerHour:    5,
 	}
 }
 
@@ -439,7 +444,7 @@ func (c *Config) overrideRateLimitEmail() error {
 }
 
 // overrideRateLimitPhoneChange applies the phone-change send/verify overrides,
-// keeping the built-in defaults when a value arrives unset or non-positive.
+// keeping the built-in defaults when a value arrives unset.
 func (c *Config) overrideRateLimitPhoneChange() error {
 	if v := os.Getenv("RATE_LIMIT_PHONE_CHANGE_SEND_PER_HOUR"); v != "" {
 		n, err := strconv.Atoi(v)
@@ -447,8 +452,6 @@ func (c *Config) overrideRateLimitPhoneChange() error {
 			return fmt.Errorf("invalid RATE_LIMIT_PHONE_CHANGE_SEND_PER_HOUR %q: %w", v, err)
 		}
 		c.RateLimit.PhoneChangeSendPerHour = n
-	} else if c.RateLimit.PhoneChangeSendPerHour <= 0 {
-		c.RateLimit.PhoneChangeSendPerHour = 5
 	}
 	if v := os.Getenv("RATE_LIMIT_PHONE_CHANGE_VERIFY_PER_15MIN"); v != "" {
 		n, err := strconv.Atoi(v)
@@ -456,8 +459,20 @@ func (c *Config) overrideRateLimitPhoneChange() error {
 			return fmt.Errorf("invalid RATE_LIMIT_PHONE_CHANGE_VERIFY_PER_15MIN %q: %w", v, err)
 		}
 		c.RateLimit.PhoneChangeVerifyPer15Min = n
-	} else if c.RateLimit.PhoneChangeVerifyPer15Min <= 0 {
-		c.RateLimit.PhoneChangeVerifyPer15Min = 10
+	}
+	return nil
+}
+
+// overrideRateLimitEmailChange applies the email-change send override
+// (codes to NEW addresses, issue #721), keeping the built-in default when the
+// value arrives unset.
+func (c *Config) overrideRateLimitEmailChange() error {
+	if v := os.Getenv("RATE_LIMIT_EMAIL_CHANGE_SEND_PER_HOUR"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return fmt.Errorf("invalid RATE_LIMIT_EMAIL_CHANGE_SEND_PER_HOUR %q: %w", v, err)
+		}
+		c.RateLimit.EmailChangeSendPerHour = n
 	}
 	return nil
 }
@@ -481,6 +496,9 @@ func (c *Config) validateRateLimit() error {
 	}
 	if c.RateLimit.PhoneChangeVerifyPer15Min <= 0 {
 		return errors.New("RATE_LIMIT_PHONE_CHANGE_VERIFY_PER_15MIN must be positive")
+	}
+	if c.RateLimit.EmailChangeSendPerHour <= 0 {
+		return errors.New("RATE_LIMIT_EMAIL_CHANGE_SEND_PER_HOUR must be positive")
 	}
 	return nil
 }

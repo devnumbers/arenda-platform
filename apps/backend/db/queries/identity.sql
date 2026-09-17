@@ -13,6 +13,9 @@ SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at
 -- name: GetUserByEmail :one
 SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone FROM users WHERE LOWER(email) = LOWER($1::text);
 
+-- name: GetUserByEmailForUpdate :one
+SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone FROM users WHERE LOWER(email) = LOWER($1::text) FOR UPDATE;
+
 -- name: CreateUser :one
 INSERT INTO users (id, phone, role, phone_encrypted, email, email_verified_at)
 VALUES ($1, $2, $3, $4, $5, $6)
@@ -171,6 +174,26 @@ SET email = $2,
     updated_at = now()
 WHERE id = $1
 RETURNING id, phone, role, name, surname, patronymic, email, email_verified_at, created_at, updated_at, phone_encrypted, timezone;
+
+-- name: UpdateUserEmailVerifiedAt :one
+UPDATE users
+SET email_verified_at = $2,
+    updated_at = now()
+WHERE id = $1
+RETURNING id, phone, role, name, surname, patronymic, email, email_verified_at, created_at, updated_at, phone_encrypted, timezone;
+
+-- name: InsertEmailChangeGrant :exec
+INSERT INTO email_change_grants (id, user_id, email, token_hash, expires_at, created_at)
+VALUES ($1, $2, $3, $4, $5, $6);
+
+-- name: GetEmailChangeGrantByUserIDForUpdate :one
+SELECT id, user_id, email, token_hash, expires_at, created_at FROM email_change_grants WHERE user_id = $1 FOR UPDATE;
+
+-- name: DeleteEmailChangeGrantByID :exec
+DELETE FROM email_change_grants WHERE id = $1;
+
+-- name: DeleteEmailChangeGrantsByUserID :exec
+DELETE FROM email_change_grants WHERE user_id = $1;
 
 -- name: ListUsersAdmin :many
 SELECT u.*, us.status AS subscription_status

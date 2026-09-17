@@ -128,14 +128,43 @@ export async function openCabinetWithSessionToken(page: Page, sessionToken: stri
  * log, tools/e2e/run-e2e-with-db-checks.sh).
  */
 export async function extractLoginCode(user: SeededUser): Promise<string> {
-  const codePattern = new RegExp(`${user.email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^\\n]*?Рентли: (\\d{6})`, 'g');
+  return extractCodeSentTo(user, user.email);
+}
+
+function codePatternFor(email: string): RegExp {
+  return new RegExp(`${email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^\\n]*?Рентли: (\\d{6})`, 'g');
+}
+
+/**
+ * Counts the codes already logged for the address. Serves as the baseline
+ * for extractCodeSentTo: an earlier send to the same address (login spec,
+ * the previous leg of the email-change flow) must not be mistaken for the
+ * code that has not been logged yet.
+ */
+export async function countCodesSentTo(user: SeededUser, email: string): Promise<number> {
+  const log = await readFile(user.backendLogPath, 'utf8');
+  return [...log.matchAll(codePatternFor(email))].length;
+}
+
+/**
+ * Extracts the last code emailed to the given address, but only once at
+ * least minCount + 1 sends are in the log — the caller snapshots the count
+ * before triggering the send. All identity codes (login, phone change,
+ * email change #722) share the fake sender and the log format.
+ */
+export async function extractCodeSentTo(
+  user: SeededUser,
+  email: string,
+  minCount = 0,
+): Promise<string> {
+  const codePattern = codePatternFor(email);
   const deadline = Date.now() + 15_000;
   while (Date.now() < deadline) {
     try {
       const log = await readFile(user.backendLogPath, 'utf8');
       const codes = [...log.matchAll(codePattern)].map((match) => match[1] ?? '');
       const code = codes.at(-1);
-      if (code) {
+      if (code !== undefined && codes.length > minCount) {
         return code;
       }
     } catch {
@@ -143,7 +172,7 @@ export async function extractLoginCode(user: SeededUser): Promise<string> {
     }
     await sleep(250);
   }
-  throw new Error(`login code not found in backend log (${user.backendLogPath})`);
+  throw new Error(`code for ${email} not found in backend log (${user.backendLogPath})`);
 }
 
 /**

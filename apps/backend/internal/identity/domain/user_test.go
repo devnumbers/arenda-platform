@@ -103,10 +103,9 @@ func assertStringPtr(t *testing.T, label string, got *string, want string) {
 	}
 }
 
-// assertEmailVerification checks the email-verification contract of
-// UpdatePersonalData: the stored address matches wantEmail, and the
-// verified-at timestamp survives only when wantVerified is set (an identical
-// resubmit keeps it, a real change resets it).
+// assertEmailVerification checks the stored address matches wantEmail and the
+// verified-at timestamp is present exactly when wantVerified is set. Since #721
+// a profile update never touches either, so the helper also pins that boundary.
 func assertEmailVerification(t *testing.T, u User, wantEmail string, wantVerified bool, verifiedAt time.Time) {
 	t.Helper()
 	if u.Email == nil || u.Email.String() != wantEmail {
@@ -141,7 +140,7 @@ func TestUser_UpdatePersonalData(t *testing.T) {
 			nameArg:        new("Ivan"),
 			surnameArg:     new("Petrov"),
 			patronymicArg:  new("Sergeevich"),
-			timezoneArg:    new(testTimezone), // Email untouched.
+			timezoneArg:    new(testTimezone),
 			wantName:       "Ivan",
 			wantSurname:    "Petrov",
 			wantPatronymic: "Sergeevich",
@@ -159,7 +158,7 @@ func TestUser_UpdatePersonalData(t *testing.T) {
 			t.Parallel()
 			u := newOwnerWithVerifiedEmail(t, verifiedAt)
 
-			err := u.UpdatePersonalData(tc.nameArg, tc.surnameArg, tc.patronymicArg, nil, tc.timezoneArg)
+			err := u.UpdatePersonalData(tc.nameArg, tc.surnameArg, tc.patronymicArg, tc.timezoneArg)
 			if err != nil {
 				t.Fatalf("UpdatePersonalData error = %v", err)
 			}
@@ -172,37 +171,20 @@ func TestUser_UpdatePersonalData(t *testing.T) {
 		})
 	}
 
-	emailCases := []struct {
-		name              string
-		email             string
-		wantEmail         string
-		wantStillVerified bool
-	}{
-		{
-			name:              "email change resets verification",
-			email:             "new@example.com",
-			wantEmail:         "new@example.com",
-			wantStillVerified: false,
-		},
-		{
-			name:              "identical email keeps verification",
-			email:             verifiedOwnerEmail,
-			wantEmail:         verifiedOwnerEmail,
-			wantStillVerified: true,
-		},
-	}
-	for _, tc := range emailCases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			u := newOwnerWithVerifiedEmail(t, verifiedAt)
+	// The email is deliberately not part of UpdatePersonalData (#721): the
+	// address changes only through the confirmed two-code flow, so the old
+	// "free edit resets verification" rule is gone — a profile update leaves
+	// the address and its verification stamp untouched.
+	t.Run("profile update leaves the email and its verification intact", func(t *testing.T) {
+		t.Parallel()
+		u := newOwnerWithVerifiedEmail(t, verifiedAt)
 
-			err := u.UpdatePersonalData(nil, nil, nil, new(tc.email), nil)
-			if err != nil {
-				t.Fatalf("UpdatePersonalData error = %v", err)
-			}
-			assertEmailVerification(t, u, tc.wantEmail, tc.wantStillVerified, verifiedAt)
-		})
-	}
+		err := u.UpdatePersonalData(new("Ivan"), nil, nil, new(testTimezone))
+		if err != nil {
+			t.Fatalf("UpdatePersonalData error = %v", err)
+		}
+		assertEmailVerification(t, u, verifiedOwnerEmail, true, verifiedAt)
+	})
 
 	t.Run("nil fields do not mutate the aggregate", func(t *testing.T) {
 		t.Parallel()
@@ -210,7 +192,7 @@ func TestUser_UpdatePersonalData(t *testing.T) {
 		emailBefore := u.Email
 		tzBefore := u.Timezone
 
-		err := u.UpdatePersonalData(nil, nil, nil, nil, nil)
+		err := u.UpdatePersonalData(nil, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("UpdatePersonalData error = %v", err)
 		}
@@ -224,19 +206,17 @@ func TestUser_UpdatePersonalData(t *testing.T) {
 
 	errorCases := []struct {
 		name        string
-		emailArg    *string
 		timezoneArg *string
 		wantErr     error
 	}{
-		{"invalid email returns ErrInvalidEmail", new("not-an-email"), nil, ErrInvalidEmail},
-		{"invalid timezone returns ErrInvalidTimezone", nil, new("Mars/Olympus"), ErrInvalidTimezone},
+		{"invalid timezone returns ErrInvalidTimezone", new("Mars/Olympus"), ErrInvalidTimezone},
 	}
 	for _, tc := range errorCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			u := newOwnerWithVerifiedEmail(t, verifiedAt)
 
-			err := u.UpdatePersonalData(nil, nil, nil, tc.emailArg, tc.timezoneArg)
+			err := u.UpdatePersonalData(nil, nil, nil, tc.timezoneArg)
 			if !errors.Is(err, tc.wantErr) {
 				t.Fatalf("UpdatePersonalData error = %v, want %v", err, tc.wantErr)
 			}

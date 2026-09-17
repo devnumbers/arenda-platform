@@ -1,1 +1,8 @@
-export { useChangePhone, useChangePhoneSendCode, useUpdateMe } from './api/hooks';
+export {
+  useChangePhone,
+  useChangePhoneSendCode,
+  useConfirmCurrentEmail,
+  useChangeEmail,
+  useEmailChangeSendCode,
+  useUpdateMe,
+} from './api/hooks';

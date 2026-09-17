@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { User } from '@/entities/user';
-import { isEmailValid, profileFieldPatch } from './profile-edit';
+import { profileFieldPatch } from './profile-edit';
 
 const me: User = {
   id: 'u1',
@@ -13,24 +13,6 @@ const me: User = {
   timezone: 'Europe/Moscow',
   subscription: null,
 };
-
-describe('isEmailValid', () => {
-  it('пустая почта валидна (поле необязательное)', () => {
-    expect(isEmailValid('')).toBe(true);
-  });
-
-  it('принимает корректный адрес', () => {
-    expect(isEmailValid('daniil@yandex.ru')).toBe(true);
-  });
-
-  it('отклоняет адрес без домена', () => {
-    expect(isEmailValid('daniil@')).toBe(false);
-  });
-
-  it('отклоняет адрес с пробелом', () => {
-    expect(isEmailValid('da niil@yandex.ru')).toBe(false);
-  });
-});
 
 describe('profileFieldPatch', () => {
   it('неизменённое поле не даёт патча', () => {
@@ -47,15 +29,5 @@ describe('profileFieldPatch', () => {
 
   it('пробельная строка при пустом сохранённом значении не даёт патча', () => {
     expect(profileFieldPatch(me, 'surname', '   ')).toBeNull();
-  });
-
-  it('изменённая почта даёт патч email', () => {
-    expect(profileFieldPatch(me, 'email', 'new@mail.ru')).toEqual({
-      email: 'new@mail.ru',
-    });
-  });
-
-  it('очищенная почта даёт патч email: "" (бэк очистку почты отклоняет — см. AccountScreen)', () => {
-    expect(profileFieldPatch(me, 'email', '')).toEqual({ email: '' });
   });
 });
