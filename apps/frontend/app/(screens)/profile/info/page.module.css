@@ -29,3 +29,15 @@
   line-height: var(--line-height-text-m);
   color: var(--color-text);
 }
+
+.attribution {
+  margin-top: 16px;
+  font-size: var(--font-size-text-s);
+  line-height: var(--line-height-text-s);
+  color: var(--color-content-secondary);
+}
+
+.attributionLink {
+  color: inherit;
+  text-decoration: underline;
+}
