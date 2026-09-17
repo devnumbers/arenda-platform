@@ -10,26 +10,13 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
 )
 
-// The direct-notification delivery of issue #253: both channels honour the
-// user's per-channel preferences (ADR 0030), every channel failure is
-// best-effort — logged and never failing the other channel — and a nil push
-// sender keeps delivery email-only.
+// The direct-notification delivery of issue #253. Grace is the always-on
+// service category (ADR 0056, решение #738): no user setting silences a
+// channel, every channel failure is best-effort — logged and never failing
+// the other channel — and a nil push sender keeps delivery email-only.
 
 // testOwnerEmail is the shared contact fixture of the direct-notification tests.
 const testOwnerEmail = "owner@example.com"
-
-// channelPrefsRepo embeds the policy-test fake and answers IsChannelAllowed
-// from a per-channel map.
-type channelPrefsRepo struct {
-	fakePreferenceRepo
-	allowed map[domain.NotificationChannel]bool
-}
-
-func (r *channelPrefsRepo) IsChannelAllowed(
-	_ context.Context, _ uuid.UUID, _ domain.EventType, ch domain.NotificationChannel,
-) (bool, error) {
-	return r.allowed[ch], nil
-}
 
 // fakeResolver resolves every user to the scripted contact.
 type fakeResolver struct {
@@ -98,11 +85,10 @@ func (r *fakePushSubRepo) ListByUser(_ context.Context, userID uuid.UUID) ([]dom
 	return subs, nil
 }
 
-// directHarness wires the DirectNotificationService over the fakes with both
-// channels allowed, one push subscription and a resolvable email contact.
+// directHarness wires the DirectNotificationService over the fakes with one
+// push subscription and a resolvable email contact.
 type directHarness struct {
 	svc     *DirectNotificationService
-	prefs   *channelPrefsRepo
 	email   *captureEmailer
 	push    *fakePushSender
 	pushSub *fakePushSubRepo
@@ -111,16 +97,11 @@ type directHarness struct {
 func newDirectHarness(t *testing.T) *directHarness {
 	t.Helper()
 	h := &directHarness{
-		prefs: &channelPrefsRepo{allowed: map[domain.NotificationChannel]bool{
-			domain.ChannelEmail: true,
-			domain.ChannelPush:  true,
-		}},
 		email:   &captureEmailer{},
 		push:    &fakePushSender{},
 		pushSub: &fakePushSubRepo{},
 	}
 	h.svc = NewDirectNotificationService(
-		h.prefs,
 		fakeResolver{contact: Contact{Channel: ChannelEmail, Email: testOwnerEmail}},
 		h.email,
 		h.push,
@@ -140,10 +121,11 @@ func (h *directHarness) withSubscriptions(t *testing.T, userID uuid.UUID, endpoi
 
 var directRecipient = uuid.Must(uuid.NewV7())
 
-// TestDirectNotification_BothChannelsDelivered proves the happy path: with
-// both channels allowed, a subscribed user with a verified email gets the
-// email and one push per device subscription (issue #253).
-func TestDirectNotification_BothChannelsDelivered(t *testing.T) {
+// TestDirectNotification_AlwaysDeliveredOnBothChannels proves the ADR 0056
+// contract: grace is the always-on service category, so a subscribed user
+// with a verified email gets the email and one push per device subscription —
+// no setting can opt a channel out (решение #738: старые opt-out'ы сброшены).
+func TestDirectNotification_AlwaysDeliveredOnBothChannels(t *testing.T) {
 	t.Parallel()
 
 	h := newDirectHarness(t)
@@ -164,49 +146,6 @@ func TestDirectNotification_BothChannelsDelivered(t *testing.T) {
 	}
 }
 
-// TestDirectNotification_PerChannelPreferences proves the ADR 0030 contract:
-// each channel is gated by its own preference — an email opt-out silences
-// email while push still delivers, and vice versa (issue #253).
-func TestDirectNotification_PerChannelPreferences(t *testing.T) {
-	t.Parallel()
-
-	pushOnly := newDirectHarness(t)
-	pushOnly.prefs.allowed[domain.ChannelEmail] = false
-	pushOnly.withSubscriptions(t, directRecipient, "https://push.example/a")
-	if err := pushOnly.svc.NotifyGraceExpiring(t.Context(), directRecipient, time.Time{}); err != nil {
-		t.Fatalf("NotifyGraceExpiring() error = %v", err)
-	}
-	if len(pushOnly.email.calls) != 0 {
-		t.Errorf("emails sent = %d, want 0 (email not allowed)", len(pushOnly.email.calls))
-	}
-	if len(pushOnly.push.sent) != 1 {
-		t.Errorf("pushes sent = %d, want 1 (push still allowed)", len(pushOnly.push.sent))
-	}
-
-	emailOnly := newDirectHarness(t)
-	emailOnly.prefs.allowed[domain.ChannelPush] = false
-	emailOnly.withSubscriptions(t, directRecipient, "https://push.example/a")
-	if err := emailOnly.svc.NotifyGraceExpiring(t.Context(), directRecipient, time.Time{}); err != nil {
-		t.Fatalf("NotifyGraceExpiring() error = %v", err)
-	}
-	if len(emailOnly.email.calls) != 1 {
-		t.Errorf("emails sent = %d, want 1 (email still allowed)", len(emailOnly.email.calls))
-	}
-	if len(emailOnly.push.sent) != 0 {
-		t.Errorf("pushes sent = %d, want 0 (push not allowed)", len(emailOnly.push.sent))
-	}
-
-	neither := newDirectHarness(t)
-	neither.prefs.allowed[domain.ChannelEmail] = false
-	neither.prefs.allowed[domain.ChannelPush] = false
-	if err := neither.svc.NotifyGraceEntered(t.Context(), directRecipient, time.Time{}); err != nil {
-		t.Fatalf("NotifyGraceEntered() error = %v", err)
-	}
-	if len(neither.email.calls) != 0 || len(neither.push.sent) != 0 {
-		t.Errorf("delivered email=%d push=%d, want nothing on a full opt-out", len(neither.email.calls), len(neither.push.sent))
-	}
-}
-
 // TestDirectNotification_MissingContactAndSubscriptions proves the graceful
 // skips: a user without a verified email still gets the push, and a user
 // without push subscriptions still gets the email (issue #253).
@@ -216,7 +155,6 @@ func TestDirectNotification_MissingContactAndSubscriptions(t *testing.T) {
 	noContact := newDirectHarness(t)
 	noContact.withSubscriptions(t, directRecipient, "https://push.example/a")
 	noContact.svc = NewDirectNotificationService(
-		noContact.prefs,
 		fakeResolver{err: ErrNoContact},
 		noContact.email,
 		noContact.push,
@@ -296,7 +234,6 @@ func TestDirectNotification_NilPushSenderIsEmailOnly(t *testing.T) {
 	h := newDirectHarness(t)
 	h.withSubscriptions(t, directRecipient, "https://push.example/a")
 	h.svc = NewDirectNotificationService(
-		h.prefs,
 		fakeResolver{contact: Contact{Channel: ChannelEmail, Email: testOwnerEmail}},
 		h.email,
 		nil,

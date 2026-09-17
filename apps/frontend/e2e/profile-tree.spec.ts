@@ -56,16 +56,13 @@ test.describe('дерево профиля — хром #566', () => {
     await expect(
       page.getByRole('heading', { level: 1, name: 'Уведомления', exact: true }),
     ).toBeVisible();
-    // Состав прежний: настройка каналов уведомлений. Фильтр visible —
-    // Next держит в body скрытый клон дерева (div#S:0[hidden]), текстовые
+    // Состав — промежуточная заглушка карты #734: прежний экран настроек
+    // снят со своим контрактом (решение #738, ADR 0056), новый экран
+    // настроек заменит страницу целиком (#746). Фильтр visible — Next
+    // держит в body скрытый клон дерева (div#S:0[hidden]), текстовые
     // локаторы без него ресолвят обе копии.
     await expect(
-      page.getByRole('checkbox', { name: 'Оплата подписки — Email' }).filter({ visible: true }),
-    ).toBeVisible();
-    await expect(
-      page
-        .getByText('Письма об оплате подписки приходят на вашу почту', { exact: false })
-        .filter({ visible: true }),
+      page.getByText('Уведомления появятся здесь', { exact: true }).filter({ visible: true }),
     ).toBeVisible();
 
     // Активность по нав-модели: средний таб TabBar подсвечен.

@@ -148,6 +148,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/email/resend-code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resendEmailCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/email/change": {
         parameters: {
             query?: never;
@@ -1006,22 +1022,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/notification-preferences": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getNotificationPreferences"];
-        put: operations["updateNotificationPreferences"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/push/vapid-public-key": {
         parameters: {
             query?: never;
@@ -1799,6 +1799,10 @@ export interface components {
         };
         EmailChangeGrantResponse: {
             /** @description One-time grant token binding the confirmed new email to the user. Present it at /me/email/change together with the code delivered to the new address; it expires in about 10 minutes. */
+            grant: string;
+        };
+        ResendEmailCodeRequest: {
+            /** @description The still-live grant token returned by /me/email/confirm-current; the code is re-issued for the address it binds. */
             grant: string;
         };
         ChangeEmailRequest: {
@@ -2856,20 +2860,6 @@ export interface components {
         AdminSubscriptionPaymentPeriod: "month" | "year";
         /** @enum {string} */
         TariffName: "basic" | "pro" | "business";
-        NotificationPreference: {
-            /** @enum {string} */
-            event_type: "subscription_grace";
-            /** @description Permission to deliver this event type over email. */
-            email_allowed: boolean;
-            /** @description Permission to deliver this event type over Web Push. */
-            push_allowed: boolean;
-        };
-        NotificationPreferencesResponse: {
-            preferences: components["schemas"]["NotificationPreference"][];
-        };
-        NotificationPreferencesUpdateRequest: {
-            preferences: components["schemas"]["NotificationPreference"][];
-        };
         VapidPublicKeyResponse: {
             /** @description The application server's VAPID P-256 public key, base64url without padding (RFC 8292). Pass this to `pushManager.subscribe({ applicationServerKey })`. */
             public_key: string;
@@ -3487,6 +3477,33 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["EmailChangeGrantResponse"];
                 };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    resendEmailCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResendEmailCodeRequest"];
+            };
+        };
+        responses: {
+            /** @description Code re-sent to the pending new email */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
@@ -5313,53 +5330,6 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-        };
-    };
-    getNotificationPreferences: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Notification preferences for every reminder event type */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NotificationPreferencesResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-        };
-    };
-    updateNotificationPreferences: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["NotificationPreferencesUpdateRequest"];
-            };
-        };
-        responses: {
-            /** @description Notification preferences updated */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NotificationPreferencesResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
         };
     };
     getVapidPublicKey: {

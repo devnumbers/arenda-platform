@@ -12,6 +12,52 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type NotificationCategory string
+
+const (
+	NotificationCategoryRental             NotificationCategory = "rental"
+	NotificationCategoryPaymentsOperations NotificationCategory = "payments_operations"
+	NotificationCategoryTasks              NotificationCategory = "tasks"
+	NotificationCategorySharedAccess       NotificationCategory = "shared_access"
+	NotificationCategoryTariff             NotificationCategory = "tariff"
+	NotificationCategorySystem             NotificationCategory = "system"
+)
+
+func (e *NotificationCategory) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = NotificationCategory(s)
+	case string:
+		*e = NotificationCategory(s)
+	default:
+		return fmt.Errorf("unsupported scan type for NotificationCategory: %T", src)
+	}
+	return nil
+}
+
+type NullNotificationCategory struct {
+	NotificationCategory NotificationCategory `json:"notification_category"`
+	Valid                bool                 `json:"valid"` // Valid is true if NotificationCategory is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullNotificationCategory) Scan(value interface{}) error {
+	if value == nil {
+		ns.NotificationCategory, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.NotificationCategory.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullNotificationCategory) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.NotificationCategory), nil
+}
+
 type NotificationChannel string
 
 const (
@@ -57,12 +103,27 @@ func (ns NullNotificationChannel) Value() (driver.Value, error) {
 type NotificationEventType string
 
 const (
-	NotificationEventTypeOperationDue        NotificationEventType = "operation_due"
-	NotificationEventTypeLeaseExpiring       NotificationEventType = "lease_expiring"
-	NotificationEventTypeLeaseRequiresAction NotificationEventType = "lease_requires_action"
-	NotificationEventTypeOperationOverdue    NotificationEventType = "operation_overdue"
-	NotificationEventTypeFreeReminder        NotificationEventType = "free_reminder"
-	NotificationEventTypeSubscriptionGrace   NotificationEventType = "subscription_grace"
+	NotificationEventTypeOperationDue                 NotificationEventType = "operation_due"
+	NotificationEventTypeLeaseExpiring                NotificationEventType = "lease_expiring"
+	NotificationEventTypeLeaseRequiresAction          NotificationEventType = "lease_requires_action"
+	NotificationEventTypeOperationOverdue             NotificationEventType = "operation_overdue"
+	NotificationEventTypeFreeReminder                 NotificationEventType = "free_reminder"
+	NotificationEventTypeSubscriptionGrace            NotificationEventType = "subscription_grace"
+	NotificationEventTypeRentalCompleted              NotificationEventType = "rental_completed"
+	NotificationEventTypePaymentDue                   NotificationEventType = "payment_due"
+	NotificationEventTypePaymentOverdue               NotificationEventType = "payment_overdue"
+	NotificationEventTypeTaskOverdue                  NotificationEventType = "task_overdue"
+	NotificationEventTypePropertyInvitation           NotificationEventType = "property_invitation"
+	NotificationEventTypeInvitationAccepted           NotificationEventType = "invitation_accepted"
+	NotificationEventTypeAccessRevoked                NotificationEventType = "access_revoked"
+	NotificationEventTypeAccessPaused                 NotificationEventType = "access_paused"
+	NotificationEventTypeAccessResumed                NotificationEventType = "access_resumed"
+	NotificationEventTypeMemberLeft                   NotificationEventType = "member_left"
+	NotificationEventTypeSubscriptionPaymentFailed    NotificationEventType = "subscription_payment_failed"
+	NotificationEventTypeSubscriptionPaymentReminder  NotificationEventType = "subscription_payment_reminder"
+	NotificationEventTypeSubscriptionPaymentSucceeded NotificationEventType = "subscription_payment_succeeded"
+	NotificationEventTypeSubscriptionPlanChanged      NotificationEventType = "subscription_plan_changed"
+	NotificationEventTypeSystemMaintenance            NotificationEventType = "system_maintenance"
 )
 
 func (e *NotificationEventType) Scan(src interface{}) error {
@@ -261,6 +322,21 @@ type LoginCode struct {
 	Used           bool               `json:"used"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	PhoneEncrypted bool               `json:"phone_encrypted"`
+}
+
+type Notification struct {
+	ID           pgtype.UUID           `json:"id"`
+	UserID       pgtype.UUID           `json:"user_id"`
+	Category     NotificationCategory  `json:"category"`
+	EventType    NotificationEventType `json:"event_type"`
+	Title        string                `json:"title"`
+	Body         string                `json:"body"`
+	ContextLabel pgtype.Text           `json:"context_label"`
+	Payload      []byte                `json:"payload"`
+	DedupKey     string                `json:"dedup_key"`
+	ReadAt       pgtype.Timestamptz    `json:"read_at"`
+	DeletedAt    pgtype.Timestamptz    `json:"deleted_at"`
+	CreatedAt    pgtype.Timestamptz    `json:"created_at"`
 }
 
 type Operation struct {
@@ -503,15 +579,6 @@ type User struct {
 	PhoneEncrypted  bool               `json:"phone_encrypted"`
 	EmailVerifiedAt pgtype.Timestamptz `json:"email_verified_at"`
 	Timezone        string             `json:"timezone"`
-}
-
-type UserNotificationChannelPreference struct {
-	UserID    pgtype.UUID           `json:"user_id"`
-	EventType NotificationEventType `json:"event_type"`
-	Channel   NotificationChannel   `json:"channel"`
-	Allowed   bool                  `json:"allowed"`
-	CreatedAt pgtype.Timestamptz    `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz    `json:"updated_at"`
 }
 
 type UserPopupView struct {

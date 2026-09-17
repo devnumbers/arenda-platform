@@ -221,7 +221,6 @@ func run() error {
 		PropertyTasks:            tasksMod.TaskService,
 		Access:                   accessMod.AccessService,
 		Invitations:              accessMod.InvitationService,
-		NotificationPreferences:  notificationsMod.PreferenceService,
 		PushSubscriptions:        notificationsMod.PushSubscriptionService,
 		VAPIDPublicKey:           p.Cfg.VAPIDPublicKey,
 		Popups:                   popupsMod.Service,
@@ -358,7 +357,6 @@ func newGraceNotifier(
 ) *notificationsapp.DirectNotificationService {
 	queries := platformgenerated.New(db)
 	return notificationsapp.NewDirectNotificationService(
-		notificationsMod.PreferenceRepo,
 		notificationspg.NewContactResolver(queries),
 		emailnotifier.NewNotifier(identityMod.EmailMailer, renderer),
 		pushSender,

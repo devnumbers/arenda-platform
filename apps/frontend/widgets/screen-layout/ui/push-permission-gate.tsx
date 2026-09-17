@@ -2,7 +2,6 @@
 
 import { useEffect, type JSX } from 'react';
 import { reportClientError } from '@/shared/lib/error-reporting/report-client-error';
-import { useNotificationPreferences } from '@/features/notification-preferences';
 import {
   ensureActiveSubscription,
   useEnsureSubscriptionTools,
@@ -13,26 +12,24 @@ import { readNotificationPermission } from '@/features/push-notifications';
  * Invisible side-effect component: keeps the push subscription alive.
  *
  * Mounted once in the screen layout (ScreenLayout, ex-cabinet since #568).
- * On every app load it checks whether
- * the user has at least one `pushAllowed === true` preference, and if so (and
- * permission is already granted) runs {@link ensureActiveSubscription} in the
- * background. The system permission prompt is NEVER triggered from here —
- * only from explicit user actions in the onboarding modal and notification
- * settings — so the gate cannot resurrect a prompt the user dismissed.
+ * On every app load, if permission is already granted, it runs
+ * {@link ensureActiveSubscription} in the background. The system permission
+ * prompt is NEVER triggered from here — only from explicit user actions in
+ * the onboarding modal — so the gate cannot resurrect a prompt the user
+ * dismissed.
+ *
+ * The old per-account preference check (`anyPushAllowed`, ADR 0030) is gone
+ * with its contract (решение #738, ADR 0056): until the per-device master
+ * flag lands (#743/#746), the subscription stays alive whenever the browser
+ * permission is granted — matching the always-on delivery of the interim.
  *
  * Any failure is reported via `reportClientError` and swallowed; push is a
  * best-effort channel and the email path is unaffected.
  */
 export function PushPermissionGate(): JSX.Element | null {
-  const { data } = useNotificationPreferences();
   const { vapidKey, postSubscription } = useEnsureSubscriptionTools();
 
   useEffect(() => {
-    if (!data) return;
-
-    const anyPushAllowed = data.some((preference) => preference.pushAllowed);
-    if (!anyPushAllowed) return;
-
     if (readNotificationPermission() !== 'granted') return;
 
     let cancelled = false;
@@ -61,7 +58,7 @@ export function PushPermissionGate(): JSX.Element | null {
     return () => {
       cancelled = true;
     };
-  }, [data, vapidKey, postSubscription]);
+  }, [vapidKey, postSubscription]);
 
   return null;
 }

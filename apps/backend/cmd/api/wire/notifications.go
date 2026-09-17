@@ -6,30 +6,21 @@ import (
 )
 
 // Notifications holds the notifications module's repositories and services
-// wired by WireNotifications. The module is grace-only (issue #438): channels
-// delivery, per-channel preferences (ADR 0030), push subscriptions and the
-// direct send for subscription_grace events.
+// wired by WireNotifications. The module owns the delivery channels, the push
+// subscriptions and the direct send for subscription_grace events; the stored
+// feed repository arrives with the delivery pipeline (#740).
 type Notifications struct {
-	PreferenceRepo          *notificationspg.PreferenceRepository
 	PushSubscriptionRepo    *notificationspg.PushSubscriptionRepository
-	PreferenceService       *notificationsapp.PreferenceService
 	PushSubscriptionService *notificationsapp.PushSubscriptionService
 }
 
-// WireNotifications constructs the push-subscription repository, the preference
-// and push-subscription services. The repositories are returned because the
-// grace notifier (direct send) consumes them.
+// WireNotifications constructs the push-subscription repository and service.
 func WireNotifications(p platformDeps) *Notifications {
-	factory := notificationsapp.NewTxStoreFactory(notificationspg.NewPreferenceRepository(p.DB), p.AuditRecorder, p.UoW)
-	preferenceService := notificationsapp.NewPreferenceService(factory)
-
 	pushSubscriptionRepo := notificationspg.NewPushSubscriptionRepository(p.DB)
 	pushSubscriptionService := notificationsapp.NewPushSubscriptionService(pushSubscriptionRepo, p.Clock)
 
 	return &Notifications{
-		PreferenceRepo:          notificationspg.NewPreferenceRepository(p.DB),
 		PushSubscriptionRepo:    pushSubscriptionRepo,
-		PreferenceService:       preferenceService,
 		PushSubscriptionService: pushSubscriptionService,
 	}
 }

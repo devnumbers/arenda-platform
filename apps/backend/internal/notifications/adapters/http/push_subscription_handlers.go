@@ -1,3 +1,5 @@
+// Package http holds the notifications HTTP adapters: push-subscription
+// endpoints, including the VAPID public-key endpoint.
 package http
 
 import (

@@ -120,6 +120,10 @@ type Querier interface {
 	// The property-less cut of the global listing (ADR 0052: the actor's own
 	// book only). No property join — the label is always absent there.
 	CountTasksGlobalWithoutProperty(ctx context.Context, arg CountTasksGlobalWithoutPropertyParams) (int64, error)
+	// The unread counter (решение #737): unread, not-deleted rows of the user;
+	// clicks, page opens and «Прочитать все» drive it down, push/email do not
+	// touch it.
+	CountUnreadNotifications(ctx context.Context, userID pgtype.UUID) (int64, error)
 	CountUsersAdmin(ctx context.Context, arg CountUsersAdminParams) (int64, error)
 	// GetUserByIDAdmin is implemented by the existing GetUserByID query (no owner filter).
 	CountUsersTotalAdmin(ctx context.Context) (int64, error)
@@ -446,6 +450,13 @@ type Querier interface {
 	// The undated task of an undated rule («Без срока»): idempotent by the
 	// partial unique (rule_id) over the undated rows.
 	InsertMaterializedUndatedTask(ctx context.Context, arg InsertMaterializedUndatedTaskParams) error
+	// Хранимая лента уведомлений (карта #734, тикет #739; модель — решение
+	// #737). One event = one row per recipient (fan-out); the row carries the
+	// text snapshot, the payload links and the personal flags.
+	// Publishes one recipient's feed row. The unique (user_id, dedup_key) index
+	// makes the dedup invariant durable: a repeat publication with the same key
+	// inserts nothing (0 rows), it is a no-op rather than an error.
+	InsertNotification(ctx context.Context, arg InsertNotificationParams) (int64, error)
 	// ids and since are app-side (UUIDv7, the owner's today); recurrence is the
 	// domain-validated jsonb; the category arrives as a default-catalog slug in
 	// this slice (user_category_id stays NULL).
@@ -457,7 +468,6 @@ type Querier interface {
 	// The id, owner and payment link are app-side (UUIDv7, the denormalized
 	// scope owner, the gateway-minted rent payment).
 	InsertRental(ctx context.Context, arg InsertRentalParams) error
-	IsNotificationChannelAllowed(ctx context.Context, arg IsNotificationChannelAllowedParams) (bool, error)
 	// The newest materialized date across planned and paid per listed rule —
 	// the projection cursor of the nearest-date fallback (the tick has not
 	// stood the single future planned up yet; CONTEXT.md «Материализация»).
@@ -603,7 +613,14 @@ type Querier interface {
 	// sort key — a rename would move rows across the window. Both cursor args
 	// travel together; NULL (no cursor) reads from the beginning.
 	ListGlobalPaymentRules(ctx context.Context, arg ListGlobalPaymentRulesParams) ([]ListGlobalPaymentRulesRow, error)
-	ListNotificationChannelPreferences(ctx context.Context, userID pgtype.UUID) ([]UserNotificationChannelPreference, error)
+	// The user's feed page, newest first, deleted rows never appear. The walk
+	// resumes strictly after the (created_at, id) the previous page ended on
+	// (канон #597), so rows created between loads never duplicate or drop; both
+	// cursor args travel together, NULL reads from the beginning. unread_only
+	// filters the page to unread rows (the partial index
+	// idx_notifications_user_unread serves the filtered walk); page_limit 0 = no
+	// limit.
+	ListNotifications(ctx context.Context, arg ListNotificationsParams) ([]Notification, error)
 	ListOpenCardBindingSessionsByUserID(ctx context.Context, userID pgtype.UUID) ([]CardBindingSession, error)
 	// The operations of one scope with pagination (limit/offset), the view status
 	// filter ('' is any), an inclusive period on the operation date, the sort
@@ -814,7 +831,13 @@ type Querier interface {
 	// serialize on one lock order. Archived properties are skipped by the tick
 	// entirely.
 	LockTaskOwnerProperties(ctx context.Context, ownerID pgtype.UUID) ([]pgtype.UUID, error)
+	// «Прочитать все» (решение #737): every unread not-deleted row of the user
+	// in one statement; the result is the number of rows that flipped.
+	MarkAllNotificationsRead(ctx context.Context, userID pgtype.UUID) (int64, error)
 	MarkLoginCodeUsed(ctx context.Context, id pgtype.UUID) error
+	// Marks one row read (a click, the notification page). Idempotent: an
+	// already-read or deleted row matches nothing (0 rows).
+	MarkNotificationRead(ctx context.Context, arg MarkNotificationReadParams) (int64, error)
 	MarkPopupSeen(ctx context.Context, arg MarkPopupSeenParams) error
 	// «Оплатить сейчас» (planned → paid, paid_date = today in the owner's
 	// timezone). The planned guard is belt-and-suspenders over the application's
@@ -953,7 +976,6 @@ type Querier interface {
 	UpdateUserEmailVerified(ctx context.Context, arg UpdateUserEmailVerifiedParams) (UpdateUserEmailVerifiedRow, error)
 	UpdateUserEmailVerifiedAt(ctx context.Context, arg UpdateUserEmailVerifiedAtParams) (UpdateUserEmailVerifiedAtRow, error)
 	UpdateUserPhone(ctx context.Context, arg UpdateUserPhoneParams) (User, error)
-	UpsertNotificationChannelPreference(ctx context.Context, arg UpsertNotificationChannelPreferenceParams) error
 	// Payment methods (issue #251). Token uniqueness is enforced per user by the
 	// UNIQUE (user_id, token_hash) constraint: the upsert converges on the
 	// existing row instead of creating a duplicate card, and exactly one active

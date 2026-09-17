@@ -77,7 +77,6 @@ type Deps struct {
 	PropertyTasks            *tasksapp.TaskService
 	Access                   *accessapp.AccessService
 	Invitations              *accessapp.InvitationService
-	NotificationPreferences  *notificationsapp.PreferenceService
 	PushSubscriptions        *notificationsapp.PushSubscriptionService
 	VAPIDPublicKey           string
 	Popups                   *popupsapp.PopupService
@@ -163,7 +162,6 @@ func New(deps Deps) http.Handler {
 	contactHandlers := contactshttp.NewContactHandlers(deps.Contacts, deps.Logger)
 	accessMemberHandlers := accesshttp.NewMemberHandlers(deps.Access, deps.Logger)
 	accessInvitationHandlers := accesshttp.NewInvitationHandlers(deps.Invitations, deps.Logger)
-	notificationPreferenceHandlers := notificationshttp.NewNotificationPreferenceHandlers(deps.NotificationPreferences, deps.Logger)
 	pushSubscriptionHandlers := notificationshttp.NewPushSubscriptionHandlers(deps.PushSubscriptions, deps.VAPIDPublicKey, deps.Logger)
 	popupHandlers := popupshttp.NewPopupHandlers(deps.Popups, deps.Logger)
 	billingHandlers := billinghttp.NewBillingHandlers(
@@ -180,23 +178,22 @@ func New(deps Deps) http.Handler {
 	clientErrorsHandlers := httpsupport.NewClientErrorsHandlers(deps.ClientErrorsLimiter)
 
 	handler := &composedHandler{
-		AuthHandlers:                   authHandlers,
-		PropertyHandlers:               propertyHandlers,
-		ContactHandlers:                contactHandlers,
-		MemberHandlers:                 accessMemberHandlers,
-		InvitationHandlers:             accessInvitationHandlers,
-		NotificationPreferenceHandlers: notificationPreferenceHandlers,
-		PushSubscriptionHandlers:       pushSubscriptionHandlers,
-		PopupHandlers:                  popupHandlers,
-		BillingHandlers:                billingHandlers,
-		PaymentHandlers:                paymentHandlers,
-		OperationsHandlers:             operationHandlers,
-		GlobalPaymentHandlers:          globalPaymentHandlers,
-		RentalHandlers:                 rentalHandlers,
-		RuleHandlers:                   taskRuleHandlers,
-		TaskHandlers:                   taskHandlers,
-		AdminHandlers:                  adminHandlers,
-		ClientErrorsHandlers:           clientErrorsHandlers,
+		AuthHandlers:             authHandlers,
+		PropertyHandlers:         propertyHandlers,
+		ContactHandlers:          contactHandlers,
+		MemberHandlers:           accessMemberHandlers,
+		InvitationHandlers:       accessInvitationHandlers,
+		PushSubscriptionHandlers: pushSubscriptionHandlers,
+		PopupHandlers:            popupHandlers,
+		BillingHandlers:          billingHandlers,
+		PaymentHandlers:          paymentHandlers,
+		OperationsHandlers:       operationHandlers,
+		GlobalPaymentHandlers:    globalPaymentHandlers,
+		RentalHandlers:           rentalHandlers,
+		RuleHandlers:             taskRuleHandlers,
+		TaskHandlers:             taskHandlers,
+		AdminHandlers:            adminHandlers,
+		ClientErrorsHandlers:     clientErrorsHandlers,
 	}
 
 	// The generated OpenAPI router has no per-route middleware support, so we
@@ -313,7 +310,6 @@ type composedHandler struct {
 	*contactshttp.ContactHandlers
 	*accesshttp.MemberHandlers
 	*accesshttp.InvitationHandlers
-	*notificationshttp.NotificationPreferenceHandlers
 	*notificationshttp.PushSubscriptionHandlers
 	*popupshttp.PopupHandlers
 	*billinghttp.BillingHandlers

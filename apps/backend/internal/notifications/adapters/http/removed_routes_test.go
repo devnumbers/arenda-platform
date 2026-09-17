@@ -15,13 +15,16 @@ import (
 // shared by the method cases below.
 const removedReminderDetailPath = "/reminders/ffffffff-0000-0000-0000-000000000001"
 
-// TestRemovedReminderRoutes_NotFound pins the code contract of the reminders
-// removal (issue #438): the generated router no longer registers the reminder
-// paths, so any request to them — including old links and stale push deep
-// links — falls through to the router's NotFound (404). The surviving
-// notifications routes stay registered: routed to the Unimplemented stub they
-// answer 501, proving the route still exists.
-func TestRemovedReminderRoutes_NotFound(t *testing.T) {
+// TestRemovedRoutes_NotFound pins the code contract of the route removals:
+// the generated router no longer registers these paths, so any request to
+// them — including old links and stale push deep links — falls through to the
+// router's NotFound (404). The reminders removal is issue #438; the
+// per-event-type notification preferences removal is the settings reset of
+// the notifications map (решение #738, ADR 0056) — the per-category contract
+// replaces it in #743. The surviving notifications routes stay registered:
+// routed to the Unimplemented stub they answer 501, proving the route still
+// exists.
+func TestRemovedRoutes_NotFound(t *testing.T) {
 	t.Parallel()
 
 	r := chi.NewRouter()
@@ -42,6 +45,8 @@ func TestRemovedReminderRoutes_NotFound(t *testing.T) {
 		{http.MethodPatch, removedReminderDetailPath},
 		{http.MethodDelete, removedReminderDetailPath},
 		{http.MethodGet, fmt.Sprintf("/leases/%s/reminders", propertyID)},
+		{http.MethodGet, "/notification-preferences"},
+		{http.MethodPut, "/notification-preferences"},
 	}
 	for _, tc := range removed {
 		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
@@ -67,7 +72,7 @@ func TestRemovedReminderRoutes_NotFound(t *testing.T) {
 
 	// Control: a surviving notifications route is still registered — the
 	// Unimplemented stub answers 501, not the router's 404.
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/notification-preferences", nil)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/push/vapid-public-key", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
@@ -81,6 +86,6 @@ func TestRemovedReminderRoutes_NotFound(t *testing.T) {
 		}
 	}()
 	if resp.StatusCode != http.StatusNotImplemented {
-		t.Errorf("GET /notification-preferences: status = %d, want 501 (route registered, stub answer)", resp.StatusCode)
+		t.Errorf("GET /push/vapid-public-key: status = %d, want 501 (route registered, stub answer)", resp.StatusCode)
 	}
 }

@@ -15,9 +15,10 @@ import (
 // Direct notifications (issue #253): messages the platform delivers to one
 // user immediately. They carry no stored send row, no claim and no retry —
 // the sender (a billing grace event subscriber) publishes once, this service
-// dispatches both channels once. Both channels honour the user's per-channel
-// preferences (ADR 0030); both are best-effort: a failing channel is logged
-// and never fails the other channel or the publisher's transition.
+// dispatches both channels once. Grace is the always-on service category
+// (ADR 0056, решение #738): neither channel consults user settings, and both
+// are best-effort — a failing channel is logged and never fails the other
+// channel or the publisher's transition.
 
 // graceNotificationPath routes the push tap and the email button to the
 // payment methods page — the one screen where the user fixes the failed
@@ -30,7 +31,6 @@ const graceNotificationPath = "/profile/tariff/payment-methods"
 // over push and email. Push requires a wired PushSender (nil keeps the
 // service email-only, the local-dev behaviour without VAPID keys).
 type DirectNotificationService struct {
-	prefs      PreferenceRepository
 	resolver   ContactResolver
 	emailer    DirectEmailSender
 	pushSender PushSender
@@ -42,7 +42,6 @@ type DirectNotificationService struct {
 // NewDirectNotificationService creates a direct-notification delivery service.
 // The appBaseURL parameter is the public web app URL the email buttons point at.
 func NewDirectNotificationService(
-	prefs PreferenceRepository,
 	resolver ContactResolver,
 	emailer DirectEmailSender,
 	pushSender PushSender,
@@ -54,7 +53,6 @@ func NewDirectNotificationService(
 		logger = slog.Default()
 	}
 	return &DirectNotificationService{
-		prefs:      prefs,
 		resolver:   resolver,
 		emailer:    emailer,
 		pushSender: pushSender,
@@ -97,28 +95,18 @@ func (s *DirectNotificationService) notify(ctx context.Context, eventType domain
 		slog.String("event_type", string(eventType)),
 	}
 	s.dispatchPush(ctx, eventType, userID, title, body, logAttrs)
-	s.dispatchEmail(ctx, eventType, userID, title, body, logAttrs)
+	s.dispatchEmail(ctx, userID, title, body, logAttrs)
 	return nil
 }
 
-// dispatchEmail delivers the email leg: the per-channel preference gates it
-// (ADR 0030), a user without a verified contact is skipped, and a send
-// failure is logged without affecting push.
+// dispatchEmail delivers the email leg: a user without a verified contact is
+// skipped, and a send failure is logged without affecting push.
 func (s *DirectNotificationService) dispatchEmail(
 	ctx context.Context,
-	eventType domain.EventType,
 	userID uuid.UUID,
 	title, body string,
 	logAttrs []any,
 ) {
-	allowed, err := s.prefs.IsChannelAllowed(ctx, userID, eventType, domain.ChannelEmail)
-	if err != nil {
-		s.log.ErrorContext(ctx, "check email notification permission failed", append(logAttrs, slog.String("error", sanitize.Error(err)))...)
-		return
-	}
-	if !allowed {
-		return
-	}
 	contact, err := s.resolver.Resolve(ctx, userID)
 	if err != nil {
 		if errors.Is(err, ErrNoContact) {
@@ -150,14 +138,6 @@ func (s *DirectNotificationService) dispatchPush(
 	logAttrs []any,
 ) {
 	if s.pushSender == nil {
-		return
-	}
-	allowed, err := s.prefs.IsChannelAllowed(ctx, userID, eventType, domain.ChannelPush)
-	if err != nil {
-		s.log.ErrorContext(ctx, "check push notification permission failed", append(logAttrs, slog.String("error", sanitize.Error(err)))...)
-		return
-	}
-	if !allowed {
 		return
 	}
 	subs, err := s.pushSubs.ListByUser(ctx, userID)

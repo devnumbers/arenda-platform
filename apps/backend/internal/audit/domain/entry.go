@@ -50,8 +50,6 @@ const (
 	ActionAuthEmailChangeFailed Action = "auth.email_change_failed"
 	ActionProfileUpdated        Action = "profile.updated"
 
-	ActionNotificationPreferencesUpdated Action = "notification_preferences.updated"
-
 	ActionPropertyCreated        Action = "property.created"
 	ActionPropertyUpdated        Action = "property.updated"
 	ActionPropertyArchived       Action = "property.archived"

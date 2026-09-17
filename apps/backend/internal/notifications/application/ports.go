@@ -2,25 +2,42 @@ package application
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
-	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
-// PreferenceRepository persists and queries the per-channel notification
-// preferences (ADR 0030).
-type PreferenceRepository interface {
-	// ListChannelPreferences returns the stored per-channel preference rows of
-	// a user. A missing row means the (event type, channel) pair is allowed.
-	ListChannelPreferences(ctx context.Context, userID uuid.UUID) ([]domain.NotificationChannelPreference, error)
-	// UpsertChannelPreference inserts or updates one per-channel preference row.
-	UpsertChannelPreference(ctx context.Context, userID uuid.UUID, pref domain.NotificationChannelPreference) error
-	// IsChannelAllowed reports whether the user permits sending notifications
-	// of the given event type over the given channel. A missing row means
-	// allowed.
-	IsChannelAllowed(ctx context.Context, userID uuid.UUID, eventType domain.EventType, channel domain.NotificationChannel) (bool, error)
-	WithTx(tx transaction.Tx) PreferenceRepository
+// NotificationRepository persists and queries the stored notification feed
+// (карта #734, модель — решение #737). The consumers are the creation
+// service (#740) and the feed reading API (#743); transactional binding
+// arrives with the creation service's transaction seam.
+type NotificationRepository interface {
+	// Insert publishes one recipient's feed row. It reports false when a row
+	// with the same (recipient, dedup key) already exists: the repeat
+	// publication is a no-op, not an error.
+	Insert(ctx context.Context, n domain.Notification) (bool, error)
+	// ListPage walks the user's feed newest-first by the (created_at, id)
+	// keyset (канон #597). Deleted rows never appear. UnreadOnly filters the
+	// page to unread rows. The afterCreatedAt/afterID pair resumes strictly
+	// after the previous page's last row; nil reads from the beginning. A
+	// zero limit removes the page size.
+	ListPage(
+		ctx context.Context,
+		userID uuid.UUID,
+		unreadOnly bool,
+		afterCreatedAt *time.Time,
+		afterID uuid.UUID,
+		limit int,
+	) ([]domain.Notification, error)
+	// CountUnread counts the user's unread, not-deleted rows.
+	CountUnread(ctx context.Context, userID uuid.UUID) (int64, error)
+	// MarkRead marks one row read. It reports false when nothing matched:
+	// the row is already read, deleted, or not the user's.
+	MarkRead(ctx context.Context, userID, id uuid.UUID) (bool, error)
+	// MarkAllRead marks every unread not-deleted row of the user read and
+	// returns how many rows flipped.
+	MarkAllRead(ctx context.Context, userID uuid.UUID) (int64, error)
 }
 
 // PushSubscriptionRepository persists Web Push subscriptions keyed by their

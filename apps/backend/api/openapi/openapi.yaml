@@ -2407,41 +2407,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/Problem'
 
-  /notification-preferences:
-    get:
-      operationId: getNotificationPreferences
-      security:
-        - sessionCookie: []
-      responses:
-        '200':
-          description: Notification preferences for every reminder event type
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/NotificationPreferencesResponse'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-    put:
-      operationId: updateNotificationPreferences
-      security:
-        - sessionCookie: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/NotificationPreferencesUpdateRequest'
-      responses:
-        '200':
-          description: Notification preferences updated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/NotificationPreferencesResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
   /push/vapid-public-key:
     get:
       operationId: getVapidPublicKey
@@ -6607,40 +6572,6 @@ components:
     TariffName:
       type: string
       enum: [basic, pro, business]
-
-    NotificationPreference:
-      type: object
-      required: [event_type, email_allowed, push_allowed]
-      properties:
-        event_type:
-          type: string
-          enum: [subscription_grace]
-        email_allowed:
-          type: boolean
-          description: Permission to deliver this event type over email.
-        push_allowed:
-          type: boolean
-          description: Permission to deliver this event type over Web Push.
-
-    NotificationPreferencesResponse:
-      type: object
-      required: [preferences]
-      properties:
-        preferences:
-          type: array
-          items:
-            $ref: '#/components/schemas/NotificationPreference'
-
-    NotificationPreferencesUpdateRequest:
-      type: object
-      required: [preferences]
-      properties:
-        preferences:
-          type: array
-          minItems: 5
-          maxItems: 5
-          items:
-            $ref: '#/components/schemas/NotificationPreference'
 
     VapidPublicKeyResponse:
       type: object
