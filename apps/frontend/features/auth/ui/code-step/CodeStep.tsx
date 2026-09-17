@@ -2,6 +2,7 @@
 
 import {type ChangeEvent, type JSX, useEffect, useRef} from 'react';
 import {ArrowLeft} from '@/shared/assets/icons';
+import {isValidLoginCode, LOGIN_CODE_LENGTH, loginCodeFromInput} from '@/shared/lib/login-code';
 import {SendCodeButton} from '@/features/auth/ui/send-code-button';
 import {Button} from '@/shared/ui/button';
 import {TextField} from '@/shared/ui/text-field';
@@ -39,9 +40,9 @@ export function CodeStep({
     }, []);
 
     const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
-        const digits = event.target.value.replace(/\D/g, '').slice(0, 6);
+        const digits = loginCodeFromInput(event.currentTarget.value);
         onCodeChange(digits);
-        if (digits.length === 6) {
+        if (isValidLoginCode(digits)) {
             onVerify(digits);
         }
     };
@@ -73,7 +74,7 @@ export function CodeStep({
                     ref={inputRef}
                     labelPlacement="inside"
                     label="6-значный код"
-                    maxLength={6}
+                    maxLength={LOGIN_CODE_LENGTH}
                     inputMode="numeric"
                     value={code}
                     onChange={handleChange}
