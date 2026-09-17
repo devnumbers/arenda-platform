@@ -23,11 +23,9 @@ import (
 // (#748–#752) call. ProviderLimiter must be stopped by the caller.
 type RiverQueue struct {
 	Client *river.Client[pgx.Tx]
-	// Queue is the transactional enqueuer (application.DeliveryQueue).
-	Queue *notificationsjob.RiverQueue
-	// Publisher writes the feed rows and schedules the channel deliveries
-	// through Queue; call it strictly after the publishing context's own
-	// transaction commits (the grace-events canon, решение #740).
+	// Publisher writes the feed rows and schedules the channel deliveries;
+	// call it strictly after the publishing context's own transaction
+	// commits (the grace-events canon, решение #740).
 	Publisher *notificationsapp.Publisher
 	// ProviderLimiter is the global email-provider budget spent inside the
 	// email worker.
@@ -50,6 +48,8 @@ func WireRiverQueue(
 ) (*RiverQueue, error) {
 	cfg := p.Cfg
 
+	// The burst absorbs a short provider burst without touching the minute
+	// budget; min keeps it from exceeding the whole budget (research #735 §8).
 	providerLimiter := httpsupport.NewRateLimiter(
 		rate.Every(time.Minute/time.Duration(cfg.NotificationsEmailProviderPerMinute)),
 		min(10, cfg.NotificationsEmailProviderPerMinute),
@@ -109,7 +109,6 @@ func WireRiverQueue(
 
 	return &RiverQueue{
 		Client:          client,
-		Queue:           queue,
 		Publisher:       notificationsapp.NewPublisher(notificationsMod.NotificationRepo, queue, p.UoW, p.Logger),
 		ProviderLimiter: providerLimiter,
 	}, nil

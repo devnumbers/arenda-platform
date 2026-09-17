@@ -50,7 +50,6 @@ func TestWireRiverQueueBuildsBundle(t *testing.T) {
 	defer riverMod.ProviderLimiter.Stop()
 
 	assert.NotNil(t, riverMod.Client)
-	assert.NotNil(t, riverMod.Queue)
 	assert.NotNil(t, riverMod.Publisher)
 	assert.NotNil(t, riverMod.ProviderLimiter)
 }

@@ -85,13 +85,17 @@ func NewWorkers(
 	if riverClient != nil {
 		go func() {
 			defer w.wg.Done()
-			// Start blocks until the client has fully stopped; the only
-			// error it can return is a startup failure (the database is
-			// unreachable) — logged, matching the scheduler loops'
-			// log-and-serve behaviour.
+			// Start returns immediately (the client runs in its own
+			// goroutines; the only error it can return is a startup failure
+			// — logged, matching the scheduler loops' log-and-serve
+			// behaviour). Cancelling the lifecycle ctx begins the soft stop
+			// (SoftStopTimeout); Stopped() closes only when it has fully
+			// finished, so Workers.Wait keeps covering in-flight delivery
+			// jobs (research #735 §3).
 			if err := riverClient.Start(ctx); err != nil {
 				p.Logger.ErrorContext(ctx, "delivery queue client stopped with error", slog.String("error", err.Error()))
 			}
+			<-riverClient.Stopped()
 		}()
 	}
 

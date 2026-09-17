@@ -41,10 +41,12 @@ our code.
 1. **In-process River client.** The API process runs the client next to the
    five scheduler workers (`cmd/api/wire/workers.go`); one deploy instance
    (`docs/deployment.md`), so no separate worker process. `Start` runs in the
-   workers phase; `Workers.Wait` waits for `client.Start` to return —
-   cancellation of the lifecycle context begins the soft stop
-   (`NOTIFICATIONS_RIVER_SOFT_STOP_TIMEOUT`, 10s), so in-flight jobs finish
-   before the process exits.
+   workers phase and returns immediately; the phase's `Wait` also blocks on
+   `client.Stopped()` — cancelling the lifecycle context begins the soft stop
+   (`NOTIFICATIONS_RIVER_SOFT_STOP_TIMEOUT`, 10s), and in-flight jobs finish
+   before the process exits. No `NOTIFICATIONS_QUEUE_ENABLED` switch: with no
+   publishers in #740 the queue is inert (nothing enqueues), so a flag would
+   guard nothing — the grace migration (#741) is the rollout gate.
 
 2. **Two queues, independent ceilings.** `notifications_email` (SMTP,
    `NOTIFICATIONS_EMAIL_MAX_WORKERS`=4) and `notifications_push` (fan-out,

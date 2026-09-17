@@ -71,14 +71,7 @@ func NewRiverQueue(client *river.Client[pgx.Tx], pushEnabled bool, emailMaxAttem
 // EnqueueEmail schedules the notification's email leg in the caller's
 // transaction.
 func (q *RiverQueue) EnqueueEmail(ctx context.Context, tx transaction.Tx, notificationID uuid.UUID) error {
-	ptx, err := database.PgxTxOf(tx)
-	if err != nil {
-		return err
-	}
-	if _, err := q.client.InsertTx(ctx, ptx, DeliverEmailArgs{NotificationID: notificationID}, q.emailInsertOpts); err != nil {
-		return fmt.Errorf("insert %s job: %w", DeliverEmailArgs{}.Kind(), err)
-	}
-	return nil
+	return q.enqueue(ctx, tx, DeliverEmailArgs{NotificationID: notificationID}, q.emailInsertOpts)
 }
 
 // EnqueuePush schedules the notification's Web Push leg in the caller's
@@ -87,12 +80,18 @@ func (q *RiverQueue) EnqueuePush(ctx context.Context, tx transaction.Tx, notific
 	if !q.pushEnabled {
 		return nil
 	}
+	return q.enqueue(ctx, tx, DeliverPushArgs{NotificationID: notificationID}, q.pushInsertOpts)
+}
+
+// enqueue unwraps the caller's transaction to the driver-level one River
+// needs and inserts the job with the channel's insert options.
+func (q *RiverQueue) enqueue(ctx context.Context, tx transaction.Tx, args river.JobArgs, opts *river.InsertOpts) error {
 	ptx, err := database.PgxTxOf(tx)
 	if err != nil {
 		return err
 	}
-	if _, err := q.client.InsertTx(ctx, ptx, DeliverPushArgs{NotificationID: notificationID}, q.pushInsertOpts); err != nil {
-		return fmt.Errorf("insert %s job: %w", DeliverPushArgs{}.Kind(), err)
+	if _, err := q.client.InsertTx(ctx, ptx, args, opts); err != nil {
+		return fmt.Errorf("insert %s job: %w", args.Kind(), err)
 	}
 	return nil
 }
