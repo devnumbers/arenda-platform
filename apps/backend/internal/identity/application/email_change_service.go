@@ -45,6 +45,11 @@ func (s *EmailChangeService) hashGrantToken(token string) string {
 //     address as verified, consumes the grant, and audits — sessions are
 //     untouched (the email is a delivery channel, not the login).
 //
+// ResendNewEmailCode (#732) re-issues the step-2 code against the still-live
+// grant: ConfirmCurrentEmail burned the step-1 code, so the grant is the
+// resend's anchor — same prechecks, budget and send throttle; the grant
+// itself survives for step 3.
+//
 // The grant is server-side state: the client sees a one-time plaintext token,
 // the store keeps only its hash; a user holds at most one live grant.
 type EmailChangeService struct {

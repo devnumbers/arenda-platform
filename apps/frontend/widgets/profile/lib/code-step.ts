@@ -8,10 +8,11 @@ import { isValidLoginCode } from '@/shared/lib/login-code';
  * серверного троттлинга; ранний клик получает честный 429-тост сценария. */
 export const RESEND_COOLDOWN_MS = 60_000;
 
-/** Куда идёт ошибка verify-мутации: неверный код (401) — inline в error-проп
- * поля кода (макет 2343-51004, текст — detail бэка «Неверный код»);
- * остальные API-ошибки (429, 409, блокировка) — null, их ведут тосты
- * сценариев профиля. */
+/** Куда идёт ошибка verify-мутации шага кода (change-phone / change-email):
+ * неверный код (401) — inline в error-проп поля кода (макет 2343-51004,
+ * текст — detail бэка «Неверный код»); остальные API-ошибки (429, 409,
+ * блокировка) — null, их ведут тосты сценариев профиля. 401 confirm-current
+ * (проверка кода шага 1 email-флоу) сюда не доходит — там тост сценария. */
 export function invalidCodeDetail(error: ApiError): string | null {
   return error.status === 401 ? error.detail : null;
 }
