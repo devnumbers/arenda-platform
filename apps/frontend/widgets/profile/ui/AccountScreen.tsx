@@ -12,12 +12,12 @@ import { cn } from '@/shared/lib/cn';
 import { formatPhoneDisplay } from '@/shared/lib/phone';
 import { notify } from '@/shared/lib/notifications';
 import { formatTimezoneLabel } from '../lib/timezone';
-import { isEmailValid, profileFieldPatch, type ProfileTextField } from '../lib/profile-edit';
+import { profileFieldPatch, type ProfileTextField } from '../lib/profile-edit';
 import { AvatarPlaceholder } from './AvatarPlaceholder';
 
 /** Серый бокс поля (как у канонных TextField/PickerField): строка-поле
- * «Телефон» и «Часовой пояс» экрана (Figma 1789-99036 — Input Field
- * 1218:53539 Title Out с иконкой в хвосте). */
+ * «Телефон», «Электронная почта» и «Часовой пояс» экрана (Figma 1789-99036 —
+ * Input Field 1218:53539 Title Out с иконкой в хвосте). */
 const fieldBoxClass = cn(
   'flex h-14 w-full items-center rounded-button bg-surface-muted py-0 pl-[18px] pr-2',
 );
@@ -59,6 +59,41 @@ function PhoneFieldRow({ phone }: { readonly phone: string }): JSX.Element {
       >
         <span className="min-w-0 flex-1 truncate text-base leading-[18px] text-content">
           {phone}
+        </span>
+        <span
+          aria-hidden
+          className="flex shrink-0 items-center justify-center text-content"
+        >
+          <SmallArrowRight className="h-6 w-6" />
+        </span>
+      </NextLink>
+    </div>
+  );
+}
+
+/** Строка «Электронная почта» (Figma 1789-99036, тикет #722): значение +
+ * SmallArrowRight — структурный двойник PhoneFieldRow, ведёт на
+ * подтверждаемый флоу смены почты /profile/account/email (карта #723).
+ * Инлайн-редактирование снесено: PATCH /me почту больше не принимает
+ * (#720 Q1). */
+function EmailFieldRow({ email }: { readonly email: string | null }): JSX.Element {
+  return (
+    <div className="flex flex-col gap-2">
+      <FieldTitle>Электронная почта</FieldTitle>
+      <NextLink
+        href={ROUTES.profileChangeEmail}
+        className={cn(
+          fieldBoxClass,
+          'cursor-pointer transition-shadow hover:shadow-[inset_0_0_0_2px_var(--dl-input-border)]',
+        )}
+      >
+        <span
+          className={cn(
+            'min-w-0 flex-1 truncate text-base leading-[18px]',
+            email === null ? 'text-content-secondary' : 'text-content',
+          )}
+        >
+          {email ?? 'Не указана'}
         </span>
         <span
           aria-hidden
@@ -136,30 +171,14 @@ function AccountScreenView({ me }: AccountScreenViewProps): JSX.Element {
   const [name, setName] = useState(me.name ?? '');
   const [surname, setSurname] = useState(me.surname ?? '');
   const [patronymic, setPatronymic] = useState(me.patronymic ?? '');
-  const [email, setEmail] = useState(me.email ?? '');
-  const [emailError, setEmailError] = useState<string | undefined>(undefined);
 
   /** Тихое автосохранение (макет без кнопки «Сохранить»): поле коммитится
    * на blur и крестиком очистки — патч только этого поля; пустая строка
-   * очищает значение (контракт бэка: null = «не менять»). Невалидная почта
-   * не отправляется. */
+   * очищает значение (контракт бэка: null = «не менять»). Почта здесь не
+   * правится (#722) — только через флоу смены на
+   * /profile/account/email. */
   const commitField = useCallback(
     (field: ProfileTextField, rawValue: string) => {
-      if (field === 'email') {
-        const value = rawValue.trim();
-        if (value === '') {
-          // Бэк очистку почты не принимает (NewEmail('') → 400, адрес —
-          // канал входа и уведомлений): черновик откатывается к сохранённому.
-          setEmail(me.email ?? '');
-          setEmailError(undefined);
-          return;
-        }
-        if (!isEmailValid(value)) {
-          setEmailError('Введите корректный email');
-          return;
-        }
-      }
-      setEmailError(undefined);
       const patch = profileFieldPatch(me, field, rawValue);
       if (patch === null) {
         return;
@@ -228,19 +247,7 @@ function AccountScreenView({ me }: AccountScreenViewProps): JSX.Element {
           />
         </section>
         <PhoneFieldRow phone={formatPhoneDisplay(me.phone)} />
-        <TextField
-          variant="titleOut"
-          title="Электронная почта"
-          placeholder="email@example.com"
-          value={email}
-          onChange={(event) => setEmail(event.currentTarget.value)}
-          onBlur={() => commitField('email', email)}
-          onClear={() => {
-            setEmail('');
-            commitField('email', '');
-          }}
-          error={emailError}
-        />
+        <EmailFieldRow email={me.email} />
         <TimezoneFieldRow label={formatTimezoneLabel(me.timezone)} />
       </div>
     </div>
@@ -251,7 +258,8 @@ function AccountScreenView({ me }: AccountScreenViewProps): JSX.Element {
  * 1789-99036): аватар-плейсхолдер 96 без «Добавить фото» (аватар отложен),
  * поля имени (titleIn) с автосохранением PATCH /me по blur/очистке —
  * макет без кнопки «Сохранить», телефон строкой на /profile/account/phone,
- * почта полем с валидацией, часовой пояс строкой на пикер
+ * почта строкой на флоу смены /profile/account/email (#722 — инлайн-правка
+ * снесена, PATCH /me почту не принимает), часовой пояс строкой на пикер
  * /profile/account/timezone (#594). Поглотил
  * легаси PersonalDataForm (/profile/personal снесён) и AccountOverview.
  * Тихий автосейв браузерной зоны снесён (#451): колонка users.timezone

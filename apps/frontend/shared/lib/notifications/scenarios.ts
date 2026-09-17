@@ -134,6 +134,12 @@ const profile = {
   ),
   phoneSendCodeError: errorScenario('Не удалось отправить код'),
   phoneChangeError: errorScenario('Не удалось изменить номер телефона'),
+  /** Флоу смены почты (#722): автосообщение кода на текущий адрес при входе
+   * на экран и ошибки шагов подтверждения; текст — detail бэка («Неверный
+   * код», «Превышен лимит запросов», «Эта электронная почта уже
+   * используется», «У аккаунта нет электронной почты»). */
+  emailSendCodeError: errorScenario('Не удалось отправить код'),
+  emailChangeError: errorScenario('Не удалось изменить электронную почту'),
   logoutError: errorScenario('Не удалось выйти'),
   pushEnabled: ((options?) =>
     notify.success('Пуши включены', options)) satisfies ScenarioFn,

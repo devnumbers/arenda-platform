@@ -157,6 +157,9 @@ export const ROUTES = {
    * с поиском; сохранение — PATCH /me, назад — на аккаунт. */
   profileAccountTimezone: '/profile/account/timezone',
   profileChangePhone: '/profile/account/phone',
+  /** Флоу смены почты (карта #723, тикет #722): двойной код — на текущий
+   * адрес, затем на новый. */
+  profileChangeEmail: '/profile/account/email',
   profileTariff: '/profile/tariff',
   /** Экран «О тарифе» (карта #611, тикет #621): детали тарифа с главного
    * «Тариф»; до #621 страница живёт как нейтральный каркас. */
