@@ -147,14 +147,17 @@ func run() error {
 	subscribeUserRegistered(eventDispatcher, billingMod, accessMod)
 
 	// 9. Grace notifications (issue #253): the billing grace events deliver
-	//     through the notifications context over push and email, honouring the
-	//     per-channel preferences (ADR 0030). Subscribers are registered before
-	//     the workers start so no grace event fires unwired.
+	//     through the notifications context over push and email (always-on
+	//     service category, ADR 0056). The contact resolver and email
+	//     notifier are shared with the delivery queue built in step 11.5.
+	//     Subscribers are registered before the workers start so no grace
+	//     event fires unwired.
 	pushSender, err := newPushSender(ctx, p.Cfg, p.Logger)
 	if err != nil {
 		return err
 	}
-	graceNotifier := newGraceNotifier(p.DB, p.Renderer, p.Cfg, p.Logger, notificationsMod, identityMod, pushSender)
+	delivery := newNotificationDelivery(p.DB, p.Renderer, identityMod.EmailMailer)
+	graceNotifier := newGraceNotifier(p.Cfg, p.Logger, notificationsMod, delivery, pushSender)
 	subscribeGraceEvents(eventDispatcher, graceNotifier)
 
 	// 10. Admin service (depends on billing subscriptions + occupancy provider).
@@ -163,9 +166,20 @@ func run() error {
 	// 11. Popups service.
 	popupsMod := wire.WirePopups(p)
 
-	// 12. Background workers (5 goroutines). Started before the HTTP server so
-	//     they are live while serving. The Web Push sender was constructed in
-	//     step 9 together with the grace notification delivery.
+	// 11.5 Delivery queue (карта #734, #740): the River client with the
+	//     email/push delivery workers and the notification publisher. The
+	//     client starts in the workers phase below; the publisher is the
+	//     post-commit seam the pipeline publishers call (#741, #748–#752).
+	riverMod, err := wire.WireRiverQueue(ctx, p, notificationsMod, delivery.resolver, delivery.emailer, pushSender)
+	if err != nil {
+		return err
+	}
+	defer riverMod.ProviderLimiter.Stop()
+
+	// 12. Background workers (5 goroutines + the delivery queue client).
+	//     Started before the HTTP server so they are live while serving. The
+	//     Web Push sender was constructed in step 9 together with the grace
+	//     notification delivery.
 	workers := wire.NewWorkers(
 		ctx, p,
 		identityMod.SessionRepo,
@@ -174,6 +188,7 @@ func run() error {
 		billingMod.Services.Workers,
 		paymentsMod.TickService,
 		tasksMod.TickService,
+		riverMod.Client,
 	)
 
 	// 12a. The stand-only time-travel rig (issue #665): the admin time-shift
@@ -343,22 +358,36 @@ func newPushSender(ctx context.Context, cfg *config.Config, logger *slog.Logger)
 	return s, nil
 }
 
+// notificationDelivery bundles the channel adapters shared by the direct
+// grace notifications and the delivery queue's email worker: one contact
+// resolver and one email notifier for both paths.
+type notificationDelivery struct {
+	resolver notificationsapp.ContactResolver
+	emailer  notificationsapp.DirectEmailSender
+}
+
+// newNotificationDelivery builds the shared channel adapters.
+func newNotificationDelivery(db *database.InstrumentedPool, renderer *mailer.Renderer, emailMailer mailer.Sender) notificationDelivery {
+	queries := platformgenerated.New(db)
+	return notificationDelivery{
+		resolver: notificationspg.NewContactResolver(queries),
+		emailer:  emailnotifier.NewNotifier(emailMailer, renderer),
+	}
+}
+
 // newGraceNotifier builds the direct notification service the billing grace
 // events deliver through; push delivery is included only when the sender
 // could be built.
 func newGraceNotifier(
-	db *database.InstrumentedPool,
-	renderer *mailer.Renderer,
 	cfg *config.Config,
 	logger *slog.Logger,
 	notificationsMod *wire.Notifications,
-	identityMod *wire.Identity,
+	delivery notificationDelivery,
 	pushSender notificationsapp.PushSender,
 ) *notificationsapp.DirectNotificationService {
-	queries := platformgenerated.New(db)
 	return notificationsapp.NewDirectNotificationService(
-		notificationspg.NewContactResolver(queries),
-		emailnotifier.NewNotifier(identityMod.EmailMailer, renderer),
+		delivery.resolver,
+		delivery.emailer,
 		pushSender,
 		notificationsMod.PushSubscriptionRepo,
 		cfg.AppBaseURL,
@@ -449,6 +478,17 @@ func runMigrate() error {
 	}
 	if err := database.MigrateUp(cfg.DatabaseURL, cfg.MigrationsDir); err != nil {
 		return fmt.Errorf("migrate: %w", err)
+	}
+	// The River queue owns its own schema chain (rivermigrate, research
+	// #735 §2): applied after ours, idempotent, never vendored into
+	// db/migrations.
+	riverPool, err := database.NewPool(context.Background(), cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("river migrate pool: %w", err)
+	}
+	defer riverPool.Close()
+	if err := database.MigrateRiverSchema(context.Background(), riverPool); err != nil {
+		return fmt.Errorf("river migrate: %w", err)
 	}
 	appLogger.InfoContext(context.Background(), "migrations applied")
 	return nil

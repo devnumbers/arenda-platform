@@ -58,3 +58,10 @@ SET read_at = now()
 WHERE user_id = $1
   AND read_at IS NULL
   AND deleted_at IS NULL;
+
+-- name: GetNotification :one
+-- One feed row by id for the delivery jobs (#740): a job reloads the
+-- committed row (recipient, texts, payload) instead of carrying content in
+-- its args. A soft-deleted row still resolves — deletion hides the row from
+-- the feed, it does not retract an in-flight delivery.
+SELECT * FROM notifications WHERE id = $1;

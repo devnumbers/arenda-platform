@@ -298,6 +298,11 @@ type Querier interface {
 	GetLoginAttemptByPhone(ctx context.Context, phone string) (LoginAttempt, error)
 	GetLoginAttemptByPhoneForUpdate(ctx context.Context, phone string) (LoginAttempt, error)
 	GetMaxMemberRoleByOwner(ctx context.Context, arg GetMaxMemberRoleByOwnerParams) (int32, error)
+	// One feed row by id for the delivery jobs (#740): a job reloads the
+	// committed row (recipient, texts, payload) instead of carrying content in
+	// its args. A soft-deleted row still resolves — deletion hides the row from
+	// the feed, it does not retract an in-flight delivery.
+	GetNotification(ctx context.Context, id pgtype.UUID) (Notification, error)
 	// Payments context queries: operations and favorites-facing operation reads
 	// (ticket #461, the second contracts slice of ADR 0049 §4). Reads are scoped
 	// by the data owner and by the nested path property→payment→operation;

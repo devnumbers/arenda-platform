@@ -29,6 +29,34 @@ func (q *Queries) CountUnreadNotifications(ctx context.Context, userID pgtype.UU
 	return count, err
 }
 
+const getNotification = `-- name: GetNotification :one
+SELECT id, user_id, category, event_type, title, body, context_label, payload, dedup_key, read_at, deleted_at, created_at FROM notifications WHERE id = $1
+`
+
+// One feed row by id for the delivery jobs (#740): a job reloads the
+// committed row (recipient, texts, payload) instead of carrying content in
+// its args. A soft-deleted row still resolves — deletion hides the row from
+// the feed, it does not retract an in-flight delivery.
+func (q *Queries) GetNotification(ctx context.Context, id pgtype.UUID) (Notification, error) {
+	row := q.db.QueryRow(ctx, getNotification, id)
+	var i Notification
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Category,
+		&i.EventType,
+		&i.Title,
+		&i.Body,
+		&i.ContextLabel,
+		&i.Payload,
+		&i.DedupKey,
+		&i.ReadAt,
+		&i.DeletedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const insertNotification = `-- name: InsertNotification :execrows
 
 INSERT INTO notifications (id, user_id, category, event_type, title, body, context_label, payload, dedup_key)

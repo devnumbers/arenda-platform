@@ -157,6 +157,16 @@ func WirePlatform() (*Platform, context.Context, error) {
 		stop()
 		return nil, nil, fmt.Errorf("database pool: %w", err)
 	}
+	if cfg.AutoMigrate {
+		// River owns its own schema chain (research #735 §2), applied after
+		// the golang-migrate chain on the same auto-migrate switch.
+		if err := database.MigrateRiverSchema(ctx, pool); err != nil {
+			stop()
+			pool.Close()
+			return nil, nil, fmt.Errorf("river migrate: %w", err)
+		}
+	}
+
 	db := database.NewInstrumentedPool(pool, appLogger)
 	auditWriter := auditpg.NewWriter(db)
 	auditRecorder := auditapp.NewService(auditWriter, clock.Real{})

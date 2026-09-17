@@ -2,14 +2,17 @@ package wire
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 
+	"github.com/jackc/pgx/v5"
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	identitypg "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/postgres"
 	identityscheduler "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/scheduler"
 	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/scheduler"
 	tasksapp "github.com/nambers/arenda-planform/apps/backend/internal/tasks/application"
+	"github.com/riverqueue/river"
 )
 
 // Compile-time checks that the worker phases satisfy the scheduler's
@@ -38,9 +41,12 @@ type Workers struct {
 
 // NewWorkers builds and starts the five background workers: the identity
 // data cleaner, the billing worker, the payment reconciliation worker, the
-// payments tick worker and the tasks tick worker. It must be called with the
-// still-active request context so the workers shut down when cancellation
-// propagates.
+// payments tick worker and the tasks tick worker. A non-nil riverClient adds
+// the delivery queue (карта #734, #740): Start blocks until the client has
+// fully stopped — cancelling the lifecycle context begins the soft stop
+// (SoftStopTimeout), so Workers.Wait also waits for in-flight delivery jobs.
+// It must be called with the still-active request context so the workers
+// shut down when cancellation propagates.
 func NewWorkers(
 	ctx context.Context,
 	p platformDeps,
@@ -50,6 +56,7 @@ func NewWorkers(
 	billingWorkers *billingapp.Workers,
 	paymentsTick *paymentsapp.TickService,
 	tasksTick *tasksapp.TickService,
+	riverClient *river.Client[pgx.Tx],
 ) *Workers {
 	billingWorker := scheduler.NewBillingWorker(
 		billingWorkers, billingWorkers, billingWorkers,
@@ -65,12 +72,28 @@ func NewWorkers(
 		sessionRepo, codeRepo, attemptRepo, p.Clock, p.Cfg.IdentityCleanerInterval, p.Cfg.IdentityCleanerRetention, p.Logger)
 
 	w := &Workers{Billing: billingWorker}
-	w.wg.Add(5)
+	goroutines := 5
+	if riverClient != nil {
+		goroutines++
+	}
+	w.wg.Add(goroutines)
 	go func() { defer w.wg.Done(); dataCleaner.Run(ctx) }()
 	go func() { defer w.wg.Done(); billingWorker.Run(ctx) }()
 	go func() { defer w.wg.Done(); paymentReconciliationWorker.Run(ctx) }()
 	go func() { defer w.wg.Done(); paymentsTickWorker.Run(ctx) }()
 	go func() { defer w.wg.Done(); tasksTickWorker.Run(ctx) }()
+	if riverClient != nil {
+		go func() {
+			defer w.wg.Done()
+			// Start blocks until the client has fully stopped; the only
+			// error it can return is a startup failure (the database is
+			// unreachable) — logged, matching the scheduler loops'
+			// log-and-serve behaviour.
+			if err := riverClient.Start(ctx); err != nil {
+				p.Logger.ErrorContext(ctx, "delivery queue client stopped with error", slog.String("error", err.Error()))
+			}
+		}()
+	}
 
 	return w
 }

@@ -5,15 +5,18 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
+	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 // The adapter satisfies the consumer-declared port (CODING_STANDARDS).
@@ -32,6 +35,27 @@ func NewNotificationRepository(db postgres.DBTX) *NotificationRepository {
 
 func (r *NotificationRepository) q() *postgres.Queries {
 	return postgres.New(r.db)
+}
+
+// WithTx returns a repository instance bound to the provided transaction.
+func (r *NotificationRepository) WithTx(tx transaction.Tx) (application.NotificationRepository, error) {
+	dbtx, ok := tx.(postgres.DBTX)
+	if !ok {
+		return nil, fmt.Errorf("notifications.NotificationRepository.WithTx: %T is not a postgres.DBTX", tx)
+	}
+	return NewNotificationRepository(dbtx), nil
+}
+
+// GetByID returns one feed row by id; ErrNotFound when absent.
+func (r *NotificationRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.Notification, error) {
+	row, err := r.q().GetNotification(ctx, pgconv.UUIDToPgtype(id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Notification{}, application.ErrNotFound
+		}
+		return domain.Notification{}, fmt.Errorf("get notification: %w", err)
+	}
+	return notificationToDomain(row)
 }
 
 // Insert publishes one recipient's feed row; a repeat publication with the

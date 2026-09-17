@@ -6,17 +6,24 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 // NotificationRepository persists and queries the stored notification feed
-// (карта #734, модель — решение #737). The consumers are the creation
-// service (#740) and the feed reading API (#743); transactional binding
-// arrives with the creation service's transaction seam.
+// (карта #734, модель — решение #737). The feed readers are the creation
+// service (#740) and the feed reading API (#743).
 type NotificationRepository interface {
+	// WithTx binds the repository to the caller's transaction (ADR 0033):
+	// the publisher inserts feed rows and enqueues deliveries in one tx.
+	WithTx(tx transaction.Tx) (NotificationRepository, error)
 	// Insert publishes one recipient's feed row. It reports false when a row
 	// with the same (recipient, dedup key) already exists: the repeat
 	// publication is a no-op, not an error.
 	Insert(ctx context.Context, n domain.Notification) (bool, error)
+	// GetByID returns one feed row by id, ErrNotFound when absent. The
+	// delivery jobs (#740) reload the committed row instead of carrying its
+	// content in job args.
+	GetByID(ctx context.Context, id uuid.UUID) (domain.Notification, error)
 	// ListPage walks the user's feed newest-first by the (created_at, id)
 	// keyset (канон #597). Deleted rows never appear. UnreadOnly filters the
 	// page to unread rows. The afterCreatedAt/afterID pair resumes strictly
@@ -74,6 +81,16 @@ type PushSender interface {
 // ContactResolver resolves the delivery channel and address for an owner.
 type ContactResolver interface {
 	Resolve(ctx context.Context, scope uuid.UUID) (Contact, error)
+}
+
+// DeliveryQueue schedules a stored notification's channel deliveries. The
+// publisher enqueues inside its own transaction, so a delivery job commits
+// together with its feed row; retries and at-least-once delivery are the
+// queue's contract (ADR 0057). A channel that is not configured (push
+// without VAPID keys) is a legitimate no-op implementation.
+type DeliveryQueue interface {
+	EnqueueEmail(ctx context.Context, tx transaction.Tx, notificationID uuid.UUID) error
+	EnqueuePush(ctx context.Context, tx transaction.Tx, notificationID uuid.UUID) error
 }
 
 // Contact is a resolved delivery endpoint.
