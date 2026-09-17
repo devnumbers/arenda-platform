@@ -2,11 +2,15 @@
 
 import { useMutation, useQuery, useQueryClient, type UseMutationResult, type UseQueryResult } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
-import type { ApiError } from '@/shared/api/errors';
+import { ApiError } from '@/shared/api/errors';
 import type { components } from '@/shared/api/dto';
 import { participantsKeys } from '@/shared/api/query-keys';
 import { mapParticipant } from '@/entities/participants';
 import type { Participant } from '@/entities/participants';
+import {
+  toAddParticipantPropertiesWireRequest,
+  type AddParticipantPropertiesCommand,
+} from './wire';
 
 type ParticipantsSummaryResponse =
   components['schemas']['ParticipantsSummaryResponse'];
@@ -86,6 +90,98 @@ export function useRevokeAllParticipants(): UseMutationResult<
         }
       }
       return { revoked, failed };
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: participantsKeys.all });
+    },
+  });
+}
+
+/** Страница участника (#698, GET /participants/{id} #693): агрегат одного
+ * человека с per-object ногами. 404 (человек вне скоупа читающего или уже
+ * отозван) доходит до экрана как ApiError со статусом — deep-link-политика
+ * «Участник не найден»; 404 детерминирован, поэтому без ретраев — экран
+ * показывает состояние сразу, а не после экспоненциальных пауз. */
+export function useParticipant(
+  participantId: string,
+): UseQueryResult<Participant, ApiError> {
+  return useQuery({
+    queryKey: participantsKeys.detail(participantId),
+    queryFn: async (): Promise<Participant> => {
+      const response = await apiClient<components['schemas']['ParticipantResponse']>(
+        `/participants/${encodeURIComponent(participantId)}`,
+      );
+      return mapParticipant(response);
+    },
+    enabled: participantId.length > 0,
+    retry: (failureCount, error) => {
+      if (error instanceof ApiError && error.status === 404) {
+        return false;
+      }
+      return failureCount < 3;
+    },
+  });
+}
+
+/** «Отозвать и удалить» со страницы участника (#698, DELETE
+ * /participants/{id} #694): снимает все ноги человека на объектах читающего.
+ * Инвалидация всегда (onSettled, канон useRevokeAllParticipants) — и после
+ * успеха, и при сбое: список/счётчики/агрегат перечитываются. */
+export function useRevokeParticipant(): UseMutationResult<void, ApiError, string> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (participantId: string) => {
+      await apiClient<void>(`/participants/${encodeURIComponent(participantId)}`, {
+        method: 'DELETE',
+      });
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: participantsKeys.all });
+    },
+  });
+}
+
+/** Исход «Пригласить в объект» (#698, POST /participants/{id}/properties
+ * #694): per-object исходы партии — успехи и skipped_* (уже выдан,
+ * архивный, чужой и т.д.). */
+export type AddParticipantPropertiesResult = {
+  readonly granted: number;
+  readonly skipped: number;
+};
+
+/** «Пригласить в объект» (#698): одна роль на выбранные объекты
+ * (AddParticipantPropertiesCommand → wire, api/wire). Счёт granted/skipped
+ * считает экран — партия может смешать исходы (ParticipantGrantOutcome
+ * #694); частичный исход макетом не различён — попап один (решение
+ * владельца на приёмке). Инвалидация в onSettled: переход на страницу
+ * участника происходит в onSuccess, агрегат перечитается там. */
+export function useAddParticipantProperties(
+  participantId: string,
+): UseMutationResult<
+  AddParticipantPropertiesResult,
+  ApiError,
+  AddParticipantPropertiesCommand
+> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (command) => {
+      const response = await apiClient<components['schemas']['ParticipantGrantResultsResponse']>(
+        `/participants/${encodeURIComponent(participantId)}/properties`,
+        {
+          method: 'POST',
+          body: JSON.stringify(toAddParticipantPropertiesWireRequest(command)),
+        },
+      );
+      let granted = 0;
+      let skipped = 0;
+      for (const item of response.items) {
+        if (item.outcome === 'active' || item.outcome === 'suspended' || item.outcome === 'pending') {
+          granted += 1;
+        } else {
+          skipped += 1;
+        }
+      }
+      return { granted, skipped };
     },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: participantsKeys.all });

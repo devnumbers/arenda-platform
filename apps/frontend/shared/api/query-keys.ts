@@ -54,6 +54,10 @@ export const participantsKeys = {
   summary: ['participants', 'summary'] as const,
   /** Список «Ваши участники» GET /participants (#693, экран #697). */
   list: () => [...participantsKeys.all, 'list'] as const,
+  /** Страница участника GET /participants/{id} (#693, экран #698);
+   * id — uuid юзера либо pending-почта (encodeURIComponent на потребителе). */
+  detail: (participantId: string) =>
+    [...participantsKeys.all, 'detail', participantId] as const,
 };
 
 // features/properties

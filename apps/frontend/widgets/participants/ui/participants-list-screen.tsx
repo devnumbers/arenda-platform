@@ -37,7 +37,9 @@ import {
   TopNavTitle,
   type PickerMenuGroup,
 } from '@/shared/ui/design';
+import { popParticipantPopup, useParticipantPopup } from '../lib/participant-popups';
 import { ParticipantsListSkeleton } from './participants-list-skeletons';
+import { ParticipantSuccessPopup } from './participant-success-popup';
 
 /**
  * Экран «Ваши участники» (карта #692, тикет #697; Figma 2036-82971):
@@ -72,6 +74,10 @@ export function ParticipantsListScreen(): JSX.Element {
   const [sortOrder, setSortOrder] = useState<ParticipantSortOrder>('asc');
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  // «Участник удален» (макет 2008-83716): отзыв одного участника со
+  // страницы участника (#698) возвращается на список по канону истории
+  // (goBack) — попап рендерится здесь по staged-флагу.
+  const deletedPopup = useParticipantPopup() === 'deleted';
 
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   // Открытие поиска сразу делает поле активным (программный фокус —
@@ -247,6 +253,13 @@ export function ParticipantsListScreen(): JSX.Element {
         pending={revokeAll.isPending}
         onConfirm={confirmRevokeAll}
       />
+
+      {deletedPopup && (
+        <ParticipantSuccessPopup
+          title="Участник удален"
+          onClose={() => popParticipantPopup()}
+        />
+      )}
 
       {/* Попап успеха (макет 2008-84101): зелёная галочка 48 и текст;
        * список под ним уже перечитан инвалидацией. Крестик — явно в углу

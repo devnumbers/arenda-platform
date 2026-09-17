@@ -219,3 +219,9 @@ export { default as CheckNoneLine } from './check-none-line.svg';
 // Icon/Color/Cancel 1933:78037, запечённый красно-градиентный круг
 // с белым крестом (имя Cancel занято контурным 24×24 currentColor).
 export { default as CancelColor } from './cancel-color.svg';
+
+// Страница участника (#698, Figma 2008-81468): бейджи ролей ног доступа —
+// Icon/S/Edit 1961:52805 («Редактирование») и Icon/S/Eye 1961:52816
+// («Просмотр»), контурные 16×16, currentColor.
+export { default as EditSmall } from './edit-small.svg';
+export { default as EyeSmall } from './eye-small.svg';

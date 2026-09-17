@@ -152,9 +152,18 @@ export const ROUTES = {
    * всех». */
   participantsList: '/participants/list',
   /** Страница участника (тикет #698, тот же агрегат GET
-   * /participants/{participantId}); до тикета адрес каркасом не живёт —
-   * ряды списка #697 ведут на него. */
-  participant: (participantId: string) => `/participants/${participantId}`,
+   * /participants/{participantId}). Идентификатор — uuid юзера либо
+   * pending-почта: кодируется в путь (Next декодирует параметр обратно). */
+  participant: (participantId: string) =>
+    `/participants/${encodeURIComponent(participantId)}`,
+  /** Экран «Права участника» (#698): роль и отзыв на одном объекте. */
+  participantRights: (participantId: string, propertyId: string) =>
+    `/participants/${encodeURIComponent(participantId)}/properties/${propertyId}`,
+  /** Экран «Пригласить в объект» (#698): мультичек объектов читающего
+   * для существующего участника (не путать с participantsInvite —
+   * приглашением нового человека, #699). */
+  participantInvite: (participantId: string) =>
+    `/participants/${encodeURIComponent(participantId)}/invite`,
   /** Экран «Объекты пользователей» (#701): чужие объекты с доступом.
    * До тикета живёт как нейтральный каркас. */
   participantsProperties: '/participants/properties',

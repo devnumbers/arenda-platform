@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import type { Metadata } from 'next';
 import { ParticipantsListScreen } from '@/widgets/participants';
 
@@ -7,6 +8,6 @@ export const metadata: Metadata = {
   title: 'Ваши участники — Рентли',
 };
 
-export default function ParticipantsListRoutePage() {
+export default function ParticipantsListRoutePage(): JSX.Element {
   return <ParticipantsListScreen />;
 }
