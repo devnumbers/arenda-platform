@@ -46,6 +46,14 @@ export const contactKeys = {
   detail: (contactId: string) => [...contactKeys.all, 'detail', contactId] as const,
 };
 
+// features/participants — «Совместный доступ» (карта #692)
+export const participantsKeys = {
+  all: ['participants'] as const,
+  /** Счётчики хаба GET /participants/summary (#693): участники читающего
+   * и чужие объекты с активным доступом. */
+  summary: ['participants', 'summary'] as const,
+};
+
 // features/properties
 export const propertyKeys = {
   all: ['properties'] as const,

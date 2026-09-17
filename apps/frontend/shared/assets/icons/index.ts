@@ -167,10 +167,10 @@ export { default as BoldWallet } from './bold-wallet.svg';
 // R: AccountSetting 472:4958, Archive 189:818, Block 1804:108181,
 // Change 1134:49309, ChangeVertical 858:20998, CheckmarkCircle 1644:94847,
 // Computer 1804:105311, Download 189:836, Exit 472:4952, Info 1296:48308,
-// Key 119:1104, Minus 1858:105685, PaintBrush 189:800, Phone 1804:105303,
-// Pin 501:8839, PinOff 890:30954, Setting 1740:100244, Sync 1804:105034,
-// Team 472:5276, TeamAdd 1804:108296, Undo 1883:71902, UserCircle 1652:82357,
-// Wallet 550:8808.
+// Key 119:1104, Minus 1858:105685, Objects 1967:86377, PaintBrush 189:800,
+// Phone 1804:105303, Pin 501:8839, PinOff 890:30954, Setting 1740:100244,
+// Sync 1804:105034, Team 472:5276, TeamAdd 1804:108296, Undo 1883:71902,
+// UserCircle 1652:82357, Wallet 550:8808.
 export { default as AccountSetting } from './account-setting.svg';
 export { default as Archive } from './archive.svg';
 export { default as Block } from './block.svg';
@@ -181,6 +181,7 @@ export { default as Download } from './download.svg';
 export { default as Exit } from './exit.svg';
 export { default as Info } from './info.svg';
 export { default as Minus } from './minus.svg';
+export { default as Objects } from './objects.svg';
 export { default as PaintBrush } from './paint-brush.svg';
 export { default as Phone } from './phone.svg';
 export { default as Pin } from './pin.svg';

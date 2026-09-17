@@ -10,6 +10,7 @@ import {
   NotificationSettings,
   SmallArrowRight,
   Star,
+  Team,
 } from '@/shared/assets/icons';
 import {
   ConfirmDialog,
@@ -35,6 +36,9 @@ type HubRow = {
 const navigationRows: readonly HubRow[] = [
   { title: 'Аккаунт', href: ROUTES.profileAccount, Icon: AccountSetting },
   { title: 'Тариф', href: ROUTES.profileTariff, Icon: Star },
+  // Хаб «Совместный доступ» (#696): второй вход хаба — строка в профиле
+  // (решение чарта #692 №10); позиция после «Тарифа» — на приёмке #696.
+  { title: 'Участники', href: ROUTES.participants, Icon: Team },
   { title: 'Уведомления', href: ROUTES.profileNotifications, Icon: NotificationSettings },
   { title: 'Информация', href: ROUTES.profileInfo, Icon: Info },
 ];
@@ -105,8 +109,9 @@ function ProfileHubSkeleton(): JSX.Element {
 /** Хаб профиля в новом дизайне (тикет #592, карта #591; Figma 1903-38340
  * плейсхолдер / 1786-31288 заполненный): аватар-плейсхолдер 96 (Bold/User,
  * фото — отложенная карта), имя + телефон, серый контейнер со строками
- * «Аккаунт / Тариф / Уведомления / Информация / Выйти». Строки «Команда» и
- * «Устройства» скрыты (решение владельца 10.09.2026 — нет макетов и бэка).
+ * «Аккаунт / Тариф / Участники / Уведомления / Информация / Выйти».
+ * Строка «Устройства» скрыта (решение владельца 10.09.2026 — нет макетов
+ * и бэка); «Участники» — вход хаба «Совместный доступ» (#696, карта #692).
  * «Выйти» — ConfirmDialog канон + POST /auth/logout. */
 export function ProfileHub(): JSX.Element {
   const router = useRouter();
