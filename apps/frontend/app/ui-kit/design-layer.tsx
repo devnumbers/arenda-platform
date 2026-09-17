@@ -54,6 +54,7 @@ import {
     SkeletonSection,
     RadioGroup,
     RadioGroupItem,
+    ResendCodeTile,
     SearchField,
     StatusIcon,
     UserButton,
@@ -1191,6 +1192,21 @@ export function DesignLayerShowcase(): JSX.Element {
                             title="Контактов нет"
                             description="Добавьте контакты арендатора, мастеров и других специалистов"
                         />
+                    </div>
+                </div>
+
+                <div className={styles.group}>
+                    <h3 className={styles.groupTitle}>ResendCodeTile · повторная отправка кода</h3>
+                    <p className={styles.groupTitle}>
+                        Resend-канон шага кода (#733, Figma 1869-68137/2343-51004): Secondary-кнопка
+                        «Отправить новый код», на таймере disabled с подписью ММ:СС (Roboto Mono),
+                        по истечении подпись скрыта. Таймер-хранение — за фичей (useCountdown).
+                    </p>
+                    <div className={styles.grid}>
+                        <div className="flex w-full flex-col gap-6">
+                            <ResendCodeTile remainingSeconds={42} onResend={() => {}} />
+                            <ResendCodeTile remainingSeconds={0} onResend={() => {}} />
+                        </div>
                     </div>
                 </div>
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ChangeEvent, type JSX, type SubmitEvent } from 'react';
 import { ArrowLeft, Cancel } from '@/shared/assets/icons';
+import { useCountdown } from '@/shared/lib/hooks/use-countdown';
 import { notify } from '@/shared/lib/notifications';
 import { isEmailValid } from '@/shared/lib/email';
 import { isValidLoginCode, loginCodeFromInput } from '@/shared/lib/login-code';
@@ -9,16 +10,19 @@ import {
   Button,
   IconButton,
   PageContent,
+  ResendCodeTile,
   StickyBottomBar,
   TextField,
   TopNav,
   TopNavTitle,
 } from '@/shared/ui/design';
 import { MeFlowScreen, MeFlowSuccessScreen, type MeFlowProps } from './MeFlowScreen';
+import { invalidCodeDetail, RESEND_COOLDOWN_MS } from '../lib/code-step';
 import {
   useChangeEmail,
   useConfirmCurrentEmail,
   useEmailChangeSendCode,
+  useResendEmailCode,
 } from '@/features/profile';
 
 /** Новый адрес: непустой, по форме «что-то@домен.тлд», в нижнем регистре —
@@ -30,28 +34,32 @@ function normalizeEmail(value: string): string {
 type Step = 'code-current' | 'new-email' | 'code-new' | 'success';
 
 /**
- * Экран «Смена почты» (карта #723, тикет #722; Figma LnnLyFL5u1DWIYPGLzWW0X —
- * 2235-104553 код текущей, 2235-104805/104954 ввод новой пустой/заполненный,
- * 2235-105106 код новой, 2235-105223 успех). Канон — PhoneChangeScreen,
+ * Экран «Смена почты» (карта #723, тикеты #722/#733; Figma
+ * LnnLyFL5u1DWIYPGLzWW0X — 2235-104553 код текущей, 2235-104805/104954
+ * ввод новой пустой/заполненный, 2235-105106 код новой, 2343-51004
+ * ошибка кода/истёкший таймер, 105223 успех). Канон — PhoneChangeScreen,
  * состояния /me и успех — общий MeFlowScreen. Четыре шага одного маршрута
  * /profile/account/email:
  *  - «code-current» — код на текущий адрес отправляется автоматически при
  *    входе на экран (шаг «Подтвердите текущую почту» в макете — первый);
- *    ошибка отправки — тост, поле остаётся (живой код из прошлой попытки
- *    принимается — паритет с телефоном). «Назад» и крест закрывают экран.
+ *    ошибка отправки — тост, поле остаётся. Resend — плитка с таймером
+ *    60 с (повторный useEmailChangeSendCode). «Назад» и крест закрывают
+ *    экран.
  *  - «new-email» — «Введите новую почту», поле с крестом-очисткой;
  *    «Продолжить» disabled до валидного адреса; same-as-current —
  *    клиентская ошибка. Здесь же уходит confirm-current (код + адрес одним
  *    запросом, #721): неверный/использованный адрес — тост из detail.
- *  - «code-new» — «Подтвердите новую почту» с новым адресом в подзаголовке.
- *  - «success» — «Электронная почта изменена на <адрес>» (решение #720 Q7:
- *    в макете 105223 стоял телефон), шит «Хорошо» на аккаунт.
- * Шапка «Смена почты» на всех шагах (артефакт макета 104805/104954
- * «Изменение телефона» правим по #720 Q7). Кнопки resend нет (Q8): код на
- * текущий адрес повторно уходит при повторном входе на экран, на новый —
- * через «Назад» → «Продолжить» на шаге адреса.
- * Поле шага получает программный фокус на монтировании и смене шага. Ошибки
- * API — тосты сценариев профиля, текст из detail бэка.
+ *  - «code-new» — «Подтвердите новую почту» с новым адресом в подзаголовке;
+ *    resend — плитка с таймером, повторная доставка по живому гранту
+ *    (`useResendEmailCode`, бэк #732): код шага 1 confirm-current сжигает,
+ *    прежний обход «Назад → Продолжить» серверно сломан.
+ *  - «success» — «Новая электронная почта <адрес>» (макет 105223),
+ *    шит «Хорошо» на аккаунт.
+ * Шапка «Смена почты» на всех шагах. Поле шага получает программный фокус
+ * на монтировании и смене шага. Ошибки: неверный код (401) — inline в
+ * error-проп поля (макет 2343-51004), ввод сбрасывает; остальные
+ * API-ошибки — тосты сценариев профиля, текст из detail бэка. Дедлайны
+ * resend-таймеров — на уровне флоу, переживают «Назад»-переключения.
  */
 export function EmailChangeScreen(): JSX.Element {
   return <MeFlowScreen title="Смена почты" Flow={EmailChangeFlow} />;
@@ -61,6 +69,7 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
   const sendCode = useEmailChangeSendCode();
   const confirmCurrent = useConfirmCurrentEmail();
   const changeEmail = useChangeEmail();
+  const resendEmailCode = useResendEmailCode();
 
   const [step, setStep] = useState<Step>('code-current');
   const [currentCode, setCurrentCode] = useState('');
@@ -68,10 +77,19 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
   const [newCode, setNewCode] = useState('');
   const [grant, setGrant] = useState('');
   const [isSubmitAttempted, setIsSubmitAttempted] = useState(false);
+  /** Дедлайны resend-таймеров (epoch ms) обоих шагов кода — от последней
+   * успешной отправки; живут на уровне флоу, переживают «Назад» (#733). */
+  const [currentCodeDeadline, setCurrentCodeDeadline] = useState<number | null>(null);
+  const [newCodeDeadline, setNewCodeDeadline] = useState<number | null>(null);
+  const currentRemainingSeconds = useCountdown(currentCodeDeadline);
+  const newRemainingSeconds = useCountdown(newCodeDeadline);
+  /** Inline-ошибка 401 «Неверный код» шага «code-new» — в error-проп поля. */
+  const [newCodeInlineError, setNewCodeInlineError] = useState<string | null>(null);
 
   // Код на текущую почту уходит один раз на монтирование потока: реф-гард
   // делает пуск идемпотентным (StrictMode и повторные рендеры не дублируют
-  // отправку), троттлинг бэка страхует серверно.
+  // отправку), троттлинг бэка страхует серверно. Успех — старт таймера
+  // resend-плитки шага.
   const isSendStartedRef = useRef(false);
   const sendCodeMutate = sendCode.mutate;
   useEffect(() => {
@@ -80,6 +98,7 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
     }
     isSendStartedRef.current = true;
     sendCodeMutate(undefined, {
+      onSuccess: () => setCurrentCodeDeadline(Date.now() + RESEND_COOLDOWN_MS),
       onError: (error) => notify.scenarios.profile.emailSendCodeError(error),
     });
   }, [sendCodeMutate]);
@@ -112,13 +131,26 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
     : undefined;
   const newCodeError = isSubmitAttempted && !isValidLoginCode(newCode)
     ? 'Введите 6-значный код'
-    : undefined;
+    : (newCodeInlineError ?? undefined);
 
   const handleCodeChange = (
     event: ChangeEvent<HTMLInputElement>,
     setter: (value: string) => void,
   ): void => {
     setter(loginCodeFromInput(event.currentTarget.value));
+  };
+
+  /** Крест-очистка полей кода (канон error-проп TextField, макет
+   * 2343-51004): черновик и валидация сбрасываются. */
+  const handleCurrentCodeClear = (): void => {
+    setCurrentCode('');
+    setIsSubmitAttempted(false);
+  };
+
+  const handleNewCodeClear = (): void => {
+    setNewCode('');
+    setNewCodeInlineError(null);
+    setIsSubmitAttempted(false);
   };
 
   /** Шаг 1 → 2 локальный: код проверяется формой, серверу он понадобится на
@@ -159,6 +191,8 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
           setIsSubmitAttempted(false);
           setGrant(newGrant);
           setNewCode('');
+          setNewCodeInlineError(null);
+          setNewCodeDeadline(Date.now() + RESEND_COOLDOWN_MS);
           setStep('code-new');
         },
         onError: (error) => notify.scenarios.profile.emailChangeError(error),
@@ -178,17 +212,56 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
       { grant, code: newCode },
       {
         onSuccess: () => setStep('success'),
-        onError: (error) => notify.scenarios.profile.emailChangeError(error),
+        onError: (error) => {
+          const inline = invalidCodeDetail(error);
+          if (inline !== null) {
+            setNewCodeInlineError(inline);
+            return;
+          }
+          notify.scenarios.profile.emailChangeError(error);
+        },
+      },
+    );
+  };
+
+  /** Плитка resend на шаге «code-current»: повторная отправка кода на
+   * текущий адрес тем же useEmailChangeSendCode; поле очищается, таймер
+   * перезапускается. */
+  const handleResendCurrentCode = (): void => {
+    sendCode.mutate(undefined, {
+      onSuccess: () => {
+        setIsSubmitAttempted(false);
+        setCurrentCode('');
+        setCurrentCodeDeadline(Date.now() + RESEND_COOLDOWN_MS);
+      },
+      onError: (error) => notify.scenarios.profile.emailSendCodeError(error),
+    });
+  };
+
+  /** Плитка resend на шаге «code-new» (#732): повторная доставка по живому
+   * гранту — код шага 1 сожжён, другой пути нет; старый код нового адреса
+   * серверно инвалидируется — поле очищается, таймер перезапускается. */
+  const handleResendNewCode = (): void => {
+    resendEmailCode.mutate(
+      { grant },
+      {
+        onSuccess: () => {
+          setIsSubmitAttempted(false);
+          setNewCode('');
+          setNewCodeInlineError(null);
+          setNewCodeDeadline(Date.now() + RESEND_COOLDOWN_MS);
+        },
+        onError: (error) => notify.scenarios.profile.emailSendCodeError(error),
       },
     );
   };
 
   /** «Назад» — на шаг раньше: черновик уходящего шага и его мутация
-   * сбрасываются. Повторная отправка кода на НОВЫЙ адрес — «Продолжить»
-   * шага «new-email» (подтвердит текущий код ещё раз, пока тот жив);
-   * код на ТЕКУЩИЙ адрес повторно уходит при повторном входе на экран
-   * (закрыть → строка на аккаунте): троттлинг бэка 429 при живом коде —
-   * форма остаётся, живой код принимается. */
+   * сбрасываются. Повторная отправка кода на НОВЫЙ адрес — resend-плитка
+   * шага «code-new»: confirm-current сжигает код шага 1, повторное
+   * «Продолжить» с шага адреса даёт 401. Код на ТЕКУЩИЙ адрес повторно
+   * уходит плиткой шага 1 (или при повторном входе на экран): троттлинг
+   * бэка 429 при живом коде — форма остаётся. */
   const backToPreviousStep = (): void => {
     setIsSubmitAttempted(false);
     if (step === 'new-email') {
@@ -196,6 +269,7 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
       confirmCurrent.reset();
     } else if (step === 'code-new') {
       setNewCode('');
+      setNewCodeInlineError(null);
       setStep('new-email');
       changeEmail.reset();
     } else {
@@ -206,7 +280,7 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
   if (step === 'success') {
     return (
       <MeFlowSuccessScreen
-        message={`Электронная почта изменена на ${normalizedNewEmail}`}
+        message={`Новая электронная почта ${normalizedNewEmail}`}
         onClose={onClose}
       />
     );
@@ -243,7 +317,7 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
               </h1>
               <p className="m-0 text-sm leading-4 text-content-secondary">
                 {me.email !== null
-                  ? `Отправили 6-значный код подтверждения на почту ${me.email}`
+                  ? `Отправили 6-значный код подтверждения на вашу почту ${me.email}`
                   : 'Отправили 6-значный код подтверждения на вашу почту'}
               </p>
             </div>
@@ -254,10 +328,19 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
               inputMode="numeric"
               value={currentCode}
               onChange={(event) => handleCodeChange(event, setCurrentCode)}
+              onClear={handleCurrentCodeClear}
               error={currentCodeError}
               ref={currentCodeRef}
             />
           </form>
+          {/* Resend-канон шага кода (2235-104553): вне формы — кнопка плитки
+           * не сабмитит код, зазор от поля 24px по макету. */}
+          <ResendCodeTile
+            className="mt-6"
+            remainingSeconds={currentRemainingSeconds}
+            loading={sendCode.isPending}
+            onResend={handleResendCurrentCode}
+          />
         </PageContent>
       )}
 
@@ -291,7 +374,7 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
                 Подтвердите новую почту
               </h1>
               <p className="m-0 text-sm leading-4 text-content-secondary">
-                Отправили 6-значный код подтверждения на почту {normalizedNewEmail}
+                Отправили 6-значный код подтверждения на вашу почту {normalizedNewEmail}
               </p>
             </div>
             <TextField
@@ -300,11 +383,23 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
               type="text"
               inputMode="numeric"
               value={newCode}
-              onChange={(event) => handleCodeChange(event, setNewCode)}
+              onChange={(event) => {
+                handleCodeChange(event, setNewCode);
+                setNewCodeInlineError(null);
+              }}
+              onClear={handleNewCodeClear}
               error={newCodeError}
               ref={newCodeRef}
             />
           </form>
+          {/* Resend-канон шага кода (2235-105106, 2343-51004): повторная
+           * доставка по гранту — бэк #732; вне формы, зазор 24px. */}
+          <ResendCodeTile
+            className="mt-6"
+            remainingSeconds={newRemainingSeconds}
+            loading={resendEmailCode.isPending}
+            onResend={handleResendNewCode}
+          />
         </PageContent>
       )}
 

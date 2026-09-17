@@ -16,6 +16,7 @@ import type {
   ChangePhoneCommand,
   ConfirmCurrentEmailCommand,
   ChangeEmailCommand,
+  ResendEmailCodeCommand,
 } from '@/entities/user';
 
 export function useUpdateMe(): UseMutationResult<
@@ -130,6 +131,24 @@ export function useChangeEmail(): UseMutationResult<
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: authKeys.all });
+    },
+  });
+}
+
+/** Повторная отправка кода на новый адрес по живому гранту (#732/#733):
+ * resend-плитка шага «Подтвердите новую почту». Кэш не трогает — состояние
+ * /me не меняется (204); троттлинг 1 мин и бюджет 5/час — серверно. */
+export function useResendEmailCode(): UseMutationResult<
+  void,
+  ApiError,
+  ResendEmailCodeCommand
+> {
+  return useMutation({
+    mutationFn: async ({ grant }: ResendEmailCodeCommand) => {
+      await apiClient<void>('/me/email/resend-code', {
+        method: 'POST',
+        body: JSON.stringify({ grant }),
+      });
     },
   });
 }

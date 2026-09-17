@@ -44,6 +44,13 @@ export type ChangeEmailCommand = {
   code: string;
 };
 
+/** Повторная отправка кода на новый адрес по живому гранту (#732/#733):
+ * код шага 1 уже сожжён confirm-current, resend-плитка — единственный
+ * путь повторной доставки. */
+export type ResendEmailCodeCommand = {
+  grant: string;
+};
+
 export type { TariffName } from '@/shared/model/tariff';
 
 /** Единственное событие доставочных уведомлений после удаления домена аренд (спека #434). */
