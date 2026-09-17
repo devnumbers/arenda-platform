@@ -1,11 +1,12 @@
 import type { Metadata } from 'next';
-import { ParticipantsPlaceholderScreen } from '@/widgets/participants';
+import { ParticipantsListScreen } from '@/widgets/participants';
 
-/** Каркас экрана «Ваши участники» (#697): список приедет тикетом. */
+/** Экран «Ваши участники» (карта #692, тикет #697): список агрегатов,
+ * поиск, «Отозвать всех». */
 export const metadata: Metadata = {
   title: 'Ваши участники — Рентли',
 };
 
 export default function ParticipantsListRoutePage() {
-  return <ParticipantsPlaceholderScreen title="Ваши участники" />;
+  return <ParticipantsListScreen />;
 }

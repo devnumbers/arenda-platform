@@ -9,6 +9,7 @@ import { useParticipantsSummary } from '@/features/participants';
 import { ROUTES } from '@/shared/config/routes';
 import {
   Button,
+  ErrorCard,
   HubCollapseAnchor,
   HubTitle,
   IconButton,
@@ -65,7 +66,11 @@ export function ParticipantsHubScreen(): JSX.Element {
             <ParticipantsHubSkeleton />
           </div>
         ) : summaryQuery.isError ? (
-          <ParticipantsErrorCard onRetry={() => void summaryQuery.refetch()} />
+          <ErrorCard
+            title="Не удалось загрузить раздел"
+            onRetry={() => void summaryQuery.refetch()}
+            className="mt-6"
+          />
         ) : (
           <div className="mt-6 flex flex-col gap-4 px-6">
             <HubCard
@@ -135,24 +140,5 @@ function HubCard({
         <SmallArrowRight className="h-6 w-6 text-content-tertiary" />
       </span>
     </Link>
-  );
-}
-
-/** Ошибка счётчиков — карточка с retry (канон §7, как ContactsErrorCard). */
-function ParticipantsErrorCard({ onRetry }: { readonly onRetry: () => void }): JSX.Element {
-  return (
-    <section className="mx-6 mt-6 rounded-card bg-surface-muted px-6 py-6">
-      <h2 className="m-0 text-xl font-semibold leading-6 text-content">
-        Не удалось загрузить раздел
-      </h2>
-      <p className="mt-2 text-sm leading-4 text-content-secondary">
-        Проверьте подключение и попробуйте еще раз
-      </p>
-      <div className="mt-4">
-        <Button size="small" variant="secondary" onClick={onRetry}>
-          Повторить
-        </Button>
-      </div>
-    </section>
   );
 }

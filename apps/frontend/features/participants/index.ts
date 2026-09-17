@@ -1,2 +1,9 @@
-export { useParticipantsSummary } from './api/hooks';
-export type { ParticipantsSummary } from './api/hooks';
+export {
+  useParticipantsList,
+  useParticipantsSummary,
+  useRevokeAllParticipants,
+} from './api/hooks';
+export type {
+  ParticipantsSummary,
+  RevokeAllParticipantsResult,
+} from './api/hooks';

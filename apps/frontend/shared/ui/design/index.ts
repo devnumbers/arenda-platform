@@ -86,6 +86,7 @@ export {
 } from './collapsible-section';
 export { ConfirmDialog, type ConfirmDialogProps } from './confirm-dialog';
 export { EmptyState, type EmptyStateProps } from './empty-state';
+export { ErrorCard, type ErrorCardProps } from './error-card';
 export { Skeleton, type SkeletonProps } from './skeleton';
 export { SkeletonListRow, type SkeletonListRowProps } from './skeleton-list-row';
 export { SkeletonSection, type SkeletonSectionProps } from './skeleton-section';

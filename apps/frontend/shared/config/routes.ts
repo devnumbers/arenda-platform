@@ -149,8 +149,12 @@ export const ROUTES = {
    * вход — пункт навбара «Участники» и строка в профиле. */
   participants: '/participants',
   /** Экран «Ваши участники» (#697): список агрегатов, поиск, «Отозвать
-   * всех». До тикета живёт как нейтральный каркас. */
+   * всех». */
   participantsList: '/participants/list',
+  /** Страница участника (тикет #698, тот же агрегат GET
+   * /participants/{participantId}); до тикета адрес каркасом не живёт —
+   * ряды списка #697 ведут на него. */
+  participant: (participantId: string) => `/participants/${participantId}`,
   /** Экран «Объекты пользователей» (#701): чужие объекты с доступом.
    * До тикета живёт как нейтральный каркас. */
   participantsProperties: '/participants/properties',

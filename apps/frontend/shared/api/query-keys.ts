@@ -52,6 +52,8 @@ export const participantsKeys = {
   /** Счётчики хаба GET /participants/summary (#693): участники читающего
    * и чужие объекты с активным доступом. */
   summary: ['participants', 'summary'] as const,
+  /** Список «Ваши участники» GET /participants (#693, экран #697). */
+  list: () => [...participantsKeys.all, 'list'] as const,
 };
 
 // features/properties

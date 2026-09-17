@@ -1,8 +1,8 @@
 import type { JSX } from 'react';
 import { cn } from '@/shared/lib/cn';
 import {
-  Button,
   EmptyState,
+  ErrorCard,
   Skeleton,
   SkeletonListRow,
   skeletonBlockClass,
@@ -77,7 +77,7 @@ export function ContactsBookSkeleton(): JSX.Element {
   );
 }
 
-/** Карточка ошибки загрузки с повтором. */
+/** Карточка ошибки загрузки с повтором — канон design ErrorCard (#697). */
 export function ContactsErrorCard({
   onRetry,
   className,
@@ -86,17 +86,7 @@ export function ContactsErrorCard({
   readonly className?: string;
 }): JSX.Element {
   return (
-    <section className={cn('mx-6 rounded-card bg-surface-muted px-6 py-6', className)}>
-      <h2 className={headingClass}>Не удалось загрузить контакты</h2>
-      <p className="mt-2 text-sm leading-4 text-content-secondary">
-        Проверьте подключение и попробуйте еще раз
-      </p>
-      <div className="mt-4">
-        <Button size="small" variant="secondary" onClick={onRetry}>
-          Повторить
-        </Button>
-      </div>
-    </section>
+    <ErrorCard title="Не удалось загрузить контакты" onRetry={onRetry} className={className} />
   );
 }
 

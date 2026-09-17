@@ -204,6 +204,9 @@ export { default as CalendarSmall } from './calendar-small.svg';
 export { default as PaintBrushSmall } from './paint-brush-small.svg';
 export { default as KeySmall } from './key-small.svg';
 export { default as PinSmall } from './pin-small.svg';
+// Список «Ваши участники» (#697, Figma 2036-82971): Icon/S/Lock 2036:83931
+// 16×16 — глиф чипа «Превышен лимит объектов», currentColor.
+export { default as LockSmall } from './lock-small.svg';
 // Уже потреблялись: ClockSmall, HomeMainSmall, Repeat, Star (файлы обновлены
 // свежими экспортами, см. README).
 
