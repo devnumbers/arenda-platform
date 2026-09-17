@@ -42,46 +42,28 @@ function FieldTailIcon({ children }: { readonly children: JSX.Element }): JSX.El
   );
 }
 
-/** Строка «Телефон» (Figma 1789-99037): значение + SmallArrowRight, ведёт
- * на флоу смены телефона (переработка — тикет #595). Хвост — Icon Button
- * Primary, как в макете: тёмный глиф (text-content), прижат к краю бокса
- * (его паддинг 8px), без зоны 44 (решение владельца 10.09.2026). */
-function PhoneFieldRow({ phone }: { readonly phone: string }): JSX.Element {
+/** Строка-поле, ведущая на флоу смены: «Телефон» (Figma 1789-99037,
+ * переработка #595) — на /profile/account/phone, «Электронная почта»
+ * (Figma 1789-99036, тикет #722) — на подтверждаемый флоу
+ * /profile/account/email (карта #723; инлайн-редактирование снесено:
+ * PATCH /me почту больше не принимает, #720 Q1). Значение +
+ * SmallArrowRight; хвост без зоны 44 — тёмный глиф text-content, прижат
+ * к краю бокса (решение владельца 10.09.2026). Пустое значение — серым
+ * «Не указана». */
+function NavFieldRow({
+  title,
+  href,
+  value,
+}: {
+  readonly title: string;
+  readonly href: string;
+  readonly value: string | null;
+}): JSX.Element {
   return (
     <div className="flex flex-col gap-2">
-      <FieldTitle>Телефон</FieldTitle>
+      <FieldTitle>{title}</FieldTitle>
       <NextLink
-        href={ROUTES.profileChangePhone}
-        className={cn(
-          fieldBoxClass,
-          'cursor-pointer transition-shadow hover:shadow-[inset_0_0_0_2px_var(--dl-input-border)]',
-        )}
-      >
-        <span className="min-w-0 flex-1 truncate text-base leading-[18px] text-content">
-          {phone}
-        </span>
-        <span
-          aria-hidden
-          className="flex shrink-0 items-center justify-center text-content"
-        >
-          <SmallArrowRight className="h-6 w-6" />
-        </span>
-      </NextLink>
-    </div>
-  );
-}
-
-/** Строка «Электронная почта» (Figma 1789-99036, тикет #722): значение +
- * SmallArrowRight — структурный двойник PhoneFieldRow, ведёт на
- * подтверждаемый флоу смены почты /profile/account/email (карта #723).
- * Инлайн-редактирование снесено: PATCH /me почту больше не принимает
- * (#720 Q1). */
-function EmailFieldRow({ email }: { readonly email: string | null }): JSX.Element {
-  return (
-    <div className="flex flex-col gap-2">
-      <FieldTitle>Электронная почта</FieldTitle>
-      <NextLink
-        href={ROUTES.profileChangeEmail}
+        href={href}
         className={cn(
           fieldBoxClass,
           'cursor-pointer transition-shadow hover:shadow-[inset_0_0_0_2px_var(--dl-input-border)]',
@@ -90,10 +72,10 @@ function EmailFieldRow({ email }: { readonly email: string | null }): JSX.Elemen
         <span
           className={cn(
             'min-w-0 flex-1 truncate text-base leading-[18px]',
-            email === null ? 'text-content-secondary' : 'text-content',
+            value === null ? 'text-content-secondary' : 'text-content',
           )}
         >
-          {email ?? 'Не указана'}
+          {value ?? 'Не указана'}
         </span>
         <span
           aria-hidden
@@ -246,8 +228,16 @@ function AccountScreenView({ me }: AccountScreenViewProps): JSX.Element {
             }}
           />
         </section>
-        <PhoneFieldRow phone={formatPhoneDisplay(me.phone)} />
-        <EmailFieldRow email={me.email} />
+        <NavFieldRow
+          title="Телефон"
+          href={ROUTES.profileChangePhone}
+          value={formatPhoneDisplay(me.phone)}
+        />
+        <NavFieldRow
+          title="Электронная почта"
+          href={ROUTES.profileChangeEmail}
+          value={me.email}
+        />
         <TimezoneFieldRow label={formatTimezoneLabel(me.timezone)} />
       </div>
     </div>
