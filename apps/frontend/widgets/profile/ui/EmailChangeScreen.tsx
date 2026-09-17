@@ -1,36 +1,25 @@
 'use client';
 
 import { useEffect, useRef, useState, type ChangeEvent, type JSX, type SubmitEvent } from 'react';
-import { useRouter } from 'next/navigation';
 import { ArrowLeft, Cancel } from '@/shared/assets/icons';
-import { ROUTES } from '@/shared/config/routes';
-import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
 import { isEmailValid } from '@/shared/lib/email';
+import { isValidLoginCode, loginCodeFromInput } from '@/shared/lib/login-code';
 import {
   Button,
   IconButton,
   PageContent,
-  Skeleton,
-  StatusIcon,
   StickyBottomBar,
   TextField,
   TopNav,
   TopNavTitle,
 } from '@/shared/ui/design';
-import { useMe } from '@/features/auth';
-import type { User } from '@/entities/user';
+import { MeFlowScreen, MeFlowSuccessScreen, type MeFlowProps } from './MeFlowScreen';
 import {
   useChangeEmail,
   useConfirmCurrentEmail,
   useEmailChangeSendCode,
 } from '@/features/profile';
-
-const CODE_LENGTH = 6;
-
-function isValidCode(value: string): boolean {
-  return /^\d{6}$/.test(value);
-}
 
 /** Новый адрес: непустой, по форме «что-то@домен.тлд», в нижнем регистре —
  * бэк хранит адрес в lowercase, same-as-current сравнивается с ним же. */
@@ -43,8 +32,9 @@ type Step = 'code-current' | 'new-email' | 'code-new' | 'success';
 /**
  * Экран «Смена почты» (карта #723, тикет #722; Figma LnnLyFL5u1DWIYPGLzWW0X —
  * 2235-104553 код текущей, 2235-104805/104954 ввод новой пустой/заполненный,
- * 2235-105106 код новой, 2235-105223 успех). Канон — PhoneChangeScreen.
- * Четыре шага одного маршрута /profile/account/email:
+ * 2235-105106 код новой, 2235-105223 успех). Канон — PhoneChangeScreen,
+ * состояния /me и успех — общий MeFlowScreen. Четыре шага одного маршрута
+ * /profile/account/email:
  *  - «code-current» — код на текущий адрес отправляется автоматически при
  *    входе на экран (шаг «Подтвердите текущую почту» в макете — первый);
  *    ошибка отправки — тост, поле остаётся (живой код из прошлой попытки
@@ -54,80 +44,20 @@ type Step = 'code-current' | 'new-email' | 'code-new' | 'success';
  *    клиентская ошибка. Здесь же уходит confirm-current (код + адрес одним
  *    запросом, #721): неверный/использованный адрес — тост из detail.
  *  - «code-new» — «Подтвердите новую почту» с новым адресом в подзаголовке.
- *  - «success» — StatusIcon good, «Электронная почта изменена на <адрес>»
- *    (решение #720 Q7: в макете 105223 стоял телефон), шит «Хорошо» на
- *    аккаунт; в шапке только крест.
+ *  - «success» — «Электронная почта изменена на <адрес>» (решение #720 Q7:
+ *    в макете 105223 стоял телефон), шит «Хорошо» на аккаунт.
  * Шапка «Смена почты» на всех шагах (артефакт макета 104805/104954
  * «Изменение телефона» правим по #720 Q7). Кнопки resend нет (Q8): код на
  * текущий адрес повторно уходит при повторном входе на экран, на новый —
  * через «Назад» → «Продолжить» на шаге адреса.
- * Хедер собирается на TopNav: состав слотов меняется по шагам. Поле шага
- * получает программный фокус на монтировании и смене шага. Ошибки API —
- * тосты сценариев профиля, текст из detail бэка.
+ * Поле шага получает программный фокус на монтировании и смене шага. Ошибки
+ * API — тосты сценариев профиля, текст из detail бэка.
  */
 export function EmailChangeScreen(): JSX.Element {
-  const router = useRouter();
-  const { data: me, isPending: isMeLoading, isError: isMeError, refetch } = useMe();
-
-  const close = (): void => goBack(router, ROUTES.profileAccount);
-
-  return (
-    <>
-      {isMeError && (
-        <>
-          <StaticHeader onClose={close} />
-          <PageContent className="px-6">
-            <div className="flex flex-col items-center gap-4 rounded-3xl bg-surface-muted px-6 py-8">
-              <p className="m-0 text-sm text-content-secondary">Не удалось загрузить данные</p>
-              <Button variant="white" onClick={() => void refetch()}>
-                Повторить
-              </Button>
-            </div>
-          </PageContent>
-        </>
-      )}
-      {!isMeError && isMeLoading && (
-        <>
-          <StaticHeader onClose={close} />
-          <PageContent className="px-6">
-            {/* Скелетон — форма шага (§7 DESIGN.md): заголовок + бокс поля,
-             * внизу — шит с «кнопкой». */}
-            <div role="status" aria-label="Загрузка" className="flex flex-col gap-4">
-              <Skeleton className="h-6 w-3/4" />
-              <Skeleton className="h-14 w-full rounded-button" />
-            </div>
-          </PageContent>
-          <StickyBottomBar>
-            <Skeleton className="h-14 w-full rounded-button" />
-          </StickyBottomBar>
-        </>
-      )}
-      {!isMeError && !isMeLoading && (
-        <EmailChangeFlow me={me} onClose={close} />
-      )}
-    </>
-  );
+  return <MeFlowScreen title="Смена почты" Flow={EmailChangeFlow} />;
 }
 
-/** Шапка состояний загрузки/ошибки: «Назад» на аккаунт, заголовок — как у
- * шагов потока (истории может не быть — goBack с фолбэком). */
-function StaticHeader({ onClose }: { readonly onClose: () => void }): JSX.Element {
-  return (
-    <TopNav
-      leading={<IconButton icon={<ArrowLeft />} label="Назад" onClick={onClose} />}
-    >
-      <TopNavTitle title="Смена почты" />
-    </TopNav>
-  );
-}
-
-function EmailChangeFlow({
-  me,
-  onClose,
-}: {
-  readonly me: User;
-  readonly onClose: () => void;
-}): JSX.Element {
+function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
   const sendCode = useEmailChangeSendCode();
   const confirmCurrent = useConfirmCurrentEmail();
   const changeEmail = useChangeEmail();
@@ -177,10 +107,10 @@ function EmailChangeFlow({
     : isSameEmail
       ? 'Новый адрес совпадает с текущим'
       : undefined;
-  const currentCodeError = isSubmitAttempted && !isValidCode(currentCode)
+  const currentCodeError = isSubmitAttempted && !isValidLoginCode(currentCode)
     ? 'Введите 6-значный код'
     : undefined;
-  const newCodeError = isSubmitAttempted && !isValidCode(newCode)
+  const newCodeError = isSubmitAttempted && !isValidLoginCode(newCode)
     ? 'Введите 6-значный код'
     : undefined;
 
@@ -188,7 +118,7 @@ function EmailChangeFlow({
     event: ChangeEvent<HTMLInputElement>,
     setter: (value: string) => void,
   ): void => {
-    setter(event.currentTarget.value.replace(/\D/g, '').slice(0, CODE_LENGTH));
+    setter(loginCodeFromInput(event.currentTarget.value));
   };
 
   /** Шаг 1 → 2 локальный: код проверяется формой, серверу он понадобится на
@@ -197,7 +127,7 @@ function EmailChangeFlow({
     event.preventDefault();
     setIsSubmitAttempted(true);
 
-    if (!isValidCode(currentCode)) {
+    if (!isValidLoginCode(currentCode)) {
       return;
     }
 
@@ -240,7 +170,7 @@ function EmailChangeFlow({
     event.preventDefault();
     setIsSubmitAttempted(true);
 
-    if (!isValidCode(newCode)) {
+    if (!isValidLoginCode(newCode)) {
       return;
     }
 
@@ -275,24 +205,10 @@ function EmailChangeFlow({
 
   if (step === 'success') {
     return (
-      <>
-        <TopNav
-          leading={<IconButton icon={<Cancel />} label="Закрыть" onClick={onClose} />}
-        />
-        <PageContent>
-          <div className="flex flex-col items-center px-6 pt-16">
-            <StatusIcon status="good" className="h-24 w-24" />
-            <h1 className="m-0 mt-10 text-center text-xl font-semibold leading-6 text-content">
-              Электронная почта изменена на {normalizedNewEmail}
-            </h1>
-          </div>
-        </PageContent>
-        <StickyBottomBar>
-          <Button className="w-full" onClick={onClose}>
-            Хорошо
-          </Button>
-        </StickyBottomBar>
-      </>
+      <MeFlowSuccessScreen
+        message={`Электронная почта изменена на ${normalizedNewEmail}`}
+        onClose={onClose}
+      />
     );
   }
 
@@ -402,7 +318,7 @@ function EmailChangeFlow({
             type="submit"
             form={formId}
             className="w-full"
-            disabled={!isValidCode(currentCode)}
+            disabled={!isValidLoginCode(currentCode)}
           >
             Продолжить
           </Button>
@@ -424,7 +340,7 @@ function EmailChangeFlow({
             form={formId}
             className="w-full"
             loading={changeEmail.isPending}
-            disabled={!isValidCode(newCode)}
+            disabled={!isValidLoginCode(newCode)}
           >
             Продолжить
           </Button>

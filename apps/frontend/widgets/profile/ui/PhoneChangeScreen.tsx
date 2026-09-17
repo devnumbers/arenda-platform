@@ -1,11 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState, type ChangeEvent, type JSX, type SubmitEvent } from 'react';
-import { useRouter } from 'next/navigation';
 import { ArrowLeft, Cancel } from '@/shared/assets/icons';
-import { ROUTES } from '@/shared/config/routes';
-import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
+import { isValidLoginCode, loginCodeFromInput } from '@/shared/lib/login-code';
 import {
   formatPhoneDisplay,
   formatPhoneInput,
@@ -15,28 +13,19 @@ import {
   Button,
   IconButton,
   PageContent,
-  Skeleton,
-  StatusIcon,
   StickyBottomBar,
   TextField,
   TopNav,
   TopNavTitle,
 } from '@/shared/ui/design';
-import { useMe } from '@/features/auth';
-import type { User } from '@/entities/user';
+import { MeFlowScreen, MeFlowSuccessScreen, type MeFlowProps } from './MeFlowScreen';
 import {
   useChangePhone,
   useChangePhoneSendCode,
 } from '@/features/profile';
 
-const CODE_LENGTH = 6;
-
 function isValidPhone(formatted: string): boolean {
   return normalizePhone(formatted).length === 12;
-}
-
-function isValidCode(value: string): boolean {
-  return /^\d{6}$/.test(value);
 }
 
 type Step = 'phone' | 'code' | 'success';
@@ -45,7 +34,8 @@ type Step = 'phone' | 'code' | 'success';
  * Экран «Изменение телефона» (карта #591, тикет #595; Figma 1868-67737 —
  * пустой ввод, 1868-67992 — заполненный, 1869-68137 — код, 1869-68303 —
  * успех). Заменяет легаси PhoneChangeForm на маршруте
- * /profile/account/phone. Три шага одного маршрута:
+ * /profile/account/phone. Состояния /me и успех — общий MeFlowScreen.
+ * Три шага одного маршрута:
  *  - «phone» — Heading «Введите новый номер телефона», поле «Новый телефон»
  *    (маска +7 (999) 000-00-00), шит с «Продолжить»; крест в шапке
  *    появляется в заполненном состоянии (макет 1868-67992) и закрывает
@@ -53,9 +43,8 @@ type Step = 'phone' | 'code' | 'success';
  *  - «code» — Heading «Код отправлен на почту» с реальной почтой юзера,
  *    поле «Код» (6 цифр); «Назад» возвращает к вводу номера (и служит
  *    повторной отправкой через новый «Продолжить»), крест — отмена потока.
- *  - «success» — галка GoodWhite 96 (нода 671:6753) и новый номер, шит с
- *    «Хорошо» возвращает на аккаунт; в шапке — только крест (макет без
- *    заголовка). Тост успеха не дублируется — экран сам подтверждение.
+ *  - «success» — новый номер в MeFlowSuccessScreen, шит с «Хорошо»
+ *    возвращает на аккаунт.
  * Хедер собирается на TopNav (не SubScreenShell): состав слотов меняется по
  * шагам. Поле шага получает программный фокус на монтировании и смене шага
  * (устоявшийся a11y-паттерн вместо autoFocus). Кнопки шита отправляют
@@ -67,68 +56,10 @@ type Step = 'phone' | 'code' | 'success';
  * «Превышен лимит запросов», «Этот номер телефона уже используется»).
  */
 export function PhoneChangeScreen(): JSX.Element {
-  const router = useRouter();
-  const { data: me, isPending: isMeLoading, isError: isMeError, refetch } = useMe();
-
-  const close = (): void => goBack(router, ROUTES.profileAccount);
-
-  return (
-    <>
-      {isMeError && (
-        <>
-          <StaticHeader onClose={close} />
-          <PageContent className="px-6">
-            <div className="flex flex-col items-center gap-4 rounded-3xl bg-surface-muted px-6 py-8">
-              <p className="m-0 text-sm text-content-secondary">Не удалось загрузить данные</p>
-              <Button variant="white" onClick={() => void refetch()}>
-                Повторить
-              </Button>
-            </div>
-          </PageContent>
-        </>
-      )}
-      {!isMeError && isMeLoading && (
-        <>
-          <StaticHeader onClose={close} />
-          <PageContent className="px-6">
-            {/* Скелетон — форма шага 1 (§7 DESIGN.md): заголовок + бокс поля,
-             * внизу — шит с «кнопкой». */}
-            <div role="status" aria-label="Загрузка" className="flex flex-col gap-4">
-              <Skeleton className="h-6 w-3/4" />
-              <Skeleton className="h-14 w-full rounded-button" />
-            </div>
-          </PageContent>
-          <StickyBottomBar>
-            <Skeleton className="h-14 w-full rounded-button" />
-          </StickyBottomBar>
-        </>
-      )}
-      {!isMeError && !isMeLoading && (
-        <PhoneChangeFlow me={me} onClose={close} />
-      )}
-    </>
-  );
+  return <MeFlowScreen title="Изменение телефона" Flow={PhoneChangeFlow} />;
 }
 
-/** Шапка состояний загрузки/ошибки: «Назад» на аккаунт, заголовок — как у
- * шагов потока (истории может не быть — goBack с фолбэком). */
-function StaticHeader({ onClose }: { readonly onClose: () => void }): JSX.Element {
-  return (
-    <TopNav
-      leading={<IconButton icon={<ArrowLeft />} label="Назад" onClick={onClose} />}
-    >
-      <TopNavTitle title="Изменение телефона" />
-    </TopNav>
-  );
-}
-
-function PhoneChangeFlow({
-  me,
-  onClose,
-}: {
-  readonly me: User;
-  readonly onClose: () => void;
-}): JSX.Element {
+function PhoneChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
   const sendCode = useChangePhoneSendCode();
   const changePhone = useChangePhone();
 
@@ -153,7 +84,7 @@ function PhoneChangeFlow({
     : isSamePhone
       ? 'Новый номер совпадает с текущим'
       : undefined;
-  const codeError = isSubmitAttempted && !isValidCode(code)
+  const codeError = isSubmitAttempted && !isValidLoginCode(code)
     ? 'Введите 6-значный код'
     : undefined;
 
@@ -167,7 +98,7 @@ function PhoneChangeFlow({
   };
 
   const handleCodeChange = (event: ChangeEvent<HTMLInputElement>): void => {
-    setCode(event.currentTarget.value.replace(/\D/g, '').slice(0, CODE_LENGTH));
+    setCode(loginCodeFromInput(event.currentTarget.value));
   };
 
   const handleSendCode = (event: SubmitEvent<HTMLFormElement>): void => {
@@ -195,7 +126,7 @@ function PhoneChangeFlow({
     event.preventDefault();
     setIsSubmitAttempted(true);
 
-    if (!isValidCode(code)) {
+    if (!isValidLoginCode(code)) {
       return;
     }
 
@@ -220,24 +151,10 @@ function PhoneChangeFlow({
 
   if (step === 'success') {
     return (
-      <>
-        <TopNav
-          leading={<IconButton icon={<Cancel />} label="Закрыть" onClick={onClose} />}
-        />
-        <PageContent>
-          <div className="flex flex-col items-center px-6 pt-16">
-            <StatusIcon status="good" className="h-24 w-24" />
-            <h1 className="m-0 mt-10 text-center text-xl font-semibold leading-6 text-content">
-              Новый номер телефона {formatPhoneDisplay(normalizedPhone)}
-            </h1>
-          </div>
-        </PageContent>
-        <StickyBottomBar>
-          <Button className="w-full" onClick={onClose}>
-            Хорошо
-          </Button>
-        </StickyBottomBar>
-      </>
+      <MeFlowSuccessScreen
+        message={`Новый номер телефона ${formatPhoneDisplay(normalizedPhone)}`}
+        onClose={onClose}
+      />
     );
   }
 
@@ -320,7 +237,7 @@ function PhoneChangeFlow({
             form="phone-change-code"
             className="w-full"
             loading={changePhone.isPending}
-            disabled={!isValidCode(code)}
+            disabled={!isValidLoginCode(code)}
           >
             Продолжить
           </Button>
