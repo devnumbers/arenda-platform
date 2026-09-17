@@ -104,7 +104,10 @@ export function ParticipantsInviteScreen(): JSX.Element {
       {
         onSuccess: (result) => {
           if (result.granted === 0) {
-            setServerError('Не удалось пригласить — попробуйте еще раз');
+            // Все объекты ушли в skipped_* — детерминированный исход
+            // (обычно доступ/приглашение уже есть): повтор не поможет,
+            // поэтому без «попробуйте еще раз» (решение владельца 17.09).
+            setServerError('Пользователь уже имеет доступ к выбранным объектам');
             return;
           }
           stageParticipantPopup('invited');
@@ -225,10 +228,9 @@ export function ParticipantsInviteScreen(): JSX.Element {
     <>
       <TopNav leading={<TopNavBackButton fallbackHref={ROUTES.participants} />} />
 
-      {/* Ряды макета edge-to-edge живут в центральной колонке канона —
-       * на мобайле это совпадает с макетом, на планшете/ПК ряды не
-       * разъезжаются из-под шапки (канон PageContent 948:47567). */}
-      <PageContent>{content}</PageContent>
+      {/* Боковой отступ 24px по макету (контентный фрейм x=24, ширина
+       * 345 из 393) — на все состояния, включая скелетон. */}
+      <PageContent className="px-6">{content}</PageContent>
 
       {options.length > 0 && (
         <StickyBottomBar>
@@ -318,7 +320,9 @@ function InviteObjectsPicker({
        * #500); на мобайле шапка в потоке и отступ не нужен. */}
       <div className="min-h-0 flex-1 overflow-y-auto tablet:mt-[72px]">
         <div className="mx-auto w-full max-w-[560px] pb-[136px]">
-          <div className="flex flex-col pt-2">
+          {/* Ряды с боковым отступом 24px по макету 2008-46627; разделитель
+           * тянется на ширину инсетного блока (без двойного отступа). */}
+          <div className="flex flex-col px-6 pt-2">
             <button
               type="button"
               role="checkbox"
@@ -337,7 +341,7 @@ function InviteObjectsPicker({
               </span>
               <SelectionGlyph state={allGlyphState} />
             </button>
-            <div aria-hidden className="mx-6 h-px bg-surface-muted" />
+            <div aria-hidden className="h-px bg-surface-muted" />
             {options.map((option) => (
               <button
                 key={option.id}
