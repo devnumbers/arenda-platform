@@ -10,9 +10,10 @@ import {
 import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
 import { mapPropertyAccessMemberResponse } from '@/entities/access';
+import type { AccessMemberStatus } from '@/entities/access';
 import type { PropertyAccessMember } from '@/entities/access';
 import type { components } from '@/shared/api/dto';
-import { accessKeys } from '@/shared/api/query-keys';
+import { accessKeys, participantsKeys } from '@/shared/api/query-keys';
 
 type PropertyAccessMembersResponse =
     components['schemas']['PropertyAccessMembersResponse'];
@@ -174,6 +175,65 @@ export function useDeletePropertyAccessMember(
             void queryClient.invalidateQueries({
                 queryKey: accessKeys.list(propertyId),
             });
+        },
+    });
+}
+
+/** Итог «Отозвать доступ всем» на объекте (#700): частичный сбой партии
+ * не должен выглядеть полным успехом — канон useRevokeAllParticipants. */
+export type RevokeAllPropertyAccessMembersResult = {
+    readonly revoked: number;
+    readonly failed: number;
+};
+
+/** Строка списка участников для партийного отзыва: id и жизненный цикл
+ * (active/suspended → DELETE members, pending → DELETE invitations). */
+export type PropertyAccessMemberRef = {
+    readonly id: string;
+    readonly status: AccessMemberStatus;
+};
+
+/** «Отозвать доступ всем» на одном объекте (#700, макет 2035-82619):
+ * DELETE /properties/{id}/access/members|invitations по каждому участнику
+ * ряда — скоуп строго объектный (не /participants/{id}, который снял бы
+ * ноги на всех объектах владельца). Bulk-эндпоинта нет; повторный DELETE
+ * по уже отозванной строке даёт безопасную ошибку, гонка параллельных
+ * запросов не страшна. Инвалидация всегда (onSettled): и список объекта,
+ * и агрегаты участников перечитываются после частичного сбоя тоже. */
+export function useRevokeAllPropertyAccessMembers(
+    propertyId: string,
+): UseMutationResult<
+    RevokeAllPropertyAccessMembersResult,
+    ApiError,
+    ReadonlyArray<PropertyAccessMemberRef>
+> {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (members) => {
+            const results = await Promise.allSettled(
+                members.map((member) =>
+                    apiClient<void>(
+                        member.status === 'pending'
+                            ? `/properties/${propertyId}/access/invitations/${member.id}`
+                            : `/properties/${propertyId}/access/members/${member.id}`,
+                        { method: 'DELETE' },
+                    ),
+                ),
+            );
+            let revoked = 0;
+            let failed = 0;
+            for (const result of results) {
+                if (result.status === 'fulfilled') {
+                    revoked += 1;
+                } else {
+                    failed += 1;
+                }
+            }
+            return { revoked, failed };
+        },
+        onSettled: () => {
+            void queryClient.invalidateQueries({ queryKey: accessKeys.list(propertyId) });
+            void queryClient.invalidateQueries({ queryKey: participantsKeys.all });
         },
     });
 }

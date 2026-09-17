@@ -134,6 +134,12 @@ export const ROUTES = {
   /** Экран правки контакта (#510): форма создания в режиме правки. */
   propertyContactEdit: (id: string, contactId: string) =>
     `/properties/${id}/contacts/${contactId}/edit`,
+  /** Экран «Участники объекта» (#700): замена легаси-модалки
+   * PropertySharingModal, вход — «Управление» → «Совместный доступ». */
+  propertyParticipants: (id: string) => `/properties/${id}/participants`,
+  /** Приглашение от объекта (#700): тот же флоу #699, но объект один —
+   * без выбора объектов. */
+  propertyParticipantsInvite: (id: string) => `/properties/${id}/participants/invite`,
   /** Плоская книга контактов (глобальная страница, макеты 1726:65083/…). */
   contacts: '/contacts',
   /** Поиск по книге — отдельная страница с поисковой шапкой (как #508). */

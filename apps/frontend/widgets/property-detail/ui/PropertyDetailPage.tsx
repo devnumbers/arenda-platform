@@ -76,7 +76,6 @@ import {
   PropertyStatusSheet,
 } from './PropertyDetailActions';
 import {PropertyDetailKebab} from './PropertyDetailKebab';
-import {PropertySharingModal} from './PropertySharingModal';
 import {PropertySharedBanner} from './PropertySharedBanner';
 import {PropertyDetailLoading} from './PropertyDetailLoading';
 import {PropertyDetailError} from './PropertyDetailError';
@@ -202,7 +201,6 @@ export function PropertyDetailPage(): JSX.Element {
     const [pinSheetOpen, setPinSheetOpen] = React.useState(false);
     const [archiveOpen, setArchiveOpen] = React.useState(false);
     const [deleteOpen, setDeleteOpen] = React.useState(false);
-    const [sharingOpen, setSharingOpen] = React.useState(false);
 
     const property = propertyQuery.data;
 
@@ -431,7 +429,7 @@ export function PropertyDetailPage(): JSX.Element {
                 });
                 break;
             case 'access':
-                setSharingOpen(true);
+                router.push(ROUTES.propertyParticipants(id));
                 break;
             case 'delete':
                 setDeleteOpen(true);
@@ -818,13 +816,6 @@ export function PropertyDetailPage(): JSX.Element {
                     Будут удалены данные аренд объекта, все операции объекта, платежи, контакты и задачи, связанные с объектом. Это действие нельзя отменить
                 </p>
             </ConfirmDialog>
-
-            <PropertySharingModal
-                propertyId={id}
-                isOpen={sharingOpen}
-                onClose={() => setSharingOpen(false)}
-                isArchived={property?.status === 'archived'}
-            />
         </>
     );
 }

@@ -4,7 +4,8 @@ import { useMutation, useQuery, useQueryClient, type UseMutationResult, type Use
 import { apiClient } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
 import type { components } from '@/shared/api/dto';
-import { participantsKeys } from '@/shared/api/query-keys';
+import { accessKeys, participantsKeys } from '@/shared/api/query-keys';
+import type { QueryClient } from '@tanstack/react-query';
 import { mapParticipant } from '@/entities/participants';
 import type { Participant } from '@/entities/participants';
 import {
@@ -25,6 +26,15 @@ export type ParticipantsSummary = {
   readonly participantsCount: number;
   readonly accessiblePropertiesCount: number;
 };
+
+/** Строки участников проецируются в двух видах: агрегаты
+ * GET /participants* и списки объекта GET /properties/{id}/access/members
+ * (#700). Инвалидация обеих семей обязательна у каждой participants-мутации:
+ * окно staleTime (#626) иначе отдаёт спискам объекта устаревший кэш. */
+function invalidateParticipantProjections(queryClient: QueryClient): void {
+  void queryClient.invalidateQueries({ queryKey: participantsKeys.all });
+  void queryClient.invalidateQueries({ queryKey: accessKeys.all });
+}
 
 /** Счётчики хаба «Совместный доступ» (карта #692, тикет #696). */
 export function useParticipantsSummary(): UseQueryResult<ParticipantsSummary, ApiError> {
@@ -93,9 +103,7 @@ export function useRevokeAllParticipants(): UseMutationResult<
       }
       return { revoked, failed };
     },
-    onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: participantsKeys.all });
-    },
+    onSettled: () => invalidateParticipantProjections(queryClient),
   });
 }
 
@@ -137,9 +145,7 @@ export function useRevokeParticipant(): UseMutationResult<void, ApiError, string
         method: 'DELETE',
       });
     },
-    onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: participantsKeys.all });
-    },
+    onSettled: () => invalidateParticipantProjections(queryClient),
   });
 }
 
@@ -185,9 +191,7 @@ export function useAddParticipantProperties(
       }
       return { granted, skipped };
     },
-    onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: participantsKeys.all });
-    },
+    onSettled: () => invalidateParticipantProjections(queryClient),
   });
 }
 
@@ -232,8 +236,6 @@ export function useInviteParticipant(): UseMutationResult<
       }
       return { granted, skipped };
     },
-    onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: participantsKeys.all });
-    },
+    onSettled: () => invalidateParticipantProjections(queryClient),
   });
 }

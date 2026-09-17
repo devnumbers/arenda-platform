@@ -7,6 +7,8 @@ export {
     useResendPropertyAccessInvitation,
     useCancelPropertyAccessInvitation,
     useDeletePropertyAccessMember,
+    useRevokeAllPropertyAccessMembers,
     type InviteMemberInput,
+    type PropertyAccessMemberRef,
     type ChangeMemberRoleInput,
 } from './hooks';

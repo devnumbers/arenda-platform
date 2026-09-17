@@ -22,7 +22,7 @@ import { contactValueRows } from '../lib/contact-detail-model';
 import { ContactKebabMenu } from './contact-kebab-menu';
 import { ContactDetailSkeleton, ContactsErrorCard } from './contacts-states';
 
-/** Задержка индикации «скопировано» (мс) — как в PropertySharingModal. */
+/** Задержка индикации «скопировано» (мс) — канон кнопки копирования. */
 const COPIED_RESET_MS = 2000;
 
 /**
@@ -248,7 +248,7 @@ function ContactCardBody({
 
 /** Строка значения с копированием (1285:55112): значение 16/500, подпись
  * 14 серым, справа кнопка копирования — иконка меняется на галочку на пару
- * секунд (паттерн PropertySharingModal). */
+ * секунд (канон строки с копированием). */
 function ContactValueRowView({
   row,
 }: {
