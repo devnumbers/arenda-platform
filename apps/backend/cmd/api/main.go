@@ -191,6 +191,7 @@ func run() error {
 	handler := httpserver.New(httpserver.Deps{
 		Auth:                     identityMod.Authentication,
 		PhoneChange:              identityMod.PhoneChange,
+		EmailChange:              identityMod.EmailChange,
 		Profile:                  identityMod.Profile,
 		Logout:                   identityMod.Logout,
 		Sessions:                 identityMod.SessionLoader,
