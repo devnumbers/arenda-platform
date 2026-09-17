@@ -20,9 +20,9 @@ RUN set -eux; \
     month="${DBIP_MONTH:-$(date +%Y-%m)}"; \
     prev="$(date -d "$month-01 -1 month" +%Y-%m)"; \
     mkdir -p /out/geoip; \
-    curl -fsSL -o /out/geoip/dbip-city-lite.mmdb \
+    curl --max-time 600 --retry 2 -fsSL -o /out/geoip/dbip-city-lite.mmdb \
       "https://download.db-ip.com/free/dbip-city-lite-${month}.mmdb" \
-    || curl -fsSL -o /out/geoip/dbip-city-lite.mmdb \
+    || curl --max-time 600 --retry 2 -fsSL -o /out/geoip/dbip-city-lite.mmdb \
       "https://download.db-ip.com/free/dbip-city-lite-${prev}.mmdb"
 
 FROM debian:bookworm-slim AS runtime

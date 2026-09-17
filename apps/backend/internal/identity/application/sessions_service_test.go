@@ -63,6 +63,60 @@ func TestSessionsService_List_MarksCurrentSession(t *testing.T) {
 	}
 }
 
+// TestSessionsService_List_GracePreviousHashStillCurrent proves the rotation
+// grace does not hide the current row: while the cookie still carries the
+// previous token, the devices list must flag the rotated session as current.
+func TestSessionsService_List_GracePreviousHashStillCurrent(t *testing.T) {
+	t.Parallel()
+	h := newSessionsHarness()
+	userID := uuid.Must(uuid.NewV7())
+	previousHash := fakeHasher{}.HashToken("stale-cookie")
+	currentID := uuid.Must(uuid.NewV7())
+	h.repo.sessions["rotated-canonical"] = domain.Session{
+		ID:                currentID,
+		UserID:            userID,
+		TokenHash:         "rotated-canonical",
+		PreviousTokenHash: previousHash,
+	}
+
+	sessions, current, err := h.svc.List(context.Background(), userID, "stale-cookie")
+	if err != nil {
+		t.Fatalf("List error = %v", err)
+	}
+	if current != currentID {
+		t.Fatalf("current = %s, want %s (previous hash in grace = current)", current, currentID)
+	}
+	if len(sessions) != 1 {
+		t.Fatalf("sessions = %d, want 1", len(sessions))
+	}
+}
+
+// TestSessionsService_Revoke_CurrentByPreviousHashRejected proves logout-others
+// semantics survive the grace window: revoking the (rotated) session behind
+// the presented stale cookie is refused, not silently terminated.
+func TestSessionsService_Revoke_CurrentByPreviousHashRejected(t *testing.T) {
+	t.Parallel()
+	h := newSessionsHarness()
+	userID := uuid.Must(uuid.NewV7())
+	previousHash := fakeHasher{}.HashToken("stale-cookie")
+	currentID := uuid.Must(uuid.NewV7())
+	h.repo.sessions["rotated-canonical"] = domain.Session{
+		ID:                currentID,
+		UserID:            userID,
+		TokenHash:         "rotated-canonical",
+		PreviousTokenHash: previousHash,
+	}
+	actor := auditdomain.Actor{ID: userID, Role: auditdomain.ActorRoleOwner}
+
+	err := h.svc.Revoke(context.Background(), userID, currentID, "stale-cookie", actor)
+	if !errors.Is(err, ErrCurrentSession) {
+		t.Fatalf("Revoke error = %v, want ErrCurrentSession (previous hash in grace = current)", err)
+	}
+	if len(h.audit.entries) != 0 {
+		t.Fatalf("audit entries = %d, want 0 on rejection", len(h.audit.entries))
+	}
+}
+
 func TestSessionsService_Revoke_RemovesOwnForeignSession(t *testing.T) {
 	t.Parallel()
 	h := newSessionsHarness()

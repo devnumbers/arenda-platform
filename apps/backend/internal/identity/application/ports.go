@@ -106,10 +106,6 @@ type SessionRepository interface {
 	// requests survive a token rotation. The returned session always carries
 	// the canonical current TokenHash.
 	GetByTokenHash(ctx context.Context, tokenHash string, now time.Time) (domain.Session, domain.User, error)
-	// Update persists the sliding-window fields (expiry and last seen) by token
-	// hash. Session bookkeeping beyond the sliding window goes through Touch
-	// and Rotate.
-	Update(ctx context.Context, session domain.Session) error
 	// Touch persists one request's activity by token hash: the sliding expiry,
 	// the last-seen stamp, and the client IP with its resolved city (an empty
 	// city never erases a stored one).

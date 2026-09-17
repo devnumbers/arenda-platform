@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/google/uuid"
 	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
@@ -11,18 +12,29 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
-// ListSessions implements GET /me/sessions — the devices list: every live
-// session of the caller, most recent activity first, with the session behind
-// the current cookie flagged.
-func (h *AuthHandlers) ListSessions(w http.ResponseWriter, r *http.Request) {
+// currentSessionRequest resolves the actor and the raw session cookie the
+// three /me/sessions handlers share. When !ok a problem response has been
+// written already.
+func (h *AuthHandlers) currentSessionRequest(w http.ResponseWriter, r *http.Request) (uuid.UUID, string, bool) {
 	userID, ok := httpsupport.RequireUser(w, r)
 	if !ok {
-		return
+		return uuid.Nil, "", false
 	}
 	token := httpsupport.SessionTokenFromRequest(r, h.cookieSecure)
 	if token == "" {
 		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
 			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return uuid.Nil, "", false
+	}
+	return userID, token, true
+}
+
+// ListSessions implements GET /me/sessions — the devices list: every live
+// session of the caller, most recent activity first, with the session behind
+// the current cookie flagged.
+func (h *AuthHandlers) ListSessions(w http.ResponseWriter, r *http.Request) {
+	userID, token, ok := h.currentSessionRequest(w, r)
+	if !ok {
 		return
 	}
 
@@ -43,14 +55,8 @@ func (h *AuthHandlers) ListSessions(w http.ResponseWriter, r *http.Request) {
 // of the user's other sessions. The current session is refused (409): the
 // devices list ends it through logout.
 func (h *AuthHandlers) RevokeSession(w http.ResponseWriter, r *http.Request, sessionID openapi_types.UUID) {
-	userID, ok := httpsupport.RequireUser(w, r)
+	userID, token, ok := h.currentSessionRequest(w, r)
 	if !ok {
-		return
-	}
-	token := httpsupport.SessionTokenFromRequest(r, h.cookieSecure)
-	if token == "" {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
-			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -75,14 +81,8 @@ func (h *AuthHandlers) RevokeSession(w http.ResponseWriter, r *http.Request, ses
 // LogoutOtherSessions implements POST /me/sessions/logout-others — terminating
 // every session of the caller except the current one.
 func (h *AuthHandlers) LogoutOtherSessions(w http.ResponseWriter, r *http.Request) {
-	userID, ok := httpsupport.RequireUser(w, r)
+	userID, token, ok := h.currentSessionRequest(w, r)
 	if !ok {
-		return
-	}
-	token := httpsupport.SessionTokenFromRequest(r, h.cookieSecure)
-	if token == "" {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
-			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 

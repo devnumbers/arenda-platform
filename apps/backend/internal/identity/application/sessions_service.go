@@ -44,15 +44,28 @@ func (s *SessionsService) List(ctx context.Context, userID uuid.UUID, currentTok
 	if err != nil {
 		return nil, uuid.Nil, fmt.Errorf("list sessions: %w", err)
 	}
-	currentHash := s.hasher.HashToken(currentToken)
 	currentID := uuid.Nil
 	for _, sess := range sessions {
-		if sess.TokenHash == currentHash {
+		if s.isCurrentSession(sess, currentToken) {
 			currentID = sess.ID
 			break
 		}
 	}
 	return sessions, currentID, nil
+}
+
+// isCurrentSession reports whether the row is the session behind the
+// presented token. During the rotation grace window the presented token may
+// be the row's previous hash (the cookie has not been swapped yet), so both
+// hashes identify the current session — otherwise the devices list would
+// briefly show no current row and logout-others would terminate the caller's
+// own session (issue #728 code review).
+func (s *SessionsService) isCurrentSession(sess domain.Session, currentToken string) bool {
+	currentHash := s.hasher.HashToken(currentToken)
+	if sess.TokenHash == currentHash {
+		return true
+	}
+	return sess.PreviousTokenHash != "" && sess.PreviousTokenHash == currentHash
 }
 
 // Revoke terminates one session of the user. Revoking the session carrying
@@ -71,7 +84,7 @@ func (s *SessionsService) Revoke(ctx context.Context, userID, sessionID uuid.UUI
 		if sess.UserID != userID {
 			return ErrNotFound
 		}
-		if sess.TokenHash == s.hasher.HashToken(currentToken) {
+		if s.isCurrentSession(sess, currentToken) {
 			return ErrCurrentSession
 		}
 

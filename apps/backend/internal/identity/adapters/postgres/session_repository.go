@@ -50,6 +50,16 @@ func inetParam(ip string) (addr netip.Addr, valid bool, err error) {
 	return addr, true, nil
 }
 
+// inetParamPtr is the pointer-shaped variant the generated params carry:
+// nil maps to SQL NULL.
+func inetParamPtr(ip string) (*netip.Addr, error) {
+	addr, valid, err := inetParam(ip)
+	if err != nil || !valid {
+		return nil, err
+	}
+	return &addr, nil
+}
+
 // cityParam maps a city name onto the nullable text column: an empty value is
 // SQL NULL, never an empty string, so an unresolved city cannot erase a
 // stored one.
@@ -68,14 +78,9 @@ func browserMajorParam(major int) pgtype.Int4 {
 }
 
 func (r *SessionRepository) Create(ctx context.Context, session domain.Session) error {
-	lastIP, lastIPValid, err := inetParam(session.LastIP)
+	lastIPParam, err := inetParamPtr(session.LastIP)
 	if err != nil {
 		return err
-	}
-	var lastIPParam *netip.Addr
-	if lastIPValid {
-		a := lastIP
-		lastIPParam = &a
 	}
 	_, err = r.q().CreateSession(ctx, pgen.CreateSessionParams{
 		ID:           pgconv.UUIDToPgtype(session.ID),
@@ -98,26 +103,10 @@ func (r *SessionRepository) Create(ctx context.Context, session domain.Session) 
 	return nil
 }
 
-func (r *SessionRepository) Update(ctx context.Context, session domain.Session) error {
-	if err := r.q().UpdateSession(ctx, pgen.UpdateSessionParams{
-		ExpiresAt:  pgtype.Timestamptz{Time: session.ExpiresAt, Valid: true},
-		LastUsedAt: pgtype.Timestamptz{Time: session.LastUsedAt, Valid: true},
-		TokenHash:  session.TokenHash,
-	}); err != nil {
-		return fmt.Errorf("update session: %w", err)
-	}
-	return nil
-}
-
 func (r *SessionRepository) Touch(ctx context.Context, session domain.Session) error {
-	lastIP, lastIPValid, err := inetParam(session.LastIP)
+	lastIPParam, err := inetParamPtr(session.LastIP)
 	if err != nil {
 		return err
-	}
-	var lastIPParam *netip.Addr
-	if lastIPValid {
-		a := lastIP
-		lastIPParam = &a
 	}
 	if err := r.q().TouchSession(ctx, pgen.TouchSessionParams{
 		TokenHash:  session.TokenHash,
@@ -132,14 +121,9 @@ func (r *SessionRepository) Touch(ctx context.Context, session domain.Session) e
 }
 
 func (r *SessionRepository) Rotate(ctx context.Context, session domain.Session, newTokenHash string) (bool, error) {
-	lastIP, lastIPValid, err := inetParam(session.LastIP)
+	lastIPParam, err := inetParamPtr(session.LastIP)
 	if err != nil {
 		return false, err
-	}
-	var lastIPParam *netip.Addr
-	if lastIPValid {
-		a := lastIP
-		lastIPParam = &a
 	}
 	n, err := r.q().RotateSessionToken(ctx, pgen.RotateSessionTokenParams{
 		ID:           pgconv.UUIDToPgtype(session.ID),

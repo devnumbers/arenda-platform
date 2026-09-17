@@ -1183,21 +1183,6 @@ func (q *Queries) TouchSession(ctx context.Context, arg TouchSessionParams) erro
 	return err
 }
 
-const updateSession = `-- name: UpdateSession :exec
-UPDATE sessions SET expires_at = $1, last_used_at = $2 WHERE token_hash = $3
-`
-
-type UpdateSessionParams struct {
-	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
-	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
-	TokenHash  string             `json:"token_hash"`
-}
-
-func (q *Queries) UpdateSession(ctx context.Context, arg UpdateSessionParams) error {
-	_, err := q.db.Exec(ctx, updateSession, arg.ExpiresAt, arg.LastUsedAt, arg.TokenHash)
-	return err
-}
-
 const updateUser = `-- name: UpdateUser :one
 UPDATE users
 SET name = $2,

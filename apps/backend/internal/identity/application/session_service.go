@@ -29,7 +29,6 @@ const lastSeenWriteInterval = time.Minute
 // persistence details.
 type SessionService interface {
 	Load(ctx context.Context, rawToken string, now time.Time) (domain.Session, domain.User, error)
-	Update(ctx context.Context, session domain.Session) error
 	// Touch maintains the session on an authenticated request: it slides the
 	// expiry (pure sliding, ADR 0056), persists the last-seen stamp throttled
 	// by lastSeenWriteInterval, refreshes the client IP and its GeoIP city on
@@ -101,10 +100,6 @@ func (s *sessionService) Load(ctx context.Context, rawToken string, now time.Tim
 	return s.sessions.GetByTokenHash(ctx, s.hasher.HashToken(rawToken), now)
 }
 
-func (s *sessionService) Update(ctx context.Context, session domain.Session) error {
-	return s.sessions.Update(ctx, session)
-}
-
 func (s *sessionService) Touch(
 	ctx context.Context, session domain.Session, clientIP string, now time.Time,
 ) (domain.Session, string, error) {
@@ -149,8 +144,7 @@ func (s *sessionService) rotate(
 	}
 	newHash := s.hasher.HashToken(token)
 
-	session.Refresh(now)
-	session.LastUsedAt = now
+	session.Refresh(now) // Refresh also stamps LastUsedAt.
 	if clientIP != "" {
 		city := s.cityFor(ctx, session, clientIP)
 		session.LastIP = clientIP

@@ -11,8 +11,8 @@ import (
 // Parser parses raw User-Agent strings into domain device descriptions.
 type Parser struct{}
 
-// NewParser creates a Parser. The type exists so the wiring stays symmetrical
-// with the other adapters and a future config (client hints) has a home.
+// NewParser creates a Parser. The constructor keeps the wiring symmetrical
+// with the other identity adapters.
 func NewParser() *Parser { return &Parser{} }
 
 // The adapter is the only implementation of the port the identity application

@@ -119,9 +119,6 @@ INSERT INTO sessions (id, user_id, token_hash, expires_at, last_used_at, rotated
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 RETURNING id, user_id, token_hash, expires_at, created_at, last_used_at;
 
--- name: UpdateSession :exec
-UPDATE sessions SET expires_at = $1, last_used_at = $2 WHERE token_hash = $3;
-
 -- TouchSession persists one request's activity: the sliding expiry, the
 -- throttled last-seen stamp, and the client IP with its GeoIP city (null when
 -- unresolvable — an existing city is never erased by an unknown one, the

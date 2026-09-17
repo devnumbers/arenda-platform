@@ -297,48 +297,48 @@ func TestAuthenticationIntegration_SlidingSessionRefresh(t *testing.T) {
 	}
 	originalExpires := session.ExpiresAt
 
-	// Advance 3 days and refresh: expiration must move forward toward +7 days
-	// from now, but not past the 30-day absolute cap.
+	// Advance 3 days and touch the session (as the middleware does): the
+	// single write must slide the expiry to now + SessionBaseTTL.
 	h.clock.advance(3 * 24 * time.Hour)
-	if !session.Refresh(h.clock.Now()) {
-		t.Fatal("Refresh returned false, want true (within sliding window)")
+	touched, _, err := h.sessionsvc.Touch(ctx, session, session.LastIP, h.clock.Now())
+	if err != nil {
+		t.Fatalf("Touch: %v", err)
 	}
-	if err := h.sessionsvc.Update(ctx, session); err != nil {
-		t.Fatalf("Update after refresh: %v", err)
-	}
-
-	if !session.ExpiresAt.After(originalExpires) {
-		t.Fatalf("expires_at = %v, want after original %v", session.ExpiresAt, originalExpires)
+	if !touched.ExpiresAt.After(originalExpires) {
+		t.Fatalf("expires_at = %v, want after original %v", touched.ExpiresAt, originalExpires)
 	}
 
-	// The persisted row carries the refreshed expiration.
+	// The persisted row carries the touched expiration.
 	reloaded, _, err := h.sessionsvc.Load(ctx, token, h.clock.Now())
 	if err != nil {
-		t.Fatalf("Load after refresh: %v", err)
+		t.Fatalf("Load after touch: %v", err)
 	}
-	if !reloaded.ExpiresAt.Equal(session.ExpiresAt) {
-		t.Fatalf("persisted expires_at = %v, want refreshed %v", reloaded.ExpiresAt, session.ExpiresAt)
+	if !reloaded.ExpiresAt.Equal(touched.ExpiresAt) {
+		t.Fatalf("persisted expires_at = %v, want touched %v", reloaded.ExpiresAt, touched.ExpiresAt)
 	}
 
 	// Keep the session active in 6-day hops; six hops cover 36 days, well past
-	// the old 30-day absolute cap. Pure sliding (ADR 0056) has no cap: an
-	// actively used session never dies and every hop extends the expiry to
-	// now + SessionBaseTTL. (One 36-day idle jump, by contrast, would kill the
-	// session — idle beyond the base TTL is death, and Refresh never revives
-	// an expired one.)
+	// the 14-day rotation window and the old 30-day absolute cap. Pure sliding
+	// (ADR 0056) has no cap: an actively used session never dies, and every
+	// hop extends the expiry to now + SessionBaseTTL. (One 36-day idle jump,
+	// by contrast, would kill the session — idle beyond the base TTL is death,
+	// and Refresh never revives an expired one.) When a hop rotates the token,
+	// the test adopts the fresh raw token exactly like the middleware does
+	// with the re-issued cookie.
 	for hop := 1; hop <= 6; hop++ {
 		h.clock.advance(6 * 24 * time.Hour)
 		hopSession, _, loadErr := h.sessionsvc.Load(ctx, token, h.clock.Now())
 		if loadErr != nil {
 			t.Fatalf("Load on hop %d: %v", hop, loadErr)
 		}
-		if !hopSession.Refresh(h.clock.Now()) {
-			t.Fatalf("Refresh on hop %d returned false, want true (active session slides)", hop)
+		touched, rotatedToken, touchErr := h.sessionsvc.Touch(ctx, hopSession, hopSession.LastIP, h.clock.Now())
+		if touchErr != nil {
+			t.Fatalf("Touch on hop %d: %v", hop, touchErr)
 		}
-		if err := h.sessionsvc.Update(ctx, hopSession); err != nil {
-			t.Fatalf("Update on hop %d: %v", hop, err)
+		session = touched
+		if rotatedToken != "" {
+			token = rotatedToken
 		}
-		session = hopSession
 	}
 	if !session.CreatedAt.Add(31 * 24 * time.Hour).Before(session.ExpiresAt) {
 		t.Fatalf("expires_at = %v did not slide past creation + 31 days (pure sliding, no cap)", session.ExpiresAt)

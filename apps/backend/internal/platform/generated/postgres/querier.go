@@ -956,7 +956,6 @@ type Querier interface {
 	// writes the full editable set. The start date is not editable (ADR 0053
 	// §3); completion and the deposit return belong to CompleteRental.
 	UpdateRental(ctx context.Context, arg UpdateRentalParams) error
-	UpdateSession(ctx context.Context, arg UpdateSessionParams) error
 	UpdateSubscription(ctx context.Context, arg UpdateSubscriptionParams) (UserSubscription, error)
 	UpdateSubscriptionPayment(ctx context.Context, arg UpdateSubscriptionPaymentParams) (SubscriptionPayment, error)
 	// Admin tariff edit (issue #256): prices, property limit and the activity

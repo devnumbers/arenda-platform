@@ -193,27 +193,6 @@ func TestSessionService_Load_DelegatesToRepositoryWithHashedToken(t *testing.T) 
 	}
 }
 
-func TestSessionService_Update_DelegatesToRepository(t *testing.T) {
-	t.Parallel()
-	h := newSessionHarness()
-	sess := domain.Session{
-		ID:        uuid.Must(uuid.NewV7()),
-		TokenHash: "hash-update",
-		ExpiresAt: testNow.Add(time.Hour),
-	}
-
-	if err := h.svc.Update(t.Context(), sess); err != nil {
-		t.Fatalf("Update error = %v", err)
-	}
-	stored, ok := h.sessions.sessions["hash-update"]
-	if !ok {
-		t.Fatal("session not persisted by Update")
-	}
-	if !stored.ExpiresAt.Equal(sess.ExpiresAt) {
-		t.Fatalf("stored ExpiresAt = %v, want %v", stored.ExpiresAt, sess.ExpiresAt)
-	}
-}
-
 // capturingSessionRepo is a SessionRepository whose GetByTokenHash delegates to
 // a function stub and captures the token hash, so the Load test can assert the
 // raw token was hashed before the repository call.
