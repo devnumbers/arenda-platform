@@ -59,22 +59,21 @@ type UpdatePropertyCommand struct {
 
 type PropertyService struct {
 	txStoreFactory
-	repo               PropertyRepository
-	photoRepo          PropertyPhotoRepository
-	photoStorage       PhotoStorage
-	audit              auditapp.Recorder
-	clock              clock.Clock
-	policy             sharedpolicy.Policy
-	sharedMemberships  SharedMemberships
-	ownerNames         OwnerDisplayNameResolver
-	suspendedCounter   SuspendedSharedCounter
-	slots              RecipientSlotPolicy
-	sharedDeleteMailer SharedMembersDeleteMailer
-	rentalOccupancy    RentalOccupancyReader
-	overdueOperations  OverdueOperationsReader
-	rentalDeletion     RentalDeletionGuard
-	ownerCalendar      OwnerCalendar
-	logger             *slog.Logger
+	repo              PropertyRepository
+	photoRepo         PropertyPhotoRepository
+	photoStorage      PhotoStorage
+	audit             auditapp.Recorder
+	clock             clock.Clock
+	policy            sharedpolicy.Policy
+	sharedMemberships SharedMemberships
+	ownerNames        OwnerDisplayNameResolver
+	suspendedCounter  SuspendedSharedCounter
+	slots             RecipientSlotPolicy
+	rentalOccupancy   RentalOccupancyReader
+	overdueOperations OverdueOperationsReader
+	rentalDeletion    RentalDeletionGuard
+	ownerCalendar     OwnerCalendar
+	logger            *slog.Logger
 }
 
 // SetSharedMemberships injects the access-context adapter that resolves the
@@ -123,13 +122,6 @@ func (s *PropertyService) HiddenSharedCount(ctx context.Context, actor uuid.UUID
 // pre-T4 behaviour).
 func (s *PropertyService) SetRecipientSlotPolicy(slots RecipientSlotPolicy) {
 	s.slots = slots
-}
-
-// SetSharedMembersDeleteMailer injects the access-context mailer that notifies
-// former shared members when the owner deletes a shared object (issue #162,
-// T6). Optional: when not set, deleting a property sends no such emails.
-func (s *PropertyService) SetSharedMembersDeleteMailer(mailer SharedMembersDeleteMailer) {
-	s.sharedDeleteMailer = mailer
 }
 
 // SetRentalOccupancyReader injects the rentals-context adapter that resolves
@@ -845,12 +837,11 @@ func (s *PropertyService) DeleteProperty(
 		return err
 	}
 
-	// The deleted property's name and photos, plus the former members'
-	// emails, escape the work closure for the post-commit notifications.
+	// The deleted property's name and photos escape the work closure for the
+	// post-commit cleanup.
 	var (
-		property           domain.Property
-		photos             []domain.Photo
-		formerMemberEmails []string
+		property domain.Property
+		photos   []domain.Photo
 	)
 	err := s.runInTx(ctx, func(stores *txStores) error {
 		var err error
@@ -884,10 +875,6 @@ func (s *PropertyService) DeleteProperty(
 			return fmt.Errorf("list photos: %w", err)
 		}
 
-		if formerMemberEmails, err = s.collectFormerMemberEmails(ctx, stores, id); err != nil {
-			return err
-		}
-
 		if err := s.recoverSlotsAfterDelete(ctx, stores, actor, id); err != nil {
 			return err
 		}
@@ -911,8 +898,7 @@ func (s *PropertyService) DeleteProperty(
 		return err
 	}
 
-	// Post-commit cleanup and notifications never fail the delete itself.
-	s.notifyPropertyDeleted(ctx, id, property.Name, formerMemberEmails)
+	// Post-commit cleanup never fails the delete itself.
 	s.cleanupPropertyPhotos(ctx, id, photos)
 
 	return nil
@@ -949,20 +935,6 @@ func lockDeletableProperty(ctx context.Context, stores *txStores, owner, id uuid
 	return property, nil
 }
 
-// collectFormerMemberEmails gathers the emails of the property's shared
-// members before the slot policy drops their memberships, so the "object
-// deleted" email can reach them after the commit (issue #162, T6).
-func (s *PropertyService) collectFormerMemberEmails(ctx context.Context, stores *txStores, id uuid.UUID) ([]string, error) {
-	if s.sharedDeleteMailer == nil {
-		return nil, nil
-	}
-	emails, err := s.sharedDeleteMailer.CollectFormerMemberEmails(ctx, stores.tx, id)
-	if err != nil {
-		return nil, fmt.Errorf("collect former shared members: %w", err)
-	}
-	return emails, nil
-}
-
 // recoverSlotsAfterDelete frees the recipients' tariff slots dropped by the
 // delete: the access context drops their memberships and recovers the oldest
 // suspended ones FIFO in the same transaction, before the property row is
@@ -981,20 +953,6 @@ func (s *PropertyService) recoverSlotsAfterDelete(ctx context.Context, stores *t
 		return fmt.Errorf("recover owner suspended memberships after delete: %w", err)
 	}
 	return nil
-}
-
-// notifyPropertyDeleted emails the former shared members (active+suspended)
-// after the delete has committed (issue #162, T6). A send failure is logged
-// and does not affect the delete.
-func (s *PropertyService) notifyPropertyDeleted(ctx context.Context, id uuid.UUID, name string, formerMemberEmails []string) {
-	for _, to := range formerMemberEmails {
-		if err := s.sharedDeleteMailer.SendPropertyDeleted(ctx, to, name); err != nil {
-			s.logger.ErrorContext(ctx, "failed to send property deleted email to former member",
-				slog.String("property_id", id.String()),
-				slog.String("error", sanitizeError(err)),
-			)
-		}
-	}
 }
 
 // cleanupPropertyPhotos removes the deleted property's photo objects from

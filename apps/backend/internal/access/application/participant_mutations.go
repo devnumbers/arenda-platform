@@ -74,7 +74,7 @@ type ParticipantMutations interface {
 	// Remove revokes and deletes the participant: every membership and
 	// pending invitation they hold on the properties the actor manages —
 	// one transaction, an audit entry per row, FIFO recovery of the person's
-	// suspended accesses, no lifecycle emails.
+	// suspended accesses, no emails.
 	Remove(ctx context.Context, actor uuid.UUID, participantID string) error
 }
 

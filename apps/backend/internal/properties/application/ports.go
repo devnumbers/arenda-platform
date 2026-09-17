@@ -136,19 +136,6 @@ type RecipientSlotPolicy interface {
 	RecoverSuspended(ctx context.Context, tx transaction.Tx, recipientID uuid.UUID) error
 }
 
-// SharedMembersDeleteMailer bridges the property deletion flow to the access
-// sharing lifecycle emails (issue #162, T6). Implemented by the access bounded
-// context and injected optionally: when nil, deleting a property sends no
-// emails to former shared members. CollectFormerMemberEmails runs inside the
-// delete transaction, before the slot policy drops the memberships (only
-// active+suspended members are collected; pending invitations are not
-// memberships and receive nothing). SendPropertyDeleted runs after the commit;
-// a send failure is logged by the caller and never rolls anything back.
-type SharedMembersDeleteMailer interface {
-	CollectFormerMemberEmails(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) ([]string, error)
-	SendPropertyDeleted(ctx context.Context, to, propertyTitle string) error
-}
-
 type SubscriptionLimiter interface {
 	ActivePropertyLimit(ctx context.Context, userID uuid.UUID) (int, error)
 	WithTx(tx transaction.Tx) (SubscriptionLimiter, error)

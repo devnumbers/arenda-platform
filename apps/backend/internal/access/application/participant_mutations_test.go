@@ -75,10 +75,9 @@ func newMutationFixture() *mutationFixture {
 	clk := &fixedClock{now: time.Now()}
 	limiter := newFakeRecipientLimiter()
 	audit := &capturingRecorder{}
-	lifecycle := NewLifecycleMailer(mailer, emails, fakeTitles(testNevskyTitle), nil)
 	coordinator := NewSlotCoordinator(repo, owners, limiter, newFakeOwnedProps(),
-		lifecycle, audit, noopBeginner{})
-	access := NewAccessService(repo, owners, statuses, lookup, policy, coordinator, lifecycle,
+		audit, noopBeginner{})
+	access := NewAccessService(repo, owners, statuses, lookup, policy, coordinator,
 		newTestFactory(repo, invitations, audit), nil)
 	svc := NewParticipantMutationService(access, owners, statuses, lookup, emails, policy,
 		coordinator, mailer, titles, newTestFactory(repo, invitations, audit), clk, nil)

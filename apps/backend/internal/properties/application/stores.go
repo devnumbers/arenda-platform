@@ -21,10 +21,9 @@ import (
 // stores its use cases reach.
 //
 // The tx field additionally exposes the raw transaction handle: the
-// RecipientSlotPolicy and SharedMembersDeleteMailer ports take a
-// transaction.Tx because the access context implements them over the caller's
-// transaction, so a use case passes stores.tx through when it needs slot
-// enforcement or former-member collection in its transaction.
+// RecipientSlotPolicy port takes a transaction.Tx because the access context
+// implements it over the caller's transaction, so a use case passes stores.tx
+// through when it needs slot enforcement in its transaction.
 type txStores struct {
 	repo    PropertyRepository
 	photos  PropertyPhotoRepository

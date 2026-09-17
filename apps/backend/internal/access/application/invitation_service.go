@@ -28,9 +28,7 @@ type InviteOutcome struct {
 // T5): inviting an unregistered email to shared access, manual resend with a
 // 24h cooldown, role change and silent cancellation of pending invitations,
 // and FIFO activation when the invitee registers. The invite email is the only
-// email sent by this service itself; the lifecycle emails (activation notice to
-// the owner, the "waiting for a slot" email on a suspended activation) go
-// through the LifecycleMailer (issue #162, T6). Persistence and audit share
+// email sent by this service. Persistence and audit share
 // the same transaction through the embedded txStoreFactory (ADR 0033); the
 // invitee email is PII and never appears in audit context (ADR 0020).
 type InvitationService struct {
@@ -44,7 +42,6 @@ type InvitationService struct {
 	policy      sharedpolicy.Policy
 	slots       *SlotCoordinator
 	mailer      AccessMailer
-	lifecycle   *LifecycleMailer
 	titles      PropertyTitleResolver
 	clock       clock.Clock
 	logger      *slog.Logger
@@ -53,9 +50,8 @@ type InvitationService struct {
 // NewInvitationService creates an InvitationService. Access is the membership
 // service used to delegate instant activation for registered emails; slots may
 // be nil to disable slot enforcement (mirrors NewAccessService); mailer may be
-// nil to skip sending (e.g. in tests that do not exercise the mail path);
-// lifecycle is the sharing lifecycle mailer (issue #162, T6) and may be nil to
-// disable the lifecycle emails. Statuses reports the archived flag of a
+// nil to skip sending (e.g. in tests that do not exercise the mail path).
+// Statuses reports the archived flag of a
 // property (issue #163); it may be nil to skip the archived-property checks.
 // Factory bundles the repositories, the audit recorder, and the Unit-of-Work
 // every mutating use case runs through (ADR 0033 γ-factory).
@@ -69,7 +65,6 @@ func NewInvitationService(
 	policy sharedpolicy.Policy,
 	slots *SlotCoordinator,
 	mailer AccessMailer,
-	lifecycle *LifecycleMailer,
 	titles PropertyTitleResolver,
 	factory txStoreFactory,
 	clk clock.Clock,
@@ -92,7 +87,6 @@ func NewInvitationService(
 		policy:         policy,
 		slots:          slots,
 		mailer:         mailer,
-		lifecycle:      lifecycle,
 		titles:         titles,
 		clock:          clk,
 		logger:         logger,
@@ -391,8 +385,7 @@ func (s *InvitationService) ActivatePendingInvitations(ctx context.Context, user
 // activateInvitation activates a single pending invitation in its own
 // transaction.
 func (s *InvitationService) activateInvitation(ctx context.Context, userID uuid.UUID, invitation domain.Invitation) error {
-	suspend := false
-	err := s.runInTx(ctx, func(stores *txStores) error {
+	return s.runInTx(ctx, func(stores *txStores) error {
 		dropped, err := s.dropInvitationIfAlreadyMember(ctx, stores, userID, invitation)
 		if err != nil {
 			return err
@@ -401,33 +394,12 @@ func (s *InvitationService) activateInvitation(ctx context.Context, userID uuid.
 			return nil
 		}
 
-		suspend, err = s.resolveActivationSuspend(ctx, stores.tx, userID, invitation.PropertyID)
+		suspend, err := s.resolveActivationSuspend(ctx, stores.tx, userID, invitation.PropertyID)
 		if err != nil {
 			return err
 		}
 		return s.insertActivationMembership(ctx, stores, userID, invitation, suspend)
 	})
-	if err != nil {
-		return err
-	}
-
-	// Lifecycle emails post-commit (issue #162, T6): the owner is notified
-	// about the activation; a membership created without a free tariff slot
-	// additionally sends the "access waits for a free slot" email to the new
-	// member. Send failures are logged inside the mailer and never fail the
-	// activation.
-	owner, err := s.owners.GetOwnerID(ctx, invitation.PropertyID)
-	if err != nil {
-		s.logger.WarnContext(ctx, "access: owner lookup for invitation activated email failed",
-			slog.String(auditKeyPropertyID, invitation.PropertyID.String()),
-			slog.String("error", err.Error()))
-	} else {
-		s.lifecycle.SendInvitationActivated(ctx, owner, invitation.PropertyID, invitation.Email)
-	}
-	if suspend {
-		s.lifecycle.SendAccessSuspended(ctx, userID, invitation.PropertyID)
-	}
-	return nil
 }
 
 // dropInvitationIfAlreadyMember drops the invitation silently when the invitee

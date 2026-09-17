@@ -102,7 +102,6 @@ func newCoordinatorFixture() *coordinatorFixture {
 		owners,
 		limiter,
 		ownedProps,
-		nil,
 		auditapp.Noop{},
 		noopBeginner{},
 	)
@@ -246,7 +245,6 @@ var (
 	scenarioBase = time.Date(2025, 1, 1, 10, 0, 0, 0, time.UTC)
 	t1Old        = scenarioBase
 	t2New        = scenarioBase.Add(1 * time.Hour)
-	t3Newer      = scenarioBase.Add(2 * time.Hour)
 )
 
 // Scenario A: EnforceRecipientLimit — downgrade suspends the excess shared

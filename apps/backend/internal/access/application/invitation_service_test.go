@@ -221,16 +221,12 @@ func newInvitationFixture() *invitationFixture {
 	mailer := &fakeAccessMailer{}
 	clk := &fixedClock{now: time.Now()}
 	limiter := newFakeRecipientLimiter()
-	// The lifecycle mailer is wired with an empty email resolver: existing T5
-	// scenarios never resolve a recipient address, so no lifecycle email is
-	// sent from these paths.
-	lifecycle := NewLifecycleMailer(mailer, fakeEmailResolver{}, fakeTitles(testNevskyTitle), nil)
 	coordinator := NewSlotCoordinator(repo, owners, limiter, newFakeOwnedProps(),
-		lifecycle, auditapp.Noop{}, noopBeginner{})
-	access := NewAccessService(repo, owners, statuses, lookup, policy, coordinator, lifecycle,
+		auditapp.Noop{}, noopBeginner{})
+	access := NewAccessService(repo, owners, statuses, lookup, policy, coordinator,
 		newTestFactory(repo, invitations, auditapp.Noop{}), nil)
 	svc := NewInvitationService(access, repo, invitations, owners, statuses, lookup, policy,
-		coordinator, mailer, lifecycle, fakeTitles(testNevskyTitle),
+		coordinator, mailer, fakeTitles(testNevskyTitle),
 		newTestFactory(repo, invitations, auditapp.Noop{}), clk, nil)
 	return &invitationFixture{
 		repo:        repo,

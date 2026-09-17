@@ -30,23 +30,18 @@ type SlotCoordinator struct {
 	owners     PropertyOwnerResolver
 	limiter    RecipientLimiter
 	ownedProps OwnedActivePropertiesPort
-	lifecycle  *LifecycleMailer
 	audit      auditapp.Recorder
 	db         txBeginner
 }
 
 // NewSlotCoordinator creates a SlotCoordinator. The recorder and limiter are
 // expected to be transaction-aware (the coordinator binds them to the caller's
-// tx per operation). Lifecycle is the sharing lifecycle mailer (issue #162,
-// T6); it may be nil to disable the lifecycle emails. The coordinator runs
-// inside the caller's transaction, so its emails are sent in-transaction: a
-// send failure is logged and never rolls the operation back.
+// tx per operation).
 func NewSlotCoordinator(
 	members MembershipRepository,
 	owners PropertyOwnerResolver,
 	limiter RecipientLimiter,
 	ownedProps OwnedActivePropertiesPort,
-	lifecycle *LifecycleMailer,
 	audit auditapp.Recorder,
 	db txBeginner,
 ) *SlotCoordinator {
@@ -55,7 +50,6 @@ func NewSlotCoordinator(
 		owners:     owners,
 		limiter:    limiter,
 		ownedProps: ownedProps,
-		lifecycle:  lifecycle,
 		audit:      audit,
 		db:         db,
 	}
@@ -138,7 +132,6 @@ func (c *SlotCoordinator) enforceRecipient(
 	}
 
 	toEvict := SelectForEviction(pool, limit)
-	suspended := make([]uuid.UUID, 0, len(toEvict))
 	for _, cand := range toEvict {
 		// Own objects are auto-archived by PropertyArchiver in the same tx; the
 		// coordinator only suspends shared memberships.
@@ -148,7 +141,6 @@ func (c *SlotCoordinator) enforceRecipient(
 		if err := txMembers.Suspend(ctx, cand.MemberID, cand.PropertyID); err != nil {
 			return fmt.Errorf("suspend membership %s: %w", cand.MemberID, err)
 		}
-		suspended = append(suspended, cand.PropertyID)
 		propertyID := cand.PropertyID
 		if err := c.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 			ActorRole:  auditdomain.ActorRoleSystem,
@@ -164,10 +156,6 @@ func (c *SlotCoordinator) enforceRecipient(
 			return fmt.Errorf("record suspend audit: %w", err)
 		}
 	}
-	// One summary email per recipient lists the memberships suspended by this
-	// call (issue #162, T6); it replaces the per-membership waiting email on
-	// the downgrade path.
-	c.lifecycle.SendDowngradeSummary(ctx, recipientID, suspended)
 	return nil
 }
 
@@ -304,9 +292,6 @@ func (c *SlotCoordinator) recoverSuspendedForRecipient(ctx context.Context, tx t
 		}); err != nil {
 			return fmt.Errorf("record reactivate audit: %w", err)
 		}
-		// The "access restored" email per reactivated membership (issue #162,
-		// T6); a send failure is logged inside the mailer.
-		c.lifecycle.SendAccessRestored(ctx, recipientID, cand.PropertyID)
 	}
 	return nil
 }
@@ -417,9 +402,6 @@ func (c *SlotCoordinator) EnforceOnUnarchiveForProperty(ctx context.Context, tx 
 		}); err != nil {
 			return fmt.Errorf("record suspend audit on unarchive: %w", err)
 		}
-		// The "access waits for a free slot" email on the unarchive path
-		// (issue #162, T6); a send failure is logged inside the mailer.
-		c.lifecycle.SendAccessSuspended(ctx, m.UserID, propertyID)
 	}
 	return nil
 }

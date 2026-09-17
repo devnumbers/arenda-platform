@@ -160,39 +160,23 @@ type InvitationRepository interface {
 	WithTx(tx transaction.Tx) InvitationRepository
 }
 
-// AccessMailer sends the transactional emails of the sharing lifecycle
-// (issues #161 T5, #162 T6). SendInvite is the invite email to an unregistered
-// invitee — the only email of the invitation lifecycle. The rest are the
-// lifecycle emails: to the (former) member on revoke / property deletion /
-// suspension / downgrade / recovery, and to the owner on invitation activation
-// and member self-exit.
+// AccessMailer sends the transactional email of the access context: the invite
+// email to an unregistered invitee (issue #161, T5). The sharing lifecycle
+// emails of issue #162 (T6) are cut (issue #695) until a full notification
+// system replaces them.
 type AccessMailer interface {
 	// SendInvite is the invite email to an unregistered invitee. Since the
 	// multi-object invitation (issue #694) one email covers the whole batch:
 	// PropertyTitles are the display titles of the objects the person was
 	// invited to.
 	SendInvite(ctx context.Context, to string, propertyTitles []string, role domain.Role) error
-	SendAccessRevoked(ctx context.Context, to, propertyTitle string) error
-	SendPropertyDeleted(ctx context.Context, to, propertyTitle string) error
-	SendAccessSuspended(ctx context.Context, to, propertyTitle string) error
-	// SendDowngradeSummary sends the single summary email listing the
-	// memberships suspended by one enforcement call (a tariff downgrade /
-	// grace expiry). PropertyTitles are the display titles of the suspended
-	// objects.
-	SendDowngradeSummary(ctx context.Context, to string, propertyTitles []string) error
-	SendAccessRestored(ctx context.Context, to, propertyTitle string) error
-	// SendInvitationActivated notifies the property owner that an invited
-	// member activated their access at registration.
-	SendInvitationActivated(ctx context.Context, to, propertyTitle, memberEmail string) error
-	// SendMemberLeft notifies the property owner that a member left the object.
-	SendMemberLeft(ctx context.Context, to, propertyTitle, memberName string) error
 }
 
-// UserEmailResolver resolves a registered user's email address for the
-// transactional sharing lifecycle emails (issue #162, T6). The access context
-// otherwise sees only non-PII display fields (MemberUser.HasEmail); the email
-// itself stays behind this narrow port, implemented over the identity user
-// repository. An empty string means the user has no email (or no longer
+// UserEmailResolver resolves a registered user's email address behind a narrow
+// port: the access context otherwise sees only non-PII display fields
+// (MemberUser.HasEmail). Implemented over the identity user repository; read
+// by the participant read model (issue #693) and the participant mutations
+// (issue #694). An empty string means the user has no email (or no longer
 // exists): the caller skips the send.
 type UserEmailResolver interface {
 	GetEmail(ctx context.Context, userID uuid.UUID) (string, error)

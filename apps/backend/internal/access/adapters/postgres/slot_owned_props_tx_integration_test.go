@@ -102,15 +102,14 @@ func TestSlotCoordinator_RecoverSuspended_OwnArchiveFreesSlotTxVisible(t *testin
 	// Own-properties port over the POOL (production wiring: injected once at
 	// startup over the pool, bound to the caller's tx only via WithTx).
 	ownedProps := NewOwnedActivePropertiesAdapter(propertiespg.NewPropertyRepository(pool))
-	limiter := &lifecycleFakeLimiter{limits: map[uuid.UUID]int{recipient: 1}}
+	limiter := &accessFakeLimiter{limits: map[uuid.UUID]int{recipient: 1}}
 	slots := accessapp.NewSlotCoordinator(
 		NewMembershipRepository(testTx),
 		NewOwnerResolver(testTx),
 		limiter,
 		ownedProps,
-		nil,
 		auditapp.Noop{},
-		lifecycleBeginner{tx: testTx},
+		accessBeginner{tx: testTx},
 	)
 
 	if _, err := testQ.ArchiveProperty(ctx, genpostgres.ArchivePropertyParams{
@@ -118,7 +117,7 @@ func TestSlotCoordinator_RecoverSuspended_OwnArchiveFreesSlotTxVisible(t *testin
 	}); err != nil {
 		t.Fatalf("ArchiveProperty: %v", err)
 	}
-	if err := slots.RecoverSuspended(ctx, lifecycleNoCommitTx{testTx}, recipient); err != nil {
+	if err := slots.RecoverSuspended(ctx, accessNoCommitTx{testTx}, recipient); err != nil {
 		t.Fatalf("RecoverSuspended: %v", err)
 	}
 

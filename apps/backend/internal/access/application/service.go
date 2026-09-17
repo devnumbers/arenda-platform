@@ -52,22 +52,20 @@ type Member struct {
 // through the embedded txStoreFactory (ADR 0033).
 type AccessService struct {
 	txStoreFactory
-	members   MembershipRepository
-	owners    PropertyOwnerResolver
-	statuses  PropertyStatusResolver
-	users     UserLookup
-	policy    sharedpolicy.Policy
-	slots     *SlotCoordinator
-	lifecycle *LifecycleMailer
-	logger    *slog.Logger
+	members  MembershipRepository
+	owners   PropertyOwnerResolver
+	statuses PropertyStatusResolver
+	users    UserLookup
+	policy   sharedpolicy.Policy
+	slots    *SlotCoordinator
+	logger   *slog.Logger
 }
 
 // NewAccessService creates an AccessService. Slots is the recipient tariff slot
 // coordinator (issue #158, T4); it may be nil to disable slot enforcement
-// (pre-T4 behaviour, e.g. in tests that don't exercise the limit). Lifecycle is
-// the sharing lifecycle mailer (issue #162, T6); it may be nil to disable the
-// lifecycle emails. Statuses reports the archived flag of a property (issue
-// #163); it may be nil to skip the archived-property checks. Factory bundles
+// (pre-T4 behaviour, e.g. in tests that don't exercise the limit). Statuses
+// reports the archived flag of a property (issue #163); it may be nil to skip
+// the archived-property checks. Factory bundles
 // the membership repository, the audit recorder, and the Unit-of-Work every
 // mutating use case runs through (ADR 0033 γ-factory).
 func NewAccessService(
@@ -77,7 +75,6 @@ func NewAccessService(
 	users UserLookup,
 	policy sharedpolicy.Policy,
 	slots *SlotCoordinator,
-	lifecycle *LifecycleMailer,
 	factory txStoreFactory,
 	logger *slog.Logger,
 ) *AccessService {
@@ -92,7 +89,6 @@ func NewAccessService(
 		users:          users,
 		policy:         policy,
 		slots:          slots,
-		lifecycle:      lifecycle,
 		logger:         logger,
 	}
 }
@@ -120,21 +116,13 @@ func (s *AccessService) AddMember(ctx context.Context, actor, propertyID, userID
 	}
 
 	var created domain.Membership
-	suspend := false
 	err = s.runInTx(ctx, func(stores *txStores) error {
 		var err error
-		created, suspend, err = s.createMembershipInTx(ctx, stores, actor, membership, actorRole)
+		created, _, err = s.createMembershipInTx(ctx, stores, actor, membership, actorRole)
 		return err
 	})
 	if err != nil {
 		return domain.Membership{}, err
-	}
-
-	// A grant created without a free tariff slot sends the "access waits for a
-	// free slot" email post-commit (issue #162, T6); a send failure is logged
-	// inside the mailer and never fails the add.
-	if suspend {
-		s.lifecycle.SendAccessSuspended(ctx, userID, propertyID)
 	}
 	return created, nil
 }
@@ -306,17 +294,7 @@ func (s *AccessService) RevokeMember(ctx context.Context, actor, propertyID, mem
 		}
 		return nil
 	})
-	if err != nil {
-		return err
-	}
-
-	// Revoking an active membership notifies the former member post-commit
-	// (issue #162, T6); revoking a suspended one is silent (the object was
-	// already hidden from them).
-	if !membership.IsSuspended() {
-		s.lifecycle.SendAccessRevoked(ctx, membership.UserID, propertyID)
-	}
-	return nil
+	return err
 }
 
 // LeaveProperty performs a member's self-exit. The owner cannot leave their own
@@ -379,29 +357,7 @@ func (s *AccessService) LeaveProperty(ctx context.Context, actor, propertyID uui
 		}
 		return nil
 	})
-	if err != nil {
-		return err
-	}
-
-	// Self-exit notifies the owner post-commit (issue #162, T6); the leaving
-	// member receives nothing.
-	owner, err := s.owners.GetOwnerID(ctx, propertyID)
-	if err != nil {
-		s.logger.WarnContext(ctx, "access: owner lookup for member left email failed",
-			slog.String(auditKeyPropertyID, propertyID.String()),
-			slog.String("error", err.Error()))
-		return nil
-	}
-	memberName := ""
-	if u, err := s.users.GetByID(ctx, actor); err != nil {
-		s.logger.WarnContext(ctx, "access: member lookup for member left email failed",
-			slog.String(auditKeyUserID, actor.String()),
-			slog.String("error", err.Error()))
-	} else {
-		memberName = displayName(u)
-	}
-	s.lifecycle.SendMemberLeft(ctx, owner, propertyID, memberName)
-	return nil
+	return err
 }
 
 // ListMembers returns the property participants: the owner first (synthesized

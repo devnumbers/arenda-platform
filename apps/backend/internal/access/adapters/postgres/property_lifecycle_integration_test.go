@@ -120,7 +120,7 @@ func activePropertyIDs(t *testing.T, repo *MembershipRepository, userID uuid.UUI
 // membership FIFO via RecoverSuspendedForProperty.
 func TestPropertyLifecycle_ArchiveActiveMemberRecoversSuspendedFIFO(t *testing.T) {
 	t.Parallel()
-	f := newLifecycleMailFixture(t)
+	f := newAccessLifecycleFixture(t)
 	ctx := f.bg()
 	repo := NewMembershipRepository(f.tx)
 
@@ -162,7 +162,7 @@ func TestPropertyLifecycle_ArchiveActiveMemberRecoversSuspendedFIFO(t *testing.T
 	}
 
 	// The service call that recovers the freed slot.
-	if err := f.slots.RecoverSuspendedForProperty(ctx, lifecycleNoCommitTx{f.tx}, target); err != nil {
+	if err := f.slots.RecoverSuspendedForProperty(ctx, accessNoCommitTx{f.tx}, target); err != nil {
 		t.Fatalf("RecoverSuspendedForProperty: %v", err)
 	}
 
@@ -194,7 +194,7 @@ func TestPropertyLifecycle_ArchiveActiveMemberRecoversSuspendedFIFO(t *testing.T
 // touch pending invitations (the row is still present afterwards).
 func TestPropertyLifecycle_ArchiveKeepsSuspendedMembersAndPendingInvitations(t *testing.T) {
 	t.Parallel()
-	f := newLifecycleMailFixture(t)
+	f := newAccessLifecycleFixture(t)
 	ctx := f.bg()
 	repo := NewMembershipRepository(f.tx)
 
@@ -212,7 +212,7 @@ func TestPropertyLifecycle_ArchiveKeepsSuspendedMembersAndPendingInvitations(t *
 	if _, err := f.q.ArchiveProperty(ctx, genpostgres.ArchivePropertyParams{ID: pgUUID(property), OwnerID: pgUUID(owner)}); err != nil {
 		t.Fatalf("ArchiveProperty: %v", err)
 	}
-	if err := f.slots.RecoverSuspendedForProperty(ctx, lifecycleNoCommitTx{f.tx}, property); err != nil {
+	if err := f.slots.RecoverSuspendedForProperty(ctx, accessNoCommitTx{f.tx}, property); err != nil {
 		t.Fatalf("RecoverSuspendedForProperty: %v", err)
 	}
 
@@ -251,7 +251,7 @@ func TestPropertyLifecycle_ArchiveKeepsSuspendedMembersAndPendingInvitations(t *
 // excludes the archived property. Goes through the real InvitationService.
 func TestPropertyLifecycle_InvitationActivationOnArchivedProperty(t *testing.T) {
 	t.Parallel()
-	f := newLifecycleMailFixture(t)
+	f := newAccessLifecycleFixture(t)
 	ctx := f.bg()
 	repo := NewMembershipRepository(f.tx)
 
@@ -306,7 +306,7 @@ func TestPropertyLifecycle_InvitationActivationOnArchivedProperty(t *testing.T) 
 // in their production order.
 func unarchiveSlotScenario(t *testing.T, limit int, withOccupied bool) (repo *MembershipRepository, recipient, target uuid.UUID) {
 	t.Helper()
-	f := newLifecycleMailFixture(t)
+	f := newAccessLifecycleFixture(t)
 	repo = NewMembershipRepository(f.tx)
 	owner := f.addUserWithEmail(t, f.email("owner"))
 	recipient = f.addUserWithEmail(t, f.email("recipient"))
@@ -325,7 +325,7 @@ func unarchiveSlotScenario(t *testing.T, limit int, withOccupied bool) (repo *Me
 	if _, err := f.q.UnarchiveProperty(ctx, genpostgres.UnarchivePropertyParams{ID: pgUUID(target), OwnerID: pgUUID(owner)}); err != nil {
 		t.Fatalf("UnarchiveProperty: %v", err)
 	}
-	if err := f.slots.EnforceOnUnarchiveForProperty(ctx, lifecycleNoCommitTx{f.tx}, target); err != nil {
+	if err := f.slots.EnforceOnUnarchiveForProperty(ctx, accessNoCommitTx{f.tx}, target); err != nil {
 		t.Fatalf("EnforceOnUnarchiveForProperty: %v", err)
 	}
 	return repo, recipient, target
@@ -401,7 +401,7 @@ func TestPropertyLifecycle_UnarchiveEnforcesRecipientSlots(t *testing.T) {
 // recovers the recipient's oldest suspended membership FIFO.
 func TestPropertyLifecycle_DeleteDropsMembershipsAndRecoversFIFO(t *testing.T) {
 	t.Parallel()
-	f := newLifecycleMailFixture(t)
+	f := newAccessLifecycleFixture(t)
 	ctx := f.bg()
 	repo := NewMembershipRepository(f.tx)
 
@@ -422,7 +422,7 @@ func TestPropertyLifecycle_DeleteDropsMembershipsAndRecoversFIFO(t *testing.T) {
 	// The slot-significant delete steps in the PropertyService.DeleteProperty
 	// order: drop the memberships and recover the freed slots first, then
 	// remove the property row.
-	if err := f.slots.RecoverAfterPropertyDelete(ctx, lifecycleNoCommitTx{f.tx}, target); err != nil {
+	if err := f.slots.RecoverAfterPropertyDelete(ctx, accessNoCommitTx{f.tx}, target); err != nil {
 		t.Fatalf("RecoverAfterPropertyDelete: %v", err)
 	}
 

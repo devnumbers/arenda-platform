@@ -255,15 +255,14 @@ func run() error {
 
 // injectPropertyServiceAccess wires the access-context adapters into the
 // property service: shared memberships for list endpoints (issues #156 T3,
-// T11), the owner display name for the sharing banner (T11), the recipient
-// slot policy and suspended-shared counter for archive/unarchive/delete
-// (issue #158, T4), and the shared-members delete mailer (issue #162, T6).
+// T11), the owner display name for the sharing banner (T11), and the
+// recipient slot policy and suspended-shared counter for
+// archive/unarchive/delete (issue #158, T4).
 func injectPropertyServiceAccess(propertiesMod *wire.Properties, accessMod *wire.Access) {
 	propertiesMod.PropertyService.SetSharedMemberships(accessMod.SharedProperties)
 	propertiesMod.PropertyService.SetOwnerDisplayNameResolver(accessMod.AccessService)
 	propertiesMod.PropertyService.SetRecipientSlotPolicy(accessMod.SlotCoordinator)
 	propertiesMod.PropertyService.SetSuspendedSharedCounter(accessMod.SuspendedCounter)
-	propertiesMod.PropertyService.SetSharedMembersDeleteMailer(accessMod.PropertyDeleteMailer)
 }
 
 // injectPropertyListProjections wires the list read projections of the

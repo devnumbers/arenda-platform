@@ -343,7 +343,7 @@ func TestAccessService_AllowDenyPath(t *testing.T) {
 	repo := newMemRepo()
 	resolver := staticResolver{property: owner}
 	policy := NewMembershipPolicy(resolver, repo)
-	svc := NewAccessService(repo, resolver, nil, stubLookup{}, policy, nil, nil,
+	svc := NewAccessService(repo, resolver, nil, stubLookup{}, policy, nil,
 		newTestFactory(repo, &memInvitationsRepo{}, auditapp.Noop{}), nil)
 
 	// Owner adds a full member.
@@ -413,7 +413,7 @@ func TestAccessService_LeaveProperty(t *testing.T) {
 	repo := newMemRepo()
 	resolver := staticResolver{property: owner}
 	policy := NewMembershipPolicy(resolver, repo)
-	svc := NewAccessService(repo, resolver, nil, stubLookup{}, policy, nil, nil,
+	svc := NewAccessService(repo, resolver, nil, stubLookup{}, policy, nil,
 		newTestFactory(repo, &memInvitationsRepo{}, auditapp.Noop{}), nil)
 
 	if _, err := svc.AddMember(context.Background(), owner, property, member, domain.RoleViewer); err != nil {
