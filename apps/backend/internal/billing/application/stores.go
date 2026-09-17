@@ -85,6 +85,16 @@ func (s *txStores) enforceRecipientSlots(ctx context.Context, userID uuid.UUID, 
 	return s.slots.Enforce(ctx, userID, trigger)
 }
 
+// recoverRecipientSlots reactivates the recipient's oldest suspended shared
+// memberships FIFO after the tariff limit grew (a recipient upgrade, issue
+// #695). Without a wired bridge it is a no-op.
+func (s *txStores) recoverRecipientSlots(ctx context.Context, userID uuid.UUID) error {
+	if s.slots == nil {
+		return nil
+	}
+	return s.slots.Recover(ctx, userID)
+}
+
 // enforceTariffLimit is the shared tail of every worker phase that lowers a
 // tariff limit: the owner's excess active properties are archived — keeping
 // the keepPropertyID choice when one is given (issue #617) — and the

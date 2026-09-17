@@ -55,10 +55,18 @@ type ExcessPropertyArchiverSource interface {
 }
 
 // RecipientSlotEnforcer suspends the shared memberships whose recipient's
-// tariff limit is exceeded after a billing limit drop. Declared here, at the
-// consumer, per ADR 0035.
+// tariff limit is exceeded after a billing limit drop, and recovers the
+// suspended ones FIFO when a slot frees up or the limit expands (a recipient
+// upgrade). Declared here, at the consumer, per ADR 0035.
 type RecipientSlotEnforcer interface {
 	Enforce(ctx context.Context, userID uuid.UUID, trigger string) error
+	// Recover reactivates the recipient's oldest suspended shared memberships
+	// FIFO while free slots remain — the upgrade tail of the success-
+	// application seam (issue #695): a payment that raised the tariff limit
+	// re-opens suspended access in the same commit. (The slot-freed sources —
+	// revoke, self-exit, owner archive/delete — recover inside the access and
+	// properties contexts, not through this port.)
+	Recover(ctx context.Context, userID uuid.UUID) error
 }
 
 // RecipientSlotEnforcerSource produces transaction-bound enforcers.

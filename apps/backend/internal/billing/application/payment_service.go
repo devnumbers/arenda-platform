@@ -506,31 +506,9 @@ func (s *PaymentService) finalizeFailedPayment(
 func (s *PaymentService) finalizeSucceededPayment(
 	ctx context.Context, stores *txStores, payment domain.SubscriptionPayment, now time.Time, allowReconcile bool,
 ) error {
-	switch payment.Status {
-	case domain.PaymentStatusSucceeded:
-		return nil // Duplicate delivery.
-	case domain.PaymentStatusFailed:
-		if !allowReconcile {
-			// The payment became failed after the caller's check;
-			// refuse so the provider retries and the verified
-			// reconciliation path runs instead.
-			return fmt.Errorf("payment %s turned failed during webhook processing", payment.ID)
-		}
-		if err := payment.ReconcileToSucceeded(now); err != nil {
-			return err
-		}
-	case domain.PaymentStatusPending:
-		if err := payment.MarkSucceeded(now); err != nil {
-			return err
-		}
-	default:
-		// A refund (and the internal refunding reservation) is a
-		// later, deliberate state that a payment notification does
-		// not override.
-		return nil
-	}
-	if err := stores.payments.Update(ctx, payment); err != nil {
-		return fmt.Errorf("mark payment succeeded: %w", err)
+	skip, err := settlePaymentToSucceeded(ctx, stores, payment, now, allowReconcile)
+	if err != nil || skip {
+		return err
 	}
 	if _, err := applySucceededPayment(ctx, stores, payment, now); err != nil {
 		return err
@@ -550,6 +528,39 @@ func (s *PaymentService) finalizeSucceededPayment(
 	return nil
 }
 
+// settlePaymentToSucceeded advances the persisted payment to the succeeded
+// status and reports whether the success is a no-op that must not touch the
+// subscription: a duplicate delivery, or a refund (and the internal refunding
+// reservation) — a later, deliberate state a notification does not override.
+func settlePaymentToSucceeded(
+	ctx context.Context, stores *txStores, payment domain.SubscriptionPayment, now time.Time, allowReconcile bool,
+) (skip bool, err error) {
+	switch payment.Status {
+	case domain.PaymentStatusSucceeded:
+		return true, nil // Duplicate delivery.
+	case domain.PaymentStatusFailed:
+		if !allowReconcile {
+			// The payment became failed after the caller's check;
+			// refuse so the provider retries and the verified
+			// reconciliation path runs instead.
+			return false, fmt.Errorf("payment %s turned failed during webhook processing", payment.ID)
+		}
+		if err := payment.ReconcileToSucceeded(now); err != nil {
+			return false, err
+		}
+	case domain.PaymentStatusPending:
+		if err := payment.MarkSucceeded(now); err != nil {
+			return false, err
+		}
+	default:
+		return true, nil
+	}
+	if err := stores.payments.Update(ctx, payment); err != nil {
+		return false, fmt.Errorf("mark payment succeeded: %w", err)
+	}
+	return false, nil
+}
+
 // applySucceededPayment applies the subscription effects of a succeeded
 // payment inside the finalizing transaction: an upgrade switches the tariff at
 // the full price of the new plan with the period counted from the payment
@@ -558,7 +569,9 @@ func (s *PaymentService) finalizeSucceededPayment(
 // applied transition switched the tariff the new plan's limit is enforced in
 // the same transaction (issue #428) — the owner's excess active properties
 // archived and the excess recipient slots suspended; an upgrade to a higher
-// limit archives nothing, a renewal into a cheaper scheduled target archives
+// limit archives nothing and instead recovers the recipient's oldest
+// suspended shared memberships FIFO through the access bridge (issue #695);
+// a renewal into a cheaper scheduled target archives
 // exactly like the renewal worker did before the seam was shared. A payment
 // the subscription already reflects is a no-op — the zero transition it
 // returns keeps duplicate deliveries, reconciliations and worker retries
@@ -592,19 +605,21 @@ func applySucceededPayment(
 	}
 
 	// Grace v2 (ADR 0055): an applied payment settles the restoration debt of
-	// the grace window — the properties archived at the grace entry restore
-	// under the (possibly changed) tariff limit, newest-first. The bridge
-	// returns what did not fit: the debt remainder that stays on the
-	// subscription for the next applied payment (the fall to basic drops it).
-	// A bridge failure fails the application, so the provider redelivers and
-	// the seam retries. Only an actually applied payment restores: the no-op
+	// the grace window. Only an actually applied payment restores: the no-op
 	// paths above return early.
-	graceSnapshot := sub.GraceArchivedPropertyIDs
-	graceRemaining := graceSnapshot
-	if len(graceSnapshot) > 0 {
-		graceRemaining, err = stores.restoreGraceArchive(ctx, payment.UserID, graceSnapshot, paymentTariff.ActivePropertyLimit)
+	graceRemaining, err := settleGraceDebt(ctx, stores, &sub, paymentTariff)
+	if err != nil {
+		return domain.Transition{}, err
+	}
+
+	// The previous tariff — read before the transition switches the tariff id,
+	// the upgrade tail below compares the two tariffs (issue #695). Renewals
+	// keep the tariff and skip the lookup.
+	var previousTariff domain.Tariff
+	if sub.TariffID != payment.TariffID {
+		previousTariff, err = subscriptionCurrentTariff(ctx, stores, sub)
 		if err != nil {
-			return domain.Transition{}, fmt.Errorf("restore grace archive after payment: %w", err)
+			return domain.Transition{}, err
 		}
 	}
 
@@ -616,14 +631,7 @@ func applySucceededPayment(
 			if s.TariffID == payment.TariffID {
 				return s.ApplyRenewal(payment.ID, payment.Period, now)
 			}
-			currentTariff, err := stores.tariffs.GetByID(ctx, s.TariffID)
-			if err != nil {
-				if errors.Is(err, ErrNotFound) {
-					return fmt.Errorf("subscription %s references missing tariff %s: %w", s.ID, s.TariffID, ErrTariffNotFound)
-				}
-				return fmt.Errorf("get current tariff: %w", err)
-			}
-			return s.ApplyTariffChange(payment.ID, currentTariff, paymentTariff, payment.Period, now)
+			return s.ApplyTariffChange(payment.ID, previousTariff, paymentTariff, payment.Period, now)
 		},
 		transitionSpec{
 			reason:    domain.TransitionReasonPaymentApplied,
@@ -640,8 +648,63 @@ func applySucceededPayment(
 		if err := stores.enforceTariffLimit(ctx, payment.UserID, paymentTariff.ActivePropertyLimit, triggerRenewalDowngrade, nil); err != nil {
 			return domain.Transition{}, fmt.Errorf("enforce tariff limit after payment downgrade: %w", err)
 		}
+		// Recipient upgrade (issue #695): the raised limit re-opens the
+		// recipient's oldest suspended shared memberships FIFO in the same
+		// commit; a lowered limit skips the recovery.
+		if err := recoverRecipientSlotsOnUpgrade(ctx, stores, previousTariff, paymentTariff, payment.UserID); err != nil {
+			return domain.Transition{}, err
+		}
 	}
 	return applied, nil
+}
+
+// settleGraceDebt settles the restoration debt of the grace window (ADR 0055):
+// the properties archived at the grace entry restore under the applied
+// payment's tariff limit, newest-first. The bridge returns what did not fit —
+// the debt remainder that stays on the subscription for the next applied
+// payment (the fall to basic drops it). A bridge failure fails the
+// application, so the provider redelivers and the seam retries.
+func settleGraceDebt(
+	ctx context.Context, stores *txStores, sub *domain.Subscription, appliedTariff domain.Tariff,
+) ([]uuid.UUID, error) {
+	snapshot := sub.GraceArchivedPropertyIDs
+	if len(snapshot) == 0 {
+		return snapshot, nil
+	}
+	remaining, err := stores.restoreGraceArchive(ctx, sub.UserID, snapshot, appliedTariff.ActivePropertyLimit)
+	if err != nil {
+		return nil, fmt.Errorf("restore grace archive after payment: %w", err)
+	}
+	return remaining, nil
+}
+
+// subscriptionCurrentTariff reads the tariff the subscription is on before the
+// payment applies, narrowing the repository miss to ErrTariffNotFound.
+func subscriptionCurrentTariff(ctx context.Context, stores *txStores, sub domain.Subscription) (domain.Tariff, error) {
+	tariff, err := stores.tariffs.GetByID(ctx, sub.TariffID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.Tariff{}, fmt.Errorf("subscription %s references missing tariff %s: %w", sub.ID, sub.TariffID, ErrTariffNotFound)
+		}
+		return domain.Tariff{}, fmt.Errorf("get current tariff: %w", err)
+	}
+	return tariff, nil
+}
+
+// recoverRecipientSlotsOnUpgrade re-opens the recipient's oldest suspended
+// shared memberships FIFO when the applied payment raised the tariff —
+// classified by the shared tariff comparison, the one definition of an
+// upgrade (issue #695). A recovery with no free slot is a no-op.
+func recoverRecipientSlotsOnUpgrade(
+	ctx context.Context, stores *txStores, previous, applied domain.Tariff, userID uuid.UUID,
+) error {
+	if domain.ClassifyTariffChange(previous, applied) != domain.TariffChangeUpgrade {
+		return nil
+	}
+	if err := stores.recoverRecipientSlots(ctx, userID); err != nil {
+		return fmt.Errorf("recover recipient slots after payment upgrade: %w", err)
+	}
+	return nil
 }
 
 // applyRefundNotification records a full refund reported by the provider and
