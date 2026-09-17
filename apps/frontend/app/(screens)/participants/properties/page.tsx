@@ -1,11 +1,14 @@
+import type { JSX } from 'react';
 import type { Metadata } from 'next';
-import { ParticipantsPlaceholderScreen } from '@/widgets/participants';
+import { ParticipantsPropertiesScreen } from '@/widgets/participants';
 
-/** Каркас экрана «Объекты пользователей» (#701): список приедет тикетом. */
+/** Экран «Объекты пользователей» (карта #692, тикет #701): чужие объекты
+ * читающего, «Покинуть объект/все объекты». Заголовок шапки — «Доступные
+ * объекты» по макету 2010-132145. */
 export const metadata: Metadata = {
-  title: 'Объекты пользователей — Рентли',
+  title: 'Доступные объекты — Рентли',
 };
 
-export default function ParticipantsPropertiesRoutePage() {
-  return <ParticipantsPlaceholderScreen title="Объекты пользователей" />;
+export default function ParticipantsPropertiesRoutePage(): JSX.Element {
+  return <ParticipantsPropertiesScreen />;
 }

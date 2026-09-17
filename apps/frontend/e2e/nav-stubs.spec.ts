@@ -62,7 +62,9 @@ test('цели карточек хаба — живые маршруты-кар�
   await expect(header.getByText('Ваши участники')).toBeVisible();
 
   await page.goto('/participants/properties');
-  await expect(header.getByText('Объекты пользователей')).toBeVisible();
+  // Живой экран #701: по макету (2010-132145) заголовок «Доступные объекты»,
+  // не имя карточки хаба.
+  await expect(header.getByText('Доступные объекты')).toBeVisible();
 
   await page.goto('/participants/invite');
   // Живой экран #699: по макету (2008-46375) заголовок в контенте, шапка —

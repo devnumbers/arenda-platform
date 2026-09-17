@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient, type UseMutationResult, type Use
 import { apiClient } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
 import type { components } from '@/shared/api/dto';
-import { accessKeys, participantsKeys } from '@/shared/api/query-keys';
+import { accessKeys, participantsKeys, propertyKeys } from '@/shared/api/query-keys';
 import type { QueryClient } from '@tanstack/react-query';
 import { mapParticipant } from '@/entities/participants';
 import type { Participant } from '@/entities/participants';
@@ -74,9 +74,8 @@ export type RevokeAllParticipantsResult = {
 };
 
 /** «Отозвать доступ всем» (#697): DELETE /participants/{id} (#694) по
- * каждому участнику текущего списка. Bulk-эндпоинта в контракте нет;
- * повторный DELETE по уже отозванному человеку даёт приватный 404 без
- * побочных эффектов, поэтому гонка параллельных запросов безопасна. Кэш
+ * каждому участнику текущего списка. Bulk-эндпоинта в контракте нет —
+ * каркас партии общий с «Покинуть все объекты» (deleteBatchCounting). Кэш
  * участников инвалидируется всегда (включая summary хаба) — и после
  * успеха, и при частичном сбое. */
 export function useRevokeAllParticipants(): UseMutationResult<
@@ -87,21 +86,10 @@ export function useRevokeAllParticipants(): UseMutationResult<
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (participantIds) => {
-      const results = await Promise.allSettled(
-        participantIds.map((id) =>
-          apiClient<void>(`/participants/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-        ),
+      const { done, failed } = await deleteBatchCounting(
+        participantIds.map((id) => `/participants/${encodeURIComponent(id)}`),
       );
-      let revoked = 0;
-      let failed = 0;
-      for (const result of results) {
-        if (result.status === 'fulfilled') {
-          revoked += 1;
-        } else {
-          failed += 1;
-        }
-      }
-      return { revoked, failed };
+      return { revoked: done, failed };
     },
     onSettled: () => invalidateParticipantProjections(queryClient),
   });
@@ -146,6 +134,81 @@ export function useRevokeParticipant(): UseMutationResult<void, ApiError, string
       });
     },
     onSettled: () => invalidateParticipantProjections(queryClient),
+  });
+}
+
+/** Итог пакетного DELETE: число исполненных и неудавшихся — частичный
+ * сбой партии не должен выглядеть полным успехом (общий каркас «Отозвать
+ * всех» #697 и «Покинуть все объекты» #701). */
+export type BatchDeleteResult = {
+  readonly done: number;
+  readonly failed: number;
+};
+
+/** Подсчёт исходов партии параллельных DELETE: повторный DELETE даёт
+ * приватный 404 без побочных эффектов, поэтому гонка параллельных
+ * запросов безопасна. */
+async function deleteBatchCounting(
+  urls: ReadonlyArray<string>,
+): Promise<BatchDeleteResult> {
+  const results = await Promise.allSettled(
+    urls.map((url) => apiClient<void>(url, { method: 'DELETE' })),
+  );
+  let done = 0;
+  let failed = 0;
+  for (const result of results) {
+    if (result.status === 'fulfilled') {
+      done += 1;
+    } else {
+      failed += 1;
+    }
+  }
+  return { done, failed };
+}
+
+/** Инвалидация самовыхода (#701): проекции участников (summary хаба
+ * считает чужие объекты) плюс сам список объектов с деталями — ряд уходит
+ * со экрана, детали чужого объекта перестают быть доступны. */
+function invalidateLeaveProjections(queryClient: QueryClient): void {
+  invalidateParticipantProjections(queryClient);
+  void queryClient.invalidateQueries({ queryKey: propertyKeys.all });
+}
+
+/** «Покинуть объект» со экрана «Объекты пользователей» (карта #692, тикет
+ * #701; DELETE /properties/{id}/access/members/self): самовыход участника.
+ * Инвалидация в onSettled — канон participants-мутаций. */
+export function useLeaveProperty(): UseMutationResult<void, ApiError, string> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (propertyId: string) => {
+      await apiClient<void>(
+        `/properties/${encodeURIComponent(propertyId)}/access/members/self`,
+        { method: 'DELETE' },
+      );
+    },
+    onSettled: () => invalidateLeaveProjections(queryClient),
+  });
+}
+
+/** «Покинуть все объекты» (#701, кебаб шапки): DELETE members/self по
+ * каждому чужому объекту текущего списка. Bulk-эндпоинта в контракте нет;
+ * повторный DELETE безопасен (см. deleteBatchCounting). Кэш инвалидируется
+ * всегда (onSettled, канон useRevokeAllParticipants) — список под попапом
+ * уже пуст. */
+export function useLeaveAllProperties(): UseMutationResult<
+  BatchDeleteResult,
+  ApiError,
+  readonly string[]
+> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (propertyIds) =>
+      deleteBatchCounting(
+        propertyIds.map(
+          (id) => `/properties/${encodeURIComponent(id)}/access/members/self`,
+        ),
+      ),
+    onSettled: () => invalidateLeaveProjections(queryClient),
   });
 }
 
