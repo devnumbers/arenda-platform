@@ -503,6 +503,9 @@ func (c *Config) validateRateLimit() error {
 	if c.RateLimit.PhoneChangeVerifyPer15Min <= 0 {
 		return errors.New("RATE_LIMIT_PHONE_CHANGE_VERIFY_PER_15MIN must be positive")
 	}
+	if c.RateLimit.EmailChangeSendPerHour <= 0 {
+		return errors.New("RATE_LIMIT_EMAIL_CHANGE_SEND_PER_HOUR must be positive")
+	}
 	return nil
 }
 
