@@ -1,4 +1,5 @@
 import type { ApiError } from '@/shared/api/errors';
+import { isValidLoginCode } from '@/shared/lib/login-code';
 
 /** Кулдаун повторной отправки кода — серверный троттлинг identity 1 мин
  * (тикет #733, макет 1869-68137: подпись «через 00:59»).
@@ -13,4 +14,18 @@ export const RESEND_COOLDOWN_MS = 60_000;
  * сценариев профиля. */
 export function invalidCodeDetail(error: ApiError): string | null {
   return error.status === 401 ? error.detail : null;
+}
+
+/** Ошибка error-проп поля кода: после сабмита неполный код — маска-подсказка
+ * «Введите 6-значный код» (сильнее inline), иначе — inline 401 verify-мутации,
+ * если он выставлен. */
+export function codeFieldError(
+  isSubmitAttempted: boolean,
+  value: string,
+  inlineError: string | null,
+): string | undefined {
+  if (isSubmitAttempted && !isValidLoginCode(value)) {
+    return 'Введите 6-значный код';
+  }
+  return inlineError ?? undefined;
 }

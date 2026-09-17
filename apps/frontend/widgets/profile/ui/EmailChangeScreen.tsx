@@ -2,10 +2,9 @@
 
 import { useEffect, useRef, useState, type ChangeEvent, type JSX, type SubmitEvent } from 'react';
 import { ArrowLeft, Cancel } from '@/shared/assets/icons';
-import { useCountdown } from '@/shared/lib/hooks/use-countdown';
 import { notify } from '@/shared/lib/notifications';
 import { isEmailValid } from '@/shared/lib/email';
-import { isValidLoginCode, loginCodeFromInput } from '@/shared/lib/login-code';
+import { isValidLoginCode } from '@/shared/lib/login-code';
 import {
   Button,
   IconButton,
@@ -17,7 +16,7 @@ import {
   TopNavTitle,
 } from '@/shared/ui/design';
 import { MeFlowScreen, MeFlowSuccessScreen, type MeFlowProps } from './MeFlowScreen';
-import { invalidCodeDetail, RESEND_COOLDOWN_MS } from '../lib/code-step';
+import { useCodeStep } from '../lib/use-code-step';
 import {
   useChangeEmail,
   useConfirmCurrentEmail,
@@ -72,19 +71,21 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
   const resendEmailCode = useResendEmailCode();
 
   const [step, setStep] = useState<Step>('code-current');
-  const [currentCode, setCurrentCode] = useState('');
   const [newEmail, setNewEmail] = useState('');
-  const [newCode, setNewCode] = useState('');
   const [grant, setGrant] = useState('');
   const [isSubmitAttempted, setIsSubmitAttempted] = useState(false);
-  /** Дедлайны resend-таймеров (epoch ms) обоих шагов кода — от последней
-   * успешной отправки; живут на уровне флоу, переживают «Назад» (#733). */
-  const [currentCodeDeadline, setCurrentCodeDeadline] = useState<number | null>(null);
-  const [newCodeDeadline, setNewCodeDeadline] = useState<number | null>(null);
-  const currentRemainingSeconds = useCountdown(currentCodeDeadline);
-  const newRemainingSeconds = useCountdown(newCodeDeadline);
-  /** Inline-ошибка 401 «Неверный код» шага «code-new» — в error-проп поля. */
-  const [newCodeInlineError, setNewCodeInlineError] = useState<string | null>(null);
+  /** Шаги кода resend-канона (#733) — экземпляр на шаг: ввод, inline-ошибка
+   * 401, дедлайн таймера от последней отправки; дедлайны живут на уровне
+   * флоу и переживают «Назад»-переключения. */
+  const currentCodeStep = useCodeStep({
+    isSubmitAttempted,
+    onAttemptReset: () => setIsSubmitAttempted(false),
+  });
+  const newCodeStep = useCodeStep({
+    isSubmitAttempted,
+    onAttemptReset: () => setIsSubmitAttempted(false),
+  });
+  const { restartCooldown: restartCurrentCooldown } = currentCodeStep;
 
   // Код на текущую почту уходит один раз на монтирование потока: реф-гард
   // делает пуск идемпотентным (StrictMode и повторные рендеры не дублируют
@@ -98,10 +99,10 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
     }
     isSendStartedRef.current = true;
     sendCodeMutate(undefined, {
-      onSuccess: () => setCurrentCodeDeadline(Date.now() + RESEND_COOLDOWN_MS),
+      onSuccess: () => restartCurrentCooldown(),
       onError: (error) => notify.scenarios.profile.emailSendCodeError(error),
     });
-  }, [sendCodeMutate]);
+  }, [sendCodeMutate, restartCurrentCooldown]);
 
   // Программный фокус поля шага (jsx-a11y/no-autofocus): точка фокуса
   // остаётся под контролем компонента — паттерн шага кода логина.
@@ -126,32 +127,6 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
     : isSameEmail
       ? 'Новый адрес совпадает с текущим'
       : undefined;
-  const currentCodeError = isSubmitAttempted && !isValidLoginCode(currentCode)
-    ? 'Введите 6-значный код'
-    : undefined;
-  const newCodeError = isSubmitAttempted && !isValidLoginCode(newCode)
-    ? 'Введите 6-значный код'
-    : (newCodeInlineError ?? undefined);
-
-  const handleCodeChange = (
-    event: ChangeEvent<HTMLInputElement>,
-    setter: (value: string) => void,
-  ): void => {
-    setter(loginCodeFromInput(event.currentTarget.value));
-  };
-
-  /** Крест-очистка полей кода (канон error-проп TextField, макет
-   * 2343-51004): черновик и валидация сбрасываются. */
-  const handleCurrentCodeClear = (): void => {
-    setCurrentCode('');
-    setIsSubmitAttempted(false);
-  };
-
-  const handleNewCodeClear = (): void => {
-    setNewCode('');
-    setNewCodeInlineError(null);
-    setIsSubmitAttempted(false);
-  };
 
   /** Шаг 1 → 2 локальный: код проверяется формой, серверу он понадобится на
    * шаге «new-email» (confirm-current несёт код и адрес одним запросом). */
@@ -159,7 +134,7 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
     event.preventDefault();
     setIsSubmitAttempted(true);
 
-    if (!isValidLoginCode(currentCode)) {
+    if (!isValidLoginCode(currentCodeStep.value)) {
       return;
     }
 
@@ -185,14 +160,11 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
     }
 
     confirmCurrent.mutate(
-      { newEmail: normalizedNewEmail, code: currentCode },
+      { newEmail: normalizedNewEmail, code: currentCodeStep.value },
       {
         onSuccess: ({ grant: newGrant }) => {
-          setIsSubmitAttempted(false);
           setGrant(newGrant);
-          setNewCode('');
-          setNewCodeInlineError(null);
-          setNewCodeDeadline(Date.now() + RESEND_COOLDOWN_MS);
+          newCodeStep.rearm();
           setStep('code-new');
         },
         onError: (error) => notify.scenarios.profile.emailChangeError(error),
@@ -204,22 +176,16 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
     event.preventDefault();
     setIsSubmitAttempted(true);
 
-    if (!isValidLoginCode(newCode)) {
+    if (!isValidLoginCode(newCodeStep.value)) {
       return;
     }
 
     changeEmail.mutate(
-      { grant, code: newCode },
+      { grant, code: newCodeStep.value },
       {
         onSuccess: () => setStep('success'),
-        onError: (error) => {
-          const inline = invalidCodeDetail(error);
-          if (inline !== null) {
-            setNewCodeInlineError(inline);
-            return;
-          }
-          notify.scenarios.profile.emailChangeError(error);
-        },
+        onError: (error) =>
+          newCodeStep.routeVerifyError(error, notify.scenarios.profile.emailChangeError),
       },
     );
   };
@@ -229,11 +195,7 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
    * перезапускается. */
   const handleResendCurrentCode = (): void => {
     sendCode.mutate(undefined, {
-      onSuccess: () => {
-        setIsSubmitAttempted(false);
-        setCurrentCode('');
-        setCurrentCodeDeadline(Date.now() + RESEND_COOLDOWN_MS);
-      },
+      onSuccess: () => currentCodeStep.rearm(),
       onError: (error) => notify.scenarios.profile.emailSendCodeError(error),
     });
   };
@@ -245,12 +207,7 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
     resendEmailCode.mutate(
       { grant },
       {
-        onSuccess: () => {
-          setIsSubmitAttempted(false);
-          setNewCode('');
-          setNewCodeInlineError(null);
-          setNewCodeDeadline(Date.now() + RESEND_COOLDOWN_MS);
-        },
+        onSuccess: () => newCodeStep.rearm(),
         onError: (error) => notify.scenarios.profile.emailSendCodeError(error),
       },
     );
@@ -268,8 +225,7 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
       setStep('code-current');
       confirmCurrent.reset();
     } else if (step === 'code-new') {
-      setNewCode('');
-      setNewCodeInlineError(null);
+      newCodeStep.clear();
       setStep('new-email');
       changeEmail.reset();
     } else {
@@ -326,10 +282,10 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
               title="Код"
               type="text"
               inputMode="numeric"
-              value={currentCode}
-              onChange={(event) => handleCodeChange(event, setCurrentCode)}
-              onClear={handleCurrentCodeClear}
-              error={currentCodeError}
+              value={currentCodeStep.value}
+              onChange={currentCodeStep.handleChange}
+              onClear={currentCodeStep.clear}
+              error={currentCodeStep.error}
               ref={currentCodeRef}
             />
           </form>
@@ -337,7 +293,7 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
            * не сабмитит код, зазор от поля 24px по макету. */}
           <ResendCodeTile
             className="mt-6"
-            remainingSeconds={currentRemainingSeconds}
+            remainingSeconds={currentCodeStep.remainingSeconds}
             loading={sendCode.isPending}
             onResend={handleResendCurrentCode}
           />
@@ -382,13 +338,10 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
               title="Код"
               type="text"
               inputMode="numeric"
-              value={newCode}
-              onChange={(event) => {
-                handleCodeChange(event, setNewCode);
-                setNewCodeInlineError(null);
-              }}
-              onClear={handleNewCodeClear}
-              error={newCodeError}
+              value={newCodeStep.value}
+              onChange={newCodeStep.handleChange}
+              onClear={newCodeStep.clear}
+              error={newCodeStep.error}
               ref={newCodeRef}
             />
           </form>
@@ -396,7 +349,7 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
            * доставка по гранту — бэк #732; вне формы, зазор 24px. */}
           <ResendCodeTile
             className="mt-6"
-            remainingSeconds={newRemainingSeconds}
+            remainingSeconds={newCodeStep.remainingSeconds}
             loading={resendEmailCode.isPending}
             onResend={handleResendNewCode}
           />
@@ -414,7 +367,7 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
             type="submit"
             form={formId}
             className="w-full"
-            disabled={!isValidLoginCode(currentCode)}
+            disabled={!isValidLoginCode(currentCodeStep.value)}
           >
             Продолжить
           </Button>
@@ -436,7 +389,7 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
             form={formId}
             className="w-full"
             loading={changeEmail.isPending}
-            disabled={!isValidLoginCode(newCode)}
+            disabled={!isValidLoginCode(newCodeStep.value)}
           >
             Продолжить
           </Button>

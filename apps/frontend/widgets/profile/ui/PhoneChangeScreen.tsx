@@ -2,9 +2,8 @@
 
 import { useEffect, useRef, useState, type ChangeEvent, type JSX, type SubmitEvent } from 'react';
 import { ArrowLeft, Cancel } from '@/shared/assets/icons';
-import { useCountdown } from '@/shared/lib/hooks/use-countdown';
 import { notify } from '@/shared/lib/notifications';
-import { isValidLoginCode, loginCodeFromInput } from '@/shared/lib/login-code';
+import { isValidLoginCode } from '@/shared/lib/login-code';
 import {
   formatPhoneDisplay,
   formatPhoneInput,
@@ -21,7 +20,7 @@ import {
   TopNavTitle,
 } from '@/shared/ui/design';
 import { MeFlowScreen, MeFlowSuccessScreen, type MeFlowProps } from './MeFlowScreen';
-import { invalidCodeDetail, RESEND_COOLDOWN_MS } from '../lib/code-step';
+import { useCodeStep } from '../lib/use-code-step';
 import {
   useChangePhone,
   useChangePhoneSendCode,
@@ -70,14 +69,14 @@ function PhoneChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
 
   const [step, setStep] = useState<Step>('phone');
   const [phone, setPhone] = useState('');
-  const [code, setCode] = useState('');
   const [isSubmitAttempted, setIsSubmitAttempted] = useState(false);
-  /** Дедлайн resend-таймера (epoch ms) — от последней успешной отправки;
-   * живёт на уровне флоу, переживает «Назад»-переключения шагов (#733). */
-  const [resendDeadline, setResendDeadline] = useState<number | null>(null);
-  const remainingSeconds = useCountdown(resendDeadline);
-  /** Inline-ошибка 401 «Неверный код» — текст в error-проп поля. */
-  const [codeInlineError, setCodeInlineError] = useState<string | null>(null);
+  /** Шаг кода resend-канона (#733): ввод, inline-ошибка 401, дедлайн
+   * таймера — от последней успешной отправки, живёт на уровне флоу и
+   * переживает «Назад»-переключения шагов. */
+  const codeStep = useCodeStep({
+    isSubmitAttempted,
+    onAttemptReset: () => setIsSubmitAttempted(false),
+  });
 
   // Программный фокус поля шага (jsx-a11y/no-autofocus): точка фокуса
   // остаётся под контролем компонента — паттерн шага кода логина.
@@ -95,9 +94,6 @@ function PhoneChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
     : isSamePhone
       ? 'Новый номер совпадает с текущим'
       : undefined;
-  const codeError = isSubmitAttempted && !isValidLoginCode(code)
-    ? 'Введите 6-значный код'
-    : (codeInlineError ?? undefined);
 
   const handlePhoneChange = (event: ChangeEvent<HTMLInputElement>): void => {
     setPhone(formatPhoneInput(event.currentTarget.value));
@@ -105,17 +101,6 @@ function PhoneChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
 
   const handlePhoneClear = (): void => {
     setPhone('');
-    setIsSubmitAttempted(false);
-  };
-
-  const handleCodeChange = (event: ChangeEvent<HTMLInputElement>): void => {
-    setCode(loginCodeFromInput(event.currentTarget.value));
-    setCodeInlineError(null);
-  };
-
-  const handleCodeClear = (): void => {
-    setCode('');
-    setCodeInlineError(null);
     setIsSubmitAttempted(false);
   };
 
@@ -131,10 +116,7 @@ function PhoneChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
       { phone: normalizedPhone },
       {
         onSuccess: () => {
-          setIsSubmitAttempted(false);
-          setCode('');
-          setCodeInlineError(null);
-          setResendDeadline(Date.now() + RESEND_COOLDOWN_MS);
+          codeStep.rearm();
           setStep('code');
         },
         onError: (error) => notify.scenarios.profile.phoneSendCodeError(error),
@@ -149,12 +131,7 @@ function PhoneChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
     sendCode.mutate(
       { phone: normalizedPhone },
       {
-        onSuccess: () => {
-          setIsSubmitAttempted(false);
-          setCode('');
-          setCodeInlineError(null);
-          setResendDeadline(Date.now() + RESEND_COOLDOWN_MS);
-        },
+        onSuccess: () => codeStep.rearm(),
         onError: (error) => notify.scenarios.profile.phoneSendCodeError(error),
       },
     );
@@ -164,22 +141,16 @@ function PhoneChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
     event.preventDefault();
     setIsSubmitAttempted(true);
 
-    if (!isValidLoginCode(code)) {
+    if (!isValidLoginCode(codeStep.value)) {
       return;
     }
 
     changePhone.mutate(
-      { phone: normalizedPhone, code },
+      { phone: normalizedPhone, code: codeStep.value },
       {
         onSuccess: () => setStep('success'),
-        onError: (error) => {
-          const inline = invalidCodeDetail(error);
-          if (inline !== null) {
-            setCodeInlineError(inline);
-            return;
-          }
-          notify.scenarios.profile.phoneChangeError(error);
-        },
+        onError: (error) =>
+          codeStep.routeVerifyError(error, notify.scenarios.profile.phoneChangeError),
       },
     );
   };
@@ -188,10 +159,8 @@ function PhoneChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
    * сбрасываются; повторная отправка без смены номера — resend-плиткой шага
    * кода, дедлайн таймера флоу сохраняется (#733). */
   const backToPhone = (): void => {
+    codeStep.clear();
     setStep('phone');
-    setCode('');
-    setIsSubmitAttempted(false);
-    setCodeInlineError(null);
     sendCode.reset();
     changePhone.reset();
   };
@@ -244,10 +213,10 @@ function PhoneChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
               title="Код"
               type="text"
               inputMode="numeric"
-              value={code}
-              onChange={handleCodeChange}
-              onClear={handleCodeClear}
-              error={codeError}
+              value={codeStep.value}
+              onChange={codeStep.handleChange}
+              onClear={codeStep.clear}
+              error={codeStep.error}
               ref={codeFieldRef}
             />
           </form>
@@ -255,7 +224,7 @@ function PhoneChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
            * не сабмитит код, зазор от поля 24px по макету. */}
           <ResendCodeTile
             className="mt-6"
-            remainingSeconds={remainingSeconds}
+            remainingSeconds={codeStep.remainingSeconds}
             loading={sendCode.isPending}
             onResend={handleResend}
           />
@@ -293,7 +262,7 @@ function PhoneChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
             form="phone-change-code"
             className="w-full"
             loading={changePhone.isPending}
-            disabled={!isValidLoginCode(code)}
+            disabled={!isValidLoginCode(codeStep.value)}
           >
             Продолжить
           </Button>
