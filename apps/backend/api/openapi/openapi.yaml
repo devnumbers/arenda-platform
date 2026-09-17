@@ -228,6 +228,30 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
         '500':
           $ref: '#/components/responses/InternalServerError'
+  /me/email/resend-code:
+    post:
+      operationId: resendEmailCode
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResendEmailCodeRequest'
+      responses:
+        '204':
+          description: Code re-sent to the pending new email
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /me/email/change:
     post:
       operationId: changeEmail
@@ -4403,6 +4427,16 @@ components:
             One-time grant token binding the confirmed new email to the user.
             Present it at /me/email/change together with the code delivered to
             the new address; it expires in about 10 minutes.
+
+    ResendEmailCodeRequest:
+      type: object
+      required: [grant]
+      properties:
+        grant:
+          type: string
+          description: >-
+            The still-live grant token returned by /me/email/confirm-current;
+            the code is re-issued for the address it binds.
 
     ChangeEmailRequest:
       type: object

@@ -180,6 +180,60 @@ func TestEmailChangeIntegration_GrantLifecycle(t *testing.T) {
 	}
 }
 
+// TestEmailChangeIntegration_ResendNewEmailCode proves the resend (#732)
+// against real PostgreSQL: past the send throttle a fresh code is issued for
+// the grant's address, the stale step-2 code stops verifying, and the fresh
+// code with the same grant completes the change.
+func TestEmailChangeIntegration_ResendNewEmailCode(t *testing.T) {
+	t.Parallel()
+	h := newIntegrationHarness(t)
+	phone := mustPhone(t, "+79160000505")
+	currentEmail := mustEmail(t, "resend@example.com")
+	newEmail := mustEmail(t, "resend-new@example.com")
+	_, user := h.registerAndLogin(t, phone, currentEmail)
+	ctx := h.ctx()
+
+	if err := h.email.SendCurrentEmailCode(ctx, user.ID); err != nil {
+		t.Fatalf("step 1: %v", err)
+	}
+	grantToken, err := h.email.ConfirmCurrentEmail(ctx, user.ID, h.sender.lastCode(t), newEmail)
+	if err != nil {
+		t.Fatalf("step 2: %v", err)
+	}
+	staleCode := h.sender.lastCode(t)
+
+	// Inside the throttle window the resend is refused.
+	if err := h.email.ResendNewEmailCode(ctx, user.ID, grantToken); !errors.Is(err, application.ErrCodeSentTooRecently) {
+		t.Fatalf("throttled resend error = %v, want ErrCodeSentTooRecently", err)
+	}
+
+	// The 3-minute advance clears the 1-minute throttle with margin: the
+	// code row's created_at is stamped by the database wall clock, which by
+	// insert time runs ahead of the fake clock by the real elapsed work
+	// (same margin TestEmailChangeIntegration_GrantLifecycle uses).
+	h.clock.advance(3 * time.Minute)
+	if err := h.email.ResendNewEmailCode(ctx, user.ID, grantToken); err != nil {
+		t.Fatalf("resend: %v", err)
+	}
+	freshCode := h.sender.lastCode(t)
+	if freshCode == staleCode {
+		t.Fatal("resend delivered no fresh code (same plaintext as step 2)")
+	}
+
+	// The stale code no longer verifies; the fresh one completes the change.
+	if _, err := h.email.ChangeEmail(ctx, user.ID, staleCode, grantToken); !errors.Is(err, domain.ErrLoginCodeInvalid) {
+		t.Fatalf("stale code error = %v, want ErrLoginCodeInvalid", err)
+	}
+	updated, err := h.email.ChangeEmail(ctx, user.ID, freshCode, grantToken)
+	if err != nil {
+		t.Fatalf("step 3 with resent code: %v", err)
+	}
+	if updated.Email == nil || updated.Email.String() != newEmail.String() {
+		t.Fatalf("updated email = %v, want %s", updated.Email, newEmail)
+	}
+	assertPersistedEmailChange(t, h, user.ID, newEmail)
+}
+
 // TestEmailChangeIntegration_TakenBetweenSteps proves the taken-email guard
 // re-runs inside the step-3 transaction: an address that became owned between
 // steps 2 and 3 is refused and nothing changes.

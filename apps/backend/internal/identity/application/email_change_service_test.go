@@ -767,6 +767,208 @@ func confirmWrongCodeHidesTakenAddress(t *testing.T) {
 	}
 }
 
+// Resend: ResendNewEmailCode.
+
+// resendHappyPath proves a resend re-arms step 3: a fresh code is delivered to
+// the grant's address, the grant is kept, no audit is written (no state
+// change), and the new code — not the stale one — completes the change.
+func resendHappyPath(t *testing.T) {
+	t.Helper()
+	h := newEmailChangeHarness()
+	user := h.seedEmailChangeUser(t, mustPhone(t, "+79160000400"), mustEmail(t, seedOwnerEmail), &testNow)
+	newEmail := mustEmail(t, "resend@example.com")
+	grantToken, oldCode := h.runToStepThree(t, user.ID, newEmail)
+
+	// Past the 1-minute send throttle the step-2 send left on the triple.
+	h.clock.advance(time.Minute)
+	if err := h.svc.ResendNewEmailCode(t.Context(), user.ID, grantToken); err != nil {
+		t.Fatalf("ResendNewEmailCode: %v", err)
+	}
+
+	if len(h.sender.sent) != 3 {
+		t.Fatalf("sender calls = %d, want 3 (step 1, step 2, resend)", len(h.sender.sent))
+	}
+	if h.sender.sent[2].email != newEmail {
+		t.Fatalf("resend delivery email = %s, want %s", h.sender.sent[2].email, newEmail)
+	}
+	assertStoredGrant(t, h, user.ID, newEmail, grantToken)
+	if len(h.audit.entries) != 0 {
+		t.Fatalf("audit entries = %d, want 0 (resend changes no state)", len(h.audit.entries))
+	}
+
+	// The stale step-2 code no longer verifies; the fresh one does.
+	if _, err := h.svc.ChangeEmail(t.Context(), user.ID, oldCode, grantToken); !errors.Is(err, domain.ErrLoginCodeInvalid) {
+		t.Fatalf("stale code error = %v, want ErrLoginCodeInvalid", err)
+	}
+	updated, err := h.svc.ChangeEmail(t.Context(), user.ID, h.sender.sent[2].code, grantToken)
+	if err != nil {
+		t.Fatalf("change with resent code: %v", err)
+	}
+	if updated.Email == nil || updated.Email.String() != newEmail.String() {
+		t.Fatalf("updated email = %v, want %s", updated.Email, newEmail)
+	}
+}
+
+// resendThrottledWithinMinute proves the send throttle covers resend: a second
+// delivery to the new address within a minute is refused, nothing is delivered,
+// and the original step-2 code stays live.
+func resendThrottledWithinMinute(t *testing.T) {
+	t.Helper()
+	h := newEmailChangeHarness()
+	user := h.seedEmailChangeUser(t, mustPhone(t, "+79160000401"), mustEmail(t, seedOwnerEmail), &testNow)
+	newEmail := mustEmail(t, "throttle@example.com")
+	grantToken, liveCode := h.runToStepThree(t, user.ID, newEmail)
+
+	err := h.svc.ResendNewEmailCode(t.Context(), user.ID, grantToken)
+	if !errors.Is(err, ErrCodeSentTooRecently) {
+		t.Fatalf("error = %v, want ErrCodeSentTooRecently", err)
+	}
+	if len(h.sender.sent) != 2 {
+		t.Fatalf("sender calls = %d, want 2 (no resend delivery)", len(h.sender.sent))
+	}
+	// The original code still completes step 3.
+	if _, err := h.svc.ChangeEmail(t.Context(), user.ID, liveCode, grantToken); err != nil {
+		t.Fatalf("original code after throttled resend: %v", err)
+	}
+}
+
+// resendExpiredGrant proves a grant past its TTL refuses the resend — the flow
+// restarts from step 1 (decision #720-2).
+func resendExpiredGrant(t *testing.T) {
+	t.Helper()
+	h := newEmailChangeHarness()
+	user := h.seedEmailChangeUser(t, mustPhone(t, "+79160000402"), mustEmail(t, seedOwnerEmail), &testNow)
+	newEmail := mustEmail(t, "expired@example.com")
+	grantToken, _ := h.runToStepThree(t, user.ID, newEmail)
+
+	h.clock.advance(domain.EmailChangeGrantTTL + time.Second)
+	err := h.svc.ResendNewEmailCode(t.Context(), user.ID, grantToken)
+	if !errors.Is(err, ErrEmailChangeGrantInvalid) {
+		t.Fatalf("error = %v, want ErrEmailChangeGrantInvalid", err)
+	}
+	if len(h.sender.sent) != 2 {
+		t.Fatalf("sender calls = %d, want 2 (no resend delivery)", len(h.sender.sent))
+	}
+}
+
+// resendWrongGrantToken proves an unknown token is refused without a delivery.
+func resendWrongGrantToken(t *testing.T) {
+	t.Helper()
+	h := newEmailChangeHarness()
+	user := h.seedEmailChangeUser(t, mustPhone(t, "+79160000403"), mustEmail(t, seedOwnerEmail), &testNow)
+	newEmail := mustEmail(t, "wrongtoken@example.com")
+	h.runToStepThree(t, user.ID, newEmail)
+
+	h.clock.advance(time.Minute)
+	err := h.svc.ResendNewEmailCode(t.Context(), user.ID, "not-a-grant")
+	if !errors.Is(err, ErrEmailChangeGrantInvalid) {
+		t.Fatalf("error = %v, want ErrEmailChangeGrantInvalid", err)
+	}
+	if len(h.sender.sent) != 2 {
+		t.Fatalf("sender calls = %d, want 2", len(h.sender.sent))
+	}
+}
+
+// resendTakenAddress proves the taken-guard re-runs before the budget is
+// spent: an address snatched between steps 2 and the resend is refused and
+// the hourly budget keeps its unit.
+func resendTakenAddress(t *testing.T) {
+	t.Helper()
+	h := newEmailChangeHarness()
+	// Two units: one for the step-2 send inside runToStepThree, one for the
+	// resend attempt — the refusal must leave the second unit unspent.
+	two := 2
+	h.budgetLeft = &two
+	user := h.seedEmailChangeUser(t, mustPhone(t, "+79160000404"), mustEmail(t, seedOwnerEmail), &testNow)
+	newEmail := mustEmail(t, "snatched@example.com")
+	grantToken, _ := h.runToStepThree(t, user.ID, newEmail)
+
+	h.seedOtherEmailOwner(t, newEmail)
+	h.clock.advance(time.Minute)
+	err := h.svc.ResendNewEmailCode(t.Context(), user.ID, grantToken)
+	if !errors.Is(err, ErrEmailAlreadyTaken) {
+		t.Fatalf("error = %v, want ErrEmailAlreadyTaken", err)
+	}
+	if len(h.sender.sent) != 2 {
+		t.Fatalf("sender calls = %d, want 2 (no delivery to the taken address)", len(h.sender.sent))
+	}
+	if *h.budgetLeft != 1 {
+		t.Fatalf("budget left = %d, want 1 (spent nothing on the dead flow)", *h.budgetLeft)
+	}
+}
+
+// resendBudgetExhausted proves the 5/hour budget covers resend: a denial sends
+// nothing and keeps the grant for a later retry.
+func resendBudgetExhausted(t *testing.T) {
+	t.Helper()
+	h := newEmailChangeHarness()
+	user := h.seedEmailChangeUser(t, mustPhone(t, "+79160000405"), mustEmail(t, seedOwnerEmail), &testNow)
+	newEmail := mustEmail(t, "budget@example.com")
+	grantToken, _ := h.runToStepThree(t, user.ID, newEmail)
+
+	zero := 0
+	h.budgetLeft = &zero
+	h.clock.advance(time.Minute)
+	err := h.svc.ResendNewEmailCode(t.Context(), user.ID, grantToken)
+	if !errors.Is(err, ErrEmailChangeBudgetExhausted) {
+		t.Fatalf("error = %v, want ErrEmailChangeBudgetExhausted", err)
+	}
+	if len(h.sender.sent) != 2 {
+		t.Fatalf("sender calls = %d, want 2", len(h.sender.sent))
+	}
+	assertStoredGrant(t, h, user.ID, newEmail, grantToken)
+
+	// The budget clears: the resend goes through.
+	one := 1
+	h.budgetLeft = &one
+	if err := h.svc.ResendNewEmailCode(t.Context(), user.ID, grantToken); err != nil {
+		t.Fatalf("resend after budget cleared: %v", err)
+	}
+}
+
+func TestEmailChangeService_ResendNewEmailCode(t *testing.T) {
+	t.Parallel()
+
+	t.Run("happy path re-arms step 3 with a fresh code and keeps the grant", func(t *testing.T) {
+		t.Parallel()
+		resendHappyPath(t)
+	})
+
+	t.Run("second resend within a minute is throttled, the live code survives", func(t *testing.T) {
+		t.Parallel()
+		resendThrottledWithinMinute(t)
+	})
+
+	t.Run("expired grant refuses the resend", func(t *testing.T) {
+		t.Parallel()
+		resendExpiredGrant(t)
+	})
+
+	t.Run("unknown grant token refuses the resend", func(t *testing.T) {
+		t.Parallel()
+		resendWrongGrantToken(t)
+	})
+
+	t.Run("taken address refuses the resend without spending the budget", func(t *testing.T) {
+		t.Parallel()
+		resendTakenAddress(t)
+	})
+
+	t.Run("exhausted budget refuses the resend until it clears", func(t *testing.T) {
+		t.Parallel()
+		resendBudgetExhausted(t)
+	})
+
+	t.Run("unknown user returns ErrNotFound", func(t *testing.T) {
+		t.Parallel()
+		h := newEmailChangeHarness()
+		err := h.svc.ResendNewEmailCode(t.Context(), uuid.Must(uuid.NewV7()), "grant")
+		if !errors.Is(err, ErrNotFound) {
+			t.Fatalf("error = %v, want ErrNotFound", err)
+		}
+	})
+}
+
 func TestEmailChangeService_ChangeEmail(t *testing.T) {
 	t.Parallel()
 
