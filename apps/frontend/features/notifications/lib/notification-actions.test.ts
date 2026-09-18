@@ -1,0 +1,77 @@
+import { describe, expect, it } from 'vitest';
+import { notificationActionView } from './notification-actions';
+import type { NotificationActionKind, NotificationPayload } from '@/entities/notification';
+
+const PROPERTY_ID = '0194a3f8-0000-7000-8000-000000000001';
+const PAYMENT_ID = '0194a3f8-0000-7000-8000-000000000002';
+const TASK_ID = '0194a3f8-0000-7000-8000-000000000003';
+
+const fullPayload: NotificationPayload = {
+  property: { id: PROPERTY_ID, name: '2-комнатная на Ленина' },
+  paymentId: PAYMENT_ID,
+  taskId: TASK_ID,
+};
+
+describe('notificationActionView', () => {
+  it('пара аренды: Продлить (secondary) и Завершить (primary) на визарды аренды объекта', () => {
+    expect(notificationActionView('rental_extend', fullPayload)).toStrictEqual({
+      label: 'Продлить',
+      href: `/properties/${PROPERTY_ID}/rentals/extend`,
+      variant: 'secondary',
+    });
+    expect(notificationActionView('rental_complete', fullPayload)).toStrictEqual({
+      label: 'Завершить',
+      href: `/properties/${PROPERTY_ID}/rentals/complete`,
+      variant: 'primary',
+    });
+  });
+
+  it('платёж и задача ведут на свои экраны', () => {
+    expect(notificationActionView('open_payment', fullPayload)).toStrictEqual({
+      label: 'Оплатить',
+      href: `/properties/${PROPERTY_ID}/payments/${PAYMENT_ID}`,
+      variant: 'primary',
+    });
+    expect(notificationActionView('open_task', fullPayload)).toStrictEqual({
+      label: 'Выполнить',
+      href: `/tasks/${TASK_ID}/edit`,
+      variant: 'primary',
+    });
+  });
+
+  it('глобальные экраны не требуют payload-ссылок', () => {
+    expect(notificationActionView('open_property', fullPayload)?.href).toBe(`/properties/${PROPERTY_ID}`);
+    expect(notificationActionView('open_property_members', fullPayload)?.href).toBe('/participants');
+    expect(notificationActionView('open_tariffs', fullPayload)?.href).toBe('/profile/tariff');
+    expect(notificationActionView('open_payment_methods', fullPayload)?.href).toBe(
+      '/profile/tariff/payment-methods',
+    );
+  });
+
+  it('кнопка без ссылки не рендерится — переход строится только из живых ссылок payload', () => {
+    expect(notificationActionView('rental_extend', {})).toBeNull();
+    expect(notificationActionView('rental_complete', { property: { id: PROPERTY_ID, name: 'x' } })).not.toBeNull();
+    expect(notificationActionView('open_payment', { paymentId: PAYMENT_ID })).toBeNull();
+    expect(notificationActionView('open_payment', fullPayload)).not.toBeNull();
+    expect(notificationActionView('open_task', {})).toBeNull();
+    expect(notificationActionView('open_property', {})).toBeNull();
+  });
+});
+
+describe('полный каталог действий #737 покрыт', () => {
+  const kinds: NotificationActionKind[] = [
+    'rental_extend',
+    'rental_complete',
+    'open_payment',
+    'open_task',
+    'open_property',
+    'open_property_members',
+    'open_tariffs',
+    'open_payment_methods',
+  ];
+  it.each(kinds)('%s даёт кнопку с лейблом', (kind) => {
+    const view = notificationActionView(kind, fullPayload);
+    expect(view).not.toBeNull();
+    expect(view?.label.length).toBeGreaterThan(0);
+  });
+});

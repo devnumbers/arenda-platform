@@ -272,6 +272,7 @@ const tasks = {
 } as const;
 
 const notifications = {
+  markReadError: errorScenario('Не удалось отметить уведомление прочитанным'),
   markAllError: errorScenario('Не удалось отметить все уведомления'),
   deleteError: errorScenario('Не удалось удалить уведомление'),
   deleteAllError: errorScenario('Не удалось удалить уведомления'),

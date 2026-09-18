@@ -11,14 +11,15 @@ import {
 } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
-import { mapNotification } from '@/entities/notification';
-import type { Notification } from '@/entities/notification';
+import { mapNotification, mapNotificationDetail } from '@/entities/notification';
+import type { Notification, NotificationDetail } from '@/entities/notification';
 import { notificationKeys } from '@/shared/api/query-keys';
 import { keysetNextPageParam } from '@/shared/lib/keyset';
 import type { components } from '@/shared/api/dto';
 
 type NotificationsPageDto = components['schemas']['NotificationsPageResponse'];
 type UnreadCountDto = components['schemas']['UnreadCountResponse'];
+type NotificationDetailDto = components['schemas']['NotificationDetailResponse'];
 
 /** Порция ленты: контракт GET /notifications (#743) — порции по 50,
  * потолок сервера 100. */
@@ -83,6 +84,24 @@ export function useUnreadNotificationsCount(): UseQueryResult<number, ApiError> 
       const response = await apiClient<UnreadCountDto>('/notifications/unread-count');
       return response.count;
     },
+  });
+}
+
+/**
+ * Страница уведомления (GET /notifications/{id}, #745): строка плюс живые
+ * действия читателя (вычислены при чтении, решение #737). staleTime 0 —
+ * кэш никогда не свежий: возврат с выполненного действия перемонтирует
+ * экран, ремаунт перечитывает — выполненные кнопки пропадают (макет
+ * 2333:184048, аннотация «после действия кнопки пропадают»).
+ */
+export function useNotificationDetail(id: string): UseQueryResult<NotificationDetail, ApiError> {
+  return useQuery({
+    queryKey: notificationKeys.detail(id),
+    queryFn: async () => {
+      const response = await apiClient<NotificationDetailDto>(`/notifications/${id}`);
+      return mapNotificationDetail(response);
+    },
+    staleTime: 0,
   });
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDateTimeHeading, formatDayMonth, formatDayMonthWithYear, formatOverdueDays, formatRangeBound, formatTime } from './date-format';
+import { formatDateTimeHeading, formatDayMonth, formatDayMonthTime, formatDayMonthWithYear, formatOverdueDays, formatRangeBound, formatTime } from './date-format';
 
 describe('date-format', () => {
   it('день и склонённый месяц без года: «11 августа»', () => {
@@ -37,5 +37,11 @@ describe('date-format', () => {
     expect(formatTime('2026-09-17T14:40:00Z')).toMatch(/^\d{2}:\d{2}$/);
     expect(formatTime('2026-09-17T07:05:00')).toBe('07:05');
     expect(formatTime('не дата')).toBe('—');
+  });
+
+  it('день-месяц и время момента: «15 сентября, 14:40» в локальном времени, невалидное — «—» (#745)', () => {
+    expect(formatDayMonthTime('2026-09-15T14:40:00')).toBe('15 сентября, 14:40');
+    expect(formatDayMonthTime('2026-01-01T07:05:00')).toBe('1 января, 07:05');
+    expect(formatDayMonthTime('не дата')).toBe('—');
   });
 });

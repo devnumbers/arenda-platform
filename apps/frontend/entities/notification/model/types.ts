@@ -40,3 +40,60 @@ export type Notification = {
 export function isNotificationUnread(notification: Notification): boolean {
   return notification.readAt === null;
 }
+
+/**
+ * Кнопка-переход на экран сущности (Действие, решение #737): enum закрыт
+ * бэком, вычисляется при чтении по живому состоянию и правам читателя;
+ * экран рендерит только то, что пришло (никогда не мутация).
+ */
+export type NotificationActionKind =
+  | 'rental_extend'
+  | 'rental_complete'
+  | 'open_payment'
+  | 'open_task'
+  | 'open_property'
+  | 'open_property_members'
+  | 'open_tariffs'
+  | 'open_payment_methods';
+
+/** Payload-ссылка со снимком имени (EntityRef, решение #737): id для
+ * перехода, имя для карточки — переживает переименование и удаление
+ * сущности. */
+export type NotificationEntityRef = {
+  readonly id: string;
+  readonly name: string;
+};
+
+/** Тарифный снимок биллинг-событий (TariffRef); сумма — BIGINT копейки. */
+export type NotificationTariffRef = {
+  readonly slug: string;
+  readonly period: string;
+  readonly amountKopecks: number;
+  readonly activeUntil: string | null;
+};
+
+/**
+ * Payload страницы уведомления (решение #737): ссылки и снимки имён,
+ * все поля опциональны — текст-снимок title/body самодостаточен, payload
+ * добавляет навигацию и карточки.
+ */
+export type NotificationPayload = {
+  readonly property?: NotificationEntityRef;
+  readonly actor?: NotificationEntityRef;
+  readonly rentalId?: string;
+  readonly paymentId?: string;
+  readonly taskId?: string;
+  readonly membershipId?: string;
+  readonly invitationId?: string;
+  readonly tariff?: NotificationTariffRef;
+};
+
+/**
+ * Страница уведомления (GET /notifications/{id}, #745): строка ленты плюс
+ * payload-ссылки и живые действия этого читателя (вычислены при чтении —
+ * после выполнения действия кнопки пропадают, решение #737).
+ */
+export type NotificationDetail = Notification & {
+  readonly payload: NotificationPayload;
+  readonly actions: readonly NotificationActionKind[];
+};

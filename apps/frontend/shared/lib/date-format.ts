@@ -90,3 +90,13 @@ export function formatTime(value: string): string {
   if (Number.isNaN(date.getTime())) return '—';
   return localTimeFormatter.format(date);
 }
+
+/** Момент «15 сентября, 14:40» — секция «Категория + дата-время» страницы
+ * уведомления (#745, Figma 2333:184048; время на странице остаётся всегда
+ * — решение владельца #734): локальные день-месяц и время смотрящего, без
+ * года. Невалидная строка даёт «—». */
+export function formatDayMonthTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return `${localDayMonthFormatter.format(date)}, ${localTimeFormatter.format(date)}`;
+}
