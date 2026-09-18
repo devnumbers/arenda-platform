@@ -149,6 +149,11 @@ DELETE FROM sessions WHERE token_hash = sqlc.arg('token_hash')::text OR previous
 -- name: DeleteSessionsByUserID :exec
 DELETE FROM sessions WHERE user_id = $1;
 
+-- The previous_token_hash branch is the SQL copy of the currentness rule in
+-- identity/application/sessions_service.go (isCurrentSession): within the
+-- rotation grace window the caller may present the previous token, so its row
+-- must survive the except-delete behind RevokeOthers. Change the two copies
+-- together; pinned by TestSessionRepository_ExceptDeleteHonorsRotationGrace.
 -- name: DeleteSessionsByUserIDExcept :execrows
 DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2 AND (previous_token_hash IS NULL OR previous_token_hash <> $2);
 

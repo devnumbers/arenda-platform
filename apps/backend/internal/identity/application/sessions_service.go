@@ -60,6 +60,12 @@ func (s *SessionsService) List(ctx context.Context, userID uuid.UUID, currentTok
 // hashes identify the current session — otherwise the devices list would
 // briefly show no current row and logout-others would terminate the caller's
 // own session (issue #728 code review).
+//
+// The except-delete behind RevokeOthers carries a SQL copy of this rule
+// (previous_token_hash branch of DeleteSessionsByUserIDExcept in
+// db/queries/identity.sql); both copies are pinned by
+// TestSessionRepository_ExceptDeleteHonorsRotationGrace — change them
+// together.
 func (s *SessionsService) isCurrentSession(sess domain.Session, currentToken string) bool {
 	currentHash := s.hasher.HashToken(currentToken)
 	if sess.TokenHash == currentHash {

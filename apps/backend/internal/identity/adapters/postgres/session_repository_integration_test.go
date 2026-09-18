@@ -231,3 +231,60 @@ func TestSessionRepository_RevokePaths(t *testing.T) {
 		t.Fatalf("extra session survived the except-delete: err=%v", err)
 	}
 }
+
+// TestSessionRepository_ExceptDeleteHonorsRotationGrace pins the SQL copy of
+// the currentness rule: when the caller presents the previous (grace-window)
+// token, the except-delete behind RevokeOthers must keep the rotated session
+// via previous_token_hash — the SQL twin of isCurrentSession in
+// application/sessions_service.go. The two copies live on opposite sides of
+// the Go↔SQL seam (db/queries/identity.sql, DeleteSessionsByUserIDExcept);
+// change them together.
+func TestSessionRepository_ExceptDeleteHonorsRotationGrace(t *testing.T) {
+	t.Parallel()
+	pool := testdb.Setup(t)
+	ctx := context.Background()
+	enc := noopEncryptor(t)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+
+	user := seedUser(t, ctx, NewUserRepository(pool, enc), "+79990001157", "except-grace@example.com")
+	repo := NewSessionRepository(pool, enc)
+
+	raw, err := domain.NewSession(user.ID, now.Add(-time.Hour))
+	if err != nil {
+		t.Fatalf("new session: %v", err)
+	}
+	raw.Session.TokenHash = fixtureOldHash
+	if err := repo.Create(ctx, raw.Session); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	rotated := raw.Session
+	rotated.RotatedAt = now
+	rotated.PreviousTokenHash = fixtureOldHash
+	if won, err := repo.Rotate(ctx, rotated, fixtureNewHash); err != nil || !won {
+		t.Fatalf("rotate: won=%v err=%v", won, err)
+	}
+
+	other := raw.Session
+	other.ID = uuid.Must(uuid.NewV7())
+	other.TokenHash = "hash-except-other"
+	other.PreviousTokenHash = ""
+	if err := repo.Create(ctx, other); err != nil {
+		t.Fatalf("create other: %v", err)
+	}
+
+	// The kept hash is the previous (grace-window) hash: its row's canonical
+	// token_hash differs, so only the previous_token_hash branch can save it.
+	n, err := repo.DeleteByUserIDExcept(ctx, user.ID, fixtureOldHash)
+	if err != nil {
+		t.Fatalf("except delete: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("except delete removed %d rows, want 1 (the other session)", n)
+	}
+	if _, _, err := repo.GetByTokenHash(ctx, fixtureNewHash, now); err != nil {
+		t.Fatalf("rotated current session lost by the except-delete: %v", err)
+	}
+	if _, err := repo.GetByID(ctx, other.ID); !errors.Is(err, application.ErrNotFound) {
+		t.Fatalf("other session survived the except-delete: err=%v", err)
+	}
+}

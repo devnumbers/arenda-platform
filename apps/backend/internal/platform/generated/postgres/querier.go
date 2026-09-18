@@ -248,6 +248,11 @@ type Querier interface {
 	DeleteSessionByIDForUser(ctx context.Context, arg DeleteSessionByIDForUserParams) (int64, error)
 	DeleteSessionByTokenHash(ctx context.Context, tokenHash string) error
 	DeleteSessionsByUserID(ctx context.Context, userID pgtype.UUID) error
+	// The previous_token_hash branch is the SQL copy of the currentness rule in
+	// identity/application/sessions_service.go (isCurrentSession): within the
+	// rotation grace window the caller may present the previous token, so its row
+	// must survive the except-delete behind RevokeOthers. Change the two copies
+	// together; pinned by TestSessionRepository_ExceptDeleteHonorsRotationGrace.
 	DeleteSessionsByUserIDExcept(ctx context.Context, arg DeleteSessionsByUserIDExceptParams) (int64, error)
 	DeleteStaleLoginAttemptsBatch(ctx context.Context, arg DeleteStaleLoginAttemptsBatchParams) (int64, error)
 	// The stand-only time-travel rig of issue #665 is the one deliberate writer
