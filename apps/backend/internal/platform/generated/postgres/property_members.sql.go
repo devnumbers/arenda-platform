@@ -416,6 +416,8 @@ ORDER BY m.suspended_at ASC NULLS LAST, m.updated_at DESC
 // The FIFO recovery queue. Memberships on archived properties are excluded:
 // an archived object does not occupy a recipient slot (issue #163), so a free
 // slot must not be wasted on them; they re-enter the selection on unarchive.
+// Predicate and order are shared with ListSuspendedSharedWithOwner below
+// (the list's blur-card placeholders, ticket #702) — change them together.
 func (q *Queries) ListSuspendedMembersByUser(ctx context.Context, userID pgtype.UUID) ([]PropertyMember, error) {
 	rows, err := q.db.Query(ctx, listSuspendedMembersByUser, userID)
 	if err != nil {

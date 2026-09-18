@@ -742,6 +742,8 @@ type Querier interface {
 	// The FIFO recovery queue. Memberships on archived properties are excluded:
 	// an archived object does not occupy a recipient slot (issue #163), so a free
 	// slot must not be wasted on them; they re-enter the selection on unarchive.
+	// Predicate and order are shared with ListSuspendedSharedWithOwner below
+	// (the list's blur-card placeholders, ticket #702) — change them together.
 	ListSuspendedMembersByUser(ctx context.Context, userID pgtype.UUID) ([]PropertyMember, error)
 	// The blur-card placeholders of the recipient's main property list (ticket
 	// #702): suspended memberships on non-archived properties — the same
