@@ -3,8 +3,9 @@
 import type { JSX } from 'react';
 import NextLink from 'next/link';
 import { ROUTES } from '@/shared/config/routes';
-import { PinSmall, SmallArrowRight } from '@/shared/assets/icons';
+import { BoldUser, PinSmall, SmallArrowRight } from '@/shared/assets/icons';
 import type { IsoDate } from '@/shared/lib/calendar';
+import { cardParticipantNames } from '../lib/property-participants';
 import {
   archivedPropertyBadge,
   hasPropertyAttentionDot,
@@ -26,6 +27,8 @@ import styles from './PropertyCard.module.css';
  * «на ремонте», шеврон у правого верхнего края. Вся карточка — ссылка на
  * объект (оверлей). «Сегодня владельца» (ADR 0048) нужно только бейджу
  * «Осталось N месяцев» — остальные бейджи рендерятся, не дожидаясь его.
+ * Под бейджами — ряд участников своих объектов (#702, Figma 2200-97368):
+ * круг 24 с BoldUser и имя 13/500 на участника, в порядке приглашения.
  *
  * Вариант archived — карточка архива: та же анатомия, но смысловая
  * начинка архивная — единственный бейдж «В архиве», без точки, скрепки
@@ -48,6 +51,9 @@ export function PropertyCard({ property, today, variant = 'list' }: PropertyCard
   const accessRole = !isArchived && property.access && property.access.role !== 'owner'
     ? property.access.role
     : null;
+  // Ряд участников (#702): активные участники своих объектов в порядке
+  // приглашения; у архивной карточки ряд тоже рисуется (Figma 2213-98944).
+  const participantNames = cardParticipantNames(property);
 
   return (
     <article className={styles.root}>
@@ -74,6 +80,18 @@ export function PropertyCard({ property, today, variant = 'list' }: PropertyCard
                 <PropertyStatusBadge key={badge.key} badge={badge} />
               ))}
             </div>
+          )}
+          {participantNames.length > 0 && (
+            <ul className={styles.participants} data-testid="property-participants">
+              {participantNames.map((name, index) => (
+                <li key={`${name}-${index}`} className={styles.participant}>
+                  <span className={styles.participantAvatar} aria-hidden>
+                    <BoldUser className={styles.participantGlyph} />
+                  </span>
+                  <span className={styles.participantName}>{name}</span>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
       </div>

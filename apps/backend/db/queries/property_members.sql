@@ -75,6 +75,31 @@ JOIN properties p ON p.id = m.property_id
 WHERE m.user_id = $1 AND m.status = 'suspended' AND p.status != 'archived'
 ORDER BY m.suspended_at ASC NULLS LAST, m.updated_at DESC;
 
+-- name: ListActiveMemberUsersByOwner :many
+-- The member-name projection of the owner's list cards (ticket #702): the
+-- ACTIVE members per own property, in membership (invitation) order.
+-- Pending invitations have no display name and suspended memberships render
+-- no row; the properties service resolves the names through the access
+-- context's user lookups — the access SQL never joins users.
+SELECT m.property_id, m.user_id
+FROM property_members m
+JOIN properties p ON p.id = m.property_id
+WHERE p.owner_id = $1 AND m.status = 'active'
+ORDER BY m.property_id, m.created_at ASC;
+
+-- name: ListSuspendedSharedWithOwner :many
+-- The blur-card placeholders of the recipient's main property list (ticket
+-- #702): suspended memberships on non-archived properties — the same
+-- predicate and FIFO order the hidden-shared count used (#158 T4, #163) —
+-- each with the data owner id for the reason sheet's contact row. Owner
+-- display data resolves through the access context's user lookups; no
+-- object data travels with a placeholder.
+SELECT m.property_id, m.role, p.owner_id
+FROM property_members m
+JOIN properties p ON p.id = m.property_id
+WHERE m.user_id = $1 AND m.status = 'suspended' AND p.status != 'archived'
+ORDER BY m.suspended_at ASC NULLS LAST, m.updated_at DESC;
+
 -- name: CountActiveMembersByUser :one
 -- Occupied recipient tariff slots: memberships on archived properties do not
 -- occupy a slot (issue #163).
@@ -82,15 +107,6 @@ SELECT COUNT(*)
 FROM property_members m
 JOIN properties p ON p.id = m.property_id
 WHERE m.user_id = $1 AND m.status = 'active' AND p.status != 'archived';
-
--- name: CountSuspendedMembersByUser :one
--- Shared objects hidden from the recipient by a tariff slot shortage (the
--- hidden_shared_count badge). Memberships on archived properties are excluded
--- (issue #163): those objects are hidden by the archive, not by the tariff.
-SELECT COUNT(*)
-FROM property_members m
-JOIN properties p ON p.id = m.property_id
-WHERE m.user_id = $1 AND m.status = 'suspended' AND p.status != 'archived';
 
 -- name: ListActiveMembersByPropertyOwner :many
 SELECT m.*

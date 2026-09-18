@@ -5,6 +5,7 @@ import {usePathname, useRouter} from 'next/navigation';
 import {
   useProperties,
   usePropertiesWithMeta,
+  type SuspendedSharedProperty,
 } from '@/features/properties';
 import {useSubscription} from '@/features/subscription';
 import {Add, Archive, Search, SmallArrowDown, SortingBigSmall, SortingSmallBig} from '@/shared/assets/icons';
@@ -30,8 +31,9 @@ import {
   type PropertySortDirection,
   type PropertySortField,
 } from '../lib/property-sort';
-import {formatHiddenSharedFootnote} from '../lib/format-hidden-shared-footnote';
 import {PropertyCard} from './PropertyCard';
+import {SuspendedPropertyCard} from './SuspendedPropertyCard';
+import {SuspendedReasonSheet} from './SuspendedReasonSheet';
 import {PropertiesEmptyState} from './PropertiesEmptyState';
 import {PropertiesLoading} from './PropertiesLoading';
 import {PropertiesErrorState} from './PropertiesErrorState';
@@ -66,8 +68,11 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
   const pathname = usePathname();
 
   const [sort, setSort] = useState<PropertySort>(initialSort ?? DEFAULT_PROPERTY_SORT);
+  const [reasonTarget, setReasonTarget] = useState<SuspendedSharedProperty | null>(null);
 
   const visible = sortProperties(data ?? [], sort);
+  const suspendedShared = metaQuery.data?.suspendedShared ?? [];
+  const showSuspended = !isLoading && !isError && suspendedShared.length > 0;
 
   const changeSort = (next: PropertySort) => {
     setSort(next);
@@ -78,13 +83,6 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
   const isEmpty = !isLoading && !isError && visible.length === 0;
   // Служебный ряд (сортировка + «Архив») и список живут только вместе (§7).
   const showControls = !isLoading && !isError && !isEmpty;
-
-  const hiddenSharedCount = metaQuery.data?.hiddenSharedCount ?? 0;
-  const showHiddenSharedNote =
-    showControls
-    && !metaQuery.isLoading
-    && !metaQuery.isError
-    && hiddenSharedCount > 0;
 
   const isActionLoading = subscriptionQuery.isPending || data === undefined;
 
@@ -138,10 +136,20 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
         </>
       )}
 
-      {showHiddenSharedNote && (
-        <p className={styles.hiddenSharedNote}>
-          {formatHiddenSharedFootnote(hiddenSharedCount)}
-        </p>
+      {/* Подвесшие общие объекты (#702): блюр-карточки вместо сноски
+       * hidden_shared_count — после обычных карточек, в серверном
+       * FIFO-порядке. */}
+      {showSuspended && (
+        <ul className={styles.suspendedList} data-testid="suspended-properties-list">
+          {suspendedShared.map((placeholder) => (
+            <li key={placeholder.propertyId}>
+              <SuspendedPropertyCard
+                placeholder={placeholder}
+                onReason={setReasonTarget}
+              />
+            </li>
+          ))}
+        </ul>
       )}
 
       {showControls && (
@@ -179,6 +187,8 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
 
         {content}
       </PageContent>
+
+      <SuspendedReasonSheet placeholder={reasonTarget} onClose={() => setReasonTarget(null)} />
     </>
   );
 }

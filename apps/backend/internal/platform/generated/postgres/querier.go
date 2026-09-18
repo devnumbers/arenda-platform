@@ -87,10 +87,6 @@ type Querier interface {
 	// the two in sync when a selection field changes. The limit of the selection
 	// value is ignored: a gauge counts the whole batch.
 	CountSubscriptionPaymentsBySelection(ctx context.Context, arg CountSubscriptionPaymentsBySelectionParams) (int64, error)
-	// Shared objects hidden from the recipient by a tariff slot shortage (the
-	// hidden_shared_count badge). Memberships on archived properties are excluded
-	// (issue #163): those objects are hidden by the archive, not by the tariff.
-	CountSuspendedMembersByUser(ctx context.Context, userID pgtype.UUID) (int64, error)
 	// The total count of one bucket — the «Выполненные N» counter (false =
 	// active tasks, true = the completed journal).
 	CountTasksByProperty(ctx context.Context, arg CountTasksByPropertyParams) (int64, error)
@@ -458,6 +454,12 @@ type Querier interface {
 	// stood the single future planned up yet; CONTEXT.md «Материализация»).
 	// Cancelled tombstones are not materialized facts.
 	LastOperationDatesOfPayments(ctx context.Context, paymentIds string) ([]LastOperationDatesOfPaymentsRow, error)
+	// The member-name projection of the owner's list cards (ticket #702): the
+	// ACTIVE members per own property, in membership (invitation) order.
+	// Pending invitations have no display name and suspended memberships render
+	// no row; the properties service resolves the names through the access
+	// context's user lookups — the access SQL never joins users.
+	ListActiveMemberUsersByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListActiveMemberUsersByOwnerRow, error)
 	ListActiveMembersByPropertyOwner(ctx context.Context, ownerID pgtype.UUID) ([]PropertyMember, error)
 	// The recipient's shared-pool entries for slot accounting. Memberships on
 	// archived properties are excluded: an archived object does not occupy a
@@ -741,6 +743,13 @@ type Querier interface {
 	// an archived object does not occupy a recipient slot (issue #163), so a free
 	// slot must not be wasted on them; they re-enter the selection on unarchive.
 	ListSuspendedMembersByUser(ctx context.Context, userID pgtype.UUID) ([]PropertyMember, error)
+	// The blur-card placeholders of the recipient's main property list (ticket
+	// #702): suspended memberships on non-archived properties — the same
+	// predicate and FIFO order the hidden-shared count used (#158 T4, #163) —
+	// each with the data owner id for the reason sheet's contact row. Owner
+	// display data resolves through the access context's user lookups; no
+	// object data travels with a placeholder.
+	ListSuspendedSharedWithOwner(ctx context.Context, userID pgtype.UUID) ([]ListSuspendedSharedWithOwnerRow, error)
 	// User-facing tariff listing: hidden tariffs stay referable by FK but are not
 	// offered (issue #245).
 	ListTariffs(ctx context.Context) ([]Tariff, error)

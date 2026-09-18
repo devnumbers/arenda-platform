@@ -42,11 +42,6 @@ type MembershipRepository interface {
 	// CountActiveByUser returns the number of active memberships held by the
 	// user — i.e. the number of occupied tariff slots.
 	CountActiveByUser(ctx context.Context, userID uuid.UUID) (int, error)
-	// CountSuspendedByUser returns the number of suspended memberships held by
-	// the user — i.e. the shared objects hidden from the recipient due to a
-	// tariff slot shortage. Used by the properties list to surface a footnote
-	// count (issue #158, T4).
-	CountSuspendedByUser(ctx context.Context, userID uuid.UUID) (int, error)
 	// ListActiveByPropertyOwner returns the active memberships across all of the
 	// owner's properties.
 	ListActiveByPropertyOwner(ctx context.Context, ownerID uuid.UUID) ([]domain.Membership, error)

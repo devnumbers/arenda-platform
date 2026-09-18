@@ -2310,6 +2310,8 @@ export interface components {
             photos?: components["schemas"]["PropertyPhoto"][];
             /** @description Shared-access participants of the property: membership rows (any status, owner excluded — the owner is never a membership row) plus pending email invitations. */
             members_count: number;
+            /** @description Display names of the property's ACTIVE members («Имя Фамилия» or a masked phone), in membership order (ticket #702): the participant row on the owner's list cards (Figma 2200-97368). Populated by the list endpoints for the actor's own properties only; omitted elsewhere — write paths, detail, search and shared rows never carry it. */
+            member_names?: string[];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -2951,11 +2953,22 @@ export interface components {
              * @description The reading actor's calendar date (ADR 0048) — the «today» the client counts the «Осталось N месяцев» rental badge against (ticket #586; the tasks feed's today rule, #521).
              */
             today: string;
+            /** @description The reading actor's suspended shared memberships, FIFO order (ticket #702): shared objects hidden from them by a tariff slot shortage, returned as blur-card placeholders («Объект недоступен») instead of the hidden_shared_count footnote they replace. Empty for owners and recipients within their limit. */
+            suspended_shared?: components["schemas"]["SuspendedSharedProperty"][];
+        };
+        /** @description A suspended shared membership of the reading actor (ticket #702): the blur-card placeholder of an object temporarily unavailable because the actor's tariff limit is exceeded. No object data travels with it — the object stays hidden while suspended; the payload carries the access role and the owner contact the reason sheet renders (Figma 2229-100002). */
+        SuspendedSharedProperty: {
+            /** Format: uuid */
+            property_id: string;
             /**
-             * @description Number of shared properties hidden from the recipient due to a tariff slot shortage (suspended memberships). Zero for owners and when the recipient is within their limit.
-             * @default 0
+             * @description The recipient's role on the suspended access.
+             * @enum {string}
              */
-            hidden_shared_count: number;
+            access_role: "full_access" | "viewer";
+            /** @description The owner's public display name («Имя Фамилия» or a masked phone). */
+            owner_name: string;
+            /** @description The owner's account email for the reason sheet's contact row — a deliberate exposure for this surface (Figma 2229-100002): the recipient needs the contact to resolve the suspension with the owner. Empty when the owner has no email. */
+            owner_email: string;
         };
         /** @description The properties search page (ticket #601): the matched cards in the keyset window's order. */
         PropertiesSearchResponse: {

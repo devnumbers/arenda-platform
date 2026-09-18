@@ -84,6 +84,52 @@
   margin-top: 12px;
 }
 
+/* Ряд участников (Figma 2200-97368, #702): «History Title» — круг 24
+ * (белый, BoldUser 13) + имя 13/500; 12px от бейджей (течение инфо-блока),
+ * между рядами 8. */
+.participants {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.participant {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.participantAvatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: 100px;
+  background: var(--dl-surface);
+}
+
+.participantGlyph {
+  width: 13px;
+  height: 13px;
+}
+
+.participantName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 15px;
+  color: var(--dl-text-primary);
+}
+
 .chevron {
   position: absolute;
   top: 24px;

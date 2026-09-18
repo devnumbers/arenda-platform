@@ -214,22 +214,35 @@ func (h *PropertyHandlers) ListProperties(w http.ResponseWriter, r *http.Request
 		items = append(items, h.propertyResponse(property))
 	}
 
-	// Report how many shared objects are hidden from the recipient by a tariff
-	// slot shortage (suspended memberships), for a footnote in the UI (issue
-	// #158, T4). Owners and recipients within their limit get zero.
-	hidden, err := h.svc.HiddenSharedCount(r.Context(), actor)
-	if err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to count hidden shared properties", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
-		return
+	// The recipient's suspended shared memberships ride the list as
+	// blur-card placeholders («Объект недоступен», ticket #702), replacing
+	// the hidden-shared count footnote (issues #158, T4). Owners and
+	// recipients within their limit get none.
+	suspended := make([]openapi.SuspendedSharedProperty, 0, len(page.SuspendedShared))
+	for _, membership := range page.SuspendedShared {
+		suspended = append(suspended, suspendedSharedResponse(membership))
 	}
-	hiddenSharedCount := hidden
 
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.PropertiesResponse{
-		Items:             items,
-		Today:             openapi_types.Date{Time: page.Today},
-		HiddenSharedCount: &hiddenSharedCount,
-	})
+	response := openapi.PropertiesResponse{
+		Items: items,
+		Today: openapi_types.Date{Time: page.Today},
+	}
+	if len(suspended) > 0 {
+		response.SuspendedShared = &suspended
+	}
+
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, response)
+}
+
+// suspendedSharedResponse maps a suspended shared membership to the
+// placeholder of the list contract (ticket #702).
+func suspendedSharedResponse(membership propertiesapp.SharedSuspendedMembership) openapi.SuspendedSharedProperty {
+	return openapi.SuspendedSharedProperty{
+		PropertyId: membership.PropertyID,
+		AccessRole: openapi.SuspendedSharedPropertyAccessRole(membership.Role),
+		OwnerName:  membership.OwnerName,
+		OwnerEmail: membership.OwnerEmail,
+	}
 }
 
 // ListArchivedProperties implements GET /properties/archive.
@@ -647,6 +660,14 @@ func (h *PropertyHandlers) propertyResponse(property domain.Property) openapi.Pr
 		if property.OwnerName != "" {
 			resp.Access.OwnerName = &property.OwnerName
 		}
+	}
+	// The participant row of the owner's list cards (ticket #702): filled by
+	// the list reads for own rows only — nil means the row was not enriched
+	// (write paths, detail, search, shared rows, unwired port).
+	if len(property.MemberNames) > 0 {
+		names := make([]string, len(property.MemberNames))
+		copy(names, property.MemberNames)
+		resp.MemberNames = &names
 	}
 	if property.Description != "" {
 		resp.Description = &property.Description

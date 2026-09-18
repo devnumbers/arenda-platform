@@ -43,13 +43,37 @@ type OwnerDisplayNameResolver interface {
 	DisplayName(ctx context.Context, userID uuid.UUID) (string, error)
 }
 
-// SuspendedSharedCounter reports how many shared memberships of a recipient
-// are currently suspended (hidden from the recipient's property list due to a
-// tariff slot shortage). Implemented by the access bounded context and injected
-// optionally: when nil, the properties list reports zero hidden shared.
-// See issue #158 (T4).
-type SuspendedSharedCounter interface {
-	CountSuspendedByUser(ctx context.Context, userID uuid.UUID) (int, error)
+// SharedSuspendedMembership is one suspended shared membership of the reading
+// actor (ticket #702): the blur-card placeholder of a shared object
+// temporarily unavailable because the actor's tariff limit is exceeded. No
+// object data travels with it — the object stays hidden while suspended; the
+// payload carries the access role and the owner contact the reason sheet
+// renders (Figma 2229-100002). It replaces the hidden-shared count footnote
+// (issues #158 T4, #163 — same predicate and FIFO order).
+type SharedSuspendedMembership struct {
+	PropertyID uuid.UUID
+	Role       sharedpolicy.Role
+	OwnerName  string
+	OwnerEmail string
+}
+
+// SuspendedSharedMemberships lists the reading actor's suspended shared
+// memberships (ticket #702) in the FIFO order the hidden-shared count used
+// (#158 T4, #163): suspended memberships on non-archived properties.
+// Implemented by the access bounded context and injected optionally — when
+// nil, the list carries no placeholders.
+type SuspendedSharedMemberships interface {
+	SuspendedWith(ctx context.Context, userID uuid.UUID) ([]SharedSuspendedMembership, error)
+}
+
+// MemberNamesReader resolves the display names of the active members of the
+// reading actor's own properties (ticket #702): the participant row on the
+// owner's list cards («Участники», Figma 2200-97368). Implemented by the
+// access bounded context and injected optionally — when nil, the list rows
+// carry no names. Shared (non-owner) rows never receive names: the row is
+// the owner's surface.
+type MemberNamesReader interface {
+	NamesByOwner(ctx context.Context, owner uuid.UUID) (map[uuid.UUID][]string, error)
 }
 
 // PropertyOwners maps the property ids of one list read onto their data
@@ -69,11 +93,17 @@ type OwnerCalendar interface {
 }
 
 // PropertiesPage is one listing read: the merged rows (own + shared, the
-// pinned first) plus the reading actor's calendar date (ADR 0048) the client
-// renders the rental badges against (ticket #586).
+// pinned first), the reading actor's calendar date (ADR 0048) the client
+// renders the rental badges against (ticket #586), and the actor's
+// suspended shared memberships as blur-card placeholders (ticket #702).
 type PropertiesPage struct {
 	Items []domain.Property
 	Today time.Time
+	// SuspendedShared lists the actor's suspended shared memberships in FIFO
+	// order (ticket #702); empty when the port is unwired or the actor has
+	// none. Only the main list fills it — archived objects hide their
+	// suspended legs behind the archive itself (#163).
+	SuspendedShared []SharedSuspendedMembership
 }
 
 // RentalOccupancyReader reports the per-property occupancy projection

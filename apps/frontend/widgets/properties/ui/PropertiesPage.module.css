@@ -1,6 +1,6 @@
-/* Список-хаб «Объектов» (#586): карточки с зазором 16 (макет 1590:88756),
- * сноска скрытых шаренных объектов под списком. Горизонтальный отступ
- * контента (24px) несёт обёртка экрана в PropertiesPage. */
+/* Список-хаб «Объектов» (#586): карточки с зазором 16 (макет 1590:88756).
+ * Горизонтальный отступ контента (24px) несёт обёртка экрана в
+ * PropertiesPage. */
 .list {
   display: flex;
   flex-direction: column;
@@ -10,11 +10,13 @@
   list-style: none;
 }
 
-.hiddenSharedNote {
+/* Блюр-карточки подвесших общих объектов (#702) — после обычных карточек,
+ * тот же зазор 16. */
+.suspendedList {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
   margin: 0;
-  font-size: 13px;
-  font-weight: 400;
-  line-height: 15px;
-  color: var(--dl-text-secondary);
-  text-align: center;
+  padding: 0;
+  list-style: none;
 }

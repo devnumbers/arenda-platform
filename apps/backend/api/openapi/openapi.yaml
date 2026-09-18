@@ -5419,6 +5419,17 @@ components:
             Shared-access participants of the property: membership rows (any
             status, owner excluded — the owner is never a membership row) plus
             pending email invitations.
+        member_names:
+          type: array
+          items:
+            type: string
+          description: >
+            Display names of the property's ACTIVE members («Имя Фамилия» or
+            a masked phone), in membership order (ticket #702): the
+            participant row on the owner's list cards (Figma 2200-97368).
+            Populated by the list endpoints for the actor's own properties
+            only; omitted elsewhere — write paths, detail, search and shared
+            rows never carry it.
         created_at:
           type: string
           format: date-time
@@ -6760,13 +6771,47 @@ components:
             The reading actor's calendar date (ADR 0048) — the «today» the
             client counts the «Осталось N месяцев» rental badge against
             (ticket #586; the tasks feed's today rule, #521).
-        hidden_shared_count:
-          type: integer
+        suspended_shared:
+          type: array
           description: >
-            Number of shared properties hidden from the recipient due to a
-            tariff slot shortage (suspended memberships). Zero for owners and
-            when the recipient is within their limit.
-          default: 0
+            The reading actor's suspended shared memberships, FIFO order
+            (ticket #702): shared objects hidden from them by a tariff slot
+            shortage, returned as blur-card placeholders («Объект
+            недоступен») instead of the hidden_shared_count footnote they
+            replace. Empty for owners and recipients within their limit.
+          items:
+            $ref: '#/components/schemas/SuspendedSharedProperty'
+
+    SuspendedSharedProperty:
+      description: >
+        A suspended shared membership of the reading actor (ticket #702): the
+        blur-card placeholder of an object temporarily unavailable because the
+        actor's tariff limit is exceeded. No object data travels with it — the
+        object stays hidden while suspended; the payload carries the access
+        role and the owner contact the reason sheet renders (Figma
+        2229-100002).
+      type: object
+      required: [property_id, access_role, owner_name, owner_email]
+      properties:
+        property_id:
+          type: string
+          format: uuid
+        access_role:
+          type: string
+          enum: [full_access, viewer]
+          description: The recipient's role on the suspended access.
+        owner_name:
+          type: string
+          description: >
+            The owner's public display name («Имя Фамилия» or a masked
+            phone).
+        owner_email:
+          type: string
+          description: >
+            The owner's account email for the reason sheet's contact row — a
+            deliberate exposure for this surface (Figma 2229-100002): the
+            recipient needs the contact to resolve the suspension with the
+            owner. Empty when the owner has no email.
 
     PropertiesSearchResponse:
       description: >

@@ -94,10 +94,6 @@ func (f fakeMemberRepo) CountActiveByUser(context.Context, uuid.UUID) (int, erro
 	panic("not implemented")
 }
 
-func (f fakeMemberRepo) CountSuspendedByUser(context.Context, uuid.UUID) (int, error) {
-	panic("not implemented")
-}
-
 func (f fakeMemberRepo) ListActiveByPropertyOwner(context.Context, uuid.UUID) ([]domain.Membership, error) {
 	panic("not implemented")
 }

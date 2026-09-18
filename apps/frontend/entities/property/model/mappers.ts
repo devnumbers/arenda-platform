@@ -18,6 +18,7 @@ export function mapPropertyResponse(
       ? { role: dto.access.role, ownerName: dto.access.owner_name }
       : undefined,
     members_count: dto.members_count,
+    member_names: dto.member_names,
     created_at: dto.created_at,
     pinned_at: dto.pinned_at,
     occupancy: dto.occupancy

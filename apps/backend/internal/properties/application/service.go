@@ -67,7 +67,8 @@ type PropertyService struct {
 	policy            sharedpolicy.Policy
 	sharedMemberships SharedMemberships
 	ownerNames        OwnerDisplayNameResolver
-	suspendedCounter  SuspendedSharedCounter
+	memberNames       MemberNamesReader
+	suspendedShared   SuspendedSharedMemberships
 	slots             RecipientSlotPolicy
 	rentalOccupancy   RentalOccupancyReader
 	overdueOperations OverdueOperationsReader
@@ -92,27 +93,21 @@ func (s *PropertyService) SetOwnerDisplayNameResolver(resolver OwnerDisplayNameR
 	s.ownerNames = resolver
 }
 
-// SetSuspendedSharedCounter injects the access-context adapter that counts how
-// many of a recipient's shared memberships are suspended (hidden from the
-// recipient's property list due to a tariff slot shortage). Optional: when not
-// set, HiddenSharedCount reports zero (issue #158, T4).
-func (s *PropertyService) SetSuspendedSharedCounter(counter SuspendedSharedCounter) {
-	s.suspendedCounter = counter
+// SetSuspendedSharedMemberships injects the access-context adapter that
+// resolves the recipient's suspended shared memberships — the blur-card
+// placeholders of the main list (ticket #702, replacing the hidden-shared
+// count of issues #158 T4 and #163). Optional: when not set, the list
+// carries no placeholders.
+func (s *PropertyService) SetSuspendedSharedMemberships(port SuspendedSharedMemberships) {
+	s.suspendedShared = port
 }
 
-// HiddenSharedCount returns the number of shared objects currently hidden from
-// the recipient because their tariff limit is exceeded (suspended memberships).
-// Owners always get zero: they have no shared memberships. Returns zero when no
-// suspended counter is wired (issue #158, T4).
-func (s *PropertyService) HiddenSharedCount(ctx context.Context, actor uuid.UUID) (int, error) {
-	if s.suspendedCounter == nil {
-		return 0, nil
-	}
-	count, err := s.suspendedCounter.CountSuspendedByUser(ctx, actor)
-	if err != nil {
-		return 0, fmt.Errorf("count suspended shared: %w", err)
-	}
-	return count, nil
+// SetMemberNamesReader injects the access-context adapter that resolves the
+// active members' display names of the actor's own properties — the
+// participant row on the owner's list cards (ticket #702). Optional: when
+// not set, the list rows carry no names.
+func (s *PropertyService) SetMemberNamesReader(reader MemberNamesReader) {
+	s.memberNames = reader
 }
 
 // SetRecipientSlotPolicy injects the access-context slot coordinator that
@@ -307,6 +302,17 @@ func (s *PropertyService) ListProperties(ctx context.Context, actor uuid.UUID) (
 		return PropertiesPage{}, err
 	}
 
+	if err := s.enrichMemberNames(ctx, actor, properties); err != nil {
+		return PropertiesPage{}, err
+	}
+
+	// The actor's suspended shared memberships ride the main list as
+	// blur-card placeholders (ticket #702); the archived list carries none.
+	suspended, err := s.listSuspendedShared(ctx, actor)
+	if err != nil {
+		return PropertiesPage{}, err
+	}
+
 	if err := s.enrichListProjections(ctx, properties); err != nil {
 		return PropertiesPage{}, err
 	}
@@ -315,7 +321,42 @@ func (s *PropertyService) ListProperties(ctx context.Context, actor uuid.UUID) (
 	if err != nil {
 		return PropertiesPage{}, err
 	}
-	return PropertiesPage{Items: items, Today: today}, nil
+	return PropertiesPage{Items: items, Today: today, SuspendedShared: suspended}, nil
+}
+
+// enrichMemberNames fills the active members' display names of the actor's
+// OWN properties (ticket #702): the participant row on the owner's list
+// cards. Shared rows keep no names — the row is the owner's surface. The
+// reader is optional: an unwired port leaves the rows untouched.
+func (s *PropertyService) enrichMemberNames(ctx context.Context, actor uuid.UUID, properties []domain.Property) error {
+	if s.memberNames == nil {
+		return nil
+	}
+	names, err := s.memberNames.NamesByOwner(ctx, actor)
+	if err != nil {
+		return fmt.Errorf("read member names: %w", err)
+	}
+	for i := range properties {
+		if properties[i].AccessRole != sharedpolicy.RoleOwner {
+			continue
+		}
+		properties[i].MemberNames = names[properties[i].ID]
+	}
+	return nil
+}
+
+// listSuspendedShared resolves the actor's suspended shared memberships for
+// the main list (ticket #702). The port is optional: an unwired read reports
+// no placeholders.
+func (s *PropertyService) listSuspendedShared(ctx context.Context, actor uuid.UUID) ([]SharedSuspendedMembership, error) {
+	if s.suspendedShared == nil {
+		return nil, nil
+	}
+	suspended, err := s.suspendedShared.SuspendedWith(ctx, actor)
+	if err != nil {
+		return nil, fmt.Errorf("read suspended shared: %w", err)
+	}
+	return suspended, nil
 }
 
 // pinnedFirst lifts the pinned properties above the unpinned ones (ticket
@@ -418,6 +459,10 @@ func (s *PropertyService) ListArchivedProperties(ctx context.Context, actor uuid
 	// The archive list carries archived objects only.
 	properties, err = s.appendSharedProperties(ctx, actor, properties, domain.PropertyStatusArchived)
 	if err != nil {
+		return PropertiesPage{}, err
+	}
+
+	if err := s.enrichMemberNames(ctx, actor, properties); err != nil {
 		return PropertiesPage{}, err
 	}
 

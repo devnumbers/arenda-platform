@@ -305,11 +305,12 @@ func (s *AccessService) LeaveProperty(ctx context.Context, actor, propertyID uui
 	if err != nil {
 		return fmt.Errorf("resolve role: %w", err)
 	}
-	if role == sharedpolicy.RoleNone || role == sharedpolicy.RoleSuspended {
-		// A suspended membership stays indistinguishable from no access here:
-		// the object is hidden from the recipient, so self-exit keeps the
-		// privacy-preserving not-found (T9 lifts the suspension signal only at
-		// the property page entry point).
+	if role == sharedpolicy.RoleNone {
+		// No access stays indistinguishable from no object: self-exit keeps
+		// the privacy-preserving not-found. A suspended membership proceeds —
+		// the recipient sees the blur-card placeholder (ticket #702) and may
+		// leave from its reason sheet (T9 lifted the signal at the property
+		// page; the placeholder list completes the surface).
 		return domain.ErrMemberNotFound
 	}
 	if role == sharedpolicy.RoleOwner {
@@ -324,20 +325,16 @@ func (s *AccessService) LeaveProperty(ctx context.Context, actor, propertyID uui
 			return err
 		}
 
-		// A suspended membership is already hidden from the recipient (no slot, no
-		// access), so self-exit is not available: the object is invisible to them
-		// (issue #158, T4 AC).
-		if membership.IsSuspended() {
-			return domain.ErrCannotLeaveSuspended
-		}
-
 		if err := stores.members.Delete(ctx, membership.ID, propertyID); err != nil {
 			return fmt.Errorf("delete membership: %w", err)
 		}
 
-		// Self-exit freed one of the actor's tariff slots: try to recover the oldest
-		// suspended membership FIFO (issue #158, T4).
-		if s.slots != nil {
+		// Self-exit of an ACTIVE membership freed one of the actor's tariff
+		// slots: try to recover the oldest suspended membership FIFO (issue
+		// #158, T4). A suspended membership holds no slot — leaving it (the
+		// reason sheet's «Покинуть объект», ticket #702) frees nothing, so
+		// the recovery is skipped.
+		if !membership.IsSuspended() && s.slots != nil {
 			if err := s.slots.RecoverSuspended(ctx, stores.tx, actor); err != nil {
 				return fmt.Errorf("recover suspended after leave: %w", err)
 			}
@@ -507,6 +504,15 @@ func displayName(u MemberUser) string {
 	}
 	// Fall back to a masked phone; never the raw phone or email.
 	return maskPhone(u.Phone)
+}
+
+// DisplayNameOf composes the public display name from user fields ("Name
+// Surname" when present, otherwise a masked phone — never an email or a raw
+// phone). The exported seam for the context's read adapters implementing
+// cross-context ports (ticket #702: the list cards' member names and the
+// suspended placeholders' owner row): the masking rules live in one place.
+func DisplayNameOf(u MemberUser) string {
+	return displayName(u)
 }
 
 // maskPhone masks all but the country code and last two digits of a phone, so a

@@ -104,13 +104,14 @@ var (
 // accessLifecycleFixture bundles the real access services wired to the test
 // transaction.
 type accessLifecycleFixture struct {
-	tx      pgx.Tx
-	q       *genpostgres.Queries
-	limiter *accessFakeLimiter
-	nonce   string
-	access  *accessapp.AccessService
-	invites *accessapp.InvitationService
-	slots   *accessapp.SlotCoordinator
+	tx       pgx.Tx
+	q        *genpostgres.Queries
+	limiter  *accessFakeLimiter
+	nonce    string
+	access   *accessapp.AccessService
+	invites  *accessapp.InvitationService
+	slots    *accessapp.SlotCoordinator
+	userRepo *identitypg.UserRepository
 }
 
 // bg returns a background context (kept out of the struct per containedctx).
@@ -160,6 +161,7 @@ func newAccessLifecycleFixture(t *testing.T) *accessLifecycleFixture {
 		tx: tx, q: genpostgres.New(tx),
 		limiter: limiter, nonce: nonce.String(),
 		access: access, invites: invites, slots: slots,
+		userRepo: userRepo,
 	}
 }
 

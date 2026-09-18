@@ -254,17 +254,6 @@ func (r *MembershipRepository) CountActiveByUser(ctx context.Context, userID uui
 	return int(count), nil
 }
 
-// CountSuspendedByUser returns the number of suspended memberships held by the
-// user (shared objects hidden from the recipient due to a tariff slot
-// shortage). See issue #158 (T4).
-func (r *MembershipRepository) CountSuspendedByUser(ctx context.Context, userID uuid.UUID) (int, error) {
-	count, err := r.q().CountSuspendedMembersByUser(ctx, pgconv.UUIDToPgtype(userID))
-	if err != nil {
-		return 0, err
-	}
-	return int(count), nil
-}
-
 // ListActiveByPropertyOwner returns the active memberships across all of the
 // owner's properties.
 func (r *MembershipRepository) ListActiveByPropertyOwner(ctx context.Context, ownerID uuid.UUID) ([]domain.Membership, error) {

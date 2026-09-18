@@ -22,7 +22,7 @@ type Access struct {
 	ParticipantMutationSvc *accessapp.ParticipantMutationService
 	SlotCoordinator        *accessapp.SlotCoordinator
 	SharedProperties       *accesspg.SharedProperties
-	SuspendedCounter       *accesspg.SuspendedCounter
+	SharedListEnricher     *accesspg.SharedListEnricher
 }
 
 // Compile-time checks that the access SlotCoordinator satisfies the cross-
@@ -31,12 +31,16 @@ type Access struct {
 // several bounded contexts at once) so the access application never imports
 // billing or properties.
 var (
-	_ propertiesapp.RecipientSlotPolicy    = (*accessapp.SlotCoordinator)(nil)
-	_ propertiesapp.SuspendedSharedCounter = (*accesspg.SuspendedCounter)(nil)
+	_ propertiesapp.RecipientSlotPolicy = (*accessapp.SlotCoordinator)(nil)
 	// The SharedProperties adapter serves the recipient access context (issue
 	// T11); the AccessService resolves owner display names for the banner.
 	_ propertiesapp.SharedMemberships        = (*accesspg.SharedProperties)(nil)
 	_ propertiesapp.OwnerDisplayNameResolver = (*accessapp.AccessService)(nil)
+	// The SharedListEnricher serves the list reads' access projections
+	// (ticket #702): member names on the owner's cards and the suspended
+	// blur-card placeholders.
+	_ propertiesapp.MemberNamesReader          = (*accesspg.SharedListEnricher)(nil)
+	_ propertiesapp.SuspendedSharedMemberships = (*accesspg.SharedListEnricher)(nil)
 	// The OwnerResolver doubles as the archived-status resolver of the access
 	// application services (issue #163).
 	_ accessapp.PropertyStatusResolver = (*accesspg.OwnerResolver)(nil)
@@ -64,7 +68,7 @@ func WireAccess(_ context.Context, p platformDeps, billing *Billing, emailMailer
 	userLookup := accesspg.NewUserLookup(userRepo)
 	emailResolver := accesspg.NewUserEmailResolver(userRepo)
 	sharedProperties := accesspg.NewSharedProperties(p.DB)
-	suspendedCounter := accesspg.NewSuspendedCounter(p.DB)
+	sharedListEnricher := accesspg.NewSharedListEnricher(p.DB, userRepo)
 
 	policy := accessapp.NewMembershipPolicy(ownerResolver, memberRepo)
 
@@ -159,6 +163,6 @@ func WireAccess(_ context.Context, p platformDeps, billing *Billing, emailMailer
 		ParticipantMutationSvc: participantMutations,
 		SlotCoordinator:        slotCoordinator,
 		SharedProperties:       sharedProperties,
-		SuspendedCounter:       suspendedCounter,
+		SharedListEnricher:     sharedListEnricher,
 	}, nil
 }

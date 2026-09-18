@@ -157,6 +157,12 @@ type Property struct {
 	// Surname" or a masked phone, never an email), filled only by the detail
 	// read path when the actor is not the owner (issue T11); empty otherwise.
 	OwnerName string
+	// MemberNames are the display names of the property's ACTIVE members in
+	// membership order (ticket #702): the participant row on the owner's
+	// list cards. Filled by the list reads for the actor's own properties
+	// only (nil on write paths, detail, search and shared rows); a property
+	// without active members reports nil.
+	MemberNames []string
 }
 
 // Photo is a photo attached to a property.

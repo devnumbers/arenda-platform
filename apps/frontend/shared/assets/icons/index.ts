@@ -170,7 +170,8 @@ export { default as BoldWallet } from './bold-wallet.svg';
 // Key 119:1104, Minus 1858:105685, Objects 1967:86377, PaintBrush 189:800,
 // Phone 1804:105303, Pin 501:8839, PinOff 890:30954, Setting 1740:100244,
 // Sync 1804:105034, Team 472:5276, TeamAdd 1804:108296, Undo 1883:71902,
-// UserCircle 1652:82357, Wallet 550:8808.
+// UserCircle 1652:82357, Wallet 550:8808, Lock 2213:99738 (#702, шит
+// «Превышен лимит объектов»).
 export { default as AccountSetting } from './account-setting.svg';
 export { default as Archive } from './archive.svg';
 export { default as Block } from './block.svg';
@@ -179,6 +180,7 @@ export { default as CheckmarkCircle } from './checkmark-circle.svg';
 export { default as Computer } from './computer.svg';
 export { default as Download } from './download.svg';
 export { default as Exit } from './exit.svg';
+export { default as Lock } from './lock.svg';
 export { default as Info } from './info.svg';
 export { default as Minus } from './minus.svg';
 export { default as Objects } from './objects.svg';

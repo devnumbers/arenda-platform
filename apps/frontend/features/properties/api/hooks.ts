@@ -19,6 +19,7 @@ import type { Property } from '@/entities/property';
 import { propertyKeys } from '@/shared/api/query-keys';
 import { keysetNextPageParam } from '@/shared/lib/keyset';
 import { resolvePropertiesLandingHref } from '../lib/property-landing';
+import type { SharedAccessRole } from '@/shared/model/access';
 import type { components } from '@/shared/api/dto';
 
 type PropertyResponse = components['schemas']['PropertyResponse'];
@@ -31,24 +32,49 @@ type AddressSuggestionsResponse =
   components['schemas']['AddressSuggestionsResponse'];
 type AddressSuggestion = components['schemas']['AddressSuggestion'];
 
+/** Подвесший чужой объект списка (карта #692, тикет #702): блюр-плейсхолдер
+ * «Объект недоступен». Данных объекта нет — только роль доступа и контакт
+ * владельца для шита причины (Figma 2229-100002; почта владельца —
+ * сознательная экспозиция этого экрана). */
+export type SuspendedSharedProperty = {
+  readonly propertyId: string;
+  readonly accessRole: SharedAccessRole;
+  readonly ownerName: string;
+  readonly ownerEmail: string;
+};
+
+function mapSuspendedShared(
+  dto: NonNullable<PropertiesResponse['suspended_shared']>,
+): SuspendedSharedProperty[] {
+  return dto.map((item) => ({
+    propertyId: item.property_id,
+    accessRole: item.access_role,
+    ownerName: item.owner_name,
+    ownerEmail: item.owner_email,
+  }));
+}
+
 export type PropertiesListResult = {
   readonly items: Property[];
-  readonly hiddenSharedCount: number;
+  /** Подвесшие общие объекты получателя (#702) — блюр-карточки хаба вместо
+   * сноски hidden_shared_count (#158 T4). */
+  readonly suspendedShared: SuspendedSharedProperty[];
   /** «Сегодня владельца» (ADR 0048) — граница бейджа «Осталось N месяцев» (#586). */
   readonly today: IsoDate;
 };
 
-/** Полный payload GET /properties — строки плюс hidden_shared_count (сколько
- * общих объектов скрыто у получателя из-за тарифного лимита) и «сегодня
- * владельца» (ADR 0048). Общее горло обоих хуков и прогрева хабов #626:
- * один cache entry на propertyKeys.list, useProperties и
+/** Полный payload GET /properties — строки, suspended-плейсхолдеры (#702) и
+ * «сегодня владельца» (ADR 0048). Общее горло обоих хуков и прогрева хабов
+ * #626: один cache entry на propertyKeys.list, useProperties и
  * usePropertiesWithMeta — лишь проекции над ним (кэш прогревается тем же
  * кодом, что читает экран). */
 export async function fetchProperties(): Promise<PropertiesListResult> {
   const response = await apiClient<PropertiesResponse>('/properties');
   return {
     items: response.items.map(mapPropertyResponse),
-    hiddenSharedCount: response.hidden_shared_count,
+    suspendedShared: response.suspended_shared
+      ? mapSuspendedShared(response.suspended_shared)
+      : [],
     today: response.today,
   };
 }
