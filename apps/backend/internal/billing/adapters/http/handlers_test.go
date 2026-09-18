@@ -1229,10 +1229,12 @@ func TestListAdminSubscriptionPayments_InvalidFilterAnswers400(t *testing.T) {
 // ownerJSONRequest builds an owner-authenticated request with a JSON body.
 func ownerJSONRequest(t *testing.T, method, target string, userID uuid.UUID, body string) *http.Request {
 	t.Helper()
-	return httptest.NewRequestWithContext(
+	req := httptest.NewRequestWithContext(
 		httpsupport.WithUserID(t.Context(), userID),
 		method, target, strings.NewReader(body),
 	)
+	req.Header.Set("Content-Type", "application/json")
+	return req
 }
 
 // TestCancelSubscription_Returns204 proves POST /subscription/cancel answers

@@ -52,20 +52,17 @@ type gateActor struct {
 // reaches the admin gate exactly as in production.
 type gateSessionLoader struct{ actors map[string]gateActor }
 
-func (l gateSessionLoader) Load(_ context.Context, token string, now time.Time) (httpsupport.Session, uuid.UUID, actor.Role, error) {
+func (l gateSessionLoader) Load(_ context.Context, token string, _ time.Time) (uuid.UUID, actor.Role, error) {
 	a, ok := l.actors[token]
 	if !ok {
-		return httpsupport.Session{}, uuid.Nil, "", httpsupport.SessionNotFound(nil)
+		return uuid.Nil, "", httpsupport.SessionNotFound(nil)
 	}
-	return httpsupport.Session{
-		TokenHash:  token,
-		ExpiresAt:  now.Add(time.Hour),
-		CreatedAt:  now.Add(-time.Minute),
-		LastUsedAt: now.Add(-time.Minute),
-	}, a.userID, a.role, nil
+	return a.userID, a.role, nil
 }
 
-func (gateSessionLoader) Update(context.Context, httpsupport.Session) error { return nil }
+func (gateSessionLoader) Touch(context.Context, string, string, time.Time) (string, *time.Time, error) {
+	return "", nil, nil
+}
 
 // adminGateHarness extends the refund harness (it already knows how to grow a
 // succeeded payment) with the production HTTP router and the two sessions.
@@ -103,7 +100,8 @@ func newAdminGateHarness(t *testing.T) *adminGateHarness {
 	// stays nil: those routes are never hit, and the constructors only store
 	// their dependencies.
 	router := httpserver.New(httpserver.Deps{
-		Sessions:             loader,
+		Sessions:             nil,
+		SessionLoader:        loader,
 		Tariffs:              base.services.Tariffs,
 		AdminTariffs:         base.services.Tariffs,
 		Subscriptions:        base.services.Subscriptions,
@@ -138,6 +136,9 @@ func (h *adminGateHarness) doAs(t *testing.T, cookie, method, path string, body 
 		payload = bytes.NewReader(encoded)
 	}
 	req := httptest.NewRequestWithContext(t.Context(), method, path, payload)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	req.AddCookie(&http.Cookie{Name: httpsupport.SessionCookieName(false), Value: cookie})
 	w := httptest.NewRecorder()
 	h.router.ServeHTTP(w, req)

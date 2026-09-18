@@ -52,22 +52,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/auth/logout-all": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["logoutAll"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/me": {
         parameters: {
             query?: never;
@@ -148,6 +132,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/email/resend-code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resendEmailCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/email/change": {
         parameters: {
             query?: never;
@@ -159,6 +159,54 @@ export interface paths {
         put?: never;
         post: operations["changeEmail"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listSessions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/sessions/logout-others": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["logoutOtherSessions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/sessions/{sessionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["revokeSession"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1771,6 +1819,34 @@ export interface components {
             timezone?: string | null;
             subscription?: components["schemas"]["Subscription"];
         };
+        SessionListResponse: {
+            sessions: components["schemas"]["ActiveSession"][];
+        };
+        ActiveSession: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description Device class captured from the User-Agent at session creation.
+             * @enum {string}
+             */
+            deviceType: "computer" | "phone" | "tablet" | "tv" | "unknown";
+            /** @description Browser name, e.g. Chrome or YaBrowser; empty when unparsed. */
+            browser: string;
+            /** @description Browser major version; null when unknown. */
+            browserMajor?: number | null;
+            /** @description Operating system name; empty when unparsed. */
+            os: string;
+            /** @description GeoIP-resolved city for the last IP in the ru locale; null when unknown. */
+            city: string | null;
+            /** @description Client IP of the most recent request. */
+            lastIp: string | null;
+            /** Format: date-time */
+            lastSeenAt: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** @description True when the session belongs to the caller's own cookie. */
+            current: boolean;
+        };
         UserUpdateRequest: {
             name?: string | null;
             surname?: string | null;
@@ -1799,6 +1875,10 @@ export interface components {
         };
         EmailChangeGrantResponse: {
             /** @description One-time grant token binding the confirmed new email to the user. Present it at /me/email/change together with the code delivered to the new address; it expires in about 10 minutes. */
+            grant: string;
+        };
+        ResendEmailCodeRequest: {
+            /** @description The still-live grant token returned by /me/email/confirm-current; the code is re-issued for the address it binds. */
             grant: string;
         };
         ChangeEmailRequest: {
@@ -3316,27 +3396,6 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
         };
     };
-    logoutAll: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description All sessions logged out */
-            204: {
-                headers: {
-                    "Set-Cookie"?: string;
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            401: components["responses"]["Unauthorized"];
-            500: components["responses"]["InternalServerError"];
-        };
-    };
     getMe: {
         parameters: {
             query?: never;
@@ -3495,6 +3554,33 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
+    resendEmailCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResendEmailCodeRequest"];
+            };
+        };
+        responses: {
+            /** @description Code re-sent to the pending new email */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
     changeEmail: {
         parameters: {
             query?: never;
@@ -3521,6 +3607,72 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             409: components["responses"]["Conflict"];
             429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    listSessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Active sessions of the current user, most recent activity first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionListResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    logoutOtherSessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every other session of the user is terminated */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    revokeSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The session is terminated */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             500: components["responses"]["InternalServerError"];
         };
     };

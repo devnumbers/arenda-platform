@@ -1,4 +1,5 @@
 export { AccountScreen } from './ui/AccountScreen';
+export { DevicesScreen } from './ui/DevicesScreen';
 export { EmailChangeScreen } from './ui/EmailChangeScreen';
 export { NotificationSettings } from './ui/NotificationSettings';
 export { PaymentDetail } from './ui/PaymentDetail';

@@ -140,6 +140,7 @@ func (s *AuthenticationService) VerifyCode(
 	email *domain.Email,
 	code string,
 	timezone *string,
+	device DeviceContext,
 ) (domain.RawSession, domain.User, error) {
 	now := s.clock.Now()
 
@@ -171,7 +172,7 @@ func (s *AuthenticationService) VerifyCode(
 			return fmt.Errorf("mark code used: %w", err)
 		}
 
-		issued, u, isNew, iErr := s.sessions.Issue(ctx, stores, phone, resolvedEmail, now)
+		issued, u, isNew, iErr := s.sessions.Issue(ctx, stores, phone, resolvedEmail, device, now)
 		if iErr != nil {
 			return iErr
 		}

@@ -118,7 +118,11 @@ type Config struct {
 	OTelEnabled                         bool
 	OTelTraceSampler                    float64
 	OTelOTLPEndpoint                    string
-	VAPIDPublicKey                      string
+	// GeoIPDBPath points at the offline DB-IP City Lite database baked into
+	// the Docker image (issue #728). Optional: when unset, cities are not
+	// resolved and sessions store no city — the product keeps working.
+	GeoIPDBPath    string
+	VAPIDPublicKey string
 	// VAPIDPrivateKey and VAPIDSubject are consumed by the Web Push sender
 	// (RFC 8292). They are optional: when VAPIDPublicKey is unset, push
 	// delivery is disabled and the reminder worker runs email-only.
@@ -200,6 +204,7 @@ func Load() (Config, error) {
 		VAPIDPublicKey:   os.Getenv("VAPID_PUBLIC_KEY"),
 		VAPIDPrivateKey:  os.Getenv("VAPID_PRIVATE_KEY"),
 		VAPIDSubject:     os.Getenv("VAPID_SUBJECT"),
+		GeoIPDBPath:      os.Getenv("GEOIP_DB_PATH"),
 	}
 
 	for _, load := range []func() error{

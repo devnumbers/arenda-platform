@@ -153,6 +153,9 @@ export const ROUTES = {
   profile: '/profile',
   profileNotifications: '/profile/notifications',
   profileAccount: '/profile/account',
+  /** Экран «Устройства» (карта #724): строка хаба ведёт сюда (мок
+   * 1786-31288, тикет #729); страница списка сессий — тикет #730. */
+  profileDevices: '/profile/devices',
   /** Пикер часового пояса (карта #591, тикет #594): полный список зон РФ
    * с поиском; сохранение — PATCH /me, назад — на аккаунт. */
   profileAccountTimezone: '/profile/account/timezone',

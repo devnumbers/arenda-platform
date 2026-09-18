@@ -14,6 +14,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/requestctx"
 )
 
 // MeEnricher augments a MeResponse with cross-cutting data (for example, the
@@ -88,10 +89,20 @@ type Authenticator interface {
 	SendCodeByPhone(ctx context.Context, phone domain.Phone) (sent bool, err error)
 	// VerifyCode accepts an optional email; nil resolves the email from the
 	// stored user record for the phone. An optional timezone (browser-detected,
-	// #451) applies only when the verify registers a new user.
+	// #451) applies only when the verify registers a new user. The device
+	// context (raw User-Agent + client IP) is captured onto the created
+	// session once (#728).
 	VerifyCode(
-		ctx context.Context, phone domain.Phone, email *domain.Email, code string, timezone *string,
+		ctx context.Context, phone domain.Phone, email *domain.Email, code string, timezone *string, device application.DeviceContext,
 	) (domain.RawSession, domain.User, error)
+}
+
+// SessionLister serves the devices list: the user's sessions with the current
+// one flagged, single-session revocation, and revoke-everything-else.
+type SessionLister interface {
+	List(ctx context.Context, userID uuid.UUID, currentToken string) ([]domain.Session, uuid.UUID, error)
+	Revoke(ctx context.Context, userID, sessionID uuid.UUID, currentToken string, actor auditdomain.Actor) error
+	RevokeOthers(ctx context.Context, userID uuid.UUID, currentToken string, actor auditdomain.Actor) (int64, error)
 }
 
 // PhoneChanger handles phone-number change for authenticated users.
@@ -116,10 +127,9 @@ type Profiler interface {
 	UpdateProfile(ctx context.Context, userID uuid.UUID, cmd application.UpdateProfileCommand) (domain.User, error)
 }
 
-// Logout terminates sessions.
+// Logout terminates the current session.
 type Logout interface {
 	Logout(ctx context.Context, rawToken string, actor auditdomain.Actor) error
-	LogoutAll(ctx context.Context, userID uuid.UUID, actor auditdomain.Actor) error
 }
 
 // AuthHandlers implements the generated non-strict ServerInterface.
@@ -129,6 +139,7 @@ type AuthHandlers struct {
 	emailChange  EmailChanger
 	profile      Profiler
 	logout       Logout
+	sessions     SessionLister
 	cookieSecure bool
 	logger       *slog.Logger
 	limits       AuthRateLimits
@@ -142,6 +153,7 @@ func NewAuthHandlers(
 	emailChange EmailChanger,
 	profile Profiler,
 	logout Logout,
+	sessions SessionLister,
 	cookieSecure bool,
 	logger *slog.Logger,
 	limits AuthRateLimits,
@@ -153,6 +165,7 @@ func NewAuthHandlers(
 		emailChange:  emailChange,
 		profile:      profile,
 		logout:       logout,
+		sessions:     sessions,
 		cookieSecure: cookieSecure,
 		logger:       logger,
 		limits:       limits,
@@ -253,7 +266,11 @@ func (h *AuthHandlers) VerifyCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	raw, user, err := h.auth.VerifyCode(r.Context(), phone, email, body.Code, body.Timezone)
+	device := application.DeviceContext{
+		UserAgent: r.Header.Get("User-Agent"),
+		IP:        requestctx.ClientIPFromContext(r.Context()),
+	}
+	raw, user, err := h.auth.VerifyCode(r.Context(), phone, email, body.Code, body.Timezone, device)
 	if err != nil {
 		if writeSharedIdentityError(w, r, err, "Неверный телефон, почта или код") {
 			return
@@ -288,26 +305,6 @@ func (h *AuthHandlers) Logout(w http.ResponseWriter, r *http.Request) {
 			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 			return
 		}
-	}
-
-	httpsupport.ClearSessionCookie(w, h.cookieSecure)
-	w.WriteHeader(http.StatusNoContent)
-}
-
-// LogoutAll implements POST /auth/logout-all.
-func (h *AuthHandlers) LogoutAll(w http.ResponseWriter, r *http.Request) {
-	userID, ok := httpsupport.UserIDFromContext(r.Context())
-	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
-			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
-		return
-	}
-
-	if err := h.logout.LogoutAll(r.Context(), userID, actorFromContext(r.Context())); err != nil {
-		h.logger.ErrorContext(r.Context(), "logout all failed", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.ClearSessionCookie(w, h.cookieSecure)
-		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
-		return
 	}
 
 	httpsupport.ClearSessionCookie(w, h.cookieSecure)

@@ -7,8 +7,10 @@ import (
 	"github.com/google/uuid"
 	identityemail "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/email"
 	identityevents "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/events"
+	identitygeoip "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/geoip"
 	identityhttp "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/http"
 	identitypg "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/postgres"
+	identityuaparse "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/uaparse"
 	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/events"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
@@ -35,6 +37,8 @@ type Identity struct {
 	EmailChange    *identityapp.EmailChangeService
 	Profile        *identityapp.ProfileService
 	Logout         *identityapp.LogoutService
+	// Sessions serves the devices list (list/revoke/revoke-others, #728).
+	Sessions *identityapp.SessionsService
 	// EmailMailer is the configured mailer.Sender (smtp or fake). It is exposed
 	// because other modules reuse it: the access email sender (invite and
 	// sharing lifecycle emails) and the notifications email notifier (grace
@@ -48,7 +52,7 @@ type Identity struct {
 // It takes the event dispatcher (for the publisher) and the shared rate
 // limiters (the email-change send budget).
 func WireIdentity(
-	_ context.Context,
+	ctx context.Context,
 	p platformDeps,
 	eventDispatcher *events.InProcessDispatcher,
 	rateLimits *RateLimiters,
@@ -68,9 +72,16 @@ func WireIdentity(
 		p.AuditRecorder, p.UoW,
 	)
 
+	// Device enrichment for sessions: the User-Agent parser runs once per
+	// login, the offline GeoIP base answers city lookups (#728). A missing
+	// database (GEOIP_DB_PATH unset — local development) degrades to "no city".
 	sessionService := identityapp.NewSessionService(
 		factory,
-		identityapp.SessionServiceConfig{Hasher: p.Encryptor},
+		identityapp.SessionServiceConfig{
+			Hasher: p.Encryptor,
+			Parser: identityuaparse.NewParser(),
+			Geo:    identitygeoip.NewResolver(ctx, p.Cfg.GeoIPDBPath, p.Logger),
+		},
 	)
 	sessionLoader := identityhttp.NewSessionLoader(sessionService)
 
@@ -154,6 +165,11 @@ func WireIdentity(
 		},
 	)
 
+	sessionsService := identityapp.NewSessionsService(
+		factory,
+		identityapp.SessionsServiceConfig{Hasher: p.Encryptor, Clock: p.Clock},
+	)
+
 	return &Identity{
 		UserRepo:       userRepo,
 		CodeRepo:       codeRepo,
@@ -167,6 +183,7 @@ func WireIdentity(
 		EmailChange:    emailChangeService,
 		Profile:        profileService,
 		Logout:         logoutService,
+		Sessions:       sessionsService,
 		EmailMailer:    emailMailer,
 	}, nil
 }
