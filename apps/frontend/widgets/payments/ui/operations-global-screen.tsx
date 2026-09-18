@@ -119,14 +119,14 @@ export function OperationsGlobalScreen(): JSX.Element {
   // «+» — в визард одиночной операции (#571, решение владельца 2026-09-08):
   // в ряду заголовка хаба и в правом слоте компакт-бара; в neverHad
   // скрыта — действие там CTA пустого состояния.
-  const addButton = canCreateSomewhere ? (
+  const addButton = (
     <IconButton
       icon={<Add />}
       label="Добавить операцию"
       onClick={() => router.push(ROUTES.operationsNew)}
     />
-  ) : null;
-  const addButtonVisible = !neverHad && addButton !== null;
+  );
+  const showAdd = !neverHad && canCreateSomewhere;
 
   return (
     <>
@@ -140,7 +140,7 @@ export function OperationsGlobalScreen(): JSX.Element {
         collapse={{
           title: 'Операции',
           search: { href: ROUTES.operationsSearch, label: 'Найти операцию' },
-          trailing: addButtonVisible ? addButton : undefined,
+          trailing: showAdd ? addButton : undefined,
         }}
       />
 
@@ -148,7 +148,7 @@ export function OperationsGlobalScreen(): JSX.Element {
         <HubCollapseAnchor>
           <div className="flex items-center justify-between pr-3.5">
             <HubTitle>Операции</HubTitle>
-            {addButtonVisible && addButton}
+            {showAdd && addButton}
           </div>
           {!neverHad && (
             <div className="mt-4 px-6">

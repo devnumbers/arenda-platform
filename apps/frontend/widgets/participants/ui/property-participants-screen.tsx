@@ -143,7 +143,9 @@ export function PropertyParticipantsScreen(): JSX.Element {
   // (отзыв разрешён), но выдача на архивный запрещена — приглашение скрыто.
   // Центральные права объекта (#703): пока объект не загружен или не
   // загрузился, мутации консервативно скрыты.
-  const canManage = propertyPermissions(propertyQuery.data).canManageMembers;
+  const canManage = propertyPermissions(
+    propertyQuery.isSuccess ? propertyQuery.data : undefined,
+  ).canManageMembers;
   const isArchived = propertyQuery.data?.status === 'archived';
 
   const participantsCount = rows.filter((row) => !row.isOwner).length;

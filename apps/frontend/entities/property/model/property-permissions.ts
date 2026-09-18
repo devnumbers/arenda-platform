@@ -37,8 +37,11 @@ const DENIED: PropertyPermissions = {
 export function propertyPermissions(
   property: Pick<Property, 'access' | 'status'> | undefined,
 ): PropertyPermissions {
-  const role = property?.access?.role;
-  if (property === undefined || role === undefined) {
+  if (property === undefined) {
+    return DENIED;
+  }
+  const role = property.access?.role;
+  if (role === undefined) {
     return DENIED;
   }
   return {
@@ -46,4 +49,13 @@ export function propertyPermissions(
     canManageMembers: role !== 'viewer',
     canLeave: role !== 'owner',
   };
+}
+
+/** Строки справочника с правом правки — пикеры привязки объекта
+ * (задача/контакт/операция): привязка к зрительскому объекту упёрлась бы
+ * в отказ сервера, архив гасится тем же флагом. */
+export function filterEditableProperties<T extends Pick<Property, 'access' | 'status'>>(
+  properties: ReadonlyArray<T>,
+): ReadonlyArray<T> {
+  return properties.filter((property) => propertyPermissions(property).canEdit);
 }

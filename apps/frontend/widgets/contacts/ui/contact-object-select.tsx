@@ -4,7 +4,7 @@ import type { JSX } from 'react';
 import { BoldHome, BoldObjects, Cancel, Check, RadioFalse, RadioTrue } from '@/shared/assets/icons';
 import { Button, IconButton, PageContent, Skeleton, StickyBottomBar, TopNav, TopNavTitle } from '@/shared/ui/design';
 import { useProperties } from '@/features/properties';
-import { propertyPermissions } from '@/entities/property';
+import { filterEditableProperties } from '@/entities/property';
 
 /**
  * Страница «Выбрать объект» (макет 1539:83846, #509/#510): отдельная
@@ -27,9 +27,7 @@ export function ContactObjectSelectPage({
   readonly onDismiss: () => void;
 }): JSX.Element {
   const propertiesQuery = useProperties();
-  const properties = (propertiesQuery.data ?? []).filter((property) =>
-    propertyPermissions(property).canEdit,
-  );
+  const properties = filterEditableProperties(propertiesQuery.data ?? []);
 
   return (
     <>

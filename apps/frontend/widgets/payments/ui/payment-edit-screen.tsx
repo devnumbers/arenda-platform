@@ -28,6 +28,7 @@ import {
   type Recurrence,
 } from '@/entities/payment';
 import { paymentCategoryBySlug } from '@/features/payment-categories';
+import { propertyPermissions } from '@/entities/property';
 import { useProperty } from '@/features/properties';
 import {
   buildPaymentUpdateCommand,
@@ -123,11 +124,9 @@ export function PaymentEditScreen({
   const property = propertyQuery.isSuccess ? propertyQuery.data : undefined;
   const payment = paymentQuery.isSuccess ? paymentQuery.data : undefined;
 
-  const role = property?.access?.role;
-  const canEdit =
-    property !== undefined && role !== undefined && role !== 'viewer' && property.status !== 'archived';
+  const canEdit = propertyPermissions(property).canEdit;
   // Удаление — только владелец (история 49 спеки #453).
-  const canDelete = role === 'owner';
+  const canDelete = property?.access?.role === 'owner';
 
   const loading = propertyQuery.isPending || paymentQuery.isPending;
   const failed = propertyQuery.isError || paymentQuery.isError;

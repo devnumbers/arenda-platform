@@ -135,7 +135,9 @@ function RentalCompletedBody({
   const router = useRouter();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const propertyQuery = useProperty(propertyId);
-  const canMutate = propertyPermissions(propertyQuery.data).canEdit;
+  const canMutate = propertyPermissions(
+    propertyQuery.isSuccess ? propertyQuery.data : undefined,
+  ).canEdit;
   const deleteRental = useDeleteRental(propertyId, rental.id, rental.rentPayment.paymentId);
 
   // История карточки — paid-вхождения платежа аренды, сначала новые

@@ -14,6 +14,7 @@ import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
 import { useProperty } from '@/features/properties';
+import { propertyPermissions } from '@/entities/property';
 import {
   DEFAULT_TASKS_SORT,
   groupTasks,
@@ -90,9 +91,7 @@ export function TasksOfPropertyScreen({
   const deleteCompleted = useDeleteCompletedTasks(propertyId);
 
   const property = propertyQuery.isSuccess ? propertyQuery.data : undefined;
-  const role = property?.access?.role;
-  const canMutate =
-    property !== undefined && role !== undefined && role !== 'viewer' && property.status !== 'archived';
+  const canMutate = propertyPermissions(property).canEdit;
 
   const active = activeQuery.data?.items ?? [];
   const completedItems = completedQuery.data?.items ?? [];

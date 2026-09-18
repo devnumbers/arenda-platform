@@ -4,7 +4,7 @@ import type { JSX } from 'react';
 import { BoldHome, BoldObjects, Cancel, Check, RadioFalse, RadioTrue } from '@/shared/assets/icons';
 import { Button, IconButton, PageContent, StickyBottomBar, TopNav, TopNavTitle } from '@/shared/ui/design';
 import { useProperties } from '@/features/properties';
-import { propertyPermissions } from '@/entities/property';
+import { filterEditableProperties } from '@/entities/property';
 import { ObjectLoadErrorCard, ObjectRowsSkeleton } from './tasks-property-select';
 
 /**
@@ -29,9 +29,7 @@ export function TaskPropertySelectPage({
   readonly onDismiss: () => void;
 }): JSX.Element {
   const propertiesQuery = useProperties();
-  const properties = (propertiesQuery.data ?? []).filter((property) =>
-    propertyPermissions(property).canEdit,
-  );
+  const properties = filterEditableProperties(propertiesQuery.data ?? []);
 
   return (
     <>

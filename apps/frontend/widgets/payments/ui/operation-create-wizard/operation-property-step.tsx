@@ -4,7 +4,7 @@ import type { JSX } from 'react';
 import { BoldHome, RadioFalse, RadioTrue } from '@/shared/assets/icons';
 import { Button, Skeleton } from '@/shared/ui/design';
 import { useProperties } from '@/features/properties';
-import { propertyPermissions } from '@/entities/property';
+import { filterEditableProperties } from '@/entities/property';
 
 /**
  * Шаг «Выбрать объект» визарда операции (#570, Figma 1858:105011) — только
@@ -24,9 +24,7 @@ export function OperationPropertyStep({
   readonly onSelect: (propertyId: string) => void;
 }): JSX.Element {
   const propertiesQuery = useProperties();
-  const properties = (propertiesQuery.data ?? []).filter((property) =>
-    propertyPermissions(property).canEdit,
-  );
+  const properties = filterEditableProperties(propertiesQuery.data ?? []);
 
   return (
     <div role="radiogroup" aria-label="Объект операции" className="px-6 pt-6">

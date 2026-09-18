@@ -4,6 +4,8 @@ import type { JSX } from "react";
 import { useRouter } from "next/navigation";
 import { Archive, ArrowLeft, Pin, Search } from "@/shared/assets/icons";
 import { ROUTES } from "@/shared/config/routes";
+import { propertyPermissions } from "@/entities/property";
+import { useProperties } from "@/features/properties";
 import {
   useGlobalPaymentObjects,
   useGlobalPayments,
@@ -62,6 +64,12 @@ export function PaymentsObjectsScreen(): JSX.Element {
   const error = feedQuery.isError || objectsQuery.isError;
   const objects = objectsQuery.data ?? [];
   const [singleObject] = objects;
+  // Право правки на единственном объекте — гейт CTA пустой книги (#703):
+  // у чистого зрителя единственный объект чужой, визард упёрся бы в 403.
+  const singleProperty = useProperties().data?.find(
+    (property) => property.id === singleObject?.propertyId,
+  );
+  const canAddOnSingleObject = propertyPermissions(singleProperty).canEdit;
   // Единственный объект книги без платежей — полноэкранное пустое
   // состояние вместо списка (решение владельца 10.09).
   const singleEmpty =
@@ -107,10 +115,15 @@ export function PaymentsObjectsScreen(): JSX.Element {
       <PageContent>
         {showEmptyState && (
           <PaymentsObjectsEmpty
-            onAddPayment={() =>
-              router.push(
-                ROUTES.propertyPaymentNew(singleObject.propertyId, "payment"),
-              )
+            /* Чистому зрителю CTA не рисуется (#703): единственный объект
+             * чужой, визард упёрся бы в отказ сервера. */
+            onAddPayment={
+              canAddOnSingleObject
+                ? () =>
+                    router.push(
+                      ROUTES.propertyPaymentNew(singleObject.propertyId, "payment"),
+                    )
+                : undefined
             }
           />
         )}
@@ -180,7 +193,7 @@ export function PaymentsObjectsScreen(): JSX.Element {
 function PaymentsObjectsEmpty({
   onAddPayment,
 }: {
-  readonly onAddPayment: () => void;
+  readonly onAddPayment?: () => void;
 }): JSX.Element {
   return (
     <div
@@ -196,7 +209,9 @@ function PaymentsObjectsEmpty({
           className="pt-0"
         />
       </div>
-      <Button onClick={onAddPayment}>Добавить платёж</Button>
+      {onAddPayment !== undefined && (
+        <Button onClick={onAddPayment}>Добавить платёж</Button>
+      )}
     </div>
   );
 }

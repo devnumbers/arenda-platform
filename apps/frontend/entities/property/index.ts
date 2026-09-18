@@ -1,5 +1,6 @@
 export { coerceAttributes } from './model/attributes';
 export {
+  filterEditableProperties,
   propertyPermissions,
   type PropertyPermissions,
 } from './model/property-permissions';

@@ -94,6 +94,7 @@ const baseManage: ManageInput = {
   isPinned: false,
   canMutate: true,
   canPin: true,
+  canLeave: false,
 };
 
 describe('buildPropertyManageActions (секция «Управление»)', () => {
@@ -139,9 +140,14 @@ describe('buildPropertyManageActions (секция «Управление»)', (
   });
 
   it('смотрящий: об объекте, совместный доступ, покинуть объект (#703)', () => {
-    const items = buildPropertyManageActions({ ...baseManage, canMutate: false });
+    const items = buildPropertyManageActions({ ...baseManage, canMutate: false, canLeave: true });
     expect(items.map((item) => item.key)).toEqual(['about', 'access', 'leave']);
     expect(items.find((item) => item.key === 'leave')?.danger).toBe(true);
+  });
+
+  it('смотрящий без контекста доступа: без строки выхода (страховка)', () => {
+    const items = buildPropertyManageActions({ ...baseManage, canMutate: false, canLeave: false });
+    expect(items.map((item) => item.key)).toEqual(['about', 'access']);
   });
 
   it('архивный смотрящий: тот же набор — выход из архива не гасит (#703)', () => {
@@ -149,8 +155,32 @@ describe('buildPropertyManageActions (секция «Управление»)', (
       ...baseManage,
       status: 'archived',
       canMutate: false,
+      canLeave: true,
     });
     expect(items.map((item) => item.key)).toEqual(['about', 'access', 'leave']);
+  });
+
+  it('полный доступ — участник: «Покинуть объект» рядом с строками владельца (#703)', () => {
+    const keys = buildPropertyManageActions({ ...baseManage, canLeave: true }).map(
+      (item) => item.key,
+    );
+    expect(keys).toContain('leave');
+    expect(keys.indexOf('leave')).toBe(keys.indexOf('access') + 1);
+    expect(keys[keys.length - 1]).toBe('delete');
+  });
+
+  it('архивный полный доступ: выход между доступом и удалением (#703)', () => {
+    const items = buildPropertyManageActions({
+      ...baseManage,
+      status: 'archived',
+      canLeave: true,
+    });
+    expect(items.map((item) => item.key)).toEqual([
+      'unarchive',
+      'access',
+      'leave',
+      'delete',
+    ]);
   });
 
   it('базовый тариф: строк основного объекта нет', () => {

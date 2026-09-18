@@ -134,6 +134,8 @@ export type PropertyManageInput = {
   readonly canMutate: boolean;
   /** «Основной объект» доступен тарифу (платный, канон резолюции #584). */
   readonly canPin: boolean;
+  /** Участник чужого объекта (#703): строка «Покинуть объект». */
+  readonly canLeave: boolean;
 };
 
 /** Секция «Управление» (Figma 1554:98469, активный): контекстный список
@@ -148,22 +150,28 @@ export type PropertyManageInput = {
 export function buildPropertyManageActions(
   input: PropertyManageInput,
 ): ReadonlyArray<PropertyDetailAction> {
-  const { status, hasRental, isPinned, canMutate, canPin } = input;
+  const { status, hasRental, isPinned, canMutate, canPin, canLeave } = input;
 
   if (!canMutate) {
-    return [
-      action('about', 'Об объекте', false),
-      action('access', 'Совместный доступ', false),
-      action('leave', 'Покинуть объект', true),
-    ];
+    // Смотрящий без контекста доступа — страховка «только чтение»,
+    // строка выхода не рисуется.
+    return canLeave
+      ? [
+          action('about', 'Об объекте', false),
+          action('access', 'Совместный доступ', false),
+          action('leave', 'Покинуть объект', true),
+        ]
+      : [action('about', 'Об объекте', false), action('access', 'Совместный доступ', false)];
   }
 
   if (status === 'archived') {
-    return [
+    const archived: PropertyDetailAction[] = [
       action('unarchive', 'Вернуть из архива', false),
       action('access', 'Совместный доступ', false),
-      action('delete', 'Удалить объект', true),
     ];
+    if (canLeave) archived.push(action('leave', 'Покинуть объект', true));
+    archived.push(action('delete', 'Удалить объект', true));
+    return archived;
   }
 
   const items: PropertyDetailAction[] = [action('edit', 'Редактировать объект', false)];
@@ -185,8 +193,9 @@ export function buildPropertyManageActions(
       : action('start-maintenance', 'Объект на ремонте', false),
     action('archive', 'Перевести в архив', false),
     action('access', 'Совместный доступ', false),
-    action('delete', 'Удалить объект', true),
   );
+  if (canLeave) items.push(action('leave', 'Покинуть объект', true));
+  items.push(action('delete', 'Удалить объект', true));
   return items;
 }
 

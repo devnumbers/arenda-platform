@@ -272,6 +272,7 @@ export function PropertyDetailPage(): JSX.Element {
             isPinned,
             canMutate: permissions.canManageMembers,
             canPin: isPaid && permissions.canManageMembers,
+            canLeave: permissions.canLeave,
         })
         : [];
     const statusSheetItems = property
@@ -713,9 +714,7 @@ export function PropertyDetailPage(): JSX.Element {
                             )}
                         </PropertySectionCard>
 
-                        {property.access?.role !== undefined
-                            && property.access.role !== 'owner'
-                            && property.access.ownerName !== undefined && (
+                        {permissions.canLeave && property.access?.ownerName !== undefined && (
                             <PropertyOwnerSection ownerName={property.access.ownerName}/>
                         )}
 
