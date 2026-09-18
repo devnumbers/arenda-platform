@@ -1,2 +1,2 @@
 export { mapSessionListResponse } from './model/mappers';
-export type { SessionDevice, SessionDeviceType } from './model/types';
+export type { ActiveSession, SessionDeviceType } from './model/types';

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { SessionDevice } from '@/entities/session';
+import type { ActiveSession } from '@/entities/session';
 import {
   deviceIconName,
   sessionSubtitle,
@@ -9,7 +9,7 @@ import {
 
 const now = new Date('2026-09-18T12:00:00');
 
-function device(overrides: Partial<SessionDevice>): SessionDevice {
+function device(overrides: Partial<ActiveSession>): ActiveSession {
   return {
     id: 's1',
     deviceType: 'computer',

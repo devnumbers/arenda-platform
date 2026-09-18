@@ -44,11 +44,11 @@ func (h *AuthHandlers) ListSessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	devices := make([]openapi.SessionDevice, 0, len(sessions))
+	activeSessions := make([]openapi.ActiveSession, 0, len(sessions))
 	for _, sess := range sessions {
-		devices = append(devices, sessionDeviceResponse(sess, sess.ID == currentID))
+		activeSessions = append(activeSessions, activeSessionResponse(sess, sess.ID == currentID))
 	}
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.SessionListResponse{Sessions: devices})
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.SessionListResponse{Sessions: activeSessions})
 }
 
 // RevokeSession implements DELETE /me/sessions/{sessionId} — terminating one
@@ -94,13 +94,13 @@ func (h *AuthHandlers) LogoutOtherSessions(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// sessionDeviceResponse maps the session aggregate onto the contract DTO. The
+// activeSessionResponse maps the session aggregate onto the contract DTO. The
 // raw token hash never leaves the application: the response carries display
 // fields plus the row ID as the revocation handle.
-func sessionDeviceResponse(sess domain.Session, current bool) openapi.SessionDevice {
-	device := openapi.SessionDevice{
+func activeSessionResponse(sess domain.Session, current bool) openapi.ActiveSession {
+	session := openapi.ActiveSession{
 		Id:         sess.ID,
-		DeviceType: openapi.SessionDeviceDeviceType(sess.DeviceType),
+		DeviceType: openapi.ActiveSessionDeviceType(sess.DeviceType),
 		Browser:    sess.Browser,
 		Os:         sess.OS,
 		City:       stringPtr(sess.City),
@@ -111,9 +111,9 @@ func sessionDeviceResponse(sess domain.Session, current bool) openapi.SessionDev
 	}
 	if sess.BrowserMajor > 0 {
 		major := sess.BrowserMajor
-		device.BrowserMajor = &major
+		session.BrowserMajor = &major
 	}
-	return device
+	return session
 }
 
 func stringPtr(s string) *string {

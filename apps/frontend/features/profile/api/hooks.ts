@@ -12,7 +12,7 @@ import type { ApiError } from '@/shared/api/errors';
 import { authKeys } from '@/shared/api/query-keys';
 import { mapMeResponse } from '@/entities/user';
 import { mapSessionListResponse } from '@/entities/session';
-import type { SessionDevice } from '@/entities/session';
+import type { ActiveSession } from '@/entities/session';
 import type {
   User,
   UserUpdateCommand,
@@ -26,7 +26,7 @@ import type {
 /** Активные сессии вызывающего (GET /me/sessions, #728) — экран
  * «Устройства» (#730). Порядок — по свежей активности (бэк); retry
  * выключен, как у useMe: 401 угасшей сессии повторами не лечится. */
-export function useSessions(): UseQueryResult<SessionDevice[], ApiError> {
+export function useSessions(): UseQueryResult<ActiveSession[], ApiError> {
   return useQuery({
     queryKey: authKeys.sessions,
     queryFn: async () => {

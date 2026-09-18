@@ -1,4 +1,4 @@
-import type { SessionDevice, SessionDeviceType } from '@/entities/session';
+import type { ActiveSession, SessionDeviceType } from '@/entities/session';
 import { formatSessionLastSeen } from '@/shared/lib/date-format';
 
 /** Отображение активных сессий на экране «Устройства» (#730, мок
@@ -8,8 +8,8 @@ import { formatSessionLastSeen } from '@/shared/lib/date-format';
 
 /** Текущая сессия отделяется от прочих; порядок бэка сохраняется. */
 export function splitSessions(
-  sessions: ReadonlyArray<SessionDevice>,
-): { current: SessionDevice | null; others: SessionDevice[] } {
+  sessions: ReadonlyArray<ActiveSession>,
+): { current: ActiveSession | null; others: ActiveSession[] } {
   return {
     current: sessions.find((session) => session.current) ?? null,
     others: sessions.filter((session) => !session.current),
@@ -18,7 +18,7 @@ export function splitSessions(
 
 /** Заголовок строки: «Chrome 121» (моки 1804-105061/1903-39135);
  * нераспознанный браузер — ОС; не распознано ничего — «Устройство». */
-export function sessionTitle(session: SessionDevice): string {
+export function sessionTitle(session: ActiveSession): string {
   const browser = [session.browser, session.browserMajor]
     .filter((part) => part !== '' && part !== null)
     .join(' ');
@@ -37,7 +37,7 @@ export function deviceIconName(deviceType: SessionDeviceType): 'phone' | 'comput
 /** Подзаголовок строки и его тон: текущая — «В сети • Город» (синий
  * #2B7FFF мока), прочие — момент активности • Город (серый #6F787C). */
 export function sessionSubtitle(
-  session: SessionDevice,
+  session: ActiveSession,
   now: Date,
 ): { text: string; online: boolean } {
   const activity = session.current ? 'В сети' : formatSessionLastSeen(session.lastSeenAt, now);

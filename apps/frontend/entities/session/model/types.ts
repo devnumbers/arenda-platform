@@ -6,7 +6,7 @@ export type SessionDeviceType = 'computer' | 'phone' | 'tablet' | 'tv' | 'unknow
  * сессия», #728): строка экрана «Устройства» (#730). `current` — сессия
  * собственной куки вызывающего: она не завершается ревокацией, только
  * выходом на хабе профиля. */
-export type SessionDevice = {
+export type ActiveSession = {
   readonly id: string;
   readonly deviceType: SessionDeviceType;
   /** Браузер с мажорной версией при разборе: «Chrome 121»; пусто — не

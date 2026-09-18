@@ -20,7 +20,7 @@ import {
   useRevokeSession,
   useSessions,
 } from '@/features/profile';
-import type { SessionDevice, SessionDeviceType } from '@/entities/session';
+import type { ActiveSession, SessionDeviceType } from '@/entities/session';
 import { cn } from '@/shared/lib/cn';
 import { notify } from '@/shared/lib/notifications';
 import {
@@ -59,7 +59,7 @@ function DeviceRow({
   session,
   onSelect,
 }: {
-  readonly session: SessionDevice;
+  readonly session: ActiveSession;
   readonly onSelect?: () => void;
 }): JSX.Element {
   const subtitle = sessionSubtitle(session, new Date());
@@ -157,7 +157,7 @@ export function DevicesScreen(): JSX.Element {
   const revoke = useRevokeSession();
   const logoutOthers = useLogoutOtherSessions();
   const [othersSheetOpen, setOthersSheetOpen] = useState(false);
-  const [target, setTarget] = useState<SessionDevice | null>(null);
+  const [target, setTarget] = useState<ActiveSession | null>(null);
 
   const confirmLogoutOthers = (): void => {
     logoutOthers.mutate(undefined, {

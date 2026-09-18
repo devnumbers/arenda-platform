@@ -1836,9 +1836,9 @@ export interface components {
             subscription?: components["schemas"]["Subscription"];
         };
         SessionListResponse: {
-            sessions: components["schemas"]["SessionDevice"][];
+            sessions: components["schemas"]["ActiveSession"][];
         };
-        SessionDevice: {
+        ActiveSession: {
             /** Format: uuid */
             id: string;
             /**

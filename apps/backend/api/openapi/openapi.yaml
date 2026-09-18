@@ -4416,9 +4416,9 @@ components:
         sessions:
           type: array
           items:
-            $ref: '#/components/schemas/SessionDevice'
+            $ref: '#/components/schemas/ActiveSession'
 
-    SessionDevice:
+    ActiveSession:
       type: object
       required: [id, deviceType, browser, os, city, lastIp, lastSeenAt, createdAt, current]
       properties:
