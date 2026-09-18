@@ -5,7 +5,7 @@ import { DevicesScreen } from '@/widgets/profile';
 
 export const metadata: Metadata = {
   title: 'Устройства — Рентли',
-  description: 'Активные сессии и управление устройствами аккаунта',
+  description: 'Активные сеансы и управление устройствами аккаунта',
 };
 
 /** Экран «Устройства» (карта #724, тикет #730; мок 1804-105061): каркас
