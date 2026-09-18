@@ -110,12 +110,12 @@ test.describe('экран «Устройства» — список и рево�
 
     await expect(
       page
-        .getByRole('button', { name: 'Завершить все другие сессии' })
+        .getByRole('button', { name: 'Завершить все другие сеансы' })
         .filter({ visible: true }),
     ).toBeVisible();
     await expect(
       page
-        .getByRole('heading', { level: 2, name: 'Активные сессии' })
+        .getByRole('heading', { level: 2, name: 'Активные сеансы' })
         .filter({ visible: true }),
     ).toBeVisible();
 
@@ -165,7 +165,7 @@ test.describe('экран «Устройства» — список и рево�
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(
       page
-        .getByRole('heading', { level: 2, name: 'Активные сессии' })
+        .getByRole('heading', { level: 2, name: 'Активные сеансы' })
         .filter({ visible: true }),
     ).toBeVisible();
     await expect(otherRow(page, 'Екатеринбург')).toHaveCount(0);
@@ -183,11 +183,11 @@ test.describe('экран «Устройства» — список и рево�
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto('/profile/devices');
 
-    await page.getByRole('button', { name: 'Завершить все другие сессии' }).click();
+    await page.getByRole('button', { name: 'Завершить все другие сеансы' }).click();
     const dialog = page.getByRole('dialog');
-    await expect(dialog.getByText('Завершить сессии')).toBeVisible();
+    await expect(dialog.getByText('Завершить сеансы')).toBeVisible();
     await expect(
-      dialog.getByText('Уверены, что хотите завершить все другие сессии, кроме текущей?'),
+      dialog.getByText('Уверены, что хотите завершить все другие сеансы, кроме текущего?'),
     ).toBeVisible();
     await captureScreen(page, testInfo, 'profile-devices-logout-others-sheet-mobile');
 
@@ -196,14 +196,14 @@ test.describe('экран «Устройства» — список и рево�
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(
       page
-        .getByRole('heading', { level: 2, name: 'Активные сессии' })
+        .getByRole('heading', { level: 2, name: 'Активные сеансы' })
         .filter({ visible: true }),
     ).toBeVisible();
 
     // Подтверждение: POST-мок 204 → перечитывание вернёт только текущую —
     // красное действие и «Активные сессии» скрываются (действия нет).
     mock.setSessions([CURRENT]);
-    await page.getByRole('button', { name: 'Завершить все другие сессии' }).click();
+    await page.getByRole('button', { name: 'Завершить все другие сеансы' }).click();
     await dialog.getByRole('button', { name: 'Завершить' }).click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(
@@ -213,12 +213,12 @@ test.describe('экран «Устройства» — список и рево�
     ).toBeVisible();
     await expect(
       page
-        .getByRole('heading', { level: 2, name: 'Активные сессии' })
+        .getByRole('heading', { level: 2, name: 'Активные сеансы' })
         .filter({ visible: true }),
     ).toHaveCount(0);
     await expect(
       page
-        .getByRole('button', { name: 'Завершить все другие сессии' })
+        .getByRole('button', { name: 'Завершить все другие сеансы' })
         .filter({ visible: true }),
     ).toHaveCount(0);
   });
@@ -238,12 +238,12 @@ test.describe('экран «Устройства» — список и рево�
     ).toBeVisible();
     await expect(
       page
-        .getByRole('button', { name: 'Завершить все другие сессии' })
+        .getByRole('button', { name: 'Завершить все другие сеансы' })
         .filter({ visible: true }),
     ).toHaveCount(0);
     await expect(
       page
-        .getByRole('heading', { level: 2, name: 'Активные сессии' })
+        .getByRole('heading', { level: 2, name: 'Активные сеансы' })
         .filter({ visible: true }),
     ).toHaveCount(0);
   });

@@ -118,13 +118,16 @@ function DevicesScreenSkeleton(): JSX.Element {
     <div role="status" aria-label="Загрузка устройств" className="flex flex-col">
       <Skeleton className="mb-4 h-6 w-40" />
       {/* Паритет (#604): текущая строка без шеврона, красное действие и
-       * секция «Активные сессии» — как при наличии чужих сессий. */}
+       * секция «Активные сеансы» — как при наличии чужих сессий;
+       * 8+24px до второго заголовка — как в контенте. */}
       <DeviceRowSkeleton chevron={false} />
       <div className="mt-2 flex h-6 items-center px-[22px]">
         <Skeleton className="h-6 w-6 bg-surface-muted-hover" />
         <Skeleton className="ml-[18px] h-5 w-56 bg-surface-muted-hover" />
       </div>
-      <Skeleton className="mb-4 mt-6 h-6 w-40" />
+      <div className="mt-2 pt-6">
+        <Skeleton className="mb-4 h-6 w-40" />
+      </div>
       <div className="flex flex-col gap-2">
         <DeviceRowSkeleton />
         <DeviceRowSkeleton />
@@ -136,15 +139,19 @@ function DevicesScreenSkeleton(): JSX.Element {
 
 /** Экран «Устройства» (#730, карта #724; моки 1804-105061, 1903-39135,
  * 1903-38679): секция «Это устройство» (текущая сессия, синий «В сети» •
- * город), красное действие «Завершить все другие сессии» (Icon/R/Exit) и
- * «Активные сессии» — чужие сессии по свежей активности. Шит «Завершить
- * сессии» — канон ConfirmDialog по моку 1903-39135 (описание 16/18 R/400 —
- * descriptionClassName="text-base", прецедент #627); шит одной сессии —
- * мок 1903-38679: иконка устройства 48, заголовок H3 по центру, детали
- * 16/18 серым, «Отменить» + danger-«Завершить» — сборка канона Modal
- * (sr-only title для a11y-имени). Тексты говорят доменным каноном
- * «сессия» (identity/CONTEXT.md), не «сеанс» макета. Если чужих сессий
- * нет — действие и секция скрыты (действия нет — не рисуется). */
+ * город), красное действие «Завершить все другие сеансы» (Icon/R/Exit) и
+ * «Активные сеансы» — чужие сессии по свежей активности. Шит «Завершить
+ * сеансы» — канон ConfirmDialog по моку 1903-39135 (описание 16/18 R/400 —
+ * descriptionClassName="text-base leading-[18px]", прецедент #627); шит
+ * одной сессии — мок 1903-38679: иконка устройства 48, заголовок H3 по
+ * центру, детали 16/18 серым, «Отменить» + danger-«Завершить» — сборка
+ * канона Modal (sr-only title для a11y-имени). Лексика UI — «сеанс(ы)»
+ * по мокам (решение владельца 18.09.2026). Вертикали блока (инспектор
+ * мака): карточка →8→ кнопка →8+24 (внутр. pt Heading-компонента)→
+ * заголовок →16→ строки. Отступ кнопки — на обёртке-диве: margin-классы
+ * на голых <button> молча не работают (unlayered preflight бьёт
+ * @layer utilities). Если чужих сессий нет — действие и секция скрыты
+ * (действия нет — не рисуется). */
 export function DevicesScreen(): JSX.Element {
   const { data: sessions, isError, isLoading, refetch } = useSessions();
   const revoke = useRevokeSession();
@@ -199,25 +206,33 @@ export function DevicesScreen(): JSX.Element {
 
       {others.length > 0 && (
         <>
-          <button
-            type="button"
-            onClick={() => setOthersSheetOpen(true)}
-            className={cn(
-              'mt-2 flex w-full cursor-pointer items-center gap-[18px] px-[22px] text-left outline-none',
-              'transition-opacity hover:opacity-80 active:opacity-80',
-              'focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white',
-            )}
-          >
-            <span aria-hidden className="flex h-6 w-6 shrink-0 items-center justify-center">
-              <Exit className="h-6 w-6 text-danger" />
-            </span>
-            <span className="text-base font-medium text-danger">
-              Завершить все другие сессии
-            </span>
-          </button>
+          {/* Отступ 8px — на обёртке: margin-классы на голых <button>
+           * молча не работают (unlayered preflight `button { margin: 0 }`
+           * бьёт @layer utilities); «сеансы» — лексика маков, решение
+           * владельца 18.09.2026. */}
+          <div className="mt-2">
+            <button
+              type="button"
+              onClick={() => setOthersSheetOpen(true)}
+              className={cn(
+                'flex w-full cursor-pointer items-center gap-[18px] px-[22px] text-left outline-none',
+                'transition-opacity hover:opacity-80 active:opacity-80',
+                'focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white',
+              )}
+            >
+              <span aria-hidden className="flex h-6 w-6 shrink-0 items-center justify-center">
+                <Exit className="h-6 w-6 text-danger" />
+              </span>
+              <span className="text-base font-medium text-danger">
+                Завершить все другие сеансы
+              </span>
+            </button>
+          </div>
 
-          <div className="mt-6">
-            <SectionHeading>Активные сессии</SectionHeading>
+          {/* 32px до заголовка = 8px зазора между блоками + 24px
+           * внутреннего отступа Heading-компонента мака. */}
+          <div className="mt-2 pt-6">
+            <SectionHeading>Активные сеансы</SectionHeading>
           </div>
           <div className="mt-4 flex flex-col gap-2">
             {others.map((session) => (
@@ -234,8 +249,8 @@ export function DevicesScreen(): JSX.Element {
       <ConfirmDialog
         open={othersSheetOpen}
         onOpenChange={setOthersSheetOpen}
-        title="Завершить сессии"
-        description="Уверены, что хотите завершить все другие сессии, кроме текущей?"
+        title="Завершить сеансы"
+        description="Уверены, что хотите завершить все другие сеансы, кроме текущего?"
         descriptionClassName="text-base leading-[18px]"
         confirmLabel="Завершить"
         cancelLabel="Отменить"
@@ -253,7 +268,7 @@ export function DevicesScreen(): JSX.Element {
         }}
       >
         {target !== null && (
-          <ModalContent title="Завершить сессию" titleSrOnly>
+          <ModalContent title="Завершить сеанс" titleSrOnly>
             <div className="flex flex-col items-center gap-8">
               <span aria-hidden className="flex h-12 w-12 items-center justify-center text-content">
                 <DeviceGlyph deviceType={target.deviceType} className="h-12 w-12" />

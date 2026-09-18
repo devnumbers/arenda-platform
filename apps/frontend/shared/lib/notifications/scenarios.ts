@@ -142,9 +142,11 @@ const profile = {
   emailChangeError: errorScenario('Не удалось изменить электронную почту'),
   logoutError: errorScenario('Не удалось выйти'),
   /** Ревокации на экране «Устройства» (#730): завершение одной чужой
-   * сессии и «все другие, кроме текущей» (POST /me/sessions/logout-others). */
-  sessionRevokeError: errorScenario('Не удалось завершить сессию'),
-  logoutOthersError: errorScenario('Не удалось завершить другие сессии'),
+   * сессии и «все другие, кроме текущей» (POST /me/sessions/logout-others).
+   * Лексика тостов — «сеанс(ы)», как в моках экрана (решение владельца
+   * 18.09.2026). */
+  sessionRevokeError: errorScenario('Не удалось завершить сеанс'),
+  logoutOthersError: errorScenario('Не удалось завершить другие сеансы'),
   pushEnabled: ((options?) =>
     notify.success('Пуши включены', options)) satisfies ScenarioFn,
   pushEnableError: errorScenario('Не удалось включить пуши'),
