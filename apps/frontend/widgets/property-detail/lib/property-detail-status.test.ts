@@ -138,18 +138,19 @@ describe('buildPropertyManageActions (секция «Управление»)', (
     expect(items.map((item) => item.key)).toEqual(['unarchive', 'access', 'delete']);
   });
 
-  it('смотрящий (нельзя мутировать): только совместный доступ', () => {
+  it('смотрящий: об объекте, совместный доступ, покинуть объект (#703)', () => {
     const items = buildPropertyManageActions({ ...baseManage, canMutate: false });
-    expect(items.map((item) => item.key)).toEqual(['access']);
+    expect(items.map((item) => item.key)).toEqual(['about', 'access', 'leave']);
+    expect(items.find((item) => item.key === 'leave')?.danger).toBe(true);
   });
 
-  it('архивный смотрящий: тоже только совместный доступ', () => {
+  it('архивный смотрящий: тот же набор — выход из архива не гасит (#703)', () => {
     const items = buildPropertyManageActions({
       ...baseManage,
       status: 'archived',
       canMutate: false,
     });
-    expect(items.map((item) => item.key)).toEqual(['access']);
+    expect(items.map((item) => item.key)).toEqual(['about', 'access', 'leave']);
   });
 
   it('базовый тариф: строк основного объекта нет', () => {

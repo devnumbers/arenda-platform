@@ -4,6 +4,7 @@ import type { JSX } from 'react';
 import { BoldHome, RadioFalse, RadioTrue } from '@/shared/assets/icons';
 import { Button, Skeleton } from '@/shared/ui/design';
 import { useProperties } from '@/features/properties';
+import { propertyPermissions } from '@/entities/property';
 
 /**
  * Шаг «Выбрать объект» визарда операции (#570, Figma 1858:105011) — только
@@ -11,7 +12,9 @@ import { useProperties } from '@/features/properties';
  * нет). Каркас выбора объекта задачи/контакта: радио-список объектов,
  * архивные отфильтрованы (решение владельца 08.09), строки без «общей»
  * операции — операция всегда привязана к объекту. Выбор применяется
- * сразу, сабмит «Добавить операцию» — панель шага во flow.
+ * сразу, сабмит «Добавить операцию» — панель шага во flow. Список —
+ * только объекты с правом правки (#703): зритель и архив ведут в отказ
+ * сервера при сабмите.
  */
 export function OperationPropertyStep({
   selectedPropertyId,
@@ -21,8 +24,8 @@ export function OperationPropertyStep({
   readonly onSelect: (propertyId: string) => void;
 }): JSX.Element {
   const propertiesQuery = useProperties();
-  const properties = (propertiesQuery.data ?? []).filter(
-    (property) => property.status !== 'archived',
+  const properties = (propertiesQuery.data ?? []).filter((property) =>
+    propertyPermissions(property).canEdit,
   );
 
   return (

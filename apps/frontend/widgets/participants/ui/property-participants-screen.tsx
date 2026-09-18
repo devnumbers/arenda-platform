@@ -20,6 +20,7 @@ import { cn } from '@/shared/lib/cn';
 import { useKeyboardActivation } from '@/shared/lib/hooks/useKeyboardActivation';
 import { useMe } from '@/features/auth';
 import { useProperty } from '@/features/properties';
+import { propertyPermissions } from '@/entities/property';
 import {
   usePropertyAccessMembers,
   useRevokeAllPropertyAccessMembers,
@@ -54,7 +55,6 @@ import {
 import {
   filterPropertyParticipantsByQuery,
   filterPropertyParticipantsByRole,
-  isPropertyViewer,
   participantEmailIndex,
   propertyParticipantRows,
   sortPropertyParticipantsByTitle,
@@ -139,16 +139,11 @@ export function PropertyParticipantsScreen(): JSX.Element {
     emailByUserId,
     currentUserEmail: meQuery.data?.email ?? undefined,
   });
-  // Режим зрителя — как в модалке (либ-канон тикета): пока /me не
-  // известен (загрузка или ошибка), мутации консервативно скрыты.
-  const isViewer = isPropertyViewer(
-    members,
-    meQuery.isSuccess ? meQuery.data.id : undefined,
-  );
-
   // Управление доступно владельцу и manage-участнику и на архивном объекте
   // (отзыв разрешён), но выдача на архивный запрещена — приглашение скрыто.
-  const canManage = !isViewer;
+  // Центральные права объекта (#703): пока объект не загружен или не
+  // загрузился, мутации консервативно скрыты.
+  const canManage = propertyPermissions(propertyQuery.data).canManageMembers;
   const isArchived = propertyQuery.data?.status === 'archived';
 
   const participantsCount = rows.filter((row) => !row.isOwner).length;

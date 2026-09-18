@@ -2,7 +2,6 @@ export * from './api';
 
 export { usePropertiesWithMeta, usePropertiesLandingHref } from './api/hooks';
 export type { PropertiesListResult, SuspendedSharedProperty } from './api/hooks';
-export { canMutateProperty } from './lib/can-mutate-property';
 export { propertyTypeLabels, propertyTypeOptions } from './lib/property-types';
 export {
   archivedPropertyBadge,

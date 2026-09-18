@@ -22,6 +22,7 @@ export type PropertyDetailActionKey =
   | 'archive'
   | 'unarchive'
   | 'access'
+  | 'leave'
   | 'delete';
 
 export type PropertyDetailAction = {
@@ -138,16 +139,23 @@ export type PropertyManageInput = {
 /** Секция «Управление» (Figma 1554:98469, активный): контекстный список
  * действий по статусу, аренде и пину. Без «Экспортировать объект» —
  * решение владельца 10.09. Архивный владелец (read-only, ADR 0028):
- * вернуть из архива, совместный доступ, удаление. Смотрящий — только
- * совместный доступ. `canMutate` здесь РОЛЕВОЙ (владелец/участник против
- * смотрящего) — в отличие от canMutateProperty, архив его не гасит. */
+ * вернуть из архива, совместный доступ, удаление. Смотрящий (макет
+ * 2235-100370, тикет #703): об объекте, совместный доступ, покинуть
+ * объект — без «Сделать основным» из макета (мутация чужого объекта;
+ * расхождение макета с тикетом — вопрос приёмки). `canMutate` здесь
+ * РОЛЕВОЙ (владелец/участник против смотрящего) — в отличие от
+ * propertyPermissions().canEdit, архив его не гасит. */
 export function buildPropertyManageActions(
   input: PropertyManageInput,
 ): ReadonlyArray<PropertyDetailAction> {
   const { status, hasRental, isPinned, canMutate, canPin } = input;
 
   if (!canMutate) {
-    return [action('access', 'Совместный доступ', false)];
+    return [
+      action('about', 'Об объекте', false),
+      action('access', 'Совместный доступ', false),
+      action('leave', 'Покинуть объект', true),
+    ];
   }
 
   if (status === 'archived') {

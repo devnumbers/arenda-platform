@@ -122,13 +122,8 @@ export function TasksFeedScreen(): JSX.Element {
   const completedTotal = completedQuery.data?.total ?? 0;
   const today = activeQuery.data?.today ?? completedQuery.data?.today;
 
-  const propertyOf = (propertyId: string): FeedPropertyRef | undefined => {
-    const property = propertiesQuery.data?.find((item) => item.id === propertyId);
-    if (property === undefined) {
-      return undefined;
-    }
-    return { role: property.access?.role, status: property.status };
-  };
+  const propertyOf = (propertyId: string): FeedPropertyRef | undefined =>
+    propertiesQuery.data?.find((item) => item.id === propertyId);
 
   const complete = useCompleteGlobalTask('complete');
   const uncomplete = useCompleteGlobalTask('uncomplete');

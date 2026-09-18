@@ -7,7 +7,6 @@ import {notify} from '@/shared/lib/notifications';
 import {goBack} from '@/shared/lib/navigation';
 import {ROUTES} from '@/shared/config/routes';
 import {
-  canMutateProperty,
   propertyTypeLabels,
   useArchiveProperty,
   useDeleteProperty,
@@ -17,6 +16,8 @@ import {
   useUnarchiveProperty,
   useUpdateProperty,
 } from '@/features/properties';
+import { propertyPermissions } from '@/entities/property';
+import { useLeaveProperty } from '@/features/participants';
 import {useRentals, currentRentalOf, useCompleteRental} from '@/features/rentals';
 import {
   operationsMonthOf,
@@ -77,6 +78,7 @@ import {
 } from './PropertyDetailActions';
 import {PropertyDetailKebab} from './PropertyDetailKebab';
 import {PropertySharedBanner} from './PropertySharedBanner';
+import {PropertyOwnerSection} from './PropertyOwnerSection';
 import {PropertyDetailLoading} from './PropertyDetailLoading';
 import {PropertyDetailError} from './PropertyDetailError';
 import {PropertyNotFoundScreen} from './PropertyNotFoundScreen';
@@ -187,6 +189,7 @@ export function PropertyDetailPage(): JSX.Element {
     const unarchiveProperty = useUnarchiveProperty();
     const setPin = useSetPropertyPin();
     const deleteProperty = useDeleteProperty();
+    const leaveProperty = useLeaveProperty();
 
     const [statusSheetOpen, setStatusSheetOpen] = React.useState(false);
     // Guard #628: какое статусное действие запросено из-под гарда; null —
@@ -201,6 +204,9 @@ export function PropertyDetailPage(): JSX.Element {
     const [pinSheetOpen, setPinSheetOpen] = React.useState(false);
     const [archiveOpen, setArchiveOpen] = React.useState(false);
     const [deleteOpen, setDeleteOpen] = React.useState(false);
+    // Шит выхода участника (#703, макет 2235-100370): «Управление» →
+    // «Покинуть объект» — канон-подтверждение #701 и возврат к объектам.
+    const [leaveOpen, setLeaveOpen] = React.useState(false);
 
     const property = propertyQuery.data;
 
@@ -244,15 +250,14 @@ export function PropertyDetailPage(): JSX.Element {
     // набор (первый объект); правило переключения наборов — на приёмке.
     const emptySet = resolvePropertyDetailEmptySet(listQuery.data?.items.length ?? 1);
 
-    const canMutate = canMutateProperty(propertyQuery.isSuccess ? property : undefined);
-    // Для «Управления» роль важна без статуса: архивный владелец видит
-    // «Вернуть из архива» и удаление (canMutateProperty гасит и архив —
-    // его смысл для CTA-кнопок секций, не для этого списка).
-    const roleCanMutate =
-        property?.access !== undefined && property.access.role !== 'viewer';
-    // Мутации задач (кружок/правка) — без зрителя и архива (контракт #569,
-    // как на экране задач объекта).
-    const canMutateTasks = roleCanMutate && property.status !== 'archived';
+    // Центральные права объекта (#703): CTA секций — canEdit (роль и
+    // не-архив), «Управление»/кебаб — ролевой canManageMembers (билдеры
+    // ветвят архив сами: архивный владелец видит «Вернуть из архива» и
+    // удаление), «Покинуть объект» — canLeave.
+    const permissions = propertyPermissions(
+        propertyQuery.isSuccess ? property : undefined,
+    );
+    const canMutate = permissions.canEdit;
     // «Основной объект» — платная возможность: базовому тарифу в шапке
     // звезда апселла, строк пина в «Управлении» нет.
     const isPaid = subscriptionQuery.data
@@ -265,8 +270,8 @@ export function PropertyDetailPage(): JSX.Element {
             status: property.status,
             hasRental,
             isPinned,
-            canMutate: roleCanMutate,
-            canPin: isPaid && roleCanMutate,
+            canMutate: permissions.canManageMembers,
+            canPin: isPaid && permissions.canManageMembers,
         })
         : [];
     const statusSheetItems = property
@@ -431,10 +436,28 @@ export function PropertyDetailPage(): JSX.Element {
             case 'access':
                 router.push(ROUTES.propertyParticipants(id));
                 break;
+            case 'leave':
+                setLeaveOpen(true);
+                break;
             case 'delete':
                 setDeleteOpen(true);
                 break;
         }
+    };
+
+    // Выход участника (#703): подтверждение — канон #701 (2010-132970),
+    // успех — тост и возврат к списку объектов (попап #701 живёт в срезе
+    // участников, чужой слайс-виджет сюда не импортируется).
+    const handleLeave = () => {
+        leaveProperty.mutate(id, {
+            onSuccess: () => {
+                setLeaveOpen(false);
+                notify.scenarios.access.leftProperty();
+                goBack(router, ROUTES.properties);
+            },
+            onError: (error) =>
+                notify.scenarios.access.leavePropertyError({description: error.detail}),
+        });
     };
 
     const handleDelete = () => {
@@ -494,7 +517,7 @@ export function PropertyDetailPage(): JSX.Element {
                     status !== undefined && propertyErrorKind === null ? (
                         <PropertyDetailKebab
                             status={status}
-                            canMutate={roleCanMutate}
+                            canMutate={permissions.canManageMembers}
                             onAction={handleAction}
                         />
                     ) : undefined
@@ -551,7 +574,7 @@ export function PropertyDetailPage(): JSX.Element {
                                     // шит с последующим 403 смотрителю не даёт
                                     // ничего (решение ревью #627).
                                     onComplete={
-                                        roleCanMutate
+                                        permissions.canManageMembers
                                             ? () => setCompleteSheetOpen(true)
                                             : () => router.push(ROUTES.propertyRentalComplete(id))
                                     }
@@ -560,7 +583,7 @@ export function PropertyDetailPage(): JSX.Element {
                                 <PropertySectionEmpty
                                     imageSrc={propertySectionImages.rental}
                                     copy={resolvePropertySectionEmpty('rental', emptySet, property.status)}
-                                    onCta={sectionCTAs.rental}
+                                    onCta={permissions.canManageMembers ? sectionCTAs.rental : undefined}
                                     ctaDisabled={!canMutate}
                                 />
                             )}
@@ -578,7 +601,7 @@ export function PropertyDetailPage(): JSX.Element {
                                 <PropertySectionEmpty
                                     imageSrc={propertySectionImages.payments}
                                     copy={resolvePropertySectionEmpty('payments', emptySet, property.status)}
-                                    onCta={sectionCTAs.payments}
+                                    onCta={permissions.canManageMembers ? sectionCTAs.payments : undefined}
                                     ctaDisabled={!canMutate}
                                 />
                             )}
@@ -619,7 +642,7 @@ export function PropertyDetailPage(): JSX.Element {
                                 <PropertySectionEmpty
                                     imageSrc={propertySectionImages.contacts}
                                     copy={resolvePropertySectionEmpty('contacts', emptySet, property.status)}
-                                    onCta={sectionCTAs.contacts}
+                                    onCta={permissions.canManageMembers ? sectionCTAs.contacts : undefined}
                                     ctaDisabled={!canMutate}
                                 />
                             )}
@@ -635,7 +658,7 @@ export function PropertyDetailPage(): JSX.Element {
                                 <PropertyTasksBlock
                                     tasks={detailTasks}
                                     today={tasksToday ?? today}
-                                    canMutate={canMutateTasks}
+                                    canMutate={permissions.canEdit}
                                     togglingFor={(task) =>
                                         (completeTask.isPending || uncompleteTask.isPending)
                                         && (completeTask.variables === task.id
@@ -655,7 +678,7 @@ export function PropertyDetailPage(): JSX.Element {
                                         }
                                     }}
                                     onOpenFor={(task) => {
-                                        if (!canMutateTasks || task.status === 'completed'
+                                        if (!permissions.canEdit || task.status === 'completed'
                                             || task.ruleId === null) {
                                             return undefined;
                                         }
@@ -668,7 +691,7 @@ export function PropertyDetailPage(): JSX.Element {
                                 <PropertySectionEmpty
                                     imageSrc={propertySectionImages.tasks}
                                     copy={resolvePropertySectionEmpty('tasks', emptySet, property.status)}
-                                    onCta={sectionCTAs.tasks}
+                                    onCta={permissions.canManageMembers ? sectionCTAs.tasks : undefined}
                                     ctaDisabled={!canMutate}
                                 />
                             )}
@@ -684,11 +707,17 @@ export function PropertyDetailPage(): JSX.Element {
                                 <PropertySectionEmpty
                                     imageSrc={propertySectionImages.about}
                                     copy={resolvePropertySectionEmpty('about', emptySet, property.status)}
-                                    onCta={sectionCTAs.about}
+                                    onCta={permissions.canManageMembers ? sectionCTAs.about : undefined}
                                     ctaDisabled={!canMutate}
                                 />
                             )}
                         </PropertySectionCard>
+
+                        {property.access?.role !== undefined
+                            && property.access.role !== 'owner'
+                            && property.access.ownerName !== undefined && (
+                            <PropertyOwnerSection ownerName={property.access.ownerName}/>
+                        )}
 
                         <PropertySectionCard title="Управление">
                             <PropertyManageSection
@@ -705,6 +734,23 @@ export function PropertyDetailPage(): JSX.Element {
                 onOpenChange={setStatusSheetOpen}
                 items={statusSheetItems}
                 onAction={handleAction}
+            />
+
+            {/* Выход участника (#703): канон #701 (2010-132970) — кнопки
+             * в ряд, красное «Покинуть» справа; кнопка в loading на время
+             * мутации. */}
+            <ConfirmDialog
+                open={leaveOpen}
+                onOpenChange={setLeaveOpen}
+                title="Уверены, что хотите покинуть объект?"
+                titleClassName="text-[28px] leading-8"
+                description="Вы потеряете доступ к объекту пользователя. Попросить доступ можно будет снова"
+                descriptionClassName="text-base"
+                confirmLabel="Покинуть"
+                cancelLabel="Отмена"
+                confirmVariant="danger"
+                pending={leaveProperty.isPending}
+                onConfirm={handleLeave}
             />
 
             <ConfirmDialog

@@ -10,6 +10,7 @@ import { notify } from '@/shared/lib/notifications';
 import { formatDayMonth, type IsoDate, type TaskRule } from '@/entities/task';
 import type { ApiError } from '@/shared/api/errors';
 import { useProperty } from '@/features/properties';
+import { propertyPermissions } from '@/entities/property';
 import {
   buildTaskRuleUpdateRequest,
   initialTaskEditDraft,
@@ -83,9 +84,9 @@ export function TaskEditScreen({
   const today = activeTasksQuery.data?.today;
 
   const property = propertyQuery.isSuccess ? propertyQuery.data : undefined;
-  const role = property?.access?.role;
-  const canMutate =
-    property !== undefined && role !== undefined && role !== 'viewer' && property.status !== 'archived';
+  // Смотрящий и архив глушат мутации (#446, ADR 0028) — центральные
+  // права (#703); форма сразу возвращает на список.
+  const canMutate = propertyPermissions(property).canEdit;
 
   useEffect(() => {
     if (propertyQuery.isSuccess && !canMutate) {

@@ -2,15 +2,12 @@ import { describe, expect, it } from 'vitest';
 import type { PropertyAccessMember } from '@/entities/access';
 import {
   filterPropertyParticipantsByQuery,
-  isPropertyViewer,
   participantEmailIndex,
   propertyParticipantRows,
   sortPropertyParticipantsByTitle,
 } from './property-participants-list';
 
 const OWNER_ID = '11111111-1111-4111-8111-111111111111';
-const MARIA_USER_ID = '12111111-1111-4111-8111-111111111121';
-const SERGEY_USER_ID = '13111111-1111-4111-8111-111111111131';
 
 function member(overrides: Partial<PropertyAccessMember>): PropertyAccessMember {
   return {
@@ -167,24 +164,6 @@ describe('sortPropertyParticipantsByTitle — чип «Имя»; владеле�
 
     expect(sorted[0]?.role).toBe('owner');
     expect(sorted[1]?.title).toBe('Сергей Сидоров');
-  });
-});
-
-describe('isPropertyViewer — режим зрителя; без известного /me мутации скрыты', () => {
-  it('читатель-viewer — зритель, manage-участник и владелец — нет', () => {
-    const members = [
-      owner,
-      member({ userId: MARIA_USER_ID, role: 'full_access' }),
-      member({ id: 'm-viewer', userId: SERGEY_USER_ID, role: 'viewer' }),
-    ];
-
-    expect(isPropertyViewer(members, SERGEY_USER_ID)).toBe(true);
-    expect(isPropertyViewer(members, OWNER_ID)).toBe(false);
-    expect(isPropertyViewer(members, MARIA_USER_ID)).toBe(false);
-  });
-
-  it('/me не загружен или упал — консервативно зритель (кебаб/CTA скрыты)', () => {
-    expect(isPropertyViewer([owner], undefined)).toBe(true);
   });
 });
 

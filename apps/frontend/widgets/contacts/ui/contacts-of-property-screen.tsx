@@ -20,7 +20,8 @@ import {
   type ContactSortOrder,
 } from '@/entities/contact';
 import { useContacts } from '@/features/contacts';
-import { canMutateProperty, useProperty } from '@/features/properties';
+import { useProperty } from '@/features/properties';
+import { propertyPermissions } from '@/entities/property';
 import {
   Button,
   ChipButton,
@@ -99,7 +100,7 @@ export function ContactsOfPropertyScreen({
   // объект не загружен или не загрузился — без кнопки.
   const property = propertyQuery.isSuccess ? propertyQuery.data : undefined;
   // Мутационный вход — общий предикат (платежи #446/история 47, контакты #508).
-  const canMutate = canMutateProperty(property);
+  const canMutate = propertyPermissions(property).canEdit;
 
   const closeSearch = (): void => {
     setSearchOpen(false);

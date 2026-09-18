@@ -16,7 +16,8 @@ import {
   usePropertyOperationsScopedPaged,
   usePropertyOperationsSummary,
 } from "@/features/payments";
-import { canMutateProperty, useProperty } from "@/features/properties";
+import { useProperty } from "@/features/properties";
+import { propertyPermissions } from "@/entities/property";
 import {
   Button,
   IconButton,
@@ -74,9 +75,9 @@ export function OperationsOfPropertyScreen({
   // Доступ к объекту — для кнопки создания (#571): общий мутационный
   // предикат (зритель — только чтение, архив read-only, контракт #569).
   const propertyQuery = useProperty(propertyId);
-  const canMutate = canMutateProperty(
+  const canMutate = propertyPermissions(
     propertyQuery.isSuccess ? propertyQuery.data : undefined,
-  );
+  ).canEdit;
 
   const today = clientTodayIso();
   // Дефолт — весь период (#674): период в запросе только с явным выбором,

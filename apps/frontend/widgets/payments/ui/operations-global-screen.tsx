@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Add, Search } from "@/shared/assets/icons";
 import { ROUTES } from "@/shared/config/routes";
 import { clientTodayIso } from "@/entities/payment";
+import { propertyPermissions } from "@/entities/property";
 import { useKeyboardActivation } from "@/shared/lib/hooks/useKeyboardActivation";
 import {
   globalOperationsFiltersParams,
@@ -16,6 +17,7 @@ import {
   useGlobalOperationsPaged,
   useGlobalOperationsSummary,
 } from "@/features/payments";
+import { useProperties } from "@/features/properties";
 import { HubCollapseAnchor, HubTitle, IconButton, InfiniteQueryTail, Button, PageContent, TopNav } from "@/shared/ui/design";
 import { PaymentsStateCard } from "./payments-sections";
 import { OperationsDateFeedSkeleton, OperationsSummarySkeleton } from "./operations-skeletons";
@@ -55,6 +57,13 @@ import { summaryBarSegments } from "@/features/payment-categories";
 export function OperationsGlobalScreen(): JSX.Element {
   const router = useRouter();
   const { filters } = useGlobalOperationsFilters();
+  // «+» и CTA пустой книги — только когда есть хоть один объект с правом
+  // правки (#703): у чистого зрителя визард ведёт в чужой объект и упирается
+  // в отказ сервера. Пока справочник не загружен — консервативно скрыты.
+  const propertiesQuery = useProperties();
+  const canCreateSomewhere = (propertiesQuery.data ?? []).some((property) =>
+    propertyPermissions(property).canEdit,
+  );
 
   const today = clientTodayIso();
   // Пикер периода — канонический оверлей поверх списка.
@@ -110,13 +119,14 @@ export function OperationsGlobalScreen(): JSX.Element {
   // «+» — в визард одиночной операции (#571, решение владельца 2026-09-08):
   // в ряду заголовка хаба и в правом слоте компакт-бара; в neverHad
   // скрыта — действие там CTA пустого состояния.
-  const addButton = (
+  const addButton = canCreateSomewhere ? (
     <IconButton
       icon={<Add />}
       label="Добавить операцию"
       onClick={() => router.push(ROUTES.operationsNew)}
     />
-  );
+  ) : null;
+  const addButtonVisible = !neverHad && addButton !== null;
 
   return (
     <>
@@ -130,7 +140,7 @@ export function OperationsGlobalScreen(): JSX.Element {
         collapse={{
           title: 'Операции',
           search: { href: ROUTES.operationsSearch, label: 'Найти операцию' },
-          trailing: neverHad ? undefined : addButton,
+          trailing: addButtonVisible ? addButton : undefined,
         }}
       />
 
@@ -138,7 +148,7 @@ export function OperationsGlobalScreen(): JSX.Element {
         <HubCollapseAnchor>
           <div className="flex items-center justify-between pr-3.5">
             <HubTitle>Операции</HubTitle>
-            {!neverHad && addButton}
+            {addButtonVisible && addButton}
           </div>
           {!neverHad && (
             <div className="mt-4 px-6">
@@ -155,9 +165,11 @@ export function OperationsGlobalScreen(): JSX.Element {
         {neverHad ? (
           <OperationsNeverHad
             action={
-              <Button onClick={() => router.push(ROUTES.operationsNew)}>
-                Добавить операцию
-              </Button>
+              canCreateSomewhere ? (
+                <Button onClick={() => router.push(ROUTES.operationsNew)}>
+                  Добавить операцию
+                </Button>
+              ) : undefined
             }
           />
         ) : (

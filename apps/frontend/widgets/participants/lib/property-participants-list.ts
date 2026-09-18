@@ -85,22 +85,6 @@ function toPropertyParticipantRow(
   };
 }
 
-/**
- * Режим зрителя (канон снесённой модалки): читатель видит себя в строках
- * с ролью viewer. Пока /me не известен (загрузка или ошибка) мутации
- * не показываем — консервативно считаем читателя зрителем.
- */
-export function isPropertyViewer(
-  members: ReadonlyArray<PropertyAccessMember>,
-  currentUserId: string | undefined,
-): boolean {
-  if (currentUserId === undefined) {
-    return true;
-  }
-  const currentMember = members.find((member) => member.userId === currentUserId);
-  return currentMember !== undefined && !currentMember.isOwner && currentMember.role === 'viewer';
-}
-
 /** Индекс «uuid → почта» из кэша агрегатов /participants: источник почт
  * зарегистрированных участников, которых контракт members скрывает. */
 export function participantEmailIndex(
