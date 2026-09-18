@@ -89,8 +89,6 @@ func (r *touchRepo) GetByID(_ context.Context, id uuid.UUID) (domain.Session, er
 
 func (r *touchRepo) DeleteByTokenHash(context.Context, string) error { return nil }
 
-func (r *touchRepo) DeleteByUserID(context.Context, uuid.UUID) error { return nil }
-
 func (r *touchRepo) DeleteByUserIDExcept(context.Context, uuid.UUID, string) (int64, error) {
 	return 0, nil
 }

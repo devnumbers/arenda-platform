@@ -73,22 +73,6 @@ paths:
                 type: string
         '401':
           $ref: '#/components/responses/Unauthorized'
-  /auth/logout-all:
-    post:
-      operationId: logoutAll
-      security:
-        - sessionCookie: []
-      responses:
-        '204':
-          description: All sessions logged out
-          headers:
-            Set-Cookie:
-              schema:
-                type: string
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
   /me:
     get:
       operationId: getMe

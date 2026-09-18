@@ -363,15 +363,6 @@ func (q *Queries) DeleteSessionByTokenHash(ctx context.Context, tokenHash string
 	return err
 }
 
-const deleteSessionsByUserID = `-- name: DeleteSessionsByUserID :exec
-DELETE FROM sessions WHERE user_id = $1
-`
-
-func (q *Queries) DeleteSessionsByUserID(ctx context.Context, userID pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, deleteSessionsByUserID, userID)
-	return err
-}
-
 const deleteSessionsByUserIDExcept = `-- name: DeleteSessionsByUserIDExcept :execrows
 DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2 AND (previous_token_hash IS NULL OR previous_token_hash <> $2)
 `

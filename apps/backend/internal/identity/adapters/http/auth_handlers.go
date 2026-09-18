@@ -127,10 +127,9 @@ type Profiler interface {
 	UpdateProfile(ctx context.Context, userID uuid.UUID, cmd application.UpdateProfileCommand) (domain.User, error)
 }
 
-// Logout terminates sessions.
+// Logout terminates the current session.
 type Logout interface {
 	Logout(ctx context.Context, rawToken string, actor auditdomain.Actor) error
-	LogoutAll(ctx context.Context, userID uuid.UUID, actor auditdomain.Actor) error
 }
 
 // AuthHandlers implements the generated non-strict ServerInterface.
@@ -306,26 +305,6 @@ func (h *AuthHandlers) Logout(w http.ResponseWriter, r *http.Request) {
 			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 			return
 		}
-	}
-
-	httpsupport.ClearSessionCookie(w, h.cookieSecure)
-	w.WriteHeader(http.StatusNoContent)
-}
-
-// LogoutAll implements POST /auth/logout-all.
-func (h *AuthHandlers) LogoutAll(w http.ResponseWriter, r *http.Request) {
-	userID, ok := httpsupport.UserIDFromContext(r.Context())
-	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
-			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
-		return
-	}
-
-	if err := h.logout.LogoutAll(r.Context(), userID, actorFromContext(r.Context())); err != nil {
-		h.logger.ErrorContext(r.Context(), "logout all failed", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.ClearSessionCookie(w, h.cookieSecure)
-		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
-		return
 	}
 
 	httpsupport.ClearSessionCookie(w, h.cookieSecure)

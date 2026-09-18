@@ -148,13 +148,6 @@ func (r *SessionRepository) DeleteByTokenHash(ctx context.Context, tokenHash str
 	return nil
 }
 
-func (r *SessionRepository) DeleteByUserID(ctx context.Context, userID uuid.UUID) error {
-	if err := r.q().DeleteSessionsByUserID(ctx, pgconv.UUIDToPgtype(userID)); err != nil {
-		return fmt.Errorf("delete sessions by user id: %w", err)
-	}
-	return nil
-}
-
 func (r *SessionRepository) DeleteByUserIDExcept(ctx context.Context, userID uuid.UUID, tokenHash string) (int64, error) {
 	n, err := r.q().DeleteSessionsByUserIDExcept(ctx, pgen.DeleteSessionsByUserIDExceptParams{
 		UserID:    pgconv.UUIDToPgtype(userID),

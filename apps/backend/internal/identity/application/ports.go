@@ -123,7 +123,6 @@ type SessionRepository interface {
 	// row even near its end of life).
 	GetByID(ctx context.Context, id uuid.UUID) (domain.Session, error)
 	DeleteByTokenHash(ctx context.Context, tokenHash string) error
-	DeleteByUserID(ctx context.Context, userID uuid.UUID) error
 	// DeleteByUserIDExcept removes every session of the user except the one
 	// carrying tokenHash (its previous hash within the grace window also
 	// protects it) and reports how many rows were removed.

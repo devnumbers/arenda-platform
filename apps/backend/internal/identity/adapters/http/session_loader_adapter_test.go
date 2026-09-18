@@ -37,7 +37,6 @@ func (r *fakeSessionRepoForLoader) Touch(_ context.Context, session domain.Sessi
 	return nil
 }
 func (r *fakeSessionRepoForLoader) DeleteByTokenHash(context.Context, string) error { return nil }
-func (r *fakeSessionRepoForLoader) DeleteByUserID(context.Context, uuid.UUID) error { return nil }
 func (r *fakeSessionRepoForLoader) DeleteByUserIDExcept(context.Context, uuid.UUID, string) (int64, error) {
 	return 0, nil
 }

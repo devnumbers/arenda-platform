@@ -224,7 +224,7 @@ func (r *capturingSessionRepo) DeleteByTokenHash(_ context.Context, hash string)
 	delete(r.sessions, hash)
 	return nil
 }
-func (r *capturingSessionRepo) DeleteByUserID(_ context.Context, _ uuid.UUID) error { return nil }
+
 func (r *capturingSessionRepo) DeleteByUserIDExcept(_ context.Context, _ uuid.UUID, _ string) (int64, error) {
 	return 0, nil
 }

@@ -34,7 +34,6 @@ const (
 	ActionAuthLogin       Action = "auth.login"
 	ActionAuthLoginFailed Action = "auth.login_failed"
 	ActionAuthLogout      Action = "auth.logout"
-	ActionAuthLogoutAll   Action = "auth.logout_all"
 	// ActionAuthSessionRevoked records a user terminating one of their own
 	// sessions from the devices list (map #724, ticket #728). The context
 	// carries the revoked session's UUID — an identifier, never a token.

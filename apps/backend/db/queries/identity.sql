@@ -146,9 +146,6 @@ WHERE id = sqlc.arg('id') AND token_hash = sqlc.arg('old_token_hash')::text;
 -- name: DeleteSessionByTokenHash :exec
 DELETE FROM sessions WHERE token_hash = sqlc.arg('token_hash')::text OR previous_token_hash = sqlc.arg('token_hash')::text;
 
--- name: DeleteSessionsByUserID :exec
-DELETE FROM sessions WHERE user_id = $1;
-
 -- The previous_token_hash branch is the SQL copy of the currentness rule in
 -- identity/application/sessions_service.go (isCurrentSession): within the
 -- rotation grace window the caller may present the previous token, so its row

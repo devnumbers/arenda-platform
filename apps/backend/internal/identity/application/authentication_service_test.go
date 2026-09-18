@@ -369,15 +369,6 @@ func (r *fakeSessionRepo) DeleteByTokenHash(_ context.Context, tokenHash string)
 	return nil
 }
 
-func (r *fakeSessionRepo) DeleteByUserID(_ context.Context, userID uuid.UUID) error {
-	for hash, s := range r.sessions {
-		if s.UserID == userID {
-			delete(r.sessions, hash)
-		}
-	}
-	return nil
-}
-
 func (r *fakeSessionRepo) DeleteByUserIDExcept(_ context.Context, userID uuid.UUID, tokenHash string) (int64, error) {
 	var removed int64
 	for hash, s := range r.sessions {

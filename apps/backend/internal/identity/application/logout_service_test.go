@@ -89,36 +89,6 @@ func TestLogoutService_Logout_WrapsDeleteError(t *testing.T) {
 	}
 }
 
-// TestLogoutService_LogoutAll_DeletesSessionsByUserID proves LogoutAll removes
-// every session belonging to the user and commits.
-func TestLogoutService_LogoutAll_DeletesSessionsByUserID(t *testing.T) {
-	t.Parallel()
-	svc, stores := newLogoutHarness()
-
-	userID := uuid.Must(uuid.NewV7())
-	otherUserID := uuid.Must(uuid.NewV7())
-	stores.sessions.sessions["hash-a"] = domain.Session{UserID: userID, TokenHash: "hash-a"}
-	stores.sessions.sessions["hash-b"] = domain.Session{UserID: userID, TokenHash: "hash-b"}
-	stores.sessions.sessions["hash-c"] = domain.Session{UserID: otherUserID, TokenHash: "hash-c"}
-
-	if err := svc.LogoutAll(context.Background(), userID, testLogoutActor); err != nil {
-		t.Fatalf("LogoutAll error = %v, want nil", err)
-	}
-
-	if _, ok := stores.sessions.sessions["hash-a"]; ok {
-		t.Error("session hash-a still present, want deleted")
-	}
-	if _, ok := stores.sessions.sessions["hash-b"]; ok {
-		t.Error("session hash-b still present, want deleted")
-	}
-	if _, ok := stores.sessions.sessions["hash-c"]; !ok {
-		t.Error("session hash-c was deleted, want retained (different user)")
-	}
-	if stores.beginner.committed != 1 {
-		t.Errorf("committed = %d, want 1", stores.beginner.committed)
-	}
-}
-
 // TestLogoutService_UsesRunInTx proves Logout goes through the UoW seam: the
 // session repository is bound to the transaction and the UoW commits. This is
 // the core assertion of the ADR 0033 smoke test.
@@ -200,40 +170,6 @@ func TestLogoutService_RecordsAuditInTx(t *testing.T) {
 	}
 }
 
-// TestLogoutService_LogoutAll_RecordsAuditInTx proves LogoutAll records the
-// logout-all audit entry inside the same transaction.
-func TestLogoutService_LogoutAll_RecordsAuditInTx(t *testing.T) {
-	t.Parallel()
-	users := newFakeUserRepo()
-	codes := newFakeCodeRepo()
-	attempts := newFakeAttemptRepo()
-	sessions := newFakeSessionRepo()
-	audit := &recordingRecorder{}
-	beginner := &fakeBeginner{}
-	factory := NewTxStoreFactory(users, codes, attempts, sessions, newFakeGrantRepo(), audit, &fakeUoW{beginner: beginner})
-	svc := NewLogoutService(
-		factory,
-		LogoutServiceConfig{
-			Hasher: fakeHasher{},
-			Logger: slog.New(slog.DiscardHandler),
-		},
-	)
-
-	userID := uuid.Must(uuid.NewV7())
-	actor := auditdomain.Actor{ID: userID, Role: auditdomain.ActorRoleOwner}
-
-	if err := svc.LogoutAll(context.Background(), userID, actor); err != nil {
-		t.Fatalf("LogoutAll error = %v, want nil", err)
-	}
-
-	if len(audit.entries) != 1 {
-		t.Fatalf("audit entries = %d, want 1", len(audit.entries))
-	}
-	if audit.entries[0].Action != auditdomain.ActionAuthLogoutAll {
-		t.Errorf("audit action = %s, want %s", audit.entries[0].Action, auditdomain.ActionAuthLogoutAll)
-	}
-}
-
 // TestLogoutService_AuditFailOpen proves an audit failure does not block
 // logout: the session delete still commits. This is the documented fail-open
 // exception — logout must always succeed regardless of the audit write.
@@ -278,7 +214,6 @@ func (r *errorSessionRepo) GetByTokenHash(context.Context, string, time.Time) (d
 }
 func (r *errorSessionRepo) Update(context.Context, domain.Session) error    { return nil }
 func (r *errorSessionRepo) DeleteByTokenHash(context.Context, string) error { return r.err }
-func (r *errorSessionRepo) DeleteByUserID(context.Context, uuid.UUID) error { return r.err }
 func (r *errorSessionRepo) DeleteByUserIDExcept(context.Context, uuid.UUID, string) (int64, error) {
 	return 0, r.err
 }

@@ -48,20 +48,12 @@ func (f *fakeProfiler) UpdateProfile(ctx context.Context, userID uuid.UUID, cmd 
 }
 
 type fakeLogout struct {
-	logout    func(ctx context.Context, rawToken string, actor auditdomain.Actor) error
-	logoutAll func(ctx context.Context, userID uuid.UUID, actor auditdomain.Actor) error
+	logout func(ctx context.Context, rawToken string, actor auditdomain.Actor) error
 }
 
 func (f *fakeLogout) Logout(ctx context.Context, rawToken string, actor auditdomain.Actor) error {
 	if f.logout != nil {
 		return f.logout(ctx, rawToken, actor)
-	}
-	return nil
-}
-
-func (f *fakeLogout) LogoutAll(ctx context.Context, userID uuid.UUID, actor auditdomain.Actor) error {
-	if f.logoutAll != nil {
-		return f.logoutAll(ctx, userID, actor)
 	}
 	return nil
 }
@@ -262,57 +254,6 @@ func TestLogout_OtherErrorReturns500(t *testing.T) {
 	r := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/auth/logout", nil)
 	r.AddCookie(sessionCookie("token"))
 	rr := doHandler(t, h.Logout, r)
-
-	if rr.Code != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want 500", rr.Code)
-	}
-}
-
-// LogoutAll.
-
-func TestLogoutAll_NoUserIDReturns401(t *testing.T) {
-	t.Parallel()
-	h := newHandlers(nil, &fakeLogout{}, nil)
-
-	rr := doHandler(t, h.LogoutAll, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/auth/logout-all", nil))
-
-	if rr.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want 401", rr.Code)
-	}
-}
-
-func TestLogoutAll_Success(t *testing.T) {
-	t.Parallel()
-	var gotUserID uuid.UUID
-	logout := &fakeLogout{
-		logoutAll: func(_ context.Context, userID uuid.UUID, _ auditdomain.Actor) error {
-			gotUserID = userID
-			return nil
-		},
-	}
-	h := newHandlers(nil, logout, nil)
-	userID := uuid.Must(uuid.NewV7())
-
-	r := authedRequest(t, http.MethodPost, "/auth/logout-all", "", userID)
-	rr := doHandler(t, h.LogoutAll, r)
-
-	if rr.Code != http.StatusNoContent {
-		t.Fatalf("status = %d, want 204", rr.Code)
-	}
-	if gotUserID != userID {
-		t.Fatalf("LogoutAll userID = %s, want %s", gotUserID, userID)
-	}
-}
-
-func TestLogoutAll_ErrorReturns500(t *testing.T) {
-	t.Parallel()
-	logout := &fakeLogout{
-		logoutAll: func(context.Context, uuid.UUID, auditdomain.Actor) error { return errors.New("db down") },
-	}
-	h := newHandlers(nil, logout, nil)
-
-	r := authedRequest(t, http.MethodPost, "/auth/logout-all", "", uuid.Must(uuid.NewV7()))
-	rr := doHandler(t, h.LogoutAll, r)
 
 	if rr.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want 500", rr.Code)

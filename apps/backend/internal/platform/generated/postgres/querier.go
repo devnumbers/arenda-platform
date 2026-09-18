@@ -247,7 +247,6 @@ type Querier interface {
 	DeleteRuleUncompleted(ctx context.Context, ruleID pgtype.UUID) error
 	DeleteSessionByIDForUser(ctx context.Context, arg DeleteSessionByIDForUserParams) (int64, error)
 	DeleteSessionByTokenHash(ctx context.Context, tokenHash string) error
-	DeleteSessionsByUserID(ctx context.Context, userID pgtype.UUID) error
 	// The previous_token_hash branch is the SQL copy of the currentness rule in
 	// identity/application/sessions_service.go (isCurrentSession): within the
 	// rotation grace window the caller may present the previous token, so its row
