@@ -44,15 +44,19 @@ type OwnerDisplayNameResolver interface {
 }
 
 // SharedSuspendedMembership is one suspended shared membership of the reading
-// actor (ticket #702): the blur-card placeholder of a shared object
-// temporarily unavailable because the actor's tariff limit is exceeded. No
-// object data travels with it — the object stays hidden while suspended; the
-// payload carries the access role and the owner contact the reason sheet
-// renders (Figma 2229-100002). It replaces the hidden-shared count footnote
-// (issues #158 T4, #163 — same predicate and FIFO order).
+// actor (ticket #702): the blur-card shown in the property list while the
+// object is temporarily unavailable because the actor's tariff limit is
+// exceeded. It carries the object's own card data (title and address — the
+// card renders for real under the blur, Figma 2213-99113; photos are not
+// wired — every card wears the same house-glyph avatar today) plus the owner
+// contact the reason sheet renders (Figma 2229-100002). It replaces the
+// hidden-shared count footnote (issues #158 T4, #163 — same predicate and
+// FIFO order).
 type SharedSuspendedMembership struct {
 	PropertyID uuid.UUID
 	Role       sharedpolicy.Role
+	Name       string
+	Address    string
 	OwnerName  string
 	OwnerEmail string
 }

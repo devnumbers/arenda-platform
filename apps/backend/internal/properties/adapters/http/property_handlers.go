@@ -240,6 +240,8 @@ func suspendedSharedResponse(membership propertiesapp.SharedSuspendedMembership)
 	return openapi.SuspendedSharedProperty{
 		PropertyId: membership.PropertyID,
 		AccessRole: openapi.SuspendedSharedPropertyAccessRole(membership.Role),
+		Name:       membership.Name,
+		Address:    membership.Address,
 		OwnerName:  membership.OwnerName,
 		OwnerEmail: membership.OwnerEmail,
 	}

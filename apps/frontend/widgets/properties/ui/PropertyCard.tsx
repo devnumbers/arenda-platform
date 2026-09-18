@@ -40,9 +40,13 @@ export type PropertyCardProps = {
   readonly today?: IsoDate;
   /** archived — карточка экрана «Архивные объекты» (#587). */
   readonly variant?: 'list' | 'archived';
+  /** nonInteractive — без оверлея-ссылки: карточка-подвесший (#702)
+   * рендерит обычную анатомию под блюром, тап ведёт в шит причины, а не на
+   * деталь объекта. */
+  readonly nonInteractive?: boolean;
 };
 
-export function PropertyCard({ property, today, variant = 'list' }: PropertyCardProps): JSX.Element {
+export function PropertyCard({ property, today, variant = 'list', nonInteractive = false }: PropertyCardProps): JSX.Element {
   const isArchived = variant === 'archived';
   const isPrimary = !isArchived && property.pinned_at !== null;
   const badges: readonly PropertyBadge[] = isArchived
@@ -57,11 +61,13 @@ export function PropertyCard({ property, today, variant = 'list' }: PropertyCard
 
   return (
     <article className={styles.root}>
-      <NextLink
-        href={ROUTES.property(property.id)}
-        className={styles.cardLink}
-        aria-label={`Открыть объект ${property.name}`}
-      />
+      {!nonInteractive && (
+        <NextLink
+          href={ROUTES.property(property.id)}
+          className={styles.cardLink}
+          aria-label={`Открыть объект ${property.name}`}
+        />
+      )}
       <div className={styles.body}>
         <PropertyAvatar
           photoUrl={property.photos?.[0]?.url ?? null}

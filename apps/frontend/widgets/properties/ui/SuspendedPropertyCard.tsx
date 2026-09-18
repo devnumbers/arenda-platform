@@ -2,7 +2,7 @@
 
 import type { JSX } from 'react';
 import type { SuspendedSharedProperty } from '@/features/properties';
-import { PropertyAvatar } from '@/entities/property';
+import { PropertyCard } from './PropertyCard';
 import { LockSmall } from '@/shared/assets/icons';
 import styles from './SuspendedPropertyCard.module.css';
 
@@ -14,17 +14,28 @@ export type SuspendedPropertyCardProps = {
 /**
  * Блюр-карточка подвесшего чужого объекта (карта #692, тикет #702; Figma
  * 2213-99113) в списке-хабе: объект, скрытый тарифным лимитом получателя,
- * вместо сноски hidden_shared_count (#158 T4) рисуется карточкой под общим
- * размытием — анатомия обычной карточки (круг-фото, строки) целиком под
- * blur(4px), сверху белая плашка с замком, «Объект недоступен» и кнопкой
- * «Узнать причину». Данных объекта плейсхолдер не несёт; вся карточка —
- * кнопка открытия шита причины (chevron и ссылка на объект, в отличие от
- * обычной карточки, отсутствуют).
+ * рисуется как ОБЫЧНАЯ карточка (настоящие название и адрес, аватар-заглушка
+ * — у объектов сейчас нет фото), целиком под blur(4px); сверху отдельным
+ * слоем — белая плашка с замком, «Объект недоступен» и кнопкой «Узнать
+ * причину». Тап открывает шит причины — ссылки на деталь объекта нет
+ * (nonInteractive), доступ к объекту приостановлен.
  */
 export function SuspendedPropertyCard({
   placeholder,
   onReason,
 }: SuspendedPropertyCardProps): JSX.Element {
+  const property = {
+    id: placeholder.propertyId,
+    name: placeholder.name,
+    // Тип в карточке не рендерится; контракт Property его требует.
+    type: 'apartment' as const,
+    address: placeholder.address,
+    attributes: {},
+    status: 'active' as const,
+    members_count: 0,
+    created_at: '',
+    pinned_at: null,
+  };
   return (
     <button
       type="button"
@@ -33,11 +44,7 @@ export function SuspendedPropertyCard({
       onClick={() => onReason(placeholder)}
     >
       <span className={styles.blurLayer} aria-hidden>
-        <PropertyAvatar photoUrl={null} withAttentionDot={false} />
-        <span className={styles.info}>
-          <span className={styles.lineTitle} />
-          <span className={styles.lineAddress} />
-        </span>
+        <PropertyCard property={property} nonInteractive />
       </span>
       <span className={styles.plaque}>
         <span className={styles.plaqueHead}>

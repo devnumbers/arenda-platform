@@ -6785,13 +6785,13 @@ components:
     SuspendedSharedProperty:
       description: >
         A suspended shared membership of the reading actor (ticket #702): the
-        blur-card placeholder of an object temporarily unavailable because the
-        actor's tariff limit is exceeded. No object data travels with it — the
-        object stays hidden while suspended; the payload carries the access
-        role and the owner contact the reason sheet renders (Figma
+        blur-card of an object temporarily unavailable because the actor's
+        tariff limit is exceeded. The card renders for real under the blur
+        (Figma 2213-99113) — the payload carries the object's own title and
+        address plus the owner contact the reason sheet renders (Figma
         2229-100002).
       type: object
-      required: [property_id, access_role, owner_name, owner_email]
+      required: [property_id, access_role, name, address, owner_name, owner_email]
       properties:
         property_id:
           type: string
@@ -6800,6 +6800,12 @@ components:
           type: string
           enum: [full_access, viewer]
           description: The recipient's role on the suspended access.
+        name:
+          type: string
+          description: The object's title — the blurred card renders it.
+        address:
+          type: string
+          description: The object's address — the blurred card renders it.
         owner_name:
           type: string
           description: >

@@ -70,8 +70,11 @@ test('блюр-карточка подвесшего объекта и шит п
   try {
     await openHub(page, seededUser);
 
-    // Блюр-карточка после своих карточек: плашка с замком и «Узнать причину».
+    // Блюр-карточка после своих карточек: настоящая карточка объекта под
+    // блюром (название, адрес — Figma 2213-99113) и плашка «Узнать причину».
     const blurCard = page.getByTestId('suspended-property-card');
+    await expect(blurCard.getByText('Дача у Марии')).toBeVisible();
+    await expect(blurCard.getByText('Москва, ул. Дачная, 5')).toBeVisible();
     await expect(blurCard.getByText('Объект недоступен')).toBeVisible();
     await expect(blurCard.getByText('Узнать причину')).toBeVisible();
 

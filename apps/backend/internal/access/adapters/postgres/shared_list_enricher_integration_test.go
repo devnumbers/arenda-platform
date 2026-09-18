@@ -118,9 +118,11 @@ func TestSharedListEnricher_NamesByOwner(t *testing.T) {
 	}
 }
 
-// TestSharedListEnricher_SuspendedWith verifies the blur-card placeholders
-// (ticket #702): suspended memberships on non-archived properties only,
-// FIFO order, each with the owner's display name and account email.
+// TestSharedListEnricher_SuspendedWith verifies the blur-cards (ticket
+// #702): suspended memberships on non-archived properties only, FIFO order,
+// each with the property's own card data (title and address — the card
+// renders for real under the blur, Figma 2213-99113) and the owner's
+// display name and account email.
 func TestSharedListEnricher_SuspendedWith(t *testing.T) {
 	t.Parallel()
 	f := newAccessLifecycleFixture(t)
@@ -130,6 +132,10 @@ func TestSharedListEnricher_SuspendedWith(t *testing.T) {
 
 	propVisible := f.addProperty(t, owner, "Доступная")
 	propArchived := f.addProperty(t, owner, "Архивная")
+
+	if _, err := f.tx.Exec(f.bg(), `UPDATE properties SET address = 'Тестовый адрес, 1' WHERE id = $1`, pgUUID(propVisible)); err != nil {
+		t.Fatalf("set address: %v", err)
+	}
 
 	first := f.addMember(t, propVisible, recipient, "viewer", "suspended")
 	f.backdateMember(t, first)
@@ -147,6 +153,8 @@ func TestSharedListEnricher_SuspendedWith(t *testing.T) {
 		{
 			PropertyID: propVisible,
 			Role:       sharedpolicy.RoleViewer,
+			Name:       "Доступная",
+			Address:    "Тестовый адрес, 1",
 			OwnerName:  "Максим Сергеевич",
 			OwnerEmail: f.email("maksim"),
 		},

@@ -15,8 +15,8 @@ import (
 // SharedListEnricher serves the access projections of the properties list
 // reads (ticket #702): the active-member display names of the owner's own
 // properties (the cards' participant row) and the recipient's suspended
-// shared memberships as blur-card placeholders, each carrying the owner
-// contact for the reason sheet. User data resolves through the identity user
+// shared memberships as blur-cards — the object's own title/address under
+// the blur plus the owner contact for the reason sheet. User data resolves through the identity user
 // reader — the access SQL never joins users; the per-user lookups follow the
 // ListMembers precedent (issue #693), the volumes are one list read's worth
 // of members and owners.
@@ -66,10 +66,12 @@ func (s *SharedListEnricher) NamesByOwner(ctx context.Context, owner uuid.UUID) 
 
 // SuspendedWith resolves the recipient's suspended shared memberships in the
 // FIFO order (ticket #702), implementing the properties application
-// SuspendedSharedMemberships port. Each placeholder carries the owner's
-// display name and account email for the reason sheet's contact row; a
-// missing owner row fails the read — the FK makes it unreachable, and an
-// infra failure must surface as a 500, not as a silently missing card.
+// SuspendedSharedMemberships port. Each card carries the object's own title
+// and address (the card renders for real under the blur, Figma 2213-99113)
+// and the owner's display name and account email for the reason sheet's
+// contact row; a missing owner row fails the read — the FK makes it
+// unreachable, and an infra failure must surface as a 500, not as a
+// silently missing card.
 func (s *SharedListEnricher) SuspendedWith(ctx context.Context, userID uuid.UUID) ([]propertiesapp.SharedSuspendedMembership, error) {
 	rows, err := postgres.New(s.db).ListSuspendedSharedWithOwner(ctx, pgconv.UUIDToPgtype(userID))
 	if err != nil {
@@ -97,6 +99,8 @@ func (s *SharedListEnricher) SuspendedWith(ctx context.Context, userID uuid.UUID
 			// (migration 000094); no corrupt-role filtering like the active
 			// list's appendSharedProperties needs here.
 			Role:       toPolicyRole(row.Role),
+			Name:       row.Name,
+			Address:    row.Address,
 			OwnerName:  contact.name,
 			OwnerEmail: contact.email,
 		})

@@ -449,7 +449,7 @@ func (q *Queries) ListSuspendedMembersByUser(ctx context.Context, userID pgtype.
 }
 
 const listSuspendedSharedWithOwner = `-- name: ListSuspendedSharedWithOwner :many
-SELECT m.property_id, m.role, p.owner_id
+SELECT m.property_id, m.role, p.name, p.address, p.owner_id
 FROM property_members m
 JOIN properties p ON p.id = m.property_id
 WHERE m.user_id = $1 AND m.status = 'suspended' AND p.status != 'archived'
@@ -459,15 +459,18 @@ ORDER BY m.suspended_at ASC NULLS LAST, m.updated_at DESC
 type ListSuspendedSharedWithOwnerRow struct {
 	PropertyID pgtype.UUID `json:"property_id"`
 	Role       string      `json:"role"`
+	Name       string      `json:"name"`
+	Address    string      `json:"address"`
 	OwnerID    pgtype.UUID `json:"owner_id"`
 }
 
-// The blur-card placeholders of the recipient's main property list (ticket
-// #702): suspended memberships on non-archived properties — the same
-// predicate and FIFO order the hidden-shared count used (#158 T4, #163) —
-// each with the data owner id for the reason sheet's contact row. Owner
-// display data resolves through the access context's user lookups; no
-// object data travels with a placeholder.
+// The blur-cards of the recipient's main property list (ticket #702):
+// suspended memberships on non-archived properties — the same predicate and
+// FIFO order the hidden-shared count used (#158 T4, #163) — each with the
+// object's own card data (title, address — the card renders for real under
+// the blur, Figma 2213-99113) and the data owner id for the reason sheet's
+// contact row. Owner display data and the first photo resolve through the
+// access context's follow-up lookups; the access SQL never joins users.
 func (q *Queries) ListSuspendedSharedWithOwner(ctx context.Context, userID pgtype.UUID) ([]ListSuspendedSharedWithOwnerRow, error) {
 	rows, err := q.db.Query(ctx, listSuspendedSharedWithOwner, userID)
 	if err != nil {
@@ -477,7 +480,13 @@ func (q *Queries) ListSuspendedSharedWithOwner(ctx context.Context, userID pgtyp
 	items := []ListSuspendedSharedWithOwnerRow{}
 	for rows.Next() {
 		var i ListSuspendedSharedWithOwnerRow
-		if err := rows.Scan(&i.PropertyID, &i.Role, &i.OwnerID); err != nil {
+		if err := rows.Scan(
+			&i.PropertyID,
+			&i.Role,
+			&i.Name,
+			&i.Address,
+			&i.OwnerID,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -2956,7 +2956,7 @@ export interface components {
             /** @description The reading actor's suspended shared memberships, FIFO order (ticket #702): shared objects hidden from them by a tariff slot shortage, returned as blur-card placeholders («Объект недоступен») instead of the hidden_shared_count footnote they replace. Empty for owners and recipients within their limit. */
             suspended_shared?: components["schemas"]["SuspendedSharedProperty"][];
         };
-        /** @description A suspended shared membership of the reading actor (ticket #702): the blur-card placeholder of an object temporarily unavailable because the actor's tariff limit is exceeded. No object data travels with it — the object stays hidden while suspended; the payload carries the access role and the owner contact the reason sheet renders (Figma 2229-100002). */
+        /** @description A suspended shared membership of the reading actor (ticket #702): the blur-card of an object temporarily unavailable because the actor's tariff limit is exceeded. The card renders for real under the blur (Figma 2213-99113) — the payload carries the object's own title and address plus the owner contact the reason sheet renders (Figma 2229-100002). */
         SuspendedSharedProperty: {
             /** Format: uuid */
             property_id: string;
@@ -2965,6 +2965,10 @@ export interface components {
              * @enum {string}
              */
             access_role: "full_access" | "viewer";
+            /** @description The object's title — the blurred card renders it. */
+            name: string;
+            /** @description The object's address — the blurred card renders it. */
+            address: string;
             /** @description The owner's public display name («Имя Фамилия» or a masked phone). */
             owner_name: string;
             /** @description The owner's account email for the reason sheet's contact row — a deliberate exposure for this surface (Figma 2229-100002): the recipient needs the contact to resolve the suspension with the owner. Empty when the owner has no email. */

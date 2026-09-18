@@ -32,13 +32,15 @@ type AddressSuggestionsResponse =
   components['schemas']['AddressSuggestionsResponse'];
 type AddressSuggestion = components['schemas']['AddressSuggestion'];
 
-/** Подвесший чужой объект списка (карта #692, тикет #702): блюр-плейсхолдер
- * «Объект недоступен». Данных объекта нет — только роль доступа и контакт
- * владельца для шита причины (Figma 2229-100002; почта владельца —
- * сознательная экспозиция этого экрана). */
+/** Подвесший чужой объект списка (карта #692, тикет #702): блюр-карточка —
+ * обычная карточка объекта (название, адрес — рендерятся под blur, Figma
+ * 2213-99113) плюс контакт владельца для шита причины (Figma 2229-100002;
+ * почта владельца — сознательная экспозиция этого экрана). */
 export type SuspendedSharedProperty = {
   readonly propertyId: string;
   readonly accessRole: SharedAccessRole;
+  readonly name: string;
+  readonly address: string;
   readonly ownerName: string;
   readonly ownerEmail: string;
 };
@@ -49,6 +51,8 @@ function mapSuspendedShared(
   return dto.map((item) => ({
     propertyId: item.property_id,
     accessRole: item.access_role,
+    name: item.name,
+    address: item.address,
     ownerName: item.owner_name,
     ownerEmail: item.owner_email,
   }));
