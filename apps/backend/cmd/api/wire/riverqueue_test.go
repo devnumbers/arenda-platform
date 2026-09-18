@@ -52,6 +52,7 @@ func TestWireRiverQueueBuildsBundle(t *testing.T) {
 	assert.NotNil(t, riverMod.Client)
 	assert.NotNil(t, riverMod.Publisher)
 	assert.NotNil(t, riverMod.ProviderLimiter)
+	assert.NotNil(t, riverMod.Stream, "the stream hub ships with the queue bundle")
 }
 
 type fakeContactResolver struct{}

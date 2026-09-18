@@ -73,7 +73,7 @@ func (w *DeliverPushWorker) Work(ctx context.Context, job *river.Job[DeliverPush
 		Title:     n.Title,
 		Body:      n.Body,
 		Tag:       n.ID.String(),
-		URL:       deeplinkFor(n.EventType),
+		URL:       DeepLinkFor(n.EventType),
 		EventType: n.EventType,
 	}
 	for _, sub := range subs {

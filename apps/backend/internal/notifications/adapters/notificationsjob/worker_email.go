@@ -129,7 +129,7 @@ func (w *DeliverEmailWorker) Work(ctx context.Context, job *river.Job[DeliverEma
 // catalog publishers (#748–#752) extend the map per event type; an event
 // without an entry renders the email without a button.
 func (w *DeliverEmailWorker) actionURL(n domain.Notification) string {
-	if path := deeplinkFor(n.EventType); path != "" {
+	if path := DeepLinkFor(n.EventType); path != "" {
 		return w.appBaseURL + path
 	}
 	return ""

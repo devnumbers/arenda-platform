@@ -8,8 +8,10 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	notificationsjob "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/notificationsjob"
+	notificationsstream "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/stream"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/sse"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/riverqueue/river/rivertype"
@@ -27,6 +29,12 @@ type RiverQueue struct {
 	// call it strictly after the publishing context's own transaction
 	// commits (the grace-events canon, решение #740).
 	Publisher *notificationsapp.Publisher
+	// Stream is the shared event stream hub (карта #734, #742; ADR 0058):
+	// the publisher pushes the live frames through it post-commit and the
+	// HTTP server serves GET /notifications/stream from it. The composition
+	// root closes it on shutdown, so long-lived streams do not hold up the
+	// graceful drain.
+	Stream *sse.Hub
 	// ProviderLimiter is the global email-provider budget spent inside the
 	// email worker.
 	ProviderLimiter *httpsupport.RateLimiter
@@ -34,10 +42,11 @@ type RiverQueue struct {
 
 // WireRiverQueue builds the River client with the two delivery queues and
 // the email/push workers, plus the publisher over the transactional
-// enqueuer. The client is not started here: NewWorkers runs it in the
-// workers phase and Workers.Wait waits for its full stop. Push jobs are
-// enqueued only when a push sender could be built (VAPID keys configured);
-// without them the pipeline runs in the email-only local mode.
+// enqueuer and the event stream hub behind it (#742, ADR 0058). The client
+// is not started here: NewWorkers runs it in the workers phase and
+// Workers.Wait waits for its full stop. Push jobs are enqueued only when a
+// push sender could be built (VAPID keys configured); without them the
+// pipeline runs in the email-only local mode.
 func WireRiverQueue(
 	ctx context.Context,
 	p platformDeps,
@@ -60,6 +69,11 @@ func WireRiverQueue(
 	if err != nil {
 		providerLimiter.Stop()
 		return nil, fmt.Errorf("wire email metrics: %w", err)
+	}
+	streamMetrics, err := sse.NewMetrics()
+	if err != nil {
+		providerLimiter.Stop()
+		return nil, fmt.Errorf("wire stream metrics: %w", err)
 	}
 
 	workers := river.NewWorkers()
@@ -107,9 +121,12 @@ func WireRiverQueue(
 		slog.Bool("push_enabled", pushSender != nil),
 	)
 
+	notificationsStream := sse.NewHub(streamMetrics)
 	return &RiverQueue{
-		Client:          client,
-		Publisher:       notificationsapp.NewPublisher(notificationsMod.NotificationRepo, queue, p.UoW, p.Logger),
+		Client: client,
+		Publisher: notificationsapp.NewPublisher(notificationsMod.NotificationRepo, queue,
+			notificationsstream.NewPublisher(notificationsStream, p.Clock), p.UoW, p.Logger),
+		Stream:          notificationsStream,
 		ProviderLimiter: providerLimiter,
 	}, nil
 }

@@ -16,13 +16,13 @@ func TestDeeplinkForGrace(t *testing.T) {
 		domain.EventSubscriptionGraceEntered,
 		domain.EventSubscriptionGraceExpiring,
 	} {
-		if got := deeplinkFor(eventType); got != graceNotificationPath {
-			t.Errorf("deeplinkFor(%q) = %q, want %s", eventType, got, graceNotificationPath)
+		if got := DeepLinkFor(eventType); got != graceNotificationPath {
+			t.Errorf("DeepLinkFor(%q) = %q, want %s", eventType, got, graceNotificationPath)
 		}
 	}
 
 	// An event without an entry delivers without a link.
-	if got := deeplinkFor(domain.EventSystemMaintenance); got != "" {
-		t.Errorf("deeplinkFor(system_maintenance) = %q, want empty", got)
+	if got := DeepLinkFor(domain.EventSystemMaintenance); got != "" {
+		t.Errorf("DeepLinkFor(system_maintenance) = %q, want empty", got)
 	}
 }

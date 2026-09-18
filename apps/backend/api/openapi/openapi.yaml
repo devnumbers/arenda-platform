@@ -2407,6 +2407,40 @@ paths:
               schema:
                 $ref: '#/components/schemas/Problem'
 
+  /notifications/stream:
+    get:
+      operationId: streamNotifications
+      summary: Живой стрим событий пользователя (SSE)
+      description: |
+        Общий пользовательский Server-Sent Events стрим (карта #734, #742;
+        ADR 0058). Авторизация — cookie-сессия тем же SessionMiddleware;
+        без актора хендлер отвечает 401 problem+json до старта стрима.
+        Формат кадров — WHATWG SSE: retry-подсказка и стартовое событие
+        connected на старте, id — монотонная последовательность (курсор
+        Last-Event-ID; replay в v1 не реализован), event — стабильное грубое
+        имя (notification.created, notification.unread_count; допишут #714),
+        data — JSON-конверт {v, occurredAt, payload}. Heartbeat-комментарий
+        каждые 25 с, соединение закрывается через час (пере-аутентификация
+        при переподключении). Кадры best-effort: состояние клиент дочитывает
+        через обычные эндпоинты.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Поток событий в формате text/event-stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          description: Стрим недоступен (хаб не сконфигурирован)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
   /push/vapid-public-key:
     get:
       operationId: getVapidPublicKey

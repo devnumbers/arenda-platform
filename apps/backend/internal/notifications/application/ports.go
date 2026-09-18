@@ -93,6 +93,22 @@ type DeliveryQueue interface {
 	EnqueuePush(ctx context.Context, tx transaction.Tx, notificationID uuid.UUID) error
 }
 
+// StreamPublisher pushes live notifications to a recipient's open stream
+// (карта #734, #742; ADR 0058). The port is the delivery pipeline's post-commit
+// hook into the transport: the publisher calls it strictly after the row's
+// transaction commits, once per created row. Best-effort by contract —
+// implementations never block, never fail and report nothing; a dropped frame
+// is one reconnect and react-query refetch away, the feed row is the system
+// of record.
+type StreamPublisher interface {
+	// NotificationCreated pushes the "notification.created" frame for the
+	// committed row (the toast: category, title, body, deep link).
+	NotificationCreated(ctx context.Context, n domain.Notification)
+	// UnreadCount pushes the "notification.unread_count" frame — the badge
+	// value read from the feed after the commit.
+	UnreadCount(ctx context.Context, userID uuid.UUID, count int64)
+}
+
 // Contact is a resolved delivery endpoint.
 type Contact struct {
 	Channel Channel

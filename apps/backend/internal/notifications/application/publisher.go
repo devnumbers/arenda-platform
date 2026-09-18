@@ -43,19 +43,27 @@ type Publication struct {
 // queue may redeliver in an crash window, a duplicate message beats a lost
 // one.
 type Publisher struct {
-	feed  NotificationRepository
-	queue DeliveryQueue
-	uow   transaction.UoW
-	log   *slog.Logger
+	feed   NotificationRepository
+	queue  DeliveryQueue
+	stream StreamPublisher
+	uow    transaction.UoW
+	log    *slog.Logger
 }
 
-// NewPublisher creates the notification publication service. A nil logger
-// defaults to the standard one.
-func NewPublisher(feed NotificationRepository, queue DeliveryQueue, uow transaction.UoW, log *slog.Logger) *Publisher {
+// NewPublisher creates the notification publication service. The stream port
+// is the optional SSE transport hook (nil disables live pushes — tests, or a
+// wiring without the stream); a nil logger defaults to the standard one.
+func NewPublisher(
+	feed NotificationRepository,
+	queue DeliveryQueue,
+	stream StreamPublisher,
+	uow transaction.UoW,
+	log *slog.Logger,
+) *Publisher {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Publisher{feed: feed, queue: queue, uow: uow, log: log}
+	return &Publisher{feed: feed, queue: queue, stream: stream, uow: uow, log: log}
 }
 
 // Publish fans the publication out to every recipient. An empty recipient
@@ -71,7 +79,8 @@ func (p *Publisher) Publish(ctx context.Context, pub Publication) error {
 	if len(rows) == 0 {
 		return nil
 	}
-	return p.uow.Do(ctx, func(tx transaction.Tx) error {
+	var created []*domain.Notification
+	err = p.uow.Do(ctx, func(tx transaction.Tx) error {
 		feed, err := p.feed.WithTx(tx)
 		if err != nil {
 			return fmt.Errorf("bind notification repository: %w", err)
@@ -86,6 +95,7 @@ func (p *Publisher) Publish(ctx context.Context, pub Publication) error {
 				// publication must not re-deliver the channels either.
 				continue
 			}
+			created = append(created, n)
 			if err := p.queue.EnqueueEmail(ctx, tx, n.ID); err != nil {
 				return fmt.Errorf("enqueue email delivery %s: %w", n.ID, err)
 			}
@@ -95,6 +105,33 @@ func (p *Publisher) Publish(ctx context.Context, pub Publication) error {
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	// Strictly after the commit: the frames must not run ahead of the rows
+	// they announce, and a rollback streams nothing.
+	p.streamCreated(ctx, created)
+	return nil
+}
+
+// streamCreated pushes the live frames for the rows the publication created.
+// The SSE transport is best-effort (ADR 0058): a failed unread count drops
+// only the badge frame — the created frame never depends on it — and nothing
+// here can fail the publication.
+func (p *Publisher) streamCreated(ctx context.Context, created []*domain.Notification) {
+	if p.stream == nil || len(created) == 0 {
+		return
+	}
+	for _, n := range created {
+		p.stream.NotificationCreated(ctx, *n)
+		count, err := p.feed.CountUnread(ctx, n.UserID)
+		if err != nil {
+			p.log.WarnContext(ctx, "unread count for the stream failed",
+				slog.String("user_id", n.UserID.String()), slog.String("error", err.Error()))
+			continue
+		}
+		p.stream.UnreadCount(ctx, n.UserID, count)
+	}
 }
 
 // buildRows validates the publication against the catalog and builds one

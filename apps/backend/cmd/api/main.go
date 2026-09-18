@@ -25,6 +25,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpserver"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/sse"
 )
 
 func main() {
@@ -167,12 +168,15 @@ func run() error {
 	//     email/push delivery workers and the notification publisher. The
 	//     client starts in the workers phase below; the publisher is the
 	//     post-commit seam the pipeline publishers call (#741, #748–#752).
-	//     The grace subscribers (step 11.6) are the first to call it.
+	//     The grace subscribers (step 11.6) are the first to call it. The
+	//     publisher also pushes the live SSE frames through the stream hub
+	//     (#742, ADR 0058), which the HTTP server serves below.
 	riverMod, err := wire.WireRiverQueue(ctx, p, notificationsMod, delivery.resolver, delivery.emailer, pushSender)
 	if err != nil {
 		return err
 	}
 	defer riverMod.ProviderLimiter.Stop()
+	notificationsStream := riverMod.Stream
 
 	// 11.6 Grace notifications (issue #253, #741): the billing grace events
 	//     publish to the stored feed + delivery queue through the pipeline
@@ -242,6 +246,7 @@ func run() error {
 		Access:                   accessMod.AccessService,
 		Invitations:              accessMod.InvitationService,
 		PushSubscriptions:        notificationsMod.PushSubscriptionService,
+		NotificationsStreamHub:   notificationsStream,
 		VAPIDPublicKey:           p.Cfg.VAPIDPublicKey,
 		Popups:                   popupsMod.Service,
 		AppBaseURL:               p.Cfg.AppBaseURL,
@@ -260,16 +265,24 @@ func run() error {
 		AppVersion:               p.Cfg.AppVersion,
 	})
 
+	// WriteTimeout is 0: the event stream (/notifications/stream, #742) is a
+	// long-lived response the per-request write deadline would kill after 30s
+	// in every environment. The deadline could not be lifted per-connection —
+	// the otelhttp wrapper in the middleware chain hides the server's
+	// SetWriteDeadline from http.ResponseController — so the protection moves
+	// to the read deadlines (slow-request vector) and the stream's own
+	// heartbeat + hourly TTL (ADR 0058). Responses are bounded API payloads
+	// behind a buffering Caddy, so a client stalling a write is not a
+	// resource leak.
 	server := &http.Server{
 		Addr:              p.Cfg.HTTPAddr,
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
 
-	return serveAndWait(ctx, server, workers, p.Logger, p.Cfg)
+	return serveAndWait(ctx, server, workers, notificationsStream, p.Logger, p.Cfg)
 }
 
 // injectPropertyServiceAccess wires the access-context adapters into the
@@ -420,6 +433,7 @@ func serveAndWait(
 	ctx context.Context,
 	server *http.Server,
 	workers *wire.Workers,
+	notificationsStream *sse.Hub,
 	logger *slog.Logger,
 	cfg *config.Config,
 ) error {
@@ -431,6 +445,10 @@ func serveAndWait(
 
 	select {
 	case <-ctx.Done():
+		// The stream hub closes first: every SSE handler returns at once, so
+		// the graceful HTTP shutdown below is not held up by long-lived
+		// streams inside its 5-second window.
+		notificationsStream.Close(ctx)
 		// The lifecycle context is already cancelled, so the shutdown window
 		// derives from its value-bearing, cancellation-stripped view (same
 		// pattern as the platform cleanup in wire).

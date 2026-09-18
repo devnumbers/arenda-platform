@@ -84,7 +84,7 @@ func setupPipeline(t *testing.T) (*pgxpool.Pool, *application.Publisher) {
 	client, err := river.NewClient(riverpgxv5.New(pool), &river.Config{})
 	require.NoError(t, err)
 	queue := notificationsjob.NewRiverQueue(client, true, 8, 8)
-	publisher := application.NewPublisher(feedRepo, queue, platformpostgres.NewUoW(pool, nil), nil)
+	publisher := application.NewPublisher(feedRepo, queue, nil, platformpostgres.NewUoW(pool, nil), nil)
 	return pool, publisher
 }
 
@@ -220,7 +220,7 @@ func TestPublisherWithRiver_PushDisabledEnqueuesEmailOnly(t *testing.T) {
 	client, err := river.NewClient(riverpgxv5.New(pool), &river.Config{})
 	require.NoError(t, err)
 	queue := notificationsjob.NewRiverQueue(client, false, 8, 8)
-	publisher := application.NewPublisher(feedRepo, queue, platformpostgres.NewUoW(pool, nil), nil)
+	publisher := application.NewPublisher(feedRepo, queue, nil, platformpostgres.NewUoW(pool, nil), nil)
 
 	require.NoError(t, publisher.Publish(ctx, application.Publication{
 		EventType:  domain.EventPaymentDue,

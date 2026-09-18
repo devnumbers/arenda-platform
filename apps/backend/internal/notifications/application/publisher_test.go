@@ -47,6 +47,10 @@ type fakeFeedRepo struct {
 	// Existing holds "user_id|dedup_key" pairs Insert reports as duplicates.
 	existing map[string]bool
 
+	// Unread holds per-user counts for CountUnread; unreadErr fails the read.
+	unread    map[uuid.UUID]int64
+	unreadErr error
+
 	withTxErr error
 	lastTx    transaction.Tx
 }
@@ -89,7 +93,10 @@ func (r *fakeFeedRepo) ListPage(
 }
 
 func (r *fakeFeedRepo) CountUnread(ctx context.Context, userID uuid.UUID) (int64, error) {
-	return 0, ErrNotFound
+	if r.unreadErr != nil {
+		return 0, r.unreadErr
+	}
+	return r.unread[userID], nil
 }
 
 func (r *fakeFeedRepo) MarkRead(ctx context.Context, userID, id uuid.UUID) (bool, error) {
@@ -126,6 +133,24 @@ func (q *fakeQueue) EnqueuePush(ctx context.Context, tx transaction.Tx, notifica
 	return nil
 }
 
+// fakeStream records the live-stream pushes (карта #734, #742) the publisher
+// fires after its commit.
+type fakeStream struct {
+	created []domain.Notification
+	unread  map[uuid.UUID]int64
+}
+
+func (s *fakeStream) NotificationCreated(ctx context.Context, n domain.Notification) {
+	s.created = append(s.created, n)
+}
+
+func (s *fakeStream) UnreadCount(ctx context.Context, userID uuid.UUID, count int64) {
+	if s.unread == nil {
+		s.unread = make(map[uuid.UUID]int64)
+	}
+	s.unread[userID] = count
+}
+
 func publication() Publication {
 	return Publication{
 		EventType:  domain.EventPaymentDue,
@@ -141,7 +166,7 @@ func TestPublisherPublishFansOutRowPerRecipient(t *testing.T) {
 
 	feed := &fakeFeedRepo{}
 	queue := &fakeQueue{}
-	p := NewPublisher(feed, queue, &fakeUoW{}, nil)
+	p := NewPublisher(feed, queue, nil, &fakeUoW{}, nil)
 	pub := publication()
 
 	require.NoError(t, p.Publish(context.Background(), pub))
@@ -170,7 +195,7 @@ func TestPublisherPublishSkipsActor(t *testing.T) {
 
 	feed := &fakeFeedRepo{}
 	queue := &fakeQueue{}
-	p := NewPublisher(feed, queue, &fakeUoW{}, nil)
+	p := NewPublisher(feed, queue, nil, &fakeUoW{}, nil)
 
 	actor := uuid.Must(uuid.NewV7())
 	pub := publication()
@@ -190,7 +215,7 @@ func TestPublisherPublishSkipsEnqueueForDedupedRows(t *testing.T) {
 
 	feed := &fakeFeedRepo{}
 	queue := &fakeQueue{}
-	p := NewPublisher(feed, queue, &fakeUoW{}, nil)
+	p := NewPublisher(feed, queue, nil, &fakeUoW{}, nil)
 
 	pub := publication()
 	recipient := pub.Recipients[1]
@@ -212,7 +237,7 @@ func TestPublisherPublishRunsInOneTransaction(t *testing.T) {
 	feed := &fakeFeedRepo{}
 	queue := &fakeQueue{}
 	uow := &fakeUoW{}
-	p := NewPublisher(feed, queue, uow, nil)
+	p := NewPublisher(feed, queue, nil, uow, nil)
 
 	require.NoError(t, p.Publish(context.Background(), publication()))
 
@@ -228,7 +253,7 @@ func TestPublisherPublishRejectsOffCatalogEvent(t *testing.T) {
 
 	feed := &fakeFeedRepo{}
 	queue := &fakeQueue{}
-	p := NewPublisher(feed, queue, &fakeUoW{}, nil)
+	p := NewPublisher(feed, queue, nil, &fakeUoW{}, nil)
 
 	pub := publication()
 	// A dead PostgreSQL enum value, outside the feed catalog (#277).
@@ -244,7 +269,7 @@ func TestPublisherPublishRejectsBlankTexts(t *testing.T) {
 
 	feed := &fakeFeedRepo{}
 	queue := &fakeQueue{}
-	p := NewPublisher(feed, queue, &fakeUoW{}, nil)
+	p := NewPublisher(feed, queue, nil, &fakeUoW{}, nil)
 
 	pub := publication()
 	pub.Title = ""
@@ -259,7 +284,7 @@ func TestPublisherPublishPropagatesQueueFailureAndRollsBack(t *testing.T) {
 	feed := &fakeFeedRepo{}
 	queue := &fakeQueue{pushErr: errors.New("river down")}
 	uow := &fakeUoW{}
-	p := NewPublisher(feed, queue, uow, nil)
+	p := NewPublisher(feed, queue, nil, uow, nil)
 
 	err := p.Publish(context.Background(), publication())
 	require.ErrorContains(t, err, "enqueue push delivery")
@@ -272,7 +297,7 @@ func TestPublisherPublishWithoutRecipientsIsNoop(t *testing.T) {
 
 	feed := &fakeFeedRepo{}
 	queue := &fakeQueue{}
-	p := NewPublisher(feed, queue, &fakeUoW{}, nil)
+	p := NewPublisher(feed, queue, nil, &fakeUoW{}, nil)
 
 	pub := publication()
 	pub.Recipients = nil
@@ -280,4 +305,81 @@ func TestPublisherPublishWithoutRecipientsIsNoop(t *testing.T) {
 	require.NoError(t, p.Publish(context.Background(), pub))
 	assert.Empty(t, feed.inserted)
 	assert.Empty(t, queue.emails)
+}
+
+// streamPublication is a single-recipient publication the stream tests share.
+func streamPublication(t *testing.T) (pub Publication, recipient uuid.UUID) {
+	t.Helper()
+	recipient = uuid.Must(uuid.NewV7())
+	return Publication{
+		EventType:  domain.EventSubscriptionGraceEntered,
+		DedupKey:   domain.DedupKey("subscription_grace_entered:sub-1:2026-10-01"),
+		Title:      "Не удалось списание за подписку",
+		Body:       "Привяжите другую карту.",
+		Recipients: []uuid.UUID{recipient},
+	}, recipient
+}
+
+func TestPublisherPublishStreamsCreatedAndUnreadCount(t *testing.T) {
+	t.Parallel()
+
+	feed := &fakeFeedRepo{}
+	stream := &fakeStream{}
+	p := NewPublisher(feed, &fakeQueue{}, stream, &fakeUoW{}, nil)
+	pub, recipient := streamPublication(t)
+	feed.unread = map[uuid.UUID]int64{recipient: 3}
+
+	require.NoError(t, p.Publish(context.Background(), pub))
+
+	// One created push per inserted row, carrying the row itself.
+	require.Len(t, stream.created, 1)
+	assert.Equal(t, feed.inserted[0].ID, stream.created[0].ID)
+	assert.Equal(t, recipient, stream.created[0].UserID)
+	// The unread count is read after the commit, for the recipient.
+	assert.Equal(t, int64(3), stream.unread[recipient])
+}
+
+func TestPublisherPublishSkipsStreamForDedupedRows(t *testing.T) {
+	t.Parallel()
+
+	feed := &fakeFeedRepo{}
+	stream := &fakeStream{}
+	p := NewPublisher(feed, &fakeQueue{}, stream, &fakeUoW{}, nil)
+	pub, recipient := streamPublication(t)
+	feed.existing = map[string]bool{recipient.String() + "|" + string(pub.DedupKey): true}
+
+	require.NoError(t, p.Publish(context.Background(), pub))
+
+	assert.Empty(t, stream.created, "a deduped row is not a new notification")
+	assert.Empty(t, stream.unread)
+}
+
+func TestPublisherPublishStreamsCreatedWhenCountFails(t *testing.T) {
+	t.Parallel()
+
+	feed := &fakeFeedRepo{}
+	stream := &fakeStream{}
+	p := NewPublisher(feed, &fakeQueue{}, stream, &fakeUoW{}, nil)
+	pub, recipient := streamPublication(t)
+	feed.unreadErr = errors.New("db down")
+
+	// The stream is best-effort: a failed unread count never fails the
+	// publication — the created push still goes out.
+	require.NoError(t, p.Publish(context.Background(), pub))
+	require.Len(t, stream.created, 1)
+	assert.NotContains(t, stream.unread, recipient)
+}
+
+func TestPublisherPublishRollbackSkipsStream(t *testing.T) {
+	t.Parallel()
+
+	feed := &fakeFeedRepo{}
+	stream := &fakeStream{}
+	uow := &fakeUoW{workErr: errors.New("queue down")}
+	p := NewPublisher(feed, &fakeQueue{pushErr: errors.New("queue down")}, stream, uow, nil)
+	pub, _ := streamPublication(t)
+
+	require.Error(t, p.Publish(context.Background(), pub))
+	assert.Empty(t, stream.created, "nothing is streamed for a rolled-back publication")
+	assert.Empty(t, feed.inserted)
 }

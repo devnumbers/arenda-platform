@@ -1022,6 +1022,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/notifications/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Живой стрим событий пользователя (SSE)
+         * @description Общий пользовательский Server-Sent Events стрим (карта #734, #742;
+         *     ADR 0058). Авторизация — cookie-сессия тем же SessionMiddleware;
+         *     без актора хендлер отвечает 401 problem+json до старта стрима.
+         *     Формат кадров — WHATWG SSE: retry-подсказка и стартовое событие
+         *     connected на старте, id — монотонная последовательность (курсор
+         *     Last-Event-ID; replay в v1 не реализован), event — стабильное грубое
+         *     имя (notification.created, notification.unread_count; допишут #714),
+         *     data — JSON-конверт {v, occurredAt, payload}. Heartbeat-комментарий
+         *     каждые 25 с, соединение закрывается через час (пере-аутентификация
+         *     при переподключении). Кадры best-effort: состояние клиент дочитывает
+         *     через обычные эндпоинты.
+         */
+        get: operations["streamNotifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/push/vapid-public-key": {
         parameters: {
             query?: never;
@@ -5323,6 +5353,36 @@ export interface operations {
             404: components["responses"]["NotFound"];
             /** @description Resend cooldown has not elapsed yet */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    streamNotifications: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Поток событий в формате text/event-stream */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description Стрим недоступен (хаб не сконфигурирован) */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

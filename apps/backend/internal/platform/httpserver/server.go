@@ -24,6 +24,7 @@ import (
 	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/sse"
 	popupshttp "github.com/nambers/arenda-planform/apps/backend/internal/popups/adapters/http"
 	popupsapp "github.com/nambers/arenda-planform/apps/backend/internal/popups/application"
 	propertieshttp "github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/http"
@@ -63,21 +64,25 @@ type Deps struct {
 	// BillingTimeTravel serves the stand-only admin time-shift and tick
 	// endpoints (issue #665); non-nil only when the BILLING_TIME_TRAVEL
 	// railguard is on, so a production build mounts no such routes at all.
-	BillingTimeTravel        *billinghttp.TimeTravelHandlers
-	ReadonlyGate             httpsupport.SubscriptionMutationChecker
-	Admin                    *adminapp.AdminService
-	Properties               *propertiesapp.PropertyService
-	Contacts                 *contactsapp.ContactService
-	AddressSuggester         propertiesapp.AddressSuggester
-	PropertyPayments         *paymentsapp.PaymentService
-	PropertyOperations       *paymentsapp.OperationService
-	GlobalPayments           *paymentsapp.GlobalPaymentService
-	PropertyRentals          *rentalsapp.RentalService
-	PropertyTaskRules        *tasksapp.RuleService
-	PropertyTasks            *tasksapp.TaskService
-	Access                   *accessapp.AccessService
-	Invitations              *accessapp.InvitationService
-	PushSubscriptions        *notificationsapp.PushSubscriptionService
+	BillingTimeTravel  *billinghttp.TimeTravelHandlers
+	ReadonlyGate       httpsupport.SubscriptionMutationChecker
+	Admin              *adminapp.AdminService
+	Properties         *propertiesapp.PropertyService
+	Contacts           *contactsapp.ContactService
+	AddressSuggester   propertiesapp.AddressSuggester
+	PropertyPayments   *paymentsapp.PaymentService
+	PropertyOperations *paymentsapp.OperationService
+	GlobalPayments     *paymentsapp.GlobalPaymentService
+	PropertyRentals    *rentalsapp.RentalService
+	PropertyTaskRules  *tasksapp.RuleService
+	PropertyTasks      *tasksapp.TaskService
+	Access             *accessapp.AccessService
+	Invitations        *accessapp.InvitationService
+	PushSubscriptions  *notificationsapp.PushSubscriptionService
+	// NotificationsStreamHub is the shared event stream's hub (карта #734,
+	// #742; ADR 0058). The generated /notifications/stream route serves from
+	// it; nil answers 503 (a build without the stream).
+	NotificationsStreamHub   *sse.Hub
 	VAPIDPublicKey           string
 	Popups                   *popupsapp.PopupService
 	AppBaseURL               string
@@ -163,6 +168,7 @@ func New(deps Deps) http.Handler {
 	accessMemberHandlers := accesshttp.NewMemberHandlers(deps.Access, deps.Logger)
 	accessInvitationHandlers := accesshttp.NewInvitationHandlers(deps.Invitations, deps.Logger)
 	pushSubscriptionHandlers := notificationshttp.NewPushSubscriptionHandlers(deps.PushSubscriptions, deps.VAPIDPublicKey, deps.Logger)
+	streamHandlers := notificationshttp.NewStreamHandlers(deps.NotificationsStreamHub, deps.Logger)
 	popupHandlers := popupshttp.NewPopupHandlers(deps.Popups, deps.Logger)
 	billingHandlers := billinghttp.NewBillingHandlers(
 		deps.Tariffs, deps.AdminTariffs, deps.Subscriptions, deps.SubscriptionManagers,
@@ -184,6 +190,7 @@ func New(deps Deps) http.Handler {
 		MemberHandlers:           accessMemberHandlers,
 		InvitationHandlers:       accessInvitationHandlers,
 		PushSubscriptionHandlers: pushSubscriptionHandlers,
+		StreamHandlers:           streamHandlers,
 		PopupHandlers:            popupHandlers,
 		BillingHandlers:          billingHandlers,
 		PaymentHandlers:          paymentHandlers,
@@ -311,6 +318,7 @@ type composedHandler struct {
 	*accesshttp.MemberHandlers
 	*accesshttp.InvitationHandlers
 	*notificationshttp.PushSubscriptionHandlers
+	*notificationshttp.StreamHandlers
 	*popupshttp.PopupHandlers
 	*billinghttp.BillingHandlers
 	*paymentshttp.PaymentHandlers

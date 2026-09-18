@@ -59,7 +59,7 @@ RFC 8292. P-256 ключ pair для идентификации application serv
 ### Delivery pipeline
 
 **Пайплайн доставки / Delivery Pipeline** (#740, ADR 0057):
-Путь уведомления от издателя до каналов: издатель после коммита своего бизнес-транзакции (канон grace_events, post-commit) вызывает `Publisher.Publish` → в одной транзакции: строка ленты на получателя (in-app доставлено) + джобы `deliver_email`/`deliver_push` (River `InsertTx`). Строка и джобы атомарны: джоба без строки и строка без доставки не существуют. Джобы несут только id — контент читается из закоммиченной строки при доставке.
+Путь уведомления от издателя до каналов: издатель после коммита своего бизнес-транзакции (канон grace_events, post-commit) вызывает `Publisher.Publish` → в одной транзакции: строка ленты на получателя (in-app доставлено) + джобы `deliver_email`/`deliver_push` (River `InsertTx`). Строка и джобы атомарны: джоба без строки и строка без доставки не существуют. Джобы несут только id — контент читается из закоммиченной строки при доставке. Строго после коммита пайплайн толкает в стрим `notification.created` + `notification.unread_count` (#742, ADR 0058) — best-effort, на доставку каналов не влияет.
 
 **Очередь / Delivery Queue**:
 River (Postgres-очередь, ADR 0057) в процессе API; очереди `notifications_email` и `notifications_push` с независимыми потолками воркеров. Ретраи — дефолтная лестница River (`attempts^4 ± 10%`), бюджет 8 попыток на канал; исчерпание → `discarded` (запросable, retention 7 дней). Дедуп джоб: unique по args (= id уведомления) во всех нетерминальных состояниях — у одного уведомления максимум одна джоба канала «в полёте». Доставка at-least-once: дубликат письма/пуша лучше потери.
@@ -85,8 +85,28 @@ Push delivery is best-effort: push failures (429, 5xx, no subscription) are logg
 
 **Decision: classic service-worker Web Push only for v1; Declarative Web Push (iOS/iPadOS 18.4+) deferred.** All notifications carry a visible notification (`showNotification` mandatory — iOS revokes the subscription on silent push), so the declarative format's main draw — silent/navigate-only messages without a `push` handler — adds nothing the v1 notifications need. The classic SW-push path (`public/sw.js` push-handler, research `docs/research/ios-pwa-push.md` §1.4) works on Android Chrome and iOS 16.4+ installed PWA alike. Declarative Web Push would primarily help if (a) we shipped silent/technical pushes, or (b) ITP purges of SW registrations started killing subscriptions at scale (the declarative format decouples the subscription from the SW). Neither applies to v1. Re-evaluate when a silent-push use case lands.
 
+## Stream
+
+**Стрим / Event Stream** (#742, ADR 0058):
+Общий пользовательский SSE-стрим `GET /notifications/stream` — живой слой поверх ленты: тосты, бейдж непрочитанных, будущие потребители (карта #714). Авторизация — та же cookie-сессия (401 problem+json до старта стрима); транспорт однонаправленный, любые мутации — только через обычный API. Кадры best-effort: состояние клиент дочитывает своими запросами, лента остаётся системой записи.
+_Avoid_: пуш (это другой канал), WebSocket, «realtime-состояние» (стрим не несёт состояния)
+
+**Хаб / Hub**:
+`internal/platform/sse.Hub` — реестр открытых соединений в памяти процесса. Лимит 8 соединений на пользователя (вкладки/устройства, старейший вытесняется), буфер 32 кадра, переполнение = медленный потребитель: соединение закрывается, клиент переподключается и перечитывает. Публикация никогда не блокирует издателя. На остановке процесса хаб закрывается первым — graceful shutdown не ждёт долгоживущие стримы.
+
+**Конверт / Envelope**:
+JSON внутри кадра: `{v, occurredAt, payload}` — версия схемы, момент события (RFC3339 UTC), типизированная нагрузка из id и дисплейных полей. Имя события — стабильное грубое: `connected` (старт), `notification.created` (тост: id, категория, заголовок, тело, deeplink), `notification.unread_count` (бейдж). Новые имена добавляются без ломки старых клиентов (нет слушателя — кадр игнорируется); ломающее изменение payload — подъём `v`.
+
+**Курсор / Last-Event-ID**:
+Заголовок переподключения с монотонным id кадра (последовательность хаба). В v1 курсор логируется, replay не реализован: клиент на каждом открытии (включая переподключение) перечитывает живое через react-query. Ring-buffer replay — заготовленный v2.
+
+### Stream observability
+
+`sse.connections` (gauge) — открытые соединения прямо сейчас, нагрузочная граница транспорта; `sse.frames.dropped` — вытеснения медленных потребителей, устойчивый ненулевой темп = клиенты не успевают или соединения зависают. Метрики nil-safe: без OTel-провайдера (локально, тесты) инструмент — no-op.
+
 ## ADRs
 
+- ADR 0058 — общий пользовательский SSE-стрим: in-memory хаб, WriteTimeout: 0 с переносом защиты в read-таймауты и heartbeat, конверт v1, publication-хук пост-коммит, LISTEN/NOTIFY как мост на N реплик. Реализация #742.
 - ADR 0057 — очередь доставки уведомлений: River в процессе API, транзакционная постановка в транзакции публикации, at-least-once, rivermigrate отдельной цепочкой. Реализация #740.
 - ADR 0056 — хранимая лента и per-category настройки: категория × канал вместо типа события × канал; email per-account, push per-device (мастер + категории на подписке); лента пишется всегда; старая таблица дропнута без переноса (миграция 000131). Supersedes ADR 0030 и ADR 0022.
 - ADR 0030 — per-channel notification preferences (email/push independent). Superseded by ADR 0056 (таблица `user_notification_channel_preferences` дропнута миграцией 000131, opt-out'ы сброшены — решение #738). Supersedes point 1 of ADR 0022.

@@ -324,6 +324,11 @@ localhost-порты контейнеров. Конфигурация — мод
   (требование спецификации — JS MIME);
 - дедупликация prod/stage-блоков — snippet `(rentlee_site)` с позиционными
   аргументами `{args[0]}` (канон Caddy ≥2.7; на сервере v2.11.4);
+- SSE-стрим (`/api/notifications/stream`, ADR 0058) исключён из `encode`
+  матчером `not header Content-Type text/event-stream`: дефолтный матчер
+  сжатия включает `text/*`, и gzip начал бы буферизовать кадры после 512
+  байт; `reverse_proxy` сам флешит `text/event-stream` немедленно —
+  `flush_interval` не нужен;
 - `www.rentlee.ru` — permanent redir на канон; admin-блоки — catch-all на
   админку с тем же `handle_path /api/*`;
 - access-лог — общий `/var/log/caddy/access.log` (JSON, roll 50mb × 5),

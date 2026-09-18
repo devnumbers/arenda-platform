@@ -17,7 +17,7 @@ import (
 // right Publication — texts, dedup key, recipient — and let the pipeline
 // fan it out.
 func newGracePublisher(feed *fakeFeedRepo, queue *fakeQueue) *GracePublisher {
-	return NewGracePublisher(NewPublisher(feed, queue, &fakeUoW{}, nil))
+	return NewGracePublisher(NewPublisher(feed, queue, nil, &fakeUoW{}, nil))
 }
 
 // graceUser returns fresh ids for the recipient (the owner, the Тариф
@@ -151,7 +151,7 @@ func TestGracePublisherPropagatesPipelineFailure(t *testing.T) {
 	feed := &fakeFeedRepo{}
 	queue := &fakeQueue{emailErr: errors.New("river down")}
 	uow := &fakeUoW{}
-	g := NewGracePublisher(NewPublisher(feed, queue, uow, nil))
+	g := NewGracePublisher(NewPublisher(feed, queue, nil, uow, nil))
 	user, sub := graceUser()
 
 	err := g.NotifyGraceEntered(context.Background(), user, sub, time.Time{})
