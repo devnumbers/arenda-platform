@@ -80,3 +80,13 @@ export function formatDateTimeHeading(value: string): string {
   if (Number.isNaN(date.getTime())) return '—';
   return `${localDayMonthFormatter.format(date)} ${date.getFullYear()}, ${localTimeFormatter.format(date)}`;
 }
+
+/** Время момента «14:40» по локальным часам смотрящего — метка момента в
+ * строках ленты уведомлений (#744, Figma 2329-149013; тот же довод
+ * локального времени, что у formatDateTimeHeading). Невалидная строка
+ * даёт «—». */
+export function formatTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return localTimeFormatter.format(date);
+}

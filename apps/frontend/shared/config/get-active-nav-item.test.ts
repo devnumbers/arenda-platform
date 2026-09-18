@@ -30,9 +30,9 @@ describe('правила активности навигации (#558)', () => 
     expect(activeSectionId('/contacts/search')).toBe('contacts');
   });
 
-  it('«Уведомления» — только раздел /profile/notifications, не весь профиль', () => {
-    expect(activeSectionId('/profile/notifications')).toBe('notifications');
-    expect(activeSectionId('/profile/notifications/settings')).toBe('notifications');
+  it('«Уведомления» — раздел /notifications со страницами (#744), не весь профиль', () => {
+    expect(activeSectionId('/notifications')).toBe('notifications');
+    expect(activeSectionId('/notifications/0194a3f8-7c1b-7d21-9a4e-3f2b8c5d6e70')).toBe('notifications');
     expect(activeSectionId('/profile')).toBeNull();
     expect(activeSectionId('/profile/account')).toBeNull();
     expect(activeSectionId('/profile/tariff')).toBeNull();
@@ -88,9 +88,9 @@ describe('активный таб мобильного TabBar (#560)', () => {
     expect(getActiveMobileTab('/properties/42/payments')).toBe('properties');
   });
 
-  it('«Уведомления» — только раздел уведомлений, не весь профиль', () => {
-    expect(getActiveMobileTab('/profile/notifications')).toBe('notifications');
-    expect(getActiveMobileTab('/profile/notifications/settings')).toBe('notifications');
+  it('«Уведомления» — раздел /notifications со страницами (#744), не весь профиль', () => {
+    expect(getActiveMobileTab('/notifications')).toBe('notifications');
+    expect(getActiveMobileTab('/notifications/0194a3f8-7c1b-7d21-9a4e-3f2b8c5d6e70')).toBe('notifications');
     expect(getActiveMobileTab('/profile')).toBe('more');
   });
 
