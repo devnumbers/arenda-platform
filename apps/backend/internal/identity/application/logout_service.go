@@ -14,7 +14,7 @@ import (
 // error is never returned, unlike the fail-safe revocations of
 // SessionsService.
 //
-// Each method performs a single delete and does not require atomicity on its
+// Logout performs a single delete and does not require atomicity on its
 // own, but routing it through runInTx (ADR 0033) keeps the audit entry and
 // the delete in one transaction: the session repository is bound to the
 // transaction, work runs, and the UoW commits on success or rolls back on
