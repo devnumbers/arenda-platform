@@ -115,8 +115,10 @@ type SessionRepository interface {
 	// the sliding fields) restart. It reports whether the swap won the race —
 	// a concurrent rotation of the same session makes it a no-op.
 	Rotate(ctx context.Context, session domain.Session, newTokenHash string) (rotated bool, err error)
-	// ListByUserID returns the user's sessions, most recently active first.
-	ListByUserID(ctx context.Context, userID uuid.UUID) ([]domain.Session, error)
+	// ListByUserID returns the user's live sessions (expires_at > seenAfter —
+	// expired rows survive up to the cleaner retention and must not surface in
+	// the devices list), most recently active first.
+	ListByUserID(ctx context.Context, userID uuid.UUID, seenAfter time.Time) ([]domain.Session, error)
 	// GetByID loads one session row regardless of expiry (revocation needs the
 	// row even near its end of life).
 	GetByID(ctx context.Context, id uuid.UUID) (domain.Session, error)

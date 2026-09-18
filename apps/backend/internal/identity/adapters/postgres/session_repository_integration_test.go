@@ -152,13 +152,26 @@ func TestSessionRepository_ListByUserID(t *testing.T) {
 	old := seed(user.ID, "hash-list-old", now.Add(-2*time.Hour))
 	recent := seed(user.ID, "hash-list-recent", now.Add(-time.Minute))
 	seed(foreign.ID, "hash-list-foreign", now)
+	// Expired but not yet swept by the cleaner (retention keeps the row for
+	// about a week): the devices list must not surface it as active. Direct
+	// SQL because Create pins created_at to now() and
+	// chk_sessions_expires_after_created forbids a session created already
+	// expired — only time passing makes a session expire.
+	expiredID := uuid.Must(uuid.NewV7())
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO sessions (id, user_id, token_hash, expires_at, created_at, last_used_at)
+		 VALUES ($1, $2, 'hash-list-expired', $3, $4, $4)`,
+		expiredID, user.ID, now.Add(-24*time.Hour), now.Add(-8*24*time.Hour),
+	); err != nil {
+		t.Fatalf("seed expired session: %v", err)
+	}
 
-	sessions, err := repo.ListByUserID(ctx, user.ID)
+	sessions, err := repo.ListByUserID(ctx, user.ID, now)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
 	if len(sessions) != 2 {
-		t.Fatalf("sessions = %d, want 2 (only the owner's)", len(sessions))
+		t.Fatalf("sessions = %d, want 2 (only the owner's live ones)", len(sessions))
 	}
 	if sessions[0].ID != recent.ID || sessions[1].ID != old.ID {
 		t.Fatalf("order = [%s %s], want most recent activity first", sessions[0].ID, sessions[1].ID)

@@ -686,7 +686,10 @@ type Querier interface {
 	// completed ones by completion date, fresh on top (ADR 0053 §4).
 	ListRentalsByProperty(ctx context.Context, arg ListRentalsByPropertyParams) ([]ListRentalsByPropertyRow, error)
 	ListSeenPopups(ctx context.Context, userID pgtype.UUID) ([]string, error)
-	ListSessionsByUserID(ctx context.Context, userID pgtype.UUID) ([]ListSessionsByUserIDRow, error)
+	// The devices list shows live sessions only: expired rows survive up to the
+	// cleaner retention (a week) after expires_at, and GetSessionByTokenHash
+	// already refuses them — the list must not show them as active either.
+	ListSessionsByUserID(ctx context.Context, arg ListSessionsByUserIDParams) ([]ListSessionsByUserIDRow, error)
 	// Admin payment views (issue #254). The phone filter matches the stored
 	// ciphertext (deterministic encryption) or the plaintext of a not-yet-
 	// encrypted row, mirroring ListUsersAdmin; user input is never interpolated

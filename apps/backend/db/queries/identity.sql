@@ -175,9 +175,12 @@ JOIN users u ON s.user_id = u.id
 WHERE (s.token_hash = sqlc.arg('token_hash')::text OR (s.previous_token_hash = sqlc.arg('token_hash')::text AND s.rotated_at > sqlc.arg('grace_cutoff'))) AND s.expires_at > sqlc.arg('seen_after');
 
 -- name: ListSessionsByUserID :many
+-- The devices list shows live sessions only: expired rows survive up to the
+-- cleaner retention (a week) after expires_at, and GetSessionByTokenHash
+-- already refuses them — the list must not show them as active either.
 SELECT id, token_hash, device_type, browser, browser_major, os, city, last_ip, last_used_at, created_at, expires_at
 FROM sessions
-WHERE user_id = $1
+WHERE user_id = sqlc.arg('user_id') AND expires_at > sqlc.arg('seen_after')
 ORDER BY last_used_at DESC, id DESC;
 
 -- name: GetSessionByID :one

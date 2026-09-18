@@ -287,7 +287,7 @@ func (r *errorSessionRepo) Rotate(context.Context, domain.Session, string) (bool
 	return true, nil
 }
 
-func (r *errorSessionRepo) ListByUserID(context.Context, uuid.UUID) ([]domain.Session, error) {
+func (r *errorSessionRepo) ListByUserID(_ context.Context, _ uuid.UUID, _ time.Time) ([]domain.Session, error) {
 	return nil, nil
 }
 

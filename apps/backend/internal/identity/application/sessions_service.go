@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 )
 
 // SessionsService serves the devices list: it reads the user's sessions,
@@ -18,6 +19,7 @@ import (
 type SessionsService struct {
 	txStoreFactory
 	hasher TokenHasher
+	clock  clock.Clock
 }
 
 // SessionsServiceConfig carries the non-transactional dependencies. The
@@ -25,22 +27,28 @@ type SessionsService struct {
 // txStoreFactory passed to NewSessionsService.
 type SessionsServiceConfig struct {
 	Hasher TokenHasher
+	Clock  clock.Clock
 }
 
 // NewSessionsService creates a SessionsService on the shared identity
 // txStoreFactory (ADR 0033 γ-factory).
 func NewSessionsService(factory txStoreFactory, cfg SessionsServiceConfig) *SessionsService {
+	if cfg.Clock == nil {
+		cfg.Clock = clock.Real{}
+	}
 	return &SessionsService{
 		txStoreFactory: factory,
 		hasher:         cfg.Hasher,
+		clock:          cfg.Clock,
 	}
 }
 
-// List returns the user's sessions (most recent activity first) and the ID of
-// the session the presented token belongs to, so the transport can flag the
-// current row without touching token hashes itself.
+// List returns the user's live sessions (most recent activity first) and the
+// ID of the session the presented token belongs to, so the transport can flag
+// the current row without touching token hashes itself. Expired rows the
+// cleaner has not swept yet do not surface as active.
 func (s *SessionsService) List(ctx context.Context, userID uuid.UUID, currentToken string) ([]domain.Session, uuid.UUID, error) {
-	sessions, err := s.sessions.ListByUserID(ctx, userID)
+	sessions, err := s.sessions.ListByUserID(ctx, userID, s.clock.Now())
 	if err != nil {
 		return nil, uuid.Nil, fmt.Errorf("list sessions: %w", err)
 	}

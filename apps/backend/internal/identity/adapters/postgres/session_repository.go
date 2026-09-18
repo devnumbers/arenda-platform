@@ -222,8 +222,11 @@ func (r *SessionRepository) GetByTokenHash(ctx context.Context, tokenHash string
 	return session, user, nil
 }
 
-func (r *SessionRepository) ListByUserID(ctx context.Context, userID uuid.UUID) ([]domain.Session, error) {
-	rows, err := r.q().ListSessionsByUserID(ctx, pgconv.UUIDToPgtype(userID))
+func (r *SessionRepository) ListByUserID(ctx context.Context, userID uuid.UUID, seenAfter time.Time) ([]domain.Session, error) {
+	rows, err := r.q().ListSessionsByUserID(ctx, pgen.ListSessionsByUserIDParams{
+		UserID:    pgconv.UUIDToPgtype(userID),
+		SeenAfter: pgtype.Timestamptz{Time: seenAfter, Valid: true},
+	})
 	if err != nil {
 		return nil, fmt.Errorf("list sessions by user id: %w", err)
 	}

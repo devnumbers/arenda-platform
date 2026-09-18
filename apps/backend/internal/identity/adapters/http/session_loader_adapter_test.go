@@ -46,7 +46,7 @@ func (r *fakeSessionRepoForLoader) Rotate(context.Context, domain.Session, strin
 	return true, nil
 }
 
-func (r *fakeSessionRepoForLoader) ListByUserID(context.Context, uuid.UUID) ([]domain.Session, error) {
+func (r *fakeSessionRepoForLoader) ListByUserID(_ context.Context, _ uuid.UUID, _ time.Time) ([]domain.Session, error) {
 	return nil, nil
 }
 

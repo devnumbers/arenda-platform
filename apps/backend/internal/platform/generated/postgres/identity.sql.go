@@ -381,6 +381,11 @@ type DeleteSessionsByUserIDExceptParams struct {
 	TokenHash string      `json:"token_hash"`
 }
 
+// The previous_token_hash branch is the SQL copy of the currentness rule in
+// identity/application/sessions_service.go (isCurrentSession): within the
+// rotation grace window the caller may present the previous token, so its row
+// must survive the except-delete behind RevokeOthers. Change the two copies
+// together; pinned by TestSessionRepository_ExceptDeleteHonorsRotationGrace.
 func (q *Queries) DeleteSessionsByUserIDExcept(ctx context.Context, arg DeleteSessionsByUserIDExceptParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteSessionsByUserIDExcept, arg.UserID, arg.TokenHash)
 	if err != nil {
@@ -924,9 +929,14 @@ func (q *Queries) ListRecentUsersAdmin(ctx context.Context) ([]ListRecentUsersAd
 const listSessionsByUserID = `-- name: ListSessionsByUserID :many
 SELECT id, token_hash, device_type, browser, browser_major, os, city, last_ip, last_used_at, created_at, expires_at
 FROM sessions
-WHERE user_id = $1
+WHERE user_id = $1 AND expires_at > $2
 ORDER BY last_used_at DESC, id DESC
 `
+
+type ListSessionsByUserIDParams struct {
+	UserID    pgtype.UUID        `json:"user_id"`
+	SeenAfter pgtype.Timestamptz `json:"seen_after"`
+}
 
 type ListSessionsByUserIDRow struct {
 	ID           pgtype.UUID        `json:"id"`
@@ -942,8 +952,11 @@ type ListSessionsByUserIDRow struct {
 	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
 }
 
-func (q *Queries) ListSessionsByUserID(ctx context.Context, userID pgtype.UUID) ([]ListSessionsByUserIDRow, error) {
-	rows, err := q.db.Query(ctx, listSessionsByUserID, userID)
+// The devices list shows live sessions only: expired rows survive up to the
+// cleaner retention (a week) after expires_at, and GetSessionByTokenHash
+// already refuses them — the list must not show them as active either.
+func (q *Queries) ListSessionsByUserID(ctx context.Context, arg ListSessionsByUserIDParams) ([]ListSessionsByUserIDRow, error) {
+	rows, err := q.db.Query(ctx, listSessionsByUserID, arg.UserID, arg.SeenAfter)
 	if err != nil {
 		return nil, err
 	}

@@ -167,7 +167,7 @@ func WireIdentity(
 
 	sessionsService := identityapp.NewSessionsService(
 		factory,
-		identityapp.SessionsServiceConfig{Hasher: p.Encryptor},
+		identityapp.SessionsServiceConfig{Hasher: p.Encryptor, Clock: p.Clock},
 	)
 
 	return &Identity{

@@ -74,7 +74,7 @@ func (r *touchRepo) Rotate(_ context.Context, s domain.Session, newTokenHash str
 	return true, nil
 }
 
-func (r *touchRepo) ListByUserID(context.Context, uuid.UUID) ([]domain.Session, error) {
+func (r *touchRepo) ListByUserID(_ context.Context, _ uuid.UUID, _ time.Time) ([]domain.Session, error) {
 	return nil, nil
 }
 

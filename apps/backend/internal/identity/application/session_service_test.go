@@ -238,7 +238,7 @@ func (r *capturingSessionRepo) Rotate(context.Context, domain.Session, string) (
 	return true, nil
 }
 
-func (r *capturingSessionRepo) ListByUserID(_ context.Context, userID uuid.UUID) ([]domain.Session, error) {
+func (r *capturingSessionRepo) ListByUserID(_ context.Context, userID uuid.UUID, _ time.Time) ([]domain.Session, error) {
 	var out []domain.Session
 	for _, s := range r.sessions {
 		if s.UserID == userID {
