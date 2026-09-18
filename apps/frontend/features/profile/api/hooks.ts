@@ -2,13 +2,17 @@
 
 import {
   useMutation,
+  useQuery,
   useQueryClient,
   type UseMutationResult,
+  type UseQueryResult,
 } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
 import { authKeys } from '@/shared/api/query-keys';
 import { mapMeResponse } from '@/entities/user';
+import { mapSessionListResponse } from '@/entities/session';
+import type { SessionDevice } from '@/entities/session';
 import type {
   User,
   UserUpdateCommand,
@@ -18,6 +22,50 @@ import type {
   ChangeEmailCommand,
   ResendEmailCodeCommand,
 } from '@/entities/user';
+
+/** Активные сессии вызывающего (GET /me/sessions, #728) — экран
+ * «Устройства» (#730). Порядок — по свежей активности (бэк); retry
+ * выключен, как у useMe: 401 угасшей сессии повторами не лечится. */
+export function useSessions(): UseQueryResult<SessionDevice[], ApiError> {
+  return useQuery({
+    queryKey: authKeys.sessions,
+    queryFn: async () => {
+      const res = await apiClient<Parameters<typeof mapSessionListResponse>[0]>(
+        '/me/sessions',
+      );
+      return mapSessionListResponse(res);
+    },
+    retry: false,
+  });
+}
+
+/** Завершение одной чужой сессии (DELETE /me/sessions/{id}, #730);
+ * текущая завершается выходом на хабе, не ревокацией. */
+export function useRevokeSession(): UseMutationResult<void, ApiError, string> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (sessionId: string) => {
+      await apiClient<void>(`/me/sessions/${sessionId}`, { method: 'DELETE' });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: authKeys.sessions });
+    },
+  });
+}
+
+/** «Завершить все другие сессии» (POST /me/sessions/logout-others, #730):
+ * текущая сессия остаётся живой. */
+export function useLogoutOtherSessions(): UseMutationResult<void, ApiError, void> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      await apiClient<void>('/me/sessions/logout-others', { method: 'POST' });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: authKeys.sessions });
+    },
+  });
+}
 
 export function useUpdateMe(): UseMutationResult<
   User,

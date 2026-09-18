@@ -20,6 +20,7 @@ import {
 const SUBPAGE_TITLES: ReadonlyArray<readonly [string, string]> = [
   ['/profile/account', 'Аккаунт'],
   ['/profile/account/phone', 'Изменение телефона'],
+  ['/profile/devices', 'Устройства'],
   ['/profile/info', 'Информация'],
   ['/profile/info/privacy', 'Политика конфиденциальности'],
   ['/profile/info/terms', 'Пользовательское соглашение'],

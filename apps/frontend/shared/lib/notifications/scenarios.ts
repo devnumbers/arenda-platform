@@ -141,6 +141,10 @@ const profile = {
   emailSendCodeError: errorScenario('Не удалось отправить код'),
   emailChangeError: errorScenario('Не удалось изменить электронную почту'),
   logoutError: errorScenario('Не удалось выйти'),
+  /** Ревокации на экране «Устройства» (#730): завершение одной чужой
+   * сессии и «все другие, кроме текущей» (POST /me/sessions/logout-others). */
+  sessionRevokeError: errorScenario('Не удалось завершить сессию'),
+  logoutOthersError: errorScenario('Не удалось завершить другие сессии'),
   pushEnabled: ((options?) =>
     notify.success('Пуши включены', options)) satisfies ScenarioFn,
   pushEnableError: errorScenario('Не удалось включить пуши'),
