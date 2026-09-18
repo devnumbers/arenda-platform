@@ -42,7 +42,7 @@ func WireNotifications(p platformDeps) *Notifications {
 	// The action computation reads the live rental against the data owner's
 	// calendar date (ADR 0048) — the same calendar the payments context
 	// serves its tick with.
-	feedLiveState := notificationspg.NewFeedLiveState(p.DB, paymentspg.NewOwnerCalendar(p.DB, p.Clock))
+	feedLiveState := notificationspg.NewFeedLiveState(p.DB, paymentspg.NewOwnerCalendar(p.DB, p.Clock), p.Policy)
 	feedService := notificationsapp.NewFeedService(notificationRepo, feedLiveState)
 	settingsService := notificationsapp.NewSettingsService(emailPreferencesRepo, pushSubscriptionRepo)
 

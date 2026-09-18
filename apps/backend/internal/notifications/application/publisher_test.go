@@ -85,6 +85,10 @@ func (r *fakeFeedRepo) GetByID(ctx context.Context, id uuid.UUID) (domain.Notifi
 	return domain.Notification{}, ErrNotFound
 }
 
+func (r *fakeFeedRepo) GetForUser(ctx context.Context, userID, id uuid.UUID) (domain.Notification, error) {
+	return r.GetByID(ctx, id)
+}
+
 func (r *fakeFeedRepo) ListPage(
 	ctx context.Context, userID uuid.UUID, unreadOnly bool,
 	afterCreatedAt *time.Time, afterID uuid.UUID, limit int,

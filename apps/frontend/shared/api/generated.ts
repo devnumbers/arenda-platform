@@ -3079,7 +3079,7 @@ export interface components {
             expiration_time?: string | null;
             /** @description The device's master push toggle; omitted = on (решение #738). */
             enabled?: boolean;
-            categories?: components["schemas"]["PushNotificationCategories"];
+            categories?: components["schemas"]["NotificationCategoryPreferences"];
         };
         PushSubscriptionDeleteRequest: {
             /** @description The push endpoint URL to unregister (same value sent on subscribe). */
@@ -3091,29 +3091,22 @@ export interface components {
             endpoint: string;
             /** @description Мастер-тумблер «Получать пуш-уведомления» устройства (решение #738). */
             enabled: boolean;
-            categories: components["schemas"]["PushNotificationCategories"];
+            categories: components["schemas"]["NotificationCategoryPreferences"];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
             updated_at: string;
         };
-        /** @description Четыре настраиваемые категории пуша устройства (решение */
-        PushNotificationCategories: {
-            rental: boolean;
-            payments_operations: boolean;
-            tasks: boolean;
-            shared_access: boolean;
-        };
         PushPreferencesRequest: {
             /** @description Push endpoint URL устройства (тот же, что при подписке). */
             endpoint: string;
             enabled: boolean;
-            categories: components["schemas"]["PushNotificationCategories"];
+            categories: components["schemas"]["NotificationCategoryPreferences"];
         };
         PushPreferencesResponse: {
             endpoint: string;
             enabled: boolean;
-            categories: components["schemas"]["PushNotificationCategories"];
+            categories: components["schemas"]["NotificationCategoryPreferences"];
         };
         /** @description Флаги четырёх настраиваемых категорий одного канала (решение */
         NotificationCategoryPreferences: {

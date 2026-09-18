@@ -124,6 +124,39 @@ func (q *Queries) GetNotification(ctx context.Context, id pgtype.UUID) (Notifica
 	return i, err
 }
 
+const getNotificationForUser = `-- name: GetNotificationForUser :one
+SELECT id, user_id, category, event_type, title, body, context_label, payload, dedup_key, read_at, deleted_at, created_at FROM notifications
+WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
+`
+
+type GetNotificationForUserParams struct {
+	ID     pgtype.UUID `json:"id"`
+	UserID pgtype.UUID `json:"user_id"`
+}
+
+// The feed page's single row (GET /notifications/{id}, #743): scoped to the
+// reader and hidden once deleted — a foreign or deleted row does not exist
+// for them. The delivery jobs keep using the unscoped GetNotification.
+func (q *Queries) GetNotificationForUser(ctx context.Context, arg GetNotificationForUserParams) (Notification, error) {
+	row := q.db.QueryRow(ctx, getNotificationForUser, arg.ID, arg.UserID)
+	var i Notification
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Category,
+		&i.EventType,
+		&i.Title,
+		&i.Body,
+		&i.ContextLabel,
+		&i.Payload,
+		&i.DedupKey,
+		&i.ReadAt,
+		&i.DeletedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getOperationOpenState = `-- name: GetOperationOpenState :one
 SELECT EXISTS (SELECT 1 FROM operations WHERE id = $1 AND status = 'planned') AS open
 `
@@ -137,36 +170,6 @@ func (q *Queries) GetOperationOpenState(ctx context.Context, id pgtype.UUID) (bo
 	var open bool
 	err := row.Scan(&open)
 	return open, err
-}
-
-const getPropertyAccessFor = `-- name: GetPropertyAccessFor :one
-SELECT COALESCE(
-           CASE
-               WHEN p.owner_id = $2 THEN 'owner'
-               ELSE (SELECT m.role
-                     FROM property_members m
-                     WHERE m.property_id = p.id AND m.user_id = $2 AND m.status = 'active'
-                     LIMIT 1)
-           END::text,
-           '') AS access_role
-FROM properties p
-WHERE p.id = $1
-`
-
-type GetPropertyAccessForParams struct {
-	ID      pgtype.UUID `json:"id"`
-	OwnerID pgtype.UUID `json:"owner_id"`
-}
-
-// The reader's live role on the property (ADR 0028): 'owner' for the owner,
-// the active membership's role for a shared one, ” for a stranger. No row
-// — the property is gone. Exists = the role is non-empty; manageable = the
-// owner or a full_access member (the «Продлить»/«Завершить» gate).
-func (q *Queries) GetPropertyAccessFor(ctx context.Context, arg GetPropertyAccessForParams) (interface{}, error) {
-	row := q.db.QueryRow(ctx, getPropertyAccessFor, arg.ID, arg.OwnerID)
-	var access_role interface{}
-	err := row.Scan(&access_role)
-	return access_role, err
 }
 
 const getRentalActionState = `-- name: GetRentalActionState :one

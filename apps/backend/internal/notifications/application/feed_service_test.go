@@ -45,6 +45,16 @@ func (r *fakeFeedQuery) GetByID(_ context.Context, id uuid.UUID) (domain.Notific
 	return n, nil
 }
 
+// GetForUser mirrors the SQL scope: a foreign or deleted row does not exist
+// for the reader.
+func (r *fakeFeedQuery) GetForUser(_ context.Context, userID, id uuid.UUID) (domain.Notification, error) {
+	n, ok := r.rows[id]
+	if !ok || n.UserID != userID || n.DeletedAt != nil {
+		return domain.Notification{}, ErrNotFound
+	}
+	return n, nil
+}
+
 // ListPage walks the rows newest-first by (created_at, id), skipping deleted
 // ones — the fake mirrors the keyset contract the SQL implements.
 func (r *fakeFeedQuery) ListPage(

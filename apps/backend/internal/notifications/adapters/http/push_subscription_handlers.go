@@ -129,7 +129,7 @@ func pushSubscriptionResponse(sub notificationsdomain.PushSubscription) openapi.
 		Id:         sub.ID,
 		Endpoint:   sub.Endpoint,
 		Enabled:    sub.Enabled,
-		Categories: pushCategoriesToOpenAPI(sub.Categories),
+		Categories: categoriesToOpenAPI(sub.Categories),
 		CreatedAt:  sub.CreatedAt,
 		UpdatedAt:  sub.UpdatedAt,
 	}
@@ -138,10 +138,10 @@ func pushSubscriptionResponse(sub notificationsdomain.PushSubscription) openapi.
 // categoriesFromOpenAPIPtr maps the optional request categories: nil keeps
 // the all-on default (решение #738 — the browser re-applies its held state
 // on every subscribe).
-func categoriesFromOpenAPIPtr(p *openapi.PushNotificationCategories) *notificationsdomain.CategoryPrefs {
+func categoriesFromOpenAPIPtr(p *openapi.NotificationCategoryPreferences) *notificationsdomain.CategoryPrefs {
 	if p == nil {
 		return nil
 	}
-	categories := pushCategoriesFromOpenAPI(*p)
+	categories := categoriesFromOpenAPI(*p)
 	return &categories
 }

@@ -59,6 +59,13 @@ WHERE user_id = $1
   AND read_at IS NULL
   AND deleted_at IS NULL;
 
+-- name: GetNotificationForUser :one
+-- The feed page's single row (GET /notifications/{id}, #743): scoped to the
+-- reader and hidden once deleted — a foreign or deleted row does not exist
+-- for them. The delivery jobs keep using the unscoped GetNotification.
+SELECT * FROM notifications
+WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL;
+
 -- name: GetNotification :one
 -- One feed row by id for the delivery jobs (#740): a job reloads the
 -- committed row (recipient, texts, payload) instead of carrying content in
@@ -126,19 +133,3 @@ SELECT EXISTS (SELECT 1 FROM operations WHERE id = $1 AND status = 'planned') AS
 -- its button (решение #737).
 SELECT EXISTS (SELECT 1 FROM tasks WHERE id = $1 AND completed_date IS NULL) AS open;
 
--- name: GetPropertyAccessFor :one
--- The reader's live role on the property (ADR 0028): 'owner' for the owner,
--- the active membership's role for a shared one, '' for a stranger. No row
--- — the property is gone. Exists = the role is non-empty; manageable = the
--- owner or a full_access member (the «Продлить»/«Завершить» gate).
-SELECT COALESCE(
-           CASE
-               WHEN p.owner_id = $2 THEN 'owner'
-               ELSE (SELECT m.role
-                     FROM property_members m
-                     WHERE m.property_id = p.id AND m.user_id = $2 AND m.status = 'active'
-                     LIMIT 1)
-           END::text,
-           '') AS access_role
-FROM properties p
-WHERE p.id = $1;

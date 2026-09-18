@@ -92,6 +92,7 @@ func (w *DeliverEmailWorker) Work(ctx context.Context, job *river.Job[DeliverEma
 		return fmt.Errorf("load notification: %w", err)
 	}
 
+	// A dead enum value has no category; the empty one reads as always-on.
 	category, _ := n.EventType.FeedCategory()
 	allowed, err := w.settings.EmailAllowed(ctx, n.UserID, category)
 	if err != nil {

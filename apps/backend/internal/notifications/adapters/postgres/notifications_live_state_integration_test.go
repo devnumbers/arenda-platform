@@ -7,6 +7,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	accesspg "github.com/nambers/arenda-planform/apps/backend/internal/access/adapters/postgres"
+	accessapp "github.com/nambers/arenda-planform/apps/backend/internal/access/application"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	paymentspg "github.com/nambers/arenda-planform/apps/backend/internal/payments/adapters/postgres"
 	genpostgres "github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
@@ -15,15 +17,17 @@ import (
 )
 
 // setupLiveState prepares the pool, an owner and the live-state adapter over
-// the real owner calendar.
+// the real owner calendar and the real membership policy — the reader's role
+// resolves through the policy port the same way the wiring does.
 func setupLiveState(t *testing.T) (*FeedLiveState, *pgxpool.Pool, uuid.UUID) {
 	t.Helper()
 	pool := setupPushDB(t)
 	ctx := context.Background()
 	ownerID := createPushTestUser(t, ctx, genpostgres.New(pool))
+	pol := accessapp.NewMembershipPolicy(accesspg.NewOwnerResolver(pool), accesspg.NewMembershipRepository(pool))
 	live := NewFeedLiveState(pool, paymentspg.NewOwnerCalendar(pool, &fixedClock{
 		now: time.Date(2026, 9, 18, 12, 0, 0, 0, time.UTC),
-	}))
+	}), pol)
 	return live, pool, ownerID
 }
 

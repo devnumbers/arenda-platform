@@ -315,6 +315,10 @@ type Querier interface {
 	// its args. A soft-deleted row still resolves — deletion hides the row from
 	// the feed, it does not retract an in-flight delivery.
 	GetNotification(ctx context.Context, id pgtype.UUID) (Notification, error)
+	// The feed page's single row (GET /notifications/{id}, #743): scoped to the
+	// reader and hidden once deleted — a foreign or deleted row does not exist
+	// for them. The delivery jobs keep using the unscoped GetNotification.
+	GetNotificationForUser(ctx context.Context, arg GetNotificationForUserParams) (Notification, error)
 	// Payments context queries: operations and favorites-facing operation reads
 	// (ticket #461, the second contracts slice of ADR 0049 §4). Reads are scoped
 	// by the data owner and by the nested path property→payment→operation;
@@ -347,11 +351,6 @@ type Querier interface {
 	GetPaymentMethodByIDForUpdate(ctx context.Context, id pgtype.UUID) (PaymentMethod, error)
 	// "active" mirrors CountActivePropertiesByOwnerAdmin: active plus maintenance.
 	GetPropertiesStatsAdmin(ctx context.Context) (GetPropertiesStatsAdminRow, error)
-	// The reader's live role on the property (ADR 0028): 'owner' for the owner,
-	// the active membership's role for a shared one, '' for a stranger. No row
-	// — the property is gone. Exists = the role is non-empty; manageable = the
-	// owner or a full_access member (the «Продлить»/«Завершить» gate).
-	GetPropertyAccessFor(ctx context.Context, arg GetPropertyAccessForParams) (interface{}, error)
 	// Unscoped lookup by id. Used by the policy/access layer (T3, issue #156) to
 	// resolve the data owner for authorization before applying a scope, and by the
 	// properties list to load shared properties (whose owner_id differs from the

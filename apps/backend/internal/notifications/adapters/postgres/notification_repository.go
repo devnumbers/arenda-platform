@@ -58,6 +58,22 @@ func (r *NotificationRepository) GetByID(ctx context.Context, id uuid.UUID) (dom
 	return notificationToDomain(row)
 }
 
+// GetForUser returns one feed row scoped to its reader; a foreign or
+// deleted row does not exist for them (ErrNotFound).
+func (r *NotificationRepository) GetForUser(ctx context.Context, userID, id uuid.UUID) (domain.Notification, error) {
+	row, err := r.q().GetNotificationForUser(ctx, postgres.GetNotificationForUserParams{
+		ID:     pgconv.UUIDToPgtype(id),
+		UserID: pgconv.UUIDToPgtype(userID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Notification{}, application.ErrNotFound
+		}
+		return domain.Notification{}, fmt.Errorf("get notification for user: %w", err)
+	}
+	return notificationToDomain(row)
+}
+
 // Insert publishes one recipient's feed row; a repeat publication with the
 // same (recipient, dedup key) inserts nothing and reports false.
 func (r *NotificationRepository) Insert(ctx context.Context, n domain.Notification) (bool, error) {

@@ -11,6 +11,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
 
 // The adapter satisfies the consumer-declared port (CODING_STANDARDS).
@@ -24,18 +25,21 @@ type ownerTodayCalendar interface {
 }
 
 // FeedLiveState answers the action computation's live-state questions
-// (решение #737) over the owning tables directly: the rentals, operations,
-// tasks, properties and membership rows decide what still stands — the feed
-// stores none of it.
+// (решение #737) over the owning tables directly: the rentals, operations
+// and tasks rows decide what still stands — the feed stores none of it. The
+// reader's standing on a property resolves through the policy port (ADR
+// 0028, the single actor-to-role point), never in SQL.
 type FeedLiveState struct {
 	db       postgres.DBTX
 	calendar ownerTodayCalendar
+	policy   policy.Policy
 }
 
-// NewFeedLiveState creates the live-state adapter. The calendar resolves the
-// owner's today for the rental's needs_attention state.
-func NewFeedLiveState(db postgres.DBTX, calendar ownerTodayCalendar) *FeedLiveState {
-	return &FeedLiveState{db: db, calendar: calendar}
+// NewFeedLiveState creates the live-state adapter: the calendar resolves the
+// owner's today for the rental's needs_attention state, the policy resolves
+// the reader's role on the property.
+func NewFeedLiveState(db postgres.DBTX, calendar ownerTodayCalendar, pol policy.Policy) *FeedLiveState {
+	return &FeedLiveState{db: db, calendar: calendar, policy: pol}
 }
 
 func (r *FeedLiveState) q() *postgres.Queries {
@@ -44,7 +48,8 @@ func (r *FeedLiveState) q() *postgres.Queries {
 
 // RentalActionState reads the live rental: gone when the row is absent;
 // awaiting action in the needs_attention state (not completed, planned end
-// already passed against the owner's today, ADR 0053).
+// already passed against the owner's today — the StatusOf semantics of
+// ADR 0053).
 func (r *FeedLiveState) RentalActionState(ctx context.Context, rentalID uuid.UUID) (application.RentalActionState, error) {
 	row, err := r.q().GetRentalActionState(ctx, pgconv.UUIDToPgtype(rentalID))
 	if err != nil {
@@ -85,24 +90,21 @@ func (r *FeedLiveState) TaskOpen(ctx context.Context, taskID uuid.UUID) (bool, e
 	return open, nil
 }
 
-// PropertyAccess resolves the reader's live role on the property: ” reads
-// as a stranger, the missing row as a gone property.
+// PropertyAccess resolves the reader's standing on the property through the
+// policy port: owner or full_access manage, a viewer reads, and everyone
+// else — including a suspended membership and a deleted property — sees
+// nothing (RoleNone is also the not-found mapping of ADR 0028).
 func (r *FeedLiveState) PropertyAccess(ctx context.Context, propertyID, readerID uuid.UUID) (application.PropertyAccess, error) {
-	role, err := r.q().GetPropertyAccessFor(ctx, postgres.GetPropertyAccessForParams{
-		ID:      pgconv.UUIDToPgtype(propertyID),
-		OwnerID: pgconv.UUIDToPgtype(readerID),
-	})
+	role, err := r.policy.RoleForProperty(ctx, readerID, propertyID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return application.PropertyAccess{}, nil
-		}
 		return application.PropertyAccess{}, fmt.Errorf("property access: %w", err)
 	}
-	if role == "" {
+	switch role {
+	case policy.RoleOwner, policy.RoleFullAccess:
+		return application.PropertyAccess{Exists: true, Manageable: true}, nil
+	case policy.RoleViewer:
+		return application.PropertyAccess{Exists: true, Manageable: false}, nil
+	default: // RoleNone (a stranger or a gone property), RoleSuspended.
 		return application.PropertyAccess{}, nil
 	}
-	return application.PropertyAccess{
-		Exists:     true,
-		Manageable: role == "owner" || role == "full_access",
-	}, nil
 }

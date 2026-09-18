@@ -47,6 +47,14 @@ func (r *handlerFeedRepo) GetByID(_ context.Context, id uuid.UUID) (domain.Notif
 	return n, nil
 }
 
+func (r *handlerFeedRepo) GetForUser(_ context.Context, userID, id uuid.UUID) (domain.Notification, error) {
+	n, ok := r.rows[id]
+	if !ok || n.UserID != userID || n.DeletedAt != nil {
+		return domain.Notification{}, notificationsapp.ErrNotFound
+	}
+	return n, nil
+}
+
 func (r *handlerFeedRepo) ListPage(
 	_ context.Context, userID uuid.UUID, unreadOnly bool, afterCreatedAt *time.Time, afterID uuid.UUID, limit int,
 ) ([]domain.Notification, error) {

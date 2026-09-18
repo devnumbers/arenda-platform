@@ -35,8 +35,6 @@ func (h *NotificationPreferencesHandlers) GetNotificationPreferences(w http.Resp
 
 	prefs, err := h.settings.EmailPreferences(r.Context(), user)
 	if err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to read notification preferences",
-			slog.String("error", httpsupport.SanitizeError(err)))
 		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 		return
 	}
@@ -65,8 +63,6 @@ func (h *NotificationPreferencesHandlers) PutNotificationPreferences(w http.Resp
 
 	prefs := categoriesFromOpenAPI(body.Email)
 	if err := h.settings.SetEmailPreferences(r.Context(), user, prefs); err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to store notification preferences",
-			slog.String("error", httpsupport.SanitizeError(err)))
 		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 		return
 	}
@@ -94,7 +90,7 @@ func (h *NotificationPreferencesHandlers) GetPushSubscriptionPreferences(
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.PushPreferencesResponse{
 		Endpoint:   sub.Endpoint,
 		Enabled:    sub.Enabled,
-		Categories: pushCategoriesToOpenAPI(sub.Categories),
+		Categories: categoriesToOpenAPI(sub.Categories),
 	})
 }
 
@@ -116,7 +112,7 @@ func (h *NotificationPreferencesHandlers) PutPushSubscriptionPreferences(w http.
 		return
 	}
 
-	prefs := pushCategoriesFromOpenAPI(body.Categories)
+	prefs := categoriesFromOpenAPI(body.Categories)
 	if err := h.settings.SetPushPreferences(r.Context(), user, body.Endpoint, body.Enabled, prefs); err != nil {
 		h.writeError(r, w, err)
 		return
@@ -124,7 +120,7 @@ func (h *NotificationPreferencesHandlers) PutPushSubscriptionPreferences(w http.
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.PushPreferencesResponse{
 		Endpoint:   body.Endpoint,
 		Enabled:    body.Enabled,
-		Categories: pushCategoriesToOpenAPI(prefs),
+		Categories: categoriesToOpenAPI(prefs),
 	})
 }
 
@@ -138,8 +134,6 @@ func (h *NotificationPreferencesHandlers) writeError(r *http.Request, w http.Res
 		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
 			httpsupport.Problem(r.Context(), "Bad request", "Некорректный endpoint"))
 	default:
-		h.logger.ErrorContext(r.Context(), "push preferences request failed",
-			slog.String("error", httpsupport.SanitizeError(err)))
 		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 	}
 }
@@ -154,24 +148,6 @@ func categoriesToOpenAPI(p notificationsdomain.CategoryPrefs) openapi.Notificati
 }
 
 func categoriesFromOpenAPI(p openapi.NotificationCategoryPreferences) notificationsdomain.CategoryPrefs {
-	return notificationsdomain.CategoryPrefs{
-		Rental:             p.Rental,
-		PaymentsOperations: p.PaymentsOperations,
-		Tasks:              p.Tasks,
-		SharedAccess:       p.SharedAccess,
-	}
-}
-
-func pushCategoriesToOpenAPI(p notificationsdomain.CategoryPrefs) openapi.PushNotificationCategories {
-	return openapi.PushNotificationCategories{
-		Rental:             p.Rental,
-		PaymentsOperations: p.PaymentsOperations,
-		Tasks:              p.Tasks,
-		SharedAccess:       p.SharedAccess,
-	}
-}
-
-func pushCategoriesFromOpenAPI(p openapi.PushNotificationCategories) notificationsdomain.CategoryPrefs {
 	return notificationsdomain.CategoryPrefs{
 		Rental:             p.Rental,
 		PaymentsOperations: p.PaymentsOperations,

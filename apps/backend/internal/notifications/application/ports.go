@@ -24,6 +24,10 @@ type NotificationRepository interface {
 	// delivery jobs (#740) reload the committed row instead of carrying its
 	// content in job args.
 	GetByID(ctx context.Context, id uuid.UUID) (domain.Notification, error)
+	// GetForUser returns one feed row scoped to its reader (the feed page's
+	// GET /notifications/{id}, #743): a foreign or deleted row does not
+	// exist for them — ErrNotFound.
+	GetForUser(ctx context.Context, userID, id uuid.UUID) (domain.Notification, error)
 	// ListPage walks the user's feed newest-first by the (created_at, id)
 	// keyset (канон #597). Deleted rows never appear. UnreadOnly filters the
 	// page to unread rows. The afterCreatedAt/afterID pair resumes strictly

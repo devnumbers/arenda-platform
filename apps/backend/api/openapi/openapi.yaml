@@ -6902,7 +6902,7 @@ components:
           description: |
             The device's master push toggle; omitted = on (решение #738).
         categories:
-          $ref: '#/components/schemas/PushNotificationCategories'
+          $ref: '#/components/schemas/NotificationCategoryPreferences'
 
     PushSubscriptionDeleteRequest:
       type: object
@@ -6927,27 +6927,13 @@ components:
           description: |
             Мастер-тумблер «Получать пуш-уведомления» устройства (решение #738).
         categories:
-          $ref: '#/components/schemas/PushNotificationCategories'
+          $ref: '#/components/schemas/NotificationCategoryPreferences'
         created_at:
           type: string
           format: date-time
         updated_at:
           type: string
           format: date-time
-
-    PushNotificationCategories:
-      type: object
-      description: Четыре настраиваемые категории пуша устройства (решение #738). Тариф и Системные всегда включены и здесь не хранятся.
-      required: [rental, payments_operations, tasks, shared_access]
-      properties:
-        rental:
-          type: boolean
-        payments_operations:
-          type: boolean
-        tasks:
-          type: boolean
-        shared_access:
-          type: boolean
 
     PushPreferencesRequest:
       type: object
@@ -6960,7 +6946,7 @@ components:
         enabled:
           type: boolean
         categories:
-          $ref: '#/components/schemas/PushNotificationCategories'
+          $ref: '#/components/schemas/NotificationCategoryPreferences'
 
     PushPreferencesResponse:
       type: object
@@ -6971,11 +6957,11 @@ components:
         enabled:
           type: boolean
         categories:
-          $ref: '#/components/schemas/PushNotificationCategories'
+          $ref: '#/components/schemas/NotificationCategoryPreferences'
 
     NotificationCategoryPreferences:
       type: object
-      description: Флаги четырёх настраиваемых категорий одного канала (решение #738).
+      description: Флаги четырёх настраиваемых категорий одного канала (решение #738) — email держит копию на аккаунте, push — на устройстве. Тариф и Системные всегда включены и здесь не хранятся.
       required: [rental, payments_operations, tasks, shared_access]
       properties:
         rental:

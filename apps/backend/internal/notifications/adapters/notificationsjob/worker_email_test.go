@@ -34,6 +34,10 @@ func (s *feedStub) GetByID(ctx context.Context, id uuid.UUID) (domain.Notificati
 	return s.notification, s.err
 }
 
+func (s *feedStub) GetForUser(ctx context.Context, userID, id uuid.UUID) (domain.Notification, error) {
+	return s.GetByID(ctx, id)
+}
+
 func (s *feedStub) ListPage(
 	ctx context.Context, userID uuid.UUID, unreadOnly bool,
 	afterCreatedAt *time.Time, afterID uuid.UUID, limit int,

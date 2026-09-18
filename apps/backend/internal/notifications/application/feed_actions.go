@@ -65,15 +65,12 @@ type NotificationDetail struct {
 // Get returns the user's view of one feed row with its live actions. A row
 // that is not the reader's, or already deleted, does not exist for them.
 func (s *FeedService) Get(ctx context.Context, userID, id uuid.UUID) (NotificationDetail, error) {
-	n, err := s.feed.GetByID(ctx, id)
+	n, err := s.feed.GetForUser(ctx, userID, id)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return NotificationDetail{}, ErrNotFound
 		}
 		return NotificationDetail{}, fmt.Errorf("get notification: %w", err)
-	}
-	if n.UserID != userID || n.DeletedAt != nil {
-		return NotificationDetail{}, ErrNotFound
 	}
 
 	actions, err := availableActions(ctx, s.live, userID, n)
