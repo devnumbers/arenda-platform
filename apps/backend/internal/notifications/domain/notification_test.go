@@ -32,6 +32,8 @@ var catalogCases = []struct {
 	{EventSubscriptionPaymentReminder, CategoryTariff, []ActionKind{ActionOpenTariffs}},
 	{EventSubscriptionPaymentSucceeded, CategoryTariff, nil},
 	{EventSubscriptionPlanChanged, CategoryTariff, []ActionKind{ActionOpenTariffs}},
+	{EventSubscriptionGraceEntered, CategoryTariff, []ActionKind{ActionOpenPaymentMethods}},
+	{EventSubscriptionGraceExpiring, CategoryTariff, []ActionKind{ActionOpenPaymentMethods}},
 	{EventSystemMaintenance, CategorySystem, nil},
 }
 
@@ -63,8 +65,9 @@ func TestActionsForEvent(t *testing.T) {
 		assert.Equal(t, tc.wantActions, actions, "actions of %s", tc.eventType)
 	}
 
-	// The legacy direct-path event is not part of the feed catalog.
-	assert.Empty(t, ActionsForEvent(EventSubscriptionGrace))
+	// Free_reminder is a dead PostgreSQL enum value (#277): the database
+	// keeps it forever, the catalog does not know it.
+	assert.Empty(t, ActionsForEvent(EventType("free_reminder")))
 }
 
 func TestNewNotification_RejectsInvalid(t *testing.T) {
@@ -80,8 +83,8 @@ func TestNewNotification_RejectsInvalid(t *testing.T) {
 
 	require.ErrorIs(t, build(uuid.Nil, userID, EventPaymentDue, "З", "Т", "k"), ErrInvalidNotification, "zero notification id")
 	require.ErrorIs(t, build(id, uuid.Nil, EventPaymentDue, "З", "Т", "k"), ErrInvalidNotification, "zero recipient")
-	require.ErrorIs(t, build(id, userID, EventSubscriptionGrace, "З", "Т", "k"), ErrInvalidNotification,
-		"grace is the direct-path event, not a feed row")
+	require.ErrorIs(t, build(id, userID, EventType("free_reminder"), "З", "Т", "k"), ErrInvalidNotification,
+		"a dead enum value outside the catalog makes no feed row")
 	require.ErrorIs(t, build(id, userID, EventType("bogus"), "З", "Т", "k"), ErrInvalidNotification)
 	require.ErrorIs(t, build(id, userID, EventPaymentDue, "", "Т", "k"), ErrInvalidNotification, "empty title")
 	require.ErrorIs(t, build(id, userID, EventPaymentDue, "З", "", "k"), ErrInvalidNotification, "empty body")

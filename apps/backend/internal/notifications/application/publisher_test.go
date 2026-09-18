@@ -58,8 +58,14 @@ func (r *fakeFeedRepo) WithTx(tx transaction.Tx) (NotificationRepository, error)
 }
 
 func (r *fakeFeedRepo) Insert(ctx context.Context, n domain.Notification) (bool, error) {
-	if r.existing[n.UserID.String()+"|"+string(n.DedupKey)] {
+	key := n.UserID.String() + "|" + string(n.DedupKey)
+	if r.existing[key] {
 		return false, nil
+	}
+	for _, inserted := range r.inserted {
+		if inserted.UserID == n.UserID && inserted.DedupKey == n.DedupKey {
+			return false, nil
+		}
 	}
 	r.inserted = append(r.inserted, n)
 	return true, nil
@@ -221,8 +227,8 @@ func TestPublisherPublishRejectsOffCatalogEvent(t *testing.T) {
 	p := NewPublisher(feed, queue, &fakeUoW{}, nil)
 
 	pub := publication()
-	// The direct-channel legacy value, outside the feed catalog.
-	pub.EventType = domain.EventSubscriptionGrace
+	// A dead PostgreSQL enum value, outside the feed catalog (#277).
+	pub.EventType = domain.EventType("free_reminder")
 
 	err := p.Publish(context.Background(), pub)
 	require.ErrorIs(t, err, domain.ErrInvalidNotification)

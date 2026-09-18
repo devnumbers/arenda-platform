@@ -20,8 +20,8 @@ var (
 )
 
 // notificationEmailTemplate is the shared notification email template
-// (templates/email/notification.{html,txt}): the direct grace channel sends
-// through it already (#253).
+// (templates/email/notification.{html,txt}): one title, one body, one
+// optional button built from the event's deep link.
 const notificationEmailTemplate = "notification"
 
 // providerLimitKey is the single key the email worker spends the global
@@ -41,7 +41,7 @@ type DeliverEmailWorker struct {
 	river.WorkerDefaults[DeliverEmailArgs]
 	feed       application.NotificationRepository
 	resolver   application.ContactResolver
-	emailer    application.DirectEmailSender
+	emailer    application.TemplateEmailSender
 	provider   providerLimiter
 	metrics    *EmailMetrics
 	appBaseURL string
@@ -58,7 +58,7 @@ type providerLimiter interface {
 func NewDeliverEmailWorker(
 	feed application.NotificationRepository,
 	resolver application.ContactResolver,
-	emailer application.DirectEmailSender,
+	emailer application.TemplateEmailSender,
 	provider providerLimiter,
 	metrics *EmailMetrics,
 	appBaseURL string,
@@ -110,7 +110,7 @@ func (w *DeliverEmailWorker) Work(ctx context.Context, job *river.Job[DeliverEma
 		return river.JobSnooze(providerSnooze)
 	}
 
-	if err := w.emailer.SendDirect(ctx, contact.Email, n.Title, notificationEmailTemplate, map[string]any{
+	if err := w.emailer.SendTemplate(ctx, contact.Email, n.Title, notificationEmailTemplate, map[string]any{
 		"Subject":   n.Title,
 		"Title":     n.Title,
 		"Body":      n.Body,
@@ -125,9 +125,9 @@ func (w *DeliverEmailWorker) Work(ctx context.Context, job *river.Job[DeliverEma
 }
 
 // actionURL builds the email button's absolute URL from the event's deep
-// link. The link vocabulary belongs to the publishers: #741 ports the grace
-// paths here, the catalog publishers (#748–#752) extend the map per event
-// type; an event without an entry renders the email without a button.
+// link. The link vocabulary belongs to the publishers (deeplink.go): the
+// catalog publishers (#748–#752) extend the map per event type; an event
+// without an entry renders the email without a button.
 func (w *DeliverEmailWorker) actionURL(n domain.Notification) string {
 	if path := deeplinkFor(n.EventType); path != "" {
 		return w.appBaseURL + path

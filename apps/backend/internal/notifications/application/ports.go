@@ -61,11 +61,11 @@ type PushSubscriptionRepository interface {
 	ListByUser(ctx context.Context, userID uuid.UUID) ([]domain.PushSubscription, error)
 }
 
-// DirectEmailSender renders and sends a one-off email outside any worker
-// lifecycle (issue #253): the direct-notification service owns subject and
-// content, the adapter owns templates and transport.
-type DirectEmailSender interface {
-	SendDirect(ctx context.Context, to, subject, template string, data map[string]any) error
+// TemplateEmailSender renders a named template and sends one email through
+// the platform mailer: the email delivery worker's send port (#740) — the
+// worker owns subject and content, the adapter owns templates and transport.
+type TemplateEmailSender interface {
+	SendTemplate(ctx context.Context, to, subject, template string, data map[string]any) error
 }
 
 // PushSender dispatches a single Web Push message to one browser subscription.

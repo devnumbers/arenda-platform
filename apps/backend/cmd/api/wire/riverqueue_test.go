@@ -62,6 +62,6 @@ func (fakeContactResolver) Resolve(ctx context.Context, scope uuid.UUID) (applic
 
 type fakeEmailSender struct{}
 
-func (fakeEmailSender) SendDirect(ctx context.Context, to, subject, template string, data map[string]any) error {
+func (fakeEmailSender) SendTemplate(ctx context.Context, to, subject, template string, data map[string]any) error {
 	return nil
 }

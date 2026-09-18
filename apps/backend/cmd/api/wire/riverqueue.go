@@ -43,7 +43,7 @@ func WireRiverQueue(
 	p platformDeps,
 	notificationsMod *Notifications,
 	resolver notificationsapp.ContactResolver,
-	emailer notificationsapp.DirectEmailSender,
+	emailer notificationsapp.TemplateEmailSender,
 	pushSender notificationsapp.PushSender,
 ) (*RiverQueue, error) {
 	cfg := p.Cfg

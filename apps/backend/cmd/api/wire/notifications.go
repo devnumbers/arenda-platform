@@ -8,8 +8,7 @@ import (
 // Notifications holds the notifications module's repositories and services
 // wired by WireNotifications. The module owns the delivery channels, the
 // push subscriptions, the stored feed and the delivery queue's inputs
-// (#740); the direct send for subscription_grace events lives until its
-// pipeline migration (#741).
+// (#740); the grace events publish through the pipeline since #741.
 type Notifications struct {
 	PushSubscriptionRepo    *notificationspg.PushSubscriptionRepository
 	PushSubscriptionService *notificationsapp.PushSubscriptionService

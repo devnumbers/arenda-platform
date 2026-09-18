@@ -1,6 +1,6 @@
 # Notifications
 
-Контекст уведомлений: хранимая лента (карта #734, модель — решение #737), каналы доставки (email, Web Push), push-подписки и события подписки. Доставка по каналам идёт через очередь River и dispatch-пайплайн (#740, ADR 0057): издатели пишут ленту и ставят джобы через `Publisher` — grace (#741) и каталог (#748–#752); до #741 grace ходит прямым каналом. Per-event-type × per-channel настройки (ADR 0030) сняты вместе с таблицей (миграция 000131): категория «Тариф» честно всегда включена, новый контракт настроек — email per-account + push per-device (ADR 0056, #743).
+Контекст уведомлений: хранимая лента (карта #734, модель — решение #737), каналы доставки (email, Web Push), push-подписки и события подписки. Доставка по каналам идёт через очередь River и dispatch-пайплайн (#740, ADR 0057): издатели пишут ленту и ставят джобы через `Publisher` — grace (#741) и каталог (#748–#752). Per-event-type × per-channel настройки (ADR 0030) сняты вместе с таблицей (миграция 000131): категория «Тариф» честно всегда включена, новый контракт настроек — email per-account + push per-device (ADR 0056, #743).
 
 ## Language
 
@@ -11,10 +11,10 @@
 _Avoid_: тип события, канал
 
 **Тип события / Notification Event Type**:
-Конкретное событие ленты; принадлежит категории (`EventType.FeedCategory`). Каталог v1 — 15 типов (решение #737): `rental_completed`; `payment_due`, `payment_overdue`; `task_overdue`; `property_invitation`, `invitation_accepted`, `access_revoked`, `access_paused`, `access_resumed`, `member_left`; `subscription_payment_failed`, `subscription_payment_reminder`, `subscription_payment_succeeded`, `subscription_plan_changed`; `system_maintenance`. Хранится в enum `notification_event_type`.
+Конкретное событие ленты; принадлежит категории (`EventType.FeedCategory`). Каталог — 17 типов: 15 из решения #737 плюс grace-пара `subscription_grace_entered` / `subscription_grace_expiring` (#741): вход в льготный период и его истечение — единственные пока изданные события. Хранится в enum `notification_event_type`.
 _Avoid_: категория
 
-Мёртвые значения `notification_event_type` (`free_reminder`, `operation_due`, `operation_overdue`, `lease_expiring`, `lease_requires_action`) и `notification_target_type` (`free`, `operation`, `recurring_operation`, `lease`) остаются в PostgreSQL навсегда (прецедент #277) — домен и контракты о них не знают. Легаси-значение `subscription_grace` обслуживает прямой grace-канал до перевода grace на пайплайн (#741); в ленте его нет.
+Мёртвые значения `notification_event_type` (`free_reminder`, `operation_due`, `operation_overdue`, `lease_expiring`, `lease_requires_action`, а с #741 и `subscription_grace` — значение прямого канала, снесённого #741) и `notification_target_type` (`free`, `operation`, `recurring_operation`, `lease`) остаются в PostgreSQL навсегда (прецедент #277) — домен и контракты о них не знают.
 
 **Уведомление / Notification**:
 Строка ленты одного получателя: снимок текста (заголовок, тело, лейбл контекста — имя объекта/тарифа или «Системные уведомления»), payload-ссылки, личные флаги (прочитано `read_at`, удалено `deleted_at`). Одно событие = по строке на каждого получателя (fan-out); переписанный шаблон не трогает хранимые строки. Таблица `notifications`; момент события — UTC instant (`created_at`), группировка «Сегодня/Вчера» — дело экрана (#744).
@@ -32,7 +32,7 @@ _Avoid_: история, журнал
 _Avoid_: кнопка-действие (выполняющая мутацию из ленты)
 
 **Дедуп-ключ / Dedup Key**:
-Пара (получатель, `dedup_key`), где ключ = (тип события, сущность, фаза/дата); уникальный индекс делает инвариант прочным: повтор с тем же ключом строку не создаёт. Форматы ключей — словарь издателей (#740, #748–#752).
+Пара (получатель, `dedup_key`), где ключ = (тип события, сущность, фаза/дата); уникальный индекс делает инвариант прочным: повтор с тем же ключом строку не создаёт. Словарь издателей: grace (#741) — `subscription_grace_entered:<subscription_id>:<YYYY-MM-DD конца окна>` (без даты, когда окно без известного конца); остальные издатели — #748–#752.
 
 **Счётчик непрочитанных / Unread Counter**:
 Число непрочитанных неудалённых строк пользователя. Снижается кликом по уведомлению, открытием страницы и «Прочитать все»; удаление непрочитанного снижает его; пуш и email на читаемость не влияют.
@@ -55,11 +55,6 @@ JSON-тело, отправляемое в service worker: `title`, `body`, `tag
 
 **VAPID / Voluntary Application Server Identification**:
 RFC 8292. P-256 ключ pair для идентификации application server'а перед push-сервисом. Публичный ключ отдаётся фронту через `GET /push/vapid-public-key`; приватный ключ и subject (`mailto:`/`https:` URI) — серверный секрет. Ротация ломает все подписки — не ротировать без миграции.
-
-### Direct notifications
-
-**Прямое уведомление / Direct Notification**:
-Сообщение, доставляемое одному пользователю немедленно, вне какого-либо жизненного цикла: без таблицы отправок, без клейма и без повторов. Отправитель публикует событие один раз — `DirectNotificationService` доставляет оба канала один раз. Grace — служебная категория «Тариф», всегда включена (ADR 0056): настройки каналы не глушат. Оба канала best-effort: сбой канала логируется и никогда не валит другой канал и не влияет на переход, вызвавший событие. Текущий отправитель — grace-события billing (issue #253): «вход в grace» доставляется немедленно, «grace истекает» — по расписанию grace-воркера billing. Единственный оставшийся отправитель прямого канала — grace (#253); #741 переводит его на пайплайн, судьба `DirectNotificationService` решается там.
 
 ### Delivery pipeline
 
@@ -84,7 +79,7 @@ Push delivery is best-effort: push failures (429, 5xx, no subscription) are logg
 
 ### Push delivery observability
 
-`webpush.Metrics` exposes a single counter `notifications.push.dispatched` with an `outcome` attribute (`sent`/`gone`/`rate_limited`/`failed`). The cleanup rate of dead subscriptions — the volume of subscriptions the direct-notification service deletes because the push service returned 404/410 (`ErrSubscriptionGone`) — is observable as `notifications.push.dispatched{outcome=gone}` in Uptrace. The metric is recorded by the adapter before the domain error is returned, so every gone outcome is counted even if the DB delete fails. To monitor cleanup on prod, alert on a sustained non-zero `gone` rate (indicates subscription churn — devices uninstalled, ITP purges, OS token expiry).
+`webpush.Metrics` exposes a single counter `notifications.push.dispatched` with an `outcome` attribute (`sent`/`gone`/`rate_limited`/`failed`). The cleanup rate of dead subscriptions — the volume of subscriptions the push delivery worker deletes because the push service returned 404/410 (`ErrSubscriptionGone`) — is observable as `notifications.push.dispatched{outcome=gone}` in Uptrace. The metric is recorded by the adapter before the domain error is returned, so every gone outcome is counted even if the DB delete fails. To monitor cleanup on prod, alert on a sustained non-zero `gone` rate (indicates subscription churn — devices uninstalled, ITP purges, OS token expiry).
 
 ### Declarative Web Push — decision (iOS)
 

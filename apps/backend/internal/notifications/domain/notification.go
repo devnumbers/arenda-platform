@@ -1,6 +1,6 @@
 // Package domain defines the notifications vocabulary: the stored feed
 // (карта #734, модель — решение #737), the delivery channels and push
-// subscriptions, and the legacy direct grace event.
+// subscriptions.
 package domain
 
 import (
@@ -11,26 +11,16 @@ import (
 	"github.com/google/uuid"
 )
 
-// EventType identifies the kind of a notification. Two families share the
-// type:
-//
-//   - the feed catalog v1 (решение #737, 15 типов) — concrete feed events,
-//     each belonging to a category (FeedCategory);
-//   - the legacy EventSubscriptionGrace — the direct grace channel's event
-//     (issue #253); it has no feed category and never appears in the feed
-//     until the delivery unification (#740/#741).
-//
-// The rental-era values of the PostgreSQL enum stay as dead rows forever
-// (#438, #277) — the domain does not know them.
+// EventType identifies the kind of a notification: a concrete feed event
+// belonging to a category (FeedCategory). The rental-era and direct-channel
+// values of the PostgreSQL enum stay as dead rows forever (#438, #277 —
+// free_reminder, subscription_grace and friends) — the domain does not know
+// them.
 type EventType string
 
-// EventSubscriptionGrace covers the billing grace lifecycle notifications:
-// a failed renewal charge entering grace and the grace window closing.
-const EventSubscriptionGrace EventType = "subscription_grace"
-
-// Feed catalog v1 (решение #737) in catalog order: the category of each
-// value is the authoritative FeedCategory mapping — Аренда; Платежи и
-// операции; Задачи; Совместный доступ; Тариф; Системные.
+// Feed catalog v1 (решение #737, дополненный #741) in catalog order: the
+// category of each value is the authoritative FeedCategory mapping — Аренда;
+// Платежи и операции; Задачи; Совместный доступ; Тариф; Системные.
 const (
 	EventRentalCompleted              EventType = "rental_completed"
 	EventPaymentDue                   EventType = "payment_due"
@@ -46,6 +36,8 @@ const (
 	EventSubscriptionPaymentReminder  EventType = "subscription_payment_reminder"
 	EventSubscriptionPaymentSucceeded EventType = "subscription_payment_succeeded"
 	EventSubscriptionPlanChanged      EventType = "subscription_plan_changed"
+	EventSubscriptionGraceEntered     EventType = "subscription_grace_entered"
+	EventSubscriptionGraceExpiring    EventType = "subscription_grace_expiring"
 	EventSystemMaintenance            EventType = "system_maintenance"
 )
 
@@ -70,12 +62,14 @@ var feedCatalog = map[EventType]struct {
 	EventSubscriptionPaymentReminder:  {CategoryTariff, []ActionKind{ActionOpenTariffs}},
 	EventSubscriptionPaymentSucceeded: {CategoryTariff, nil},
 	EventSubscriptionPlanChanged:      {CategoryTariff, []ActionKind{ActionOpenTariffs}},
+	EventSubscriptionGraceEntered:     {CategoryTariff, []ActionKind{ActionOpenPaymentMethods}},
+	EventSubscriptionGraceExpiring:    {CategoryTariff, []ActionKind{ActionOpenPaymentMethods}},
 	EventSystemMaintenance:            {CategorySystem, nil},
 }
 
 // FeedCategory returns the event type's category per the catalog v1. The
 // second return is false for event types outside the feed catalog — the
-// grace event among them.
+// dead enum values among them.
 func (e EventType) FeedCategory() (Category, bool) {
 	entry, ok := feedCatalog[e]
 	if !ok {
@@ -114,6 +108,9 @@ const (
 	ActionOpenProperty        ActionKind = "open_property"
 	ActionOpenPropertyMembers ActionKind = "open_property_members"
 	ActionOpenTariffs         ActionKind = "open_tariffs"
+	// ActionOpenPaymentMethods opens the payment-methods screen — where the
+	// user fixes a failed renewal charge (the grace events' fix screen).
+	ActionOpenPaymentMethods ActionKind = "open_payment_methods"
 )
 
 // ActionsForEvent returns the action buttons the event type may carry, in

@@ -61,8 +61,9 @@ func run() error {
 	// 2. Event dispatcher (shared by identity publisher and subscribers).
 	eventDispatcher := events.NewInProcessDispatcher()
 
-	// 3. Notifications (grace-only, issue #438): preference and
-	//    push-subscription services.
+	// 3. Notifications (issue #438): the push-subscription service and the
+	//    stored feed repository; the delivery queue and the grace publisher
+	//    build on them below.
 	notificationsMod := wire.WireNotifications(p)
 
 	// 3.5. HTTP rate limiters (built early: the email-change service's
@@ -146,19 +147,15 @@ func run() error {
 	// 8. Cross-module user_registered subscribers.
 	subscribeUserRegistered(eventDispatcher, billingMod, accessMod)
 
-	// 9. Grace notifications (issue #253): the billing grace events deliver
-	//     through the notifications context over push and email (always-on
-	//     service category, ADR 0056). The contact resolver and email
-	//     notifier are shared with the delivery queue built in step 11.5.
-	//     Subscribers are registered before the workers start so no grace
-	//     event fires unwired.
+	// 9. Notifications channel adapters: the Web Push sender (nil without
+	//    VAPID keys — email-only local mode) and the shared contact resolver
+	//    + email notifier. Both the grace subscribers (step 11.6) and the
+	//    delivery queue (step 11.5) consume them.
 	pushSender, err := newPushSender(ctx, p.Cfg, p.Logger)
 	if err != nil {
 		return err
 	}
 	delivery := newNotificationDelivery(p.DB, p.Renderer, identityMod.EmailMailer)
-	graceNotifier := newGraceNotifier(p.Cfg, p.Logger, notificationsMod, delivery, pushSender)
-	subscribeGraceEvents(eventDispatcher, graceNotifier)
 
 	// 10. Admin service (depends on billing subscriptions + occupancy provider).
 	adminMod := wire.WireAdmin(p, billingMod.Services.Subscriptions)
@@ -170,16 +167,24 @@ func run() error {
 	//     email/push delivery workers and the notification publisher. The
 	//     client starts in the workers phase below; the publisher is the
 	//     post-commit seam the pipeline publishers call (#741, #748–#752).
+	//     The grace subscribers (step 11.6) are the first to call it.
 	riverMod, err := wire.WireRiverQueue(ctx, p, notificationsMod, delivery.resolver, delivery.emailer, pushSender)
 	if err != nil {
 		return err
 	}
 	defer riverMod.ProviderLimiter.Stop()
 
+	// 11.6 Grace notifications (issue #253, #741): the billing grace events
+	//     publish to the stored feed + delivery queue through the pipeline
+	//     publisher (the always-on Тариф category, ADR 0056). Subscribers
+	//     are registered before the workers start (step 12), so no grace
+	//     event fires unwired.
+	subscribeGraceEvents(eventDispatcher, notificationsapp.NewGracePublisher(riverMod.Publisher))
+
 	// 12. Background workers (5 goroutines + the delivery queue client).
 	//     Started before the HTTP server so they are live while serving. The
-	//     Web Push sender was constructed in step 9 together with the grace
-	//     notification delivery.
+	//     Web Push sender was constructed in step 9 and shared with the
+	//     delivery queue.
 	workers := wire.NewWorkers(
 		ctx, p,
 		identityMod.SessionRepo,
@@ -358,12 +363,12 @@ func newPushSender(ctx context.Context, cfg *config.Config, logger *slog.Logger)
 	return s, nil
 }
 
-// notificationDelivery bundles the channel adapters shared by the direct
-// grace notifications and the delivery queue's email worker: one contact
-// resolver and one email notifier for both paths.
+// notificationDelivery bundles the delivery queue's channel adapters: the
+// contact resolver and the email notifier the email worker resolves and
+// sends through.
 type notificationDelivery struct {
 	resolver notificationsapp.ContactResolver
-	emailer  notificationsapp.DirectEmailSender
+	emailer  notificationsapp.TemplateEmailSender
 }
 
 // newNotificationDelivery builds the shared channel adapters.
@@ -375,45 +380,28 @@ func newNotificationDelivery(db *database.InstrumentedPool, renderer *mailer.Ren
 	}
 }
 
-// newGraceNotifier builds the direct notification service the billing grace
-// events deliver through; push delivery is included only when the sender
-// could be built.
-func newGraceNotifier(
-	cfg *config.Config,
-	logger *slog.Logger,
-	notificationsMod *wire.Notifications,
-	delivery notificationDelivery,
-	pushSender notificationsapp.PushSender,
-) *notificationsapp.DirectNotificationService {
-	return notificationsapp.NewDirectNotificationService(
-		delivery.resolver,
-		delivery.emailer,
-		pushSender,
-		notificationsMod.PushSubscriptionRepo,
-		cfg.AppBaseURL,
-		logger,
-	)
-}
-
 // subscribeGraceEvents registers the grace-entered and grace-expiring
-// subscribers on the shared event dispatcher.
+// subscribers on the shared event dispatcher: each billing event becomes a
+// stored feed notification with queued email/push delivery (#741). The
+// publisher is notifications' GracePublisher over the pipeline Publisher;
+// billing never imports notifications — the composition root owns the seam.
 func subscribeGraceEvents(
 	eventDispatcher *events.InProcessDispatcher,
-	graceNotifier *notificationsapp.DirectNotificationService,
+	gracePublisher *notificationsapp.GracePublisher,
 ) {
 	eventDispatcher.Subscribe(events.EventType("subscription_grace_entered"), func(ctx context.Context, event any) error {
 		e, ok := event.(billingapp.GraceEntered)
 		if !ok {
 			return fmt.Errorf("unexpected event type %T", event)
 		}
-		return graceNotifier.NotifyGraceEntered(ctx, e.UserID, e.GraceUntil)
+		return gracePublisher.NotifyGraceEntered(ctx, e.UserID, e.SubscriptionID, e.GraceUntil)
 	})
 	eventDispatcher.Subscribe(events.EventType("subscription_grace_expiring"), func(ctx context.Context, event any) error {
 		e, ok := event.(billingapp.GraceExpiring)
 		if !ok {
 			return fmt.Errorf("unexpected event type %T", event)
 		}
-		return graceNotifier.NotifyGraceExpiring(ctx, e.UserID, e.GraceUntil)
+		return gracePublisher.NotifyGraceExpiring(ctx, e.UserID, e.SubscriptionID, e.GraceUntil)
 	})
 }
 

@@ -29,8 +29,7 @@ var _ application.DeliveryQueue = (*RiverQueue)(nil)
 type RiverQueue struct {
 	client *river.Client[pgx.Tx]
 	// PushEnabled-style flag: without VAPID keys there is no push sender, so
-	// push jobs are not enqueued (the same email-only local mode the
-	// direct-notification service has).
+	// push jobs are not enqueued — the email-only local mode.
 	pushEnabled bool
 
 	emailInsertOpts *river.InsertOpts

@@ -85,7 +85,7 @@ type emailerStub struct {
 	err error
 }
 
-func (e *emailerStub) SendDirect(ctx context.Context, to, subject, template string, data map[string]any) error {
+func (e *emailerStub) SendTemplate(ctx context.Context, to, subject, template string, data map[string]any) error {
 	e.calls++
 	e.last.to, e.last.subject, e.last.template, e.last.data = to, subject, template, data
 	return e.err
@@ -106,7 +106,7 @@ func newEmailWorker(
 	t *testing.T,
 	feed application.NotificationRepository,
 	resolver application.ContactResolver,
-	emailer application.DirectEmailSender,
+	emailer application.TemplateEmailSender,
 	limiter providerLimiter,
 ) *DeliverEmailWorker {
 	t.Helper()

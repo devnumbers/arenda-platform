@@ -1,6 +1,6 @@
 // Package application holds the notifications use cases and ports: the
-// stored feed repositories, push subscriptions and direct grace
-// notifications.
+// stored feed repository, the delivery pipeline's creation service, the
+// grace publisher and push subscriptions.
 package application
 
 import "errors"
