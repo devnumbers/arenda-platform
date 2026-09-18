@@ -13,12 +13,13 @@ export type SuspendedPropertyCardProps = {
 
 /**
  * Блюр-карточка подвесшего чужого объекта (карта #692, тикет #702; Figma
- * 2213-99112) в списке-хабе: объект, скрытый тарифным лимитом получателя,
- * вместо сноски hidden_shared_count (#158 T4) рисуется карточкой-плейсхолдером
- * — размытое «содержимое» (blur 4px) под белой плашкой с замком, «Объект
- * недоступен» и кнопкой «Узнать причину». Данных объекта плейсхолдер не
- * несёт; вся карточка — кнопка открытия шита причины (chevron и ссылка на
- * объект, в отличие от обычной карточки, отсутствуют).
+ * 2213-99113) в списке-хабе: объект, скрытый тарифным лимитом получателя,
+ * вместо сноски hidden_shared_count (#158 T4) рисуется карточкой под общим
+ * размытием — анатомия обычной карточки (круг-фото, строки) целиком под
+ * blur(4px), сверху белая плашка с замком, «Объект недоступен» и кнопкой
+ * «Узнать причину». Данных объекта плейсхолдер не несёт; вся карточка —
+ * кнопка открытия шита причины (chevron и ссылка на объект, в отличие от
+ * обычной карточки, отсутствуют).
  */
 export function SuspendedPropertyCard({
   placeholder,
@@ -31,10 +32,12 @@ export function SuspendedPropertyCard({
       data-testid="suspended-property-card"
       onClick={() => onReason(placeholder)}
     >
-      <span className={styles.blurred} aria-hidden>
+      <span className={styles.blurLayer} aria-hidden>
         <PropertyAvatar photoUrl={null} withAttentionDot={false} />
-        <span className={`${styles.line} ${styles.lineShort}`} />
-        <span className={`${styles.line} ${styles.lineMuted}`} />
+        <span className={styles.info}>
+          <span className={styles.lineTitle} />
+          <span className={styles.lineAddress} />
+        </span>
       </span>
       <span className={styles.plaque}>
         <span className={styles.plaqueHead}>
