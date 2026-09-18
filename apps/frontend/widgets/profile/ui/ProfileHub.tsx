@@ -81,6 +81,17 @@ function HubRowButton({
   );
 }
 
+/** Строка скелетона хаба — форма строки меню (паритет #604). */
+function SkeletonHubRow(): JSX.Element {
+  return (
+    <div className="flex items-center px-3 py-1">
+      <Skeleton className="h-6 w-6 shrink-0 bg-surface-muted-hover" />
+      <Skeleton className="ml-[22px] h-5 w-32 flex-1 bg-surface-muted-hover" />
+      <Skeleton className="ml-3 h-6 w-6 shrink-0 bg-surface-muted-hover" />
+    </div>
+  );
+}
+
 function ProfileHubSkeleton(): JSX.Element {
   return (
     <div role="status" aria-label="Загрузка профиля" className="flex flex-col gap-8 px-6 pb-6">
@@ -92,14 +103,12 @@ function ProfileHubSkeleton(): JSX.Element {
         </div>
       </div>
       <div className="flex flex-col rounded-3xl bg-surface-muted py-2">
-        {/* Паритет скелетона (#604): строки навигации + строка «Выйти». */}
-        {[...navigationRows, null].map((row) => (
-          <div key={row?.href ?? 'logout'} className="flex items-center px-3 py-1">
-            <Skeleton className="h-6 w-6 shrink-0 bg-surface-muted-hover" />
-            <Skeleton className="ml-[22px] h-5 w-32 flex-1 bg-surface-muted-hover" />
-            <Skeleton className="ml-3 h-6 w-6 shrink-0 bg-surface-muted-hover" />
-          </div>
+        {navigationRows.map((row) => (
+          <SkeletonHubRow key={row.href} />
         ))}
+        {/* Паритет скелетона (#604): «Выйти» живёт вне nav, но в том же
+         * контейнере — без неё контент приходил со сдвигом (ходка #729). */}
+        <SkeletonHubRow />
       </div>
     </div>
   );
