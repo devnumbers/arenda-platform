@@ -60,45 +60,28 @@ type fallbackClock struct{}
 
 func (fallbackClock) Now() time.Time { return time.Now().UTC() }
 
-// Session is the platform-neutral view of an authenticated session. It carries
-// the fields the session middleware and its Touch seam read or write (the
-// sliding expiry for the cookie, the rotation/IP/city bookkeeping the
-// per-request maintenance updates); it deliberately avoids any bounded-context
-// type so that platform/httpsupport does not depend on identity/domain
-// (ADR 0034). The sliding/rotation policy itself lives behind Touch, in the
-// identity application — the platform stays a dumb orchestrator.
-type Session struct {
-	ID         uuid.UUID
-	TokenHash  string
-	ExpiresAt  time.Time
-	CreatedAt  time.Time
-	LastUsedAt time.Time
-	RotatedAt  time.Time
-	LastIP     string
-	City       string
-}
-
-// IsExpired reports whether the session has passed its expiry at now.
-func (s *Session) IsExpired(now time.Time) bool {
-	return now.After(s.ExpiresAt)
-}
-
-// SessionLoader loads and maintains the platform-neutral session view. It is
-// the seam through which the session middleware reads a session without
-// depending on identity/domain: an adapter in the identity context maps the
-// identity session/user aggregate onto (Session, userID, actor.Role)
-// (ADR 0034).
+// SessionLoader resolves the raw session cookie to the acting user and
+// maintains the session's cookie lifecycle. It is the seam through which the
+// session middleware authenticates requests without depending on any bounded
+// context's domain (ADR 0034): the session state itself — expiry, sliding
+// window, token rotation — never crosses this boundary; it lives behind the
+// interface, in the identity application. The platform stays a dumb
+// orchestrator that only sees the actor identity and the cookie it must
+// re-issue.
 type SessionLoader interface {
-	// Load resolves a raw session token to the platform-neutral session together
-	// with the actor identity (user ID and role). The now argument seeds the
-	// sliding window.
-	Load(ctx context.Context, token string, now time.Time) (Session, uuid.UUID, actor.Role, error)
-	// Touch performs the per-request session maintenance and persists it: the
-	// sliding expiry (pure sliding, ADR 0056), the throttled last-seen stamp,
-	// the client IP with its city on change, and the 14-day token rotation.
-	// When rotatedToken is non-empty the token was replaced and the transport
-	// must deliver it as the new cookie value.
-	Touch(ctx context.Context, session Session, clientIP string, now time.Time) (updated Session, rotatedToken string, err error)
+	// Load resolves a raw session token to the actor identity (user ID and
+	// role). Unknown and expired tokens surface identically as the
+	// [SessionNotFound] sentinel — expiry is the loader's decision, not the
+	// transport's.
+	Load(ctx context.Context, token string, now time.Time) (uuid.UUID, actor.Role, error)
+	// Touch performs the per-request session maintenance keyed by the raw
+	// token: the sliding expiry (pure sliding, ADR 0056), the throttled
+	// last-seen stamp, the client IP with its city on change, and the 14-day
+	// token rotation. A non-nil cookieExpires means the transport must
+	// re-issue the session cookie: cookieToken carries the fresh token after
+	// a rotation, or is empty when the presented token stays valid and only
+	// the expiry moved. A nil cookieExpires means no cookie change.
+	Touch(ctx context.Context, token, clientIP string, now time.Time) (cookieToken string, cookieExpires *time.Time, err error)
 }
 
 // publicSessionSkippedPaths are paths that never require a session lookup.
@@ -122,7 +105,7 @@ func isPublicSessionSkippedPath(path string) bool {
 }
 
 // sessionMiddleware carries the wired session dependencies so each step of
-// the request path (load, validate, refresh) is a named method.
+// the request path (load, authenticate, touch) is a named method.
 type sessionMiddleware struct {
 	logger *slog.Logger
 	loader SessionLoader
@@ -155,17 +138,13 @@ func (m sessionMiddleware) wrap(next http.Handler) http.Handler {
 		}
 
 		now := m.clock.Now()
-		session, userID, role, err := m.loader.Load(r.Context(), token, now)
+		userID, role, err := m.loader.Load(r.Context(), token, now)
 		if err != nil {
 			m.serveLoadError(w, r, next, err)
 			return
 		}
-		if session.IsExpired(now) {
-			m.serveWithClearedCookie(w, r, next)
-			return
-		}
 
-		m.touchSession(w, r, token, session, now)
+		m.touchSession(w, r, token, now)
 
 		ctx := WithUserID(r.Context(), userID)
 		ctx = WithActor(ctx, userID, role)
@@ -174,9 +153,9 @@ func (m sessionMiddleware) wrap(next http.Handler) http.Handler {
 	})
 }
 
-// serveLoadError maps a session lookup failure: the not-found sentinel keeps
-// the request anonymous with the cookie cleared, anything else is a 500
-// problem response.
+// serveLoadError maps a session lookup failure: the not-found sentinel —
+// an unknown or an expired token, the loader's call — keeps the request
+// anonymous with the cookie cleared, anything else is a 500 problem response.
 func (m sessionMiddleware) serveLoadError(w http.ResponseWriter, r *http.Request, next http.Handler, err error) {
 	if IsSessionNotFound(err) {
 		m.serveWithClearedCookie(w, r, next)
@@ -197,25 +176,25 @@ func (m sessionMiddleware) serveWithClearedCookie(w http.ResponseWriter, r *http
 
 // touchSession runs the per-request session maintenance (sliding expiry,
 // throttled last-seen, IP/city refresh, token rotation) and re-issues the
-// cookie when the session state changed the cookie: a rotation delivers the
-// fresh token, a sliding move re-stamps the expiry. A maintenance failure is
+// cookie when the loader reports a change: a rotation delivers the fresh
+// token, an expiry move re-stamps the presented one. A maintenance failure is
 // logged once and leaves the previous cookie in place — the request still
 // proceeds authenticated.
-func (m sessionMiddleware) touchSession(w http.ResponseWriter, r *http.Request, token string, session Session, now time.Time) {
-	updated, rotatedToken, err := m.loader.Touch(r.Context(), session, requestctx.ClientIPFromContext(r.Context()), now)
+func (m sessionMiddleware) touchSession(w http.ResponseWriter, r *http.Request, token string, now time.Time) {
+	cookieToken, cookieExpires, err := m.loader.Touch(r.Context(), token, requestctx.ClientIPFromContext(r.Context()), now)
 	if err != nil {
 		if m.logger != nil {
 			m.logger.ErrorContext(r.Context(), "failed to touch session", slog.String("error", SanitizeError(err)))
 		}
 		return
 	}
-	if rotatedToken != "" {
-		SetSessionCookie(w, rotatedToken, updated.ExpiresAt, m.secure)
+	if cookieExpires == nil {
 		return
 	}
-	if !updated.ExpiresAt.Equal(session.ExpiresAt) {
-		SetSessionCookie(w, token, updated.ExpiresAt, m.secure)
+	if cookieToken == "" {
+		cookieToken = token
 	}
+	SetSessionCookie(w, cookieToken, *cookieExpires, m.secure)
 }
 
 // errSessionNotFound is the sentinel the SessionLoader seam uses to signal that

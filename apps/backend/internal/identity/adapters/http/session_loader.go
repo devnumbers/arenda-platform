@@ -7,16 +7,15 @@ import (
 
 	"github.com/google/uuid"
 	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
-	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/actor"
 )
 
 // sessionLoader adapts the identity [identityapp.SessionService] to the
 // platform-neutral [httpsupport.SessionLoader] seam. It is the boundary that
-// keeps platform/httpsupport free of any identity/domain import: the identity
-// session/user aggregate is mapped here onto (httpsupport.Session, userID,
-// actor.Role) (ADR 0034).
+// keeps platform/httpsupport free of any identity/domain import (ADR 0034):
+// the platform only ever sees the actor identity and the cookie decision, so
+// session state never needs a platform-side mirror.
 type sessionLoader struct {
 	svc identityapp.SessionService
 }
@@ -31,60 +30,51 @@ func NewSessionLoader(svc identityapp.SessionService) httpsupport.SessionLoader 
 	return sessionLoader{svc: svc}
 }
 
-func (l sessionLoader) Load(ctx context.Context, token string, now time.Time) (httpsupport.Session, uuid.UUID, actor.Role, error) {
-	sess, user, err := l.svc.Load(ctx, token, now)
+func (l sessionLoader) Load(ctx context.Context, token string, now time.Time) (uuid.UUID, actor.Role, error) {
+	_, user, err := l.svc.Load(ctx, token, now)
 	if err != nil {
-		// Map the identity "not found" sentinel onto the platform-neutral
-		// session-not-found sentinel so the middleware treats a dead session as
-		// a public, cookie-clearing miss rather than an internal error.
-		if errors.Is(err, identityapp.ErrNotFound) {
-			return httpsupport.Session{}, uuid.Nil, "", httpsupport.SessionNotFound(err)
-		}
-		return httpsupport.Session{}, uuid.Nil, "", err
+		return uuid.Nil, "", mapSessionLoadErr(err)
 	}
-	return toPlatformSession(sess), user.ID, user.Role, nil
+	return user.ID, user.Role, nil
 }
 
+// mapSessionLoadErr maps the identity "not found" sentinel onto the
+// platform-neutral session-not-found sentinel so the middleware treats an
+// unknown or expired session as a public, cookie-clearing miss rather than an
+// internal error.
+func mapSessionLoadErr(err error) error {
+	if errors.Is(err, identityapp.ErrNotFound) {
+		return httpsupport.SessionNotFound(err)
+	}
+	return err
+}
+
+// Touch re-resolves the session by the presented token and maps the service
+// outcome onto the transport's cookie decision: a rotation delivers the fresh
+// raw token, an expiry move re-stamps the presented one. The re-resolve is the
+// deliberate price of carrying no session state across the seam (#755): the
+// maintenance works on a fresh snapshot, and the platform never mirrors
+// identity fields. A token that died between the middleware Load and this
+// reload surfaces as [httpsupport.SessionNotFound] — the middleware keeps the
+// request authenticated (fail-open) without re-issuing a cookie.
 func (l sessionLoader) Touch(
-	ctx context.Context, sess httpsupport.Session, clientIP string, now time.Time,
-) (httpsupport.Session, string, error) {
-	updated, rotatedToken, err := l.svc.Touch(ctx, fromPlatformSession(sess), clientIP, now)
+	ctx context.Context, rawToken, clientIP string, now time.Time,
+) (string, *time.Time, error) {
+	sess, _, err := l.svc.Load(ctx, rawToken, now)
 	if err != nil {
-		return httpsupport.Session{}, "", err
+		return "", nil, mapSessionLoadErr(err)
 	}
-	return toPlatformSession(updated), rotatedToken, nil
-}
+	expiresBefore := sess.ExpiresAt
 
-// toPlatformSession maps the identity session aggregate onto the platform-neutral
-// [httpsupport.Session] view. Only the fields the session middleware and its
-// Touch seam read or write are carried; UserID — the one field with no meaning
-// outside the aggregate — is intentionally dropped.
-func toPlatformSession(sess domain.Session) httpsupport.Session {
-	return httpsupport.Session{
-		ID:         sess.ID,
-		TokenHash:  sess.TokenHash,
-		ExpiresAt:  sess.ExpiresAt,
-		CreatedAt:  sess.CreatedAt,
-		LastUsedAt: sess.LastUsedAt,
-		RotatedAt:  sess.RotatedAt,
-		LastIP:     sess.LastIP,
-		City:       sess.City,
+	updated, rotatedToken, err := l.svc.Touch(ctx, sess, clientIP, now)
+	if err != nil {
+		return "", nil, err
 	}
-}
-
-// fromPlatformSession rebuilds the identity session aggregate from the
-// platform-neutral view for maintenance. UserID, the device description and
-// the raw User-Agent are not part of the platform view; the maintenance paths
-// key rows by TokenHash/ID and never rewrite them, so the zero values are safe.
-func fromPlatformSession(sess httpsupport.Session) domain.Session {
-	return domain.Session{
-		ID:         sess.ID,
-		TokenHash:  sess.TokenHash,
-		ExpiresAt:  sess.ExpiresAt,
-		CreatedAt:  sess.CreatedAt,
-		LastUsedAt: sess.LastUsedAt,
-		RotatedAt:  sess.RotatedAt,
-		LastIP:     sess.LastIP,
-		City:       sess.City,
+	if rotatedToken != "" {
+		return rotatedToken, &updated.ExpiresAt, nil
 	}
+	if !updated.ExpiresAt.Equal(expiresBefore) {
+		return "", &updated.ExpiresAt, nil
+	}
+	return "", nil, nil
 }

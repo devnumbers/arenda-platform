@@ -52,25 +52,16 @@ type gateActor struct {
 // reaches the admin gate exactly as in production.
 type gateSessionLoader struct{ actors map[string]gateActor }
 
-func (l gateSessionLoader) Load(_ context.Context, token string, now time.Time) (httpsupport.Session, uuid.UUID, actor.Role, error) {
+func (l gateSessionLoader) Load(_ context.Context, token string, _ time.Time) (uuid.UUID, actor.Role, error) {
 	a, ok := l.actors[token]
 	if !ok {
-		return httpsupport.Session{}, uuid.Nil, "", httpsupport.SessionNotFound(nil)
+		return uuid.Nil, "", httpsupport.SessionNotFound(nil)
 	}
-	return httpsupport.Session{
-		TokenHash:  token,
-		ExpiresAt:  now.Add(time.Hour),
-		CreatedAt:  now.Add(-time.Minute),
-		LastUsedAt: now.Add(-time.Minute),
-	}, a.userID, a.role, nil
+	return a.userID, a.role, nil
 }
 
-func (gateSessionLoader) Update(context.Context, httpsupport.Session) error { return nil }
-
-func (l gateSessionLoader) Touch(
-	_ context.Context, session httpsupport.Session, _ string, _ time.Time,
-) (httpsupport.Session, string, error) {
-	return session, "", nil
+func (gateSessionLoader) Touch(context.Context, string, string, time.Time) (string, *time.Time, error) {
+	return "", nil, nil
 }
 
 // adminGateHarness extends the refund harness (it already knows how to grow a
