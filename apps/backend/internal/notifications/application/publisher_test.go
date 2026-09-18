@@ -39,9 +39,11 @@ func (u *fakeUoW) Do(ctx context.Context, work func(tx transaction.Tx) error) er
 type fakeTx struct{ transaction.Tx }
 
 // fakeFeedRepo counts inserts and reports which (user, dedup key) pairs are
-// already published.
+// already published — either pre-seeded via Existing (a row from a previous
+// publication) or inserted through this fixture itself, one mechanism for both.
 type fakeFeedRepo struct {
-	inserted []domain.Notification
+	inserted  []domain.Notification
+	published map[string]bool
 	// Existing holds "user_id|dedup_key" pairs Insert reports as duplicates.
 	existing map[string]bool
 
@@ -58,15 +60,17 @@ func (r *fakeFeedRepo) WithTx(tx transaction.Tx) (NotificationRepository, error)
 }
 
 func (r *fakeFeedRepo) Insert(ctx context.Context, n domain.Notification) (bool, error) {
-	key := n.UserID.String() + "|" + string(n.DedupKey)
-	if r.existing[key] {
-		return false, nil
-	}
-	for _, inserted := range r.inserted {
-		if inserted.UserID == n.UserID && inserted.DedupKey == n.DedupKey {
-			return false, nil
+	if r.published == nil {
+		r.published = make(map[string]bool, len(r.existing))
+		for key := range r.existing {
+			r.published[key] = true
 		}
 	}
+	key := n.UserID.String() + "|" + string(n.DedupKey)
+	if r.published[key] {
+		return false, nil
+	}
+	r.published[key] = true
 	r.inserted = append(r.inserted, n)
 	return true, nil
 }

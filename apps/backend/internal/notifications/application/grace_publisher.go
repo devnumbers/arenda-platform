@@ -15,7 +15,8 @@ import (
 // email and push — enqueued through the River queue (ADR 0057). The former
 // direct channel (DirectNotificationService) is gone: same copy, same
 // payment-methods destination, but the notification is now stored, retried
-// and observable per channel.
+// and observable per channel. Settings never gate the delivery — the Тариф
+// category is always on (ADR 0056); the per-channel matrix is #743's contract.
 //
 // The call stays on the grace-events canon: billing captures the event
 // inside its transaction and publishes strictly after the commit, best-effort
@@ -38,7 +39,7 @@ func (g *GracePublisher) NotifyGraceEntered(ctx context.Context, userID, subscri
 	title := "Не удалось списание за подписку"
 	body := "Мы не смогли списать оплату за подписку. Привяжите другую карту, чтобы тариф не прервался."
 	if !graceUntil.IsZero() {
-		body = fmt.Sprintf("%s Льготный период действует до %s.", body, formatDate(graceUntil))
+		body = fmt.Sprintf("%s Льготный период действует до %s.", body, formatGraceDeadline(graceUntil))
 	}
 	return g.publish(ctx, domain.EventSubscriptionGraceEntered, userID, subscriptionID, graceUntil, title, body)
 }
@@ -49,14 +50,15 @@ func (g *GracePublisher) NotifyGraceExpiring(ctx context.Context, userID, subscr
 	title := "Подписка скоро истекает"
 	body := "Льготный период подписки заканчивается — обновите способ оплаты, чтобы сохранить тариф."
 	if !graceUntil.IsZero() {
-		body = fmt.Sprintf("%s Он действует до %s.", body, formatDate(graceUntil))
+		body = fmt.Sprintf("%s Он действует до %s.", body, formatGraceDeadline(graceUntil))
 	}
 	return g.publish(ctx, domain.EventSubscriptionGraceExpiring, userID, subscriptionID, graceUntil, title, body)
 }
 
 // publish fans the grace event out to its single recipient. The dedup key
-// carries the window identity — (event type, subscription, until date) — so
-// a repeated publication of the same window creates nothing, while a new
+// carries the window identity — (event type, subscription, until date, the
+// date taken in UTC so the key does not depend on the instant's location) —
+// so a repeated publication of the same window creates nothing, while a new
 // grace window of the same subscription notifies again. A zero graceUntil
 // (a window without a known end) drops the date part it does not have.
 func (g *GracePublisher) publish(
@@ -68,7 +70,7 @@ func (g *GracePublisher) publish(
 ) error {
 	key := string(eventType) + ":" + subscriptionID.String()
 	if !graceUntil.IsZero() {
-		key += ":" + graceUntil.Format("2006-01-02")
+		key += ":" + graceUntil.UTC().Format("2006-01-02")
 	}
 	return g.pipeline.Publish(ctx, Publication{
 		EventType:  eventType,
@@ -86,11 +88,11 @@ var graceMonths = [...]string{
 	"июля", "августа", "сентября", "октября", "ноября", "декабря",
 }
 
-// formatDate renders a deadline as a Russian day-month string ("21 августа").
-// The deadline is a UTC instant; a date-only rendering does not need the
-// user's timezone — the grace window ends at a fixed instant and the copy
-// names the day, not the hour.
-func formatDate(t time.Time) string {
+// formatGraceDeadline renders a grace deadline as a Russian day-month string
+// ("21 августа"). The deadline is a UTC instant; a date-only rendering does
+// not need the user's timezone — the grace window ends at a fixed instant and
+// the copy names the day, not the hour.
+func formatGraceDeadline(t time.Time) string {
 	// The platform's users are in Russia (RUB-only product, ADR 0036), so
 	// Moscow's offset approximates their calendar day for a deadline label.
 	msk := t.In(time.FixedZone("MSK", 3*60*60))

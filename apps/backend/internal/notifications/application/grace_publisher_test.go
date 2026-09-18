@@ -56,6 +56,20 @@ func TestGracePublisherNotifyGraceEntered(t *testing.T) {
 	require.Len(t, queue.pushes, 1)
 	assert.Equal(t, n.ID, queue.emails[0])
 	assert.Equal(t, n.ID, queue.pushes[0])
+
+	// The key's date is taken in UTC — it must not depend on the instant's
+	// own location: this 02:00 MSK instant is 2026-09-30T23:00Z, the copy
+	// says "1 октября" while the key keeps 2026-09-30.
+	msk := time.FixedZone("MSK", 3*60*60)
+	otherUser, otherSub := graceUser()
+	require.NoError(t, g.NotifyGraceEntered(context.Background(), otherUser, otherSub,
+		time.Date(2026, 10, 1, 2, 0, 0, 0, msk)))
+	assert.Equal(t,
+		domain.DedupKey("subscription_grace_entered:"+otherSub.String()+":2026-09-30"),
+		feed.inserted[1].DedupKey)
+	assert.Equal(t,
+		"Мы не смогли списать оплату за подписку. Привяжите другую карту, чтобы тариф не прервался. Льготный период действует до 1 октября.",
+		feed.inserted[1].Body)
 }
 
 func TestGracePublisherNotifyGraceEnteredWithoutDeadline(t *testing.T) {
