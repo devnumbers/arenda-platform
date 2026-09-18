@@ -29,6 +29,73 @@ func (q *Queries) CountUnreadNotifications(ctx context.Context, userID pgtype.UU
 	return count, err
 }
 
+const deleteAllNotifications = `-- name: DeleteAllNotifications :execrows
+UPDATE notifications
+SET deleted_at = now()
+WHERE user_id = $1 AND deleted_at IS NULL
+`
+
+// «Удалить все» (решение #737): soft-deletes every feed row of the user in
+// one statement; the result is the number of rows hidden.
+func (q *Queries) DeleteAllNotifications(ctx context.Context, userID pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteAllNotifications, userID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteNotification = `-- name: DeleteNotification :execrows
+UPDATE notifications
+SET deleted_at = now()
+WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
+`
+
+type DeleteNotificationParams struct {
+	ID     pgtype.UUID `json:"id"`
+	UserID pgtype.UUID `json:"user_id"`
+}
+
+// Soft-deletes one feed row («удалить», решение #737): the row stays with
+// its deleted_at, the feed and the unread counter stop seeing it. Rows
+// matched = 0 means already deleted, read-status aside — the caller maps
+// that to not-found for the reader.
+func (q *Queries) DeleteNotification(ctx context.Context, arg DeleteNotificationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteNotification, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getEmailPreferences = `-- name: GetEmailPreferences :one
+SELECT rental, payments_operations, tasks, shared_access
+FROM notification_email_preferences
+WHERE user_id = $1
+`
+
+type GetEmailPreferencesRow struct {
+	Rental             bool `json:"rental"`
+	PaymentsOperations bool `json:"payments_operations"`
+	Tasks              bool `json:"tasks"`
+	SharedAccess       bool `json:"shared_access"`
+}
+
+// The account-level email matrix (решение #738, ADR 0056): four
+// configurable categories. A missing row is the all-on default — the caller
+// falls back without inserting.
+func (q *Queries) GetEmailPreferences(ctx context.Context, userID pgtype.UUID) (GetEmailPreferencesRow, error) {
+	row := q.db.QueryRow(ctx, getEmailPreferences, userID)
+	var i GetEmailPreferencesRow
+	err := row.Scan(
+		&i.Rental,
+		&i.PaymentsOperations,
+		&i.Tasks,
+		&i.SharedAccess,
+	)
+	return i, err
+}
+
 const getNotification = `-- name: GetNotification :one
 SELECT id, user_id, category, event_type, title, body, context_label, payload, dedup_key, read_at, deleted_at, created_at FROM notifications WHERE id = $1
 `
@@ -55,6 +122,99 @@ func (q *Queries) GetNotification(ctx context.Context, id pgtype.UUID) (Notifica
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const getOperationOpenState = `-- name: GetOperationOpenState :one
+SELECT EXISTS (SELECT 1 FROM operations WHERE id = $1 AND status = 'planned') AS open
+`
+
+// Whether the notification's operation (Операция — вхождение Payments,
+// not the rule) still awaits payment: it exists and its status is planned.
+// Paid or cancelled — the state has moved on, the «открыть платёж» button
+// goes (решение #737).
+func (q *Queries) GetOperationOpenState(ctx context.Context, id pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, getOperationOpenState, id)
+	var open bool
+	err := row.Scan(&open)
+	return open, err
+}
+
+const getPropertyAccessFor = `-- name: GetPropertyAccessFor :one
+SELECT COALESCE(
+           CASE
+               WHEN p.owner_id = $2 THEN 'owner'
+               ELSE (SELECT m.role
+                     FROM property_members m
+                     WHERE m.property_id = p.id AND m.user_id = $2 AND m.status = 'active'
+                     LIMIT 1)
+           END::text,
+           '') AS access_role
+FROM properties p
+WHERE p.id = $1
+`
+
+type GetPropertyAccessForParams struct {
+	ID      pgtype.UUID `json:"id"`
+	OwnerID pgtype.UUID `json:"owner_id"`
+}
+
+// The reader's live role on the property (ADR 0028): 'owner' for the owner,
+// the active membership's role for a shared one, ” for a stranger. No row
+// — the property is gone. Exists = the role is non-empty; manageable = the
+// owner or a full_access member (the «Продлить»/«Завершить» gate).
+func (q *Queries) GetPropertyAccessFor(ctx context.Context, arg GetPropertyAccessForParams) (interface{}, error) {
+	row := q.db.QueryRow(ctx, getPropertyAccessFor, arg.ID, arg.OwnerID)
+	var access_role interface{}
+	err := row.Scan(&access_role)
+	return access_role, err
+}
+
+const getRentalActionState = `-- name: GetRentalActionState :one
+SELECT r.completed_date, r.planned_end_date, r.start_date, r.property_id, p.owner_id
+FROM rentals r
+JOIN properties p ON p.id = r.property_id
+WHERE r.id = $1
+`
+
+type GetRentalActionStateRow struct {
+	CompletedDate  pgtype.Date `json:"completed_date"`
+	PlannedEndDate pgtype.Date `json:"planned_end_date"`
+	StartDate      pgtype.Date `json:"start_date"`
+	PropertyID     pgtype.UUID `json:"property_id"`
+	OwnerID        pgtype.UUID `json:"owner_id"`
+}
+
+// The live rental facts behind the «Продлить»/«Завершить» buttons
+// (решение #737: действия вычисляются при чтении): whether the rental still
+// awaits action (not completed, planned end already passed — the
+// needs_attention state, ADR 0053) and which property it belongs to, so the
+// reader's rights resolve against the live rental, not the payload snapshot.
+// No row — the rental is gone.
+func (q *Queries) GetRentalActionState(ctx context.Context, id pgtype.UUID) (GetRentalActionStateRow, error) {
+	row := q.db.QueryRow(ctx, getRentalActionState, id)
+	var i GetRentalActionStateRow
+	err := row.Scan(
+		&i.CompletedDate,
+		&i.PlannedEndDate,
+		&i.StartDate,
+		&i.PropertyID,
+		&i.OwnerID,
+	)
+	return i, err
+}
+
+const getTaskOpenState = `-- name: GetTaskOpenState :one
+SELECT EXISTS (SELECT 1 FROM tasks WHERE id = $1 AND completed_date IS NULL) AS open
+`
+
+// Whether the notification's task still awaits action: it exists and is not
+// completed. A completed or deleted task leaves the notification without
+// its button (решение #737).
+func (q *Queries) GetTaskOpenState(ctx context.Context, id pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, getTaskOpenState, id)
+	var open bool
+	err := row.Scan(&open)
+	return open, err
 }
 
 const insertNotification = `-- name: InsertNotification :execrows
@@ -204,6 +364,40 @@ type MarkNotificationReadParams struct {
 // already-read or deleted row matches nothing (0 rows).
 func (q *Queries) MarkNotificationRead(ctx context.Context, arg MarkNotificationReadParams) (int64, error) {
 	result, err := q.db.Exec(ctx, markNotificationRead, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const upsertEmailPreferences = `-- name: UpsertEmailPreferences :execrows
+INSERT INTO notification_email_preferences (user_id, rental, payments_operations, tasks, shared_access)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (user_id) DO UPDATE SET
+    rental              = EXCLUDED.rental,
+    payments_operations = EXCLUDED.payments_operations,
+    tasks               = EXCLUDED.tasks,
+    shared_access       = EXCLUDED.shared_access
+`
+
+type UpsertEmailPreferencesParams struct {
+	UserID             pgtype.UUID `json:"user_id"`
+	Rental             bool        `json:"rental"`
+	PaymentsOperations bool        `json:"payments_operations"`
+	Tasks              bool        `json:"tasks"`
+	SharedAccess       bool        `json:"shared_access"`
+}
+
+// PUT /notification-preferences is a full replacement of the four flags
+// (канон #738).
+func (q *Queries) UpsertEmailPreferences(ctx context.Context, arg UpsertEmailPreferencesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, upsertEmailPreferences,
+		arg.UserID,
+		arg.Rental,
+		arg.PaymentsOperations,
+		arg.Tasks,
+		arg.SharedAccess,
+	)
 	if err != nil {
 		return 0, err
 	}

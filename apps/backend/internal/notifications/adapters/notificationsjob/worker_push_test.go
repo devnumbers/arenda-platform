@@ -33,6 +33,21 @@ func (s *pushSubsStub) Upsert(ctx context.Context, sub domain.PushSubscription) 
 	return sub, nil
 }
 
+func (s *pushSubsStub) GetByEndpoint(ctx context.Context, userID uuid.UUID, endpoint string) (domain.PushSubscription, error) {
+	for _, sub := range s.subs {
+		if sub.Endpoint == endpoint && sub.UserID == userID {
+			return sub, nil
+		}
+	}
+	return domain.PushSubscription{}, application.ErrNotFound
+}
+
+func (s *pushSubsStub) UpdatePreferences(
+	ctx context.Context, userID uuid.UUID, endpoint string, enabled bool, prefs domain.CategoryPrefs,
+) (bool, error) {
+	return false, nil
+}
+
 type senderStub struct {
 	sent   []domain.PushSubscription
 	last   application.PushPayload
@@ -53,11 +68,13 @@ func (s *senderStub) Send(ctx context.Context, sub domain.PushSubscription, payl
 
 func pushSub(endpoint string) domain.PushSubscription {
 	return domain.PushSubscription{
-		ID:       uuid.Must(uuid.NewV7()),
-		UserID:   uuid.Must(uuid.NewV7()),
-		Endpoint: endpoint,
-		P256dh:   "p256dh",
-		Auth:     "auth",
+		ID:         uuid.Must(uuid.NewV7()),
+		UserID:     uuid.Must(uuid.NewV7()),
+		Endpoint:   endpoint,
+		P256dh:     "p256dh",
+		Auth:       "auth",
+		Enabled:    true,
+		Categories: domain.DefaultCategoryPrefs(),
 	}
 }
 
@@ -149,6 +166,41 @@ func TestDeliverPushWorkerLogsPerDeviceFailureAndContinues(t *testing.T) {
 	require.NoError(t, w.Work(context.Background(), pushJob(n.ID)), "a single device's failure never fails the job")
 	require.Len(t, sender.sent, 2)
 	assert.Empty(t, subs.deleted)
+}
+
+// The per-device settings gate the fan-out at delivery time (решение #738):
+// master-off mutes the whole device, a category-off device skips this
+// notification, an all-on device still receives it.
+func TestDeliverPushWorkerSkipsDevicesBySettings(t *testing.T) {
+	t.Parallel()
+
+	// The fixture row is a payment_due event — категория payments_operations.
+	n := feedNotification(t)
+	masterOff := pushSub("https://push.example/master-off")
+	masterOff.UserID = n.UserID
+	masterOff.Enabled = false
+
+	categoryOff := pushSub("https://push.example/category-off")
+	categoryOff.UserID = n.UserID
+	categoryOff.Categories = domain.CategoryPrefs{Rental: true, PaymentsOperations: false, Tasks: true, SharedAccess: true}
+
+	otherCategoryOff := pushSub("https://push.example/other-category-off")
+	otherCategoryOff.UserID = n.UserID
+	otherCategoryOff.Categories = domain.CategoryPrefs{Rental: false, PaymentsOperations: true, Tasks: true, SharedAccess: true}
+
+	on := pushSub("https://push.example/on")
+	on.UserID = n.UserID
+
+	subs := &pushSubsStub{subs: []domain.PushSubscription{masterOff, categoryOff, otherCategoryOff, on}}
+	sender := &senderStub{}
+	w := newPushWorker(t, &feedStub{notification: n}, sender, subs)
+
+	require.NoError(t, w.Work(context.Background(), pushJob(n.ID)))
+
+	require.Len(t, sender.sent, 2, "master-off and the category-off device are skipped")
+	assert.Equal(t, []string{otherCategoryOff.Endpoint, on.Endpoint},
+		[]string{sender.sent[0].Endpoint, sender.sent[1].Endpoint})
+	assert.Empty(t, subs.deleted, "a settings skip is not a dead subscription — nothing is deleted")
 }
 
 func TestDeliverPushWorkerNoSubscriptionsIsNoop(t *testing.T) {

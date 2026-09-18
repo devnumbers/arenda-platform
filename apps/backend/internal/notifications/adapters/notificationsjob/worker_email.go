@@ -34,15 +34,17 @@ const providerLimitKey = "notifications_email_provider"
 const providerSnooze = time.Minute
 
 // DeliverEmailWorker delivers a notification's email leg: it reloads the
-// committed feed row, resolves the recipient's contact and sends through the
-// platform mailer. Per-channel prefs checks belong here, at delivery time,
-// not at enqueue time — the matrix lands with the settings API (#743).
+// committed feed row, checks the recipient's account-level email setting for
+// the notification's category (решение #738 — the matrix is read at delivery
+// time, not at enqueue), resolves the contact and sends through the platform
+// mailer.
 type DeliverEmailWorker struct {
 	river.WorkerDefaults[DeliverEmailArgs]
 	feed       application.NotificationRepository
 	resolver   application.ContactResolver
 	emailer    application.TemplateEmailSender
 	provider   providerLimiter
+	settings   application.DeliverySettings
 	metrics    *EmailMetrics
 	appBaseURL string
 	log        *slog.Logger
@@ -63,13 +65,14 @@ func NewDeliverEmailWorker(
 	metrics *EmailMetrics,
 	appBaseURL string,
 	log *slog.Logger,
+	settings application.DeliverySettings,
 ) *DeliverEmailWorker {
 	if log == nil {
 		log = slog.Default()
 	}
 	return &DeliverEmailWorker{
 		feed: feed, resolver: resolver, emailer: emailer,
-		provider: provider, metrics: metrics,
+		provider: provider, settings: settings, metrics: metrics,
 		appBaseURL: appBaseURL, log: log,
 	}
 }
@@ -87,6 +90,20 @@ func (w *DeliverEmailWorker) Work(ctx context.Context, job *river.Job[DeliverEma
 			return river.JobCancel(fmt.Errorf("notification %s not found", job.Args.NotificationID))
 		}
 		return fmt.Errorf("load notification: %w", err)
+	}
+
+	category, _ := n.EventType.FeedCategory()
+	allowed, err := w.settings.EmailAllowed(ctx, n.UserID, category)
+	if err != nil {
+		return fmt.Errorf("check email settings: %w", err)
+	}
+	if !allowed {
+		w.metrics.RecordDispatch(ctx, outcomeSkipped)
+		w.log.InfoContext(ctx, "notification email skipped: category email off",
+			slog.String("notification_id", n.ID.String()),
+			slog.String("recipient_id", n.UserID.String()),
+			slog.String("category", string(category)))
+		return nil
 	}
 
 	contact, err := w.resolver.Resolve(ctx, n.UserID)

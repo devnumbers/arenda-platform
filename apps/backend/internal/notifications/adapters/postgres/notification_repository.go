@@ -148,6 +148,28 @@ func (r *NotificationRepository) MarkAllRead(ctx context.Context, userID uuid.UU
 	return rows, nil
 }
 
+// Delete soft-deletes one row; false means nothing matched (deleted, gone,
+// or not the user's).
+func (r *NotificationRepository) Delete(ctx context.Context, userID, id uuid.UUID) (bool, error) {
+	rows, err := r.q().DeleteNotification(ctx, postgres.DeleteNotificationParams{
+		ID:     pgconv.UUIDToPgtype(id),
+		UserID: pgconv.UUIDToPgtype(userID),
+	})
+	if err != nil {
+		return false, fmt.Errorf("delete notification: %w", err)
+	}
+	return rows > 0, nil
+}
+
+// DeleteAll soft-deletes every not-deleted row of the user.
+func (r *NotificationRepository) DeleteAll(ctx context.Context, userID uuid.UUID) (int64, error) {
+	rows, err := r.q().DeleteAllNotifications(ctx, pgconv.UUIDToPgtype(userID))
+	if err != nil {
+		return 0, fmt.Errorf("delete all notifications: %w", err)
+	}
+	return rows, nil
+}
+
 func notificationToDomain(row postgres.Notification) (domain.Notification, error) {
 	var payload domain.Payload
 	if len(row.Payload) > 0 {

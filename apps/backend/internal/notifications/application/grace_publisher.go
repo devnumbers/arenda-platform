@@ -15,8 +15,9 @@ import (
 // email and push — enqueued through the River queue (ADR 0057). The former
 // direct channel (DirectNotificationService) is gone: same copy, same
 // payment-methods destination, but the notification is now stored, retried
-// and observable per channel. Settings never gate the delivery — the Тариф
-// category is always on (ADR 0056); the per-channel matrix is #743's contract.
+// and observable per channel. The per-category matrix (#743) never gates
+// these rows: the Тариф category is a service category — always on, outside
+// the settings screen (ADR 0056).
 //
 // The call stays on the grace-events canon: billing captures the event
 // inside its transaction and publishes strictly after the commit, best-effort

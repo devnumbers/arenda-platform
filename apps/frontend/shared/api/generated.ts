@@ -1022,6 +1022,147 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Страница ленты уведомлений (keyset, канон
+         * @description Хранимая лента пользователя, newest-first keyset-пагинация (карта
+         *     #734, решение #737, #743). Удалённые строки не появляются. Курсор —
+         *     непрозрачный blob из next_cursor предыдущей страницы; страницы
+         *     читаются строго после последней строки, новые строки между загрузками
+         *     не дублируются и не теряются. limit 1..100, по умолчанию 50.
+         */
+        get: operations["listNotifications"];
+        put?: never;
+        post?: never;
+        /**
+         * Удалить все уведомления
+         * @description Мягкое удаление всех строк ленты пользователя (решение #737):
+         *     строки остаются с deleted_at, лента и счётчик непрочитанных их
+         *     перестают видеть. Подтверждение — на стороне клиента.
+         */
+        delete: operations["deleteAllNotifications"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/unread-count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Счётчик непрочитанных
+         * @description Число непрочитанных неудалённых строк пользователя (решение #737).
+         *     Снижается кликом, открытием страницы и «Прочитать все»; пуш и email
+         *     на читаемость не влияют.
+         */
+        get: operations["getUnreadNotificationCount"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/read-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Прочитать все */
+        post: operations["markAllNotificationsRead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/{notificationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Страница уведомления с живыми действиями
+         * @description Одна строка ленты с payload для отрисовки карточек (объект,
+         *     приглашающий) и действиями, вычисленными при чтении по живому
+         *     состоянию сущностей и правам читателя (решение #737): состояние
+         *     ушло или сущность удалена — кнопок нет; роль «Просмотр» не получает
+         *     кнопок-мутаций. Чужая или удалённая строка — 404.
+         */
+        get: operations["getNotification"];
+        put?: never;
+        post?: never;
+        /**
+         * Удалить уведомление
+         * @description Мягкое удаление одной строки; удаление непрочитанного снижает счётчик.
+         */
+        delete: operations["deleteNotification"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/{notificationId}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Прочитать уведомление
+         * @description Идемпотентно — повторный вызов не меняет состояние.
+         */
+        post: operations["markNotificationRead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notification-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Матрица email-настроек аккаунта
+         * @description Email — на аккаунте: одна конфигурация на все устройства (решение
+         *     #738, ADR 0056). Четыре настраиваемые категории; нет строки —
+         *     всё включено. Тариф и Системные всегда включены и в настройках
+         *     не показываются.
+         */
+        get: operations["getNotificationPreferences"];
+        /** Заменить матрицу email-настроек аккаунта */
+        put: operations["putNotificationPreferences"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/notifications/stream": {
         parameters: {
             query?: never;
@@ -1079,6 +1220,36 @@ export interface paths {
         put?: never;
         post: operations["createPushSubscription"];
         delete: operations["deletePushSubscription"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/push/subscriptions/preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Настройки пушей устройства
+         * @description Пуш — на устройстве (решение #738): мастер-тумблер «Получать
+         *     пуш-уведомления» и четыре категорийных флага на подписке браузера.
+         *     Устройство идентифицируется endpoint URL — естественным ключом и
+         *     секретом подписки (RFC 8030 §8.3). Чужой/неизвестный endpoint — 404.
+         */
+        get: operations["getPushSubscriptionPreferences"];
+        /**
+         * Заменить настройки пушей устройства
+         * @description Upsert состояния устройства: мастер и категории двигаются, подписка и
+         *     её ключи остаются. Выключение мастера — флаг enabled=false: dispatch
+         *     пропускает устройство, повторное включение мгновенное, без
+         *     переподписки (решение #738).
+         */
+        put: operations["putPushSubscriptionPreferences"];
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2906,6 +3077,9 @@ export interface components {
              * @description Optional subscription expiration instant reported by the browser (RFC 8030).
              */
             expiration_time?: string | null;
+            /** @description The device's master push toggle; omitted = on (решение #738). */
+            enabled?: boolean;
+            categories?: components["schemas"]["PushNotificationCategories"];
         };
         PushSubscriptionDeleteRequest: {
             /** @description The push endpoint URL to unregister (same value sent on subscribe). */
@@ -2915,10 +3089,106 @@ export interface components {
             /** Format: uuid */
             id: string;
             endpoint: string;
+            /** @description Мастер-тумблер «Получать пуш-уведомления» устройства (решение #738). */
+            enabled: boolean;
+            categories: components["schemas"]["PushNotificationCategories"];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        /** @description Четыре настраиваемые категории пуша устройства (решение */
+        PushNotificationCategories: {
+            rental: boolean;
+            payments_operations: boolean;
+            tasks: boolean;
+            shared_access: boolean;
+        };
+        PushPreferencesRequest: {
+            /** @description Push endpoint URL устройства (тот же, что при подписке). */
+            endpoint: string;
+            enabled: boolean;
+            categories: components["schemas"]["PushNotificationCategories"];
+        };
+        PushPreferencesResponse: {
+            endpoint: string;
+            enabled: boolean;
+            categories: components["schemas"]["PushNotificationCategories"];
+        };
+        /** @description Флаги четырёх настраиваемых категорий одного канала (решение */
+        NotificationCategoryPreferences: {
+            rental: boolean;
+            payments_operations: boolean;
+            tasks: boolean;
+            shared_access: boolean;
+        };
+        NotificationPreferencesRequest: {
+            email: components["schemas"]["NotificationCategoryPreferences"];
+        };
+        NotificationPreferencesResponse: {
+            email: components["schemas"]["NotificationCategoryPreferences"];
+        };
+        /** @description Строка ленты одного получателя (решение */
+        NotificationItem: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description Тип события каталога v1 (решение #737).
+             * @example payment_due
+             */
+            event_type: string;
+            /**
+             * @description Категория уведомлений (группа настроек и иконка).
+             * @example payments_operations
+             */
+            category: string;
+            title: string;
+            body: string;
+            /** @description Строка над заголовком — имя объекта/тарифа или «Системные уведомления». */
+            context_label?: string | null;
+            /**
+             * Format: date-time
+             * @description Момент события, UTC instant; группировка «Сегодня/Вчера» — дело экрана.
+             */
+            created_at: string;
+            /** Format: date-time */
+            read_at?: string | null;
+        };
+        NotificationDetailResponse: {
+            /** Format: uuid */
+            id: string;
+            event_type: string;
+            category: string;
+            title: string;
+            body: string;
+            context_label?: string | null;
+            /**
+             * @description Payload-ссылки и снимки имён (решение #737): property {id, name},
+             *     actor {id, name}, rental_id, payment_id, task_id, membership_id,
+             *     invitation_id, tariff {slug, period, amount_kopecks, active_until}.
+             *     Все поля опциональны; суммы — BIGINT копейки.
+             */
+            payload: Record<string, never>;
+            /** @description Действия, доступные этому читателю сейчас (вычислены при чтении, решение #737). */
+            actions: components["schemas"]["NotificationAction"][];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            read_at?: string | null;
+        };
+        /**
+         * @description Кнопка-переход на экран сущности, никогда не мутация (решение #737).
+         * @enum {string}
+         */
+        NotificationAction: "rental_extend" | "rental_complete" | "open_payment" | "open_task" | "open_property" | "open_property_members" | "open_tariffs" | "open_payment_methods";
+        NotificationsPageResponse: {
+            items: components["schemas"]["NotificationItem"][];
+            /** @description Непрозрачный курсор следующей страницы; отсутствует в конце ленты. */
+            next_cursor?: string;
+        };
+        UnreadCountResponse: {
+            /** Format: int64 */
+            count: number;
         };
         PendingPopupsResponse: {
             popups: string[];
@@ -5362,6 +5632,206 @@ export interface operations {
             };
         };
     };
+    listNotifications: {
+        parameters: {
+            query?: {
+                /** @description Только непрочитанные строки. */
+                unread?: boolean;
+                limit?: number;
+                /** @description Непрозрачный курсор продолжения (next_cursor прошлой страницы). */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Страница ленты */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationsPageResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    deleteAllNotifications: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Все строки скрыты */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getUnreadNotificationCount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Значение счётчика */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnreadCountResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    markAllNotificationsRead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Все непрочитанные строки помечены прочитанными */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getNotification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                notificationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Уведомление с действиями */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationDetailResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteNotification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                notificationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Строка скрыта (идемпотентно) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    markNotificationRead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                notificationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Строка прочитана */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getNotificationPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Текущая матрица */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreferencesResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    putNotificationPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationPreferencesRequest"];
+            };
+        };
+        responses: {
+            /** @description Сохранённая матрица */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreferencesResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
     streamNotifications: {
         parameters: {
             query?: never;
@@ -5458,6 +5928,58 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getPushSubscriptionPreferences: {
+        parameters: {
+            query: {
+                endpoint: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Текущее состояние устройства */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PushPreferencesResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    putPushSubscriptionPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PushPreferencesRequest"];
+            };
+        };
+        responses: {
+            /** @description Сохранённое состояние устройства */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PushPreferencesResponse"];
+                };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];

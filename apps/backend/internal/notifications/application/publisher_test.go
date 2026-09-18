@@ -107,6 +107,14 @@ func (r *fakeFeedRepo) MarkAllRead(ctx context.Context, userID uuid.UUID) (int64
 	return 0, ErrNotFound
 }
 
+func (r *fakeFeedRepo) Delete(ctx context.Context, userID, id uuid.UUID) (bool, error) {
+	return false, ErrNotFound
+}
+
+func (r *fakeFeedRepo) DeleteAll(ctx context.Context, userID uuid.UUID) (int64, error) {
+	return 0, ErrNotFound
+}
+
 // fakeQueue records the enqueue calls per channel.
 type fakeQueue struct {
 	emails   []uuid.UUID

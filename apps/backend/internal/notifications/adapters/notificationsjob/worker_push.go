@@ -20,8 +20,9 @@ const pushRateSnoozeStep = 30 * time.Second
 // DeliverPushWorker delivers a notification's Web Push leg: it reloads the
 // committed feed row and fans the payload out over the recipient's current
 // subscriptions. Subscription resolution happens at delivery time — devices
-// subscribed after the enqueue still receive the push, dead ones are
-// dropped; the per-device settings matrix lands with #743.
+// subscribed after the enqueue still receive the push, dead ones are dropped,
+// and each device's own settings (master + category flags, решение #738)
+// gate its copy right here.
 type DeliverPushWorker struct {
 	river.WorkerDefaults[DeliverPushArgs]
 	feed     application.NotificationRepository
@@ -76,7 +77,16 @@ func (w *DeliverPushWorker) Work(ctx context.Context, job *river.Job[DeliverPush
 		URL:       DeepLinkFor(n.EventType),
 		EventType: n.EventType,
 	}
+	// A dead enum value has no category; the empty one reads as always-on.
+	category, _ := n.EventType.FeedCategory()
 	for _, sub := range subs {
+		if !sub.Accepts(category) {
+			w.log.InfoContext(ctx, "push skipped by device settings",
+				slog.String("notification_id", n.ID.String()),
+				slog.String("recipient_id", n.UserID.String()),
+				slog.String("category", string(category)))
+			continue
+		}
 		sendErr := w.sender.Send(ctx, sub, payload)
 		switch {
 		case sendErr == nil:

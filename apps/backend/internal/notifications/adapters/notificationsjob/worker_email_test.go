@@ -49,6 +49,14 @@ func (s *feedStub) MarkAllRead(ctx context.Context, userID uuid.UUID) (int64, er
 	return 0, nil
 }
 
+func (s *feedStub) Delete(ctx context.Context, userID, id uuid.UUID) (bool, error) {
+	return false, nil
+}
+
+func (s *feedStub) DeleteAll(ctx context.Context, userID uuid.UUID) (int64, error) {
+	return 0, nil
+}
+
 func feedNotification(t *testing.T) domain.Notification {
 	t.Helper()
 	n, err := domain.NewNotification(
@@ -95,6 +103,18 @@ type limiterStub struct{ allow bool }
 
 func (l limiterStub) Allow(key string) bool { return l.allow }
 
+// settingsStub answers the account-level email matrix (решение #738).
+type settingsStub struct {
+	allowed bool
+	err     error
+	calls   int
+}
+
+func (s *settingsStub) EmailAllowed(ctx context.Context, userID uuid.UUID, category domain.Category) (bool, error) {
+	s.calls++
+	return s.allowed, s.err
+}
+
 func emailJob(id uuid.UUID) *river.Job[DeliverEmailArgs] {
 	return &river.Job[DeliverEmailArgs]{
 		JobRow: &rivertype.JobRow{Attempt: 1},
@@ -108,11 +128,12 @@ func newEmailWorker(
 	resolver application.ContactResolver,
 	emailer application.TemplateEmailSender,
 	limiter providerLimiter,
+	settings application.DeliverySettings,
 ) *DeliverEmailWorker {
 	t.Helper()
 	metrics, err := NewEmailMetrics()
 	require.NoError(t, err)
-	return NewDeliverEmailWorker(feed, resolver, emailer, limiter, metrics, "https://app.example", nil)
+	return NewDeliverEmailWorker(feed, resolver, emailer, limiter, metrics, "https://app.example", nil, settings)
 }
 
 func TestDeliverEmailWorkerSendsRenderedNotification(t *testing.T) {
@@ -123,7 +144,7 @@ func TestDeliverEmailWorkerSendsRenderedNotification(t *testing.T) {
 	emailer := &emailerStub{}
 	w := newEmailWorker(t, feed,
 		resolverStub{contact: application.Contact{Email: testRecipientEmail}},
-		emailer, limiterStub{allow: true})
+		emailer, limiterStub{allow: true}, &settingsStub{allowed: true})
 
 	require.NoError(t, w.Work(context.Background(), emailJob(n.ID)))
 
@@ -146,7 +167,7 @@ func TestDeliverEmailWorkerSkipsRecipientWithoutContact(t *testing.T) {
 	w := newEmailWorker(t,
 		&feedStub{notification: n},
 		resolverStub{err: application.ErrNoContact},
-		emailer, limiterStub{allow: true})
+		emailer, limiterStub{allow: true}, &settingsStub{allowed: true})
 
 	require.NoError(t, w.Work(context.Background(), emailJob(n.ID)))
 	assert.Zero(t, emailer.calls, "a recipient without a verified contact has no email leg")
@@ -160,7 +181,7 @@ func TestDeliverEmailWorkerSnoozesWhenProviderBudgetSpent(t *testing.T) {
 	w := newEmailWorker(t,
 		&feedStub{notification: n},
 		resolverStub{contact: application.Contact{Email: testRecipientEmail}},
-		emailer, limiterStub{allow: false})
+		emailer, limiterStub{allow: false}, &settingsStub{allowed: true})
 
 	err := w.Work(context.Background(), emailJob(n.ID))
 	require.Error(t, err)
@@ -178,7 +199,7 @@ func TestDeliverEmailWorkerRetriesSendFailure(t *testing.T) {
 	w := newEmailWorker(t,
 		&feedStub{notification: n},
 		resolverStub{contact: application.Contact{Email: testRecipientEmail}},
-		emailer, limiterStub{allow: true})
+		emailer, limiterStub{allow: true}, &settingsStub{allowed: true})
 
 	err := w.Work(context.Background(), emailJob(n.ID))
 	require.ErrorContains(t, err, "send notification email")
@@ -190,7 +211,7 @@ func TestDeliverEmailWorkerCancelsWhenFeedRowGone(t *testing.T) {
 
 	w := newEmailWorker(t,
 		&feedStub{err: application.ErrNotFound},
-		resolverStub{}, &emailerStub{}, limiterStub{allow: true})
+		resolverStub{}, &emailerStub{}, limiterStub{allow: true}, &settingsStub{allowed: true})
 
 	err := w.Work(context.Background(), emailJob(uuid.Must(uuid.NewV7())))
 	require.Error(t, err)
@@ -203,8 +224,42 @@ func TestDeliverEmailWorkerRetriesFeedFailure(t *testing.T) {
 
 	w := newEmailWorker(t,
 		&feedStub{err: errors.New("db unavailable")},
-		resolverStub{}, &emailerStub{}, limiterStub{allow: true})
+		resolverStub{}, &emailerStub{}, limiterStub{allow: true}, &settingsStub{allowed: true})
 
 	err := w.Work(context.Background(), emailJob(uuid.Must(uuid.NewV7())))
 	require.ErrorContains(t, err, "load notification")
+}
+
+// The account-level email matrix gates the leg at delivery time (решение
+// #738, ADR 0056): the job checks the recipient's live settings before
+// sending — settings changed after the enqueue apply to the in-flight job.
+func TestDeliverEmailWorkerSkipsWhenCategoryEmailOff(t *testing.T) {
+	t.Parallel()
+
+	n := feedNotification(t)
+	emailer := &emailerStub{}
+	settings := &settingsStub{allowed: false}
+	w := newEmailWorker(t,
+		&feedStub{notification: n},
+		resolverStub{contact: application.Contact{Email: testRecipientEmail}},
+		emailer, limiterStub{allow: true}, settings)
+
+	require.NoError(t, w.Work(context.Background(), emailJob(n.ID)))
+
+	assert.Zero(t, emailer.calls, "a category with email off has no email leg")
+	assert.Equal(t, 1, settings.calls, "the matrix is read once, for the notification's category")
+}
+
+func TestDeliverEmailWorkerFailsWhenSettingsReadFails(t *testing.T) {
+	t.Parallel()
+
+	n := feedNotification(t)
+	w := newEmailWorker(t,
+		&feedStub{notification: n},
+		resolverStub{contact: application.Contact{Email: testRecipientEmail}},
+		&emailerStub{}, limiterStub{allow: true},
+		&settingsStub{err: errors.New("db unavailable")})
+
+	err := w.Work(context.Background(), emailJob(n.ID))
+	require.ErrorContains(t, err, "check email settings", "a failed settings read is a retryable delivery failure")
 }

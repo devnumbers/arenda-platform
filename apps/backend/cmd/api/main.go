@@ -246,6 +246,8 @@ func run() error {
 		Access:                   accessMod.AccessService,
 		Invitations:              accessMod.InvitationService,
 		PushSubscriptions:        notificationsMod.PushSubscriptionService,
+		NotificationsFeed:        notificationsMod.FeedService,
+		NotificationSettings:     notificationsMod.SettingsService,
 		NotificationsStreamHub:   notificationsStream,
 		VAPIDPublicKey:           p.Cfg.VAPIDPublicKey,
 		Popups:                   popupsMod.Service,

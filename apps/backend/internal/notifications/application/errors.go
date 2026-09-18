@@ -8,6 +8,9 @@ import "errors"
 var (
 	ErrNotFound  = errors.New("not found")
 	ErrNoContact = errors.New("no contact found")
+	// ErrInvalidInput is the malformed client input sentinel (the contract's
+	// 400): a malformed feed cursor or an out-of-range page limit.
+	ErrInvalidInput = errors.New("invalid input")
 	// ErrInvalidPushSubscription is returned when a push subscription field
 	// fails validation.
 	ErrInvalidPushSubscription = errors.New("invalid push subscription")

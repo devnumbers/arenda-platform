@@ -79,6 +79,12 @@ type Deps struct {
 	Access             *accessapp.AccessService
 	Invitations        *accessapp.InvitationService
 	PushSubscriptions  *notificationsapp.PushSubscriptionService
+	// NotificationsFeed is the stored feed's reading service (#743); nil
+	// keeps the feed endpoints answering from the Unimplemented stub.
+	NotificationsFeed *notificationsapp.FeedService
+	// NotificationSettings serves the per-category settings (#743): email on
+	// the account, push on the device; nil answers the Unimplemented stub.
+	NotificationSettings *notificationsapp.SettingsService
 	// NotificationsStreamHub is the shared event stream's hub (карта #734,
 	// #742; ADR 0058). The generated /notifications/stream route serves from
 	// it; nil answers 503 (a build without the stream).
@@ -169,6 +175,8 @@ func New(deps Deps) http.Handler {
 	accessInvitationHandlers := accesshttp.NewInvitationHandlers(deps.Invitations, deps.Logger)
 	pushSubscriptionHandlers := notificationshttp.NewPushSubscriptionHandlers(deps.PushSubscriptions, deps.VAPIDPublicKey, deps.Logger)
 	streamHandlers := notificationshttp.NewStreamHandlers(deps.NotificationsStreamHub, deps.Logger)
+	notificationPrefsHandlers := notificationshttp.NewNotificationPreferencesHandlers(deps.NotificationSettings, deps.Logger)
+	feedHandlers := notificationshttp.NewFeedHandlers(deps.NotificationsFeed, deps.Logger)
 	popupHandlers := popupshttp.NewPopupHandlers(deps.Popups, deps.Logger)
 	billingHandlers := billinghttp.NewBillingHandlers(
 		deps.Tariffs, deps.AdminTariffs, deps.Subscriptions, deps.SubscriptionManagers,
@@ -184,23 +192,25 @@ func New(deps Deps) http.Handler {
 	clientErrorsHandlers := httpsupport.NewClientErrorsHandlers(deps.ClientErrorsLimiter)
 
 	handler := &composedHandler{
-		AuthHandlers:             authHandlers,
-		PropertyHandlers:         propertyHandlers,
-		ContactHandlers:          contactHandlers,
-		MemberHandlers:           accessMemberHandlers,
-		InvitationHandlers:       accessInvitationHandlers,
-		PushSubscriptionHandlers: pushSubscriptionHandlers,
-		StreamHandlers:           streamHandlers,
-		PopupHandlers:            popupHandlers,
-		BillingHandlers:          billingHandlers,
-		PaymentHandlers:          paymentHandlers,
-		OperationsHandlers:       operationHandlers,
-		GlobalPaymentHandlers:    globalPaymentHandlers,
-		RentalHandlers:           rentalHandlers,
-		RuleHandlers:             taskRuleHandlers,
-		TaskHandlers:             taskHandlers,
-		AdminHandlers:            adminHandlers,
-		ClientErrorsHandlers:     clientErrorsHandlers,
+		AuthHandlers:                    authHandlers,
+		PropertyHandlers:                propertyHandlers,
+		ContactHandlers:                 contactHandlers,
+		MemberHandlers:                  accessMemberHandlers,
+		InvitationHandlers:              accessInvitationHandlers,
+		PushSubscriptionHandlers:        pushSubscriptionHandlers,
+		StreamHandlers:                  streamHandlers,
+		NotificationPreferencesHandlers: notificationPrefsHandlers,
+		FeedHandlers:                    feedHandlers,
+		PopupHandlers:                   popupHandlers,
+		BillingHandlers:                 billingHandlers,
+		PaymentHandlers:                 paymentHandlers,
+		OperationsHandlers:              operationHandlers,
+		GlobalPaymentHandlers:           globalPaymentHandlers,
+		RentalHandlers:                  rentalHandlers,
+		RuleHandlers:                    taskRuleHandlers,
+		TaskHandlers:                    taskHandlers,
+		AdminHandlers:                   adminHandlers,
+		ClientErrorsHandlers:            clientErrorsHandlers,
 	}
 
 	// The generated OpenAPI router has no per-route middleware support, so we
@@ -319,6 +329,8 @@ type composedHandler struct {
 	*accesshttp.InvitationHandlers
 	*notificationshttp.PushSubscriptionHandlers
 	*notificationshttp.StreamHandlers
+	*notificationshttp.NotificationPreferencesHandlers
+	*notificationshttp.FeedHandlers
 	*popupshttp.PopupHandlers
 	*billinghttp.BillingHandlers
 	*paymentshttp.PaymentHandlers

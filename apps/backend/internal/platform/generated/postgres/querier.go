@@ -167,6 +167,9 @@ type Querier interface {
 	CreateTaskRule(ctx context.Context, arg CreateTaskRuleParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	DeactivateAllPaymentMethodsForUser(ctx context.Context, userID pgtype.UUID) error
+	// «Удалить все» (решение #737): soft-deletes every feed row of the user in
+	// one statement; the result is the number of rows hidden.
+	DeleteAllNotifications(ctx context.Context, userID pgtype.UUID) (int64, error)
 	// «Удалить все выполненные» (resolution #497): the completed tasks of the
 	// property's deleted rules (rule_id IS NULL) are removed forever. The
 	// completed tasks of live rules stay — they hold the tick's dedup keys, and
@@ -205,6 +208,11 @@ type Querier interface {
 	DeleteLoginAttemptsByUserID(ctx context.Context, userID pgtype.UUID) error
 	DeleteLoginCodeByID(ctx context.Context, id pgtype.UUID) error
 	DeleteLoginCodesByUserID(ctx context.Context, userID pgtype.UUID) error
+	// Soft-deletes one feed row («удалить», решение #737): the row stays with
+	// its deleted_at, the feed and the unread counter stop seeing it. Rows
+	// matched = 0 means already deleted, read-status aside — the caller maps
+	// that to not-found for the reader.
+	DeleteNotification(ctx context.Context, arg DeleteNotificationParams) (int64, error)
 	// Hard delete of the rule. Pauses cascade; operations keep their snapshots
 	// with payment_id set to NULL by the FK — the "платёж удалён" mark is
 	// origin='payment' AND payment_id IS NULL (ticket #446). Planned operations
@@ -285,6 +293,10 @@ type Querier interface {
 	// whose book the property-bound cards belong to (ADR 0028).
 	GetContactPropertyRef(ctx context.Context, id pgtype.UUID) (GetContactPropertyRefRow, error)
 	GetEmailChangeGrantByUserIDForUpdate(ctx context.Context, userID pgtype.UUID) (EmailChangeGrant, error)
+	// The account-level email matrix (решение #738, ADR 0056): four
+	// configurable categories. A missing row is the all-on default — the caller
+	// falls back without inserting.
+	GetEmailPreferences(ctx context.Context, userID pgtype.UUID) (GetEmailPreferencesRow, error)
 	// GetLatestLoginCodeByPhoneAndEmailAndPurpose reads the newest non-expired unused
 	// login code for a (phone, email, purpose) tuple. It is served by the partial unique
 	// index idx_login_codes_unique_unused (phone, COALESCE(email, empty-string), purpose)
@@ -313,6 +325,11 @@ type Querier interface {
 	// pay-now use case's load step (manual operations have no payment, so the
 	// payment link is not a filter).
 	GetOperationByID(ctx context.Context, arg GetOperationByIDParams) (GetOperationByIDRow, error)
+	// Whether the notification's operation (Операция — вхождение Payments,
+	// not the rule) still awaits payment: it exists and its status is planned.
+	// Paid or cancelled — the state has moved on, the «открыть платёж» button
+	// goes (решение #737).
+	GetOperationOpenState(ctx context.Context, id pgtype.UUID) (bool, error)
 	// The data owner's IANA timezone (ADR 0048): the tick's "today" is the
 	// calendar date in the property owner's timezone. NOT NULL with the
 	// 'Europe/Moscow' default (migration 000088); IANA-validated on write.
@@ -330,6 +347,11 @@ type Querier interface {
 	GetPaymentMethodByIDForUpdate(ctx context.Context, id pgtype.UUID) (PaymentMethod, error)
 	// "active" mirrors CountActivePropertiesByOwnerAdmin: active plus maintenance.
 	GetPropertiesStatsAdmin(ctx context.Context) (GetPropertiesStatsAdminRow, error)
+	// The reader's live role on the property (ADR 0028): 'owner' for the owner,
+	// the active membership's role for a shared one, '' for a stranger. No row
+	// — the property is gone. Exists = the role is non-empty; manageable = the
+	// owner or a full_access member (the «Продлить»/«Завершить» gate).
+	GetPropertyAccessFor(ctx context.Context, arg GetPropertyAccessForParams) (interface{}, error)
 	// Unscoped lookup by id. Used by the policy/access layer (T3, issue #156) to
 	// resolve the data owner for authorization before applying a scope, and by the
 	// properties list to load shared properties (whose owner_id differs from the
@@ -377,6 +399,16 @@ type Querier interface {
 	GetPropertyPhotoByID(ctx context.Context, id pgtype.UUID) (PropertyPhoto, error)
 	GetPropertyPhotoByIDAndPropertyID(ctx context.Context, arg GetPropertyPhotoByIDAndPropertyIDParams) (PropertyPhoto, error)
 	GetPropertyStatusByOwner(ctx context.Context, arg GetPropertyStatusByOwnerParams) (string, error)
+	// The device's stored settings state (GET /push/subscriptions/preferences):
+	// scoped to the user — another user's endpoint is not found.
+	GetPushSubscriptionByEndpointAndUser(ctx context.Context, arg GetPushSubscriptionByEndpointAndUserParams) (PushSubscription, error)
+	// The live rental facts behind the «Продлить»/«Завершить» buttons
+	// (решение #737: действия вычисляются при чтении): whether the rental still
+	// awaits action (not completed, planned end already passed — the
+	// needs_attention state, ADR 0053) and which property it belongs to, so the
+	// reader's rights resolve against the live rental, not the payload snapshot.
+	// No row — the rental is gone.
+	GetRentalActionState(ctx context.Context, id pgtype.UUID) (GetRentalActionStateRow, error)
 	// Rentals context queries: the rental CRUD and the list ordering (ADR 0053
 	// §4, ticket #529). Reads and writes are scoped by the data owner (ADR 0028:
 	// SQL filters by scope, the policy port has already resolved the actor's
@@ -414,6 +446,10 @@ type Querier interface {
 	// LEFT JOIN (null once the rule is deleted) — the wire's ↻ mark; the task
 	// row itself carries no repeat snapshot.
 	GetTask(ctx context.Context, arg GetTaskParams) (GetTaskRow, error)
+	// Whether the notification's task still awaits action: it exists and is not
+	// completed. A completed or deleted task leaves the notification without
+	// its button (решение #737).
+	GetTaskOpenState(ctx context.Context, id pgtype.UUID) (bool, error)
 	// The data owner's IANA timezone (ADR 0048): the tick's "today" and the
 	// listings' computed buckets are resolved in the property owner's timezone.
 	// NOT NULL with the 'Europe/Moscow' default (migration 000088);
@@ -962,6 +998,11 @@ type Querier interface {
 	UpdatePropertyMemberInvitationLastSentAt(ctx context.Context, arg UpdatePropertyMemberInvitationLastSentAtParams) error
 	UpdatePropertyMemberInvitationRole(ctx context.Context, arg UpdatePropertyMemberInvitationRoleParams) (PropertyMemberInvitation, error)
 	UpdatePropertyMemberRole(ctx context.Context, arg UpdatePropertyMemberRoleParams) (PropertyMember, error)
+	// PUT /push/subscriptions/preferences (решение #738): the upsert of the
+	// device's delivery state — master and the four category flags move, the
+	// subscription's keys stay. Rows affected = 0 means the subscription does
+	// not exist for this user (404).
+	UpdatePushSubscriptionPreferences(ctx context.Context, arg UpdatePushSubscriptionPreferencesParams) (int64, error)
 	// Partial PATCH is resolved by the application layer; the statement always
 	// writes the full editable set. The start date is not editable (ADR 0053
 	// §3); completion and the deposit return belong to CompleteRental.
@@ -981,6 +1022,9 @@ type Querier interface {
 	UpdateUserEmailVerified(ctx context.Context, arg UpdateUserEmailVerifiedParams) (UpdateUserEmailVerifiedRow, error)
 	UpdateUserEmailVerifiedAt(ctx context.Context, arg UpdateUserEmailVerifiedAtParams) (UpdateUserEmailVerifiedAtRow, error)
 	UpdateUserPhone(ctx context.Context, arg UpdateUserPhoneParams) (User, error)
+	// PUT /notification-preferences is a full replacement of the four flags
+	// (канон #738).
+	UpsertEmailPreferences(ctx context.Context, arg UpsertEmailPreferencesParams) (int64, error)
 	// Payment methods (issue #251). Token uniqueness is enforced per user by the
 	// UNIQUE (user_id, token_hash) constraint: the upsert converges on the
 	// existing row instead of creating a duplicate card, and exactly one active
@@ -999,7 +1043,11 @@ type Querier interface {
 	// Insert a push subscription keyed by endpoint, or update its mutable fields
 	// (user_id, p256dh, auth, expiration_time) when the endpoint already exists.
 	// This makes re-subscribing on the same device idempotent and also re-binds an
-	// endpoint that moved between accounts (rare) to the latest user.
+	// endpoint that moved between accounts (rare) to the latest user. The
+	// per-device settings (master enabled + the four category flags, решение
+	// #738) always travel with the request: the browser keeps the desired state
+	// locally and re-applies it on every subscribe, so the stored copy follows
+	// the body.
 	UpsertPushSubscription(ctx context.Context, arg UpsertPushSubscriptionParams) (PushSubscription, error)
 }
 

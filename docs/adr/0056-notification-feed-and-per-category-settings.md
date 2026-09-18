@@ -69,3 +69,16 @@ per-event-type table alive would preserve a model nothing reads anymore.
   `/profile/notifications` screen shows no settings.
 - The feed is written by the publishers (#748–#752); dedup key formats are
   their vocabulary, the schema only enforces uniqueness.
+
+## Implementation
+
+The settings contract and the feed's REST surface landed with #743
+(migration `000133`): the account email matrix lives in
+`notification_email_preferences` (one row of four flags per user, absent row
+= all-on), the device matrix lives on the push subscription itself (master
+`enabled` plus the four category flags). The email delivery job reads the
+recipient's matrix at delivery time (`DeliverySettings`); the push job
+filters each subscription by its own state (`Accepts`). The feed's REST
+surface (#743): keyset page, unread count, read/delete one and all, and the
+notification detail whose action buttons are computed at read time from the
+entities' live state and the reader's role (decision #737).

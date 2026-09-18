@@ -46,19 +46,45 @@ type NotificationRepository interface {
 	// MarkAllRead marks every unread not-deleted row of the user read and
 	// returns how many rows flipped.
 	MarkAllRead(ctx context.Context, userID uuid.UUID) (int64, error)
+	// Delete soft-deletes one row (решение #737: the row stays, the feed
+	// stops seeing it). It reports false when nothing matched: the row is
+	// deleted, already gone, or not the user's.
+	Delete(ctx context.Context, userID, id uuid.UUID) (bool, error)
+	// DeleteAll soft-deletes every not-deleted row of the user and returns
+	// how many rows were hidden.
+	DeleteAll(ctx context.Context, userID uuid.UUID) (int64, error)
+}
+
+// EmailPreferencesRepository persists the account-level email matrix
+// (решение #738, ADR 0056): one row of four configurable category flags per
+// user.
+type EmailPreferencesRepository interface {
+	// Get returns the user's email matrix; a missing row is the all-on
+	// default — the all-on answer comes back without inserting anything.
+	Get(ctx context.Context, userID uuid.UUID) (domain.CategoryPrefs, error)
+	// Set replaces the user's email matrix (PUT is a full replacement).
+	Set(ctx context.Context, userID uuid.UUID, prefs domain.CategoryPrefs) error
 }
 
 // PushSubscriptionRepository persists Web Push subscriptions keyed by their
 // browser-issued endpoint URL.
 type PushSubscriptionRepository interface {
 	// Upsert inserts a subscription keyed by endpoint, or updates its mutable
-	// fields when the endpoint already exists (idempotent re-subscribe).
+	// fields when the endpoint already exists (idempotent re-subscribe). The
+	// per-device settings (master + category flags) travel with every call.
 	Upsert(ctx context.Context, sub domain.PushSubscription) (domain.PushSubscription, error)
 	// Delete removes a subscription by endpoint scoped to a user. It returns
 	// ErrNotFound when no row matched.
 	Delete(ctx context.Context, userID uuid.UUID, endpoint string) error
 	// ListByUser returns all stored subscriptions for a user.
 	ListByUser(ctx context.Context, userID uuid.UUID) ([]domain.PushSubscription, error)
+	// GetByEndpoint returns the user's subscription with its settings state;
+	// ErrNotFound when the endpoint is not this user's.
+	GetByEndpoint(ctx context.Context, userID uuid.UUID, endpoint string) (domain.PushSubscription, error)
+	// UpdatePreferences replaces the device's delivery state (master +
+	// category flags, решение #738), keeping the subscription's keys. It
+	// reports false when the endpoint is not this user's.
+	UpdatePreferences(ctx context.Context, userID uuid.UUID, endpoint string, enabled bool, prefs domain.CategoryPrefs) (bool, error)
 }
 
 // TemplateEmailSender renders a named template and sends one email through
@@ -107,6 +133,17 @@ type StreamPublisher interface {
 	// UnreadCount pushes the "notification.unread_count" frame — the badge
 	// value read from the feed after the commit.
 	UnreadCount(ctx context.Context, userID uuid.UUID, count int64)
+}
+
+// DeliverySettings reads the category × channel matrix at delivery time
+// (решение #738, ADR 0056; CONTEXT.md «Доставка в момент доставки»): the
+// delivery job checks the recipient's live settings right before sending —
+// a setting changed after the enqueue applies to the in-flight job too.
+type DeliverySettings interface {
+	// EmailAllowed reports whether the recipient's account-level email
+	// setting lets the category's email leg through. The service categories
+	// (Тариф, Системные) are never gated.
+	EmailAllowed(ctx context.Context, userID uuid.UUID, category domain.Category) (bool, error)
 }
 
 // Contact is a resolved delivery endpoint.

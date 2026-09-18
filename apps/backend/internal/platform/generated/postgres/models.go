@@ -123,6 +123,8 @@ const (
 	NotificationEventTypeSubscriptionPaymentReminder  NotificationEventType = "subscription_payment_reminder"
 	NotificationEventTypeSubscriptionPaymentSucceeded NotificationEventType = "subscription_payment_succeeded"
 	NotificationEventTypeSubscriptionPlanChanged      NotificationEventType = "subscription_plan_changed"
+	NotificationEventTypeSubscriptionGraceEntered     NotificationEventType = "subscription_grace_entered"
+	NotificationEventTypeSubscriptionGraceExpiring    NotificationEventType = "subscription_grace_expiring"
 	NotificationEventTypeSystemMaintenance            NotificationEventType = "system_maintenance"
 )
 
@@ -339,6 +341,14 @@ type Notification struct {
 	CreatedAt    pgtype.Timestamptz    `json:"created_at"`
 }
 
+type NotificationEmailPreference struct {
+	UserID             pgtype.UUID `json:"user_id"`
+	Rental             bool        `json:"rental"`
+	PaymentsOperations bool        `json:"payments_operations"`
+	Tasks              bool        `json:"tasks"`
+	SharedAccess       bool        `json:"shared_access"`
+}
+
 type Operation struct {
 	ID            pgtype.UUID        `json:"id"`
 	OwnerID       pgtype.UUID        `json:"owner_id"`
@@ -454,14 +464,19 @@ type PropertyPhoto struct {
 }
 
 type PushSubscription struct {
-	ID             pgtype.UUID        `json:"id"`
-	UserID         pgtype.UUID        `json:"user_id"`
-	Endpoint       string             `json:"endpoint"`
-	P256dh         string             `json:"p256dh"`
-	Auth           string             `json:"auth"`
-	ExpirationTime pgtype.Timestamptz `json:"expiration_time"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	ID                         pgtype.UUID        `json:"id"`
+	UserID                     pgtype.UUID        `json:"user_id"`
+	Endpoint                   string             `json:"endpoint"`
+	P256dh                     string             `json:"p256dh"`
+	Auth                       string             `json:"auth"`
+	ExpirationTime             pgtype.Timestamptz `json:"expiration_time"`
+	CreatedAt                  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                  pgtype.Timestamptz `json:"updated_at"`
+	Enabled                    bool               `json:"enabled"`
+	CategoryRental             bool               `json:"category_rental"`
+	CategoryPaymentsOperations bool               `json:"category_payments_operations"`
+	CategoryTasks              bool               `json:"category_tasks"`
+	CategorySharedAccess       bool               `json:"category_shared_access"`
 }
 
 type Rental struct {
