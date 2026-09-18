@@ -10,15 +10,16 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
 )
 
-// LogoutService terminates sessions.
+// LogoutService terminates sessions by logout: the current session by its
+// token, or every session of the user at once. Logout keeps the fail-open
+// audit policy of ADR 0020 — a recording error is never returned, unlike the
+// fail-safe revocations of SessionsService.
 //
-// It is the first identity use case migrated to runInTx/txStores (ADR 0033,
-// migration step 2) and serves as the smoke test for the Unit-of-Work apparatus
-// before the more complex use cases (Profile, Authenticate, PhoneChange) follow.
-// Although each method performs a single delete and does not require atomicity,
-// routing it through runInTx proves the seam works end-to-end on a live use
-// case: the session repository is bound to the transaction, work runs, and UoW
-// commits on success or rolls back on error.
+// Each method performs a single delete and does not require atomicity on its
+// own, but routing it through runInTx (ADR 0033) keeps the audit entry and
+// the delete in one transaction: the session repository is bound to the
+// transaction, work runs, and the UoW commits on success or rolls back on
+// error.
 type LogoutService struct {
 	txStoreFactory
 	hasher TokenHasher
