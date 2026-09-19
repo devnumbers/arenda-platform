@@ -120,19 +120,18 @@ export function TabNavLink({
 }
 
 /** Пункт-действие шита «Еще» — та же анатомия TabLabel, но <button> вместо
- * ссылки: «Поддержка» (#766) открывает модалку вместо перехода. */
+ * ссылки: «Поддержка» (#766) открывает модалку вместо перехода. Секция —
+ * цельный NavSection из нав-модели (supportNavSection), как у TabNavLink. */
 export function TabNavAction({
-  label,
-  Icon,
+  section,
   onClick,
 }: {
-  readonly label: string;
-  readonly Icon: NavSection['Icon'];
+  readonly section: NavSection;
   readonly onClick: () => void;
 }): JSX.Element {
   return (
     <button type="button" onClick={onClick} className={TAB_TRIGGER_CLASS}>
-      <TabLabel label={label} Icon={Icon} active={false} />
+      <TabLabel label={section.label} Icon={section.Icon} active={false} />
     </button>
   );
 }

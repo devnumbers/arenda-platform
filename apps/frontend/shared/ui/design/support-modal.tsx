@@ -48,7 +48,9 @@ export function SupportModal({ open, onOpenChange }: SupportModalProps): JSX.Ele
     // Буфер может быть недоступен (небезопасный контекст) — подсказку
     // «Скопировано» показываем независимо от буфера (канон контактов).
     const clipboard = navigator.clipboard as Clipboard | undefined;
-    clipboard?.writeText(SUPPORT_EMAIL).catch(() => {});
+    clipboard?.writeText(SUPPORT_EMAIL).catch(() => {
+      // то же: подсказку «Скопировано» показываем независимо от буфера
+    });
     setCopied(true);
     if (copiedTimeoutRef.current !== null) {
       clearTimeout(copiedTimeoutRef.current);

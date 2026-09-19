@@ -83,8 +83,7 @@ export function MoreSheet({ open, onOpenChange }: MoreSheetProps): JSX.Element {
                     ) : (
                       <TabNavAction
                         key={supportNavSection.id}
-                        label={supportNavSection.label}
-                        Icon={supportNavSection.Icon}
+                        section={supportNavSection}
                         onClick={openSupport}
                       />
                     ),
