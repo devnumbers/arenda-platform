@@ -263,7 +263,6 @@ func injectPropertyServiceAccess(propertiesMod *wire.Properties, accessMod *wire
 	propertiesMod.PropertyService.SetSharedMemberships(accessMod.SharedProperties)
 	propertiesMod.PropertyService.SetOwnerDisplayNameResolver(accessMod.AccessService)
 	propertiesMod.PropertyService.SetRecipientSlotPolicy(accessMod.SlotCoordinator)
-	propertiesMod.PropertyService.SetMemberNamesReader(accessMod.SharedListEnricher)
 	propertiesMod.PropertyService.SetSuspendedSharedMemberships(accessMod.SharedListEnricher)
 }
 

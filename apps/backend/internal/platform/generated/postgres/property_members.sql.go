@@ -223,44 +223,6 @@ func (q *Queries) GetPropertyMemberRole(ctx context.Context, arg GetPropertyMemb
 	return role, err
 }
 
-const listActiveMemberUsersByOwner = `-- name: ListActiveMemberUsersByOwner :many
-SELECT m.property_id, m.user_id
-FROM property_members m
-JOIN properties p ON p.id = m.property_id
-WHERE p.owner_id = $1 AND m.status = 'active'
-ORDER BY m.property_id, m.created_at ASC
-`
-
-type ListActiveMemberUsersByOwnerRow struct {
-	PropertyID pgtype.UUID `json:"property_id"`
-	UserID     pgtype.UUID `json:"user_id"`
-}
-
-// The member-name projection of the owner's list cards (ticket #702): the
-// ACTIVE members per own property, in membership (invitation) order.
-// Pending invitations have no display name and suspended memberships render
-// no row; the properties service resolves the names through the access
-// context's user lookups — the access SQL never joins users.
-func (q *Queries) ListActiveMemberUsersByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListActiveMemberUsersByOwnerRow, error) {
-	rows, err := q.db.Query(ctx, listActiveMemberUsersByOwner, ownerID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListActiveMemberUsersByOwnerRow{}
-	for rows.Next() {
-		var i ListActiveMemberUsersByOwnerRow
-		if err := rows.Scan(&i.PropertyID, &i.UserID); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listActiveMembersByPropertyOwner = `-- name: ListActiveMembersByPropertyOwner :many
 SELECT m.id, m.property_id, m.user_id, m.role, m.granted_by, m.created_at, m.updated_at, m.status, m.suspended_at
 FROM property_members m

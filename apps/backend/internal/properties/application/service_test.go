@@ -1121,11 +1121,11 @@ const (
 	testPropertyNameShared = "Shared"
 )
 
-// TestListProperties_ParticipantNames verifies the member-name projection of
-// the owner's list cards (ticket #702): own rows carry the active members'
-// display names in the reader's order, shared rows never do, and an unwired
-// reader leaves the rows without names.
-func TestListProperties_ParticipantNames(t *testing.T) {
+// TestListProperties_SharedRowOwnerName verifies the owner-name projection
+// of the shared list rows (owner decision on the #756 walkthrough fixes):
+// a shared row carries the property owner's display name — the card shows
+// whose object it is; own rows and an unwired resolver keep none.
+func TestListProperties_SharedRowOwnerName(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -1161,14 +1161,11 @@ func TestListProperties_ParticipantNames(t *testing.T) {
 		return svc
 	}
 
-	wantNames := []string{testMemberNameMaria, "Пётр Селезнёв"}
-
-	t.Run("own rows carry the names, shared rows do not", func(t *testing.T) {
+	t.Run("shared rows carry the owner name, own rows do not", func(t *testing.T) {
 		t.Parallel()
 		svc := newSvc(t)
-		svc.SetMemberNamesReader(fakeMemberNames{names: map[uuid.UUID][]string{
-			ownID:    wantNames,
-			sharedID: {"утечка"},
+		svc.SetOwnerDisplayNameResolver(fakeOwnerNames{names: map[uuid.UUID]string{
+			otherOwnerID: testMemberNameMaria,
 		}})
 
 		result, err := svc.ListProperties(ctx, ownerID)
@@ -1179,15 +1176,15 @@ func TestListProperties_ParticipantNames(t *testing.T) {
 		for _, p := range result.Items {
 			byID[p.ID] = p
 		}
-		if got := byID[ownID].MemberNames; !slices.Equal(got, wantNames) {
-			t.Errorf("own row MemberNames = %v, want %v", got, wantNames)
+		if got := byID[sharedID].OwnerName; got != testMemberNameMaria {
+			t.Errorf("shared row OwnerName = %q, want %q", got, testMemberNameMaria)
 		}
-		if got := byID[sharedID].MemberNames; got != nil {
-			t.Errorf("shared row MemberNames = %v, want none", got)
+		if got := byID[ownID].OwnerName; got != "" {
+			t.Errorf("own row OwnerName = %q, want empty", got)
 		}
 	})
 
-	t.Run("unwired reader leaves the rows without names", func(t *testing.T) {
+	t.Run("unwired resolver leaves the name empty", func(t *testing.T) {
 		t.Parallel()
 		svc := newSvc(t)
 
@@ -1196,27 +1193,28 @@ func TestListProperties_ParticipantNames(t *testing.T) {
 			t.Fatalf("ListProperties failed: %v", err)
 		}
 		for _, p := range result.Items {
-			if p.MemberNames != nil {
-				t.Errorf("row %s MemberNames = %v, want nil without the port", p.ID, p.MemberNames)
+			if p.OwnerName != "" {
+				t.Errorf("row %s OwnerName = %q, want empty without the port", p.ID, p.OwnerName)
 			}
 		}
 	})
 }
 
-// TestListArchivedProperties_ParticipantNames verifies that the archived
-// list carries the same member-name projection (ticket #702, Figma
-// 2213-98944), and that it never carries suspended placeholders — archived
-// objects hide their suspended legs behind the archive (#163).
-func TestListArchivedProperties_ParticipantNames(t *testing.T) {
+// TestListArchivedProperties_SharedRowOwnerName verifies that the archived
+// list carries the same owner-name projection on its shared rows, and that
+// it never carries suspended placeholders — archived objects hide their
+// suspended legs behind the archive (#163).
+func TestListArchivedProperties_SharedRowOwnerName(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	ownID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	otherOwnerID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
+	sharedID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
 
 	repo := scopedPropertyRepo{newFakePropertyRepo(
 		domain.Property{
-			ID: ownID, OwnerID: ownerID, Name: testPropertyNameOwn, Address: testPropertyAddress,
+			ID: sharedID, OwnerID: otherOwnerID, Name: testPropertyNameShared, Address: testPropertyAddress,
 			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusArchived,
 		},
 	)}
@@ -1229,8 +1227,11 @@ func TestListArchivedProperties_ParticipantNames(t *testing.T) {
 		testOwnerPolicy{},
 		nil,
 	)
-	svc.SetMemberNamesReader(fakeMemberNames{names: map[uuid.UUID][]string{
-		ownID: {testMemberNameMaria},
+	svc.SetSharedMemberships(fakeSharedMemberships{memberships: []SharedMembership{
+		{PropertyID: sharedID, Role: sharedpolicy.RoleViewer},
+	}})
+	svc.SetOwnerDisplayNameResolver(fakeOwnerNames{names: map[uuid.UUID]string{
+		otherOwnerID: testMemberNameMaria,
 	}})
 	svc.SetSuspendedSharedMemberships(fakeSuspendedShared{items: []SharedSuspendedMembership{
 		{
@@ -1248,8 +1249,8 @@ func TestListArchivedProperties_ParticipantNames(t *testing.T) {
 	if len(result.Items) != 1 {
 		t.Fatalf("expected 1 archived property, got %d", len(result.Items))
 	}
-	if got := result.Items[0].MemberNames; !slices.Equal(got, []string{testMemberNameMaria}) {
-		t.Errorf("archived row MemberNames = %v, want [Мария Иванова]", got)
+	if got := result.Items[0].OwnerName; got != testMemberNameMaria {
+		t.Errorf("archived shared row OwnerName = %q, want %q", got, testMemberNameMaria)
 	}
 	if len(result.SuspendedShared) != 0 {
 		t.Errorf("archived list must not carry suspended placeholders, got %v", result.SuspendedShared)

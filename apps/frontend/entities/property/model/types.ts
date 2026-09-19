@@ -57,11 +57,6 @@ export type Property = {
   readonly photos?: PropertyPhoto[];
   readonly access?: PropertyAccess;
   readonly members_count: number;
-  /** Имена активных участников («Имя Фамилия» или маскированный телефон) в
-   * порядке приглашения (#702): только списочные чтения СВОИХ объектов
-   * (ряд участников карточки, Figma 2200-97368); остальное приложение поля
-   * не несёт. Имя поля — из контракта (member_names), как members_count. */
-  readonly member_names?: string[];
   /** Момент создания (ISO date-time) — сортировка «По дате создания» (#586). */
   readonly created_at: string;
   /**

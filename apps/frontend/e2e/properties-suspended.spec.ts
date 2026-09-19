@@ -7,13 +7,14 @@ import {
   test,
 } from './fixtures';
 
-// Карточки хаба «Объекты» карты «Совместный доступ 2.0» (тикет #702):
-// ряд участников на карточках СВОИХ объектов (сид: Мария Петрова и Сергей
-// Сидоров на «Квартире на Ленина») и блюр-карточки подвесших чужих
-// объектов с шитом причины «Превышен лимит объектов». Suspended-доступ
-// владельца Ивана на чужой «Даче у Марии» грантуется через execE2eSql
-// (workers=1) и убирается в конце каждого теста. Выход с подвесшего
-// доступа разрешён правилом #702 (раньше ErrCannotLeaveSuspended).
+// Карточки хаба «Объекты» карты «Совместный доступ 2.0» (тикет #702; поля
+// карточек пересмотрены решением владельца по итогам обхода #756 — ряд
+// участников своих объектов снесён, ряд владельца носят только ЧУЖИЕ
+// карточки) и блюр-карточки подвесших чужих объектов с шитом причины
+// «Превышен лимит объектов». Suspended-доступ владельца Ивана на чужой
+// «Даче у Марии» грантуется через execE2eSql (workers=1) и убирается в
+// конце каждого теста. Выход с подвесшего доступа разрешён правилом #702
+// (раньше ErrCannotLeaveSuspended).
 
 const OWNER_ID = '11111111-1111-4111-8111-111111111111';
 const FOREIGN_OWNER_ID = '12111111-1111-4111-8111-111111111121';
@@ -48,21 +49,20 @@ async function openHub(
   await page.goto('/properties');
 }
 
-test('ряд участников на карточках своих объектов', async ({ page, seededUser }, testInfo) => {
+test('свои карточки без ряда участников и без бейджа роли', async ({ page, seededUser }, testInfo) => {
   await openHub(page, seededUser);
 
-  // Активные участники квартиры — на карточке владельца, в порядке сида.
+  // Решение владельца по итогам обхода #756: на своих карточках ряда нет
+  // вовсе — ни участников (#702 снесён), ни владельца, ни бейджа роли.
   const apartmentCard = page
     .locator('li')
     .filter({ has: page.getByRole('heading', { name: 'Квартира на Ленина' }) });
-  await expect(
-    apartmentCard.getByTestId('property-participants').getByText('Мария Петрова'),
-  ).toBeVisible();
-  await expect(
-    apartmentCard.getByTestId('property-participants').getByText('Сергей Сидоров'),
-  ).toBeVisible();
+  await expect(apartmentCard.getByTestId('property-participants')).toHaveCount(0);
+  await expect(apartmentCard.getByTestId('property-owner')).toHaveCount(0);
+  await expect(apartmentCard.getByText('Мария Петрова')).toHaveCount(0);
+  await expect(apartmentCard.getByText('Редактирование')).toHaveCount(0);
 
-  await captureScreen(page, testInfo, 'properties-participants');
+  await captureScreen(page, testInfo, 'properties-own-cards-plain');
 });
 
 test('блюр-карточка подвесшего объекта и шит причины', async ({ page, seededUser }, testInfo) => {
@@ -71,10 +71,13 @@ test('блюр-карточка подвесшего объекта и шит п
     await openHub(page, seededUser);
 
     // Блюр-карточка после своих карточек: настоящая карточка объекта под
-    // блюром (название, адрес — Figma 2213-99113) и плашка «Узнать причину».
+    // блюром с теми же полями, что у любой чужой карточки (название, адрес
+    // и ряд владельца — Figma 2213-99113 + решение по обходу #756), и
+    // плашка «Узнать причину».
     const blurCard = page.getByTestId('suspended-property-card');
     await expect(blurCard.getByText('Дача у Марии')).toBeVisible();
     await expect(blurCard.getByText('Москва, ул. Дачная, 5')).toBeVisible();
+    await expect(blurCard.getByTestId('property-owner').getByText('Мария Петрова')).toBeVisible();
     await expect(blurCard.getByText('Объект недоступен')).toBeVisible();
     await expect(blurCard.getByText('Узнать причину')).toBeVisible();
 

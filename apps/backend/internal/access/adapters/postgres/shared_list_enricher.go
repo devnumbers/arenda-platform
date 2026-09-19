@@ -13,13 +13,12 @@ import (
 )
 
 // SharedListEnricher serves the access projections of the properties list
-// reads (ticket #702): the active-member display names of the owner's own
-// properties (the cards' participant row) and the recipient's suspended
-// shared memberships as blur-cards — the object's own title/address under
-// the blur plus the owner contact for the reason sheet. User data resolves through the identity user
-// reader — the access SQL never joins users; the per-user lookups follow the
-// ListMembers precedent (issue #693), the volumes are one list read's worth
-// of members and owners.
+// reads (ticket #702): the recipient's suspended shared memberships as
+// blur-cards — the object's own title/address under the blur plus the owner
+// contact for the reason sheet. User data resolves through the identity
+// user reader — the access SQL never joins users; the per-user lookups
+// follow the ListMembers precedent (issue #693), the volumes are one list
+// read's worth of owners.
 type SharedListEnricher struct {
 	db    postgres.DBTX
 	users UserReader
@@ -34,34 +33,6 @@ func NewSharedListEnricher(db postgres.DBTX, users UserReader) *SharedListEnrich
 type ownerContact struct {
 	name  string
 	email string
-}
-
-// NamesByOwner resolves the display names of the active members of the
-// owner's properties, implementing the properties application
-// MemberNamesReader port (ticket #702). The result carries a name list per
-// property with at least one active member, in membership order.
-func (s *SharedListEnricher) NamesByOwner(ctx context.Context, owner uuid.UUID) (map[uuid.UUID][]string, error) {
-	rows, err := postgres.New(s.db).ListActiveMemberUsersByOwner(ctx, pgconv.UUIDToPgtype(owner))
-	if err != nil {
-		return nil, fmt.Errorf("list member users: %w", err)
-	}
-	names := make(map[uuid.UUID][]string, len(rows))
-	display := make(map[uuid.UUID]string)
-	for _, row := range rows {
-		userID := pgconv.UUIDFromPgtype(row.UserID)
-		name, ok := display[userID]
-		if !ok {
-			u, err := s.users.GetByID(ctx, userID)
-			if err != nil {
-				return nil, fmt.Errorf("lookup member user: %w", err)
-			}
-			name = application.DisplayNameOf(toMemberUser(u))
-			display[userID] = name
-		}
-		propertyID := pgconv.UUIDFromPgtype(row.PropertyID)
-		names[propertyID] = append(names[propertyID], name)
-	}
-	return names, nil
 }
 
 // SuspendedWith resolves the recipient's suspended shared memberships in the

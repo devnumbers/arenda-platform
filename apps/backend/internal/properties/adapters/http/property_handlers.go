@@ -663,14 +663,6 @@ func (h *PropertyHandlers) propertyResponse(property domain.Property) openapi.Pr
 			resp.Access.OwnerName = &property.OwnerName
 		}
 	}
-	// The participant row of the owner's list cards (ticket #702): filled by
-	// the list reads for own rows only — nil means the row was not enriched
-	// (write paths, detail, search, shared rows, unwired port).
-	if len(property.MemberNames) > 0 {
-		names := make([]string, len(property.MemberNames))
-		copy(names, property.MemberNames)
-		resp.MemberNames = &names
-	}
 	if property.Description != "" {
 		resp.Description = &property.Description
 	}

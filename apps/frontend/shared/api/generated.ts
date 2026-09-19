@@ -2294,7 +2294,7 @@ export interface components {
              * @enum {string}
              */
             role: "owner" | "full_access" | "viewer";
-            /** @description Owner display name ("Name Surname" or masked phone, never email). Present only in the detail response when the actor is not the owner. */
+            /** @description Owner display name ("Name Surname" or masked phone, never email). Present when the actor is not the owner: in the detail response and on the list rows (main and archive) — the shared card shows whose object it is. Own rows carry none. */
             owner_name?: string;
         };
         PropertyResponse: {
@@ -2310,8 +2310,6 @@ export interface components {
             photos?: components["schemas"]["PropertyPhoto"][];
             /** @description Shared-access participants of the property: membership rows (any status, owner excluded — the owner is never a membership row) plus pending email invitations. */
             members_count: number;
-            /** @description Display names of the property's ACTIVE members («Имя Фамилия» or a masked phone), in membership order (ticket #702): the participant row on the owner's list cards (Figma 2200-97368). Populated by the list endpoints for the actor's own properties only; omitted elsewhere — write paths, detail, search and shared rows never carry it. */
-            member_names?: string[];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */

@@ -93,16 +93,6 @@ var (
 	_ OwnerDisplayNameResolver = fakeOwnerNames{}
 )
 
-// fakeMemberNames serves the MemberNamesReader port with a canned
-// per-property name list (ticket #702).
-type fakeMemberNames struct {
-	names map[uuid.UUID][]string
-}
-
-func (f fakeMemberNames) NamesByOwner(context.Context, uuid.UUID) (map[uuid.UUID][]string, error) {
-	return f.names, nil
-}
-
 // fakeSuspendedShared serves the SuspendedSharedMemberships port with a
 // canned placeholder list (ticket #702).
 type fakeSuspendedShared struct {
@@ -113,7 +103,4 @@ func (f fakeSuspendedShared) SuspendedWith(context.Context, uuid.UUID) ([]Shared
 	return f.items, nil
 }
 
-var (
-	_ MemberNamesReader          = fakeMemberNames{}
-	_ SuspendedSharedMemberships = fakeSuspendedShared{}
-)
+var _ SuspendedSharedMemberships = fakeSuspendedShared{}

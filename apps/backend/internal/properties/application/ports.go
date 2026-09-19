@@ -70,16 +70,6 @@ type SuspendedSharedMemberships interface {
 	SuspendedWith(ctx context.Context, userID uuid.UUID) ([]SharedSuspendedMembership, error)
 }
 
-// MemberNamesReader resolves the display names of the active members of the
-// reading actor's own properties (ticket #702): the participant row on the
-// owner's list cards («Участники», Figma 2200-97368). Implemented by the
-// access bounded context and injected optionally — when nil, the list rows
-// carry no names. Shared (non-owner) rows never receive names: the row is
-// the owner's surface.
-type MemberNamesReader interface {
-	NamesByOwner(ctx context.Context, owner uuid.UUID) (map[uuid.UUID][]string, error)
-}
-
 // PropertyOwners maps the property ids of one list read onto their data
 // owners (the projections resolve «today» and scope per data owner, ADR
 // 0048); the rows carry the owner already, so the service passes it instead

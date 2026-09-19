@@ -67,7 +67,6 @@ type PropertyService struct {
 	policy            sharedpolicy.Policy
 	sharedMemberships SharedMemberships
 	ownerNames        OwnerDisplayNameResolver
-	memberNames       MemberNamesReader
 	suspendedShared   SuspendedSharedMemberships
 	slots             RecipientSlotPolicy
 	rentalOccupancy   RentalOccupancyReader
@@ -100,14 +99,6 @@ func (s *PropertyService) SetOwnerDisplayNameResolver(resolver OwnerDisplayNameR
 // carries no placeholders.
 func (s *PropertyService) SetSuspendedSharedMemberships(port SuspendedSharedMemberships) {
 	s.suspendedShared = port
-}
-
-// SetMemberNamesReader injects the access-context adapter that resolves the
-// active members' display names of the actor's own properties — the
-// participant row on the owner's list cards (ticket #702). Optional: when
-// not set, the list rows carry no names.
-func (s *PropertyService) SetMemberNamesReader(reader MemberNamesReader) {
-	s.memberNames = reader
 }
 
 // SetRecipientSlotPolicy injects the access-context slot coordinator that
@@ -302,9 +293,7 @@ func (s *PropertyService) ListProperties(ctx context.Context, actor uuid.UUID) (
 		return PropertiesPage{}, err
 	}
 
-	if err := s.enrichMemberNames(ctx, actor, properties); err != nil {
-		return PropertiesPage{}, err
-	}
+	s.enrichSharedOwnerNames(ctx, properties)
 
 	// The actor's suspended shared memberships ride the main list as
 	// blur-card placeholders (ticket #702); the archived list carries none.
@@ -324,25 +313,36 @@ func (s *PropertyService) ListProperties(ctx context.Context, actor uuid.UUID) (
 	return PropertiesPage{Items: items, Today: today, SuspendedShared: suspended}, nil
 }
 
-// enrichMemberNames fills the active members' display names of the actor's
-// OWN properties (ticket #702): the participant row on the owner's list
-// cards. Shared rows keep no names — the row is the owner's surface. The
-// reader is optional: an unwired port leaves the rows untouched.
-func (s *PropertyService) enrichMemberNames(ctx context.Context, actor uuid.UUID, properties []domain.Property) error {
-	if s.memberNames == nil {
-		return nil
+// enrichSharedOwnerNames fills the owner display name of the shared list
+// rows (owner decision on the #756 walkthrough fixes): the shared card
+// shows whose object it is; own rows keep none — the reader is the owner.
+// The resolver is optional and failure-degrading, the detail-read
+// precedent: an unwired port or a failed lookup leaves the row without
+// the name.
+func (s *PropertyService) enrichSharedOwnerNames(ctx context.Context, properties []domain.Property) {
+	if s.ownerNames == nil {
+		return
 	}
-	names, err := s.memberNames.NamesByOwner(ctx, actor)
-	if err != nil {
-		return fmt.Errorf("read member names: %w", err)
-	}
+	resolved := make(map[uuid.UUID]string)
 	for i := range properties {
-		if properties[i].AccessRole != sharedpolicy.RoleOwner {
+		if properties[i].AccessRole == sharedpolicy.RoleOwner {
 			continue
 		}
-		properties[i].MemberNames = names[properties[i].ID]
+		ownerID := properties[i].OwnerID
+		name, ok := resolved[ownerID]
+		if !ok {
+			var err error
+			name, err = s.ownerNames.DisplayName(ctx, ownerID)
+			if err != nil {
+				s.logger.WarnContext(ctx, "failed to resolve owner display name",
+					slog.String("owner_id", ownerID.String()),
+					slog.String("error", sanitizeError(err)),
+				)
+			}
+			resolved[ownerID] = name
+		}
+		properties[i].OwnerName = name
 	}
-	return nil
 }
 
 // listSuspendedShared resolves the actor's suspended shared memberships for
@@ -462,9 +462,7 @@ func (s *PropertyService) ListArchivedProperties(ctx context.Context, actor uuid
 		return PropertiesPage{}, err
 	}
 
-	if err := s.enrichMemberNames(ctx, actor, properties); err != nil {
-		return PropertiesPage{}, err
-	}
+	s.enrichSharedOwnerNames(ctx, properties)
 
 	if err := s.enrichListProjections(ctx, properties); err != nil {
 		return PropertiesPage{}, err

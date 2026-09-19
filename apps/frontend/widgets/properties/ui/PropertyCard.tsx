@@ -5,7 +5,7 @@ import NextLink from 'next/link';
 import { ROUTES } from '@/shared/config/routes';
 import { BoldUser, PinSmall, SmallArrowRight } from '@/shared/assets/icons';
 import type { IsoDate } from '@/shared/lib/calendar';
-import { cardParticipantNames } from '../lib/property-participants';
+import { cardOwnerName } from '../lib/property-owner-name';
 import {
   archivedPropertyBadge,
   hasPropertyAttentionDot,
@@ -13,7 +13,6 @@ import {
   PropertyStatusBadge,
   type PropertyBadge,
 } from '@/features/properties';
-import { AccessRoleBadge } from '@/entities/access';
 import { PropertyAvatar, type Property } from '@/entities/property';
 import styles from './PropertyCard.module.css';
 
@@ -23,16 +22,19 @@ import styles from './PropertyCard.module.css';
  * тикет #587): серая карточка radius 24, круг-фото 64 (мобайл ≤560 над
  * текстом, 561+ — слева вровень), имя 20/24 до трёх строк, адрес со
  * скрепкой у основного объекта (Icon/S/Pin), красная точка на круге
- * (резолюция #584), бейдж роли доступа у чужого объекта, арендный бейдж +
- * «на ремонте», шеврон у правого верхнего края. Вся карточка — ссылка на
- * объект (оверлей). «Сегодня владельца» (ADR 0048) нужно только бейджу
- * «Осталось N месяцев» — остальные бейджи рендерятся, не дожидаясь его.
- * Под бейджами — ряд участников своих объектов (#702, Figma 2200-97368):
- * круг 24 с BoldUser и имя 13/500 на участника, в порядке приглашения.
+ * (резолюция #584), арендный бейдж + «на ремонте», шеврон у правого
+ * верхнего края. Вся карточка — ссылка на объект (оверлей). «Сегодня
+ * владельца» (ADR 0048) нужно только бейджу «Осталось N месяцев» —
+ * остальные бейджи рендерятся, не дожидаясь его.
+ * Под бейджами — ряд владельца ЧУЖОГО объекта (решение владельца по итогам
+ * обхода #756): круг 24 с BoldUser и имя 13/500 — карточка показывает, чей
+ * это объект и кто выдал доступ; на своих карточках ряда нет. Бейдж роли
+ * доступа («Редактирование/Просмотр») на карточках больше не рисуется.
  *
  * Вариант archived — карточка архива: та же анатомия, но смысловая
- * начинка архивная — единственный бейдж «В архиве», без точки, скрепки
- * и бейджа роли (макет 1603:92102).
+ * начинка архивная — единственный бейдж «В архиве», без точки и скрепки
+ * (макет 1603:92102); ряд владельца чужого архивного объекта — как в
+ * основном списке.
  */
 export type PropertyCardProps = {
   readonly property: Property;
@@ -52,12 +54,8 @@ export function PropertyCard({ property, today, variant = 'list', nonInteractive
   const badges: readonly PropertyBadge[] = isArchived
     ? [archivedPropertyBadge]
     : propertyBadges(property, today);
-  const accessRole = !isArchived && property.access && property.access.role !== 'owner'
-    ? property.access.role
-    : null;
-  // Ряд участников (#702): активные участники своих объектов в порядке
-  // приглашения; у архивной карточки ряд тоже рисуется (Figma 2213-98944).
-  const participantNames = cardParticipantNames(property);
+  // Ряд владельца (решение по итогам обхода #756): только чужие объекты.
+  const ownerName = cardOwnerName(property);
 
   return (
     <article className={styles.root}>
@@ -79,24 +77,21 @@ export function PropertyCard({ property, today, variant = 'list', nonInteractive
             {isPrimary && <PinSmall className={styles.pin} aria-hidden />}
             <span className={styles.addressText}>{property.address}</span>
           </p>
-          {(badges.length > 0 || accessRole !== null) && (
+          {badges.length > 0 && (
             <div className={styles.badges}>
-              {accessRole !== null && <AccessRoleBadge role={accessRole} />}
               {badges.map((badge) => (
                 <PropertyStatusBadge key={badge.key} badge={badge} />
               ))}
             </div>
           )}
-          {participantNames.length > 0 && (
-            <ul className={styles.participants} data-testid="property-participants">
-              {participantNames.map((name, index) => (
-                <li key={`${name}-${index}`} className={styles.participant}>
-                  <span className={styles.participantAvatar} aria-hidden>
-                    <BoldUser className={styles.participantGlyph} />
-                  </span>
-                  <span className={styles.participantName}>{name}</span>
-                </li>
-              ))}
+          {ownerName !== null && (
+            <ul className={styles.participants} data-testid="property-owner">
+              <li className={styles.participant}>
+                <span className={styles.participantAvatar} aria-hidden>
+                  <BoldUser className={styles.participantGlyph} />
+                </span>
+                <span className={styles.participantName}>{ownerName}</span>
+              </li>
             </ul>
           )}
         </div>

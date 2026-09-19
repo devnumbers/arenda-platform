@@ -39,7 +39,6 @@ var (
 	// The SharedListEnricher serves the list reads' access projections
 	// (ticket #702): member names on the owner's cards and the suspended
 	// blur-card placeholders.
-	_ propertiesapp.MemberNamesReader          = (*accesspg.SharedListEnricher)(nil)
 	_ propertiesapp.SuspendedSharedMemberships = (*accesspg.SharedListEnricher)(nil)
 	// The OwnerResolver doubles as the archived-status resolver of the access
 	// application services (issue #163).

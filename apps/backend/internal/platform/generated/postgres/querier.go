@@ -454,12 +454,6 @@ type Querier interface {
 	// stood the single future planned up yet; CONTEXT.md «Материализация»).
 	// Cancelled tombstones are not materialized facts.
 	LastOperationDatesOfPayments(ctx context.Context, paymentIds string) ([]LastOperationDatesOfPaymentsRow, error)
-	// The member-name projection of the owner's list cards (ticket #702): the
-	// ACTIVE members per own property, in membership (invitation) order.
-	// Pending invitations have no display name and suspended memberships render
-	// no row; the properties service resolves the names through the access
-	// context's user lookups — the access SQL never joins users.
-	ListActiveMemberUsersByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListActiveMemberUsersByOwnerRow, error)
 	ListActiveMembersByPropertyOwner(ctx context.Context, ownerID pgtype.UUID) ([]PropertyMember, error)
 	// The recipient's shared-pool entries for slot accounting. Memberships on
 	// archived properties are excluded: an archived object does not occupy a

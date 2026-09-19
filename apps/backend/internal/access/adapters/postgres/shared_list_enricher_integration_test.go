@@ -77,47 +77,6 @@ func (f *accessLifecycleFixture) archiveProperty(t *testing.T, id uuid.UUID) {
 	}
 }
 
-// TestSharedListEnricher_NamesByOwner verifies the member-name projection
-// (ticket #702): active members of the owner's properties only, in
-// membership order; suspended legs and other owners' properties stay out.
-func TestSharedListEnricher_NamesByOwner(t *testing.T) {
-	t.Parallel()
-	f := newAccessLifecycleFixture(t)
-
-	owner := f.addNamedUserWithEmail(t, "Мария", "Иванова", f.email("maria"))
-	otherOwner := createAccessTestUser(t, f.bg(), f.q)
-	first := f.addNamedUserWithEmail(t, "Пётр", "Селезнёв", f.email("petr"))
-	second := f.addNamedUserWithEmail(t, "Анна", "Ахматова", f.email("anna"))
-	suspended := createAccessTestUser(t, f.bg(), f.q)
-
-	propA := f.addProperty(t, owner, "Квартира")
-	propOther := f.addProperty(t, otherOwner, "Чужая")
-
-	m1 := f.addMember(t, propA, first, "viewer", "active")
-	f.backdateMember(t, m1)
-	_ = f.addMember(t, propA, second, "full_access", "active")
-	_ = f.addMember(t, propA, suspended, "viewer", "suspended")
-	_ = f.addMember(t, propOther, second, "viewer", "active")
-
-	enricher := NewSharedListEnricher(f.tx, f.userRepo)
-	names, err := enricher.NamesByOwner(f.bg(), owner)
-	if err != nil {
-		t.Fatalf("NamesByOwner: %v", err)
-	}
-	// The owner is not a member of their own property; the members keep the
-	// membership order (the backdated leg first).
-	want := []string{
-		"Пётр Селезнёв",
-		"Анна Ахматова",
-	}
-	if !slices.Equal(names[propA], want) {
-		t.Errorf("names[%s] = %v, want %v", propA, names[propA], want)
-	}
-	if _, ok := names[propOther]; ok {
-		t.Errorf("another owner's property leaked into the projection: %v", names[propOther])
-	}
-}
-
 // TestSharedListEnricher_SuspendedWith verifies the blur-cards (ticket
 // #702): suspended memberships on non-archived properties only, FIFO order,
 // each with the property's own card data (title and address — the card

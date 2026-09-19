@@ -77,18 +77,6 @@ JOIN properties p ON p.id = m.property_id
 WHERE m.user_id = $1 AND m.status = 'suspended' AND p.status != 'archived'
 ORDER BY m.suspended_at ASC NULLS LAST, m.updated_at DESC;
 
--- name: ListActiveMemberUsersByOwner :many
--- The member-name projection of the owner's list cards (ticket #702): the
--- ACTIVE members per own property, in membership (invitation) order.
--- Pending invitations have no display name and suspended memberships render
--- no row; the properties service resolves the names through the access
--- context's user lookups — the access SQL never joins users.
-SELECT m.property_id, m.user_id
-FROM property_members m
-JOIN properties p ON p.id = m.property_id
-WHERE p.owner_id = $1 AND m.status = 'active'
-ORDER BY m.property_id, m.created_at ASC;
-
 -- name: ListSuspendedSharedWithOwner :many
 -- The blur-cards of the recipient's main property list (ticket #702):
 -- suspended memberships on non-archived properties — the same predicate and
