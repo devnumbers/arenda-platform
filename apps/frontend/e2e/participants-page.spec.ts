@@ -125,14 +125,23 @@ test('пригласить в объект: мультичек гаража, ш�
 
   // Попап «Доступ выдан» (2010-131859) на странице участника; грант
   // пришёл suspended — у сид-получателя нет подписки, тарифный слот
-  // превышен (второй объект): чип агрегата и бейдж гаража — warning.
+  // превышен (второй объект). Статус и пояснение — на уровне участника
+  // (макет 2036-84861, правка приёмки #756): чип в шапке + жёлтая
+  // карточка; ноги несут бейджи ролей.
   await expect(
     page.getByRole('dialog').locator('p', { hasText: 'Доступ выдан' }),
   ).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.getByText('Превышен лимит объектов').first()).toBeVisible();
+  await expect(page.getByTestId('participant-limit-notice')).toBeVisible();
   await expect(
-    page.getByRole('button', { name: /Гараж на Садовой/ }).getByText('Превышен лимит объектов'),
+    page
+      .getByTestId('participant-limit-notice')
+      .getByText('Пользователь пока не может пользоваться вашим объектом'),
+  ).toBeVisible();
+  await expect(page.getByTestId('participant-limit-notice').getByText(/Попросите его освободить слот/)).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: /Гараж на Садовой/ }).getByText('Редактирование'),
   ).toBeVisible();
   await expect(page.getByRole('button', { name: /Квартира на Ленина/ }).getByText('Редактирование')).toBeVisible();
 

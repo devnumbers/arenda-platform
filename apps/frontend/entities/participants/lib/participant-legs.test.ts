@@ -37,11 +37,19 @@ describe('participantLegBadge — чип ноги доступа (макеты 2
     });
   });
 
-  it('suspended — «Превышен лимит объектов», warning с замком (канон агрегат-чипа #697)', () => {
+  it('suspended full_access — роль «Редактирование»: статус ноги коммуницируется на уровне участника (макет 2036-84861, правка приёмки #756)', () => {
     expect(participantLegBadge(leg({ status: 'suspended' }))).toEqual({
-      tone: 'warning',
-      label: 'Превышен лимит объектов',
-      icon: 'lock',
+      tone: 'neutral',
+      label: 'Редактирование',
+      icon: 'edit',
+    });
+  });
+
+  it('suspended viewer — роль «Просмотр», серый, иконка Eye', () => {
+    expect(participantLegBadge(leg({ status: 'suspended', role: 'viewer' }))).toEqual({
+      tone: 'neutral',
+      label: 'Просмотр',
+      icon: 'eye',
     });
   });
 });

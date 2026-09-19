@@ -2,7 +2,7 @@
 
 import { useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
-import { Add, Block, BoldUser, Kebab, SmallArrowRight } from '@/shared/assets/icons';
+import { Add, Block, BoldUser, Info, Kebab, SmallArrowRight } from '@/shared/assets/icons';
 import { goBack } from '@/shared/lib/navigation';
 import { ROUTES } from '@/shared/config/routes';
 import {
@@ -131,6 +131,9 @@ export function ParticipantScreen({
         ) : (
           <div className="flex flex-col gap-6 pb-2">
             <ParticipantHeader participant={participantQuery.data} />
+            {participantQuery.data.aggregateStatus === 'limit_exceeded' && (
+              <ParticipantLimitNotice />
+            )}
             <section className="flex flex-col gap-2">
               <h2 className="text-xl font-semibold leading-6 text-content">
                 Доступные объекты
@@ -218,6 +221,30 @@ function ParticipantHeader({ participant }: { readonly participant: Participant 
       )}
       <div className="pt-2">
         <ParticipantStatusBadge badge={participantStatusBadge(participant)} />
+      </div>
+    </div>
+  );
+}
+
+/** Жёлтая карточка-пояснение у suspended-участника (макет 2036-84861,
+ * правка приёмки #756): почему участник пока не пользуется объектами и
+ * что делать. Рисуется только при агрегате «Превышен лимит объектов» —
+ * статус уже виден бейджем в шапке, ноги несут бейджи ролей. */
+function ParticipantLimitNotice(): JSX.Element {
+  return (
+    <div
+      className="flex items-start gap-3 rounded-[32px] bg-warning-bg p-6 pr-8"
+      data-testid="participant-limit-notice"
+    >
+      <Info className="h-6 w-6 shrink-0 text-content" aria-hidden />
+      <div className="flex min-w-0 flex-col gap-2">
+        <p className="text-base font-medium leading-[18px] text-content">
+          Пользователь пока не может пользоваться вашим объектом
+        </p>
+        <p className="text-sm leading-4 text-content">
+          Попросите его освободить слот под ваш объект, чтобы он смог
+          просматривать его и редактировать
+        </p>
       </div>
     </div>
   );
