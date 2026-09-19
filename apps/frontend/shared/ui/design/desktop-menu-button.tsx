@@ -13,6 +13,10 @@ export type DesktopMenuButtonProps = {
   readonly href?: string;
   readonly active?: boolean;
   readonly className?: string;
+  /** Число непрочитанных (пилюля «Уведомления», #747): канон NumbersAlerts
+   * (Figma 1652:82624) — красный pill #FB2C36, белый текст 13/15 Medium,
+   * прижат вправо. 0/undefined — бейджа нет. */
+  readonly badge?: number;
 };
 
 /** Кнопка десктопной навигации (Figma 1675:54051, анатомия
@@ -32,6 +36,7 @@ export function DesktopMenuButton({
   href,
   active = false,
   className,
+  badge,
 }: DesktopMenuButtonProps): JSX.Element {
   const intent = useNavIntentLink();
   return (
@@ -56,6 +61,14 @@ export function DesktopMenuButton({
       >
         <section.Icon className="h-6 w-6 shrink-0" aria-hidden />
         <span className="truncate text-sm font-medium leading-4">{section.label}</span>
+        {badge !== undefined && badge > 0 && (
+          // Число непрочитанных: без потолка — счётчик бэка всегда конечен;
+          // текст 13/15 Medium белый, вертикально pill = 18px по высоте
+          // строки (Figma NumbersAlerts, padding 0 6).
+          <span className="ml-auto flex h-[18px] shrink-0 items-center rounded-pill bg-danger px-1.5 text-[13px] font-medium leading-[15px] text-surface">
+            {badge}
+          </span>
+        )}
       </span>
     </Link>
   );

@@ -51,11 +51,12 @@ func (p *Publisher) NotificationCreated(ctx context.Context, n domain.Notificati
 		V:          envelopeVersion,
 		OccurredAt: p.clk.Now().UTC().Format(time.RFC3339),
 		Payload: marshalPayload(createdPayload{
-			ID:       n.ID.String(),
-			Category: string(n.Category),
-			Title:    n.Title,
-			Body:     n.Body,
-			URL:      notificationsjob.DeepLinkFor(n.EventType),
+			ID:           n.ID.String(),
+			Category:     string(n.Category),
+			ContextLabel: n.ContextLabel,
+			Title:        n.Title,
+			Body:         n.Body,
+			URL:          notificationsjob.DeepLinkFor(n.EventType),
 		}),
 	})
 	if err != nil {
@@ -93,11 +94,15 @@ type envelope struct {
 }
 
 type createdPayload struct {
-	ID       string `json:"id"`
-	Category string `json:"category"`
-	Title    string `json:"title"`
-	Body     string `json:"body"`
-	URL      string `json:"url,omitempty"`
+	ID string `json:"id"`
+	// ContextLabel is the optional line above the toast title — the feed
+	// row's context snapshot (#747, toast mockup 2343:57307). Additive to
+	// envelope v1: old clients ignore the extra field.
+	ContextLabel string `json:"contextLabel,omitempty"`
+	Category     string `json:"category"`
+	Title        string `json:"title"`
+	Body         string `json:"body"`
+	URL          string `json:"url,omitempty"`
 }
 
 type unreadPayload struct {

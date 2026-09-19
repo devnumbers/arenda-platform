@@ -7,14 +7,18 @@
 
 /** Категория уведомлений (решение #737): группа настроек и иконка строки.
  * Каталог v1 фиксирован бэком; Тариф и Системные — сервисные, вне экрана
- * настроек. */
-export type NotificationCategory =
-  | 'rental'
-  | 'payments_operations'
-  | 'tasks'
-  | 'shared_access'
-  | 'tariff'
-  | 'system';
+ * настроек. Кортеж — единственный источник каталога: юнион ниже выводится
+ * из него (канон NOTIFICATION_ACTION_KINDS), дрейфа списков не бывает. */
+export const NOTIFICATION_CATEGORIES = [
+  'rental',
+  'payments_operations',
+  'tasks',
+  'shared_access',
+  'tariff',
+  'system',
+] as const;
+
+export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
 
 /**
  * Строка ленты одного получателя (GET /notifications): текст — снимок

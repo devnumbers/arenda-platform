@@ -62,11 +62,15 @@ export function NotificationCategoryIcon({
   category,
   unread,
   variant = 'row',
+  badge = true,
 }: {
   readonly category: NotificationCategory;
   readonly unread: boolean;
   /** row — строка ленты (#744), page — страница уведомления (#745). */
   readonly variant?: 'row' | 'page';
+  /** Тарифный бейдж (только Тариф): в ленте и на странице рисуется,
+   * в тосте нового уведомления (#747) макет даёт Badge=None — off. */
+  readonly badge?: boolean;
 }): JSX.Element {
   const visual = CATEGORY_VISUALS[category];
   const sizes = ICON_SIZES[variant];
@@ -87,7 +91,7 @@ export function NotificationCategoryIcon({
         )}
       </div>
       {variant === 'row' && unread && <NotificationDot className="absolute left-0 top-0 h-3.5 w-3.5" />}
-      {BADGE_CATEGORIES.has(category) && (
+      {badge && BADGE_CATEGORIES.has(category) && (
         // Кант бейджа — stroke="currentColor" в самом SVG, красится под
         // поверхность ленты (прецедент features/payment-categories
         // category-icon): белая лента → text-surface.

@@ -84,8 +84,10 @@ async function fetchNotificationsPage(params: {
   };
 }
 
-/** Счётчик непрочитанных (бейдж чипа «Непрочитанные N») —
- * GET /notifications/unread-count. */
+/** Счётчик непрочитанных (бейдж чипа «Непрочитанные N» и бейджей
+ * навигации) — GET /notifications/unread-count. refetchOnWindowFocus —
+ * локальный: бейдж живёт весь сеанс (не только экран ленты), возврат во
+ * вкладку перечитывает счёт (глобальный дефолт канона выключен, #747). */
 export function useUnreadNotificationsCount(): UseQueryResult<number, ApiError> {
   return useQuery({
     queryKey: notificationKeys.unreadCount(),
@@ -93,6 +95,7 @@ export function useUnreadNotificationsCount(): UseQueryResult<number, ApiError> 
       const response = await apiClient<UnreadCountDto>('/notifications/unread-count');
       return response.count;
     },
+    refetchOnWindowFocus: true,
   });
 }
 

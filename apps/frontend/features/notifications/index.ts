@@ -17,3 +17,4 @@ export {
   notificationActionView,
   type NotificationActionView,
 } from './lib/notification-actions';
+export { NotificationStreamProvider } from './ui/notification-stream-provider';

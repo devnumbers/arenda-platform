@@ -104,6 +104,57 @@ func TestNotificationCreatedWithoutDeepLinkOmitsURL(t *testing.T) {
 	assert.NotContains(t, f.Data, `"url"`, "an event without a deep link delivers without a url")
 }
 
+func TestNotificationCreatedFrameCarriesContextLabel(t *testing.T) {
+	t.Parallel()
+
+	// Тосту нужна строка над заголовком — снимок контекста строки ленты
+	// (#747, макет тоста 2343:57307). Поле аддитивное к конверту v1.
+	user := uuid.Must(uuid.NewV7())
+	hub, frames := subscribedHub(t, user)
+	publisher := NewPublisher(hub, fixedClock{})
+
+	publisher.NotificationCreated(context.Background(), domain.Notification{
+		ID:           uuid.Must(uuid.NewV7()),
+		UserID:       user,
+		Category:     domain.CategoryRental,
+		EventType:    domain.EventRentalCompleted,
+		ContextLabel: "2-комнатная на Ленина",
+		Title:        "Аренда завершена",
+		Body:         "Договор аренды завершён",
+	})
+
+	f := receiveFrame(t, frames)
+	var env struct {
+		Payload json.RawMessage `json:"payload"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(f.Data), &env))
+	var payload struct {
+		ContextLabel string `json:"contextLabel"`
+	}
+	require.NoError(t, json.Unmarshal(env.Payload, &payload))
+	assert.Equal(t, "2-комнатная на Ленина", payload.ContextLabel)
+}
+
+func TestNotificationCreatedFrameOmitsEmptyContextLabel(t *testing.T) {
+	t.Parallel()
+
+	user := uuid.Must(uuid.NewV7())
+	hub, frames := subscribedHub(t, user)
+	publisher := NewPublisher(hub, fixedClock{})
+
+	publisher.NotificationCreated(context.Background(), domain.Notification{
+		ID:        uuid.Must(uuid.NewV7()),
+		UserID:    user,
+		Category:  domain.CategorySystem,
+		EventType: domain.EventSystemMaintenance,
+		Title:     "t",
+		Body:      "b",
+	})
+
+	f := receiveFrame(t, frames)
+	assert.NotContains(t, f.Data, `"contextLabel"`, "an empty context label is omitted, not an empty string")
+}
+
 func TestUnreadCountFrame(t *testing.T) {
 	t.Parallel()
 
