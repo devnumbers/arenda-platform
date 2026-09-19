@@ -3,6 +3,7 @@
 import type { JSX } from 'react';
 import Image from 'next/image';
 import { BoldKey, NotificationDot, StatusIconDanger } from '@/shared/assets/icons';
+import { cn } from '@/shared/lib/cn';
 import type { NotificationCategory } from '../model/types';
 
 /**
@@ -69,10 +70,12 @@ export function NotificationCategoryIcon({
 }): JSX.Element {
   const visual = CATEGORY_VISUALS[category];
   const sizes = ICON_SIZES[variant];
+  // Размер живёт на внешнем wrapper: точка и бейдж якорятся к кругу, а сам
+  // wrapper не растягивается флекс-родителем (страница #745 — колонка).
   return (
-    <div className="relative shrink-0" aria-hidden>
+    <div className={cn('relative shrink-0', sizes.circle)} aria-hidden>
       <div
-        className={`flex ${sizes.circle} items-center justify-center rounded-pill ring-[2.5px] ring-white ${visual.className}`}
+        className={`flex h-full w-full items-center justify-center rounded-pill ring-[2.5px] ring-white ${visual.className}`}
       >
         {visual.kind === 'image' ? (
           <Image src={visual.src} alt="" width={112} height={112} className={sizes.image} unoptimized />

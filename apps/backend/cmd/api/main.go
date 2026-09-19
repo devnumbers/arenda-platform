@@ -62,11 +62,6 @@ func run() error {
 	// 2. Event dispatcher (shared by identity publisher and subscribers).
 	eventDispatcher := events.NewInProcessDispatcher()
 
-	// 3. Notifications (issue #438): the push-subscription service and the
-	//    stored feed repository; the delivery queue and the grace publisher
-	//    build on them below.
-	notificationsMod := wire.WireNotifications(p)
-
 	// 3.5. HTTP rate limiters (built early: the email-change service's
 	//      new-address send budget consumes the email-change limiter).
 	limiters := wire.WireRateLimiters(p.Cfg)
@@ -98,6 +93,16 @@ func run() error {
 		return err
 	}
 	p.Policy = accessMod.Policy
+
+	// 6.5. Notifications (issue #438): the push-subscription service, the
+	//      stored feed repository and the feed reading service; the delivery
+	//      queue and the grace publisher build on them below. Wired after the
+	//      membership policy is installed: the feed's live actions resolve the
+	//      reader's role through the policy (FeedLiveState, #743) — on the
+	//      owner-only fallback every property-scoped button (Продлить/
+	//      Завершить, Принять) would silently never stand (находка приёмки
+	//      #745).
+	notificationsMod := wire.WireNotifications(p)
 
 	// 7. Properties: repos, subscription limiter, photo storage, the property
 	//    service and the dadata suggester.
