@@ -1,15 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState, type JSX } from 'react';
+import { type JSX } from 'react';
 import { Cancel, Check, Copy } from '@/shared/assets/icons';
 import { SUPPORT_EMAIL, SUPPORT_TELEGRAM_URL } from '@/shared/config/support';
+import { useCopiedHint } from '@/shared/lib/hooks/use-copied-hint';
 import { Button, buttonVariants } from './button';
 import { HeaderLogo } from './header-logo';
 import { IconButton } from './icon-button';
 import { Modal, ModalClose, ModalContent, useIsDesktop } from './modal';
-
-/** Подсказка «Скопировано» — канон копирования (карточка контакта): 2 с. */
-const COPIED_RESET_MS = 2000;
 
 export type SupportModalProps = {
   readonly open: boolean;
@@ -33,30 +31,7 @@ export type SupportModalProps = {
  */
 export function SupportModal({ open, onOpenChange }: SupportModalProps): JSX.Element {
   const isDesktop = useIsDesktop();
-  const [copied, setCopied] = useState(false);
-  const copiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (copiedTimeoutRef.current !== null) {
-        clearTimeout(copiedTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  const handleCopy = (): void => {
-    // Буфер может быть недоступен (небезопасный контекст) — подсказку
-    // «Скопировано» показываем независимо от буфера (канон контактов).
-    const clipboard = navigator.clipboard as Clipboard | undefined;
-    clipboard?.writeText(SUPPORT_EMAIL).catch(() => {
-      // то же: подсказку «Скопировано» показываем независимо от буфера
-    });
-    setCopied(true);
-    if (copiedTimeoutRef.current !== null) {
-      clearTimeout(copiedTimeoutRef.current);
-    }
-    copiedTimeoutRef.current = setTimeout(() => setCopied(false), COPIED_RESET_MS);
-  };
+  const { copied, copy } = useCopiedHint();
 
   return (
     <Modal open={open} onOpenChange={onOpenChange}>
@@ -101,7 +76,7 @@ export function SupportModal({ open, onOpenChange }: SupportModalProps): JSX.Ele
                   copied ? <Check className="h-6 w-6" aria-hidden /> : <Copy className="h-6 w-6" aria-hidden />
                 }
                 aria-label={copied ? 'Скопировано' : `Скопировать: ${SUPPORT_EMAIL}`}
-                onClick={handleCopy}
+                onClick={() => copy(SUPPORT_EMAIL)}
               >
                 {SUPPORT_EMAIL}
               </Button>
