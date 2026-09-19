@@ -185,12 +185,11 @@ func paymentsBody(eventType domain.EventType, target PaymentScanTarget) string {
 }
 
 // paymentsDedupKey builds the scan's dedup key (словарь издателей,
-// CONTEXT.md): (event type, rule, operation date). The date half is the
-// operation's DATE itself — no timezone of the instant involved — so the key
-// depends only on the facts the trigger reads; an operation unpaid past its
-// date keeps the overdue key for its whole overdue life and never repeats.
+// CONTEXT.md): (event type, rule, operation date) — an operation unpaid past
+// its date keeps the overdue key for its whole overdue life and never
+// repeats.
 func paymentsDedupKey(eventType domain.EventType, ruleID uuid.UUID, dueDate time.Time) string {
-	return string(eventType) + ":" + ruleID.String() + ":" + dueDate.Format("2006-01-02")
+	return entityDateDedupKey(string(eventType), ruleID, dueDate)
 }
 
 // formatAmountKopecks renders a kopecks amount as rubles for the

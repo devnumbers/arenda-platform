@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // ScanZone is one sweep target of the notifications scan (карта #734): an
@@ -54,6 +56,14 @@ func (g *ScanGroup) RunZoneScans(ctx context.Context, now time.Time) error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// entityDateDedupKey builds the scan publishers' dedup key shape (словарь
+// издателей, CONTEXT.md): (event type, entity id, date). The date half is
+// the entity's DATE itself — no timezone of the instant involved — so the
+// key depends only on the facts the trigger reads.
+func entityDateDedupKey(prefix string, id uuid.UUID, date time.Time) string {
+	return prefix + ":" + id.String() + ":" + date.Format("2006-01-02")
 }
 
 // zoneToday computes the sweep's "today" for one zone (ADR 0048 p.2, the

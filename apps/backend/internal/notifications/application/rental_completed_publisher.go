@@ -139,9 +139,8 @@ func (p *RentalCompletedPublisher) publish(ctx context.Context, target RentalCom
 }
 
 // rentalCompletedDedupKey builds the scan's dedup key (словарь издателей,
-// CONTEXT.md): (event type, rental, planned end date). The date half is the
-// planned end itself — a DATE column, no timezone of the instant involved —
-// so the key depends only on the facts the trigger reads.
+// CONTEXT.md): (event type, rental, planned end date) — the extended rental
+// (a new planned end) notifies again under its new key.
 func rentalCompletedDedupKey(rentalID uuid.UUID, plannedEnd time.Time) string {
-	return "rental_completed:" + rentalID.String() + ":" + plannedEnd.Format("2006-01-02")
+	return entityDateDedupKey("rental_completed", rentalID, plannedEnd)
 }
