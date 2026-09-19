@@ -215,11 +215,15 @@ export function AuthForm({
                 </div>
             )}
             {effectiveStep === "phone" && (
+                /* Спящая ветка: page.tsx с карты #761 (#763) ведёт шаг телефона
+                   мимо AuthForm — на новый LoginShell + PhoneStep; сюда шаг
+                   «phone» больше не приходит. Живёт до редизайна шагов
+                   email/code (#764/#765), когда AuthForm разберут на шаги. */
                 <StepTransition stepKey="phone">
                     <PhoneStep
                         phone={phone}
                         onPhoneChange={handlePhoneChange}
-                        onSubmit={handleSendPhone}
+                        onSendPhone={handleSendPhone}
                         isLoading={isSending}
                         resendTimer={resendTimer}
                     />

@@ -4,7 +4,7 @@ import {type JSX} from "react";
 import {useRouter} from "next/navigation";
 import {notify} from "@/shared/lib/notifications";
 import {type ApiError} from "@/shared/api/errors";
-import {AuthForm, deviceTimezone, useSendCode, useVerifyCode} from "@/features/auth";
+import {AuthForm, LoginShell, PhoneStep, deviceTimezone, useSendCode, useVerifyCode} from "@/features/auth";
 import {normalizePhone, isPhoneValid} from "@/shared/lib/phone";
 import {safeInternalPath} from "@/shared/lib/safe-internal-path";
 import {useSendCooldown} from "@/features/auth";
@@ -135,6 +135,23 @@ export default function LoginPage(): JSX.Element {
         );
     };
 
+    // Шаг телефона — новый редизайн по макетам Рентли (карта #761, тикет
+    // #763). Шаги почты и кода до своих тикетов (#764/#765) живут в прежней
+    // вёрстке — ноль регрессий, редизайн следующим экраном.
+    if (draft.step === "phone") {
+        return (
+            <LoginShell onClose={handleClose} hideClose={isStandalone}>
+                <PhoneStep
+                    phone={draft.phone}
+                    onPhoneChange={(phone) => setDraft((prev) => ({...prev, phone}))}
+                    onSendPhone={handleSendPhone}
+                    isLoading={sendCode.isPending}
+                    resendTimer={resendTimer}
+                />
+            </LoginShell>
+        );
+    }
+
     return (
         <main className={styles.container}>
             <section className={styles.left} aria-hidden="true">
@@ -145,7 +162,6 @@ export default function LoginPage(): JSX.Element {
                     <AuthForm
                         step={draft.step}
                         onStepChange={(step) => setDraft((prev) => ({...prev, step}))}
-                        onSendPhone={handleSendPhone}
                         onSendEmail={handleSendEmail}
                         onVerifyCode={handleVerifyCode}
                         onChangePhone={handleChangePhone}
@@ -153,11 +169,8 @@ export default function LoginPage(): JSX.Element {
                         onResend={handleResend}
                         onClose={handleClose}
                         hideClose={isStandalone}
-                        phone={draft.phone}
-                        onPhoneChange={(phone) => setDraft((prev) => ({...prev, phone}))}
                         email={draft.email}
                         onEmailChange={(email) => setDraft((prev) => ({...prev, email}))}
-                        isSending={sendCode.isPending}
                         isSendingEmail={sendCode.isPending}
                         isVerifying={verifyCode.isPending}
                         isResending={sendCode.isPending}

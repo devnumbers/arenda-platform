@@ -1,88 +1,117 @@
-"use client";
+'use client';
 
-import {type ChangeEvent, type JSX} from "react";
-import NextLink from "next/link";
-import {formatPhoneInput, isPhoneValid} from "@/shared/lib/phone";
-import {Support} from "@/shared/assets/icons";
-import {Button} from "@/shared/ui/button";
-import {TextField} from "@/shared/ui/text-field";
-import {ROUTES} from "@/shared/config/routes";
-import {SendCodeButton} from "@/features/auth/ui/send-code-button";
-import styles from "./PhoneStep.module.css";
+import { type ChangeEvent, type JSX } from "react";
+import { formatPhoneInput, isPhoneValid } from "@/shared/lib/phone";
+import { formatCountdown } from "@/shared/lib/countdown";
+import { Support } from "@/shared/assets/icons";
+import { Button, HeaderLogo, TextField } from "@/shared/ui/design";
+import { ROUTES } from "@/shared/config/routes";
 
 export type PhoneStepProps = {
     phone: string;
     onPhoneChange: (value: string) => void;
-    onSubmit: () => void;
+    onSendPhone: (formattedPhone: string) => void;
     isLoading: boolean;
     resendTimer?: number;
 };
 
+/** Шаг «Введите номер телефона» по макетам Рентли (карта #761, тикет
+ * #763; Figma 2343:66417 — десктоп-экран, блок формы 2343:66422,
+ * 2343:67172/2349:67759 — мобайл, пустое/заполненное). Колонка блоков
+ * с зазором 32: лого-вектор 112×28 —
+ * канон HeaderLogo; заголовок H1 28/32 + подпись 16/18 (зазор 8); поле —
+ * канон TextField titleIn (плавающий лейбл, крестик очистки при значении)
+ * + Primary-кнопка (зазор 16); юртекст 16/18 tertiary с подчёркнутыми
+ * ссылками; «Написать в поддержку» — White-пилюля с Icon/R/Support.
+ * Кнопка в покое погашена (disabled 50% = #95BFFF макета). Кулдаун
+ * 429/retryAfter — кнопка погашена + подпись в лексике resend-канона
+ * (#733) «Запросить код можно через ММ:СС» (моно 14/16, tertiary). Юрссылки
+ * ведут на лендинг (/privacy, /terms) в новой вкладке — самих страниц пока
+ * нет, 404 лендинга не блокирует (решение владельца 18.09). «Написать в
+ * поддержку» — заглушка mailto до модалки поддержки (#766); почта
+ * hello@rentlee.ru — решение владельца 18.09 (карта #761). */
 export function PhoneStep({
-                              phone,
-                              onPhoneChange,
-                              onSubmit,
-                              isLoading,
-                              resendTimer = 0,
-                          }: PhoneStepProps): JSX.Element {
+    phone,
+    onPhoneChange,
+    onSendPhone,
+    isLoading,
+    resendTimer = 0,
+}: PhoneStepProps): JSX.Element {
+    const isWaiting = resendTimer > 0;
+
     const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
         onPhoneChange(formatPhoneInput(event.target.value));
     };
 
     const handleSubmit = (event: React.SubmitEvent<HTMLFormElement>) => {
         event.preventDefault();
-        onSubmit();
+        onSendPhone(phone);
     };
 
     return (
-        <div className={styles.root}>
-            <div className={styles.header}>
-                <h1 className={styles.title}>Введите номер телефона</h1>
-                <p className={styles.subtitle}>Чтобы войти или зарегистрироваться</p>
+        <div className="flex w-full flex-col gap-8">
+            <HeaderLogo className="h-7 w-28" />
+
+            <div className="flex flex-col gap-2">
+                <h1 className="m-0 text-[28px] font-semibold leading-8 text-content">
+                    Введите номер телефона
+                </h1>
+                <p className="m-0 text-base leading-[18px] text-content-secondary">
+                    Чтобы войти или зарегистрироваться
+                </p>
             </div>
 
-            <form className={styles.form} onSubmit={handleSubmit}>
+            <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
                 <TextField
-                    labelPlacement="inside"
-                    label="Телефон"
-                    placeholder="+7 (000) 000-00-00"
+                    variant="titleIn"
+                    title="Телефон"
+                    name="phone"
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
                     value={phone}
                     onChange={handleChange}
-                    fullWidth
+                    onClear={() => onPhoneChange("")}
                 />
 
-                <SendCodeButton
-                    type="submit"
-                    remainingSeconds={resendTimer}
-                    loading={isLoading}
-                    disabled={!isPhoneValid(phone) || isLoading}
-                    timerLabel={() => `Отправить новый код`}
-                >
+                <Button type="submit" loading={isLoading} disabled={!isPhoneValid(phone) || isWaiting}>
                     Войти
-                </SendCodeButton>
+                </Button>
+
+                {isWaiting && (
+                    <p className="m-0 text-center font-mono text-sm font-medium leading-4 text-content-tertiary">
+                        Запросить код можно через {formatCountdown(resendTimer)}
+                    </p>
+                )}
             </form>
 
-            <p className={styles.legal}>
+            <p className="m-0 text-base leading-[18px] text-content-tertiary">
                 Нажимая кнопку «Войти», я принимаю{" "}
-                <NextLink className={styles.legalLink} href={ROUTES.profilePrivacy}>
+                <a
+                    className="underline"
+                    href={ROUTES.landingPrivacy}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                >
                     политику конфиденциальности
-                </NextLink>{" "}
+                </a>{" "}
                 и{" "}
-                {/* The privacy policy page is the personal-data processing
-                    document (its own metadata description) — the consent link
-                    points there too. */}
-                <NextLink className={styles.legalLink} href={ROUTES.profilePrivacy}>
+                <a
+                    className="underline"
+                    href={ROUTES.landingTerms}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                >
                     соглашаюсь на обработку персональных данных
-                </NextLink>
+                </a>
             </p>
 
             <Button
-                variant="clear"
-                size="large"
-                fullWidth
-                leftIcon={<Support/>}
+                variant="white"
+                className="w-full"
+                trailingIcon={<Support />}
                 onClick={() => {
-                    window.location.href = "mailto:support@hatus.ru";
+                    window.location.href = "mailto:hello@rentlee.ru";
                 }}
             >
                 Написать в поддержку
