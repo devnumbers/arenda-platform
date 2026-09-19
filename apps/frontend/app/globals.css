@@ -877,27 +877,3 @@ body > * {
         text-decoration: none;
     }
 }
-
-.stepEnter {
-    opacity: 0;
-    transform: translateX(20px);
-}
-
-.stepEnterActive {
-    opacity: 1;
-    transform: translateX(0);
-    transition: opacity var(--dl-duration-move) var(--dl-ease),
-    transform var(--dl-duration-move) var(--dl-ease);
-}
-
-.stepExit {
-    opacity: 1;
-    transform: translateX(0);
-}
-
-.stepExitActive {
-    opacity: 0;
-    transform: translateX(-20px);
-    transition: opacity var(--dl-duration-move) var(--dl-ease),
-    transform var(--dl-duration-move) var(--dl-ease);
-}
