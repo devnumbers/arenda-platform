@@ -227,5 +227,5 @@ func groupDigits(digits string) string {
 // string ("20 сентября") — the copy names the day, not the year, the same
 // rendering the grace deadline uses (formatGraceDeadline).
 func formatPaymentDueDate(t time.Time) string {
-	return fmt.Sprintf("%d %s", t.Day(), graceMonths[int(t.Month())-1])
+	return formatDayMonth(t)
 }

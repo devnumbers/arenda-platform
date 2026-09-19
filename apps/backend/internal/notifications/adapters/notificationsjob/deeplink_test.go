@@ -102,3 +102,39 @@ func TestDeeplinkForPayment(t *testing.T) {
 		t.Errorf("DeepLinkFor(payment_overdue without payload) = %q, want empty", got)
 	}
 }
+
+// The task-overdue event (#750) routes to the task's edit screen — its
+// rule's screen: a property-bound task navigates through the property, the
+// task without a property — through the flat tasks route (ADR 0052).
+func TestDeeplinkForTaskOverdue(t *testing.T) {
+	t.Parallel()
+
+	propertyID := uuid.Must(uuid.NewV7())
+	ruleID := uuid.Must(uuid.NewV7())
+	bound := domain.Notification{
+		EventType: domain.EventTaskOverdue,
+		Payload: domain.Payload{
+			Property:   &domain.EntityRef{ID: propertyID, Name: deeplinkPropertyName},
+			TaskRuleID: &ruleID,
+		},
+	}
+	want := "/properties/" + propertyID.String() + "/tasks/" + ruleID.String() + "/edit"
+	if got := DeepLinkFor(bound); got != want {
+		t.Errorf("DeepLinkFor(bound task_overdue) = %q, want %q", got, want)
+	}
+
+	propertyless := domain.Notification{
+		EventType: domain.EventTaskOverdue,
+		Payload:   domain.Payload{TaskRuleID: &ruleID},
+	}
+	wantFlat := "/tasks/" + ruleID.String() + "/edit"
+	if got := DeepLinkFor(propertyless); got != wantFlat {
+		t.Errorf("DeepLinkFor(propertyless task_overdue) = %q, want %q", got, wantFlat)
+	}
+
+	// A payload without the rule id (a hand-edited row) delivers without a
+	// link rather than a broken one.
+	if got := DeepLinkFor(domain.Notification{EventType: domain.EventTaskOverdue}); got != "" {
+		t.Errorf("DeepLinkFor(task_overdue without rule id) = %q, want empty", got)
+	}
+}

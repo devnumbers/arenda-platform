@@ -10,11 +10,14 @@ import (
 	"github.com/google/uuid"
 )
 
-// QueueEmail and QueuePush are the two River queues. Separate queues keep the
-// SMTP ceiling and the push fan-out from starving each other.
+// QueueEmail and QueuePush are the two delivery queues; QueueTasks carries
+// the timed tasks' due-minute jobs (issue #750). Separate queues keep the
+// SMTP ceiling, the push fan-out and the scheduled task jobs from starving
+// each other.
 const (
 	QueueEmail = "notifications_email"
 	QueuePush  = "notifications_push"
+	QueueTasks = "notifications_tasks"
 )
 
 // DeliverEmailArgs delivers one notification's email leg. The args are the
@@ -35,3 +38,15 @@ type DeliverPushArgs struct {
 
 // Kind identifies the job kind to River.
 func (DeliverPushArgs) Kind() string { return "notifications:deliver_push" }
+
+// TaskOverdueArgs publishes one timed task's «Задача просрочена» at its due
+// minute (issue #750). The args are the job's dedup key: one task has at
+// most one overdue job in flight — the hourly scan re-asks freely and River
+// answers the standing job. The worker reloads the task at wake-up, so the
+// job never carries content, only the id.
+type TaskOverdueArgs struct {
+	TaskID uuid.UUID `json:"task_id"`
+}
+
+// Kind identifies the job kind to River.
+func (TaskOverdueArgs) Kind() string { return "notifications:task_overdue" }

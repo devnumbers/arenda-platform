@@ -33,6 +33,24 @@ var deeplinks = map[domain.EventType]func(domain.Payload) string{
 	// the snapshot ids are exactly what the publisher put there.
 	domain.EventPaymentDue:     paymentPath,
 	domain.EventPaymentOverdue: paymentPath,
+	// The task's edit screen is its rule's screen (#750): a property-bound
+	// task navigates through the property, the task without a property —
+	// through the flat tasks route (ADR 0052); the ids are exactly what the
+	// publisher put in the payload.
+	domain.EventTaskOverdue: taskPath,
+}
+
+// taskPath builds the task's rule-edit path from the payload: the property
+// snapshot's id and the rule id (Payload.TaskRuleID), or the rule id alone
+// for the task without a property.
+func taskPath(p domain.Payload) string {
+	if p.TaskRuleID == nil {
+		return ""
+	}
+	if p.Property != nil {
+		return fmt.Sprintf("/properties/%s/tasks/%s/edit", p.Property.ID, *p.TaskRuleID)
+	}
+	return fmt.Sprintf("/tasks/%s/edit", *p.TaskRuleID)
 }
 
 // paymentPath builds the payment page path from the payload: the property

@@ -254,3 +254,91 @@ WHERE u.timezone = $1
   AND p.status IN ('active', 'maintenance')
 ORDER BY o.id;
 
+-- name: ListTaskScanZones :many
+-- The tasks scan's sweep targets (карта #734, #750; ADR 0048 p.3): the
+-- distinct owner timezones having active dated tasks on non-archived
+-- properties or without a property — the only tasks the scan can fire for
+-- (the ticks' status canon, same as the rental scan; ADR 0052 — the task
+-- without a property stays in its owner's book). Stateless — every run
+-- re-lists, no per-zone state is kept.
+SELECT DISTINCT u.timezone
+FROM tasks t
+JOIN users u ON u.id = t.owner_id
+LEFT JOIN properties p ON p.id = t.property_id
+WHERE t.completed_date IS NULL
+  AND t.due_date IS NOT NULL
+  AND (t.property_id IS NULL OR p.status IN ('active', 'maintenance'))
+ORDER BY u.timezone;
+
+-- name: ListTaskScheduledTargets :many
+-- The tasks scan's scheduled leg (issue #750): the active timed tasks whose
+-- term instant — (due_date + due_time) read in the owner's timezone — falls
+-- in the window (from, until]. Each one gets a due-minute River job booked
+-- at its term instant; the date-only tasks stay out (their notification is
+-- the first sweep after the day's end) and so do the undated ones (без
+-- срока — никогда).
+SELECT t.id AS task_id,
+       CAST(((t.due_date + t.due_time) AT TIME ZONE u.timezone) AS timestamptz) AS due_at
+FROM tasks t
+JOIN users u ON u.id = t.owner_id
+LEFT JOIN properties p ON p.id = t.property_id
+WHERE t.completed_date IS NULL
+  AND t.due_date IS NOT NULL
+  AND t.due_time IS NOT NULL
+  AND (t.property_id IS NULL OR p.status IN ('active', 'maintenance'))
+  AND ((t.due_date + t.due_time) AT TIME ZONE u.timezone) > $1::timestamptz
+  AND ((t.due_date + t.due_time) AT TIME ZONE u.timezone) <= $2::timestamptz
+ORDER BY t.id;
+
+-- name: ListTaskOverdueTargets :many
+-- One zone's overdue tasks as of the sweep's instant (решение #737, тип №4):
+-- active, dated, term passed — the timed ones by their term minute
+-- (в минуту срока, включительно, tasks/CONTEXT.md «Просрочка»), the
+-- date-only ones strictly after the zone's day's end (первый скан после
+-- границы суток). Non-archived property or no property at all (ADR 0052).
+-- The dedup key (task id) keeps a long-overdue task single — the sweep
+-- lists it hourly, the publication inserts nothing.
+SELECT t.id AS task_id,
+       t.title,
+       t.due_date,
+       t.due_time,
+       t.property_id,
+       p.name AS property_name,
+       p.address AS property_address,
+       t.rule_id,
+       t.owner_id
+FROM tasks t
+JOIN users u ON u.id = t.owner_id
+LEFT JOIN properties p ON p.id = t.property_id
+WHERE u.timezone = $1
+  AND t.completed_date IS NULL
+  AND t.due_date IS NOT NULL
+  AND (t.property_id IS NULL OR p.status IN ('active', 'maintenance'))
+  AND (
+    (t.due_time IS NOT NULL AND ((t.due_date + t.due_time) AT TIME ZONE u.timezone) <= $2::timestamptz)
+    OR (t.due_time IS NULL AND t.due_date < $3::date)
+  )
+ORDER BY t.id;
+
+-- name: GetScheduledOverdueTask :one
+-- The due-minute job's delivery-time resolution (issue #750): the task as
+-- it stands at its term minute. A gone (rule edit removed the stale row),
+-- completed, date-only, or archived-property task answers no row — the job
+-- finishes without publishing. The rule id travels for the screen path: an
+-- active task's edit screen is its rule's screen.
+SELECT t.id AS task_id,
+       t.title,
+       t.due_date,
+       t.due_time,
+       t.property_id,
+       p.name AS property_name,
+       p.address AS property_address,
+       t.rule_id,
+       t.owner_id
+FROM tasks t
+LEFT JOIN properties p ON p.id = t.property_id
+WHERE t.id = $1
+  AND t.completed_date IS NULL
+  AND t.due_time IS NOT NULL
+  AND (t.property_id IS NULL OR p.status IN ('active', 'maintenance'));
+

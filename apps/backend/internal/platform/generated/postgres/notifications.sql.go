@@ -217,6 +217,58 @@ func (q *Queries) GetRentalActionState(ctx context.Context, id pgtype.UUID) (Get
 	return i, err
 }
 
+const getScheduledOverdueTask = `-- name: GetScheduledOverdueTask :one
+SELECT t.id AS task_id,
+       t.title,
+       t.due_date,
+       t.due_time,
+       t.property_id,
+       p.name AS property_name,
+       p.address AS property_address,
+       t.rule_id,
+       t.owner_id
+FROM tasks t
+LEFT JOIN properties p ON p.id = t.property_id
+WHERE t.id = $1
+  AND t.completed_date IS NULL
+  AND t.due_time IS NOT NULL
+  AND (t.property_id IS NULL OR p.status IN ('active', 'maintenance'))
+`
+
+type GetScheduledOverdueTaskRow struct {
+	TaskID          pgtype.UUID `json:"task_id"`
+	Title           string      `json:"title"`
+	DueDate         pgtype.Date `json:"due_date"`
+	DueTime         pgtype.Time `json:"due_time"`
+	PropertyID      pgtype.UUID `json:"property_id"`
+	PropertyName    pgtype.Text `json:"property_name"`
+	PropertyAddress pgtype.Text `json:"property_address"`
+	RuleID          pgtype.UUID `json:"rule_id"`
+	OwnerID         pgtype.UUID `json:"owner_id"`
+}
+
+// The due-minute job's delivery-time resolution (issue #750): the task as
+// it stands at its term minute. A gone (rule edit removed the stale row),
+// completed, date-only, or archived-property task answers no row — the job
+// finishes without publishing. The rule id travels for the screen path: an
+// active task's edit screen is its rule's screen.
+func (q *Queries) GetScheduledOverdueTask(ctx context.Context, id pgtype.UUID) (GetScheduledOverdueTaskRow, error) {
+	row := q.db.QueryRow(ctx, getScheduledOverdueTask, id)
+	var i GetScheduledOverdueTaskRow
+	err := row.Scan(
+		&i.TaskID,
+		&i.Title,
+		&i.DueDate,
+		&i.DueTime,
+		&i.PropertyID,
+		&i.PropertyName,
+		&i.PropertyAddress,
+		&i.RuleID,
+		&i.OwnerID,
+	)
+	return i, err
+}
+
 const getTaskOpenState = `-- name: GetTaskOpenState :one
 SELECT EXISTS (SELECT 1 FROM tasks WHERE id = $1 AND completed_date IS NULL) AS open
 `
@@ -644,6 +696,173 @@ func (q *Queries) ListRentalCompletedTargets(ctx context.Context, arg ListRental
 			&i.PropertyAddress,
 			&i.OwnerID,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTaskOverdueTargets = `-- name: ListTaskOverdueTargets :many
+SELECT t.id AS task_id,
+       t.title,
+       t.due_date,
+       t.due_time,
+       t.property_id,
+       p.name AS property_name,
+       p.address AS property_address,
+       t.rule_id,
+       t.owner_id
+FROM tasks t
+JOIN users u ON u.id = t.owner_id
+LEFT JOIN properties p ON p.id = t.property_id
+WHERE u.timezone = $1
+  AND t.completed_date IS NULL
+  AND t.due_date IS NOT NULL
+  AND (t.property_id IS NULL OR p.status IN ('active', 'maintenance'))
+  AND (
+    (t.due_time IS NOT NULL AND ((t.due_date + t.due_time) AT TIME ZONE u.timezone) <= $2::timestamptz)
+    OR (t.due_time IS NULL AND t.due_date < $3::date)
+  )
+ORDER BY t.id
+`
+
+type ListTaskOverdueTargetsParams struct {
+	Timezone string             `json:"timezone"`
+	Column2  pgtype.Timestamptz `json:"column_2"`
+	Column3  pgtype.Date        `json:"column_3"`
+}
+
+type ListTaskOverdueTargetsRow struct {
+	TaskID          pgtype.UUID `json:"task_id"`
+	Title           string      `json:"title"`
+	DueDate         pgtype.Date `json:"due_date"`
+	DueTime         pgtype.Time `json:"due_time"`
+	PropertyID      pgtype.UUID `json:"property_id"`
+	PropertyName    pgtype.Text `json:"property_name"`
+	PropertyAddress pgtype.Text `json:"property_address"`
+	RuleID          pgtype.UUID `json:"rule_id"`
+	OwnerID         pgtype.UUID `json:"owner_id"`
+}
+
+// One zone's overdue tasks as of the sweep's instant (решение #737, тип №4):
+// active, dated, term passed — the timed ones by their term minute
+// (в минуту срока, включительно, tasks/CONTEXT.md «Просрочка»), the
+// date-only ones strictly after the zone's day's end (первый скан после
+// границы суток). Non-archived property or no property at all (ADR 0052).
+// The dedup key (task id) keeps a long-overdue task single — the sweep
+// lists it hourly, the publication inserts nothing.
+func (q *Queries) ListTaskOverdueTargets(ctx context.Context, arg ListTaskOverdueTargetsParams) ([]ListTaskOverdueTargetsRow, error) {
+	rows, err := q.db.Query(ctx, listTaskOverdueTargets, arg.Timezone, arg.Column2, arg.Column3)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListTaskOverdueTargetsRow{}
+	for rows.Next() {
+		var i ListTaskOverdueTargetsRow
+		if err := rows.Scan(
+			&i.TaskID,
+			&i.Title,
+			&i.DueDate,
+			&i.DueTime,
+			&i.PropertyID,
+			&i.PropertyName,
+			&i.PropertyAddress,
+			&i.RuleID,
+			&i.OwnerID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTaskScanZones = `-- name: ListTaskScanZones :many
+SELECT DISTINCT u.timezone
+FROM tasks t
+JOIN users u ON u.id = t.owner_id
+LEFT JOIN properties p ON p.id = t.property_id
+WHERE t.completed_date IS NULL
+  AND t.due_date IS NOT NULL
+  AND (t.property_id IS NULL OR p.status IN ('active', 'maintenance'))
+ORDER BY u.timezone
+`
+
+// The tasks scan's sweep targets (карта #734, #750; ADR 0048 p.3): the
+// distinct owner timezones having active dated tasks on non-archived
+// properties or without a property — the only tasks the scan can fire for
+// (the ticks' status canon, same as the rental scan; ADR 0052 — the task
+// without a property stays in its owner's book). Stateless — every run
+// re-lists, no per-zone state is kept.
+func (q *Queries) ListTaskScanZones(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, listTaskScanZones)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var timezone string
+		if err := rows.Scan(&timezone); err != nil {
+			return nil, err
+		}
+		items = append(items, timezone)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTaskScheduledTargets = `-- name: ListTaskScheduledTargets :many
+SELECT t.id AS task_id,
+       CAST(((t.due_date + t.due_time) AT TIME ZONE u.timezone) AS timestamptz) AS due_at
+FROM tasks t
+JOIN users u ON u.id = t.owner_id
+LEFT JOIN properties p ON p.id = t.property_id
+WHERE t.completed_date IS NULL
+  AND t.due_date IS NOT NULL
+  AND t.due_time IS NOT NULL
+  AND (t.property_id IS NULL OR p.status IN ('active', 'maintenance'))
+  AND ((t.due_date + t.due_time) AT TIME ZONE u.timezone) > $1::timestamptz
+  AND ((t.due_date + t.due_time) AT TIME ZONE u.timezone) <= $2::timestamptz
+ORDER BY t.id
+`
+
+type ListTaskScheduledTargetsParams struct {
+	Column1 pgtype.Timestamptz `json:"column_1"`
+	Column2 pgtype.Timestamptz `json:"column_2"`
+}
+
+type ListTaskScheduledTargetsRow struct {
+	TaskID pgtype.UUID        `json:"task_id"`
+	DueAt  pgtype.Timestamptz `json:"due_at"`
+}
+
+// The tasks scan's scheduled leg (issue #750): the active timed tasks whose
+// term instant — (due_date + due_time) read in the owner's timezone — falls
+// in the window (from, until]. Each one gets a due-minute River job booked
+// at its term instant; the date-only tasks stay out (their notification is
+// the first sweep after the day's end) and so do the undated ones (без
+// срока — никогда).
+func (q *Queries) ListTaskScheduledTargets(ctx context.Context, arg ListTaskScheduledTargetsParams) ([]ListTaskScheduledTargetsRow, error) {
+	rows, err := q.db.Query(ctx, listTaskScheduledTargets, arg.Column1, arg.Column2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListTaskScheduledTargetsRow{}
+	for rows.Next() {
+		var i ListTaskScheduledTargetsRow
+		if err := rows.Scan(&i.TaskID, &i.DueAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

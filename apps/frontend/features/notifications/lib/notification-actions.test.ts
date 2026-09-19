@@ -8,11 +8,13 @@ import {
 const PROPERTY_ID = '0194a3f8-0000-7000-8000-000000000001';
 const PAYMENT_ID = '0194a3f8-0000-7000-8000-000000000002';
 const TASK_ID = '0194a3f8-0000-7000-8000-000000000003';
+const TASK_RULE_ID = '0194a3f8-0000-7000-8000-000000000004';
 
 const fullPayload: NotificationPayload = {
   property: { id: PROPERTY_ID, name: '2-комнатная на Ленина' },
   paymentId: PAYMENT_ID,
   taskId: TASK_ID,
+  taskRuleId: TASK_RULE_ID,
 };
 
 describe('notificationActionView', () => {
@@ -37,7 +39,16 @@ describe('notificationActionView', () => {
     });
     expect(notificationActionView('open_task', fullPayload)).toStrictEqual({
       label: 'Выполнить',
-      href: `/tasks/${TASK_ID}/edit`,
+      href: `/properties/${PROPERTY_ID}/tasks/${TASK_RULE_ID}/edit`,
+      variant: 'primary',
+    });
+    // Экран задачи — экран её правила (#750): без объекта — плоский
+    // маршрут (ADR 0052).
+    expect(
+      notificationActionView('open_task', { taskId: TASK_ID, taskRuleId: TASK_RULE_ID }),
+    ).toStrictEqual({
+      label: 'Выполнить',
+      href: `/tasks/${TASK_RULE_ID}/edit`,
       variant: 'primary',
     });
   });

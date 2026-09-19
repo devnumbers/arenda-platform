@@ -97,5 +97,12 @@ func formatGraceDeadline(t time.Time) string {
 	// The platform's users are in Russia (RUB-only product, ADR 0036), so
 	// Moscow's offset approximates their calendar day for a deadline label.
 	msk := t.In(time.FixedZone("MSK", 3*60*60))
-	return fmt.Sprintf("%d %s", msk.Day(), graceMonths[int(msk.Month())-1])
+	return formatDayMonth(msk)
+}
+
+// formatDayMonth renders a date as a Russian day-month string ("20
+// сентября") — the scan publishers' shared body rendering: the copy names
+// the day, not the year (payments #749, tasks #750).
+func formatDayMonth(t time.Time) string {
+	return fmt.Sprintf("%d %s", t.Day(), graceMonths[int(t.Month())-1])
 }

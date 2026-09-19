@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	notificationsjob "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/notificationsjob"
+	notificationspg "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/postgres"
 	notificationsstream "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/stream"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
@@ -29,6 +30,12 @@ type RiverQueue struct {
 	// call it strictly after the publishing context's own transaction
 	// commits (the grace-events canon, решение #740).
 	Publisher *notificationsapp.Publisher
+	// TasksPublisher is the tasks scan's publisher (issue #750): the hourly
+	// sweep books the upcoming timed tasks' due-minute jobs through the same
+	// client and sweeps the zones for the already-overdue ones; the
+	// due-minute worker publishes through it (bound post-construction, see
+	// DeferredTaskOverdueDeliverer).
+	TasksPublisher *notificationsapp.TasksPublisher
 	// Stream is the shared event stream hub (карта #734, #742; ADR 0058):
 	// the publisher pushes the live frames through it post-commit and the
 	// HTTP server serves GET /notifications/stream from it. The composition
@@ -40,13 +47,22 @@ type RiverQueue struct {
 	ProviderLimiter *httpsupport.RateLimiter
 }
 
-// WireRiverQueue builds the River client with the two delivery queues and
-// the email/push workers, plus the publisher over the transactional
-// enqueuer and the event stream hub behind it (#742, ADR 0058). The client
-// is not started here: NewWorkers runs it in the workers phase and
-// Workers.Wait waits for its full stop. Push jobs are enqueued only when a
-// push sender could be built (VAPID keys configured); without them the
-// pipeline runs in the email-only local mode.
+// notificationsTaskMaxWorkers is the due-minute jobs' ceiling: the jobs are
+// tiny (one feed read and one write) and rare — a fixed domain decision, no
+// env knob (the scan cadence canon).
+const notificationsTaskMaxWorkers = 2
+
+// WireRiverQueue builds the River client with the two delivery queues, the
+// due-minute tasks queue and the email/push/task workers, plus the
+// publisher over the transactional enqueuer and the event stream hub behind
+// it (#742, ADR 0058). The tasks scan publisher wires here too (issue
+// #750): its scheduled leg books the due-minute jobs through the same
+// client, so it binds the worker's deferred deliverer — the composition
+// root passes it to the scan group. The client is not started here:
+// NewWorkers runs it in the workers phase and Workers.Wait waits for its
+// full stop. Push jobs are enqueued only when a push sender could be built
+// (VAPID keys configured); without them the pipeline runs in the email-only
+// local mode.
 func WireRiverQueue(
 	ctx context.Context,
 	p platformDeps,
@@ -54,6 +70,7 @@ func WireRiverQueue(
 	resolver notificationsapp.ContactResolver,
 	emailer notificationsapp.TemplateEmailSender,
 	pushSender notificationsapp.PushSender,
+	taskStore *notificationspg.TaskScanStore,
 ) (*RiverQueue, error) {
 	cfg := p.Cfg
 
@@ -93,11 +110,14 @@ func WireRiverQueue(
 		notificationsMod.PushSubscriptionRepo,
 		p.Logger,
 	))
+	taskDeliverer := &notificationsjob.DeferredTaskOverdueDeliverer{}
+	river.AddWorker(workers, notificationsjob.NewTaskOverdueWorker(taskDeliverer, p.Logger))
 
 	client, err := river.NewClient(riverpgxv5.New(p.Pool), &river.Config{
 		Queues: map[string]river.QueueConfig{
 			notificationsjob.QueueEmail: {MaxWorkers: cfg.NotificationsEmailMaxWorkers},
 			notificationsjob.QueuePush:  {MaxWorkers: cfg.NotificationsPushMaxWorkers},
+			notificationsjob.QueueTasks: {MaxWorkers: notificationsTaskMaxWorkers},
 		},
 		Workers:         workers,
 		Logger:          p.Logger,
@@ -123,10 +143,16 @@ func WireRiverQueue(
 	)
 
 	notificationsStream := sse.NewHub(streamMetrics)
+	publisher := notificationsapp.NewPublisher(notificationsMod.NotificationRepo, queue,
+		notificationsstream.NewPublisher(notificationsStream, p.Clock), p.UoW, p.Logger)
+	tasksPublisher := notificationsapp.NewTasksPublisher(publisher, taskStore, taskStore,
+		notificationsjob.NewTaskOverdueScheduler(client))
+	taskDeliverer.Bind(tasksPublisher)
+
 	return &RiverQueue{
-		Client: client,
-		Publisher: notificationsapp.NewPublisher(notificationsMod.NotificationRepo, queue,
-			notificationsstream.NewPublisher(notificationsStream, p.Clock), p.UoW, p.Logger),
+		Client:          client,
+		Publisher:       publisher,
+		TasksPublisher:  tasksPublisher,
 		Stream:          notificationsStream,
 		ProviderLimiter: providerLimiter,
 	}, nil

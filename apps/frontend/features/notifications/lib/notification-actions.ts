@@ -35,8 +35,16 @@ export function notificationActionView(
         ? { label: 'Оплатить', href: ROUTES.propertyPayment(propertyId, payload.paymentId), variant: 'primary' }
         : null;
     case 'open_task':
-      return payload.taskId
-        ? { label: 'Выполнить', href: ROUTES.taskEdit(payload.taskId), variant: 'primary' }
+      // Экран задачи — экран её правила (#750): объектная задача ведёт
+      // через объект, безобъектная — по плоскому маршруту (ADR 0052).
+      return payload.taskRuleId
+        ? {
+            label: 'Выполнить',
+            href: propertyId
+              ? ROUTES.propertyTaskEdit(propertyId, payload.taskRuleId)
+              : ROUTES.taskEdit(payload.taskRuleId),
+            variant: 'primary',
+          }
         : null;
     case 'open_property':
       return propertyId

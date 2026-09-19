@@ -156,8 +156,12 @@ type Payload struct {
 	// PaymentDate is the payment events' operation date (решение #737:
 	// payload payment = id правила + дата операции) — the calendar date the
 	// «Оплатить» button's live check pins the occurrence to (#743).
-	PaymentDate  *time.Time `json:"payment_date,omitempty"`
-	TaskID       *uuid.UUID `json:"task_id,omitempty"`
+	PaymentDate *time.Time `json:"payment_date,omitempty"`
+	TaskID      *uuid.UUID `json:"task_id,omitempty"`
+	// TaskRuleID is the task's producing rule (the tasks events, #750): an
+	// active task's screens are its rule's screens, so the «переход к
+	// задаче» navigation needs the rule id alongside the task id.
+	TaskRuleID   *uuid.UUID `json:"task_rule_id,omitempty"`
 	MembershipID *uuid.UUID `json:"membership_id,omitempty"`
 	InvitationID *uuid.UUID `json:"invitation_id,omitempty"`
 	Tariff       *TariffRef `json:"tariff,omitempty"`

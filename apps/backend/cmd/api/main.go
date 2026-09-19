@@ -175,8 +175,11 @@ func run() error {
 	//     post-commit seam the pipeline publishers call (#741, #748–#752).
 	//     The grace subscribers (step 11.6) are the first to call it. The
 	//     publisher also pushes the live SSE frames through the stream hub
-	//     (#742, ADR 0058), which the HTTP server serves below.
-	riverMod, err := wire.WireRiverQueue(ctx, p, notificationsMod, delivery.resolver, delivery.emailer, pushSender)
+	//     (#742, ADR 0058), which the HTTP server serves below. The tasks
+	//     scan publisher (#750) wires here as well — its scheduled leg books
+	//     the due-minute jobs through the same client.
+	taskScanStore := notificationspg.NewTaskScanStore(p.DB)
+	riverMod, err := wire.WireRiverQueue(ctx, p, notificationsMod, delivery.resolver, delivery.emailer, pushSender, taskScanStore)
 	if err != nil {
 		return err
 	}
@@ -190,17 +193,21 @@ func run() error {
 	//     event fires unwired.
 	subscribeGraceEvents(eventDispatcher, notificationsapp.NewGracePublisher(riverMod.Publisher))
 
-	// 11.7 The notifications scan (карта #734, #748, #749): the hourly zone
+	// 11.7 The notifications scan (карта #734, #748–#750): the hourly zone
 	//     sweep publishes the scan-driven catalog events — the rentals that
-	//     moved to «Ожидает действия» and the payments that came due or
-	//     overdue — through the same pipeline publisher; the Аренда and
-	//     Платежи и операции categories are gated per-channel by the
-	//     settings matrix at delivery time.
+	//     moved to «Ожидает действия», the payments that came due or
+	//     overdue, and the tasks whose term has passed — through the same
+	//     pipeline publisher; the Аренда, Платежи и операции and Задачи
+	//     categories are gated per-channel by the settings matrix at
+	//     delivery time. The tasks publisher's scheduled leg (#750) books
+	//     the timed tasks' due-minute jobs on the way — the minute precision
+	//     the hourly cadence cannot give.
 	scanStore := notificationspg.NewRentalScanStore(p.DB)
 	paymentScanStore := notificationspg.NewPaymentScanStore(p.DB)
 	notificationsScan := notificationsapp.NewScanGroup(
 		notificationsapp.NewRentalCompletedPublisher(riverMod.Publisher, scanStore, scanStore),
 		notificationsapp.NewPaymentsPublisher(riverMod.Publisher, paymentScanStore, paymentScanStore),
+		riverMod.TasksPublisher,
 	)
 
 	// 12. Background workers (6 goroutines + the delivery queue client).

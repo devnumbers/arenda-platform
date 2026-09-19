@@ -99,6 +99,9 @@ export type NotificationPayload = {
   /** Дата операции (решение #737: payment = правило + дата операции, #749). */
   readonly paymentDate?: string;
   readonly taskId?: string;
+  /** Id правила задачи (задача просрочена, #750): экран задачи — экран её
+   * правила, переход ведёт по нему. */
+  readonly taskRuleId?: string;
   readonly membershipId?: string;
   readonly invitationId?: string;
   readonly tariff?: NotificationTariffRef;
