@@ -3,6 +3,7 @@ package notificationsjob
 import (
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
 )
 
@@ -16,13 +17,48 @@ func TestDeeplinkForGrace(t *testing.T) {
 		domain.EventSubscriptionGraceEntered,
 		domain.EventSubscriptionGraceExpiring,
 	} {
-		if got := DeepLinkFor(eventType); got != graceNotificationPath {
+		n := domain.Notification{EventType: eventType}
+		if got := DeepLinkFor(n); got != graceNotificationPath {
 			t.Errorf("DeepLinkFor(%q) = %q, want %s", eventType, got, graceNotificationPath)
 		}
 	}
 
 	// An event without an entry delivers without a link.
-	if got := DeepLinkFor(domain.EventSystemMaintenance); got != "" {
+	if got := DeepLinkFor(domain.Notification{EventType: domain.EventSystemMaintenance}); got != "" {
 		t.Errorf("DeepLinkFor(system_maintenance) = %q, want empty", got)
+	}
+}
+
+// The rental-completed event (#748) routes to the rental's screen, whose
+// path carries both the property and the rental — the ids come from the
+// row's payload, not from a static path.
+func TestDeeplinkForRentalCompleted(t *testing.T) {
+	t.Parallel()
+
+	propertyID := uuid.Must(uuid.NewV7())
+	rentalID := uuid.Must(uuid.NewV7())
+	n := domain.Notification{
+		EventType: domain.EventRentalCompleted,
+		Payload: domain.Payload{
+			Property: &domain.EntityRef{ID: propertyID, Name: "Квартира"},
+			RentalID: &rentalID,
+		},
+	}
+	want := "/properties/" + propertyID.String() + "/rentals/" + rentalID.String()
+	if got := DeepLinkFor(n); got != want {
+		t.Errorf("DeepLinkFor(rental_completed) = %q, want %q", got, want)
+	}
+
+	// A payload without the ids (a hand-edited row) delivers without a link
+	// rather than a broken one.
+	half := domain.Notification{
+		EventType: domain.EventRentalCompleted,
+		Payload:   domain.Payload{Property: &domain.EntityRef{ID: propertyID, Name: "Квартира"}},
+	}
+	if got := DeepLinkFor(half); got != "" {
+		t.Errorf("DeepLinkFor(rental_completed without rental id) = %q, want empty", got)
+	}
+	if got := DeepLinkFor(domain.Notification{EventType: domain.EventRentalCompleted}); got != "" {
+		t.Errorf("DeepLinkFor(rental_completed without payload) = %q, want empty", got)
 	}
 }

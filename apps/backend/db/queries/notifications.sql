@@ -133,3 +133,50 @@ SELECT EXISTS (SELECT 1 FROM operations WHERE id = $1 AND status = 'planned') AS
 -- its button (решение #737).
 SELECT EXISTS (SELECT 1 FROM tasks WHERE id = $1 AND completed_date IS NULL) AS open;
 
+-- name: ListRentalCompletedScanZones :many
+-- The rental-completed scan's sweep targets (карта #734, #748; ADR 0048
+-- p.3): the distinct owner timezones having unfinished rentals with a
+-- planned end on non-archived properties — the only rentals the scan can
+-- fire for (the ticks' status canon: an archived property's rentals
+-- mutations are rejected, the action buttons would be dead ends).
+-- Stateless — every run re-lists, no per-zone state is kept.
+SELECT DISTINCT u.timezone
+FROM rentals r
+JOIN properties p ON p.id = r.property_id
+JOIN users u ON u.id = p.owner_id
+WHERE r.completed_date IS NULL
+  AND r.planned_end_date IS NOT NULL
+  AND p.status IN ('active', 'maintenance')
+ORDER BY u.timezone;
+
+-- name: ListRentalCompletedTargets :many
+-- One zone's needs_attention rentals as of the zone's today (решение #737,
+-- тип №1: the day after the planned end): not completed, planned end
+-- strictly before today, non-archived property. The property snapshot
+-- (name, address) travels for the publication cards (решение владельца
+-- 19.09.2026, #745).
+SELECT r.id AS rental_id,
+       r.planned_end_date,
+       p.id AS property_id,
+       p.name AS property_name,
+       p.address AS property_address,
+       p.owner_id
+FROM rentals r
+JOIN properties p ON p.id = r.property_id
+JOIN users u ON u.id = p.owner_id
+WHERE u.timezone = $1
+  AND r.completed_date IS NULL
+  AND r.planned_end_date IS NOT NULL
+  AND r.planned_end_date < $2::date
+  AND p.status IN ('active', 'maintenance')
+ORDER BY r.id;
+
+-- name: ListRentalCompletedRecipients :many
+-- The property's active members' user ids — the event's recipients besides
+-- the owner (решение #737: активные участники, «Просмотр» включительно; a
+-- suspended membership is not an active participant).
+SELECT user_id
+FROM property_members
+WHERE property_id = $1 AND status = 'active'
+ORDER BY user_id;
+

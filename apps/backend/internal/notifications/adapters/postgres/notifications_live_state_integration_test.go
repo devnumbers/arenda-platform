@@ -35,13 +35,7 @@ func setupLiveState(t *testing.T) (*FeedLiveState, *pgxpool.Pool, uuid.UUID) {
 // needs its own property (the one-unfinished-per-property unique index).
 func createLiveProperty(t *testing.T, pool *pgxpool.Pool, ownerID uuid.UUID) uuid.UUID {
 	t.Helper()
-	propertyID := uuid.Must(uuid.NewV7())
-	_, err := pool.Exec(context.Background(), `
-		INSERT INTO properties (id, owner_id, name, type, address, status)
-		VALUES ($1, $2, 'Объект', 'apartment', 'Москва, Тверская 1', 'active')`,
-		propertyID, ownerID)
-	require.NoError(t, err)
-	return propertyID
+	return createLivePropertyFor(t, pool, ownerID, "Объект", "Москва, Тверская 1")
 }
 
 // insertRental adds the referenced payment row plus the rental with the

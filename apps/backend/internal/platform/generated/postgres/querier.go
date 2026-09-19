@@ -728,6 +728,23 @@ type Querier interface {
 	ListPushSubscriptionsByUser(ctx context.Context, userID pgtype.UUID) ([]PushSubscription, error)
 	ListRecentSubscriptionPaymentsAdmin(ctx context.Context) ([]ListRecentSubscriptionPaymentsAdminRow, error)
 	ListRecentUsersAdmin(ctx context.Context) ([]ListRecentUsersAdminRow, error)
+	// The property's active members' user ids — the event's recipients besides
+	// the owner (решение #737: активные участники, «Просмотр» включительно; a
+	// suspended membership is not an active participant).
+	ListRentalCompletedRecipients(ctx context.Context, propertyID pgtype.UUID) ([]pgtype.UUID, error)
+	// The rental-completed scan's sweep targets (карта #734, #748; ADR 0048
+	// p.3): the distinct owner timezones having unfinished rentals with a
+	// planned end on non-archived properties — the only rentals the scan can
+	// fire for (the ticks' status canon: an archived property's rentals
+	// mutations are rejected, the action buttons would be dead ends).
+	// Stateless — every run re-lists, no per-zone state is kept.
+	ListRentalCompletedScanZones(ctx context.Context) ([]string, error)
+	// One zone's needs_attention rentals as of the zone's today (решение #737,
+	// тип №1: the day after the planned end): not completed, planned end
+	// strictly before today, non-archived property. The property snapshot
+	// (name, address) travels for the publication cards (решение владельца
+	// 19.09.2026, #745).
+	ListRentalCompletedTargets(ctx context.Context, arg ListRentalCompletedTargetsParams) ([]ListRentalCompletedTargetsRow, error)
 	// The property's rentals: unfinished first (newest start on top), then the
 	// completed ones by completion date, fresh on top (ADR 0053 §4).
 	ListRentalsByProperty(ctx context.Context, arg ListRentalsByPropertyParams) ([]ListRentalsByPropertyRow, error)

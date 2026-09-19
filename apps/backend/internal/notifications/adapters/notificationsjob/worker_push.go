@@ -74,7 +74,7 @@ func (w *DeliverPushWorker) Work(ctx context.Context, job *river.Job[DeliverPush
 		Title:     n.Title,
 		Body:      n.Body,
 		Tag:       n.ID.String(),
-		URL:       DeepLinkFor(n.EventType),
+		URL:       DeepLinkFor(n),
 		EventType: n.EventType,
 	}
 	// A dead enum value has no category; the empty one reads as always-on.

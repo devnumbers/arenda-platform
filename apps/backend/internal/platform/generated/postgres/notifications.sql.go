@@ -331,6 +331,137 @@ func (q *Queries) ListNotifications(ctx context.Context, arg ListNotificationsPa
 	return items, nil
 }
 
+const listRentalCompletedRecipients = `-- name: ListRentalCompletedRecipients :many
+SELECT user_id
+FROM property_members
+WHERE property_id = $1 AND status = 'active'
+ORDER BY user_id
+`
+
+// The property's active members' user ids — the event's recipients besides
+// the owner (решение #737: активные участники, «Просмотр» включительно; a
+// suspended membership is not an active participant).
+func (q *Queries) ListRentalCompletedRecipients(ctx context.Context, propertyID pgtype.UUID) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listRentalCompletedRecipients, propertyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var user_id pgtype.UUID
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRentalCompletedScanZones = `-- name: ListRentalCompletedScanZones :many
+SELECT DISTINCT u.timezone
+FROM rentals r
+JOIN properties p ON p.id = r.property_id
+JOIN users u ON u.id = p.owner_id
+WHERE r.completed_date IS NULL
+  AND r.planned_end_date IS NOT NULL
+  AND p.status IN ('active', 'maintenance')
+ORDER BY u.timezone
+`
+
+// The rental-completed scan's sweep targets (карта #734, #748; ADR 0048
+// p.3): the distinct owner timezones having unfinished rentals with a
+// planned end on non-archived properties — the only rentals the scan can
+// fire for (the ticks' status canon: an archived property's rentals
+// mutations are rejected, the action buttons would be dead ends).
+// Stateless — every run re-lists, no per-zone state is kept.
+func (q *Queries) ListRentalCompletedScanZones(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, listRentalCompletedScanZones)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var timezone string
+		if err := rows.Scan(&timezone); err != nil {
+			return nil, err
+		}
+		items = append(items, timezone)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRentalCompletedTargets = `-- name: ListRentalCompletedTargets :many
+SELECT r.id AS rental_id,
+       r.planned_end_date,
+       p.id AS property_id,
+       p.name AS property_name,
+       p.address AS property_address,
+       p.owner_id
+FROM rentals r
+JOIN properties p ON p.id = r.property_id
+JOIN users u ON u.id = p.owner_id
+WHERE u.timezone = $1
+  AND r.completed_date IS NULL
+  AND r.planned_end_date IS NOT NULL
+  AND r.planned_end_date < $2::date
+  AND p.status IN ('active', 'maintenance')
+ORDER BY r.id
+`
+
+type ListRentalCompletedTargetsParams struct {
+	Timezone string      `json:"timezone"`
+	Column2  pgtype.Date `json:"column_2"`
+}
+
+type ListRentalCompletedTargetsRow struct {
+	RentalID        pgtype.UUID `json:"rental_id"`
+	PlannedEndDate  pgtype.Date `json:"planned_end_date"`
+	PropertyID      pgtype.UUID `json:"property_id"`
+	PropertyName    string      `json:"property_name"`
+	PropertyAddress string      `json:"property_address"`
+	OwnerID         pgtype.UUID `json:"owner_id"`
+}
+
+// One zone's needs_attention rentals as of the zone's today (решение #737,
+// тип №1: the day after the planned end): not completed, planned end
+// strictly before today, non-archived property. The property snapshot
+// (name, address) travels for the publication cards (решение владельца
+// 19.09.2026, #745).
+func (q *Queries) ListRentalCompletedTargets(ctx context.Context, arg ListRentalCompletedTargetsParams) ([]ListRentalCompletedTargetsRow, error) {
+	rows, err := q.db.Query(ctx, listRentalCompletedTargets, arg.Timezone, arg.Column2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListRentalCompletedTargetsRow{}
+	for rows.Next() {
+		var i ListRentalCompletedTargetsRow
+		if err := rows.Scan(
+			&i.RentalID,
+			&i.PlannedEndDate,
+			&i.PropertyID,
+			&i.PropertyName,
+			&i.PropertyAddress,
+			&i.OwnerID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markAllNotificationsRead = `-- name: MarkAllNotificationsRead :execrows
 UPDATE notifications
 SET read_at = now()

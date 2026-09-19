@@ -56,7 +56,7 @@ func (p *Publisher) NotificationCreated(ctx context.Context, n domain.Notificati
 			ContextLabel: n.ContextLabel,
 			Title:        n.Title,
 			Body:         n.Body,
-			URL:          notificationsjob.DeepLinkFor(n.EventType),
+			URL:          notificationsjob.DeepLinkFor(n),
 		}),
 	})
 	if err != nil {
