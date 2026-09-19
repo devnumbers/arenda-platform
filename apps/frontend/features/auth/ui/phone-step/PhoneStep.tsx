@@ -1,10 +1,10 @@
 'use client';
 
-import { type ChangeEvent, type JSX } from "react";
+import { type ChangeEvent, type JSX, useState } from "react";
 import { formatPhoneInput, isPhoneValid } from "@/shared/lib/phone";
 import { formatCountdown } from "@/shared/lib/countdown";
 import { Support } from "@/shared/assets/icons";
-import { Button, HeaderLogo, TextField } from "@/shared/ui/design";
+import { Button, HeaderLogo, SupportModal, TextField } from "@/shared/ui/design";
 import { ROUTES } from "@/shared/config/routes";
 
 export type PhoneStepProps = {
@@ -28,8 +28,7 @@ export type PhoneStepProps = {
  * (#733) «Запросить код можно через ММ:СС» (моно 14/16, tertiary). Юрссылки
  * ведут на лендинг (/privacy, /terms) в новой вкладке — самих страниц пока
  * нет, 404 лендинга не блокирует (решение владельца 18.09). «Написать в
- * поддержку» — заглушка mailto до модалки поддержки (#766); почта
- * hello@rentlee.ru — решение владельца 18.09 (карта #761). */
+ * поддержку» открывает модалку «Связаться с нами» (#766). */
 export function PhoneStep({
     phone,
     onPhoneChange,
@@ -38,6 +37,7 @@ export function PhoneStep({
     resendTimer = 0,
 }: PhoneStepProps): JSX.Element {
     const isWaiting = resendTimer > 0;
+    const [supportOpen, setSupportOpen] = useState(false);
 
     const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
         onPhoneChange(formatPhoneInput(event.target.value));
@@ -110,12 +110,12 @@ export function PhoneStep({
                 variant="white"
                 className="w-full"
                 trailingIcon={<Support />}
-                onClick={() => {
-                    window.location.href = "mailto:hello@rentlee.ru";
-                }}
+                onClick={() => setSupportOpen(true)}
             >
                 Написать в поддержку
             </Button>
+
+            <SupportModal open={supportOpen} onOpenChange={setSupportOpen} />
         </div>
     );
 }

@@ -147,9 +147,6 @@ export const ROUTES = {
   /** Глобальные «Участники» — страница-заглушка единого хрома (карта #556,
    * тикет #559); сама фича шаринга доступа — вне карты. */
   participants: '/participants',
-  /** Экран «Поддержка» (регистрирует единая нав-модель #558; страница живет
-   * до переезда на новый хром — карта #556). */
-  support: '/support',
   profile: '/profile',
   profileNotifications: '/profile/notifications',
   profileAccount: '/profile/account',

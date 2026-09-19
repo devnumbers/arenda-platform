@@ -64,6 +64,7 @@ export { DesktopMenuButton, type DesktopMenuButtonProps } from './desktop-menu-b
 export { DesktopSidebar } from './desktop-sidebar';
 export { DesktopNavPills } from './desktop-nav-pills';
 export { HeaderLogo, type HeaderLogoProps } from './header-logo';
+export { SupportModal, type SupportModalProps } from './support-modal';
 export {
   Modal,
   ModalClose,

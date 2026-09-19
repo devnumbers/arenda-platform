@@ -1,10 +1,10 @@
 'use client';
 
-import type { JSX } from 'react';
+import { useState, type JSX } from 'react';
 import NextLink from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
 import { CreditCard, Support, TimeHistory } from '@/shared/assets/icons';
-import { Button, buttonVariants, Skeleton } from '@/shared/ui/design';
+import { Button, Skeleton, SupportModal } from '@/shared/ui/design';
 import { billingKeys } from '@/shared/api/query-keys';
 import { ROUTES } from '@/shared/config/routes';
 import { useSubscription } from '@/features/billing';
@@ -23,6 +23,7 @@ import { TariffHero } from './tariff-hero';
 export function TariffScreen(): JSX.Element {
   const { data: subscription, isPending, isError, refetch } = useSubscription();
   const queryClient = useQueryClient();
+  const [supportOpen, setSupportOpen] = useState(false);
 
   if (isPending) {
     return <TariffScreenSkeleton />;
@@ -65,10 +66,18 @@ export function TariffScreen(): JSX.Element {
 
       <TariffFaq />
 
-      <NextLink href={ROUTES.support} className={buttonVariants({ variant: 'secondary' })}>
-        <Support className="h-6 w-6 shrink-0" aria-hidden />
+      {/* «Поддержка» — модалка «Связаться с нами» (#766): страницы /support
+       * больше нет. Иконка слева — как было на ссылке-кнопке. */}
+      <Button
+        type="button"
+        variant="secondary"
+        leadingIcon={<Support className="h-6 w-6" aria-hidden />}
+        onClick={() => setSupportOpen(true)}
+      >
         Поддержка
-      </NextLink>
+      </Button>
+
+      <SupportModal open={supportOpen} onOpenChange={setSupportOpen} />
     </div>
   );
 }

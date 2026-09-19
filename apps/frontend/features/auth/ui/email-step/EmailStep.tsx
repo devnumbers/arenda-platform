@@ -1,10 +1,10 @@
 'use client';
 
-import { type ChangeEvent, type JSX } from "react";
+import { type ChangeEvent, type JSX, useState } from "react";
 import { isEmailValid } from "@/shared/lib/email";
 import { formatCountdown } from "@/shared/lib/countdown";
 import { Support } from "@/shared/assets/icons";
-import { Button, HeaderLogo, TextField } from "@/shared/ui/design";
+import { Button, HeaderLogo, SupportModal, TextField } from "@/shared/ui/design";
 
 export type EmailStepProps = {
     email: string;
@@ -28,8 +28,8 @@ export type EmailStepProps = {
  * погашена + подпись resend-канона (#733) «Запросить код можно через
  * ММ:СС» (моно 14/16, tertiary). Шаг видят только новые пользователи
  * (sent:false из POST /auth/send, ADR 0015) — код уходит на введённую
- * почту. «Написать в поддержку» — заглушка mailto до модалки поддержки
- * (#766); почта hello@rentlee.ru — решение владельца 18.09 (карта #761). */
+ * почту. «Написать в поддержку» открывает модалку «Связаться с нами»
+ * (#766). */
 export function EmailStep({
     email,
     onEmailChange,
@@ -38,6 +38,7 @@ export function EmailStep({
     resendTimer = 0,
 }: EmailStepProps): JSX.Element {
     const isWaiting = resendTimer > 0;
+    const [supportOpen, setSupportOpen] = useState(false);
 
     const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
         onEmailChange(event.target.value);
@@ -93,12 +94,12 @@ export function EmailStep({
                 variant="white"
                 className="w-full"
                 trailingIcon={<Support />}
-                onClick={() => {
-                    window.location.href = "mailto:hello@rentlee.ru";
-                }}
+                onClick={() => setSupportOpen(true)}
             >
                 Написать в поддержку
             </Button>
+
+            <SupportModal open={supportOpen} onOpenChange={setSupportOpen} />
         </div>
     );
 }
