@@ -240,16 +240,21 @@ export function ParticipantsPropertiesScreen(): JSX.Element {
                   )}
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => requestLeave(sheetRow.id)}
-                className="mt-7 flex cursor-pointer items-center gap-4 text-left outline-none transition-opacity hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:opacity-80"
-              >
-                <Exit className="h-6 w-6 shrink-0 text-error" aria-hidden />
-                <span className="text-base font-medium leading-[18px] text-error">
-                  Покинуть объект
-                </span>
-              </button>
+              {/* Отступ 24 на обёртке-div: unlayered preflight
+               * button{margin:0} гасит margin-утилиты на голой кнопке
+               * (урок #730/#753, приёмка #757). */}
+              <div className="mt-6">
+                <button
+                  type="button"
+                  onClick={() => requestLeave(sheetRow.id)}
+                  className="flex cursor-pointer items-center gap-4 text-left outline-none transition-opacity hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:opacity-80"
+                >
+                  <Exit className="h-6 w-6 shrink-0 text-error" aria-hidden />
+                  <span className="text-base font-medium leading-[18px] text-error">
+                    Покинуть объект
+                  </span>
+                </button>
+              </div>
             </div>
           )}
         </ModalContent>
