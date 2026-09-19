@@ -38,9 +38,7 @@ describe('правила активности навигации (#558)', () => 
     expect(activeSectionId('/profile/tariff')).toBeNull();
   });
 
-  it('«Поддержка», «Платежи» и «Участники» — по своему префиксу', () => {
-    expect(activeSectionId('/support')).toBe('support');
-    expect(activeSectionId('/support/faq')).toBe('support');
+  it('«Платежи» и «Участники» — по своему префиксу', () => {
     expect(activeSectionId('/payments')).toBe('payments');
     expect(activeSectionId('/participants')).toBe('participants');
   });
@@ -51,6 +49,10 @@ describe('правила активности навигации (#558)', () => 
     expect(activeSectionId('/subscription')).toBeNull();
     expect(activeSectionId('/ui-kit')).toBeNull();
     expect(activeSectionId('/profile/info/terms')).toBeNull();
+    // «Поддержка» — действие хрома (модалка #766), а не раздел: маршрута
+    // больше нет, страница снесена — активного пункта нет и быть не может.
+    expect(activeSectionId('/support')).toBeNull();
+    expect(activeSectionId('/support/faq')).toBeNull();
   });
 
   it('соседний префикс не подсвечивает раздел', () => {

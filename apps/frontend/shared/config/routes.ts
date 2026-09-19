@@ -147,9 +147,6 @@ export const ROUTES = {
   /** Глобальные «Участники» — страница-заглушка единого хрома (карта #556,
    * тикет #559); сама фича шаринга доступа — вне карты. */
   participants: '/participants',
-  /** Экран «Поддержка» (регистрирует единая нав-модель #558; страница живет
-   * до переезда на новый хром — карта #556). */
-  support: '/support',
   profile: '/profile',
   profileNotifications: '/profile/notifications',
   profileAccount: '/profile/account',
@@ -179,4 +176,10 @@ export const ROUTES = {
   profileInfo: '/profile/info',
   profilePrivacy: '/profile/info/privacy',
   profileTerms: '/profile/info/terms',
+  /** Юрстраницы лендинга (карта #761, тикет #763): consent-ссылки шага
+   * телефона логина. Страницы живут на лендинге за прокси, открываются в
+   * новой вкладке; самих страниц пока нет — 404 лендинга не блокирует
+   * (решение владельца 18.09). */
+  landingPrivacy: '/privacy',
+  landingTerms: '/terms',
 } as const;

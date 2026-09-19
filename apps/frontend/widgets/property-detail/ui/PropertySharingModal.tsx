@@ -1,11 +1,12 @@
 'use client';
 
-import {useEffect, useRef, useState, type ChangeEvent, type JSX} from 'react';
+import {useState, type ChangeEvent, type JSX} from 'react';
 import {Modal} from '@heroui/react';
 import clsx from 'clsx';
 import {notify} from '@/shared/lib/notifications';
 import {ROUTES} from '@/shared/config/routes';
 import {ApiError} from '@/shared/api/errors';
+import {useCopiedHint} from '@/shared/lib/hooks/use-copied-hint';
 import {Button} from '@/shared/ui/button';
 import {TextField} from '@/shared/ui/text-field';
 import {Select, type SelectOption} from '@/shared/ui/select';
@@ -109,8 +110,8 @@ export function PropertySharingModal({
     const [addRole, setAddRole] = useState<MemberRole>('viewer');
     const [addError, setAddError] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
-    const [copied, setCopied] = useState(false);
     const [wasOpen, setWasOpen] = useState(isOpen);
+    const { copied, copy, reset } = useCopiedHint();
 
     if (isOpen !== wasOpen) {
         setWasOpen(isOpen);
@@ -119,7 +120,7 @@ export function PropertySharingModal({
             setAddRole('viewer');
             setAddError(null);
             setNotice(null);
-            setCopied(false);
+            reset();
         }
     }
 
@@ -237,31 +238,9 @@ export function PropertySharingModal({
         }
     };
 
-    const copiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-    useEffect(() => {
-        return () => {
-            if (copiedTimeoutRef.current !== null) {
-                clearTimeout(copiedTimeoutRef.current);
-            }
-        };
-    }, []);
-
     const handleCopyLink = (): void => {
-        // Ссылка не даёт прав — только для удобства. В небезопасном контексте
-        // (http) clipboard у навигатора отсутствует, хотя DOM-тип считает его
-        // всегда доступным — расширение типа сохраняет runtime-проверку.
-        const clipboard = navigator.clipboard as Clipboard | undefined;
-        clipboard
-            ?.writeText(`${window.location.origin}${ROUTES.property(propertyId)}`)
-            .catch(() => {
-                // clipboard может быть недоступен — подсказку всё равно показываем
-            });
-        setCopied(true);
-        if (copiedTimeoutRef.current !== null) {
-            clearTimeout(copiedTimeoutRef.current);
-        }
-        copiedTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
+        // Ссылка не даёт прав — только для удобства.
+        copy(`${window.location.origin}${ROUTES.property(propertyId)}`);
     };
 
     const isLoading = membersQuery.isPending;
