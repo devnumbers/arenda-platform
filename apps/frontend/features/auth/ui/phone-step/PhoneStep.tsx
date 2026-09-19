@@ -1,11 +1,10 @@
 'use client';
 
-import { type ChangeEvent, type JSX, useState } from "react";
+import { type ChangeEvent, type JSX } from "react";
 import { formatPhoneInput, isPhoneValid } from "@/shared/lib/phone";
-import { formatCountdown } from "@/shared/lib/countdown";
-import { Support } from "@/shared/assets/icons";
-import { Button, HeaderLogo, SupportModal, TextField } from "@/shared/ui/design";
+import { Button, TextField } from "@/shared/ui/design";
 import { ROUTES } from "@/shared/config/routes";
+import { CooldownNote, StepHeader, SupportRequestButton } from "../step-chrome";
 
 export type PhoneStepProps = {
     phone: string;
@@ -37,7 +36,6 @@ export function PhoneStep({
     resendTimer = 0,
 }: PhoneStepProps): JSX.Element {
     const isWaiting = resendTimer > 0;
-    const [supportOpen, setSupportOpen] = useState(false);
 
     const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
         onPhoneChange(formatPhoneInput(event.target.value));
@@ -50,16 +48,10 @@ export function PhoneStep({
 
     return (
         <div className="flex w-full flex-col gap-8">
-            <HeaderLogo className="h-7 w-28" />
-
-            <div className="flex flex-col gap-2">
-                <h1 className="m-0 text-[28px] font-semibold leading-8 text-content">
-                    Введите номер телефона
-                </h1>
-                <p className="m-0 text-base leading-[18px] text-content-secondary">
-                    Чтобы войти или зарегистрироваться
-                </p>
-            </div>
+            <StepHeader
+                title="Введите номер телефона"
+                subtitle="Чтобы войти или зарегистрироваться"
+            />
 
             <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
                 <TextField
@@ -78,11 +70,7 @@ export function PhoneStep({
                     Войти
                 </Button>
 
-                {isWaiting && (
-                    <p className="m-0 text-center font-mono text-sm font-medium leading-4 text-content-tertiary">
-                        Запросить код можно через {formatCountdown(resendTimer)}
-                    </p>
-                )}
+                <CooldownNote secondsLeft={resendTimer} />
             </form>
 
             <p className="m-0 text-base leading-[18px] text-content-tertiary">
@@ -106,16 +94,7 @@ export function PhoneStep({
                 </a>
             </p>
 
-            <Button
-                variant="white"
-                className="w-full"
-                trailingIcon={<Support />}
-                onClick={() => setSupportOpen(true)}
-            >
-                Написать в поддержку
-            </Button>
-
-            <SupportModal open={supportOpen} onOpenChange={setSupportOpen} />
+            <SupportRequestButton />
         </div>
     );
 }

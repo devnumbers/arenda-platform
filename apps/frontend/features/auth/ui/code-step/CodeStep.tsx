@@ -2,7 +2,8 @@
 
 import { type ChangeEvent, type JSX, useEffect, useRef } from "react";
 import { isValidLoginCode, loginCodeFromInput } from "@/shared/lib/login-code";
-import { HeaderLogo, ResendCodeTile, TextField } from "@/shared/ui/design";
+import { ResendCodeTile, TextField } from "@/shared/ui/design";
+import { StepHeader } from "../step-chrome";
 
 export type CodeStepProps = {
     code: string;
@@ -61,16 +62,10 @@ export function CodeStep({
 
     return (
         <div className="flex w-full flex-col gap-8">
-            <HeaderLogo className="h-7 w-28" />
-
-            <div className="flex flex-col gap-2">
-                <h1 className="m-0 text-[28px] font-semibold leading-8 text-content">
-                    Введите код
-                </h1>
-                <p className="m-0 text-base leading-[18px] text-content-secondary">
-                    Отправили 6-значный код на вашу почту
-                </p>
-            </div>
+            <StepHeader
+                title="Введите код"
+                subtitle="Отправили 6-значный код на вашу почту"
+            />
 
             <div className="flex flex-col gap-6">
                 <TextField

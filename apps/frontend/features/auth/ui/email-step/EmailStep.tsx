@@ -1,10 +1,9 @@
 'use client';
 
-import { type ChangeEvent, type JSX, useState } from "react";
+import { type ChangeEvent, type JSX } from "react";
 import { isEmailValid } from "@/shared/lib/email";
-import { formatCountdown } from "@/shared/lib/countdown";
-import { Support } from "@/shared/assets/icons";
-import { Button, HeaderLogo, SupportModal, TextField } from "@/shared/ui/design";
+import { Button, TextField } from "@/shared/ui/design";
+import { CooldownNote, StepHeader, SupportRequestButton } from "../step-chrome";
 
 export type EmailStepProps = {
     email: string;
@@ -38,7 +37,6 @@ export function EmailStep({
     resendTimer = 0,
 }: EmailStepProps): JSX.Element {
     const isWaiting = resendTimer > 0;
-    const [supportOpen, setSupportOpen] = useState(false);
 
     const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
         onEmailChange(event.target.value);
@@ -51,16 +49,7 @@ export function EmailStep({
 
     return (
         <div className="flex w-full flex-col gap-8">
-            <HeaderLogo className="h-7 w-28" />
-
-            <div className="flex flex-col gap-2">
-                <h1 className="m-0 text-[28px] font-semibold leading-8 text-content">
-                    Введите почту
-                </h1>
-                <p className="m-0 text-base leading-[18px] text-content-secondary">
-                    На почту придет код для входа
-                </p>
-            </div>
+            <StepHeader title="Введите почту" subtitle="На почту придет код для входа" />
 
             <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
                 <TextField
@@ -83,23 +72,10 @@ export function EmailStep({
                     Получить код
                 </Button>
 
-                {isWaiting && (
-                    <p className="m-0 text-center font-mono text-sm font-medium leading-4 text-content-tertiary">
-                        Запросить код можно через {formatCountdown(resendTimer)}
-                    </p>
-                )}
+                <CooldownNote secondsLeft={resendTimer} />
             </form>
 
-            <Button
-                variant="white"
-                className="w-full"
-                trailingIcon={<Support />}
-                onClick={() => setSupportOpen(true)}
-            >
-                Написать в поддержку
-            </Button>
-
-            <SupportModal open={supportOpen} onOpenChange={setSupportOpen} />
+            <SupportRequestButton />
         </div>
     );
 }
