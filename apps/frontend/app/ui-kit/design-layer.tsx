@@ -1104,7 +1104,8 @@ export function DesignLayerShowcase(): JSX.Element {
                     <h3 className={styles.groupTitle}>MoreSheet · шит «Еще» мобильного TabBar</h3>
                     <p className={styles.groupTitle}>
                         Выезжающий снизу шит навигации: ручка 48×4, два ряда разделов из нав-модели,
-                        нижний ряд — сам TabBar с активным «Еще» (Figma 1721:57140, #560). Выезд
+                        шестая ячейка — «Поддержка»-действие (TabNavAction, открывает SupportModal —
+                        #766), нижний ряд — сам TabBar с активным «Еще» (Figma 1721:57140, #560). Выезд
                         400ms на кривой vaul, оверлей — fade 250ms; закрытие — оверлей, свайп вниз,
                         повторный тап «Еще». В продукте живёт в TabBar (мобайл/планшет ≤768), здесь —
                         с ручным триггером.
