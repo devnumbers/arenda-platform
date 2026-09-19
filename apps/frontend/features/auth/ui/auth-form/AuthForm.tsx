@@ -230,6 +230,10 @@ export function AuthForm({
                 </StepTransition>
             )}
             {effectiveStep === "email" && (
+                /* Спящая ветка: page.tsx с карты #761 (#764) ведёт шаг почты
+                   мимо AuthForm — на новый LoginShell + EmailStep; сюда шаг
+                   «email» больше не приходит. Живёт до редизайна шага кода
+                   (#765), когда AuthForm разберут на шаги. */
                 <StepTransition stepKey="email">
                     <EmailStep
                         email={email}

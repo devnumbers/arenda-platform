@@ -4,7 +4,8 @@ import {type JSX} from "react";
 import {useRouter} from "next/navigation";
 import {notify} from "@/shared/lib/notifications";
 import {type ApiError} from "@/shared/api/errors";
-import {AuthForm, LoginShell, PhoneStep, deviceTimezone, useSendCode, useVerifyCode} from "@/features/auth";
+import {AuthForm, EmailStep, LoginShell, PhoneStep, deviceTimezone, useSendCode, useVerifyCode} from "@/features/auth";
+import {isEmailValid} from "@/shared/lib/email";
 import {normalizePhone, isPhoneValid} from "@/shared/lib/phone";
 import {safeInternalPath} from "@/shared/lib/safe-internal-path";
 import {useSendCooldown} from "@/features/auth";
@@ -53,7 +54,7 @@ export default function LoginPage(): JSX.Element {
 
     const handleSendEmail = () => {
         const trimmedEmail = draft.email.trim();
-        if (!trimmedEmail || !isPhoneValid(draft.phone)) {
+        if (!isEmailValid(trimmedEmail) || !isPhoneValid(draft.phone)) {
             return;
         }
 
@@ -135,8 +136,8 @@ export default function LoginPage(): JSX.Element {
         );
     };
 
-    // Шаг телефона — новый редизайн по макетам Рентли (карта #761, тикет
-    // #763). Шаги почты и кода до своих тикетов (#764/#765) живут в прежней
+    // Шаги телефона и почты — новый редизайн по макетам Рентли (карта #761,
+    // тикеты #763/#764). Шаг кода до своего тикета (#765) живёт в прежней
     // вёрстке — ноль регрессий, редизайн следующим экраном.
     if (draft.step === "phone") {
         return (
@@ -145,6 +146,20 @@ export default function LoginPage(): JSX.Element {
                     phone={draft.phone}
                     onPhoneChange={(phone) => setDraft((prev) => ({...prev, phone}))}
                     onSendPhone={handleSendPhone}
+                    isLoading={sendCode.isPending}
+                    resendTimer={resendTimer}
+                />
+            </LoginShell>
+        );
+    }
+
+    if (draft.step === "email") {
+        return (
+            <LoginShell onClose={handleClose} hideClose={isStandalone}>
+                <EmailStep
+                    email={draft.email}
+                    onEmailChange={(email) => setDraft((prev) => ({...prev, email}))}
+                    onSubmit={handleSendEmail}
                     isLoading={sendCode.isPending}
                     resendTimer={resendTimer}
                 />
