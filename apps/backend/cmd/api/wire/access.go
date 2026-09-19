@@ -23,6 +23,7 @@ type Access struct {
 	SlotCoordinator        *accessapp.SlotCoordinator
 	SharedProperties       *accesspg.SharedProperties
 	SharedListEnricher     *accesspg.SharedListEnricher
+	UserEmailResolver      *accesspg.UserEmailResolverAdapter
 }
 
 // Compile-time checks that the access SlotCoordinator satisfies the cross-
@@ -36,6 +37,9 @@ var (
 	// T11); the AccessService resolves owner display names for the banner.
 	_ propertiesapp.SharedMemberships        = (*accesspg.SharedProperties)(nil)
 	_ propertiesapp.OwnerDisplayNameResolver = (*accessapp.AccessService)(nil)
+	// The UserEmailResolverAdapter doubles as the owner-email resolver of the
+	// detail's owner contact row (Figma 2200-97365, #757 walkthrough fixes).
+	_ propertiesapp.OwnerEmailResolver = (*accesspg.UserEmailResolverAdapter)(nil)
 	// The SharedListEnricher serves the list reads' access projections
 	// (ticket #702): member names on the owner's cards and the suspended
 	// blur-card placeholders.
@@ -163,5 +167,6 @@ func WireAccess(_ context.Context, p platformDeps, billing *Billing, emailMailer
 		SlotCoordinator:        slotCoordinator,
 		SharedProperties:       sharedProperties,
 		SharedListEnricher:     sharedListEnricher,
+		UserEmailResolver:      emailResolver,
 	}, nil
 }

@@ -662,6 +662,9 @@ func (h *PropertyHandlers) propertyResponse(property domain.Property) openapi.Pr
 		if property.OwnerName != "" {
 			resp.Access.OwnerName = &property.OwnerName
 		}
+		if property.OwnerEmail != "" {
+			resp.Access.OwnerEmail = &property.OwnerEmail
+		}
 	}
 	if property.Description != "" {
 		resp.Description = &property.Description

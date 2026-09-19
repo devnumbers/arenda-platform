@@ -5387,6 +5387,14 @@ components:
             Present when the actor is not the owner: in the detail response
             and on the list rows (main and archive) — the shared card shows
             whose object it is. Own rows carry none.
+        owner_email:
+          type: string
+          description: >
+            Owner's account email for the detail's owner contact row — a
+            deliberate exposure on this surface (Figma 2200-97365), the same
+            posture as SuspendedShared.owner_email. Present in the detail
+            response only when the actor is not the owner; empty when the
+            owner has no email or the resolution failed.
 
     PropertyResponse:
       type: object

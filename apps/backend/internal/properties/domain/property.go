@@ -159,6 +159,12 @@ type Property struct {
 	// for shared rows (owner decision on the #756 walkthrough fixes); empty
 	// otherwise.
 	OwnerName string
+	// OwnerEmail is the property owner's account email, filled by the detail
+	// read when the actor is not the owner (Figma 2200-97365, the owner
+	// contact row) — a deliberate exposure on this surface, the same posture
+	// as SharedSuspendedMembership.OwnerEmail (#702); empty otherwise (the
+	// owner, a resolver failure, an owner without an email).
+	OwnerEmail string
 }
 
 // Photo is a photo attached to a property.

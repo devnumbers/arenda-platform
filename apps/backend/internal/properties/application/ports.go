@@ -43,6 +43,14 @@ type OwnerDisplayNameResolver interface {
 	DisplayName(ctx context.Context, userID uuid.UUID) (string, error)
 }
 
+// OwnerEmailResolver resolves a property owner's account email for the
+// detail's owner contact row (Figma 2200-97365): a deliberate exposure on
+// this surface, the same posture as suspended_shared.owner_email (ticket
+// #702). Optional.
+type OwnerEmailResolver interface {
+	GetEmail(ctx context.Context, userID uuid.UUID) (string, error)
+}
+
 // SharedSuspendedMembership is one suspended shared membership of the reading
 // actor (ticket #702): the blur-card shown in the property list while the
 // object is temporarily unavailable because the actor's tariff limit is

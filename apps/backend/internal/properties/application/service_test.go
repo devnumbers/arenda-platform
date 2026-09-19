@@ -811,7 +811,7 @@ func TestGetProperty_AccessOutcomes(t *testing.T) {
 			t.Parallel()
 			repo := newFakePropertyRepo(
 				domain.Property{
-					ID: propertyID, OwnerID: ownerID, Name: "Obj", Address: testPropertyAddress,
+					ID: propertyID, OwnerID: ownerID, Name: testObjName, Address: testPropertyAddress,
 					Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive,
 				},
 			)
@@ -1334,7 +1334,9 @@ func TestListProperties_SuspendedShared(t *testing.T) {
 // detail endpoint (issue T11): the owner gets RoleOwner and no owner name;
 // a recipient gets the membership role and the owner's public display name.
 // A resolver failure is logged and degrades to an empty name, never to a
-// failed request.
+// failed request. The owner's account email follows the same shape
+// (Figma 2200-97365, the detail's owner contact row): a deliberate exposure
+// for recipients only, degrading to empty.
 func TestGetProperty_AccessContext(t *testing.T) {
 	t.Parallel()
 
@@ -1347,7 +1349,7 @@ func TestGetProperty_AccessContext(t *testing.T) {
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 
 	property := domain.Property{
-		ID: propertyID, OwnerID: ownerID, Name: "Obj", Address: testPropertyAddress,
+		ID: propertyID, OwnerID: ownerID, Name: testObjName, Address: testPropertyAddress,
 		Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive,
 	}
 
@@ -1424,6 +1426,98 @@ func TestGetProperty_AccessContext(t *testing.T) {
 		}
 		if p.OwnerName != "" {
 			t.Errorf("OwnerName = %q, want empty on resolver error", p.OwnerName)
+		}
+	})
+}
+
+// TestGetProperty_OwnerEmail verifies the owner's account email in the
+// detail's access context (Figma 2200-97365, the owner contact row): filled
+// for recipients only, empty for the owner, degrading to empty on a resolver
+// failure or when the port is unwired.
+func TestGetProperty_OwnerEmail(t *testing.T) {
+	t.Parallel()
+
+	// Фикстура почты владельца (Figma 2200-97365).
+	const testOwnerEmail = "ivan@example.com"
+
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	recipientID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
+	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+
+	property := domain.Property{
+		ID: propertyID, OwnerID: ownerID, Name: testObjName, Address: testPropertyAddress,
+		Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive,
+	}
+
+	newSvc := func(role sharedpolicy.Role, resolver OwnerEmailResolver) *PropertyService {
+		repo := newFakePropertyRepo(property)
+		svc := NewPropertyService(
+			repo,
+			fakePropertyPhotoRepo{},
+			fakePropertyPhotoStorage{},
+			newPropertyTestFactory(repo,
+				fakePropertyPhotoRepo{},
+				nil),
+			fakePropertyClock{now: time.Now()},
+			staticRolePolicy{role: role},
+			nil,
+		)
+		if resolver != nil {
+			svc.SetOwnerEmailResolver(resolver)
+		}
+		return svc
+	}
+
+	t.Run("recipient gets the owner email", func(t *testing.T) {
+		t.Parallel()
+		svc := newSvc(sharedpolicy.RoleFullAccess, fakeOwnerEmails{emails: map[uuid.UUID]string{
+			ownerID: testOwnerEmail,
+		}})
+		p, err := svc.GetProperty(ctx, recipientID, propertyID)
+		if err != nil {
+			t.Fatalf("GetProperty failed: %v", err)
+		}
+		if p.OwnerEmail != testOwnerEmail {
+			t.Errorf("OwnerEmail = %q, want %q", p.OwnerEmail, testOwnerEmail)
+		}
+	})
+
+	t.Run("owner gets no owner email", func(t *testing.T) {
+		t.Parallel()
+		svc := newSvc(sharedpolicy.RoleOwner, fakeOwnerEmails{emails: map[uuid.UUID]string{
+			ownerID: testOwnerEmail,
+		}})
+		p, err := svc.GetProperty(ctx, ownerID, propertyID)
+		if err != nil {
+			t.Fatalf("GetProperty failed: %v", err)
+		}
+		if p.OwnerEmail != "" {
+			t.Errorf("owner must not get an owner email, got %q", p.OwnerEmail)
+		}
+	})
+
+	t.Run("recipient without the port gets an empty owner email", func(t *testing.T) {
+		t.Parallel()
+		svc := newSvc(sharedpolicy.RoleViewer, nil)
+		p, err := svc.GetProperty(ctx, recipientID, propertyID)
+		if err != nil {
+			t.Fatalf("GetProperty failed: %v", err)
+		}
+		if p.OwnerEmail != "" {
+			t.Errorf("OwnerEmail = %q, want empty without a resolver", p.OwnerEmail)
+		}
+	})
+
+	t.Run("resolver error degrades to an empty owner email", func(t *testing.T) {
+		t.Parallel()
+		svc := newSvc(sharedpolicy.RoleViewer, fakeOwnerEmails{err: errors.New("lookup failed")})
+		p, err := svc.GetProperty(ctx, recipientID, propertyID)
+		if err != nil {
+			t.Fatalf("resolver error must not fail the request: %v", err)
+		}
+		if p.OwnerEmail != "" {
+			t.Errorf("OwnerEmail = %q, want empty on resolver error", p.OwnerEmail)
 		}
 	})
 }

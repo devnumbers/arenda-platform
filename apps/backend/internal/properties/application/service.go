@@ -67,6 +67,7 @@ type PropertyService struct {
 	policy            sharedpolicy.Policy
 	sharedMemberships SharedMemberships
 	ownerNames        OwnerDisplayNameResolver
+	ownerEmails       OwnerEmailResolver
 	suspendedShared   SuspendedSharedMemberships
 	slots             RecipientSlotPolicy
 	rentalOccupancy   RentalOccupancyReader
@@ -90,6 +91,15 @@ func (s *PropertyService) SetSharedMemberships(memberships SharedMemberships) {
 // T11). Optional: when not set, detail responses carry no owner name.
 func (s *PropertyService) SetOwnerDisplayNameResolver(resolver OwnerDisplayNameResolver) {
 	s.ownerNames = resolver
+}
+
+// SetOwnerEmailResolver injects the adapter that resolves a property owner's
+// account email for the detail's owner contact row (Figma 2200-97365) —
+// a deliberate exposure on this surface, same posture as
+// suspended_shared.owner_email (#702). Optional: when not set, detail
+// responses carry no owner email.
+func (s *PropertyService) SetOwnerEmailResolver(resolver OwnerEmailResolver) {
+	s.ownerEmails = resolver
 }
 
 // SetSuspendedSharedMemberships injects the access-context adapter that
@@ -599,6 +609,19 @@ func (s *PropertyService) GetProperty(ctx context.Context, actor, id uuid.UUID) 
 			)
 		} else {
 			property.OwnerName = name
+		}
+	}
+	// The owner's account email for the detail's owner contact row (Figma
+	// 2200-97365): recipients only, degrading to empty like the name.
+	if role != sharedpolicy.RoleOwner && s.ownerEmails != nil {
+		email, err := s.ownerEmails.GetEmail(ctx, property.OwnerID)
+		if err != nil {
+			s.logger.WarnContext(ctx, "failed to resolve owner email",
+				slog.String("property_id", property.ID.String()),
+				slog.String("error", sanitizeError(err)),
+			)
+		} else {
+			property.OwnerEmail = email
 		}
 	}
 
