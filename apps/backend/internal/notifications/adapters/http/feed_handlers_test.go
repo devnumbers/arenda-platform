@@ -327,7 +327,7 @@ func (f *handlerLiveState) RentalActionState(_ context.Context, _ uuid.UUID) (no
 	return f.rental, nil
 }
 
-func (f *handlerLiveState) PaymentOpen(_ context.Context, _ uuid.UUID) (bool, error) {
+func (f *handlerLiveState) PaymentOpen(_ context.Context, _ uuid.UUID, _ time.Time) (bool, error) {
 	return true, nil
 }
 

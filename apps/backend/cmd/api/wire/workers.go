@@ -25,7 +25,7 @@ var (
 	_ scheduler.RenewalProcessor         = (*billingapp.Workers)(nil)
 	_ scheduler.PaymentReconciler        = (*billingapp.Workers)(nil)
 	_ scheduler.PaymentsTicker           = (*paymentsapp.TickService)(nil)
-	_ scheduler.NotificationsScanRunner  = (*notificationsapp.RentalCompletedPublisher)(nil)
+	_ scheduler.NotificationsScanRunner  = (*notificationsapp.ScanGroup)(nil)
 )
 
 // Workers bundles the six background workers and exposes Wait (block until
@@ -45,7 +45,7 @@ type Workers struct {
 // NewWorkers builds and starts the six background workers: the identity
 // data cleaner, the billing worker, the payment reconciliation worker, the
 // payments tick worker, the tasks tick worker and the notifications scan
-// worker (карта #734, #748). A non-nil riverClient adds
+// worker (карта #734, #748–#749). A non-nil riverClient adds
 // the delivery queue (карта #734, #740): Start blocks until the client has
 // fully stopped — cancelling the lifecycle context begins the soft stop
 // (SoftStopTimeout), so Workers.Wait also waits for in-flight delivery jobs.
@@ -60,7 +60,7 @@ func NewWorkers(
 	billingWorkers *billingapp.Workers,
 	paymentsTick *paymentsapp.TickService,
 	tasksTick *tasksapp.TickService,
-	notificationsScan *notificationsapp.RentalCompletedPublisher,
+	notificationsScan *notificationsapp.ScanGroup,
 	riverClient *river.Client[pgx.Tx],
 ) *Workers {
 	billingWorker := scheduler.NewBillingWorker(

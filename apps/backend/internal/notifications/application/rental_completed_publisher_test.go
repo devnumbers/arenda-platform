@@ -18,11 +18,11 @@ const zoneMSK = "Europe/Moscow"
 // fakeScanZones is the zone directory stub: the distinct owner timezones
 // having scan-relevant rentals.
 type fakeScanZones struct {
-	zones []RentalScanZone
+	zones []ScanZone
 	err   error
 }
 
-func (f *fakeScanZones) ListScanZones(ctx context.Context) ([]RentalScanZone, error) {
+func (f *fakeScanZones) ListScanZones(ctx context.Context) ([]ScanZone, error) {
 	return f.zones, f.err
 }
 
@@ -61,7 +61,7 @@ type scanHarness struct {
 	source   *fakeRentalSource
 }
 
-func newScanHarness(zones []RentalScanZone) *scanHarness {
+func newScanHarness(zones []ScanZone) *scanHarness {
 	feed := &fakeFeedRepo{}
 	queue := &fakeQueue{}
 	pipeline := NewPublisher(feed, queue, nil, &fakeUoW{}, nil)
@@ -86,7 +86,7 @@ func scanTarget(rentalID uuid.UUID, plannedEnd time.Time, name string) RentalCom
 		PlannedEndDate:  plannedEnd,
 		PropertyID:      uuid.Must(uuid.NewV7()),
 		PropertyName:    name,
-		PropertyAddress: "г. Москва, ул. Ленина, 1",
+		PropertyAddress: scanPropertyAddress,
 		OwnerID:         uuid.Must(uuid.NewV7()),
 	}
 }
@@ -98,7 +98,7 @@ var scanNow = time.Date(2026, 9, 19, 21, 30, 0, 0, time.UTC)
 func TestRentalCompletedPublisher_PublishesNeedsAttentionRental(t *testing.T) {
 	t.Parallel()
 
-	h := newScanHarness([]RentalScanZone{{Timezone: zoneMSK}})
+	h := newScanHarness([]ScanZone{{Timezone: zoneMSK}})
 	rental := uuid.Must(uuid.NewV7())
 	target := scanTarget(rental, time.Date(2026, 9, 18, 0, 0, 0, 0, time.UTC), "Квартира на Ленина")
 	member1, member2 := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
@@ -140,7 +140,7 @@ func TestRentalCompletedPublisher_PublishesNeedsAttentionRental(t *testing.T) {
 func TestRentalCompletedPublisher_ExtensionRepublishesWithNewKey(t *testing.T) {
 	t.Parallel()
 
-	h := newScanHarness([]RentalScanZone{{Timezone: zoneMSK}})
+	h := newScanHarness([]ScanZone{{Timezone: zoneMSK}})
 	rental := uuid.Must(uuid.NewV7())
 	first := scanTarget(rental, time.Date(2026, 9, 18, 0, 0, 0, 0, time.UTC), "Студия на Пушкина")
 	// The owner extended: same rental, the planned end moved a month out.
@@ -163,7 +163,7 @@ func TestRentalCompletedPublisher_ExtensionRepublishesWithNewKey(t *testing.T) {
 func TestRentalCompletedPublisher_RepeatScanIsNoOp(t *testing.T) {
 	t.Parallel()
 
-	h := newScanHarness([]RentalScanZone{{Timezone: zoneMSK}})
+	h := newScanHarness([]ScanZone{{Timezone: zoneMSK}})
 	target := scanTarget(uuid.Must(uuid.NewV7()), time.Date(2026, 9, 18, 0, 0, 0, 0, time.UTC), "Квартира на Ленина")
 	h.source.targets[zoneMSK] = []RentalCompletedTarget{target}
 
@@ -176,7 +176,7 @@ func TestRentalCompletedPublisher_RepeatScanIsNoOp(t *testing.T) {
 func TestRentalCompletedPublisher_EachZoneSweptWithItsOwnToday(t *testing.T) {
 	t.Parallel()
 
-	h := newScanHarness([]RentalScanZone{{Timezone: zoneMSK}, {Timezone: "Europe/Kaliningrad"}})
+	h := newScanHarness([]ScanZone{{Timezone: zoneMSK}, {Timezone: "Europe/Kaliningrad"}})
 	p := NewRentalCompletedPublisher(h.pipeline, h.zones, h.source)
 	require.NoError(t, p.RunZoneScans(context.Background(), scanNow))
 
@@ -196,7 +196,7 @@ func TestRentalCompletedPublisher_NoZonesNoTargets(t *testing.T) {
 	require.NoError(t, p.RunZoneScans(context.Background(), scanNow))
 	assert.Empty(t, h.feed.inserted)
 
-	h = newScanHarness([]RentalScanZone{{Timezone: zoneMSK}})
+	h = newScanHarness([]ScanZone{{Timezone: zoneMSK}})
 	p = NewRentalCompletedPublisher(h.pipeline, h.zones, h.source)
 	require.NoError(t, p.RunZoneScans(context.Background(), scanNow))
 	assert.Empty(t, h.feed.inserted)
@@ -205,7 +205,7 @@ func TestRentalCompletedPublisher_NoZonesNoTargets(t *testing.T) {
 func TestRentalCompletedPublisher_FailuresAreIsolated(t *testing.T) {
 	t.Parallel()
 
-	h := newScanHarness([]RentalScanZone{{Timezone: zoneMSK}})
+	h := newScanHarness([]ScanZone{{Timezone: zoneMSK}})
 	ok := scanTarget(uuid.Must(uuid.NewV7()), time.Date(2026, 9, 18, 0, 0, 0, 0, time.UTC), "Квартира на Ленина")
 	broken := scanTarget(uuid.Must(uuid.NewV7()), time.Date(2026, 9, 18, 0, 0, 0, 0, time.UTC), "Дом на Гагарина")
 	h.source.targets[zoneMSK] = []RentalCompletedTarget{ok, broken}
@@ -223,7 +223,7 @@ func TestRentalCompletedPublisher_FailuresAreIsolated(t *testing.T) {
 func TestRentalCompletedPublisher_BrokenZoneNameIsolated(t *testing.T) {
 	t.Parallel()
 
-	h := newScanHarness([]RentalScanZone{{Timezone: "Mars/Olympus"}, {Timezone: zoneMSK}})
+	h := newScanHarness([]ScanZone{{Timezone: "Mars/Olympus"}, {Timezone: zoneMSK}})
 	target := scanTarget(uuid.Must(uuid.NewV7()), time.Date(2026, 9, 18, 0, 0, 0, 0, time.UTC), "Квартира на Ленина")
 	h.source.targets[zoneMSK] = []RentalCompletedTarget{target}
 

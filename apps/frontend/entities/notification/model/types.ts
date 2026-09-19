@@ -94,7 +94,10 @@ export type NotificationPayload = {
   readonly property?: NotificationEntityRef;
   readonly actor?: NotificationEntityRef;
   readonly rentalId?: string;
+  /** Id правила (Платёж); переход кнопки «Оплатить» ведёт на его страницу. */
   readonly paymentId?: string;
+  /** Дата операции (решение #737: payment = правило + дата операции, #749). */
+  readonly paymentDate?: string;
   readonly taskId?: string;
   readonly membershipId?: string;
   readonly invitationId?: string;

@@ -72,9 +72,16 @@ func (r *FeedLiveState) RentalActionState(ctx context.Context, rentalID uuid.UUI
 	}, nil
 }
 
-// PaymentOpen reports whether the operation still awaits payment.
-func (r *FeedLiveState) PaymentOpen(ctx context.Context, paymentID uuid.UUID) (bool, error) {
-	open, err := r.q().GetOperationOpenState(ctx, pgconv.UUIDToPgtype(paymentID))
+// PaymentOpen reports whether the notification's own occurrence still
+// awaits payment: a planned operation of the rule dated the operation date
+// (решение #737: payment = правило + дата операции). The date pins the
+// check to the notified occurrence — the rule's other, later occurrences
+// say nothing about it.
+func (r *FeedLiveState) PaymentOpen(ctx context.Context, paymentID uuid.UUID, dueDate time.Time) (bool, error) {
+	open, err := r.q().GetPaymentOpenState(ctx, postgres.GetPaymentOpenStateParams{
+		PaymentID: pgconv.UUIDToPgtype(paymentID),
+		Date:      pgconv.DateToPgtype(dueDate),
+	})
 	if err != nil {
 		return false, fmt.Errorf("payment open state: %w", err)
 	}

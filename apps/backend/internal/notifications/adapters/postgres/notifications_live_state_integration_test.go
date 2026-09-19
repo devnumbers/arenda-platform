@@ -122,50 +122,69 @@ func TestFeedLiveState_RentalActionState(t *testing.T) {
 	assert.False(t, state.Exists, "a deleted rental is gone")
 }
 
+// The «Оплатить» button lives exactly while the notification's own
+// occurrence still awaits payment (решение #737: payment = правило + дата
+// операции; состояние ушло — кнопки нет).
 func TestFeedLiveState_PaymentOpen(t *testing.T) {
 	t.Parallel()
 
 	live, pool, ownerID := setupLiveState(t)
 	ctx := context.Background()
 	propertyID := createLiveProperty(t, pool, ownerID)
+	rule := insertPayment(t, pool, ownerID, propertyID)
 
-	insertOperation := func(status string) uuid.UUID {
+	// Adds one operation of the rule at the given date; the result is never
+	// needed — the assertions read the live state through the adapter.
+	insertOccurrence := func(t *testing.T, status, date string) {
 		t.Helper()
-		id := uuid.Must(uuid.NewV7())
-		var err error
+		var paidDate any
 		if status == "paid" {
-			_, err = pool.Exec(ctx, `
-				INSERT INTO operations (id, owner_id, property_id, origin, date, paid_date, status, type, title, amount_kopecks, category_label)
-				VALUES ($1, $2, $3, 'manual', '2026-10-01', '2026-10-01', $4, 'income', 'Аренда', 2000000, 'Аренда')`,
-				id, ownerID, propertyID, status)
-		} else {
-			_, err = pool.Exec(ctx, `
-				INSERT INTO operations (id, owner_id, property_id, origin, date, status, type, title, amount_kopecks, category_label)
-				VALUES ($1, $2, $3, 'manual', '2026-10-01', $4, 'income', 'Аренда', 2000000, 'Аренда')`,
-				id, ownerID, propertyID, status)
+			paidDate = date
 		}
+		_, err := pool.Exec(ctx, `
+			INSERT INTO operations (id, owner_id, property_id, payment_id, origin,
+				date, paid_date, status, type, title, amount_kopecks, category_label)
+			VALUES ($1, $2, $3, $4, 'payment', $5, $6, $7, 'income', 'Аренда', 2000000, 'Аренда')`,
+			uuid.Must(uuid.NewV7()), ownerID, propertyID, rule, date, paidDate, status)
 		require.NoError(t, err)
-		return id
 	}
 
-	planned := insertOperation("planned")
-	open, err := live.PaymentOpen(ctx, planned)
+	dueDay := time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC)
+	insertOccurrence(t, "planned", "2026-09-20")
+	open, err := live.PaymentOpen(ctx, rule, dueDay)
 	require.NoError(t, err)
 	assert.True(t, open)
 
-	paid := insertOperation("paid")
-	open, err = live.PaymentOpen(ctx, paid)
+	// The check pins the date: the same rule's other occurrence — planned,
+	// paid, cancelled — says nothing about the notified one.
+	insertOccurrence(t, "planned", "2026-10-20")
+	insertOccurrence(t, "paid", "2026-08-20")
+	insertOccurrence(t, "cancelled", "2026-07-20")
+	open, err = live.PaymentOpen(ctx, rule, dueDay)
 	require.NoError(t, err)
-	assert.False(t, open, "the payment is settled — the button goes")
+	assert.True(t, open, "other occurrences of the rule do not close this one's button")
 
-	cancelled := insertOperation("cancelled")
-	open, err = live.PaymentOpen(ctx, cancelled)
+	insertOccurrence(t, "paid", "2026-09-21")
+	open, err = live.PaymentOpen(ctx, rule, time.Date(2026, 9, 21, 0, 0, 0, 0, time.UTC))
+	require.NoError(t, err)
+	assert.False(t, open, "the paid occurrence's button goes")
+
+	open, err = live.PaymentOpen(ctx, rule, time.Date(2026, 9, 25, 0, 0, 0, 0, time.UTC))
+	require.NoError(t, err)
+	assert.False(t, open, "a date without an occurrence has no button")
+
+	// The rule deleted: its occurrences lose the payment link
+	// (payment_id ON DELETE SET NULL) — the button goes, the payment page
+	// would be a dead end.
+	_, err = pool.Exec(ctx, `DELETE FROM payments WHERE id = $1`, rule)
+	require.NoError(t, err)
+	open, err = live.PaymentOpen(ctx, rule, dueDay)
 	require.NoError(t, err)
 	assert.False(t, open)
 
-	open, err = live.PaymentOpen(ctx, uuid.Must(uuid.NewV7()))
+	open, err = live.PaymentOpen(ctx, uuid.Must(uuid.NewV7()), dueDay)
 	require.NoError(t, err)
-	assert.False(t, open, "a deleted operation leaves no button")
+	assert.False(t, open, "an unknown rule leaves no button")
 }
 
 func TestFeedLiveState_TaskOpen(t *testing.T) {

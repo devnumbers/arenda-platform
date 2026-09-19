@@ -29,6 +29,19 @@ var deeplinks = map[domain.EventType]func(domain.Payload) string{
 		}
 		return fmt.Sprintf("/properties/%s/rentals/%s", p.Property.ID, p.RentalID)
 	},
+	// The payment's page path carries the property and the rule (#749);
+	// the snapshot ids are exactly what the publisher put there.
+	domain.EventPaymentDue:     paymentPath,
+	domain.EventPaymentOverdue: paymentPath,
+}
+
+// paymentPath builds the payment page path from the payload: the property
+// snapshot's id and the rule's id (Payload.PaymentID).
+func paymentPath(p domain.Payload) string {
+	if p.Property == nil || p.PaymentID == nil {
+		return ""
+	}
+	return fmt.Sprintf("/properties/%s/payments/%s", p.Property.ID, p.PaymentID)
 }
 
 // staticPath adapts a fixed path to the payload resolver signature.

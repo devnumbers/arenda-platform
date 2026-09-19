@@ -190,13 +190,18 @@ func run() error {
 	//     event fires unwired.
 	subscribeGraceEvents(eventDispatcher, notificationsapp.NewGracePublisher(riverMod.Publisher))
 
-	// 11.7 The rental-completed scan (карта #734, #748): the hourly zone
-	//     sweep publishes the rentals that moved to «Ожидает действия»
-	//     through the same pipeline publisher — the catalog's Аренда
-	//     category, gated per-channel by the settings matrix at delivery
-	//     time.
+	// 11.7 The notifications scan (карта #734, #748, #749): the hourly zone
+	//     sweep publishes the scan-driven catalog events — the rentals that
+	//     moved to «Ожидает действия» and the payments that came due or
+	//     overdue — through the same pipeline publisher; the Аренда and
+	//     Платежи и операции categories are gated per-channel by the
+	//     settings matrix at delivery time.
 	scanStore := notificationspg.NewRentalScanStore(p.DB)
-	rentalScan := notificationsapp.NewRentalCompletedPublisher(riverMod.Publisher, scanStore, scanStore)
+	paymentScanStore := notificationspg.NewPaymentScanStore(p.DB)
+	notificationsScan := notificationsapp.NewScanGroup(
+		notificationsapp.NewRentalCompletedPublisher(riverMod.Publisher, scanStore, scanStore),
+		notificationsapp.NewPaymentsPublisher(riverMod.Publisher, paymentScanStore, paymentScanStore),
+	)
 
 	// 12. Background workers (6 goroutines + the delivery queue client).
 	//     Started before the HTTP server so they are live while serving. The
@@ -210,7 +215,7 @@ func run() error {
 		billingMod.Services.Workers,
 		paymentsMod.TickService,
 		tasksMod.TickService,
-		rentalScan,
+		notificationsScan,
 		riverMod.Client,
 	)
 

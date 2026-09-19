@@ -2,12 +2,14 @@ package postgres
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,7 +19,10 @@ import (
 func createUserInZone(t *testing.T, pool *pgxpool.Pool, timezone string) uuid.UUID {
 	t.Helper()
 	id := uuid.Must(uuid.NewV7())
-	phone := fmt.Sprintf("+7999%07d", id.ID())
+	// The digits come from the uuid's random half (bytes 8..11): ID() is the
+	// millisecond timestamp prefix, and two UUIDv7 minted in the same
+	// millisecond — the parallel tests do exactly that — would collide.
+	phone := fmt.Sprintf("+7999%07d", binary.BigEndian.Uint32(id[8:12])%10_000_000)
 	_, err := pool.Exec(context.Background(),
 		`INSERT INTO users (id, phone, role, timezone) VALUES ($1, $2, 'owner', $3)`,
 		id, phone, timezone)
@@ -71,7 +76,10 @@ func TestRentalScanStore_ListScanZones(t *testing.T) {
 	for _, z := range zones {
 		got = append(got, z.Timezone)
 	}
-	assert.ElementsMatch(t, []string{"Europe/Kaliningrad", "Europe/Moscow"}, got)
+	// The shared test database's parallel fixtures may add zones — assert
+	// this test's zones are swept, not that the world holds exactly them.
+	assert.Contains(t, got, "Europe/Moscow")
+	assert.Contains(t, got, "Europe/Kaliningrad")
 }
 
 // archiveProperty flips one of the owner's properties to the archived
@@ -110,15 +118,17 @@ func TestRentalScanStore_ListCompletedTargets(t *testing.T) {
 	store := NewRentalScanStore(pool)
 	targets, err := store.ListCompletedTargets(ctx, "Europe/Moscow", *datePtr(time.September, 19))
 	require.NoError(t, err)
-	require.Len(t, targets, 1)
-
-	got := targets[0]
-	assert.Equal(t, awaiting, got.RentalID)
-	assert.Equal(t, time.Date(2026, 9, 18, 0, 0, 0, 0, time.UTC), got.PlannedEndDate)
-	assert.Equal(t, awaitingProp, got.PropertyID)
-	assert.Equal(t, "Объект", got.PropertyName)
-	assert.Equal(t, "Москва, Тверская 1", got.PropertyAddress)
-	assert.Equal(t, msk, got.OwnerID)
+	// The tests of this package share one database (setupPushDB), so the
+	// parallel fixtures' rows may appear in the same zone's sweep — every
+	// assertion filters to the properties this test created.
+	got := rentalTargetsOfProps(targets, awaitingProp)
+	require.Len(t, got, 1)
+	assert.Equal(t, awaiting, got[0].RentalID)
+	assert.Equal(t, time.Date(2026, 9, 18, 0, 0, 0, 0, time.UTC), got[0].PlannedEndDate)
+	assert.Equal(t, awaitingProp, got[0].PropertyID)
+	assert.Equal(t, "Объект", got[0].PropertyName)
+	assert.Equal(t, "Москва, Тверская 1", got[0].PropertyAddress)
+	assert.Equal(t, msk, got[0].OwnerID)
 
 	// The boundary: a rental whose planned end IS the zone's today is still
 	// active today — strictly before (решение #737: the day after).
@@ -126,8 +136,8 @@ func TestRentalScanStore_ListCompletedTargets(t *testing.T) {
 	insertRental(t, pool, msk, todayProp, datePtr(time.September, 1), datePtr(time.September, 19), nil)
 	targets, err = store.ListCompletedTargets(ctx, "Europe/Moscow", *datePtr(time.September, 19))
 	require.NoError(t, err)
-	require.Len(t, targets, 1)
-	assert.Equal(t, awaiting, targets[0].RentalID)
+	assert.Empty(t, rentalTargetsOfProps(targets, todayProp), "today's rental is not needs_attention yet")
+	assert.Len(t, rentalTargetsOfProps(targets, awaitingProp), 1)
 
 	// An archived property's rental — even in the needs_attention state —
 	// stays out: the ticks sweep active/maintenance only.
@@ -136,8 +146,25 @@ func TestRentalScanStore_ListCompletedTargets(t *testing.T) {
 	archiveProperty(t, pool, msk, archivedProp)
 	targets, err = store.ListCompletedTargets(ctx, "Europe/Moscow", *datePtr(time.September, 19))
 	require.NoError(t, err)
-	require.Len(t, targets, 1)
-	assert.Equal(t, awaiting, targets[0].RentalID)
+	assert.Empty(t, rentalTargetsOfProps(targets, archivedProp), "the archived property stays out of the sweep")
+	assert.Len(t, rentalTargetsOfProps(targets, awaitingProp), 1)
+}
+
+// rentalTargetsOfProps filters the sweep's targets to the given properties —
+// the shared test database's parallel fixtures must not break the count
+// assertions.
+func rentalTargetsOfProps(targets []application.RentalCompletedTarget, props ...uuid.UUID) []application.RentalCompletedTarget {
+	want := make(map[uuid.UUID]bool, len(props))
+	for _, p := range props {
+		want[p] = true
+	}
+	out := make([]application.RentalCompletedTarget, 0, len(targets))
+	for _, target := range targets {
+		if want[target.PropertyID] {
+			out = append(out, target)
+		}
+	}
+	return out
 }
 
 func TestRentalScanStore_ListActiveRecipients(t *testing.T) {

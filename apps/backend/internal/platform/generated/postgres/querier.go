@@ -329,11 +329,6 @@ type Querier interface {
 	// pay-now use case's load step (manual operations have no payment, so the
 	// payment link is not a filter).
 	GetOperationByID(ctx context.Context, arg GetOperationByIDParams) (GetOperationByIDRow, error)
-	// Whether the notification's operation (Операция — вхождение Payments,
-	// not the rule) still awaits payment: it exists and its status is planned.
-	// Paid or cancelled — the state has moved on, the «открыть платёж» button
-	// goes (решение #737).
-	GetOperationOpenState(ctx context.Context, id pgtype.UUID) (bool, error)
 	// The data owner's IANA timezone (ADR 0048): the tick's "today" is the
 	// calendar date in the property owner's timezone. NOT NULL with the
 	// 'Europe/Moscow' default (migration 000088); IANA-validated on write.
@@ -349,6 +344,14 @@ type Querier interface {
 	GetPaymentByID(ctx context.Context, arg GetPaymentByIDParams) (GetPaymentByIDRow, error)
 	GetPaymentMethodByID(ctx context.Context, id pgtype.UUID) (PaymentMethod, error)
 	GetPaymentMethodByIDForUpdate(ctx context.Context, id pgtype.UUID) (PaymentMethod, error)
+	// Whether the notification's own payment occurrence (решение #737: payment
+	// = правило + дата операции) still awaits payment: a planned operation of
+	// the rule dated that day exists. The date pins the check to the notified
+	// occurrence — the rule's other occurrences say nothing about it. Paid or
+	// cancelled — the state has moved on; the rule deleted — its occurrences
+	// lose the payment link and the «открыть платёж» button goes with the dead
+	// page (решение #737).
+	GetPaymentOpenState(ctx context.Context, arg GetPaymentOpenStateParams) (bool, error)
 	// "active" mirrors CountActivePropertiesByOwnerAdmin: active plus maintenance.
 	GetPropertiesStatsAdmin(ctx context.Context) (GetPropertiesStatsAdminRow, error)
 	// Unscoped lookup by id. Used by the policy/access layer (T3, issue #156) to
@@ -703,7 +706,29 @@ type Querier interface {
 	// only flips the date comparison. Both cursor args travel together; NULL
 	// (no cursor) reads from the beginning.
 	ListPaidOperationsGlobal(ctx context.Context, arg ListPaidOperationsGlobalParams) ([]ListPaidOperationsGlobalRow, error)
+	// One zone's due-day operations as of the zone's today (решение #737, тип
+	// №2: в день срока): planned, dated exactly today, on rules without the
+	// auto-pay mode — an auto-pay rule's due occurrence is extinguished by the
+	// tick the same day (ADR 0049) and never asks to be paid; if the auto
+	// charge did not happen, the operation becomes overdue and the overdue leg
+	// speaks. The rule's title travels (not the operation's snapshot): the
+	// notification's link lands on the payment's page, the copy names what the
+	// reader sees there.
+	ListPaymentDueTargets(ctx context.Context, arg ListPaymentDueTargetsParams) ([]ListPaymentDueTargetsRow, error)
 	ListPaymentMethodsByUserID(ctx context.Context, userID pgtype.UUID) ([]PaymentMethod, error)
+	// One zone's overdue operations as of the zone's today (решение #737, тип
+	// №3: 1-й день просрочки): planned, dated strictly before today — auto-pay
+	// rules included, the tick never backdates an auto charge (ADR 0049). The
+	// dedup key (rule, operation date) keeps a long-unpaid operation single —
+	// the sweep lists it daily, the publication inserts nothing.
+	ListPaymentOverdueTargets(ctx context.Context, arg ListPaymentOverdueTargetsParams) ([]ListPaymentOverdueTargetsRow, error)
+	// The payments scan's sweep targets (карта #734, #749; ADR 0048 p.3): the
+	// distinct owner timezones having planned payment-rule operations on
+	// non-archived properties — the only operations the scan can fire for (the
+	// ticks' status canon, same as the rental scan; the join to payments also
+	// keeps the manual facts and the deleted rules' orphans out). Stateless —
+	// every run re-lists, no per-zone state is kept.
+	ListPaymentScanZones(ctx context.Context) ([]string, error)
 	// The property's rules in creation order (stable for the list response).
 	// search ('' = no filter) is a case-insensitive substring match on the title;
 	// the application layer escapes the ILIKE metacharacters (ESCAPE '\').
@@ -713,6 +738,10 @@ type Querier interface {
 	ListPendingInvitationsByEmail(ctx context.Context, email string) ([]PropertyMemberInvitation, error)
 	ListPendingSubscriptionPaymentsByUserID(ctx context.Context, userID pgtype.UUID) ([]SubscriptionPayment, error)
 	ListPropertiesAdmin(ctx context.Context, arg ListPropertiesAdminParams) ([]ListPropertiesAdminRow, error)
+	// The property's active members' user ids — the object events' recipients
+	// besides the owner (решение #737: активные участники, «Просмотр»
+	// включительно; a suspended membership is not an active participant).
+	ListPropertyActiveRecipients(ctx context.Context, propertyID pgtype.UUID) ([]pgtype.UUID, error)
 	// The payments half of the list red dot (ticket #585, резолюция #584): the
 	// subset of the given properties holding at least one overdue planned
 	// operation — a stored planned row dated before the owner's today, the same
@@ -728,10 +757,6 @@ type Querier interface {
 	ListPushSubscriptionsByUser(ctx context.Context, userID pgtype.UUID) ([]PushSubscription, error)
 	ListRecentSubscriptionPaymentsAdmin(ctx context.Context) ([]ListRecentSubscriptionPaymentsAdminRow, error)
 	ListRecentUsersAdmin(ctx context.Context) ([]ListRecentUsersAdminRow, error)
-	// The property's active members' user ids — the event's recipients besides
-	// the owner (решение #737: активные участники, «Просмотр» включительно; a
-	// suspended membership is not an active participant).
-	ListRentalCompletedRecipients(ctx context.Context, propertyID pgtype.UUID) ([]pgtype.UUID, error)
 	// The rental-completed scan's sweep targets (карта #734, #748; ADR 0048
 	// p.3): the distinct owner timezones having unfinished rentals with a
 	// planned end on non-archived properties — the only rentals the scan can

@@ -13,8 +13,8 @@ import (
 
 // The adapters satisfy the consumer-declared ports (CODING_STANDARDS).
 var (
-	_ application.RentalScanZoneDirectory = (*RentalScanStore)(nil)
-	_ application.RentalCompletedSource   = (*RentalScanStore)(nil)
+	_ application.ScanZoneDirectory     = (*RentalScanStore)(nil)
+	_ application.RentalCompletedSource = (*RentalScanStore)(nil)
 )
 
 // RentalScanStore answers the rental-completed scan's questions (#748) over
@@ -32,14 +32,14 @@ func NewRentalScanStore(db postgres.DBTX) *RentalScanStore {
 
 // ListScanZones lists the distinct owner timezones having unfinished rentals
 // with a planned end — the sweep targets (ADR 0048 p.3).
-func (s *RentalScanStore) ListScanZones(ctx context.Context) ([]application.RentalScanZone, error) {
+func (s *RentalScanStore) ListScanZones(ctx context.Context) ([]application.ScanZone, error) {
 	zones, err := postgres.New(s.db).ListRentalCompletedScanZones(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list rental scan zones: %w", err)
 	}
-	result := make([]application.RentalScanZone, 0, len(zones))
+	result := make([]application.ScanZone, 0, len(zones))
 	for _, timezone := range zones {
-		result = append(result, application.RentalScanZone{Timezone: timezone})
+		result = append(result, application.ScanZone{Timezone: timezone})
 	}
 	return result, nil
 }
@@ -75,7 +75,7 @@ func (s *RentalScanStore) ListCompletedTargets(
 // event's recipients besides the owner (решение #737: «Просмотр» включён,
 // suspended is not an active participant).
 func (s *RentalScanStore) ListActiveRecipients(ctx context.Context, propertyID uuid.UUID) ([]uuid.UUID, error) {
-	ids, err := postgres.New(s.db).ListRentalCompletedRecipients(ctx, pgconv.UUIDToPgtype(propertyID))
+	ids, err := postgres.New(s.db).ListPropertyActiveRecipients(ctx, pgconv.UUIDToPgtype(propertyID))
 	if err != nil {
 		return nil, fmt.Errorf("list property recipients %s: %w", propertyID, err)
 	}

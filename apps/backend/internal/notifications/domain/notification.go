@@ -149,10 +149,14 @@ type TariffRef struct {
 // title/body/context_label is self-sufficient, the payload only adds
 // navigation and card rendering.
 type Payload struct {
-	Property     *EntityRef `json:"property,omitempty"`
-	Actor        *EntityRef `json:"actor,omitempty"`
-	RentalID     *uuid.UUID `json:"rental_id,omitempty"`
-	PaymentID    *uuid.UUID `json:"payment_id,omitempty"`
+	Property  *EntityRef `json:"property,omitempty"`
+	Actor     *EntityRef `json:"actor,omitempty"`
+	RentalID  *uuid.UUID `json:"rental_id,omitempty"`
+	PaymentID *uuid.UUID `json:"payment_id,omitempty"`
+	// PaymentDate is the payment events' operation date (решение #737:
+	// payload payment = id правила + дата операции) — the calendar date the
+	// «Оплатить» button's live check pins the occurrence to (#743).
+	PaymentDate  *time.Time `json:"payment_date,omitempty"`
 	TaskID       *uuid.UUID `json:"task_id,omitempty"`
 	MembershipID *uuid.UUID `json:"membership_id,omitempty"`
 	InvitationID *uuid.UUID `json:"invitation_id,omitempty"`

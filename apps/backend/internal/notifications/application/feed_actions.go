@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
@@ -22,10 +23,11 @@ type FeedLiveState interface {
 	// ADR 0053) and which property it belongs to. Exists=false when the
 	// rental is gone.
 	RentalActionState(ctx context.Context, rentalID uuid.UUID) (RentalActionState, error)
-	// PaymentOpen reports whether the notification's operation (Операция —
-	// вхождение Payments) still awaits payment: it exists and its status is
-	// planned. Paid or cancelled — the state has moved on.
-	PaymentOpen(ctx context.Context, paymentID uuid.UUID) (bool, error)
+	// PaymentOpen reports whether the notification's payment occurrence
+	// (решение #737: payment = правило + дата операции) still awaits
+	// payment: a planned operation of that rule dated that day exists.
+	// Paid, cancelled, or the rule gone — the state has moved on.
+	PaymentOpen(ctx context.Context, paymentID uuid.UUID, dueDate time.Time) (bool, error)
 	// TaskOpen reports whether the notification's task still awaits action:
 	// it exists and is not completed.
 	TaskOpen(ctx context.Context, taskID uuid.UUID) (bool, error)
@@ -128,10 +130,10 @@ func actionStands(
 		}
 		return access.Manageable, nil
 	case domain.ActionOpenPayment:
-		if n.Payload.PaymentID == nil {
+		if n.Payload.PaymentID == nil || n.Payload.PaymentDate == nil {
 			return false, nil
 		}
-		return live.PaymentOpen(ctx, *n.Payload.PaymentID)
+		return live.PaymentOpen(ctx, *n.Payload.PaymentID, *n.Payload.PaymentDate)
 	case domain.ActionOpenTask:
 		if n.Payload.TaskID == nil {
 			return false, nil

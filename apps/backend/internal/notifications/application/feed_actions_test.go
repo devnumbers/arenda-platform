@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
@@ -25,7 +26,7 @@ func (f *fakeLiveState) RentalActionState(_ context.Context, _ uuid.UUID) (Renta
 	return f.rental, f.rentalErr
 }
 
-func (f *fakeLiveState) PaymentOpen(_ context.Context, _ uuid.UUID) (bool, error) {
+func (f *fakeLiveState) PaymentOpen(_ context.Context, _ uuid.UUID, _ time.Time) (bool, error) {
 	return f.paymentOpen, nil
 }
 
@@ -103,7 +104,10 @@ func TestAvailableActions_EntityGates(t *testing.T) {
 	ctx := context.Background()
 	propertyID := uuid.Must(uuid.NewV7())
 
-	payment := actionNotification(t, domain.EventPaymentDue, domain.Payload{PaymentID: new(uuid.Must(uuid.NewV7()))})
+	payment := actionNotification(t, domain.EventPaymentDue, domain.Payload{
+		PaymentID:   new(uuid.Must(uuid.NewV7())),
+		PaymentDate: new(time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC)),
+	})
 	paymentLive := &fakeLiveState{paymentOpen: true}
 	actions, err := availableActions(ctx, paymentLive, feedTestUser, payment)
 	require.NoError(t, err)

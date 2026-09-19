@@ -44,7 +44,9 @@ func (s *feedStub) ListPage(
 ) ([]domain.Notification, error) {
 	return nil, nil
 }
+
 func (s *feedStub) CountUnread(ctx context.Context, userID uuid.UUID) (int64, error) { return 0, nil }
+
 func (s *feedStub) MarkRead(ctx context.Context, userID, id uuid.UUID) (bool, error) {
 	return false, nil
 }

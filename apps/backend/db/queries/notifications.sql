@@ -120,12 +120,18 @@ FROM rentals r
 JOIN properties p ON p.id = r.property_id
 WHERE r.id = $1;
 
--- name: GetOperationOpenState :one
--- Whether the notification's operation (Операция — вхождение Payments,
--- not the rule) still awaits payment: it exists and its status is planned.
--- Paid or cancelled — the state has moved on, the «открыть платёж» button
--- goes (решение #737).
-SELECT EXISTS (SELECT 1 FROM operations WHERE id = $1 AND status = 'planned') AS open;
+-- name: GetPaymentOpenState :one
+-- Whether the notification's own payment occurrence (решение #737: payment
+-- = правило + дата операции) still awaits payment: a planned operation of
+-- the rule dated that day exists. The date pins the check to the notified
+-- occurrence — the rule's other occurrences say nothing about it. Paid or
+-- cancelled — the state has moved on; the rule deleted — its occurrences
+-- lose the payment link and the «открыть платёж» button goes with the dead
+-- page (решение #737).
+SELECT EXISTS (
+    SELECT 1 FROM operations
+    WHERE payment_id = $1 AND date = $2 AND status = 'planned'
+) AS open;
 
 -- name: GetTaskOpenState :one
 -- Whether the notification's task still awaits action: it exists and is not
@@ -171,12 +177,80 @@ WHERE u.timezone = $1
   AND p.status IN ('active', 'maintenance')
 ORDER BY r.id;
 
--- name: ListRentalCompletedRecipients :many
--- The property's active members' user ids — the event's recipients besides
--- the owner (решение #737: активные участники, «Просмотр» включительно; a
--- suspended membership is not an active participant).
+-- name: ListPropertyActiveRecipients :many
+-- The property's active members' user ids — the object events' recipients
+-- besides the owner (решение #737: активные участники, «Просмотр»
+-- включительно; a suspended membership is not an active participant).
 SELECT user_id
 FROM property_members
 WHERE property_id = $1 AND status = 'active'
 ORDER BY user_id;
+
+-- name: ListPaymentScanZones :many
+-- The payments scan's sweep targets (карта #734, #749; ADR 0048 p.3): the
+-- distinct owner timezones having planned payment-rule operations on
+-- non-archived properties — the only operations the scan can fire for (the
+-- ticks' status canon, same as the rental scan; the join to payments also
+-- keeps the manual facts and the deleted rules' orphans out). Stateless —
+-- every run re-lists, no per-zone state is kept.
+SELECT DISTINCT u.timezone
+FROM operations o
+JOIN payments pay ON pay.id = o.payment_id
+JOIN properties p ON p.id = o.property_id
+JOIN users u ON u.id = o.owner_id
+WHERE o.status = 'planned'
+  AND p.status IN ('active', 'maintenance')
+ORDER BY u.timezone;
+
+-- name: ListPaymentDueTargets :many
+-- One zone's due-day operations as of the zone's today (решение #737, тип
+-- №2: в день срока): planned, dated exactly today, on rules without the
+-- auto-pay mode — an auto-pay rule's due occurrence is extinguished by the
+-- tick the same day (ADR 0049) and never asks to be paid; if the auto
+-- charge did not happen, the operation becomes overdue and the overdue leg
+-- speaks. The rule's title travels (not the operation's snapshot): the
+-- notification's link lands on the payment's page, the copy names what the
+-- reader sees there.
+SELECT pay.id AS payment_id,
+       o.date,
+       pay.title,
+       o.amount_kopecks,
+       p.id AS property_id,
+       p.name AS property_name,
+       p.address AS property_address,
+       o.owner_id
+FROM operations o
+JOIN payments pay ON pay.id = o.payment_id
+JOIN properties p ON p.id = o.property_id
+JOIN users u ON u.id = o.owner_id
+WHERE u.timezone = $1
+  AND o.date = $2::date
+  AND o.status = 'planned'
+  AND pay.auto_pay = false
+  AND p.status IN ('active', 'maintenance')
+ORDER BY o.id;
+
+-- name: ListPaymentOverdueTargets :many
+-- One zone's overdue operations as of the zone's today (решение #737, тип
+-- №3: 1-й день просрочки): planned, dated strictly before today — auto-pay
+-- rules included, the tick never backdates an auto charge (ADR 0049). The
+-- dedup key (rule, operation date) keeps a long-unpaid operation single —
+-- the sweep lists it daily, the publication inserts nothing.
+SELECT pay.id AS payment_id,
+       o.date,
+       pay.title,
+       o.amount_kopecks,
+       p.id AS property_id,
+       p.name AS property_name,
+       p.address AS property_address,
+       o.owner_id
+FROM operations o
+JOIN payments pay ON pay.id = o.payment_id
+JOIN properties p ON p.id = o.property_id
+JOIN users u ON u.id = o.owner_id
+WHERE u.timezone = $1
+  AND o.date < $2::date
+  AND o.status = 'planned'
+  AND p.status IN ('active', 'maintenance')
+ORDER BY o.id;
 

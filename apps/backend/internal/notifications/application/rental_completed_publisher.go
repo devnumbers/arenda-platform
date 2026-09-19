@@ -10,19 +10,6 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
 )
 
-// RentalScanZone is one sweep target of the rental-completed scan: an owner
-// timezone (ADR 0048 p.3) whose owners have rentals the scan can fire for.
-type RentalScanZone struct {
-	Timezone string
-}
-
-// RentalScanZoneDirectory lists the scan's sweep targets. Stateless — every
-// run re-lists, the scan keeps no per-zone state (the dedup key of the
-// published row is the only memory).
-type RentalScanZoneDirectory interface {
-	ListScanZones(ctx context.Context) ([]RentalScanZone, error)
-}
-
 // RentalCompletedTarget is one rental the scan fires for: a live rental in
 // the needs_attention state (ADR 0053) with the property snapshot the
 // publication carries (решение владельца 19.09.2026, #745 — the address line
@@ -70,14 +57,14 @@ type RentalCompletedSource interface {
 // it, so the next passing date notifies again (issue #748).
 type RentalCompletedPublisher struct {
 	pipeline *Publisher
-	zones    RentalScanZoneDirectory
+	zones    ScanZoneDirectory
 	source   RentalCompletedSource
 }
 
 // NewRentalCompletedPublisher builds the rental-completed publisher over the
 // pipeline creation service, the zone directory and the scan source.
 func NewRentalCompletedPublisher(
-	pipeline *Publisher, zones RentalScanZoneDirectory, source RentalCompletedSource,
+	pipeline *Publisher, zones ScanZoneDirectory, source RentalCompletedSource,
 ) *RentalCompletedPublisher {
 	return &RentalCompletedPublisher{pipeline: pipeline, zones: zones, source: source}
 }
@@ -157,27 +144,4 @@ func (p *RentalCompletedPublisher) publish(ctx context.Context, target RentalCom
 // so the key depends only on the facts the trigger reads.
 func rentalCompletedDedupKey(rentalID uuid.UUID, plannedEnd time.Time) string {
 	return "rental_completed:" + rentalID.String() + ":" + plannedEnd.Format("2006-01-02")
-}
-
-// zoneToday computes the sweep's "today" for one zone (ADR 0048 p.2, the
-// payments/tasks tick convention): the calendar date of the instant in the
-// zone's IANA location under the module's UTC-midnight date convention. An
-// unknown zone name is a data integrity error, not a fallback case:
-// users.timezone is IANA-validated on write.
-func zoneToday(now time.Time, timezone string) (time.Time, error) {
-	loc, err := time.LoadLocation(timezone)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("load rental scan zone %q as location: %w", timezone, err)
-	}
-	return DateAtUTCMidnight(now, loc), nil
-}
-
-// DateAtUTCMidnight is the module's date convention (ADR 0048 p.2): read the
-// instant in the given location and return its calendar date as a
-// UTC-midnight time.Time, so DATE columns compare without timezone surprises.
-// The same convention the payments and tasks ticks run under — each context
-// keeps its own copy across the context boundary.
-func DateAtUTCMidnight(t time.Time, loc *time.Location) time.Time {
-	local := t.In(loc)
-	return time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, time.UTC)
 }

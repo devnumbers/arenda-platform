@@ -7,6 +7,10 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
 )
 
+// deeplinkPropertyName is the property snapshot's name in the deeplink
+// tests' payloads.
+const deeplinkPropertyName = "Дом у парка"
+
 // The grace events (issue #253, #741) route to the payment-methods screen —
 // the one place the user fixes the failed renewal charge. The path is the
 // legacy direct channel's path, preserved verbatim.
@@ -40,7 +44,7 @@ func TestDeeplinkForRentalCompleted(t *testing.T) {
 	n := domain.Notification{
 		EventType: domain.EventRentalCompleted,
 		Payload: domain.Payload{
-			Property: &domain.EntityRef{ID: propertyID, Name: "Квартира"},
+			Property: &domain.EntityRef{ID: propertyID, Name: deeplinkPropertyName},
 			RentalID: &rentalID,
 		},
 	}
@@ -53,12 +57,48 @@ func TestDeeplinkForRentalCompleted(t *testing.T) {
 	// rather than a broken one.
 	half := domain.Notification{
 		EventType: domain.EventRentalCompleted,
-		Payload:   domain.Payload{Property: &domain.EntityRef{ID: propertyID, Name: "Квартира"}},
+		Payload:   domain.Payload{Property: &domain.EntityRef{ID: propertyID, Name: deeplinkPropertyName}},
 	}
 	if got := DeepLinkFor(half); got != "" {
 		t.Errorf("DeepLinkFor(rental_completed without rental id) = %q, want empty", got)
 	}
 	if got := DeepLinkFor(domain.Notification{EventType: domain.EventRentalCompleted}); got != "" {
 		t.Errorf("DeepLinkFor(rental_completed without payload) = %q, want empty", got)
+	}
+}
+
+// The payment events (#749) route to the payment's page, whose path carries
+// both the property and the rule — the ids come from the row's payload, not
+// from a static path.
+func TestDeeplinkForPayment(t *testing.T) {
+	t.Parallel()
+
+	propertyID := uuid.Must(uuid.NewV7())
+	ruleID := uuid.Must(uuid.NewV7())
+	for _, eventType := range []domain.EventType{domain.EventPaymentDue, domain.EventPaymentOverdue} {
+		n := domain.Notification{
+			EventType: eventType,
+			Payload: domain.Payload{
+				Property:  &domain.EntityRef{ID: propertyID, Name: deeplinkPropertyName},
+				PaymentID: &ruleID,
+			},
+		}
+		want := "/properties/" + propertyID.String() + "/payments/" + ruleID.String()
+		if got := DeepLinkFor(n); got != want {
+			t.Errorf("DeepLinkFor(%q) = %q, want %q", eventType, got, want)
+		}
+	}
+
+	// A payload without the ids (a hand-edited row) delivers without a link
+	// rather than a broken one.
+	half := domain.Notification{
+		EventType: domain.EventPaymentDue,
+		Payload:   domain.Payload{Property: &domain.EntityRef{ID: propertyID, Name: deeplinkPropertyName}},
+	}
+	if got := DeepLinkFor(half); got != "" {
+		t.Errorf("DeepLinkFor(payment_due without rule id) = %q, want empty", got)
+	}
+	if got := DeepLinkFor(domain.Notification{EventType: domain.EventPaymentOverdue}); got != "" {
+		t.Errorf("DeepLinkFor(payment_overdue without payload) = %q, want empty", got)
 	}
 }

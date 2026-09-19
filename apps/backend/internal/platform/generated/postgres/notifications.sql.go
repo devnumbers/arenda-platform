@@ -157,16 +157,27 @@ func (q *Queries) GetNotificationForUser(ctx context.Context, arg GetNotificatio
 	return i, err
 }
 
-const getOperationOpenState = `-- name: GetOperationOpenState :one
-SELECT EXISTS (SELECT 1 FROM operations WHERE id = $1 AND status = 'planned') AS open
+const getPaymentOpenState = `-- name: GetPaymentOpenState :one
+SELECT EXISTS (
+    SELECT 1 FROM operations
+    WHERE payment_id = $1 AND date = $2 AND status = 'planned'
+) AS open
 `
 
-// Whether the notification's operation (Операция — вхождение Payments,
-// not the rule) still awaits payment: it exists and its status is planned.
-// Paid or cancelled — the state has moved on, the «открыть платёж» button
-// goes (решение #737).
-func (q *Queries) GetOperationOpenState(ctx context.Context, id pgtype.UUID) (bool, error) {
-	row := q.db.QueryRow(ctx, getOperationOpenState, id)
+type GetPaymentOpenStateParams struct {
+	PaymentID pgtype.UUID `json:"payment_id"`
+	Date      pgtype.Date `json:"date"`
+}
+
+// Whether the notification's own payment occurrence (решение #737: payment
+// = правило + дата операции) still awaits payment: a planned operation of
+// the rule dated that day exists. The date pins the check to the notified
+// occurrence — the rule's other occurrences say nothing about it. Paid or
+// cancelled — the state has moved on; the rule deleted — its occurrences
+// lose the payment link and the «открыть платёж» button goes with the dead
+// page (решение #737).
+func (q *Queries) GetPaymentOpenState(ctx context.Context, arg GetPaymentOpenStateParams) (bool, error) {
+	row := q.db.QueryRow(ctx, getPaymentOpenState, arg.PaymentID, arg.Date)
 	var open bool
 	err := row.Scan(&open)
 	return open, err
@@ -331,18 +342,199 @@ func (q *Queries) ListNotifications(ctx context.Context, arg ListNotificationsPa
 	return items, nil
 }
 
-const listRentalCompletedRecipients = `-- name: ListRentalCompletedRecipients :many
+const listPaymentDueTargets = `-- name: ListPaymentDueTargets :many
+SELECT pay.id AS payment_id,
+       o.date,
+       pay.title,
+       o.amount_kopecks,
+       p.id AS property_id,
+       p.name AS property_name,
+       p.address AS property_address,
+       o.owner_id
+FROM operations o
+JOIN payments pay ON pay.id = o.payment_id
+JOIN properties p ON p.id = o.property_id
+JOIN users u ON u.id = o.owner_id
+WHERE u.timezone = $1
+  AND o.date = $2::date
+  AND o.status = 'planned'
+  AND pay.auto_pay = false
+  AND p.status IN ('active', 'maintenance')
+ORDER BY o.id
+`
+
+type ListPaymentDueTargetsParams struct {
+	Timezone string      `json:"timezone"`
+	Column2  pgtype.Date `json:"column_2"`
+}
+
+type ListPaymentDueTargetsRow struct {
+	PaymentID       pgtype.UUID `json:"payment_id"`
+	Date            pgtype.Date `json:"date"`
+	Title           string      `json:"title"`
+	AmountKopecks   int64       `json:"amount_kopecks"`
+	PropertyID      pgtype.UUID `json:"property_id"`
+	PropertyName    string      `json:"property_name"`
+	PropertyAddress string      `json:"property_address"`
+	OwnerID         pgtype.UUID `json:"owner_id"`
+}
+
+// One zone's due-day operations as of the zone's today (решение #737, тип
+// №2: в день срока): planned, dated exactly today, on rules without the
+// auto-pay mode — an auto-pay rule's due occurrence is extinguished by the
+// tick the same day (ADR 0049) and never asks to be paid; if the auto
+// charge did not happen, the operation becomes overdue and the overdue leg
+// speaks. The rule's title travels (not the operation's snapshot): the
+// notification's link lands on the payment's page, the copy names what the
+// reader sees there.
+func (q *Queries) ListPaymentDueTargets(ctx context.Context, arg ListPaymentDueTargetsParams) ([]ListPaymentDueTargetsRow, error) {
+	rows, err := q.db.Query(ctx, listPaymentDueTargets, arg.Timezone, arg.Column2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPaymentDueTargetsRow{}
+	for rows.Next() {
+		var i ListPaymentDueTargetsRow
+		if err := rows.Scan(
+			&i.PaymentID,
+			&i.Date,
+			&i.Title,
+			&i.AmountKopecks,
+			&i.PropertyID,
+			&i.PropertyName,
+			&i.PropertyAddress,
+			&i.OwnerID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPaymentOverdueTargets = `-- name: ListPaymentOverdueTargets :many
+SELECT pay.id AS payment_id,
+       o.date,
+       pay.title,
+       o.amount_kopecks,
+       p.id AS property_id,
+       p.name AS property_name,
+       p.address AS property_address,
+       o.owner_id
+FROM operations o
+JOIN payments pay ON pay.id = o.payment_id
+JOIN properties p ON p.id = o.property_id
+JOIN users u ON u.id = o.owner_id
+WHERE u.timezone = $1
+  AND o.date < $2::date
+  AND o.status = 'planned'
+  AND p.status IN ('active', 'maintenance')
+ORDER BY o.id
+`
+
+type ListPaymentOverdueTargetsParams struct {
+	Timezone string      `json:"timezone"`
+	Column2  pgtype.Date `json:"column_2"`
+}
+
+type ListPaymentOverdueTargetsRow struct {
+	PaymentID       pgtype.UUID `json:"payment_id"`
+	Date            pgtype.Date `json:"date"`
+	Title           string      `json:"title"`
+	AmountKopecks   int64       `json:"amount_kopecks"`
+	PropertyID      pgtype.UUID `json:"property_id"`
+	PropertyName    string      `json:"property_name"`
+	PropertyAddress string      `json:"property_address"`
+	OwnerID         pgtype.UUID `json:"owner_id"`
+}
+
+// One zone's overdue operations as of the zone's today (решение #737, тип
+// №3: 1-й день просрочки): planned, dated strictly before today — auto-pay
+// rules included, the tick never backdates an auto charge (ADR 0049). The
+// dedup key (rule, operation date) keeps a long-unpaid operation single —
+// the sweep lists it daily, the publication inserts nothing.
+func (q *Queries) ListPaymentOverdueTargets(ctx context.Context, arg ListPaymentOverdueTargetsParams) ([]ListPaymentOverdueTargetsRow, error) {
+	rows, err := q.db.Query(ctx, listPaymentOverdueTargets, arg.Timezone, arg.Column2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPaymentOverdueTargetsRow{}
+	for rows.Next() {
+		var i ListPaymentOverdueTargetsRow
+		if err := rows.Scan(
+			&i.PaymentID,
+			&i.Date,
+			&i.Title,
+			&i.AmountKopecks,
+			&i.PropertyID,
+			&i.PropertyName,
+			&i.PropertyAddress,
+			&i.OwnerID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPaymentScanZones = `-- name: ListPaymentScanZones :many
+SELECT DISTINCT u.timezone
+FROM operations o
+JOIN payments pay ON pay.id = o.payment_id
+JOIN properties p ON p.id = o.property_id
+JOIN users u ON u.id = o.owner_id
+WHERE o.status = 'planned'
+  AND p.status IN ('active', 'maintenance')
+ORDER BY u.timezone
+`
+
+// The payments scan's sweep targets (карта #734, #749; ADR 0048 p.3): the
+// distinct owner timezones having planned payment-rule operations on
+// non-archived properties — the only operations the scan can fire for (the
+// ticks' status canon, same as the rental scan; the join to payments also
+// keeps the manual facts and the deleted rules' orphans out). Stateless —
+// every run re-lists, no per-zone state is kept.
+func (q *Queries) ListPaymentScanZones(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, listPaymentScanZones)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var timezone string
+		if err := rows.Scan(&timezone); err != nil {
+			return nil, err
+		}
+		items = append(items, timezone)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPropertyActiveRecipients = `-- name: ListPropertyActiveRecipients :many
 SELECT user_id
 FROM property_members
 WHERE property_id = $1 AND status = 'active'
 ORDER BY user_id
 `
 
-// The property's active members' user ids — the event's recipients besides
-// the owner (решение #737: активные участники, «Просмотр» включительно; a
-// suspended membership is not an active participant).
-func (q *Queries) ListRentalCompletedRecipients(ctx context.Context, propertyID pgtype.UUID) ([]pgtype.UUID, error) {
-	rows, err := q.db.Query(ctx, listRentalCompletedRecipients, propertyID)
+// The property's active members' user ids — the object events' recipients
+// besides the owner (решение #737: активные участники, «Просмотр»
+// включительно; a suspended membership is not an active participant).
+func (q *Queries) ListPropertyActiveRecipients(ctx context.Context, propertyID pgtype.UUID) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listPropertyActiveRecipients, propertyID)
 	if err != nil {
 		return nil, err
 	}
