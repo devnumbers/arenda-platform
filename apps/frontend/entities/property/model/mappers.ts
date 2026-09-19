@@ -15,7 +15,11 @@ export function mapPropertyResponse(
     status: dto.status,
     photos: dto.photos?.map((photo) => ({ id: photo.id, url: photo.url })),
     access: dto.access
-      ? { role: dto.access.role, ownerName: dto.access.owner_name }
+      ? {
+          role: dto.access.role,
+          ownerName: dto.access.owner_name,
+          ownerEmail: dto.access.owner_email,
+        }
       : undefined,
     members_count: dto.members_count,
     created_at: dto.created_at,

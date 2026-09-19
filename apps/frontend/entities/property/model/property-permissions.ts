@@ -18,12 +18,18 @@ export type PropertyPermissions = {
   /** Участник чужого объекта — «Покинуть объект» (не для владельца).
    * Архив не гасит: выйти можно и из архивного (канон выхода #701). */
   readonly canLeave: boolean;
+  /** Жизненный цикл объекта — архив/возврат/удаление (зеркало
+   * sharedpolicy.CanLifecycle): только владелец. Гейтит мёртвые кнопки
+   * у участника («Перевести в архив», «Удалить объект» — сервер отвечает
+   * 403, приёмка #757: кнопок, которые нельзя сделать, быть не должно). */
+  readonly canLifecycle: boolean;
 };
 
 const DENIED: PropertyPermissions = {
   canEdit: false,
   canManageMembers: false,
   canLeave: false,
+  canLifecycle: false,
 };
 
 /**
@@ -48,6 +54,7 @@ export function propertyPermissions(
     canEdit: role !== 'viewer' && property.status !== 'archived',
     canManageMembers: role !== 'viewer',
     canLeave: role !== 'owner',
+    canLifecycle: role === 'owner',
   };
 }
 

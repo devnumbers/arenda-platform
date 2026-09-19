@@ -2296,6 +2296,8 @@ export interface components {
             role: "owner" | "full_access" | "viewer";
             /** @description Owner display name ("Name Surname" or masked phone, never email). Present when the actor is not the owner: in the detail response and on the list rows (main and archive) — the shared card shows whose object it is. Own rows carry none. */
             owner_name?: string;
+            /** @description Owner's account email for the detail's owner contact row — a deliberate exposure on this surface (Figma 2200-97365), the same posture as SuspendedShared.owner_email. Present in the detail response only when the actor is not the owner; empty when the owner has no email or the resolution failed. */
+            owner_email?: string;
         };
         PropertyResponse: {
             /** Format: uuid */

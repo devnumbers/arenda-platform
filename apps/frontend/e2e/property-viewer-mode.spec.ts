@@ -51,9 +51,11 @@ test.describe('режим просмотра', () => {
   ) => {
     await openDetail(page);
 
-    // Секция «Владелец объекта» (2235-100370): имя владельца из контракта;
-    // exact — имя двоится с баннером «С вами делится Иван Иванов».
+    // Секция «Владелец объекта» (2200-97365): имя и почта владельца из
+    // контракта; пилюля «Просмотр» под заголовком вместо баннера (#757).
     await expect(page.getByText('Иван Иванов', { exact: true })).toBeVisible();
+    await expect(page.getByText('e2e@example.com', { exact: true })).toBeVisible();
+    await expect(page.getByText('Просмотр', { exact: true })).toBeVisible();
 
     // «Управление» — ровно три ряда зрителя; мутирующих строк нет.
     const manage = page.getByTestId('property-manage-list');

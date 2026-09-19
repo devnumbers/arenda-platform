@@ -20,10 +20,13 @@ export type PropertyPhoto = {
 
 export type PropertyAttributes = Readonly<Record<string, string | number>>;
 
-/** Контекст доступа актора к объекту: роль и имя владельца (только для чужих объектов). */
+/** Контекст доступа актора к объекту: роль, имя и почта владельца (имя —
+ * для чужих объектов на списках и детали; почта — только в детали чужого
+ * объекта, контактный ряд владельца, Figma 2200-97365). */
 export type PropertyAccess = {
   readonly role: AccessRole;
   readonly ownerName?: string;
+  readonly ownerEmail?: string;
 };
 
 /**

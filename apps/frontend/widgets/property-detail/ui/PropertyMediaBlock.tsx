@@ -1,9 +1,12 @@
-import type { JSX } from 'react';
+import type { ReactNode, JSX } from 'react';
 import { PropertyAvatar } from '@/entities/property';
 
 export type PropertyMediaBlockProps = {
   readonly name: string;
   readonly address: string;
+  /** Пилюля доступа участника под адресом (Figma 2200-97365) — у
+   * владельца её нет. */
+  readonly children?: ReactNode;
 };
 
 /** Медиа-блок детали объекта (Figma 1186:44997, решение владельца
@@ -16,6 +19,7 @@ export type PropertyMediaBlockProps = {
 export function PropertyMediaBlock({
   name,
   address,
+  children,
 }: PropertyMediaBlockProps): JSX.Element {
   return (
     <section className="flex flex-col items-center px-0 pt-6 text-center">
@@ -26,6 +30,7 @@ export function PropertyMediaBlock({
         {name}
       </h1>
       <p className="m-0 mt-3 max-w-[345px] text-sm leading-4 text-content-secondary">{address}</p>
+      {children}
     </section>
   );
 }

@@ -77,7 +77,7 @@ import {
   PropertyStatusSheet,
 } from './PropertyDetailActions';
 import {PropertyDetailKebab} from './PropertyDetailKebab';
-import {PropertySharedBanner} from './PropertySharedBanner';
+import {PropertyAccessPill} from './PropertyAccessPill';
 import {PropertyOwnerSection} from './PropertyOwnerSection';
 import {PropertyDetailLoading} from './PropertyDetailLoading';
 import {PropertyDetailError} from './PropertyDetailError';
@@ -273,10 +273,11 @@ export function PropertyDetailPage(): JSX.Element {
             canMutate: permissions.canManageMembers,
             canPin: isPaid && permissions.canManageMembers,
             canLeave: permissions.canLeave,
+            canLifecycle: permissions.canLifecycle,
         })
         : [];
     const statusSheetItems = property
-        ? buildPropertyStatusSheetItems(property.status, hasRental)
+        ? buildPropertyStatusSheetItems(property.status, hasRental, permissions.canLifecycle)
         : [];
 
     const handleArchive = () => {
@@ -531,10 +532,6 @@ export function PropertyDetailPage(): JSX.Element {
             </TopNav>
 
             <PageContent className="px-6">
-                {property?.access && property.access.role !== 'owner' && (
-                    <PropertySharedBanner access={property.access}/>
-                )}
-
                 {isLoading && <PropertyDetailLoading/>}
 
                 {!isLoading && propertyErrorKind === 'not_found' && (
@@ -557,7 +554,11 @@ export function PropertyDetailPage(): JSX.Element {
 
                 {!isLoading && !propertyQuery.isError && property && (
                     <>
-                        <PropertyMediaBlock name={property.name} address={property.address}/>
+                        <PropertyMediaBlock name={property.name} address={property.address}>
+                            {property.access !== undefined && (
+                                <PropertyAccessPill role={property.access.role}/>
+                            )}
+                        </PropertyMediaBlock>
 
                         <PropertySectionCard
                             title="Аренда"
@@ -715,7 +716,10 @@ export function PropertyDetailPage(): JSX.Element {
                         </PropertySectionCard>
 
                         {permissions.canLeave && property.access?.ownerName !== undefined && (
-                            <PropertyOwnerSection ownerName={property.access.ownerName}/>
+                            <PropertyOwnerSection
+                                ownerName={property.access.ownerName}
+                                ownerEmail={property.access.ownerEmail}
+                            />
                         )}
 
                         <PropertySectionCard title="Управление">

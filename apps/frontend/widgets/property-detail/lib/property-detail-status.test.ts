@@ -61,28 +61,40 @@ describe('buildPropertyKebabItems (кебаб-меню детали)', () => {
 });
 
 describe('buildPropertyStatusSheetItems (шит смены статуса)', () => {
-  it('без аренды: начать аренду, на ремонте, в архив', () => {
-    expect(buildPropertyStatusSheetItems('active', false)).toEqual([
+  it('владелец, без аренды: начать аренду, на ремонте, в архив', () => {
+    expect(buildPropertyStatusSheetItems('active', false, true)).toEqual([
       { key: 'start-rental', label: 'Начать аренду', danger: false },
       { key: 'start-maintenance', label: 'Объект на ремонте', danger: false },
       { key: 'archive', label: 'Перевести в архив', danger: false },
     ]);
   });
 
-  it('с незавершённой арендой: завершить аренду вместо начала', () => {
+  it('владелец, с незавершённой арендой: завершить аренду вместо начала', () => {
     expect(
-      buildPropertyStatusSheetItems('active', true).map((item) => item.key),
+      buildPropertyStatusSheetItems('active', true, true).map((item) => item.key),
     ).toEqual(['complete-rental', 'start-maintenance', 'archive']);
   });
 
-  it('на ремонте: завершить ремонт, в архив', () => {
+  it('владелец, на ремонте: завершить ремонт, в архив', () => {
     expect(
-      buildPropertyStatusSheetItems('maintenance', false).map((item) => item.key),
+      buildPropertyStatusSheetItems('maintenance', false, true).map((item) => item.key),
     ).toEqual(['finish-maintenance', 'archive']);
   });
 
   it('архивный — шит не открывается, набор не строится', () => {
-    expect(buildPropertyStatusSheetItems('archived', false)).toEqual([]);
+    expect(buildPropertyStatusSheetItems('archived', false, true)).toEqual([]);
+  });
+
+  it('участник (#757 приёмка: нет мёртвых кнопок): без «Перевести в архив»', () => {
+    expect(
+      buildPropertyStatusSheetItems('active', false, false).map((item) => item.key),
+    ).toEqual(['start-rental', 'start-maintenance']);
+    expect(
+      buildPropertyStatusSheetItems('active', true, false).map((item) => item.key),
+    ).toEqual(['complete-rental', 'start-maintenance']);
+    expect(
+      buildPropertyStatusSheetItems('maintenance', false, false).map((item) => item.key),
+    ).toEqual(['finish-maintenance']);
   });
 });
 
@@ -95,6 +107,7 @@ const baseManage: ManageInput = {
   canMutate: true,
   canPin: true,
   canLeave: false,
+  canLifecycle: true,
 };
 
 describe('buildPropertyManageActions (секция «Управление»)', () => {
@@ -181,6 +194,30 @@ describe('buildPropertyManageActions (секция «Управление»)', (
       'leave',
       'delete',
     ]);
+  });
+
+  it('участник (#757 приёмка): без архива и удаления — нет мёртвых кнопок', () => {
+    const keys = buildPropertyManageActions({ ...baseManage, canLifecycle: false, canLeave: true }).map(
+      (item) => item.key,
+    );
+    expect(keys).toEqual(['edit', 'pin', 'start-rental', 'start-maintenance', 'access', 'leave']);
+  });
+
+  it('участник без права выхода: тот же набор без выхода', () => {
+    const keys = buildPropertyManageActions({ ...baseManage, canLifecycle: false }).map(
+      (item) => item.key,
+    );
+    expect(keys).toEqual(['edit', 'pin', 'start-rental', 'start-maintenance', 'access']);
+  });
+
+  it('участник, архивный объект: только доступ и выход — возврат/удаление владельческие', () => {
+    const items = buildPropertyManageActions({
+      ...baseManage,
+      status: 'archived',
+      canLifecycle: false,
+      canLeave: true,
+    });
+    expect(items.map((item) => item.key)).toEqual(['access', 'leave']);
   });
 
   it('базовый тариф: строк основного объекта нет', () => {

@@ -22,6 +22,7 @@ describe('propertyPermissions — центральные права из propert
       canEdit: false,
       canManageMembers: false,
       canLeave: false,
+      canLifecycle: false,
     });
   });
 
@@ -31,24 +32,27 @@ describe('propertyPermissions — центральные права из propert
       canEdit: false,
       canManageMembers: false,
       canLeave: false,
+      canLifecycle: false,
     });
   });
 
-  it('владелец живого объекта — правит, управляет доступом, не покидает свой объект', () => {
+  it('владелец живого объекта — правит, управляет доступом и жизненным циклом, не покидает свой объект', () => {
     const own = property({ id: 'p1', access: { role: 'owner' } });
     expect(propertyPermissions(own)).toEqual({
       canEdit: true,
       canManageMembers: true,
       canLeave: false,
+      canLifecycle: true,
     });
   });
 
-  it('полный доступ — правит и управляет доступом, может покинуть', () => {
+  it('полный доступ — правит и управляет доступом, может покинуть; жизненный цикл владельческий (#757)', () => {
     const editor = property({ id: 'p1', access: { role: 'full_access', ownerName: 'Иван Иванов' } });
     expect(propertyPermissions(editor)).toEqual({
       canEdit: true,
       canManageMembers: true,
       canLeave: true,
+      canLifecycle: false,
     });
   });
 
@@ -58,6 +62,7 @@ describe('propertyPermissions — центральные права из propert
       canEdit: false,
       canManageMembers: false,
       canLeave: true,
+      canLifecycle: false,
     });
   });
 
@@ -67,6 +72,7 @@ describe('propertyPermissions — центральные права из propert
       canEdit: false,
       canManageMembers: true,
       canLeave: false,
+      canLifecycle: true,
     });
 
     const archivedEditor = property({
@@ -78,6 +84,7 @@ describe('propertyPermissions — центральные права из propert
       canEdit: false,
       canManageMembers: true,
       canLeave: true,
+      canLifecycle: false,
     });
   });
 
