@@ -14,6 +14,7 @@ import type {
   NotificationPayload,
   NotificationTariffRef,
 } from './types';
+import { NOTIFICATION_ACTION_KINDS } from './types';
 
 type NotificationItemDto = components['schemas']['NotificationItem'];
 type NotificationDetailDto = components['schemas']['NotificationDetailResponse'];
@@ -39,7 +40,8 @@ export function mapNotification(dto: NotificationItemDto): Notification {
 /** Payload путешествует free-form объектом (контракт #743) — урезаем до
  * известного словаря и переводим в camelCase; чужие ключи и кривые
  * структуры не проходят. */
-function toEntityRef(value: unknown): NotificationEntityRef | undefined {  if (typeof value !== 'object' || value === null) return undefined;
+function toEntityRef(value: unknown): NotificationEntityRef | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
   const { id, name } = value as Record<string, unknown>;
   if (typeof id !== 'string' || typeof name !== 'string') return undefined;
   return { id, name };
@@ -84,19 +86,10 @@ function toPayload(raw: Record<string, unknown>): NotificationPayload {
   });
 }
 
-const ACTION_KINDS: ReadonlySet<string> = new Set<NotificationActionKind>([
-  'rental_extend',
-  'rental_complete',
-  'open_payment',
-  'open_task',
-  'open_property',
-  'open_property_members',
-  'open_tariffs',
-  'open_payment_methods',
-]);
-
 /** Живые действия читателя — enum закрыт бэком; неизвестное значение
- * (каталог v2 при старом фронте) не рендерится. */
+ * (каталог v2 при старом фронте) не рендерится. Источник каталога —
+ * NOTIFICATION_ACTION_KINDS (types.ts), расхождение исключено. */
+const ACTION_KINDS: ReadonlySet<string> = new Set(NOTIFICATION_ACTION_KINDS);
 function toActions(values: NotificationDetailDto['actions']): NotificationActionKind[] {
   return values.filter((value): value is NotificationActionKind => ACTION_KINDS.has(value));
 }

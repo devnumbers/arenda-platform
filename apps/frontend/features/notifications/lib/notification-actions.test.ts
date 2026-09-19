@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { notificationActionView } from './notification-actions';
-import type { NotificationActionKind, NotificationPayload } from '@/entities/notification';
+import {
+  NOTIFICATION_ACTION_KINDS,
+  type NotificationPayload,
+} from '@/entities/notification';
 
 const PROPERTY_ID = '0194a3f8-0000-7000-8000-000000000001';
 const PAYMENT_ID = '0194a3f8-0000-7000-8000-000000000002';
@@ -59,17 +62,7 @@ describe('notificationActionView', () => {
 });
 
 describe('полный каталог действий #737 покрыт', () => {
-  const kinds: NotificationActionKind[] = [
-    'rental_extend',
-    'rental_complete',
-    'open_payment',
-    'open_task',
-    'open_property',
-    'open_property_members',
-    'open_tariffs',
-    'open_payment_methods',
-  ];
-  it.each(kinds)('%s даёт кнопку с лейблом', (kind) => {
+  it.each(NOTIFICATION_ACTION_KINDS)('%s даёт кнопку с лейблом', (kind) => {
     const view = notificationActionView(kind, fullPayload);
     expect(view).not.toBeNull();
     expect(view?.label.length).toBeGreaterThan(0);

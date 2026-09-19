@@ -44,17 +44,22 @@ export function isNotificationUnread(notification: Notification): boolean {
 /**
  * Кнопка-переход на экран сущности (Действие, решение #737): enum закрыт
  * бэком, вычисляется при чтении по живому состоянию и правам читателя;
- * экран рендерит только то, что пришло (никогда не мутация).
+ * экран рендерит только то, что пришло (никогда не мутация). Кортеж —
+ * единственный источник каталога: union ниже, Set маппера и тест полного
+ * покрытия выводятся из него, дрейфа между списками не бывает.
  */
-export type NotificationActionKind =
-  | 'rental_extend'
-  | 'rental_complete'
-  | 'open_payment'
-  | 'open_task'
-  | 'open_property'
-  | 'open_property_members'
-  | 'open_tariffs'
-  | 'open_payment_methods';
+export const NOTIFICATION_ACTION_KINDS = [
+  'rental_extend',
+  'rental_complete',
+  'open_payment',
+  'open_task',
+  'open_property',
+  'open_property_members',
+  'open_tariffs',
+  'open_payment_methods',
+] as const;
+
+export type NotificationActionKind = (typeof NOTIFICATION_ACTION_KINDS)[number];
 
 /** Payload-ссылка со снимком имени (EntityRef, решение #737): id для
  * перехода, имя для карточки — переживает переименование и удаление

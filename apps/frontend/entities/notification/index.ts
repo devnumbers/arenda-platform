@@ -1,4 +1,4 @@
-export { isNotificationUnread } from './model/types';
+export { isNotificationUnread, NOTIFICATION_ACTION_KINDS } from './model/types';
 export type {
   Notification,
   NotificationActionKind,
