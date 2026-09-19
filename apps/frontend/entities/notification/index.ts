@@ -9,5 +9,13 @@ export type {
   NotificationTariffRef,
 } from './model/types';
 export { notificationCategoryLabel } from './model/category-labels';
-export { mapNotification, mapNotificationDetail } from './model/mappers';
+export {
+  allCategoriesEnabled,
+  NOTIFICATION_SETTINGS_CATEGORIES,
+} from './model/settings-catalog';
+export type {
+  NotificationCategoryPreferences,
+  NotificationSettingsCategory,
+} from './model/settings-catalog';
+export { mapNotification, mapNotificationDetail, mapCategoryPreferences } from './model/mappers';
 export { NotificationCategoryIcon } from './ui/notification-category-icon';

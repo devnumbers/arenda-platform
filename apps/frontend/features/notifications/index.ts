@@ -8,6 +8,10 @@ export {
   useDeleteNotification,
 } from './api/hooks';
 export {
+  useEmailNotificationPreferences,
+  useUpdateEmailPreferences,
+} from './api/preferences';
+export {
   groupNotificationsByDay,
   type NotificationFeedGroup,
 } from './lib/feed-groups';

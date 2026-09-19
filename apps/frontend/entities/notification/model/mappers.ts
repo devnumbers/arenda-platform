@@ -15,9 +15,24 @@ import type {
   NotificationTariffRef,
 } from './types';
 import { NOTIFICATION_ACTION_KINDS } from './types';
+import type { NotificationCategoryPreferences } from './settings-catalog';
 
 type NotificationItemDto = components['schemas']['NotificationItem'];
 type NotificationDetailDto = components['schemas']['NotificationDetailResponse'];
+type CategoryPreferencesDto = components['schemas']['NotificationCategoryPreferences'];
+
+/** Матрица флагов канала (NotificationCategoryPreferences, контракт #743)
+ * — snake_case DTO → доменные флаги четырёх настраиваемых категорий. */
+export function mapCategoryPreferences(
+  dto: CategoryPreferencesDto,
+): NotificationCategoryPreferences {
+  return {
+    rental: dto.rental,
+    payments_operations: dto.payments_operations,
+    tasks: dto.tasks,
+    shared_access: dto.shared_access,
+  };
+}
 
 /** Категория — строка в openapi, но каталог v1 (#737) фиксирован бэком. */
 function toCategory(value: string): NotificationCategory {

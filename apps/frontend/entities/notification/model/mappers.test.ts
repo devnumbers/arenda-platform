@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { components } from '@/shared/api/dto';
-import { mapNotification, mapNotificationDetail } from './mappers';
+import { mapCategoryPreferences, mapNotification, mapNotificationDetail } from './mappers';
 
 type NotificationItemDto = components['schemas']['NotificationItem'];
 type NotificationDetailDto = components['schemas']['NotificationDetailResponse'];
@@ -144,5 +144,23 @@ describe('mapNotificationDetail', () => {
       detailDto({ actions: ['rental_extend', 'rental_complete', 'open_tariffs_v2'] as NotificationDetailDto['actions'] }),
     );
     expect(mapped.actions).toStrictEqual(['rental_extend', 'rental_complete']);
+  });
+});
+
+describe('mapCategoryPreferences', () => {
+  it('переводит snake_case-матрицу канала в доменные флаги (#746)', () => {
+    expect(
+      mapCategoryPreferences({
+        rental: true,
+        payments_operations: false,
+        tasks: true,
+        shared_access: false,
+      }),
+    ).toStrictEqual({
+      rental: true,
+      payments_operations: false,
+      tasks: true,
+      shared_access: false,
+    });
   });
 });

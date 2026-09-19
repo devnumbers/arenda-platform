@@ -19,6 +19,12 @@ export type PushSubscriptionStatus = {
   readonly isReady: boolean;
   /** Initial SSR-safe state — no decision yet. */
   readonly isPending: boolean;
+  /**
+   * Endpoint URL of the active browser subscription — the device key of the
+   * per-device preferences API (#743, решение #738). null until a live
+   * subscription is probed (pending / unsupported / no subscription).
+   */
+  readonly endpoint: string | null;
 };
 
 const PENDING: PushSubscriptionStatus = {
@@ -28,6 +34,7 @@ const PENDING: PushSubscriptionStatus = {
   needsSubscription: false,
   isReady: false,
   isPending: true,
+  endpoint: null,
 };
 
 const UNSUPPORTED: PushSubscriptionStatus = {
@@ -37,6 +44,7 @@ const UNSUPPORTED: PushSubscriptionStatus = {
   needsSubscription: false,
   isReady: false,
   isPending: false,
+  endpoint: null,
 };
 
 export type PushSubscriptionStatusResult = PushSubscriptionStatus & {
@@ -92,6 +100,7 @@ export function usePushSubscriptionStatus(): PushSubscriptionStatusResult {
           needsSubscription: false,
           isReady: false,
           isPending: false,
+          endpoint: null,
         });
       }
       return;
@@ -107,6 +116,7 @@ export function usePushSubscriptionStatus(): PushSubscriptionStatusResult {
       needsSubscription: subscription === null,
       isReady: subscription !== null,
       isPending: false,
+      endpoint: subscription?.endpoint ?? null,
     });
   }, []);
 
