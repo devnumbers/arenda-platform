@@ -1,7 +1,7 @@
 'use client';
 
 import type { JSX, ReactNode } from 'react';
-import { Cancel } from '@/shared/assets/icons';
+import { ArrowLeft, Cancel } from '@/shared/assets/icons';
 import { IconButton } from '@/shared/ui/design';
 
 /**
@@ -20,16 +20,21 @@ import { IconButton } from '@/shared/ui/design';
  * колонкой max-w-400 по центру. Крестик × — выход на лендинг (`onClose`),
  * во всех макетах в баре 72px справа; в standalone PWA скрывается
  * (`hideClose`) — закрывать некуда (решение владельца 18.09, текущее
- * поведение).
+ * поведение). Опциональная стрелка ← (`onBack`) — в том же баре слева
+ * (макеты шага кода #765: 2349:67383/67411; на планшете 2349:67396 не
+ * нарисована — рисуется для единообразия, сводить на приёмке): шаг кода
+ * ведёт на предыдущий шаг — почта, если была, иначе телефон.
  */
 
 export type LoginShellProps = {
     readonly onClose: () => void;
+    /** Стрелка ← в баре слева: назад на предыдущий шаг (шаг кода #765). */
+    readonly onBack?: () => void;
     readonly hideClose?: boolean;
     readonly children: ReactNode;
 };
 
-export function LoginShell({ onClose, hideClose = false, children }: LoginShellProps): JSX.Element {
+export function LoginShell({ onClose, onBack, hideClose = false, children }: LoginShellProps): JSX.Element {
     return (
         <main className="relative min-h-dvh bg-surface">
             {/* Планшетный фон: градиент + размытый домик 700×700 по центру. */}
@@ -56,9 +61,15 @@ export function LoginShell({ onClose, hideClose = false, children }: LoginShellP
                 </div>
             </div>
 
-            {!hideClose && (
-                <div className="absolute right-0 top-0 z-10 flex h-[72px] items-center justify-end px-3">
-                    <IconButton icon={<Cancel />} label="Закрыть" onClick={onClose} />
+            {(onBack !== undefined || !hideClose) && (
+                <div className="absolute inset-x-0 top-0 z-10 flex h-[72px] items-center justify-between px-3">
+                    {/* Левый слот держит × справа и когда стрелки нет. */}
+                    {onBack !== undefined ? (
+                        <IconButton icon={<ArrowLeft />} label="Назад" onClick={onBack} />
+                    ) : (
+                        <span aria-hidden />
+                    )}
+                    {!hideClose && <IconButton icon={<Cancel />} label="Закрыть" onClick={onClose} />}
                 </div>
             )}
         </main>

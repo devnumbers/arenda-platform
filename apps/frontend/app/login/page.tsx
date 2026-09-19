@@ -1,10 +1,10 @@
 "use client";
 
-import {type JSX} from "react";
+import {type JSX, useState} from "react";
 import {useRouter} from "next/navigation";
 import {notify} from "@/shared/lib/notifications";
 import {type ApiError} from "@/shared/api/errors";
-import {AuthForm, EmailStep, LoginShell, PhoneStep, deviceTimezone, useSendCode, useVerifyCode} from "@/features/auth";
+import {CodeStep, EmailStep, LoginShell, PhoneStep, deviceTimezone, useSendCode, useVerifyCode} from "@/features/auth";
 import {isEmailValid} from "@/shared/lib/email";
 import {normalizePhone, isPhoneValid} from "@/shared/lib/phone";
 import {safeInternalPath} from "@/shared/lib/safe-internal-path";
@@ -13,7 +13,6 @@ import {useLoginDraft} from "@/features/auth";
 import {RESEND_TIMEOUT} from "@/features/auth";
 import {useStandalone} from "@/shared/lib/hooks/useStandalone";
 import {goBack} from "@/shared/lib/navigation";
-import styles from "./LoginPage.module.css";
 
 export default function LoginPage(): JSX.Element {
     const router = useRouter();
@@ -74,9 +73,17 @@ export default function LoginPage(): JSX.Element {
         );
     };
 
-    const handleVerifyCode = (code: string) => {
+    const [code, setCode] = useState("");
+    const [verifyError, setVerifyError] = useState<string | null>(null);
+
+    const handleCodeChange = (value: string) => {
+        setCode(value);
+        setVerifyError(null);
+    };
+
+    const handleVerifyCode = (value: string) => {
         const trimmedEmail = draft.email.trim();
-        if (code.length !== 6 || !isPhoneValid(draft.phone)) {
+        if (value.length !== 6 || !isPhoneValid(draft.phone) || verifyCode.isPending) {
             return;
         }
 
@@ -84,7 +91,7 @@ export default function LoginPage(): JSX.Element {
         // верификацией, бэк применяет её только при создании аккаунта. Когда
         // браузер не отдал зону — поле не отправляется.
         const timezone = deviceTimezone();
-        const base = {phone: normalizePhone(draft.phone), code, ...(timezone && {timezone})};
+        const base = {phone: normalizePhone(draft.phone), code: value, ...(timezone && {timezone})};
 
         verifyCode.mutate(
             trimmedEmail ? {...base, email: trimmedEmail} : base,
@@ -95,27 +102,42 @@ export default function LoginPage(): JSX.Element {
                     clearDraft();
                 },
                 onError: (error) => {
+                    // Неверный код (401) — инлайн в поле по макету 2349:67624
+                    // (resend-канон #733: 401 verify — не тост; текст макета
+                    // «Неверный код», деталь бэка «Неверный телефон, почта или
+                    // код» не встаёт в поле). Блокировка (429 — окно попыток
+                    // 15/30 мин, бан, лимит) — понятный текст бэка тоже инлайн,
+                    // чтобы не исчезал. Остальное — тост сценария.
+                    if (error.status === 401 || error.status === 429) {
+                        setVerifyError(error.status === 401 ? "Неверный код" : error.detail);
+                        return;
+                    }
                     notify.scenarios.auth.loginError({description: error.detail});
                 },
             },
         );
     };
 
-    const handleChangePhone = () => {
-        setDraft((prev) => ({...prev, step: "phone"}));
+    const handleCodeClear = () => {
+        setCode("");
+        setVerifyError(null);
     };
 
-    const handleChangeEmail = () => {
-        setDraft((prev) => ({...prev, step: "email"}));
-    };
-
-    const handleClose = () => {
-        goBack(router, "/");
+    // Стрелка ← — на предыдущий шаг: почта, если она была, иначе телефон
+    // (макеты #765). Черновик кода и ошибка живут только на шаге кода.
+    // Пока верификация в полёте, уход со шага закрыт — иначе её onSuccess
+    // утащил бы пользователя в кабинет с чужого шага.
+    const handleCodeBack = () => {
+        if (verifyCode.isPending) {
+            return;
+        }
+        handleCodeClear();
+        setDraft((prev) => ({...prev, step: prev.email.trim() ? "email" : "phone"}));
     };
 
     const handleResend = () => {
         const trimmedEmail = draft.email.trim();
-        if (!isPhoneValid(draft.phone)) {
+        if (!isPhoneValid(draft.phone) || verifyCode.isPending) {
             return;
         }
 
@@ -130,15 +152,19 @@ export default function LoginPage(): JSX.Element {
                         return;
                     }
                     recordSendWithRemainingSeconds(data.retryAfter ?? RESEND_TIMEOUT);
+                    handleCodeClear();
                 },
                 onError: handleSendCodeError,
             },
         );
     };
 
-    // Шаги телефона и почты — новый редизайн по макетам Рентли (карта #761,
-    // тикеты #763/#764). Шаг кода до своего тикета (#765) живёт в прежней
-    // вёрстке — ноль регрессий, редизайн следующим экраном.
+    const handleClose = () => {
+        goBack(router, "/");
+    };
+
+    // Шаги телефона и почты — редизайн по макетам Рентли (карта #761,
+    // тикеты #763/#764), шаг кода — #765. Все три шага живут на LoginShell.
     if (draft.step === "phone") {
         return (
             <LoginShell onClose={handleClose} hideClose={isStandalone}>
@@ -168,32 +194,17 @@ export default function LoginPage(): JSX.Element {
     }
 
     return (
-        <main className={styles.container}>
-            <section className={styles.left} aria-hidden="true">
-                <div className={styles.logo}/>
-            </section>
-            <section className={styles.right}>
-                <div className={styles.formWrapper}>
-                    <AuthForm
-                        step={draft.step}
-                        onStepChange={(step) => setDraft((prev) => ({...prev, step}))}
-                        onSendEmail={handleSendEmail}
-                        onVerifyCode={handleVerifyCode}
-                        onChangePhone={handleChangePhone}
-                        onChangeEmail={handleChangeEmail}
-                        onResend={handleResend}
-                        onClose={handleClose}
-                        hideClose={isStandalone}
-                        email={draft.email}
-                        onEmailChange={(email) => setDraft((prev) => ({...prev, email}))}
-                        isSendingEmail={sendCode.isPending}
-                        isVerifying={verifyCode.isPending}
-                        isResending={sendCode.isPending}
-                        resendTimer={resendTimer}
-                    />
-                </div>
-            </section>
-            <div className={styles.bgLogo} aria-hidden="true"/>
-        </main>
+        <LoginShell onClose={handleClose} hideClose={isStandalone} onBack={handleCodeBack}>
+            <CodeStep
+                code={code}
+                onCodeChange={handleCodeChange}
+                onVerify={handleVerifyCode}
+                error={verifyError ?? undefined}
+                onClear={handleCodeClear}
+                onResend={handleResend}
+                isResending={sendCode.isPending}
+                resendTimer={resendTimer}
+            />
+        </LoginShell>
     );
 }
