@@ -23,6 +23,7 @@ import { Button, Skeleton, Switch } from '@/shared/ui/design';
 import {
   applyPushChange,
   resolvePushDisplay,
+  resolvePushState,
   verdictFromOutcome,
   type PushChange,
 } from '../lib/notification-settings';
@@ -86,9 +87,7 @@ export function NotificationSettingsScreen(): JSX.Element {
   const pushLoading = !probeSettled || (endpoint !== null && pushPrefsQuery.isPending);
 
   const currentPushState = (): PushDevicePreferences =>
-    endpoint !== null
-      ? (pushPrefsQuery.data ?? defaultPushDevicePreferences())
-      : (localPush ?? defaultPushDevicePreferences());
+    resolvePushState(endpoint, pushPrefsQuery.data, localPush);
 
   const savePush = (next: PushDevicePreferences, saveEndpoint: string): void => {
     updatePush.mutate(

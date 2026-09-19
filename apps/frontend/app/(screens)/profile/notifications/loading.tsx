@@ -1,11 +1,12 @@
 import type { JSX } from 'react';
 import { Skeleton, SubScreenShell } from '@/shared/ui/design';
+import { ROUTES } from '@/shared/config/routes';
 
 /** Route-loading «Настроить уведомления» (#609): каркас саб-экрана (#568)
  * вне фазы загрузки; контент — скелетон мастер-строки и групп матрицы. */
 export default function NotificationsLoading(): JSX.Element {
   return (
-    <SubScreenShell title="Настроить уведомления" fallbackHref="/profile">
+    <SubScreenShell title="Настроить уведомления" fallbackHref={ROUTES.profile}>
       <div className="flex flex-col pb-6 pt-1" aria-label="Загрузка настроек">
         <div className="flex items-center justify-between py-3">
           <Skeleton className="h-5 w-56" />

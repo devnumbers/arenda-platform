@@ -65,6 +65,18 @@ export type PushDisplayInput = {
   readonly local: PushDevicePreferences | null;
 };
 
+/** Единый источник состояния пуш-колонки: с подпиской — сервер (до ответа
+ * GET — дефолт), без — локальное состояние с тем же дефолтом. */
+export function resolvePushState(
+  endpoint: string | null,
+  server: PushDevicePreferences | undefined,
+  local: PushDevicePreferences | null,
+): PushDevicePreferences {
+  return endpoint !== null
+    ? (server ?? defaultPushDevicePreferences())
+    : (local ?? defaultPushDevicePreferences());
+}
+
 export function resolvePushDisplay(input: PushDisplayInput): PushDisplay {
   if (!input.supported) {
     return {
@@ -76,10 +88,7 @@ export function resolvePushDisplay(input: PushDisplayInput): PushDisplay {
     };
   }
 
-  const state: PushDevicePreferences =
-    input.endpoint !== null
-      ? (input.server ?? defaultPushDevicePreferences())
-      : (input.local ?? defaultPushDevicePreferences());
+  const state = resolvePushState(input.endpoint, input.server, input.local);
 
   return {
     visible: true,

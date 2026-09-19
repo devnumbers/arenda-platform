@@ -6,11 +6,9 @@ export {
   useMarkAllNotificationsRead,
   useDeleteAllNotifications,
   useDeleteNotification,
-} from './api/hooks';
-export {
   useEmailNotificationPreferences,
   useUpdateEmailPreferences,
-} from './api/preferences';
+} from './api/hooks';
 export {
   groupNotificationsByDay,
   type NotificationFeedGroup,
