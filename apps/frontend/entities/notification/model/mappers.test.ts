@@ -78,12 +78,20 @@ describe('mapNotificationDetail', () => {
     expect(mapped.createdAt).toBe('2026-09-17T14:40:00Z');
   });
 
-  it('переносит payload-снимки в camelCase', () => {
+  it('переносит payload-снимки в camelCase, включая строки карточек', () => {
     const mapped = mapNotificationDetail(
       detailDto({
         payload: {
-          property: { id: '0194a3f8-0000-7000-8000-000000000001', name: '2-комнатная на Ленина' },
-          actor: { id: '0194a3f8-0000-7000-8000-000000000002', name: 'Иван Петров' },
+          property: {
+            id: '0194a3f8-0000-7000-8000-000000000001',
+            name: '2-комнатная на Ленина',
+            address: 'Проспект Ленина, 31',
+          },
+          actor: {
+            id: '0194a3f8-0000-7000-8000-000000000002',
+            name: 'Иван Петров',
+            email: 'ivan@yandex.ru',
+          },
           rental_id: '0194a3f8-0000-7000-8000-000000000003',
           payment_id: '0194a3f8-0000-7000-8000-000000000004',
           task_id: '0194a3f8-0000-7000-8000-000000000005',
@@ -94,8 +102,8 @@ describe('mapNotificationDetail', () => {
       }),
     );
     expect(mapped.payload).toStrictEqual({
-      property: { id: '0194a3f8-0000-7000-8000-000000000001', name: '2-комнатная на Ленина' },
-      actor: { id: '0194a3f8-0000-7000-8000-000000000002', name: 'Иван Петров' },
+      property: { id: '0194a3f8-0000-7000-8000-000000000001', name: '2-комнатная на Ленина', address: 'Проспект Ленина, 31' },
+      actor: { id: '0194a3f8-0000-7000-8000-000000000002', name: 'Иван Петров', email: 'ivan@yandex.ru' },
       rentalId: '0194a3f8-0000-7000-8000-000000000003',
       paymentId: '0194a3f8-0000-7000-8000-000000000004',
       taskId: '0194a3f8-0000-7000-8000-000000000005',
@@ -105,18 +113,30 @@ describe('mapNotificationDetail', () => {
     });
   });
 
+  it('строки карточек без адреса и email остаются чистыми снимками {id, name}', () => {
+    const mapped = mapNotificationDetail(
+      detailDto({
+        payload: {
+          property: { id: '0194a3f8-0000-7000-8000-000000000001', name: 'Объект' },
+          actor: { id: '0194a3f8-0000-7000-8000-000000000002', name: 'Иван Петров' },
+        },
+      }),
+    );
+    expect(mapped.payload.property).toStrictEqual({ id: '0194a3f8-0000-7000-8000-000000000001', name: 'Объект' });
+    expect(mapped.payload.actor).toStrictEqual({ id: '0194a3f8-0000-7000-8000-000000000002', name: 'Иван Петров' });
+  });
+
   it('урезает payload до известного словаря — мусор не проходит', () => {
     const mapped = mapNotificationDetail(
       detailDto({
         payload: {
-          property: { id: '0194a3f8-0000-7000-8000-000000000001', name: 'Объект', address: 'неизвестное поле' },
+          property: { id: '0194a3f8-0000-7000-8000-000000000001', name: 'Объект', address: 42 },
           unknown_key: 42,
         },
       }),
     );
-    expect(mapped.payload).toStrictEqual({
-      property: { id: '0194a3f8-0000-7000-8000-000000000001', name: 'Объект' },
-    });
+    // address не строка — строка карточки не проходит; имя и id остаются.
+    expect(mapped.payload.property).toStrictEqual({ id: '0194a3f8-0000-7000-8000-000000000001', name: 'Объект' });
   });
 
   it('фильтрует неизвестные действия из живого состояния', () => {

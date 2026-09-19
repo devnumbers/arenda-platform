@@ -42,9 +42,14 @@ export function mapNotification(dto: NotificationItemDto): Notification {
  * структуры не проходят. */
 function toEntityRef(value: unknown): NotificationEntityRef | undefined {
   if (typeof value !== 'object' || value === null) return undefined;
-  const { id, name } = value as Record<string, unknown>;
+  const { id, name, address, email } = value as Record<string, unknown>;
   if (typeof id !== 'string' || typeof name !== 'string') return undefined;
-  return { id, name };
+  return withoutUndefinedSlots({
+    id,
+    name,
+    address: typeof address === 'string' ? address : undefined,
+    email: typeof email === 'string' ? email : undefined,
+  });
 }
 
 function toTariffRef(value: unknown): NotificationTariffRef | undefined {

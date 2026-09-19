@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, type JSX } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   notificationCategoryLabel,
@@ -155,15 +156,21 @@ function NotificationDetailBody({
         <p className="text-balance text-base leading-[18px] text-content">{detail.body}</p>
       </div>
       {detail.payload.property && (
-        <NotificationEntityCard
-          icon={<BoldHome className="h-6 w-6 text-white" />}
+        // Карточка объекта — ссылка на объект (решение владельца 19.09.2026,
+        // #745): имя и адрес — снимки payload, у снесённого объекта остаётся
+        // снимок, ссылка уводит на 404 объектного экрана.
+        <NotificationEntityLink
+          href={ROUTES.property(detail.payload.property.id)}
+          icon={<BoldHome className="h-6 w-6 text-[#d3d7d9]" />}
           name={detail.payload.property.name}
+          detail={detail.payload.property.address}
         />
       )}
       {detail.payload.actor && (
         <NotificationEntityCard
-          icon={<BoldUser className="h-6 w-6 text-white" />}
+          icon={<BoldUser className="h-6 w-6 text-[#d3d7d9]" />}
           name={detail.payload.actor.name}
+          detail={detail.payload.actor.email}
         />
       )}
       <div className="flex flex-col gap-2 text-base leading-[18px] text-content-tertiary">
@@ -207,24 +214,71 @@ function NotificationDetailBody({
   );
 }
 
-/** Карточка сущности (Row Button макета 2333:184048): круг 44 на
- * surface-muted с bold-глифом, имя-снимок 16/18. Адрес объекта и email
- * приглашающего контрактом не приходят — рендерится снимок имени. */
-function NotificationEntityCard({
+/** Карточка сущности (Row Button макета 2316:143298): круг 44 на
+ * surface-muted с серым bold-глифом (канонный серый иконок #D3D7D9),
+ * имя-снимок 16/18 и серая строка карточки 14/16 (#6F787C) — адрес объекта
+ * / email приглашающего, снимки payload (решение владельца 19.09.2026,
+ * #745); строки, которых в снимке нет, не рендерятся. */
+function NotificationEntityCardBody({
   icon,
   name,
+  detail,
 }: {
   readonly icon: JSX.Element;
   readonly name: string;
+  readonly detail?: string;
 }): JSX.Element {
   return (
-    <div className="flex min-h-[52px] items-center gap-3">
+    <>
       <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill bg-surface-muted ring-[2.5px] ring-white">
         {icon}
       </div>
-      <p className="min-w-0 flex-1 truncate text-base font-medium leading-[18px] text-content">
-        {name}
-      </p>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-base font-medium leading-[18px] text-content">{name}</p>
+        {detail && (
+          <p className="mt-1 truncate text-sm leading-4 text-content-secondary">{detail}</p>
+        )}
+      </div>
+    </>
+  );
+}
+
+/** Карточка приглашающего — не ссылка. */
+function NotificationEntityCard({
+  icon,
+  name,
+  detail,
+}: {
+  readonly icon: JSX.Element;
+  readonly name: string;
+  readonly detail?: string;
+}): JSX.Element {
+  return (
+    <div className="flex min-h-[52px] items-center gap-3">
+      <NotificationEntityCardBody icon={icon} name={name} detail={detail} />
     </div>
+  );
+}
+
+/** Карточка объекта-ссылка: та же анатомия, вся карточка ведёт на объект
+ * (решение владельца 19.09.2026, #745); ховер — как у строк ленты (#744). */
+function NotificationEntityLink({
+  href,
+  icon,
+  name,
+  detail,
+}: {
+  readonly href: string;
+  readonly icon: JSX.Element;
+  readonly name: string;
+  readonly detail?: string;
+}): JSX.Element {
+  return (
+    <Link
+      href={href}
+      className="flex min-h-[52px] items-center gap-3 rounded-button outline-none transition-opacity hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary active:opacity-80"
+    >
+      <NotificationEntityCardBody icon={icon} name={name} detail={detail} />
+    </Link>
   );
 }

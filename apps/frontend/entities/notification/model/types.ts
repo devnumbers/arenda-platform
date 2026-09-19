@@ -63,10 +63,14 @@ export type NotificationActionKind = (typeof NOTIFICATION_ACTION_KINDS)[number];
 
 /** Payload-ссылка со снимком имени (EntityRef, решение #737): id для
  * перехода, имя для карточки — переживает переименование и удаление
- * сущности. */
+ * сущности. Строки карточек сверх имени — тоже снимки момента публикации
+ * (решение владельца 19.09.2026, #745): объект несёт адрес, приглашающий —
+ * email; строки, которых в снимке нет, карточка не рисует. */
 export type NotificationEntityRef = {
   readonly id: string;
   readonly name: string;
+  readonly address?: string;
+  readonly email?: string;
 };
 
 /** Тарифный снимок биллинг-событий (TariffRef); сумма — BIGINT копейки. */
