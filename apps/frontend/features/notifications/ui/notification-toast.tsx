@@ -20,7 +20,9 @@ const NOTIFICATION_TOAST_AUTOCLOSE_MS = 6000;
  * Тост о новом уведомлении (макет 2343:57307, тикет #747): круг иконки
  * категории 44 без точки непрочитанного и без тарифного бейджа (в макете
  * тоста Badge=None), строка контекста + время, заголовок 16/18, описание
- * 14/16 максимум в три строки, X 40 в правом-верхнем. Тап по карточке
+ * 14/16 максимум в две строки (решение владельца 19.09 — подпись-заглушка
+ * макета «в три строки» устарела), X 40 с зазором 8 от правого края. Тап
+ * по карточке
  * ведёт на страницу уведомления («тап → страница уведомления», #747);
  * deeplink url из кадра остаётся канону пушей (sw.js). X — сестринский
  * элемент ссылки, не вложенный (валидная интерактивная вложенность).
@@ -59,7 +61,7 @@ export function NotificationToast({
             <span className="text-base font-medium leading-[18px] text-content">{frame.title}</span>
           </span>
           {frame.body !== '' && (
-            <span className="line-clamp-3 text-sm leading-4 text-content-secondary">{frame.body}</span>
+            <span className="line-clamp-2 text-sm leading-4 text-content-secondary">{frame.body}</span>
           )}
         </span>
       </Link>
@@ -71,7 +73,7 @@ export function NotificationToast({
           event.stopPropagation();
           closeToast();
         }}
-        className="absolute right-0 top-0 flex h-10 w-10 items-center justify-center rounded-pill text-content-tertiary outline-none transition-colors hover:text-content focus-visible:ring-2 focus-visible:ring-primary"
+        className="absolute right-2 top-0 flex h-10 w-10 items-center justify-center rounded-pill text-content-secondary outline-none transition-colors hover:text-content focus-visible:ring-2 focus-visible:ring-primary"
       >
         <Cancel width={24} height={24} aria-hidden />
       </button>

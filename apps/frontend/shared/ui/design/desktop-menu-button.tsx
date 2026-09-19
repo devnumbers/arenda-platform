@@ -55,17 +55,21 @@ export function DesktopMenuButton({
     >
       <span
         className={cn(
-          'flex h-full w-full items-center gap-3 rounded-button px-3 text-content transition-colors',
+          'flex h-full w-full items-center gap-2 rounded-button px-3 text-content transition-colors',
           active ? 'bg-surface-muted' : 'bg-surface',
         )}
       >
-        <section.Icon className="h-6 w-6 shrink-0" aria-hidden />
-        <span className="truncate text-sm font-medium leading-4">{section.label}</span>
+        <span className="flex min-w-0 items-center gap-3">
+          <section.Icon className="h-6 w-6 shrink-0" aria-hidden />
+          <span className="truncate text-sm font-medium leading-4">{section.label}</span>
+        </span>
         {badge !== undefined && badge > 0 && (
           // Число непрочитанных: без потолка — счётчик бэка всегда конечен;
-          // текст 13/15 Medium белый, вертикально pill = 18px по высоте
-          // строки (Figma NumbersAlerts, padding 0 6).
-          <span className="ml-auto flex h-[18px] shrink-0 items-center rounded-pill bg-danger px-1.5 text-[13px] font-medium leading-[15px] text-surface">
+          // текст 13/15 Medium белый, pill 18px (Figma NumbersAlerts,
+          // padding 0 6); стоит вплотную к подписи с зазором 8 (Figma
+          // 2329:148713 — внешний row gap 8, внутри icon+label gap 12),
+          // не прижат к правому краю пилюли.
+          <span className="flex h-[18px] shrink-0 items-center rounded-pill bg-danger px-1.5 text-[13px] font-medium leading-[15px] text-surface">
             {badge}
           </span>
         )}

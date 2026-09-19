@@ -130,6 +130,23 @@
     background: transparent;
 }
 
+/* Extended hit area канона накрывает X верхней карточки свёрнутого
+   стека — клик по крестику перехватывает фронт-карточка (поймано
+   владельцем 19.09: «уведомления не закрываются на крестик»). У
+   уведомительных тостов зона отключена: X кликабелен всегда; gap
+   filler (::after) остаётся — hover-раскрытие работает. */
+.toast.notification[class*='--stacked']::before {
+    content: none;
+}
+
+/* Exit канона («улет вправо») перебивает stack-трансформ (--y/--s):
+   свёрнутая карточка при закрытии скачет по вертикали и масштабу.
+   Не-фронтовая карточка гаснет на месте; фронтовая (:last-child)
+   сохраняет вылет канона. */
+.toast.notification[class*='--stacked']:not(:last-child).toastExit {
+    animation-name: toast-fade-out;
+}
+
 .closeButton {
     flex-shrink: 0;
     align-self: center;
