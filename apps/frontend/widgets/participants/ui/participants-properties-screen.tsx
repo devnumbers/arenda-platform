@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type JSX } from 'react';
-import { ArrowDown, BoldUser, EditSmall, Exit, EyeSmall, Kebab } from '@/shared/assets/icons';
+import { ArrowDown, BoldUser, Edit, Exit, EyeSmall, Kebab } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { ParticipantLegBadge } from '@/entities/participants';
 import { useLeaveAllProperties, useLeaveProperty } from '@/features/participants';
@@ -40,7 +40,7 @@ import { ParticipantSuccessPopup } from './participant-success-popup';
  * «Просмотр») — канон participantLegBadge #698; чип-сортировка «Название» —
  * клиентская (объём мал — тарифные слоты, канон #697).
  *
- * Кебаб карточки открывает шит «Действия с объектом» (2010-133846/132578):
+ * Кебаб карточки открывает шит «Действия с объектом» (2010-132581/133849):
  * карточка объекта, ряд владельца, статус доступа и «Покинуть объект» —
  * ConfirmDialog 2010-132970 (кнопки в ряд) → DELETE members/self → попап
  * «Вы покинули объект» (2010-133204). Кебаб шапки — «Покинуть все объекты»
@@ -79,6 +79,7 @@ export function ParticipantsPropertiesScreen(): JSX.Element {
   // открытии (useProperty гейтится пустым id).
   const detailQuery = useProperty(sheetPropertyId ?? '');
   const ownerName = detailQuery.data?.access?.ownerName;
+  const ownerEmail = detailQuery.data?.access?.ownerEmail;
 
   const requestLeave = (propertyId: string): void => {
     setSheetPropertyId(null);
@@ -201,10 +202,10 @@ export function ParticipantsPropertiesScreen(): JSX.Element {
           }
         }}
       >
-        <ModalContent title="Действия с объектом" titleClassName="text-2xl leading-8">
+        <ModalContent title="Действия с объектом">
           {sheetRow !== null && (
             <div className="flex flex-col">
-              <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-6">
                 <ObjectCard
                   photoUrl={sheetRow.photoUrl}
                   title={sheetRow.title}
@@ -215,27 +216,34 @@ export function ParticipantsPropertiesScreen(): JSX.Element {
                   <ObjectCard
                     glyph={<BoldUser className="h-6 w-6 text-content-tertiary" />}
                     title={ownerName}
+                    subtitle={ownerEmail}
                     badge={ownerBadge}
                   />
                 )}
               </div>
-              <div className="mt-6 flex h-14 w-full items-center justify-center gap-2 rounded-button border-[1.5px] border-surface-muted text-base font-medium text-content">
-                {sheetRow.role === 'full_access' ? (
-                  <>
-                    Вам доступно редактирование
-                    <EditSmall className="h-6 w-6" aria-hidden />
-                  </>
-                ) : (
-                  <>
-                    Вам доступен просмотр
-                    <EyeSmall className="h-6 w-6" aria-hidden />
-                  </>
-                )}
+              <div className="mt-6 flex h-14 w-full rounded-2xl bg-surface-muted p-0.5">
+                <div className="flex h-full w-full items-center justify-center gap-2 rounded-[14px] bg-surface shadow-[0_2px_8px_rgba(0,0,0,0.16)]">
+                  {sheetRow.role === 'full_access' ? (
+                    <>
+                      <span className="text-sm font-medium leading-4 text-content">
+                        Вам доступно редактирование
+                      </span>
+                      <Edit className="h-6 w-6 shrink-0 text-content" aria-hidden />
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-sm font-medium leading-4 text-content">
+                        Вам доступен просмотр
+                      </span>
+                      <EyeSmall className="h-6 w-6 shrink-0 text-content" aria-hidden />
+                    </>
+                  )}
+                </div>
               </div>
               <button
                 type="button"
                 onClick={() => requestLeave(sheetRow.id)}
-                className="mt-6 flex cursor-pointer items-center gap-3 text-left outline-none transition-opacity hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:opacity-80"
+                className="mt-7 flex cursor-pointer items-center gap-4 text-left outline-none transition-opacity hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:opacity-80"
               >
                 <Exit className="h-6 w-6 shrink-0 text-error" aria-hidden />
                 <span className="text-base font-medium leading-[18px] text-error">
