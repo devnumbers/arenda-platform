@@ -280,6 +280,11 @@ type Querier interface {
 	// объекте): run inside the transaction under the property lock; the partial
 	// unique index backstops the race.
 	ExistsUnfinishedRental(ctx context.Context, arg ExistsUnfinishedRentalParams) (bool, error)
+	// The access events' property snapshot (#751): the display name and the
+	// address line the feed rows' property card carries (EntityRef, #745). A
+	// missing property is a no-row error — the access transitions never fire on
+	// a deleted object, a miss is abnormal and fails the publication.
+	GetAccessEventPropertyView(ctx context.Context, id pgtype.UUID) (GetAccessEventPropertyViewRow, error)
 	GetAuditLogByIDAdmin(ctx context.Context, id pgtype.UUID) (AuditLog, error)
 	GetCardBindingSessionByRequestKeyForUpdate(ctx context.Context, arg GetCardBindingSessionByRequestKeyForUpdateParams) (CardBindingSession, error)
 	// Contacts context queries: CRUD and search over the owner's contact book

@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nambers/arenda-planform/apps/backend/cmd/api/wire"
+	accessapp "github.com/nambers/arenda-planform/apps/backend/internal/access/application"
 	billinghttp "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/http"
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
@@ -88,7 +89,7 @@ func run() error {
 	//    resolver, membership-aware policy and access service. Built before
 	//    properties because the policy replaces the T2 owner-only policy and is
 	//    injected into every property service.
-	accessMod, err := wire.WireAccess(ctx, p, billingMod, identityMod.EmailMailer)
+	accessMod, err := wire.WireAccess(ctx, p, billingMod, identityMod.EmailMailer, eventDispatcher)
 	if err != nil {
 		return err
 	}
@@ -192,6 +193,19 @@ func run() error {
 	//     are registered before the workers start (step 12), so no grace
 	//     event fires unwired.
 	subscribeGraceEvents(eventDispatcher, notificationsapp.NewGracePublisher(riverMod.Publisher))
+
+	// 11.8 Access notifications (карта #734, #751): the access lifecycle
+	//     events — the invitation's activation, the revoke, the slot pause
+	//     and recovery, the member's self-exit — publish to the stored feed
+	//     + delivery queue through the same pipeline publisher (the
+	//     Совместный доступ category, gated per-channel by the settings
+	//     matrix at delivery time). The dispatchers are synchronous, so the
+	//     subscription must exist before any transition can fire it.
+	accessEventViews := notificationspg.NewAccessViewStore(
+		p.DB,
+		notificationspg.NewAccessEventUserReader(identityMod.UserRepo),
+	)
+	subscribeAccessEvents(eventDispatcher, notificationsapp.NewAccessPublisher(riverMod.Publisher, accessEventViews))
 
 	// 11.7 The notifications scan (карта #734, #748–#750): the hourly zone
 	//     sweep publishes the scan-driven catalog events — the rentals that
@@ -443,6 +457,63 @@ func subscribeGraceEvents(
 			return fmt.Errorf("unexpected event type %T", event)
 		}
 		return gracePublisher.NotifyGraceExpiring(ctx, e.UserID, e.SubscriptionID, e.GraceUntil)
+	})
+}
+
+// subscribeAccessEvents registers the access lifecycle events' subscribers on
+// the shared event dispatcher: each access transition becomes the stored feed
+// notification(s) of the Совместный доступ catalog (карта #734, #751). The
+// publisher is notifications' AccessPublisher over the pipeline Publisher;
+// access never imports notifications — the composition root owns the seam.
+func subscribeAccessEvents(
+	eventDispatcher *events.InProcessDispatcher,
+	accessPublisher *notificationsapp.AccessPublisher,
+) {
+	eventDispatcher.Subscribe(events.EventType("access_invitation_activated"), func(ctx context.Context, event any) error {
+		e, ok := event.(accessapp.InvitationActivated)
+		if !ok {
+			return fmt.Errorf("unexpected event type %T", event)
+		}
+		return accessPublisher.NotifyInvitationActivated(
+			ctx, e.InvitationID, e.MembershipID, e.PropertyID, e.InviterID, e.InviteeID,
+			e.Suspended, e.At,
+		)
+	})
+	eventDispatcher.Subscribe(events.EventType("access_membership_suspended"), func(ctx context.Context, event any) error {
+		e, ok := event.(accessapp.MembershipSuspended)
+		if !ok {
+			return fmt.Errorf("unexpected event type %T", event)
+		}
+		return accessPublisher.NotifyMembershipSuspended(
+			ctx, e.MembershipID, e.PropertyID, e.RecipientID, e.ActorID, e.SuspendedAt,
+		)
+	})
+	eventDispatcher.Subscribe(events.EventType("access_membership_resumed"), func(ctx context.Context, event any) error {
+		e, ok := event.(accessapp.MembershipResumed)
+		if !ok {
+			return fmt.Errorf("unexpected event type %T", event)
+		}
+		return accessPublisher.NotifyMembershipResumed(
+			ctx, e.MembershipID, e.PropertyID, e.RecipientID, e.ActorID, e.ResumedAt,
+		)
+	})
+	eventDispatcher.Subscribe(events.EventType("access_membership_revoked"), func(ctx context.Context, event any) error {
+		e, ok := event.(accessapp.MembershipRevoked)
+		if !ok {
+			return fmt.Errorf("unexpected event type %T", event)
+		}
+		return accessPublisher.NotifyAccessRevoked(
+			ctx, e.MembershipID, e.PropertyID, e.RecipientID, e.ActorID,
+		)
+	})
+	eventDispatcher.Subscribe(events.EventType("access_member_left"), func(ctx context.Context, event any) error {
+		e, ok := event.(accessapp.MemberLeft)
+		if !ok {
+			return fmt.Errorf("unexpected event type %T", event)
+		}
+		return accessPublisher.NotifyMemberLeft(
+			ctx, e.MembershipID, e.PropertyID, e.OwnerID, e.MemberID,
+		)
 	})
 }
 

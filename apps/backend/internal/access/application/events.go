@@ -1,0 +1,118 @@
+package application
+
+import (
+	"context"
+	"log/slog"
+	"time"
+
+	"github.com/google/uuid"
+)
+
+// The access lifecycle events (карта #734, #751): the single interface the
+// membership transitions publish through, on the grace-events canon (ADR
+// 0033) — an event is published strictly after the transaction that caused it
+// commits, best-effort: a publication failure is logged by the caller and
+// never fails or rolls back the transition. The composition root subscribes
+// the notifications context's access publisher to the same events, so access
+// never imports notifications.
+//
+// The events carry pure transition facts — ids, flags, instants; the display
+// snapshots (names, addresses, emails) are the notifications side's
+// vocabulary, resolved at publication from the owning tables (#745's
+// snapshot-at-publication semantics).
+
+// InvitationActivated reports a pending invitation's activation at
+// registration: the invitation row is gone, the membership row was created
+// (suspended when the recipient had no free tariff slot, issue #158, T4).
+// The inviter learns their invitation was accepted; the invitee's own
+// notification depends on the landing state.
+type InvitationActivated struct {
+	InvitationID uuid.UUID
+	MembershipID uuid.UUID
+	PropertyID   uuid.UUID
+	// InviterID is the actor of the invitation (membership.GrantedBy) — the
+	// recipient of the accepted event.
+	InviterID uuid.UUID
+	// InviteeID is the freshly registered user the invitation belonged to —
+	// the actor of the accepted event.
+	InviteeID uuid.UUID
+	// Suspended reports the membership landed in the suspended state (no free
+	// recipient slot at activation).
+	Suspended bool
+	// At is the activation instant; the paused-access row's dedup key stamps
+	// it when the landing is suspended.
+	At time.Time
+}
+
+// MembershipSuspended reports an active membership moving into the suspended
+// state. RecipientID is the member whose access got paused; ActorID uuid.Nil
+// marks the system suspension (the recipient slot enforcement has no human
+// initiator) — every suspension today. SuspendedAt is the transition instant
+// the notification's dedup key stamps (a membership can cycle paused →
+// resumed → paused; each pause is its own fact).
+type MembershipSuspended struct {
+	MembershipID uuid.UUID
+	PropertyID   uuid.UUID
+	RecipientID  uuid.UUID
+	ActorID      uuid.UUID
+	SuspendedAt  time.Time
+}
+
+// MembershipResumed reports a suspended membership recovering to the active
+// state (the FIFO slot recovery). ResumedAt is the transition instant the
+// notification's dedup key stamps.
+type MembershipResumed struct {
+	MembershipID uuid.UUID
+	PropertyID   uuid.UUID
+	RecipientID  uuid.UUID
+	ActorID      uuid.UUID
+	ResumedAt    time.Time
+}
+
+// MembershipRevoked reports a manager deleting an active membership (issue
+// #156, T3). RecipientID is the removed member; ActorID is the revoking
+// owner or full member. A suspended membership's revoke publishes nothing —
+// the object was already hidden from the recipient (issue #162, T6 canon).
+type MembershipRevoked struct {
+	MembershipID uuid.UUID
+	PropertyID   uuid.UUID
+	RecipientID  uuid.UUID
+	ActorID      uuid.UUID
+}
+
+// MemberLeft reports a member's self-exit (issue #156, T3): OwnerID is the
+// recipient, MemberID the leaving member — the actor of their own exit.
+type MemberLeft struct {
+	MembershipID uuid.UUID
+	PropertyID   uuid.UUID
+	OwnerID      uuid.UUID
+	MemberID     uuid.UUID
+}
+
+// AccessEventPublisher publishes the access lifecycle events. A nil
+// implementation (or a nil interface) keeps the pre-#751 behaviour — the
+// transitions run, no events leave the context.
+type AccessEventPublisher interface {
+	PublishInvitationActivated(ctx context.Context, event InvitationActivated) error
+	PublishMembershipSuspended(ctx context.Context, event MembershipSuspended) error
+	PublishMembershipResumed(ctx context.Context, event MembershipResumed) error
+	PublishMembershipRevoked(ctx context.Context, event MembershipRevoked) error
+	PublishMemberLeft(ctx context.Context, event MemberLeft) error
+}
+
+// publishAccessEvent runs one publication on the nil-tolerant port: a nil
+// publisher is a no-op, a publication failure is logged and swallowed — the
+// events are best-effort by canon and must never fail their transition.
+func publishAccessEvent(ctx context.Context, publisher AccessEventPublisher, log *slog.Logger, kind string, publish func() error) {
+	if publisher == nil {
+		return
+	}
+	if err := publish(); err != nil {
+		if log == nil {
+			log = slog.Default()
+		}
+		log.ErrorContext(ctx, "access: publish lifecycle event failed",
+			slog.String("event", kind),
+			slog.String("error", err.Error()))
+	}
+}

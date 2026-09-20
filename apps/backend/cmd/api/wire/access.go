@@ -4,9 +4,11 @@ import (
 	"context"
 
 	accessemail "github.com/nambers/arenda-planform/apps/backend/internal/access/adapters/email"
+	accessevents "github.com/nambers/arenda-planform/apps/backend/internal/access/adapters/events"
 	accesspg "github.com/nambers/arenda-planform/apps/backend/internal/access/adapters/postgres"
 	accessapp "github.com/nambers/arenda-planform/apps/backend/internal/access/application"
 	identitypg "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/postgres"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/events"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer"
 	propertiespg "github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/postgres"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
@@ -56,8 +58,16 @@ var (
 // here from the shared db pool (they are stateless pointers over the pool).
 // The emailMailer parameter is the platform mailer (wired by the identity
 // module) used for the invite email of the email invitation lifecycle
-// (issue #161, T5) and the sharing lifecycle emails (issue #162, T6).
-func WireAccess(_ context.Context, p platformDeps, billing *Billing, emailMailer mailer.Sender) (*Access, error) {
+// (issue #161, T5) and the "object deleted" notice (issue #162, T6). The
+// dispatcher carries the lifecycle events (#751) to the notifications
+// context's subscriber.
+func WireAccess(
+	_ context.Context,
+	p platformDeps,
+	billing *Billing,
+	emailMailer mailer.Sender,
+	eventDispatcher *events.InProcessDispatcher,
+) (*Access, error) {
 	memberRepo := accesspg.NewMembershipRepository(p.DB)
 	invitationRepo := accesspg.NewInvitationRepository(p.DB)
 	ownerResolver := accesspg.NewOwnerResolver(p.DB)
@@ -84,19 +94,25 @@ func WireAccess(_ context.Context, p platformDeps, billing *Billing, emailMailer
 	ownedActiveProps := accesspg.NewOwnedActivePropertiesAdapter(propertiespg.NewPropertyRepository(p.DB))
 
 	// The access email sender renders through the shared renderer and platform
-	// mailer (T5 invite + T6 lifecycle emails); the owner resolver doubles as
-	// the property title resolver for the email texts.
+	// mailer (T5 invite + the T6 object-deleted notice — the two direct emails
+	// that stay).
 	accessMailer := accessemail.NewSender(emailMailer, p.Renderer, p.Cfg.AppBaseURL)
-	lifecycleMailer := accessapp.NewLifecycleMailer(accessMailer, emailResolver, ownerResolver, p.Logger)
+
+	// The lifecycle events publisher (карта #734, #751): the transitions'
+	// notifications leave the context through the shared dispatcher, the
+	// composition root subscribes the notifications publisher to them.
+	accessEventPublisher := accessevents.NewPublisher(eventDispatcher)
 
 	slotCoordinator := accessapp.NewSlotCoordinator(
 		memberRepo,
 		ownerResolver,
 		recipientLimiter,
 		ownedActiveProps,
-		lifecycleMailer,
+		accessEventPublisher,
 		p.AuditRecorder,
 		p.Beginner,
+		p.Clock,
+		p.Logger,
 	)
 
 	accessService := accessapp.NewAccessService(
@@ -106,7 +122,7 @@ func WireAccess(_ context.Context, p platformDeps, billing *Billing, emailMailer
 		userLookup,
 		policy,
 		slotCoordinator,
-		lifecycleMailer,
+		accessEventPublisher,
 		factory,
 		p.Logger,
 	)
@@ -121,7 +137,7 @@ func WireAccess(_ context.Context, p platformDeps, billing *Billing, emailMailer
 		policy,
 		slotCoordinator,
 		accessMailer,
-		lifecycleMailer,
+		accessEventPublisher,
 		ownerResolver,
 		factory,
 		p.Clock,

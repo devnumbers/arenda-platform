@@ -68,6 +68,28 @@ func (q *Queries) DeleteNotification(ctx context.Context, arg DeleteNotification
 	return result.RowsAffected(), nil
 }
 
+const getAccessEventPropertyView = `-- name: GetAccessEventPropertyView :one
+SELECT p.name, p.address
+FROM properties p
+WHERE p.id = $1
+`
+
+type GetAccessEventPropertyViewRow struct {
+	Name    string `json:"name"`
+	Address string `json:"address"`
+}
+
+// The access events' property snapshot (#751): the display name and the
+// address line the feed rows' property card carries (EntityRef, #745). A
+// missing property is a no-row error — the access transitions never fire on
+// a deleted object, a miss is abnormal and fails the publication.
+func (q *Queries) GetAccessEventPropertyView(ctx context.Context, id pgtype.UUID) (GetAccessEventPropertyViewRow, error) {
+	row := q.db.QueryRow(ctx, getAccessEventPropertyView, id)
+	var i GetAccessEventPropertyViewRow
+	err := row.Scan(&i.Name, &i.Address)
+	return i, err
+}
+
 const getEmailPreferences = `-- name: GetEmailPreferences :one
 SELECT rental, payments_operations, tasks, shared_access
 FROM notification_email_preferences

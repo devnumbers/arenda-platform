@@ -342,3 +342,12 @@ WHERE t.id = $1
   AND t.due_time IS NOT NULL
   AND (t.property_id IS NULL OR p.status IN ('active', 'maintenance'));
 
+
+-- name: GetAccessEventPropertyView :one
+-- The access events' property snapshot (#751): the display name and the
+-- address line the feed rows' property card carries (EntityRef, #745). A
+-- missing property is a no-row error — the access transitions never fire on
+-- a deleted object, a miss is abnormal and fails the publication.
+SELECT p.name, p.address
+FROM properties p
+WHERE p.id = $1;
