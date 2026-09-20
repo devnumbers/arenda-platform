@@ -398,7 +398,8 @@ func (s *PaymentService) reconcileOutOfOrderSuccess(ctx context.Context, payment
 // best-effort (issue #284).
 func (s *PaymentService) finalizePayment(ctx context.Context, n *PaymentNotification, allowReconcile bool) error {
 	grace := newGraceEvents(s.publisher, s.log)
-	return grace.run(ctx, s.runLifecycleTx, func(stores *txStores) error {
+	tariff := newTariffEvents(s.publisher, s.log)
+	err := grace.run(ctx, s.runLifecycleTx, func(stores *txStores) error {
 		payment, err := stores.paymentForUpdate(ctx, n.InternalPaymentID)
 		if err != nil {
 			return err
@@ -419,11 +420,19 @@ func (s *PaymentService) finalizePayment(ctx context.Context, n *PaymentNotifica
 		case domain.PaymentStatusFailed:
 			return s.finalizeFailedPayment(ctx, grace, stores, payment, n, now)
 		case domain.PaymentStatusSucceeded:
-			return s.finalizeSucceededPayment(ctx, stores, payment, now, allowReconcile)
+			return s.finalizeSucceededPayment(ctx, tariff, stores, payment, now, allowReconcile)
 		default:
 			return fmt.Errorf("%w: status %q", ErrWebhookUnsupported, n.Status)
 		}
 	})
+	if err != nil {
+		return err
+	}
+	// Strictly after the commit, best-effort (карта #734, #752): the tariff
+	// events of the notifications catalog ride the same post-commit seam the
+	// grace events captured along the way were published through.
+	tariff.publishAfterCommit(ctx)
+	return nil
 }
 
 // captureProviderReference persists the provider payment id carried by the
@@ -503,8 +512,10 @@ func (s *PaymentService) finalizeFailedPayment(
 // switch keeps duplicate deliveries idempotent and — without allowReconcile —
 // refuses a success that arrives after the payment was already marked failed,
 // so the provider retries and the verified reconciliation path runs instead.
+// The tariff events of the notifications catalog (карта #734, #752) are
+// captured on the same seam and published strictly after the commit.
 func (s *PaymentService) finalizeSucceededPayment(
-	ctx context.Context, stores *txStores, payment domain.SubscriptionPayment, now time.Time, allowReconcile bool,
+	ctx context.Context, tariff *tariffEvents, stores *txStores, payment domain.SubscriptionPayment, now time.Time, allowReconcile bool,
 ) error {
 	switch payment.Status {
 	case domain.PaymentStatusSucceeded:
@@ -532,7 +543,7 @@ func (s *PaymentService) finalizeSucceededPayment(
 	if err := stores.payments.Update(ctx, payment); err != nil {
 		return fmt.Errorf("mark payment succeeded: %w", err)
 	}
-	if _, err := applySucceededPayment(ctx, stores, payment, now); err != nil {
+	if _, err := applySucceededPayment(ctx, tariff, stores, payment, now); err != nil {
 		return err
 	}
 	if err := stores.audit.Record(ctx, auditdomain.Entry{
@@ -569,8 +580,17 @@ func (s *PaymentService) finalizeSucceededPayment(
 // payment's state and the success is recorded on the payment alone. Shared by
 // every path that finalizes a success — the webhook flow, the reconciliation
 // worker and the renewal worker (issues #252, #428).
+//
+// The tariff events of the notifications catalog (карта #734, #752) are
+// captured here — where the payment, the two plans and the post-application
+// validity are all in hand: an actually applied payment is the «Оплата
+// прошла» event (№13), and an application that moved the subscription to a
+// better plan adds the upgrade leg of «Тариф изменён» (№14). The direction
+// is classified with the plan records, not the tariff ids alone; a paid
+// downgrade notifies through №13 alone — №14's downgrade leg belongs to the
+// assignment, not to a payment.
 func applySucceededPayment(
-	ctx context.Context, stores *txStores, payment domain.SubscriptionPayment, now time.Time,
+	ctx context.Context, tariff *tariffEvents, stores *txStores, payment domain.SubscriptionPayment, now time.Time,
 ) (domain.Transition, error) {
 	sub, err := stores.subscriptionForUpdate(ctx, payment.UserID)
 	if err != nil {
@@ -589,6 +609,17 @@ func applySucceededPayment(
 			return domain.Transition{}, fmt.Errorf("payment %s references missing tariff %s: %w", payment.ID, payment.TariffID, ErrTariffNotFound)
 		}
 		return domain.Transition{}, fmt.Errorf("get payment tariff: %w", err)
+	}
+	// The current plan is loaded before the mutation when the payment would
+	// switch the tariff: the applied change classifies against it, and the
+	// mutation itself consumes it (the seam of issue #428).
+	var currentTariff *domain.Tariff
+	if sub.TariffID != payment.TariffID {
+		loaded, err := currentSubscriptionTariff(ctx, stores, &sub)
+		if err != nil {
+			return domain.Transition{}, err
+		}
+		currentTariff = loaded
 	}
 
 	// Grace v2 (ADR 0055): an applied payment settles the restoration debt of
@@ -613,17 +644,10 @@ func applySucceededPayment(
 			// The settled snapshot (or its remainder) commits with the
 			// transition — the aggregate is persisted once, by the seam.
 			s.SetGraceArchive(graceRemaining)
-			if s.TariffID == payment.TariffID {
+			if currentTariff == nil {
 				return s.ApplyRenewal(payment.ID, payment.Period, now)
 			}
-			currentTariff, err := stores.tariffs.GetByID(ctx, s.TariffID)
-			if err != nil {
-				if errors.Is(err, ErrNotFound) {
-					return fmt.Errorf("subscription %s references missing tariff %s: %w", s.ID, s.TariffID, ErrTariffNotFound)
-				}
-				return fmt.Errorf("get current tariff: %w", err)
-			}
-			return s.ApplyTariffChange(payment.ID, currentTariff, paymentTariff, payment.Period, now)
+			return s.ApplyTariffChange(payment.ID, *currentTariff, paymentTariff, payment.Period, now)
 		},
 		transitionSpec{
 			reason:    domain.TransitionReasonPaymentApplied,
@@ -641,7 +665,64 @@ func applySucceededPayment(
 			return domain.Transition{}, fmt.Errorf("enforce tariff limit after payment downgrade: %w", err)
 		}
 	}
+	// The catalog events ride the caller's tariff carrier — published
+	// strictly after the transaction commits (#752). A no-op application
+	// (the zero transition) captures nothing.
+	captureTariffEvents(tariff, payment, &paymentTariff, currentTariff, sub, applied)
 	return applied, nil
+}
+
+// captureTariffEvents captures the tariff events of the notifications
+// catalog (карта #734, #752) for an actually applied payment: the
+// «Оплата прошла» event itself and, when the application moved the
+// subscription to a better plan, the upgrade leg of «Тариф изменён» —
+// classified against the plan records, not the tariff ids alone. A nil
+// carrier or the zero transition (the no-op of a duplicate delivery)
+// captures nothing.
+func captureTariffEvents(
+	tariff *tariffEvents,
+	payment domain.SubscriptionPayment,
+	paymentTariff, currentTariff *domain.Tariff,
+	sub domain.Subscription,
+	applied domain.Transition,
+) {
+	if tariff == nil || applied.ID == uuid.Nil {
+		return
+	}
+	until := time.Time{}
+	if sub.ValidUntil != nil {
+		until = *sub.ValidUntil
+	}
+	tariff.succeeded = &PaymentSucceeded{
+		UserID:        payment.UserID,
+		PaymentID:     payment.ID,
+		TariffID:      payment.TariffID,
+		AmountKopecks: payment.AmountKopecks,
+		Period:        payment.Period,
+		ActiveUntil:   until,
+	}
+	if currentTariff != nil && domain.ClassifyTariffChange(*currentTariff, *paymentTariff) == domain.TariffChangeUpgrade {
+		tariff.upgraded = &PlanUpgraded{
+			UserID:       payment.UserID,
+			TransitionID: applied.ID,
+			TariffID:     payment.TariffID,
+			Period:       payment.Period,
+			ActiveUntil:  until,
+		}
+	}
+}
+
+// currentSubscriptionTariff loads the plan the subscription is currently on,
+// mapping a missing row to the tariff sentinel.
+func currentSubscriptionTariff(ctx context.Context, stores *txStores, sub *domain.Subscription) (*domain.Tariff, error) {
+	tariff, err := stores.tariffs.GetByID(ctx, sub.TariffID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil, fmt.Errorf("subscription %s references missing tariff %s: %w", sub.ID, sub.TariffID, ErrTariffNotFound)
+		}
+		return nil, fmt.Errorf("get current tariff: %w", err)
+	}
+	return &tariff, nil
 }
 
 // applyRefundNotification records a full refund reported by the provider and

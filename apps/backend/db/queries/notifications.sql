@@ -351,3 +351,13 @@ WHERE t.id = $1
 SELECT p.name, p.address
 FROM properties p
 WHERE p.id = $1;
+
+
+-- name: GetTariffEventView :one
+-- The tariff events' plan snapshot (#752): the slug the display name resolves
+-- from (TariffDisplayName). A missing plan is a no-row error — the billing
+-- events never fire on a dropped tariff, a miss is abnormal and fails the
+-- publication.
+SELECT t.name
+FROM tariffs t
+WHERE t.id = $1;

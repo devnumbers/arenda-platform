@@ -13,6 +13,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/cmd/api/wire"
 	accessevents "github.com/nambers/arenda-planform/apps/backend/internal/access/adapters/events"
 	accessapp "github.com/nambers/arenda-planform/apps/backend/internal/access/application"
+	billingevents "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/events"
 	billinghttp "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/http"
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
@@ -194,6 +195,17 @@ func run() error {
 	//     are registered before the workers start (step 12), so no grace
 	//     event fires unwired.
 	subscribeGraceEvents(eventDispatcher, notificationsapp.NewGracePublisher(riverMod.Publisher))
+
+	// 11.9 Tariff notifications (карта #734, #752): the billing tariff
+	//     events — the applied subscription payment (№13 «Оплата прошла»),
+	//     the upgrade an applied payment activated and the downgrade
+	//     assigned for the period's end (№14 «Тариф изменён») — publish to
+	//     the stored feed + delivery queue through the same pipeline
+	//     publisher (the always-on Тариф category, ADR 0056). The dispatchers
+	//     are synchronous, so the subscription must exist before any applied
+	//     payment can fire it.
+	tariffEventViews := notificationspg.NewTariffViewStore(p.DB)
+	subscribeTariffEvents(eventDispatcher, notificationsapp.NewTariffPublisher(riverMod.Publisher, tariffEventViews))
 
 	// 11.8 Access notifications (карта #734, #751): the access lifecycle
 	//     events — the invitation's activation, the revoke, the slot pause
@@ -445,19 +457,61 @@ func subscribeGraceEvents(
 	eventDispatcher *events.InProcessDispatcher,
 	gracePublisher *notificationsapp.GracePublisher,
 ) {
-	eventDispatcher.Subscribe(events.EventType("subscription_grace_entered"), func(ctx context.Context, event any) error {
+	eventDispatcher.Subscribe(billingevents.EventGraceEntered, func(ctx context.Context, event any) error {
 		e, ok := event.(billingapp.GraceEntered)
 		if !ok {
 			return fmt.Errorf("unexpected event type %T", event)
 		}
 		return gracePublisher.NotifyGraceEntered(ctx, e.UserID, e.SubscriptionID, e.GraceUntil)
 	})
-	eventDispatcher.Subscribe(events.EventType("subscription_grace_expiring"), func(ctx context.Context, event any) error {
+	eventDispatcher.Subscribe(billingevents.EventGraceExpiring, func(ctx context.Context, event any) error {
 		e, ok := event.(billingapp.GraceExpiring)
 		if !ok {
 			return fmt.Errorf("unexpected event type %T", event)
 		}
 		return gracePublisher.NotifyGraceExpiring(ctx, e.UserID, e.SubscriptionID, e.GraceUntil)
+	})
+}
+
+// subscribeTariffEvents registers the tariff events' subscribers on the
+// shared event dispatcher: an applied subscription payment and a tariff
+// change become the Тариф catalog rows (карта #734, решение #737 №13–№14,
+// #752). The publisher is notifications' TariffPublisher over the pipeline
+// Publisher; billing never imports notifications — the composition root owns
+// the seam.
+func subscribeTariffEvents(
+	eventDispatcher *events.InProcessDispatcher,
+	tariffPublisher *notificationsapp.TariffPublisher,
+) {
+	eventDispatcher.Subscribe(billingevents.EventPaymentSucceeded, func(ctx context.Context, event any) error {
+		e, ok := event.(billingapp.PaymentSucceeded)
+		if !ok {
+			return fmt.Errorf("unexpected event type %T", event)
+		}
+		return tariffPublisher.NotifyPaymentSucceeded(
+			ctx, e.UserID, e.PaymentID, e.TariffID,
+			e.AmountKopecks, string(e.Period), e.ActiveUntil,
+		)
+	})
+	eventDispatcher.Subscribe(billingevents.EventPlanUpgraded, func(ctx context.Context, event any) error {
+		e, ok := event.(billingapp.PlanUpgraded)
+		if !ok {
+			return fmt.Errorf("unexpected event type %T", event)
+		}
+		return tariffPublisher.NotifyPlanUpgraded(
+			ctx, e.UserID, e.TransitionID, e.TariffID,
+			string(e.Period), e.ActiveUntil,
+		)
+	})
+	eventDispatcher.Subscribe(billingevents.EventPlanDowngradeScheduled, func(ctx context.Context, event any) error {
+		e, ok := event.(billingapp.PlanDowngradeScheduled)
+		if !ok {
+			return fmt.Errorf("unexpected event type %T", event)
+		}
+		return tariffPublisher.NotifyPlanDowngradeScheduled(
+			ctx, e.UserID, e.TransitionID, e.TariffID,
+			string(e.Period), e.EffectiveAt,
+		)
 	})
 }
 

@@ -291,6 +291,23 @@ func (q *Queries) GetScheduledOverdueTask(ctx context.Context, id pgtype.UUID) (
 	return i, err
 }
 
+const getTariffEventView = `-- name: GetTariffEventView :one
+SELECT t.name
+FROM tariffs t
+WHERE t.id = $1
+`
+
+// The tariff events' plan snapshot (#752): the slug the display name resolves
+// from (TariffDisplayName). A missing plan is a no-row error — the billing
+// events never fire on a dropped tariff, a miss is abnormal and fails the
+// publication.
+func (q *Queries) GetTariffEventView(ctx context.Context, id pgtype.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getTariffEventView, id)
+	var name string
+	err := row.Scan(&name)
+	return name, err
+}
+
 const getTaskOpenState = `-- name: GetTaskOpenState :one
 SELECT EXISTS (SELECT 1 FROM tasks WHERE id = $1 AND completed_date IS NULL) AS open
 `

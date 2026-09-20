@@ -10,6 +10,13 @@ import (
 // user fixes a failed renewal charge; both grace events route here (#741).
 const graceNotificationPath = "/profile/tariff/payment-methods"
 
+// tariffPath is the subscription screen — the plan the user pays for, the
+// place a payment or a plan change answers about (#752). The payment
+// succeeded event carries no catalog action (решение #737 №13), its push tap
+// and email button still land somewhere sensible; the plan changed event's
+// action open_tariffs resolves to the same screen (#743).
+const tariffPath = "/profile/tariff"
+
 // deeplinks maps a feed event type to the in-app path its email button and
 // push tap navigate to, resolved from the row's payload. This is the
 // publishers' channel vocabulary (#740): the grace path landed with #741,
@@ -21,6 +28,10 @@ const graceNotificationPath = "/profile/tariff/payment-methods"
 var deeplinks = map[domain.EventType]func(domain.Payload) string{
 	domain.EventSubscriptionGraceEntered:  staticPath(graceNotificationPath),
 	domain.EventSubscriptionGraceExpiring: staticPath(graceNotificationPath),
+	// The subscription screen answers both tariff events (#752): the
+	// payment's outcome and the plan's state live there.
+	domain.EventSubscriptionPaymentSucceeded: staticPath(tariffPath),
+	domain.EventSubscriptionPlanChanged:      staticPath(tariffPath),
 	// The rental's screen path carries both the property and the rental
 	// (#748); the snapshot ids are exactly what the publisher put there.
 	domain.EventRentalCompleted: func(p domain.Payload) string {

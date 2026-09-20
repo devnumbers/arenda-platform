@@ -450,6 +450,11 @@ type Querier interface {
 	// dashboard live here. The payment, payment-method and webhook queries return
 	// with their tickets (#250, #251, #254).
 	GetTariffByName(ctx context.Context, name string) (Tariff, error)
+	// The tariff events' plan snapshot (#752): the slug the display name resolves
+	// from (TariffDisplayName). A missing plan is a no-row error — the billing
+	// events never fire on a dropped tariff, a miss is abnormal and fails the
+	// publication.
+	GetTariffEventView(ctx context.Context, id pgtype.UUID) (string, error)
 	// Tasks context queries: the task reads, the completion toggle and the
 	// «Удалить все выполненные» journal clear (ADR 0051, resolutions #496/#497).
 	// Rule CRUD lives in tasks_rules.sql, the tick's persistence in
