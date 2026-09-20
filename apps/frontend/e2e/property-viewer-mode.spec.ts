@@ -95,6 +95,30 @@ test.describe('режим просмотра', () => {
     await expect(page.getByRole('button', { name: 'Добавить операцию' })).toHaveCount(0);
   });
 
+  test('прямые ссылки форм гасятся карточками недоступности (обход #758)', async ({
+    page,
+  }) => {
+    await openViewerCabinet(page);
+
+    // Правка объекта (deep-link /edit): гард #607 — карточка вместо формы;
+    // без него сервер отвечал 403, а тост винил соединение.
+    await page.goto(`/properties/${PROPERTY}/edit`);
+    await expect(page.getByText('Правка недоступна')).toBeVisible();
+    await expect(
+      page.getByText('У вас доступ только для просмотра этого объекта'),
+    ).toBeVisible();
+    await expect(page.getByText('Название объекта')).toHaveCount(0);
+
+    // Создание контакта в объекте: карточка вместо формы с предвыбранным
+    // объектом; без гарда сервер отвечал 403 на отправку.
+    await page.goto(`/properties/${PROPERTY}/contacts/new`);
+    await expect(page.getByText('Создание недоступно')).toBeVisible();
+    await expect(
+      page.getByText('У вас доступ только для просмотра этого объекта'),
+    ).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Имя' })).toHaveCount(0);
+  });
+
   test('участники объекта: список читается, manage-контролы скрыты', async ({ page }) => {
     await openViewerCabinet(page);
     await page.goto(`/properties/${PROPERTY}/participants`);
