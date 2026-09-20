@@ -13,13 +13,15 @@ import (
 )
 
 // The access lifecycle events' dispatcher names: stable, coarse — the same
-// contract the grace events' names follow.
+// contract the grace events' names follow. Exported: the composition root's
+// subscriber must name the very same strings, and a private literal on each
+// side would make a typo a silently dead subscription.
 const (
-	invitationActivatedType = "access_invitation_activated"
-	membershipSuspendedType = "access_membership_suspended"
-	membershipResumedType   = "access_membership_resumed"
-	membershipRevokedType   = "access_membership_revoked"
-	memberLeftType          = "access_member_left"
+	EventInvitationActivated = platformevents.EventType("access_invitation_activated")
+	EventMembershipSuspended = platformevents.EventType("access_membership_suspended")
+	EventMembershipResumed   = platformevents.EventType("access_membership_resumed")
+	EventMembershipRevoked   = platformevents.EventType("access_membership_revoked")
+	EventMemberLeft          = platformevents.EventType("access_member_left")
 )
 
 // Publisher implements accessapp.AccessEventPublisher on top of the generic
@@ -38,25 +40,25 @@ var _ accessapp.AccessEventPublisher = (*Publisher)(nil)
 
 // PublishInvitationActivated publishes the InvitationActivated event.
 func (p *Publisher) PublishInvitationActivated(ctx context.Context, event accessapp.InvitationActivated) error {
-	return p.dispatcher.Publish(ctx, invitationActivatedType, event)
+	return p.dispatcher.Publish(ctx, EventInvitationActivated, event)
 }
 
 // PublishMembershipSuspended publishes the MembershipSuspended event.
 func (p *Publisher) PublishMembershipSuspended(ctx context.Context, event accessapp.MembershipSuspended) error {
-	return p.dispatcher.Publish(ctx, membershipSuspendedType, event)
+	return p.dispatcher.Publish(ctx, EventMembershipSuspended, event)
 }
 
 // PublishMembershipResumed publishes the MembershipResumed event.
 func (p *Publisher) PublishMembershipResumed(ctx context.Context, event accessapp.MembershipResumed) error {
-	return p.dispatcher.Publish(ctx, membershipResumedType, event)
+	return p.dispatcher.Publish(ctx, EventMembershipResumed, event)
 }
 
 // PublishMembershipRevoked publishes the MembershipRevoked event.
 func (p *Publisher) PublishMembershipRevoked(ctx context.Context, event accessapp.MembershipRevoked) error {
-	return p.dispatcher.Publish(ctx, membershipRevokedType, event)
+	return p.dispatcher.Publish(ctx, EventMembershipRevoked, event)
 }
 
 // PublishMemberLeft publishes the MemberLeft event.
 func (p *Publisher) PublishMemberLeft(ctx context.Context, event accessapp.MemberLeft) error {
-	return p.dispatcher.Publish(ctx, memberLeftType, event)
+	return p.dispatcher.Publish(ctx, EventMemberLeft, event)
 }

@@ -39,8 +39,9 @@ type InvitationActivated struct {
 	// Suspended reports the membership landed in the suspended state (no free
 	// recipient slot at activation).
 	Suspended bool
-	// At is the activation instant; the paused-access row's dedup key stamps
-	// it when the landing is suspended.
+	// At is the transition instant the notifications' dedup keys stamp: the
+	// membership row's suspension instant when the landing is suspended, the
+	// activation moment otherwise.
 	At time.Time
 }
 

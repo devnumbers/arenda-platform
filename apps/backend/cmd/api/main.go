@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nambers/arenda-planform/apps/backend/cmd/api/wire"
+	accessevents "github.com/nambers/arenda-planform/apps/backend/internal/access/adapters/events"
 	accessapp "github.com/nambers/arenda-planform/apps/backend/internal/access/application"
 	billinghttp "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/http"
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
@@ -469,7 +470,7 @@ func subscribeAccessEvents(
 	eventDispatcher *events.InProcessDispatcher,
 	accessPublisher *notificationsapp.AccessPublisher,
 ) {
-	eventDispatcher.Subscribe(events.EventType("access_invitation_activated"), func(ctx context.Context, event any) error {
+	eventDispatcher.Subscribe(accessevents.EventInvitationActivated, func(ctx context.Context, event any) error {
 		e, ok := event.(accessapp.InvitationActivated)
 		if !ok {
 			return fmt.Errorf("unexpected event type %T", event)
@@ -479,7 +480,7 @@ func subscribeAccessEvents(
 			e.Suspended, e.At,
 		)
 	})
-	eventDispatcher.Subscribe(events.EventType("access_membership_suspended"), func(ctx context.Context, event any) error {
+	eventDispatcher.Subscribe(accessevents.EventMembershipSuspended, func(ctx context.Context, event any) error {
 		e, ok := event.(accessapp.MembershipSuspended)
 		if !ok {
 			return fmt.Errorf("unexpected event type %T", event)
@@ -488,7 +489,7 @@ func subscribeAccessEvents(
 			ctx, e.MembershipID, e.PropertyID, e.RecipientID, e.ActorID, e.SuspendedAt,
 		)
 	})
-	eventDispatcher.Subscribe(events.EventType("access_membership_resumed"), func(ctx context.Context, event any) error {
+	eventDispatcher.Subscribe(accessevents.EventMembershipResumed, func(ctx context.Context, event any) error {
 		e, ok := event.(accessapp.MembershipResumed)
 		if !ok {
 			return fmt.Errorf("unexpected event type %T", event)
@@ -497,7 +498,7 @@ func subscribeAccessEvents(
 			ctx, e.MembershipID, e.PropertyID, e.RecipientID, e.ActorID, e.ResumedAt,
 		)
 	})
-	eventDispatcher.Subscribe(events.EventType("access_membership_revoked"), func(ctx context.Context, event any) error {
+	eventDispatcher.Subscribe(accessevents.EventMembershipRevoked, func(ctx context.Context, event any) error {
 		e, ok := event.(accessapp.MembershipRevoked)
 		if !ok {
 			return fmt.Errorf("unexpected event type %T", event)
@@ -506,7 +507,7 @@ func subscribeAccessEvents(
 			ctx, e.MembershipID, e.PropertyID, e.RecipientID, e.ActorID,
 		)
 	})
-	eventDispatcher.Subscribe(events.EventType("access_member_left"), func(ctx context.Context, event any) error {
+	eventDispatcher.Subscribe(accessevents.EventMemberLeft, func(ctx context.Context, event any) error {
 		e, ok := event.(accessapp.MemberLeft)
 		if !ok {
 			return fmt.Errorf("unexpected event type %T", event)

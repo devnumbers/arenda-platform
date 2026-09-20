@@ -420,6 +420,13 @@ func (s *InvitationService) activateInvitation(ctx context.Context, userID uuid.
 	// «Доступ приостановлен» row for the new member instead of the
 	// invitation one. Published post-commit, best-effort; the direct
 	// lifecycle emails this replaces are gone.
+	// The transition instant is the membership row's own suspension instant
+	// when the landing is suspended (the same source AddMember's pause uses),
+	// the activation moment otherwise.
+	at := s.clock.Now()
+	if suspend {
+		at = deref(created.SuspendedAt)
+	}
 	publishAccessEvent(ctx, s.events, s.logger, "invitation_activated", func() error {
 		return s.events.PublishInvitationActivated(ctx, InvitationActivated{
 			InvitationID: invitation.ID,
@@ -428,7 +435,7 @@ func (s *InvitationService) activateInvitation(ctx context.Context, userID uuid.
 			InviterID:    invitation.InvitedBy,
 			InviteeID:    userID,
 			Suspended:    suspend,
-			At:           s.clock.Now(),
+			At:           at,
 		})
 	})
 	return nil
