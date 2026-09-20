@@ -162,7 +162,7 @@ func newFakeLookup() *fakeLookup {
 }
 
 func (f *fakeLookup) add(email string, userID uuid.UUID) {
-	f.byEmail[email] = MemberUser{ID: userID, HasEmail: true}
+	f.byEmail[email] = MemberUser{ID: userID}
 }
 
 func (f *fakeLookup) GetByID(_ context.Context, id uuid.UUID) (MemberUser, error) {
@@ -175,6 +175,22 @@ func (f *fakeLookup) GetByEmail(_ context.Context, email string) (MemberUser, er
 		return u, nil
 	}
 	return MemberUser{}, domain.ErrUserNotFound
+}
+
+// fakeEmails is a configurable UserEmailResolver keyed by user id; users
+// missing from the map resolve to the empty string (no email).
+type fakeEmails struct {
+	byUser map[uuid.UUID]string
+}
+
+func newFakeEmails() *fakeEmails {
+	return &fakeEmails{byUser: map[uuid.UUID]string{}}
+}
+
+func (f *fakeEmails) set(userID uuid.UUID, email string) { f.byUser[userID] = email }
+
+func (f *fakeEmails) GetEmail(_ context.Context, id uuid.UUID) (string, error) {
+	return f.byUser[id], nil
 }
 
 // fakeTitles resolves a fixed property title.
@@ -204,6 +220,7 @@ type invitationFixture struct {
 	owners      staticResolver
 	statuses    fakeStatuses
 	lookup      *fakeLookup
+	emails      *fakeEmails
 	mailer      *fakeAccessMailer
 	clk         *fixedClock
 	limiter     *fakeRecipientLimiter
@@ -218,6 +235,7 @@ func newInvitationFixture() *invitationFixture {
 	statuses := fakeStatuses{}
 	policy := NewMembershipPolicy(owners, repo)
 	lookup := newFakeLookup()
+	emails := newFakeEmails()
 	mailer := &fakeAccessMailer{}
 	clk := &fixedClock{now: time.Now()}
 	limiter := newFakeRecipientLimiter()
@@ -227,13 +245,14 @@ func newInvitationFixture() *invitationFixture {
 		newTestFactory(repo, invitations, auditapp.Noop{}), nil)
 	svc := NewInvitationService(access, repo, invitations, owners, statuses, lookup, policy,
 		coordinator, mailer, fakeTitles(testNevskyTitle),
-		newTestFactory(repo, invitations, auditapp.Noop{}), clk, nil)
+		newTestFactory(repo, invitations, auditapp.Noop{}), clk, nil, emails)
 	return &invitationFixture{
 		repo:        repo,
 		invitations: invitations,
 		owners:      owners,
 		statuses:    statuses,
 		lookup:      lookup,
+		emails:      emails,
 		mailer:      mailer,
 		clk:         clk,
 		limiter:     limiter,
@@ -673,7 +692,9 @@ func TestInvitationService_ActivationSkipsExistingMembership(t *testing.T) {
 	}
 }
 
-// Member list: pending invitations are manager-only.
+// Member list: pending invitations and member emails are visible to every
+// reader with view capability (owner decision 2026-09-20, #758: nothing is
+// hidden from viewers).
 
 func TestInvitationService_ListMembersIncludesPendingForManagers(t *testing.T) {
 	t.Parallel()
@@ -682,6 +703,7 @@ func TestInvitationService_ListMembersIncludesPendingForManagers(t *testing.T) {
 	property := f.addProperty(owner)
 	viewer := uuid.Must(uuid.NewV7())
 	f.limiter.set(viewer, 10)
+	f.emails.set(owner, testOwnerEmail)
 	if _, err := f.access.AddMember(t.Context(), owner, property, viewer, domain.RoleViewer); err != nil {
 		t.Fatalf("AddMember: %v", err)
 	}
@@ -689,7 +711,7 @@ func TestInvitationService_ListMembersIncludesPendingForManagers(t *testing.T) {
 		t.Fatalf("InviteByEmail: %v", err)
 	}
 
-	// The owner (manager) sees owner + member + pending invitation.
+	// The owner sees owner + member + pending invitation.
 	members, err := f.svc.ListMembers(t.Context(), owner, property)
 	if err != nil {
 		t.Fatalf("ListMembers: %v", err)
@@ -707,19 +729,55 @@ func TestInvitationService_ListMembersIncludesPendingForManagers(t *testing.T) {
 	if pending.LastSentAt == nil {
 		t.Error("pending row must carry last_sent_at")
 	}
+	if email := members[0].Email; email == nil || *email != testOwnerEmail {
+		t.Errorf("owner row email = %v, want %s", email, testOwnerEmail)
+	}
+}
 
-	// A viewer does not see pending invitations (they expose the invitee email).
-	members, err = f.svc.ListMembers(t.Context(), viewer, property)
+func TestInvitationService_ListMembersViewerSeesEmailsAndPending(t *testing.T) {
+	t.Parallel()
+	f := newInvitationFixture()
+	owner := uuid.Must(uuid.NewV7())
+	property := f.addProperty(owner)
+	viewer := uuid.Must(uuid.NewV7())
+	f.limiter.set(viewer, 10)
+	f.emails.set(owner, testOwnerEmail)
+	f.emails.set(viewer, "viewer@example.com")
+	if _, err := f.access.AddMember(t.Context(), owner, property, viewer, domain.RoleViewer); err != nil {
+		t.Fatalf("AddMember: %v", err)
+	}
+	if _, err := f.svc.InviteByEmail(t.Context(), owner, property, testNewUserEmail, domain.RoleFullAccess); err != nil {
+		t.Fatalf("InviteByEmail: %v", err)
+	}
+
+	// A viewer sees the same rows as the owner: registered members with
+	// their emails and the pending invitation (owner decision #758).
+	members, err := f.svc.ListMembers(t.Context(), viewer, property)
 	if err != nil {
 		t.Fatalf("viewer ListMembers: %v", err)
 	}
+	if len(members) != 3 {
+		t.Fatalf("viewer rows = %d, want 3 (owner + viewer + pending)", len(members))
+	}
+	emailByUser := map[uuid.UUID]string{}
+	pendingSeen := false
 	for _, m := range members {
 		if m.Pending {
-			t.Errorf("viewer must not see pending invitations, got %+v", members)
+			pendingSeen = true
+			if m.Email == nil || *m.Email != testNewUserEmail {
+				t.Errorf("viewer pending row = %+v", m)
+			}
+			continue
+		}
+		if m.Email != nil {
+			emailByUser[m.UserID] = *m.Email
 		}
 	}
-	if len(members) != 2 {
-		t.Errorf("viewer rows = %d, want 2 (owner + viewer)", len(members))
+	if !pendingSeen {
+		t.Error("viewer must see the pending invitation")
+	}
+	if emailByUser[owner] != testOwnerEmail || emailByUser[viewer] != "viewer@example.com" {
+		t.Errorf("viewer must see member emails, got %v", emailByUser)
 	}
 }
 

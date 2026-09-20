@@ -11,7 +11,6 @@ export type PropertyAccessMember = {
     readonly role: AccessRole;
     readonly isOwner: boolean;
     readonly displayName: string;
-    readonly hasEmail: boolean;
     readonly status: AccessMemberStatus;
     readonly suspendedAt?: string | null;
     readonly lastSentAt?: string | null;

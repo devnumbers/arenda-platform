@@ -128,6 +128,11 @@ test.describe('режим просмотра', () => {
     await expect(page.getByText('Иван Иванов', { exact: true })).toBeVisible();
     await expect(page.getByText('Сергей Сидоров (Вы)', { exact: true })).toBeVisible();
 
+    // Почты участников видны зрителю наравне с остальными (решение
+    // владельца 2026-09-20, обход #758: от зрителя ничего не прячем).
+    await expect(page.getByText('e2e@example.com')).toBeVisible();
+    await expect(page.getByText('e2e-member@example.com')).toBeVisible();
+
     // Manage-контролы зрителю не рисуются: кебаб и CTA приглашения.
     await expect(
       page.getByRole('button', { name: 'Еще — действия со списком' }),

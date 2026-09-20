@@ -28,21 +28,20 @@ const (
 // stored as a membership row, so it carries IsOwner = true and no membership id.
 // A pending email invitation (issue #161, T5) is projected as a Member with
 // Pending = true, the invitation id in ID, a zero UserID, and Email/LastSentAt
-// filled.
+// filled. Email is resolved for every row: participant emails are visible to
+// all readers of the list (owner decision 2026-09-20, #758 walkthrough).
 type Member struct {
 	ID          uuid.UUID // Membership id; invitation id when Pending (zero uuid for the owner).
 	UserID      uuid.UUID
 	Role        sharedpolicy.Role // Owner | full_access | viewer.
 	IsOwner     bool
 	DisplayName string
-	HasEmail    bool
 	Status      domain.MemberStatus // Active | suspended (always active for the owner; meaningless when Pending).
 	SuspendedAt *time.Time          // When the membership was suspended; nil when active.
 	// Pending marks a pending email invitation row: the invitee is not
-	// registered yet, so UserID is zero and Email carries the invitee address
-	// (visible to managers only).
+	// registered yet, so UserID is zero.
 	Pending    bool
-	Email      *string    // Invitee email; set only when Pending.
+	Email      *string    // User address; nil when unresolved or the user has none.
 	LastSentAt *time.Time // When the invite email was last sent; set only when Pending.
 }
 
@@ -386,7 +385,6 @@ func (s *AccessService) ListMembers(ctx context.Context, actor, propertyID uuid.
 		Role:        sharedpolicy.RoleOwner,
 		IsOwner:     true,
 		DisplayName: displayName(ownerUser),
-		HasEmail:    ownerUser.HasEmail,
 		Status:      domain.MemberStatusActive,
 	})
 
@@ -408,7 +406,6 @@ func (s *AccessService) ListMembers(ctx context.Context, actor, propertyID uuid.
 			Role:        toSharedRole(m.Role),
 			IsOwner:     false,
 			DisplayName: displayName(u),
-			HasEmail:    u.HasEmail,
 			Status:      m.Status,
 			SuspendedAt: m.SuspendedAt,
 		})

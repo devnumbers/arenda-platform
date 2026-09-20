@@ -72,14 +72,14 @@ type PropertyOwnerResolver interface {
 }
 
 // MemberUser describes a user for member display purposes. Only non-PII
-// display fields are exposed; emails and phones are never placed in audit
-// context (ADR 0020).
+// display fields are exposed; phones are never placed in audit context
+// (ADR 0020). Member emails for the participants list are resolved through
+// the narrow UserEmailResolver port.
 type MemberUser struct {
-	ID       uuid.UUID
-	Name     *string
-	Surname  *string
-	Phone    string
-	HasEmail bool
+	ID      uuid.UUID
+	Name    *string
+	Surname *string
+	Phone   string
 }
 
 // UserLookup resolves registered users by id for member display.
@@ -168,11 +168,11 @@ type AccessMailer interface {
 }
 
 // UserEmailResolver resolves a registered user's email address behind a narrow
-// port: the access context otherwise sees only non-PII display fields
-// (MemberUser.HasEmail). Implemented over the identity user repository; read
-// by the participant read model (issue #693) and the participant mutations
-// (issue #694). An empty string means the user has no email (or no longer
-// exists): the caller skips the send.
+// port: the access context otherwise sees only non-PII display fields. Read by
+// the participant read model (issue #693), the participant mutations (issue
+// #694) and the members list (owner decision 2026-09-20, #758: participant
+// emails are visible to every reader of the list). An empty string means the
+// user has no email (or no longer exists): the caller skips the send.
 type UserEmailResolver interface {
 	GetEmail(ctx context.Context, userID uuid.UUID) (string, error)
 }

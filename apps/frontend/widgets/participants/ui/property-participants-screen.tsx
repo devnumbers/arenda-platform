@@ -27,7 +27,6 @@ import {
   type PropertyAccessMemberRef,
 } from '@/features/access';
 import { ParticipantStatusBadge } from '@/entities/participants';
-import { useParticipantsList } from '@/features/participants';
 import {
   Button,
   ChipButton,
@@ -55,7 +54,6 @@ import {
 import {
   filterPropertyParticipantsByQuery,
   filterPropertyParticipantsByRole,
-  participantEmailIndex,
   propertyParticipantRows,
   sortPropertyParticipantsByTitle,
   type PropertyParticipantEmailIcon,
@@ -126,19 +124,13 @@ export function PropertyParticipantsScreen(): JSX.Element {
 
   const membersQuery = usePropertyAccessMembers(propertyId);
   const propertyQuery = useProperty(propertyId);
-  const participantsQuery = useParticipantsList();
   const revokeAll = useRevokeAllPropertyAccessMembers(propertyId);
   const meQuery = useMe();
 
   const members = membersQuery.data ?? [];
-  // Почта зарегистрированных в контракте members скрыта (только флаг
-  // has_email) — добираем из кэша агрегатов /participants; собственная
-  // почта и так есть в /me.
-  const emailByUserId = participantEmailIndex(participantsQuery.data ?? []);
-  const rows = propertyParticipantRows(members, meQuery.data?.id, {
-    emailByUserId,
-    currentUserEmail: meQuery.data?.email ?? undefined,
-  });
+  // Почта участника приходит в каждой строке контракта (решение владельца
+  // 2026-09-20, обход #758) — обогащение не требуется.
+  const rows = propertyParticipantRows(members, meQuery.data?.id);
   // Управление доступно владельцу и manage-участнику и на архивном объекте
   // (отзыв разрешён), но выдача на архивный запрещена — приглашение скрыто.
   // Центральные права объекта (#703): пока объект не загружен или не

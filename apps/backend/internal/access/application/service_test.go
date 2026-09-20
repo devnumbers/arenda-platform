@@ -118,7 +118,7 @@ func TestAccessService_DisplayName(t *testing.T) {
 	name, surname := "Ivan", "Petrov"
 
 	lookup := fakeUserLookup{
-		namedID:     {ID: namedID, Name: &name, Surname: &surname, Phone: "+79123456789", HasEmail: true},
+		namedID:     {ID: namedID, Name: &name, Surname: &surname, Phone: "+79123456789"},
 		phoneOnlyID: {ID: phoneOnlyID, Phone: "+79123456789"},
 	}
 	svc := NewAccessService(newMemRepo(), staticResolver{}, nil, lookup, nil, nil,

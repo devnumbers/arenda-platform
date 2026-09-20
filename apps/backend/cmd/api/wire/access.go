@@ -128,6 +128,7 @@ func WireAccess(_ context.Context, p platformDeps, billing *Billing, emailMailer
 		factory,
 		p.Clock,
 		p.Logger,
+		emailResolver,
 	)
 
 	// The owner's participant read model (issue #693): the aggregate over

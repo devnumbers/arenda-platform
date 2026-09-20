@@ -66,10 +66,9 @@ func (a *UserLookupAdapter) GetByEmail(ctx context.Context, email string) (appli
 
 func toMemberUser(u identitydomain.User) application.MemberUser {
 	return application.MemberUser{
-		ID:       u.ID,
-		Name:     u.Name,
-		Surname:  u.Surname,
-		Phone:    u.Phone.String(),
-		HasEmail: u.Email != nil,
+		ID:      u.ID,
+		Name:    u.Name,
+		Surname: u.Surname,
+		Phone:   u.Phone.String(),
 	}
 }

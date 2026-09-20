@@ -11,7 +11,6 @@ function member(overrides: Partial<PropertyAccessMember> = {}): PropertyAccessMe
     role: 'full_access',
     isOwner: false,
     displayName: 'Мария Петрова',
-    hasEmail: true,
     status: 'active',
     suspendedAt: null,
     lastSentAt: null,

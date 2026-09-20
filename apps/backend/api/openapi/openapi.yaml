@@ -6505,8 +6505,10 @@ components:
           format: email
           nullable: true
           description: >
-            Invitee email; filled only on pending invitation rows, null for
-            registered participants.
+            The participant's email address. Filled on every row the reader
+            may see — registered participants and pending invitations alike
+            (owner decision 2026-09-20, #758: nothing is hidden from
+            viewers); null when the address did not resolve.
         role:
           $ref: '#/components/schemas/PropertyAccessMemberRole'
         is_owner:
@@ -6516,8 +6518,6 @@ components:
           description: >
             Participant display name (name and surname, or a masked phone).
             Never the raw phone or email.
-        has_email:
-          type: boolean
         status:
           type: string
           enum: [active, suspended, pending]

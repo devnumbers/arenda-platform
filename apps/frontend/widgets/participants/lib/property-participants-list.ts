@@ -29,43 +29,27 @@ export type PropertyParticipantRow = {
   readonly isOwner: boolean;
 };
 
-/** Источники обогащения почты: контракт members отдаёт email только у
- * pending-приглашений (у зарегистрированных — лишь флаг has_email), адреса
- * зарегистрированных экран добирает из кэша агрегатов /participants
- * (прецедент обогащения адресами #698), собственную почту владельца —
- * из /me. */
-export type PropertyParticipantEmailSources = {
-  readonly emailByUserId: ReadonlyMap<string, string>;
-  readonly currentUserEmail: string | undefined;
-};
-
 /**
  * Ряды списка «Участники объекта» (карта #692, тикет #700) из строк
  * GET /properties/{id}/access/members: владелец — отдельным первым рядом
  * (макет 1980-107096), отметка «(Вы)» — у строки текущего читателя.
- * Порядок входа участников сохраняется — сортировка отдельно.
+ * Порядок входа участников сохраняется — сортировка отдельно. Почта есть
+ * у каждой строки контракта, чей адрес разрешился (решение владельца
+ * 2026-09-20, обход #758: зрителю почты участников тоже видны).
  */
 export function propertyParticipantRows(
   members: ReadonlyArray<PropertyAccessMember>,
   currentUserId: string | undefined,
-  emailSources: PropertyParticipantEmailSources = { emailByUserId: new Map(), currentUserEmail: undefined },
 ): PropertyParticipantRow[] {
-  const rows = members.map(toPropertyParticipantRow(currentUserId, emailSources));
+  const rows = members.map(toPropertyParticipantRow(currentUserId));
   // Инвариант макета: ряд владельца первым независимо от порядка ответа.
   const owner = rows.find((row) => row.isOwner);
   return owner === undefined ? rows : [owner, ...rows.filter((row) => !row.isOwner)];
 }
 
-function toPropertyParticipantRow(
-  currentUserId: string | undefined,
-  { emailByUserId, currentUserEmail }: PropertyParticipantEmailSources,
-) {
+function toPropertyParticipantRow(currentUserId: string | undefined) {
   return (member: PropertyAccessMember): PropertyParticipantRow => {
-    const email =
-      member.email ??
-      (member.userId !== null ? emailByUserId.get(member.userId) : undefined) ??
-      (member.userId !== null && member.userId === currentUserId ? currentUserEmail : undefined) ??
-      '';
+    const email = member.email ?? '';
     const displayName = member.displayName !== '' ? member.displayName : undefined;
     const isMe = currentUserId !== undefined && member.userId === currentUserId;
     const title = [displayName ?? (email !== '' ? email : undefined), isMe ? '(Вы)' : undefined]
@@ -83,20 +67,6 @@ function toPropertyParticipantRow(
       isOwner: member.isOwner,
     };
   };
-}
-
-/** Индекс «uuid → почта» из кэша агрегатов /participants: источник почт
- * зарегистрированных участников, которых контракт members скрывает. */
-export function participantEmailIndex(
-  participants: ReadonlyArray<{ readonly userId: string | undefined; readonly email: string | undefined }>,
-): Map<string, string> {
-  const index = new Map<string, string>();
-  for (const participant of participants) {
-    if (participant.userId !== undefined && participant.email !== undefined) {
-      index.set(participant.userId, participant.email);
-    }
-  }
-  return index;
 }
 
 /** Клиентский поиск по имени и почте (подсказка макета 1980-108531:

@@ -145,6 +145,7 @@ func newAccessLifecycleFixture(t *testing.T) *accessLifecycleFixture {
 	ownerResolver := NewOwnerResolver(tx)
 	userRepo := identitypg.NewUserRepository(tx, encryptor)
 	userLookup := NewUserLookup(userRepo)
+	emailResolver := NewUserEmailResolver(userRepo)
 	policy := accessapp.NewMembershipPolicy(ownerResolver, memberRepo)
 
 	limiter := &accessFakeLimiter{limits: map[uuid.UUID]int{}}
@@ -155,7 +156,7 @@ func newAccessLifecycleFixture(t *testing.T) *accessLifecycleFixture {
 	factory := accessapp.NewTxStoreFactory(memberRepo, invitationRepo, auditapp.Noop{}, accessUoW{beginner})
 	access := accessapp.NewAccessService(memberRepo, ownerResolver, ownerResolver, userLookup, policy, slots, factory, nil)
 	invites := accessapp.NewInvitationService(access, memberRepo, invitationRepo, ownerResolver, ownerResolver,
-		userLookup, policy, slots, nil, ownerResolver, factory, nil, nil)
+		userLookup, policy, slots, nil, ownerResolver, factory, nil, nil, emailResolver)
 
 	return &accessLifecycleFixture{
 		tx: tx, q: genpostgres.New(tx),

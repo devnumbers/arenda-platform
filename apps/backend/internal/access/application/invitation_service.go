@@ -43,14 +43,16 @@ type InvitationService struct {
 	slots       *SlotCoordinator
 	mailer      AccessMailer
 	titles      PropertyTitleResolver
+	emails      UserEmailResolver
 	clock       clock.Clock
 	logger      *slog.Logger
 }
 
 // NewInvitationService creates an InvitationService. Access is the membership
 // service used to delegate instant activation for registered emails; slots may
-// be nil to disable slot enforcement (mirrors NewAccessService); mailer may be
-// nil to skip sending (e.g. in tests that do not exercise the mail path).
+// be nil to disable slot enforcement (mirrors NewAccessService); mailer may
+// be nil to skip sending (e.g. in tests that do not exercise the mail path);
+// emails may be nil to skip the member-email enrichment of ListMembers.
 // Statuses reports the archived flag of a
 // property (issue #163); it may be nil to skip the archived-property checks.
 // Factory bundles the repositories, the audit recorder, and the Unit-of-Work
@@ -69,6 +71,7 @@ func NewInvitationService(
 	factory txStoreFactory,
 	clk clock.Clock,
 	logger *slog.Logger,
+	emails UserEmailResolver,
 ) *InvitationService {
 	if logger == nil {
 		logger = slog.Default()
@@ -88,6 +91,7 @@ func NewInvitationService(
 		slots:          slots,
 		mailer:         mailer,
 		titles:         titles,
+		emails:         emails,
 		clock:          clk,
 		logger:         logger,
 	}
@@ -502,22 +506,33 @@ func (s *InvitationService) insertActivationMembership(
 }
 
 // ListMembers returns the property participants (owner first, then membership
-// rows) and, for actors with the manage-members capability, the pending email
-// invitations of the property appended after the members. Pending rows expose
-// the invitee email, so they are manager-only; viewers get the plain member
-// list.
+// rows) with the pending email invitations appended after the members. Every
+// reader with the view capability (gated by AccessService.ListMembers) sees
+// the same rows, including member emails and pending invitations (owner
+// decision 2026-09-20, #758 walkthrough: nothing is hidden from viewers).
+// Email resolution degrades to a nil email when the resolver is not wired or
+// a lookup fails — the row stays.
 func (s *InvitationService) ListMembers(ctx context.Context, actor, propertyID uuid.UUID) ([]Member, error) {
 	members, err := s.access.ListMembers(ctx, actor, propertyID)
 	if err != nil {
 		return nil, err
 	}
 
-	role, err := s.policy.RoleForProperty(ctx, actor, propertyID)
-	if err != nil {
-		return nil, fmt.Errorf("resolve role: %w", err)
-	}
-	if !sharedpolicy.CanManageMembers(role) {
-		return members, nil
+	for i := range members {
+		m := &members[i]
+		if m.Pending || m.UserID == uuid.Nil || s.emails == nil {
+			continue
+		}
+		email, err := s.emails.GetEmail(ctx, m.UserID)
+		if err != nil {
+			s.logger.WarnContext(ctx, "access: member email lookup failed",
+				slog.String(auditKeyUserID, m.UserID.String()),
+				slog.String("error", err.Error()))
+			continue
+		}
+		if email != "" {
+			m.Email = &email
+		}
 	}
 
 	invitations, err := s.invitations.ListByProperty(ctx, propertyID)

@@ -2811,14 +2811,13 @@ export interface components {
             user_id: string | null;
             /**
              * Format: email
-             * @description Invitee email; filled only on pending invitation rows, null for registered participants.
+             * @description The participant's email address. Filled on every row the reader may see — registered participants and pending invitations alike (owner decision 2026-09-20, #758: nothing is hidden from viewers); null when the address did not resolve.
              */
             email?: string | null;
             role: components["schemas"]["PropertyAccessMemberRole"];
             is_owner: boolean;
             /** @description Participant display name (name and surname, or a masked phone). Never the raw phone or email. */
             display_name?: string;
-            has_email?: boolean;
             /**
              * @description Membership lifecycle status. "suspended" means the recipient's tariff slot was exceeded, so the object is hidden from the recipient's list and grants no access until a slot frees up. "pending" is an email invitation waiting for the invitee to register.
              * @enum {string}

@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import type { PropertyAccessMember } from '@/entities/access';
 import {
   filterPropertyParticipantsByQuery,
-  participantEmailIndex,
   propertyParticipantRows,
   sortPropertyParticipantsByTitle,
 } from './property-participants-list';
@@ -17,7 +16,6 @@ function member(overrides: Partial<PropertyAccessMember>): PropertyAccessMember 
     role: 'viewer',
     isOwner: false,
     displayName: 'Мария Петрова',
-    hasEmail: true,
     status: 'active',
     ...overrides,
   };
@@ -95,35 +93,27 @@ describe('propertyParticipantRows — VM ряда «Участники объе�
     expect(byKey.get('invitation-1')?.participantId).toBe('invitee@example.com');
   });
 
-  it('почта зарегистрированных обогащается из кэша /participants, владельца — из /me', () => {
-    // Контракт members отдаёт email только у pending (has_email без
-    // значения) — недостающее приносит экран.
+  it('почта приходит в каждой строке контракта — без обогащения (решение #758)', () => {
+    // Контракт members отдаёт email и у зарегистрированных, и у pending,
+    // и у владельца — зритель видит те же адреса, что и владелец.
     const rows = propertyParticipantRows(
       [
         member({
-          id: 'm-enriched',
+          id: 'm-registered',
           userId: '12111111-1111-4111-8111-111111111199',
-          email: null,
+          email: 'maria@example.com',
           displayName: 'Мария Петрова',
         }),
-        member({ id: 'm-unknown', email: null, displayName: 'Аноним Анонимов' }),
-        member({ ...owner, email: null }),
+        member({ id: 'm-owner', userId: OWNER_ID, email: 'ivan@example.com', role: 'owner', isOwner: true, displayName: 'Иван Иванов' }),
         pending,
       ],
-      OWNER_ID,
-      {
-        emailByUserId: new Map([['12111111-1111-4111-8111-111111111199', 'maria@relay.example']]),
-        currentUserEmail: 'ivan@example.com',
-      },
+      '99999999-9999-4999-8999-999999999999',
     );
     const byKey = new Map(rows.map((row) => [row.key, row]));
 
-    // В кэше агрегата есть — почта оттуда.
-    expect(byKey.get('m-enriched')?.subtitle).toBe('maria@relay.example');
-    // Нет в кэше — строки почты нет вовсе.
-    expect(byKey.get('m-unknown')?.subtitle).toBeUndefined();
-    // Владельцу хватает собственной почты из /me.
-    expect(byKey.get('owner-row')?.subtitle).toBe('ivan@example.com');
+    expect(byKey.get('m-registered')?.subtitle).toBe('maria@example.com');
+    expect(byKey.get('m-owner')?.subtitle).toBe('ivan@example.com');
+    expect(byKey.get('invitation-1')?.title).toBe('invitee@example.com');
     // Почта pending уже титул — не дублируется.
     expect(byKey.get('invitation-1')?.subtitle).toBeUndefined();
   });
@@ -164,18 +154,5 @@ describe('sortPropertyParticipantsByTitle — чип «Имя»; владеле�
 
     expect(sorted[0]?.role).toBe('owner');
     expect(sorted[1]?.title).toBe('Сергей Сидоров');
-  });
-});
-
-describe('participantEmailIndex — uuid → почта из кэша агрегатов', () => {
-  it('строки без uuid или без почты пропускаются', () => {
-    const index = participantEmailIndex([
-      { userId: 'u-1', email: 'one@example.com' },
-      { userId: undefined, email: 'pending@example.com' },
-      { userId: 'u-2', email: undefined },
-    ]);
-
-    expect(index.size).toBe(1);
-    expect(index.get('u-1')).toBe('one@example.com');
   });
 });
