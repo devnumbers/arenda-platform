@@ -703,11 +703,12 @@ func captureTariffEvents(
 	}
 	if currentTariff != nil && domain.ClassifyTariffChange(*currentTariff, *paymentTariff) == domain.TariffChangeUpgrade {
 		tariff.upgraded = &PlanUpgraded{
-			UserID:       payment.UserID,
-			TransitionID: applied.ID,
-			TariffID:     payment.TariffID,
-			Period:       payment.Period,
-			ActiveUntil:  until,
+			UserID:        payment.UserID,
+			TransitionID:  applied.ID,
+			TariffID:      payment.TariffID,
+			Period:        payment.Period,
+			AmountKopecks: payment.AmountKopecks,
+			ActiveUntil:   until,
 		}
 	}
 }

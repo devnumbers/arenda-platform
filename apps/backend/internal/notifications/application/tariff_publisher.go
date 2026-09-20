@@ -80,13 +80,13 @@ func (p *TariffPublisher) NotifyPaymentSucceeded(
 	period string,
 	activeUntil time.Time,
 ) error {
-	view, err := p.views.TariffView(ctx, tariffID)
+	slug, err := p.resolveTariffSlug(ctx, tariffID)
 	if err != nil {
-		return fmt.Errorf("resolve tariff view %s: %w", tariffID, err)
+		return err
 	}
-	name := tariffDisplayName(view.Name)
+	name := tariffDisplayName(slug)
 	body := "Оплата тарифа «" + name + "» на " + formatAmountKopecks(amountKopecks) + " прошла успешно."
-	payload := domain.TariffRef{Slug: view.Name, Period: period, AmountKopecks: amountKopecks}
+	payload := domain.TariffRef{Slug: slug, Period: period, AmountKopecks: amountKopecks}
 	if !activeUntil.IsZero() {
 		body += " Подписка активна до " + formatGraceDeadline(activeUntil)
 		until := activeUntil
@@ -94,7 +94,7 @@ func (p *TariffPublisher) NotifyPaymentSucceeded(
 	}
 	return p.pipeline.Publish(ctx, Publication{
 		EventType:    domain.EventSubscriptionPaymentSucceeded,
-		DedupKey:     domain.DedupKey("subscription_payment_succeeded:" + paymentID.String()),
+		DedupKey:     domain.DedupKey(string(domain.EventSubscriptionPaymentSucceeded) + ":" + paymentID.String()),
 		Title:        "Оплата прошла",
 		Body:         body,
 		ContextLabel: name,
@@ -105,26 +105,28 @@ func (p *TariffPublisher) NotifyPaymentSucceeded(
 
 // NotifyPlanUpgraded publishes the upgrade leg of «Тариф изменён» (решение
 // #737, тип №14): the payment just activated the new plan — «Тариф „{тариф}“
-// активирован». ActiveUntil is the validity the payment set.
+// активирован». ActiveUntil is the validity the payment set, AmountKopecks
+// the charge that activated it — the tariff payload's amount line.
 func (p *TariffPublisher) NotifyPlanUpgraded(
 	ctx context.Context,
 	userID, transitionID, tariffID uuid.UUID,
 	period string,
+	amountKopecks int64,
 	activeUntil time.Time,
 ) error {
-	view, err := p.views.TariffView(ctx, tariffID)
+	slug, err := p.resolveTariffSlug(ctx, tariffID)
 	if err != nil {
-		return fmt.Errorf("resolve tariff view %s: %w", tariffID, err)
+		return err
 	}
-	name := tariffDisplayName(view.Name)
-	payload := domain.TariffRef{Slug: view.Name, Period: period}
+	name := tariffDisplayName(slug)
+	payload := domain.TariffRef{Slug: slug, Period: period, AmountKopecks: amountKopecks}
 	if !activeUntil.IsZero() {
 		until := activeUntil
 		payload.ActiveUntil = &until
 	}
 	return p.pipeline.Publish(ctx, Publication{
 		EventType:    domain.EventSubscriptionPlanChanged,
-		DedupKey:     domain.DedupKey("subscription_plan_changed:" + transitionID.String()),
+		DedupKey:     domain.DedupKey(string(domain.EventSubscriptionPlanChanged) + ":" + transitionID.String()),
 		Title:        "Тариф изменён",
 		Body:         fmt.Sprintf("Тариф „%s“ активирован", name),
 		ContextLabel: name,
@@ -137,25 +139,37 @@ func (p *TariffPublisher) NotifyPlanUpgraded(
 // изменён» (решение #737, тип №14): the change is scheduled now and lands
 // when the paid period ends — «С {дата} тариф сменится на „{тариф}“».
 // EffectiveAt is that period end; the payload carries no validity — the
-// target is not active yet.
+// target is not active yet — and no amount: no payment was involved, the
+// amount line belongs to the applied payment of №13 and the upgrade leg.
 func (p *TariffPublisher) NotifyPlanDowngradeScheduled(
 	ctx context.Context,
 	userID, transitionID, tariffID uuid.UUID,
 	period string,
 	effectiveAt time.Time,
 ) error {
-	view, err := p.views.TariffView(ctx, tariffID)
+	slug, err := p.resolveTariffSlug(ctx, tariffID)
 	if err != nil {
-		return fmt.Errorf("resolve tariff view %s: %w", tariffID, err)
+		return err
 	}
-	name := tariffDisplayName(view.Name)
+	name := tariffDisplayName(slug)
 	return p.pipeline.Publish(ctx, Publication{
 		EventType:    domain.EventSubscriptionPlanChanged,
-		DedupKey:     domain.DedupKey("subscription_plan_changed:" + transitionID.String()),
+		DedupKey:     domain.DedupKey(string(domain.EventSubscriptionPlanChanged) + ":" + transitionID.String()),
 		Title:        "Тариф изменён",
 		Body:         fmt.Sprintf("С %s тариф сменится на „%s“", formatGraceDeadline(effectiveAt), name),
 		ContextLabel: name,
-		Payload:      domain.Payload{Tariff: &domain.TariffRef{Slug: view.Name, Period: period}},
+		Payload:      domain.Payload{Tariff: &domain.TariffRef{Slug: slug, Period: period}},
 		Recipients:   []uuid.UUID{userID},
 	})
+}
+
+// resolveTariffSlug resolves the publication-time tariff snapshot; the
+// failure (an abnormal miss on the owning table) surfaces to the post-commit
+// wrapper that logs and swallows it — the grace-events canon.
+func (p *TariffPublisher) resolveTariffSlug(ctx context.Context, tariffID uuid.UUID) (string, error) {
+	view, err := p.views.TariffView(ctx, tariffID)
+	if err != nil {
+		return "", fmt.Errorf("resolve tariff view %s: %w", tariffID, err)
+	}
+	return view.Name, nil
 }

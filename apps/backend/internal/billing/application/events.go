@@ -71,10 +71,13 @@ type PlanUpgraded struct {
 	UserID       uuid.UUID
 	TransitionID uuid.UUID
 	// TariffID is the plan the payment activated; Period is its billing
-	// period and ActiveUntil the validity the application just set.
-	TariffID    uuid.UUID
-	Period      domain.SubscriptionPeriod
-	ActiveUntil time.Time
+	// period, AmountKopecks the charge that activated it (the tariff
+	// payload's amount line, решение #737), and ActiveUntil the validity the
+	// application just set.
+	TariffID      uuid.UUID
+	Period        domain.SubscriptionPeriod
+	AmountKopecks int64
+	ActiveUntil   time.Time
 }
 
 // PlanDowngradeScheduled is emitted when a user schedules a downgrade for

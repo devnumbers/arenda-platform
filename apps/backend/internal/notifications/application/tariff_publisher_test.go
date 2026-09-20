@@ -141,7 +141,7 @@ func TestTariffPublisherNotifyPlanUpgraded(t *testing.T) {
 
 	require.NoError(t, h.pub.NotifyPlanUpgraded(
 		context.Background(), testTariffUserID, testTariffTransition, testTariffTariffID,
-		"month", until,
+		"month", 99_000, until,
 	))
 
 	require.Len(t, h.feed.inserted, 1)
@@ -159,6 +159,9 @@ func TestTariffPublisherNotifyPlanUpgraded(t *testing.T) {
 	require.NotNil(t, n.Payload.Tariff)
 	assert.Equal(t, "business", n.Payload.Tariff.Slug)
 	assert.Equal(t, "month", n.Payload.Tariff.Period)
+	// The tariff payload's amount line (решение #737: слаг, период, сумма,
+	// дата до) — for the upgrade leg the applied payment's charge.
+	assert.Equal(t, int64(99_000), n.Payload.Tariff.AmountKopecks)
 	require.NotNil(t, n.Payload.Tariff.ActiveUntil)
 	assert.True(t, until.Equal(*n.Payload.Tariff.ActiveUntil))
 }
@@ -203,7 +206,7 @@ func TestTariffPublisherViewResolveFailureFailsPublication(t *testing.T) {
 		ctx, testTariffUserID, testTariffPaymentID, testTariffTariffID, 100_00, "month", time.Time{},
 	), ErrNotFound)
 	require.ErrorIs(t, h.pub.NotifyPlanUpgraded(
-		ctx, testTariffUserID, testTariffTransition, testTariffTariffID, "month", time.Time{},
+		ctx, testTariffUserID, testTariffTransition, testTariffTariffID, "month", 100_00, time.Time{},
 	), ErrNotFound)
 	require.ErrorIs(t, h.pub.NotifyPlanDowngradeScheduled(
 		ctx, testTariffUserID, testTariffTransition, testTariffTariffID, "month", time.Time{},

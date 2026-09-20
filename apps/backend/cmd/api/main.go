@@ -196,17 +196,6 @@ func run() error {
 	//     event fires unwired.
 	subscribeGraceEvents(eventDispatcher, notificationsapp.NewGracePublisher(riverMod.Publisher))
 
-	// 11.9 Tariff notifications (карта #734, #752): the billing tariff
-	//     events — the applied subscription payment (№13 «Оплата прошла»),
-	//     the upgrade an applied payment activated and the downgrade
-	//     assigned for the period's end (№14 «Тариф изменён») — publish to
-	//     the stored feed + delivery queue through the same pipeline
-	//     publisher (the always-on Тариф category, ADR 0056). The dispatchers
-	//     are synchronous, so the subscription must exist before any applied
-	//     payment can fire it.
-	tariffEventViews := notificationspg.NewTariffViewStore(p.DB)
-	subscribeTariffEvents(eventDispatcher, notificationsapp.NewTariffPublisher(riverMod.Publisher, tariffEventViews))
-
 	// 11.8 Access notifications (карта #734, #751): the access lifecycle
 	//     events — the invitation's activation, the revoke, the slot pause
 	//     and recovery, the member's self-exit — publish to the stored feed
@@ -219,6 +208,17 @@ func run() error {
 		notificationspg.NewAccessEventUserReader(identityMod.UserRepo),
 	)
 	subscribeAccessEvents(eventDispatcher, notificationsapp.NewAccessPublisher(riverMod.Publisher, accessEventViews))
+
+	// 11.9 Tariff notifications (карта #734, #752): the billing tariff
+	//     events — the applied subscription payment (№13 «Оплата прошла»),
+	//     the upgrade an applied payment activated and the downgrade
+	//     assigned for the period's end (№14 «Тариф изменён») — publish to
+	//     the stored feed + delivery queue through the same pipeline
+	//     publisher (the always-on Тариф category, ADR 0056). The dispatchers
+	//     are synchronous, so the subscription must exist before any applied
+	//     payment can fire it.
+	tariffEventViews := notificationspg.NewTariffViewStore(p.DB)
+	subscribeTariffEvents(eventDispatcher, notificationsapp.NewTariffPublisher(riverMod.Publisher, tariffEventViews))
 
 	// 11.7 The notifications scan (карта #734, #748–#750): the hourly zone
 	//     sweep publishes the scan-driven catalog events — the rentals that
@@ -500,7 +500,7 @@ func subscribeTariffEvents(
 		}
 		return tariffPublisher.NotifyPlanUpgraded(
 			ctx, e.UserID, e.TransitionID, e.TariffID,
-			string(e.Period), e.ActiveUntil,
+			string(e.Period), e.AmountKopecks, e.ActiveUntil,
 		)
 	})
 	eventDispatcher.Subscribe(billingevents.EventPlanDowngradeScheduled, func(ctx context.Context, event any) error {

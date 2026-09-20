@@ -124,6 +124,10 @@ func TestWebhook_SucceededUpgradePublishesPaymentSucceededAndPlanUpgraded(t *tes
 		t.Errorf("event identifies user %s tariff %s, want user %s tariff %s",
 			upgraded.UserID, upgraded.TariffID, sub.UserID, payment.TariffID)
 	}
+	if upgraded.AmountKopecks != payment.AmountKopecks {
+		t.Errorf("event amount = %d, want %d (the charge that activated the plan)",
+			upgraded.AmountKopecks, payment.AmountKopecks)
+	}
 	if upgraded.TransitionID == uuid.Nil {
 		t.Error("event transition id is nil — the transition is the dedup entity")
 	}
