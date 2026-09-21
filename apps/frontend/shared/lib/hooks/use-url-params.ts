@@ -1,6 +1,11 @@
 'use client';
 
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import {
+  usePathname,
+  useRouter,
+  useSearchParams,
+  type ReadonlyURLSearchParams,
+} from 'next/navigation';
 
 /**
  * Запись группы параметров в адрес (pre-merge #785; хвосты — #786):
@@ -54,7 +59,8 @@ export function buildUrlWithParams(pathname: string, params: URLSearchParams): s
 }
 
 export function useUrlParams(): {
-  readonly params: URLSearchParams;
+  /** Только чтение: set/delete адресом не делаются — запись через write. */
+  readonly params: ReadonlyURLSearchParams;
   readonly write: (
     patch: Record<string, string>,
     options?: UseUrlParamsWriteOptions,

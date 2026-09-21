@@ -152,6 +152,11 @@ describe('parse/serialize сортировки в URL', () => {
   it('читает новые параметры sort/order', () => {
     expect(parseSortFromParams({ sort: 'created', order: 'desc' })).toEqual({ field: 'created', direction: 'desc' });
     expect(parseSortFromParams({ sort: 'status' })).toEqual({ field: 'status', direction: 'asc' });
+    // Поле и направление разбираются независимо (два «радио», резолюция
+    // #584): ?order=desc без sort — валидный адрес сериализатора
+    // (serializeSortToParams({name, desc}) — ровно он), читается как
+    // {name, desc}, а не сбрасывается целиком (политика канона #786).
+    expect(parseSortFromParams({ order: 'desc' })).toEqual({ field: 'name', direction: 'desc' });
   });
 
   it('читает легаси name_asc/name_desc', () => {
