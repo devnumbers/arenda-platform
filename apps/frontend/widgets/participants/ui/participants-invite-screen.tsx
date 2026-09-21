@@ -32,7 +32,8 @@ import {
   TopNavBackButton,
   TopNavTitle,
 } from '@/shared/ui/design';
-import { ObjectAvatarGlyph, PARTICIPANT_ROW_BASE_CLASS, SelectionGlyph } from './participant-fragments';
+import { ObjectAvatarGlyph, PARTICIPANT_ROW_BASE_CLASS } from './participant-fragments';
+import { InvitePropertiesRows } from './invite-properties-rows';
 import { stageParticipantPopup } from '../lib/participant-popups';
 import { ParticipantRoleSegmented } from './participant-role-segmented';
 import { ParticipantsInviteSkeleton } from './participants-skeletons';
@@ -284,9 +285,6 @@ function InviteObjectsPicker({
 
   const optionIds = options.map((option) => option.id);
   const allState = inviteSelectionState(draft, optionIds);
-  // Tri-state домена ('all'|'partial'|'none') → глиф макета (on/mixed/off).
-  const allGlyphState: 'on' | 'off' | 'mixed' =
-    allState === 'all' ? 'on' : allState === 'partial' ? 'mixed' : 'off';
 
   // Esc закрывает пикер без коммита (канон CalendarDatePicker).
   useEffect(() => {
@@ -320,49 +318,15 @@ function InviteObjectsPicker({
        * #500); на мобайле шапка в потоке и отступ не нужен. */}
       <div className="min-h-0 flex-1 overflow-y-auto tablet:mt-[72px]">
         <div className="mx-auto w-full max-w-[560px] pb-[136px]">
-          {/* Ряды с боковым отступом 24px по макету 2008-46627; разделитель
-           * тянется на ширину инсетного блока (без двойного отступа). */}
+          {/* Ряды с боковым отступом 24px по макету 2008-46627. */}
           <div className="flex flex-col px-6 pt-2">
-            <button
-              type="button"
-              role="checkbox"
-              aria-checked={allGlyphState === 'mixed' ? 'mixed' : allGlyphState === 'on'}
-              onClick={() => setDraft(toggleAllInvitedProperties(draft, optionIds))}
-              className={PARTICIPANT_ROW_BASE_CLASS}
-            >
-              <ObjectAvatarGlyph photoUrl={undefined} isAll />
-              <span className="flex min-w-0 flex-1 flex-col gap-1">
-                <span className="truncate text-base font-medium leading-[18px] text-content">
-                  Все объекты
-                </span>
-                <span className="truncate text-sm leading-4 text-content-secondary">
-                  Поделиться всеми объектами
-                </span>
-              </span>
-              <SelectionGlyph state={allGlyphState} />
-            </button>
-            <div aria-hidden className="h-px bg-surface-muted" />
-            {options.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                role="checkbox"
-                aria-checked={draft.has(option.id)}
-                onClick={() => setDraft(toggleInvitedProperty(draft, option.id))}
-                className={PARTICIPANT_ROW_BASE_CLASS}
-              >
-                <ObjectAvatarGlyph photoUrl={option.photoUrl} />
-                <span className="flex min-w-0 flex-1 flex-col gap-1">
-                  <span className="truncate text-base font-medium leading-[18px] text-content">
-                    {option.name}
-                  </span>
-                  <span className="truncate text-sm leading-4 text-content-secondary">
-                    {option.address}
-                  </span>
-                </span>
-                <SelectionGlyph state={draft.has(option.id) ? 'on' : 'off'} />
-              </button>
-            ))}
+            <InvitePropertiesRows
+              options={options}
+              selected={draft}
+              allState={allState}
+              onToggleAll={() => setDraft(toggleAllInvitedProperties(draft, optionIds))}
+              onToggle={(propertyId) => setDraft(toggleInvitedProperty(draft, propertyId))}
+            />
           </div>
         </div>
       </div>

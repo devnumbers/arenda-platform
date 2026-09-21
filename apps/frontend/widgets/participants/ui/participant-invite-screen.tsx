@@ -7,8 +7,11 @@ import { goBack } from '@/shared/lib/navigation';
 import { ROUTES } from '@/shared/config/routes';
 import {
   availableInviteProperties,
+  inviteSelectionState,
   type InvitePropertyOption,
   type ParticipantAccessRole,
+  toggleAllInvitedProperties,
+  toggleInvitedProperty,
 } from '@/entities/participants';
 import {
   useAddParticipantProperties,
@@ -27,12 +30,8 @@ import {
   TopNav,
   TopNavTitle,
 } from '@/shared/ui/design';
-import {
-  ObjectAvatarGlyph,
-  PARTICIPANT_ROW_BASE_CLASS,
-  ParticipantNotFound,
-  SelectionGlyph,
-} from './participant-fragments';
+import { ParticipantNotFound } from './participant-fragments';
+import { InvitePropertiesRows } from './invite-properties-rows';
 import { stageParticipantPopup } from '../lib/participant-popups';
 import { ParticipantRoleSegmented } from './participant-role-segmented';
 import { ParticipantInviteSkeleton } from './participants-skeletons';
@@ -83,22 +82,8 @@ export function ParticipantInviteScreen({
       ? []
       : availableInviteProperties(manageable, participant);
 
-  const allChecked = options.length > 0 && selected.size === options.length;
-  const mixed = selected.size > 0 && selected.size < options.length;
-  const allState = mixed ? 'mixed' : allChecked ? 'on' : 'off';
-
-  const toggleAll = (): void =>
-    setSelected(allChecked ? new Set() : new Set(options.map((option) => option.id)));
-  const toggleOne = (id: string): void =>
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
+  const optionIds = options.map((option) => option.id);
+  const allState = inviteSelectionState(selected, optionIds);
 
   const close = (): void => {
     if (addProperties.isPending) {
@@ -161,46 +146,14 @@ export function ParticipantInviteScreen({
   } else {
     content = (
       <div className="flex flex-col">
-        <button
-          type="button"
-          role="checkbox"
-          aria-checked={mixed ? 'mixed' : allChecked}
-          onClick={toggleAll}
-          className={PARTICIPANT_ROW_BASE_CLASS}
-        >
-          <ObjectAvatarGlyph photoUrl={undefined} isAll />
-          <span className="flex min-w-0 flex-1 flex-col gap-1">
-            <span className="truncate text-base font-medium leading-[18px] text-content">
-              Все объекты
-            </span>
-            <span className="truncate text-sm leading-4 text-content-secondary">
-              Поделиться всеми объектами
-            </span>
-          </span>
-          <SelectionGlyph state={allState} />
-        </button>
-        <div aria-hidden className="mx-6 h-px bg-surface-muted" />
-        {options.map((option) => (
-          <button
-            key={option.id}
-            type="button"
-            role="checkbox"
-            aria-checked={selected.has(option.id)}
-            onClick={() => toggleOne(option.id)}
-            className={PARTICIPANT_ROW_BASE_CLASS}
-          >
-            <ObjectAvatarGlyph photoUrl={option.photoUrl} />
-            <span className="flex min-w-0 flex-1 flex-col gap-1">
-              <span className="truncate text-base font-medium leading-[18px] text-content">
-                {option.name}
-              </span>
-              <span className="truncate text-sm leading-4 text-content-secondary">
-                {option.address}
-              </span>
-            </span>
-            <SelectionGlyph state={selected.has(option.id) ? 'on' : 'off'} />
-          </button>
-        ))}
+        <InvitePropertiesRows
+          options={options}
+          selected={selected}
+          allState={allState}
+          onToggleAll={() => setSelected(toggleAllInvitedProperties(selected, optionIds))}
+          onToggle={(propertyId) => setSelected(toggleInvitedProperty(selected, propertyId))}
+          dividerClassName="mx-6 h-px bg-surface-muted"
+        />
       </div>
     );
   }
