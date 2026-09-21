@@ -62,6 +62,12 @@ type TaskOverdueTarget struct {
 	PropertyName    string
 	PropertyAddress string
 	OwnerID         uuid.UUID
+	// DueAt is the term's instant in the owner's timezone — the due-minute
+	// job's ScheduledAt. Only GetScheduledOverdueTask fills it (the
+	// due-minute job's reload and the creation/edit seam's term-vs-now
+	// decision, issue #775); the zone sweep's targets carry the term as the
+	// date + wall-clock pair above and leave it zero.
+	DueAt time.Time
 }
 
 // TaskOverdueSource is the tasks publisher's window into the tasks context:
@@ -207,6 +213,46 @@ func (p *TasksPublisher) DeliverTaskOverdue(ctx context.Context, taskID uuid.UUI
 	}
 	if !live {
 		return nil
+	}
+	return p.publish(ctx, target)
+}
+
+// NotifyMaterializedTasks is the creation/edit seam (issue #775): the tasks
+// context hands over the standing tasks' ids strictly after their
+// materializing transaction committed. Per task the due-minute job's own
+// reload decides: a live timed task books its job at the term's instant —
+// or, when the term already passed (the task was born overdue), publishes
+// at once, the wait for the next sweep being exactly the up-to-an-hour delay
+// this seam removes; a gone, completed or date-only task is a no-op (the
+// sweep leg covers the date-only ones as before). Failures are isolated per
+// task and travel back joined — the caller is best-effort and only logs
+// them.
+func (p *TasksPublisher) NotifyMaterializedTasks(
+	ctx context.Context, taskIDs []uuid.UUID, now time.Time,
+) error {
+	var errs []error
+	for _, taskID := range taskIDs {
+		if err := p.notifyMaterialized(ctx, taskID, now); err != nil {
+			errs = append(errs, fmt.Errorf("notify task %s: %w", taskID, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// notifyMaterialized plans one handed-over task: the live reload answers the
+// target with its term instant; a term in the future books the due-minute
+// job, a reached one — the boundary inclusive, the canon minute — publishes
+// now.
+func (p *TasksPublisher) notifyMaterialized(ctx context.Context, taskID uuid.UUID, now time.Time) error {
+	target, live, err := p.source.GetScheduledOverdueTask(ctx, taskID)
+	if err != nil {
+		return fmt.Errorf("load task %s for the scheduling seam: %w", taskID, err)
+	}
+	if !live {
+		return nil
+	}
+	if target.DueAt.After(now) {
+		return p.scheduler.ScheduleTaskOverdue(ctx, taskID, target.DueAt)
 	}
 	return p.publish(ctx, target)
 }

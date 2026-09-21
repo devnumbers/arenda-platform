@@ -361,6 +361,105 @@ func TestTasksPublisher_EachZoneSweptWithItsOwnToday(t *testing.T) {
 	}, h.source.asked)
 }
 
+// The creation/edit seam (issue #775): a task born between the hourly passes
+// with its term before the next one books its due-minute job at once — the
+// notification lands exactly at the term's minute, not up to an hour late.
+func TestTasksPublisher_NotifyMaterializedBooksFutureTerm(t *testing.T) {
+	t.Parallel()
+
+	h := newTaskScanHarness([]ScanZone{{Timezone: zoneMSK}})
+	task := uuid.Must(uuid.NewV7())
+	due := scanNow.Add(2 * time.Minute)
+	target := overdueTaskTarget(task, "Показ квартиры",
+		time.Date(2026, 9, 18, 0, 0, 0, 0, time.UTC), dueTimePtr(9, 5))
+	target.DueAt = due
+	h.source.live[task] = target
+
+	p := NewTasksPublisher(h.pipeline, h.zones, h.source, h.scheduler)
+	require.NoError(t, p.NotifyMaterializedTasks(context.Background(), []uuid.UUID{task}, scanNow))
+
+	require.Len(t, h.scheduler.booked, 1)
+	assert.Equal(t, due, h.scheduler.booked[task])
+	assert.Empty(t, h.feed.inserted, "a future term only books the job")
+}
+
+// A task born already overdue — its term passed before the handover —
+// publishes at once: waiting for the next sweep would be up to an hour late,
+// the delay the seam exists to remove. The boundary is the canon minute
+// (включительно): a term at the sweep instant is overdue, not future.
+func TestTasksPublisher_NotifyMaterializedPublishesBornOverdue(t *testing.T) {
+	t.Parallel()
+
+	h := newTaskScanHarness([]ScanZone{{Timezone: zoneMSK}})
+	task := uuid.Must(uuid.NewV7())
+	target := overdueTaskTarget(task, "Показ квартиры",
+		time.Date(2026, 9, 18, 0, 0, 0, 0, time.UTC), dueTimePtr(15, 13))
+	target.DueAt = scanNow.Add(-time.Minute)
+	h.source.live[task] = target
+	member := uuid.Must(uuid.NewV7())
+	h.source.recips[*target.PropertyID] = []uuid.UUID{member}
+
+	p := NewTasksPublisher(h.pipeline, h.zones, h.source, h.scheduler)
+	require.NoError(t, p.NotifyMaterializedTasks(context.Background(), []uuid.UUID{task}, scanNow))
+
+	assert.Empty(t, h.scheduler.booked, "a passed term publishes, nothing to book")
+	require.Len(t, h.feed.inserted, 2)
+	assert.Equal(t, domain.DedupKey("task_overdue:"+task.String()), h.feed.inserted[0].DedupKey)
+
+	// The boundary: the term at the handover instant itself is overdue too.
+	boundary := uuid.Must(uuid.NewV7())
+	atTerm := overdueTaskTarget(boundary, "Второй показ",
+		time.Date(2026, 9, 18, 0, 0, 0, 0, time.UTC), dueTimePtr(21, 40))
+	atTerm.DueAt = scanNow
+	h.source.live[boundary] = atTerm
+	h.source.recips[*atTerm.PropertyID] = []uuid.UUID{member}
+	require.NoError(t, p.NotifyMaterializedTasks(context.Background(), []uuid.UUID{boundary}, scanNow))
+	assert.Empty(t, h.scheduler.booked, "the term minute reached is overdue, not future")
+	require.Len(t, h.feed.inserted, 4)
+}
+
+// The seam's no-op: a task gone, completed or turned date-only between the
+// materialization and the handover — the reload answers nothing and the seam
+// moves on without booking or publishing.
+func TestTasksPublisher_NotifyMaterializedSkipsDeadTask(t *testing.T) {
+	t.Parallel()
+
+	h := newTaskScanHarness([]ScanZone{{Timezone: zoneMSK}})
+	gone := uuid.Must(uuid.NewV7())
+
+	p := NewTasksPublisher(h.pipeline, h.zones, h.source, h.scheduler)
+	require.NoError(t, p.NotifyMaterializedTasks(context.Background(), []uuid.UUID{gone}, scanNow))
+
+	assert.Empty(t, h.scheduler.booked)
+	assert.Empty(t, h.feed.inserted)
+}
+
+// A broken task's planning does not stop the rest: the surviving tasks are
+// handled, the joined error reports the failure — the caller is best-effort
+// and logs it (the scan's isolation canon).
+func TestTasksPublisher_NotifyMaterializedFailuresAreIsolated(t *testing.T) {
+	t.Parallel()
+
+	h := newTaskScanHarness([]ScanZone{{Timezone: zoneMSK}})
+	broken := uuid.Must(uuid.NewV7())
+	survivor := uuid.Must(uuid.NewV7())
+	brokenTarget := overdueTaskTarget(broken, "Сломалась",
+		time.Date(2026, 9, 18, 0, 0, 0, 0, time.UTC), dueTimePtr(15, 13))
+	brokenTarget.DueAt = scanNow.Add(time.Hour)
+	h.source.live[broken] = brokenTarget
+	survivorTarget := overdueTaskTarget(survivor, "Выжила",
+		time.Date(2026, 9, 18, 0, 0, 0, 0, time.UTC), dueTimePtr(16, 13))
+	survivorTarget.DueAt = scanNow.Add(2 * time.Hour)
+	h.source.live[survivor] = survivorTarget
+	h.scheduler.errFor = map[uuid.UUID]error{broken: errors.New("queue down")}
+
+	p := NewTasksPublisher(h.pipeline, h.zones, h.source, h.scheduler)
+	err := p.NotifyMaterializedTasks(context.Background(), []uuid.UUID{broken, survivor}, scanNow)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), broken.String())
+	assert.Equal(t, survivorTarget.DueAt, h.scheduler.booked[survivor])
+}
+
 func parseScheduledWindow(raw string) (from, until time.Time, err error) {
 	parts := strings.Split(raw, "|")
 	if len(parts) != 2 {

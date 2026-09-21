@@ -10,6 +10,7 @@ import (
 	notificationsjob "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/notificationsjob"
 	notificationspg "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/postgres"
 	notificationsstream "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/stream"
+	taskschedule "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/taskschedule"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/sse"
@@ -36,6 +37,12 @@ type RiverQueue struct {
 	// due-minute worker publishes through it (bound post-construction, see
 	// DeferredTaskOverdueDeliverer).
 	TasksPublisher *notificationsapp.TasksPublisher
+	// TasksSeam is the tasks context's scheduling seam (issue #775): the
+	// rule create/edit flows hand their standing tasks' ids over post-commit
+	// and the seam plans them through the tasks publisher. The composition
+	// root wires it into the tasks module after this constructor — the
+	// tasks module builds earlier than the queue.
+	TasksSeam *taskschedule.Seam
 	// Stream is the shared event stream hub (карта #734, #742; ADR 0058):
 	// the publisher pushes the live frames through it post-commit and the
 	// HTTP server serves GET /notifications/stream from it. The composition
@@ -153,6 +160,7 @@ func WireRiverQueue(
 		Client:          client,
 		Publisher:       publisher,
 		TasksPublisher:  tasksPublisher,
+		TasksSeam:       taskschedule.NewSeam(tasksPublisher, p.Clock),
 		Stream:          notificationsStream,
 		ProviderLimiter: providerLimiter,
 	}, nil

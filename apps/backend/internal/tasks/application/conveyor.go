@@ -12,11 +12,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
 	"github.com/nambers/arenda-planform/apps/backend/internal/tasks/domain"
 )
 
@@ -53,14 +55,26 @@ type mutationOutcome[T any] struct {
 	// commit so the response carries persisted timestamps. Only rule-shaped
 	// outcomes set it — the name carries that fact.
 	RereadRuleID *uuid.UUID
+	// ScheduleOverdueOf asks the conveyor to hand this rule's standing
+	// uncompleted tasks to the notifications scheduling seam after the tick
+	// and the commit (issue #775): their ids are captured inside the
+	// transaction once the tick has settled the rule's rows — the freshly
+	// materialized and the kept standing tasks alike. Only the rule
+	// create/edit flows set it, always with Tick=true.
+	ScheduleOverdueOf *uuid.UUID
 }
 
 // mutationGates bundles the dependencies the conveyor needs beyond the
-// transactional stores: the owner calendar for the day boundary; the role
-// gate arrives per call, already resolved over the caller's policy.
+// transactional stores: the owner calendar for the day boundary, the
+// notifications scheduling seam the rule flows hand their standing tasks to
+// after the commit (issue #775; nil keeps the pre-#775 silence) and the
+// logger the best-effort handover reports through. The role gate arrives per
+// call, already resolved over the caller's policy.
 type mutationGates struct {
-	factory  txStoreFactory
-	calendar OwnerCalendar
+	factory     txStoreFactory
+	calendar    OwnerCalendar
+	overdueSeam MaterializedTaskNotifier
+	log         *slog.Logger
 }
 
 // runMutation is the mutation conveyor shared by every use case of this
@@ -92,6 +106,7 @@ func runMutation[T any](
 	}
 	var scope uuid.UUID
 	var out mutationOutcome[T]
+	var seamTaskIDs []uuid.UUID
 	err = g.factory.runInTx(ctx, func(stores *txStores) error {
 		ref, err := stores.properties.Get(ctx, propertyID)
 		if err != nil {
@@ -127,11 +142,16 @@ func runMutation[T any](
 		if !out.Tick {
 			return nil
 		}
-		return stores.tickOwnerProperties(ctx, scope, today)
+		if err := stores.tickOwnerProperties(ctx, scope, today); err != nil {
+			return err
+		}
+		seamTaskIDs, err = captureSeamTasks(ctx, stores, out.ScheduleOverdueOf)
+		return err
 	})
 	if err != nil {
 		return zero, err
 	}
+	dispatchSeamTasks(g, ctx, seamTaskIDs)
 	if out.RereadRuleID == nil {
 		return out.Response, nil
 	}
@@ -174,6 +194,7 @@ func runOwnerMutation[T any](
 ) (T, error) {
 	var zero T
 	var out mutationOutcome[T]
+	var seamTaskIDs []uuid.UUID
 	err := g.factory.runInTx(ctx, func(stores *txStores) error {
 		if err := stores.tick.LockOwner(ctx, actor); err != nil {
 			return err
@@ -204,11 +225,16 @@ func runOwnerMutation[T any](
 		if !out.Tick {
 			return nil
 		}
-		return stores.tickOwnerWithoutProperty(ctx, actor, today)
+		if err := stores.tickOwnerWithoutProperty(ctx, actor, today); err != nil {
+			return err
+		}
+		seamTaskIDs, err = captureSeamTasks(ctx, stores, out.ScheduleOverdueOf)
+		return err
 	})
 	if err != nil {
 		return zero, err
 	}
+	dispatchSeamTasks(g, ctx, seamTaskIDs)
 	if out.RereadRuleID == nil {
 		return out.Response, nil
 	}
@@ -268,6 +294,42 @@ func ownerToday(calendar OwnerCalendar, ctx context.Context, ownerID uuid.UUID) 
 		return time.Time{}, fmt.Errorf("resolve owner today: %w", err)
 	}
 	return today, nil
+}
+
+// captureSeamTasks reads the scheduling seam's handover after the tick has
+// settled the rule's rows (issue #775): the rule's standing uncompleted
+// tasks — the freshly materialized ones and the kept standing ones alike,
+// since notifications re-resolves each task's liveness and term itself. A
+// change without the seam verdict captures nothing.
+func captureSeamTasks(ctx context.Context, stores *txStores, ruleID *uuid.UUID) ([]uuid.UUID, error) {
+	if ruleID == nil {
+		return nil, nil
+	}
+	ids, err := stores.tasks.ListUncompletedTaskIDs(ctx, *ruleID)
+	if err != nil {
+		return nil, fmt.Errorf("capture standing tasks of rule %s: %w", *ruleID, err)
+	}
+	return ids, nil
+}
+
+// dispatchSeamTasks hands the captured task ids to the notifications
+// scheduling seam strictly after the commit — the grace-events canon
+// (issue #775): a rolled-back transaction dispatches nothing, a nil seam
+// keeps the pre-#775 silence, and a broken seam is logged and never fails
+// the committed mutation.
+func dispatchSeamTasks(g mutationGates, ctx context.Context, taskIDs []uuid.UUID) {
+	if len(taskIDs) == 0 || g.overdueSeam == nil {
+		return
+	}
+	if err := g.overdueSeam.NotifyMaterializedTasks(ctx, taskIDs); err != nil {
+		logger := g.log
+		if logger == nil {
+			logger = slog.Default()
+		}
+		logger.ErrorContext(ctx, "notify materialized tasks failed",
+			slog.Int("task_count", len(taskIDs)),
+			slog.String("error", sanitize.Error(err)))
+	}
 }
 
 // recordAudit writes the mutation's audit entry inside the transaction

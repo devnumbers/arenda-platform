@@ -95,9 +95,11 @@ func (s *TaskScanStore) ListOverdueTargets(
 }
 
 // GetScheduledOverdueTask reloads one task at its due minute — the
-// scheduled job's delivery-time resolution. A gone, completed, date-only or
-// archived-property task is pgx.ErrNoRows here and answers live=false: the
-// job finishes without publishing.
+// scheduled job's delivery-time resolution and the creation/edit seam's
+// live check (#775). A gone, completed, date-only or archived-property task
+// is pgx.ErrNoRows here and answers live=false: the job finishes without
+// publishing. The term's instant (DueAt) travels for the seam's
+// future-vs-past decision; the due-minute job itself ignores it.
 func (s *TaskScanStore) GetScheduledOverdueTask(ctx context.Context, taskID uuid.UUID) (application.TaskOverdueTarget, bool, error) {
 	row, err := postgres.New(s.db).GetScheduledOverdueTask(ctx, pgconv.UUIDToPgtype(taskID))
 	if err != nil {
@@ -109,6 +111,7 @@ func (s *TaskScanStore) GetScheduledOverdueTask(ctx context.Context, taskID uuid
 	target := taskOverdueTargetFromRow(
 		row.TaskID, row.Title, row.DueDate, row.DueTime,
 		row.PropertyID, row.PropertyName, row.PropertyAddress, row.RuleID, row.OwnerID)
+	target.DueAt = pgconv.TimestamptzToTime(row.DueAt)
 	return target, true, nil
 }
 

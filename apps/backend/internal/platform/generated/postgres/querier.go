@@ -429,7 +429,10 @@ type Querier interface {
 	// it stands at its term minute. A gone (rule edit removed the stale row),
 	// completed, date-only, or archived-property task answers no row — the job
 	// finishes without publishing. The rule id travels for the screen path: an
-	// active task's edit screen is its rule's screen.
+	// active task's edit screen is its rule's screen. The term's instant in the
+	// owner's timezone (due_at) travels for the creation/edit seam (#775),
+	// which decides future-vs-past on it — the job wakes at its own minute and
+	// needs no clock.
 	GetScheduledOverdueTask(ctx context.Context, id pgtype.UUID) (GetScheduledOverdueTaskRow, error)
 	GetSessionByTokenHash(ctx context.Context, arg GetSessionByTokenHashParams) (GetSessionByTokenHashRow, error)
 	GetSubscriptionByID(ctx context.Context, id pgtype.UUID) (UserSubscription, error)
@@ -789,6 +792,12 @@ type Querier interface {
 	// The property's rentals: unfinished first (newest start on top), then the
 	// completed ones by completion date, fresh on top (ADR 0053 §4).
 	ListRentalsByProperty(ctx context.Context, arg ListRentalsByPropertyParams) ([]ListRentalsByPropertyRow, error)
+	// The scheduling seam's in-transaction handover (issue #775): the rule's
+	// standing uncompleted tasks' ids, read after the materialization tick has
+	// settled the rule's rows. The freshly materialized and the kept standing
+	// tasks travel alike — notifications re-resolves each task's liveness and
+	// term itself, so stale or kept ids are safe to hand over.
+	ListRuleUncompletedTaskIDs(ctx context.Context, ruleID pgtype.UUID) ([]pgtype.UUID, error)
 	ListSeenPopups(ctx context.Context, userID pgtype.UUID) ([]string, error)
 	// Admin payment views (issue #254). The phone filter matches the stored
 	// ciphertext (deterministic encryption) or the plaintext of a not-yet-

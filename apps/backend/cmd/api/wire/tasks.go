@@ -47,7 +47,7 @@ func WireTasks(p platformDeps) (*Tasks, error) {
 	}
 
 	return &Tasks{
-		RuleService: tasksapp.NewRuleService(factory, ownerClock, p.Policy),
+		RuleService: tasksapp.NewRuleService(factory, ownerClock, p.Policy, p.Logger),
 		TaskService: tasksapp.NewTaskService(factory, ownerClock, ownerClock, p.Policy),
 		TickService: tasksapp.NewTickService(factory, zones, ownerClock, metrics),
 	}, nil

@@ -189,6 +189,15 @@ func run() error {
 	defer riverMod.ProviderLimiter.Stop()
 	notificationsStream := riverMod.Stream
 
+	// 11.5.1 The tasks scheduling seam (issue #775): the rule create/edit
+	//     flows hand their standing tasks' ids over post-commit — a live
+	//     timed task books its due-minute job at once (the term before the
+	//     next hourly pass is exactly the delay this removes), a task born
+	//     overdue publishes immediately. Late-bound: the tasks module builds
+	//     earlier than the delivery queue (the grace-events canon —
+	//     best-effort, a broken seam never fails the committed rule).
+	tasksMod.RuleService.SetOverdueSeam(riverMod.TasksSeam)
+
 	// 11.6 Grace notifications (issue #253, #741): the billing grace events
 	//     publish to the stored feed + delivery queue through the pipeline
 	//     publisher (the always-on Тариф category, ADR 0056). Subscribers

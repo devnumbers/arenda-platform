@@ -485,3 +485,13 @@ func (s *TaskStore) DeleteCompletedJournalOwnerBook(ctx context.Context, scope u
 	}
 	return cleared, nil
 }
+
+// ListUncompletedTaskIDs returns the rule's standing uncompleted tasks' ids
+// — the scheduling seam's in-transaction handover (issue #775).
+func (s *TaskStore) ListUncompletedTaskIDs(ctx context.Context, ruleID uuid.UUID) ([]uuid.UUID, error) {
+	ids, err := s.q().ListRuleUncompletedTaskIDs(ctx, pgconv.UUIDToPgtype(ruleID))
+	if err != nil {
+		return nil, fmt.Errorf("list uncompleted tasks of rule %s: %w", ruleID, err)
+	}
+	return pgconv.UUIDSliceFromPgtype(ids), nil
+}

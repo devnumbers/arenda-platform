@@ -284,6 +284,10 @@ func TestTaskScanStore_GetScheduledOverdueTask(t *testing.T) {
 	assert.Equal(t, prop, *target.PropertyID)
 	require.NotNil(t, target.DueTime)
 	assert.Equal(t, application.TaskDueTime(15*60+13), *target.DueTime)
+	// The term's instant in the owner's timezone — the creation/edit seam's
+	// future-vs-past decision (#775): 15:13 Moscow = 12:13 UTC.
+	assert.True(t, target.DueAt.Equal(time.Date(2026, 9, 19, 12, 13, 0, 0, time.UTC)),
+		"15:13 Moscow = 12:13 UTC, got %s", target.DueAt)
 
 	_, isLive, err = store.GetScheduledOverdueTask(ctx, completed)
 	require.NoError(t, err)

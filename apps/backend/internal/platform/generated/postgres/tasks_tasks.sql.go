@@ -948,6 +948,39 @@ func (q *Queries) ListCompletedTasksGlobalWithoutProperty(ctx context.Context, a
 	return items, nil
 }
 
+const listRuleUncompletedTaskIDs = `-- name: ListRuleUncompletedTaskIDs :many
+SELECT id
+FROM tasks
+WHERE rule_id = $1
+  AND completed_date IS NULL
+ORDER BY id
+`
+
+// The scheduling seam's in-transaction handover (issue #775): the rule's
+// standing uncompleted tasks' ids, read after the materialization tick has
+// settled the rule's rows. The freshly materialized and the kept standing
+// tasks travel alike — notifications re-resolves each task's liveness and
+// term itself, so stale or kept ids are safe to hand over.
+func (q *Queries) ListRuleUncompletedTaskIDs(ctx context.Context, ruleID pgtype.UUID) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listRuleUncompletedTaskIDs, ruleID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const uncompleteTask = `-- name: UncompleteTask :execrows
 UPDATE tasks
 SET completed_date = NULL

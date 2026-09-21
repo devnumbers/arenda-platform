@@ -248,32 +248,39 @@ SELECT t.id AS task_id,
        p.name AS property_name,
        p.address AS property_address,
        t.rule_id,
-       t.owner_id
+       t.owner_id,
+       CAST(((t.due_date + t.due_time) AT TIME ZONE u.timezone) AS timestamptz) AS due_at
 FROM tasks t
+JOIN users u ON u.id = t.owner_id
 LEFT JOIN properties p ON p.id = t.property_id
 WHERE t.id = $1
   AND t.completed_date IS NULL
+  AND t.due_date IS NOT NULL
   AND t.due_time IS NOT NULL
   AND (t.property_id IS NULL OR p.status IN ('active', 'maintenance'))
 `
 
 type GetScheduledOverdueTaskRow struct {
-	TaskID          pgtype.UUID `json:"task_id"`
-	Title           string      `json:"title"`
-	DueDate         pgtype.Date `json:"due_date"`
-	DueTime         pgtype.Time `json:"due_time"`
-	PropertyID      pgtype.UUID `json:"property_id"`
-	PropertyName    pgtype.Text `json:"property_name"`
-	PropertyAddress pgtype.Text `json:"property_address"`
-	RuleID          pgtype.UUID `json:"rule_id"`
-	OwnerID         pgtype.UUID `json:"owner_id"`
+	TaskID          pgtype.UUID        `json:"task_id"`
+	Title           string             `json:"title"`
+	DueDate         pgtype.Date        `json:"due_date"`
+	DueTime         pgtype.Time        `json:"due_time"`
+	PropertyID      pgtype.UUID        `json:"property_id"`
+	PropertyName    pgtype.Text        `json:"property_name"`
+	PropertyAddress pgtype.Text        `json:"property_address"`
+	RuleID          pgtype.UUID        `json:"rule_id"`
+	OwnerID         pgtype.UUID        `json:"owner_id"`
+	DueAt           pgtype.Timestamptz `json:"due_at"`
 }
 
 // The due-minute job's delivery-time resolution (issue #750): the task as
 // it stands at its term minute. A gone (rule edit removed the stale row),
 // completed, date-only, or archived-property task answers no row — the job
 // finishes without publishing. The rule id travels for the screen path: an
-// active task's edit screen is its rule's screen.
+// active task's edit screen is its rule's screen. The term's instant in the
+// owner's timezone (due_at) travels for the creation/edit seam (#775),
+// which decides future-vs-past on it — the job wakes at its own minute and
+// needs no clock.
 func (q *Queries) GetScheduledOverdueTask(ctx context.Context, id pgtype.UUID) (GetScheduledOverdueTaskRow, error) {
 	row := q.db.QueryRow(ctx, getScheduledOverdueTask, id)
 	var i GetScheduledOverdueTaskRow
@@ -287,6 +294,7 @@ func (q *Queries) GetScheduledOverdueTask(ctx context.Context, id pgtype.UUID) (
 		&i.PropertyAddress,
 		&i.RuleID,
 		&i.OwnerID,
+		&i.DueAt,
 	)
 	return i, err
 }
