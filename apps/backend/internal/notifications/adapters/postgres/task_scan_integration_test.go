@@ -126,8 +126,9 @@ func TestTaskScanStore_ListScheduledTargets(t *testing.T) {
 	atLowerBound := insertScanTask(t, pool, msk, mskProp, uuid.Nil, "2026-09-19", new("16:00"), nil)
 	// Beyond the horizon — books on a later pass.
 	beyondHorizon := insertScanTask(t, pool, msk, mskProp, uuid.Nil, "2026-09-22", new("16:00"), nil)
-	// The date-only and the completed tasks get no job — the date-only
-	// notification is the first sweep after the day's end.
+	// The date-only task books at its day-after midnight (issue #777):
+	// due 2026-09-20 → 00:00 Moscow of the 21st = 2026-09-20T21:00Z, inside
+	// the window.
 	dateOnly := insertScanTask(t, pool, msk, mskProp, uuid.Nil, "2026-09-20", nil, nil)
 	doneAt := "2026-09-18"
 	completed := insertScanTask(t, pool, msk, mskProp, uuid.Nil, "2026-09-20", new("10:00"), &doneAt)
@@ -148,10 +149,13 @@ func TestTaskScanStore_ListScheduledTargets(t *testing.T) {
 		"09:00 Moscow on the 21st = 06:00 UTC, got %s", got[noProp])
 	require.Contains(t, got, atEdge)
 	assert.True(t, got[atEdge].Equal(until), "the upper bound is inclusive, got %s", got[atEdge])
+	require.Contains(t, got, dateOnly, "the date-only task books at its day-after midnight (issue #777)")
+	assert.True(t, got[dateOnly].Equal(time.Date(2026, 9, 20, 21, 0, 0, 0, time.UTC)),
+		"00:00 Moscow of the 21st = 2026-09-20T21:00Z, got %s", got[dateOnly])
 	// The shared test database's parallel fixtures add targets of their own —
-	// assert this test's tasks, not the world: the boundary, out-of-window,
-	// date-only and completed ones stay out.
-	for _, gone := range []uuid.UUID{atLowerBound, beyondHorizon, dateOnly, completed} {
+	// assert this test's tasks, not the world: the boundary, out-of-window
+	// and completed ones stay out.
+	for _, gone := range []uuid.UUID{atLowerBound, beyondHorizon, completed} {
 		assert.NotContains(t, got, gone)
 	}
 }
@@ -293,9 +297,14 @@ func TestTaskScanStore_GetScheduledOverdueTask(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, isLive, "a completed task does not fire at its old minute")
 
-	_, isLive, err = store.GetScheduledOverdueTask(ctx, dateOnly)
+	dateTarget, isLive, err := store.GetScheduledOverdueTask(ctx, dateOnly)
 	require.NoError(t, err)
-	assert.False(t, isLive, "the date-only task is the sweep's business")
+	assert.True(t, isLive, "the date-only task answers at its own midnight boundary (issue #777)")
+	assert.Nil(t, dateTarget.DueTime, "a date-only task carries no wall-clock minute")
+	// The day-after midnight in the owner's zone — the booked job's
+	// ScheduledAt: 00:00 Moscow of the 18th = 2026-09-17T21:00Z.
+	assert.True(t, dateTarget.DueAt.Equal(time.Date(2026, 9, 17, 21, 0, 0, 0, time.UTC)),
+		"00:00 Moscow of the 18th = 2026-09-17T21:00Z, got %s", dateTarget.DueAt)
 
 	_, isLive, err = store.GetScheduledOverdueTask(ctx, onArchived)
 	require.NoError(t, err)

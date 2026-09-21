@@ -177,6 +177,50 @@ WHERE u.timezone = $1
   AND p.status IN ('active', 'maintenance')
 ORDER BY r.id;
 
+-- name: ListRentalScheduledCompletedTargets :many
+-- The rental scan's booking list of the completed boundary (issue #777):
+-- the unfinished rentals whose boundary — 00:00 of the day after the
+-- planned end read in the owner's timezone — falls in the window (from,
+-- until]. The wall-clock midnight of the next calendar date is the
+-- boundary, a DST day rolls it with the wall clock (the payments' overdue
+-- convention); non-archived property only (the ticks' canon).
+SELECT r.id AS rental_id,
+       r.planned_end_date,
+       CAST(((r.planned_end_date + 1)::timestamp AT TIME ZONE u.timezone) AS timestamptz) AS fire_at
+FROM rentals r
+JOIN properties p ON p.id = r.property_id
+JOIN users u ON u.id = p.owner_id
+WHERE r.completed_date IS NULL
+  AND r.planned_end_date IS NOT NULL
+  AND p.status IN ('active', 'maintenance')
+  AND ((r.planned_end_date + 1)::timestamp AT TIME ZONE u.timezone) > $1::timestamptz
+  AND ((r.planned_end_date + 1)::timestamp AT TIME ZONE u.timezone) <= $2::timestamptz
+ORDER BY r.id;
+
+-- name: GetScheduledCompletedRental :one
+-- The completed boundary job's delivery-time resolution (issue #777): the
+-- rental as it stands at its boundary midnight. The needs_attention
+-- conditions are re-checked as of the wake-up instant ($3): a completed
+-- rental, an extended one (the planned end moved off the booked date — its
+-- new boundary books its own job), an archived property — and a rental
+-- whose planned end is no longer strictly before the zone's today (the job
+-- woke before the boundary) — answers no row, the job finishes without
+-- publishing.
+SELECT r.id AS rental_id,
+       r.planned_end_date,
+       p.id AS property_id,
+       p.name AS property_name,
+       p.address AS property_address,
+       p.owner_id
+FROM rentals r
+JOIN properties p ON p.id = r.property_id
+JOIN users u ON u.id = p.owner_id
+WHERE r.id = $1::uuid
+  AND r.planned_end_date = $2::date
+  AND r.completed_date IS NULL
+  AND p.status IN ('active', 'maintenance')
+  AND r.planned_end_date < ($3::timestamptz AT TIME ZONE u.timezone)::date;
+
 -- name: ListPropertyActiveRecipients :many
 -- The property's active members' user ids — the object events' recipients
 -- besides the owner (решение #737: активные участники, «Просмотр»
@@ -364,23 +408,22 @@ WHERE t.completed_date IS NULL
 ORDER BY u.timezone;
 
 -- name: ListTaskScheduledTargets :many
--- The tasks scan's scheduled leg (issue #750): the active timed tasks whose
--- term instant — (due_date + due_time) read in the owner's timezone — falls
--- in the window (from, until]. Each one gets a due-minute River job booked
--- at its term instant; the date-only tasks stay out (their notification is
--- the first sweep after the day's end) and so do the undated ones (без
--- срока — никогда).
+-- The tasks scan's scheduled leg (issues #750, #777): the active dated
+-- tasks whose boundary instant — a timed task's (due_date + due_time), a
+-- date-only task's day-after midnight (the wall-clock midnight, a DST day
+-- rolls it with the wall clock), each read in the owner's timezone — falls
+-- in the window (from, until]. Each one gets a boundary River job booked at
+-- its boundary instant; the undated ones stay out (без срока — никогда).
 SELECT t.id AS task_id,
-       CAST(((t.due_date + t.due_time) AT TIME ZONE u.timezone) AS timestamptz) AS due_at
+       CAST(((t.due_date + COALESCE(t.due_time, '24:00'::time)) AT TIME ZONE u.timezone) AS timestamptz) AS due_at
 FROM tasks t
 JOIN users u ON u.id = t.owner_id
 LEFT JOIN properties p ON p.id = t.property_id
 WHERE t.completed_date IS NULL
   AND t.due_date IS NOT NULL
-  AND t.due_time IS NOT NULL
   AND (t.property_id IS NULL OR p.status IN ('active', 'maintenance'))
-  AND ((t.due_date + t.due_time) AT TIME ZONE u.timezone) > $1::timestamptz
-  AND ((t.due_date + t.due_time) AT TIME ZONE u.timezone) <= $2::timestamptz
+  AND ((t.due_date + COALESCE(t.due_time, '24:00'::time)) AT TIME ZONE u.timezone) > $1::timestamptz
+  AND ((t.due_date + COALESCE(t.due_time, '24:00'::time)) AT TIME ZONE u.timezone) <= $2::timestamptz
 ORDER BY t.id;
 
 -- name: ListTaskOverdueTargets :many
@@ -414,14 +457,15 @@ WHERE u.timezone = $1
 ORDER BY t.id;
 
 -- name: GetScheduledOverdueTask :one
--- The due-minute job's delivery-time resolution (issue #750): the task as
--- it stands at its term minute. A gone (rule edit removed the stale row),
--- completed, date-only, or archived-property task answers no row — the job
--- finishes without publishing. The rule id travels for the screen path: an
--- active task's edit screen is its rule's screen. The term's instant in the
--- owner's timezone (due_at) travels for the creation/edit seam (#775),
--- which decides future-vs-past on it — the job wakes at its own minute and
--- needs no clock.
+-- The boundary job's delivery-time resolution (issues #750, #777): the task
+-- as it stands at its boundary instant. A gone (rule edit removed the stale
+-- row), completed, undated, or archived-property task answers no row — the
+-- job finishes without publishing. The boundary instant in the owner's
+-- timezone (due_at) — a timed task's term minute, a date-only task's
+-- day-after midnight — travels for the creation/edit seam (#775), which
+-- decides future-vs-past on it; the job wakes at its own instant and needs
+-- no clock. Both shapes answer: the kind is one per task, the boundary
+-- differs by shape.
 SELECT t.id AS task_id,
        t.title,
        t.due_date,
@@ -431,14 +475,13 @@ SELECT t.id AS task_id,
        p.address AS property_address,
        t.rule_id,
        t.owner_id,
-       CAST(((t.due_date + t.due_time) AT TIME ZONE u.timezone) AS timestamptz) AS due_at
+       CAST(((t.due_date + COALESCE(t.due_time, '24:00'::time)) AT TIME ZONE u.timezone) AS timestamptz) AS due_at
 FROM tasks t
 JOIN users u ON u.id = t.owner_id
 LEFT JOIN properties p ON p.id = t.property_id
 WHERE t.id = $1
   AND t.completed_date IS NULL
   AND t.due_date IS NOT NULL
-  AND t.due_time IS NOT NULL
   AND (t.property_id IS NULL OR p.status IN ('active', 'maintenance'));
 
 

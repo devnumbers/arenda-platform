@@ -179,13 +179,14 @@ func run() error {
 	//     The grace subscribers (step 11.6) are the first to call it. The
 	//     publisher also pushes the live SSE frames through the stream hub
 	//     (#742, ADR 0058), which the HTTP server serves below. The tasks
-	//     (#750) and payments (#776) scan publishers wire here as well —
-	//     their booking legs schedule the boundary jobs through the same
-	//     client.
+	//     (#750), payments (#776) and rentals (#777) scan publishers wire
+	//     here as well — their booking legs schedule the boundary jobs
+	//     through the same client.
 	taskScanStore := notificationspg.NewTaskScanStore(p.DB)
 	paymentScanStore := notificationspg.NewPaymentScanStore(p.DB)
+	rentalScanStore := notificationspg.NewRentalScanStore(p.DB)
 	riverMod, err := wire.WireRiverQueue(ctx, p, notificationsMod,
-		delivery.resolver, delivery.emailer, pushSender, taskScanStore, paymentScanStore)
+		delivery.resolver, delivery.emailer, pushSender, taskScanStore, paymentScanStore, rentalScanStore)
 	if err != nil {
 		return err
 	}
@@ -232,20 +233,19 @@ func run() error {
 	tariffEventViews := notificationspg.NewTariffViewStore(p.DB)
 	subscribeTariffEvents(eventDispatcher, notificationsapp.NewTariffPublisher(riverMod.Publisher, tariffEventViews))
 
-	// 11.7 The notifications scan (карта #734, #748–#750, #776): the hourly
-	//     zone sweep publishes the scan-driven catalog events — the rentals
-	//     that moved to «Ожидает действия», the payments that came due or
-	//     overdue, and the tasks whose term has passed — through the same
-	//     pipeline publisher; the Аренда, Платежи и операции and Задачи
-	//     categories are gated per-channel by the settings matrix at
-	//     delivery time. The tasks publisher's scheduled leg (#750) books
-	//     the timed tasks' due-minute jobs and the payments publisher's
-	//     booking leg (#776) the operations' boundary jobs on the way —
+	// 11.7 The notifications scan (карта #734, #748–#750, #776, #777): the
+	//     hourly zone sweep publishes the scan-driven catalog events — the
+	//     rentals that moved to «Ожидает действия», the payments that came
+	//     due or overdue, and the tasks whose boundary has passed — through
+	//     the same pipeline publisher; the Аренда, Платежи и операции and
+	//     Задачи categories are gated per-channel by the settings matrix at
+	//     delivery time. The tasks publisher's scheduled leg (#750),
+	//     the payments publisher's booking leg (#776) and the rentals
+	//     publisher's booking leg (#777) book the boundary jobs on the way —
 	//     the exact trigger moments the hourly cadence cannot give; the
 	//     sweeps stay the retrospectives after a downtime.
-	scanStore := notificationspg.NewRentalScanStore(p.DB)
 	notificationsScan := notificationsapp.NewScanGroup(
-		notificationsapp.NewRentalCompletedPublisher(riverMod.Publisher, scanStore, scanStore),
+		riverMod.RentalsPublisher,
 		riverMod.PaymentsPublisher,
 		riverMod.TasksPublisher,
 	)

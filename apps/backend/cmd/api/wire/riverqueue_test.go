@@ -46,8 +46,9 @@ func TestWireRiverQueueBuildsBundle(t *testing.T) {
 	var pushSender application.PushSender // nil: email-only local mode
 	taskStore := notificationspg.NewTaskScanStore(nil)
 	paymentStore := notificationspg.NewPaymentScanStore(nil)
+	rentalStore := notificationspg.NewRentalScanStore(nil)
 	riverMod, err := WireRiverQueue(context.Background(), p, notificationsMod,
-		fakeContactResolver{}, fakeEmailSender{}, pushSender, taskStore, paymentStore)
+		fakeContactResolver{}, fakeEmailSender{}, pushSender, taskStore, paymentStore, rentalStore)
 	require.NoError(t, err)
 	defer riverMod.ProviderLimiter.Stop()
 
@@ -57,6 +58,7 @@ func TestWireRiverQueueBuildsBundle(t *testing.T) {
 	assert.NotNil(t, riverMod.Stream, "the stream hub ships with the queue bundle")
 	assert.NotNil(t, riverMod.TasksPublisher, "the tasks scan publisher ships with the queue bundle")
 	assert.NotNil(t, riverMod.PaymentsPublisher, "the payments scan publisher ships with the queue bundle")
+	assert.NotNil(t, riverMod.RentalsPublisher, "the rentals scan publisher ships with the queue bundle")
 }
 
 type fakeContactResolver struct{}

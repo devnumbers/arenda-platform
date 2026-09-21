@@ -14,11 +14,11 @@ import (
 // The adapter satisfies the consumer-declared port (CODING_STANDARDS).
 var _ application.PaymentBoundaryScheduler = (*PaymentBoundaryScheduler)(nil)
 
-// paymentBoundaryMaxAttempts is a boundary job's retry budget: the
-// publication is one feed write, a short ladder covers a database blip
-// without pinning a dead operation's job to the queue (the scan cadence
-// canon, the same budget the task job carries).
-const paymentBoundaryMaxAttempts = 5
+// boundaryJobMaxAttempts is every boundary job's retry budget (the tasks',
+// payments' and rentals' jobs alike): the publication is one feed write, a
+// short ladder covers a database blip without pinning a dead target's job
+// to the queue (the scan cadence canon).
+const boundaryJobMaxAttempts = 5
 
 // PaymentBoundaryScheduler books a payment operation's boundary jobs on the
 // River client (issue #776): the due leg's job wakes at 00:00 of the
@@ -57,7 +57,7 @@ func (s *PaymentBoundaryScheduler) SchedulePaymentDue(ctx context.Context, payme
 	_, err := s.client.Insert(ctx, PaymentDueArgs{PaymentID: paymentID, DueDate: date}, &river.InsertOpts{
 		Queue:       QueuePayments,
 		ScheduledAt: fireAt,
-		MaxAttempts: paymentBoundaryMaxAttempts,
+		MaxAttempts: boundaryJobMaxAttempts,
 		UniqueOpts:  uniqueOpts,
 	})
 	if err != nil {
@@ -72,7 +72,7 @@ func (s *PaymentBoundaryScheduler) SchedulePaymentOverdue(ctx context.Context, p
 	_, err := s.client.Insert(ctx, PaymentOverdueArgs{PaymentID: paymentID, DueDate: date}, &river.InsertOpts{
 		Queue:       QueuePayments,
 		ScheduledAt: fireAt,
-		MaxAttempts: paymentBoundaryMaxAttempts,
+		MaxAttempts: boundaryJobMaxAttempts,
 		UniqueOpts:  uniqueOpts,
 	})
 	if err != nil {

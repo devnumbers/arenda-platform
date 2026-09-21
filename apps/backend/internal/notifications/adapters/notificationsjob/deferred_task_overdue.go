@@ -13,7 +13,7 @@ var _ application.TaskOverdueDeliverer = (*DeferredTaskOverdueDeliverer)(nil)
 
 // DeferredTaskOverdueDeliverer bridges the wiring cycle (issue #750): the
 // River workers register before the client exists, while the tasks
-// publisher — the due-minute worker's real deliverer — is built after it,
+// publisher — the boundary worker's real deliverer — is built after it,
 // because its scheduled leg books the jobs through the same client. The
 // composition root binds the publisher once, strictly before the workers
 // phase starts the client; the worker reads the binding per job.

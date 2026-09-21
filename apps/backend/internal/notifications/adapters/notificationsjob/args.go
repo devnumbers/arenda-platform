@@ -13,8 +13,9 @@ import (
 )
 
 // QueueEmail and QueuePush are the two delivery queues; QueueTasks carries
-// the timed tasks' due-minute jobs (issue #750), QueuePayments — the
-// payment operations' boundary jobs (issue #776). Separate queues keep the
+// the dated tasks' boundary jobs (issues #750, #777), QueuePayments — the
+// payment operations' boundary jobs (issue #776), QueueRentals — the
+// rentals' completed-boundary jobs (issue #777). Separate queues keep the
 // SMTP ceiling, the push fan-out and the scheduled jobs from starving each
 // other.
 const (
@@ -22,6 +23,7 @@ const (
 	QueuePush     = "notifications_push"
 	QueueTasks    = "notifications_tasks"
 	QueuePayments = "notifications_payments"
+	QueueRentals  = "notifications_rentals"
 )
 
 // DeliverEmailArgs delivers one notification's email leg. The args are the
@@ -43,11 +45,12 @@ type DeliverPushArgs struct {
 // Kind identifies the job kind to River.
 func (DeliverPushArgs) Kind() string { return "notifications:deliver_push" }
 
-// TaskOverdueArgs publishes one timed task's «Задача просрочена» at its due
-// minute (issue #750). The args are the job's dedup key: one task has at
-// most one overdue job in flight — the hourly scan re-asks freely and River
-// answers the standing job. The worker reloads the task at wake-up, so the
-// job never carries content, only the id.
+// TaskOverdueArgs publishes one dated task's «Задача просрочена» at its
+// boundary instant — the timed term's minute or the date-only day-after
+// midnight (issues #750, #777). The args are the job's dedup key: one task
+// has at most one overdue job in flight — the hourly scan re-asks freely
+// and River answers the standing job. The worker reloads the task at
+// wake-up, so the job never carries content, only the id.
 type TaskOverdueArgs struct {
 	TaskID uuid.UUID `json:"task_id"`
 }
@@ -82,3 +85,19 @@ type PaymentOverdueArgs struct {
 
 // Kind identifies the job kind to River.
 func (PaymentOverdueArgs) Kind() string { return "notifications:payment_overdue" }
+
+// RentalCompletedArgs publishes one rental's «Аренда завершена» at 00:00 of
+// the day after its planned end in the owner's timezone (issue #777). The
+// args are the job's dedup key — the publication key's (rental, planned end)
+// pair —: one rental has at most one job per planned end in flight, the
+// hourly scan re-asks freely and River answers the standing job.
+// PlannedEndDate is the module's UTC-midnight date convention. The worker
+// reloads the rental at wake-up, so the job never carries content, only the
+// identity.
+type RentalCompletedArgs struct {
+	RentalID       uuid.UUID `json:"rental_id"`
+	PlannedEndDate time.Time `json:"planned_end_date"`
+}
+
+// Kind identifies the job kind to River.
+func (RentalCompletedArgs) Kind() string { return "notifications:rental_completed" }

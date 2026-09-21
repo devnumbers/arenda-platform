@@ -425,6 +425,15 @@ type Querier interface {
 	// One rental by id within the owner's scope on the given property, with the
 	// tenant's contact fields resolved for the embedded tenant view.
 	GetRentalByID(ctx context.Context, arg GetRentalByIDParams) (GetRentalByIDRow, error)
+	// The completed boundary job's delivery-time resolution (issue #777): the
+	// rental as it stands at its boundary midnight. The needs_attention
+	// conditions are re-checked as of the wake-up instant ($3): a completed
+	// rental, an extended one (the planned end moved off the booked date — its
+	// new boundary books its own job), an archived property — and a rental
+	// whose planned end is no longer strictly before the zone's today (the job
+	// woke before the boundary) — answers no row, the job finishes without
+	// publishing.
+	GetScheduledCompletedRental(ctx context.Context, arg GetScheduledCompletedRentalParams) (GetScheduledCompletedRentalRow, error)
 	// The due boundary job's delivery-time resolution (issue #776): the
 	// operation as it stands at its due midnight. The leg's conditions are
 	// re-checked as of the wake-up instant ($3): a paid, cancelled, auto-pay
@@ -439,14 +448,15 @@ type Querier interface {
 	// non-archived property, the date strictly before the zone's today —
 	// auto-pay rules included, the sweep's overdue leg's shape.
 	GetScheduledOverduePayment(ctx context.Context, arg GetScheduledOverduePaymentParams) (GetScheduledOverduePaymentRow, error)
-	// The due-minute job's delivery-time resolution (issue #750): the task as
-	// it stands at its term minute. A gone (rule edit removed the stale row),
-	// completed, date-only, or archived-property task answers no row — the job
-	// finishes without publishing. The rule id travels for the screen path: an
-	// active task's edit screen is its rule's screen. The term's instant in the
-	// owner's timezone (due_at) travels for the creation/edit seam (#775),
-	// which decides future-vs-past on it — the job wakes at its own minute and
-	// needs no clock.
+	// The boundary job's delivery-time resolution (issues #750, #777): the task
+	// as it stands at its boundary instant. A gone (rule edit removed the stale
+	// row), completed, undated, or archived-property task answers no row — the
+	// job finishes without publishing. The boundary instant in the owner's
+	// timezone (due_at) — a timed task's term minute, a date-only task's
+	// day-after midnight — travels for the creation/edit seam (#775), which
+	// decides future-vs-past on it; the job wakes at its own instant and needs
+	// no clock. Both shapes answer: the kind is one per task, the boundary
+	// differs by shape.
 	GetScheduledOverdueTask(ctx context.Context, id pgtype.UUID) (GetScheduledOverdueTaskRow, error)
 	GetSessionByTokenHash(ctx context.Context, arg GetSessionByTokenHashParams) (GetSessionByTokenHashRow, error)
 	GetSubscriptionByID(ctx context.Context, id pgtype.UUID) (UserSubscription, error)
@@ -818,6 +828,13 @@ type Querier interface {
 	// (name, address) travels for the publication cards (решение владельца
 	// 19.09.2026, #745).
 	ListRentalCompletedTargets(ctx context.Context, arg ListRentalCompletedTargetsParams) ([]ListRentalCompletedTargetsRow, error)
+	// The rental scan's booking list of the completed boundary (issue #777):
+	// the unfinished rentals whose boundary — 00:00 of the day after the
+	// planned end read in the owner's timezone — falls in the window (from,
+	// until]. The wall-clock midnight of the next calendar date is the
+	// boundary, a DST day rolls it with the wall clock (the payments' overdue
+	// convention); non-archived property only (the ticks' canon).
+	ListRentalScheduledCompletedTargets(ctx context.Context, arg ListRentalScheduledCompletedTargetsParams) ([]ListRentalScheduledCompletedTargetsRow, error)
 	// The property's rentals: unfinished first (newest start on top), then the
 	// completed ones by completion date, fresh on top (ADR 0053 §4).
 	ListRentalsByProperty(ctx context.Context, arg ListRentalsByPropertyParams) ([]ListRentalsByPropertyRow, error)
@@ -898,12 +915,12 @@ type Querier interface {
 	// without a property stays in its owner's book). Stateless — every run
 	// re-lists, no per-zone state is kept.
 	ListTaskScanZones(ctx context.Context) ([]string, error)
-	// The tasks scan's scheduled leg (issue #750): the active timed tasks whose
-	// term instant — (due_date + due_time) read in the owner's timezone — falls
-	// in the window (from, until]. Each one gets a due-minute River job booked
-	// at its term instant; the date-only tasks stay out (their notification is
-	// the first sweep after the day's end) and so do the undated ones (без
-	// срока — никогда).
+	// The tasks scan's scheduled leg (issues #750, #777): the active dated
+	// tasks whose boundary instant — a timed task's (due_date + due_time), a
+	// date-only task's day-after midnight (the wall-clock midnight, a DST day
+	// rolls it with the wall clock), each read in the owner's timezone — falls
+	// in the window (from, until]. Each one gets a boundary River job booked at
+	// its boundary instant; the undated ones stay out (без срока — никогда).
 	ListTaskScheduledTargets(ctx context.Context, arg ListTaskScheduledTargetsParams) ([]ListTaskScheduledTargetsRow, error)
 	// The hourly zone sweep of the tasks tick worker (ADR 0048 p.3): the
 	// distinct owner timezones having task rules — without a property (ADR 0052)

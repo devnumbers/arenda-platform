@@ -20,10 +20,11 @@ var (
 	_ application.TaskOverdueSource = (*TaskScanStore)(nil)
 )
 
-// TaskScanStore answers the tasks scan's questions (#750) over the owning
-// tables directly: the sweep targets' zones, the upcoming timed tasks, the
-// zone's overdue ones and the due-minute job's reload. Read-only — the scan
-// publishes through the pipeline, it writes nothing here.
+// TaskScanStore answers the tasks scan's questions (#750, #777) over the
+// owning tables directly: the sweep targets' zones, the upcoming dated
+// tasks' booking list, the zone's overdue ones and the boundary job's
+// reload. Read-only — the scan publishes through the pipeline, it writes
+// nothing here.
 type TaskScanStore struct {
 	db postgres.DBTX
 }
@@ -48,9 +49,10 @@ func (s *TaskScanStore) ListScanZones(ctx context.Context) ([]application.ScanZo
 	return result, nil
 }
 
-// ListScheduledTargets lists the active timed tasks whose term instant (in
-// the owner's timezone) falls in the window (from, until] — the scheduled
-// leg's booking list (issue #750).
+// ListScheduledTargets lists the active dated tasks whose boundary instant
+// (in the owner's timezone) falls in the window (from, until] — the
+// scheduled leg's booking list (issues #750, #777). The boundary is a timed
+// task's term instant, a date-only task's day-after midnight.
 func (s *TaskScanStore) ListScheduledTargets(
 	ctx context.Context, from, until time.Time,
 ) ([]application.TaskScheduleTarget, error) {
@@ -94,12 +96,13 @@ func (s *TaskScanStore) ListOverdueTargets(
 	return targets, nil
 }
 
-// GetScheduledOverdueTask reloads one task at its due minute — the
-// scheduled job's delivery-time resolution and the creation/edit seam's
-// live check (#775). A gone, completed, date-only or archived-property task
-// is pgx.ErrNoRows here and answers live=false: the job finishes without
-// publishing. The term's instant (DueAt) travels for the seam's
-// future-vs-past decision; the due-minute job itself ignores it.
+// GetScheduledOverdueTask reloads one dated task at its boundary instant —
+// the boundary job's delivery-time resolution and the creation/edit seam's
+// live check (#775, #777). A gone, completed, undated or archived-property
+// task is pgx.ErrNoRows here and answers live=false: the job finishes
+// without publishing. The boundary instant (DueAt) — the timed task's term
+// minute or the date-only task's day-after midnight — travels for the
+// seam's future-vs-past decision; the job itself ignores it.
 func (s *TaskScanStore) GetScheduledOverdueTask(ctx context.Context, taskID uuid.UUID) (application.TaskOverdueTarget, bool, error) {
 	row, err := postgres.New(s.db).GetScheduledOverdueTask(ctx, pgconv.UUIDToPgtype(taskID))
 	if err != nil {

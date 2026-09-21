@@ -1,9 +1,10 @@
 // Package taskschedule adapts the tasks context's scheduling seam (issue
 // #775) to the notifications context: the rule create/edit flows hand their
 // standing tasks' ids over strictly after their transaction commits, and
-// the seam plans each one through the tasks publisher — the due-minute job
-// at the term's instant, or the immediate publication of a task born
-// overdue. The adapter owns the process clock the term-vs-now decision runs
+// the seam plans each one through the tasks publisher — the boundary job at
+// the task's instant (a timed term or a date-only day-after midnight,
+// issue #777), or the immediate publication of a task born overdue. The
+// adapter owns the process clock the boundary-vs-now decision runs
 // on; the composition root wires it into the tasks module once the delivery
 // queue exists (the tasks module builds earlier than the queue).
 package taskschedule

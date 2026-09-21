@@ -239,6 +239,60 @@ func (q *Queries) GetRentalActionState(ctx context.Context, id pgtype.UUID) (Get
 	return i, err
 }
 
+const getScheduledCompletedRental = `-- name: GetScheduledCompletedRental :one
+SELECT r.id AS rental_id,
+       r.planned_end_date,
+       p.id AS property_id,
+       p.name AS property_name,
+       p.address AS property_address,
+       p.owner_id
+FROM rentals r
+JOIN properties p ON p.id = r.property_id
+JOIN users u ON u.id = p.owner_id
+WHERE r.id = $1::uuid
+  AND r.planned_end_date = $2::date
+  AND r.completed_date IS NULL
+  AND p.status IN ('active', 'maintenance')
+  AND r.planned_end_date < ($3::timestamptz AT TIME ZONE u.timezone)::date
+`
+
+type GetScheduledCompletedRentalParams struct {
+	Column1 pgtype.UUID        `json:"column_1"`
+	Column2 pgtype.Date        `json:"column_2"`
+	Column3 pgtype.Timestamptz `json:"column_3"`
+}
+
+type GetScheduledCompletedRentalRow struct {
+	RentalID        pgtype.UUID `json:"rental_id"`
+	PlannedEndDate  pgtype.Date `json:"planned_end_date"`
+	PropertyID      pgtype.UUID `json:"property_id"`
+	PropertyName    string      `json:"property_name"`
+	PropertyAddress string      `json:"property_address"`
+	OwnerID         pgtype.UUID `json:"owner_id"`
+}
+
+// The completed boundary job's delivery-time resolution (issue #777): the
+// rental as it stands at its boundary midnight. The needs_attention
+// conditions are re-checked as of the wake-up instant ($3): a completed
+// rental, an extended one (the planned end moved off the booked date — its
+// new boundary books its own job), an archived property — and a rental
+// whose planned end is no longer strictly before the zone's today (the job
+// woke before the boundary) — answers no row, the job finishes without
+// publishing.
+func (q *Queries) GetScheduledCompletedRental(ctx context.Context, arg GetScheduledCompletedRentalParams) (GetScheduledCompletedRentalRow, error) {
+	row := q.db.QueryRow(ctx, getScheduledCompletedRental, arg.Column1, arg.Column2, arg.Column3)
+	var i GetScheduledCompletedRentalRow
+	err := row.Scan(
+		&i.RentalID,
+		&i.PlannedEndDate,
+		&i.PropertyID,
+		&i.PropertyName,
+		&i.PropertyAddress,
+		&i.OwnerID,
+	)
+	return i, err
+}
+
 const getScheduledDuePayment = `-- name: GetScheduledDuePayment :one
 SELECT pay.id AS payment_id,
        o.date,
@@ -368,14 +422,13 @@ SELECT t.id AS task_id,
        p.address AS property_address,
        t.rule_id,
        t.owner_id,
-       CAST(((t.due_date + t.due_time) AT TIME ZONE u.timezone) AS timestamptz) AS due_at
+       CAST(((t.due_date + COALESCE(t.due_time, '24:00'::time)) AT TIME ZONE u.timezone) AS timestamptz) AS due_at
 FROM tasks t
 JOIN users u ON u.id = t.owner_id
 LEFT JOIN properties p ON p.id = t.property_id
 WHERE t.id = $1
   AND t.completed_date IS NULL
   AND t.due_date IS NOT NULL
-  AND t.due_time IS NOT NULL
   AND (t.property_id IS NULL OR p.status IN ('active', 'maintenance'))
 `
 
@@ -392,14 +445,15 @@ type GetScheduledOverdueTaskRow struct {
 	DueAt           pgtype.Timestamptz `json:"due_at"`
 }
 
-// The due-minute job's delivery-time resolution (issue #750): the task as
-// it stands at its term minute. A gone (rule edit removed the stale row),
-// completed, date-only, or archived-property task answers no row — the job
-// finishes without publishing. The rule id travels for the screen path: an
-// active task's edit screen is its rule's screen. The term's instant in the
-// owner's timezone (due_at) travels for the creation/edit seam (#775),
-// which decides future-vs-past on it — the job wakes at its own minute and
-// needs no clock.
+// The boundary job's delivery-time resolution (issues #750, #777): the task
+// as it stands at its boundary instant. A gone (rule edit removed the stale
+// row), completed, undated, or archived-property task answers no row — the
+// job finishes without publishing. The boundary instant in the owner's
+// timezone (due_at) — a timed task's term minute, a date-only task's
+// day-after midnight — travels for the creation/edit seam (#775), which
+// decides future-vs-past on it; the job wakes at its own instant and needs
+// no clock. Both shapes answer: the kind is one per task, the boundary
+// differs by shape.
 func (q *Queries) GetScheduledOverdueTask(ctx context.Context, id pgtype.UUID) (GetScheduledOverdueTaskRow, error) {
 	row := q.db.QueryRow(ctx, getScheduledOverdueTask, id)
 	var i GetScheduledOverdueTaskRow
@@ -978,6 +1032,58 @@ func (q *Queries) ListRentalCompletedTargets(ctx context.Context, arg ListRental
 	return items, nil
 }
 
+const listRentalScheduledCompletedTargets = `-- name: ListRentalScheduledCompletedTargets :many
+SELECT r.id AS rental_id,
+       r.planned_end_date,
+       CAST(((r.planned_end_date + 1)::timestamp AT TIME ZONE u.timezone) AS timestamptz) AS fire_at
+FROM rentals r
+JOIN properties p ON p.id = r.property_id
+JOIN users u ON u.id = p.owner_id
+WHERE r.completed_date IS NULL
+  AND r.planned_end_date IS NOT NULL
+  AND p.status IN ('active', 'maintenance')
+  AND ((r.planned_end_date + 1)::timestamp AT TIME ZONE u.timezone) > $1::timestamptz
+  AND ((r.planned_end_date + 1)::timestamp AT TIME ZONE u.timezone) <= $2::timestamptz
+ORDER BY r.id
+`
+
+type ListRentalScheduledCompletedTargetsParams struct {
+	Column1 pgtype.Timestamptz `json:"column_1"`
+	Column2 pgtype.Timestamptz `json:"column_2"`
+}
+
+type ListRentalScheduledCompletedTargetsRow struct {
+	RentalID       pgtype.UUID        `json:"rental_id"`
+	PlannedEndDate pgtype.Date        `json:"planned_end_date"`
+	FireAt         pgtype.Timestamptz `json:"fire_at"`
+}
+
+// The rental scan's booking list of the completed boundary (issue #777):
+// the unfinished rentals whose boundary — 00:00 of the day after the
+// planned end read in the owner's timezone — falls in the window (from,
+// until]. The wall-clock midnight of the next calendar date is the
+// boundary, a DST day rolls it with the wall clock (the payments' overdue
+// convention); non-archived property only (the ticks' canon).
+func (q *Queries) ListRentalScheduledCompletedTargets(ctx context.Context, arg ListRentalScheduledCompletedTargetsParams) ([]ListRentalScheduledCompletedTargetsRow, error) {
+	rows, err := q.db.Query(ctx, listRentalScheduledCompletedTargets, arg.Column1, arg.Column2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListRentalScheduledCompletedTargetsRow{}
+	for rows.Next() {
+		var i ListRentalScheduledCompletedTargetsRow
+		if err := rows.Scan(&i.RentalID, &i.PlannedEndDate, &i.FireAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTaskOverdueTargets = `-- name: ListTaskOverdueTargets :many
 SELECT t.id AS task_id,
        t.title,
@@ -1096,16 +1202,15 @@ func (q *Queries) ListTaskScanZones(ctx context.Context) ([]string, error) {
 
 const listTaskScheduledTargets = `-- name: ListTaskScheduledTargets :many
 SELECT t.id AS task_id,
-       CAST(((t.due_date + t.due_time) AT TIME ZONE u.timezone) AS timestamptz) AS due_at
+       CAST(((t.due_date + COALESCE(t.due_time, '24:00'::time)) AT TIME ZONE u.timezone) AS timestamptz) AS due_at
 FROM tasks t
 JOIN users u ON u.id = t.owner_id
 LEFT JOIN properties p ON p.id = t.property_id
 WHERE t.completed_date IS NULL
   AND t.due_date IS NOT NULL
-  AND t.due_time IS NOT NULL
   AND (t.property_id IS NULL OR p.status IN ('active', 'maintenance'))
-  AND ((t.due_date + t.due_time) AT TIME ZONE u.timezone) > $1::timestamptz
-  AND ((t.due_date + t.due_time) AT TIME ZONE u.timezone) <= $2::timestamptz
+  AND ((t.due_date + COALESCE(t.due_time, '24:00'::time)) AT TIME ZONE u.timezone) > $1::timestamptz
+  AND ((t.due_date + COALESCE(t.due_time, '24:00'::time)) AT TIME ZONE u.timezone) <= $2::timestamptz
 ORDER BY t.id
 `
 
@@ -1119,12 +1224,12 @@ type ListTaskScheduledTargetsRow struct {
 	DueAt  pgtype.Timestamptz `json:"due_at"`
 }
 
-// The tasks scan's scheduled leg (issue #750): the active timed tasks whose
-// term instant — (due_date + due_time) read in the owner's timezone — falls
-// in the window (from, until]. Each one gets a due-minute River job booked
-// at its term instant; the date-only tasks stay out (their notification is
-// the first sweep after the day's end) and so do the undated ones (без
-// срока — никогда).
+// The tasks scan's scheduled leg (issues #750, #777): the active dated
+// tasks whose boundary instant — a timed task's (due_date + due_time), a
+// date-only task's day-after midnight (the wall-clock midnight, a DST day
+// rolls it with the wall clock), each read in the owner's timezone — falls
+// in the window (from, until]. Each one gets a boundary River job booked at
+// its boundary instant; the undated ones stay out (без срока — никогда).
 func (q *Queries) ListTaskScheduledTargets(ctx context.Context, arg ListTaskScheduledTargetsParams) ([]ListTaskScheduledTargetsRow, error) {
 	rows, err := q.db.Query(ctx, listTaskScheduledTargets, arg.Column1, arg.Column2)
 	if err != nil {

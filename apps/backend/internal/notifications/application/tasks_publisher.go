@@ -10,17 +10,20 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
 )
 
-// scheduledHorizon bounds the scans' booking window (issues #750, #776):
-// the hourly pass books boundary jobs for the targets whose boundary — a
-// timed task's term, a payment operation's due or overdue midnight — falls
-// into the next two days. A boundary further out joins on a later pass (the
-// materialization ticks keep the rows standing long before their moment);
-// one already passed inside the window is the overdue sweeps' business.
+// scheduledHorizon bounds the scans' booking window (issues #750, #776,
+// #777): the hourly pass books boundary jobs for the targets whose boundary
+// — a timed task's term, a date-only task's day-after midnight, a payment
+// operation's due or overdue midnight, a rental's completed midnight —
+// falls into the next two days. A boundary further out joins on a later
+// pass (the materialization ticks keep the rows standing long before their
+// moment); one already passed inside the window is the overdue sweeps'
+// business.
 const scheduledHorizon = 48 * time.Hour
 
-// TaskScheduleTarget is one upcoming timed task the scheduled leg books
-// (issue #750): the task id and the term's instant in the owner's timezone —
-// the job's ScheduledAt, the «в минуту срока» of решение #737.
+// TaskScheduleTarget is one upcoming dated task the scheduled leg books
+// (issues #750, #777): the task id and the boundary's instant in the owner's
+// timezone — the job's ScheduledAt, the timed task's «в минуту срока» or the
+// date-only task's day-after midnight of решение #737.
 type TaskScheduleTarget struct {
 	TaskID uuid.UUID
 	DueAt  time.Time
@@ -62,32 +65,35 @@ type TaskOverdueTarget struct {
 	PropertyName    string
 	PropertyAddress string
 	OwnerID         uuid.UUID
-	// DueAt is the term's instant in the owner's timezone — the due-minute
-	// job's ScheduledAt. Only GetScheduledOverdueTask fills it (the
-	// due-minute job's reload and the creation/edit seam's term-vs-now
-	// decision, issue #775); the zone sweep's targets carry the term as the
-	// date + wall-clock pair above and leave it zero.
+	// DueAt is the task's boundary instant in the owner's timezone — the
+	// term's minute for a timed task, 00:00 of the day after the due date
+	// for a date-only one (issue #777) — the booked job's ScheduledAt. Only
+	// GetScheduledOverdueTask fills it (the boundary job's reload and the
+	// creation/edit seam's boundary-vs-now decision, issue #775); the zone
+	// sweep's targets carry the term as the date + wall-clock pair above and
+	// leave it zero.
 	DueAt time.Time
 }
 
 // TaskOverdueSource is the tasks publisher's window into the tasks context:
-// the upcoming timed tasks, the zone's overdue ones and the scheduled job's
-// reload. Consumer-declared (CODING_STANDARDS), answered over the owning
-// tables by the notifications postgres adapter.
+// the upcoming tasks' booking list, the zone's overdue ones and the boundary
+// job's reload. Consumer-declared (CODING_STANDARDS), answered over the
+// owning tables by the notifications postgres adapter.
 type TaskOverdueSource interface {
-	// ListScheduledTargets lists the active timed tasks whose term instant
-	// (in the owner's timezone) falls in the window (from, until] — the
-	// scheduled leg's booking list.
+	// ListScheduledTargets lists the active dated tasks whose boundary
+	// instant (in the owner's timezone) falls in the window (from, until] —
+	// the scheduled leg's booking list. The boundary is a timed task's term
+	// instant, a date-only task's day-after midnight (issue #777).
 	ListScheduledTargets(ctx context.Context, from, until time.Time) ([]TaskScheduleTarget, error)
 	// ListOverdueTargets lists the zone's active tasks whose term has passed
 	// as of the sweep's instant: the timed ones by the term's minute (в
 	// минуту срока, включительно), the date-only ones strictly after the
 	// zone's day's end (первый скан после границы суток).
 	ListOverdueTargets(ctx context.Context, zone string, today, now time.Time) ([]TaskOverdueTarget, error)
-	// GetScheduledOverdueTask reloads one task at its due minute — the
-	// scheduled job's delivery-time resolution. The live flag is false for a
-	// task gone (the rule edit removes stale rows), completed, or turned
-	// date-only: the job finishes without publishing.
+	// GetScheduledOverdueTask reloads one dated task at its boundary
+	// instant — the boundary job's delivery-time resolution. The live flag
+	// is false for a task gone (the rule edit removes stale rows) or
+	// completed: the job finishes without publishing.
 	GetScheduledOverdueTask(ctx context.Context, taskID uuid.UUID) (TaskOverdueTarget, bool, error)
 	// ListActiveRecipients lists the user ids of the property's active
 	// members — the recipients besides the owner, «Просмотр» included
@@ -95,9 +101,10 @@ type TaskOverdueSource interface {
 	ListActiveRecipients(ctx context.Context, propertyID uuid.UUID) ([]uuid.UUID, error)
 }
 
-// TaskOverdueScheduler books a task's due-minute job on the delivery queue
-// (issue #750). Booking is idempotent — the queue's unique key keeps one
-// in-flight job per task — so the hourly passes repeat their asks freely.
+// TaskOverdueScheduler books a task's boundary job on the delivery queue
+// (issues #750, #777). Booking is idempotent — the queue's unique key keeps
+// one in-flight job per task — so the hourly passes repeat their asks
+// freely.
 type TaskOverdueScheduler interface {
 	ScheduleTaskOverdue(ctx context.Context, taskID uuid.UUID, dueAt time.Time) error
 }
@@ -109,16 +116,17 @@ type TaskOverdueDeliverer interface {
 }
 
 // TasksPublisher is the task events' publisher (issue #750) on the delivery
-// pipeline (карта #734, #740): a task's term has passed — «Задача
+// pipeline (карта #734, #740): a task's boundary has passed — «Задача
 // просрочена» goes to the owner and the active members, or to the owner
 // alone for the task without a property. The hourly sweep has two legs: the
-// scheduled one books the timed tasks' due-minute jobs — minute precision
-// the hourly cadence cannot give (решение #737) — and the overdue one
-// sweeps the zones as the backstop for everything the jobs missed (a pass
-// delayed past a term, a term the booking window has not reached yet, and
-// the date-only tasks whose notification lands on the first sweep after the
-// day's end). A task without a term never fires (решение #737); the
-// «сегодня» reminder does not exist.
+// scheduled one books the dated tasks' boundary jobs — the timed ones at the
+// term's minute, the date-only ones at the day-after midnight (issue #777) —
+// minute-to-midnight precision the hourly cadence cannot give (решение
+// #737) — and the overdue one sweeps the zones as the backstop for
+// everything the jobs missed (a pass delayed past a boundary, a boundary the
+// booking window has not reached yet, the retrospective after a downtime).
+// A task without a term never fires (решение #737); the «сегодня» reminder
+// does not exist.
 //
 // Idempotence is carried by the dedup key — `task_overdue:<task_id>`, the
 // task id alone (решение #737, тип №4) — instead of sweep state: whichever
@@ -140,11 +148,11 @@ func NewTasksPublisher(
 	return &TasksPublisher{pipeline: pipeline, zones: zones, source: source, scheduler: scheduler}
 }
 
-// RunZoneScans is the hourly sweep: book the upcoming timed tasks'
-// due-minute jobs first — every hour counts down to their minute — then
-// sweep the zones for the already-overdue tasks. Failures are isolated — a
-// broken booking, zone or task does not stop the rest; the joined error
-// reports everything that failed.
+// RunZoneScans is the hourly sweep: book the upcoming dated tasks' boundary
+// jobs first — every hour counts down to their instant — then sweep the
+// zones for the already-overdue tasks. Failures are isolated — a broken
+// booking, zone or task does not stop the rest; the joined error reports
+// everything that failed.
 func (p *TasksPublisher) RunZoneScans(ctx context.Context, now time.Time) error {
 	if p.zones == nil {
 		return errors.New("notifications tasks scan: zone directory must be configured")
@@ -156,9 +164,10 @@ func (p *TasksPublisher) RunZoneScans(ctx context.Context, now time.Time) error 
 	return errors.Join(errs...)
 }
 
-// scheduleUpcoming books the due-minute jobs of the timed tasks whose term
-// falls into the horizon window. A broken task's booking is isolated — the
-// rest of the window books on.
+// scheduleUpcoming books the boundary jobs of the dated tasks — the timed
+// terms and the date-only day-after midnights alike — whose boundary falls
+// into the horizon window. A broken task's booking is isolated — the rest
+// of the window books on.
 func (p *TasksPublisher) scheduleUpcoming(ctx context.Context, now time.Time) []error {
 	targets, err := p.source.ListScheduledTargets(ctx, now, now.Add(scheduledHorizon))
 	if err != nil {
@@ -202,14 +211,14 @@ func (p *TasksPublisher) sweepOverdue(ctx context.Context, now time.Time) error 
 	return errors.Join(errs...)
 }
 
-// DeliverTaskOverdue is the due-minute job's half: reload the task through
-// the source and publish if it still lives overdue. A false live flag — the
-// task is gone, completed, or turned date-only — finishes the job without
-// publishing; an error is returned to River for its retry ladder.
+// DeliverTaskOverdue is the boundary job's half: reload the task through the
+// source and publish if it still lives. A false live flag — the task is gone
+// or completed — finishes the job without publishing; an error is returned
+// to River for its retry ladder.
 func (p *TasksPublisher) DeliverTaskOverdue(ctx context.Context, taskID uuid.UUID) error {
 	target, live, err := p.source.GetScheduledOverdueTask(ctx, taskID)
 	if err != nil {
-		return fmt.Errorf("load task %s for the due-minute job: %w", taskID, err)
+		return fmt.Errorf("load task %s for the boundary job: %w", taskID, err)
 	}
 	if !live {
 		return nil
@@ -219,14 +228,14 @@ func (p *TasksPublisher) DeliverTaskOverdue(ctx context.Context, taskID uuid.UUI
 
 // NotifyMaterializedTasks is the creation/edit seam (issue #775): the tasks
 // context hands over the standing tasks' ids strictly after their
-// materializing transaction committed. Per task the due-minute job's own
-// reload decides: a live timed task books its job at the term's instant —
-// or, when the term already passed (the task was born overdue), publishes
-// at once, the wait for the next sweep being exactly the up-to-an-hour delay
-// this seam removes; a gone, completed or date-only task is a no-op (the
-// sweep leg covers the date-only ones as before). Failures are isolated per
-// task and travel back joined — the caller is best-effort and only logs
-// them.
+// materializing transaction committed. Per task the boundary job's own
+// reload decides: a live task whose boundary is ahead — a timed term or a
+// date-only day-after midnight — books its job at that instant (created
+// between the passes, it fires exactly at its boundary, not up to an hour
+// late); a reached boundary — inclusive, the canon minute — publishes at
+// once, born overdue; a gone or completed task is a no-op. Failures are
+// isolated per task and travel back joined — the caller is best-effort and
+// only logs them.
 func (p *TasksPublisher) NotifyMaterializedTasks(
 	ctx context.Context, taskIDs []uuid.UUID, now time.Time,
 ) error {
@@ -240,9 +249,8 @@ func (p *TasksPublisher) NotifyMaterializedTasks(
 }
 
 // notifyMaterialized plans one handed-over task: the live reload answers the
-// target with its term instant; a term in the future books the due-minute
-// job, a reached one — the boundary inclusive, the canon minute — publishes
-// now.
+// target with its boundary instant; a boundary in the future books the job,
+// a reached one — the boundary inclusive, the canon minute — publishes now.
 func (p *TasksPublisher) notifyMaterialized(ctx context.Context, taskID uuid.UUID, now time.Time) error {
 	target, live, err := p.source.GetScheduledOverdueTask(ctx, taskID)
 	if err != nil {

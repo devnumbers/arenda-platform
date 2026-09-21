@@ -150,6 +150,121 @@ func TestRentalScanStore_ListCompletedTargets(t *testing.T) {
 	assert.Len(t, rentalTargetsOfProps(targets, awaitingProp), 1)
 }
 
+// The booking window of the completed boundary (issue #777): unfinished
+// rentals whose boundary — 00:00 of the day after the planned end in the
+// owner's timezone — falls into (from, until]. Moscow's midnight of the 19th
+// is 2026-09-18T21:00Z; the boundary carries the zone's shift.
+func TestRentalScanStore_ListScheduledCompletedTargets(t *testing.T) {
+	t.Parallel()
+
+	pool := setupPushDB(t)
+	ctx := context.Background()
+
+	msk := createUserInZone(t, pool, "Europe/Moscow")
+	// One unfinished rental per property (idx_rentals_one_unfinished_per_
+	// property) — every fixture rental sits on its own object.
+	inWindowProp := createLiveProperty(t, pool, msk)
+	inWindow := insertRental(t, pool, msk, inWindowProp, datePtr(time.September, 1), datePtr(time.September, 18), nil)
+
+	// A further-out rental books on a later pass; a passed boundary is the
+	// sweep's business (the window is open on the left).
+	futureProp := createLiveProperty(t, pool, msk)
+	future := insertRental(t, pool, msk, futureProp, datePtr(time.September, 1), datePtr(time.September, 25), nil)
+	pastProp := createLiveProperty(t, pool, msk)
+	past := insertRental(t, pool, msk, pastProp, datePtr(time.September, 1), datePtr(time.September, 17), nil)
+	// A completed rental and an eternal one (no planned end) book nothing.
+	doneAt := time.Date(2026, 9, 19, 0, 0, 0, 0, time.UTC)
+	completedProp := createLiveProperty(t, pool, msk)
+	completed := insertRental(t, pool, msk, completedProp, datePtr(time.September, 1), datePtr(time.September, 18), &doneAt)
+	eternalProp := createLiveProperty(t, pool, msk)
+	eternal := insertRental(t, pool, msk, eternalProp, datePtr(time.September, 1), nil, nil)
+
+	// An archived property's rental stays out (the ticks' canon).
+	archived := createUserInZone(t, pool, "Europe/Moscow")
+	archivedProp := createLiveProperty(t, pool, archived)
+	archivedRental := insertRental(t, pool, archived, archivedProp, datePtr(time.September, 1), datePtr(time.September, 18), nil)
+	archiveProperty(t, pool, archived, archivedProp)
+
+	store := NewRentalScanStore(pool)
+	targets, err := store.ListScheduledCompletedTargets(ctx,
+		time.Date(2026, 9, 18, 0, 0, 0, 0, time.UTC),
+		time.Date(2026, 9, 19, 0, 0, 0, 0, time.UTC))
+	require.NoError(t, err)
+
+	got := make(map[uuid.UUID]application.RentalScheduleTarget, len(targets))
+	for _, target := range targets {
+		got[target.RentalID] = target
+	}
+	require.Contains(t, got, inWindow)
+	assert.Equal(t, time.Date(2026, 9, 18, 0, 0, 0, 0, time.UTC), got[inWindow].PlannedEndDate)
+	assert.True(t, got[inWindow].FireAt.Equal(time.Date(2026, 9, 18, 21, 0, 0, 0, time.UTC)),
+		"the job wakes at 00:00 of the day after the planned end in the owner's zone, got %s",
+		got[inWindow].FireAt)
+	for _, gone := range []uuid.UUID{future, past, completed, eternal, archivedRental} {
+		assert.NotContains(t, got, gone)
+	}
+}
+
+// The completed boundary job's delivery-time resolution (issue #777): an
+// unfinished rental whose planned end is strictly before the zone's today
+// answers live; a completed one, an extended one (the planned end moved off
+// the booked date) and a job awake before the boundary answer no.
+func TestRentalScanStore_GetScheduledCompletedRental(t *testing.T) {
+	t.Parallel()
+
+	pool := setupPushDB(t)
+	ctx := context.Background()
+
+	msk := createUserInZone(t, pool, "Europe/Moscow")
+	prop := createLivePropertyFor(t, pool, msk, "Квартира на Ленина", "г. Москва, ул. Ленина, 1")
+	live := insertRental(t, pool, msk, prop, datePtr(time.September, 1), datePtr(time.September, 18), nil)
+
+	doneAt := time.Date(2026, 9, 18, 0, 0, 0, 0, time.UTC)
+	completedProp := createLiveProperty(t, pool, msk)
+	completed := insertRental(t, pool, msk, completedProp, datePtr(time.September, 1), datePtr(time.September, 18), &doneAt)
+
+	// The extended rental: the booked job carries the old planned end, the
+	// row has moved a month out — the pair misses, the new boundary books
+	// its own job.
+	extendedProp := createLiveProperty(t, pool, msk)
+	extended := insertRental(t, pool, msk, extendedProp, datePtr(time.September, 1), datePtr(time.September, 18), nil)
+	_, err := pool.Exec(ctx, `UPDATE rentals SET planned_end_date = '2026-10-18' WHERE id = $1`, extended)
+	require.NoError(t, err)
+
+	store := NewRentalScanStore(pool)
+	// Moscow's midnight of the 19th has just passed: the 18th is needs_attention.
+	now := time.Date(2026, 9, 18, 21, 0, 30, 0, time.UTC)
+
+	target, isLive, err := store.GetScheduledCompletedRental(ctx, live,
+		time.Date(2026, 9, 18, 0, 0, 0, 0, time.UTC), now)
+	require.NoError(t, err)
+	require.True(t, isLive)
+	assert.Equal(t, live, target.RentalID)
+	assert.Equal(t, time.Date(2026, 9, 18, 0, 0, 0, 0, time.UTC), target.PlannedEndDate)
+	assert.Equal(t, prop, target.PropertyID)
+	assert.Equal(t, "Квартира на Ленина", target.PropertyName)
+	assert.Equal(t, "г. Москва, ул. Ленина, 1", target.PropertyAddress)
+	assert.Equal(t, msk, target.OwnerID)
+
+	_, isLive, err = store.GetScheduledCompletedRental(ctx, completed,
+		time.Date(2026, 9, 18, 0, 0, 0, 0, time.UTC), now)
+	require.NoError(t, err)
+	assert.False(t, isLive, "completed")
+
+	_, isLive, err = store.GetScheduledCompletedRental(ctx, extended,
+		time.Date(2026, 9, 18, 0, 0, 0, 0, time.UTC), now)
+	require.NoError(t, err)
+	assert.False(t, isLive, "the planned end moved off the booked date")
+
+	// Before the boundary — Moscow's midnight of the 19th has not arrived,
+	// the 18th is still the zone's today — the leg is silent; the job could
+	// not wake this early, the check keeps the leg's semantics honest.
+	_, isLive, err = store.GetScheduledCompletedRental(ctx, live,
+		time.Date(2026, 9, 18, 0, 0, 0, 0, time.UTC), time.Date(2026, 9, 18, 20, 59, 0, 0, time.UTC))
+	require.NoError(t, err)
+	assert.False(t, isLive, "the rental is not needs_attention yet")
+}
+
 // rentalTargetsOfProps filters the sweep's targets to the given properties —
 // the shared test database's parallel fixtures must not break the count
 // assertions.

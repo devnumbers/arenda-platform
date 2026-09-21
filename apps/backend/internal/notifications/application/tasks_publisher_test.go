@@ -312,8 +312,9 @@ func TestTasksPublisher_DeliverTaskOverduePublishes(t *testing.T) {
 }
 
 // The scheduled job's no-op: the task the job was booked for may be gone
-// (the rule edit removes stale tasks), completed, or turned date-only —
-// the reload answers nil and the job finishes without publishing.
+// (the rule edit removes stale tasks) or completed — the reload answers nil
+// and the job finishes without publishing. A date-only task is not a no-op:
+// since #777 its own midnight job (and the seam) plans it like a timed one.
 func TestTasksPublisher_DeliverTaskOverdueNoOpWhenGone(t *testing.T) {
 	t.Parallel()
 
@@ -323,6 +324,28 @@ func TestTasksPublisher_DeliverTaskOverdueNoOpWhenGone(t *testing.T) {
 	p := NewTasksPublisher(h.pipeline, h.zones, h.source, h.scheduler)
 	require.NoError(t, p.DeliverTaskOverdue(context.Background(), task))
 	assert.Empty(t, h.feed.inserted)
+}
+
+// The date-only task's boundary job (issue #777, решение владельца
+// 21.09.2026: все уведомления — чётко по времени): the reload answers a live
+// date-only task at its midnight — 00:00 of the day after the due date —
+// and the publication is the day-only copy the sweep leg writes.
+func TestTasksPublisher_DeliverTaskOverduePublishesDateOnlyAtMidnight(t *testing.T) {
+	t.Parallel()
+
+	h := newTaskScanHarness([]ScanZone{{Timezone: zoneMSK}})
+	task := uuid.Must(uuid.NewV7())
+	target := overdueTaskTarget(task, "Сменить замок",
+		time.Date(2026, 9, 17, 0, 0, 0, 0, time.UTC), nil)
+	h.source.live[task] = target
+
+	p := NewTasksPublisher(h.pipeline, h.zones, h.source, h.scheduler)
+	require.NoError(t, p.DeliverTaskOverdue(context.Background(), task))
+	require.Len(t, h.feed.inserted, 1)
+	assert.Equal(t,
+		"Задача «Сменить замок» по объекту «Квартира на Ленина» просрочена. Срок был: 17 сентября",
+		h.feed.inserted[0].Body)
+	assert.Equal(t, domain.DedupKey("task_overdue:"+task.String()), h.feed.inserted[0].DedupKey)
 }
 
 // Both legs may fire for the same task — the scheduled job and the next
@@ -418,9 +441,11 @@ func TestTasksPublisher_NotifyMaterializedPublishesBornOverdue(t *testing.T) {
 	require.Len(t, h.feed.inserted, 4)
 }
 
-// The seam's no-op: a task gone, completed or turned date-only between the
-// materialization and the handover — the reload answers nothing and the seam
-// moves on without booking or publishing.
+// The seam's no-op: a task gone between the materialization and the handover
+// (the rule edit removes stale rows; a completed task answers nothing too) —
+// the reload answers nothing and the seam moves on without booking or
+// publishing. A live date-only task is not a no-op since #777 — see the
+// boundary tests below.
 func TestTasksPublisher_NotifyMaterializedSkipsDeadTask(t *testing.T) {
 	t.Parallel()
 
@@ -432,6 +457,53 @@ func TestTasksPublisher_NotifyMaterializedSkipsDeadTask(t *testing.T) {
 
 	assert.Empty(t, h.scheduler.booked)
 	assert.Empty(t, h.feed.inserted)
+}
+
+// A date-only task born between the hourly passes (issue #777) plans at its
+// own boundary, the same shape the timed tasks run: a boundary ahead — 00:00
+// of the day after the due date, in the owner's zone — books the job at
+// once, no wait for the next sweep.
+func TestTasksPublisher_NotifyMaterializedBooksDateOnlyBoundary(t *testing.T) {
+	t.Parallel()
+
+	h := newTaskScanHarness([]ScanZone{{Timezone: zoneMSK}})
+	task := uuid.Must(uuid.NewV7())
+	// The due date 2026-09-20 (the zone's today at the handover) in Moscow:
+	// the boundary is midnight of the 21st — 2026-09-20T21:00Z, still ahead.
+	target := overdueTaskTarget(task, "Сменить замок",
+		time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC), nil)
+	target.DueAt = time.Date(2026, 9, 20, 21, 0, 0, 0, time.UTC)
+	h.source.live[task] = target
+
+	p := NewTasksPublisher(h.pipeline, h.zones, h.source, h.scheduler)
+	require.NoError(t, p.NotifyMaterializedTasks(context.Background(), []uuid.UUID{task}, scanNow))
+
+	require.Len(t, h.scheduler.booked, 1)
+	assert.Equal(t, time.Date(2026, 9, 20, 21, 0, 0, 0, time.UTC), h.scheduler.booked[task])
+	assert.Empty(t, h.feed.inserted, "a future boundary only books the job")
+}
+
+// A date-only task born already overdue — its midnight passed before the
+// handover — publishes at once; waiting for the next sweep would be up to an
+// hour late, the delay the seam exists to remove.
+func TestTasksPublisher_NotifyMaterializedPublishesDateOnlyBornOverdue(t *testing.T) {
+	t.Parallel()
+
+	h := newTaskScanHarness([]ScanZone{{Timezone: zoneMSK}})
+	task := uuid.Must(uuid.NewV7())
+	target := overdueTaskTarget(task, "Сменить замок",
+		time.Date(2026, 9, 17, 0, 0, 0, 0, time.UTC), nil)
+	target.DueAt = time.Date(2026, 9, 17, 21, 0, 0, 0, time.UTC)
+	h.source.live[task] = target
+	member := uuid.Must(uuid.NewV7())
+	h.source.recips[*target.PropertyID] = []uuid.UUID{member}
+
+	p := NewTasksPublisher(h.pipeline, h.zones, h.source, h.scheduler)
+	require.NoError(t, p.NotifyMaterializedTasks(context.Background(), []uuid.UUID{task}, scanNow))
+
+	assert.Empty(t, h.scheduler.booked, "a passed boundary publishes, nothing to book")
+	require.Len(t, h.feed.inserted, 2)
+	assert.Equal(t, domain.DedupKey("task_overdue:"+task.String()), h.feed.inserted[0].DedupKey)
 }
 
 // A broken task's planning does not stop the rest: the surviving tasks are

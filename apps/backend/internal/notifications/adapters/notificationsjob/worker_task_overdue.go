@@ -9,19 +9,20 @@ import (
 	"github.com/riverqueue/river"
 )
 
-// TaskOverdueWorker wakes at one timed task's due minute (issue #750) and
-// hands the id to the publisher's delivery-time resolution: the task is
-// reloaded at wake-up — a task gone with its rule edit, completed, or turned
-// date-only finishes the job without publishing, a live one publishes
-// «Задача просрочена» through the pipeline (the dedup key keeps the sweep's
-// row and the job's row to one).
+// TaskOverdueWorker wakes at one dated task's boundary instant — the timed
+// term's minute or the date-only day-after midnight (issues #750, #777) —
+// and hands the id to the publisher's delivery-time resolution: the task is
+// reloaded at wake-up — a task gone with its rule edit or completed
+// finishes the job without publishing, a live one publishes «Задача
+// просрочена» through the pipeline (the dedup key keeps the sweep's row and
+// the job's row to one).
 type TaskOverdueWorker struct {
 	river.WorkerDefaults[TaskOverdueArgs]
 	publisher application.TaskOverdueDeliverer
 	log       *slog.Logger
 }
 
-// NewTaskOverdueWorker builds the due-minute worker over the publisher.
+// NewTaskOverdueWorker builds the boundary worker over the publisher.
 func NewTaskOverdueWorker(publisher application.TaskOverdueDeliverer, log *slog.Logger) *TaskOverdueWorker {
 	if log == nil {
 		log = slog.Default()
