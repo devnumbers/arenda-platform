@@ -8,13 +8,9 @@ export const metadata: Metadata = {
   description: 'Управление способами оплаты',
 };
 
-type PaymentMethodsPageProps = {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-};
-
 export default async function PaymentMethodsPage({
   searchParams,
-}: PaymentMethodsPageProps) {
+}: PageProps<'/profile/tariff/payment-methods'>) {
   const params = await searchParams;
   const addCardResult =
     typeof params.addCard === 'string' ? params.addCard : undefined;

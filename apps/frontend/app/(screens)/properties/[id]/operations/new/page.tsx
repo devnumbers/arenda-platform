@@ -12,15 +12,10 @@ export const metadata: Metadata = {
   title: 'Новая операция — Рентли',
 };
 
-type PropertyOperationNewRoutePageProps = {
-  params: Promise<{ id: string }>;
-  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
-};
-
 export default async function PropertyOperationNewRoutePage({
   params,
   searchParams,
-}: PropertyOperationNewRoutePageProps) {
+}: PageProps<'/properties/[id]/operations/new'>) {
   const { id } = await params;
   const query = await searchParams;
 

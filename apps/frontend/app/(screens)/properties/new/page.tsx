@@ -16,9 +16,7 @@ export const metadata: Metadata = {
 
 export default async function PropertyNewRoutePage({
   searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
+}: PageProps<'/properties/new'>) {
   const { returnTo } = await searchParams;
   const sanitizedReturnTo = sanitizeReturnTo(typeof returnTo === 'string' ? returnTo : undefined);
 

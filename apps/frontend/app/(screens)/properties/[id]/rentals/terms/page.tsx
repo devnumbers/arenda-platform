@@ -11,12 +11,10 @@ export const metadata: Metadata = {
   title: 'Условия аренды — Рентли',
 };
 
-type RentalTermsRoutePageProps = {
-  params: Promise<{ id: string }>;
-  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
-};
-
-export default async function RentalTermsRoutePage({ params, searchParams }: RentalTermsRoutePageProps) {
+export default async function RentalTermsRoutePage({
+  params,
+  searchParams,
+}: PageProps<'/properties/[id]/rentals/terms'>) {
   const { id } = await params;
   const query = await searchParams;
   const rentalParam = typeof query.rental === 'string' ? query.rental : undefined;

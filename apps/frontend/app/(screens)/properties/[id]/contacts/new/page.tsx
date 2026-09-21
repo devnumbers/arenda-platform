@@ -11,15 +11,10 @@ export const metadata: Metadata = {
   title: 'Создать контакт — Рентли',
 };
 
-type ContactNewRoutePageProps = {
-  params: Promise<{ id: string }>;
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-};
-
 export default async function ContactNewRoutePage({
   params,
   searchParams,
-}: ContactNewRoutePageProps) {
+}: PageProps<'/properties/[id]/contacts/new'>) {
   const { id } = await params;
   const query = await searchParams;
   const rawRole = query.role;
