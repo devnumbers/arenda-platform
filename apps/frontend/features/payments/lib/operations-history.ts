@@ -30,7 +30,7 @@ export const DEFAULT_HISTORY_ORDER: HistoryOrder = 'desc';
 export function parseHistoryOrderParams(
   order: string | string[] | undefined,
 ): HistoryOrder {
-  return parseEnumParam(order, ['asc', 'desc'], 'desc');
+  return parseEnumParam(order, ['asc', 'desc'], DEFAULT_HISTORY_ORDER);
 }
 
 /** Собственный параметр направления в адресе — знание этого модуля;

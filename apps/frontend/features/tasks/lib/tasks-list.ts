@@ -34,8 +34,8 @@ export function parseTasksSortParams(
   order: string | string[] | undefined,
 ): TasksSort {
   return {
-    field: parseEnumParam(sort, ['date', 'title'], 'date'),
-    direction: parseEnumParam(order, ['asc', 'desc'], 'asc'),
+    field: parseEnumParam(sort, ['date', 'title'], DEFAULT_TASKS_SORT.field),
+    direction: parseEnumParam(order, ['asc', 'desc'], DEFAULT_TASKS_SORT.direction),
   };
 }
 
