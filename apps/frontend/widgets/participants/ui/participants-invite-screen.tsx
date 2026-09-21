@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation';
 import { Cancel, SmallArrowDown } from '@/shared/assets/icons';
 import { goBack } from '@/shared/lib/navigation';
 import { ROUTES } from '@/shared/config/routes';
-import { isEmailValid } from '@/shared/lib/email';
 import { pluralize } from '@/shared/lib/pluralize';
 import {
   allInvitedProperties,
@@ -16,9 +15,7 @@ import {
   toggleAllInvitedProperties,
   toggleInvitedProperty,
   type InvitePropertyOption,
-  type ParticipantAccessRole,
 } from '@/entities/participants';
-import { useInviteParticipant } from '@/features/participants';
 import { useProperties } from '@/features/properties';
 import {
   Button,
@@ -35,6 +32,7 @@ import {
 import { ObjectAvatarGlyph, PARTICIPANT_ROW_BASE_CLASS } from './participant-fragments';
 import { InvitePropertiesRows } from './invite-properties-rows';
 import { stageParticipantPopup } from '../lib/participant-popups';
+import { useInviteForm } from '../lib/use-invite-form';
 import { ParticipantRoleSegmented } from './participant-role-segmented';
 import { ParticipantsInviteSkeleton } from './participants-skeletons';
 
@@ -63,16 +61,19 @@ export function ParticipantsInviteScreen(): JSX.Element {
   const router = useRouter();
 
   const propertiesQuery = useProperties();
-  const invite = useInviteParticipant();
 
-  const [email, setEmail] = useState('');
-  const [role, setRole] = useState<ParticipantAccessRole>('viewer');
-  /** null — «не трогали» = дефолт «Все объекты»; конкретный Set — после
-   * первого тапа или коммита пикера (пустой Set = осознанный ноль). */
   const [committedSelection, setCommittedSelection] = useState<ReadonlySet<string> | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [emailError, setEmailError] = useState<string | null>(null);
-  const [serverError, setServerError] = useState<string | null>(null);
+
+  const form = useInviteForm({
+    propertyIds: () => [...selection],
+    grantedZeroMessage: 'Пользователь уже имеет доступ к выбранным объектам',
+    onInvited: () => {
+      stageParticipantPopup('invited');
+      goBack(router, ROUTES.participants);
+    },
+  });
+  const { email, setEmailValue, role, setRole, emailError, serverError, submitInvite } = form;
 
   // access отсутствует у собственных объектов (владелец); viewer — чужие
   // объекты, где читающий не управляет выдачей: бэк вернул бы
@@ -87,46 +88,7 @@ export function ParticipantsInviteScreen(): JSX.Element {
   const collapsedRows = collapsedInviteRows(options, selection);
 
   const trimmedEmail = email.trim();
-  const canSubmit = trimmedEmail.length > 0 && selection.size > 0 && !invite.isPending;
-
-  const setEmailValue = (value: string): void => {
-    setEmail(value);
-    setEmailError(null);
-    setServerError(null);
-  };
-
-  const submitInvite = (): void => {
-    if (!isEmailValid(trimmedEmail)) {
-      setEmailError('Укажите корректную электронную почту');
-      return;
-    }
-    invite.mutate(
-      { email: trimmedEmail, role, propertyIds: [...selection] },
-      {
-        onSuccess: (result) => {
-          if (result.granted === 0) {
-            // Все объекты ушли в skipped_* — детерминированный исход
-            // (обычно доступ/приглашение уже есть): повтор не поможет,
-            // поэтому без «попробуйте еще раз» (решение владельца 17.09).
-            setServerError('Пользователь уже имеет доступ к выбранным объектам');
-            return;
-          }
-          stageParticipantPopup('invited');
-          goBack(router, ROUTES.participants);
-        },
-        onError: (error) => {
-          // Семантические 400 (#694: свой email, некорректная почта) бэк
-          // объясняет по-человечески — показываем его текст; остальное —
-          // инфраструктура, общая фраза.
-          setServerError(
-            error.status === 400 && error.detail.length > 0
-              ? error.detail
-              : 'Не удалось пригласить — попробуйте еще раз',
-          );
-        },
-      },
-    );
-  };
+  const canSubmit = trimmedEmail.length > 0 && selection.size > 0 && !form.isPending;
 
   let content: JSX.Element;
   if (propertiesQuery.isPending) {
@@ -180,7 +142,7 @@ export function ParticipantsInviteScreen(): JSX.Element {
         </div>
 
         <div className="mt-8">
-          <ParticipantRoleSegmented value={role} disabled={invite.isPending} onChange={setRole} />
+          <ParticipantRoleSegmented value={role} disabled={form.isPending} onChange={setRole} />
         </div>
 
         <div className="mt-6 flex flex-col">
@@ -238,7 +200,7 @@ export function ParticipantsInviteScreen(): JSX.Element {
           <Button
             className="w-full"
             disabled={!canSubmit}
-            loading={invite.isPending}
+            loading={form.isPending}
             onClick={submitInvite}
           >
             Пригласить

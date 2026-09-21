@@ -46,3 +46,29 @@ export function toInviteParticipantWireRequest(
     property_ids: [...command.propertyIds],
   };
 }
+
+/** Результат исхода партии грантов: granted = активные + suspended
+ * (слоты получателя) + pending (письмо) — человек приглашён в любом из
+ * этих исходов; остальные — skipped_*. */
+export type ParticipantGrantOutcomeCounts = {
+  readonly granted: number;
+  readonly skipped: number;
+};
+
+/** Классификация исходов партии (зеркало ParticipantGrantOutcome бэка,
+ * #694): единственное место, знающее, какие исходы считаются грантом;
+ * оба mutationFn «Пригласить в объект» и приглашения хаба считают им. */
+export function countGrantOutcomes(
+  items: ReadonlyArray<{ readonly outcome: string }>,
+): ParticipantGrantOutcomeCounts {
+  let granted = 0;
+  let skipped = 0;
+  for (const item of items) {
+    if (item.outcome === 'active' || item.outcome === 'suspended' || item.outcome === 'pending') {
+      granted += 1;
+    } else {
+      skipped += 1;
+    }
+  }
+  return { granted, skipped };
+}

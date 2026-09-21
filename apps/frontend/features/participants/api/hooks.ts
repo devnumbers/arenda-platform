@@ -9,6 +9,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import { mapParticipant } from '@/entities/participants';
 import type { Participant } from '@/entities/participants';
 import {
+  countGrantOutcomes,
   toAddParticipantPropertiesWireRequest,
   toInviteParticipantWireRequest,
   type AddParticipantPropertiesCommand,
@@ -237,16 +238,7 @@ export function useAddParticipantProperties(
           body: JSON.stringify(toAddParticipantPropertiesWireRequest(command)),
         },
       );
-      let granted = 0;
-      let skipped = 0;
-      for (const item of response.items) {
-        if (item.outcome === 'active' || item.outcome === 'suspended' || item.outcome === 'pending') {
-          granted += 1;
-        } else {
-          skipped += 1;
-        }
-      }
-      return { granted, skipped };
+      return countGrantOutcomes(response.items);
     },
     onSettled: () => invalidateParticipantProjections(queryClient),
   });
@@ -282,16 +274,7 @@ export function useInviteParticipant(): UseMutationResult<
           body: JSON.stringify(toInviteParticipantWireRequest(command)),
         },
       );
-      let granted = 0;
-      let skipped = 0;
-      for (const item of response.items) {
-        if (item.outcome === 'active' || item.outcome === 'suspended' || item.outcome === 'pending') {
-          granted += 1;
-        } else {
-          skipped += 1;
-        }
-      }
-      return { granted, skipped };
+      return countGrantOutcomes(response.items);
     },
     onSettled: () => invalidateParticipantProjections(queryClient),
   });

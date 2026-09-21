@@ -1,13 +1,10 @@
 'use client';
 
-import { useState, type JSX } from 'react';
+import type { JSX } from 'react';
 import Image from 'next/image';
 import { useParams, useRouter } from 'next/navigation';
 import { goBack } from '@/shared/lib/navigation';
 import { ROUTES } from '@/shared/config/routes';
-import { isEmailValid } from '@/shared/lib/email';
-import type { ParticipantAccessRole } from '@/entities/participants';
-import { useInviteParticipant } from '@/features/participants';
 import {
   Button,
   PageContent,
@@ -17,6 +14,7 @@ import {
   TopNavBackButton,
 } from '@/shared/ui/design';
 import { stageParticipantPopup } from '../lib/participant-popups';
+import { useInviteForm } from '../lib/use-invite-form';
 import { ParticipantRoleSegmented } from './participant-role-segmented';
 
 /**
@@ -39,53 +37,18 @@ export function PropertyParticipantsInviteScreen(): JSX.Element {
   const propertyId = params.id;
   const router = useRouter();
 
-  const invite = useInviteParticipant();
-
-  const [email, setEmail] = useState('');
-  const [role, setRole] = useState<ParticipantAccessRole>('viewer');
-  const [emailError, setEmailError] = useState<string | null>(null);
-  const [serverError, setServerError] = useState<string | null>(null);
+  const form = useInviteForm({
+    propertyIds: () => [propertyId],
+    grantedZeroMessage: 'Пользователь уже имеет доступ к объекту',
+    onInvited: () => {
+      stageParticipantPopup('invited');
+      goBack(router, ROUTES.propertyParticipants(propertyId));
+    },
+  });
+  const { email, setEmailValue, role, setRole, emailError, serverError, submitInvite } = form;
 
   const trimmedEmail = email.trim();
-  const canSubmit = trimmedEmail.length > 0 && !invite.isPending;
-
-  const setEmailValue = (value: string): void => {
-    setEmail(value);
-    setEmailError(null);
-    setServerError(null);
-  };
-
-  const submitInvite = (): void => {
-    if (!isEmailValid(trimmedEmail)) {
-      setEmailError('Укажите корректную электронную почту');
-      return;
-    }
-    invite.mutate(
-      { email: trimmedEmail, role, propertyIds: [propertyId] },
-      {
-        onSuccess: (result) => {
-          if (result.granted === 0) {
-            // Детерминированный исход (доступ/приглашение уже есть):
-            // повтор не поможет — без «попробуйте еще раз» (решение #699).
-            setServerError('Пользователь уже имеет доступ к объекту');
-            return;
-          }
-          stageParticipantPopup('invited');
-          goBack(router, ROUTES.propertyParticipants(propertyId));
-        },
-        onError: (error) => {
-          // Семантические 400 (#694: свой email, некорректная почта) бэк
-          // объясняет по-человечески — показываем его текст; остальное —
-          // инфраструктура, общая фраза.
-          setServerError(
-            error.status === 400 && error.detail.length > 0
-              ? error.detail
-              : 'Не удалось пригласить — попробуйте еще раз',
-          );
-        },
-      },
-    );
-  };
+  const canSubmit = trimmedEmail.length > 0 && !form.isPending;
 
   return (
     <>
@@ -131,7 +94,7 @@ export function PropertyParticipantsInviteScreen(): JSX.Element {
           <div className="mt-8">
             <ParticipantRoleSegmented
               value={role}
-              disabled={invite.isPending}
+              disabled={form.isPending}
               onChange={setRole}
             />
           </div>
@@ -142,7 +105,7 @@ export function PropertyParticipantsInviteScreen(): JSX.Element {
         <Button
           className="w-full"
           disabled={!canSubmit}
-          loading={invite.isPending}
+          loading={form.isPending}
           onClick={submitInvite}
         >
           Пригласить
