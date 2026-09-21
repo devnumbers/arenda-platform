@@ -106,7 +106,13 @@ func prefsRequest(t *testing.T, userID uuid.UUID, method, target string, body an
 	} else {
 		reader = bytes.NewReader(nil)
 	}
-	return httptest.NewRequestWithContext(ctx, method, target, reader)
+	r := httptest.NewRequestWithContext(ctx, method, target, reader)
+	if body != nil {
+		// DecodeJSONBody (#724) отвергает непустое тело без
+		// application/json — как живой клиент fetch.
+		r.Header.Set("Content-Type", "application/json")
+	}
+	return r
 }
 
 // The email matrix answers the all-on default before any PUT and echoes the
