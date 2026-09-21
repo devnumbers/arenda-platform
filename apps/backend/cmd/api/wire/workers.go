@@ -45,7 +45,7 @@ type Workers struct {
 // NewWorkers builds and starts the six background workers: the identity
 // data cleaner, the billing worker, the payment reconciliation worker, the
 // payments tick worker, the tasks tick worker and the notifications scan
-// worker (карта #734, #748–#749). A non-nil riverClient adds
+// worker (карта #734, #748–#750, #776–#777). A non-nil riverClient adds
 // the delivery queue (карта #734, #740): Start blocks until the client has
 // fully stopped — cancelling the lifecycle context begins the soft stop
 // (SoftStopTimeout), so Workers.Wait also waits for in-flight delivery jobs.

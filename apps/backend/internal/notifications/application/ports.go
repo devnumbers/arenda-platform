@@ -108,7 +108,8 @@ type PushSender interface {
 	Send(ctx context.Context, subscription domain.PushSubscription, payload PushPayload) error
 }
 
-// ContactResolver resolves the delivery channel and address for an owner.
+// ContactResolver resolves a recipient's delivery address — the owner or
+// any active member of the event's property.
 type ContactResolver interface {
 	Resolve(ctx context.Context, scope uuid.UUID) (Contact, error)
 }

@@ -12,7 +12,7 @@ import (
 // NotificationsScanRunner is the notifications port consumed only by this
 // worker shell; per the consumer-side interface rule (ADR 0035) it is
 // declared here next to its consumer. RunZoneScans is the hourly zone sweep
-// of the notifications scan group (карта #734, #748–#749): one today per
+// of the notifications scan group (карта #734, #748–#750, #776–#777): one today per
 // owner timezone (ADR 0048 p.3), every scan-driven catalog event published —
 // idempotently, through each row's dedup key, so the hourly cadence lands
 // the notification on the first pass after its trigger.
@@ -27,8 +27,8 @@ const notificationsScanWorkerLockKey int64 = 0xB115
 
 // NewNotificationsScanWorker creates the notifications scan worker: the
 // shared ZoneTickWorker shell over the scan group's sweep (the
-// rental-completed and the payments due/overdue publishers) and its own lock
-// namespace.
+// rental-completed, the payments due/overdue and the tasks overdue
+// publishers) and its own lock namespace.
 func NewNotificationsScanWorker(
 	scan NotificationsScanRunner,
 	pool *pgxpool.Pool,

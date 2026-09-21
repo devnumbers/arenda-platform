@@ -23,7 +23,7 @@ import (
 
 // RiverQueue bundles the delivery queue (River) and the notifications
 // publisher. The client is started in the workers phase; the publisher is
-// the seam the grace migration (#741) and the catalog publishers
+// the seam the grace publisher (#741) and the catalog publishers
 // (#748–#752) call. ProviderLimiter must be stopped by the caller.
 type RiverQueue struct {
 	Client *river.Client[pgx.Tx]
@@ -31,10 +31,11 @@ type RiverQueue struct {
 	// call it strictly after the publishing context's own transaction
 	// commits (the grace-events canon, решение #740).
 	Publisher *notificationsapp.Publisher
-	// TasksPublisher is the tasks scan's publisher (issue #750): the hourly
-	// sweep books the upcoming timed tasks' due-minute jobs through the same
-	// client and sweeps the zones for the already-overdue ones; the
-	// due-minute worker publishes through it (bound post-construction, see
+	// TasksPublisher is the tasks scan's publisher (issues #750, #777): the
+	// hourly sweep books the dated tasks' boundary jobs — the timed terms'
+	// minutes and the date-only day-after midnights alike — through the same
+	// client and sweeps the zones for the already-overdue ones; the boundary
+	// worker publishes through it (bound post-construction, see
 	// DeferredTaskOverdueDeliverer).
 	TasksPublisher *notificationsapp.TasksPublisher
 	// PaymentsPublisher is the payments scan's publisher (issues #749,

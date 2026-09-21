@@ -21,8 +21,8 @@ CREATE TYPE notification_category AS ENUM (
 
 -- Каталог типов событий v1 (решение #737, 15 типов). Мёртвые значения
 -- notification_event_type (напоминания, #438/#277) остаются в типе навсегда;
--- живое legacy-значение subscription_grace обслуживает прямой grace-канал
--- до унификации (#740/#741).
+-- legacy-значение subscription_grace мёртво с унификацией (#740/#741): grace
+-- живёт в ленте и пайплайне, прямой канал больше не читает тип.
 ALTER TYPE notification_event_type ADD VALUE 'rental_completed';
 ALTER TYPE notification_event_type ADD VALUE 'payment_due';
 ALTER TYPE notification_event_type ADD VALUE 'payment_overdue';

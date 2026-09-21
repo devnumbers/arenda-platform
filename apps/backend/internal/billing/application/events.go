@@ -10,7 +10,8 @@ import (
 
 // Grace lifecycle events (issue #253, ADR 0008). Billing publishes them at the
 // subscription transitions; the notifications context delivers them to the
-// user over push and email with the per-channel preferences of ADR 0030.
+// user over push and email through the delivery pipeline (ADR 0059): the
+// Тариф category is always on (ADR 0058).
 // The publication semantics — capture inside the transaction, dispatch
 // strictly after the commit, once per window, best-effort — are owned by the
 // grace-events module (grace_events.go, issue #284).

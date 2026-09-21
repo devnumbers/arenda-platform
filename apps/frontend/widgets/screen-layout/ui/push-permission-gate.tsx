@@ -19,9 +19,9 @@ import { readNotificationPermission } from '@/features/push-notifications';
  * dismissed.
  *
  * The old per-account preference check (`anyPushAllowed`, ADR 0030) is gone
- * with its contract (решение #738, ADR 0058): until the per-device master
- * flag lands (#743/#746), the subscription stays alive whenever the browser
- * permission is granted — matching the always-on delivery of the interim.
+ * with its contract (решение #738, ADR 0058): the subscription stays alive
+ * whenever the browser permission is granted — the per-device master flag
+ * gates at delivery time (ADR 0058), not at subscription.
  *
  * Any failure is reported via `reportClientError` and swallowed; push is a
  * best-effort channel and the email path is unaffected.
