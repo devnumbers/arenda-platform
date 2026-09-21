@@ -26,3 +26,10 @@ export function parseContactListOrderParams(
 ): ContactSortOrder {
   return parseEnumParam(order, ['asc', 'desc'], 'asc');
 }
+
+/** Патч направления для адреса: дефолтные значения параметров не создают
+ * (конвенция страницы «Объекты»); пишется через useUrlParams с
+ * own: ['order'] (#785). */
+export function serializeContactOrderToParams(order: ContactSortOrder): Record<string, string> {
+  return order === 'asc' ? {} : { order };
+}

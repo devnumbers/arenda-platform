@@ -13,20 +13,18 @@ import {
 import { ROUTES } from '@/shared/config/routes';
 import { ApiError } from '@/shared/api/errors';
 import { notify } from '@/shared/lib/notifications';
-import { useUrlParams } from '@/shared/lib/hooks/use-url-params';
 import { useProperties } from '@/features/properties';
 import {
-  DEFAULT_TASKS_SORT,
   canMutateFeedTask,
   groupTasks,
   mutableFeedTasks,
-  serializeTasksSortToParams,
   useCompleteAllGlobalTasks,
   useCompleteGlobalTask,
   useDeleteCompletedGlobalTasks,
   useGlobalActiveTasks,
   useGlobalCompletedTasks,
   useTasksFeedFilter,
+  useTasksSort,
   type FeedPropertyRef,
   type TaskSection,
   type TasksSort,
@@ -94,28 +92,18 @@ export function TasksFeedScreen({
   readonly initialSort?: TasksSort;
 }): JSX.Element {
   const router = useRouter();
-  const { write } = useUrlParams();
 
   const { filter, applyFeedFilter } = useTasksFeedFilter();
   const activeQuery = useGlobalActiveTasks(filter.propertyIds, filter.withoutProperty);
   const completedQuery = useGlobalCompletedTasks(filter.propertyIds, filter.withoutProperty);
   const propertiesQuery = useProperties();
 
-  const [sort, setSort] = useState<TasksSort>(initialSort ?? DEFAULT_TASKS_SORT);
+  const { sort, changeSort } = useTasksSort(initialSort);
   const [deleteOpen, setDeleteOpen] = useState(false);
   // Страница выбора объектов — строгий черновик (#524): черновик живёт,
   // пока страница смонтирована, история не пишется.
   const [selectOpen, setSelectOpen] = useState(false);
   const [filterDraft, setFilterDraft] = useState<TasksFilterDraft>(EMPTY_TASKS_FILTER_DRAFT);
-
-  // Сортировка живёт в адресе (?sort=&order=, дефолт не пишется — конвенция
-  // страницы «Объекты», #785): перезагрузка и шаринг ссылки сохраняют выбор.
-  // write снимает sort/order перед записью: фильтр ленты #524 не затирается,
-  // дефолт снимается — в том числе протухшее значение из чужой ссылки.
-  const changeSort = (next: TasksSort): void => {
-    setSort(next);
-    write(serializeTasksSortToParams(next), { own: ['sort', 'order'] });
-  };
 
   // Авто-сброс фильтра при 404 (решение 8 #522): объект удалён или доступ
   // отозван — privacy 404, мёртвый фильтр из адреса убирает replace, чтобы

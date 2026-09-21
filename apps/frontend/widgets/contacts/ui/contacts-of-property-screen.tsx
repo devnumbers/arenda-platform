@@ -42,6 +42,7 @@ import {
   ContactsSearchHint,
   ContactsSkeleton,
 } from './contacts-states';
+import { serializeContactOrderToParams } from '../lib/contact-list-model';
 
 /** Задержка дебаунса поиска (мс) — серверный фильтр по ?search=. */
 const SEARCH_DEBOUNCE_MS = 300;
@@ -83,7 +84,7 @@ export function ContactsOfPropertyScreen({
   // не пишется — конвенция страницы «Объекты», #785).
   const changeOrder = (order: ContactSortOrder): void => {
     setSortOrder(order);
-    write(order === 'asc' ? {} : { order }, { own: ['order'] });
+    write(serializeContactOrderToParams(order), { own: ['order'] });
   };
 
   // Открытие поиска сразу делает поле активным (программный фокус —

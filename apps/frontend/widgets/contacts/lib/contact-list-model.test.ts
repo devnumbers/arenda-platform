@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { Contact } from '@/entities/contact';
-import { contactRowModel, parseContactListOrderParams } from './contact-list-model';
+import {
+  contactRowModel,
+  parseContactListOrderParams,
+  serializeContactOrderToParams,
+} from './contact-list-model';
 
 const contact: Contact = {
   id: '0198b6a7-1000-7000-8000-0000000000c1',
@@ -43,5 +47,15 @@ describe('parseContactListOrderParams — разбор ?order= «Контакт�
 
   it('читает «Я→А»', () => {
     expect(parseContactListOrderParams('desc')).toBe('desc');
+  });
+});
+
+describe('serializeContactOrderToParams — патч ?order= для адреса (#785)', () => {
+  it('дефолт «А→Я» параметров не создаёт', () => {
+    expect(serializeContactOrderToParams('asc')).toStrictEqual({});
+  });
+
+  it('«Я→А» пишет order=desc', () => {
+    expect(serializeContactOrderToParams('desc')).toStrictEqual({ order: 'desc' });
   });
 });

@@ -36,6 +36,7 @@ export {
   type FeedPropertyRef,
 } from './lib/global-tasks';
 export { useTasksFeedFilter } from './lib/use-tasks-feed-filter';
+export { useTasksSort } from './lib/use-tasks-sort';
 export {
   EMPTY_TASKS_FEED_FILTER,
   type TasksFeedFilter,

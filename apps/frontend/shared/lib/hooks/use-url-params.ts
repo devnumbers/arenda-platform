@@ -1,6 +1,5 @@
 'use client';
 
-import { useCallback } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 
 /**
@@ -10,11 +9,10 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
  * группы, отсутствующий в patch (дефолт), удаляется из адреса, а не остаётся
  * протухшим — урок фикса 0c64fcc3: гард «параметр пуст» вместо снятия
  * оставлял в адресе старое значение, и после перезагрузки возвращалась
- * не та сортировка. Чужие
- * параметры (например, фильтр ленты задач #524) не трогаются. Запись —
- * router.replace без скролла (записей истории не создаёт); push — опцией
- * mode. «Дефолтные значения не пишутся» решает serialize-функция фичи:
- * patch несёт только не-дефолты.
+ * не та сортировка. Чужие параметры (например, фильтр ленты задач #524)
+ * не трогаются. Запись — router.replace без скролла: записей истории не
+ * создаёт (конвенция страницы «Объекты», #785). «Дефолтные значения не
+ * пишутся» решает serialize-функция фичи: patch несёт только не-дефолты.
  */
 
 /**
@@ -45,28 +43,21 @@ export function buildUrlWithParams(pathname: string, params: URLSearchParams): s
 export function useUrlParams(): {
   readonly write: (
     patch: Record<string, string>,
-    options?: { readonly own?: ReadonlyArray<string>; readonly mode?: 'replace' | 'push' },
+    options?: { readonly own?: ReadonlyArray<string> },
   ) => void;
 } {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const write = useCallback(
-    (
-      patch: Record<string, string>,
-      options?: { readonly own?: ReadonlyArray<string>; readonly mode?: 'replace' | 'push' },
-    ): void => {
-      const params = applyUrlParamsPatch(searchParams, patch, options?.own ?? []);
-      const url = buildUrlWithParams(pathname, params);
-      if (options?.mode === 'push') {
-        router.push(url, { scroll: false });
-      } else {
-        router.replace(url, { scroll: false });
-      }
-    },
-    [pathname, router, searchParams],
-  );
+  // Ручная мемоизация не нужна: значение не утекает из React (CODING_STANDARDS).
+  const write = (
+    patch: Record<string, string>,
+    options?: { readonly own?: ReadonlyArray<string> },
+  ): void => {
+    const params = applyUrlParamsPatch(searchParams, patch, options?.own ?? []);
+    router.replace(buildUrlWithParams(pathname, params), { scroll: false });
+  };
 
   return { write };
 }

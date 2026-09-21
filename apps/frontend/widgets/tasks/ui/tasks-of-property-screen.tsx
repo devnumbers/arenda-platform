@@ -13,17 +13,15 @@ import {
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
-import { useUrlParams } from '@/shared/lib/hooks/use-url-params';
 import { useProperty } from '@/features/properties';
 import {
-  DEFAULT_TASKS_SORT,
   groupTasks,
-  serializeTasksSortToParams,
   useActiveTasks,
   useCompleteAllTasks,
   useCompletedTasks,
   useCompleteTask,
   useDeleteCompletedTasks,
+  useTasksSort,
   useUncompleteTask,
   type TaskSection,
   type TasksSort,
@@ -81,21 +79,13 @@ export function TasksOfPropertyScreen({
   readonly initialSort?: TasksSort;
 }): JSX.Element {
   const router = useRouter();
-  const { write } = useUrlParams();
   const propertyQuery = useProperty(propertyId);
 
   const activeQuery = useActiveTasks(propertyId);
   const completedQuery = useCompletedTasks(propertyId);
 
-  const [sort, setSort] = useState<TasksSort>(initialSort ?? DEFAULT_TASKS_SORT);
+  const { sort, changeSort } = useTasksSort(initialSort);
   const [deleteOpen, setDeleteOpen] = useState(false);
-
-  // Сортировка живёт в адресе (?sort=&order=, дефолт не пишется — конвенция
-  // страницы «Объекты», #785): перезагрузка и шаринг ссылки сохраняют выбор.
-  const changeSort = (next: TasksSort): void => {
-    setSort(next);
-    write(serializeTasksSortToParams(next), { own: ['sort', 'order'] });
-  };
 
   const complete = useCompleteTask(propertyId);
   const uncomplete = useUncompleteTask(propertyId);
