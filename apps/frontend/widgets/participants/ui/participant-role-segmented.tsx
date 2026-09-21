@@ -2,6 +2,7 @@
 
 import type { JSX } from 'react';
 import { cn } from '@/shared/lib/cn';
+import { ACCESS_ROLE_LABELS } from '@/entities/access';
 import type { ParticipantAccessRole } from '@/entities/participants';
 
 /** Сегмент-переключатель роли доступа (карта #692, тикет #698; макеты
@@ -25,10 +26,9 @@ export function ParticipantRoleSegmented({
   const options: ReadonlyArray<{
     readonly role: ParticipantAccessRole;
     readonly label: string;
-  }> = [
-    { role: 'viewer', label: 'Просмотр' },
-    { role: 'full_access', label: 'Редактирование' },
-  ];
+  }> = (
+    ['viewer', 'full_access'] as const
+  ).map((role) => ({ role, label: ACCESS_ROLE_LABELS[role] }));
 
   return (
     <div

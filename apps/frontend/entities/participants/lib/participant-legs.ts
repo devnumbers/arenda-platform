@@ -1,3 +1,4 @@
+import { ACCESS_ROLE_ICON_NAMES, ACCESS_ROLE_LABELS } from '@/shared/model/access';
 import type { ParticipantPropertyLeg } from '../model/types';
 
 /** Иконка чипа ноги: Edit («Редактирование»), Eye («Просмотр»);
@@ -28,7 +29,9 @@ export function participantLegBadge(leg: ParticipantPropertyLeg): ParticipantLeg
   if (leg.status === 'pending') {
     return { tone: 'neutral', label: 'Приглашён', icon: undefined };
   }
-  return leg.role === 'full_access'
-    ? { tone: 'neutral', label: 'Редактирование', icon: 'edit' }
-    : { tone: 'neutral', label: 'Просмотр', icon: 'eye' };
+  return {
+    tone: 'neutral',
+    label: ACCESS_ROLE_LABELS[leg.role],
+    icon: ACCESS_ROLE_ICON_NAMES[leg.role],
+  };
 }

@@ -1,7 +1,15 @@
 import type { JSX } from 'react';
+import { ACCESS_ROLE_ICON_NAMES, ACCESS_ROLE_LABELS } from '@/entities/access';
 import type { AccessRole } from '@/shared/model/access';
 import { EditSmall, EyeSmall } from '@/shared/assets/icons';
 import { propertyPillClass } from './property-pill-class';
+
+/** Имя иконки канона → компонент Icon/S (ассеты — забота слоя
+ * отображения, словарь ролей их не импортирует). */
+const ROLE_ICON_COMPONENTS = {
+  edit: EditSmall,
+  eye: EyeSmall,
+} as const;
 
 export type PropertyAccessPillProps = {
   readonly role: AccessRole;
@@ -18,11 +26,11 @@ export function PropertyAccessPill({ role }: PropertyAccessPillProps): JSX.Eleme
   if (role === 'owner') {
     return null;
   }
-  const Icon = role === 'full_access' ? EditSmall : EyeSmall;
+  const Icon = ROLE_ICON_COMPONENTS[ACCESS_ROLE_ICON_NAMES[role]];
   return (
     <p className={propertyPillClass}>
       <Icon aria-hidden className="h-4 w-4" />
-      {role === 'full_access' ? 'Редактирование' : 'Просмотр'}
+      {ACCESS_ROLE_LABELS[role]}
     </p>
   );
 }

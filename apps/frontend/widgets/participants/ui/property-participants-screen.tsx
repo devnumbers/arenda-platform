@@ -21,6 +21,7 @@ import { useKeyboardActivation } from '@/shared/lib/hooks/useKeyboardActivation'
 import { useMe } from '@/features/auth';
 import { useProperty } from '@/features/properties';
 import { propertyPermissions } from '@/entities/property';
+import { ACCESS_ROLE_LABELS } from '@/entities/access';
 import {
   usePropertyAccessMembers,
   useRevokeAllPropertyAccessMembers,
@@ -72,8 +73,8 @@ const EMAIL_ROLE_ICONS: Record<PropertyParticipantEmailIcon, typeof EyeSmall> = 
 
 const ROLE_FILTER_LABELS: Record<PropertyParticipantRoleFilter, string> = {
   all: 'Все роли',
-  viewer: 'Просмотр',
-  full_access: 'Редактирование',
+  viewer: ACCESS_ROLE_LABELS.viewer,
+  full_access: ACCESS_ROLE_LABELS.full_access,
 };
 
 /**
