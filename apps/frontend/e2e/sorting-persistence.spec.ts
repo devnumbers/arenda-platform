@@ -172,6 +172,20 @@ test.describe('сортировки переживают перезагрузк�
       expect(await yOf(section, 'E2E-лента Альфа')).toBeLessThan(
         await yOf(section, 'E2E-лента Бета'),
       );
+
+      // Возврат на дефолт: параметры снимаются из адреса (находка живой
+      // приёмки #785) — иначе после перезагрузки сортировка «возвращается».
+      await chip.click();
+      await page.getByRole('menuitem', { name: 'Убывание' }).click();
+      await expect(page).toHaveURL(/order=desc/);
+      await chip.click();
+      await page.getByRole('menuitem', { name: 'По дате создания' }).click();
+      await expect(page).toHaveURL(/order=desc/);
+      await chip.click();
+      await page.getByRole('menuitem', { name: 'Возрастание' }).click();
+      await expect(page).toHaveURL(new RegExp(`property=${APARTMENT}`));
+      await expect(page).not.toHaveURL(/sort=|order=/);
+      await expect(page.getByTestId('tasks-sort-chip')).toHaveText(/Дата/);
     } finally {
       await page.request.delete(`/api/properties/${APARTMENT}/tasks/rules/${ruleAlpha}`);
       await page.request.delete(`/api/properties/${APARTMENT}/tasks/rules/${ruleBeta}`);

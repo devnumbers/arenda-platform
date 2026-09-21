@@ -111,16 +111,18 @@ export function TasksFeedScreen({
   // Сортировка живёт в адресе (?sort=&order=, дефолт не пишется — конвенция
   // страницы «Объекты», #785): перезагрузка и шаринг ссылки сохраняют выбор.
   // Пишется поверх текущих параметров (как applyFeedFilter), чтобы не
-  // затирать фильтр ленты #524; дефолтные значения параметров снимаются.
+  // затирать фильтр ленты #524; не-дефолт ставится, дефолт снимается —
+  // в том числе протухшее значение из чужой ссылки.
   const changeSort = (next: TasksSort): void => {
     setSort(next);
+    const nextParams = serializeTasksSortToParams(next);
     const params = new URLSearchParams(searchParams);
-    for (const [name, value] of Object.entries(serializeTasksSortToParams(next))) {
-      params.set(name, value);
-    }
-    for (const name of ['sort', 'order']) {
-      if (!params.get(name)) {
+    for (const name of ['sort', 'order'] as const) {
+      const value = nextParams[name];
+      if (value === undefined) {
         params.delete(name);
+      } else {
+        params.set(name, value);
       }
     }
     const query = params.toString();
