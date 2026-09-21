@@ -34,9 +34,10 @@ type ZoneScanner interface {
 
 // ScanGroup is the hourly notifications sweep (карта #734): the
 // scan-driven publishers in catalog order — the rental-completed sweep
-// (#748), the payments due/overdue sweep (#749). One worker shell runs them
-// in one pass; a publisher's failure is isolated — the group goes on with
-// the rest, the joined error reports everything that failed.
+// (#748), the payments due/overdue sweep (#749), the tasks overdue sweep
+// (#750/#777). One worker shell runs them in one pass; a publisher's
+// failure is isolated — the group goes on with the rest, the joined error
+// reports everything that failed.
 type ScanGroup struct {
 	scans []ZoneScanner
 }
