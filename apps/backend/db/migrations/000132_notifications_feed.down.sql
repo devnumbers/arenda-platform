@@ -1,4 +1,4 @@
--- Откат 000131: таблица ленты, категория и дропнутые настройки.
+-- Откат 000132: таблица ленты, категория и дропнутые настройки с типом.
 -- Добавленные значения notification_event_type удалить нельзя (PostgreSQL
 -- не снимает значения enum; прецедент #277) — они остаются мёртвыми.
 
@@ -6,7 +6,10 @@ DROP TABLE notifications;
 DROP TYPE notification_category;
 
 -- Схема user_notification_channel_preferences восстановлена по миграции
--- 000100; строки и хранившиеся opt-out'ы невосстановимы.
+-- 000100; строки и хранившиеся opt-out'ы невосстановимы. Тип
+-- notification_channel дропнут в 000132.up — воссоздаётся рядом с таблицей.
+CREATE TYPE notification_channel AS ENUM ('email', 'push');
+
 CREATE TABLE user_notification_channel_preferences (
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     event_type notification_event_type NOT NULL,

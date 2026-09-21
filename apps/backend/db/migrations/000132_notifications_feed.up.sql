@@ -73,5 +73,9 @@ CREATE INDEX idx_notifications_user_unread
 -- Старые per-event-type × per-channel настройки (ADR 0030) уходят без
 -- переноса: сброс opt-out'ов grace — решение #738, категория «Тариф» честно
 -- всегда включена для всех. Новый контракт настроек (email per-account,
--- push per-device) — #743; преемник ADR — 0056.
+-- push per-device) — #743; преемник ADR — 0058.
 DROP TABLE user_notification_channel_preferences;
+-- Тип-сирота: его единственный потребитель — дропнутая выше таблица, в
+-- queries/ ссылок нет. Каналы с #740 — отдельные джобы очереди, хранение
+-- перечисления не нужно (прецедент сноса осиротевших значений — #277).
+DROP TYPE notification_channel;

@@ -43,7 +43,7 @@ _Avoid_: кнопка-действие (выполняющая мутацию и
 ### Channels
 
 **Channel / Канал доставки**:
-Транспорт доставки уведомления. Значения: `email`, `push`. Хранится в `notification_channel` enum.
+Транспорт доставки уведомления. Значения: `email`, `push`. Отдельного хранения канал не имеет: с пайплайном доставки (#740, ADR 0059) канал — отдельная джоба очереди (`notifications_email`/`notifications_push`), enum `notification_channel` дропнут вместе с таблицей per-channel настроек (миграция 000132).
 _Avoid_: тип доставки
 
 **PushSubscription / Push-подписка**:
