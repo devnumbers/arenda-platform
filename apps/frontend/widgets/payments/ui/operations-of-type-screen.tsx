@@ -4,7 +4,7 @@ import { useState, type JSX } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Add, ArrowLeft, Search } from "@/shared/assets/icons";
 import { ROUTES } from "@/shared/config/routes";
-import { buildUrlWithParams } from "@/shared/lib/hooks/use-url-params";
+import { buildUrlWithParams } from "@/shared/lib/url-params";
 import type { PaymentOperationScope } from "@/shared/api/query-keys";
 import { summaryBarSegments } from "@/features/payment-categories";
 import {

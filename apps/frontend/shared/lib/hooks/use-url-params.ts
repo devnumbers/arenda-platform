@@ -6,21 +6,23 @@ import {
   useSearchParams,
   type ReadonlyURLSearchParams,
 } from 'next/navigation';
+import { applyUrlParamsPatch, buildUrlWithParams } from '@/shared/lib/url-params';
 
 /**
  * Запись группы параметров в адрес (pre-merge #785; хвосты — #786):
  * `write(patch, { own })` пишет patch ПОВЕРХ текущих параметров адреса,
- * предварительно сняв все собственные ключи `own`. Поэтому ключ группы,
- * отсутствующий в patch (дефолт), удаляется из адреса, а не остаётся
- * протухшим — урок фикса 0c64fcc3: гард «параметр пуст» вместо снятия
- * оставлял в адресе старое значение, и после перезагрузки возвращалась
- * не та сортировка. Чужие параметры (например, фильтр ленты задач #524)
- * не трогаются. Режим записи: `replace` (дефолт) — записей истории не
- * создаёт, конвенция «Состояние страницы в адресе» (DESIGN.md §3); `push` — для
- * писателей, которым нужна история («назад» снимает фильтр: #524,
- * #477, #541). «Дефолтные значения не пишутся» решает serialize-функция
- * фичи: patch несёт только не-дефолты. `params` — те же текущие параметры
- * для чтения: хуки-читатели (фильтры #524/#477/#541) берут адрес отсюда
+ * предварительно сняв все собственные ключи `own` (ядро — shared/lib/
+ * url-params). Поэтому ключ группы, отсутствующий в patch (дефолт),
+ * удаляется из адреса, а не остаётся протухшим — урок фикса 0c64fcc3:
+ * гард «параметр пуст» вместо снятия оставлял в адресе старое значение,
+ * и после перезагрузки возвращалась не та сортировка. Чужие параметры
+ * (например, фильтр ленты задач #524) не трогаются. Режим записи:
+ * `replace` (дефолт) — записей истории не создаёт, конвенция «Состояние
+ * страницы в адресе» (DESIGN.md §3); `push` — для писателей, которым
+ * нужна история («назад» снимает фильтр: #524, #477, #541).
+ * «Дефолтные значения не пишутся» решает serialize-функция фичи: patch
+ * несёт только не-дефолты. `params` — те же текущие параметры для
+ * чтения: хуки-читатели (фильтры #524/#477/#541) берут адрес отсюда
  * же, откуда пишут.
  */
 
@@ -32,31 +34,6 @@ export type UseUrlParamsWriteOptions = {
   readonly own?: ReadonlyArray<string>;
   readonly mode?: UrlParamsWriteMode;
 };
-
-/**
- * Чистое ядро: патч полного желаемого состояния группы `own` поверх
- * текущих параметров. Поведенческие гарантии — в use-url-params.test.ts.
- */
-export function applyUrlParamsPatch(
-  current: URLSearchParams,
-  patch: Record<string, string>,
-  own: ReadonlyArray<string>,
-): URLSearchParams {
-  const next = new URLSearchParams(current);
-  for (const name of own) {
-    next.delete(name);
-  }
-  for (const [name, value] of Object.entries(patch)) {
-    next.set(name, value);
-  }
-  return next;
-}
-
-/** Адрес с query или без (пустые параметры — голый pathname). */
-export function buildUrlWithParams(pathname: string, params: URLSearchParams): string {
-  const query = params.toString();
-  return query.length > 0 ? `${pathname}?${query}` : pathname;
-}
 
 export function useUrlParams(): {
   /** Только чтение: set/delete адресом не делаются — запись через write. */

@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Cancel } from '@/shared/assets/icons';
 import { goBack } from '@/shared/lib/navigation';
-import { buildUrlWithParams } from '@/shared/lib/hooks/use-url-params';
+import { buildUrlWithParams } from '@/shared/lib/url-params';
 import { clientTodayIso } from '@/entities/payment';
 import {
   operationsCategoryRows,

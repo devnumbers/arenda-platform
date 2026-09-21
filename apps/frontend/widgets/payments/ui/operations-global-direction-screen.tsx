@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Add, ArrowLeft, Search } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
-import { buildUrlWithParams } from '@/shared/lib/hooks/use-url-params';
+import { buildUrlWithParams } from '@/shared/lib/url-params';
 import { clientTodayIso, type PaymentType } from '@/entities/payment';
 import {
   globalOperationsFiltersParams,

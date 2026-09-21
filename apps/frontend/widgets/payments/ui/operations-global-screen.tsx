@@ -6,7 +6,7 @@ import { Add, Search } from "@/shared/assets/icons";
 import { ROUTES } from "@/shared/config/routes";
 import { clientTodayIso } from "@/entities/payment";
 import { useKeyboardActivation } from "@/shared/lib/hooks/useKeyboardActivation";
-import { buildUrlWithParams } from "@/shared/lib/hooks/use-url-params";
+import { buildUrlWithParams } from "@/shared/lib/url-params";
 import {
   globalOperationsFiltersParams,
   groupOperationsByDate,

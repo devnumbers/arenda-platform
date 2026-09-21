@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { applyUrlParamsPatch, buildUrlWithParams } from './use-url-params';
+import { applyUrlParamsPatch, buildUrlWithParams } from './url-params';
 
 /**
- * Чистое ядро записи параметров в адрес (pre-merge #785): хук — тонкий
- * адаптер над next/navigation (как useSearchQueryState), поведенческие
- * гарантии пинятся на ядре. Главная — delete-своих-ключей перед set:
- * ключ группы без значения в patch снимается из адреса, а не остаётся
- * протухшим (урок фикса 0c64fcc3).
+ * Чистое ядро сборки и патча адреса (pre-merge #785): хук use-url-params —
+ * тонкий адаптер над next/navigation (как useSearchQueryState),
+ * поведенческие гарантии пинятся на ядре. Главная — delete-своих-ключей
+ * перед set: ключ группы без значения в patch снимается из адреса, а не
+ * остаётся протухшим (урок фикса 0c64fcc3).
  */
 
 describe('applyUrlParamsPatch — патч поверх текущих параметров', () => {

@@ -1,7 +1,7 @@
 import type { IsoDate, OperationsCategorySummary } from '@/entities/payment';
 import { lastDayOfMonth } from '@/shared/lib/calendar';
 import { formatDottedDate } from '@/shared/lib/date-format';
-import { buildUrlWithParams } from '@/shared/lib/hooks/use-url-params';
+import { buildUrlWithParams } from '@/shared/lib/url-params';
 import { pluralize } from '@/shared/lib/pluralize';
 import { safeInternalPath } from '@/shared/lib/safe-internal-path';
 
