@@ -30,20 +30,31 @@ const (
 type Action string
 
 const (
-	ActionAuthRegistered   Action = "auth.registered"
-	ActionAuthLogin        Action = "auth.login"
-	ActionAuthLoginFailed  Action = "auth.login_failed"
-	ActionAuthLogout       Action = "auth.logout"
-	ActionAuthLogoutAll    Action = "auth.logout_all"
-	ActionAuthPhoneChanged Action = "auth.phone_changed"
+	ActionAuthRegistered  Action = "auth.registered"
+	ActionAuthLogin       Action = "auth.login"
+	ActionAuthLoginFailed Action = "auth.login_failed"
+	ActionAuthLogout      Action = "auth.logout"
+	// ActionAuthSessionRevoked records a user terminating one of their own
+	// sessions from the devices list (map #724, ticket #728). The context
+	// carries the revoked session's UUID — an identifier, never a token.
+	ActionAuthSessionRevoked Action = "auth.session_revoked"
+	// ActionAuthOtherSessionsRevoked records the user terminating every
+	// session except the current one; the context carries the removed count.
+	ActionAuthOtherSessionsRevoked Action = "auth.other_sessions_revoked"
+	ActionAuthPhoneChanged         Action = "auth.phone_changed"
 	// ActionAuthPhoneChangeFailed records a failed phone-change verification
 	// attempt, mirroring ActionAuthLoginFailed for the login flow. Closes the
 	// audit gap where phone-change failures left no trail while the success
 	// path was fully audited.
 	ActionAuthPhoneChangeFailed Action = "auth.phone_change_failed"
+	// ActionAuthEmailChanged records a successful email change (issue #721).
+	// The email is the login-code delivery channel, not the login itself, so
+	// sessions are intentionally left untouched.
+	ActionAuthEmailChanged Action = "auth.email_changed"
+	// ActionAuthEmailChangeFailed records a failed email-change verification
+	// attempt, mirroring ActionAuthPhoneChangeFailed (issue #721).
+	ActionAuthEmailChangeFailed Action = "auth.email_change_failed"
 	ActionProfileUpdated        Action = "profile.updated"
-
-	ActionNotificationPreferencesUpdated Action = "notification_preferences.updated"
 
 	ActionPropertyCreated        Action = "property.created"
 	ActionPropertyUpdated        Action = "property.updated"

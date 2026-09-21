@@ -52,22 +52,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/auth/logout-all": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["logoutAll"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/me": {
         parameters: {
             query?: never;
@@ -111,6 +95,118 @@ export interface paths {
         put?: never;
         post: operations["changePhone"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/email/send-code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["sendEmailChangeCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/email/confirm-current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["confirmCurrentEmail"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/email/resend-code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resendEmailCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/email/change": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["changeEmail"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listSessions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/sessions/logout-others": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["logoutOtherSessions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/sessions/{sessionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["revokeSession"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1062,6 +1158,123 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Страница ленты уведомлений (keyset, канон
+         * @description Хранимая лента пользователя, newest-first keyset-пагинация (карта
+         *     #734, решение #737, #743). Удалённые строки не появляются. Курсор —
+         *     непрозрачный blob из next_cursor предыдущей страницы; страницы
+         *     читаются строго после последней строки, новые строки между загрузками
+         *     не дублируются и не теряются. limit 1..100, по умолчанию 50.
+         */
+        get: operations["listNotifications"];
+        put?: never;
+        post?: never;
+        /**
+         * Удалить все уведомления
+         * @description Мягкое удаление всех строк ленты пользователя (решение #737):
+         *     строки остаются с deleted_at, лента и счётчик непрочитанных их
+         *     перестают видеть. Подтверждение — на стороне клиента.
+         */
+        delete: operations["deleteAllNotifications"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/unread-count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Счётчик непрочитанных
+         * @description Число непрочитанных неудалённых строк пользователя (решение #737).
+         *     Снижается кликом, открытием страницы и «Прочитать все»; пуш и email
+         *     на читаемость не влияют.
+         */
+        get: operations["getUnreadNotificationCount"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/read-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Прочитать все */
+        post: operations["markAllNotificationsRead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/{notificationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Страница уведомления с живыми действиями
+         * @description Одна строка ленты с payload для отрисовки карточек (объект,
+         *     приглашающий) и действиями, вычисленными при чтении по живому
+         *     состоянию сущностей и правам читателя (решение #737): состояние
+         *     ушло или сущность удалена — кнопок нет; роль «Просмотр» не получает
+         *     кнопок-мутаций. Чужая или удалённая строка — 404.
+         */
+        get: operations["getNotification"];
+        put?: never;
+        post?: never;
+        /**
+         * Удалить уведомление
+         * @description Мягкое удаление одной строки; удаление непрочитанного снижает счётчик.
+         */
+        delete: operations["deleteNotification"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/{notificationId}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Прочитать уведомление
+         * @description Идемпотентно — повторный вызов не меняет состояние.
+         */
+        post: operations["markNotificationRead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/notification-preferences": {
         parameters: {
             query?: never;
@@ -1069,8 +1282,46 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Матрица email-настроек аккаунта
+         * @description Email — на аккаунте: одна конфигурация на все устройства (решение
+         *     #738, ADR 0058). Четыре настраиваемые категории; нет строки —
+         *     всё включено. Тариф и Системные всегда включены и в настройках
+         *     не показываются.
+         */
         get: operations["getNotificationPreferences"];
-        put: operations["updateNotificationPreferences"];
+        /** Заменить матрицу email-настроек аккаунта */
+        put: operations["putNotificationPreferences"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Живой стрим событий пользователя (SSE)
+         * @description Общий пользовательский Server-Sent Events стрим (карта #734, #742;
+         *     ADR 0060). Авторизация — cookie-сессия тем же SessionMiddleware;
+         *     без актора хендлер отвечает 401 problem+json до старта стрима.
+         *     Формат кадров — WHATWG SSE: retry-подсказка и стартовое событие
+         *     connected на старте, id — монотонная последовательность (курсор
+         *     Last-Event-ID; replay в v1 не реализован), event — стабильное грубое
+         *     имя (notification.created, notification.unread_count; допишут #714),
+         *     data — JSON-конверт {v, occurredAt, payload}. Heartbeat-комментарий
+         *     каждые 25 с, соединение закрывается через час (пере-аутентификация
+         *     при переподключении). Кадры best-effort: состояние клиент дочитывает
+         *     через обычные эндпоинты.
+         */
+        get: operations["streamNotifications"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -1105,6 +1356,36 @@ export interface paths {
         put?: never;
         post: operations["createPushSubscription"];
         delete: operations["deletePushSubscription"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/push/subscriptions/preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Настройки пушей устройства
+         * @description Пуш — на устройстве (решение #738): мастер-тумблер «Получать
+         *     пуш-уведомления» и четыре категорийных флага на подписке браузера.
+         *     Устройство идентифицируется endpoint URL — естественным ключом и
+         *     секретом подписки (RFC 8030 §8.3). Чужой/неизвестный endpoint — 404.
+         */
+        get: operations["getPushSubscriptionPreferences"];
+        /**
+         * Заменить настройки пушей устройства
+         * @description Upsert состояния устройства: мастер и категории двигаются, подписка и
+         *     её ключи остаются. Выключение мастера — флаг enabled=false: dispatch
+         *     пропускает устройство, повторное включение мгновенное, без
+         *     переподписки (решение #738).
+         */
+        put: operations["putPushSubscriptionPreferences"];
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1827,12 +2108,38 @@ export interface components {
             timezone?: string | null;
             subscription?: components["schemas"]["Subscription"];
         };
+        SessionListResponse: {
+            sessions: components["schemas"]["ActiveSession"][];
+        };
+        ActiveSession: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description Device class captured from the User-Agent at session creation.
+             * @enum {string}
+             */
+            deviceType: "computer" | "phone" | "tablet" | "tv" | "unknown";
+            /** @description Browser name, e.g. Chrome or YaBrowser; empty when unparsed. */
+            browser: string;
+            /** @description Browser major version; null when unknown. */
+            browserMajor?: number | null;
+            /** @description Operating system name; empty when unparsed. */
+            os: string;
+            /** @description GeoIP-resolved city for the last IP in the ru locale; null when unknown. */
+            city: string | null;
+            /** @description Client IP of the most recent request. */
+            lastIp: string | null;
+            /** Format: date-time */
+            lastSeenAt: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** @description True when the session belongs to the caller's own cookie. */
+            current: boolean;
+        };
         UserUpdateRequest: {
             name?: string | null;
             surname?: string | null;
             patronymic?: string | null;
-            /** @description Email is stored in lowercase. */
-            email?: string | null;
             /** @description IANA timezone identifier, e.g. Europe/Moscow. */
             timezone?: string | null;
         };
@@ -1845,6 +2152,32 @@ export interface components {
             phone: string;
             /** @example 123456 */
             code: string;
+        };
+        ConfirmCurrentEmailRequest: {
+            /**
+             * @description The code sent to the current email.
+             * @example 123456
+             */
+            code: string;
+            /** @description The new address; stored in lowercase. */
+            newEmail: string;
+        };
+        EmailChangeGrantResponse: {
+            /** @description One-time grant token binding the confirmed new email to the user. Present it at /me/email/change together with the code delivered to the new address; it expires in about 10 minutes. */
+            grant: string;
+        };
+        ResendEmailCodeRequest: {
+            /** @description The still-live grant token returned by /me/email/confirm-current; the code is re-issued for the address it binds. */
+            grant: string;
+        };
+        ChangeEmailRequest: {
+            /**
+             * @description The code sent to the new email.
+             * @example 123456
+             */
+            code: string;
+            /** @description The grant token returned by /me/email/confirm-current. */
+            grant: string;
         };
         Tariff: {
             name: components["schemas"]["TariffName"];
@@ -2994,20 +3327,6 @@ export interface components {
         AdminSubscriptionPaymentPeriod: "month" | "year";
         /** @enum {string} */
         TariffName: "basic" | "pro" | "business";
-        NotificationPreference: {
-            /** @enum {string} */
-            event_type: "subscription_grace";
-            /** @description Permission to deliver this event type over email. */
-            email_allowed: boolean;
-            /** @description Permission to deliver this event type over Web Push. */
-            push_allowed: boolean;
-        };
-        NotificationPreferencesResponse: {
-            preferences: components["schemas"]["NotificationPreference"][];
-        };
-        NotificationPreferencesUpdateRequest: {
-            preferences: components["schemas"]["NotificationPreference"][];
-        };
         VapidPublicKeyResponse: {
             /** @description The application server's VAPID P-256 public key, base64url without padding (RFC 8292). Pass this to `pushManager.subscribe({ applicationServerKey })`. */
             public_key: string;
@@ -3024,6 +3343,9 @@ export interface components {
              * @description Optional subscription expiration instant reported by the browser (RFC 8030).
              */
             expiration_time?: string | null;
+            /** @description The device's master push toggle; omitted = on (решение #738). */
+            enabled?: boolean;
+            categories?: components["schemas"]["NotificationCategoryPreferences"];
         };
         PushSubscriptionDeleteRequest: {
             /** @description The push endpoint URL to unregister (same value sent on subscribe). */
@@ -3033,10 +3355,107 @@ export interface components {
             /** Format: uuid */
             id: string;
             endpoint: string;
+            /** @description Мастер-тумблер «Получать пуш-уведомления» устройства (решение #738). */
+            enabled: boolean;
+            categories: components["schemas"]["NotificationCategoryPreferences"];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        PushPreferencesRequest: {
+            /** @description Push endpoint URL устройства (тот же, что при подписке). */
+            endpoint: string;
+            enabled: boolean;
+            categories: components["schemas"]["NotificationCategoryPreferences"];
+        };
+        PushPreferencesResponse: {
+            endpoint: string;
+            enabled: boolean;
+            categories: components["schemas"]["NotificationCategoryPreferences"];
+        };
+        /** @description Флаги четырёх настраиваемых категорий одного канала (решение */
+        NotificationCategoryPreferences: {
+            rental: boolean;
+            payments_operations: boolean;
+            tasks: boolean;
+            shared_access: boolean;
+        };
+        NotificationPreferencesRequest: {
+            email: components["schemas"]["NotificationCategoryPreferences"];
+        };
+        NotificationPreferencesResponse: {
+            email: components["schemas"]["NotificationCategoryPreferences"];
+        };
+        /** @description Строка ленты одного получателя (решение */
+        NotificationItem: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description Тип события каталога v1 (решение #737).
+             * @example payment_due
+             */
+            event_type: string;
+            /**
+             * @description Категория уведомлений (группа настроек и иконка).
+             * @example payments_operations
+             */
+            category: string;
+            title: string;
+            body: string;
+            /** @description Строка над заголовком — имя объекта/тарифа или «Системные уведомления». */
+            context_label?: string | null;
+            /**
+             * Format: date-time
+             * @description Момент события, UTC instant; группировка «Сегодня/Вчера» — дело экрана.
+             */
+            created_at: string;
+            /** Format: date-time */
+            read_at?: string | null;
+        };
+        NotificationDetailResponse: {
+            /** Format: uuid */
+            id: string;
+            event_type: string;
+            category: string;
+            title: string;
+            body: string;
+            context_label?: string | null;
+            /**
+             * @description Payload-ссылки и снимки имён (решение #737): property {id, name,
+             *     address}, actor {id, name, email}, rental_id, payment_id, payment_date,
+             *     task_id, task_rule_id, membership_id, tariff {slug,
+             *     period, amount_kopecks, active_until}. address и email — снимки
+             *     карточек (решение владельца 19.09.2026, #745): строка карточки,
+             *     которой нет в снимке, просто не рендерится. payment_id — id правила,
+             *     payment_date — дата операции (решение #737: payment = правило +
+             *     дата операции, #749). task_rule_id — правило задачи: экран задачи —
+             *     экран её правила, переход ведёт по нему (#750). События доступа
+             *     (#751) несут membership_id — сущность перехода, переживающую
+             *     снесённое приглашение.
+             *     Все поля опциональны; суммы — BIGINT копейки.
+             */
+            payload: Record<string, never>;
+            /** @description Действия, доступные этому читателю сейчас (вычислены при чтении, решение #737). */
+            actions: components["schemas"]["NotificationAction"][];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            read_at?: string | null;
+        };
+        /**
+         * @description Кнопка-переход на экран сущности, никогда не мутация (решение #737).
+         * @enum {string}
+         */
+        NotificationAction: "rental_extend" | "rental_complete" | "open_payment" | "open_task" | "open_property" | "open_property_members" | "open_tariffs" | "open_payment_methods";
+        NotificationsPageResponse: {
+            items: components["schemas"]["NotificationItem"][];
+            /** @description Непрозрачный курсор следующей страницы; отсутствует в конце ленты. */
+            next_cursor?: string;
+        };
+        UnreadCountResponse: {
+            /** Format: int64 */
+            count: number;
         };
         PendingPopupsResponse: {
             popups: string[];
@@ -3454,27 +3873,6 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
         };
     };
-    logoutAll: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description All sessions logged out */
-            204: {
-                headers: {
-                    "Set-Cookie"?: string;
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            401: components["responses"]["Unauthorized"];
-            500: components["responses"]["InternalServerError"];
-        };
-    };
     getMe: {
         parameters: {
             query?: never;
@@ -3578,6 +3976,180 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             409: components["responses"]["Conflict"];
             429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    sendEmailChangeCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Code sent to the current email */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    confirmCurrentEmail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmCurrentEmailRequest"];
+            };
+        };
+        responses: {
+            /** @description Current email confirmed; a one-time grant and a code for the new email */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailChangeGrantResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    resendEmailCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResendEmailCodeRequest"];
+            };
+        };
+        responses: {
+            /** @description Code re-sent to the pending new email */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    changeEmail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeEmailRequest"];
+            };
+        };
+        responses: {
+            /** @description Email changed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    listSessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Active sessions of the current user, most recent activity first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionListResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    logoutOtherSessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every other session of the user is terminated */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    revokeSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The session is terminated */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -5518,6 +6090,159 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    listNotifications: {
+        parameters: {
+            query?: {
+                /** @description Только непрочитанные строки. */
+                unread?: boolean;
+                limit?: number;
+                /** @description Непрозрачный курсор продолжения (next_cursor прошлой страницы). */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Страница ленты */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationsPageResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    deleteAllNotifications: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Все строки скрыты */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getUnreadNotificationCount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Значение счётчика */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnreadCountResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    markAllNotificationsRead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Все непрочитанные строки помечены прочитанными */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getNotification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                notificationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Уведомление с действиями */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationDetailResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteNotification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                notificationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Строка скрыта (идемпотентно) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    markNotificationRead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                notificationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Строка прочитана */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
     getNotificationPreferences: {
         parameters: {
             query?: never;
@@ -5527,7 +6252,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Notification preferences for every reminder event type */
+            /** @description Текущая матрица */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5539,7 +6264,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
         };
     };
-    updateNotificationPreferences: {
+    putNotificationPreferences: {
         parameters: {
             query?: never;
             header?: never;
@@ -5548,11 +6273,11 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["NotificationPreferencesUpdateRequest"];
+                "application/json": components["schemas"]["NotificationPreferencesRequest"];
             };
         };
         responses: {
-            /** @description Notification preferences updated */
+            /** @description Сохранённая матрица */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5563,6 +6288,36 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    streamNotifications: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Поток событий в формате text/event-stream */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description Стрим недоступен (хаб не сконфигурирован) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     getVapidPublicKey: {
@@ -5631,6 +6386,58 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getPushSubscriptionPreferences: {
+        parameters: {
+            query: {
+                endpoint: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Текущее состояние устройства */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PushPreferencesResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    putPushSubscriptionPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PushPreferencesRequest"];
+            };
+        };
+        responses: {
+            /** @description Сохранённое состояние устройства */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PushPreferencesResponse"];
+                };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];

@@ -13,13 +13,9 @@ export const metadata: Metadata = {
   title: 'Новая операция — Рентли',
 };
 
-type OperationNewRoutePageProps = {
-  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
-};
-
 export default async function OperationNewRoutePage({
   searchParams,
-}: OperationNewRoutePageProps) {
+}: PageProps<'/operations/new'>) {
   const query = await searchParams;
 
   return (

@@ -1,4 +1,4 @@
 export { getTariffLabel } from './lib/get-tariff-label';
 export { isPaidTariff } from './lib/is-paid-tariff';
-export { mapMeResponse, mapNotificationPreferencesResponse } from './model/mappers';
-export type { ChangePhoneCommand, NotificationEventType, NotificationPreference, SendPhoneChangeCodeCommand, TariffName, User, UserUpdateCommand } from './model/types';
+export { mapMeResponse } from './model/mappers';
+export type { ChangeEmailCommand, ChangePhoneCommand, ConfirmCurrentEmailCommand, ResendEmailCodeCommand, SendPhoneChangeCodeCommand, TariffName, User, UserUpdateCommand } from './model/types';

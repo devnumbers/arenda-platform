@@ -3,4 +3,7 @@ export { RESEND_TIMEOUT } from './lib/constants';
 export { deviceTimezone } from './lib/device-timezone';
 export { useLoginDraft } from './lib/use-login-draft';
 export { useSendCooldown } from './lib/use-send-cooldown';
-export { AuthForm } from './ui/auth-form/index';
+export { CodeStep } from './ui/code-step/CodeStep';
+export { EmailStep } from './ui/email-step';
+export { LoginShell } from './ui/login-shell/LoginShell';
+export { PhoneStep } from './ui/phone-step/PhoneStep';

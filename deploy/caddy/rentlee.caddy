@@ -17,7 +17,14 @@
 # fallback), выписан в порядке приоритета для читаемости.
 # Аргументы: {args[0]} — backend, {args[1]} — landing, {args[2]} — frontend.
 (rentlee_site) {
-	encode zstd gzip
+	# Стрим событий не сжимается: дефолтный матчер encode включает text/*,
+	# и gzip начал бы буферизовать SSE-кадры после 512 байт (карта #734,
+	# #742; ADR 0058). reverse_proxy сам флешит text/event-stream немедленно.
+	encode zstd gzip {
+		match {
+			not header Content-Type text/event-stream
+		}
+	}
 
 	# Префикс /api снимается: бэкенд ждёт пути без /api.
 	handle_path /api/* {

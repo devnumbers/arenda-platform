@@ -10,6 +10,7 @@ import {
   NotificationSettings,
   SmallArrowRight,
   Star,
+  Sync,
   Team,
 } from '@/shared/assets/icons';
 import {
@@ -40,6 +41,7 @@ const navigationRows: readonly HubRow[] = [
   // (решение чарта #692 №10); позиция после «Тарифа» — на приёмке #696.
   { title: 'Участники', href: ROUTES.participants, Icon: Team },
   { title: 'Уведомления', href: ROUTES.profileNotifications, Icon: NotificationSettings },
+  { title: 'Устройства', href: ROUTES.profileDevices, Icon: Sync },
   { title: 'Информация', href: ROUTES.profileInfo, Icon: Info },
 ];
 
@@ -83,6 +85,17 @@ function HubRowButton({
   );
 }
 
+/** Строка скелетона хаба — форма строки меню (паритет #604). */
+function SkeletonHubRow(): JSX.Element {
+  return (
+    <div className="flex items-center px-3 py-1">
+      <Skeleton className="h-6 w-6 shrink-0 bg-surface-muted-hover" />
+      <Skeleton className="ml-[22px] h-5 w-32 flex-1 bg-surface-muted-hover" />
+      <Skeleton className="ml-3 h-6 w-6 shrink-0 bg-surface-muted-hover" />
+    </div>
+  );
+}
+
 function ProfileHubSkeleton(): JSX.Element {
   return (
     <div role="status" aria-label="Загрузка профиля" className="flex flex-col gap-8 px-6 pb-6">
@@ -95,12 +108,11 @@ function ProfileHubSkeleton(): JSX.Element {
       </div>
       <div className="flex flex-col rounded-3xl bg-surface-muted py-2">
         {navigationRows.map((row) => (
-          <div key={row.href} className="flex items-center px-3 py-1">
-            <Skeleton className="h-6 w-6 shrink-0 bg-surface-muted-hover" />
-            <Skeleton className="ml-[22px] h-5 w-32 flex-1 bg-surface-muted-hover" />
-            <Skeleton className="ml-3 h-6 w-6 shrink-0 bg-surface-muted-hover" />
-          </div>
+          <SkeletonHubRow key={row.href} />
         ))}
+        {/* Паритет скелетона (#604): «Выйти» живёт вне nav, но в том же
+         * контейнере — без неё контент приходил со сдвигом (ходка #729). */}
+        <SkeletonHubRow />
       </div>
     </div>
   );
@@ -109,10 +121,13 @@ function ProfileHubSkeleton(): JSX.Element {
 /** Хаб профиля в новом дизайне (тикет #592, карта #591; Figma 1903-38340
  * плейсхолдер / 1786-31288 заполненный): аватар-плейсхолдер 96 (Bold/User,
  * фото — отложенная карта), имя + телефон, серый контейнер со строками
- * «Аккаунт / Тариф / Участники / Уведомления / Информация / Выйти».
- * Строка «Устройства» скрыта (решение владельца 10.09.2026 — нет макетов
- * и бэка); «Участники» — вход хаба «Совместный доступ» (#696, карта #692).
- * «Выйти» — ConfirmDialog канон + POST /auth/logout. */
+ * «Аккаунт / Тариф / Участники / Уведомления / Устройства / Информация /
+ * Выйти». «Участники» — вход хаба «Совместный доступ» (#696, карта #692,
+ * решение чарта №10: после «Тарифа»). «Устройства» — карта #724 (мок
+ * 1786-31288, тикет #729): между «Уведомления» и «Информация», ведёт на
+ * /profile/devices (сам экран — тикет #730). «Выйти» — ConfirmDialog канон
+ * по моку 2004-45981: «Вы уверены, что хотите выйти?», «Отменить» +
+ * danger-«Выйти», подтверждение — POST /auth/logout. */
 export function ProfileHub(): JSX.Element {
   const router = useRouter();
   const { data: me, isError, refetch } = useMe();
@@ -173,8 +188,10 @@ export function ProfileHub(): JSX.Element {
       <ConfirmDialog
         open={logoutOpen}
         onOpenChange={setLogoutOpen}
-        title="Выйти из аккаунта?"
+        title="Вы уверены, что хотите выйти?"
         confirmLabel="Выйти"
+        cancelLabel="Отменить"
+        confirmVariant="danger"
         pending={logout.isPending}
         onConfirm={handleLogoutConfirm}
       />

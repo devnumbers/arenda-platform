@@ -62,8 +62,11 @@ export {
 export {
   groupOperationsByDate,
   groupPaidOperations,
+  parseHistoryOrderParams,
+  type HistoryOrder,
   type PaymentHistoryGroup,
 } from './lib/operations-history';
+export { useHistoryOrder } from './lib/use-history-order';
 export {
   operationsMonthOf,
   operationsMonthRange,
@@ -87,6 +90,7 @@ export {
 } from './lib/operations-filters';
 export { useOperationsFilters } from './lib/use-operations-filters';
 export {
+  globalOperationsFiltersHref,
   globalOperationsFiltersParams,
   operationsPropertyChipLabel,
   readGlobalOperationsFilters,

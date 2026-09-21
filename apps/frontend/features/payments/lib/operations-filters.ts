@@ -1,6 +1,7 @@
 import type { IsoDate, OperationsCategorySummary } from '@/entities/payment';
 import { lastDayOfMonth } from '@/shared/lib/calendar';
 import { formatDottedDate } from '@/shared/lib/date-format';
+import { buildUrlWithParams } from '@/shared/lib/url-params';
 import { pluralize } from '@/shared/lib/pluralize';
 import { safeInternalPath } from '@/shared/lib/safe-internal-path';
 
@@ -117,14 +118,14 @@ export function operationsFiltersParams(filters: OperationsFilters): Record<stri
  * Ссылка на список операций с текущими фильтрами (#472): период и
  * категории переживают переход между списками (главный ↔ направления) —
  * решению владельца о несбрасываемых фильтрах. Дефолтные фильтры дают
- * чистую базу без query, как и в operationsFiltersParams.
+ * чистую базу без query — правило канона buildUrlWithParams (#792,
+ * «пустой query — голый адрес»), которому функция делегирует.
  */
 export function operationsFiltersHref(
   base: string,
   filters: OperationsFilters,
 ): string {
-  const query = new URLSearchParams(operationsFiltersParams(filters)).toString();
-  return query.length > 0 ? `${base}?${query}` : base;
+  return buildUrlWithParams(base, new URLSearchParams(operationsFiltersParams(filters)));
 }
 
 /** Сокращения месяцев для лейблов диапазона: «1 — 30 ноя». */

@@ -3,11 +3,13 @@ package application
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -24,34 +26,58 @@ import (
 // transaction, shared memberships are suspended by this coordinator. When a slot
 // frees, the oldest suspended shared memberships are reactivated.
 //
+// The suspension and the recovery leave the context as lifecycle events
+// (карта #734, #751): published in-transaction — the coordinator runs inside
+// the caller's transaction and has no post-commit point of its own, the same
+// shape the lifecycle emails it replaced had (issue #162, T6) — best-effort, a
+// publication failure is logged and never rolls the operation back.
+//
 // See issue #158 (T4) and PRD #153.
 type SlotCoordinator struct {
 	members    MembershipRepository
 	owners     PropertyOwnerResolver
 	limiter    RecipientLimiter
 	ownedProps OwnedActivePropertiesPort
+	events     AccessEventPublisher
 	audit      auditapp.Recorder
 	db         txBeginner
+	clk        clock.Clock
+	logger     *slog.Logger
 }
 
 // NewSlotCoordinator creates a SlotCoordinator. The recorder and limiter are
 // expected to be transaction-aware (the coordinator binds them to the caller's
-// tx per operation).
+// tx per operation). Events is the lifecycle event publisher (карта #734,
+// #751); it may be nil to disable the publications. The clock stamps the
+// transition instants the publications' dedup keys carry; a nil logger
+// defaults to the standard one.
 func NewSlotCoordinator(
 	members MembershipRepository,
 	owners PropertyOwnerResolver,
 	limiter RecipientLimiter,
 	ownedProps OwnedActivePropertiesPort,
+	events AccessEventPublisher,
 	audit auditapp.Recorder,
 	db txBeginner,
+	clk clock.Clock,
+	logger *slog.Logger,
 ) *SlotCoordinator {
+	if clk == nil {
+		clk = clock.Real{}
+	}
+	if logger == nil {
+		logger = slog.Default()
+	}
 	return &SlotCoordinator{
 		members:    members,
 		owners:     owners,
 		limiter:    limiter,
 		ownedProps: ownedProps,
+		events:     events,
 		audit:      audit,
 		db:         db,
+		clk:        clk,
+		logger:     logger,
 	}
 }
 
@@ -155,6 +181,18 @@ func (c *SlotCoordinator) enforceRecipient(
 		}); err != nil {
 			return fmt.Errorf("record suspend audit: %w", err)
 		}
+		// The paused-access notification per suspended membership (карта #734,
+		// #751) — in-transaction, best-effort; the summary email this replaces
+		// had the same shape (issue #162, T6).
+		publishAccessEvent(ctx, c.events, c.logger, "membership_suspended", func() error {
+			return c.events.PublishMembershipSuspended(ctx, MembershipSuspended{
+				MembershipID: cand.MemberID,
+				PropertyID:   propertyID,
+				RecipientID:  recipientID,
+				ActorID:      uuid.Nil,
+				SuspendedAt:  c.clk.Now(),
+			})
+		})
 	}
 	return nil
 }
@@ -292,6 +330,18 @@ func (c *SlotCoordinator) recoverSuspendedForRecipient(ctx context.Context, tx t
 		}); err != nil {
 			return fmt.Errorf("record reactivate audit: %w", err)
 		}
+		// The restored-access notification per reactivated membership
+		// (карта #734, #751) — in-transaction, best-effort; the lifecycle
+		// email it replaces had the same shape (issue #162, T6).
+		publishAccessEvent(ctx, c.events, c.logger, "membership_resumed", func() error {
+			return c.events.PublishMembershipResumed(ctx, MembershipResumed{
+				MembershipID: cand.MemberID,
+				PropertyID:   cand.PropertyID,
+				RecipientID:  recipientID,
+				ActorID:      uuid.Nil,
+				ResumedAt:    c.clk.Now(),
+			})
+		})
 	}
 	return nil
 }
@@ -402,6 +452,18 @@ func (c *SlotCoordinator) EnforceOnUnarchiveForProperty(ctx context.Context, tx 
 		}); err != nil {
 			return fmt.Errorf("record suspend audit on unarchive: %w", err)
 		}
+		// The paused-access notification on the unarchive path (карта #734,
+		// #751) — in-transaction, best-effort; the lifecycle email it
+		// replaces had the same shape (issue #162, T6).
+		publishAccessEvent(ctx, c.events, c.logger, "membership_suspended", func() error {
+			return c.events.PublishMembershipSuspended(ctx, MembershipSuspended{
+				MembershipID: m.ID,
+				PropertyID:   propertyID,
+				RecipientID:  m.UserID,
+				ActorID:      uuid.Nil,
+				SuspendedAt:  c.clk.Now(),
+			})
+		})
 	}
 	return nil
 }

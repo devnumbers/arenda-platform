@@ -141,6 +141,26 @@ func (s userSourceFromUpdateEmailVerified) toUserRow() userRow {
 	}
 }
 
+// userSourceFromUpdateEmailVerifiedAt adapts an UpdateUserEmailVerifiedAt query
+// row (the MarkEmailVerified write: the address is untouched, only the
+// verified-at stamp moves).
+type userSourceFromUpdateEmailVerifiedAt pgen.UpdateUserEmailVerifiedAtRow
+
+func (s userSourceFromUpdateEmailVerifiedAt) toUserRow() userRow {
+	return userRow{
+		ID:              s.ID,
+		Phone:           s.Phone,
+		Role:            s.Role,
+		Name:            s.Name,
+		Surname:         s.Surname,
+		Patronymic:      s.Patronymic,
+		Email:           s.Email,
+		EmailVerifiedAt: s.EmailVerifiedAt,
+		Timezone:        s.Timezone,
+		PhoneEncrypted:  s.PhoneEncrypted,
+	}
+}
+
 // userSourceFromSession adapts a GetSessionByTokenHash query row. The user id
 // lives in the UserID field (the row's own ID is the session id).
 type userSourceFromSession pgen.GetSessionByTokenHashRow

@@ -152,11 +152,11 @@ func newAccessLifecycleFixture(t *testing.T) *accessLifecycleFixture {
 	beginner := accessBeginner{tx: tx}
 
 	slots := accessapp.NewSlotCoordinator(memberRepo, ownerResolver, limiter,
-		accessNoOwnedProps{}, auditapp.Noop{}, beginner)
+		accessNoOwnedProps{}, nil, auditapp.Noop{}, beginner, nil, nil)
 	factory := accessapp.NewTxStoreFactory(memberRepo, invitationRepo, auditapp.Noop{}, accessUoW{beginner})
-	access := accessapp.NewAccessService(memberRepo, ownerResolver, ownerResolver, userLookup, policy, slots, factory, nil)
+	access := accessapp.NewAccessService(memberRepo, ownerResolver, ownerResolver, userLookup, policy, slots, nil, factory, nil)
 	invites := accessapp.NewInvitationService(access, memberRepo, invitationRepo, ownerResolver, ownerResolver,
-		userLookup, policy, slots, nil, ownerResolver, factory, nil, nil, emailResolver)
+		userLookup, policy, slots, nil, nil, ownerResolver, factory, nil, nil, emailResolver)
 
 	return &accessLifecycleFixture{
 		tx: tx, q: genpostgres.New(tx),

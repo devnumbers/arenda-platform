@@ -1,37 +1,51 @@
 'use client';
 
-import {type ChangeEvent, type JSX, useEffect, useRef} from 'react';
-import {ArrowLeft} from '@/shared/assets/icons';
-import {SendCodeButton} from '@/features/auth/ui/send-code-button';
-import {Button} from '@/shared/ui/button';
-import {TextField} from '@/shared/ui/text-field';
-import styles from './CodeStep.module.css';
+import { type ChangeEvent, type JSX, useEffect, useRef } from "react";
+import { isValidLoginCode, loginCodeFromInput } from "@/shared/lib/login-code";
+import { ResendCodeTile, TextField } from "@/shared/ui/design";
+import { StepHeader } from "../step-chrome";
 
 export type CodeStepProps = {
-    contact: string;
-    contactType: 'email' | 'stored-email';
     code: string;
     onCodeChange: (value: string) => void;
     onVerify: (code: string) => void;
-    onChangeContact: () => void;
+    /** Инлайн-ошибка поля: «Неверный код» (401 verify) или понятный текст
+     * блокировки (429). Пусто — поле в покое. */
+    error?: string;
+    onClear: () => void;
     onResend: () => void;
-    isVerifying: boolean;
     isResending: boolean;
-    resendTimer: number;
+    resendTimer?: number;
 };
 
+/** Шаг «Введите код» по макетам Рентли (карта #761, тикет #765; Figma
+ * 2349:67383 — мобайл, 2349:67396 — планшет, 2349:67411 — десктоп,
+ * 2349:67624 — ошибка). Колонка блоков с зазором 32, как на шагах
+ * телефона #763 и почты #764: лого — канон HeaderLogo 112×28; заголовок
+ * H1 28/32 + подпись 16/18 «Отправили 6-значный код на вашу почту»
+ * (один текст для обоих флоу — код по ADR 0044 всегда уходит письмом,
+ * макет контакт не показывает). Поле — канон TextField titleIn «Код»:
+ * маска 6 цифр с автосабмитом (как в прежнем шаге кода), крестик очистки;
+ * нативный maxLength не ставится — он рисует счётчик канона (в макете
+ * его нет) и обрезает вставку до маски, теряя цифры хвоста; потолок
+ * держит сама маска. Ошибка верификации — инлайн в error-проп
+ * (resend-канон #733: 401 — не тост), по макету поле краснеет, крестик
+ * становится красным.
+ * Отправка нового кода — канон ResendCodeTile (#733): Secondary-кнопка
+ * «Отправить новый код», в кулдауне 60 с от retryAfter погашена с
+ * подписью «Запросить новый код можно через ММ:СС» (моно 14/16). Зазор
+ * поле — плитка 24 по канону #733. Стрелка ← — в баре шейла (onBack
+ * LoginShell), не в колонке контента. */
 export function CodeStep({
-                             contact,
-                             contactType,
-                             code,
-                             onCodeChange,
-                             onVerify,
-                             onChangeContact,
-                             onResend,
-                             isVerifying,
-                             isResending,
-                             resendTimer,
-                         }: CodeStepProps): JSX.Element {
+    code,
+    onCodeChange,
+    onVerify,
+    error,
+    onClear,
+    onResend,
+    isResending,
+    resendTimer = 0,
+}: CodeStepProps): JSX.Element {
     const inputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -39,70 +53,40 @@ export function CodeStep({
     }, []);
 
     const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
-        const digits = event.target.value.replace(/\D/g, '').slice(0, 6);
+        const digits = loginCodeFromInput(event.target.value);
         onCodeChange(digits);
-        if (digits.length === 6) {
+        if (isValidLoginCode(digits)) {
             onVerify(digits);
         }
     };
 
-    const contactLabel = contactType === 'email'
-        ? 'Отправили код на почту'
-        : 'Мы отправили код на вашу почту';
-
-    const changeLabel = contactType === 'email' ? 'Изменить почту' : 'Изменить номер';
-
     return (
-        <div className={styles.root}>
-            <div className={styles.header}>
-                <h1 className={styles.title}>Введите код</h1>
-                <p className={styles.subtitle}>
-                    {contactType === 'email' ? (
-                        <>
-                            {contactLabel}{' '}
-                            <span className={styles.contact}>{contact}</span>
-                        </>
-                    ) : (
-                        contactLabel
-                    )}
-                </p>
-            </div>
+        <div className="flex w-full flex-col gap-8">
+            <StepHeader
+                title="Введите код"
+                subtitle="Отправили 6-значный код на вашу почту"
+            />
 
-            <div className={styles.fields}>
+            <div className="flex flex-col gap-6">
                 <TextField
                     ref={inputRef}
-                    labelPlacement="inside"
-                    label="6-значный код"
-                    maxLength={6}
+                    variant="titleIn"
+                    title="Код"
+                    name="code"
+                    type="text"
                     inputMode="numeric"
                     value={code}
                     onChange={handleChange}
-                    fullWidth
+                    onClear={onClear}
+                    error={error}
                 />
-            </div>
 
-            <div className={styles.buttons}>
-                <SendCodeButton
+                <ResendCodeTile
                     remainingSeconds={resendTimer}
                     loading={isResending}
-                    disabled={isResending}
-                    onClick={onResend}
-                >
-                    Отправить новый код
-                </SendCodeButton>
-
-                <Button
-                    variant="clear"
-                    size="large"
-                    fullWidth
-                    leftIcon={<ArrowLeft/>}
-                    onClick={onChangeContact}
-                    disabled={isVerifying}
-                >
-                    {changeLabel}
-                </Button>
+                    onResend={onResend}
+                />
             </div>
         </div>
     );
 }
-

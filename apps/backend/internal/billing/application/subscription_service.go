@@ -40,6 +40,10 @@ type SubscriptionService struct {
 	// The stand-only time-travel railguard of the service (issue #665): the
 	// second layer behind the BILLING_TIME_TRAVEL route mounting.
 	timeTravelEnabled bool
+	// Publisher emits the tariff events of the notifications catalog
+	// (карта #734, #752); nil keeps the pre-#752 behaviour — the events are
+	// captured but never dispatched.
+	publisher EventPublisher
 }
 
 // SubscriptionServiceConfig carries the non-transactional dependencies of the
@@ -55,6 +59,10 @@ type SubscriptionServiceConfig struct {
 	// TimeTravelEnabled turns on the admin time-shift rig (issue #665); the
 	// wiring sets it from the platform's BILLING_TIME_TRAVEL flag.
 	TimeTravelEnabled bool
+	// Publisher emits the tariff events of the notifications catalog
+	// (карта #734, #752) — the scheduled downgrade's assignment notifies its
+	// owner; nil keeps the pre-#752 behaviour.
+	Publisher EventPublisher
 }
 
 // NewSubscriptionService creates a subscription service over the shared
@@ -77,6 +85,7 @@ func NewSubscriptionService(factory txStoreFactory, cfg SubscriptionServiceConfi
 		config:            cfg.Config,
 		log:               cfg.Logger,
 		timeTravelEnabled: cfg.TimeTravelEnabled,
+		publisher:         cfg.Publisher,
 	}
 }
 
@@ -349,9 +358,13 @@ func (s *SubscriptionService) ToggleAutoRenew(ctx context.Context, userID uuid.U
 // (issue #255): the applied payment converts the subscription into a paid one
 // from the new period.
 func (s *SubscriptionService) ChangeTariff(ctx context.Context, userID uuid.UUID, req ChangeTariffRequest) (ChangeTariffResult, error) {
+	// The carrier of the tariff events this planning transaction captures
+	// (карта #734, #752): the scheduled downgrade's assignment notifies the
+	// owner once the transaction commits.
+	tariff := newTariffEvents(s.publisher, s.log)
 	var plan changeTariffPlan
 	if err := s.runInTx(ctx, func(stores *txStores) error {
-		p, err := s.planTariffChange(ctx, stores, userID, req)
+		p, err := s.planTariffChange(ctx, tariff, stores, userID, req)
 		if err != nil {
 			return err
 		}
@@ -360,6 +373,9 @@ func (s *SubscriptionService) ChangeTariff(ctx context.Context, userID uuid.UUID
 	}); err != nil {
 		return ChangeTariffResult{}, err
 	}
+	// Strictly after the commit, best-effort (the grace-events canon): a
+	// publication failure never fails the planned change.
+	tariff.publishAfterCommit(ctx)
 	if !plan.needsPayment {
 		return ChangeTariffResult{}, nil
 	}
@@ -381,7 +397,7 @@ type changeTariffPlan struct {
 // schedules the deferred downgrade or plans the payment whose provider
 // initiation runs after commit.
 func (s *SubscriptionService) planTariffChange(
-	ctx context.Context, stores *txStores, userID uuid.UUID, req ChangeTariffRequest,
+	ctx context.Context, tariff *tariffEvents, stores *txStores, userID uuid.UUID, req ChangeTariffRequest,
 ) (changeTariffPlan, error) {
 	newTariff, err := selectableTariff(ctx, stores, req.TariffName)
 	if err != nil {
@@ -424,7 +440,7 @@ func (s *SubscriptionService) planTariffChange(
 		return changeTariffPlan{}, domain.ErrInvalidSubscriptionState
 	}
 	if !needsPayment {
-		return changeTariffPlan{}, scheduleDeferredDowngrade(ctx, stores, userID, sub, currentTariff, newTariff, req.Period)
+		return changeTariffPlan{}, scheduleDeferredDowngrade(ctx, tariff, stores, userID, sub, currentTariff, newTariff, req.Period)
 	}
 
 	if err := s.checkPaymentInitiable(sub, now); err != nil {
@@ -535,9 +551,12 @@ func (s *SubscriptionService) checkPaymentInitiable(sub domain.Subscription, now
 
 // scheduleDeferredDowngrade schedules a downgrade for the end of the paid
 // period with auto-renew on, so the new tariff renews on the normal cycle
-// (ADR 0008 §3), recording the transition and its audit entry.
+// (ADR 0008 §3), recording the transition and its audit entry. The
+// assignment is the «Тариф изменён» event's trigger (карта #734, #752):
+// the owner learns the change was assigned and when it takes effect —
+// the application of the scheduled change at period end stays silent.
 func scheduleDeferredDowngrade(
-	ctx context.Context, stores *txStores, userID uuid.UUID, sub domain.Subscription,
+	ctx context.Context, tariff *tariffEvents, stores *txStores, userID uuid.UUID, sub domain.Subscription,
 	currentTariff, newTariff domain.Tariff, period domain.SubscriptionPeriod,
 ) error {
 	// A deferred change needs a paid period to defer to; the domain
@@ -546,7 +565,7 @@ func scheduleDeferredDowngrade(
 	if sub.ValidUntil == nil {
 		return domain.ErrInvalidTariffChange
 	}
-	_, err := stores.applyTransition(ctx, &sub,
+	applied, err := stores.applyTransition(ctx, &sub,
 		func(s *domain.Subscription) error {
 			return s.ScheduleDowngrade(currentTariff, newTariff, period, *s.ValidUntil)
 		},
@@ -561,7 +580,17 @@ func scheduleDeferredDowngrade(
 			},
 		},
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	tariff.downgradeScheduled = &PlanDowngradeScheduled{
+		UserID:       userID,
+		TransitionID: applied.ID,
+		TariffID:     newTariff.ID,
+		Period:       period,
+		EffectiveAt:  *sub.ValidUntil,
+	}
+	return nil
 }
 
 // executePlannedPayment runs the provider initiation planned by the planning

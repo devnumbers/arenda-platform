@@ -55,6 +55,7 @@ type mutationFixture struct {
 	emails      fakeEmailResolver
 	titles      fakePropertyTitles
 	mailer      *fakeAccessMailer
+	events      *fakeEventPublisher
 	clk         *fixedClock
 	limiter     *fakeRecipientLimiter
 	audit       *capturingRecorder
@@ -72,15 +73,16 @@ func newMutationFixture() *mutationFixture {
 	emails := fakeEmailResolver{}
 	titles := fakePropertyTitles{}
 	mailer := &fakeAccessMailer{}
+	events := &fakeEventPublisher{}
 	clk := &fixedClock{now: time.Now()}
 	limiter := newFakeRecipientLimiter()
 	audit := &capturingRecorder{}
 	coordinator := NewSlotCoordinator(repo, owners, limiter, newFakeOwnedProps(),
-		audit, noopBeginner{})
+		events, audit, noopBeginner{}, clk, nil)
 	access := NewAccessService(repo, owners, statuses, lookup, policy, coordinator,
-		newTestFactory(repo, invitations, audit), nil)
+		events, newTestFactory(repo, invitations, audit), nil)
 	svc := NewParticipantMutationService(access, owners, statuses, lookup, emails, policy,
-		coordinator, mailer, titles, newTestFactory(repo, invitations, audit), clk, nil)
+		coordinator, mailer, events, titles, newTestFactory(repo, invitations, audit), clk, nil)
 	return &mutationFixture{
 		repo:        repo,
 		invitations: invitations,
@@ -90,6 +92,7 @@ func newMutationFixture() *mutationFixture {
 		emails:      emails,
 		titles:      titles,
 		mailer:      mailer,
+		events:      events,
 		clk:         clk,
 		limiter:     limiter,
 		audit:       audit,
@@ -644,5 +647,112 @@ func TestParticipantMutation_AddProperties_ArchivedPropertySkipped(t *testing.T)
 	}
 	if results[1].Outcome != ParticipantGrantActive || results[1].MembershipID == uuid.Nil {
 		t.Errorf("results[1] = %+v, want active", results[1])
+	}
+}
+
+// TestParticipantMutation_ActiveGrantPublishesNothing mirrors the single-property
+// canon: a grant the recipient's slot accommodates stays silent — the catalog
+// has no "access granted" event (карта #734, #751).
+func TestParticipantMutation_ActiveGrantPublishesNothing(t *testing.T) {
+	t.Parallel()
+	f := newMutationFixture()
+	p1 := uuid.Must(uuid.NewV7())
+	f.addProperty(p1, f.owner, testFirstTitle)
+	member := uuid.Must(uuid.NewV7())
+	f.lookup.add(testMemberEmail, member)
+	f.limiter.set(member, 1)
+
+	if _, err := f.svc.Invite(t.Context(), f.owner, testMemberEmail, domain.RoleViewer,
+		[]uuid.UUID{p1}); err != nil {
+		t.Fatalf("invite: %v", err)
+	}
+	if got := len(f.events.events); got != 0 {
+		t.Errorf("expected no events for an active batch grant, got %d: %+v", got, f.events.events)
+	}
+}
+
+// TestParticipantMutation_Invite_SuspendedGrantPublishesSystemPause checks the
+// no-slot leg of a batch: the per-property suspended outcome publishes the
+// system «Доступ приостановлен» event — no actor, the recipient and the row's
+// own suspension instant, like AddMember's pause (карта #734, #751).
+func TestParticipantMutation_Invite_SuspendedGrantPublishesSystemPause(t *testing.T) {
+	t.Parallel()
+	f := newMutationFixture()
+	p1 := uuid.Must(uuid.NewV7())
+	f.addProperty(p1, f.owner, testFirstTitle)
+	member := uuid.Must(uuid.NewV7())
+	f.lookup.add(testMemberEmail, member)
+	f.limiter.set(member, 0)
+
+	results, err := f.svc.Invite(t.Context(), f.owner, testMemberEmail, domain.RoleViewer,
+		[]uuid.UUID{p1})
+	if err != nil {
+		t.Fatalf("invite: %v", err)
+	}
+	if results[0].Outcome != ParticipantGrantSuspended {
+		t.Fatalf("results[0] = %+v, want suspended", results[0])
+	}
+	ev := f.events.last(t, "membership_suspended")
+	pause := ev.pause
+	if pause.MembershipID != results[0].MembershipID || pause.PropertyID != p1 {
+		t.Errorf("pause event = %+v, want membership %s on %s", pause, results[0].MembershipID, p1)
+	}
+	if pause.RecipientID != member {
+		t.Errorf("pause recipient = %s, want %s", pause.RecipientID, member)
+	}
+	if pause.ActorID != (uuid.UUID{}) {
+		t.Errorf("pause actor = %s, want the system Nil actor", pause.ActorID)
+	}
+	if pause.SuspendedAt.IsZero() {
+		t.Errorf("pause instant is zero, want the membership row's suspension instant")
+	}
+}
+
+// TestParticipantMutation_Remove_PublishesRevokedForActiveLegsOnly extends the
+// single-property revoke canon to the batch: every removed ACTIVE membership
+// notifies the former member post-commit; a suspended leg publishes nothing —
+// the object was already hidden from them (карта #734, #751, T6 canon).
+func TestParticipantMutation_Remove_PublishesRevokedForActiveLegsOnly(t *testing.T) {
+	t.Parallel()
+	f := newMutationFixture()
+	pActive, pSuspended := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	f.addProperty(pActive, f.owner, testFirstTitle)
+	f.addProperty(pSuspended, f.owner, testSecondTitle)
+	member := uuid.Must(uuid.NewV7())
+	f.emails[member] = testMemberEmail
+
+	activeID := uuid.Must(uuid.NewV7())
+	if _, err := f.repo.Create(t.Context(), domain.Membership{
+		ID: activeID, PropertyID: pActive, UserID: member,
+		Role: domain.RoleViewer, GrantedBy: f.owner,
+	}); err != nil {
+		t.Fatalf("seed active leg: %v", err)
+	}
+	suspendedAt := f.clk.now
+	suspendedID := uuid.Must(uuid.NewV7())
+	if _, err := f.repo.CreateWithStatus(t.Context(), domain.Membership{
+		ID: suspendedID, PropertyID: pSuspended, UserID: member,
+		Role: domain.RoleViewer, GrantedBy: f.owner,
+		Status: domain.MemberStatusSuspended, SuspendedAt: &suspendedAt,
+	}); err != nil {
+		t.Fatalf("seed suspended leg: %v", err)
+	}
+
+	if err := f.svc.Remove(t.Context(), f.owner, member.String()); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	if got := f.events.count("membership_revoked"); got != 1 {
+		t.Fatalf("membership_revoked events = %d, want exactly 1 (the active leg)", got)
+	}
+	ev := f.events.last(t, "membership_revoked")
+	revoke := ev.revo
+	if revoke.MembershipID != activeID || revoke.PropertyID != pActive {
+		t.Errorf("revoke event = %+v, want the active leg %s on %s", revoke, activeID, pActive)
+	}
+	if revoke.RecipientID != member {
+		t.Errorf("revoke recipient = %s, want %s", revoke.RecipientID, member)
+	}
+	if revoke.ActorID != f.owner {
+		t.Errorf("revoke actor = %s, want %s", revoke.ActorID, f.owner)
 	}
 }

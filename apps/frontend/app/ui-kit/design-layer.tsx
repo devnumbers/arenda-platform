@@ -55,8 +55,11 @@ import {
     SkeletonSection,
     RadioGroup,
     RadioGroupItem,
+    ResendCodeTile,
     SearchField,
     StatusIcon,
+    SuccessPopup,
+    SupportModal,
     UserButton,
     StepsChip,
     StickyBottomBar,
@@ -73,7 +76,7 @@ import {
     type PickerOption,
     type WheelPickerItem,
 } from '@/shared/ui/design';
-import { navSectionById } from '@/shared/config/navigation';
+import { navSectionById, supportNavSection } from '@/shared/config/navigation';
 import { addDays, dateToIso } from '@/shared/lib/calendar';
 import {
     CategoryIcon,
@@ -212,7 +215,9 @@ export function DesignLayerShowcase(): JSX.Element {
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [confirmLargeOpen, setConfirmLargeOpen] = useState(false);
     const [deletePropertyOpen, setDeletePropertyOpen] = useState(false);
+    const [successPopupOpen, setSuccessPopupOpen] = useState(false);
     const [moreSheetOpen, setMoreSheetOpen] = useState(false);
+    const [supportModalOpen, setSupportModalOpen] = useState(false);
 
     return (
         <>
@@ -1090,10 +1095,31 @@ export function DesignLayerShowcase(): JSX.Element {
                 </div>
 
                 <div className={styles.group}>
+                    <h3 className={styles.groupTitle}>SupportModal · «Связаться с нами» (#766)</h3>
+                    <p className={styles.groupTitle}>
+                        Единая поверхность поддержки вместо страницы /support (карта #761):
+                        канва Modal — карточка ≥768 / vaul-шит ниже; лого HeaderLogo 112×28,
+                        заголовок H1 28/32 + подпись 16/18, Primary «Написать в Телеграм»
+                        (внешняя ссылка в новой вкладке) и Secondary-строка почты с копированием
+                        в буфер (Figma 2355:52709 — десктоп, 2355:52684 — планшет, 2355:52746 —
+                        мобайл). Карточка макета уже канона — max-w-400. Триггеры в продукте:
+                        пилюля «Поддержка» десктопа, шестая ячейка шита «Еще», кнопка экрана
+                        «Тариф», пилюли «Написать в поддержку» шагов входа.
+                    </p>
+                    <div className={styles.grid}>
+                        <Button onClick={() => setSupportModalOpen(true)}>
+                            Открыть «Связаться с нами»
+                        </Button>
+                    </div>
+                    <SupportModal open={supportModalOpen} onOpenChange={setSupportModalOpen} />
+                </div>
+
+                <div className={styles.group}>
                     <h3 className={styles.groupTitle}>MoreSheet · шит «Еще» мобильного TabBar</h3>
                     <p className={styles.groupTitle}>
                         Выезжающий снизу шит навигации: ручка 48×4, два ряда разделов из нав-модели,
-                        нижний ряд — сам TabBar с активным «Еще» (Figma 1721:57140, #560). Выезд
+                        шестая ячейка — «Поддержка»-действие (TabNavAction, открывает SupportModal —
+                        #766), нижний ряд — сам TabBar с активным «Еще» (Figma 1721:57140, #560). Выезд
                         400ms на кривой vaul, оверлей — fade 250ms; закрытие — оверлей, свайп вниз,
                         повторный тап «Еще». В продукте живёт в TabBar (мобайл/планшет ≤768), здесь —
                         с ручным триггером.
@@ -1113,8 +1139,9 @@ export function DesignLayerShowcase(): JSX.Element {
                         хедером, Figma 1675:54050) и DesktopNavPills («Уведомления» — левый-низ 200,
                         «Поддержка» — правый-низ авто, Figma 1675:54098/54096) — только на ПК ≥1024
                         (561–1023 — планшетный хром с TabBar); пилюли глушатся вместе с TabBar,
-                        пока открыт StickyBottomBar. Живой вид — на любом экране продукта при
-                        ширине ≥1024.
+                        пока открыт StickyBottomBar. С onClick рендерится кнопкой-действием
+                        вместо ссылки — так живёт пилюля «Поддержка»: открывает SupportModal (#766).
+                        Живой вид — на любом экране продукта при ширине ≥1024.
                     </p>
                     <div className={styles.grid}>
                         <div className="flex flex-col gap-0.5">
@@ -1124,7 +1151,11 @@ export function DesignLayerShowcase(): JSX.Element {
                         </div>
                         <div className="flex flex-col items-start gap-2">
                             <DesktopMenuButton section={navSectionById('notifications')} active />
-                            <DesktopMenuButton section={navSectionById('support')} className="w-fit" />
+                            <DesktopMenuButton
+                                section={supportNavSection}
+                                onClick={() => setSupportModalOpen(true)}
+                                className="w-fit"
+                            />
                         </div>
                     </div>
                 </div>
@@ -1203,6 +1234,21 @@ export function DesignLayerShowcase(): JSX.Element {
                             title="Контактов нет"
                             description="Добавьте контакты арендатора, мастеров и других специалистов"
                         />
+                    </div>
+                </div>
+
+                <div className={styles.group}>
+                    <h3 className={styles.groupTitle}>ResendCodeTile · повторная отправка кода</h3>
+                    <p className={styles.groupTitle}>
+                        Resend-канон шага кода (#733, Figma 1869-68137/2343-51004): Secondary-кнопка
+                        «Отправить новый код», на таймере disabled с подписью ММ:СС (Roboto Mono),
+                        по истечении подпись скрыта. Таймер-хранение — за фичей (useCountdown).
+                    </p>
+                    <div className={styles.grid}>
+                        <div className="flex w-full flex-col gap-6">
+                            <ResendCodeTile remainingSeconds={42} onResend={() => {}} />
+                            <ResendCodeTile remainingSeconds={0} onResend={() => {}} />
+                        </div>
                     </div>
                 </div>
 
@@ -1400,7 +1446,26 @@ export function DesignLayerShowcase(): JSX.Element {
                         Живой образец закреплён внизу окна — вариант из визарда (кнопка «Далее»).
                     </p>
                 </div>
+
+                <div className={styles.group}>
+                    <h3 className={styles.groupTitle}>SuccessPopup · успех-попап</h3>
+                    <p className={styles.groupTitle}>
+                        Центрированная карточка без затемнения на любой ширине (#744, Figma
+                        2329:148661): иконка Icon/Color/GoodWhite 48, зелёное сообщение 16/18
+                        Medium (#00A63E из макета), крестик закрытия. Потребители — действия
+                        центра уведомлений.
+                    </p>
+                    <div className={styles.grid}>
+                        <Button onClick={() => setSuccessPopupOpen(true)}>Показать попап</Button>
+                    </div>
+                </div>
             </section>
+
+            <SuccessPopup
+                open={successPopupOpen}
+                onOpenChange={setSuccessPopupOpen}
+                message="Все уведомления прочитаны"
+            />
 
             <StickyBottomBar>
                 <Button>Далее</Button>

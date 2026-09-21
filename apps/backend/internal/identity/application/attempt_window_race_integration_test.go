@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 )
 
@@ -48,7 +49,7 @@ func TestAttemptWindowRace_ConcurrentIncrementsAreNotLost(t *testing.T) {
 			// ErrTooManyAttempts near the threshold), both of which record a
 			// failure via recordFailedLogin; anything else would break the
 			// count assertion below.
-			_, _, err := h.auth.VerifyCode(ctx, phone, &email, "000000", nil)
+			_, _, err := h.auth.VerifyCode(ctx, phone, &email, "000000", nil, application.DeviceContext{})
 			errs <- err
 		})
 	}

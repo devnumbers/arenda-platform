@@ -15,6 +15,7 @@ type RateLimiters struct {
 	EmailVerifyLimiter       *httpsupport.RateLimiter
 	PhoneChangeSendLimiter   *httpsupport.RateLimiter
 	PhoneChangeVerifyLimiter *httpsupport.RateLimiter
+	EmailChangeSendLimiter   *httpsupport.RateLimiter
 	ClientErrorsLimiter      *httpsupport.RateLimiter
 }
 
@@ -37,6 +38,12 @@ func WireRateLimiters(cfg *config.Config) *RateLimiters {
 	phoneChangeVerifyLimiter := httpsupport.NewRateLimiter(
 		rate.Every(15*time.Minute/time.Duration(cfg.RateLimit.PhoneChangeVerifyPer15Min)), phoneChangeVerifyBurst, 1*time.Hour)
 
+	// The per-user budget on email-change sends to NEW addresses (step 2);
+	// grilling decision #720-3 pins it at 5/hour, mirroring the phone change.
+	emailChangeSendBurst := min(3, cfg.RateLimit.EmailChangeSendPerHour)
+	emailChangeSendLimiter := httpsupport.NewRateLimiter(
+		rate.Every(time.Hour/time.Duration(cfg.RateLimit.EmailChangeSendPerHour)), emailChangeSendBurst, 1*time.Hour)
+
 	clientErrorsLimiter := httpsupport.NewRateLimiter(rate.Every(2*time.Second), 10, time.Minute)
 
 	return &RateLimiters{
@@ -45,6 +52,7 @@ func WireRateLimiters(cfg *config.Config) *RateLimiters {
 		EmailVerifyLimiter:       emailVerifyLimiter,
 		PhoneChangeSendLimiter:   phoneChangeSendLimiter,
 		PhoneChangeVerifyLimiter: phoneChangeVerifyLimiter,
+		EmailChangeSendLimiter:   emailChangeSendLimiter,
 		ClientErrorsLimiter:      clientErrorsLimiter,
 	}
 }
@@ -56,5 +64,6 @@ func (r *RateLimiters) Stop() {
 	r.EmailVerifyLimiter.Stop()
 	r.PhoneChangeSendLimiter.Stop()
 	r.PhoneChangeVerifyLimiter.Stop()
+	r.EmailChangeSendLimiter.Stop()
 	r.ClientErrorsLimiter.Stop()
 }

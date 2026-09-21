@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted (absolute cap and the revocation story amended by ADR 0056: pure sliding without the 30-day maximum, 14-day token rotation)
 
 ## Context
 

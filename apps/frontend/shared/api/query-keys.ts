@@ -16,6 +16,9 @@ export const accessKeys = {
 export const authKeys = {
   all: ['auth'] as const,
   me: ['auth', 'me'] as const,
+  /** Активные сессии GET /me/sessions (#728) — экран «Устройства» (#730);
+   * ревокации и «все другие» инвалидируют этот ключ. */
+  sessions: ['auth', 'sessions'] as const,
 };
 
 // features/billing
@@ -299,6 +302,28 @@ export const rentalKeys = {
    * until в ключе: выбранная дата меняет расчёт. */
   summary: (propertyId: string, rentalId: string, until: string) =>
     [...rentalKeys.all, 'summary', propertyId, rentalId, until] as const,
+};
+
+// features/notifications
+export const notificationKeys = {
+  all: ['notifications'] as const,
+  /**
+   * Порции ленты GET /notifications (#743): фильтр «Непрочитанные» — часть
+   * ключа; страница (курсор) в ключ не входит — это pageParam бесконечного
+   * запроса.
+   */
+  list: (unreadOnly: boolean) => [...notificationKeys.all, 'list', unreadOnly] as const,
+  /** Счётчик непрочитанных GET /notifications/unread-count (бейдж). */
+  unreadCount: () => [...notificationKeys.all, 'unread-count'] as const,
+  /** Страница уведомления GET /notifications/{id} с живыми действиями. */
+  detail: (id: string) => [...notificationKeys.all, 'detail', id] as const,
+  /** Матрица email-настроек аккаунта GET/PUT /notification-preferences
+   * (#743, решение #738). */
+  emailPreferences: () => [...notificationKeys.all, 'email-preferences'] as const,
+  /** Настройки пушей устройства GET/PUT /push/subscriptions/preferences
+   * (#743): endpoint устройства — часть ключа. */
+  pushPreferences: (endpoint: string) =>
+    [...notificationKeys.all, 'push-preferences', endpoint] as const,
 };
 
 // features/subscription

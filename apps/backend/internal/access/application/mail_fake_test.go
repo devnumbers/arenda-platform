@@ -38,6 +38,10 @@ func (f *fakeAccessMailer) SendInvite(_ context.Context, to string, titles []str
 	return f.record(sentMail{kind: "invite", to: to, titles: titles, role: role})
 }
 
+func (f *fakeAccessMailer) SendPropertyDeleted(_ context.Context, to, title string) error {
+	return f.record(sentMail{kind: "property_deleted", to: to, titles: []string{title}})
+}
+
 // count returns how many emails of the given kind were sent.
 func (f *fakeAccessMailer) count(kind string) int {
 	n := 0

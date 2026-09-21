@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { parseStringParam } from '@/shared/lib/parse-string-param';
 import { SubScreenShell } from '@/shared/ui/design';
 import { ROUTES } from '@/shared/config/routes';
 import { PaymentMethodList } from '@/widgets/profile';
@@ -8,16 +9,11 @@ export const metadata: Metadata = {
   description: 'Управление способами оплаты',
 };
 
-type PaymentMethodsPageProps = {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-};
-
 export default async function PaymentMethodsPage({
   searchParams,
-}: PaymentMethodsPageProps) {
+}: PageProps<'/profile/tariff/payment-methods'>) {
   const params = await searchParams;
-  const addCardResult =
-    typeof params.addCard === 'string' ? params.addCard : undefined;
+  const addCardResult = parseStringParam(params.addCard);
 
   return (
     <>

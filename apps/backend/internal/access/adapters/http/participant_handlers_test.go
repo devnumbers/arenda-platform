@@ -238,7 +238,8 @@ func TestGetParticipantsSummaryHandler(t *testing.T) {
 }
 
 // newParticipantMutationRequest builds a POST/DELETE request with the user
-// context and an optional JSON body set.
+// context and an optional JSON body set. A JSON body carries the
+// application/json Content-Type the shared decoder requires (ADR 0056).
 func newParticipantMutationRequest(t *testing.T, method, target string, userID *uuid.UUID, body any) *http.Request {
 	t.Helper()
 	ctx := context.Background()
@@ -251,7 +252,11 @@ func newParticipantMutationRequest(t *testing.T, method, target string, userID *
 		require.NoError(t, err)
 		reader = bytes.NewReader(raw)
 	}
-	return httptest.NewRequestWithContext(ctx, method, target, reader)
+	req := httptest.NewRequestWithContext(ctx, method, target, reader)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	return req
 }
 
 // fieldEmail is the JSON field name of the invitee email in request bodies.

@@ -86,7 +86,6 @@ const APP_ROUTE_PREFIXES = [
   '/properties',
   '/profile',
   '/subscription',
-  '/support',
   '/ui-kit',
   '/tasks',
   '/operations',

@@ -21,7 +21,7 @@ type fakeAuthenticator struct {
 	sendCode        func(ctx context.Context, phone domain.Phone, email domain.Email, purpose domain.LoginCodePurpose) error
 	sendCodeByPhone func(ctx context.Context, phone domain.Phone) (bool, error)
 	verifyCode      func(
-		ctx context.Context, phone domain.Phone, email *domain.Email, code string, timezone *string,
+		ctx context.Context, phone domain.Phone, email *domain.Email, code string, timezone *string, device application.DeviceContext,
 	) (domain.RawSession, domain.User, error)
 }
 
@@ -45,20 +45,22 @@ func (f *fakeAuthenticator) VerifyCode(
 	email *domain.Email,
 	code string,
 	timezone *string,
+	device application.DeviceContext,
 ) (domain.RawSession, domain.User, error) {
 	if f.verifyCode != nil {
-		return f.verifyCode(ctx, phone, email, code, timezone)
+		return f.verifyCode(ctx, phone, email, code, timezone, device)
 	}
 	return domain.RawSession{}, domain.User{}, errors.New("unexpected VerifyCode call")
 }
 
 func newTestAuthHandlers(auth Authenticator) *AuthHandlers {
-	return NewAuthHandlers(auth, nil, nil, nil, false, slog.New(slog.DiscardHandler), AuthRateLimits{}, nil)
+	return NewAuthHandlers(auth, nil, nil, nil, nil, nil, false, slog.New(slog.DiscardHandler), AuthRateLimits{}, nil)
 }
 
 func doJSON(t *testing.T, handler http.HandlerFunc, path, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, path, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	handler(rr, req)
 	return rr
@@ -209,7 +211,7 @@ func TestVerifyCode_WithoutEmail_PassesNilEmailAndSetsCookie(t *testing.T) {
 	var gotTimezone *string
 	auth := &fakeAuthenticator{
 		verifyCode: func(
-			_ context.Context, _ domain.Phone, email *domain.Email, code string, timezone *string,
+			_ context.Context, _ domain.Phone, email *domain.Email, code string, timezone *string, _ application.DeviceContext,
 		) (domain.RawSession, domain.User, error) {
 			if code != "123456" {
 				t.Errorf("VerifyCode code = %s, want 123456", code)
@@ -254,7 +256,9 @@ func TestVerifyCode_PassesTimezoneToService(t *testing.T) {
 
 	var gotTimezone *string
 	auth := &fakeAuthenticator{
-		verifyCode: func(_ context.Context, _ domain.Phone, _ *domain.Email, _ string, timezone *string) (domain.RawSession, domain.User, error) {
+		verifyCode: func(_ context.Context, _ domain.Phone, _ *domain.Email, _ string, timezone *string,
+			_ application.DeviceContext,
+		) (domain.RawSession, domain.User, error) {
 			gotTimezone = timezone
 			return raw, user, nil
 		},

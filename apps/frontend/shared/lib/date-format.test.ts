@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDateTimeHeading, formatDayMonth, formatDayMonthWithYear, formatOverdueDays, formatRangeBound } from './date-format';
+import { formatDateTimeHeading, formatDayMonth, formatDayMonthTime, formatDayMonthWithYear, formatOverdueDays, formatRangeBound, formatSessionLastSeen, formatTime } from './date-format';
 
 describe('date-format', () => {
   it('день и склонённый месяц без года: «11 августа»', () => {
@@ -31,5 +31,25 @@ describe('date-format', () => {
   it('заголовок-дата детали платежа: «10 августа 2026, 10:56» (#624)', () => {
     expect(formatDateTimeHeading('2026-08-10T10:56:00')).toBe('10 августа 2026, 10:56');
     expect(formatDateTimeHeading('2026-01-01T07:05:00')).toBe('1 января 2026, 07:05');
+  });
+
+  it('время момента: «14:40», ведущий ноль часа, невалидное — «—» (#744)', () => {
+    expect(formatTime('2026-09-17T14:40:00Z')).toMatch(/^\d{2}:\d{2}$/);
+    expect(formatTime('2026-09-17T07:05:00')).toBe('07:05');
+    expect(formatTime('не дата')).toBe('—');
+  });
+
+  it('день-месяц и время момента: «15 сентября, 14:40» в локальном времени, невалидное — «—» (#745)', () => {
+    expect(formatDayMonthTime('2026-09-15T14:40:00')).toBe('15 сентября, 14:40');
+    expect(formatDayMonthTime('2026-01-01T07:05:00')).toBe('1 января, 07:05');
+    expect(formatDayMonthTime('не дата')).toBe('—');
+  });
+
+  it('момент сессии в списке устройств: «14 августа, 14:41», год — вне текущего (#730)', () => {
+    const now = new Date('2026-09-18T12:00:00');
+    expect(formatSessionLastSeen('2026-08-14T14:41:00', now)).toBe('14 августа, 14:41');
+    expect(formatSessionLastSeen('2026-01-01T07:05:00', now)).toBe('1 января, 07:05');
+    expect(formatSessionLastSeen('2025-08-14T09:08:00', now)).toBe('14 августа 2025, 09:08');
+    expect(formatSessionLastSeen('ерунда', now)).toBe('—');
   });
 });

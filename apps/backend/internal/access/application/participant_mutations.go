@@ -93,8 +93,9 @@ type grantTarget struct {
 // #163) and the recipient tariff slots (SlotCoordinator) are evaluated per
 // property, every row is audited in the same transaction (ADR 0020/0033),
 // and a batch reports per-property outcomes instead of failing as a whole.
-// Only the invite email exists here (issue #694 keeps lifecycle emails out
-// of the batch flows — the cut of the lifecycle emails is issue #695).
+// The only direct email is the batch invite one; the lifecycle notifications
+// (the suspended grant, the revoked active legs) leave the context as events
+// (карта #734, #751).
 type ParticipantMutationService struct {
 	txStoreFactory
 	access   *AccessService
@@ -105,6 +106,7 @@ type ParticipantMutationService struct {
 	policy   sharedpolicy.Policy
 	slots    *SlotCoordinator
 	mailer   AccessMailer
+	events   AccessEventPublisher
 	titles   PropertyTitleResolver
 	clock    clock.Clock
 	logger   *slog.Logger
@@ -113,8 +115,9 @@ type ParticipantMutationService struct {
 // NewParticipantMutationService creates a ParticipantMutationService. Statuses
 // may be nil to skip the archived-property checks (tests without the
 // dependency); slots may be nil to disable slot enforcement; mailer/titles may
-// be nil to skip the invite email; emails may be nil (registered targets then
-// resolve without invitation-leg lookups).
+// be nil to skip the invite email; events may be nil to disable the
+// publications; emails may be nil (registered targets then resolve without
+// invitation-leg lookups).
 func NewParticipantMutationService(
 	access *AccessService,
 	owners PropertyOwnerResolver,
@@ -124,6 +127,7 @@ func NewParticipantMutationService(
 	policy sharedpolicy.Policy,
 	slots *SlotCoordinator,
 	mailer AccessMailer,
+	events AccessEventPublisher,
 	titles PropertyTitleResolver,
 	factory txStoreFactory,
 	clk clock.Clock,
@@ -145,6 +149,7 @@ func NewParticipantMutationService(
 		policy:         policy,
 		slots:          slots,
 		mailer:         mailer,
+		events:         events,
 		titles:         titles,
 		clock:          clk,
 		logger:         logger,
@@ -212,6 +217,7 @@ func (s *ParticipantMutationService) grantProperties(
 	ids := dedupePropertyIDs(propertyIDs)
 
 	results := make([]ParticipantGrantResult, 0, len(ids))
+	var suspended []domain.Membership
 	err := s.runInTx(ctx, func(stores *txStores) error {
 		if requireExisting {
 			exists, err := s.personInScope(ctx, stores, target, actor)
@@ -223,7 +229,7 @@ func (s *ParticipantMutationService) grantProperties(
 			}
 		}
 		for _, propertyID := range ids {
-			result, err := s.grantOne(ctx, stores, actor, target, role, propertyID)
+			result, err := s.grantOne(ctx, stores, actor, target, role, propertyID, &suspended)
 			if err != nil {
 				return err
 			}
@@ -233,6 +239,22 @@ func (s *ParticipantMutationService) grantProperties(
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	// A grant created without a free tariff slot pauses the new member's
+	// access (issue #158, T4): the system «Доступ приостановлен» notification
+	// is the event subscriber's (карта #734, #751) — published post-commit,
+	// best-effort, no actor.
+	for _, m := range suspended {
+		publishAccessEvent(ctx, s.events, s.logger, "membership_suspended", func() error {
+			return s.events.PublishMembershipSuspended(ctx, MembershipSuspended{
+				MembershipID: m.ID,
+				PropertyID:   m.PropertyID,
+				RecipientID:  m.UserID,
+				ActorID:      uuid.Nil,
+				SuspendedAt:  deref(m.SuspendedAt),
+			})
+		})
 	}
 
 	// The single batch invite email goes out after the commit; a send failure
@@ -252,8 +274,12 @@ func (s *ParticipantMutationService) grantProperties(
 // grantOne produces one requested property's outcome. Gate failures skip the
 // property (they are outcomes, not errors); a repository failure returns an
 // error and aborts the transaction.
+// GrantOne evaluates one property's gates and grants the target on it. The
+// suspended outcome's membership row is appended to the collector — the caller
+// publishes its system pause post-commit (карта #734, #751).
 func (s *ParticipantMutationService) grantOne(
 	ctx context.Context, stores *txStores, actor uuid.UUID, target grantTarget, role domain.Role, propertyID uuid.UUID,
+	suspended *[]domain.Membership,
 ) (ParticipantGrantResult, error) {
 	owner, actorRole, err := requireManageAccess(ctx, s.policy, s.owners, actor, propertyID)
 	if err != nil {
@@ -276,16 +302,18 @@ func (s *ParticipantMutationService) grantOne(
 	}
 
 	if target.userID != (uuid.UUID{}) {
-		return s.grantMembership(ctx, stores, actor, target.userID, actorRole, role, propertyID)
+		return s.grantMembership(ctx, stores, actor, target.userID, actorRole, role, propertyID, suspended)
 	}
 	return s.grantInvitation(ctx, stores, actor, target.email, actorRole, role, propertyID)
 }
 
 // grantMembership creates one membership through the same transactional core
 // AddMember uses (duplicate check, recipient slot decision, audited insert);
-// a duplicate is a skipped outcome, not an error.
+// a duplicate is a skipped outcome, not an error. A suspended landing joins
+// the caller's post-commit publication collector.
 func (s *ParticipantMutationService) grantMembership(
 	ctx context.Context, stores *txStores, actor, userID uuid.UUID, actorRole sharedpolicy.Role, role domain.Role, propertyID uuid.UUID,
+	suspended *[]domain.Membership,
 ) (ParticipantGrantResult, error) {
 	id, err := uuid.NewV7()
 	if err != nil {
@@ -303,6 +331,9 @@ func (s *ParticipantMutationService) grantMembership(
 	}
 	if err != nil {
 		return ParticipantGrantResult{}, err
+	}
+	if suspend {
+		*suspended = append(*suspended, created)
 	}
 	outcome := ParticipantGrantActive
 	if suspend {
@@ -401,6 +432,7 @@ func (s *ParticipantMutationService) Remove(ctx context.Context, actor uuid.UUID
 	}
 
 	freedActive := 0
+	var revokedActive []domain.Membership
 	err = s.runInTx(ctx, func(stores *txStores) error {
 		legs, invitationLegs, err := s.listRemovalLegs(ctx, stores, userID, email, actor)
 		if err != nil {
@@ -409,7 +441,7 @@ func (s *ParticipantMutationService) Remove(ctx context.Context, actor uuid.UUID
 		if len(legs) == 0 && len(invitationLegs) == 0 {
 			return domain.ErrParticipantNotFound
 		}
-		freedActive, err = s.removeMembershipLegs(ctx, stores, actor, userID, legs)
+		freedActive, revokedActive, err = s.removeMembershipLegs(ctx, stores, actor, userID, legs)
 		if err != nil {
 			return err
 		}
@@ -425,7 +457,24 @@ func (s *ParticipantMutationService) Remove(ctx context.Context, actor uuid.UUID
 		}
 		return nil
 	})
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Every removed ACTIVE membership notifies the former member post-commit
+	// (карта #734, #751); suspended legs publish nothing — the object was
+	// already hidden from them (issue #162, T6 canon).
+	for _, m := range revokedActive {
+		publishAccessEvent(ctx, s.events, s.logger, "membership_revoked", func() error {
+			return s.events.PublishMembershipRevoked(ctx, MembershipRevoked{
+				MembershipID: m.ID,
+				PropertyID:   m.PropertyID,
+				RecipientID:  m.UserID,
+				ActorID:      actor,
+			})
+		})
+	}
+	return nil
 }
 
 // listRemovalLegs enumerates the person's removal scope: their memberships
@@ -467,21 +516,25 @@ func (s *ParticipantMutationService) actorRoleOn(ctx context.Context, actor, pro
 }
 
 // removeMembershipLegs deletes the person's membership rows with an audit
-// entry per row and reports how many active (slot-occupying) ones were freed.
+// entry per row, reports how many active (slot-occupying) ones were freed and
+// appends the removed active rows to the collector — the caller publishes
+// their revocation events post-commit (карта #734, #751).
 func (s *ParticipantMutationService) removeMembershipLegs(
 	ctx context.Context, stores *txStores, actor, userID uuid.UUID, legs []domain.Membership,
-) (int, error) {
+) (int, []domain.Membership, error) {
 	freedActive := 0
+	var revokedActive []domain.Membership
 	for _, m := range legs {
 		if err := stores.members.Delete(ctx, m.ID, m.PropertyID); err != nil {
-			return 0, fmt.Errorf("delete membership: %w", err)
+			return 0, nil, fmt.Errorf("delete membership: %w", err)
 		}
 		if !m.IsSuspended() {
 			freedActive++
+			revokedActive = append(revokedActive, m)
 		}
 		actorRole, err := s.actorRoleOn(ctx, actor, m.PropertyID)
 		if err != nil {
-			return 0, err
+			return 0, nil, err
 		}
 		if err := stores.audit.Record(ctx, auditdomain.Entry{
 			ActorID:    &actor,
@@ -494,10 +547,10 @@ func (s *ParticipantMutationService) removeMembershipLegs(
 				auditKeyUserID:     userID,
 			},
 		}); err != nil {
-			return 0, fmt.Errorf("record audit: %w", err)
+			return 0, nil, fmt.Errorf("record audit: %w", err)
 		}
 	}
-	return freedActive, nil
+	return freedActive, revokedActive, nil
 }
 
 // removeInvitationLegs deletes the person's pending invitation rows with an

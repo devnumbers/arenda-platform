@@ -116,6 +116,10 @@ func (r *fakeUserRepo) GetByEmail(_ context.Context, email domain.Email) (domain
 	return domain.User{}, ErrNotFound
 }
 
+func (r *fakeUserRepo) GetByEmailForUpdate(ctx context.Context, email domain.Email) (domain.User, error) {
+	return r.GetByEmail(ctx, email)
+}
+
 func (r *fakeUserRepo) Create(_ context.Context, user domain.User) (domain.User, error) {
 	r.byPhone[user.Phone.String()] = user
 	return user, nil
@@ -153,7 +157,58 @@ func (r *fakeUserRepo) UpdateEmailVerified(
 	return u, nil
 }
 
+func (r *fakeUserRepo) MarkEmailVerified(
+	ctx context.Context,
+	id uuid.UUID,
+	verifiedAt time.Time,
+) (domain.User, error) {
+	u, err := r.GetByID(ctx, id)
+	if err != nil {
+		return domain.User{}, err
+	}
+	u.EmailVerifiedAt = &verifiedAt
+	r.byPhone[u.Phone.String()] = u
+	return u, nil
+}
+
 func (r *fakeUserRepo) WithTx(transaction.Tx) (UserRepository, error) { return r, nil }
+
+type fakeGrantRepo struct {
+	grants map[uuid.UUID]domain.EmailChangeGrant
+}
+
+func newFakeGrantRepo() *fakeGrantRepo {
+	return &fakeGrantRepo{grants: map[uuid.UUID]domain.EmailChangeGrant{}}
+}
+
+func (r *fakeGrantRepo) Save(_ context.Context, grant domain.EmailChangeGrant) error {
+	r.grants[grant.UserID] = grant
+	return nil
+}
+
+func (r *fakeGrantRepo) GetByUserIDForUpdate(_ context.Context, userID uuid.UUID) (domain.EmailChangeGrant, error) {
+	g, ok := r.grants[userID]
+	if !ok {
+		return domain.EmailChangeGrant{}, ErrNotFound
+	}
+	return g, nil
+}
+
+func (r *fakeGrantRepo) DeleteByID(_ context.Context, id uuid.UUID) error {
+	for userID, g := range r.grants {
+		if g.ID == id {
+			delete(r.grants, userID)
+		}
+	}
+	return nil
+}
+
+func (r *fakeGrantRepo) DeleteByUserID(_ context.Context, userID uuid.UUID) error {
+	delete(r.grants, userID)
+	return nil
+}
+
+func (r *fakeGrantRepo) WithTx(transaction.Tx) (EmailChangeGrantRepository, error) { return r, nil }
 
 type fakeCodeRepo struct {
 	codes map[uuid.UUID]domain.LoginCode
@@ -314,22 +369,53 @@ func (r *fakeSessionRepo) DeleteByTokenHash(_ context.Context, tokenHash string)
 	return nil
 }
 
-func (r *fakeSessionRepo) DeleteByUserID(_ context.Context, userID uuid.UUID) error {
-	for hash, s := range r.sessions {
-		if s.UserID == userID {
-			delete(r.sessions, hash)
-		}
-	}
-	return nil
-}
-
-func (r *fakeSessionRepo) DeleteByUserIDExcept(_ context.Context, userID uuid.UUID, tokenHash string) error {
+func (r *fakeSessionRepo) DeleteByUserIDExcept(_ context.Context, userID uuid.UUID, tokenHash string) (int64, error) {
+	var removed int64
 	for hash, s := range r.sessions {
 		if s.UserID == userID && hash != tokenHash {
 			delete(r.sessions, hash)
+			removed++
 		}
 	}
+	return removed, nil
+}
+
+func (r *fakeSessionRepo) Touch(_ context.Context, session domain.Session) error {
+	r.sessions[session.TokenHash] = session
 	return nil
+}
+
+func (r *fakeSessionRepo) Rotate(context.Context, domain.Session, string) (bool, error) {
+	return true, nil
+}
+
+func (r *fakeSessionRepo) ListByUserID(_ context.Context, userID uuid.UUID, _ time.Time) ([]domain.Session, error) {
+	var out []domain.Session
+	for _, s := range r.sessions {
+		if s.UserID == userID {
+			out = append(out, s)
+		}
+	}
+	return out, nil
+}
+
+func (r *fakeSessionRepo) GetByID(_ context.Context, id uuid.UUID) (domain.Session, error) {
+	for _, s := range r.sessions {
+		if s.ID == id {
+			return s, nil
+		}
+	}
+	return domain.Session{}, ErrNotFound
+}
+
+func (r *fakeSessionRepo) DeleteByIDForUser(_ context.Context, id, userID uuid.UUID) (bool, error) {
+	for hash, s := range r.sessions {
+		if s.ID == id && s.UserID == userID {
+			delete(r.sessions, hash)
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (r *fakeSessionRepo) WithTx(transaction.Tx) (SessionRepository, error) { return r, nil }
@@ -504,7 +590,7 @@ func TestAuthenticationService_VerifyCode_ResolvesEmailFromUser(t *testing.T) {
 	}
 	code := h.sender.sent[0].code
 
-	raw, got, err := h.svc.VerifyCode(ctx, phone, nil, code, nil)
+	raw, got, err := h.svc.VerifyCode(ctx, phone, nil, code, nil, DeviceContext{})
 	if err != nil {
 		t.Fatalf("VerifyCode error = %v", err)
 	}
@@ -527,7 +613,7 @@ func TestAuthenticationService_VerifyCode_UnknownPhoneWithoutEmail(t *testing.T)
 	h := newAuthServiceHarness()
 	phone := mustPhone(t, "+79150000009")
 
-	_, _, err := h.svc.VerifyCode(t.Context(), phone, nil, "123456", nil)
+	_, _, err := h.svc.VerifyCode(t.Context(), phone, nil, "123456", nil, DeviceContext{})
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("VerifyCode error = %v, want ErrNotFound", err)
 	}
@@ -539,7 +625,7 @@ func TestAuthenticationService_VerifyCode_UserWithoutEmailWithoutEmail(t *testin
 	phone := mustPhone(t, "+79150000008")
 	h.seedUser(t, phone, nil)
 
-	_, _, err := h.svc.VerifyCode(t.Context(), phone, nil, "123456", nil)
+	_, _, err := h.svc.VerifyCode(t.Context(), phone, nil, "123456", nil, DeviceContext{})
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("VerifyCode error = %v, want ErrNotFound", err)
 	}
@@ -559,7 +645,7 @@ func TestAuthenticationService_ExplicitEmailFlow(t *testing.T) {
 		}
 		code := h.sender.sent[0].code
 
-		raw, user, err := h.svc.VerifyCode(ctx, phone, &email, code, nil)
+		raw, user, err := h.svc.VerifyCode(ctx, phone, &email, code, nil, DeviceContext{})
 		if err != nil {
 			t.Fatalf("VerifyCode error = %v", err)
 		}
@@ -639,7 +725,7 @@ func TestAuthenticationService_VerifyCode_RegistrationTimezone_NewUser(t *testin
 	code := h.sender.sent[0].code
 	timezone := "Asia/Yekaterinburg"
 
-	_, user, err := h.svc.VerifyCode(ctx, phone, &email, code, &timezone)
+	_, user, err := h.svc.VerifyCode(ctx, phone, &email, code, &timezone, DeviceContext{})
 	if err != nil {
 		t.Fatalf("VerifyCode error = %v", err)
 	}
@@ -668,7 +754,7 @@ func TestAuthenticationService_VerifyCode_RegistrationTimezone_InvalidFallsBack(
 	code := h.sender.sent[0].code
 	timezone := "Mars/Olympus"
 
-	_, _, err := h.svc.VerifyCode(ctx, phone, &email, code, &timezone)
+	_, _, err := h.svc.VerifyCode(ctx, phone, &email, code, &timezone, DeviceContext{})
 	if err != nil {
 		t.Fatalf("VerifyCode error = %v", err)
 	}
@@ -698,7 +784,7 @@ func TestAuthenticationService_VerifyCode_RegistrationTimezone_ExistingUntouched
 	code := h.sender.sent[0].code
 	timezone := "Asia/Yekaterinburg"
 
-	_, user, err := h.svc.VerifyCode(ctx, phone, &email, code, &timezone)
+	_, user, err := h.svc.VerifyCode(ctx, phone, &email, code, &timezone, DeviceContext{})
 	if err != nil {
 		t.Fatalf("VerifyCode error = %v", err)
 	}
@@ -773,7 +859,7 @@ func TestAuthenticationService_VerifyCode_InvalidCodeRecordsAttemptAndAudit(t *t
 		t.Fatalf("SendCodeByPhone error = %v", err)
 	}
 
-	_, _, err := h.svc.VerifyCode(ctx, phone, &email, "000000", nil)
+	_, _, err := h.svc.VerifyCode(ctx, phone, &email, "000000", nil, DeviceContext{})
 	if !errors.Is(err, domain.ErrLoginCodeInvalid) {
 		t.Fatalf("VerifyCode error = %v, want ErrLoginCodeInvalid", err)
 	}
@@ -814,7 +900,7 @@ func TestAuthenticationService_VerifyCode_TooManyAttemptsBlocks(t *testing.T) {
 
 	var lastErr error
 	for range domain.MaxLoginFailures {
-		_, _, lastErr = h.svc.VerifyCode(ctx, phone, &email, "000000", nil)
+		_, _, lastErr = h.svc.VerifyCode(ctx, phone, &email, "000000", nil, DeviceContext{})
 	}
 	if !errors.Is(lastErr, domain.ErrTooManyAttempts) {
 		t.Fatalf("last VerifyCode error = %v, want ErrTooManyAttempts", lastErr)
@@ -849,7 +935,7 @@ func TestAuthenticationService_VerifyCode_BlockedPhoneSkipsRecovery(t *testing.T
 	// Drive exactly MaxLoginFailures invalid verifications to reach the block.
 	var lastErr error
 	for range domain.MaxLoginFailures {
-		_, _, lastErr = h.svc.VerifyCode(ctx, phone, &email, "000000", nil)
+		_, _, lastErr = h.svc.VerifyCode(ctx, phone, &email, "000000", nil, DeviceContext{})
 	}
 	if !errors.Is(lastErr, domain.ErrTooManyAttempts) {
 		t.Fatalf("last VerifyCode error = %v, want ErrTooManyAttempts", lastErr)
@@ -857,7 +943,7 @@ func TestAuthenticationService_VerifyCode_BlockedPhoneSkipsRecovery(t *testing.T
 
 	// The phone is now blocked. A further verify must return ErrUserBlocked
 	// straight from LoginCodeService.Verify, without recovery.
-	_, _, err := h.svc.VerifyCode(ctx, phone, &email, "000000", nil)
+	_, _, err := h.svc.VerifyCode(ctx, phone, &email, "000000", nil, DeviceContext{})
 	if !errors.Is(err, ErrUserBlocked) {
 		t.Fatalf("VerifyCode on blocked phone error = %v, want ErrUserBlocked", err)
 	}
@@ -885,7 +971,7 @@ func TestAuthenticationService_SendCode_GetByPhoneError(t *testing.T) {
 
 	factory := NewTxStoreFactory(
 		&errorUserRepo{err: dbErr}, stores.codes, stores.attempts, stores.sessions,
-		auditapp.Noop{}, &fakeUoW{beginner: stores.beginner},
+		newFakeGrantRepo(), auditapp.Noop{}, &fakeUoW{beginner: stores.beginner},
 	)
 	loginCodes := NewLoginCodeService(factory, LoginCodeServiceConfig{
 		CodeSender: sender, Clock: &fakeClock{now: testNow},
@@ -925,7 +1011,7 @@ func TestAuthenticationService_SendCode_GetByEmailError(t *testing.T) {
 	users := &errorOnGetByEmailRepo{fakeUserRepo: newFakeUserRepo(), err: dbErr}
 	factory := NewTxStoreFactory(
 		users, stores.codes, stores.attempts, stores.sessions,
-		auditapp.Noop{}, &fakeUoW{beginner: stores.beginner},
+		newFakeGrantRepo(), auditapp.Noop{}, &fakeUoW{beginner: stores.beginner},
 	)
 	loginCodes := NewLoginCodeService(factory, LoginCodeServiceConfig{
 		CodeSender: sender, Clock: &fakeClock{now: testNow},
@@ -961,7 +1047,7 @@ func TestAuthenticationService_SendCodeByPhone_GetByPhoneError(t *testing.T) {
 
 	factory := NewTxStoreFactory(
 		&errorUserRepo{err: dbErr}, stores.codes, stores.attempts, stores.sessions,
-		auditapp.Noop{}, &fakeUoW{beginner: stores.beginner},
+		newFakeGrantRepo(), auditapp.Noop{}, &fakeUoW{beginner: stores.beginner},
 	)
 	svc := NewAuthenticationService(factory, AuthenticationServiceConfig{
 		LoginCodes: NewLoginCodeService(factory, LoginCodeServiceConfig{
@@ -1005,6 +1091,10 @@ func (r *errorUserRepo) GetByEmail(context.Context, domain.Email) (domain.User, 
 	return domain.User{}, r.err
 }
 
+func (r *errorUserRepo) GetByEmailForUpdate(context.Context, domain.Email) (domain.User, error) {
+	return domain.User{}, r.err
+}
+
 func (r *errorUserRepo) Create(_ context.Context, user domain.User) (domain.User, error) {
 	return user, nil
 }
@@ -1018,6 +1108,10 @@ func (r *errorUserRepo) UpdatePhone(context.Context, uuid.UUID, domain.Phone) (d
 }
 
 func (r *errorUserRepo) UpdateEmailVerified(context.Context, uuid.UUID, *domain.Email, *time.Time) (domain.User, error) {
+	return domain.User{}, nil
+}
+
+func (r *errorUserRepo) MarkEmailVerified(context.Context, uuid.UUID, time.Time) (domain.User, error) {
 	return domain.User{}, nil
 }
 func (r *errorUserRepo) WithTx(transaction.Tx) (UserRepository, error) { return r, nil }

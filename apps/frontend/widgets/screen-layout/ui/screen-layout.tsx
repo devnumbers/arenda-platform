@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, type JSX, type ReactNode } from 'react';
+import { useUnreadNotificationsCount } from '@/features/notifications';
 import { ServiceWorkerRegister } from '@/shared/lib/pwa/ServiceWorkerRegister';
 import { ServiceWorkerUpdater } from '@/shared/lib/pwa/ServiceWorkerUpdater';
 import { PullToRefresh } from '@/shared/ui/pull-to-refresh';
@@ -12,6 +13,7 @@ import {
 } from '@/shared/ui/design';
 import { usePropertiesLandingHref } from '@/features/properties';
 import { HubPrefetchProvider } from './hub-prefetch-provider';
+import { NotificationStreamGate } from './notification-stream-gate';
 import { PushPermissionGate } from './push-permission-gate';
 import { TopNavUserProvider } from './top-nav-user-provider';
 
@@ -34,7 +36,15 @@ import { TopNavUserProvider } from './top-nav-user-provider';
  * worker, pull-to-refresh (ADR 0031 — ref делится с узлом контента:
  * жест двигает transform'ом именно его; сайдбар, пилюли и TabBar
  * `position: fixed` и остаются на месте) и PushPermissionGate —
- * фоновая синхронизация push-подписки без системного промпта. */
+/** Число непрочитанных для бейджей навигации (#747): тот же react-query
+ * запрос, что у чипа ленты — SSE и refetch-on-focus обновляют кэш один
+ * раз, все потребители перерисовываются. null — счёт ещё не приходил
+ * (скелет: бейджи молчат). */
+function useNavigationBadge(): number | null {
+  const query = useUnreadNotificationsCount();
+  return query.data ?? null;
+}
+
 export function ScreenLayout({ children }: { readonly children: ReactNode }): JSX.Element {
   // PullToRefresh drives `transform` on the content node during the gesture,
   // so the layout shares its ref with the component.
@@ -43,6 +53,7 @@ export function ScreenLayout({ children }: { readonly children: ReactNode }): JS
   // активный / список — пока список не загружен, обе поверхности ведут
   // на список (безопасный фолбэк хука).
   const propertiesHref = usePropertiesLandingHref();
+  const notificationsBadge = useNavigationBadge();
 
   return (
     <TabBarVisibilityProvider>
@@ -53,12 +64,13 @@ export function ScreenLayout({ children }: { readonly children: ReactNode }): JS
             <div className="flex min-w-0 flex-1 flex-col" ref={contentRef}>
               {children}
             </div>
-            <DesktopNavPills />
-            <TabBar propertiesHref={propertiesHref} />
+            <DesktopNavPills notificationsBadge={notificationsBadge ?? 0} />
+            <TabBar propertiesHref={propertiesHref} notificationsUnread={(notificationsBadge ?? 0) > 0} />
             <ServiceWorkerRegister />
             <ServiceWorkerUpdater />
             <PullToRefresh contentRef={contentRef} />
             <PushPermissionGate />
+            <NotificationStreamGate />
           </div>
         </TopNavUserProvider>
       </HubPrefetchProvider>

@@ -108,8 +108,11 @@ func TestSlotCoordinator_RecoverSuspended_OwnArchiveFreesSlotTxVisible(t *testin
 		NewOwnerResolver(testTx),
 		limiter,
 		ownedProps,
+		nil,
 		auditapp.Noop{},
 		accessBeginner{tx: testTx},
+		nil,
+		nil,
 	)
 
 	if _, err := testQ.ArchiveProperty(ctx, genpostgres.ArchivePropertyParams{

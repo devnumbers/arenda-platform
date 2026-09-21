@@ -50,7 +50,7 @@ func TestSessionService_Issue_CreatesNewUserAndSession(t *testing.T) {
 		t.Fatalf("stores: %v", err)
 	}
 
-	raw, user, isNew, err := h.svc.Issue(ctx, stores, phone, email, testNow)
+	raw, user, isNew, err := h.svc.Issue(ctx, stores, phone, email, DeviceContext{}, testNow)
 	if err != nil {
 		t.Fatalf("Issue error = %v", err)
 	}
@@ -87,7 +87,7 @@ func TestSessionService_Issue_ExistingUserReturnsNewFalse(t *testing.T) {
 		t.Fatalf("stores: %v", err)
 	}
 
-	raw, user, isNew, err := h.svc.Issue(ctx, stores, phone, email, testNow)
+	raw, user, isNew, err := h.svc.Issue(ctx, stores, phone, email, DeviceContext{}, testNow)
 	if err != nil {
 		t.Fatalf("Issue error = %v", err)
 	}
@@ -125,7 +125,7 @@ func TestSessionService_Issue_VerifiesEmailWhenUnverified(t *testing.T) {
 		t.Fatalf("stores: %v", err)
 	}
 
-	_, got, isNew, err := h.svc.Issue(ctx, stores, phone, email, testNow)
+	_, got, isNew, err := h.svc.Issue(ctx, stores, phone, email, DeviceContext{}, testNow)
 	if err != nil {
 		t.Fatalf("Issue error = %v", err)
 	}
@@ -174,7 +174,7 @@ func TestSessionService_Load_DelegatesToRepositoryWithHashedToken(t *testing.T) 
 	}
 	factory := NewTxStoreFactory(
 		newFakeUserRepo(), newFakeCodeRepo(), newFakeAttemptRepo(), repo,
-		nil, &fakeUoW{beginner: beginner},
+		newFakeGrantRepo(), nil, &fakeUoW{beginner: beginner},
 	)
 	svc := NewSessionService(factory, SessionServiceConfig{Hasher: fakeHasher{}})
 
@@ -190,27 +190,6 @@ func TestSessionService_Load_DelegatesToRepositoryWithHashedToken(t *testing.T) 
 	}
 	if repo.lastTokenHash != tokenHash {
 		t.Fatalf("repo received tokenHash = %s, want %s", repo.lastTokenHash, tokenHash)
-	}
-}
-
-func TestSessionService_Update_DelegatesToRepository(t *testing.T) {
-	t.Parallel()
-	h := newSessionHarness()
-	sess := domain.Session{
-		ID:        uuid.Must(uuid.NewV7()),
-		TokenHash: "hash-update",
-		ExpiresAt: testNow.Add(time.Hour),
-	}
-
-	if err := h.svc.Update(t.Context(), sess); err != nil {
-		t.Fatalf("Update error = %v", err)
-	}
-	stored, ok := h.sessions.sessions["hash-update"]
-	if !ok {
-		t.Fatal("session not persisted by Update")
-	}
-	if !stored.ExpiresAt.Equal(sess.ExpiresAt) {
-		t.Fatalf("stored ExpiresAt = %v, want %v", stored.ExpiresAt, sess.ExpiresAt)
 	}
 }
 
@@ -245,8 +224,46 @@ func (r *capturingSessionRepo) DeleteByTokenHash(_ context.Context, hash string)
 	delete(r.sessions, hash)
 	return nil
 }
-func (r *capturingSessionRepo) DeleteByUserID(_ context.Context, _ uuid.UUID) error { return nil }
-func (r *capturingSessionRepo) DeleteByUserIDExcept(_ context.Context, _ uuid.UUID, _ string) error {
+
+func (r *capturingSessionRepo) DeleteByUserIDExcept(_ context.Context, _ uuid.UUID, _ string) (int64, error) {
+	return 0, nil
+}
+
+func (r *capturingSessionRepo) Touch(_ context.Context, s domain.Session) error {
+	r.sessions[s.TokenHash] = s
 	return nil
+}
+
+func (r *capturingSessionRepo) Rotate(context.Context, domain.Session, string) (bool, error) {
+	return true, nil
+}
+
+func (r *capturingSessionRepo) ListByUserID(_ context.Context, userID uuid.UUID, _ time.Time) ([]domain.Session, error) {
+	var out []domain.Session
+	for _, s := range r.sessions {
+		if s.UserID == userID {
+			out = append(out, s)
+		}
+	}
+	return out, nil
+}
+
+func (r *capturingSessionRepo) GetByID(_ context.Context, id uuid.UUID) (domain.Session, error) {
+	for _, s := range r.sessions {
+		if s.ID == id {
+			return s, nil
+		}
+	}
+	return domain.Session{}, ErrNotFound
+}
+
+func (r *capturingSessionRepo) DeleteByIDForUser(_ context.Context, id, userID uuid.UUID) (bool, error) {
+	for hash, s := range r.sessions {
+		if s.ID == id && s.UserID == userID {
+			delete(r.sessions, hash)
+			return true, nil
+		}
+	}
+	return false, nil
 }
 func (r *capturingSessionRepo) WithTx(transaction.Tx) (SessionRepository, error) { return r, nil }

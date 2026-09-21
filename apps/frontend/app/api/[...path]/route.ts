@@ -2,8 +2,8 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import { BACKEND_URL } from '@/shared/config/backend-url';
 
-const BACKEND_URL = process.env.BACKEND_URL ?? 'http://localhost:8080';
 const BACKEND_TIMEOUT_MS = 30000;
 
 async function handler(

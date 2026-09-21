@@ -12,57 +12,78 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type NotificationChannel string
+type NotificationCategory string
 
 const (
-	NotificationChannelEmail NotificationChannel = "email"
-	NotificationChannelPush  NotificationChannel = "push"
+	NotificationCategoryRental             NotificationCategory = "rental"
+	NotificationCategoryPaymentsOperations NotificationCategory = "payments_operations"
+	NotificationCategoryTasks              NotificationCategory = "tasks"
+	NotificationCategorySharedAccess       NotificationCategory = "shared_access"
+	NotificationCategoryTariff             NotificationCategory = "tariff"
+	NotificationCategorySystem             NotificationCategory = "system"
 )
 
-func (e *NotificationChannel) Scan(src interface{}) error {
+func (e *NotificationCategory) Scan(src interface{}) error {
 	switch s := src.(type) {
 	case []byte:
-		*e = NotificationChannel(s)
+		*e = NotificationCategory(s)
 	case string:
-		*e = NotificationChannel(s)
+		*e = NotificationCategory(s)
 	default:
-		return fmt.Errorf("unsupported scan type for NotificationChannel: %T", src)
+		return fmt.Errorf("unsupported scan type for NotificationCategory: %T", src)
 	}
 	return nil
 }
 
-type NullNotificationChannel struct {
-	NotificationChannel NotificationChannel `json:"notification_channel"`
-	Valid               bool                `json:"valid"` // Valid is true if NotificationChannel is not NULL
+type NullNotificationCategory struct {
+	NotificationCategory NotificationCategory `json:"notification_category"`
+	Valid                bool                 `json:"valid"` // Valid is true if NotificationCategory is not NULL
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullNotificationChannel) Scan(value interface{}) error {
+func (ns *NullNotificationCategory) Scan(value interface{}) error {
 	if value == nil {
-		ns.NotificationChannel, ns.Valid = "", false
+		ns.NotificationCategory, ns.Valid = "", false
 		return nil
 	}
 	ns.Valid = true
-	return ns.NotificationChannel.Scan(value)
+	return ns.NotificationCategory.Scan(value)
 }
 
 // Value implements the driver Valuer interface.
-func (ns NullNotificationChannel) Value() (driver.Value, error) {
+func (ns NullNotificationCategory) Value() (driver.Value, error) {
 	if !ns.Valid {
 		return nil, nil
 	}
-	return string(ns.NotificationChannel), nil
+	return string(ns.NotificationCategory), nil
 }
 
 type NotificationEventType string
 
 const (
-	NotificationEventTypeOperationDue        NotificationEventType = "operation_due"
-	NotificationEventTypeLeaseExpiring       NotificationEventType = "lease_expiring"
-	NotificationEventTypeLeaseRequiresAction NotificationEventType = "lease_requires_action"
-	NotificationEventTypeOperationOverdue    NotificationEventType = "operation_overdue"
-	NotificationEventTypeFreeReminder        NotificationEventType = "free_reminder"
-	NotificationEventTypeSubscriptionGrace   NotificationEventType = "subscription_grace"
+	NotificationEventTypeOperationDue                 NotificationEventType = "operation_due"
+	NotificationEventTypeLeaseExpiring                NotificationEventType = "lease_expiring"
+	NotificationEventTypeLeaseRequiresAction          NotificationEventType = "lease_requires_action"
+	NotificationEventTypeOperationOverdue             NotificationEventType = "operation_overdue"
+	NotificationEventTypeFreeReminder                 NotificationEventType = "free_reminder"
+	NotificationEventTypeSubscriptionGrace            NotificationEventType = "subscription_grace"
+	NotificationEventTypeRentalCompleted              NotificationEventType = "rental_completed"
+	NotificationEventTypePaymentDue                   NotificationEventType = "payment_due"
+	NotificationEventTypePaymentOverdue               NotificationEventType = "payment_overdue"
+	NotificationEventTypeTaskOverdue                  NotificationEventType = "task_overdue"
+	NotificationEventTypePropertyInvitation           NotificationEventType = "property_invitation"
+	NotificationEventTypeInvitationAccepted           NotificationEventType = "invitation_accepted"
+	NotificationEventTypeAccessRevoked                NotificationEventType = "access_revoked"
+	NotificationEventTypeAccessPaused                 NotificationEventType = "access_paused"
+	NotificationEventTypeAccessResumed                NotificationEventType = "access_resumed"
+	NotificationEventTypeMemberLeft                   NotificationEventType = "member_left"
+	NotificationEventTypeSubscriptionPaymentFailed    NotificationEventType = "subscription_payment_failed"
+	NotificationEventTypeSubscriptionPaymentReminder  NotificationEventType = "subscription_payment_reminder"
+	NotificationEventTypeSubscriptionPaymentSucceeded NotificationEventType = "subscription_payment_succeeded"
+	NotificationEventTypeSubscriptionPlanChanged      NotificationEventType = "subscription_plan_changed"
+	NotificationEventTypeSubscriptionGraceEntered     NotificationEventType = "subscription_grace_entered"
+	NotificationEventTypeSubscriptionGraceExpiring    NotificationEventType = "subscription_grace_expiring"
+	NotificationEventTypeSystemMaintenance            NotificationEventType = "system_maintenance"
 )
 
 func (e *NotificationEventType) Scan(src interface{}) error {
@@ -231,6 +252,15 @@ type Contact struct {
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 }
 
+type EmailChangeGrant struct {
+	ID        pgtype.UUID        `json:"id"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	Email     string             `json:"email"`
+	TokenHash string             `json:"token_hash"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type LoginAttempt struct {
 	ID             pgtype.UUID        `json:"id"`
 	Phone          string             `json:"phone"`
@@ -252,6 +282,29 @@ type LoginCode struct {
 	Used           bool               `json:"used"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	PhoneEncrypted bool               `json:"phone_encrypted"`
+}
+
+type Notification struct {
+	ID           pgtype.UUID           `json:"id"`
+	UserID       pgtype.UUID           `json:"user_id"`
+	Category     NotificationCategory  `json:"category"`
+	EventType    NotificationEventType `json:"event_type"`
+	Title        string                `json:"title"`
+	Body         string                `json:"body"`
+	ContextLabel pgtype.Text           `json:"context_label"`
+	Payload      []byte                `json:"payload"`
+	DedupKey     string                `json:"dedup_key"`
+	ReadAt       pgtype.Timestamptz    `json:"read_at"`
+	DeletedAt    pgtype.Timestamptz    `json:"deleted_at"`
+	CreatedAt    pgtype.Timestamptz    `json:"created_at"`
+}
+
+type NotificationEmailPreference struct {
+	UserID             pgtype.UUID `json:"user_id"`
+	Rental             bool        `json:"rental"`
+	PaymentsOperations bool        `json:"payments_operations"`
+	Tasks              bool        `json:"tasks"`
+	SharedAccess       bool        `json:"shared_access"`
 }
 
 type Operation struct {
@@ -369,14 +422,19 @@ type PropertyPhoto struct {
 }
 
 type PushSubscription struct {
-	ID             pgtype.UUID        `json:"id"`
-	UserID         pgtype.UUID        `json:"user_id"`
-	Endpoint       string             `json:"endpoint"`
-	P256dh         string             `json:"p256dh"`
-	Auth           string             `json:"auth"`
-	ExpirationTime pgtype.Timestamptz `json:"expiration_time"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	ID                         pgtype.UUID        `json:"id"`
+	UserID                     pgtype.UUID        `json:"user_id"`
+	Endpoint                   string             `json:"endpoint"`
+	P256dh                     string             `json:"p256dh"`
+	Auth                       string             `json:"auth"`
+	ExpirationTime             pgtype.Timestamptz `json:"expiration_time"`
+	CreatedAt                  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                  pgtype.Timestamptz `json:"updated_at"`
+	Enabled                    bool               `json:"enabled"`
+	CategoryRental             bool               `json:"category_rental"`
+	CategoryPaymentsOperations bool               `json:"category_payments_operations"`
+	CategoryTasks              bool               `json:"category_tasks"`
+	CategorySharedAccess       bool               `json:"category_shared_access"`
 }
 
 type Rental struct {
@@ -399,12 +457,21 @@ type Rental struct {
 }
 
 type Session struct {
-	ID         pgtype.UUID        `json:"id"`
-	UserID     pgtype.UUID        `json:"user_id"`
-	TokenHash  string             `json:"token_hash"`
-	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
-	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
+	ID                pgtype.UUID        `json:"id"`
+	UserID            pgtype.UUID        `json:"user_id"`
+	TokenHash         string             `json:"token_hash"`
+	ExpiresAt         pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	LastUsedAt        pgtype.Timestamptz `json:"last_used_at"`
+	RotatedAt         pgtype.Timestamptz `json:"rotated_at"`
+	PreviousTokenHash pgtype.Text        `json:"previous_token_hash"`
+	LastIp            *netip.Addr        `json:"last_ip"`
+	UserAgent         string             `json:"user_agent"`
+	DeviceType        string             `json:"device_type"`
+	Browser           string             `json:"browser"`
+	BrowserMajor      pgtype.Int4        `json:"browser_major"`
+	Os                string             `json:"os"`
+	City              pgtype.Text        `json:"city"`
 }
 
 type SubscriptionPayment struct {
@@ -494,15 +561,6 @@ type User struct {
 	PhoneEncrypted  bool               `json:"phone_encrypted"`
 	EmailVerifiedAt pgtype.Timestamptz `json:"email_verified_at"`
 	Timezone        string             `json:"timezone"`
-}
-
-type UserNotificationChannelPreference struct {
-	UserID    pgtype.UUID           `json:"user_id"`
-	EventType NotificationEventType `json:"event_type"`
-	Channel   NotificationChannel   `json:"channel"`
-	Allowed   bool                  `json:"allowed"`
-	CreatedAt pgtype.Timestamptz    `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz    `json:"updated_at"`
 }
 
 type UserPopupView struct {

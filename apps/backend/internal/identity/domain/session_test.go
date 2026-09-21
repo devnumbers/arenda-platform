@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -63,16 +64,15 @@ func TestSession_Refresh(t *testing.T) {
 			wantLastUsedOff: 1 * time.Hour,
 		},
 		{
-			// Session is still active but late in its lifetime: now is 6 days
-			// before the hard cap (so now + SessionBaseTTL exceeds it), and
-			// ExpiresAt is 3 days before the cap (still active). Refresh must
-			// clamp to CreatedAt + SessionMaxTTL.
-			name:            "caps expiration at CreatedAt + SessionMaxTTL",
-			expiresOff:      SessionMaxTTL - 3*24*time.Hour,
-			nowOff:          SessionMaxTTL - 6*24*time.Hour,
+			// Pure sliding (ADR 0056): there is no absolute cap, so an active
+			// session keeps sliding past the old 30-day bound — a session last
+			// refreshed on day 90 is pushed to day 96.
+			name:            "slides past the old 30-day cap without limit",
+			expiresOff:      90 * 24 * time.Hour,
+			nowOff:          90*24*time.Hour - 24*time.Hour,
 			want:            true,
-			wantExpiresOff:  SessionMaxTTL,
-			wantLastUsedOff: SessionMaxTTL - 6*24*time.Hour,
+			wantExpiresOff:  96 * 24 * time.Hour,
+			wantLastUsedOff: 90*24*time.Hour - 24*time.Hour,
 		},
 		{
 			name:            "expired session is never refreshed",
@@ -83,14 +83,13 @@ func TestSession_Refresh(t *testing.T) {
 			wantLastUsedOff: 0,
 		},
 		{
-			// Session already at the hard cap: candidate equals the current
-			// ExpiresAt, so candidate.After(ExpiresAt) is false and neither
-			// field moves.
+			// Candidate does not move the expiration forward: neither field
+			// changes and Refresh reports a no-op.
 			name:            "returns false when expiration does not move forward",
-			expiresOff:      SessionMaxTTL,
-			nowOff:          SessionMaxTTL - SessionBaseTTL + time.Hour,
+			expiresOff:      8 * 24 * time.Hour,
+			nowOff:          24 * time.Hour,
 			want:            false,
-			wantExpiresOff:  SessionMaxTTL,
+			wantExpiresOff:  8 * 24 * time.Hour,
 			wantLastUsedOff: 0,
 		},
 	}
@@ -138,6 +137,78 @@ func TestSession_Refresh(t *testing.T) {
 	})
 }
 
+func TestSession_RenewalDue(t *testing.T) {
+	t.Parallel()
+	created := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name      string
+		rotatedAt time.Time
+		now       time.Time
+		want      bool
+	}{
+		{
+			name:      "young session is not due",
+			rotatedAt: created,
+			now:       created.Add(SessionRenewalInterval - time.Second),
+			want:      false,
+		},
+		{
+			name:      "exactly at the renewal interval the rotation is due",
+			rotatedAt: created,
+			now:       created.Add(SessionRenewalInterval),
+			want:      true,
+		},
+		{
+			name:      "long-lived session is due",
+			rotatedAt: created,
+			now:       created.Add(90 * 24 * time.Hour),
+			want:      true,
+		},
+		{
+			name:      "recently rotated session is not due again",
+			rotatedAt: created.Add(89 * 24 * time.Hour),
+			now:       created.Add(90 * 24 * time.Hour),
+			want:      false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := Session{RotatedAt: tc.rotatedAt}
+			if got := s.RenewalDue(tc.now); got != tc.want {
+				t.Fatalf("RenewalDue(%v) = %v, want %v", tc.now, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestNewToken(t *testing.T) {
+	t.Parallel()
+
+	token, err := NewToken()
+	if err != nil {
+		t.Fatalf("NewToken error = %v", err)
+	}
+	// 32 random bytes → 64 lowercase hex characters, same shape as the
+	// issuance token in NewSession.
+	if len(token) != 64 {
+		t.Fatalf("token length = %d, want 64", len(token))
+	}
+	const hexDigits = "0123456789abcdef"
+	if strings.Trim(token, hexDigits) != "" {
+		t.Fatalf("token %q is not lowercase hex", token)
+	}
+
+	other, err := NewToken()
+	if err != nil {
+		t.Fatalf("second NewToken error = %v", err)
+	}
+	if other == token {
+		t.Fatal("two NewToken calls produced identical tokens")
+	}
+}
+
 func TestNewSession(t *testing.T) {
 	t.Parallel()
 
@@ -182,5 +253,16 @@ func TestNewSession(t *testing.T) {
 	}
 	if !sess.LastUsedAt.Equal(now) {
 		t.Fatalf("LastUsedAt = %v, want %v", sess.LastUsedAt, now)
+	}
+	// Creation is rotation zero: a fresh session is never immediately due for
+	// a token rotation and has no previous token.
+	if !sess.RotatedAt.Equal(now) {
+		t.Fatalf("RotatedAt = %v, want %v", sess.RotatedAt, now)
+	}
+	if sess.PreviousTokenHash != "" {
+		t.Fatalf("PreviousTokenHash = %q, want empty on a fresh session", sess.PreviousTokenHash)
+	}
+	if sess.RenewalDue(now.Add(SessionRenewalInterval - time.Second)) {
+		t.Fatal("fresh session must not be due for rotation within the interval")
 	}
 }

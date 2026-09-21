@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  globalOperationsFiltersHref,
   globalOperationsFiltersParams,
   operationsPropertyChipLabel,
   readGlobalOperationsFilters,
@@ -109,6 +110,36 @@ describe('globalOperationsFiltersParams', () => {
       category: 'rent',
       property: `${PROP_A},${PROP_B}`,
     });
+  });
+});
+
+describe('globalOperationsFiltersHref', () => {
+  it('дефолтные фильтры — голая база без query (канон buildUrlWithParams, #792)', () => {
+    expect(
+      globalOperationsFiltersHref('/operations', {
+        period: null,
+        categories: [],
+        propertyIds: [],
+        archived: false,
+      }),
+    ).toBe('/operations');
+  });
+
+  it('выбранные фильтры пишутся, extra кладётся поверх', () => {
+    expect(
+      globalOperationsFiltersHref(
+        '/operations/categories',
+        {
+          period: { from: '2026-08-01', to: '2026-08-31' },
+          categories: ['rent'],
+          propertyIds: [PROP_A],
+          archived: true,
+        },
+        { return: '/operations/search' },
+      ),
+    ).toBe(
+      `/operations/categories?from=2026-08-01&to=2026-08-31&category=rent&property=${PROP_A}&archived=1&return=%2Foperations%2Fsearch`,
+    );
   });
 });
 

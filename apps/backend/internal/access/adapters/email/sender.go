@@ -1,7 +1,8 @@
-// Package email holds the email adapter of the access bounded context: the
-// property invite email of the invitation lifecycle (issue #161, T5). The
-// sharing lifecycle emails of issue #162 (T6) are cut (issue #695) until a
-// full notification system replaces them.
+// Package email holds the email adapters for the access bounded context: the
+// property invite email of the invitation lifecycle (issue #161, T5) and the
+// "object deleted" notice (issue #162, T6) — the two direct emails that stay;
+// the rest of the sharing lifecycle correspondence is the notifications feed's
+// (карта #734, #751).
 package email
 
 import (
@@ -14,10 +15,14 @@ import (
 )
 
 const (
-	inviteSubject = "Приглашение к совместному доступу в Рентли"
+	inviteSubject          = "Приглашение к совместному доступу в Рентли"
+	propertyDeletedSubject = "Объект в Рентли удалён владельцем"
+	// PropertyTitleKey is the template data key carrying the display title of
+	// the shared object.
+	propertyTitleKey = "PropertyTitle"
 )
 
-// Sender renders and sends the access invite email through the shared mailer.
+// Sender renders and sends the direct access emails through the shared mailer.
 type Sender struct {
 	sender     mailer.Sender
 	renderer   *mailer.Renderer
@@ -41,6 +46,13 @@ func (s *Sender) SendInvite(ctx context.Context, to string, propertyTitles []str
 		"PropertyTitles": propertyTitles,
 		"Role":           roleLabel(role),
 		"AppURL":         s.appBaseURL,
+	})
+}
+
+// SendPropertyDeleted emails a former member that the owner deleted the object.
+func (s *Sender) SendPropertyDeleted(ctx context.Context, to, propertyTitle string) error {
+	return s.send(ctx, to, propertyDeletedSubject, "property_deleted", map[string]any{
+		propertyTitleKey: propertyTitle,
 	})
 }
 

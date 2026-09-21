@@ -1,5 +1,6 @@
 import type { IsoDate, PaymentOperation } from '@/entities/payment';
 import { addDays, formatDayMonth, formatDayMonthWithYear } from '@/entities/payment';
+import { parseEnumParam } from '@/shared/lib/parse-enum-param';
 
 /**
  * Группировка «Истории платежей» по датам (резолюция #452): «Сегодня»,
@@ -16,6 +17,32 @@ export type PaymentHistoryGroup = {
   readonly label: string;
   readonly operations: ReadonlyArray<PaymentOperation>;
 };
+
+/** Направление «Истории операций» — экрана платежа (#466) и аренды (#535);
+ * дефолт «сначала новые» (макеты). */
+export type HistoryOrder = 'asc' | 'desc';
+
+export const DEFAULT_HISTORY_ORDER: HistoryOrder = 'desc';
+
+/** Разбор ?order= страниц истории (конвенция состояния в адресе):
+ * неизвестное и отсутствующее значения — дефолт desc. Направление живёт
+ * в адресе — переживает перезагрузку (#785). */
+export function parseHistoryOrderParams(
+  order: string | string[] | undefined,
+): HistoryOrder {
+  return parseEnumParam(order, ['asc', 'desc'], DEFAULT_HISTORY_ORDER);
+}
+
+/** Собственный параметр направления в адресе — знание этого модуля;
+ * писатель (useHistoryOrder) импортирует отсюда. */
+export const HISTORY_ORDER_PARAMS = ['order'] as const;
+
+/** Патч направления для адреса: дефолтные значения параметров не создают
+ * (конвенция состояния в адресе); пишется через useUrlParams с
+ * own: HISTORY_ORDER_PARAMS (#785). */
+export function serializeHistoryOrderToParams(order: HistoryOrder): Record<string, string> {
+  return order === DEFAULT_HISTORY_ORDER ? {} : { order };
+}
 
 export function groupPaidOperations(
   operations: ReadonlyArray<PaymentOperation>,

@@ -101,6 +101,17 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email domain.Email) (do
 	return mapUser(ctx, r.enc, userSourceFromUser(row).toUserRow())
 }
 
+func (r *UserRepository) GetByEmailForUpdate(ctx context.Context, email domain.Email) (domain.User, error) {
+	row, err := r.q().GetUserByEmailForUpdate(ctx, email.String())
+	if err != nil {
+		if notFound(err) {
+			return domain.User{}, application.ErrNotFound
+		}
+		return domain.User{}, fmt.Errorf("get user by email for update: %w", err)
+	}
+	return mapUser(ctx, r.enc, userSourceFromUser(row).toUserRow())
+}
+
 func (r *UserRepository) Create(ctx context.Context, user domain.User) (domain.User, error) {
 	encryptedPhone, phoneEncrypted, err := phoneToColumns(ctx, r.enc, user.Phone.String())
 	if err != nil {
@@ -213,6 +224,24 @@ func (r *UserRepository) UpdateEmailVerified(
 		return domain.User{}, fmt.Errorf("update user email verified: %w", err)
 	}
 	return mapUser(ctx, r.enc, userSourceFromUpdateEmailVerified(row).toUserRow())
+}
+
+func (r *UserRepository) MarkEmailVerified(
+	ctx context.Context,
+	id uuid.UUID,
+	verifiedAt time.Time,
+) (domain.User, error) {
+	row, err := r.q().UpdateUserEmailVerifiedAt(ctx, pgen.UpdateUserEmailVerifiedAtParams{
+		ID:              pgconv.UUIDToPgtype(id),
+		EmailVerifiedAt: pgconv.TimePtrToPgtype(&verifiedAt),
+	})
+	if err != nil {
+		if notFound(err) {
+			return domain.User{}, application.ErrNotFound
+		}
+		return domain.User{}, fmt.Errorf("mark user email verified: %w", err)
+	}
+	return mapUser(ctx, r.enc, userSourceFromUpdateEmailVerifiedAt(row).toUserRow())
 }
 
 func mapUser(ctx context.Context, enc encryption.Encryptor, row userRow) (domain.User, error) {

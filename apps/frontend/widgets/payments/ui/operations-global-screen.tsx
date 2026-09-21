@@ -8,7 +8,7 @@ import { clientTodayIso } from "@/entities/payment";
 import { propertyPermissions } from "@/entities/property";
 import { useKeyboardActivation } from "@/shared/lib/hooks/useKeyboardActivation";
 import {
-  globalOperationsFiltersParams,
+  globalOperationsFiltersHref,
   groupOperationsByDate,
   operationsCategoryChipLabel,
   operationsPeriodChipLabel,
@@ -107,15 +107,6 @@ export function OperationsGlobalScreen(): JSX.Element {
   }): void =>
     router.push(ROUTES.propertyOperation(operation.propertyId, operation.id));
 
-  const filterHref = (base: string, extra?: Record<string, string>): string => {
-    const params = new URLSearchParams(globalOperationsFiltersParams(filters));
-    for (const [name, value] of Object.entries(extra ?? {})) {
-      params.set(name, value);
-    }
-    const query = params.toString();
-    return query.length > 0 ? `${base}?${query}` : base;
-  };
-
   // «+» — в визард одиночной операции (#571, решение владельца 2026-09-08):
   // в ряду заголовка хаба и в правом слоте компакт-бара; в neverHad
   // скрыта — действие там CTA пустого состояния.
@@ -155,7 +146,9 @@ export function OperationsGlobalScreen(): JSX.Element {
               {/* Пилюля поиска (#543) — кнопка на отдельную страницу. */}
               <OperationsSearchPill
                 onOpenSearch={() =>
-                  router.push(filterHref(ROUTES.operationsSearch))
+                  router.push(
+                    globalOperationsFiltersHref(ROUTES.operationsSearch, filters),
+                  )
                 }
               />
             </div>
@@ -188,14 +181,14 @@ export function OperationsGlobalScreen(): JSX.Element {
               onOpenPeriod={() => setPeriodOpen(true)}
               onOpenProperties={() =>
                 router.push(
-                  filterHref(ROUTES.operationsObjects, {
+                  globalOperationsFiltersHref(ROUTES.operationsObjects, filters, {
                     return: ROUTES.operations,
                   }),
                 )
               }
               onOpenCategories={() =>
                 router.push(
-                  filterHref(ROUTES.operationsCategories, {
+                  globalOperationsFiltersHref(ROUTES.operationsCategories, filters, {
                     return: ROUTES.operations,
                   }),
                 )
@@ -244,7 +237,7 @@ export function OperationsGlobalScreen(): JSX.Element {
                         openLabel="Открыть все расходы"
                         onOpen={() =>
                           router.push(
-                            filterHref(ROUTES.operationsExpenses, {
+                            globalOperationsFiltersHref(ROUTES.operationsExpenses, filters, {
                               return: ROUTES.operations,
                             }),
                           )
@@ -260,7 +253,7 @@ export function OperationsGlobalScreen(): JSX.Element {
                         openLabel="Открыть все доходы"
                         onOpen={() =>
                           router.push(
-                            filterHref(ROUTES.operationsIncomes, {
+                            globalOperationsFiltersHref(ROUTES.operationsIncomes, filters, {
                               return: ROUTES.operations,
                             }),
                           )

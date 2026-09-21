@@ -137,7 +137,19 @@ const profile = {
   ),
   phoneSendCodeError: errorScenario('Не удалось отправить код'),
   phoneChangeError: errorScenario('Не удалось изменить номер телефона'),
+  /** Флоу смены почты (#722): автосообщение кода на текущий адрес при входе
+   * на экран и ошибки шагов подтверждения; текст — detail бэка («Неверный
+   * код», «Превышен лимит запросов», «Эта электронная почта уже
+   * используется», «У аккаунта нет электронной почты»). */
+  emailSendCodeError: errorScenario('Не удалось отправить код'),
+  emailChangeError: errorScenario('Не удалось изменить электронную почту'),
   logoutError: errorScenario('Не удалось выйти'),
+  /** Ревокации на экране «Устройства» (#730): завершение одной чужой
+   * сессии и «все другие, кроме текущей» (POST /me/sessions/logout-others).
+   * Лексика тостов — «сеанс(ы)», как в моках экрана (решение владельца
+   * 18.09.2026). */
+  sessionRevokeError: errorScenario('Не удалось завершить сеанс'),
+  logoutOthersError: errorScenario('Не удалось завершить другие сеансы'),
   pushEnabled: ((options?) =>
     notify.success('Пуши включены', options)) satisfies ScenarioFn,
   pushEnableError: errorScenario('Не удалось включить пуши'),
@@ -268,6 +280,13 @@ const tasks = {
   updateError: errorScenario('Не удалось сохранить задачу'),
 } as const;
 
+const notifications = {
+  markReadError: errorScenario('Не удалось отметить уведомление прочитанным'),
+  markAllError: errorScenario('Не удалось отметить все уведомления'),
+  deleteError: errorScenario('Не удалось удалить уведомление'),
+  deleteAllError: errorScenario('Не удалось удалить уведомления'),
+} as const;
+
 const demo = {
   success: ((options?) =>
     notify.success('Успех', options)) satisfies ScenarioFn,
@@ -296,6 +315,7 @@ export type Scenarios = {
   readonly payments: typeof payments;
   readonly rentals: typeof rentals;
   readonly tasks: typeof tasks;
+  readonly notifications: typeof notifications;
   readonly demo: typeof demo;
 };
 
@@ -310,5 +330,6 @@ export const scenarios: Scenarios = {
   payments,
   rentals,
   tasks,
+  notifications,
   demo,
 };

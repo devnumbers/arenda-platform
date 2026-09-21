@@ -155,16 +155,24 @@ type InvitationRepository interface {
 	WithTx(tx transaction.Tx) InvitationRepository
 }
 
-// AccessMailer sends the transactional email of the access context: the invite
-// email to an unregistered invitee (issue #161, T5). The sharing lifecycle
-// emails of issue #162 (T6) are cut (issue #695) until a full notification
-// system replaces them.
+// AccessMailer sends the transactional emails of the sharing lifecycle that
+// stay direct: the invite email to an unregistered invitee (issue #161, T5 —
+// until the invitee registers there is no recipient a feed row could belong
+// to) and the "object deleted" notice (issue #162, T6) whose event is not in
+// the notifications catalog. The rest of the lifecycle correspondence —
+// revoke, suspension, recovery, activation, self-exit — is the stored
+// notifications feed's (карта #734, #751, ADR 0058): written always,
+// delivered over the channels per the category matrix (the direct lifecycle
+// emails cut by issue #695 are replaced by exactly this feed).
 type AccessMailer interface {
 	// SendInvite is the invite email to an unregistered invitee. Since the
 	// multi-object invitation (issue #694) one email covers the whole batch:
 	// PropertyTitles are the display titles of the objects the person was
 	// invited to.
 	SendInvite(ctx context.Context, to string, propertyTitles []string, role domain.Role) error
+	// SendPropertyDeleted is the "object deleted" notice: one letter per
+	// former member of the deleted object (issue #162, T6).
+	SendPropertyDeleted(ctx context.Context, to, propertyTitle string) error
 }
 
 // UserEmailResolver resolves a registered user's email address behind a narrow

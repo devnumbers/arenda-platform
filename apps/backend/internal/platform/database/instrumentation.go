@@ -62,14 +62,24 @@ func NewInstrumentedPool(pool *pgxpool.Pool, logger *slog.Logger) *InstrumentedP
 
 // InstrumentedTx wraps a pgx transaction with slow query diagnostics.
 type InstrumentedTx struct {
-	tx   transactionExecutor
+	tx transactionExecutor
+	// Raw is the driver transaction behind tx. PgxTxOf hands it to
+	// infrastructure that joins the caller's transaction with driver-level
+	// semantics (river InsertTx); a test-injected non-pgx executor leaves it
+	// nil.
+	raw  pgx.Tx
 	inst dbInstrumenter
 }
 
 // NewInstrumentedTx returns a DBTX-compatible transaction wrapper.
 func NewInstrumentedTx(tx transactionExecutor, logger *slog.Logger) *InstrumentedTx {
+	var raw pgx.Tx
+	if t, ok := tx.(pgx.Tx); ok {
+		raw = t
+	}
 	return &InstrumentedTx{
 		tx:   tx,
+		raw:  raw,
 		inst: newDBInstrumenter(logger),
 	}
 }

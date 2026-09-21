@@ -2,8 +2,8 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { buildCspReportOnlyPolicy, generateCspNonce } from '@/shared/lib/csp';
 import { safeInternalPath } from '@/shared/lib/safe-internal-path';
+import { BACKEND_URL } from '@/shared/config/backend-url';
 
-const BACKEND_URL = process.env.BACKEND_URL ?? 'http://localhost:8080';
 // CSP шаг 2 — разведка (тикет #406, решение #331): nonce + strict-dynamic
 // в Content-Security-Policy-Report-Only. Флаг ставит только stage-compose
 // (deploy/docker-compose.stage.yml); без переменной поведение прежнее —

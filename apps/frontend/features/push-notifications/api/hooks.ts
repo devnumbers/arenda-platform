@@ -21,8 +21,7 @@ type PushSubscriptionResponse =
   components['schemas']['PushSubscriptionResponse'];
 
 // Note: a separate keys.ts here would be ignored by the bare `api` rule in the
-// root .gitignore, so the keys live in this file (same pattern as the
-// notification-preferences feature).
+// root .gitignore, so the keys live in this file.
 export const pushSubscriptionKeys = {
   vapid: ['push', 'vapid-public-key'] as const,
   subscription: ['push', 'subscription'] as const,

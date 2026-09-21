@@ -239,12 +239,14 @@ func newInvitationFixture() *invitationFixture {
 	mailer := &fakeAccessMailer{}
 	clk := &fixedClock{now: time.Now()}
 	limiter := newFakeRecipientLimiter()
+	// The lifecycle events are not wired here: the T5 scenarios assert the
+	// invite email only, no event publication is part of them.
 	coordinator := NewSlotCoordinator(repo, owners, limiter, newFakeOwnedProps(),
-		auditapp.Noop{}, noopBeginner{})
-	access := NewAccessService(repo, owners, statuses, lookup, policy, coordinator,
+		nil, auditapp.Noop{}, noopBeginner{}, nil, nil)
+	access := NewAccessService(repo, owners, statuses, lookup, policy, coordinator, nil,
 		newTestFactory(repo, invitations, auditapp.Noop{}), nil)
 	svc := NewInvitationService(access, repo, invitations, owners, statuses, lookup, policy,
-		coordinator, mailer, fakeTitles(testNevskyTitle),
+		coordinator, mailer, nil, fakeTitles(testNevskyTitle),
 		newTestFactory(repo, invitations, auditapp.Noop{}), clk, nil, emails)
 	return &invitationFixture{
 		repo:        repo,

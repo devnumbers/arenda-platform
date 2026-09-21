@@ -284,3 +284,15 @@ WHERE t.owner_id = $1
         SELECT 1 FROM properties p
         WHERE p.id = t.property_id AND p.status != 'archived'
       ));
+
+-- name: ListRuleUncompletedTaskIDs :many
+-- The scheduling seam's in-transaction handover (issue #775): the rule's
+-- standing uncompleted tasks' ids, read after the materialization tick has
+-- settled the rule's rows. The freshly materialized and the kept standing
+-- tasks travel alike — notifications re-resolves each task's liveness and
+-- term itself, so stale or kept ids are safe to hand over.
+SELECT id
+FROM tasks
+WHERE rule_id = $1
+  AND completed_date IS NULL
+ORDER BY id;

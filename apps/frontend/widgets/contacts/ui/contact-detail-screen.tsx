@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type JSX } from 'react';
+import { useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft,
@@ -18,13 +18,11 @@ import type { Property } from '@/entities/property';
 import { useContact, useDeleteContact } from '@/features/contacts';
 import { useProperty } from '@/features/properties';
 import { propertyPermissions } from '@/entities/property';
+import { useCopiedHint } from '@/shared/lib/hooks/use-copied-hint';
 import { ConfirmDialog, IconButton, PageContent, TopNav, TopNavTitle } from '@/shared/ui/design';
 import { contactValueRows } from '../lib/contact-detail-model';
 import { ContactKebabMenu } from './contact-kebab-menu';
 import { ContactDetailSkeleton, ContactsErrorCard } from './contacts-states';
-
-/** Задержка индикации «скопировано» (мс) — канон кнопки копирования. */
-const COPIED_RESET_MS = 2000;
 
 /**
  * Экран «Контакт» (#510, макеты 1285:55112 / 1424:54725): карточка книги
@@ -249,38 +247,13 @@ function ContactCardBody({
 
 /** Строка значения с копированием (1285:55112): значение 16/500, подпись
  * 14 серым, справа кнопка копирования — иконка меняется на галочку на пару
- * секунд (канон строки с копированием). */
+ * секунд (канон useCopiedHint). */
 function ContactValueRowView({
   row,
 }: {
   readonly row: ReturnType<typeof contactValueRows>[number];
 }): JSX.Element {
-  const [copied, setCopied] = useState(false);
-  const copiedTimeoutRef = useRef<number | null>(null);
-
-  // Таймер подсказки гасим при размонтировании строки.
-  useEffect(
-    () => () => {
-      if (copiedTimeoutRef.current !== null) {
-        clearTimeout(copiedTimeoutRef.current);
-      }
-    },
-    [],
-  );
-
-  const handleCopy = (): void => {
-    // Буфер может быть недоступен (небезопасный контекст) — расширение типа
-    // сохраняет runtime-проверку, подсказку всё равно показываем.
-    const clipboard = navigator.clipboard as Clipboard | undefined;
-    clipboard?.writeText(row.value).catch(() => {
-      // то же: подсказку «Скопировано» показываем независимо от буфера
-    });
-    setCopied(true);
-    if (copiedTimeoutRef.current !== null) {
-      clearTimeout(copiedTimeoutRef.current);
-    }
-    copiedTimeoutRef.current = window.setTimeout(() => setCopied(false), COPIED_RESET_MS);
-  };
+  const { copied, copy } = useCopiedHint();
 
   return (
     <div className="flex items-center gap-2 py-3">
@@ -293,7 +266,7 @@ function ContactValueRowView({
       <IconButton
         icon={copied ? <Check className="h-5 w-5" /> : <Copy className="h-5 w-5" />}
         label={copied ? 'Скопировано' : `Скопировать: ${row.label}`}
-        onClick={handleCopy}
+        onClick={() => copy(row.value)}
       />
     </div>
   );

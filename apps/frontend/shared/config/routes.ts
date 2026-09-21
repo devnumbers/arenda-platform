@@ -176,16 +176,26 @@ export const ROUTES = {
   /** Экран приглашения участника (#699): мультиобъектный флоу. До тикета
    * живёт как нейтральный каркас. */
   participantsInvite: '/participants/invite',
-  /** Экран «Поддержка» (регистрирует единая нав-модель #558; страница живет
-   * до переезда на новый хром — карта #556). */
-  support: '/support',
+  /** Центр уведомлений — лента (карта #734, тикет #744): хаб-маршрут
+   * среднего таба TabBar и пилюли ПК. */
+  notifications: '/notifications',
+  /** Страница уведомления с живыми действиями (карта #734, тикет #745). */
+  notification: (id: string) => `/notifications/${id}`,
   profile: '/profile',
+  /** Хаб-страница «Уведомления» (#566) — промежуточная заглушка; станет
+   * экраном «Настроить уведомления» (#746, решение #738). */
   profileNotifications: '/profile/notifications',
   profileAccount: '/profile/account',
+  /** Экран «Устройства» (карта #724): строка хаба ведёт сюда (мок
+   * 1786-31288, тикет #729); страница списка сессий — тикет #730. */
+  profileDevices: '/profile/devices',
   /** Пикер часового пояса (карта #591, тикет #594): полный список зон РФ
    * с поиском; сохранение — PATCH /me, назад — на аккаунт. */
   profileAccountTimezone: '/profile/account/timezone',
   profileChangePhone: '/profile/account/phone',
+  /** Флоу смены почты (карта #723, тикет #722): двойной код — на текущий
+   * адрес, затем на новый. */
+  profileChangeEmail: '/profile/account/email',
   profileTariff: '/profile/tariff',
   /** Экран «О тарифе» (карта #611, тикет #621): детали тарифа с главного
    * «Тариф»; до #621 страница живёт как нейтральный каркас. */
@@ -202,4 +212,10 @@ export const ROUTES = {
   profileInfo: '/profile/info',
   profilePrivacy: '/profile/info/privacy',
   profileTerms: '/profile/info/terms',
+  /** Юрстраницы лендинга (карта #761, тикет #763): consent-ссылки шага
+   * телефона логина. Страницы живут на лендинге за прокси, открываются в
+   * новой вкладке; самих страниц пока нет — 404 лендинга не блокирует
+   * (решение владельца 18.09). */
+  landingPrivacy: '/privacy',
+  landingTerms: '/terms',
 } as const;

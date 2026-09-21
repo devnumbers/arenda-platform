@@ -69,6 +69,13 @@ describe('isAppRoute', () => {
     expect(isAppRoute('/finance')).toBe(false);
     expect(isAppRoute('/calendar')).toBe(false);
   });
+
+  it('returns false for the removed support route (modal #766, not a page)', () => {
+    // Страница /support снесена (карта #761, тикет #766): «Поддержка» —
+    // модалка «Связаться с нами», старые ссылки уходят в сеть как 404.
+    expect(isAppRoute('/support')).toBe(false);
+    expect(isAppRoute('/support/faq')).toBe(false);
+  });
 });
 
 describe('app route list sync with service worker', () => {

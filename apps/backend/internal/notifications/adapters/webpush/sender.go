@@ -180,7 +180,7 @@ func (s *Sender) mapResponse(ctx context.Context, resp *http.Response) error {
 // immediately; anything else gets "normal" to save battery (research #174 §4).
 func urgencyForEventType(eventType domain.EventType) string {
 	switch eventType {
-	case domain.EventSubscriptionGrace:
+	case domain.EventSubscriptionGraceEntered, domain.EventSubscriptionGraceExpiring:
 		return urgencyHigh
 	default:
 		return urgencyNormal

@@ -99,6 +99,20 @@ func (r *countingSessionRepo) WithTx(tx transaction.Tx) (SessionRepository, erro
 	return r, nil
 }
 
+type countingGrantRepo struct {
+	*fakeGrantRepo
+	withTxCalls int
+	withTxErr   error
+}
+
+func (r *countingGrantRepo) WithTx(tx transaction.Tx) (EmailChangeGrantRepository, error) {
+	r.withTxCalls++
+	if r.withTxErr != nil {
+		return nil, r.withTxErr
+	}
+	return r, nil
+}
+
 // countingRecorder wraps auditapp.Noop to count WithTx bindings.
 type countingRecorder struct {
 	auditapp.Noop
@@ -119,6 +133,7 @@ type countingFactory struct {
 	codes    *countingCodeRepo
 	attempts *countingAttemptRepo
 	sessions *countingSessionRepo
+	grants   *countingGrantRepo
 	audit    *countingRecorder
 }
 
@@ -132,11 +147,12 @@ func newCountingFactory(t *testing.T) countingFactory {
 		codes:    &countingCodeRepo{fakeCodeRepo: newFakeCodeRepo()},
 		attempts: &countingAttemptRepo{fakeAttemptRepo: newFakeAttemptRepo()},
 		sessions: &countingSessionRepo{fakeSessionRepo: newFakeSessionRepo()},
+		grants:   &countingGrantRepo{fakeGrantRepo: newFakeGrantRepo()},
 		audit:    &countingRecorder{},
 	}
 	cf.f = &txStoreFactory{
 		users: cf.users, codes: cf.codes, attempts: cf.attempts,
-		sessions: cf.sessions, audit: cf.audit, uow: &fakeUoW{beginner: cf.b},
+		sessions: cf.sessions, grants: cf.grants, audit: cf.audit, uow: &fakeUoW{beginner: cf.b},
 	}
 	return cf
 }
@@ -150,6 +166,7 @@ type fakeStores struct {
 	codes    *fakeCodeRepo
 	attempts *fakeAttemptRepo
 	sessions *fakeSessionRepo
+	grants   *fakeGrantRepo
 	beginner *fakeBeginner
 }
 
@@ -160,6 +177,7 @@ func newFakeStores() *fakeStores {
 		codes:    newFakeCodeRepo(),
 		attempts: newFakeAttemptRepo(),
 		sessions: newFakeSessionRepo(),
+		grants:   newFakeGrantRepo(),
 		beginner: &fakeBeginner{},
 	}
 }
@@ -168,7 +186,7 @@ func newFakeStores() *fakeStores {
 // to nil (NewTxStoreFactory substitutes Noop); pass a non-nil recorder (e.g.
 // *recordingRecorder) when the test checks audit output.
 func (s *fakeStores) factory(audit auditapp.Recorder) txStoreFactory {
-	return NewTxStoreFactory(s.users, s.codes, s.attempts, s.sessions, audit, &fakeUoW{beginner: s.beginner})
+	return NewTxStoreFactory(s.users, s.codes, s.attempts, s.sessions, s.grants, audit, &fakeUoW{beginner: s.beginner})
 }
 
 // TestRunInTx_BuildsStoresFromTxAndCommits proves runInTx binds every
@@ -192,28 +210,8 @@ func TestRunInTx_BuildsStoresFromTxAndCommits(t *testing.T) {
 		t.Fatal("work was not called")
 	}
 
-	// Each repository is bound to the transaction exactly once.
-	if cf.users.withTxCalls != 1 {
-		t.Errorf("users.WithTx calls = %d, want 1", cf.users.withTxCalls)
-	}
-	if cf.codes.withTxCalls != 1 {
-		t.Errorf("codes.WithTx calls = %d, want 1", cf.codes.withTxCalls)
-	}
-	if cf.attempts.withTxCalls != 1 {
-		t.Errorf("attempts.WithTx calls = %d, want 1", cf.attempts.withTxCalls)
-	}
-	if cf.sessions.withTxCalls != 1 {
-		t.Errorf("sessions.WithTx calls = %d, want 1", cf.sessions.withTxCalls)
-	}
-	if cf.audit.withTxCalls != 1 {
-		t.Errorf("audit.WithTx calls = %d, want 1", cf.audit.withTxCalls)
-	}
-
-	// The same transactional instances are handed to work.
-	if got.users != cf.users || got.codes != cf.codes || got.attempts != cf.attempts ||
-		got.sessions != cf.sessions {
-		t.Error("work received stores that do not match the bound repositories")
-	}
+	assertEveryRepoBoundOnce(t, cf)
+	assertWorkGotBoundStores(t, cf, got)
 
 	// UoW commits on nil error and leaves no transaction open.
 	if cf.b.committed != 1 {
@@ -299,6 +297,7 @@ func TestRunInTx_WrapsWithTxError(t *testing.T) {
 		codes:    &countingCodeRepo{fakeCodeRepo: newFakeCodeRepo()},
 		attempts: &countingAttemptRepo{fakeAttemptRepo: newFakeAttemptRepo()},
 		sessions: &countingSessionRepo{fakeSessionRepo: newFakeSessionRepo()},
+		grants:   &countingGrantRepo{fakeGrantRepo: newFakeGrantRepo()},
 		audit:    &countingRecorder{},
 		uow:      &fakeUoW{beginner: b},
 	}
@@ -334,6 +333,7 @@ func TestRunInTx_ReturnsErrorWhenUoWMissing(t *testing.T) {
 		codes:    &countingCodeRepo{fakeCodeRepo: newFakeCodeRepo()},
 		attempts: &countingAttemptRepo{fakeAttemptRepo: newFakeAttemptRepo()},
 		sessions: &countingSessionRepo{fakeSessionRepo: newFakeSessionRepo()},
+		grants:   &countingGrantRepo{fakeGrantRepo: newFakeGrantRepo()},
 		audit:    &countingRecorder{},
 		// UoW intentionally nil.
 	}
@@ -349,6 +349,37 @@ func TestRunInTx_ReturnsErrorWhenUoWMissing(t *testing.T) {
 	}
 	if workCalled {
 		t.Fatal("work must not run when UoW is missing")
+	}
+}
+
+// assertEveryRepoBoundOnce checks that runInTx bound every repository and the
+// audit recorder to the transaction exactly once.
+func assertEveryRepoBoundOnce(t *testing.T, cf countingFactory) {
+	t.Helper()
+	for _, tc := range []struct {
+		name string
+		n    int
+	}{
+		{"users", cf.users.withTxCalls},
+		{"codes", cf.codes.withTxCalls},
+		{"attempts", cf.attempts.withTxCalls},
+		{"sessions", cf.sessions.withTxCalls},
+		{"grants", cf.grants.withTxCalls},
+		{"audit", cf.audit.withTxCalls},
+	} {
+		if tc.n != 1 {
+			t.Errorf("%s.WithTx calls = %d, want 1", tc.name, tc.n)
+		}
+	}
+}
+
+// assertWorkGotBoundStores checks that work received the same transactional
+// instances the factory bound.
+func assertWorkGotBoundStores(t *testing.T, cf countingFactory, got txStores) {
+	t.Helper()
+	if got.users != cf.users || got.codes != cf.codes || got.attempts != cf.attempts ||
+		got.sessions != cf.sessions || got.grants != cf.grants {
+		t.Error("work received stores that do not match the bound repositories")
 	}
 }
 

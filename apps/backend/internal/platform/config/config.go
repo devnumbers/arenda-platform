@@ -118,12 +118,25 @@ type Config struct {
 	OTelEnabled                         bool
 	OTelTraceSampler                    float64
 	OTelOTLPEndpoint                    string
-	VAPIDPublicKey                      string
+	// GeoIPDBPath points at the offline DB-IP City Lite database baked into
+	// the Docker image (issue #728). Optional: when unset, cities are not
+	// resolved and sessions store no city — the product keeps working.
+	GeoIPDBPath    string
+	VAPIDPublicKey string
 	// VAPIDPrivateKey and VAPIDSubject are consumed by the Web Push sender
 	// (RFC 8292). They are optional: when VAPIDPublicKey is unset, push
 	// delivery is disabled and the reminder worker runs email-only.
 	VAPIDPrivateKey string
 	VAPIDSubject    string
+	// Notifications queue (карта #734, #740): the in-process River client's
+	// worker pools, retry budgets, soft-stop window and the global email
+	// provider budget. Defaults live in loadNotificationsQueue.
+	NotificationsEmailMaxWorkers        int
+	NotificationsPushMaxWorkers         int
+	NotificationsEmailMaxAttempts       int
+	NotificationsPushMaxAttempts        int
+	NotificationsRiverSoftStopTimeout   time.Duration
+	NotificationsEmailProviderPerMinute int
 	// WebOrigin is the frontend origin the fake provider's bank-return
 	// redirects the browser into (issue #663). The env var is read
 	// unconditionally but parsed, defaulted to the APP_BASE_URL origin
@@ -147,6 +160,7 @@ type RateLimit struct {
 	EmailVerifyPer15Min       int
 	PhoneChangeSendPerHour    int
 	PhoneChangeVerifyPer15Min int
+	EmailChangeSendPerHour    int
 }
 
 // DBPoolConfig holds PostgreSQL connection pool settings.
@@ -199,6 +213,7 @@ func Load() (Config, error) {
 		VAPIDPublicKey:   os.Getenv("VAPID_PUBLIC_KEY"),
 		VAPIDPrivateKey:  os.Getenv("VAPID_PRIVATE_KEY"),
 		VAPIDSubject:     os.Getenv("VAPID_SUBJECT"),
+		GeoIPDBPath:      os.Getenv("GEOIP_DB_PATH"),
 	}
 
 	for _, load := range []func() error{
@@ -216,6 +231,7 @@ func Load() (Config, error) {
 		cfg.loadSchedulerIntervals,
 		cfg.loadTrustedProxies,
 		cfg.loadTariffCacheTTL,
+		cfg.loadNotificationsQueue,
 		cfg.loadBillingTimeTravel,
 	} {
 		if err := load(); err != nil {
@@ -384,6 +400,9 @@ func (c *Config) loadRateLimit() error {
 	if err := c.overrideRateLimitPhoneChange(); err != nil {
 		return err
 	}
+	if err := c.overrideRateLimitEmailChange(); err != nil {
+		return err
+	}
 	return c.validateRateLimit()
 }
 
@@ -397,6 +416,7 @@ func defaultRateLimit() RateLimit {
 		EmailVerifyPer15Min:       30,
 		PhoneChangeSendPerHour:    5,
 		PhoneChangeVerifyPer15Min: 10,
+		EmailChangeSendPerHour:    5,
 	}
 }
 
@@ -439,7 +459,7 @@ func (c *Config) overrideRateLimitEmail() error {
 }
 
 // overrideRateLimitPhoneChange applies the phone-change send/verify overrides,
-// keeping the built-in defaults when a value arrives unset or non-positive.
+// keeping the built-in defaults when a value arrives unset.
 func (c *Config) overrideRateLimitPhoneChange() error {
 	if v := os.Getenv("RATE_LIMIT_PHONE_CHANGE_SEND_PER_HOUR"); v != "" {
 		n, err := strconv.Atoi(v)
@@ -447,8 +467,6 @@ func (c *Config) overrideRateLimitPhoneChange() error {
 			return fmt.Errorf("invalid RATE_LIMIT_PHONE_CHANGE_SEND_PER_HOUR %q: %w", v, err)
 		}
 		c.RateLimit.PhoneChangeSendPerHour = n
-	} else if c.RateLimit.PhoneChangeSendPerHour <= 0 {
-		c.RateLimit.PhoneChangeSendPerHour = 5
 	}
 	if v := os.Getenv("RATE_LIMIT_PHONE_CHANGE_VERIFY_PER_15MIN"); v != "" {
 		n, err := strconv.Atoi(v)
@@ -456,8 +474,20 @@ func (c *Config) overrideRateLimitPhoneChange() error {
 			return fmt.Errorf("invalid RATE_LIMIT_PHONE_CHANGE_VERIFY_PER_15MIN %q: %w", v, err)
 		}
 		c.RateLimit.PhoneChangeVerifyPer15Min = n
-	} else if c.RateLimit.PhoneChangeVerifyPer15Min <= 0 {
-		c.RateLimit.PhoneChangeVerifyPer15Min = 10
+	}
+	return nil
+}
+
+// overrideRateLimitEmailChange applies the email-change send override
+// (codes to NEW addresses, issue #721), keeping the built-in default when the
+// value arrives unset.
+func (c *Config) overrideRateLimitEmailChange() error {
+	if v := os.Getenv("RATE_LIMIT_EMAIL_CHANGE_SEND_PER_HOUR"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return fmt.Errorf("invalid RATE_LIMIT_EMAIL_CHANGE_SEND_PER_HOUR %q: %w", v, err)
+		}
+		c.RateLimit.EmailChangeSendPerHour = n
 	}
 	return nil
 }
@@ -481,6 +511,9 @@ func (c *Config) validateRateLimit() error {
 	}
 	if c.RateLimit.PhoneChangeVerifyPer15Min <= 0 {
 		return errors.New("RATE_LIMIT_PHONE_CHANGE_VERIFY_PER_15MIN must be positive")
+	}
+	if c.RateLimit.EmailChangeSendPerHour <= 0 {
+		return errors.New("RATE_LIMIT_EMAIL_CHANGE_SEND_PER_HOUR must be positive")
 	}
 	return nil
 }
@@ -658,6 +691,45 @@ func (c *Config) validateSMTPFields() error {
 		return errors.New("SMTP_FROM is required when EMAIL_SENDER=smtp")
 	}
 	return nil
+}
+
+// loadNotificationsQueue defaults the delivery-queue (River) settings and
+// applies the env overrides. Every value guards a resource ceiling: worker
+// pools cap concurrent SMTP/push calls, retry budgets bound the backoff
+// ladder, the soft-stop window bounds graceful shutdown, and the per-minute
+// provider budget is the global email rate limit enforced inside the
+// delivery job (research #735 §5).
+func (c *Config) loadNotificationsQueue() error {
+	c.NotificationsEmailMaxWorkers = 4
+	c.NotificationsPushMaxWorkers = 16
+	c.NotificationsEmailMaxAttempts = 8
+	c.NotificationsPushMaxAttempts = 8
+	c.NotificationsRiverSoftStopTimeout = 10 * time.Second
+	c.NotificationsEmailProviderPerMinute = 60
+
+	for _, o := range []struct {
+		dst *int
+		key string
+	}{
+		{&c.NotificationsEmailMaxWorkers, "NOTIFICATIONS_EMAIL_MAX_WORKERS"},
+		{&c.NotificationsPushMaxWorkers, "NOTIFICATIONS_PUSH_MAX_WORKERS"},
+		{&c.NotificationsEmailMaxAttempts, "NOTIFICATIONS_EMAIL_MAX_ATTEMPTS"},
+		{&c.NotificationsPushMaxAttempts, "NOTIFICATIONS_PUSH_MAX_ATTEMPTS"},
+		{&c.NotificationsEmailProviderPerMinute, "NOTIFICATIONS_EMAIL_PROVIDER_PER_MINUTE"},
+	} {
+		if v := os.Getenv(o.key); v != "" {
+			n, err := strconv.Atoi(v)
+			if err != nil {
+				return fmt.Errorf("invalid %s %q: %w", o.key, v, err)
+			}
+			if n <= 0 {
+				return errors.New(o.key + " must be positive")
+			}
+			*o.dst = n
+		}
+	}
+
+	return overridePositiveDurationEnv(&c.NotificationsRiverSoftStopTimeout, "NOTIFICATIONS_RIVER_SOFT_STOP_TIMEOUT")
 }
 
 func (c *Config) loadPaymentProvider() error {

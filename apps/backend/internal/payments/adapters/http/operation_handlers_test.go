@@ -1221,6 +1221,7 @@ func TestCreateOperation_FoldsBodyIntoCommandAndReturns201(t *testing.T) {
 	req := httptest.NewRequestWithContext(
 		httpsupport.WithUserID(t.Context(), actor), http.MethodPost, "/operations", strings.NewReader(body),
 	)
+	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	h.CreateOperation(w, req, propertyID)
 
@@ -1276,6 +1277,7 @@ func TestCreateOperation_ErrorMapping(t *testing.T) {
 			req := httptest.NewRequestWithContext(
 				httpsupport.WithUserID(t.Context(), actor), http.MethodPost, "/operations", strings.NewReader(payload),
 			)
+			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 			h.CreateOperation(w, req, propertyID)
 			if w.Code != tc.wantStatus {

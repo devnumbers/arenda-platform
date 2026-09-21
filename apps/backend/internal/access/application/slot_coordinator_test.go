@@ -102,8 +102,11 @@ func newCoordinatorFixture() *coordinatorFixture {
 		owners,
 		limiter,
 		ownedProps,
+		nil,
 		auditapp.Noop{},
 		noopBeginner{},
+		nil,
+		nil,
 	)
 	return &coordinatorFixture{
 		repo:        repo,

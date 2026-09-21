@@ -4,6 +4,8 @@ import { addDays } from '@/entities/task';
 import {
   DEFAULT_TASKS_SORT,
   groupTasks,
+  parseTasksSortParams,
+  serializeTasksSortToParams,
   sortTasks,
   type TasksSort,
 } from './tasks-list';
@@ -153,5 +155,60 @@ describe('sortTasks — порядок строк внутри групп', () =
     ];
     const sorted = sortTasks(group, { field: 'date', direction: 'asc' });
     expect(sorted.map((t) => t.id)).toEqual(['old', 'new']);
+  });
+});
+
+describe('parseTasksSortParams — разбор ?sort=&order= экранов задач (#785)', () => {
+  it('отсутствие параметров — дефолт «Дата, asc»', () => {
+    expect(parseTasksSortParams(undefined, undefined)).toStrictEqual(DEFAULT_TASKS_SORT);
+    expect(parseTasksSortParams('', '')).toStrictEqual(DEFAULT_TASKS_SORT);
+  });
+
+  it('читает поле и направление; неизвестные значения — дефолтные', () => {
+    expect(parseTasksSortParams('title', 'desc')).toStrictEqual({
+      field: 'title',
+      direction: 'desc',
+    });
+    expect(parseTasksSortParams('name', 'desc')).toStrictEqual({
+      field: 'date',
+      direction: 'desc',
+    });
+    expect(parseTasksSortParams('title', 'up')).toStrictEqual({
+      field: 'title',
+      direction: 'asc',
+    });
+  });
+
+  it('массивное значение (битый дубликат параметра) — дефолт, как в книге контактов', () => {
+    expect(parseTasksSortParams(['title'], ['desc'])).toStrictEqual(DEFAULT_TASKS_SORT);
+  });
+});
+
+describe('serializeTasksSortToParams — запись ?sort=&order= (#785)', () => {
+  it('дефолт параметров не создаёт', () => {
+    expect(serializeTasksSortToParams(DEFAULT_TASKS_SORT)).toStrictEqual({});
+  });
+
+  it('пишет только отклонения от дефолта', () => {
+    expect(serializeTasksSortToParams({ field: 'title', direction: 'asc' })).toStrictEqual({
+      sort: 'title',
+    });
+    expect(serializeTasksSortToParams({ field: 'date', direction: 'desc' })).toStrictEqual({
+      order: 'desc',
+    });
+    expect(serializeTasksSortToParams({ field: 'title', direction: 'desc' })).toStrictEqual({
+      sort: 'title',
+      order: 'desc',
+    });
+  });
+
+  it('обратима: сериализация → разбор возвращает исходную сортировку', () => {
+    for (const field of ['date', 'title'] as const) {
+      for (const direction of ['asc', 'desc'] as const) {
+        const sort: TasksSort = { field, direction };
+        const params = serializeTasksSortToParams(sort);
+        expect(parseTasksSortParams(params.sort, params.order)).toStrictEqual(sort);
+      }
+    }
   });
 });

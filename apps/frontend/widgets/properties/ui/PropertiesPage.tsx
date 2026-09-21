@@ -1,7 +1,7 @@
 'use client';
 
 import {type JSX, useState} from 'react';
-import {usePathname, useRouter} from 'next/navigation';
+import {useRouter} from 'next/navigation';
 import {
   useProperties,
   usePropertiesWithMeta,
@@ -10,6 +10,7 @@ import {
 import {useSubscription} from '@/features/subscription';
 import {Add, Archive, Search, SmallArrowDown, SortingBigSmall, SortingSmallBig} from '@/shared/assets/icons';
 import {useKeyboardActivation} from '@/shared/lib/hooks/useKeyboardActivation';
+import {useUrlParams} from '@/shared/lib/hooks/use-url-params';
 import {
   Button,
   HubCollapseAnchor,
@@ -23,6 +24,7 @@ import {
 import {ROUTES} from '@/shared/config/routes';
 import {
   DEFAULT_PROPERTY_SORT,
+  PROPERTY_SORT_PARAMS,
   SORT_FIELD_CHIP_LABEL,
   SORT_FIELD_OPTIONS,
   serializeSortToParams,
@@ -65,7 +67,7 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
   const metaQuery = usePropertiesWithMeta();
   const subscriptionQuery = useSubscription();
   const router = useRouter();
-  const pathname = usePathname();
+  const {write} = useUrlParams();
 
   const [sort, setSort] = useState<PropertySort>(initialSort ?? DEFAULT_PROPERTY_SORT);
   const [reasonTarget, setReasonTarget] = useState<SuspendedSharedProperty | null>(null);
@@ -74,10 +76,11 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
   const suspendedShared = metaQuery.data?.suspendedShared ?? [];
   const showSuspended = !isLoading && !isError && suspendedShared.length > 0;
 
+  // Запись — канон useUrlParams (#786): экран владеет только sort/order,
+  // чужие параметры адреса переживают смену сортировки, дефолт снимается.
   const changeSort = (next: PropertySort) => {
     setSort(next);
-    const query = new URLSearchParams(serializeSortToParams(next)).toString();
-    router.replace(query ? `${pathname}?${query}` : pathname, {scroll: false});
+    write(serializeSortToParams(next), {own: PROPERTY_SORT_PARAMS});
   };
 
   const isEmpty = !isLoading && !isError && visible.length === 0;

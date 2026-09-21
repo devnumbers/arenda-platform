@@ -24,6 +24,7 @@ import (
 	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/sse"
 	popupshttp "github.com/nambers/arenda-planform/apps/backend/internal/popups/adapters/http"
 	popupsapp "github.com/nambers/arenda-planform/apps/backend/internal/popups/application"
 	propertieshttp "github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/http"
@@ -40,9 +41,11 @@ import (
 type Deps struct {
 	Auth                 identityhttp.Authenticator
 	PhoneChange          identityhttp.PhoneChanger
+	EmailChange          identityhttp.EmailChanger
 	Profile              identityhttp.Profiler
 	Logout               identityhttp.Logout
-	Sessions             httpsupport.SessionLoader
+	Sessions             identityhttp.SessionLister
+	SessionLoader        httpsupport.SessionLoader
 	Audit                auditapp.Recorder
 	MeEnricher           identityhttp.MeEnricher
 	Tariffs              billinghttp.TariffLister
@@ -62,24 +65,33 @@ type Deps struct {
 	// BillingTimeTravel serves the stand-only admin time-shift and tick
 	// endpoints (issue #665); non-nil only when the BILLING_TIME_TRAVEL
 	// railguard is on, so a production build mounts no such routes at all.
-	BillingTimeTravel        *billinghttp.TimeTravelHandlers
-	ReadonlyGate             httpsupport.SubscriptionMutationChecker
-	Admin                    *adminapp.AdminService
-	Properties               *propertiesapp.PropertyService
-	Contacts                 *contactsapp.ContactService
-	AddressSuggester         propertiesapp.AddressSuggester
-	PropertyPayments         *paymentsapp.PaymentService
-	PropertyOperations       *paymentsapp.OperationService
-	GlobalPayments           *paymentsapp.GlobalPaymentService
-	PropertyRentals          *rentalsapp.RentalService
-	PropertyTaskRules        *tasksapp.RuleService
-	PropertyTasks            *tasksapp.TaskService
-	Access                   *accessapp.AccessService
-	Invitations              *accessapp.InvitationService
-	Participants             accessapp.ParticipantsManager
-	ParticipantMutations     accessapp.ParticipantMutations
-	NotificationPreferences  *notificationsapp.PreferenceService
-	PushSubscriptions        *notificationsapp.PushSubscriptionService
+	BillingTimeTravel    *billinghttp.TimeTravelHandlers
+	ReadonlyGate         httpsupport.SubscriptionMutationChecker
+	Admin                *adminapp.AdminService
+	Properties           *propertiesapp.PropertyService
+	Contacts             *contactsapp.ContactService
+	AddressSuggester     propertiesapp.AddressSuggester
+	PropertyPayments     *paymentsapp.PaymentService
+	PropertyOperations   *paymentsapp.OperationService
+	GlobalPayments       *paymentsapp.GlobalPaymentService
+	PropertyRentals      *rentalsapp.RentalService
+	PropertyTaskRules    *tasksapp.RuleService
+	PropertyTasks        *tasksapp.TaskService
+	Access               *accessapp.AccessService
+	Invitations          *accessapp.InvitationService
+	Participants         accessapp.ParticipantsManager
+	ParticipantMutations accessapp.ParticipantMutations
+	PushSubscriptions    *notificationsapp.PushSubscriptionService
+	// NotificationsFeed is the stored feed's reading service (#743); nil
+	// keeps the feed endpoints answering from the Unimplemented stub.
+	NotificationsFeed *notificationsapp.FeedService
+	// NotificationSettings serves the per-category settings (#743): email on
+	// the account, push on the device; nil answers the Unimplemented stub.
+	NotificationSettings *notificationsapp.SettingsService
+	// NotificationsStreamHub is the shared event stream's hub (карта #734,
+	// #742; ADR 0060). The generated /notifications/stream route serves from
+	// it; nil answers 503 (a build without the stream).
+	NotificationsStreamHub   *sse.Hub
 	VAPIDPublicKey           string
 	Popups                   *popupsapp.PopupService
 	AppBaseURL               string
@@ -115,6 +127,22 @@ func securityHeaders(secure bool) func(http.Handler) http.Handler {
 	}
 }
 
+// crossOriginProtection is the second CSRF layer beside SameSite=Lax
+// (ADR 0056): non-safe cross-origin browser requests are rejected with 403
+// by the stdlib Fetch-Metadata/Origin check. The bypassed paths are the
+// non-browser endpoints — the T-Kassa payment webhooks and the internal
+// performance diagnostics — which no browser may call anyway.
+func crossOriginProtection() func(http.Handler) http.Handler {
+	protection := http.NewCrossOriginProtection()
+	protection.AddInsecureBypassPattern("POST /webhooks/")
+	protection.AddInsecureBypassPattern("/internal/perf/")
+	protection.SetDenyHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		httpsupport.WriteProblem(r.Context(), w, http.StatusForbidden,
+			httpsupport.Problem(r.Context(), "Forbidden", "Запрос отклонён: кросс-сайтовый запрос"))
+	}))
+	return protection.Handler
+}
+
 // New builds the HTTP handler with routing and middleware wired.
 func New(deps Deps) http.Handler {
 	r := chi.NewRouter()
@@ -130,7 +158,8 @@ func New(deps Deps) http.Handler {
 	r.Use(rateLimitMiddleware(deps.IPRateLimiter))
 	r.Use(clientErrorsBodyLimitMiddleware)
 	r.Use(securityHeaders(deps.CookieSecure))
-	r.Use(httpsupport.SessionMiddleware(deps.Logger, deps.Sessions, deps.CookieSecure, deps.Clock))
+	r.Use(httpsupport.SessionMiddleware(deps.Logger, deps.SessionLoader, deps.CookieSecure, deps.Clock))
+	r.Use(crossOriginProtection())
 	r.Use(httpsupport.ReadonlyMiddleware(deps.ReadonlyGate, deps.Logger))
 
 	r.Get("/healthz", httpsupport.HealthHandler(deps.AppVersion))
@@ -142,8 +171,10 @@ func New(deps Deps) http.Handler {
 	authHandlers := identityhttp.NewAuthHandlers(
 		deps.Auth,
 		deps.PhoneChange,
+		deps.EmailChange,
 		deps.Profile,
 		deps.Logout,
+		deps.Sessions,
 		deps.CookieSecure,
 		deps.Logger,
 		identityhttp.AuthRateLimits{
@@ -164,8 +195,10 @@ func New(deps Deps) http.Handler {
 	accessMemberHandlers := accesshttp.NewMemberHandlers(deps.Access, deps.Logger)
 	accessInvitationHandlers := accesshttp.NewInvitationHandlers(deps.Invitations, deps.Logger)
 	accessParticipantHandlers := accesshttp.NewParticipantHandlers(deps.Participants, deps.ParticipantMutations, deps.Logger)
-	notificationPreferenceHandlers := notificationshttp.NewNotificationPreferenceHandlers(deps.NotificationPreferences, deps.Logger)
 	pushSubscriptionHandlers := notificationshttp.NewPushSubscriptionHandlers(deps.PushSubscriptions, deps.VAPIDPublicKey, deps.Logger)
+	streamHandlers := notificationshttp.NewStreamHandlers(deps.NotificationsStreamHub, deps.Logger)
+	notificationPrefsHandlers := notificationshttp.NewNotificationPreferencesHandlers(deps.NotificationSettings, deps.Logger)
+	feedHandlers := notificationshttp.NewFeedHandlers(deps.NotificationsFeed, deps.Logger)
 	popupHandlers := popupshttp.NewPopupHandlers(deps.Popups, deps.Logger)
 	billingHandlers := billinghttp.NewBillingHandlers(
 		deps.Tariffs, deps.AdminTariffs, deps.Subscriptions, deps.SubscriptionManagers,
@@ -181,24 +214,26 @@ func New(deps Deps) http.Handler {
 	clientErrorsHandlers := httpsupport.NewClientErrorsHandlers(deps.ClientErrorsLimiter)
 
 	handler := &composedHandler{
-		AuthHandlers:                   authHandlers,
-		PropertyHandlers:               propertyHandlers,
-		ContactHandlers:                contactHandlers,
-		MemberHandlers:                 accessMemberHandlers,
-		InvitationHandlers:             accessInvitationHandlers,
-		ParticipantHandlers:            accessParticipantHandlers,
-		NotificationPreferenceHandlers: notificationPreferenceHandlers,
-		PushSubscriptionHandlers:       pushSubscriptionHandlers,
-		PopupHandlers:                  popupHandlers,
-		BillingHandlers:                billingHandlers,
-		PaymentHandlers:                paymentHandlers,
-		OperationsHandlers:             operationHandlers,
-		GlobalPaymentHandlers:          globalPaymentHandlers,
-		RentalHandlers:                 rentalHandlers,
-		RuleHandlers:                   taskRuleHandlers,
-		TaskHandlers:                   taskHandlers,
-		AdminHandlers:                  adminHandlers,
-		ClientErrorsHandlers:           clientErrorsHandlers,
+		AuthHandlers:                    authHandlers,
+		PropertyHandlers:                propertyHandlers,
+		ContactHandlers:                 contactHandlers,
+		MemberHandlers:                  accessMemberHandlers,
+		InvitationHandlers:              accessInvitationHandlers,
+		ParticipantHandlers:             accessParticipantHandlers,
+		PushSubscriptionHandlers:        pushSubscriptionHandlers,
+		StreamHandlers:                  streamHandlers,
+		NotificationPreferencesHandlers: notificationPrefsHandlers,
+		FeedHandlers:                    feedHandlers,
+		PopupHandlers:                   popupHandlers,
+		BillingHandlers:                 billingHandlers,
+		PaymentHandlers:                 paymentHandlers,
+		OperationsHandlers:              operationHandlers,
+		GlobalPaymentHandlers:           globalPaymentHandlers,
+		RentalHandlers:                  rentalHandlers,
+		RuleHandlers:                    taskRuleHandlers,
+		TaskHandlers:                    taskHandlers,
+		AdminHandlers:                   adminHandlers,
+		ClientErrorsHandlers:            clientErrorsHandlers,
 	}
 
 	// The generated OpenAPI router has no per-route middleware support, so we
@@ -316,8 +351,10 @@ type composedHandler struct {
 	*accesshttp.MemberHandlers
 	*accesshttp.InvitationHandlers
 	*accesshttp.ParticipantHandlers
-	*notificationshttp.NotificationPreferenceHandlers
 	*notificationshttp.PushSubscriptionHandlers
+	*notificationshttp.StreamHandlers
+	*notificationshttp.NotificationPreferencesHandlers
+	*notificationshttp.FeedHandlers
 	*popupshttp.PopupHandlers
 	*billinghttp.BillingHandlers
 	*paymentshttp.PaymentHandlers

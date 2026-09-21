@@ -5,20 +5,20 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/google/uuid"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
 )
 
-// LogoutService terminates sessions.
+// LogoutService terminates the user's current session, identified by its raw
+// token. Logout keeps the fail-open audit policy of ADR 0020 — a recording
+// error is never returned, unlike the fail-safe revocations of
+// SessionsService.
 //
-// It is the first identity use case migrated to runInTx/txStores (ADR 0033,
-// migration step 2) and serves as the smoke test for the Unit-of-Work apparatus
-// before the more complex use cases (Profile, Authenticate, PhoneChange) follow.
-// Although each method performs a single delete and does not require atomicity,
-// routing it through runInTx proves the seam works end-to-end on a live use
-// case: the session repository is bound to the transaction, work runs, and UoW
-// commits on success or rolls back on error.
+// Logout performs a single delete and does not require atomicity on its
+// own, but routing it through runInTx (ADR 0033) keeps the audit entry and
+// the delete in one transaction: the session repository is bound to the
+// transaction, work runs, and the UoW commits on success or rolls back on
+// error.
 type LogoutService struct {
 	txStoreFactory
 	hasher TokenHasher
@@ -34,7 +34,7 @@ type LogoutServiceConfig struct {
 }
 
 // NewLogoutService creates a LogoutService. It embeds the shared identity
-// txStoreFactory so Logout/LogoutAll run through runInTx; the repositories and
+// txStoreFactory so Logout runs through runInTx; the repositories and
 // audit recorder are shared by every identity service (ADR 0033 γ-factory).
 func NewLogoutService(
 	factory txStoreFactory,
@@ -60,18 +60,6 @@ func (s *LogoutService) Logout(ctx context.Context, rawToken string, actor audit
 			return fmt.Errorf("delete session: %w", err)
 		}
 		s.recordLogoutAudit(ctx, stores, actor, auditdomain.ActionAuthLogout)
-		return nil
-	})
-}
-
-// LogoutAll deletes all sessions for the given user and records the logout-all
-// audit entry inside the same transaction.
-func (s *LogoutService) LogoutAll(ctx context.Context, userID uuid.UUID, actor auditdomain.Actor) error {
-	return s.runInTx(ctx, func(stores *txStores) error {
-		if err := stores.sessions.DeleteByUserID(ctx, userID); err != nil {
-			return fmt.Errorf("delete sessions: %w", err)
-		}
-		s.recordLogoutAudit(ctx, stores, actor, auditdomain.ActionAuthLogoutAll)
 		return nil
 	})
 }

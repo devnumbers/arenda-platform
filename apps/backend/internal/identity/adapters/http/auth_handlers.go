@@ -14,6 +14,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/requestctx"
 )
 
 // MeEnricher augments a MeResponse with cross-cutting data (for example, the
@@ -88,10 +89,20 @@ type Authenticator interface {
 	SendCodeByPhone(ctx context.Context, phone domain.Phone) (sent bool, err error)
 	// VerifyCode accepts an optional email; nil resolves the email from the
 	// stored user record for the phone. An optional timezone (browser-detected,
-	// #451) applies only when the verify registers a new user.
+	// #451) applies only when the verify registers a new user. The device
+	// context (raw User-Agent + client IP) is captured onto the created
+	// session once (#728).
 	VerifyCode(
-		ctx context.Context, phone domain.Phone, email *domain.Email, code string, timezone *string,
+		ctx context.Context, phone domain.Phone, email *domain.Email, code string, timezone *string, device application.DeviceContext,
 	) (domain.RawSession, domain.User, error)
+}
+
+// SessionLister serves the devices list: the user's sessions with the current
+// one flagged, single-session revocation, and revoke-everything-else.
+type SessionLister interface {
+	List(ctx context.Context, userID uuid.UUID, currentToken string) ([]domain.Session, uuid.UUID, error)
+	Revoke(ctx context.Context, userID, sessionID uuid.UUID, currentToken string, actor auditdomain.Actor) error
+	RevokeOthers(ctx context.Context, userID uuid.UUID, currentToken string, actor auditdomain.Actor) (int64, error)
 }
 
 // PhoneChanger handles phone-number change for authenticated users.
@@ -100,24 +111,35 @@ type PhoneChanger interface {
 	ChangePhone(ctx context.Context, userID uuid.UUID, newPhone domain.Phone, code, currentToken string) (domain.User, error)
 }
 
+// EmailChanger handles confirmed email change for authenticated users
+// (issue #721): a code to the current address, then — against the grant — a
+// code to the new one, a resend of that code (#732), and the change itself.
+type EmailChanger interface {
+	SendCurrentEmailCode(ctx context.Context, userID uuid.UUID) error
+	ConfirmCurrentEmail(ctx context.Context, userID uuid.UUID, code string, newEmail domain.Email) (string, error)
+	ResendNewEmailCode(ctx context.Context, userID uuid.UUID, grant string) error
+	ChangeEmail(ctx context.Context, userID uuid.UUID, code, grant string) (domain.User, error)
+}
+
 // Profiler provides the current user's profile and updates it.
 type Profiler interface {
 	Me(ctx context.Context, userID uuid.UUID) (domain.User, error)
 	UpdateProfile(ctx context.Context, userID uuid.UUID, cmd application.UpdateProfileCommand) (domain.User, error)
 }
 
-// Logout terminates sessions.
+// Logout terminates the current session.
 type Logout interface {
 	Logout(ctx context.Context, rawToken string, actor auditdomain.Actor) error
-	LogoutAll(ctx context.Context, userID uuid.UUID, actor auditdomain.Actor) error
 }
 
 // AuthHandlers implements the generated non-strict ServerInterface.
 type AuthHandlers struct {
 	auth         Authenticator
 	phoneChange  PhoneChanger
+	emailChange  EmailChanger
 	profile      Profiler
 	logout       Logout
+	sessions     SessionLister
 	cookieSecure bool
 	logger       *slog.Logger
 	limits       AuthRateLimits
@@ -128,8 +150,10 @@ type AuthHandlers struct {
 func NewAuthHandlers(
 	auth Authenticator,
 	phoneChange PhoneChanger,
+	emailChange EmailChanger,
 	profile Profiler,
 	logout Logout,
+	sessions SessionLister,
 	cookieSecure bool,
 	logger *slog.Logger,
 	limits AuthRateLimits,
@@ -138,8 +162,10 @@ func NewAuthHandlers(
 	return &AuthHandlers{
 		auth:         auth,
 		phoneChange:  phoneChange,
+		emailChange:  emailChange,
 		profile:      profile,
 		logout:       logout,
+		sessions:     sessions,
 		cookieSecure: cookieSecure,
 		logger:       logger,
 		limits:       limits,
@@ -240,7 +266,11 @@ func (h *AuthHandlers) VerifyCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	raw, user, err := h.auth.VerifyCode(r.Context(), phone, email, body.Code, body.Timezone)
+	device := application.DeviceContext{
+		UserAgent: r.Header.Get("User-Agent"),
+		IP:        requestctx.ClientIPFromContext(r.Context()),
+	}
+	raw, user, err := h.auth.VerifyCode(r.Context(), phone, email, body.Code, body.Timezone, device)
 	if err != nil {
 		if writeSharedIdentityError(w, r, err, "Неверный телефон, почта или код") {
 			return
@@ -275,26 +305,6 @@ func (h *AuthHandlers) Logout(w http.ResponseWriter, r *http.Request) {
 			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 			return
 		}
-	}
-
-	httpsupport.ClearSessionCookie(w, h.cookieSecure)
-	w.WriteHeader(http.StatusNoContent)
-}
-
-// LogoutAll implements POST /auth/logout-all.
-func (h *AuthHandlers) LogoutAll(w http.ResponseWriter, r *http.Request) {
-	userID, ok := httpsupport.UserIDFromContext(r.Context())
-	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
-			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
-		return
-	}
-
-	if err := h.logout.LogoutAll(r.Context(), userID, actorFromContext(r.Context())); err != nil {
-		h.logger.ErrorContext(r.Context(), "logout all failed", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.ClearSessionCookie(w, h.cookieSecure)
-		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
-		return
 	}
 
 	httpsupport.ClearSessionCookie(w, h.cookieSecure)
@@ -369,7 +379,6 @@ func (h *AuthHandlers) UpdateMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cmd := application.UpdateProfileCommand{
-		Email:      body.Email,
 		Name:       body.Name,
 		Surname:    body.Surname,
 		Patronymic: body.Patronymic,
@@ -382,9 +391,6 @@ func (h *AuthHandlers) UpdateMe(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		switch {
-		case errors.Is(err, domain.ErrInvalidEmail):
-			httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
-				httpsupport.Problem(r.Context(), "Invalid email", "Некорректный формат email"))
 		case errors.Is(err, domain.ErrInvalidTimezone):
 			httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
 				httpsupport.Problem(r.Context(), "Invalid timezone", "Некорректный часовой пояс"))
@@ -517,6 +523,185 @@ func (h *AuthHandlers) ChangePhone(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, meResponse(user))
+}
+
+// detailEmailTakenForChange is the conflict text pinned by grilling decision
+// #720-4 for the email-change endpoints. The login flow asserts its own
+// fixture text, so the two wording families stay separate.
+const detailEmailTakenForChange = "Эта электронная почта уже используется"
+
+// writeEmailChangeError maps the email-change-specific errors ahead of the
+// shared identity mapping: these texts are pinned by the grilling decisions
+// (#720-4, #720-2, #720 Q9) and differ from the login-flow fixtures. Returns
+// false when err is not one of them.
+func writeEmailChangeError(w http.ResponseWriter, r *http.Request, err error) bool {
+	switch {
+	case errors.Is(err, application.ErrEmailUnchanged):
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Invalid email", "Новая электронная почта должна отличаться от текущей"))
+	case errors.Is(err, application.ErrEmailAlreadyTaken):
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
+			httpsupport.Problem(r.Context(), "Conflict", detailEmailTakenForChange))
+	case errors.Is(err, application.ErrEmailDoesNotMatch):
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
+			httpsupport.Problem(r.Context(), "Conflict", "У аккаунта нет электронной почты"))
+	case errors.Is(err, application.ErrEmailChangeGrantInvalid):
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
+			httpsupport.Problem(r.Context(), "Conflict", "Подтверждение истекло, начните смену почты заново"))
+	case errors.Is(err, domain.ErrLoginCodeInvalid):
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Неверный код"))
+	case errors.Is(err, application.ErrEmailChangeBudgetExhausted):
+		httpsupport.WriteTooManyRequests(w, r, "Превышен лимит запросов")
+	default:
+		return false
+	}
+	return true
+}
+
+// SendEmailChangeCode implements POST /me/email/send-code — step 1: a code to
+// the user's current email.
+func (h *AuthHandlers) SendEmailChangeCode(w http.ResponseWriter, r *http.Request) {
+	userID, ok := httpsupport.UserIDFromContext(r.Context())
+	if !ok {
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	// No send budget here: step 1 mails the user's current address. The
+	// per-user 5/hour budget (#720-3) guards sends to NEW addresses — step 2;
+	// this request is covered by the domain's 1-minute throttle and the global
+	// IP limiter.
+	if err := h.emailChange.SendCurrentEmailCode(r.Context(), userID); err != nil {
+		if writeEmailChangeError(w, r, err) {
+			return
+		}
+		if writeSharedIdentityError(w, r, err, "") {
+			return
+		}
+		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ConfirmCurrentEmail implements POST /me/email/confirm-current — step 2:
+// verify the code from the current email, get the one-time grant and the code
+// for the new address. The per-user 5/hour budget (#720-3) is spent inside the
+// service, on the actual send to the new address.
+func (h *AuthHandlers) ConfirmCurrentEmail(w http.ResponseWriter, r *http.Request) {
+	userID, ok := httpsupport.UserIDFromContext(r.Context())
+	if !ok {
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	var body openapi.ConfirmCurrentEmailRequest
+	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
+		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		return
+	}
+
+	newEmail, err := domain.NewEmail(body.NewEmail)
+	if err != nil {
+		h.logger.WarnContext(r.Context(), "invalid email in request body", slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Invalid email", "Некорректный формат электронной почты"))
+		return
+	}
+
+	grant, err := h.emailChange.ConfirmCurrentEmail(r.Context(), userID, body.Code, newEmail)
+	if err != nil {
+		if writeEmailChangeError(w, r, err) {
+			return
+		}
+		if writeSharedIdentityError(w, r, err, "") {
+			return
+		}
+		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+		return
+	}
+
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.EmailChangeGrantResponse{Grant: grant})
+}
+
+// ResendEmailCode implements POST /me/email/resend-code — a fresh code for the
+// pending new address, anchored on the still-live grant (#732): the step-1
+// code is burned by ConfirmCurrentEmail, so the resend cannot re-run step 2
+// and must ride the grant instead. The budget (#720-3) and the send throttle
+// are spent inside the service, on the actual re-issuance.
+func (h *AuthHandlers) ResendEmailCode(w http.ResponseWriter, r *http.Request) {
+	userID, ok := httpsupport.UserIDFromContext(r.Context())
+	if !ok {
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	var body openapi.ResendEmailCodeRequest
+	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
+		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		return
+	}
+
+	if err := h.emailChange.ResendNewEmailCode(r.Context(), userID, body.Grant); err != nil {
+		if writeEmailChangeError(w, r, err) {
+			return
+		}
+		if writeSharedIdentityError(w, r, err, "") {
+			return
+		}
+		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ChangeEmail implements POST /me/email/change — step 3: verify the code from
+// the new email against the grant and apply the change.
+func (h *AuthHandlers) ChangeEmail(w http.ResponseWriter, r *http.Request) {
+	userID, ok := httpsupport.UserIDFromContext(r.Context())
+	if !ok {
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	var body openapi.ChangeEmailRequest
+	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
+		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		return
+	}
+
+	user, err := h.emailChange.ChangeEmail(r.Context(), userID, body.Code, body.Grant)
+	if err != nil {
+		if writeEmailChangeError(w, r, err) {
+			return
+		}
+		if writeSharedIdentityError(w, r, err, "") {
+			return
+		}
+		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+		return
+	}
+
+	resp := meResponse(user)
+	if h.meEnricher != nil {
+		if err := h.meEnricher(r.Context(), userID, &resp); err != nil {
+			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+			return
+		}
+	}
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, resp)
 }
 
 func meResponse(user domain.User) openapi.MeResponse {

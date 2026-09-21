@@ -62,6 +62,28 @@ func (r *fakePushRepo) ListByUser(_ context.Context, userID uuid.UUID) ([]domain
 	return out, nil
 }
 
+func (r *fakePushRepo) GetByEndpoint(_ context.Context, userID uuid.UUID, endpoint string) (domain.PushSubscription, error) {
+	for _, s := range r.subs {
+		if s.Endpoint == endpoint && s.UserID == userID {
+			return s, nil
+		}
+	}
+	return domain.PushSubscription{}, notificationsapp.ErrNotFound
+}
+
+func (r *fakePushRepo) UpdatePreferences(
+	_ context.Context, userID uuid.UUID, endpoint string, enabled bool, prefs domain.CategoryPrefs,
+) (bool, error) {
+	for i, s := range r.subs {
+		if s.Endpoint == endpoint && s.UserID == userID {
+			r.subs[i].Enabled = enabled
+			r.subs[i].Categories = prefs
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // pushFakeClock is a deterministic clock.Clock for push handler tests.
 type pushFakeClock struct{ now time.Time }
 
@@ -82,7 +104,9 @@ func newPushJSONRequest(t *testing.T, method, target string, userID *uuid.UUID, 
 	if userID != nil {
 		ctx = httpsupport.WithUserID(ctx, *userID)
 	}
-	return httptest.NewRequestWithContext(ctx, method, target, bytes.NewReader(raw))
+	req := httptest.NewRequestWithContext(ctx, method, target, bytes.NewReader(raw))
+	req.Header.Set("Content-Type", "application/json")
+	return req
 }
 
 func TestGetVapidPublicKey_ReturnsKey(t *testing.T) {

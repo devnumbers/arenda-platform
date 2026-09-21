@@ -3,7 +3,9 @@ package httpsupport
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
+	"mime"
 	"net/http"
 	"strconv"
 
@@ -16,7 +18,26 @@ const MaxRequestBodySize = 16 << 10 // 16 KiB.
 // rate-limited auth request. It matches the service-layer minSendInterval.
 const RetryAfterSeconds = 60
 
+// errContentTypeNotJSON reports a request whose Content-Type is not
+// application/json. A cross-site HTML form can only send the simple content
+// types, so the check closes the JSON-parsing CSRF side door that SameSite
+// cannot reach (ADR 0056).
+var errContentTypeNotJSON = errors.New("request Content-Type is not application/json")
+
+// IsContentTypeNotJSON reports whether err is the Content-Type sentinel the
+// JSON body decoder rejects with.
+func IsContentTypeNotJSON(err error) bool { return errors.Is(err, errContentTypeNotJSON) }
+
 func DecodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {
+	if ct := r.Header.Get("Content-Type"); ct != "" {
+		if mediaType, _, err := mime.ParseMediaType(ct); err != nil || mediaType != "application/json" {
+			return errContentTypeNotJSON
+		}
+	} else if r.ContentLength != 0 {
+		// No declared type: only an empty body (the optional-body endpoints)
+		// is tolerated; anything else must declare application/json.
+		return errContentTypeNotJSON
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, MaxRequestBodySize)
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
