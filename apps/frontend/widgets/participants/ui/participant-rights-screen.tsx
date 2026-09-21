@@ -8,7 +8,7 @@ import { Block } from '@/shared/assets/icons';
 import { goBack } from '@/shared/lib/navigation';
 import { ROUTES } from '@/shared/config/routes';
 import {
-  ParticipantLegBadge,
+  ParticipantRowBadge,
   participantLegBadge,
   type ParticipantAccessRole,
 } from '@/entities/participants';
@@ -165,7 +165,7 @@ export function ParticipantRightsScreen({
             )}
             {leg !== undefined && (
               <span>
-                <ParticipantLegBadge badge={participantLegBadge(leg)} />
+                <ParticipantRowBadge badge={participantLegBadge(leg)} />
               </span>
             )}
           </span>

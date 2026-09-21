@@ -10,7 +10,7 @@ import {
   participantRowTitle,
   participantStatusBadge,
 } from '../lib/participant-display';
-import { ParticipantStatusBadge } from './participant-status-badge';
+import { ParticipantRowBadge } from './participant-row-badge';
 
 /**
  * Строка участника списка «Ваши участники» (#697; Figma 2036-82971,
@@ -59,7 +59,7 @@ export function ParticipantRowButton({
           <span className="truncate text-sm text-content-secondary">{subtitle}</span>
         )}
         <span>
-          <ParticipantStatusBadge badge={badge} />
+          <ParticipantRowBadge badge={badge} />
         </span>
       </span>
       <SmallArrowRight className="h-6 w-6 shrink-0 text-content-tertiary" aria-hidden />

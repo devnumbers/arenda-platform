@@ -3,7 +3,7 @@
 import { useState, type JSX } from 'react';
 import { ArrowDown, BoldUser, Edit, Exit, EyeSmall, Kebab } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { ParticipantLegBadge } from '@/entities/participants';
+import { ParticipantRowBadge } from '@/entities/participants';
 import { useLeaveAllProperties, useLeaveProperty } from '@/features/participants';
 import { useProperties, useProperty } from '@/features/properties';
 import {
@@ -336,7 +336,7 @@ function UserPropertyRowItem({
           {row.address}
         </span>
         <span>
-          <ParticipantLegBadge badge={row.badge} />
+          <ParticipantRowBadge badge={row.badge} />
         </span>
       </span>
       <IconButton
@@ -385,7 +385,7 @@ function ObjectCard({
           </span>
         )}
         <span>
-          <ParticipantLegBadge badge={badge} />
+          <ParticipantRowBadge badge={badge} />
         </span>
       </span>
     </div>

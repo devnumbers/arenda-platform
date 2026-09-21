@@ -66,7 +66,7 @@ describe('participantStatusBadge — чип агрегат-статуса (ма�
     expect(participantStatusBadge(participant())).toEqual({
       tone: 'neutral',
       label: 'Доступ ко всем объектам',
-      withLock: false,
+      icon: undefined,
     });
   });
 
@@ -86,7 +86,7 @@ describe('participantStatusBadge — чип агрегат-статуса (ма�
     expect(participantStatusBadge(participant({ aggregateStatus: 'limit_exceeded' }))).toEqual({
       tone: 'warning',
       label: 'Превышен лимит объектов',
-      withLock: true,
+      icon: 'lock',
     });
   });
 
@@ -106,7 +106,7 @@ describe('participantStatusBadge — чип агрегат-статуса (ма�
     expect(participantStatusBadge(p)).toEqual({
       tone: 'neutral',
       label: 'Приглашён',
-      withLock: false,
+      icon: undefined,
     });
   });
 

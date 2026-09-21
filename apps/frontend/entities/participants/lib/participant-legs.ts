@@ -1,19 +1,10 @@
 import { ACCESS_ROLE_ICON_NAMES, ACCESS_ROLE_LABELS } from '@/shared/model/access';
 import type { ParticipantPropertyLeg } from '../model/types';
+import type { ParticipantRowBadge } from './participant-badge';
 
-/** Иконка чипа ноги: Edit («Редактирование»), Eye («Просмотр»);
- * undefined — без иконки. */
-export type ParticipantLegBadgeIcon = 'edit' | 'eye' | 'lock';
-
-/** Тон чипа ноги — общий с агрегат-чипом (#697): warning — жёлтая
- * подложка, neutral — серая. */
-export type ParticipantLegBadgeTone = 'neutral' | 'warning';
-
-export type ParticipantLegBadge = {
-  readonly tone: ParticipantLegBadgeTone;
-  readonly label: string;
-  readonly icon: ParticipantLegBadgeIcon | undefined;
-};
+/** Чип ноги доступа — общий ParticipantRowBadge (анатомия «Row Button
+ * Bage», Figma 2036:83107), тот же тип, что у агрегат-чипа. */
+export type ParticipantLegBadge = ParticipantRowBadge;
 
 /**
  * Чип ноги доступа в ряде «Доступных объектов» (страница участника #698;

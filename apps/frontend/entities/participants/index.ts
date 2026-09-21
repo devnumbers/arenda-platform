@@ -30,6 +30,6 @@ export type {
   InviteSelectionState,
 } from './lib/participant-invite-selection';
 export { ParticipantRowButton } from './ui/participant-row-button';
-export { ParticipantLegBadge } from './ui/participant-leg-badge';
-export { ParticipantStatusBadge } from './ui/participant-status-badge';
+export { ParticipantRowBadge } from './ui/participant-row-badge';
+export { suspendedLimitBadge } from './lib/participant-display';
 export { participantStatusBadge } from './lib/participant-display';

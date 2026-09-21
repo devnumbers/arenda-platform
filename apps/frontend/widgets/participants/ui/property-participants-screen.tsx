@@ -27,7 +27,7 @@ import {
   useRevokeAllPropertyAccessMembers,
   type PropertyAccessMemberRef,
 } from '@/features/access';
-import { ParticipantStatusBadge } from '@/entities/participants';
+import { ParticipantRowBadge, suspendedLimitBadge } from '@/entities/participants';
 import {
   Button,
   ChipButton,
@@ -428,9 +428,7 @@ function PropertyParticipantRowView({
         </span>
         {row.suspended && (
           <span>
-            <ParticipantStatusBadge
-              badge={{ tone: 'warning', label: 'Превышен лимит объектов', withLock: true }}
-            />
+            <ParticipantRowBadge badge={suspendedLimitBadge()} />
           </span>
         )}
       </span>

@@ -6,8 +6,7 @@ import { Add, Block, BoldUser, Info, Kebab, SmallArrowRight } from '@/shared/ass
 import { goBack } from '@/shared/lib/navigation';
 import { ROUTES } from '@/shared/config/routes';
 import {
-  ParticipantLegBadge,
-  ParticipantStatusBadge,
+  ParticipantRowBadge,
   participantLegBadge,
   participantStatusBadge,
   type Participant,
@@ -220,7 +219,7 @@ function ParticipantHeader({ participant }: { readonly participant: Participant 
         <p className="text-center text-sm leading-4 text-content-secondary">{email}</p>
       )}
       <div className="pt-2">
-        <ParticipantStatusBadge badge={participantStatusBadge(participant)} />
+        <ParticipantRowBadge badge={participantStatusBadge(participant)} />
       </div>
     </div>
   );
@@ -281,7 +280,7 @@ function ParticipantPropertyRowButton({
           </span>
         )}
         <span>
-          <ParticipantLegBadge badge={participantLegBadge(leg)} />
+          <ParticipantRowBadge badge={participantLegBadge(leg)} />
         </span>
       </span>
       <SmallArrowRight className="h-6 w-6 shrink-0 text-content-tertiary" aria-hidden />

@@ -1,17 +1,19 @@
 import { pluralize } from '@/shared/lib/pluralize';
 import type { Participant } from '../model/types';
+import type { ParticipantRowBadge } from './participant-badge';
 
-/** Тон чипа агрегат-статуса: warning — жёлтая подложка с замком
- * («Превышен лимит объектов», макет 2036-82971, Row Button Bage Warning),
- * neutral — серая без иконки. */
-export type ParticipantBadgeTone = 'neutral' | 'warning';
+/** Чип агрегат-статуса — общий ParticipantRowBadge (анатомия «Row Button
+ * Bage», Figma 2036:83107). */
+export type ParticipantBadge = ParticipantRowBadge;
 
-export type ParticipantBadge = {
-  readonly tone: ParticipantBadgeTone;
-  readonly label: string;
-  /** Замок — только у warning-чипа лимита (Icon/S/Lock, макет 2036-83931). */
-  readonly withLock: boolean;
-};
+/** Warning-чип превышенного лимита (макет 2036-82971, Row Button Bage
+ * Warning): жёлтая подложка, Icon/S/Lock. Именованный конструктор вместо
+ * ручного литерала — текст и тон держатся в одном месте. */
+export const suspendedLimitBadge = (): ParticipantRowBadge => ({
+  tone: 'warning',
+  label: 'Превышен лимит объектов',
+  icon: 'lock',
+});
 
 /** Титул строки списка: имя; у pending-строки (имени нет) — почта
  * (контракт #693: «the email is the label»). */
@@ -46,13 +48,13 @@ function isPendingAggregate(participant: Participant): boolean {
  * всем объектам» / «Доступно N объектов» / «Превышен лимит объектов». */
 export function participantStatusBadge(participant: Participant): ParticipantBadge {
   if (isPendingAggregate(participant)) {
-    return { tone: 'neutral', label: 'Приглашён', withLock: false };
+    return { tone: 'neutral', label: 'Приглашён' };
   }
   switch (participant.aggregateStatus) {
     case 'limit_exceeded':
-      return { tone: 'warning', label: 'Превышен лимит объектов', withLock: true };
+      return suspendedLimitBadge();
     case 'all_properties':
-      return { tone: 'neutral', label: 'Доступ ко всем объектам', withLock: false };
+      return { tone: 'neutral', label: 'Доступ ко всем объектам' };
     case 'partial':
       return {
         tone: 'neutral',
@@ -62,7 +64,6 @@ export function participantStatusBadge(participant: Participant): ParticipantBad
           'объекта',
           'объектов',
         )}`,
-        withLock: false,
       };
   }
 }
