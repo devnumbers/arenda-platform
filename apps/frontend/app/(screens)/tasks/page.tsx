@@ -8,19 +8,16 @@ import { TasksFeedScreen, TasksLoading } from '@/widgets/tasks';
  * топ-уровень группы (screens) рядом с объектами; вход — пункт «Задачи» в
  * меню профиля (решение 1 #522). Фильтр по объекту (#524) живёт в
  * query-параметрах, поэтому клиентский экран со useSearchParams стоит за
- * Suspense-границей — требование App Router. Сортировка тоже живёт в адресе
- * (?sort=&order=, #785) — стартовое значение парсится здесь, на сервере.
+ * Suspense-границей — требование App Router. Сортировка тоже живёт в
+ * адресе (?sort=&order=, #785) — стартовое значение парсится здесь, на
+ * сервере.
  */
 export const metadata: Metadata = {
   title: 'Задачи — Рентли',
 };
 
-type TasksRoutePageProps = {
-  searchParams?: Promise<Record<string, string | string[] | undefined>>;
-};
-
-export default async function TasksRoutePage({ searchParams }: TasksRoutePageProps) {
-  const resolved = searchParams ? await searchParams : {};
+export default async function TasksRoutePage({ searchParams }: PageProps<'/tasks'>) {
+  const resolved = await searchParams;
   const initialSort = parseTasksSortParams(resolved.sort, resolved.order);
 
   return (

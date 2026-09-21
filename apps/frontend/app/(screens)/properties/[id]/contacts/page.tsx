@@ -9,14 +9,12 @@ export const metadata: Metadata = {
   title: 'Контакты объекта — Рентли',
 };
 
-type ContactsRoutePageProps = {
-  params: Promise<{ id: string }>;
-  searchParams?: Promise<Record<string, string | string[] | undefined>>;
-};
-
-export default async function ContactsRoutePage({ params, searchParams }: ContactsRoutePageProps) {
+export default async function ContactsRoutePage({
+  params,
+  searchParams,
+}: PageProps<'/properties/[id]/contacts'>) {
   const { id } = await params;
-  const resolved = searchParams ? await searchParams : {};
+  const resolved = await searchParams;
   const initialOrder = parseContactListOrderParams(resolved.order);
 
   return <ContactsOfPropertyScreen propertyId={id} initialOrder={initialOrder} />;

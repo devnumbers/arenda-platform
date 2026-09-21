@@ -11,14 +11,12 @@ export const metadata: Metadata = {
   title: 'Задачи объекта — Рентли',
 };
 
-type TasksRoutePageProps = {
-  params: Promise<{ id: string }>;
-  searchParams?: Promise<Record<string, string | string[] | undefined>>;
-};
-
-export default async function TasksRoutePage({ params, searchParams }: TasksRoutePageProps) {
+export default async function TasksRoutePage({
+  params,
+  searchParams,
+}: PageProps<'/properties/[id]/tasks'>) {
   const { id } = await params;
-  const resolved = searchParams ? await searchParams : {};
+  const resolved = await searchParams;
   const initialSort = parseTasksSortParams(resolved.sort, resolved.order);
 
   return <TasksOfPropertyScreen propertyId={id} initialSort={initialSort} />;

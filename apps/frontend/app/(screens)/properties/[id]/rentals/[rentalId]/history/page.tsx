@@ -12,17 +12,12 @@ export const metadata: Metadata = {
   title: 'История операций — Рентли',
 };
 
-type RentalHistoryRoutePageProps = {
-  params: Promise<{ id: string; rentalId: string }>;
-  searchParams?: Promise<Record<string, string | string[] | undefined>>;
-};
-
 export default async function RentalHistoryRoutePage({
   params,
   searchParams,
-}: RentalHistoryRoutePageProps) {
+}: PageProps<'/properties/[id]/rentals/[rentalId]/history'>) {
   const { id, rentalId } = await params;
-  const resolved = searchParams ? await searchParams : {};
+  const resolved = await searchParams;
   const initialOrder = parseHistoryOrderParams(resolved.order);
 
   return (

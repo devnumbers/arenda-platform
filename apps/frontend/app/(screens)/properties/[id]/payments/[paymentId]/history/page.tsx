@@ -13,14 +13,12 @@ export const metadata: Metadata = {
   title: 'История операций — Рентли',
 };
 
-type HistoryRoutePageProps = {
-  params: Promise<{ id: string; paymentId: string }>;
-  searchParams?: Promise<Record<string, string | string[] | undefined>>;
-};
-
-export default async function PaymentHistoryRoutePage({ params, searchParams }: HistoryRoutePageProps) {
+export default async function PaymentHistoryRoutePage({
+  params,
+  searchParams,
+}: PageProps<'/properties/[id]/payments/[paymentId]/history'>) {
   const { id, paymentId } = await params;
-  const resolved = searchParams ? await searchParams : {};
+  const resolved = await searchParams;
   const initialOrder = parseHistoryOrderParams(resolved.order);
 
   return <PaymentHistoryScreen propertyId={id} paymentId={paymentId} initialOrder={initialOrder} />;
