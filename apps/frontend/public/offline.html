@@ -22,7 +22,10 @@
       display: flex;
       align-items: center;
       justify-content: center;
+      /* dvh — видимая высота без адресной строки мобильного браузера:
+         100vh включает её, и блок уезжает вниз. */
       min-height: 100vh;
+      min-height: 100dvh;
       padding: 24px;
       padding-bottom: calc(24px + env(safe-area-inset-bottom));
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -34,7 +37,9 @@
 
     /* Колонка макета Figma 2353:50704: центрированный блок, зазоры 32/8.
        400px — ширина карточки канона Modal, чтобы кнопки не расползались
-       на всю ширину десктопа. */
+       на всю ширину десктопа. Сдвиг на −5vh — оптический центр (решение
+       владельца 21.09): на высоких экранах «мёртвый» центр оставляет
+       треть экрана пустоты сверху. */
     .panel {
       display: flex;
       flex-direction: column;
@@ -42,6 +47,7 @@
       gap: 32px;
       width: 100%;
       max-width: 400px;
+      transform: translateY(-5vh);
     }
 
     /* Лого — вектор HeaderLogo (shared/assets/icons/rently-logo.svg),

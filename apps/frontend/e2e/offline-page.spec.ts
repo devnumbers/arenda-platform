@@ -38,6 +38,16 @@ test.describe('мобайл 390', () => {
     await expect(page.getByRole('heading', { name: 'Нет соединения' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Обратиться в поддержку' })).toBeVisible();
 
+    // Оптический центр (решение владельца 21.09): блок приподнят на −5vh,
+    // его центр выше центра вьюпорта — «мёртвое» центрирование оставляло
+    // треть экрана пустоты сверху.
+    const centerOffset = await page.evaluate(() => {
+      const panel = document.querySelector('.panel') as HTMLElement;
+      const rect = panel.getBoundingClientRect();
+      return rect.top + rect.height / 2 - window.innerHeight / 2;
+    });
+    expect(centerOffset).toBeLessThan(0);
+
     await captureScreen(page, testInfo, 'offline-page-mobile');
   });
 });
