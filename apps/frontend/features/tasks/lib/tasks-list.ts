@@ -13,6 +13,7 @@ import {
   type IsoDate,
   type Task,
 } from '@/entities/task';
+import { parseEnumParam } from '@/shared/lib/parse-enum-param';
 
 export type TasksSortField = 'date' | 'title';
 export type TasksSortDirection = 'asc' | 'desc';
@@ -26,18 +27,15 @@ export type TasksSort = {
 export const DEFAULT_TASKS_SORT: TasksSort = { field: 'date', direction: 'asc' };
 
 /** Разбор ?sort=&order= экранов задач (конвенция страницы «Объекты»):
- * неизвестные и отсутствующие значения — дефолт («Дата, asc»); массивное
- * значение — как битое, тоже дефолт. Выбор живёт в адресе — переживает
- * перезагрузку (#785). */
+ * неизвестные и отсутствующие значения — дефолт («Дата, asc»). Выбор
+ * живёт в адресе — переживает перезагрузку (#785). */
 export function parseTasksSortParams(
   sort: string | string[] | undefined,
   order: string | string[] | undefined,
 ): TasksSort {
-  const sortValue = typeof sort === 'string' ? sort : '';
-  const orderValue = typeof order === 'string' ? order : '';
   return {
-    field: sortValue === 'title' ? 'title' : 'date',
-    direction: orderValue === 'desc' ? 'desc' : 'asc',
+    field: parseEnumParam(sort, ['date', 'title'], 'date'),
+    direction: parseEnumParam(order, ['asc', 'desc'], 'asc'),
   };
 }
 

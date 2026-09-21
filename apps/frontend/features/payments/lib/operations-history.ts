@@ -1,5 +1,6 @@
 import type { IsoDate, PaymentOperation } from '@/entities/payment';
 import { addDays, formatDayMonth, formatDayMonthWithYear } from '@/entities/payment';
+import { parseEnumParam } from '@/shared/lib/parse-enum-param';
 
 /**
  * Группировка «Истории платежей» по датам (резолюция #452): «Сегодня»,
@@ -27,7 +28,7 @@ export type HistoryOrder = 'asc' | 'desc';
 export function parseHistoryOrderParams(
   order: string | string[] | undefined,
 ): HistoryOrder {
-  return typeof order === 'string' && order === 'asc' ? 'asc' : 'desc';
+  return parseEnumParam(order, ['asc', 'desc'], 'desc');
 }
 
 export function groupPaidOperations(

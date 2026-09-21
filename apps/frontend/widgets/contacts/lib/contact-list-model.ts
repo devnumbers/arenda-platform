@@ -1,5 +1,6 @@
 import { contactFullName, type ContactSortOrder } from '@/entities/contact';
 import type { Contact } from '@/entities/contact';
+import { parseEnumParam } from '@/shared/lib/parse-enum-param';
 
 /**
  * Модель строки списка (#508, макет 1527:74139): заголовок — имя, подзаголовок
@@ -23,5 +24,5 @@ export function contactRowModel(contact: Contact): {
 export function parseContactListOrderParams(
   order: string | string[] | undefined,
 ): ContactSortOrder {
-  return typeof order === 'string' && order === 'desc' ? 'desc' : 'asc';
+  return parseEnumParam(order, ['asc', 'desc'], 'asc');
 }
