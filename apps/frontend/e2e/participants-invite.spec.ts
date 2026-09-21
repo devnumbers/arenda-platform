@@ -149,6 +149,87 @@ test('приглашение незарегистрированной почты
   await expect(page.getByRole('button', { name: new RegExp(INVITEE_EMAIL) })).toHaveCount(0);
 });
 
+test('хаб-приёмник: приглашение из хаба → возврат на /participants → попап «Участник приглашен» (цикл ×3); сид восстанавливается', async ({ page, seededUser }, testInfo) => {
+  await openCabinetWithSeededSession(page, seededUser);
+  // Мобильная канва — условия обхода #759: попап здесь рисует vaul-шит,
+  // и именно на ней #771 поймал «невидимый» попап (шит за сгибом).
+  await page.setViewportSize({ width: 375, height: 667 });
+
+  // P2-хвост #759 / #771: вход во флоу — с хаба «Совместный доступ»
+  // (CTA нижней панели), возврат goBack ведёт на хаб — попап рисует И
+  // список, И хаб (#699). Раньше спека покрывала только список; на хабе
+  // была поймана редкая потеря попапа (1 из 8 прогонов). Цикл повторов —
+  // регрессионная сетка нестабильности; у каждого цикла своя почта,
+  // иначе повторное приглашение уходит в granted=0 без попапа.
+  await page.goto('/participants');
+
+  // Самозаживление: провал предыдущего прогона до очистки оставил бы
+  // pending-приглашения — повторное приглашение ушло бы в granted=0 без
+  // попапа и отравило бы весь цикл.
+  await execE2eSql(`DELETE FROM property_member_invitations WHERE email LIKE 'e2e-invite-hub-%'`);
+
+  for (let cycle = 1; cycle <= 3; cycle++) {
+    const email = `e2e-invite-hub-${cycle}@example.com`;
+
+    await page.getByRole('button', { name: 'Пригласить участника' })
+      .filter({ hasText: 'Пригласить участника' })
+      .click();
+    await expect(page.getByRole('heading', { name: 'Пригласите участника' })).toBeVisible();
+
+    await page.getByRole('textbox', { name: 'Электронная почта' }).fill(email);
+    // Выбор по умолчанию — все объекты; роль «Просмотр».
+    await page.getByRole('button', { name: 'Пригласить' })
+      .filter({ hasText: 'Пригласить' })
+      .click();
+
+    // Приёмник goBack — именно хаб, с попапом «Участник приглашен»
+    // (2010-134458). URL с якорем конца строки отличает хаб от списка
+    // (заголовок хаба не проверяем: открытая модалка прячет фон из
+    // a11y-дерева — aria-modal).
+    await expect(page).toHaveURL(/\/participants$/);
+    await expect(
+      page.getByRole('dialog').locator('p', { hasText: 'Участник приглашен' }),
+    ).toBeVisible();
+    // Попап целиком в вьюпорте: в DOM он был и когда шит терял
+    // position:fixed (#771: tailwind-merge снимал fixed под relative
+    // потребителя) и рисовался за сгибом — toBeVisible такой дефект не
+    // ловит, прямоугольник ловит. Поллинг — шит въезжает 0.5s, ждём
+    // завершение слайда, а не первый кадр.
+    const viewport = page.viewportSize();
+    await expect
+      .poll(
+        async () => {
+          const box = await page.getByRole('dialog').boundingBox();
+          return box === null ? Number.POSITIVE_INFINITY : box.y + box.height;
+        },
+        { timeout: 3_000 },
+      )
+      .toBeLessThanOrEqual(viewport ? viewport.height : Number.POSITIVE_INFINITY);
+    expect(
+      await page.getByRole('dialog').boundingBox().then((box) => (box === null ? null : box.y)),
+    ).toBeGreaterThanOrEqual(0);
+    if (cycle === 1) {
+      await captureScreen(page, testInfo, 'participants-invite-hub-popup');
+    }
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+
+    // Серверная правда: pending-приглашения на все 3 объекта снапшота;
+    // чистим сразу, чтобы циклы были независимы.
+    expect(
+      await execE2eSql(
+        `SELECT count(*) FROM property_member_invitations WHERE email = '${email}'`,
+      ),
+    ).toBe('3');
+    await execE2eSql(`DELETE FROM property_member_invitations WHERE email = '${email}'`);
+  }
+
+  await page.reload();
+  expect(
+    await execE2eSql(`SELECT count(*) FROM property_member_invitations WHERE email LIKE 'e2e-invite-hub-%'`),
+  ).toBe('0');
+});
+
 test('приглашение зарегистрированной почты на один объект: suspended-слот, чип «Превышен лимит объектов»; сид восстанавливается', async ({ page, seededUser }) => {
   await openCabinetWithSeededSession(page, seededUser);
 

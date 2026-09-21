@@ -50,6 +50,11 @@ function getSnapshot(): ParticipantPopupKind | null {
   return staged;
 }
 
+/** Текущее значение флага без React (юнит-тесты канона one-shot #771). */
+export function getParticipantPopupSnapshot(): ParticipantPopupKind | null {
+  return getSnapshot();
+}
+
 function getServerSnapshot(): ParticipantPopupKind | null {
   return null;
 }

@@ -280,7 +280,7 @@ export function ParticipantsListScreen(): JSX.Element {
        * канона), как в попапе продления аренды. */}
       {showSuccess && (
         <Modal open onOpenChange={(open) => open || setShowSuccess(false)}>
-          <ModalContent title="Все участники удалены" titleSrOnly className="relative">
+          <ModalContent title="Все участники удалены" titleSrOnly>
             <IconButton
               icon={<Cancel />}
               label="Закрыть"

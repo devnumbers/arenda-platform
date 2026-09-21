@@ -359,7 +359,7 @@ export function PropertyParticipantsScreen(): JSX.Element {
        * зелёная галочка 48 и текст; владелец в списке остаётся. */}
       {showAllRevoked && (
         <Modal open onOpenChange={(open) => open || setShowAllRevoked(false)}>
-          <ModalContent title="Все участники удалены" titleSrOnly className="relative">
+          <ModalContent title="Все участники удалены" titleSrOnly>
             <IconButton
               icon={<Cancel />}
               label="Закрыть"

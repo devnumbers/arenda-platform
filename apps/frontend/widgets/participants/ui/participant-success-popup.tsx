@@ -21,7 +21,7 @@ export function ParticipantSuccessPopup({
 }): JSX.Element {
   return (
     <Modal open onOpenChange={(open) => open || onClose()}>
-      <ModalContent title={title} titleSrOnly className="relative">
+      <ModalContent title={title} titleSrOnly>
         <IconButton
           icon={<Cancel />}
           label="Закрыть"

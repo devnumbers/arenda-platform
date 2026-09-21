@@ -242,7 +242,7 @@ function RentalExtendForm({
           мобиле закрытие — свайп/оверлей, как у всех шитов канона. */}
       {extended !== null && (
         <Modal open onOpenChange={(open) => open || onClose()}>
-          <ModalContent title="Аренда продлена" titleSrOnly className="relative">
+          <ModalContent title="Аренда продлена" titleSrOnly>
             <IconButton
               icon={<Cancel />}
               label="Закрыть"
