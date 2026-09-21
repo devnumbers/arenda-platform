@@ -94,7 +94,7 @@ func (h *accessPublisherHarness) plantUser(id uuid.UUID, name, email string) {
 func (h *accessPublisherHarness) notifyActivated(t *testing.T, ids accessIDs, suspended bool) map[domain.EventType]domain.Notification {
 	t.Helper()
 	err := h.pub.NotifyInvitationActivated(
-		t.Context(), uuid.Must(uuid.NewV7()), ids.membership, ids.property, ids.owner, ids.member,
+		t.Context(), ids.membership, ids.property, ids.owner, ids.member,
 		suspended, time.Date(2026, 9, 20, 12, 0, 0, 0, time.UTC),
 	)
 	require.NoError(t, err)
@@ -361,7 +361,7 @@ func TestNotifyViewFailure(t *testing.T) {
 	assert.Empty(t, h.feed.inserted)
 
 	err = h.pub.NotifyInvitationActivated(
-		context.Background(), uuid.Must(uuid.NewV7()), ids.membership, ids.property, ids.owner, ids.member,
+		context.Background(), ids.membership, ids.property, ids.owner, ids.member,
 		false, time.Now(),
 	)
 	require.Error(t, err)
@@ -394,10 +394,9 @@ func TestNotifyInvitationActivatedDedupStable(t *testing.T) {
 	h.plantUser(testAccessOwnerID, "Пётр Петров", "inviter@example.com")
 	h.plantUser(testAccessMemberID, "Иван Иванов", "invitee@example.com")
 
-	invitationID := uuid.Must(uuid.NewV7())
 	for range 2 {
 		err := h.pub.NotifyInvitationActivated(
-			t.Context(), invitationID, testAccessMembershipID, testAccessPropertyID,
+			t.Context(), testAccessMembershipID, testAccessPropertyID,
 			testAccessOwnerID, testAccessMemberID, false, time.Date(2026, 9, 20, 12, 0, 0, 0, time.UTC),
 		)
 		require.NoError(t, err)

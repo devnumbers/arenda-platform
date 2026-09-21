@@ -544,7 +544,7 @@ func subscribeAccessEvents(
 			return fmt.Errorf("unexpected event type %T", event)
 		}
 		return accessPublisher.NotifyInvitationActivated(
-			ctx, e.InvitationID, e.MembershipID, e.PropertyID, e.InviterID, e.InviteeID,
+			ctx, e.MembershipID, e.PropertyID, e.InviterID, e.InviteeID,
 			e.Suspended, e.At,
 		)
 	})

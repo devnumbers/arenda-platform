@@ -429,7 +429,6 @@ func (s *InvitationService) activateInvitation(ctx context.Context, userID uuid.
 	}
 	publishAccessEvent(ctx, s.events, s.logger, "invitation_activated", func() error {
 		return s.events.PublishInvitationActivated(ctx, InvitationActivated{
-			InvitationID: invitation.ID,
 			MembershipID: created.ID,
 			PropertyID:   invitation.PropertyID,
 			InviterID:    invitation.InvitedBy,

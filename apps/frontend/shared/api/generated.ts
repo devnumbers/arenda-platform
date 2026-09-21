@@ -3218,7 +3218,7 @@ export interface components {
             /**
              * @description Payload-ссылки и снимки имён (решение #737): property {id, name,
              *     address}, actor {id, name, email}, rental_id, payment_id, payment_date,
-             *     task_id, task_rule_id, membership_id, invitation_id, tariff {slug,
+             *     task_id, task_rule_id, membership_id, tariff {slug,
              *     period, amount_kopecks, active_until}. address и email — снимки
              *     карточек (решение владельца 19.09.2026, #745): строка карточки,
              *     которой нет в снимке, просто не рендерится. payment_id — id правила,
@@ -3226,7 +3226,7 @@ export interface components {
              *     дата операции, #749). task_rule_id — правило задачи: экран задачи —
              *     экран её правила, переход ведёт по нему (#750). События доступа
              *     (#751) несут membership_id — сущность перехода, переживающую
-             *     снесённое приглашение; invitation_id издателем доступа не пишется.
+             *     снесённое приглашение.
              *     Все поля опциональны; суммы — BIGINT копейки.
              */
             payload: Record<string, never>;

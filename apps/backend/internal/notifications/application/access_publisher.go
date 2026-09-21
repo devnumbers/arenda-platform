@@ -73,7 +73,7 @@ func NewAccessPublisher(pipeline *Publisher, views AccessEventViewSource) *Acces
 // is the activation instant the paused row's dedup key stamps.
 func (p *AccessPublisher) NotifyInvitationActivated(
 	ctx context.Context,
-	invitationID, membershipID, propertyID, inviterID, inviteeID uuid.UUID,
+	membershipID, propertyID, inviterID, inviteeID uuid.UUID,
 	suspended bool,
 	activatedAt time.Time,
 ) error {

@@ -27,7 +27,6 @@ import (
 // The inviter learns their invitation was accepted; the invitee's own
 // notification depends on the landing state.
 type InvitationActivated struct {
-	InvitationID uuid.UUID
 	MembershipID uuid.UUID
 	PropertyID   uuid.UUID
 	// InviterID is the actor of the invitation (membership.GrantedBy) — the

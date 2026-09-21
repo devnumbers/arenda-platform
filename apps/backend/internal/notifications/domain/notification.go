@@ -163,7 +163,6 @@ type Payload struct {
 	// задаче» navigation needs the rule id alongside the task id.
 	TaskRuleID   *uuid.UUID `json:"task_rule_id,omitempty"`
 	MembershipID *uuid.UUID `json:"membership_id,omitempty"`
-	InvitationID *uuid.UUID `json:"invitation_id,omitempty"`
 	Tariff       *TariffRef `json:"tariff,omitempty"`
 }
 

@@ -103,7 +103,6 @@ export type NotificationPayload = {
    * правила, переход ведёт по нему. */
   readonly taskRuleId?: string;
   readonly membershipId?: string;
-  readonly invitationId?: string;
   readonly tariff?: NotificationTariffRef;
 };
 

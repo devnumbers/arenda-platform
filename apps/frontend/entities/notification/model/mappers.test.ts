@@ -96,7 +96,6 @@ describe('mapNotificationDetail', () => {
           payment_id: '0194a3f8-0000-7000-8000-000000000004',
           task_id: '0194a3f8-0000-7000-8000-000000000005',
           membership_id: '0194a3f8-0000-7000-8000-000000000006',
-          invitation_id: '0194a3f8-0000-7000-8000-000000000007',
           tariff: { slug: 'pro', period: 'month', amount_kopecks: 49000, active_until: '2026-10-01T00:00:00Z' },
         },
       }),
@@ -108,7 +107,6 @@ describe('mapNotificationDetail', () => {
       paymentId: '0194a3f8-0000-7000-8000-000000000004',
       taskId: '0194a3f8-0000-7000-8000-000000000005',
       membershipId: '0194a3f8-0000-7000-8000-000000000006',
-      invitationId: '0194a3f8-0000-7000-8000-000000000007',
       tariff: { slug: 'pro', period: 'month', amountKopecks: 49000, activeUntil: '2026-10-01T00:00:00Z' },
     });
   });

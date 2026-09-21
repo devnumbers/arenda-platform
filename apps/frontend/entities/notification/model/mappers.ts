@@ -101,7 +101,6 @@ function toPayload(raw: Record<string, unknown>): NotificationPayload {
     paymentId: toId(raw.payment_id),
     taskId: toId(raw.task_id),
     membershipId: toId(raw.membership_id),
-    invitationId: toId(raw.invitation_id),
     tariff: toTariffRef(raw.tariff),
   });
 }
