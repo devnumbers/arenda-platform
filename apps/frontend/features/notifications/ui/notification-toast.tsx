@@ -17,15 +17,19 @@ export type NotificationCreatedFrame = Extract<StreamFrame, { kind: 'created' }>
 const NOTIFICATION_TOAST_AUTOCLOSE_MS = 6000;
 
 /**
- * Тост о новом уведомлении (макет 2343:57307, тикет #747): круг иконки
+ * Тост о новом уведомлении (макет 2343:57307, тикеты #747/#778): круг иконки
  * категории 44 без точки непрочитанного и без тарифного бейджа (в макете
- * тоста Badge=None), строка контекста + время, заголовок 16/18, описание
- * 14/16 максимум в две строки (решение владельца 19.09 — подпись-заглушка
- * макета «в три строки» устарела), X 40 с зазором 8 от правого края. Тап
- * по карточке
- * ведёт на страницу уведомления («тап → страница уведомления», #747);
- * deeplink url из кадра остаётся канону пушей (sw.js). X — сестринский
- * элемент ссылки, не вложенный (валидная интерактивная вложенность).
+ * тоста Badge=None), строка контекста + время (зазор 8), заголовок 16/18
+ * одна строка с ellipsis, описание 14/16 максимум в две строки (решение
+ * владельца 19.09 — подпись-заглушка макета «в три строки» устарела),
+ * X 44×44 с отступами 8 сверху и 8 справа, глиф 24 по центру зоны.
+ * Решение владельца 21.09 — «сделать 1 в 1 как на фигме» (#778): ширина
+ * карточки 402 на десктопе (макет: поля 24 во фрейме 450) и экран − 48 на
+ * мобиле (поля 24) — живёт в варианте `.notification`
+ * в ToastProvider.module.css. Тап по карточке ведёт на страницу
+ * уведомления («тап → страница уведомления», #747); deeplink url из кадра
+ * остаётся канону пушей (sw.js). X — сестринский элемент ссылки, не
+ * вложенный (валидная интерактивная вложенность).
  */
 export function NotificationToast({
   frame,
@@ -58,7 +62,7 @@ export function NotificationToast({
                 )}
               </span>
             )}
-            <span className="text-base font-medium leading-[18px] text-content">{frame.title}</span>
+            <span className="truncate text-base font-medium leading-[18px] text-content">{frame.title}</span>
           </span>
           {frame.body !== '' && (
             <span className="line-clamp-2 text-sm leading-4 text-content-secondary">{frame.body}</span>
@@ -73,7 +77,7 @@ export function NotificationToast({
           event.stopPropagation();
           closeToast();
         }}
-        className="absolute right-2 top-0 flex h-10 w-10 items-center justify-center rounded-pill text-content-secondary outline-none transition-colors hover:text-content focus-visible:ring-2 focus-visible:ring-primary"
+        className="absolute right-2 top-2 flex h-11 w-11 items-center justify-center rounded-pill text-content-secondary outline-none transition-colors hover:text-content focus-visible:ring-2 focus-visible:ring-primary"
       >
         <Cancel width={24} height={24} aria-hidden />
       </button>
