@@ -138,6 +138,11 @@ type Querier interface {
 	// Pending property member invitations by email (T5, issue #161). Emails are
 	// stored lowercase; lookups compare with lower() on the parameter side too.
 	CreatePropertyMemberInvitation(ctx context.Context, arg CreatePropertyMemberInvitationParams) (PropertyMemberInvitation, error)
+	// A grant created directly in the suspended status (invite activation or
+	// AddMember without a free recipient slot) stamps suspended_at: the FIFO
+	// recovery queue orders by it (ListSuspendedMembersByUser), and a NULL would
+	// degrade the ordering to updated_at DESC (issue #767). The active insert
+	// keeps it NULL, matching the column default.
 	CreatePropertyMemberWithStatus(ctx context.Context, arg CreatePropertyMemberWithStatusParams) (PropertyMember, error)
 	CreatePropertyPhoto(ctx context.Context, arg CreatePropertyPhotoParams) (PropertyPhoto, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)

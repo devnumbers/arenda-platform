@@ -116,6 +116,11 @@ JOIN properties p ON p.id = m.property_id
 WHERE m.user_id = $1 AND m.status = 'active' AND p.status != 'archived';
 
 -- name: CreatePropertyMemberWithStatus :one
-INSERT INTO property_members (id, property_id, user_id, role, granted_by, status)
-VALUES ($1, $2, $3, $4, $5, $6)
+-- A grant created directly in the suspended status (invite activation or
+-- AddMember without a free recipient slot) stamps suspended_at: the FIFO
+-- recovery queue orders by it (ListSuspendedMembersByUser), and a NULL would
+-- degrade the ordering to updated_at DESC (issue #767). The active insert
+-- keeps it NULL, matching the column default.
+INSERT INTO property_members (id, property_id, user_id, role, granted_by, status, suspended_at)
+VALUES ($1, $2, $3, $4, $5, $6, CASE WHEN $6 = 'suspended' THEN now() END)
 RETURNING *;

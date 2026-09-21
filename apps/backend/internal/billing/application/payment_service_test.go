@@ -974,6 +974,9 @@ func TestWebhook_SucceededAppliesUpgrade(t *testing.T) {
 // upgrade tail of the success-application seam (issue #695): a payment that
 // raised the tariff limit recovers the recipient's suspended shared
 // memberships FIFO through the access bridge, in the finalizing transaction.
+// The enforcement audit trigger names the direction: a raised limit is
+// recorded as tariff_upgrade, never as a downgrade (issue #767 — the #760
+// walkthrough caught a Pro→Business upgrade writing renewal_downgrade).
 func TestWebhook_SucceededUpgradeRecoversSuspendedSlots(t *testing.T) {
 	t.Parallel()
 	h := newPaymentHarness(t)
@@ -986,8 +989,63 @@ func TestWebhook_SucceededUpgradeRecoversSuspendedSlots(t *testing.T) {
 	if got := slots.recovered(); len(got) != 1 || got[0] != sub.UserID {
 		t.Errorf("recover calls = %v, want one recover of the upgraded user %s", got, sub.UserID)
 	}
-	if got := slots.recorded(); len(got) != 1 || got[0] != triggerRenewalDowngrade {
-		t.Errorf("enforce calls = %v, want one %q after the tariff switch", got, triggerRenewalDowngrade)
+	if got := slots.recorded(); len(got) != 1 || got[0] != triggerTariffUpgrade {
+		t.Errorf("enforce calls = %v, want one %q after the upgrade", got, triggerTariffUpgrade)
+	}
+}
+
+// TestTariffChangeTriggerFollowsDirection pins the audit-trigger mapping of
+// the payment-applied enforcement to the shared tariff comparison
+// (ClassifyTariffChange, issue #695): lowered limit keeps the existing
+// renewal_downgrade label, raised limit gets tariff_upgrade, and distinct
+// tariffs that compare equal get the neutral tariff_change.
+func TestTariffChangeTriggerFollowsDirection(t *testing.T) {
+	t.Parallel()
+	basic := domain.Tariff{
+		ID:                  uuid.MustParse("11111111-1111-4111-8111-111111111111"),
+		Name:                domain.TariffBasic,
+		ActivePropertyLimit: 5,
+		MonthlyPriceKopecks: 1000,
+		YearlyPriceKopecks:  10000,
+	}
+	pro := domain.Tariff{
+		ID:                  uuid.MustParse("22222222-2222-4222-8222-222222222222"),
+		Name:                domain.TariffPro,
+		ActivePropertyLimit: 50,
+		MonthlyPriceKopecks: 5000,
+		YearlyPriceKopecks:  50000,
+	}
+	business := domain.Tariff{
+		ID:                  uuid.MustParse("33333333-3333-4333-8333-333333333333"),
+		Name:                domain.TariffBusiness,
+		ActivePropertyLimit: domain.UnlimitedPropertyLimit,
+		MonthlyPriceKopecks: 10000,
+		YearlyPriceKopecks:  100000,
+	}
+	distinctSameAsPro := domain.Tariff{
+		ID:                  uuid.MustParse("44444444-4444-4444-8444-444444444444"),
+		Name:                domain.TariffPro,
+		ActivePropertyLimit: 50,
+		MonthlyPriceKopecks: 5000,
+		YearlyPriceKopecks:  50000,
+	}
+
+	cases := []struct {
+		name              string
+		previous, applied domain.Tariff
+		want              string
+	}{
+		{"downgrade keeps renewal_downgrade", pro, basic, triggerRenewalDowngrade},
+		{"upgrade gets tariff_upgrade", pro, business, triggerTariffUpgrade},
+		{"equal-priced distinct tariffs get the neutral label", pro, distinctSameAsPro, triggerTariffChange},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := tariffChangeTrigger(tc.previous, tc.applied); got != tc.want {
+				t.Errorf("tariffChangeTrigger() = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 

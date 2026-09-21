@@ -187,12 +187,14 @@ func NewWorkers(factory txStoreFactory, cfg WorkersConfig) *Workers {
 }
 
 // Worker-slot audit triggers — the access coordinator records them in its
-// audit context, so they are low-cardinality labels naming the phase that
-// dropped a tariff limit.
+// audit context, so they are low-cardinality labels naming the tariff phase
+// behind the enforcement: which phase ran and which way the limit moved.
 const (
 	triggerScheduledDowngrade = "scheduled_downgrade"
 	triggerFreeDowngrade      = "free_downgrade"
 	triggerRenewalDowngrade   = "renewal_downgrade"
+	triggerTariffUpgrade      = "tariff_upgrade"
+	triggerTariffChange       = "tariff_change"
 	triggerGraceExpired       = "grace_expired"
 	triggerGraceEntry         = "grace_entry"
 	triggerNonRenewingExpired = "non_renewing_expired"

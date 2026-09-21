@@ -65,8 +65,8 @@ func (q *Queries) CreatePropertyMember(ctx context.Context, arg CreatePropertyMe
 }
 
 const createPropertyMemberWithStatus = `-- name: CreatePropertyMemberWithStatus :one
-INSERT INTO property_members (id, property_id, user_id, role, granted_by, status)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO property_members (id, property_id, user_id, role, granted_by, status, suspended_at)
+VALUES ($1, $2, $3, $4, $5, $6, CASE WHEN $6 = 'suspended' THEN now() END)
 RETURNING id, property_id, user_id, role, granted_by, created_at, updated_at, status, suspended_at
 `
 
@@ -79,6 +79,11 @@ type CreatePropertyMemberWithStatusParams struct {
 	Status     string      `json:"status"`
 }
 
+// A grant created directly in the suspended status (invite activation or
+// AddMember without a free recipient slot) stamps suspended_at: the FIFO
+// recovery queue orders by it (ListSuspendedMembersByUser), and a NULL would
+// degrade the ordering to updated_at DESC (issue #767). The active insert
+// keeps it NULL, matching the column default.
 func (q *Queries) CreatePropertyMemberWithStatus(ctx context.Context, arg CreatePropertyMemberWithStatusParams) (PropertyMember, error) {
 	row := q.db.QueryRow(ctx, createPropertyMemberWithStatus,
 		arg.ID,

@@ -644,9 +644,12 @@ func applySucceededPayment(
 	}
 	if transitionChangedTariff(applied, payment.TariffID) {
 		// The applied payment switched the tariff: the new plan's limit takes
-		// effect with the same commit.
-		if err := stores.enforceTariffLimit(ctx, payment.UserID, paymentTariff.ActivePropertyLimit, triggerRenewalDowngrade, nil); err != nil {
-			return domain.Transition{}, fmt.Errorf("enforce tariff limit after payment downgrade: %w", err)
+		// effect with the same commit. The audit trigger names the direction
+		// of the switch, not the phase — an upgrade must not read as a
+		// downgrade (issue #767).
+		trigger := tariffChangeTrigger(previousTariff, paymentTariff)
+		if err := stores.enforceTariffLimit(ctx, payment.UserID, paymentTariff.ActivePropertyLimit, trigger, nil); err != nil {
+			return domain.Transition{}, fmt.Errorf("enforce tariff limit after payment tariff switch: %w", err)
 		}
 		// Recipient upgrade (issue #695): the raised limit re-opens the
 		// recipient's oldest suspended shared memberships FIFO in the same
@@ -705,6 +708,24 @@ func recoverRecipientSlotsOnUpgrade(
 		return fmt.Errorf("recover recipient slots after payment upgrade: %w", err)
 	}
 	return nil
+}
+
+// tariffChangeTrigger names the payment-applied enforcement for the audit
+// context: the label follows the direction of the applied tariff switch — a
+// lowered limit keeps the existing renewal_downgrade, a raised one is
+// tariff_upgrade, distinct tariffs that compare equal get the neutral
+// tariff_change. ClassifyTariffChange is the shared definition of the
+// direction (issue #695); labeling an upgrade a downgrade lies to the audit
+// reader (issue #767, found by the #760 walkthrough).
+func tariffChangeTrigger(previous, applied domain.Tariff) string {
+	switch domain.ClassifyTariffChange(previous, applied) {
+	case domain.TariffChangeUpgrade:
+		return triggerTariffUpgrade
+	case domain.TariffChangeDowngrade:
+		return triggerRenewalDowngrade
+	default:
+		return triggerTariffChange
+	}
 }
 
 // applyRefundNotification records a full refund reported by the provider and
