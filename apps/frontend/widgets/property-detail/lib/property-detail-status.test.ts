@@ -18,8 +18,8 @@ describe('propertyStatusSubtitle (подзаголовок шапки детал
     expect(propertyStatusSubtitle('maintenance')).toBe('На ремонте');
   });
 
-  it('в архиве — «В архиве»', () => {
-    expect(propertyStatusSubtitle('archived')).toBe('В архиве');
+  it('в архиве — без подзаголовка: факт архива несёт пилюля #773, второй канал дублировал бы её', () => {
+    expect(propertyStatusSubtitle('archived')).toBeNull();
   });
 });
 

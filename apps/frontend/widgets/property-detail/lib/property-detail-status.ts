@@ -31,10 +31,12 @@ export type PropertyDetailAction = {
   readonly danger: boolean;
 };
 
-/** Подзаголовок в шапке под «Объект» (Figma 1581:53679, 1581:55564). */
+/** Подзаголовок в шапке под «Объект» (Figma 1581:53679, 1581:55564).
+ * Архив в шапке не подписывается: факт архива несёт пилюля «В архиве»
+ * под адресом (#773, propertyHeaderPills) — иконка + видна любому
+ * читателю, второй канал дублировал бы её. */
 export function propertyStatusSubtitle(status: PropertyStatus): string | null {
   if (status === 'maintenance') return 'На ремонте';
-  if (status === 'archived') return 'В архиве';
   return null;
 }
 
