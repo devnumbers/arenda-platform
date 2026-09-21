@@ -43,6 +43,7 @@ import {
   ContactsSkeleton,
 } from './contacts-states';
 import {
+  CONTACT_ORDER_PARAMS,
   DEFAULT_CONTACT_LIST_ORDER,
   serializeContactOrderToParams,
 } from '../lib/contact-list-model';
@@ -89,7 +90,7 @@ export function ContactsOfPropertyScreen({
   // не пишется — конвенция состояния в адресе, #785).
   const changeOrder = (order: ContactSortOrder): void => {
     setSortOrder(order);
-    write(serializeContactOrderToParams(order), { own: ['order'] });
+    write(serializeContactOrderToParams(order), { own: CONTACT_ORDER_PARAMS });
   };
 
   // Открытие поиска сразу делает поле активным (программный фокус —

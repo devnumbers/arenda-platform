@@ -20,6 +20,10 @@ export function parseOverdueSortParams(
   return parseEnumParam(sort, ['new', 'old'], 'old');
 }
 
+/** Собственный параметр сортировки в адресе — знание этого модуля;
+ * писатель (PaymentOverdueGlobalScreen) импортирует отсюда. */
+export const OVERDUE_SORT_PARAMS = ['sort'] as const;
+
 /** Сериализация в адрес: дефолт «Старые» параметра не создаёт — конвенция
  * состояния в адресе. */
 export function serializeOverdueSortToParams(sort: OverdueSort): Record<string, string> {

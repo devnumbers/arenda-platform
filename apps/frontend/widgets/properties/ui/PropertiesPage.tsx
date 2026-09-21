@@ -23,6 +23,7 @@ import {
 import {ROUTES} from '@/shared/config/routes';
 import {
   DEFAULT_PROPERTY_SORT,
+  PROPERTY_SORT_PARAMS,
   SORT_FIELD_CHIP_LABEL,
   SORT_FIELD_OPTIONS,
   serializeSortToParams,
@@ -41,9 +42,6 @@ import styles from './PropertiesPage.module.css';
 export type PropertiesPageProps = {
   readonly initialSort?: PropertySort;
 };
-
-/** Собственные параметры сортировки в адресе — знание этого модуля. */
-const SORT_PARAMS = ['sort', 'order'] as const;
 
 /**
  * Экран-хаб «Объекты» (карта #583, тикет #586; Figma 1603:89079 — ПК,
@@ -77,7 +75,7 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
   // чужие параметры адреса переживают смену сортировки, дефолт снимается.
   const changeSort = (next: PropertySort) => {
     setSort(next);
-    write(serializeSortToParams(next), {own: SORT_PARAMS});
+    write(serializeSortToParams(next), {own: PROPERTY_SORT_PARAMS});
   };
 
   const isEmpty = !isLoading && !isError && visible.length === 0;

@@ -112,6 +112,10 @@ export function parseSortFromParams(params: SearchParamsLike): PropertySort {
   };
 }
 
+/** Собственные параметры сортировки в адресе — знание этого модуля;
+ * писатель (PropertiesPage) импортирует отсюда. */
+export const PROPERTY_SORT_PARAMS = ['sort', 'order'] as const;
+
 /** Сериализация в URL: значения по умолчанию параметров не создают. */
 export function serializeSortToParams(sort: PropertySort): Record<string, string> {
   const params: Record<string, string> = {};

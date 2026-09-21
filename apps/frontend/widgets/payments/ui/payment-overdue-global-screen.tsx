@@ -21,6 +21,7 @@ import {
 import { goBack } from "@/shared/lib/navigation";
 import { useUrlParams } from "@/shared/lib/hooks/use-url-params";
 import {
+  OVERDUE_SORT_PARAMS,
   globalOverdueList,
   serializeOverdueSortToParams,
   type OverdueSort,
@@ -45,8 +46,6 @@ import { PaymentsRowsSkeleton, PaymentsStateCard } from "./payments-sections";
  * читающая: оплата и закрытие просрочки — на объектных экранах. Пустое
  * состояние (885:18755) — канон EmptyState с 3D-иллюстрацией.
  */
-/** Собственный параметр сортировки в адресе — знание этого модуля. */
-const SORT_PARAMS = ["sort"] as const;
 
 export function PaymentOverdueGlobalScreen({
   initialSort = "old",
@@ -70,7 +69,7 @@ export function PaymentOverdueGlobalScreen({
   const toggleSort = (): void => {
     const next: OverdueSort = sort === "old" ? "new" : "old";
     setSort(next);
-    write(serializeOverdueSortToParams(next), { own: SORT_PARAMS });
+    write(serializeOverdueSortToParams(next), { own: OVERDUE_SORT_PARAMS });
   };
 
   return (

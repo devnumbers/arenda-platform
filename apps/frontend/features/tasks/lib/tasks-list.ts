@@ -39,6 +39,10 @@ export function parseTasksSortParams(
   };
 }
 
+/** Собственные параметры сортировки задач в адресе — знание этого модуля;
+ * писатель (useTasksSort) импортирует отсюда. */
+export const TASKS_SORT_PARAMS = ['sort', 'order'] as const;
+
 /** Сериализация сортировки в адрес: дефолтные значения параметров
  * не создают (конвенция состояния в адресе). */
 export function serializeTasksSortToParams(sort: TasksSort): Record<string, string> {

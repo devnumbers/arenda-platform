@@ -1,11 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { DEFAULT_TASKS_SORT, serializeTasksSortToParams, type TasksSort } from './tasks-list';
+import {
+  DEFAULT_TASKS_SORT,
+  TASKS_SORT_PARAMS,
+  serializeTasksSortToParams,
+  type TasksSort,
+} from './tasks-list';
 import { useUrlParams } from '@/shared/lib/hooks/use-url-params';
-
-/** Собственные параметры сортировки задач в адресе — знание этого модуля. */
-const SORT_PARAMS = ['sort', 'order'] as const;
 
 /**
  * Сортировка экранов задач в адресе (#785): ?sort=&order=, дефолт
@@ -39,7 +41,7 @@ export function useTasksSort(initialSort?: TasksSort): {
 
   const changeSort = (next: TasksSort): void => {
     setSort(next);
-    write(serializeTasksSortToParams(next), { own: SORT_PARAMS });
+    write(serializeTasksSortToParams(next), { own: TASKS_SORT_PARAMS });
   };
 
   return { sort, changeSort };

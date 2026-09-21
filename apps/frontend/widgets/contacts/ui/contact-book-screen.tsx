@@ -29,6 +29,7 @@ import {
   type PickerMenuGroup,
 } from '@/shared/ui/design';
 import {
+  CONTACT_BOOK_SORT_PARAMS,
   contactBookRowSubtitle,
   groupBookByLetter,
   groupBookByProperty,
@@ -60,8 +61,6 @@ import {
  * Пустая книга — EmptyState (служебный чип сортировки прячется вместе со
  * списком, DESIGN.md).
  */
-/** Собственные параметры сортировки книги в адресе — знание этого модуля. */
-const SORT_PARAMS = ['sort', 'order'] as const;
 
 export function ContactBookScreen({
   initialSort,
@@ -88,7 +87,7 @@ export function ContactBookScreen({
   const changeSort = (field: ContactBookSort, order: ContactBookOrder): void => {
     setSortField(field);
     setSortOrder(order);
-    write(serializeContactBookSortToParams(field, order), { own: SORT_PARAMS });
+    write(serializeContactBookSortToParams(field, order), { own: CONTACT_BOOK_SORT_PARAMS });
   };
 
   const groups =

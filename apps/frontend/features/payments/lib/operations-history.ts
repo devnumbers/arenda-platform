@@ -33,9 +33,13 @@ export function parseHistoryOrderParams(
   return parseEnumParam(order, ['asc', 'desc'], 'desc');
 }
 
+/** Собственный параметр направления в адресе — знание этого модуля;
+ * писатель (useHistoryOrder) импортирует отсюда. */
+export const HISTORY_ORDER_PARAMS = ['order'] as const;
+
 /** Патч направления для адреса: дефолтные значения параметров не создают
  * (конвенция состояния в адресе); пишется через useUrlParams с
- * own: ['order'] (#785). */
+ * own: HISTORY_ORDER_PARAMS (#785). */
 export function serializeHistoryOrderToParams(order: HistoryOrder): Record<string, string> {
   return order === DEFAULT_HISTORY_ORDER ? {} : { order };
 }

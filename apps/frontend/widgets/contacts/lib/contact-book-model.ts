@@ -29,6 +29,10 @@ export function parseContactBookSortParams(
   };
 }
 
+/** Собственные параметры сортировки книги в адресе — знание этого модуля;
+ * писатель (ContactBookScreen) импортирует отсюда. */
+export const CONTACT_BOOK_SORT_PARAMS = ['sort', 'order'] as const;
+
 /** Сериализация сортировки в адрес: дефолтные значения (имя, возрастание)
  * параметров не создают — конвенция состояния в адресе. */
 export function serializeContactBookSortToParams(

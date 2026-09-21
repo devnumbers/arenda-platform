@@ -30,9 +30,13 @@ export function parseContactListOrderParams(
   return parseEnumParam(order, ['asc', 'desc'], DEFAULT_CONTACT_LIST_ORDER);
 }
 
+/** Собственный параметр направления в адресе — знание этого модуля;
+ * писатель (ContactsOfPropertyScreen) импортирует отсюда. */
+export const CONTACT_ORDER_PARAMS = ['order'] as const;
+
 /** Патч направления для адреса: дефолтные значения параметров не создают
  * (конвенция состояния в адресе); пишется через useUrlParams с
- * own: ['order'] (#785). */
+ * own: CONTACT_ORDER_PARAMS (#785). */
 export function serializeContactOrderToParams(order: ContactSortOrder): Record<string, string> {
   return order === DEFAULT_CONTACT_LIST_ORDER ? {} : { order };
 }

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import {
   DEFAULT_HISTORY_ORDER,
+  HISTORY_ORDER_PARAMS,
   serializeHistoryOrderToParams,
   type HistoryOrder,
 } from './operations-history';
@@ -29,7 +30,7 @@ export function useHistoryOrder(initialOrder?: HistoryOrder): {
     // какое из двух направлений дефолтное.
     const next: HistoryOrder = order === 'asc' ? 'desc' : 'asc';
     setOrder(next);
-    write(serializeHistoryOrderToParams(next), { own: ['order'] });
+    write(serializeHistoryOrderToParams(next), { own: HISTORY_ORDER_PARAMS });
   };
 
   return { order, toggleOrder };
