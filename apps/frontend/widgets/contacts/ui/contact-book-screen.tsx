@@ -30,6 +30,8 @@ import {
 } from '@/shared/ui/design';
 import {
   CONTACT_BOOK_SORT_PARAMS,
+  DEFAULT_CONTACT_BOOK_ORDER,
+  DEFAULT_CONTACT_BOOK_SORT,
   contactBookRowSubtitle,
   groupBookByLetter,
   groupBookByProperty,
@@ -72,8 +74,12 @@ export function ContactBookScreen({
   const router = useRouter();
   const { write } = useUrlParams();
 
-  const [sortField, setSortField] = useState<ContactBookSort>(initialSort ?? 'name');
-  const [sortOrder, setSortOrder] = useState<ContactBookOrder>(initialOrder ?? 'asc');
+  const [sortField, setSortField] = useState<ContactBookSort>(
+    initialSort ?? DEFAULT_CONTACT_BOOK_SORT,
+  );
+  const [sortOrder, setSortOrder] = useState<ContactBookOrder>(
+    initialOrder ?? DEFAULT_CONTACT_BOOK_ORDER,
+  );
 
   // Серверная сортировка книги: ключ и направление уходят в запрос —
   // без них данные всегда приходят в дефолтном порядке (name asc).
