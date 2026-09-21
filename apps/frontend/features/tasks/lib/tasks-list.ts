@@ -25,6 +25,35 @@ export type TasksSort = {
 
 export const DEFAULT_TASKS_SORT: TasksSort = { field: 'date', direction: 'asc' };
 
+/** Разбор ?sort=&order= экранов задач (конвенция страницы «Объекты»):
+ * неизвестные и отсутствующие значения — дефолт («Дата, asc»); массивное
+ * значение — как битое, тоже дефолт. Выбор живёт в адресе — переживает
+ * перезагрузку (#785). */
+export function parseTasksSortParams(
+  sort: string | string[] | undefined,
+  order: string | string[] | undefined,
+): TasksSort {
+  const sortValue = typeof sort === 'string' ? sort : '';
+  const orderValue = typeof order === 'string' ? order : '';
+  return {
+    field: sortValue === 'title' ? 'title' : 'date',
+    direction: orderValue === 'desc' ? 'desc' : 'asc',
+  };
+}
+
+/** Сериализация сортировки в адрес: дефолтные значения параметров
+ * не создают (конвенция страницы «Объекты»). */
+export function serializeTasksSortToParams(sort: TasksSort): Record<string, string> {
+  const params: Record<string, string> = {};
+  if (sort.field !== DEFAULT_TASKS_SORT.field) {
+    params.sort = sort.field;
+  }
+  if (sort.direction !== DEFAULT_TASKS_SORT.direction) {
+    params.order = sort.direction;
+  }
+  return params;
+}
+
 export type TaskSectionKind =
   | 'overdue'
   | 'today'

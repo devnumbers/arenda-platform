@@ -1,4 +1,4 @@
-import { contactFullName } from '@/entities/contact';
+import { contactFullName, type ContactSortOrder } from '@/entities/contact';
 import type { Contact } from '@/entities/contact';
 
 /**
@@ -15,4 +15,13 @@ export function contactRowModel(contact: Contact): {
     title: contactFullName(contact),
     subtitle: contact.role.length > 0 ? contact.role : undefined,
   };
+}
+
+/** Разбор ?order= экрана «Контакты объекта» (конвенция страницы
+ * «Объекты»): неизвестное и отсутствующее значения — дефолт «А→Я».
+ * Направление живёт в адресе — переживает перезагрузку (#785). */
+export function parseContactListOrderParams(
+  order: string | string[] | undefined,
+): ContactSortOrder {
+  return typeof order === 'string' && order === 'desc' ? 'desc' : 'asc';
 }

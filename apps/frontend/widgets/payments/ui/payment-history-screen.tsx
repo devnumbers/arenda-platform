@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type JSX } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import Image from 'next/image';
 import { ArrowLeft, ChangeVertical } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
@@ -15,6 +15,7 @@ import { CategoryIcon, categoryStyle } from '@/features/payment-categories';
 import {
   groupPaidOperations,
   usePaymentOperationsPaged,
+  type HistoryOrder,
 } from '@/features/payments';
 import {
   Button,
@@ -36,28 +37,38 @@ import { PaymentGroupedListSkeleton } from './payments-skeletons';
  * Подэкран «История операций» (#466, Figma 671:7776): только paid-вхождения,
  * группы «Сегодня» / «Вчера» / дата; чип «Новые» переключает сортировку
  * «сначала новые ↔ сначала старые» (серверная — порядок закреплён за API);
- * серверные порции по 50 с бесконечным скроллом. Суммы расходов — со
- * знаком минус (Figma). Группировка по дате вхождения: досрочно оплаченное
- * будущее вхождение остаётся в дате своего периода (учёт, не касса).
- * Пустая история — иллюстрация и «Платежей еще не было» (Figma 858:21271).
+ * направление живёт в адресе (?order=asc, дефолт не пишется, #785) —
+ * переживает перезагрузку. Серверные порции по 50 с бесконечным скроллом.
+ * Суммы расходов — со знаком минус (Figma). Группировка по дате вхождения:
+ * досрочно оплаченное будущее вхождение остаётся в дате своего периода
+ * (учёт, не касса). Пустая история — иллюстрация и «Платежей еще не было»
+ * (Figma 858:21271).
  */
 export function PaymentHistoryScreen({
   propertyId,
   paymentId,
+  initialOrder,
 }: {
   readonly propertyId: string;
   readonly paymentId: string;
+  readonly initialOrder?: HistoryOrder;
 }): JSX.Element {
   const router = useRouter();
+  const pathname = usePathname();
   // Дефолт — сначала новые (Figma); направление — часть ключа запроса.
-  const [order, setOrder] = useState<'desc' | 'asc'>('desc');
+  const [order, setOrder] = useState<HistoryOrder>(initialOrder ?? 'desc');
   const historyQuery = usePaymentOperationsPaged(propertyId, paymentId, {
     status: 'paid',
     order,
   });
 
+  // Направление живёт в адресе (?order=asc, дефолт desc не пишется —
+  // конвенция страницы «Объекты», #785).
   const toggleOrder = (): void => {
-    setOrder((current) => (current === 'desc' ? 'asc' : 'desc'));
+    const next: HistoryOrder = order === 'desc' ? 'asc' : 'desc';
+    setOrder(next);
+    const query = next === 'asc' ? `?order=${next}` : '';
+    router.replace(query !== '' ? `${pathname}${query}` : pathname, { scroll: false });
   };
 
   const today = clientTodayIso();

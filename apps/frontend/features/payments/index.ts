@@ -62,6 +62,8 @@ export {
 export {
   groupOperationsByDate,
   groupPaidOperations,
+  parseHistoryOrderParams,
+  type HistoryOrder,
   type PaymentHistoryGroup,
 } from './lib/operations-history';
 export {

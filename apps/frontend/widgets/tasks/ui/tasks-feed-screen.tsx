@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import type { JSX } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import {
   Add,
   Checkmark,
@@ -19,6 +19,7 @@ import {
   canMutateFeedTask,
   groupTasks,
   mutableFeedTasks,
+  serializeTasksSortToParams,
   useCompleteAllGlobalTasks,
   useCompleteGlobalTask,
   useDeleteCompletedGlobalTasks,
@@ -65,7 +66,8 @@ import { SortChip, sortPickerGroups } from './tasks-sort';
  * канон объектного экрана (#499): границы «Сегодня»/«Завтра» считает сервер
  * по календаре читателя, порядок секций приходит плоским по сроку, строки
  * внутри сортируются клиентски (дефолт «Дата, asc» — решение 5 #522; чип
- * «Название» на макете — не дефолт). У объектных строк — строка объекта
+ * «Название» на макете — не дефолт). Выбор сортировки живёт в адресе
+ * (?sort=&order=, #785) — переживает перезагрузку. У объектных строк — строка объекта
  * (HomeMainSmall + имя, propertyName из контракта #521); тап по активной
  * объектной строке — правка на объекте, по безобъектной — плоский маршрут
  * /tasks/{ruleId}/edit (#537, решения 2–3 #522), выполненные некликабельны.
@@ -85,20 +87,45 @@ import { SortChip, sortPickerGroups } from './tasks-sort';
  * решения 7 #522). «+» — создание задачи (#525): та же форма, что на
  * объекте, вход без предвыбранного объекта — маршрут /tasks/new.
  */
-export function TasksFeedScreen(): JSX.Element {
+export function TasksFeedScreen({
+  initialSort,
+}: {
+  readonly initialSort?: TasksSort;
+}): JSX.Element {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   const { filter, applyFeedFilter } = useTasksFeedFilter();
   const activeQuery = useGlobalActiveTasks(filter.propertyIds, filter.withoutProperty);
   const completedQuery = useGlobalCompletedTasks(filter.propertyIds, filter.withoutProperty);
   const propertiesQuery = useProperties();
 
-  const [sort, setSort] = useState<TasksSort>(DEFAULT_TASKS_SORT);
+  const [sort, setSort] = useState<TasksSort>(initialSort ?? DEFAULT_TASKS_SORT);
   const [deleteOpen, setDeleteOpen] = useState(false);
   // Страница выбора объектов — строгий черновик (#524): черновик живёт,
   // пока страница смонтирована, история не пишется.
   const [selectOpen, setSelectOpen] = useState(false);
   const [filterDraft, setFilterDraft] = useState<TasksFilterDraft>(EMPTY_TASKS_FILTER_DRAFT);
+
+  // Сортировка живёт в адресе (?sort=&order=, дефолт не пишется — конвенция
+  // страницы «Объекты», #785): перезагрузка и шаринг ссылки сохраняют выбор.
+  // Пишется поверх текущих параметров (как applyFeedFilter), чтобы не
+  // затирать фильтр ленты #524; дефолтные значения параметров снимаются.
+  const changeSort = (next: TasksSort): void => {
+    setSort(next);
+    const params = new URLSearchParams(searchParams);
+    for (const [name, value] of Object.entries(serializeTasksSortToParams(next))) {
+      params.set(name, value);
+    }
+    for (const name of ['sort', 'order']) {
+      if (!params.get(name)) {
+        params.delete(name);
+      }
+    }
+    const query = params.toString();
+    router.replace(query !== '' ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
 
   // Авто-сброс фильтра при 404 (решение 8 #522): объект удалён или доступ
   // отозван — privacy 404, мёртвый фильтр из адреса убирает replace, чтобы
@@ -227,8 +254,8 @@ export function TasksFeedScreen(): JSX.Element {
           {!showEmpty && (
           <div className="mt-4 flex items-center justify-between pr-3.5 pl-6">
             <div className="flex items-center gap-2">
-              <PickerMenu title="Сортировать" groups={sortPickerGroups(sort, setSort)}>
-                <SortChip sort={sort} />
+              <PickerMenu title="Сортировать" groups={sortPickerGroups(sort, changeSort)}>
+                <SortChip sort={sort} data-testid="tasks-sort-chip" />
               </PickerMenu>
               {/* Фильтр (#524/#547, «Общие задачи» — решение владельца
                * 2026-09-07): при любом непустом фильтре чип активный

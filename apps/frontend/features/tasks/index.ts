@@ -21,6 +21,8 @@ export {
 export {
   DEFAULT_TASKS_SORT,
   groupTasks,
+  parseTasksSortParams,
+  serializeTasksSortToParams,
   sortTasks,
   type TaskSection,
   type TaskSectionKind,

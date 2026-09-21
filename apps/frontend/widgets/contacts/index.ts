@@ -5,6 +5,7 @@ export { ContactCreateScreen } from './ui/contact-create-screen';
 export { ContactDetailScreen } from './ui/contact-detail-screen';
 export { ContactEditScreen } from './ui/contact-edit-screen';
 export { parseContactBookSortParams } from './lib/contact-book-model';
+export { parseContactListOrderParams } from './lib/contact-list-model';
 /* Route-loading (#609). */
 export {
   ContactBookLoading,

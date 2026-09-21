@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type JSX, type ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { ArrowLeft, ChangeVertical } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
@@ -12,7 +12,11 @@ import {
 } from '@/entities/payment';
 import { paidPaymentNumber, paymentOrdinalLabel, useRentals } from '@/features/rentals';
 import { CategoryIcon, categoryStyle } from '@/features/payment-categories';
-import { groupPaidOperations, usePaymentOperationsPaged } from '@/features/payments';
+import {
+  groupPaidOperations,
+  usePaymentOperationsPaged,
+  type HistoryOrder,
+} from '@/features/payments';
 import {
   Button,
   ChipButton,
@@ -29,20 +33,24 @@ import {
  * «История операций» завершённой аренды (#535, Figma 1302:52209):
  * paid-вхождения Платежа арендной платы, группы по дате вхождения, чип
  * «Сначала новые» переключает сортировку (серверная — порядок закреплён
- * за API, порции по 50 с бесконечным скроллом — канон #452). Подзаголовок
- * строки — порядковый номер платежа: нумерация по дате от старых, итог
- * оплаченных — progress.paidMonths аренды.
+ * за API, порции по 50 с бесконечным скроллом — канон #452); направление
+ * живёт в адресе (?order=asc, дефолт не пишется, #785) — переживает
+ * перезагрузку. Подзаголовок строки — порядковый номер платежа: нумерация
+ * по дате от старых, итог оплаченных — progress.paidMonths аренды.
  */
 export function RentalHistoryScreen({
   propertyId,
   rentalId,
+  initialOrder,
 }: {
   readonly propertyId: string;
   readonly rentalId: string;
+  readonly initialOrder?: HistoryOrder;
 }): JSX.Element {
   const router = useRouter();
+  const pathname = usePathname();
   // Дефолт — сначала новые (макет); направление — часть ключа запроса.
-  const [order, setOrder] = useState<'desc' | 'asc'>('desc');
+  const [order, setOrder] = useState<HistoryOrder>(initialOrder ?? 'desc');
   const rentalsQuery = useRentals(propertyId);
   const rental = rentalsQuery.data?.find((item) => item.id === rentalId);
   const historyQuery = usePaymentOperationsPaged(
@@ -51,8 +59,13 @@ export function RentalHistoryScreen({
     { status: 'paid', order },
   );
 
+  // Направление живёт в адресе (?order=asc, дефолт desc не пишется —
+  // конвенция страницы «Объекты», #785).
   const toggleOrder = (): void => {
-    setOrder((current) => (current === 'desc' ? 'asc' : 'desc'));
+    const next: HistoryOrder = order === 'desc' ? 'asc' : 'desc';
+    setOrder(next);
+    const query = next === 'asc' ? `?order=${next}` : '';
+    router.replace(query !== '' ? `${pathname}${query}` : pathname, { scroll: false });
   };
 
   const operations = historyQuery.data ?? [];

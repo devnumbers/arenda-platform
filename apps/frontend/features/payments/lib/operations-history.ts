@@ -17,6 +17,19 @@ export type PaymentHistoryGroup = {
   readonly operations: ReadonlyArray<PaymentOperation>;
 };
 
+/** Направление «Истории операций» — экрана платежа (#466) и аренды (#535);
+ * дефолт «сначала новые» (макеты). */
+export type HistoryOrder = 'asc' | 'desc';
+
+/** Разбор ?order= страниц истории (конвенция страницы «Объекты»):
+ * неизвестное и отсутствующее значения — дефолт desc. Направление живёт
+ * в адресе — переживает перезагрузку (#785). */
+export function parseHistoryOrderParams(
+  order: string | string[] | undefined,
+): HistoryOrder {
+  return typeof order === 'string' && order === 'asc' ? 'asc' : 'desc';
+}
+
 export function groupPaidOperations(
   operations: ReadonlyArray<PaymentOperation>,
   today: IsoDate,

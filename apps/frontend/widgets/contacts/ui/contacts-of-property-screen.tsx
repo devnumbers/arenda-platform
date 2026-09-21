@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { ComponentProps, JSX } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import {
   ArrowLeft,
   Search,
@@ -55,7 +55,8 @@ const SEARCH_DEBOUNCE_MS = 300;
  * открывает меню сортировки (механика меню задач, Figma 1603-94487 —
  * выбор применяет и закрывает), на мобильной ширине — шит А→Я / Я→А
  * (клиентская, макет 1539:85395; выбор применяет, шит остаётся открытым —
- * как в задачах). Пустой список — иллюстрация
+ * как в задачах). Направление живёт в адресе (?order=, дефолт не пишется,
+ * #785) — переживает перезагрузку. Пустой список — иллюстрация
  * «Контактов нет»; в поиске — подсказка по началу и «Такого контакта нет».
  * Полноширинная кнопка «Добавить контакт» — тому, кто может мутировать
  * (как у платежей: не смотрящий и не архив, #446); ведёт на создание —
@@ -63,16 +64,27 @@ const SEARCH_DEBOUNCE_MS = 300;
  */
 export function ContactsOfPropertyScreen({
   propertyId,
+  initialOrder,
 }: {
   readonly propertyId: string;
+  readonly initialOrder?: ContactSortOrder;
 }): JSX.Element {
   const router = useRouter();
+  const pathname = usePathname();
   const propertyQuery = useProperty(propertyId);
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const [sortOrder, setSortOrder] = useState<ContactSortOrder>('asc');
+  const [sortOrder, setSortOrder] = useState<ContactSortOrder>(initialOrder ?? 'asc');
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Направление сортировки живёт в адресе (?order=desc, дефолт «А→Я»
+  // не пишется — конвенция страницы «Объекты», #785).
+  const changeOrder = (order: ContactSortOrder): void => {
+    setSortOrder(order);
+    const query = order === 'asc' ? '' : `?order=${order}`;
+    router.replace(query !== '' ? `${pathname}${query}` : pathname, { scroll: false });
+  };
 
   // Открытие поиска сразу делает поле активным (программный фокус —
   // устоявшийся a11y-паттерн вместо autoFocus, как на платёжных экранах).
@@ -169,7 +181,7 @@ export function ContactsOfPropertyScreen({
         ) : (
           <>
             <div className="mx-6 mb-6">
-              <PickerMenu title="Сортировать" groups={orderPickerGroups(sortOrder, setSortOrder)}>
+              <PickerMenu title="Сортировать" groups={orderPickerGroups(sortOrder, changeOrder)}>
                 <ContactsSortChip order={sortOrder} />
               </PickerMenu>
             </div>
