@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { ROUTES } from '@/shared/config/routes';
+import { parseStringParam } from '@/shared/lib/parse-string-param';
 import { PaymentCreateWizardScreen } from '@/widgets/payments';
 
 /**
@@ -20,7 +21,7 @@ export default async function PaymentNewRoutePage({
 }: PageProps<'/properties/[id]/payments/new'>) {
   const { id } = await params;
   const query = await searchParams;
-  const typeParam = typeof query.type === 'string' ? query.type : undefined;
+  const typeParam = parseStringParam(query.type);
 
   if (typeParam === undefined || !DRAFT_TYPES.has(typeParam)) {
     redirect(ROUTES.propertyPayments(id));

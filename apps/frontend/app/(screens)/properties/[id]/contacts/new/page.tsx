@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { parseStringParam } from '@/shared/lib/parse-string-param';
 import { ContactCreateScreen } from '@/widgets/contacts';
 
 /** Экран «Создать контакт» (#509, макеты 1281:48439 / 1282:49285).
@@ -17,8 +18,7 @@ export default async function ContactNewRoutePage({
 }: PageProps<'/properties/[id]/contacts/new'>) {
   const { id } = await params;
   const query = await searchParams;
-  const rawRole = query.role;
-  const initialRole = typeof rawRole === 'string' ? rawRole.trim() : '';
+  const initialRole = parseStringParam(query.role)?.trim() ?? '';
 
   return (
     <ContactCreateScreen

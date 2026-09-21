@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { parseStringParam } from '@/shared/lib/parse-string-param';
 import { RentalTermsScreen } from '@/widgets/rentals';
 
 /**
@@ -17,7 +18,7 @@ export default async function RentalTermsRoutePage({
 }: PageProps<'/properties/[id]/rentals/terms'>) {
   const { id } = await params;
   const query = await searchParams;
-  const rentalParam = typeof query.rental === 'string' ? query.rental : undefined;
+  const rentalParam = parseStringParam(query.rental);
 
   return <RentalTermsScreen propertyId={id} rentalId={rentalParam} />;
 }

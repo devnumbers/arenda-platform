@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { sanitizeReturnTo } from '@/shared/lib/navigation';
+import { parseStringParam } from '@/shared/lib/parse-string-param';
 import { PropertyCreateWizardScreen } from '@/widgets/properties';
 
 /** Визард создания объекта (#480): один маршрут в группе (screens) на
@@ -18,7 +19,7 @@ export default async function PropertyNewRoutePage({
   searchParams,
 }: PageProps<'/properties/new'>) {
   const { returnTo } = await searchParams;
-  const sanitizedReturnTo = sanitizeReturnTo(typeof returnTo === 'string' ? returnTo : undefined);
+  const sanitizedReturnTo = sanitizeReturnTo(parseStringParam(returnTo));
 
   return <PropertyCreateWizardScreen returnTo={sanitizedReturnTo} />;
 }

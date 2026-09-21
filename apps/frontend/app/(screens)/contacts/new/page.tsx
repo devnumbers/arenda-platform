@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { parseStringParam } from '@/shared/lib/parse-string-param';
 import { ContactCreateScreen } from '@/widgets/contacts';
 
 /** Создание контакта из книги (тот же экран #509, что на странице объекта;
@@ -11,8 +12,7 @@ export const metadata: Metadata = {
 
 export default async function ContactNewRoutePage({ searchParams }: PageProps<'/contacts/new'>) {
   const query = await searchParams;
-  const rawRole = query.role;
-  const initialRole = typeof rawRole === 'string' ? rawRole.trim() : '';
+  const initialRole = parseStringParam(query.role)?.trim() ?? '';
 
   return <ContactCreateScreen initialRole={initialRole} />;
 }
