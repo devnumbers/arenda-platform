@@ -1,6 +1,7 @@
 import type { Property } from '@/entities/property';
 import { comparePrimaryProperty } from '@/entities/property';
 import { propertyTypeOptions } from '@/features/properties';
+import { parseEnumParam } from '@/shared/lib/parse-enum-param';
 
 /**
  * Сортировка списка объектов (тикет #586, резолюция #584): поле
@@ -88,36 +89,27 @@ export function sortProperties(
 
 type SearchParamsLike = Record<string, string | string[] | undefined>;
 
-function readString(value: string | string[] | undefined): string | undefined {
-  if (Array.isArray(value)) {
-    return value[0];
-  }
-  return value;
+/** Легаси-значение ?sort=name_asc|name_desc из старого списка: ссылки не
+ * протухают. Читается только строка — массив по канону parseEnumParam бит. */
+function parseLegacySortParam(value: string | string[] | undefined): PropertySort | null {
+  if (value === 'name_asc') return DEFAULT_PROPERTY_SORT;
+  if (value === 'name_desc') return { field: 'name', direction: 'desc' };
+  return null;
 }
 
-const sortFields = new Set<PropertySortField>([
-  'name',
-  'created',
-  'type',
-  'status',
-]);
-
-/** Разбор сортировки из URL (?sort=<поле>&order=<asc|desc>; легаси
- * name_asc/name_desc из старого списка читается, чтобы ссылки не протухли). */
+/** Разбор сортировки из URL (?sort=<поле>&order=<asc|desc>): политика
+ * канона parseEnumParam — отсутствующее, пустое, неизвестное и массивное
+ * (битый дубликат) — дефолт; легаси name_asc/name_desc читается, чтобы
+ * ссылки не протухли. */
 export function parseSortFromParams(params: SearchParamsLike): PropertySort {
-  const raw = readString(params.sort);
-
-  if (raw === 'name_asc') return { field: 'name', direction: 'asc' };
-  if (raw === 'name_desc') return { field: 'name', direction: 'desc' };
-
-  if (raw !== undefined && sortFields.has(raw as PropertySortField)) {
-    return {
-      field: raw as PropertySortField,
-      direction: readString(params.order) === 'desc' ? 'desc' : 'asc',
-    };
+  const legacy = parseLegacySortParam(params.sort);
+  if (legacy !== null) {
+    return legacy;
   }
-
-  return DEFAULT_PROPERTY_SORT;
+  return {
+    field: parseEnumParam(params.sort, SORT_FIELD_OPTIONS, DEFAULT_PROPERTY_SORT.field),
+    direction: parseEnumParam(params.order, ['asc', 'desc'], DEFAULT_PROPERTY_SORT.direction),
+  };
 }
 
 /** Сериализация в URL: значения по умолчанию параметров не создают. */

@@ -1,4 +1,5 @@
 import { contactFullName, type Contact } from '@/entities/contact';
+import { parseEnumParam } from '@/shared/lib/parse-enum-param';
 
 /**
  * Клиентская модель плоской книги (глобальная страница контактов, макеты
@@ -15,18 +16,33 @@ export type ContactBookGroup = {
 /** Заголовок группы контактов без объекта (макет 1726:85937). */
 export const UNBOUND_GROUP_LABEL = 'Общие контакты';
 
-/** Разбор ?sort=&order= строки книги (конвенция страницы «Объекты»):
- * неизвестные и отсутствующие значения — дефолт (имя по возрастанию). */
+/** Разбор ?sort=&order= строки книги (конвенция страницы «Объекты», канон
+ * parseEnumParam): неизвестные, отсутствующие и массивные значения —
+ * дефолт (имя по возрастанию). */
 export function parseContactBookSortParams(
   sort: string | string[] | undefined,
   order: string | string[] | undefined,
 ): { sort: 'name' | 'property'; order: 'asc' | 'desc' } {
-  const sortValue = typeof sort === 'string' ? sort : '';
-  const orderValue = typeof order === 'string' ? order : '';
   return {
-    sort: sortValue === 'property' ? 'property' : 'name',
-    order: orderValue === 'desc' ? 'desc' : 'asc',
+    sort: parseEnumParam(sort, ['name', 'property'], 'name'),
+    order: parseEnumParam(order, ['asc', 'desc'], 'asc'),
   };
+}
+
+/** Сериализация сортировки в адрес: дефолтные значения (имя, возрастание)
+ * параметров не создают — конвенция страницы «Объекты». */
+export function serializeContactBookSortToParams(
+  sort: 'name' | 'property',
+  order: 'asc' | 'desc',
+): Record<string, string> {
+  const params: Record<string, string> = {};
+  if (sort !== 'name') {
+    params.sort = sort;
+  }
+  if (order !== 'asc') {
+    params.order = order;
+  }
+  return params;
 }
 
 /**

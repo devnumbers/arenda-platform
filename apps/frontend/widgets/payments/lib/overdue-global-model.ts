@@ -6,17 +6,24 @@
  */
 
 import type { GlobalPayment } from '@/entities/payment';
+import { parseEnumParam } from '@/shared/lib/parse-enum-param';
 
 /** Направление сортировки страницы: по возрасту просрочки. */
 export type OverdueSort = 'new' | 'old';
 
-/** Разбор ?sort= строки страницы (конвенция книги контактов):
- * неизвестное и отсутствующее значения — дефолт «Старые» (решение
- * владельца 09.09 — самые старые просрочки первыми). */
+/** Разбор ?sort= строки страницы (конвенция книги контактов, канон
+ * parseEnumParam): неизвестное, отсутствующее и массивное — дефолт «Старые»
+ * (решение владельца 09.09 — самые старые просрочки первыми). */
 export function parseOverdueSortParams(
   sort: string | string[] | undefined,
 ): OverdueSort {
-  return typeof sort === 'string' && sort === 'new' ? 'new' : 'old';
+  return parseEnumParam(sort, ['new', 'old'], 'old');
+}
+
+/** Сериализация в адрес: дефолт «Старые» параметра не создаёт — конвенция
+ * страницы «Объекты». */
+export function serializeOverdueSortToParams(sort: OverdueSort): Record<string, string> {
+  return sort === 'new' ? { sort: 'new' } : {};
 }
 
 /** Просроченные правила скоупа в направлении сортировки страницы.

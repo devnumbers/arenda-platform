@@ -164,6 +164,15 @@ describe('parse/serialize сортировки в URL', () => {
     expect(parseSortFromParams({ sort: 'name', order: 'вверх' })).toEqual({ field: 'name', direction: 'asc' });
   });
 
+  it('массивное значение — битый дубликат, дефолт (канон parseEnumParam, #786)', () => {
+    // Раньше читался первый элемент (?sort=a&sort=b → a) — историческое
+    // исключение из политики платформы; с #786 «Объекты» на общем каноне.
+    expect(parseSortFromParams({ sort: ['created', 'name'] })).toEqual(DEFAULT_PROPERTY_SORT);
+    expect(parseSortFromParams({ sort: 'created', order: ['desc'] })).toEqual({ field: 'created', direction: 'asc' });
+    // Легаси-значение массивом тоже битое — читается только строка.
+    expect(parseSortFromParams({ sort: ['name_asc'] })).toEqual(DEFAULT_PROPERTY_SORT);
+  });
+
   it('сериализация опускает значения по умолчанию', () => {
     expect(serializeSortToParams(DEFAULT_PROPERTY_SORT)).toEqual({});
     expect(serializeSortToParams({ field: 'type', direction: 'asc' })).toEqual({ sort: 'type' });
