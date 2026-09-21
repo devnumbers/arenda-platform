@@ -36,8 +36,5 @@ func (r *ContactResolver) Resolve(ctx context.Context, scope uuid.UUID) (applica
 		return application.Contact{}, application.ErrNoContact
 	}
 
-	return application.Contact{
-		Channel: application.ChannelEmail,
-		Email:   email.String,
-	}, nil
+	return application.Contact{Email: email.String}, nil
 }

@@ -150,16 +150,9 @@ type DeliverySettings interface {
 	EmailAllowed(ctx context.Context, userID uuid.UUID, category domain.Category) (bool, error)
 }
 
-// Contact is a resolved delivery endpoint.
+// Contact is a resolved delivery endpoint. The channel is not part of the
+// contact: since #740 each channel is its own job, and the email worker
+// reads the address only.
 type Contact struct {
-	Channel Channel
-	Email   string
+	Email string
 }
-
-// Channel identifies a delivery channel.
-type Channel string
-
-const (
-	ChannelEmail Channel = "email"
-	ChannelPush  Channel = "push"
-)
