@@ -273,10 +273,9 @@ func (s *ParticipantMutationService) grantProperties(
 
 // grantOne produces one requested property's outcome. Gate failures skip the
 // property (they are outcomes, not errors); a repository failure returns an
-// error and aborts the transaction.
-// GrantOne evaluates one property's gates and grants the target on it. The
-// suspended outcome's membership row is appended to the collector — the caller
-// publishes its system pause post-commit (карта #734, #751).
+// error and aborts the transaction. A suspended landing appends its membership
+// row to the collector — the caller publishes its system pause post-commit
+// (карта #734, #751).
 func (s *ParticipantMutationService) grantOne(
 	ctx context.Context, stores *txStores, actor uuid.UUID, target grantTarget, role domain.Role, propertyID uuid.UUID,
 	suspended *[]domain.Membership,
