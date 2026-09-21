@@ -29,16 +29,22 @@
      (`app/manifest.ts`), линковку делает Next.js file conventions.
 3. Скачать зип и передать агенту.
 
-## Куда что кладёт агент (маппинг)
+## Куда что кладёт агент (маппинг, Next.js-набор RFG от 21.09)
 
 | Файл из RFG | Куда в репо |
 |---|---|
-| `android-chrome-192x192.png` | `public/icons/icon-192.png` |
-| `android-chrome-512x512.png` | `public/icons/icon-512.png` и `app/icon.png` |
-| `android-chrome-*-maskable*.png` (512) | `public/icons/icon-maskable-512.png` |
-| `apple-touch-icon.png` | `app/apple-icon.png` |
-| `favicon.ico` | `app/favicon.ico` |
-| mstile-*, browserconfig.xml, safari-pinned-tab.svg, site.webmanifest | **не брать** |
+| `favicon.ico` (16/32/48) | `app/favicon.ico` |
+| `apple-icon.png` (180, непрозрачный) | `app/apple-icon.png` |
+| `icon1.png` (96, прозрачный) | `app/icon.png` |
+| `web-app-manifest-512x512.png` | `public/icons/icon-maskable-512.png` |
+| `web-app-manifest-192x192.png` | некуда: в манифесте нет 192-maskable записи — не брать |
+| `icon0.svg` (SVG-favicon), `manifest.json` («MyWebSite»), прочее | **не брать** — SVG-favicon запрещён research #780, манифест свой (`app/manifest.ts`) |
+
+Нюанс: RFG в Next.js-наборе отдаёт `web-app-manifest-*` как **непрозрачные
+квадраты (purpose maskable)** — они идут только в maskable. Purpose `any`
+(`public/icons/icon-192.png`, `icon-512.png` — прозрачные, дом вписан 74%)
+RFG не делает: эти два файла в репо постоянные, пока RFG не начнёт отдавать
+прозрачный вариант.
 
 `public/icons/icon-monochrome-512.png` RFG не делает — файл в репо, обновляется
 только вместе с `source-monochrome.svg`.
