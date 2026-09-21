@@ -28,26 +28,19 @@ var (
 // here.
 type PaymentScanStore struct {
 	db postgres.DBTX
+	scanPopulationStore
 }
 
 // NewPaymentScanStore creates the payments scan source adapter over the pool.
 func NewPaymentScanStore(db postgres.DBTX) *PaymentScanStore {
-	return &PaymentScanStore{db: db}
+	return &PaymentScanStore{db: db, scanPopulationStore: scanPopulationStore{db: db}}
 }
 
 // ListScanZones lists the distinct owner timezones having planned
 // payment-rule operations on non-archived properties — the sweep targets
 // (ADR 0048 p.3).
 func (s *PaymentScanStore) ListScanZones(ctx context.Context) ([]application.ScanZone, error) {
-	zones, err := postgres.New(s.db).ListPaymentScanZones(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list payments scan zones: %w", err)
-	}
-	result := make([]application.ScanZone, 0, len(zones))
-	for _, timezone := range zones {
-		result = append(result, application.ScanZone{Timezone: timezone})
-	}
-	return result, nil
+	return scanZones(ctx, "payments", postgres.New(s.db).ListPaymentScanZones)
 }
 
 // ListDueTargets lists the zone's planned operations dated exactly the
@@ -206,15 +199,4 @@ func paymentScanTarget(
 		PropertyAddress: propertyAddress,
 		OwnerID:         pgconv.UUIDFromPgtype(ownerID),
 	}
-}
-
-// ListActiveRecipients lists the property's active members' user ids — the
-// event's recipients besides the owner (решение #737: «Просмотр» включён,
-// suspended is not an active participant).
-func (s *PaymentScanStore) ListActiveRecipients(ctx context.Context, propertyID uuid.UUID) ([]uuid.UUID, error) {
-	ids, err := postgres.New(s.db).ListPropertyActiveRecipients(ctx, pgconv.UUIDToPgtype(propertyID))
-	if err != nil {
-		return nil, fmt.Errorf("list property recipients %s: %w", propertyID, err)
-	}
-	return pgconv.UUIDSliceFromPgtype(ids), nil
 }

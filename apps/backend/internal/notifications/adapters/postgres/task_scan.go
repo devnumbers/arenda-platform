@@ -27,26 +27,19 @@ var (
 // nothing here.
 type TaskScanStore struct {
 	db postgres.DBTX
+	scanPopulationStore
 }
 
 // NewTaskScanStore creates the scan source adapter over the pool.
 func NewTaskScanStore(db postgres.DBTX) *TaskScanStore {
-	return &TaskScanStore{db: db}
+	return &TaskScanStore{db: db, scanPopulationStore: scanPopulationStore{db: db}}
 }
 
 // ListScanZones lists the distinct owner timezones having active dated tasks
 // — on non-archived properties or without a property — the sweep targets
 // (ADR 0048 p.3).
 func (s *TaskScanStore) ListScanZones(ctx context.Context) ([]application.ScanZone, error) {
-	zones, err := postgres.New(s.db).ListTaskScanZones(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list tasks scan zones: %w", err)
-	}
-	result := make([]application.ScanZone, 0, len(zones))
-	for _, timezone := range zones {
-		result = append(result, application.ScanZone{Timezone: timezone})
-	}
-	return result, nil
+	return scanZones(ctx, "tasks", postgres.New(s.db).ListTaskScanZones)
 }
 
 // ListScheduledTargets lists the active dated tasks whose boundary instant
@@ -116,17 +109,6 @@ func (s *TaskScanStore) GetScheduledOverdueTask(ctx context.Context, taskID uuid
 		row.PropertyID, row.PropertyName, row.PropertyAddress, row.RuleID, row.OwnerID)
 	target.DueAt = pgconv.TimestamptzToTime(row.DueAt)
 	return target, true, nil
-}
-
-// ListActiveRecipients lists the property's active members' user ids — the
-// event's recipients besides the owner (решение #737: «Просмотр» включён,
-// suspended is not an active participant).
-func (s *TaskScanStore) ListActiveRecipients(ctx context.Context, propertyID uuid.UUID) ([]uuid.UUID, error) {
-	ids, err := postgres.New(s.db).ListPropertyActiveRecipients(ctx, pgconv.UUIDToPgtype(propertyID))
-	if err != nil {
-		return nil, fmt.Errorf("list property recipients %s: %w", propertyID, err)
-	}
-	return pgconv.UUIDSliceFromPgtype(ids), nil
 }
 
 // taskOverdueTargetFromRow maps a scan row onto the application target: the

@@ -26,25 +26,18 @@ var (
 // scan publishes through the pipeline, it writes nothing here.
 type RentalScanStore struct {
 	db postgres.DBTX
+	scanPopulationStore
 }
 
 // NewRentalScanStore creates the scan source adapter over the pool.
 func NewRentalScanStore(db postgres.DBTX) *RentalScanStore {
-	return &RentalScanStore{db: db}
+	return &RentalScanStore{db: db, scanPopulationStore: scanPopulationStore{db: db}}
 }
 
 // ListScanZones lists the distinct owner timezones having unfinished rentals
 // with a planned end — the sweep targets (ADR 0048 p.3).
 func (s *RentalScanStore) ListScanZones(ctx context.Context) ([]application.ScanZone, error) {
-	zones, err := postgres.New(s.db).ListRentalCompletedScanZones(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list rental scan zones: %w", err)
-	}
-	result := make([]application.ScanZone, 0, len(zones))
-	for _, timezone := range zones {
-		result = append(result, application.ScanZone{Timezone: timezone})
-	}
-	return result, nil
+	return scanZones(ctx, "rental", postgres.New(s.db).ListRentalCompletedScanZones)
 }
 
 // ListCompletedTargets lists the zone's rentals in the needs_attention state
@@ -126,15 +119,4 @@ func (s *RentalScanStore) GetScheduledCompletedRental(
 		PropertyAddress: row.PropertyAddress,
 		OwnerID:         pgconv.UUIDFromPgtype(row.OwnerID),
 	}, true, nil
-}
-
-// ListActiveRecipients lists the property's active members' user ids — the
-// event's recipients besides the owner (решение #737: «Просмотр» включён,
-// suspended is not an active participant).
-func (s *RentalScanStore) ListActiveRecipients(ctx context.Context, propertyID uuid.UUID) ([]uuid.UUID, error) {
-	ids, err := postgres.New(s.db).ListPropertyActiveRecipients(ctx, pgconv.UUIDToPgtype(propertyID))
-	if err != nil {
-		return nil, fmt.Errorf("list property recipients %s: %w", propertyID, err)
-	}
-	return pgconv.UUIDSliceFromPgtype(ids), nil
 }
