@@ -134,8 +134,8 @@ export const ROUTES = {
   /** Экран правки контакта (#510): форма создания в режиме правки. */
   propertyContactEdit: (id: string, contactId: string) =>
     `/properties/${id}/contacts/${contactId}/edit`,
-  /** Экран «Участники объекта» (#700): замена легаси-модалки
-   * PropertySharingModal, вход — «Управление» → «Совместный доступ». */
+  /** Экран «Участники объекта» (#700): вход из детали объекта —
+   * «Управление» → «Совместный доступ». */
   propertyParticipants: (id: string) => `/properties/${id}/participants`,
   /** Приглашение от объекта (#700): тот же флоу #699, но объект один —
    * без выбора объектов. */

@@ -55,7 +55,8 @@ import { ParticipantRightsSkeleton } from './participants-skeletons';
  * на странице участника и в списке перечитаются). Успех роли — попап
  * «Права изменены» (2177-59799); успех отзыва — переход на страницу
  * участника с попапом «У участника больше нет доступа к объекту»
- * (2008-83135, через search-param). Если это был последний объект,
+ * (2008-83135, staged-флаг participant-popups — канон one-shot #771).
+ * Если это был последний объект,
  * страница участника честно покажет «Участник не найден» — контракт
  * приватного 404 (#693).
  */
@@ -116,7 +117,7 @@ export function ParticipantRightsScreen({
     const onDone = (): void => {
       void queryClient.invalidateQueries({ queryKey: participantsKeys.all });
       // Источник — страница участника: возврат по канону истории, попап
-      // «У участника больше нет доступа к объекту» рендерит она (2008-83135).
+      // «У участника больше нет доступа к объекту» рендерит он (2008-83135).
       stageParticipantPopup('revokedFromProperty');
       goBack(router, ROUTES.participant(participantId));
     };

@@ -63,8 +63,7 @@ import { ParticipantSuccessPopup } from './participant-success-popup';
  * Успех — попап по макету 2008-84101 (прецедент продления аренды:
  * StatusIcon good 48 + зелёный текст, на мобайле закрытие свайпом/оверлеем).
  *
- * Тап по ряду — страница участника (#698); пока тикет не сделан, адрес
- * отвечает 404 осознанно.
+ * Тап по ряду — страница участника (#698).
  */
 export function ParticipantsListScreen(): JSX.Element {
   const router = useRouter();
