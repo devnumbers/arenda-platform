@@ -49,27 +49,31 @@ type Member struct {
 // AccessService implements the property membership use cases (issue #156, T3):
 // adding, listing, changing roles, revoking and self-exit. Authorization goes
 // through the policy port; persistence and audit share the same transaction
-// through the embedded txStoreFactory (ADR 0033).
+// through the embedded txStoreFactory (ADR 0033). The lifecycle notifications
+// leave the context as events (карта #734, #751) on the grace-events canon:
+// captured at the transition, published strictly after the commit,
+// best-effort.
 type AccessService struct {
 	txStoreFactory
-	members   MembershipRepository
-	owners    PropertyOwnerResolver
-	statuses  PropertyStatusResolver
-	users     UserLookup
-	policy    sharedpolicy.Policy
-	slots     *SlotCoordinator
-	lifecycle *LifecycleMailer
-	logger    *slog.Logger
+	members  MembershipRepository
+	owners   PropertyOwnerResolver
+	statuses PropertyStatusResolver
+	users    UserLookup
+	policy   sharedpolicy.Policy
+	slots    *SlotCoordinator
+	events   AccessEventPublisher
+	logger   *slog.Logger
 }
 
 // NewAccessService creates an AccessService. Slots is the recipient tariff slot
 // coordinator (issue #158, T4); it may be nil to disable slot enforcement
-// (pre-T4 behaviour, e.g. in tests that don't exercise the limit). Lifecycle is
-// the sharing lifecycle mailer (issue #162, T6); it may be nil to disable the
-// lifecycle emails. Statuses reports the archived flag of a property (issue
-// #163); it may be nil to skip the archived-property checks. Factory bundles
-// the membership repository, the audit recorder, and the Unit-of-Work every
-// mutating use case runs through (ADR 0033 γ-factory).
+// (pre-T4 behaviour, e.g. in tests that don't exercise the limit). Events is
+// the lifecycle event publisher (карта #734, #751); it may be nil to disable
+// the publications (tests that don't exercise them). Statuses reports the
+// archived flag of a property (issue #163); it may be nil to skip the
+// archived-property checks. Factory bundles the membership repository, the
+// audit recorder, and the Unit-of-Work every mutating use case runs through
+// (ADR 0033 γ-factory).
 func NewAccessService(
 	members MembershipRepository,
 	owners PropertyOwnerResolver,
@@ -77,7 +81,7 @@ func NewAccessService(
 	users UserLookup,
 	policy sharedpolicy.Policy,
 	slots *SlotCoordinator,
-	lifecycle *LifecycleMailer,
+	events AccessEventPublisher,
 	factory txStoreFactory,
 	logger *slog.Logger,
 ) *AccessService {
@@ -92,7 +96,7 @@ func NewAccessService(
 		users:          users,
 		policy:         policy,
 		slots:          slots,
-		lifecycle:      lifecycle,
+		events:         events,
 		logger:         logger,
 	}
 }
@@ -130,11 +134,21 @@ func (s *AccessService) AddMember(ctx context.Context, actor, propertyID, userID
 		return domain.Membership{}, err
 	}
 
-	// A grant created without a free tariff slot sends the "access waits for a
-	// free slot" email post-commit (issue #162, T6); a send failure is logged
-	// inside the mailer and never fails the add.
+	// A grant created without a free tariff slot pauses the new member's
+	// access (issue #158, T4). The «Доступ приостановлен» notification is the
+	// event subscriber's (карта #734, #751) — the direct lifecycle email it
+	// replaced is gone; the publication is post-commit and best-effort. The
+	// system suspension has no actor.
 	if suspend {
-		s.lifecycle.SendAccessSuspended(ctx, userID, propertyID)
+		publishAccessEvent(ctx, s.events, s.logger, "membership_suspended", func() error {
+			return s.events.PublishMembershipSuspended(ctx, MembershipSuspended{
+				MembershipID: created.ID,
+				PropertyID:   propertyID,
+				RecipientID:  userID,
+				ActorID:      uuid.Nil,
+				SuspendedAt:  deref(created.SuspendedAt),
+			})
+		})
 	}
 	return created, nil
 }
@@ -311,10 +325,18 @@ func (s *AccessService) RevokeMember(ctx context.Context, actor, propertyID, mem
 	}
 
 	// Revoking an active membership notifies the former member post-commit
-	// (issue #162, T6); revoking a suspended one is silent (the object was
-	// already hidden from them).
+	// (карта #734, #751; the direct lifecycle email it replaced is gone);
+	// revoking a suspended one publishes nothing — the object was already
+	// hidden from them (issue #162, T6 canon).
 	if !membership.IsSuspended() {
-		s.lifecycle.SendAccessRevoked(ctx, membership.UserID, propertyID)
+		publishAccessEvent(ctx, s.events, s.logger, "membership_revoked", func() error {
+			return s.events.PublishMembershipRevoked(ctx, MembershipRevoked{
+				MembershipID: membership.ID,
+				PropertyID:   propertyID,
+				RecipientID:  membership.UserID,
+				ActorID:      actor,
+			})
+		})
 	}
 	return nil
 }
@@ -383,24 +405,25 @@ func (s *AccessService) LeaveProperty(ctx context.Context, actor, propertyID uui
 		return err
 	}
 
-	// Self-exit notifies the owner post-commit (issue #162, T6); the leaving
-	// member receives nothing.
+	// Self-exit notifies the owner post-commit (карта #734, #751; the direct
+	// lifecycle email it replaced is gone); the leaving member receives
+	// nothing. A failed owner lookup leaves nobody to notify — logged, not an
+	// error.
 	owner, err := s.owners.GetOwnerID(ctx, propertyID)
 	if err != nil {
-		s.logger.WarnContext(ctx, "access: owner lookup for member left email failed",
+		s.logger.WarnContext(ctx, "access: owner lookup for member left event failed",
 			slog.String(auditKeyPropertyID, propertyID.String()),
 			slog.String("error", err.Error()))
 		return nil
 	}
-	memberName := ""
-	if u, err := s.users.GetByID(ctx, actor); err != nil {
-		s.logger.WarnContext(ctx, "access: member lookup for member left email failed",
-			slog.String(auditKeyUserID, actor.String()),
-			slog.String("error", err.Error()))
-	} else {
-		memberName = displayName(u)
-	}
-	s.lifecycle.SendMemberLeft(ctx, owner, propertyID, memberName)
+	publishAccessEvent(ctx, s.events, s.logger, "member_left", func() error {
+		return s.events.PublishMemberLeft(ctx, MemberLeft{
+			MembershipID: membership.ID,
+			PropertyID:   propertyID,
+			OwnerID:      owner,
+			MemberID:     actor,
+		})
+	})
 	return nil
 }
 

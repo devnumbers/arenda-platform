@@ -3,11 +3,13 @@ package application
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -24,40 +26,58 @@ import (
 // transaction, shared memberships are suspended by this coordinator. When a slot
 // frees, the oldest suspended shared memberships are reactivated.
 //
+// The suspension and the recovery leave the context as lifecycle events
+// (карта #734, #751): published in-transaction — the coordinator runs inside
+// the caller's transaction and has no post-commit point of its own, the same
+// shape the lifecycle emails it replaced had (issue #162, T6) — best-effort, a
+// publication failure is logged and never rolls the operation back.
+//
 // See issue #158 (T4) and PRD #153.
 type SlotCoordinator struct {
 	members    MembershipRepository
 	owners     PropertyOwnerResolver
 	limiter    RecipientLimiter
 	ownedProps OwnedActivePropertiesPort
-	lifecycle  *LifecycleMailer
+	events     AccessEventPublisher
 	audit      auditapp.Recorder
 	db         txBeginner
+	clk        clock.Clock
+	logger     *slog.Logger
 }
 
 // NewSlotCoordinator creates a SlotCoordinator. The recorder and limiter are
 // expected to be transaction-aware (the coordinator binds them to the caller's
-// tx per operation). Lifecycle is the sharing lifecycle mailer (issue #162,
-// T6); it may be nil to disable the lifecycle emails. The coordinator runs
-// inside the caller's transaction, so its emails are sent in-transaction: a
-// send failure is logged and never rolls the operation back.
+// tx per operation). Events is the lifecycle event publisher (карта #734,
+// #751); it may be nil to disable the publications. The clock stamps the
+// transition instants the publications' dedup keys carry; a nil logger
+// defaults to the standard one.
 func NewSlotCoordinator(
 	members MembershipRepository,
 	owners PropertyOwnerResolver,
 	limiter RecipientLimiter,
 	ownedProps OwnedActivePropertiesPort,
-	lifecycle *LifecycleMailer,
+	events AccessEventPublisher,
 	audit auditapp.Recorder,
 	db txBeginner,
+	clk clock.Clock,
+	logger *slog.Logger,
 ) *SlotCoordinator {
+	if clk == nil {
+		clk = clock.Real{}
+	}
+	if logger == nil {
+		logger = slog.Default()
+	}
 	return &SlotCoordinator{
 		members:    members,
 		owners:     owners,
 		limiter:    limiter,
 		ownedProps: ownedProps,
-		lifecycle:  lifecycle,
+		events:     events,
 		audit:      audit,
 		db:         db,
+		clk:        clk,
+		logger:     logger,
 	}
 }
 
@@ -138,7 +158,6 @@ func (c *SlotCoordinator) enforceRecipient(
 	}
 
 	toEvict := SelectForEviction(pool, limit)
-	suspended := make([]uuid.UUID, 0, len(toEvict))
 	for _, cand := range toEvict {
 		// Own objects are auto-archived by PropertyArchiver in the same tx; the
 		// coordinator only suspends shared memberships.
@@ -148,7 +167,6 @@ func (c *SlotCoordinator) enforceRecipient(
 		if err := txMembers.Suspend(ctx, cand.MemberID, cand.PropertyID); err != nil {
 			return fmt.Errorf("suspend membership %s: %w", cand.MemberID, err)
 		}
-		suspended = append(suspended, cand.PropertyID)
 		propertyID := cand.PropertyID
 		if err := c.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 			ActorRole:  auditdomain.ActorRoleSystem,
@@ -163,11 +181,19 @@ func (c *SlotCoordinator) enforceRecipient(
 		}); err != nil {
 			return fmt.Errorf("record suspend audit: %w", err)
 		}
+		// The paused-access notification per suspended membership (карта #734,
+		// #751) — in-transaction, best-effort; the summary email this replaces
+		// had the same shape (issue #162, T6).
+		publishAccessEvent(ctx, c.events, c.logger, "membership_suspended", func() error {
+			return c.events.PublishMembershipSuspended(ctx, MembershipSuspended{
+				MembershipID: cand.MemberID,
+				PropertyID:   propertyID,
+				RecipientID:  recipientID,
+				ActorID:      uuid.Nil,
+				SuspendedAt:  c.clk.Now(),
+			})
+		})
 	}
-	// One summary email per recipient lists the memberships suspended by this
-	// call (issue #162, T6); it replaces the per-membership waiting email on
-	// the downgrade path.
-	c.lifecycle.SendDowngradeSummary(ctx, recipientID, suspended)
 	return nil
 }
 
@@ -304,9 +330,18 @@ func (c *SlotCoordinator) recoverSuspendedForRecipient(ctx context.Context, tx t
 		}); err != nil {
 			return fmt.Errorf("record reactivate audit: %w", err)
 		}
-		// The "access restored" email per reactivated membership (issue #162,
-		// T6); a send failure is logged inside the mailer.
-		c.lifecycle.SendAccessRestored(ctx, recipientID, cand.PropertyID)
+		// The restored-access notification per reactivated membership
+		// (карта #734, #751) — in-transaction, best-effort; the lifecycle
+		// email it replaces had the same shape (issue #162, T6).
+		publishAccessEvent(ctx, c.events, c.logger, "membership_resumed", func() error {
+			return c.events.PublishMembershipResumed(ctx, MembershipResumed{
+				MembershipID: cand.MemberID,
+				PropertyID:   cand.PropertyID,
+				RecipientID:  recipientID,
+				ActorID:      uuid.Nil,
+				ResumedAt:    c.clk.Now(),
+			})
+		})
 	}
 	return nil
 }
@@ -417,9 +452,18 @@ func (c *SlotCoordinator) EnforceOnUnarchiveForProperty(ctx context.Context, tx 
 		}); err != nil {
 			return fmt.Errorf("record suspend audit on unarchive: %w", err)
 		}
-		// The "access waits for a free slot" email on the unarchive path
-		// (issue #162, T6); a send failure is logged inside the mailer.
-		c.lifecycle.SendAccessSuspended(ctx, m.UserID, propertyID)
+		// The paused-access notification on the unarchive path (карта #734,
+		// #751) — in-transaction, best-effort; the lifecycle email it
+		// replaces had the same shape (issue #162, T6).
+		publishAccessEvent(ctx, c.events, c.logger, "membership_suspended", func() error {
+			return c.events.PublishMembershipSuspended(ctx, MembershipSuspended{
+				MembershipID: m.ID,
+				PropertyID:   propertyID,
+				RecipientID:  m.UserID,
+				ActorID:      uuid.Nil,
+				SuspendedAt:  c.clk.Now(),
+			})
+		})
 	}
 	return nil
 }

@@ -26,17 +26,22 @@ func NewPushSubscriptionService(repo PushSubscriptionRepository, clk clock.Clock
 }
 
 // UpsertPushSubscriptionInput is the user-supplied data for registering a push
-// subscription.
+// subscription. The per-device settings are optional: a nil pointer keeps the
+// all-on default (решение #738) — the browser applies its locally held desired
+// state on every subscribe.
 type UpsertPushSubscriptionInput struct {
 	Endpoint       string
 	P256dh         string
 	Auth           string
 	ExpirationTime *time.Time
+	Enabled        *bool
+	Categories     *domain.CategoryPrefs
 }
 
 // Upsert validates the subscription fields and stores them keyed by endpoint.
 // A repeated call with the same endpoint updates the mutable fields (idempotent
-// re-subscribe). It returns the stored subscription.
+// re-subscribe), settings included — the body carries the device's desired
+// state. It returns the stored subscription.
 func (s *PushSubscriptionService) Upsert(
 	ctx context.Context,
 	userID uuid.UUID,
@@ -44,6 +49,15 @@ func (s *PushSubscriptionService) Upsert(
 ) (domain.PushSubscription, error) {
 	if err := domain.ValidatePushSubscription(in.Endpoint, in.P256dh, in.Auth); err != nil {
 		return domain.PushSubscription{}, fmt.Errorf("%w: %w", ErrInvalidPushSubscription, err)
+	}
+
+	enabled := true
+	if in.Enabled != nil {
+		enabled = *in.Enabled
+	}
+	categories := domain.DefaultCategoryPrefs()
+	if in.Categories != nil {
+		categories = *in.Categories
 	}
 
 	now := s.clock.Now()
@@ -58,6 +72,8 @@ func (s *PushSubscriptionService) Upsert(
 		P256dh:         in.P256dh,
 		Auth:           in.Auth,
 		ExpirationTime: in.ExpirationTime,
+		Enabled:        enabled,
+		Categories:     categories,
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}

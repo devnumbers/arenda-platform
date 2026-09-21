@@ -1,28 +1,22 @@
 import type { Metadata } from 'next';
-import { HubCollapseAnchor, HubTitle, PageContent, TopNav } from '@/shared/ui/design';
-import { NotificationSettings } from '@/widgets/profile';
+import { SubScreenShell } from '@/shared/ui/design';
+import { ROUTES } from '@/shared/config/routes';
+import { NotificationSettingsScreen } from '@/widgets/notifications';
 
 export const metadata: Metadata = {
-  title: 'Уведомления — Рентли',
-  description: 'Управление настройками уведомлений',
+  title: 'Настроить уведомления — Рентли',
+  description: 'Каналы уведомлений по группам событий: электронная почта и пуш-уведомления',
 };
 
-/** Страница раздела «Уведомления» на едином хроме (карта #556, тикет
- * #566): пункт вторичной навигации — средний таб TabBar мобайла и пилюля
- * ПК (#560/#561), поэтому хаб-анатомия как у «Поддержки» (#567): TopNav с
- * крыльями и на мобайле, заголовок раздела 28; активность подчёркивается
- * нав-моделью #558 без правок. Состав прежний (настройки каналов), лента
- * уведомлений и её компоненты из Figma — отдельное усилие. */
-export default function NotificationsPage() {
+/** Экран «Настроить уведомления» (#746, карта #734): саб-экран дерева
+ * профиля (каркас #568) — вход из кебаба/шестерёнки ленты /notifications
+ * (#744) и строки «Уведомления» хаба профиля; заглушка #744 заменена
+ * целиком. Анатомия — по макетам 1789-100250/2329-150165: ведущий «Назад»
+ * (history-first, фолбэк — хаб профиля), заголовок в центре шапки. */
+export default function ProfileNotificationsPage() {
   return (
-    <>
-      <TopNav mobileWings collapse={{ title: 'Уведомления' }} />
-      <PageContent>
-        <HubCollapseAnchor>
-          <HubTitle>Уведомления</HubTitle>
-        </HubCollapseAnchor>
-        <NotificationSettings />
-      </PageContent>
-    </>
+    <SubScreenShell title="Настроить уведомления" fallbackHref={ROUTES.profile}>
+      <NotificationSettingsScreen />
+    </SubScreenShell>
   );
 }

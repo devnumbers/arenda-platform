@@ -1,13 +1,16 @@
-// Package application holds the notifications use cases and ports: per-channel
-// preferences, push subscriptions and direct grace notifications.
+// Package application holds the notifications use cases and ports: the
+// stored feed repository, the delivery pipeline's creation service, the
+// grace publisher and push subscriptions.
 package application
 
 import "errors"
 
 var (
-	ErrNotFound           = errors.New("not found")
-	ErrNoContact          = errors.New("no contact found")
-	ErrInvalidPreferences = errors.New("invalid notification preferences")
+	ErrNotFound  = errors.New("not found")
+	ErrNoContact = errors.New("no contact found")
+	// ErrInvalidInput is the malformed client input sentinel (the contract's
+	// 400): a malformed feed cursor or an out-of-range page limit.
+	ErrInvalidInput = errors.New("invalid input")
 	// ErrInvalidPushSubscription is returned when a push subscription field
 	// fails validation.
 	ErrInvalidPushSubscription = errors.New("invalid push subscription")

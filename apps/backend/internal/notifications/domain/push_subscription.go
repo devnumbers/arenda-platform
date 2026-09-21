@@ -37,8 +37,23 @@ type PushSubscription struct {
 	P256dh         string
 	Auth           string
 	ExpirationTime *time.Time
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	// Enabled is the device's master push toggle «Получать пуш-уведомления»
+	// (решение #738): turning it off keeps the subscription and the category
+	// flags, dispatch just skips the device — re-enabling is instant.
+	Enabled bool
+	// Categories is the device's own copy of the four configurable category
+	// flags (per-device push settings, решение #738).
+	Categories CategoryPrefs
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
+// Accepts is the device's delivery verdict for one category: the master
+// toggle gates everything (including the always-on service categories —
+// master-off mutes the device entirely), the category flag gates its own
+// category.
+func (s PushSubscription) Accepts(c Category) bool {
+	return s.Enabled && s.Categories.Allows(c)
 }
 
 // ValidatePushSubscription checks the invariants of a stored subscription's

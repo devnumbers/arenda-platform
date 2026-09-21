@@ -50,7 +50,7 @@ func newTasksHarnessWithRealPolicy(t *testing.T) *tasksHarness {
 		auditapp.NewService(auditpg.NewWriter(h.pool), h.clock),
 		pgdb.NewUoW(h.pool, slog.New(slog.DiscardHandler)),
 	)
-	h.rules = tasksapp.NewRuleService(factory, ownerClock, policy)
+	h.rules = tasksapp.NewRuleService(factory, ownerClock, policy, slog.New(slog.DiscardHandler))
 	h.tasks = tasksapp.NewTaskService(factory, ownerClock, ownerClock, policy)
 	return h
 }

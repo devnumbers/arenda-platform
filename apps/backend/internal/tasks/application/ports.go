@@ -162,7 +162,29 @@ type TaskStore interface {
 	// ADR 0028). The same live-rule protection as the property-scoped
 	// variant. It returns the number of removed rows.
 	DeleteCompletedJournalOwnerBook(ctx context.Context, scope uuid.UUID) (int64, error)
+	// ListUncompletedTaskIDs returns the rule's standing uncompleted tasks'
+	// ids — the scheduling seam's in-transaction handover (issue #775):
+	// read after the materialization tick has settled the rule's rows, so
+	// the freshly materialized and the kept standing tasks alike travel to
+	// notifications, which re-resolves each task's liveness and term itself.
+	ListUncompletedTaskIDs(ctx context.Context, ruleID uuid.UUID) ([]uuid.UUID, error)
 	WithTx(tx transaction.Tx) (TaskStore, error)
+}
+
+// MaterializedTaskNotifier is the scheduling seam to the notifications
+// context (issue #775): the rule create/edit flows hand over the standing
+// tasks' ids strictly after their materializing transaction commits, and
+// notifications plans each one — a live timed task books its due-minute job
+// at the term's instant (or publishes at once when the term already
+// passed), everything else is a no-op. Best-effort by the grace-events
+// canon: the call happens post-commit, a failure is logged and never fails
+// the committed mutation. Consumer-declared (CODING_STANDARDS); the
+// composition root wires the notifications adapter in.
+type MaterializedTaskNotifier interface {
+	// NotifyMaterializedTasks accepts the handed-over task ids. Errors
+	// travel back joined for the log — the mutation itself is already
+	// committed and stays untouched.
+	NotifyMaterializedTasks(ctx context.Context, taskIDs []uuid.UUID) error
 }
 
 // Pagination bounds of the tasks lists: the wire default is a page of 100

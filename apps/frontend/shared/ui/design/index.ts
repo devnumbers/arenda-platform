@@ -109,3 +109,4 @@ export {
   InfiniteQueryTail,
   type InfiniteQueryTailQuery,
 } from './infinite-query-tail';
+export { SuccessPopup, type SuccessPopupProps } from './success-popup';

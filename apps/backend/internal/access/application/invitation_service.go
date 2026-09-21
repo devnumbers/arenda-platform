@@ -28,11 +28,12 @@ type InviteOutcome struct {
 // T5): inviting an unregistered email to shared access, manual resend with a
 // 24h cooldown, role change and silent cancellation of pending invitations,
 // and FIFO activation when the invitee registers. The invite email is the only
-// email sent by this service itself; the lifecycle emails (activation notice to
-// the owner, the "waiting for a slot" email on a suspended activation) go
-// through the LifecycleMailer (issue #162, T6). Persistence and audit share
-// the same transaction through the embedded txStoreFactory (ADR 0033); the
-// invitee email is PII and never appears in audit context (ADR 0020).
+// email sent by this service itself; the lifecycle notifications (the
+// activation notice to the inviter, the paused access on a suspended
+// activation) leave the context as events (карта #734, #751). Persistence and
+// audit share the same transaction through the embedded txStoreFactory
+// (ADR 0033); the invitee email is PII and never appears in audit context
+// (ADR 0020).
 type InvitationService struct {
 	txStoreFactory
 	access      *AccessService
@@ -44,7 +45,7 @@ type InvitationService struct {
 	policy      sharedpolicy.Policy
 	slots       *SlotCoordinator
 	mailer      AccessMailer
-	lifecycle   *LifecycleMailer
+	events      AccessEventPublisher
 	titles      PropertyTitleResolver
 	clock       clock.Clock
 	logger      *slog.Logger
@@ -54,8 +55,8 @@ type InvitationService struct {
 // service used to delegate instant activation for registered emails; slots may
 // be nil to disable slot enforcement (mirrors NewAccessService); mailer may be
 // nil to skip sending (e.g. in tests that do not exercise the mail path);
-// lifecycle is the sharing lifecycle mailer (issue #162, T6) and may be nil to
-// disable the lifecycle emails. Statuses reports the archived flag of a
+// events is the lifecycle event publisher (карта #734, #751) and may be nil to
+// disable the publications. Statuses reports the archived flag of a
 // property (issue #163); it may be nil to skip the archived-property checks.
 // Factory bundles the repositories, the audit recorder, and the Unit-of-Work
 // every mutating use case runs through (ADR 0033 γ-factory).
@@ -69,7 +70,7 @@ func NewInvitationService(
 	policy sharedpolicy.Policy,
 	slots *SlotCoordinator,
 	mailer AccessMailer,
-	lifecycle *LifecycleMailer,
+	events AccessEventPublisher,
 	titles PropertyTitleResolver,
 	factory txStoreFactory,
 	clk clock.Clock,
@@ -92,7 +93,7 @@ func NewInvitationService(
 		policy:         policy,
 		slots:          slots,
 		mailer:         mailer,
-		lifecycle:      lifecycle,
+		events:         events,
 		titles:         titles,
 		clock:          clk,
 		logger:         logger,
@@ -392,6 +393,7 @@ func (s *InvitationService) ActivatePendingInvitations(ctx context.Context, user
 // transaction.
 func (s *InvitationService) activateInvitation(ctx context.Context, userID uuid.UUID, invitation domain.Invitation) error {
 	suspend := false
+	var created domain.Membership
 	err := s.runInTx(ctx, func(stores *txStores) error {
 		dropped, err := s.dropInvitationIfAlreadyMember(ctx, stores, userID, invitation)
 		if err != nil {
@@ -405,28 +407,36 @@ func (s *InvitationService) activateInvitation(ctx context.Context, userID uuid.
 		if err != nil {
 			return err
 		}
-		return s.insertActivationMembership(ctx, stores, userID, invitation, suspend)
+		created, err = s.insertActivationMembership(ctx, stores, userID, invitation, suspend)
+		return err
 	})
 	if err != nil {
 		return err
 	}
 
-	// Lifecycle emails post-commit (issue #162, T6): the owner is notified
-	// about the activation; a membership created without a free tariff slot
-	// additionally sends the "access waits for a free slot" email to the new
-	// member. Send failures are logged inside the mailer and never fail the
-	// activation.
-	owner, err := s.owners.GetOwnerID(ctx, invitation.PropertyID)
-	if err != nil {
-		s.logger.WarnContext(ctx, "access: owner lookup for invitation activated email failed",
-			slog.String(auditKeyPropertyID, invitation.PropertyID.String()),
-			slog.String("error", err.Error()))
-	} else {
-		s.lifecycle.SendInvitationActivated(ctx, owner, invitation.PropertyID, invitation.Email)
-	}
+	// The lifecycle notifications are the event subscriber's (карта #734,
+	// #751) — the activation becomes the «Приглашение принято» row for the
+	// inviter and, when the access landed suspended, the system
+	// «Доступ приостановлен» row for the new member instead of the
+	// invitation one. Published post-commit, best-effort; the direct
+	// lifecycle emails this replaces are gone.
+	// The transition instant is the membership row's own suspension instant
+	// when the landing is suspended (the same source AddMember's pause uses),
+	// the activation moment otherwise.
+	at := s.clock.Now()
 	if suspend {
-		s.lifecycle.SendAccessSuspended(ctx, userID, invitation.PropertyID)
+		at = deref(created.SuspendedAt)
 	}
+	publishAccessEvent(ctx, s.events, s.logger, "invitation_activated", func() error {
+		return s.events.PublishInvitationActivated(ctx, InvitationActivated{
+			MembershipID: created.ID,
+			PropertyID:   invitation.PropertyID,
+			InviterID:    invitation.InvitedBy,
+			InviteeID:    userID,
+			Suspended:    suspend,
+			At:           at,
+		})
+	})
 	return nil
 }
 
@@ -475,13 +485,14 @@ func (s *InvitationService) resolveActivationSuspend(
 }
 
 // insertActivationMembership creates the activated membership, consumes the
-// invitation and records the audit entry in the same transaction.
+// invitation and records the audit entry in the same transaction; the created
+// membership travels back for the post-commit event (#751).
 func (s *InvitationService) insertActivationMembership(
 	ctx context.Context, stores *txStores, userID uuid.UUID, invitation domain.Invitation, suspend bool,
-) error {
+) (domain.Membership, error) {
 	id, err := uuid.NewV7()
 	if err != nil {
-		return fmt.Errorf("generate membership id: %w", err)
+		return domain.Membership{}, fmt.Errorf("generate membership id: %w", err)
 	}
 	membership := domain.Membership{
 		ID:         id,
@@ -499,11 +510,11 @@ func (s *InvitationService) insertActivationMembership(
 		created, err = stores.members.Create(ctx, membership)
 	}
 	if err != nil {
-		return fmt.Errorf("create membership: %w", err)
+		return domain.Membership{}, fmt.Errorf("create membership: %w", err)
 	}
 
 	if err := stores.invitations.Delete(ctx, invitation.ID, invitation.PropertyID); err != nil {
-		return fmt.Errorf("delete invitation: %w", err)
+		return domain.Membership{}, fmt.Errorf("delete invitation: %w", err)
 	}
 
 	// Audit in the same transaction; the invitee email is PII and must never
@@ -524,9 +535,9 @@ func (s *InvitationService) insertActivationMembership(
 			"status":           string(created.Status),
 		},
 	}); err != nil {
-		return fmt.Errorf("record audit: %w", err)
+		return domain.Membership{}, fmt.Errorf("record audit: %w", err)
 	}
-	return nil
+	return created, nil
 }
 
 // ListMembers returns the property participants (owner first, then membership

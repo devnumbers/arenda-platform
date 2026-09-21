@@ -1,9 +1,7 @@
 import type { components } from '@/shared/api/dto';
-import { type NotificationPreference, type User } from './types';
+import type { User } from './types';
 
 type MeResponse = components['schemas']['MeResponse'];
-type NotificationPreferencesResponse =
-  components['schemas']['NotificationPreferencesResponse'];
 
 export function mapMeResponse(response: MeResponse): User {
   return {
@@ -23,14 +21,4 @@ export function mapMeResponse(response: MeResponse): User {
         }
       : null,
   };
-}
-
-export function mapNotificationPreferencesResponse(
-  response: NotificationPreferencesResponse,
-): NotificationPreference[] {
-  return response.preferences.map((preference) => ({
-    eventType: preference.event_type,
-    emailAllowed: preference.email_allowed,
-    pushAllowed: preference.push_allowed,
-  }));
 }

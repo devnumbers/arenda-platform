@@ -128,6 +128,15 @@ type Config struct {
 	// delivery is disabled and the reminder worker runs email-only.
 	VAPIDPrivateKey string
 	VAPIDSubject    string
+	// Notifications queue (карта #734, #740): the in-process River client's
+	// worker pools, retry budgets, soft-stop window and the global email
+	// provider budget. Defaults live in loadNotificationsQueue.
+	NotificationsEmailMaxWorkers        int
+	NotificationsPushMaxWorkers         int
+	NotificationsEmailMaxAttempts       int
+	NotificationsPushMaxAttempts        int
+	NotificationsRiverSoftStopTimeout   time.Duration
+	NotificationsEmailProviderPerMinute int
 	// WebOrigin is the frontend origin the fake provider's bank-return
 	// redirects the browser into (issue #663). The env var is read
 	// unconditionally but parsed, defaulted to the APP_BASE_URL origin
@@ -222,6 +231,7 @@ func Load() (Config, error) {
 		cfg.loadSchedulerIntervals,
 		cfg.loadTrustedProxies,
 		cfg.loadTariffCacheTTL,
+		cfg.loadNotificationsQueue,
 		cfg.loadBillingTimeTravel,
 	} {
 		if err := load(); err != nil {
@@ -681,6 +691,45 @@ func (c *Config) validateSMTPFields() error {
 		return errors.New("SMTP_FROM is required when EMAIL_SENDER=smtp")
 	}
 	return nil
+}
+
+// loadNotificationsQueue defaults the delivery-queue (River) settings and
+// applies the env overrides. Every value guards a resource ceiling: worker
+// pools cap concurrent SMTP/push calls, retry budgets bound the backoff
+// ladder, the soft-stop window bounds graceful shutdown, and the per-minute
+// provider budget is the global email rate limit enforced inside the
+// delivery job (research #735 §5).
+func (c *Config) loadNotificationsQueue() error {
+	c.NotificationsEmailMaxWorkers = 4
+	c.NotificationsPushMaxWorkers = 16
+	c.NotificationsEmailMaxAttempts = 8
+	c.NotificationsPushMaxAttempts = 8
+	c.NotificationsRiverSoftStopTimeout = 10 * time.Second
+	c.NotificationsEmailProviderPerMinute = 60
+
+	for _, o := range []struct {
+		dst *int
+		key string
+	}{
+		{&c.NotificationsEmailMaxWorkers, "NOTIFICATIONS_EMAIL_MAX_WORKERS"},
+		{&c.NotificationsPushMaxWorkers, "NOTIFICATIONS_PUSH_MAX_WORKERS"},
+		{&c.NotificationsEmailMaxAttempts, "NOTIFICATIONS_EMAIL_MAX_ATTEMPTS"},
+		{&c.NotificationsPushMaxAttempts, "NOTIFICATIONS_PUSH_MAX_ATTEMPTS"},
+		{&c.NotificationsEmailProviderPerMinute, "NOTIFICATIONS_EMAIL_PROVIDER_PER_MINUTE"},
+	} {
+		if v := os.Getenv(o.key); v != "" {
+			n, err := strconv.Atoi(v)
+			if err != nil {
+				return fmt.Errorf("invalid %s %q: %w", o.key, v, err)
+			}
+			if n <= 0 {
+				return errors.New(o.key + " must be positive")
+			}
+			*o.dst = n
+		}
+	}
+
+	return overridePositiveDurationEnv(&c.NotificationsRiverSoftStopTimeout, "NOTIFICATIONS_RIVER_SOFT_STOP_TIMEOUT")
 }
 
 func (c *Config) loadPaymentProvider() error {

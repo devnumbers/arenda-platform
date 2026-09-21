@@ -1,5 +1,3 @@
-// Package http holds the notifications HTTP adapters: notification-preference and push-subscription
-// endpoints, including the VAPID public-key endpoint.
 package http
 
 import (
@@ -13,120 +11,147 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 )
 
-// NotificationPreferenceHandlers implements the generated notification
-// preferences endpoints.
-type NotificationPreferenceHandlers struct {
-	svc    *notificationsapp.PreferenceService
-	logger *slog.Logger
+// NotificationPreferencesHandlers implements the per-category settings
+// endpoints (решение #738, ADR 0058): the account-level email matrix and the
+// per-device push preferences.
+type NotificationPreferencesHandlers struct {
+	settings *notificationsapp.SettingsService
+	logger   *slog.Logger
 }
 
-// NewNotificationPreferenceHandlers creates HTTP handlers for the notification
-// preferences API.
-func NewNotificationPreferenceHandlers(svc *notificationsapp.PreferenceService, logger *slog.Logger) *NotificationPreferenceHandlers {
-	return &NotificationPreferenceHandlers{svc: svc, logger: logger}
+// NewNotificationPreferencesHandlers creates the settings handlers.
+func NewNotificationPreferencesHandlers(settings *notificationsapp.SettingsService, logger *slog.Logger) *NotificationPreferencesHandlers {
+	return &NotificationPreferencesHandlers{settings: settings, logger: logger}
 }
 
 // GetNotificationPreferences implements GET /notification-preferences.
-func (h *NotificationPreferenceHandlers) GetNotificationPreferences(w http.ResponseWriter, r *http.Request) {
-	actor, ok := httpsupport.UserIDFromContext(r.Context())
+func (h *NotificationPreferencesHandlers) GetNotificationPreferences(w http.ResponseWriter, r *http.Request) {
+	user, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
 			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	channelPrefs, err := h.svc.ListChannelPreferences(r.Context(), actor)
+	prefs, err := h.settings.EmailPreferences(r.Context(), user)
 	if err != nil {
 		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 		return
 	}
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, notificationChannelPreferencesResponse(channelPrefs))
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.NotificationPreferencesResponse{
+		Email: categoriesToOpenAPI(prefs),
+	})
 }
 
-// UpdateNotificationPreferences implements PUT /notification-preferences.
-func (h *NotificationPreferenceHandlers) UpdateNotificationPreferences(w http.ResponseWriter, r *http.Request) {
-	actor, ok := httpsupport.UserIDFromContext(r.Context())
+// PutNotificationPreferences implements PUT /notification-preferences.
+func (h *NotificationPreferencesHandlers) PutNotificationPreferences(w http.ResponseWriter, r *http.Request) {
+	user, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
 			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	var body openapi.NotificationPreferencesUpdateRequest
+	var body openapi.NotificationPreferencesRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to decode update notification preferences request",
+		h.logger.ErrorContext(r.Context(), "failed to decode notification preferences request",
 			slog.String("error", httpsupport.SanitizeError(err)))
 		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
 			httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
-	prefs := channelPreferencesFromRequest(body.Preferences)
-
-	updated, err := h.svc.ReplaceChannelPreferences(r.Context(), actor, prefs)
-	if err != nil {
-		if errors.Is(err, notificationsapp.ErrInvalidPreferences) {
-			httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
-				httpsupport.Problem(r.Context(), "Bad request", "Некорректные настройки уведомлений"))
-			return
-		}
+	prefs := categoriesFromOpenAPI(body.Email)
+	if err := h.settings.SetEmailPreferences(r.Context(), user, prefs); err != nil {
 		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 		return
 	}
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, notificationChannelPreferencesResponse(updated))
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.NotificationPreferencesResponse{
+		Email: categoriesToOpenAPI(prefs),
+	})
 }
 
-// channelPreferencesFromRequest expands the per-event-type request items (each
-// carrying independent email/push flags) into the per-channel domain slice the
-// service expects: one (event_type, channel) entry per flag.
-func channelPreferencesFromRequest(items []openapi.NotificationPreference) []notificationsdomain.NotificationChannelPreference {
-	prefs := make([]notificationsdomain.NotificationChannelPreference, 0, len(items)*2)
-	for _, item := range items {
-		eventType := notificationsdomain.EventType(item.EventType)
-		prefs = append(prefs,
-			notificationsdomain.NotificationChannelPreference{
-				EventType: eventType, Channel: notificationsdomain.ChannelEmail, Allowed: item.EmailAllowed,
-			},
-			notificationsdomain.NotificationChannelPreference{
-				EventType: eventType, Channel: notificationsdomain.ChannelPush, Allowed: item.PushAllowed,
-			},
-		)
+// GetPushSubscriptionPreferences implements GET /push/subscriptions/preferences.
+func (h *NotificationPreferencesHandlers) GetPushSubscriptionPreferences(
+	w http.ResponseWriter, r *http.Request, params openapi.GetPushSubscriptionPreferencesParams,
+) {
+	user, ok := httpsupport.UserIDFromContext(r.Context())
+	if !ok {
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
 	}
-	return prefs
+
+	sub, err := h.settings.PushPreferences(r.Context(), user, params.Endpoint)
+	if err != nil {
+		h.writeError(r, w, err)
+		return
+	}
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.PushPreferencesResponse{
+		Endpoint:   sub.Endpoint,
+		Enabled:    sub.Enabled,
+		Categories: categoriesToOpenAPI(sub.Categories),
+	})
 }
 
-// notificationChannelPreferencesResponse collapses the per-channel domain
-// slice back into one response item per event type, carrying emailAllowed and
-// pushAllowed.
-func notificationChannelPreferencesResponse(
-	prefs []notificationsdomain.NotificationChannelPreference,
-) openapi.NotificationPreferencesResponse {
-	byType := make(map[notificationsdomain.EventType]struct {
-		email bool
-		push  bool
-	}, len(prefs))
-	for _, p := range prefs {
-		entry := byType[p.EventType]
-		switch p.Channel {
-		case notificationsdomain.ChannelEmail:
-			entry.email = p.Allowed
-		case notificationsdomain.ChannelPush:
-			entry.push = p.Allowed
-		}
-		byType[p.EventType] = entry
+// PutPushSubscriptionPreferences implements PUT /push/subscriptions/preferences.
+func (h *NotificationPreferencesHandlers) PutPushSubscriptionPreferences(w http.ResponseWriter, r *http.Request) {
+	user, ok := httpsupport.UserIDFromContext(r.Context())
+	if !ok {
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
 	}
 
-	items := make([]openapi.NotificationPreference, 0, len(byType))
-	for _, eventType := range notificationsdomain.AllEventTypes() {
-		entry, ok := byType[eventType]
-		if !ok {
-			continue
-		}
-		items = append(items, openapi.NotificationPreference{
-			EventType:    openapi.NotificationPreferenceEventType(eventType),
-			EmailAllowed: entry.email,
-			PushAllowed:  entry.push,
-		})
+	var body openapi.PushPreferencesRequest
+	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
+		h.logger.ErrorContext(r.Context(), "failed to decode push preferences request",
+			slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		return
 	}
-	return openapi.NotificationPreferencesResponse{Preferences: items}
+
+	prefs := categoriesFromOpenAPI(body.Categories)
+	if err := h.settings.SetPushPreferences(r.Context(), user, body.Endpoint, body.Enabled, prefs); err != nil {
+		h.writeError(r, w, err)
+		return
+	}
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.PushPreferencesResponse{
+		Endpoint:   body.Endpoint,
+		Enabled:    body.Enabled,
+		Categories: categoriesToOpenAPI(prefs),
+	})
+}
+
+// writeError maps the settings sentinel errors onto the contract's statuses.
+func (h *NotificationPreferencesHandlers) writeError(r *http.Request, w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, notificationsapp.ErrNotFound):
+		httpsupport.WriteProblem(r.Context(), w, http.StatusNotFound,
+			httpsupport.Problem(r.Context(), "Not found", "Push-подписка не найдена"))
+	case errors.Is(err, notificationsapp.ErrInvalidPushSubscription):
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Некорректный endpoint"))
+	default:
+		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+	}
+}
+
+func categoriesToOpenAPI(p notificationsdomain.CategoryPrefs) openapi.NotificationCategoryPreferences {
+	return openapi.NotificationCategoryPreferences{
+		Rental:             p.Rental,
+		PaymentsOperations: p.PaymentsOperations,
+		Tasks:              p.Tasks,
+		SharedAccess:       p.SharedAccess,
+	}
+}
+
+func categoriesFromOpenAPI(p openapi.NotificationCategoryPreferences) notificationsdomain.CategoryPrefs {
+	return notificationsdomain.CategoryPrefs{
+		Rental:             p.Rental,
+		PaymentsOperations: p.PaymentsOperations,
+		Tasks:              p.Tasks,
+		SharedAccess:       p.SharedAccess,
+	}
 }

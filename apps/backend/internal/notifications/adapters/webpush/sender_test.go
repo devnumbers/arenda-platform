@@ -299,7 +299,9 @@ func TestUrgencyForEventType(t *testing.T) {
 		eventType domain.EventType
 		want      string
 	}{
-		{domain.EventSubscriptionGrace, urgencyHigh},
+		{domain.EventSubscriptionGraceEntered, urgencyHigh},
+		{domain.EventSubscriptionGraceExpiring, urgencyHigh},
+		{domain.EventPaymentDue, urgencyNormal},
 	}
 	for _, tc := range cases {
 		t.Run(string(tc.eventType), func(t *testing.T) {

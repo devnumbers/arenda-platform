@@ -53,12 +53,3 @@ export type ResendEmailCodeCommand = {
 
 export type { TariffName } from '@/shared/model/tariff';
 
-/** Единственное событие доставочных уведомлений после удаления домена аренд (спека #434). */
-export type NotificationEventType = 'subscription_grace';
-
-export type NotificationPreference = {
-  readonly eventType: NotificationEventType;
-  readonly emailAllowed: boolean;
-  readonly pushAllowed: boolean;
-};
-
