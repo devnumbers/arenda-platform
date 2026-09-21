@@ -8,7 +8,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/riverqueue/river"
-	"github.com/riverqueue/river/rivertype"
 )
 
 // The adapter satisfies the consumer-declared port (CODING_STANDARDS).
@@ -43,16 +42,7 @@ func (s *TaskOverdueScheduler) ScheduleTaskOverdue(ctx context.Context, taskID u
 		Queue:       QueueTasks,
 		ScheduledAt: dueAt,
 		MaxAttempts: boundaryJobMaxAttempts,
-		UniqueOpts: river.UniqueOpts{
-			ByArgs: true,
-			ByState: []rivertype.JobState{
-				rivertype.JobStateAvailable,
-				rivertype.JobStatePending,
-				rivertype.JobStateRunning,
-				rivertype.JobStateRetryable,
-				rivertype.JobStateScheduled,
-			},
-		},
+		UniqueOpts:  jobUniqueOpts,
 	})
 	if err != nil {
 		return err

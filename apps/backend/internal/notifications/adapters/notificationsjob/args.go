@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/rivertype"
 )
 
 // QueueEmail and QueuePush are the two delivery queues; QueueTasks carries
@@ -25,6 +27,20 @@ const (
 	QueuePayments = "notifications_payments"
 	QueueRentals  = "notifications_rentals"
 )
+
+// jobUniqueOpts is every notifications job's uniqueness: one in-flight job
+// per (kind, args) in every non-terminal state — the publications are
+// idempotent, and a finished job frees the key for a future one.
+var jobUniqueOpts = river.UniqueOpts{
+	ByArgs: true,
+	ByState: []rivertype.JobState{
+		rivertype.JobStateAvailable,
+		rivertype.JobStatePending,
+		rivertype.JobStateRunning,
+		rivertype.JobStateRetryable,
+		rivertype.JobStateScheduled,
+	},
+}
 
 // DeliverEmailArgs delivers one notification's email leg. The args are the
 // job's dedup key: one notification has at most one email job in flight.

@@ -10,7 +10,6 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 	"github.com/riverqueue/river"
-	"github.com/riverqueue/river/rivertype"
 )
 
 // The adapter satisfies the consumer-declared port (CODING_STANDARDS).
@@ -41,28 +40,18 @@ type RiverQueue struct {
 // enforcement covers every non-terminal state, so a completed job frees the
 // notification's key for a future publication.
 func NewRiverQueue(client *river.Client[pgx.Tx], pushEnabled bool, emailMaxAttempts, pushMaxAttempts int) *RiverQueue {
-	uniqueOpts := river.UniqueOpts{
-		ByArgs: true,
-		ByState: []rivertype.JobState{
-			rivertype.JobStateAvailable,
-			rivertype.JobStatePending,
-			rivertype.JobStateRunning,
-			rivertype.JobStateRetryable,
-			rivertype.JobStateScheduled,
-		},
-	}
 	return &RiverQueue{
 		client:      client,
 		pushEnabled: pushEnabled,
 		emailInsertOpts: &river.InsertOpts{
 			Queue:       QueueEmail,
 			MaxAttempts: emailMaxAttempts,
-			UniqueOpts:  uniqueOpts,
+			UniqueOpts:  jobUniqueOpts,
 		},
 		pushInsertOpts: &river.InsertOpts{
 			Queue:       QueuePush,
 			MaxAttempts: pushMaxAttempts,
-			UniqueOpts:  uniqueOpts,
+			UniqueOpts:  jobUniqueOpts,
 		},
 	}
 }

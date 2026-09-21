@@ -40,7 +40,7 @@ func (s *RentalBoundaryScheduler) ScheduleRentalCompleted(ctx context.Context, r
 		// The same budget every boundary job carries: the publication is
 		// one feed write.
 		MaxAttempts: boundaryJobMaxAttempts,
-		UniqueOpts:  uniqueOpts,
+		UniqueOpts:  jobUniqueOpts,
 	})
 	if err != nil {
 		return err
