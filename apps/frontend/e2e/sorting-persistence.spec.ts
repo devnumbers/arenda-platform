@@ -36,7 +36,9 @@ async function settle(locator: Locator): Promise<Locator> {
 }
 
 /** Создание правила задачи API-вызовом от сидовой сессии (правило без срока
- * материализуется сразу — undated-задача в группе «Без даты»). */
+ * материализуется сразу — undated-задача в группе «Без даты»). Канал
+ * осознанный (в спеках прецедента нет): API дешевле UI-обхода и точнее
+ * прямой SQL-вставки; очистка — в finally каждого теста. */
 async function createTaskRule(page: Page, title: string): Promise<string> {
   const response = await page.request.post(`/api/properties/${APARTMENT}/tasks/rules`, {
     data: { title, repeat: 'once' },
@@ -46,7 +48,8 @@ async function createTaskRule(page: Page, title: string): Promise<string> {
   return rule.id;
 }
 
-/** Создание карточки контакта на объекте API-вызовом от сидовой сессии. */
+/** Создание карточки контакта на объекте API-вызовом от сидовой сессии
+ * (канал — как у createTaskRule выше). */
 async function createContact(page: Page, firstName: string): Promise<string> {
   const response = await page.request.post('/api/contacts', {
     data: { propertyId: APARTMENT, firstName },
@@ -91,35 +94,39 @@ test.describe('сортировки переживают перезагрузк�
   test('задачи объекта: сортировка живёт в адресе и переживает перезагрузку', async ({
     page,
     seededUser,
-  }) => {
+  }, testInfo) => {
     await openCabinetWithSeededSession(page, seededUser);
     // «Бета» создана раньше «Альфы»: дефолт «Дата, asc» держит порядок
-    // создания, «Название» его переворачивает.
-    const ruleBeta = await createTaskRule(page, 'E2E-сорт Бета');
-    const ruleAlpha = await createTaskRule(page, 'E2E-сорт Альфа');
+    // создания, «Название» его переворачивает. Суффикс retry: повтор
+    // упавшей попытки не встречает остатки прошлой (testing-strategy,
+    // прецедент contacts-book.spec).
+    const titleBeta = `E2E-сорт Бета ${testInfo.retry}`;
+    const titleAlpha = `E2E-сорт Альфа ${testInfo.retry}`;
+    const ruleBeta = await createTaskRule(page, titleBeta);
+    const ruleAlpha = await createTaskRule(page, titleAlpha);
     try {
       await page.goto(`/properties/${APARTMENT}/tasks`);
       const section = page.getByTestId('section-undated');
-      await expect(section.getByText('E2E-сорт Бета')).toBeVisible();
-      await expect(section.getByText('E2E-сорт Альфа')).toBeVisible();
-      expect(await yOf(section, 'E2E-сорт Бета')).toBeLessThan(
-        await yOf(section, 'E2E-сорт Альфа'),
+      await expect(section.getByText(titleBeta)).toBeVisible();
+      await expect(section.getByText(titleAlpha)).toBeVisible();
+      expect(await yOf(section, titleBeta)).toBeLessThan(
+        await yOf(section, titleAlpha),
       );
 
       const chip = await settle(page.getByTestId('tasks-sort-chip'));
       await chip.click();
       await page.getByRole('menuitem', { name: 'По названию' }).click();
       await expect(page).toHaveURL(/sort=title/);
-      expect(await yOf(section, 'E2E-сорт Альфа')).toBeLessThan(
-        await yOf(section, 'E2E-сорт Бета'),
+      expect(await yOf(section, titleAlpha)).toBeLessThan(
+        await yOf(section, titleBeta),
       );
 
       await chip.click();
       await page.getByRole('menuitem', { name: 'Убывание' }).click();
       await expect(page).toHaveURL(/sort=title/);
       await expect(page).toHaveURL(/order=desc/);
-      expect(await yOf(section, 'E2E-сорт Бета')).toBeLessThan(
-        await yOf(section, 'E2E-сорт Альфа'),
+      expect(await yOf(section, titleBeta)).toBeLessThan(
+        await yOf(section, titleAlpha),
       );
 
       // Перезагрузка: поле и направление восстановлены из адреса (#785).
@@ -127,9 +134,18 @@ test.describe('сортировки переживают перезагрузк�
       await expect(page).toHaveURL(/sort=title/);
       await expect(page).toHaveURL(/order=desc/);
       await expect(chip).toHaveText(/Название/);
-      expect(await yOf(section, 'E2E-сорт Бета')).toBeLessThan(
-        await yOf(section, 'E2E-сорт Альфа'),
+      expect(await yOf(section, titleBeta)).toBeLessThan(
+        await yOf(section, titleAlpha),
       );
+
+      // «Назад/вперёд» (приёмка #785): смены сортировки пишут replace —
+      // записей истории не создают: «назад» уводит со страницы, «вперёд»
+      // возвращает её вместе с адресом и сортировкой.
+      await page.goBack();
+      await expect(page).not.toHaveURL(new RegExp(`properties/${APARTMENT}/tasks`));
+      await page.goForward();
+      await expect(page).toHaveURL(/sort=title/);
+      await expect(page).toHaveURL(/order=desc/);
     } finally {
       await page.request.delete(`/api/properties/${APARTMENT}/tasks/rules/${ruleAlpha}`);
       await page.request.delete(`/api/properties/${APARTMENT}/tasks/rules/${ruleBeta}`);
@@ -139,19 +155,22 @@ test.describe('сортировки переживают перезагрузк�
   test('глобальная лента задач: сортировка живёт в адресе и переживает перезагрузку', async ({
     page,
     seededUser,
-  }) => {
+  }, testInfo) => {
     await openCabinetWithSeededSession(page, seededUser);
-    const ruleBeta = await createTaskRule(page, 'E2E-лента Бета');
-    const ruleAlpha = await createTaskRule(page, 'E2E-лента Альфа');
+    // Суффикс retry — см. тест «задачи объекта» выше.
+    const titleBeta = `E2E-лента Бета ${testInfo.retry}`;
+    const titleAlpha = `E2E-лента Альфа ${testInfo.retry}`;
+    const ruleBeta = await createTaskRule(page, titleBeta);
+    const ruleAlpha = await createTaskRule(page, titleAlpha);
     try {
       // Вход с активным фильтром #524 (?property=): смена сортировки обязана
       // писать ?sort= ПОВЕРХ фильтра, не затирая его (находка код-ревью).
       await page.goto(`/tasks?property=${APARTMENT}`);
       const section = page.getByTestId('section-undated');
-      await expect(section.getByText('E2E-лента Бета')).toBeVisible();
-      await expect(section.getByText('E2E-лента Альфа')).toBeVisible();
-      expect(await yOf(section, 'E2E-лента Бета')).toBeLessThan(
-        await yOf(section, 'E2E-лента Альфа'),
+      await expect(section.getByText(titleBeta)).toBeVisible();
+      await expect(section.getByText(titleAlpha)).toBeVisible();
+      expect(await yOf(section, titleBeta)).toBeLessThan(
+        await yOf(section, titleAlpha),
       );
 
       const chip = await settle(page.getByTestId('tasks-sort-chip'));
@@ -159,8 +178,8 @@ test.describe('сортировки переживают перезагрузк�
       await page.getByRole('menuitem', { name: 'По названию' }).click();
       await expect(page).toHaveURL(/sort=title/);
       await expect(page).toHaveURL(new RegExp(`property=${APARTMENT}`));
-      expect(await yOf(section, 'E2E-лента Альфа')).toBeLessThan(
-        await yOf(section, 'E2E-лента Бета'),
+      expect(await yOf(section, titleAlpha)).toBeLessThan(
+        await yOf(section, titleBeta),
       );
 
       // Перезагрузка: поле и фильтр восстановлены из адреса, направление —
@@ -169,8 +188,8 @@ test.describe('сортировки переживают перезагрузк�
       await expect(page).toHaveURL(/sort=title/);
       await expect(page).toHaveURL(new RegExp(`property=${APARTMENT}`));
       await expect(page.getByTestId('tasks-sort-chip')).toHaveText(/Название/);
-      expect(await yOf(section, 'E2E-лента Альфа')).toBeLessThan(
-        await yOf(section, 'E2E-лента Бета'),
+      expect(await yOf(section, titleAlpha)).toBeLessThan(
+        await yOf(section, titleBeta),
       );
 
       // Возврат на дефолт: параметры снимаются из адреса (находка живой
@@ -195,26 +214,29 @@ test.describe('сортировки переживают перезагрузк�
   test('контакты объекта: направление живёт в адресе и переживает перезагрузку', async ({
     page,
     seededUser,
-  }) => {
+  }, testInfo) => {
     await openCabinetWithSeededSession(page, seededUser);
-    const contactAlpha = await createContact(page, 'Э2Е Ася');
-    const contactBeta = await createContact(page, 'Э2Е Борис');
+    // Суффикс retry — см. тест «задачи объекта» выше.
+    const nameAlpha = `Э2Е Ася ${testInfo.retry}`;
+    const nameBeta = `Э2Е Борис ${testInfo.retry}`;
+    const contactAlpha = await createContact(page, nameAlpha);
+    const contactBeta = await createContact(page, nameBeta);
     try {
       await page.goto(`/properties/${APARTMENT}/contacts`);
       const chip = await settle(page.getByRole('button', { name: 'Имя', exact: true }));
       await expect(chip).toBeVisible();
       // Дефолт «А→Я»: Ася выше Бориса.
-      expect(await yOf(page, 'Э2Е Ася')).toBeLessThan(await yOf(page, 'Э2Е Борис'));
+      expect(await yOf(page, nameAlpha)).toBeLessThan(await yOf(page, nameBeta));
 
       await chip.click();
       await page.getByRole('menuitem', { name: 'Имя от Я до А' }).click();
       await expect(page).toHaveURL(/order=desc/);
-      expect(await yOf(page, 'Э2Е Борис')).toBeLessThan(await yOf(page, 'Э2Е Ася'));
+      expect(await yOf(page, nameBeta)).toBeLessThan(await yOf(page, nameAlpha));
 
       // Перезагрузка: направление восстановлено из адреса (#785).
       await page.reload();
       await expect(page).toHaveURL(/order=desc/);
-      expect(await yOf(page, 'Э2Е Борис')).toBeLessThan(await yOf(page, 'Э2Е Ася'));
+      expect(await yOf(page, nameBeta)).toBeLessThan(await yOf(page, nameAlpha));
     } finally {
       await page.request.delete(`/api/contacts/${contactAlpha}`);
       await page.request.delete(`/api/contacts/${contactBeta}`);
