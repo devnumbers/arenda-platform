@@ -90,6 +90,7 @@ export {
 } from './lib/operations-filters';
 export { useOperationsFilters } from './lib/use-operations-filters';
 export {
+  globalOperationsFiltersHref,
   globalOperationsFiltersParams,
   operationsPropertyChipLabel,
   readGlobalOperationsFilters,

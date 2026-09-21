@@ -5,10 +5,9 @@ import { useRouter } from 'next/navigation';
 import { Add, ArrowLeft, Search } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
-import { buildUrlWithParams } from '@/shared/lib/url-params';
 import { clientTodayIso, type PaymentType } from '@/entities/payment';
 import {
-  globalOperationsFiltersParams,
+  globalOperationsFiltersHref,
   groupOperationsByDate,
   operationsCategoryChipLabel,
   operationsPeriodChipLabel,
@@ -112,14 +111,6 @@ export function OperationsGlobalDirectionScreen({
   // Доход, с «Расходов» — Расход (маршрут распознаёт ?type=).
   const newOperationHref = `${ROUTES.operationsNew}?type=${type}`;
 
-  const filterHref = (base: string, extra?: Record<string, string>): string => {
-    const params = new URLSearchParams(globalOperationsFiltersParams(filters));
-    for (const [name, value] of Object.entries(extra ?? {})) {
-      params.set(name, value);
-    }
-    return buildUrlWithParams(base, params);
-  };
-
   return (
     <>
       {/* Шапка направления — канон подэкрана: «Назад» на ленту (goBack
@@ -133,7 +124,9 @@ export function OperationsGlobalDirectionScreen({
           <IconButton
             icon={<ArrowLeft />}
             label="Назад"
-            onClick={() => goBack(router, filterHref(ROUTES.operations))}
+            onClick={() =>
+              goBack(router, globalOperationsFiltersHref(ROUTES.operations, filters))
+            }
           />
         }
         trailing={
@@ -142,7 +135,9 @@ export function OperationsGlobalDirectionScreen({
               <IconButton
                 icon={<Search />}
                 label="Найти операцию"
-                onClick={() => router.push(filterHref(ROUTES.operationsSearch))}
+                onClick={() =>
+                  router.push(globalOperationsFiltersHref(ROUTES.operationsSearch, filters))
+                }
               />
               <IconButton
                 icon={<Add />}
@@ -177,10 +172,18 @@ export function OperationsGlobalDirectionScreen({
               categoriesActive={filters.categories.length > 0}
               onOpenPeriod={() => setPeriodOpen(true)}
               onOpenProperties={() =>
-                router.push(filterHref(ROUTES.operationsObjects, { return: selfRoute }))
+                router.push(
+                  globalOperationsFiltersHref(ROUTES.operationsObjects, filters, {
+                    return: selfRoute,
+                  }),
+                )
               }
               onOpenCategories={() =>
-                router.push(filterHref(ROUTES.operationsCategories, { return: selfRoute }))
+                router.push(
+                  globalOperationsFiltersHref(ROUTES.operationsCategories, filters, {
+                    return: selfRoute,
+                  }),
+                )
               }
             />
 
