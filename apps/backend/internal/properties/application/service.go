@@ -1016,9 +1016,6 @@ func lockDeletableProperty(ctx context.Context, stores *txStores, owner, id uuid
 	return property, nil
 }
 
-// recoverSlotsAfterDelete frees the recipients' tariff slots dropped by the
-// delete: the access context drops their memberships and recovers the oldest
-// suspended ones FIFO in the same transaction, before the property row is
 // collectFormerMemberEmails gathers the emails of the property's shared
 // members before the slot policy drops their memberships, so the "object
 // deleted" email can reach them after the commit (issue #162, T6).
@@ -1037,6 +1034,9 @@ func (s *PropertyService) collectFormerMemberEmails(ctx context.Context, stores 
 // after the delete has committed (issue #162, T6). A send failure is logged
 // and does not affect the delete.
 func (s *PropertyService) notifyPropertyDeleted(ctx context.Context, id uuid.UUID, name string, formerMemberEmails []string) {
+	if s.sharedDeleteMailer == nil {
+		return
+	}
 	for _, to := range formerMemberEmails {
 		if err := s.sharedDeleteMailer.SendPropertyDeleted(ctx, to, name); err != nil {
 			s.logger.ErrorContext(ctx, "failed to send property deleted email to former member",
