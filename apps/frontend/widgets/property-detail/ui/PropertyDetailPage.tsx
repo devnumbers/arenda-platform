@@ -54,6 +54,7 @@ import {
   type PropertyDetailSectionKey,
 } from '../lib/property-sections';
 import {propertyPaymentGroups} from '../lib/payments-strip';
+import {propertySectionCta} from '../lib/property-section-cta';
 import {operationsSectionTitle} from '../lib/operations-section';
 import {propertyDetailTasks} from '../lib/detail-tasks';
 import {propertyApartmentSummaryRows} from '../lib/apartment-summary';
@@ -261,14 +262,15 @@ export function PropertyDetailPage(): JSX.Element {
     // набор (первый объект); правило переключения наборов — на приёмке.
     const emptySet = resolvePropertyDetailEmptySet(listQuery.data?.items.length ?? 1);
 
-    // Центральные права объекта (#703): CTA секций — canEdit (роль и
-    // не-архив), «Управление»/кебаб — ролевой canManageMembers (билдеры
-    // ветвят архив сами: архивный владелец видит «Вернуть из архива» и
-    // удаление), «Покинуть объект» — canLeave.
+    // Центральные права объекта (#703): «Управление»/кебаб — ролевой
+    // canManageMembers (билдеры ветвят архив сами: архивный владелец
+    // видит «Вернуть из архива» и удаление), «Покинуть объект» — canLeave.
+    // Create-CTA пустых секций — шов propertySectionCta (#774): зритель
+    // не видит их вовсе, архив глушит (#773).
     const permissions = propertyPermissions(
         propertyQuery.isSuccess ? property : undefined,
     );
-    const canMutate = permissions.canEdit;
+    const sectionCta = propertySectionCta(permissions);
     // «Основной объект» — платная возможность: базовому тарифу в шапке
     // звезда апселла, строк пина в «Управлении» нет.
     const isPaid = subscriptionQuery.data
@@ -607,8 +609,8 @@ export function PropertyDetailPage(): JSX.Element {
                                 <PropertySectionEmpty
                                     imageSrc={propertySectionImages.rental}
                                     copy={resolvePropertySectionEmpty('rental', emptySet, property.status)}
-                                    onCta={permissions.canManageMembers ? sectionCTAs.rental : undefined}
-                                    ctaDisabled={!canMutate}
+                                    onCta={sectionCta.visible ? sectionCTAs.rental : undefined}
+                                    ctaDisabled={sectionCta.disabled}
                                 />
                             )}
                         </PropertySectionCard>
@@ -625,8 +627,8 @@ export function PropertyDetailPage(): JSX.Element {
                                 <PropertySectionEmpty
                                     imageSrc={propertySectionImages.payments}
                                     copy={resolvePropertySectionEmpty('payments', emptySet, property.status)}
-                                    onCta={permissions.canManageMembers ? sectionCTAs.payments : undefined}
-                                    ctaDisabled={!canMutate}
+                                    onCta={sectionCta.visible ? sectionCTAs.payments : undefined}
+                                    ctaDisabled={sectionCta.disabled}
                                 />
                             )}
                         </PropertySectionCard>
@@ -666,8 +668,8 @@ export function PropertyDetailPage(): JSX.Element {
                                 <PropertySectionEmpty
                                     imageSrc={propertySectionImages.contacts}
                                     copy={resolvePropertySectionEmpty('contacts', emptySet, property.status)}
-                                    onCta={permissions.canManageMembers ? sectionCTAs.contacts : undefined}
-                                    ctaDisabled={!canMutate}
+                                    onCta={sectionCta.visible ? sectionCTAs.contacts : undefined}
+                                    ctaDisabled={sectionCta.disabled}
                                 />
                             )}
                         </PropertySectionCard>
@@ -715,8 +717,8 @@ export function PropertyDetailPage(): JSX.Element {
                                 <PropertySectionEmpty
                                     imageSrc={propertySectionImages.tasks}
                                     copy={resolvePropertySectionEmpty('tasks', emptySet, property.status)}
-                                    onCta={permissions.canManageMembers ? sectionCTAs.tasks : undefined}
-                                    ctaDisabled={!canMutate}
+                                    onCta={sectionCta.visible ? sectionCTAs.tasks : undefined}
+                                    ctaDisabled={sectionCta.disabled}
                                 />
                             )}
                         </PropertySectionCard>
@@ -731,8 +733,8 @@ export function PropertyDetailPage(): JSX.Element {
                                 <PropertySectionEmpty
                                     imageSrc={propertySectionImages.about}
                                     copy={resolvePropertySectionEmpty('about', emptySet, property.status)}
-                                    onCta={permissions.canManageMembers ? sectionCTAs.about : undefined}
-                                    ctaDisabled={!canMutate}
+                                    onCta={sectionCta.visible ? sectionCTAs.about : undefined}
+                                    ctaDisabled={sectionCta.disabled}
                                 />
                             )}
                         </PropertySectionCard>

@@ -4,6 +4,7 @@ import {
   expect,
   execE2eSql,
   openCabinetWithSessionToken,
+  seededMemberSessionToken,
   seededViewerSessionToken,
   SEEDED_APARTMENT_PROPERTY_ID,
   test,
@@ -15,7 +16,8 @@ import {
 // своих объектов, то есть чистый зритель. Проверки: деталь объекта
 // («Владелец объекта», «Управление» = об объекте/совместный доступ/
 // покинуть), скрытие «+» в разделах и глобальной ленте операций, экран
-// участников без manage-контролов, флоу «Покинуть объект» с SQL-правдой.
+// участников без manage-контролов, флоу «Покинуть объект» с SQL-правдой,
+// create-CTA пустых секций детали: зритель — мимо, редактор — на месте (#774).
 // Выход из объекта сносит сидовое членство — восстанавливаем его в конце
 // теста (workers=1, файл идёт последним по алфавиту среди новых прогонов).
 
@@ -93,6 +95,33 @@ test.describe('режим просмотра', () => {
     // и CTA пустой книги скрыты (макет 2235-100976).
     await page.goto('/operations');
     await expect(page.getByRole('button', { name: 'Добавить операцию' })).toHaveCount(0);
+  });
+
+  test('create-CTA пустых секций: зритель — не рисуются, редактору — на месте (#774)', async ({
+    page,
+  }) => {
+    // Решение владельца Q13=А («резать консистентно»): у зрителя пустые
+    // секции детали (сид не кладёт в квартиру аренду, контакты и задачи)
+    // читаются с текстами-подсказками, но без кнопок «Добавить» —
+    // объектные формы зрителю отвечают 403, кнопка, ведущая в отказ,
+    // мёртвая (прецедент #757, канон «+» операций #703).
+    await openDetail(page);
+    await expect(page.getByText('Аренда не добавлена')).toBeVisible();
+    await expect(page.getByText('Контакты не добавлены')).toBeVisible();
+    await expect(page.getByText('Задач нет')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Добавить' })).toHaveCount(0);
+
+    // Контраст: редактору (full_access) того же объекта create-CTA пустых
+    // секций рисуются активными — кнопки владельца/редактора не тронуты.
+    await openCabinetWithSessionToken(page, seededMemberSessionToken());
+    await page.goto(`/properties/${PROPERTY}`);
+    await expect(page.getByText('Контакты не добавлены')).toBeVisible();
+    const addButtons = page.getByRole('button', { name: 'Добавить' });
+    const count = await addButtons.count();
+    expect(count).toBeGreaterThan(0);
+    for (let i = 0; i < count; i += 1) {
+      await expect(addButtons.nth(i)).toBeEnabled();
+    }
   });
 
   test('прямые ссылки форм гасятся карточками недоступности (обход #758)', async ({
