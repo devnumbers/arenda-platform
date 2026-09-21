@@ -1,7 +1,7 @@
 'use client';
 
 import {type JSX, useState} from 'react';
-import {usePathname, useRouter} from 'next/navigation';
+import {useRouter} from 'next/navigation';
 import {
   useProperties,
   usePropertiesWithMeta,
@@ -9,6 +9,7 @@ import {
 import {useSubscription} from '@/features/subscription';
 import {Add, Archive, Search, SmallArrowDown, SortingBigSmall, SortingSmallBig} from '@/shared/assets/icons';
 import {useKeyboardActivation} from '@/shared/lib/hooks/useKeyboardActivation';
+import {useUrlParams} from '@/shared/lib/hooks/use-url-params';
 import {
   Button,
   HubCollapseAnchor,
@@ -41,6 +42,9 @@ export type PropertiesPageProps = {
   readonly initialSort?: PropertySort;
 };
 
+/** Собственные параметры сортировки в адресе — знание этого модуля. */
+const SORT_PARAMS = ['sort', 'order'] as const;
+
 /**
  * Экран-хаб «Объекты» (карта #583, тикет #586; Figma 1603:89079 — ПК,
  * 1603:88972 — планшет, 1590:88756 — мобайл, 1603:90604 — пустое): заголовок
@@ -63,16 +67,17 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
   const metaQuery = usePropertiesWithMeta();
   const subscriptionQuery = useSubscription();
   const router = useRouter();
-  const pathname = usePathname();
+  const {write} = useUrlParams();
 
   const [sort, setSort] = useState<PropertySort>(initialSort ?? DEFAULT_PROPERTY_SORT);
 
   const visible = sortProperties(data ?? [], sort);
 
+  // Запись — канон useUrlParams (#786): экран владеет только sort/order,
+  // чужие параметры адреса переживают смену сортировки, дефолт снимается.
   const changeSort = (next: PropertySort) => {
     setSort(next);
-    const query = new URLSearchParams(serializeSortToParams(next)).toString();
-    router.replace(query ? `${pathname}?${query}` : pathname, {scroll: false});
+    write(serializeSortToParams(next), {own: SORT_PARAMS});
   };
 
   const isEmpty = !isLoading && !isError && visible.length === 0;

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type ComponentProps, type JSX } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import {
   Add,
   Search,
@@ -11,6 +11,7 @@ import {
 } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { useKeyboardActivation } from '@/shared/lib/hooks/useKeyboardActivation';
+import { useUrlParams } from '@/shared/lib/hooks/use-url-params';
 import {
   useContactBook,
   type ContactBookOrder,
@@ -31,6 +32,7 @@ import {
   contactBookRowSubtitle,
   groupBookByLetter,
   groupBookByProperty,
+  serializeContactBookSortToParams,
 } from '../lib/contact-book-model';
 import { ContactRowButton } from '@/entities/contact';
 import {
@@ -58,6 +60,9 @@ import {
  * Пустая книга — EmptyState (служебный чип сортировки прячется вместе со
  * списком, DESIGN.md).
  */
+/** Собственные параметры сортировки книги в адресе — знание этого модуля. */
+const SORT_PARAMS = ['sort', 'order'] as const;
+
 export function ContactBookScreen({
   initialSort,
   initialOrder,
@@ -66,7 +71,7 @@ export function ContactBookScreen({
   readonly initialOrder?: ContactBookOrder;
 }): JSX.Element {
   const router = useRouter();
-  const pathname = usePathname();
+  const { write } = useUrlParams();
 
   const [sortField, setSortField] = useState<ContactBookSort>(initialSort ?? 'name');
   const [sortOrder, setSortOrder] = useState<ContactBookOrder>(initialOrder ?? 'asc');
@@ -77,20 +82,13 @@ export function ContactBookScreen({
 
   const contacts = contactsQuery.data ?? [];
 
-  // Смена сортировки синхронно переписывает query строки (дефолтные
-  // значения не пишутся — как на странице «Объекты»).
+  // Смена сортировки синхронно переписывает query строки — канон
+  // useUrlParams (#786): экран владеет только sort/order, дефолтные
+  // значения не пишутся (как на странице «Объекты»).
   const changeSort = (field: ContactBookSort, order: ContactBookOrder): void => {
     setSortField(field);
     setSortOrder(order);
-    const params = new URLSearchParams();
-    if (field !== 'name') {
-      params.set('sort', field);
-    }
-    if (order !== 'asc') {
-      params.set('order', order);
-    }
-    const query = params.toString();
-    router.replace(query !== '' ? `${pathname}?${query}` : pathname, { scroll: false });
+    write(serializeContactBookSortToParams(field, order), { own: SORT_PARAMS });
   };
 
   const groups =

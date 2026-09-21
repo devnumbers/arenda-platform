@@ -2,7 +2,7 @@
 
 import type { JSX } from "react";
 import { useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, ChangeVertical, Star } from "@/shared/assets/icons";
 import { ROUTES } from "@/shared/config/routes";
 import { useGlobalPayments } from "@/features/payments";
@@ -19,7 +19,12 @@ import {
   TopNavTitle,
 } from "@/shared/ui/design";
 import { goBack } from "@/shared/lib/navigation";
-import { globalOverdueList, type OverdueSort } from "../lib/overdue-global-model";
+import { useUrlParams } from "@/shared/lib/hooks/use-url-params";
+import {
+  globalOverdueList,
+  serializeOverdueSortToParams,
+  type OverdueSort,
+} from "../lib/overdue-global-model";
 import { overdueDaysLine } from "../lib/payments-global-model";
 import { PaymentsRowsSkeleton, PaymentsStateCard } from "./payments-sections";
 
@@ -40,13 +45,16 @@ import { PaymentsRowsSkeleton, PaymentsStateCard } from "./payments-sections";
  * читающая: оплата и закрытие просрочки — на объектных экранах. Пустое
  * состояние (885:18755) — канон EmptyState с 3D-иллюстрацией.
  */
+/** Собственный параметр сортировки в адресе — знание этого модуля. */
+const SORT_PARAMS = ["sort"] as const;
+
 export function PaymentOverdueGlobalScreen({
   initialSort = "old",
 }: {
   readonly initialSort?: OverdueSort;
 }): JSX.Element {
   const router = useRouter();
-  const pathname = usePathname();
+  const { write } = useUrlParams();
   const [sort, setSort] = useState<OverdueSort>(initialSort);
   const feedQuery = useGlobalPayments();
 
@@ -56,15 +64,13 @@ export function PaymentOverdueGlobalScreen({
   const overdue = globalOverdueList(feedQuery.data?.items ?? [], sort);
   const listReady = !pending && !feedQuery.isError;
 
-  // Смена направления синхронно переписывает query строки (дефолтное
-  // «Старые» не пишется — как в книге контактов).
+  // Смена направления синхронно переписывает query строки — канон
+  // useUrlParams (#786), дефолтное «Старые» не пишется (как в книге
+  // контактов).
   const toggleSort = (): void => {
     const next: OverdueSort = sort === "old" ? "new" : "old";
     setSort(next);
-    const query = next === "new" ? "?sort=new" : "";
-    router.replace(query !== "" ? `${pathname}${query}` : pathname, {
-      scroll: false,
-    });
+    write(serializeOverdueSortToParams(next), { own: SORT_PARAMS });
   };
 
   return (
