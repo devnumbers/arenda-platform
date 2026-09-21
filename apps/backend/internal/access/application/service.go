@@ -398,6 +398,13 @@ func (s *AccessService) RevokeMember(ctx context.Context, actor, propertyID, mem
 			return domain.ErrCannotRevokeOwner
 		}
 
+		// The delete goes before the recovery pass: the recovery counts the
+		// recipient's active memberships, and the revoked row must already be
+		// gone for its slot to read as freed (issue #158, T4).
+		if err := removeMembershipInTx(ctx, stores, actor, actorRole, membership, &revoked); err != nil {
+			return err
+		}
+
 		// Revoking the recipient freed one of their tariff slots: try to recover the
 		// oldest suspended membership FIFO (issue #158, T4).
 		if s.slots != nil {
@@ -405,8 +412,7 @@ func (s *AccessService) RevokeMember(ctx context.Context, actor, propertyID, mem
 				return fmt.Errorf("recover suspended after revoke: %w", err)
 			}
 		}
-
-		return removeMembershipInTx(ctx, stores, actor, actorRole, membership, &revoked)
+		return nil
 	})
 	if err != nil {
 		return err

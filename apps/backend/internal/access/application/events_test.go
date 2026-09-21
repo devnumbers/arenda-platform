@@ -333,3 +333,41 @@ func (f *fakeEventPublisher) last(t *testing.T, kind string) recordedEvent {
 	}
 	panic("unreachable")
 }
+
+// TestRevokeMemberRecoversSuspendedFIFO pins the #158 T4 recovery seam at the
+// service level: revoking the recipient's ACTIVE membership frees their slot
+// and the oldest suspended membership comes back active. The delete must hit
+// the database before the recovery pass counts the free slots — an earlier
+// recovery silently sees the freed slot as still occupied (regression guard
+// for the removeMembershipInTx call order).
+func TestRevokeMemberRecoversSuspendedFIFO(t *testing.T) {
+	t.Parallel()
+	f := newEventsFixture()
+	owner, member := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	propA, propB := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	f.linkOwner(owner, propA)
+	f.linkOwner(owner, propB)
+	f.limiter.set(member, 1) // One slot: the first grant fits, the second suspends.
+
+	active, err := f.access.AddMember(t.Context(), owner, propA, member, domain.RoleViewer)
+	if err != nil {
+		t.Fatalf("AddMember propA: %v", err)
+	}
+	if _, err := f.access.AddMember(t.Context(), owner, propB, member, domain.RoleViewer); err != nil {
+		t.Fatalf("AddMember propB: %v", err)
+	}
+	f.events.events = nil
+
+	// Revoke the ACTIVE propA leg: its slot frees, propB's suspended one recovers.
+	if err := f.access.RevokeMember(t.Context(), owner, propA, active.ID); err != nil {
+		t.Fatalf("RevokeMember: %v", err)
+	}
+
+	revived, err := f.repo.GetByPropertyAndUser(t.Context(), propB, member)
+	if err != nil {
+		t.Fatalf("get propB membership: %v", err)
+	}
+	if revived.Status != domain.MemberStatusActive {
+		t.Errorf("propB membership = %s, want active after the FIFO recovery", revived.Status)
+	}
+}
