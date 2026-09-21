@@ -25,7 +25,9 @@ export function useHistoryOrder(initialOrder?: HistoryOrder): {
   const { write } = useUrlParams();
 
   const toggleOrder = (): void => {
-    const next: HistoryOrder = order === DEFAULT_HISTORY_ORDER ? 'asc' : 'desc';
+    // Инверсия от текущего значения, не от дефолта: не сцеплена с тем,
+    // какое из двух направлений дефолтное.
+    const next: HistoryOrder = order === 'asc' ? 'desc' : 'asc';
     setOrder(next);
     write(serializeHistoryOrderToParams(next), { own: ['order'] });
   };

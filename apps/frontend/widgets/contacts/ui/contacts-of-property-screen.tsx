@@ -42,7 +42,10 @@ import {
   ContactsSearchHint,
   ContactsSkeleton,
 } from './contacts-states';
-import { serializeContactOrderToParams } from '../lib/contact-list-model';
+import {
+  DEFAULT_CONTACT_LIST_ORDER,
+  serializeContactOrderToParams,
+} from '../lib/contact-list-model';
 
 /** Задержка дебаунса поиска (мс) — серверный фильтр по ?search=. */
 const SEARCH_DEBOUNCE_MS = 300;
@@ -77,7 +80,9 @@ export function ContactsOfPropertyScreen({
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const [sortOrder, setSortOrder] = useState<ContactSortOrder>(initialOrder ?? 'asc');
+  const [sortOrder, setSortOrder] = useState<ContactSortOrder>(
+    initialOrder ?? DEFAULT_CONTACT_LIST_ORDER,
+  );
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   // Направление сортировки живёт в адресе (?order=desc, дефолт «А→Я»

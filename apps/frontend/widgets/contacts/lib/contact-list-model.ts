@@ -18,18 +18,21 @@ export function contactRowModel(contact: Contact): {
   };
 }
 
+/** Дефолтное направление «Контактов объекта» — «А→Я» (макет 1539:85395). */
+export const DEFAULT_CONTACT_LIST_ORDER: ContactSortOrder = 'asc';
+
 /** Разбор ?order= экрана «Контакты объекта» (конвенция страницы
  * «Объекты»): неизвестное и отсутствующее значения — дефолт «А→Я».
  * Направление живёт в адресе — переживает перезагрузку (#785). */
 export function parseContactListOrderParams(
   order: string | string[] | undefined,
 ): ContactSortOrder {
-  return parseEnumParam(order, ['asc', 'desc'], 'asc');
+  return parseEnumParam(order, ['asc', 'desc'], DEFAULT_CONTACT_LIST_ORDER);
 }
 
 /** Патч направления для адреса: дефолтные значения параметров не создают
  * (конвенция страницы «Объекты»); пишется через useUrlParams с
  * own: ['order'] (#785). */
 export function serializeContactOrderToParams(order: ContactSortOrder): Record<string, string> {
-  return order === 'asc' ? {} : { order };
+  return order === DEFAULT_CONTACT_LIST_ORDER ? {} : { order };
 }
