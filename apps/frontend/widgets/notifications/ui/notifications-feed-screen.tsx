@@ -70,7 +70,7 @@ export function NotificationsFeedScreen({
   const unreadCount = unreadCountQuery.data ?? 0;
 
   // Смена фильтра синхронно переписывает query строки (дефолт не пишется —
-  // канон страницы «Объекты»/«Контакты»).
+  // конвенция «Состояние страницы в адресе», DESIGN.md §3).
   const toggleUnreadOnly = (): void => {
     const next = !unreadOnly;
     setUnreadOnly(next);
