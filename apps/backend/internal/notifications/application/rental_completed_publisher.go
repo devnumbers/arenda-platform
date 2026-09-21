@@ -159,30 +159,20 @@ func (p *RentalCompletedPublisher) scheduleBoundaries(ctx context.Context, now t
 // sweepZones is the zone sweep (ADR 0048 p.3): one today per owner timezone,
 // every needs_attention rental published.
 func (p *RentalCompletedPublisher) sweepZones(ctx context.Context, now time.Time) error {
-	zones, err := p.zones.ListScanZones(ctx)
-	if err != nil {
-		return fmt.Errorf("list rental scan zones: %w", err)
-	}
-	var errs []error
-	for _, zone := range zones {
-		today, err := zoneToday(now, zone.Timezone)
+	return forEachZone(ctx, p.zones, now, "rental", func(zone string, today time.Time) error {
+		targets, err := p.source.ListCompletedTargets(ctx, zone, today)
 		if err != nil {
-			errs = append(errs, err)
-			continue
+			return fmt.Errorf("list rental targets of zone %s: %w", zone, err)
 		}
-		targets, err := p.source.ListCompletedTargets(ctx, zone.Timezone, today)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("list rental targets of zone %s: %w", zone.Timezone, err))
-			continue
-		}
+		var errs []error
 		for _, target := range targets {
 			if err := p.publish(ctx, target); err != nil {
 				errs = append(errs, fmt.Errorf("publish rental %s of zone %s: %w",
-					target.RentalID, zone.Timezone, err))
+					target.RentalID, zone, err))
 			}
 		}
-	}
-	return errors.Join(errs...)
+		return errors.Join(errs...)
+	})
 }
 
 // DeliverRentalCompleted is the boundary job's half (issue #777): reload the
@@ -208,13 +198,10 @@ func (p *RentalCompletedPublisher) DeliverRentalCompleted(ctx context.Context, r
 // extended rental (a new planned end) notifies again. A system scan has no
 // initiator: the actor is nobody, nobody is skipped.
 func (p *RentalCompletedPublisher) publish(ctx context.Context, target RentalCompletedTarget) error {
-	members, err := p.source.ListActiveRecipients(ctx, target.PropertyID)
+	recipients, err := ownerPlusMembers(ctx, p.source.ListActiveRecipients, target.OwnerID, target.PropertyID)
 	if err != nil {
-		return fmt.Errorf("list recipients of property %s: %w", target.PropertyID, err)
+		return err
 	}
-	recipients := make([]uuid.UUID, 0, len(members)+1)
-	recipients = append(recipients, target.OwnerID)
-	recipients = append(recipients, members...)
 
 	rentalID := target.RentalID
 	return p.pipeline.Publish(ctx, Publication{

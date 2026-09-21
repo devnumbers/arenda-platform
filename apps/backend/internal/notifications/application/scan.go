@@ -88,3 +88,45 @@ func DateAtUTCMidnight(t time.Time, loc *time.Location) time.Time {
 	local := t.In(loc)
 	return time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, time.UTC)
 }
+
+// forEachZone runs the sweep's zone pass (ADR 0048 p.3): one today per owner
+// timezone; what names the scan in the list-zones error. The visit's errors
+// are collected and joined — a broken zone or target does not stop the rest.
+func forEachZone(
+	ctx context.Context, zones ScanZoneDirectory, now time.Time, what string,
+	visit func(zone string, today time.Time) error,
+) error {
+	list, err := zones.ListScanZones(ctx)
+	if err != nil {
+		return fmt.Errorf("list %s scan zones: %w", what, err)
+	}
+	var errs []error
+	for _, zone := range list {
+		today, err := zoneToday(now, zone.Timezone)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		if err := visit(zone.Timezone, today); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// ownerPlusMembers prepends the owner to the property's active members —
+// the object events' fan-out list (решение #737: получатели объектных
+// событий, «Просмотр» включён). ListMembers is the source's
+// ListActiveRecipients.
+func ownerPlusMembers(
+	ctx context.Context, listMembers func(context.Context, uuid.UUID) ([]uuid.UUID, error),
+	ownerID, propertyID uuid.UUID,
+) ([]uuid.UUID, error) {
+	members, err := listMembers(ctx, propertyID)
+	if err != nil {
+		return nil, fmt.Errorf("list recipients of property %s: %w", propertyID, err)
+	}
+	recipients := make([]uuid.UUID, 0, len(members)+1)
+	recipients = append(recipients, ownerID)
+	return append(recipients, members...), nil
+}

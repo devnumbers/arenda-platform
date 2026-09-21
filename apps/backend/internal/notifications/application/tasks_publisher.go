@@ -185,30 +185,20 @@ func (p *TasksPublisher) scheduleUpcoming(ctx context.Context, now time.Time) []
 // sweepOverdue is the zone sweep (ADR 0048 p.3): one today per owner
 // timezone, every overdue task published.
 func (p *TasksPublisher) sweepOverdue(ctx context.Context, now time.Time) error {
-	zones, err := p.zones.ListScanZones(ctx)
-	if err != nil {
-		return fmt.Errorf("list tasks scan zones: %w", err)
-	}
-	var errs []error
-	for _, zone := range zones {
-		today, err := zoneToday(now, zone.Timezone)
+	return forEachZone(ctx, p.zones, now, "tasks", func(zone string, today time.Time) error {
+		targets, err := p.source.ListOverdueTargets(ctx, zone, today, now)
 		if err != nil {
-			errs = append(errs, err)
-			continue
+			return fmt.Errorf("list overdue tasks of zone %s: %w", zone, err)
 		}
-		targets, err := p.source.ListOverdueTargets(ctx, zone.Timezone, today, now)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("list overdue tasks of zone %s: %w", zone.Timezone, err))
-			continue
-		}
+		var errs []error
 		for _, target := range targets {
 			if err := p.publish(ctx, target); err != nil {
 				errs = append(errs, fmt.Errorf("publish task %s of zone %s: %w",
-					target.TaskID, zone.Timezone, err))
+					target.TaskID, zone, err))
 			}
 		}
-	}
-	return errors.Join(errs...)
+		return errors.Join(errs...)
+	})
 }
 
 // DeliverTaskOverdue is the boundary job's half: reload the task through the
@@ -271,8 +261,7 @@ func (p *TasksPublisher) notifyMaterialized(ctx context.Context, taskID uuid.UUI
 // task id alone; a system scan and a scheduled job have no initiator — the
 // actor is nobody, nobody is skipped.
 func (p *TasksPublisher) publish(ctx context.Context, target TaskOverdueTarget) error {
-	recipients := make([]uuid.UUID, 0, 1)
-	recipients = append(recipients, target.OwnerID)
+	recipients := []uuid.UUID{target.OwnerID}
 	var property *domain.EntityRef
 	if target.PropertyID != nil {
 		members, err := p.source.ListActiveRecipients(ctx, *target.PropertyID)

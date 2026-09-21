@@ -200,39 +200,31 @@ func (p *PaymentsPublisher) scheduleBoundaries(ctx context.Context, now time.Tim
 // sweepZones is the zone sweep (ADR 0048 p.3): one today per owner timezone,
 // the due leg before the overdue one, every target published.
 func (p *PaymentsPublisher) sweepZones(ctx context.Context, now time.Time) error {
-	zones, err := p.zones.ListScanZones(ctx)
-	if err != nil {
-		return fmt.Errorf("list payments scan zones: %w", err)
-	}
-	var errs []error
-	for _, zone := range zones {
-		today, err := zoneToday(now, zone.Timezone)
+	return forEachZone(ctx, p.zones, now, "payments", func(zone string, today time.Time) error {
+		// A broken leg's list is isolated — the other leg still runs.
+		var errs []error
+		due, err := p.source.ListDueTargets(ctx, zone, today)
 		if err != nil {
-			errs = append(errs, err)
-			continue
+			errs = append(errs, fmt.Errorf("list due payments of zone %s: %w", zone, err))
 		}
-		due, err := p.source.ListDueTargets(ctx, zone.Timezone, today)
+		overdue, err := p.source.ListOverdueTargets(ctx, zone, today)
 		if err != nil {
-			errs = append(errs, fmt.Errorf("list due payments of zone %s: %w", zone.Timezone, err))
+			errs = append(errs, fmt.Errorf("list overdue payments of zone %s: %w", zone, err))
 		}
 		for _, target := range due {
 			if err := p.publish(ctx, domain.EventPaymentDue, target); err != nil {
 				errs = append(errs, fmt.Errorf("publish due payment %s of zone %s: %w",
-					target.PaymentID, zone.Timezone, err))
+					target.PaymentID, zone, err))
 			}
-		}
-		overdue, err := p.source.ListOverdueTargets(ctx, zone.Timezone, today)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("list overdue payments of zone %s: %w", zone.Timezone, err))
 		}
 		for _, target := range overdue {
 			if err := p.publish(ctx, domain.EventPaymentOverdue, target); err != nil {
 				errs = append(errs, fmt.Errorf("publish overdue payment %s of zone %s: %w",
-					target.PaymentID, zone.Timezone, err))
+					target.PaymentID, zone, err))
 			}
 		}
-	}
-	return errors.Join(errs...)
+		return errors.Join(errs...)
+	})
 }
 
 // DeliverPaymentDue is the due boundary job's half (issue #776): reload the
@@ -272,13 +264,10 @@ func (p *PaymentsPublisher) DeliverPaymentOverdue(ctx context.Context, paymentID
 // the repeat publication of the same rule and date inserts nothing. A system
 // scan has no initiator: the actor is nobody, nobody is skipped.
 func (p *PaymentsPublisher) publish(ctx context.Context, eventType domain.EventType, target PaymentScanTarget) error {
-	members, err := p.source.ListActiveRecipients(ctx, target.PropertyID)
+	recipients, err := ownerPlusMembers(ctx, p.source.ListActiveRecipients, target.OwnerID, target.PropertyID)
 	if err != nil {
-		return fmt.Errorf("list recipients of property %s: %w", target.PropertyID, err)
+		return err
 	}
-	recipients := make([]uuid.UUID, 0, len(members)+1)
-	recipients = append(recipients, target.OwnerID)
-	recipients = append(recipients, members...)
 
 	dueDate := target.DueDate
 	return p.pipeline.Publish(ctx, Publication{
