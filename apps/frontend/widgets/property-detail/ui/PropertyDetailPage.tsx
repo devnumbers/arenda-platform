@@ -78,6 +78,8 @@ import {
 } from './PropertyDetailActions';
 import {PropertyDetailKebab} from './PropertyDetailKebab';
 import {PropertyAccessPill} from './PropertyAccessPill';
+import {PropertyArchivedPill} from './PropertyArchivedPill';
+import {propertyHeaderPills} from '../lib/property-header-pills';
 import {PropertyOwnerSection} from './PropertyOwnerSection';
 import {PropertyDetailLoading} from './PropertyDetailLoading';
 import {PropertyDetailError} from './PropertyDetailError';
@@ -214,6 +216,10 @@ export function PropertyDetailPage(): JSX.Element {
     const [leaveOpen, setLeaveOpen] = React.useState(false);
 
     const property = propertyQuery.data;
+    // Пилюли шапки (#773): «В архиве» у архивного объекта (признак для
+    // любого читателя — чужой архивный живёт только deep-link'ом) и роль
+    // доступа у чужого.
+    const headerPills = propertyHeaderPills(property);
 
     const currentRental = rentalsQuery.data
         ? currentRentalOf(rentalsQuery.data)
@@ -560,8 +566,19 @@ export function PropertyDetailPage(): JSX.Element {
                 {!isLoading && !propertyQuery.isError && property && (
                     <>
                         <PropertyMediaBlock name={property.name} address={property.address}>
-                            {property.access !== undefined && (
-                                <PropertyAccessPill role={property.access.role}/>
+                            {/* Пилюли шапки (#773): «В архиве» и/или роль
+                             * доступа — ряд под адресом, канон 2200-97365
+                             * и 1603-92103. */}
+                            {headerPills.length > 0 && (
+                                <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                                    {headerPills.map((pill) =>
+                                        pill.kind === 'archived' ? (
+                                            <PropertyArchivedPill key="archived"/>
+                                        ) : (
+                                            <PropertyAccessPill key="access" role={pill.role}/>
+                                        ),
+                                    )}
+                                </div>
                             )}
                         </PropertyMediaBlock>
 
