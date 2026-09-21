@@ -2,10 +2,12 @@ package postgres
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nambers/arenda-planform/apps/backend/internal/access/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
 	genpostgres "github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 )
@@ -401,5 +403,93 @@ func TestParticipantRepository_RemovalScopeInvitations(t *testing.T) {
 	rows, err = invitationRepo.ListForRemovalByEmail(ctx, "gone@x.ru", f.manager)
 	if err != nil || len(rows) != 1 || rows[0].PropertyID != f.pActive {
 		t.Fatalf("manager rows = %+v, %v; want only pActive", rows, err)
+	}
+}
+
+// TestParticipantRepository_ManageScopePredicateMatrix pins the manage-scope
+// predicate ACROSS all three queries that carry it (the read scope and the two
+// removal listings): the same actor must get the same verdict everywhere. The
+// predicate text lives in three query bodies (db/queries/participants.sql) —
+// this matrix turns any desync of one copy (a dropped status='active', a
+// role typo) into a loud failure instead of a silent privacy hole.
+func TestParticipantRepository_ManageScopePredicateMatrix(t *testing.T) {
+	t.Parallel()
+	pool := setupAccessDB(t)
+	ctx, tx, cleanup := beginAccessTx(t, pool)
+	defer cleanup()
+
+	q := genpostgres.New(tx)
+	owner := createAccessTestUser(t, ctx, q)
+	activeManager := createAccessTestUser(t, ctx, q)
+	suspendedManager := createAccessTestUser(t, ctx, q)
+	viewer := createAccessTestUser(t, ctx, q)
+	person := createAccessTestUser(t, ctx, q)
+
+	prop := createAccessTestProperty(t, ctx, q, owner)
+	memberRepo := NewMembershipRepository(tx)
+	for _, m := range []domain.Membership{
+		{ID: newTestUUID(t), PropertyID: prop, UserID: activeManager, Role: domain.RoleFullAccess, GrantedBy: owner},
+		{ID: newTestUUID(t), PropertyID: prop, UserID: viewer, Role: domain.RoleViewer, GrantedBy: owner},
+		{ID: newTestUUID(t), PropertyID: prop, UserID: person, Role: domain.RoleViewer, GrantedBy: owner},
+	} {
+		if _, err := memberRepo.Create(ctx, m); err != nil {
+			t.Fatalf("create membership: %v", err)
+		}
+	}
+	// The suspended manager holds the managing role but a paused membership —
+	// the predicate must not count them anywhere.
+	if _, err := memberRepo.CreateWithStatus(ctx, domain.Membership{
+		ID: newTestUUID(t), PropertyID: prop, UserID: suspendedManager,
+		Role: domain.RoleFullAccess, GrantedBy: owner, Status: domain.MemberStatusSuspended,
+	}); err != nil {
+		t.Fatalf("create suspended manager: %v", err)
+	}
+
+	invitationRepo := NewInvitationRepository(tx)
+	if _, err := invitationRepo.Create(ctx, domain.Invitation{
+		ID: newTestUUID(t), PropertyID: prop, Email: "matrix@x.ru",
+		Role: domain.RoleViewer, InvitedBy: owner, LastSentAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("create invitation: %v", err)
+	}
+
+	participants := NewParticipantRepository(tx)
+	cases := []struct {
+		name  string
+		actor uuid.UUID
+		want  bool
+	}{
+		{"owner", owner, true},
+		{"active full_access manager", activeManager, true},
+		{"suspended full_access manager", suspendedManager, false},
+		{"viewer", viewer, false},
+	}
+	// Plain sequential loop, no t.Run: the subtests share one tx (a pgx.Tx is
+	// not safe for concurrent queries), and the paralleltest linter reads
+	// subtest parallelism into the matrix otherwise.
+	for _, tc := range cases {
+		props, err := participants.ListScopeProperties(ctx, tc.actor)
+		if err != nil {
+			t.Fatalf("%s: ListScopeProperties: %v", tc.name, err)
+		}
+		if got := slices.ContainsFunc(props, func(p application.ParticipantScopeProperty) bool { return p.ID == prop }); got != tc.want {
+			t.Errorf("%s: read scope = %v, want %v", tc.name, got, tc.want)
+		}
+
+		memberships, err := memberRepo.ListForRemovalByUser(ctx, person, tc.actor)
+		if err != nil {
+			t.Fatalf("%s: ListForRemovalByUser: %v", tc.name, err)
+		}
+		if got := len(memberships) > 0; got != tc.want {
+			t.Errorf("%s: membership removal scope = %v, want %v", tc.name, got, tc.want)
+		}
+
+		invitations, err := invitationRepo.ListForRemovalByEmail(ctx, "matrix@x.ru", tc.actor)
+		if err != nil {
+			t.Fatalf("%s: ListForRemovalByEmail: %v", tc.name, err)
+		}
+		if got := len(invitations) > 0; got != tc.want {
+			t.Errorf("%s: invitation removal scope = %v, want %v", tc.name, got, tc.want)
+		}
 	}
 }

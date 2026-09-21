@@ -226,6 +226,15 @@ type ListParticipantScopePropertiesRow struct {
 // member; archived properties stay invisible like everywhere else on the
 // platform (issue #163). The scope doubles as the authorization: rows outside
 // it never leave the database.
+//
+// THE MANAGE-SCOPE PREDICATE (the «actor_can_manage» canon): the
+// owner-or-active-full_access EXISTS block below appears in THREE query
+// bodies of this file (read scope + both removal listings) — sqlc cannot
+// share the text, so the copies must stay byte-identical modulo table
+// aliases. TestParticipantRepository_ManageScopePredicateMatrix runs the
+// same actor verdict across all three queries: a desync of any copy fails
+// there instead of opening a silent privacy hole. Moving the predicate into
+// a real SQL function (needs a migration) is the filed follow-up (#775).
 func (q *Queries) ListParticipantScopeProperties(ctx context.Context, actorID pgtype.UUID) ([]ListParticipantScopePropertiesRow, error) {
 	rows, err := q.db.Query(ctx, listParticipantScopeProperties, actorID)
 	if err != nil {

@@ -778,6 +778,15 @@ type Querier interface {
 	// member; archived properties stay invisible like everywhere else on the
 	// platform (issue #163). The scope doubles as the authorization: rows outside
 	// it never leave the database.
+	//
+	// THE MANAGE-SCOPE PREDICATE (the «actor_can_manage» canon): the
+	// owner-or-active-full_access EXISTS block below appears in THREE query
+	// bodies of this file (read scope + both removal listings) — sqlc cannot
+	// share the text, so the copies must stay byte-identical modulo table
+	// aliases. TestParticipantRepository_ManageScopePredicateMatrix runs the
+	// same actor verdict across all three queries: a desync of any copy fails
+	// there instead of opening a silent privacy hole. Moving the predicate into
+	// a real SQL function (needs a migration) is the filed follow-up (#775).
 	ListParticipantScopeProperties(ctx context.Context, actorID pgtype.UUID) ([]ListParticipantScopePropertiesRow, error)
 	// One zone's due-day operations as of the zone's today (решение #737, тип
 	// №2: в день срока): planned, dated exactly today, on rules without the
