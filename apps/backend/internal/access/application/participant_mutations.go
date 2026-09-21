@@ -341,47 +341,30 @@ func (s *ParticipantMutationService) grantMembership(
 	return ParticipantGrantResult{PropertyID: propertyID, Outcome: outcome, MembershipID: created.ID}, nil
 }
 
-// grantInvitation stores one pending invitation with its audit entry; a
-// duplicate pending invitation is a skipped outcome, not an error.
+// grantInvitation creates one pending invitation through the shared
+// createInvitationInTx core (the mirror of grantMembership over
+// createMembershipInTx); a duplicate pending invitation is a skipped
+// outcome, not an error.
 func (s *ParticipantMutationService) grantInvitation(
 	ctx context.Context, stores *txStores, actor uuid.UUID, email string, actorRole sharedpolicy.Role, role domain.Role, propertyID uuid.UUID,
 ) (ParticipantGrantResult, error) {
-	if _, err := stores.invitations.GetByPropertyAndEmail(ctx, propertyID, email); err == nil {
-		return ParticipantGrantResult{PropertyID: propertyID, Outcome: ParticipantGrantDuplicate}, nil
-	} else if !errors.Is(err, domain.ErrInvitationNotFound) {
-		return ParticipantGrantResult{}, fmt.Errorf("check existing invitation: %w", err)
-	}
-
 	id, err := uuid.NewV7()
 	if err != nil {
 		return ParticipantGrantResult{}, fmt.Errorf("generate invitation id: %w", err)
 	}
-	created, err := stores.invitations.Create(ctx, domain.Invitation{
+	created, err := s.access.createInvitationInTx(ctx, stores, domain.Invitation{
 		ID:         id,
 		PropertyID: propertyID,
 		Email:      email,
 		Role:       role,
 		InvitedBy:  actor,
 		LastSentAt: s.clock.Now(),
-	})
-	if err != nil {
-		return ParticipantGrantResult{}, fmt.Errorf("create invitation: %w", err)
+	}, actor, actorRole)
+	if errors.Is(err, domain.ErrInvitationAlreadyExists) {
+		return ParticipantGrantResult{PropertyID: propertyID, Outcome: ParticipantGrantDuplicate}, nil
 	}
-
-	// Audit in the same transaction; the invitee email is PII and must never
-	// appear in context (ADR 0020).
-	if err := stores.audit.Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  sharedpolicy.AuditActorRole(actorRole),
-		Action:     auditdomain.ActionPropertyMemberInvitationInvited,
-		EntityType: auditdomain.EntityPropertyMemberInvitation,
-		EntityID:   &created.ID,
-		Context: map[string]any{
-			auditKeyPropertyID: propertyID,
-			auditKeyRole:       string(role),
-		},
-	}); err != nil {
-		return ParticipantGrantResult{}, fmt.Errorf("record audit: %w", err)
+	if err != nil {
+		return ParticipantGrantResult{}, err
 	}
 	return ParticipantGrantResult{PropertyID: propertyID, Outcome: ParticipantGrantPending, InvitationID: created.ID}, nil
 }
@@ -623,21 +606,21 @@ func (s *ParticipantMutationService) resolveTarget(ctx context.Context, particip
 	}
 }
 
-// sendInviteEmail renders and sends the single batch invite email listing the
-// granted objects. A missing title degrades to no list entry rather than
-// failing the send; a nil mailer or title resolver disables the email.
-func (s *ParticipantMutationService) sendInviteEmail(ctx context.Context, email string, propertyIDs []uuid.UUID, role domain.Role) {
-	if s.mailer == nil {
-		return
-	}
+// resolveInviteTitles renders the display titles for the invite email: a
+// missing or failed title degrades to no list entry rather than failing the
+// send — the template falls back to the generic text when the list is
+// empty (an empty-string entry would render broken «к объекту «»»).
+func resolveInviteTitles(
+	ctx context.Context, resolver PropertyTitleResolver, log *slog.Logger, propertyIDs []uuid.UUID,
+) []string {
 	titles := make([]string, 0, len(propertyIDs))
 	for _, propertyID := range propertyIDs {
-		if s.titles == nil {
+		if resolver == nil {
 			continue
 		}
-		title, err := s.titles.GetTitle(ctx, propertyID)
+		title, err := resolver.GetTitle(ctx, propertyID)
 		if err != nil {
-			s.logger.WarnContext(ctx, "access: property title lookup for invite email failed",
+			log.WarnContext(ctx, "access: property title lookup for invite email failed",
 				slog.String(auditKeyPropertyID, propertyID.String()),
 				slog.String("error", err.Error()))
 			continue
@@ -646,6 +629,17 @@ func (s *ParticipantMutationService) sendInviteEmail(ctx context.Context, email 
 			titles = append(titles, title)
 		}
 	}
+	return titles
+}
+
+// sendInviteEmail renders and sends the single batch invite email listing the
+// granted objects. A nil mailer disables the email; titles degrade per
+// resolveInviteTitles.
+func (s *ParticipantMutationService) sendInviteEmail(ctx context.Context, email string, propertyIDs []uuid.UUID, role domain.Role) {
+	if s.mailer == nil {
+		return
+	}
+	titles := resolveInviteTitles(ctx, s.titles, s.logger, propertyIDs)
 	if err := s.mailer.SendInvite(ctx, email, titles, role); err != nil {
 		// The recipient email is PII and never reaches the log (ADR 0020);
 		// the granted-object count is the correlation handle.

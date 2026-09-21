@@ -192,39 +192,18 @@ func (s *InvitationService) inviteRegisteredUser(
 
 // createPendingInvitation stores the invitation and its audit entry in one
 // transaction; a duplicate pending invitation is ErrInvitationAlreadyExists.
+// The row machinery is the shared createInvitationInTx core (the same core
+// the batch grant uses).
 func (s *InvitationService) createPendingInvitation(
 	ctx context.Context, invitation domain.Invitation, actor uuid.UUID, actorRole sharedpolicy.Role,
 ) (domain.Invitation, error) {
-	var created domain.Invitation
-	err := s.runInTx(ctx, func(stores *txStores) error {
-		if _, err := stores.invitations.GetByPropertyAndEmail(ctx, invitation.PropertyID, invitation.Email); err == nil {
-			return domain.ErrInvitationAlreadyExists
-		} else if !errors.Is(err, domain.ErrInvitationNotFound) {
-			return fmt.Errorf("check existing invitation: %w", err)
-		}
-
-		var err error
-		created, err = stores.invitations.Create(ctx, invitation)
-		if err != nil {
-			return fmt.Errorf("create invitation: %w", err)
-		}
-
-		// Audit in the same transaction. Only ids and the role are recorded; the
-		// invitee email is PII and must never appear in context (ADR 0020).
-		if err := stores.audit.Record(ctx, auditdomain.Entry{
-			ActorID:    &actor,
-			ActorRole:  sharedpolicy.AuditActorRole(actorRole),
-			Action:     auditdomain.ActionPropertyMemberInvitationInvited,
-			EntityType: auditdomain.EntityPropertyMemberInvitation,
-			EntityID:   &created.ID,
-			Context: map[string]any{
-				auditKeyPropertyID: invitation.PropertyID,
-				auditKeyRole:       string(invitation.Role),
-			},
-		}); err != nil {
-			return fmt.Errorf("record audit: %w", err)
-		}
-		return nil
+	var (
+		created domain.Invitation
+		err     error
+	)
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		created, err = s.access.createInvitationInTx(ctx, stores, invitation, actor, actorRole)
+		return err
 	})
 	if err != nil {
 		return domain.Invitation{}, err
@@ -593,21 +572,12 @@ func (s *InvitationService) ListMembers(ctx context.Context, actor, propertyID u
 }
 
 // sendInviteEmail renders and sends the single invite email. A missing
-// property title degrades to a generic text rather than failing the send.
+// property title degrades to the generic text (an empty title list, the
+// shared resolveInviteTitles) rather than failing the send.
 func (s *InvitationService) sendInviteEmail(ctx context.Context, email string, propertyID uuid.UUID, role domain.Role) error {
 	if s.mailer == nil {
 		return nil
 	}
-	var title string
-	if s.titles != nil {
-		resolved, err := s.titles.GetTitle(ctx, propertyID)
-		if err != nil {
-			s.logger.WarnContext(ctx, "access: property title lookup for invite email failed",
-				slog.String(auditKeyPropertyID, propertyID.String()),
-				slog.String("error", err.Error()))
-		} else {
-			title = resolved
-		}
-	}
-	return s.mailer.SendInvite(ctx, email, []string{title}, role)
+	titles := resolveInviteTitles(ctx, s.titles, s.logger, []uuid.UUID{propertyID})
+	return s.mailer.SendInvite(ctx, email, titles, role)
 }

@@ -152,6 +152,44 @@ func (s *AccessService) AddMember(ctx context.Context, actor, propertyID, userID
 	return created, nil
 }
 
+// createInvitationInTx is the transactional core of pending-invitation
+// creation: the duplicate guard, the insert and the audited record. Shared by
+// the single-property invite (InvitationService.InviteByEmail) and the batch
+// grant (ParticipantMutationService.grantInvitation) — the audit context and
+// the PII rule live here, not in the callers. A duplicate is the
+// ErrInvitationAlreadyExists signal; the caller maps it to its own outcome.
+func (s *AccessService) createInvitationInTx(
+	ctx context.Context, stores *txStores, invitation domain.Invitation, actor uuid.UUID, actorRole sharedpolicy.Role,
+) (domain.Invitation, error) {
+	if _, err := stores.invitations.GetByPropertyAndEmail(ctx, invitation.PropertyID, invitation.Email); err == nil {
+		return domain.Invitation{}, domain.ErrInvitationAlreadyExists
+	} else if !errors.Is(err, domain.ErrInvitationNotFound) {
+		return domain.Invitation{}, fmt.Errorf("check existing invitation: %w", err)
+	}
+
+	created, err := stores.invitations.Create(ctx, invitation)
+	if err != nil {
+		return domain.Invitation{}, fmt.Errorf("create invitation: %w", err)
+	}
+
+	// Audit in the same transaction. Only ids and the role are recorded; the
+	// invitee email is PII and must never appear in context (ADR 0020).
+	if err := stores.audit.Record(ctx, auditdomain.Entry{
+		ActorID:    &actor,
+		ActorRole:  sharedpolicy.AuditActorRole(actorRole),
+		Action:     auditdomain.ActionPropertyMemberInvitationInvited,
+		EntityType: auditdomain.EntityPropertyMemberInvitation,
+		EntityID:   &created.ID,
+		Context: map[string]any{
+			auditKeyPropertyID: invitation.PropertyID,
+			auditKeyRole:       string(invitation.Role),
+		},
+	}); err != nil {
+		return domain.Invitation{}, fmt.Errorf("record audit: %w", err)
+	}
+	return created, nil
+}
+
 // authorizeNewMember applies the AddMember gates: the actor needs the
 // manage-members capability and the property must not be archived (issue #163),
 // and the target user must be neither the property owner nor the actor
