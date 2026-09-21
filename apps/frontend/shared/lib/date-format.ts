@@ -100,3 +100,19 @@ export function formatDayMonthTime(value: string): string {
   if (Number.isNaN(date.getTime())) return '—';
   return `${localDayMonthFormatter.format(date)}, ${localTimeFormatter.format(date)}`;
 }
+
+/** Момент последней активности сессии в списке устройств (#730, мок
+ * 1804-105061): «14 августа, 14:41»; год — только вне текущего
+ * («14 августа 2025, 09:08»), как у formatDayMonthWithYear. Локальное
+ * время смотрящего — та же семантика метки момента, что у
+ * formatDateTimeHeading; «сейчас» — параметром для чистоты (дефолт —
+ * факт). Невалидная строка даёт «—». */
+export function formatSessionLastSeen(value: string, now: Date = new Date()): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  const dayMonth = localDayMonthFormatter.format(date);
+  const time = localTimeFormatter.format(date);
+  return date.getFullYear() === now.getFullYear()
+    ? `${dayMonth}, ${time}`
+    : `${dayMonth} ${date.getFullYear()}, ${time}`;
+}

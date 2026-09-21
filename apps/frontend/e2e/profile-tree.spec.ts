@@ -20,6 +20,7 @@ import {
 const SUBPAGE_TITLES: ReadonlyArray<readonly [string, string]> = [
   ['/profile/account', 'Аккаунт'],
   ['/profile/account/phone', 'Изменение телефона'],
+  ['/profile/devices', 'Устройства'],
   ['/profile/info', 'Информация'],
   ['/profile/info/privacy', 'Политика конфиденциальности'],
   ['/profile/info/terms', 'Пользовательское соглашение'],
@@ -103,6 +104,41 @@ test.describe('дерево профиля — хром #566', () => {
     await expect(header.getByText('Аккаунт', { exact: true })).toBeVisible();
     await header.getByRole('button', { name: 'Назад' }).click();
     await expect(page).toHaveURL(/\/profile$/);
+  });
+
+  test('хаб: строка «Устройства» ведёт в дерево устройств (#724, #729)', async ({
+    page,
+    seededUser,
+  }) => {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto('/profile');
+
+    // Строка из мока хаба (Figma 1786-31288, между «Уведомления» и
+    // «Информация»); сам экран /profile/devices — тикет #730, здесь шов —
+    // переход.
+    await page.getByRole('button', { name: 'Устройства' }).click();
+    await expect(page).toHaveURL(/\/profile\/devices$/);
+  });
+
+  test('хаб: «Выйти» — шит «Вы уверены, что хотите выйти?» (мок 2004-45981)', async ({
+    page,
+    seededUser,
+  }, testInfo) => {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto('/profile');
+
+    await page.getByRole('button', { name: 'Выйти' }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByText('Вы уверены, что хотите выйти?')).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Отменить' })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Выйти' })).toBeVisible();
+    await captureScreen(page, testInfo, 'profile-hub-logout-sheet-mobile');
+
+    // Отмена закрывает шит, сессия жива — хаб на месте. Подтверждённый
+    // логаут не гоняем: он угасил бы сид-сессию для параллельных воркеров.
+    await dialog.getByRole('button', { name: 'Отменить' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Аккаунт' })).toBeVisible();
   });
 
   test('все маршруты дерева отвечают канонной шапкой подэкрана', async ({

@@ -18,7 +18,6 @@ export const APP_ROUTE_PREFIXES: ReadonlyArray<string> = [
     '/properties',
     '/profile',
     '/subscription',
-    '/support',
     '/ui-kit',
     // Глобальные разделы единого хрома (карта #556): ленты и заглушки.
     '/tasks',

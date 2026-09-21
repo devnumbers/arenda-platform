@@ -34,11 +34,15 @@ export function getActiveNavItem(
   let activeLength = 0;
 
   for (const section of sections) {
+    const { href } = section;
+    // Пункты-действия без маршрута («Поддержка», #766) не подсвечиваются:
+    // им нечем совпасть с URL.
+    if (href === undefined) continue;
     const matches = matchesSection(pathname, section);
 
-    if (matches && section.href.length > activeLength) {
+    if (matches && href.length > activeLength) {
       active = section;
-      activeLength = section.href.length;
+      activeLength = href.length;
     }
   }
 

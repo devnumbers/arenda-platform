@@ -499,12 +499,21 @@ type Rental struct {
 }
 
 type Session struct {
-	ID         pgtype.UUID        `json:"id"`
-	UserID     pgtype.UUID        `json:"user_id"`
-	TokenHash  string             `json:"token_hash"`
-	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
-	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
+	ID                pgtype.UUID        `json:"id"`
+	UserID            pgtype.UUID        `json:"user_id"`
+	TokenHash         string             `json:"token_hash"`
+	ExpiresAt         pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	LastUsedAt        pgtype.Timestamptz `json:"last_used_at"`
+	RotatedAt         pgtype.Timestamptz `json:"rotated_at"`
+	PreviousTokenHash pgtype.Text        `json:"previous_token_hash"`
+	LastIp            *netip.Addr        `json:"last_ip"`
+	UserAgent         string             `json:"user_agent"`
+	DeviceType        string             `json:"device_type"`
+	Browser           string             `json:"browser"`
+	BrowserMajor      pgtype.Int4        `json:"browser_major"`
+	Os                string             `json:"os"`
+	City              pgtype.Text        `json:"city"`
 }
 
 type SubscriptionPayment struct {

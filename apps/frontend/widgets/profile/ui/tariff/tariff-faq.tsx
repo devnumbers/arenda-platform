@@ -5,6 +5,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@radix-ui/r
 import NextLink from 'next/link';
 import { SmallArrowDown } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
+import { SUPPORT_EMAIL } from '@/shared/config/support';
 import { cn } from '@/shared/lib/cn';
 
 /** FAQ главного экрана «Тариф» (#620, макеты 1879-70076/1929-76367):
@@ -101,7 +102,7 @@ const FAQ_ITEMS: ReadonlyArray<FaqItem> = [
       ],
       [
         { text: 'Напишите в службу поддержки на почту ' },
-        { link: 'hello@rentlee.ru', href: 'mailto:hello@rentlee.ru' },
+        { link: SUPPORT_EMAIL, href: `mailto:${SUPPORT_EMAIL}` },
         { text: ' и укажите причину возврата. Мы рассмотрим вашу заявку и вернем деньги на ту же карту, с которой была произведена оплата' },
       ],
     ],

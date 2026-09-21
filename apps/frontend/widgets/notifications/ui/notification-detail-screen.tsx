@@ -24,6 +24,7 @@ import {
   ConfirmDialog,
   IconButton,
   PageContent,
+  SupportModal,
   TopNav,
 } from '@/shared/ui/design';
 import { NotificationDetailSkeleton, NotificationsErrorCard } from './notifications-states';
@@ -127,6 +128,23 @@ export function NotificationDetailScreen({
   );
 }
 
+/** Кнопка «Поддержка» системных уведомлений (макет 2328:147773;
+ * контрактом действий у категории нет): у страницы /support после #766
+ * маршрута нет — поддержка открывается модалкой «Связаться с нами»,
+ * как остальные триггеры хрома. */
+function SystemSupportButton(): JSX.Element {
+  const [supportOpen, setSupportOpen] = useState(false);
+
+  return (
+    <>
+      <Button variant="secondary" className="w-full" onClick={() => setSupportOpen(true)}>
+        Поддержка
+      </Button>
+      <SupportModal open={supportOpen} onOpenChange={setSupportOpen} />
+    </>
+  );
+}
+
 /** Тело страницы (макет 2333:184048): колонка px-8 gap-8 — иконка 96,
  * заголовок 28/32 + тело 16/18, карточки сущностей, «Категория + дата»
  * 16/18 третичным серым, кнопки действий в потоке после секции. */
@@ -198,17 +216,7 @@ function NotificationDetailBody({
           ))}
         </div>
       ) : (
-        detail.category === 'system' && (
-          // Системные: статическая навигация в Поддержку (макет
-          // 2328:147773); контрактом действий у категории нет.
-          <Button
-            variant="secondary"
-            className="w-full"
-            onClick={() => onAction(ROUTES.support)}
-          >
-            Поддержка
-          </Button>
-        )
+        detail.category === 'system' && <SystemSupportButton />
       )}
     </div>
   );

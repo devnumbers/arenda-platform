@@ -193,15 +193,15 @@ export async function captureScreen(page: Page, testInfo: TestInfo, name: string
  */
 export async function loginViaUi(page: Page, user: SeededUser): Promise<void> {
   await page.goto('/login');
-  // HeroUI TextField exposes the label as the accessible name (the placeholder
-  // attribute renders as a single space), so locators go by role+name.
+  // The design-layer TextField (titleIn) exposes the floating label as the
+  // accessible name, so locators go by role+name.
   await page.getByRole('textbox', { name: 'Телефон' }).fill(user.phoneDigits);
   await page.getByRole('button', { name: 'Войти' }).click();
 
   await expect(page.getByRole('heading', { name: 'Введите код' })).toBeVisible();
   const code = await extractLoginCode(user);
   // The code field auto-verifies as soon as all six digits are in.
-  await page.getByRole('textbox', { name: '6-значный код' }).fill(code);
+  await page.getByRole('textbox', { name: 'Код' }).fill(code);
 
   await page.waitForURL('**/properties');
   await expect(page.getByRole('heading', { name: 'Объекты' })).toBeVisible();

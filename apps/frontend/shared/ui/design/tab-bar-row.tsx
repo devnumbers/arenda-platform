@@ -109,9 +109,15 @@ export function TabNavLink({
   readonly unreadDot?: boolean;
 }): JSX.Element {
   const intent = useNavIntentLink();
+  const resolvedHref = href ?? section.href;
+  if (resolvedHref === undefined) {
+    // Программная ошибка: пункты-действия без адреса («Поддержка», #766)
+    // рендерятся TabNavAction, не ссылкой.
+    throw new Error('TabNavLink: у раздела без href нет адреса ссылки');
+  }
   return (
     <Link
-      href={href ?? section.href}
+      href={resolvedHref}
       prefetch={intent.prefetch}
       aria-current={active ? 'page' : undefined}
       onClick={onClick}
@@ -122,6 +128,23 @@ export function TabNavLink({
     >
       <TabLabel label={section.label} Icon={section.Icon} active={active} unreadDot={unreadDot} />
     </Link>
+  );
+}
+
+/** Пункт-действие шита «Еще» — та же анатомия TabLabel, но <button> вместо
+ * ссылки: «Поддержка» (#766) открывает модалку вместо перехода. Секция —
+ * цельный NavSection из нав-модели (supportNavSection), как у TabNavLink. */
+export function TabNavAction({
+  section,
+  onClick,
+}: {
+  readonly section: NavSection;
+  readonly onClick: () => void;
+}): JSX.Element {
+  return (
+    <button type="button" onClick={onClick} className={TAB_TRIGGER_CLASS}>
+      <TabLabel label={section.label} Icon={section.Icon} active={false} />
+    </button>
   );
 }
 

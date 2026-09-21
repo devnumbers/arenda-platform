@@ -30,12 +30,18 @@ const (
 type Action string
 
 const (
-	ActionAuthRegistered   Action = "auth.registered"
-	ActionAuthLogin        Action = "auth.login"
-	ActionAuthLoginFailed  Action = "auth.login_failed"
-	ActionAuthLogout       Action = "auth.logout"
-	ActionAuthLogoutAll    Action = "auth.logout_all"
-	ActionAuthPhoneChanged Action = "auth.phone_changed"
+	ActionAuthRegistered  Action = "auth.registered"
+	ActionAuthLogin       Action = "auth.login"
+	ActionAuthLoginFailed Action = "auth.login_failed"
+	ActionAuthLogout      Action = "auth.logout"
+	// ActionAuthSessionRevoked records a user terminating one of their own
+	// sessions from the devices list (map #724, ticket #728). The context
+	// carries the revoked session's UUID — an identifier, never a token.
+	ActionAuthSessionRevoked Action = "auth.session_revoked"
+	// ActionAuthOtherSessionsRevoked records the user terminating every
+	// session except the current one; the context carries the removed count.
+	ActionAuthOtherSessionsRevoked Action = "auth.other_sessions_revoked"
+	ActionAuthPhoneChanged         Action = "auth.phone_changed"
 	// ActionAuthPhoneChangeFailed records a failed phone-change verification
 	// attempt, mirroring ActionAuthLoginFailed for the login flow. Closes the
 	// audit gap where phone-change failures left no trail while the success

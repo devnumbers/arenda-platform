@@ -65,6 +65,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # The backend image bakes the monthly DB-IP City Lite GeoIP database
+      # (ticket #728); passing the month as a build-arg busts its layer cache
+      # exactly once a month.
+      - name: Compute DB-IP month
+        if: matrix.service == 'backend'
+        run: echo "DBIP_MONTH=$(date +%Y-%m)" >> "$GITHUB_ENV"
+
       - name: Build and push
         id: build
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
@@ -76,6 +83,7 @@ jobs:
           build-args: |
             APP_VERSION=${{ github.sha }}
             VCS_REF=${{ github.sha }}
+            ${{ matrix.service == 'backend' && format('DBIP_MONTH={0}', env.DBIP_MONTH) || '' }}
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 

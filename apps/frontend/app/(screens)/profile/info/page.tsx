@@ -49,6 +49,17 @@ export default function InfoPage() {
             </NextLink>
           ))}
         </nav>
+        <p className={styles.attribution}>
+          {'Данные о городах — '}
+          <a
+            href="https://db-ip.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className={styles.attributionLink}
+          >
+            DB-IP
+          </a>
+        </p>
       </SubScreenShell>
     </>
   );

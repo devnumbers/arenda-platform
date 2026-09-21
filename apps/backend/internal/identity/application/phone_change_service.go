@@ -244,7 +244,7 @@ func (s *PhoneChangeService) applyPhoneChange(
 		return domain.User{}, fmt.Errorf("update phone: %w", err)
 	}
 
-	if err := stores.sessions.DeleteByUserIDExcept(ctx, userID, s.hasher.HashToken(currentToken)); err != nil {
+	if _, err := stores.sessions.DeleteByUserIDExcept(ctx, userID, s.hasher.HashToken(currentToken)); err != nil {
 		return domain.User{}, fmt.Errorf("delete other sessions: %w", err)
 	}
 	return updated, nil

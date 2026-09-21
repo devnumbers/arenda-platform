@@ -16,6 +16,9 @@ export const accessKeys = {
 export const authKeys = {
   all: ['auth'] as const,
   me: ['auth', 'me'] as const,
+  /** Активные сессии GET /me/sessions (#728) — экран «Устройства» (#730);
+   * ревокации и «все другие» инвалидируют этот ключ. */
+  sessions: ['auth', 'sessions'] as const,
 };
 
 // features/billing

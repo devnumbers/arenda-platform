@@ -34,7 +34,7 @@ func TestAuthenticationIntegration_LoginHappyPath(t *testing.T) {
 	}
 	code := h.sender.lastCode(t)
 
-	raw, user, err := h.auth.VerifyCode(ctx, phone, &email, code, nil)
+	raw, user, err := h.auth.VerifyCode(ctx, phone, &email, code, nil, application.DeviceContext{})
 	if err != nil {
 		t.Fatalf("VerifyCode: %v", err)
 	}
@@ -72,7 +72,8 @@ func TestAuthenticationIntegration_LoginHappyPath(t *testing.T) {
 	}
 
 	// The code was marked used: a second verify with the same code fails.
-	if _, _, err := h.auth.VerifyCode(ctx, phone, &email, code, nil); !errors.Is(err, domain.ErrLoginCodeInvalid) {
+	_, _, err = h.auth.VerifyCode(ctx, phone, &email, code, nil, application.DeviceContext{})
+	if !errors.Is(err, domain.ErrLoginCodeInvalid) {
 		t.Fatalf("re-verify used code error = %v, want ErrLoginCodeInvalid", err)
 	}
 }
@@ -92,7 +93,7 @@ func TestAuthenticationIntegration_RegistrationCreatesNewUser(t *testing.T) {
 	}
 	code := h.sender.lastCode(t)
 
-	raw, user, err := h.auth.VerifyCode(ctx, phone, &email, code, nil)
+	raw, user, err := h.auth.VerifyCode(ctx, phone, &email, code, nil, application.DeviceContext{})
 	if err != nil {
 		t.Fatalf("VerifyCode: %v", err)
 	}
@@ -153,7 +154,7 @@ func TestAuthenticationIntegration_RegistrationTimezone(t *testing.T) {
 			t.Fatalf("SendCode: %v", err)
 		}
 		timezone := testDeviceTimezone
-		_, _, err := h.auth.VerifyCode(ctx, phone, &email, h.sender.lastCode(t), &timezone)
+		_, _, err := h.auth.VerifyCode(ctx, phone, &email, h.sender.lastCode(t), &timezone, application.DeviceContext{})
 		if err != nil {
 			t.Fatalf("VerifyCode: %v", err)
 		}
@@ -205,7 +206,7 @@ func TestAuthenticationIntegration_RegistrationTimezone(t *testing.T) {
 			t.Fatalf("SendCode: %v", err)
 		}
 		timezone := testDeviceTimezone
-		if _, _, err := h.auth.VerifyCode(h.ctx(), phone, &email, h.sender.lastCode(t), &timezone); err != nil {
+		if _, _, err := h.auth.VerifyCode(h.ctx(), phone, &email, h.sender.lastCode(t), &timezone, application.DeviceContext{}); err != nil {
 			t.Fatalf("VerifyCode: %v", err)
 		}
 
@@ -256,7 +257,7 @@ func TestAuthenticationIntegration_LoginFailRecordsAttemptAndAudit(t *testing.T)
 		t.Fatalf("SendCode: %v", err)
 	}
 
-	_, _, err := h.auth.VerifyCode(ctx, phone, &email, "000000", nil)
+	_, _, err := h.auth.VerifyCode(ctx, phone, &email, "000000", nil, application.DeviceContext{})
 	if !errors.Is(err, domain.ErrLoginCodeInvalid) {
 		t.Fatalf("VerifyCode wrong code error = %v, want ErrLoginCodeInvalid", err)
 	}
@@ -295,37 +296,51 @@ func TestAuthenticationIntegration_SlidingSessionRefresh(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 	originalExpires := session.ExpiresAt
-	createdAt := session.CreatedAt
 
-	// Advance 3 days and refresh: expiration must move forward toward +7 days
-	// from now, but not past the 30-day absolute cap.
+	// Advance 3 days and touch the session (as the middleware does): the
+	// single write must slide the expiry to now + SessionBaseTTL.
 	h.clock.advance(3 * 24 * time.Hour)
-	if !session.Refresh(h.clock.Now()) {
-		t.Fatal("Refresh returned false, want true (within sliding window)")
+	touched, _, err := h.sessionsvc.Touch(ctx, session, session.LastIP, h.clock.Now())
+	if err != nil {
+		t.Fatalf("Touch: %v", err)
 	}
-	if err := h.sessionsvc.Update(ctx, session); err != nil {
-		t.Fatalf("Update after refresh: %v", err)
-	}
-
-	if !session.ExpiresAt.After(originalExpires) {
-		t.Fatalf("expires_at = %v, want after original %v", session.ExpiresAt, originalExpires)
+	if !touched.ExpiresAt.After(originalExpires) {
+		t.Fatalf("expires_at = %v, want after original %v", touched.ExpiresAt, originalExpires)
 	}
 
-	// The persisted row carries the refreshed expiration.
+	// The persisted row carries the touched expiration.
 	reloaded, _, err := h.sessionsvc.Load(ctx, token, h.clock.Now())
 	if err != nil {
-		t.Fatalf("Load after refresh: %v", err)
+		t.Fatalf("Load after touch: %v", err)
 	}
-	if !reloaded.ExpiresAt.Equal(session.ExpiresAt) {
-		t.Fatalf("persisted expires_at = %v, want refreshed %v", reloaded.ExpiresAt, session.ExpiresAt)
+	if !reloaded.ExpiresAt.Equal(touched.ExpiresAt) {
+		t.Fatalf("persisted expires_at = %v, want touched %v", reloaded.ExpiresAt, touched.ExpiresAt)
 	}
 
-	// Advance well beyond the 30-day absolute cap and refresh again. Refresh may
-	// extend the window up to the cap but never past CreatedAt + SessionMaxTTL.
-	h.clock.advance(40 * 24 * time.Hour)
-	session.Refresh(h.clock.Now())
-	maxExpires := createdAt.Add(domain.SessionMaxTTL)
-	if session.ExpiresAt.After(maxExpires) {
-		t.Fatalf("expires_at = %v exceeds 30-day cap %v", session.ExpiresAt, maxExpires)
+	// Keep the session active in 6-day hops; six hops cover 36 days, well past
+	// the 14-day rotation window and the old 30-day absolute cap. Pure sliding
+	// (ADR 0056) has no cap: an actively used session never dies, and every
+	// hop extends the expiry to now + SessionBaseTTL. (One 36-day idle jump,
+	// by contrast, would kill the session — idle beyond the base TTL is death,
+	// and Refresh never revives an expired one.) When a hop rotates the token,
+	// the test adopts the fresh raw token exactly like the middleware does
+	// with the re-issued cookie.
+	for hop := 1; hop <= 6; hop++ {
+		h.clock.advance(6 * 24 * time.Hour)
+		hopSession, _, loadErr := h.sessionsvc.Load(ctx, token, h.clock.Now())
+		if loadErr != nil {
+			t.Fatalf("Load on hop %d: %v", hop, loadErr)
+		}
+		touched, rotatedToken, touchErr := h.sessionsvc.Touch(ctx, hopSession, hopSession.LastIP, h.clock.Now())
+		if touchErr != nil {
+			t.Fatalf("Touch on hop %d: %v", hop, touchErr)
+		}
+		session = touched
+		if rotatedToken != "" {
+			token = rotatedToken
+		}
+	}
+	if !session.CreatedAt.Add(31 * 24 * time.Hour).Before(session.ExpiresAt) {
+		t.Fatalf("expires_at = %v did not slide past creation + 31 days (pure sliding, no cap)", session.ExpiresAt)
 	}
 }

@@ -6,7 +6,7 @@ DDD modular monolith (Go, `apps/backend/internal/`). Domain glossary is split by
 
 ## Contexts
 
-- [Identity](./apps/backend/internal/identity/CONTEXT.md) — accounts, sessions, user roles (Owner, Admin).
+- [Identity](./apps/backend/internal/identity/CONTEXT.md) — accounts, sessions (pure sliding with 14-day token rotation and the devices list, ADR 0056) and user roles (Owner, Admin).
 - [Properties](./apps/backend/internal/properties/CONTEXT.md) — property cards only: photos, attributes, archive. The leases/operations domain was removed for a full rewrite (ADR 0046).
 - [Rentals](./apps/backend/internal/rentals/CONTEXT.md) — rental tenancy of a property: period, terms, payment day, utilities, deposit (the clean-slate successor of the removed leases domain, ADR 0046). Each rental manages exactly one rent payment in the Payments context.
 - [Contacts](./apps/backend/internal/contacts/CONTEXT.md) — the owner's contact book: cards of people for a property (plumber, management company, concierge); the property link is optional (ADR 0054).

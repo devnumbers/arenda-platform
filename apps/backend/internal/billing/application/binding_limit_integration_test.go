@@ -40,7 +40,8 @@ func newBindingLimitHarness(t *testing.T) *bindingLimitHarness {
 		gateOwnerSessionCookie: {userID: ownerID, role: actor.RoleOwner},
 	}}
 	router := httpserver.New(httpserver.Deps{
-		Sessions:       loader,
+		Sessions:       nil,
+		SessionLoader:  loader,
 		PaymentMethods: base.services.PaymentMethods,
 		Logger:         slog.New(slog.DiscardHandler),
 		Clock:          base.clock,
@@ -52,6 +53,7 @@ func newBindingLimitHarness(t *testing.T) *bindingLimitHarness {
 func (h *bindingLimitHarness) addCard(t *testing.T) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/subscription/payment-methods", strings.NewReader("{}"))
+	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: httpsupport.SessionCookieName(false), Value: gateOwnerSessionCookie})
 	w := httptest.NewRecorder()
 	h.router.ServeHTTP(w, req)
