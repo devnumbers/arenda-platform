@@ -6,6 +6,7 @@ import { Add, Search } from "@/shared/assets/icons";
 import { ROUTES } from "@/shared/config/routes";
 import { clientTodayIso } from "@/entities/payment";
 import { useKeyboardActivation } from "@/shared/lib/hooks/useKeyboardActivation";
+import { buildUrlWithParams } from "@/shared/lib/hooks/use-url-params";
 import {
   globalOperationsFiltersParams,
   groupOperationsByDate,
@@ -103,8 +104,7 @@ export function OperationsGlobalScreen(): JSX.Element {
     for (const [name, value] of Object.entries(extra ?? {})) {
       params.set(name, value);
     }
-    const query = params.toString();
-    return query.length > 0 ? `${base}?${query}` : base;
+    return buildUrlWithParams(base, params);
   };
 
   // «+» — в визард одиночной операции (#571, решение владельца 2026-09-08):

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Add, ArrowLeft, Search } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
+import { buildUrlWithParams } from '@/shared/lib/hooks/use-url-params';
 import { clientTodayIso, type PaymentType } from '@/entities/payment';
 import {
   globalOperationsFiltersParams,
@@ -116,8 +117,7 @@ export function OperationsGlobalDirectionScreen({
     for (const [name, value] of Object.entries(extra ?? {})) {
       params.set(name, value);
     }
-    const query = params.toString();
-    return query.length > 0 ? `${base}?${query}` : base;
+    return buildUrlWithParams(base, params);
   };
 
   return (

@@ -4,6 +4,7 @@ import { useState, type JSX } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Add, ArrowLeft, Search } from "@/shared/assets/icons";
 import { ROUTES } from "@/shared/config/routes";
+import { buildUrlWithParams } from "@/shared/lib/hooks/use-url-params";
 import { clientTodayIso } from "@/entities/payment";
 import type { PaymentOperationScope } from "@/shared/api/query-keys";
 import {
@@ -120,11 +121,12 @@ export function OperationsOfPropertyScreen({
 
   const openCategories = (): void => {
     // Формат query — один хелпер с operationsFiltersHref (#472): знание
-    // «как period/categories кодируются в адрес» живёт в одном модуле.
+    // «как period/categories кодируются в адрес» живёт в одном модуле;
+    // сборка адреса — тот же канон buildUrlWithParams (#792).
     const params = new URLSearchParams(operationsFiltersParams(filters));
     params.set("return", pathname);
     router.push(
-      `${ROUTES.propertyOperationsCategories(propertyId)}?${params.toString()}`,
+      buildUrlWithParams(ROUTES.propertyOperationsCategories(propertyId), params),
     );
   };
 
