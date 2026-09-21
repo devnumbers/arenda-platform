@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	notificationsjob "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/notificationsjob"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/sse"
@@ -56,7 +55,7 @@ func (p *Publisher) NotificationCreated(ctx context.Context, n domain.Notificati
 			ContextLabel: n.ContextLabel,
 			Title:        n.Title,
 			Body:         n.Body,
-			URL:          notificationsjob.DeepLinkFor(n),
+			URL:          notificationsapp.DeepLinkFor(n),
 		}),
 	})
 	if err != nil {

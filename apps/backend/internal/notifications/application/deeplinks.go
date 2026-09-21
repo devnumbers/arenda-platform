@@ -1,4 +1,4 @@
-package notificationsjob
+package application
 
 import (
 	"fmt"
