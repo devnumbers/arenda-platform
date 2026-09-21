@@ -41,6 +41,26 @@ async function revokeSuspendedAccess(): Promise<void> {
   await execE2eSql(`DELETE FROM properties WHERE id = '${SUSPENDED_PROPERTY_ID}'`);
 }
 
+// Прослушка запросов deep-link #769: деталь объекта отдельно, зависимые
+// (property-scoped секции) — отдельно; ассерты считают волнами.
+function trackPropertyRequests(
+  page: Page,
+  propertyId: string,
+): { detailRequests: string[]; dependentRequests: string[] } {
+  const detailRequests: string[] = [];
+  const dependentRequests: string[] = [];
+  page.on('request', (request) => {
+    const pathname = new URL(request.url()).pathname;
+    if (pathname === `/api/properties/${propertyId}`) {
+      detailRequests.push(pathname);
+    }
+    if (pathname.startsWith(`/api/properties/${propertyId}/`)) {
+      dependentRequests.push(pathname);
+    }
+  });
+  return { detailRequests, dependentRequests };
+}
+
 async function openHub(
   page: Page,
   seededUser: Parameters<typeof openCabinetWithSeededSession>[1],
@@ -130,4 +150,48 @@ test('«Выбрать тариф» ведёт на смену тарифа', as
   } finally {
     await revokeSuspendedAccess();
   }
+});
+
+// Deep-link гарды #769: деталь не ретраится (глобальный no-retry 4xx) и
+// property-scoped запросы секций гейтятся успехом детали — гард виден
+// сразу, без волн повторов и 404 зависимых (аренды/платежи/операции/
+// контакты/задачи) по нечитаемому объекту.
+test('deep-link suspended: гард сразу, зависимых запросов нет (#769)', async ({ page, seededUser }, testInfo) => {
+  await grantSuspendedAccess();
+  const { detailRequests, dependentRequests } = trackPropertyRequests(
+    page,
+    SUSPENDED_PROPERTY_ID,
+  );
+  try {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto(`/properties/${SUSPENDED_PROPERTY_ID}`);
+
+    await expect(page.getByText('Превышен лимит объектов')).toBeVisible();
+
+    // Пауза дольше первых двух волн дефолтных ретраев (кумулятивно ~3с):
+    // ни повторов детали, ни запросов секций за окно не попадает.
+    await page.waitForTimeout(2500);
+    expect(detailRequests).toHaveLength(1);
+    expect(dependentRequests).toHaveLength(0);
+
+    await captureScreen(page, testInfo, '769-suspended-deep-link');
+  } finally {
+    await revokeSuspendedAccess();
+  }
+});
+
+test('deep-link несуществующего объекта: «не найден» сразу, зависимых запросов нет (#769)', async ({ page, seededUser }) => {
+  const missingPropertyId = '0e999999-9999-4999-8999-999999999904';
+  const { detailRequests, dependentRequests } = trackPropertyRequests(
+    page,
+    missingPropertyId,
+  );
+  await openCabinetWithSeededSession(page, seededUser);
+  await page.goto(`/properties/${missingPropertyId}`);
+
+  await expect(page.getByText('Объект не найден или у вас нет к нему доступа')).toBeVisible();
+
+  await page.waitForTimeout(2500);
+  expect(detailRequests).toHaveLength(1);
+  expect(dependentRequests).toHaveLength(0);
 });

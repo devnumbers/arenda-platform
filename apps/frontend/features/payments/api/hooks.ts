@@ -57,6 +57,7 @@ type OperationResponseDto = components['schemas']['OperationResponse'];
 export function usePayments(
   propertyId: string,
   search = '',
+  options: { readonly enabled?: boolean } = {},
 ): UseQueryResult<Payment[], ApiError> {
   return useQuery({
     queryKey: paymentKeys.list(propertyId, search),
@@ -67,7 +68,7 @@ export function usePayments(
       );
       return response.items.map(mapPayment);
     },
-    enabled: Boolean(propertyId),
+    enabled: (options.enabled ?? true) && Boolean(propertyId),
   });
 }
 
@@ -82,6 +83,7 @@ export function usePayments(
 export function usePropertyOverdueOperations(
   propertyId: string,
   search = '',
+  options: { readonly enabled?: boolean } = {},
 ): UseQueryResult<PaymentOperation[], ApiError> {
   return useQuery({
     queryKey: paymentOperationKeys.overdueByProperty(propertyId, search),
@@ -92,7 +94,7 @@ export function usePropertyOverdueOperations(
       );
       return response.items.map(mapPaymentOperation);
     },
-    enabled: Boolean(propertyId),
+    enabled: (options.enabled ?? true) && Boolean(propertyId),
   });
 }
 

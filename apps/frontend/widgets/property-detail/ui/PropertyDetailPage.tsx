@@ -153,9 +153,14 @@ export function PropertyDetailPage(): JSX.Element {
     // Количество активных объектов живёт только в списочном ответе (#584) —
     // читаем из общего кэша хаба/лендинга ради выбора набора пустых.
     const listQuery = usePropertiesWithMeta();
+    // Гейт #769: property-scoped запросы секций стартуют только после
+    // успеха детали — на упавшей детали (404 / 403 membership_suspended)
+    // гард deep-link показывается сразу, и зависимые запросы не
+    // простреливают 404-волнами по нечитаемому объекту.
+    const propertyLoaded = propertyQuery.isSuccess;
     // Текущая (незавершённая) аренда — источник блока «Аренда» (#589) и
     // арендатора в «Контактах»; точный источник — аренды самого объекта.
-    const rentalsQuery = useRentals(id);
+    const rentalsQuery = useRentals(id, { enabled: propertyLoaded });
     const subscriptionQuery = useSubscription();
 
     // Данные секций (#589): правила платежей с точками просрочки, сводка
@@ -163,8 +168,8 @@ export function PropertyDetailPage(): JSX.Element {
     // сводкой и «Операций еще не было», как на экране операций), контакты
     // объекта и активные задачи.
     const today = clientTodayIso();
-    const paymentsQuery = usePayments(id);
-    const overdueQuery = usePropertyOverdueOperations(id);
+    const paymentsQuery = usePayments(id, '', { enabled: propertyLoaded });
+    const overdueQuery = usePropertyOverdueOperations(id, '', { enabled: propertyLoaded });
     // Сводка секции «Операции в <месяц>» — за текущий календарный месяц
     // (карта #669: сводка объекта месячная и после дефолта «весь период»
     // на лентах); границы берутся напрямую из модели месяца.
@@ -174,13 +179,13 @@ export function PropertyDetailPage(): JSX.Element {
         order: 'desc',
         dateFrom: operationsPeriod.from,
         dateTo: operationsPeriod.to,
-    });
+    }, { enabled: propertyLoaded });
     const operationsEverQuery = usePropertyOperationsSummary(id, {
         status: 'paid',
         order: 'desc',
-    });
-    const contactsQuery = useContacts(id);
-    const tasksQuery = useActiveTasks(id);
+    }, { enabled: propertyLoaded });
+    const contactsQuery = useContacts(id, '', { enabled: propertyLoaded });
+    const tasksQuery = useActiveTasks(id, { enabled: propertyLoaded });
     const completeTask = useCompleteTask(id);
     const uncompleteTask = useUncompleteTask(id);
 

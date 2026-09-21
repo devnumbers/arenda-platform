@@ -20,13 +20,14 @@ type SendCodeResponse = components['schemas']['SendCodeResponse'];
 type VerifyCodeRequest = components['schemas']['VerifyCodeRequest'];
 
 export function useMe(): UseQueryResult<User, ApiError> {
+  // Без локального retry: 4xx (включая 401) гасит глобальный предикат
+  // (#769), сетевые/5xx сбои ретраются по общему дефолту.
   return useQuery({
     queryKey: authKeys.me,
     queryFn: async () => {
       const res = await apiClient<MeResponse>('/me');
       return mapMeResponse(res);
     },
-    retry: false,
   });
 }
 

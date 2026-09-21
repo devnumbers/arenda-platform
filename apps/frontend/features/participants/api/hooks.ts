@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient, type UseMutationResult, type UseQueryResult } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
-import { ApiError } from '@/shared/api/errors';
+import type { ApiError } from '@/shared/api/errors';
 import type { components } from '@/shared/api/dto';
 import { accessKeys, participantsKeys, propertyKeys } from '@/shared/api/query-keys';
 import type { QueryClient } from '@tanstack/react-query';
@@ -98,8 +98,8 @@ export function useRevokeAllParticipants(): UseMutationResult<
 /** Страница участника (#698, GET /participants/{id} #693): агрегат одного
  * человека с per-object ногами. 404 (человек вне скоупа читающего или уже
  * отозван) доходит до экрана как ApiError со статусом — deep-link-политика
- * «Участник не найден»; 404 детерминирован, поэтому без ретраев — экран
- * показывает состояние сразу, а не после экспоненциальных пауз. */
+ * «Участник не найден»; 404 не ретрается глобальным предикатом (#769,
+ * shared/providers/query-retry) — экран показывает состояние сразу. */
 export function useParticipant(
   participantId: string,
 ): UseQueryResult<Participant, ApiError> {
@@ -112,12 +112,6 @@ export function useParticipant(
       return mapParticipant(response);
     },
     enabled: participantId.length > 0,
-    retry: (failureCount, error) => {
-      if (error instanceof ApiError && error.status === 404) {
-        return false;
-      }
-      return failureCount < 3;
-    },
   });
 }
 

@@ -53,6 +53,7 @@ export type ContactsPageData = {
 export function useContacts(
   propertyId: string,
   search = '',
+  options: { readonly enabled?: boolean } = {},
 ): UseInfiniteQueryResult<Contact[], ApiError> {
   return useInfiniteQuery({
     queryKey: contactKeys.list(propertyId, search),
@@ -62,7 +63,7 @@ export function useContacts(
     getNextPageParam: keysetNextPageParam,
     select: (data) => data.pages.flatMap((page) => page.items),
     placeholderData: keepPreviousData,
-    enabled: Boolean(propertyId),
+    enabled: (options.enabled ?? true) && Boolean(propertyId),
   });
 }
 

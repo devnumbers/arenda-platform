@@ -50,7 +50,10 @@ export function useCreateRental(
  * (ADR 0053 §4). Экран «Аренда» живёт первой (незавершённой) арендой;
  * завершённые — материал «Прошлых аренд» (#535).
  */
-export function useRentals(propertyId: string): UseQueryResult<Rental[], ApiError> {
+export function useRentals(
+  propertyId: string,
+  options: { readonly enabled?: boolean } = {},
+): UseQueryResult<Rental[], ApiError> {
   return useQuery({
     queryKey: rentalKeys.list(propertyId),
     queryFn: async () => {
@@ -59,7 +62,7 @@ export function useRentals(propertyId: string): UseQueryResult<Rental[], ApiErro
       );
       return response.items.map(mapRental);
     },
-    enabled: Boolean(propertyId),
+    enabled: (options.enabled ?? true) && Boolean(propertyId),
   });
 }
 
