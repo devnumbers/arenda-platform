@@ -93,12 +93,15 @@ const ROLE_FILTER_LABELS: Record<PropertyParticipantRoleFilter, string> = {
  * CTA «Пригласить участника» — приглашение от объекта без выбора объектов.
  *
  * Тап по ряду — страница участника (#698, агрегат): uuid юзера, у
- * pending — почта. Ряд владельца статичный (страница участника про
- * выданные доступы, своих ног у владельца нет). Читающий без manage-прав
- * не входит в скоуп агрегата (404-политика #693), а на архивном объекте
- * нога участника может быть только архивной — в обоих случаях ряды
- * статичные, без шеврона; у зрителя, как в модалке, скрыты и
- * manage-контролы (кебаб, CTA), выдача на архивный объект запрещена.
+ * pending — почта. Статичные ряды, без шеврона: владелец (страница
+ * участника про выданные доступы, своих ног у владельца нет), своя
+ * строка «(Вы)» (#770 — своей ноги в manage-скоупе читателя нет,
+ * /participants/{себя} отвечает 404), читающий без manage-прав
+ * (404-политика #693) и архивный объект (нога участника там может быть
+ * только архивной). Пока /me не разрешился, ряды статичны тоже —
+ * кнопка, ведущая на 404, не рендерится вовсе. У зрителя, как в
+ * модалке, скрыты и manage-контролы (кебаб, CTA), выдача на архивный
+ * объект запрещена.
  */
 export function PropertyParticipantsScreen(): JSX.Element {
   const params = useParams<{ id: string }>();
@@ -211,10 +214,12 @@ export function PropertyParticipantsScreen(): JSX.Element {
   const rowsBlock = (
     <div className="flex flex-col px-6">
       {visible.map((row) => {
-        // Тап ведёт на агрегат /participants/{id} (#698) только там, где
-        // он гарантированно в скоупе читателя: manage-права и живой объект.
+        // Тап ведёт на агрегат /participants/{id} (#698) только в скоупе
+        // читателя — полная политика в доке экрана.
         const target =
-          canManage && !isArchived && !row.isOwner ? row.participantId : undefined;
+          canManage && !isArchived && meQuery.isSuccess && !row.isOwner && !row.isMe
+            ? row.participantId
+            : undefined;
         return (
           <PropertyParticipantRowView
             key={row.key}

@@ -125,6 +125,37 @@ describe('propertyParticipantRows — VM ряда «Участники объе�
   });
 });
 
+describe('своя строка читателя — isMe (тикет #770)', () => {
+  const MY_ID = '12111111-1111-4111-8111-111111111121';
+
+  it('manage-участник на чужом объекте: своя строка isMe, чужие — нет', () => {
+    const rows = propertyParticipantRows(
+      [owner, member({ id: 'm-me', userId: MY_ID, displayName: 'Мария Петрова' }), pending],
+      MY_ID,
+    );
+    const byKey = new Map(rows.map((row) => [row.key, row]));
+
+    expect(byKey.get('m-me')?.isMe).toBe(true);
+    expect(byKey.get('m-me')?.title).toBe('Мария Петрова (Вы)');
+    expect(byKey.get('owner-row')?.isMe).toBe(false);
+    // pending-строка идентифицируется почтой, не uuid — «своей» быть не может.
+    expect(byKey.get('invitation-1')?.isMe).toBe(false);
+  });
+
+  it('читатель-владелец: ряд владельца тоже свой', () => {
+    const rows = propertyParticipantRows([owner, maria], OWNER_ID);
+
+    expect(rows[0]?.isMe).toBe(true);
+    expect(rows[1]?.isMe).toBe(false);
+  });
+
+  it('пока /me не известно — ни одна строка не своя', () => {
+    const rows = propertyParticipantRows([owner, member({ userId: MY_ID })], undefined);
+
+    expect(rows.every((row) => !row.isMe)).toBe(true);
+  });
+});
+
 describe('filterPropertyParticipantsByQuery — клиентский поиск (имя или почта)', () => {
   const rows = propertyParticipantRows([owner, maria, pending], OWNER_ID);
 

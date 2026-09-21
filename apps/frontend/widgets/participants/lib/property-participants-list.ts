@@ -27,6 +27,9 @@ export type PropertyParticipantRow = {
   /** Роль ноги: фильтр «Все роли» и сортировка. */
   readonly role: AccessRole;
   readonly isOwner: boolean;
+  /** Строка самого читателя («(Вы)») — ряд инертный (#770; политика
+   * тапа — в доке экрана). */
+  readonly isMe: boolean;
 };
 
 /**
@@ -65,6 +68,7 @@ function toPropertyParticipantRow(currentUserId: string | undefined) {
         member.userId ?? (member.status === 'pending' && email !== '' ? email : undefined),
       role: member.role,
       isOwner: member.isOwner,
+      isMe,
     };
   };
 }
