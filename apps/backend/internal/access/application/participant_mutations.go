@@ -423,7 +423,7 @@ func (s *ParticipantMutationService) Remove(ctx context.Context, actor uuid.UUID
 		if len(legs) == 0 && len(invitationLegs) == 0 {
 			return domain.ErrParticipantNotFound
 		}
-		freedActive, revokedActive, err = s.removeMembershipLegs(ctx, stores, actor, userID, legs)
+		freedActive, revokedActive, err = s.removeMembershipLegs(ctx, stores, actor, legs)
 		if err != nil {
 			return err
 		}
@@ -446,16 +446,7 @@ func (s *ParticipantMutationService) Remove(ctx context.Context, actor uuid.UUID
 	// Every removed ACTIVE membership notifies the former member post-commit
 	// (карта #734, #751); suspended legs publish nothing — the object was
 	// already hidden from them (issue #162, T6 canon).
-	for _, m := range revokedActive {
-		publishAccessEvent(ctx, s.events, s.logger, "membership_revoked", func() error {
-			return s.events.PublishMembershipRevoked(ctx, MembershipRevoked{
-				MembershipID: m.ID,
-				PropertyID:   m.PropertyID,
-				RecipientID:  m.UserID,
-				ActorID:      actor,
-			})
-		})
-	}
+	publishRevokedEvents(ctx, s.events, s.logger, actor, revokedActive)
 	return nil
 }
 
@@ -502,34 +493,20 @@ func (s *ParticipantMutationService) actorRoleOn(ctx context.Context, actor, pro
 // appends the removed active rows to the collector — the caller publishes
 // their revocation events post-commit (карта #734, #751).
 func (s *ParticipantMutationService) removeMembershipLegs(
-	ctx context.Context, stores *txStores, actor, userID uuid.UUID, legs []domain.Membership,
+	ctx context.Context, stores *txStores, actor uuid.UUID, legs []domain.Membership,
 ) (int, []domain.Membership, error) {
 	freedActive := 0
 	var revokedActive []domain.Membership
 	for _, m := range legs {
-		if err := stores.members.Delete(ctx, m.ID, m.PropertyID); err != nil {
-			return 0, nil, fmt.Errorf("delete membership: %w", err)
-		}
-		if !m.IsSuspended() {
-			freedActive++
-			revokedActive = append(revokedActive, m)
-		}
 		actorRole, err := s.actorRoleOn(ctx, actor, m.PropertyID)
 		if err != nil {
 			return 0, nil, err
 		}
-		if err := stores.audit.Record(ctx, auditdomain.Entry{
-			ActorID:    &actor,
-			ActorRole:  sharedpolicy.AuditActorRole(actorRole),
-			Action:     auditdomain.ActionPropertyMemberRemoved,
-			EntityType: auditdomain.EntityPropertyMember,
-			EntityID:   &m.ID,
-			Context: map[string]any{
-				auditKeyPropertyID: m.PropertyID,
-				auditKeyUserID:     userID,
-			},
-		}); err != nil {
-			return 0, nil, fmt.Errorf("record audit: %w", err)
+		if err := removeMembershipInTx(ctx, stores, actor, actorRole, m, &revokedActive); err != nil {
+			return 0, nil, err
+		}
+		if !m.IsSuspended() {
+			freedActive++
 		}
 	}
 	return freedActive, revokedActive, nil

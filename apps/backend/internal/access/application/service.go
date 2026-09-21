@@ -311,6 +311,63 @@ func (s *AccessService) ChangeMemberRole(
 	return updated, nil
 }
 
+// removeMembershipInTx is the shared core of deleting one membership row:
+// the delete and the audited record — the audit shape lives here, not in the
+// callers. The caller decides the FIFO recovery of the recipient's suspended
+// accesses (the single revoke recovers immediately, the batch Remove recovers
+// once after all legs) and publishes the post-commit revocation event for the
+// collected active rows (карта #734, #751); a suspended row publishes nothing
+// — the object was already hidden from them (issue #162, T6 canon). The
+// actor role comes from the caller: the single path resolves it in
+// requireManage, the batch in actorRoleOn.
+func removeMembershipInTx(
+	ctx context.Context,
+	stores *txStores,
+	actor uuid.UUID,
+	actorRole sharedpolicy.Role,
+	membership domain.Membership,
+	revokedActive *[]domain.Membership,
+) error {
+	if err := stores.members.Delete(ctx, membership.ID, membership.PropertyID); err != nil {
+		return fmt.Errorf("delete membership: %w", err)
+	}
+	if !membership.IsSuspended() && revokedActive != nil {
+		*revokedActive = append(*revokedActive, membership)
+	}
+
+	if err := stores.audit.Record(ctx, auditdomain.Entry{
+		ActorID:    &actor,
+		ActorRole:  sharedpolicy.AuditActorRole(actorRole),
+		Action:     auditdomain.ActionPropertyMemberRemoved,
+		EntityType: auditdomain.EntityPropertyMember,
+		EntityID:   &membership.ID,
+		Context: map[string]any{
+			auditKeyPropertyID: membership.PropertyID,
+			auditKeyUserID:     membership.UserID,
+		},
+	}); err != nil {
+		return fmt.Errorf("record audit: %w", err)
+	}
+	return nil
+}
+
+// publishRevokedEvents publishes the post-commit revocation events for the
+// removed active rows — best-effort (карта #734, #751).
+func publishRevokedEvents(
+	ctx context.Context, publisher AccessEventPublisher, log *slog.Logger, actor uuid.UUID, revoked []domain.Membership,
+) {
+	for _, m := range revoked {
+		publishAccessEvent(ctx, publisher, log, "membership_revoked", func() error {
+			return publisher.PublishMembershipRevoked(ctx, MembershipRevoked{
+				MembershipID: m.ID,
+				PropertyID:   m.PropertyID,
+				RecipientID:  m.UserID,
+				ActorID:      actor,
+			})
+		})
+	}
+}
+
 // RevokeMember removes a member's access. The owner cannot be revoked (and is
 // never a membership row); this guard exists for defence in depth.
 func (s *AccessService) RevokeMember(ctx context.Context, actor, propertyID, memberID uuid.UUID) error {
@@ -320,6 +377,7 @@ func (s *AccessService) RevokeMember(ctx context.Context, actor, propertyID, mem
 	}
 
 	var membership domain.Membership
+	var revoked []domain.Membership
 	err = s.runInTx(ctx, func(stores *txStores) error {
 		var err error
 		membership, err = stores.members.GetByID(ctx, memberID, propertyID)
@@ -330,10 +388,6 @@ func (s *AccessService) RevokeMember(ctx context.Context, actor, propertyID, mem
 			return domain.ErrCannotRevokeOwner
 		}
 
-		if err := stores.members.Delete(ctx, memberID, propertyID); err != nil {
-			return fmt.Errorf("delete membership: %w", err)
-		}
-
 		// Revoking the recipient freed one of their tariff slots: try to recover the
 		// oldest suspended membership FIFO (issue #158, T4).
 		if s.slots != nil {
@@ -342,39 +396,12 @@ func (s *AccessService) RevokeMember(ctx context.Context, actor, propertyID, mem
 			}
 		}
 
-		if err := stores.audit.Record(ctx, auditdomain.Entry{
-			ActorID:    &actor,
-			ActorRole:  sharedpolicy.AuditActorRole(actorRole),
-			Action:     auditdomain.ActionPropertyMemberRemoved,
-			EntityType: auditdomain.EntityPropertyMember,
-			EntityID:   &membership.ID,
-			Context: map[string]any{
-				auditKeyPropertyID: propertyID,
-				auditKeyUserID:     membership.UserID,
-			},
-		}); err != nil {
-			return fmt.Errorf("record audit: %w", err)
-		}
-		return nil
+		return removeMembershipInTx(ctx, stores, actor, actorRole, membership, &revoked)
 	})
 	if err != nil {
 		return err
 	}
-
-	// Revoking an active membership notifies the former member post-commit
-	// (карта #734, #751; the direct lifecycle email it replaced is gone);
-	// revoking a suspended one publishes nothing — the object was already
-	// hidden from them (issue #162, T6 canon).
-	if !membership.IsSuspended() {
-		publishAccessEvent(ctx, s.events, s.logger, "membership_revoked", func() error {
-			return s.events.PublishMembershipRevoked(ctx, MembershipRevoked{
-				MembershipID: membership.ID,
-				PropertyID:   propertyID,
-				RecipientID:  membership.UserID,
-				ActorID:      actor,
-			})
-		})
-	}
+	publishRevokedEvents(ctx, s.events, s.logger, actor, revoked)
 	return nil
 }
 
