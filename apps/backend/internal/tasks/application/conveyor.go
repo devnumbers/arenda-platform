@@ -68,8 +68,9 @@ type mutationOutcome[T any] struct {
 // transactional stores: the owner calendar for the day boundary, the
 // notifications scheduling seam the rule flows hand their standing tasks to
 // after the commit (issue #775; nil keeps the pre-#775 silence) and the
-// logger the best-effort handover reports through. The role gate arrives per
-// call, already resolved over the caller's policy.
+// logger the best-effort handover reports through — the rule service's
+// constructor pairs it with the seam, so a set seam always has a logger.
+// The role gate arrives per call, already resolved over the caller's policy.
 type mutationGates struct {
 	factory     txStoreFactory
 	calendar    OwnerCalendar
@@ -322,11 +323,7 @@ func dispatchSeamTasks(g mutationGates, ctx context.Context, taskIDs []uuid.UUID
 		return
 	}
 	if err := g.overdueSeam.NotifyMaterializedTasks(ctx, taskIDs); err != nil {
-		logger := g.log
-		if logger == nil {
-			logger = slog.Default()
-		}
-		logger.ErrorContext(ctx, "notify materialized tasks failed",
+		g.log.ErrorContext(ctx, "notify materialized tasks failed",
 			slog.Int("task_count", len(taskIDs)),
 			slog.String("error", sanitize.Error(err)))
 	}

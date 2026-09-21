@@ -3,24 +3,45 @@
 package application_test
 
 import (
+	"context"
 	"errors"
+	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nambers/arenda-planform/apps/backend/internal/tasks/application"
+	auditpg "github.com/nambers/arenda-planform/apps/backend/internal/audit/adapters/postgres"
+	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	pgdb "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
+	taskspg "github.com/nambers/arenda-planform/apps/backend/internal/tasks/adapters/postgres"
+	tasksapp "github.com/nambers/arenda-planform/apps/backend/internal/tasks/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/tasks/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// errSeamDown is the scheduling seam's failure double.
-var errSeamDown = errors.New("seam down")
-
 // The scheduling seam's handover (issue #775): a rule create/edit hands the
 // standing uncompleted tasks' ids to the notifications seam strictly after
 // the commit, so a task born between the hourly passes with its term before
 // the next one books its due-minute job at once.
+
+// errSeamDown is the scheduling seam's failure double.
+var errSeamDown = errors.New("seam down")
+
+// captureLog collects the slog records' messages — the best-effort log's
+// assertion double («отказ — best-effort, лог»).
+type captureLog struct{ messages []string }
+
+func (l *captureLog) Enabled(context.Context, slog.Level) bool { return true }
+
+func (l *captureLog) Handle(_ context.Context, r slog.Record) error {
+	l.messages = append(l.messages, r.Message)
+	return nil
+}
+
+func (l *captureLog) WithAttrs([]slog.Attr) slog.Handler { return l }
+
+func (l *captureLog) WithGroup(string) slog.Handler { return l }
 
 // CreateRule hands over the first materialization's standing tasks — the
 // today's occurrence and the single future one, both ids exactly as the
@@ -51,7 +72,7 @@ func TestScheduleSeam_CreateTimedRuleHandsOver(t *testing.T) {
 	due := time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
 	at, err := domain.NewTimeOfDay(15, 13)
 	require.NoError(t, err)
-	rule, err := h.rules.CreateRule(h.ctx(), h.owner, h.propID, application.CreateRuleCommand{
+	rule, err := h.rules.CreateRule(h.ctx(), h.owner, h.propID, tasksapp.CreateRuleCommand{
 		Title:   "Показ квартиры",
 		DueDate: &due,
 		DueTime: &at,
@@ -87,29 +108,29 @@ func TestScheduleSeam_EditRuleHandsOverNewStanding(t *testing.T) {
 
 	rule, err := h.rules.CreateRule(h.ctx(), h.owner, h.propID, h.createCmd())
 	require.NoError(t, err)
-	require.Len(t, h.seam.handovers, 1)
-	oldFuture := futureTaskID(h, rule.ID, day10)
-	require.NotNil(t, oldFuture)
+	oldFuture := standingTaskDates(h, rule.ID)[day17]
+	require.NotEqual(t, uuid.Nil, oldFuture, "the single future stands on the next weekly day")
 
 	newDate := time.Date(2026, 9, 24, 0, 0, 0, 0, time.UTC)
 	updated, err := h.rules.UpdateRule(h.ctx(), h.owner, h.propID, rule.ID,
-		application.UpdateRuleCommand{DueDate: &application.DueDateUpdate{Value: &newDate}})
+		tasksapp.UpdateRuleCommand{DueDate: &tasksapp.DueDateUpdate{Value: &newDate}})
 	require.NoError(t, err)
 
 	require.Len(t, h.seam.handovers, 2, "one handover per rule create, one per edit")
 	handed := h.seam.handovers[1]
 	assert.ElementsMatch(t, uncompletedIDs(h, updated.ID), handed)
-	assert.NotContains(t, handed, *oldFuture, "the invalidated future's id stays out")
-	assert.Contains(t, handed, standingOn(h, updated.ID, day24), "the moved date's task is in")
+	assert.NotContains(t, handed, oldFuture, "the invalidated future's id stays out")
+	assert.Contains(t, handed, standingTaskDates(h, updated.ID)[day24], "the moved date's task is in")
 }
 
 // A create whose handover fails still commits: the seam is best-effort —
-// the error is logged away, the rule and its tasks stand, the hourly scan
+// the failure is logged, the rule and its tasks stand, the hourly scan
 // remains the backstop.
 func TestScheduleSeam_SeamFailureDoesNotFailMutation(t *testing.T) {
 	t.Parallel()
 
-	h := newTasksHarness(t).withOwner(taskMoscowTZ).withSeam(&fakeSeam{err: errSeamDown})
+	log := &captureLog{}
+	h := newTasksHarness(t).withOwner(taskMoscowTZ).withRuleLog(log).withSeam(&fakeSeam{err: errSeamDown})
 
 	rule, err := h.rules.CreateRule(h.ctx(), h.owner, h.propID, h.createCmd())
 	require.NoError(t, err, "a broken seam must never fail the committed rule")
@@ -118,6 +139,7 @@ func TestScheduleSeam_SeamFailureDoesNotFailMutation(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, rule.ID, stored.ID)
 	assert.Empty(t, h.seam.handovers)
+	assert.Contains(t, log.messages, "notify materialized tasks failed", "the failure is logged away")
 }
 
 // No seam wired — the pre-#775 silence: the create succeeds, nothing is
@@ -129,6 +151,22 @@ func TestScheduleSeam_NilSeamKeepsSilence(t *testing.T) {
 
 	_, err := h.rules.CreateRule(h.ctx(), h.owner, h.propID, h.createCmd())
 	require.NoError(t, err)
+}
+
+// withRuleLog rebuilds the rule service over a fresh factory with the given
+// logger — the best-effort log's assertions door.
+func (h *tasksHarness) withRuleLog(log *captureLog) *tasksHarness {
+	h.t.Helper()
+	factory := tasksapp.NewTxStoreFactory(
+		taskspg.NewTickStore(h.pool),
+		taskspg.NewRuleStore(h.pool),
+		taskspg.NewTaskStore(h.pool),
+		taskspg.NewPropertyStore(h.pool),
+		auditapp.NewService(auditpg.NewWriter(h.pool), h.clock),
+		pgdb.NewUoW(h.pool, slog.New(log)),
+	)
+	h.rules = tasksapp.NewRuleService(factory, taskspg.NewOwnerClock(h.pool, h.clock), nil, slog.New(log))
+	return h
 }
 
 // uncompletedIDs reads the rule's standing uncompleted tasks' ids straight
@@ -155,30 +193,22 @@ func uncompletedIDs(h *tasksHarness, ruleID uuid.UUID) []uuid.UUID {
 	return ids
 }
 
-// futureTaskID finds the rule's standing task on the given anchor date's
-// next occurrence — the single future the edit invalidates.
-func futureTaskID(h *tasksHarness, ruleID uuid.UUID, afterDate string) *uuid.UUID {
+// standingTaskDates maps the rule's standing uncompleted tasks by due date
+// ("") for the undated one — the handover inspected by date.
+func standingTaskDates(h *tasksHarness, ruleID uuid.UUID) map[string]uuid.UUID {
 	h.t.Helper()
-	for _, id := range uncompletedIDs(h, ruleID) {
-		for _, row := range h.loadTasks(h.t) {
-			if row.ID == id && row.DueDate != nil && *row.DueDate > afterDate {
-				return new(id)
-			}
-		}
+	byID := make(map[uuid.UUID]taskRow, 2)
+	for _, row := range h.loadTasks(h.t) {
+		byID[row.ID] = row
 	}
-	return nil
-}
-
-// standingOn finds the rule's standing task with the given due date.
-func standingOn(h *tasksHarness, ruleID uuid.UUID, date string) uuid.UUID {
-	h.t.Helper()
+	out := map[string]uuid.UUID{}
 	for _, id := range uncompletedIDs(h, ruleID) {
-		for _, row := range h.loadTasks(h.t) {
-			if row.ID == id && row.DueDate != nil && *row.DueDate == date {
-				return id
-			}
+		row := byID[id]
+		date := ""
+		if row.DueDate != nil {
+			date = *row.DueDate
 		}
+		out[date] = id
 	}
-	h.t.Fatalf("no standing task of rule %s on %s", ruleID, date)
-	return uuid.Nil
+	return out
 }
