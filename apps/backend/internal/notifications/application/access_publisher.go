@@ -42,7 +42,7 @@ type AccessEventViewSource interface {
 // (решение #737, типы №5–№10) for their single addressee. The former direct
 // lifecycle emails (issue #162, T6) are gone: same events, but the
 // notification is now a stored feed row — written always, delivered over
-// email and push per the category matrix (ADR 0056). The invite email to an
+// email and push per the category matrix (ADR 0058). The invite email to an
 // unregistered address stays out of the pipeline by nature: until the invitee
 // registers there is no recipient a row could belong to (№5's row is the
 // activation's, решение #737).

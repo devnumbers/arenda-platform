@@ -47,7 +47,7 @@ func tariffDisplayName(slug string) string {
 // upgrade applied right after the payment, the downgrade scheduled for the
 // period's end) arrive here and become the Тариф catalog rows (решение #737)
 // for their single recipient — the owner. The Тариф category is a service
-// one: always on, outside the settings screen (ADR 0056), the per-category
+// one: always on, outside the settings screen (ADR 0058), the per-category
 // matrix never gates these rows.
 //
 // The billing context captures the events inside its transaction and the

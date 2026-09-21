@@ -178,7 +178,7 @@ func run() error {
 	//     post-commit seam the pipeline publishers call (#741, #748–#752).
 	//     The grace subscribers (step 11.6) are the first to call it. The
 	//     publisher also pushes the live SSE frames through the stream hub
-	//     (#742, ADR 0058), which the HTTP server serves below. The tasks
+	//     (#742, ADR 0060), which the HTTP server serves below. The tasks
 	//     (#750), payments (#776) and rentals (#777) scan publishers wire
 	//     here as well — their booking legs schedule the boundary jobs
 	//     through the same client.
@@ -204,7 +204,7 @@ func run() error {
 
 	// 11.6 Grace notifications (issue #253, #741): the billing grace events
 	//     publish to the stored feed + delivery queue through the pipeline
-	//     publisher (the always-on Тариф category, ADR 0056). Subscribers
+	//     publisher (the always-on Тариф category, ADR 0058). Subscribers
 	//     are registered before the workers start (step 12), so no grace
 	//     event fires unwired.
 	subscribeGraceEvents(eventDispatcher, notificationsapp.NewGracePublisher(riverMod.Publisher))
@@ -227,7 +227,7 @@ func run() error {
 	//     the upgrade an applied payment activated and the downgrade
 	//     assigned for the period's end (№14 «Тариф изменён») — publish to
 	//     the stored feed + delivery queue through the same pipeline
-	//     publisher (the always-on Тариф category, ADR 0056). The dispatchers
+	//     publisher (the always-on Тариф category, ADR 0058). The dispatchers
 	//     are synchronous, so the subscription must exist before any applied
 	//     payment can fire it.
 	tariffEventViews := notificationspg.NewTariffViewStore(p.DB)
@@ -340,7 +340,7 @@ func run() error {
 	// the otelhttp wrapper in the middleware chain hides the server's
 	// SetWriteDeadline from http.ResponseController — so the protection moves
 	// to the read deadlines (slow-request vector) and the stream's own
-	// heartbeat + hourly TTL (ADR 0058). Responses are bounded API payloads
+	// heartbeat + hourly TTL (ADR 0060). Responses are bounded API payloads
 	// behind a buffering Caddy, so a client stalling a write is not a
 	// resource leak.
 	server := &http.Server{

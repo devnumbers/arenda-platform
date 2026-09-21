@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// The category × channel matrix (решение #738, ADR 0056): four configurable
+// The category × channel matrix (решение #738, ADR 0058): four configurable
 // categories per set, the service categories never gated.
 func TestCategoryPrefs_DefaultIsAllOn(t *testing.T) {
 	t.Parallel()
@@ -29,7 +29,7 @@ func TestCategoryPrefs_Allows(t *testing.T) {
 	assert.False(t, off.Allows(CategorySharedAccess))
 
 	// The service categories are outside the settings screen — nothing can
-	// turn them off (решение чарта, ADR 0056).
+	// turn them off (решение чарта, ADR 0058).
 	assert.True(t, DefaultCategoryPrefs().Allows(CategoryTariff))
 	assert.True(t, DefaultCategoryPrefs().Allows(CategorySystem))
 	assert.True(t, off.Allows(CategoryTariff))

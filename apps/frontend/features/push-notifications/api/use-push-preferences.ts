@@ -25,7 +25,7 @@ export function defaultPushDevicePreferences(): PushDevicePreferences {
   return { enabled: true, categories: allCategoriesEnabled() };
 }
 
-/** Состояние пуш-канала устройства (решение #738, ADR 0056): мастер-тумблер
+/** Состояние пуш-канала устройства (решение #738, ADR 0058): мастер-тумблер
  * «Получать пуш-уведомления» и флаги четырёх категорий — на подписке
  * браузера, ключ устройства — endpoint URL (контракт #743). */
 export type PushDevicePreferences = {

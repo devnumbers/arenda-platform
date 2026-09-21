@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseStreamFrame, type StreamFrame } from './stream-frame';
 
-/** Кадры стрима (#742, ADR 0058): конверт {v, occurredAt, payload} внутри
+/** Кадры стрима (#742, ADR 0060): конверт {v, occurredAt, payload} внутри
  * data-строки SSE-события. */
 function frameData(payload: unknown, v = 1): string {
   return JSON.stringify({ v, occurredAt: '2026-09-19T10:40:00Z', payload });

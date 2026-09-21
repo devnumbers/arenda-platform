@@ -1,4 +1,4 @@
-# ADR 0056: Notification Feed and Per-Category Settings
+# ADR 0058: Notification Feed and Per-Category Settings
 
 The notifications context grows a stored feed (map #734, data model — decision
 #737): every event fans out one feed row per recipient, carrying a text
@@ -16,7 +16,7 @@ the "event type" axis of the preference model is gone — permissions bind to
 the notification category, the stored feed is written regardless of settings,
 and the settings matrix lives on the account (email) and on each push
 subscription (push). The legacy table
-`user_notification_channel_preferences` was dropped in migration `000131`.
+`user_notification_channel_preferences` was dropped in migration `000132`.
 
 ## Context
 
@@ -55,7 +55,7 @@ per-event-type table alive would preserve a model nothing reads anymore.
   subscription. The old per-event-type `GET/PUT /notification-preferences`
   contract is removed; front and back move together in the map branch.
 - **Reset, not migrate**: the old table and its rows are dropped (migration
-  `000131`); stored grace opt-outs are not honoured. The grace sender
+  `000132`); stored grace opt-outs are not honoured. The grace sender
   (`DirectNotificationService`) delivers both channels unconditionally — the
   «Тариф» category is always on.
 
@@ -73,7 +73,7 @@ per-event-type table alive would preserve a model nothing reads anymore.
 ## Implementation
 
 The settings contract and the feed's REST surface landed with #743
-(migration `000133`): the account email matrix lives in
+(migration `000134`): the account email matrix lives in
 `notification_email_preferences` (one row of four flags per user, absent row
 = all-on), the device matrix lives on the push subscription itself (master
 `enabled` plus the four category flags). The email delivery job reads the

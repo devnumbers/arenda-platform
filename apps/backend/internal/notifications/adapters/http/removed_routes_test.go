@@ -20,7 +20,7 @@ const removedReminderDetailPath = "/reminders/ffffffff-0000-0000-0000-0000000000
 // them — including old links and stale push deep links — falls through to the
 // router's NotFound (404). The reminders removal is issue #438. The
 // per-event-type notification preferences removal was the settings reset of
-// the notifications map (решение #738, ADR 0056); the per-category contract
+// the notifications map (решение #738, ADR 0058); the per-category contract
 // of #743 re-registered the path, so it is no longer part of this list —
 // the surviving-notifications control below pins its return.
 func TestRemovedRoutes_NotFound(t *testing.T) {

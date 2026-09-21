@@ -1,5 +1,5 @@
 // Package stream adapts the notifications context to the shared SSE
-// transport (карта #734, #742; ADR 0058): it formats the delivery pipeline's
+// transport (карта #734, #742; ADR 0060): it formats the delivery pipeline's
 // live pushes into envelope frames and hands them to the platform hub. The
 // transport is best-effort — the feed row is the system of record, the
 // frames only wake the clients up.
@@ -18,7 +18,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 )
 
-// The stream's event names (ADR 0058): stable coarse names the browser
+// The stream's event names (ADR 0060): stable coarse names the browser
 // dispatches to its addEventListener; adding new names is backward compatible
 // by definition (a client without a listener ignores the frame).
 const (
@@ -26,7 +26,7 @@ const (
 	EventUnreadCount         = "notification.unread_count"
 )
 
-// envelopeVersion is the envelope schema version (ADR 0058): breaking payload
+// envelopeVersion is the envelope schema version (ADR 0060): breaking payload
 // changes bump it, additive ones keep it.
 const envelopeVersion = 1
 
@@ -84,7 +84,7 @@ func (p *Publisher) UnreadCount(ctx context.Context, userID uuid.UUID, count int
 	})
 }
 
-// envelope is the JSON wrapper inside every frame's data line (ADR 0058):
+// envelope is the JSON wrapper inside every frame's data line (ADR 0060):
 // version, occurrence instant, per-type payload. The payload carries ids and
 // display fields only — the client re-reads state through its API.
 type envelope struct {

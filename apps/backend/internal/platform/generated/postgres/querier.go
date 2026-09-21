@@ -303,7 +303,7 @@ type Querier interface {
 	// whose book the property-bound cards belong to (ADR 0028).
 	GetContactPropertyRef(ctx context.Context, id pgtype.UUID) (GetContactPropertyRefRow, error)
 	GetEmailChangeGrantByUserIDForUpdate(ctx context.Context, userID pgtype.UUID) (EmailChangeGrant, error)
-	// The account-level email matrix (решение #738, ADR 0056): four
+	// The account-level email matrix (решение #738, ADR 0058): four
 	// configurable categories. A missing row is the all-on default — the caller
 	// falls back without inserting.
 	GetEmailPreferences(ctx context.Context, userID pgtype.UUID) (GetEmailPreferencesRow, error)

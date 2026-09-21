@@ -2,9 +2,9 @@
 
 ## Status
 
-Superseded by [ADR 0056](./0056-notification-feed-and-per-category-settings.md)
+Superseded by [ADR 0058](./0058-notification-feed-and-per-category-settings.md)
 (per-category settings; the per-event-type model and its tables are removed —
-migration `000131`).
+migration `000132`).
 
 Was accepted
 

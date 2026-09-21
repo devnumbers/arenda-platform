@@ -1,7 +1,7 @@
 package domain
 
 // CategoryPrefs is one channel's copy of the settings matrix (карта #734,
-// решение #738, ADR 0056): the four user-configurable categories as booleans.
+// решение #738, ADR 0058): the four user-configurable categories as booleans.
 // Email keeps one set per account (notification_email_preferences), push
 // keeps one per device — on the push subscription itself. Тариф and Системные
 // are service categories: always on, outside the settings screen, nothing

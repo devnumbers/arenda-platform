@@ -90,7 +90,7 @@ SET deleted_at = now()
 WHERE user_id = $1 AND deleted_at IS NULL;
 
 -- name: GetEmailPreferences :one
--- The account-level email matrix (решение #738, ADR 0056): four
+-- The account-level email matrix (решение #738, ADR 0058): four
 -- configurable categories. A missing row is the all-on default — the caller
 -- falls back without inserting.
 SELECT rental, payments_operations, tasks, shared_access

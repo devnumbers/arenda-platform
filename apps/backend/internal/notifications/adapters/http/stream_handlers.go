@@ -16,14 +16,14 @@ const (
 	// interval.
 	streamHeartbeatInterval = 25 * time.Second
 	// The TTL ends every connection after an hour, so a client
-	// re-authenticates through the session middleware on reconnect (ADR 0058).
+	// re-authenticates through the session middleware on reconnect (ADR 0060).
 	streamMaxConnTTL = time.Hour
 	// The browser's reconnect delay hint (retry:).
 	streamReconnectHintMs = 3000
 )
 
 // StreamHandlers implements the shared user event stream (карта #734, #742;
-// ADR 0058): GET /notifications/stream is an SSE endpoint over the session
+// ADR 0060): GET /notifications/stream is an SSE endpoint over the session
 // middleware's actor. The stream carries no domain state — coarse event
 // frames only, the clients re-read through their APIs.
 type StreamHandlers struct {
@@ -61,7 +61,7 @@ func (h *StreamHandlers) StreamNotifications(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Last-Event-ID is the browser's reconnect cursor. Replay is not
-	// implemented (v1, ADR 0058): the client re-reads the state through its
+	// implemented (v1, ADR 0060): the client re-reads the state through its
 	// API on open; the log keeps the seam visible for a v2 replay buffer.
 	if lastEventID := r.Header.Get("Last-Event-ID"); lastEventID != "" {
 		h.logger.InfoContext(r.Context(), "stream reconnect with last event id",

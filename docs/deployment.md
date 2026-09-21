@@ -188,7 +188,7 @@ Push в GHCR из workflow идёт под встроенным `GITHUB_TOKEN` (
   (`mailto:smirnowwwivan@mail.ru`). Публичный ключ отдаётся фронту в рантайме
   через `GET /push/vapid-public-key` (BFF-прокси `app/api/[...path]/route.ts`),
   приватный — серверный секрет; никуда кроме `ENV_FILE` не кладётся.
-- Очередь доставки уведомлений (River, ADR 0057) настраивается ключами
+- Очередь доставки уведомлений (River, ADR 0059) настраивается ключами
   `NOTIFICATIONS_*` (потолки воркеров очередей, бюджеты ретраев, окно
   soft-stop, глобальный email-бюджет провайдера) — в `ENV_FILE` обычно не
   указывается, рабочие дефолты зашиты в конфиг. Схема очереди применяется
@@ -324,7 +324,7 @@ localhost-порты контейнеров. Конфигурация — мод
   (требование спецификации — JS MIME);
 - дедупликация prod/stage-блоков — snippet `(rentlee_site)` с позиционными
   аргументами `{args[0]}` (канон Caddy ≥2.7; на сервере v2.11.4);
-- SSE-стрим (`/api/notifications/stream`, ADR 0058) исключён из `encode`
+- SSE-стрим (`/api/notifications/stream`, ADR 0060) исключён из `encode`
   матчером `not header Content-Type text/event-stream`: дефолтный матчер
   сжатия включает `text/*`, и gzip начал бы буферизовать кадры после 512
   байт; `reverse_proxy` сам флешит `text/event-stream` немедленно —

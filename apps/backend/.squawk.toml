@@ -51,7 +51,7 @@ excluded_paths = [
   "*000114_drop_leases_and_operations.up.sql",       # ban-drop-table ×8: осознанный drop контекста аренд (тикет #438, спека #434)
   "*000119_contacts_context.up.sql",                 # ban-drop-table: осознанный drop property_contacts (ADR 0051, карта #503 — данные не переносятся)
   "*000121_tasks_without_property.up.sql",           # ban-drop-not-null: свой смысл миграции — property_id в tasks становится опциональным (ADR 0052, карта #518); объектный срез не меняется, NULL-строки порождает только новый безобъектный срез
-  "*000131_notifications_feed.up.sql",               # ban-drop-table + require-enum-value-ordering: осознанный дроп user_notification_channel_preferences без переноса строк (решение #738, ADR 0056); 15 типов каталога #737 добавляются порядком каталога, не алфавитом
+  "*000132_notifications_feed.up.sql",               # ban-drop-table + require-enum-value-ordering: осознанный дроп user_notification_channel_preferences без переноса строк (решение #738, ADR 0058); 15 типов каталога #737 добавляются порядком каталога, не алфавитом
 ]
 
 excluded_rules = [

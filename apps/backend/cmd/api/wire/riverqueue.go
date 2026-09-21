@@ -58,7 +58,7 @@ type RiverQueue struct {
 	// root wires it into the tasks module after this constructor — the
 	// tasks module builds earlier than the queue.
 	TasksSeam *taskschedule.Seam
-	// Stream is the shared event stream hub (карта #734, #742; ADR 0058):
+	// Stream is the shared event stream hub (карта #734, #742; ADR 0060):
 	// the publisher pushes the live frames through it post-commit and the
 	// HTTP server serves GET /notifications/stream from it. The composition
 	// root closes it on shutdown, so long-lived streams do not hold up the
@@ -84,7 +84,7 @@ const (
 // tasks boundary queue, the payment boundary queue, the rental boundary
 // queue and the email/push/task/payment/rental workers, plus the publisher
 // over the transactional enqueuer and the event stream hub behind it (#742,
-// ADR 0058). The tasks (#750), payments (#776) and rentals (#777) scan
+// ADR 0060). The tasks (#750), payments (#776) and rentals (#777) scan
 // publishers wire here too: their booking legs schedule the boundary jobs
 // through the same client, so they bind the workers' deferred deliverers —
 // the composition root passes them to the scan group. The client is not

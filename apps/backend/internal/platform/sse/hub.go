@@ -37,7 +37,7 @@ type subscriber struct {
 }
 
 // Hub keeps the registry of open stream connections and fans events out to
-// them (ADR 0058). It is the in-memory transport for the single-instance
+// them (ADR 0060). It is the in-memory transport for the single-instance
 // backend; the N-replica upgrade path is a Postgres LISTEN/NOTIFY bridge
 // feeding the same hub, so the Subscribe/Publish surface does not change.
 type Hub struct {

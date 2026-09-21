@@ -20,7 +20,7 @@ const (
 // #743): the keyset page, the unread counter, the read/delete mutations and
 // the single-notification view whose action buttons are computed from the
 // entities' live state. Settings never hide rows — the feed is written
-// regardless of them (ADR 0056).
+// regardless of them (ADR 0058).
 type FeedService struct {
 	feed NotificationRepository
 	live FeedLiveState

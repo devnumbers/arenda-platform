@@ -24,7 +24,7 @@ var _ application.DeliveryQueue = (*RiverQueue)(nil)
 // in-flight job per channel (args = the notification id, all states except
 // the terminal ones), so a retried publication after a crash cannot
 // double-book a delivery. Delivery itself stays at-least-once — a crash
-// between the SMTP send and the job's completion can resend (ADR 0057): a
+// between the SMTP send and the job's completion can resend (ADR 0059): a
 // duplicate message beats a lost one.
 type RiverQueue struct {
 	client *river.Client[pgx.Tx]

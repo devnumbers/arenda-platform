@@ -39,7 +39,7 @@ type Publication struct {
 // runs its own transaction, where a feed row and its delivery jobs commit
 // together — a job never exists without its row and vice versa. Dedup is
 // durable: a repeat publication with the same (recipient, dedup key) inserts
-// nothing and enqueues nothing. Delivery is at-least-once (ADR 0057): the
+// nothing and enqueues nothing. Delivery is at-least-once (ADR 0059): the
 // queue may redeliver in an crash window, a duplicate message beats a lost
 // one.
 type Publisher struct {
@@ -115,7 +115,7 @@ func (p *Publisher) Publish(ctx context.Context, pub Publication) error {
 }
 
 // streamCreated pushes the live frames for the rows the publication created.
-// The SSE transport is best-effort (ADR 0058): a failed unread count drops
+// The SSE transport is best-effort (ADR 0060): a failed unread count drops
 // only the badge frame — the created frame never depends on it — and nothing
 // here can fail the publication.
 func (p *Publisher) streamCreated(ctx context.Context, created []*domain.Notification) {

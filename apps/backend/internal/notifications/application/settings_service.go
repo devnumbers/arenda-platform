@@ -10,7 +10,7 @@ import (
 )
 
 // SettingsService implements the notification settings use cases (карта
-// #734, решение #738, ADR 0056): the email matrix lives on the account —
+// #734, решение #738, ADR 0058): the email matrix lives on the account —
 // one configuration for every device; the push matrix lives on the device —
 // the master toggle and the four category flags on the push subscription.
 // The service categories (Тариф, Системные) are outside the contract: always

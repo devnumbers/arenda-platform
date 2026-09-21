@@ -176,7 +176,7 @@ export function useDeleteAllNotifications(): UseMutationResult<void, ApiError, v
 /**
  * Матрица email-настроек аккаунта (GET /notification-preferences, #743):
  * одна конфигурация на все устройства, нет строки — всё включено (решение
- * #738, ADR 0056). Тариф и Системные бэк не отдаёт — они всегда включены.
+ * #738, ADR 0058). Тариф и Системные бэк не отдаёт — они всегда включены.
  */
 export function useEmailNotificationPreferences(): UseQueryResult<
   NotificationCategoryPreferences,

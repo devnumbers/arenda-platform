@@ -2,7 +2,7 @@ import { parseStreamFrame, type StreamFrame } from './stream-frame';
 
 /**
  * Живой слой уведомлений на фронте (#747): подключение к SSE-стриму
- * GET /notifications/stream (#742, ADR 0058) без React — чистая логика
+ * GET /notifications/stream (#742, ADR 0060) без React — чистая логика
  * соединения, реакт-обвязка в notification-stream-provider. Компонент
  * держит EventSource на каждую вкладку — бэк рассчитан на это (лимит хаба
  * 8 соединений на пользователя, вкладки/устройства).
@@ -38,7 +38,7 @@ const READY_STATE_CLOSED = 2;
 
 const RETRY_DELAYS_MS = [1000, 2000, 4000, 8000, 16000, 30000] as const;
 
-/** Имена кадров стрима (ADR 0058): стабильные грубые имена — добавление
+/** Имена кадров стрима (ADR 0060): стабильные грубые имена — добавление
  * новых имён назад-совместимо, старый клиент их просто не слушает. */
 const STREAM_EVENT_NAMES = ['connected', 'notification.created', 'notification.unread_count'] as const;
 

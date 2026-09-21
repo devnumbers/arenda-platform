@@ -1,7 +1,7 @@
 // Package notificationsjob is the delivery-queue adapter of the notifications
 // context (карта #734, #740): River job args and workers that deliver a
 // stored feed row over email and Web Push, and the transactional enqueuer the
-// application publisher schedules deliveries through (ADR 0057). Jobs carry
+// application publisher schedules deliveries through (ADR 0059). Jobs carry
 // only the notification id — the worker reloads the committed feed row, so
 // the row stays the single source of the content.
 package notificationsjob

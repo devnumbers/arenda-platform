@@ -87,7 +87,7 @@ type Deps struct {
 	// the account, push on the device; nil answers the Unimplemented stub.
 	NotificationSettings *notificationsapp.SettingsService
 	// NotificationsStreamHub is the shared event stream's hub (карта #734,
-	// #742; ADR 0058). The generated /notifications/stream route serves from
+	// #742; ADR 0060). The generated /notifications/stream route serves from
 	// it; nil answers 503 (a build without the stream).
 	NotificationsStreamHub   *sse.Hub
 	VAPIDPublicKey           string

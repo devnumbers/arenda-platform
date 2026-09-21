@@ -1,4 +1,4 @@
-# ADR 0058: Shared User Event Stream — SSE
+# ADR 0060: Shared User Event Stream — SSE
 
 The platform has one long-lived, per-user event stream — `GET
 /notifications/stream` (Server-Sent Events) — instead of per-feature
@@ -12,7 +12,7 @@ consumer of the same transport.
 Accepted. Implements the realtime axis of the map #734 charter decision
 («SSE — общий пользовательский стрим»), based on research #736
 (`docs/research/2026-09-17-notifications-sse.md`). Complements
-[ADR 0057](./0057-notification-delivery-queue-river.md) (the delivery
+[ADR 0059](./0059-notification-delivery-queue-river.md) (the delivery
 pipeline whose commit the stream follows) and
 [ADR 0014](./0014-in-memory-event-dispatcher.md) (the in-process domain
 dispatcher, which stays as-is — the stream hub is a different primitive).
@@ -110,7 +110,7 @@ map #714 all need a push channel. The facts that shaped the decision:
 - (+) Live toasts, badges and future map #714 features ride one transport
   with one auth story; adding an event is a name and a payload, no new
   infrastructure.
-- (+) Delivery stays exactly as ADR 0057 defined it — the stream adds a
+- (+) Delivery stays exactly as ADR 0059 defined it — the stream adds a
   post-commit push, not a second delivery path; the feed row remains the
   system of record.
 - (−) `WriteTimeout: 0` applies to every response, not only the stream; the

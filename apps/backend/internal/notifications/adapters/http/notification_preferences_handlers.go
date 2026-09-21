@@ -12,7 +12,7 @@ import (
 )
 
 // NotificationPreferencesHandlers implements the per-category settings
-// endpoints (решение #738, ADR 0056): the account-level email matrix and the
+// endpoints (решение #738, ADR 0058): the account-level email matrix and the
 // per-device push preferences.
 type NotificationPreferencesHandlers struct {
 	settings *notificationsapp.SettingsService

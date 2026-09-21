@@ -1,7 +1,7 @@
 import { NOTIFICATION_CATEGORIES, type NotificationCategory } from '@/entities/notification';
 
 /**
- * Разбор кадров SSE-стрима (GET /notifications/stream, #742, ADR 0058) на
+ * Разбор кадров SSE-стрима (GET /notifications/stream, #742, ADR 0060) на
  * фронте #747: data-строка каждого события — конверт {v, occurredAt,
  * payload}. Кадры best-effort: мусорный или непонятный кадр даёт null и
  * просто игнорируется — лента остаётся системой записи, состояние клиент
@@ -26,7 +26,7 @@ export type StreamFrame =
     }
   | { readonly kind: 'unread-count'; readonly count: number; readonly occurredAt: string };
 
-/** envelopeVersion бэка (ADR 0058): ломающее изменение payload поднимает v —
+/** envelopeVersion бэка (ADR 0060): ломающее изменение payload поднимает v —
  * такой кадр старый клиент игнорирует; аддитивные поля остаются в v1. */
 const ENVELOPE_VERSION = 1;
 

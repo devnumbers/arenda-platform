@@ -17,7 +17,7 @@ import (
 var _ application.EmailPreferencesRepository = (*EmailPreferencesRepository)(nil)
 
 // EmailPreferencesRepository persists the account-level email matrix
-// (решение #738, ADR 0056): one row of four configurable category flags per
+// (решение #738, ADR 0058): one row of four configurable category flags per
 // user, absent row = all-on default.
 type EmailPreferencesRepository struct {
 	db postgres.DBTX

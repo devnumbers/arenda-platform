@@ -60,7 +60,7 @@ type NotificationRepository interface {
 }
 
 // EmailPreferencesRepository persists the account-level email matrix
-// (решение #738, ADR 0056): one row of four configurable category flags per
+// (решение #738, ADR 0058): one row of four configurable category flags per
 // user.
 type EmailPreferencesRepository interface {
 	// Get returns the user's email matrix; a missing row is the all-on
@@ -116,7 +116,7 @@ type ContactResolver interface {
 // DeliveryQueue schedules a stored notification's channel deliveries. The
 // publisher enqueues inside its own transaction, so a delivery job commits
 // together with its feed row; retries and at-least-once delivery are the
-// queue's contract (ADR 0057). A channel that is not configured (push
+// queue's contract (ADR 0059). A channel that is not configured (push
 // without VAPID keys) is a legitimate no-op implementation.
 type DeliveryQueue interface {
 	EnqueueEmail(ctx context.Context, tx transaction.Tx, notificationID uuid.UUID) error
@@ -124,7 +124,7 @@ type DeliveryQueue interface {
 }
 
 // StreamPublisher pushes live notifications to a recipient's open stream
-// (карта #734, #742; ADR 0058). The port is the delivery pipeline's post-commit
+// (карта #734, #742; ADR 0060). The port is the delivery pipeline's post-commit
 // hook into the transport: the publisher calls it strictly after the row's
 // transaction commits, once per created row. Best-effort by contract —
 // implementations never block, never fail and report nothing; a dropped frame
@@ -140,7 +140,7 @@ type StreamPublisher interface {
 }
 
 // DeliverySettings reads the category × channel matrix at delivery time
-// (решение #738, ADR 0056; CONTEXT.md «Доставка в момент доставки»): the
+// (решение #738, ADR 0058; CONTEXT.md «Доставка в момент доставки»): the
 // delivery job checks the recipient's live settings right before sending —
 // a setting changed after the enqueue applies to the in-flight job too.
 type DeliverySettings interface {

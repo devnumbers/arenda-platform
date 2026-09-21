@@ -153,7 +153,7 @@ type InvitationRepository interface {
 // to) and the "object deleted" notice (issue #162, T6) whose event is not in
 // the notifications catalog. The rest of the lifecycle correspondence —
 // revoke, suspension, recovery, activation, self-exit — is the stored
-// notifications feed's (карта #734, #751, ADR 0056): written always,
+// notifications feed's (карта #734, #751, ADR 0058): written always,
 // delivered over the channels per the category matrix.
 type AccessMailer interface {
 	SendInvite(ctx context.Context, to, propertyTitle string, role domain.Role) error

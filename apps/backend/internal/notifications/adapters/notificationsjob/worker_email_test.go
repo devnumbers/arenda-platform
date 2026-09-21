@@ -237,7 +237,7 @@ func TestDeliverEmailWorkerRetriesFeedFailure(t *testing.T) {
 }
 
 // The account-level email matrix gates the leg at delivery time (решение
-// #738, ADR 0056): the job checks the recipient's live settings before
+// #738, ADR 0058): the job checks the recipient's live settings before
 // sending — settings changed after the enqueue apply to the in-flight job.
 func TestDeliverEmailWorkerSkipsWhenCategoryEmailOff(t *testing.T) {
 	t.Parallel()

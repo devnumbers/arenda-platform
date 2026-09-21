@@ -5,7 +5,7 @@
 // Этот маршрут стримит тело upstream как есть: без таймаута, без буферизации;
 // закрытие страницы отменяет upstream через request.signal. Last-Event-ID
 // пробрасывается — браузер шлёт его на переподключении (в v1 бэк курсор
-// только логирует, ADR 0058).
+// только логирует, ADR 0060).
 import type { NextRequest } from 'next/server';
 import { BACKEND_URL } from '@/shared/config/backend-url';
 

@@ -12,12 +12,12 @@ import (
 // GracePublisher is the billing grace events' publisher (issue #253) on the
 // delivery pipeline (карта #734, #741): each grace event becomes a feed row
 // for the owner (the Тариф recipient slot) with both channel deliveries —
-// email and push — enqueued through the River queue (ADR 0057). The former
+// email and push — enqueued through the River queue (ADR 0059). The former
 // direct channel (DirectNotificationService) is gone: same copy, same
 // payment-methods destination, but the notification is now stored, retried
 // and observable per channel. The per-category matrix (#743) never gates
 // these rows: the Тариф category is a service category — always on, outside
-// the settings screen (ADR 0056).
+// the settings screen (ADR 0058).
 //
 // The call stays on the grace-events canon: billing captures the event
 // inside its transaction and publishes strictly after the commit, best-effort

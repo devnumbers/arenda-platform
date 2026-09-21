@@ -103,7 +103,7 @@ type GetEmailPreferencesRow struct {
 	SharedAccess       bool `json:"shared_access"`
 }
 
-// The account-level email matrix (решение #738, ADR 0056): four
+// The account-level email matrix (решение #738, ADR 0058): four
 // configurable categories. A missing row is the all-on default — the caller
 // falls back without inserting.
 func (q *Queries) GetEmailPreferences(ctx context.Context, userID pgtype.UUID) (GetEmailPreferencesRow, error) {

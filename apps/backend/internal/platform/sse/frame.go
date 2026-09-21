@@ -1,5 +1,5 @@
 // Package sse is the shared user event stream's transport primitives
-// (карта #734, #742; ADR 0058): the SSE frame writer and the per-user
+// (карта #734, #742; ADR 0060): the SSE frame writer and the per-user
 // subscription hub. The package knows nothing about notification semantics —
 // contexts format their own envelopes and address recipients through the hub;
 // the stream's first consumer is notifications (#742), the map #714 rewires
@@ -49,7 +49,7 @@ func (f Frame) Bytes() []byte {
 // what makes the browser treat the connection as SSE (anything else fails the
 // connection), no-store keeps proxies from caching, and X-Accel-Buffering
 // asks nginx-family proxies not to buffer (Caddy ignores it — harmless).
-// The server's WriteTimeout is 0 (ADR 0058): no per-connection deadline to
+// The server's WriteTimeout is 0 (ADR 0060): no per-connection deadline to
 // clear, the heartbeat's write errors surface dead connections.
 func WriteHeaders(w http.ResponseWriter) {
 	h := w.Header()

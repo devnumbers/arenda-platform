@@ -1,4 +1,4 @@
-# ADR 0057: Notification Delivery Queue — River
+# ADR 0059: Notification Delivery Queue — River
 
 The delivery pipeline of the notifications map (#734, ticket #740) runs
 channel deliveries (email, Web Push) through [River](https://riverqueue.com)
@@ -11,7 +11,7 @@ and a global email-provider budget.
 
 Accepted. Implements the delivery axis of the map #734 charter decision
 («очередь = River»), based on research #735. Complements
-[ADR 0056](./0056-notification-feed-and-per-category-settings.md) (the feed
+[ADR 0058](./0058-notification-feed-and-per-category-settings.md) (the feed
 model) and [ADR 0013](./0013-in-memory-rate-limiters.md) (rate-limit canon,
 unchanged for per-user budgets).
 
@@ -64,7 +64,7 @@ our code.
 4. **Jobs carry the notification id, not the content.** The worker reloads
    the committed feed row — the row stays the single source of the text —
    and resolves the recipient's contact and live push subscriptions at
-   delivery time. The per-category × channel settings matrix (ADR 0056)
+   delivery time. The per-category × channel settings matrix (ADR 0058)
    is enforced in the same place when it exists (#743); until then nothing
    can silence a channel (the old table is dropped, everything-on default).
 
@@ -72,7 +72,7 @@ our code.
    id; `UniqueOpts{ByArgs, ByState minus completed/cancelled/discarded}`
    makes the enqueue idempotent across crash windows without blocking a
    legitimate future publication. Feed-row dedup ((user_id, dedup_key)
-   unique, ADR 0056) remains the primary guard — a deduped row enqueues
+   unique, ADR 0058) remains the primary guard — a deduped row enqueues
    nothing.
 
 6. **Retries and throttling.** River's default backoff ladder
@@ -128,7 +128,7 @@ our code.
 
 ## See also
 
-[ADR 0056](./0056-notification-feed-and-per-category-settings.md),
+[ADR 0058](./0058-notification-feed-and-per-category-settings.md),
 [ADR 0013](./0013-in-memory-rate-limiters.md),
 [ADR 0033](./0033-unit-of-work-transactional-seam.md),
 research #735 (`docs/research/2026-09-17-notifications-river.md` on branch

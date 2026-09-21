@@ -41,7 +41,7 @@ export function handleStreamFrame(frame: StreamFrame, queryClient: StreamQueryCl
 }
 
 /** Открытые-хендлеры стрима: на каждом открытии (включая переподключение —
- * replay-курсора в v1 нет, ADR 0058) клиент перечитывает живое через
+ * replay-курсора в v1 нет, ADR 0060) клиент перечитывает живое через
  * react-query. */
 function streamHandlers(queryClient: StreamQueryClient): NotificationStreamHandlers {
   return {
