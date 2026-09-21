@@ -56,7 +56,13 @@ describe('notificationActionView', () => {
   it('глобальные экраны не требуют payload-ссылок', () => {
     expect(notificationActionView('open_property', fullPayload)?.href).toBe(`/properties/${PROPERTY_ID}`);
     expect(notificationActionView('open_property_members', fullPayload)?.href).toBe('/participants');
-    expect(notificationActionView('open_tariffs', fullPayload)?.href).toBe('/profile/tariff');
+    // №14 «Тариф изменён»: лейбл не из макета (у №14 его нет), а из
+    // каталога #737 (#788) — обоснование в notification-actions.ts.
+    expect(notificationActionView('open_tariffs', fullPayload)).toStrictEqual({
+      label: 'Тариф',
+      href: '/profile/tariff',
+      variant: 'primary',
+    });
     expect(notificationActionView('open_payment_methods', fullPayload)?.href).toBe(
       '/profile/tariff/payment-methods',
     );

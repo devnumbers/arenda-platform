@@ -4,7 +4,9 @@
  * и переход на экран сущности — кнопка никогда не мутирует. Переходы
  * строятся только из ссылок payload; живой ссылки нет — кнопки нет.
  * Продлить — secondary по макету 2316:143297 (пара аренды), остальные
- * primary (2316:143530/143588/143647, 2333:184060).
+ * primary (2316:143530/143588/143647, 2333:184060). Исключение —
+ * open_tariffs: у №14 «Тариф изменён» макета нет, лейбл из решения
+ * каталога #737 (см. комментарий у кейса).
  */
 
 import { ROUTES } from '@/shared/config/routes';
@@ -53,7 +55,10 @@ export function notificationActionView(
     case 'open_property_members':
       return { label: 'Участники', href: ROUTES.participants, variant: 'primary' };
     case 'open_tariffs':
-      return { label: 'Оплатить', href: ROUTES.profileTariff, variant: 'primary' };
+      // №14 «Тариф изменён» (#788): лейбл «Тариф» — по решению каталога
+      // #737 («переход к тарифам»); макета у №14 нет, «Оплатить» из макета
+      // grace-пары (2316:143647) не переносится — даунгрейд не оплата.
+      return { label: 'Тариф', href: ROUTES.profileTariff, variant: 'primary' };
     case 'open_payment_methods':
       return { label: 'Способ оплаты', href: ROUTES.profilePaymentMethods, variant: 'primary' };
   }
