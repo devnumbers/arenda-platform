@@ -279,9 +279,12 @@ func TestGraceEvents_ExpiringReminderPublishedStrictlyAfterCommit(t *testing.T) 
 // capturePublisher is an EventPublisher that records the published events and
 // can be scripted to fail.
 type capturePublisher struct {
-	entered  []GraceEntered
-	expiring []GraceExpiring
-	err      error
+	entered            []GraceEntered
+	expiring           []GraceExpiring
+	succeeded          []PaymentSucceeded
+	upgraded           []PlanUpgraded
+	downgradeScheduled []PlanDowngradeScheduled
+	err                error
 }
 
 func (p *capturePublisher) PublishGraceEntered(_ context.Context, event GraceEntered) error {
@@ -297,6 +300,30 @@ func (p *capturePublisher) PublishGraceExpiring(_ context.Context, event GraceEx
 		return p.err
 	}
 	p.expiring = append(p.expiring, event)
+	return nil
+}
+
+func (p *capturePublisher) PublishPaymentSucceeded(_ context.Context, event PaymentSucceeded) error {
+	if p.err != nil {
+		return p.err
+	}
+	p.succeeded = append(p.succeeded, event)
+	return nil
+}
+
+func (p *capturePublisher) PublishPlanUpgraded(_ context.Context, event PlanUpgraded) error {
+	if p.err != nil {
+		return p.err
+	}
+	p.upgraded = append(p.upgraded, event)
+	return nil
+}
+
+func (p *capturePublisher) PublishPlanDowngradeScheduled(_ context.Context, event PlanDowngradeScheduled) error {
+	if p.err != nil {
+		return p.err
+	}
+	p.downgradeScheduled = append(p.downgradeScheduled, event)
 	return nil
 }
 

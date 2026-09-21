@@ -1,24 +1,33 @@
+/* Тосты на react-toastify v11 (unstyled) + нативный ReactToastify.css.
+   Библиотечный CSS несёт контейнер, позиции, стек (позиции --y/--s/--g,
+   data-collapsed, peek-ступени, transition transform 0.3s), скрытие
+   содержимого свёрнутых карточек. Здесь только скины поверх него и
+   библиотечные CSS-переменные; специфичность поднята до .toast.Toastify__toast,
+   чтобы не зависеть от порядка в бандле. */
+
+:global(:root) {
+    --toastify-toast-width: 460px;
+}
+
+/* Пустые зоны контейнера не ловят клики; сам тост — pointer-events: auto. */
 .container {
-    position: fixed;
-    top: 16px;
-    right: 16px;
-    z-index: 9999;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    width: 460px;
     pointer-events: none;
 }
 
-.toast {
-    --y: 0px;
+@media (max-width: 767px) {
+    .container {
+        --toastify-toast-width: calc(100vw - 24px);
+        --toastify-toast-right: 12px;
+        --toastify-toast-left: 12px;
+    }
+}
+
+.toast:global(.Toastify__toast) {
+    /* Стековые transform-переменные выставляет библиотека инлайн; дефолт
+       --s страхует кадр до layout-эффекта (нативный дефолт только у --y). */
     --s: 1;
 
-    position: relative;
-    display: flex;
-    align-items: center;
     gap: 12px;
-    width: 100%;
     padding: 12px 16px;
     border-radius: var(--radius-button);
     background: var(--color-white);
@@ -26,15 +35,14 @@
     0 -6px 12px rgba(0, 0, 0, 0.03),
     0 14px 28px rgba(0, 0, 0, 0.08);
     font-family: var(--font-inter), 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    min-height: 0;
+    margin-bottom: 0;
     pointer-events: auto;
-    touch-action: none;
-    user-select: none;
-    -webkit-user-select: none;
 }
 
 /* Auto-close countdown runs on the progress bar animation (react-toastify
    closes the toast on its animationend). Keep it invisible but animating. */
-.toast > [class*='Toastify__progress-bar--wrp'] {
+.toast:global(.Toastify__toast) > [class*='Toastify__progress-bar--wrp'] {
     position: absolute;
     bottom: 0;
     left: 0;
@@ -45,7 +53,7 @@
     pointer-events: none;
 }
 
-.toast > [class*='Toastify__progress-bar--wrp'] > [class*='Toastify__progress-bar'] {
+.toast:global(.Toastify__toast) > [class*='Toastify__progress-bar--wrp'] > [class*='Toastify__progress-bar'] {
     position: absolute;
     bottom: 0;
     left: 0;
@@ -54,7 +62,7 @@
     transform-origin: left;
 }
 
-.toast > [class*='Toastify__progress-bar--wrp'] > [class*='Toastify__progress-bar--animated'] {
+.toast:global(.Toastify__toast) > [class*='Toastify__progress-bar--wrp'] > [class*='Toastify__progress-bar--animated'] {
     animation: toast-progress linear 1 forwards;
 }
 
@@ -66,6 +74,15 @@
     to {
         transform: scaleX(0);
     }
+}
+
+/* В v11 обёртки .Toastify__toast-body больше нет — контент рендерится
+   напрямую в тост, и нативное правило фейда «... .Toastify__toast-body
+   { transition: opacity 0.1s }» не находит элемент. Повторяем его намерение
+   на прямых детях тоста: содержимое свёрнутых карточек гаснет/проявляется
+   плавно вслед за разлётом стека, а не одним кадром. */
+.toast:global(.Toastify__toast)[class*='--stacked'] > * {
+    transition: opacity 0.1s;
 }
 
 .body {
@@ -116,6 +133,49 @@
 .action {
     flex-shrink: 0;
     align-self: center;
+}
+
+/* Bare variant (тост о новом уведомлении, #747, макет 2343:57307): макет
+   карточки — радиус 24 и тень 0 8px 24px — несёт сам тост, поэтому фон и
+   хром видны и у свёрнутых карточек (нативный peek-стек), а содержимое
+   скрывается стеком библиотеки. Ширина карточки — 402 (макет #778, поля
+   24 во фрейме 450), мобайл — экран − 48 (поля 24 с обеих сторон).
+   Ширина задаётся СВОЙСТВОМ, не переменной: в stacked-режиме библиотека
+   кладёт на тосты `.Toastify__toast--stacked { width: 100% }` позже своей
+   базовой ширины — var(--toastify-toast-width) на тосте не разрешается
+   вовсе, карточка тянется на ширину контейнера. 0-3-0 варианта бьёт
+   0-1-0 библиотеки; канонные тосты сценариев остаются на :root-значении
+   460. */
+.toast:global(.Toastify__toast).notification {
+    width: 402px;
+    gap: 0;
+    padding: 0;
+    border-radius: 24px;
+    background: var(--color-white);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+@media (max-width: 767px) {
+    .toast:global(.Toastify__toast).notification {
+        width: calc(100vw - 48px);
+    }
+}
+
+/* Extended hit area канона накрывает X верхней карточки свёрнутого
+   стека — клик по крестику перехватывает фронт-карточка (поймано
+   владельцем 19.09: «уведомления не закрываются на крестик»). У
+   уведомительных тостов зона отключена: X кликабелен всегда; gap
+   filler (::after) остаётся — hover-раскрытие работает. */
+.toast.notification[class*='--stacked']::before {
+    content: none;
+}
+
+/* Exit канона («улет вправо») перебивает stack-трансформ (--y/--s):
+   свёрнутая карточка при закрытии скачет по вертикали и масштабу.
+   Не-фронтовая карточка гаснет на месте; фронтовая (:last-child)
+   сохраняет вылет канона. */
+.toast.notification[class*='--stacked']:not(:last-child).toastExit {
+    animation-name: toast-fade-out;
 }
 
 .closeButton {
@@ -281,74 +341,7 @@
     }
 }
 
-/* Stacked mode: library JS sets the class, data attributes and --y/--s/--g
-   variables; visuals below replicate ReactToastify.css lines 155-207. */
-.toast[class*='--stacked'] {
-    position: absolute;
-    width: 100%;
-    transform: translate3d(0, var(--y), 0) scale(var(--s));
-    transition: transform var(--dl-duration-move) var(--dl-ease);
-}
-
-.toast[data-collapsed] .body,
-.toast[data-collapsed] .closeButton {
-    transition: opacity var(--dl-duration-fast) var(--dl-ease);
-}
-
-.toast[data-collapsed='false'] {
-    overflow: visible;
-}
-
-/* Only the front card shows its content while collapsed. */
-.toast[data-collapsed='true']:not(:last-child) > * {
-    opacity: 0;
-}
-
-/* Gap filler: keeps the hover area continuous between stacked cards. */
-.toast[class*='--stacked']::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    height: calc(var(--g, 0) * 1px);
-    bottom: 100%;
-}
-
-/* Extended hit area behind the card. */
-.toast[class*='--stacked']::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: 100%;
-    transform: scaleY(3);
-    z-index: -1;
-}
-
-.toast[data-pos='bot'][class*='--stacked']::before {
-    transform-origin: top;
-}
-
-.toast[data-pos='top'][class*='--stacked']::before {
-    transform-origin: bottom;
-}
-
-.toast[data-pos='top'] {
-    top: 0;
-}
-
-.toast[data-pos='bot'] {
-    bottom: 0;
-}
-
 @media (max-width: 767px) {
-    .container {
-        left: 12px;
-        right: 12px;
-        width: auto;
-    }
-
     .toastEnter {
         animation-name: toast-enter-down;
     }

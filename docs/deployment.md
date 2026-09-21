@@ -188,6 +188,11 @@ Push в GHCR из workflow идёт под встроенным `GITHUB_TOKEN` (
   (`mailto:smirnowwwivan@mail.ru`). Публичный ключ отдаётся фронту в рантайме
   через `GET /push/vapid-public-key` (BFF-прокси `app/api/[...path]/route.ts`),
   приватный — серверный секрет; никуда кроме `ENV_FILE` не кладётся.
+- Очередь доставки уведомлений (River, ADR 0059) настраивается ключами
+  `NOTIFICATIONS_*` (потолки воркеров очередей, бюджеты ретраев, окно
+  soft-stop, глобальный email-бюджет провайдера) — в `ENV_FILE` обычно не
+  указывается, рабочие дефолты зашиты в конфиг. Схема очереди применяется
+  шагом `migrate` после основных миграций (отдельная цепочка `river_migration`).
 
 ## Миграции и бэкапы
 
@@ -319,6 +324,11 @@ localhost-порты контейнеров. Конфигурация — мод
   (требование спецификации — JS MIME);
 - дедупликация prod/stage-блоков — snippet `(rentlee_site)` с позиционными
   аргументами `{args[0]}` (канон Caddy ≥2.7; на сервере v2.11.4);
+- SSE-стрим (`/api/notifications/stream`, ADR 0060) исключён из `encode`
+  матчером `not header Content-Type text/event-stream`: дефолтный матчер
+  сжатия включает `text/*`, и gzip начал бы буферизовать кадры после 512
+  байт; `reverse_proxy` сам флешит `text/event-stream` немедленно —
+  `flush_interval` не нужен;
 - `www.rentlee.ru` — permanent redir на канон; admin-блоки — catch-all на
   админку с тем же `handle_path /api/*`;
 - access-лог — общий `/var/log/caddy/access.log` (JSON, roll 50mb × 5),

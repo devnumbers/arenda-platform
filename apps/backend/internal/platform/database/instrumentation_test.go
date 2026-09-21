@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"os"
@@ -133,3 +134,49 @@ func TestSQLOperationFallsBackToVerbAndTable(t *testing.T) {
 }
 
 var _ pgx.Row = (*fakeRow)(nil)
+
+// stubPgxTx satisfies pgx.Tx by embedding the interface: the PgxTxOf tests
+// only pass the value around, no method is ever invoked.
+type stubPgxTx struct{ pgx.Tx }
+
+// bareTx implements only the transaction port — the shape PgxTxOf must reject.
+type bareTx struct{}
+
+func (bareTx) Commit(context.Context) error   { return nil }
+func (bareTx) Rollback(context.Context) error { return nil }
+
+func TestPgxTxOfUnwrapsInstrumentedTx(t *testing.T) {
+	t.Parallel()
+
+	raw := &stubPgxTx{}
+	instrumented := NewInstrumentedTx(raw, nil)
+
+	got, err := PgxTxOf(instrumented)
+	if err != nil {
+		t.Fatalf("PgxTxOf(instrumented) error: %v", err)
+	}
+	if got != pgx.Tx(raw) {
+		t.Fatalf("PgxTxOf(instrumented) = %v, want the raw pgx tx", got)
+	}
+}
+
+func TestPgxTxOfPassesThroughPgxTx(t *testing.T) {
+	t.Parallel()
+
+	raw := &stubPgxTx{}
+	got, err := PgxTxOf(raw)
+	if err != nil {
+		t.Fatalf("PgxTxOf(pgx.Tx) error: %v", err)
+	}
+	if got != pgx.Tx(raw) {
+		t.Fatalf("PgxTxOf(pgx.Tx) = %v, want the same tx", got)
+	}
+}
+
+func TestPgxTxOfRejectsNonPgxTx(t *testing.T) {
+	t.Parallel()
+
+	if _, err := PgxTxOf(bareTx{}); err == nil {
+		t.Fatal("PgxTxOf(bare tx) = nil error, want rejection")
+	}
+}

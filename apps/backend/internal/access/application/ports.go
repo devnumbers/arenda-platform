@@ -147,28 +147,17 @@ type InvitationRepository interface {
 	WithTx(tx transaction.Tx) InvitationRepository
 }
 
-// AccessMailer sends the transactional emails of the sharing lifecycle
-// (issues #161 T5, #162 T6). SendInvite is the invite email to an unregistered
-// invitee — the only email of the invitation lifecycle. The rest are the
-// lifecycle emails: to the (former) member on revoke / property deletion /
-// suspension / downgrade / recovery, and to the owner on invitation activation
-// and member self-exit.
+// AccessMailer sends the transactional emails of the sharing lifecycle that
+// stay direct: the invite email to an unregistered invitee (issue #161, T5 —
+// until the invitee registers there is no recipient a feed row could belong
+// to) and the "object deleted" notice (issue #162, T6) whose event is not in
+// the notifications catalog. The rest of the lifecycle correspondence —
+// revoke, suspension, recovery, activation, self-exit — is the stored
+// notifications feed's (карта #734, #751, ADR 0058): written always,
+// delivered over the channels per the category matrix.
 type AccessMailer interface {
 	SendInvite(ctx context.Context, to, propertyTitle string, role domain.Role) error
-	SendAccessRevoked(ctx context.Context, to, propertyTitle string) error
 	SendPropertyDeleted(ctx context.Context, to, propertyTitle string) error
-	SendAccessSuspended(ctx context.Context, to, propertyTitle string) error
-	// SendDowngradeSummary sends the single summary email listing the
-	// memberships suspended by one enforcement call (a tariff downgrade /
-	// grace expiry). PropertyTitles are the display titles of the suspended
-	// objects.
-	SendDowngradeSummary(ctx context.Context, to string, propertyTitles []string) error
-	SendAccessRestored(ctx context.Context, to, propertyTitle string) error
-	// SendInvitationActivated notifies the property owner that an invited
-	// member activated their access at registration.
-	SendInvitationActivated(ctx context.Context, to, propertyTitle, memberEmail string) error
-	// SendMemberLeft notifies the property owner that a member left the object.
-	SendMemberLeft(ctx context.Context, to, propertyTitle, memberName string) error
 }
 
 // UserEmailResolver resolves a registered user's email address for the

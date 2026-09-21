@@ -7,16 +7,16 @@ import {
 
 // Дерево профиля на едином хроме (карта #556, тикет #566): все /profile*
 // переехали из (cabinet) в (screens) без смены URL. Подэкраны — TopNav с
-// ведущим «Назад» (history-first goBack, фолбэк — родительская страница),
-// /profile/notifications — хаб-страница таба «Уведомления» (анатомия #567),
-// активность — по нав-модели #558 без правок.
+// ведущим «Назад» (history-first goBack, фолбэк — родительская страница).
+// /profile/notifications с #746 — саб-экран «Настроить уведомления»,
+// раздел «Уведомления» он подсвечивает по нав-модели #558.
 
-/** Подэкраны дерева: путь → заголовок в шапке. /profile и
- * /profile/notifications — хабы (без «Назад», крылья), в таблицу не входят.
- * /profile/tariff/payments/[id] не входит — требует id платежа, канон его
- * шапки совпадает со списком. /profile/personal снесён в #593 — поглощён
- * экраном /profile/account. /profile/tariff/change/success не входит —
- * канонный полноэкранный успех (#623) без SubScreenShell. */
+/** Подэкраны дерева: путь → заголовок в шапке. /profile — хаб (без «Назад»,
+ * крылья), в таблицу не входит. /profile/tariff/payments/[id] не входит —
+ * требует id платежа, канон его шапки совпадает со списком.
+ * /profile/personal снесён в #593 — поглощён экраном /profile/account.
+ * /profile/tariff/change/success не входит — канонный полноэкранный успех
+ * (#623) без SubScreenShell. */
 const SUBPAGE_TITLES: ReadonlyArray<readonly [string, string]> = [
   ['/profile/account', 'Аккаунт'],
   ['/profile/account/phone', 'Изменение телефона'],
@@ -24,6 +24,7 @@ const SUBPAGE_TITLES: ReadonlyArray<readonly [string, string]> = [
   ['/profile/info', 'Информация'],
   ['/profile/info/privacy', 'Политика конфиденциальности'],
   ['/profile/info/terms', 'Пользовательское соглашение'],
+  ['/profile/notifications', 'Настроить уведомления'],
   ['/profile/tariff', 'Тариф'],
   ['/profile/tariff/about', 'О тарифе'],
   ['/profile/tariff/disable', 'Отключение тарифа'],
@@ -41,40 +42,47 @@ const USER_WING = /Пользователь|Иван/;
 test.describe('дерево профиля — хром #566', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test('хаб «Уведомления»: крылья на мобайле, таб активен, без «Назад»', async ({
+  test('экран «Настроить уведомления»: саб-экран с «Назад», мастер и матрица', async ({
     page,
     seededUser,
   }, testInfo) => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto('/profile/notifications');
 
-    // Хаб-анатомия: крылья и на мобайле, ведущего «Назад» нет —
-    // страница таба, а не подэкран профиля.
+    // Саб-экран #746 (макеты 1789-100250/2329-150165): ведущий «Назад»,
+    // заголовок в шапке; крыльев нет — экран дерева профиля.
     const header = page.locator(SCREEN_HEADER);
-    await expect(header.getByRole('link', { name: 'Объекты' })).toBeVisible();
-    await expect(header.getByRole('button', { name: USER_WING })).toBeVisible();
-    await expect(header.getByRole('button', { name: 'Назад' })).toHaveCount(0);
+    await expect(header.getByRole('button', { name: 'Назад' })).toBeVisible();
+    // Фильтр visible — Next держит в body скрытый клон дерева,
+    // текстовые локаторы без него ресолвят обе копии шапки.
     await expect(
-      page.getByRole('heading', { level: 1, name: 'Уведомления', exact: true }),
+      header.getByText('Настроить уведомления', { exact: true }).filter({ visible: true }),
     ).toBeVisible();
-    // Состав прежний: настройка каналов уведомлений. Фильтр visible —
+
+    // Матрица: мастер-тумблер и четыре группы × два канала. Фильтр visible —
     // Next держит в body скрытый клон дерева (div#S:0[hidden]), текстовые
     // локаторы без него ресолвят обе копии.
     await expect(
-      page.getByRole('checkbox', { name: 'Оплата подписки — Email' }).filter({ visible: true }),
+      page.getByText('Получать пуш-уведомления', { exact: true }).filter({ visible: true }),
     ).toBeVisible();
+    for (const group of ['Аренда', 'Платежи и операции', 'Задачи', 'Совместный доступ']) {
+      await expect(
+        page.getByRole('heading', { level: 2, name: group }).filter({ visible: true }),
+      ).toBeVisible();
+    }
     await expect(
-      page
-        .getByText('Письма об оплате подписки приходят на вашу почту', { exact: false })
-        .filter({ visible: true }),
-    ).toBeVisible();
+      page.getByText('Электронная почта', { exact: true }).filter({ visible: true }),
+    ).toHaveCount(4);
+    await expect(
+      page.getByText('Пуш-уведомления', { exact: true }).filter({ visible: true }),
+    ).toHaveCount(4);
 
-    // Активность по нав-модели: средний таб TabBar подсвечен.
+    // Активность по нав-модели: раздел «Уведомлений» — средний таб TabBar.
     await expect(
       page.locator(BOTTOM_NAV).getByRole('link', { name: 'Уведомления' }),
     ).toHaveAttribute('aria-current', 'page');
 
-    await captureScreen(page, testInfo, 'profile-notifications-hub-mobile');
+    await captureScreen(page, testInfo, 'profile-notifications-settings-mobile');
   });
 
   test('дерево: хаб без «Назад», строка «Аккаунт» вглубь, «Назад» по истории', async ({
@@ -160,24 +168,26 @@ test.describe('дерево профиля — хром #566', () => {
     await expect(header.getByRole('link', { name: 'Объекты' })).toBeVisible();
     await expect(header.getByRole('button', { name: 'Назад' })).toHaveCount(0);
 
-    // Хаб «Уведомления»: крылья и на планшете (канон хаб-экранов).
+    // «Настроить уведомления» (#746): саб-экран — «Назад» вместо крыльев
+    // и на планшете (канон подэкранов).
     await page.goto('/profile/notifications');
-    await expect(header.getByRole('link', { name: 'Объекты' })).toBeVisible();
-    await expect(header.getByRole('button', { name: 'Назад' })).toHaveCount(0);
+    await expect(header.getByRole('button', { name: 'Назад' })).toBeVisible();
+    await expect(header.getByRole('link', { name: 'Объекты' })).toHaveCount(0);
   });
 });
 
 test.describe('дерево профиля — ПК ≥1024', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
-  test('хаб «Уведомления»: пилюля активна, TabBar скрыт', async ({
+  test('«Настроить уведомления»: пилюля активна, TabBar скрыт', async ({
     page,
     seededUser,
   }) => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto('/profile/notifications');
 
-    // Пилюля «Уведомления» (левый-низ) подсвечена, TabBar на ПК не рендерится.
+    // Пилюля «Уведомления» (левый-низ) подсвечена и на саб-экране настроек
+    // (правило пилюль #561, #746), TabBar на ПК не рендерится.
     await expect(
       page
         .getByRole('navigation', { name: 'Дополнительная навигация' })

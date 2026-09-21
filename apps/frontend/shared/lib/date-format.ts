@@ -81,6 +81,26 @@ export function formatDateTimeHeading(value: string): string {
   return `${localDayMonthFormatter.format(date)} ${date.getFullYear()}, ${localTimeFormatter.format(date)}`;
 }
 
+/** Время момента «14:40» по локальным часам смотрящего — метка момента в
+ * строках ленты уведомлений (#744, Figma 2329-149013; тот же довод
+ * локального времени, что у formatDateTimeHeading). Невалидная строка
+ * даёт «—». */
+export function formatTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return localTimeFormatter.format(date);
+}
+
+/** Момент «15 сентября, 14:40» — секция «Категория + дата-время» страницы
+ * уведомления (#745, Figma 2333:184048; время на странице остаётся всегда
+ * — решение владельца 17.09.2026, чарт карты #734): локальные день-месяц и
+ * время смотрящего, без года. Невалидная строка даёт «—». */
+export function formatDayMonthTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return `${localDayMonthFormatter.format(date)}, ${localTimeFormatter.format(date)}`;
+}
+
 /** Момент последней активности сессии в списке устройств (#730, мок
  * 1804-105061): «14 августа, 14:41»; год — только вне текущего
  * («14 августа 2025, 09:08»), как у formatDayMonthWithYear. Локальное

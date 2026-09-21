@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -57,32 +58,56 @@ type UpdateRuleCommand struct {
 // runMutation conveyor, which owns the ordering invariants structurally: the
 // role gate, the property row lock, the owner's today, the change step, its
 // audit entry in the same transaction and the materialization tick when the
-// step's verdict asks for it. Reads never tick and never write.
+// step's verdict asks for it. Create and edit also hand the rule's standing
+// tasks to the notifications scheduling seam after the commit (issue #775,
+// best-effort). Reads never tick and never write.
 type RuleService struct {
 	txStoreFactory
-	policy    sharedpolicy.Policy
-	calendar  OwnerCalendar
-	writeGate gateFunc // Full Access and Owner: create/edit/delete (resolution #496).
+	policy      sharedpolicy.Policy
+	calendar    OwnerCalendar
+	writeGate   gateFunc // Full Access and Owner: create/edit/delete (resolution #496).
+	overdueSeam MaterializedTaskNotifier
+	log         *slog.Logger
 }
 
 // NewRuleService builds the rule use cases over the shared transactional
 // store factory, the owner calendar and the authorization policy (ADR 0028).
 // A nil calendar is a wiring mistake; a mutation fails on first use rather
 // than writing with a zero date. A nil policy keeps the historical
-// owner-only behaviour.
-func NewRuleService(factory txStoreFactory, calendar OwnerCalendar, policy sharedpolicy.Policy) *RuleService {
+// owner-only behaviour. A nil logger defaults to the standard one — only
+// the scheduling seam's best-effort failures are logged with it.
+func NewRuleService(factory txStoreFactory, calendar OwnerCalendar, policy sharedpolicy.Policy, log *slog.Logger) *RuleService {
+	if log == nil {
+		log = slog.Default()
+	}
 	return &RuleService{
 		txStoreFactory: factory,
 		policy:         policy,
 		calendar:       calendar,
 		writeGate:      newCapabilityGate(policy, sharedpolicy.CanEdit),
+		log:            log,
 	}
 }
 
-// conveyor bundles this service's factory and calendar for the shared
-// mutation conveyor.
+// SetOverdueSeam late-binds the notifications scheduling seam (issue #775):
+// the seam's adapter is built after this service — it books the due-minute
+// jobs through the delivery queue's River client, which the composition
+// root constructs later — so the seam lands here once the queue exists.
+// A nil seam keeps the pre-#775 silence: the hourly scan stays the only
+// scheduler.
+func (s *RuleService) SetOverdueSeam(seam MaterializedTaskNotifier) {
+	s.overdueSeam = seam
+}
+
+// conveyor bundles this service's factory, calendar and scheduling seam for
+// the shared mutation conveyor.
 func (s *RuleService) conveyor() mutationGates {
-	return mutationGates{factory: s.txStoreFactory, calendar: s.calendar}
+	return mutationGates{
+		factory:     s.txStoreFactory,
+		calendar:    s.calendar,
+		overdueSeam: s.overdueSeam,
+		log:         s.log,
+	}
 }
 
 // readScope applies the read gate and returns the data owner whose scope the
@@ -228,6 +253,10 @@ func patchRule(
 		AuditCtx:      map[string]any{"fields": updatedFields(cmd)},
 		Tick:          true,
 		RereadRuleID:  &rule.ID,
+		// The edit's invalidation + tick settled the rule's rows: the
+		// standing tasks (the new single future among them) go to the
+		// scheduling seam post-commit (issue #775).
+		ScheduleOverdueOf: &rule.ID,
 	}, nil
 }
 
@@ -288,6 +317,10 @@ func createRule(
 		AuditEntityID: &draft.ID,
 		Tick:          true,
 		RereadRuleID:  &draft.ID,
+		// The first materialization settled the rule's rows: the standing
+		// tasks go to the scheduling seam post-commit (issue #775) — the
+		// due-minute job lands at once, not on the next hourly pass.
+		ScheduleOverdueOf: &draft.ID,
 	}, nil
 }
 

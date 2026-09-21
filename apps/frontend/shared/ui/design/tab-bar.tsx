@@ -77,7 +77,10 @@ export function TabBarVisibilityProvider({ children }: { readonly children: Reac
   return <TabBarSuppressionContext.Provider value={value}>{children}</TabBarSuppressionContext.Provider>;
 }
 
-export function TabBar({ propertiesHref }: { readonly propertiesHref?: string } = {}): JSX.Element | null {
+export function TabBar({
+  propertiesHref,
+  notificationsUnread = false,
+}: { readonly propertiesHref?: string; readonly notificationsUnread?: boolean } = {}): JSX.Element | null {
   const { present, bars } = useContext(TabBarSuppressionContext);
   const [moreOpen, setMoreOpen] = useState(false);
 
@@ -93,7 +96,12 @@ export function TabBar({ propertiesHref }: { readonly propertiesHref?: string } 
          * нет ПК-хрома (1023 и уже), кап-колонка не нужна. Фолбэк 12px в
          * safe-area — тот же, что у шита «Еще»: полоса и лист заканчиваются
          * на одной высоте (research §4). */}
-        <TabBarRow moreExpanded={moreOpen} onMoreSelect={() => setMoreOpen(true)} propertiesHref={propertiesHref} />
+        <TabBarRow
+          moreExpanded={moreOpen}
+          onMoreSelect={() => setMoreOpen(true)}
+          propertiesHref={propertiesHref}
+          notificationsUnread={notificationsUnread}
+        />
       </nav>
       <MoreSheet open={moreOpen} onOpenChange={setMoreOpen} />
     </>

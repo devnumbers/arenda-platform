@@ -54,7 +54,7 @@ export const secondaryNavSections: ReadonlyArray<NavSection> = [
   {
     id: 'notifications',
     label: 'Уведомления',
-    href: ROUTES.profileNotifications,
+    href: ROUTES.notifications,
     Icon: NotificationSettings,
   },
 ];

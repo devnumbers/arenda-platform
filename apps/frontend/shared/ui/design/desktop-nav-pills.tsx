@@ -13,16 +13,17 @@ import { useTabBarSuppressionState } from './tab-bar';
  * в правом-нижнем (авто-ширина); обёртки p-12 держат плашку у краёв
  * вьюпорта. «Уведомления» — раздел из secondaryNavSections нав-модели
  * (#558), активность — getActiveNavItem: подсвечивается на
- * /profile/notifications*. «Поддержка» — действие (#766): страница /support
- * снесена, пилюля открывает модалку «Связаться с нами». Только ПК ≥1024
- * (hidden desktop:block; ярусы владельца 08.09: пилюли — часть ПК-хрома,
- * в 561–1023 планшетный хром с TabBar). Рендерит ScreenLayout.
+ * /profile/notifications*; число непрочитанных — канон NumbersAlerts на
+ * пилюле (Figma 2340:50227, #747). «Поддержка» — действие (#766): страница
+ * /support снесена, пилюля открывает модалку «Связаться с нами». Только ПК
+ * ≥1024 (hidden desktop:block; ярусы владельца 08.09: пилюли — часть
+ * ПК-хрома, в 561–1023 планшетный хром с TabBar). Рендерит ScreenLayout.
  * Пока на экране смонтирован StickyBottomBar, пилюли глушатся вместе с
  * TabBar (useTabBarSuppression): нижняя панель — полноширинный белый шит,
  * углы под ним не кликабельны — тот же канон «честной недоступности», что
  * у шита «Еще» (решение не фиксировано картой — «Not yet specified»,
  * предъявлено владельцу на приёмке #561). */
-export function DesktopNavPills(): JSX.Element | null {
+export function DesktopNavPills({ notificationsBadge = 0 }: { readonly notificationsBadge?: number } = {}): JSX.Element | null {
   const { present, bars } = useTabBarSuppressionState();
   const pathname = usePathname();
   const [supportOpen, setSupportOpen] = useState(false);
@@ -36,6 +37,7 @@ export function DesktopNavPills(): JSX.Element | null {
         <DesktopMenuButton
           section={navSectionById('notifications')}
           active={activeSectionId === 'notifications'}
+          badge={notificationsBadge}
         />
       </div>
       <div className="fixed bottom-0 right-0 z-30 p-3">

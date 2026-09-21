@@ -2442,14 +2442,178 @@ paths:
               schema:
                 $ref: '#/components/schemas/Problem'
 
-  /notification-preferences:
+  /notifications:
     get:
-      operationId: getNotificationPreferences
+      operationId: listNotifications
+      summary: Страница ленты уведомлений (keyset, канон #597)
+      description: |
+        Хранимая лента пользователя, newest-first keyset-пагинация (карта
+        #734, решение #737, #743). Удалённые строки не появляются. Курсор —
+        непрозрачный blob из next_cursor предыдущей страницы; страницы
+        читаются строго после последней строки, новые строки между загрузками
+        не дублируются и не теряются. limit 1..100, по умолчанию 50.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: unread
+          in: query
+          schema:
+            type: boolean
+          description: Только непрочитанные строки.
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: cursor
+          in: query
+          schema:
+            type: string
+          description: |
+            Непрозрачный курсор продолжения (next_cursor прошлой страницы).
+      responses:
+        '200':
+          description: Страница ленты
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationsPageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    delete:
+      operationId: deleteAllNotifications
+      summary: Удалить все уведомления
+      description: |
+        Мягкое удаление всех строк ленты пользователя (решение #737):
+        строки остаются с deleted_at, лента и счётчик непрочитанных их
+        перестают видеть. Подтверждение — на стороне клиента.
+      security:
+        - sessionCookie: []
+      responses:
+        '204':
+          description: Все строки скрыты
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /notifications/unread-count:
+    get:
+      operationId: getUnreadNotificationCount
+      summary: Счётчик непрочитанных
+      description: |
+        Число непрочитанных неудалённых строк пользователя (решение #737).
+        Снижается кликом, открытием страницы и «Прочитать все»; пуш и email
+        на читаемость не влияют.
       security:
         - sessionCookie: []
       responses:
         '200':
-          description: Notification preferences for every reminder event type
+          description: Значение счётчика
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnreadCountResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /notifications/read-all:
+    post:
+      operationId: markAllNotificationsRead
+      summary: Прочитать все
+      security:
+        - sessionCookie: []
+      responses:
+        '204':
+          description: Все непрочитанные строки помечены прочитанными
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /notifications/{notificationId}:
+    get:
+      operationId: getNotification
+      summary: Страница уведомления с живыми действиями
+      description: |
+        Одна строка ленты с payload для отрисовки карточек (объект,
+        приглашающий) и действиями, вычисленными при чтении по живому
+        состоянию сущностей и правам читателя (решение #737): состояние
+        ушло или сущность удалена — кнопок нет; роль «Просмотр» не получает
+        кнопок-мутаций. Чужая или удалённая строка — 404.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: notificationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Уведомление с действиями
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationDetailResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteNotification
+      summary: Удалить уведомление
+      description: Мягкое удаление одной строки; удаление непрочитанного снижает счётчик.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: notificationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Строка скрыта (идемпотентно)
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /notifications/{notificationId}/read:
+    post:
+      operationId: markNotificationRead
+      summary: Прочитать уведомление
+      description: Идемпотентно — повторный вызов не меняет состояние.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: notificationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Строка прочитана
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /notification-preferences:
+    get:
+      operationId: getNotificationPreferences
+      summary: Матрица email-настроек аккаунта
+      description: |
+        Email — на аккаунте: одна конфигурация на все устройства (решение
+        #738, ADR 0058). Четыре настраиваемые категории; нет строки —
+        всё включено. Тариф и Системные всегда включены и в настройках
+        не показываются.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Текущая матрица
           content:
             application/json:
               schema:
@@ -2457,7 +2621,8 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
     put:
-      operationId: updateNotificationPreferences
+      operationId: putNotificationPreferences
+      summary: Заменить матрицу email-настроек аккаунта
       security:
         - sessionCookie: []
       requestBody:
@@ -2465,10 +2630,10 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/NotificationPreferencesUpdateRequest'
+              $ref: '#/components/schemas/NotificationPreferencesRequest'
       responses:
         '200':
-          description: Notification preferences updated
+          description: Сохранённая матрица
           content:
             application/json:
               schema:
@@ -2477,6 +2642,41 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+
+  /notifications/stream:
+    get:
+      operationId: streamNotifications
+      summary: Живой стрим событий пользователя (SSE)
+      description: |
+        Общий пользовательский Server-Sent Events стрим (карта #734, #742;
+        ADR 0060). Авторизация — cookie-сессия тем же SessionMiddleware;
+        без актора хендлер отвечает 401 problem+json до старта стрима.
+        Формат кадров — WHATWG SSE: retry-подсказка и стартовое событие
+        connected на старте, id — монотонная последовательность (курсор
+        Last-Event-ID; replay в v1 не реализован), event — стабильное грубое
+        имя (notification.created, notification.unread_count; допишут #714),
+        data — JSON-конверт {v, occurredAt, payload}. Heartbeat-комментарий
+        каждые 25 с, соединение закрывается через час (пере-аутентификация
+        при переподключении). Кадры best-effort: состояние клиент дочитывает
+        через обычные эндпоинты.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Поток событий в формате text/event-stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          description: Стрим недоступен (хаб не сконфигурирован)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
   /push/vapid-public-key:
     get:
       operationId: getVapidPublicKey
@@ -2526,6 +2726,66 @@ paths:
       responses:
         '204':
           description: Push subscription deleted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /push/subscriptions/preferences:
+    get:
+      operationId: getPushSubscriptionPreferences
+      summary: Настройки пушей устройства
+      description: |
+        Пуш — на устройстве (решение #738): мастер-тумблер «Получать
+        пуш-уведомления» и четыре категорийных флага на подписке браузера.
+        Устройство идентифицируется endpoint URL — естественным ключом и
+        секретом подписки (RFC 8030 §8.3). Чужой/неизвестный endpoint — 404.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: endpoint
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 2048
+      responses:
+        '200':
+          description: Текущее состояние устройства
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PushPreferencesResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      operationId: putPushSubscriptionPreferences
+      summary: Заменить настройки пушей устройства
+      description: |
+        Upsert состояния устройства: мастер и категории двигаются, подписка и
+        её ключи остаются. Выключение мастера — флаг enabled=false: dispatch
+        пропускает устройство, повторное включение мгновенное, без
+        переподписки (решение #738).
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PushPreferencesRequest'
+      responses:
+        '200':
+          description: Сохранённое состояние устройства
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PushPreferencesResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -6691,40 +6951,6 @@ components:
       type: string
       enum: [basic, pro, business]
 
-    NotificationPreference:
-      type: object
-      required: [event_type, email_allowed, push_allowed]
-      properties:
-        event_type:
-          type: string
-          enum: [subscription_grace]
-        email_allowed:
-          type: boolean
-          description: Permission to deliver this event type over email.
-        push_allowed:
-          type: boolean
-          description: Permission to deliver this event type over Web Push.
-
-    NotificationPreferencesResponse:
-      type: object
-      required: [preferences]
-      properties:
-        preferences:
-          type: array
-          items:
-            $ref: '#/components/schemas/NotificationPreference'
-
-    NotificationPreferencesUpdateRequest:
-      type: object
-      required: [preferences]
-      properties:
-        preferences:
-          type: array
-          minItems: 5
-          maxItems: 5
-          items:
-            $ref: '#/components/schemas/NotificationPreference'
-
     VapidPublicKeyResponse:
       type: object
       required: [public_key]
@@ -6754,6 +6980,12 @@ components:
           format: date-time
           nullable: true
           description: Optional subscription expiration instant reported by the browser (RFC 8030).
+        enabled:
+          type: boolean
+          description: |
+            The device's master push toggle; omitted = on (решение #738).
+        categories:
+          $ref: '#/components/schemas/NotificationCategoryPreferences'
 
     PushSubscriptionDeleteRequest:
       type: object
@@ -6766,19 +6998,195 @@ components:
 
     PushSubscriptionResponse:
       type: object
-      required: [id, endpoint, created_at, updated_at]
+      required: [id, endpoint, created_at, updated_at, enabled, categories]
       properties:
         id:
           type: string
           format: uuid
         endpoint:
           type: string
+        enabled:
+          type: boolean
+          description: |
+            Мастер-тумблер «Получать пуш-уведомления» устройства (решение #738).
+        categories:
+          $ref: '#/components/schemas/NotificationCategoryPreferences'
         created_at:
           type: string
           format: date-time
         updated_at:
           type: string
           format: date-time
+
+    PushPreferencesRequest:
+      type: object
+      required: [endpoint, enabled, categories]
+      properties:
+        endpoint:
+          type: string
+          description: Push endpoint URL устройства (тот же, что при подписке).
+          maxLength: 2048
+        enabled:
+          type: boolean
+        categories:
+          $ref: '#/components/schemas/NotificationCategoryPreferences'
+
+    PushPreferencesResponse:
+      type: object
+      required: [endpoint, enabled, categories]
+      properties:
+        endpoint:
+          type: string
+        enabled:
+          type: boolean
+        categories:
+          $ref: '#/components/schemas/NotificationCategoryPreferences'
+
+    NotificationCategoryPreferences:
+      type: object
+      description: Флаги четырёх настраиваемых категорий одного канала (решение #738) — email держит копию на аккаунте, push — на устройстве. Тариф и Системные всегда включены и здесь не хранятся.
+      required: [rental, payments_operations, tasks, shared_access]
+      properties:
+        rental:
+          type: boolean
+        payments_operations:
+          type: boolean
+        tasks:
+          type: boolean
+        shared_access:
+          type: boolean
+
+    NotificationPreferencesRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          $ref: '#/components/schemas/NotificationCategoryPreferences'
+
+    NotificationPreferencesResponse:
+      type: object
+      required: [email]
+      properties:
+        email:
+          $ref: '#/components/schemas/NotificationCategoryPreferences'
+
+    NotificationItem:
+      type: object
+      description: Строка ленты одного получателя (решение #737): снимок текста, payload-ссылки, личные флаги.
+      required: [id, event_type, category, title, body, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        event_type:
+          type: string
+          description: |
+            Тип события каталога v1 (решение #737).
+          example: payment_due
+        category:
+          type: string
+          description: Категория уведомлений (группа настроек и иконка).
+          example: payments_operations
+        title:
+          type: string
+        body:
+          type: string
+        context_label:
+          type: string
+          nullable: true
+          description: |
+            Строка над заголовком — имя объекта/тарифа или «Системные уведомления».
+        created_at:
+          type: string
+          format: date-time
+          description: |
+            Момент события, UTC instant; группировка «Сегодня/Вчера» — дело экрана.
+        read_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    NotificationDetailResponse:
+      type: object
+      required: [id, event_type, category, title, body, payload, actions, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        event_type:
+          type: string
+        category:
+          type: string
+        title:
+          type: string
+        body:
+          type: string
+        context_label:
+          type: string
+          nullable: true
+        payload:
+          type: object
+          description: |
+            Payload-ссылки и снимки имён (решение #737): property {id, name,
+            address}, actor {id, name, email}, rental_id, payment_id, payment_date,
+            task_id, task_rule_id, membership_id, tariff {slug,
+            period, amount_kopecks, active_until}. address и email — снимки
+            карточек (решение владельца 19.09.2026, #745): строка карточки,
+            которой нет в снимке, просто не рендерится. payment_id — id правила,
+            payment_date — дата операции (решение #737: payment = правило +
+            дата операции, #749). task_rule_id — правило задачи: экран задачи —
+            экран её правила, переход ведёт по нему (#750). События доступа
+            (#751) несут membership_id — сущность перехода, переживающую
+            снесённое приглашение.
+            Все поля опциональны; суммы — BIGINT копейки.
+        actions:
+          type: array
+          description: |
+            Действия, доступные этому читателю сейчас (вычислены при чтении, решение #737).
+          items:
+            $ref: '#/components/schemas/NotificationAction'
+        created_at:
+          type: string
+          format: date-time
+        read_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    NotificationAction:
+      type: string
+      description: |
+        Кнопка-переход на экран сущности, никогда не мутация (решение #737).
+      enum:
+        - rental_extend
+        - rental_complete
+        - open_payment
+        - open_task
+        - open_property
+        - open_property_members
+        - open_tariffs
+        - open_payment_methods
+
+    NotificationsPageResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificationItem'
+        next_cursor:
+          type: string
+          description: |
+            Непрозрачный курсор следующей страницы; отсутствует в конце ленты.
+
+    UnreadCountResponse:
+      type: object
+      required: [count]
+      properties:
+        count:
+          type: integer
+          format: int64
 
     PendingPopupsResponse:
       type: object

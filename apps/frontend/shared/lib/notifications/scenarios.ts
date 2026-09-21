@@ -277,6 +277,13 @@ const tasks = {
   updateError: errorScenario('Не удалось сохранить задачу'),
 } as const;
 
+const notifications = {
+  markReadError: errorScenario('Не удалось отметить уведомление прочитанным'),
+  markAllError: errorScenario('Не удалось отметить все уведомления'),
+  deleteError: errorScenario('Не удалось удалить уведомление'),
+  deleteAllError: errorScenario('Не удалось удалить уведомления'),
+} as const;
+
 const demo = {
   success: ((options?) =>
     notify.success('Успех', options)) satisfies ScenarioFn,
@@ -305,6 +312,7 @@ export type Scenarios = {
   readonly payments: typeof payments;
   readonly rentals: typeof rentals;
   readonly tasks: typeof tasks;
+  readonly notifications: typeof notifications;
   readonly demo: typeof demo;
 };
 
@@ -319,5 +327,6 @@ export const scenarios: Scenarios = {
   payments,
   rentals,
   tasks,
+  notifications,
   demo,
 };

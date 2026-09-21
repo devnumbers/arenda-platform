@@ -65,7 +65,7 @@ describe('единый конфиг разделов навигации (#558)',
       ['tasks', '/tasks'],
       ['contacts', '/contacts'],
       ['participants', '/participants'],
-      ['notifications', '/profile/notifications'],
+      ['notifications', '/notifications'],
     ]);
   });
 
