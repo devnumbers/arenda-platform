@@ -27,7 +27,7 @@ import {
   useRevokeAllPropertyAccessMembers,
   type PropertyAccessMemberRef,
 } from '@/features/access';
-import { ParticipantRowBadge, suspendedLimitBadge } from '@/entities/participants';
+import { ParticipantRowBadge, suspendedLimitBadge, sortOrderPickerGroups } from '@/entities/participants';
 import {
   Button,
   ChipButton,
@@ -187,7 +187,7 @@ export function PropertyParticipantsScreen(): JSX.Element {
   };
 
   const sortChip = (
-    <PickerMenu title="Сортировать" groups={sortPickerGroups(sortOrder, setSortOrder)}>
+    <PickerMenu title="Сортировать" groups={sortOrderPickerGroups('Имя', sortOrder, setSortOrder)}>
       <ChipButton
         trailingIcon={
           <ArrowDown className={sortOrder === 'desc' ? 'rotate-180' : undefined} />
@@ -456,24 +456,6 @@ function PropertyParticipantsSkeleton(): JSX.Element {
       ))}
     </div>
   );
-}
-
-/** Группы пикера сортировки «Имя» — канон #697. */
-function sortPickerGroups(
-  order: PropertyParticipantSortOrder,
-  onChange: (order: PropertyParticipantSortOrder) => void,
-): ReadonlyArray<PickerMenuGroup> {
-  return [
-    {
-      options: [{ label: 'Имя', selected: true, onSelect: () => undefined }],
-    },
-    {
-      options: [
-        { label: 'Возрастание', selected: order === 'asc', onSelect: () => onChange('asc') },
-        { label: 'Убывание', selected: order === 'desc', onSelect: () => onChange('desc') },
-      ],
-    },
-  ];
 }
 
 /** Группы пикера фильтра ролей (макет 1980-109148): одна группа из трёх

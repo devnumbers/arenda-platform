@@ -1,4 +1,5 @@
 import type { AccessRole, PropertyAccessMember } from '@/entities/access';
+import { filterByRuQuery, sortByRuText } from '@/entities/participants';
 
 /** Иконка у почты в ряду (макет 1980-107096): владелец — замок,
  * full_access — перо, viewer — глаз. */
@@ -8,7 +9,9 @@ export type PropertyParticipantEmailIcon = 'owner' | 'edit' | 'eye';
 export type PropertyParticipantRoleFilter = 'all' | Exclude<AccessRole, 'owner'>;
 
 /** Направление чипа «Имя» — как сортировка «Ваших участников» (#697). */
-export type PropertyParticipantSortOrder = 'asc' | 'desc';
+import type { ParticipantSortOrder as PropertyParticipantSortOrder } from '@/entities/participants';
+
+export type { PropertyParticipantSortOrder };
 
 /** Данные ряда списка участников объекта: всё, что рисует строка,
  * вычислено один раз (ViewModel) — экрану остаётся только рендер. */
@@ -80,13 +83,7 @@ export function filterPropertyParticipantsByQuery(
   rows: ReadonlyArray<PropertyParticipantRow>,
   query: string,
 ): PropertyParticipantRow[] {
-  const needle = query.trim().toLowerCase();
-  if (needle === '') {
-    return [...rows];
-  }
-  return rows.filter((row) =>
-    `${row.title} ${row.subtitle ?? ''}`.toLowerCase().includes(needle),
-  );
+  return filterByRuQuery(rows, (row) => `${row.title} ${row.subtitle ?? ''}`, query);
 }
 
 /** Чип-фильтр «Все роли» (макет 1980-109148): владельцу фильтр не
@@ -108,12 +105,10 @@ export function sortPropertyParticipantsByTitle(
   order: PropertyParticipantSortOrder,
 ): PropertyParticipantRow[] {
   const owner = rows.find((row) => row.isOwner);
-  const participants = rows.filter((row) => !row.isOwner);
-  const collator = new Intl.Collator('ru');
-  participants.sort((a, b) =>
-    order === 'asc'
-      ? collator.compare(a.title.toLowerCase(), b.title.toLowerCase())
-      : collator.compare(b.title.toLowerCase(), a.title.toLowerCase()),
+  const participants = sortByRuText(
+    rows.filter((row) => !row.isOwner),
+    (row) => row.title,
+    order,
   );
   return owner !== undefined ? [owner, ...participants] : participants;
 }

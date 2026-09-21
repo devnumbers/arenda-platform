@@ -9,6 +9,7 @@ export {
   sortParticipantsByName,
 } from './lib/participant-list';
 export type { ParticipantSortOrder } from './lib/participant-list';
+export { filterByRuQuery, sortByRuText, sortOrderPickerGroups } from './lib/participant-sorting';
 export { participantLegBadge } from './lib/participant-legs';
 export {
   availableInviteProperties,

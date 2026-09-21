@@ -9,6 +9,7 @@ import {
   ParticipantRowButton,
   sortParticipantsByName,
   type ParticipantSortOrder,
+  sortOrderPickerGroups,
 } from '@/entities/participants';
 import {
   useParticipantsList,
@@ -35,7 +36,6 @@ import {
   TopNav,
   TopNavBackButton,
   TopNavTitle,
-  type PickerMenuGroup,
 } from '@/shared/ui/design';
 import { popParticipantPopup, useParticipantPopup } from '../lib/participant-popups';
 import { ParticipantsListSkeleton } from './participants-list-skeletons';
@@ -128,7 +128,7 @@ export function ParticipantsListScreen(): JSX.Element {
   };
 
   const sortChip = (
-    <PickerMenu title="Сортировать" groups={sortPickerGroups(sortOrder, setSortOrder)}>
+    <PickerMenu title="Сортировать" groups={sortOrderPickerGroups('Имя', sortOrder, setSortOrder)}>
       <ChipButton
         trailingIcon={
           <ArrowDown className={sortOrder === 'desc' ? 'rotate-180' : undefined} />
@@ -300,21 +300,3 @@ export function ParticipantsListScreen(): JSX.Element {
   );
 }
 
-/** Группы пикера сортировки: поле («Имя» — единственное) и направление —
- * выбор применяется сразу (канон PickerMenu, как книга контактов). */
-function sortPickerGroups(
-  order: ParticipantSortOrder,
-  onChange: (order: ParticipantSortOrder) => void,
-): ReadonlyArray<PickerMenuGroup> {
-  return [
-    {
-      options: [{ label: 'Имя', selected: true, onSelect: () => undefined }],
-    },
-    {
-      options: [
-        { label: 'Возрастание', selected: order === 'asc', onSelect: () => onChange('asc') },
-        { label: 'Убывание', selected: order === 'desc', onSelect: () => onChange('desc') },
-      ],
-    },
-  ];
-}

@@ -3,7 +3,7 @@
 import { useState, type JSX } from 'react';
 import { ArrowDown, BoldUser, Edit, Exit, EyeSmall, Kebab } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { ParticipantRowBadge } from '@/entities/participants';
+import { ParticipantRowBadge, sortOrderPickerGroups } from '@/entities/participants';
 import { useLeaveAllProperties, useLeaveProperty } from '@/features/participants';
 import { useProperties, useProperty } from '@/features/properties';
 import {
@@ -19,7 +19,6 @@ import {
   PickerMenu,
   SubScreenShell,
   ChipButton,
-  type PickerMenuGroup,
 } from '@/shared/ui/design';
 import {
   sortUserPropertyRows,
@@ -119,7 +118,7 @@ export function ParticipantsPropertiesScreen(): JSX.Element {
   };
 
   const sortChip = (
-    <PickerMenu title="Сортировать" groups={sortPickerGroups(sortOrder, setSortOrder)}>
+    <PickerMenu title="Сортировать" groups={sortOrderPickerGroups('Название', sortOrder, setSortOrder)}>
       <ChipButton
         trailingIcon={
           <ArrowDown className={sortOrder === 'desc' ? 'rotate-180' : undefined} />
@@ -392,22 +391,3 @@ function ObjectCard({
   );
 }
 
-
-/** Группы пикера сортировки «Название»: поле единственное, направление —
- * выбор применяется сразу (канон PickerMenu, «Ваши участники» #697). */
-function sortPickerGroups(
-  order: ParticipantsPropertySortOrder,
-  onChange: (order: ParticipantsPropertySortOrder) => void,
-): ReadonlyArray<PickerMenuGroup> {
-  return [
-    {
-      options: [{ label: 'Название', selected: true, onSelect: () => undefined }],
-    },
-    {
-      options: [
-        { label: 'Возрастание', selected: order === 'asc', onSelect: () => onChange('asc') },
-        { label: 'Убывание', selected: order === 'desc', onSelect: () => onChange('desc') },
-      ],
-    },
-  ];
-}

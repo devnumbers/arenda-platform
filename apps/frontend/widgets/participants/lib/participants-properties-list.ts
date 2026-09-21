@@ -1,9 +1,11 @@
-import { participantLegBadge } from '@/entities/participants';
+import { participantLegBadge, sortByRuText } from '@/entities/participants';
 import type { Property } from '@/entities/property';
 import type { SharedAccessRole } from '@/shared/model/access';
 
 /** Направление чипа «Название» — как сортировка «Ваших участников» (#697). */
-export type ParticipantsPropertySortOrder = 'asc' | 'desc';
+import type { ParticipantSortOrder as ParticipantsPropertySortOrder } from '@/entities/participants';
+
+export type { ParticipantsPropertySortOrder };
 
 /** Модель бейджа ноги — канон participantLegBadge (#698). */
 export type UserPropertyBadge = ReturnType<typeof participantLegBadge>;
@@ -63,12 +65,5 @@ export function sortUserPropertyRows(
   rows: ReadonlyArray<UserPropertyRow>,
   order: ParticipantsPropertySortOrder,
 ): UserPropertyRow[] {
-  const sorted = [...rows];
-  const collator = new Intl.Collator('ru');
-  sorted.sort((a, b) =>
-    order === 'asc'
-      ? collator.compare(a.title.toLowerCase(), b.title.toLowerCase())
-      : collator.compare(b.title.toLowerCase(), a.title.toLowerCase()),
-  );
-  return sorted;
+  return sortByRuText(rows, (row) => row.title, order);
 }
