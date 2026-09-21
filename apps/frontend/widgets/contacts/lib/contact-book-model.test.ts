@@ -7,6 +7,7 @@ import {
   groupBookByLetter,
   groupBookByProperty,
   parseContactBookSortParams,
+  serializeContactBookSortToParams,
 } from './contact-book-model';
 
 const contact = (overrides: Partial<Contact>): Contact => ({
@@ -121,6 +122,21 @@ describe('parseContactBookSortParams — разбор ?sort=&order= книги',
     expect(parseContactBookSortParams(['property'], ['desc'])).toEqual({
       sort: 'name',
       order: 'asc',
+    });
+  });
+});
+
+describe('serializeContactBookSortToParams — дефолтные значения не пишутся', () => {
+  it('дефолт (имя, возрастание) параметров не создаёт', () => {
+    expect(serializeContactBookSortToParams('name', 'asc')).toEqual({});
+  });
+
+  it('не-дефолтные поле и направление попадают в адрес', () => {
+    expect(serializeContactBookSortToParams('property', 'asc')).toEqual({ sort: 'property' });
+    expect(serializeContactBookSortToParams('name', 'desc')).toEqual({ order: 'desc' });
+    expect(serializeContactBookSortToParams('property', 'desc')).toEqual({
+      sort: 'property',
+      order: 'desc',
     });
   });
 });

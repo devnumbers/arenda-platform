@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type ComponentProps, type JSX } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import {
   Add,
   Search,
@@ -11,6 +11,7 @@ import {
 } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { useKeyboardActivation } from '@/shared/lib/hooks/useKeyboardActivation';
+import { useUrlParams } from '@/shared/lib/hooks/use-url-params';
 import {
   useContactBook,
   type ContactBookOrder,
@@ -28,9 +29,13 @@ import {
   type PickerMenuGroup,
 } from '@/shared/ui/design';
 import {
+  CONTACT_BOOK_SORT_PARAMS,
+  DEFAULT_CONTACT_BOOK_ORDER,
+  DEFAULT_CONTACT_BOOK_SORT,
   contactBookRowSubtitle,
   groupBookByLetter,
   groupBookByProperty,
+  serializeContactBookSortToParams,
 } from '../lib/contact-book-model';
 import { ContactRowButton } from '@/entities/contact';
 import {
@@ -46,7 +51,7 @@ import {
  * сортировки и одна серая карточка с группами. Сортировка — серверная:
  * поле «Имя/Объект» × «Возрастание/Убывание» (меню/шит «Сортировать»,
  * 1726:65136) уходит в ?sort/order GET /contacts; выбор живёт в query
- * строки (?sort=&order=, конвенция страницы «Объекты») — переживает
+ * строки (?sort=&order=, конвенция состояния в адресе) — переживает
  * перезагрузку и назад/вперёд. При сортировке по объекту группы — «Общие
  * контакты» (без объекта; сервер держит их первыми в обоих направлениях —
  * решение владельца 2026-09-04) и имена объектов, при сортировке по имени —
@@ -58,6 +63,7 @@ import {
  * Пустая книга — EmptyState (служебный чип сортировки прячется вместе со
  * списком, DESIGN.md).
  */
+
 export function ContactBookScreen({
   initialSort,
   initialOrder,
@@ -66,10 +72,14 @@ export function ContactBookScreen({
   readonly initialOrder?: ContactBookOrder;
 }): JSX.Element {
   const router = useRouter();
-  const pathname = usePathname();
+  const { write } = useUrlParams();
 
-  const [sortField, setSortField] = useState<ContactBookSort>(initialSort ?? 'name');
-  const [sortOrder, setSortOrder] = useState<ContactBookOrder>(initialOrder ?? 'asc');
+  const [sortField, setSortField] = useState<ContactBookSort>(
+    initialSort ?? DEFAULT_CONTACT_BOOK_SORT,
+  );
+  const [sortOrder, setSortOrder] = useState<ContactBookOrder>(
+    initialOrder ?? DEFAULT_CONTACT_BOOK_ORDER,
+  );
 
   // Серверная сортировка книги: ключ и направление уходят в запрос —
   // без них данные всегда приходят в дефолтном порядке (name asc).
@@ -77,20 +87,13 @@ export function ContactBookScreen({
 
   const contacts = contactsQuery.data ?? [];
 
-  // Смена сортировки синхронно переписывает query строки (дефолтные
-  // значения не пишутся — как на странице «Объекты»).
+  // Смена сортировки синхронно переписывает query строки — канон
+  // useUrlParams (#786): экран владеет только sort/order, дефолтные
+  // значения не пишутся (как на странице «Объекты»).
   const changeSort = (field: ContactBookSort, order: ContactBookOrder): void => {
     setSortField(field);
     setSortOrder(order);
-    const params = new URLSearchParams();
-    if (field !== 'name') {
-      params.set('sort', field);
-    }
-    if (order !== 'asc') {
-      params.set('order', order);
-    }
-    const query = params.toString();
-    router.replace(query !== '' ? `${pathname}?${query}` : pathname, { scroll: false });
+    write(serializeContactBookSortToParams(field, order), { own: CONTACT_BOOK_SORT_PARAMS });
   };
 
   const groups =

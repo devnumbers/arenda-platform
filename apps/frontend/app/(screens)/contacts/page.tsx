@@ -10,12 +10,10 @@ export const metadata: Metadata = {
   description: 'Книга контактов',
 };
 
-type ContactsRoutePageProps = {
-  searchParams?: Promise<Record<string, string | string[] | undefined>>;
-};
-
-export default async function ContactsRoutePage({ searchParams }: ContactsRoutePageProps) {
-  const resolved = searchParams ? await searchParams : {};
+export default async function ContactsRoutePage({
+  searchParams,
+}: PageProps<'/contacts'>) {
+  const resolved = await searchParams;
   const { sort, order } = parseContactBookSortParams(resolved.sort, resolved.order);
 
   return <ContactBookScreen initialSort={sort} initialOrder={order} />;

@@ -7,12 +7,10 @@ export const metadata: Metadata = {
     description: 'Список объектов',
 };
 
-type PropertiesRoutePageProps = {
-    readonly searchParams?: Promise<Record<string, string | string[] | undefined>>;
-};
-
-export default async function PropertiesRoutePage({searchParams}: PropertiesRoutePageProps) {
-    const resolved = searchParams ? await searchParams : {};
+export default async function PropertiesRoutePage({
+    searchParams,
+}: PageProps<'/properties'>) {
+    const resolved = await searchParams;
     const initialSort = parseSortFromParams(resolved);
 
     return <PropertiesPage initialSort={initialSort}/>;

@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { PaymentOperation } from '@/entities/payment';
-import { groupOperationsByDate, groupPaidOperations } from './operations-history';
+import {
+  groupOperationsByDate,
+  groupPaidOperations,
+  parseHistoryOrderParams,
+  serializeHistoryOrderToParams,
+} from './operations-history';
 
 const paid = (id: string, date: string): PaymentOperation => ({
   id,
@@ -76,5 +81,27 @@ describe('groupOperationsByDate', () => {
 
   it('пустой список даёт пустой список групп', () => {
     expect(groupOperationsByDate([], '2026-08-27')).toStrictEqual([]);
+  });
+});
+
+describe('parseHistoryOrderParams — разбор ?order= страниц истории (#785)', () => {
+  it('отсутствие и неизвестное значение — дефолт «сначала новые»', () => {
+    expect(parseHistoryOrderParams(undefined)).toBe('desc');
+    expect(parseHistoryOrderParams('')).toBe('desc');
+    expect(parseHistoryOrderParams('newest')).toBe('desc');
+  });
+
+  it('читает «сначала старые»', () => {
+    expect(parseHistoryOrderParams('asc')).toBe('asc');
+  });
+});
+
+describe('serializeHistoryOrderToParams — патч ?order= для адреса (#785)', () => {
+  it('дефолт «сначала новые» параметров не создаёт', () => {
+    expect(serializeHistoryOrderToParams('desc')).toStrictEqual({});
+  });
+
+  it('«сначала старые» пишет order=asc', () => {
+    expect(serializeHistoryOrderToParams('asc')).toStrictEqual({ order: 'asc' });
   });
 });

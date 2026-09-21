@@ -152,6 +152,11 @@ describe('parse/serialize сортировки в URL', () => {
   it('читает новые параметры sort/order', () => {
     expect(parseSortFromParams({ sort: 'created', order: 'desc' })).toEqual({ field: 'created', direction: 'desc' });
     expect(parseSortFromParams({ sort: 'status' })).toEqual({ field: 'status', direction: 'asc' });
+    // Поле и направление разбираются независимо (два «радио», резолюция
+    // #584): ?order=desc без sort — валидный адрес сериализатора
+    // (serializeSortToParams({name, desc}) — ровно он), читается как
+    // {name, desc}, а не сбрасывается целиком (политика канона #786).
+    expect(parseSortFromParams({ order: 'desc' })).toEqual({ field: 'name', direction: 'desc' });
   });
 
   it('читает легаси name_asc/name_desc', () => {
@@ -162,6 +167,15 @@ describe('parse/serialize сортировки в URL', () => {
   it('мусор в параметрах — значение по умолчанию', () => {
     expect(parseSortFromParams({ sort: 'цвет' })).toEqual(DEFAULT_PROPERTY_SORT);
     expect(parseSortFromParams({ sort: 'name', order: 'вверх' })).toEqual({ field: 'name', direction: 'asc' });
+  });
+
+  it('массивное значение — битый дубликат, дефолт (канон parseEnumParam, #786)', () => {
+    // Раньше читался первый элемент (?sort=a&sort=b → a) — историческое
+    // исключение из политики платформы; с #786 «Объекты» на общем каноне.
+    expect(parseSortFromParams({ sort: ['created', 'name'] })).toEqual(DEFAULT_PROPERTY_SORT);
+    expect(parseSortFromParams({ sort: 'created', order: ['desc'] })).toEqual({ field: 'created', direction: 'asc' });
+    // Легаси-значение массивом тоже битое — читается только строка.
+    expect(parseSortFromParams({ sort: ['name_asc'] })).toEqual(DEFAULT_PROPERTY_SORT);
   });
 
   it('сериализация опускает значения по умолчанию', () => {

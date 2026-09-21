@@ -1,7 +1,7 @@
 'use client';
 
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { clientTodayIso } from '@/entities/payment';
+import { useUrlParams } from '@/shared/lib/hooks/use-url-params';
 import {
   globalOperationsFiltersParams,
   readGlobalOperationsFilters,
@@ -12,12 +12,16 @@ import type { OperationsPeriod } from './operations-filters';
 /**
  * Состояние фильтров глобальной ленты «Операции» в адресе (#541): те же
  * правила, что на объектном экране (#477) — чтение отбрасывает битые
- * значения, запись через router.push, «назад» возвращает к прежнему
- * списку; плюс мультивыбор объектов (#539, ?property=csv). Пикер периода
- * пишет с заменой записи истории; null (#670) — сброс периода: from/to
- * уходят из URL, лента открывается весь период. Дефолт — весь период, все
- * объекты, «Все категории».
+ * значения, запись через router.push (useUrlParams, #786), «назад»
+ * возвращает к прежнему списку; плюс мультивыбор объектов (#539,
+ * ?property=csv). Пикер периода пишет с заменой записи истории; null
+ * (#670) — сброс периода: from/to уходят из URL, лента открывается весь
+ * период. Дефолт — весь период, все объекты, «Все категории».
  */
+
+/** Собственные параметры фильтров глобальной ленты — знание этого модуля. */
+const FILTER_PARAMS = ['from', 'to', 'category', 'property', 'archived'] as const;
+
 export function useGlobalOperationsFilters(): {
   readonly filters: GlobalOperationsFilters;
   readonly applyPeriod: (
@@ -27,29 +31,15 @@ export function useGlobalOperationsFilters(): {
   readonly applyCategories: (categories: ReadonlyArray<string>) => void;
   readonly applyPropertyIds: (propertyIds: ReadonlyArray<string>) => void;
 } {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const { params, write } = useUrlParams();
 
-  const filters = readGlobalOperationsFilters(searchParams, clientTodayIso());
+  const filters = readGlobalOperationsFilters(params, clientTodayIso());
 
   const apply = (next: GlobalOperationsFilters, replace: boolean): void => {
-    const params = new URLSearchParams(searchParams);
-    params.delete('from');
-    params.delete('to');
-    params.delete('category');
-    params.delete('property');
-    params.delete('archived');
-    for (const [name, value] of Object.entries(globalOperationsFiltersParams(next))) {
-      params.set(name, value);
-    }
-    const queryString = params.toString();
-    const url = queryString.length > 0 ? `${pathname}?${queryString}` : pathname;
-    if (replace) {
-      router.replace(url, { scroll: false });
-    } else {
-      router.push(url, { scroll: false });
-    }
+    write(globalOperationsFiltersParams(next), {
+      own: FILTER_PARAMS,
+      mode: replace ? 'replace' : 'push',
+    });
   };
 
   return {

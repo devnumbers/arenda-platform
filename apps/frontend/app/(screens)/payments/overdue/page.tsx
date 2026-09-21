@@ -13,14 +13,10 @@ export const metadata: Metadata = {
   title: 'Просроченные операции — Рентли',
 };
 
-type OverdueRoutePageProps = {
-  searchParams?: Promise<Record<string, string | string[] | undefined>>;
-};
-
 export default async function PaymentOverdueRoutePage({
   searchParams,
-}: OverdueRoutePageProps) {
-  const resolved = searchParams ? await searchParams : {};
+}: PageProps<'/payments/overdue'>) {
+  const resolved = await searchParams;
   const sort = parseOverdueSortParams(resolved.sort);
 
   return <PaymentOverdueGlobalScreen initialSort={sort} />;

@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Cancel } from '@/shared/assets/icons';
 import { goBack } from '@/shared/lib/navigation';
+import { buildUrlWithParams } from '@/shared/lib/url-params';
 import { clientTodayIso } from '@/entities/payment';
 import {
   operationsCategoryRows,
@@ -89,18 +90,17 @@ export function OperationsCategoriesScreen({
   const cancel = (): void => {
     const params = new URLSearchParams(searchParams);
     params.delete('return');
-    const queryString = params.toString();
-    goBack(router, `${returnTo}${queryString ? `?${queryString}` : ''}`);
+    goBack(router, buildUrlWithParams(returnTo, params));
   };
 
   const apply = (): void => {
     // Формат query — один хелпер с operationsFiltersHref (#472); черновик
-    // подаётся как выбор категорий того же фильтр-шейпа.
+    // подаётся как выбор категорий того же фильтр-шейпа. Сборка адреса —
+    // тот же канон buildUrlWithParams (#792), «пустой query — голый адрес».
     const query = new URLSearchParams(
       operationsFiltersParams({ period: filters.period, categories: draft }),
     );
-    const queryString = query.toString();
-    router.replace(`${returnTo}${queryString ? `?${queryString}` : ''}`);
+    router.replace(buildUrlWithParams(returnTo, query));
   };
 
   return (

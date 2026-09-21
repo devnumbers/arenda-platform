@@ -15,13 +15,13 @@ import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
 import { useProperty } from '@/features/properties';
 import {
-  DEFAULT_TASKS_SORT,
   groupTasks,
   useActiveTasks,
   useCompleteAllTasks,
   useCompletedTasks,
   useCompleteTask,
   useDeleteCompletedTasks,
+  useTasksSort,
   useUncompleteTask,
   type TaskSection,
   type TasksSort,
@@ -60,7 +60,8 @@ import { SortChip, sortPickerGroups } from './tasks-sort';
  * сортировки: ведущая иконка показывает направление (SortingSmallBig —
  * возрастание, SortingBigSmall — убывание); на десктопе открывает меню
  * «Сортировать» (Figma 1603-94487,
- * выбор применяет и закрывает), на мобильной ширине — шит. Кебаб ⋮
+ * выбор применяет и закрывает), на мобильной ширине — шит. Выбор сортировки
+ * живёт в адресе (?sort=&order=, #785) — переживает перезагрузку. Кебаб ⋮
  * (Figma 1535-77633) —
  * «Отметить все задачи» (все активные, по одному POST, молча — без шитов и
  * уведомлений, решение владельца 2026-09-03) и «Удалить выполненные
@@ -72,8 +73,10 @@ import { SortChip, sortPickerGroups } from './tasks-sort';
  */
 export function TasksOfPropertyScreen({
   propertyId,
+  initialSort,
 }: {
   readonly propertyId: string;
+  readonly initialSort?: TasksSort;
 }): JSX.Element {
   const router = useRouter();
   const propertyQuery = useProperty(propertyId);
@@ -81,7 +84,7 @@ export function TasksOfPropertyScreen({
   const activeQuery = useActiveTasks(propertyId);
   const completedQuery = useCompletedTasks(propertyId);
 
-  const [sort, setSort] = useState<TasksSort>(DEFAULT_TASKS_SORT);
+  const { sort, changeSort } = useTasksSort(initialSort);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   const complete = useCompleteTask(propertyId);
@@ -161,8 +164,8 @@ export function TasksOfPropertyScreen({
       <PageContent>
         <div className="flex flex-col gap-6 pb-6">
           <div className="flex items-center justify-between pr-3.5 pl-6">
-            <PickerMenu title="Сортировать" groups={sortPickerGroups(sort, setSort)}>
-              <SortChip sort={sort} />
+            <PickerMenu title="Сортировать" groups={sortPickerGroups(sort, changeSort)}>
+              <SortChip sort={sort} data-testid="tasks-sort-chip" />
             </PickerMenu>
             {canMutate && (active.length > 0 || completedTotal > 0) && (
               <Menu>
