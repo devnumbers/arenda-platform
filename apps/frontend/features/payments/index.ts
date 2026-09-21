@@ -66,6 +66,7 @@ export {
   type HistoryOrder,
   type PaymentHistoryGroup,
 } from './lib/operations-history';
+export { useHistoryOrder } from './lib/use-history-order';
 export {
   operationsMonthOf,
   operationsMonthRange,

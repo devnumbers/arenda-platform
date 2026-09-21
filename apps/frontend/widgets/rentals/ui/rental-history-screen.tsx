@@ -1,11 +1,10 @@
 'use client';
 
-import { useState, type JSX, type ReactNode } from 'react';
+import { type JSX, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, ChangeVertical } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
-import { useUrlParams } from '@/shared/lib/hooks/use-url-params';
 import {
   clientTodayIso,
   PaymentRowButton,
@@ -15,6 +14,7 @@ import { paidPaymentNumber, paymentOrdinalLabel, useRentals } from '@/features/r
 import { CategoryIcon, categoryStyle } from '@/features/payment-categories';
 import {
   groupPaidOperations,
+  useHistoryOrder,
   usePaymentOperationsPaged,
   type HistoryOrder,
 } from '@/features/payments';
@@ -49,9 +49,9 @@ export function RentalHistoryScreen({
   readonly initialOrder?: HistoryOrder;
 }): JSX.Element {
   const router = useRouter();
-  const { write } = useUrlParams();
-  // Дефолт — сначала новые (макет); направление — часть ключа запроса.
-  const [order, setOrder] = useState<HistoryOrder>(initialOrder ?? 'desc');
+  // Дефолт — сначала новые (макет); направление — в адресе (#785) и часть
+  // ключа запроса.
+  const { order, toggleOrder } = useHistoryOrder(initialOrder);
   const rentalsQuery = useRentals(propertyId);
   const rental = rentalsQuery.data?.find((item) => item.id === rentalId);
   const historyQuery = usePaymentOperationsPaged(
@@ -59,14 +59,6 @@ export function RentalHistoryScreen({
     rental?.rentPayment.paymentId ?? '',
     { status: 'paid', order },
   );
-
-  // Направление живёт в адресе (?order=asc, дефолт desc не пишется —
-  // конвенция страницы «Объекты», #785).
-  const toggleOrder = (): void => {
-    const next: HistoryOrder = order === 'desc' ? 'asc' : 'desc';
-    setOrder(next);
-    write(next === 'asc' ? { order: next } : {}, { own: ['order'] });
-  };
 
   const operations = historyQuery.data ?? [];
   const groups = groupPaidOperations(operations, clientTodayIso());

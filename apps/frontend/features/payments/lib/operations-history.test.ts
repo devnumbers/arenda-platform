@@ -4,6 +4,7 @@ import {
   groupOperationsByDate,
   groupPaidOperations,
   parseHistoryOrderParams,
+  serializeHistoryOrderToParams,
 } from './operations-history';
 
 const paid = (id: string, date: string): PaymentOperation => ({
@@ -92,5 +93,15 @@ describe('parseHistoryOrderParams — разбор ?order= страниц ист
 
   it('читает «сначала старые»', () => {
     expect(parseHistoryOrderParams('asc')).toBe('asc');
+  });
+});
+
+describe('serializeHistoryOrderToParams — патч ?order= для адреса (#785)', () => {
+  it('дефолт «сначала новые» параметров не создаёт', () => {
+    expect(serializeHistoryOrderToParams('desc')).toStrictEqual({});
+  });
+
+  it('«сначала старые» пишет order=asc', () => {
+    expect(serializeHistoryOrderToParams('asc')).toStrictEqual({ order: 'asc' });
   });
 });

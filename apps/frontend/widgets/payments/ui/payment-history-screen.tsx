@@ -1,12 +1,11 @@
 'use client';
 
-import { useState, type JSX } from 'react';
+import { type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { ArrowLeft, ChangeVertical } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
-import { useUrlParams } from '@/shared/lib/hooks/use-url-params';
 import {
   clientTodayIso,
   PaymentRowButton,
@@ -15,6 +14,7 @@ import {
 import { CategoryIcon, categoryStyle } from '@/features/payment-categories';
 import {
   groupPaidOperations,
+  useHistoryOrder,
   usePaymentOperationsPaged,
   type HistoryOrder,
 } from '@/features/payments';
@@ -55,21 +55,13 @@ export function PaymentHistoryScreen({
   readonly initialOrder?: HistoryOrder;
 }): JSX.Element {
   const router = useRouter();
-  const { write } = useUrlParams();
-  // Дефолт — сначала новые (Figma); направление — часть ключа запроса.
-  const [order, setOrder] = useState<HistoryOrder>(initialOrder ?? 'desc');
+  // Дефолт — сначала новые (Figma); направление — в адресе (#785) и часть
+  // ключа запроса.
+  const { order, toggleOrder } = useHistoryOrder(initialOrder);
   const historyQuery = usePaymentOperationsPaged(propertyId, paymentId, {
     status: 'paid',
     order,
   });
-
-  // Направление живёт в адресе (?order=asc, дефолт desc не пишется —
-  // конвенция страницы «Объекты», #785).
-  const toggleOrder = (): void => {
-    const next: HistoryOrder = order === 'desc' ? 'asc' : 'desc';
-    setOrder(next);
-    write(next === 'asc' ? { order: next } : {}, { own: ['order'] });
-  };
 
   const today = clientTodayIso();
   const groups = groupPaidOperations(historyQuery.data ?? [], today);

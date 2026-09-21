@@ -22,6 +22,8 @@ export type PaymentHistoryGroup = {
  * дефолт «сначала новые» (макеты). */
 export type HistoryOrder = 'asc' | 'desc';
 
+export const DEFAULT_HISTORY_ORDER: HistoryOrder = 'desc';
+
 /** Разбор ?order= страниц истории (конвенция страницы «Объекты»):
  * неизвестное и отсутствующее значения — дефолт desc. Направление живёт
  * в адресе — переживает перезагрузку (#785). */
@@ -29,6 +31,13 @@ export function parseHistoryOrderParams(
   order: string | string[] | undefined,
 ): HistoryOrder {
   return parseEnumParam(order, ['asc', 'desc'], 'desc');
+}
+
+/** Патч направления для адреса: дефолтные значения параметров не создают
+ * (конвенция страницы «Объекты»); пишется через useUrlParams с
+ * own: ['order'] (#785). */
+export function serializeHistoryOrderToParams(order: HistoryOrder): Record<string, string> {
+  return order === DEFAULT_HISTORY_ORDER ? {} : { order };
 }
 
 export function groupPaidOperations(
