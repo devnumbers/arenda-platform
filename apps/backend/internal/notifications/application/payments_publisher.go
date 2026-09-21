@@ -12,6 +12,18 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
 )
 
+// PaymentScheduleTarget is one upcoming boundary the payments scan books
+// (issue #776): the rule id, the operation date — the job args' identity —
+// and the boundary's instant in the owner's timezone, the job's ScheduledAt.
+// The due leg's instant is 00:00 of the operation date, the overdue leg's —
+// 00:00 of the day after (решение владельца 21.09.2026: все уведомления —
+// чётко по времени).
+type PaymentScheduleTarget struct {
+	PaymentID uuid.UUID
+	DueDate   time.Time
+	FireAt    time.Time
+}
+
 // PaymentScanTarget is one operation the payments scan fires for: a planned
 // occurrence (Операция — вхождение Payments) of a live rule on a
 // non-archived property, with the property snapshot the publication carries
@@ -56,15 +68,68 @@ type PaymentScanSource interface {
 	// members — the recipients besides the owner, «Просмотр» included
 	// (решение #737: получатели объектных событий).
 	ListActiveRecipients(ctx context.Context, propertyID uuid.UUID) ([]uuid.UUID, error)
+	// ListScheduledDueTargets lists the upcoming operations whose due
+	// boundary — 00:00 of the operation date in the owner's timezone —
+	// falls in the window (from, until]; the booking list of the due leg
+	// (issue #776), auto-pay rules excluded like the sweep's due leg.
+	ListScheduledDueTargets(ctx context.Context, from, until time.Time) ([]PaymentScheduleTarget, error)
+	// ListScheduledOverdueTargets lists the upcoming operations whose
+	// overdue boundary — 00:00 of the day after the operation date in the
+	// owner's timezone — falls in the window (from, until]; the booking
+	// list of the overdue leg (issue #776), auto-pay rules included.
+	ListScheduledOverdueTargets(ctx context.Context, from, until time.Time) ([]PaymentScheduleTarget, error)
+	// GetScheduledDuePayment reloads one operation at its due boundary —
+	// the due job's delivery-time resolution (issue #776). The live flag is
+	// false when the leg's conditions no longer hold as of now: the
+	// operation gone, paid, cancelled, moved to auto-pay, the property
+	// archived, or the operation date no longer the zone's today.
+	GetScheduledDuePayment(ctx context.Context, paymentID uuid.UUID, date, now time.Time) (PaymentScanTarget, bool, error)
+	// GetScheduledOverduePayment reloads one operation at its overdue
+	// boundary — the overdue job's delivery-time resolution (issue #776).
+	// The live flag is false when the operation is no longer a planned
+	// occurrence of the rule on a non-archived property, or the operation
+	// date is not strictly before the zone's today as of now.
+	GetScheduledOverduePayment(ctx context.Context, paymentID uuid.UUID, date, now time.Time) (PaymentScanTarget, bool, error)
+}
+
+// PaymentBoundaryScheduler books a leg's boundary job on the delivery queue
+// (issue #776). Booking is idempotent — the queue's unique key keeps one
+// in-flight job per (leg, rule, date) — so the hourly passes repeat their
+// asks freely.
+type PaymentBoundaryScheduler interface {
+	// SchedulePaymentDue books the «Оплатите платёж» job at the boundary's
+	// instant: 00:00 of the operation date in the owner's timezone.
+	SchedulePaymentDue(ctx context.Context, paymentID uuid.UUID, date, fireAt time.Time) error
+	// SchedulePaymentOverdue books the «Платёж просрочен» job at the
+	// boundary's instant: 00:00 of the day after the operation date.
+	SchedulePaymentOverdue(ctx context.Context, paymentID uuid.UUID, date, fireAt time.Time) error
+}
+
+// PaymentBoundaryDeliverer is the boundary jobs' call into the publisher:
+// a boundary worker reloads the operation through the source as of its
+// wake-up and publishes — or finishes without publishing when the reload
+// answers no live operation.
+type PaymentBoundaryDeliverer interface {
+	DeliverPaymentDue(ctx context.Context, paymentID uuid.UUID, date, now time.Time) error
+	DeliverPaymentOverdue(ctx context.Context, paymentID uuid.UUID, date, now time.Time) error
 }
 
 // PaymentsPublisher is the payments events' publisher (issue #749) on the
-// delivery pipeline (карта #734, #740): the hourly zone sweep finds the
-// operations that came due today — «Оплатите платёж» — and the ones whose
-// due date has passed unpaid — «Платёж просрочен» — and gives each one's row
-// to the owner and the active members. The copy, the payload and the dedup
-// keys are the publisher's (решение #737, типы №2–№3); the «Оплатить» button
-// is nobody's here — it computes at read time from the live state (#743).
+// delivery pipeline (карта #734, #740): the operations that came due today —
+// «Оплатите платёж» — and the ones whose due date has passed unpaid —
+// «Платёж просрочен» — reach the owner and the active members with each
+// event's row. The copy, the payload and the dedup keys are the publisher's
+// (решение #737, типы №2–№3); the «Оплатить» button is nobody's here — it
+// computes at read time from the live state (#743).
+//
+// The trigger has two mechanisms (issue #776, the tasks scan's canon of
+// #750): the hourly pass books the boundary jobs — the due leg's at 00:00 of
+// the operation date, the overdue leg's at 00:00 of the day after, each in
+// the owner's timezone — and the zone sweep stays the backstop for
+// everything the jobs missed (a pass delayed past a boundary, a booking
+// window not reached yet, the retrospective after a downtime). In the norm
+// the job wakes exactly at the boundary and the sweep's publication is
+// silent — the dedup key carries the idempotence, no sweep state does.
 //
 // The sweep mirrors the materialization ticks (ADR 0048 p.3): one today per
 // owner timezone, failures isolated per zone and per operation, and
@@ -72,27 +137,69 @@ type PaymentScanSource interface {
 // fires once per (rule, date) because the key outlives the day, and an
 // overdue operation sweeps daily without ever producing a second row.
 type PaymentsPublisher struct {
-	pipeline *Publisher
-	zones    ScanZoneDirectory
-	source   PaymentScanSource
+	pipeline  *Publisher
+	zones     ScanZoneDirectory
+	source    PaymentScanSource
+	scheduler PaymentBoundaryScheduler
 }
 
 // NewPaymentsPublisher builds the payments publisher over the pipeline
-// creation service, the zone directory and the scan source.
+// creation service, the zone directory, the scan source and the boundary
+// scheduler.
 func NewPaymentsPublisher(
-	pipeline *Publisher, zones ScanZoneDirectory, source PaymentScanSource,
+	pipeline *Publisher, zones ScanZoneDirectory, source PaymentScanSource, scheduler PaymentBoundaryScheduler,
 ) *PaymentsPublisher {
-	return &PaymentsPublisher{pipeline: pipeline, zones: zones, source: source}
+	return &PaymentsPublisher{pipeline: pipeline, zones: zones, source: source, scheduler: scheduler}
 }
 
-// RunZoneScans is the hourly sweep: list the zones, compute one today per
-// zone from the passed instant, publish the zone's due targets then its
-// overdue ones. Failures are isolated — a broken zone or operation does not
-// stop the rest; the joined error reports everything that failed.
+// RunZoneScans is the hourly sweep: book the upcoming boundaries' jobs
+// first — every hour counts down to their midnight — then sweep the zones,
+// publishing the zone's due targets then its overdue ones. Failures are
+// isolated — a broken booking, zone or operation does not stop the rest;
+// the joined error reports everything that failed.
 func (p *PaymentsPublisher) RunZoneScans(ctx context.Context, now time.Time) error {
 	if p.zones == nil {
 		return errors.New("notifications payments scan: zone directory must be configured")
 	}
+	errs := append([]error{}, p.scheduleBoundaries(ctx, now)...)
+	if err := p.sweepZones(ctx, now); err != nil {
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
+}
+
+// scheduleBoundaries books the boundary jobs of the operations whose
+// boundaries fall into the horizon window — the due leg's ahead of the
+// operation date's midnight, the overdue leg's ahead of the day after's.
+// A broken booking is isolated — the rest of the window books on.
+func (p *PaymentsPublisher) scheduleBoundaries(ctx context.Context, now time.Time) []error {
+	var errs []error
+	for _, leg := range []struct {
+		list    func(context.Context, time.Time, time.Time) ([]PaymentScheduleTarget, error)
+		book    func(context.Context, uuid.UUID, time.Time, time.Time) error
+		diagnos string
+	}{
+		{p.source.ListScheduledDueTargets, p.scheduler.SchedulePaymentDue, "due"},
+		{p.source.ListScheduledOverdueTargets, p.scheduler.SchedulePaymentOverdue, "overdue"},
+	} {
+		targets, err := leg.list(ctx, now, now.Add(scheduledHorizon))
+		if err != nil {
+			errs = append(errs, fmt.Errorf("list %s payment boundaries: %w", leg.diagnos, err))
+			continue
+		}
+		for _, target := range targets {
+			if err := leg.book(ctx, target.PaymentID, target.DueDate, target.FireAt); err != nil {
+				errs = append(errs, fmt.Errorf("schedule %s boundary of payment %s: %w",
+					leg.diagnos, target.PaymentID, err))
+			}
+		}
+	}
+	return errs
+}
+
+// sweepZones is the zone sweep (ADR 0048 p.3): one today per owner timezone,
+// the due leg before the overdue one, every target published.
+func (p *PaymentsPublisher) sweepZones(ctx context.Context, now time.Time) error {
 	zones, err := p.zones.ListScanZones(ctx)
 	if err != nil {
 		return fmt.Errorf("list payments scan zones: %w", err)
@@ -126,6 +233,38 @@ func (p *PaymentsPublisher) RunZoneScans(ctx context.Context, now time.Time) err
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// DeliverPaymentDue is the due boundary job's half (issue #776): reload the
+// operation through the source as of the wake-up and publish if it still
+// lives due. A false live flag — paid, cancelled, the rule edited or
+// deleted, the property archived, or the operation date no longer the
+// zone's today — finishes the job without publishing; an error is returned
+// to River for its retry ladder.
+func (p *PaymentsPublisher) DeliverPaymentDue(ctx context.Context, paymentID uuid.UUID, date, now time.Time) error {
+	target, live, err := p.source.GetScheduledDuePayment(ctx, paymentID, date, now)
+	if err != nil {
+		return fmt.Errorf("load due payment %s: %w", paymentID, err)
+	}
+	if !live {
+		return nil
+	}
+	return p.publish(ctx, domain.EventPaymentDue, target)
+}
+
+// DeliverPaymentOverdue is the overdue boundary job's half (issue #776):
+// reload the operation as of the wake-up and publish if it still lives
+// overdue — planned, on a non-archived property, its date strictly before
+// the zone's today.
+func (p *PaymentsPublisher) DeliverPaymentOverdue(ctx context.Context, paymentID uuid.UUID, date, now time.Time) error {
+	target, live, err := p.source.GetScheduledOverduePayment(ctx, paymentID, date, now)
+	if err != nil {
+		return fmt.Errorf("load overdue payment %s: %w", paymentID, err)
+	}
+	if !live {
+		return nil
+	}
+	return p.publish(ctx, domain.EventPaymentOverdue, target)
 }
 
 // publish fans one operation's event out to the owner and the active

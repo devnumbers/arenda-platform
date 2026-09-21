@@ -37,6 +37,14 @@ type RiverQueue struct {
 	// due-minute worker publishes through it (bound post-construction, see
 	// DeferredTaskOverdueDeliverer).
 	TasksPublisher *notificationsapp.TasksPublisher
+	// PaymentsPublisher is the payments scan's publisher (issues #749,
+	// #776): the hourly sweep books the upcoming operations' boundary jobs
+	// — «Оплатите платёж» at 00:00 of the operation date, «Платёж
+	// просрочен» at 00:00 of the day after, each in the owner's timezone —
+	// and sweeps the zones as the backstop; the boundary workers publish
+	// through it (bound post-construction, see
+	// DeferredPaymentBoundaryDeliverer).
+	PaymentsPublisher *notificationsapp.PaymentsPublisher
 	// TasksSeam is the tasks context's scheduling seam (issue #775): the
 	// rule create/edit flows hand their standing tasks' ids over post-commit
 	// and the seam plans them through the tasks publisher. The composition
@@ -54,22 +62,27 @@ type RiverQueue struct {
 	ProviderLimiter *httpsupport.RateLimiter
 }
 
-// notificationsTaskMaxWorkers is the due-minute jobs' ceiling: the jobs are
-// tiny (one feed read and one write) and rare — a fixed domain decision, no
-// env knob (the scan cadence canon).
-const notificationsTaskMaxWorkers = 2
+// The scheduled jobs' worker ceilings: tiny jobs (one feed read and one
+// write) and rare — a fixed domain decision, no env knob (the scan cadence
+// canon). The payments' pair (#776) shares the tasks' (#750) value: a
+// midnight across zones wakes the boundary jobs in a batch, each stays one
+// feed write.
+const (
+	notificationsTaskMaxWorkers    = 2
+	notificationsPaymentMaxWorkers = 2
+)
 
 // WireRiverQueue builds the River client with the two delivery queues, the
-// due-minute tasks queue and the email/push/task workers, plus the
-// publisher over the transactional enqueuer and the event stream hub behind
-// it (#742, ADR 0058). The tasks scan publisher wires here too (issue
-// #750): its scheduled leg books the due-minute jobs through the same
-// client, so it binds the worker's deferred deliverer — the composition
-// root passes it to the scan group. The client is not started here:
-// NewWorkers runs it in the workers phase and Workers.Wait waits for its
-// full stop. Push jobs are enqueued only when a push sender could be built
-// (VAPID keys configured); without them the pipeline runs in the email-only
-// local mode.
+// due-minute tasks queue, the payment boundary queue and the
+// email/push/task/payment workers, plus the publisher over the transactional
+// enqueuer and the event stream hub behind it (#742, ADR 0058). The tasks
+// (#750) and payments (#776) scan publishers wire here too: their booking
+// legs schedule the boundary jobs through the same client, so they bind the
+// workers' deferred deliverer — the composition root passes them to the
+// scan group. The client is not started here: NewWorkers runs it in the
+// workers phase and Workers.Wait waits for its full stop. Push jobs are
+// enqueued only when a push sender could be built (VAPID keys configured);
+// without them the pipeline runs in the email-only local mode.
 func WireRiverQueue(
 	ctx context.Context,
 	p platformDeps,
@@ -78,6 +91,7 @@ func WireRiverQueue(
 	emailer notificationsapp.TemplateEmailSender,
 	pushSender notificationsapp.PushSender,
 	taskStore *notificationspg.TaskScanStore,
+	paymentStore *notificationspg.PaymentScanStore,
 ) (*RiverQueue, error) {
 	cfg := p.Cfg
 
@@ -119,12 +133,16 @@ func WireRiverQueue(
 	))
 	taskDeliverer := &notificationsjob.DeferredTaskOverdueDeliverer{}
 	river.AddWorker(workers, notificationsjob.NewTaskOverdueWorker(taskDeliverer, p.Logger))
+	paymentDeliverer := &notificationsjob.DeferredPaymentBoundaryDeliverer{}
+	river.AddWorker(workers, notificationsjob.NewPaymentDueWorker(paymentDeliverer, p.Clock, p.Logger))
+	river.AddWorker(workers, notificationsjob.NewPaymentOverdueWorker(paymentDeliverer, p.Clock, p.Logger))
 
 	client, err := river.NewClient(riverpgxv5.New(p.Pool), &river.Config{
 		Queues: map[string]river.QueueConfig{
-			notificationsjob.QueueEmail: {MaxWorkers: cfg.NotificationsEmailMaxWorkers},
-			notificationsjob.QueuePush:  {MaxWorkers: cfg.NotificationsPushMaxWorkers},
-			notificationsjob.QueueTasks: {MaxWorkers: notificationsTaskMaxWorkers},
+			notificationsjob.QueueEmail:    {MaxWorkers: cfg.NotificationsEmailMaxWorkers},
+			notificationsjob.QueuePush:     {MaxWorkers: cfg.NotificationsPushMaxWorkers},
+			notificationsjob.QueueTasks:    {MaxWorkers: notificationsTaskMaxWorkers},
+			notificationsjob.QueuePayments: {MaxWorkers: notificationsPaymentMaxWorkers},
 		},
 		Workers:         workers,
 		Logger:          p.Logger,
@@ -155,13 +173,17 @@ func WireRiverQueue(
 	tasksPublisher := notificationsapp.NewTasksPublisher(publisher, taskStore, taskStore,
 		notificationsjob.NewTaskOverdueScheduler(client))
 	taskDeliverer.Bind(tasksPublisher)
+	paymentsPublisher := notificationsapp.NewPaymentsPublisher(publisher, paymentStore, paymentStore,
+		notificationsjob.NewPaymentBoundaryScheduler(client))
+	paymentDeliverer.Bind(paymentsPublisher)
 
 	return &RiverQueue{
-		Client:          client,
-		Publisher:       publisher,
-		TasksPublisher:  tasksPublisher,
-		TasksSeam:       taskschedule.NewSeam(tasksPublisher, p.Clock),
-		Stream:          notificationsStream,
-		ProviderLimiter: providerLimiter,
+		Client:            client,
+		Publisher:         publisher,
+		TasksPublisher:    tasksPublisher,
+		PaymentsPublisher: paymentsPublisher,
+		TasksSeam:         taskschedule.NewSeam(tasksPublisher, p.Clock),
+		Stream:            notificationsStream,
+		ProviderLimiter:   providerLimiter,
 	}, nil
 }

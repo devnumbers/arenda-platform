@@ -10,12 +10,12 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
 )
 
-// scheduledHorizon bounds the scheduled leg's booking window (issue #750):
-// the hourly pass books due-minute jobs for the timed tasks whose term falls
-// into the next two days. The term further out joins on a later pass — the
-// materialization tick keeps the rows standing long before their minute —
-// and a term already passed inside the window is the overdue sweep's
-// business.
+// scheduledHorizon bounds the scans' booking window (issues #750, #776):
+// the hourly pass books boundary jobs for the targets whose boundary — a
+// timed task's term, a payment operation's due or overdue midnight — falls
+// into the next two days. A boundary further out joins on a later pass (the
+// materialization ticks keep the rows standing long before their moment);
+// one already passed inside the window is the overdue sweeps' business.
 const scheduledHorizon = 48 * time.Hour
 
 // TaskScheduleTarget is one upcoming timed task the scheduled leg books

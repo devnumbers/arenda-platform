@@ -222,3 +222,251 @@ func paymentTargetsOfProps(targets []application.PaymentScanTarget, props ...uui
 	}
 	return out
 }
+
+// The booking window of the due leg (issue #776): planned operations whose
+// due boundary — 00:00 of the operation date in the owner's timezone —
+// falls into (from, until], auto-pay rules excluded. Moscow's midnight of
+// the 20th is 2026-09-19T21:00Z; the boundary carries the zone's shift.
+func TestPaymentScanStore_ListScheduledDueTargets(t *testing.T) {
+	t.Parallel()
+
+	pool := setupPushDB(t)
+	ctx := context.Background()
+
+	msk := createUserInZone(t, pool, "Europe/Moscow")
+	prop := createLiveProperty(t, pool, msk)
+	rule := insertScanPayment(t, pool, msk, prop, false)
+	// The in-window occurrence: due boundary 2026-09-19T21:00Z.
+	insertScanOperation(t, pool, msk, prop, rule, "2026-09-20", "planned")
+
+	// A settled, a cancelled, an auto-pay and an out-of-window occurrence —
+	// none of them books a due job.
+	insertScanOperation(t, pool, msk, prop, rule, "2026-09-21", "paid")
+	insertScanOperation(t, pool, msk, prop, rule, "2026-09-22", "cancelled")
+	autoProp := createLiveProperty(t, pool, msk)
+	autoRule := insertScanPayment(t, pool, msk, autoProp, true)
+	insertScanOperation(t, pool, msk, autoProp, autoRule, "2026-09-20", "planned")
+	insertScanOperation(t, pool, msk, prop, rule, "2026-10-20", "planned")
+
+	// An archived property's occurrence stays out (the ticks' canon).
+	archivedProp := createLiveProperty(t, pool, msk)
+	archivedRule := insertScanPayment(t, pool, msk, archivedProp, false)
+	insertScanOperation(t, pool, msk, archivedProp, archivedRule, "2026-09-20", "planned")
+	archiveProperty(t, pool, msk, archivedProp)
+
+	store := NewPaymentScanStore(pool)
+	targets, err := store.ListScheduledDueTargets(ctx,
+		time.Date(2026, 9, 19, 0, 0, 0, 0, time.UTC),
+		time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC))
+	require.NoError(t, err)
+
+	got := scheduleTargetsOfProps(targets, rule, autoRule, archivedRule)
+	require.Len(t, got, 1)
+	assert.Equal(t, rule, got[0].PaymentID)
+	assert.Equal(t, time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC), got[0].DueDate)
+	assert.True(t, got[0].FireAt.Equal(time.Date(2026, 9, 19, 21, 0, 0, 0, time.UTC)),
+		"the job wakes at 00:00 of the operation date in the owner's zone")
+}
+
+// The booking window of the overdue leg (issue #776): planned operations
+// whose overdue boundary — 00:00 of the day after the operation date in the
+// owner's timezone — falls into (from, until], auto-pay rules included (the
+// tick never backdates an auto charge, ADR 0049).
+func TestPaymentScanStore_ListScheduledOverdueTargets(t *testing.T) {
+	t.Parallel()
+
+	pool := setupPushDB(t)
+	ctx := context.Background()
+
+	msk := createUserInZone(t, pool, "Europe/Moscow")
+	prop := createLiveProperty(t, pool, msk)
+	rule := insertScanPayment(t, pool, msk, prop, false)
+	// The in-window occurrence: overdue boundary 2026-09-19T21:00Z —
+	// Moscow's midnight of the 20th, the day after the operation date.
+	insertScanOperation(t, pool, msk, prop, rule, "2026-09-19", "planned")
+
+	// The auto-pay mode does not excuse the overdue leg's booking.
+	autoProp := createLiveProperty(t, pool, msk)
+	autoRule := insertScanPayment(t, pool, msk, autoProp, true)
+	insertScanOperation(t, pool, msk, autoProp, autoRule, "2026-09-19", "planned")
+
+	// A settled, a cancelled and an out-of-window occurrence stay out.
+	insertScanOperation(t, pool, msk, prop, rule, "2026-09-20", "paid")
+	insertScanOperation(t, pool, msk, prop, rule, "2026-09-21", "cancelled")
+	insertScanOperation(t, pool, msk, prop, rule, "2026-09-10", "planned")
+
+	// An archived property's occurrence stays out (the ticks' canon).
+	archivedProp := createLiveProperty(t, pool, msk)
+	archivedRule := insertScanPayment(t, pool, msk, archivedProp, false)
+	insertScanOperation(t, pool, msk, archivedProp, archivedRule, "2026-09-19", "planned")
+	archiveProperty(t, pool, msk, archivedProp)
+
+	store := NewPaymentScanStore(pool)
+	targets, err := store.ListScheduledOverdueTargets(ctx,
+		time.Date(2026, 9, 19, 0, 0, 0, 0, time.UTC),
+		time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC))
+	require.NoError(t, err)
+
+	got := scheduleTargetsOfProps(targets, rule, autoRule, archivedRule)
+	require.Len(t, got, 2)
+	fire := map[uuid.UUID]time.Time{}
+	dates := map[uuid.UUID]time.Time{}
+	for _, target := range got {
+		fire[target.PaymentID] = target.FireAt
+		dates[target.PaymentID] = target.DueDate
+	}
+	assert.True(t, fire[rule].Equal(time.Date(2026, 9, 19, 21, 0, 0, 0, time.UTC)),
+		"the job wakes at 00:00 of the day after the operation date in the owner's zone")
+	assert.Equal(t, time.Date(2026, 9, 19, 0, 0, 0, 0, time.UTC), dates[rule])
+	assert.True(t, fire[autoRule].Equal(time.Date(2026, 9, 19, 21, 0, 0, 0, time.UTC)))
+}
+
+// The due boundary job's delivery-time resolution (issue #776): a planned
+// operation of a live manual rule on a live property whose date is still
+// the zone's today answers live; paid, cancelled, auto-pay, orphaned
+// (the rule row deleted), archived and rolled-over states answer no.
+func TestPaymentScanStore_GetScheduledDuePayment(t *testing.T) {
+	t.Parallel()
+
+	pool := setupPushDB(t)
+	ctx := context.Background()
+
+	msk := createUserInZone(t, pool, "Europe/Moscow")
+	prop := createLivePropertyFor(t, pool, msk, "Квартира на Ленина", "Москва, Тверская 1")
+	rule := insertScanPayment(t, pool, msk, prop, false)
+	insertScanOperation(t, pool, msk, prop, rule, "2026-09-20", "planned")
+
+	// The dead siblings of the same operation date: paid, cancelled (their
+	// own rules keep the (rule, date) uniqueness), an auto-pay rule's, an
+	// archived property's and an orphaned one.
+	paidProp := createLiveProperty(t, pool, msk)
+	paidRule := insertScanPayment(t, pool, msk, paidProp, false)
+	insertScanOperation(t, pool, msk, paidProp, paidRule, "2026-09-20", "paid")
+	cancelProp := createLiveProperty(t, pool, msk)
+	cancelRule := insertScanPayment(t, pool, msk, cancelProp, false)
+	insertScanOperation(t, pool, msk, cancelProp, cancelRule, "2026-09-20", "cancelled")
+	autoProp := createLiveProperty(t, pool, msk)
+	autoRule := insertScanPayment(t, pool, msk, autoProp, true)
+	insertScanOperation(t, pool, msk, autoProp, autoRule, "2026-09-20", "planned")
+	archivedProp := createLiveProperty(t, pool, msk)
+	archivedRule := insertScanPayment(t, pool, msk, archivedProp, false)
+	insertScanOperation(t, pool, msk, archivedProp, archivedRule, "2026-09-23", "planned")
+	archiveProperty(t, pool, msk, archivedProp)
+	orphanRule := insertScanPayment(t, pool, msk, prop, false)
+	insertScanOperation(t, pool, msk, prop, orphanRule, "2026-09-24", "planned")
+	_, err := pool.Exec(ctx, `DELETE FROM payments WHERE id = $1`, orphanRule)
+	require.NoError(t, err)
+
+	store := NewPaymentScanStore(pool)
+	// Moscow's midnight of the 20th has just passed.
+	now := time.Date(2026, 9, 19, 21, 0, 30, 0, time.UTC)
+
+	target, live, err := store.GetScheduledDuePayment(ctx, rule, time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC), now)
+	require.NoError(t, err)
+	require.True(t, live)
+	assert.Equal(t, rule, target.PaymentID)
+	assert.Equal(t, time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC), target.DueDate)
+	assert.Equal(t, "Обслуживание", target.Title)
+	assert.Equal(t, int64(250000), target.AmountKopecks)
+	assert.Equal(t, prop, target.PropertyID)
+	assert.Equal(t, "Квартира на Ленина", target.PropertyName)
+	assert.Equal(t, "Москва, Тверская 1", target.PropertyAddress)
+	assert.Equal(t, msk, target.OwnerID)
+
+	// The dead states answer live=false — the job finishes silently.
+	_, live, err = store.GetScheduledDuePayment(ctx, paidRule, time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC), now)
+	require.NoError(t, err)
+	assert.False(t, live, "paid")
+
+	_, live, err = store.GetScheduledDuePayment(ctx, cancelRule, time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC), now)
+	require.NoError(t, err)
+	assert.False(t, live, "cancelled")
+
+	_, live, err = store.GetScheduledDuePayment(ctx, autoRule, time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC), now)
+	require.NoError(t, err)
+	assert.False(t, live, "auto-pay")
+
+	_, live, err = store.GetScheduledDuePayment(ctx, archivedRule, time.Date(2026, 9, 23, 0, 0, 0, 0, time.UTC), now)
+	require.NoError(t, err)
+	assert.False(t, live, "archived property")
+
+	_, live, err = store.GetScheduledDuePayment(ctx, orphanRule, time.Date(2026, 9, 24, 0, 0, 0, 0, time.UTC), now)
+	require.NoError(t, err)
+	assert.False(t, live, "orphaned operation")
+
+	// The rollover check: once the zone's today has moved past the operation
+	// date, the due leg is silent — the scan semantics say so.
+	_, live, err = store.GetScheduledDuePayment(ctx, rule, time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC),
+		time.Date(2026, 9, 20, 21, 0, 30, 0, time.UTC))
+	require.NoError(t, err)
+	assert.False(t, live, "the job woke after the day rolled over")
+}
+
+// The overdue boundary job's delivery-time resolution (issue #776): a
+// planned operation whose date is strictly before the zone's today answers
+// live — auto-pay rules included; a job awake before the day's end (the
+// date not yet overdue) answers no.
+func TestPaymentScanStore_GetScheduledOverduePayment(t *testing.T) {
+	t.Parallel()
+
+	pool := setupPushDB(t)
+	ctx := context.Background()
+
+	msk := createUserInZone(t, pool, "Europe/Moscow")
+	prop := createLiveProperty(t, pool, msk)
+	rule := insertScanPayment(t, pool, msk, prop, false)
+	insertScanOperation(t, pool, msk, prop, rule, "2026-09-19", "planned")
+
+	autoProp := createLiveProperty(t, pool, msk)
+	autoRule := insertScanPayment(t, pool, msk, autoProp, true)
+	insertScanOperation(t, pool, msk, autoProp, autoRule, "2026-09-19", "planned")
+
+	paidProp := createLiveProperty(t, pool, msk)
+	paidRule := insertScanPayment(t, pool, msk, paidProp, false)
+	insertScanOperation(t, pool, msk, paidProp, paidRule, "2026-09-19", "paid")
+
+	store := NewPaymentScanStore(pool)
+	// Moscow's midnight of the 20th has just passed: the 19th is overdue.
+	now := time.Date(2026, 9, 19, 21, 0, 30, 0, time.UTC)
+
+	target, live, err := store.GetScheduledOverduePayment(ctx, rule, time.Date(2026, 9, 19, 0, 0, 0, 0, time.UTC), now)
+	require.NoError(t, err)
+	require.True(t, live)
+	assert.Equal(t, rule, target.PaymentID)
+	assert.Equal(t, time.Date(2026, 9, 19, 0, 0, 0, 0, time.UTC), target.DueDate)
+	assert.Equal(t, "Обслуживание", target.Title)
+
+	_, live, err = store.GetScheduledOverduePayment(ctx, autoRule, time.Date(2026, 9, 19, 0, 0, 0, 0, time.UTC), now)
+	require.NoError(t, err)
+	assert.True(t, live, "auto-pay rules are the overdue leg's targets too")
+
+	// Before the boundary — Moscow's midnight of the 20th has not arrived,
+	// the 19th is still the zone's today — the leg is silent; the job could
+	// not wake this early, the check keeps the leg's semantics honest.
+	_, live, err = store.GetScheduledOverduePayment(ctx, rule, time.Date(2026, 9, 19, 0, 0, 0, 0, time.UTC),
+		time.Date(2026, 9, 19, 20, 59, 0, 0, time.UTC))
+	require.NoError(t, err)
+	assert.False(t, live, "the operation is not overdue yet")
+
+	_, live, err = store.GetScheduledOverduePayment(ctx, paidRule, time.Date(2026, 9, 19, 0, 0, 0, 0, time.UTC), now)
+	require.NoError(t, err)
+	assert.False(t, live, "paid")
+}
+
+// scheduleTargetsOfProps filters the booking window's targets to the given
+// rules — the schedule target carries no property, the rule id is its
+// identity; the shared test database's parallel fixtures must not break the
+// count assertions.
+func scheduleTargetsOfProps(targets []application.PaymentScheduleTarget, rules ...uuid.UUID) []application.PaymentScheduleTarget {
+	want := make(map[uuid.UUID]bool, len(rules))
+	for _, r := range rules {
+		want[r] = true
+	}
+	out := make([]application.PaymentScheduleTarget, 0, len(targets))
+	for _, target := range targets {
+		if want[target.PaymentID] {
+			out = append(out, target)
+		}
+	}
+	return out
+}

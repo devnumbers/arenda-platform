@@ -239,6 +239,125 @@ func (q *Queries) GetRentalActionState(ctx context.Context, id pgtype.UUID) (Get
 	return i, err
 }
 
+const getScheduledDuePayment = `-- name: GetScheduledDuePayment :one
+SELECT pay.id AS payment_id,
+       o.date,
+       pay.title,
+       o.amount_kopecks,
+       p.id AS property_id,
+       p.name AS property_name,
+       p.address AS property_address,
+       o.owner_id
+FROM operations o
+JOIN payments pay ON pay.id = o.payment_id
+JOIN properties p ON p.id = o.property_id
+JOIN users u ON u.id = o.owner_id
+WHERE pay.id = $1::uuid
+  AND o.date = $2::date
+  AND o.status = 'planned'
+  AND pay.auto_pay = false
+  AND p.status IN ('active', 'maintenance')
+  AND o.date = ($3::timestamptz AT TIME ZONE u.timezone)::date
+`
+
+type GetScheduledDuePaymentParams struct {
+	Column1 pgtype.UUID        `json:"column_1"`
+	Column2 pgtype.Date        `json:"column_2"`
+	Column3 pgtype.Timestamptz `json:"column_3"`
+}
+
+type GetScheduledDuePaymentRow struct {
+	PaymentID       pgtype.UUID `json:"payment_id"`
+	Date            pgtype.Date `json:"date"`
+	Title           string      `json:"title"`
+	AmountKopecks   int64       `json:"amount_kopecks"`
+	PropertyID      pgtype.UUID `json:"property_id"`
+	PropertyName    string      `json:"property_name"`
+	PropertyAddress string      `json:"property_address"`
+	OwnerID         pgtype.UUID `json:"owner_id"`
+}
+
+// The due boundary job's delivery-time resolution (issue #776): the
+// operation as it stands at its due midnight. The leg's conditions are
+// re-checked as of the wake-up instant ($3): a paid, cancelled, auto-pay
+// operation, a deleted rule's orphan, an archived property — and an
+// operation whose date is no longer the zone's today (the job woke after
+// the day had rolled over) — answers no row, the job finishes without
+// publishing.
+func (q *Queries) GetScheduledDuePayment(ctx context.Context, arg GetScheduledDuePaymentParams) (GetScheduledDuePaymentRow, error) {
+	row := q.db.QueryRow(ctx, getScheduledDuePayment, arg.Column1, arg.Column2, arg.Column3)
+	var i GetScheduledDuePaymentRow
+	err := row.Scan(
+		&i.PaymentID,
+		&i.Date,
+		&i.Title,
+		&i.AmountKopecks,
+		&i.PropertyID,
+		&i.PropertyName,
+		&i.PropertyAddress,
+		&i.OwnerID,
+	)
+	return i, err
+}
+
+const getScheduledOverduePayment = `-- name: GetScheduledOverduePayment :one
+SELECT pay.id AS payment_id,
+       o.date,
+       pay.title,
+       o.amount_kopecks,
+       p.id AS property_id,
+       p.name AS property_name,
+       p.address AS property_address,
+       o.owner_id
+FROM operations o
+JOIN payments pay ON pay.id = o.payment_id
+JOIN properties p ON p.id = o.property_id
+JOIN users u ON u.id = o.owner_id
+WHERE pay.id = $1::uuid
+  AND o.date = $2::date
+  AND o.status = 'planned'
+  AND p.status IN ('active', 'maintenance')
+  AND o.date < ($3::timestamptz AT TIME ZONE u.timezone)::date
+`
+
+type GetScheduledOverduePaymentParams struct {
+	Column1 pgtype.UUID        `json:"column_1"`
+	Column2 pgtype.Date        `json:"column_2"`
+	Column3 pgtype.Timestamptz `json:"column_3"`
+}
+
+type GetScheduledOverduePaymentRow struct {
+	PaymentID       pgtype.UUID `json:"payment_id"`
+	Date            pgtype.Date `json:"date"`
+	Title           string      `json:"title"`
+	AmountKopecks   int64       `json:"amount_kopecks"`
+	PropertyID      pgtype.UUID `json:"property_id"`
+	PropertyName    string      `json:"property_name"`
+	PropertyAddress string      `json:"property_address"`
+	OwnerID         pgtype.UUID `json:"owner_id"`
+}
+
+// The overdue boundary job's delivery-time resolution (issue #776): the
+// operation as it stands at its overdue midnight. The overdue leg's
+// conditions are re-checked as of the wake-up instant ($3): planned,
+// non-archived property, the date strictly before the zone's today —
+// auto-pay rules included, the sweep's overdue leg's shape.
+func (q *Queries) GetScheduledOverduePayment(ctx context.Context, arg GetScheduledOverduePaymentParams) (GetScheduledOverduePaymentRow, error) {
+	row := q.db.QueryRow(ctx, getScheduledOverduePayment, arg.Column1, arg.Column2, arg.Column3)
+	var i GetScheduledOverduePaymentRow
+	err := row.Scan(
+		&i.PaymentID,
+		&i.Date,
+		&i.Title,
+		&i.AmountKopecks,
+		&i.PropertyID,
+		&i.PropertyName,
+		&i.PropertyAddress,
+		&i.OwnerID,
+	)
+	return i, err
+}
+
 const getScheduledOverdueTask = `-- name: GetScheduledOverdueTask :one
 SELECT t.id AS task_id,
        t.title,
@@ -615,6 +734,112 @@ func (q *Queries) ListPaymentScanZones(ctx context.Context) ([]string, error) {
 			return nil, err
 		}
 		items = append(items, timezone)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPaymentScheduledDueTargets = `-- name: ListPaymentScheduledDueTargets :many
+SELECT pay.id AS payment_id,
+       o.date,
+       CAST((o.date::timestamp AT TIME ZONE u.timezone) AS timestamptz) AS fire_at
+FROM operations o
+JOIN payments pay ON pay.id = o.payment_id
+JOIN properties p ON p.id = o.property_id
+JOIN users u ON u.id = o.owner_id
+WHERE o.status = 'planned'
+  AND pay.auto_pay = false
+  AND p.status IN ('active', 'maintenance')
+  AND (o.date::timestamp AT TIME ZONE u.timezone) > $1::timestamptz
+  AND (o.date::timestamp AT TIME ZONE u.timezone) <= $2::timestamptz
+ORDER BY o.id
+`
+
+type ListPaymentScheduledDueTargetsParams struct {
+	Column1 pgtype.Timestamptz `json:"column_1"`
+	Column2 pgtype.Timestamptz `json:"column_2"`
+}
+
+type ListPaymentScheduledDueTargetsRow struct {
+	PaymentID pgtype.UUID        `json:"payment_id"`
+	Date      pgtype.Date        `json:"date"`
+	FireAt    pgtype.Timestamptz `json:"fire_at"`
+}
+
+// The payments scan's booking list of the due leg (issue #776): the planned
+// operations whose due boundary — 00:00 of the operation date read in the
+// owner's timezone — falls in the window (from, until]. Auto-pay rules
+// excluded like the sweep's due leg (an auto-pay rule's due occurrence is
+// extinguished by the tick the same day, ADR 0049); manual facts and
+// cancelled tombstones stay out (status='planned' + the join to payments);
+// non-archived property only (the ticks' canon).
+func (q *Queries) ListPaymentScheduledDueTargets(ctx context.Context, arg ListPaymentScheduledDueTargetsParams) ([]ListPaymentScheduledDueTargetsRow, error) {
+	rows, err := q.db.Query(ctx, listPaymentScheduledDueTargets, arg.Column1, arg.Column2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPaymentScheduledDueTargetsRow{}
+	for rows.Next() {
+		var i ListPaymentScheduledDueTargetsRow
+		if err := rows.Scan(&i.PaymentID, &i.Date, &i.FireAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPaymentScheduledOverdueTargets = `-- name: ListPaymentScheduledOverdueTargets :many
+SELECT pay.id AS payment_id,
+       o.date,
+       CAST(((o.date + 1)::timestamp AT TIME ZONE u.timezone) AS timestamptz) AS fire_at
+FROM operations o
+JOIN payments pay ON pay.id = o.payment_id
+JOIN properties p ON p.id = o.property_id
+JOIN users u ON u.id = o.owner_id
+WHERE o.status = 'planned'
+  AND p.status IN ('active', 'maintenance')
+  AND ((o.date + 1)::timestamp AT TIME ZONE u.timezone) > $1::timestamptz
+  AND ((o.date + 1)::timestamp AT TIME ZONE u.timezone) <= $2::timestamptz
+ORDER BY o.id
+`
+
+type ListPaymentScheduledOverdueTargetsParams struct {
+	Column1 pgtype.Timestamptz `json:"column_1"`
+	Column2 pgtype.Timestamptz `json:"column_2"`
+}
+
+type ListPaymentScheduledOverdueTargetsRow struct {
+	PaymentID pgtype.UUID        `json:"payment_id"`
+	Date      pgtype.Date        `json:"date"`
+	FireAt    pgtype.Timestamptz `json:"fire_at"`
+}
+
+// The payments scan's booking list of the overdue leg (issue #776): the
+// planned operations whose overdue boundary — 00:00 of the day after the
+// operation date read in the owner's timezone — falls in the window
+// (from, until]. Auto-pay rules included (the tick never backdates an auto
+// charge, ADR 0049); the wall-clock midnight of the next calendar date is
+// the boundary, a DST day rolls it with the wall clock.
+func (q *Queries) ListPaymentScheduledOverdueTargets(ctx context.Context, arg ListPaymentScheduledOverdueTargetsParams) ([]ListPaymentScheduledOverdueTargetsRow, error) {
+	rows, err := q.db.Query(ctx, listPaymentScheduledOverdueTargets, arg.Column1, arg.Column2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPaymentScheduledOverdueTargetsRow{}
+	for rows.Next() {
+		var i ListPaymentScheduledOverdueTargetsRow
+		if err := rows.Scan(&i.PaymentID, &i.Date, &i.FireAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

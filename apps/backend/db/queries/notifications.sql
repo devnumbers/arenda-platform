@@ -254,6 +254,99 @@ WHERE u.timezone = $1
   AND p.status IN ('active', 'maintenance')
 ORDER BY o.id;
 
+-- name: ListPaymentScheduledDueTargets :many
+-- The payments scan's booking list of the due leg (issue #776): the planned
+-- operations whose due boundary — 00:00 of the operation date read in the
+-- owner's timezone — falls in the window (from, until]. Auto-pay rules
+-- excluded like the sweep's due leg (an auto-pay rule's due occurrence is
+-- extinguished by the tick the same day, ADR 0049); manual facts and
+-- cancelled tombstones stay out (status='planned' + the join to payments);
+-- non-archived property only (the ticks' canon).
+SELECT pay.id AS payment_id,
+       o.date,
+       CAST((o.date::timestamp AT TIME ZONE u.timezone) AS timestamptz) AS fire_at
+FROM operations o
+JOIN payments pay ON pay.id = o.payment_id
+JOIN properties p ON p.id = o.property_id
+JOIN users u ON u.id = o.owner_id
+WHERE o.status = 'planned'
+  AND pay.auto_pay = false
+  AND p.status IN ('active', 'maintenance')
+  AND (o.date::timestamp AT TIME ZONE u.timezone) > $1::timestamptz
+  AND (o.date::timestamp AT TIME ZONE u.timezone) <= $2::timestamptz
+ORDER BY o.id;
+
+-- name: ListPaymentScheduledOverdueTargets :many
+-- The payments scan's booking list of the overdue leg (issue #776): the
+-- planned operations whose overdue boundary — 00:00 of the day after the
+-- operation date read in the owner's timezone — falls in the window
+-- (from, until]. Auto-pay rules included (the tick never backdates an auto
+-- charge, ADR 0049); the wall-clock midnight of the next calendar date is
+-- the boundary, a DST day rolls it with the wall clock.
+SELECT pay.id AS payment_id,
+       o.date,
+       CAST(((o.date + 1)::timestamp AT TIME ZONE u.timezone) AS timestamptz) AS fire_at
+FROM operations o
+JOIN payments pay ON pay.id = o.payment_id
+JOIN properties p ON p.id = o.property_id
+JOIN users u ON u.id = o.owner_id
+WHERE o.status = 'planned'
+  AND p.status IN ('active', 'maintenance')
+  AND ((o.date + 1)::timestamp AT TIME ZONE u.timezone) > $1::timestamptz
+  AND ((o.date + 1)::timestamp AT TIME ZONE u.timezone) <= $2::timestamptz
+ORDER BY o.id;
+
+-- name: GetScheduledDuePayment :one
+-- The due boundary job's delivery-time resolution (issue #776): the
+-- operation as it stands at its due midnight. The leg's conditions are
+-- re-checked as of the wake-up instant ($3): a paid, cancelled, auto-pay
+-- operation, a deleted rule's orphan, an archived property — and an
+-- operation whose date is no longer the zone's today (the job woke after
+-- the day had rolled over) — answers no row, the job finishes without
+-- publishing.
+SELECT pay.id AS payment_id,
+       o.date,
+       pay.title,
+       o.amount_kopecks,
+       p.id AS property_id,
+       p.name AS property_name,
+       p.address AS property_address,
+       o.owner_id
+FROM operations o
+JOIN payments pay ON pay.id = o.payment_id
+JOIN properties p ON p.id = o.property_id
+JOIN users u ON u.id = o.owner_id
+WHERE pay.id = $1::uuid
+  AND o.date = $2::date
+  AND o.status = 'planned'
+  AND pay.auto_pay = false
+  AND p.status IN ('active', 'maintenance')
+  AND o.date = ($3::timestamptz AT TIME ZONE u.timezone)::date;
+
+-- name: GetScheduledOverduePayment :one
+-- The overdue boundary job's delivery-time resolution (issue #776): the
+-- operation as it stands at its overdue midnight. The overdue leg's
+-- conditions are re-checked as of the wake-up instant ($3): planned,
+-- non-archived property, the date strictly before the zone's today —
+-- auto-pay rules included, the sweep's overdue leg's shape.
+SELECT pay.id AS payment_id,
+       o.date,
+       pay.title,
+       o.amount_kopecks,
+       p.id AS property_id,
+       p.name AS property_name,
+       p.address AS property_address,
+       o.owner_id
+FROM operations o
+JOIN payments pay ON pay.id = o.payment_id
+JOIN properties p ON p.id = o.property_id
+JOIN users u ON u.id = o.owner_id
+WHERE pay.id = $1::uuid
+  AND o.date = $2::date
+  AND o.status = 'planned'
+  AND p.status IN ('active', 'maintenance')
+  AND o.date < ($3::timestamptz AT TIME ZONE u.timezone)::date;
+
 -- name: ListTaskScanZones :many
 -- The tasks scan's sweep targets (карта #734, #750; ADR 0048 p.3): the
 -- distinct owner timezones having active dated tasks on non-archived

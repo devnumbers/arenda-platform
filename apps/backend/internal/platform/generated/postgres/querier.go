@@ -425,6 +425,20 @@ type Querier interface {
 	// One rental by id within the owner's scope on the given property, with the
 	// tenant's contact fields resolved for the embedded tenant view.
 	GetRentalByID(ctx context.Context, arg GetRentalByIDParams) (GetRentalByIDRow, error)
+	// The due boundary job's delivery-time resolution (issue #776): the
+	// operation as it stands at its due midnight. The leg's conditions are
+	// re-checked as of the wake-up instant ($3): a paid, cancelled, auto-pay
+	// operation, a deleted rule's orphan, an archived property — and an
+	// operation whose date is no longer the zone's today (the job woke after
+	// the day had rolled over) — answers no row, the job finishes without
+	// publishing.
+	GetScheduledDuePayment(ctx context.Context, arg GetScheduledDuePaymentParams) (GetScheduledDuePaymentRow, error)
+	// The overdue boundary job's delivery-time resolution (issue #776): the
+	// operation as it stands at its overdue midnight. The overdue leg's
+	// conditions are re-checked as of the wake-up instant ($3): planned,
+	// non-archived property, the date strictly before the zone's today —
+	// auto-pay rules included, the sweep's overdue leg's shape.
+	GetScheduledOverduePayment(ctx context.Context, arg GetScheduledOverduePaymentParams) (GetScheduledOverduePaymentRow, error)
 	// The due-minute job's delivery-time resolution (issue #750): the task as
 	// it stands at its term minute. A gone (rule edit removed the stale row),
 	// completed, date-only, or archived-property task answers no row — the job
@@ -748,6 +762,21 @@ type Querier interface {
 	// keeps the manual facts and the deleted rules' orphans out). Stateless —
 	// every run re-lists, no per-zone state is kept.
 	ListPaymentScanZones(ctx context.Context) ([]string, error)
+	// The payments scan's booking list of the due leg (issue #776): the planned
+	// operations whose due boundary — 00:00 of the operation date read in the
+	// owner's timezone — falls in the window (from, until]. Auto-pay rules
+	// excluded like the sweep's due leg (an auto-pay rule's due occurrence is
+	// extinguished by the tick the same day, ADR 0049); manual facts and
+	// cancelled tombstones stay out (status='planned' + the join to payments);
+	// non-archived property only (the ticks' canon).
+	ListPaymentScheduledDueTargets(ctx context.Context, arg ListPaymentScheduledDueTargetsParams) ([]ListPaymentScheduledDueTargetsRow, error)
+	// The payments scan's booking list of the overdue leg (issue #776): the
+	// planned operations whose overdue boundary — 00:00 of the day after the
+	// operation date read in the owner's timezone — falls in the window
+	// (from, until]. Auto-pay rules included (the tick never backdates an auto
+	// charge, ADR 0049); the wall-clock midnight of the next calendar date is
+	// the boundary, a DST day rolls it with the wall clock.
+	ListPaymentScheduledOverdueTargets(ctx context.Context, arg ListPaymentScheduledOverdueTargetsParams) ([]ListPaymentScheduledOverdueTargetsRow, error)
 	// The property's rules in creation order (stable for the list response).
 	// search ('' = no filter) is a case-insensitive substring match on the title;
 	// the application layer escapes the ILIKE metacharacters (ESCAPE '\').

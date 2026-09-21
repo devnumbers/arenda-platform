@@ -179,10 +179,13 @@ func run() error {
 	//     The grace subscribers (step 11.6) are the first to call it. The
 	//     publisher also pushes the live SSE frames through the stream hub
 	//     (#742, ADR 0058), which the HTTP server serves below. The tasks
-	//     scan publisher (#750) wires here as well — its scheduled leg books
-	//     the due-minute jobs through the same client.
+	//     (#750) and payments (#776) scan publishers wire here as well —
+	//     their booking legs schedule the boundary jobs through the same
+	//     client.
 	taskScanStore := notificationspg.NewTaskScanStore(p.DB)
-	riverMod, err := wire.WireRiverQueue(ctx, p, notificationsMod, delivery.resolver, delivery.emailer, pushSender, taskScanStore)
+	paymentScanStore := notificationspg.NewPaymentScanStore(p.DB)
+	riverMod, err := wire.WireRiverQueue(ctx, p, notificationsMod,
+		delivery.resolver, delivery.emailer, pushSender, taskScanStore, paymentScanStore)
 	if err != nil {
 		return err
 	}
@@ -229,20 +232,21 @@ func run() error {
 	tariffEventViews := notificationspg.NewTariffViewStore(p.DB)
 	subscribeTariffEvents(eventDispatcher, notificationsapp.NewTariffPublisher(riverMod.Publisher, tariffEventViews))
 
-	// 11.7 The notifications scan (карта #734, #748–#750): the hourly zone
-	//     sweep publishes the scan-driven catalog events — the rentals that
-	//     moved to «Ожидает действия», the payments that came due or
+	// 11.7 The notifications scan (карта #734, #748–#750, #776): the hourly
+	//     zone sweep publishes the scan-driven catalog events — the rentals
+	//     that moved to «Ожидает действия», the payments that came due or
 	//     overdue, and the tasks whose term has passed — through the same
 	//     pipeline publisher; the Аренда, Платежи и операции and Задачи
 	//     categories are gated per-channel by the settings matrix at
 	//     delivery time. The tasks publisher's scheduled leg (#750) books
-	//     the timed tasks' due-minute jobs on the way — the minute precision
-	//     the hourly cadence cannot give.
+	//     the timed tasks' due-minute jobs and the payments publisher's
+	//     booking leg (#776) the operations' boundary jobs on the way —
+	//     the exact trigger moments the hourly cadence cannot give; the
+	//     sweeps stay the retrospectives after a downtime.
 	scanStore := notificationspg.NewRentalScanStore(p.DB)
-	paymentScanStore := notificationspg.NewPaymentScanStore(p.DB)
 	notificationsScan := notificationsapp.NewScanGroup(
 		notificationsapp.NewRentalCompletedPublisher(riverMod.Publisher, scanStore, scanStore),
-		notificationsapp.NewPaymentsPublisher(riverMod.Publisher, paymentScanStore, paymentScanStore),
+		riverMod.PaymentsPublisher,
 		riverMod.TasksPublisher,
 	)
 
