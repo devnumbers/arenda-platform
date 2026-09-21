@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, type JSX, type ReactNode } from 'react';
-import { NotificationStreamProvider, useUnreadNotificationsCount } from '@/features/notifications';
+import { useUnreadNotificationsCount } from '@/features/notifications';
 import { ServiceWorkerRegister } from '@/shared/lib/pwa/ServiceWorkerRegister';
 import { ServiceWorkerUpdater } from '@/shared/lib/pwa/ServiceWorkerUpdater';
 import { PullToRefresh } from '@/shared/ui/pull-to-refresh';
@@ -13,6 +13,7 @@ import {
 } from '@/shared/ui/design';
 import { usePropertiesLandingHref } from '@/features/properties';
 import { HubPrefetchProvider } from './hub-prefetch-provider';
+import { NotificationStreamGate } from './notification-stream-gate';
 import { PushPermissionGate } from './push-permission-gate';
 import { TopNavUserProvider } from './top-nav-user-provider';
 
@@ -69,7 +70,7 @@ export function ScreenLayout({ children }: { readonly children: ReactNode }): JS
             <ServiceWorkerUpdater />
             <PullToRefresh contentRef={contentRef} />
             <PushPermissionGate />
-            <NotificationStreamProvider />
+            <NotificationStreamGate />
           </div>
         </TopNavUserProvider>
       </HubPrefetchProvider>
