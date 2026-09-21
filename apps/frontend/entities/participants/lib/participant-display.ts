@@ -28,9 +28,26 @@ export function participantRowSubtitle(participant: Participant): string | undef
   return participant.email;
 }
 
-/** Чип агрегат-статуса (подписи контракта #693): «Доступ ко всем
- * объектам» / «Доступно N объектов» / «Превышен лимит объектов». */
+/** Pending-агрегат — незарегистрированный приглашённый (идентификатор —
+ * почта, юзера нет), у которого нет ни одной активной или подвесшей ноги:
+ * доступа пока нет, есть только приглашение. На проводе такое состояние
+ * совпадает с `user_id = null` (registered-бакет собирается только из
+ * memberships), проверка ног — страховка от ложного «Приглашён». */
+function isPendingAggregate(participant: Participant): boolean {
+  return (
+    participant.userId === undefined
+    && participant.properties.every((leg) => leg.status === 'pending')
+  );
+}
+
+/** Чип агрегат-статуса: pending-агрегат — «Приглашён» (решение владельца
+ * Q11=А, #772: считанный partial/0 как «Доступно 0 объектов» читался
+ * как отказ); зарегистрированным — подписи контракта #693: «Доступ ко
+ * всем объектам» / «Доступно N объектов» / «Превышен лимит объектов». */
 export function participantStatusBadge(participant: Participant): ParticipantBadge {
+  if (isPendingAggregate(participant)) {
+    return { tone: 'neutral', label: 'Приглашён', withLock: false };
+  }
   switch (participant.aggregateStatus) {
     case 'limit_exceeded':
       return { tone: 'warning', label: 'Превышен лимит объектов', withLock: true };

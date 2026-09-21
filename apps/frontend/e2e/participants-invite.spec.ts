@@ -132,10 +132,11 @@ test('приглашение незарегистрированной почты
   ).toBeVisible();
   await page.keyboard.press('Escape');
 
-  // Pending-ряд появился: почта — титул, чип «Доступно 0 объектов».
+  // Pending-ряд появился: почта — титул, чип «Приглашён» (#772: считанный
+  // partial/0 как «Доступно 0 объектов» читался как отказ).
   const inviteeRow = page.getByRole('button', { name: new RegExp(INVITEE_EMAIL) });
   await expect(inviteeRow).toBeVisible();
-  await expect(inviteeRow.getByText('Доступно 0 объектов')).toBeVisible();
+  await expect(inviteeRow.getByText('Приглашён')).toBeVisible();
 
   // Серверная правда: pending-приглашения на оба объекта снапшота.
   expect(

@@ -237,10 +237,12 @@ test('pending-участник: deep-link по почте, бейдж «Приг
   await page.goto('/participants/e2e-pending%40example.com');
 
   await expect(page.locator(header).getByText('Участник', { exact: true }).first()).toBeVisible();
-  // Имени нет — почта титул (контракт: «the email is the label»); активных
-  // объектов 0 → чип «Доступно 0 объектов».
+  // Имени нет — почта титул (контракт: «the email is the label»); чип
+  // агрегата в шапке — «Приглашён» (#772: считанный partial/0 как
+  // «Доступно 0 объектов» читался как отказ). first(): шапка в DOM раньше
+  // списка, где у pending-ноги гаража свой такой же чип (ассерт ниже).
   await expect(page.getByText('e2e-pending@example.com').first()).toBeVisible();
-  await expect(page.getByText('Доступно 0 объектов')).toBeVisible();
+  await expect(page.getByText('Приглашён').first()).toBeVisible();
 
   const garageRow = page.getByRole('button', { name: /Гараж на Садовой/ });
   await expect(garageRow.getByText('Приглашён')).toBeVisible();

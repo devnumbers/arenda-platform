@@ -21,6 +21,18 @@ function participant(
   };
 }
 
+function leg(
+  overrides: Partial<Participant['properties'][number]> = {},
+): Participant['properties'][number] {
+  return {
+    propertyId: '33333333-3333-4333-8333-333333333333',
+    title: 'Квартира на Ленина',
+    role: 'viewer',
+    status: 'pending',
+    ...overrides,
+  };
+}
+
 describe('participantRowTitle / participantRowSubtitle', () => {
   it('у зарегистрированного титул — имя, подзаголовок — почта', () => {
     const p = participant();
@@ -76,5 +88,43 @@ describe('participantStatusBadge — чип агрегат-статуса (ма�
       label: 'Превышен лимит объектов',
       withLock: true,
     });
+  });
+
+  it('pending-агрегат (юзера нет, все ноги pending) — «Приглашён», нейтральный без замка (Q11=А, #772)', () => {
+    const p = participant({
+      id: 'invitee@example.com',
+      userId: undefined,
+      displayName: undefined,
+      email: 'invitee@example.com',
+      aggregateStatus: 'partial',
+      accessiblePropertiesCount: 0,
+      properties: [leg()],
+    });
+
+    // «Доступно 0 объектов» читалось как отказ — приглашённому честнее
+    // «Приглашён».
+    expect(participantStatusBadge(p)).toEqual({
+      tone: 'neutral',
+      label: 'Приглашён',
+      withLock: false,
+    });
+  });
+
+  it('зарегистрированный без активных ног — чипы как прежде (детектор pending не срабатывает)', () => {
+    // На проводе не встречается (registered-бакет собирается только из
+    // memberships), но предикат не должен прятать честный счётчик.
+    expect(
+      participantStatusBadge(participant({ aggregateStatus: 'partial', accessiblePropertiesCount: 0 })).label,
+    ).toBe('Доступно 0 объектов');
+  });
+
+  it('pending-агрегат с активной ногой (на проводе невозможно) — считанный статус, не «Приглашён»', () => {
+    const p = participant({
+      aggregateStatus: 'partial',
+      accessiblePropertiesCount: 1,
+      properties: [leg({ status: 'active' })],
+    });
+
+    expect(participantStatusBadge(p).label).toBe('Доступно 1 объект');
   });
 });
