@@ -140,38 +140,6 @@
     .btn-secondary:active {
       background: #dfe0e2;
     }
-
-    /* Раскрытый блок поддержки — канон #766: Telegram-ссылка на Primary,
-       почта Secondary с копированием. Скрытие через [hidden], чтобы не
-       бороться с display:flex. */
-    .support-block {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      width: 100%;
-    }
-
-    .support-block[hidden] {
-      display: none;
-    }
-
-    .btn .icon {
-      width: 24px;
-      height: 24px;
-      flex-shrink: 0;
-    }
-
-    .icon-check {
-      display: none;
-    }
-
-    .is-copied .icon-copy {
-      display: none;
-    }
-
-    .is-copied .icon-check {
-      display: block;
-    }
   </style>
 </head>
 <body>
@@ -195,20 +163,7 @@
 
     <div class="buttons">
       <button type="button" id="reload-button" class="btn btn-primary">Обновить страницу</button>
-      <button type="button" id="support-toggle" class="btn btn-secondary" aria-expanded="false" aria-controls="support-block">Обратиться в поддержку</button>
-
-      <div id="support-block" class="support-block" hidden>
-        <a id="support-telegram" class="btn btn-primary" href="https://t.me/swirnowwwivan" target="_blank" rel="noopener noreferrer">Написать в Телеграм</a>
-        <button type="button" id="copy-email" class="btn btn-secondary" aria-label="Скопировать: hello@rentlee.ru">
-          hello@rentlee.ru
-          <svg class="icon icon-copy" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-            <path d="M16.9999 9C16.9975 6.04291 16.9528 4.51121 16.092 3.46243C15.9258 3.25989 15.7401 3.07418 15.5376 2.90796C14.4312 2 12.7875 2 9.5 2C6.21252 2 4.56878 2 3.46243 2.90796C3.25989 3.07417 3.07418 3.25989 2.90796 3.46243C2 4.56878 2 6.21252 2 9.5C2 12.7875 2 14.4312 2.90796 15.5376C3.07417 15.7401 3.25989 15.9258 3.46243 16.092C4.51121 16.9528 6.04291 16.9975 9 16.9999M15 22H16C18.8284 22 20.2426 22 21.1213 21.1213C22 20.2426 22 18.8284 22 16V15C22 12.1716 22 10.7574 21.1213 9.87868C20.2426 9 18.8284 9 16 9H15C12.1716 9 10.7574 9 9.87868 9.87868C9 10.7574 9 12.1716 9 15V16C9 18.8284 9 20.2426 9.87868 21.1213C10.7574 22 12.1716 22 15 22Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          <svg class="icon icon-check" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-            <path d="M19 6.5L8.5 17.5L5 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </button>
-      </div>
+      <a id="support-telegram" class="btn btn-secondary" href="https://t.me/swirnowwwivan" target="_blank" rel="noopener noreferrer">Обратиться в поддержку</a>
     </div>
   </main>
 
@@ -216,43 +171,16 @@
     (function () {
       'use strict';
 
-      // Контакты — shared/config/support.ts; страница самодостаточна и не
-      // может импортировать TS, константы продублированы вручную, синхронность
-      // сторожит shared/config/support.test.ts.
-      var SUPPORT_EMAIL = 'hello@rentlee.ru';
-      // Канон копирования «Скопировано» (use-copied-hint): подсказка горит
-      // 2 с независимо от буфера, повторное копирование перезапускает таймер.
-      var COPIED_RESET_MS = 2000;
+      // Ссылка поддержки — shared/config/support.ts; страница самодостаточна
+      // и не может импортировать TS, адрес продублирован вручную, синхронность
+      // сторожит shared/config/support.test.ts (решение владельца 21.09:
+      // «на тг ссылку просто» — без блока копирования, канон #766 тут не
+      // воспроизводится).
 
       var reloadButton = document.getElementById('reload-button');
-      var supportToggle = document.getElementById('support-toggle');
-      var supportBlock = document.getElementById('support-block');
-      var copyButton = document.getElementById('copy-email');
-      var copiedTimeout = null;
 
       reloadButton.addEventListener('click', function () {
         location.reload();
-      });
-
-      supportToggle.addEventListener('click', function () {
-        var expanded = supportBlock.hidden;
-        supportBlock.hidden = !expanded;
-        supportToggle.setAttribute('aria-expanded', String(expanded));
-      });
-
-      copyButton.addEventListener('click', function () {
-        if (navigator.clipboard) {
-          navigator.clipboard.writeText(SUPPORT_EMAIL).catch(function () {});
-        }
-        copyButton.classList.add('is-copied');
-        copyButton.setAttribute('aria-label', 'Скопировано');
-        if (copiedTimeout !== null) {
-          clearTimeout(copiedTimeout);
-        }
-        copiedTimeout = setTimeout(function () {
-          copyButton.classList.remove('is-copied');
-          copyButton.setAttribute('aria-label', 'Скопировать: ' + SUPPORT_EMAIL);
-        }, COPIED_RESET_MS);
       });
     })();
   </script>

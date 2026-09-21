@@ -2,34 +2,21 @@ import { captureScreen, expect, openCabinetWithSeededSession, test } from './fix
 
 // Офлайн-экран по макету (карта #779, тикет #783): public/offline.html
 // отдаётся из кэша SW при выключенной сети, поэтому страница самодостаточна
-// (лого инлайном, стили/JS инлайном). Контакты поддержки — канон #766:
-// Telegram-ссылка + почта с тап-копированием и подсказкой «Скопировано».
+// (лого инлайном, стили/JS инлайном). «Обратиться в поддержку» — прямая
+// ссылка на Telegram из shared/config/support.ts (упрощение владельца
+// 21.09: «на тг ссылку просто», без блока копирования).
 
-test('офлайн-страница: заголовок, кнопки, поддержка с копированием', async ({ page }, testInfo) => {
+test('офлайн-страница: заголовок, кнопки, поддержка', async ({ page }, testInfo) => {
   await page.goto('/offline.html');
 
   await expect(page.getByRole('heading', { name: 'Нет соединения' })).toBeVisible();
   await expect(page.getByText('Проверьте подключение к интернету и попробуйте снова')).toBeVisible();
 
-  // Блок поддержки скрыт до тапа «Обратиться в поддержку».
-  const telegram = page.getByRole('link', { name: 'Написать в Телеграм' });
-  await expect(telegram).toBeHidden();
-
-  await page.getByRole('button', { name: 'Обратиться в поддержку' }).click();
-  await expect(telegram).toBeVisible();
-  // Адрес — заглушка из shared/config/support.ts (владелец заменит).
+  // «Обратиться в поддержку» — внешняя ссылка на Telegram; адрес — заглушка
+  // из shared/config/support.ts (владелец заменит).
+  const telegram = page.getByRole('link', { name: 'Обратиться в поддержку' });
   await expect(telegram).toHaveAttribute('href', 'https://t.me/swirnowwwivan');
   await expect(telegram).toHaveAttribute('target', '_blank');
-
-  // Почта — копирование в буфер: иконка/подпись сменяются на «Скопировано»
-  // на 2 с (канон карточки контакта), затем возвращаются.
-  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
-  const copy = page.getByRole('button', { name: /Скопировать/ });
-  await expect(copy).toContainText('hello@rentlee.ru');
-  await copy.click();
-  await expect(page.getByRole('button', { name: 'Скопировано' })).toBeVisible();
-  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('hello@rentlee.ru');
-  await expect(page.getByRole('button', { name: /Скопировать/ })).toBeVisible({ timeout: 5000 });
 
   // «Обновить страницу» перезагружает документ: маркер текущего окна после
   // перезагрузки исчезает (новый документ его не ставил).
@@ -45,12 +32,11 @@ test('офлайн-страница: заголовок, кнопки, подд�
 test.describe('мобайл 390', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test('офлайн-страница на мобайле: раскрытая поддержка', async ({ page }, testInfo) => {
+  test('офлайн-страница на мобайле', async ({ page }, testInfo) => {
     await page.goto('/offline.html');
 
     await expect(page.getByRole('heading', { name: 'Нет соединения' })).toBeVisible();
-    await page.getByRole('button', { name: 'Обратиться в поддержку' }).click();
-    await expect(page.getByRole('link', { name: 'Написать в Телеграм' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Обратиться в поддержку' })).toBeVisible();
 
     await captureScreen(page, testInfo, 'offline-page-mobile');
   });
