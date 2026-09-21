@@ -26,6 +26,7 @@ type Access struct {
 	SharedProperties       *accesspg.SharedProperties
 	SharedListEnricher     *accesspg.SharedListEnricher
 	UserEmailResolver      *accesspg.UserEmailResolverAdapter
+	PropertyDeleteMailer   *accessapp.PropertyDeleteMailer
 }
 
 // Compile-time checks that the access SlotCoordinator satisfies the cross-
@@ -42,6 +43,10 @@ var (
 	// The UserEmailResolverAdapter doubles as the owner-email resolver of the
 	// detail's owner contact row (Figma 2200-97365, #757 walkthrough fixes).
 	_ propertiesapp.OwnerEmailResolver = (*accesspg.UserEmailResolverAdapter)(nil)
+	// The PropertyDeleteMailer satisfies the properties delete-mail port
+	// (issue #162, T6): the "object deleted" letter stays direct — its event
+	// is not in the notifications catalog.
+	_ propertiesapp.SharedMembersDeleteMailer = (*accessapp.PropertyDeleteMailer)(nil)
 	// The SharedListEnricher serves the list reads' access projections
 	// (ticket #702): member names on the owner's cards and the suspended
 	// blur-card placeholders.
@@ -182,6 +187,11 @@ func WireAccess(
 		p.Logger,
 	)
 
+	// The "object deleted" emails to former shared members (issue #162, T6):
+	// collected inside the property delete transaction, sent after commit by
+	// the properties service.
+	propertyDeleteMailer := accessapp.NewPropertyDeleteMailer(memberRepo, emailResolver, accessMailer, p.Logger)
+
 	return &Access{
 		Policy:                 policy,
 		AccessService:          accessService,
@@ -192,5 +202,6 @@ func WireAccess(
 		SharedProperties:       sharedProperties,
 		SharedListEnricher:     sharedListEnricher,
 		UserEmailResolver:      emailResolver,
+		PropertyDeleteMailer:   propertyDeleteMailer,
 	}, nil
 }
