@@ -245,17 +245,7 @@ func (s *ParticipantMutationService) grantProperties(
 	// access (issue #158, T4): the system «Доступ приостановлен» notification
 	// is the event subscriber's (карта #734, #751) — published post-commit,
 	// best-effort, no actor.
-	for _, m := range suspended {
-		publishAccessEvent(ctx, s.events, s.logger, "membership_suspended", func() error {
-			return s.events.PublishMembershipSuspended(ctx, MembershipSuspended{
-				MembershipID: m.ID,
-				PropertyID:   m.PropertyID,
-				RecipientID:  m.UserID,
-				ActorID:      uuid.Nil,
-				SuspendedAt:  deref(m.SuspendedAt),
-			})
-		})
-	}
+	publishSuspendedEvents(ctx, s.events, s.logger, suspended)
 
 	// The single batch invite email goes out after the commit; a send failure
 	// does not roll the invitations back (a manual resend is available).
@@ -476,7 +466,12 @@ func (s *ParticipantMutationService) listRemovalLegs(
 }
 
 // actorRoleOn attributes the audit entry to the actor's real role on the
-// property, like the single-property flows do.
+// property, like the single-property flows do. The «owner, else
+// full_access» verdict mirrors the SQL manage-scope predicate of
+// ListParticipantMembershipsForRemoval (db/queries/participants.sql): the
+// legs only got here because that predicate passed — this attribution
+// must evolve with it (the matrix test pins the predicate, not this
+// mirror).
 func (s *ParticipantMutationService) actorRoleOn(ctx context.Context, actor, propertyID uuid.UUID) (sharedpolicy.Role, error) {
 	ownerID, err := s.owners.GetOwnerID(ctx, propertyID)
 	if err != nil {

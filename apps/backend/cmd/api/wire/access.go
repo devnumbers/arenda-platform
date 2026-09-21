@@ -105,7 +105,6 @@ func WireAccess(
 	ownedActiveProps := accesspg.NewOwnedActivePropertiesAdapter(propertiespg.NewPropertyRepository(p.DB))
 
 	// The access email sender renders through the shared renderer and platform
-	// The access email sender renders through the shared renderer and platform
 	// mailer (T5 invite + the T6 object-deleted notice — the two direct emails
 	// that stay); the owner resolver doubles as the property title resolver
 	// for the email texts.

@@ -136,18 +136,9 @@ func (s *AccessService) AddMember(ctx context.Context, actor, propertyID, userID
 	// A grant created without a free tariff slot pauses the new member's
 	// access (issue #158, T4). The «Доступ приостановлен» notification is the
 	// event subscriber's (карта #734, #751) — the direct lifecycle email it
-	// replaced is gone; the publication is post-commit and best-effort. The
-	// system suspension has no actor.
+	// replaced is gone; the publication is post-commit and best-effort.
 	if suspended {
-		publishAccessEvent(ctx, s.events, s.logger, "membership_suspended", func() error {
-			return s.events.PublishMembershipSuspended(ctx, MembershipSuspended{
-				MembershipID: created.ID,
-				PropertyID:   propertyID,
-				RecipientID:  userID,
-				ActorID:      uuid.Nil,
-				SuspendedAt:  deref(created.SuspendedAt),
-			})
-		})
+		publishSuspendedEvents(ctx, s.events, s.logger, []domain.Membership{created})
 	}
 	return created, nil
 }
@@ -349,6 +340,25 @@ func removeMembershipInTx(
 		return fmt.Errorf("record audit: %w", err)
 	}
 	return nil
+}
+
+// publishSuspendedEvents publishes the post-commit system pause events for
+// suspended grants — best-effort (карта #734, #751); the system suspension
+// has no actor.
+func publishSuspendedEvents(
+	ctx context.Context, publisher AccessEventPublisher, log *slog.Logger, suspended []domain.Membership,
+) {
+	for _, m := range suspended {
+		publishAccessEvent(ctx, publisher, log, "membership_suspended", func() error {
+			return publisher.PublishMembershipSuspended(ctx, MembershipSuspended{
+				MembershipID: m.ID,
+				PropertyID:   m.PropertyID,
+				RecipientID:  m.UserID,
+				ActorID:      uuid.Nil,
+				SuspendedAt:  deref(m.SuspendedAt),
+			})
+		})
+	}
 }
 
 // publishRevokedEvents publishes the post-commit revocation events for the
