@@ -84,6 +84,8 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
   // Служебный ряд (сортировка + «Архив») и список живут только вместе (§7).
   const showControls = !isLoading && !isError && !isEmpty;
 
+  // 404 подписки хук отдаёт null (#768) — это не pending и не ошибка:
+  // canAdd=false ниже ведёт на смену тарифа, кнопки не висят в disabled.
   const isActionLoading = subscriptionQuery.isPending || data === undefined;
 
   const canAdd = (() => {

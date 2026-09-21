@@ -8,6 +8,7 @@ import { Button, buttonVariants, Skeleton } from '@/shared/ui/design';
 import { billingKeys } from '@/shared/api/query-keys';
 import { ROUTES } from '@/shared/config/routes';
 import { useSubscription } from '@/features/billing';
+import { NO_SUBSCRIPTION } from '@/widgets/profile/lib/no-subscription';
 import { tariffHero } from '@/widgets/profile/lib/tariff-overview';
 import { GracePlaque } from './grace-plaque';
 import { PendingPaymentPlaque } from './pending-payment-plaque';
@@ -21,7 +22,8 @@ import { TariffHero } from './tariff-hero';
  * уход/возврат на экран без миганий (правило владельца). Скелетон повторяет
  * геометрию загруженного экрана (DESIGN.md §7, гейт Loading stability). */
 export function TariffScreen(): JSX.Element {
-  const { data: subscription, isPending, isError, refetch } = useSubscription();
+  const { data, isPending, isError, refetch } = useSubscription();
+  const subscription = data ?? NO_SUBSCRIPTION;
   const queryClient = useQueryClient();
 
   if (isPending) {
