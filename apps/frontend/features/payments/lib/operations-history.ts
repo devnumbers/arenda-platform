@@ -24,7 +24,7 @@ export type HistoryOrder = 'asc' | 'desc';
 
 export const DEFAULT_HISTORY_ORDER: HistoryOrder = 'desc';
 
-/** Разбор ?order= страниц истории (конвенция страницы «Объекты»):
+/** Разбор ?order= страниц истории (конвенция состояния в адресе):
  * неизвестное и отсутствующее значения — дефолт desc. Направление живёт
  * в адресе — переживает перезагрузку (#785). */
 export function parseHistoryOrderParams(
@@ -34,7 +34,7 @@ export function parseHistoryOrderParams(
 }
 
 /** Патч направления для адреса: дефолтные значения параметров не создают
- * (конвенция страницы «Объекты»); пишется через useUrlParams с
+ * (конвенция состояния в адресе); пишется через useUrlParams с
  * own: ['order'] (#785). */
 export function serializeHistoryOrderToParams(order: HistoryOrder): Record<string, string> {
   return order === DEFAULT_HISTORY_ORDER ? {} : { order };

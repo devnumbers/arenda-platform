@@ -16,7 +16,7 @@ export type ContactBookGroup = {
 /** Заголовок группы контактов без объекта (макет 1726:85937). */
 export const UNBOUND_GROUP_LABEL = 'Общие контакты';
 
-/** Разбор ?sort=&order= строки книги (конвенция страницы «Объекты», канон
+/** Разбор ?sort=&order= строки книги (конвенция состояния в адресе, канон
  * parseEnumParam): неизвестные, отсутствующие и массивные значения —
  * дефолт (имя по возрастанию). */
 export function parseContactBookSortParams(
@@ -30,7 +30,7 @@ export function parseContactBookSortParams(
 }
 
 /** Сериализация сортировки в адрес: дефолтные значения (имя, возрастание)
- * параметров не создают — конвенция страницы «Объекты». */
+ * параметров не создают — конвенция состояния в адресе. */
 export function serializeContactBookSortToParams(
   sort: 'name' | 'property',
   order: 'asc' | 'desc',

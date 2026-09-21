@@ -26,7 +26,7 @@ export type TasksSort = {
 
 export const DEFAULT_TASKS_SORT: TasksSort = { field: 'date', direction: 'asc' };
 
-/** Разбор ?sort=&order= экранов задач (конвенция страницы «Объекты»):
+/** Разбор ?sort=&order= экранов задач (конвенция состояния в адресе):
  * неизвестные и отсутствующие значения — дефолт («Дата, asc»). Выбор
  * живёт в адресе — переживает перезагрузку (#785). */
 export function parseTasksSortParams(
@@ -40,7 +40,7 @@ export function parseTasksSortParams(
 }
 
 /** Сериализация сортировки в адрес: дефолтные значения параметров
- * не создают (конвенция страницы «Объекты»). */
+ * не создают (конвенция состояния в адресе). */
 export function serializeTasksSortToParams(sort: TasksSort): Record<string, string> {
   const params: Record<string, string> = {};
   if (sort.field !== DEFAULT_TASKS_SORT.field) {

@@ -86,7 +86,7 @@ export function ContactsOfPropertyScreen({
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   // Направление сортировки живёт в адресе (?order=desc, дефолт «А→Я»
-  // не пишется — конвенция страницы «Объекты», #785).
+  // не пишется — конвенция состояния в адресе, #785).
   const changeOrder = (order: ContactSortOrder): void => {
     setSortOrder(order);
     write(serializeContactOrderToParams(order), { own: ['order'] });

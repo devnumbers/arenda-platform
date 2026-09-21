@@ -11,7 +11,7 @@ import { parseEnumParam } from '@/shared/lib/parse-enum-param';
 /** Направление сортировки страницы: по возрасту просрочки. */
 export type OverdueSort = 'new' | 'old';
 
-/** Разбор ?sort= строки страницы (конвенция книги контактов, канон
+/** Разбор ?sort= строки страницы (конвенция состояния в адресе, канон
  * parseEnumParam): неизвестное, отсутствующее и массивное — дефолт «Старые»
  * (решение владельца 09.09 — самые старые просрочки первыми). */
 export function parseOverdueSortParams(
@@ -21,7 +21,7 @@ export function parseOverdueSortParams(
 }
 
 /** Сериализация в адрес: дефолт «Старые» параметра не создаёт — конвенция
- * страницы «Объекты». */
+ * состояния в адресе. */
 export function serializeOverdueSortToParams(sort: OverdueSort): Record<string, string> {
   return sort === 'new' ? { sort: 'new' } : {};
 }
