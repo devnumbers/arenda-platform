@@ -2,6 +2,9 @@
 
 import {type JSX, useEffect, useState} from 'react';
 import {type CloseButtonProps, cssTransition, ToastContainer,} from 'react-toastify/unstyled';
+// Нативный CSS библиотеки: контейнер, позиции, стек (peek-ступени,
+// data-collapsed, transition transform 0.3s). unstyled сам стилей не несёт.
+import 'react-toastify/dist/ReactToastify.css';
 import {Cancel} from '@/shared/assets/icons';
 import styles from './ToastProvider.module.css';
 
@@ -56,6 +59,10 @@ export function ToastProvider(): JSX.Element {
         <ToastContainer
             position={isMobile ? 'top-center' : 'top-right'}
             stacked
+            /* Больше трёх карточек в стеке не показываются: лишние стоят в
+               нативной очереди и выходят по мере закрытия (решение владельца
+               21.09). */
+            limit={3}
             hideProgressBar
             closeOnClick={false}
             pauseOnHover

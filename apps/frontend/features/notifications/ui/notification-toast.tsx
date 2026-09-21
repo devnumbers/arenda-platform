@@ -35,7 +35,7 @@ export function NotificationToast({
   readonly closeToast: () => void;
 }): JSX.Element {
   return (
-    <div className="relative w-full rounded-[24px] bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+    <div className="relative w-full">
       <Link
         href={ROUTES.notification(frame.id)}
         onClick={closeToast}
@@ -85,8 +85,10 @@ export function NotificationToast({
  * ОБА: опция className тоста в react-toastify v11 ЗАМЕНЯЕТ toastClassName
  * контейнера (поймано приёмкой #747 — карточка без .toast теряла
  * pointer-events: auto и не пропускала тапы), а bare-вариант
- * `.toast.notification` снимает стандартный паддинг/тень — карточка рисует
- * свой макет; X — своя, closeButton канона выключен. */
+ * `.toast.notification` перекрашивает хром тоста под макет (радиус 24,
+ * тень 0 8px 24px) — хром на тосте, а не на карточке, чтобы свёрнутый
+ * стек показывал краешки задних карточек (нативный peek); X — своя,
+ * closeButton канона выключен. */
 export function notifyNotificationCreated(frame: NotificationCreatedFrame): void {
   toast(({ closeToast }) => createElement(NotificationToast, { frame, closeToast }), {
     toastId: `notification-${frame.id}`,
