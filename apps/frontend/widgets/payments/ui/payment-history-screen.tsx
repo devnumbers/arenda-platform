@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, type JSX } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { ArrowLeft, ChangeVertical } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
+import { useUrlParams } from '@/shared/lib/hooks/use-url-params';
 import {
   clientTodayIso,
   PaymentRowButton,
@@ -54,7 +55,7 @@ export function PaymentHistoryScreen({
   readonly initialOrder?: HistoryOrder;
 }): JSX.Element {
   const router = useRouter();
-  const pathname = usePathname();
+  const { write } = useUrlParams();
   // Дефолт — сначала новые (Figma); направление — часть ключа запроса.
   const [order, setOrder] = useState<HistoryOrder>(initialOrder ?? 'desc');
   const historyQuery = usePaymentOperationsPaged(propertyId, paymentId, {
@@ -67,8 +68,7 @@ export function PaymentHistoryScreen({
   const toggleOrder = (): void => {
     const next: HistoryOrder = order === 'desc' ? 'asc' : 'desc';
     setOrder(next);
-    const query = next === 'asc' ? `?order=${next}` : '';
-    router.replace(query !== '' ? `${pathname}${query}` : pathname, { scroll: false });
+    write(next === 'asc' ? { order: next } : {}, { own: ['order'] });
   };
 
   const today = clientTodayIso();

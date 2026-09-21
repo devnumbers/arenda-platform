@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import type { JSX } from 'react';
-import { useRouter, usePathname, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import {
   Add,
   Checkmark,
@@ -13,6 +13,7 @@ import {
 import { ROUTES } from '@/shared/config/routes';
 import { ApiError } from '@/shared/api/errors';
 import { notify } from '@/shared/lib/notifications';
+import { useUrlParams } from '@/shared/lib/hooks/use-url-params';
 import { useProperties } from '@/features/properties';
 import {
   DEFAULT_TASKS_SORT,
@@ -93,8 +94,7 @@ export function TasksFeedScreen({
   readonly initialSort?: TasksSort;
 }): JSX.Element {
   const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const { write } = useUrlParams();
 
   const { filter, applyFeedFilter } = useTasksFeedFilter();
   const activeQuery = useGlobalActiveTasks(filter.propertyIds, filter.withoutProperty);
@@ -110,23 +110,11 @@ export function TasksFeedScreen({
 
   // Сортировка живёт в адресе (?sort=&order=, дефолт не пишется — конвенция
   // страницы «Объекты», #785): перезагрузка и шаринг ссылки сохраняют выбор.
-  // Пишется поверх текущих параметров (как applyFeedFilter), чтобы не
-  // затирать фильтр ленты #524; не-дефолт ставится, дефолт снимается —
-  // в том числе протухшее значение из чужой ссылки.
+  // write снимает sort/order перед записью: фильтр ленты #524 не затирается,
+  // дефолт снимается — в том числе протухшее значение из чужой ссылки.
   const changeSort = (next: TasksSort): void => {
     setSort(next);
-    const nextParams = serializeTasksSortToParams(next);
-    const params = new URLSearchParams(searchParams);
-    for (const name of ['sort', 'order'] as const) {
-      const value = nextParams[name];
-      if (value === undefined) {
-        params.delete(name);
-      } else {
-        params.set(name, value);
-      }
-    }
-    const query = params.toString();
-    router.replace(query !== '' ? `${pathname}?${query}` : pathname, { scroll: false });
+    write(serializeTasksSortToParams(next), { own: ['sort', 'order'] });
   };
 
   // Авто-сброс фильтра при 404 (решение 8 #522): объект удалён или доступ

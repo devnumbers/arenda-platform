@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, type JSX, type ReactNode } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { ArrowLeft, ChangeVertical } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
+import { useUrlParams } from '@/shared/lib/hooks/use-url-params';
 import {
   clientTodayIso,
   PaymentRowButton,
@@ -48,7 +49,7 @@ export function RentalHistoryScreen({
   readonly initialOrder?: HistoryOrder;
 }): JSX.Element {
   const router = useRouter();
-  const pathname = usePathname();
+  const { write } = useUrlParams();
   // Дефолт — сначала новые (макет); направление — часть ключа запроса.
   const [order, setOrder] = useState<HistoryOrder>(initialOrder ?? 'desc');
   const rentalsQuery = useRentals(propertyId);
@@ -64,8 +65,7 @@ export function RentalHistoryScreen({
   const toggleOrder = (): void => {
     const next: HistoryOrder = order === 'desc' ? 'asc' : 'desc';
     setOrder(next);
-    const query = next === 'asc' ? `?order=${next}` : '';
-    router.replace(query !== '' ? `${pathname}${query}` : pathname, { scroll: false });
+    write(next === 'asc' ? { order: next } : {}, { own: ['order'] });
   };
 
   const operations = historyQuery.data ?? [];

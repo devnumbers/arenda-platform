@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { JSX } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import {
   Add,
   ArrowLeft,
@@ -13,6 +13,7 @@ import {
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
+import { useUrlParams } from '@/shared/lib/hooks/use-url-params';
 import { useProperty } from '@/features/properties';
 import {
   DEFAULT_TASKS_SORT,
@@ -80,7 +81,7 @@ export function TasksOfPropertyScreen({
   readonly initialSort?: TasksSort;
 }): JSX.Element {
   const router = useRouter();
-  const pathname = usePathname();
+  const { write } = useUrlParams();
   const propertyQuery = useProperty(propertyId);
 
   const activeQuery = useActiveTasks(propertyId);
@@ -93,8 +94,7 @@ export function TasksOfPropertyScreen({
   // страницы «Объекты», #785): перезагрузка и шаринг ссылки сохраняют выбор.
   const changeSort = (next: TasksSort): void => {
     setSort(next);
-    const query = new URLSearchParams(serializeTasksSortToParams(next)).toString();
-    router.replace(query !== '' ? `${pathname}?${query}` : pathname, { scroll: false });
+    write(serializeTasksSortToParams(next), { own: ['sort', 'order'] });
   };
 
   const complete = useCompleteTask(propertyId);

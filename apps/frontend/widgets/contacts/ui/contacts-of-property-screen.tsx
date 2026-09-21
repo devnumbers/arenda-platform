@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { ComponentProps, JSX } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import {
   ArrowLeft,
   Search,
@@ -13,6 +13,7 @@ import {
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { useDebounce } from '@/shared/lib/hooks/useDebounce';
+import { useUrlParams } from '@/shared/lib/hooks/use-url-params';
 import {
   ContactRowButton,
   contactSortByName,
@@ -70,7 +71,7 @@ export function ContactsOfPropertyScreen({
   readonly initialOrder?: ContactSortOrder;
 }): JSX.Element {
   const router = useRouter();
-  const pathname = usePathname();
+  const { write } = useUrlParams();
   const propertyQuery = useProperty(propertyId);
 
   const [searchOpen, setSearchOpen] = useState(false);
@@ -82,8 +83,7 @@ export function ContactsOfPropertyScreen({
   // не пишется — конвенция страницы «Объекты», #785).
   const changeOrder = (order: ContactSortOrder): void => {
     setSortOrder(order);
-    const query = order === 'asc' ? '' : `?order=${order}`;
-    router.replace(query !== '' ? `${pathname}${query}` : pathname, { scroll: false });
+    write(order === 'asc' ? {} : { order }, { own: ['order'] });
   };
 
   // Открытие поиска сразу делает поле активным (программный фокус —
