@@ -19,8 +19,8 @@ function permissions(partial: Partial<Property> & { readonly id: string }) {
 
 describe('propertySectionCta — кнопка «Добавить» пустой секции детали (#774)', () => {
   it('зритель — CTA не рисуется: формы создания отвечают 403, мёртвых кнопок нет', () => {
-    const watcher = permissions({ id: 'p1', access: { role: 'viewer', ownerName: 'Иван Иванов' } });
-    expect(propertySectionCta(watcher)).toEqual({ visible: false, disabled: true });
+    const viewer = permissions({ id: 'p1', access: { role: 'viewer', ownerName: 'Иван Иванов' } });
+    expect(propertySectionCta(viewer)).toEqual({ visible: false, disabled: true });
   });
 
   it('владелец живого объекта — активная кнопка', () => {
