@@ -47,18 +47,8 @@ func (q *Queries) ListParticipantInvitationsByProperties(ctx context.Context, pr
 const listParticipantInvitationsForRemoval = `-- name: ListParticipantInvitationsForRemoval :many
 SELECT i.id, i.property_id, i.email
 FROM property_member_invitations i
-JOIN properties p ON p.id = i.property_id
 WHERE lower(i.email) = lower($1::text)
-  AND (
-    p.owner_id = $2::uuid
-    OR EXISTS (
-      SELECT 1 FROM property_members am
-      WHERE am.property_id = p.id
-        AND am.user_id = $2::uuid
-        AND am.status = 'active'
-        AND am.role = 'full_access'
-    )
-  )
+  AND actor_can_manage(i.property_id, $2::uuid)
 ORDER BY i.created_at ASC
 `
 
@@ -136,18 +126,8 @@ const listParticipantMembershipsForRemoval = `-- name: ListParticipantMembership
 
 SELECT m.id, m.property_id, m.user_id, m.status
 FROM property_members m
-JOIN properties p ON p.id = m.property_id
 WHERE m.user_id = $1::uuid
-  AND (
-    p.owner_id = $2::uuid
-    OR EXISTS (
-      SELECT 1 FROM property_members am
-      WHERE am.property_id = m.property_id
-        AND am.user_id = $2::uuid
-        AND am.status = 'active'
-        AND am.role = 'full_access'
-    )
-  )
+  AND actor_can_manage(m.property_id, $2::uuid)
 ORDER BY m.created_at ASC
 `
 
@@ -200,16 +180,7 @@ const listParticipantScopeProperties = `-- name: ListParticipantScopeProperties 
 SELECT p.id, p.owner_id, p.name AS title
 FROM properties p
 WHERE p.status <> 'archived'
-  AND (
-    p.owner_id = $1::uuid
-    OR EXISTS (
-      SELECT 1 FROM property_members m
-      WHERE m.property_id = p.id
-        AND m.user_id = $1::uuid
-        AND m.status = 'active'
-        AND m.role = 'full_access'
-    )
-  )
+  AND actor_can_manage(p.id, $1::uuid)
 ORDER BY p.name ASC, p.id ASC
 `
 
@@ -227,14 +198,17 @@ type ListParticipantScopePropertiesRow struct {
 // platform (issue #163). The scope doubles as the authorization: rows outside
 // it never leave the database.
 //
-// THE MANAGE-SCOPE PREDICATE (the «actor_can_manage» canon): the
-// owner-or-active-full_access EXISTS block below appears in THREE query
-// bodies of this file (read scope + both removal listings) — sqlc cannot
-// share the text, so the copies must stay byte-identical modulo table
-// aliases. TestParticipantRepository_ManageScopePredicateMatrix runs the
-// same actor verdict across all three queries: a desync of any copy fails
-// there instead of opening a silent privacy hole. Moving the predicate into
-// a real SQL function (needs a migration) is the filed follow-up (#775).
+// THE MANAGE-SCOPE PREDICATE (the «actor_can_manage» canon): owner OR active
+// full_access is the authorization of the three scope queries in this file
+// (read scope + both removal listings; the two ByProperties listings filter
+// by the already-scoped id list). The predicate lives in one place — the SQL
+// function actor_can_manage
+// (migration 000135, issue #794) — which the queries below call; before #794
+// sqlc could not share the text between query bodies, so the predicate was
+// kept as three byte-identical copies pinned by the matrix test.
+// TestParticipantRepository_ManageScopePredicateMatrix runs the same actor
+// verdict across all three queries and stays the gate: semantic drift of the
+// function fails there instead of opening a silent privacy hole.
 func (q *Queries) ListParticipantScopeProperties(ctx context.Context, actorID pgtype.UUID) ([]ListParticipantScopePropertiesRow, error) {
 	rows, err := q.db.Query(ctx, listParticipantScopeProperties, actorID)
 	if err != nil {

@@ -409,9 +409,10 @@ func TestParticipantRepository_RemovalScopeInvitations(t *testing.T) {
 // TestParticipantRepository_ManageScopePredicateMatrix pins the manage-scope
 // predicate ACROSS all three queries that carry it (the read scope and the two
 // removal listings): the same actor must get the same verdict everywhere. The
-// predicate text lives in three query bodies (db/queries/participants.sql) —
-// this matrix turns any desync of one copy (a dropped status='active', a
-// role typo) into a loud failure instead of a silent privacy hole.
+// predicate is one SQL function now (actor_can_manage, migration 000135,
+// issue #794) that all three queries call — this matrix turns any semantic
+// drift of the function (a dropped status='active', a role typo) into a loud
+// failure instead of a silent privacy hole.
 func TestParticipantRepository_ManageScopePredicateMatrix(t *testing.T) {
 	t.Parallel()
 	pool := setupAccessDB(t)

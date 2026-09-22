@@ -779,14 +779,17 @@ type Querier interface {
 	// platform (issue #163). The scope doubles as the authorization: rows outside
 	// it never leave the database.
 	//
-	// THE MANAGE-SCOPE PREDICATE (the «actor_can_manage» canon): the
-	// owner-or-active-full_access EXISTS block below appears in THREE query
-	// bodies of this file (read scope + both removal listings) — sqlc cannot
-	// share the text, so the copies must stay byte-identical modulo table
-	// aliases. TestParticipantRepository_ManageScopePredicateMatrix runs the
-	// same actor verdict across all three queries: a desync of any copy fails
-	// there instead of opening a silent privacy hole. Moving the predicate into
-	// a real SQL function (needs a migration) is the filed follow-up (#775).
+	// THE MANAGE-SCOPE PREDICATE (the «actor_can_manage» canon): owner OR active
+	// full_access is the authorization of the three scope queries in this file
+	// (read scope + both removal listings; the two ByProperties listings filter
+	// by the already-scoped id list). The predicate lives in one place — the SQL
+	// function actor_can_manage
+	// (migration 000135, issue #794) — which the queries below call; before #794
+	// sqlc could not share the text between query bodies, so the predicate was
+	// kept as three byte-identical copies pinned by the matrix test.
+	// TestParticipantRepository_ManageScopePredicateMatrix runs the same actor
+	// verdict across all three queries and stays the gate: semantic drift of the
+	// function fails there instead of opening a silent privacy hole.
 	ListParticipantScopeProperties(ctx context.Context, actorID pgtype.UUID) ([]ListParticipantScopePropertiesRow, error)
 	// One zone's due-day operations as of the zone's today (решение #737, тип
 	// №2: в день срока): planned, dated exactly today, on rules without the
