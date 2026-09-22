@@ -41,8 +41,11 @@ export default function manifest(): MetadataRoute.Manifest {
             },
             {
                 // Android Adaptive Icons — opaque square, content in the 80%
-                // safe zone. Generated from the glass master; see
-                // scripts/generate-icons.mjs.
+                // safe zone. The icon set is assembled via
+                // RealFaviconGenerator; the maskable entry is an opaque
+                // square built from the square master source-square.svg
+                // (RFG output web-app-manifest-512x512.png). Current process
+                // and file mapping — assets/icons/README.md.
                 src: '/icons/icon-maskable-512.png',
                 sizes: '512x512',
                 type: 'image/png',
