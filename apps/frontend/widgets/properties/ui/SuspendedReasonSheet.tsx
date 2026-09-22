@@ -37,8 +37,7 @@ export function SuspendedReasonSheet({
     }
     leave.mutate(placeholder.propertyId, {
       onSuccess: onClose,
-      onError: (error) =>
-        notify.scenarios.access.leavePropertyError({ description: error.detail }),
+      onError: (error) => notify.scenarios.access.leavePropertyError(error),
     });
   };
 

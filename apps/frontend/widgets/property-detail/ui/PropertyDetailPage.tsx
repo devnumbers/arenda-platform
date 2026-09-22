@@ -470,8 +470,7 @@ export function PropertyDetailPage(): JSX.Element {
                 notify.scenarios.access.leftProperty();
                 goBack(router, ROUTES.properties);
             },
-            onError: (error) =>
-                notify.scenarios.access.leavePropertyError({description: error.detail}),
+            onError: (error) => notify.scenarios.access.leavePropertyError(error),
         });
     };
 
