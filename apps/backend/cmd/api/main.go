@@ -107,6 +107,12 @@ func run() error {
 	//      #745).
 	notificationsMod := wire.WireNotifications(p)
 
+	// 6.6. History reading (карта #704, тикет #708): the journal's feed and
+	//      the filter options; wired after the membership policy is
+	//      installed — the property_ids scope proof resolves roles through
+	//      it (the same reason as the notifications feed above).
+	historyReadMod := wire.WireHistoryRead(p)
+
 	// 7. Properties: repos, subscription limiter, photo storage, the property
 	//    service and the dadata suggester.
 	propertiesMod, err := wire.WireProperties(ctx, p, billingMod)
@@ -315,6 +321,7 @@ func run() error {
 		Participants:             accessMod.ParticipantService,
 		ParticipantMutations:     accessMod.ParticipantMutationSvc,
 		PushSubscriptions:        notificationsMod.PushSubscriptionService,
+		HistoryRead:              historyReadMod.Service,
 		NotificationsFeed:        notificationsMod.FeedService,
 		NotificationSettings:     notificationsMod.SettingsService,
 		NotificationsStreamHub:   notificationsStream,

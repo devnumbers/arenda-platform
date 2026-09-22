@@ -571,6 +571,26 @@ type Querier interface {
 	// stood the single future planned up yet; CONTEXT.md «Материализация»).
 	// Cancelled tombstones are not materialized facts.
 	LastOperationDatesOfPayments(ctx context.Context, paymentIds string) ([]LastOperationDatesOfPaymentsRow, error)
+	// Чтение журнала (карта #704, тикет #708, ADR 0061 §7): страница ленты
+	// «История действий» по объектам read-скоупа читателя. Область видимости —
+	// SQL-функция actor_can_read_history (000137): владелец (включая архивные
+	// объекты) и активные участники неархивных объектов; suspended и чужие
+	// объекты строк не отдают (privacy-404 — существование не раскрывается).
+	//
+	// Курсор двусторонний по ключу (created_at, id): before_ts/before_id —
+	// страница СТАРШЕ ключа (скролл вверх), after_ts/after_id — страница МОЛОЖЕ
+	// (prepend новых); аргументы пары ходят вместе, NULL — нет курсора. Порядок
+	// строк всегда (created_at DESC, id DESC) — переименование объекта не может
+	// увести строку из окна (канон #597).
+	//
+	// Фильтры: csv-списки ('' = фильтра нет), период по created_at (верхняя
+	// граница исключающая — экран считает датой+24ч), поиск — маршрутизация
+	// trgm/fts/both приложением (решение #705): q_trgm — экранированный
+	// ILIKE-паттерн, q_raw — сырой ввод для websearch_to_tsquery (безопасен для
+	// пользовательского ввода); mode='' — поиска нет. Записи с обезличенным
+	// актёром (actor_id IS NULL) под фильтр actor_ids не попадают.
+	//
+	ListActionJournal(ctx context.Context, arg ListActionJournalParams) ([]ListActionJournalRow, error)
 	ListActiveMembersByPropertyOwner(ctx context.Context, ownerID pgtype.UUID) ([]PropertyMember, error)
 	// The recipient's shared-pool entries for slot accounting. Memberships on
 	// archived properties are excluded: an archived object does not occupy a
@@ -711,6 +731,22 @@ type Querier interface {
 	// sort key — a rename would move rows across the window. Both cursor args
 	// travel together; NULL (no cursor) reads from the beginning.
 	ListGlobalPaymentRules(ctx context.Context, arg ListGlobalPaymentRulesParams) ([]ListGlobalPaymentRulesRow, error)
+	// Объекты области для шита фильтров: те же свойства, что отдаёт лента,
+	// плюс фото-аватар карточки — первое по времени фото (канон #582);
+	// '' = фото нет (COALESCE: sqlc верит NOT NULL колонке, а lateral LEFT
+	// JOIN промахивается в NULL). Сужение property_ids — тот же фильтр ленты.
+	//
+	ListHistoryFilterObjects(ctx context.Context, arg ListHistoryFilterObjectsParams) ([]ListHistoryFilterObjectsRow, error)
+	// Опции фильтров ленты (ADR 0061 §7, тикет #708): участники области =
+	// владелец ∪ текущие участники (включая приостановленных — suspend не
+	// вытирает их записи из журнала) ∪ все актёры журнала области (отозванные
+	// и вышедшие остаются фильтруемыми — записи переживают отзыв). Живые имена
+	// читаются из users: чип фильтра — метаданные UI, не строка журнала; снимки
+	// строк остаются в самом журнале. Обезличенные актёры (пользователь удалён)
+	// не фильтруемы по определению. Отображаемое имя собирает адаптер по канону
+	// access.DisplayNameOf (маскированный телефон вместо сырого — PII).
+	//
+	ListHistoryFilterParticipants(ctx context.Context, arg ListHistoryFilterParticipantsParams) ([]ListHistoryFilterParticipantsRow, error)
 	// The user's feed page, newest first, deleted rows never appear. The walk
 	// resumes strictly after the (created_at, id) the previous page ended on
 	// (канон #597), so rows created between loads never duplicate or drop; both

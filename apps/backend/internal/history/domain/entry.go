@@ -25,6 +25,12 @@ const (
 	KindMember    Kind = "member"
 )
 
+// AllKinds is the dictionary's full kind list — the wire's kinds filter is
+// validated against it (unknown values are a 400, not a silent empty filter).
+var AllKinds = []Kind{
+	KindProperty, KindRental, KindPayment, KindOperation, KindContact, KindTask, KindMember,
+}
+
 // BaseAction is the coarse action group — one of the four filter groups of
 // the feed, each with its own icon and color (ADR 0061 §4).
 type BaseAction string
@@ -35,6 +41,12 @@ const (
 	BaseCompleted BaseAction = "completed"
 	BaseDeleted   BaseAction = "deleted"
 )
+
+// AllBaseActions is the dictionary's full base-action list — the wire's
+// actions filter is validated against it.
+var AllBaseActions = []BaseAction{
+	BaseAdded, BaseChanged, BaseCompleted, BaseDeleted,
+}
 
 // ActorRole is the role the actor held on the property at action time
 // (the shared/policy vocabulary: owner | full_access | viewer, the audit

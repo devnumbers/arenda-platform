@@ -56,3 +56,291 @@ func (q *Queries) InsertActionJournal(ctx context.Context, arg InsertActionJourn
 	err := row.Scan(&id)
 	return id, err
 }
+
+const listActionJournal = `-- name: ListActionJournal :many
+SELECT aj.id,
+       aj.property_id,
+       p.name AS property_name,
+       aj.actor_id,
+       aj.actor_name,
+       aj.actor_email,
+       aj.actor_role,
+       aj.kind,
+       aj.action,
+       aj.base_action,
+       aj.segments,
+       aj.context,
+       aj.created_at
+FROM action_journal aj
+JOIN properties p ON p.id = aj.property_id
+WHERE actor_can_read_history(aj.property_id, $1::uuid)
+  AND ($2::text = ''
+       OR aj.property_id = ANY(string_to_array($2::text, ',')::uuid[]))
+  AND ($3::text = ''
+       OR aj.actor_id = ANY(string_to_array($3::text, ',')::uuid[]))
+  AND ($4::text = ''
+       OR aj.kind = ANY(string_to_array($4::text, ',')))
+  AND ($5::text = ''
+       OR aj.base_action = ANY(string_to_array($5::text, ',')))
+  AND ($6::timestamptz IS NULL
+       OR aj.created_at >= $6::timestamptz)
+  AND ($7::timestamptz IS NULL
+       OR aj.created_at < $7::timestamptz)
+  AND ($8::timestamptz IS NULL
+       OR aj.created_at < $8::timestamptz
+       OR (aj.created_at = $8::timestamptz
+           AND aj.id < $9::uuid))
+  AND ($10::timestamptz IS NULL
+       OR aj.created_at > $10::timestamptz
+       OR (aj.created_at = $10::timestamptz
+           AND aj.id > $11::uuid))
+  AND (
+       $12::text = ''
+       OR ($12::text = 'trgm'
+           AND aj.searchable ILIKE '%' || $13::text || '%' ESCAPE '\')
+       OR ($12::text = 'fts'
+           AND aj.search_tsv @@ websearch_to_tsquery('russian', $14::text))
+       OR ($12::text = 'both'
+           AND (aj.search_tsv @@ websearch_to_tsquery('russian', $14::text)
+                OR aj.searchable ILIKE '%' || $13::text || '%' ESCAPE '\'))
+      )
+ORDER BY aj.created_at DESC, aj.id DESC
+LIMIT $15::int
+`
+
+type ListActionJournalParams struct {
+	Actor       pgtype.UUID        `json:"actor"`
+	PropertyIds string             `json:"property_ids"`
+	ActorIds    string             `json:"actor_ids"`
+	Kinds       string             `json:"kinds"`
+	BaseActions string             `json:"base_actions"`
+	DateFrom    pgtype.Timestamptz `json:"date_from"`
+	DateTo      pgtype.Timestamptz `json:"date_to"`
+	BeforeTs    pgtype.Timestamptz `json:"before_ts"`
+	BeforeID    pgtype.UUID        `json:"before_id"`
+	AfterTs     pgtype.Timestamptz `json:"after_ts"`
+	AfterID     pgtype.UUID        `json:"after_id"`
+	Mode        string             `json:"mode"`
+	QTrgm       string             `json:"q_trgm"`
+	QRaw        string             `json:"q_raw"`
+	PageLimit   int32              `json:"page_limit"`
+}
+
+type ListActionJournalRow struct {
+	ID           pgtype.UUID        `json:"id"`
+	PropertyID   pgtype.UUID        `json:"property_id"`
+	PropertyName string             `json:"property_name"`
+	ActorID      pgtype.UUID        `json:"actor_id"`
+	ActorName    string             `json:"actor_name"`
+	ActorEmail   string             `json:"actor_email"`
+	ActorRole    string             `json:"actor_role"`
+	Kind         string             `json:"kind"`
+	Action       string             `json:"action"`
+	BaseAction   string             `json:"base_action"`
+	Segments     []byte             `json:"segments"`
+	Context      []byte             `json:"context"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+// Чтение журнала (карта #704, тикет #708, ADR 0061 §7): страница ленты
+// «История действий» по объектам read-скоупа читателя. Область видимости —
+// SQL-функция actor_can_read_history (000137): владелец (включая архивные
+// объекты) и активные участники неархивных объектов; suspended и чужие
+// объекты строк не отдают (privacy-404 — существование не раскрывается).
+//
+// Курсор двусторонний по ключу (created_at, id): before_ts/before_id —
+// страница СТАРШЕ ключа (скролл вверх), after_ts/after_id — страница МОЛОЖЕ
+// (prepend новых); аргументы пары ходят вместе, NULL — нет курсора. Порядок
+// строк всегда (created_at DESC, id DESC) — переименование объекта не может
+// увести строку из окна (канон #597).
+//
+// Фильтры: csv-списки (” = фильтра нет), период по created_at (верхняя
+// граница исключающая — экран считает датой+24ч), поиск — маршрутизация
+// trgm/fts/both приложением (решение #705): q_trgm — экранированный
+// ILIKE-паттерн, q_raw — сырой ввод для websearch_to_tsquery (безопасен для
+// пользовательского ввода); mode=” — поиска нет. Записи с обезличенным
+// актёром (actor_id IS NULL) под фильтр actor_ids не попадают.
+func (q *Queries) ListActionJournal(ctx context.Context, arg ListActionJournalParams) ([]ListActionJournalRow, error) {
+	rows, err := q.db.Query(ctx, listActionJournal,
+		arg.Actor,
+		arg.PropertyIds,
+		arg.ActorIds,
+		arg.Kinds,
+		arg.BaseActions,
+		arg.DateFrom,
+		arg.DateTo,
+		arg.BeforeTs,
+		arg.BeforeID,
+		arg.AfterTs,
+		arg.AfterID,
+		arg.Mode,
+		arg.QTrgm,
+		arg.QRaw,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListActionJournalRow{}
+	for rows.Next() {
+		var i ListActionJournalRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PropertyID,
+			&i.PropertyName,
+			&i.ActorID,
+			&i.ActorName,
+			&i.ActorEmail,
+			&i.ActorRole,
+			&i.Kind,
+			&i.Action,
+			&i.BaseAction,
+			&i.Segments,
+			&i.Context,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listHistoryFilterObjects = `-- name: ListHistoryFilterObjects :many
+SELECT p.id,
+       p.name,
+       p.address,
+       COALESCE(ph.url, '') AS photo_url
+FROM properties p
+LEFT JOIN LATERAL (
+    SELECT pp.url
+    FROM property_photos pp
+    WHERE pp.property_id = p.id
+    ORDER BY pp.created_at, pp.id
+    LIMIT 1
+) ph ON true
+WHERE actor_can_read_history(p.id, $1::uuid)
+  AND ($2::text = ''
+       OR p.id = ANY(string_to_array($2::text, ',')::uuid[]))
+ORDER BY p.name ASC, p.id ASC
+`
+
+type ListHistoryFilterObjectsParams struct {
+	Actor       pgtype.UUID `json:"actor"`
+	PropertyIds string      `json:"property_ids"`
+}
+
+type ListHistoryFilterObjectsRow struct {
+	ID       pgtype.UUID `json:"id"`
+	Name     string      `json:"name"`
+	Address  string      `json:"address"`
+	PhotoUrl string      `json:"photo_url"`
+}
+
+// Объекты области для шита фильтров: те же свойства, что отдаёт лента,
+// плюс фото-аватар карточки — первое по времени фото (канон #582);
+// ” = фото нет (COALESCE: sqlc верит NOT NULL колонке, а lateral LEFT
+// JOIN промахивается в NULL). Сужение property_ids — тот же фильтр ленты.
+func (q *Queries) ListHistoryFilterObjects(ctx context.Context, arg ListHistoryFilterObjectsParams) ([]ListHistoryFilterObjectsRow, error) {
+	rows, err := q.db.Query(ctx, listHistoryFilterObjects, arg.Actor, arg.PropertyIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListHistoryFilterObjectsRow{}
+	for rows.Next() {
+		var i ListHistoryFilterObjectsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Address,
+			&i.PhotoUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listHistoryFilterParticipants = `-- name: ListHistoryFilterParticipants :many
+SELECT DISTINCT u.id, u.name, u.surname, u.phone, u.email
+FROM users u
+WHERE u.id IN (
+    SELECT p.owner_id
+    FROM properties p
+    WHERE actor_can_read_history(p.id, $1::uuid)
+      AND ($2::text = ''
+           OR p.id = ANY(string_to_array($2::text, ',')::uuid[]))
+    UNION
+    SELECT m.user_id
+    FROM property_members m
+    JOIN properties p ON p.id = m.property_id
+    WHERE actor_can_read_history(m.property_id, $1::uuid)
+      AND ($2::text = ''
+           OR m.property_id = ANY(string_to_array($2::text, ',')::uuid[]))
+    UNION
+    SELECT aj.actor_id
+    FROM action_journal aj
+    JOIN properties p ON p.id = aj.property_id
+    WHERE actor_can_read_history(aj.property_id, $1::uuid)
+      AND ($2::text = ''
+           OR aj.property_id = ANY(string_to_array($2::text, ',')::uuid[]))
+      AND aj.actor_id IS NOT NULL
+)
+ORDER BY u.name ASC NULLS LAST, u.surname ASC NULLS LAST, u.id ASC
+`
+
+type ListHistoryFilterParticipantsParams struct {
+	Actor       pgtype.UUID `json:"actor"`
+	PropertyIds string      `json:"property_ids"`
+}
+
+type ListHistoryFilterParticipantsRow struct {
+	ID      pgtype.UUID `json:"id"`
+	Name    pgtype.Text `json:"name"`
+	Surname pgtype.Text `json:"surname"`
+	Phone   string      `json:"phone"`
+	Email   pgtype.Text `json:"email"`
+}
+
+// Опции фильтров ленты (ADR 0061 §7, тикет #708): участники области =
+// владелец ∪ текущие участники (включая приостановленных — suspend не
+// вытирает их записи из журнала) ∪ все актёры журнала области (отозванные
+// и вышедшие остаются фильтруемыми — записи переживают отзыв). Живые имена
+// читаются из users: чип фильтра — метаданные UI, не строка журнала; снимки
+// строк остаются в самом журнале. Обезличенные актёры (пользователь удалён)
+// не фильтруемы по определению. Отображаемое имя собирает адаптер по канону
+// access.DisplayNameOf (маскированный телефон вместо сырого — PII).
+func (q *Queries) ListHistoryFilterParticipants(ctx context.Context, arg ListHistoryFilterParticipantsParams) ([]ListHistoryFilterParticipantsRow, error) {
+	rows, err := q.db.Query(ctx, listHistoryFilterParticipants, arg.Actor, arg.PropertyIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListHistoryFilterParticipantsRow{}
+	for rows.Next() {
+		var i ListHistoryFilterParticipantsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Surname,
+			&i.Phone,
+			&i.Email,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
