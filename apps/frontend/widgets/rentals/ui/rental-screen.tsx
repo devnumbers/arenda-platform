@@ -5,7 +5,8 @@ import type { JSX } from 'react';
 import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
-import { canMutateProperty, useProperty } from '@/features/properties';
+import { useProperty } from '@/features/properties';
+import { propertyPermissions } from '@/entities/property';
 import { currentRentalOf, useRentals } from '@/features/rentals';
 import {
   Button,
@@ -35,7 +36,7 @@ export function RentalScreen({ propertyId }: { readonly propertyId: string }): J
   const loading = propertyQuery.isPending || rentalsQuery.isPending;
   const failed = propertyQuery.isError || rentalsQuery.isError;
   const property = propertyQuery.isSuccess ? propertyQuery.data : undefined;
-  const canMutate = canMutateProperty(property);
+  const canMutate = propertyPermissions(property).canEdit;
 
   // Незавершённая аренда всегда первая (ADR 0053 §4); завершённые —
   // материал «Прошлых аренд» (#535), экраном текущей не являются.

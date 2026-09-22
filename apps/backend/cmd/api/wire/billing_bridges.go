@@ -74,7 +74,8 @@ func (s recipientSlotSource) WithTx(tx transaction.Tx) (billingapp.RecipientSlot
 }
 
 // recipientSlotEnforcer suspends the excess shared memberships after a billing
-// limit drop on the bound transaction.
+// limit drop and recovers the suspended ones FIFO when the limit expands, on
+// the bound transaction.
 type recipientSlotEnforcer struct {
 	coordinator *accessapp.SlotCoordinator
 	tx          transaction.Tx
@@ -83,6 +84,12 @@ type recipientSlotEnforcer struct {
 // Enforce suspends the recipient's excess shared memberships.
 func (e recipientSlotEnforcer) Enforce(ctx context.Context, userID uuid.UUID, trigger string) error {
 	return e.coordinator.EnforceRecipientLimit(ctx, e.tx, userID, trigger)
+}
+
+// Recover reactivates the recipient's oldest suspended shared memberships
+// FIFO (issue #695).
+func (e recipientSlotEnforcer) Recover(ctx context.Context, userID uuid.UUID) error {
+	return e.coordinator.RecoverSuspended(ctx, e.tx, userID)
 }
 
 // ActivePropertyExists reports whether the property belongs to the owner and

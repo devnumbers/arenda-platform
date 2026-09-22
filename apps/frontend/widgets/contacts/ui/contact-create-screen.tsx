@@ -7,6 +7,7 @@ import { ROUTES } from '@/shared/config/routes';
 import { ApiError } from '@/shared/api/errors';
 import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
+import { useProperty } from '@/features/properties';
 import {
   buildContactCreateCommand,
   contactFormErrors,
@@ -24,8 +25,10 @@ import {
   TopNav,
   TopNavTitle,
 } from '@/shared/ui/design';
+import { contactCreateGate } from '../lib/contact-create-gate';
 import { ContactForm } from './contact-form';
 import { ContactObjectSelectPage } from './contact-object-select';
+import { ContactsSkeleton } from './contacts-states';
 
 const SHORT_TEXT_MAX = 256;
 
@@ -63,6 +66,12 @@ export function ContactCreateScreen({
 }): JSX.Element {
   const router = useRouter();
   const createContact = useCreateContact();
+  // В объекте роль читателя решает, открывать ли форму вовсе: смотрящему
+  // и архиву формы не показываем (обход #758, как в правке контакта) —
+  // сервер всё равно ответил бы отказом. В книге (propertyId не задан)
+  // объект не грузится и гейт не участвует.
+  const contextPropertyQuery = useProperty(propertyId ?? '');
+  const gate = contactCreateGate(contextPropertyQuery);
   const backHref = propertyId !== undefined ? ROUTES.propertyContacts(propertyId) : ROUTES.contacts;
   // Ветвь визарда аренды (#530): черновик аренды патчится тем же хуком
   // (экземпляр на маунт, хранилище общее через localStorage) — возврат
@@ -152,6 +161,67 @@ export function ContactCreateScreen({
     );
   }
 
+  // Объектная ветка: пока роль неизвестна — скелетон (форму не показываем),
+  // ошибка загрузки объекта — карточка с «Повторить» (сбой сети не звучит
+  // как вердикт о правах), смотрящему и архиву — карточка недоступности
+  // (тексты — канон гейда создания операций; архивная — как в правке
+  // контакта).
+  if (propertyId !== undefined) {
+    if (gate.kind === 'pending') {
+      return (
+        <>
+          <CancelHeader onClick={() => goBack(router, backHref)} />
+          <PageContent>
+            <ContactsSkeleton />
+          </PageContent>
+        </>
+      );
+    }
+    if (gate.kind === 'error') {
+      return (
+        <>
+          <CancelHeader onClick={() => goBack(router, backHref)} />
+          <PageContent>
+            <div className="flex flex-col items-center gap-3 px-6 pt-16 text-center">
+              <h2 className="text-xl font-semibold leading-6 text-content">
+                Не удалось загрузить объект
+              </h2>
+              <p className="max-w-[360px] text-base leading-[18px] text-content-secondary">
+                Проверьте подключение и попробуйте снова
+              </p>
+              <Button
+                variant="secondary"
+                size="small"
+                onClick={() => void contextPropertyQuery.refetch()}
+              >
+                Повторить
+              </Button>
+            </div>
+          </PageContent>
+        </>
+      );
+    }
+    if (gate.kind === 'denied') {
+      return (
+        <>
+          <CancelHeader onClick={() => goBack(router, backHref)} />
+          <PageContent>
+            <div className="flex flex-col items-center gap-3 px-6 pt-16 text-center">
+              <h2 className="text-xl font-semibold leading-6 text-content">
+                Создание недоступно
+              </h2>
+              <p className="max-w-[360px] text-base leading-[18px] text-content-secondary">
+                {gate.archived
+                  ? 'Объект в архиве — контакты можно только смотреть'
+                  : 'У вас доступ только для просмотра этого объекта'}
+              </p>
+            </div>
+          </PageContent>
+        </>
+      );
+    }
+  }
+
   return (
     <>
       <TopNav
@@ -202,5 +272,18 @@ export function ContactCreateScreen({
         </StickyBottomBar>
       )}
     </>
+  );
+}
+
+/** Хедер гейтов объекта: только «Отменить создание» — отправлять нечего. */
+function CancelHeader({ onClick }: { readonly onClick: () => void }): JSX.Element {
+  return (
+    <TopNav
+      leading={
+        <IconButton icon={<Cancel />} label="Отменить создание" onClick={onClick} />
+      }
+    >
+      <TopNavTitle title="Создать контакт" />
+    </TopNav>
   );
 }

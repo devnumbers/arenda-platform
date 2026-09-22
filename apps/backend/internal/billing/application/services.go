@@ -94,6 +94,7 @@ func NewServices(factory txStoreFactory, cfg ServicesConfig) Services {
 		Subscriptions: NewSubscriptionService(factory, SubscriptionServiceConfig{
 			Clock: cfg.Clock, Provider: cfg.Provider, Config: cfg.Config, Logger: cfg.Logger,
 			TimeTravelEnabled: cfg.TimeTravelEnabled,
+			Publisher:         cfg.Publisher,
 		}),
 		Payments: payments,
 		PaymentMethods: NewPaymentMethodService(factory, cfg.Provider, PaymentMethodServiceConfig{

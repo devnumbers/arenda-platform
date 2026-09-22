@@ -8,6 +8,7 @@ import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
 import { formatDayMonth } from '@/entities/task';
 import { useProperties, useProperty } from '@/features/properties';
+import { propertyPermissions } from '@/entities/property';
 import {
   canCreateTask,
   EMPTY_TASK_CREATE_DRAFT,
@@ -96,9 +97,9 @@ export function TaskCreateScreen({
 
   const propertiesQuery = useProperties();
   const property = propertyQuery.data;
-  const role = property?.access?.role;
-  const canMutate =
-    property !== undefined && role !== undefined && role !== 'viewer' && property.status !== 'archived';
+  // Права объекта — из центрального селектора (#703): зритель и архив
+  // объектный вход закрывают; глобальное создание — своя книга.
+  const canMutate = propertyPermissions(property).canEdit;
 
   useEffect(() => {
     // Гейт только объектного входа: глобальное создание — в своей книге.

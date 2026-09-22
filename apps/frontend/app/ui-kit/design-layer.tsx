@@ -30,6 +30,7 @@ import {
     ConfirmDialog,
     DesktopMenuButton,
     EmptyState,
+    ErrorCard,
     HubTitle,
     SubScreenShell,
     IconButton,
@@ -57,6 +58,7 @@ import {
     ResendCodeTile,
     SearchField,
     StatusIcon,
+    SuccessPopup,
     SupportModal,
     UserButton,
     StepsChip,
@@ -213,6 +215,7 @@ export function DesignLayerShowcase(): JSX.Element {
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [confirmLargeOpen, setConfirmLargeOpen] = useState(false);
     const [deletePropertyOpen, setDeletePropertyOpen] = useState(false);
+    const [successPopupOpen, setSuccessPopupOpen] = useState(false);
     const [moreSheetOpen, setMoreSheetOpen] = useState(false);
     const [supportModalOpen, setSupportModalOpen] = useState(false);
 
@@ -458,6 +461,17 @@ export function DesignLayerShowcase(): JSX.Element {
                     <div className={styles.grid}>
                         <StepsChip step={1} total={5} />
                         <StepsChip step={2} total={6} size="m" />
+                    </div>
+                </div>
+
+                <div className={styles.group}>
+                    <h3 className={styles.groupTitle}>ErrorCard</h3>
+                    <div className={styles.links}>
+                        <ErrorCard
+                            title="Не удалось загрузить раздел"
+                            onRetry={() => {}}
+                            className="mx-0 max-w-[360px]"
+                        />
                     </div>
                 </div>
 
@@ -1432,7 +1446,26 @@ export function DesignLayerShowcase(): JSX.Element {
                         Живой образец закреплён внизу окна — вариант из визарда (кнопка «Далее»).
                     </p>
                 </div>
+
+                <div className={styles.group}>
+                    <h3 className={styles.groupTitle}>SuccessPopup · успех-попап</h3>
+                    <p className={styles.groupTitle}>
+                        Центрированная карточка без затемнения на любой ширине (#744, Figma
+                        2329:148661): иконка Icon/Color/GoodWhite 48, зелёное сообщение 16/18
+                        Medium (#00A63E из макета), крестик закрытия. Потребители — действия
+                        центра уведомлений.
+                    </p>
+                    <div className={styles.grid}>
+                        <Button onClick={() => setSuccessPopupOpen(true)}>Показать попап</Button>
+                    </div>
+                </div>
             </section>
+
+            <SuccessPopup
+                open={successPopupOpen}
+                onOpenChange={setSuccessPopupOpen}
+                message="Все уведомления прочитаны"
+            />
 
             <StickyBottomBar>
                 <Button>Далее</Button>

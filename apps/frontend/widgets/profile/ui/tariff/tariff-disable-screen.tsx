@@ -26,6 +26,7 @@ import {
   disableConfirmTitle,
   tariffDisableObjectsCard,
 } from '@/widgets/profile/lib/tariff-disable';
+import { NO_SUBSCRIPTION } from '@/widgets/profile/lib/no-subscription';
 import {
   tariffAboutCard,
   tariffFeatureRows,
@@ -74,7 +75,7 @@ export function TariffDisableScreen(): JSX.Element {
 
   return (
     <TariffDisableContent
-      subscription={subscription.data}
+      subscription={subscription.data ?? NO_SUBSCRIPTION}
       properties={properties.data}
     />
   );

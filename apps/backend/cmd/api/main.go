@@ -11,6 +11,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nambers/arenda-planform/apps/backend/cmd/api/wire"
+	accessevents "github.com/nambers/arenda-planform/apps/backend/internal/access/adapters/events"
+	accessapp "github.com/nambers/arenda-planform/apps/backend/internal/access/application"
+	billingevents "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/events"
 	billinghttp "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/http"
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
@@ -25,6 +28,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpserver"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/sse"
 )
 
 func main() {
@@ -61,10 +65,6 @@ func run() error {
 	// 2. Event dispatcher (shared by identity publisher and subscribers).
 	eventDispatcher := events.NewInProcessDispatcher()
 
-	// 3. Notifications (grace-only, issue #438): preference and
-	//    push-subscription services.
-	notificationsMod := wire.WireNotifications(p)
-
 	// 3.5. HTTP rate limiters (built early: the email-change service's
 	//      new-address send budget consumes the email-change limiter).
 	limiters := wire.WireRateLimiters(p.Cfg)
@@ -91,11 +91,21 @@ func run() error {
 	//    resolver, membership-aware policy and access service. Built before
 	//    properties because the policy replaces the T2 owner-only policy and is
 	//    injected into every property service.
-	accessMod, err := wire.WireAccess(ctx, p, billingMod, identityMod.EmailMailer)
+	accessMod, err := wire.WireAccess(ctx, p, billingMod, identityMod.EmailMailer, eventDispatcher)
 	if err != nil {
 		return err
 	}
 	p.Policy = accessMod.Policy
+
+	// 6.5. Notifications (issue #438): the push-subscription service, the
+	//      stored feed repository and the feed reading service; the delivery
+	//      queue and the grace publisher build on them below. Wired after the
+	//      membership policy is installed: the feed's live actions resolve the
+	//      reader's role through the policy (FeedLiveState, #743) — on the
+	//      owner-only fallback every property-scoped button (Продлить/
+	//      Завершить, Принять) would silently never stand (находка приёмки
+	//      #745).
+	notificationsMod := wire.WireNotifications(p)
 
 	// 7. Properties: repos, subscription limiter, photo storage, the property
 	//    service and the dadata suggester.
@@ -146,16 +156,15 @@ func run() error {
 	// 8. Cross-module user_registered subscribers.
 	subscribeUserRegistered(eventDispatcher, billingMod, accessMod)
 
-	// 9. Grace notifications (issue #253): the billing grace events deliver
-	//     through the notifications context over push and email, honouring the
-	//     per-channel preferences (ADR 0030). Subscribers are registered before
-	//     the workers start so no grace event fires unwired.
+	// 9. Notifications channel adapters: the Web Push sender (nil without
+	//    VAPID keys — email-only local mode) and the shared contact resolver
+	//    + email notifier. Both the grace subscribers (step 11.6) and the
+	//    delivery queue (step 11.5) consume them.
 	pushSender, err := newPushSender(ctx, p.Cfg, p.Logger)
 	if err != nil {
 		return err
 	}
-	graceNotifier := newGraceNotifier(p.DB, p.Renderer, p.Cfg, p.Logger, notificationsMod, identityMod, pushSender)
-	subscribeGraceEvents(eventDispatcher, graceNotifier)
+	delivery := newNotificationDelivery(p.DB, p.Renderer, identityMod.EmailMailer)
 
 	// 10. Admin service (depends on billing subscriptions + occupancy provider).
 	adminMod := wire.WireAdmin(p, billingMod.Services.Subscriptions)
@@ -163,9 +172,88 @@ func run() error {
 	// 11. Popups service.
 	popupsMod := wire.WirePopups(p)
 
-	// 12. Background workers (5 goroutines). Started before the HTTP server so
-	//     they are live while serving. The Web Push sender was constructed in
-	//     step 9 together with the grace notification delivery.
+	// 11.5 Delivery queue (карта #734, #740): the River client with the
+	//     email/push delivery workers and the notification publisher. The
+	//     client starts in the workers phase below; the publisher is the
+	//     post-commit seam the pipeline publishers call (#741, #748–#752).
+	//     The grace subscribers (step 11.6) are the first to call it. The
+	//     publisher also pushes the live SSE frames through the stream hub
+	//     (#742, ADR 0060), which the HTTP server serves below. The tasks
+	//     (#750), payments (#776) and rentals (#777) scan publishers wire
+	//     here as well — their booking legs schedule the boundary jobs
+	//     through the same client.
+	taskScanStore := notificationspg.NewTaskScanStore(p.DB)
+	paymentScanStore := notificationspg.NewPaymentScanStore(p.DB)
+	rentalScanStore := notificationspg.NewRentalScanStore(p.DB)
+	riverMod, err := wire.WireRiverQueue(ctx, p, notificationsMod,
+		delivery.resolver, delivery.emailer, pushSender, taskScanStore, paymentScanStore, rentalScanStore)
+	if err != nil {
+		return err
+	}
+	defer riverMod.ProviderLimiter.Stop()
+	notificationsStream := riverMod.Stream
+
+	// 11.5.1 The tasks scheduling seam (issue #775): the rule create/edit
+	//     flows hand their standing tasks' ids over post-commit — a live
+	//     timed task books its due-minute job at once (the term before the
+	//     next hourly pass is exactly the delay this removes), a task born
+	//     overdue publishes immediately. Late-bound: the tasks module builds
+	//     earlier than the delivery queue (the grace-events canon —
+	//     best-effort, a broken seam never fails the committed rule).
+	tasksMod.RuleService.SetOverdueSeam(riverMod.TasksSeam)
+
+	// 11.6 Grace notifications (issue #253, #741): the billing grace events
+	//     publish to the stored feed + delivery queue through the pipeline
+	//     publisher (the always-on Тариф category, ADR 0058). Subscribers
+	//     are registered before the workers start (step 12), so no grace
+	//     event fires unwired.
+	subscribeGraceEvents(eventDispatcher, notificationsapp.NewGracePublisher(riverMod.Publisher))
+
+	// 11.8 Access notifications (карта #734, #751): the access lifecycle
+	//     events — the invitation's activation, the revoke, the slot pause
+	//     and recovery, the member's self-exit — publish to the stored feed
+	//     + delivery queue through the same pipeline publisher (the
+	//     Совместный доступ category, gated per-channel by the settings
+	//     matrix at delivery time). The dispatchers are synchronous, so the
+	//     subscription must exist before any transition can fire it.
+	accessEventViews := notificationspg.NewAccessViewStore(
+		p.DB,
+		notificationspg.NewAccessEventUserReader(identityMod.UserRepo),
+	)
+	subscribeAccessEvents(eventDispatcher, notificationsapp.NewAccessPublisher(riverMod.Publisher, accessEventViews))
+
+	// 11.9 Tariff notifications (карта #734, #752): the billing tariff
+	//     events — the applied subscription payment (№13 «Оплата прошла»),
+	//     the upgrade an applied payment activated and the downgrade
+	//     assigned for the period's end (№14 «Тариф изменён») — publish to
+	//     the stored feed + delivery queue through the same pipeline
+	//     publisher (the always-on Тариф category, ADR 0058). The dispatchers
+	//     are synchronous, so the subscription must exist before any applied
+	//     payment can fire it.
+	tariffEventViews := notificationspg.NewTariffViewStore(p.DB)
+	subscribeTariffEvents(eventDispatcher, notificationsapp.NewTariffPublisher(riverMod.Publisher, tariffEventViews))
+
+	// 11.7 The notifications scan (карта #734, #748–#750, #776, #777): the
+	//     hourly zone sweep publishes the scan-driven catalog events — the
+	//     rentals that moved to «Ожидает действия», the payments that came
+	//     due or overdue, and the tasks whose boundary has passed — through
+	//     the same pipeline publisher; the Аренда, Платежи и операции and
+	//     Задачи categories are gated per-channel by the settings matrix at
+	//     delivery time. The tasks publisher's scheduled leg (#750),
+	//     the payments publisher's booking leg (#776) and the rentals
+	//     publisher's booking leg (#777) book the boundary jobs on the way —
+	//     the exact trigger moments the hourly cadence cannot give; the
+	//     sweeps stay the retrospectives after a downtime.
+	notificationsScan := notificationsapp.NewScanGroup(
+		riverMod.RentalsPublisher,
+		riverMod.PaymentsPublisher,
+		riverMod.TasksPublisher,
+	)
+
+	// 12. Background workers (6 goroutines + the delivery queue client).
+	//     Started before the HTTP server so they are live while serving. The
+	//     Web Push sender was constructed in step 9 and shared with the
+	//     delivery queue.
 	workers := wire.NewWorkers(
 		ctx, p,
 		identityMod.SessionRepo,
@@ -174,6 +262,8 @@ func run() error {
 		billingMod.Services.Workers,
 		paymentsMod.TickService,
 		tasksMod.TickService,
+		notificationsScan,
+		riverMod.Client,
 	)
 
 	// 12a. The stand-only time-travel rig (issue #665): the admin time-shift
@@ -222,8 +312,12 @@ func run() error {
 		PropertyTasks:            tasksMod.TaskService,
 		Access:                   accessMod.AccessService,
 		Invitations:              accessMod.InvitationService,
-		NotificationPreferences:  notificationsMod.PreferenceService,
+		Participants:             accessMod.ParticipantService,
+		ParticipantMutations:     accessMod.ParticipantMutationSvc,
 		PushSubscriptions:        notificationsMod.PushSubscriptionService,
+		NotificationsFeed:        notificationsMod.FeedService,
+		NotificationSettings:     notificationsMod.SettingsService,
+		NotificationsStreamHub:   notificationsStream,
 		VAPIDPublicKey:           p.Cfg.VAPIDPublicKey,
 		Popups:                   popupsMod.Service,
 		AppBaseURL:               p.Cfg.AppBaseURL,
@@ -242,29 +336,40 @@ func run() error {
 		AppVersion:               p.Cfg.AppVersion,
 	})
 
+	// WriteTimeout is 0: the event stream (/notifications/stream, #742) is a
+	// long-lived response the per-request write deadline would kill after 30s
+	// in every environment. The deadline could not be lifted per-connection —
+	// the otelhttp wrapper in the middleware chain hides the server's
+	// SetWriteDeadline from http.ResponseController — so the protection moves
+	// to the read deadlines (slow-request vector) and the stream's own
+	// heartbeat + hourly TTL (ADR 0060). Responses are bounded API payloads
+	// behind a buffering Caddy, so a client stalling a write is not a
+	// resource leak.
 	server := &http.Server{
 		Addr:              p.Cfg.HTTPAddr,
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
 
-	return serveAndWait(ctx, server, workers, p.Logger, p.Cfg)
+	return serveAndWait(ctx, server, workers, notificationsStream, p.Logger, p.Cfg)
 }
 
 // injectPropertyServiceAccess wires the access-context adapters into the
 // property service: shared memberships for list endpoints (issues #156 T3,
-// T11), the owner display name for the sharing banner (T11), the recipient
-// slot policy and suspended-shared counter for archive/unarchive/delete
-// (issue #158, T4), and the shared-members delete mailer (issue #162, T6).
+// T11), the owner display name for the sharing banner (T11), the owner email
+// for the detail's owner contact row (Figma 2200-97365), the recipient
+// slot policy for archive/unarchive/delete (issue #158, T4), and the list
+// reads' access projections — member names on the owner's cards and the
+// suspended blur-card placeholders (ticket #702).
 func injectPropertyServiceAccess(propertiesMod *wire.Properties, accessMod *wire.Access) {
 	propertiesMod.PropertyService.SetSharedMemberships(accessMod.SharedProperties)
 	propertiesMod.PropertyService.SetOwnerDisplayNameResolver(accessMod.AccessService)
+	propertiesMod.PropertyService.SetOwnerEmailResolver(accessMod.UserEmailResolver)
 	propertiesMod.PropertyService.SetRecipientSlotPolicy(accessMod.SlotCoordinator)
-	propertiesMod.PropertyService.SetSuspendedSharedCounter(accessMod.SuspendedCounter)
 	propertiesMod.PropertyService.SetSharedMembersDeleteMailer(accessMod.PropertyDeleteMailer)
+	propertiesMod.PropertyService.SetSuspendedSharedMemberships(accessMod.SharedListEnricher)
 }
 
 // injectPropertyListProjections wires the list read projections of the
@@ -345,49 +450,144 @@ func newPushSender(ctx context.Context, cfg *config.Config, logger *slog.Logger)
 	return s, nil
 }
 
-// newGraceNotifier builds the direct notification service the billing grace
-// events deliver through; push delivery is included only when the sender
-// could be built.
-func newGraceNotifier(
-	db *database.InstrumentedPool,
-	renderer *mailer.Renderer,
-	cfg *config.Config,
-	logger *slog.Logger,
-	notificationsMod *wire.Notifications,
-	identityMod *wire.Identity,
-	pushSender notificationsapp.PushSender,
-) *notificationsapp.DirectNotificationService {
+// notificationDelivery bundles the delivery queue's channel adapters: the
+// contact resolver and the email notifier the email worker resolves and
+// sends through.
+type notificationDelivery struct {
+	resolver notificationsapp.ContactResolver
+	emailer  notificationsapp.TemplateEmailSender
+}
+
+// newNotificationDelivery builds the shared channel adapters.
+func newNotificationDelivery(db *database.InstrumentedPool, renderer *mailer.Renderer, emailMailer mailer.Sender) notificationDelivery {
 	queries := platformgenerated.New(db)
-	return notificationsapp.NewDirectNotificationService(
-		notificationsMod.PreferenceRepo,
-		notificationspg.NewContactResolver(queries),
-		emailnotifier.NewNotifier(identityMod.EmailMailer, renderer),
-		pushSender,
-		notificationsMod.PushSubscriptionRepo,
-		cfg.AppBaseURL,
-		logger,
-	)
+	return notificationDelivery{
+		resolver: notificationspg.NewContactResolver(queries),
+		emailer:  emailnotifier.NewNotifier(emailMailer, renderer),
+	}
 }
 
 // subscribeGraceEvents registers the grace-entered and grace-expiring
-// subscribers on the shared event dispatcher.
+// subscribers on the shared event dispatcher: each billing event becomes a
+// stored feed notification with queued email/push delivery (#741). The
+// publisher is notifications' GracePublisher over the pipeline Publisher;
+// billing never imports notifications — the composition root owns the seam.
 func subscribeGraceEvents(
 	eventDispatcher *events.InProcessDispatcher,
-	graceNotifier *notificationsapp.DirectNotificationService,
+	gracePublisher *notificationsapp.GracePublisher,
 ) {
-	eventDispatcher.Subscribe(events.EventType("subscription_grace_entered"), func(ctx context.Context, event any) error {
+	eventDispatcher.Subscribe(billingevents.EventGraceEntered, func(ctx context.Context, event any) error {
 		e, ok := event.(billingapp.GraceEntered)
 		if !ok {
 			return fmt.Errorf("unexpected event type %T", event)
 		}
-		return graceNotifier.NotifyGraceEntered(ctx, e.UserID, e.GraceUntil)
+		return gracePublisher.NotifyGraceEntered(ctx, e.UserID, e.SubscriptionID, e.GraceUntil)
 	})
-	eventDispatcher.Subscribe(events.EventType("subscription_grace_expiring"), func(ctx context.Context, event any) error {
+	eventDispatcher.Subscribe(billingevents.EventGraceExpiring, func(ctx context.Context, event any) error {
 		e, ok := event.(billingapp.GraceExpiring)
 		if !ok {
 			return fmt.Errorf("unexpected event type %T", event)
 		}
-		return graceNotifier.NotifyGraceExpiring(ctx, e.UserID, e.GraceUntil)
+		return gracePublisher.NotifyGraceExpiring(ctx, e.UserID, e.SubscriptionID, e.GraceUntil)
+	})
+}
+
+// subscribeTariffEvents registers the tariff events' subscribers on the
+// shared event dispatcher: an applied subscription payment and a tariff
+// change become the Тариф catalog rows (карта #734, решение #737 №13–№14,
+// #752). The publisher is notifications' TariffPublisher over the pipeline
+// Publisher; billing never imports notifications — the composition root owns
+// the seam.
+func subscribeTariffEvents(
+	eventDispatcher *events.InProcessDispatcher,
+	tariffPublisher *notificationsapp.TariffPublisher,
+) {
+	eventDispatcher.Subscribe(billingevents.EventPaymentSucceeded, func(ctx context.Context, event any) error {
+		e, ok := event.(billingapp.PaymentSucceeded)
+		if !ok {
+			return fmt.Errorf("unexpected event type %T", event)
+		}
+		return tariffPublisher.NotifyPaymentSucceeded(
+			ctx, e.UserID, e.PaymentID, e.TariffID,
+			e.AmountKopecks, string(e.Period), e.ActiveUntil,
+		)
+	})
+	eventDispatcher.Subscribe(billingevents.EventPlanUpgraded, func(ctx context.Context, event any) error {
+		e, ok := event.(billingapp.PlanUpgraded)
+		if !ok {
+			return fmt.Errorf("unexpected event type %T", event)
+		}
+		return tariffPublisher.NotifyPlanUpgraded(
+			ctx, e.UserID, e.TransitionID, e.TariffID,
+			string(e.Period), e.AmountKopecks, e.ActiveUntil,
+		)
+	})
+	eventDispatcher.Subscribe(billingevents.EventPlanDowngradeScheduled, func(ctx context.Context, event any) error {
+		e, ok := event.(billingapp.PlanDowngradeScheduled)
+		if !ok {
+			return fmt.Errorf("unexpected event type %T", event)
+		}
+		return tariffPublisher.NotifyPlanDowngradeScheduled(
+			ctx, e.UserID, e.TransitionID, e.TariffID,
+			string(e.Period), e.EffectiveAt,
+		)
+	})
+}
+
+// subscribeAccessEvents registers the access lifecycle events' subscribers on
+// the shared event dispatcher: each access transition becomes the stored feed
+// notification(s) of the Совместный доступ catalog (карта #734, #751). The
+// publisher is notifications' AccessPublisher over the pipeline Publisher;
+// access never imports notifications — the composition root owns the seam.
+func subscribeAccessEvents(
+	eventDispatcher *events.InProcessDispatcher,
+	accessPublisher *notificationsapp.AccessPublisher,
+) {
+	eventDispatcher.Subscribe(accessevents.EventInvitationActivated, func(ctx context.Context, event any) error {
+		e, ok := event.(accessapp.InvitationActivated)
+		if !ok {
+			return fmt.Errorf("unexpected event type %T", event)
+		}
+		return accessPublisher.NotifyInvitationActivated(
+			ctx, e.MembershipID, e.PropertyID, e.InviterID, e.InviteeID,
+			e.Suspended, e.At,
+		)
+	})
+	eventDispatcher.Subscribe(accessevents.EventMembershipSuspended, func(ctx context.Context, event any) error {
+		e, ok := event.(accessapp.MembershipSuspended)
+		if !ok {
+			return fmt.Errorf("unexpected event type %T", event)
+		}
+		return accessPublisher.NotifyMembershipSuspended(
+			ctx, e.MembershipID, e.PropertyID, e.RecipientID, e.ActorID, e.SuspendedAt,
+		)
+	})
+	eventDispatcher.Subscribe(accessevents.EventMembershipResumed, func(ctx context.Context, event any) error {
+		e, ok := event.(accessapp.MembershipResumed)
+		if !ok {
+			return fmt.Errorf("unexpected event type %T", event)
+		}
+		return accessPublisher.NotifyMembershipResumed(
+			ctx, e.MembershipID, e.PropertyID, e.RecipientID, e.ActorID, e.ResumedAt,
+		)
+	})
+	eventDispatcher.Subscribe(accessevents.EventMembershipRevoked, func(ctx context.Context, event any) error {
+		e, ok := event.(accessapp.MembershipRevoked)
+		if !ok {
+			return fmt.Errorf("unexpected event type %T", event)
+		}
+		return accessPublisher.NotifyAccessRevoked(
+			ctx, e.MembershipID, e.PropertyID, e.RecipientID, e.ActorID,
+		)
+	})
+	eventDispatcher.Subscribe(accessevents.EventMemberLeft, func(ctx context.Context, event any) error {
+		e, ok := event.(accessapp.MemberLeft)
+		if !ok {
+			return fmt.Errorf("unexpected event type %T", event)
+		}
+		return accessPublisher.NotifyMemberLeft(
+			ctx, e.MembershipID, e.PropertyID, e.OwnerID, e.MemberID,
+		)
 	})
 }
 
@@ -406,6 +606,7 @@ func serveAndWait(
 	ctx context.Context,
 	server *http.Server,
 	workers *wire.Workers,
+	notificationsStream *sse.Hub,
 	logger *slog.Logger,
 	cfg *config.Config,
 ) error {
@@ -417,6 +618,10 @@ func serveAndWait(
 
 	select {
 	case <-ctx.Done():
+		// The stream hub closes first: every SSE handler returns at once, so
+		// the graceful HTTP shutdown below is not held up by long-lived
+		// streams inside its 5-second window.
+		notificationsStream.Close(ctx)
 		// The lifecycle context is already cancelled, so the shutdown window
 		// derives from its value-bearing, cancellation-stripped view (same
 		// pattern as the platform cleanup in wire).
@@ -452,6 +657,17 @@ func runMigrate() error {
 	}
 	if err := database.MigrateUp(cfg.DatabaseURL, cfg.MigrationsDir); err != nil {
 		return fmt.Errorf("migrate: %w", err)
+	}
+	// The River queue owns its own schema chain (rivermigrate, research
+	// #735 §2): applied after ours, idempotent, never vendored into
+	// db/migrations.
+	riverPool, err := database.NewPool(context.Background(), cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("river migrate pool: %w", err)
+	}
+	defer riverPool.Close()
+	if err := database.MigrateRiverSchema(context.Background(), riverPool); err != nil {
+		return fmt.Errorf("river migrate: %w", err)
 	}
 	appLogger.InfoContext(context.Background(), "migrations applied")
 	return nil

@@ -268,6 +268,50 @@ func TestMembershipRepository_SuspendedMembershipVisible(t *testing.T) {
 	}
 }
 
+// TestMembershipRepository_SuspendedInsertStampsSuspendedAt proves the
+// suspended insert carries the moment (issue #767): the FIFO recovery queue
+// orders suspended memberships by suspended_at ASC (ListSuspendedMembersByUser),
+// so a grant created directly in the suspended status — invite activation or
+// AddMember without a free slot — must not leave suspended_at NULL and
+// degrade the queue to updated_at DESC. The active insert keeps it NULL.
+func TestMembershipRepository_SuspendedInsertStampsSuspendedAt(t *testing.T) {
+	t.Parallel()
+	pool := setupAccessDB(t)
+	ctx, tx, cleanup := beginAccessTx(t, pool)
+	defer cleanup()
+
+	q := genpostgres.New(tx)
+	owner := createAccessTestUser(t, ctx, q)
+	member := createAccessTestUser(t, ctx, q)
+	active := createAccessTestUser(t, ctx, q)
+	property := createAccessTestProperty(t, ctx, q, owner)
+
+	repo := NewMembershipRepository(tx)
+	suspendedID := uuid.Must(uuid.NewV7())
+	created, err := repo.CreateWithStatus(ctx, domain.Membership{
+		ID: suspendedID, PropertyID: property, UserID: member,
+		Role: domain.RoleViewer, GrantedBy: owner, Status: domain.MemberStatusSuspended,
+	})
+	if err != nil {
+		t.Fatalf("CreateWithStatus(suspended): %v", err)
+	}
+	if created.SuspendedAt == nil {
+		t.Fatalf("suspended insert left suspended_at NULL — the FIFO recovery queue orders by it (issue #767)")
+	}
+
+	activeID := uuid.Must(uuid.NewV7())
+	createdActive, err := repo.Create(ctx, domain.Membership{
+		ID: activeID, PropertyID: property, UserID: active,
+		Role: domain.RoleViewer, GrantedBy: owner,
+	})
+	if err != nil {
+		t.Fatalf("Create(active): %v", err)
+	}
+	if createdActive.SuspendedAt != nil {
+		t.Errorf("active insert set suspended_at = %v, want NULL", createdActive.SuspendedAt)
+	}
+}
+
 func TestOwnerResolver_ReturnsOwner(t *testing.T) {
 	t.Parallel()
 	pool := setupAccessDB(t)

@@ -1,4 +1,5 @@
 import type { IsoDate } from '@/entities/payment';
+import { buildUrlWithParams } from '@/shared/lib/url-params';
 import { pluralize } from '@/shared/lib/pluralize';
 import { safeInternalPath } from '@/shared/lib/safe-internal-path';
 import {
@@ -82,6 +83,26 @@ export function globalOperationsFiltersParams(
     result.archived = '1';
   }
   return result;
+}
+
+/**
+ * Ссылка на экран глобальной ленты с текущими фильтрами, extra — поверх
+ * (например, ?return= страниц выбора). Дефолтные фильтры дают чистую базу
+ * без query — канон buildUrlWithParams (#792, «пустой query — голый
+ * адрес»), которому функция делегирует; одна функция вместо двух дословных
+ * filterHref ленты и направления (хвост #792, находка повторного
+ * pre-merge #785).
+ */
+export function globalOperationsFiltersHref(
+  base: string,
+  filters: GlobalOperationsFilters,
+  extra?: Record<string, string>,
+): string {
+  const params = new URLSearchParams(globalOperationsFiltersParams(filters));
+  for (const [name, value] of Object.entries(extra ?? {})) {
+    params.set(name, value);
+  }
+  return buildUrlWithParams(base, params);
 }
 
 /** Лейбл чипа «Объект» (макет 1733-26805): без выбора — «Все объекты»,

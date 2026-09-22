@@ -72,6 +72,7 @@ type tasksHarness struct {
 	tick   *tasksapp.TickService
 	rules  *tasksapp.RuleService
 	tasks  *tasksapp.TaskService
+	seam   *fakeSeam
 	owner  uuid.UUID
 	propID uuid.UUID
 }
@@ -105,9 +106,35 @@ func newTasksHarnessWithPolicy(t *testing.T, policy sharedpolicy.Policy) *tasksH
 		pool:  pool,
 		clock: clk,
 		tick:  tasksapp.NewTickService(factory, zones, ownerClock, nil),
-		rules: tasksapp.NewRuleService(factory, ownerClock, policy),
+		rules: tasksapp.NewRuleService(factory, ownerClock, policy, logger),
 		tasks: tasksapp.NewTaskService(factory, ownerClock, ownerClock, policy),
 	}
+}
+
+// withSeam wires a recording scheduling-seam fake into the rule service —
+// the scheduling-seam tests' door (issue #775); the other families keep the
+// pre-#775 silence.
+func (h *tasksHarness) withSeam(seam *fakeSeam) *tasksHarness {
+	h.t.Helper()
+	h.rules.SetOverdueSeam(seam)
+	h.seam = seam
+	return h
+}
+
+// fakeSeam records the handovers the rule flows make to the notifications
+// scheduling seam and can fail on demand — the best-effort contract's
+// double.
+type fakeSeam struct {
+	handovers [][]uuid.UUID
+	err       error
+}
+
+func (f *fakeSeam) NotifyMaterializedTasks(_ context.Context, taskIDs []uuid.UUID) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.handovers = append(f.handovers, taskIDs)
+	return nil
 }
 
 // withOwner seeds a user (the data owner) with the given timezone and one

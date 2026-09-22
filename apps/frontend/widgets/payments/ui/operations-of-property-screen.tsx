@@ -4,6 +4,7 @@ import { useState, type JSX } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Add, ArrowLeft, Search } from "@/shared/assets/icons";
 import { ROUTES } from "@/shared/config/routes";
+import { buildUrlWithParams } from "@/shared/lib/url-params";
 import { clientTodayIso } from "@/entities/payment";
 import type { PaymentOperationScope } from "@/shared/api/query-keys";
 import {
@@ -16,7 +17,8 @@ import {
   usePropertyOperationsScopedPaged,
   usePropertyOperationsSummary,
 } from "@/features/payments";
-import { canMutateProperty, useProperty } from "@/features/properties";
+import { useProperty } from "@/features/properties";
+import { propertyPermissions } from "@/entities/property";
 import {
   Button,
   IconButton,
@@ -74,9 +76,9 @@ export function OperationsOfPropertyScreen({
   // Доступ к объекту — для кнопки создания (#571): общий мутационный
   // предикат (зритель — только чтение, архив read-only, контракт #569).
   const propertyQuery = useProperty(propertyId);
-  const canMutate = canMutateProperty(
+  const canMutate = propertyPermissions(
     propertyQuery.isSuccess ? propertyQuery.data : undefined,
-  );
+  ).canEdit;
 
   const today = clientTodayIso();
   // Дефолт — весь период (#674): период в запросе только с явным выбором,
@@ -120,11 +122,12 @@ export function OperationsOfPropertyScreen({
 
   const openCategories = (): void => {
     // Формат query — один хелпер с operationsFiltersHref (#472): знание
-    // «как period/categories кодируются в адрес» живёт в одном модуле.
+    // «как period/categories кодируются в адрес» живёт в одном модуле;
+    // сборка адреса — тот же канон buildUrlWithParams (#792).
     const params = new URLSearchParams(operationsFiltersParams(filters));
     params.set("return", pathname);
     router.push(
-      `${ROUTES.propertyOperationsCategories(propertyId)}?${params.toString()}`,
+      buildUrlWithParams(ROUTES.propertyOperationsCategories(propertyId), params),
     );
   };
 

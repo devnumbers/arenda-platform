@@ -10,7 +10,8 @@ import {
   usePayments,
   usePropertyOverdueOperations,
 } from '@/features/payments';
-import { canMutateProperty, useProperty } from '@/features/properties';
+import { useProperty } from '@/features/properties';
+import { propertyPermissions } from '@/entities/property';
 import { CategoryIcon, categoryStyle } from '@/features/payment-categories';
 import {
   formatOverdueDays,
@@ -91,7 +92,7 @@ export function PaymentsOfPropertyScreen({
   // без кнопок (история 47), архив read-only для финансов (#446). Пока
   // объект не загружен или не загрузился — без кнопки.
   const property = propertyQuery.isSuccess ? propertyQuery.data : undefined;
-  const canMutate = canMutateProperty(property);
+  const canMutate = propertyPermissions(property).canEdit;
 
   const openPayment = (payment: Payment): void =>
     router.push(ROUTES.propertyPayment(propertyId, payment.id));

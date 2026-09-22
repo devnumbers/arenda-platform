@@ -1,8 +1,8 @@
 // Package email holds the email adapters for the access bounded context: the
 // property invite email of the invitation lifecycle (issue #161, T5) and the
-// sharing lifecycle emails (issue #162, T6) — to the (former) member on
-// revoke, property deletion, suspension, downgrade and recovery, and to the
-// owner on invitation activation and member self-exit.
+// "object deleted" notice (issue #162, T6) — the two direct emails that stay;
+// the rest of the sharing lifecycle correspondence is the notifications feed's
+// (карта #734, #751).
 package email
 
 import (
@@ -15,21 +15,14 @@ import (
 )
 
 const (
-	inviteSubject              = "Приглашение к совместному доступу в Рентли"
-	accessRevokedSubject       = "Ваш доступ к объекту в Рентли отозван"
-	propertyDeletedSubject     = "Объект в Рентли удалён владельцем"
-	accessSuspendedSubject     = "Доступ к объекту в Рентли ждёт свободного слота"
-	downgradeSummarySubject    = "Часть доступов в Рентли приостановлена по вашему тарифу"
-	accessRestoredSubject      = "Доступ к объекту в Рентли восстановлен"
-	invitationActivatedSubject = "Приглашение к совместному доступу в Рентли принято"
-	memberLeftSubject          = "Участник вышел из объекта в Рентли"
+	inviteSubject          = "Приглашение к совместному доступу в Рентли"
+	propertyDeletedSubject = "Объект в Рентли удалён владельцем"
 	// PropertyTitleKey is the template data key carrying the display title of
 	// the shared object.
 	propertyTitleKey = "PropertyTitle"
 )
 
-// Sender renders and sends the access lifecycle emails through the shared
-// mailer.
+// Sender renders and sends the direct access emails through the shared mailer.
 type Sender struct {
 	sender     mailer.Sender
 	renderer   *mailer.Renderer
@@ -44,20 +37,15 @@ func NewSender(sender mailer.Sender, renderer *mailer.Renderer, appBaseURL strin
 
 var _ application.AccessMailer = (*Sender)(nil)
 
-// SendInvite renders and sends the invite email. An empty propertyTitle
-// degrades to a generic text (the template handles it).
-func (s *Sender) SendInvite(ctx context.Context, to, propertyTitle string, role domain.Role) error {
+// SendInvite renders and sends the invite email. Since the multi-object
+// invitation (issue #694) PropertyTitles carries the whole batch — a single
+// title renders exactly like the pre-#694 text; empty titles degrade to a
+// generic text (the template handles it).
+func (s *Sender) SendInvite(ctx context.Context, to string, propertyTitles []string, role domain.Role) error {
 	return s.send(ctx, to, inviteSubject, "property_invite", map[string]any{
-		propertyTitleKey: propertyTitle,
+		"PropertyTitles": propertyTitles,
 		"Role":           roleLabel(role),
 		"AppURL":         s.appBaseURL,
-	})
-}
-
-// SendAccessRevoked emails the former member that their access was revoked.
-func (s *Sender) SendAccessRevoked(ctx context.Context, to, propertyTitle string) error {
-	return s.send(ctx, to, accessRevokedSubject, "access_revoked", map[string]any{
-		propertyTitleKey: propertyTitle,
 	})
 }
 
@@ -65,48 +53,6 @@ func (s *Sender) SendAccessRevoked(ctx context.Context, to, propertyTitle string
 func (s *Sender) SendPropertyDeleted(ctx context.Context, to, propertyTitle string) error {
 	return s.send(ctx, to, propertyDeletedSubject, "property_deleted", map[string]any{
 		propertyTitleKey: propertyTitle,
-	})
-}
-
-// SendAccessSuspended emails the member that their access waits for a free
-// tariff slot.
-func (s *Sender) SendAccessSuspended(ctx context.Context, to, propertyTitle string) error {
-	return s.send(ctx, to, accessSuspendedSubject, "access_suspended", map[string]any{
-		propertyTitleKey: propertyTitle,
-	})
-}
-
-// SendDowngradeSummary emails the recipient the single summary of the
-// memberships suspended by one enforcement call.
-func (s *Sender) SendDowngradeSummary(ctx context.Context, to string, propertyTitles []string) error {
-	return s.send(ctx, to, downgradeSummarySubject, "downgrade_summary", map[string]any{
-		"PropertyTitles": propertyTitles,
-	})
-}
-
-// SendAccessRestored emails the member that a suspended membership became
-// active again.
-func (s *Sender) SendAccessRestored(ctx context.Context, to, propertyTitle string) error {
-	return s.send(ctx, to, accessRestoredSubject, "access_restored", map[string]any{
-		propertyTitleKey: propertyTitle,
-		"AppURL":         s.appBaseURL,
-	})
-}
-
-// SendInvitationActivated emails the property owner that an invited member
-// activated their access at registration.
-func (s *Sender) SendInvitationActivated(ctx context.Context, to, propertyTitle, memberEmail string) error {
-	return s.send(ctx, to, invitationActivatedSubject, "invitation_activated", map[string]any{
-		propertyTitleKey: propertyTitle,
-		"MemberEmail":    memberEmail,
-	})
-}
-
-// SendMemberLeft emails the property owner that a member left the object.
-func (s *Sender) SendMemberLeft(ctx context.Context, to, propertyTitle, memberName string) error {
-	return s.send(ctx, to, memberLeftSubject, "member_left", map[string]any{
-		propertyTitleKey: propertyTitle,
-		"MemberName":     memberName,
 	})
 }
 

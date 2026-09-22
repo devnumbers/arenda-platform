@@ -33,7 +33,8 @@ import {
   categoryStyle,
   CategoryIcon,
 } from '@/features/payment-categories';
-import { canMutateProperty, useProperty } from '@/features/properties';
+import { useProperty } from '@/features/properties';
+import { propertyPermissions } from '@/entities/property';
 import {
   isPaymentCompleted,
   nearestOccurrence,
@@ -101,7 +102,7 @@ export function PaymentDetailScreen({
 
   // Единый предикат мутационного входа страницы: смотрящий читает без кнопок
   // (история 47), архив финансово read-only (#446).
-  const canMutate = canMutateProperty(property);
+  const canMutate = propertyPermissions(property).canEdit;
 
   const loading = paymentQuery.isPending || propertyQuery.isPending;
   const failed = paymentQuery.isError || propertyQuery.isError;

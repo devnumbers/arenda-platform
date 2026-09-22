@@ -107,8 +107,9 @@ func TestPropertyService_DeleteProperty_NotifiesFormerSharedMembers(t *testing.T
 			t.Errorf("sent with title = %q", title)
 		}
 	}
-	// Sends happen after the collect/recover (post-commit).
-	if shared.events[len(shared.events)-2:] == nil || shared.events[len(shared.events)-1] != "send" {
+	// Sends happen after the collect/recover (post-commit): the last two
+	// events are the two sends.
+	if len(shared.events) < 2 || shared.events[len(shared.events)-2] != "send" || shared.events[len(shared.events)-1] != "send" {
 		t.Errorf("sends must come last (post-commit), events = %v", shared.events)
 	}
 

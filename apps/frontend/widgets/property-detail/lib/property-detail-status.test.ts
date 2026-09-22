@@ -18,8 +18,8 @@ describe('propertyStatusSubtitle (подзаголовок шапки детал
     expect(propertyStatusSubtitle('maintenance')).toBe('На ремонте');
   });
 
-  it('в архиве — «В архиве»', () => {
-    expect(propertyStatusSubtitle('archived')).toBe('В архиве');
+  it('в архиве — без подзаголовка: факт архива несёт пилюля #773, второй канал дублировал бы её', () => {
+    expect(propertyStatusSubtitle('archived')).toBeNull();
   });
 });
 
@@ -61,28 +61,40 @@ describe('buildPropertyKebabItems (кебаб-меню детали)', () => {
 });
 
 describe('buildPropertyStatusSheetItems (шит смены статуса)', () => {
-  it('без аренды: начать аренду, на ремонте, в архив', () => {
-    expect(buildPropertyStatusSheetItems('active', false)).toEqual([
+  it('владелец, без аренды: начать аренду, на ремонте, в архив', () => {
+    expect(buildPropertyStatusSheetItems('active', false, true)).toEqual([
       { key: 'start-rental', label: 'Начать аренду', danger: false },
       { key: 'start-maintenance', label: 'Объект на ремонте', danger: false },
       { key: 'archive', label: 'Перевести в архив', danger: false },
     ]);
   });
 
-  it('с незавершённой арендой: завершить аренду вместо начала', () => {
+  it('владелец, с незавершённой арендой: завершить аренду вместо начала', () => {
     expect(
-      buildPropertyStatusSheetItems('active', true).map((item) => item.key),
+      buildPropertyStatusSheetItems('active', true, true).map((item) => item.key),
     ).toEqual(['complete-rental', 'start-maintenance', 'archive']);
   });
 
-  it('на ремонте: завершить ремонт, в архив', () => {
+  it('владелец, на ремонте: завершить ремонт, в архив', () => {
     expect(
-      buildPropertyStatusSheetItems('maintenance', false).map((item) => item.key),
+      buildPropertyStatusSheetItems('maintenance', false, true).map((item) => item.key),
     ).toEqual(['finish-maintenance', 'archive']);
   });
 
   it('архивный — шит не открывается, набор не строится', () => {
-    expect(buildPropertyStatusSheetItems('archived', false)).toEqual([]);
+    expect(buildPropertyStatusSheetItems('archived', false, true)).toEqual([]);
+  });
+
+  it('участник (#757 приёмка: нет мёртвых кнопок): без «Перевести в архив»', () => {
+    expect(
+      buildPropertyStatusSheetItems('active', false, false).map((item) => item.key),
+    ).toEqual(['start-rental', 'start-maintenance']);
+    expect(
+      buildPropertyStatusSheetItems('active', true, false).map((item) => item.key),
+    ).toEqual(['complete-rental', 'start-maintenance']);
+    expect(
+      buildPropertyStatusSheetItems('maintenance', false, false).map((item) => item.key),
+    ).toEqual(['finish-maintenance']);
   });
 });
 
@@ -94,6 +106,8 @@ const baseManage: ManageInput = {
   isPinned: false,
   canMutate: true,
   canPin: true,
+  canLeave: false,
+  canLifecycle: true,
 };
 
 describe('buildPropertyManageActions (секция «Управление»)', () => {
@@ -138,18 +152,72 @@ describe('buildPropertyManageActions (секция «Управление»)', (
     expect(items.map((item) => item.key)).toEqual(['unarchive', 'access', 'delete']);
   });
 
-  it('смотрящий (нельзя мутировать): только совместный доступ', () => {
-    const items = buildPropertyManageActions({ ...baseManage, canMutate: false });
-    expect(items.map((item) => item.key)).toEqual(['access']);
+  it('смотрящий: об объекте, совместный доступ, покинуть объект (#703)', () => {
+    const items = buildPropertyManageActions({ ...baseManage, canMutate: false, canLeave: true });
+    expect(items.map((item) => item.key)).toEqual(['about', 'access', 'leave']);
+    expect(items.find((item) => item.key === 'leave')?.danger).toBe(true);
   });
 
-  it('архивный смотрящий: тоже только совместный доступ', () => {
+  it('смотрящий без контекста доступа: без строки выхода (страховка)', () => {
+    const items = buildPropertyManageActions({ ...baseManage, canMutate: false, canLeave: false });
+    expect(items.map((item) => item.key)).toEqual(['about', 'access']);
+  });
+
+  it('архивный смотрящий: тот же набор — выход из архива не гасит (#703)', () => {
     const items = buildPropertyManageActions({
       ...baseManage,
       status: 'archived',
       canMutate: false,
+      canLeave: true,
     });
-    expect(items.map((item) => item.key)).toEqual(['access']);
+    expect(items.map((item) => item.key)).toEqual(['about', 'access', 'leave']);
+  });
+
+  it('полный доступ — участник: «Покинуть объект» рядом с строками владельца (#703)', () => {
+    const keys = buildPropertyManageActions({ ...baseManage, canLeave: true }).map(
+      (item) => item.key,
+    );
+    expect(keys).toContain('leave');
+    expect(keys.indexOf('leave')).toBe(keys.indexOf('access') + 1);
+    expect(keys[keys.length - 1]).toBe('delete');
+  });
+
+  it('архивный полный доступ: выход между доступом и удалением (#703)', () => {
+    const items = buildPropertyManageActions({
+      ...baseManage,
+      status: 'archived',
+      canLeave: true,
+    });
+    expect(items.map((item) => item.key)).toEqual([
+      'unarchive',
+      'access',
+      'leave',
+      'delete',
+    ]);
+  });
+
+  it('участник (#757 приёмка): без архива и удаления — нет мёртвых кнопок', () => {
+    const keys = buildPropertyManageActions({ ...baseManage, canLifecycle: false, canLeave: true }).map(
+      (item) => item.key,
+    );
+    expect(keys).toEqual(['edit', 'pin', 'start-rental', 'start-maintenance', 'access', 'leave']);
+  });
+
+  it('участник без права выхода: тот же набор без выхода', () => {
+    const keys = buildPropertyManageActions({ ...baseManage, canLifecycle: false }).map(
+      (item) => item.key,
+    );
+    expect(keys).toEqual(['edit', 'pin', 'start-rental', 'start-maintenance', 'access']);
+  });
+
+  it('участник, архивный объект: только доступ и выход — возврат/удаление владельческие', () => {
+    const items = buildPropertyManageActions({
+      ...baseManage,
+      status: 'archived',
+      canLifecycle: false,
+      canLeave: true,
+    });
+    expect(items.map((item) => item.key)).toEqual(['access', 'leave']);
   });
 
   it('базовый тариф: строк основного объекта нет', () => {

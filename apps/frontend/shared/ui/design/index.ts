@@ -87,6 +87,7 @@ export {
 } from './collapsible-section';
 export { ConfirmDialog, type ConfirmDialogProps } from './confirm-dialog';
 export { EmptyState, type EmptyStateProps } from './empty-state';
+export { ErrorCard, type ErrorCardProps } from './error-card';
 export { ResendCodeTile, type ResendCodeTileProps } from './resend-code-tile';
 export { Skeleton, type SkeletonProps } from './skeleton';
 export { SkeletonListRow, type SkeletonListRowProps } from './skeleton-list-row';
@@ -109,3 +110,4 @@ export {
   InfiniteQueryTail,
   type InfiniteQueryTailQuery,
 } from './infinite-query-tail';
+export { SuccessPopup, type SuccessPopupProps } from './success-popup';

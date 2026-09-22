@@ -2,6 +2,8 @@ import type { JSX } from 'react';
 import {
   Archive,
   Edit,
+  Exit,
+  Info,
   Key,
   PaintBrush,
   Pin,
@@ -37,7 +39,10 @@ export function propertyActionIcon(key: PropertyDetailActionKey): JSX.Element | 
       return <Team className={iconClass} />;
     case 'delete':
       return <TrashBin className={iconClass} />;
+    case 'leave':
+      return <Exit className={iconClass} />;
     case 'about':
+      return <Info className={iconClass} />;
     case 'change-status':
       return null;
   }

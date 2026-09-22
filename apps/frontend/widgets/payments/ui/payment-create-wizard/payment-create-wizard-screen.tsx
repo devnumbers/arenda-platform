@@ -6,6 +6,7 @@ import { ArrowLeft, Search } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { useProperty } from '@/features/properties';
+import { propertyPermissions } from '@/entities/property';
 import {
   usePaymentWizardDraft,
   WIZARD_TOTAL_STEPS,
@@ -53,9 +54,7 @@ export function PaymentCreateWizardScreen({
 
   const loading = !draftState.isLoaded || propertyQuery.isPending;
   const property = propertyQuery.isSuccess ? propertyQuery.data : undefined;
-  const role = property?.access?.role;
-  const canMutate =
-    property !== undefined && role !== undefined && role !== 'viewer' && property.status !== 'archived';
+  const canMutate = propertyPermissions(property).canEdit;
 
   return (
     <>

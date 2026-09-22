@@ -156,7 +156,13 @@ export function ModalContent({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
           <DialogContent
             className={cn(
-              'flex max-h-[92dvh] w-full max-w-[520px] flex-col rounded-sheet bg-white font-sans outline-none',
+              // relative — канон попапа: крестик в углу карточки
+              // (desktop:absolute у потребителя) якорится в карточку, а не в
+              // фуллскрин-обёртку. База — ПЕРВЫМ аргументом слияния, className
+              // потребителя — последним (tailwind-merge отдаёт приоритет
+              // последнему); «канва последней» верна только для мобильного
+              // Drawer-блока ниже.
+              'relative flex max-h-[92dvh] w-full max-w-[520px] flex-col rounded-sheet bg-white font-sans outline-none',
               'data-[state=open]:animate-[modal-card-in_400ms_var(--dl-ease)]',
               'data-[state=closed]:animate-[modal-card-out_220ms_var(--dl-ease)]',
               className,
@@ -180,10 +186,15 @@ export function ModalContent({
       />
       <Drawer.Content
         className={cn(
-          'fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[92dvh] w-full flex-col rounded-t-sheet bg-white font-sans outline-none',
+          // Позиционные классы канвы (fixed) — последними в слиянии: любой
+          // className потребителя, конфликтный по position (например,
+          // «relative» под десктопный крестик), иначе через tailwind-merge
+          // снимает fixed, шит выпадает из фикс-канвы в поток за сгиб
+          // экрана и попап «пропадает» (#771).
+          className,
           // Вход/выход анимирует сам vaul (slideFromBottom 0.5s на той же
           // кривой cubic-bezier(0.32,0.72,0,1)) — скоординировано с drag.
-          className,
+          'fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[92dvh] w-full flex-col rounded-t-sheet bg-white font-sans outline-none',
         )}
       >
         {body}

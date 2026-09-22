@@ -3,8 +3,9 @@
 import type { JSX } from 'react';
 import NextLink from 'next/link';
 import { ROUTES } from '@/shared/config/routes';
-import { PinSmall, SmallArrowRight } from '@/shared/assets/icons';
+import { BoldUser, PinSmall, SmallArrowRight } from '@/shared/assets/icons';
 import type { IsoDate } from '@/shared/lib/calendar';
+import { cardOwnerName } from '../lib/property-owner-name';
 import {
   archivedPropertyBadge,
   hasPropertyAttentionDot,
@@ -12,7 +13,6 @@ import {
   PropertyStatusBadge,
   type PropertyBadge,
 } from '@/features/properties';
-import { AccessRoleBadge } from '@/entities/access';
 import { PropertyAvatar, type Property } from '@/entities/property';
 import styles from './PropertyCard.module.css';
 
@@ -22,14 +22,19 @@ import styles from './PropertyCard.module.css';
  * тикет #587): серая карточка radius 24, круг-фото 64 (мобайл ≤560 над
  * текстом, 561+ — слева вровень), имя 20/24 до трёх строк, адрес со
  * скрепкой у основного объекта (Icon/S/Pin), красная точка на круге
- * (резолюция #584), бейдж роли доступа у чужого объекта, арендный бейдж +
- * «на ремонте», шеврон у правого верхнего края. Вся карточка — ссылка на
- * объект (оверлей). «Сегодня владельца» (ADR 0048) нужно только бейджу
- * «Осталось N месяцев» — остальные бейджи рендерятся, не дожидаясь его.
+ * (резолюция #584), арендный бейдж + «на ремонте», шеврон у правого
+ * верхнего края. Вся карточка — ссылка на объект (оверлей). «Сегодня
+ * владельца» (ADR 0048) нужно только бейджу «Осталось N месяцев» —
+ * остальные бейджи рендерятся, не дожидаясь его.
+ * Под бейджами — ряд владельца ЧУЖОГО объекта (решение владельца по итогам
+ * обхода #756): круг 24 с BoldUser и имя 13/500 — карточка показывает, чей
+ * это объект и кто выдал доступ; на своих карточках ряда нет. Бейдж роли
+ * доступа («Редактирование/Просмотр») на карточках больше не рисуется.
  *
  * Вариант archived — карточка архива: та же анатомия, но смысловая
- * начинка архивная — единственный бейдж «В архиве», без точки, скрепки
- * и бейджа роли (макет 1603:92102).
+ * начинка архивная — единственный бейдж «В архиве», без точки и скрепки
+ * (макет 1603:92102); ряд владельца чужого архивного объекта — как в
+ * основном списке.
  */
 export type PropertyCardProps = {
   readonly property: Property;
@@ -37,25 +42,30 @@ export type PropertyCardProps = {
   readonly today?: IsoDate;
   /** archived — карточка экрана «Архивные объекты» (#587). */
   readonly variant?: 'list' | 'archived';
+  /** nonInteractive — без оверлея-ссылки: карточка-подвесший (#702)
+   * рендерит обычную анатомию под блюром, тап ведёт в шит причины, а не на
+   * деталь объекта. */
+  readonly nonInteractive?: boolean;
 };
 
-export function PropertyCard({ property, today, variant = 'list' }: PropertyCardProps): JSX.Element {
+export function PropertyCard({ property, today, variant = 'list', nonInteractive = false }: PropertyCardProps): JSX.Element {
   const isArchived = variant === 'archived';
   const isPrimary = !isArchived && property.pinned_at !== null;
   const badges: readonly PropertyBadge[] = isArchived
     ? [archivedPropertyBadge]
     : propertyBadges(property, today);
-  const accessRole = !isArchived && property.access && property.access.role !== 'owner'
-    ? property.access.role
-    : null;
+  // Ряд владельца (решение по итогам обхода #756): только чужие объекты.
+  const ownerName = cardOwnerName(property);
 
   return (
     <article className={styles.root}>
-      <NextLink
-        href={ROUTES.property(property.id)}
-        className={styles.cardLink}
-        aria-label={`Открыть объект ${property.name}`}
-      />
+      {!nonInteractive && (
+        <NextLink
+          href={ROUTES.property(property.id)}
+          className={styles.cardLink}
+          aria-label={`Открыть объект ${property.name}`}
+        />
+      )}
       <div className={styles.body}>
         <PropertyAvatar
           photoUrl={property.photos?.[0]?.url ?? null}
@@ -67,13 +77,22 @@ export function PropertyCard({ property, today, variant = 'list' }: PropertyCard
             {isPrimary && <PinSmall className={styles.pin} aria-hidden />}
             <span className={styles.addressText}>{property.address}</span>
           </p>
-          {(badges.length > 0 || accessRole !== null) && (
+          {badges.length > 0 && (
             <div className={styles.badges}>
-              {accessRole !== null && <AccessRoleBadge role={accessRole} />}
               {badges.map((badge) => (
                 <PropertyStatusBadge key={badge.key} badge={badge} />
               ))}
             </div>
+          )}
+          {ownerName !== null && (
+            <ul className={styles.participants} data-testid="property-owner">
+              <li className={styles.participant}>
+                <span className={styles.participantAvatar} aria-hidden>
+                  <BoldUser className={styles.participantGlyph} />
+                </span>
+                <span className={styles.participantName}>{ownerName}</span>
+              </li>
+            </ul>
           )}
         </div>
       </div>

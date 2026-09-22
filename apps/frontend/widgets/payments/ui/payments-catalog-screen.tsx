@@ -11,7 +11,8 @@ import {
   usePropertyOperationsPaged,
   usePropertyOverdueOperations,
 } from '@/features/payments';
-import { canMutateProperty, useProperty } from '@/features/properties';
+import { useProperty } from '@/features/properties';
+import { propertyPermissions } from '@/entities/property';
 import {
   Button,
   IconButton,
@@ -84,7 +85,7 @@ export function PaymentsCatalogScreen({
 
   const propertyQuery = useProperty(propertyId);
   const property = propertyQuery.isSuccess ? propertyQuery.data : undefined;
-  const canMutate = canMutateProperty(property);
+  const canMutate = propertyPermissions(property).canEdit;
 
   return (
     <>

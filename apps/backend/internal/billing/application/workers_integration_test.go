@@ -87,11 +87,12 @@ func (s *capturingArchiver) restoreCalls() []capturedRestore {
 	return append([]capturedRestore(nil), s.restores...)
 }
 
-// capturingSlots records the enforce calls of a worker phase.
+// capturingSlots records the enforce and recover calls of a worker phase.
 type capturingSlots struct {
-	mu    sync.Mutex
-	calls []string
-	err   error
+	mu       sync.Mutex
+	calls    []string
+	recovers []uuid.UUID
+	err      error
 }
 
 func (s *capturingSlots) WithTx(transaction.Tx) (billingapp.RecipientSlotEnforcer, error) {
@@ -104,6 +105,13 @@ func (e boundSlots) Enforce(_ context.Context, _ uuid.UUID, trigger string) erro
 	e.src.mu.Lock()
 	defer e.src.mu.Unlock()
 	e.src.calls = append(e.src.calls, trigger)
+	return e.src.err
+}
+
+func (e boundSlots) Recover(_ context.Context, userID uuid.UUID) error {
+	e.src.mu.Lock()
+	defer e.src.mu.Unlock()
+	e.src.recovers = append(e.src.recovers, userID)
 	return e.src.err
 }
 

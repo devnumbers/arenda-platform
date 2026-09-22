@@ -25,10 +25,10 @@ function task(partial: Partial<Task> & { readonly id: string }): Task {
 }
 
 const properties: Record<string, FeedPropertyRef> = {
-  own: { role: 'owner', status: 'active' },
-  shared: { role: 'full_access', status: 'active' },
-  watched: { role: 'viewer', status: 'active' },
-  archived: { role: 'owner', status: 'archived' },
+  own: { access: { role: 'owner' }, status: 'active' },
+  shared: { access: { role: 'full_access' }, status: 'active' },
+  watched: { access: { role: 'viewer' }, status: 'active' },
+  archived: { access: { role: 'owner' }, status: 'archived' },
 };
 const propertyOf = (propertyId: string): FeedPropertyRef | undefined =>
   properties[propertyId];

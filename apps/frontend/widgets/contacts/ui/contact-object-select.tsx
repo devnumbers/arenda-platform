@@ -4,6 +4,7 @@ import type { JSX } from 'react';
 import { BoldHome, BoldObjects, Cancel, Check, RadioFalse, RadioTrue } from '@/shared/assets/icons';
 import { Button, IconButton, PageContent, Skeleton, StickyBottomBar, TopNav, TopNavTitle } from '@/shared/ui/design';
 import { useProperties } from '@/features/properties';
+import { filterEditableProperties } from '@/entities/property';
 
 /**
  * Страница «Выбрать объект» (макет 1539:83846, #509/#510): отдельная
@@ -11,7 +12,8 @@ import { useProperties } from '@/features/properties';
  * радио-строке меняет только подсветку, применяются «Выбрать»/✓, ✕
  * отбрасывает. Первая строка — «Общий контакт / Не привязан к объектам»
  * (тексты 1:1 из макета), объекты — имя и адрес, с фото-аватаром или
- * серым домом.
+ * серым домом. Объекты — только с правом правки (#703): привязка своего
+ * контакта к зрительскому объекту закрыла бы её правку.
  */
 export function ContactObjectSelectPage({
   draft,
@@ -25,6 +27,7 @@ export function ContactObjectSelectPage({
   readonly onDismiss: () => void;
 }): JSX.Element {
   const propertiesQuery = useProperties();
+  const properties = filterEditableProperties(propertiesQuery.data ?? []);
 
   return (
     <>
@@ -68,10 +71,10 @@ export function ContactObjectSelectPage({
               </div>
             </section>
           )}
-          {(propertiesQuery.data ?? []).length > 0 && (
+          {properties.length > 0 && (
             <div aria-hidden className="h-px bg-surface-muted" />
           )}
-          {(propertiesQuery.data ?? []).map((property) => (
+          {properties.map((property) => (
             <ObjectRowButton
               key={property.id}
               title={property.name}

@@ -22,6 +22,7 @@ export type PropertyDetailActionKey =
   | 'archive'
   | 'unarchive'
   | 'access'
+  | 'leave'
   | 'delete';
 
 export type PropertyDetailAction = {
@@ -30,10 +31,12 @@ export type PropertyDetailAction = {
   readonly danger: boolean;
 };
 
-/** Подзаголовок в шапке под «Объект» (Figma 1581:53679, 1581:55564). */
+/** Подзаголовок в шапке под «Объект» (Figma 1581:53679, 1581:55564).
+ * Архив в шапке не подписывается: факт архива несёт пилюля «В архиве»
+ * под адресом (#773, propertyHeaderPills) — иконка + видна любому
+ * читателю, второй канал дублировал бы её. */
 export function propertyStatusSubtitle(status: PropertyStatus): string | null {
   if (status === 'maintenance') return 'На ремонте';
-  if (status === 'archived') return 'В архиве';
   return null;
 }
 
@@ -65,27 +68,30 @@ export function buildPropertyKebabItems(
 /**
  * Шит смены статуса (канон Modal-шита): без аренды — Figma 1554:100371,
  * на ремонте — 1581:53679. У активного с арендой первый пункт —
- * «Завершить аренду» (свитч, уточняется на приёмке). Архивному шита нет —
- * в кебабе прямой пункт «Вернуть из архива».
+ * «Завершить аренду» (свитч, уточняется на приёмке). «Перевести в архив»
+ * рисуется только владельцу (canLifecycle — зеркало sharedpolicy.CanLifecycle):
+ * участнику сервер отвечает 403, мёртвых кнопок быть не должно (приёмка
+ * #757). Архивному шита нет — в кебабе прямой пункт «Вернуть из архива».
  */
 export function buildPropertyStatusSheetItems(
   status: PropertyStatus,
   hasRental: boolean,
+  canLifecycle: boolean,
 ): ReadonlyArray<PropertyDetailAction> {
   if (status === 'archived') return [];
   if (status === 'maintenance') {
-    return [
-      action('finish-maintenance', 'Завершить ремонт', false),
-      action('archive', 'Перевести в архив', false),
-    ];
+    const items = [action('finish-maintenance', 'Завершить ремонт', false)];
+    if (canLifecycle) items.push(action('archive', 'Перевести в архив', false));
+    return items;
   }
-  return [
+  const items = [
     hasRental
       ? action('complete-rental', 'Завершить аренду', false)
       : action('start-rental', 'Начать аренду', false),
     action('start-maintenance', 'Объект на ремонте', false),
-    action('archive', 'Перевести в архив', false),
   ];
+  if (canLifecycle) items.push(action('archive', 'Перевести в архив', false));
+  return items;
 }
 
 /**
@@ -129,33 +135,65 @@ export type PropertyManageInput = {
   /** Незавершённая аренда есть (occupancy списка, резолюция #584). */
   readonly hasRental: boolean;
   readonly isPinned: boolean;
-  /** Мутационный доступ (canMutateProperty: роль и не-архив). */
+  /** Мутационный доступ — ролевой canManageMembers (#703); архив его
+   * не гасит, билдер ветвит архив сам. */
   readonly canMutate: boolean;
   /** «Основной объект» доступен тарифу (платный, канон резолюции #584). */
   readonly canPin: boolean;
+  /** Участник чужого объекта (#703): строка «Покинуть объект». */
+  readonly canLeave: boolean;
+  /** Жизненный цикл — архив/возврат/удаление (canLifecycle, зеркало
+   * sharedpolicy.CanLifecycle): только владелец. Участнику эти строки не
+   * рисуются — сервер отвечает 403, а мёртвых кнопок быть не должно
+   * (приёмка #757, решение владельца). */
+  readonly canLifecycle: boolean;
 };
 
 /** Секция «Управление» (Figma 1554:98469, активный): контекстный список
  * действий по статусу, аренде и пину. Без «Экспортировать объект» —
- * решение владельца 10.09. Архивный владелец (read-only, ADR 0028):
- * вернуть из архива, совместный доступ, удаление. Смотрящий — только
- * совместный доступ. `canMutate` здесь РОЛЕВОЙ (владелец/участник против
- * смотрящего) — в отличие от canMutateProperty, архив его не гасит. */
+ * решение владельца 10.09. Архив/удаление — только владельцу
+ * (canLifecycle; участнику 403 — приёмка #757). Архивный владелец
+ * (read-only, ADR 0028): вернуть из архива, совместный доступ, удаление.
+ * Смотрящий (макет 2235-100370, тикет #703): об объекте, совместный
+ * доступ, покинуть объект — без «Сделать основным» из макета (мутация
+ * чужого объекта; расхождение макета с тикетом — вопрос приёмки).
+ * `canMutate` здесь РОЛЕВОЙ (владелец/участник против смотрящего) — в
+ * отличие от propertyPermissions().canEdit, архив его не гасит. */
 export function buildPropertyManageActions(
   input: PropertyManageInput,
 ): ReadonlyArray<PropertyDetailAction> {
-  const { status, hasRental, isPinned, canMutate, canPin } = input;
+  const { status, hasRental, isPinned, canMutate, canPin, canLeave, canLifecycle } = input;
 
   if (!canMutate) {
-    return [action('access', 'Совместный доступ', false)];
+    // Смотрящий без контекста доступа — страховка «только чтение»,
+    // строка выхода не рисуется.
+    return canLeave
+      ? [
+          action('about', 'Об объекте', false),
+          action('access', 'Совместный доступ', false),
+          action('leave', 'Покинуть объект', true),
+        ]
+      : [action('about', 'Об объекте', false), action('access', 'Совместный доступ', false)];
   }
 
   if (status === 'archived') {
-    return [
+    if (!canLifecycle) {
+      // Архивный объект участника: возврат/удаление владельческие —
+      // остаются чтение доступа и выход.
+      return canLeave
+        ? [
+            action('access', 'Совместный доступ', false),
+            action('leave', 'Покинуть объект', true),
+          ]
+        : [action('access', 'Совместный доступ', false)];
+    }
+    const archived: PropertyDetailAction[] = [
       action('unarchive', 'Вернуть из архива', false),
       action('access', 'Совместный доступ', false),
-      action('delete', 'Удалить объект', true),
     ];
+    if (canLeave) archived.push(action('leave', 'Покинуть объект', true));
+    archived.push(action('delete', 'Удалить объект', true));
+    return archived;
   }
 
   const items: PropertyDetailAction[] = [action('edit', 'Редактировать объект', false)];
@@ -170,15 +208,14 @@ export function buildPropertyManageActions(
     hasRental
       ? action('complete-rental', 'Завершить аренду', false)
       : action('start-rental', 'Начать аренду', false),
-  );
-  items.push(
     status === 'maintenance'
       ? action('finish-maintenance', 'Завершить ремонт', false)
       : action('start-maintenance', 'Объект на ремонте', false),
-    action('archive', 'Перевести в архив', false),
-    action('access', 'Совместный доступ', false),
-    action('delete', 'Удалить объект', true),
   );
+  if (canLifecycle) items.push(action('archive', 'Перевести в архив', false));
+  items.push(action('access', 'Совместный доступ', false));
+  if (canLeave) items.push(action('leave', 'Покинуть объект', true));
+  if (canLifecycle) items.push(action('delete', 'Удалить объект', true));
   return items;
 }
 

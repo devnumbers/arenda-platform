@@ -239,6 +239,13 @@
     --color-error: var(--dl-error);
     --color-success: var(--dl-success);
 
+    /* Warning-подложка чипов «Превышен лимит объектов» и жёлтой карточки
+       участника: значение из макетов 2036-83108/84861 (#FFB900 @ 10%).
+       Легаси --color-warning-bg из tokens.css (:root) лежит вне @theme,
+       поэтому утилита bg-warning-bg не генерировалась и warning-чипы
+       рисовались прозрачными (вскрылось на приёмке #756). */
+    --color-warning-bg: rgba(255, 185, 0, 0.1);
+
     --color-overlay: var(--dl-overlay);
     --color-input-border: var(--dl-input-border);
 

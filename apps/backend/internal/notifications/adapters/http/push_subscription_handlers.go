@@ -73,6 +73,8 @@ func (h *PushSubscriptionHandlers) CreatePushSubscription(w http.ResponseWriter,
 		P256dh:         body.P256dh,
 		Auth:           body.Auth,
 		ExpirationTime: body.ExpirationTime,
+		Enabled:        body.Enabled,
+		Categories:     categoriesFromOpenAPIPtr(body.Categories),
 	})
 	if err != nil {
 		if errors.Is(err, notificationsapp.ErrInvalidPushSubscription) {
@@ -124,9 +126,22 @@ func (h *PushSubscriptionHandlers) DeletePushSubscription(w http.ResponseWriter,
 
 func pushSubscriptionResponse(sub notificationsdomain.PushSubscription) openapi.PushSubscriptionResponse {
 	return openapi.PushSubscriptionResponse{
-		Id:        sub.ID,
-		Endpoint:  sub.Endpoint,
-		CreatedAt: sub.CreatedAt,
-		UpdatedAt: sub.UpdatedAt,
+		Id:         sub.ID,
+		Endpoint:   sub.Endpoint,
+		Enabled:    sub.Enabled,
+		Categories: categoriesToOpenAPI(sub.Categories),
+		CreatedAt:  sub.CreatedAt,
+		UpdatedAt:  sub.UpdatedAt,
 	}
+}
+
+// categoriesFromOpenAPIPtr maps the optional request categories: nil keeps
+// the all-on default (решение #738 — the browser re-applies its held state
+// on every subscribe).
+func categoriesFromOpenAPIPtr(p *openapi.NotificationCategoryPreferences) *notificationsdomain.CategoryPrefs {
+	if p == nil {
+		return nil
+	}
+	categories := categoriesFromOpenAPI(*p)
+	return &categories
 }

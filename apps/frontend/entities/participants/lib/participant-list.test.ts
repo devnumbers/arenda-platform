@@ -1,0 +1,68 @@
+import { describe, expect, it } from 'vitest';
+import type { Participant } from '../model/types';
+import {
+  filterParticipantsByQuery,
+  sortParticipantsByName,
+} from './participant-list';
+
+function participant(id: string, displayName: string | undefined, email: string | undefined): Participant {
+  return {
+    id,
+    userId: displayName === undefined ? undefined : id,
+    email,
+    displayName,
+    aggregateStatus: 'all_properties',
+    accessiblePropertiesCount: 1,
+    properties: [],
+  };
+}
+
+const maria = participant('id-maria', 'Мария Петрова', 'maria@example.com');
+const sergey = participant('id-sergey', 'Сергей Сидоров', 'sergey@mail.ru');
+const pending = participant('invitee@example.com', undefined, 'invitee@example.com');
+
+describe('sortParticipantsByName — чип-сортировка «Имя»', () => {
+  it('asc — русская коллация по титулу строки (у pending — почта)', () => {
+    const sorted = sortParticipantsByName([sergey, pending, maria], 'asc');
+
+    expect(sorted.map((p) => p.id)).toEqual(['id-maria', 'id-sergey', 'invitee@example.com']);
+  });
+
+  it('desc — обратный порядок, исходный список не мутируется', () => {
+    const source = [maria, sergey];
+    const sorted = sortParticipantsByName(source, 'desc');
+
+    expect(sorted.map((p) => p.id)).toEqual(['id-sergey', 'id-maria']);
+    expect(source.map((p) => p.id)).toEqual(['id-maria', 'id-sergey']);
+  });
+
+  it('регистр не важен («анна» до «Мария»)', () => {
+    const anna = participant('id-anna', 'анна бирюкова', 'anna@example.com');
+    const sorted = sortParticipantsByName([maria, anna], 'asc');
+
+    expect(sorted[0]?.id).toBe('id-anna');
+  });
+});
+
+describe('filterParticipantsByQuery — клиентский поиск (иконка в шапке, объём мал)', () => {
+  it('пустой запрос (и из пробелов) возвращает весь список', () => {
+    const list = [maria, sergey];
+
+    expect(filterParticipantsByQuery(list, '')).toEqual(list);
+    expect(filterParticipantsByQuery(list, '   ')).toEqual(list);
+  });
+
+  it('ищет подстрокой без регистра по имени', () => {
+    expect(filterParticipantsByQuery([maria, sergey], 'петр')).toEqual([maria]);
+    expect(filterParticipantsByQuery([maria, sergey], 'ПЕТРОВА')).toEqual([maria]);
+  });
+
+  it('ищет по почте — у зарегистрированных и у pending-строк', () => {
+    expect(filterParticipantsByQuery([maria, sergey, pending], 'mail.ru')).toEqual([sergey]);
+    expect(filterParticipantsByQuery([maria, sergey, pending], 'invitee@')).toEqual([pending]);
+  });
+
+  it('без совпадений — пустой список', () => {
+    expect(filterParticipantsByQuery([maria], 'александр')).toEqual([]);
+  });
+});

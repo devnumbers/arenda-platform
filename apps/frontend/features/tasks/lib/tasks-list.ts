@@ -13,6 +13,7 @@ import {
   type IsoDate,
   type Task,
 } from '@/entities/task';
+import { parseEnumParam } from '@/shared/lib/parse-enum-param';
 
 export type TasksSortField = 'date' | 'title';
 export type TasksSortDirection = 'asc' | 'desc';
@@ -24,6 +25,36 @@ export type TasksSort = {
 };
 
 export const DEFAULT_TASKS_SORT: TasksSort = { field: 'date', direction: 'asc' };
+
+/** Разбор ?sort=&order= экранов задач (конвенция состояния в адресе):
+ * неизвестные и отсутствующие значения — дефолт («Дата, asc»). Выбор
+ * живёт в адресе — переживает перезагрузку (#785). */
+export function parseTasksSortParams(
+  sort: string | string[] | undefined,
+  order: string | string[] | undefined,
+): TasksSort {
+  return {
+    field: parseEnumParam(sort, ['date', 'title'], DEFAULT_TASKS_SORT.field),
+    direction: parseEnumParam(order, ['asc', 'desc'], DEFAULT_TASKS_SORT.direction),
+  };
+}
+
+/** Собственные параметры сортировки задач в адресе — знание этого модуля;
+ * писатель (useTasksSort) импортирует отсюда. */
+export const TASKS_SORT_PARAMS = ['sort', 'order'] as const;
+
+/** Сериализация сортировки в адрес: дефолтные значения параметров
+ * не создают (конвенция состояния в адресе). */
+export function serializeTasksSortToParams(sort: TasksSort): Record<string, string> {
+  const params: Record<string, string> = {};
+  if (sort.field !== DEFAULT_TASKS_SORT.field) {
+    params.sort = sort.field;
+  }
+  if (sort.direction !== DEFAULT_TASKS_SORT.direction) {
+    params.order = sort.direction;
+  }
+  return params;
+}
 
 export type TaskSectionKind =
   | 'overdue'

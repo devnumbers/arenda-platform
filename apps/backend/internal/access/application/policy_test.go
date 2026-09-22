@@ -70,6 +70,10 @@ func (f fakeMemberRepo) ListByUser(context.Context, uuid.UUID) ([]domain.Members
 	panic("not implemented")
 }
 
+func (f fakeMemberRepo) ListForRemovalByUser(context.Context, uuid.UUID, uuid.UUID) ([]domain.Membership, error) {
+	panic("not implemented")
+}
+
 func (f fakeMemberRepo) UpdateRole(context.Context, uuid.UUID, uuid.UUID, domain.Role) (domain.Membership, error) {
 	panic("not implemented")
 }
@@ -87,10 +91,6 @@ func (f fakeMemberRepo) ListSuspendedByUser(context.Context, uuid.UUID) ([]domai
 }
 
 func (f fakeMemberRepo) CountActiveByUser(context.Context, uuid.UUID) (int, error) {
-	panic("not implemented")
-}
-
-func (f fakeMemberRepo) CountSuspendedByUser(context.Context, uuid.UUID) (int, error) {
 	panic("not implemented")
 }
 

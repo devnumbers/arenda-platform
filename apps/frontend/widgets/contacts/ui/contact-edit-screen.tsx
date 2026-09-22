@@ -18,7 +18,8 @@ import {
   type ContactFormFields,
 } from '@/features/contacts';
 import type { Contact } from '@/entities/contact';
-import { canMutateProperty, useProperty } from '@/features/properties';
+import { useProperty } from '@/features/properties';
+import { propertyPermissions } from '@/entities/property';
 import {
   Button,
   IconButton,
@@ -92,11 +93,11 @@ export function ContactEditScreen({
   // последняя инстанция, как на правке платежей.
   const canEdit =
     propertyId !== undefined
-      ? canMutateProperty(contextProperty)
+      ? propertyPermissions(contextProperty).canEdit
       : contact === undefined
         ? false
         : contact.propertyId !== undefined
-          ? canMutateProperty(boundProperty)
+          ? propertyPermissions(boundProperty).canEdit
           : true;
 
   if (loading) {

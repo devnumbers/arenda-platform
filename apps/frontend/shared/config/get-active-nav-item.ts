@@ -1,6 +1,24 @@
 import type { NavSection } from './navigation';
 import { allNavSections } from './navigation';
 
+/** Страницы вне префикса своего раздела, которые он подсвечивает: экран
+ * «Настроить уведомления» живёт в дереве профиля, а подсвечивает
+ * «Уведомления» — правило #558 и правило пилюль #561 (#746). */
+const SECTION_ALIASES: ReadonlyArray<readonly [prefix: string, sectionId: string]> = [
+  ['/profile/notifications', 'notifications'],
+];
+
+function matchesSection(pathname: string, section: NavSection): boolean {
+  if (pathname === section.href || pathname.startsWith(`${section.href}/`)) {
+    return true;
+  }
+  return SECTION_ALIASES.some(
+    ([prefix, sectionId]) =>
+      sectionId === section.id &&
+      (pathname === prefix || pathname.startsWith(`${prefix}/`)),
+  );
+}
+
 /** Активный раздел навигации по URL — единые правила активности хрома
  * (карта #556, тикет #558). Совпадение — точный адрес или его префикс
  * с границей сегмента (`/tasks` → и `/tasks/new`); из совпавших побеждает
@@ -20,7 +38,7 @@ export function getActiveNavItem(
     // Пункты-действия без маршрута («Поддержка», #766) не подсвечиваются:
     // им нечем совпасть с URL.
     if (href === undefined) continue;
-    const matches = pathname === href || pathname.startsWith(`${href}/`);
+    const matches = matchesSection(pathname, section);
 
     if (matches && href.length > activeLength) {
       active = section;

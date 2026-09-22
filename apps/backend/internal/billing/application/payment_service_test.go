@@ -970,6 +970,163 @@ func TestWebhook_SucceededAppliesUpgrade(t *testing.T) {
 	}
 }
 
+// TestWebhook_SucceededUpgradeRecoversSuspendedSlots proves the recipient
+// upgrade tail of the success-application seam (issue #695): a payment that
+// raised the tariff limit recovers the recipient's suspended shared
+// memberships FIFO through the access bridge, in the finalizing transaction.
+// The enforcement audit trigger names the direction: a raised limit is
+// recorded as tariff_upgrade, never as a downgrade (issue #767 — the #760
+// walkthrough caught a Pro→Business upgrade writing renewal_downgrade).
+func TestWebhook_SucceededUpgradeRecoversSuspendedSlots(t *testing.T) {
+	t.Parallel()
+	h := newPaymentHarness(t)
+	slots := &fakeSlotSource{}
+	h.payments.SetLifecycleBridges(nil, slots)
+
+	sub := h.seedSubscription(t, nil)
+	h.seedSucceededUpgrade(t, sub)
+
+	if got := slots.recovered(); len(got) != 1 || got[0] != sub.UserID {
+		t.Errorf("recover calls = %v, want one recover of the upgraded user %s", got, sub.UserID)
+	}
+	if got := slots.recorded(); len(got) != 1 || got[0] != triggerTariffUpgrade {
+		t.Errorf("enforce calls = %v, want one %q after the upgrade", got, triggerTariffUpgrade)
+	}
+}
+
+// TestTariffChangeTriggerFollowsDirection pins the audit-trigger mapping of
+// the payment-applied enforcement to the shared tariff comparison
+// (ClassifyTariffChange, issue #695): lowered limit keeps the existing
+// renewal_downgrade label, raised limit gets tariff_upgrade, and distinct
+// tariffs that compare equal get the neutral tariff_change.
+func TestTariffChangeTriggerFollowsDirection(t *testing.T) {
+	t.Parallel()
+	basic := domain.Tariff{
+		ID:                  uuid.MustParse("11111111-1111-4111-8111-111111111111"),
+		Name:                domain.TariffBasic,
+		ActivePropertyLimit: 5,
+		MonthlyPriceKopecks: 1000,
+		YearlyPriceKopecks:  10000,
+	}
+	pro := domain.Tariff{
+		ID:                  uuid.MustParse("22222222-2222-4222-8222-222222222222"),
+		Name:                domain.TariffPro,
+		ActivePropertyLimit: 50,
+		MonthlyPriceKopecks: 5000,
+		YearlyPriceKopecks:  50000,
+	}
+	business := domain.Tariff{
+		ID:                  uuid.MustParse("33333333-3333-4333-8333-333333333333"),
+		Name:                domain.TariffBusiness,
+		ActivePropertyLimit: domain.UnlimitedPropertyLimit,
+		MonthlyPriceKopecks: 10000,
+		YearlyPriceKopecks:  100000,
+	}
+	distinctSameAsPro := domain.Tariff{
+		ID:                  uuid.MustParse("44444444-4444-4444-8444-444444444444"),
+		Name:                domain.TariffPro,
+		ActivePropertyLimit: 50,
+		MonthlyPriceKopecks: 5000,
+		YearlyPriceKopecks:  50000,
+	}
+
+	cases := []struct {
+		name              string
+		previous, applied domain.Tariff
+		want              string
+	}{
+		{"downgrade keeps renewal_downgrade", pro, basic, triggerRenewalDowngrade},
+		{"upgrade gets tariff_upgrade", pro, business, triggerTariffUpgrade},
+		{"equal-priced distinct tariffs get the neutral label", pro, distinctSameAsPro, triggerTariffChange},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := tariffChangeTrigger(tc.previous, tc.applied); got != tc.want {
+				t.Errorf("tariffChangeTrigger() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestWebhook_SucceededRenewalSkipsSlotRecovery proves the recovery is the
+// upgrade tail only: a same-tariff renewal switches no tariff, so neither the
+// enforcement nor the recovery of recipient slots runs.
+func TestWebhook_SucceededRenewalSkipsSlotRecovery(t *testing.T) {
+	t.Parallel()
+	h := newPaymentHarness(t)
+	slots := &fakeSlotSource{}
+	h.payments.SetLifecycleBridges(nil, slots)
+
+	graceUntil := h.now.Add(24 * time.Hour)
+	sub := h.seedSubscription(t, func(s *domain.Subscription) {
+		s.Status = domain.SubscriptionStatusGrace
+		s.ValidUntil = &graceUntil
+	})
+	result, err := h.subs.ChangeTariff(t.Context(), sub.UserID, ChangeTariffRequest{
+		TariffName: domain.TariffPro,
+		Period:     domain.PeriodMonth,
+	})
+	if err != nil {
+		t.Fatalf("ChangeTariff(renewal) error = %v", err)
+	}
+	payment, err := h.stores.payments.GetByID(t.Context(), result.PaymentID)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+	if err := h.webhookSucceeded(t, payment); err != nil {
+		t.Fatalf("HandleWebhook() error = %v", err)
+	}
+
+	if got := slots.recovered(); len(got) != 0 {
+		t.Errorf("recover calls = %v, want none on a same-tariff renewal", got)
+	}
+	if got := slots.recorded(); len(got) != 0 {
+		t.Errorf("enforce calls = %v, want none on a same-tariff renewal", got)
+	}
+}
+
+// TestWebhook_SucceededDowngradeSkipsSlotRecovery proves the recovery does not
+// run when the applied payment lowers the limit: the enforcement side still
+// suspends the excess, and nothing suspended comes back.
+func TestWebhook_SucceededDowngradeSkipsSlotRecovery(t *testing.T) {
+	t.Parallel()
+	h := newPaymentHarness(t)
+	slots := &fakeSlotSource{}
+	h.payments.SetLifecycleBridges(nil, slots)
+
+	sub := h.seedSubscription(t, nil)
+	payment, err := domain.NewSubscriptionPayment(
+		sub.UserID, sub.ID, h.tariffID(t, domain.TariffBasic),
+		domain.PeriodMonth, 99000, testProviderFake, h.now)
+	if err != nil {
+		t.Fatalf("NewSubscriptionPayment() error = %v", err)
+	}
+	if err := payment.SaveProviderReference("stub_downgrade", "https://pay.example/downgrade", h.now); err != nil {
+		t.Fatalf("SaveProviderReference() error = %v", err)
+	}
+	if _, err := h.stores.payments.Create(t.Context(), payment); err != nil {
+		t.Fatalf("seed Create() error = %v", err)
+	}
+	if err := h.webhookSucceeded(t, payment); err != nil {
+		t.Fatalf("HandleWebhook() error = %v", err)
+	}
+
+	stored, err := h.stores.subscriptions.GetByUserID(t.Context(), sub.UserID)
+	if err != nil {
+		t.Fatalf("GetByUserID() error = %v", err)
+	}
+	if stored.TariffID != h.tariffID(t, domain.TariffBasic) {
+		t.Fatalf("tariff = %s, want the downgraded basic", stored.TariffID)
+	}
+	if got := slots.recovered(); len(got) != 0 {
+		t.Errorf("recover calls = %v, want none on a downgrade", got)
+	}
+	if got := slots.recorded(); len(got) != 1 || got[0] != triggerRenewalDowngrade {
+		t.Errorf("enforce calls = %v, want one %q on a downgrade", got, triggerRenewalDowngrade)
+	}
+}
+
 // TestWebhook_SucceededAppliesGraceRenewal proves a succeeded same-tariff
 // payment in grace renews the subscription from the payment moment (grace is
 // not paid time and must not be gifted) and reactivates it. Migrated from the

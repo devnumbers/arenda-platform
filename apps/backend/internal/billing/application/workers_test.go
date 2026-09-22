@@ -209,11 +209,13 @@ func (s *fakeArchiverSource) restoreCalls() []restoreCall {
 	return append([]restoreCall(nil), s.restores...)
 }
 
-// fakeSlotSource records enforce calls for the lifecycle-bridge tests.
+// fakeSlotSource records enforce and recover calls for the lifecycle-bridge
+// tests.
 type fakeSlotSource struct {
-	mu    sync.Mutex
-	calls []string
-	err   error
+	mu       sync.Mutex
+	calls    []string
+	recovers []uuid.UUID
+	err      error
 }
 
 func (s *fakeSlotSource) WithTx(transaction.Tx) (RecipientSlotEnforcer, error) {
@@ -229,10 +231,23 @@ func (e fakeSlots) Enforce(_ context.Context, _ uuid.UUID, trigger string) error
 	return e.src.err
 }
 
+func (e fakeSlots) Recover(_ context.Context, userID uuid.UUID) error {
+	e.src.mu.Lock()
+	defer e.src.mu.Unlock()
+	e.src.recovers = append(e.src.recovers, userID)
+	return e.src.err
+}
+
 func (s *fakeSlotSource) recorded() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]string(nil), s.calls...)
+}
+
+func (s *fakeSlotSource) recovered() []uuid.UUID {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]uuid.UUID(nil), s.recovers...)
 }
 
 // workersHarness wires Workers over the in-memory fakes and a scripted

@@ -13,6 +13,7 @@ import {
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { useDebounce } from '@/shared/lib/hooks/useDebounce';
+import { useUrlParams } from '@/shared/lib/hooks/use-url-params';
 import {
   ContactRowButton,
   contactSortByName,
@@ -20,7 +21,8 @@ import {
   type ContactSortOrder,
 } from '@/entities/contact';
 import { useContacts } from '@/features/contacts';
-import { canMutateProperty, useProperty } from '@/features/properties';
+import { useProperty } from '@/features/properties';
+import { propertyPermissions } from '@/entities/property';
 import {
   Button,
   ChipButton,
@@ -41,6 +43,11 @@ import {
   ContactsSearchHint,
   ContactsSkeleton,
 } from './contacts-states';
+import {
+  CONTACT_ORDER_PARAMS,
+  DEFAULT_CONTACT_LIST_ORDER,
+  serializeContactOrderToParams,
+} from '../lib/contact-list-model';
 
 /** Задержка дебаунса поиска (мс) — серверный фильтр по ?search=. */
 const SEARCH_DEBOUNCE_MS = 300;
@@ -55,7 +62,8 @@ const SEARCH_DEBOUNCE_MS = 300;
  * открывает меню сортировки (механика меню задач, Figma 1603-94487 —
  * выбор применяет и закрывает), на мобильной ширине — шит А→Я / Я→А
  * (клиентская, макет 1539:85395; выбор применяет, шит остаётся открытым —
- * как в задачах). Пустой список — иллюстрация
+ * как в задачах). Направление живёт в адресе (?order=, дефолт не пишется,
+ * #785) — переживает перезагрузку. Пустой список — иллюстрация
  * «Контактов нет»; в поиске — подсказка по началу и «Такого контакта нет».
  * Полноширинная кнопка «Добавить контакт» — тому, кто может мутировать
  * (как у платежей: не смотрящий и не архив, #446); ведёт на создание —
@@ -63,16 +71,28 @@ const SEARCH_DEBOUNCE_MS = 300;
  */
 export function ContactsOfPropertyScreen({
   propertyId,
+  initialOrder,
 }: {
   readonly propertyId: string;
+  readonly initialOrder?: ContactSortOrder;
 }): JSX.Element {
   const router = useRouter();
+  const { write } = useUrlParams();
   const propertyQuery = useProperty(propertyId);
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const [sortOrder, setSortOrder] = useState<ContactSortOrder>('asc');
+  const [sortOrder, setSortOrder] = useState<ContactSortOrder>(
+    initialOrder ?? DEFAULT_CONTACT_LIST_ORDER,
+  );
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Направление сортировки живёт в адресе (?order=desc, дефолт «А→Я»
+  // не пишется — конвенция состояния в адресе, #785).
+  const changeOrder = (order: ContactSortOrder): void => {
+    setSortOrder(order);
+    write(serializeContactOrderToParams(order), { own: CONTACT_ORDER_PARAMS });
+  };
 
   // Открытие поиска сразу делает поле активным (программный фокус —
   // устоявшийся a11y-паттерн вместо autoFocus, как на платёжных экранах).
@@ -99,7 +119,7 @@ export function ContactsOfPropertyScreen({
   // объект не загружен или не загрузился — без кнопки.
   const property = propertyQuery.isSuccess ? propertyQuery.data : undefined;
   // Мутационный вход — общий предикат (платежи #446/история 47, контакты #508).
-  const canMutate = canMutateProperty(property);
+  const canMutate = propertyPermissions(property).canEdit;
 
   const closeSearch = (): void => {
     setSearchOpen(false);
@@ -169,7 +189,7 @@ export function ContactsOfPropertyScreen({
         ) : (
           <>
             <div className="mx-6 mb-6">
-              <PickerMenu title="Сортировать" groups={orderPickerGroups(sortOrder, setSortOrder)}>
+              <PickerMenu title="Сортировать" groups={orderPickerGroups(sortOrder, changeOrder)}>
                 <ContactsSortChip order={sortOrder} />
               </PickerMenu>
             </div>

@@ -7,7 +7,6 @@ import {notify} from '@/shared/lib/notifications';
 import {goBack} from '@/shared/lib/navigation';
 import {ROUTES} from '@/shared/config/routes';
 import {
-  canMutateProperty,
   propertyTypeLabels,
   useArchiveProperty,
   useDeleteProperty,
@@ -17,6 +16,8 @@ import {
   useUnarchiveProperty,
   useUpdateProperty,
 } from '@/features/properties';
+import { propertyPermissions } from '@/entities/property';
+import { useLeaveProperty } from '@/features/participants';
 import {useRentals, currentRentalOf, useCompleteRental} from '@/features/rentals';
 import {
   operationsMonthOf,
@@ -53,6 +54,7 @@ import {
   type PropertyDetailSectionKey,
 } from '../lib/property-sections';
 import {propertyPaymentGroups} from '../lib/payments-strip';
+import {propertySectionCta} from '../lib/property-section-cta';
 import {operationsSectionTitle} from '../lib/operations-section';
 import {propertyDetailTasks} from '../lib/detail-tasks';
 import {propertyApartmentSummaryRows} from '../lib/apartment-summary';
@@ -76,8 +78,10 @@ import {
   PropertyStatusSheet,
 } from './PropertyDetailActions';
 import {PropertyDetailKebab} from './PropertyDetailKebab';
-import {PropertySharingModal} from './PropertySharingModal';
-import {PropertySharedBanner} from './PropertySharedBanner';
+import {PropertyAccessPill} from './PropertyAccessPill';
+import {PropertyArchivedPill} from './PropertyArchivedPill';
+import {propertyHeaderPills} from '../lib/property-header-pills';
+import {PropertyOwnerSection} from './PropertyOwnerSection';
 import {PropertyDetailLoading} from './PropertyDetailLoading';
 import {PropertyDetailError} from './PropertyDetailError';
 import {PropertyNotFoundScreen} from './PropertyNotFoundScreen';
@@ -152,9 +156,14 @@ export function PropertyDetailPage(): JSX.Element {
     // Количество активных объектов живёт только в списочном ответе (#584) —
     // читаем из общего кэша хаба/лендинга ради выбора набора пустых.
     const listQuery = usePropertiesWithMeta();
+    // Гейт #769: property-scoped запросы секций стартуют только после
+    // успеха детали — на упавшей детали (404 / 403 membership_suspended)
+    // гард deep-link показывается сразу, и зависимые запросы не
+    // простреливают 404-волнами по нечитаемому объекту.
+    const propertyLoaded = propertyQuery.isSuccess;
     // Текущая (незавершённая) аренда — источник блока «Аренда» (#589) и
     // арендатора в «Контактах»; точный источник — аренды самого объекта.
-    const rentalsQuery = useRentals(id);
+    const rentalsQuery = useRentals(id, { enabled: propertyLoaded });
     const subscriptionQuery = useSubscription();
 
     // Данные секций (#589): правила платежей с точками просрочки, сводка
@@ -162,8 +171,8 @@ export function PropertyDetailPage(): JSX.Element {
     // сводкой и «Операций еще не было», как на экране операций), контакты
     // объекта и активные задачи.
     const today = clientTodayIso();
-    const paymentsQuery = usePayments(id);
-    const overdueQuery = usePropertyOverdueOperations(id);
+    const paymentsQuery = usePayments(id, '', { enabled: propertyLoaded });
+    const overdueQuery = usePropertyOverdueOperations(id, '', { enabled: propertyLoaded });
     // Сводка секции «Операции в <месяц>» — за текущий календарный месяц
     // (карта #669: сводка объекта месячная и после дефолта «весь период»
     // на лентах); границы берутся напрямую из модели месяца.
@@ -173,13 +182,13 @@ export function PropertyDetailPage(): JSX.Element {
         order: 'desc',
         dateFrom: operationsPeriod.from,
         dateTo: operationsPeriod.to,
-    });
+    }, { enabled: propertyLoaded });
     const operationsEverQuery = usePropertyOperationsSummary(id, {
         status: 'paid',
         order: 'desc',
-    });
-    const contactsQuery = useContacts(id);
-    const tasksQuery = useActiveTasks(id);
+    }, { enabled: propertyLoaded });
+    const contactsQuery = useContacts(id, '', { enabled: propertyLoaded });
+    const tasksQuery = useActiveTasks(id, { enabled: propertyLoaded });
     const completeTask = useCompleteTask(id);
     const uncompleteTask = useUncompleteTask(id);
 
@@ -188,6 +197,7 @@ export function PropertyDetailPage(): JSX.Element {
     const unarchiveProperty = useUnarchiveProperty();
     const setPin = useSetPropertyPin();
     const deleteProperty = useDeleteProperty();
+    const leaveProperty = useLeaveProperty();
 
     const [statusSheetOpen, setStatusSheetOpen] = React.useState(false);
     // Guard #628: какое статусное действие запросено из-под гарда; null —
@@ -202,9 +212,15 @@ export function PropertyDetailPage(): JSX.Element {
     const [pinSheetOpen, setPinSheetOpen] = React.useState(false);
     const [archiveOpen, setArchiveOpen] = React.useState(false);
     const [deleteOpen, setDeleteOpen] = React.useState(false);
-    const [sharingOpen, setSharingOpen] = React.useState(false);
+    // Шит выхода участника (#703, макет 2235-100370): «Управление» →
+    // «Покинуть объект» — канон-подтверждение #701 и возврат к объектам.
+    const [leaveOpen, setLeaveOpen] = React.useState(false);
 
     const property = propertyQuery.data;
+    // Пилюли шапки (#773): «В архиве» у архивного объекта (признак для
+    // любого читателя — чужой архивный живёт только deep-link'ом) и роль
+    // доступа у чужого.
+    const headerPills = propertyHeaderPills(property);
 
     const currentRental = rentalsQuery.data
         ? currentRentalOf(rentalsQuery.data)
@@ -246,15 +262,15 @@ export function PropertyDetailPage(): JSX.Element {
     // набор (первый объект); правило переключения наборов — на приёмке.
     const emptySet = resolvePropertyDetailEmptySet(listQuery.data?.items.length ?? 1);
 
-    const canMutate = canMutateProperty(propertyQuery.isSuccess ? property : undefined);
-    // Для «Управления» роль важна без статуса: архивный владелец видит
-    // «Вернуть из архива» и удаление (canMutateProperty гасит и архив —
-    // его смысл для CTA-кнопок секций, не для этого списка).
-    const roleCanMutate =
-        property?.access !== undefined && property.access.role !== 'viewer';
-    // Мутации задач (кружок/правка) — без зрителя и архива (контракт #569,
-    // как на экране задач объекта).
-    const canMutateTasks = roleCanMutate && property.status !== 'archived';
+    // Центральные права объекта (#703): «Управление»/кебаб — ролевой
+    // canManageMembers (билдеры ветвят архив сами: архивный владелец
+    // видит «Вернуть из архива» и удаление), «Покинуть объект» — canLeave.
+    // Create-CTA пустых секций — шов propertySectionCta (#774): зритель
+    // не видит их вовсе, архив глушит (#773).
+    const permissions = propertyPermissions(
+        propertyQuery.isSuccess ? property : undefined,
+    );
+    const sectionCta = propertySectionCta(permissions);
     // «Основной объект» — платная возможность: базовому тарифу в шапке
     // звезда апселла, строк пина в «Управлении» нет.
     const isPaid = subscriptionQuery.data
@@ -267,12 +283,14 @@ export function PropertyDetailPage(): JSX.Element {
             status: property.status,
             hasRental,
             isPinned,
-            canMutate: roleCanMutate,
-            canPin: isPaid && roleCanMutate,
+            canMutate: permissions.canManageMembers,
+            canPin: isPaid && permissions.canManageMembers,
+            canLeave: permissions.canLeave,
+            canLifecycle: permissions.canLifecycle,
         })
         : [];
     const statusSheetItems = property
-        ? buildPropertyStatusSheetItems(property.status, hasRental)
+        ? buildPropertyStatusSheetItems(property.status, hasRental, permissions.canLifecycle)
         : [];
 
     const handleArchive = () => {
@@ -431,12 +449,29 @@ export function PropertyDetailPage(): JSX.Element {
                 });
                 break;
             case 'access':
-                setSharingOpen(true);
+                router.push(ROUTES.propertyParticipants(id));
+                break;
+            case 'leave':
+                setLeaveOpen(true);
                 break;
             case 'delete':
                 setDeleteOpen(true);
                 break;
         }
+    };
+
+    // Выход участника (#703): подтверждение — канон #701 (2010-132970),
+    // успех — тост и возврат к списку объектов (попап #701 живёт в срезе
+    // участников, чужой слайс-виджет сюда не импортируется).
+    const handleLeave = () => {
+        leaveProperty.mutate(id, {
+            onSuccess: () => {
+                setLeaveOpen(false);
+                notify.scenarios.access.leftProperty();
+                goBack(router, ROUTES.properties);
+            },
+            onError: (error) => notify.scenarios.access.leavePropertyError(error),
+        });
     };
 
     const handleDelete = () => {
@@ -496,7 +531,7 @@ export function PropertyDetailPage(): JSX.Element {
                     status !== undefined && propertyErrorKind === null ? (
                         <PropertyDetailKebab
                             status={status}
-                            canMutate={roleCanMutate}
+                            canMutate={permissions.canManageMembers}
                             onAction={handleAction}
                         />
                     ) : undefined
@@ -509,10 +544,6 @@ export function PropertyDetailPage(): JSX.Element {
             </TopNav>
 
             <PageContent className="px-6">
-                {property?.access && property.access.role !== 'owner' && (
-                    <PropertySharedBanner access={property.access}/>
-                )}
-
                 {isLoading && <PropertyDetailLoading/>}
 
                 {!isLoading && propertyErrorKind === 'not_found' && (
@@ -535,7 +566,22 @@ export function PropertyDetailPage(): JSX.Element {
 
                 {!isLoading && !propertyQuery.isError && property && (
                     <>
-                        <PropertyMediaBlock name={property.name} address={property.address}/>
+                        <PropertyMediaBlock name={property.name} address={property.address}>
+                            {/* Пилюли шапки (#773): «В архиве» и/или роль
+                             * доступа — ряд под адресом, канон 2200-97365
+                             * и 1603-92103. */}
+                            {headerPills.length > 0 && (
+                                <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                                    {headerPills.map((pill) =>
+                                        pill.kind === 'archived' ? (
+                                            <PropertyArchivedPill key="archived"/>
+                                        ) : (
+                                            <PropertyAccessPill key="access" role={pill.role}/>
+                                        ),
+                                    )}
+                                </div>
+                            )}
+                        </PropertyMediaBlock>
 
                         <PropertySectionCard
                             title="Аренда"
@@ -553,7 +599,7 @@ export function PropertyDetailPage(): JSX.Element {
                                     // шит с последующим 403 смотрителю не даёт
                                     // ничего (решение ревью #627).
                                     onComplete={
-                                        roleCanMutate
+                                        permissions.canManageMembers
                                             ? () => setCompleteSheetOpen(true)
                                             : () => router.push(ROUTES.propertyRentalComplete(id))
                                     }
@@ -562,8 +608,8 @@ export function PropertyDetailPage(): JSX.Element {
                                 <PropertySectionEmpty
                                     imageSrc={propertySectionImages.rental}
                                     copy={resolvePropertySectionEmpty('rental', emptySet, property.status)}
-                                    onCta={sectionCTAs.rental}
-                                    ctaDisabled={!canMutate}
+                                    onCta={sectionCta.visible ? sectionCTAs.rental : undefined}
+                                    ctaDisabled={sectionCta.disabled}
                                 />
                             )}
                         </PropertySectionCard>
@@ -580,8 +626,8 @@ export function PropertyDetailPage(): JSX.Element {
                                 <PropertySectionEmpty
                                     imageSrc={propertySectionImages.payments}
                                     copy={resolvePropertySectionEmpty('payments', emptySet, property.status)}
-                                    onCta={sectionCTAs.payments}
-                                    ctaDisabled={!canMutate}
+                                    onCta={sectionCta.visible ? sectionCTAs.payments : undefined}
+                                    ctaDisabled={sectionCta.disabled}
                                 />
                             )}
                         </PropertySectionCard>
@@ -621,8 +667,8 @@ export function PropertyDetailPage(): JSX.Element {
                                 <PropertySectionEmpty
                                     imageSrc={propertySectionImages.contacts}
                                     copy={resolvePropertySectionEmpty('contacts', emptySet, property.status)}
-                                    onCta={sectionCTAs.contacts}
-                                    ctaDisabled={!canMutate}
+                                    onCta={sectionCta.visible ? sectionCTAs.contacts : undefined}
+                                    ctaDisabled={sectionCta.disabled}
                                 />
                             )}
                         </PropertySectionCard>
@@ -637,7 +683,7 @@ export function PropertyDetailPage(): JSX.Element {
                                 <PropertyTasksBlock
                                     tasks={detailTasks}
                                     today={tasksToday ?? today}
-                                    canMutate={canMutateTasks}
+                                    canMutate={permissions.canEdit}
                                     togglingFor={(task) =>
                                         (completeTask.isPending || uncompleteTask.isPending)
                                         && (completeTask.variables === task.id
@@ -657,7 +703,7 @@ export function PropertyDetailPage(): JSX.Element {
                                         }
                                     }}
                                     onOpenFor={(task) => {
-                                        if (!canMutateTasks || task.status === 'completed'
+                                        if (!permissions.canEdit || task.status === 'completed'
                                             || task.ruleId === null) {
                                             return undefined;
                                         }
@@ -670,8 +716,8 @@ export function PropertyDetailPage(): JSX.Element {
                                 <PropertySectionEmpty
                                     imageSrc={propertySectionImages.tasks}
                                     copy={resolvePropertySectionEmpty('tasks', emptySet, property.status)}
-                                    onCta={sectionCTAs.tasks}
-                                    ctaDisabled={!canMutate}
+                                    onCta={sectionCta.visible ? sectionCTAs.tasks : undefined}
+                                    ctaDisabled={sectionCta.disabled}
                                 />
                             )}
                         </PropertySectionCard>
@@ -686,11 +732,18 @@ export function PropertyDetailPage(): JSX.Element {
                                 <PropertySectionEmpty
                                     imageSrc={propertySectionImages.about}
                                     copy={resolvePropertySectionEmpty('about', emptySet, property.status)}
-                                    onCta={sectionCTAs.about}
-                                    ctaDisabled={!canMutate}
+                                    onCta={sectionCta.visible ? sectionCTAs.about : undefined}
+                                    ctaDisabled={sectionCta.disabled}
                                 />
                             )}
                         </PropertySectionCard>
+
+                        {permissions.canLeave && property.access?.ownerName !== undefined && (
+                            <PropertyOwnerSection
+                                ownerName={property.access.ownerName}
+                                ownerEmail={property.access.ownerEmail}
+                            />
+                        )}
 
                         <PropertySectionCard title="Управление">
                             <PropertyManageSection
@@ -707,6 +760,23 @@ export function PropertyDetailPage(): JSX.Element {
                 onOpenChange={setStatusSheetOpen}
                 items={statusSheetItems}
                 onAction={handleAction}
+            />
+
+            {/* Выход участника (#703): канон #701 (2010-132970) — кнопки
+             * в ряд, красное «Покинуть» справа; кнопка в loading на время
+             * мутации. */}
+            <ConfirmDialog
+                open={leaveOpen}
+                onOpenChange={setLeaveOpen}
+                title="Уверены, что хотите покинуть объект?"
+                titleClassName="text-[28px] leading-8"
+                description="Вы потеряете доступ к объекту пользователя. Попросить доступ можно будет снова"
+                descriptionClassName="text-base"
+                confirmLabel="Покинуть"
+                cancelLabel="Отмена"
+                confirmVariant="danger"
+                pending={leaveProperty.isPending}
+                onConfirm={handleLeave}
             />
 
             <ConfirmDialog
@@ -818,13 +888,6 @@ export function PropertyDetailPage(): JSX.Element {
                     Будут удалены данные аренд объекта, все операции объекта, платежи, контакты и задачи, связанные с объектом. Это действие нельзя отменить
                 </p>
             </ConfirmDialog>
-
-            <PropertySharingModal
-                propertyId={id}
-                isOpen={sharingOpen}
-                onClose={() => setSharingOpen(false)}
-                isArchived={property?.status === 'archived'}
-            />
         </>
     );
 }

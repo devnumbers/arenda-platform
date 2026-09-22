@@ -5,7 +5,8 @@ import type { JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
-import { canMutateProperty, useProperty } from '@/features/properties';
+import { useProperty } from '@/features/properties';
+import { propertyPermissions } from '@/entities/property';
 import { currentRentalOf, useRentals } from '@/features/rentals';
 import type { Rental } from '@/entities/rental';
 import { Button, PageContent, Skeleton, TopNav } from '@/shared/ui/design';
@@ -34,7 +35,7 @@ export function RentalCompleteScreen({
 
   const loading = propertyQuery.isPending || rentalsQuery.isPending;
   const property = propertyQuery.isSuccess ? propertyQuery.data : undefined;
-  const canMutate = canMutateProperty(property);
+  const canMutate = propertyPermissions(property).canEdit;
   const rental = currentRentalOf(rentalsQuery.data ?? []);
   // После успешного завершения аренда уходит из незавершённых — держим
   // последний виденный экземпляр (вывод состояния во время рендера), чтобы

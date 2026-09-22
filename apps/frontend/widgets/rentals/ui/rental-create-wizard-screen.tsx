@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { Cancel } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
-import { useProperty, canMutateProperty } from '@/features/properties';
+import { useProperty } from '@/features/properties';
+import { propertyPermissions } from '@/entities/property';
 import { useRentalWizardDraft, WIZARD_TOTAL_STEPS } from '@/features/rentals';
 import { Button, IconButton, PageContent, StepsChip, TopNav } from '@/shared/ui/design';
 import { RentalAmountDayStepSkeleton } from './rental-skeletons';
@@ -37,7 +38,7 @@ export function RentalCreateWizardScreen({
 
   const loading = !draftState.isLoaded || propertyQuery.isPending;
   const property = propertyQuery.isSuccess ? propertyQuery.data : undefined;
-  const canMutate = property !== undefined && canMutateProperty(property);
+  const canMutate = property !== undefined && propertyPermissions(property).canEdit;
 
   return (
     <>

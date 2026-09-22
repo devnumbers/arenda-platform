@@ -1,7 +1,7 @@
 'use client';
 
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { clientTodayIso } from '@/entities/payment';
+import { useUrlParams } from '@/shared/lib/hooks/use-url-params';
 import {
   operationsFiltersParams,
   readOperationsFilters,
@@ -11,13 +11,17 @@ import {
 
 /**
  * Состояние фильтров период/категории в адресе страницы (#477): чтение —
- * readOperationsFilters (битые значения отбрасываются), запись — router.push,
- * поэтому «назад» по истории возвращает к списку без фильтра, а ссылка с
- * ?from=&to=&category= восстанавливает выбор. Открытие шитов историю не
- * трогает — черновик выбора живёт внутри шита. null (#674) — сброс периода:
- * from/to уходят из URL; дефолт (без параметров) на всех экранах операций
- * объекта — весь период (карта #669).
+ * readOperationsFilters (битые значения отбрасываются), запись — router.push
+ * через useUrlParams (#786), поэтому «назад» по истории возвращает к списку
+ * без фильтра, а ссылка с ?from=&to=&category= восстанавливает выбор.
+ * Открытие шитов историю не трогает — черновик выбора живёт внутри шита.
+ * null (#674) — сброс периода: from/to уходят из URL; дефолт (без
+ * параметров) на всех экранах операций объекта — весь период (карта #669).
  */
+
+/** Собственные параметры фильтров операций в адресе — знание этого модуля. */
+const FILTER_PARAMS = ['from', 'to', 'category'] as const;
+
 export function useOperationsFilters(): {
   readonly filters: OperationsFilters;
   /**
@@ -32,27 +36,15 @@ export function useOperationsFilters(): {
   ) => void;
   readonly applyCategories: (categories: ReadonlyArray<string>) => void;
 } {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const { params, write } = useUrlParams();
 
-  const filters = readOperationsFilters(searchParams, clientTodayIso());
+  const filters = readOperationsFilters(params, clientTodayIso());
 
   const apply = (next: OperationsFilters, replace: boolean): void => {
-    const params = new URLSearchParams(searchParams);
-    params.delete('from');
-    params.delete('to');
-    params.delete('category');
-    for (const [name, value] of Object.entries(operationsFiltersParams(next))) {
-      params.set(name, value);
-    }
-    const queryString = params.toString();
-    const url = queryString.length > 0 ? `${pathname}?${queryString}` : pathname;
-    if (replace) {
-      router.replace(url, { scroll: false });
-    } else {
-      router.push(url, { scroll: false });
-    }
+    write(operationsFiltersParams(next), {
+      own: FILTER_PARAMS,
+      mode: replace ? 'replace' : 'push',
+    });
   };
 
   return {

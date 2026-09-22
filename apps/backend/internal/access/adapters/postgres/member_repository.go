@@ -254,17 +254,6 @@ func (r *MembershipRepository) CountActiveByUser(ctx context.Context, userID uui
 	return int(count), nil
 }
 
-// CountSuspendedByUser returns the number of suspended memberships held by the
-// user (shared objects hidden from the recipient due to a tariff slot
-// shortage). See issue #158 (T4).
-func (r *MembershipRepository) CountSuspendedByUser(ctx context.Context, userID uuid.UUID) (int, error) {
-	count, err := r.q().CountSuspendedMembersByUser(ctx, pgconv.UUIDToPgtype(userID))
-	if err != nil {
-		return 0, err
-	}
-	return int(count), nil
-}
-
 // ListActiveByPropertyOwner returns the active memberships across all of the
 // owner's properties.
 func (r *MembershipRepository) ListActiveByPropertyOwner(ctx context.Context, ownerID uuid.UUID) ([]domain.Membership, error) {
@@ -291,6 +280,31 @@ func (r *MembershipRepository) ListActiveByUser(ctx context.Context, userID uuid
 	out := make([]domain.Membership, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, membershipFromRow(row))
+	}
+	return out, nil
+}
+
+// ListForRemovalByUser returns the person's memberships (any status, with
+// ids) on the properties the actor manages, archived included — the removal
+// scope of «Отозвать и удалить» (issue #694). The SQL scope is the
+// authorization (issue #693). The role is not part of the removal projection:
+// revoking does not read it.
+func (r *MembershipRepository) ListForRemovalByUser(ctx context.Context, personID, actorID uuid.UUID) ([]domain.Membership, error) {
+	rows, err := r.q().ListParticipantMembershipsForRemoval(ctx, postgres.ListParticipantMembershipsForRemovalParams{
+		PersonID: pgconv.UUIDToPgtype(personID),
+		ActorID:  pgconv.UUIDToPgtype(actorID),
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.Membership, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, domain.Membership{
+			ID:         pgconv.UUIDFromPgtype(row.ID),
+			PropertyID: pgconv.UUIDFromPgtype(row.PropertyID),
+			UserID:     pgconv.UUIDFromPgtype(row.UserID),
+			Status:     domainMemberStatus(row.Status),
+		})
 	}
 	return out, nil
 }

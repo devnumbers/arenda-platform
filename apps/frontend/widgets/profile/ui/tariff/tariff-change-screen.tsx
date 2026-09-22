@@ -37,6 +37,7 @@ import {
   yearlyDiscountPercent,
   yearlyPerMonthLine,
 } from '@/widgets/profile/lib/tariff-change';
+import { NO_SUBSCRIPTION } from '@/widgets/profile/lib/no-subscription';
 import { TariffFaq } from './tariff-faq';
 import { FEATURE_IMAGES } from './tariff-about-cards';
 import { PendingPaymentCta } from './pending-payment-cta';
@@ -65,11 +66,14 @@ export function TariffChangeScreen(): JSX.Element {
     refetch: refetchTariffs,
   } = useTariffs();
   const {
-    data: subscription,
+    data,
     isPending: isSubscriptionPending,
     isError: isSubscriptionError,
     refetch: refetchSubscription,
   } = useSubscription();
+  // «Подписки нет» (404 → null, #768) экран читает как базовый тариф:
+  // дефолт выбора «Год»+«Про», «Текущий» на базовом, футер «Подключен».
+  const subscription = data ?? NO_SUBSCRIPTION;
 
   if (isTariffsError || isSubscriptionError) {
     return (

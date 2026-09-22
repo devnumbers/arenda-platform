@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type JSX, type ReactNode } from 'react';
+import { type JSX, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, ChangeVertical } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
@@ -12,7 +12,12 @@ import {
 } from '@/entities/payment';
 import { paidPaymentNumber, paymentOrdinalLabel, useRentals } from '@/features/rentals';
 import { CategoryIcon, categoryStyle } from '@/features/payment-categories';
-import { groupPaidOperations, usePaymentOperationsPaged } from '@/features/payments';
+import {
+  groupPaidOperations,
+  useHistoryOrder,
+  usePaymentOperationsPaged,
+  type HistoryOrder,
+} from '@/features/payments';
 import {
   Button,
   ChipButton,
@@ -29,20 +34,24 @@ import {
  * «История операций» завершённой аренды (#535, Figma 1302:52209):
  * paid-вхождения Платежа арендной платы, группы по дате вхождения, чип
  * «Сначала новые» переключает сортировку (серверная — порядок закреплён
- * за API, порции по 50 с бесконечным скроллом — канон #452). Подзаголовок
- * строки — порядковый номер платежа: нумерация по дате от старых, итог
- * оплаченных — progress.paidMonths аренды.
+ * за API, порции по 50 с бесконечным скроллом — канон #452); направление
+ * живёт в адресе (?order=asc, дефолт не пишется, #785) — переживает
+ * перезагрузку. Подзаголовок строки — порядковый номер платежа: нумерация
+ * по дате от старых, итог оплаченных — progress.paidMonths аренды.
  */
 export function RentalHistoryScreen({
   propertyId,
   rentalId,
+  initialOrder,
 }: {
   readonly propertyId: string;
   readonly rentalId: string;
+  readonly initialOrder?: HistoryOrder;
 }): JSX.Element {
   const router = useRouter();
-  // Дефолт — сначала новые (макет); направление — часть ключа запроса.
-  const [order, setOrder] = useState<'desc' | 'asc'>('desc');
+  // Дефолт — сначала новые (макет); направление — в адресе (#785) и часть
+  // ключа запроса.
+  const { order, toggleOrder } = useHistoryOrder(initialOrder);
   const rentalsQuery = useRentals(propertyId);
   const rental = rentalsQuery.data?.find((item) => item.id === rentalId);
   const historyQuery = usePaymentOperationsPaged(
@@ -50,10 +59,6 @@ export function RentalHistoryScreen({
     rental?.rentPayment.paymentId ?? '',
     { status: 'paid', order },
   );
-
-  const toggleOrder = (): void => {
-    setOrder((current) => (current === 'desc' ? 'asc' : 'desc'));
-  };
 
   const operations = historyQuery.data ?? [];
   const groups = groupPaidOperations(operations, clientTodayIso());

@@ -11,6 +11,8 @@ import (
 const (
 	testPropertyName    = "Test"
 	testPropertyAddress = "Addr"
+	// Короткое имя объекта access-тестов (деталь и исходы доступа).
+	testObjName = "Obj"
 )
 
 // newPropertyTestFactory builds the txStoreFactory for the property service
@@ -88,7 +90,34 @@ func (f fakeOwnerNames) DisplayName(_ context.Context, userID uuid.UUID) (string
 	return f.names[userID], nil
 }
 
+// fakeOwnerEmails resolves fixed owner account emails, or fails when err is
+// set (Figma 2200-97365, the detail's owner contact row).
+type fakeOwnerEmails struct {
+	emails map[uuid.UUID]string
+	err    error
+}
+
+func (f fakeOwnerEmails) GetEmail(_ context.Context, userID uuid.UUID) (string, error) {
+	if f.err != nil {
+		return "", f.err
+	}
+	return f.emails[userID], nil
+}
+
 var (
 	_ SharedMemberships        = fakeSharedMemberships{}
 	_ OwnerDisplayNameResolver = fakeOwnerNames{}
+	_ OwnerEmailResolver       = fakeOwnerEmails{}
 )
+
+// fakeSuspendedShared serves the SuspendedSharedMemberships port with a
+// canned placeholder list (ticket #702).
+type fakeSuspendedShared struct {
+	items []SharedSuspendedMembership
+}
+
+func (f fakeSuspendedShared) SuspendedWith(context.Context, uuid.UUID) ([]SharedSuspendedMembership, error) {
+	return f.items, nil
+}
+
+var _ SuspendedSharedMemberships = fakeSuspendedShared{}

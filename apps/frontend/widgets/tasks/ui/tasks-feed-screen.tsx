@@ -15,7 +15,6 @@ import { ApiError } from '@/shared/api/errors';
 import { notify } from '@/shared/lib/notifications';
 import { useProperties } from '@/features/properties';
 import {
-  DEFAULT_TASKS_SORT,
   canMutateFeedTask,
   groupTasks,
   mutableFeedTasks,
@@ -25,6 +24,7 @@ import {
   useGlobalActiveTasks,
   useGlobalCompletedTasks,
   useTasksFeedFilter,
+  useTasksSort,
   type FeedPropertyRef,
   type TaskSection,
   type TasksSort,
@@ -65,7 +65,8 @@ import { SortChip, sortPickerGroups } from './tasks-sort';
  * канон объектного экрана (#499): границы «Сегодня»/«Завтра» считает сервер
  * по календаре читателя, порядок секций приходит плоским по сроку, строки
  * внутри сортируются клиентски (дефолт «Дата, asc» — решение 5 #522; чип
- * «Название» на макете — не дефолт). У объектных строк — строка объекта
+ * «Название» на макете — не дефолт). Выбор сортировки живёт в адресе
+ * (?sort=&order=, #785) — переживает перезагрузку. У объектных строк — строка объекта
  * (HomeMainSmall + имя, propertyName из контракта #521); тап по активной
  * объектной строке — правка на объекте, по безобъектной — плоский маршрут
  * /tasks/{ruleId}/edit (#537, решения 2–3 #522), выполненные некликабельны.
@@ -85,7 +86,11 @@ import { SortChip, sortPickerGroups } from './tasks-sort';
  * решения 7 #522). «+» — создание задачи (#525): та же форма, что на
  * объекте, вход без предвыбранного объекта — маршрут /tasks/new.
  */
-export function TasksFeedScreen(): JSX.Element {
+export function TasksFeedScreen({
+  initialSort,
+}: {
+  readonly initialSort?: TasksSort;
+}): JSX.Element {
   const router = useRouter();
 
   const { filter, applyFeedFilter } = useTasksFeedFilter();
@@ -93,7 +98,7 @@ export function TasksFeedScreen(): JSX.Element {
   const completedQuery = useGlobalCompletedTasks(filter.propertyIds, filter.withoutProperty);
   const propertiesQuery = useProperties();
 
-  const [sort, setSort] = useState<TasksSort>(DEFAULT_TASKS_SORT);
+  const { sort, changeSort } = useTasksSort(initialSort);
   const [deleteOpen, setDeleteOpen] = useState(false);
   // Страница выбора объектов — строгий черновик (#524): черновик живёт,
   // пока страница смонтирована, история не пишется.
@@ -122,13 +127,8 @@ export function TasksFeedScreen(): JSX.Element {
   const completedTotal = completedQuery.data?.total ?? 0;
   const today = activeQuery.data?.today ?? completedQuery.data?.today;
 
-  const propertyOf = (propertyId: string): FeedPropertyRef | undefined => {
-    const property = propertiesQuery.data?.find((item) => item.id === propertyId);
-    if (property === undefined) {
-      return undefined;
-    }
-    return { role: property.access?.role, status: property.status };
-  };
+  const propertyOf = (propertyId: string): FeedPropertyRef | undefined =>
+    propertiesQuery.data?.find((item) => item.id === propertyId);
 
   const complete = useCompleteGlobalTask('complete');
   const uncomplete = useCompleteGlobalTask('uncomplete');
@@ -227,8 +227,8 @@ export function TasksFeedScreen(): JSX.Element {
           {!showEmpty && (
           <div className="mt-4 flex items-center justify-between pr-3.5 pl-6">
             <div className="flex items-center gap-2">
-              <PickerMenu title="Сортировать" groups={sortPickerGroups(sort, setSort)}>
-                <SortChip sort={sort} />
+              <PickerMenu title="Сортировать" groups={sortPickerGroups(sort, changeSort)}>
+                <SortChip sort={sort} data-testid="tasks-sort-chip" />
               </PickerMenu>
               {/* Фильтр (#524/#547, «Общие задачи» — решение владельца
                * 2026-09-07): при любом непустом фильтре чип активный

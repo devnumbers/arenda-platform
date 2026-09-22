@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { globalOverdueList, parseOverdueSortParams } from './overdue-global-model';
+import {
+  globalOverdueList,
+  parseOverdueSortParams,
+  serializeOverdueSortToParams,
+} from './overdue-global-model';
 import { makeGlobalPayment as item } from './global-payment-fixtures';
 
 describe('parseOverdueSortParams', () => {
@@ -9,9 +13,20 @@ describe('parseOverdueSortParams', () => {
     expect(parseOverdueSortParams('garbage')).toBe('old');
   });
 
+  it('массивное значение — битый дубликат, дефолт (канон parseEnumParam)', () => {
+    expect(parseOverdueSortParams(['new'])).toBe('old');
+  });
+
   it('читает ?sort=new|old строки запроса', () => {
     expect(parseOverdueSortParams('new')).toBe('new');
     expect(parseOverdueSortParams('old')).toBe('old');
+  });
+});
+
+describe('serializeOverdueSortToParams — дефолт «Старые» параметра не создаёт', () => {
+  it('дефолт — пустой патч, «Новые» — ?sort=new', () => {
+    expect(serializeOverdueSortToParams('old')).toEqual({});
+    expect(serializeOverdueSortToParams('new')).toEqual({ sort: 'new' });
   });
 });
 

@@ -102,10 +102,6 @@ var (
 	// ErrInvalidMemberStatus is returned when a membership status string is not
 	// a recognized member status value.
 	ErrInvalidMemberStatus = errors.New("invalid membership status")
-	// ErrCannotLeaveSuspended is returned when a recipient tries to self-exit a
-	// suspended membership. Self-exit is not available for suspended access
-	// because the object is already hidden from the recipient.
-	ErrCannotLeaveSuspended = errors.New("cannot leave a suspended membership")
 	// ErrPropertyArchived is returned when a new member or invitation is added
 	// to an archived property. Existing members keep working: revoking and role
 	// changes stay available on archived objects (issue #163).

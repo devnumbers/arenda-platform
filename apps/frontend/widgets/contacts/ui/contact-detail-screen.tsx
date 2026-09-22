@@ -16,7 +16,8 @@ import { notify } from '@/shared/lib/notifications';
 import { contactFullName, type Contact } from '@/entities/contact';
 import type { Property } from '@/entities/property';
 import { useContact, useDeleteContact } from '@/features/contacts';
-import { canMutateProperty, useProperty } from '@/features/properties';
+import { useProperty } from '@/features/properties';
+import { propertyPermissions } from '@/entities/property';
 import { useCopiedHint } from '@/shared/lib/hooks/use-copied-hint';
 import { ConfirmDialog, IconButton, PageContent, TopNav, TopNavTitle } from '@/shared/ui/design';
 import { contactValueRows } from '../lib/contact-detail-model';
@@ -64,9 +65,9 @@ export function ContactDetailScreen({
   // с объектом — доступ этого объекта.
   const canMutate =
     propertyId !== undefined
-      ? canMutateProperty(propertyQuery.isSuccess ? propertyQuery.data : undefined)
+      ? propertyPermissions(propertyQuery.isSuccess ? propertyQuery.data : undefined).canEdit
       : contact?.propertyId !== undefined
-        ? canMutateProperty(boundProperty)
+        ? propertyPermissions(boundProperty).canEdit
         : contact !== undefined;
 
   const handleDelete = (): void => {

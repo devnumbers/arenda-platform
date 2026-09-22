@@ -6,6 +6,7 @@ import { Cancel } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { useProperty } from '@/features/properties';
+import { propertyPermissions } from '@/entities/property';
 import {
   useOperationWizardDraft,
   type OperationWizardMode,
@@ -61,10 +62,9 @@ export function OperationCreateWizardScreen({
   const loading =
     !draftState.isLoaded || (mode === 'property' && propertyQuery.isPending);
   const property = propertyQuery.isSuccess ? propertyQuery.data : undefined;
-  const role = property?.access?.role;
-  const canMutate =
-    mode === 'global'
-    || (property !== undefined && role !== undefined && role !== 'viewer' && property.status !== 'archived');
+  // Глобальный вход мутирует книгу читателя в целом; объектный — по
+  // центральным правам объекта (#703).
+  const canMutate = mode === 'global' || propertyPermissions(property).canEdit;
 
   // Выход с шага 1 — куда ведет «Закрыть» потока (шаг восстановится сам).
   const closeDestination =

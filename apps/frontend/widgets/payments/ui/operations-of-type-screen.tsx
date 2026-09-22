@@ -4,6 +4,7 @@ import { useState, type JSX } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Add, ArrowLeft, Search } from "@/shared/assets/icons";
 import { ROUTES } from "@/shared/config/routes";
+import { buildUrlWithParams } from "@/shared/lib/url-params";
 import type { PaymentOperationScope } from "@/shared/api/query-keys";
 import { summaryBarSegments } from "@/features/payment-categories";
 import {
@@ -25,7 +26,8 @@ import {
   usePropertyOperationsScopedPaged,
   usePropertyOperationsSummary,
 } from "@/features/payments";
-import { canMutateProperty, useProperty } from "@/features/properties";
+import { useProperty } from "@/features/properties";
+import { propertyPermissions } from "@/entities/property";
 import { operationsFeedGate } from "../lib/operations-feed-gate";
 import { PaymentsStateCard } from "./payments-sections";
 import {
@@ -60,7 +62,7 @@ const SCREEN_COPY = {
  * (пустой старт, «Сбросить»). Шапка — «Назад» на главный список
  * операций с текущими фильтрами (#472), лупа объектного поиска и «+»
  * в визард с пресетом направления (?type=) — только у того, кто может
- * создавать операции (canMutateProperty, контракт #569, как на главном
+ * создавать операции (propertyPermissions, контракт #569, как на главном
  * #674). Совсем пустой объект (all-time сводка без операций, #478)
  * вместо контента показывает «Операций еще не было» с CTA — лупа и «+»
  * скрыты (конвенция зоны #478/#571); пустой период/категория при живой
@@ -82,9 +84,9 @@ export function OperationsOfTypeScreen({
   // Доступ к объекту — для «+» (#679): общий мутационный предикат
   // (зритель — только чтение, архив read-only, контракт #569).
   const propertyQuery = useProperty(propertyId);
-  const canMutate = canMutateProperty(
+  const canMutate = propertyPermissions(
     propertyQuery.isSuccess ? propertyQuery.data : undefined,
-  );
+  ).canEdit;
 
   const today = clientTodayIso();
   // Пикер периода — канонический оверлей поверх списка (решение владельца
@@ -126,11 +128,12 @@ export function OperationsOfTypeScreen({
 
   const openCategories = (): void => {
     // Формат query — один хелпер с operationsFiltersHref (#472): знание
-    // «как period/categories кодируются в адрес» живёт в одном модуле.
+    // «как period/categories кодируются в адрес» живёт в одном модуле;
+    // сборка адреса — тот же канон buildUrlWithParams (#792).
     const params = new URLSearchParams(operationsFiltersParams(filters));
     params.set("return", pathname);
     router.push(
-      `${ROUTES.propertyOperationsCategories(propertyId)}?${params.toString()}`,
+      buildUrlWithParams(ROUTES.propertyOperationsCategories(propertyId), params),
     );
   };
 

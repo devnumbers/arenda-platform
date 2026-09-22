@@ -1,15 +1,16 @@
 import type { Metadata } from 'next';
-import { ParticipantsStubScreen } from '@/widgets/participants';
+import { ParticipantsHubScreen } from '@/widgets/participants';
 
 /**
- * Глобальные «Участники» — страница-заглушка единого хрома (карта #556,
- * тикет #559): пункт «Участники» главной навигации ведёт на живой маршрут;
- * фича совместного доступа (ADR 0028) — вне карты.
+ * Хаб «Совместный доступ» (карта #692, тикет #696): пункт навбара
+ * «Участники» перестаёт быть заглушкой #559 — живой раздел с карточками
+ * «Ваши участники» и «Объекты пользователей»; второй вход — строка в
+ * профиле.
  */
 export const metadata: Metadata = {
-  title: 'Участники — Рентли',
+  title: 'Совместный доступ — Рентли',
 };
 
 export default function ParticipantsRoutePage() {
-  return <ParticipantsStubScreen />;
+  return <ParticipantsHubScreen />;
 }

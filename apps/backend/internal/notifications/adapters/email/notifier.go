@@ -1,5 +1,5 @@
-// Package email renders direct notification emails and sends them through
-// the platform mailer.
+// Package email renders notification emails from named templates and sends
+// them through the platform mailer.
 package email
 
 import (
@@ -10,7 +10,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer"
 )
 
-// Notifier sends direct notifications via email.
+// Notifier sends template-rendered notification emails.
 type Notifier struct {
 	sender   mailer.Sender
 	renderer *mailer.Renderer
@@ -21,10 +21,9 @@ func NewNotifier(sender mailer.Sender, renderer *mailer.Renderer) *Notifier {
 	return &Notifier{sender: sender, renderer: renderer}
 }
 
-// SendDirect renders the named template and sends a one-off email outside any
-// worker lifecycle (issue #253): the direct-notification service owns the
-// subject and content.
-func (n *Notifier) SendDirect(ctx context.Context, to, subject, template string, data map[string]any) error {
+// SendTemplate renders the named template and sends one email: the caller
+// (the email delivery worker) owns the subject and content.
+func (n *Notifier) SendTemplate(ctx context.Context, to, subject, template string, data map[string]any) error {
 	plain, html, err := n.renderer.Render(template, data)
 	if err != nil {
 		return fmt.Errorf("render %s email: %w", template, err)
@@ -41,4 +40,4 @@ func (n *Notifier) SendDirect(ctx context.Context, to, subject, template string,
 	return nil
 }
 
-var _ application.DirectEmailSender = (*Notifier)(nil)
+var _ application.TemplateEmailSender = (*Notifier)(nil)

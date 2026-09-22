@@ -180,16 +180,6 @@ func (r *memRepo) CountActiveByUser(_ context.Context, userID uuid.UUID) (int, e
 	return count, nil
 }
 
-func (r *memRepo) CountSuspendedByUser(_ context.Context, userID uuid.UUID) (int, error) {
-	count := 0
-	for _, m := range r.rows {
-		if m.UserID == userID && m.Status == domain.MemberStatusSuspended {
-			count++
-		}
-	}
-	return count, nil
-}
-
 func (r *memRepo) ListActiveByPropertyOwner(_ context.Context, ownerID uuid.UUID) ([]domain.Membership, error) {
 	var out []domain.Membership
 	for _, m := range r.rows {
@@ -221,6 +211,37 @@ func (r *memRepo) ListActiveByUser(_ context.Context, userID uuid.UUID) ([]domai
 		out = append(out, m)
 	}
 	return out, nil
+}
+
+// ListForRemovalByUser mirrors the SQL removal scope (issue #694): the
+// person's memberships (any status, archived included) on properties the
+// actor owns or manages as an active full_access member.
+func (r *memRepo) ListForRemovalByUser(_ context.Context, personID, actorID uuid.UUID) ([]domain.Membership, error) {
+	var out []domain.Membership
+	for _, m := range r.rows {
+		if m.UserID == personID && r.inManageScope(m.PropertyID, actorID) {
+			out = append(out, m)
+		}
+	}
+	slices.SortFunc(out, func(a, b domain.Membership) int {
+		return a.CreatedAt.Compare(b.CreatedAt)
+	})
+	return out, nil
+}
+
+// inManageScope is the in-memory twin of the SQL manage-scope predicate: the
+// actor owns the property or holds an active full_access membership on it.
+func (r *memRepo) inManageScope(propertyID, actorID uuid.UUID) bool {
+	if r.owners[propertyID] == actorID {
+		return true
+	}
+	for _, m := range r.rows {
+		if m.PropertyID == propertyID && m.UserID == actorID &&
+			m.Status == domain.MemberStatusActive && m.Role == domain.RoleFullAccess {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *memRepo) CreateWithStatus(_ context.Context, m domain.Membership) (domain.Membership, error) {
@@ -407,5 +428,48 @@ func TestAccessService_LeaveProperty(t *testing.T) {
 	// Owner cannot leave.
 	if err := svc.LeaveProperty(context.Background(), owner, property); !errors.Is(err, domain.ErrCannotLeaveOwnProperty) {
 		t.Errorf("owner leave: expected ErrCannotLeaveOwnProperty, got %v", err)
+	}
+}
+
+// TestAccessService_LeaveSuspendedProperty verifies the reason sheet's
+// «Покинуть объект» (ticket #702): a suspended membership no longer blocks
+// self-exit — the recipient sees the blur-card placeholder and may leave
+// without freeing a slot first. The delete frees no slot (suspended holds
+// none), so no FIFO recovery runs.
+func TestAccessService_LeaveSuspendedProperty(t *testing.T) {
+	t.Parallel()
+	owner := uuid.Must(uuid.NewV7())
+	member := uuid.Must(uuid.NewV7())
+	property := uuid.Must(uuid.NewV7())
+
+	repo := newMemRepo()
+	resolver := staticResolver{property: owner}
+	policy := NewMembershipPolicy(resolver, repo)
+	svc := NewAccessService(repo, resolver, nil, stubLookup{}, policy, nil, nil,
+		newTestFactory(repo, &memInvitationsRepo{}, auditapp.Noop{}), nil)
+
+	if _, err := svc.AddMember(context.Background(), owner, property, member, domain.RoleViewer); err != nil {
+		t.Fatalf("AddMember: %v", err)
+	}
+	m, err := repo.GetByPropertyAndUser(context.Background(), property, member)
+	if err != nil {
+		t.Fatalf("GetByPropertyAndUser: %v", err)
+	}
+	if err := repo.Suspend(context.Background(), m.ID, property); err != nil {
+		t.Fatalf("Suspend: %v", err)
+	}
+
+	if err := svc.LeaveProperty(context.Background(), member, property); err != nil {
+		t.Fatalf("LeaveProperty on suspended: %v", err)
+	}
+
+	members, err := svc.ListMembers(context.Background(), owner, property)
+	if err != nil {
+		t.Fatalf("ListMembers after leave: %v", err)
+	}
+	for _, m := range members {
+		if m.UserID == member {
+			t.Errorf("suspended member still present after leave")
+		}
 	}
 }
