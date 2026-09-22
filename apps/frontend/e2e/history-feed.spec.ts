@@ -1,4 +1,5 @@
 import {
+  captureScreen,
   expect,
   execE2eSql,
   openCabinetWithSeededSession,
@@ -69,7 +70,7 @@ async function seedEntry(entry: SeededEntry, user: SeededUser): Promise<string> 
   `);
 }
 
-test('вход с хаба «Совместный доступ», пустая лента — «Действий не было» и кнопка «Настройки»', async ({ page, seededUser }) => {
+test('вход с хаба «Совместный доступ», пустая лента — «Действий не было» и кнопка «Настройки»', async ({ page, seededUser }, testInfo) => {
   await execE2eSql('DELETE FROM action_journal;');
   await openCabinetWithSeededSession(page, seededUser);
 
@@ -82,9 +83,11 @@ test('вход с хаба «Совместный доступ», пустая �
   // Кнопка «Настройки» стоит и на пустой ленте (макет 2050-158499);
   // контент шита — тикет #711.
   await expect(page.getByRole('button', { name: 'Настройки' })).toBeVisible();
+
+  await captureScreen(page, testInfo, 'history-feed-empty');
 });
 
-test('лента из сида: чипы дней, группы «объект → актёр», иконки и время строк', async ({ page, seededUser }) => {
+test('лента из сида: чипы дней, группы «объект → актёр», иконки и время строк', async ({ page, seededUser }, testInfo) => {
   await execE2eSql('DELETE FROM action_journal;');
   await openCabinetWithSeededSession(page, seededUser);
 
@@ -188,9 +191,11 @@ test('лента из сида: чипы дней, группы «объект �
   await expect(page.locator('svg[aria-label="Удаление"]').first()).toBeVisible();
   // Время строки «ЧЧ:ММ».
   await expect(page.getByText(/^\d{2}:\d{2}$/).first()).toBeVisible();
+
+  await captureScreen(page, testInfo, 'history-feed-groups');
 });
 
-test('прокрутка вверх догружает старое: prepend 55 записей поверх порции 50', async ({ page, seededUser }) => {
+test('прокрутка вверх догружает старое: prepend 55 записей поверх порции 50', async ({ page, seededUser }, testInfo) => {
   await execE2eSql('DELETE FROM action_journal;');
   await openCabinetWithSeededSession(page, seededUser);
 
@@ -233,4 +238,6 @@ test('прокрутка вверх догружает старое: prepend 55 
   // Удержание позиции: верхняя до prepend'а строка (платёж-06 — старейшая
   // первой порции) возвращается в кадр.
   await expect(page.getByText('Платёж создан: платёж-06')).toBeInViewport();
+
+  await captureScreen(page, testInfo, 'history-feed-prepend');
 });

@@ -34,6 +34,7 @@ import {
     HubTitle,
     SubScreenShell,
     IconButton,
+    InfiniteQueryHead,
     InfiniteQueryTail,
     ListRow,
     Modal,
@@ -1344,6 +1345,9 @@ export function DesignLayerShowcase(): JSX.Element {
                         useInfiniteScroll и жив при тёплом кэше (#631). Ниже — оба тона
                         индикатора догрузки (LoadingMoreIndicator) на статичной заглушке
                         запроса; в приложении хвост ставится последним элементом ленты.
+                        В мессенджерских лентах «новые снизу» (#709) тот же компонент
+                        ставится НАД списком под именем InfiniteQueryHead — prepend
+                        старых при прокрутке вверх.
                     </p>
                     <div className={styles.grid}>
                         <div className="flex w-full flex-col gap-2">
@@ -1357,6 +1361,12 @@ export function DesignLayerShowcase(): JSX.Element {
                             <h4 className={styles.groupTitle}>LoadingMoreIndicator · тон base</h4>
                             <div className="rounded-card border border-dashed border-content-tertiary">
                                 <InfiniteQueryTail query={STUB_FETCHING_QUERY} />
+                            </div>
+                        </div>
+                        <div className="flex w-full flex-col gap-2">
+                            <h4 className={styles.groupTitle}>Голова · InfiniteQueryHead (#709)</h4>
+                            <div className="rounded-card border border-dashed border-content-tertiary">
+                                <InfiniteQueryHead query={STUB_FETCHING_QUERY} />
                             </div>
                         </div>
                         <div className="flex w-full flex-col gap-2">

@@ -9,10 +9,7 @@ import {
   Button,
   ErrorCard,
   InfiniteQueryHead,
-  PageContent,
-  TopNav,
-  TopNavBackButton,
-  TopNavTitle,
+  SubScreenShell,
   useTabBarSuppression,
 } from '@/shared/ui/design';
 import { ROUTES } from '@/shared/config/routes';
@@ -73,22 +70,11 @@ export function HistoryFeedScreen(): JSX.Element {
 
   return (
     <>
-      <TopNav
-        mobileWings
-        leading={<TopNavBackButton fallbackHref={ROUTES.participants} />}
-      >
-        <TopNavTitle title="История действий" />
-      </TopNav>
-
-      <PageContent>
+      <SubScreenShell title="История действий" fallbackHref={ROUTES.participants}>
         {feedQuery.isPending ? (
           <HistoryFeedSkeleton />
         ) : feedQuery.isError ? (
-          <ErrorCard
-            title="Не удалось загрузить историю"
-            onRetry={() => void feedQuery.refetch()}
-            className="mt-6"
-          />
+          <ErrorCard title="Не удалось загрузить историю" onRetry={() => void feedQuery.refetch()} className="mt-6" />
         ) : feedEmpty ? (
           <div className="flex min-h-[60vh] items-center justify-center">
             <p className="text-base leading-[18px] text-content-secondary">Действий не было</p>
@@ -104,11 +90,8 @@ export function HistoryFeedScreen(): JSX.Element {
                   </span>
                 </div>
                 {day.objects.map((object_, objectIndex) => (
-                  <section
-                    key={`${object_.propertyId}-${objectIndex}`}
-                    className="pb-2"
-                  >
-                    <div className="flex items-center gap-3 px-6 pb-1 pt-4">
+                  <section key={`${object_.propertyId}-${objectIndex}`} className="pb-2">
+                    <div className="flex items-center gap-3 pb-1 pt-4">
                       <PropertyAvatar
                         photoUrl={photos.get(object_.propertyId) ?? ''}
                         surface="row"
@@ -119,11 +102,8 @@ export function HistoryFeedScreen(): JSX.Element {
                       </h2>
                     </div>
                     {object_.actors.map((actor, actorIndex) => (
-                      <div
-                        key={`${actor.key}-${actorIndex}`}
-                        className="pl-[60px] pr-6 pt-3"
-                      >
-                        <div>
+                      <div key={`${actor.key}-${actorIndex}`} className="pt-3">
+                        <div className="pl-[36px]">
                           <h3 className="text-[15px] font-medium leading-[18px] text-content">
                             {actor.name}
                           </h3>
@@ -144,12 +124,12 @@ export function HistoryFeedScreen(): JSX.Element {
             ))}
           </>
         )}
-      </PageContent>
+      </SubScreenShell>
 
       {/* Шит «Настройки» (#711) — на месте по макету 2157-56786/2050-158499,
         * пока без действия. */}
       <div className="fixed inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom))] z-40 flex justify-center">
-        <Button type="button" className="w-auto rounded-pill px-12" aria-disabled>
+        <Button type="button" className="w-auto rounded-pill px-12">
           Настройки
         </Button>
       </div>

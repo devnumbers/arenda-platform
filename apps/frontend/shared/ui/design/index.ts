@@ -110,8 +110,10 @@ export {
   InfiniteQueryTail,
   type InfiniteQueryTailQuery,
 } from './infinite-query-tail';
+// Голова мессенджерской ленты «новые снизу» (#709) — тот же сантинел с
+// индикатором, поставленный НАД списком (геометрии у хвоста нет).
 export {
-  InfiniteQueryHead,
-  type InfiniteQueryHeadQuery,
-} from './infinite-query-head';
+  InfiniteQueryTail as InfiniteQueryHead,
+  type InfiniteQueryTailQuery as InfiniteQueryHeadQuery,
+} from './infinite-query-tail';
 export { SuccessPopup, type SuccessPopupProps } from './success-popup';
