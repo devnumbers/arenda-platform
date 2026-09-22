@@ -1,63 +1,69 @@
 ---
 name: pre-merge
-description: Final polish for a closed multi-ticket effort — one architecture pass scoped to the branch, then a code-review loop until it converges — before the branch merges into dev.
+description: Final gate for a finished multi-ticket effort — the whole polish runs as one dynamic workflow (architecture pass scoped to the branch, a review loop that auto-fixes every finding until none remain, full test suites), then integrates fresh dev, merges the branch into local dev and reports to the map issue. Never pushes.
 disable-model-invocation: true
 ---
 
-# Pre-merge polish
+# Pre-merge gate (dynamic workflow)
 
-The effort is done — every ticket closed, acceptance green — and the branch waits to merge into `dev`. The tickets were built as isolated vertical slices, so per-ticket reviews never saw the whole branch: cross-ticket duplication, shallow seams between slices, and near-miss abstractions stay invisible until one pass looks at the accumulated diff. This skill is that pass — the gate a branch clears before the owner merges.
+The effort is done — every ticket closed, acceptance green — and the branch waits in its worktree to merge into `dev`. The tickets were built as isolated vertical slices, so per-ticket reviews never saw the whole branch: cross-ticket duplication, shallow seams, and doc-rot stay invisible until one pass looks at the accumulated diff. This skill is that pass, and it runs as **one dynamic workflow** (the `/workflow` machinery): the workflow reviews, fixes, tests, integrates fresh `dev`, and — when everything is clean — merges into `dev` and posts the report. Invoke it with the effort's map (URL or number); a map-less effort works too (the spec source then comes from ticket references in the commit messages).
 
-It never merges and never pushes: the effort closes here with a report, and the merge into `dev` stays the owner's explicit word.
+The owner's involvement is three deliberate moments: confirming the run, answering escalations, and pushing.
 
-Invoke it with the effort's map (URL or number). A map-less effort works too — the spec source is then the tickets referenced in the commit messages.
+Boundaries that never move:
 
-## Process
+- **Never pushes.** Push to `dev` deploys stage; it stays the owner's explicit word.
+- **Never tears down.** Worktree removal, stand shutdown (`compose down -v`), slot teardown — outside the workflow, per `docs/agents/parallel-dev.md`, on the owner's word.
+- **Merges only when clean.** Zero blocking findings (rounds 1–2: any severity blocks; from round 3: high/medium block, lows become recorded leftover) plus green full suites on the branch and on merged `dev`. Anything less is a blocked report, not a merge.
+- **Never aborts a merge, never invents behavior** — the `/resolving-merge-conflicts` rules, baked into the integrator persona.
 
-### 1. Pin the gate
+## Preparation (live session, before the workflow)
 
-- Work in the effort branch's worktree. On the main checkout — nothing to gate; stop.
-- The branch rides the `dev` it merges into: integrate fresh `dev` into the branch before the gate (the «Интеграция» order in `docs/agents/parallel-dev.md`; merge conflicts go through `/resolving-merge-conflicts`), so the gate sees the branch against what it will actually join.
-- Fixed point: `git merge-base dev HEAD`. Verify it resolves and `git diff <fixed-point>...HEAD` is non-empty; capture `git log <fixed-point>..HEAD --oneline`.
-- Spec source, in order: the map issue and its closed tickets (fetch per `docs/agents/issue-tracker.md`); ticket references from the commit messages; ask the owner.
-- Lint runs through `make` cache per-checkout (`GOLANGCI_LINT_CACHE` pinned in the root Makefile), so sibling worktrees cannot poison each other. A bare `golangci-lint` invocation outside `make` still shares the machine-global cache and can replay a sibling tree's paths — run through `make` (or `golangci-lint cache clean`) before suspecting the diff.
+1. Load the `dynamic-workflows` skill via the Skill tool — `CreateWorkflow` refuses to run without it.
+2. Pin the gate. The effort branch must sit in its worktree (invoked on the main checkout's branch means there is nothing to gate — stop). Verify `git merge-base dev HEAD` resolves and `git diff <base>...HEAD` is non-empty; pin the map issue. Fresh `dev` integration is the workflow's job, not yours. Lint runs through `make` (per-checkout `GOLANGCI_LINT_CACHE`); a bare `golangci-lint` outside `make` shares the machine-global cache.
+3. Copy the template and edit only its CONFIG block:
+   ```
+   cp .agents/skills/pre-merge/pre-merge.dwf.ts .zcode/workflow-drafts/premerge-<branch>.dwf.ts
+   ```
+   Fill in: `WT` (absolute worktree path), `BRANCH`, `MAIN` (absolute main-checkout path — where `dev` lives and where the merge happens), `MAP_ISSUE`, `AREAS`, `DISPO`. `AREAS` is the hand-composed area split of the diff (id/title/paths/standards/focus) — reading the diff's shape and the per-app `AGENTS.md` is what makes this good; an empty array falls back to a mechanical directory split. `DISPO` lists pins and dispositions from ticket reviews and map comments that reviewers must not re-open. Two flags: `E2E_AFTER_MERGE` (run `make frontend-e2e` on merged `dev` in the main checkout after the merge — safe there, disposable slot-0 stack; +10–20 min) and `ASK_BEFORE_MERGE` (put one final yes/no to the owner before the merge even on a clean gate).
+4. If a previous gate run on this branch was blocked or errored, **harvest its dispositions** into `DISPO` before submitting: declines with reasons, applied cluster titles with commit hashes, low-leftovers, owner pins from the blocked report. A fresh run that omits them re-opens closed work in round 1.
+5. Submit: `CreateWorkflow { path: ".zcode/workflow-drafts/premerge-<branch>.dwf.ts", name: "Pre-merge: <branch>" }`. The owner approves the run by its phase graph. If the file was already submitted once and needs a fix, edit the draft file and resubmit with `path` — never paste the script inline again.
 
-Done when: the fixed point resolves, the diff is non-empty, and the spec source is pinned.
+## What the workflow does (the contract)
 
-### 2. Green baseline
+1. **Branch check + fresh `dev` integration.** If `dev` moved, the workflow merges it into the branch; conflicts go to an integrator agent (see state, find primary sources, preserve both intents per hunk; the classic collision class — migration and ADR numbers — is renumbered on the branch side). Ambiguous calls escalate to the owner instead of guessing.
+2. **Diff pinning** against the post-integration merge-base; file list fanned out over hand-set (or mechanical) areas.
+3. **Full baseline**: `make -C <worktree> test-log` (reuses the `test` target; verbose output goes to `.make-test.log` inside the checkout, the recipe prints only the summary — and a tail on failure, which feeds the repair round). Red → bounded repair (2 rounds, the repairer reads the full log) → still red → blocked report; review never starts.
+4. **Review sweep per area, up to 3 rounds.** Each area gets a read-only reviewer: defects + documented-standard violations + the Fowler smell baseline (judgement calls; the repo's documented standards win) + a doc-rot sweep (comments describing behavior the branch removed) + architecture candidates — the `/improve-codebase-architecture` method scoped to the diff (shallow modules, deletion test, cross-ticket duplication, missed `CONTEXT.md` vocabulary; `/codebase-design` terms). With a map issue set, a spec reviewer runs alongside (missing/partial/wrong/scope-creep against the map and its tickets). **Every finding is independently confirmed** by a fresh agent (Подтверждено / Опровергнуто / Неясно) before it counts; `DISPO` pins ride in every prompt. **Blocking rule:** in rounds 1–2 every confirmed finding of any severity blocks; from round 3 on, low findings (and unclear lows) stop blocking — they are recorded as осознанный остаток in the report and merged with it. High/medium block in every round.
+5. **Triage into file-disjoint fix clusters.** A planner agent returns clusters (concrete files, per-finding task, commit message in repo canon), declines (Speculative arch candidates, canon conflicts — with reasons), issues to file (candidates beyond the branch's blast radius), and escalates behavior-changing fixes to the owner for sanction. The script itself validates file disjointness and finding coverage deterministically and repairs gaps with a reserve cluster.
+6. **Parallel fixers per cluster** (minimal, style-following, test-first for behavior-adjacent changes, targeted tests only), then **fast gates** — tsc, eslint, vitest, go test — with bounded repair. Red after 3 rounds means **no commits**: the tree stays dirty for live handling, by design.
+7. **Serial commits**: one cluster, one commit; hashes land on the board.
+8. Loop back to 4 until a round ends with zero blocking findings (see the rule in step 4) — or the 3-round ceiling stops the gate (осознанный остаток → owner, **no merge**).
+9. **Final full `make test-log`**, pre-merge checks (main is on `dev`, `dev` unmoved since integration, `git merge-tree` dry-run clean, worktree clean), then — if `ASK_BEFORE_MERGE` — one final question to the owner through an escalation (hold = clean stop, the branch stays ready to merge). **Merge `--no-ff` into `dev` in the main checkout**; the merge message is composed in repo canon from the map and the commit log.
+10. **Full `make test-log` on merged `dev`**, then — if `E2E_AFTER_MERGE` — `make frontend-e2e` on merged `dev` (the joined tree is exactly where integration regressions live). Then the report: markdown artifact for the owner, a comment on the map issue, issue close.
 
-Fast loops for the sides the branch touched (`make backend-test`, `make frontend-test`, `make admin-test`, `make tools-test`), then the full `make test`. A red suite is `/diagnosing-bugs` territory, not polish — stop and hand it there.
+The full suite runs via `world.run` through the `test-log` make target — a real exit code with no `echo $?` masking, and an output small enough to never hit the workflow's stream cap (the verbose log stays on disk for repair agents to read). If the cap is ever hit anyway, the script falls back to per-suite targets and reports anything still unverifiable as honestly not covered (which blocks the merge).
 
-Done when: the full suite is green.
+## During the run (main agent duties)
 
-### 3. Architecture pass — scoped to the branch
+- **Do not poll.** The completion notification arrives on its own; `TaskOutput` only when the owner asks you to wait.
+- **Answer escalations.** Subagents raise blocking questions (`dwfq-…`): ambiguous conflict calls, behavior-change sanctions, unclear findings. Put each to the owner with `AskUserQuestion` — one question, options with a recommendation, grilling discipline — then answer via `ResolveWorkflowQuestion`. Nothing answers on your behalf; a dropped question parks the subagent forever.
+- **Repair, don't restart.** A run heading the wrong way is fixed by editing the run's script file (the notification and `GetWorkflowRun` name it) and calling `AmendWorkflow` with that `path` — never by starting a new `CreateWorkflow`, never by `TaskStop` first. errored → fix the script, resubmit via `AmendWorkflow`. stopped → resume only on the owner's word (`ResumeWorkflowRun`); a `user` stop means leave it alone.
 
-Run `/improve-codebase-architecture`'s Explore and HTML-report steps, scoped: the Explore subagent walks the branch diff and the modules it touched — the whole codebase is out of scope here. Hunt what isolated slices produce: duplicated shapes across tickets, shallow modules with interface-heavy surfaces, the shared abstraction two tickets each half-built, missed `CONTEXT.md` vocabulary, missed `/codebase-design` terms. Apply the deletion test to suspects.
+## After the run
 
-Doc rot is a candidate too: comments and docstrings in the touched files that still describe behavior the branch removed or replaced. Sweep them with the same pass, and fix them inside the candidate that removed the behavior.
+- Verify live (this has bitten before): `git -C <main> log --oneline -3` shows the merge; the worktree is clean; the gh comment landed on the map issue; the workflow report and the artifact agree.
+- Left to the owner's word: push; worktree/branch/stand teardown (order per `docs/agents/parallel-dev.md` — stands down before `worktree remove`); a live `/ui-walkthrough` for UI-heavy branches; `make frontend-e2e` if wanted.
 
-Present the candidates and grill with the owner — which to apply here, and for each pick, the shape of the deepened module and the tests that survive (that skill's grilling loop). A candidate beyond the branch's blast radius is a campaign, not a polish: file it as an issue for a future `/grill-with-docs` and record that it was filed.
+## Gotchas (each paid for in a real campaign)
 
-Done when: the owner picked candidates — possibly zero, then skip to step 5.
+- **Absolute paths only in `world.run`** — relative `make -C`/`git -C` once failed every gate round silently and once lied about a clean tree. The template is absolute everywhere; keep it that way.
+- **The merge happens in the main checkout** (`git -C <main>`), never from the worktree — a merge once went into the worktree from a persistent shell cwd («Already up to date»).
+- **e2e is out of the gate**: running e2e from a worktree against its `.env` can tear down a live stand's slot (`down -v` deletes volumes).
+- **Comments in fixed code** are Russian, written for the next reader, and never mention the review, the agents, or the run.
+- **The command set is fixed literals**: git, make, node, npm, gh — no push, no destructive docker commands anywhere in the script.
+- `make test` does not include e2e. The honest exit code is the one `world.run` returns — never a piped `echo $?` after it.
 
-### 4. Apply, one candidate at a time
+## Files
 
-Refactor under `/tdd` discipline: the suite is green before and after each candidate, behavior is preserved, each candidate is one commit. A "refactor" that changes behavior is a new ticket — file it as one instead.
-
-Done when: every picked candidate is applied and the full suite is green.
-
-### 5. Review gate
-
-Run `/code-review` with the fixed point and spec source from step 1. Dispose of every finding: a documented-standard violation is fixed now; a judgement call (a baseline smell, a spec nuance) is fixed or declined with a one-line reason. Declines survive — they reach the report.
-
-Done when: zero undisposed findings.
-
-### 6. Converge
-
-Fixes can surface new findings, so re-run the review gate. The gate passes when a round ends with zero undisposed findings and a green full suite. Three rounds is the ceiling: a branch still turning up new findings on the third round goes to the owner as a conscious leftover, recorded in the report.
-
-Done when: the gate passes, or the ceiling surfaced leftovers.
-
-### 7. Report and stop
-
-Post the report as a comment on the map issue (the effort's tracking issue otherwise): candidates applied with their commits, per-round review verdicts, declines with reasons, issues filed for out-of-scope candidates. Link tickets by name, not bare ids. Then stop — the merge into `dev` and any push happen on the owner's word, outside this skill.
+- `pre-merge.dwf.ts` — the workflow template. Edit only the CONFIG block; the mechanics are battle-tested (the #692 доводка: 3 sweeps 24→12→7 findings, every one independently confirmed and fixed).

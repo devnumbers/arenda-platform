@@ -447,6 +447,26 @@ test: ## Run the full test suite (backend + frontend + admin + tools; Docker req
 	$(MAKE) admin-test; \
 	$(MAKE) tools-test
 
+# Full suite with output captured to a file: for agents/workflows that gate on
+# `make test` programmatically. Reuses the `test` target as-is (same suites, same
+# order, same Docker precheck); the recipe prints only the summary (+ tail on
+# failure), the verbose log stays in $(LOG_FILE) inside the checkout (*.log is
+# gitignored). LOG_FILE is workspace-relative, so `make -C <worktree> test-log`
+# writes it into that worktree.
+LOG_FILE ?= .make-test.log
+
+test-log: ## Run the full suite via `test`, capturing output to $(LOG_FILE); prints summary + tail (Docker required)
+	@rm -f $(LOG_FILE)
+	@$(MAKE) --no-print-directory test >> $(LOG_FILE) 2>&1; \
+	status=$$?; \
+	if [ $$status -eq 0 ]; then \
+		echo "make test-log OK (full suite green), log: $(CURDIR)/$(LOG_FILE)"; \
+	else \
+		echo "make test-log FAILED (exit $$status), full log: $(CURDIR)/$(LOG_FILE), tail:"; \
+		tail -60 $(LOG_FILE); \
+	fi; \
+	exit $$status
+
 ##@ Code generation
 # Regenerates the property-attributes catalog artifacts (validate catalog.json
 # then emit Go + frontend TS + admin TS). `npm run generate` validates the
