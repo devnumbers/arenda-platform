@@ -6,6 +6,7 @@ import { useLeaveProperty } from '@/features/participants';
 import { type SuspendedSharedProperty } from '@/features/properties';
 import { BoldUser, Exit, Lock } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
+import { notify } from '@/shared/lib/notifications';
 import { Button, Modal, ModalContent } from '@/shared/ui/design';
 
 export type SuspendedReasonSheetProps = {
@@ -20,7 +21,8 @@ export type SuspendedReasonSheetProps = {
  * и три действия: красный выход «Покинуть объект» (DELETE members/self —
  * с suspended-доступа теперь можно выйти, #702), «Выбрать тариф» (CTA на
  * смену тарифа) и «Закрыть». Успех выхода без попапа — макет его не рисует,
- * плейсхолдер уходит после инвалидации (useLeaveProperty, #701).
+ * плейсхолдер уходит после инвалидации (useLeaveProperty, #701); отказ —
+ * тост с detail ответа, шит остаётся открытым.
  */
 export function SuspendedReasonSheet({
   placeholder,
@@ -35,6 +37,8 @@ export function SuspendedReasonSheet({
     }
     leave.mutate(placeholder.propertyId, {
       onSuccess: onClose,
+      onError: (error) =>
+        notify.scenarios.access.leavePropertyError({ description: error.detail }),
     });
   };
 

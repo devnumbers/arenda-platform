@@ -1,6 +1,6 @@
 'use client';
 
-import type { JSX } from 'react';
+import type { JSX, KeyboardEvent } from 'react';
 import type { SuspendedSharedProperty } from '@/features/properties';
 import { PropertyCard } from './PropertyCard';
 import { LockSmall } from '@/shared/assets/icons';
@@ -20,6 +20,10 @@ export type SuspendedPropertyCardProps = {
  * blur(4px); сверху отдельным слоем — белая плашка с замком, «Объект
  * недоступен» и кнопкой «Узнать причину». Тап открывает шит причины —
  * ссылки на деталь объекта нет (nonInteractive), доступ приостановлен.
+ *
+ * Корень — div с role=button, а не <button>: внутри лежит article-карточка
+ * (PropertyCard) — flow-контент, в button невалидный; клавиатура Enter/Space
+ * вызывают onReason, как в ListRow.
  */
 export function SuspendedPropertyCard({
   placeholder,
@@ -38,16 +42,27 @@ export function SuspendedPropertyCard({
     pinned_at: null,
     access: { role: placeholder.accessRole, ownerName: placeholder.ownerName },
   };
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      onReason(placeholder);
+    }
+  };
+
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       className={styles.root}
       data-testid="suspended-property-card"
+      aria-label="Объект недоступен — узнать причину"
       onClick={() => onReason(placeholder)}
+      onKeyDown={handleKeyDown}
     >
-      <span className={styles.blurLayer} aria-hidden>
+      <div className={styles.blurLayer} aria-hidden>
         <PropertyCard property={property} nonInteractive />
-      </span>
+      </div>
       <span className={styles.plaque}>
         <span className={styles.plaqueHead}>
           <LockSmall className={styles.lock} aria-hidden />
@@ -55,6 +70,6 @@ export function SuspendedPropertyCard({
         </span>
         <span className={styles.plaqueButton}>Узнать причину</span>
       </span>
-    </button>
+    </div>
   );
 }
