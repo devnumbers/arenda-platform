@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
+	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/payments/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
@@ -182,11 +183,14 @@ func (s *OperationService) PayOperation(
 			op.Status = domain.StatusPaid
 			paidDate := today
 			op.PaidDate = &paidDate
+			history := historydomain.OperationPaid(op.ID, op.Title, op.Date)
+			history.Context[historydomain.CtxKeyAmountKopecks] = op.AmountKopecks
 			outcome := mutationOutcome[domain.Operation]{
 				Response:      op,
 				Audit:         auditdomain.ActionOperationPaid,
 				AuditEntity:   auditdomain.EntityOperation,
 				AuditEntityID: &op.ID,
+				History:       new(history),
 				Tick:          true,
 			}
 			if op.PaymentID != nil {
@@ -245,11 +249,14 @@ func (s *OperationService) CreateOperation(
 			if err := stores.operations.Create(ctx, draft); err != nil {
 				return mutationOutcome[domain.Operation]{}, fmt.Errorf("create manual operation: %w", err)
 			}
+			history := historydomain.OperationCreated(draft.ID, draft.Title, draft.Date)
+			history.Context[historydomain.CtxKeyAmountKopecks] = draft.AmountKopecks
 			return mutationOutcome[domain.Operation]{
 				Response:      draft,
 				Audit:         auditdomain.ActionOperationCreated,
 				AuditEntity:   auditdomain.EntityOperation,
 				AuditEntityID: &draft.ID,
+				History:       new(history),
 				Tick:          true,
 			}, nil
 		})
@@ -287,10 +294,12 @@ func (s *OperationService) DeleteOperation(
 			if err := stores.operations.Cancel(ctx, operationID, scope, propertyID); err != nil {
 				return mutationOutcome[domain.Operation]{}, err
 			}
+			history := historydomain.OperationDeleted(op.ID, op.Title, op.Date)
 			outcome := mutationOutcome[domain.Operation]{
 				Audit:         auditdomain.ActionOperationDeleted,
 				AuditEntity:   auditdomain.EntityOperation,
 				AuditEntityID: &op.ID,
+				History:       new(history),
 			}
 			if op.PaymentID != nil {
 				outcome.AuditCtx = map[string]any{"payment_id": *op.PaymentID}

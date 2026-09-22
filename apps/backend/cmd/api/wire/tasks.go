@@ -38,6 +38,7 @@ func WireTasks(p platformDeps) (*Tasks, error) {
 		taskStore,
 		propertyStore,
 		p.AuditRecorder,
+		p.HistoryRecorder,
 		p.UoW,
 	)
 

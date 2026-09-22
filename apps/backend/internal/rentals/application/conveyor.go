@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
+	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/rentals/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
@@ -52,6 +53,10 @@ type mutationOutcome struct {
 	// derivation from the response.
 	Audit    auditdomain.Action
 	AuditCtx map[string]any
+	// History is the action journal row of the mutation (ADR 0061), built by
+	// the step from the row-text catalog and recorded inside the same
+	// transaction (fail-safe like the audit).
+	History *historydomain.Entry
 	// Tick runs the payments materialization tick for the owner after the
 	// change; only a step that changed the managed payment sets it (ADR 0053
 	// §3). Completion and deletion resolve the plan themselves and set false.
@@ -102,6 +107,9 @@ func runRentalMutation(
 			return err
 		}
 		if err := recordAudit(ctx, stores, actor, role, out.Audit, out.RentalID, out.AuditCtx); err != nil {
+			return err
+		}
+		if err := recordHistory(ctx, stores, actor, role, propertyID, out.History); err != nil {
 			return err
 		}
 		if !out.Tick {
@@ -169,6 +177,26 @@ func recordAudit(
 		Context:    auditCtx,
 	}); err != nil {
 		return fmt.Errorf("record audit: %w", err)
+	}
+	return nil
+}
+
+// recordHistory writes the mutation's action journal entry inside the
+// transaction (fail-safe like the audit: an insert error rolls the mutation
+// back, ADR 0061 §3). The role is the one the gate resolved before the
+// transaction opened. A nil entry writes nothing.
+func recordHistory(
+	ctx context.Context, stores *txStores, actor uuid.UUID, role sharedpolicy.Role,
+	propertyID uuid.UUID, entry *historydomain.Entry,
+) error {
+	if entry == nil {
+		return nil
+	}
+	entry.PropertyID = propertyID
+	entry.ActorID = &actor
+	entry.ActorRole = sharedpolicy.HistoryActorRole(role)
+	if err := stores.history.Record(ctx, *entry); err != nil {
+		return fmt.Errorf("record history: %w", err)
 	}
 	return nil
 }

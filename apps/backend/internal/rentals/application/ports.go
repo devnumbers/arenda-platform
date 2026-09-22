@@ -168,4 +168,9 @@ type RentPaymentGateway interface {
 type TenantReader interface {
 	// Exists reports whether the contact belongs to the scope owner's book.
 	Exists(ctx context.Context, scope, contactID uuid.UUID) (bool, error)
+	// DisplayName resolves the tenant card's display name (the ФИО) — the
+	// label snapshot the action journal rows carry (ADR 0061 §3). An unknown
+	// or foreign card is an error like Exists' miss: the caller validated
+	// the card first.
+	DisplayName(ctx context.Context, scope, contactID uuid.UUID) (string, error)
 }

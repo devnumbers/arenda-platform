@@ -45,6 +45,7 @@ func WirePayments(p platformDeps) (*Payments, error) {
 		propertyStore,
 		globalPayments,
 		p.AuditRecorder,
+		p.HistoryRecorder,
 		p.UoW,
 	)
 

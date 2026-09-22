@@ -17,6 +17,7 @@ import (
 
 	"github.com/google/uuid"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
+	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
 	"github.com/nambers/arenda-planform/apps/backend/internal/tasks/domain"
@@ -47,6 +48,12 @@ type mutationOutcome[T any] struct {
 	AuditCtx      map[string]any
 	AuditEntity   auditdomain.EntityType
 	AuditEntityID *uuid.UUID
+	// History is the action journal row of the mutation (ADR 0061), built by
+	// the step from the row-text catalog and recorded inside the same
+	// transaction (fail-safe like the audit). Only the property-bound
+	// conveyor records it — the property-less book (ADR 0052) has no object
+	// the row could hang on, so runOwnerMutation ignores this field.
+	History *historydomain.Entry
 	// Tick runs the materialization tick for the owner after the change;
 	// every use case states its need explicitly (deletion and the completed
 	// journal clear set false).
@@ -132,12 +139,8 @@ func runMutation[T any](
 		if err != nil {
 			return err
 		}
-		entityType := out.AuditEntity
-		if entityType == "" {
-			entityType = auditdomain.EntityTaskRule
-		}
-		entityID := out.AuditEntityID
-		if err := recordAudit(ctx, stores, actor, role, out.Audit, entityType, entityID, out.AuditCtx); err != nil {
+		if err := recordTrail(ctx, stores, actor, role, propertyID,
+			auditdomain.EntityTaskRule, out.AuditEntity, out.Audit, out.AuditEntityID, out.AuditCtx, out.History); err != nil {
 			return err
 		}
 		if !out.Tick {
@@ -215,12 +218,8 @@ func runOwnerMutation[T any](
 		if err != nil {
 			return err
 		}
-		entityType := out.AuditEntity
-		if entityType == "" {
-			entityType = auditdomain.EntityTaskRule
-		}
-		if err := recordAudit(ctx, stores, actor, sharedpolicy.RoleOwner,
-			out.Audit, entityType, out.AuditEntityID, out.AuditCtx); err != nil {
+		if err := recordTrail(ctx, stores, actor, sharedpolicy.RoleOwner, uuid.Nil,
+			auditdomain.EntityTaskRule, out.AuditEntity, out.Audit, out.AuditEntityID, out.AuditCtx, nil); err != nil {
 			return err
 		}
 		if !out.Tick {
@@ -347,6 +346,46 @@ func recordAudit(
 		Context:    auditCtx,
 	}); err != nil {
 		return fmt.Errorf("record audit: %w", err)
+	}
+	return nil
+}
+
+// recordTrail writes the mutation's audit entry and its action journal row
+// inside the transaction — the shared tail of both conveyors. The empty
+// entity type defaults to the rule (the audit contract); a zero propertyID
+// (the property-less book) skips the journal.
+func recordTrail(
+	ctx context.Context, stores *txStores, actor uuid.UUID, role sharedpolicy.Role,
+	propertyID uuid.UUID, defaultEntity auditdomain.EntityType,
+	entity auditdomain.EntityType, action auditdomain.Action, entityID *uuid.UUID,
+	auditCtx map[string]any, history *historydomain.Entry,
+) error {
+	if entity == "" {
+		entity = defaultEntity
+	}
+	if err := recordAudit(ctx, stores, actor, role, action, entity, entityID, auditCtx); err != nil {
+		return err
+	}
+	return recordHistory(ctx, stores, actor, role, propertyID, history)
+}
+
+// recordHistory writes the mutation's action journal entry inside the
+// transaction (fail-safe like the audit: an insert error rolls the mutation
+// back, ADR 0061 §3). The role is the one the gate resolved before the
+// transaction opened. A nil entry (the property-less book's outcomes) writes
+// nothing — a journal row needs a property to hang on.
+func recordHistory(
+	ctx context.Context, stores *txStores, actor uuid.UUID, role sharedpolicy.Role,
+	propertyID uuid.UUID, entry *historydomain.Entry,
+) error {
+	if entry == nil {
+		return nil
+	}
+	entry.PropertyID = propertyID
+	entry.ActorID = &actor
+	entry.ActorRole = sharedpolicy.HistoryActorRole(role)
+	if err := stores.history.Record(ctx, *entry); err != nil {
+		return fmt.Errorf("record history: %w", err)
 	}
 	return nil
 }

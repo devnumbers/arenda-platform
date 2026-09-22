@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
+	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/tasks/domain"
 )
@@ -107,12 +108,14 @@ func (s *TaskService) CompleteTask(
 			}
 			completed := today
 			task.CompletedDate = &completed
+			history := historydomain.TaskCompleted(task.ID, task.Title, taskDueDate(task))
 			return mutationOutcome[domain.Task]{
 				Response:      task,
 				Audit:         auditdomain.ActionTaskCompleted,
 				AuditEntity:   auditdomain.EntityTask,
 				AuditEntityID: &task.ID,
 				AuditCtx:      auditRuleCtx(task.RuleID),
+				History:       new(history),
 				Tick:          true,
 			}, nil
 		})
@@ -152,6 +155,7 @@ func (s *TaskService) UncompleteTask(
 				AuditEntity:   auditdomain.EntityTask,
 				AuditEntityID: &task.ID,
 				AuditCtx:      auditRuleCtx(task.RuleID),
+				History:       new(historydomain.TaskUncompleted(task.ID, task.Title)),
 				Tick:          true,
 			}, nil
 		})
@@ -177,11 +181,18 @@ func (s *TaskService) ClearCompletedJournal(
 			if err != nil {
 				return mutationOutcome[int64]{}, fmt.Errorf("clear completed journal: %w", err)
 			}
+			// An empty cleanup is no action: the journal row would read
+			// «удалены выполненные задачи: 0».
+			var history *historydomain.Entry
+			if cleared > 0 {
+				history = new(historydomain.TaskCompletedCleared(int(cleared)))
+			}
 			return mutationOutcome[int64]{
 				Response:    cleared,
 				Audit:       auditdomain.ActionTaskCompletedCleared,
 				AuditEntity: auditdomain.EntityTask,
 				AuditCtx:    map[string]any{"count": cleared},
+				History:     history,
 			}, nil
 		})
 	return cleared, err
@@ -445,4 +456,13 @@ func auditRuleCtx(ruleID *uuid.UUID) map[string]any {
 		return nil
 	}
 	return map[string]any{"rule_id": *ruleID}
+}
+
+// taskDueDate is the occurrence's due date for the row text; the undated
+// task yields a zero time and the builder omits the term.
+func taskDueDate(task domain.Task) time.Time {
+	if task.DueDate == nil {
+		return time.Time{}
+	}
+	return *task.DueDate
 }

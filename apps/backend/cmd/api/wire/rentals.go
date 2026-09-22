@@ -52,6 +52,7 @@ func WireRentals(p platformDeps) (*Rentals, error) {
 		gateway,
 		NewTenantBookReader(contactStore),
 		p.AuditRecorder,
+		p.HistoryRecorder,
 		p.UoW,
 	)
 
@@ -359,4 +360,18 @@ func (r *tenantBookReader) Exists(ctx context.Context, scope, contactID uuid.UUI
 		return false, err
 	}
 	return contact.OwnerID == scope, nil
+}
+
+// DisplayName resolves the tenant card's ФИО for the action journal rows
+// (ADR 0061 §3); a foreign or missing card is an error — the caller has
+// validated the card through Exists first.
+func (r *tenantBookReader) DisplayName(ctx context.Context, scope, contactID uuid.UUID) (string, error) {
+	contact, err := r.contacts.GetByID(ctx, contactID)
+	if err != nil {
+		return "", err
+	}
+	if contact.OwnerID != scope {
+		return "", contactsapp.ErrNotFound
+	}
+	return contact.FullName(), nil
 }

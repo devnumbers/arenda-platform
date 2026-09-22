@@ -10,6 +10,8 @@ import (
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/contacts/domain"
+	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
+	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
@@ -135,6 +137,16 @@ func (r *fakeRecorder) Record(_ context.Context, e auditdomain.Entry) error {
 
 func (r *fakeRecorder) WithTx(transaction.Tx) auditapp.Recorder { return r }
 
+// fakeHistory captures action journal entries written inside the transaction.
+type fakeHistory struct{ entries []historydomain.Entry }
+
+func (h *fakeHistory) Record(_ context.Context, e historydomain.Entry) error {
+	h.entries = append(h.entries, e)
+	return nil
+}
+
+func (h *fakeHistory) WithTx(transaction.Tx) historyapp.Recorder { return h }
+
 // stubPolicy resolves every (actor, property) pair to one configured role.
 type stubPolicy struct{ role sharedpolicy.Role }
 
@@ -168,6 +180,7 @@ type serviceHarness struct {
 	svc      *ContactService
 	contacts *fakeContactStore
 	audit    *fakeRecorder
+	history  *fakeHistory
 
 	owner     uuid.UUID
 	member    uuid.UUID
@@ -204,10 +217,12 @@ func newServiceHarnessWithPolicy(
 		property:  uuid.Must(uuid.NewV7()),
 		otherProp: uuid.Must(uuid.NewV7()),
 	}
+	h.history = &fakeHistory{}
 	factory := NewTxStoreFactory(
 		h.contacts,
 		fakePropertyStore{owners: map[uuid.UUID]uuid.UUID{h.property: owner, h.otherProp: owner}},
 		audit,
+		h.history,
 		fakeUoW{},
 	)
 	h.svc = NewContactService(factory, build(h))

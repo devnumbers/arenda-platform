@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
+	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/payments/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
@@ -44,6 +45,11 @@ type mutationOutcome[T any] struct {
 	AuditCtx      map[string]any
 	AuditEntity   auditdomain.EntityType
 	AuditEntityID *uuid.UUID
+	// History is the action journal row of the mutation (ADR 0061), built by
+	// the step from the row-text catalog and recorded inside the same
+	// transaction (fail-safe like the audit). A nil entry writes no row — the
+	// noise actions (the favorite star) are excluded by the map charter.
+	History *historydomain.Entry
 	// Tick runs the materialization tick for the owner after the change;
 	// every use case states its need explicitly (deletion sets false).
 	Tick bool
@@ -104,6 +110,9 @@ func runMutation[T any](
 		}
 		entityID := out.AuditEntityID
 		if err := recordAudit(ctx, stores, actor, role, out.Audit, entityType, entityID, out.AuditCtx); err != nil {
+			return err
+		}
+		if err := recordHistory(ctx, stores, actor, role, propertyID, out.History); err != nil {
 			return err
 		}
 		if !out.Tick {
@@ -192,6 +201,27 @@ func recordAudit(
 		Context:    auditCtx,
 	}); err != nil {
 		return fmt.Errorf("record audit: %w", err)
+	}
+	return nil
+}
+
+// recordHistory writes the mutation's action journal entry inside the
+// transaction (fail-safe like the audit: an insert error rolls the mutation
+// back, ADR 0061 §3) — the row and the action share the transaction's fate.
+// The role is the one the gate resolved before the transaction opened. A nil
+// entry (the excluded noise actions) writes nothing.
+func recordHistory(
+	ctx context.Context, stores *txStores, actor uuid.UUID, role sharedpolicy.Role,
+	propertyID uuid.UUID, entry *historydomain.Entry,
+) error {
+	if entry == nil {
+		return nil
+	}
+	entry.PropertyID = propertyID
+	entry.ActorID = &actor
+	entry.ActorRole = sharedpolicy.HistoryActorRole(role)
+	if err := stores.history.Record(ctx, *entry); err != nil {
+		return fmt.Errorf("record history: %w", err)
 	}
 	return nil
 }

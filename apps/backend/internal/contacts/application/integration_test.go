@@ -25,6 +25,8 @@ import (
 	contactspg "github.com/nambers/arenda-planform/apps/backend/internal/contacts/adapters/postgres"
 	contactsapp "github.com/nambers/arenda-planform/apps/backend/internal/contacts/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/contacts/domain"
+	historypg "github.com/nambers/arenda-planform/apps/backend/internal/history/adapters/postgres"
+	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	pgdb "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/testdb"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/actor"
@@ -85,6 +87,7 @@ func newContactsHarness(t *testing.T) *contactsHarness {
 		contactspg.NewContactStore(pool),
 		contactspg.NewPropertyStore(pool),
 		audit,
+		historyapp.NewService(historypg.NewEntryStore(pool), historypg.NewActorStore(pool), nil),
 		uow,
 	)
 	return &contactsHarness{

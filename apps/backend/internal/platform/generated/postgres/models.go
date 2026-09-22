@@ -211,6 +211,23 @@ func (ns NullNotificationTargetType) Value() (driver.Value, error) {
 	return string(ns.NotificationTargetType), nil
 }
 
+type ActionJournal struct {
+	ID         pgtype.UUID        `json:"id"`
+	PropertyID pgtype.UUID        `json:"property_id"`
+	ActorID    pgtype.UUID        `json:"actor_id"`
+	ActorRole  string             `json:"actor_role"`
+	ActorName  string             `json:"actor_name"`
+	ActorEmail string             `json:"actor_email"`
+	Kind       string             `json:"kind"`
+	Action     string             `json:"action"`
+	BaseAction string             `json:"base_action"`
+	Segments   []byte             `json:"segments"`
+	Searchable string             `json:"searchable"`
+	SearchTsv  interface{}        `json:"search_tsv"`
+	Context    []byte             `json:"context"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+}
+
 type AuditLog struct {
 	ID         pgtype.UUID        `json:"id"`
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`

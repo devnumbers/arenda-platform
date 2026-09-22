@@ -20,6 +20,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	auditpg "github.com/nambers/arenda-planform/apps/backend/internal/audit/adapters/postgres"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	historypg "github.com/nambers/arenda-planform/apps/backend/internal/history/adapters/postgres"
+	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	paymentspg "github.com/nambers/arenda-planform/apps/backend/internal/payments/adapters/postgres"
 	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
 	paymentsdomain "github.com/nambers/arenda-planform/apps/backend/internal/payments/domain"
@@ -79,6 +81,7 @@ func newSeamHarness(t *testing.T) *seamHarness {
 		gateway,
 		nil,
 		audit,
+		historyRecorder(pool),
 		pgdb.NewUoW(pool, logger),
 	)
 	// The real payments factory backs the tick re-run assertions.
@@ -89,6 +92,7 @@ func newSeamHarness(t *testing.T) *seamHarness {
 		paymentspg.NewPropertyStore(pool),
 		paymentspg.NewGlobalPaymentStore(pool),
 		audit,
+		historyRecorder(pool),
 		pgdb.NewUoW(pool, logger),
 	)
 	return &seamHarness{
@@ -341,4 +345,10 @@ func TestSeam_SummaryReadsThePaidOperations(t *testing.T) {
 	fresh, err := h.svc.GetRental(context.Background(), h.owner, h.propID, view.Rental.ID)
 	require.NoError(t, err)
 	assert.Equal(t, 2, fresh.Progress.PaidMonths)
+}
+
+// historyRecorder builds the real action journal recorder over the pool —
+// the same composition the wire runs (карта #704, ADR 0061).
+func historyRecorder(pool *pgxpool.Pool) historyapp.Recorder {
+	return historyapp.NewService(historypg.NewEntryStore(pool), historypg.NewActorStore(pool), nil)
 }

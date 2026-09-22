@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -16,6 +17,7 @@ import (
 type txStores struct {
 	contacts ContactStore
 	audit    auditapp.Recorder
+	history  historyapp.Recorder
 }
 
 // txStoreFactory holds the non-transactional repositories plus the
@@ -27,6 +29,7 @@ type txStoreFactory struct {
 	contacts   ContactStore
 	properties PropertyStore
 	audit      auditapp.Recorder
+	history    historyapp.Recorder
 	uow        transaction.UoW
 }
 
@@ -37,12 +40,16 @@ type txStoreFactory struct {
 // callers use := to hold it (standard Go pattern for a factory returning an
 // unexported type).
 func NewTxStoreFactory(
-	contacts ContactStore, properties PropertyStore, audit auditapp.Recorder, uow transaction.UoW,
+	contacts ContactStore, properties PropertyStore,
+	audit auditapp.Recorder, history historyapp.Recorder, uow transaction.UoW,
 ) txStoreFactory {
 	if audit == nil {
 		audit = auditapp.Noop{}
 	}
-	return txStoreFactory{contacts: contacts, properties: properties, audit: audit, uow: uow}
+	if history == nil {
+		history = historyapp.Noop{}
+	}
+	return txStoreFactory{contacts: contacts, properties: properties, audit: audit, history: history, uow: uow}
 }
 
 // runInTx opens a Unit-of-Work, builds the transactional stores from the
@@ -58,6 +65,6 @@ func (f *txStoreFactory) runInTx(ctx context.Context, work func(*txStores) error
 		if err != nil {
 			return fmt.Errorf("bind contact store to tx: %w", err)
 		}
-		return work(&txStores{contacts: contacts, audit: f.audit.WithTx(tx)})
+		return work(&txStores{contacts: contacts, audit: f.audit.WithTx(tx), history: f.history.WithTx(tx)})
 	})
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
+	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
 
@@ -22,6 +23,35 @@ const (
 	auditKeyTrigger    = "trigger"
 	auditKeyUserID     = "user_id"
 )
+
+// recordAccessHistory writes the action journal row inside the transaction
+// (fail-safe like the audit: an insert error rolls the mutation back,
+// ADR 0061 §3). The role is the one the gate resolved before the transaction
+// opened.
+func recordAccessHistory(
+	ctx context.Context, stores *txStores, actor uuid.UUID, actorRole sharedpolicy.Role,
+	propertyID uuid.UUID, entry historydomain.Entry,
+) error {
+	entry.PropertyID = propertyID
+	entry.ActorID = &actor
+	entry.ActorRole = sharedpolicy.HistoryActorRole(actorRole)
+	if err := stores.history.Record(ctx, entry); err != nil {
+		return fmt.Errorf("record history: %w", err)
+	}
+	return nil
+}
+
+// userLabel resolves the row-text label of a participant: the display name
+// (the audit's masking canon — «Name Surname», иначе замаскированный телефон,
+// никогда email или сырой телефон). Loud on failure: a broken lookup is a
+// database trouble, not a missing label.
+func userLabel(ctx context.Context, users UserLookup, userID uuid.UUID) (string, error) {
+	u, err := users.GetByID(ctx, userID)
+	if err != nil {
+		return "", fmt.Errorf("resolve history member label: %w", err)
+	}
+	return displayName(u), nil
+}
 
 // Member is the application-level projection of a property participant used by
 // ListMembers. The owner is synthesized from properties.owner_id and never
@@ -178,6 +208,14 @@ func (s *AccessService) createInvitationInTx(
 	}); err != nil {
 		return domain.Invitation{}, fmt.Errorf("record audit: %w", err)
 	}
+
+	// The action journal row (ADR 0061 §5): an unregistered invitee is known
+	// by the email only — the email is the label snapshot here.
+	entry := historydomain.MemberInvited(invitation.Email)
+	entry.Context["role"] = string(invitation.Role)
+	if err := recordAccessHistory(ctx, stores, actor, actorRole, invitation.PropertyID, entry); err != nil {
+		return domain.Invitation{}, err
+	}
 	return created, nil
 }
 
@@ -250,6 +288,18 @@ func (s *AccessService) createMembershipInTx(
 	}); err != nil {
 		return domain.Membership{}, false, fmt.Errorf("record audit: %w", err)
 	}
+
+	// The action journal row (ADR 0061): the member's display name is the
+	// label snapshot — the row survives any later rename or revocation.
+	label, err := userLabel(ctx, s.users, membership.UserID)
+	if err != nil {
+		return domain.Membership{}, false, err
+	}
+	entry := historydomain.MemberAdded(membership.UserID, label)
+	entry.Context[historydomain.CtxKeyRole] = string(membership.Role)
+	if err := recordAccessHistory(ctx, stores, actor, actorRole, membership.PropertyID, entry); err != nil {
+		return domain.Membership{}, false, err
+	}
 	return created, suspend, nil
 }
 
@@ -270,11 +320,11 @@ func (s *AccessService) ChangeMemberRole(
 	err = s.runInTx(ctx, func(stores *txStores) error {
 		// Confirm the membership exists and belongs to this property before
 		// updating; a missing row is a not-found outcome rather than a silent no-op.
-		if _, err := stores.members.GetByID(ctx, memberID, propertyID); err != nil {
+		existing, err := stores.members.GetByID(ctx, memberID, propertyID)
+		if err != nil {
 			return err
 		}
 
-		var err error
 		updated, err = stores.members.UpdateRole(ctx, memberID, propertyID, role)
 		if err != nil {
 			return fmt.Errorf("update membership role: %w", err)
@@ -293,6 +343,17 @@ func (s *AccessService) ChangeMemberRole(
 			},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
+		}
+
+		label, err := userLabel(ctx, s.users, updated.UserID)
+		if err != nil {
+			return err
+		}
+		if err := recordAccessHistory(ctx, stores, actor, actorRole, propertyID,
+			historydomain.MemberRoleChanged(updated.UserID, label,
+				historydomain.ActorRole(toSharedRole(existing.Role)),
+				historydomain.ActorRole(toSharedRole(role)))); err != nil {
+			return err
 		}
 		return nil
 	})
@@ -318,6 +379,7 @@ func removeMembershipInTx(
 	actorRole sharedpolicy.Role,
 	membership domain.Membership,
 	revokedActive *[]domain.Membership,
+	historyEntry historydomain.Entry,
 ) error {
 	if err := stores.members.Delete(ctx, membership.ID, membership.PropertyID); err != nil {
 		return fmt.Errorf("delete membership: %w", err)
@@ -338,6 +400,14 @@ func removeMembershipInTx(
 		},
 	}); err != nil {
 		return fmt.Errorf("record audit: %w", err)
+	}
+
+	// The action journal row (ADR 0061): the caller builds the row — the
+	// single revoke and the bulk participant removal write their own action
+	// ids over the same core.
+	historyEntry.Context[historydomain.CtxKeyUserID] = membership.UserID
+	if err := recordAccessHistory(ctx, stores, actor, actorRole, membership.PropertyID, historyEntry); err != nil {
+		return err
 	}
 	return nil
 }
@@ -401,7 +471,12 @@ func (s *AccessService) RevokeMember(ctx context.Context, actor, propertyID, mem
 		// The delete goes before the recovery pass: the recovery counts the
 		// recipient's active memberships, and the revoked row must already be
 		// gone for its slot to read as freed (issue #158, T4).
-		if err := removeMembershipInTx(ctx, stores, actor, actorRole, membership, &revoked); err != nil {
+		label, err := userLabel(ctx, s.users, membership.UserID)
+		if err != nil {
+			return err
+		}
+		if err := removeMembershipInTx(ctx, stores, actor, actorRole, membership, &revoked,
+			historydomain.MemberRemoved(label)); err != nil {
 			return err
 		}
 
@@ -475,6 +550,16 @@ func (s *AccessService) LeaveProperty(ctx context.Context, actor, propertyID uui
 			},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
+		}
+
+		// The action journal row (ADR 0061): the leaver is their own label.
+		label, err := userLabel(ctx, s.users, actor)
+		if err != nil {
+			return err
+		}
+		if err := recordAccessHistory(ctx, stores, actor, role, propertyID,
+			historydomain.MemberLeft(label)); err != nil {
+			return err
 		}
 		return nil
 	})

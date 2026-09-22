@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
+	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
@@ -313,7 +314,8 @@ func (s *InvitationService) CancelInvitation(ctx context.Context, actor, propert
 	}
 
 	return s.runInTx(ctx, func(stores *txStores) error {
-		if _, err := stores.invitations.GetByID(ctx, invitationID, propertyID); err != nil {
+		invitation, err := stores.invitations.GetByID(ctx, invitationID, propertyID)
+		if err != nil {
 			return err
 		}
 
@@ -332,6 +334,13 @@ func (s *InvitationService) CancelInvitation(ctx context.Context, actor, propert
 			},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
+		}
+
+		// The action journal row (ADR 0061): the invitee is known by the
+		// invitation's email — the row survives the cancelled invitation.
+		if err := recordAccessHistory(ctx, stores, actor, actorRole, propertyID,
+			historydomain.MemberInvitationCancelled(invitation.Email)); err != nil {
+			return err
 		}
 		return nil
 	})

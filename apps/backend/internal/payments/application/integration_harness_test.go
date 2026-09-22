@@ -22,6 +22,8 @@ import (
 	accessapp "github.com/nambers/arenda-planform/apps/backend/internal/access/application"
 	auditpg "github.com/nambers/arenda-planform/apps/backend/internal/audit/adapters/postgres"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	historypg "github.com/nambers/arenda-planform/apps/backend/internal/history/adapters/postgres"
+	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	paymentspg "github.com/nambers/arenda-planform/apps/backend/internal/payments/adapters/postgres"
 	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/payments/domain"
@@ -30,6 +32,12 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/actor"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
+
+// historyRecorder builds the real action journal recorder over the pool —
+// the same composition the wire runs (карта #704, ADR 0061).
+func historyRecorder(pool *pgxpool.Pool) historyapp.Recorder {
+	return historyapp.NewService(historypg.NewEntryStore(pool), historypg.NewActorStore(pool), nil)
+}
 
 // tickBaseTime anchors the fake clock: 2026-08-25 20:00 UTC, already past
 // midnight in Kamchatka (the 26th) and still the 25th in Moscow — the TZ test
@@ -103,7 +111,8 @@ func newPaymentsHarnessWithPolicy(t *testing.T, policy sharedpolicy.Policy) *pay
 	calendar := paymentspg.NewOwnerCalendar(pool, clk)
 	zones := paymentspg.NewTickZoneDirectory(pool)
 	factory := paymentsapp.NewTxStoreFactory(
-		tickStore, paymentStore, operationStore, propertyStore, favoriteOrders, audit, uow,
+		tickStore, paymentStore, operationStore, propertyStore, favoriteOrders, audit,
+		historyRecorder(pool), uow,
 	)
 
 	return &paymentsHarness{
@@ -138,6 +147,7 @@ func newPaymentsHarnessWithRealPolicy(t *testing.T) *paymentsHarness {
 		paymentspg.NewPropertyStore(h.pool),
 		paymentspg.NewGlobalPaymentStore(h.pool),
 		auditapp.NewService(auditpg.NewWriter(h.pool), clk),
+		historyRecorder(h.pool),
 		pgdb.NewUoW(h.pool, logger),
 	)
 	calendar := paymentspg.NewOwnerCalendar(h.pool, clk)

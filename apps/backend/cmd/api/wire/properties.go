@@ -68,6 +68,7 @@ func WireProperties(
 		propertyPhotoRepo,
 		limiter,
 		p.AuditRecorder,
+		p.HistoryRecorder,
 		p.UoW,
 	)
 

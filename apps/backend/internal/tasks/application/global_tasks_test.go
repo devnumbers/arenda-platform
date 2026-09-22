@@ -148,7 +148,7 @@ func newGlobalTaskService(
 	store TaskStore, properties PropertyStore, clock OwnerClock, policy sharedpolicy.Policy,
 ) *TaskService {
 	return NewTaskService(
-		NewTxStoreFactory(nilTickStore{}, nilRuleStore{}, store, properties, nil, nil),
+		NewTxStoreFactory(nilTickStore{}, nilRuleStore{}, store, properties, nil, nil, nil),
 		nil, clock, policy,
 	)
 }

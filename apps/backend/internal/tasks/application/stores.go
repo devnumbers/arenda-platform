@@ -6,20 +6,22 @@ import (
 	"fmt"
 
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 // txStores bundles the tasks repositories, the property serialization store
-// and the audit recorder bound to the same transaction. It is the only
-// handle a use case receives inside runInTx, so it is impossible to forget
-// WithTx, to write outside the transaction or to record audit outside it
-// (ADR 0033, ADR 0020).
+// and the audit and history recorders bound to the same transaction. It is
+// the only handle a use case receives inside runInTx, so it is impossible to
+// forget WithTx, to write outside the transaction or to record audit or
+// history outside it (ADR 0033, ADR 0020, ADR 0061).
 type txStores struct {
 	tick       TickStore
 	rules      RuleStore
 	tasks      TaskStore
 	properties PropertyStore
 	audit      auditapp.Recorder
+	history    historyapp.Recorder
 }
 
 // txStoreFactory holds the non-transactional tasks repositories plus the
@@ -34,21 +36,26 @@ type txStoreFactory struct {
 	tasks      TaskStore
 	properties PropertyStore
 	audit      auditapp.Recorder
+	history    historyapp.Recorder
 	uow        transaction.UoW
 }
 
-// NewTxStoreFactory bundles the tasks repositories, the audit recorder and
-// the Unit-of-Work into the single txStoreFactory every tasks service
-// embeds. A nil audit defaults to a Noop recorder so a caller that does not
-// care about audit still gets a safe factory. The type stays unexported;
-// callers use := to hold it (standard Go pattern for a factory returning an
+// NewTxStoreFactory bundles the tasks repositories, the recorders and the
+// Unit-of-Work into the single txStoreFactory every tasks service embeds. A
+// nil recorder defaults to a Noop so a caller that does not care about audit
+// or history still gets a safe factory. The type stays unexported; callers
+// use := to hold it (standard Go pattern for a factory returning an
 // unexported type).
 func NewTxStoreFactory(
 	tick TickStore, rules RuleStore, tasks TaskStore,
-	properties PropertyStore, audit auditapp.Recorder, uow transaction.UoW,
+	properties PropertyStore, audit auditapp.Recorder, history historyapp.Recorder,
+	uow transaction.UoW,
 ) txStoreFactory {
 	if audit == nil {
 		audit = auditapp.Noop{}
+	}
+	if history == nil {
+		history = historyapp.Noop{}
 	}
 	return txStoreFactory{
 		tick:       tick,
@@ -56,6 +63,7 @@ func NewTxStoreFactory(
 		tasks:      tasks,
 		properties: properties,
 		audit:      audit,
+		history:    history,
 		uow:        uow,
 	}
 }
@@ -91,6 +99,7 @@ func (f *txStoreFactory) runInTx(ctx context.Context, work func(*txStores) error
 			tasks:      tasks,
 			properties: properties,
 			audit:      f.audit.WithTx(tx),
+			history:    f.history.WithTx(tx),
 		})
 	})
 }

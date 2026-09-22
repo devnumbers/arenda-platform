@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	accessapp "github.com/nambers/arenda-planform/apps/backend/internal/access/application"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	identitypg "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
 	genpostgres "github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
@@ -153,7 +154,7 @@ func newAccessLifecycleFixture(t *testing.T) *accessLifecycleFixture {
 
 	slots := accessapp.NewSlotCoordinator(memberRepo, ownerResolver, limiter,
 		accessNoOwnedProps{}, nil, auditapp.Noop{}, beginner, nil, nil)
-	factory := accessapp.NewTxStoreFactory(memberRepo, invitationRepo, auditapp.Noop{}, accessUoW{beginner})
+	factory := accessapp.NewTxStoreFactory(memberRepo, invitationRepo, auditapp.Noop{}, historyapp.Noop{}, accessUoW{beginner})
 	access := accessapp.NewAccessService(memberRepo, ownerResolver, ownerResolver, userLookup, policy, slots, nil, factory, nil)
 	invites := accessapp.NewInvitationService(access, memberRepo, invitationRepo, ownerResolver, ownerResolver,
 		userLookup, policy, slots, nil, nil, ownerResolver, factory, nil, nil, emailResolver)

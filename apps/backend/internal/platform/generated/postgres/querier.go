@@ -533,6 +533,7 @@ type Querier interface {
 	// failures carries the delta to add; first_failure_at is intentionally left
 	// untouched on the conflict branch because the window is not being reset.
 	IncrementLoginAttempt(ctx context.Context, arg IncrementLoginAttemptParams) error
+	InsertActionJournal(ctx context.Context, arg InsertActionJournalParams) (pgtype.UUID, error)
 	InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) (pgtype.UUID, error)
 	InsertContact(ctx context.Context, arg InsertContactParams) (Contact, error)
 	InsertEmailChangeGrant(ctx context.Context, arg InsertEmailChangeGrantParams) error

@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -21,6 +22,7 @@ type txStores struct {
 	members     MembershipRepository
 	invitations InvitationRepository
 	audit       auditapp.Recorder
+	history     historyapp.Recorder
 	tx          transaction.Tx
 }
 
@@ -37,6 +39,7 @@ type txStoreFactory struct {
 	members     MembershipRepository
 	invitations InvitationRepository
 	audit       auditapp.Recorder
+	history     historyapp.Recorder
 	uow         transaction.UoW
 }
 
@@ -50,15 +53,20 @@ func NewTxStoreFactory(
 	members MembershipRepository,
 	invitations InvitationRepository,
 	audit auditapp.Recorder,
+	history historyapp.Recorder,
 	uow transaction.UoW,
 ) txStoreFactory {
 	if audit == nil {
 		audit = auditapp.Noop{}
 	}
+	if history == nil {
+		history = historyapp.Noop{}
+	}
 	return txStoreFactory{
 		members:     members,
 		invitations: invitations,
 		audit:       audit,
+		history:     history,
 		uow:         uow,
 	}
 }
@@ -81,6 +89,7 @@ func (f *txStoreFactory) runInTx(ctx context.Context, work func(*txStores) error
 			members:     f.members.WithTx(tx),
 			invitations: f.invitations.WithTx(tx),
 			audit:       f.audit.WithTx(tx),
+			history:     f.history.WithTx(tx),
 			tx:          tx,
 		}
 		return work(stores)

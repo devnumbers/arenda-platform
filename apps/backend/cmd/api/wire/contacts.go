@@ -26,6 +26,7 @@ func WireContacts(p platformDeps) (*Contacts, error) {
 		contactStore,
 		propertyStore,
 		p.AuditRecorder,
+		p.HistoryRecorder,
 		p.UoW,
 	)
 

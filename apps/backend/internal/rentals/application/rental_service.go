@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/rentals/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
@@ -198,14 +199,9 @@ func (s *RentalService) CreateRental(
 			if err := validateCreate(cmd, today); err != nil {
 				return mutationOutcome{}, err
 			}
-			if cmd.ContactID != nil {
-				ok, err := s.tenantExists(ctx, scope, *cmd.ContactID)
-				if err != nil {
-					return mutationOutcome{}, err
-				}
-				if !ok {
-					return mutationOutcome{}, ErrInvalidInput
-				}
+			tenantName, err := s.validatedTenantName(ctx, scope, cmd.ContactID)
+			if err != nil {
+				return mutationOutcome{}, err
 			}
 			occupied, err := stores.rentals.HasUnfinished(ctx, scope, propertyID)
 			if err != nil {
@@ -249,6 +245,7 @@ func (s *RentalService) CreateRental(
 			return mutationOutcome{
 				RentalID: rentalID,
 				Audit:    auditActionRentalCreated,
+				History:  new(historydomain.RentalCreated(rentalID, tenantName, cmd.StartDate, derefDate(cmd.PlannedEndDate))),
 				Tick:     true, // The new payment materializes its first planned.
 			}, nil
 		})
@@ -330,12 +327,8 @@ func (s *RentalService) UpdateRental(
 				return mutationOutcome{}, err
 			}
 			if cmd.ContactID != nil && cmd.ContactID.Value != nil {
-				ok, err := s.tenantExists(ctx, scope, *cmd.ContactID.Value)
-				if err != nil {
+				if _, err := s.validatedTenantName(ctx, scope, cmd.ContactID.Value); err != nil {
 					return mutationOutcome{}, err
-				}
-				if !ok {
-					return mutationOutcome{}, ErrInvalidInput
 				}
 			}
 			if paymentChanged {
@@ -346,10 +339,15 @@ func (s *RentalService) UpdateRental(
 			if err := stores.rentals.Update(ctx, rental); err != nil {
 				return mutationOutcome{}, fmt.Errorf("update rental: %w", err)
 			}
+			tenantName, err := s.tenantName(ctx, scope, rental.ContactID)
+			if err != nil {
+				return mutationOutcome{}, err
+			}
 			return mutationOutcome{
 				RentalID: rental.ID,
 				Audit:    auditActionRentalUpdated,
 				AuditCtx: map[string]any{"fields": updatedRentalFields(cmd)},
+				History:  new(historydomain.RentalUpdated(rental.ID, tenantName, rental.StartDate, derefDate(rental.PlannedEndDate))),
 				Tick:     paymentChanged,
 			}, nil
 		})
@@ -391,9 +389,14 @@ func (s *RentalService) CompleteRental(
 			if err := stores.rentals.Complete(ctx, rental.ID, scope, cmd.CompletedDate, cmd.DepositReturn); err != nil {
 				return mutationOutcome{}, fmt.Errorf("complete rental: %w", err)
 			}
+			tenantName, err := s.tenantName(ctx, scope, rental.ContactID)
+			if err != nil {
+				return mutationOutcome{}, err
+			}
 			out := mutationOutcome{
 				RentalID: rental.ID,
 				Audit:    auditActionRentalCompleted,
+				History:  new(historydomain.RentalCompleted(rental.ID, tenantName)),
 				Tick:     false,
 			}
 			if cmd.DepositReturn != nil {
@@ -434,9 +437,14 @@ func (s *RentalService) DeleteRental(
 			if err := stores.pay.Delete(ctx, scope, rental.PaymentID, today); err != nil {
 				return mutationOutcome{}, fmt.Errorf("delete rent payment: %w", err)
 			}
+			tenantName, err := s.tenantName(ctx, scope, rental.ContactID)
+			if err != nil {
+				return mutationOutcome{}, err
+			}
 			return mutationOutcome{
 				RentalID: rental.ID,
 				Audit:    auditActionRentalDeleted,
+				History:  new(historydomain.RentalDeleted(rental.ID, tenantName)),
 				Tick:     false,
 			}, nil
 		})
@@ -749,4 +757,47 @@ func updatedRentalFields(cmd UpdateRentalCommand) []string {
 		fields = append(fields, "comment")
 	}
 	return fields
+}
+
+// tenantName resolves the tenant card's display name for the action journal
+// row (ADR 0061 §3); a rental without a tenant card yields an empty label.
+// The read is loud: a failing card read is a database trouble, not a missing
+// label.
+func (s *RentalService) tenantName(ctx context.Context, scope uuid.UUID, contactID *uuid.UUID) (string, error) {
+	if contactID == nil || s.tenants == nil {
+		return "", nil
+	}
+	name, err := s.tenants.DisplayName(ctx, scope, *contactID)
+	if err != nil {
+		return "", fmt.Errorf("resolve tenant name: %w", err)
+	}
+	return name, nil
+}
+
+// validatedTenantName checks a create/update contact reference and resolves
+// its display name for the action journal row: an unknown or foreign card is
+// ErrInvalidInput, a nil contact is a tenant-less rental.
+func (s *RentalService) validatedTenantName(
+	ctx context.Context, scope uuid.UUID, contactID *uuid.UUID,
+) (string, error) {
+	if contactID == nil {
+		return "", nil
+	}
+	ok, err := s.tenantExists(ctx, scope, *contactID)
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		return "", ErrInvalidInput
+	}
+	return s.tenantName(ctx, scope, contactID)
+}
+
+// derefDate materializes an optional date for the row-text builders: a nil
+// becomes the zero time the builders omit.
+func derefDate(t *time.Time) time.Time {
+	if t == nil {
+		return time.Time{}
+	}
+	return *t
 }

@@ -163,6 +163,7 @@ func (h *tasksHarness) withRuleLog(log *captureLog) *tasksHarness {
 		taskspg.NewTaskStore(h.pool),
 		taskspg.NewPropertyStore(h.pool),
 		auditapp.NewService(auditpg.NewWriter(h.pool), h.clock),
+		historyRecorder(h.pool),
 		pgdb.NewUoW(h.pool, slog.New(log)),
 	)
 	h.rules = tasksapp.NewRuleService(factory, taskspg.NewOwnerClock(h.pool, h.clock), nil, slog.New(log))
