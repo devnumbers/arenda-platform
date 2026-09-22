@@ -43,7 +43,7 @@
 | `icon1.png` (96, прозрачный) | `app/icon.png` |
 | `web-app-manifest-512x512.png` | `public/icons/icon-maskable-512.png` |
 | `web-app-manifest-192x192.png` | некуда: в манифесте нет 192-maskable записи — не брать |
-| `icon0.svg` (SVG-favicon), `manifest.json` («MyWebSite»), прочее | **не брать** — SVG-favicon запрещён research #780, манифест свой (`app/manifest.ts`) |
+| `icon0.svg` (SVG-favicon), `manifest.json` («MyWebSite»), прочее | **не брать** — SVG-favicon — опциональное дополнение research (§6, №7), решено не брать; манифест свой (`app/manifest.ts`) |
 
 Нюанс: RFG в Next.js-наборе отдаёт `web-app-manifest-*` как **непрозрачные
 квадраты (purpose maskable)** — они идут только в maskable. Purpose `any`
