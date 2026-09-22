@@ -235,6 +235,21 @@ test('прокрутка вверх догружает старое: prepend 55 
   await page.evaluate(() => window.scrollTo(0, 0));
   await expect(oldest).toBeVisible();
   await expect(rows).toHaveCount(55);
+  // Хронология prepend'а: старейшая строка встала НАД старейшей первой
+  // порции (платёж-06) и обе в кадре — страница старых рисуется над
+  // загруженными, а не в низу ленты (баг живой приёмки #709: реверс
+  // постранично вместо плоского клал prepend-страницу в низ).
+  const order = await page.evaluate(() => {
+    const y = (needle: string) => {
+      const row = [...document.querySelectorAll('p')].find((p) => p.textContent.includes(needle));
+      return row ? row.getBoundingClientRect().top : null;
+    };
+    return { first: y('платёж-01'), sixth: y('платёж-06') };
+  });
+  expect(order.first).not.toBeNull();
+  expect(order.sixth).not.toBeNull();
+  expect(order.first as number).toBeLessThan(order.sixth as number);
+  await expect(oldest).toBeInViewport();
   // Удержание позиции: верхняя до prepend'а строка (платёж-06 — старейшая
   // первой порции) возвращается в кадр.
   await expect(page.getByText('Платёж создан: платёж-06')).toBeInViewport();

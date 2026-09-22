@@ -32,11 +32,15 @@ export type HistoryFeedPage = {
  * Лента «История действий» (#709): двусторонний keyset по (created_at, id)
  * — мессенджерская модель «новые снизу». Порции уходят в прошлое стороной
  * next: fetchNextPage читает СТАРШЕ (before_cursor), поэтому «следующая»
- * страница в модели react-query рисуется НАД загруженными —prepend старых
+ * страница в модели react-query рисуется НАД загруженными — prepend старых
  * при прокрутке вверх. Сторона prev (after_cursor) — prepend свежих
  * записей, появившихся после загрузки; сам prepend свежих подключит
- * realtime-карта (#714). select отдаёт плоский список по возрастанию
- * времени — старые сверху, новые снизу.
+ * realtime-карта (#714). select разворачивает ПЛОСКИЙ список страниц в
+ * хронологию — страницы приходят [новейшая, …, старейшая], внутри
+ * страницы строки по убыванию; реверс целого даёт «старые сверху, новые
+ * снизу» независимо от того, с какой стороны rides порция (реверс
+ * постранично оставил бы новую страницу на её месте в массиве — баг
+ * живой приёмки #709: prepend-страница легла в низ ленты).
  */
 export function useHistoryFeed(
   scope: HistoryFeedScope = {},
@@ -49,7 +53,7 @@ export function useHistoryFeed(
       lastPage.nextCursor ? { before: lastPage.nextCursor } : undefined,
     getPreviousPageParam: (firstPage): HistoryFeedPageParam | undefined =>
       firstPage.prevCursor ? { after: firstPage.prevCursor } : undefined,
-    select: (data) => data.pages.flatMap((page) => [...page.items].reverse()),
+    select: (data) => data.pages.flatMap((page) => page.items).reverse(),
   });
 }
 
