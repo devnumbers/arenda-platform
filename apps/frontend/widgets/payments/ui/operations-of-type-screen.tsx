@@ -26,7 +26,8 @@ import {
   usePropertyOperationsScopedPaged,
   usePropertyOperationsSummary,
 } from "@/features/payments";
-import { canMutateProperty, useProperty } from "@/features/properties";
+import { useProperty } from "@/features/properties";
+import { propertyPermissions } from "@/entities/property";
 import { operationsFeedGate } from "../lib/operations-feed-gate";
 import { PaymentsStateCard } from "./payments-sections";
 import {
@@ -61,7 +62,7 @@ const SCREEN_COPY = {
  * (пустой старт, «Сбросить»). Шапка — «Назад» на главный список
  * операций с текущими фильтрами (#472), лупа объектного поиска и «+»
  * в визард с пресетом направления (?type=) — только у того, кто может
- * создавать операции (canMutateProperty, контракт #569, как на главном
+ * создавать операции (propertyPermissions, контракт #569, как на главном
  * #674). Совсем пустой объект (all-time сводка без операций, #478)
  * вместо контента показывает «Операций еще не было» с CTA — лупа и «+»
  * скрыты (конвенция зоны #478/#571); пустой период/категория при живой
@@ -83,9 +84,9 @@ export function OperationsOfTypeScreen({
   // Доступ к объекту — для «+» (#679): общий мутационный предикат
   // (зритель — только чтение, архив read-only, контракт #569).
   const propertyQuery = useProperty(propertyId);
-  const canMutate = canMutateProperty(
+  const canMutate = propertyPermissions(
     propertyQuery.isSuccess ? propertyQuery.data : undefined,
-  );
+  ).canEdit;
 
   const today = clientTodayIso();
   // Пикер периода — канонический оверлей поверх списка (решение владельца

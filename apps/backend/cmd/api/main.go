@@ -312,6 +312,8 @@ func run() error {
 		PropertyTasks:            tasksMod.TaskService,
 		Access:                   accessMod.AccessService,
 		Invitations:              accessMod.InvitationService,
+		Participants:             accessMod.ParticipantService,
+		ParticipantMutations:     accessMod.ParticipantMutationSvc,
 		PushSubscriptions:        notificationsMod.PushSubscriptionService,
 		NotificationsFeed:        notificationsMod.FeedService,
 		NotificationSettings:     notificationsMod.SettingsService,
@@ -356,15 +358,18 @@ func run() error {
 
 // injectPropertyServiceAccess wires the access-context adapters into the
 // property service: shared memberships for list endpoints (issues #156 T3,
-// T11), the owner display name for the sharing banner (T11), the recipient
-// slot policy and suspended-shared counter for archive/unarchive/delete
-// (issue #158, T4), and the shared-members delete mailer (issue #162, T6).
+// T11), the owner display name for the sharing banner (T11), the owner email
+// for the detail's owner contact row (Figma 2200-97365), the recipient
+// slot policy for archive/unarchive/delete (issue #158, T4), and the list
+// reads' access projections — member names on the owner's cards and the
+// suspended blur-card placeholders (ticket #702).
 func injectPropertyServiceAccess(propertiesMod *wire.Properties, accessMod *wire.Access) {
 	propertiesMod.PropertyService.SetSharedMemberships(accessMod.SharedProperties)
 	propertiesMod.PropertyService.SetOwnerDisplayNameResolver(accessMod.AccessService)
+	propertiesMod.PropertyService.SetOwnerEmailResolver(accessMod.UserEmailResolver)
 	propertiesMod.PropertyService.SetRecipientSlotPolicy(accessMod.SlotCoordinator)
-	propertiesMod.PropertyService.SetSuspendedSharedCounter(accessMod.SuspendedCounter)
 	propertiesMod.PropertyService.SetSharedMembersDeleteMailer(accessMod.PropertyDeleteMailer)
+	propertiesMod.PropertyService.SetSuspendedSharedMemberships(accessMod.SharedListEnricher)
 }
 
 // injectPropertyListProjections wires the list read projections of the

@@ -154,9 +154,17 @@ type Property struct {
 	// by the list reads alongside Occupancy; false when not computed.
 	HasOverdueOperations bool
 	// OwnerName is the public display name of the property owner ("Name
-	// Surname" or a masked phone, never an email), filled only by the detail
-	// read path when the actor is not the owner (issue T11); empty otherwise.
+	// Surname" or a masked phone, never an email), filled when the actor is
+	// not the owner: by the detail read (issue T11) and by the list reads
+	// for shared rows (owner decision on the #756 walkthrough fixes); empty
+	// otherwise.
 	OwnerName string
+	// OwnerEmail is the property owner's account email, filled by the detail
+	// read when the actor is not the owner (Figma 2200-97365, the owner
+	// contact row) — a deliberate exposure on this surface, the same posture
+	// as SharedSuspendedMembership.OwnerEmail (#702); empty otherwise (the
+	// owner, a resolver failure, an owner without an email).
+	OwnerEmail string
 }
 
 // Photo is a photo attached to a property.

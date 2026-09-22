@@ -25,6 +25,7 @@ import {
   tariffAboutCard,
   tariffFeatureRows,
 } from '@/widgets/profile/lib/tariff-about';
+import { NO_SUBSCRIPTION } from '@/widgets/profile/lib/no-subscription';
 import { DisableGuardSheet } from './disable-guard-sheet';
 import { GracePlaque } from './grace-plaque';
 import { ResumeSuccessScreen } from './resume-success-screen';
@@ -38,7 +39,8 @@ import { TariffAboutCard, TariffFeaturesCard } from './tariff-about-cards';
  * тариф» ручной оплатой того же тарифа). Данные — кэш GET /subscription
  * (staleTime 30с), скелетон повторяет геометрию (DESIGN.md §7). */
 export function TariffAboutScreen(): JSX.Element {
-  const { data: subscription, isPending, isError, refetch } = useSubscription();
+  const { data, isPending, isError, refetch } = useSubscription();
+  const subscription = data ?? NO_SUBSCRIPTION;
 
   if (isPending) {
     return <TariffAboutSkeleton />;

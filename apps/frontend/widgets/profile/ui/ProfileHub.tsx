@@ -11,6 +11,7 @@ import {
   SmallArrowRight,
   Star,
   Sync,
+  Team,
 } from '@/shared/assets/icons';
 import {
   ConfirmDialog,
@@ -36,6 +37,9 @@ type HubRow = {
 const navigationRows: readonly HubRow[] = [
   { title: 'Аккаунт', href: ROUTES.profileAccount, Icon: AccountSetting },
   { title: 'Тариф', href: ROUTES.profileTariff, Icon: Star },
+  // Хаб «Совместный доступ» (#696): второй вход хаба — строка в профиле
+  // (решение чарта #692 №10); позиция после «Тарифа» — на приёмке #696.
+  { title: 'Участники', href: ROUTES.participants, Icon: Team },
   { title: 'Уведомления', href: ROUTES.profileNotifications, Icon: NotificationSettings },
   { title: 'Устройства', href: ROUTES.profileDevices, Icon: Sync },
   { title: 'Информация', href: ROUTES.profileInfo, Icon: Info },
@@ -117,13 +121,13 @@ function ProfileHubSkeleton(): JSX.Element {
 /** Хаб профиля в новом дизайне (тикет #592, карта #591; Figma 1903-38340
  * плейсхолдер / 1786-31288 заполненный): аватар-плейсхолдер 96 (Bold/User,
  * фото — отложенная карта), имя + телефон, серый контейнер со строками
- * «Аккаунт / Тариф / Уведомления / Устройства / Информация / Выйти».
- * «Устройства» — карта #724 (мок 1786-31288, тикет #729): между
- * «Уведомления» и «Информация», ведёт на /profile/devices (сам экран —
- * тикет #730). Строка «Команда» скрыта (решение владельца 10.09.2026 —
- * нет бэка). «Выйти» — ConfirmDialog канон по моку 2004-45981: «Вы
- * уверены, что хотите выйти?», «Отменить» + danger-«Выйти», подтверждение —
- * POST /auth/logout. */
+ * «Аккаунт / Тариф / Участники / Уведомления / Устройства / Информация /
+ * Выйти». «Участники» — вход хаба «Совместный доступ» (#696, карта #692,
+ * решение чарта №10: после «Тарифа»). «Устройства» — карта #724 (мок
+ * 1786-31288, тикет #729): между «Уведомления» и «Информация», ведёт на
+ * /profile/devices (сам экран — тикет #730). «Выйти» — ConfirmDialog канон
+ * по моку 2004-45981: «Вы уверены, что хотите выйти?», «Отменить» +
+ * danger-«Выйти», подтверждение — POST /auth/logout. */
 export function ProfileHub(): JSX.Element {
   const router = useRouter();
   const { data: me, isError, refetch } = useMe();

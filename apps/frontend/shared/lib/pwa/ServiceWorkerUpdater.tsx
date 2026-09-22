@@ -3,6 +3,7 @@
 import { useEffect, useRef, type JSX } from 'react';
 import { usePathname } from 'next/navigation';
 import { reportClientError } from '@/shared/lib/error-reporting/report-client-error';
+import { shouldActivateWaitingOnRouteChange } from './sw-update-timing';
 
 /**
  * Silent service worker update lifecycle.
@@ -16,7 +17,11 @@ import { reportClientError } from '@/shared/lib/error-reporting/report-client-er
  * moments guaranteed not to interrupt the user — on a route change (the user
  * is not mid-form) or when the app is hidden (backgrounded / tab switched).
  * Reload happens on the same route change, or deferred until the user returns
- * if the SW took over while the app was hidden. See ADR 0032.
+ * if the SW took over while the app was hidden. See ADR 0032. A route change
+ * caused by popstate (goBack / back button) does not activate — the reload
+ * would land on the arrival screen and erase the one-shot state that
+ * navigation just carried in (#771); the next push navigation or hidden
+ * trigger applies the update instead.
  *
  * Guards:
  * - First visit (`navigator.serviceWorker.controller === null` on mount): the
@@ -43,6 +48,11 @@ export function ServiceWorkerUpdater(): JSX.Element | null {
     // mount as a "route change" — otherwise a SW that was already waiting at
     // mount time would be activated instantly on the first render.
     const isFirstPathnameRun = useRef(true);
+    // Date.now() of the last popstate traversal (goBack / back button / back
+    // gesture). popstate fires before the router reacts, so the timestamp is
+    // always in place by the time the pathname effect runs; see
+    // shouldActivateWaitingOnRouteChange for why activation defers (#771).
+    const lastPopNavigateAt = useRef(0);
 
     // Shared activation helper: posts SKIP_WAITING to the waiting worker and
     // clears the pending flag. Used by both the route-change and the
@@ -57,16 +67,34 @@ export function ServiceWorkerUpdater(): JSX.Element | null {
     // Trigger: route change. When the user navigates between app screens
     // (so is not mid-form), activate the waiting SW if one is ready. pathname
     // is an effect dependency, so this runs on every navigation. The first run
-    // (mount) is skipped — it is not a real route change.
+    // (mount) is skipped — it is not a real route change. A route change
+    // caused by popstate (returning to a previous screen) is also skipped —
+    // the reload would erase the one-shot state the navigation just carried
+    // in (#771, staged success popups); the next push navigation or the
+    // visibility trigger applies the update instead.
     useEffect(() => {
         if (isFirstPathnameRun.current) {
             isFirstPathnameRun.current = false;
             return;
         }
-        if (pendingSkipWaiting.current) {
+        if (
+            shouldActivateWaitingOnRouteChange({
+                pendingSkipWaiting: pendingSkipWaiting.current,
+                lastPopNavigateAt: lastPopNavigateAt.current,
+                now: Date.now(),
+            })
+        ) {
             activateWaiting();
         }
     }, [pathname]);
+
+    useEffect(() => {
+        const onPopState = (): void => {
+            lastPopNavigateAt.current = Date.now();
+        };
+        window.addEventListener('popstate', onPopState);
+        return () => window.removeEventListener('popstate', onPopState);
+    }, []);
 
     useEffect(() => {
         if (typeof window === 'undefined') return;

@@ -67,7 +67,8 @@ type PropertyService struct {
 	policy             sharedpolicy.Policy
 	sharedMemberships  SharedMemberships
 	ownerNames         OwnerDisplayNameResolver
-	suspendedCounter   SuspendedSharedCounter
+	ownerEmails        OwnerEmailResolver
+	suspendedShared    SuspendedSharedMemberships
 	slots              RecipientSlotPolicy
 	sharedDeleteMailer SharedMembersDeleteMailer
 	rentalOccupancy    RentalOccupancyReader
@@ -93,27 +94,22 @@ func (s *PropertyService) SetOwnerDisplayNameResolver(resolver OwnerDisplayNameR
 	s.ownerNames = resolver
 }
 
-// SetSuspendedSharedCounter injects the access-context adapter that counts how
-// many of a recipient's shared memberships are suspended (hidden from the
-// recipient's property list due to a tariff slot shortage). Optional: when not
-// set, HiddenSharedCount reports zero (issue #158, T4).
-func (s *PropertyService) SetSuspendedSharedCounter(counter SuspendedSharedCounter) {
-	s.suspendedCounter = counter
+// SetOwnerEmailResolver injects the adapter that resolves a property owner's
+// account email for the detail's owner contact row (Figma 2200-97365) —
+// a deliberate exposure on this surface, same posture as
+// suspended_shared.owner_email (#702). Optional: when not set, detail
+// responses carry no owner email.
+func (s *PropertyService) SetOwnerEmailResolver(resolver OwnerEmailResolver) {
+	s.ownerEmails = resolver
 }
 
-// HiddenSharedCount returns the number of shared objects currently hidden from
-// the recipient because their tariff limit is exceeded (suspended memberships).
-// Owners always get zero: they have no shared memberships. Returns zero when no
-// suspended counter is wired (issue #158, T4).
-func (s *PropertyService) HiddenSharedCount(ctx context.Context, actor uuid.UUID) (int, error) {
-	if s.suspendedCounter == nil {
-		return 0, nil
-	}
-	count, err := s.suspendedCounter.CountSuspendedByUser(ctx, actor)
-	if err != nil {
-		return 0, fmt.Errorf("count suspended shared: %w", err)
-	}
-	return count, nil
+// SetSuspendedSharedMemberships injects the access-context adapter that
+// resolves the recipient's suspended shared memberships — the blur-card
+// placeholders of the main list (ticket #702, replacing the hidden-shared
+// count of issues #158 T4 and #163). Optional: when not set, the list
+// carries no placeholders.
+func (s *PropertyService) SetSuspendedSharedMemberships(port SuspendedSharedMemberships) {
+	s.suspendedShared = port
 }
 
 // SetRecipientSlotPolicy injects the access-context slot coordinator that
@@ -315,6 +311,15 @@ func (s *PropertyService) ListProperties(ctx context.Context, actor uuid.UUID) (
 		return PropertiesPage{}, err
 	}
 
+	s.enrichSharedOwnerNames(ctx, properties)
+
+	// The actor's suspended shared memberships ride the main list as
+	// blur-card placeholders (ticket #702); the archived list carries none.
+	suspended, err := s.listSuspendedShared(ctx, actor)
+	if err != nil {
+		return PropertiesPage{}, err
+	}
+
 	if err := s.enrichListProjections(ctx, properties); err != nil {
 		return PropertiesPage{}, err
 	}
@@ -323,7 +328,53 @@ func (s *PropertyService) ListProperties(ctx context.Context, actor uuid.UUID) (
 	if err != nil {
 		return PropertiesPage{}, err
 	}
-	return PropertiesPage{Items: items, Today: today}, nil
+	return PropertiesPage{Items: items, Today: today, SuspendedShared: suspended}, nil
+}
+
+// enrichSharedOwnerNames fills the owner display name of the shared list
+// rows (owner decision on the #756 walkthrough fixes): the shared card
+// shows whose object it is; own rows keep none — the reader is the owner.
+// The resolver is optional and failure-degrading, the detail-read
+// precedent: an unwired port or a failed lookup leaves the row without
+// the name.
+func (s *PropertyService) enrichSharedOwnerNames(ctx context.Context, properties []domain.Property) {
+	if s.ownerNames == nil {
+		return
+	}
+	resolved := make(map[uuid.UUID]string)
+	for i := range properties {
+		if properties[i].AccessRole == sharedpolicy.RoleOwner {
+			continue
+		}
+		ownerID := properties[i].OwnerID
+		name, ok := resolved[ownerID]
+		if !ok {
+			var err error
+			name, err = s.ownerNames.DisplayName(ctx, ownerID)
+			if err != nil {
+				s.logger.WarnContext(ctx, "failed to resolve owner display name",
+					slog.String("owner_id", ownerID.String()),
+					slog.String("error", sanitizeError(err)),
+				)
+			}
+			resolved[ownerID] = name
+		}
+		properties[i].OwnerName = name
+	}
+}
+
+// listSuspendedShared resolves the actor's suspended shared memberships for
+// the main list (ticket #702). The port is optional: an unwired read reports
+// no placeholders.
+func (s *PropertyService) listSuspendedShared(ctx context.Context, actor uuid.UUID) ([]SharedSuspendedMembership, error) {
+	if s.suspendedShared == nil {
+		return nil, nil
+	}
+	suspended, err := s.suspendedShared.SuspendedWith(ctx, actor)
+	if err != nil {
+		return nil, fmt.Errorf("read suspended shared: %w", err)
+	}
+	return suspended, nil
 }
 
 // pinnedFirst lifts the pinned properties above the unpinned ones (ticket
@@ -428,6 +479,8 @@ func (s *PropertyService) ListArchivedProperties(ctx context.Context, actor uuid
 	if err != nil {
 		return PropertiesPage{}, err
 	}
+
+	s.enrichSharedOwnerNames(ctx, properties)
 
 	if err := s.enrichListProjections(ctx, properties); err != nil {
 		return PropertiesPage{}, err
@@ -564,6 +617,19 @@ func (s *PropertyService) GetProperty(ctx context.Context, actor, id uuid.UUID) 
 			)
 		} else {
 			property.OwnerName = name
+		}
+	}
+	// The owner's account email for the detail's owner contact row (Figma
+	// 2200-97365): recipients only, degrading to empty like the name.
+	if role != sharedpolicy.RoleOwner && s.ownerEmails != nil {
+		email, err := s.ownerEmails.GetEmail(ctx, property.OwnerID)
+		if err != nil {
+			s.logger.WarnContext(ctx, "failed to resolve owner email",
+				slog.String("property_id", property.ID.String()),
+				slog.String("error", sanitizeError(err)),
+			)
+		} else {
+			property.OwnerEmail = email
 		}
 	}
 
@@ -845,8 +911,8 @@ func (s *PropertyService) DeleteProperty(
 		return err
 	}
 
-	// The deleted property's name and photos, plus the former members'
-	// emails, escape the work closure for the post-commit notifications.
+	// The deleted property's name, photos and former members' emails escape
+	// the work closure for the post-commit cleanup.
 	var (
 		property           domain.Property
 		photos             []domain.Photo
@@ -855,6 +921,11 @@ func (s *PropertyService) DeleteProperty(
 	err := s.runInTx(ctx, func(stores *txStores) error {
 		var err error
 		property, err = lockDeletableProperty(ctx, stores, actor, id)
+		if err != nil {
+			return err
+		}
+
+		formerMemberEmails, err = s.collectFormerMemberEmails(ctx, stores, id)
 		if err != nil {
 			return err
 		}
@@ -884,10 +955,6 @@ func (s *PropertyService) DeleteProperty(
 			return fmt.Errorf("list photos: %w", err)
 		}
 
-		if formerMemberEmails, err = s.collectFormerMemberEmails(ctx, stores, id); err != nil {
-			return err
-		}
-
 		if err := s.recoverSlotsAfterDelete(ctx, stores, actor, id); err != nil {
 			return err
 		}
@@ -911,9 +978,9 @@ func (s *PropertyService) DeleteProperty(
 		return err
 	}
 
-	// Post-commit cleanup and notifications never fail the delete itself.
-	s.notifyPropertyDeleted(ctx, id, property.Name, formerMemberEmails)
+	// Post-commit cleanup never fails the delete itself.
 	s.cleanupPropertyPhotos(ctx, id, photos)
+	s.notifyPropertyDeleted(ctx, id, property.Name, formerMemberEmails)
 
 	return nil
 }
@@ -963,6 +1030,23 @@ func (s *PropertyService) collectFormerMemberEmails(ctx context.Context, stores 
 	return emails, nil
 }
 
+// notifyPropertyDeleted emails the former shared members (active+suspended)
+// after the delete has committed (issue #162, T6). A send failure is logged
+// and does not affect the delete.
+func (s *PropertyService) notifyPropertyDeleted(ctx context.Context, id uuid.UUID, name string, formerMemberEmails []string) {
+	if s.sharedDeleteMailer == nil {
+		return
+	}
+	for _, to := range formerMemberEmails {
+		if err := s.sharedDeleteMailer.SendPropertyDeleted(ctx, to, name); err != nil {
+			s.logger.ErrorContext(ctx, "failed to send property deleted email to former member",
+				slog.String("property_id", id.String()),
+				slog.String("error", sanitizeError(err)),
+			)
+		}
+	}
+}
+
 // recoverSlotsAfterDelete frees the recipients' tariff slots dropped by the
 // delete: the access context drops their memberships and recovers the oldest
 // suspended ones FIFO in the same transaction, before the property row is
@@ -981,20 +1065,6 @@ func (s *PropertyService) recoverSlotsAfterDelete(ctx context.Context, stores *t
 		return fmt.Errorf("recover owner suspended memberships after delete: %w", err)
 	}
 	return nil
-}
-
-// notifyPropertyDeleted emails the former shared members (active+suspended)
-// after the delete has committed (issue #162, T6). A send failure is logged
-// and does not affect the delete.
-func (s *PropertyService) notifyPropertyDeleted(ctx context.Context, id uuid.UUID, name string, formerMemberEmails []string) {
-	for _, to := range formerMemberEmails {
-		if err := s.sharedDeleteMailer.SendPropertyDeleted(ctx, to, name); err != nil {
-			s.logger.ErrorContext(ctx, "failed to send property deleted email to former member",
-				slog.String("property_id", id.String()),
-				slog.String("error", sanitizeError(err)),
-			)
-		}
-	}
 }
 
 // cleanupPropertyPhotos removes the deleted property's photo objects from

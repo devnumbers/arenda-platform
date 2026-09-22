@@ -17,7 +17,8 @@ import {
   useRentals,
 } from '@/features/rentals';
 import { usePaymentOperationsPaged } from '@/features/payments';
-import { canMutateProperty, useProperty } from '@/features/properties';
+import { useProperty } from '@/features/properties';
+import { propertyPermissions } from '@/entities/property';
 import { CategoryIcon, categoryStyle } from '@/features/payment-categories';
 import type { Rental } from '@/entities/rental';
 import { PaymentRowButton, type PaymentOperation } from '@/entities/payment';
@@ -134,7 +135,9 @@ function RentalCompletedBody({
   const router = useRouter();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const propertyQuery = useProperty(propertyId);
-  const canMutate = canMutateProperty(propertyQuery.data);
+  const canMutate = propertyPermissions(
+    propertyQuery.isSuccess ? propertyQuery.data : undefined,
+  ).canEdit;
   const deleteRental = useDeleteRental(propertyId, rental.id, rental.rentPayment.paymentId);
 
   // История карточки — paid-вхождения платежа аренды, сначала новые

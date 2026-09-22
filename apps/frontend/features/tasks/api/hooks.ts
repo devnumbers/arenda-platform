@@ -35,6 +35,7 @@ const TASKS_PAGE_LIMIT = 500;
  */
 export function useActiveTasks(
   propertyId: string,
+  options: { readonly enabled?: boolean } = {},
 ): UseQueryResult<TasksPage, ApiError> {
   return useQuery({
     queryKey: taskKeys.active(propertyId),
@@ -44,7 +45,7 @@ export function useActiveTasks(
       );
       return mapTasksPage(response);
     },
-    enabled: Boolean(propertyId),
+    enabled: (options.enabled ?? true) && Boolean(propertyId),
   });
 }
 

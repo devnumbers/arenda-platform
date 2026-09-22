@@ -41,3 +41,36 @@ test('архив объектов: шапка подэкрана с «Назад
 
   await captureScreen(page, testInfo, 'properties-archive');
 });
+
+test('без подписки (404 /subscription): кнопки создания живые, ведут на смену тарифа #768', async ({ page, seededUser }) => {
+  // Состояние сид-Марии из обхода #760 воспроизводим перехватом: до фикса
+  // 404 держал react-query в вечном pending, и кнопки создания хаба были
+  // disabled навсегда.
+  await page.route('**/api/subscription', (route) =>
+    route.fulfill({
+      status: 404,
+      contentType: 'application/problem+json',
+      body: JSON.stringify({ code: 'not_found', detail: 'Подписка не найдена' }),
+    }),
+  );
+  await openCabinetWithSeededSession(page, seededUser);
+  await page.goto('/properties');
+
+  // Список рисуется, «+» пилюли не disabled и носит защитную подписку
+  // (canAdd=false при «подписки нет» — тот же путь, что лимит тарифа).
+  await expect(page.getByRole('heading', { name: 'Объекты', exact: true })).toBeVisible();
+  const pillAdd = page
+    .getByTestId('properties-search-pill')
+    .getByRole('button', { name: 'Достигнут лимит объектов по тарифу — сменить тариф' });
+  await expect(pillAdd).toBeVisible();
+  await expect(pillAdd).toBeEnabled();
+
+  // Защитный путь: тап ведёт на «Выбрать тариф», где пикер рисуется
+  // (фолбэк «подписки нет ≡ базовый»), а не ошибка загрузки.
+  await pillAdd.click();
+  await expect(page).toHaveURL(/\/profile\/tariff\/change$/);
+  const tariffRadio = page.getByRole('radiogroup', { name: 'Тариф' });
+  await expect(tariffRadio.getByText('Базовый', { exact: true })).toBeVisible();
+  await expect(page.getByText('Текущий', { exact: true })).toBeVisible();
+  await expect(page.getByText('Не удалось загрузить данные тарифов')).toHaveCount(0);
+});

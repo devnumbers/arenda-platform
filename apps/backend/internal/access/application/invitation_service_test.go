@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -28,6 +29,11 @@ const (
 	testRecipientEmail = "recipient@example.com"
 	testNevskyTitle    = "Квартира на Невском"
 	testApartmentTitle = "Квартира"
+	// The ordered display titles of the two-property fixtures.
+	testOwnTitle     = "Мой"
+	testForeignTitle = "Чужой"
+	testFirstTitle   = "Первая"
+	testSecondTitle  = "Вторая"
 )
 
 // In-memory port stubs for the invitation dependencies.
@@ -35,6 +41,11 @@ const (
 // memInvitationsRepo is an in-memory InvitationRepository.
 type memInvitationsRepo struct {
 	rows []domain.Invitation
+	// The manage-scope predicate for ListForRemovalByEmail (issue #694). The
+	// fixture wires it to the shared membership repo's inManageScope so the
+	// in-memory predicate matches the SQL one (owner or active full_access
+	// member, archived included).
+	removalScope func(propertyID, actorID uuid.UUID) bool
 }
 
 func (r *memInvitationsRepo) Create(_ context.Context, inv domain.Invitation) (domain.Invitation, error) {
@@ -93,6 +104,22 @@ func (r *memInvitationsRepo) ListPendingByEmail(_ context.Context, email string)
 	return out, nil
 }
 
+// ListForRemovalByEmail mirrors the SQL removal scope (issue #694): the
+// pending invitations for the email on properties inside the actor's manage
+// scope, oldest first.
+func (r *memInvitationsRepo) ListForRemovalByEmail(_ context.Context, email string, actorID uuid.UUID) ([]domain.Invitation, error) {
+	var out []domain.Invitation
+	for _, e := range r.rows {
+		if strings.EqualFold(e.Email, email) && (r.removalScope == nil || r.removalScope(e.PropertyID, actorID)) {
+			out = append(out, e)
+		}
+	}
+	slices.SortFunc(out, func(a, b domain.Invitation) int {
+		return a.CreatedAt.Compare(b.CreatedAt)
+	})
+	return out, nil
+}
+
 func (r *memInvitationsRepo) UpdateRole(_ context.Context, id, propertyID uuid.UUID, role domain.Role) (domain.Invitation, error) {
 	for i := range r.rows {
 		if r.rows[i].ID == id && r.rows[i].PropertyID == propertyID {
@@ -135,7 +162,7 @@ func newFakeLookup() *fakeLookup {
 }
 
 func (f *fakeLookup) add(email string, userID uuid.UUID) {
-	f.byEmail[email] = MemberUser{ID: userID, HasEmail: true}
+	f.byEmail[email] = MemberUser{ID: userID}
 }
 
 func (f *fakeLookup) GetByID(_ context.Context, id uuid.UUID) (MemberUser, error) {
@@ -148,6 +175,22 @@ func (f *fakeLookup) GetByEmail(_ context.Context, email string) (MemberUser, er
 		return u, nil
 	}
 	return MemberUser{}, domain.ErrUserNotFound
+}
+
+// fakeEmails is a configurable UserEmailResolver keyed by user id; users
+// missing from the map resolve to the empty string (no email).
+type fakeEmails struct {
+	byUser map[uuid.UUID]string
+}
+
+func newFakeEmails() *fakeEmails {
+	return &fakeEmails{byUser: map[uuid.UUID]string{}}
+}
+
+func (f *fakeEmails) set(userID uuid.UUID, email string) { f.byUser[userID] = email }
+
+func (f *fakeEmails) GetEmail(_ context.Context, id uuid.UUID) (string, error) {
+	return f.byUser[id], nil
 }
 
 // fakeTitles resolves a fixed property title.
@@ -177,6 +220,7 @@ type invitationFixture struct {
 	owners      staticResolver
 	statuses    fakeStatuses
 	lookup      *fakeLookup
+	emails      *fakeEmails
 	mailer      *fakeAccessMailer
 	clk         *fixedClock
 	limiter     *fakeRecipientLimiter
@@ -186,11 +230,12 @@ type invitationFixture struct {
 
 func newInvitationFixture() *invitationFixture {
 	repo := newMemRepo()
-	invitations := &memInvitationsRepo{}
+	invitations := &memInvitationsRepo{removalScope: repo.inManageScope}
 	owners := staticResolver{}
 	statuses := fakeStatuses{}
 	policy := NewMembershipPolicy(owners, repo)
 	lookup := newFakeLookup()
+	emails := newFakeEmails()
 	mailer := &fakeAccessMailer{}
 	clk := &fixedClock{now: time.Now()}
 	limiter := newFakeRecipientLimiter()
@@ -202,13 +247,14 @@ func newInvitationFixture() *invitationFixture {
 		newTestFactory(repo, invitations, auditapp.Noop{}), nil)
 	svc := NewInvitationService(access, repo, invitations, owners, statuses, lookup, policy,
 		coordinator, mailer, nil, fakeTitles(testNevskyTitle),
-		newTestFactory(repo, invitations, auditapp.Noop{}), clk, nil)
+		newTestFactory(repo, invitations, auditapp.Noop{}), clk, nil, emails)
 	return &invitationFixture{
 		repo:        repo,
 		invitations: invitations,
 		owners:      owners,
 		statuses:    statuses,
 		lookup:      lookup,
+		emails:      emails,
 		mailer:      mailer,
 		clk:         clk,
 		limiter:     limiter,
@@ -318,8 +364,8 @@ func TestInvitationService_InviteUnregisteredCreatesPending(t *testing.T) {
 	if len(f.mailer.sent) != 1 || f.mailer.sent[0].to != testNewUserEmail {
 		t.Fatalf("expected exactly one invite email, got %+v", f.mailer.sent)
 	}
-	if f.mailer.sent[0].title != testNevskyTitle {
-		t.Errorf("mail title = %q", f.mailer.sent[0].title)
+	if !slices.Equal(f.mailer.sent[0].titles, []string{testNevskyTitle}) {
+		t.Errorf("mail titles = %v", f.mailer.sent[0].titles)
 	}
 
 	// A duplicate pending invite is a conflict and sends no second email.
@@ -648,7 +694,9 @@ func TestInvitationService_ActivationSkipsExistingMembership(t *testing.T) {
 	}
 }
 
-// Member list: pending invitations are manager-only.
+// Member list: pending invitations and member emails are visible to every
+// reader with view capability (owner decision 2026-09-20, #758: nothing is
+// hidden from viewers).
 
 func TestInvitationService_ListMembersIncludesPendingForManagers(t *testing.T) {
 	t.Parallel()
@@ -657,6 +705,7 @@ func TestInvitationService_ListMembersIncludesPendingForManagers(t *testing.T) {
 	property := f.addProperty(owner)
 	viewer := uuid.Must(uuid.NewV7())
 	f.limiter.set(viewer, 10)
+	f.emails.set(owner, testOwnerEmail)
 	if _, err := f.access.AddMember(t.Context(), owner, property, viewer, domain.RoleViewer); err != nil {
 		t.Fatalf("AddMember: %v", err)
 	}
@@ -664,7 +713,7 @@ func TestInvitationService_ListMembersIncludesPendingForManagers(t *testing.T) {
 		t.Fatalf("InviteByEmail: %v", err)
 	}
 
-	// The owner (manager) sees owner + member + pending invitation.
+	// The owner sees owner + member + pending invitation.
 	members, err := f.svc.ListMembers(t.Context(), owner, property)
 	if err != nil {
 		t.Fatalf("ListMembers: %v", err)
@@ -682,19 +731,55 @@ func TestInvitationService_ListMembersIncludesPendingForManagers(t *testing.T) {
 	if pending.LastSentAt == nil {
 		t.Error("pending row must carry last_sent_at")
 	}
+	if email := members[0].Email; email == nil || *email != testOwnerEmail {
+		t.Errorf("owner row email = %v, want %s", email, testOwnerEmail)
+	}
+}
 
-	// A viewer does not see pending invitations (they expose the invitee email).
-	members, err = f.svc.ListMembers(t.Context(), viewer, property)
+func TestInvitationService_ListMembersViewerSeesEmailsAndPending(t *testing.T) {
+	t.Parallel()
+	f := newInvitationFixture()
+	owner := uuid.Must(uuid.NewV7())
+	property := f.addProperty(owner)
+	viewer := uuid.Must(uuid.NewV7())
+	f.limiter.set(viewer, 10)
+	f.emails.set(owner, testOwnerEmail)
+	f.emails.set(viewer, "viewer@example.com")
+	if _, err := f.access.AddMember(t.Context(), owner, property, viewer, domain.RoleViewer); err != nil {
+		t.Fatalf("AddMember: %v", err)
+	}
+	if _, err := f.svc.InviteByEmail(t.Context(), owner, property, testNewUserEmail, domain.RoleFullAccess); err != nil {
+		t.Fatalf("InviteByEmail: %v", err)
+	}
+
+	// A viewer sees the same rows as the owner: registered members with
+	// their emails and the pending invitation (owner decision #758).
+	members, err := f.svc.ListMembers(t.Context(), viewer, property)
 	if err != nil {
 		t.Fatalf("viewer ListMembers: %v", err)
 	}
+	if len(members) != 3 {
+		t.Fatalf("viewer rows = %d, want 3 (owner + viewer + pending)", len(members))
+	}
+	emailByUser := map[uuid.UUID]string{}
+	pendingSeen := false
 	for _, m := range members {
 		if m.Pending {
-			t.Errorf("viewer must not see pending invitations, got %+v", members)
+			pendingSeen = true
+			if m.Email == nil || *m.Email != testNewUserEmail {
+				t.Errorf("viewer pending row = %+v", m)
+			}
+			continue
+		}
+		if m.Email != nil {
+			emailByUser[m.UserID] = *m.Email
 		}
 	}
-	if len(members) != 2 {
-		t.Errorf("viewer rows = %d, want 2 (owner + viewer)", len(members))
+	if !pendingSeen {
+		t.Error("viewer must see the pending invitation")
+	}
+	if emailByUser[owner] != testOwnerEmail || emailByUser[viewer] != "viewer@example.com" {
+		t.Errorf("viewer must see member emails, got %v", emailByUser)
 	}
 }
 

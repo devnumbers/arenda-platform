@@ -88,6 +88,9 @@ const access = {
   invitationCancelled: ((options?) =>
     notify.success('Приглашение отменено', options)) satisfies ScenarioFn,
   cancelInvitationError: errorScenario('Не удалось отменить приглашение'),
+  leftProperty: ((options?) =>
+    notify.success('Вы покинули объект', options)) satisfies ScenarioFn,
+  leavePropertyError: errorScenario('Не удалось покинуть объект'),
 } as const;
 
 const property = {

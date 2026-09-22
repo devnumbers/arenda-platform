@@ -43,13 +43,39 @@ type OwnerDisplayNameResolver interface {
 	DisplayName(ctx context.Context, userID uuid.UUID) (string, error)
 }
 
-// SuspendedSharedCounter reports how many shared memberships of a recipient
-// are currently suspended (hidden from the recipient's property list due to a
-// tariff slot shortage). Implemented by the access bounded context and injected
-// optionally: when nil, the properties list reports zero hidden shared.
-// See issue #158 (T4).
-type SuspendedSharedCounter interface {
-	CountSuspendedByUser(ctx context.Context, userID uuid.UUID) (int, error)
+// OwnerEmailResolver resolves a property owner's account email for the
+// detail's owner contact row (Figma 2200-97365): a deliberate exposure on
+// this surface, the same posture as suspended_shared.owner_email (ticket
+// #702). Optional.
+type OwnerEmailResolver interface {
+	GetEmail(ctx context.Context, userID uuid.UUID) (string, error)
+}
+
+// SharedSuspendedMembership is one suspended shared membership of the reading
+// actor (ticket #702): the blur-card shown in the property list while the
+// object is temporarily unavailable because the actor's tariff limit is
+// exceeded. It carries the object's own card data (title and address — the
+// card renders for real under the blur, Figma 2213-99113; photos are not
+// wired — every card wears the same house-glyph avatar today) plus the owner
+// contact the reason sheet renders (Figma 2229-100002). It replaces the
+// hidden-shared count footnote (issues #158 T4, #163 — same predicate and
+// FIFO order).
+type SharedSuspendedMembership struct {
+	PropertyID uuid.UUID
+	Role       sharedpolicy.Role
+	Name       string
+	Address    string
+	OwnerName  string
+	OwnerEmail string
+}
+
+// SuspendedSharedMemberships lists the reading actor's suspended shared
+// memberships (ticket #702) in the FIFO order the hidden-shared count used
+// (#158 T4, #163): suspended memberships on non-archived properties.
+// Implemented by the access bounded context and injected optionally — when
+// nil, the list carries no placeholders.
+type SuspendedSharedMemberships interface {
+	SuspendedWith(ctx context.Context, userID uuid.UUID) ([]SharedSuspendedMembership, error)
 }
 
 // PropertyOwners maps the property ids of one list read onto their data
@@ -69,11 +95,17 @@ type OwnerCalendar interface {
 }
 
 // PropertiesPage is one listing read: the merged rows (own + shared, the
-// pinned first) plus the reading actor's calendar date (ADR 0048) the client
-// renders the rental badges against (ticket #586).
+// pinned first), the reading actor's calendar date (ADR 0048) the client
+// renders the rental badges against (ticket #586), and the actor's
+// suspended shared memberships as blur-card placeholders (ticket #702).
 type PropertiesPage struct {
 	Items []domain.Property
 	Today time.Time
+	// SuspendedShared lists the actor's suspended shared memberships in FIFO
+	// order (ticket #702); empty when the port is unwired or the actor has
+	// none. Only the main list fills it — archived objects hide their
+	// suspended legs behind the archive itself (#163).
+	SuspendedShared []SharedSuspendedMembership
 }
 
 // RentalOccupancyReader reports the per-property occupancy projection
@@ -137,13 +169,12 @@ type RecipientSlotPolicy interface {
 }
 
 // SharedMembersDeleteMailer bridges the property deletion flow to the access
-// sharing lifecycle emails (issue #162, T6). Implemented by the access bounded
-// context and injected optionally: when nil, deleting a property sends no
-// emails to former shared members. CollectFormerMemberEmails runs inside the
-// delete transaction, before the slot policy drops the memberships (only
-// active+suspended members are collected; pending invitations are not
-// memberships and receive nothing). SendPropertyDeleted runs after the commit;
-// a send failure is logged by the caller and never rolls anything back.
+// context's "object deleted" letter (issue #162, T6): CollectFormerMemberEmails
+// runs inside the property delete transaction, before the slot policy drops the
+// memberships (only active+suspended members are collected; pending
+// invitations are not memberships and receive nothing). SendPropertyDeleted
+// runs after the commit; a send failure is logged by the caller and never
+// rolls anything back.
 type SharedMembersDeleteMailer interface {
 	CollectFormerMemberEmails(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) ([]string, error)
 	SendPropertyDeleted(ctx context.Context, to, propertyTitle string) error

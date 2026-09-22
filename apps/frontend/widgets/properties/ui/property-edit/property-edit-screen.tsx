@@ -16,7 +16,7 @@ import {
   type PropertyEditDraft,
 } from '@/features/properties';
 import { attributeCatalog } from '../property-fields/attribute-catalog';
-import { PropertyAvatar, type PropertyType } from '@/entities/property';
+import { PropertyAvatar, propertyPermissions, type PropertyType } from '@/entities/property';
 import { ApiError } from '@/shared/api/errors';
 import {
   Button,
@@ -141,6 +141,37 @@ export function PropertyEditScreen({ propertyId }: PropertyEditScreenProps): JSX
 
   if (propertyQuery.isPending || property === undefined || draft === null) {
     return <PropertyEditLoading />;
+  }
+
+  // Смотрящему и архиву формы не показываем вовсе (как у правки платежей,
+  // #607): сервер всё равно ответил бы отказом, а тост «проверьте
+  // соединение» вводил бы в заблуждение (обход #758).
+  if (!propertyPermissions(property).canEdit) {
+    return (
+      <>
+        <TopNav
+          leading={
+            <IconButton
+              icon={<Cancel />}
+              label="Закрыть"
+              onClick={() => goBack(router, ROUTES.property(propertyId))}
+            />
+          }
+        >
+          <TopNavTitle title="Редактирование объекта" />
+        </TopNav>
+        <PageContent>
+          <div className="flex flex-col items-center gap-3 px-6 pt-16 text-center">
+            <h2 className="text-xl font-semibold leading-6 text-content">Правка недоступна</h2>
+            <p className="max-w-[360px] text-base leading-[18px] text-content-secondary">
+              {property.status === 'archived'
+                ? 'Объект в архиве — его можно только смотреть'
+                : 'У вас доступ только для просмотра этого объекта'}
+            </p>
+          </div>
+        </PageContent>
+      </>
+    );
   }
 
   return (

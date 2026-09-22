@@ -8,6 +8,7 @@ import {
   type UseMutationResult,
 } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
+import { nullOn404 } from '@/shared/api/null-on-404';
 import type { ApiError } from '@/shared/api/errors';
 import type { components } from '@/shared/api/dto';
 import { type TariffName } from '@/entities/user';
@@ -66,11 +67,13 @@ export function useTariffs(): UseQueryResult<Tariff[], ApiError> {
   });
 }
 
-export function useSubscription(): UseQueryResult<Subscription, ApiError> {
+/** 404 → null — «подписки нет» (#768): отсутствие подписки — состояние
+ * данных, а не ошибка; правило — в nullOn404. */
+export function useSubscription(): UseQueryResult<Subscription | null, ApiError> {
   return useQuery({
     queryKey: billingKeys.subscription,
-    queryFn: () => apiClient<components['schemas']['Subscription']>('/subscription'),
-    select: mapSubscriptionResponse,
+    queryFn: () => nullOn404(() => apiClient<components['schemas']['Subscription']>('/subscription')),
+    select: (data) => (data === null ? null : mapSubscriptionResponse(data)),
   });
 }
 

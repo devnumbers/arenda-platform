@@ -65,21 +65,23 @@ type Deps struct {
 	// BillingTimeTravel serves the stand-only admin time-shift and tick
 	// endpoints (issue #665); non-nil only when the BILLING_TIME_TRAVEL
 	// railguard is on, so a production build mounts no such routes at all.
-	BillingTimeTravel  *billinghttp.TimeTravelHandlers
-	ReadonlyGate       httpsupport.SubscriptionMutationChecker
-	Admin              *adminapp.AdminService
-	Properties         *propertiesapp.PropertyService
-	Contacts           *contactsapp.ContactService
-	AddressSuggester   propertiesapp.AddressSuggester
-	PropertyPayments   *paymentsapp.PaymentService
-	PropertyOperations *paymentsapp.OperationService
-	GlobalPayments     *paymentsapp.GlobalPaymentService
-	PropertyRentals    *rentalsapp.RentalService
-	PropertyTaskRules  *tasksapp.RuleService
-	PropertyTasks      *tasksapp.TaskService
-	Access             *accessapp.AccessService
-	Invitations        *accessapp.InvitationService
-	PushSubscriptions  *notificationsapp.PushSubscriptionService
+	BillingTimeTravel    *billinghttp.TimeTravelHandlers
+	ReadonlyGate         httpsupport.SubscriptionMutationChecker
+	Admin                *adminapp.AdminService
+	Properties           *propertiesapp.PropertyService
+	Contacts             *contactsapp.ContactService
+	AddressSuggester     propertiesapp.AddressSuggester
+	PropertyPayments     *paymentsapp.PaymentService
+	PropertyOperations   *paymentsapp.OperationService
+	GlobalPayments       *paymentsapp.GlobalPaymentService
+	PropertyRentals      *rentalsapp.RentalService
+	PropertyTaskRules    *tasksapp.RuleService
+	PropertyTasks        *tasksapp.TaskService
+	Access               *accessapp.AccessService
+	Invitations          *accessapp.InvitationService
+	Participants         accessapp.ParticipantsManager
+	ParticipantMutations accessapp.ParticipantMutations
+	PushSubscriptions    *notificationsapp.PushSubscriptionService
 	// NotificationsFeed is the stored feed's reading service (#743); nil
 	// keeps the feed endpoints answering from the Unimplemented stub.
 	NotificationsFeed *notificationsapp.FeedService
@@ -192,6 +194,7 @@ func New(deps Deps) http.Handler {
 	contactHandlers := contactshttp.NewContactHandlers(deps.Contacts, deps.Logger)
 	accessMemberHandlers := accesshttp.NewMemberHandlers(deps.Access, deps.Logger)
 	accessInvitationHandlers := accesshttp.NewInvitationHandlers(deps.Invitations, deps.Logger)
+	accessParticipantHandlers := accesshttp.NewParticipantHandlers(deps.Participants, deps.ParticipantMutations, deps.Logger)
 	pushSubscriptionHandlers := notificationshttp.NewPushSubscriptionHandlers(deps.PushSubscriptions, deps.VAPIDPublicKey, deps.Logger)
 	streamHandlers := notificationshttp.NewStreamHandlers(deps.NotificationsStreamHub, deps.Logger)
 	notificationPrefsHandlers := notificationshttp.NewNotificationPreferencesHandlers(deps.NotificationSettings, deps.Logger)
@@ -216,6 +219,7 @@ func New(deps Deps) http.Handler {
 		ContactHandlers:                 contactHandlers,
 		MemberHandlers:                  accessMemberHandlers,
 		InvitationHandlers:              accessInvitationHandlers,
+		ParticipantHandlers:             accessParticipantHandlers,
 		PushSubscriptionHandlers:        pushSubscriptionHandlers,
 		StreamHandlers:                  streamHandlers,
 		NotificationPreferencesHandlers: notificationPrefsHandlers,
@@ -346,6 +350,7 @@ type composedHandler struct {
 	*contactshttp.ContactHandlers
 	*accesshttp.MemberHandlers
 	*accesshttp.InvitationHandlers
+	*accesshttp.ParticipantHandlers
 	*notificationshttp.PushSubscriptionHandlers
 	*notificationshttp.StreamHandlers
 	*notificationshttp.NotificationPreferencesHandlers

@@ -811,7 +811,7 @@ func TestGetProperty_AccessOutcomes(t *testing.T) {
 			t.Parallel()
 			repo := newFakePropertyRepo(
 				domain.Property{
-					ID: propertyID, OwnerID: ownerID, Name: "Obj", Address: testPropertyAddress,
+					ID: propertyID, OwnerID: ownerID, Name: testObjName, Address: testPropertyAddress,
 					Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive,
 				},
 			)
@@ -991,11 +991,11 @@ func TestListProperties_AccessRoles(t *testing.T) {
 
 	repo := scopedPropertyRepo{newFakePropertyRepo(
 		domain.Property{
-			ID: ownID, OwnerID: ownerID, Name: "Own", Address: testPropertyAddress,
+			ID: ownID, OwnerID: ownerID, Name: testPropertyNameOwn, Address: testPropertyAddress,
 			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive,
 		},
 		domain.Property{
-			ID: sharedID, OwnerID: otherOwnerID, Name: "Shared", Address: testPropertyAddress,
+			ID: sharedID, OwnerID: otherOwnerID, Name: testPropertyNameShared, Address: testPropertyAddress,
 			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive,
 		},
 		domain.Property{
@@ -1062,11 +1062,11 @@ func TestListArchivedProperties_AccessRoles(t *testing.T) {
 
 	repo := scopedPropertyRepo{newFakePropertyRepo(
 		domain.Property{
-			ID: ownID, OwnerID: ownerID, Name: "Own", Address: testPropertyAddress,
+			ID: ownID, OwnerID: ownerID, Name: testPropertyNameOwn, Address: testPropertyAddress,
 			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusArchived,
 		},
 		domain.Property{
-			ID: sharedID, OwnerID: otherOwnerID, Name: "Shared", Address: testPropertyAddress,
+			ID: sharedID, OwnerID: otherOwnerID, Name: testPropertyNameShared, Address: testPropertyAddress,
 			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusArchived,
 		},
 		domain.Property{
@@ -1114,11 +1114,229 @@ func TestListArchivedProperties_AccessRoles(t *testing.T) {
 	}
 }
 
+// Test fixture display strings of the ticket #702 list tests (goconst).
+const (
+	testMemberNameMaria    = "Мария Иванова"
+	testPropertyNameOwn    = "Own"
+	testPropertyNameShared = "Shared"
+)
+
+// TestListProperties_SharedRowOwnerName verifies the owner-name projection
+// of the shared list rows (owner decision on the #756 walkthrough fixes):
+// a shared row carries the property owner's display name — the card shows
+// whose object it is; own rows and an unwired resolver keep none.
+func TestListProperties_SharedRowOwnerName(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	otherOwnerID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
+	ownID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	sharedID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+
+	newSvc := func(t *testing.T) *PropertyService {
+		t.Helper()
+		repo := scopedPropertyRepo{newFakePropertyRepo(
+			domain.Property{
+				ID: ownID, OwnerID: ownerID, Name: testPropertyNameOwn, Address: testPropertyAddress,
+				Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive,
+			},
+			domain.Property{
+				ID: sharedID, OwnerID: otherOwnerID, Name: testPropertyNameShared, Address: testPropertyAddress,
+				Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive,
+			},
+		)}
+		svc := NewPropertyService(
+			repo,
+			fakePropertyPhotoRepo{},
+			fakePropertyPhotoStorage{},
+			newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil),
+			fakePropertyClock{now: time.Now()},
+			testOwnerPolicy{},
+			nil,
+		)
+		svc.SetSharedMemberships(fakeSharedMemberships{memberships: []SharedMembership{
+			{PropertyID: sharedID, Role: sharedpolicy.RoleViewer},
+		}})
+		return svc
+	}
+
+	t.Run("shared rows carry the owner name, own rows do not", func(t *testing.T) {
+		t.Parallel()
+		svc := newSvc(t)
+		svc.SetOwnerDisplayNameResolver(fakeOwnerNames{names: map[uuid.UUID]string{
+			otherOwnerID: testMemberNameMaria,
+		}})
+
+		result, err := svc.ListProperties(ctx, ownerID)
+		if err != nil {
+			t.Fatalf("ListProperties failed: %v", err)
+		}
+		byID := make(map[uuid.UUID]domain.Property, len(result.Items))
+		for _, p := range result.Items {
+			byID[p.ID] = p
+		}
+		if got := byID[sharedID].OwnerName; got != testMemberNameMaria {
+			t.Errorf("shared row OwnerName = %q, want %q", got, testMemberNameMaria)
+		}
+		if got := byID[ownID].OwnerName; got != "" {
+			t.Errorf("own row OwnerName = %q, want empty", got)
+		}
+	})
+
+	t.Run("unwired resolver leaves the name empty", func(t *testing.T) {
+		t.Parallel()
+		svc := newSvc(t)
+
+		result, err := svc.ListProperties(ctx, ownerID)
+		if err != nil {
+			t.Fatalf("ListProperties failed: %v", err)
+		}
+		for _, p := range result.Items {
+			if p.OwnerName != "" {
+				t.Errorf("row %s OwnerName = %q, want empty without the port", p.ID, p.OwnerName)
+			}
+		}
+	})
+}
+
+// TestListArchivedProperties_SharedRowOwnerName verifies that the archived
+// list carries the same owner-name projection on its shared rows, and that
+// it never carries suspended placeholders — archived objects hide their
+// suspended legs behind the archive (#163).
+func TestListArchivedProperties_SharedRowOwnerName(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	otherOwnerID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
+	sharedID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+
+	repo := scopedPropertyRepo{newFakePropertyRepo(
+		domain.Property{
+			ID: sharedID, OwnerID: otherOwnerID, Name: testPropertyNameShared, Address: testPropertyAddress,
+			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusArchived,
+		},
+	)}
+	svc := NewPropertyService(
+		repo,
+		fakePropertyPhotoRepo{},
+		fakePropertyPhotoStorage{},
+		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil),
+		fakePropertyClock{now: time.Now()},
+		testOwnerPolicy{},
+		nil,
+	)
+	svc.SetSharedMemberships(fakeSharedMemberships{memberships: []SharedMembership{
+		{PropertyID: sharedID, Role: sharedpolicy.RoleViewer},
+	}})
+	svc.SetOwnerDisplayNameResolver(fakeOwnerNames{names: map[uuid.UUID]string{
+		otherOwnerID: testMemberNameMaria,
+	}})
+	svc.SetSuspendedSharedMemberships(fakeSuspendedShared{items: []SharedSuspendedMembership{
+		{
+			PropertyID: uuid.MustParse("44444444-4444-4444-4444-444444444444"),
+			Role:       sharedpolicy.RoleViewer,
+			OwnerName:  testMemberNameMaria,
+			OwnerEmail: "maria@example.com",
+		},
+	}})
+
+	result, err := svc.ListArchivedProperties(ctx, ownerID)
+	if err != nil {
+		t.Fatalf("ListArchivedProperties failed: %v", err)
+	}
+	if len(result.Items) != 1 {
+		t.Fatalf("expected 1 archived property, got %d", len(result.Items))
+	}
+	if got := result.Items[0].OwnerName; got != testMemberNameMaria {
+		t.Errorf("archived shared row OwnerName = %q, want %q", got, testMemberNameMaria)
+	}
+	if len(result.SuspendedShared) != 0 {
+		t.Errorf("archived list must not carry suspended placeholders, got %v", result.SuspendedShared)
+	}
+}
+
+// TestListProperties_SuspendedShared verifies the blur-card placeholders
+// (ticket #702): the page carries the actor's suspended shared memberships
+// as the port reports them — no object data, owner contact only; an unwired
+// port carries none, and a placeholder never leaks into the list items.
+func TestListProperties_SuspendedShared(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	ownID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	suspendedID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+
+	newSvc := func(t *testing.T) *PropertyService {
+		t.Helper()
+		repo := scopedPropertyRepo{newFakePropertyRepo(
+			domain.Property{
+				ID: ownID, OwnerID: ownerID, Name: testPropertyNameOwn, Address: testPropertyAddress,
+				Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive,
+			},
+		)}
+		return NewPropertyService(
+			repo,
+			fakePropertyPhotoRepo{},
+			fakePropertyPhotoStorage{},
+			newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil),
+			fakePropertyClock{now: time.Now()},
+			testOwnerPolicy{},
+			nil,
+		)
+	}
+
+	want := []SharedSuspendedMembership{
+		{
+			PropertyID: suspendedID,
+			Role:       sharedpolicy.RoleViewer,
+			OwnerName:  testMemberNameMaria,
+			OwnerEmail: "maria@example.com",
+		},
+	}
+
+	t.Run("wired port fills the page", func(t *testing.T) {
+		t.Parallel()
+		svc := newSvc(t)
+		svc.SetSuspendedSharedMemberships(fakeSuspendedShared{items: want})
+
+		result, err := svc.ListProperties(ctx, ownerID)
+		if err != nil {
+			t.Fatalf("ListProperties failed: %v", err)
+		}
+		if !slices.Equal(result.SuspendedShared, want) {
+			t.Errorf("SuspendedShared = %v, want %v", result.SuspendedShared, want)
+		}
+		for _, p := range result.Items {
+			if p.ID == suspendedID {
+				t.Errorf("suspended property %s leaked into the list items", p.ID)
+			}
+		}
+	})
+
+	t.Run("unwired port carries none", func(t *testing.T) {
+		t.Parallel()
+		svc := newSvc(t)
+
+		result, err := svc.ListProperties(ctx, ownerID)
+		if err != nil {
+			t.Fatalf("ListProperties failed: %v", err)
+		}
+		if len(result.SuspendedShared) != 0 {
+			t.Errorf("SuspendedShared = %v, want empty without the port", result.SuspendedShared)
+		}
+	})
+}
+
 // TestGetProperty_AccessContext verifies the actor's access context on the
 // detail endpoint (issue T11): the owner gets RoleOwner and no owner name;
 // a recipient gets the membership role and the owner's public display name.
 // A resolver failure is logged and degrades to an empty name, never to a
-// failed request.
+// failed request. The owner's account email follows the same shape
+// (Figma 2200-97365, the detail's owner contact row): a deliberate exposure
+// for recipients only, degrading to empty.
 func TestGetProperty_AccessContext(t *testing.T) {
 	t.Parallel()
 
@@ -1131,7 +1349,7 @@ func TestGetProperty_AccessContext(t *testing.T) {
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 
 	property := domain.Property{
-		ID: propertyID, OwnerID: ownerID, Name: "Obj", Address: testPropertyAddress,
+		ID: propertyID, OwnerID: ownerID, Name: testObjName, Address: testPropertyAddress,
 		Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive,
 	}
 
@@ -1208,6 +1426,98 @@ func TestGetProperty_AccessContext(t *testing.T) {
 		}
 		if p.OwnerName != "" {
 			t.Errorf("OwnerName = %q, want empty on resolver error", p.OwnerName)
+		}
+	})
+}
+
+// TestGetProperty_OwnerEmail verifies the owner's account email in the
+// detail's access context (Figma 2200-97365, the owner contact row): filled
+// for recipients only, empty for the owner, degrading to empty on a resolver
+// failure or when the port is unwired.
+func TestGetProperty_OwnerEmail(t *testing.T) {
+	t.Parallel()
+
+	// Фикстура почты владельца (Figma 2200-97365).
+	const testOwnerEmail = "ivan@example.com"
+
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	recipientID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
+	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+
+	property := domain.Property{
+		ID: propertyID, OwnerID: ownerID, Name: testObjName, Address: testPropertyAddress,
+		Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive,
+	}
+
+	newSvc := func(role sharedpolicy.Role, resolver OwnerEmailResolver) *PropertyService {
+		repo := newFakePropertyRepo(property)
+		svc := NewPropertyService(
+			repo,
+			fakePropertyPhotoRepo{},
+			fakePropertyPhotoStorage{},
+			newPropertyTestFactory(repo,
+				fakePropertyPhotoRepo{},
+				nil),
+			fakePropertyClock{now: time.Now()},
+			staticRolePolicy{role: role},
+			nil,
+		)
+		if resolver != nil {
+			svc.SetOwnerEmailResolver(resolver)
+		}
+		return svc
+	}
+
+	t.Run("recipient gets the owner email", func(t *testing.T) {
+		t.Parallel()
+		svc := newSvc(sharedpolicy.RoleFullAccess, fakeOwnerEmails{emails: map[uuid.UUID]string{
+			ownerID: testOwnerEmail,
+		}})
+		p, err := svc.GetProperty(ctx, recipientID, propertyID)
+		if err != nil {
+			t.Fatalf("GetProperty failed: %v", err)
+		}
+		if p.OwnerEmail != testOwnerEmail {
+			t.Errorf("OwnerEmail = %q, want %q", p.OwnerEmail, testOwnerEmail)
+		}
+	})
+
+	t.Run("owner gets no owner email", func(t *testing.T) {
+		t.Parallel()
+		svc := newSvc(sharedpolicy.RoleOwner, fakeOwnerEmails{emails: map[uuid.UUID]string{
+			ownerID: testOwnerEmail,
+		}})
+		p, err := svc.GetProperty(ctx, ownerID, propertyID)
+		if err != nil {
+			t.Fatalf("GetProperty failed: %v", err)
+		}
+		if p.OwnerEmail != "" {
+			t.Errorf("owner must not get an owner email, got %q", p.OwnerEmail)
+		}
+	})
+
+	t.Run("recipient without the port gets an empty owner email", func(t *testing.T) {
+		t.Parallel()
+		svc := newSvc(sharedpolicy.RoleViewer, nil)
+		p, err := svc.GetProperty(ctx, recipientID, propertyID)
+		if err != nil {
+			t.Fatalf("GetProperty failed: %v", err)
+		}
+		if p.OwnerEmail != "" {
+			t.Errorf("OwnerEmail = %q, want empty without a resolver", p.OwnerEmail)
+		}
+	})
+
+	t.Run("resolver error degrades to an empty owner email", func(t *testing.T) {
+		t.Parallel()
+		svc := newSvc(sharedpolicy.RoleViewer, fakeOwnerEmails{err: errors.New("lookup failed")})
+		p, err := svc.GetProperty(ctx, recipientID, propertyID)
+		if err != nil {
+			t.Fatalf("resolver error must not fail the request: %v", err)
+		}
+		if p.OwnerEmail != "" {
+			t.Errorf("OwnerEmail = %q, want empty on resolver error", p.OwnerEmail)
 		}
 	})
 }

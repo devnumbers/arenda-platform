@@ -49,6 +49,20 @@ export const contactKeys = {
   detail: (contactId: string) => [...contactKeys.all, 'detail', contactId] as const,
 };
 
+// features/participants — «Совместный доступ» (карта #692)
+export const participantsKeys = {
+  all: ['participants'] as const,
+  /** Счётчики хаба GET /participants/summary (#693): участники читающего
+   * и чужие объекты с активным доступом. */
+  summary: ['participants', 'summary'] as const,
+  /** Список «Ваши участники» GET /participants (#693, экран #697). */
+  list: () => [...participantsKeys.all, 'list'] as const,
+  /** Страница участника GET /participants/{id} (#693, экран #698);
+   * id — uuid юзера либо pending-почта (encodeURIComponent на потребителе). */
+  detail: (participantId: string) =>
+    [...participantsKeys.all, 'detail', participantId] as const,
+};
+
 // features/properties
 export const propertyKeys = {
   all: ['properties'] as const,

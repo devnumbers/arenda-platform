@@ -6,9 +6,8 @@
  * тонкими.
  */
 
-import type { PropertyStatus } from '@/entities/property';
-import type { AccessRole } from '@/shared/model/access';
 import type { Task } from '@/entities/task';
+import { type Property, propertyPermissions } from '@/entities/property';
 
 /** Действие над фактом выполнения задачи. */
 export type TaskCompletionAction = 'complete' | 'uncomplete';
@@ -28,12 +27,9 @@ export function taskCompletionPath(
   return `/properties/${encodeURIComponent(task.propertyId)}/tasks${verb}`;
 }
 
-/** Роль и статус объекта из справочника объектов — то, что лента знает о
- * свойстве строки (useProperties). */
-export type FeedPropertyRef = {
-  readonly role?: AccessRole;
-  readonly status?: PropertyStatus;
-};
+/** Объект из справочника ленты (useProperties) — ровно то, что нужно
+ * центральным правам (#703). */
+export type FeedPropertyRef = Pick<Property, 'access' | 'status'>;
 
 /** Мутабельность строки ленты (ADR 0028, решения #522): безобъектная задача
  * в ленте всегда своя (срез owner-only — если видна, то читателю), объектная
@@ -48,10 +44,7 @@ export function canMutateFeedTask(
     return true;
   }
   const property = propertyOf(task.propertyId);
-  if (property === undefined) {
-    return false;
-  }
-  return property.role !== 'viewer' && property.status !== 'archived';
+  return property !== undefined && propertyPermissions(property).canEdit;
 }
 
 /** Подмножество ленты, доступное мутациям, — адресат «Отметить все»

@@ -170,7 +170,7 @@ func (h *MemberHandlers) handleError(w http.ResponseWriter, r *http.Request, err
 }
 
 // membershipResponse maps a domain.Membership to a response DTO. The display
-// name and email flag are not available from a membership row alone; the owner
+// name and email are not available from a membership row alone; the owner
 // list path uses memberResponse instead.
 func (h *MemberHandlers) membershipResponse(m domain.Membership, isOwner bool) openapi.PropertyAccessMemberResponse {
 	id := m.ID
@@ -187,20 +187,20 @@ func (h *MemberHandlers) membershipResponse(m domain.Membership, isOwner bool) o
 
 // memberResponse maps an application-level participant projection (owner,
 // member or pending invitation) to the shared member response shape. It is
-// used by the participant list on InvitationHandlers.
+// used by the participant list on InvitationHandlers. Every row carries the
+// user's email when it resolved (owner decision 2026-09-20, #758).
 func memberResponse(m accessapp.Member) openapi.PropertyAccessMemberResponse {
 	resp := openapi.PropertyAccessMemberResponse{
 		Role:    openapi.PropertyAccessMemberRole(string(m.Role)),
 		IsOwner: m.IsOwner,
 	}
+	if m.Email != nil {
+		email := openapi_types.Email(*m.Email)
+		resp.Email = &email
+	}
 	if m.Pending {
-		// Pending invitation row (issue #161, T5): no user yet, the invitee
-		// email is shown to managers only (the service filters the rows).
+		// Pending invitation row (issue #161, T5): no user yet.
 		resp.Status = openapi.PropertyAccessMemberResponseStatusPending
-		if m.Email != nil {
-			email := openapi_types.Email(*m.Email)
-			resp.Email = &email
-		}
 		resp.LastSentAt = m.LastSentAt
 		id := m.ID
 		resp.Id = &id
@@ -213,8 +213,6 @@ func memberResponse(m accessapp.Member) openapi.PropertyAccessMemberResponse {
 	if m.DisplayName != "" {
 		resp.DisplayName = &m.DisplayName
 	}
-	hasEmail := m.HasEmail
-	resp.HasEmail = &hasEmail
 	if !m.IsOwner {
 		id := m.ID
 		resp.Id = &id

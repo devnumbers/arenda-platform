@@ -58,48 +58,6 @@ func (ns NullNotificationCategory) Value() (driver.Value, error) {
 	return string(ns.NotificationCategory), nil
 }
 
-type NotificationChannel string
-
-const (
-	NotificationChannelEmail NotificationChannel = "email"
-	NotificationChannelPush  NotificationChannel = "push"
-)
-
-func (e *NotificationChannel) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = NotificationChannel(s)
-	case string:
-		*e = NotificationChannel(s)
-	default:
-		return fmt.Errorf("unsupported scan type for NotificationChannel: %T", src)
-	}
-	return nil
-}
-
-type NullNotificationChannel struct {
-	NotificationChannel NotificationChannel `json:"notification_channel"`
-	Valid               bool                `json:"valid"` // Valid is true if NotificationChannel is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullNotificationChannel) Scan(value interface{}) error {
-	if value == nil {
-		ns.NotificationChannel, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.NotificationChannel.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullNotificationChannel) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.NotificationChannel), nil
-}
-
 type NotificationEventType string
 
 const (

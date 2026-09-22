@@ -152,7 +152,7 @@ export { default as BoldObjects } from './bold-objects.svg';
 // (CreditCard 1917:72300) — currentColor.
 export { default as CreditCard } from './credit-card.svg';
 
-// Канонический набор иконок (96, владелец 07.09): Icon/Bold/* и Icon/R/* из
+// Канонический набор иконок (99, владелец 07.09): Icon/Bold/* и Icon/R/* из
 // Figma «Рентли. Новые экраны сервиса». Полное сопоставление узлов —
 // README.md рядом. Иконки не рисуются сами — только экспорт из Figma;
 // цвет — currentColor (кроме запечённых дизайнерских: BoldUser #D3D7D9
@@ -167,10 +167,11 @@ export { default as BoldWallet } from './bold-wallet.svg';
 // R: AccountSetting 472:4958, Archive 189:818, Block 1804:108181,
 // Change 1134:49309, ChangeVertical 858:20998, CheckmarkCircle 1644:94847,
 // Computer 1804:105311, Download 189:836, Exit 472:4952, Info 1296:48308,
-// Key 119:1104, Minus 1858:105685, PaintBrush 189:800, Phone 1804:105303,
-// Pin 501:8839, PinOff 890:30954, Setting 1740:100244, Sync 1804:105034,
-// Team 472:5276, TeamAdd 1804:108296, Undo 1883:71902, UserCircle 1652:82357,
-// Wallet 550:8808.
+// Key 119:1104, Minus 1858:105685, Objects 1967:86377, PaintBrush 189:800,
+// Phone 1804:105303, Pin 501:8839, PinOff 890:30954, Setting 1740:100244,
+// Sync 1804:105034, Team 472:5276, TeamAdd 1804:108296, Undo 1883:71902,
+// UserCircle 1652:82357, Wallet 550:8808, Lock 2213:99738 (#702, шит
+// «Превышен лимит объектов»).
 export { default as AccountSetting } from './account-setting.svg';
 export { default as Archive } from './archive.svg';
 export { default as Block } from './block.svg';
@@ -179,8 +180,10 @@ export { default as CheckmarkCircle } from './checkmark-circle.svg';
 export { default as Computer } from './computer.svg';
 export { default as Download } from './download.svg';
 export { default as Exit } from './exit.svg';
+export { default as Lock } from './lock.svg';
 export { default as Info } from './info.svg';
 export { default as Minus } from './minus.svg';
+export { default as Objects } from './objects.svg';
 export { default as PaintBrush } from './paint-brush.svg';
 export { default as Phone } from './phone.svg';
 export { default as Pin } from './pin.svg';
@@ -203,6 +206,9 @@ export { default as CalendarSmall } from './calendar-small.svg';
 export { default as PaintBrushSmall } from './paint-brush-small.svg';
 export { default as KeySmall } from './key-small.svg';
 export { default as PinSmall } from './pin-small.svg';
+// Список «Ваши участники» (#697, Figma 2036-82971): Icon/S/Lock 2036:83931
+// 16×16 — глиф чипа «Превышен лимит объектов», currentColor.
+export { default as LockSmall } from './lock-small.svg';
 // Уже потреблялись: ClockSmall, HomeMainSmall, Repeat, Star (файлы обновлены
 // свежими экспортами, см. README).
 
@@ -215,3 +221,9 @@ export { default as CheckNoneLine } from './check-none-line.svg';
 // Icon/Color/Cancel 1933:78037, запечённый красно-градиентный круг
 // с белым крестом (имя Cancel занято контурным 24×24 currentColor).
 export { default as CancelColor } from './cancel-color.svg';
+
+// Страница участника (#698, Figma 2008-81468): бейджи ролей ног доступа —
+// Icon/S/Edit 1961:52805 («Редактирование») и Icon/S/Eye 1961:52816
+// («Просмотр»), контурные 16×16, currentColor.
+export { default as EditSmall } from './edit-small.svg';
+export { default as EyeSmall } from './eye-small.svg';

@@ -27,23 +27,6 @@ func (q *Queries) CountActiveMembersByUser(ctx context.Context, userID pgtype.UU
 	return count, err
 }
 
-const countSuspendedMembersByUser = `-- name: CountSuspendedMembersByUser :one
-SELECT COUNT(*)
-FROM property_members m
-JOIN properties p ON p.id = m.property_id
-WHERE m.user_id = $1 AND m.status = 'suspended' AND p.status != 'archived'
-`
-
-// Shared objects hidden from the recipient by a tariff slot shortage (the
-// hidden_shared_count badge). Memberships on archived properties are excluded
-// (issue #163): those objects are hidden by the archive, not by the tariff.
-func (q *Queries) CountSuspendedMembersByUser(ctx context.Context, userID pgtype.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, countSuspendedMembersByUser, userID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const createPropertyMember = `-- name: CreatePropertyMember :one
 INSERT INTO property_members (id, property_id, user_id, role, granted_by)
 VALUES ($1, $2, $3, $4, $5)
@@ -82,8 +65,8 @@ func (q *Queries) CreatePropertyMember(ctx context.Context, arg CreatePropertyMe
 }
 
 const createPropertyMemberWithStatus = `-- name: CreatePropertyMemberWithStatus :one
-INSERT INTO property_members (id, property_id, user_id, role, granted_by, status)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO property_members (id, property_id, user_id, role, granted_by, status, suspended_at)
+VALUES ($1, $2, $3, $4, $5, $6, CASE WHEN $6 = 'suspended' THEN now() END)
 RETURNING id, property_id, user_id, role, granted_by, created_at, updated_at, status, suspended_at
 `
 
@@ -96,6 +79,11 @@ type CreatePropertyMemberWithStatusParams struct {
 	Status     string      `json:"status"`
 }
 
+// A grant created directly in the suspended status (invite activation or
+// AddMember without a free recipient slot) stamps suspended_at: the FIFO
+// recovery queue orders by it (ListSuspendedMembersByUser), and a NULL would
+// degrade the ordering to updated_at DESC (issue #767). The active insert
+// keeps it NULL, matching the column default.
 func (q *Queries) CreatePropertyMemberWithStatus(ctx context.Context, arg CreatePropertyMemberWithStatusParams) (PropertyMember, error) {
 	row := q.db.QueryRow(ctx, createPropertyMemberWithStatus,
 		arg.ID,
@@ -395,6 +383,8 @@ ORDER BY m.suspended_at ASC NULLS LAST, m.updated_at DESC
 // The FIFO recovery queue. Memberships on archived properties are excluded:
 // an archived object does not occupy a recipient slot (issue #163), so a free
 // slot must not be wasted on them; they re-enter the selection on unarchive.
+// Predicate and order are shared with ListSuspendedSharedWithOwner below
+// (the list's blur-card placeholders, ticket #702) — change them together.
 func (q *Queries) ListSuspendedMembersByUser(ctx context.Context, userID pgtype.UUID) ([]PropertyMember, error) {
 	rows, err := q.db.Query(ctx, listSuspendedMembersByUser, userID)
 	if err != nil {
@@ -414,6 +404,55 @@ func (q *Queries) ListSuspendedMembersByUser(ctx context.Context, userID pgtype.
 			&i.UpdatedAt,
 			&i.Status,
 			&i.SuspendedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSuspendedSharedWithOwner = `-- name: ListSuspendedSharedWithOwner :many
+SELECT m.property_id, m.role, p.name, p.address, p.owner_id
+FROM property_members m
+JOIN properties p ON p.id = m.property_id
+WHERE m.user_id = $1 AND m.status = 'suspended' AND p.status != 'archived'
+ORDER BY m.suspended_at ASC NULLS LAST, m.updated_at DESC
+`
+
+type ListSuspendedSharedWithOwnerRow struct {
+	PropertyID pgtype.UUID `json:"property_id"`
+	Role       string      `json:"role"`
+	Name       string      `json:"name"`
+	Address    string      `json:"address"`
+	OwnerID    pgtype.UUID `json:"owner_id"`
+}
+
+// The blur-cards of the recipient's main property list (ticket #702):
+// suspended memberships on non-archived properties — the same predicate and
+// FIFO order the hidden-shared count used (#158 T4, #163) — each with the
+// object's own card data (title, address — the card renders for real under
+// the blur, Figma 2213-99113) and the data owner id for the reason sheet's
+// contact row. Owner display data and the first photo resolve through the
+// access context's follow-up lookups; the access SQL never joins users.
+func (q *Queries) ListSuspendedSharedWithOwner(ctx context.Context, userID pgtype.UUID) ([]ListSuspendedSharedWithOwnerRow, error) {
+	rows, err := q.db.Query(ctx, listSuspendedSharedWithOwner, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListSuspendedSharedWithOwnerRow{}
+	for rows.Next() {
+		var i ListSuspendedSharedWithOwnerRow
+		if err := rows.Scan(
+			&i.PropertyID,
+			&i.Role,
+			&i.Name,
+			&i.Address,
+			&i.OwnerID,
 		); err != nil {
 			return nil, err
 		}

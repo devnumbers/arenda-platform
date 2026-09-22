@@ -1054,6 +1054,110 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/participants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the owner's participants (aggregate over all properties)
+         * @description The «Ваши участники» list (issue #693): one aggregate row per person — a registered user or a pending email — across every non-archived property the reading actor owns or manages as an active full_access member. The actor themself never appears. A person's identifier (id) is the registered user's uuid, or the invitee email for a pending row.
+         */
+        get: operations["listParticipants"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/participants/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Counters of the «Совместный доступ» hub
+         * @description The hub card counters (issue #693): the number of the reading actor's participants (the same aggregate the list endpoint returns) and the number of other people's objects the actor has access to (the active shared memberships — the recipient tariff-slot counter).
+         */
+        get: operations["getParticipantsSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/participants/invite": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Invite a person to several objects with one role
+         * @description The multi-object invitation of the «Совместный доступ» hub (issue #694). One email and one role against a list of property ids — a snapshot of the objects chosen at invite time; objects added later are not shared automatically. A registered email gets instant memberships (each property individually slot-checked, so a batch can mix active and suspended results); an unregistered email gets one pending invitation per property and exactly one invite email listing the objects. Every requested property id comes back with its per-property outcome. Requesting the actor's own email is a bad request.
+         */
+        post: operations["inviteParticipant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/participants/{participantId}/properties": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Grant an existing participant access to more objects
+         * @description The «Пригласить в объект» action on the participant page (issue #694): adds the chosen properties to an existing person's aggregate with one role. The identifier resolves like everywhere else on the participant API — a registered user's uuid, or an invitee email (which may already have resolved to a registered user). Registered targets get memberships (per-property slot checks apply), pending-email targets get invitations and one invite email listing the newly granted objects. Every requested property id comes back with its per-property outcome.
+         */
+        post: operations["addParticipantProperties"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/participants/{participantId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One participant's aggregate (the participant page)
+         * @description The same aggregate the list returns for one person: display data, the aggregate status and every access leg with its per-object role and lifecycle status (issue #693). A uuid resolves a registered user, an email resolves a pending invitee (and after the registration resolves to the same user's aggregate). Everything outside the reading actor's scope — including a person whose access was fully revoked — is a privacy-preserving 404 (the deep-link policy of the participant page).
+         */
+        get: operations["getParticipant"];
+        put?: never;
+        post?: never;
+        /**
+         * Revoke and remove a participant from all of the actor's objects
+         * @description The «Отозвать и удалить» action on the participant page (issue #694): removes every membership and pending invitation the person holds on the properties the reading actor manages (owner or active full_access member) — including archived ones — in one transaction, with an audit entry per removed row and FIFO recovery of the person's suspended accesses when active slots were freed. No lifecycle emails are sent. Legs on other owners' properties stay untouched. A person with nothing in the actor's scope is a privacy-preserving 404.
+         */
+        delete: operations["deleteParticipant"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/notifications": {
         parameters: {
             query?: never;
@@ -2523,8 +2627,10 @@ export interface components {
              * @enum {string}
              */
             role: "owner" | "full_access" | "viewer";
-            /** @description Owner display name ("Name Surname" or masked phone, never email). Present only in the detail response when the actor is not the owner. */
+            /** @description Owner display name ("Name Surname" or masked phone, never email). Present when the actor is not the owner: in the detail response and on the list rows (main and archive) — the shared card shows whose object it is. Own rows carry none. */
             owner_name?: string;
+            /** @description Owner's account email for the detail's owner contact row — a deliberate exposure on this surface (Figma 2200-97365), the same posture as SuspendedShared.owner_email. Present in the detail response only when the actor is not the owner; empty when the owner has no email or the resolution failed. */
+            owner_email?: string;
         };
         PropertyResponse: {
             /** Format: uuid */
@@ -3038,14 +3144,13 @@ export interface components {
             user_id: string | null;
             /**
              * Format: email
-             * @description Invitee email; filled only on pending invitation rows, null for registered participants.
+             * @description The participant's email address. Filled on every row the reader may see — registered participants and pending invitations alike (owner decision 2026-09-20, #758: nothing is hidden from viewers); null when the address did not resolve.
              */
             email?: string | null;
             role: components["schemas"]["PropertyAccessMemberRole"];
             is_owner: boolean;
             /** @description Participant display name (name and surname, or a masked phone). Never the raw phone or email. */
             display_name?: string;
-            has_email?: boolean;
             /**
              * @description Membership lifecycle status. "suspended" means the recipient's tariff slot was exceeded, so the object is hidden from the recipient's list and grants no access until a slot frees up. "pending" is an email invitation waiting for the invitee to register.
              * @enum {string}
@@ -3083,9 +3188,95 @@ export interface components {
             /** @enum {string} */
             role: "full_access" | "viewer";
         };
+        ParticipantsResponse: {
+            items: components["schemas"]["ParticipantResponse"][];
+        };
+        ParticipantResponse: {
+            /** @description The stable person identifier to address this aggregate by: the registered user's uuid, or the invitee email for a pending row. */
+            id: string;
+            /**
+             * Format: uuid
+             * @description Registered user id; null for a pending email row.
+             */
+            user_id?: string | null;
+            /**
+             * Format: email
+             * @description The invitee email of a pending row; for a registered user, their email resolved for display (null when the user has none).
+             */
+            email?: string | null;
+            /** @description The person's display name (name and surname, or a masked phone); null for a pending row (the email is the label). */
+            display_name?: string | null;
+            /**
+             * @description The aggregate badge (issue #693): "all_properties" — active access to every property in the reading scope; "partial" — active access to accessible_properties_count of them; "limit_exceeded" — at least one suspended membership (the recipient's tariff limit was hit). Display copy: «Доступ ко всем объектам» / «Доступно N объектов» / «Превышен лимит объектов».
+             * @enum {string}
+             */
+            aggregate_status: "all_properties" | "partial" | "limit_exceeded";
+            /** @description The number of properties with active access. */
+            accessible_properties_count: number;
+            /** @description The person's access legs on the reading scope's properties. */
+            properties: components["schemas"]["ParticipantPropertyResponse"][];
+        };
+        ParticipantPropertyResponse: {
+            /** Format: uuid */
+            property_id: string;
+            title: string;
+            /** @enum {string} */
+            role: "full_access" | "viewer";
+            /**
+             * @description The access lifecycle on this property: "active"/"suspended" memberships, "pending" email invitation.
+             * @enum {string}
+             */
+            status: "active" | "suspended" | "pending";
+        };
+        ParticipantsSummaryResponse: {
+            /** @description The reading actor's participants across their scope. */
+            participants_count: number;
+            /** @description Other people's objects the reading actor has active access to (the recipient tariff-slot counter; issue #163). */
+            accessible_properties_count: number;
+        };
         PropertyAccessMemberUpdateRequest: {
             /** @enum {string} */
             role: "full_access" | "viewer";
+        };
+        ParticipantInviteRequest: {
+            /**
+             * Format: email
+             * @description Invitee email. A registered email activates memberships instantly; an unregistered email becomes pending invitations plus one invite email listing the objects. The actor's own email is rejected.
+             */
+            email: string;
+            /** @enum {string} */
+            role: "full_access" | "viewer";
+            /** @description The objects to grant access to — a snapshot chosen at invite time. Duplicate ids collapse to the first occurrence. */
+            property_ids: string[];
+        };
+        ParticipantPropertiesAddRequest: {
+            /** @enum {string} */
+            role: "full_access" | "viewer";
+            /** @description The objects to add to the participant's existing access — a snapshot chosen at grant time. Duplicate ids collapse to the first occurrence. */
+            property_ids: string[];
+        };
+        /**
+         * @description The per-property result of a participant grant. "active"/"suspended" — a membership was created (the recipient's tariff slot was free / exhausted); "pending" — an invitation was stored and the invite email will be sent; "skipped_duplicate" — the person already holds access or a pending invitation on the property; "skipped_archived" — the property is archived (granting new access is forbidden);  "skipped_owner" — the target is the property's owner themself; "skipped_unavailable" — the property is not in the reading actor's manage scope (unknown, foreign, or otherwise unmanageable).
+         * @enum {string}
+         */
+        ParticipantGrantOutcome: "active" | "suspended" | "pending" | "skipped_duplicate" | "skipped_archived" | "skipped_owner" | "skipped_unavailable";
+        ParticipantGrantResult: {
+            /** Format: uuid */
+            property_id: string;
+            outcome: components["schemas"]["ParticipantGrantOutcome"];
+            /**
+             * Format: uuid
+             * @description The created membership id; set only for active/suspended.
+             */
+            membership_id?: string | null;
+            /**
+             * Format: uuid
+             * @description The created invitation id; set only for pending.
+             */
+            invitation_id?: string | null;
+        };
+        ParticipantGrantResultsResponse: {
+            items: components["schemas"]["ParticipantGrantResult"][];
         };
         PropertiesResponse: {
             items: components["schemas"]["PropertyResponse"][];
@@ -3094,11 +3285,26 @@ export interface components {
              * @description The reading actor's calendar date (ADR 0048) — the «today» the client counts the «Осталось N месяцев» rental badge against (ticket #586; the tasks feed's today rule, #521).
              */
             today: string;
+            /** @description The reading actor's suspended shared memberships, FIFO order (ticket #702): shared objects hidden from them by a tariff slot shortage, returned as blur-card placeholders («Объект недоступен») instead of the hidden_shared_count footnote they replace. Empty for owners and recipients within their limit. */
+            suspended_shared?: components["schemas"]["SuspendedSharedProperty"][];
+        };
+        /** @description A suspended shared membership of the reading actor (ticket #702): the blur-card of an object temporarily unavailable because the actor's tariff limit is exceeded. The card renders for real under the blur (Figma 2213-99113) — the payload carries the object's own title and address plus the owner contact the reason sheet renders (Figma 2229-100002). */
+        SuspendedSharedProperty: {
+            /** Format: uuid */
+            property_id: string;
             /**
-             * @description Number of shared properties hidden from the recipient due to a tariff slot shortage (suspended memberships). Zero for owners and when the recipient is within their limit.
-             * @default 0
+             * @description The recipient's role on the suspended access.
+             * @enum {string}
              */
-            hidden_shared_count: number;
+            access_role: "full_access" | "viewer";
+            /** @description The object's title — the blurred card renders it. */
+            name: string;
+            /** @description The object's address — the blurred card renders it. */
+            address: string;
+            /** @description The owner's public display name («Имя Фамилия» or a masked phone). */
+            owner_name: string;
+            /** @description The owner's account email for the reason sheet's contact row — a deliberate exposure for this surface (Figma 2229-100002): the recipient needs the contact to resolve the suspension with the owner. Empty when the owner has no email. */
+            owner_email: string;
         };
         /** @description The properties search page (ticket #601): the matched cards in the keyset window's order. */
         PropertiesSearchResponse: {
@@ -5736,6 +5942,152 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+        };
+    };
+    listParticipants: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The owner's participants sorted by display name, pending emails last */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParticipantsResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getParticipantsSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The hub counters */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParticipantsSummaryResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    inviteParticipant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ParticipantInviteRequest"];
+            };
+        };
+        responses: {
+            /** @description The per-property grant results, one item per requested id in request order (duplicate ids collapse to the first occurrence). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParticipantGrantResultsResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    addParticipantProperties: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A registered user's uuid or an invitee email. */
+                participantId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ParticipantPropertiesAddRequest"];
+            };
+        };
+        responses: {
+            /** @description The per-property grant results, one item per requested id in request order (duplicate ids collapse to the first occurrence). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParticipantGrantResultsResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getParticipant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A registered user's uuid or a pending invitee email. */
+                participantId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The participant's aggregate */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParticipantResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteParticipant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A registered user's uuid or an invitee email. */
+                participantId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The person was removed from the actor's properties */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     listNotifications: {

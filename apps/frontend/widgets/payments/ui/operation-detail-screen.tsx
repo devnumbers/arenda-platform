@@ -19,7 +19,8 @@ import {
   categoryIconComponents,
   categoryStyle,
 } from '@/features/payment-categories';
-import { canMutateProperty, useProperty } from '@/features/properties';
+import { useProperty } from '@/features/properties';
+import { propertyPermissions } from '@/entities/property';
 import {
   isOperationPayable,
   useDeleteOperation,
@@ -85,7 +86,7 @@ export function OperationDetailScreen({
 
 
   // Единый предикат мутационного входа страницы платежа (ADR 0028, #446).
-  const canMutate = canMutateProperty(property);
+  const canMutate = propertyPermissions(property).canEdit;
 
   const loading = operationQuery.isPending || propertyQuery.isPending;
   const failed = operationQuery.isError || propertyQuery.isError;

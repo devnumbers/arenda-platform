@@ -87,10 +87,6 @@ type Querier interface {
 	// the two in sync when a selection field changes. The limit of the selection
 	// value is ignored: a gauge counts the whole batch.
 	CountSubscriptionPaymentsBySelection(ctx context.Context, arg CountSubscriptionPaymentsBySelectionParams) (int64, error)
-	// Shared objects hidden from the recipient by a tariff slot shortage (the
-	// hidden_shared_count badge). Memberships on archived properties are excluded
-	// (issue #163): those objects are hidden by the archive, not by the tariff.
-	CountSuspendedMembersByUser(ctx context.Context, userID pgtype.UUID) (int64, error)
 	// The total count of one bucket — the «Выполненные N» counter (false =
 	// active tasks, true = the completed journal).
 	CountTasksByProperty(ctx context.Context, arg CountTasksByPropertyParams) (int64, error)
@@ -146,6 +142,11 @@ type Querier interface {
 	// Pending property member invitations by email (T5, issue #161). Emails are
 	// stored lowercase; lookups compare with lower() on the parameter side too.
 	CreatePropertyMemberInvitation(ctx context.Context, arg CreatePropertyMemberInvitationParams) (PropertyMemberInvitation, error)
+	// A grant created directly in the suspended status (invite activation or
+	// AddMember without a free recipient slot) stamps suspended_at: the FIFO
+	// recovery queue orders by it (ListSuspendedMembersByUser), and a NULL would
+	// degrade the ordering to updated_at DESC (issue #767). The active insert
+	// keeps it NULL, matching the column default.
 	CreatePropertyMemberWithStatus(ctx context.Context, arg CreatePropertyMemberWithStatusParams) (PropertyMember, error)
 	CreatePropertyPhoto(ctx context.Context, arg CreatePropertyPhotoParams) (PropertyPhoto, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (CreateSessionRow, error)
@@ -759,6 +760,37 @@ type Querier interface {
 	// only flips the date comparison. Both cursor args travel together; NULL
 	// (no cursor) reads from the beginning.
 	ListPaidOperationsGlobal(ctx context.Context, arg ListPaidOperationsGlobalParams) ([]ListPaidOperationsGlobalRow, error)
+	ListParticipantInvitationsByProperties(ctx context.Context, propertyIds string) ([]ListParticipantInvitationsByPropertiesRow, error)
+	ListParticipantInvitationsForRemoval(ctx context.Context, arg ListParticipantInvitationsForRemovalParams) ([]ListParticipantInvitationsForRemovalRow, error)
+	ListParticipantMembershipsByProperties(ctx context.Context, propertyIds string) ([]ListParticipantMembershipsByPropertiesRow, error)
+	// The mutation side of the owner's participant aggregate (issue #694):
+	// «Отозвать и удалить» enumerates one person's legs within the acting
+	// actor's manage scope. Unlike the read scope above, archived properties are
+	// INCLUDED here: revoking access keeps working on archived objects (issue
+	// #163) — an archived leg must not survive a full removal, or the person
+	// would silently reappear on unarchive. The scope predicate is the
+	// authorization: rows outside it never leave the database.
+	ListParticipantMembershipsForRemoval(ctx context.Context, arg ListParticipantMembershipsForRemovalParams) ([]ListParticipantMembershipsForRemovalRow, error)
+	// The «Участник (владельца)» read model (issue #693): an aggregate over
+	// property_members ∪ property_member_invitations with no table of its own
+	// (chart decision of map #692). The reading actor's scope is the set of
+	// non-archived properties the actor owns or manages as an active full_access
+	// member; archived properties stay invisible like everywhere else on the
+	// platform (issue #163). The scope doubles as the authorization: rows outside
+	// it never leave the database.
+	//
+	// THE MANAGE-SCOPE PREDICATE (the «actor_can_manage» canon): owner OR active
+	// full_access is the authorization of the three scope queries in this file
+	// (read scope + both removal listings; the two ByProperties listings filter
+	// by the already-scoped id list). The predicate lives in one place — the SQL
+	// function actor_can_manage
+	// (migration 000135, issue #794) — which the queries below call; before #794
+	// sqlc could not share the text between query bodies, so the predicate was
+	// kept as three byte-identical copies pinned by the matrix test.
+	// TestParticipantRepository_ManageScopePredicateMatrix runs the same actor
+	// verdict across all three queries and stays the gate: semantic drift of the
+	// function fails there instead of opening a silent privacy hole.
+	ListParticipantScopeProperties(ctx context.Context, actorID pgtype.UUID) ([]ListParticipantScopePropertiesRow, error)
 	// One zone's due-day operations as of the zone's today (решение #737, тип
 	// №2: в день срока): planned, dated exactly today, on rules without the
 	// auto-pay mode — an auto-pay rule's due occurrence is extinguished by the
@@ -910,7 +942,17 @@ type Querier interface {
 	// The FIFO recovery queue. Memberships on archived properties are excluded:
 	// an archived object does not occupy a recipient slot (issue #163), so a free
 	// slot must not be wasted on them; they re-enter the selection on unarchive.
+	// Predicate and order are shared with ListSuspendedSharedWithOwner below
+	// (the list's blur-card placeholders, ticket #702) — change them together.
 	ListSuspendedMembersByUser(ctx context.Context, userID pgtype.UUID) ([]PropertyMember, error)
+	// The blur-cards of the recipient's main property list (ticket #702):
+	// suspended memberships on non-archived properties — the same predicate and
+	// FIFO order the hidden-shared count used (#158 T4, #163) — each with the
+	// object's own card data (title, address — the card renders for real under
+	// the blur, Figma 2213-99113) and the data owner id for the reason sheet's
+	// contact row. Owner display data and the first photo resolve through the
+	// access context's follow-up lookups; the access SQL never joins users.
+	ListSuspendedSharedWithOwner(ctx context.Context, userID pgtype.UUID) ([]ListSuspendedSharedWithOwnerRow, error)
 	// User-facing tariff listing: hidden tariffs stay referable by FK but are not
 	// offered (issue #245).
 	ListTariffs(ctx context.Context) ([]Tariff, error)

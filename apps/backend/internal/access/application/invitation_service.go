@@ -47,6 +47,7 @@ type InvitationService struct {
 	mailer      AccessMailer
 	events      AccessEventPublisher
 	titles      PropertyTitleResolver
+	emails      UserEmailResolver
 	clock       clock.Clock
 	logger      *slog.Logger
 }
@@ -56,7 +57,8 @@ type InvitationService struct {
 // be nil to disable slot enforcement (mirrors NewAccessService); mailer may be
 // nil to skip sending (e.g. in tests that do not exercise the mail path);
 // events is the lifecycle event publisher (карта #734, #751) and may be nil to
-// disable the publications. Statuses reports the archived flag of a
+// disable the publications; emails may be nil to skip the member-email
+// enrichment of ListMembers. Statuses reports the archived flag of a
 // property (issue #163); it may be nil to skip the archived-property checks.
 // Factory bundles the repositories, the audit recorder, and the Unit-of-Work
 // every mutating use case runs through (ADR 0033 γ-factory).
@@ -75,6 +77,7 @@ func NewInvitationService(
 	factory txStoreFactory,
 	clk clock.Clock,
 	logger *slog.Logger,
+	emails UserEmailResolver,
 ) *InvitationService {
 	if logger == nil {
 		logger = slog.Default()
@@ -95,6 +98,7 @@ func NewInvitationService(
 		mailer:         mailer,
 		events:         events,
 		titles:         titles,
+		emails:         emails,
 		clock:          clk,
 		logger:         logger,
 	}
@@ -188,39 +192,18 @@ func (s *InvitationService) inviteRegisteredUser(
 
 // createPendingInvitation stores the invitation and its audit entry in one
 // transaction; a duplicate pending invitation is ErrInvitationAlreadyExists.
+// The row machinery is the shared createInvitationInTx core (the same core
+// the batch grant uses).
 func (s *InvitationService) createPendingInvitation(
 	ctx context.Context, invitation domain.Invitation, actor uuid.UUID, actorRole sharedpolicy.Role,
 ) (domain.Invitation, error) {
-	var created domain.Invitation
-	err := s.runInTx(ctx, func(stores *txStores) error {
-		if _, err := stores.invitations.GetByPropertyAndEmail(ctx, invitation.PropertyID, invitation.Email); err == nil {
-			return domain.ErrInvitationAlreadyExists
-		} else if !errors.Is(err, domain.ErrInvitationNotFound) {
-			return fmt.Errorf("check existing invitation: %w", err)
-		}
-
-		var err error
-		created, err = stores.invitations.Create(ctx, invitation)
-		if err != nil {
-			return fmt.Errorf("create invitation: %w", err)
-		}
-
-		// Audit in the same transaction. Only ids and the role are recorded; the
-		// invitee email is PII and must never appear in context (ADR 0020).
-		if err := stores.audit.Record(ctx, auditdomain.Entry{
-			ActorID:    &actor,
-			ActorRole:  sharedpolicy.AuditActorRole(actorRole),
-			Action:     auditdomain.ActionPropertyMemberInvitationInvited,
-			EntityType: auditdomain.EntityPropertyMemberInvitation,
-			EntityID:   &created.ID,
-			Context: map[string]any{
-				auditKeyPropertyID: invitation.PropertyID,
-				auditKeyRole:       string(invitation.Role),
-			},
-		}); err != nil {
-			return fmt.Errorf("record audit: %w", err)
-		}
-		return nil
+	var (
+		created domain.Invitation
+		err     error
+	)
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		created, err = s.access.createInvitationInTx(ctx, stores, invitation, actor, actorRole)
+		return err
 	})
 	if err != nil {
 		return domain.Invitation{}, err
@@ -541,22 +524,33 @@ func (s *InvitationService) insertActivationMembership(
 }
 
 // ListMembers returns the property participants (owner first, then membership
-// rows) and, for actors with the manage-members capability, the pending email
-// invitations of the property appended after the members. Pending rows expose
-// the invitee email, so they are manager-only; viewers get the plain member
-// list.
+// rows) with the pending email invitations appended after the members. Every
+// reader with the view capability (gated by AccessService.ListMembers) sees
+// the same rows, including member emails and pending invitations (owner
+// decision 2026-09-20, #758 walkthrough: nothing is hidden from viewers).
+// Email resolution degrades to a nil email when the resolver is not wired or
+// a lookup fails — the row stays.
 func (s *InvitationService) ListMembers(ctx context.Context, actor, propertyID uuid.UUID) ([]Member, error) {
 	members, err := s.access.ListMembers(ctx, actor, propertyID)
 	if err != nil {
 		return nil, err
 	}
 
-	role, err := s.policy.RoleForProperty(ctx, actor, propertyID)
-	if err != nil {
-		return nil, fmt.Errorf("resolve role: %w", err)
-	}
-	if !sharedpolicy.CanManageMembers(role) {
-		return members, nil
+	for i := range members {
+		m := &members[i]
+		if m.Pending || m.UserID == uuid.Nil || s.emails == nil {
+			continue
+		}
+		email, err := s.emails.GetEmail(ctx, m.UserID)
+		if err != nil {
+			s.logger.WarnContext(ctx, "access: member email lookup failed",
+				slog.String(auditKeyUserID, m.UserID.String()),
+				slog.String("error", err.Error()))
+			continue
+		}
+		if email != "" {
+			m.Email = &email
+		}
 	}
 
 	invitations, err := s.invitations.ListByProperty(ctx, propertyID)
@@ -578,21 +572,12 @@ func (s *InvitationService) ListMembers(ctx context.Context, actor, propertyID u
 }
 
 // sendInviteEmail renders and sends the single invite email. A missing
-// property title degrades to a generic text rather than failing the send.
+// property title degrades to the generic text (an empty title list, the
+// shared resolveInviteTitles) rather than failing the send.
 func (s *InvitationService) sendInviteEmail(ctx context.Context, email string, propertyID uuid.UUID, role domain.Role) error {
 	if s.mailer == nil {
 		return nil
 	}
-	var title string
-	if s.titles != nil {
-		resolved, err := s.titles.GetTitle(ctx, propertyID)
-		if err != nil {
-			s.logger.WarnContext(ctx, "access: property title lookup for invite email failed",
-				slog.String(auditKeyPropertyID, propertyID.String()),
-				slog.String("error", err.Error()))
-		} else {
-			title = resolved
-		}
-	}
-	return s.mailer.SendInvite(ctx, email, title, role)
+	titles := resolveInviteTitles(ctx, s.titles, s.logger, []uuid.UUID{propertyID})
+	return s.mailer.SendInvite(ctx, email, titles, role)
 }

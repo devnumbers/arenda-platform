@@ -69,7 +69,23 @@ RETURNING *;
 -- The FIFO recovery queue. Memberships on archived properties are excluded:
 -- an archived object does not occupy a recipient slot (issue #163), so a free
 -- slot must not be wasted on them; they re-enter the selection on unarchive.
+-- Predicate and order are shared with ListSuspendedSharedWithOwner below
+-- (the list's blur-card placeholders, ticket #702) — change them together.
 SELECT m.*
+FROM property_members m
+JOIN properties p ON p.id = m.property_id
+WHERE m.user_id = $1 AND m.status = 'suspended' AND p.status != 'archived'
+ORDER BY m.suspended_at ASC NULLS LAST, m.updated_at DESC;
+
+-- name: ListSuspendedSharedWithOwner :many
+-- The blur-cards of the recipient's main property list (ticket #702):
+-- suspended memberships on non-archived properties — the same predicate and
+-- FIFO order the hidden-shared count used (#158 T4, #163) — each with the
+-- object's own card data (title, address — the card renders for real under
+-- the blur, Figma 2213-99113) and the data owner id for the reason sheet's
+-- contact row. Owner display data and the first photo resolve through the
+-- access context's follow-up lookups; the access SQL never joins users.
+SELECT m.property_id, m.role, p.name, p.address, p.owner_id
 FROM property_members m
 JOIN properties p ON p.id = m.property_id
 WHERE m.user_id = $1 AND m.status = 'suspended' AND p.status != 'archived'
@@ -82,15 +98,6 @@ SELECT COUNT(*)
 FROM property_members m
 JOIN properties p ON p.id = m.property_id
 WHERE m.user_id = $1 AND m.status = 'active' AND p.status != 'archived';
-
--- name: CountSuspendedMembersByUser :one
--- Shared objects hidden from the recipient by a tariff slot shortage (the
--- hidden_shared_count badge). Memberships on archived properties are excluded
--- (issue #163): those objects are hidden by the archive, not by the tariff.
-SELECT COUNT(*)
-FROM property_members m
-JOIN properties p ON p.id = m.property_id
-WHERE m.user_id = $1 AND m.status = 'suspended' AND p.status != 'archived';
 
 -- name: ListActiveMembersByPropertyOwner :many
 SELECT m.*
@@ -109,6 +116,11 @@ JOIN properties p ON p.id = m.property_id
 WHERE m.user_id = $1 AND m.status = 'active' AND p.status != 'archived';
 
 -- name: CreatePropertyMemberWithStatus :one
-INSERT INTO property_members (id, property_id, user_id, role, granted_by, status)
-VALUES ($1, $2, $3, $4, $5, $6)
+-- A grant created directly in the suspended status (invite activation or
+-- AddMember without a free recipient slot) stamps suspended_at: the FIFO
+-- recovery queue orders by it (ListSuspendedMembersByUser), and a NULL would
+-- degrade the ordering to updated_at DESC (issue #767). The active insert
+-- keeps it NULL, matching the column default.
+INSERT INTO property_members (id, property_id, user_id, role, granted_by, status, suspended_at)
+VALUES ($1, $2, $3, $4, $5, $6, CASE WHEN $6 = 'suspended' THEN now() END)
 RETURNING *;

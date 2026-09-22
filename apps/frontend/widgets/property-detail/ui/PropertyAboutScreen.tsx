@@ -4,7 +4,8 @@ import {useParams, useRouter} from 'next/navigation';
 import type {JSX} from 'react';
 import Image from 'next/image';
 import {ROUTES} from '@/shared/config/routes';
-import {canMutateProperty, propertyTypeLabels, useProperty} from '@/features/properties';
+import { propertyTypeLabels, useProperty } from '@/features/properties';
+import { propertyPermissions } from '@/entities/property';
 import {formatAttributesForCardGrouped} from '@/features/property-attributes';
 import {
     IconButton,
@@ -33,7 +34,7 @@ export function PropertyAboutScreen(): JSX.Element {
 
     const propertyQuery = useProperty(id);
     const property = propertyQuery.data;
-    const canMutate = canMutateProperty(propertyQuery.isSuccess ? property : undefined);
+    const canMutate = propertyPermissions(propertyQuery.isSuccess ? property : undefined).canEdit;
 
     if (propertyQuery.isPending) {
         return (

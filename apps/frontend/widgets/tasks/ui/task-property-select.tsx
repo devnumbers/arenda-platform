@@ -4,6 +4,7 @@ import type { JSX } from 'react';
 import { BoldHome, BoldObjects, Cancel, Check, RadioFalse, RadioTrue } from '@/shared/assets/icons';
 import { Button, IconButton, PageContent, StickyBottomBar, TopNav, TopNavTitle } from '@/shared/ui/design';
 import { useProperties } from '@/features/properties';
+import { filterEditableProperties } from '@/entities/property';
 import { ObjectLoadErrorCard, ObjectRowsSkeleton } from './tasks-property-select';
 
 /**
@@ -12,7 +13,9 @@ import { ObjectLoadErrorCard, ObjectRowsSkeleton } from './tasks-property-select
  * страница на том же маршруте, URL не меняется, строгий черновик применяют
  * «Выбрать»/✓, ✕ отбрасывает. Радио-выбор одного: «Общая задача / Не
  * привязана к объектам» (null — правило без объекта, ADR 0052) или объект.
- * Архивов в списке нет — решение 9 #522 (как в фильтре ленты #524).
+ * Архивов в списке нет — решение 9 #522 (как в фильтре ленты #524);
+ * объекты — только с правом правки (#703): привязка к чужому
+ * зрительскому объекту упёрлась бы в отказ сервера.
  */
 export function TaskPropertySelectPage({
   draft,
@@ -26,9 +29,7 @@ export function TaskPropertySelectPage({
   readonly onDismiss: () => void;
 }): JSX.Element {
   const propertiesQuery = useProperties();
-  const properties = (propertiesQuery.data ?? []).filter(
-    (property) => property.status !== 'archived',
-  );
+  const properties = filterEditableProperties(propertiesQuery.data ?? []);
 
   return (
     <>

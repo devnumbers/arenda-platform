@@ -30,6 +30,7 @@ import {
     ConfirmDialog,
     DesktopMenuButton,
     EmptyState,
+    ErrorCard,
     HubTitle,
     SubScreenShell,
     IconButton,
@@ -460,6 +461,17 @@ export function DesignLayerShowcase(): JSX.Element {
                     <div className={styles.grid}>
                         <StepsChip step={1} total={5} />
                         <StepsChip step={2} total={6} size="m" />
+                    </div>
+                </div>
+
+                <div className={styles.group}>
+                    <h3 className={styles.groupTitle}>ErrorCard</h3>
+                    <div className={styles.links}>
+                        <ErrorCard
+                            title="Не удалось загрузить раздел"
+                            onRetry={() => {}}
+                            className="mx-0 max-w-[360px]"
+                        />
                     </div>
                 </div>
 

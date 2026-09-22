@@ -5,6 +5,7 @@ import {useRouter} from 'next/navigation';
 import {
   useProperties,
   usePropertiesWithMeta,
+  type SuspendedSharedProperty,
 } from '@/features/properties';
 import {useSubscription} from '@/features/subscription';
 import {Add, Archive, Search, SmallArrowDown, SortingBigSmall, SortingSmallBig} from '@/shared/assets/icons';
@@ -32,8 +33,9 @@ import {
   type PropertySortDirection,
   type PropertySortField,
 } from '../lib/property-sort';
-import {formatHiddenSharedFootnote} from '../lib/format-hidden-shared-footnote';
 import {PropertyCard} from './PropertyCard';
+import {SuspendedPropertyCard} from './SuspendedPropertyCard';
+import {SuspendedReasonSheet} from './SuspendedReasonSheet';
 import {PropertiesEmptyState} from './PropertiesEmptyState';
 import {PropertiesLoading} from './PropertiesLoading';
 import {PropertiesErrorState} from './PropertiesErrorState';
@@ -48,8 +50,9 @@ export type PropertiesPageProps = {
  * 1603:88972 — планшет, 1590:88756 — мобайл, 1603:90604 — пустое): заголовок
  * хаба, поисковая пилюля с «+» создания, ряд сортировки (чип PickerMenu +
  * ссылка «Архив» → экран архива #587; пустой список прячет ряд — DESIGN.md
- * §7), список карточек, сноска скрытых шаренных объектов, «+ Создать объект»
- * под списком. Компакт-бар — канон хаба: лупа на поиск, заголовок, «+».
+ * §7), список карточек, блюр-карточки подвесших общих объектов (#702),
+ * «+ Создать объект» под списком. Компакт-бар — канон хаба: лупа на поиск,
+ * заголовок, «+».
  * Сортировки — резолюция #584 (4 поля × возрастание/убывание, основной
  * всегда первый), персистентность в URL (?sort=&order=). Фильтров по
  * типу/статусу в хабе нет; поиск объектов — серверный на отдельной
@@ -60,16 +63,20 @@ export type PropertiesPageProps = {
 export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element {
   const {data, isLoading, isFetching, isError, refetch} = useProperties();
   // Та же запись кэша /properties, что и у useProperties (один ключ — один
-  // запрос): сколько общих объектов скрыто у получателя из-за тарифного
-  // лимита и «сегодня владельца» (ADR 0048) для бейджей аренды.
+  // запрос): подвесшие общие объекты получателя (suspended_shared —
+  // блюр-карточки suspendedList ниже) и «сегодня владельца» (ADR 0048) для
+  // бейджей аренды.
   const metaQuery = usePropertiesWithMeta();
   const subscriptionQuery = useSubscription();
   const router = useRouter();
   const {write} = useUrlParams();
 
   const [sort, setSort] = useState<PropertySort>(initialSort ?? DEFAULT_PROPERTY_SORT);
+  const [reasonTarget, setReasonTarget] = useState<SuspendedSharedProperty | null>(null);
 
   const visible = sortProperties(data ?? [], sort);
+  const suspendedShared = metaQuery.data?.suspendedShared ?? [];
+  const showSuspended = !isLoading && !isError && suspendedShared.length > 0;
 
   // Запись — канон useUrlParams (#786): экран владеет только sort/order,
   // чужие параметры адреса переживают смену сортировки, дефолт снимается.
@@ -82,13 +89,8 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
   // Служебный ряд (сортировка + «Архив») и список живут только вместе (§7).
   const showControls = !isLoading && !isError && !isEmpty;
 
-  const hiddenSharedCount = metaQuery.data?.hiddenSharedCount ?? 0;
-  const showHiddenSharedNote =
-    showControls
-    && !metaQuery.isLoading
-    && !metaQuery.isError
-    && hiddenSharedCount > 0;
-
+  // 404 подписки хук отдаёт null (#768) — это не pending и не ошибка:
+  // canAdd=false ниже ведёт на смену тарифа, кнопки не висят в disabled.
   const isActionLoading = subscriptionQuery.isPending || data === undefined;
 
   const canAdd = (() => {
@@ -141,10 +143,20 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
         </>
       )}
 
-      {showHiddenSharedNote && (
-        <p className={styles.hiddenSharedNote}>
-          {formatHiddenSharedFootnote(hiddenSharedCount)}
-        </p>
+      {/* Подвесшие общие объекты (#702): блюр-карточки вместо сноски
+       * hidden_shared_count — после обычных карточек, в серверном
+       * FIFO-порядке. */}
+      {showSuspended && (
+        <ul className={styles.suspendedList} data-testid="suspended-properties-list">
+          {suspendedShared.map((placeholder) => (
+            <li key={placeholder.propertyId}>
+              <SuspendedPropertyCard
+                placeholder={placeholder}
+                onReason={setReasonTarget}
+              />
+            </li>
+          ))}
+        </ul>
       )}
 
       {showControls && (
@@ -182,6 +194,8 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
 
         {content}
       </PageContent>
+
+      <SuspendedReasonSheet placeholder={reasonTarget} onClose={() => setReasonTarget(null)} />
     </>
   );
 }

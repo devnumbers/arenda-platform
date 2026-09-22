@@ -134,6 +134,12 @@ export const ROUTES = {
   /** Экран правки контакта (#510): форма создания в режиме правки. */
   propertyContactEdit: (id: string, contactId: string) =>
     `/properties/${id}/contacts/${contactId}/edit`,
+  /** Экран «Участники объекта» (#700): вход из детали объекта —
+   * «Управление» → «Совместный доступ». */
+  propertyParticipants: (id: string) => `/properties/${id}/participants`,
+  /** Приглашение от объекта (#700): тот же флоу #699, но объект один —
+   * без выбора объектов. */
+  propertyParticipantsInvite: (id: string) => `/properties/${id}/participants/invite`,
   /** Плоская книга контактов (глобальная страница, макеты 1726:65083/…). */
   contacts: '/contacts',
   /** Поиск по книге — отдельная страница с поисковой шапкой (как #508). */
@@ -144,9 +150,32 @@ export const ROUTES = {
   contact: (contactId: string) => `/contacts/${contactId}`,
   /** Правка контакта из книги. */
   contactEdit: (contactId: string) => `/contacts/${contactId}/edit`,
-  /** Глобальные «Участники» — страница-заглушка единого хрома (карта #556,
-   * тикет #559); сама фича шаринга доступа — вне карты. */
+  /** Хаб «Совместный доступ» (карта #692, тикет #696): карточки «Ваши
+   * участники» и «Объекты пользователей», CTA «Пригласить участника»;
+   * вход — пункт навбара «Участники» и строка в профиле. */
   participants: '/participants',
+  /** Экран «Ваши участники» (#697): список агрегатов, поиск, «Отозвать
+   * всех». */
+  participantsList: '/participants/list',
+  /** Страница участника (тикет #698, тот же агрегат GET
+   * /participants/{participantId}). Идентификатор — uuid юзера либо
+   * pending-почта: кодируется в путь (Next декодирует параметр обратно). */
+  participant: (participantId: string) =>
+    `/participants/${encodeURIComponent(participantId)}`,
+  /** Экран «Права участника» (#698): роль и отзыв на одном объекте. */
+  participantRights: (participantId: string, propertyId: string) =>
+    `/participants/${encodeURIComponent(participantId)}/properties/${propertyId}`,
+  /** Экран «Пригласить в объект» (#698): мультичек объектов читающего
+   * для существующего участника (не путать с participantsInvite —
+   * приглашением нового человека, #699). */
+  participantInvite: (participantId: string) =>
+    `/participants/${encodeURIComponent(participantId)}/invite`,
+  /** Экран «Объекты пользователей» (#701): чужие объекты с доступом.
+   * До тикета живёт как нейтральный каркас. */
+  participantsProperties: '/participants/properties',
+  /** Экран приглашения участника (#699): мультиобъектный флоу. До тикета
+   * живёт как нейтральный каркас. */
+  participantsInvite: '/participants/invite',
   /** Центр уведомлений — лента (карта #734, тикет #744): хаб-маршрут
    * среднего таба TabBar и пилюли ПК. */
   notifications: '/notifications',

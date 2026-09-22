@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -53,7 +54,7 @@ func newEventsFixture() *eventsFixture {
 	access := NewAccessService(repo, owners, statuses, lookup, policy, coordinator,
 		events, factory, nil)
 	invites := NewInvitationService(access, repo, invitations, owners, statuses, lookup, policy,
-		coordinator, nil, events, fakeTitles("Квартира на Невском"), factory, clk, nil)
+		coordinator, nil, events, fakeTitles("Квартира на Невском"), factory, clk, nil, nil)
 	return &eventsFixture{
 		repo: repo, owners: owners, lookup: lookup, limiter: limiter, events: events, clk: clk,
 		access: access, invites: invites,
@@ -245,5 +246,128 @@ func TestActivateInvitationPublishesActivated(t *testing.T) {
 				t.Error("the event must carry the activation instant")
 			}
 		})
+	}
+}
+
+// fakeEventPublisher records the lifecycle events the services publish
+// (карта #734, #751); errFor fails a kind on demand — the publications are
+// best-effort, so a failure must never surface from the transition itself.
+type fakeEventPublisher struct {
+	events []recordedEvent
+	errFor map[string]error
+}
+
+type recordedEvent struct {
+	kind  string
+	email *InvitationActivated
+	pause *MembershipSuspended
+	resum *MembershipResumed
+	revo  *MembershipRevoked
+	left  *MemberLeft
+}
+
+func (f *fakeEventPublisher) PublishInvitationActivated(_ context.Context, e InvitationActivated) error {
+	if err := f.errFor["invitation_activated"]; err != nil {
+		return err
+	}
+	f.events = append(f.events, recordedEvent{kind: "invitation_activated", email: &e})
+	return nil
+}
+
+func (f *fakeEventPublisher) PublishMembershipSuspended(_ context.Context, e MembershipSuspended) error {
+	if err := f.errFor["membership_suspended"]; err != nil {
+		return err
+	}
+	f.events = append(f.events, recordedEvent{kind: "membership_suspended", pause: &e})
+	return nil
+}
+
+func (f *fakeEventPublisher) PublishMembershipResumed(_ context.Context, e MembershipResumed) error {
+	if err := f.errFor["membership_resumed"]; err != nil {
+		return err
+	}
+	f.events = append(f.events, recordedEvent{kind: "membership_resumed", resum: &e})
+	return nil
+}
+
+func (f *fakeEventPublisher) PublishMembershipRevoked(_ context.Context, e MembershipRevoked) error {
+	if err := f.errFor["membership_revoked"]; err != nil {
+		return err
+	}
+	f.events = append(f.events, recordedEvent{kind: "membership_revoked", revo: &e})
+	return nil
+}
+
+func (f *fakeEventPublisher) PublishMemberLeft(_ context.Context, e MemberLeft) error {
+	if err := f.errFor["member_left"]; err != nil {
+		return err
+	}
+	f.events = append(f.events, recordedEvent{kind: "member_left", left: &e})
+	return nil
+}
+
+var _ AccessEventPublisher = (*fakeEventPublisher)(nil)
+
+// count returns how many events of the given kind were published.
+func (f *fakeEventPublisher) count(kind string) int {
+	n := 0
+	for _, e := range f.events {
+		if e.kind == kind {
+			n++
+		}
+	}
+	return n
+}
+
+// last returns the last recorded event of the given kind, failing the test
+// otherwise.
+func (f *fakeEventPublisher) last(t *testing.T, kind string) recordedEvent {
+	t.Helper()
+	if f.count(kind) == 0 {
+		t.Fatalf("expected at least one %s event, got none (all: %+v)", kind, f.events)
+	}
+	for _, v := range slices.Backward(f.events) {
+		if v.kind == kind {
+			return v
+		}
+	}
+	panic("unreachable")
+}
+
+// TestRevokeMemberRecoversSuspendedFIFO pins the #158 T4 recovery seam at the
+// service level: revoking the recipient's ACTIVE membership frees their slot
+// and the oldest suspended membership comes back active. The delete must hit
+// the database before the recovery pass counts the free slots — an earlier
+// recovery silently sees the freed slot as still occupied (regression guard
+// for the removeMembershipInTx call order).
+func TestRevokeMemberRecoversSuspendedFIFO(t *testing.T) {
+	t.Parallel()
+	f := newEventsFixture()
+	owner, member := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	propA, propB := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	f.linkOwner(owner, propA)
+	f.linkOwner(owner, propB)
+	f.limiter.set(member, 1) // One slot: the first grant fits, the second suspends.
+
+	active, err := f.access.AddMember(t.Context(), owner, propA, member, domain.RoleViewer)
+	if err != nil {
+		t.Fatalf("AddMember propA: %v", err)
+	}
+	if _, err := f.access.AddMember(t.Context(), owner, propB, member, domain.RoleViewer); err != nil {
+		t.Fatalf("AddMember propB: %v", err)
+	}
+	f.events.events = nil
+
+	// Revoke the ACTIVE propA leg: its slot frees, propB's suspended one recovers.
+	if err := f.access.RevokeMember(t.Context(), owner, propA, active.ID); err != nil {
+		t.Fatalf("RevokeMember: %v", err)
+	}
+
+	revived, err := f.repo.GetByPropertyAndUser(t.Context(), propB, member)
+	if err != nil {
+		t.Fatalf("get propB membership: %v", err)
+	}
+	if revived.Status != domain.MemberStatusActive {
+		t.Errorf("propB membership = %s, want active after the FIFO recovery", revived.Status)
 	}
 }
