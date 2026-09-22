@@ -28,7 +28,6 @@ export function ParticipantsHubSkeleton(): JSX.Element {
         <div className="flex items-start gap-6">
           <div className="flex min-w-0 flex-1 flex-col gap-2">
             <Skeleton className="h-6 w-44" />
-            <Skeleton className="h-6 w-40" />
             <Skeleton className="h-4 w-full" />
             <Skeleton className="h-4 w-3/5" />
           </div>
