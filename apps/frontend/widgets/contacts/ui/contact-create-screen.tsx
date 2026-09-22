@@ -7,7 +7,6 @@ import { ROUTES } from '@/shared/config/routes';
 import { ApiError } from '@/shared/api/errors';
 import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
-import { propertyPermissions } from '@/entities/property';
 import { useProperty } from '@/features/properties';
 import {
   buildContactCreateCommand,
@@ -26,6 +25,7 @@ import {
   TopNav,
   TopNavTitle,
 } from '@/shared/ui/design';
+import { contactCreateGate } from '../lib/contact-create-gate';
 import { ContactForm } from './contact-form';
 import { ContactObjectSelectPage } from './contact-object-select';
 import { ContactsSkeleton } from './contacts-states';
@@ -71,7 +71,7 @@ export function ContactCreateScreen({
   // сервер всё равно ответил бы отказом. В книге (propertyId не задан)
   // объект не грузится и гейт не участвует.
   const contextPropertyQuery = useProperty(propertyId ?? '');
-  const contextProperty = contextPropertyQuery.isSuccess ? contextPropertyQuery.data : undefined;
+  const gate = contactCreateGate(contextPropertyQuery);
   const backHref = propertyId !== undefined ? ROUTES.propertyContacts(propertyId) : ROUTES.contacts;
   // Ветвь визарда аренды (#530): черновик аренды патчится тем же хуком
   // (экземпляр на маунт, хранилище общее через localStorage) — возврат
@@ -162,10 +162,12 @@ export function ContactCreateScreen({
   }
 
   // Объектная ветка: пока роль неизвестна — скелетон (форму не показываем),
-  // смотрящему и архиву — карточка недоступности (тексты — канон гейда
-  // создания операций; архивная — как в правке контакта).
+  // ошибка загрузки объекта — карточка с «Повторить» (сбой сети не звучит
+  // как вердикт о правах), смотрящему и архиву — карточка недоступности
+  // (тексты — канон гейда создания операций; архивная — как в правке
+  // контакта).
   if (propertyId !== undefined) {
-    if (contextPropertyQuery.isPending) {
+    if (gate.kind === 'pending') {
       return (
         <>
           <CancelHeader onClick={() => goBack(router, backHref)} />
@@ -175,7 +177,31 @@ export function ContactCreateScreen({
         </>
       );
     }
-    if (!propertyPermissions(contextProperty).canEdit) {
+    if (gate.kind === 'error') {
+      return (
+        <>
+          <CancelHeader onClick={() => goBack(router, backHref)} />
+          <PageContent>
+            <div className="flex flex-col items-center gap-3 px-6 pt-16 text-center">
+              <h2 className="text-xl font-semibold leading-6 text-content">
+                Не удалось загрузить объект
+              </h2>
+              <p className="max-w-[360px] text-base leading-[18px] text-content-secondary">
+                Проверьте подключение и попробуйте снова
+              </p>
+              <Button
+                variant="secondary"
+                size="small"
+                onClick={() => void contextPropertyQuery.refetch()}
+              >
+                Повторить
+              </Button>
+            </div>
+          </PageContent>
+        </>
+      );
+    }
+    if (gate.kind === 'denied') {
       return (
         <>
           <CancelHeader onClick={() => goBack(router, backHref)} />
@@ -185,7 +211,7 @@ export function ContactCreateScreen({
                 Создание недоступно
               </h2>
               <p className="max-w-[360px] text-base leading-[18px] text-content-secondary">
-                {contextProperty?.status === 'archived'
+                {gate.archived
                   ? 'Объект в архиве — контакты можно только смотреть'
                   : 'У вас доступ только для просмотра этого объекта'}
               </p>
