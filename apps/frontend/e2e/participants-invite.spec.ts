@@ -121,31 +121,33 @@ test('приглашение незарегистрированной почты
 
   await page.getByRole('textbox', { name: 'Электронная почта' }).fill(INVITEE_EMAIL);
   // Выбор по умолчанию — все объекты; роль «Просмотр».
-  await page.getByRole('button', { name: 'Пригласить' })
-    .filter({ hasText: 'Пригласить' })
-    .click();
+  try {
+    await page.getByRole('button', { name: 'Пригласить' })
+      .filter({ hasText: 'Пригласить' })
+      .click();
 
-  // Попап «Участник приглашен» (2010-134458) на списке «Ваши участники».
-  await expect(page.locator(header).getByText('Ваши участники')).toBeVisible();
-  await expect(
-    page.getByRole('dialog').locator('p', { hasText: 'Участник приглашен' }),
-  ).toBeVisible();
-  await page.keyboard.press('Escape');
+    // Попап «Участник приглашен» (2010-134458) на списке «Ваши участники».
+    await expect(page.locator(header).getByText('Ваши участники')).toBeVisible();
+    await expect(
+      page.getByRole('dialog').locator('p', { hasText: 'Участник приглашен' }),
+    ).toBeVisible();
+    await page.keyboard.press('Escape');
 
-  // Pending-ряд появился: почта — титул, чип «Приглашён» (#772: считанный
-  // partial/0 как «Доступно 0 объектов» читался как отказ).
-  const inviteeRow = page.getByRole('button', { name: new RegExp(INVITEE_EMAIL) });
-  await expect(inviteeRow).toBeVisible();
-  await expect(inviteeRow.getByText('Приглашён')).toBeVisible();
+    // Pending-ряд появился: почта — титул, чип «Приглашён» (#772: считанный
+    // partial/0 как «Доступно 0 объектов» читался как отказ).
+    const inviteeRow = page.getByRole('button', { name: new RegExp(INVITEE_EMAIL) });
+    await expect(inviteeRow).toBeVisible();
+    await expect(inviteeRow.getByText('Приглашён')).toBeVisible();
 
-  // Серверная правда: pending-приглашения на оба объекта снапшота.
-  expect(
-    await execE2eSql(
-      `SELECT count(*) FROM property_member_invitations WHERE email = '${INVITEE_EMAIL}'`,
-    ),
-  ).toBe('3');
-
-  await execE2eSql(`DELETE FROM property_member_invitations WHERE email = '${INVITEE_EMAIL}'`);
+    // Серверная правда: pending-приглашения на все 3 объекта снапшота.
+    expect(
+      await execE2eSql(
+        `SELECT count(*) FROM property_member_invitations WHERE email = '${INVITEE_EMAIL}'`,
+      ),
+    ).toBe('3');
+  } finally {
+    await execE2eSql(`DELETE FROM property_member_invitations WHERE email = '${INVITEE_EMAIL}'`);
+  }
   await page.reload();
   await expect(page.getByRole('button', { name: new RegExp(INVITEE_EMAIL) })).toHaveCount(0);
 });
@@ -249,33 +251,35 @@ test('приглашение зарегистрированной почты н�
   await expect(page.getByText('Все 3 объекта')).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Гараж на Садовой/ })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Пригласить' })
-    .filter({ hasText: 'Пригласить' })
-    .click();
-
-  // granted=2 (suspended — у Марии нет подписки, тарифный слот превышен;
-  // грабля #698) — попап успеха, возврат на список.
-  await expect(
-    page.getByRole('dialog').locator('p', { hasText: 'Участник приглашен' }),
-  ).toBeVisible();
-  await page.keyboard.press('Escape');
-
-  // Чип агрегата Марии сменился: активна квартира + suspended гараж и
-  // студия — «Превышен лимит объектов» (макет 2036-84861).
   const mariaRow = page.getByRole('button', { name: /Мария Петрова/ });
-  await expect(mariaRow.getByText('Превышен лимит объектов')).toBeVisible();
+  try {
+    await page.getByRole('button', { name: 'Пригласить' })
+      .filter({ hasText: 'Пригласить' })
+      .click();
 
-  // Серверная правда: suspended-членство на гараже.
-  expect(
+    // granted=2 (suspended — у Марии нет подписки, тарифный слот превышен;
+    // грабля #698) — попап успеха, возврат на список.
+    await expect(
+      page.getByRole('dialog').locator('p', { hasText: 'Участник приглашен' }),
+    ).toBeVisible();
+    await page.keyboard.press('Escape');
+
+    // Чип агрегата Марии сменился: активна квартира + suspended гараж и
+    // студия — «Превышен лимит объектов» (макет 2036-84861).
+    await expect(mariaRow.getByText('Превышен лимит объектов')).toBeVisible();
+
+    // Серверная правда: suspended-членство на гараже.
+    expect(
+      await execE2eSql(
+        `SELECT count(*) FROM property_members ` +
+          `WHERE property_id = '${GARAGE_ID}' AND user_id = '${MARIA_ID}' AND role = 'viewer' AND status = 'suspended'`,
+      ),
+    ).toBe('1');
+  } finally {
     await execE2eSql(
-      `SELECT count(*) FROM property_members ` +
-        `WHERE property_id = '${GARAGE_ID}' AND user_id = '${MARIA_ID}' AND role = 'viewer' AND status = 'suspended'`,
-    ),
-  ).toBe('1');
-
-  await execE2eSql(
-    `DELETE FROM property_members WHERE user_id = '${MARIA_ID}' AND property_id IN ('${GARAGE_ID}', '${STUDIO_ID}')`,
-  );
+      `DELETE FROM property_members WHERE user_id = '${MARIA_ID}' AND property_id IN ('${GARAGE_ID}', '${STUDIO_ID}')`,
+    );
+  }
   await page.reload();
   await expect(mariaRow.getByText('Превышен лимит объектов')).toHaveCount(0);
 });

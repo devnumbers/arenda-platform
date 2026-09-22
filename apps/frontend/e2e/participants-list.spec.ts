@@ -10,7 +10,7 @@ import {
 // GET /participants, чипы агрегат-статуса, клиентские поиск и сортировка
 // «Имя», кебаб «Отозвать доступ всем». Сид: владелец «Квартиры на Ленина»
 // с двумя участниками — Мария Петрова (full_access) и Сергей Сидоров
-// (viewer), оба active на одном объекте из двух в скоупе владельца →
+// (viewer), оба active на одном объекте из трёх в скоупе владельца →
 // агрегат-статус partial, чип «Доступно 1 объект».
 
 const header = 'header[aria-label="Навигация экрана"]';
@@ -22,7 +22,7 @@ test('список участников: ряды сида с чипами ст�
   await expect(page.locator(header).getByText('Ваши участники')).toBeVisible();
 
   // Ряды агрегатов: имя + почта + чип «Доступно 1 объект» (у обоих
-  // активный доступ к одному объекту из двух в скоупе — partial).
+  // активный доступ к одному объекту из трёх в скоупе — partial).
   const mariaRow = page.getByRole('button', { name: /Мария Петрова/ });
   await expect(mariaRow).toBeVisible();
   await expect(mariaRow.getByText('e2e-member@example.com')).toBeVisible();
@@ -125,31 +125,33 @@ test('«Отозвать и удалить»: ряды исчезают, поп�
   await page.getByRole('menuitem', { name: 'Отозвать доступ всем' }).click();
 
   const dialog = page.getByRole('dialog');
-  await dialog.getByRole('button', { name: 'Отозвать и удалить' }).click();
+  try {
+    await dialog.getByRole('button', { name: 'Отозвать и удалить' }).click();
 
-  // Попап успеха по макету 2008-84101; список под ним перечитан
-  // (sr-only заголовок несёт тот же текст — проверяем видимый <p>).
-  await expect(
-    page.getByRole('dialog').locator('p', { hasText: 'Все участники удалены' }),
-  ).toBeVisible();
-  await expect(page.getByRole('button', { name: /Мария Петрова/ })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Сергей Сидоров/ })).toHaveCount(0);
+    // Попап успеха по макету 2008-84101; список под ним перечитан
+    // (sr-only заголовок несёт тот же текст — проверяем видимый <p>).
+    await expect(
+      page.getByRole('dialog').locator('p', { hasText: 'Все участники удалены' }),
+    ).toBeVisible();
+    await expect(page.getByRole('button', { name: /Мария Петрова/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Сергей Сидоров/ })).toHaveCount(0);
 
-  await page.keyboard.press('Escape');
-  // Пустой список: служебные иконки шапки спрятаны, иллюстрация на месте.
-  await expect(page.getByText('Участников пока нет')).toBeVisible();
-  await expect(
-    page.locator(header).getByRole('button', { name: 'Поиск участников' }),
-  ).toHaveCount(0);
-
-  // Восстановление сида (воркers=1 — дальше по сюиту сид нужен другим
-  // спекам: роли payment-edit-delete, счётчики nav-stubs).
-  await execE2eSql(
-    "INSERT INTO property_members (id, property_id, user_id, role, granted_by) VALUES " +
-      "('99999999-9999-4999-8999-999999999931', '33333333-3333-4333-8333-333333333333', '12111111-1111-4111-8111-111111111121', 'full_access', '11111111-1111-4111-8111-111111111111'), " +
-      "('99999999-9999-4999-8999-999999999932', '33333333-3333-4333-8333-333333333333', '13111111-1111-4111-8111-111111111131', 'viewer', '11111111-1111-4111-8111-111111111111') " +
-      'ON CONFLICT (id) DO NOTHING',
-  );
+    await page.keyboard.press('Escape');
+    // Пустой список: служебные иконки шапки спрятаны, иллюстрация на месте.
+    await expect(page.getByText('Участников пока нет')).toBeVisible();
+    await expect(
+      page.locator(header).getByRole('button', { name: 'Поиск участников' }),
+    ).toHaveCount(0);
+  } finally {
+    // Восстановление сида (воркers=1 — дальше по сюиту сид нужен другим
+    // спекам: роли payment-edit-delete, счётчики nav-stubs).
+    await execE2eSql(
+      "INSERT INTO property_members (id, property_id, user_id, role, granted_by) VALUES " +
+        "('99999999-9999-4999-8999-999999999931', '33333333-3333-4333-8333-333333333333', '12111111-1111-4111-8111-111111111121', 'full_access', '11111111-1111-4111-8111-111111111111'), " +
+        "('99999999-9999-4999-8999-999999999932', '33333333-3333-4333-8333-333333333333', '13111111-1111-4111-8111-111111111131', 'viewer', '11111111-1111-4111-8111-111111111111') " +
+        'ON CONFLICT (id) DO NOTHING',
+    );
+  }
   await page.reload();
   await expect(page.getByRole('button', { name: /Мария Петрова/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /Сергей Сидоров/ })).toBeVisible();

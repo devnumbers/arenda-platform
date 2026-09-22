@@ -174,16 +174,17 @@ test('suspended-участник: warning-чип в ряду; сид восст�
   await execE2eSql(
     `UPDATE property_members SET status = 'suspended' WHERE id = '${MARIA_MEMBER_ID}'`,
   );
+  try {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto(`/properties/${APARTMENT_ID}/participants`);
 
-  await openCabinetWithSeededSession(page, seededUser);
-  await page.goto(`/properties/${APARTMENT_ID}/participants`);
-
-  const mariaRow = page.getByRole('button', { name: /Мария Петрова/ });
-  await expect(mariaRow.getByText('Превышен лимит объектов')).toBeVisible();
-
-  await execE2eSql(
-    `UPDATE property_members SET status = 'active' WHERE id = '${MARIA_MEMBER_ID}'`,
-  );
+    const mariaRow = page.getByRole('button', { name: /Мария Петрова/ });
+    await expect(mariaRow.getByText('Превышен лимит объектов')).toBeVisible();
+  } finally {
+    await execE2eSql(
+      `UPDATE property_members SET status = 'active' WHERE id = '${MARIA_MEMBER_ID}'`,
+    );
+  }
 });
 
 test('кебаб «Отозвать доступ всем»: подтверждение, попап, владелец остаётся; сид восстанавливается', async ({ page, seededUser }) => {
@@ -197,29 +198,32 @@ test('кебаб «Отозвать доступ всем»: подтвержд�
   await expect(
     dialog.getByText('Отозвать доступ всем пользователям к вашему объекту?'),
   ).toBeVisible();
-  await dialog.getByRole('button', { name: 'Отозвать и удалить' }).click();
+  try {
+    await dialog.getByRole('button', { name: 'Отозвать и удалить' }).click();
 
-  // Попап успеха (2035-82834): владелец в списке, участников нет.
-  await expect(
-    page.getByRole('dialog').locator('p', { hasText: 'Все участники удалены' }),
-  ).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(page.getByText('Иван Иванов (Вы)')).toBeVisible();
-  await expect(page.getByRole('button', { name: /Мария Петрова/ })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Сергей Сидоров/ })).toHaveCount(0);
+    // Попап успеха (2035-82834): владелец в списке, участников нет.
+    await expect(
+      page.getByRole('dialog').locator('p', { hasText: 'Все участники удалены' }),
+    ).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByText('Иван Иванов (Вы)')).toBeVisible();
+    await expect(page.getByRole('button', { name: /Мария Петрова/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Сергей Сидоров/ })).toHaveCount(0);
 
-  // Серверная правда: членовств на объекте нет; сид возвращается.
-  expect(
+    // Серверная правда: членовств на объекте нет; сид возвращается.
+    expect(
+      await execE2eSql(
+        `SELECT count(*) FROM property_members WHERE property_id = '${APARTMENT_ID}'`,
+      ),
+    ).toBe('0');
+  } finally {
     await execE2eSql(
-      `SELECT count(*) FROM property_members WHERE property_id = '${APARTMENT_ID}'`,
-    ),
-  ).toBe('0');
-  await execE2eSql(
-    `INSERT INTO property_members (id, property_id, user_id, role, granted_by) VALUES ` +
-      `('${MARIA_MEMBER_ID}', '${APARTMENT_ID}', '${MARIA_ID}', 'full_access', '11111111-1111-4111-8111-111111111111'), ` +
-      `('${SERGEY_MEMBER_ID}', '${APARTMENT_ID}', '${SERGEY_ID}', 'viewer', '11111111-1111-4111-8111-111111111111') ` +
-      `ON CONFLICT (id) DO NOTHING`,
-  );
+      `INSERT INTO property_members (id, property_id, user_id, role, granted_by) VALUES ` +
+        `('${MARIA_MEMBER_ID}', '${APARTMENT_ID}', '${MARIA_ID}', 'full_access', '11111111-1111-4111-8111-111111111111'), ` +
+        `('${SERGEY_MEMBER_ID}', '${APARTMENT_ID}', '${SERGEY_ID}', 'viewer', '11111111-1111-4111-8111-111111111111') ` +
+        `ON CONFLICT (id) DO NOTHING`,
+    );
+  }
 });
 
 test('зритель: список без manage-контролов, свой ряд с «(Вы)»', async ({ page }) => {

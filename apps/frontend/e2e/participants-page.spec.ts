@@ -72,22 +72,24 @@ test('права участника: смена роли сегментом, п�
   await expect(page.locator(header).getByText('Права участника')).toBeVisible();
   await expect(page.getByRole('radio', { name: 'Редактирование' })).toBeChecked();
 
-  await page.getByRole('radio', { name: 'Просмотр' }).click();
+  try {
+    await page.getByRole('radio', { name: 'Просмотр' }).click();
 
-  await expect(
-    page.getByRole('dialog').locator('p', { hasText: 'Права изменены' }),
-  ).toBeVisible();
-  await page.keyboard.press('Escape');
+    await expect(
+      page.getByRole('dialog').locator('p', { hasText: 'Права изменены' }),
+    ).toBeVisible();
+    await page.keyboard.press('Escape');
 
-  // Бейдж на странице участника перечитан (инвалидация агрегатов).
-  await page.locator(header).getByRole('button', { name: 'Назад' }).click();
-  await expect(
-    page.getByRole('button', { name: /Квартира на Ленина/ }).getByText('Просмотр'),
-  ).toBeVisible();
-
-  await execE2eSql(
-    `UPDATE property_members SET role = 'full_access' WHERE id = '99999999-9999-4999-8999-999999999931'`,
-  );
+    // Бейдж на странице участника перечитан (инвалидация агрегатов).
+    await page.locator(header).getByRole('button', { name: 'Назад' }).click();
+    await expect(
+      page.getByRole('button', { name: /Квартира на Ленина/ }).getByText('Просмотр'),
+    ).toBeVisible();
+  } finally {
+    await execE2eSql(
+      `UPDATE property_members SET role = 'full_access' WHERE id = '99999999-9999-4999-8999-999999999931'`,
+    );
+  }
   await page.reload();
   await expect(
     page.getByRole('button', { name: /Квартира на Ленина/ }).getByText('Редактирование'),
@@ -121,33 +123,35 @@ test('пригласить в объект: мультичек гаража, ш�
   // Шит роли (макет 2010-131724): сегмент + кнопка «Пригласить».
   const sheet = page.getByRole('dialog');
   await sheet.getByRole('radio', { name: 'Редактирование' }).click();
-  await sheet.getByRole('button', { name: 'Пригласить' }).click();
+  try {
+    await sheet.getByRole('button', { name: 'Пригласить' }).click();
 
-  // Попап «Доступ выдан» (2010-131859) на странице участника; грант
-  // пришёл suspended — у сид-получателя нет подписки, тарифный слот
-  // превышен (второй объект). Статус и пояснение — на уровне участника
-  // (макет 2036-84861, правка приёмки #756): чип в шапке + жёлтая
-  // карточка; ноги несут бейджи ролей.
-  await expect(
-    page.getByRole('dialog').locator('p', { hasText: 'Доступ выдан' }),
-  ).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(page.getByText('Превышен лимит объектов').first()).toBeVisible();
-  await expect(page.getByTestId('participant-limit-notice')).toBeVisible();
-  await expect(
-    page
-      .getByTestId('participant-limit-notice')
-      .getByText('Пользователь пока не может пользоваться вашим объектом'),
-  ).toBeVisible();
-  await expect(page.getByTestId('participant-limit-notice').getByText(/Попросите его освободить слот/)).toBeVisible();
-  await expect(
-    page.getByRole('button', { name: /Гараж на Садовой/ }).getByText('Редактирование'),
-  ).toBeVisible();
-  await expect(page.getByRole('button', { name: /Квартира на Ленина/ }).getByText('Редактирование')).toBeVisible();
-
-  await execE2eSql(
-    `DELETE FROM property_members WHERE property_id = '${GARAGE_ID}' AND user_id = '${MARIA_ID}'`,
-  );
+    // Попап «Доступ выдан» (2010-131859) на странице участника; грант
+    // пришёл suspended — у сид-получателя нет подписки, тарифный слот
+    // превышен (второй объект). Статус и пояснение — на уровне участника
+    // (макет 2036-84861, правка приёмки #756): чип в шапке + жёлтая
+    // карточка; ноги несут бейджи ролей.
+    await expect(
+      page.getByRole('dialog').locator('p', { hasText: 'Доступ выдан' }),
+    ).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByText('Превышен лимит объектов').first()).toBeVisible();
+    await expect(page.getByTestId('participant-limit-notice')).toBeVisible();
+    await expect(
+      page
+        .getByTestId('participant-limit-notice')
+        .getByText('Пользователь пока не может пользоваться вашим объектом'),
+    ).toBeVisible();
+    await expect(page.getByTestId('participant-limit-notice').getByText(/Попросите его освободить слот/)).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: /Гараж на Садовой/ }).getByText('Редактирование'),
+    ).toBeVisible();
+    await expect(page.getByRole('button', { name: /Квартира на Ленина/ }).getByText('Редактирование')).toBeVisible();
+  } finally {
+    await execE2eSql(
+      `DELETE FROM property_members WHERE property_id = '${GARAGE_ID}' AND user_id = '${MARIA_ID}'`,
+    );
+  }
   await page.reload();
   await expect(page.getByText('Доступно 1 объект')).toBeVisible();
 });
@@ -170,21 +174,23 @@ test('отзыв из объекта: подтверждение, попап у�
 
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByText('Уверены, что хотите отозвать доступ?')).toBeVisible();
-  await dialog.getByRole('button', { name: 'Отозвать' }).click();
+  try {
+    await dialog.getByRole('button', { name: 'Отозвать' }).click();
 
-  // Попап (2008-83135) на странице участника; нога на гараже исчезла.
-  await expect(
-    page.getByRole('dialog').locator('p', {
-      hasText: 'У участника больше нет доступа к объекту',
-    }),
-  ).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(page.getByRole('button', { name: /Гараж на Садовой/ })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Квартира на Ленина/ })).toBeVisible();
-
-  await execE2eSql(
-    `DELETE FROM property_members WHERE id = '99999999-9999-4999-8999-999999999933'`,
-  );
+    // Попап (2008-83135) на странице участника; нога на гараже исчезла.
+    await expect(
+      page.getByRole('dialog').locator('p', {
+        hasText: 'У участника больше нет доступа к объекту',
+      }),
+    ).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('button', { name: /Гараж на Садовой/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Квартира на Ленина/ })).toBeVisible();
+  } finally {
+    await execE2eSql(
+      `DELETE FROM property_members WHERE id = '99999999-9999-4999-8999-999999999933'`,
+    );
+  }
 });
 
 test('кебаб «Отозвать доступ к объектам»: подтверждение, попап «Участник удален» на списке; сид восстанавливается', async ({ page, seededUser }) => {
@@ -202,23 +208,26 @@ test('кебаб «Отозвать доступ к объектам»: подт
   await expect(
     dialog.getByText('Отозвать у пользователя доступ ко всем вашим объектам?'),
   ).toBeVisible();
-  await dialog.getByRole('button', { name: 'Отозвать и удалить' }).click();
+  try {
+    await dialog.getByRole('button', { name: 'Отозвать и удалить' }).click();
 
-  // Возврат на список «Участники» с попапом «Участник удален»
-  // (2008-83716); Сергей из списка исчез, Мария осталась.
-  await expect(page.locator(header).getByText('Ваши участники')).toBeVisible();
-  await expect(
-    page.getByRole('dialog').locator('p', { hasText: 'Участник удален' }),
-  ).toBeVisible();
-  // Модалка скрывает фон от a11y-дерева — список проверяем после закрытия.
-  await page.keyboard.press('Escape');
-  await expect(page.getByRole('button', { name: /Сергей Сидоров/ })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Мария Петрова/ })).toBeVisible();
-  await execE2eSql(
-    `INSERT INTO property_members (id, property_id, user_id, role, granted_by) ` +
-      `VALUES ('99999999-9999-4999-8999-999999999932', '${APARTMENT_ID}', '${SERGEY_ID}', 'viewer', '11111111-1111-4111-8111-111111111111') ` +
-      `ON CONFLICT (id) DO NOTHING`,
-  );
+    // Возврат на список «Участники» с попапом «Участник удален»
+    // (2008-83716); Сергей из списка исчез, Мария осталась.
+    await expect(page.locator(header).getByText('Ваши участники')).toBeVisible();
+    await expect(
+      page.getByRole('dialog').locator('p', { hasText: 'Участник удален' }),
+    ).toBeVisible();
+    // Модалка скрывает фон от a11y-дерева — список проверяем после закрытия.
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('button', { name: /Сергей Сидоров/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Мария Петрова/ })).toBeVisible();
+  } finally {
+    await execE2eSql(
+      `INSERT INTO property_members (id, property_id, user_id, role, granted_by) ` +
+        `VALUES ('99999999-9999-4999-8999-999999999932', '${APARTMENT_ID}', '${SERGEY_ID}', 'viewer', '11111111-1111-4111-8111-111111111111') ` +
+        `ON CONFLICT (id) DO NOTHING`,
+    );
+  }
   await page.reload();
   await expect(page.getByRole('button', { name: /Сергей Сидоров/ })).toBeVisible();
 });
