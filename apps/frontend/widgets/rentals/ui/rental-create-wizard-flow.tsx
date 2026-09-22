@@ -59,12 +59,6 @@ export function RentalCreateWizardFlow({
   const [created, setCreated] = useState<Rental | null>(null);
   const today: IsoDate = clientTodayIso();
   const [step, setStep] = useState<RentalWizardStep>(() => initialStep(draft, today));
-  // Прямая ссылка на визард (закладка, обновление на маршруте): документ
-  // загружен без referrer — history.back уводит за пределы приложения
-  // (#807, P3), «Закрыть» тогда просто заменяет маршрут на объект.
-  const [enteredDirectly] = useState(
-    () => typeof document !== 'undefined' && document.referrer === '',
-  );
 
   if (created !== null) {
     return (
@@ -203,13 +197,9 @@ export function RentalCreateWizardFlow({
   );
 
   /** Выход из визарда (крестик на любом шаге, «Хорошо» на экране успеха):
-   * история назад (при прямом заходе без внутренней истории — замена на
-   * объект), черновик остаётся в localStorage. */
+   * история назад, при пустой истории — фолбэк goBack'а на объект,
+   * черновик остаётся в localStorage. */
   function closeWizard(): void {
-    if (enteredDirectly) {
-      router.replace(ROUTES.property(propertyId));
-      return;
-    }
     goBack(router, ROUTES.property(propertyId));
   }
 

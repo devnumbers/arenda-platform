@@ -69,9 +69,11 @@ export function ContactStep({
     contactId !== undefined && !tenantQuery.isError ? tenantQuery.data : undefined;
 
   // Сбой чтения книги не блокирует шаг: экран выбора покажет свой
-  // повтор, а «Создать контакт» работает всегда.
-  const bookHasContacts =
-    contactsQuery.isPending || contactsQuery.isError || contactsQuery.data.length > 0;
+  // повтор, а «Создать контакт» работает всегда. Строка «Выбрать
+  // контакт» — только при подтверждённой непустой книге (пустая книга —
+  // единственная строка создания без мерцания, решение владельца).
+  const showPickerRow =
+    !contactsQuery.isPending && !contactsQuery.isError && contactsQuery.data.length > 0;
 
   const openPicker = (): void => {
     router.push(ROUTES.propertyRentalNewContact(propertyId));
@@ -149,30 +151,16 @@ export function ContactStep({
             а в пустой книге (решение владельца) — только «Создать
             контакт». Пока книга едет — рисуем создание (безопасный
             дефолт: контакты появятся — добавится «Выбрать контакт»). */}
-        {selectedTenant === undefined && bookHasContacts && (
+        {selectedTenant === undefined && showPickerRow && (
           <ListRow
-            leading={
-              <span
-                aria-hidden
-                className="flex h-11 w-11 items-center justify-center rounded-pill bg-surface-muted shadow-[0_0_0_2.5px_var(--dl-surface)]"
-              >
-                <BoldUser className="h-6 w-6" />
-              </span>
-            }
+            leading={<ActionRowIcon icon={<BoldUser className="h-6 w-6" />} />}
             title="Выбрать контакт"
             onSelect={openPicker}
             className="-mx-6"
           />
         )}
         <ListRow
-          leading={
-            <span
-              aria-hidden
-              className="flex h-11 w-11 items-center justify-center rounded-pill bg-surface-muted shadow-[0_0_0_2.5px_var(--dl-surface)]"
-            >
-              <Add className="h-6 w-6" />
-            </span>
-          }
+          leading={<ActionRowIcon icon={<Add className="h-6 w-6" />} />}
           title="Создать контакт"
           onSelect={openCreateBranch}
           className="-mx-6"
@@ -190,5 +178,18 @@ export function ContactStep({
         onConfirm={handleDelete}
       />
     </>
+  );
+}
+
+/** Кружок 44 действий шага (1855:63385): приглушённая подложка с белым
+ * кольцом — та же анатомия, что у аватара ContactRowButton. */
+function ActionRowIcon({ icon }: { readonly icon: JSX.Element }): JSX.Element {
+  return (
+    <span
+      aria-hidden
+      className="flex h-11 w-11 items-center justify-center rounded-pill bg-surface-muted shadow-[0_0_0_2.5px_var(--dl-surface)]"
+    >
+      {icon}
+    </span>
   );
 }

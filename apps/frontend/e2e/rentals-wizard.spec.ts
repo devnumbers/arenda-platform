@@ -121,7 +121,7 @@ test.describe('визард создания аренды — шаг «Конт�
     );
   }
 
-  test('пустая книга: только «Создать контакт», ветвь #509 с ролью, футер глушится, «Закрыть» без истории ведёт на объект', async ({
+  test('пустая книга: только «Создать контакт», ветвь #509 с ролью, футер глушится, «Закрыть» возвращает на источник', async ({
     page,
     seededUser,
   }) => {
@@ -144,16 +144,10 @@ test.describe('визард создания аренды — шаг «Конт�
       page.getByRole('navigation', { name: 'Нижняя навигация' }),
     ).toBeHidden();
 
-    // «Закрыть» визарда при прямом заходе без внутренней истории:
-    // повторное открытие с пустым referrer восстанавливает черновик из
-    // localStorage на шаг 4, «Закрыть» заменяет маршрут страницей объекта
-    // (#807, P3) — не уводит в пустоту.
+    // «Закрыть» визарда: goBack возвращает на источник по истории
+    // (вход был со страницы объекта, как в реальном потоке).
     await page.getByRole('button', { name: 'Отменить создание' }).click();
     await expect(page.getByRole('button', { name: 'Создать контакт' })).toBeVisible();
-    await page.goto(GARAGE_WIZARD_URL, { referer: '' });
-    await expect(
-      page.getByRole('heading', { name: 'Добавьте контакт арендатора' }),
-    ).toBeVisible();
     await page.getByRole('button', { name: 'Закрыть' }).click();
     await expect(page).toHaveURL(new RegExp(`/properties/${SEEDED_GARAGE_PROPERTY_ID}$`));
   });

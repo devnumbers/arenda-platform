@@ -15,6 +15,7 @@ import {
   InfiniteQueryTail,
   PageContent,
   SearchField,
+  SkeletonListRow,
   TopNav,
   useTabBarSuppression,
 } from '@/shared/ui/design';
@@ -84,7 +85,15 @@ export function RentalContactPickerScreen({
       </TopNav>
 
       <PageContent>
-        {contactsQuery.isPending ? null : contactsQuery.isError ? (
+        {contactsQuery.isPending ? (
+          /* Каркас списка строк на время первой порции (паритет скелетонов
+           * #607; SearchField в шапке уже показывает активность). */
+          <div aria-hidden className="flex flex-col px-6">
+            {Array.from({ length: 4 }, (_, index) => (
+              <SkeletonListRow key={index} className="py-2" />
+            ))}
+          </div>
+        ) : contactsQuery.isError ? (
           <div className="flex flex-col items-center gap-4 pt-16">
             <p className="text-center text-base leading-[18px] text-content-secondary">
               Не удалось загрузить контакты
