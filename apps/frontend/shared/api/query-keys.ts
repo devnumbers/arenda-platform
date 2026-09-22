@@ -326,6 +326,46 @@ export const notificationKeys = {
     [...notificationKeys.all, 'push-preferences', endpoint] as const,
 };
 
+/**
+ * Скоуп ленты «История действий» (контракт GET /history #708): границы
+ * периода ('YYYY-MM-DD'), основные действия, виды, актёры, объекты и
+ * поисковый запрос целиком уходят в ключ react-query и в query-параметры.
+ * #709 читает ленту без скоупа; поиск (#710), шит фильтров (#711) и
+ * «Действия участника» (#712) доопределяют поля.
+ */
+export type HistoryFeedScope = {
+  readonly dateFrom?: string;
+  readonly dateTo?: string;
+  readonly actions?: ReadonlyArray<string>;
+  readonly kinds?: ReadonlyArray<string>;
+  readonly actorIds?: ReadonlyArray<string>;
+  readonly propertyIds?: ReadonlyArray<string>;
+  readonly q?: string;
+};
+
+// features/history — «История действий» (карта #704)
+export const historyKeys = {
+  all: ['history'] as const,
+  /** Порции ленты GET /history (#708): скоуп — часть ключа, смена фильтра
+   * начинает свежий обход с самой новой страницы; страница (курсор) в ключ
+   * не входит — это pageParam бесконечного запроса. */
+  feed: (scope: HistoryFeedScope) =>
+    [
+      ...historyKeys.all,
+      'feed',
+      scope.dateFrom ?? '',
+      scope.dateTo ?? '',
+      scope.actions?.join(',') ?? '',
+      scope.kinds?.join(',') ?? '',
+      scope.actorIds?.join(',') ?? '',
+      scope.propertyIds?.join(',') ?? '',
+      scope.q ?? '',
+    ] as const,
+  /** Опции шита фильтров GET /history/filters (#708, экран #711). */
+  filters: (propertyIds: ReadonlyArray<string>) =>
+    [...historyKeys.all, 'filters', propertyIds.join(',')] as const,
+};
+
 // features/subscription
 export const subscriptionKeys = {
   subscription: ['subscription'] as const,

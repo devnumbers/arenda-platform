@@ -110,4 +110,8 @@ export {
   InfiniteQueryTail,
   type InfiniteQueryTailQuery,
 } from './infinite-query-tail';
+export {
+  InfiniteQueryHead,
+  type InfiniteQueryHeadQuery,
+} from './infinite-query-head';
 export { SuccessPopup, type SuccessPopupProps } from './success-popup';
