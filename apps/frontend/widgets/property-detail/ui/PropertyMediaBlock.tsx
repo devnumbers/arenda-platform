@@ -4,8 +4,8 @@ import { PropertyAvatar } from '@/entities/property';
 export type PropertyMediaBlockProps = {
   readonly name: string;
   readonly address: string;
-  /** Пилюля доступа участника под адресом (Figma 2200-97365) — у
-   * владельца её нет. */
+  /** Пилюли шапки propertyHeaderPills (#773) под адресом: «В архиве» —
+   * её получает и владелец, и/или роль доступа (Figma 2200-97365). */
   readonly children?: ReactNode;
 };
 

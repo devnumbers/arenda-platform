@@ -158,8 +158,10 @@ export function ModalContent({
             className={cn(
               // relative — канон попапа: крестик в углу карточки
               // (desktop:absolute у потребителя) якорится в карточку, а не в
-              // фуллскрин-обёртку. База — последним аргументом слияния
-              // (см. мобильную канву).
+              // фуллскрин-обёртку. База — ПЕРВЫМ аргументом слияния, className
+              // потребителя — последним (tailwind-merge отдаёт приоритет
+              // последнему); «канва последней» верна только для мобильного
+              // Drawer-блока ниже.
               'relative flex max-h-[92dvh] w-full max-w-[520px] flex-col rounded-sheet bg-white font-sans outline-none',
               'data-[state=open]:animate-[modal-card-in_400ms_var(--dl-ease)]',
               'data-[state=closed]:animate-[modal-card-out_220ms_var(--dl-ease)]',

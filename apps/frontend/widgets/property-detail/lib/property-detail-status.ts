@@ -135,7 +135,8 @@ export type PropertyManageInput = {
   /** Незавершённая аренда есть (occupancy списка, резолюция #584). */
   readonly hasRental: boolean;
   readonly isPinned: boolean;
-  /** Мутационный доступ (canMutateProperty: роль и не-архив). */
+  /** Мутационный доступ — ролевой canManageMembers (#703); архив его
+   * не гасит, билдер ветвит архив сам. */
   readonly canMutate: boolean;
   /** «Основной объект» доступен тарифу (платный, канон резолюции #584). */
   readonly canPin: boolean;
