@@ -2,7 +2,6 @@
 
 import { useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
-import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/shared/lib/cn';
 import { Block } from '@/shared/assets/icons';
 import { goBack } from '@/shared/lib/navigation';
@@ -22,7 +21,6 @@ import {
   useUpdatePropertyAccessInvitation,
   useUpdatePropertyAccessMember,
 } from '@/features/access';
-import { participantsKeys } from '@/shared/api/query-keys';
 import {
   ConfirmDialog,
   ErrorCard,
@@ -58,7 +56,8 @@ import { ParticipantRightsSkeleton } from './participants-skeletons';
  * (2008-83135, staged-флаг participant-popups — канон one-shot #771).
  * Если это был последний объект,
  * страница участника честно покажет «Участник не найден» — контракт
- * приватного 404 (#693).
+ * приватного 404 (#693). Строки нет уже на этом экране (нога отозвана
+ * в другой сессии) — тот же честный текст без «Повторить».
  */
 export function ParticipantRightsScreen({
   participantId,
@@ -68,7 +67,6 @@ export function ParticipantRightsScreen({
   readonly propertyId: string;
 }): JSX.Element {
   const router = useRouter();
-  const queryClient = useQueryClient();
 
   const participantQuery = useParticipant(participantId);
   const membersQuery = usePropertyAccessMembers(propertyId);
@@ -99,8 +97,9 @@ export function ParticipantRightsScreen({
     if (member === undefined || member.id === null || member.role === role) {
       return;
     }
+    // Инвалидацию обеих семей делает access-хук (onSettled) — здесь только
+    // попап.
     const onSuccess = (): void => {
-      void queryClient.invalidateQueries({ queryKey: participantsKeys.all });
       setShowRoleChanged(true);
     };
     if (member.status === 'pending') {
@@ -114,8 +113,9 @@ export function ParticipantRightsScreen({
     if (member === undefined || member.id === null) {
       return;
     }
+    // Инвалидацию обеих семей делает access-хук (onSettled) — здесь только
+    // навигация и попап.
     const onDone = (): void => {
-      void queryClient.invalidateQueries({ queryKey: participantsKeys.all });
       // Источник — страница участника: возврат по канону истории, попап
       // «У участника больше нет доступа к объекту» рендерит он (2008-83135).
       stageParticipantPopup('revokedFromProperty');
@@ -142,7 +142,7 @@ export function ParticipantRightsScreen({
           className="mt-6"
         />
       );
-  } else if (member === undefined) {
+  } else if (membersQuery.isError) {
     content = (
       <ErrorCard
         title="Не удалось загрузить права участника"
@@ -150,6 +150,11 @@ export function ParticipantRightsScreen({
         className="mt-6"
       />
     );
+  } else if (member === undefined) {
+    // Список успешен, а строки нет — нога уже отозвана (контракт
+    // participant-member-lookup: «строки нет — доступ уже снят»); честный
+    // «Участник не найден», как у агрегата выше — приватный 404 (#693).
+    content = <ParticipantNotFound />;
   } else {
     content = (
       <div className="flex flex-col gap-6">

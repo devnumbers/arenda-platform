@@ -4,6 +4,7 @@ import {
     useMutation,
     useQuery,
     useQueryClient,
+    type QueryClient,
     type UseMutationResult,
     type UseQueryResult,
 } from '@tanstack/react-query';
@@ -19,15 +20,22 @@ type PropertyAccessMembersResponse =
     components['schemas']['PropertyAccessMembersResponse'];
 type PropertyAccessMemberResponse =
     components['schemas']['PropertyAccessMemberResponse'];
-type PropertyAccessInvitationCreateRequest =
-    components['schemas']['PropertyAccessInvitationCreateRequest'];
 type PropertyAccessMemberUpdateRequest =
     components['schemas']['PropertyAccessMemberUpdateRequest'];
 
-export type InviteMemberInput = {
-    readonly email: string;
-    readonly role: 'full_access' | 'viewer';
-};
+/** Строки участников проецируются в двух видах: списки объекта
+ * GET /properties/{id}/access/members и агрегаты /participants*
+ * (канон invalidateParticipantProjections, features/participants/api/hooks.ts).
+ * Инвалидация обеих семей обязательна у каждой access-мутации — окно
+ * staleTime (#626) иначе отдаёт агрегатам устаревший кэш; всегда
+ * (onSettled) — перечитываются и после частичного сбоя. */
+function invalidateAccessProjections(
+    queryClient: QueryClient,
+    propertyId: string,
+): void {
+    void queryClient.invalidateQueries({ queryKey: accessKeys.list(propertyId) });
+    void queryClient.invalidateQueries({ queryKey: participantsKeys.all });
+}
 
 export type ChangeMemberRoleInput = {
     readonly role: 'full_access' | 'viewer';
@@ -48,30 +56,6 @@ export function usePropertyAccessMembers(
     });
 }
 
-export function useInvitePropertyAccessMember(
-    propertyId: string,
-): UseMutationResult<PropertyAccessMember, ApiError, InviteMemberInput> {
-    const queryClient = useQueryClient();
-    return useMutation({
-        mutationFn: async (data: InviteMemberInput) => {
-            const body: PropertyAccessInvitationCreateRequest = {
-                email: data.email,
-                role: data.role,
-            };
-            const response = await apiClient<PropertyAccessMemberResponse>(
-                `/properties/${propertyId}/access/invitations`,
-                { method: 'POST', body: JSON.stringify(body) },
-            );
-            return mapPropertyAccessMemberResponse(response);
-        },
-        onSuccess: () => {
-            void queryClient.invalidateQueries({
-                queryKey: accessKeys.list(propertyId),
-            });
-        },
-    });
-}
-
 export function useUpdatePropertyAccessInvitation(
     propertyId: string,
 ): UseMutationResult<
@@ -89,30 +73,7 @@ export function useUpdatePropertyAccessInvitation(
             );
             return mapPropertyAccessMemberResponse(response);
         },
-        onSuccess: () => {
-            void queryClient.invalidateQueries({
-                queryKey: accessKeys.list(propertyId),
-            });
-        },
-    });
-}
-
-export function useResendPropertyAccessInvitation(
-    propertyId: string,
-): UseMutationResult<void, ApiError, string> {
-    const queryClient = useQueryClient();
-    return useMutation({
-        mutationFn: async (invitationId: string) => {
-            await apiClient<void>(
-                `/properties/${propertyId}/access/invitations/${invitationId}/resend`,
-                { method: 'POST' },
-            );
-        },
-        onSuccess: () => {
-            void queryClient.invalidateQueries({
-                queryKey: accessKeys.list(propertyId),
-            });
-        },
+        onSettled: () => invalidateAccessProjections(queryClient, propertyId),
     });
 }
 
@@ -127,11 +88,7 @@ export function useCancelPropertyAccessInvitation(
                 { method: 'DELETE' },
             );
         },
-        onSuccess: () => {
-            void queryClient.invalidateQueries({
-                queryKey: accessKeys.list(propertyId),
-            });
-        },
+        onSettled: () => invalidateAccessProjections(queryClient, propertyId),
     });
 }
 
@@ -152,11 +109,7 @@ export function useUpdatePropertyAccessMember(
             );
             return mapPropertyAccessMemberResponse(response);
         },
-        onSuccess: () => {
-            void queryClient.invalidateQueries({
-                queryKey: accessKeys.list(propertyId),
-            });
-        },
+        onSettled: () => invalidateAccessProjections(queryClient, propertyId),
     });
 }
 
@@ -171,11 +124,7 @@ export function useDeletePropertyAccessMember(
                 { method: 'DELETE' },
             );
         },
-        onSuccess: () => {
-            void queryClient.invalidateQueries({
-                queryKey: accessKeys.list(propertyId),
-            });
-        },
+        onSettled: () => invalidateAccessProjections(queryClient, propertyId),
     });
 }
 
@@ -198,8 +147,9 @@ export type PropertyAccessMemberRef = {
  * ряда — скоуп строго объектный (не /participants/{id}, который снял бы
  * ноги на всех объектах владельца). Bulk-эндпоинта нет; повторный DELETE
  * по уже отозванной строке даёт безопасную ошибку, гонка параллельных
- * запросов не страшна. Инвалидация всегда (onSettled): и список объекта,
- * и агрегаты участников перечитываются после частичного сбоя тоже. */
+ * запросов не страшна. Инвалидация всегда (onSettled), канон
+ * invalidateAccessProjections: и список объекта, и агрегаты участников
+ * перечитываются после частичного сбоя тоже. */
 export function useRevokeAllPropertyAccessMembers(
     propertyId: string,
 ): UseMutationResult<
@@ -231,9 +181,6 @@ export function useRevokeAllPropertyAccessMembers(
             }
             return { revoked, failed };
         },
-        onSettled: () => {
-            void queryClient.invalidateQueries({ queryKey: accessKeys.list(propertyId) });
-            void queryClient.invalidateQueries({ queryKey: participantsKeys.all });
-        },
+        onSettled: () => invalidateAccessProjections(queryClient, propertyId),
     });
 }
