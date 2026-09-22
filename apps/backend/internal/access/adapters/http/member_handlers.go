@@ -170,7 +170,7 @@ func (h *MemberHandlers) handleError(w http.ResponseWriter, r *http.Request, err
 }
 
 // membershipResponse maps a domain.Membership to a response DTO. The display
-// name and email flag are not available from a membership row alone; the owner
+// name and email are not available from a membership row alone; the owner
 // list path uses memberResponse instead.
 func (h *MemberHandlers) membershipResponse(m domain.Membership, isOwner bool) openapi.PropertyAccessMemberResponse {
 	id := m.ID
