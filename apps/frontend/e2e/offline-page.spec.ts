@@ -58,8 +58,9 @@ test('SW отдаёт офлайн-страницу при потере сети
   // нужен сеанс: /login вне кабинетного layout регистрации не делает.
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto('/properties');
-  // ServiceWorkerRegister делает clients.claim — контроллер появляется
-  // на текущей странице после install.
+  // SW сам делает clients.claim в activate (public/sw.js) — контроллер
+  // появляется на уже открытой странице без перезагрузки;
+  // ServiceWorkerRegister только register('/sw.js').
   await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
     timeout: 30_000,
   });
