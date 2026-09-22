@@ -28,9 +28,12 @@ import { TabBarRow } from './tab-bar-row';
  * Показывается только на экранах без нижней кнопки действия: экраны со
  * StickyBottomBar глушат футер через useTabBarSuppression, поэтому выше по
  * дереву обязателен TabBarVisibilityProvider (ставит ScreenLayout) — вне
- * его (root layout, ui-kit) футер не рендерится вовсе. На время открытого
- * шита бар остаётся под оверлеем (затемнён), а нижний ряд шита — тот же
- * TabBarRow поверх: полоса «замещается» без прыжка (исследование #557). */
+ * его (root layout, ui-kit) футер не рендерится вовсе. Модель «одного
+ * целого» (решение владельца 22.09.2026): бар — z-50, НАД оверлеем и
+ * листом шита «Еще» — не темнеет, не дублируется и остаётся живым при
+ * открытом шите: «Еще» — тумблер (подсвечен активным, пока шит открыт),
+ * табы-ссылки ведут на разделы и закрывают шит; лист поднимается
+ * из-за бара. */
 type TabBarSuppression = {
   /** Провайдер в дереве есть; без него TabBar считается неуместным. */
   readonly present: boolean;
@@ -90,15 +93,22 @@ export function TabBar({
     <>
       <nav
         aria-label="Нижняя навигация"
-        className="fixed inset-x-0 bottom-0 z-40 w-full bg-white pb-[max(12px,env(safe-area-inset-bottom))] font-sans desktop:hidden"
+        className="pointer-events-auto fixed inset-x-0 bottom-0 z-50 w-full bg-white pb-[max(12px,env(safe-area-inset-bottom))] font-sans desktop:hidden"
       >
         {/* Табы во всю ширину вьюпорта — футер существует только там, где
          * нет ПК-хрома (1023 и уже), кап-колонка не нужна. Фолбэк 12px в
          * safe-area — тот же, что у шита «Еще»: полоса и лист заканчиваются
-         * на одной высоте (research §4). */}
+         * на одной высоте (research §4). Бар живёт НАД оверлеем шита
+         * (z-50 против z-40) — одна поверхность с листом, не темнеет и
+         * кликабелен в любой фазе анимации. pointer-events-auto обязателен:
+         * открытый шит (dismissable-layer Radix) ставит body
+         * pointer-events:none — без явного значения бар «прозрачен» для
+         * кликов, хотя стоит выше шита. */}
         <TabBarRow
+          moreActive={moreOpen}
           moreExpanded={moreOpen}
-          onMoreSelect={() => setMoreOpen(true)}
+          onMoreSelect={() => setMoreOpen((open) => !open)}
+          onNavigate={() => setMoreOpen(false)}
           propertiesHref={propertiesHref}
           notificationsUnread={notificationsUnread}
         />
