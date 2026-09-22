@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowDown, ArrowLeft, Cancel, Kebab, Search } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
+import { useUrlParams } from '@/shared/lib/hooks/use-url-params';
 import {
   filterParticipantsByQuery,
   ParticipantRowButton,
@@ -38,6 +39,11 @@ import {
   TopNavTitle,
 } from '@/shared/ui/design';
 import { popParticipantPopup, useParticipantPopup } from '../lib/participant-popups';
+import {
+  DEFAULT_PARTICIPANTS_LIST_ORDER,
+  PARTICIPANTS_LIST_ORDER_PARAMS,
+  serializeParticipantsListOrderToParams,
+} from '../lib/participants-list-model';
 import { ParticipantsListSkeleton } from './participants-list-skeletons';
 import { ParticipantSuccessPopup } from './participant-success-popup';
 
@@ -45,8 +51,10 @@ import { ParticipantSuccessPopup } from './participant-success-popup';
  * Экран «Ваши участники» (карта #692, тикет #697; Figma 2036-82971):
  * ряды участников-агрегатов (#693) с чипом агрегат-статуса, чип-сортировка
  * «Имя» (сервер приходит name ASC — направление из меню применяется
- * клиентски), кебаб «Отозвать доступ всем» и CTA «Пригласить участника»
- * в постоянной нижней панели (макет держит её во всех состояниях).
+ * клиентски; выбор живёт в адресе ?order=, дефолт «А→Я» не пишется —
+ * конвенция состояния в адресе, #785), кебаб «Отозвать доступ всем» и
+ * CTA «Пригласить участника» в постоянной нижней панели (макет держит
+ * её во всех состояниях).
  *
  * Поиск — иконка в шапке, поверх этого же экрана (макеты 2008-84003 /
  * 2010-134629: шапка сменяется поисковой, чип сортировки прячется):
@@ -65,12 +73,19 @@ import { ParticipantSuccessPopup } from './participant-success-popup';
  *
  * Тап по ряду — страница участника (#698).
  */
-export function ParticipantsListScreen(): JSX.Element {
+export function ParticipantsListScreen({
+  initialOrder,
+}: {
+  readonly initialOrder?: ParticipantSortOrder;
+}): JSX.Element {
   const router = useRouter();
+  const { write } = useUrlParams();
 
   const [searchMode, setSearchMode] = useState(false);
   const [search, setSearch] = useState('');
-  const [sortOrder, setSortOrder] = useState<ParticipantSortOrder>('asc');
+  const [sortOrder, setSortOrder] = useState<ParticipantSortOrder>(
+    initialOrder ?? DEFAULT_PARTICIPANTS_LIST_ORDER,
+  );
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   // «Участник удален» (макет 2008-83716): отзыв одного участника со
@@ -108,6 +123,15 @@ export function ParticipantsListScreen(): JSX.Element {
     setSearch('');
   };
 
+  // Направление сортировки живёт в адресе (?order=, дефолт «А→Я» не
+  // пишется — конвенция состояния в адресе, #785), переживает перезагрузку.
+  const changeOrder = (order: ParticipantSortOrder): void => {
+    setSortOrder(order);
+    write(serializeParticipantsListOrderToParams(order), {
+      own: PARTICIPANTS_LIST_ORDER_PARAMS,
+    });
+  };
+
   const confirmRevokeAll = (): void => {
     // Гард двойной защиты: кебаб скрыт и при ошибке, и на пустом списке,
     // но без этого гарда пустая партия вернула бы {failed: 0} — ложный
@@ -127,7 +151,7 @@ export function ParticipantsListScreen(): JSX.Element {
   };
 
   const sortChip = (
-    <PickerMenu title="Сортировать" groups={sortOrderPickerGroups('Имя', sortOrder, setSortOrder)}>
+    <PickerMenu title="Сортировать" groups={sortOrderPickerGroups('Имя', sortOrder, changeOrder)}>
       <ChipButton
         trailingIcon={
           <ArrowDown className={sortOrder === 'desc' ? 'rotate-180' : undefined} />

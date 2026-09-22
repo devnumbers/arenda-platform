@@ -1,5 +1,7 @@
 import type { AccessRole, PropertyAccessMember } from '@/entities/access';
+import { ACCESS_ROLE_LABELS } from '@/entities/access';
 import { filterByRuQuery, sortByRuText } from '@/entities/participants';
+import { parseEnumParam } from '@/shared/lib/parse-enum-param';
 
 /** Иконка у почты в ряду (макет 1980-107096): владелец — замок,
  * full_access — перо, viewer — глаз. */
@@ -12,6 +14,61 @@ export type PropertyParticipantRoleFilter = 'all' | Exclude<AccessRole, 'owner'>
 import type { ParticipantSortOrder as PropertyParticipantSortOrder } from '@/entities/participants';
 
 export type { PropertyParticipantSortOrder };
+
+/** Подписи чипа и опций фильтра ролей: «Все роли» плюс канон ролей
+ * ACCESS_ROLE_LABELS (единственный источник подписи роли, shared/model/
+ * access) — второй копии литералов здесь нет. */
+export const ROLE_FILTER_LABELS: Record<PropertyParticipantRoleFilter, string> = {
+  all: 'Все роли',
+  viewer: ACCESS_ROLE_LABELS.viewer,
+  full_access: ACCESS_ROLE_LABELS.full_access,
+};
+
+/** Дефолты чипов «Имя» и «Все роли» — в адресе не живут (конвенция
+ * состояния в адресе, #785). */
+export const DEFAULT_PROPERTY_PARTICIPANT_ORDER: PropertyParticipantSortOrder = 'asc';
+export const DEFAULT_PROPERTY_PARTICIPANT_ROLE_FILTER: PropertyParticipantRoleFilter = 'all';
+
+/** Разбор ?order= экрана «Участники объекта»: неизвестное и отсутствующее
+ * значения — дефолт «А→Я». */
+export function parsePropertyParticipantOrderParams(
+  order: string | string[] | undefined,
+): PropertyParticipantSortOrder {
+  return parseEnumParam(order, ['asc', 'desc'], DEFAULT_PROPERTY_PARTICIPANT_ORDER);
+}
+
+/** Разбор ?role= фильтра ролей: неизвестное (в том числе owner — роли ног
+ * только viewer/full_access) и отсутствующее — «Все роли». */
+export function parsePropertyParticipantRoleFilterParams(
+  role: string | string[] | undefined,
+): PropertyParticipantRoleFilter {
+  return parseEnumParam(
+    role,
+    ['all', 'viewer', 'full_access'],
+    DEFAULT_PROPERTY_PARTICIPANT_ROLE_FILTER,
+  );
+}
+
+/** Собственные параметры чипов в адресе — знание этого модуля; писатель
+ * (PropertyParticipantsScreen) импортирует отсюда: у каждого чипа свой
+ * ключ, чужой при записи не трогается. */
+export const PROPERTY_PARTICIPANT_ORDER_PARAMS = ['order'] as const;
+export const PROPERTY_PARTICIPANT_ROLE_FILTER_PARAMS = ['role'] as const;
+
+/** Патчи чипов для адреса: дефолтные значения параметров не создают
+ * (пустой query — голый pathname); пишутся через useUrlParams с own
+ * (#785). */
+export function serializePropertyParticipantOrderToParams(
+  order: PropertyParticipantSortOrder,
+): Record<string, string> {
+  return order === DEFAULT_PROPERTY_PARTICIPANT_ORDER ? {} : { order };
+}
+
+export function serializePropertyParticipantRoleFilterToParams(
+  role: PropertyParticipantRoleFilter,
+): Record<string, string> {
+  return role === DEFAULT_PROPERTY_PARTICIPANT_ROLE_FILTER ? {} : { role };
+}
 
 /** Данные ряда списка участников объекта: всё, что рисует строка,
  * вычислено один раз (ViewModel) — экрану остаётся только рендер. */

@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import type { PropertyAccessMember } from '@/entities/access';
+import { ACCESS_ROLE_LABELS, type PropertyAccessMember } from '@/entities/access';
 import {
   filterPropertyParticipantsByQuery,
+  parsePropertyParticipantOrderParams,
+  parsePropertyParticipantRoleFilterParams,
   propertyParticipantRows,
+  ROLE_FILTER_LABELS,
+  serializePropertyParticipantOrderToParams,
+  serializePropertyParticipantRoleFilterToParams,
   sortPropertyParticipantsByTitle,
 } from './property-participants-list';
 
@@ -185,5 +190,50 @@ describe('sortPropertyParticipantsByTitle — чип «Имя»; владеле�
 
     expect(sorted[0]?.role).toBe('owner');
     expect(sorted[1]?.title).toBe('Сергей Сидоров');
+  });
+});
+
+describe('адрес «Участников объекта» — parse порядок и фильтра ролей (#785)', () => {
+  it('направление: отсутствие, пустое, неизвестное и массивное — дефолт «А→Я»', () => {
+    expect(parsePropertyParticipantOrderParams(undefined)).toBe('asc');
+    expect(parsePropertyParticipantOrderParams('')).toBe('asc');
+    expect(parsePropertyParticipantOrderParams('по роли')).toBe('asc');
+    expect(parsePropertyParticipantOrderParams(['desc'])).toBe('asc');
+    expect(parsePropertyParticipantOrderParams('desc')).toBe('desc');
+  });
+
+  it('фильтр ролей: отсутствие, мусор и owner — «Все роли»', () => {
+    expect(parsePropertyParticipantRoleFilterParams(undefined)).toBe('all');
+    expect(parsePropertyParticipantRoleFilterParams('')).toBe('all');
+    expect(parsePropertyParticipantRoleFilterParams('owner')).toBe('all');
+    expect(parsePropertyParticipantRoleFilterParams(['viewer'])).toBe('all');
+  });
+
+  it('фильтр ролей читает канонические значения ролей', () => {
+    expect(parsePropertyParticipantRoleFilterParams('viewer')).toBe('viewer');
+    expect(parsePropertyParticipantRoleFilterParams('full_access')).toBe('full_access');
+  });
+});
+
+describe('адрес «Участников объекта» — serialize патчей (#785)', () => {
+  it('дефолты параметров не создают — пустой query даёт голый адрес', () => {
+    expect(serializePropertyParticipantOrderToParams('asc')).toStrictEqual({});
+    expect(serializePropertyParticipantRoleFilterToParams('all')).toStrictEqual({});
+  });
+
+  it('не-дефолты пишутся, каждый в свой ключ', () => {
+    expect(serializePropertyParticipantOrderToParams('desc')).toStrictEqual({ order: 'desc' });
+    expect(serializePropertyParticipantRoleFilterToParams('viewer')).toStrictEqual({ role: 'viewer' });
+    expect(serializePropertyParticipantRoleFilterToParams('full_access')).toStrictEqual({
+      role: 'full_access',
+    });
+  });
+});
+
+describe('ROLE_FILTER_LABELS — подписи фильтра ролей из канона ролей', () => {
+  it('«Все роли» + канон ACCESS_ROLE_LABELS, второй копии литералов нет', () => {
+    expect(ROLE_FILTER_LABELS.all).toBe('Все роли');
+    expect(ROLE_FILTER_LABELS.viewer).toBe(ACCESS_ROLE_LABELS.viewer);
+    expect(ROLE_FILTER_LABELS.full_access).toBe(ACCESS_ROLE_LABELS.full_access);
   });
 });

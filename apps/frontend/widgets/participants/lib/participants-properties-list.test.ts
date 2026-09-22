@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Property } from '@/entities/property';
 import {
+  parseParticipantsPropertyOrderParams,
+  serializeParticipantsPropertyOrderToParams,
   sortUserPropertyRows,
   userPropertyRows,
   type UserPropertyRow,
@@ -85,5 +87,28 @@ describe('sortUserPropertyRows', () => {
     sortUserPropertyRows(rows, 'desc');
     expect(rows.map((row) => row.id)).toEqual(['b', 'a', 'c']);
     expect(sortUserPropertyRows(rows, 'desc').map((row) => row.id)).toEqual(['a', 'b', 'c']);
+  });
+});
+
+describe('parseParticipantsPropertyOrderParams — разбор ?order= «Объектов пользователей» (#785)', () => {
+  it('отсутствие, пустое, неизвестное и массивное — дефолт «А→Я»', () => {
+    expect(parseParticipantsPropertyOrderParams(undefined)).toBe('asc');
+    expect(parseParticipantsPropertyOrderParams('')).toBe('asc');
+    expect(parseParticipantsPropertyOrderParams('по дате')).toBe('asc');
+    expect(parseParticipantsPropertyOrderParams(['desc'])).toBe('asc');
+  });
+
+  it('читает «Я→А»', () => {
+    expect(parseParticipantsPropertyOrderParams('desc')).toBe('desc');
+  });
+});
+
+describe('serializeParticipantsPropertyOrderToParams — патч ?order= для адреса (#785)', () => {
+  it('дефолт «А→Я» параметров не создаёт — пустой query даёт голый адрес', () => {
+    expect(serializeParticipantsPropertyOrderToParams('asc')).toStrictEqual({});
+  });
+
+  it('«Я→А» пишет order=desc', () => {
+    expect(serializeParticipantsPropertyOrderToParams('desc')).toStrictEqual({ order: 'desc' });
   });
 });

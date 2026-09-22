@@ -3,6 +3,7 @@
 import { useState, type JSX } from 'react';
 import { ArrowDown, BoldUser, Edit, Exit, EyeSmall, Kebab } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
+import { useUrlParams } from '@/shared/lib/hooks/use-url-params';
 import { ParticipantRowBadge, sortOrderPickerGroups } from '@/entities/participants';
 import { useLeaveAllProperties, useLeaveProperty } from '@/features/participants';
 import { useProperties, useProperty } from '@/features/properties';
@@ -21,6 +22,9 @@ import {
   ChipButton,
 } from '@/shared/ui/design';
 import {
+  DEFAULT_PARTICIPANTS_PROPERTY_ORDER,
+  PARTICIPANTS_PROPERTY_ORDER_PARAMS,
+  serializeParticipantsPropertyOrderToParams,
   sortUserPropertyRows,
   userPropertyRows,
   type ParticipantsPropertySortOrder,
@@ -37,7 +41,9 @@ import { ParticipantSuccessPopup } from './participant-success-popup';
  * (список уже несёт и свои, и чужие; suspended-доступы скрыты сервером —
  * их показ уходит в блюр-карточки #702). Бейдж роли («Редактирование»/
  * «Просмотр») — канон participantLegBadge #698; чип-сортировка «Название» —
- * клиентская (объём мал — тарифные слоты, канон #697).
+ * клиентская (объём мал — тарифные слоты, канон #697), выбор живёт в
+ * адресе ?order= (дефолт «А→Я» не пишется — конвенция состояния в адресе,
+ * #785).
  *
  * Кебаб карточки открывает шит «Действия с объектом» (2010-132581/133849):
  * карточка объекта, ряд владельца, статус доступа и «Покинуть объект» —
@@ -52,12 +58,19 @@ import { ParticipantSuccessPopup } from './participant-success-popup';
  * Пустой список — «Вас не пригласили в объекты» по центру без картинки
  * и чипа (2010-133784); служебные иконки шапки спрятаны (§7).
  */
-export function ParticipantsPropertiesScreen(): JSX.Element {
+export function ParticipantsPropertiesScreen({
+  initialOrder,
+}: {
+  readonly initialOrder?: ParticipantsPropertySortOrder;
+}): JSX.Element {
+  const { write } = useUrlParams();
   const propertiesQuery = useProperties();
   const leave = useLeaveProperty();
   const leaveAll = useLeaveAllProperties();
 
-  const [sortOrder, setSortOrder] = useState<ParticipantsPropertySortOrder>('asc');
+  const [sortOrder, setSortOrder] = useState<ParticipantsPropertySortOrder>(
+    initialOrder ?? DEFAULT_PARTICIPANTS_PROPERTY_ORDER,
+  );
   const [sheetPropertyId, setSheetPropertyId] = useState<string | null>(null);
   // Цель одиночного выхода: шит к этому моменту уже закрыт (макет 2010-132970
   // показывает диалог поверх списка).
@@ -67,6 +80,15 @@ export function ParticipantsPropertiesScreen(): JSX.Element {
   const [leftPopup, setLeftPopup] = useState<'single' | 'all' | null>(null);
 
   const rows = sortUserPropertyRows(userPropertyRows(propertiesQuery.data ?? []), sortOrder);
+
+  // Направление сортировки живёт в адресе (?order=, дефолт «А→Я» не
+  // пишется — конвенция состояния в адресе, #785), переживает перезагрузку.
+  const changeOrder = (order: ParticipantsPropertySortOrder): void => {
+    setSortOrder(order);
+    write(serializeParticipantsPropertyOrderToParams(order), {
+      own: PARTICIPANTS_PROPERTY_ORDER_PARAMS,
+    });
+  };
 
   // Служебные иконки шапки — только когда данные загружены и есть что
   // покидать: пустой список (§7) и ошибка загрузки их прячут.
@@ -118,7 +140,7 @@ export function ParticipantsPropertiesScreen(): JSX.Element {
   };
 
   const sortChip = (
-    <PickerMenu title="Сортировать" groups={sortOrderPickerGroups('Название', sortOrder, setSortOrder)}>
+    <PickerMenu title="Сортировать" groups={sortOrderPickerGroups('Название', sortOrder, changeOrder)}>
       <ChipButton
         trailingIcon={
           <ArrowDown className={sortOrder === 'desc' ? 'rotate-180' : undefined} />

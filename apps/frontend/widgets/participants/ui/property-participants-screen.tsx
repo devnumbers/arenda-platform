@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type JSX } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import {
   ArrowDown,
   ArrowLeft,
@@ -18,10 +18,10 @@ import {
 import { ROUTES } from '@/shared/config/routes';
 import { cn } from '@/shared/lib/cn';
 import { useKeyboardActivation } from '@/shared/lib/hooks/useKeyboardActivation';
+import { useUrlParams } from '@/shared/lib/hooks/use-url-params';
 import { useMe } from '@/features/auth';
 import { useProperty } from '@/features/properties';
 import { propertyPermissions } from '@/entities/property';
-import { ACCESS_ROLE_LABELS } from '@/entities/access';
 import {
   usePropertyAccessMembers,
   useRevokeAllPropertyAccessMembers,
@@ -53,9 +53,16 @@ import {
   type PickerMenuGroup,
 } from '@/shared/ui/design';
 import {
+  DEFAULT_PROPERTY_PARTICIPANT_ORDER,
+  DEFAULT_PROPERTY_PARTICIPANT_ROLE_FILTER,
   filterPropertyParticipantsByQuery,
   filterPropertyParticipantsByRole,
+  PROPERTY_PARTICIPANT_ORDER_PARAMS,
+  PROPERTY_PARTICIPANT_ROLE_FILTER_PARAMS,
   propertyParticipantRows,
+  ROLE_FILTER_LABELS,
+  serializePropertyParticipantOrderToParams,
+  serializePropertyParticipantRoleFilterToParams,
   sortPropertyParticipantsByTitle,
   type PropertyParticipantEmailIcon,
   type PropertyParticipantRoleFilter,
@@ -71,12 +78,6 @@ const EMAIL_ROLE_ICONS: Record<PropertyParticipantEmailIcon, typeof EyeSmall> = 
   eye: EyeSmall,
 };
 
-const ROLE_FILTER_LABELS: Record<PropertyParticipantRoleFilter, string> = {
-  all: 'Все роли',
-  viewer: ACCESS_ROLE_LABELS.viewer,
-  full_access: ACCESS_ROLE_LABELS.full_access,
-};
-
 /**
  * Экран «Участники объекта» (карта #692, тикет #700; Figma 1980-107096):
  * замена легаси-модалки PropertySharingModal — вход из детали объекта
@@ -88,7 +89,9 @@ const ROLE_FILTER_LABELS: Record<PropertyParticipantRoleFilter, string> = {
  * Чип «Имя» — клиентская сортировка (владелец всегда первым), чип «Все
  * роли» — клиентский фильтр (1980-109148), поиск — иконка в шапке поверх
  * экрана (1980-108531): объём мал, серверного ?search= нет (прецедент
- * #697). Кебаб (1980-139712): «Пригласить участника» и «Отозвать доступ
+ * #697). Выбор обоих чипов живёт в адресе (?order= и ?role=, дефолты не
+ * пишутся — конвенция состояния в адресе, #785). Кебаб (1980-139712):
+ * «Пригласить участника» и «Отозвать доступ
  * всем» (2035-82619 — партия DELETE members/invitations в скоупе одного
  * объекта; пункт «История объекта» — журнал #712, вне скоупа тикета).
  * CTA «Пригласить участника» — приглашение от объекта без выбора объектов.
@@ -104,15 +107,26 @@ const ROLE_FILTER_LABELS: Record<PropertyParticipantRoleFilter, string> = {
  * модалке, скрыты и manage-контролы (кебаб, CTA), выдача на архивный
  * объект запрещена.
  */
-export function PropertyParticipantsScreen(): JSX.Element {
-  const params = useParams<{ id: string }>();
-  const propertyId = params.id;
+export function PropertyParticipantsScreen({
+  propertyId,
+  initialOrder,
+  initialRoleFilter,
+}: {
+  readonly propertyId: string;
+  readonly initialOrder?: PropertyParticipantSortOrder;
+  readonly initialRoleFilter?: PropertyParticipantRoleFilter;
+}): JSX.Element {
   const router = useRouter();
+  const { write } = useUrlParams();
 
   const [searchMode, setSearchMode] = useState(false);
   const [search, setSearch] = useState('');
-  const [sortOrder, setSortOrder] = useState<PropertyParticipantSortOrder>('asc');
-  const [roleFilter, setRoleFilter] = useState<PropertyParticipantRoleFilter>('all');
+  const [sortOrder, setSortOrder] = useState<PropertyParticipantSortOrder>(
+    initialOrder ?? DEFAULT_PROPERTY_PARTICIPANT_ORDER,
+  );
+  const [roleFilter, setRoleFilter] = useState<PropertyParticipantRoleFilter>(
+    initialRoleFilter ?? DEFAULT_PROPERTY_PARTICIPANT_ROLE_FILTER,
+  );
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [showAllRevoked, setShowAllRevoked] = useState(false);
   // «Участник приглашен» (макет 2035-82202): возврат из приглашения от
@@ -164,6 +178,23 @@ export function PropertyParticipantsScreen(): JSX.Element {
     setSearch('');
   };
 
+  // Чипы живут в адресе (конвенция состояния в адресе, #785): у каждого
+  // свой ключ (?order= и ?role=), дефолт не пишется, чужой ключ при
+  // записи не трогается — переживает перезагрузку.
+  const changeOrder = (order: PropertyParticipantSortOrder): void => {
+    setSortOrder(order);
+    write(serializePropertyParticipantOrderToParams(order), {
+      own: PROPERTY_PARTICIPANT_ORDER_PARAMS,
+    });
+  };
+
+  const changeRoleFilter = (role: PropertyParticipantRoleFilter): void => {
+    setRoleFilter(role);
+    write(serializePropertyParticipantRoleFilterToParams(role), {
+      own: PROPERTY_PARTICIPANT_ROLE_FILTER_PARAMS,
+    });
+  };
+
   const confirmRevokeAll = (): void => {
     // Гард двойной защиты (канон #697): кебаб скрыт без участников, но
     // без гарда пустая партия выглядела бы успехом.
@@ -187,7 +218,7 @@ export function PropertyParticipantsScreen(): JSX.Element {
   };
 
   const sortChip = (
-    <PickerMenu title="Сортировать" groups={sortOrderPickerGroups('Имя', sortOrder, setSortOrder)}>
+    <PickerMenu title="Сортировать" groups={sortOrderPickerGroups('Имя', sortOrder, changeOrder)}>
       <ChipButton
         trailingIcon={
           <ArrowDown className={sortOrder === 'desc' ? 'rotate-180' : undefined} />
@@ -199,7 +230,7 @@ export function PropertyParticipantsScreen(): JSX.Element {
   );
 
   const roleFilterChip = (
-    <PickerMenu title="Роль" groups={roleFilterPickerGroups(roleFilter, setRoleFilter)}>
+    <PickerMenu title="Роль" groups={roleFilterPickerGroups(roleFilter, changeRoleFilter)}>
       <ChipButton trailingIcon={<SmallArrowDown />}>
         {ROLE_FILTER_LABELS[roleFilter]}
       </ChipButton>
@@ -459,22 +490,24 @@ function PropertyParticipantsSkeleton(): JSX.Element {
 }
 
 /** Группы пикера фильтра ролей (макет 1980-109148): одна группа из трёх
- * значений, выбор применяется сразу (канон PickerMenu). */
+ * значений, выбор применяется сразу (канон PickerMenu). Подписи — только
+ * из ROLE_FILTER_LABELS («Все роли» + канон ACCESS_ROLE_LABELS). */
 function roleFilterPickerGroups(
   value: PropertyParticipantRoleFilter,
   onChange: (value: PropertyParticipantRoleFilter) => void,
 ): ReadonlyArray<PickerMenuGroup> {
+  const keys: ReadonlyArray<PropertyParticipantRoleFilter> = [
+    'all',
+    'viewer',
+    'full_access',
+  ];
   return [
     {
-      options: [
-        { label: 'Все роли', selected: value === 'all', onSelect: () => onChange('all') },
-        { label: 'Просмотр', selected: value === 'viewer', onSelect: () => onChange('viewer') },
-        {
-          label: 'Редактирование',
-          selected: value === 'full_access',
-          onSelect: () => onChange('full_access'),
-        },
-      ],
+      options: keys.map((key) => ({
+        label: ROLE_FILTER_LABELS[key],
+        selected: value === key,
+        onSelect: () => onChange(key),
+      })),
     },
   ];
 }

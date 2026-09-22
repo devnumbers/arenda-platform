@@ -1,13 +1,18 @@
-import type { JSX } from 'react';
 import type { Metadata } from 'next';
-import { ParticipantsListScreen } from '@/widgets/participants';
+import { ParticipantsListScreen, parseParticipantsListOrderParams } from '@/widgets/participants';
 
 /** Экран «Ваши участники» (карта #692, тикет #697): список агрегатов,
- * поиск, «Отозвать всех». */
+ * поиск, «Отозвать всех». Направление сортировки живёт в адресе (?order=,
+ * #785) — стартовое значение парсится здесь, на сервере. */
 export const metadata: Metadata = {
   title: 'Ваши участники — Рентли',
 };
 
-export default function ParticipantsListRoutePage(): JSX.Element {
-  return <ParticipantsListScreen />;
+export default async function ParticipantsListRoutePage({
+  searchParams,
+}: PageProps<'/participants/list'>) {
+  const resolved = await searchParams;
+  const initialOrder = parseParticipantsListOrderParams(resolved.order);
+
+  return <ParticipantsListScreen initialOrder={initialOrder} />;
 }

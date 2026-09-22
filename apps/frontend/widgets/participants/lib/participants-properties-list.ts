@@ -1,11 +1,37 @@
 import { participantLegBadge, sortByRuText } from '@/entities/participants';
 import type { Property } from '@/entities/property';
 import type { SharedAccessRole } from '@/shared/model/access';
+import { parseEnumParam } from '@/shared/lib/parse-enum-param';
 
 /** Направление чипа «Название» — как сортировка «Ваших участников» (#697). */
 import type { ParticipantSortOrder as ParticipantsPropertySortOrder } from '@/entities/participants';
 
 export type { ParticipantsPropertySortOrder };
+
+/** Дефолтное направление «Объектов пользователей» — «А→Я», в адресе
+ * не живёт (конвенция состояния в адресе, #785). */
+export const DEFAULT_PARTICIPANTS_PROPERTY_ORDER: ParticipantsPropertySortOrder = 'asc';
+
+/** Разбор ?order= списка «Объекты пользователей»: неизвестное и
+ * отсутствующее значения — дефолт «А→Я». */
+export function parseParticipantsPropertyOrderParams(
+  order: string | string[] | undefined,
+): ParticipantsPropertySortOrder {
+  return parseEnumParam(order, ['asc', 'desc'], DEFAULT_PARTICIPANTS_PROPERTY_ORDER);
+}
+
+/** Собственный параметр направления в адресе — знание этого модуля;
+ * писатель (ParticipantsPropertiesScreen) импортирует отсюда. */
+export const PARTICIPANTS_PROPERTY_ORDER_PARAMS = ['order'] as const;
+
+/** Патч направления для адреса: дефолтные значения параметров не создают
+ * (пустой query — голый pathname); пишется через useUrlParams с
+ * own: PARTICIPANTS_PROPERTY_ORDER_PARAMS (#785). */
+export function serializeParticipantsPropertyOrderToParams(
+  order: ParticipantsPropertySortOrder,
+): Record<string, string> {
+  return order === DEFAULT_PARTICIPANTS_PROPERTY_ORDER ? {} : { order };
+}
 
 /** Модель бейджа ноги — канон participantLegBadge (#698). */
 export type UserPropertyBadge = ReturnType<typeof participantLegBadge>;
@@ -37,11 +63,11 @@ function isSharedProperty(property: Property): property is SharedProperty {
 }
 
 /**
- * Ряды экрана «Объекты пользователей» (#701): строки GET /properties, где
+ * Ряды экрана «Объектов пользователей» (#701): строки GET /properties, где
  * читающий не владелец (список уже несёт и свои, и чужие объекты —
- * access.role отличает их; suspended-доступы скрыты сервером —
- * hidden_shared_count, тикет #702). Порядок входа сохраняется — сортировка
- * отдельно.
+ * access.role отличает их; suspended-доступы скрыты сервером — приходят
+ * отдельным suspended_shared под блюр-карточки, тикет #702). Порядок входа
+ * сохраняется — сортировка отдельно.
  */
 export function userPropertyRows(properties: ReadonlyArray<Property>): UserPropertyRow[] {
   return properties.filter(isSharedProperty).map((property) => ({
