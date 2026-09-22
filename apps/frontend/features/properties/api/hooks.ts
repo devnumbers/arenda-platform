@@ -103,7 +103,7 @@ export function useProperties(
 
 // Тот же cache entry, что у useProperties (один ключ — один запрос,
 // react-query дедуплицирует параллельных наблюдателей). Поверхности
-// hidden_shared_count и today нужны не везде — остальное приложение
+// suspended_shared и today нужны не везде — остальное приложение
 // читает useProperties с проекцией на строки.
 export function usePropertiesWithMeta(
   options: { enabled?: boolean } = {},

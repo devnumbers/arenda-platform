@@ -26,7 +26,7 @@ async function openAsMember(page: Page): Promise<void> {
 }
 
 /** Сид после разрушающих тестов: membership Марии возвращается (workers=1 —
- * дальше сид нужен спекам participants-list и payment-edit-delete). */
+ * дальше сид нужен payment-edit-delete: кабинет сид-участников). */
 async function restoreMemberMembership(): Promise<void> {
   await execE2eSql(
     "INSERT INTO property_members (id, property_id, user_id, role, granted_by) VALUES " +

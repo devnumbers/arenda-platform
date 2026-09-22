@@ -105,7 +105,7 @@ test('пригласить в объект: мультичек гаража, ш�
 
   await expect(page.locator(header).getByText('Пригласить в объект')).toBeVisible();
 
-  // Квартира уже выдана — в списке только гараж; «Все объекты» unchecked.
+  // Квартира уже выдана — в списке гараж и студия; «Все объекты» unchecked.
   const garageRow = page.getByRole('checkbox', { name: /Гараж на Садовой/ });
   await expect(garageRow).toBeVisible();
   await expect(page.getByRole('button', { name: /Квартира на Ленина/ })).toHaveCount(0);

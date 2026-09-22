@@ -152,7 +152,7 @@ export { default as BoldObjects } from './bold-objects.svg';
 // (CreditCard 1917:72300) — currentColor.
 export { default as CreditCard } from './credit-card.svg';
 
-// Канонический набор иконок (96, владелец 07.09): Icon/Bold/* и Icon/R/* из
+// Канонический набор иконок (99, владелец 07.09): Icon/Bold/* и Icon/R/* из
 // Figma «Рентли. Новые экраны сервиса». Полное сопоставление узлов —
 // README.md рядом. Иконки не рисуются сами — только экспорт из Figma;
 // цвет — currentColor (кроме запечённых дизайнерских: BoldUser #D3D7D9
