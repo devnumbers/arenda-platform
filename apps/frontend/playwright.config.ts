@@ -1,5 +1,12 @@
 import { defineConfig, devices } from '@playwright/test';
 
+// The whole run lives in UTC so every clock in the suite agrees — the seed
+// (CURRENT_DATE in the Etc/UTC postgres container), the browser and the
+// node workers of the specs; otherwise a nightly run between 00:00 and 03:00
+// MSK saw «сегодня» render as «Вчера» (#796). TZ is set before workers fork,
+// so they inherit it; the invariant is guarded live by e2e/utc-clock.spec.ts.
+process.env.TZ = 'UTC';
+
 // Frontend e2e suite (ticket #456, spec #453). The whole stack — postgres
 // (compose project arenda-e2e), the backend (fake email sender, fake payment
 // provider, migrations on boot) and a production standalone build of this
@@ -23,6 +30,7 @@ export default defineConfig({
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
+    timezoneId: 'UTC',
   },
   projects: [
     {
