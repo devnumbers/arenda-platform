@@ -150,24 +150,27 @@ test('приглашение от объекта: свой email — 400, све
   // Свежая почта — pending-приглашение, возврат на список с попапом.
   await emailField.fill(INVITE_EMAIL);
   await page.getByRole('radio', { name: 'Редактирование' }).click();
-  await page.getByRole('button', { name: 'Пригласить' }).filter({ hasText: 'Пригласить' }).click();
+  try {
+    await page.getByRole('button', { name: 'Пригласить' }).filter({ hasText: 'Пригласить' }).click();
 
-  await expect(page.locator(header).getByText('Участники объекта')).toBeVisible();
-  await expect(
-    page.getByRole('dialog').locator('p', { hasText: 'Участник приглашен' }),
-  ).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(page.getByText(INVITE_EMAIL).first()).toBeVisible();
+    await expect(page.locator(header).getByText('Участники объекта')).toBeVisible();
+    await expect(
+      page.getByRole('dialog').locator('p', { hasText: 'Участник приглашен' }),
+    ).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByText(INVITE_EMAIL).first()).toBeVisible();
 
-  // Серверная правда: приглашение именно на этот объект с выбранной ролью.
-  expect(
+    // Серверная правда: приглашение именно на этот объект с выбранной ролью.
+    expect(
+      await execE2eSql(
+        `SELECT count(*) FROM property_member_invitations WHERE property_id = '${APARTMENT_ID}' AND email = '${INVITE_EMAIL}' AND role = 'full_access'`,
+      ),
+    ).toBe('1');
+  } finally {
     await execE2eSql(
-      `SELECT count(*) FROM property_member_invitations WHERE property_id = '${APARTMENT_ID}' AND email = '${INVITE_EMAIL}' AND role = 'full_access'`,
-    ),
-  ).toBe('1');
-  await execE2eSql(
-    `DELETE FROM property_member_invitations WHERE property_id = '${APARTMENT_ID}' AND email = '${INVITE_EMAIL}'`,
-  );
+      `DELETE FROM property_member_invitations WHERE property_id = '${APARTMENT_ID}' AND email = '${INVITE_EMAIL}'`,
+    );
+  }
 });
 
 test('suspended-участник: warning-чип в ряду; сид восстанавливается', async ({ page, seededUser }) => {

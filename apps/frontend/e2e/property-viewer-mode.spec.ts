@@ -176,34 +176,36 @@ test.describe('режим просмотра', () => {
   }) => {
     await openDetail(page);
 
-    // Отмена: диалог закрывается, деталь остаётся.
-    await page.getByTestId('property-manage-list').getByText('Покинуть объект').click();
-    const dialog = page.getByRole('dialog');
-    await expect(
-      dialog.getByText('Уверены, что хотите покинуть объект?'),
-    ).toBeVisible();
-    await dialog.getByRole('button', { name: 'Отмена' }).click();
-    await expect(dialog).toHaveCount(0);
-    await expect(page.getByText('Владелец объекта')).toBeVisible();
+    try {
+      // Отмена: диалог закрывается, деталь остаётся.
+      await page.getByTestId('property-manage-list').getByText('Покинуть объект').click();
+      const dialog = page.getByRole('dialog');
+      await expect(
+        dialog.getByText('Уверены, что хотите покинуть объект?'),
+      ).toBeVisible();
+      await dialog.getByRole('button', { name: 'Отмена' }).click();
+      await expect(dialog).toHaveCount(0);
+      await expect(page.getByText('Владелец объекта')).toBeVisible();
 
-    // Выход: канон-подтверждение #701 (2010-132970), тост, возврат к
-    // списку объектов по истории (путь пользователя, канон #698).
-    await page.getByTestId('property-manage-list').getByText('Покинуть объект').click();
-    await dialog.getByRole('button', { name: 'Покинуть', exact: true }).click();
-    await expect(page.getByText('Вы покинули объект')).toBeVisible();
-    await expect(page).toHaveURL(/\/properties$/);
+      // Выход: канон-подтверждение #701 (2010-132970), тост, возврат к
+      // списку объектов по истории (путь пользователя, канон #698).
+      await page.getByTestId('property-manage-list').getByText('Покинуть объект').click();
+      await dialog.getByRole('button', { name: 'Покинуть', exact: true }).click();
+      await expect(page.getByText('Вы покинули объект')).toBeVisible();
+      await expect(page).toHaveURL(/\/properties$/);
 
-    // Серверная правда: членство зрителя удалено.
-    const count = await execE2eSql(
-      `SELECT count(*) FROM property_members WHERE id = '${VIEWER_MEMBERSHIP_ID}'`,
-    );
-    expect(count).toBe('0');
-
-    // Восстановление сида: зритель квартиры нужен другим спекам.
-    await execE2eSql(
-      'INSERT INTO property_members (id, property_id, user_id, role, granted_by, status) VALUES ' +
-        `('${VIEWER_MEMBERSHIP_ID}', '${PROPERTY}', '${VIEWER_USER_ID}', 'viewer', '${OWNER_ID}', 'active') ` +
-        'ON CONFLICT (id) DO NOTHING',
-    );
+      // Серверная правда: членство зрителя удалено.
+      const count = await execE2eSql(
+        `SELECT count(*) FROM property_members WHERE id = '${VIEWER_MEMBERSHIP_ID}'`,
+      );
+      expect(count).toBe('0');
+    } finally {
+      // Восстановление сида: зритель квартиры нужен другим спекам.
+      await execE2eSql(
+        'INSERT INTO property_members (id, property_id, user_id, role, granted_by, status) VALUES ' +
+          `('${VIEWER_MEMBERSHIP_ID}', '${PROPERTY}', '${VIEWER_USER_ID}', 'viewer', '${OWNER_ID}', 'active') ` +
+          'ON CONFLICT (id) DO NOTHING',
+      );
+    }
   });
 });

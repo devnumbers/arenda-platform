@@ -31,7 +31,7 @@ test('страница участника: шапка, чип агрегата, 
     page.locator(header).getByText('Участник', { exact: true }).first(),
   ).toBeVisible();
 
-  // Блок участника: имя, почта, чип агрегата (partial — активна 1 из 2).
+  // Блок участника: имя, почта, чип агрегата (partial — активна 1 из 3).
   await expect(page.getByRole('heading', { name: 'Мария Петрова' })).toBeVisible();
   await expect(page.getByText('e2e-member@example.com')).toBeVisible();
   await expect(page.getByText('Доступно 1 объект')).toBeVisible();
@@ -240,39 +240,41 @@ test('pending-участник: deep-link по почте, бейдж «Приг
       `VALUES ('88888888-8888-4888-8888-888888888881', '${GARAGE_ID}', 'e2e-pending@example.com', 'viewer', '11111111-1111-4111-8111-111111111111', now()) ` +
       `ON CONFLICT (id) DO NOTHING`,
   );
+  try {
+    await openCabinetWithSeededSession(page, seededUser);
+    // Идентификатор pending-участника — почта (контракт #693).
+    await page.goto('/participants/e2e-pending%40example.com');
 
-  await openCabinetWithSeededSession(page, seededUser);
-  // Идентификатор pending-участника — почта (контракт #693).
-  await page.goto('/participants/e2e-pending%40example.com');
+    await expect(page.locator(header).getByText('Участник', { exact: true }).first()).toBeVisible();
+    // Имени нет — почта титул (контракт: «the email is the label»); чип
+    // агрегата в шапке — «Приглашён» (#772: считанный partial/0 как
+    // «Доступно 0 объектов» читался как отказ). first(): шапка в DOM раньше
+    // списка, где у pending-ноги гаража свой такой же чип (ассерт ниже).
+    await expect(page.getByText('e2e-pending@example.com').first()).toBeVisible();
+    await expect(page.getByText('Приглашён').first()).toBeVisible();
 
-  await expect(page.locator(header).getByText('Участник', { exact: true }).first()).toBeVisible();
-  // Имени нет — почта титул (контракт: «the email is the label»); чип
-  // агрегата в шапке — «Приглашён» (#772: считанный partial/0 как
-  // «Доступно 0 объектов» читался как отказ). first(): шапка в DOM раньше
-  // списка, где у pending-ноги гаража свой такой же чип (ассерт ниже).
-  await expect(page.getByText('e2e-pending@example.com').first()).toBeVisible();
-  await expect(page.getByText('Приглашён').first()).toBeVisible();
+    const garageRow = page.getByRole('button', { name: /Гараж на Садовой/ });
+    await expect(garageRow.getByText('Приглашён')).toBeVisible();
 
-  const garageRow = page.getByRole('button', { name: /Гараж на Садовой/ });
-  await expect(garageRow.getByText('Приглашён')).toBeVisible();
+    await garageRow.click();
+    await expect(page.locator(header).getByText('Права участника')).toBeVisible();
+    await expect(page.getByRole('radio', { name: 'Просмотр' })).toBeChecked();
 
-  await garageRow.click();
-  await expect(page.locator(header).getByText('Права участника')).toBeVisible();
-  await expect(page.getByRole('radio', { name: 'Просмотр' })).toBeChecked();
+    await page.getByRole('radio', { name: 'Редактирование' }).click();
+    await expect(
+      page.getByRole('dialog').locator('p', { hasText: 'Права изменены' }),
+    ).toBeVisible();
+    await page.keyboard.press('Escape');
 
-  await page.getByRole('radio', { name: 'Редактирование' }).click();
-  await expect(
-    page.getByRole('dialog').locator('p', { hasText: 'Права изменены' }),
-  ).toBeVisible();
-  await page.keyboard.press('Escape');
-
-  // Серверная правда: роль приглашения реально сменилась.
-  expect(
+    // Серверная правда: роль приглашения реально сменилась.
+    expect(
+      await execE2eSql(
+        `SELECT count(*) FROM property_member_invitations WHERE id = '88888888-8888-4888-8888-888888888881' AND role = 'full_access'`,
+      ),
+    ).toBe('1');
+  } finally {
     await execE2eSql(
-      `SELECT count(*) FROM property_member_invitations WHERE id = '88888888-8888-4888-8888-888888888881' AND role = 'full_access'`,
-    ),
-  ).toBe('1');
-  await execE2eSql(
-    `DELETE FROM property_member_invitations WHERE id = '88888888-8888-4888-8888-888888888881'`,
-  );
+      `DELETE FROM property_member_invitations WHERE id = '88888888-8888-4888-8888-888888888881'`,
+    );
+  }
 });

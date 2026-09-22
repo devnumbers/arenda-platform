@@ -98,26 +98,28 @@ test('«Покинуть объект»: доступ снят, попап ус�
   await openAsMember(page);
   await page.getByRole('button', { name: 'Действия с объектом «Квартира на Ленина»' }).click();
 
-  const sheet = page.getByRole('dialog');
-  await sheet.getByRole('button', { name: 'Покинуть объект', exact: true }).click();
+  try {
+    const sheet = page.getByRole('dialog');
+    await sheet.getByRole('button', { name: 'Покинуть объект', exact: true }).click();
 
-  const confirm = page.getByRole('dialog');
-  await confirm.getByRole('button', { name: 'Покинуть', exact: true }).click();
+    const confirm = page.getByRole('dialog');
+    await confirm.getByRole('button', { name: 'Покинуть', exact: true }).click();
 
-  // Попап (2010-133204); список под ним перечитан инвалидацией properties.
-  await expect(
-    page.getByRole('dialog').locator('p', { hasText: 'Вы покинули объект' }),
-  ).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(page.getByText('Вас не пригласили в объекты')).toBeVisible();
+    // Попап (2010-133204); список под ним перечитан инвалидацией properties.
+    await expect(
+      page.getByRole('dialog').locator('p', { hasText: 'Вы покинули объект' }),
+    ).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByText('Вас не пригласили в объекты')).toBeVisible();
 
-  // Серверная правда: membership удалён самовыходом.
-  const count = await execE2eSql(
-    `SELECT count(*) FROM property_members WHERE id = '${MEMBER_MEMBERSHIP_ID}'`,
-  );
-  expect(count).toBe('0');
-
-  await restoreMemberMembership();
+    // Серверная правда: membership удалён самовыходом.
+    const count = await execE2eSql(
+      `SELECT count(*) FROM property_members WHERE id = '${MEMBER_MEMBERSHIP_ID}'`,
+    );
+    expect(count).toBe('0');
+  } finally {
+    await restoreMemberMembership();
+  }
   await page.reload();
   await expect(page.getByText(APARTMENT_ROW).first()).toBeVisible();
 });
@@ -125,33 +127,35 @@ test('«Покинуть объект»: доступ снят, попап ус�
 test('«Покинуть все объекты» из кебаба шапки: пустой список, сид восстанавливается', async ({ page }) => {
   await openAsMember(page);
 
-  await page.locator(header).getByRole('button', { name: 'Еще — действия со списком' }).click();
-  await page.getByRole('menuitem', { name: 'Покинуть все объекты' }).click();
+  try {
+    await page.locator(header).getByRole('button', { name: 'Еще — действия со списком' }).click();
+    await page.getByRole('menuitem', { name: 'Покинуть все объекты' }).click();
 
-  // Подтверждение (2010-133563): кнопки столбиком, подтверждение сверху.
-  const confirm = page.getByRole('dialog');
-  await expect(confirm.getByText('Уверены, что хотите покинуть все объекты?')).toBeVisible();
-  const leaveAllButton = confirm.getByRole('button', { name: 'Покинуть все объекты', exact: true });
-  const cancelButton = confirm.getByRole('button', { name: 'Отмена', exact: true });
-  await expect(leaveAllButton).toBeVisible();
-  await expect(cancelButton).toBeVisible();
-  const leaveBox = await leaveAllButton.boundingBox();
-  const cancelBox = await cancelButton.boundingBox();
-  expect(leaveBox?.y ?? 0).toBeLessThan(cancelBox?.y ?? 0);
-  await leaveAllButton.click();
+    // Подтверждение (2010-133563): кнопки столбиком, подтверждение сверху.
+    const confirm = page.getByRole('dialog');
+    await expect(confirm.getByText('Уверены, что хотите покинуть все объекты?')).toBeVisible();
+    const leaveAllButton = confirm.getByRole('button', { name: 'Покинуть все объекты', exact: true });
+    const cancelButton = confirm.getByRole('button', { name: 'Отмена', exact: true });
+    await expect(leaveAllButton).toBeVisible();
+    await expect(cancelButton).toBeVisible();
+    const leaveBox = await leaveAllButton.boundingBox();
+    const cancelBox = await cancelButton.boundingBox();
+    expect(leaveBox?.y ?? 0).toBeLessThan(cancelBox?.y ?? 0);
+    await leaveAllButton.click();
 
-  await expect(
-    page.getByRole('dialog').locator('p', { hasText: 'Вы покинули все объекты пользователей' }),
-  ).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(page.getByText('Вас не пригласили в объекты')).toBeVisible();
+    await expect(
+      page.getByRole('dialog').locator('p', { hasText: 'Вы покинули все объекты пользователей' }),
+    ).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByText('Вас не пригласили в объекты')).toBeVisible();
 
-  const count = await execE2eSql(
-    `SELECT count(*) FROM property_members WHERE id = '${MEMBER_MEMBERSHIP_ID}'`,
-  );
-  expect(count).toBe('0');
-
-  await restoreMemberMembership();
+    const count = await execE2eSql(
+      `SELECT count(*) FROM property_members WHERE id = '${MEMBER_MEMBERSHIP_ID}'`,
+    );
+    expect(count).toBe('0');
+  } finally {
+    await restoreMemberMembership();
+  }
   await page.reload();
   await expect(page.getByText(APARTMENT_ROW).first()).toBeVisible();
 });

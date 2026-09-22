@@ -143,8 +143,8 @@ test('«Отозвать и удалить»: ряды исчезают, поп�
       page.locator(header).getByRole('button', { name: 'Поиск участников' }),
     ).toHaveCount(0);
   } finally {
-    // Восстановление сида (воркers=1 — дальше по сюиту сид нужен другим
-    // спекам: роли payment-edit-delete, счётчики nav-stubs).
+    // Восстановление сида (воркеры=1 — позже по сюиту сид нужен
+    // payment-edit-delete: кабинет сид-участников).
     await execE2eSql(
       "INSERT INTO property_members (id, property_id, user_id, role, granted_by) VALUES " +
         "('99999999-9999-4999-8999-999999999931', '33333333-3333-4333-8333-333333333333', '12111111-1111-4111-8111-111111111121', 'full_access', '11111111-1111-4111-8111-111111111111'), " +
