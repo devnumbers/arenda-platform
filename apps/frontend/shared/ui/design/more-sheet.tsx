@@ -42,26 +42,47 @@ export type MoreSheetProps = {
  * баром, полоса визуально непрерывна, без двойной полосы. Активность
  * пунктов — из нав-модели (getActiveNavItem).
  *
- * Тайминги — в globals.css (.more-sheet-*): выезд 400ms, закрытие 300ms,
- * оверлей — канонный fade 250ms; закрытие — оверлей, Esc (Radix), свайп
- * vaul и повторный тап «Еще» (кнопка нижнего ряда). shouldScaleBackground
- * не включаем (research: чёрные вспышки, #259), snap points не нужны —
- * шит фиксированной навигационной высоты. Контент статичен и не
- * размонтируется по open=false — анимация закрытия живёт (vaul issue
- * #558). Пункты ведут на живые маршруты: «Платежи» и «Участники» —
- * страницы-заглушки (#559). */
+ * Движение — прерываемая transition-модель в globals.css (.more-sheet-*):
+ * выезд 300ms, закрытие 240ms из текущей позиции (повторный тап «Еще»
+ * посреди закрывания разворачивает шит, без скачков; research
+ * docs/research/2026-09-22-bottom-sheet-motion-best-practices.md).
+ * Закрытие — оверлей, Esc (Radix), свайп vaul и повторный тап «Еще»
+ * (кнопка нижнего ряда). shouldScaleBackground не включаем (research:
+ * чёрные вспышки, #259), snap points не нужны — шит фиксированной
+ * навигационной высоты. Контент статичен и не размонтируется по
+ * open=false — анимация закрытия живёт (vaul issue #558). Пункты ведут
+ * на живые маршруты: «Платежи» и «Участники» — страницы-заглушки (#559). */
 export function MoreSheet({ open, onOpenChange }: MoreSheetProps): JSX.Element {
   const pathname = usePathname();
   const [supportOpen, setSupportOpen] = useState(false);
   const activeSectionId = getActiveNavItem(pathname)?.id;
 
+  // vaul во время drag ведёт шит inline-стилями (transition:none + текущий
+  // transform) и оставляет их висеть после release; transition-модель CSS
+  // движением управляет только без inline-хвостов. На старте закрытия
+  // сносим их ДО смены data-state: transition стартует из фактической
+  // позиции свайпа (лист доезжает оттуда, где его отпустили), а разворот
+  // посреди закрывания работает из любой промежуточной точки.
+  const clearDragInlineStyles = (): void => {
+    for (const el of document.querySelectorAll<HTMLElement>('[data-vaul-drawer], [data-vaul-overlay]')) {
+      el.style.removeProperty('transform');
+      el.style.removeProperty('transition');
+      el.style.removeProperty('opacity');
+    }
+  };
+
+  const handleOpenChange = (next: boolean): void => {
+    if (!next) clearDragInlineStyles();
+    onOpenChange(next);
+  };
+
   const openSupport = (): void => {
-    onOpenChange(false);
+    handleOpenChange(false);
     setSupportOpen(true);
   };
 
   return (
-    <Drawer.Root open={open} onOpenChange={onOpenChange} repositionInputs={false}>
+    <Drawer.Root open={open} onOpenChange={handleOpenChange} onClose={clearDragInlineStyles} repositionInputs={false}>
       <Drawer.Portal>
         <Drawer.Overlay className="more-sheet-overlay fixed inset-0 z-50 bg-overlay" />
         <Drawer.Content className="more-sheet-drawer fixed inset-x-0 bottom-0 z-50 rounded-t-sheet bg-white pb-[max(12px,env(safe-area-inset-bottom))] font-sans outline-none">
@@ -78,7 +99,7 @@ export function MoreSheet({ open, onOpenChange }: MoreSheetProps): JSX.Element {
                         key={cell.section.id}
                         section={cell.section}
                         active={activeSectionId === cell.section.id}
-                        onClick={() => onOpenChange(false)}
+                        onClick={() => handleOpenChange(false)}
                       />
                     ) : (
                       <TabNavAction
@@ -94,8 +115,8 @@ export function MoreSheet({ open, onOpenChange }: MoreSheetProps): JSX.Element {
           <nav aria-label="Нижняя навигация">
             <TabBarRow
               moreActive
-              onMoreSelect={() => onOpenChange(false)}
-              onNavigate={() => onOpenChange(false)}
+              onMoreSelect={() => handleOpenChange(false)}
+              onNavigate={() => handleOpenChange(false)}
             />
           </nav>
         </Drawer.Content>
