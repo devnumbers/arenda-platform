@@ -833,7 +833,11 @@ html {
 html,
 body {
     max-width: 100vw;
-    overflow-x: hidden;
+    /* clip, а не hidden: hidden делает body scroll-контейнером, и любой
+       position:sticky внутри прилипает к нему, а не к вьюпорту (вскрылось
+       на липких плашках дат ленты «Истории», #709). clip режет горизонталь
+       так же, но scroll-контейнера не создаёт. */
+    overflow-x: clip;
 }
 
 body {

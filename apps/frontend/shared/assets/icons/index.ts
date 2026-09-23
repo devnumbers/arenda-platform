@@ -227,3 +227,12 @@ export { default as CancelColor } from './cancel-color.svg';
 // («Просмотр»), контурные 16×16, currentColor.
 export { default as EditSmall } from './edit-small.svg';
 export { default as EyeSmall } from './eye-small.svg';
+
+// Лента «История действий» (#709, Figma 2157-56876): строки действий —
+// Icon/S/Add 2041:133285, Icon/S/Check 2140:125448 и Icon/S/TrashBin
+// 2041:133286 (16×16, контур 1.2 — нейтральный тёмный, тон строки несёт
+// цветная полоска слева); Icon/S/Edit уже в каноне (EditSmall, #698).
+// currentColor.
+export { default as AddSmall } from './add-small.svg';
+export { default as CheckSmall } from './check-small.svg';
+export { default as TrashBinSmall } from './trash-bin-small.svg';

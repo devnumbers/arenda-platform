@@ -1,7 +1,8 @@
 'use client';
 
 import { useLayoutEffect, useRef, type JSX } from 'react';
-import { actorRoleLabel, type HistoryFilterOptions } from '@/entities/history';
+import { BoldUser } from '@/shared/assets/icons';
+import { type HistoryFilterOptions } from '@/entities/history';
 import { PropertyAvatar } from '@/entities/property';
 import { groupHistoryByDay, useHistoryFeed, useHistoryFilters } from '@/features/history';
 import { dateToIsoLocal } from '@/shared/lib/calendar';
@@ -20,10 +21,18 @@ import { HistoryFeedSkeleton } from './history-states';
  * Экран «История действий» (карта #704, тикет #709; макеты 2157-56786 —
  * лента, 2050-158499 — пустая): мессенджерская лента по всем доступным
  * объектам — новые снизу, прокрутка вверх догружает старое (двусторонний
- * keyset #708, head-сентинел). Группировка «дата → объект → актёр →
- * строки» (ADR 0061 §6); фото шапок объектов — опции /history/filters
- * (item фото не несёт), нет опции — дом-плейсхолдер. Вход — хаб
- * «Совместный доступ» (решение владельца 22.09), фолбэк «Назад» — туда же.
+ * keyset #708, head-сентинел). Анатомия по макету 2157-56876 (правка
+ * дизайна, решение владельца 23.09): секция дня открывается белой плашкой
+ * даты с тенью — она прилипает к верхнему краю при прокрутке, как в
+ * мессенджерах (на мобиле шапка уезжает — плашка встаёт к краю с
+ * safe-area, на планшете/ПК — под закреплённой шапкой 72); шапка объекта —
+ * аватар 24 (feed) + название + адрес из опций /history/filters; действия
+ * актёра — серые карточки (surface-muted, radius m): белый кружок с
+ * пользователем + имя, внутри строки «полоска тона + S-иконка + текст»
+ * (см. HistoryRow). Роль актёра экран не показывает (как в макете) —
+ * словарь роли живёт в entity (ADR 0061), действия участника — #712.
+ * Вход — хаб «Совместный доступ» (решение владельца 22.09), фолбэк «Назад»
+ * — туда же.
  *
  * Элементы макета, приходящие со своими тикетами: поиск в шапке (#710),
  * контент шита «Настройки» (#711), действия участника (#712), переходы по
@@ -40,7 +49,7 @@ export function HistoryFeedScreen(): JSX.Element {
   const entries = feedQuery.data ?? [];
   const today = dateToIsoLocal(new Date());
   const days = groupHistoryByDay(entries, today);
-  const photos = propertyPhotos(filtersQuery.data);
+  const options = propertyOptions(filtersQuery.data);
 
   // Мессенджерская прокрутка: на первой загрузке окно встаёт на низ
   // (видны самые новые), prepend старых при прокрутке вверх удерживает
@@ -70,7 +79,11 @@ export function HistoryFeedScreen(): JSX.Element {
 
   return (
     <>
-      <SubScreenShell title="История действий" fallbackHref={ROUTES.participants}>
+      <SubScreenShell
+        title="История действий"
+        fallbackHref={ROUTES.participants}
+        contentClassName="px-4"
+      >
         {feedQuery.isPending ? (
           <HistoryFeedSkeleton />
         ) : feedQuery.isError ? (
@@ -83,53 +96,73 @@ export function HistoryFeedScreen(): JSX.Element {
           <>
             <InfiniteQueryHead query={feedQuery} />
             {days.map((day) => (
-              <section key={day.day}>
-                <div className="flex justify-center py-2.5">
-                  <span className="rounded-pill bg-surface-muted px-3.5 py-1.5 text-sm leading-4 text-content-secondary">
+              <section key={day.day} className="pb-4">
+                {/* Плашка дня липнет к верхнему краю (макет 2157-56876 —
+                  * sticky, как в мессенджерах): на мобиле шапка уезжает —
+                  * встаёт к краю с safe-area, на планшете/ПК — под
+                  * закреплённой шапкой 72. */}
+                <div className="sticky top-[env(safe-area-inset-top)] z-20 mb-3 flex justify-center tablet:top-[72px]">
+                  <span className="rounded-pill bg-white px-3.5 py-2 text-xs leading-[15px] text-content shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
                     {day.label}
                   </span>
                 </div>
-                {day.objects.map((object_, objectIndex) => (
-                  <section key={`${object_.propertyId}-${objectIndex}`} className="pb-2">
-                    <div className="flex items-center gap-3 pb-1 pt-4">
-                      <PropertyAvatar
-                        photoUrl={photos.get(object_.propertyId) ?? ''}
-                        surface="row"
-                        className="h-7 w-7"
-                      />
-                      <h2 className="text-base font-semibold leading-[18px] text-content">
-                        {object_.propertyName}
-                      </h2>
-                    </div>
-                    {object_.actors.map((actor, actorIndex) => (
-                      <div key={`${actor.key}-${actorIndex}`} className="pt-3">
-                        <div className="pl-[36px]">
-                          <h3 className="text-[15px] font-medium leading-[18px] text-content">
-                            {actor.name}
-                          </h3>
-                          <p className="text-[13px] leading-4 text-content-secondary">
-                            {actorRoleLabel(actor.role)}
-                          </p>
-                        </div>
-                        <div className="divide-y divide-dashed divide-surface-muted">
-                          {actor.entries.map((entry) => (
-                            <HistoryRow key={entry.id} entry={entry} />
-                          ))}
+                <div className="flex flex-col gap-3">
+                  {day.objects.map((object_, objectIndex) => (
+                    <section
+                      key={`${object_.propertyId}-${objectIndex}`}
+                      className="flex flex-col gap-3"
+                    >
+                      <div className="flex items-center gap-2">
+                        <PropertyAvatar
+                          photoUrl={options.get(object_.propertyId)?.photoUrl ?? ''}
+                          surface="feed"
+                        />
+                        <div className="min-w-0">
+                          <h2 className="truncate text-xs font-medium leading-[15px] text-content">
+                            {object_.propertyName}
+                          </h2>
+                          {options.get(object_.propertyId)?.address && (
+                            <p className="truncate text-xs leading-[15px] text-content-secondary">
+                              {options.get(object_.propertyId)?.address}
+                            </p>
+                          )}
                         </div>
                       </div>
-                    ))}
-                  </section>
-                ))}
+                      <div className="flex flex-col gap-1.5">
+                        {object_.actors.map((actor, actorIndex) => (
+                          <div
+                            key={`${actor.key}-${actorIndex}`}
+                            className="flex flex-col gap-2 rounded-m bg-surface-muted p-3"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-pill bg-white">
+                                <BoldUser className="h-3.5 w-3.5" aria-hidden />
+                              </span>
+                              <h3 className="min-w-0 truncate text-xs font-medium leading-[15px] text-content">
+                                {actor.name}
+                              </h3>
+                            </div>
+                            <div className="flex flex-col gap-2">
+                              {actor.entries.map((entry) => (
+                                <HistoryRow key={entry.id} entry={entry} />
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  ))}
+                </div>
               </section>
             ))}
           </>
         )}
       </SubScreenShell>
 
-      {/* Шит «Настройки» (#711) — на месте по макету 2157-56786/2050-158499,
-        * пока без действия. */}
-      <div className="fixed inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom))] z-40 flex justify-center">
-        <Button type="button" className="w-auto rounded-pill px-12">
+      {/* Шит «Настройки» (#711) — на месте по макету 2157-56786/56887,
+        * пока без действия; кнопка — primary дизайн-слоя на всю колонку. */}
+      <div className="fixed inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom))] z-40 flex justify-center px-4">
+        <Button type="button" className="w-full max-w-[560px]">
           Настройки
         </Button>
       </div>
@@ -137,11 +170,13 @@ export function HistoryFeedScreen(): JSX.Element {
   );
 }
 
-/** Фото объектов области: id → URL первого фото ('' — плейсхолдер). */
-function propertyPhotos(options: HistoryFilterOptions | undefined): Map<string, string> {
-  const photos = new Map<string, string>();
+/** Опции объектов области: id → фото и адрес шапки группы ('' — плейсхолдер). */
+function propertyOptions(
+  options: HistoryFilterOptions | undefined,
+): Map<string, { photoUrl: string; address: string }> {
+  const map = new Map<string, { photoUrl: string; address: string }>();
   for (const object_ of options?.objects ?? []) {
-    photos.set(object_.id, object_.photoUrl);
+    map.set(object_.id, { photoUrl: object_.photoUrl, address: object_.address });
   }
-  return photos;
+  return map;
 }

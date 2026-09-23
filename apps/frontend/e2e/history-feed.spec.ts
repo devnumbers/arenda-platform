@@ -171,15 +171,16 @@ test('лента из сида: чипы дней, группы «объект �
   await expect(page.getByText('Вчера', { exact: true })).toBeVisible();
   await expect(page.getByText(expectedDayChip(12), { exact: true })).toBeVisible();
 
-  // Шапки объектов — живые названия области.
+  // Шапки объектов — живые названия области; у сидовой квартиры виден и
+  // адрес (вторая строка шапки по макету 2157-56876, из /history/filters).
   await expect(page.getByRole('heading', { name: 'Квартира на Ленина' }).first()).toBeVisible();
+  await expect(page.getByText('Москва, ул. Ленина, 1').first()).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Гараж на Садовой' }).first()).toBeVisible();
 
-  // Шапки актёров: владелец и участник (словарь ролей #692).
+  // Шапки актёров — имена в серых карточках; роль экран не показывает
+  // (макет 2157-56876, решение владельца 23.09).
   await expect(page.getByRole('heading', { name: 'Иван Иванов' }).first()).toBeVisible();
-  await expect(page.getByText('Владелец', { exact: true }).first()).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Мария Петрова' }).first()).toBeVisible();
-  await expect(page.getByText('Редактирование', { exact: true }).first()).toBeVisible();
 
   // Строки: сегменты дословно, связанные фрагменты — синие ссылки (#713
   // проложит переходы), иконка основного действия с подписью группы.
@@ -191,6 +192,19 @@ test('лента из сида: чипы дней, группы «объект �
   await expect(page.locator('svg[aria-label="Удаление"]').first()).toBeVisible();
   // Время строки «ЧЧ:ММ».
   await expect(page.getByText(/^\d{2}:\d{2}$/).first()).toBeVisible();
+
+  // Плашка дня липнет к верхнему краю (макет 2157-56876 — sticky, как в
+  // мессенджерах): на дне ленты секция «Вчера» уже прошла верхнюю кромку —
+  // её плашка прижата под закреплённой шапкой 72 (вьюпорт e2e — Desktop
+  // Chrome), а не висит в потоке на своей позиции.
+  await page.evaluate(() => {
+    window.scrollTo(0, document.documentElement.scrollHeight - window.innerHeight);
+  });
+  const yesterdayPill = page.getByText('Вчера', { exact: true });
+  await expect(yesterdayPill).toBeVisible();
+  const pillBox = await yesterdayPill.boundingBox();
+  expect(pillBox?.y).toBeGreaterThanOrEqual(60);
+  expect(pillBox?.y).toBeLessThanOrEqual(96);
 
   await captureScreen(page, testInfo, 'history-feed-groups');
 });
