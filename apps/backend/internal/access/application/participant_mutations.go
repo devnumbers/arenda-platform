@@ -94,8 +94,8 @@ type grantTarget struct {
 // property, every row is audited in the same transaction (ADR 0020/0033),
 // and a batch reports per-property outcomes instead of failing as a whole.
 // The only direct email is the batch invite one; the lifecycle notifications
-// (the suspended grant, the revoked active legs) leave the context as events
-// (карта #734, #751).
+// (the granted landing, the suspended grant, the revoked active legs) leave
+// the context as events (карта #734, #751).
 type ParticipantMutationService struct {
 	txStoreFactory
 	access   *AccessService
