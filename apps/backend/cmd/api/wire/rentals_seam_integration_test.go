@@ -57,6 +57,7 @@ type seamHarness struct {
 	pool   *pgxpool.Pool
 	svc    *rentalsapp.RentalService
 	paySvc *paymentsapp.PaymentService
+	ops    *paymentsapp.OperationService
 	tick   *paymentsapp.TickService
 	owner  uuid.UUID
 	propID uuid.UUID
@@ -88,6 +89,7 @@ func newSeamHarness(t *testing.T) *seamHarness {
 		paymentspg.NewOperationStore(pool),
 		paymentspg.NewPropertyStore(pool),
 		paymentspg.NewGlobalPaymentStore(pool),
+		rentalspg.NewRentalLinkReader(pool),
 		audit,
 		pgdb.NewUoW(pool, logger),
 	)
@@ -96,6 +98,7 @@ func newSeamHarness(t *testing.T) *seamHarness {
 		pool:   pool,
 		svc:    rentalsapp.NewRentalService(factory, calendar, nil),
 		paySvc: paymentsapp.NewPaymentService(payFactory, calendar, nil),
+		ops:    paymentsapp.NewOperationService(payFactory, calendar, nil),
 		tick: paymentsapp.NewTickService(payFactory, paymentspg.NewTickZoneDirectory(pool),
 			calendar, nil),
 	}

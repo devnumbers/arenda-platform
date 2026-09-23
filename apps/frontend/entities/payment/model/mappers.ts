@@ -57,6 +57,7 @@ export function mapPayment(dto: PaymentDto): Payment {
     category: mapCategoryView(dto.category),
     isFavorite: dto.isFavorite,
     isCompleted: dto.isCompleted,
+    isRentalManaged: dto.isRentalManaged,
     pauses: dto.pauses.map((pause) => ({
       from: pause.fromDate,
       to: pause.toDate ?? undefined,

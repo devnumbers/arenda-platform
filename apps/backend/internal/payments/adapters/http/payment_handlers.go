@@ -38,6 +38,8 @@ type PaymentManager interface {
 	SetPaymentFavorite(ctx context.Context, actor, propertyID, paymentID uuid.UUID, favorite bool) (domain.Payment, error)
 	CompletedStatus(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (bool, error)
 	CompletedStatuses(ctx context.Context, actor, propertyID uuid.UUID) (map[uuid.UUID]bool, error)
+	RentalManagedStatus(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (bool, error)
+	RentalManagedStatuses(ctx context.Context, actor, propertyID uuid.UUID) (map[uuid.UUID]bool, error)
 }
 
 // PaymentHandlers implements the generated payment endpoints.
@@ -82,6 +84,14 @@ var staticPaymentProblems = []httpsupport.ErrorProblem{
 	{
 		Err: application.ErrAlreadyPaid, Status: http.StatusConflict,
 		Title: httpsupport.ProblemTitleConflict, Detail: "Операция уже оплачена",
+	},
+	{
+		// The rent payment's rule mutations answer the domain's own words
+		// (ADR 0053, ticket #818): the rental owns the amount, the payment
+		// day, the auto-pay and the planned end.
+		Err: application.ErrRentManagedPayment, Status: http.StatusConflict,
+		Title:  httpsupport.ProblemTitleConflict,
+		Detail: "Платёж управляется арендой — поставить на паузу, изменить или удалить его можно только в аренде",
 	},
 }
 
@@ -171,8 +181,13 @@ func (h *PaymentHandlers) ListPayments(
 	}
 
 	items := make([]openapi.PaymentResponse, 0, len(payments))
+	managed, err := h.svc.RentalManagedStatuses(r.Context(), actor, propertyID)
+	if err != nil {
+		h.writeInternal(w, r, err)
+		return
+	}
 	for _, payment := range payments {
-		resp, err := paymentResponse(payment, completed[payment.ID])
+		resp, err := paymentResponse(payment, completed[payment.ID], managed[payment.ID])
 		if err != nil {
 			h.writeInternal(w, r, err)
 			return
@@ -515,9 +530,10 @@ func datePtrFromWire(d *openapi_types.Date) *time.Time {
 // paymentResponse maps the domain rule onto the wire response: the category
 // reference is resolved (CategoryView with the «Прочее» fallback), the
 // recurrence goes back through its per-kind shape and the pauses travel as
-// intervals. The isCompleted flag is the server-computed settlement view
-// the use case passes in — the mapping itself stays pure.
-func paymentResponse(p domain.Payment, isCompleted bool) (openapi.PaymentResponse, error) {
+// intervals. The isCompleted flag is the server-computed settlement view and
+// isRentalManaged the rental gate's read flag (#818) — both the use case
+// passes in, the mapping itself stays pure.
+func paymentResponse(p domain.Payment, isCompleted, isRentalManaged bool) (openapi.PaymentResponse, error) {
 	recurrence, err := recurrenceResponse(p.Recurrence)
 	if err != nil {
 		return openapi.PaymentResponse{}, err
@@ -530,22 +546,23 @@ func paymentResponse(p domain.Payment, isCompleted bool) (openapi.PaymentRespons
 		})
 	}
 	return openapi.PaymentResponse{
-		Id:            p.ID,
-		PropertyId:    p.PropertyID,
-		Type:          openapi.PaymentResponseType(p.Type),
-		Title:         p.Title,
-		AmountKopecks: p.AmountKopecks,
-		Recurrence:    recurrence,
-		Since:         openapi_types.Date{Time: p.Since},
-		EndDate:       httpsupport.DatePtrToOpenAPI(p.EndDate),
-		AutoPay:       p.AutoPay,
-		PaymentForm:   openapi.PaymentResponsePaymentForm(p.PaymentForm),
-		Category:      categoryView(p.Category),
-		IsFavorite:    p.IsFavorite,
-		IsCompleted:   isCompleted,
-		Pauses:        pauses,
-		CreatedAt:     p.CreatedAt,
-		UpdatedAt:     p.UpdatedAt,
+		Id:              p.ID,
+		PropertyId:      p.PropertyID,
+		Type:            openapi.PaymentResponseType(p.Type),
+		Title:           p.Title,
+		AmountKopecks:   p.AmountKopecks,
+		Recurrence:      recurrence,
+		Since:           openapi_types.Date{Time: p.Since},
+		EndDate:         httpsupport.DatePtrToOpenAPI(p.EndDate),
+		AutoPay:         p.AutoPay,
+		PaymentForm:     openapi.PaymentResponsePaymentForm(p.PaymentForm),
+		Category:        categoryView(p.Category),
+		IsFavorite:      p.IsFavorite,
+		IsCompleted:     isCompleted,
+		IsRentalManaged: isRentalManaged,
+		Pauses:          pauses,
+		CreatedAt:       p.CreatedAt,
+		UpdatedAt:       p.UpdatedAt,
 	}, nil
 }
 
@@ -616,7 +633,12 @@ func (h *PaymentHandlers) respondWithPayment(
 		h.writeInternal(w, r, err)
 		return
 	}
-	resp, err := paymentResponse(payment, completed)
+	managed, err := h.svc.RentalManagedStatus(r.Context(), actor, propertyID, payment.ID)
+	if err != nil {
+		h.writeInternal(w, r, err)
+		return
+	}
+	resp, err := paymentResponse(payment, completed, managed)
 	if err != nil {
 		h.writeInternal(w, r, err)
 		return

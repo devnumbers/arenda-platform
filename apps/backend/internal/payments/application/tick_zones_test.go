@@ -168,6 +168,20 @@ func (noopPropertyStore) WithTx(tx transaction.Tx) (PropertyStore, error) {
 	return noopPropertyStore{}, nil
 }
 
+// noopRentalManaged fills the rental gate's seat for the in-memory fixtures:
+// the tick and the favorites-order paths never consult it.
+type noopRentalManaged struct{}
+
+func (noopRentalManaged) ManagedPaymentIDs(
+	context.Context, uuid.UUID, []uuid.UUID,
+) (map[uuid.UUID]bool, error) {
+	return map[uuid.UUID]bool{}, nil
+}
+
+func (noopRentalManaged) WithTx(tx transaction.Tx) (RentalManagedReader, error) {
+	return noopRentalManaged{}, nil
+}
+
 // sweepFixture wires a TickService over the in-memory doubles: one shared
 // fakeTickStore (canned snapshot), the fake zone directory and the counting
 // UoW.
@@ -183,7 +197,7 @@ func newSweepFixture(t *testing.T, zones []TickZone, snapshot OwnerSnapshot) *sw
 	store := &fakeTickStore{snapshot: snapshot}
 	uow := &fakeUoW{}
 	factory := NewTxStoreFactory(store, noopPaymentStore{}, noopOperationStore{},
-		noopPropertyStore{}, newFakeFavoriteOrderStore(nil), nil, uow)
+		noopPropertyStore{}, newFakeFavoriteOrderStore(nil), noopRentalManaged{}, nil, uow)
 	return &sweepFixture{
 		tick:  NewTickService(factory, &fakeTickZoneDirectory{zones: zones}, nil, nil),
 		store: store,

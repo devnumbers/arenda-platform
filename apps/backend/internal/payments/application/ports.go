@@ -40,6 +40,14 @@ var (
 	// ErrAlreadyPaid marks «Оплатить сейчас» on an operation that is already
 	// paid — the contract's 409 on a repeated pay (ticket #461).
 	ErrAlreadyPaid = errors.New("payments: operation already paid")
+	// ErrRentManagedPayment marks a rule mutation of the rent payment — the
+	// payment a rental row references (ADR 0053, ticket #818): the rental is
+	// the source of truth for the amount, the payment day, the auto-pay and
+	// the planned end, and the payment is created, edited and deleted only
+	// through it (rentals/CONTEXT.md «Платёж арендной платы»). The payment
+	// facts (pay) and the favorite star stay open — they are not the
+	// rental's terms.
+	ErrRentManagedPayment = errors.New("payments: payment is managed by a rental")
 )
 
 // PropertyRef is the payments view of the property a use case targets: the
@@ -64,6 +72,24 @@ type PropertyStore interface {
 	// the caller's transaction.
 	GetForUpdate(ctx context.Context, propertyID uuid.UUID) (PropertyRef, error)
 	WithTx(tx transaction.Tx) (PropertyStore, error)
+}
+
+// RentalManagedReader is the consumer-declared port answering which payment
+// rules a rental manages (ADR 0053, ticket #818 — the reverse half of the
+// rentals seam: the rentals context declares its payments-side gateway, this
+// port is payments' mirror image of it). The rentals schema stays the
+// rentals context's own — the wiring fits the port to the rentals store. The
+// gate reads run inside the mutation conveyor's transaction, under the same
+// property lock the rentals mutations take, so a rental cannot appear or
+// vanish mid-check.
+type RentalManagedReader interface {
+	// ManagedPaymentIDs returns the subset of the given rules that a rental
+	// row references — any rental state: a completed rental is final (the
+	// rentals use cases reject its mutations) and its payment is final with
+	// it. Ids absent from the result are simply unmanaged; an empty input
+	// never reaches the query.
+	ManagedPaymentIDs(ctx context.Context, scope uuid.UUID, paymentIDs []uuid.UUID) (map[uuid.UUID]bool, error)
+	WithTx(tx transaction.Tx) (RentalManagedReader, error)
 }
 
 // PaymentStore is the persistence port of the payment rules and their pauses

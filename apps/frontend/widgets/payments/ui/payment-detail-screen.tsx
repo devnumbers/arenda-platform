@@ -61,6 +61,7 @@ import {
   PaymentsGroup,
   PaymentsStateCard,
 } from './payments-sections';
+import { paymentDetailActions } from '../lib/payment-detail-actions-model';
 import { PaymentDetailSkeleton } from './payments-skeletons';
 
 /**
@@ -84,6 +85,14 @@ import { PaymentDetailSkeleton } from './payments-skeletons';
 /** Максимум строк секции «Просроченные» страницы; полный список — подэкран
  * следующего среза (#466). */
 const OVERDUE_PREVIEW_LIMIT = 3;
+
+/** Колонки ряда действий по числу видимых кнопок (Tailwind-классы — только
+ * литералы: динамическая строка не попала бы в CSS). */
+const ACTIONS_GRID: Record<number, string> = {
+  1: 'grid',
+  2: 'grid grid-cols-2',
+  3: 'grid grid-cols-3',
+};
 
 export function PaymentDetailScreen({
   propertyId,
@@ -185,6 +194,8 @@ function PaymentDetailBody({
 
   const today = clientTodayIso();
   const paused = isDatePaused(payment.pauses, today);
+  // Завершённость для состава кнопок — клиентский предикат (история 44
+  // спеки #453): серверный isCompleted у бессрочной паузы уже true.
   const completed = isPaymentCompleted(payment, today);
 
   // undefined — списки ещё грузятся, кнопка без состояния; null — гасить
@@ -313,7 +324,9 @@ function PaymentHeroCard({
 }
 
 /** Круглые кнопки мутаций (Figma 671:6261): пауза с confirm-шторкой ↔
- * возобновление, «Изменить», «Оплатить» — переход на страницу операции. */
+ * возобновление, «Изменить», «Оплатить» — переход на страницу операции.
+ * Состав держит paymentDetailActions (#818): у управляемого арендой
+ * платежа остаётся только «Оплатить». */
 function PaymentActionsRow({
   propertyId,
   payment,
@@ -330,6 +343,10 @@ function PaymentActionsRow({
   const router = useRouter();
   const pausePayment = usePausePayment(propertyId, payment.id);
   const resumePayment = useResumePayment(propertyId, payment.id);
+
+  // Состав кнопок держит чистая модель (#818): управляемый арендой платёж —
+  // только «Оплатить» (правка/пауза дают 409, экран их скрывает).
+  const actions = paymentDetailActions(payment, paused, completed);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
 
@@ -354,44 +371,49 @@ function PaymentActionsRow({
 
   return (
     <>
-      {/* Сетка из трёх равных колонок; у завершённого правила паузы нет
-       * (история 44) — колонок две. */}
-      <div className={completed ? 'grid grid-cols-2' : 'grid grid-cols-3'}>
-        {completed
-          ? null
-          : (paused ? (
-            <RoundActionButton
-              icon={<Play />}
-              caption="Возобновить"
-              loading={resumePayment.isPending}
-              onClick={() => void resume()}
-            />
-          ) : (
-            <RoundActionButton
-              icon={<Pause />}
-              caption="На паузу"
-              loading={pausePayment.isPending}
-              onClick={() => setConfirmOpen(true)}
-            />
-          ))}
+      {/* Равные колонки по видимому составу: три кнопки, две у завершённого
+       * правила (история 44), одна («Оплатить») у управляемого арендой
+       * платежа (#818). */}
+      <div className={ACTIONS_GRID[actions.length]}>
+        {actions.includes('pause') && (
+          <RoundActionButton
+            icon={<Pause />}
+            caption="На паузу"
+            loading={pausePayment.isPending}
+            onClick={() => setConfirmOpen(true)}
+          />
+        )}
+        {actions.includes('resume') && (
+          <RoundActionButton
+            icon={<Play />}
+            caption="Возобновить"
+            loading={resumePayment.isPending}
+            onClick={() => void resume()}
+          />
+        )}
         {/* Экран правки (#467): смотрящий не входит — строка кнопок скрыта
-         * целиком (canMutate), полный доступ правит без удаления. */}
-        <RoundActionButton
-          icon={<Edit />}
-          caption="Изменить"
-          onClick={() => router.push(ROUTES.propertyPaymentEdit(propertyId, payment.id))}
-        />
-        <RoundActionButton
-          variant="primary"
-          icon={<Check />}
-          caption="Оплатить"
-          disabled={payable == null}
-          onClick={() => {
-            if (payable != null) {
-              router.push(ROUTES.propertyOperation(propertyId, payable.id));
-            }
-          }}
-        />
+         * целиком (canMutate), полный доступ правит без удаления; у
+         * управляемого платежа входа нет (#818). */}
+        {actions.includes('edit') && (
+          <RoundActionButton
+            icon={<Edit />}
+            caption="Изменить"
+            onClick={() => router.push(ROUTES.propertyPaymentEdit(propertyId, payment.id))}
+          />
+        )}
+        {actions.includes('pay') && (
+          <RoundActionButton
+            variant="primary"
+            icon={<Check />}
+            caption="Оплатить"
+            disabled={payable == null}
+            onClick={() => {
+              if (payable != null) {
+                router.push(ROUTES.propertyOperation(propertyId, payable.id));
+              }
+            }}
+          />
+        )}
       </div>
 
       {/* Confirm-шторка паузы (тексты — резолюция #452): случайное нажатие

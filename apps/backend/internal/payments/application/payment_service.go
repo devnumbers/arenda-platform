@@ -186,7 +186,12 @@ func (s *PaymentService) UpdatePayment(
 	ctx context.Context, actor, propertyID, paymentID uuid.UUID, cmd UpdatePaymentCommand,
 ) (domain.Payment, error) {
 	return runMutation(s.conveyor(), ctx, actor, propertyID, paymentID, s.writeGate,
-		func(ctx context.Context, stores *txStores, _ uuid.UUID, rule domain.Payment, today time.Time) (mutationOutcome[domain.Payment], error) {
+		func(
+			ctx context.Context, stores *txStores, scope uuid.UUID, rule domain.Payment, today time.Time,
+		) (mutationOutcome[domain.Payment], error) {
+			if err := ensureNotRentalManaged(ctx, stores, scope, rule.ID); err != nil {
+				return mutationOutcome[domain.Payment]{}, err
+			}
 			applyUpdate(&rule, cmd)
 			if err := validateRule(rule); err != nil {
 				return mutationOutcome[domain.Payment]{}, err
@@ -221,6 +226,12 @@ func (s *PaymentService) DeletePayment(
 		func(
 			ctx context.Context, stores *txStores, scope uuid.UUID, rule domain.Payment, today time.Time,
 		) (mutationOutcome[domain.Payment], error) {
+			// The rentals RESTRICT FK forbids the direct delete for any
+			// rental state — the gate states the same in the domain's own
+			// words (ticket #818): delete the rental, the payment follows.
+			if err := ensureNotRentalManaged(ctx, stores, scope, rule.ID); err != nil {
+				return mutationOutcome[domain.Payment]{}, err
+			}
 			if err := stores.payments.DeletePlannedFrom(ctx, rule.ID, today); err != nil {
 				return mutationOutcome[domain.Payment]{}, err
 			}
@@ -251,7 +262,14 @@ func (s *PaymentService) PausePayment(
 	ctx context.Context, actor, propertyID, paymentID uuid.UUID,
 ) (domain.Payment, error) {
 	return runMutation(s.conveyor(), ctx, actor, propertyID, paymentID, s.writeGate,
-		func(ctx context.Context, stores *txStores, _ uuid.UUID, rule domain.Payment, today time.Time) (mutationOutcome[domain.Payment], error) {
+		func(
+			ctx context.Context, stores *txStores, scope uuid.UUID, rule domain.Payment, today time.Time,
+		) (mutationOutcome[domain.Payment], error) {
+			// The gate precedes the rule's own state: pausing a rent payment
+			// would silently stop the rental's materialization (#818).
+			if err := ensureNotRentalManaged(ctx, stores, scope, rule.ID); err != nil {
+				return mutationOutcome[domain.Payment]{}, err
+			}
 			if _, active := domain.ActivePause(rule.Pauses); active {
 				return mutationOutcome[domain.Payment]{}, ErrAlreadyPaused
 			}
@@ -276,7 +294,12 @@ func (s *PaymentService) ResumePayment(
 	ctx context.Context, actor, propertyID, paymentID uuid.UUID,
 ) (domain.Payment, error) {
 	return runMutation(s.conveyor(), ctx, actor, propertyID, paymentID, s.writeGate,
-		func(ctx context.Context, stores *txStores, _ uuid.UUID, rule domain.Payment, today time.Time) (mutationOutcome[domain.Payment], error) {
+		func(
+			ctx context.Context, stores *txStores, scope uuid.UUID, rule domain.Payment, today time.Time,
+		) (mutationOutcome[domain.Payment], error) {
+			if err := ensureNotRentalManaged(ctx, stores, scope, rule.ID); err != nil {
+				return mutationOutcome[domain.Payment]{}, err
+			}
 			if _, active := domain.ActivePause(rule.Pauses); !active {
 				return mutationOutcome[domain.Payment]{}, ErrNotPaused
 			}
@@ -475,6 +498,57 @@ func (s *PaymentService) CompletedStatuses(
 			return nil, err
 		}
 		statuses[payment.ID] = completed
+	}
+	return statuses, nil
+}
+
+// RentalManagedStatus reports whether the rule is managed by a rental
+// (ADR 0053, ticket #818): the read the payment screen uses to hide the
+// rule mutations the gate rejects. Reads never tick.
+func (s *PaymentService) RentalManagedStatus(
+	ctx context.Context, actor, propertyID, paymentID uuid.UUID,
+) (bool, error) {
+	scope, err := s.readScope(ctx, actor, propertyID)
+	if err != nil {
+		return false, err
+	}
+	if _, err := s.payments.Get(ctx, paymentID, scope, propertyID); err != nil {
+		return false, err
+	}
+	managed, err := s.rentalManaged.ManagedPaymentIDs(ctx, scope, []uuid.UUID{paymentID})
+	if err != nil {
+		return false, fmt.Errorf("rental-managed status: %w", err)
+	}
+	return managed[paymentID], nil
+}
+
+// RentalManagedStatuses computes the rental-managed flag for every rule of
+// the property: the list response carries the flag per item, mirroring
+// CompletedStatuses.
+func (s *PaymentService) RentalManagedStatuses(
+	ctx context.Context, actor, propertyID uuid.UUID,
+) (map[uuid.UUID]bool, error) {
+	scope, err := s.readScope(ctx, actor, propertyID)
+	if err != nil {
+		return nil, err
+	}
+	payments, err := s.payments.ListByProperty(ctx, scope, propertyID, "")
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]uuid.UUID, 0, len(payments))
+	for _, payment := range payments {
+		ids = append(ids, payment.ID)
+	}
+	// The reader answers the managed subset; every listed rule travels out
+	// of this read, the unmanaged ones as false.
+	managed, err := s.rentalManaged.ManagedPaymentIDs(ctx, scope, ids)
+	if err != nil {
+		return nil, fmt.Errorf("rental-managed statuses: %w", err)
+	}
+	statuses := make(map[uuid.UUID]bool, len(ids))
+	for _, id := range ids {
+		statuses[id] = managed[id]
 	}
 	return statuses, nil
 }

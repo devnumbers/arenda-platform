@@ -107,7 +107,9 @@ import { CategorySearchHint } from './payment-create-wizard/wizard-chrome';
  *
  * Доступ (ADR 0028): смотрящий экрана не видит вовсе; полный доступ правит
  * без удаления; «Удалить платеж» — только владелец. Архив финансово
- * read-only (#446).
+ * read-only (#446). Платёж, управляемый арендой (#818), деградирует к
+ * карточке «Правка недоступна» с арендной подсказкой — условия задаются
+ * в аренде.
  */
 
 export function PaymentEditScreen({
@@ -125,6 +127,11 @@ export function PaymentEditScreen({
   const payment = paymentQuery.isSuccess ? paymentQuery.data : undefined;
 
   const canEdit = propertyPermissions(property).canEdit;
+  // Управляемый арендой платёж правится только через аренду (#818): экран
+  // деградирует как у смотрящего, но с арендной подсказкой — удаления у
+  // такого платежа не существует вовсе (RESTRICT FK, честный 409).
+  const managed = payment?.isRentalManaged === true;
+  const editable = canEdit && !managed;
   // Удаление — только владелец (история 49 спеки #453).
   const canDelete = property?.access?.role === 'owner';
 
@@ -134,10 +141,10 @@ export function PaymentEditScreen({
   return (
     <>
       {/* В загрузке роль неизвестна — показываем хром правки (сценарий
-       * по умолчанию); у смотрящего и архива после загрузки хром
-       * деградирует к «Отмене», а контент — к карточке недоступности
-       * (редкий прямой путь, решение #607). */}
-      {!loading && !canEdit && (
+       * по умолчанию); у смотрящего, архива и управляемого арендой
+       * платежа после загрузки хром деградирует к «Отмене», а контент —
+       * к карточке недоступности (редкий прямой путь, решение #607). */}
+      {!loading && !editable && (
         <TopNav
           leading={
             <IconButton
@@ -184,20 +191,22 @@ export function PaymentEditScreen({
             />
           )}
 
-          {!loading && !failed && !canEdit && (
+          {!loading && !failed && !editable && (
             <div className="pt-6">
               <PaymentsEmptyCard
                 title="Правка недоступна"
                 hint={
-                  property?.status === 'archived'
-                    ? 'Объект в архиве — платежи можно только смотреть'
-                    : 'У вас доступ только для просмотра этого объекта'
+                  managed
+                    ? 'Платёж управляется арендой — изменить его можно только в аренде'
+                    : property?.status === 'archived'
+                      ? 'Объект в архиве — платежи можно только смотреть'
+                      : 'У вас доступ только для просмотра этого объекта'
                 }
               />
             </div>
           )}
 
-          {!loading && !failed && canEdit && payment !== undefined && (
+          {!loading && !failed && editable && payment !== undefined && (
             <PaymentEditForm
               key={payment.id}
               propertyId={propertyId}

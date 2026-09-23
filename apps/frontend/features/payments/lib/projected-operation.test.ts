@@ -22,6 +22,7 @@ function payment(overrides: Partial<Payment> = {}): Payment {
     category: { source: 'default', slug: 'insurance', label: 'Страхование' },
     isFavorite: false,
     isCompleted: false,
+    isRentalManaged: false,
     pauses: [],
     createdAt: '2026-01-15T00:00:00Z',
     updatedAt: '2026-01-15T00:00:00Z',

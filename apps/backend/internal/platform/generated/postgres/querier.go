@@ -877,6 +877,11 @@ type Querier interface {
 	// (name, address) travels for the publication cards (решение владельца
 	// 19.09.2026, #745).
 	ListRentalCompletedTargets(ctx context.Context, arg ListRentalCompletedTargetsParams) ([]ListRentalCompletedTargetsRow, error)
+	// The scope's payment ids a rental row references (any rental state) — the
+	// payments rule-mutation gate's input and the isRentalManaged read flag
+	// (ADR 0053, ticket #818): the rent payment is created, edited and deleted
+	// only through the rental. An empty id list never reaches the query.
+	ListRentalManagedPaymentIDs(ctx context.Context, arg ListRentalManagedPaymentIDsParams) ([]pgtype.UUID, error)
 	// The rental scan's booking list of the completed boundary (issue #777):
 	// the unfinished rentals whose boundary — 00:00 of the day after the
 	// planned end read in the owner's timezone — falls in the window (from,
