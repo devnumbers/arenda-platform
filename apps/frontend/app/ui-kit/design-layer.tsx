@@ -949,7 +949,7 @@ export function DesignLayerShowcase(): JSX.Element {
                             }
                             title="Арендная плата"
                             subtitle="Моя квартира"
-                            subtitleIcon={<Star />}
+                            subtitleIcon={<Star aria-hidden />}
                             amountKopecks={5600000}
                             description="11 сентября"
                             onSelect={() => undefined}
