@@ -184,6 +184,22 @@ describe('createLongPress skipOn', () => {
 
     expect(onLongPress).toHaveBeenCalledOnce();
   });
+
+  it('skipOn=true: pointerdown does not update isTouchPointer', () => {
+    // Skip-выход onPointerDown срабатывает раньше записи флага:
+    // пропущенный pointerdown (ручка dnd со своим жестом) не подменяет
+    // «последний указатель» — флаг читается после чужого события.
+    const lp = createLongPress({
+      onLongPress: () => undefined,
+      skipOn: (event) => event.clientX === 999,
+    });
+
+    lp.handlers.onPointerDown({ pointerType: 'touch', clientX: 999, clientY: 0 });
+    expect(lp.isTouchPointer()).toBe(false);
+
+    lp.handlers.onPointerDown(touchAt());
+    expect(lp.isTouchPointer()).toBe(true);
+  });
 });
 
 describe('createLongPress consumeClickAfterLongPress', () => {

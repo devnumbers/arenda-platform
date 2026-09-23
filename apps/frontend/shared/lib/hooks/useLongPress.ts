@@ -41,7 +41,10 @@ export type CreateLongPressOptions<E extends LongPressEvent> = {
   readonly onLongPress: () => void;
   /** Ручки приёмки (#814: «тайминги подсветки выбора — на приёмке»):
    * задержка срабатывания и допуск сдвига уточняются владельцем на
-   * живой приёмке. */
+   * живой приёмке. Оба значения фиксируются при создании жеста, а
+   * создание ленивое — первым pointer-событием, не монтированием:
+   * конфигурация создания у единственного потребителя статична, в
+   * отличие от onLongPress/skipOn, читаемых свежими через optionsRef. */
   readonly delayMs?: number;
   readonly tolerancePx?: number;
   /** Места, откуда жест зажатия не начинается (например, ручка dnd со
@@ -56,8 +59,11 @@ export type CreatedLongPress<E extends LongPressEvent> = {
     readonly onPointerUp: () => void;
     readonly onPointerCancel: () => void;
   };
-  /** Был ли последний pointerdown touch-указателем: click приходит после
-   * pointerup, когда pointerType из события уже недоступен. */
+  /** Был ли последний незакрытый skipOn'ом pointerdown touch-указателем:
+   * click приходит после pointerup, когда pointerType из события уже
+   * недоступен. Пропущенный skipOn pointerdown (ручка dnd со своим
+   * жестом) флаг не обновляет — skip-выход onPointerDown срабатывает
+   * раньше записи флага. */
   readonly isTouchPointer: () => boolean;
   /** Одноразовое «клик пришёл после сработавшего зажатия»: true — клик
    * надо игнорировать. */
@@ -164,32 +170,14 @@ export function createLongPress<E extends LongPressEvent>({
   };
 }
 
-export type LongPressOptions = {
-  readonly onLongPress: () => void;
-  /** Ручки приёмки (#814: «тайминги подсветки выбора — на приёмке»):
-   * задержка срабатывания и допуск сдвига уточняются владельцем на
-   * живой приёмке. */
-  readonly delayMs?: number;
-  readonly tolerancePx?: number;
-  /** Места, откуда жест зажатия не начинается (например, ручка dnd со
-   * своим pointer-жестом): предикат по событию pointerdown. */
-  readonly skipOn?: (event: ReactPointerEvent<HTMLElement>) => boolean;
-};
+/** React-обёртка над фабричными типами: событие —
+ * ReactPointerEvent<HTMLElement>; докстринги полей — у фабричных типов
+ * выше, здесь не дублируются. */
+export type LongPressOptions = CreateLongPressOptions<ReactPointerEvent<HTMLElement>>;
 
-export type LongPress = {
-  readonly handlers: {
-    readonly onPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
-    readonly onPointerMove: (event: ReactPointerEvent<HTMLElement>) => void;
-    readonly onPointerUp: () => void;
-    readonly onPointerCancel: () => void;
-  };
-  /** Был ли последний pointerdown touch-указателем: click приходит после
-   * pointerup, когда pointerType из события уже недоступен. */
-  readonly isTouchPointer: () => boolean;
-  /** Одноразовое «клик пришёл после сработавшего зажатия»: true — клик
-   * надо игнорировать. */
-  readonly consumeClickAfterLongPress: () => boolean;
-};
+/** То же для результата хука: CreatedLongPress без dispose — тот
+ * внутренний cleanup размонтирования и наружу не отдаётся. */
+export type LongPress = Omit<CreatedLongPress<ReactPointerEvent<HTMLElement>>, 'dispose'>;
 
 export function useLongPress({
   onLongPress,
@@ -222,7 +210,6 @@ export function useLongPress({
     if (gesture === null) {
       gesture = createLongPress<ReactPointerEvent<HTMLElement>>({
         onLongPress: fireOnLongPress,
-        // Конфигурация создания; у единственного потребителя статична.
         delayMs,
         tolerancePx,
         skipOn: skipGesture,
