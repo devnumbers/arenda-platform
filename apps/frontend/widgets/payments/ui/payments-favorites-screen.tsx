@@ -54,11 +54,14 @@ import { GlobalPaymentRuleIcon, PaymentsRowsSkeleton, PaymentsStateCard } from "
 
 /**
  * Экран «Избранные платежи» (карта #573, тикет #579; вход — карточка
- * «Все избранные» главного экрана #578). Список (693:5546): строки канона
+ * «Все избранные» главного экрана #578). Список: строки канона
  * PaymentRowButton — иконка категории с красной точкой просрочки (как в
- * стопках), название, объект со звездой Icon/S/Star; справа сумма и
- * дата-«Ближайший» (просто дата графика). Тап строке — страница платежа;
- * тап звезде убирает из избранного на месте — строка исчезает. Иконка
+ * стопках), название, объект со звездой Icon/S/Star перед именем
+ * (954-52460); справа сумма и дата-«Ближайший» (просто дата графика).
+ * Плашка просмотра и плашка правки анатомически идентичны (954-52460 =
+ * 954-52219) — иначе список дёргается при входе в правку. Тап строке —
+ * страница платежа; тап звезде убирает из избранного на месте — строка
+ * исчезает. Иконка
  * правки (693:5903): строки правки — каноническая середина с галочкой на
  * иконке категории (889:25528) и ручка Move справа — плавное
  * перетаскивание (карта #811, тикет #813: плашка следует за пальцем/
@@ -286,8 +289,14 @@ export function PaymentFavoritesScreen(): JSX.Element {
                   className="px-6"
                   categoryIcon={<GlobalPaymentRuleIcon payment={payment} />}
                   title={payment.title}
-                  subtitle={payment.propertyName}
-                  subtitleSuffix={
+                  // Подзаголовок по макету 954-52460: звезда Icon/S/Star
+                  // 16 перед именем объекта. Звезда здесь — тап «убрать из
+                  // избранного» (#579); хит-зона 32 через before:-inset-2 —
+                  // отрицательные margin на голой кнопке перебивает
+                  // preflight (кнопочная грабля), а раздутый бокс строки
+                  // делал плашку просмотра выше плашки правки.
+                  subtitle={
+                    <>
                       <button
                         type="button"
                         data-testid={`favorites-row-star-${payment.id}`}
@@ -300,18 +309,26 @@ export function PaymentFavoritesScreen(): JSX.Element {
                           event.stopPropagation();
                           unfavorite(payment);
                         }}
-                        className="-m-2 cursor-pointer p-2 outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        className={cn(
+                          "relative h-4 w-4 shrink-0 cursor-pointer outline-none",
+                          "focus-visible:ring-2 focus-visible:ring-primary",
+                          "before:absolute before:-inset-2",
+                        )}
                       >
                         <Star className="h-4 w-4" aria-hidden />
                       </button>
-                    }
-                    amountKopecks={payment.amountKopecks}
-                    description={nearestDateLine(payment)}
-                    onSelect={() =>
-                      router.push(
-                        ROUTES.propertyPayment(payment.propertyId, payment.id),
-                      )
-                    }
+                      <span className="min-w-0 truncate">
+                        {payment.propertyName}
+                      </span>
+                    </>
+                  }
+                  amountKopecks={payment.amountKopecks}
+                  description={nearestDateLine(payment)}
+                  onSelect={() =>
+                    router.push(
+                      ROUTES.propertyPayment(payment.propertyId, payment.id),
+                    )
+                  }
                   />
               ))}
             </>
@@ -662,6 +679,10 @@ function FavoritesEditRow({
           <GlobalPaymentRuleIcon payment={payment} check={selected} />
         }
         title={payment.title}
+        // Плашка правки = плашка просмотра (954-52219 = 954-52460):
+        // та же звезда Icon/S/Star перед именем объекта, иначе строки
+        // разной высоты и список дёргается при входе в правку.
+        subtitleIcon={<Star className="h-4 w-4" aria-hidden />}
         subtitle={payment.propertyName}
         amountKopecks={payment.amountKopecks}
         description={nearestDateLine(payment)}
