@@ -29,7 +29,7 @@ export type CategoryIconProps = {
   readonly color: string;
   readonly badge?: CategoryIconBadge;
   readonly surface?: CategoryIconSurface;
-  /** Пометка на удаление из избранного (889:25528, тикет #579). */
+  /** Выделение платежа на удаление в правке избранного (889:25528; #579 — пометка строк, #814 — выделение зажатием/кликом). */
   readonly check?: boolean;
   readonly className?: string;
 };
