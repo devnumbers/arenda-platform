@@ -2,7 +2,13 @@
 
 import type { Dispatch, SetStateAction } from 'react';
 import { clearDraftStorage, useDraftStore } from '@/shared/lib/hooks/useDraftStore';
-import type { IsoDate, PaymentForm, PaymentType, Recurrence } from '@/entities/payment';
+import type {
+  IsoDate,
+  PaymentForm,
+  PaymentReminderOffset,
+  PaymentType,
+  Recurrence,
+} from '@/entities/payment';
 
 /**
  * Черновик визарда создания платежа (спека #453, история 10): переживает
@@ -27,6 +33,8 @@ export type PaymentWizardDraft = {
   readonly recurrence?: Recurrence;
   /** Окончание платежа (шаг 4). */
   readonly endDate?: IsoDate;
+  /** Напоминание «за N дней» (шаг 4, ручная ветка; карта #822). */
+  readonly reminderOffsetDays?: PaymentReminderOffset;
   /** Сумма в копейках, целая положительная (шаг 5). */
   readonly amountKopecks?: number;
   /** Форма оплаты: перевод/наличные (шаг 5). */
@@ -95,6 +103,7 @@ export function hasPaymentWizardDraftFields(draft: PaymentWizardDraft): boolean 
     || draft.title !== undefined
     || draft.recurrence !== undefined
     || draft.endDate !== undefined
+    || draft.reminderOffsetDays !== undefined
     || draft.amountKopecks !== undefined
     || draft.paymentForm !== undefined
   );
@@ -186,6 +195,12 @@ export function validatePaymentWizardDraft(parsed: unknown): PaymentWizardDraft 
 
   const endDate = typeof record.endDate === 'string' && record.endDate.length > 0 ? record.endDate : undefined;
 
+  const reminderOffsetDays =
+    record.reminderOffsetDays === 1 || record.reminderOffsetDays === 3 || record.reminderOffsetDays === 7
+      ? record.reminderOffsetDays
+      : undefined;
+  if (record.reminderOffsetDays !== undefined && reminderOffsetDays === undefined) return DEFAULT_DRAFT;
+
   const amountKopecks = isPositiveInt(record.amountKopecks) ? record.amountKopecks : undefined;
   if (record.amountKopecks !== undefined && amountKopecks === undefined) return DEFAULT_DRAFT;
 
@@ -203,6 +218,7 @@ export function validatePaymentWizardDraft(parsed: unknown): PaymentWizardDraft 
     ...(title !== undefined && { title }),
     ...(recurrence !== undefined && { recurrence }),
     ...(endDate !== undefined && { endDate }),
+    ...(reminderOffsetDays !== undefined && { reminderOffsetDays }),
     ...(amountKopecks !== undefined && { amountKopecks }),
     ...(paymentForm !== undefined && { paymentForm }),
     ...(updatedAt !== undefined && { updatedAt }),

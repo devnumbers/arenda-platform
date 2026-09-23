@@ -1,0 +1,211 @@
+'use client';
+
+import { useState } from 'react';
+import type { JSX } from 'react';
+import { SmallArrowRight } from '@/shared/assets/icons';
+import type { IsoDate, PaymentReminderOffset } from '@/entities/payment';
+import { formatDayMonthWithYear, PaymentReminderPicker } from '@/entities/payment';
+import { useMe } from '@/features/auth';
+import {
+  useEmailNotificationPreferences,
+  useUpdateEmailPreferences,
+} from '@/features/notifications';
+import type { PaymentDraftType } from '@/features/payments';
+import { notify } from '@/shared/lib/notifications';
+import { CalendarDatePicker, ListRow, Skeleton, Switch } from '@/shared/ui/design';
+import { WizardHeading } from './wizard-chrome';
+
+/**
+ * Шаг 4 визарда — настройки платежа, две ветки по типу создания
+ * (решение постановки #823, тикет #825):
+ *
+ * — ручной платёж (Figma 1084-24863): «Настройте платеж» с радио
+ *   «За 1 день / За 3 дня / За 7 дней» (опционально, по умолчанию ничего
+ *   не выбрано; контракт reminderOffsetDays) и секция «Настройки платежа»
+ *   — окончание и почта;
+ * — автоплатёж (Figma 1056-54338): без радио — карточка «Уведомления
+ *   об оплате» (автоплатёж уведомит, когда платёж отметят оплаченным),
+ *   «Окончание платежа» остаётся с каноническим заголовком.
+ *
+ * Тумблер «Уведомления на почту» — шоткат глобальной email-настройки
+ * категории «Платежи и операции» (GET/PUT /notification-preferences),
+ * никаких пер-платёжных override; подпись несёт почту пользователя.
+ * Опечатки подписей макетов не воспроизводятся (канон AutoPayRow).
+ */
+
+export type PaymentSettingsStepProps = {
+  readonly draftType: PaymentDraftType;
+  readonly reminderOffsetDays: PaymentReminderOffset | undefined;
+  readonly onReminderOffsetDaysChange: (offset: PaymentReminderOffset) => void;
+  readonly endDate: IsoDate | undefined;
+  readonly onEndDateChange: (endDate: IsoDate | undefined) => void;
+  readonly today: IsoDate;
+};
+
+export function PaymentSettingsStep({
+  draftType,
+  reminderOffsetDays,
+  onReminderOffsetDaysChange,
+  endDate,
+  onEndDateChange,
+  today,
+}: PaymentSettingsStepProps): JSX.Element {
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const meQuery = useMe();
+  const email = meQuery.data?.email ?? null;
+  const emailCaption =
+    email !== null
+      ? `Будем напоминать о платеже на вашу почту ${email}`
+      : 'Будем напоминать о платеже на вашу почту';
+
+  return (
+    <>
+      {draftType === 'payment' ? (
+        <>
+          <WizardHeading
+            title="Настройте платеж"
+            subtitle="Выберите за сколько дней напомнить о платеже. В нужный день пришлем напоминание о том, что платеж нужно отметить"
+          />
+          <PaymentReminderPicker
+            value={reminderOffsetDays}
+            onChange={onReminderOffsetDaysChange}
+          />
+          <StepSectionHeading
+            title="Настройки платежа"
+            subtitle="Можно выбрать окончание платежа и добавить напоминания об оплате на электронную почту"
+          />
+          <EndDateRow
+            endDate={endDate}
+            today={today}
+            onOpen={() => setPickerOpen(true)}
+          />
+          <EmailNotificationsRow caption={emailCaption} />
+        </>
+      ) : (
+        <>
+          <div className="mx-6 mt-6 flex flex-col gap-2 rounded-3xl bg-surface-muted px-6 pb-6 pt-6">
+            <h2 className="m-0 text-xl font-semibold leading-6 text-content">
+              Уведомления об оплате
+            </h2>
+            <p className="text-sm leading-4 text-content-secondary">
+              Пришлём уведомление, когда отметим платеж оплаченным
+            </p>
+          </div>
+          <WizardHeading
+            title="Окончание платежа"
+            subtitle="После выбранной даты, платеж перестанет оплачиваться и удалится. Выбирать необязательно"
+          />
+          <EndDateRow
+            endDate={endDate}
+            today={today}
+            onOpen={() => setPickerOpen(true)}
+          />
+          <StepSectionHeading title="Уведомления на почту" subtitle={emailCaption} />
+          <EmailNotificationsRow caption={undefined} />
+        </>
+      )}
+
+      {/* Рендер только в открытом состоянии — состояние ленты и черновик
+          живут, пока пикер смонтирован (конвенция канона). */}
+      {pickerOpen && (
+        <CalendarDatePicker
+          today={today}
+          value={endDate ?? null}
+          onClose={() => setPickerOpen(false)}
+          onConfirm={(date) => {
+            onEndDateChange(date ?? undefined);
+            setPickerOpen(false);
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+/** Секционный заголовок шага под главным (H3 20/24 + подзаголовок 14/16,
+ * как WizardHeading, но h2 — на шаге один h1). */
+function StepSectionHeading({
+  title,
+  subtitle,
+}: {
+  readonly title: string;
+  readonly subtitle?: string;
+}): JSX.Element {
+  return (
+    <div className="flex flex-col gap-2 px-6 pt-6">
+      <h2 className="m-0 text-xl font-semibold leading-6 text-content">{title}</h2>
+      {subtitle !== undefined && (
+        <p className="text-sm leading-4 text-content-secondary">{subtitle}</p>
+      )}
+    </div>
+  );
+}
+
+/** Строка «Выбрать дату» (канон шага «Окончание платежа», Figma 843:8345):
+ * с датой — она сама, тап открывает канонический бесконечный календарь. */
+function EndDateRow({
+  endDate,
+  today,
+  onOpen,
+}: {
+  readonly endDate: IsoDate | undefined;
+  readonly today: IsoDate;
+  readonly onOpen: () => void;
+}): JSX.Element {
+  return (
+    <div className="flex flex-col pt-2">
+      <ListRow
+        title={endDate !== undefined ? formatDayMonthWithYear(endDate, today) : 'Выбрать дату'}
+        className="py-4"
+        onSelect={onOpen}
+        trailing={<SmallArrowRight className="h-6 w-6" aria-hidden />}
+      />
+    </div>
+  );
+}
+
+/** Тумблер «Уведомления на почту» — шоткат глобальной email-настройки
+ * категории «Платежи и операции»: значение и запись — матрица аккаунта
+ * (канон экрана настроек #746). Пока настройки грузятся — скелетон;
+ * не загрузились — тумблер выключен и заглушен (шаг не блокируем). */
+function EmailNotificationsRow({
+  caption,
+}: {
+  readonly caption: string | undefined;
+}): JSX.Element {
+  const prefsQuery = useEmailNotificationPreferences();
+  const updatePrefs = useUpdateEmailPreferences();
+  const current = prefsQuery.data;
+
+  const toggle = (value: boolean): void => {
+    if (current === undefined) return;
+    updatePrefs.mutate(
+      { ...current, payments_operations: value },
+      {
+        onError: (error) =>
+          notify.scenarios.profile.notificationPreferencesSaveError(error),
+      },
+    );
+  };
+
+  return (
+    <div className="flex items-center justify-between gap-4 px-6 py-3">
+      <div className="flex min-w-0 flex-col gap-1">
+        <span className="text-base font-medium leading-[18px] text-content">
+          Уведомления на почту
+        </span>
+        <span className="text-sm leading-4 text-content-tertiary">{caption}</span>
+      </div>
+      {prefsQuery.isPending ? (
+        <Skeleton className="h-7 w-16 rounded-pill" />
+      ) : (
+        <Switch
+          checked={current?.payments_operations ?? false}
+          onCheckedChange={(value) => toggle(value === true)}
+          disabled={current === undefined || updatePrefs.isPending}
+          aria-label="Уведомления на почту"
+        />
+      )}
+    </div>
+  );
+}

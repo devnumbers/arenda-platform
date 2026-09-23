@@ -4,8 +4,7 @@ import type {
   PaymentForm,
   PaymentType,
   Recurrence,
-} from '@/entities/payment';
-import { dateInMonth, isoYear } from '@/shared/lib/calendar';
+} from '@/entities/payment';import { dateInMonth, isoYear } from '@/shared/lib/calendar';
 import type { PaymentWizardDraft } from './use-payment-wizard-draft';
 
 /**
@@ -191,5 +190,10 @@ export function buildPaymentCreateCommand(
     categorySlug: draft.categorySlug,
     autoPay: options.autoPay ?? false,
     ...(draft.endDate !== undefined && { endDate: draft.endDate }),
+    // Напоминание — только явный выбор (ручная ветка шага 4, карта #822):
+    // в контракте создания опущенное поле = напоминаний нет.
+    ...(draft.reminderOffsetDays !== undefined && {
+      reminderOffsetDays: draft.reminderOffsetDays,
+    }),
   };
 }

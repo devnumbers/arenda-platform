@@ -47,6 +47,15 @@ describe('validatePaymentWizardDraft', () => {
     expect(validatePaymentWizardDraft({ type: 'weekly' })).toStrictEqual({});
   });
 
+  it('напоминание сохраняется, чужой оффал роняет черновик (карта #822)', () => {
+    expect(validatePaymentWizardDraft({ title: 'x', reminderOffsetDays: 3 })).toStrictEqual({
+      title: 'x',
+      reminderOffsetDays: 3,
+    });
+    expect(validatePaymentWizardDraft({ reminderOffsetDays: 2 })).toStrictEqual({});
+    expect(validatePaymentWizardDraft({ reminderOffsetDays: 'завтра' })).toStrictEqual({});
+  });
+
   it('пустые строки и неположительные суммы отбрасываются', () => {
     expect(validatePaymentWizardDraft({ title: '' })).toStrictEqual({});
     expect(validatePaymentWizardDraft({ amountKopecks: 0 })).toStrictEqual({});
@@ -80,6 +89,7 @@ describe('hasPaymentWizardDraftFields', () => {
   it('любое заполненное поле делает черновик наличным', () => {
     expect(hasPaymentWizardDraftFields({ categorySlug: 'rent' })).toBe(true);
     expect(hasPaymentWizardDraftFields({ endDate: '2027-01-31' })).toBe(true);
+    expect(hasPaymentWizardDraftFields({ reminderOffsetDays: 7 })).toBe(true);
   });
 
   it('служебный updatedAt сам по себе черновиком не считается', () => {

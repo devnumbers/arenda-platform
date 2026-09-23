@@ -213,4 +213,11 @@ describe('buildPaymentCreateCommand — сериализация чернови�
     const openEnded = buildPaymentCreateCommand(draft({}), {});
     expect(openEnded !== undefined && Object.hasOwn(openEnded, 'endDate')).toBe(false);
   });
+
+  it('напоминание включается, только когда выбрано (ручная ветка шага 4, #822)', () => {
+    const withReminder = buildPaymentCreateCommand(draft({ reminderOffsetDays: 3 }), {});
+    expect(withReminder?.reminderOffsetDays).toBe(3);
+    const without = buildPaymentCreateCommand(draft({}), {});
+    expect(without !== undefined && Object.hasOwn(without, 'reminderOffsetDays')).toBe(false);
+  });
 });
