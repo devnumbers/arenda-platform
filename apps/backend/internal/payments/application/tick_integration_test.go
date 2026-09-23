@@ -233,6 +233,84 @@ func TestTick_RebuildsFuturePlannedAfterEarlyPayment(t *testing.T) {
 	}
 }
 
+func TestTick_DayEditDoesNotReMaterializePaidMonths(t *testing.T) {
+	t.Parallel()
+	// #802 F1 (ticket #815): six paid months on the 10th; the payment day
+	// is edited to the 5th — the same SQL-level edit the payments and
+	// rentals mutations make, followed by the in-mutation tick. The paid
+	// months must not re-materialize on the new day as phantom overdue;
+	// the single future planned re-dates to the new day.
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+	paymentID := h.seedPayment("2026-03-10", `{"kind":"monthly","dayOfMonth":10}`, false)
+
+	h.runTick()
+
+	if _, err := h.pool.Exec(h.ctx(), `
+		UPDATE operations SET status = 'paid', paid_date = date
+		WHERE payment_id = $1 AND date < '2026-09-01'`, paymentID,
+	); err != nil {
+		t.Fatalf("pay the history: %v", err)
+	}
+	if _, err := h.pool.Exec(h.ctx(),
+		`UPDATE payments SET recurrence = '{"kind":"monthly","daysOfMonth":[5]}'::jsonb WHERE id = $1`,
+		paymentID,
+	); err != nil {
+		t.Fatalf("edit the payment day: %v", err)
+	}
+
+	h.runTick()
+
+	ops := statusesOf(h.operationsOf(paymentID))
+	for date, status := range ops {
+		if status == opPlanned && date < day25 {
+			t.Fatalf("operation %s = planned: a paid month re-materialized as phantom overdue", date)
+		}
+	}
+	if got := len(ops); got != 7 {
+		t.Fatalf("operations = %d (%+v), want 6 paid months + the re-dated future", got, ops)
+	}
+	if got := ops["2026-09-05"]; got != opPlanned {
+		t.Fatalf("2026-09-05 = %q, want planned — the future follows the new day", got)
+	}
+}
+
+func TestTick_UnpaidMonthStaysSingleDebtAfterDayEdit(t *testing.T) {
+	t.Parallel()
+	// The same edit with May overdue (its old-day operation stands planned,
+	// never paid): no second May obligation may appear — the standing row
+	// is the month's debt; the schedule change does not double it.
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+	paymentID := h.seedPayment("2026-03-10", `{"kind":"monthly","dayOfMonth":10}`, false)
+
+	h.runTick()
+
+	if _, err := h.pool.Exec(h.ctx(), `
+		UPDATE operations SET status = 'paid', paid_date = date
+		WHERE payment_id = $1 AND date < '2026-09-01' AND date <> '2026-05-10'`, paymentID,
+	); err != nil {
+		t.Fatalf("pay the history: %v", err)
+	}
+	if _, err := h.pool.Exec(h.ctx(),
+		`UPDATE payments SET recurrence = '{"kind":"monthly","daysOfMonth":[5]}'::jsonb WHERE id = $1`,
+		paymentID,
+	); err != nil {
+		t.Fatalf("edit the payment day: %v", err)
+	}
+
+	h.runTick()
+
+	ops := statusesOf(h.operationsOf(paymentID))
+	if got := ops["2026-05-10"]; got != opPlanned {
+		t.Fatalf("2026-05-10 = %q, want planned — the standing overdue is untouched", got)
+	}
+	if _, dup := ops["2026-05-05"]; dup {
+		t.Fatalf("2026-05-05 materialized: the claimed month got a second obligation")
+	}
+	if got := ops["2026-09-05"]; got != opPlanned {
+		t.Fatalf("2026-09-05 = %q, want planned — the future follows the new day", got)
+	}
+}
+
 func TestTick_SkipsArchivedProperty(t *testing.T) {
 	t.Parallel()
 	h := newPaymentsHarness(t).withOwner("Europe/Moscow")

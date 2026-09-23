@@ -55,7 +55,8 @@ func NewMaterializedOperation(p Payment, date time.Time) Operation {
 // operation keys (ADR 0049 §2–§3). Applying it is idempotent.
 type PaymentTickPlan struct {
 	// Materialize lists due occurrence dates (<= today) that have no
-	// operation yet; each becomes a planned operation. Overdue debt
+	// operation yet and whose recurrence period is not already claimed by
+	// one; each becomes a planned operation. Overdue debt
 	// accumulates here and is never auto-closed.
 	Materialize []time.Time
 	// AutoPayToday runs the auto-pay day payment: the planned occurrence with
@@ -75,20 +76,34 @@ type PaymentTickPlan struct {
 
 // PlanPaymentTick computes the tick plan for one payment rule. The existing map holds
 // the rule's stored operations keyed by date. Paid operations are never
-// touched; overdue planned operations (date < today) are left as debt.
+// touched; overdue planned operations (date < today) are left as debt. A
+// period of the recurrence's own calendar (the month for monthly rules, the
+// week for weekly, the year for yearly) that already holds one of the rule's
+// operations is never re-materialized on a re-dated schedule — the #802 F1
+// phantom fix (ticket #815).
 func PlanPaymentTick(p Payment, today time.Time, existing map[time.Time]OperationStatus) PaymentTickPlan {
 	byDate := existing
 	var plan PaymentTickPlan
 
 	// 1. Materialize everything due: occurrences <= today (>= since, <=
-	// end_date, outside pauses) that do not exist yet.
+	// end_date, outside pauses) that do not exist yet. A period already
+	// holding an operation of the rule is claimed: after a payment-day edit
+	// the old occurrences keep standing at the old dates, and exact-date
+	// dedup alone would resurrect every paid month as phantom overdue debt
+	// (ticket #815).
+	claimed := make(map[time.Time]struct{}, len(byDate))
+	for date := range byDate {
+		claimed[recurrencePeriod(p, date)] = struct{}{}
+	}
 	todayOccurs := false
 	for _, d := range OccurrencesBetween(p, p.Since, today) {
 		if d.Equal(today) {
 			todayOccurs = true
 		}
 		if _, ok := byDate[d]; !ok {
-			plan.Materialize = append(plan.Materialize, d)
+			if _, taken := claimed[recurrencePeriod(p, d)]; !taken {
+				plan.Materialize = append(plan.Materialize, d)
+			}
 		}
 	}
 
@@ -110,6 +125,27 @@ func PlanPaymentTick(p Payment, today time.Time, existing map[time.Time]Operatio
 		}
 	}
 	return plan
+}
+
+// recurrencePeriod maps a date onto the schedule slot of the rule's
+// recurrence that contains it: the day itself for daily rules, the
+// Sunday-based week for weekly, the calendar month for monthly and the
+// calendar year for yearly. Any operation of the rule inside a slot claims
+// it — the slot's obligation already stands (a paid fact, planned debt or a
+// cancellation tombstone), and a re-dated schedule must not materialize a
+// second one there. For daily rules this collapses into the exact-date
+// dedup (#815).
+func recurrencePeriod(p Payment, date time.Time) time.Time {
+	switch p.Recurrence.Kind() {
+	case RecurrenceWeekly:
+		return time.Date(date.Year(), date.Month(), date.Day()-int(date.Weekday()), 0, 0, 0, 0, time.UTC)
+	case RecurrenceMonthly:
+		return time.Date(date.Year(), date.Month(), 1, 0, 0, 0, 0, time.UTC)
+	case RecurrenceYearly:
+		return time.Date(date.Year(), time.January, 1, 0, 0, 0, 0, time.UTC)
+	default:
+		return date
+	}
 }
 
 // nextFuturePlanned finds where the rule's only future planned operation must
