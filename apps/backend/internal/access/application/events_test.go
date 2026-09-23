@@ -23,7 +23,7 @@ import (
 type eventsFixture struct {
 	repo    *memRepo
 	owners  staticResolver
-	lookup  *stubLookup
+	lookup  *fakeLookup
 	limiter *fakeRecipientLimiter
 	events  *fakeEventPublisher
 	clk     *fixedClock
@@ -44,7 +44,7 @@ func newEventsFixture() *eventsFixture {
 	owners := staticResolver{}
 	statuses := fakeStatuses{}
 	policy := NewMembershipPolicy(owners, repo)
-	lookup := &stubLookup{}
+	lookup := newFakeLookup()
 	clk := &fixedClock{now: time.Now()}
 	limiter := newFakeRecipientLimiter()
 	events := &fakeEventPublisher{}
@@ -61,20 +61,44 @@ func newEventsFixture() *eventsFixture {
 	}
 }
 
-// TestAddMemberActivePublishesNothing checks that a grant the recipient's slot
-// accommodates stays silent — the catalog has no "access granted" event.
-func TestAddMemberActivePublishesNothing(t *testing.T) {
+// TestAddMemberActivePublishesGranted checks the instant landing's event
+// (issue #829): an active grant notifies the new member — the event carries
+// the created membership, the property, the recipient and the granting actor
+// (the subscriber renders the №5 «Приглашение в объект» row).
+func TestAddMemberActivePublishesGranted(t *testing.T) {
 	t.Parallel()
 	f := newEventsFixture()
 	owner, member, property := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
 	f.linkOwner(owner, property)
 	f.limiter.set(member, 5)
 
-	if _, err := f.access.AddMember(t.Context(), owner, property, member, domain.RoleViewer); err != nil {
+	m, err := f.access.AddMember(t.Context(), owner, property, member, domain.RoleViewer)
+	if err != nil {
 		t.Fatalf("AddMember: %v", err)
 	}
-	if got := len(f.events.events); got != 0 {
-		t.Errorf("expected no events for an active grant, got %d: %+v", got, f.events.events)
+	e := f.events.last(t, kindMembershipGranted).grant
+	if e.MembershipID != m.ID || e.PropertyID != property || e.RecipientID != member {
+		t.Errorf("event ids = (%s, %s, %s), want (%s, %s, %s)",
+			e.MembershipID, e.PropertyID, e.RecipientID, m.ID, property, member)
+	}
+	if e.ActorID != owner {
+		t.Errorf("event actor = %s, want the granting owner %s", e.ActorID, owner)
+	}
+}
+
+// TestAddMemberGrantedPublishFailureSwallowed checks the best-effort canon on
+// the instant landing's event: a publisher failure never fails the committed
+// transition.
+func TestAddMemberGrantedPublishFailureSwallowed(t *testing.T) {
+	t.Parallel()
+	f := newEventsFixture()
+	owner, member, property := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	f.linkOwner(owner, property)
+	f.limiter.set(member, 5)
+	f.events.errFor = map[string]error{kindMembershipGranted: errors.New("queue down")}
+
+	if _, err := f.access.AddMember(t.Context(), owner, property, member, domain.RoleViewer); err != nil {
+		t.Fatalf("AddMember must survive a publish failure, got %v", err)
 	}
 }
 
@@ -249,6 +273,41 @@ func TestActivateInvitationPublishesActivated(t *testing.T) {
 	}
 }
 
+// TestInviteRegisteredUserPublishesGranted checks the InviteByEmail input of
+// the instant landing (issue #829): a registered email lands active through
+// AddMember and the invitee is notified — with no invite email and no
+// «Приглашение принято», an event that exists only for an acceptance.
+func TestInviteRegisteredUserPublishesGranted(t *testing.T) {
+	t.Parallel()
+	f := newEventsFixture()
+	inviter, invitee, property := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	f.linkOwner(inviter, property)
+	f.limiter.set(invitee, 5)
+	email := "invitee@example.com"
+	f.lookup.add(email, invitee)
+
+	outcome, err := f.invites.InviteByEmail(t.Context(), inviter, property, email, domain.RoleViewer)
+	if err != nil {
+		t.Fatalf("InviteByEmail: %v", err)
+	}
+	if outcome.Member == nil {
+		t.Fatalf("a registered email must land a membership, got %+v", outcome)
+	}
+	if f.events.count("invitation_activated") != 0 {
+		t.Error("an instant landing publishes no activation event — there was no acceptance")
+	}
+	e := f.events.last(t, kindMembershipGranted).grant
+	if e.MembershipID != outcome.Member.ID || e.PropertyID != property ||
+		e.RecipientID != invitee || e.ActorID != inviter {
+		t.Errorf("granted event = %+v, want the landing membership %s for %s by %s",
+			e, outcome.Member.ID, invitee, inviter)
+	}
+}
+
+// kindMembershipGranted is the granted event's kind at the recording fake —
+// the lookup key of the granted-event assertions and the errFor failure key.
+const kindMembershipGranted = "membership_granted"
+
 // fakeEventPublisher records the lifecycle events the services publish
 // (карта #734, #751); errFor fails a kind on demand — the publications are
 // best-effort, so a failure must never surface from the transition itself.
@@ -264,6 +323,7 @@ type recordedEvent struct {
 	resum *MembershipResumed
 	revo  *MembershipRevoked
 	left  *MemberLeft
+	grant *MembershipGranted
 }
 
 func (f *fakeEventPublisher) PublishInvitationActivated(_ context.Context, e InvitationActivated) error {
@@ -303,6 +363,14 @@ func (f *fakeEventPublisher) PublishMemberLeft(_ context.Context, e MemberLeft) 
 		return err
 	}
 	f.events = append(f.events, recordedEvent{kind: "member_left", left: &e})
+	return nil
+}
+
+func (f *fakeEventPublisher) PublishMembershipGranted(_ context.Context, e MembershipGranted) error {
+	if err := f.errFor[kindMembershipGranted]; err != nil {
+		return err
+	}
+	f.events = append(f.events, recordedEvent{kind: kindMembershipGranted, grant: &e})
 	return nil
 }
 

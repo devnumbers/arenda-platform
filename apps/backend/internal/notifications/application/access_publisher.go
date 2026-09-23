@@ -109,6 +109,43 @@ func (p *AccessPublisher) NotifyInvitationActivated(
 	}
 
 	// №5 «Приглашение в объект» to the invitee; the inviter is the actor.
+	return p.publishInvitationRow(ctx, membershipID, propertyID, inviterID, inviteeID, property, inviter)
+}
+
+// NotifyMembershipGranted publishes the №5 «Приглашение в объект» row for the
+// instant landing (issue #829): a registered user granted access right away —
+// by the batch Invite/AddProperties or the single InviteByEmail — learns about
+// it with the catalog's verbatim copy, the granter the actor. The same copy
+// the registration activation uses: the access is active, so «Теперь объект
+// доступен вам совместно» is true. No «Приглашение принято» exists here —
+// there was no acceptance; a no-slot landing never arrives as granted (it
+// speaks the system pause).
+func (p *AccessPublisher) NotifyMembershipGranted(
+	ctx context.Context,
+	membershipID, propertyID, recipientID, actorID uuid.UUID,
+) error {
+	property, err := p.views.PropertyView(ctx, propertyID)
+	if err != nil {
+		return fmt.Errorf("resolve property view %s: %w", propertyID, err)
+	}
+	inviter, err := p.views.UserProfileView(ctx, actorID)
+	if err != nil {
+		return fmt.Errorf("resolve inviter profile %s: %w", actorID, err)
+	}
+	return p.publishInvitationRow(ctx, membershipID, propertyID, actorID, recipientID, property, inviter)
+}
+
+// publishInvitationRow is the №5 row's shared body (the registration
+// activation's active landing #751 and the instant landing #829): the catalog
+// copy verbatim, the inviter naming the text and the actor card, the bare
+// membership id keying the row — revoke → re-invite is a new membership,
+// hence a new row.
+func (p *AccessPublisher) publishInvitationRow(
+	ctx context.Context,
+	membershipID, propertyID, inviterID, recipientID uuid.UUID,
+	property AccessPropertyView,
+	inviter AccessUserProfile,
+) error {
 	return p.pipeline.Publish(ctx, Publication{
 		EventType:    domain.EventPropertyInvitation,
 		DedupKey:     domain.DedupKey("property_invitation:" + membershipID.String()),
@@ -116,7 +153,7 @@ func (p *AccessPublisher) NotifyInvitationActivated(
 		Body:         fmt.Sprintf("%s пригласил вас в объект «%s». Теперь объект доступен вам совместно", inviter.DisplayName, property.Name),
 		ContextLabel: property.Name,
 		Payload:      accessPayload(propertyID, property, inviterID, &inviter, membershipID),
-		Recipients:   []uuid.UUID{inviteeID},
+		Recipients:   []uuid.UUID{recipientID},
 		Actor:        inviterID,
 	})
 }

@@ -18,6 +18,7 @@ import (
 // side would make a typo a silently dead subscription.
 const (
 	EventInvitationActivated = platformevents.EventType("access_invitation_activated")
+	EventMembershipGranted   = platformevents.EventType("access_membership_granted")
 	EventMembershipSuspended = platformevents.EventType("access_membership_suspended")
 	EventMembershipResumed   = platformevents.EventType("access_membership_resumed")
 	EventMembershipRevoked   = platformevents.EventType("access_membership_revoked")
@@ -41,6 +42,11 @@ var _ accessapp.AccessEventPublisher = (*Publisher)(nil)
 // PublishInvitationActivated publishes the InvitationActivated event.
 func (p *Publisher) PublishInvitationActivated(ctx context.Context, event accessapp.InvitationActivated) error {
 	return p.dispatcher.Publish(ctx, EventInvitationActivated, event)
+}
+
+// PublishMembershipGranted publishes the MembershipGranted event.
+func (p *Publisher) PublishMembershipGranted(ctx context.Context, event accessapp.MembershipGranted) error {
+	return p.dispatcher.Publish(ctx, EventMembershipGranted, event)
 }
 
 // PublishMembershipSuspended publishes the MembershipSuspended event.

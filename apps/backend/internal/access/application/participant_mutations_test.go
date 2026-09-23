@@ -650,24 +650,119 @@ func TestParticipantMutation_AddProperties_ArchivedPropertySkipped(t *testing.T)
 	}
 }
 
-// TestParticipantMutation_ActiveGrantPublishesNothing mirrors the single-property
-// canon: a grant the recipient's slot accommodates stays silent — the catalog
-// has no "access granted" event (карта #734, #751).
-func TestParticipantMutation_ActiveGrantPublishesNothing(t *testing.T) {
+// TestParticipantMutation_ActiveGrantPublishesGranted checks the batch side of
+// the instant landing (issue #829): every ACTIVE leg of the Invite batch
+// notifies the new member — one granted event per leg, the granting actor
+// named (the subscriber renders the №5 «Приглашение в объект» row).
+func TestParticipantMutation_ActiveGrantPublishesGranted(t *testing.T) {
+	t.Parallel()
+	f := newMutationFixture()
+	p1, p2 := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	f.addProperty(p1, f.owner, testFirstTitle)
+	f.addProperty(p2, f.owner, testSecondTitle)
+	member := uuid.Must(uuid.NewV7())
+	f.lookup.add(testMemberEmail, member)
+	f.limiter.set(member, 5)
+
+	results, err := f.svc.Invite(t.Context(), f.owner, testMemberEmail, domain.RoleViewer,
+		[]uuid.UUID{p1, p2})
+	if err != nil {
+		t.Fatalf("invite: %v", err)
+	}
+	for i, r := range results {
+		if r.Outcome != ParticipantGrantActive {
+			t.Fatalf("results[%d] = %+v, want active", i, r)
+		}
+	}
+	if got := f.events.count(kindMembershipGranted); got != 2 {
+		t.Fatalf("expected one granted event per active leg, got %d", got)
+	}
+	// The events append in leg order, mirroring the results order.
+	granted := 0
+	for _, ev := range f.events.events {
+		if ev.kind != kindMembershipGranted {
+			continue
+		}
+		r := results[granted]
+		if ev.grant.MembershipID != r.MembershipID || ev.grant.PropertyID != r.PropertyID {
+			t.Errorf("granted event %d = (%s, %s), want leg (%s, %s)",
+				granted, ev.grant.MembershipID, ev.grant.PropertyID, r.MembershipID, r.PropertyID)
+		}
+		if ev.grant.RecipientID != member || ev.grant.ActorID != f.owner {
+			t.Errorf("granted event %d recipient/actor = (%s, %s), want (%s, %s)",
+				granted, ev.grant.RecipientID, ev.grant.ActorID, member, f.owner)
+		}
+		granted++
+	}
+}
+
+// TestParticipantMutation_AddProperties_ActiveGrantPublishesGranted extends the
+// granted event to the «Пригласить в объект» input (issue #829): the new
+// active leg of an existing participant notifies them like any other landing.
+func TestParticipantMutation_AddProperties_ActiveGrantPublishesGranted(t *testing.T) {
 	t.Parallel()
 	f := newMutationFixture()
 	p1 := uuid.Must(uuid.NewV7())
 	f.addProperty(p1, f.owner, testFirstTitle)
 	member := uuid.Must(uuid.NewV7())
+	f.emails[member] = testMemberEmail
 	f.lookup.add(testMemberEmail, member)
-	f.limiter.set(member, 1)
-
+	f.limiter.set(member, 5)
+	// The person must already hold a leg in the actor's scope.
 	if _, err := f.svc.Invite(t.Context(), f.owner, testMemberEmail, domain.RoleViewer,
 		[]uuid.UUID{p1}); err != nil {
+		t.Fatalf("seed invite: %v", err)
+	}
+
+	p2 := uuid.Must(uuid.NewV7())
+	f.addProperty(p2, f.owner, testSecondTitle)
+	f.events.events = nil
+	results, err := f.svc.AddProperties(t.Context(), f.owner, member.String(), domain.RoleViewer,
+		[]uuid.UUID{p2})
+	if err != nil {
+		t.Fatalf("add properties: %v", err)
+	}
+	if results[0].Outcome != ParticipantGrantActive {
+		t.Fatalf("results[0] = %+v, want active", results[0])
+	}
+	e := f.events.last(t, kindMembershipGranted).grant
+	if e.MembershipID != results[0].MembershipID || e.PropertyID != p2 ||
+		e.RecipientID != member || e.ActorID != f.owner {
+		t.Errorf("granted event = %+v, want the p2 leg for %s by %s", e, member, f.owner)
+	}
+}
+
+// TestParticipantMutation_Invite_MixedBatchPublishesPerLeg checks the mixed
+// batch (issue #829): the active leg publishes the granted event, the no-slot
+// leg the system pause — each landing speaks its own catalog row.
+func TestParticipantMutation_Invite_MixedBatchPublishesPerLeg(t *testing.T) {
+	t.Parallel()
+	f := newMutationFixture()
+	p1, p2 := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	f.addProperty(p1, f.owner, testFirstTitle)
+	f.addProperty(p2, f.owner, testSecondTitle)
+	member := uuid.Must(uuid.NewV7())
+	f.lookup.add(testMemberEmail, member)
+	f.limiter.set(member, 1) // The first leg fits, the second suspends.
+
+	results, err := f.svc.Invite(t.Context(), f.owner, testMemberEmail, domain.RoleViewer,
+		[]uuid.UUID{p1, p2})
+	if err != nil {
 		t.Fatalf("invite: %v", err)
 	}
-	if got := len(f.events.events); got != 0 {
-		t.Errorf("expected no events for an active batch grant, got %d: %+v", got, f.events.events)
+	if results[0].Outcome != ParticipantGrantActive || results[1].Outcome != ParticipantGrantSuspended {
+		t.Fatalf("outcomes = (%s, %s), want (active, suspended)", results[0].Outcome, results[1].Outcome)
+	}
+	if got := f.events.count(kindMembershipGranted); got != 1 {
+		t.Errorf("expected exactly one granted event, got %d", got)
+	}
+	if got := f.events.count("membership_suspended"); got != 1 {
+		t.Errorf("expected exactly one suspended event, got %d", got)
+	}
+	granted := f.events.last(t, kindMembershipGranted).grant
+	if granted.MembershipID != results[0].MembershipID || granted.PropertyID != p1 {
+		t.Errorf("granted event = (%s, %s), want the active leg (%s, %s)",
+			granted.MembershipID, granted.PropertyID, results[0].MembershipID, p1)
 	}
 }
 

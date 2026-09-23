@@ -133,12 +133,17 @@ func (s *AccessService) AddMember(ctx context.Context, actor, propertyID, userID
 		return domain.Membership{}, err
 	}
 
-	// A grant created without a free tariff slot pauses the new member's
-	// access (issue #158, T4). The «Доступ приостановлен» notification is the
-	// event subscriber's (карта #734, #751) — the direct lifecycle email it
-	// replaced is gone; the publication is post-commit and best-effort.
+	// The landing state picks the member's row (карта #734, #751, #829): an
+	// active grant speaks the «Приглашение в объект» event (the granter is the
+	// actor); a grant created without a free tariff slot pauses the new
+	// member's access (issue #158, T4) and speaks the system «Доступ
+	// приостановлен» instead. Both are the event subscriber's — published
+	// post-commit, best-effort; the direct lifecycle emails they replaced are
+	// gone.
 	if suspended {
 		publishSuspendedEvents(ctx, s.events, s.logger, []domain.Membership{created})
+	} else {
+		publishGrantedEvents(ctx, s.events, s.logger, actor, []domain.Membership{created})
 	}
 	return created, nil
 }
@@ -340,6 +345,24 @@ func removeMembershipInTx(
 		return fmt.Errorf("record audit: %w", err)
 	}
 	return nil
+}
+
+// publishGrantedEvents publishes the post-commit «Приглашение в объект»
+// events for active landings (issue #829) — best-effort (карта #734, #751);
+// the granter is the event's actor.
+func publishGrantedEvents(
+	ctx context.Context, publisher AccessEventPublisher, log *slog.Logger, actor uuid.UUID, granted []domain.Membership,
+) {
+	for _, m := range granted {
+		publishAccessEvent(ctx, publisher, log, "membership_granted", func() error {
+			return publisher.PublishMembershipGranted(ctx, MembershipGranted{
+				MembershipID: m.ID,
+				PropertyID:   m.PropertyID,
+				RecipientID:  m.UserID,
+				ActorID:      actor,
+			})
+		})
+	}
 }
 
 // publishSuspendedEvents publishes the post-commit system pause events for

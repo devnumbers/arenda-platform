@@ -384,6 +384,44 @@ func TestNotifyActorProfileFailure(t *testing.T) {
 	assert.Empty(t, h.feed.inserted)
 }
 
+// TestNotifyMembershipGranted checks the instant landing's invitation row
+// (issue #829, решение #737 тип №5): a registered user granted access right
+// away learns about it with the catalog's verbatim copy — the inviter names
+// the text and the actor card, the bare membership id keys the row (revoke →
+// re-invite is a new membership, hence a new row).
+func TestNotifyMembershipGranted(t *testing.T) {
+	t.Parallel()
+	h := newAccessPublisherHarness()
+	ids := newAccessIDs()
+	h.plantProperty(ids.property, "Дом на Рублёвке", "ул. Рублёвское шоссе, 1")
+	h.plantUser(ids.owner, "Пётр Петров", "inviter@example.com")
+
+	err := h.pub.NotifyMembershipGranted(
+		t.Context(), ids.membership, ids.property, ids.member, ids.owner,
+	)
+	require.NoError(t, err)
+	require.Len(t, h.feed.inserted, 1, "the granted member's row is the only one — no «Приглашение принято» on an instant landing")
+
+	n := h.feed.inserted[0]
+	assert.Equal(t, domain.EventPropertyInvitation, n.EventType)
+	assert.Equal(t, ids.member, n.UserID)
+	assert.Equal(t, "Приглашение в объект", n.Title)
+	assert.Equal(t, "Пётр Петров пригласил вас в объект «Дом на Рублёвке». Теперь объект доступен вам совместно", n.Body)
+	assert.Equal(t, "Дом на Рублёвке", n.ContextLabel)
+	assert.Equal(t, domain.DedupKey("property_invitation:"+ids.membership.String()), n.DedupKey)
+	assert.Equal(t, domain.CategorySharedAccess, n.Category)
+	require.NotNil(t, n.Payload.Property)
+	assert.Equal(t, ids.property, n.Payload.Property.ID)
+	assert.Equal(t, "Дом на Рублёвке", n.Payload.Property.Name)
+	assert.Equal(t, "ул. Рублёвское шоссе, 1", n.Payload.Property.Address)
+	require.NotNil(t, n.Payload.Actor)
+	assert.Equal(t, ids.owner, n.Payload.Actor.ID)
+	assert.Equal(t, "Пётр Петров", n.Payload.Actor.Name)
+	assert.Equal(t, "inviter@example.com", n.Payload.Actor.Email)
+	require.NotNil(t, n.Payload.MembershipID)
+	assert.Equal(t, ids.membership, *n.Payload.MembershipID)
+}
+
 // TestNotifyInvitationActivatedDedupStable checks the dedup pair of a
 // repeated publication: the same activation inserts nothing new.
 func TestNotifyInvitationActivatedDedupStable(t *testing.T) {

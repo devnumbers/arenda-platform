@@ -553,6 +553,15 @@ func subscribeAccessEvents(
 			e.Suspended, e.At,
 		)
 	})
+	eventDispatcher.Subscribe(accessevents.EventMembershipGranted, func(ctx context.Context, event any) error {
+		e, ok := event.(accessapp.MembershipGranted)
+		if !ok {
+			return fmt.Errorf("unexpected event type %T", event)
+		}
+		return accessPublisher.NotifyMembershipGranted(
+			ctx, e.MembershipID, e.PropertyID, e.RecipientID, e.ActorID,
+		)
+	})
 	eventDispatcher.Subscribe(accessevents.EventMembershipSuspended, func(ctx context.Context, event any) error {
 		e, ok := event.(accessapp.MembershipSuspended)
 		if !ok {

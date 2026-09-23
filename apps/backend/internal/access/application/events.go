@@ -44,6 +44,22 @@ type InvitationActivated struct {
 	At time.Time
 }
 
+// MembershipGranted reports an active membership granted instantly to a
+// registered user (issue #829): the Invite and AddProperties batches and the
+// InviteByEmail registered path all land through this transition. The granted
+// member learns about the new access (the №5 «Приглашение в объект» row, the
+// copy promising an access they actually have); a no-slot landing speaks the
+// system pause instead and publishes no granted event.
+type MembershipGranted struct {
+	MembershipID uuid.UUID
+	PropertyID   uuid.UUID
+	// RecipientID is the member the access was granted to.
+	RecipientID uuid.UUID
+	// ActorID is the granter (the inviting owner or full member) — the copy's
+	// subject and the actor-skip anchor.
+	ActorID uuid.UUID
+}
+
 // MembershipSuspended reports an active membership moving into the suspended
 // state. RecipientID is the member whose access got paused; ActorID uuid.Nil
 // marks the system suspension (the recipient slot enforcement has no human
@@ -94,6 +110,7 @@ type MemberLeft struct {
 // transitions run, no events leave the context.
 type AccessEventPublisher interface {
 	PublishInvitationActivated(ctx context.Context, event InvitationActivated) error
+	PublishMembershipGranted(ctx context.Context, event MembershipGranted) error
 	PublishMembershipSuspended(ctx context.Context, event MembershipSuspended) error
 	PublishMembershipResumed(ctx context.Context, event MembershipResumed) error
 	PublishMembershipRevoked(ctx context.Context, event MembershipRevoked) error
