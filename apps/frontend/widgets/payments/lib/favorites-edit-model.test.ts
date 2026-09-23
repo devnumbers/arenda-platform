@@ -8,24 +8,18 @@ import {
   selectedFavoritesTitle,
   toggleFavoriteSelection,
 } from './favorites-edit-model';
+import { makeGlobalPayment } from './global-payment-fixtures';
 
-const payment = (id: string): GlobalPayment => ({
-  id,
-  propertyId: `property-${id}`,
-  propertyName: 'Моя квартира',
-  title: `Платёж ${id}`,
-  amountKopecks: 100_000,
-  type: 'expense',
-  category: { source: 'default', slug: 'bold-internet', label: 'Интернет' },
-  autoPay: false,
-  isFavorite: true,
-  favoriteOrder: null,
-  today: '2026-09-09',
-  nearestDate: '2026-09-10',
-  overdueOperationCount: 0,
-  overdueDays: null,
-  oldestOverdueOperationId: null,
-});
+const payment = (id: string): GlobalPayment =>
+  makeGlobalPayment({
+    id,
+    propertyId: `property-${id}`,
+    title: `Платёж ${id}`,
+    amountKopecks: 100_000,
+    category: { source: 'default', slug: 'bold-internet', label: 'Интернет' },
+    isFavorite: true,
+    today: '2026-09-09',
+  });
 
 describe('moveFavorite', () => {
   it('поднимает элемент: 0 → 2', () => {
