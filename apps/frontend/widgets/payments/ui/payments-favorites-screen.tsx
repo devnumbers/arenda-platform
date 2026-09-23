@@ -561,7 +561,7 @@ function FavoritesEditRow({
             aria-label={`Переместить: ${payment.title}`}
             data-testid={`favorites-grip-${payment.id}`}
             className={cn(
-              "cursor-grab touch-none rounded-sm outline-none",
+              "cursor-grab touch-none rounded-sm text-content-tertiary outline-none",
               "focus-visible:ring-2 focus-visible:ring-primary",
               "active:cursor-grabbing",
             )}
