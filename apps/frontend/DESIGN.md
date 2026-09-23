@@ -272,7 +272,7 @@ Radix-примитивов + vaul), шрифт Onest.
   удлиняются через `onNearStart`/`onNearEnd`).
   Полоса в самом колесе — только для одиночного использования; в шите её
   рисует контейнер. Витрина: разделы «WheelPickerSheet» и
-  «MonthYearPicker · min/max» на /ui-kit.
+  «MonthYearPicker · кольцо месяцев при min/max» на /ui-kit.
 - **`PickerMenu`** — группы опций-«радио» (см. таблицу поверхностей); опция:
   `{ label, selected, onSelect }`, выбор применяется сразу. Триггер-кнопка
   обязана прокидывать `…props` (asChild триггера передаёт обработчики/aria).
