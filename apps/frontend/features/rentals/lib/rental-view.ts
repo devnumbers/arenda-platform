@@ -76,6 +76,20 @@ export function rentalRemainingLine(monthsRemaining: number | null): string | un
   return `${remained} ${monthsRemaining} ${monthsWord(monthsRemaining)} аренды`;
 }
 
+/** Карточка прогресса на детализации видима, пока ей есть что жить: со
+ * следующим платежом — строка дней и бар (1232:61259), без него — строка
+ * остатка или прошедших месяцев. У срочной в день планового окончания и
+ * в «Ожидает действия» содержимого нет — карточка прячется целиком:
+ * пустого контейнера макеты не рисуют (F1, решение владельца 23.09). */
+export function hasProgressCard(
+  nextPayment: RentalNextPayment | null,
+  progress: RentalProgress,
+): boolean {
+  return (
+    nextPayment !== null || progress.totalMonths === null || (progress.monthsRemaining ?? 0) > 0
+  );
+}
+
 /** Строка бессрочной аренды (решение владельца 2026-09-07): полных месяцев
  * с начала — «Прошло 12 месяцев», глагол как у остатка («Прошёл 21 месяц»);
  * пока не прошёл полный месяц — «Идёт 1 месяц». */

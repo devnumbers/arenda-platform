@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Rental } from '@/entities/rental';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import {
+  hasProgressCard,
   rentalElapsedLine,
   rentalNextPaymentLine,
   rentalPaidTitle,
@@ -275,5 +276,33 @@ describe('rentalTenantTitle', () => {
         phone: '+79934302010',
       }),
     ).toBe('Александр Петров');
+  });
+});
+
+describe('hasProgressCard', () => {
+  it('со следующим платежом карточка видима (1232:61259)', () => {
+    const rental = rentalFixture();
+    expect(hasProgressCard(rental.rentPayment.nextPayment, rental.progress)).toBe(true);
+  });
+
+  it('F1: день планового окончания и «Ожидает действия» — карточка скрыта целиком', () => {
+    const rental = rentalFixture({
+      progress: { paidMonths: 6, totalMonths: 24, monthsRemaining: 0 },
+    });
+    expect(hasProgressCard(null, rental.progress)).toBe(false);
+  });
+
+  it('без платежа, но с остатком — карточка остаётся ради строки «Осталось N»', () => {
+    const rental = rentalFixture({
+      progress: { paidMonths: 6, totalMonths: 24, monthsRemaining: 3 },
+    });
+    expect(hasProgressCard(null, rental.progress)).toBe(true);
+  });
+
+  it('бессрочная без платежа — карточка остаётся ради «Прошло N месяцев»', () => {
+    const rental = rentalFixture({
+      progress: { paidMonths: 0, totalMonths: null, monthsRemaining: null },
+    });
+    expect(hasProgressCard(null, rental.progress)).toBe(true);
   });
 });

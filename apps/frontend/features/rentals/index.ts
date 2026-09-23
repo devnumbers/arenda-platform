@@ -41,6 +41,7 @@ export {
 } from './lib/success-copy';
 export {
   currentRentalOf,
+  hasProgressCard,
   rentalCommentText,
   rentalElapsedLine,
   rentalNextPaymentLine,

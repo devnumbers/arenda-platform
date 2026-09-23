@@ -7,6 +7,7 @@ import { Calendar, Check, Edit, Key, TimeHistory } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { formatDayMonth } from '@/shared/lib/date-format';
 import {
+  hasProgressCard,
   rentalElapsedLine,
   rentalNextPaymentLine,
   rentalPaidTitle,
@@ -40,9 +41,9 @@ import { TenantRow } from './tenant-row';
  * Статусы «ожидает начала»/«ожидает действия» макетом не нарисованы — тот
  * же рендер деградирует честно: без будущего платежа нет строки дней и
  * «Оплатить», у бессрочной нет бара — вместо остатка «Прошло N месяцев»
- * (решение владельца 2026-09-07), у срочной после планового окончания нет
- * ни бара, ни строки остатка (фог карты #526 — сверить с владельцем на
- * приёмке).
+ * (решение владельца 2026-09-07), а карточка прогресса срочной после
+ * планового окончания прячется целиком — пустого контейнера макеты не
+ * рисуют (F1, решение владельца 23.09).
  */
 export function RentalDetailBody({
   propertyId,
@@ -137,37 +138,42 @@ export function RentalDetailBody({
             <PaymentRow rental={rental} onSelect={openPayment} />
           </RentalGroup>
 
-          <section className="mx-6 rounded-card bg-surface-muted p-6">
-            <div className="flex flex-col gap-5">
-              {nextPayment !== null && (
-                <div className="flex flex-col gap-3">
-                  <div className="flex items-center gap-1.5">
-                    <Calendar className="h-4 w-4 text-primary" aria-hidden />
-                    <p className="text-sm font-medium leading-4 text-primary">
-                      {rentalNextPaymentLine(nextPayment)}
-                    </p>
-                  </div>
-                  {percent !== null && (
-                    <div
-                      role="progressbar"
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                      aria-valuenow={percent}
-                      className="h-1.5 w-full overflow-hidden rounded-pill bg-surface"
-                    >
-                      <div
-                        className="h-full rounded-pill bg-primary"
-                        style={{ width: `${percent}%` }}
-                      />
+          {/* Карточка прогресса живёт, пока ей есть что показывать; в день
+              планового окончания и в «Ожидает действия» прячется целиком —
+              пустого контейнера макеты не рисуют (F1, решение 23.09). */}
+          {hasProgressCard(nextPayment, rental.progress) && (
+            <section className="mx-6 rounded-card bg-surface-muted p-6">
+              <div className="flex flex-col gap-5">
+                {nextPayment !== null && (
+                  <div className="flex flex-col gap-3">
+                    <div className="flex items-center gap-1.5">
+                      <Calendar className="h-4 w-4 text-primary" aria-hidden />
+                      <p className="text-sm font-medium leading-4 text-primary">
+                        {rentalNextPaymentLine(nextPayment)}
+                      </p>
                     </div>
-                  )}
-                </div>
-              )}
-              {progressLine !== undefined && (
-                <p className="text-sm leading-4 text-content-secondary">{progressLine}</p>
-              )}
-            </div>
-          </section>
+                    {percent !== null && (
+                      <div
+                        role="progressbar"
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-valuenow={percent}
+                        className="h-1.5 w-full overflow-hidden rounded-pill bg-surface"
+                      >
+                        <div
+                          className="h-full rounded-pill bg-primary"
+                          style={{ width: `${percent}%` }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+                {progressLine !== undefined && (
+                  <p className="text-sm leading-4 text-content-secondary">{progressLine}</p>
+                )}
+              </div>
+            </section>
+          )}
 
           <RentalGroup
             title="Условия аренды"
