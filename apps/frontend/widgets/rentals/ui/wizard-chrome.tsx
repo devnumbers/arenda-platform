@@ -285,8 +285,7 @@ export function PaymentDayPicker({
 }
 
 /** Поле режима коммунальных платежей (общее для шага условий #530 и правки
- * #532): триггер-бокс + PickerMenu (меню на десктопе, шит на мобиле —
- * канон выбора одной опции, выбор применяется сразу). */
+ * #532) на общем PickerSelectField. */
 export function UtilitiesPickerField({
   value,
   onChange,
@@ -294,27 +293,49 @@ export function UtilitiesPickerField({
   readonly value: RentalUtilities;
   readonly onChange: (utilities: RentalUtilities) => void;
 }): JSX.Element {
-  const groups: ReadonlyArray<PickerMenuGroup> = [
-    {
-      options: UTILITIES_OPTIONS.map((option) => ({
-        label: option.label,
-        selected: value === option.value,
-        onSelect: () => onChange(option.value),
-      })),
-    },
-  ];
+  return (
+    <PickerSelectField
+      title="Коммунальные платежи"
+      valueLabel={utilitiesLabel(value)}
+      groups={[
+        {
+          options: UTILITIES_OPTIONS.map((option) => ({
+            label: option.label,
+            selected: value === option.value,
+            onSelect: () => onChange(option.value),
+          })),
+        },
+      ]}
+    />
+  );
+}
 
+/** Поле-селект одной опции — общая анатомия «Input Field» макета
+ * (1270:46821): заголовок над триггер-боксом 56px с выбранной меткой и
+ * шевроном; тап открывает канонный PickerMenu (меню на десктопе, шит на
+ * мобиле), выбор применяется сразу. Общее для коммуналки (#530/#532) и
+ * «За сколько напоминать» (#826). */
+export function PickerSelectField({
+  title,
+  valueLabel,
+  groups,
+}: {
+  readonly title: string;
+  /** Метка выбранной опции в триггере. */
+  readonly valueLabel: string;
+  readonly groups: ReadonlyArray<PickerMenuGroup>;
+}): JSX.Element {
   return (
     <div className="flex w-full flex-col gap-2 font-sans">
-      <FieldTitle title="Коммунальные платежи" />
-      <PickerMenu title="Коммунальные платежи" groups={groups}>
+      <FieldTitle title={title} />
+      <PickerMenu title={title} groups={groups}>
         <button
           type="button"
-          aria-label={`Коммунальные платежи: ${utilitiesLabel(value)}`}
+          aria-label={`${title}: ${valueLabel}`}
           className="group/trigger flex h-14 w-full cursor-pointer items-center rounded-button bg-surface-muted py-0 pl-[18px] pr-2 text-left transition-shadow outline-none hover:shadow-[inset_0_0_0_2px_var(--dl-input-border)]"
         >
           <span className="min-w-0 flex-1 truncate text-base leading-[18px] text-content">
-            {utilitiesLabel(value)}
+            {valueLabel}
           </span>
           {/* Хвостовая иконка — IconButton-primary-анатомия (круг 44 с
               hover-подложкой), как у триггеров дат. */}

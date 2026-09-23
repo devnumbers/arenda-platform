@@ -12,7 +12,9 @@ import type { PaymentReminderOffset } from '../model/types';
  * Row Button + RadioFalse/RadioTrue (как шаг «Категория платежа»,
  * Figma 781:12299). Выбор опционален: начальное состояние — ничего
  * не выбрано; выбранный пункт не снимается повторным тапом (радио).
- * Общий с визардом аренды (#826 — там предвыбран «За 1 день»).
+ * Экран настроек аренды (#826) по своему макету 1428-58757 взял селект
+ * (ReminderPickerField), общий с этим пикером — кортеж опций
+ * PAYMENT_REMINDER_OPTIONS.
  */
 
 export type PaymentReminderPickerProps = {

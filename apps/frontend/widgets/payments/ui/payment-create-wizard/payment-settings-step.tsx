@@ -6,13 +6,9 @@ import { SmallArrowRight } from '@/shared/assets/icons';
 import type { IsoDate, PaymentReminderOffset } from '@/entities/payment';
 import { formatDayMonthWithYear, PaymentReminderPicker } from '@/entities/payment';
 import { useMe } from '@/features/auth';
-import {
-  useEmailNotificationPreferences,
-  useUpdateEmailPreferences,
-} from '@/features/notifications';
+import { EmailNotificationsRow } from '@/features/notifications';
 import type { PaymentDraftType } from '@/features/payments';
-import { notify } from '@/shared/lib/notifications';
-import { CalendarDatePicker, ListRow, Skeleton, Switch } from '@/shared/ui/design';
+import { CalendarDatePicker, ListRow } from '@/shared/ui/design';
 import { WizardHeading } from './wizard-chrome';
 
 /**
@@ -27,10 +23,9 @@ import { WizardHeading } from './wizard-chrome';
  *   об оплате» (автоплатёж уведомит, когда платёж отметят оплаченным),
  *   «Окончание платежа» остаётся с каноническим заголовком.
  *
- * Тумблер «Уведомления на почту» — шоткат глобальной email-настройки
- * категории «Платежи и операции» (GET/PUT /notification-preferences),
- * никаких пер-платёжных override; подпись несёт почту пользователя.
- * Опечатки подписей макетов не воспроизводятся (канон AutoPayRow).
+ * Тумблер «Уведомления на почту» — общий EmailNotificationsRow (шоткат
+ * глобальной email-настройки категории «Платежи и операции», канон
+ * #746); опечатки подписей макетов не воспроизводятся (канон AutoPayRow).
  */
 
 export type PaymentSettingsStepProps = {
@@ -79,7 +74,7 @@ export function PaymentSettingsStep({
             today={today}
             onOpen={() => setPickerOpen(true)}
           />
-          <EmailNotificationsRow caption={emailCaption} />
+          <EmailNotificationsRow title="Уведомления на почту" caption={emailCaption} />
         </>
       ) : (
         <>
@@ -101,7 +96,7 @@ export function PaymentSettingsStep({
             onOpen={() => setPickerOpen(true)}
           />
           <StepSectionHeading title="Уведомления на почту" subtitle={emailCaption} />
-          <EmailNotificationsRow caption={undefined} />
+          <EmailNotificationsRow title="Уведомления на почту" caption={undefined} />
         </>
       )}
 
@@ -160,52 +155,6 @@ function EndDateRow({
         onSelect={onOpen}
         trailing={<SmallArrowRight className="h-6 w-6" aria-hidden />}
       />
-    </div>
-  );
-}
-
-/** Тумблер «Уведомления на почту» — шоткат глобальной email-настройки
- * категории «Платежи и операции»: значение и запись — матрица аккаунта
- * (канон экрана настроек #746). Пока настройки грузятся — скелетон;
- * не загрузились — тумблер выключен и заглушен (шаг не блокируем). */
-function EmailNotificationsRow({
-  caption,
-}: {
-  readonly caption: string | undefined;
-}): JSX.Element {
-  const prefsQuery = useEmailNotificationPreferences();
-  const updatePrefs = useUpdateEmailPreferences();
-  const current = prefsQuery.data;
-
-  const toggle = (value: boolean): void => {
-    if (current === undefined) return;
-    updatePrefs.mutate(
-      { ...current, payments_operations: value },
-      {
-        onError: (error) =>
-          notify.scenarios.profile.notificationPreferencesSaveError(error),
-      },
-    );
-  };
-
-  return (
-    <div className="flex items-center justify-between gap-4 px-6 py-3">
-      <div className="flex min-w-0 flex-col gap-1">
-        <span className="text-base font-medium leading-[18px] text-content">
-          Уведомления на почту
-        </span>
-        <span className="text-sm leading-4 text-content-tertiary">{caption}</span>
-      </div>
-      {prefsQuery.isPending ? (
-        <Skeleton className="h-7 w-16 rounded-pill" />
-      ) : (
-        <Switch
-          checked={current?.payments_operations ?? false}
-          onCheckedChange={(value) => toggle(value === true)}
-          disabled={current === undefined || updatePrefs.isPending}
-          aria-label="Уведомления на почту"
-        />
-      )}
     </div>
   );
 }
