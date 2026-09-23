@@ -135,6 +135,56 @@ func (p *AccessPublisher) NotifyMembershipGranted(
 	return p.publishInvitationRow(ctx, membershipID, propertyID, actorID, recipientID, property, inviter)
 }
 
+// NotifyRoleChanged publishes the «Роль изменена» row (карта #828, тикет
+// #830, решение владельца 23.09): a manager changed the member's role, and
+// the member learns it — the changer the actor, the recipient the member.
+// The role names speak the #692 chart canon's display wording
+// («Редактирование»/«Просмотр»); ChangedAt is the change instant (the
+// membership row's updated_at) the dedup key stamps — every change is its
+// own fact and notifies anew, a repeat publication of the same change
+// inserts nothing.
+func (p *AccessPublisher) NotifyRoleChanged(
+	ctx context.Context,
+	membershipID, propertyID, recipientID, actorID uuid.UUID,
+	role string,
+	changedAt time.Time,
+) error {
+	property, err := p.views.PropertyView(ctx, propertyID)
+	if err != nil {
+		return fmt.Errorf("resolve property view %s: %w", propertyID, err)
+	}
+	actor, err := p.views.UserProfileView(ctx, actorID)
+	if err != nil {
+		return fmt.Errorf("resolve actor profile %s: %w", actorID, err)
+	}
+	return p.pipeline.Publish(ctx, Publication{
+		EventType: domain.EventAccessRoleChanged,
+		DedupKey:  domain.DedupKey("access_role_changed:" + membershipID.String() + ":" + unixDedupStamp(changedAt)),
+		Title:     "Роль изменена",
+		Body: fmt.Sprintf("%s изменил вашу роль в объекте «%s» на «%s»",
+			actor.DisplayName, property.Name, roleChangedLabel(role)),
+		ContextLabel: property.Name,
+		Payload:      accessPayload(propertyID, property, actorID, &actor, membershipID),
+		Recipients:   []uuid.UUID{recipientID},
+		Actor:        actorID,
+	})
+}
+
+// roleChangedLabel renders the membership role in the display wording of the
+// #692 chart canon (the frontend's shared/model/access labels): full_access
+// reads «Редактирование», viewer «Просмотр». Anything else renders the raw
+// role — a defensive default the two catalog roles never hit.
+func roleChangedLabel(role string) string {
+	switch role {
+	case "full_access":
+		return "Редактирование"
+	case "viewer":
+		return "Просмотр"
+	default:
+		return role
+	}
+}
+
 // publishInvitationRow is the №5 row's shared body (the registration
 // activation's active landing #751 and the instant landing #829): the catalog
 // copy verbatim, the inviter naming the text and the actor card, the bare

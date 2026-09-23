@@ -2,6 +2,8 @@ package application
 
 import (
 	"context"
+	"fmt"
+	"strconv"
 	"testing"
 	"time"
 
@@ -440,6 +442,80 @@ func TestNotifyInvitationActivatedDedupStable(t *testing.T) {
 		require.NoError(t, err)
 	}
 	assert.Len(t, h.feed.inserted, 2, "the second publication inserts nothing")
+}
+
+// TestNotifyRoleChanged checks the role-change row (карта #828, тикет #830):
+// the member learns the manager's change with the catalog's verbatim copy —
+// the display role names of the #692 chart canon («Редактирование»/«Просмотр»)
+// — the changer the actor, the change instant keying the row.
+func TestNotifyRoleChanged(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		role      string
+		wantLabel string
+	}{
+		{"full_access", "Редактирование"},
+		{"viewer", "Просмотр"},
+	} {
+		t.Run(tc.role, func(t *testing.T) {
+			t.Parallel()
+			h := newAccessPublisherHarness()
+			ids := newAccessIDs()
+			h.plantProperty(ids.property, "Дом на Рублёвке", "ул. Рублёвское шоссе, 1")
+			h.plantUser(ids.owner, "Пётр Петров", "owner@example.com")
+			changedAt := time.Date(2026, 9, 23, 10, 0, 0, 0, time.UTC)
+
+			err := h.pub.NotifyRoleChanged(
+				t.Context(), ids.membership, ids.property, ids.member, ids.owner,
+				tc.role, changedAt,
+			)
+			require.NoError(t, err)
+			require.Len(t, h.feed.inserted, 1, "the member's row is the only one")
+
+			n := h.feed.inserted[0]
+			assert.Equal(t, domain.EventAccessRoleChanged, n.EventType)
+			assert.Equal(t, domain.CategorySharedAccess, n.Category)
+			assert.Equal(t, ids.member, n.UserID)
+			assert.Equal(t, "Роль изменена", n.Title)
+			assert.Equal(t,
+				fmt.Sprintf("Пётр Петров изменил вашу роль в объекте «Дом на Рублёвке» на «%s»", tc.wantLabel),
+				n.Body)
+			assert.Equal(t, "Дом на Рублёвке", n.ContextLabel)
+			assert.Equal(t,
+				domain.DedupKey("access_role_changed:"+ids.membership.String()+":"+strconv.FormatInt(changedAt.Unix(), 10)),
+				n.DedupKey)
+			require.NotNil(t, n.Payload.Property)
+			assert.Equal(t, ids.property, n.Payload.Property.ID)
+			assert.Equal(t, "Дом на Рублёвке", n.Payload.Property.Name)
+			require.NotNil(t, n.Payload.Actor)
+			assert.Equal(t, ids.owner, n.Payload.Actor.ID)
+			assert.Equal(t, "Пётр Петров", n.Payload.Actor.Name)
+			require.NotNil(t, n.Payload.MembershipID)
+			assert.Equal(t, ids.membership, *n.Payload.MembershipID)
+		})
+	}
+}
+
+// TestNotifyRoleChangedDedupPerChange pins the every-change-notifies rule
+// (тикет #830): each new change instant yields a fresh row; a repeated
+// publication of the same change inserts nothing.
+func TestNotifyRoleChangedDedupPerChange(t *testing.T) {
+	t.Parallel()
+	h := newAccessPublisherHarness()
+	ids := newAccessIDs()
+	h.plantProperty(ids.property, "Дом на Рублёвке", "")
+	h.plantUser(ids.owner, "Пётр Петров", "owner@example.com")
+
+	first := time.Date(2026, 9, 23, 10, 0, 0, 0, time.UTC)
+	second := first.Add(time.Minute)
+	for _, at := range []time.Time{first, second, second} {
+		err := h.pub.NotifyRoleChanged(
+			t.Context(), ids.membership, ids.property, ids.member, ids.owner,
+			"viewer", at,
+		)
+		require.NoError(t, err)
+	}
+	assert.Len(t, h.feed.inserted, 2, "each change inserts a row, the repeat inserts nothing")
 }
 
 // UnixDedupStamp lives in access_publisher.go — the tests assert the exact

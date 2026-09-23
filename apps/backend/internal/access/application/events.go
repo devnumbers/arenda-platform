@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
 )
 
 // The access lifecycle events (карта #734, #751): the single interface the
@@ -96,6 +97,23 @@ type MembershipRevoked struct {
 	ActorID      uuid.UUID
 }
 
+// MembershipRoleChanged reports a manager changing an active member's role
+// (карта #828, #830, решение владельца 23.09 — the «изменение ваших прав»
+// part of the settings matrix). RecipientID is the member whose role changed,
+// ActorID the manager who changed it, Role the new role — the notifications
+// side renders its display wording. ChangedAt is the change instant (the
+// membership row's updated_at) the notification's dedup key stamps: every
+// change is its own fact; a suspended membership's change publishes nothing
+// — the object was already hidden from the recipient (issue #162, T6 canon).
+type MembershipRoleChanged struct {
+	MembershipID uuid.UUID
+	PropertyID   uuid.UUID
+	RecipientID  uuid.UUID
+	ActorID      uuid.UUID
+	Role         domain.Role
+	ChangedAt    time.Time
+}
+
 // MemberLeft reports a member's self-exit (issue #156, T3): OwnerID is the
 // recipient, MemberID the leaving member — the actor of their own exit.
 type MemberLeft struct {
@@ -115,6 +133,7 @@ type AccessEventPublisher interface {
 	PublishMembershipResumed(ctx context.Context, event MembershipResumed) error
 	PublishMembershipRevoked(ctx context.Context, event MembershipRevoked) error
 	PublishMemberLeft(ctx context.Context, event MemberLeft) error
+	PublishMembershipRoleChanged(ctx context.Context, event MembershipRoleChanged) error
 }
 
 // publishAccessEvent runs one publication on the nil-tolerant port: a nil

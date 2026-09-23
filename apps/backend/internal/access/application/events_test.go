@@ -304,9 +304,92 @@ func TestInviteRegisteredUserPublishesGranted(t *testing.T) {
 	}
 }
 
+// TestChangeMemberRolePublishesRoleChanged checks the role-change event
+// (карта #828, #830): the changed member learns the manager's change — the
+// event carries the membership, the property, the recipient, the changing
+// actor, the new role and the change instant (the row's updated_at) the
+// dedup key stamps.
+func TestChangeMemberRolePublishesRoleChanged(t *testing.T) {
+	t.Parallel()
+	f := newEventsFixture()
+	owner, member, property := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	f.linkOwner(owner, property)
+	f.limiter.set(member, 5)
+
+	m, err := f.access.AddMember(t.Context(), owner, property, member, domain.RoleViewer)
+	if err != nil {
+		t.Fatalf("AddMember: %v", err)
+	}
+	f.events.events = nil
+	updated, err := f.access.ChangeMemberRole(t.Context(), owner, property, m.ID, domain.RoleFullAccess)
+	if err != nil {
+		t.Fatalf("ChangeMemberRole: %v", err)
+	}
+	e := f.events.last(t, kindMembershipRoleChanged).role
+	if e.MembershipID != m.ID || e.PropertyID != property || e.RecipientID != member || e.ActorID != owner {
+		t.Errorf("role-changed event = %+v, want membership %s for %s by %s",
+			e, m.ID, member, owner)
+	}
+	if e.Role != domain.RoleFullAccess {
+		t.Errorf("event role = %v, want the new role full_access", e.Role)
+	}
+	if e.ChangedAt.IsZero() || !e.ChangedAt.Equal(updated.UpdatedAt) {
+		t.Errorf("event ChangedAt = %v, want the row's updated_at %v — the dedup key's stamp", e.ChangedAt, updated.UpdatedAt)
+	}
+}
+
+// TestChangeMemberRoleSuspendedPublishesNothing checks the #162 canon on the
+// role change (тикет #830): a suspended membership's role change is silent —
+// the object was already hidden from the recipient.
+func TestChangeMemberRoleSuspendedPublishesNothing(t *testing.T) {
+	t.Parallel()
+	f := newEventsFixture()
+	owner, member, property := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	f.linkOwner(owner, property)
+	f.limiter.set(member, 0)
+
+	m, err := f.access.AddMember(t.Context(), owner, property, member, domain.RoleViewer)
+	if err != nil {
+		t.Fatalf("AddMember: %v", err)
+	}
+	if !m.IsSuspended() {
+		t.Fatalf("member must land suspended, got %v", m.Status)
+	}
+	f.events.events = nil
+	if _, err := f.access.ChangeMemberRole(t.Context(), owner, property, m.ID, domain.RoleFullAccess); err != nil {
+		t.Fatalf("ChangeMemberRole: %v", err)
+	}
+	if got := len(f.events.events); got != 0 {
+		t.Errorf("a suspended membership's role change publishes nothing, got %d events", got)
+	}
+}
+
+// TestChangeMemberRolePublishFailureSwallowed checks the best-effort canon:
+// a publisher failure never fails the committed transition.
+func TestChangeMemberRolePublishFailureSwallowed(t *testing.T) {
+	t.Parallel()
+	f := newEventsFixture()
+	owner, member, property := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	f.linkOwner(owner, property)
+	f.limiter.set(member, 5)
+
+	m, err := f.access.AddMember(t.Context(), owner, property, member, domain.RoleViewer)
+	if err != nil {
+		t.Fatalf("AddMember: %v", err)
+	}
+	f.events.errFor = map[string]error{kindMembershipRoleChanged: errors.New("queue down")}
+	if _, err := f.access.ChangeMemberRole(t.Context(), owner, property, m.ID, domain.RoleFullAccess); err != nil {
+		t.Fatalf("ChangeMemberRole must survive a publish failure, got %v", err)
+	}
+}
+
 // kindMembershipGranted is the granted event's kind at the recording fake —
 // the lookup key of the granted-event assertions and the errFor failure key.
 const kindMembershipGranted = "membership_granted"
+
+// kindMembershipRoleChanged is the role-change event's kind at the recording
+// fake (карта #828, #830) — the same contract as kindMembershipGranted.
+const kindMembershipRoleChanged = "membership_role_changed"
 
 // fakeEventPublisher records the lifecycle events the services publish
 // (карта #734, #751); errFor fails a kind on demand — the publications are
@@ -324,6 +407,7 @@ type recordedEvent struct {
 	revo  *MembershipRevoked
 	left  *MemberLeft
 	grant *MembershipGranted
+	role  *MembershipRoleChanged
 }
 
 func (f *fakeEventPublisher) PublishInvitationActivated(_ context.Context, e InvitationActivated) error {
@@ -371,6 +455,14 @@ func (f *fakeEventPublisher) PublishMembershipGranted(_ context.Context, e Membe
 		return err
 	}
 	f.events = append(f.events, recordedEvent{kind: kindMembershipGranted, grant: &e})
+	return nil
+}
+
+func (f *fakeEventPublisher) PublishMembershipRoleChanged(_ context.Context, e MembershipRoleChanged) error {
+	if err := f.errFor[kindMembershipRoleChanged]; err != nil {
+		return err
+	}
+	f.events = append(f.events, recordedEvent{kind: kindMembershipRoleChanged, role: &e})
 	return nil
 }
 
