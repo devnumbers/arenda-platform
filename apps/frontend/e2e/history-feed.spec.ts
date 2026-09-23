@@ -171,16 +171,22 @@ test('лента из сида: чипы дней, группы «объект �
   await expect(page.getByText('Вчера', { exact: true })).toBeVisible();
   await expect(page.getByText(expectedDayChip(12), { exact: true })).toBeVisible();
 
-  // Шапки объектов — живые названия области; у сидовой квартиры виден и
-  // адрес (вторая строка шапки по макету 2157-56876, из /history/filters).
-  await expect(page.getByRole('heading', { name: 'Квартира на Ленина' }).first()).toBeVisible();
+  // Шапки объектов — живые названия области, кликабельны (страница
+  // объекта); у сидовой квартиры виден и адрес (вторая строка шапки по
+  // макету 2157-56876, из /history/filters).
+  const apartmentHeader = page.getByRole('link', { name: /Квартира на Ленина/ }).first();
+  await expect(apartmentHeader).toBeVisible();
+  await expect(apartmentHeader).toHaveAttribute('href', new RegExp(`/properties/${SEEDED_APARTMENT_PROPERTY_ID}`));
   await expect(page.getByText('Москва, ул. Ленина, 1').first()).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Гараж на Садовой' }).first()).toBeVisible();
+  await expect(page.getByRole('link', { name: /Гараж на Садовой/ }).first()).toBeVisible();
 
   // Шапки актёров — имена в серых карточках; роль экран не показывает
-  // (макет 2157-56876, решение владельца 23.09).
+  // (макет 2157-56876, решение владельца 23.09). Кликабельна шапка
+  // только участника (страница владельца/себя в пространстве участников
+  // не существует — 404), обезличенные записи тоже не ссылки.
   await expect(page.getByRole('heading', { name: 'Иван Иванов' }).first()).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Мария Петрова' }).first()).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Мария Петрова' }).first()).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Иван Иванов' })).toHaveCount(0);
 
   // Строки: сегменты дословно, связанные фрагменты — синие ссылки (#713
   // проложит переходы), иконка основного действия с подписью группы.

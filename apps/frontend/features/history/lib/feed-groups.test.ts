@@ -43,6 +43,7 @@ describe('groupHistoryByDay', () => {
     expect(days).toHaveLength(1);
     expect(days[0]?.label).toBe('Сегодня');
     expect(days[0]?.day).toBe(TODAY);
+    expect(days[0]?.objects[0]?.actors[0]?.actorId).toBe('user-1');
     expect(days[0]?.objects[0]?.actors[0]?.entries.map((e) => e.id)).toEqual(['a', 'b']);
   });
 
@@ -102,5 +103,6 @@ describe('groupHistoryByDay', () => {
       'Бывший участник',
       'Другой удалённый',
     ]);
+    expect(days[0]?.objects[0]?.actors.map((actor) => actor.actorId)).toEqual([null, null]);
   });
 });

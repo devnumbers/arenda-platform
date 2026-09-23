@@ -14,6 +14,9 @@ import { addDays, dateToIsoLocal, type IsoDate } from '@/shared/lib/calendar';
 import { formatDayMonthWithYear } from '@/shared/lib/date-format';
 
 export type HistoryActorGroup = {
+  /** actor_id снимка записи; null — пользователь удалён, запись
+   * обезличена (шапка такой группы не кликабельна). */
+  readonly actorId: string | null;
   /** actor_id, обезличенным записям — ключ по снимку имени. */
   readonly key: string;
   readonly name: string;
@@ -35,6 +38,7 @@ export type HistoryDayGroup = {
 };
 
 type MutableActorGroup = {
+  actorId: string | null;
   key: string;
   name: string;
   role: HistoryActorRole;
@@ -78,7 +82,13 @@ export function groupHistoryByDay(
     const actorKey = entry.actorId ?? `~deleted:${entry.actorName}`;
     let actor = object_.actors.at(-1);
     if (actor === undefined || actor.key !== actorKey) {
-      actor = { key: actorKey, name: entry.actorName, role: entry.actorRole, entries: [] };
+      actor = {
+        actorId: entry.actorId,
+        key: actorKey,
+        name: entry.actorName,
+        role: entry.actorRole,
+        entries: [],
+      };
       object_.actors.push(actor);
     }
     actor.entries.push(entry);
