@@ -33,6 +33,7 @@ type paymentRowFields struct {
 	Since            pgtype.Date
 	EndDate          pgtype.Date
 	AutoPay          bool
+	ReminderOffset   pgtype.Int4
 	PaymentForm      string
 	CategorySlug     pgtype.Text
 	UserCategoryID   pgtype.UUID
@@ -61,7 +62,8 @@ func paymentFieldsFromGetRow(row postgres.GetPaymentByIDRow) paymentRowFields {
 		ID: row.ID, OwnerID: row.OwnerID, PropertyID: row.PropertyID, Type: row.Type,
 		Title: row.Title, AmountKopecks: row.AmountKopecks, Recurrence: row.Recurrence,
 		Since: row.Since, EndDate: row.EndDate, AutoPay: row.AutoPay,
-		PaymentForm: row.PaymentForm, CategorySlug: row.CategorySlug,
+		ReminderOffset: row.ReminderOffsetDays,
+		PaymentForm:    row.PaymentForm, CategorySlug: row.CategorySlug,
 		UserCategoryID:   row.UserCategoryID,
 		UserCategoryName: row.UserCategoryName,
 		CreatedAt:        row.CreatedAt,
@@ -76,7 +78,8 @@ func paymentFieldsFromListRow(row postgres.ListPaymentsByPropertyRow) paymentRow
 		ID: row.ID, OwnerID: row.OwnerID, PropertyID: row.PropertyID, Type: row.Type,
 		Title: row.Title, AmountKopecks: row.AmountKopecks, Recurrence: row.Recurrence,
 		Since: row.Since, EndDate: row.EndDate, AutoPay: row.AutoPay,
-		PaymentForm: row.PaymentForm, CategorySlug: row.CategorySlug,
+		ReminderOffset: row.ReminderOffsetDays,
+		PaymentForm:    row.PaymentForm, CategorySlug: row.CategorySlug,
 		UserCategoryID:   row.UserCategoryID,
 		UserCategoryName: row.UserCategoryName,
 		CreatedAt:        row.CreatedAt,
@@ -104,7 +107,10 @@ func mapPaymentRow(row paymentRowFields) (domain.Payment, error) {
 		Since:         pgconv.DateFromPgtype(row.Since),
 		EndDate:       pgconv.DatePtrFromPgtype(row.EndDate),
 		AutoPay:       row.AutoPay,
-		PaymentForm:   domain.PaymentForm(row.PaymentForm),
+		// The reminder lead time: a NULL column is no reminders (nil). The
+		// tick's rows do not select the column — the tick never reads it.
+		ReminderOffsetDays: pgconv.Int4ToPtr(row.ReminderOffset),
+		PaymentForm:        domain.PaymentForm(row.PaymentForm),
 		Category: domain.CategoryRef{
 			Slug:             pgconv.TextToPtrString(row.CategorySlug),
 			UserCategoryID:   pgconv.UUIDFromPgtypePtr(row.UserCategoryID),

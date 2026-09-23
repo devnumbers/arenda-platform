@@ -25,6 +25,24 @@ func insertScanPayment(t *testing.T, pool *pgxpool.Pool, ownerID, propertyID uui
 	return id
 }
 
+// insertScanReminderPayment adds a payment rule row with the reminder lead
+// time set (карта #822) — the reminder leg sweeps reminder-carrying rules
+// only, auto-pay mode included (решение #823).
+func insertScanReminderPayment(
+	t *testing.T, pool *pgxpool.Pool, ownerID, propertyID uuid.UUID, autoPay bool, reminderOffsetDays int,
+) uuid.UUID {
+	t.Helper()
+	id := uuid.Must(uuid.NewV7())
+	_, err := pool.Exec(context.Background(), `
+		INSERT INTO payments (id, owner_id, property_id, type, title, amount_kopecks, recurrence,
+			since, auto_pay, reminder_offset_days, payment_form, category_slug)
+		VALUES ($1, $2, $3, 'expense', 'Обслуживание', 250000, '{"kind": "monthly"}',
+			'2026-08-01', $4, $5, 'transfer', 'maintenance')`,
+		id, ownerID, propertyID, autoPay, reminderOffsetDays)
+	require.NoError(t, err)
+	return id
+}
+
 // insertScanOperation adds one operation of the rule (or a manual fact when
 // the rule id is nil) at the given date with the given status.
 func insertScanOperation(
@@ -469,4 +487,168 @@ func scheduleTargetsOfProps(targets []application.PaymentScheduleTarget, rules .
 		}
 	}
 	return out
+}
+
+// Нога напоминания (карта #822, #824): planned-вхождения правил с заданным
+// напоминанием, чей «день напоминания» (дата операции − оффал) — ровно
+// «сегодня» пояса. Автоплатёжные включены (решение #823); без напоминания,
+// гашеные, чужой пояс и архив — мимо.
+func TestPaymentScanStore_ListReminderTargets(t *testing.T) {
+	t.Parallel()
+
+	pool := setupPushDB(t)
+	ctx := context.Background()
+
+	msk := createUserInZone(t, pool, "Europe/Moscow")
+	prop := createLiveProperty(t, pool, msk)
+	rule := insertScanReminderPayment(t, pool, msk, prop, false, 3)
+	insertScanOperation(t, pool, msk, prop, rule, "2026-09-22", "planned") // Reminder day = 2026-09-19.
+
+	// Автоплатёжное правило с напоминанием входит (решение #823).
+	autoProp := createLiveProperty(t, pool, msk)
+	autoRule := insertScanReminderPayment(t, pool, msk, autoProp, true, 7)
+	insertScanOperation(t, pool, msk, autoProp, autoRule, "2026-09-26", "planned") // Reminder day = 2026-09-19.
+
+	// Мимо: другой оффал (день напоминания не сегодня), гашеное вхождение,
+	// правило без напоминания.
+	offProp := createLiveProperty(t, pool, msk)
+	offRule := insertScanReminderPayment(t, pool, msk, offProp, false, 7)
+	insertScanOperation(t, pool, msk, offProp, offRule, "2026-09-22", "planned") // Reminder day = 2026-09-15.
+	paidProp := createLiveProperty(t, pool, msk)
+	paidRule := insertScanReminderPayment(t, pool, msk, paidProp, false, 3)
+	insertScanOperation(t, pool, msk, paidProp, paidRule, "2026-09-22", "paid")
+	noneProp := createLiveProperty(t, pool, msk)
+	noneRule := insertScanPayment(t, pool, msk, noneProp, false)
+	insertScanOperation(t, pool, msk, noneProp, noneRule, "2026-09-22", "planned")
+
+	// Чужой пояс и архив — мимо (канон тиков).
+	kgd := createUserInZone(t, pool, "Europe/Kaliningrad")
+	kgdProp := createLiveProperty(t, pool, kgd)
+	kgdRule := insertScanReminderPayment(t, pool, kgd, kgdProp, false, 3)
+	insertScanOperation(t, pool, kgd, kgdProp, kgdRule, "2026-09-22", "planned")
+	archivedProp := createLiveProperty(t, pool, msk)
+	archivedRule := insertScanReminderPayment(t, pool, msk, archivedProp, false, 3)
+	insertScanOperation(t, pool, msk, archivedProp, archivedRule, "2026-09-22", "planned")
+	archiveProperty(t, pool, msk, archivedProp)
+
+	store := NewPaymentScanStore(pool)
+	targets, err := store.ListReminderTargets(ctx, "Europe/Moscow", time.Date(2026, 9, 19, 0, 0, 0, 0, time.UTC))
+	require.NoError(t, err)
+	got := paymentTargetsOfProps(targets, prop, autoProp, offProp, paidProp, noneProp, archivedProp)
+	require.Len(t, got, 2)
+
+	dates := map[uuid.UUID]time.Time{}
+	for _, target := range got {
+		dates[target.PaymentID] = target.DueDate
+	}
+	assert.Equal(t, time.Date(2026, 9, 22, 0, 0, 0, 0, time.UTC), dates[rule])
+	assert.Equal(t, time.Date(2026, 9, 26, 0, 0, 0, 0, time.UTC), dates[autoRule])
+}
+
+// Букинг ноги напоминания: граница — полночь «дата − оффал» по поясу
+// (Московская полночь 19-го = 2026-09-18T21:00Z), окно (from, until].
+func TestPaymentScanStore_ListScheduledReminderTargets(t *testing.T) {
+	t.Parallel()
+
+	pool := setupPushDB(t)
+	ctx := context.Background()
+
+	msk := createUserInZone(t, pool, "Europe/Moscow")
+	prop := createLiveProperty(t, pool, msk)
+	rule := insertScanReminderPayment(t, pool, msk, prop, false, 3)
+	insertScanOperation(t, pool, msk, prop, rule, "2026-09-22", "planned") // Boundary 2026-09-18T21:00Z.
+
+	// Автоплатёжное — включено; другой оффал — граница вне окна; без
+	// напоминания — мимо.
+	autoProp := createLiveProperty(t, pool, msk)
+	autoRule := insertScanReminderPayment(t, pool, msk, autoProp, true, 1)
+	insertScanOperation(t, pool, msk, autoProp, autoRule, "2026-09-21", "planned") // Boundary 2026-09-19T21:00Z.
+	offProp := createLiveProperty(t, pool, msk)
+	offRule := insertScanReminderPayment(t, pool, msk, offProp, false, 7)
+	insertScanOperation(t, pool, msk, offProp, offRule, "2026-09-22", "planned") // Boundary 2026-09-15T21:00Z.
+	noneProp := createLiveProperty(t, pool, msk)
+	noneRule := insertScanPayment(t, pool, msk, noneProp, false)
+	insertScanOperation(t, pool, msk, noneProp, noneRule, "2026-09-22", "planned")
+
+	store := NewPaymentScanStore(pool)
+	targets, err := store.ListScheduledReminderTargets(ctx,
+		time.Date(2026, 9, 18, 20, 0, 0, 0, time.UTC),
+		time.Date(2026, 9, 19, 21, 0, 0, 0, time.UTC))
+	require.NoError(t, err)
+
+	got := scheduleTargetsOfProps(targets, rule, autoRule, offRule, noneRule)
+	require.Len(t, got, 2)
+	fire := map[uuid.UUID]time.Time{}
+	dates := map[uuid.UUID]time.Time{}
+	for _, target := range got {
+		fire[target.PaymentID] = target.FireAt
+		dates[target.PaymentID] = target.DueDate
+	}
+	assert.True(t, fire[rule].Equal(time.Date(2026, 9, 18, 21, 0, 0, 0, time.UTC)),
+		"the job wakes at 00:00 of (operation date − 3) in the owner's zone")
+	assert.Equal(t, time.Date(2026, 9, 22, 0, 0, 0, 0, time.UTC), dates[rule])
+	assert.True(t, fire[autoRule].Equal(time.Date(2026, 9, 19, 21, 0, 0, 0, time.UTC)))
+}
+
+// Разрешение в момент доставки (карта #822): planned-вхождение правила с
+// напоминанием, чей ТЕКУЩИЙ день напоминания — «сегодня» пояса, отвечает
+// live; смена оффала после букинга, гашеное, архив и ролловер — нет.
+func TestPaymentScanStore_GetScheduledReminderPayment(t *testing.T) {
+	t.Parallel()
+
+	pool := setupPushDB(t)
+	ctx := context.Background()
+
+	msk := createUserInZone(t, pool, "Europe/Moscow")
+	prop := createLiveProperty(t, pool, msk)
+	rule := insertScanReminderPayment(t, pool, msk, prop, false, 3)
+	insertScanOperation(t, pool, msk, prop, rule, "2026-09-22", "planned")
+
+	// Мёртвые состояния: гашеное вхождение; правило, чей оффал сменён после
+	// букинга (3 → 7: день напоминания уехал на 15-е); архив.
+	paidProp := createLiveProperty(t, pool, msk)
+	paidRule := insertScanReminderPayment(t, pool, msk, paidProp, false, 3)
+	insertScanOperation(t, pool, msk, paidProp, paidRule, "2026-09-22", "paid")
+	movedProp := createLiveProperty(t, pool, msk)
+	movedRule := insertScanReminderPayment(t, pool, msk, movedProp, false, 3)
+	insertScanOperation(t, pool, msk, movedProp, movedRule, "2026-09-22", "planned")
+	_, err := pool.Exec(ctx, `UPDATE payments SET reminder_offset_days = 7 WHERE id = $1`, movedRule)
+	require.NoError(t, err)
+	archivedProp := createLiveProperty(t, pool, msk)
+	archivedRule := insertScanReminderPayment(t, pool, msk, archivedProp, false, 3)
+	insertScanOperation(t, pool, msk, archivedProp, archivedRule, "2026-09-22", "planned")
+	archiveProperty(t, pool, msk, archivedProp)
+
+	store := NewPaymentScanStore(pool)
+	// Московская полночь 19-го только что пробила.
+	now := time.Date(2026, 9, 18, 21, 0, 30, 0, time.UTC)
+	opDate := time.Date(2026, 9, 22, 0, 0, 0, 0, time.UTC)
+
+	target, live, err := store.GetScheduledReminderPayment(ctx, rule, opDate, now)
+	require.NoError(t, err)
+	require.True(t, live)
+	assert.Equal(t, rule, target.PaymentID)
+	assert.Equal(t, opDate, target.DueDate)
+	assert.Equal(t, "Обслуживание", target.Title)
+	assert.Equal(t, int64(250000), target.AmountKopecks)
+	assert.Equal(t, prop, target.PropertyID)
+	assert.Equal(t, msk, target.OwnerID)
+
+	_, live, err = store.GetScheduledReminderPayment(ctx, paidRule, opDate, now)
+	require.NoError(t, err)
+	assert.False(t, live, "paid")
+
+	_, live, err = store.GetScheduledReminderPayment(ctx, movedRule, opDate, now)
+	require.NoError(t, err)
+	assert.False(t, live, "the lead time changed after the booking")
+
+	_, live, err = store.GetScheduledReminderPayment(ctx, archivedRule, opDate, now)
+	require.NoError(t, err)
+	assert.False(t, live, "archived property")
+
+	// Ролловер: сегодня зоны уже не день напоминания.
+	_, live, err = store.GetScheduledReminderPayment(ctx, rule, opDate,
+		time.Date(2026, 9, 19, 21, 0, 30, 0, time.UTC))
+	require.NoError(t, err)
+	assert.False(t, live, "the job woke after the reminder day rolled over")
 }

@@ -384,6 +384,9 @@ func createRentalCommand(body openapi.RentalCreateRequest) (rentalsapp.CreateRen
 		Comment:        stringPtrFromWire(body.Comment),
 		AutoPay:        body.AutoPay,
 	}
+	if body.ReminderOffsetDays != nil {
+		cmd.ReminderOffsetDays = new(int(*body.ReminderOffsetDays))
+	}
 	if body.DepositKopecks != nil {
 		cmd.DepositKopecks = body.DepositKopecks
 	}
@@ -586,6 +589,10 @@ func rentalResponse(view rentalsapp.RentalView) (openapi.RentalResponse, error) 
 		PaymentDay:    paymentDay,
 		AutoPay:       view.Payment.AutoPay,
 		NextPayment:   nextPaymentToWire(view.NextPayment, view.Today),
+	}
+	if view.Payment.ReminderOffsetDays != nil {
+		offset := openapi.RentalPaymentViewReminderOffsetDays(*view.Payment.ReminderOffsetDays)
+		response.RentPayment.ReminderOffsetDays = &offset
 	}
 	return response, nil
 }

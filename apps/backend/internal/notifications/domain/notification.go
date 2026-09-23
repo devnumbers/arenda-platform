@@ -25,6 +25,7 @@ const (
 	EventRentalCompleted              EventType = "rental_completed"
 	EventPaymentDue                   EventType = "payment_due"
 	EventPaymentOverdue               EventType = "payment_overdue"
+	EventPaymentReminder              EventType = "payment_reminder"
 	EventTaskOverdue                  EventType = "task_overdue"
 	EventPropertyInvitation           EventType = "property_invitation"
 	EventInvitationAccepted           EventType = "invitation_accepted"
@@ -48,9 +49,12 @@ var feedCatalog = map[EventType]struct {
 	category Category
 	actions  []ActionKind
 }{
-	EventRentalCompleted:              {CategoryRental, []ActionKind{ActionRentalExtend, ActionRentalComplete}},
-	EventPaymentDue:                   {CategoryPaymentsOperations, []ActionKind{ActionOpenPayment}},
-	EventPaymentOverdue:               {CategoryPaymentsOperations, []ActionKind{ActionOpenPayment}},
+	EventRentalCompleted: {CategoryRental, []ActionKind{ActionRentalExtend, ActionRentalComplete}},
+	EventPaymentDue:      {CategoryPaymentsOperations, []ActionKind{ActionOpenPayment}},
+	EventPaymentOverdue:  {CategoryPaymentsOperations, []ActionKind{ActionOpenPayment}},
+	// «Напоминание о платеже» (карта #822, #824): та же категория и кнопка,
+	// что у платёжной пары решения #737 — переход на страницу правила.
+	EventPaymentReminder:              {CategoryPaymentsOperations, []ActionKind{ActionOpenPayment}},
 	EventTaskOverdue:                  {CategoryTasks, []ActionKind{ActionOpenTask}},
 	EventPropertyInvitation:           {CategorySharedAccess, []ActionKind{ActionOpenProperty}},
 	EventInvitationAccepted:           {CategorySharedAccess, []ActionKind{ActionOpenPropertyMembers}},

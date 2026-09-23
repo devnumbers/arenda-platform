@@ -61,6 +61,16 @@ func TestValidateRule(t *testing.T) {
 		{"endDate before since", func(r *domain.Payment) { r.EndDate = new(r.Since.AddDate(0, 0, -1)) }, true},
 		{"endDate equal to since", func(r *domain.Payment) { r.EndDate = new(r.Since) }, false},
 		{"endDate after since", func(r *domain.Payment) { r.EndDate = &endDate }, false},
+		// Напоминание о платеже (карта #822, #824): nil = напоминаний нет,
+		// допустимы 1/3/7 — остальное некорректный ввод.
+		{"reminder offset absent", nil, false},
+		{"reminder offset 1 day", func(r *domain.Payment) { r.ReminderOffsetDays = new(1) }, false},
+		{"reminder offset 3 days", func(r *domain.Payment) { r.ReminderOffsetDays = new(3) }, false},
+		{"reminder offset 7 days", func(r *domain.Payment) { r.ReminderOffsetDays = new(7) }, false},
+		{"reminder offset zero", func(r *domain.Payment) { r.ReminderOffsetDays = new(0) }, true},
+		{"reminder offset 2 days", func(r *domain.Payment) { r.ReminderOffsetDays = new(2) }, true},
+		{"reminder offset 8 days", func(r *domain.Payment) { r.ReminderOffsetDays = new(8) }, true},
+		{"reminder offset negative", func(r *domain.Payment) { r.ReminderOffsetDays = new(-3) }, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

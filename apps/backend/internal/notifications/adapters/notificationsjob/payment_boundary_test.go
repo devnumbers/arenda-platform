@@ -22,6 +22,7 @@ import (
 type fakePaymentBoundaryDeliverer struct {
 	due       []paymentBoundaryCall
 	overdue   []paymentBoundaryCall
+	reminder  []paymentBoundaryCall
 	errForDue error
 }
 
@@ -41,6 +42,11 @@ func (f *fakePaymentBoundaryDeliverer) DeliverPaymentDue(ctx context.Context, pa
 
 func (f *fakePaymentBoundaryDeliverer) DeliverPaymentOverdue(ctx context.Context, paymentID uuid.UUID, date, now time.Time) error {
 	f.overdue = append(f.overdue, paymentBoundaryCall{paymentID, date, now})
+	return nil
+}
+
+func (f *fakePaymentBoundaryDeliverer) DeliverPaymentReminder(ctx context.Context, paymentID uuid.UUID, date, now time.Time) error {
+	f.reminder = append(f.reminder, paymentBoundaryCall{paymentID, date, now})
 	return nil
 }
 
@@ -74,6 +80,12 @@ func TestPaymentBoundaryWorkersWork(t *testing.T) {
 	require.Len(t, deliverer.overdue, 1)
 	assert.Equal(t, date, deliverer.overdue[0].date)
 
+	reminderJob := &river.Job[PaymentReminderArgs]{Args: PaymentReminderArgs{PaymentID: paymentID, DueDate: date}}
+	require.NoError(t, NewPaymentReminderWorker(deliverer, stubClock{now}, nil).Work(ctx, reminderJob))
+	require.Len(t, deliverer.reminder, 1)
+	assert.Equal(t, paymentID, deliverer.reminder[0].paymentID)
+	assert.Equal(t, now, deliverer.reminder[0].now)
+
 	broken := &fakePaymentBoundaryDeliverer{errForDue: errors.New("feed write failed")}
 	assert.Error(t, NewPaymentDueWorker(broken, stubClock{now}, nil).Work(ctx, dueJob))
 }
@@ -87,12 +99,14 @@ func TestDeferredPaymentBoundaryDelivererRequiresBinding(t *testing.T) {
 	bridge := &DeferredPaymentBoundaryDeliverer{}
 	require.Error(t, bridge.DeliverPaymentDue(ctx, uuid.Must(uuid.NewV7()), time.Now(), time.Now()))
 	require.Error(t, bridge.DeliverPaymentOverdue(ctx, uuid.Must(uuid.NewV7()), time.Now(), time.Now()))
+	require.Error(t, bridge.DeliverPaymentReminder(ctx, uuid.Must(uuid.NewV7()), time.Now(), time.Now()))
 
 	bridge.Bind(&fakePaymentBoundaryDeliverer{})
 	paymentID := uuid.Must(uuid.NewV7())
 	date := time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC)
 	assert.NoError(t, bridge.DeliverPaymentDue(ctx, paymentID, date, date))
 	assert.NoError(t, bridge.DeliverPaymentOverdue(ctx, paymentID, date, date))
+	assert.NoError(t, bridge.DeliverPaymentReminder(ctx, paymentID, date, date))
 }
 
 // The scheduler is the application port over the River client: a repeat ask
@@ -136,6 +150,8 @@ func TestPaymentBoundarySchedulerScheduleIsIdempotent(t *testing.T) {
 	require.NoError(t, scheduler.SchedulePaymentDue(ctx, paymentID, date, fireAt), "the repeat ask re-books nothing")
 	require.NoError(t, scheduler.SchedulePaymentOverdue(ctx, paymentID, date, fireAt))
 	require.NoError(t, scheduler.SchedulePaymentOverdue(ctx, paymentID, date, fireAt))
+	require.NoError(t, scheduler.SchedulePaymentReminder(ctx, paymentID, date, fireAt))
+	require.NoError(t, scheduler.SchedulePaymentReminder(ctx, paymentID, date, fireAt), "the repeat ask re-books nothing")
 
 	// One job per leg, each on the payments queue at its boundary instant.
 	due := listPaymentBoundaryJobs(t, pool, PaymentDueArgs{}.Kind(), paymentID)
@@ -146,6 +162,10 @@ func TestPaymentBoundarySchedulerScheduleIsIdempotent(t *testing.T) {
 	require.Len(t, overdue, 1)
 	assert.Equal(t, QueuePayments, overdue[0].queue)
 	assert.True(t, overdue[0].scheduledAt.Equal(fireAt))
+	reminder := listPaymentBoundaryJobs(t, pool, PaymentReminderArgs{}.Kind(), paymentID)
+	require.Len(t, reminder, 1)
+	assert.Equal(t, QueuePayments, reminder[0].queue)
+	assert.True(t, reminder[0].scheduledAt.Equal(fireAt))
 
 	// A different operation date books its own jobs.
 	other := date.AddDate(0, 1, 0)

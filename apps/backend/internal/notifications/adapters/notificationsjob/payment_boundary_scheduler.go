@@ -66,3 +66,19 @@ func (s *PaymentBoundaryScheduler) SchedulePaymentOverdue(ctx context.Context, p
 	}
 	return nil
 }
+
+// SchedulePaymentReminder books the operation's «Напоминание о платеже» job
+// at the given boundary instant (карта #822): 00:00 of (operation date −
+// lead time) in the owner's timezone.
+func (s *PaymentBoundaryScheduler) SchedulePaymentReminder(ctx context.Context, paymentID uuid.UUID, date, fireAt time.Time) error {
+	_, err := s.client.Insert(ctx, PaymentReminderArgs{PaymentID: paymentID, DueDate: date}, &river.InsertOpts{
+		Queue:       QueuePayments,
+		ScheduledAt: fireAt,
+		MaxAttempts: boundaryJobMaxAttempts,
+		UniqueOpts:  jobUniqueOpts,
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}

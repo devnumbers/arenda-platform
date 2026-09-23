@@ -75,9 +75,20 @@ type PaymentScanSource interface {
 	ListScheduledDueTargets(ctx context.Context, from, until time.Time) ([]PaymentScheduleTarget, error)
 	// ListScheduledOverdueTargets lists the upcoming operations whose
 	// overdue boundary — 00:00 of the day after the operation date in the
-	// owner's timezone — falls in the window (from, until]; the booking
-	// list of the overdue leg (issue #776), auto-pay rules included.
+	// owner's timezone — falls in the window (from, until]; the booking list
+	// of the overdue leg (issue #776), auto-pay rules included.
 	ListScheduledOverdueTargets(ctx context.Context, from, until time.Time) ([]PaymentScheduleTarget, error)
+	// ListReminderTargets lists the zone's planned operations of rules with
+	// a reminder set whose reminder day — the operation date minus the
+	// rule's lead time (1/3/7) — is exactly the zone's today (карта #822,
+	// #824): auto-pay rules included, the reminder lives independently of
+	// auto_pay (решение владельца, #823).
+	ListReminderTargets(ctx context.Context, zone string, today time.Time) ([]PaymentScanTarget, error)
+	// ListScheduledReminderTargets lists the upcoming operations of rules
+	// with a reminder set whose reminder boundary — 00:00 of (operation
+	// date − lead time) in the owner's timezone — falls in the window
+	// (from, until]; the booking list of the reminder leg (карта #822).
+	ListScheduledReminderTargets(ctx context.Context, from, until time.Time) ([]PaymentScheduleTarget, error)
 	// GetScheduledDuePayment reloads one operation at its due boundary —
 	// the due job's delivery-time resolution (issue #776). The live flag is
 	// false when the leg's conditions no longer hold as of now: the
@@ -90,6 +101,14 @@ type PaymentScanSource interface {
 	// occurrence of the rule on a non-archived property, or the operation
 	// date is not strictly before the zone's today as of now.
 	GetScheduledOverduePayment(ctx context.Context, paymentID uuid.UUID, date, now time.Time) (PaymentScanTarget, bool, error)
+	// GetScheduledReminderPayment reloads one operation at its reminder
+	// boundary (карта #822) — the reminder job's delivery-time resolution.
+	// The live flag is false when the operation is no longer a planned
+	// occurrence of a reminder-carrying rule on a non-archived property, or
+	// the rule's reminder day (date − its current lead time) is no longer
+	// the zone's today — a lead time changed after the booking sends the
+	// stale job away quietly, the new boundary books its own job.
+	GetScheduledReminderPayment(ctx context.Context, paymentID uuid.UUID, date, now time.Time) (PaymentScanTarget, bool, error)
 }
 
 // PaymentBoundaryScheduler books a leg's boundary job on the delivery queue
@@ -103,6 +122,10 @@ type PaymentBoundaryScheduler interface {
 	// SchedulePaymentOverdue books the «Платёж просрочен» job at the
 	// boundary's instant: 00:00 of the day after the operation date.
 	SchedulePaymentOverdue(ctx context.Context, paymentID uuid.UUID, date, fireAt time.Time) error
+	// SchedulePaymentReminder books the «Напоминание о платеже» job at the
+	// boundary's instant: 00:00 of (operation date − lead time) in the
+	// owner's timezone (карта #822).
+	SchedulePaymentReminder(ctx context.Context, paymentID uuid.UUID, date, fireAt time.Time) error
 }
 
 // PaymentBoundaryDeliverer is the boundary jobs' call into the publisher:
@@ -112,6 +135,7 @@ type PaymentBoundaryScheduler interface {
 type PaymentBoundaryDeliverer interface {
 	DeliverPaymentDue(ctx context.Context, paymentID uuid.UUID, date, now time.Time) error
 	DeliverPaymentOverdue(ctx context.Context, paymentID uuid.UUID, date, now time.Time) error
+	DeliverPaymentReminder(ctx context.Context, paymentID uuid.UUID, date, now time.Time) error
 }
 
 // PaymentsPublisher is the payments events' publisher (issue #749) on the
@@ -180,6 +204,7 @@ func (p *PaymentsPublisher) scheduleBoundaries(ctx context.Context, now time.Tim
 		diagnos string
 	}{
 		{p.source.ListScheduledDueTargets, p.scheduler.SchedulePaymentDue, "due"},
+		{p.source.ListScheduledReminderTargets, p.scheduler.SchedulePaymentReminder, "reminder"},
 		{p.source.ListScheduledOverdueTargets, p.scheduler.SchedulePaymentOverdue, "overdue"},
 	} {
 		targets, err := leg.list(ctx, now, now.Add(scheduledHorizon))
@@ -198,29 +223,31 @@ func (p *PaymentsPublisher) scheduleBoundaries(ctx context.Context, now time.Tim
 }
 
 // sweepZones is the zone sweep (ADR 0048 p.3): one today per owner timezone,
-// the due leg before the overdue one, every target published.
+// every leg's targets published, in catalog order — due, reminder (карта
+// #822), overdue.
 func (p *PaymentsPublisher) sweepZones(ctx context.Context, now time.Time) error {
 	return forEachZone(ctx, p.zones, now, "payments", func(zone string, today time.Time) error {
-		// A broken leg's list is isolated — the other leg still runs.
+		// A broken leg's list is isolated — the other legs still run.
 		var errs []error
-		due, err := p.source.ListDueTargets(ctx, zone, today)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("list due payments of zone %s: %w", zone, err))
-		}
-		overdue, err := p.source.ListOverdueTargets(ctx, zone, today)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("list overdue payments of zone %s: %w", zone, err))
-		}
-		for _, target := range due {
-			if err := p.publish(ctx, domain.EventPaymentDue, target); err != nil {
-				errs = append(errs, fmt.Errorf("publish due payment %s of zone %s: %w",
-					target.PaymentID, zone, err))
+		for _, leg := range []struct {
+			list    func(context.Context, string, time.Time) ([]PaymentScanTarget, error)
+			event   domain.EventType
+			diagnos string
+		}{
+			{p.source.ListDueTargets, domain.EventPaymentDue, "due"},
+			{p.source.ListReminderTargets, domain.EventPaymentReminder, "reminder"},
+			{p.source.ListOverdueTargets, domain.EventPaymentOverdue, "overdue"},
+		} {
+			targets, err := leg.list(ctx, zone, today)
+			if err != nil {
+				errs = append(errs, fmt.Errorf("list %s payments of zone %s: %w", leg.diagnos, zone, err))
+				continue
 			}
-		}
-		for _, target := range overdue {
-			if err := p.publish(ctx, domain.EventPaymentOverdue, target); err != nil {
-				errs = append(errs, fmt.Errorf("publish overdue payment %s of zone %s: %w",
-					target.PaymentID, zone, err))
+			for _, target := range targets {
+				if err := p.publish(ctx, leg.event, target); err != nil {
+					errs = append(errs, fmt.Errorf("publish %s payment %s of zone %s: %w",
+						leg.diagnos, target.PaymentID, zone, err))
+				}
 			}
 		}
 		return errors.Join(errs...)
@@ -259,6 +286,22 @@ func (p *PaymentsPublisher) DeliverPaymentOverdue(ctx context.Context, paymentID
 	return p.publish(ctx, domain.EventPaymentOverdue, target)
 }
 
+// DeliverPaymentReminder is the reminder boundary job's half (карта #822,
+// #824): reload the operation as of the wake-up and publish if it still
+// lives on its reminder day — planned, on a non-archived property, the
+// rule's current lead time still landing the reminder day on today. A
+// lead time changed since the booking sends the stale job away quietly.
+func (p *PaymentsPublisher) DeliverPaymentReminder(ctx context.Context, paymentID uuid.UUID, date, now time.Time) error {
+	target, live, err := p.source.GetScheduledReminderPayment(ctx, paymentID, date, now)
+	if err != nil {
+		return fmt.Errorf("load reminder payment %s: %w", paymentID, err)
+	}
+	if !live {
+		return nil
+	}
+	return p.publish(ctx, domain.EventPaymentReminder, target)
+}
+
 // publish fans one operation's event out to the owner and the active
 // members. The dedup key pins the rule and the operation date it fired for —
 // the repeat publication of the same rule and date inserts nothing. A system
@@ -292,24 +335,25 @@ func (p *PaymentsPublisher) publish(ctx context.Context, eventType domain.EventT
 }
 
 // paymentsTitles is the catalog's copy per event type (решение #737,
-// типы №2–№3): the titles verbatim.
+// типы №2–№3; напоминание — карта #822): the titles verbatim.
 var paymentsTitles = map[domain.EventType]string{
-	domain.EventPaymentDue:     "Оплатите платёж",
-	domain.EventPaymentOverdue: "Платёж просрочен",
+	domain.EventPaymentDue:      "Оплатите платёж",
+	domain.EventPaymentOverdue:  "Платёж просрочен",
+	domain.EventPaymentReminder: "Напоминание о платеже",
 }
 
 // paymentsBody renders the catalog's body template (решение #737, verbatim):
-// the due leg asks for the payment on its day, the overdue one — the day
-// after. The name is the rule's, the amount and the date are the
-// operation's.
+// the due and reminder legs ask for the payment ahead of its day, the
+// overdue one — the day after. The name is the rule's, the amount and the
+// date are the operation's.
 func paymentsBody(eventType domain.EventType, target PaymentScanTarget) string {
 	name := fmt.Sprintf("Платёж «%s» по объекту «%s»", target.Title, target.PropertyName)
 	amount := formatAmountKopecks(target.AmountKopecks)
 	date := formatPaymentDueDate(target.DueDate)
-	if eventType == domain.EventPaymentDue {
-		return fmt.Sprintf("%s: %s. Срок оплаты: %s", name, amount, date)
+	if eventType == domain.EventPaymentOverdue {
+		return fmt.Sprintf("%s просрочен: %s. Срок оплаты был %s", name, amount, date)
 	}
-	return fmt.Sprintf("%s просрочен: %s. Срок оплаты был %s", name, amount, date)
+	return fmt.Sprintf("%s: %s. Срок оплаты: %s", name, amount, date)
 }
 
 // paymentsDedupKey builds the scan's dedup key (словарь издателей,

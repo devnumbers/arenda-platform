@@ -21,18 +21,45 @@ const MaxAmountKopecks = 1_000_000_000
 // copy limit, not a byte limit.
 const MaxTitleLength = 255
 
+// ReminderOffsets are the reminder lead times the product speaks (карта
+// #822): 1, 3 or 7 days before an occurrence — the same vocabulary the
+// schema CHECK enforces durably.
+var ReminderOffsets = [3]int{1, 3, 7}
+
+// isValidReminderOffset reports whether the reminder lead time is one of the
+// contract's values; nil (no reminders) is always valid.
+func isValidReminderOffset(offset *int) bool {
+	if offset == nil {
+		return true
+	}
+	for _, valid := range ReminderOffsets {
+		if *offset == valid {
+			return true
+		}
+	}
+	return false
+}
+
+// IsValidReminderOffset is the exported read of the reminder contract for
+// the sibling contexts that write payment rules through their own seams (the
+// rentals' managed payment): nil or 1/3/7 is valid, anything else is not.
+func IsValidReminderOffset(offset *int) bool {
+	return isValidReminderOffset(offset)
+}
+
 // CreatePaymentCommand is the validated create payload of a payment rule.
 // The since date is not part of it: the server sets it to the owner's today
 // (ADR 0048), and it never changes afterwards.
 type CreatePaymentCommand struct {
-	Type          domain.PaymentType
-	Title         string
-	AmountKopecks int64
-	Recurrence    domain.Recurrence
-	PaymentForm   domain.PaymentForm
-	CategorySlug  string
-	EndDate       *time.Time
-	AutoPay       bool
+	Type               domain.PaymentType
+	Title              string
+	AmountKopecks      int64
+	Recurrence         domain.Recurrence
+	PaymentForm        domain.PaymentForm
+	CategorySlug       string
+	EndDate            *time.Time
+	AutoPay            bool
+	ReminderOffsetDays *int
 }
 
 // EndDateUpdate is the PATCH resolution of endDate: Value nil clears the end
@@ -54,6 +81,15 @@ type UpdatePaymentCommand struct {
 	// non-nil one applies the EndDateUpdate (set or clear).
 	EndDate *EndDateUpdate
 	AutoPay *bool
+	// ReminderOffsetDays is tri-state the same way: omit keeps, a set value
+	// applies (1/3/7), a clear turns reminders off.
+	ReminderOffsetDays *ReminderOffsetUpdate
+}
+
+// ReminderOffsetUpdate is the PATCH resolution of reminderOffsetDays: Value
+// nil clears the reminders, 1/3/7 sets the lead time.
+type ReminderOffsetUpdate struct {
+	Value *int
 }
 
 // PaymentService orchestrates the payment rule use cases (ticket #457,
@@ -108,17 +144,18 @@ func (s *PaymentService) CreatePayment(
 	return runMutation(s.conveyor(), ctx, actor, propertyID, uuid.Nil, s.writeGate,
 		func(ctx context.Context, stores *txStores, scope uuid.UUID, _ domain.Payment, today time.Time) (mutationOutcome[domain.Payment], error) {
 			draft := domain.Payment{
-				OwnerID:       scope,
-				PropertyID:    propertyID,
-				Type:          cmd.Type,
-				Title:         strings.TrimSpace(cmd.Title),
-				AmountKopecks: cmd.AmountKopecks,
-				Recurrence:    cmd.Recurrence,
-				Since:         today,
-				EndDate:       cmd.EndDate,
-				AutoPay:       cmd.AutoPay,
-				PaymentForm:   cmd.PaymentForm,
-				Category:      domain.CategoryRef{Slug: &cmd.CategorySlug},
+				OwnerID:            scope,
+				PropertyID:         propertyID,
+				Type:               cmd.Type,
+				Title:              strings.TrimSpace(cmd.Title),
+				AmountKopecks:      cmd.AmountKopecks,
+				Recurrence:         cmd.Recurrence,
+				Since:              today,
+				EndDate:            cmd.EndDate,
+				AutoPay:            cmd.AutoPay,
+				ReminderOffsetDays: cmd.ReminderOffsetDays,
+				PaymentForm:        cmd.PaymentForm,
+				Category:           domain.CategoryRef{Slug: &cmd.CategorySlug},
 			}
 			if err := validateRule(draft); err != nil {
 				return mutationOutcome[domain.Payment]{}, err
@@ -350,6 +387,9 @@ func validateRule(rule domain.Payment) error {
 	if rule.EndDate != nil && rule.EndDate.Before(rule.Since) {
 		return ErrInvalidInput
 	}
+	if !isValidReminderOffset(rule.ReminderOffsetDays) {
+		return ErrInvalidInput
+	}
 	return nil
 }
 
@@ -398,6 +438,9 @@ func applyUpdate(payment *domain.Payment, cmd UpdatePaymentCommand) {
 	if cmd.AutoPay != nil {
 		payment.AutoPay = *cmd.AutoPay
 	}
+	if cmd.ReminderOffsetDays != nil {
+		payment.ReminderOffsetDays = cmd.ReminderOffsetDays.Value
+	}
 }
 
 // updatedFields lists the field names a command changes; the audit context
@@ -427,6 +470,9 @@ func updatedFields(cmd UpdatePaymentCommand) []string {
 	}
 	if cmd.AutoPay != nil {
 		fields = append(fields, "auto_pay")
+	}
+	if cmd.ReminderOffsetDays != nil {
+		fields = append(fields, "reminder_offset_days")
 	}
 	return fields
 }

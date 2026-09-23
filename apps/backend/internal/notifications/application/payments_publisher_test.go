@@ -17,6 +17,10 @@ import (
 const (
 	scanPropertyName    = "Квартира на Ленина"
 	scanPropertyAddress = "г. Москва, ул. Ленина, 1"
+	// The fixture rule title and the shared due/reminder body the due-leg
+	// and reminder-leg tests assert.
+	scanRentTitle        = "Аренда квартиры"
+	scanRentReminderBody = "Платёж «Аренда квартиры» по объекту «Квартира на Ленина»: 2\u00a0500 ₽. Срок оплаты: 20 сентября"
 )
 
 // fakePaymentSource is the payments scan source stub: per zone it answers the
@@ -27,16 +31,19 @@ const (
 type fakePaymentSource struct {
 	due     map[string][]PaymentScanTarget
 	overdue map[string][]PaymentScanTarget
-	asked   []string
-	recips  map[uuid.UUID][]uuid.UUID
-	recErr  map[uuid.UUID]error
+	// Reminder holds the reminder leg's sweep targets per zone (карта #822).
+	reminder map[string][]PaymentScanTarget
+	asked    []string
+	recips   map[uuid.UUID][]uuid.UUID
+	recErr   map[uuid.UUID]error
 	// SchedDue and schedOverdue answer the boundary-booking windows;
 	// schedAsked records the "leg|from|until" questions in order. Live
 	// answers the boundary jobs' reloads keyed "leg|rule|date".
-	schedDue     []PaymentScheduleTarget
-	schedOverdue []PaymentScheduleTarget
-	schedAsked   []string
-	live         map[string]PaymentScanTarget
+	schedDue      []PaymentScheduleTarget
+	schedOverdue  []PaymentScheduleTarget
+	schedReminder []PaymentScheduleTarget
+	schedAsked    []string
+	live          map[string]PaymentScanTarget
 }
 
 func (f *fakePaymentSource) ListDueTargets(ctx context.Context, zone string, today time.Time) ([]PaymentScanTarget, error) {
@@ -49,6 +56,11 @@ func (f *fakePaymentSource) ListOverdueTargets(ctx context.Context, zone string,
 	return f.overdue[zone], nil
 }
 
+func (f *fakePaymentSource) ListReminderTargets(ctx context.Context, zone string, today time.Time) ([]PaymentScanTarget, error) {
+	f.asked = append(f.asked, "reminder|"+zone+"|"+today.Format("2006-01-02"))
+	return f.reminder[zone], nil
+}
+
 func (f *fakePaymentSource) ListScheduledDueTargets(ctx context.Context, from, until time.Time) ([]PaymentScheduleTarget, error) {
 	f.schedAsked = append(f.schedAsked, "due|"+from.Format(time.RFC3339)+"|"+until.Format(time.RFC3339))
 	return f.schedDue, nil
@@ -57,6 +69,11 @@ func (f *fakePaymentSource) ListScheduledDueTargets(ctx context.Context, from, u
 func (f *fakePaymentSource) ListScheduledOverdueTargets(ctx context.Context, from, until time.Time) ([]PaymentScheduleTarget, error) {
 	f.schedAsked = append(f.schedAsked, "overdue|"+from.Format(time.RFC3339)+"|"+until.Format(time.RFC3339))
 	return f.schedOverdue, nil
+}
+
+func (f *fakePaymentSource) ListScheduledReminderTargets(ctx context.Context, from, until time.Time) ([]PaymentScheduleTarget, error) {
+	f.schedAsked = append(f.schedAsked, "reminder|"+from.Format(time.RFC3339)+"|"+until.Format(time.RFC3339))
+	return f.schedReminder, nil
 }
 
 func (f *fakePaymentSource) GetScheduledDuePayment(
@@ -70,6 +87,13 @@ func (f *fakePaymentSource) GetScheduledOverduePayment(
 	ctx context.Context, paymentID uuid.UUID, date, now time.Time,
 ) (PaymentScanTarget, bool, error) {
 	target, ok := f.live["overdue|"+paymentID.String()+"|"+date.Format("2006-01-02")]
+	return target, ok, nil
+}
+
+func (f *fakePaymentSource) GetScheduledReminderPayment(
+	ctx context.Context, paymentID uuid.UUID, date, now time.Time,
+) (PaymentScanTarget, bool, error) {
+	target, ok := f.live["reminder|"+paymentID.String()+"|"+date.Format("2006-01-02")]
 	return target, ok, nil
 }
 
@@ -91,6 +115,10 @@ func (f *fakePaymentScheduler) SchedulePaymentDue(ctx context.Context, paymentID
 
 func (f *fakePaymentScheduler) SchedulePaymentOverdue(ctx context.Context, paymentID uuid.UUID, date, fireAt time.Time) error {
 	return f.book("overdue", paymentID, date, fireAt)
+}
+
+func (f *fakePaymentScheduler) SchedulePaymentReminder(ctx context.Context, paymentID uuid.UUID, date, fireAt time.Time) error {
+	return f.book("reminder", paymentID, date, fireAt)
 }
 
 func (f *fakePaymentScheduler) book(leg string, paymentID uuid.UUID, date, fireAt time.Time) error {
@@ -134,11 +162,12 @@ func newPaymentScanHarness(zones []ScanZone) *paymentScanHarness {
 		queue:    queue,
 		zones:    &fakeScanZones{zones: zones},
 		source: &fakePaymentSource{
-			due:     map[string][]PaymentScanTarget{},
-			overdue: map[string][]PaymentScanTarget{},
-			live:    map[string]PaymentScanTarget{},
-			recips:  map[uuid.UUID][]uuid.UUID{},
-			recErr:  map[uuid.UUID]error{},
+			due:      map[string][]PaymentScanTarget{},
+			overdue:  map[string][]PaymentScanTarget{},
+			reminder: map[string][]PaymentScanTarget{},
+			live:     map[string]PaymentScanTarget{},
+			recips:   map[uuid.UUID][]uuid.UUID{},
+			recErr:   map[uuid.UUID]error{},
 		},
 		scheduler: &fakePaymentScheduler{
 			booked: map[string]time.Time{},
@@ -177,7 +206,7 @@ func TestPaymentsPublisher_PublishesDuePayment(t *testing.T) {
 	target := PaymentScanTarget{
 		PaymentID:       rule,
 		DueDate:         time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC),
-		Title:           "Аренда квартиры",
+		Title:           scanRentTitle,
 		AmountKopecks:   250000,
 		PropertyID:      uuid.Must(uuid.NewV7()),
 		PropertyName:    scanPropertyName,
@@ -203,7 +232,7 @@ func TestPaymentsPublisher_PublishesDuePayment(t *testing.T) {
 		assert.Equal(t, domain.CategoryPaymentsOperations, n.Category)
 		assert.Equal(t, "Оплатите платёж", n.Title)
 		assert.Equal(t,
-			"Платёж «Аренда квартиры» по объекту «Квартира на Ленина»: 2\u00a0500 ₽. Срок оплаты: 20 сентября",
+			scanRentReminderBody,
 			n.Body)
 		assert.Equal(t, "Квартира на Ленина", n.ContextLabel)
 		// The dedup key pins the rule and the operation date it fired for.
@@ -307,13 +336,15 @@ func TestPaymentsPublisher_EachZoneSweptWithItsOwnToday(t *testing.T) {
 	p := NewPaymentsPublisher(h.pipeline, h.zones, h.source, h.scheduler)
 	require.NoError(t, p.RunZoneScans(context.Background(), scanNow))
 
-	// Both legs ask per zone; Moscow's local calendar has already rolled to
-	// the 20th, Kaliningrad's has not — the sweep must not share one today
+	// All three legs ask per zone; Moscow's local calendar has already rolled
+	// to the 20th, Kaliningrad's has not — the sweep must not share one today
 	// across zones.
 	assert.ElementsMatch(t, []string{
 		"due|Europe/Moscow|2026-09-20",
+		"reminder|Europe/Moscow|2026-09-20",
 		"overdue|Europe/Moscow|2026-09-20",
 		"due|Europe/Kaliningrad|2026-09-19",
+		"reminder|Europe/Kaliningrad|2026-09-19",
 		"overdue|Europe/Kaliningrad|2026-09-19",
 	}, h.source.asked)
 }
@@ -398,6 +429,7 @@ func TestPaymentsPublisher_SchedulesUpcomingBoundaries(t *testing.T) {
 	// Both legs asked for the same window: (now, now+48h].
 	assert.ElementsMatch(t, []string{
 		"due|" + scanNow.Format(time.RFC3339) + "|" + scanNow.Add(scheduledHorizon).Format(time.RFC3339),
+		"reminder|" + scanNow.Format(time.RFC3339) + "|" + scanNow.Add(scheduledHorizon).Format(time.RFC3339),
 		"overdue|" + scanNow.Format(time.RFC3339) + "|" + scanNow.Add(scheduledHorizon).Format(time.RFC3339),
 	}, h.source.schedAsked)
 	// Each leg books its own kind at the boundary instant it was given.
@@ -438,7 +470,7 @@ func TestPaymentsPublisher_DeliverPaymentDuePublishes(t *testing.T) {
 	target := PaymentScanTarget{
 		PaymentID:       rule,
 		DueDate:         time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC),
-		Title:           "Аренда квартиры",
+		Title:           scanRentTitle,
 		AmountKopecks:   250000,
 		PropertyID:      uuid.Must(uuid.NewV7()),
 		PropertyName:    scanPropertyName,
@@ -462,7 +494,7 @@ func TestPaymentsPublisher_DeliverPaymentDuePublishes(t *testing.T) {
 		assert.Equal(t, domain.EventPaymentDue, n.EventType)
 		assert.Equal(t, "Оплатите платёж", n.Title)
 		assert.Equal(t,
-			"Платёж «Аренда квартиры» по объекту «Квартира на Ленина»: 2\u00a0500 ₽. Срок оплаты: 20 сентября",
+			scanRentReminderBody,
 			n.Body)
 		assert.Equal(t, domain.DedupKey("payment_due:"+rule.String()+":2026-09-20"), n.DedupKey)
 	}
@@ -508,6 +540,109 @@ func TestPaymentsPublisher_DeliverPaymentOverduePublishes(t *testing.T) {
 		"Платёж «Интернет» по объекту «Квартира на Ленина» просрочен: 1\u00a0000,50 ₽. Срок оплаты был 19 сентября",
 		n.Body)
 	assert.Equal(t, domain.DedupKey("payment_overdue:"+rule.String()+":2026-09-19"), n.DedupKey)
+}
+
+// Напоминание о платеже (карта #822, #824): третья нога свипа — за N дней
+// до даты операции. Копия — форма due-ноги (факт срока), тайтл свой; дедуп —
+// (правило, дата операции), автоплатёж ногу не исключает.
+func TestPaymentsPublisher_PublishesReminderPayment(t *testing.T) {
+	t.Parallel()
+
+	h := newPaymentScanHarness([]ScanZone{{Timezone: zoneMSK}})
+	rule := uuid.Must(uuid.NewV7())
+	target := PaymentScanTarget{
+		PaymentID:       rule,
+		DueDate:         time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC),
+		Title:           scanRentTitle,
+		AmountKopecks:   250000,
+		PropertyID:      uuid.Must(uuid.NewV7()),
+		PropertyName:    scanPropertyName,
+		PropertyAddress: scanPropertyAddress,
+		OwnerID:         uuid.Must(uuid.NewV7()),
+	}
+	h.source.reminder[zoneMSK] = []PaymentScanTarget{target}
+	member := uuid.Must(uuid.NewV7())
+	h.source.recips[target.PropertyID] = []uuid.UUID{member}
+
+	p := NewPaymentsPublisher(h.pipeline, h.zones, h.source, h.scheduler)
+	require.NoError(t, p.RunZoneScans(context.Background(), scanNow))
+
+	require.Len(t, h.feed.inserted, 2)
+	recipients := []uuid.UUID{h.feed.inserted[0].UserID, h.feed.inserted[1].UserID}
+	assert.ElementsMatch(t, []uuid.UUID{target.OwnerID, member}, recipients)
+	for _, n := range h.feed.inserted {
+		assert.Equal(t, domain.EventPaymentReminder, n.EventType)
+		assert.Equal(t, domain.CategoryPaymentsOperations, n.Category)
+		assert.Equal(t, "Напоминание о платеже", n.Title)
+		assert.Equal(t,
+			scanRentReminderBody,
+			n.Body)
+		assert.Equal(t, "Квартира на Ленина", n.ContextLabel)
+		// Дедуп — (правило, дата операции): одно напоминание на вхождение.
+		assert.Equal(t, domain.DedupKey("payment_reminder:"+rule.String()+":2026-09-20"), n.DedupKey)
+		require.NotNil(t, n.Payload.PaymentID)
+		assert.Equal(t, rule, *n.Payload.PaymentID)
+		require.NotNil(t, n.Payload.PaymentDate)
+	}
+	assert.Len(t, h.queue.emails, 2)
+	assert.Len(t, h.queue.pushes, 2)
+}
+
+// Букинг ноги напоминания: тот же горизонт, своя граница (полночь «дата − N»
+// — инстант считает SQL-нога), повторный запрос возвращает стоящую джобу.
+func TestPaymentsPublisher_SchedulesReminderBoundaries(t *testing.T) {
+	t.Parallel()
+
+	h := newPaymentScanHarness([]ScanZone{{Timezone: zoneMSK}})
+	rule := uuid.Must(uuid.NewV7())
+	h.source.schedReminder = []PaymentScheduleTarget{
+		{
+			PaymentID: rule, DueDate: time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC),
+			FireAt: time.Date(2026, 9, 17, 21, 0, 0, 0, time.UTC),
+		},
+	}
+
+	p := NewPaymentsPublisher(h.pipeline, h.zones, h.source, h.scheduler)
+	require.NoError(t, p.RunZoneScans(context.Background(), scanNow))
+
+	// Все три ноги спрашивают одно окно (now, now+48h].
+	assert.Contains(t, h.source.schedAsked,
+		"reminder|"+scanNow.Format(time.RFC3339)+"|"+scanNow.Add(scheduledHorizon).Format(time.RFC3339))
+	assert.Equal(t, time.Date(2026, 9, 17, 21, 0, 0, 0, time.UTC),
+		h.scheduler.booked[paymentBookingKey("reminder", rule, time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC))])
+}
+
+// Пробуждение reminder-джобы: живое planned-вхождение с напоминанием
+// публикует ту же строку, что и свип; мёртвое — вежливый no-op.
+func TestPaymentsPublisher_DeliverPaymentReminderPublishes(t *testing.T) {
+	t.Parallel()
+
+	h := newPaymentScanHarness([]ScanZone{{Timezone: zoneMSK}})
+	rule := uuid.Must(uuid.NewV7())
+	target := dueTarget(rule, time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC), "Интернет")
+	target.AmountKopecks = 100050
+	h.source.live["reminder|"+rule.String()+"|2026-09-20"] = target
+
+	p := NewPaymentsPublisher(h.pipeline, h.zones, h.source, h.scheduler)
+	require.NoError(t, p.DeliverPaymentReminder(context.Background(), rule,
+		time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC), scanNow))
+
+	require.Len(t, h.feed.inserted, 1)
+	n := h.feed.inserted[0]
+	assert.Equal(t, domain.EventPaymentReminder, n.EventType)
+	assert.Equal(t, "Напоминание о платеже", n.Title)
+	assert.Equal(t, domain.DedupKey("payment_reminder:"+rule.String()+":2026-09-20"), n.DedupKey)
+}
+
+func TestPaymentsPublisher_DeliverPaymentReminderNoOpWhenDead(t *testing.T) {
+	t.Parallel()
+
+	h := newPaymentScanHarness([]ScanZone{{Timezone: zoneMSK}})
+	p := NewPaymentsPublisher(h.pipeline, h.zones, h.source, h.scheduler)
+	require.NoError(t, p.DeliverPaymentReminder(context.Background(), uuid.Must(uuid.NewV7()),
+		time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC), scanNow))
+	assert.Empty(t, h.feed.inserted)
+	assert.Empty(t, h.queue.emails)
 }
 
 func TestFormatAmountKopecks(t *testing.T) {

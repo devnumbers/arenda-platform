@@ -391,6 +391,79 @@ WHERE pay.id = $1::uuid
   AND p.status IN ('active', 'maintenance')
   AND o.date < ($3::timestamptz AT TIME ZONE u.timezone)::date;
 
+-- name: ListPaymentReminderTargets :many
+-- One zone's reminder-day operations as of the zone's today (карта #822,
+-- #824): planned, on rules with a reminder set, whose reminder day — the
+-- operation date minus the rule's lead time (1/3/7) — is exactly today.
+-- Auto-pay rules included: напоминание живёт независимо от auto_pay
+-- (решение владельца, #823). The dedup key (rule, operation date) keeps
+-- the occurrence single even if the lead time changes after firing.
+SELECT pay.id AS payment_id,
+       o.date,
+       pay.title,
+       o.amount_kopecks,
+       p.id AS property_id,
+       p.name AS property_name,
+       p.address AS property_address,
+       o.owner_id
+FROM operations o
+JOIN payments pay ON pay.id = o.payment_id
+JOIN properties p ON p.id = o.property_id
+JOIN users u ON u.id = o.owner_id
+WHERE u.timezone = $1
+  AND pay.reminder_offset_days IS NOT NULL
+  AND (o.date - pay.reminder_offset_days) = $2::date
+  AND o.status = 'planned'
+  AND p.status IN ('active', 'maintenance')
+ORDER BY o.id;
+
+-- name: ListPaymentScheduledReminderTargets :many
+-- The payments scan's booking list of the reminder leg (карта #822, #824):
+-- the planned operations of rules with a reminder set whose reminder
+-- boundary — 00:00 of (operation date − lead time) read in the owner's
+-- timezone — falls in the window (from, until]. Auto-pay rules included
+-- (the reminder is independent of auto_pay); the wall-clock midnight is
+-- the boundary, a DST day rolls it with the wall clock.
+SELECT pay.id AS payment_id,
+       o.date,
+       CAST(((o.date - pay.reminder_offset_days)::timestamp AT TIME ZONE u.timezone) AS timestamptz) AS fire_at
+FROM operations o
+JOIN payments pay ON pay.id = o.payment_id
+JOIN properties p ON p.id = o.property_id
+JOIN users u ON u.id = o.owner_id
+WHERE o.status = 'planned'
+  AND pay.reminder_offset_days IS NOT NULL
+  AND p.status IN ('active', 'maintenance')
+  AND ((o.date - pay.reminder_offset_days)::timestamp AT TIME ZONE u.timezone) > $1::timestamptz
+  AND ((o.date - pay.reminder_offset_days)::timestamp AT TIME ZONE u.timezone) <= $2::timestamptz
+ORDER BY o.id;
+
+-- name: GetScheduledReminderPayment :one
+-- The reminder boundary job's delivery-time resolution (карта #822, #824):
+-- the operation as it stands at its reminder midnight. Planned, on a
+-- non-archived property, and the rule's CURRENT lead time still landing the
+-- reminder day on the zone's today ($3) — a lead time changed after the
+-- booking (or a job awake after the day rolled over) answers no row, the
+-- job finishes without publishing; the new boundary books its own job.
+SELECT pay.id AS payment_id,
+       o.date,
+       pay.title,
+       o.amount_kopecks,
+       p.id AS property_id,
+       p.name AS property_name,
+       p.address AS property_address,
+       o.owner_id
+FROM operations o
+JOIN payments pay ON pay.id = o.payment_id
+JOIN properties p ON p.id = o.property_id
+JOIN users u ON u.id = o.owner_id
+WHERE pay.id = $1::uuid
+  AND o.date = $2::date
+  AND o.status = 'planned'
+  AND pay.reminder_offset_days IS NOT NULL
+  AND (o.date - pay.reminder_offset_days) = ($3::timestamptz AT TIME ZONE u.timezone)::date
+  AND p.status IN ('active', 'maintenance');
+
 -- name: ListTaskScanZones :many
 -- The tasks scan's sweep targets (карта #734, #750; ADR 0048 p.3): the
 -- distinct owner timezones having active dated tasks on non-archived
