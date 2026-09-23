@@ -370,6 +370,31 @@ func TestPlanPaymentTick_YearlyEditDoesNotReMaterializePaidYears(t *testing.T) {
 	assert.Equal(t, "2027-06-01", plan.KeepFuture.Format(time.DateOnly))
 }
 
+func TestPlanPaymentTick_MultiDayRuleClaimedMonthStaysAtOldDates(t *testing.T) {
+	t.Parallel()
+	// A rule with two obligations per month (1st and 15th) re-dated to
+	// (1st and 20th): a claimed month keeps its standing rows — the paid
+	// 1st and the overdue 15th — and gains no re-dated duplicates; the
+	// first unclaimed slot (September 1st) becomes the future planned.
+	rec := mustMonthly(t, 1, 20)
+	p := rule(t, rec, "2026-07-01", nil)
+	byDate := map[time.Time]OperationStatus{
+		d("2026-07-01"): StatusPaid,
+		d("2026-07-15"): StatusPlanned,
+		d("2026-08-01"): StatusPaid,
+	}
+
+	plan := PlanPaymentTick(p, d(dayT0), byDate)
+	assert.Empty(t, dates(plan.Materialize),
+		"July and August are claimed — no re-dated second obligations")
+	assert.Equal(t, StatusPlanned, byDate[d("2026-07-15")], "the standing debt is untouched")
+	require.NotNil(t, plan.KeepFuture)
+	assert.Equal(t, "2026-09-01", plan.KeepFuture.Format(time.DateOnly),
+		"the first unclaimed slot is the future")
+	require.NotNil(t, plan.InsertFuture)
+	assert.Equal(t, "2026-09-01", plan.InsertFuture.Format(time.DateOnly))
+}
+
 func TestNewMaterializedOperation_SnapshotsRule(t *testing.T) {
 	t.Parallel()
 	rec := mustMonthly(t, 15)
