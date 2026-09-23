@@ -53,3 +53,21 @@ export function loopNearestRow(
   else if (delta < -cycleLength / 2) delta += cycleLength;
   return row + delta;
 }
+
+/** Ряд ленты для плавной синхронизации при ретаргете колеса. Смена длины
+ * цикла (граничный год режет месяц-колесо) ре-анкорит на якорную копию:
+ * физическая позиция мерялась прежней лентой и могла остаться за её
+ * пределами — кламп посадил бы на чужой логический ряд. Клампы не нужны:
+ * якорь в середине ленты, |переезд| ≤ полцикла по контракту
+ * loopNearestRow, цель всегда в ленте. */
+export function loopSyncRow(
+  currentRow: number,
+  valueIndex: number,
+  cycleLength: number,
+  prevCycleLength: number,
+): number {
+  if (prevCycleLength !== cycleLength) {
+    return WHEEL_LOOP_ANCHOR * cycleLength + valueIndex;
+  }
+  return loopNearestRow(currentRow, valueIndex, cycleLength);
+}

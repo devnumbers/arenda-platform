@@ -13,9 +13,9 @@ import { cn } from '@/shared/lib/cn';
 import {
   WHEEL_LOOP_ANCHOR,
   isAnchorRow,
-  loopNearestRow,
   loopRecenterRows,
   loopRowCount,
+  loopSyncRow,
   modRows,
 } from './wheel-loop';
 
@@ -140,6 +140,10 @@ export function WheelPicker({
   // Первая установка колеса — мгновенная (как у iOS: выбранная строка уже
   // в центре при открытии), дальнейшие синхронизации — плавные.
   const instantRef = useRef(true);
+  // Длина цикла, под которую позиционирована лента: отличает ретаргет
+  // внутри ленты (ближайший представитель) от смены самой ленты
+  // (ре-анкор, loopSyncRow).
+  const loopLengthRef = useRef(items.length);
   // Длина списка, о крае которого колесо уже сообщило (onNearEnd /
   // onNearStart): защита от повторных вызовов на каждом скролл-событии,
   // пока родитель удлиняет. Только без loop.
@@ -167,7 +171,8 @@ export function WheelPicker({
   // индекс для типографики приходит из событий скролла этого прокрута.
   // В loop первая установка садится на якорную копию (середина ленты —
   // максимальный запас пробега в обе стороны), дальше — ближайший
-  // представитель значения.
+  // представитель значения; смена длины цикла — ре-анкор на якорную
+  // копию: прежняя позиция мерялась чужой лентой.
   useEffect(() => {
     const list = listRef.current;
     if (list === null) return;
@@ -177,9 +182,16 @@ export function WheelPicker({
       if (instantRef.current) {
         targetRow = WHEEL_LOOP_ANCHOR * items.length + valueIndex;
       } else {
-        const currentRow = rowFromScrollTop(list, maxRow);
-        targetRow = Math.max(0, Math.min(loopNearestRow(currentRow, valueIndex, items.length), maxRow));
+        targetRow = loopSyncRow(
+          rowFromScrollTop(list, maxRow),
+          valueIndex,
+          items.length,
+          loopLengthRef.current,
+        );
       }
+      // Лента переезжает под новую длину — фиксируем её до следующей
+      // синхронизации, чтобы та знала, откуда ре-анкориться.
+      loopLengthRef.current = items.length;
     }
     if (Math.round(list.scrollTop / WHEEL_ROW_HEIGHT) !== targetRow) {
       list.scrollTo({

@@ -6,6 +6,7 @@ import {
   loopNearestRow,
   loopRecenterRows,
   loopRowCount,
+  loopSyncRow,
   modRows,
 } from './wheel-loop';
 
@@ -104,6 +105,58 @@ describe('wheel-loop', () => {
           const target = loopNearestRow(row, logical, n);
           expect(modRows(target, n)).toBe(logical);
           expect(Math.abs(target - row)).toBeLessThanOrEqual(n / 2);
+        }
+      }
+    }
+  });
+
+  it('loopSyncRow — смена длины цикла ре-анкорит на якорную копию (граничный год режет месяц-колесо)', () => {
+    // 12 → 4: позиция 123 — это кламп физического ряда в новую ленту
+    // (loopRowCount(4) − 1); ближайший представитель Sep = 124 вне ленты,
+    // кламп оставил бы 123 = Dec — молчаливая подмена черновика месяца.
+    expect(loopSyncRow(123, 0, 4, 12)).toBe(WHEEL_LOOP_ANCHOR * 4);
+    // 4 → 12: подъём обратно тоже садит на якорную копию, а не на ближнюю.
+    expect(loopSyncRow(50, 8, 12, 4)).toBe(WHEEL_LOOP_ANCHOR * 12 + 8);
+  });
+
+  // Полный перебор ~250 тыс. комбинаций идёт дольше дефолтных 5 с vitest
+  // под нагрузкой параллельного сьюта — явный таймаут, масштаб не режем.
+  it(
+    'loopSyncRow — при смене длины цель всегда в новой ленте и сохраняет логический индекс',
+    () => {
+      // Только пары n ≠ m: при равных длинах окно вне ленты невозможно
+      // (инвариант середины ленты держит речентр), кламп-класс не возникает.
+      const lengths = [1, 2, 4, 9, 12, 24, 60];
+      for (const n of lengths) {
+        for (const m of lengths) {
+          if (n === m) continue;
+          for (let row = 0; row < loopRowCount(n); row += 1) {
+            for (let logical = 0; logical < m; logical += 1) {
+              const target = loopSyncRow(row, logical, m, n);
+              expect(modRows(target, m), `n=${n}→m=${m} row=${row} logical=${logical}`).toBe(
+                logical,
+              );
+              expect(target).toBeGreaterThanOrEqual(0);
+              expect(target).toBeLessThanOrEqual(loopRowCount(m) - 1);
+            }
+          }
+        }
+      }
+    },
+    15000,
+  );
+
+  it('loopSyncRow без смены длины — это loopNearestRow', () => {
+    // Ряды из середины ленты: ближайший представитель не выходит за края,
+    // поэтому шов совпадает с loopNearestRow дословно.
+    for (const n of [1, 2, 4, 9, 12, 24, 60]) {
+      for (const logical of [0, Math.floor(n / 2), n - 1]) {
+        for (const row of [
+          WHEEL_LOOP_ANCHOR * n,
+          WHEEL_LOOP_ANCHOR * n + n - 1,
+          loopRowCount(n) - 1 - n,
+        ]) {
+          expect(loopSyncRow(row, logical, n, n)).toBe(loopNearestRow(row, logical, n));
         }
       }
     }
