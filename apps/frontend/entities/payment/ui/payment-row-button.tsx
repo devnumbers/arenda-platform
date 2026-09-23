@@ -41,6 +41,9 @@ export type PaymentRowButtonProps = {
    * описание-маска остаётся серым (макет 1877-68603). */
   readonly valueClassName?: string;
   readonly onSelect?: () => void;
+  /** aria-pressed строки-переключателя (выделение в правке избранного
+   * #814: клик/зажатие выделяет строку). Без onSelect не имеет смысла. */
+  readonly pressed?: boolean;
   readonly disabled?: boolean;
   readonly className?: string;
 };
@@ -60,6 +63,7 @@ export function PaymentRowButton({
   signedAmount = false,
   valueClassName,
   onSelect,
+  pressed,
   disabled = false,
   className,
 }: PaymentRowButtonProps): JSX.Element {
@@ -68,6 +72,7 @@ export function PaymentRowButton({
   return (
     <div
       {...activatorProps}
+      aria-pressed={pressed}
       className={cn(
         'group/row flex w-full cursor-pointer items-center py-2 outline-none',
         'transition-all focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white',

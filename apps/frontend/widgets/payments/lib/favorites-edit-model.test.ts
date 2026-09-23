@@ -4,7 +4,9 @@ import {
   favoriteDragAnnouncement,
   hasFavoritesEdits,
   moveFavorite,
-  remainingFavoriteIds,
+  selectFavoriteSelection,
+  selectedFavoritesTitle,
+  toggleFavoriteSelection,
 } from './favorites-edit-model';
 
 const payment = (id: string): GlobalPayment => ({
@@ -48,31 +50,53 @@ describe('moveFavorite', () => {
   });
 });
 
-describe('remainingFavoriteIds', () => {
-  it('убирает помеченных и сохраняет порядок черновика', () => {
-    const order = [payment('a'), payment('b'), payment('c')];
-    expect(remainingFavoriteIds(order, new Set(['b']))).toEqual(['a', 'c']);
-  });
-
-  it('без помеченных — весь черновик', () => {
-    const order = [payment('b'), payment('a')];
-    expect(remainingFavoriteIds(order, new Set())).toEqual(['b', 'a']);
-  });
-});
-
 describe('hasFavoritesEdits', () => {
   const initial = [payment('a'), payment('b'), payment('c')];
 
   it('нет изменений — false', () => {
-    expect(hasFavoritesEdits(initial, initial, new Set())).toBe(false);
+    expect(hasFavoritesEdits(initial, initial)).toBe(false);
   });
 
   it('перестановка — true', () => {
-    expect(hasFavoritesEdits(moveFavorite(initial, 0, 2), initial, new Set())).toBe(true);
+    expect(hasFavoritesEdits(moveFavorite(initial, 0, 2), initial)).toBe(true);
+  });
+});
+
+describe('selectedFavoritesTitle', () => {
+  it.each([
+    [1, 'Выбрано 1 платёж'],
+    [2, 'Выбрано 2 платежа'],
+    [3, 'Выбрано 3 платежа'],
+    [5, 'Выбрано 5 платежей'],
+    [11, 'Выбрано 11 платежей'],
+    [21, 'Выбрано 21 платёж'],
+    [22, 'Выбрано 22 платежа'],
+    [25, 'Выбрано 25 платежей'],
+  ])('%i — «%s»', (count, expected) => {
+    expect(selectedFavoritesTitle(count)).toBe(expected);
+  });
+});
+
+describe('toggleFavoriteSelection', () => {
+  it('не выбран — добавляет', () => {
+    expect(toggleFavoriteSelection(new Set(['a']), 'b')).toEqual(new Set(['a', 'b']));
   });
 
-  it('одна пометка на удаление — true', () => {
-    expect(hasFavoritesEdits(initial, initial, new Set(['b']))).toBe(true);
+  it('выбран — убирает', () => {
+    expect(toggleFavoriteSelection(new Set(['a', 'b']), 'a')).toEqual(new Set(['b']));
+  });
+
+  it('не мутирует исходное множество', () => {
+    const ids = new Set(['a']);
+    toggleFavoriteSelection(ids, 'a');
+    expect(ids).toEqual(new Set(['a']));
+  });
+});
+
+describe('selectFavoriteSelection', () => {
+  it('добавляет, не снимая уже выбранных', () => {
+    expect(selectFavoriteSelection(new Set(['a']), 'b')).toEqual(new Set(['a', 'b']));
+    expect(selectFavoriteSelection(new Set(['a', 'b']), 'a')).toEqual(new Set(['a', 'b']));
   });
 });
 

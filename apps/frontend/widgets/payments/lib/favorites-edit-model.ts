@@ -1,13 +1,15 @@
 /**
  * Модель режима правки «Избранных платежей» (карта #573, тикет #579;
- * макеты 693:5903/889:25522): черновик порядка для ручного dnd (#576)
- * плюс пометки на удаление (крест-звезда строки). Сохранение — PUT
- * favorite=false по каждому помеченному и полный список оставшихся id в
- * порядке черновика (PUT /payments/favorites/order — полное замещение,
- * плотные 1-based позиции строит сервер).
+ * макеты 693:5903/889:25522): черновик порядка для dnd (#813) плюс
+ * выделение для удаления (#814 — клик на десктопе, long-press и тапы на
+ * таче, trash в навбаре). Сохранение порядка — полный список оставшихся
+ * id в порядке черновика (PUT /payments/favorites/order — полное
+ * замещение, плотные 1-based позиции строит сервер); удаление выбранных —
+ * PUT favorite=false по каждому (тикет #814).
  */
 
 import type { GlobalPayment } from '@/entities/payment';
+import { pluralize } from '@/shared/lib/pluralize';
 
 /** Перестановка в черновике: элемент с позиции `from` встаёт на `to`,
  * соседи сдвигаются. Невалидные индексы (вне списка) возвращают исходный
@@ -29,12 +31,37 @@ export function moveFavorite(
   return next;
 }
 
-/** idы сохраняемого порядка: черновик без помеченных на удаление. */
-export function remainingFavoriteIds(
-  order: ReadonlyArray<GlobalPayment>,
-  removedIds: ReadonlySet<string>,
-): string[] {
-  return order.filter((item) => !removedIds.has(item.id)).map((item) => item.id);
+/** Заголовок навбара при активном выделении (макет 954-51409: «Выбрано
+ * 3 платежа»): безличное «Выбрано» + склонение «платёж/платежа/платежей»
+ * по правилам русского числительного. */
+export function selectedFavoritesTitle(count: number): string {
+  return `Выбрано ${count} ${pluralize(count, 'платёж', 'платежа', 'платежей')}`;
+}
+
+/** Переключение выделения строки (тап после включения режима выбора,
+ * клик на десктопе). */
+export function toggleFavoriteSelection(
+  ids: ReadonlySet<string>,
+  id: string,
+): ReadonlySet<string> {
+  const next = new Set(ids);
+  if (next.has(id)) {
+    next.delete(id);
+  } else {
+    next.add(id);
+  }
+  return next;
+}
+
+/** Выделить строку, не снимая уже выбранных (long-press выделяет —
+ * никогда не развыделяет, тикет #814). */
+export function selectFavoriteSelection(
+  ids: ReadonlySet<string>,
+  id: string,
+): ReadonlySet<string> {
+  const next = new Set(ids);
+  next.add(id);
+  return next;
 }
 
 /** Род события клавиатурного порядка: взятие ручки, перемещение стрелками
@@ -60,15 +87,12 @@ export function favoriteDragAnnouncement(
   }
 }
 
-/** Есть ли несохранённые изменения правки: перестановка против исходного
- * порядка или хотя бы одна пометка. Гасит «Сохранить» без диффа. */
+/** Есть ли несохранённые изменения порядка: перестановка против исходного.
+ * Удаление в правке применяется сразу trash'ем (#814), в дифф «Сохранить»
+ * не входит — гасит кнопку без перестановки. */
 export function hasFavoritesEdits(
   order: ReadonlyArray<GlobalPayment>,
   initialOrder: ReadonlyArray<GlobalPayment>,
-  removedIds: ReadonlySet<string>,
 ): boolean {
-  if (removedIds.size > 0) {
-    return true;
-  }
   return order.some((item, index) => item.id !== initialOrder[index]?.id);
 }
