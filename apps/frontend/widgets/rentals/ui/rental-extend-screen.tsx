@@ -15,11 +15,8 @@ import {
   Button,
   CalendarDatePicker,
   IconButton,
-  Modal,
-  ModalContent,
   PageContent,
   Skeleton,
-  StatusIcon,
   StickyBottomBar,
   TopNav,
 } from '@/shared/ui/design';
@@ -35,8 +32,9 @@ import { PickerTriggerBox } from './wizard-chrome';
  * plannedEndDate, сервер синхронно переставляет платёж аренды. Шапка —
  * крестик без заголовка (как шаг 1 визарда #530), панель «Отменить /
  * Продлить»: продление притушено, пока дата не выбрана (макет — Disabled).
- * Успех — попап «Аренда продлена еще на N месяцев до ДД.ММ.ГГГГ»
- * (Figma 1550:93723); детализация пересчитывается инвалидацией useUpdateRental.
+ * Успех — тост «Аренда продлена еще на N месяцев до ДД.ММ.ГГГГ» на
+ * детализации (1550:93664, решение #802 23.09; прежний попап 1550:93723
+ * заменён); детализация пересчитывается инвалидацией useUpdateRental.
  *
  * Точка входа — круглая «Продлить аренду» на детализации (там и живёт
  * доступность: Full Access и только срочная аренда). Бессрочной продлевать
@@ -134,7 +132,7 @@ function ExtendTopNav({ onClose }: { readonly onClose: () => void }): JSX.Elemen
   );
 }
 
-/** Форма продления: черновик даты и попап успеха живут здесь; key по id
+/** Форма продления: черновик даты живёт здесь; key по id
  * аренды пересоздаёт форму при смене данных (прецедент правки условий). */
 function RentalExtendForm({
   rental,
@@ -151,11 +149,6 @@ function RentalExtendForm({
 
   const [newEnd, setNewEnd] = useState<IsoDate | undefined>(undefined);
   const [pickerOpen, setPickerOpen] = useState(false);
-  // Старое окончание фиксируется на момент сабмита: после успешного PATCH
-  // аренда перечитается уже с новой датой, а попапу нужна прежняя.
-  const [extended, setExtended] = useState<{ previousEnd: IsoDate; newEnd: IsoDate } | null>(
-    null,
-  );
 
   // «Строго позже текущего окончания» (ADR 0053 §5); у needs_attention
   // окончание в прошлом — нижняя граница today (контракт PATCH: не в прошлое).
@@ -170,7 +163,12 @@ function RentalExtendForm({
     }
     try {
       await updateRental.mutateAsync({ plannedEndDate: newEnd });
-      setExtended({ previousEnd: currentEnd, newEnd });
+      // Успех — тост на детализации (1550:93664): текст считает либа
+      // success-copy, старое окончание снимком до перечитания аренды.
+      notify.success(
+        rentalExtendSuccessCopy({ previousEnd: currentEnd, newEnd }),
+      );
+      onClose();
     } catch (error) {
       notify.scenarios.rentals.updateError(error);
     }
@@ -233,30 +231,6 @@ function RentalExtendForm({
             setPickerOpen(false);
           }}
         />
-      )}
-
-      {/* Попап успеха (Figma 1550:93723): зелёная галочка 48 и текст
-          успеха; детализация под ним уже перечитана инвалидацией. Крестик —
-          явно в углу карточки: канонный showClose живёт в ветке видимого
-          заголовка, а попап без заголовка (title sr-only ради a11y). На
-          мобиле закрытие — свайп/оверлей, как у всех шитов канона. */}
-      {extended !== null && (
-        <Modal open onOpenChange={(open) => open || onClose()}>
-          <ModalContent title="Аренда продлена" titleSrOnly>
-            <IconButton
-              icon={<Cancel />}
-              label="Закрыть"
-              onClick={onClose}
-              className="hidden desktop:absolute desktop:right-3 desktop:top-3 desktop:block"
-            />
-            <div className="flex flex-col items-center gap-2">
-              <StatusIcon status="good" className="h-12 w-12" />
-              <p className="text-center text-base font-medium leading-[18px] text-success">
-                {rentalExtendSuccessCopy(extended)}
-              </p>
-            </div>
-          </ModalContent>
-        </Modal>
       )}
     </>
   );
