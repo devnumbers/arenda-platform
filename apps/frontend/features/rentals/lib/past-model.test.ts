@@ -40,7 +40,7 @@ function completedFixture(overrides: Partial<Rental> = {}): Rental {
       autoPay: false,
       nextPayment: null,
     },
-    progress: { paidMonths: 24, totalMonths: 24, monthsRemaining: 0 },
+    progress: { paidMonths: 24, totalMonths: 24, monthsRemaining: 0, overdueMonths: null },
     today: '2029-01-15',
     createdAt: '2026-05-10T10:00:00Z',
     ...overrides,

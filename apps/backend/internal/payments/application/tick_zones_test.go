@@ -136,6 +136,12 @@ func (noopOperationStore) CountPaidOperationsByPayment(
 	panic("unused")
 }
 
+func (noopOperationStore) CountOverdueOperationsByPayment(
+	context.Context, uuid.UUID, uuid.UUID, uuid.UUID, time.Time,
+) (int64, error) {
+	panic("unused")
+}
+
 func (noopOperationStore) ListGlobal(context.Context, uuid.UUID, GlobalOperationsListQuery) ([]GlobalOperationRow, error) {
 	panic("unused")
 }

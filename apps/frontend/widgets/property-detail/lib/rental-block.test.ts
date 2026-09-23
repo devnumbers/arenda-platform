@@ -33,7 +33,7 @@ function rentalFixture(overrides: Partial<Rental> = {}): Rental {
         daysUntil: 150,
       },
     },
-    progress: { paidMonths: 6, totalMonths: 24, monthsRemaining: 23 },
+    progress: { paidMonths: 6, totalMonths: 24, monthsRemaining: 23, overdueMonths: null },
     today: '2026-09-11',
     createdAt: '2026-04-01T00:00:00Z',
     ...overrides,
@@ -52,7 +52,7 @@ describe('buildPropertyRentalBlock — активная аренда', () => {
   it('первый платёж ещё не оплачен — «N дней до платежа» (макет 1425:55908)', () => {
     const block = buildPropertyRentalBlock(
       rentalFixture({
-        progress: { paidMonths: 0, totalMonths: 24, monthsRemaining: 24 },
+        progress: { paidMonths: 0, totalMonths: 24, monthsRemaining: 24, overdueMonths: null },
         rentPayment: {
           paymentId: 'payment-1',
           amountKopecks: 5600000,
@@ -95,7 +95,7 @@ describe('buildPropertyRentalBlock — активная аренда', () => {
     const line = (daysUntil: number): string =>
       buildPropertyRentalBlock(
         rentalFixture({
-          progress: { paidMonths: 0, totalMonths: 24, monthsRemaining: 24 },
+          progress: { paidMonths: 0, totalMonths: 24, monthsRemaining: 24, overdueMonths: null },
           rentPayment: {
             paymentId: 'payment-1',
             amountKopecks: 5600000,
@@ -118,7 +118,7 @@ describe('buildPropertyRentalBlock — активная аренда', () => {
   it('родительный падеж после «из»: «из 21 платежа»', () => {
     const block = buildPropertyRentalBlock(
       rentalFixture({
-        progress: { paidMonths: 3, totalMonths: 21, monthsRemaining: 18 },
+        progress: { paidMonths: 3, totalMonths: 21, monthsRemaining: 18, overdueMonths: null },
       }),
     );
     expect(block.paidTitle).toBe('Оплачено 3 из 21 платежа');
@@ -135,7 +135,7 @@ describe('buildPropertyRentalBlock — срок подошёл к концу', (
     const block = buildPropertyRentalBlock(
       rentalFixture({
         status: 'needs_attention',
-        progress: { paidMonths: 24, totalMonths: 24, monthsRemaining: 0 },
+        progress: { paidMonths: 24, totalMonths: 24, monthsRemaining: 0, overdueMonths: null },
       }),
     );
     expect(block.endOfTerm).toBe(true);
@@ -150,7 +150,7 @@ describe('buildPropertyRentalBlock — бессрочная аренда', () =>
     const block = buildPropertyRentalBlock(
       rentalFixture({
         plannedEndDate: null,
-        progress: { paidMonths: 3, totalMonths: null, monthsRemaining: null },
+        progress: { paidMonths: 3, totalMonths: null, monthsRemaining: null, overdueMonths: null },
       }),
     );
     expect(block.paidTitle).toBe('Оплачено 3 платежа');
@@ -164,7 +164,7 @@ describe('buildPropertyRentalBlock — бессрочная аренда', () =>
       buildPropertyRentalBlock(
         rentalFixture({
           plannedEndDate: null,
-          progress: { paidMonths, totalMonths: null, monthsRemaining: null },
+          progress: { paidMonths, totalMonths: null, monthsRemaining: null, overdueMonths: null },
         }),
       ).paidTitle;
     expect(title(1)).toBe('Оплачено 1 платёж');

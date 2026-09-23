@@ -342,3 +342,58 @@ func TestSeam_SummaryReadsThePaidOperations(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 2, fresh.Progress.PaidMonths)
 }
+
+// Прогресс несёт серверный счётчик просрочки (#817): planned-вхождения с
+// датой раньше «сегодня» собственника. Upcoming не имеет просрочек по
+// построению — null; просроченные месяцы материализуются тиком как долг и
+// считаются гейтвеем на реальном SQL.
+func TestSeam_ProgressCountsTheOverdueOccurrences(t *testing.T) {
+	t.Parallel()
+	h := newSeamHarness(t)
+	h.seedOwner()
+	view := h.createRental()
+
+	// Upcoming (старт в будущем): вхождения начинаются со старта — просрочек
+	// не бывает, счётчик null.
+	future := mustSeamDate("2026-09-10")
+	_, err := h.pool.Exec(context.Background(),
+		`UPDATE rentals SET start_date = $1 WHERE id = $2`, future, view.Rental.ID)
+	require.NoError(t, err)
+	upcoming, err := h.svc.GetRental(context.Background(), h.owner, h.propID, view.Rental.ID)
+	require.NoError(t, err)
+	assert.Equal(t, rentalsdomain.StatusUpcoming, upcoming.Status)
+	assert.Nil(t, upcoming.Progress.OverdueMonths)
+
+	// Backdate the pair into July (the seeding scenario, as completion) and
+	// run the owner tick: Jul 15 and Aug 15 materialize as the overdue debt,
+	// Sep 15 stands the single future planned — the count is 2.
+	start := mustSeamDate("2026-07-15")
+	_, err = h.pool.Exec(context.Background(),
+		`UPDATE rentals SET start_date = $1 WHERE id = $2`, start, view.Rental.ID)
+	require.NoError(t, err)
+	_, err = h.pool.Exec(context.Background(),
+		`UPDATE payments SET since = $1 WHERE id = $2`, start, view.Rental.PaymentID)
+	require.NoError(t, err)
+	require.NoError(t, h.tick.RunOwnerTick(context.Background(), h.owner))
+
+	overdue, err := h.svc.GetRental(context.Background(), h.owner, h.propID, view.Rental.ID)
+	require.NoError(t, err)
+	require.NotNil(t, overdue.Progress.OverdueMonths)
+	assert.Equal(t, 2, *overdue.Progress.OverdueMonths)
+	require.NotNil(t, overdue.NextPayment,
+		"the future planned stays — the blue line keeps its data")
+	assert.Equal(t, mustSeamDate("2026-09-15"), overdue.NextPayment.Date)
+
+	// A paid fact closes its month (решение #815): marking Aug 15 paid drops
+	// the count to 1 — paid rows never read as overdue.
+	_, err = h.pool.Exec(context.Background(),
+		`UPDATE operations SET status = 'paid', paid_date = $2
+		 WHERE payment_id = $1 AND status = 'planned' AND date = $2`,
+		view.Rental.PaymentID, mustSeamDate("2026-08-15"))
+	require.NoError(t, err)
+	paid, err := h.svc.GetRental(context.Background(), h.owner, h.propID, view.Rental.ID)
+	require.NoError(t, err)
+	require.NotNil(t, paid.Progress.OverdueMonths)
+	assert.Equal(t, 1, *paid.Progress.OverdueMonths)
+	assert.Equal(t, 1, paid.Progress.PaidMonths)
+}

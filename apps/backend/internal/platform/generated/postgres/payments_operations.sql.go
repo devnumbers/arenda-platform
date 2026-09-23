@@ -37,6 +37,41 @@ func (q *Queries) CancelOperationByID(ctx context.Context, arg CancelOperationBy
 	return result.RowsAffected(), nil
 }
 
+const countOverdueOperationsByPayment = `-- name: CountOverdueOperationsByPayment :one
+SELECT COUNT(*)::bigint
+FROM operations
+WHERE owner_id = $1
+  AND property_id = $2
+  AND payment_id = $3
+  AND status = 'planned'
+  AND date < $4
+`
+
+type CountOverdueOperationsByPaymentParams struct {
+	Owner    pgtype.UUID `json:"owner"`
+	Property pgtype.UUID `json:"property"`
+	Payment  pgtype.UUID `json:"payment"`
+	Today    pgtype.Date `json:"today"`
+}
+
+// The overdue-occurrences count of one rule (#817: the rentals progress'
+// overdueMonths — «Просрочено N месяцев» counts the managed payment's
+// planned rows dated before the owner's today). The same computed truth the
+// listings report (domain.OperationView mirrors the predicate; ticket
+// #461); paid facts never read as overdue, cancelled tombstones never count,
+// the nested payment→property path is enforced in the WHERE clause.
+func (q *Queries) CountOverdueOperationsByPayment(ctx context.Context, arg CountOverdueOperationsByPaymentParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countOverdueOperationsByPayment,
+		arg.Owner,
+		arg.Property,
+		arg.Payment,
+		arg.Today,
+	)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const countPaidOperationsByPayment = `-- name: CountPaidOperationsByPayment :one
 SELECT COUNT(*)::bigint
 FROM operations

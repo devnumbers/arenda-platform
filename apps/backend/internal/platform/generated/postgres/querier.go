@@ -67,6 +67,13 @@ type Querier interface {
 	// are the list's rows.
 	CountGlobalPaymentRules(ctx context.Context, arg CountGlobalPaymentRulesParams) (int64, error)
 	CountNewUsersLast30dAdmin(ctx context.Context) (int64, error)
+	// The overdue-occurrences count of one rule (#817: the rentals progress'
+	// overdueMonths — «Просрочено N месяцев» counts the managed payment's
+	// planned rows dated before the owner's today). The same computed truth the
+	// listings report (domain.OperationView mirrors the predicate; ticket
+	// #461); paid facts never read as overdue, cancelled tombstones never count,
+	// the nested payment→property path is enforced in the WHERE clause.
+	CountOverdueOperationsByPayment(ctx context.Context, arg CountOverdueOperationsByPaymentParams) (int64, error)
 	// The paid-operations count of one rule (ADR 0053 §2: the rentals progress'
 	// paidMonths — «N из M месяцев» counts the managed payment's paid facts).
 	// Cancelled tombstones never count; the nested payment→property path is

@@ -45,6 +45,7 @@ export {
   rentalCommentText,
   rentalElapsedLine,
   rentalNextPaymentLine,
+  rentalOverdueLine,
   rentalPaidTitle,
   rentalProgressPercent,
   rentalRemainingLine,

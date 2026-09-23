@@ -142,6 +142,13 @@ type OperationStore interface {
 	// read the Rentals progress «N из M месяцев» consumes through the
 	// RentPaymentGateway (ADR 0053 §2). Cancelled tombstones never count.
 	CountPaidOperationsByPayment(ctx context.Context, scope, propertyID, paymentID uuid.UUID) (int64, error)
+	// CountOverdueOperationsByPayment counts one rule's overdue occurrences —
+	// planned rows dated before the owner's today — the read the Rentals
+	// progress' overdueMonths consumes through the RentPaymentGateway (#817).
+	// Paid facts never read as overdue, cancelled tombstones never count.
+	CountOverdueOperationsByPayment(
+		ctx context.Context, scope, propertyID, paymentID uuid.UUID, today time.Time,
+	) (int64, error)
 	// ListGlobal returns one page of the actor's visible paid operations —
 	// the global «Операции» screen's merged feed (ticket #540): the paid
 	// facts of the actor's own properties plus the properties they can view,

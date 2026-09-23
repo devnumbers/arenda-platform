@@ -7794,9 +7794,12 @@ components:
       description: >-
         Прогресс «Оплачено N из M месяцев» (ADR 0053 §2): paidMonths — число
         paid-операций Платежа; totalMonths и monthsRemaining — только у
-        срочной аренды (null у бессрочной).
+        срочной аренды (null у бессрочной). overdueMonths — серверная
+        просрочка Платежа арендной платы (#817): число planned-вхождений
+        раньше «сегодня» собственника (платёжные месяцы, не календарные);
+        null — просрочки нет.
       type: object
-      required: [paidMonths, totalMonths, monthsRemaining]
+      required: [paidMonths, totalMonths, monthsRemaining, overdueMonths]
       properties:
         paidMonths:
           type: integer
@@ -7804,6 +7807,9 @@ components:
           type: integer
           nullable: true
         monthsRemaining:
+          type: integer
+          nullable: true
+        overdueMonths:
           type: integer
           nullable: true
 

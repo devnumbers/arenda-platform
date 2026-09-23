@@ -200,6 +200,21 @@ WHERE owner_id = sqlc.arg('owner')
   AND payment_id = sqlc.arg('payment')
   AND status = 'paid';
 
+-- name: CountOverdueOperationsByPayment :one
+-- The overdue-occurrences count of one rule (#817: the rentals progress'
+-- overdueMonths — «Просрочено N месяцев» counts the managed payment's
+-- planned rows dated before the owner's today). The same computed truth the
+-- listings report (domain.OperationView mirrors the predicate; ticket
+-- #461); paid facts never read as overdue, cancelled tombstones never count,
+-- the nested payment→property path is enforced in the WHERE clause.
+SELECT COUNT(*)::bigint
+FROM operations
+WHERE owner_id = sqlc.arg('owner')
+  AND property_id = sqlc.arg('property')
+  AND payment_id = sqlc.arg('payment')
+  AND status = 'planned'
+  AND date < sqlc.arg('today');
+
 -- The global read side (ticket #540): the actor-scoped cross-property read
 -- over the paid facts of their own book plus the properties they can view.
 -- The visibility predicate is this SQL's (the tasks global feed precedent,

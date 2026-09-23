@@ -46,11 +46,13 @@ export type RentalPaymentView = {
 };
 
 /** Прогресс «Оплачено N из M месяцев»: totalMonths/monthsRemaining — только
- * у срочной аренды (null у бессрочной). */
+ * у срочной аренды (null у бессрочной); overdueMonths — серверная просрочка
+ * Платежа арендной платы (#817), null — просрочки нет. */
 export type RentalProgress = {
   readonly paidMonths: number;
   readonly totalMonths: number | null;
   readonly monthsRemaining: number | null;
+  readonly overdueMonths: number | null;
 };
 
 /** Аренда с вычисляемым сервером состоянием: статус, прогресс, «сегодня» и

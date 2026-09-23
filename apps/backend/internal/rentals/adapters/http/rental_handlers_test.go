@@ -168,6 +168,7 @@ func viewFixture(t *testing.T) rentalsapp.RentalView {
 			PaidMonths:      0,
 			TotalMonths:     func() *int { v := 12; return &v }(),
 			MonthsRemaining: func() *int { v := 11; return &v }(),
+			OverdueMonths:   func() *int { v := 2; return &v }(),
 		},
 		Today: wireDate("2026-09-04").Time,
 	}
@@ -225,6 +226,9 @@ func TestCreateRental_Created(t *testing.T) {
 	assert.Equal(t, "Иван", response.Tenant.FirstName)
 	require.NotNil(t, response.Progress.TotalMonths)
 	assert.Equal(t, 12, *response.Progress.TotalMonths)
+	require.NotNil(t, response.Progress.OverdueMonths,
+		"the server-counted overdue rides the progress node (#817)")
+	assert.Equal(t, 2, *response.Progress.OverdueMonths)
 	assert.Equal(t, "2026-09-04", response.Today.Format(time.DateOnly))
 }
 

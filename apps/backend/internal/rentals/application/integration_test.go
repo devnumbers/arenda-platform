@@ -107,6 +107,12 @@ func (g *fakeSeamGateway) CountPaidOperations(
 	return g.paidCount, nil
 }
 
+func (g *fakeSeamGateway) CountOverdueOccurrences(
+	context.Context, uuid.UUID, uuid.UUID, uuid.UUID, time.Time,
+) (int, error) {
+	return 0, nil
+}
+
 func (g *fakeSeamGateway) SummarizePaidOperations(
 	context.Context, uuid.UUID, uuid.UUID, time.Time, time.Time, time.Time,
 ) (rentalsapp.PaymentsTotals, error) {

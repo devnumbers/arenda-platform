@@ -65,6 +65,15 @@ export function rentalNextPaymentLine(nextPayment: RentalNextPayment): string {
   return `${formatOverdueDays(nextPayment.daysUntil)} до следующего платежа`;
 }
 
+/** Красная строка просрочки карточки прогресса (#817, решение владельца
+ * 23.09): «Просрочен 1 месяц» / «Просрочено 2 месяца»; единственное число —
+ * у 1, 21, 31… (11, 111 — множительное). N — платёжные месяцы, счётчик
+ * серверный (ADR 0053 §2). */
+export function rentalOverdueLine(overdueMonths: number): string {
+  const singular = overdueMonths % 10 === 1 && overdueMonths % 100 !== 11;
+  return `${singular ? 'Просрочен' : 'Просрочено'} ${overdueMonths} ${monthsWord(overdueMonths)}`;
+}
+
 /** Строка «Осталось 23 месяца аренды»; у бессрочной остатка нет — строки нет.
  * Глагол согласуется числом: «Остался 21 месяц», но «Осталось 11 месяцев». */
 export function rentalRemainingLine(monthsRemaining: number | null): string | undefined {
@@ -78,15 +87,20 @@ export function rentalRemainingLine(monthsRemaining: number | null): string | un
 
 /** Карточка прогресса на детализации видима, пока ей есть что жить: со
  * следующим платежом — строка дней и бар (1232:61259), без него — строка
- * остатка или прошедших месяцев. У срочной в день планового окончания и
- * в «Ожидает действия» содержимого нет — карточка прячется целиком:
- * пустого контейнера макеты не рисуют (F1, решение владельца 23.09). */
+ * остатка или прошедших месяцев, просрочка — красная строка (#817). У
+ * срочной в день планового окончания и в «Ожидает действия» содержимого
+ * нет — карточка прячется целиком: пустого контейнера макеты не рисуют
+ * (F1, решение владельца 23.09); задолженность появляется — содержимое
+ * снова есть. */
 export function hasProgressCard(
   nextPayment: RentalNextPayment | null,
   progress: RentalProgress,
 ): boolean {
   return (
-    nextPayment !== null || progress.totalMonths === null || (progress.monthsRemaining ?? 0) > 0
+    nextPayment !== null ||
+    progress.overdueMonths !== null ||
+    progress.totalMonths === null ||
+    (progress.monthsRemaining ?? 0) > 0
   );
 }
 

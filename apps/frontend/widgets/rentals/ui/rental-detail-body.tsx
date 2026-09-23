@@ -11,6 +11,7 @@ import {
   hasProgressCard,
   rentalElapsedLine,
   rentalNextPaymentLine,
+  rentalOverdueLine,
   rentalPaidTitle,
   rentalProgressPercent,
   rentalRemainingLine,
@@ -161,10 +162,18 @@ export function RentalDetailBody({
 
           {/* Карточка прогресса живёт, пока ей есть что показывать; в день
               планового окончания и в «Ожидает действия» прячется целиком —
-              пустого контейнера макеты не рисуют (F1, решение 23.09). */}
+              пустого контейнера макеты не рисуют (F1, решение 23.09), но
+              задолженность (#817) — содержимое: карточка снова жива. */}
           {hasProgressCard(nextPayment, rental.progress) && (
             <section className="mx-6 rounded-card bg-surface-muted p-6">
               <div className="flex flex-col gap-5">
+                {/* Красная строка просрочки (#817, решение владельца 23.09):
+                    первая в карточке, синяя строка дней остаётся второй. */}
+                {rental.progress.overdueMonths !== null && (
+                  <p className="text-sm font-medium leading-4 text-danger">
+                    {rentalOverdueLine(rental.progress.overdueMonths)}
+                  </p>
+                )}
                 {nextPayment !== null && (
                   <div className="flex flex-col gap-3">
                     <div className="flex items-center gap-1.5">

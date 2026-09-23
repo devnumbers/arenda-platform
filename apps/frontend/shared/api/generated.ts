@@ -3561,11 +3561,12 @@ export interface components {
             /** @description date − today по TZ собственника. */
             daysUntil: number;
         };
-        /** @description Прогресс «Оплачено N из M месяцев» (ADR 0053 §2): paidMonths — число paid-операций Платежа; totalMonths и monthsRemaining — только у срочной аренды (null у бессрочной). */
+        /** @description Прогресс «Оплачено N из M месяцев» (ADR 0053 §2): paidMonths — число paid-операций Платежа; totalMonths и monthsRemaining — только у срочной аренды (null у бессрочной). overdueMonths — серверная просрочка Платежа арендной платы (#817): число planned-вхождений раньше «сегодня» собственника (платёжные месяцы, не календарные); null — просрочки нет. */
         RentalProgress: {
             paidMonths: number;
             totalMonths: number | null;
             monthsRemaining: number | null;
+            overdueMonths: number | null;
         };
         /** @description Состояние Платежа арендной платы: рендер читается из платежа — дня оплаты на аренде нет (решение №5). paymentId — переход на экран платежа с детализации аренды (#531): платеж не ищется слагом категории, на объекте бывают и другие платежи rent. */
         RentalPaymentView: {
