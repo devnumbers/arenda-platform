@@ -21,6 +21,8 @@ import {
   lastDayOfMonth,
   listCalendarMonths,
   booleanRunSegments,
+  calendarDayDisabled,
+  calendarPastFloor,
   pickIsoRange,
   rangeFeedWindow,
   settleIsoRange,
@@ -251,5 +253,49 @@ describe('calendar: полных месяцев между датами', () => 
 
   it('обратный интервал не уходит в минус', () => {
     expect(fullMonthsBetween('2026-09-07', '2026-05-10')).toBe(0);
+  });
+});
+
+describe('calendar: пикер завершения — прошлое открыто до начала (#805)', () => {
+  const today = '2026-09-23';
+  const completionArgs = {
+    today,
+    value: null,
+    minDate: '2026-01-23' as const,
+    maxDate: '2026-09-23' as const,
+  };
+
+  it('пол прошлого: сегодня по умолчанию, minDate при allowPast', () => {
+    expect(calendarPastFloor(today, undefined, false)).toBe(today);
+    expect(calendarPastFloor(today, '2026-01-23', false)).toBe(today);
+    expect(calendarPastFloor(today, undefined, true)).toBe(today);
+    expect(calendarPastFloor(today, '2026-01-23', true)).toBe('2026-01-23');
+  });
+
+  it('allowPast: период [minDate, today] тапабелен, края погашены', () => {
+    const day = (iso: string) => calendarDayDisabled({ iso, ...completionArgs, allowPast: true });
+    expect(day('2026-03-10')).toBe(false);
+    expect(day('2026-01-23')).toBe(false);
+    expect(day(today)).toBe(false);
+    expect(day('2026-01-22')).toBe(true);
+    expect(day('2026-09-24')).toBe(true);
+  });
+
+  it('без allowPast прошлое закрыто, значение-якорь тапабельно (правка #502)', () => {
+    const day = (iso: string, value: string | null) =>
+      calendarDayDisabled({ iso, today, value, minDate: '2026-01-23', maxDate: undefined, allowPast: false });
+    expect(day('2026-09-22', null)).toBe(true);
+    expect(day(today, null)).toBe(false);
+    expect(day('2026-08-01', '2026-08-01')).toBe(false);
+    expect(day('2026-08-01', null)).toBe(true);
+    expect(day('2026-01-10', '2026-01-10')).toBe(true);
+  });
+
+  it('старт ленты уходит под пол allowPast, не теряя якорь значения', () => {
+    const floor = { year: 2026, month0: 0 };
+    expect(calendarFeedStart(today, null, floor)).toEqual({ year: 2026, month0: 0 });
+    expect(calendarFeedStart(today, '2026-03-10', floor)).toEqual({ year: 2026, month0: 0 });
+    expect(calendarFeedStart(today, '2025-12-01', floor)).toEqual({ year: 2025, month0: 11 });
+    expect(calendarFeedStart(today, null)).toEqual({ year: 2026, month0: 8 });
   });
 });

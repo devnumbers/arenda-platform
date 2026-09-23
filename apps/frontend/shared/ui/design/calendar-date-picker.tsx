@@ -22,10 +22,12 @@ import {
 // точки входа сами по себе), как в мастере платежей.
 import {
   booleanRunSegments,
+  calendarDayDisabled,
   calendarFeedStart,
   calendarMonthIndex,
   calendarMonthOf,
   calendarMonthOfIndex,
+  calendarPastFloor,
   type CalendarMonthRef,
   type IsoDate,
   type IsoRange,
@@ -77,6 +79,12 @@ import { MONTH_LABELS, daysInMonth, firstWeekdayOfMonth, WEEKDAY_LABELS } from '
  * чистит его при смене начала. Пустой черновик стартует с первого
  * доступного дня (сегодня либо minDate, если он позже).
  *
+ * Открытое прошлое (проп allowPast, #805): прошедшие дни до minDate
+ * тапабельны, лента стартует от месяца minDate — дата завершения аренды
+ * бывает задним числом (ADR 0053 §3: start ≤ дата ≤ сегодня). Без пропа
+ * прошлое закрыто сегодняшним (контракт #498); проп не трогает якорь
+ * значения-в-прошлом правки (#502) и границы maxDate.
+ *
  * Максимальная дата (проп maxDate, #534): дни позже недоступны — дата
  * завершения аренды не бывает будущей (ADR 0053 §3, потребитель передаёт
  * «сегодня» собственника). Симметрично минимуму: пустой черновик
@@ -107,6 +115,11 @@ export type CalendarDatePickerProps = {
   /** Первый доступный день; дни раньше недоступны (окончание аренды —
    * строго позже начала). */
   readonly minDate?: IsoDate;
+  /** Прошедшие дни открыты до minDate — дата бывает задним числом (мастер
+   * завершения аренды, ADR 0053 §3: start ≤ дата ≤ сегодня, #805). Без
+   * пропа прошлое закрыто сегодняшним (задним числом даты не создаются,
+   * #498). */
+  readonly allowPast?: boolean;
   /** Последний доступный день; дни позже недоступны (дата завершения
    * аренды — не будущее, ADR 0053 §3). */
   readonly maxDate?: IsoDate;
@@ -140,6 +153,7 @@ export function CalendarDatePicker({
   required,
   minDate,
   maxDate,
+  allowPast = false,
   onClose,
   onConfirm,
 }: CalendarDatePickerProps): JSX.Element {
@@ -149,7 +163,12 @@ export function CalendarDatePicker({
   // открывается на первом доступном месяце, а не на сегодня, где выбирать
   // нечего); лента под якорь дорисована, скролл к нему при монтаже.
   const initialAnchor = value ?? initialDraft(today, minDate, maxDate);
-  const feedStart = calendarFeedStart(today, value);
+  const pastFloor = calendarPastFloor(today, minDate, allowPast);
+  const feedStart = calendarFeedStart(
+    today,
+    value,
+    pastFloor === today ? undefined : calendarMonthOf(pastFloor),
+  );
   const startIndex = calendarMonthIndex(feedStart);
   const anchorIndex =
     calendarMonthIndex(calendarMonthOf(initialAnchor)) - startIndex;
@@ -315,19 +334,24 @@ export function CalendarDatePicker({
                         className="aspect-square h-auto w-full"
                         state={selected ? 'selected' : isToday ? 'today' : 'default'}
                         aria-current={isToday ? 'date' : undefined}
-                        // Прошлые дни недоступны — задним числом даты не
-                        // создаются (контракт #498); исключение — текущее
-                        // значение-якорь в прошлом (правка #502): оно остаётся
-                        // тапабельным, повторный тап снимает дату. Дни раньше
-                        // minDate недоступны без исключений (minDate — первый
-                        // доступный: окончание аренды строго позже начала,
-                        // ADR 0053); дни позже maxDate — тоже (дата
+                        // Прошлые дни закрыты полом (calendarDayDisabled):
+                        // сегодня по умолчанию — задним числом даты не
+                        // создаются (#498), minDate при allowPast — дата
+                        // завершения бывает задним числом (#805); текущее
+                        // значение-якорь в прошлом остаётся тапабельным
+                        // (правка #502), повторный тап снимает дату. Дни
+                        // раньше minDate недоступны без исключений (minDate —
+                        // первый доступный: окончание аренды строго позже
+                        // начала, ADR 0053); дни позже maxDate — тоже (дата
                         // завершения не бывает будущей, #534).
-                        disabled={
-                          (iso < today && iso !== value)
-                          || (minDate !== undefined && iso < minDate)
-                          || (maxDate !== undefined && iso > maxDate)
-                        }
+                        disabled={calendarDayDisabled({
+                          iso,
+                          today,
+                          value,
+                          minDate,
+                          maxDate,
+                          allowPast,
+                        })}
                         // Повторный тап по выбранному дню снимает выбор
                         // (решение владельца 2026-09-03); с required дата
                         // обязательна — тап её держит.

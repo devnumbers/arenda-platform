@@ -128,17 +128,51 @@ export function listCalendarMonths(
   return Array.from({ length: count }, (_, offset) => calendarMonthOfIndex(startIndex + offset));
 }
 
-/** Старт ленты пикера: самый ранний из «сегодня» и текущего значения —
- * якорь даты в прошлом (правка #502) остаётся reachable. */
-export function calendarFeedStart(today: IsoDate, value: IsoDate | null): CalendarMonthRef {
-  const todayMonth = calendarMonthOf(today);
+/** Старт ленты пикера: самый ранний из «сегодня», текущего значения и пола
+ * прошлого — якорь даты в прошлом (правка #502) и открытое allowPast-прошлое
+ * (мастер завершения #805) остаются reachable. */
+export function calendarFeedStart(
+  today: IsoDate, value: IsoDate | null, pastFloor?: CalendarMonthRef,
+): CalendarMonthRef {
+  let start = calendarMonthOf(today);
   if (value !== null) {
     const valueMonth = calendarMonthOf(value);
-    if (calendarMonthIndex(valueMonth) < calendarMonthIndex(todayMonth)) {
-      return valueMonth;
+    if (calendarMonthIndex(valueMonth) < calendarMonthIndex(start)) {
+      start = valueMonth;
     }
   }
-  return todayMonth;
+  if (pastFloor !== undefined && calendarMonthIndex(pastFloor) < calendarMonthIndex(start)) {
+    start = pastFloor;
+  }
+  return start;
+}
+
+/** Пол прошлого пикера дат: до какой черты прошедшие дни закрыты. По
+ * умолчанию — сегодня (задним числом даты не создаются, #498); пикер с
+ * allowPast (дата завершения бывает задним числом, ADR 0053 §3 — #805)
+ * опускает черту до minDate. */
+export function calendarPastFloor(
+  today: IsoDate, minDate: IsoDate | undefined, allowPast: boolean,
+): IsoDate {
+  return allowPast && minDate !== undefined ? minDate : today;
+}
+
+/** Погашен ли день в пикере дат: до пола прошлого (значение-якорь остаётся
+ * тапабельным — правка #502), раньше minDate, позже maxDate. */
+export function calendarDayDisabled(args: {
+  readonly iso: IsoDate;
+  readonly today: IsoDate;
+  readonly value: IsoDate | null;
+  readonly minDate: IsoDate | undefined;
+  readonly maxDate: IsoDate | undefined;
+  readonly allowPast: boolean;
+}): boolean {
+  const floor = calendarPastFloor(args.today, args.minDate, args.allowPast);
+  return (
+    (cmp(args.iso, floor) < 0 && args.iso !== args.value)
+    || (args.minDate !== undefined && cmp(args.iso, args.minDate) < 0)
+    || (args.maxDate !== undefined && cmp(args.iso, args.maxDate) > 0)
+  );
 }
 
 /** Месяц колеса с учётом нижней границы: в минимальном году месяцы раньше
