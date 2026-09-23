@@ -37,15 +37,16 @@ type AccessEventViewSource interface {
 
 // AccessPublisher is the access events' publisher (#751) on the delivery
 // pipeline (карта #734, #740): the transition hooks of the access context —
-// an invitation's activation, a revoke, a slot pause or recovery, a member's
-// self-exit — arrive here and become the Совместный доступ catalog rows
-// (решение #737, типы №5–№10) for their single addressee. The former direct
+// an invitation's activation or an instant grant, a revoke, a slot pause or
+// recovery, a member's self-exit, a member's role change — arrive here and
+// become the Совместный доступ catalog rows (решение #737, типы №5–№10 и
+// access_role_changed, #830) for their single addressee. The former direct
 // lifecycle emails (issue #162, T6) are gone: same events, but the
 // notification is now a stored feed row — written always, delivered over
 // email and push per the category matrix (ADR 0058). The invite email to an
 // unregistered address stays out of the pipeline by nature: until the invitee
 // registers there is no recipient a row could belong to (№5's row is the
-// activation's, решение #737).
+// activation's or the instant grant's, решение #737).
 //
 // The copy's {Имя} is the actor's display name at publication time; a system
 // transition (the slot enforcement, no human initiator) renders the no-name
@@ -406,8 +407,8 @@ func accessPayload(
 	return payload
 }
 
-// unixDedupStamp renders the paused/resumed keys' instant half: the unix
-// seconds of the transition.
+// unixDedupStamp renders the paused/resumed and role-changed keys' instant
+// half: the unix seconds of the transition.
 func unixDedupStamp(t time.Time) string {
 	return strconv.FormatInt(t.Unix(), 10)
 }
