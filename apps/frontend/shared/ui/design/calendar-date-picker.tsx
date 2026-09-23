@@ -47,7 +47,10 @@ import { MONTH_LABELS, daysInMonth, firstWeekdayOfMonth, WEEKDAY_LABELS } from '
  * бесконечна вперёд: старт — самый ранний из «сегодня» и значения (якорь
  * правки #502), месяцы дорисовываются годом при приближении к нижнему
  * краю, а оффскрин-блоки не участвуют в layout (content-visibility) —
- * прокрутка остаётся плавной на любой глубине. Сегодня собственника
+ * прокрутка остаётся плавной на любой глубине. Открывается сеткой на
+ * месяце якоря — значения, а без него «сегодня», прижатое в
+ * [minDate, maxDate] (решение владельца #802 23.09: продление с далёким
+ * минимумом открывается на первом доступном месяце). Сегодня собственника
  * предвыбрано сразу, поэтому «Выбрать» активна без действий (подсказка
  * владельца к #500); дни раньше сегодня недоступны — задним числом даты
  * не выбираются (контракт #498), кроме текущего значения-якоря в прошлом
@@ -141,13 +144,16 @@ export function CalendarDatePicker({
   onConfirm,
 }: CalendarDatePickerProps): JSX.Element {
   // Лента от самого раннего из сегодня и значения вперёд без конца;
-  // значение дальше стартового года открывает ленту, уже дорисованную
-  // до него, и скроллит к нему при монтаже.
+  // якорь открытия — значение, а без него «сегодня», прижатое в границы
+  // [minDate, maxDate] (решение #802 23.09: продление с далёким minDate
+  // открывается на первом доступном месяце, а не на сегодня, где выбирать
+  // нечего); лента под якорь дорисована, скролл к нему при монтаже.
+  const initialAnchor = value ?? initialDraft(today, minDate, maxDate);
   const feedStart = calendarFeedStart(today, value);
   const startIndex = calendarMonthIndex(feedStart);
-  const valueIndex =
-    value !== null ? calendarMonthIndex(calendarMonthOf(value)) - startIndex : -1;
-  const [monthsCount, setMonthsCount] = useState(() => Math.max(FEED_MONTHS, valueIndex + 1));
+  const anchorIndex =
+    calendarMonthIndex(calendarMonthOf(initialAnchor)) - startIndex;
+  const [monthsCount, setMonthsCount] = useState(() => Math.max(FEED_MONTHS, anchorIndex + 1));
   const [draft, setDraft] = useState<IsoDate | null>(
     value ?? initialDraft(today, minDate, maxDate),
   );
@@ -162,13 +168,14 @@ export function CalendarDatePicker({
   // Чип месяца показывает месяц черновика; у пустого — текущий месяц.
   const draftMonth = calendarMonthOf(draft ?? today);
 
-  // Значение за пределами стартового года — сразу к нему при открытии.
+  // Открытие — сразу к месяцу якоря (значение или ближайший доступный
+  // день), когда он не стартовый месяц ленты.
   useEffect(() => {
-    if (valueIndex >= FEED_MONTHS) {
-      const target = calendarMonthOfIndex(startIndex + valueIndex);
+    if (anchorIndex > 0) {
+      const target = calendarMonthOfIndex(startIndex + anchorIndex);
       monthRefs.current.get(monthKey(target.year, target.month0))?.scrollIntoView({ block: 'start' });
     }
-  }, [valueIndex, startIndex]);
+  }, [anchorIndex, startIndex]);
 
   // Дорисовка прыжка за край — после монтирования новых месяцев.
   useEffect(() => {
