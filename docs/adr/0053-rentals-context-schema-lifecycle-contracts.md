@@ -73,7 +73,7 @@ CREATE INDEX idx_rentals_owner ON rentals(owner_id);
 Сервер считает всё сам — клиент пояса не знает (прецедент tasks/payments); `today` — по TZ собственника (ADR 0048):
 
 - `status`: `completed` (есть `completed_date`); иначе `upcoming` (`start_date > today`); иначе `needs_attention` (`planned_end_date` наступила и прошла: `planned_end_date < today`; в день планового окончания ещё активна); иначе `active`. У бессрочной `needs_attention` не бывает (№2).
-- `progress`: `paidMonths` — число paid-операций Платежа арендной платы; `totalMonths` — число дней оплаты в периоде `[start_date, planned_end_date]` (только срочная); `monthsRemaining` — полных календарных месяцев от `today` до `planned_end_date` (только срочная). Заголовок детализации «Оплачено N из M месяцев» (макет #531).
+- `progress`: `paidMonths` — число paid-операций Платежа арендной платы; `totalMonths` — число дней оплаты в периоде `[start_date, planned_end_date)` — вхождение на плановом окончании не считается: 12-месячная аренда = 12 платежей, согласовано с `monthsRemaining` (только срочная; #802 F2); `monthsRemaining` — полных календарных месяцев от `today` до `planned_end_date` (только срочная). Заголовок детализации «Оплачено N из M месяцев» (макет #531).
 - `rentPayment.nextPayment` — единственное будущее planned-вхождение платежа ( payments держат ровно одно): `operationId`, `date`, `amountKopecks`, `daysUntil = date − today`; `null`, когда будущего вхождения нет (после планового окончания, у завершённой).
 - `today` — в каждом ответе аренды (границы статусов и секций на клиенте).
 
