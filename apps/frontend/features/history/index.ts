@@ -18,6 +18,7 @@ export {
   historyPeriodChipLabel,
   isDefaultHistoryFilters,
   readHistoryFilters,
+  toggleHistoryFilterGroup,
   toggleHistoryFilterOption,
   type HistoryFilters,
 } from './lib/history-filters';

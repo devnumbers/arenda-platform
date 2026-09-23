@@ -7,6 +7,7 @@ import {
   historyPeriodChipLabel,
   isDefaultHistoryFilters,
   readHistoryFilters,
+  toggleHistoryFilterGroup,
   toggleHistoryFilterOption,
 } from './history-filters';
 
@@ -175,6 +176,17 @@ describe('historyParticipantTitle', () => {
     expect(historyParticipantTitle({ name: '+7********34', firstName: '' }, true)).toBe(
       '+7********34',
     );
+  });
+});
+
+describe('toggleHistoryFilterGroup', () => {
+  it('«все» (null) — снимает всю группу ([])', () => {
+    expect(toggleHistoryFilterGroup(null)).toEqual([]);
+  });
+
+  it('«ни одного» ([] ) и частичный выбор — ставит всю группу (null)', () => {
+    expect(toggleHistoryFilterGroup([])).toBeNull();
+    expect(toggleHistoryFilterGroup(['added', 'changed'])).toBeNull();
   });
 });
 

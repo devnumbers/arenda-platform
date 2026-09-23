@@ -36,6 +36,7 @@ import {
   DEFAULT_HISTORY_FILTERS,
   historyParticipantTitle,
   historyPeriodChipLabel,
+  toggleHistoryFilterGroup,
   toggleHistoryFilterOption,
   type HistoryFilters,
 } from '@/features/history';
@@ -76,7 +77,8 @@ import { HistoryFiltersSheetSkeleton } from './history-states';
  * фильтрует; частичный выбор — только выбранное; ни одного — пустой
  * результат (модель history-filters). Мастер-чекбокс группы: все —
  * галочка, ни одного — пусто, частично — минус (indeterminate, макет
- * 2067-162950); тап по нему из любого состояния ставит «все».
+ * 2067-162950); тап переключает группу: «все» → «ни одного», иначе —
+ * «все» (решение владельца 23.09 — из состояния «все» тап был но-опом).
  *
  * Черновик живёт, пока шит открыт: «Применить фильтры» коммитит его в
  * адрес одним push'ом («назад» возвращает без фильтров, DESIGN.md §3),
@@ -269,7 +271,7 @@ export function HistoryFiltersSheet({
                 selected={draft.actions}
                 expanded={expanded.actions}
                 onToggleExpanded={() => toggleExpanded('actions')}
-                onSelectAll={() => setDraft((state) => ({ ...state, actions: null }))}
+                onToggleAll={(actions) => setDraft((state) => ({ ...state, actions: actions as HistoryBaseAction[] }))}
                 onToggleOption={(id) =>
                   setDraft((state) => ({
                     ...state,
@@ -287,7 +289,7 @@ export function HistoryFiltersSheet({
                 selected={draft.kinds}
                 expanded={expanded.kinds}
                 onToggleExpanded={() => toggleExpanded('kinds')}
-                onSelectAll={() => setDraft((state) => ({ ...state, kinds: null }))}
+                onToggleAll={(kinds) => setDraft((state) => ({ ...state, kinds: kinds as HistoryKind[] }))}
                 onToggleOption={(id) =>
                   setDraft((state) => ({
                     ...state,
@@ -311,7 +313,7 @@ export function HistoryFiltersSheet({
                     selected={draft.actorIds}
                     expanded={expanded.actors}
                     onToggleExpanded={() => toggleExpanded('actors')}
-                    onSelectAll={() => setDraft((state) => ({ ...state, actorIds: null }))}
+                    onToggleAll={(actorIds) => setDraft((state) => ({ ...state, actorIds }))}
                     onToggleOption={(id) =>
                       setDraft((state) => ({
                         ...state,
@@ -329,7 +331,7 @@ export function HistoryFiltersSheet({
                     selected={draft.propertyIds}
                     expanded={expanded.objects}
                     onToggleExpanded={() => toggleExpanded('objects')}
-                    onSelectAll={() => setDraft((state) => ({ ...state, propertyIds: null }))}
+                    onToggleAll={(propertyIds) => setDraft((state) => ({ ...state, propertyIds }))}
                     onToggleOption={(id) =>
                       setDraft((state) => ({
                         ...state,
@@ -395,7 +397,7 @@ function FilterGroupCard({
   selected,
   expanded,
   onToggleExpanded,
-  onSelectAll,
+  onToggleAll,
   onToggleOption,
 }: {
   readonly title: string;
@@ -403,7 +405,7 @@ function FilterGroupCard({
   readonly selected: ReadonlyArray<string> | null;
   readonly expanded: boolean;
   readonly onToggleExpanded: () => void;
-  readonly onSelectAll: () => void;
+  readonly onToggleAll: (next: ReadonlyArray<string> | null) => void;
   readonly onToggleOption: (id: string) => void;
 }): JSX.Element {
   const count = selected === null ? rows.length : selected.length;
@@ -420,7 +422,7 @@ function FilterGroupCard({
             id={masterId}
             className="h-6 w-6"
             checked={selected === null ? true : selected.length > 0 ? 'indeterminate' : false}
-            onCheckedChange={onSelectAll}
+            onCheckedChange={() => onToggleAll(toggleHistoryFilterGroup(selected))}
             aria-label={`Выбрать все: ${title}`}
           />
         </label>

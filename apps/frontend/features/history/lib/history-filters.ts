@@ -179,6 +179,16 @@ export function historyParticipantTitle(
   return participant.firstName !== '' ? participant.firstName : participant.name;
 }
 
+/** Переключение группы мастер-чекбоксом шита: «все» (null) — снять всю
+ * группу ([]); иначе (частичный выбор или «ни одного») — поставить всю
+ * группу (null). Решение владельца 23.09: тап по мастер-чекбоксу из
+ * состояния «все» должен снимать группу, а не быть но-опом. */
+export function toggleHistoryFilterGroup(
+  current: ReadonlyArray<string> | null,
+): ReadonlyArray<string> | null {
+  return current === null ? [] : null;
+}
+
 /**
  * Переключение одной опции группы в черновике шита: «все» (null) — явный
  * список «все, кроме переключённой» (полный каталог опций знает вызывающий

@@ -149,6 +149,19 @@ test('шит открывается свёрнутым с «всеми выбр�
     await expect(dialog.getByRole('checkbox', { name: label })).toHaveAttribute('data-state', 'checked');
   }
 
+  // Мастер-чекбокс — переключатель (решение владельца 23.09): из «все»
+  // снимает всю группу, повторный тап возвращает «все».
+  await dialog.getByRole('checkbox', { name: 'Выбрать все: Основные действия' }).click();
+  await expect(dialog.getByRole('checkbox', { name: 'Выбрать все: Основные действия' })).toHaveAttribute('data-state', 'unchecked');
+  await expect(dialog.getByText('0/4')).toBeVisible();
+  for (const label of ['Добавление', 'Изменение', 'Выполнение', 'Удаление']) {
+    await expect(dialog.getByRole('checkbox', { name: label })).toHaveAttribute('data-state', 'unchecked');
+  }
+  await dialog.getByRole('checkbox', { name: 'Выбрать все: Основные действия' }).click();
+  await expect(dialog.getByRole('checkbox', { name: 'Выбрать все: Основные действия' })).toHaveAttribute('data-state', 'checked');
+  await expect(dialog.getByText('4/4')).toBeVisible();
+  await expect(dialog.getByRole('checkbox', { name: 'Добавление' })).toHaveAttribute('data-state', 'checked');
+
   // Крестик закрывает без коммита: лента и адрес не тронуты.
   await dialog.getByRole('button', { name: 'Закрыть фильтры' }).click();
   await expect(dialog).toHaveCount(0);
