@@ -745,6 +745,11 @@ type Querier interface {
 	// строк остаются в самом журнале. Обезличенные актёры (пользователь удалён)
 	// не фильтруемы по определению. Отображаемое имя собирает адаптер по канону
 	// access.DisplayNameOf (маскированный телефон вместо сырого — PII).
+	// is_owner (#711, макет 2067-163528): замок владельца — пользователь —
+	// владелец ХОТЯ БЫ ОДНОГО объекта области (bool_or по ноге properties
+	// UNION'а); приглашённый без своих объектов флага не получает. first_name —
+	// имя без фамилии (u.name) для строки «(Вы)»; '' у безымянных (тогда
+	// name — маскированный телефон).
 	//
 	ListHistoryFilterParticipants(ctx context.Context, arg ListHistoryFilterParticipantsParams) ([]ListHistoryFilterParticipantsRow, error)
 	// The user's feed page, newest first, deleted rows never appear. The walk

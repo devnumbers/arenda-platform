@@ -3,6 +3,7 @@ import {
   DEFAULT_HISTORY_FILTERS,
   historyFeedScope,
   historyFiltersParams,
+  historyParticipantTitle,
   historyPeriodChipLabel,
   isDefaultHistoryFilters,
   readHistoryFilters,
@@ -156,6 +157,24 @@ describe('historyPeriodChipLabel', () => {
   it('с периодом — формат чипа канона: «1 окт — 20 дек» (макет 2067-162950)', () => {
     expect(historyPeriodChipLabel({ from: '2026-10-01', to: '2026-12-20' })).toBe('1 окт — 20 дек');
     expect(historyPeriodChipLabel({ from: '2026-09-23', to: '2026-09-23' })).toBe('23 сен');
+  });
+});
+
+describe('historyParticipantTitle', () => {
+  const participant = { name: 'Даниил Смирнов', firstName: 'Даниил' };
+
+  it('чужой участник — канон отображаемого имени', () => {
+    expect(historyParticipantTitle(participant, false)).toBe('Даниил Смирнов');
+  });
+
+  it('себе — только имя без фамилии (макет 2067-163528: «Даниил (Вы)»)', () => {
+    expect(historyParticipantTitle(participant, true)).toBe('Даниил');
+  });
+
+  it('себе без имени — канон (маскированный телефон)', () => {
+    expect(historyParticipantTitle({ name: '+7********34', firstName: '' }, true)).toBe(
+      '+7********34',
+    );
   });
 });
 

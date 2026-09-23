@@ -271,23 +271,21 @@ func (q *Queries) ListHistoryFilterObjects(ctx context.Context, arg ListHistoryF
 }
 
 const listHistoryFilterParticipants = `-- name: ListHistoryFilterParticipants :many
-SELECT DISTINCT u.id, u.name, u.surname, u.phone, u.email
-FROM users u
-WHERE u.id IN (
-    SELECT p.owner_id
+WITH scope_participant(user_id, is_owner) AS (
+    SELECT p.owner_id, TRUE
     FROM properties p
     WHERE actor_can_read_history(p.id, $1::uuid)
       AND ($2::text = ''
            OR p.id = ANY(string_to_array($2::text, ',')::uuid[]))
     UNION
-    SELECT m.user_id
+    SELECT m.user_id, FALSE
     FROM property_members m
     JOIN properties p ON p.id = m.property_id
     WHERE actor_can_read_history(m.property_id, $1::uuid)
       AND ($2::text = ''
            OR m.property_id = ANY(string_to_array($2::text, ',')::uuid[]))
     UNION
-    SELECT aj.actor_id
+    SELECT aj.actor_id, FALSE
     FROM action_journal aj
     JOIN properties p ON p.id = aj.property_id
     WHERE actor_can_read_history(aj.property_id, $1::uuid)
@@ -295,6 +293,12 @@ WHERE u.id IN (
            OR aj.property_id = ANY(string_to_array($2::text, ',')::uuid[]))
       AND aj.actor_id IS NOT NULL
 )
+SELECT u.id, u.name, u.surname, u.phone, u.email,
+       COALESCE(u.name, '') AS first_name,
+       bool_or(s.is_owner) AS is_owner
+FROM scope_participant s
+JOIN users u ON u.id = s.user_id
+GROUP BY u.id
 ORDER BY u.name ASC NULLS LAST, u.surname ASC NULLS LAST, u.id ASC
 `
 
@@ -304,11 +308,13 @@ type ListHistoryFilterParticipantsParams struct {
 }
 
 type ListHistoryFilterParticipantsRow struct {
-	ID      pgtype.UUID `json:"id"`
-	Name    pgtype.Text `json:"name"`
-	Surname pgtype.Text `json:"surname"`
-	Phone   string      `json:"phone"`
-	Email   pgtype.Text `json:"email"`
+	ID        pgtype.UUID `json:"id"`
+	Name      pgtype.Text `json:"name"`
+	Surname   pgtype.Text `json:"surname"`
+	Phone     string      `json:"phone"`
+	Email     pgtype.Text `json:"email"`
+	FirstName string      `json:"first_name"`
+	IsOwner   bool        `json:"is_owner"`
 }
 
 // Опции фильтров ленты (ADR 0061 §7, тикет #708): участники области =
@@ -319,6 +325,11 @@ type ListHistoryFilterParticipantsRow struct {
 // строк остаются в самом журнале. Обезличенные актёры (пользователь удалён)
 // не фильтруемы по определению. Отображаемое имя собирает адаптер по канону
 // access.DisplayNameOf (маскированный телефон вместо сырого — PII).
+// is_owner (#711, макет 2067-163528): замок владельца — пользователь —
+// владелец ХОТЯ БЫ ОДНОГО объекта области (bool_or по ноге properties
+// UNION'а); приглашённый без своих объектов флага не получает. first_name —
+// имя без фамилии (u.name) для строки «(Вы)»; ” у безымянных (тогда
+// name — маскированный телефон).
 func (q *Queries) ListHistoryFilterParticipants(ctx context.Context, arg ListHistoryFilterParticipantsParams) ([]ListHistoryFilterParticipantsRow, error) {
 	rows, err := q.db.Query(ctx, listHistoryFilterParticipants, arg.Actor, arg.PropertyIds)
 	if err != nil {
@@ -334,6 +345,8 @@ func (q *Queries) ListHistoryFilterParticipants(ctx context.Context, arg ListHis
 			&i.Surname,
 			&i.Phone,
 			&i.Email,
+			&i.FirstName,
+			&i.IsOwner,
 		); err != nil {
 			return nil, err
 		}

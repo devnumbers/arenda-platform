@@ -3633,7 +3633,8 @@ export interface components {
         /**
          * @description Участник-вариант фильтра. name — канон отображаемого имени платформы
          *     («Имя Фамилия», иначе маскированный телефон); email — текущая почта
-         *     пользователя.
+         *     пользователя; first_name — имя без фамилии для строки «(Вы)»;
+         *     is_owner — замок владельца объектов (макет 2067-163528).
          */
         HistoryParticipant: {
             /** Format: uuid */
@@ -3641,6 +3642,10 @@ export interface components {
             name: string;
             /** @description Текущая почта; '' — почты нет. */
             email: string;
+            /** @description Имя без фамилии; '' — имени нет (тогда name — маскированный телефон). */
+            first_name: string;
+            /** @description Пользователь владеет хотя бы одним объектом области чтения. */
+            is_owner: boolean;
         };
         /** @description Объект-вариант фильтра с фото-аватаром карточки (первое по времени фото, */
         HistoryObject: {

@@ -55,11 +55,15 @@ export type HistoryEntry = {
   readonly createdAt: string;
 };
 
-/** Участник-вариант шита фильтров (GET /history/filters, #708). */
+/** Участник-вариант шита фильтров (GET /history/filters, #708). firstName —
+ * имя без фамилии для строки «(Вы)» ('' — имени нет); isOwner — владелец
+ * хотя бы одного объекта области чтения (иконка-замок, макет 2067-163528). */
 export type HistoryParticipantOption = {
   readonly id: string;
   readonly name: string;
   readonly email: string;
+  readonly firstName: string;
+  readonly isOwner: boolean;
 };
 
 /** Объект-вариант шита фильтров с фото-аватаром ('' — фото нет). */

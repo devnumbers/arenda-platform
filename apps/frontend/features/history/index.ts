@@ -14,6 +14,7 @@ export {
   DEFAULT_HISTORY_FILTERS,
   historyFeedScope,
   historyFiltersParams,
+  historyParticipantTitle,
   historyPeriodChipLabel,
   isDefaultHistoryFilters,
   readHistoryFilters,

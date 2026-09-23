@@ -12,6 +12,7 @@ import {
   Edit,
   HomeMain,
   Key,
+  LockSmall,
   SmallArrowDown,
   SmallArrowUp,
   Team,
@@ -30,8 +31,10 @@ import {
   type HistoryKind,
 } from '@/entities/history';
 import { PropertyAvatar } from '@/entities/property';
+import { useMe } from '@/features/auth';
 import {
   DEFAULT_HISTORY_FILTERS,
+  historyParticipantTitle,
   historyPeriodChipLabel,
   toggleHistoryFilterOption,
   type HistoryFilters,
@@ -58,7 +61,12 @@ import { HistoryFiltersSheetSkeleton } from './history-states';
  * StickyBottomBar), рендерится только в открытом состоянии.
  *
  * Группы-чекбоксы со счётчиками N/M: «Основные действия», «Виды действий»,
- * «Участники» и «Объекты» (опции — GET /history/filters, #708). Семантика
+ * «Участники» и «Объекты» (опции — GET /history/filters, #708). Строки —
+ * подпись 14/16 с сепараторами #ebebeb (кроме последней), макет
+ * 2067-163528. Участники: чужой — канон отображаемого имени, своя строка —
+ * только имя + серый суффикс «(Вы)» (по id сессии); владелец объектов
+ * области (is_owner) — замок 16 перед почтой; у приглашённого без своих
+ * объектов замка нет. Семантика
  * по аннотации макета («открывается сначала со свернутыми и всеми
  * выбранными категориями»): все выбрано = «все» (null) — сервер не
  * фильтрует; частичный выбор — только выбранное; ни одного — пустой
@@ -87,8 +95,9 @@ import { HistoryFiltersSheetSkeleton } from './history-states';
  */
 
 /** Строка группы: id значения, подпись, опциональный подзаголовок и
- * ведущая иконка/аватар (макет 2050-158280: 24-иконка действий/видов,
- * кружок 36 у участников, аватар объекта 32). */
+ * ведущая иконка/аватар (макет 2067-163528: 24-иконка действий/видов,
+ * кружок 36 у участников, аватар объекта 32). isMe — суффикс «(Вы)»;
+ * ownerLock — замок владельца объектов перед подзаголовком. */
 type HistoryFilterOptionRow = {
   readonly id: string;
   readonly label: string;
@@ -97,6 +106,8 @@ type HistoryFilterOptionRow = {
   readonly leadingSize: 'icon' | 'participant' | 'object';
   /** Фото объекта для ведущего аватара (leadingSize 'object'). */
   readonly photoUrl?: string;
+  readonly isMe?: boolean;
+  readonly ownerLock?: boolean;
 };
 
 const BASE_ACTION_ICONS: Record<HistoryBaseAction, JSX.Element> = {
@@ -159,6 +170,10 @@ export function HistoryFiltersSheet({
   });
   const [periodPickerOpen, setPeriodPickerOpen] = useState(false);
   const today = dateToIsoLocal(new Date());
+  // Своя строка участников — «Имя (Вы)» (макет 2067-163528): себя узнаём
+  // по id сессии (канон списка участников объекта).
+  const meQuery = useMe();
+  const meId = meQuery.data?.id;
 
   const toggleExpanded = (key: 'actions' | 'kinds' | 'actors' | 'objects'): void => {
     setExpanded((state) => ({ ...state, [key]: !state[key] }));
@@ -183,9 +198,11 @@ export function HistoryFiltersSheet({
     optionsQuery.data?.participants ?? []
   ).map((participant) => ({
     id: participant.id,
-    label: participant.name,
+    label: historyParticipantTitle(participant, participant.id === meId),
     subtitle: participant.email,
     leadingSize: 'participant',
+    isMe: participant.id === meId,
+    ownerLock: participant.isOwner,
   }));
 
   const objectRows: ReadonlyArray<HistoryFilterOptionRow> = (optionsQuery.data?.objects ?? []).map(
@@ -397,7 +414,7 @@ function FilterGroupCard({
         />
         <button
           type="button"
-          className="flex min-w-0 flex-1 cursor-pointer items-center py-4 pr-5 text-left outline-none focus-visible:ring-4 focus-visible:ring-primary"
+          className="flex min-w-0 flex-1 cursor-pointer items-center py-4 pl-2 pr-5 text-left outline-none focus-visible:ring-4 focus-visible:ring-primary"
           onClick={onToggleExpanded}
           aria-expanded={expanded}
         >
@@ -416,10 +433,11 @@ function FilterGroupCard({
       </div>
       {expanded && (
         <div className="pb-1">
-          {rows.map((row) => (
+          {rows.map((row, index) => (
             <FilterOptionRow
               key={row.id}
               row={row}
+              last={index === rows.length - 1}
               checked={selected === null || selected.includes(row.id)}
               onToggle={() => onToggleOption(row.id)}
             />
@@ -430,15 +448,19 @@ function FilterGroupCard({
   );
 }
 
-/** Строка опции (макет 2050-158280): чекбокс 24 на 44 от края, ведущая
- * иконка/аватар, подпись 16/18 + подзаголовок 13/15; снятая опция —
- * приглушена. */
+/** Строка опции (макет 2067-163528): чекбокс 24 на 44 от края, ведущая
+ * иконка/аватар, подпись 14/16 + подзаголовок 13/15; между строками —
+ * сепаратор #ebebeb на контейнере текста (кроме последней строки);
+ * снятая опция — приглушена. У себя — суффикс «(Вы)» серым, у владельца
+ * объектов — замок 16 перед подзаголовком. */
 function FilterOptionRow({
   row,
+  last,
   checked,
   onToggle,
 }: {
   readonly row: HistoryFilterOptionRow;
+  readonly last: boolean;
   readonly checked: boolean;
   readonly onToggle: () => void;
 }): JSX.Element {
@@ -448,7 +470,7 @@ function FilterOptionRow({
         className="h-6 w-6"
         checked={checked}
         onCheckedChange={onToggle}
-        aria-label={row.label}
+        aria-label={row.isMe === true ? `${row.label} (Вы)` : row.label}
       />
       {row.leadingSize === 'icon' && (
         <span
@@ -467,15 +489,23 @@ function FilterOptionRow({
           <PropertyAvatar photoUrl={row.photoUrl} surface="filter" />
         </span>
       )}
-      <span className="ml-3 min-w-0 flex-1">
+      <span
+        className={`ml-3 flex min-w-0 flex-1 flex-col justify-center gap-1 self-stretch ${last ? '' : 'border-b border-[#ebebeb]'}`}
+      >
         <span
-          className={`block truncate text-base font-medium leading-[18px] ${checked ? 'text-content' : 'text-content-tertiary'}`}
+          className={`truncate text-sm font-medium leading-4 ${checked ? 'text-content' : 'text-content-tertiary'}`}
         >
           {row.label}
+          {row.isMe === true && <span className="text-content-tertiary"> (Вы)</span>}
         </span>
         {row.subtitle !== undefined && (
-          <span className="block truncate text-[13px] leading-[15px] text-content-tertiary">
-            {row.subtitle}
+          <span className="flex items-center gap-1">
+            {row.ownerLock === true && (
+              <LockSmall className="h-4 w-4 shrink-0 text-content-tertiary" aria-hidden />
+            )}
+            <span className="truncate text-[13px] leading-[15px] text-content-tertiary">
+              {row.subtitle}
+            </span>
           </span>
         )}
       </span>

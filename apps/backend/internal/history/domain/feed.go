@@ -35,11 +35,17 @@ type FeedEntry struct {
 // FilterParticipant is one «Участники» option of the filter sheet (ADR 0061
 // §7): a current member or a historical actor of the scope — revoked and
 // exited actors stay filterable because their rows survive. The chip shows
-// the live display name and email: UI metadata, not a row fact.
+// the live display name and email: UI metadata, not a row fact. FirstName
+// is the name without the surname (the «(Вы)» row, макет 2067-163528) and
+// stays empty when the user has no name — Name is a masked phone then;
+// IsOwner marks the owner of at least one object of the scope — the
+// owner-lock icon.
 type FilterParticipant struct {
-	ID    uuid.UUID
-	Name  string
-	Email string
+	ID        uuid.UUID
+	Name      string
+	Email     string
+	FirstName string
+	IsOwner   bool
 }
 
 // FilterObject is one «Объекты» option of the filter sheet: the object with

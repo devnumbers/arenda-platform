@@ -58,16 +58,30 @@ describe('mapHistoryItem', () => {
 });
 
 describe('mapHistoryFilterOptions', () => {
-  it('переводит опции шита в camelCase', () => {
+  it('переводит опции шита в camelCase вместе с first_name/is_owner (#711)', () => {
     const options = mapHistoryFilterOptions({
-      participants: [{ id: 'user-1', name: 'Иван Иванов', email: 'ivan@example.com' }],
+      participants: [
+        {
+          id: 'user-1',
+          name: 'Иван Иванов',
+          email: 'ivan@example.com',
+          first_name: 'Иван',
+          is_owner: true,
+        },
+      ],
       objects: [
         { id: 'property-1', name: 'Моя квартира', address: 'Ленина 1', photo_url: 'https://cdn/x.jpg' },
         { id: 'property-2', name: 'Гараж', address: '', photo_url: '' },
       ],
     } satisfies HistoryFiltersDto);
     expect(options.participants).toEqual([
-      { id: 'user-1', name: 'Иван Иванов', email: 'ivan@example.com' },
+      {
+        id: 'user-1',
+        name: 'Иван Иванов',
+        email: 'ivan@example.com',
+        firstName: 'Иван',
+        isOwner: true,
+      },
     ]);
     expect(options.objects).toEqual([
       { id: 'property-1', name: 'Моя квартира', address: 'Ленина 1', photoUrl: 'https://cdn/x.jpg' },

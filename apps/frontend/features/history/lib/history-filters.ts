@@ -1,5 +1,5 @@
 import type { IsoDate, IsoRange } from '@/shared/lib/calendar';
-import type { HistoryBaseAction, HistoryKind } from '@/entities/history';
+import type { HistoryBaseAction, HistoryKind, HistoryParticipantOption } from '@/entities/history';
 import { HISTORY_KINDS } from '@/entities/history';
 import { formatIsoRangeChipLabel } from '@/shared/lib/date-format';
 import { readIsoRangeParam, type UrlParamsSource } from '@/shared/lib/parse-iso-range-param';
@@ -163,6 +163,20 @@ export function historyFeedScope(filters: HistoryFilters): HistoryFeedScope | nu
  * 2177-60527), с периодом — формат чипа канона (макет 2067-162950). */
 export function historyPeriodChipLabel(period: IsoRange | null): string {
   return period !== null ? formatIsoRangeChipLabel(period) : 'Выбрать период';
+}
+
+/** Заголовок строки участника шита: чужой — канон отображаемого имени,
+ * себе — только имя без фамилии (макет 2067-163528: «Даниил (Вы)»;
+ * суффикс «(Вы)» серым рисует сам шит); имени нет — канон (маскированный
+ * телефон). */
+export function historyParticipantTitle(
+  participant: Pick<HistoryParticipantOption, 'name' | 'firstName'>,
+  isMe: boolean,
+): string {
+  if (!isMe) {
+    return participant.name;
+  }
+  return participant.firstName !== '' ? participant.firstName : participant.name;
 }
 
 /**

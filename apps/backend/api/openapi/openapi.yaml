@@ -7935,8 +7935,9 @@ components:
       description: |
         Участник-вариант фильтра. name — канон отображаемого имени платформы
         («Имя Фамилия», иначе маскированный телефон); email — текущая почта
-        пользователя.
-      required: [id, name, email]
+        пользователя; first_name — имя без фамилии для строки «(Вы)»;
+        is_owner — замок владельца объектов (макет 2067-163528).
+      required: [id, name, email, first_name, is_owner]
       properties:
         id:
           type: string
@@ -7946,6 +7947,12 @@ components:
         email:
           type: string
           description: Текущая почта; '' — почты нет.
+        first_name:
+          type: string
+          description: Имя без фамилии; '' — имени нет (тогда name — маскированный телефон).
+        is_owner:
+          type: boolean
+          description: Пользователь владеет хотя бы одним объектом области чтения.
 
     HistoryObject:
       type: object
