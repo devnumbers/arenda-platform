@@ -117,6 +117,18 @@ test('шит открывается свёрнутым с «всеми выбр�
   const dialog = sheet(page);
   await expect(dialog).toBeVisible();
 
+  // Отступ чекбокса шапки от края карточки — 20 (макет 2177-60528;
+  // регресс-гард: margin на кнопке чекбокса съедает preflight, #753).
+  const masterInset = await page.evaluate(() => {
+    const card = document.querySelector('[aria-label="Фильтры истории"] section');
+    const box = card?.querySelector('button[role="checkbox"]')?.getBoundingClientRect();
+    if (!card || !box) {
+      return -1;
+    }
+    return Math.round(box.left - card.getBoundingClientRect().left);
+  });
+  expect(masterInset).toBe(20);
+
   // Анатомия макета 2177-60527: чип периода, четыре свёрнутые группы со
   // счётчиками «все выбрано», сброс и применение.
   await expect(dialog.getByRole('button', { name: 'Выбрать период' })).toBeVisible();
@@ -158,6 +170,13 @@ test('снятие опции «Добавление» и «Применить»
   await expect(dialog.getByText('3/4')).toBeVisible();
   await expect(dialog.getByRole('checkbox', { name: 'Выбрать все: Основные действия' })).toHaveAttribute('data-state', 'indeterminate');
 
+  // Цвет текста невыбранной опции не меняется (макет 2050-158281:
+  // content #171a1c, не tertiary).
+  const uncheckedColor = await dialog
+    .getByText('Добавление', { exact: true })
+    .evaluate((el) => getComputedStyle(el).color);
+  expect(uncheckedColor).toBe('rgb(23, 26, 28)');
+
   await dialog.getByRole('button', { name: 'Применить фильтры' }).click();
   await expect(dialog).toHaveCount(0);
   // Пишется router.push — адрес догоняет с ретраем.
@@ -175,6 +194,15 @@ test('снятие опции «Добавление» и «Применить»
   await expect(sheet(page).getByText('3/4')).toBeVisible();
   await sheet(page).getByRole('button', { name: 'Основные действия' }).click();
   await expect(sheet(page).getByRole('checkbox', { name: 'Добавление' })).toHaveAttribute('data-state', 'unchecked');
+
+  // Вся строка кликабельна: тап по тексту переключает опцию (макет
+  // 2050-158281), не только чекбокс.
+  await sheet(page).getByText('Добавление', { exact: true }).click();
+  await expect(sheet(page).getByRole('checkbox', { name: 'Добавление' })).toHaveAttribute('data-state', 'checked');
+  await expect(sheet(page).getByText('4/4')).toBeVisible();
+  await sheet(page).getByText('Добавление', { exact: true }).click();
+  await expect(sheet(page).getByRole('checkbox', { name: 'Добавление' })).toHaveAttribute('data-state', 'unchecked');
+  await expect(sheet(page).getByText('3/4')).toBeVisible();
 });
 
 test('период «сегодня» через CalendarRangePicker: синий чип, дальняя запись уходит из ленты', async ({ page, seededUser }, testInfo) => {
@@ -283,7 +311,7 @@ test('участники: своя строка «Иван (Вы)» с замк�
   // Своя строка: имя без фамилии + серый суффикс «(Вы)»; владелец
   // объектов области — замок перед почтой (вторая svg строки: аватар + замок).
   const ownRow = page
-    .locator('div.min-h-14')
+    .locator('.min-h-14')
     .filter({ has: page.getByRole('checkbox', { name: 'Иван (Вы)' }) });
   await expect(ownRow).toHaveCount(1);
   await expect(ownRow.getByText('(Вы)', { exact: true })).toBeVisible();
@@ -292,7 +320,7 @@ test('участники: своя строка «Иван (Вы)» с замк�
 
   // Приглашённая без своих объектов: канон имени, замка нет.
   const memberRow = page
-    .locator('div.min-h-14')
+    .locator('.min-h-14')
     .filter({ has: page.getByRole('checkbox', { name: 'Мария Петрова' }) });
   await expect(memberRow).toHaveCount(1);
   await expect(memberRow.locator('svg.text-content-tertiary')).toHaveCount(0);

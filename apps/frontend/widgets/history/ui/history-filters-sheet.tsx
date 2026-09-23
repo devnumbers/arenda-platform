@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type JSX, type ReactNode } from 'react';
+import { useEffect, useId, useState, type JSX, type ReactNode } from 'react';
 import type { ApiError } from '@/shared/api/errors';
 import type { UseQueryResult } from '@tanstack/react-query';
 import {
@@ -63,7 +63,11 @@ import { HistoryFiltersSheetSkeleton } from './history-states';
  * Группы-чекбоксы со счётчиками N/M: «Основные действия», «Виды действий»,
  * «Участники» и «Объекты» (опции — GET /history/filters, #708). Строки —
  * подпись 14/16 с сепараторами #ebebeb (кроме последней), макет
- * 2067-163528. Участники: чужой — канон отображаемого имени, своя строка —
+ * 2067-163528; строка целиком кликабельна (label), цвет текста от
+ * состояния чекбокса не зависит (аннотации макета 2050-158281), как и
+ * область чекбокса шапки — паддинги на label, margin на кнопке съедает
+ * preflight (#753). Участники: чужой — канон отображаемого имени, своя
+ * строка —
  * только имя + серый суффикс «(Вы)» (по id сессии); владелец объектов
  * области (is_owner) — замок 16 перед почтой; у приглашённого без своих
  * объектов замка нет. Семантика
@@ -403,15 +407,23 @@ function FilterGroupCard({
   readonly onToggleOption: (id: string) => void;
 }): JSX.Element {
   const count = selected === null ? rows.length : selected.length;
+  const masterId = useId();
   return (
     <section className="rounded-3xl bg-surface-muted py-1">
       <div className="flex min-h-14 items-center">
-        <Checkbox
-          className="ml-5 h-6 w-6"
-          checked={selected === null ? true : selected.length > 0 ? 'indeterminate' : false}
-          onCheckedChange={onSelectAll}
-          aria-label={`Выбрать все: ${title}`}
-        />
+        {/* Область чекбокса — сама кликабельная зона (аннотация макета
+          * 2050-158281: «нажимается по этой области, при свернутом виде
+          * тоже»): паддинги на label, не margin на кнопке — иначе
+          * preflight `button{margin:0}` их съедает (#753). */}
+        <label htmlFor={masterId} className="flex cursor-pointer items-center py-4 pl-5 pr-2">
+          <Checkbox
+            id={masterId}
+            className="h-6 w-6"
+            checked={selected === null ? true : selected.length > 0 ? 'indeterminate' : false}
+            onCheckedChange={onSelectAll}
+            aria-label={`Выбрать все: ${title}`}
+          />
+        </label>
         <button
           type="button"
           className="flex min-w-0 flex-1 cursor-pointer items-center py-4 pl-2 pr-5 text-left outline-none focus-visible:ring-4 focus-visible:ring-primary"
@@ -450,9 +462,11 @@ function FilterGroupCard({
 
 /** Строка опции (макет 2067-163528): чекбокс 24 на 44 от края, ведущая
  * иконка/аватар, подпись 14/16 + подзаголовок 13/15; между строками —
- * сепаратор #ebebeb на контейнере текста (кроме последней строки);
- * снятая опция — приглушена. У себя — суффикс «(Вы)» серым, у владельца
- * объектов — замок 16 перед подзаголовком. */
+ * сепаратор #ebebeb на контейнере текста (кроме последней строки).
+ * Вся строка — label: клик в любое место переключает опцию; цвет текста
+ * от состояния чекбокса не зависит (макет 2050-158281: невыбранная
+ * остаётся чёрной). У себя — суффикс «(Вы)» серым, у владельца объектов —
+ * замок 16 перед подзаголовком. */
 function FilterOptionRow({
   row,
   last,
@@ -464,18 +478,21 @@ function FilterOptionRow({
   readonly checked: boolean;
   readonly onToggle: () => void;
 }): JSX.Element {
+  const checkboxId = useId();
   return (
-    <div className="flex min-h-14 items-center pl-11 pr-5">
+    <label
+      htmlFor={checkboxId}
+      className="flex min-h-14 cursor-pointer items-center pl-11 pr-5"
+    >
       <Checkbox
+        id={checkboxId}
         className="h-6 w-6"
         checked={checked}
         onCheckedChange={onToggle}
         aria-label={row.isMe === true ? `${row.label} (Вы)` : row.label}
       />
       {row.leadingSize === 'icon' && (
-        <span
-          className={`ml-4 flex h-6 w-6 shrink-0 items-center justify-center ${checked ? 'text-content' : 'text-content-tertiary'}`}
-        >
+        <span className="ml-4 flex h-6 w-6 shrink-0 items-center justify-center text-content">
           {row.leading}
         </span>
       )}
@@ -492,9 +509,7 @@ function FilterOptionRow({
       <span
         className={`ml-3 flex min-w-0 flex-1 flex-col justify-center gap-1 self-stretch ${last ? '' : 'border-b border-[#ebebeb]'}`}
       >
-        <span
-          className={`truncate text-sm font-medium leading-4 ${checked ? 'text-content' : 'text-content-tertiary'}`}
-        >
+        <span className="truncate text-sm font-medium leading-4 text-content">
           {row.label}
           {row.isMe === true && <span className="text-content-tertiary"> (Вы)</span>}
         </span>
@@ -509,6 +524,6 @@ function FilterOptionRow({
           </span>
         )}
       </span>
-    </div>
+    </label>
   );
 }
