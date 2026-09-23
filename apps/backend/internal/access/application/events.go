@@ -46,9 +46,11 @@ type InvitationActivated struct {
 }
 
 // MembershipGranted reports an active membership granted instantly to a
-// registered user (issue #829): the Invite and AddProperties batches and the
-// InviteByEmail registered path all land through this transition. The granted
-// member learns about the new access (the №5 «Приглашение в объект» row, the
+// registered user (issue #829): the Invite and AddProperties batches, the
+// InviteByEmail registered path and the direct add-member endpoint
+// (POST /properties/{propertyId}/access/members) all land through this
+// transition. The granted member learns about the new access (the №5
+// «Приглашение в объект» row, the
 // copy promising an access they actually have); a no-slot landing speaks the
 // system pause instead and publishes no granted event.
 type MembershipGranted struct {
