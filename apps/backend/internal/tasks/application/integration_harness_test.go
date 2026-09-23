@@ -61,6 +61,10 @@ func (c *mutableClock) Now() time.Time { return c.now }
 // seam; here only the role resolution contract matters.
 type stubPropertyPolicy struct{ role sharedpolicy.Role }
 
+// taskCompletedAction is the dotted id the audit and the action journal both
+// use for a manual task completion (goconst: three test sites share it).
+const taskCompletedAction = "task.completed"
+
 func (p stubPropertyPolicy) Role(context.Context, uuid.UUID, uuid.UUID) (sharedpolicy.Role, error) {
 	return sharedpolicy.RoleNone, nil
 }

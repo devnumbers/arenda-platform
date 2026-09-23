@@ -93,6 +93,26 @@ func TestHistory_TaskCompletionAndJournalClear(t *testing.T) {
 	if _, err := h.tasks.CompleteTask(h.ctx(), h.owner, h.propID, tasks[0].ID); err != nil {
 		t.Fatalf("CompleteTask (again): %v", err)
 	}
+	// The occurrence rows link the RULE (#713): the only task page is the
+	// rule's edit screen, and a hard-deleted rule leaves the link off —
+	// the occurrence id itself is navigable nowhere. The complete→
+	// uncomplete→complete cycle leaves two task.completed rows; both carry
+	// the rule link, so picking either satisfies the pin.
+	for _, action := range []string{taskCompletedAction, "task.uncompleted"} {
+		var linkID string
+		err := h.pool.QueryRow(h.ctx(),
+			`SELECT segments->1->'link'->>'id' FROM action_journal
+			 WHERE property_id = $1 AND action = $2`,
+			h.propID, action,
+		).Scan(&linkID)
+		if err != nil {
+			t.Fatalf("read %s link: %v", action, err)
+		}
+		if linkID != created.ID.String() {
+			t.Errorf("%s link id = %s, want the rule id %s (got the occurrence %s?)",
+				action, linkID, created.ID, tasks[0].ID)
+		}
+	}
 	if err := h.rules.DeleteRule(h.ctx(), h.owner, h.propID, created.ID); err != nil {
 		t.Fatalf("DeleteRule: %v", err)
 	}

@@ -93,7 +93,7 @@ Seven kinds (the mockup filter groups), stable `action` ids, base-action mapping
 | | member.role_changed | changed | имя, роль old → new |
 | | member.removed / invitation_cancelled / left / participant_removed (bulk) | deleted | имя или email |
 
-Mapping rulings: archive/unarchive, pause/resume, task uncomplete, rental extension → **changed**; operation deletion (the «Отменённая» tombstone) → **deleted**.
+Mapping rulings: archive/unarchive, pause/resume, task uncomplete, rental extension → **changed**; operation deletion (the «Отменённая» tombstone) → **deleted**. Link targets (ticket #713): links point at the entity's existing page, so the completed/uncompleted task occurrence rows link the **producing rule** (the only task page is the rule's edit screen; a hard-deleted rule — `RuleID` nil — leaves the row linkless, the deleted-entity rule).
 
 ### 5. Privacy and money
 

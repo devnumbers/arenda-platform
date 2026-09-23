@@ -59,7 +59,7 @@ func TestCompleteAndUncomplete_Semantics(t *testing.T) {
 	}
 
 	actions := h.auditActions(t, "task", taskID)
-	if !slices.Equal(actions, []string{"task.completed", "task.uncompleted"}) {
+	if !slices.Equal(actions, []string{taskCompletedAction, "task.uncompleted"}) {
 		t.Fatalf("audit = %v, want [task.completed task.uncompleted]", actions)
 	}
 }

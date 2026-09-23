@@ -194,8 +194,8 @@ test('лента из сида: чипы дней, группы «объект �
     /\/history\/participants\//,
   );
 
-  // Строки: сегменты дословно, связанные фрагменты — синие ссылки (#713
-  // проложит переходы), иконка основного действия с подписью группы.
+  // Строки: сегменты дословно, связанные фрагменты — синие ссылки на
+  // страницы сущностей (#713), иконка основного действия с подписью группы.
   await expect(page.getByText('Платёж создан:').first()).toBeVisible();
   await expect(page.getByText('Аренда за сентябрь')).toBeVisible();
   await expect(page.locator('svg[aria-label="Добавление"]').first()).toBeVisible();
@@ -226,6 +226,100 @@ test('лента из сида: чипы дней, группы «объект �
   expect(pillBox?.y).toBeLessThanOrEqual(96);
 
   await captureScreen(page, testInfo, 'history-feed-groups');
+});
+
+test('синие переходы #713: связанные сегменты ведут на страницы сущностей, удалённая — без перехода', async ({ page, seededUser }) => {
+  await execE2eSql('DELETE FROM action_journal;');
+  await openCabinetWithSeededSession(page, seededUser);
+
+  // Живой платёж сидовой квартиры (сид #463) — адресат платежной ссылки.
+  const paymentId = await execE2eSql(
+    `SELECT id FROM payments WHERE property_id = '${SEEDED_APARTMENT_PROPERTY_ID}' LIMIT 1`,
+  );
+  const memberUserId = await execE2eSql(`SELECT id FROM users WHERE email = 'e2e-member@example.com'`);
+
+  // Платёжная и участникская ссылки на живые сущности + объектная.
+  await seedEntry(
+    {
+      id: 'a0000000-0000-4000-8000-000000000011',
+      createdAt: new Date(Date.now() - 3 * 60_000).toISOString(),
+      segments: `[{"text": "Платёж изменён: "}, {"text": "Аренда за сентябрь", "link": {"kind": "payment", "id": "${paymentId}"}}]`,
+      searchable: 'Платёж изменён: Аренда за сентябрь Иван Иванов',
+      action: 'payment.updated',
+      baseAction: 'changed',
+    },
+    seededUser,
+  );
+  await seedEntry(
+    {
+      id: 'a0000000-0000-4000-8000-000000000012',
+      createdAt: new Date(Date.now() - 2 * 60_000).toISOString(),
+      propertyId: SEEDED_GARAGE_PROPERTY_ID,
+      segments: `[{"text": "Гараж на Садовой закреплён", "link": {"kind": "property", "id": "${SEEDED_GARAGE_PROPERTY_ID}"}}]`,
+      searchable: 'Гараж на Садовой закреплён Иван Иванов',
+      action: 'property.pinned',
+      baseAction: 'changed',
+      kind: 'property',
+    },
+    seededUser,
+  );
+  await seedEntry(
+    {
+      id: 'a0000000-0000-4000-8000-000000000013',
+      createdAt: new Date(Date.now() - 60_000).toISOString(),
+      segments: `[{"text": "Добавлен участник: "}, {"text": "Мария Петрова", "link": {"kind": "member", "id": "${memberUserId}"}}]`,
+      searchable: 'Добавлен участник: Мария Петрова Иван Иванов',
+      action: 'member.added',
+      baseAction: 'added',
+      kind: 'member',
+      actorIdSql: memberActorId(),
+      actorName: 'Мария Петрова',
+      actorRole: 'full_access',
+    },
+    seededUser,
+  );
+  // Удалённая сущность: сервер пишет строку без ссылки — снапшот названия
+  // остаётся, перехода нет (ADR 0061 §3).
+  await seedEntry(
+    {
+      id: 'a0000000-0000-4000-8000-000000000014',
+      createdAt: new Date().toISOString(),
+      segments: '[{"text": "Платёж удалён: Старый платёж"}]',
+      searchable: 'Платёж удалён: Старый платёж Иван Иванов',
+      action: 'payment.deleted',
+      baseAction: 'deleted',
+    },
+    seededUser,
+  );
+
+  await page.goto('/history');
+
+  // Сегмент-ссылка платежа ведёт на страницу платежа по его живому id.
+  const paymentLink = page.getByRole('link', { name: 'Аренда за сентябрь' });
+  await expect(paymentLink).toHaveAttribute(
+    'href',
+    `/properties/${SEEDED_APARTMENT_PROPERTY_ID}/payments/${paymentId}`,
+  );
+  await paymentLink.click();
+  await page.waitForURL(`**/properties/${SEEDED_APARTMENT_PROPERTY_ID}/payments/${paymentId}`);
+
+  // Объектная ссылка строки — на деталь своего объекта.
+  await page.goto('/history');
+  const propertyLink = page.getByRole('link', { name: 'Гараж на Садовой' }).last();
+  await expect(propertyLink).toHaveAttribute('href', `/properties/${SEEDED_GARAGE_PROPERTY_ID}`);
+
+  // Ссылка участника — на страницу участника хаба (uuid юзера из ссылки).
+  // Локатор по href: шапка актёра той же группы тоже «Мария Петрова», но
+  // ведёт в «Действия участника» (#712).
+  const memberLink = page.locator(`a[href="/participants/${memberUserId}"]`);
+  await expect(memberLink).toHaveCount(1);
+  await memberLink.click();
+  await page.waitForURL(`**/participants/${memberUserId}`);
+
+  // Удалённая сущность — текст строки без ссылки.
+  await page.goto('/history');
+  await expect(page.getByText('Старый платёж')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Старый платёж' })).toHaveCount(0);
 });
 
 test('прокрутка вверх догружает старое: prepend 55 записей поверх порции 50', async ({ page, seededUser }, testInfo) => {

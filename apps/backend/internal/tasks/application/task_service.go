@@ -108,7 +108,7 @@ func (s *TaskService) CompleteTask(
 			}
 			completed := today
 			task.CompletedDate = &completed
-			history := historydomain.TaskCompleted(task.ID, task.Title, taskDueDate(task))
+			history := historydomain.TaskCompleted(ruleLinkID(task.RuleID), task.Title, taskDueDate(task))
 			return mutationOutcome[domain.Task]{
 				Response:      task,
 				Audit:         auditdomain.ActionTaskCompleted,
@@ -155,7 +155,7 @@ func (s *TaskService) UncompleteTask(
 				AuditEntity:   auditdomain.EntityTask,
 				AuditEntityID: &task.ID,
 				AuditCtx:      auditRuleCtx(task.RuleID),
-				History:       new(historydomain.TaskUncompleted(task.ID, task.Title)),
+				History:       new(historydomain.TaskUncompleted(ruleLinkID(task.RuleID), task.Title)),
 				Tick:          true,
 			}, nil
 		})
@@ -456,6 +456,17 @@ func auditRuleCtx(ruleID *uuid.UUID) map[string]any {
 		return nil
 	}
 	return map[string]any{"rule_id": *ruleID}
+}
+
+// ruleLinkID dereferences the occurrence's rule binding for the journal
+// link (#713): the only task page is the rule's edit screen, so the row
+// links the rule; nil (the rule hard-deleted, resolution #496) yields
+// uuid.Nil, which the builder's entityLink turns into no link.
+func ruleLinkID(ruleID *uuid.UUID) uuid.UUID {
+	if ruleID == nil {
+		return uuid.Nil
+	}
+	return *ruleID
 }
 
 // taskDueDate is the occurrence's due date for the row text; the undated

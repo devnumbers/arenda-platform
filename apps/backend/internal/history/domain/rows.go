@@ -140,7 +140,7 @@ func PropertyAddressChanged(entityID uuid.UUID, oldAddress, newAddress string) E
 			{Text: newAddress, Link: entityLink(KindProperty, entityID)},
 		}
 	case newAddress == "":
-		e.Segments = Segments{{Text: "Удалён адрес объекта"}}
+		e.Segments = Segments{{Text: "Удалён адрес объекта", Link: entityLink(KindProperty, entityID)}}
 	default:
 		e.Segments = Segments{
 			{Text: "Адрес объекта изменён: "},

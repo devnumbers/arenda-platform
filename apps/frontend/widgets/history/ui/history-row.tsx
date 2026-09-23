@@ -1,10 +1,12 @@
 'use client';
 
 import type { ComponentType, JSX } from 'react';
+import Link from 'next/link';
 import { AddSmall, CheckSmall, EditSmall, TrashBinSmall } from '@/shared/assets/icons';
 import {
   baseActionLabel,
   baseActionTone,
+  historySegmentHref,
   type HistoryBaseActionTone,
   type HistoryEntry,
 } from '@/entities/history';
@@ -34,9 +36,10 @@ const TONE_BAR: Record<HistoryBaseActionTone, string> = {
  * Строка ленты «История действий» (#709, макет 2157-56876): цветная
  * полоска тона 3px на всю высоту строки, S-иконка основного действия,
  * текст — серверные сегменты дословно (ADR 0061 §6); связанные фрагменты —
- * синие с подчёркиванием (переходы по ссылкам сегментов — тикет #713).
- * Время — справа по нижней строке текста (items-end). Строка не кнопка:
- * переходом служат только синие фрагменты.
+ * синие с подчёркиванием, переход по ссылке сегмента на страницу сущности
+ * (#713): резолвер — entities/history, строка не кнопка, переходом служат
+ * только синие фрагменты. Время — справа по нижней строке текста
+ * (items-end).
  */
 export function HistoryRow({ entry }: { readonly entry: HistoryEntry }): JSX.Element {
   const tone = baseActionTone(entry.baseAction);
@@ -50,15 +53,20 @@ export function HistoryRow({ entry }: { readonly entry: HistoryEntry }): JSX.Ele
           aria-label={baseActionLabel(entry.baseAction)}
         />
         <p className="min-w-0 flex-1 text-xs leading-[15px] text-content">
-          {entry.segments.map((segment, index) =>
-            segment.link ? (
-              <span key={index} className="text-primary underline decoration-from-font">
+          {entry.segments.map((segment, index) => {
+            const href = segment.link ? historySegmentHref(segment.link, entry.propertyId) : null;
+            return href ? (
+              <Link
+                key={index}
+                href={href}
+                className="text-primary underline decoration-from-font"
+              >
                 {segment.text}
-              </span>
+              </Link>
             ) : (
               <span key={index}>{segment.text}</span>
-            ),
-          )}
+            );
+          })}
         </p>
       </div>
       <span className="shrink-0 text-xs leading-[15px] text-content-secondary">
