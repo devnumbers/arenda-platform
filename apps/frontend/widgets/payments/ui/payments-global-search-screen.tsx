@@ -188,13 +188,13 @@ export function PaymentsGlobalSearchScreen(): JSX.Element {
                       categoryIcon={<GlobalPaymentRuleIcon payment={payment} />}
                       title={payment.title}
                       subtitle={payment.propertyName}
-                      subtitleSuffix={
+                      subtitleIcon={
                         payment.isFavorite ? (
-                          // Индикатор избранного: пассивен, управление —
-                          // только со страницы платежа (решение #580).
-                          <span className="flex shrink-0" aria-hidden>
-                            <Star className="h-4 w-4" />
-                          </span>
+                          // Индикатор избранного — первый элемент второй
+                          // строки (954-52461); у не-избранных слот пуст и
+                          // имя встаёт на место звезды. Пассивен, управление
+                          // — только со страницы платежа (решение #580).
+                          <Star className="h-4 w-4" aria-hidden />
                         ) : undefined
                       }
                       amountKopecks={payment.amountKopecks}

@@ -143,7 +143,10 @@ export function PaymentOverdueGlobalScreen({
                   categoryIcon={<OverdueRowIcon payment={payment} />}
                   title={payment.title}
                   subtitle={payment.propertyName}
-                  subtitleSuffix={
+                  // Индикатор избранного — первый элемент второй строки
+                  // (954-52461); у не-избранных слот пуст и имя встаёт на
+                  // место звезды.
+                  subtitleIcon={
                     payment.isFavorite ? (
                       <Star className="h-4 w-4" aria-hidden />
                     ) : undefined

@@ -17,11 +17,10 @@ export type PaymentRowButtonProps = {
   readonly title: ReactNode;
   /** Подзаголовок, например название объекта рядом с избранной звездой. */
   readonly subtitle?: ReactNode;
+  /** Мини-иконка в начале подзаголовка — звезда избранного (954-52461:
+   * Icon/S/Star 16 — первый элемент второй строки, у не-избранных строк
+   * слот пуст и текст встаёт на место звезды). */
   readonly subtitleIcon?: ReactNode;
-  /** Слот после текста подзаголовка в его же строке — звезда избранного
-   * списка (693:5546: «объект ★»); вложенную кнопку глушит от открытия
-   * строки сам потребитель (stopPropagation). */
-  readonly subtitleSuffix?: ReactNode;
   /** Ведущий слот перед контентным фреймом (кнопка-иконка и т.п.). */
   readonly leading?: ReactNode;
   readonly trailing?: ReactNode;
@@ -53,7 +52,6 @@ export function PaymentRowButton({
   title,
   subtitle,
   subtitleIcon,
-  subtitleSuffix,
   leading,
   trailing,
   amountKopecks,
@@ -93,14 +91,15 @@ export function PaymentRowButton({
               {subtitle !== undefined && (
                 <span className="flex items-center gap-1 text-sm text-content-secondary">
                   {subtitleIcon !== undefined && (
-                    <span className="flex h-4 w-4 shrink-0 items-center justify-center" aria-hidden>
+                    // Без aria-hidden на слоте: содержимое может быть
+                    // интерактивным (звезда-кнопка «убрать из избранного»
+                    // в просмотре избранного), декоративность обеспечивают
+                    // сами иконки своим aria-hidden.
+                    <span className="flex h-4 w-4 shrink-0 items-center justify-center">
                       {subtitleIcon}
                     </span>
                   )}
                   <span className="truncate">{subtitle}</span>
-                  {subtitleSuffix !== undefined && (
-                    <span className="flex shrink-0 items-center">{subtitleSuffix}</span>
-                  )}
                 </span>
               )}
             </span>
