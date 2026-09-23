@@ -118,12 +118,13 @@ export function RentalDetailBody({
               }
             >
               {/* «Завершить аренду» — левая круглая тройки (1550:93664):
-                  ведёт в мастер завершения #534, как строка «Управления». */}
+                  ведёт в мастер завершения #534, как строка «Управления».
+                  Подписи тройки — в две строки по макету (#802). */}
               {rental.status !== 'upcoming' && (
                 <RoundActionButton
                   variant="secondary"
                   icon={<Key />}
-                  caption="Завершить аренду"
+                  caption={<>Завершить<br />аренду</>}
                   onClick={() => router.push(ROUTES.propertyRentalComplete(propertyId))}
                 />
               )}
@@ -131,7 +132,7 @@ export function RentalDetailBody({
                 <RoundActionButton
                   variant="secondary"
                   icon={<Calendar />}
-                  caption="Продлить аренду"
+                  caption={<>Продлить<br />аренду</>}
                   onClick={() => router.push(ROUTES.propertyRentalExtend(propertyId))}
                 />
               )}
@@ -139,7 +140,7 @@ export function RentalDetailBody({
                 <RoundActionButton
                   variant="primary"
                   icon={<Check />}
-                  caption="Оплатить платеж"
+                  caption={<>Оплатить<br />платеж</>}
                   onClick={() =>
                     router.push(ROUTES.propertyOperation(propertyId, nextPayment.operationId))
                   }
