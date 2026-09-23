@@ -1,14 +1,15 @@
 import type { JSX } from 'react';
 import type { RentalTermsRow } from '@/features/rentals';
 
-/** Строка условий «метка — значение» (Figma EL-c094fdcc): серая метка 14/16,
- * значение тем же кеглем; 12px между колонками. Общая детализации (#531)
- * и экранов «Прошлых аренд» (#535). */
+/** Строка условий «метка — значение» (Figma 1302:53784): сетка из двух равных
+ * колонок с зазором 12 — значение всегда стоит в фиксированной правой колонке
+ * (в макете x=154.5 при ширине контента 297), метка переносится в своей.
+ * Общая экрана «Условия аренды» (#531), детализации и «Прошлых аренд» (#535). */
 export function TermRow({ label, value }: { readonly label: string; readonly value: string }): JSX.Element {
   return (
-    <div className="flex gap-3">
-      <span className="shrink-0 text-sm leading-4 text-content-secondary">{label}</span>
-      <span className="min-w-0 text-sm leading-4 text-content">{value}</span>
+    <div className="grid grid-cols-2 gap-3">
+      <span className="text-sm leading-4 text-content-secondary">{label}</span>
+      <span className="text-sm leading-4 text-content">{value}</span>
     </div>
   );
 }
