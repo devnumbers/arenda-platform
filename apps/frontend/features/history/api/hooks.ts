@@ -1,6 +1,6 @@
 'use client';
 
-import { useInfiniteQuery, useQuery, type UseInfiniteQueryResult, type UseQueryResult } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useQuery, type UseInfiniteQueryResult, type UseQueryResult } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
 import type { components } from '@/shared/api/dto';
@@ -41,6 +41,10 @@ export type HistoryFeedPage = {
  * снизу» независимо от того, с какой стороны rides порция (реверс
  * постранично оставил бы новую страницу на её месте в массиве — баг
  * живой приёмки #709: prepend-страница легла в низ ленты).
+ *
+ * Смена скоупа (поиск #710: q в ключе) держит прежнюю выдачу, пока едет
+ * запрос с новым ключом (keepPreviousData, канон поиска #601/#609) —
+ * лента под полем не мигает скелетоном на каждый шаг набора.
  */
 export function useHistoryFeed(
   scope: HistoryFeedScope = {},
@@ -54,6 +58,7 @@ export function useHistoryFeed(
     getPreviousPageParam: (firstPage): HistoryFeedPageParam | undefined =>
       firstPage.prevCursor ? { after: firstPage.prevCursor } : undefined,
     select: (data) => data.pages.flatMap((page) => page.items).reverse(),
+    placeholderData: keepPreviousData,
   });
 }
 

@@ -1,22 +1,31 @@
 'use client';
 
-import { useLayoutEffect, useRef, type JSX, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type JSX, type ReactNode } from 'react';
 import Link from 'next/link';
-import { BoldUser } from '@/shared/assets/icons';
+import { ArrowLeft, BoldUser, Search } from '@/shared/assets/icons';
 import { type HistoryFilterOptions } from '@/entities/history';
 import { PropertyAvatar } from '@/entities/property';
 import { groupHistoryByDay, useHistoryFeed, useHistoryFilters } from '@/features/history';
 import { dateToIsoLocal } from '@/shared/lib/calendar';
+import { useDebounce } from '@/shared/lib/hooks/useDebounce';
 import {
   Button,
   ErrorCard,
   InfiniteQueryHead,
-  SubScreenShell,
+  IconButton,
+  PageContent,
+  SearchField,
+  TopNav,
+  TopNavBackButton,
+  TopNavTitle,
   useTabBarSuppression,
 } from '@/shared/ui/design';
 import { ROUTES } from '@/shared/config/routes';
 import { HistoryRow } from './history-row';
 import { HistoryFeedSkeleton } from './history-states';
+
+/** Задержка дебаунса поиска (мс) — канон поисков (#601). */
+const SEARCH_DEBOUNCE_MS = 300;
 
 /** Канон строки-ссылки (хаб «Совместный доступ»): подложка hover/active
  * не меняется, только прозрачность; фокус-ринг с клавиатуры. */
@@ -24,34 +33,67 @@ const HEADER_LINK =
   'flex min-w-0 items-center gap-2 rounded-m outline-none transition-opacity hover:opacity-80 active:opacity-80 focus-visible:ring-4 focus-visible:ring-primary';
 
 /**
- * Экран «История действий» (карта #704, тикет #709; макеты 2157-56786 —
- * лента, 2050-158499 — пустая): мессенджерская лента по всем доступным
- * объектам — новые снизу, прокрутка вверх догружает старое (двусторонний
- * keyset #708, head-сентинел). Анатомия по макету 2157-56876 (правка
- * дизайна, решение владельца 23.09): секция дня открывается белой плашкой
- * даты с тенью — она прилипает к верхнему краю при прокрутке, как в
- * мессенджерах, с отступом 24 от хедера (на мобиле шапка уезжает —
- * safe-area + 24, на планшете/ПК — под закреплённой шапкой 72+24);
- * шапка объекта — аватар 24 (feed) + название + адрес из опций
- * /history/filters, кликабельна — ведёт на страницу объекта; действия
- * актёра — серые карточки (surface-muted, radius m): белый кружок с
- * пользователем + имя, внутри строки «полоска тона + S-иконка + текст»
- * (см. HistoryRow). Шапка актёра кликабельна, только если страница
- * участника существует: actor_id известен и роль в снимке не owner —
- * страницы владельцев (и своя собственная) в пространстве участников
- * нет (GET /participants/{uuid} для них 404, решение владельца 23.09).
- * Роль на экране не показывается (как в макете) — словарь роли живёт
- * в entity (ADR 0061), действия участника — #712. Вход — хаб
- * «Совместный доступ» (решение владельца 22.09), фолбэк «Назад» — туда же.
+ * Экран «История действий» (карта #704, тикеты #709+#710; макеты
+ * 2157-56876 — лента, 2050-158499 — пустая, 2089-165788 и
+ * 2092-166284/166621/166866 — поиск): мессенджерская лента по всем
+ * доступным объектам — новые снизу, прокрутка вверх догружает старое
+ * (двусторонний keyset #708, head-сентинел). Анатомия по макету
+ * 2157-56876 (правка дизайна, решение владельца 23.09): секция дня
+ * открывается белой плашкой даты с тенью — она прилипает к верхнему краю
+ * при прокрутке, как в мессенджерах, с отступом 24 от хедера (на мобиле
+ * шапка уезжает — safe-area + 24, на планшете/ПК — под закреплённой
+ * шапкой 72+24); шапка объекта — аватар 24 (feed) + название + адрес из
+ * опций /history/filters, кликабельна — ведёт на страницу объекта;
+ * действия актёра — серые карточки (surface-muted, radius m): белый
+ * кружок с пользователем + имя, внутри строки «полоска тона + S-иконка +
+ * текст» (см. HistoryRow). Шапка актёра кликабельна, только если
+ * страница участника существует: actor_id известен и роль в снимке не
+ * owner — страницы владельцев (и своя собственная) в пространстве
+ * участников нет (GET /participants/{uuid} для них 404, решение
+ * владельца 23.09). Роль на экране не показывается (как в макете) —
+ * словарь роли живёт в entity (ADR 0061), действия участника — #712.
+ * Вход — хаб «Совместный доступ» (решение владельца 22.09), фолбэк
+ * «Назад» — туда же.
  *
- * Элементы макета, приходящие со своими тикетами: поиск в шапке (#710),
- * контент шита «Настройки» (#711), действия участника (#712), переходы по
- * ссылкам сегментов (#713). Кнопка «Настройки» стоит на месте по макету
- * (в т.ч. на пустой ленте), пока без действия: primary по контенту
- * (не на всю ширину, макет 2184-94734), по центру.
+ * Поиск по истории (#710) — иконка в шапке ленты (макет 2157-56876),
+ * шапка меняется на поисковую поверх того же экрана (прецедент «Ваших
+ * участников» #697; серверный поиск — канон #601: дебаунс 300 мс, трим,
+ * пустой ввод после трима запроса не порождает — под полем остаётся
+ * сама лента, макет 2089-165788). Ввод ищет серверно по q (маршрутизация
+ * trgm/fts #708); смена запроса держит прежнюю выдачу до ответа
+ * (keepPreviousData в useHistoryFeed). Найденное группируется как лента —
+ * чипы дней сохраняются (макеты 2092-166284/166621); без совпадений —
+ * серая строка «Ничего не найдено» без иллюстрации (макет 2092-166866,
+ * канон «пусто без иллюстрации»); выход — «Назад» возвращает ленту.
+ *
+ * Элементы макета, приходящие со своими тикетами: контент шита
+ * «Настройки» (#711), действия участника (#712), переходы по ссылкам
+ * сегментов (#713). Кнопка «Настройки» стоит на месте по макету (в т.ч.
+ * на пустой ленте и в поиске — 2092-166284), пока без действия: primary
+ * по контенту (не на всю ширину, макет 2184-94734), по центру.
  */
 export function HistoryFeedScreen(): JSX.Element {
-  const feedQuery = useHistoryFeed();
+  const [searchMode, setSearchMode] = useState(false);
+  const [search, setSearch] = useState('');
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Открытие поиска сразу делает поле активным (программный фокус —
+  // устоявшийся a11y-паттерн вместо autoFocus).
+  useEffect(() => {
+    if (searchMode) {
+      searchInputRef.current?.focus();
+    }
+  }, [searchMode]);
+
+  // Канон поиска #601: серверный запрос догоняет ввод с дебаунсом, в
+  // запрос идёт трим; пустой трим — не поиск, а лента (запроса нет).
+  // Гард по searchMode закрывает окно дебаунса: «Назад» из поиска
+  // возвращает ленту тем же кадром, не держа 300 мс старый ключ.
+  const debounced = useDebounce(search, SEARCH_DEBOUNCE_MS);
+  const q = debounced.trim();
+  const searching = q.length > 0;
+
+  const feedQuery = useHistoryFeed(searchMode && searching ? { q } : {});
   const filtersQuery = useHistoryFilters();
   // Экран с плавающей нижней кнопкой — TabBar глушится (канон
   // StickyBottomBar, без белого шита: макет оставляет контент видимым).
@@ -64,7 +106,9 @@ export function HistoryFeedScreen(): JSX.Element {
 
   // Мессенджерская прокрутка: на первой загрузке окно встаёт на низ
   // (видны самые новые), prepend старых при прокрутке вверх удерживает
-  // позицию компенсацией дельты высоты (iOS overflow-anchor не умеем).
+  // позицию компенсацией дельты высоты (iOS overflow-anchor не умеем);
+  // сужение выдачи поиском (макет 2092-166284 — «Сегодня» под шапкой)
+  // ведёт себя как первая загрузка: окно на самых свежих найденных.
   const entryCount = entries.length;
   const previous = useRef<{ count: number | null; height: number }>({ count: null, height: 0 });
   useLayoutEffect(() => {
@@ -86,23 +130,66 @@ export function HistoryFeedScreen(): JSX.Element {
     }
   }, [entryCount]);
 
-  const feedEmpty = feedQuery.isSuccess && entries.length === 0;
+  const closeSearch = (): void => {
+    setSearch('');
+    setSearchMode(false);
+  };
 
   return (
     <>
-      <SubScreenShell
-        title="История действий"
-        fallbackHref={ROUTES.participants}
-        contentClassName="px-4"
-      >
+      {searchMode ? (
+        <TopNav
+          variant="search"
+          leading={
+            <IconButton icon={<ArrowLeft />} label="Закрыть поиск" onClick={closeSearch} />
+          }
+        >
+          <SearchField
+            ref={searchInputRef}
+            aria-label="Поиск по истории"
+            placeholder="Поиск действий"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            onClear={() => setSearch('')}
+          />
+        </TopNav>
+      ) : (
+        <TopNav
+          leading={<TopNavBackButton fallbackHref={ROUTES.participants} />}
+          // Лупа — только на загруженной непустой ленте: пустая книга
+          // прячет иконки шапки (§7), pending/error — тоже (прецедент
+          // «Ваших участников» #697), иначе иконка мелькает до ответа.
+          trailing={
+            feedQuery.isSuccess && entries.length > 0 ? (
+              <IconButton
+                icon={<Search className="h-6 w-6" />}
+                label="Поиск по истории"
+                onClick={() => setSearchMode(true)}
+              />
+            ) : undefined
+          }
+        >
+          <TopNavTitle title="История действий" />
+        </TopNav>
+      )}
+
+      <PageContent className="px-4">
         {feedQuery.isPending ? (
           <HistoryFeedSkeleton />
         ) : feedQuery.isError ? (
           <ErrorCard title="Не удалось загрузить историю" onRetry={() => void feedQuery.refetch()} className="mt-6" />
-        ) : feedEmpty ? (
-          <div className="flex min-h-[60vh] items-center justify-center">
-            <p className="text-base leading-[18px] text-content-secondary">Действий не было</p>
-          </div>
+        ) : entries.length === 0 ? (
+          searching ? (
+            /* Без совпадений — серая строка без иллюстрации (макет
+              * 2092-166866; канон «Ваших участников» #697). */
+            <p className="pt-16 text-center text-base leading-[18px] text-content-secondary">
+              Ничего не найдено
+            </p>
+          ) : (
+            <div className="flex min-h-[60vh] items-center justify-center">
+              <p className="text-base leading-[18px] text-content-secondary">Действий не было</p>
+            </div>
+          )
         ) : (
           <>
             <InfiniteQueryHead query={feedQuery} />
@@ -176,11 +263,11 @@ export function HistoryFeedScreen(): JSX.Element {
             ))}
           </>
         )}
-      </SubScreenShell>
+      </PageContent>
 
-      {/* Шит «Настройки» (#711) — на месте по макету 2157-56786/2184-94734,
-        * пока без действия: primary по контенту (не на всю ширину), по
-        * центру. */}
+      {/* Шит «Настройки» (#711) — на месте по макету 2157-56786/2184-94734
+        * (и в поиске — 2092-166284), пока без действия: primary по контенту
+        * (не на всю ширину), по центру. */}
       <div className="fixed inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom))] z-40 flex justify-center">
         <Button type="button">Настройки</Button>
       </div>
