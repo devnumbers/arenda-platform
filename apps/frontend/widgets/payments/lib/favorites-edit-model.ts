@@ -37,6 +37,29 @@ export function remainingFavoriteIds(
   return order.filter((item) => !removedIds.has(item.id)).map((item) => item.id);
 }
 
+/** Род события клавиатурного порядка: взятие ручки, перемещение стрелками
+ * (и каждый такой шаг), отпускание. */
+export type FavoriteDragAnnouncementKind = 'grab' | 'move' | 'release';
+
+/** Текст для aria-live-анонса клавиатурного порядка: позиции 1-based
+ * (человеческий счёт), title — название платежа. */
+export function favoriteDragAnnouncement(
+  kind: FavoriteDragAnnouncementKind,
+  title: string,
+  position: number,
+  total: number,
+): string {
+  const at = `«${title}», позиция ${position} из ${total}`;
+  switch (kind) {
+    case 'grab':
+      return `${at}. Стрелки вверх и вниз — переместить, пробел — отпустить.`;
+    case 'move':
+      return `${at}.`;
+    case 'release':
+      return `${at}. Изменения порядка применятся кнопкой «Сохранить».`;
+  }
+}
+
 /** Есть ли несохранённые изменения правки: перестановка против исходного
  * порядка или хотя бы одна пометка. Гасит «Сохранить» без диффа. */
 export function hasFavoritesEdits(

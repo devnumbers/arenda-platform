@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { GlobalPayment } from '@/entities/payment';
 import {
+  favoriteDragAnnouncement,
   hasFavoritesEdits,
   moveFavorite,
   remainingFavoriteIds,
@@ -72,5 +73,25 @@ describe('hasFavoritesEdits', () => {
 
   it('одна пометка на удаление — true', () => {
     expect(hasFavoritesEdits(initial, initial, new Set(['b']))).toBe(true);
+  });
+});
+
+describe('favoriteDragAnnouncement', () => {
+  it('grab: позиция и подсказка клавиш', () => {
+    expect(favoriteDragAnnouncement('grab', 'Аренда', 1, 3)).toBe(
+      '«Аренда», позиция 1 из 3. Стрелки вверх и вниз — переместить, пробел — отпустить.',
+    );
+  });
+
+  it('move: новая позиция', () => {
+    expect(favoriteDragAnnouncement('move', 'Аренда', 2, 3)).toBe(
+      '«Аренда», позиция 2 из 3.',
+    );
+  });
+
+  it('release: позиция и подсказка сохранения', () => {
+    expect(favoriteDragAnnouncement('release', 'Аренда', 3, 3)).toBe(
+      '«Аренда», позиция 3 из 3. Изменения порядка применятся кнопкой «Сохранить».',
+    );
   });
 });

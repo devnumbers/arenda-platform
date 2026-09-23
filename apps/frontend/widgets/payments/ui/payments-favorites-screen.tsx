@@ -1,8 +1,9 @@
 "use client";
 
-import type { JSX, PointerEvent as ReactPointerEvent } from "react";
-import { useRef, useState } from "react";
+import type { JSX, KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Reorder, useDragControls, useReducedMotion } from "framer-motion";
 import {
   ArrowLeft,
   Cancel,
@@ -32,6 +33,7 @@ import {
   TopNav,
   TopNavTitle,
 } from "@/shared/ui/design";
+import { cn } from "@/shared/lib/cn";
 import { goBack } from "@/shared/lib/navigation";
 import { notify } from "@/shared/lib/notifications";
 import {
@@ -39,6 +41,8 @@ import {
   nearestDateLine,
 } from "../lib/payments-global-model";
 import {
+  favoriteDragAnnouncement,
+  type FavoriteDragAnnouncementKind,
   hasFavoritesEdits,
   moveFavorite,
   remainingFavoriteIds,
@@ -52,11 +56,13 @@ import { GlobalPaymentRuleIcon, PaymentsRowsSkeleton, PaymentsStateCard } from "
  * стопках), название, объект со звездой Icon/S/Star; справа сумма и
  * дата-«Ближайший» (просто дата графика). Тап строке — страница платежа;
  * тап звезде убирает из избранного на месте — строка исчезает. Иконка
- * правки в шапке открывает режим правки (693:5903): слева у строк
- * крест-звезда — пометка на удаление (синяя галочка на иконке категории,
- * 889:25528), справа ручка Move — ручной порядок (pointer-dnd, на десктопе
- * та же мышиная перетаскация), футер-кнопка «Сохранить». Сохранение с
- * помеченными просит канон ConfirmDialog (889:25522); после удаления —
+ * правки (693:5903): слева у строк крест-звезда — пометка на удаление
+ * (синяя галочка на иконке категории, 889:25528), справа ручка Move —
+ * плавное перетаскивание (карта #811, тикет #813: плашка следует за
+ * пальцем/курсором за ручку, лифт-эффект, соседи пружинят, автоскролл у
+ * краёв — framer-motion Reorder; клавиатурный порядок — свой слой на
+ * ручке: пробел берёт, стрелки перемещают, Escape отпускает), футер-кнопка
+ * «Сохранить». Сохранение с помеченными просит канон ConfirmDialog (889:25522); после удаления —
  * попап успеха «Платежи больше не в избранном» (канон попапов StatusIcon,
  * как #533) и пустое состояние, если избранного не осталось (889:28111).
  * Кнопка StarOff в шапке правки из макета не воспроизведена: её поведение
@@ -269,6 +275,7 @@ export function PaymentFavoritesScreen(): JSX.Element {
                   return next;
                 });
               }}
+              onReorder={(next) => setDraftOrder(next)}
               onMove={(from, to) =>
                 setDraftOrder((previous) => moveFavorite(previous, from, to))
               }
@@ -357,95 +364,210 @@ function FavoritesEmpty(): JSX.Element {
 /** Список режима правки (693:5903): строки Edit — ведущая крест-звезда
  * (пометка на удаление), каноническая середина строки с галочкой на
  * иконке категории, хвостовая ручка Move. Строка в правке платеж не
- * открывает — вся строка управляет правкой. DnD: pointer-события ручки,
- * цель — ряд под курсором по его середине; touch-none держит палец от
- * прокрутки страницы (на десктопе тот же pointer-драг мышью). */
+ * открывает — вся строка управляет правкой. DnD (#813) — framer-motion
+ * Reorder: жест живёт только на ручке (dragListener={false} +
+ * useDragControls), плашка тащится трансформом за указателем 1:1,
+ * соседи пружинят layout-анимацией, автоскролл у краёв встроен. Лифт —
+ * scale и тень единым motion-стейтом: whileDrag (указательный жест) и
+ * animate (клавиатурный захват) дают один и тот же подъём.
+ * Клавиатурный порядок (#813): ручка — фокусируемая
+ * кнопка, пробел берёт/отпускает, стрелки перемещают, Escape отпускает;
+ * анонсы — в sr-only aria-live. Движение — по кривой дома
+ * (DESIGN.md §8): 350ms, reduced-motion — 150ms, не отключается. */
+const EDIT_ROW_LIFT_SCALE = 1.02;
+/** Лифт-тень взятой плашки: та же структура строки, что у «нет тени» —
+ * motion интерполирует бокс-шэдоу только между схожими значениями. */
+const EDIT_ROW_SHADOW = "0px 8px 24px rgba(23,26,28,0.16)";
+const EDIT_ROW_NO_SHADOW = "0px 0px 0px rgba(23,26,28,0)";
+const EDIT_ROW_MOVE_S = 0.25;
+const EDIT_ROW_LAYOUT_S = 0.35;
+const EDIT_ROW_REDUCED_S = 0.15;
+/** cubic-bezier(0.32, 0.72, 0, 1) — единая кривая дома (--dl-ease). */
+const EDIT_ROW_EASE: [number, number, number, number] = [0.32, 0.72, 0, 1];
+
 function FavoritesEditList({
   draftOrder,
   removedIds,
   onToggleRemoved,
+  onReorder,
   onMove,
 }: {
   readonly draftOrder: ReadonlyArray<GlobalPayment>;
   readonly removedIds: ReadonlySet<string>;
   readonly onToggleRemoved: (id: string) => void;
+  readonly onReorder: (next: ReadonlyArray<GlobalPayment>) => void;
   readonly onMove: (from: number, to: number) => void;
 }): JSX.Element {
-  const listRef = useRef<HTMLDivElement>(null);
-  const dragIndex = useRef<number | null>(null);
+  const [grabbedId, setGrabbedId] = useState<string | null>(null);
+  const [announce, setAnnounce] = useState("");
+  const reducedMotion = useReducedMotion() ?? false;
 
-  const handleMove = (event: ReactPointerEvent<HTMLButtonElement>): void => {
-    const from = dragIndex.current;
-    const list = listRef.current;
-    if (from === null || list === null) {
+  const announceDrag = (
+    kind: FavoriteDragAnnouncementKind,
+    payment: GlobalPayment,
+    position: number,
+  ): void => {
+    setAnnounce(
+      favoriteDragAnnouncement(
+        kind,
+        payment.title,
+        position,
+        draftOrder.length,
+      ),
+    );
+  };
+
+  return (
+    <>
+      {/* values — копия черновика: Group мутирует массив при подсчёте
+          следующего порядка, ReadonlyArray отдаём как новый список. */}
+      <Reorder.Group
+        as="ul"
+        axis="y"
+        className="flex flex-col"
+        values={[...draftOrder]}
+        onReorder={onReorder}
+      >
+        {draftOrder.map((payment, index) => (
+          <FavoritesEditRow
+            key={payment.id}
+            payment={payment}
+            index={index}
+            total={draftOrder.length}
+            marked={removedIds.has(payment.id)}
+            grabbed={grabbedId === payment.id}
+            reducedMotion={reducedMotion}
+            onToggleRemoved={() => onToggleRemoved(payment.id)}
+            onGrabChange={(grabbed) => {
+              setGrabbedId(grabbed ? payment.id : null);
+              announceDrag(grabbed ? "grab" : "release", payment, index + 1);
+            }}
+            onMoved={(to) => {
+              onMove(index, to);
+              announceDrag("move", payment, to + 1);
+            }}
+          />
+        ))}
+      </Reorder.Group>
+      <p className="sr-only" aria-live="polite" data-testid="favorites-dnd-live">
+        {announce}
+      </p>
+    </>
+  );
+}
+
+/** Строка-плашка списка правки: обёртка Reorder.Item над каноном
+ * PaymentRowButton. Взятой (рука или клавиатура) — лифт: scale 1.02
+ * плюс тень. release-возврат — теми же таймингами. */
+function FavoritesEditRow({
+  payment,
+  index,
+  total,
+  marked,
+  grabbed,
+  reducedMotion,
+  onToggleRemoved,
+  onGrabChange,
+  onMoved,
+}: {
+  readonly payment: GlobalPayment;
+  readonly index: number;
+  readonly total: number;
+  readonly marked: boolean;
+  readonly grabbed: boolean;
+  readonly reducedMotion: boolean;
+  readonly onToggleRemoved: () => void;
+  readonly onGrabChange: (grabbed: boolean) => void;
+  readonly onMoved: (to: number) => void;
+}): JSX.Element {
+  const controls = useDragControls();
+  const duration = reducedMotion ? EDIT_ROW_REDUCED_S : EDIT_ROW_MOVE_S;
+
+  const handleKeyDown = (
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+  ): void => {
+    if (event.key === " " || event.key === "Enter") {
+      event.preventDefault();
+      onGrabChange(!grabbed);
       return;
     }
-    const rows = Array.from(list.children) as HTMLElement[];
-    let insertion = 0;
-    for (const [index, row] of rows.entries()) {
-      const rect = row.getBoundingClientRect();
-      if (event.clientY > rect.top + rect.height / 2) {
-        insertion = index + 1;
+    if (!grabbed) {
+      return;
+    }
+    if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+      event.preventDefault();
+      const to = event.key === "ArrowUp" ? index - 1 : index + 1;
+      if (to >= 0 && to < total) {
+        onMoved(to);
       }
+      return;
     }
-    let to = insertion;
-    if (to > from) {
-      to -= 1;
-    }
-    if (to !== from) {
-      onMove(from, to);
-      dragIndex.current = to;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onGrabChange(false);
     }
   };
 
   return (
-    <div ref={listRef} className="flex flex-col">
-      {draftOrder.map((payment, index) => {
-        const marked = removedIds.has(payment.id);
-        return (
-          <PaymentRowButton
-            key={payment.id}
-            categoryIcon={<GlobalPaymentRuleIcon payment={payment} check={marked} />}
-            title={payment.title}
-            subtitle={payment.propertyName}
-            amountKopecks={payment.amountKopecks}
-            description={nearestDateLine(payment)}
-            leading={
-              <IconButton
-                icon={<StarOff />}
-                variant="secondary"
-                label={marked ? "Снять пометку" : "Пометить на удаление"}
-                aria-pressed={marked}
-                data-testid={`favorites-mark-${payment.id}`}
-                onClick={() => onToggleRemoved(payment.id)}
-              />
-            }
-            trailing={
-              // Ручка dnd — только указательный ввод, из a11y-дерева
-              // исключена (клавиатурный порядок тикетом не заведён).
-              <button
-                type="button"
-                aria-hidden
-                tabIndex={-1}
-                className="cursor-grab touch-none outline-none active:cursor-grabbing"
-                onPointerDown={(event) => {
-                  event.currentTarget.setPointerCapture(event.pointerId);
-                  dragIndex.current = index;
-                }}
-                onPointerMove={handleMove}
-                onPointerUp={() => {
-                  dragIndex.current = null;
-                }}
-                onPointerCancel={() => {
-                  dragIndex.current = null;
-                }}
-              >
-                <Move className="h-6 w-6" aria-hidden />
-              </button>
-            }
+    <Reorder.Item
+      value={payment}
+      dragListener={false}
+      dragControls={controls}
+      whileDrag={{
+        scale: EDIT_ROW_LIFT_SCALE,
+        boxShadow: EDIT_ROW_SHADOW,
+      }}
+      animate={{
+        scale: grabbed ? EDIT_ROW_LIFT_SCALE : 1,
+        boxShadow: grabbed ? EDIT_ROW_SHADOW : EDIT_ROW_NO_SHADOW,
+      }}
+      transition={{
+        duration,
+        ease: EDIT_ROW_EASE,
+        layout: {
+          duration: reducedMotion ? EDIT_ROW_REDUCED_S : EDIT_ROW_LAYOUT_S,
+          ease: EDIT_ROW_EASE,
+        },
+      }}
+      data-testid={`favorites-edit-row-${payment.id}`}
+    >
+      <PaymentRowButton
+        className="px-6"
+        categoryIcon={<GlobalPaymentRuleIcon payment={payment} check={marked} />}
+        title={payment.title}
+        subtitle={payment.propertyName}
+        amountKopecks={payment.amountKopecks}
+        description={nearestDateLine(payment)}
+        leading={
+          <IconButton
+            icon={<StarOff />}
+            variant="secondary"
+            label={marked ? "Снять пометку" : "Пометить на удаление"}
+            aria-pressed={marked}
+            data-testid={`favorites-mark-${payment.id}`}
+            onClick={() => onToggleRemoved()}
           />
-        );
-      })}
-    </div>
+        }
+        trailing={
+          // Ручка dnd (#813): pointer-жест стартует только здесь, из
+          // клавиатуры — пробел берёт, стрелки перемещают, Escape/пробел
+          // отпускает; анонсы позиции — живым регионом списка.
+          <button
+            type="button"
+            aria-label={`Переместить: ${payment.title}`}
+            data-testid={`favorites-grip-${payment.id}`}
+            className={cn(
+              "cursor-grab touch-none rounded-sm outline-none",
+              "focus-visible:ring-2 focus-visible:ring-primary",
+              "active:cursor-grabbing",
+            )}
+            onPointerDown={(event) => controls.start(event)}
+            onKeyDown={handleKeyDown}
+          >
+            <Move className="h-6 w-6" aria-hidden />
+          </button>
+        }
+      />
+    </Reorder.Item>
   );
 }
