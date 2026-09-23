@@ -4,7 +4,8 @@ import type {
   PaymentForm,
   PaymentType,
   Recurrence,
-} from '@/entities/payment';import { dateInMonth, isoYear } from '@/shared/lib/calendar';
+} from '@/entities/payment';
+import { dateInMonth, isoYear } from '@/shared/lib/calendar';
 import type { PaymentWizardDraft } from './use-payment-wizard-draft';
 
 /**

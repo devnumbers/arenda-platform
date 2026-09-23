@@ -2,6 +2,7 @@
 
 import type { Dispatch, SetStateAction } from 'react';
 import { clearDraftStorage, useDraftStore } from '@/shared/lib/hooks/useDraftStore';
+import { PAYMENT_REMINDER_OPTIONS } from '@/entities/payment';
 import type {
   IsoDate,
   PaymentForm,
@@ -195,11 +196,15 @@ export function validatePaymentWizardDraft(parsed: unknown): PaymentWizardDraft 
 
   const endDate = typeof record.endDate === 'string' && record.endDate.length > 0 ? record.endDate : undefined;
 
-  const reminderOffsetDays =
-    record.reminderOffsetDays === 1 || record.reminderOffsetDays === 3 || record.reminderOffsetDays === 7
-      ? record.reminderOffsetDays
-      : undefined;
-  if (record.reminderOffsetDays !== undefined && reminderOffsetDays === undefined) return DEFAULT_DRAFT;
+  // Напоминание — контрактный оффал из того же кортежа, что и пикер.
+  const isReminderOffset = (value: unknown): value is PaymentReminderOffset =>
+    PAYMENT_REMINDER_OPTIONS.some((option) => option.offset === value);
+  if (record.reminderOffsetDays !== undefined && !isReminderOffset(record.reminderOffsetDays)) {
+    return DEFAULT_DRAFT;
+  }
+  const reminderOffsetDays = isReminderOffset(record.reminderOffsetDays)
+    ? record.reminderOffsetDays
+    : undefined;
 
   const amountKopecks = isPositiveInt(record.amountKopecks) ? record.amountKopecks : undefined;
   if (record.amountKopecks !== undefined && amountKopecks === undefined) return DEFAULT_DRAFT;

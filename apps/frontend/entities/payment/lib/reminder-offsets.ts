@@ -2,9 +2,9 @@ import type { PaymentReminderOffset } from '../model/types';
 
 /**
  * Опции напоминания о платеже (карта #822, контракт reminderOffsetDays
- * 1|3|7): «за N дней» до даты вхождения. Метки — родительный падеж по
- * числу (день/дня/дней); кортеж — источник порядка строк пикера
- * (макет 1084-24863), метки агрегирует paymentReminderOptionLabel.
+ * 1|3|7): «за N дней» до даты вхождения. Кортеж — единственный источник
+ * контракта на фронте: отсюда берёт метки пикер, валидатор черновика и
+ * paymentReminderOptionLabel; порядок — по макету 1084-24863.
  */
 export const PAYMENT_REMINDER_OPTIONS = [
   { offset: 1, label: 'За 1 день' },
@@ -15,15 +15,10 @@ export const PAYMENT_REMINDER_OPTIONS = [
   readonly label: string;
 }>;
 
-/** Метка оффала («За 3 дня»); switch исчерпывающий — новый оффал
- * контракта потребует метку компилятором. */
+/** Метка оффала («За 3 дня») — из того же кортежа, что и пикер. */
 export function paymentReminderOptionLabel(offset: PaymentReminderOffset): string {
-  switch (offset) {
-    case 1:
-      return 'За 1 день';
-    case 3:
-      return 'За 3 дня';
-    case 7:
-      return 'За 7 дней';
-  }
+  const option = PAYMENT_REMINDER_OPTIONS.find(
+    (candidate) => candidate.offset === offset,
+  );
+  return option?.label ?? '';
 }
