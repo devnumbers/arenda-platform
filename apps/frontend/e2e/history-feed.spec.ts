@@ -206,15 +206,22 @@ test('лента из сида: чипы дней, группы «объект �
   await expect(page.getByText(/^\d{2}:\d{2}$/).first()).toBeVisible();
 
   // Плашка дня липнет к верхнему краю (макет 2157-56876 — sticky, как в
-  // мессенджерах): на дне ленты секция «Вчера» уже прошла верхнюю кромку —
-  // её плашка прижата под закреплённой шапкой 72 (вьюпорт e2e — Desktop
-  // Chrome), а не висит в потоке на своей позиции.
-  await page.evaluate(() => {
-    window.scrollTo(0, document.documentElement.scrollHeight - window.innerHeight);
-  });
-  const yesterdayPill = page.getByText('Вчера', { exact: true });
-  await expect(yesterdayPill).toBeVisible();
-  const pillBox = await yesterdayPill.boundingBox();
+  // мессенджерах): прокручиваем в середину секции «Сегодня» — плашка
+  // прижимается под закреплённой шапкой 72, на tablet-вьюпорте это 96
+  // (tablet:top-96). Вьюпорт ниже стандарта, чтобы сид из шести записей
+  // позволял докрутить секцию до кромки (иначе контент ниже короче
+  // вьюпорта и страница кончается раньше пиннинга).
+  await page.setViewportSize({ width: 1280, height: 560 });
+  const todaySection = page.getByText('Сегодня', { exact: true }).locator('xpath=ancestor::section[1]');
+  const todayTop = await todaySection.evaluate(
+    (el) => el.getBoundingClientRect().top + window.scrollY,
+  );
+  await page.evaluate((top) => {
+    window.scrollTo(0, top + 300);
+  }, todayTop);
+  const todayPill = page.getByText('Сегодня', { exact: true });
+  await expect(todayPill).toBeVisible();
+  const pillBox = await todayPill.boundingBox();
   expect(pillBox?.y).toBeGreaterThanOrEqual(60);
   expect(pillBox?.y).toBeLessThanOrEqual(96);
 

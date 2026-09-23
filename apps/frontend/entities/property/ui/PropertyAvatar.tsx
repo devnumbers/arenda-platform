@@ -4,7 +4,7 @@ import { BoldHome, NotificationDot } from '@/shared/assets/icons';
 
 /**
  * Круглый аватар объекта (Figma Category Icon 651:5923, тикет #586): фото
- * объекта или дом-плейсхолдер #D3D7D9 — единственное место «лица объекта»,
+ * объекта или дом-плейсхолдер — единственное место «лица объекта»,
  * размеры и канты всех поверхностей держит карта ниже. Поверхности:
  * card — на серой карточке списка «Объектов» (белый круг 64, кант серого —
  * 1603:88779) с красной точкой занятости/просрочки (Notification Dot
@@ -15,7 +15,10 @@ import { BoldHome, NotificationDot } from '@/shared/assets/icons';
  * серый круг без канта, как hero); filter — 32 в строках «Объектов» шита
  * фильтров истории (макет 2050-158280, #711 — серый круг без канта, как
  * feed). Точка — вне клипающего фото контейнера: круг с overflow-hidden
- * срезал бы её углы.
+ * срезал бы её углы. Плейсхолдер поверхностей: светлый круг + серый дом
+ * #D3D7D9, кроме filter (#712, макет 2184-92510, решение владельца
+ * 23.09) — инвертирован как в каноне Category Icon (Background=Gray):
+ * серый круг #D3D7D9 + белый дом.
  */
 export type PropertyAvatarProps = {
   readonly photoUrl?: string | null;
@@ -39,7 +42,7 @@ const SURFACE_CIRCLE: Record<NonNullable<PropertyAvatarProps['surface']>, string
   row: 'bg-surface-muted shadow-[0_0_0_2.5px_var(--dl-surface)]',
   hero: 'bg-surface-muted',
   feed: 'bg-surface-muted',
-  filter: 'bg-surface-muted',
+  filter: 'bg-[#D3D7D9]',
 };
 
 const SURFACE_ICON: Record<NonNullable<PropertyAvatarProps['surface']>, string> = {
@@ -48,6 +51,14 @@ const SURFACE_ICON: Record<NonNullable<PropertyAvatarProps['surface']>, string> 
   hero: 'h-10 w-10',
   feed: 'h-3.5 w-3.5',
   filter: 'h-[18px] w-[18px]',
+};
+
+const SURFACE_GLYPH: Record<NonNullable<PropertyAvatarProps['surface']>, string> = {
+  card: 'text-[#D3D7D9]',
+  row: 'text-[#D3D7D9]',
+  hero: 'text-[#D3D7D9]',
+  feed: 'text-[#D3D7D9]',
+  filter: 'text-white',
 };
 
 export function PropertyAvatar({
@@ -67,7 +78,7 @@ export function PropertyAvatar({
         {photoUrl ? (
           <img src={photoUrl} alt="" className="h-full w-full object-cover" />
         ) : (
-          <BoldHome className={cn('text-[#D3D7D9]', SURFACE_ICON[surface])} aria-hidden />
+          <BoldHome className={cn(SURFACE_GLYPH[surface], SURFACE_ICON[surface])} aria-hidden />
         )}
       </span>
       {withAttentionDot && (

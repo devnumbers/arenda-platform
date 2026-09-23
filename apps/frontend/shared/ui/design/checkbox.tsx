@@ -11,6 +11,11 @@ import { cn } from '@/shared/lib/cn';
  * Частичный выбор (indeterminate, #711 — мастер-чекбокс группы фильтров
  * истории, макет 2067-162950): синий квадрат с белым минусом 16×16 —
  * переключение `checked="indeterminate"`, стили по data-state.
+ *
+ * Disabled (#712 — прибитый участник в шите «Действий участника», макет
+ * 2184-92510, решение владельца 23.09): выбранный — серый квадрат #D3D7D9
+ * с белой галочкой/минусом, без прозрачности (невыбранный — прежняя
+ * полупрозрачность); клики не проходят.
  */
 export type CheckboxProps = ComponentProps<typeof CheckboxRoot>;
 
@@ -27,7 +32,9 @@ export function Checkbox({ className, checked, ...props }: CheckboxProps): JSX.E
         'data-[state=checked]:hover:bg-primary-hover data-[state=checked]:active:bg-primary-active data-[state=checked]:active:border-primary-active',
         'data-[state=indeterminate]:hover:bg-primary-hover data-[state=indeterminate]:active:bg-primary-active data-[state=indeterminate]:active:border-primary-active',
         'focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface',
-        'disabled:pointer-events-none disabled:opacity-50',
+        'disabled:pointer-events-none disabled:data-[state=unchecked]:opacity-50',
+        'disabled:data-[state=checked]:border-[#D3D7D9] disabled:data-[state=checked]:bg-[#D3D7D9]',
+        'disabled:data-[state=indeterminate]:border-[#D3D7D9] disabled:data-[state=indeterminate]:bg-[#D3D7D9]',
         className,
       )}
       {...props}

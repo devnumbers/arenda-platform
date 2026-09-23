@@ -62,7 +62,11 @@ import { HistoryFiltersSheetSkeleton } from './history-states';
  * StickyBottomBar), рендерится только в открытом состоянии.
  *
  * Группы-чекбоксы со счётчиками N/M: «Основные действия», «Виды действий»,
- * «Участники» и «Объекты» (опции — GET /history/filters, #708). Строки —
+ * «Участники» и «Объекты» (опции — GET /history/filters, #708). На
+ * «Действиях участника» (#712) группа «Участники» показывает только
+ * прибитого страницу человека — серым и незабираемым (disabled-чекбокс
+ * канона Checkbox, макет 2184-92510, решение владельца 23.09); он не
+ * часть черновика: «Сбросить»/«Применить» его не пишут. Строки —
  * подпись 14/16 с сепараторами #ebebeb (кроме последней), макет
  * 2067-163528; строка целиком кликабельна (label), цвет текста от
  * состояния чекбокса не зависит (аннотации макета 2050-158281), как и
@@ -160,9 +164,11 @@ export type HistoryFiltersSheetProps = {
   /** Заголовок шита (шапка оверлея): на «Действиях участника» (#712) шит
    * поверх той же ленты — заголовок страницы, не общей. */
   readonly title?: string;
-  /** Группа «Участники» рендерится только в общей ленте: на «Действиях
-   * участника» человек прибит страницей и фильтром не является (#712). */
-  readonly showActorsGroup?: boolean;
+  /** Действия участника (#712, макет 2184-92510, решение владельца
+   * 23.09): группа «Участники» показывает ТОЛЬКО прибитого человека —
+   * серым (disabled-чекбокс канона Checkbox), тапы не проходят; он не
+   * часть черновика — «Сбросить» и «Применить» его не трогают. */
+  readonly pinnedParticipantId?: string;
 };
 
 export function HistoryFiltersSheet({
@@ -171,7 +177,7 @@ export function HistoryFiltersSheet({
   onApply,
   onClose,
   title = 'История действий',
-  showActorsGroup = true,
+  pinnedParticipantId,
 }: HistoryFiltersSheetProps): JSX.Element {
   const [draft, setDraft] = useState<HistoryFilters>(() => applied);
   // Раскрытие групп — локально, свёрнуто по умолчанию (аннотация макета
@@ -208,16 +214,27 @@ export function HistoryFiltersSheet({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [periodPickerOpen, onClose]);
 
-  const participantRows: ReadonlyArray<HistoryFilterOptionRow> = (
-    optionsQuery.data?.participants ?? []
-  ).map((participant) => ({
-    id: participant.id,
-    label: historyParticipantTitle(participant, participant.id === meId),
-    subtitle: participant.email,
-    leadingSize: 'participant',
-    isMe: participant.id === meId,
-    ownerLock: participant.isOwner,
-  }));
+  // Строки «Участников»: в общей ленте — все опции; на «Действиях
+  // участника» (#712) — только прибитый человек (группа «1/1», макет
+  // 2184-92510). Не нашёлся в опциях (мусорный id) — группа не рисуется.
+  const pinnedParticipant =
+    pinnedParticipantId !== undefined
+      ? (optionsQuery.data?.participants ?? []).find(
+          (participant) => participant.id === pinnedParticipantId,
+        )
+      : undefined;
+  const participantsSource = pinnedParticipant !== undefined ? [pinnedParticipant] : (optionsQuery.data?.participants ?? []);
+
+  const participantRows: ReadonlyArray<HistoryFilterOptionRow> = participantsSource.map(
+    (participant) => ({
+      id: participant.id,
+      label: historyParticipantTitle(participant, participant.id === meId),
+      subtitle: participant.email,
+      leadingSize: 'participant',
+      isMe: participant.id === meId,
+      ownerLock: participant.isOwner,
+    }),
+  );
 
   const objectRows: ReadonlyArray<HistoryFilterOptionRow> = (optionsQuery.data?.objects ?? []).map(
     (object_) => ({
@@ -245,7 +262,7 @@ export function HistoryFiltersSheet({
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-[560px] px-6 pb-[136px] pt-6 tablet:mt-[72px]">
           {optionsQuery.isPending ? (
-            <HistoryFiltersSheetSkeleton groups={showActorsGroup ? 4 : 3} />
+            <HistoryFiltersSheetSkeleton />
           ) : (
             <div className="flex flex-col gap-4">
               {/* Чип периода: серый «Выбрать период» / синий с диапазоном
@@ -315,11 +332,12 @@ export function HistoryFiltersSheet({
                 />
               ) : (
                 <>
-                  {showActorsGroup && (
+                  {(pinnedParticipantId === undefined || participantRows.length > 0) && (
                     <FilterGroupCard
                       title="Участники"
                       rows={participantRows}
                       selected={draft.actorIds}
+                      disabled={pinnedParticipantId !== undefined}
                       expanded={expanded.actors}
                       onToggleExpanded={() => toggleExpanded('actors')}
                       onToggleAll={(actorIds) => setDraft((state) => ({ ...state, actorIds }))}
@@ -400,12 +418,14 @@ export function HistoryFiltersSheet({
 
 /** Карточка группы (макет 2177-60527): серый блок radius 24, шапка —
  * мастер-чекбокс 24 + кнопка раскрытия с заголовком 16/18, счётчиком N/M и
- * шевроном; в раскрытом — строки опций по 56. */
+ * шевроном; в раскрытом — строки опций по 56. disabled (#712 — прибитый
+ * участник): чекбоксы серые, тапы по ним не проходят; раскрытие работает. */
 function FilterGroupCard({
   title,
   rows,
   selected,
   expanded,
+  disabled = false,
   onToggleExpanded,
   onToggleAll,
   onToggleOption,
@@ -414,6 +434,7 @@ function FilterGroupCard({
   readonly rows: ReadonlyArray<HistoryFilterOptionRow>;
   readonly selected: ReadonlyArray<string> | null;
   readonly expanded: boolean;
+  readonly disabled?: boolean;
   readonly onToggleExpanded: () => void;
   readonly onToggleAll: (next: ReadonlyArray<string> | null) => void;
   readonly onToggleOption: (id: string) => void;
@@ -432,6 +453,7 @@ function FilterGroupCard({
             id={masterId}
             className="h-6 w-6"
             checked={selected === null ? true : selected.length > 0 ? 'indeterminate' : false}
+            disabled={disabled}
             onCheckedChange={() => onToggleAll(toggleHistoryFilterGroup(selected))}
             aria-label={`Выбрать все: ${title}`}
           />
@@ -463,6 +485,7 @@ function FilterGroupCard({
               row={row}
               last={index === rows.length - 1}
               checked={selected === null || selected.includes(row.id)}
+              disabled={disabled}
               onToggle={() => onToggleOption(row.id)}
             />
           ))}
@@ -478,28 +501,32 @@ function FilterGroupCard({
  * Вся строка — label: клик в любое место переключает опцию; цвет текста
  * от состояния чекбокса не зависит (макет 2050-158281: невыбранная
  * остаётся чёрной). У себя — суффикс «(Вы)» серым, у владельца объектов —
- * замок 16 перед подзаголовком. */
+ * замок 16 перед подзаголовком. Disabled (#712): чекбокс серый, текст
+ * приглушён, тапы не проходят. */
 function FilterOptionRow({
   row,
   last,
   checked,
+  disabled = false,
   onToggle,
 }: {
   readonly row: HistoryFilterOptionRow;
   readonly last: boolean;
   readonly checked: boolean;
+  readonly disabled?: boolean;
   readonly onToggle: () => void;
 }): JSX.Element {
   const checkboxId = useId();
   return (
     <label
       htmlFor={checkboxId}
-      className="flex min-h-14 cursor-pointer items-center pl-11 pr-5"
+      className={`flex min-h-14 items-center pl-11 pr-5 ${disabled ? 'cursor-default' : 'cursor-pointer'}`}
     >
       <Checkbox
         id={checkboxId}
         className="h-6 w-6"
         checked={checked}
+        disabled={disabled}
         onCheckedChange={onToggle}
         aria-label={row.isMe === true ? `${row.label} (Вы)` : row.label}
       />
@@ -521,7 +548,9 @@ function FilterOptionRow({
       <span
         className={`ml-3 flex min-w-0 flex-1 flex-col justify-center gap-1 self-stretch ${last ? '' : 'border-b border-[#ebebeb]'}`}
       >
-        <span className="truncate text-sm font-medium leading-4 text-content">
+        <span
+          className={`truncate text-sm font-medium leading-4 ${disabled ? 'text-content-tertiary' : 'text-content'}`}
+        >
           {row.label}
           {row.isMe === true && <span className="text-content-tertiary"> (Вы)</span>}
         </span>

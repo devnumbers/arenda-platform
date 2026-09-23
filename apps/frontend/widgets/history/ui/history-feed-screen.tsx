@@ -99,14 +99,15 @@ const HEADER_LINK =
  * «день → объект → актёр → строки» переиспользуется как есть — в рамках
  * одного человека объекты внутри дня остаются секциями (макет 2184-94731:
  * шапки объектов и серые карточки). Поиск и «Настройки» переиспользуются;
- * группы «Участники» в шите нет — человек прибит страницей, а не фильтр
- * (memberHistoryFilters: и URL-actors не читается, и «Сбросить»/«Применить»
- * её не пишут). Вход — тап по актёру в общей ленте (все записи с
- * actor_id — включая владельца: страница не читает участников, 404 не
- * бывает; решение #709 о ссылке на страницу участника заменено: она
- * доступна из списка «Ваши участники») и кебаб страницы участника (#698).
- * Шапки актёров на самой странице статичны — человек уже её предмет.
- * Фолбэк «Назад» — общая лента.
+ * группа «Участники» шита показывает прибитого человека — серым и
+ * незабираемым (макет 2184-92510, решение владельца 23.09), в черновик и
+ * адрес он не пишется: memberHistoryFilters не читает URL-actors, а
+ * «Применить» его вычищает. Вход — тап по актёру в общей ленте (все
+ * записи с actor_id — включая владельца: страница не читает участников,
+ * 404 не бывает; решение #709 о ссылке на страницу участника заменено:
+ * она доступна из списка «Ваши участники») и кебаб страницы участника
+ * (#698). Шапки актёров на самой странице статичны — человек уже её
+ * предмет. Фолбэк «Назад» — общая лента.
  */
 export type HistoryFeedScreenProps = {
   /** Действия участника (#712): uuid юзера, прибивающий ленту
@@ -268,12 +269,13 @@ export function HistoryFeedScreen({ participantId }: HistoryFeedScreenProps = {}
           <>
             <InfiniteQueryHead query={feedQuery} />
             {days.map((day) => (
-              <section key={day.day} className="pb-4">
+              <section key={day.day} className="pb-6">
                 {/* Плашка дня липнет к верхнему краю (макет 2157-56876 —
                   * sticky, как в мессенджерах) с отступом 24 от хедера:
                   * на мобиле шапка уезжает — safe-area + 24, на
-                  * планшете/ПК — закреплённая шапка 72 + 24. */}
-                <div className="sticky top-[calc(env(safe-area-inset-top)_+_24px)] z-20 mb-3 flex justify-center tablet:top-[96px]">
+                  * планшете/ПК — закреплённая шапка 72 + 24. Зазоры
+                  * плашка↔блоки — по 24 (решение владельца 23.09). */}
+                <div className="sticky top-[calc(env(safe-area-inset-top)_+_24px)] z-20 mb-6 flex justify-center tablet:top-[96px]">
                   <span className="rounded-pill bg-white px-3.5 py-2 text-xs leading-[15px] text-content shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
                     {day.label}
                   </span>
@@ -359,7 +361,7 @@ export function HistoryFeedScreen({ participantId }: HistoryFeedScreenProps = {}
           applied={filters}
           optionsQuery={filtersQuery}
           title={isMemberPage ? 'Действия участника' : undefined}
-          showActorsGroup={!isMemberPage}
+          pinnedParticipantId={participantId}
           onApply={(draft: HistoryFilters) => {
             applyFilters(draft);
             setFiltersOpen(false);

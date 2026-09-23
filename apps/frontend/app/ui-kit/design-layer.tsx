@@ -371,6 +371,13 @@ export function DesignLayerShowcase(): JSX.Element {
                             <Checkbox id="dl-checkbox-partial" checked="indeterminate" onCheckedChange={() => {}} />
                             <label htmlFor="dl-checkbox-partial">Частично (2/4)</label>
                         </div>
+                        <div className={styles.links}>
+                            {/* Disabled выбранный (#712): серый квадрат #D3D7D9
+                                с белой галочкой (прибитый участник в шите
+                                «Действий участника», макет 2184-92510). */}
+                            <Checkbox id="dl-checkbox-disabled" checked disabled />
+                            <label htmlFor="dl-checkbox-disabled">Недоступен</label>
+                        </div>
                         <RadioGroup value={radio} onValueChange={setRadio}>
                             <div className={styles.links}>
                                 <RadioGroupItem id="dl-radio-payments" value="payments" />

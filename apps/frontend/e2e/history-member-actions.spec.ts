@@ -186,7 +186,7 @@ test('поиск переиспользуется: сужает действия
   await captureScreen(page, testInfo, 'history-member-search');
 });
 
-test('фильтры переиспользуются, группы «Участники» нет; «в ноль» — пусто без запроса', async ({ page, seededUser }, testInfo) => {
+test('фильтры переиспользуются, «Участники» прибит серым; «в ноль» — пусто без запроса', async ({ page, seededUser }, testInfo) => {
   await seedMemberJournal(seededUser);
   const actors = await trackActorIds(page);
   await openCabinetWithSeededSession(page, seededUser);
@@ -196,18 +196,30 @@ test('фильтры переиспользуются, группы «Участ
   await page.getByRole('button', { name: 'Настройки' }).click();
   const dialog = page.getByRole('dialog', { name: 'Фильтры истории' });
   await expect(dialog.getByText('Виды действий')).toBeVisible();
-  // Человек прибит страницей — группы «Участники» в шите нет (#712).
-  await expect(dialog.getByText('Участники')).toHaveCount(0);
   await expect(dialog.getByText('Объекты')).toBeVisible();
 
+  // Группа «Участники» показывает только прибитого человека — 1/1, серым
+  // и незабираемым (#712, макет 2184-92510, решение владельца 23.09).
+  await expect(dialog.getByText('Участники')).toBeVisible();
+  await expect(dialog.getByText('1/1')).toBeVisible();
+  const master = dialog.getByRole('checkbox', { name: 'Выбрать все: Участники' });
+  await expect(master).toBeDisabled();
+  await dialog.getByRole('button', { name: /Участники/ }).click();
+  const pinned = dialog.getByRole('checkbox', { name: 'Мария Петрова' });
+  await expect(pinned).toBeChecked();
+  await expect(pinned).toBeDisabled();
+  await expect(dialog.getByText('e2e-member@example.com')).toBeVisible();
+
   // «Виды действий» в ноль мастер-чекбоксом, применить — лента пуста
-  // (семантика «ни одного», запроса нет), параметр kinds= в адресе.
+  // (семантика «ни одного», запроса нет), параметр kinds= в адресе; пин
+  // в адрес не пишется.
   await dialog.getByRole('button', { name: /Виды действий/ }).click();
   await dialog.getByRole('checkbox', { name: 'Выбрать все: Виды действий' }).click();
   actors.reset();
   await dialog.getByRole('button', { name: 'Применить фильтры' }).click();
   await expect(page.getByText('Ничего не найдено')).toBeVisible();
   await expect(page).toHaveURL(/kinds=/);
+  await expect(page).not.toHaveURL(/actors=/);
   expect(actors.last()).toBeNull(); // «в ноль» — запроса не было вовсе
 
   // Сброс возвращает ленту: виды снова «все» (ключ запроса возвращается к
