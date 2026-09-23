@@ -5,7 +5,15 @@ import Link from 'next/link';
 import { ArrowLeft, BoldUser, Search } from '@/shared/assets/icons';
 import { type HistoryFilterOptions } from '@/entities/history';
 import { PropertyAvatar } from '@/entities/property';
-import { groupHistoryByDay, useHistoryFeed, useHistoryFilters } from '@/features/history';
+import {
+  groupHistoryByDay,
+  historyFeedScope,
+  isDefaultHistoryFilters,
+  useHistoryFeed,
+  useHistoryFilters,
+  useHistoryFiltersState,
+  type HistoryFilters,
+} from '@/features/history';
 import { dateToIsoLocal } from '@/shared/lib/calendar';
 import { useDebounce } from '@/shared/lib/hooks/useDebounce';
 import {
@@ -23,6 +31,7 @@ import {
 import { ROUTES } from '@/shared/config/routes';
 import { HistoryRow } from './history-row';
 import { HistoryFeedSkeleton } from './history-states';
+import { HistoryFiltersSheet } from './history-filters-sheet';
 
 /** Задержка дебаунса поиска (мс) — канон поисков (#601). */
 const SEARCH_DEBOUNCE_MS = 300;
@@ -66,16 +75,29 @@ const HEADER_LINK =
  * серая строка «Ничего не найдено» без иллюстрации (макет 2092-166866,
  * канон «пусто без иллюстрации»); выход — «Назад» возвращает ленту.
  *
- * Элементы макета, приходящие со своими тикетами: контент шита
- * «Настройки» (#711), действия участника (#712), переходы по ссылкам
- * сегментов (#713). Кнопка «Настройки» стоит на месте по макету (в т.ч.
- * на пустой ленте и в поиске — 2092-166284), пока без действия: primary
- * по контенту (не на всю ширину, макет 2184-94734), по центру.
+ * Элементы макета, приходящие со своими тикетами: действия участника
+ * (#712), переходы по ссылкам сегментов (#713). Кнопка «Настройки» стоит
+ * на месте по макету (в т.ч. на пустой ленте и в поиске — 2092-166284):
+ * primary по контенту (не на всю ширину, макет 2184-94734), по центру.
+ *
+ * Фильтры (#711) живут в адресе ленты (?from=&to=&actions=&kinds=&actors=
+ * &objects=, канон §3; применение — push, «назад» возвращает без
+ * фильтров) и открываются шитом «Настройки» (HistoryFiltersSheet) поверх
+ * той же ленты. Группа фильтров, выбранная «в ноль», — пустой результат
+ * без запроса (historyFeedScope → null); активные фильтры с пустой
+ * выдачей показывают «Ничего не найдено» — «Действий не было» остаётся
+ * только у чистой ленты.
  */
 export function HistoryFeedScreen(): JSX.Element {
   const [searchMode, setSearchMode] = useState(false);
   const [search, setSearch] = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Фильтры (#711) живут в адресе ленты; чтение и запись — через канон
+  // useUrlParams (DESIGN.md §3), применение — push («назад» возвращает
+  // без фильтров).
+  const { filters, applyFilters } = useHistoryFiltersState();
 
   // Открытие поиска сразу делает поле активным (программный фокус —
   // устоявшийся a11y-паттерн вместо autoFocus).
@@ -93,7 +115,14 @@ export function HistoryFeedScreen(): JSX.Element {
   const q = debounced.trim();
   const searching = q.length > 0;
 
-  const feedQuery = useHistoryFeed(searchMode && searching ? { q } : {});
+  // Скоуп ленты = фильтры адреса (#711) + живой поиск (#710); группа
+  // фильтров, выбранная «в ноль», означает пустой результат — скоупа нет
+  // (null), запрос не делается.
+  const scope = historyFeedScope(filters);
+  const feedQuery = useHistoryFeed(
+    scope === null ? {} : searchMode && searching ? { ...scope, q } : scope,
+    { enabled: scope !== null },
+  );
   const filtersQuery = useHistoryFilters();
   // Экран с плавающей нижней кнопкой — TabBar глушится (канон
   // StickyBottomBar, без белого шита: макет оставляет контент видимым).
@@ -174,14 +203,22 @@ export function HistoryFeedScreen(): JSX.Element {
       )}
 
       <PageContent className="px-4">
-        {feedQuery.isPending ? (
+        {scope === null ? (
+          /* Фильтры выбраны «в ноль» — результат пуст по семантике
+            * (запроса нет, #711). */
+          <p className="pt-16 text-center text-base leading-[18px] text-content-secondary">
+            Ничего не найдено
+          </p>
+        ) : feedQuery.isPending ? (
           <HistoryFeedSkeleton />
         ) : feedQuery.isError ? (
           <ErrorCard title="Не удалось загрузить историю" onRetry={() => void feedQuery.refetch()} className="mt-6" />
         ) : entries.length === 0 ? (
-          searching ? (
+          searching || !isDefaultHistoryFilters(filters) ? (
             /* Без совпадений — серая строка без иллюстрации (макет
-              * 2092-166866; канон «Ваших участников» #697). */
+              * 2092-166866; канон «пусто без иллюстрации» #697); активные
+              * фильтры с пустой выдачей — тот же канон (#711: действия
+              * были, но не подходят под фильтр). */
             <p className="pt-16 text-center text-base leading-[18px] text-content-secondary">
               Ничего не найдено
             </p>
@@ -265,12 +302,26 @@ export function HistoryFeedScreen(): JSX.Element {
         )}
       </PageContent>
 
-      {/* Шит «Настройки» (#711) — на месте по макету 2157-56786/2184-94734
-        * (и в поиске — 2092-166284), пока без действия: primary по контенту
-        * (не на всю ширину), по центру. */}
+      {/* Шит «Настройки» (#711): primary по контенту (не на всю ширину,
+        * макет 2184-94734), по центру; открывает шит фильтров поверх
+        * ленты. */}
       <div className="fixed inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom))] z-40 flex justify-center">
-        <Button type="button">Настройки</Button>
+        <Button type="button" onClick={() => setFiltersOpen(true)}>
+          Настройки
+        </Button>
       </div>
+
+      {filtersOpen && (
+        <HistoryFiltersSheet
+          applied={filters}
+          optionsQuery={filtersQuery}
+          onApply={(draft: HistoryFilters) => {
+            applyFilters(draft);
+            setFiltersOpen(false);
+          }}
+          onClose={() => setFiltersOpen(false)}
+        />
+      )}
     </>
   );
 }

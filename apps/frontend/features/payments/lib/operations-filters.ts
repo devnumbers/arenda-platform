@@ -1,6 +1,6 @@
 import type { IsoDate, OperationsCategorySummary } from '@/entities/payment';
-import { lastDayOfMonth } from '@/shared/lib/calendar';
-import { formatDottedDate } from '@/shared/lib/date-format';
+import { formatIsoRangeChipLabel } from '@/shared/lib/date-format';
+import { readIsoRangeParam, type UrlParamsSource } from '@/shared/lib/parse-iso-range-param';
 import { buildUrlWithParams } from '@/shared/lib/url-params';
 import { pluralize } from '@/shared/lib/pluralize';
 import { safeInternalPath } from '@/shared/lib/safe-internal-path';
@@ -42,49 +42,22 @@ export type OperationsFilters = {
 };
 
 /**
- * Минимальный источник параметров — ReadonlyURLSearchParams Next ему
- * удовлетворяет; структурный тип держит модуль чистым для vitest.
+ * Минимальный источник параметров — структурный тип UrlParamsSource из
+ * канона parse-iso-range-param; отдельное имя сохранено для публичных
+ * сигнатур фичи.
  */
-export type OperationsParamsSource = {
-  readonly get: (name: string) => string | null;
-};
-
-const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-
-const isoParts = (iso: IsoDate): { year: number; month: number; day: number } => ({
-  year: Number(iso.slice(0, 4)),
-  month: Number(iso.slice(5, 7)),
-  day: Number(iso.slice(8, 10)),
-});
-
-/** Календарно корректная ISO-дата (не «2026-13-40»). */
-function isRealIsoDate(iso: string): boolean {
-  if (!ISO_DATE_RE.test(iso)) {
-    return false;
-  }
-  const { year, month, day } = isoParts(iso);
-  return month >= 1 && month <= 12 && day >= 1 && day <= lastDayOfMonth(year, month - 1);
-}
+export type OperationsParamsSource = UrlParamsSource;
 
 /**
- * Чтение фильтров из URL: битые даты, перевёрнутый или целиком будущий
- * период отбрасываются (экраны операций — только paid, будущего в скоупе
- * не бывает, резолюция #474), будущий хвост обрезается «сегодня».
- * Категории — непустые слаги без дублей.
+ * Чтение фильтров из URL: период — канон readIsoRangeParam (битые даты,
+ * перевёрнутый или целиком будущий период отбрасываются — экраны операций
+ * только paid, будущего в скоупе не бывает, резолюция #474; будущий хвост
+ * обрезается «сегодня»). Категории — непустые слаги без дублей.
  */
 export function readOperationsFilters(
   params: OperationsParamsSource,
   today: IsoDate,
 ): OperationsFilters {
-  const rawFrom = params.get('from');
-  const rawTo = params.get('to');
-  let period: OperationsPeriod | null = null;
-  if (rawFrom !== null && rawTo !== null && isRealIsoDate(rawFrom) && isRealIsoDate(rawTo)) {
-    const to = rawTo < today ? rawTo : today;
-    if (rawFrom <= to) {
-      period = { from: rawFrom, to };
-    }
-  }
   const categories: string[] = [];
   const seen = new Set<string>();
   for (const slug of (params.get('category') ?? '').split(',')) {
@@ -94,7 +67,7 @@ export function readOperationsFilters(
       categories.push(trimmed);
     }
   }
-  return { period, categories };
+  return { period: readIsoRangeParam(params, 'from', 'to', today), categories };
 }
 
 /**
@@ -128,43 +101,14 @@ export function operationsFiltersHref(
   return buildUrlWithParams(base, new URLSearchParams(operationsFiltersParams(filters)));
 }
 
-/** Сокращения месяцев для лейблов диапазона: «1 — 30 ноя». */
-const MONTH_SHORT: ReadonlyArray<string> = [
-  'янв',
-  'фев',
-  'мар',
-  'апр',
-  'май',
-  'июн',
-  'июл',
-  'авг',
-  'сен',
-  'окт',
-  'ноя',
-  'дек',
-];
-
 /**
- * Лейбл чипа выбранного периода — всегда формат диапазона, даже полный
- * месяц: «1 — 30 ноя» (Figma 1506-72116), через месяцы — «10 окт —
- * 19 ноя», один день — «5 ноя», через годы — «01.01.2025 — 01.01.2026»
- * (Figma 1510-74149).
+ * Лейбл чипа выбранного периода — формат канона дат formatIsoRangeChipLabel
+ * (#711 поднял формат в shared/lib/date-format): даже полный месяц — «1 —
+ * 30 ноя» (Figma 1506-72116), один день — «5 ноя», через годы — точечные
+ * границы.
  */
 export function operationsPeriodRangeChipLabel(period: OperationsPeriod): string {
-  const from = isoParts(period.from);
-  const to = isoParts(period.to);
-  if (from.year !== to.year) {
-    return `${formatDottedDate(period.from)} — ${formatDottedDate(period.to)}`;
-  }
-  const fromLabel = `${from.day} ${MONTH_SHORT[from.month - 1] ?? ''}`.trim();
-  if (period.from === period.to) {
-    return fromLabel;
-  }
-  if (from.month === to.month) {
-    return `${from.day} — ${to.day} ${MONTH_SHORT[to.month - 1] ?? ''}`.trim();
-  }
-  const toLabel = `${to.day} ${MONTH_SHORT[to.month - 1] ?? ''}`.trim();
-  return `${fromLabel} — ${toLabel}`;
+  return formatIsoRangeChipLabel(period);
 }
 
 /**

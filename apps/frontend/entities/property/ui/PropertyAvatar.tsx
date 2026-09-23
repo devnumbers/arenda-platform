@@ -12,13 +12,15 @@ import { BoldHome, NotificationDot } from '@/shared/assets/icons';
  * кант белого — паттерн SelectAvatar 888:19370; поиск #601); hero — 96 в
  * шапках детали и правки (1186:44997, 1550:95852 — серый круг без канта);
  * feed — 24 в шапках групп ленты «Истории» (макет 2157-56876, #709 —
- * серый круг без канта, как hero). Точка — вне клипающего фото контейнера:
- * круг с overflow-hidden срезал бы её углы.
+ * серый круг без канта, как hero); filter — 32 в строках «Объектов» шита
+ * фильтров истории (макет 2050-158280, #711 — серый круг без канта, как
+ * feed). Точка — вне клипающего фото контейнера: круг с overflow-hidden
+ * срезал бы её углы.
  */
 export type PropertyAvatarProps = {
   readonly photoUrl?: string | null;
-  /** card — 64 на серой карточке; row — 44 на белой странице; hero — 96 в шапках; feed — 24 в шапках групп лент. */
-  readonly surface?: 'card' | 'row' | 'hero' | 'feed';
+  /** card — 64 на серой карточке; row — 44 на белой странице; hero — 96 в шапках; feed — 24 в шапках групп лент; filter — 32 в шите фильтров истории. */
+  readonly surface?: 'card' | 'row' | 'hero' | 'feed' | 'filter';
   /** Красная точка (просроченные операции ИЛИ «подошла к концу», #584). */
   readonly withAttentionDot?: boolean;
   readonly className?: string;
@@ -29,6 +31,7 @@ const SURFACE_BOX: Record<NonNullable<PropertyAvatarProps['surface']>, string> =
   row: 'h-11 w-11',
   hero: 'h-24 w-24',
   feed: 'h-6 w-6',
+  filter: 'h-8 w-8',
 };
 
 const SURFACE_CIRCLE: Record<NonNullable<PropertyAvatarProps['surface']>, string> = {
@@ -36,6 +39,7 @@ const SURFACE_CIRCLE: Record<NonNullable<PropertyAvatarProps['surface']>, string
   row: 'bg-surface-muted shadow-[0_0_0_2.5px_var(--dl-surface)]',
   hero: 'bg-surface-muted',
   feed: 'bg-surface-muted',
+  filter: 'bg-surface-muted',
 };
 
 const SURFACE_ICON: Record<NonNullable<PropertyAvatarProps['surface']>, string> = {
@@ -43,6 +47,7 @@ const SURFACE_ICON: Record<NonNullable<PropertyAvatarProps['surface']>, string> 
   row: 'h-6 w-6',
   hero: 'h-10 w-10',
   feed: 'h-3.5 w-3.5',
+  filter: 'h-[18px] w-[18px]',
 };
 
 export function PropertyAvatar({

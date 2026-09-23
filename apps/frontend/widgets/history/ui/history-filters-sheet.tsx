@@ -1,0 +1,484 @@
+'use client';
+
+import { useEffect, useState, type JSX, type ReactNode } from 'react';
+import type { ApiError } from '@/shared/api/errors';
+import type { UseQueryResult } from '@tanstack/react-query';
+import {
+  Add,
+  BoldUser,
+  Cancel,
+  Check,
+  CheckmarkCircle,
+  Edit,
+  HomeMain,
+  Key,
+  SmallArrowDown,
+  SmallArrowUp,
+  Team,
+  TimeHistory,
+  TrashBin,
+  Undo,
+  UserCircle,
+  Wallet,
+} from '@/shared/assets/icons';
+import {
+  baseActionLabel,
+  HISTORY_KINDS,
+  kindLabel,
+  type HistoryBaseAction,
+  type HistoryFilterOptions,
+  type HistoryKind,
+} from '@/entities/history';
+import { PropertyAvatar } from '@/entities/property';
+import {
+  DEFAULT_HISTORY_FILTERS,
+  historyPeriodChipLabel,
+  toggleHistoryFilterOption,
+  type HistoryFilters,
+} from '@/features/history';
+import { dateToIsoLocal, type IsoRange } from '@/shared/lib/calendar';
+import {
+  Button,
+  CalendarRangePicker,
+  Checkbox,
+  ErrorCard,
+  IconButton,
+  StickyBottomBar,
+  TopNav,
+  TopNavTitle,
+} from '@/shared/ui/design';
+import { HistoryFiltersSheetSkeleton } from './history-states';
+
+/**
+ * Шит «Настройки» — фильтры ленты «История действий» (#711; макеты
+ * 2177-60527 — свёрнутый, 2067-163528/162950 — период и смешанные
+ * состояния, 2050-158280 — раскрытые группы). Полноэкранный оверлей поверх
+ * ленты (канон поверхностей: пикер-поверх экрана — состояние ленты не
+ * теряется; каркас как у CalendarRangePicker: TopNav + внутренний скролл +
+ * StickyBottomBar), рендерится только в открытом состоянии.
+ *
+ * Группы-чекбоксы со счётчиками N/M: «Основные действия», «Виды действий»,
+ * «Участники» и «Объекты» (опции — GET /history/filters, #708). Семантика
+ * по аннотации макета («открывается сначала со свернутыми и всеми
+ * выбранными категориями»): все выбрано = «все» (null) — сервер не
+ * фильтрует; частичный выбор — только выбранное; ни одного — пустой
+ * результат (модель history-filters). Мастер-чекбокс группы: все —
+ * галочка, ни одного — пусто, частично — минус (indeterminate, макет
+ * 2067-162950); тап по нему из любого состояния ставит «все».
+ *
+ * Черновик живёт, пока шит открыт: «Применить фильтры» коммитит его в
+ * адрес одним push'ом («назад» возвращает без фильтров, DESIGN.md §3),
+ * крестик закрывает без коммита, «Сбросить фильтры» возвращает черновик к
+ * дефолту (все группы «все», без периода) — применением по-прежнему
+ * остаётся «Применить».
+ *
+ * Период — чип над группами: без периода серый «Выбрать период ⌄», с
+ * периодом синий с форматом чипа канона («1 окт — 20 дек», макет
+ * 2067-162950); тап открывает канон CalendarRangePicker (пустой старт и
+ * «Сбросить» — #670; чип прыжка скрыт, как у операций) поверх шита — пикер
+ * правит черновик, применением остаётся «Применить фильтры».
+ *
+ * Опции участников/объектов едут с /history/filters: пока в пути —
+ * скелетон с паритетом свёрнутого макета (§7). Если опции не приехали,
+ * группы «Участники»/«Объекты» не рисуются, но шит остаётся рабочим —
+ * период, действия, виды, сброс и применение правятся (находка ревью
+ * #711: ошибка опций не делает шит мёртвым); ошибка — канон ErrorCard с
+ * «Повторить» на месте этих групп.
+ */
+
+/** Строка группы: id значения, подпись, опциональный подзаголовок и
+ * ведущая иконка/аватар (макет 2050-158280: 24-иконка действий/видов,
+ * кружок 36 у участников, аватар объекта 32). */
+type HistoryFilterOptionRow = {
+  readonly id: string;
+  readonly label: string;
+  readonly subtitle?: string;
+  readonly leading?: ReactNode;
+  readonly leadingSize: 'icon' | 'participant' | 'object';
+  /** Фото объекта для ведущего аватара (leadingSize 'object'). */
+  readonly photoUrl?: string;
+};
+
+const BASE_ACTION_ICONS: Record<HistoryBaseAction, JSX.Element> = {
+  added: <Add />,
+  changed: <Edit />,
+  completed: <Check />,
+  deleted: <TrashBin />,
+};
+
+const KIND_ICONS: Record<HistoryKind, JSX.Element> = {
+  property: <HomeMain />,
+  rental: <Key />,
+  payment: <Wallet />,
+  operation: <TimeHistory />,
+  contact: <UserCircle />,
+  task: <CheckmarkCircle />,
+  member: <Team />,
+};
+
+/** Каталог основных действий в порядке макета — тот же список идёт в
+ * строки группы и в семантику «все, кроме переключённой» (null → список). */
+const ACTION_IDS = ['added', 'changed', 'completed', 'deleted'] as const;
+
+const ACTION_ROWS: ReadonlyArray<HistoryFilterOptionRow> = ACTION_IDS.map((id) => ({
+  id,
+  label: baseActionLabel(id),
+  leading: BASE_ACTION_ICONS[id],
+  leadingSize: 'icon',
+}));
+
+const KIND_ROWS: ReadonlyArray<HistoryFilterOptionRow> = HISTORY_KINDS.map((id) => ({
+  id,
+  label: kindLabel(id),
+  leading: KIND_ICONS[id],
+  leadingSize: 'icon',
+}));
+
+export type HistoryFiltersSheetProps = {
+  /** Применённые фильтры ленты — стартовое состояние черновика. */
+  readonly applied: HistoryFilters;
+  readonly optionsQuery: UseQueryResult<HistoryFilterOptions, ApiError>;
+  readonly onApply: (draft: HistoryFilters) => void;
+  readonly onClose: () => void;
+};
+
+export function HistoryFiltersSheet({
+  applied,
+  optionsQuery,
+  onApply,
+  onClose,
+}: HistoryFiltersSheetProps): JSX.Element {
+  const [draft, setDraft] = useState<HistoryFilters>(() => applied);
+  // Раскрытие групп — локально, свёрнуто по умолчанию (аннотация макета
+  // 2177-60527: страница открывается свёрнутой).
+  const [expanded, setExpanded] = useState<Record<'actions' | 'kinds' | 'actors' | 'objects', boolean>>({
+    actions: false,
+    kinds: false,
+    actors: false,
+    objects: false,
+  });
+  const [periodPickerOpen, setPeriodPickerOpen] = useState(false);
+  const today = dateToIsoLocal(new Date());
+
+  const toggleExpanded = (key: 'actions' | 'kinds' | 'actors' | 'objects'): void => {
+    setExpanded((state) => ({ ...state, [key]: !state[key] }));
+  };
+
+  // Esc закрывает шит; при открытом пикере периода его Esc закрывает пикер
+  // (свой слушатель) — шит в этот момент не закрываем.
+  useEffect(() => {
+    if (periodPickerOpen) {
+      return;
+    }
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [periodPickerOpen, onClose]);
+
+  const participantRows: ReadonlyArray<HistoryFilterOptionRow> = (
+    optionsQuery.data?.participants ?? []
+  ).map((participant) => ({
+    id: participant.id,
+    label: participant.name,
+    subtitle: participant.email,
+    leadingSize: 'participant',
+  }));
+
+  const objectRows: ReadonlyArray<HistoryFilterOptionRow> = (optionsQuery.data?.objects ?? []).map(
+    (object_) => ({
+      id: object_.id,
+      label: object_.name,
+      subtitle: object_.address,
+      leadingSize: 'object',
+      photoUrl: object_.photoUrl,
+    }),
+  );
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Фильтры истории"
+      className="fixed inset-0 z-50 flex flex-col bg-surface font-sans"
+    >
+      <TopNav
+        leading={<IconButton icon={<Cancel />} label="Закрыть фильтры" onClick={onClose} />}
+      >
+        <TopNavTitle title="История действий" />
+      </TopNav>
+
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-[560px] px-6 pb-[136px] pt-6 tablet:mt-[72px]">
+          {optionsQuery.isPending ? (
+            <HistoryFiltersSheetSkeleton />
+          ) : (
+            <div className="flex flex-col gap-4">
+              {/* Чип периода: серый «Выбрать период» / синий с диапазоном
+                * (макеты 2177-60527 / 2067-162950). */}
+              {draft.period !== null ? (
+                <Button
+                  type="button"
+                  size="small"
+                  className="self-start gap-1.5"
+                  onClick={() => setPeriodPickerOpen(true)}
+                >
+                  {historyPeriodChipLabel(draft.period)}
+                  <SmallArrowDown className="h-6 w-6" aria-hidden />
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="small"
+                  className="self-start gap-1.5"
+                  onClick={() => setPeriodPickerOpen(true)}
+                >
+                  Выбрать период
+                  <SmallArrowDown className="h-6 w-6" aria-hidden />
+                </Button>
+              )}
+
+              <FilterGroupCard
+                title="Основные действия"
+                rows={ACTION_ROWS}
+                selected={draft.actions}
+                expanded={expanded.actions}
+                onToggleExpanded={() => toggleExpanded('actions')}
+                onSelectAll={() => setDraft((state) => ({ ...state, actions: null }))}
+                onToggleOption={(id) =>
+                  setDraft((state) => ({
+                    ...state,
+                    actions: toggleHistoryFilterOption(
+                      ACTION_IDS,
+                      state.actions,
+                      id as HistoryBaseAction,
+                    ),
+                  }))
+                }
+              />
+              <FilterGroupCard
+                title="Виды действий"
+                rows={KIND_ROWS}
+                selected={draft.kinds}
+                expanded={expanded.kinds}
+                onToggleExpanded={() => toggleExpanded('kinds')}
+                onSelectAll={() => setDraft((state) => ({ ...state, kinds: null }))}
+                onToggleOption={(id) =>
+                  setDraft((state) => ({
+                    ...state,
+                    kinds: toggleHistoryFilterOption(HISTORY_KINDS, state.kinds, id as HistoryKind),
+                  }))
+                }
+              />
+              {optionsQuery.isError ? (
+                /* Опции участников/объектов не приехали: их группы не
+                  * рисуются, остальные фильтры и применение работают
+                  * (правка ревью #711 — черновик правится и без опций). */
+                <ErrorCard
+                  title="Не удалось загрузить фильтры"
+                  onRetry={() => void optionsQuery.refetch()}
+                />
+              ) : (
+                <>
+                  <FilterGroupCard
+                    title="Участники"
+                    rows={participantRows}
+                    selected={draft.actorIds}
+                    expanded={expanded.actors}
+                    onToggleExpanded={() => toggleExpanded('actors')}
+                    onSelectAll={() => setDraft((state) => ({ ...state, actorIds: null }))}
+                    onToggleOption={(id) =>
+                      setDraft((state) => ({
+                        ...state,
+                        actorIds: toggleHistoryFilterOption(
+                          participantRows.map((row) => row.id),
+                          state.actorIds,
+                          id,
+                        ),
+                      }))
+                    }
+                  />
+                  <FilterGroupCard
+                    title="Объекты"
+                    rows={objectRows}
+                    selected={draft.propertyIds}
+                    expanded={expanded.objects}
+                    onToggleExpanded={() => toggleExpanded('objects')}
+                    onSelectAll={() => setDraft((state) => ({ ...state, propertyIds: null }))}
+                    onToggleOption={(id) =>
+                      setDraft((state) => ({
+                        ...state,
+                        propertyIds: toggleHistoryFilterOption(
+                          objectRows.map((row) => row.id),
+                          state.propertyIds,
+                          id,
+                        ),
+                      }))
+                    }
+                  />
+                </>
+              )}
+
+              {/* Сброс возвращает черновик к дефолту (все группы «все», без
+                * периода); коммит — «Применить фильтры». */}
+              <Button type="button" variant="white" className="w-full text-base" onClick={() => setDraft(DEFAULT_HISTORY_FILTERS)}>
+                <Undo className="h-6 w-6" aria-hidden />
+                Сбросить фильтры
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Применение видно всегда, когда шит редактируем (§7: панель
+        * скрывается вместо погашенной кнопки; черновик правится и при
+        * ошибке опций — находка ревью #711). */}
+      {!optionsQuery.isPending && (
+        <StickyBottomBar>
+          <Button type="button" className="w-full" onClick={() => onApply(draft)}>
+            Применить фильтры
+          </Button>
+        </StickyBottomBar>
+      )}
+
+      {periodPickerOpen && (
+        <CalendarRangePicker
+          today={today}
+          value={draft.period}
+          monthJump={false}
+          onClose={() => setPeriodPickerOpen(false)}
+          onConfirm={(range: IsoRange) => {
+            setDraft((state) => ({ ...state, period: range }));
+            setPeriodPickerOpen(false);
+          }}
+          onReset={() => {
+            setDraft((state) => ({ ...state, period: null }));
+            setPeriodPickerOpen(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Карточка группы (макет 2177-60527): серый блок radius 24, шапка —
+ * мастер-чекбокс 24 + кнопка раскрытия с заголовком 16/18, счётчиком N/M и
+ * шевроном; в раскрытом — строки опций по 56. */
+function FilterGroupCard({
+  title,
+  rows,
+  selected,
+  expanded,
+  onToggleExpanded,
+  onSelectAll,
+  onToggleOption,
+}: {
+  readonly title: string;
+  readonly rows: ReadonlyArray<HistoryFilterOptionRow>;
+  readonly selected: ReadonlyArray<string> | null;
+  readonly expanded: boolean;
+  readonly onToggleExpanded: () => void;
+  readonly onSelectAll: () => void;
+  readonly onToggleOption: (id: string) => void;
+}): JSX.Element {
+  const count = selected === null ? rows.length : selected.length;
+  return (
+    <section className="rounded-3xl bg-surface-muted py-1">
+      <div className="flex min-h-14 items-center">
+        <Checkbox
+          className="ml-5 h-6 w-6"
+          checked={selected === null ? true : selected.length > 0 ? 'indeterminate' : false}
+          onCheckedChange={onSelectAll}
+          aria-label={`Выбрать все: ${title}`}
+        />
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 cursor-pointer items-center py-4 pr-5 text-left outline-none focus-visible:ring-4 focus-visible:ring-primary"
+          onClick={onToggleExpanded}
+          aria-expanded={expanded}
+        >
+          <span className="min-w-0 flex-1 truncate text-base font-medium leading-[18px] text-content">
+            {title}
+          </span>
+          <span className="shrink-0 text-[13px] font-medium leading-[15px] text-content-tertiary">
+            {count}/{rows.length}
+          </span>
+          {expanded ? (
+            <SmallArrowUp className="ml-1 h-6 w-6 shrink-0" aria-hidden />
+          ) : (
+            <SmallArrowDown className="ml-1 h-6 w-6 shrink-0" aria-hidden />
+          )}
+        </button>
+      </div>
+      {expanded && (
+        <div className="pb-1">
+          {rows.map((row) => (
+            <FilterOptionRow
+              key={row.id}
+              row={row}
+              checked={selected === null || selected.includes(row.id)}
+              onToggle={() => onToggleOption(row.id)}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** Строка опции (макет 2050-158280): чекбокс 24 на 44 от края, ведущая
+ * иконка/аватар, подпись 16/18 + подзаголовок 13/15; снятая опция —
+ * приглушена. */
+function FilterOptionRow({
+  row,
+  checked,
+  onToggle,
+}: {
+  readonly row: HistoryFilterOptionRow;
+  readonly checked: boolean;
+  readonly onToggle: () => void;
+}): JSX.Element {
+  return (
+    <div className="flex min-h-14 items-center pl-11 pr-5">
+      <Checkbox
+        className="h-6 w-6"
+        checked={checked}
+        onCheckedChange={onToggle}
+        aria-label={row.label}
+      />
+      {row.leadingSize === 'icon' && (
+        <span
+          className={`ml-4 flex h-6 w-6 shrink-0 items-center justify-center ${checked ? 'text-content' : 'text-content-tertiary'}`}
+        >
+          {row.leading}
+        </span>
+      )}
+      {row.leadingSize === 'participant' && (
+        <span className="ml-4 flex h-9 w-9 shrink-0 items-center justify-center rounded-pill bg-white">
+          <BoldUser className="h-4 w-4" aria-hidden />
+        </span>
+      )}
+      {row.leadingSize === 'object' && (
+        <span className="ml-4 shrink-0">
+          <PropertyAvatar photoUrl={row.photoUrl} surface="filter" />
+        </span>
+      )}
+      <span className="ml-3 min-w-0 flex-1">
+        <span
+          className={`block truncate text-base font-medium leading-[18px] ${checked ? 'text-content' : 'text-content-tertiary'}`}
+        >
+          {row.label}
+        </span>
+        {row.subtitle !== undefined && (
+          <span className="block truncate text-[13px] leading-[15px] text-content-tertiary">
+            {row.subtitle}
+          </span>
+        )}
+      </span>
+    </div>
+  );
+}

@@ -48,6 +48,7 @@ export type HistoryFeedPage = {
  */
 export function useHistoryFeed(
   scope: HistoryFeedScope = {},
+  options: { readonly enabled?: boolean } = {},
 ): UseInfiniteQueryResult<HistoryEntry[], ApiError> {
   return useInfiniteQuery({
     queryKey: historyKeys.feed(scope),
@@ -59,6 +60,10 @@ export function useHistoryFeed(
       firstPage.prevCursor ? { after: firstPage.prevCursor } : undefined,
     select: (data) => data.pages.flatMap((page) => page.items).reverse(),
     placeholderData: keepPreviousData,
+    // Фильтры #711, выбранные «в ноль», означают пустой результат —
+    // серверный контракт пустой список не отличает от «все», запрос не
+    // делается (historyFeedScope возвращает null).
+    enabled: options.enabled ?? true,
   });
 }
 

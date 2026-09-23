@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { formatDateTimeHeading, formatDayMonth, formatDayMonthTime, formatDayMonthWithYear, formatOverdueDays, formatRangeBound, formatSessionLastSeen, formatTime } from './date-format';
+import { formatDateTimeHeading, formatDayMonth, formatDayMonthTime, formatDayMonthWithYear, formatIsoRangeChipLabel, formatOverdueDays, formatRangeBound, formatSessionLastSeen, formatTime } from './date-format';
 
 describe('date-format', () => {
   it('день и склонённый месяц без года: «11 августа»', () => {
     expect(formatDayMonth('2026-08-11')).toBe('11 августа');
     expect(formatDayMonth('2026-03-01')).toBe('1 марта');
+  });
+
+  it('чип периода фильтра: через месяцы «1 окт — 20 дек» (#711, макет 2067-162950)', () => {
+    expect(formatIsoRangeChipLabel({ from: '2026-10-01', to: '2026-12-20' })).toBe('1 окт — 20 дек');
   });
 
   it('год добавляется только вне текущего года: «13 мая» / «13 мая, 2027»', () => {

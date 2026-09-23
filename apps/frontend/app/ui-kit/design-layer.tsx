@@ -364,6 +364,13 @@ export function DesignLayerShowcase(): JSX.Element {
                             />
                             <label htmlFor="dl-checkbox-off">Не выбран</label>
                         </div>
+                        <div className={styles.links}>
+                            {/* Частичный выбор (#711): checked="indeterminate" —
+                                синий квадрат с белым минусом (мастер-чекбокс
+                                группы фильтров истории). */}
+                            <Checkbox id="dl-checkbox-partial" checked="indeterminate" onCheckedChange={() => {}} />
+                            <label htmlFor="dl-checkbox-partial">Частично (2/4)</label>
+                        </div>
                         <RadioGroup value={radio} onValueChange={setRadio}>
                             <div className={styles.links}>
                                 <RadioGroupItem id="dl-radio-payments" value="payments" />
