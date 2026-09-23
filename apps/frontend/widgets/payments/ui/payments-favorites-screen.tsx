@@ -371,16 +371,18 @@ function FavoritesEmpty(): JSX.Element {
  * scale и тень единым motion-стейтом: whileDrag (указательный жест) и
  * animate (клавиатурный захват) дают один и тот же подъём.
  * Клавиатурный порядок (#813): ручка — фокусируемая
- * кнопка, пробел берёт/отпускает, стрелки перемещают, Escape отпускает;
- * анонсы — в sr-only aria-live. Движение — по кривой дома
- * (DESIGN.md §8): 350ms, reduced-motion — 150ms, не отключается. */
+ * кнопка, пробел или Enter берёт/отпускает, стрелки перемещают, Escape
+ * отпускает (уход фокуса тоже); анонсы — в sr-only aria-live.
+ * Движение — по кривой дома (DESIGN.md §8): 350ms, reduced-motion —
+ * 150ms, не отключается. */
 const EDIT_ROW_LIFT_SCALE = 1.02;
 /** Лифт-тень взятой плашки: та же структура строки, что у «нет тени» —
  * motion интерполирует бокс-шэдоу только между схожими значениями. */
 const EDIT_ROW_SHADOW = "0px 8px 24px rgba(23,26,28,0.16)";
 const EDIT_ROW_NO_SHADOW = "0px 0px 0px rgba(23,26,28,0)";
-const EDIT_ROW_MOVE_S = 0.25;
-const EDIT_ROW_LAYOUT_S = 0.35;
+/** Лифт (scale+тень) и пружина соседей — движение/трансформы: 350ms;
+ * reduced-motion — 150ms (DESIGN.md §8). */
+const EDIT_ROW_LIFT_S = 0.35;
 const EDIT_ROW_REDUCED_S = 0.15;
 /** cubic-bezier(0.32, 0.72, 0, 1) — единая кривая дома (--dl-ease). */
 const EDIT_ROW_EASE: [number, number, number, number] = [0.32, 0.72, 0, 1];
@@ -481,7 +483,17 @@ function FavoritesEditRow({
   readonly onMoved: (to: number) => void;
 }): JSX.Element {
   const controls = useDragControls();
-  const duration = reducedMotion ? EDIT_ROW_REDUCED_S : EDIT_ROW_MOVE_S;
+  const duration = reducedMotion ? EDIT_ROW_REDUCED_S : EDIT_ROW_LIFT_S;
+  // Единый лифт для тача и клавиатуры: whileDrag и animate дают один
+  // и тот же подъём — scale плюс тень.
+  const lift = {
+    scale: EDIT_ROW_LIFT_SCALE,
+    boxShadow: EDIT_ROW_SHADOW,
+  };
+  const rest = {
+    scale: 1,
+    boxShadow: EDIT_ROW_NO_SHADOW,
+  };
 
   const handleKeyDown = (
     event: ReactKeyboardEvent<HTMLButtonElement>,
@@ -513,21 +525,11 @@ function FavoritesEditRow({
       value={payment}
       dragListener={false}
       dragControls={controls}
-      whileDrag={{
-        scale: EDIT_ROW_LIFT_SCALE,
-        boxShadow: EDIT_ROW_SHADOW,
-      }}
-      animate={{
-        scale: grabbed ? EDIT_ROW_LIFT_SCALE : 1,
-        boxShadow: grabbed ? EDIT_ROW_SHADOW : EDIT_ROW_NO_SHADOW,
-      }}
+      whileDrag={lift}
+      animate={grabbed ? lift : rest}
       transition={{
         duration,
         ease: EDIT_ROW_EASE,
-        layout: {
-          duration: reducedMotion ? EDIT_ROW_REDUCED_S : EDIT_ROW_LAYOUT_S,
-          ease: EDIT_ROW_EASE,
-        },
       }}
       data-testid={`favorites-edit-row-${payment.id}`}
     >
@@ -550,8 +552,10 @@ function FavoritesEditRow({
         }
         trailing={
           // Ручка dnd (#813): pointer-жест стартует только здесь, из
-          // клавиатуры — пробел берёт, стрелки перемещают, Escape/пробел
-          // отпускает; анонсы позиции — живым регионом списка.
+          // клавиатуры — пробел или Enter берёт, стрелки перемещают,
+          // Escape/повторный пробел отпускает; уход фокуса с взятой
+          // ручки отпускает строку (плашка не зависает поднятой);
+          // анонсы позиции — живым регионом списка.
           <button
             type="button"
             aria-label={`Переместить: ${payment.title}`}
@@ -563,6 +567,11 @@ function FavoritesEditRow({
             )}
             onPointerDown={(event) => controls.start(event)}
             onKeyDown={handleKeyDown}
+            onBlur={() => {
+              if (grabbed) {
+                onGrabChange(false);
+              }
+            }}
           >
             <Move className="h-6 w-6" aria-hidden />
           </button>

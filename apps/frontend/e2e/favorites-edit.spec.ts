@@ -47,6 +47,17 @@ async function editRowIds(page: Page): Promise<string[]> {
   return ids;
 }
 
+/** Серверная правда сохранения: favorite_order в БД — плотные 1..N
+ * ровно в ожидаемом порядке (positions строит PUT /favorites/order). */
+async function expectServerOrder(expectedIds: string[]): Promise<void> {
+  const dbOrder = await execE2eSql(
+    `SELECT id FROM payments
+     WHERE id IN ('${FAVORITE_IDS.join("','")}') AND is_favorite
+     ORDER BY favorite_order;`,
+  );
+  expect(dbOrder.split('\n')).toEqual(expectedIds);
+}
+
 test.describe('правка избранного: перетаскивание за ручку', () => {
   test.beforeEach(async () => {
     await seedFavorites();
@@ -111,16 +122,7 @@ test.describe('правка избранного: перетаскивание �
     await expect(page.getByTestId('favorites-save')).toBeDisabled();
 
     // Серверная правда: взятый первым платеж теперь на позиции 2.
-    const dbOrder = await execE2eSql(
-      `SELECT id || ':' || favorite_order FROM payments
-       WHERE id IN ('${FAVORITE_IDS.join("','")}') AND is_favorite
-       ORDER BY favorite_order;`,
-    );
-    expect(dbOrder.split('\n')).toEqual([
-      `${afterMove[0]}:1`,
-      `${afterMove[1]}:2`,
-      `${afterMove[2]}:3`,
-    ]);
+    await expectServerOrder(afterMove);
 
     // Порядок переживает перезагрузку — прочитан с сервера.
     await page.reload();
@@ -190,15 +192,6 @@ test.describe('правка избранного: перетаскивание �
     await page.getByTestId('favorites-save').click();
     await expect(page.getByTestId('favorites-save')).toBeDisabled();
 
-    const dbOrder = await execE2eSql(
-      `SELECT id || ':' || favorite_order FROM payments
-       WHERE id IN ('${FAVORITE_IDS.join("','")}') AND is_favorite
-       ORDER BY favorite_order;`,
-    );
-    expect(dbOrder.split('\n')).toEqual([
-      `${afterDrag[0]}:1`,
-      `${afterDrag[1]}:2`,
-      `${afterDrag[2]}:3`,
-    ]);
+    await expectServerOrder(afterDrag);
   });
 });
