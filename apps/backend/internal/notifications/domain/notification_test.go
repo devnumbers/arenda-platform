@@ -28,6 +28,7 @@ var catalogCases = []struct {
 	{EventAccessPaused, CategorySharedAccess, nil},
 	{EventAccessResumed, CategorySharedAccess, nil},
 	{EventMemberLeft, CategorySharedAccess, nil},
+	{EventAccessRoleChanged, CategorySharedAccess, []ActionKind{ActionOpenPropertyMembers}},
 	{EventSubscriptionPaymentFailed, CategoryTariff, []ActionKind{ActionOpenTariffs}},
 	{EventSubscriptionPaymentReminder, CategoryTariff, []ActionKind{ActionOpenTariffs}},
 	{EventSubscriptionPaymentSucceeded, CategoryTariff, nil},

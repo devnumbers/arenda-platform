@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
 )
 
 // The access lifecycle events (карта #734, #751): the single interface the
@@ -44,6 +45,24 @@ type InvitationActivated struct {
 	At time.Time
 }
 
+// MembershipGranted reports an active membership granted instantly to a
+// registered user (issue #829): the Invite and AddProperties batches, the
+// InviteByEmail registered path and the direct add-member endpoint
+// (POST /properties/{propertyId}/access/members) all land through this
+// transition. The granted member learns about the new access (the №5
+// «Приглашение в объект» row, the
+// copy promising an access they actually have); a no-slot landing speaks the
+// system pause instead and publishes no granted event.
+type MembershipGranted struct {
+	MembershipID uuid.UUID
+	PropertyID   uuid.UUID
+	// RecipientID is the member the access was granted to.
+	RecipientID uuid.UUID
+	// ActorID is the granter (the inviting owner or full member) — the copy's
+	// subject and the actor-skip anchor.
+	ActorID uuid.UUID
+}
+
 // MembershipSuspended reports an active membership moving into the suspended
 // state. RecipientID is the member whose access got paused; ActorID uuid.Nil
 // marks the system suspension (the recipient slot enforcement has no human
@@ -80,6 +99,23 @@ type MembershipRevoked struct {
 	ActorID      uuid.UUID
 }
 
+// MembershipRoleChanged reports a manager changing an active member's role
+// (карта #828, #830, решение владельца 23.09 — the «изменение ваших прав»
+// part of the settings matrix). RecipientID is the member whose role changed,
+// ActorID the manager who changed it, Role the new role — the notifications
+// side renders its display wording. ChangedAt is the change instant (the
+// membership row's updated_at) the notification's dedup key stamps: every
+// change is its own fact; a suspended membership's change publishes nothing
+// — the object was already hidden from the recipient (issue #162, T6 canon).
+type MembershipRoleChanged struct {
+	MembershipID uuid.UUID
+	PropertyID   uuid.UUID
+	RecipientID  uuid.UUID
+	ActorID      uuid.UUID
+	Role         domain.Role
+	ChangedAt    time.Time
+}
+
 // MemberLeft reports a member's self-exit (issue #156, T3): OwnerID is the
 // recipient, MemberID the leaving member — the actor of their own exit.
 type MemberLeft struct {
@@ -94,10 +130,12 @@ type MemberLeft struct {
 // transitions run, no events leave the context.
 type AccessEventPublisher interface {
 	PublishInvitationActivated(ctx context.Context, event InvitationActivated) error
+	PublishMembershipGranted(ctx context.Context, event MembershipGranted) error
 	PublishMembershipSuspended(ctx context.Context, event MembershipSuspended) error
 	PublishMembershipResumed(ctx context.Context, event MembershipResumed) error
 	PublishMembershipRevoked(ctx context.Context, event MembershipRevoked) error
 	PublishMemberLeft(ctx context.Context, event MemberLeft) error
+	PublishMembershipRoleChanged(ctx context.Context, event MembershipRoleChanged) error
 }
 
 // publishAccessEvent runs one publication on the nil-tolerant port: a nil

@@ -251,3 +251,32 @@ func TestAccessService_ManageAuditActorRole(t *testing.T) {
 		}
 	}
 }
+
+// TestChangeMemberRoleNoOpStaysSilent checks the role-change notice's edge
+// (карта #828, #830): re-setting the member's current role is a no-op and
+// publishes nothing — the notice is only about a change the holder can
+// actually observe.
+func TestChangeMemberRoleNoOpStaysSilent(t *testing.T) {
+	t.Parallel()
+	f := newEventsFixture()
+	owner, member, property := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	f.linkOwner(owner, property)
+	f.limiter.set(member, 5)
+
+	m, err := f.access.AddMember(t.Context(), owner, property, member, domain.RoleViewer)
+	if err != nil {
+		t.Fatalf("AddMember: %v", err)
+	}
+	// The active landing publishes its granted event; the baseline is taken
+	// after it, so every event past n belongs to ChangeMemberRole alone.
+	n := len(f.events.events)
+	if _, err := f.access.ChangeMemberRole(t.Context(), owner, property, m.ID, domain.RoleViewer); err != nil {
+		t.Fatalf("ChangeMemberRole with the same role: %v", err)
+	}
+	if got := len(f.events.events); got != n {
+		t.Errorf("a same-role no-op publishes nothing, got %d new events", got-n)
+	}
+	if got := f.events.count(kindMembershipRoleChanged); got != 0 {
+		t.Errorf("a same-role no-op publishes no %s event, got %d", kindMembershipRoleChanged, got)
+	}
+}
