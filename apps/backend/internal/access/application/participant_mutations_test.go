@@ -756,7 +756,7 @@ func TestParticipantMutation_Invite_MixedBatchPublishesPerLeg(t *testing.T) {
 	if got := f.events.count(kindMembershipGranted); got != 1 {
 		t.Errorf("expected exactly one granted event, got %d", got)
 	}
-	if got := f.events.count("membership_suspended"); got != 1 {
+	if got := f.events.count(kindMembershipSuspended); got != 1 {
 		t.Errorf("expected exactly one suspended event, got %d", got)
 	}
 	granted := f.events.last(t, kindMembershipGranted).grant
@@ -787,7 +787,7 @@ func TestParticipantMutation_Invite_SuspendedGrantPublishesSystemPause(t *testin
 	if results[0].Outcome != ParticipantGrantSuspended {
 		t.Fatalf("results[0] = %+v, want suspended", results[0])
 	}
-	ev := f.events.last(t, "membership_suspended")
+	ev := f.events.last(t, kindMembershipSuspended)
 	pause := ev.pause
 	if pause.MembershipID != results[0].MembershipID || pause.PropertyID != p1 {
 		t.Errorf("pause event = %+v, want membership %s on %s", pause, results[0].MembershipID, p1)
@@ -836,10 +836,10 @@ func TestParticipantMutation_Remove_PublishesRevokedForActiveLegsOnly(t *testing
 	if err := f.svc.Remove(t.Context(), f.owner, member.String()); err != nil {
 		t.Fatalf("remove: %v", err)
 	}
-	if got := f.events.count("membership_revoked"); got != 1 {
+	if got := f.events.count(kindMembershipRevoked); got != 1 {
 		t.Fatalf("membership_revoked events = %d, want exactly 1 (the active leg)", got)
 	}
-	ev := f.events.last(t, "membership_revoked")
+	ev := f.events.last(t, kindMembershipRevoked)
 	revoke := ev.revo
 	if revoke.MembershipID != activeID || revoke.PropertyID != pActive {
 		t.Errorf("revoke event = %+v, want the active leg %s on %s", revoke, activeID, pActive)

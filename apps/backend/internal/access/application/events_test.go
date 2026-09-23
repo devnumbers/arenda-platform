@@ -119,10 +119,10 @@ func TestAddMemberSuspendedPublishesSystemPause(t *testing.T) {
 	if m.Status != domain.MemberStatusSuspended {
 		t.Fatalf("member must land suspended, got %v", m.Status)
 	}
-	if got := f.events.count("membership_suspended"); got != 1 {
+	if got := f.events.count(kindMembershipSuspended); got != 1 {
 		t.Fatalf("expected exactly one membership_suspended event, got %d", got)
 	}
-	e := f.events.last(t, "membership_suspended").pause
+	e := f.events.last(t, kindMembershipSuspended).pause
 	if e.MembershipID != m.ID || e.PropertyID != property || e.RecipientID != member {
 		t.Errorf("event ids = (%s, %s, %s)", e.MembershipID, e.PropertyID, e.RecipientID)
 	}
@@ -142,7 +142,7 @@ func TestAddMemberSuspendedPublishFailureSwallowed(t *testing.T) {
 	owner, member, property := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
 	f.linkOwner(owner, property)
 	f.limiter.set(member, 0)
-	f.events.errFor = map[string]error{"membership_suspended": errors.New("queue down")}
+	f.events.errFor = map[string]error{kindMembershipSuspended: errors.New("queue down")}
 
 	if _, err := f.access.AddMember(t.Context(), owner, property, member, domain.RoleViewer); err != nil {
 		t.Fatalf("AddMember must survive a publish failure, got %v", err)
@@ -166,7 +166,7 @@ func TestRevokeMemberPublishesRevoked(t *testing.T) {
 	if err := f.access.RevokeMember(t.Context(), owner, property, m.ID); err != nil {
 		t.Fatalf("RevokeMember: %v", err)
 	}
-	e := f.events.last(t, "membership_revoked").revo
+	e := f.events.last(t, kindMembershipRevoked).revo
 	if e.MembershipID != m.ID || e.RecipientID != member || e.ActorID != owner {
 		t.Errorf("event = (%s, %s, %s), want (%s, %s, %s)",
 			e.MembershipID, e.RecipientID, e.ActorID, m.ID, member, owner)
@@ -211,7 +211,7 @@ func TestLeavePropertyPublishesMemberLeft(t *testing.T) {
 	if err := f.access.LeaveProperty(t.Context(), member, property); err != nil {
 		t.Fatalf("LeaveProperty: %v", err)
 	}
-	e := f.events.last(t, "member_left").left
+	e := f.events.last(t, kindMemberLeft).left
 	if e.PropertyID != property || e.OwnerID != owner || e.MemberID != member {
 		t.Errorf("event = (%s, %s, %s)", e.PropertyID, e.OwnerID, e.MemberID)
 	}
@@ -256,7 +256,7 @@ func TestActivateInvitationPublishesActivated(t *testing.T) {
 			if err := f.invites.ActivatePendingInvitations(t.Context(), invitee, email); err != nil {
 				t.Fatalf("ActivatePendingInvitations: %v", err)
 			}
-			e := f.events.last(t, "invitation_activated").email
+			e := f.events.last(t, kindInvitationActivated).email
 			if e.InviterID != inviter || e.InviteeID != invitee || e.PropertyID != property {
 				t.Errorf("event parties = (%s, %s, %s)", e.InviterID, e.InviteeID, e.PropertyID)
 			}
@@ -293,7 +293,7 @@ func TestInviteRegisteredUserPublishesGranted(t *testing.T) {
 	if outcome.Member == nil {
 		t.Fatalf("a registered email must land a membership, got %+v", outcome)
 	}
-	if f.events.count("invitation_activated") != 0 {
+	if f.events.count(kindInvitationActivated) != 0 {
 		t.Error("an instant landing publishes no activation event — there was no acceptance")
 	}
 	e := f.events.last(t, kindMembershipGranted).grant
@@ -391,6 +391,26 @@ const kindMembershipGranted = "membership_granted"
 // fake (карта #828, #830) — the same contract as kindMembershipGranted.
 const kindMembershipRoleChanged = "membership_role_changed"
 
+// kindInvitationActivated is the invitation-activated event's kind at the
+// recording fake — the same contract as kindMembershipGranted.
+const kindInvitationActivated = "invitation_activated"
+
+// kindMembershipSuspended is the suspended event's kind at the recording
+// fake — the same contract as kindMembershipGranted.
+const kindMembershipSuspended = "membership_suspended"
+
+// kindMembershipResumed is the resumed event's kind at the recording fake —
+// the same contract as kindMembershipGranted.
+const kindMembershipResumed = "membership_resumed"
+
+// kindMembershipRevoked is the revoked event's kind at the recording fake —
+// the same contract as kindMembershipGranted.
+const kindMembershipRevoked = "membership_revoked"
+
+// kindMemberLeft is the member-left event's kind at the recording fake — the
+// same contract as kindMembershipGranted.
+const kindMemberLeft = "member_left"
+
 // fakeEventPublisher records the lifecycle events the services publish
 // (карта #734, #751); errFor fails a kind on demand — the publications are
 // best-effort, so a failure must never surface from the transition itself.
@@ -411,42 +431,42 @@ type recordedEvent struct {
 }
 
 func (f *fakeEventPublisher) PublishInvitationActivated(_ context.Context, e InvitationActivated) error {
-	if err := f.errFor["invitation_activated"]; err != nil {
+	if err := f.errFor[kindInvitationActivated]; err != nil {
 		return err
 	}
-	f.events = append(f.events, recordedEvent{kind: "invitation_activated", email: &e})
+	f.events = append(f.events, recordedEvent{kind: kindInvitationActivated, email: &e})
 	return nil
 }
 
 func (f *fakeEventPublisher) PublishMembershipSuspended(_ context.Context, e MembershipSuspended) error {
-	if err := f.errFor["membership_suspended"]; err != nil {
+	if err := f.errFor[kindMembershipSuspended]; err != nil {
 		return err
 	}
-	f.events = append(f.events, recordedEvent{kind: "membership_suspended", pause: &e})
+	f.events = append(f.events, recordedEvent{kind: kindMembershipSuspended, pause: &e})
 	return nil
 }
 
 func (f *fakeEventPublisher) PublishMembershipResumed(_ context.Context, e MembershipResumed) error {
-	if err := f.errFor["membership_resumed"]; err != nil {
+	if err := f.errFor[kindMembershipResumed]; err != nil {
 		return err
 	}
-	f.events = append(f.events, recordedEvent{kind: "membership_resumed", resum: &e})
+	f.events = append(f.events, recordedEvent{kind: kindMembershipResumed, resum: &e})
 	return nil
 }
 
 func (f *fakeEventPublisher) PublishMembershipRevoked(_ context.Context, e MembershipRevoked) error {
-	if err := f.errFor["membership_revoked"]; err != nil {
+	if err := f.errFor[kindMembershipRevoked]; err != nil {
 		return err
 	}
-	f.events = append(f.events, recordedEvent{kind: "membership_revoked", revo: &e})
+	f.events = append(f.events, recordedEvent{kind: kindMembershipRevoked, revo: &e})
 	return nil
 }
 
 func (f *fakeEventPublisher) PublishMemberLeft(_ context.Context, e MemberLeft) error {
-	if err := f.errFor["member_left"]; err != nil {
+	if err := f.errFor[kindMemberLeft]; err != nil {
 		return err
 	}
-	f.events = append(f.events, recordedEvent{kind: "member_left", left: &e})
+	f.events = append(f.events, recordedEvent{kind: kindMemberLeft, left: &e})
 	return nil
 }
 
