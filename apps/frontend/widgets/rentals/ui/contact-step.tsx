@@ -4,11 +4,12 @@ import { useState } from 'react';
 import type { JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import {
+  AccountSetting,
   Add,
   BoldUser,
+  Change,
   Edit,
   Kebab,
-  Repeat,
   TrashBin,
 } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
@@ -31,13 +32,14 @@ import { WizardHeading } from './wizard-chrome';
  * «Добавьте контакт арендатора» + подзаголовок; без выбора — два действия,
  * «Выбрать контакт» (экран выбора, отдельный маршрут 1855:64129) и «Создать
  * контакт» (ветвь ведёт в форму #509 с ?pick=rental и возвратом в визард);
- * с выбранным — строка арендатора с кебабом из четырёх пунктов (1855:64385):
- * Открыть — карточка контакта, Выбрать другой — экран выбора, Изменить —
- * форма правки, Удалить — контакт удаляется из книги и отвязывается от
- * аренд и объектов (шит подтверждения; тап по строке — тот же Открыть,
- * решение владельца 2026-09-22). Строка «Создать контакт» видна и в
- * выбранном состоянии; пустая книга (макета нет, решение владельца) —
- * только «Создать контакт». Арендатор необязателен.
+ * с выбранным — строка арендатора с кебабом из четырёх пунктов (1855:64385,
+ * меню 1855:64502 — иконки семейства R: AccountSetting / Change / Edit /
+ * TrashBin): Открыть — карточка контакта, Выбрать другой — экран выбора,
+ * Изменить — форма правки, Удалить — контакт удаляется из книги и
+ * отвязывается от аренд и объектов (шит подтверждения; тап по строке —
+ * тот же Открыть, решение владельца 2026-09-22). Строка «Создать контакт»
+ * видна и в выбранном состоянии; пустая книга (макета нет, решение
+ * владельца) — только «Создать контакт». Арендатор необязателен.
  */
 
 export type ContactStepProps = {
@@ -120,13 +122,16 @@ export function ContactStep({
                 <IconButton icon={<Kebab className="h-6 w-6" />} label="Меню контакта" />
               </MenuTrigger>
               <MenuContent collisionPadding={24}>
+                {/* Иконки пунктов — семейство R по меню макета
+                    (1855:64502): Icon/R/AccountSetting, Icon/R/Change,
+                    Icon/R/Edit, Icon/R/TrashBin. */}
                 <MenuItem
-                  icon={<BoldUser className="h-6 w-6" />}
+                  icon={<AccountSetting className="h-6 w-6" />}
                   onSelect={() => router.push(ROUTES.propertyContact(propertyId, selectedTenant.id))}
                 >
                   Открыть
                 </MenuItem>
-                <MenuItem icon={<Repeat className="h-6 w-6" />} onSelect={openPicker}>
+                <MenuItem icon={<Change className="h-6 w-6" />} onSelect={openPicker}>
                   Выбрать другой
                 </MenuItem>
                 <MenuItem
