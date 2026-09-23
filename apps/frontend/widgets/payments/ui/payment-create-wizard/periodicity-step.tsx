@@ -3,7 +3,7 @@
 import type { JSX } from 'react';
 import { SmallArrowRight, CheckBoxFalse, CheckBoxTrue } from '@/shared/assets/icons';
 import { type IsoDate, type Recurrence } from '@/entities/payment';
-import { CalendarDatePicker, ListRow } from '@/shared/ui/design';
+import { CalendarDatePicker, ListRow, MonthDaysGrid } from '@/shared/ui/design';
 import { isoDayOfMonth, isoMonthNumber } from '@/shared/lib/calendar';
 import {
   PERIODICITY_OPTIONS,
@@ -20,8 +20,9 @@ import { WizardHeading } from './wizard-chrome';
  * Шаг 3 визарда — периодичность без «Один раз» (решение #449, ошибка
  * дизайна Figma): меню день/неделя/месяц/год (Figma 1049:48174 — строки
  * с круглой стрелкой вправо) и ветки дат — дни недели списком с
- * чекбоксами (Figma 1056:52140/52895), мини-грид месяца с «последним
- * днем месяца» (823:11422/830:12311), год — бесконечный календарь как в
+ * чекбоксами (Figma 1056:52140/52895), мини-грид месяца — канонный
+ * MonthDaysGrid с «последним днем месяца» (1056:53076/53077, тикет
+ * #809), год — бесконечный календарь как в
  * задачах (решение владельца 2026-09-04, раньше был грид месяца
  * 829:11606/1056:53547). У ежедневного правила ветки нет — выбор сразу
  * завершает шаг.
@@ -164,45 +165,34 @@ export function PeriodicityStep({
       );
     }
     case 'monthDays': {
-      // Несколько дней месяца (Figma 1056:53076/53382): плоский грид 1..30 на
-      // всю ширину, выбор мультивыбором; последний день месяца — отдельный
-      // маркер-чекбокс, независимый от дней.
+      // Несколько дней месяца (Figma 1056:53076/53077): канонный мини-грид
+      // MonthDaysGrid — те же клетки, что в пикере дня оплаты аренды;
+      // мультивыбор 1..30 (31-е закрывается «последним днем месяца»).
+      // Последний день — отдельный маркер-чекбокс, независимый от дней.
       const current: Recurrence =
         recurrence?.kind === 'monthly'
           ? recurrence
           : { kind: 'monthly', daysOfMonth: [], lastDay: false };
-      const days = current.daysOfMonth;
       const toggleDay = (day: number): Recurrence => ({
         kind: 'monthly',
-        daysOfMonth: days.includes(day)
-          ? days.filter((picked) => picked !== day)
-          : [...days, day].sort((a, b) => a - b),
+        daysOfMonth: current.daysOfMonth.includes(day)
+          ? current.daysOfMonth.filter((picked) => picked !== day)
+          : [...current.daysOfMonth, day].sort((a, b) => a - b),
         lastDay: current.lastDay,
       });
       return (
         <>
           {heading('Выберите день', 'Можно выбрать несколько дней')}
-          <div className="grid grid-cols-7 gap-2 px-6 pt-6">
-            {Array.from({ length: 30 }, (_, index) => index + 1).map((day) => {
-              const selected = days.includes(day);
-              return (
-                <button
-                  key={day}
-                  type="button"
-                  aria-pressed={selected}
-                  onClick={() => onRecurrenceChange(toggleDay(day))}
-                  className={
-                    selected
-                      ? 'aspect-square w-full cursor-pointer rounded-xl bg-primary text-base font-medium leading-[18px] text-white outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary'
-                      : 'aspect-square w-full cursor-pointer rounded-xl text-base font-medium leading-[18px] text-content outline-none transition-colors hover:bg-surface-muted active:bg-surface-muted-hover focus-visible:ring-2 focus-visible:ring-primary'
-                  }
-                >
-                  {day}
-                </button>
-              );
-            })}
-          </div>
+          {/* Отступы по макету: 16px от заголовка к гриду, 8px от грида
+              к строке последнего дня (узлы 1056:53375/53081). */}
           <div className="pt-4">
+            <MonthDaysGrid
+              days={30}
+              selectedDays={new Set(current.daysOfMonth)}
+              onDayToggle={(day) => onRecurrenceChange(toggleDay(day))}
+            />
+          </div>
+          <div className="pt-2">
             <ListRow
               title="Последний день месяца"
               className="py-3.5"

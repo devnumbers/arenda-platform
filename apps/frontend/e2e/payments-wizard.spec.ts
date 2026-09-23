@@ -165,6 +165,16 @@ test.describe('визард создания платежа', () => {
     await expect(page.getByRole('heading', { name: 'Выберите день', exact: true })).toBeVisible();
     await page.getByRole('button', { name: '10', exact: true }).first().click();
     await page.getByRole('button', { name: '15', exact: true }).first().click();
+    // Канонный грид MonthDaysGrid (#809): выбранная клетка несёт
+    // aria-pressed, у каждой из 30 клеток имя — само число.
+    await expect(page.getByRole('button', { name: '10', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect(page.getByRole('button', { name: '30', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
     await captureScreen(page, testInfo, 'wizard-step3-month-days-mobile');
 
     // Шаг 4 — окончание необязательно: пропускаем.
