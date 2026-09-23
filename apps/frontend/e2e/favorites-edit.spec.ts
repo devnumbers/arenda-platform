@@ -1,4 +1,4 @@
-import type { CDPSession, Page } from '@playwright/test';
+import type { CDPSession, Locator, Page } from '@playwright/test';
 import {
   captureScreen,
   execE2eSql,
@@ -71,6 +71,48 @@ async function expectServerOrder(expectedIds: string[]): Promise<void> {
   expect(dbOrder.split('\n')).toEqual(expectedIds);
 }
 
+/** Бокс элемента для жеста: boundingBox с честной ошибкой вместо
+ * null-гвардов на месте вызова. */
+async function boxOrThrow(
+  locator: Locator,
+  what: string,
+): Promise<{ x: number; y: number; width: number; height: number }> {
+  const box = await locator.boundingBox();
+  if (box === null) {
+    throw new Error(`${what} не нашлись для жеста`);
+  }
+  return box;
+}
+
+/** Мышью тащит строку за ручку dnd к целевой строке: центры боксов,
+ * решительный жест с шагами — velocity-based перестановка Reorder
+ * срабатывает на движении, а не на стоянке. */
+async function dragGripToRow(
+  page: Page,
+  gripTestId: string,
+  targetRowTestId: string,
+): Promise<void> {
+  const gripBox = await boxOrThrow(
+    page.getByTestId(gripTestId),
+    'ручек или строка',
+  );
+  const rowBox = await boxOrThrow(
+    page.getByTestId(targetRowTestId),
+    'ручек или строка',
+  );
+  await page.mouse.move(
+    gripBox.x + gripBox.width / 2,
+    gripBox.y + gripBox.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    rowBox.x + rowBox.width / 2,
+    rowBox.y + rowBox.height / 2,
+    { steps: 10 },
+  );
+  await page.mouse.up();
+}
+
 test.describe('правка избранного: перетаскивание за ручку', () => {
   test.beforeEach(async () => {
     await seedFavorites();
@@ -113,6 +155,20 @@ test.describe('правка избранного: перетаскивание �
     // Взятие анонсится позицией и подсказкой клавиш.
     await expect(page.getByTestId('favorites-dnd-live')).toContainText(
       'Стрелки вверх и вниз — переместить',
+    );
+
+    // Авто-повтор удержания (keydown c repeat) не отпускает ручку:
+    // повторное событие — не второе нажатие, лифт и анонсы не флапают.
+    await grip.dispatchEvent('keydown', {
+      key: ' ',
+      repeat: true,
+      bubbles: true,
+    });
+    await expect(page.getByTestId('favorites-dnd-live')).toContainText(
+      'Стрелки вверх и вниз — переместить',
+    );
+    await expect(page.getByTestId('favorites-dnd-live')).not.toContainText(
+      'Изменения порядка применятся',
     );
 
     await page.keyboard.press('ArrowDown');
@@ -191,28 +247,11 @@ test.describe('правка избранного: перетаскивание �
         .locator('[aria-pressed="true"]'),
     ).toHaveCount(1);
 
-    const grip = page.getByTestId(`favorites-grip-${firstId}`);
-    const gripBox = await grip.boundingBox();
-    const secondBox = await page
-      .getByTestId(`favorites-edit-row-${ids[1]}`)
-      .boundingBox();
-    if (gripBox === null || secondBox === null) {
-      throw new Error('ручек или строка не нашлись для жеста');
-    }
-
-    await page.mouse.move(
-      gripBox.x + gripBox.width / 2,
-      gripBox.y + gripBox.height / 2,
+    await dragGripToRow(
+      page,
+      `favorites-grip-${firstId}`,
+      `favorites-edit-row-${ids[1]}`,
     );
-    await page.mouse.down();
-    // Решительный жест вниз — центр второй строки; velocity-based
-    // перестановка Reorder срабатывает на движении, а не на стоянке.
-    await page.mouse.move(
-      secondBox.x + secondBox.width / 2,
-      secondBox.y + secondBox.height / 2,
-      { steps: 10 },
-    );
-    await page.mouse.up();
 
     const afterDrag = await editRowIds(page);
     expect(afterDrag[1]).toBe(firstId);
@@ -419,11 +458,10 @@ test.describe('правка избранного: выделение и удал
     await expect(page.getByTestId('favorites-trash')).toHaveCount(0);
 
     // Зажатие на ручке dnd выделение не включает — жест не из плашки.
-    const grip = page.getByTestId(`favorites-grip-${ids[0]}`);
-    const gripBox = await grip.boundingBox();
-    if (gripBox === null) {
-      throw new Error('ручек не нашлась для жеста');
-    }
+    const gripBox = await boxOrThrow(
+      page.getByTestId(`favorites-grip-${ids[0]}`),
+      'ручек',
+    );
     await touchLongPress(page, cdp, gripBox);
     await expectSelected(page, ids[0] as string, false);
     expect(await editRowIds(page)).toEqual(ids);
@@ -450,7 +488,7 @@ test.describe('правка избранного: выделение и удал
     await expect(page.getByText('Избранные платежи')).toBeVisible();
   });
 
-  test('drag за ручку при активном выделении не переключает выделение — клик-хвост жеста съеден', async ({
+  test('drag за ручку не выделяет строку — клик-хвост жеста съеден', async ({
     page,
     seededUser,
   }) => {
@@ -466,20 +504,9 @@ test.describe('правка избранного: выделение и удал
     expect(ids).toHaveLength(3);
     const [firstId, secondId] = ids as [string, string];
 
-    const gripBox = await page.getByTestId(`favorites-grip-${firstId}`).boundingBox();
-    const secondBox = await page.getByTestId(`favorites-edit-row-${secondId}`).boundingBox();
-    if (gripBox === null || secondBox === null) {
-      throw new Error('ручек или строка не нашлись для жеста');
-    }
-
     // Drag первой строки на вторую: строка уезжает под курсор, pointerup
     // ложится внутрь перетаскиваемой плашки — выделение не переключает.
-    await page.mouse.move(gripBox.x + gripBox.width / 2, gripBox.y + gripBox.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(secondBox.x + secondBox.width / 2, secondBox.y + secondBox.height / 2, {
-      steps: 10,
-    });
-    await page.mouse.up();
+    await dragGripToRow(page, `favorites-grip-${firstId}`, `favorites-edit-row-${secondId}`);
 
     const afterDrag = await editRowIds(page);
     expect(afterDrag).not.toEqual(ids);
