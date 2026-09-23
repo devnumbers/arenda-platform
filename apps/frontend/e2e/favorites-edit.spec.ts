@@ -1,5 +1,6 @@
 import type { CDPSession, Page } from '@playwright/test';
 import {
+  captureScreen,
   execE2eSql,
   expect,
   openCabinetWithSeededSession,
@@ -35,6 +36,18 @@ async function seedFavorites(): Promise<void> {
   );
 }
 
+async function restoreSeedFavorites(): Promise<void> {
+  // Возврат к сиду: в избранном только аренда, без позиции.
+  await execE2eSql(
+    `UPDATE payments SET is_favorite = FALSE, favorite_order = NULL
+     WHERE id IN ('${ELECTRICITY_ID}', '${INTERCOM_ID}');`,
+  );
+  await execE2eSql(
+    `UPDATE payments SET is_favorite = TRUE, favorite_order = NULL
+     WHERE id = '${RENT_ID}';`,
+  );
+}
+
 /** id строк режима правки в текущем DOM-порядке. */
 async function editRowIds(page: Page): Promise<string[]> {
   const rows = page.locator('[data-testid^="favorites-edit-row-"]');
@@ -64,15 +77,7 @@ test.describe('правка избранного: перетаскивание �
   });
 
   test.afterAll(async () => {
-    // Возврат к сиду: в избранном только аренда, без позиции.
-    await execE2eSql(
-      `UPDATE payments SET is_favorite = FALSE, favorite_order = NULL
-       WHERE id IN ('${ELECTRICITY_ID}', '${INTERCOM_ID}');`,
-    );
-    await execE2eSql(
-      `UPDATE payments SET is_favorite = TRUE, favorite_order = NULL
-       WHERE id = '${RENT_ID}';`,
-    );
+    await restoreSeedFavorites();
   });
 
   test('клавиатурный порядок: пробел берёт, стрелка перемещает, Escape отпускает, сохранение пишет сервер', async ({
@@ -96,6 +101,15 @@ test.describe('правка избранного: перетаскивание �
     await grip.focus();
     await page.keyboard.press('Space');
 
+    // keydown ручки не всплывает в строку: захват не переключает выделение.
+    await expect(
+      page
+        .getByTestId(`favorites-edit-row-${firstId}`)
+        .locator('[aria-pressed="true"]'),
+    ).toHaveCount(0);
+    await expect(page.getByTestId('favorites-trash')).toHaveCount(0);
+    await expect(page.getByText(/^Выбрано/)).toHaveCount(0);
+
     // Взятие анонсится позицией и подсказкой клавиш.
     await expect(page.getByTestId('favorites-dnd-live')).toContainText(
       'Стрелки вверх и вниз — переместить',
@@ -117,6 +131,15 @@ test.describe('правка избранного: перетаскивание �
     await expect(page.getByTestId('favorites-dnd-live')).toContainText(
       'Сохранить',
     );
+
+    // keydown ручки не всплывает в строку: захват не переключает выделение.
+    await expect(
+      page
+        .getByTestId(`favorites-edit-row-${firstId}`)
+        .locator('[aria-pressed="true"]'),
+    ).toHaveCount(0);
+    await expect(page.getByTestId('favorites-trash')).toHaveCount(0);
+    await expect(page.getByText(/^Выбрано/)).toHaveCount(0);
 
     await page.getByTestId('favorites-save').click();
     await expect(page.getByTestId('favorites-save')).toBeDisabled();
@@ -200,6 +223,33 @@ test.describe('правка избранного: перетаскивание �
 
     await expectServerOrder(afterDrag);
   });
+
+  test('скриншоты для Figma-сверки: просмотр и правка, mobile 375 и desktop 1440', async ({
+    page,
+    seededUser,
+  }) => {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto(FAVORITES_URL);
+
+    for (const [label, viewport] of [
+      ['mobile', { width: 375, height: 667 }],
+      ['desktop', { width: 1440, height: 900 }],
+    ] as const) {
+      await page.setViewportSize(viewport);
+
+      // Просмотр: звёзды строк — маркер загрузки, скелетон не снимаем.
+      await expect(
+        page.locator('[data-testid^="favorites-row-star-"]'),
+      ).toHaveCount(3);
+      await captureScreen(page, test.info(), `favorites-view-${label}`);
+
+      // Правка: вход через карандаш, выход из неё для следующего вьюпорта.
+      await page.getByTestId('favorites-edit-button').click();
+      await expect(page.getByTestId('favorites-save')).toBeVisible();
+      await captureScreen(page, test.info(), `favorites-edit-${label}`);
+      await page.getByLabel('Выйти из правки').click();
+    }
+  });
 });
 
 // Выделение и удаление (#814): клик строки на десктопе выделяет,
@@ -213,15 +263,7 @@ test.describe('правка избранного: выделение и удал
   });
 
   test.afterAll(async () => {
-    // Возврат к сиду: в избранном только аренда, без позиции.
-    await execE2eSql(
-      `UPDATE payments SET is_favorite = FALSE, favorite_order = NULL
-       WHERE id IN ('${ELECTRICITY_ID}', '${INTERCOM_ID}');`,
-    );
-    await execE2eSql(
-      `UPDATE payments SET is_favorite = TRUE, favorite_order = NULL
-       WHERE id = '${RENT_ID}';`,
-    );
+    await restoreSeedFavorites();
   });
 
   /** Строка правки по id. */

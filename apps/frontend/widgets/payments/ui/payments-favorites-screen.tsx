@@ -622,6 +622,10 @@ function FavoritesEditRow({
   ): void => {
     if (event.key === " " || event.key === "Enter") {
       event.preventDefault();
+      // Space/Enter ручки не всплывают в строку: её useKeyboardActivation
+      // поймал бы их и переключил выделение — флаг gripGestureRef не
+      // спасает, onKeyDownCapture строки сбрасывает его раньше таргета.
+      event.stopPropagation();
       onGrabChange(!grabbed);
       return;
     }
@@ -698,7 +702,10 @@ function FavoritesEditRow({
           // ручки отпускает строку (плашка не зависает поднятой);
           // анонсы позиции — живым регионом списка. Жест ручки ставит
           // флаг gripGestureRef (клик-хвост drag'а строка съедает), а
-          // stopPropagation страхует клавиатурные клики ручки.
+          // stopPropagation на кнопке страхует и клик, и Space/Enter:
+          // keydown ручки не всплывает в строки useKeyboardActivation —
+          // флаг их не спасает, onKeyDownCapture строки сбрасывает его
+          // в capture-фазе раньше таргета.
           // absolute (по центру правого паддинга px-6) — вне потока:
           // обёртка trailing-слота схлопывается в нулевую ширину и не
           // сдвигает сумму с датой.
