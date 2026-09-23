@@ -181,12 +181,18 @@ test('лента из сида: чипы дней, группы «объект �
   await expect(page.getByRole('link', { name: /Гараж на Садовой/ }).first()).toBeVisible();
 
   // Шапки актёров — имена в серых карточках; роль экран не показывает
-  // (макет 2157-56876, решение владельца 23.09). Кликабельна шапка
-  // только участника (страница владельца/себя в пространстве участников
-  // не существует — 404), обезличенные записи тоже не ссылки.
+  // (макет 2157-56876). Шапка с actor_id — вход в «Действия участника»
+  // (#712): кликабельны и участник, и владелец (страница действий не
+  // читает участников, 404 не бывает), обезличенные записи не ссылки.
   await expect(page.getByRole('heading', { name: 'Иван Иванов' }).first()).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Мария Петрова' }).first()).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Иван Иванов' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Мария Петрова' }).first()).toHaveAttribute(
+    'href',
+    /\/history\/participants\//,
+  );
+  await expect(page.getByRole('link', { name: 'Иван Иванов' }).first()).toHaveAttribute(
+    'href',
+    /\/history\/participants\//,
+  );
 
   // Строки: сегменты дословно, связанные фрагменты — синие ссылки (#713
   // проложит переходы), иконка основного действия с подписью группы.

@@ -157,6 +157,12 @@ export type HistoryFiltersSheetProps = {
   readonly optionsQuery: UseQueryResult<HistoryFilterOptions, ApiError>;
   readonly onApply: (draft: HistoryFilters) => void;
   readonly onClose: () => void;
+  /** Заголовок шита (шапка оверлея): на «Действиях участника» (#712) шит
+   * поверх той же ленты — заголовок страницы, не общей. */
+  readonly title?: string;
+  /** Группа «Участники» рендерится только в общей ленте: на «Действиях
+   * участника» человек прибит страницей и фильтром не является (#712). */
+  readonly showActorsGroup?: boolean;
 };
 
 export function HistoryFiltersSheet({
@@ -164,6 +170,8 @@ export function HistoryFiltersSheet({
   optionsQuery,
   onApply,
   onClose,
+  title = 'История действий',
+  showActorsGroup = true,
 }: HistoryFiltersSheetProps): JSX.Element {
   const [draft, setDraft] = useState<HistoryFilters>(() => applied);
   // Раскрытие групп — локально, свёрнуто по умолчанию (аннотация макета
@@ -231,13 +239,13 @@ export function HistoryFiltersSheet({
       <TopNav
         leading={<IconButton icon={<Cancel />} label="Закрыть фильтры" onClick={onClose} />}
       >
-        <TopNavTitle title="История действий" />
+        <TopNavTitle title={title} />
       </TopNav>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-[560px] px-6 pb-[136px] pt-6 tablet:mt-[72px]">
           {optionsQuery.isPending ? (
-            <HistoryFiltersSheetSkeleton />
+            <HistoryFiltersSheetSkeleton groups={showActorsGroup ? 4 : 3} />
           ) : (
             <div className="flex flex-col gap-4">
               {/* Чип периода: серый «Выбрать период» / синий с диапазоном
@@ -307,24 +315,26 @@ export function HistoryFiltersSheet({
                 />
               ) : (
                 <>
-                  <FilterGroupCard
-                    title="Участники"
-                    rows={participantRows}
-                    selected={draft.actorIds}
-                    expanded={expanded.actors}
-                    onToggleExpanded={() => toggleExpanded('actors')}
-                    onToggleAll={(actorIds) => setDraft((state) => ({ ...state, actorIds }))}
-                    onToggleOption={(id) =>
-                      setDraft((state) => ({
-                        ...state,
-                        actorIds: toggleHistoryFilterOption(
-                          participantRows.map((row) => row.id),
-                          state.actorIds,
-                          id,
-                        ),
-                      }))
-                    }
-                  />
+                  {showActorsGroup && (
+                    <FilterGroupCard
+                      title="Участники"
+                      rows={participantRows}
+                      selected={draft.actorIds}
+                      expanded={expanded.actors}
+                      onToggleExpanded={() => toggleExpanded('actors')}
+                      onToggleAll={(actorIds) => setDraft((state) => ({ ...state, actorIds }))}
+                      onToggleOption={(id) =>
+                        setDraft((state) => ({
+                          ...state,
+                          actorIds: toggleHistoryFilterOption(
+                            participantRows.map((row) => row.id),
+                            state.actorIds,
+                            id,
+                          ),
+                        }))
+                      }
+                    />
+                  )}
                   <FilterGroupCard
                     title="Объекты"
                     rows={objectRows}

@@ -64,6 +64,55 @@ export const SEEDED_APARTMENT_PROPERTY_ID = '33333333-3333-4333-8333-33333333333
 export const SEEDED_GARAGE_PROPERTY_ID = '44444444-4444-4444-8444-444444444444';
 export const SEEDED_STUDIO_PROPERTY_ID = '46464646-4646-4646-8646-464646464646';
 
+/** actor_id журнала для INSERT'а — владелец сида (карта #704). */
+export function ownerActorIdSql(user: SeededUser): string {
+  return `(SELECT id FROM users WHERE email = '${user.email}')`;
+}
+
+/** actor_id журнала — приглашённый участник сида e2e-member@example.com. */
+export function memberActorIdSql(): string {
+  return `(SELECT id FROM users WHERE email = 'e2e-member@example.com')`;
+}
+
+/** Одна запись журнала «Истории действий» прямым INSERT'ом в
+ * action_journal: запись идёт в транзакциях мутаций (ADR 0061), сиду
+ * проще класть строки тем же контрактом, что миграция 000136. */
+export async function seedJournalEntry(
+  entry: {
+    readonly id: string;
+    readonly createdAt: string;
+    readonly propertyId?: string;
+    readonly actorIdSql?: string;
+    readonly actorName?: string;
+    readonly actorRole?: string;
+    readonly action?: string;
+    readonly baseAction?: string;
+    readonly kind?: string;
+    readonly segments: string;
+    readonly searchable: string;
+  },
+  user: SeededUser,
+): Promise<string> {
+  return execE2eSql(`
+    INSERT INTO action_journal
+      (id, property_id, actor_id, actor_role, actor_name, actor_email, kind, action, base_action, segments, searchable, created_at)
+    VALUES (
+      '${entry.id}',
+      '${entry.propertyId ?? SEEDED_APARTMENT_PROPERTY_ID}',
+      ${entry.actorIdSql ?? ownerActorIdSql(user)},
+      '${entry.actorRole ?? 'owner'}',
+      '${entry.actorName ?? 'Иван Иванов'}',
+      '${user.email}',
+      '${entry.kind ?? 'payment'}',
+      '${entry.action ?? 'payment.created'}',
+      '${entry.baseAction ?? 'added'}',
+      $j$${entry.segments}$j$::jsonb,
+      '${entry.searchable.replace(/'/g, "''")}',
+      '${entry.createdAt}'
+    );
+  `);
+}
+
 const execFileAsync = promisify(execFile);
 
 /**

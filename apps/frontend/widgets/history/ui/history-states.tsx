@@ -65,14 +65,16 @@ export function HistoryFeedSkeleton(): JSX.Element {
 
 /**
  * Скелет шита «Настройки» (#711): паритет финального лейаута (макет
- * 2177-60527 — чип периода, четыре свёрнутые карточки групп, «Сбросить
- * фильтры»); рендерится, пока опции /history/filters в пути.
+ * 2177-60527 — чип периода, свёрнутые карточки групп, «Сбросить
+ * фильтры»); рендерится, пока опции /history/filters в пути. Групп — 4 в
+ * общей ленте и 3 на «Действиях участника» (#712: группа «Участники»
+ * там не рендерится).
  */
-export function HistoryFiltersSheetSkeleton(): JSX.Element {
+export function HistoryFiltersSheetSkeleton({ groups = 4 }: { readonly groups?: number } = {}): JSX.Element {
   return (
     <div aria-hidden className="flex flex-col gap-4">
       <Skeleton className="h-11 w-40 rounded-pill" />
-      {[0, 1, 2, 3].map((index) => (
+      {Array.from({ length: groups }, (_, index) => (
         <div key={index} className="rounded-3xl bg-surface-muted py-1">
           <div className="flex min-h-14 items-center gap-2 py-4 pl-5 pr-5">
             <Skeleton className="h-6 w-6 shrink-0 rounded-lg" />

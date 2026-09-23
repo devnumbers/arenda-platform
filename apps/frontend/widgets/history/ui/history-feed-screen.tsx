@@ -8,7 +8,9 @@ import { PropertyAvatar } from '@/entities/property';
 import {
   groupHistoryByDay,
   historyFeedScope,
+  historyMemberFeedScope,
   isDefaultHistoryFilters,
+  memberHistoryFilters,
   useHistoryFeed,
   useHistoryFilters,
   useHistoryFiltersState,
@@ -55,14 +57,14 @@ const HEADER_LINK =
  * опций /history/filters, кликабельна — ведёт на страницу объекта;
  * действия актёра — серые карточки (surface-muted, radius m): белый
  * кружок с пользователем + имя, внутри строки «полоска тона + S-иконка +
- * текст» (см. HistoryRow). Шапка актёра кликабельна, только если
- * страница участника существует: actor_id известен и роль в снимке не
- * owner — страницы владельцев (и своя собственная) в пространстве
- * участников нет (GET /participants/{uuid} для них 404, решение
- * владельца 23.09). Роль на экране не показывается (как в макете) —
- * словарь роли живёт в entity (ADR 0061), действия участника — #712.
- * Вход — хаб «Совместный доступ» (решение владельца 22.09), фолбэк
- * «Назад» — туда же.
+ * текст» (см. HistoryRow). Шапка актёра кликабельна при известном
+ * actor_id — тап ведёт на «Действия участника» (#712, ниже; решение
+ * #709 о ссылке на страницу участника заменено: владельцы и своя шапка
+ * тоже кликабельны — страница действий не читает участников, 404 не
+ * бывает; обезличенные записи, actor_id null, не ссылки). Роль на экране
+ * не показывается (как в макете) — словарь роли живёт в entity
+ * (ADR 0061). Вход — хаб «Совместный доступ» (решение владельца 22.09),
+ * фолбэк «Назад» — туда же.
  *
  * Поиск по истории (#710) — иконка в шапке ленты (макет 2157-56876),
  * шапка меняется на поисковую поверх того же экрана (прецедент «Ваших
@@ -75,8 +77,8 @@ const HEADER_LINK =
  * серая строка «Ничего не найдено» без иллюстрации (макет 2092-166866,
  * канон «пусто без иллюстрации»); выход — «Назад» возвращает ленту.
  *
- * Элементы макета, приходящие со своими тикетами: действия участника
- * (#712), переходы по ссылкам сегментов (#713). Кнопка «Настройки» стоит
+ * Элементы макета, приходящие со своими тикетами: переходы по ссылкам
+ * сегментов (#713). Кнопка «Настройки» стоит
  * на месте по макету (в т.ч. на пустой ленте и в поиске — 2092-166284):
  * primary по контенту (не на всю ширину, макет 2184-94734), по центру.
  *
@@ -87,8 +89,35 @@ const HEADER_LINK =
  * без запроса (historyFeedScope → null); активные фильтры с пустой
  * выдачей показывают «Ничего не найдено» — «Действий не было» остаётся
  * только у чистой ленты.
+ *
+ * ## Действия участника (#712; макет 2184-94731)
+ *
+ * Та же лента, прибитая к одному человеку: маршрут
+ * /history/participants/[participantId] несёт uuid юзера (actor_id
+ * журнала), скоуп — actor_ids = один (ADR 0061 §7: тот же GET /history),
+ * группы адреса действуют поверх (historyMemberFeedScope). Группировка
+ * «день → объект → актёр → строки» переиспользуется как есть — в рамках
+ * одного человека объекты внутри дня остаются секциями (макет 2184-94731:
+ * шапки объектов и серые карточки). Поиск и «Настройки» переиспользуются;
+ * группы «Участники» в шите нет — человек прибит страницей, а не фильтр
+ * (memberHistoryFilters: и URL-actors не читается, и «Сбросить»/«Применить»
+ * её не пишут). Вход — тап по актёру в общей ленте (все записи с
+ * actor_id — включая владельца: страница не читает участников, 404 не
+ * бывает; решение #709 о ссылке на страницу участника заменено: она
+ * доступна из списка «Ваши участники») и кебаб страницы участника (#698).
+ * Шапки актёров на самой странице статичны — человек уже её предмет.
+ * Фолбэк «Назад» — общая лента.
  */
-export function HistoryFeedScreen(): JSX.Element {
+export type HistoryFeedScreenProps = {
+  /** Действия участника (#712): uuid юзера, прибивающий ленту
+   * (actor_ids = один); undefined — общая лента по всем объектам. */
+  readonly participantId?: string;
+};
+
+export function HistoryFeedScreen({ participantId }: HistoryFeedScreenProps = {}): JSX.Element {
+  // Личность экрана: страница участника прибивает человека, заголовок и
+  // фолбэк «Назад»; группа «Участники» шита и URL-actors на ней не живут.
+  const isMemberPage = participantId !== undefined;
   const [searchMode, setSearchMode] = useState(false);
   const [search, setSearch] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -96,8 +125,11 @@ export function HistoryFeedScreen(): JSX.Element {
 
   // Фильтры (#711) живут в адресе ленты; чтение и запись — через канон
   // useUrlParams (DESIGN.md §3), применение — push («назад» возвращает
-  // без фильтров).
-  const { filters, applyFilters } = useHistoryFiltersState();
+  // без фильтров). На странице участника группа «Участники» не читается
+  // (человек прибит путём) — и в шит, и в скоуп идёт нормализованная
+  // модель (memberHistoryFilters), «Применить» заодно вычищает ?actors=.
+  const { filters: urlFilters, applyFilters } = useHistoryFiltersState();
+  const filters = isMemberPage ? memberHistoryFilters(urlFilters) : urlFilters;
 
   // Открытие поиска сразу делает поле активным (программный фокус —
   // устоявшийся a11y-паттерн вместо autoFocus).
@@ -115,10 +147,13 @@ export function HistoryFeedScreen(): JSX.Element {
   const q = debounced.trim();
   const searching = q.length > 0;
 
-  // Скоуп ленты = фильтры адреса (#711) + живой поиск (#710); группа
+  // Скоуп ленты = фильтры адреса (#711) + живой поиск (#710); на странице
+  // участника поверх — прибитый человек (historyMemberFeedScope). Группа
   // фильтров, выбранная «в ноль», означает пустой результат — скоупа нет
   // (null), запрос не делается.
-  const scope = historyFeedScope(filters);
+  const scope = isMemberPage
+    ? historyMemberFeedScope(filters, participantId)
+    : historyFeedScope(filters);
   const feedQuery = useHistoryFeed(
     scope === null ? {} : searchMode && searching ? { ...scope, q } : scope,
     { enabled: scope !== null },
@@ -184,7 +219,9 @@ export function HistoryFeedScreen(): JSX.Element {
         </TopNav>
       ) : (
         <TopNav
-          leading={<TopNavBackButton fallbackHref={ROUTES.participants} />}
+          leading={
+            <TopNavBackButton fallbackHref={isMemberPage ? ROUTES.history : ROUTES.participants} />
+          }
           // Лупа — только на загруженной непустой ленте: пустая книга
           // прячет иконки шапки (§7), pending/error — тоже (прецедент
           // «Ваших участников» #697), иначе иконка мелькает до ответа.
@@ -198,7 +235,7 @@ export function HistoryFeedScreen(): JSX.Element {
             ) : undefined
           }
         >
-          <TopNavTitle title="История действий" />
+          <TopNavTitle title={isMemberPage ? 'Действия участника' : 'История действий'} />
         </TopNav>
       )}
 
@@ -270,12 +307,18 @@ export function HistoryFeedScreen(): JSX.Element {
                         </Link>
                         <div className="flex flex-col gap-1.5">
                           {object_.actors.map((actor, actorIndex) => {
-                            // Страница участника существует только для
-                            // приглашённых: владелец (role owner) и
-                            // обезличенные записи не кликабельны.
+                            // В общей ленте шапка актёра — вход в
+                            // «Действия участника» (#712): любая запись с
+                            // actor_id кликабельна, владелец включительно —
+                            // страница не читает участников, 404 не
+                            // бывает (решение #709 о ссылке на страницу
+                            // участника заменено). На странице участника
+                            // шапки статичны — человек уже её предмет;
+                            // обезличенные записи (actor_id null) не
+                            // ссылки нигде.
                             const header =
-                              actor.actorId !== null && actor.role !== 'owner'
-                                ? ROUTES.participant(actor.actorId)
+                              !isMemberPage && actor.actorId !== null
+                                ? ROUTES.historyParticipant(actor.actorId)
                                 : null;
                             return (
                               <div
@@ -315,6 +358,8 @@ export function HistoryFeedScreen(): JSX.Element {
         <HistoryFiltersSheet
           applied={filters}
           optionsQuery={filtersQuery}
+          title={isMemberPage ? 'Действия участника' : undefined}
+          showActorsGroup={!isMemberPage}
           onApply={(draft: HistoryFilters) => {
             applyFilters(draft);
             setFiltersOpen(false);

@@ -3,9 +3,11 @@ import {
   DEFAULT_HISTORY_FILTERS,
   historyFeedScope,
   historyFiltersParams,
+  historyMemberFeedScope,
   historyParticipantTitle,
   historyPeriodChipLabel,
   isDefaultHistoryFilters,
+  memberHistoryFilters,
   readHistoryFilters,
   toggleHistoryFilterGroup,
   toggleHistoryFilterOption,
@@ -147,6 +149,71 @@ describe('historyFeedScope', () => {
     expect(historyFeedScope({ ...DEFAULT_HISTORY_FILTERS, kinds: [] })).toBeNull();
     // «Все» (null) — не пустой результат.
     expect(historyFeedScope({ ...DEFAULT_HISTORY_FILTERS, actorIds: null })).not.toBeNull();
+  });
+});
+
+describe('memberHistoryFilters', () => {
+  it('группа «Участники» на странице участника не читается: человек прибит страницей, не фильтр', () => {
+    expect(memberHistoryFilters({ ...DEFAULT_HISTORY_FILTERS, actorIds: [UUID_A] })).toEqual(
+      DEFAULT_HISTORY_FILTERS,
+    );
+    expect(memberHistoryFilters({ ...DEFAULT_HISTORY_FILTERS, actorIds: [] }).actorIds).toBeNull();
+  });
+
+  it('остальные группы проходят без изменений', () => {
+    expect(
+      memberHistoryFilters({
+        period: { from: '2026-08-01', to: '2026-08-20' },
+        actions: ['added'],
+        kinds: ['payment'],
+        actorIds: [UUID_A],
+        propertyIds: null,
+      }),
+    ).toEqual({
+      period: { from: '2026-08-01', to: '2026-08-20' },
+      actions: ['added'],
+      kinds: ['payment'],
+      actorIds: null,
+      propertyIds: null,
+    });
+  });
+});
+
+describe('historyMemberFeedScope', () => {
+  it('лента прибита к одному человеку: actor_ids = один id (ADR 0061 §7)', () => {
+    expect(historyMemberFeedScope(DEFAULT_HISTORY_FILTERS, UUID_A)).toEqual({ actorIds: [UUID_A] });
+  });
+
+  it('прибитый актёр сильнее группы «Участники»: даже «ни одного» ([]) лента не опустошается', () => {
+    expect(historyMemberFeedScope({ ...DEFAULT_HISTORY_FILTERS, actorIds: [] }, UUID_A)).toEqual({
+      actorIds: [UUID_A],
+    });
+  });
+
+  it('период и выбор групп адреса действуют поверх прибитого актёра', () => {
+    expect(
+      historyMemberFeedScope(
+        {
+          period: { from: '2026-08-01', to: '2026-08-20' },
+          actions: ['added'],
+          kinds: null,
+          actorIds: [UUID_B],
+          propertyIds: [UUID_B],
+        },
+        UUID_A,
+      ),
+    ).toEqual({
+      dateFrom: '2026-08-01',
+      dateTo: '2026-08-20',
+      actions: ['added'],
+      actorIds: [UUID_A],
+      propertyIds: [UUID_B],
+    });
+  });
+
+  it('группа адреса «ни один» (кроме «Участников») — скоуп null, запроса нет', () => {
+    expect(historyMemberFeedScope({ ...DEFAULT_HISTORY_FILTERS, kinds: [] }, UUID_A)).toBeNull();
+    expect(historyMemberFeedScope({ ...DEFAULT_HISTORY_FILTERS, propertyIds: [] }, UUID_A)).toBeNull();
   });
 });
 

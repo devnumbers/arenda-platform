@@ -182,6 +182,12 @@ export const ROUTES = {
    * владельца 22.09); история объекта — фильтр property_ids (#711),
    * поиск #710, действия участника #712, переходы строк #713. */
   history: '/history',
+  /** «Действия участника» (карта #704, тикет #712): та же лента,
+   * прибитая к одному человеку (actor_ids = один, ADR 0061 §7).
+   * Идентификатор — uuid юзера (actor_id журнала); вход — тап по актёру
+   * в общей ленте и кебаб страницы участника (#698). */
+  historyParticipant: (participantId: string) =>
+    `/history/participants/${encodeURIComponent(participantId)}`,
   /** Центр уведомлений — лента (карта #734, тикет #744): хаб-маршрут
    * среднего таба TabBar и пилюли ПК. */
   notifications: '/notifications',

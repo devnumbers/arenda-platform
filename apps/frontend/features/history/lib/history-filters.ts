@@ -159,6 +159,31 @@ export function historyFeedScope(filters: HistoryFilters): HistoryFeedScope | nu
   };
 }
 
+/**
+ * Фильтры адреса на странице «Действия участника» (#712): человек прибит
+ * путём страницы и фильтром «Участники» не является — группа не читается
+ * вовсе (в шите её нет; hand-crafted ?actors= в адресе игнорируется, а
+ * «Применить фильтры» его и вычищает — запись группы своя).
+ */
+export function memberHistoryFilters(filters: HistoryFilters): HistoryFilters {
+  return { ...filters, actorIds: null };
+}
+
+/**
+ * Скоуп «Действий участника» (#712, ADR 0061 §7 — тот же GET /history,
+ * actor_ids = один): группы адреса действуют поверх прибитого актёра;
+ * null — как у historyFeedScope, какая-то из групп адреса выбрана «в
+ * ноль». Группа «Участники» адреса не действует никогда — человек прибит
+ * страницей (memberHistoryFilters).
+ */
+export function historyMemberFeedScope(
+  filters: HistoryFilters,
+  participantId: string,
+): HistoryFeedScope | null {
+  const base = historyFeedScope(memberHistoryFilters(filters));
+  return base !== null ? { ...base, actorIds: [participantId] } : null;
+}
+
 /** Лейбл чипа периода шита: без периода — «Выбрать период» (макет
  * 2177-60527), с периодом — формат чипа канона (макет 2067-162950). */
 export function historyPeriodChipLabel(period: IsoRange | null): string {
