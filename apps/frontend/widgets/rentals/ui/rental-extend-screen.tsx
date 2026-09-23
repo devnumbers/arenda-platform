@@ -7,9 +7,15 @@ import { Calendar, Cancel } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
-import { addDays, cmp, type IsoDate } from '@/shared/lib/calendar';
+import type { IsoDate } from '@/shared/lib/calendar';
 import { formatDayMonthWithYear } from '@/shared/lib/date-format';
-import { currentRentalOf, rentalExtendSuccessCopy, useRentals, useUpdateRental } from '@/features/rentals';
+import {
+  currentRentalOf,
+  rentalExtendMinDate,
+  rentalExtendSuccessCopy,
+  useRentals,
+  useUpdateRental,
+} from '@/features/rentals';
 import type { Rental } from '@/entities/rental';
 import {
   Button,
@@ -25,9 +31,9 @@ import { PickerTriggerBox } from './wizard-chrome';
 /**
  * Экран «Продление аренды» (#533, Figma 1428:58218): вопрос «На сколько
  * продлить аренду?» с единственным полем «Новая дата» — канонический
- * календарь с нижней границей «строго позже текущего окончания» (правило
- * продления, ADR 0053 §3/§5; у needs_attention-аренды окончание в прошлом —
- * нижняя граница today, сервер PATCH принимает даты не раньше сегодняшнего).
+ * календарь. Нижняя граница — правило продления (ADR 0053 §3/§5): у срочной
+ * «строго позже текущего окончания», у needs_attention (окончание в прошлом)
+ * и у бессрочной — today (контракт PATCH: даты не раньше сегодняшнего).
  * Условия (сумма/день оплаты) в продлении не меняются — PATCH несёт только
  * plannedEndDate, сервер синхронно переставляет платёж аренды. Шапка —
  * крестик без заголовка (как шаг 1 визарда #530), панель «Отменить /
@@ -37,8 +43,10 @@ import { PickerTriggerBox } from './wizard-chrome';
  * заменён); детализация пересчитывается инвалидацией useUpdateRental.
  *
  * Точка входа — круглая «Продлить аренду» на детализации (там и живёт
- * доступность: Full Access и только срочная аренда). Бессрочной продлевать
- * нечего — сюда не попадают; прямой заход показывает честный отказ.
+ * доступность: Full Access). Продление — сценарий любой незавершённой
+ * аренды; бессрочной задаёт первую дату окончания (домен «Продление»,
+ * rentals/CONTEXT.md; бэк-контракт PATCH это же и держит — seam-тест
+ * бессрочной в rentals_seam_integration_test.go).
  */
 export function RentalExtendScreen({
   propertyId,
@@ -83,18 +91,6 @@ export function RentalExtendScreen({
         <div className="pt-6">
           <p className="text-center text-base leading-[18px] text-content-secondary">
             Аренда не найдена
-          </p>
-        </div>
-      </ExtendShell>
-    );
-  }
-
-  if (rental.plannedEndDate === null) {
-    return (
-      <ExtendShell onClose={close}>
-        <div className="pt-6">
-          <p className="text-center text-base leading-[18px] text-content-secondary">
-            Бессрочную аренду продлить нельзя — у неё нет даты окончания
           </p>
         </div>
       </ExtendShell>
@@ -151,23 +147,21 @@ function RentalExtendForm({
   const [pickerOpen, setPickerOpen] = useState(false);
 
   // «Строго позже текущего окончания» (ADR 0053 §5); у needs_attention
-  // окончание в прошлом — нижняя граница today (контракт PATCH: не в прошлое).
-  const minDate =
-    currentEnd !== null && cmp(currentEnd, today) >= 0 ? addDays(currentEnd, 1) : today;
+  // окончание в прошлом, а у бессрочной его нет вовсе — границу ведёт
+  // контракт PATCH (не в прошлое и не раньше дня после начала).
+  const minDate = rentalExtendMinDate(currentEnd, rental.startDate, today);
 
   const extend = async (): Promise<void> => {
-    // Оба условия гарантированы UI (кнопка живёт только у срочной аренды
-    // с выбранной датой); проверка — для типизации снимка старой даты.
-    if (newEnd === undefined || currentEnd === null) {
+    // Гарантировано UI (кнопка живёт только с выбранной датой).
+    if (newEnd === undefined) {
       return;
     }
     try {
       await updateRental.mutateAsync({ plannedEndDate: newEnd });
       // Успех — тост на детализации (1550:93664): текст считает либа
-      // success-copy, старое окончание снимком до перечитания аренды.
-      notify.success(
-        rentalExtendSuccessCopy({ previousEnd: currentEnd, newEnd }),
-      );
+      // success-copy, старое окончание снимком до перечитания аренды
+      // (у бессрочной его нет — тост без счётчика месяцев).
+      notify.success(rentalExtendSuccessCopy({ previousEnd: currentEnd, newEnd }));
       onClose();
     } catch (error) {
       notify.scenarios.rentals.updateError(error);

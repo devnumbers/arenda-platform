@@ -77,11 +77,12 @@ export function RentalDetailBody({
   const openPayment = () => router.push(ROUTES.propertyPayment(propertyId, rentPaymentId));
 
   // Круглая тройка макета (1550:93664, решение #802 23.09): «Завершить» —
-  // только у начавшейся аренды (как строка «Управления»), раскладка по
-  // числу видимых действий — тройка/пара сеткой, одиночная по центру.
+  // только у начавшейся аренды (как строка «Управления»), «Продлить» — у
+  // любой незавершённой (#804), раскладка по числу видимых действий —
+  // тройка/пара сеткой, одиночная по центру.
   const roundCount =
     (rental.status !== 'upcoming' ? 1 : 0) +
-    (rental.plannedEndDate !== null ? 1 : 0) +
+    1 /* «Продлить» — у любой незавершённой (#804) */ +
     (nextPayment !== null ? 1 : 0);
 
   return (
@@ -129,14 +130,12 @@ export function RentalDetailBody({
                   onClick={() => router.push(ROUTES.propertyRentalComplete(propertyId))}
                 />
               )}
-              {rental.plannedEndDate !== null && (
-                <RoundActionButton
-                  variant="secondary"
-                  icon={<Calendar />}
-                  caption={<>Продлить<br />аренду</>}
-                  onClick={() => router.push(ROUTES.propertyRentalExtend(propertyId))}
-                />
-              )}
+              <RoundActionButton
+                variant="secondary"
+                icon={<Calendar />}
+                caption={<>Продлить<br />аренду</>}
+                onClick={() => router.push(ROUTES.propertyRentalExtend(propertyId))}
+              />
               {nextPayment !== null && (
                 <RoundActionButton
                   variant="primary"
@@ -232,8 +231,9 @@ export function RentalDetailBody({
           {/* Секция «Управление» (Figma 1232:62297): строки ведут на экраны
               #532/#534/#533. «Завершить» — только у начавшейся аренды (дата
               завершения не бывает раньше начала, ADR 0053 §3), «Продлить» —
-              только у срочной (как круглая кнопка #533). Смотрящему секции
-              нет — все строки мутирующие. */}
+              у любой незавершённой: бессрочной задаёт первую дату окончания
+              (домен «Продление», #804; как круглая кнопка #533). Смотрящему
+              секции нет — все строки мутирующие. */}
           {canMutate && (
             <RentalGroup title="Управление" className="pb-3">
               <div className="flex flex-col">
@@ -249,13 +249,11 @@ export function RentalDetailBody({
                     onClick={() => router.push(ROUTES.propertyRentalComplete(propertyId))}
                   />
                 )}
-                {rental.plannedEndDate !== null && (
-                  <ManageRow
-                    icon={<Calendar className="h-6 w-6 text-content" />}
-                    label="Продлить аренду"
-                    onClick={() => router.push(ROUTES.propertyRentalExtend(propertyId))}
-                  />
-                )}
+                <ManageRow
+                  icon={<Calendar className="h-6 w-6 text-content" />}
+                  label="Продлить аренду"
+                  onClick={() => router.push(ROUTES.propertyRentalExtend(propertyId))}
+                />
               </div>
             </RentalGroup>
           )}

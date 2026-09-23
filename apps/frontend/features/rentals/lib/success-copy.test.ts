@@ -47,6 +47,12 @@ describe('rentalExtendSuccessCopy', () => {
       'Аренда продлена до 05.03.2026',
     );
   });
+
+  it('бессрочной счётчика нет по построению — первая дата окончания без дельты', () => {
+    expect(rentalExtendSuccessCopy({ previousEnd: null, newEnd: '2027-03-01' })).toBe(
+      'Аренда продлена до 01.03.2027',
+    );
+  });
 });
 
 describe('rentalCompletedTitle', () => {

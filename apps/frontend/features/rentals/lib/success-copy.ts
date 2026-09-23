@@ -9,7 +9,7 @@ import { paymentDayPhrase } from './wizard-model';
  * Тексты экрана успеха визарда аренды (Figma 1371:63753): заголовок
  * «Вы создали аренду», описание — день оплаты, сумма и способ отметки:
  * автоплатёж фиксирует оплату сам, иначе владелец отмечает вручную.
- * Здесь же текст попапа успеха продления (#533, Figma 1550:93723).
+ * Здесь же текст тоста успеха продления (#533, Figma 1550:93664).
  */
 
 export type RentalSuccessCopyInput = {
@@ -32,18 +32,22 @@ export function rentalSuccessCopy(input: RentalSuccessCopyInput): RentalSuccessC
   };
 }
 
-/** Вход попапа успеха продления: старое и новое окончания. */
+/** Вход тоста успеха продления: старое и новое окончания; у бессрочной
+ * старого окончания нет — previousEnd null. */
 export type RentalExtendSuccessCopyInput = {
-  readonly previousEnd: IsoDate;
+  readonly previousEnd: IsoDate | null;
   readonly newEnd: IsoDate;
 };
 
-/** Текст попапа успеха продления (#533, Figma 1550:93723): «Аренда продлена
+/** Текст тоста успеха продления (#533, Figma 1550:93664; попап 1550:93723
+ * заменён тостом на детализации — решение #802 23.09): «Аренда продлена
  * еще на N месяцев до ДД.ММ.ГГГГ» — N полных календарных месяцев между
- * старым и новым окончанием. Продление короче полного месяца счётчика
- * не получает: «Аренда продлена до ДД.ММ.ГГГГ». */
+ * старым и новым окончанием. Без счётчика живут два случая: продление
+ * короче полного месяца и продление бессрочной — первой задаётся первая
+ * дата окончания, дельты нет (домен «Продление», rentals/CONTEXT.md). */
 export function rentalExtendSuccessCopy(input: RentalExtendSuccessCopyInput): string {
-  const months = fullMonthsBetween(input.previousEnd, input.newEnd);
+  const months =
+    input.previousEnd === null ? 0 : fullMonthsBetween(input.previousEnd, input.newEnd);
   if (months === 0) {
     return `Аренда продлена до ${formatDottedDate(input.newEnd)}`;
   }

@@ -39,6 +39,7 @@ export {
   rentalExtendSuccessCopy,
   rentalSuccessCopy,
 } from './lib/success-copy';
+export { rentalExtendMinDate } from './lib/extend-model';
 export {
   currentRentalOf,
   hasProgressCard,
