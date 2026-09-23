@@ -273,6 +273,7 @@ func (s *AccessService) ChangeMemberRole(
 
 	var updated domain.Membership
 	var wasSuspended bool
+	var roleChanged bool
 	err = s.runInTx(ctx, func(stores *txStores) error {
 		// Confirm the membership exists and belongs to this property before
 		// updating; a missing row is a not-found outcome rather than a silent no-op.
@@ -281,6 +282,7 @@ func (s *AccessService) ChangeMemberRole(
 			return err
 		}
 		wasSuspended = existing.IsSuspended()
+		roleChanged = existing.Role != role
 
 		updated, err = stores.members.UpdateRole(ctx, memberID, propertyID, role)
 		if err != nil {
@@ -310,7 +312,9 @@ func (s *AccessService) ChangeMemberRole(
 	// Post-commit notice to the member whose role changed (карта #828, #830)
 	// — best-effort (карта #734, #751). A suspended membership stays silent:
 	// the object was already hidden from its holder (issue #162, T6 canon).
-	if !wasSuspended {
+	// A same-role no-op stays silent too — there is no change for the holder
+	// to learn about.
+	if !wasSuspended && roleChanged {
 		publishAccessEvent(ctx, s.events, s.logger, "membership_role_changed", func() error {
 			return s.events.PublishMembershipRoleChanged(ctx, MembershipRoleChanged{
 				MembershipID: updated.ID,
