@@ -229,7 +229,7 @@ export { default as EditSmall } from './edit-small.svg';
 export { default as EyeSmall } from './eye-small.svg';
 
 // Иконка роли «Полный доступ» в шите фильтров «Истории» (#840, Figma
-// Icon/S/FullAccess 2184-94261): контурный 16×16, currentColor — сосед
+// Icon/S/FullAccess 1963-83727): контурный 16×16, currentColor — сосед
 // EyeSmall («Просмотр») и LockSmall (владелец).
 export { default as FullAccessSmall } from './full-access-small.svg';
 

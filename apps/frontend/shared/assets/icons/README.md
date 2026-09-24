@@ -152,7 +152,7 @@
 | `AddSmall` | `add-small.svg` | `S/Add` | 2041:133285 | новая (23.09.2026, лента «История» #709) |
 | `CheckSmall` | `check-small.svg` | `S/Check` | 2140:125448 | новая (23.09.2026, лента «История» #709) |
 | `TrashBinSmall` | `trash-bin-small.svg` | `S/TrashBin` | 2041:133286 | новая (23.09.2026, лента «История» #709) |
-| `FullAccessSmall` | `full-access-small.svg` | `S/FullAccess` | 2184:94261 | новая (24.09.2026, фильтр «Истории» #840) |
+| `FullAccessSmall` | `full-access-small.svg` | `S/FullAccess` | 1963:83727 | новая (24.09.2026, фильтр «Истории» #840) |
 
 ## Таблица канона — статусы и бейджи (запечённые цвета)
 
