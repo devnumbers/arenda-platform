@@ -76,7 +76,7 @@ export function memberActorIdSql(): string {
 
 /** Одна запись журнала «Истории действий» прямым INSERT'ом в
  * action_journal: запись идёт в транзакциях мутаций (ADR 0061), сиду
- * проще класть строки тем же контрактом, что миграция 000136. */
+ * проще класть строки тем же контрактом, что миграция 000140. */
 export async function seedJournalEntry(
   entry: {
     readonly id: string;
@@ -88,11 +88,16 @@ export async function seedJournalEntry(
     readonly action?: string;
     readonly baseAction?: string;
     readonly kind?: string;
-    readonly segments: string;
-    readonly searchable: string;
+    /** Короткая форма плоской строки без ссылок: segments и searchable
+     * собираются из текста (searchable — текст + имя актёра). */
+    readonly text?: string;
+    readonly segments?: string;
+    readonly searchable?: string;
   },
   user: SeededUser,
 ): Promise<string> {
+  const segments = entry.segments ?? `[{"text": "${entry.text}"}]`;
+  const searchable = entry.searchable ?? `${entry.text} ${entry.actorName ?? 'Иван Иванов'}`;
   return execE2eSql(`
     INSERT INTO action_journal
       (id, property_id, actor_id, actor_role, actor_name, actor_email, kind, action, base_action, segments, searchable, created_at)
@@ -106,11 +111,39 @@ export async function seedJournalEntry(
       '${entry.kind ?? 'payment'}',
       '${entry.action ?? 'payment.created'}',
       '${entry.baseAction ?? 'added'}',
-      $j$${entry.segments}$j$::jsonb,
-      '${entry.searchable.replace(/'/g, "''")}',
+      $j$${segments}$j$::jsonb,
+      '${searchable.replace(/'/g, "''")}',
       '${entry.createdAt}'
     );
   `);
+}
+
+/**
+ * actor_ids и property_ids последнего запроса ленты «Истории» — серверная
+ * правда прибитой области страницы (канон e2e: ассерт на запрос, не
+ * только на DOM). reset — между действиями: «в ноль» запроса не делает,
+ * оба last остаются старыми.
+ */
+export async function trackHistoryScope(page: Page): Promise<{
+  lastActors: () => string | null;
+  lastProperties: () => string | null;
+  reset: () => void;
+}> {
+  const state = { actors: null as string | null, properties: null as string | null };
+  await page.route(/\/history\?/, (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    state.actors = params.get('actor_ids');
+    state.properties = params.get('property_ids');
+    return route.continue();
+  });
+  return {
+    lastActors: () => state.actors,
+    lastProperties: () => state.properties,
+    reset: () => {
+      state.actors = null;
+      state.properties = null;
+    },
+  };
 }
 
 const execFileAsync = promisify(execFile);

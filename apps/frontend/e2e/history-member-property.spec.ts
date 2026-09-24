@@ -1,4 +1,3 @@
-import type { Page } from '@playwright/test';
 import {
   captureScreen,
   expect,
@@ -9,6 +8,7 @@ import {
   SEEDED_GARAGE_PROPERTY_ID,
   seedJournalEntry,
   test,
+  trackHistoryScope,
   type SeededUser,
 } from './fixtures';
 
@@ -74,35 +74,10 @@ async function seedPairJournal(user: SeededUser): Promise<void> {
   );
 }
 
-/** actor_ids и property_ids последнего запроса ленты — серверная правда
- * двойного пина (канон e2e: ассерт на запрос, не только на DOM). reset —
- * между действиями: «в ноль» запроса не делает, last остаётся старым. */
-async function trackScope(page: Page): Promise<{
-  lastActors: () => string | null;
-  lastProperties: () => string | null;
-  reset: () => void;
-}> {
-  const state = { actors: null as string | null, properties: null as string | null };
-  await page.route(/\/history\?/, (route) => {
-    const params = new URL(route.request().url()).searchParams;
-    state.actors = params.get('actor_ids');
-    state.properties = params.get('property_ids');
-    return route.continue();
-  });
-  return {
-    lastActors: () => state.actors,
-    lastProperties: () => state.properties,
-    reset: () => {
-      state.actors = null;
-      state.properties = null;
-    },
-  };
-}
-
 test('вход с «Прав участника»: лента прибита к паре, чужой актёр и чужой объект не приезжают', async ({ page, seededUser }, testInfo) => {
   await seedPairJournal(seededUser);
   const memberUuid = await execE2eSql(MEMBER_UUID_SQL);
-  const scope = await trackScope(page);
+  const scope = await trackHistoryScope(page);
   await openCabinetWithSeededSession(page, seededUser);
 
   await page.goto(`/participants/${memberUuid}/properties/${APARTMENT_ID}`);
@@ -140,7 +115,7 @@ test('вход с «Прав участника»: лента прибита к 
 test('шит: «Участники» и «Объекты» обе прибиты серым «1/1»; «в ноль» без запроса, пины не пишутся в адрес', async ({ page, seededUser }, testInfo) => {
   await seedPairJournal(seededUser);
   const memberUuid = await execE2eSql(MEMBER_UUID_SQL);
-  const scope = await trackScope(page);
+  const scope = await trackHistoryScope(page);
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto(`/history/participants/${memberUuid}/properties/${APARTMENT_ID}`);
   await expect(page.getByText('Задача выполнена: Заменить кран')).toBeVisible();

@@ -5,9 +5,12 @@ import {
   captureScreen,
   execE2eSql,
   expect,
+  memberActorIdSql,
   openCabinetWithSeededSession,
+  ownerActorIdSql,
   SEEDED_APARTMENT_PROPERTY_ID,
   SEEDED_GARAGE_PROPERTY_ID,
+  seedJournalEntry,
   test,
   type SeededUser,
 } from './fixtures';
@@ -23,80 +26,54 @@ import {
 const OWNER_NAME = 'Иван Иванов';
 const MEMBER_NAME = 'Мария Петрова';
 
-function ownerActorId(user: SeededUser): string {
-  return `(SELECT id FROM users WHERE email = '${user.email}')`;
-}
-
-function memberActorId(): string {
-  return `(SELECT id FROM users WHERE email = 'e2e-member@example.com')`;
-}
-
 async function seedHistory(user: SeededUser): Promise<void> {
   await execE2eSql('DELETE FROM action_journal;');
-  const insert = (entry: {
-    id: string;
-    createdAt: string;
-    propertyIdSql?: string;
-    actorIdSql?: string;
-    actorName?: string;
-    actorRole?: string;
-    kind?: string;
-    action?: string;
-    baseAction?: string;
-    text: string;
-  }): Promise<unknown> =>
-    execE2eSql(`
-    INSERT INTO action_journal
-      (id, property_id, actor_id, actor_role, actor_name, actor_email, kind, action, base_action, segments, searchable, created_at)
-    VALUES (
-      '${entry.id}',
-      '${entry.propertyIdSql ?? SEEDED_APARTMENT_PROPERTY_ID}',
-      ${entry.actorIdSql ?? ownerActorId(user)},
-      '${entry.actorRole ?? 'owner'}',
-      '${entry.actorName ?? OWNER_NAME}',
-      '${user.email}',
-      '${entry.kind ?? 'payment'}',
-      '${entry.action ?? 'payment.created'}',
-      '${entry.baseAction ?? 'added'}',
-      $j$[{"text": "${entry.text}"}]$j$::jsonb,
-      '${entry.text} ${entry.actorName ?? OWNER_NAME}',
-      '${entry.createdAt}'
-    );
-  `);
   const now = Date.now();
-  await insert({
-    id: 'b0000000-0000-4000-8000-000000000001',
-    createdAt: new Date(now - 4 * 60_000).toISOString(),
-    text: 'Платёж создан: Аренда за сентябрь',
-  });
-  await insert({
-    id: 'b0000000-0000-4000-8000-000000000002',
-    createdAt: new Date(now - 3 * 60_000).toISOString(),
-    kind: 'operation',
-    action: 'operation.paid',
-    baseAction: 'completed',
-    text: 'Операция оплачена: Вода',
-  });
-  await insert({
-    id: 'b0000000-0000-4000-8000-000000000003',
-    createdAt: new Date(now - 2 * 60_000).toISOString(),
-    actorIdSql: memberActorId(),
-    actorName: MEMBER_NAME,
-    actorRole: 'full_access',
-    kind: 'task',
-    action: 'task.completed',
-    baseAction: 'completed',
-    text: 'Задача выполнена: Заменить кран',
-  });
-  await insert({
-    id: 'b0000000-0000-4000-8000-000000000004',
-    createdAt: new Date(now - 60_000).toISOString(),
-    propertyIdSql: SEEDED_GARAGE_PROPERTY_ID,
-    kind: 'property',
-    action: 'property.pinned',
-    baseAction: 'changed',
-    text: 'Гараж на Садовой закреплён',
-  });
+  await seedJournalEntry(
+    {
+      id: 'b0000000-0000-4000-8000-000000000001',
+      createdAt: new Date(now - 4 * 60_000).toISOString(),
+      text: 'Платёж создан: Аренда за сентябрь',
+    },
+    user,
+  );
+  await seedJournalEntry(
+    {
+      id: 'b0000000-0000-4000-8000-000000000002',
+      createdAt: new Date(now - 3 * 60_000).toISOString(),
+      kind: 'operation',
+      action: 'operation.paid',
+      baseAction: 'completed',
+      text: 'Операция оплачена: Вода',
+    },
+    user,
+  );
+  await seedJournalEntry(
+    {
+      id: 'b0000000-0000-4000-8000-000000000003',
+      createdAt: new Date(now - 2 * 60_000).toISOString(),
+      actorIdSql: memberActorIdSql(),
+      actorName: MEMBER_NAME,
+      actorRole: 'full_access',
+      kind: 'task',
+      action: 'task.completed',
+      baseAction: 'completed',
+      text: 'Задача выполнена: Заменить кран',
+    },
+    user,
+  );
+  await seedJournalEntry(
+    {
+      id: 'b0000000-0000-4000-8000-000000000004',
+      createdAt: new Date(now - 60_000).toISOString(),
+      propertyId: SEEDED_GARAGE_PROPERTY_ID,
+      kind: 'property',
+      action: 'property.pinned',
+      baseAction: 'changed',
+      text: 'Гараж на Садовой закреплён',
+    },
+    user,
+  );
 }
 
 /** Сид + вход + открытая лента: все записи в первой порции (без прокрутки). */
@@ -227,7 +204,7 @@ test('период «сегодня» через CalendarRangePicker: синий
     VALUES (
       'b0000000-0000-4000-8000-000000000005',
       '${SEEDED_APARTMENT_PROPERTY_ID}',
-      ${ownerActorId(seededUser)},
+      ${ownerActorIdSql(seededUser)},
       'owner',
       '${OWNER_NAME}',
       '${seededUser.email}',
@@ -256,7 +233,9 @@ test('период «сегодня» через CalendarRangePicker: синий
   const now = new Date();
   const monthLabel = `${MONTH_LABELS[now.getMonth()]}, ${now.getFullYear()}`;
   const monthSection = page.locator('section').filter({ has: page.getByRole('heading', { name: monthLabel }) });
-  const todayButton = monthSection.getByRole('button', { name: String(now.getDate()), exact: true });
+  // «Сегодня» читаем из маркера aria-current — как в однодатных пикерах
+  // (прецедент payment-edit-delete), а не из календарного числа.
+  const todayButton = monthSection.locator('button[aria-current="date"]');
   await todayButton.click();
   await todayButton.click();
   await picker.getByRole('button', { name: 'Выбрать', exact: true }).click();
@@ -328,7 +307,7 @@ test('участники: своя строка «Иван (Вы)» с замк�
     .filter({ has: page.getByRole('checkbox', { name: 'Иван (Вы)' }) });
   await expect(ownRow).toHaveCount(1);
   await expect(ownRow.getByText('(Вы)', { exact: true })).toBeVisible();
-  await expect(ownRow.getByRole('img', { name: 'Роль: владелец' })).toHaveCount(1);
+  await expect(ownRow.getByRole('img', { name: 'Роль: Владелец' })).toHaveCount(1);
 
   // Приглашённая без своих объектов: канон имени + иконка роли
   // full_access (#840, макет 2184-94261).
@@ -336,8 +315,8 @@ test('участники: своя строка «Иван (Вы)» с замк�
     .locator('.min-h-14')
     .filter({ has: page.getByRole('checkbox', { name: 'Мария Петрова' }) });
   await expect(memberRow).toHaveCount(1);
-  await expect(memberRow.getByRole('img', { name: 'Роль: полный доступ' })).toHaveCount(1);
-  await expect(memberRow.getByRole('img', { name: 'Роль: владелец' })).toHaveCount(0);
+  await expect(memberRow.getByRole('img', { name: 'Роль: Редактирование' })).toHaveCount(1);
+  await expect(memberRow.getByRole('img', { name: 'Роль: Владелец' })).toHaveCount(0);
 });
 
 test('прямая ссылка с фильтром (?kinds=task) открывает отфильтрованную ленту', async ({ page, seededUser }) => {

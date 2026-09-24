@@ -2,13 +2,15 @@ import {
   captureScreen,
   expect,
   execE2eSql,
+  memberActorIdSql,
   openCabinetWithSeededSession,
   openCabinetWithSessionToken,
+  ownerActorIdSql,
   SEEDED_APARTMENT_PROPERTY_ID,
   SEEDED_GARAGE_PROPERTY_ID,
+  seedJournalEntry,
   seededMemberSessionToken,
   test,
-  type SeededUser,
 } from './fixtures';
 
 // Экран «История действий» (карта #704, тикет #709): мессенджерская лента
@@ -18,7 +20,7 @@ import {
 // макет 2008-47514; решение владельца 22.09 о строке на хабе заменено —
 // #843). Журнал сеется прямым INSERT'ом в
 // action_journal (запись журнала идёт в транзакциях мутаций — сиду
-// проще класть строки тем же контрактом, что миграция 000136).
+// проще класть строки тем же контрактом, что миграция 000140).
 
 /** Чип дня в JS — зеркально formatDayMonthWithYear (год вне текущего). */
 function expectedDayChip(daysAgo: number): string {
@@ -30,50 +32,7 @@ function expectedDayChip(daysAgo: number): string {
   return day.getUTCFullYear() === today.getUTCFullYear() ? base : `${base}, ${day.getUTCFullYear()}`;
 }
 
-function ownerActorId(user: SeededUser): string {
-  return `(SELECT id FROM users WHERE email = '${user.email}')`;
-}
-
 const header = 'header[aria-label="Навигация экрана"]';
-
-function memberActorId(): string {
-  return `(SELECT id FROM users WHERE email = 'e2e-member@example.com')`;
-}
-
-interface SeededEntry {
-  readonly id: string;
-  readonly createdAt: string;
-  readonly propertyId?: string;
-  readonly actorIdSql?: string;
-  readonly actorName?: string;
-  readonly actorRole?: string;
-  readonly baseAction?: string;
-  readonly action?: string;
-  readonly kind?: string;
-  readonly segments: string;
-  readonly searchable: string;
-}
-
-async function seedEntry(entry: SeededEntry, user: SeededUser): Promise<string> {
-  return execE2eSql(`
-    INSERT INTO action_journal
-      (id, property_id, actor_id, actor_role, actor_name, actor_email, kind, action, base_action, segments, searchable, created_at)
-    VALUES (
-      '${entry.id}',
-      '${entry.propertyId ?? SEEDED_APARTMENT_PROPERTY_ID}',
-      ${entry.actorIdSql ?? ownerActorId(user)},
-      '${entry.actorRole ?? 'owner'}',
-      '${entry.actorName ?? 'Иван Иванов'}',
-      '${user.email}',
-      '${entry.kind ?? 'payment'}',
-      '${entry.action ?? 'payment.created'}',
-      '${entry.baseAction ?? 'added'}',
-      $j$${entry.segments}$j$::jsonb,
-      '${entry.searchable.replace(/'/g, "''")}',
-      '${entry.createdAt}'
-    );
-  `);
-}
 
 test('вход с кебаба «Ваших участников», пустая лента — «Действий не было» и кнопка «Настройки»', async ({ page, seededUser }, testInfo) => {
   await execE2eSql('DELETE FROM action_journal;');
@@ -98,7 +57,7 @@ test('лента из сида: чипы дней, группы «объект �
   await openCabinetWithSeededSession(page, seededUser);
 
   // Сегодня: два объекта и два актёра сериями (канон мессенджера).
-  await seedEntry(
+  await seedJournalEntry(
     {
       id: 'a0000000-0000-4000-8000-000000000001',
       createdAt: new Date(Date.now() - 3 * 60_000).toISOString(),
@@ -107,7 +66,7 @@ test('лента из сида: чипы дней, группы «объект �
     },
     seededUser,
   );
-  await seedEntry(
+  await seedJournalEntry(
     {
       id: 'a0000000-0000-4000-8000-000000000002',
       createdAt: new Date(Date.now() - 2 * 60_000).toISOString(),
@@ -116,7 +75,7 @@ test('лента из сида: чипы дней, группы «объект �
     },
     seededUser,
   );
-  await seedEntry(
+  await seedJournalEntry(
     {
       id: 'a0000000-0000-4000-8000-000000000003',
       createdAt: new Date(Date.now() - 60_000).toISOString(),
@@ -130,11 +89,11 @@ test('лента из сида: чипы дней, группы «объект �
     seededUser,
   );
   // Сегодня, другим актёром — серия внутри того же объекта.
-  await seedEntry(
+  await seedJournalEntry(
     {
       id: 'a0000000-0000-4000-8000-000000000004',
       createdAt: new Date().toISOString(),
-      actorIdSql: memberActorId(),
+      actorIdSql: memberActorIdSql(),
       actorName: 'Мария Петрова',
       actorRole: 'full_access',
       segments: '[{"text": "Задача выполнена: Заменить кран"}]',
@@ -146,7 +105,7 @@ test('лента из сида: чипы дней, группы «объект �
     seededUser,
   );
   // Вчера и 12 дней назад.
-  await seedEntry(
+  await seedJournalEntry(
     {
       id: 'a0000000-0000-4000-8000-000000000005',
       createdAt: new Date(Date.now() - 24 * 3600_000).toISOString(),
@@ -158,7 +117,7 @@ test('лента из сида: чипы дней, группы «объект �
     },
     seededUser,
   );
-  await seedEntry(
+  await seedJournalEntry(
     {
       id: 'a0000000-0000-4000-8000-000000000006',
       createdAt: new Date(Date.now() - 12 * 24 * 3600_000).toISOString(),
@@ -245,7 +204,7 @@ test('синие переходы #713: связанные сегменты ве
   const memberUserId = await execE2eSql(`SELECT id FROM users WHERE email = 'e2e-member@example.com'`);
 
   // Платёжная и участникская ссылки на живые сущности + объектная.
-  await seedEntry(
+  await seedJournalEntry(
     {
       id: 'a0000000-0000-4000-8000-000000000011',
       createdAt: new Date(Date.now() - 3 * 60_000).toISOString(),
@@ -256,7 +215,7 @@ test('синие переходы #713: связанные сегменты ве
     },
     seededUser,
   );
-  await seedEntry(
+  await seedJournalEntry(
     {
       id: 'a0000000-0000-4000-8000-000000000012',
       createdAt: new Date(Date.now() - 2 * 60_000).toISOString(),
@@ -269,7 +228,7 @@ test('синие переходы #713: связанные сегменты ве
     },
     seededUser,
   );
-  await seedEntry(
+  await seedJournalEntry(
     {
       id: 'a0000000-0000-4000-8000-000000000013',
       createdAt: new Date(Date.now() - 60_000).toISOString(),
@@ -278,7 +237,7 @@ test('синие переходы #713: связанные сегменты ве
       action: 'member.added',
       baseAction: 'added',
       kind: 'member',
-      actorIdSql: memberActorId(),
+      actorIdSql: memberActorIdSql(),
       actorName: 'Мария Петрова',
       actorRole: 'full_access',
     },
@@ -286,7 +245,7 @@ test('синие переходы #713: связанные сегменты ве
   );
   // Удалённая сущность: сервер пишет строку без ссылки — снапшот названия
   // остаётся, перехода нет (ADR 0061 §3).
-  await seedEntry(
+  await seedJournalEntry(
     {
       id: 'a0000000-0000-4000-8000-000000000014',
       createdAt: new Date().toISOString(),
@@ -340,7 +299,7 @@ test('прокрутка вверх догружает старое: prepend 55 
     SELECT
       ('a0000000-0000-4000-8000-' || lpad(g::text, 12, '0'))::uuid,
       '${SEEDED_APARTMENT_PROPERTY_ID}',
-      ${ownerActorId(seededUser)},
+      ${ownerActorIdSql(seededUser)},
       'owner',
       'Иван Иванов',
       '${seededUser.email}',
@@ -398,7 +357,7 @@ test('короткая лента прижата к низу вьюпорта �
   // сообщение в мессенджере, она висит у нижнего края, а не у верхнего
   // (решение владельца 24.09). Пустые состояния — не «сообщения», их
   // прижатие не касается.
-  await seedEntry(
+  await seedJournalEntry(
     {
       id: 'a0000000-0000-4000-8000-000000000021',
       createdAt: new Date(Date.now() - 5 * 60_000).toISOString(),
@@ -407,7 +366,7 @@ test('короткая лента прижата к низу вьюпорта �
     },
     seededUser,
   );
-  await seedEntry(
+  await seedJournalEntry(
     {
       id: 'a0000000-0000-4000-8000-000000000022',
       createdAt: new Date(Date.now() - 60_000).toISOString(),
@@ -449,7 +408,7 @@ test('свой актор подписан «(Вы)»: в ленте и на п�
   // Свой актор (владелец сеанса) и чужой — метка только у своего
   // (actor_id = id сессии, семантика «как в Telegram», решение
   // владельца 24.09); канон подписи — серый суффикс шита фильтров (#710).
-  await seedEntry(
+  await seedJournalEntry(
     {
       id: 'a0000000-0000-4000-8000-000000000031',
       createdAt: new Date(Date.now() - 5 * 60_000).toISOString(),
@@ -458,11 +417,11 @@ test('свой актор подписан «(Вы)»: в ленте и на п�
     },
     seededUser,
   );
-  await seedEntry(
+  await seedJournalEntry(
     {
       id: 'a0000000-0000-4000-8000-000000000032',
       createdAt: new Date(Date.now() - 60_000).toISOString(),
-      actorIdSql: memberActorId(),
+      actorIdSql: memberActorIdSql(),
       actorName: 'Мария Петрова',
       actorRole: 'full_access',
       segments: '[{"text": "Задача выполнена: Заменить кран"}]',

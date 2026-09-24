@@ -2,9 +2,10 @@ import {
   captureScreen,
   expect,
   execE2eSql,
+  memberActorIdSql,
   openCabinetWithSeededSession,
-  SEEDED_APARTMENT_PROPERTY_ID,
   SEEDED_GARAGE_PROPERTY_ID,
+  seedJournalEntry,
   test,
   type SeededUser,
 } from './fixtures';
@@ -19,52 +20,11 @@ import {
 // прямым INSERT'ом в action_journal; searchable контракта рекордера —
 // текст сегментов + имя + почта актёра.
 
-function ownerActorId(user: SeededUser): string {
-  return `(SELECT id FROM users WHERE email = '${user.email}')`;
-}
-
-function memberActorId(): string {
-  return `(SELECT id FROM users WHERE email = 'e2e-member@example.com')`;
-}
-
-async function seedEntry(entry: {
-  readonly id: string;
-  readonly createdAt: string;
-  readonly propertyId?: string;
-  readonly actorIdSql?: string;
-  readonly actorName?: string;
-  readonly actorRole?: string;
-  readonly action?: string;
-  readonly baseAction?: string;
-  readonly kind?: string;
-  readonly segments: string;
-  readonly searchable: string;
-}, user: SeededUser): Promise<string> {
-  return execE2eSql(`
-    INSERT INTO action_journal
-      (id, property_id, actor_id, actor_role, actor_name, actor_email, kind, action, base_action, segments, searchable, created_at)
-    VALUES (
-      '${entry.id}',
-      '${entry.propertyId ?? SEEDED_APARTMENT_PROPERTY_ID}',
-      ${entry.actorIdSql ?? ownerActorId(user)},
-      '${entry.actorRole ?? 'owner'}',
-      '${entry.actorName ?? 'Иван Иванов'}',
-      '${user.email}',
-      '${entry.kind ?? 'payment'}',
-      '${entry.action ?? 'payment.created'}',
-      '${entry.baseAction ?? 'added'}',
-      $j$${entry.segments}$j$::jsonb,
-      '${entry.searchable.replace(/'/g, "''")}',
-      '${entry.createdAt}'
-    );
-  `);
-}
-
 /** Три записи: две сегодняшних (владелец) и одна вчерашняя; у записи
  * участника searchable несёт почту — лег trgm-поиска по почте. */
 async function seedSearchJournal(user: SeededUser): Promise<void> {
   await execE2eSql('DELETE FROM action_journal;');
-  await seedEntry(
+  await seedJournalEntry(
     {
       id: 'b0000000-0000-4000-8000-000000000001',
       createdAt: new Date(Date.now() - 120_000).toISOString(),
@@ -73,7 +33,7 @@ async function seedSearchJournal(user: SeededUser): Promise<void> {
     },
     user,
   );
-  await seedEntry(
+  await seedJournalEntry(
     {
       id: 'b0000000-0000-4000-8000-000000000002',
       createdAt: new Date(Date.now() - 60_000).toISOString(),
@@ -86,7 +46,7 @@ async function seedSearchJournal(user: SeededUser): Promise<void> {
     },
     user,
   );
-  await seedEntry(
+  await seedJournalEntry(
     {
       id: 'b0000000-0000-4000-8000-000000000003',
       createdAt: new Date(Date.now() - 24 * 3600_000).toISOString(),
@@ -100,11 +60,11 @@ async function seedSearchJournal(user: SeededUser): Promise<void> {
   );
   // Сегодня, запись участника: searchable несёт почту (контракт
   // рекордера — текст + имя + почта), находку по адресу даёт trgm-нога.
-  await seedEntry(
+  await seedJournalEntry(
     {
       id: 'b0000000-0000-4000-8000-000000000004',
       createdAt: new Date(Date.now() - 30_000).toISOString(),
-      actorIdSql: memberActorId(),
+      actorIdSql: memberActorIdSql(),
       actorName: 'Мария Петрова',
       actorRole: 'full_access',
       segments: '[{"text": "Задача выполнена: Заменить кран"}]',

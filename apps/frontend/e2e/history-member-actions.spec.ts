@@ -1,4 +1,3 @@
-import type { Page } from '@playwright/test';
 import {
   captureScreen,
   expect,
@@ -8,6 +7,7 @@ import {
   SEEDED_GARAGE_PROPERTY_ID,
   seedJournalEntry,
   test,
+  trackHistoryScope,
   type SeededUser,
 } from './fixtures';
 
@@ -79,29 +79,9 @@ async function seedMemberJournal(user: SeededUser): Promise<void> {
   );
 }
 
-/** actor_ids последнего запроса ленты — серверная правда прибитого
- * человека (канон e2e: ассерт на запрос, не только на DOM). reset —
- * между действиями: «в ноль» запроса не делает, last остаётся старым. */
-async function trackActorIds(page: Page): Promise<{
-  last: () => string | null;
-  reset: () => void;
-}> {
-  const state = { last: null as string | null };
-  await page.route(/\/history\?/, (route) => {
-    state.last = new URL(route.request().url()).searchParams.get('actor_ids');
-    return route.continue();
-  });
-  return {
-    last: () => state.last,
-    reset: () => {
-      state.last = null;
-    },
-  };
-}
-
 test('вход из общей ленты по тапу на актёра: только его действия, объекты внутри дня', async ({ page, seededUser }, testInfo) => {
   await seedMemberJournal(seededUser);
-  const actors = await trackActorIds(page);
+  const actors = await trackHistoryScope(page);
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto('/history');
 
@@ -112,7 +92,7 @@ test('вход из общей ленты по тапу на актёра: то�
 
   // Прибитый человек: запрос ленты несёт actor_ids = один id (полл —
   // фетч стартует с маунтом экрана, позже смены адреса).
-  await expect.poll(() => actors.last()).toBe(MARIA_ID);
+  await expect.poll(() => actors.lastActors()).toBe(MARIA_ID);
 
   // Заголовок страницы и лента только его действий; записи владельца
   // не приезжают.
@@ -140,7 +120,7 @@ test('вход из общей ленты по тапу на актёра: то�
 
 test('вход со страницы участника: кебаб ведёт на действия', async ({ page, seededUser }) => {
   await seedMemberJournal(seededUser);
-  const actors = await trackActorIds(page);
+  const actors = await trackHistoryScope(page);
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto(`/participants/${MARIA_ID}`);
   await expect(page.getByRole('heading', { name: 'Мария Петрова' })).toBeVisible();
@@ -149,7 +129,7 @@ test('вход со страницы участника: кебаб ведёт �
   await page.getByRole('menuitem', { name: 'Действия участника' }).click();
   await page.waitForURL(`**/history/participants/${MARIA_ID}`);
 
-  await expect.poll(() => actors.last()).toBe(MARIA_ID);
+  await expect.poll(() => actors.lastActors()).toBe(MARIA_ID);
   await expect(page.getByText('Задача выполнена: Заменить кран')).toBeVisible();
 
   // «Назад» возвращает на страницу участника (источник входа).
@@ -188,7 +168,7 @@ test('поиск переиспользуется: сужает действия
 
 test('фильтры переиспользуются, «Участники» прибит серым; «в ноль» — пусто без запроса', async ({ page, seededUser }, testInfo) => {
   await seedMemberJournal(seededUser);
-  const actors = await trackActorIds(page);
+  const actors = await trackHistoryScope(page);
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto(`/history/participants/${MARIA_ID}`);
   await expect(page.getByText('Задача выполнена: Заменить кран')).toBeVisible();
@@ -220,7 +200,7 @@ test('фильтры переиспользуются, «Участники» п
   await expect(page.getByText('Ничего не найдено')).toBeVisible();
   await expect(page).toHaveURL(/kinds=/);
   await expect(page).not.toHaveURL(/actors=/);
-  expect(actors.last()).toBeNull(); // «в ноль» — запроса не было вовсе
+  expect(actors.lastActors()).toBeNull(); // «в ноль» — запроса не было вовсе
 
   // Сброс возвращает ленту: виды снова «все» (ключ запроса возвращается к
   // исходному — данные свежи в кэше, staleTime, рефетча нет), kinds уходит

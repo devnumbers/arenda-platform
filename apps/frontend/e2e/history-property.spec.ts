@@ -1,4 +1,3 @@
-import type { Page } from '@playwright/test';
 import {
   captureScreen,
   expect,
@@ -9,6 +8,7 @@ import {
   SEEDED_GARAGE_PROPERTY_ID,
   seedJournalEntry,
   test,
+  trackHistoryScope,
   type SeededUser,
 } from './fixtures';
 
@@ -75,29 +75,9 @@ async function seedPropertyJournal(user: SeededUser): Promise<void> {
   );
 }
 
-/** property_ids последнего запроса ленты — серверная правда прибитого
- * объекта (канон e2e: ассерт на запрос, не только на DOM). reset —
- * между действиями: «в ноль» запроса не делает, last остаётся старым. */
-async function trackPropertyIds(page: Page): Promise<{
-  last: () => string | null;
-  reset: () => void;
-}> {
-  const state = { last: null as string | null };
-  await page.route(/\/history\?/, (route) => {
-    state.last = new URL(route.request().url()).searchParams.get('property_ids');
-    return route.continue();
-  });
-  return {
-    last: () => state.last,
-    reset: () => {
-      state.last = null;
-    },
-  };
-}
-
 test('вход из кебаба «Участников объекта»: лента только этого объекта, шапка над лентой', async ({ page, seededUser }, testInfo) => {
   await seedPropertyJournal(seededUser);
-  const properties = await trackPropertyIds(page);
+  const properties = await trackHistoryScope(page);
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto(`/properties/${APARTMENT_ID}/participants`);
   // TopNavTitle — span, не heading: ждём текст шапки.
@@ -109,7 +89,7 @@ test('вход из кебаба «Участников объекта»: лен
 
   // Прибитый объект: запрос ленты несёт property_ids = один id (полл —
   // фетч стартует с маунтом экрана, позже смены адреса).
-  await expect.poll(() => properties.last()).toBe(APARTMENT_ID);
+  await expect.poll(() => properties.lastProperties()).toBe(APARTMENT_ID);
 
   // Заголовок страницы; записи квартиры на месте — обеих актёров, чужой
   // объект (гараж) не приезжает.
@@ -166,7 +146,7 @@ test('поиск ищет в пределах объекта, чужой объ�
 
 test('фильтры переиспользуются, «Объекты» прибита серым; «в ноль» — пусто без запроса', async ({ page, seededUser }, testInfo) => {
   await seedPropertyJournal(seededUser);
-  const properties = await trackPropertyIds(page);
+  const properties = await trackHistoryScope(page);
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto(`/history/properties/${APARTMENT_ID}`);
   await expect(page.getByText('Задача выполнена: Заменить кран')).toBeVisible();
@@ -198,7 +178,7 @@ test('фильтры переиспользуются, «Объекты» при
   await expect(page.getByText('Ничего не найдено')).toBeVisible();
   await expect(page).toHaveURL(/kinds=/);
   await expect(page).not.toHaveURL(/objects=/);
-  expect(properties.last()).toBeNull(); // «в ноль» — запроса не было вовсе
+  expect(properties.lastProperties()).toBeNull(); // «в ноль» — запроса не было вовсе
 
   // Сброс возвращает ленту (ключ запроса возвращается к исходному —
   // данные свежи в кэше, staleTime, рефетча нет), kinds уходит из адреса.

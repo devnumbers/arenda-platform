@@ -817,6 +817,7 @@ function RangeWeekRow({
             type="button"
             disabled={day > today}
             onClick={() => onPick(day)}
+            aria-current={day === today ? 'date' : undefined}
             aria-pressed={draft !== null && (day === draft.start || day === draft.end)}
             className={cn(
               'aspect-square w-full cursor-pointer rounded-xl text-center font-sans text-base font-medium leading-[18px] text-content outline-none transition-colors',
