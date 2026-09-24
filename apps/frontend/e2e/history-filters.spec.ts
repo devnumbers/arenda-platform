@@ -1,5 +1,4 @@
 import { MONTH_SHORT } from '@/shared/lib/date-format';
-import { MONTH_LABELS } from '@/shared/ui/design/month-grid';
 import type { Page } from '@playwright/test';
 import {
   captureScreen,
@@ -7,9 +6,7 @@ import {
   expect,
   memberTaskEntry,
   openCabinetWithSeededSession,
-  ownerActorIdSql,
   paymentCreatedEntry,
-  SEEDED_APARTMENT_PROPERTY_ID,
   SEEDED_GARAGE_PROPERTY_ID,
   seedJournalEntry,
   test,
@@ -25,7 +22,11 @@ import {
 // фильтров. Семантика группы: все — параметра нет, выбор — CSV, ни одного —
 // пустое значение и пустой результат без запроса.
 
-const OWNER_NAME = 'Иван Иванов';
+// Названия месяцев в заголовках секций пикера периода («Сентябрь, 2026»).
+const PICKER_MONTH_LABELS = [
+  'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+  'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
+] as const;
 
 /** Четыре записи «сегодня» под фильтры Истории. */
 async function seedHistory(user: SeededUser): Promise<void> {
@@ -179,24 +180,17 @@ test('снятие опции «Добавление» и «Применить»
 test('период «сегодня» через CalendarRangePicker: синий чип, дальняя запись уходит из ленты', async ({ page, seededUser }, testInfo) => {
   await seedHistory(seededUser);
   // Запись 12 дней назад — за пределами периода «сегодня».
-  await execE2eSql(`
-    INSERT INTO action_journal
-      (id, property_id, actor_id, actor_role, actor_name, actor_email, kind, action, base_action, segments, searchable, created_at)
-    VALUES (
-      'b0000000-0000-4000-8000-000000000005',
-      '${SEEDED_APARTMENT_PROPERTY_ID}',
-      ${ownerActorIdSql(seededUser)},
-      'owner',
-      '${OWNER_NAME}',
-      '${seededUser.email}',
-      'payment',
-      'payment.deleted',
-      'deleted',
-      $j$[{"text": "Платёж удалён: Старый платёж"}]$j$::jsonb,
-      'Платёж удалён: Старый платёж ${OWNER_NAME}',
-      (now() - interval '12 days')
-    );
-  `);
+  await seedJournalEntry(
+    {
+      id: 'b0000000-0000-4000-8000-000000000005',
+      createdAtSql: "(now() - interval '12 days')",
+      kind: 'payment',
+      action: 'payment.deleted',
+      baseAction: 'deleted',
+      text: 'Платёж удалён: Старый платёж',
+    },
+    seededUser,
+  );
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto('/history');
   await expect(page.getByText('Платёж удалён: Старый платёж')).toBeVisible();
@@ -212,7 +206,7 @@ test('период «сегодня» через CalendarRangePicker: синий
   const picker = page.getByRole('dialog', { name: 'Выберите период' });
   await expect(picker).toBeVisible();
   const now = new Date();
-  const monthLabel = `${MONTH_LABELS[now.getMonth()]}, ${now.getFullYear()}`;
+  const monthLabel = `${PICKER_MONTH_LABELS[now.getMonth()]}, ${now.getFullYear()}`;
   const monthSection = page.locator('section').filter({ has: page.getByRole('heading', { name: monthLabel }) });
   // «Сегодня» читаем из маркера aria-current — как в однодатных пикерах
   // (прецедент payment-edit-delete), а не из календарного числа.

@@ -148,7 +148,7 @@ export async function seedJournalEntry(
  * минус minutesAgo минут (порядок строк внутри дня), daysAgo отступает на
  * целые сутки («Вчера» и дальше). Якорь — к началу суток, а не к моменту
  * прогона: возле полуночи Date.now()-минуты уезжали бы в чужие сутки
- * вместе с чипами «Сегодня»/«Вчера» (канон e35758e2). */
+ * вместе с чипами «Сегодня»/«Вчера». */
 export function todayAt(minutesAgo: number, daysAgo = 0): string {
   const day = daysAgo > 0 ? `- interval '${daysAgo} days' ` : '';
   return `date_trunc('day', now()) ${day}+ interval '9 hours' - interval '${minutesAgo} minutes'`;
