@@ -30,11 +30,7 @@ const (
 // никогда email или сырой телефон). Loud on failure: a broken lookup is a
 // database trouble, not a missing label.
 func userLabel(ctx context.Context, users UserLookup, userID uuid.UUID) (string, error) {
-	u, err := users.GetByID(ctx, userID)
-	if err != nil {
-		return "", fmt.Errorf("resolve history member label: %w", err)
-	}
-	return displayName(u), nil
+	return lookupLabel(ctx, users, userID, "resolve history member label")
 }
 
 // Member is the application-level projection of a property participant used by
@@ -755,11 +751,19 @@ func toSharedRole(r domain.Role) sharedpolicy.Role {
 // phone. Used cross-context (the properties sharing banner) via the
 // OwnerDisplayNameResolver port.
 func (s *AccessService) DisplayName(ctx context.Context, userID uuid.UUID) (string, error) {
-	user, err := s.users.GetByID(ctx, userID)
+	return lookupLabel(ctx, s.users, userID, "lookup user")
+}
+
+// lookupLabel resolves the user and projects the row-text label through the
+// masking canon — the shared lookup plumbing of userLabel and DisplayName.
+// Loud on failure: a broken lookup is a database trouble, wrapped with
+// wrapText.
+func lookupLabel(ctx context.Context, users UserLookup, userID uuid.UUID, wrapText string) (string, error) {
+	u, err := users.GetByID(ctx, userID)
 	if err != nil {
-		return "", fmt.Errorf("lookup user: %w", err)
+		return "", fmt.Errorf(wrapText+": %w", err)
 	}
-	return displayName(user), nil
+	return displayName(u), nil
 }
 
 func displayName(u MemberUser) string {

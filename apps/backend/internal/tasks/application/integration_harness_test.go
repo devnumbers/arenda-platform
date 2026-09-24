@@ -20,7 +20,6 @@ import (
 	auditpg "github.com/nambers/arenda-planform/apps/backend/internal/audit/adapters/postgres"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	historypg "github.com/nambers/arenda-planform/apps/backend/internal/history/adapters/postgres"
-	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	pgdb "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/testdb"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/actor"
@@ -29,12 +28,6 @@ import (
 	tasksapp "github.com/nambers/arenda-planform/apps/backend/internal/tasks/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/tasks/domain"
 )
-
-// historyRecorder builds the real action journal recorder over the pool —
-// the same composition the wire runs (карта #704, ADR 0061).
-func historyRecorder(pool *pgxpool.Pool) historyapp.Recorder {
-	return historyapp.NewService(historypg.NewEntryStore(pool), historypg.NewActorStore(pool), nil)
-}
 
 // tickBaseTime anchors the fake clock: 2026-09-10 12:00 UTC — Thursday,
 // 15:00 in Moscow and already the 11th (00:00) in Kamchatka: the TZ split
@@ -110,7 +103,7 @@ func newTasksHarnessWithPolicy(t *testing.T, policy sharedpolicy.Policy) *tasksH
 	ownerClock := taskspg.NewOwnerClock(pool, clk)
 	zones := taskspg.NewTickZoneDirectory(pool)
 	factory := tasksapp.NewTxStoreFactory(
-		tickStore, ruleStore, taskStore, propertyStore, audit, historyRecorder(pool), uow,
+		tickStore, ruleStore, taskStore, propertyStore, audit, historypg.NewRecorder(pool), uow,
 	)
 
 	return &tasksHarness{

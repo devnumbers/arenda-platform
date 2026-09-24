@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 	auditpg "github.com/nambers/arenda-planform/apps/backend/internal/audit/adapters/postgres"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	historypg "github.com/nambers/arenda-planform/apps/backend/internal/history/adapters/postgres"
 	paymentspg "github.com/nambers/arenda-planform/apps/backend/internal/payments/adapters/postgres"
 	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
 	pgdb "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
@@ -54,7 +55,7 @@ func (h *paymentsHarness) globalSvc() *paymentsapp.GlobalPaymentService {
 		store,
 		rentalspg.NewRentalLinkReader(h.pool),
 		audit,
-		historyRecorder(h.pool),
+		historypg.NewRecorder(h.pool),
 		pgdb.NewUoW(h.pool, slog.New(slog.DiscardHandler)),
 	)
 	return paymentsapp.NewGlobalPaymentService(store, calendar, factory)

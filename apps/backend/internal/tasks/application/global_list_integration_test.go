@@ -22,6 +22,7 @@ import (
 	accessapp "github.com/nambers/arenda-planform/apps/backend/internal/access/application"
 	auditpg "github.com/nambers/arenda-planform/apps/backend/internal/audit/adapters/postgres"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	historypg "github.com/nambers/arenda-planform/apps/backend/internal/history/adapters/postgres"
 	pgdb "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/actor"
 	taskspg "github.com/nambers/arenda-planform/apps/backend/internal/tasks/adapters/postgres"
@@ -48,7 +49,7 @@ func newTasksHarnessWithRealPolicy(t *testing.T) *tasksHarness {
 		taskspg.NewTaskStore(h.pool),
 		taskspg.NewPropertyStore(h.pool),
 		auditapp.NewService(auditpg.NewWriter(h.pool), h.clock),
-		historyRecorder(h.pool),
+		historypg.NewRecorder(h.pool),
 		pgdb.NewUoW(h.pool, slog.New(slog.DiscardHandler)),
 	)
 	h.rules = tasksapp.NewRuleService(factory, ownerClock, policy, slog.New(slog.DiscardHandler))

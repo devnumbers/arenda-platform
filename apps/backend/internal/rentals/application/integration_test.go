@@ -23,7 +23,6 @@ import (
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	historypg "github.com/nambers/arenda-planform/apps/backend/internal/history/adapters/postgres"
-	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	paymentspg "github.com/nambers/arenda-planform/apps/backend/internal/payments/adapters/postgres"
 	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
 	pgdb "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
@@ -199,7 +198,7 @@ func newRentalsHarness(t *testing.T) *rentalsHarness {
 		gateway,
 		nil,
 		audit,
-		historyapp.NewService(historypg.NewEntryStore(pool), historypg.NewActorStore(pool), nil),
+		historypg.NewRecorder(pool),
 		pgdb.NewUoW(pool, slog.New(slog.DiscardHandler)),
 	)
 	return &rentalsHarness{

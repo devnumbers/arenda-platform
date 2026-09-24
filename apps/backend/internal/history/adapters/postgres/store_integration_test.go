@@ -17,15 +17,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	historypg "github.com/nambers/arenda-planform/apps/backend/internal/history/adapters/postgres"
-	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/testdb"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/actor"
 )
-
-func newRecorder(pool *pgxpool.Pool) historyapp.Recorder {
-	return historyapp.NewService(historypg.NewEntryStore(pool), historypg.NewActorStore(pool), nil)
-}
 
 func seedUser(t *testing.T, pool *pgxpool.Pool, name, surname, phone, email string) uuid.UUID {
 	t.Helper()
@@ -72,7 +67,7 @@ func recordEntry(t *testing.T, pool *pgxpool.Pool, actorID, propertyID uuid.UUID
 	entry.PropertyID = propertyID
 	entry.ActorID = &actorID
 	entry.ActorRole = domain.ActorRoleOwner
-	if err := newRecorder(pool).Record(context.Background(), entry); err != nil {
+	if err := historypg.NewRecorder(pool).Record(context.Background(), entry); err != nil {
 		t.Fatalf("Record: %v", err)
 	}
 }
@@ -180,7 +175,7 @@ func TestStore_DeletedUserNullsActorButKeepsSnapshots(t *testing.T) {
 	entry.PropertyID = property
 	entry.ActorID = &member
 	entry.ActorRole = domain.ActorRoleFullAccess
-	if err := newRecorder(pool).Record(context.Background(), entry); err != nil {
+	if err := historypg.NewRecorder(pool).Record(context.Background(), entry); err != nil {
 		t.Fatalf("Record: %v", err)
 	}
 
@@ -216,7 +211,7 @@ func TestStore_SurvivesMemberRevokeAndLeave(t *testing.T) {
 	entry.PropertyID = property
 	entry.ActorID = &member
 	entry.ActorRole = domain.ActorRoleFullAccess
-	if err := newRecorder(pool).Record(context.Background(), entry); err != nil {
+	if err := historypg.NewRecorder(pool).Record(context.Background(), entry); err != nil {
 		t.Fatalf("Record: %v", err)
 	}
 
