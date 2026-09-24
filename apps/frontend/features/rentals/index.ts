@@ -11,6 +11,7 @@ export {
   draftAfterStartChange,
   paymentDayFromPicker,
   paymentDayLabel,
+  RENTAL_REMINDER_DEFAULT,
   rentalPlannedEndDateError,
   rentalStartDateError,
   utilitiesLabel,

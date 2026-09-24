@@ -471,6 +471,13 @@ type Querier interface {
 	// no clock. Both shapes answer: the kind is one per task, the boundary
 	// differs by shape.
 	GetScheduledOverdueTask(ctx context.Context, id pgtype.UUID) (GetScheduledOverdueTaskRow, error)
+	// The reminder boundary job's delivery-time resolution (карта #822, #824):
+	// the operation as it stands at its reminder midnight. Planned, on a
+	// non-archived property, and the rule's CURRENT lead time still landing the
+	// reminder day on the zone's today ($3) — a lead time changed after the
+	// booking (or a job awake after the day rolled over) answers no row, the
+	// job finishes without publishing; the new boundary books its own job.
+	GetScheduledReminderPayment(ctx context.Context, arg GetScheduledReminderPaymentParams) (GetScheduledReminderPaymentRow, error)
 	GetSessionByID(ctx context.Context, id pgtype.UUID) (GetSessionByIDRow, error)
 	// GetSessionByTokenHash resolves a live session by its token hash. The
 	// previous_token_hash branch keeps in-flight requests working during the
@@ -563,7 +570,8 @@ type Querier interface {
 	InsertNotification(ctx context.Context, arg InsertNotificationParams) (int64, error)
 	// ids and since are app-side (UUIDv7, the owner's today); recurrence is the
 	// domain-validated jsonb; the category arrives as a default-catalog slug in
-	// this slice (user_category_id stays NULL).
+	// this slice (user_category_id stays NULL). reminder_offset_days is the
+	// nullable reminder lead time (карта #822; NULL = напоминаний нет).
 	InsertPayment(ctx context.Context, arg InsertPaymentParams) error
 	// The open-ended pause [from, ∞): exactly one may exist per rule — the
 	// partial unique index (to_date IS NULL) makes a double pause a constraint
@@ -814,6 +822,13 @@ type Querier interface {
 	// dedup key (rule, operation date) keeps a long-unpaid operation single —
 	// the sweep lists it daily, the publication inserts nothing.
 	ListPaymentOverdueTargets(ctx context.Context, arg ListPaymentOverdueTargetsParams) ([]ListPaymentOverdueTargetsRow, error)
+	// One zone's reminder-day operations as of the zone's today (карта #822,
+	// #824): planned, on rules with a reminder set, whose reminder day — the
+	// operation date minus the rule's lead time (1/3/7) — is exactly today.
+	// Auto-pay rules included: напоминание живёт независимо от auto_pay
+	// (решение владельца, #823). The dedup key (rule, operation date) keeps
+	// the occurrence single even if the lead time changes after firing.
+	ListPaymentReminderTargets(ctx context.Context, arg ListPaymentReminderTargetsParams) ([]ListPaymentReminderTargetsRow, error)
 	// The payments scan's sweep targets (карта #734, #749; ADR 0048 p.3): the
 	// distinct owner timezones having planned payment-rule operations on
 	// non-archived properties — the only operations the scan can fire for (the
@@ -836,6 +851,13 @@ type Querier interface {
 	// charge, ADR 0049); the wall-clock midnight of the next calendar date is
 	// the boundary, a DST day rolls it with the wall clock.
 	ListPaymentScheduledOverdueTargets(ctx context.Context, arg ListPaymentScheduledOverdueTargetsParams) ([]ListPaymentScheduledOverdueTargetsRow, error)
+	// The payments scan's booking list of the reminder leg (карта #822, #824):
+	// the planned operations of rules with a reminder set whose reminder
+	// boundary — 00:00 of (operation date − lead time) read in the owner's
+	// timezone — falls in the window (from, until]. Auto-pay rules included
+	// (the reminder is independent of auto_pay); the wall-clock midnight is
+	// the boundary, a DST day rolls it with the wall clock.
+	ListPaymentScheduledReminderTargets(ctx context.Context, arg ListPaymentScheduledReminderTargetsParams) ([]ListPaymentScheduledReminderTargetsRow, error)
 	// The property's rules in creation order (stable for the list response).
 	// search ('' = no filter) is a case-insensitive substring match on the title;
 	// the application layer escapes the ILIKE metacharacters (ESCAPE '\').

@@ -186,6 +186,64 @@ export async function captureScreen(page: Page, testInfo: TestInfo, name: string
   await testInfo.attach(name, { path, contentType: 'image/png' });
 }
 
+/** Email-матрица аккаунта (#743): канонный словарь категорий, которым мок
+ * отвечает на /api/notification-preferences. */
+export interface EmailCategories {
+  rental: boolean;
+  payments_operations: boolean;
+  tasks: boolean;
+  shared_access: boolean;
+}
+
+/** Стартовое состояние мока — все категории включены. */
+const EMAIL_CATEGORIES_ALL_ON: EmailCategories = {
+  rental: true,
+  payments_operations: true,
+  tasks: true,
+  shared_access: true,
+};
+
+/**
+ * Stateful-мок глобальной email-матрицы на /api/notification-preferences:
+ * GET всегда отдаёт текущее состояние, PUT запоминает присланный словарь
+ * `email` и отвечает уже сохранённым — refetch после PUT видит его же.
+ * Возвращает `savedCategories` — что записал последний PUT (undefined, пока
+ * PUT не было); гонки запросов в спеках читаются только через expect.poll
+ * по нему.
+ */
+export async function mockEmailCategoryShortcut(page: Page): Promise<{
+  savedCategories: () => EmailCategories | undefined;
+}> {
+  let current: EmailCategories = { ...EMAIL_CATEGORIES_ALL_ON };
+  let saved: EmailCategories | undefined;
+  await page.route('**/api/notification-preferences', async (route) => {
+    if (route.request().method() === 'PUT') {
+      saved = (route.request().postDataJSON() as { email: EmailCategories }).email;
+      current = { ...saved };
+      await route.fulfill({ json: { email: current } });
+      return;
+    }
+    await route.fulfill({ json: { email: current } });
+  });
+  return { savedCategories: () => saved };
+}
+
+/**
+ * Тап по дню в канонном бесконечном календаре (04.09): секция месяца
+ * опознаётся по заголовку «Месяц, год» — в ленте остаются и прошлые
+ * месяцы, где тот же день был бы disabled. Сам тап только кладёт черновик;
+ * коммит — отдельная кнопка «Выбрать» диалога.
+ */
+export async function pickCalendarDay(page: Page, date: Date): Promise<void> {
+  const monthLabel = date
+    .toLocaleDateString('ru-RU', { month: 'long' })
+    .replace(/^./, (ch) => ch.toUpperCase());
+  const section = page
+    .locator('section')
+    .filter({ has: page.getByRole('heading', { name: `${monthLabel}, ${date.getFullYear()}` }) });
+  await section.getByRole('button', { name: String(date.getDate()), exact: true }).click();
+}
+
 /**
  * Full login through the real UI: phone step → code step (the code comes
  * from the backend log) → redirect into the cabinet. Ends on /properties

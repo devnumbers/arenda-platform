@@ -38,3 +38,17 @@ func NewPaymentOverdueWorker(
 		return publisher.DeliverPaymentOverdue(ctx, args.PaymentID, args.DueDate, clk.Now())
 	}, log)
 }
+
+// NewPaymentReminderWorker builds the reminder boundary worker (карта #822,
+// #824): the worker wakes at one operation's reminder midnight — 00:00 of
+// (operation date − lead time) in the owner's timezone — and hands the
+// (rule, date) and the wake-up instant to the publisher's delivery-time
+// resolution; a lead time changed after the booking is the resolution's
+// no-op case.
+func NewPaymentReminderWorker(
+	publisher application.PaymentBoundaryDeliverer, clk clock.Clock, log *slog.Logger,
+) *boundaryWorker[PaymentReminderArgs] {
+	return newBoundaryWorker("payment reminder", func(ctx context.Context, args PaymentReminderArgs) error {
+		return publisher.DeliverPaymentReminder(ctx, args.PaymentID, args.DueDate, clk.Now())
+	}, log)
+}

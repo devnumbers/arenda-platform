@@ -106,18 +106,19 @@ func (s *PaymentStore) Create(ctx context.Context, p domain.Payment) error {
 		return err
 	}
 	if err := s.q().InsertPayment(ctx, postgres.InsertPaymentParams{
-		ID:            pgconv.UUIDToPgtype(p.ID),
-		OwnerID:       pgconv.UUIDToPgtype(p.OwnerID),
-		PropertyID:    pgconv.UUIDToPgtype(p.PropertyID),
-		Type:          string(p.Type),
-		Title:         p.Title,
-		AmountKopecks: p.AmountKopecks,
-		Recurrence:    recurrence,
-		Since:         pgconv.DateToPgtype(p.Since),
-		EndDate:       pgconv.DatePtrToPgtype(p.EndDate),
-		AutoPay:       p.AutoPay,
-		PaymentForm:   string(p.PaymentForm),
-		CategorySlug:  pgconv.StringPtrToPgtype(p.Category.Slug),
+		ID:                 pgconv.UUIDToPgtype(p.ID),
+		OwnerID:            pgconv.UUIDToPgtype(p.OwnerID),
+		PropertyID:         pgconv.UUIDToPgtype(p.PropertyID),
+		Type:               string(p.Type),
+		Title:              p.Title,
+		AmountKopecks:      p.AmountKopecks,
+		Recurrence:         recurrence,
+		Since:              pgconv.DateToPgtype(p.Since),
+		EndDate:            pgconv.DatePtrToPgtype(p.EndDate),
+		AutoPay:            p.AutoPay,
+		ReminderOffsetDays: pgconv.Int4PtrToPgtype(p.ReminderOffsetDays),
+		PaymentForm:        string(p.PaymentForm),
+		CategorySlug:       pgconv.StringPtrToPgtype(p.Category.Slug),
 	}); err != nil {
 		return fmt.Errorf("insert payment %s: %w", p.ID, err)
 	}
@@ -131,16 +132,17 @@ func (s *PaymentStore) Update(ctx context.Context, p domain.Payment) error {
 		return err
 	}
 	if err := s.q().UpdatePayment(ctx, postgres.UpdatePaymentParams{
-		ID:            pgconv.UUIDToPgtype(p.ID),
-		OwnerID:       pgconv.UUIDToPgtype(p.OwnerID),
-		Type:          string(p.Type),
-		Title:         p.Title,
-		AmountKopecks: p.AmountKopecks,
-		Recurrence:    recurrence,
-		EndDate:       pgconv.DatePtrToPgtype(p.EndDate),
-		AutoPay:       p.AutoPay,
-		PaymentForm:   string(p.PaymentForm),
-		CategorySlug:  pgconv.StringPtrToPgtype(p.Category.Slug),
+		ID:                 pgconv.UUIDToPgtype(p.ID),
+		OwnerID:            pgconv.UUIDToPgtype(p.OwnerID),
+		Type:               string(p.Type),
+		Title:              p.Title,
+		AmountKopecks:      p.AmountKopecks,
+		Recurrence:         recurrence,
+		EndDate:            pgconv.DatePtrToPgtype(p.EndDate),
+		AutoPay:            p.AutoPay,
+		ReminderOffsetDays: pgconv.Int4PtrToPgtype(p.ReminderOffsetDays),
+		PaymentForm:        string(p.PaymentForm),
+		CategorySlug:       pgconv.StringPtrToPgtype(p.Category.Slug),
 	}); err != nil {
 		return fmt.Errorf("update payment %s: %w", p.ID, err)
 	}

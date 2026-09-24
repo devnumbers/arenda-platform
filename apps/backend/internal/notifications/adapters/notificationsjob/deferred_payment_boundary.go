@@ -34,3 +34,12 @@ func (d *DeferredPaymentBoundaryDeliverer) DeliverPaymentOverdue(ctx context.Con
 	}
 	return inner.DeliverPaymentOverdue(ctx, paymentID, date, now)
 }
+
+// DeliverPaymentReminder delegates to the bound publisher.
+func (d *DeferredPaymentBoundaryDeliverer) DeliverPaymentReminder(ctx context.Context, paymentID uuid.UUID, date, now time.Time) error {
+	inner, err := d.load()
+	if err != nil {
+		return err
+	}
+	return inner.DeliverPaymentReminder(ctx, paymentID, date, now)
+}

@@ -70,6 +70,7 @@ const (
 	NotificationEventTypeRentalCompleted              NotificationEventType = "rental_completed"
 	NotificationEventTypePaymentDue                   NotificationEventType = "payment_due"
 	NotificationEventTypePaymentOverdue               NotificationEventType = "payment_overdue"
+	NotificationEventTypePaymentReminder              NotificationEventType = "payment_reminder"
 	NotificationEventTypeTaskOverdue                  NotificationEventType = "task_overdue"
 	NotificationEventTypePropertyInvitation           NotificationEventType = "property_invitation"
 	NotificationEventTypeInvitationAccepted           NotificationEventType = "invitation_accepted"
@@ -77,6 +78,7 @@ const (
 	NotificationEventTypeAccessPaused                 NotificationEventType = "access_paused"
 	NotificationEventTypeAccessResumed                NotificationEventType = "access_resumed"
 	NotificationEventTypeMemberLeft                   NotificationEventType = "member_left"
+	NotificationEventTypeAccessRoleChanged            NotificationEventType = "access_role_changed"
 	NotificationEventTypeSubscriptionPaymentFailed    NotificationEventType = "subscription_payment_failed"
 	NotificationEventTypeSubscriptionPaymentReminder  NotificationEventType = "subscription_payment_reminder"
 	NotificationEventTypeSubscriptionPaymentSucceeded NotificationEventType = "subscription_payment_succeeded"
@@ -327,23 +329,24 @@ type Operation struct {
 }
 
 type Payment struct {
-	ID             pgtype.UUID        `json:"id"`
-	OwnerID        pgtype.UUID        `json:"owner_id"`
-	PropertyID     pgtype.UUID        `json:"property_id"`
-	Type           string             `json:"type"`
-	Title          string             `json:"title"`
-	AmountKopecks  int64              `json:"amount_kopecks"`
-	Recurrence     []byte             `json:"recurrence"`
-	Since          pgtype.Date        `json:"since"`
-	EndDate        pgtype.Date        `json:"end_date"`
-	AutoPay        bool               `json:"auto_pay"`
-	PaymentForm    string             `json:"payment_form"`
-	CategorySlug   pgtype.Text        `json:"category_slug"`
-	UserCategoryID pgtype.UUID        `json:"user_category_id"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
-	IsFavorite     bool               `json:"is_favorite"`
-	FavoriteOrder  pgtype.Int8        `json:"favorite_order"`
+	ID                 pgtype.UUID        `json:"id"`
+	OwnerID            pgtype.UUID        `json:"owner_id"`
+	PropertyID         pgtype.UUID        `json:"property_id"`
+	Type               string             `json:"type"`
+	Title              string             `json:"title"`
+	AmountKopecks      int64              `json:"amount_kopecks"`
+	Recurrence         []byte             `json:"recurrence"`
+	Since              pgtype.Date        `json:"since"`
+	EndDate            pgtype.Date        `json:"end_date"`
+	AutoPay            bool               `json:"auto_pay"`
+	PaymentForm        string             `json:"payment_form"`
+	CategorySlug       pgtype.Text        `json:"category_slug"`
+	UserCategoryID     pgtype.UUID        `json:"user_category_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	IsFavorite         bool               `json:"is_favorite"`
+	FavoriteOrder      pgtype.Int8        `json:"favorite_order"`
+	ReminderOffsetDays pgtype.Int4        `json:"reminder_offset_days"`
 }
 
 type PaymentCategory struct {

@@ -17,11 +17,13 @@ import (
 // subscriber must name the very same strings, and a private literal on each
 // side would make a typo a silently dead subscription.
 const (
-	EventInvitationActivated = platformevents.EventType("access_invitation_activated")
-	EventMembershipSuspended = platformevents.EventType("access_membership_suspended")
-	EventMembershipResumed   = platformevents.EventType("access_membership_resumed")
-	EventMembershipRevoked   = platformevents.EventType("access_membership_revoked")
-	EventMemberLeft          = platformevents.EventType("access_member_left")
+	EventInvitationActivated   = platformevents.EventType("access_invitation_activated")
+	EventMembershipGranted     = platformevents.EventType("access_membership_granted")
+	EventMembershipSuspended   = platformevents.EventType("access_membership_suspended")
+	EventMembershipResumed     = platformevents.EventType("access_membership_resumed")
+	EventMembershipRevoked     = platformevents.EventType("access_membership_revoked")
+	EventMemberLeft            = platformevents.EventType("access_member_left")
+	EventMembershipRoleChanged = platformevents.EventType("access_membership_role_changed")
 )
 
 // Publisher implements accessapp.AccessEventPublisher on top of the generic
@@ -43,6 +45,11 @@ func (p *Publisher) PublishInvitationActivated(ctx context.Context, event access
 	return p.dispatcher.Publish(ctx, EventInvitationActivated, event)
 }
 
+// PublishMembershipGranted publishes the MembershipGranted event.
+func (p *Publisher) PublishMembershipGranted(ctx context.Context, event accessapp.MembershipGranted) error {
+	return p.dispatcher.Publish(ctx, EventMembershipGranted, event)
+}
+
 // PublishMembershipSuspended publishes the MembershipSuspended event.
 func (p *Publisher) PublishMembershipSuspended(ctx context.Context, event accessapp.MembershipSuspended) error {
 	return p.dispatcher.Publish(ctx, EventMembershipSuspended, event)
@@ -61,4 +68,9 @@ func (p *Publisher) PublishMembershipRevoked(ctx context.Context, event accessap
 // PublishMemberLeft publishes the MemberLeft event.
 func (p *Publisher) PublishMemberLeft(ctx context.Context, event accessapp.MemberLeft) error {
 	return p.dispatcher.Publish(ctx, EventMemberLeft, event)
+}
+
+// PublishMembershipRoleChanged publishes the MembershipRoleChanged event.
+func (p *Publisher) PublishMembershipRoleChanged(ctx context.Context, event accessapp.MembershipRoleChanged) error {
+	return p.dispatcher.Publish(ctx, EventMembershipRoleChanged, event)
 }

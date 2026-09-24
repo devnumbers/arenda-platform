@@ -65,6 +65,9 @@ type CreateRentalCommand struct {
 	ContactID         *uuid.UUID
 	Comment           string
 	AutoPay           bool
+	// ReminderOffsetDays is the managed payment's reminder lead time
+	// (карта #822): 1/3/7, nil = без напоминаний.
+	ReminderOffsetDays *int
 }
 
 // UpdateRentalCommand is the partial-update payload: a nil field leaves the
@@ -218,13 +221,14 @@ func (s *RentalService) CreateRental(
 				return mutationOutcome{}, ErrPropertyOccupied
 			}
 			paymentID, err := stores.pay.Create(ctx, RentPaymentSeed{
-				OwnerID:        scope,
-				PropertyID:     propertyID,
-				AmountKopecks:  cmd.AmountKopecks,
-				PaymentDay:     cmd.PaymentDay,
-				StartDate:      cmd.StartDate,
-				PlannedEndDate: cmd.PlannedEndDate,
-				AutoPay:        cmd.AutoPay,
+				OwnerID:            scope,
+				PropertyID:         propertyID,
+				AmountKopecks:      cmd.AmountKopecks,
+				PaymentDay:         cmd.PaymentDay,
+				StartDate:          cmd.StartDate,
+				PlannedEndDate:     cmd.PlannedEndDate,
+				AutoPay:            cmd.AutoPay,
+				ReminderOffsetDays: cmd.ReminderOffsetDays,
 			})
 			if err != nil {
 				return mutationOutcome{}, fmt.Errorf("create rent payment: %w", err)
@@ -597,6 +601,9 @@ func validateCreate(cmd CreateRentalCommand, today time.Time) error {
 	}
 	if err := validateOptionalAmount(cmd.CommissionKopecks); err != nil {
 		return err
+	}
+	if !paymentsapp.IsValidReminderOffset(cmd.ReminderOffsetDays) {
+		return ErrInvalidInput
 	}
 	if utf8.RuneCountInString(strings.TrimSpace(cmd.Comment)) > MaxCommentLength {
 		return ErrInvalidInput

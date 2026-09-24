@@ -37,15 +37,16 @@ type AccessEventViewSource interface {
 
 // AccessPublisher is the access events' publisher (#751) on the delivery
 // pipeline (карта #734, #740): the transition hooks of the access context —
-// an invitation's activation, a revoke, a slot pause or recovery, a member's
-// self-exit — arrive here and become the Совместный доступ catalog rows
-// (решение #737, типы №5–№10) for their single addressee. The former direct
+// an invitation's activation or an instant grant, a revoke, a slot pause or
+// recovery, a member's self-exit, a member's role change — arrive here and
+// become the Совместный доступ catalog rows (решение #737, типы №5–№10 и
+// access_role_changed, #830) for their single addressee. The former direct
 // lifecycle emails (issue #162, T6) are gone: same events, but the
 // notification is now a stored feed row — written always, delivered over
 // email and push per the category matrix (ADR 0058). The invite email to an
 // unregistered address stays out of the pipeline by nature: until the invitee
 // registers there is no recipient a row could belong to (№5's row is the
-// activation's, решение #737).
+// activation's or the instant grant's, решение #737).
 //
 // The copy's {Имя} is the actor's display name at publication time; a system
 // transition (the slot enforcement, no human initiator) renders the no-name
@@ -109,6 +110,93 @@ func (p *AccessPublisher) NotifyInvitationActivated(
 	}
 
 	// №5 «Приглашение в объект» to the invitee; the inviter is the actor.
+	return p.publishInvitationRow(ctx, membershipID, propertyID, inviterID, inviteeID, property, inviter)
+}
+
+// NotifyMembershipGranted publishes the №5 «Приглашение в объект» row for the
+// instant landing (issue #829): a registered user granted access right away —
+// by the batch Invite/AddProperties or the single InviteByEmail — learns about
+// it with the catalog's verbatim copy, the granter the actor. The same copy
+// the registration activation uses: the access is active, so «Теперь объект
+// доступен вам совместно» is true. No «Приглашение принято» exists here —
+// there was no acceptance; a no-slot landing never arrives as granted (it
+// speaks the system pause).
+func (p *AccessPublisher) NotifyMembershipGranted(
+	ctx context.Context,
+	membershipID, propertyID, recipientID, actorID uuid.UUID,
+) error {
+	property, err := p.views.PropertyView(ctx, propertyID)
+	if err != nil {
+		return fmt.Errorf("resolve property view %s: %w", propertyID, err)
+	}
+	inviter, err := p.views.UserProfileView(ctx, actorID)
+	if err != nil {
+		return fmt.Errorf("resolve inviter profile %s: %w", actorID, err)
+	}
+	return p.publishInvitationRow(ctx, membershipID, propertyID, actorID, recipientID, property, inviter)
+}
+
+// NotifyRoleChanged publishes the «Роль изменена» row (карта #828, тикет
+// #830, решение владельца 23.09): a manager changed the member's role, and
+// the member learns it — the changer the actor, the recipient the member.
+// The role names speak the #692 chart canon's display wording
+// («Редактирование»/«Просмотр»); ChangedAt is the change instant (the
+// membership row's updated_at) the dedup key stamps — every change is its
+// own fact and notifies anew, a repeat publication of the same change
+// inserts nothing.
+func (p *AccessPublisher) NotifyRoleChanged(
+	ctx context.Context,
+	membershipID, propertyID, recipientID, actorID uuid.UUID,
+	role string,
+	changedAt time.Time,
+) error {
+	property, err := p.views.PropertyView(ctx, propertyID)
+	if err != nil {
+		return fmt.Errorf("resolve property view %s: %w", propertyID, err)
+	}
+	actor, err := p.views.UserProfileView(ctx, actorID)
+	if err != nil {
+		return fmt.Errorf("resolve actor profile %s: %w", actorID, err)
+	}
+	return p.pipeline.Publish(ctx, Publication{
+		EventType: domain.EventAccessRoleChanged,
+		DedupKey:  domain.DedupKey("access_role_changed:" + membershipID.String() + ":" + unixDedupStamp(changedAt)),
+		Title:     "Роль изменена",
+		Body: fmt.Sprintf("%s изменил вашу роль в объекте «%s» на «%s»",
+			actor.DisplayName, property.Name, roleChangedLabel(role)),
+		ContextLabel: property.Name,
+		Payload:      accessPayload(propertyID, property, actorID, &actor, membershipID),
+		Recipients:   []uuid.UUID{recipientID},
+		Actor:        actorID,
+	})
+}
+
+// roleChangedLabel renders the membership role in the display wording of the
+// #692 chart canon (the frontend's shared/model/access labels): full_access
+// reads «Редактирование», viewer «Просмотр». Anything else renders the raw
+// role — a defensive default the two catalog roles never hit.
+func roleChangedLabel(role string) string {
+	switch role {
+	case "full_access":
+		return "Редактирование"
+	case "viewer":
+		return "Просмотр"
+	default:
+		return role
+	}
+}
+
+// publishInvitationRow is the №5 row's shared body (the registration
+// activation's active landing #751 and the instant landing #829): the catalog
+// copy verbatim, the inviter naming the text and the actor card, the bare
+// membership id keying the row — revoke → re-invite is a new membership,
+// hence a new row.
+func (p *AccessPublisher) publishInvitationRow(
+	ctx context.Context,
+	membershipID, propertyID, inviterID, recipientID uuid.UUID,
+	property AccessPropertyView,
+	inviter AccessUserProfile,
+) error {
 	return p.pipeline.Publish(ctx, Publication{
 		EventType:    domain.EventPropertyInvitation,
 		DedupKey:     domain.DedupKey("property_invitation:" + membershipID.String()),
@@ -116,7 +204,7 @@ func (p *AccessPublisher) NotifyInvitationActivated(
 		Body:         fmt.Sprintf("%s пригласил вас в объект «%s». Теперь объект доступен вам совместно", inviter.DisplayName, property.Name),
 		ContextLabel: property.Name,
 		Payload:      accessPayload(propertyID, property, inviterID, &inviter, membershipID),
-		Recipients:   []uuid.UUID{inviteeID},
+		Recipients:   []uuid.UUID{recipientID},
 		Actor:        inviterID,
 	})
 }
@@ -319,8 +407,8 @@ func accessPayload(
 	return payload
 }
 
-// unixDedupStamp renders the paused/resumed keys' instant half: the unix
-// seconds of the transition.
+// unixDedupStamp renders the paused/resumed and role-changed keys' instant
+// half: the unix seconds of the transition.
 func unixDedupStamp(t time.Time) string {
 	return strconv.FormatInt(t.Unix(), 10)
 }

@@ -95,15 +95,17 @@ const dlButtonVariants = ['primary', 'secondary', 'danger', 'clear', 'white'] as
 const dlIconVariants = ['primary', 'secondary', 'danger'] as const;
 const statusGradations = ['danger', 'warning', 'good', 'check', 'info'] as const;
 
-/** Колёса демо-шита WheelPickerSheet: часы 00–23 и минуты 00–59. */
-const sheetHourItems: ReadonlyArray<WheelPickerItem> = Array.from({ length: 24 }, (_, value) => ({
-    value: String(value),
-    label: String(value).padStart(2, '0'),
-}));
-const sheetMinuteItems: ReadonlyArray<WheelPickerItem> = Array.from({ length: 60 }, (_, value) => ({
-    value: String(value),
-    label: String(value).padStart(2, '0'),
-}));
+/** Колёса демо-шита WheelPickerSheet: часы 00–23 и минуты 00–59. Значения
+ * совпадают с метками (паддинг): состояние демо держит HH:MM-строки, иначе
+ * колесо не находит выбранное и садится на первый ряд (находка приёмки
+ * #810). */
+const paddedItems = (length: number): ReadonlyArray<WheelPickerItem> =>
+    Array.from({ length }, (_, value) => {
+        const label = String(value).padStart(2, '0');
+        return { value: label, label };
+    });
+const sheetHourItems = paddedItems(24);
+const sheetMinuteItems = paddedItems(60);
 
 /** Витринные категории из сгенерированного каталога #447. */
 const showcaseCategorySlugs = [
@@ -190,6 +192,9 @@ export function DesignLayerShowcase(): JSX.Element {
     const [wheelSheetValue, setWheelSheetValue] = useState('09:00');
     const [sheetHour, setSheetHour] = useState('09');
     const [sheetMinute, setSheetMinute] = useState('00');
+    const [boundedWheelOpen, setBoundedWheelOpen] = useState(false);
+    const [boundedMonth, setBoundedMonth] = useState(8);
+    const [boundedYear, setBoundedYear] = useState(2026);
     const [datePickerOpen, setDatePickerOpen] = useState(false);
     const [datePickerValue, setDatePickerValue] = useState<string | null>(null);
     const [datePickerRequiredOpen, setDatePickerRequiredOpen] = useState(false);
@@ -549,10 +554,38 @@ export function DesignLayerShowcase(): JSX.Element {
                 </div>
 
                 <div className={styles.group}>
+                    <h3 className={styles.groupTitle}>MonthYearPicker · кольцо месяцев при min/max</h3>
+                    <p className={styles.groupTitle}>
+                        Колесо месяцев замкнуто (#810), но при границах кольцо идёт по дуге
+                        разрешённых: здесь март–сентябрь 2026 — сентябрь докручивается в март,
+                        закрытые месяцы не открываются. Годы линейны: за 2026 ничего нет.
+                    </p>
+                    <div className={styles.column}>
+                        <ChipButton trailingIcon={<ArrowDown />} onClick={() => setBoundedWheelOpen(true)}>
+                            {monthTitle(boundedYear, boundedMonth)}
+                        </ChipButton>
+                    </div>
+                    <MonthYearPicker
+                        open={boundedWheelOpen}
+                        onOpenChange={setBoundedWheelOpen}
+                        month={boundedMonth}
+                        year={boundedYear}
+                        min={{ year: 2026, month0: 2 }}
+                        max={{ year: 2026, month0: 8 }}
+                        onConfirm={(month, year) => {
+                            setBoundedMonth(month);
+                            setBoundedYear(year);
+                            setBoundedWheelOpen(false);
+                        }}
+                    />
+                </div>
+
+                <div className={styles.group}>
                     <h3 className={styles.groupTitle}>WheelPickerSheet · универсальный шит колёс</h3>
                     <p className={styles.groupTitle}>
-                        Любое число колёс + передаваемые кнопки (Figma 1539-82659); на мобиле —
-                        выезжающий шит (vaul), на десктопе — карточка.
+                        Любое число колёс + передаваемые кнопки (Figma 1539-82659); колёса крутятся без
+                        конца — кольцо в обе стороны (#810), на мобиле — выезжающий шит (vaul), на
+                        десктопе — карточка.
                     </p>
                     <div className={styles.column}>
                         <Button onClick={() => setWheelSheetOpen(true)}>Открыть шит колёс</Button>
@@ -583,6 +616,7 @@ export function DesignLayerShowcase(): JSX.Element {
                                 key="hour"
                                 label="Часы"
                                 strip={false}
+                                loop
                                 items={sheetHourItems}
                                 value={sheetHour}
                                 onValueChange={setSheetHour}
@@ -591,6 +625,7 @@ export function DesignLayerShowcase(): JSX.Element {
                                 key="minute"
                                 label="Минуты"
                                 strip={false}
+                                loop
                                 items={sheetMinuteItems}
                                 value={sheetMinute}
                                 onValueChange={setSheetMinute}
@@ -914,7 +949,7 @@ export function DesignLayerShowcase(): JSX.Element {
                             }
                             title="Арендная плата"
                             subtitle="Моя квартира"
-                            subtitleIcon={<Star />}
+                            subtitleIcon={<Star aria-hidden />}
                             amountKopecks={5600000}
                             description="11 сентября"
                             onSelect={() => undefined}

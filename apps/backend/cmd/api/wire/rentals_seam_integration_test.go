@@ -127,15 +127,23 @@ func (h *seamHarness) seedOwner() {
 
 // createRental starts tomorrow (upcoming, no materialized occurrences yet).
 func (h *seamHarness) createRental() rentalsapp.RentalView {
+	return h.createRentalWithReminderOffset(nil)
+}
+
+// createRentalWithReminderOffset is the same create with an explicit reminder
+// lead time (nil = без напоминаний) for the tests that pin the seam's copy
+// into the managed payment.
+func (h *seamHarness) createRentalWithReminderOffset(offset *int) rentalsapp.RentalView {
 	t := h.t
 	t.Helper()
 	view, err := h.svc.CreateRental(context.Background(), h.owner, h.propID,
 		rentalsapp.CreateRentalCommand{
-			AmountKopecks: 5_000_000,
-			PaymentDay:    rentalsdomain.MustPaymentDay(15),
-			StartDate:     seamToday,
-			Utilities:     rentalsdomain.UtilitiesIncluded,
-			AutoPay:       true,
+			AmountKopecks:      5_000_000,
+			PaymentDay:         rentalsdomain.MustPaymentDay(15),
+			StartDate:          seamToday,
+			Utilities:          rentalsdomain.UtilitiesIncluded,
+			AutoPay:            true,
+			ReminderOffsetDays: offset,
 		})
 	require.NoError(t, err)
 	return view
@@ -146,7 +154,9 @@ func TestSeam_CreateBuildsTheManagedPaymentAndMaterializes(t *testing.T) {
 	h := newSeamHarness(t)
 	h.seedOwner()
 
-	view := h.createRental()
+	// The explicit reminder lead time rides the seed through the seam.
+	offset := 1
+	view := h.createRentalWithReminderOffset(&offset)
 
 	// The managed payment is the ordinary payments rule: income, «Арендная
 	// плата», transfer, the rent category, monthly on the payment day,
@@ -163,6 +173,7 @@ func TestSeam_CreateBuildsTheManagedPaymentAndMaterializes(t *testing.T) {
 	assert.Equal(t, []int{15}, payment.Recurrence.DaysOfMonth())
 	assert.Equal(t, seamToday, payment.Since)
 	assert.True(t, payment.AutoPay)
+	assert.Equal(t, 1, *payment.ReminderOffsetDays)
 
 	// The in-transaction tick stood the single future planned at the payment
 	// day of the start month (start == today, day 15 ahead).

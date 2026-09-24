@@ -56,6 +56,12 @@ describe('mapPayment — DTO → entity', () => {
     expect(managed.isRentalManaged).toBe(true);
   });
 
+  it('напоминание: оффсет приходит числом, null и отсутствие — «нет напоминания» (карта #822)', () => {
+    expect(payment.reminderOffsetDays).toBeUndefined();
+    expect(mapPayment({ ...paymentDto, reminderOffsetDays: null }).reminderOffsetDays).toBeUndefined();
+    expect(mapPayment({ ...paymentDto, reminderOffsetDays: 3 }).reminderOffsetDays).toBe(3);
+  });
+
   it('интервалы пауз переименовываются в [from, to), открытая бессрочная без to', () => {
     expect(payment.pauses).toStrictEqual([
       { from: '2026-03-01', to: '2026-04-01' },

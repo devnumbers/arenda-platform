@@ -191,5 +191,10 @@ export function buildPaymentCreateCommand(
     categorySlug: draft.categorySlug,
     autoPay: options.autoPay ?? false,
     ...(draft.endDate !== undefined && { endDate: draft.endDate }),
+    // Напоминание — только явный выбор (ручная ветка шага 4, карта #822):
+    // в контракте создания опущенное поле = напоминаний нет.
+    ...(draft.reminderOffsetDays !== undefined && {
+      reminderOffsetDays: draft.reminderOffsetDays,
+    }),
   };
 }

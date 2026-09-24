@@ -7,7 +7,7 @@ import { ArrowLeft, Cancel } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
-import { clientTodayIso, type IsoDate } from '@/entities/payment';
+import { clientTodayIso, type IsoDate, type PaymentReminderOffset } from '@/entities/payment';
 import type { Rental } from '@/entities/rental';
 import {
   useCreateRental,
@@ -15,6 +15,7 @@ import {
   wizardStepReady,
   draftAfterStartChange,
   WIZARD_TOTAL_STEPS,
+  RENTAL_REMINDER_DEFAULT,
   buildRentalCreateCommand,
   type RentalWizardDraft,
   type RentalWizardStep,
@@ -159,6 +160,10 @@ export function RentalCreateWizardFlow({
             <SettingsStep
               autoPay={draft.autoPay ?? false}
               onAutoPayChange={(autoPay) => setDraft((prev) => ({ ...prev, autoPay }))}
+              reminderOffsetDays={draft.reminderOffsetDays ?? RENTAL_REMINDER_DEFAULT}
+              onReminderOffsetChange={(reminderOffsetDays: PaymentReminderOffset) =>
+                setDraft((prev) => ({ ...prev, reminderOffsetDays }))
+              }
             />
             {/* Шаг всегда готов (тумблер с дефолтом) — кнопка видна всегда. */}
             <StickyBottomBar fullWidthContent>

@@ -127,18 +127,19 @@ func (t *rentPaymentGatewayTx) Create(
 	}
 	category := rentCategorySlug
 	if err := t.payments.Create(ctx, paymentsdomain.Payment{
-		ID:            id,
-		OwnerID:       seed.OwnerID,
-		PropertyID:    seed.PropertyID,
-		Type:          paymentsdomain.TypeIncome,
-		Title:         rentPaymentTitle,
-		AmountKopecks: seed.AmountKopecks,
-		Recurrence:    recurrence,
-		Since:         seed.StartDate,
-		EndDate:       seed.PlannedEndDate,
-		AutoPay:       seed.AutoPay,
-		PaymentForm:   paymentsdomain.FormTransfer,
-		Category:      paymentsdomain.CategoryRef{Slug: &category},
+		ID:                 id,
+		OwnerID:            seed.OwnerID,
+		PropertyID:         seed.PropertyID,
+		Type:               paymentsdomain.TypeIncome,
+		Title:              rentPaymentTitle,
+		AmountKopecks:      seed.AmountKopecks,
+		Recurrence:         recurrence,
+		Since:              seed.StartDate,
+		EndDate:            seed.PlannedEndDate,
+		AutoPay:            seed.AutoPay,
+		ReminderOffsetDays: seed.ReminderOffsetDays,
+		PaymentForm:        paymentsdomain.FormTransfer,
+		Category:           paymentsdomain.CategoryRef{Slug: &category},
 	}); err != nil {
 		return uuid.Nil, fmt.Errorf("insert rent payment: %w", err)
 	}
@@ -269,9 +270,10 @@ func (g *rentPaymentGateway) RentPaymentState(
 		return rentalsapp.RentPaymentState{}, fmt.Errorf("read payment day: %w", err)
 	}
 	return rentalsapp.RentPaymentState{
-		AmountKopecks: payment.AmountKopecks,
-		PaymentDay:    day,
-		AutoPay:       payment.AutoPay,
+		AmountKopecks:      payment.AmountKopecks,
+		PaymentDay:         day,
+		AutoPay:            payment.AutoPay,
+		ReminderOffsetDays: payment.ReminderOffsetDays,
 	}, nil
 }
 
@@ -292,16 +294,15 @@ func (g *rentPaymentGateway) NextPlannedOccurrence(
 	if err != nil {
 		return nil, err
 	}
-	var occurrence *rentalsapp.PlannedOccurrence
-	if len(ops) > 0 {
-		op := ops[0]
-		occurrence = &rentalsapp.PlannedOccurrence{
-			OperationID:   op.ID,
-			Date:          op.Date,
-			AmountKopecks: op.AmountKopecks,
-		}
+	if len(ops) == 0 {
+		return nil, nil // Будущего вхождения нет — это nil, не ошибка (ADR 0053 §2; исключение nilnil — в .golangci.yml).
 	}
-	return occurrence, nil
+	op := ops[0]
+	return &rentalsapp.PlannedOccurrence{
+		OperationID:   op.ID,
+		Date:          op.Date,
+		AmountKopecks: op.AmountKopecks,
+	}, nil
 }
 
 // CountPaidOperations counts the payment's paid operations — the progress'

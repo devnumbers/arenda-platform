@@ -52,6 +52,7 @@ export function mapPayment(dto: PaymentDto): Payment {
         : dto.recurrence,
     since: dto.since,
     endDate: dto.endDate ?? undefined,
+    reminderOffsetDays: dto.reminderOffsetDays ?? undefined,
     autoPay: dto.autoPay,
     paymentForm: dto.paymentForm,
     category: mapCategoryView(dto.category),
