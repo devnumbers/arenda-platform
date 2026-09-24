@@ -3,7 +3,10 @@ import {
   expect,
   execE2eSql,
   memberActorIdSql,
+  memberTaskEntry,
   openCabinetWithSeededSession,
+  paymentCreatedEntry,
+  propertyRenamedEntry,
   SEEDED_APARTMENT_PROPERTY_ID,
   SEEDED_GARAGE_PROPERTY_ID,
   seedJournalEntry,
@@ -31,45 +34,15 @@ const MEMBER_UUID_SQL = `SELECT id FROM users WHERE email = 'e2e-member@example.
  * квартира»; все сегодня. */
 async function seedPairJournal(user: SeededUser): Promise<void> {
   await execE2eSql('DELETE FROM action_journal;');
+  await seedJournalEntry(paymentCreatedEntry('e0000000-0000-4000-8000-000000000001', 5, 'Аренда за сентябрь'), user);
+  await seedJournalEntry(memberTaskEntry('e0000000-0000-4000-8000-000000000002', 3), user);
   await seedJournalEntry(
-    {
-      id: 'e0000000-0000-4000-8000-000000000001',
-      createdAt: new Date(Date.now() - 5 * 60_000).toISOString(),
-      segments: '[{"text": "Платёж создан: Аренда за сентябрь"}]',
-      searchable: 'Платёж создан: Аренда за сентябрь Иван Иванов',
-    },
-    user,
-  );
-  await seedJournalEntry(
-    {
-      id: 'e0000000-0000-4000-8000-000000000002',
-      createdAt: new Date(Date.now() - 3 * 60_000).toISOString(),
-      actorIdSql: memberActorIdSql(),
-      actorName: 'Мария Петрова',
-      actorRole: 'full_access',
-      segments: '[{"text": "Задача выполнена: Заменить кран"}]',
-      searchable: 'Задача выполнена: Заменить кран Мария Петрова e2e-member@example.com',
-      action: 'task.completed',
-      baseAction: 'completed',
-      kind: 'task',
-    },
-    user,
-  );
-  await seedJournalEntry(
-    {
-      id: 'e0000000-0000-4000-8000-000000000003',
-      createdAt: new Date(Date.now() - 60_000).toISOString(),
+    propertyRenamedEntry('e0000000-0000-4000-8000-000000000003', 1, 'Гараж на Садовой', {
       propertyId: GARAGE_ID,
       actorIdSql: memberActorIdSql(),
       actorName: 'Мария Петрова',
       actorRole: 'full_access',
-      segments: '[{"text": "Название объекта изменено: Гараж на Садовой"}]',
-      searchable:
-        'Название объекта изменено: Гараж на Садовой Мария Петрова e2e-member@example.com',
-      action: 'property.renamed',
-      baseAction: 'changed',
-      kind: 'property',
-    },
+    }),
     user,
   );
 }

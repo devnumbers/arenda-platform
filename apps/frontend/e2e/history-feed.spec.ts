@@ -3,14 +3,18 @@ import {
   expect,
   execE2eSql,
   memberActorIdSql,
+  memberTaskEntry,
   openCabinetWithSeededSession,
   openCabinetWithSessionToken,
   ownerActorIdSql,
+  paymentCreatedEntry,
+  propertyRenamedEntry,
   SEEDED_APARTMENT_PROPERTY_ID,
   SEEDED_GARAGE_PROPERTY_ID,
   seedJournalEntry,
   seededMemberSessionToken,
   test,
+  todayAt,
 } from './fixtures';
 
 // Экран «История действий» (карта #704, тикет #709): мессенджерская лента
@@ -56,32 +60,23 @@ test('лента из сида: чипы дней, группы «объект �
   await execE2eSql('DELETE FROM action_journal;');
   await openCabinetWithSeededSession(page, seededUser);
 
-  // Сегодня: два объекта и два актёра сериями (канон мессенджера). Дневные
-  // сиды анкерятся к началу текущих суток фиксированным часом (9 часов —
-  // как в prepend-сиде ниже), а не к моменту запуска: возле полуночи
-  // Date.now()-минуты уезжали бы в чужие сутки.
+  // Сегодня: два объекта и два актёра сериями (канон мессенджера).
   await seedJournalEntry(
-    {
-      id: 'a0000000-0000-4000-8000-000000000001',
-      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '3 minutes'`,
+    paymentCreatedEntry('a0000000-0000-4000-8000-000000000001', 3, 'Аренда за сентябрь', {
       segments: '[{"text": "Платёж создан: "}, {"text": "Аренда за сентябрь", "link": {"kind": "payment", "id": "11111111-1111-4111-8111-111111111111"}}]',
-      searchable: 'Платёж создан: Аренда за сентябрь Иван Иванов',
-    },
+    }),
     seededUser,
   );
   await seedJournalEntry(
-    {
-      id: 'a0000000-0000-4000-8000-000000000002',
-      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '2 minutes'`,
+    propertyRenamedEntry('a0000000-0000-4000-8000-000000000002', 2, 'Гараж на Садовой', {
       segments: '[{"text": "Название объекта изменено: "}, {"text": "Гараж на Садовой", "link": {"kind": "property", "id": "' + SEEDED_GARAGE_PROPERTY_ID + '"}}]',
-      searchable: 'Название объекта изменено: Гараж на Садовой Иван Иванов',
-    },
+    }),
     seededUser,
   );
   await seedJournalEntry(
     {
       id: 'a0000000-0000-4000-8000-000000000003',
-      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '1 minute'`,
+      createdAtSql: todayAt(1),
       propertyId: SEEDED_GARAGE_PROPERTY_ID,
       segments: '[{"text": "Гараж на Садовой закреплён"}]',
       searchable: 'Гараж на Садовой закреплён Иван Иванов',
@@ -92,26 +87,12 @@ test('лента из сида: чипы дней, группы «объект �
     seededUser,
   );
   // Сегодня, другим актёром — серия внутри того же объекта.
-  await seedJournalEntry(
-    {
-      id: 'a0000000-0000-4000-8000-000000000004',
-      createdAt: new Date().toISOString(),
-      actorIdSql: memberActorIdSql(),
-      actorName: 'Мария Петрова',
-      actorRole: 'full_access',
-      segments: '[{"text": "Задача выполнена: Заменить кран"}]',
-      searchable: 'Задача выполнена: Заменить кран Мария Петрова',
-      action: 'task.completed',
-      baseAction: 'completed',
-      kind: 'task',
-    },
-    seededUser,
-  );
+  await seedJournalEntry(memberTaskEntry('a0000000-0000-4000-8000-000000000004', 0), seededUser);
   // Вчера и 12 дней назад.
   await seedJournalEntry(
     {
       id: 'a0000000-0000-4000-8000-000000000005',
-      createdAtSql: `date_trunc('day', now()) - interval '1 day' + interval '9 hours'`,
+      createdAtSql: todayAt(0, 1),
       segments: '[{"text": "Операция оплачена: Вода"}]',
       searchable: 'Операция оплачена: Вода Иван Иванов',
       action: 'operation.paid',
@@ -123,7 +104,7 @@ test('лента из сида: чипы дней, группы «объект �
   await seedJournalEntry(
     {
       id: 'a0000000-0000-4000-8000-000000000006',
-      createdAtSql: `date_trunc('day', now()) - interval '12 days' + interval '9 hours'`,
+      createdAtSql: todayAt(0, 12),
       segments: '[{"text": "Платёж удалён: Старый платёж"}]',
       searchable: 'Платёж удалён: Старый платёж Иван Иванов',
       action: 'payment.deleted',
@@ -210,7 +191,7 @@ test('синие переходы #713: связанные сегменты ве
   await seedJournalEntry(
     {
       id: 'a0000000-0000-4000-8000-000000000011',
-      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '3 minutes'`,
+      createdAtSql: todayAt(3),
       segments: `[{"text": "Платёж изменён: "}, {"text": "Аренда за сентябрь", "link": {"kind": "payment", "id": "${paymentId}"}}]`,
       searchable: 'Платёж изменён: Аренда за сентябрь Иван Иванов',
       action: 'payment.updated',
@@ -221,7 +202,7 @@ test('синие переходы #713: связанные сегменты ве
   await seedJournalEntry(
     {
       id: 'a0000000-0000-4000-8000-000000000012',
-      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '2 minutes'`,
+      createdAtSql: todayAt(2),
       propertyId: SEEDED_GARAGE_PROPERTY_ID,
       segments: `[{"text": "Гараж на Садовой закреплён", "link": {"kind": "property", "id": "${SEEDED_GARAGE_PROPERTY_ID}"}}]`,
       searchable: 'Гараж на Садовой закреплён Иван Иванов',
@@ -234,7 +215,7 @@ test('синие переходы #713: связанные сегменты ве
   await seedJournalEntry(
     {
       id: 'a0000000-0000-4000-8000-000000000013',
-      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '1 minute'`,
+      createdAtSql: todayAt(1),
       segments: `[{"text": "Добавлен участник: "}, {"text": "Мария Петрова", "link": {"kind": "member", "id": "${memberUserId}"}}]`,
       searchable: 'Добавлен участник: Мария Петрова Иван Иванов',
       action: 'member.added',
@@ -251,7 +232,7 @@ test('синие переходы #713: связанные сегменты ве
   await seedJournalEntry(
     {
       id: 'a0000000-0000-4000-8000-000000000014',
-      createdAt: new Date().toISOString(),
+      createdAtSql: todayAt(0),
       segments: '[{"text": "Платёж удалён: Старый платёж"}]',
       searchable: 'Платёж удалён: Старый платёж Иван Иванов',
       action: 'payment.deleted',
@@ -360,24 +341,8 @@ test('короткая лента прижата к низу вьюпорта �
   // сообщение в мессенджере, она висит у нижнего края, а не у верхнего
   // (решение владельца 24.09). Пустые состояния — не «сообщения», их
   // прижатие не касается.
-  await seedJournalEntry(
-    {
-      id: 'a0000000-0000-4000-8000-000000000021',
-      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '5 minutes'`,
-      segments: '[{"text": "Платёж создан: Первая запись"}]',
-      searchable: 'Платёж создан: Первая запись Иван Иванов',
-    },
-    seededUser,
-  );
-  await seedJournalEntry(
-    {
-      id: 'a0000000-0000-4000-8000-000000000022',
-      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '1 minute'`,
-      segments: '[{"text": "Платёж создан: Вторая запись"}]',
-      searchable: 'Платёж создан: Вторая запись Иван Иванов',
-    },
-    seededUser,
-  );
+  await seedJournalEntry(paymentCreatedEntry('a0000000-0000-4000-8000-000000000021', 5, 'Первая запись'), seededUser);
+  await seedJournalEntry(paymentCreatedEntry('a0000000-0000-4000-8000-000000000022', 1, 'Вторая запись'), seededUser);
 
   await page.goto('/history');
   await expect(page.getByText('Сегодня', { exact: true })).toBeVisible();
@@ -411,30 +376,8 @@ test('свой актор подписан «(Вы)»: в ленте и на п�
   // Свой актор (владелец сеанса) и чужой — метка только у своего
   // (actor_id = id сессии, семантика «как в Telegram», решение
   // владельца 24.09); канон подписи — серый суффикс шита фильтров (#710).
-  await seedJournalEntry(
-    {
-      id: 'a0000000-0000-4000-8000-000000000031',
-      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '5 minutes'`,
-      segments: '[{"text": "Платёж создан: Аренда за сентябрь"}]',
-      searchable: 'Платёж создан: Аренда за сентябрь Иван Иванов',
-    },
-    seededUser,
-  );
-  await seedJournalEntry(
-    {
-      id: 'a0000000-0000-4000-8000-000000000032',
-      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '1 minute'`,
-      actorIdSql: memberActorIdSql(),
-      actorName: 'Мария Петрова',
-      actorRole: 'full_access',
-      segments: '[{"text": "Задача выполнена: Заменить кран"}]',
-      searchable: 'Задача выполнена: Заменить кран Мария Петрова',
-      action: 'task.completed',
-      baseAction: 'completed',
-      kind: 'task',
-    },
-    seededUser,
-  );
+  await seedJournalEntry(paymentCreatedEntry('a0000000-0000-4000-8000-000000000031', 5, 'Аренда за сентябрь'), seededUser);
+  await seedJournalEntry(memberTaskEntry('a0000000-0000-4000-8000-000000000032', 1), seededUser);
 
   await page.goto('/history');
 

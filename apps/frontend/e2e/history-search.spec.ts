@@ -2,11 +2,14 @@ import {
   captureScreen,
   expect,
   execE2eSql,
-  memberActorIdSql,
+  memberTaskEntry,
   openCabinetWithSeededSession,
+  paymentCreatedEntry,
+  propertyRenamedEntry,
   SEEDED_GARAGE_PROPERTY_ID,
   seedJournalEntry,
   test,
+  todayAt,
   type SeededUser,
 } from './fixtures';
 
@@ -20,41 +23,28 @@ import {
 // прямым INSERT'ом в action_journal; searchable контракта рекордера —
 // текст сегментов + имя + почта актёра.
 
-/** Три записи: две сегодняшних (владелец) и одна вчерашняя; у записи
- * участника searchable несет почту — лег trgm-поиска по почте. Сиды
- * анкерятся к началу текущих суток фиксированным часом (9 часов), а не к
- * моменту запуска: возле полуночи «сегодня»/«вчера» уезжали бы в чужие
- * сутки вместе с чипами дней. */
+/** Четыре записи: три владельца (сегодня, сегодня, вчера) и участница
+ * Мария; почта в searchable — нога trgm-поиска по адресу. */
 async function seedSearchJournal(user: SeededUser): Promise<void> {
   await execE2eSql('DELETE FROM action_journal;');
   await seedJournalEntry(
-    {
-      id: 'b0000000-0000-4000-8000-000000000001',
-      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '2 minutes'`,
+    paymentCreatedEntry('b0000000-0000-4000-8000-000000000001', 2, 'Аренда за сентябрь', {
       segments: '[{"text": "Платёж создан: "}, {"text": "Аренда за сентябрь", "link": {"kind": "payment", "id": "11111111-1111-4111-8111-111111111111"}}]',
       searchable: `Платёж создан: Аренда за сентябрь Иван Иванов ${user.email}`,
-    },
+    }),
     user,
   );
   await seedJournalEntry(
-    {
-      id: 'b0000000-0000-4000-8000-000000000002',
-      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '1 minute'`,
+    propertyRenamedEntry('b0000000-0000-4000-8000-000000000002', 1, 'Гараж на Садовой', {
       propertyId: SEEDED_GARAGE_PROPERTY_ID,
-      segments: '[{"text": "Название объекта изменено: Гараж на Садовой"}]',
-      searchable: 'Название объекта изменено: Гараж на Садовой Иван Иванов',
-      action: 'property.renamed',
-      baseAction: 'changed',
-      kind: 'property',
-    },
+    }),
     user,
   );
   await seedJournalEntry(
     {
       id: 'b0000000-0000-4000-8000-000000000003',
-      createdAtSql: `date_trunc('day', now()) - interval '1 day' + interval '9 hours'`,
-      segments: '[{"text": "Операция оплачена: Вода"}]',
-      searchable: 'Операция оплачена: Вода Иван Иванов',
+      createdAtSql: todayAt(0, 1),
+      text: 'Операция оплачена: Вода',
       action: 'operation.paid',
       baseAction: 'completed',
       kind: 'operation',
@@ -64,18 +54,9 @@ async function seedSearchJournal(user: SeededUser): Promise<void> {
   // Сегодня, запись участника: searchable несёт почту (контракт
   // рекордера — текст + имя + почта), находку по адресу даёт trgm-нога.
   await seedJournalEntry(
-    {
-      id: 'b0000000-0000-4000-8000-000000000004',
-      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '30 seconds'`,
-      actorIdSql: memberActorIdSql(),
-      actorName: 'Мария Петрова',
-      actorRole: 'full_access',
-      segments: '[{"text": "Задача выполнена: Заменить кран"}]',
+    memberTaskEntry('b0000000-0000-4000-8000-000000000004', 0.5, {
       searchable: 'Задача выполнена: Заменить кран Мария Петрова e2e-member@example.com',
-      action: 'task.completed',
-      baseAction: 'completed',
-      kind: 'task',
-    },
+    }),
     user,
   );
 }

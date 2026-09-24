@@ -5,13 +5,15 @@ import {
   captureScreen,
   execE2eSql,
   expect,
-  memberActorIdSql,
+  memberTaskEntry,
   openCabinetWithSeededSession,
   ownerActorIdSql,
+  paymentCreatedEntry,
   SEEDED_APARTMENT_PROPERTY_ID,
   SEEDED_GARAGE_PROPERTY_ID,
   seedJournalEntry,
   test,
+  todayAt,
   type SeededUser,
 } from './fixtures';
 
@@ -24,26 +26,15 @@ import {
 // пустое значение и пустой результат без запроса.
 
 const OWNER_NAME = 'Иван Иванов';
-const MEMBER_NAME = 'Мария Петрова';
 
-/** Четыре записи «сегодня» под фильтры Истории. Сиды анкерятся к началу
- * текущих суток фиксированным часом (9 часов — канон createdAtSql из
- * fixtures), а не к моменту запуска: возле полуночи Date.now()-минуты
- * уезжали бы из «Сегодня». */
+/** Четыре записи «сегодня» под фильтры Истории. */
 async function seedHistory(user: SeededUser): Promise<void> {
   await execE2eSql('DELETE FROM action_journal;');
-  await seedJournalEntry(
-    {
-      id: 'b0000000-0000-4000-8000-000000000001',
-      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '4 minutes'`,
-      text: 'Платёж создан: Аренда за сентябрь',
-    },
-    user,
-  );
+  await seedJournalEntry(paymentCreatedEntry('b0000000-0000-4000-8000-000000000001', 4, 'Аренда за сентябрь'), user);
   await seedJournalEntry(
     {
       id: 'b0000000-0000-4000-8000-000000000002',
-      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '3 minutes'`,
+      createdAtSql: todayAt(3),
       kind: 'operation',
       action: 'operation.paid',
       baseAction: 'completed',
@@ -51,24 +42,11 @@ async function seedHistory(user: SeededUser): Promise<void> {
     },
     user,
   );
-  await seedJournalEntry(
-    {
-      id: 'b0000000-0000-4000-8000-000000000003',
-      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '2 minutes'`,
-      actorIdSql: memberActorIdSql(),
-      actorName: MEMBER_NAME,
-      actorRole: 'full_access',
-      kind: 'task',
-      action: 'task.completed',
-      baseAction: 'completed',
-      text: 'Задача выполнена: Заменить кран',
-    },
-    user,
-  );
+  await seedJournalEntry(memberTaskEntry('b0000000-0000-4000-8000-000000000003', 2), user);
   await seedJournalEntry(
     {
       id: 'b0000000-0000-4000-8000-000000000004',
-      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '1 minute'`,
+      createdAtSql: todayAt(1),
       propertyId: SEEDED_GARAGE_PROPERTY_ID,
       kind: 'property',
       action: 'property.pinned',

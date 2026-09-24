@@ -2,12 +2,15 @@ import {
   captureScreen,
   expect,
   execE2eSql,
-  memberActorIdSql,
+  memberTaskEntry,
   openCabinetWithSeededSession,
+  paymentCreatedEntry,
+  propertyRenamedEntry,
   SEEDED_APARTMENT_PROPERTY_ID,
   SEEDED_GARAGE_PROPERTY_ID,
   seedJournalEntry,
   test,
+  todayAt,
   trackHistoryScope,
   type SeededUser,
 } from './fixtures';
@@ -22,54 +25,23 @@ const APARTMENT_ID = SEEDED_APARTMENT_PROPERTY_ID;
 const GARAGE_ID = SEEDED_GARAGE_PROPERTY_ID;
 
 /** Три записи квартиры (владелец и участница Мария) и одна запись гаража —
- * чужой объект не должен попадать в прибитую ленту; все сегодня. Сиды
- * анкерятся к началу текущих суток фиксированным часом (9 часов), а не к
- * моменту запуска: возле полуночи Date.now()-минуты уезжали бы из «Сегодня». */
+ * чужой объект не должен попадать в прибитую ленту; все сегодня. */
 async function seedPropertyJournal(user: SeededUser): Promise<void> {
   await execE2eSql('DELETE FROM action_journal;');
   await seedJournalEntry(
-    {
-      id: 'd0000000-0000-4000-8000-000000000001',
-      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '5 minutes'`,
+    paymentCreatedEntry('d0000000-0000-4000-8000-000000000001', 5, 'Аренда за сентябрь', {
       segments: '[{"text": "Платёж создан: "}, {"text": "Аренда за сентябрь", "link": {"kind": "payment", "id": "11111111-1111-4111-8111-111111111111"}}]',
-      searchable: 'Платёж создан: Аренда за сентябрь Иван Иванов',
-    },
+    }),
     user,
   );
-  await seedJournalEntry(
-    {
-      id: 'd0000000-0000-4000-8000-000000000002',
-      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '4 minutes'`,
-      segments: '[{"text": "Название объекта изменено: Квартира на Ленина"}]',
-      searchable: 'Название объекта изменено: Квартира на Ленина Иван Иванов',
-      action: 'property.renamed',
-      baseAction: 'changed',
-      kind: 'property',
-    },
-    user,
-  );
-  await seedJournalEntry(
-    {
-      id: 'd0000000-0000-4000-8000-000000000003',
-      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '3 minutes'`,
-      actorIdSql: memberActorIdSql(),
-      actorName: 'Мария Петрова',
-      actorRole: 'full_access',
-      segments: '[{"text": "Задача выполнена: Заменить кран"}]',
-      searchable: 'Задача выполнена: Заменить кран Мария Петрова e2e-member@example.com',
-      action: 'task.completed',
-      baseAction: 'completed',
-      kind: 'task',
-    },
-    user,
-  );
+  await seedJournalEntry(propertyRenamedEntry('d0000000-0000-4000-8000-000000000002', 4, 'Квартира на Ленина'), user);
+  await seedJournalEntry(memberTaskEntry('d0000000-0000-4000-8000-000000000003', 3), user);
   await seedJournalEntry(
     {
       id: 'd0000000-0000-4000-8000-000000000004',
-      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '1 minute'`,
+      createdAtSql: todayAt(1),
       propertyId: GARAGE_ID,
-      segments: '[{"text": "Платёж удалён: Аренда гаража"}]',
-      searchable: 'Платёж удалён: Аренда гаража Иван Иванов',
+      text: 'Платёж удалён: Аренда гаража',
       action: 'payment.deleted',
       baseAction: 'deleted',
     },

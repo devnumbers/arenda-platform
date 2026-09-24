@@ -74,45 +74,56 @@ export function memberActorIdSql(): string {
   return `(SELECT id FROM users WHERE email = 'e2e-member@example.com')`;
 }
 
+/** Поля строки журнала «Истории действий» для seedJournalEntry — контракт
+ * INSERT'а миграции 000140. */
+export interface JournalEntrySeed {
+  readonly id: string;
+  readonly createdAt?: string;
+  /** Сырое SQL-выражение вместо литерала createdAt: дневочувствительные
+   * сиды («Сегодня»/«Вчера») анкерятся к началу текущих суток —
+   * date_trunc('day', now()) + фиксированный час — а не к моменту
+   * запуска прогона, иначе возле полуночи запись уезжает в чужие сутки. */
+  readonly createdAtSql?: string;
+  readonly propertyId?: string;
+  readonly actorIdSql?: string;
+  /** Почта актёра строки контрактом рекордера — снапшот по actor_id
+   * (recorder резолвит имя и почту из entry.ActorID); дефолт — подзапрос
+   * по actor_id самой строки, чтобы member-строки не несли хозяйскую
+   * почту сида. */
+  readonly actorEmailSql?: string;
+  readonly actorName?: string;
+  readonly actorRole?: string;
+  readonly action?: string;
+  readonly baseAction?: string;
+  readonly kind?: string;
+  /** Короткая форма плоской строки без ссылок: segments собираются из
+   * текста, а searchable — контракт рекордера: текст + имя + почта
+   * актёра (тот же подзапрос по actor_id, что в колонке actor_email). */
+  readonly text?: string;
+  readonly segments?: string;
+  readonly searchable?: string;
+}
+
 /** Одна запись журнала «Истории действий» прямым INSERT'ом в
  * action_journal: запись идёт в транзакциях мутаций (ADR 0061), сиду
  * проще класть строки тем же контрактом, что миграция 000140. */
 export async function seedJournalEntry(
-  entry: {
-    readonly id: string;
-    readonly createdAt?: string;
-    /** Сырое SQL-выражение вместо литерала createdAt: дневочувствительные
-     * сиды («Сегодня»/«Вчера») анкерятся к началу текущих суток —
-     * date_trunc('day', now()) + фиксированный час — а не к моменту
-     * запуска прогона, иначе возле полуночи запись уезжает в чужие сутки. */
-    readonly createdAtSql?: string;
-    readonly propertyId?: string;
-    readonly actorIdSql?: string;
-    /** Почта актёра строки контрактом рекордера — снапшот по actor_id
-     * (recorder резолвит имя и почту из entry.ActorID); дефолт — подзапрос
-     * по actor_id самой строки, чтобы member-строки не несли хозяйскую
-     * почту сида. */
-    readonly actorEmailSql?: string;
-    readonly actorName?: string;
-    readonly actorRole?: string;
-    readonly action?: string;
-    readonly baseAction?: string;
-    readonly kind?: string;
-    /** Короткая форма плоской строки без ссылок: segments и searchable
-     * собираются из текста (searchable — текст + имя актёра). */
-    readonly text?: string;
-    readonly segments?: string;
-    readonly searchable?: string;
-  },
+  entry: JournalEntrySeed,
   user: SeededUser,
 ): Promise<string> {
   if (entry.createdAt === undefined && entry.createdAtSql === undefined) {
     throw new Error('seedJournalEntry: задай момент записи — createdAt или createdAtSql');
   }
   const segments = entry.segments ?? `[{"text": "${entry.text}"}]`;
-  const searchable = entry.searchable ?? `${entry.text} ${entry.actorName ?? 'Иван Иванов'}`;
   const actorIdSql = entry.actorIdSql ?? ownerActorIdSql(user);
   const actorEmailSql = entry.actorEmailSql ?? `(SELECT email FROM users WHERE id = ${actorIdSql})`;
+  // searchable — текст + имя + почта актёра (контракт searchableOf
+  // рекордера); почта — тот же подзапрос по actor_id, что в колонке
+  // actor_email, поэтому дефолт честен и для member-строк. Явный
+  // searchable остаётся литералом.
+  const searchableSql = entry.searchable === undefined
+    ? `'${`${entry.text} ${entry.actorName ?? 'Иван Иванов'}`.replace(/'/g, "''")}' || ' ' || ${actorEmailSql}`
+    : `'${entry.searchable.replace(/'/g, "''")}'`;
   return execE2eSql(`
     INSERT INTO action_journal
       (id, property_id, actor_id, actor_role, actor_name, actor_email, kind, action, base_action, segments, searchable, created_at)
@@ -127,10 +138,79 @@ export async function seedJournalEntry(
       '${entry.action ?? 'payment.created'}',
       '${entry.baseAction ?? 'added'}',
       $j$${segments}$j$::jsonb,
-      '${searchable.replace(/'/g, "''")}',
+      ${searchableSql},
       ${entry.createdAtSql ?? `'${entry.createdAt}'`}
     );
   `);
+}
+
+/** Момент дневной серии: начало текущих суток плюс фиксированные 9 часов
+ * минус minutesAgo минут (порядок строк внутри дня), daysAgo отступает на
+ * целые сутки («Вчера» и дальше). Якорь — к началу суток, а не к моменту
+ * прогона: возле полуночи Date.now()-минуты уезжали бы в чужие сутки
+ * вместе с чипами «Сегодня»/«Вчера» (канон e35758e2). */
+export function todayAt(minutesAgo: number, daysAgo = 0): string {
+  const day = daysAgo > 0 ? `- interval '${daysAgo} days' ` : '';
+  return `date_trunc('day', now()) ${day}+ interval '9 hours' - interval '${minutesAgo} minutes'`;
+}
+
+/** Типовые записи дневной серии: сиды history-спек собраны из трёх
+ * канонных строк, спека передаёт свой префикс id, минуты от 9:00 и
+ * вариации (propertyId, segments со ссылками, другой текст). */
+
+/** «Платёж создан: …» владельца — базовая строка ленты. */
+export function paymentCreatedEntry(
+  id: string,
+  minutesAgo: number,
+  title: string,
+  overrides: Partial<JournalEntrySeed> = {},
+): JournalEntrySeed {
+  return {
+    id,
+    createdAtSql: todayAt(minutesAgo),
+    text: `Платёж создан: ${title}`,
+    ...overrides,
+  };
+}
+
+/** «Задача выполнена: Заменить кран» участницы Марии — чужой актёр в
+ * общей ленте и на прибитых страницах. */
+export function memberTaskEntry(
+  id: string,
+  minutesAgo: number,
+  overrides: Partial<JournalEntrySeed> = {},
+): JournalEntrySeed {
+  return {
+    id,
+    createdAtSql: todayAt(minutesAgo),
+    actorIdSql: memberActorIdSql(),
+    actorName: 'Мария Петрова',
+    actorRole: 'full_access',
+    text: 'Задача выполнена: Заменить кран',
+    action: 'task.completed',
+    baseAction: 'completed',
+    kind: 'task',
+    ...overrides,
+  };
+}
+
+/** «Название объекта изменено: …»; актёра и объект переопределяют
+ * (гараж переименовывает участница). */
+export function propertyRenamedEntry(
+  id: string,
+  minutesAgo: number,
+  name: string,
+  overrides: Partial<JournalEntrySeed> = {},
+): JournalEntrySeed {
+  return {
+    id,
+    createdAtSql: todayAt(minutesAgo),
+    text: `Название объекта изменено: ${name}`,
+    action: 'property.renamed',
+    baseAction: 'changed',
+    kind: 'property',
+    ...overrides,
+  };
 }
 
 /**
