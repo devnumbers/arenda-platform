@@ -86,6 +86,9 @@ export function readHistoryFilters(params: HistoryParamsSource, today: IsoDate):
  * Patch адреса (канон: дефолтные значения не пишутся): «все» (null) — ключ
  * отсутствует, «ни один» — пустое значение (отличимо от отсутствия), выбор
  * — comma-list. from/to пишутся парой всегда, когда период применён.
+ * Период матчится сервером как UTC-сутки (канон админ-аудита), тогда как
+ * группировка дней ленты — по локальному дню смотрящего; расхождение
+ * краевых часов принято (#453, ADR 0061 §7).
  */
 export function historyFiltersParams(filters: HistoryFilters): Record<string, string> {
   const result: Record<string, string> = {};
