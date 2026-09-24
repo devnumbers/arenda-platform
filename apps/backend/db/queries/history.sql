@@ -15,8 +15,10 @@ RETURNING id;
 -- Курсор двусторонний по ключу (created_at, id): before_ts/before_id —
 -- страница СТАРШЕ ключа (скролл вверх), after_ts/after_id — страница МОЛОЖЕ
 -- (prepend новых); аргументы пары ходят вместе, NULL — нет курсора. Порядок
--- строк всегда (created_at DESC, id DESC) — переименование объекта не может
--- увести строку из окна (канон #597).
+-- DESC-запроса — (created_at DESC, id DESC); after-нога читается отдельным
+-- ASC-запросом (ListActionJournalAfter), адаптер разворачивает её страницу
+-- обратно — на проводе порядок строк всегда (created_at DESC, id DESC), и
+-- переименование объекта не может увести строку из окна (канон #597).
 --
 -- Фильтры: csv-списки ('' = фильтра нет), период по created_at (верхняя
 -- граница исключающая — экран считает датой+24ч), поиск — всегда-OR
@@ -80,6 +82,64 @@ WHERE actor_can_read_history(aj.property_id, sqlc.arg('actor')::uuid)
        )
       )
 ORDER BY aj.created_at DESC, aj.id DESC
+LIMIT sqlc.arg('page_limit')::int;
+
+-- After-нога двустороннего курсора (prepend новых, «новые снизу» ленты):
+-- тот же скоуп, фильтры и поиск, что у ListActionJournal, окно «строго
+-- новее якоря» (after_ts/after_id) — но от якоря В СТОРОНУ НЕПРЕРЫВНОСТИ:
+-- (created_at ASC, id ASC) забирает старейшие строки окна, поэтому
+-- after-цепочка продолжает ленту от якоря вверх и всплеск новых записей
+-- больше страницы доносится целиком (контракт openapi «появившиеся записи
+-- не теряются») — DESC-порядок здесь взял бы из всплеска новейшие и отрезал
+-- старейший хвост. Один sqlc-запрос двух порядков не несёт; контрактный
+-- DESC страницы возвращает адаптер разворотом. Before-пару запрос не принимает:
+-- ноги курсора взаимоисключающие на сервисе.
+--
+-- name: ListActionJournalAfter :many
+SELECT aj.id,
+       aj.property_id,
+       p.name AS property_name,
+       aj.actor_id,
+       aj.actor_name,
+       aj.actor_email,
+       aj.actor_role,
+       aj.kind,
+       aj.action,
+       aj.base_action,
+       aj.segments,
+       aj.context,
+       aj.created_at
+FROM action_journal aj
+JOIN properties p ON p.id = aj.property_id
+WHERE actor_can_read_history(aj.property_id, sqlc.arg('actor')::uuid)
+  AND (sqlc.arg('property_ids')::text = ''
+       OR aj.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[]))
+  AND (sqlc.arg('actor_ids')::text = ''
+       OR aj.actor_id = ANY(string_to_array(sqlc.arg('actor_ids')::text, ',')::uuid[]))
+  AND (sqlc.arg('kinds')::text = ''
+       OR aj.kind = ANY(string_to_array(sqlc.arg('kinds')::text, ',')))
+  AND (sqlc.arg('base_actions')::text = ''
+       OR aj.base_action = ANY(string_to_array(sqlc.arg('base_actions')::text, ',')))
+  AND (sqlc.narg('date_from')::timestamptz IS NULL
+       OR aj.created_at >= sqlc.narg('date_from')::timestamptz)
+  AND (sqlc.narg('date_to')::timestamptz IS NULL
+       OR aj.created_at < sqlc.narg('date_to')::timestamptz)
+  AND (aj.created_at > sqlc.narg('after_ts')::timestamptz
+       OR (aj.created_at = sqlc.narg('after_ts')::timestamptz
+           AND aj.id > sqlc.narg('after_id')::uuid))
+  AND (
+       sqlc.arg('q_raw')::text = ''
+       OR (
+           aj.search_tsv @@ CASE
+               WHEN plainto_tsquery('russian', sqlc.arg('q_raw')::text)::text = ''
+                   THEN ''::tsquery
+               ELSE to_tsquery('russian',
+                    plainto_tsquery('russian', sqlc.arg('q_raw')::text)::text || ':*')
+           END
+           OR aj.searchable ILIKE '%' || sqlc.arg('q_trgm')::text || '%' ESCAPE '\'
+       )
+      )
+ORDER BY aj.created_at ASC, aj.id ASC
 LIMIT sqlc.arg('page_limit')::int;
 
 -- Опции фильтров ленты (ADR 0061 §7, тикет #708): участники области =

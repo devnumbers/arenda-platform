@@ -56,7 +56,7 @@ func seedEntry(t *testing.T, pool *pgxpool.Pool, actorID, propertyID uuid.UUID, 
 		Context:    map[string]any{},
 		CreatedAt:  at,
 	}
-	if err := newRecorder(pool).Record(context.Background(), entry); err != nil {
+	if err := historypg.NewRecorder(pool).Record(context.Background(), entry); err != nil {
 		t.Fatalf("seed entry: %v", err)
 	}
 	// Record присваивает ID копии Entry (передача по значению — до
@@ -357,6 +357,88 @@ func TestReadStore_PrependNewArrival(t *testing.T) {
 	}
 	if len(page.Items) != 1 || page.Items[0].Segments[0].Text != "Свежая строка" {
 		t.Fatalf("prepend: want exactly the fresh row, got %+v", page.Items)
+	}
+}
+
+// Всплеск новых записей больше страницы (контракт openapi «появившиеся
+// записи не теряются»): 60 строк строго новее якоря не помещаются в одну
+// страницу из 50 — after-цепочка от якоря обязана донести весь всплеск,
+// ровно множество засеянных строк, без дублей и дыр. Одиночный prepend
+// (TestReadStore_PrependNewArrival) эту дыру не ловит: одна строка всегда
+// умещается в страницу.
+func TestReadStore_AfterCursorBurstWalk(t *testing.T) {
+	t.Parallel()
+	pool := testdb.Setup(t)
+	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
+	property := seedProperty(t, pool, owner)
+
+	for i := range 5 {
+		seedEntry(t, pool, owner, property, time.Unix(int64(1000+i), 0),
+			domain.KindOperation, domain.ActionOperationPaid, domain.BaseCompleted, fmt.Sprintf("База %d", i))
+	}
+	svc := newReadStack(pool)
+	ctx := context.Background()
+
+	// Якорь — ключ свежайшей строки страницы, снятой до всплеска.
+	first, err := svc.Feed(ctx, owner, historyapp.FeedQuery{Limit: 5})
+	if err != nil {
+		t.Fatalf("first page: %v", err)
+	}
+
+	// Всплеск: 60 строк строго новее якоря, у каждой свой момент времени —
+	// детерминированный порядок (created_at, id).
+	const burst = 60
+	seeded := make(map[uuid.UUID]bool, burst)
+	rowIDAt := newRowIDAt(t, pool, property)
+	for i := range burst {
+		at := time.Unix(2000+int64(i), 0)
+		seedEntry(t, pool, owner, property, at,
+			domain.KindPayment, domain.ActionPaymentCreated, domain.BaseAdded, fmt.Sprintf("Всплеск %d", i))
+		seeded[rowIDAt(at)] = true
+	}
+
+	const pageSize = 50
+	got := map[uuid.UUID]bool{}
+	pages := 0
+	for after := first.PrevCursor; after != ""; {
+		page, err := svc.Feed(ctx, owner, historyapp.FeedQuery{Limit: pageSize, AfterCursor: after})
+		if err != nil {
+			t.Fatalf("after page %d: %v", pages, err)
+		}
+		if len(page.Items) == 0 {
+			if page.NextCursor != "" || page.PrevCursor != "" {
+				t.Fatal("an empty after-page must carry neither cursor")
+			}
+			break
+		}
+		for i := 1; i < len(page.Items); i++ {
+			if page.Items[i].CreatedAt.After(page.Items[i-1].CreatedAt) {
+				t.Fatal("an after-page must keep the (created_at, id) DESC order")
+			}
+		}
+		for _, item := range page.Items {
+			if got[item.ID] {
+				t.Fatalf("after page %d: duplicate row %s", pages, item.ID)
+			}
+			if !seeded[item.ID] {
+				t.Fatalf("after page %d: row %s is not part of the burst", pages, item.ID)
+			}
+			got[item.ID] = true
+		}
+		pages++
+		if pages > burst/pageSize+1 {
+			t.Fatal("the after-walk did not end within the burst's pages")
+		}
+		if len(page.Items) < pageSize {
+			break
+		}
+		if page.PrevCursor == "" {
+			t.Fatal("a full after-page must carry prev_cursor")
+		}
+		after = page.PrevCursor
+	}
+	if len(got) != burst {
+		t.Fatalf("after-walk: want all %d burst rows, got %d — %d lost", burst, len(got), burst-len(got))
 	}
 }
 
@@ -835,7 +917,7 @@ func TestReadStore_FilterOptionsParticipantRoles(t *testing.T) {
 		Context:    map[string]any{},
 		CreatedAt:  time.Unix(1000, 0),
 	}
-	if err := newRecorder(pool).Record(context.Background(), exitedEntry); err != nil {
+	if err := historypg.NewRecorder(pool).Record(context.Background(), exitedEntry); err != nil {
 		t.Fatalf("seed exited entry: %v", err)
 	}
 	if _, err := pool.Exec(t.Context(),
@@ -863,7 +945,7 @@ func TestReadStore_FilterOptionsParticipantRoles(t *testing.T) {
 		Context:    map[string]any{},
 		CreatedAt:  time.Unix(1001, 0),
 	}
-	if err := newRecorder(pool).Record(context.Background(), mixedEntry); err != nil {
+	if err := historypg.NewRecorder(pool).Record(context.Background(), mixedEntry); err != nil {
 		t.Fatalf("seed mixed entry: %v", err)
 	}
 

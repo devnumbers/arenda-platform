@@ -152,8 +152,10 @@ type ListActionJournalRow struct {
 // Курсор двусторонний по ключу (created_at, id): before_ts/before_id —
 // страница СТАРШЕ ключа (скролл вверх), after_ts/after_id — страница МОЛОЖЕ
 // (prepend новых); аргументы пары ходят вместе, NULL — нет курсора. Порядок
-// строк всегда (created_at DESC, id DESC) — переименование объекта не может
-// увести строку из окна (канон #597).
+// DESC-запроса — (created_at DESC, id DESC); after-нога читается отдельным
+// ASC-запросом (ListActionJournalAfter), адаптер разворачивает её страницу
+// обратно — на проводе порядок строк всегда (created_at DESC, id DESC), и
+// переименование объекта не может увести строку из окна (канон #597).
 //
 // Фильтры: csv-списки (” = фильтра нет), период по created_at (верхняя
 // граница исключающая — экран считает датой+24ч), поиск — всегда-OR
@@ -190,6 +192,142 @@ func (q *Queries) ListActionJournal(ctx context.Context, arg ListActionJournalPa
 	items := []ListActionJournalRow{}
 	for rows.Next() {
 		var i ListActionJournalRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PropertyID,
+			&i.PropertyName,
+			&i.ActorID,
+			&i.ActorName,
+			&i.ActorEmail,
+			&i.ActorRole,
+			&i.Kind,
+			&i.Action,
+			&i.BaseAction,
+			&i.Segments,
+			&i.Context,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listActionJournalAfter = `-- name: ListActionJournalAfter :many
+SELECT aj.id,
+       aj.property_id,
+       p.name AS property_name,
+       aj.actor_id,
+       aj.actor_name,
+       aj.actor_email,
+       aj.actor_role,
+       aj.kind,
+       aj.action,
+       aj.base_action,
+       aj.segments,
+       aj.context,
+       aj.created_at
+FROM action_journal aj
+JOIN properties p ON p.id = aj.property_id
+WHERE actor_can_read_history(aj.property_id, $1::uuid)
+  AND ($2::text = ''
+       OR aj.property_id = ANY(string_to_array($2::text, ',')::uuid[]))
+  AND ($3::text = ''
+       OR aj.actor_id = ANY(string_to_array($3::text, ',')::uuid[]))
+  AND ($4::text = ''
+       OR aj.kind = ANY(string_to_array($4::text, ',')))
+  AND ($5::text = ''
+       OR aj.base_action = ANY(string_to_array($5::text, ',')))
+  AND ($6::timestamptz IS NULL
+       OR aj.created_at >= $6::timestamptz)
+  AND ($7::timestamptz IS NULL
+       OR aj.created_at < $7::timestamptz)
+  AND (aj.created_at > $8::timestamptz
+       OR (aj.created_at = $8::timestamptz
+           AND aj.id > $9::uuid))
+  AND (
+       $10::text = ''
+       OR (
+           aj.search_tsv @@ CASE
+               WHEN plainto_tsquery('russian', $10::text)::text = ''
+                   THEN ''::tsquery
+               ELSE to_tsquery('russian',
+                    plainto_tsquery('russian', $10::text)::text || ':*')
+           END
+           OR aj.searchable ILIKE '%' || $11::text || '%' ESCAPE '\'
+       )
+      )
+ORDER BY aj.created_at ASC, aj.id ASC
+LIMIT $12::int
+`
+
+type ListActionJournalAfterParams struct {
+	Actor       pgtype.UUID        `json:"actor"`
+	PropertyIds string             `json:"property_ids"`
+	ActorIds    string             `json:"actor_ids"`
+	Kinds       string             `json:"kinds"`
+	BaseActions string             `json:"base_actions"`
+	DateFrom    pgtype.Timestamptz `json:"date_from"`
+	DateTo      pgtype.Timestamptz `json:"date_to"`
+	AfterTs     pgtype.Timestamptz `json:"after_ts"`
+	AfterID     pgtype.UUID        `json:"after_id"`
+	QRaw        string             `json:"q_raw"`
+	QTrgm       string             `json:"q_trgm"`
+	PageLimit   int32              `json:"page_limit"`
+}
+
+type ListActionJournalAfterRow struct {
+	ID           pgtype.UUID        `json:"id"`
+	PropertyID   pgtype.UUID        `json:"property_id"`
+	PropertyName string             `json:"property_name"`
+	ActorID      pgtype.UUID        `json:"actor_id"`
+	ActorName    string             `json:"actor_name"`
+	ActorEmail   string             `json:"actor_email"`
+	ActorRole    string             `json:"actor_role"`
+	Kind         string             `json:"kind"`
+	Action       string             `json:"action"`
+	BaseAction   string             `json:"base_action"`
+	Segments     []byte             `json:"segments"`
+	Context      []byte             `json:"context"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+// After-нога двустороннего курсора (prepend новых, «новые снизу» ленты):
+// тот же скоуп, фильтры и поиск, что у ListActionJournal, окно «строго
+// новее якоря» (after_ts/after_id) — но от якоря В СТОРОНУ НЕПРЕРЫВНОСТИ:
+// (created_at ASC, id ASC) забирает старейшие строки окна, поэтому
+// after-цепочка продолжает ленту от якоря вверх и всплеск новых записей
+// больше страницы доносится целиком (контракт openapi «появившиеся записи
+// не теряются») — DESC-порядок здесь взял бы из всплеска новейшие и отрезал
+// старейший хвост. Один sqlc-запрос двух порядков не несёт; контрактный
+// DESC страницы возвращает адаптер разворотом. Before-пару запрос не принимает:
+// ноги курсора взаимоисключающие на сервисе.
+func (q *Queries) ListActionJournalAfter(ctx context.Context, arg ListActionJournalAfterParams) ([]ListActionJournalAfterRow, error) {
+	rows, err := q.db.Query(ctx, listActionJournalAfter,
+		arg.Actor,
+		arg.PropertyIds,
+		arg.ActorIds,
+		arg.Kinds,
+		arg.BaseActions,
+		arg.DateFrom,
+		arg.DateTo,
+		arg.AfterTs,
+		arg.AfterID,
+		arg.QRaw,
+		arg.QTrgm,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListActionJournalAfterRow{}
+	for rows.Next() {
+		var i ListActionJournalAfterRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.PropertyID,

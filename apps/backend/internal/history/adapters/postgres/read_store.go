@@ -12,6 +12,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -42,6 +43,11 @@ func (s *ReadStore) List(ctx context.Context, actor uuid.UUID, q application.Jou
 	if q.Limit <= 0 || q.Limit > application.FeedMaxLimit {
 		return nil, fmt.Errorf("list action journal: limit %d out of range", q.Limit)
 	}
+	// After-нога (prepend новых) — отдельным ASC-запросом от якоря:
+	// after-цепочка доносит всплеск новых записей целиком, без дыр.
+	if q.After != nil {
+		return s.listAfter(ctx, actor, q)
+	}
 	params := postgres.ListActionJournalParams{
 		Actor:       pgconv.UUIDToPgtype(actor),
 		PropertyIds: joinUUIDs(q.PropertyIDs),
@@ -62,10 +68,6 @@ func (s *ReadStore) List(ctx context.Context, actor uuid.UUID, q application.Jou
 		params.BeforeTs = pgtype.Timestamptz{Time: q.Before.CreatedAt, Valid: true}
 		params.BeforeID = pgconv.UUIDToPgtype(q.Before.ID)
 	}
-	if q.After != nil {
-		params.AfterTs = pgtype.Timestamptz{Time: q.After.CreatedAt, Valid: true}
-		params.AfterID = pgconv.UUIDToPgtype(q.After.ID)
-	}
 
 	rows, err := postgres.New(s.db).ListActionJournal(ctx, params)
 	if err != nil {
@@ -75,6 +77,53 @@ func (s *ReadStore) List(ctx context.Context, actor uuid.UUID, q application.Jou
 	out := make([]domain.FeedEntry, len(rows))
 	for i, row := range rows {
 		entry, err := feedEntryOf(row)
+		if err != nil {
+			return nil, err
+		}
+		out[i] = entry
+	}
+	return out, nil
+}
+
+// listAfter serves the prepend's after_cursor page: the SQL reads the window
+// «строго новее якоря» from the anchor upward (created_at ASC, id ASC) — the
+// page takes the OLDEST eligible rows, so a burst of new arrivals wider than
+// the page is carried by the after-chain entirely, from the anchor toward
+// the fresh edge (the contract's «появившиеся записи не теряются»; the DESC
+// query would take the burst's newest and strand its oldest tail). The
+// reversal restores the feed's DESC order, so rows[0] stays the page's
+// newest row for the service's cursor math.
+func (s *ReadStore) listAfter(ctx context.Context, actor uuid.UUID, q application.JournalQuery) ([]domain.FeedEntry, error) {
+	params := postgres.ListActionJournalAfterParams{
+		Actor:       pgconv.UUIDToPgtype(actor),
+		PropertyIds: joinUUIDs(q.PropertyIDs),
+		ActorIds:    joinUUIDs(q.ActorIDs),
+		Kinds:       joinStrings(kindStrings(q.Kinds)),
+		BaseActions: joinStrings(baseActionStrings(q.BaseActions)),
+		QRaw:        q.Search,
+		QTrgm:       escapeLikePattern(q.Search),
+		AfterTs:     pgtype.Timestamptz{Time: q.After.CreatedAt, Valid: true},
+		AfterID:     pgconv.UUIDToPgtype(q.After.ID),
+		PageLimit:   int32(q.Limit),
+	}
+	if q.DateFrom != nil {
+		params.DateFrom = pgtype.Timestamptz{Time: *q.DateFrom, Valid: true}
+	}
+	if q.DateTo != nil {
+		params.DateTo = pgtype.Timestamptz{Time: *q.DateTo, Valid: true}
+	}
+
+	rows, err := postgres.New(s.db).ListActionJournalAfter(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("list action journal after: %w", err)
+	}
+	slices.Reverse(rows)
+
+	out := make([]domain.FeedEntry, len(rows))
+	for i, row := range rows {
+		// Оба запроса читают одни и те же колонки — конвертация рядов
+		// безпотерьна, маппинг общий.
+		entry, err := feedEntryOf(postgres.ListActionJournalRow(row))
 		if err != nil {
 			return nil, err
 		}

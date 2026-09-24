@@ -598,8 +598,10 @@ type Querier interface {
 	// Курсор двусторонний по ключу (created_at, id): before_ts/before_id —
 	// страница СТАРШЕ ключа (скролл вверх), after_ts/after_id — страница МОЛОЖЕ
 	// (prepend новых); аргументы пары ходят вместе, NULL — нет курсора. Порядок
-	// строк всегда (created_at DESC, id DESC) — переименование объекта не может
-	// увести строку из окна (канон #597).
+	// DESC-запроса — (created_at DESC, id DESC); after-нога читается отдельным
+	// ASC-запросом (ListActionJournalAfter), адаптер разворачивает её страницу
+	// обратно — на проводе порядок строк всегда (created_at DESC, id DESC), и
+	// переименование объекта не может увести строку из окна (канон #597).
 	//
 	// Фильтры: csv-списки ('' = фильтра нет), период по created_at (верхняя
 	// граница исключающая — экран считает датой+24ч), поиск — всегда-OR
@@ -614,6 +616,18 @@ type Querier interface {
 	// (actor_id IS NULL) под фильтр actor_ids не попадают.
 	//
 	ListActionJournal(ctx context.Context, arg ListActionJournalParams) ([]ListActionJournalRow, error)
+	// After-нога двустороннего курсора (prepend новых, «новые снизу» ленты):
+	// тот же скоуп, фильтры и поиск, что у ListActionJournal, окно «строго
+	// новее якоря» (after_ts/after_id) — но от якоря В СТОРОНУ НЕПРЕРЫВНОСТИ:
+	// (created_at ASC, id ASC) забирает старейшие строки окна, поэтому
+	// after-цепочка продолжает ленту от якоря вверх и всплеск новых записей
+	// больше страницы доносится целиком (контракт openapi «появившиеся записи
+	// не теряются») — DESC-порядок здесь взял бы из всплеска новейшие и отрезал
+	// старейший хвост. Один sqlc-запрос двух порядков не несёт; контрактный
+	// DESC страницы возвращает адаптер разворотом. Before-пару запрос не принимает:
+	// ноги курсора взаимоисключающие на сервисе.
+	//
+	ListActionJournalAfter(ctx context.Context, arg ListActionJournalAfterParams) ([]ListActionJournalAfterRow, error)
 	ListActiveMembersByPropertyOwner(ctx context.Context, ownerID pgtype.UUID) ([]PropertyMember, error)
 	// The recipient's shared-pool entries for slot accounting. Memberships on
 	// archived properties are excluded: an archived object does not occupy a
