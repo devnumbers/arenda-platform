@@ -22,8 +22,9 @@ var (
 
 // PaymentScanStore answers the payments scan's questions (#749, #776) over
 // the owning tables directly: the sweep targets' zones, the zone's due-day
-// operations, the zone's overdue ones, the upcoming boundaries' booking
-// lists, the boundary jobs' reloads and the properties' active members.
+// operations, the zone's reminder-day ones, the zone's overdue ones, the
+// upcoming boundaries' booking lists, the boundary jobs' reloads and the
+// properties' active members.
 // Read-only — the scan publishes through the pipeline, it writes nothing
 // here.
 type PaymentScanStore struct {
@@ -256,8 +257,8 @@ func (s *PaymentScanStore) GetScheduledReminderPayment(
 }
 
 // paymentScanTarget maps one scan row's fields to the application target.
-// The two sqlc legs (due, overdue) share the select shape but not the
-// generated row type, so the mapping travels by value.
+// The three sqlc legs (due, reminder, overdue) share the select shape but
+// not the generated row type, so the mapping travels by value.
 func paymentScanTarget(
 	paymentID pgtype.UUID, date pgtype.Date, title string, amountKopecks int64,
 	propertyID pgtype.UUID, propertyName, propertyAddress string, ownerID pgtype.UUID,

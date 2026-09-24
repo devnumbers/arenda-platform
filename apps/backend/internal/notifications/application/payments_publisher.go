@@ -15,9 +15,10 @@ import (
 // PaymentScheduleTarget is one upcoming boundary the payments scan books
 // (issue #776): the rule id, the operation date — the job args' identity —
 // and the boundary's instant in the owner's timezone, the job's ScheduledAt.
-// The due leg's instant is 00:00 of the operation date, the overdue leg's —
-// 00:00 of the day after (решение владельца 21.09.2026: все уведомления —
-// чётко по времени).
+// The due leg's instant is 00:00 of the operation date, the reminder leg's —
+// 00:00 of the operation date minus the rule's lead time (карта #822), the
+// overdue leg's — 00:00 of the day after (решение владельца 21.09.2026: все
+// уведомления — чётко по времени).
 type PaymentScheduleTarget struct {
 	PaymentID uuid.UUID
 	DueDate   time.Time
@@ -48,9 +49,9 @@ type PaymentScanTarget struct {
 }
 
 // PaymentScanSource is the payments scan's window into the payments context:
-// the due and the overdue targets of one zone and the property's active
-// members. Consumer-declared (CODING_STANDARDS), answered over the owning
-// tables by the notifications postgres adapter.
+// the due, the reminder and the overdue targets of one zone and the
+// property's active members. Consumer-declared (CODING_STANDARDS), answered
+// over the owning tables by the notifications postgres adapter.
 type PaymentScanSource interface {
 	// ListDueTargets lists the zone's planned operations dated exactly the
 	// zone's today (решение #737, тип №2: в день срока) on rules without the
@@ -148,12 +149,13 @@ type PaymentBoundaryDeliverer interface {
 //
 // The trigger has two mechanisms (issue #776, the tasks scan's canon of
 // #750): the hourly pass books the boundary jobs — the due leg's at 00:00 of
-// the operation date, the overdue leg's at 00:00 of the day after, each in
-// the owner's timezone — and the zone sweep stays the backstop for
-// everything the jobs missed (a pass delayed past a boundary, a booking
-// window not reached yet, the retrospective after a downtime). In the norm
-// the job wakes exactly at the boundary and the sweep's publication is
-// silent — the dedup key carries the idempotence, no sweep state does.
+// the operation date, the reminder leg's at 00:00 of the operation date
+// minus the rule's lead time (карта #822), the overdue leg's at 00:00 of the
+// day after, each in the owner's timezone — and the zone sweep stays the
+// backstop for everything the jobs missed (a pass delayed past a boundary, a
+// booking window not reached yet, the retrospective after a downtime). In
+// the norm the job wakes exactly at the boundary and the sweep's publication
+// is silent — the dedup key carries the idempotence, no sweep state does.
 //
 // The sweep mirrors the materialization ticks (ADR 0048 p.3): one today per
 // owner timezone, failures isolated per zone and per operation, and
@@ -178,7 +180,7 @@ func NewPaymentsPublisher(
 
 // RunZoneScans is the hourly sweep: book the upcoming boundaries' jobs
 // first — every hour counts down to their midnight — then sweep the zones,
-// publishing the zone's due targets then its overdue ones. Failures are
+// publishing the zone's due, reminder and overdue targets. Failures are
 // isolated — a broken booking, zone or operation does not stop the rest;
 // the joined error reports everything that failed.
 func (p *PaymentsPublisher) RunZoneScans(ctx context.Context, now time.Time) error {
