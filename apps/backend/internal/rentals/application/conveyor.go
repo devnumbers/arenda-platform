@@ -4,9 +4,9 @@ package application
 // cases. Every mutation of the context runs through the same ordering
 // invariants structurally (ADR 0053 §3, the payments discipline): the role
 // gate, the property row lock, the owner's today, the change step, its audit
-// entry in the same transaction and the payments tick after the change when
-// the step's verdict says the payment changed. Reads never tick and never
-// write.
+// entry and its action journal row (ADR 0061) in the same transaction, and
+// the payments tick after the change when the step's verdict says the
+// payment changed. Reads never tick and never write.
 
 import (
 	"context"
@@ -75,8 +75,9 @@ type mutationGates struct {
 // context. It runs, in one transaction and in this order: the role gate, the
 // property serialization lock (FOR UPDATE — ADR 0053 §3), the owner's today,
 // the load of the target rental (skipped for a zero rentalID), the change
-// step, its audit entry, and the payments tick when the step changed the
-// payment. After commit it returns the changed rental's id for the re-read.
+// step, its audit entry and its action journal row (ADR 0061) in the same
+// transaction, and the payments tick when the step changed the payment.
+// After commit it returns the changed rental's id for the re-read.
 func runRentalMutation(
 	g mutationGates,
 	ctx context.Context, actor, propertyID, rentalID uuid.UUID,

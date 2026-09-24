@@ -4,9 +4,9 @@ package application
 // cases. Every mutation of the context — rules and tasks alike — runs
 // through the same ordering invariants structurally (ADR 0051, mirroring
 // ADR 0049 §3): the role gate, the owner's ordered property-row set lock,
-// the owner's today, the change step, its audit entry in the same
-// transaction and the materialization tick after the change. Reads never
-// tick and never write.
+// the owner's today, the change step, its audit entry and its action
+// journal row (ADR 0061) in the same transaction, and the materialization
+// tick after the change. Reads never tick and never write.
 
 import (
 	"context"
@@ -90,8 +90,9 @@ type mutationGates struct {
 // order: the role gate, the owner-wide ordered property-row lock (the tick's
 // serialization point taken at the front — the deadlock-free global order,
 // #546), the owner's today, the load of the target rule (skipped for a zero
-// ruleID), the change step, its audit entry, and the materialization tick
-// when the step asked for it. After commit it returns the step's response,
+// ruleID), the change step, its audit entry and its action journal row
+// (ADR 0061) in the same transaction, and the materialization tick when the
+// step asked for it. After commit it returns the step's response,
 // post-commit-re-read applied.
 //
 // The owner-wide lock must be the transaction's first property lock: two

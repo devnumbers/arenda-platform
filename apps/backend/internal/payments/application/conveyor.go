@@ -4,8 +4,9 @@ package application
 // cases. Every mutation of the context — rules and operations alike — runs
 // through the same ordering invariants structurally (ADR 0049 §3): the role
 // gate, the property row lock, the owner's today, the change step, its audit
-// entry in the same transaction and the materialization tick after the
-// change. Reads never tick and never write.
+// entry and its action journal row (ADR 0061) in the same transaction, and
+// the materialization tick after the change. Reads never tick and never
+// write.
 
 import (
 	"context"
@@ -71,9 +72,10 @@ type mutationGates struct {
 // context — rules and operations alike. It runs, in one transaction and in
 // this order: the role gate, the property serialization lock (FOR UPDATE —
 // ADR 0049 §3), the owner's today, the load of the target rule (skipped for a
-// zero paymentID), the change step, its audit entry, and the materialization
-// tick when the step asked for it. After commit it returns the step's
-// response, post-commit-re-read applied.
+// zero paymentID), the change step, its audit entry and its action journal
+// row (ADR 0061) in the same transaction, and the materialization tick when
+// the step asked for it. After commit it returns the step's response,
+// post-commit-re-read applied.
 func runMutation[T any](
 	g mutationGates,
 	ctx context.Context, actor, propertyID, paymentID uuid.UUID,
