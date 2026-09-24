@@ -23,12 +23,17 @@ export function completedRentalsOf(items: ReadonlyArray<Rental>): ReadonlyArray<
   return items.filter((rental) => rental.status === 'completed');
 }
 
+/** Чем аренда кончилась: доменный факт завершения, для незавершённой —
+ * плановое окончание (оба nullable по типу). */
+function rentalEndDate(rental: Rental): IsoDate | null {
+  return rental.completedDate ?? rental.plannedEndDate;
+}
+
 /** Прожитые полные месяцы: от начала до фактической даты завершения;
  * та не задана (не бывает у завершённой, но тип nullable) — плановое
  * окончание, затем начало (ноль). */
 export function completedRentalMonths(rental: Rental): number {
-  const end: IsoDate = rental.completedDate ?? rental.plannedEndDate ?? rental.startDate;
-  return fullMonthsBetween(rental.startDate, end);
+  return fullMonthsBetween(rental.startDate, rentalEndDate(rental) ?? rental.startDate);
 }
 
 /** Заголовок карточки списка: срок в месяцах — «24 месяца»; неполный
@@ -50,8 +55,18 @@ export function pastRentalTitle(rental: Rental, paidOperationsCount: number): st
   return pastRentalCardTitle(rental);
 }
 
+/** Окончание на карточке — доменный факт завершения (решение F2 аудита
+ * #801): завершённая «кончилась» датой завершения, плановая остаётся
+ * видимой в «Условиях аренды» завершённой. Факта нет (тип nullable,
+ * живьём не бывает) — плановая; нет и её — «Не указано» (1550:94804). */
+function pastRentalEndDate(rental: Rental): string {
+  const end = rentalEndDate(rental);
+  return end === null ? 'Не указано' : formatDayMonthWithYear(end, rental.today);
+}
+
 /** Строки карточки списка (1302:52462): плата, начало, окончание —
- * сроки с годом; у бессрочной окончание «Не указано» (1550:94804). */
+ * формат списковых дат; окончание — фактическая дата завершения
+ * (F2 #801). */
 export function pastRentalRows(rental: Rental): ReadonlyArray<RentalTermsRow> {
   return [
     { label: 'Арендная плата', value: rentAmountPerMonth(rental.rentPayment.amountKopecks) },
@@ -61,10 +76,7 @@ export function pastRentalRows(rental: Rental): ReadonlyArray<RentalTermsRow> {
     },
     {
       label: 'Окончание аренды',
-      value:
-        rental.plannedEndDate === null
-          ? 'Не указано'
-          : formatDayMonthWithYear(rental.plannedEndDate, rental.today),
+      value: pastRentalEndDate(rental),
     },
   ];
 }

@@ -137,10 +137,25 @@ describe('pastRentalRows', () => {
     ]);
   });
 
-  it('бессрочная завершённая — окончание «Не указано»', () => {
+  it('окончание на карточке — фактическая дата завершения, не плановая (F2 аудита #801)', () => {
+    const rental = completedFixture({ completedDate: '2026-11-23' });
+    const rows = pastRentalRows(rental);
+    expect(rows[2]).toEqual({ label: 'Окончание аренды', value: '23 ноября, 2026' });
+  });
+
+  it('бессрочная завершённая — фактическая дата завершения', () => {
     const rental = completedFixture({ plannedEndDate: null });
     const rows = pastRentalRows(rental);
-    expect(rows[2]).toEqual({ label: 'Окончание аренды', value: 'Не указано' });
+    expect(rows[2]).toEqual({ label: 'Окончание аренды', value: '10 мая, 2028' });
+  });
+
+  it('без факта завершения (тип nullable, живьём не бывает) — плановая, затем «Не указано»', () => {
+    const planned = pastRentalRows(completedFixture({ completedDate: null }));
+    expect(planned[2]).toEqual({ label: 'Окончание аренды', value: '10 мая, 2028' });
+    const none = pastRentalRows(
+      completedFixture({ completedDate: null, plannedEndDate: null }),
+    );
+    expect(none[2]).toEqual({ label: 'Окончание аренды', value: 'Не указано' });
   });
 });
 
