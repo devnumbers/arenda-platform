@@ -6,7 +6,12 @@ import { Skeleton } from '@/shared/ui/design';
  * лейаута (макет 2157-56876) — плашка дня, шапка объекта, серые карточки
  * актёров со строками (§7 канона скелетонов). Пустое состояние — на самом
  * экране (макет 2050-158499: только серая строка «Действий не было», без
- * иллюстрации).
+ * иллюстрации). Скелетоны прибитых страниц — паритет их композиции
+ * (решение владельца 24.09): «Действия участника» — одна группа, «История
+ * объекта» и пара (#840/#841) — шапка-карточка объекта + одна группа без
+ * объектной секции; общий двухгрупповый остаётся только общей ленте —
+ * прежде он стоял на всех страницах и заполнял весь viewport, схлопываясь
+ * в короткую ленту.
  */
 
 const ROW_WIDTHS = ['w-11/12', 'w-2/3', 'w-3/4'] as const;
@@ -30,20 +35,46 @@ function HistoryFeedSkeletonActorCard({ rows }: { readonly rows: number }): JSX.
   );
 }
 
+/** Плашка дня скелетона. */
+function HistoryFeedSkeletonDayPill(): JSX.Element {
+  return (
+    <div className="mb-3 flex justify-center">
+      <Skeleton className="h-[31px] w-28 rounded-pill" />
+    </div>
+  );
+}
+
+/** Шапка объекта внутри группы скелетона (общая лента и «Действия
+ * участника»: аватар 24 + название + адрес). */
+function HistoryFeedSkeletonObjectHeader(): JSX.Element {
+  return (
+    <div className="flex items-center gap-2">
+      <Skeleton className="h-6 w-6 shrink-0 rounded-pill" />
+      <div className="min-w-0">
+        <Skeleton className="h-[15px] w-36" />
+        <Skeleton className="mt-1 h-[15px] w-24" />
+      </div>
+    </div>
+  );
+}
+
+/** Шапка-карточка прибитого объекта скелетона («История объекта» и пара,
+ * #840/#841): то же содержимое объектной шапки, но над всей лентой —
+ * зеркало PinnedPropertyHeader. */
+function HistoryFeedSkeletonPinnedProperty(): JSX.Element {
+  return (
+    <div aria-hidden className="mb-3 flex min-w-0 items-center gap-2">
+      <HistoryFeedSkeletonObjectHeader />
+    </div>
+  );
+}
+
 function HistoryFeedSkeletonGroup(): JSX.Element {
   return (
     <div aria-hidden>
-      <div className="mb-3 flex justify-center">
-        <Skeleton className="h-[31px] w-28 rounded-pill" />
-      </div>
+      <HistoryFeedSkeletonDayPill />
       <div className="flex flex-col gap-3">
-        <div className="flex items-center gap-2">
-          <Skeleton className="h-6 w-6 shrink-0 rounded-pill" />
-          <div className="min-w-0">
-            <Skeleton className="h-[15px] w-36" />
-            <Skeleton className="mt-1 h-[15px] w-24" />
-          </div>
-        </div>
+        <HistoryFeedSkeletonObjectHeader />
         <div className="flex flex-col gap-1.5">
           <HistoryFeedSkeletonActorCard rows={3} />
           <HistoryFeedSkeletonActorCard rows={1} />
@@ -53,12 +84,47 @@ function HistoryFeedSkeletonGroup(): JSX.Element {
   );
 }
 
-/** Скелет ленты: две группы (плашка + шапка объекта + карточки актёров). */
+/** Скелет общей ленты: две группы (плашка + шапка объекта + карточки
+ * актёров) — лента по всем объектам реально длинная. */
 export function HistoryFeedSkeleton(): JSX.Element {
   return (
     <div aria-hidden className="pt-2">
       <HistoryFeedSkeletonGroup />
       <HistoryFeedSkeletonGroup />
+    </div>
+  );
+}
+
+/** Скелет «Действий участника» (#712): одна группа — в пределах одного
+ * человека день даёт одну-две объектные секции, двухгрупповый общий
+ * скелетон заполнял весь viewport и схлопывался (решение владельца
+ * 24.09). */
+export function HistoryMemberFeedSkeleton(): JSX.Element {
+  return (
+    <div aria-hidden className="pt-2">
+      <HistoryFeedSkeletonDayPill />
+      <div className="flex flex-col gap-3">
+        <HistoryFeedSkeletonObjectHeader />
+        <div className="flex flex-col gap-1.5">
+          <HistoryFeedSkeletonActorCard rows={3} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Скелет «Истории объекта» (#840) и «Действий участника в объекте»
+ * (#841): шапка-карточка прибитого объекта над лентой + одна группа без
+ * объектной секции — внутри объекта дни открываются сразу карточками
+ * актёров. */
+export function HistoryPropertyFeedSkeleton(): JSX.Element {
+  return (
+    <div aria-hidden className="pt-2">
+      <HistoryFeedSkeletonPinnedProperty />
+      <HistoryFeedSkeletonDayPill />
+      <div className="flex flex-col gap-1.5">
+        <HistoryFeedSkeletonActorCard rows={3} />
+      </div>
     </div>
   );
 }

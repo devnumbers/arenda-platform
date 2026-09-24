@@ -1,7 +1,7 @@
 import { Suspense } from 'react';
 import type { JSX } from 'react';
 import type { Metadata } from 'next';
-import { HistoryFeedScreen, HistoryFeedSkeleton } from '@/widgets/history';
+import { HistoryFeedScreen, HistoryMemberFeedSkeleton } from '@/widgets/history';
 
 /** «Действия участника» (карта #704, тикет #712): та же лента «Истории
  * действий», прибитая к одному человеку — actor_ids = один uuid юзера
@@ -27,7 +27,7 @@ export default async function HistoryParticipantRoutePage({
   const { participantId } = await params;
 
   return (
-    <Suspense fallback={<HistoryFeedSkeleton />}>
+    <Suspense fallback={<HistoryMemberFeedSkeleton />}>
       <HistoryFeedScreen participantId={participantId} />
     </Suspense>
   );

@@ -1,7 +1,7 @@
 import { Suspense } from 'react';
 import type { JSX } from 'react';
 import type { Metadata } from 'next';
-import { HistoryFeedScreen, HistoryFeedSkeleton } from '@/widgets/history';
+import { HistoryFeedScreen, HistoryPropertyFeedSkeleton } from '@/widgets/history';
 
 /** «История объекта» (карта #838, тикет #840): та же лента «Истории
  * действий», прибитая к одному объекту — property_ids = один uuid
@@ -28,7 +28,7 @@ export default async function HistoryPropertyRoutePage({
   const { propertyId } = await params;
 
   return (
-    <Suspense fallback={<HistoryFeedSkeleton />}>
+    <Suspense fallback={<HistoryPropertyFeedSkeleton />}>
       <HistoryFeedScreen propertyId={propertyId} />
     </Suspense>
   );

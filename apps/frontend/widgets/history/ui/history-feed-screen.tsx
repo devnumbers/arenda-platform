@@ -37,7 +37,11 @@ import {
 } from '@/shared/ui/design';
 import { ROUTES } from '@/shared/config/routes';
 import { HistoryRow } from './history-row';
-import { HistoryFeedSkeleton } from './history-states';
+import {
+  HistoryFeedSkeleton,
+  HistoryMemberFeedSkeleton,
+  HistoryPropertyFeedSkeleton,
+} from './history-states';
 import { HistoryFiltersSheet } from './history-filters-sheet';
 
 /** Задержка дебаунса поиска (мс) — канон поисков (#601). */
@@ -338,7 +342,16 @@ export function HistoryFeedScreen({
             Ничего не найдено
           </p>
         ) : feedQuery.isPending ? (
-          <HistoryFeedSkeleton />
+          /* Скелетон — паритет композиции страницы (решение владельца
+            * 24.09): прибитым страницам — их короткий скелетон, общий
+            * двухгрупповый остаётся только общей ленте (§7). */
+          isPropertyPage ? (
+            <HistoryPropertyFeedSkeleton />
+          ) : isMemberPage ? (
+            <HistoryMemberFeedSkeleton />
+          ) : (
+            <HistoryFeedSkeleton />
+          )
         ) : feedQuery.isError ? (
           <ErrorCard title="Не удалось загрузить историю" onRetry={() => void feedQuery.refetch()} className="mt-6" />
         ) : entries.length === 0 ? (
