@@ -18,6 +18,7 @@ const FULL_DRAFT: RentalWizardDraft = {
   amountKopecks: 5600000,
   paymentDay: 10,
   autoPay: false,
+  reminderOffsetDays: 3,
   startDate: '2026-09-10',
   plannedEndDate: '2027-09-09',
   utilities: 'full_receipt',
@@ -156,10 +157,11 @@ describe('buildRentalCreateCommand', () => {
       commissionKopecks: 500000,
       contactId: '0198c7a2-0000-7000-8000-000000000003',
       autoPay: false,
+      reminderOffsetDays: 3,
     });
   });
 
-  it('незаданные необязательные поля уходят null, автоплатёж — дефолт false', () => {
+  it('незаданные необязательные поля уходят null; напоминание — дефолт «За 1 день» (решение #823)', () => {
     expect(
       buildRentalCreateCommand(
         { amountKopecks: 5600000, paymentDay: 'last', startDate: TODAY },
@@ -175,7 +177,17 @@ describe('buildRentalCreateCommand', () => {
       commissionKopecks: null,
       contactId: null,
       autoPay: false,
+      reminderOffsetDays: 1,
     });
+  });
+
+  it('выбранное напоминание протекает в команду (аренда → платёж 1:1)', () => {
+    expect(
+      buildRentalCreateCommand(
+        { amountKopecks: 5600000, paymentDay: 10, startDate: TODAY, reminderOffsetDays: 7 },
+        TODAY,
+      )?.reminderOffsetDays,
+    ).toBe(7);
   });
 
   it('недостроенный черновик команды не даёт', () => {

@@ -12,6 +12,11 @@ export type IsoDate = string;
 export type PaymentType = 'income' | 'expense';
 export type PaymentForm = 'transfer' | 'cash';
 
+/** За сколько дней предупреждать о вхождении («Напоминание о платеже»,
+ * карта #822): контракт 1|3|7, не задан — напоминаний нет. Напоминание
+ * живёт независимо от autoPay. */
+export type PaymentReminderOffset = 1 | 3 | 7;
+
 /** Статус вхождения; `overdue` — серверная проекция planned с прошедшей датой. */
 export type PaymentOperationStatus = 'planned' | 'paid' | 'overdue';
 
@@ -55,6 +60,8 @@ export type Payment = {
   readonly since: IsoDate;
   /** Окончание действия; не задано — бессрочный. */
   readonly endDate?: IsoDate;
+  /** Напоминание «за N дней»; не задано — напоминаний нет (карта #822). */
+  readonly reminderOffsetDays?: PaymentReminderOffset;
   readonly autoPay: boolean;
   readonly paymentForm: PaymentForm;
   readonly category: PaymentCategoryView;
@@ -103,6 +110,8 @@ export type PaymentCreateCommand = {
   readonly paymentForm: PaymentForm;
   readonly categorySlug: string;
   readonly endDate?: IsoDate;
+  /** Напоминание «за N дней»; не выбрано — поле не передаётся (карта #822). */
+  readonly reminderOffsetDays?: PaymentReminderOffset;
   readonly autoPay?: boolean;
 };
 

@@ -2,7 +2,14 @@
 
 import type { Dispatch, SetStateAction } from 'react';
 import { clearDraftStorage, useDraftStore } from '@/shared/lib/hooks/useDraftStore';
-import type { IsoDate, PaymentForm, PaymentType, Recurrence } from '@/entities/payment';
+import { PAYMENT_REMINDER_OPTIONS } from '@/entities/payment';
+import type {
+  IsoDate,
+  PaymentForm,
+  PaymentReminderOffset,
+  PaymentType,
+  Recurrence,
+} from '@/entities/payment';
 
 /**
  * Черновик визарда создания платежа (спека #453, история 10): переживает
@@ -27,6 +34,8 @@ export type PaymentWizardDraft = {
   readonly recurrence?: Recurrence;
   /** Окончание платежа (шаг 4). */
   readonly endDate?: IsoDate;
+  /** Напоминание «за N дней» (шаг 4, ручная ветка; карта #822). */
+  readonly reminderOffsetDays?: PaymentReminderOffset;
   /** Сумма в копейках, целая положительная (шаг 5). */
   readonly amountKopecks?: number;
   /** Форма оплаты: перевод/наличные (шаг 5). */
@@ -95,6 +104,7 @@ export function hasPaymentWizardDraftFields(draft: PaymentWizardDraft): boolean 
     || draft.title !== undefined
     || draft.recurrence !== undefined
     || draft.endDate !== undefined
+    || draft.reminderOffsetDays !== undefined
     || draft.amountKopecks !== undefined
     || draft.paymentForm !== undefined
   );
@@ -186,6 +196,16 @@ export function validatePaymentWizardDraft(parsed: unknown): PaymentWizardDraft 
 
   const endDate = typeof record.endDate === 'string' && record.endDate.length > 0 ? record.endDate : undefined;
 
+  // Напоминание — контрактный оффсет из того же кортежа, что и пикер.
+  const isReminderOffset = (value: unknown): value is PaymentReminderOffset =>
+    PAYMENT_REMINDER_OPTIONS.some((option) => option.offset === value);
+  if (record.reminderOffsetDays !== undefined && !isReminderOffset(record.reminderOffsetDays)) {
+    return DEFAULT_DRAFT;
+  }
+  const reminderOffsetDays = isReminderOffset(record.reminderOffsetDays)
+    ? record.reminderOffsetDays
+    : undefined;
+
   const amountKopecks = isPositiveInt(record.amountKopecks) ? record.amountKopecks : undefined;
   if (record.amountKopecks !== undefined && amountKopecks === undefined) return DEFAULT_DRAFT;
 
@@ -203,6 +223,7 @@ export function validatePaymentWizardDraft(parsed: unknown): PaymentWizardDraft 
     ...(title !== undefined && { title }),
     ...(recurrence !== undefined && { recurrence }),
     ...(endDate !== undefined && { endDate }),
+    ...(reminderOffsetDays !== undefined && { reminderOffsetDays }),
     ...(amountKopecks !== undefined && { amountKopecks }),
     ...(paymentForm !== undefined && { paymentForm }),
     ...(updatedAt !== undefined && { updatedAt }),

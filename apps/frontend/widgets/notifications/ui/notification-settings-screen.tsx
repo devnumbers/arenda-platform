@@ -49,8 +49,10 @@ const GROUP_DESCRIPTIONS: Record<NotificationSettingsCategory, string> = {
  * Пуш-флоу «Разрешите пуши»: включение пуш-тумблера без разрешения браузера
  * открывает шит (2329-151632), мастер включён без разрешения — inline-карту
  * под мастером (2329-150165); после разрешения пуш включён (2329-151164).
- * Мастер выключен — пуш-тумблеры групп затемнены (2333-180696), значения
- * хранятся. Браузер без Web Push — пуш-колонка не рендерится.
+ * Мастер выключен глушит только доставку: тумблеры категорий кликабельны
+ * и хранят значения — макет 2333-180696 показывает включённый пуш-тумблер
+ * под выключенным мастером (сверка #827). Браузер без Web Push —
+ * пуш-колонка не рендерится.
  */
 export function NotificationSettingsScreen(): JSX.Element {
   const { refresh, ...pushStatus } = usePushSubscriptionStatus();
@@ -243,11 +245,11 @@ export function NotificationSettingsScreen(): JSX.Element {
         </div>
       ) : (
         NOTIFICATION_SETTINGS_CATEGORIES.map((category) => (
-          <section key={category} className="mt-7">
-            <h2 className="m-0 text-[26px] font-semibold leading-8 text-content">
+          <section key={category} className="mt-6">
+            <h2 className="m-0 text-2xl font-semibold leading-8 text-content">
               {notificationCategoryLabel(category)}
             </h2>
-            <p className="mb-2 mt-1 text-sm leading-[18px] text-content-tertiary">
+            <p className="mb-3 mt-2 text-base leading-[18px] text-content-secondary">
               {GROUP_DESCRIPTIONS[category]}
             </p>
 
@@ -266,13 +268,7 @@ export function NotificationSettingsScreen(): JSX.Element {
             </div>
 
             {display.visible && (
-              <div
-                className={
-                  display.categoriesInteractive
-                    ? 'flex items-center justify-between py-3'
-                    : 'flex items-center justify-between py-3 opacity-50'
-                }
-              >
+              <div className="flex items-center justify-between py-3">
                 <span className="text-base text-content">Пуш-уведомления</span>
                 {pushLoading ? (
                   <Skeleton className="h-7 w-16 rounded-pill" />
@@ -280,7 +276,6 @@ export function NotificationSettingsScreen(): JSX.Element {
                   <Switch
                     checked={display.categories[category]}
                     onCheckedChange={(value) => togglePushCategory(category, value)}
-                    disabled={!display.categoriesInteractive}
                     aria-label={`Пуш-уведомления — ${notificationCategoryLabel(category)}`}
                   />
                 )}

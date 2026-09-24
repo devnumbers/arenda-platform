@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import type { ReactNode } from 'react';
-import type { JSX } from 'react';
+import type { ComponentPropsWithRef, JSX, ReactNode } from 'react';
 import { ArrowLeft, Cancel, SmallArrowDown } from '@/shared/assets/icons';
 import type { RentalPaymentDay, RentalUtilities } from '@/entities/rental';
 import { cn } from '@/shared/lib/cn';
@@ -82,7 +81,9 @@ export function FieldTitle({
 /** Триггер-бокс поля-пикера (анатомия «Input Field» из макета 1270:46821):
  * заголовок над боксом 56px, значение или плейсхолдер слева, хвостовая
  * иконка справа — канон IconButton primary (круг, hover-подложка на
- * ховере бокса). Открывает пикер-поверхность снаружи (onClick). */
+ * ховере бокса). Открывает пикер-поверхность снаружи (onClick). Бокс
+ * работает и триггером PickerMenu (asChild): остальные пропсы кнопки —
+ * обработчики/aria/ref от Radix — прокидываются на внутреннюю <button>. */
 export function PickerTriggerBox({
   title,
   required = false,
@@ -92,6 +93,7 @@ export function PickerTriggerBox({
   onClick,
   error,
   className,
+  ...rest
 }: {
   readonly title: string;
   readonly required?: boolean;
@@ -102,7 +104,10 @@ export function PickerTriggerBox({
   readonly onClick: () => void;
   readonly error?: string;
   readonly className?: string;
-}): JSX.Element {
+} & Omit<
+  ComponentPropsWithRef<'button'>,
+  'title' | 'type' | 'onClick' | 'className' | 'aria-label'
+>): JSX.Element {
   return (
     <div className={cn('flex w-full flex-col gap-2 font-sans', className)}>
       <FieldTitle title={title} required={required} />
@@ -111,6 +116,7 @@ export function PickerTriggerBox({
         onClick={onClick}
         aria-label={`${title}: ${value ?? placeholder}`}
         className="group/trigger flex h-14 w-full cursor-pointer items-center rounded-button bg-surface-muted py-0 pl-[18px] pr-2 text-left transition-shadow outline-none hover:shadow-[inset_0_0_0_2px_var(--dl-input-border)]"
+        {...rest}
       >
         <span
           className={cn(
@@ -285,8 +291,7 @@ export function PaymentDayPicker({
 }
 
 /** Поле режима коммунальных платежей (общее для шага условий #530 и правки
- * #532): триггер-бокс + PickerMenu (меню на десктопе, шит на мобиле —
- * канон выбора одной опции, выбор применяется сразу). */
+ * #532) на общем PickerSelectField. */
 export function UtilitiesPickerField({
   value,
   onChange,
@@ -294,39 +299,49 @@ export function UtilitiesPickerField({
   readonly value: RentalUtilities;
   readonly onChange: (utilities: RentalUtilities) => void;
 }): JSX.Element {
-  const groups: ReadonlyArray<PickerMenuGroup> = [
-    {
-      options: UTILITIES_OPTIONS.map((option) => ({
-        label: option.label,
-        selected: value === option.value,
-        onSelect: () => onChange(option.value),
-      })),
-    },
-  ];
-
   return (
-    <div className="flex w-full flex-col gap-2 font-sans">
-      <FieldTitle title="Коммунальные платежи" />
-      <PickerMenu title="Коммунальные платежи" groups={groups}>
-        <button
-          type="button"
-          aria-label={`Коммунальные платежи: ${utilitiesLabel(value)}`}
-          className="group/trigger flex h-14 w-full cursor-pointer items-center rounded-button bg-surface-muted py-0 pl-[18px] pr-2 text-left transition-shadow outline-none hover:shadow-[inset_0_0_0_2px_var(--dl-input-border)]"
-        >
-          <span className="min-w-0 flex-1 truncate text-base leading-[18px] text-content">
-            {utilitiesLabel(value)}
-          </span>
-          {/* Хвостовая иконка — IconButton-primary-анатомия (круг 44 с
-              hover-подложкой), как у триггеров дат. */}
-          <span
-            aria-hidden
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-content transition-colors group-hover/trigger:bg-surface-muted group-active/trigger:bg-surface-muted-hover"
-          >
-            <SmallArrowDown className="h-6 w-6" />
-          </span>
-        </button>
-      </PickerMenu>
-    </div>
+    <PickerSelectField
+      title="Коммунальные платежи"
+      valueLabel={utilitiesLabel(value)}
+      groups={[
+        {
+          options: UTILITIES_OPTIONS.map((option) => ({
+            label: option.label,
+            selected: value === option.value,
+            onSelect: () => onChange(option.value),
+          })),
+        },
+      ]}
+    />
+  );
+}
+
+/** Поле-селект одной опции — общая анатомия «Input Field» макета
+ * (1270:46821): заголовок над триггер-боксом 56px с выбранной меткой и
+ * шевроном; тап открывает канонный PickerMenu (меню на десктопе, шит на
+ * мобиле), выбор применяется сразу. Общее для коммуналки (#530/#532) и
+ * «За сколько напоминать» (#826). Собрано на общем PickerTriggerBox —
+ * обёртку и заголовок поля рисует он сам. */
+export function PickerSelectField({
+  title,
+  valueLabel,
+  groups,
+}: {
+  readonly title: string;
+  /** Метка выбранной опции в триггере. */
+  readonly valueLabel: string;
+  readonly groups: ReadonlyArray<PickerMenuGroup>;
+}): JSX.Element {
+  return (
+    <PickerMenu title={title} groups={groups}>
+      <PickerTriggerBox
+        title={title}
+        value={valueLabel}
+        placeholder={valueLabel}
+        icon={<SmallArrowDown className="h-6 w-6" />}
+        onClick={() => {}}
+      />
+    </PickerMenu>
   );
 }
 

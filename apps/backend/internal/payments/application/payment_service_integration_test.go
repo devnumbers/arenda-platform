@@ -541,3 +541,96 @@ func TestOperationSearch_FiltersByTitle(t *testing.T) {
 		t.Fatalf("search with '_' matched %d operations, want 0", len(got))
 	}
 }
+
+// readReminderOffset loads the rule and returns its reminder lead time.
+func readReminderOffset(t *testing.T, h *paymentsHarness, paymentID uuid.UUID) *int {
+	t.Helper()
+	payment, err := h.svc.GetPayment(h.ctx(), h.owner, h.propID, paymentID)
+	if err != nil {
+		t.Fatalf("get payment: %v", err)
+	}
+	return payment.ReminderOffsetDays
+}
+
+// assertReminderReadBack fails unless the stored lead time equals want.
+func assertReminderReadBack(t *testing.T, h *paymentsHarness, paymentID uuid.UUID, want *int) {
+	t.Helper()
+	got := readReminderOffset(t, h, paymentID)
+	switch {
+	case want == nil && got != nil:
+		t.Fatalf("reminder offset = %v, want nil", got)
+	case want != nil && (got == nil || *got != *want):
+		t.Fatalf("reminder offset = %v, want %d", got, *want)
+	}
+}
+
+// patchReminderSet applies the set/clear patch: value nil = явный null
+// (отключить напоминания).
+func patchReminderSet(t *testing.T, h *paymentsHarness, paymentID uuid.UUID, value *int) {
+	t.Helper()
+	if _, err := h.svc.UpdatePayment(h.ctx(), h.owner, h.propID, paymentID, paymentsapp.UpdatePaymentCommand{
+		ReminderOffsetDays: &paymentsapp.ReminderOffsetUpdate{Value: value},
+	}); err != nil {
+		t.Fatalf("patch reminder offset: %v", err)
+	}
+}
+
+// TestPaymentReminderOffset_Lifecycle goes the reminder field (карта #822,
+// #824) through its whole contract: create persists it, reads carry it, the
+// patch sets / clears it tri-state and omitting it changes nothing.
+func TestPaymentReminderOffset_Lifecycle(t *testing.T) {
+	t.Parallel()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+
+	offset := 3
+	created, err := h.svc.CreatePayment(h.ctx(), h.owner, h.propID, func() paymentsapp.CreatePaymentCommand {
+		cmd := h.createCmd()
+		cmd.ReminderOffsetDays = &offset
+		return cmd
+	}())
+	if err != nil {
+		t.Fatalf("create payment with reminder: %v", err)
+	}
+	three := 3
+	if created.ReminderOffsetDays == nil || *created.ReminderOffsetDays != three {
+		t.Fatalf("created reminder offset = %v, want 3", created.ReminderOffsetDays)
+	}
+	assertReminderReadBack(t, h, created.ID, &three)
+	listed, err := h.svc.ListPayments(h.ctx(), h.owner, h.propID, "")
+	if err != nil {
+		t.Fatalf("list payments: %v", err)
+	}
+	if len(listed) != 1 || listed[0].ReminderOffsetDays == nil || *listed[0].ReminderOffsetDays != three {
+		t.Fatalf("list reminder offset = %v, want 3", listed)
+	}
+
+	// Omit — the field stays.
+	if _, err := h.svc.UpdatePayment(h.ctx(), h.owner, h.propID, created.ID, paymentsapp.UpdatePaymentCommand{}); err != nil {
+		t.Fatalf("update without changes: %v", err)
+	}
+	assertReminderReadBack(t, h, created.ID, &three)
+
+	// A set value applies; the explicit null clears.
+	seven := 7
+	patchReminderSet(t, h, created.ID, &seven)
+	assertReminderReadBack(t, h, created.ID, &seven)
+	patchReminderSet(t, h, created.ID, nil)
+	assertReminderReadBack(t, h, created.ID, nil)
+}
+
+// TestCreatePayment_RejectsBadReminderOffset: the reminder contract is the
+// domain validator's — only nil or 1/3/7 pass the service seam too.
+func TestCreatePayment_RejectsBadReminderOffset(t *testing.T) {
+	t.Parallel()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+
+	bad := 2
+	_, err := h.svc.CreatePayment(h.ctx(), h.owner, h.propID, func() paymentsapp.CreatePaymentCommand {
+		cmd := h.createCmd()
+		cmd.ReminderOffsetDays = &bad
+		return cmd
+	}())
+	if !errors.Is(err, paymentsapp.ErrInvalidInput) {
+		t.Fatalf("create with reminder offset 2 = %v, want ErrInvalidInput", err)
+	}
+}

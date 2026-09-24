@@ -6263,6 +6263,14 @@ components:
         autoPay:
           type: boolean
           default: false
+        reminderOffsetDays:
+          type: integer
+          nullable: true
+          enum: [1, 3, 7]
+          description: >-
+            За сколько дней предупреждать о вхождении («Напоминание о
+            платеже», карта #822): 1, 3 или 7. Null/omitted — напоминаний нет
+            (выбор опционален). Напоминание живёт независимо от autoPay.
 
     PaymentUpdateRequest:
       description: >-
@@ -6294,8 +6302,19 @@ components:
           type: string
           format: date
           nullable: true
+          description: >
+            Tri-state: omitted keeps the value, null clears it (open-ended),
+            a date sets it.
         autoPay:
           type: boolean
+        reminderOffsetDays:
+          type: integer
+          nullable: true
+          enum: [1, 3, 7]
+          description: >
+            Tri-state lead time of the payment reminder («Напоминание о
+            платеже»): omitted keeps the current value, null turns reminders
+            off, 1/3/7 sets the lead time.
 
     CategoryView:
       description: >-
@@ -6364,6 +6383,13 @@ components:
           enum: [transfer, cash]
         category:
           $ref: '#/components/schemas/CategoryView'
+        reminderOffsetDays:
+          type: integer
+          nullable: true
+          enum: [1, 3, 7]
+          description: >-
+            The payment reminder's lead time in days (карта #822); null —
+            напоминаний нет. Живёт независимо от autoPay.
         isFavorite:
           type: boolean
           description: The rule's favorite star (PUT favorite); returned in the reads and the lists.
@@ -7681,6 +7707,15 @@ components:
           maxLength: 2000
         autoPay:
           type: boolean
+        reminderOffsetDays:
+          type: integer
+          nullable: true
+          enum: [1, 3, 7]
+          description: >-
+            За сколько дней предупреждать о платеже арендной платы
+            («Напоминание о платеже», карта #822): 1, 3 или 7. Null/omitted —
+            напоминаний нет. Аренда ставит его вместе с автоплатежом; по
+            макетам дефолт выбора на экране — «За 1 день» (решение #823).
 
     RentalUpdateRequest:
       description: >-
@@ -7827,6 +7862,13 @@ components:
           $ref: '#/components/schemas/RentalPaymentDay'
         autoPay:
           type: boolean
+        reminderOffsetDays:
+          type: integer
+          nullable: true
+          enum: [1, 3, 7]
+          description: >-
+            Lead time of the managed payment's reminder (карта #822); null —
+            напоминаний нет.
         nextPayment:
           $ref: '#/components/schemas/RentalNextPayment'
           nullable: true

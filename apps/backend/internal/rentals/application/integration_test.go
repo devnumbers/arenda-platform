@@ -98,7 +98,7 @@ func (g *fakeSeamGateway) RentPaymentState(
 func (g *fakeSeamGateway) NextPlannedOccurrence(
 	context.Context, uuid.UUID, uuid.UUID, uuid.UUID, time.Time,
 ) (*rentalsapp.PlannedOccurrence, error) {
-	return nil, nil //nolint:nilnil // nil — будущего вхождения нет, не ошибка.
+	return nil, nil // Будущего вхождения нет — это nil, не ошибка (ADR 0053 §2; исключение nilnil — в .golangci.yml).
 }
 
 func (g *fakeSeamGateway) CountPaidOperations(
@@ -262,6 +262,38 @@ func TestRentalsIntegration_CreatePersistsAndAudits(t *testing.T) {
 	// The second unfinished rental on the property is the honest 409.
 	_, err := h.svc.CreateRental(context.Background(), h.owner, h.propID, h.createCmd())
 	assert.ErrorIs(t, err, rentalsapp.ErrPropertyOccupied)
+}
+
+// TestRentalsIntegration_ReminderOffsetFlowsToSeed (карта #822, #824): the
+// reminder rides the create command into the managed payment's seed, and a
+// bad lead time is the shared invalid-input outcome.
+func TestRentalsIntegration_ReminderOffsetFlowsToSeed(t *testing.T) {
+	t.Parallel()
+	h := newRentalsHarness(t)
+	h.seedOwner()
+
+	cmd := h.createCmd()
+	cmd.AutoPay = true
+	reminder := 1
+	cmd.ReminderOffsetDays = &reminder
+	view, err := h.svc.CreateRental(context.Background(), h.owner, h.propID, cmd)
+	require.NoError(t, err)
+
+	require.Len(t, h.gateway.created, 1)
+	seed := h.gateway.created[0]
+	require.NotNil(t, seed.ReminderOffsetDays)
+	assert.Equal(t, 1, *seed.ReminderOffsetDays)
+
+	// The fake seam answers no reminder — the view renders null.
+	assert.Nil(t, view.Payment.ReminderOffsetDays)
+
+	bad := 5
+	_, err = h.svc.CreateRental(context.Background(), h.owner, h.propID, func() rentalsapp.CreateRentalCommand {
+		c := h.createCmd()
+		c.ReminderOffsetDays = &bad
+		return c
+	}())
+	assert.ErrorIs(t, err, rentalsapp.ErrInvalidInput)
 }
 
 func TestRentalsIntegration_ListOrdering(t *testing.T) {

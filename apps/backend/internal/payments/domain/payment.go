@@ -118,6 +118,12 @@ type Payment struct {
 	// EndDate optionally stops generation; nil means open-ended.
 	EndDate *time.Time
 	AutoPay bool
+	// ReminderOffsetDays is how many days ahead of an occurrence the
+	// «Напоминание о платеже» fires: 1, 3 or 7; nil means no reminders. The
+	// notification lives independently of AutoPay — an auto-pay rule with a
+	// reminder still warns (решение владельца, карта #822); the reminders
+	// publisher reads it (notifications/CONTEXT.md).
+	ReminderOffsetDays *int
 	// PaymentForm is how the payment passes; operations snapshot it.
 	PaymentForm PaymentForm
 	Category    CategoryRef

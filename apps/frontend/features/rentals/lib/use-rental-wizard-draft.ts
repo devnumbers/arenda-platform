@@ -3,6 +3,7 @@
 import type { Dispatch, SetStateAction } from 'react';
 import { useDraftStore } from '@/shared/lib/hooks/useDraftStore';
 import type { IsoDate } from '@/shared/lib/calendar';
+import { PAYMENT_REMINDER_OPTIONS, type PaymentReminderOffset } from '@/entities/payment';
 import type { RentalPaymentDay, RentalUtilities } from '@/entities/rental';
 
 /**
@@ -20,6 +21,9 @@ export type RentalWizardDraft = {
   readonly paymentDay?: RentalPaymentDay;
   /** Автоплатёж Платежа арендной платы (шаг 3; отсутствие = выключен). */
   readonly autoPay?: boolean;
+  /** Лид-тайм напоминания о платеже (шаг 3, карта #822; отсутствие —
+   * дефолт «За 1 день» применяется при сборке команды). */
+  readonly reminderOffsetDays?: PaymentReminderOffset;
   /** Начало аренды — сегодня или позже (шаг 2). */
   readonly startDate?: IsoDate;
   /** Плановое окончание; отсутствие — бессрочная аренда (шаг 2). */
@@ -106,11 +110,16 @@ export function validateRentalWizardDraft(parsed: unknown): RentalWizardDraft {
     ? record.commissionKopecks
     : undefined;
   const contactId = isFilledString(record.contactId) ? record.contactId : undefined;
+  // Напоминание — контрактный оффсет из того же кортежа, что и селект.
+  const reminderOffsetDays = PAYMENT_REMINDER_OPTIONS.find(
+    (option) => option.offset === record.reminderOffsetDays,
+  )?.offset;
 
   return {
     ...(amountKopecks !== undefined && { amountKopecks }),
     ...(paymentDay !== undefined && { paymentDay }),
     ...(autoPay !== undefined && { autoPay }),
+    ...(reminderOffsetDays !== undefined && { reminderOffsetDays }),
     ...(startDate !== undefined && { startDate }),
     ...(plannedEndDate !== undefined && { plannedEndDate }),
     ...(utilities !== undefined && { utilities }),

@@ -14,6 +14,7 @@ describe('validateRentalWizardDraft', () => {
         depositKopecks: 0,
         commissionKopecks: 500000,
         contactId: '0198c7a2-0000-7000-8000-000000000003',
+        reminderOffsetDays: 7,
       }),
     ).toStrictEqual({
       amountKopecks: 5600000,
@@ -25,6 +26,7 @@ describe('validateRentalWizardDraft', () => {
       depositKopecks: 0,
       commissionKopecks: 500000,
       contactId: '0198c7a2-0000-7000-8000-000000000003',
+      reminderOffsetDays: 7,
     });
   });
 
@@ -54,6 +56,15 @@ describe('validateRentalWizardDraft', () => {
     expect(validateRentalWizardDraft({ paymentDay: 'десятое' })).toStrictEqual({});
     expect(validateRentalWizardDraft({ paymentDay: 0 })).toStrictEqual({});
     expect(validateRentalWizardDraft({ paymentDay: 1.5 })).toStrictEqual({});
+  });
+
+  it('напоминание — только контрактные оффсеты 1/3/7, прочие роняются', () => {
+    expect(validateRentalWizardDraft({ reminderOffsetDays: 3 })).toStrictEqual({
+      reminderOffsetDays: 3,
+    });
+    expect(validateRentalWizardDraft({ reminderOffsetDays: 5 })).toStrictEqual({});
+    expect(validateRentalWizardDraft({ reminderOffsetDays: 0 })).toStrictEqual({});
+    expect(validateRentalWizardDraft({ reminderOffsetDays: 'три' })).toStrictEqual({});
   });
 
   it('не-объект и массив роняют весь черновик', () => {

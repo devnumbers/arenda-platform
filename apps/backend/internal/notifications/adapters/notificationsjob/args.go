@@ -102,6 +102,20 @@ type PaymentOverdueArgs struct {
 // Kind identifies the job kind to River.
 func (PaymentOverdueArgs) Kind() string { return "notifications:payment_overdue" }
 
+// PaymentReminderArgs publishes one operation's «Напоминание о платеже» at
+// 00:00 of (operation date − lead time) in the owner's timezone (карта
+// #822, #824). The args are the job's dedup key, the same (rule, date) shape
+// as the other payment legs; a lead time changed after the booking sends the
+// stale job away quietly — the worker re-checks the rule's current lead time
+// at wake-up.
+type PaymentReminderArgs struct {
+	PaymentID uuid.UUID `json:"payment_id"`
+	DueDate   time.Time `json:"due_date"`
+}
+
+// Kind identifies the job kind to River.
+func (PaymentReminderArgs) Kind() string { return "notifications:payment_reminder" }
+
 // RentalCompletedArgs publishes one rental's «Аренда завершена» at 00:00 of
 // the day after its planned end in the owner's timezone (issue #777). The
 // args are the job's dedup key — the publication key's (rental, planned end)

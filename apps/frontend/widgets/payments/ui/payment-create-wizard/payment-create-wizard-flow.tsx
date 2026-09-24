@@ -36,7 +36,7 @@ import {
 import { paymentCategoryBySlug } from '@/features/payment-categories';
 import { AmountStep } from './amount-step';
 import { CategoryStep } from './category-step';
-import { EndDateStep } from './end-date-step';
+import { PaymentSettingsStep } from './payment-settings-step';
 import { BRANCH_PERIOD_LABELS, PeriodicityStep } from './periodicity-step';
 import { TitleStep } from './title-step';
 import {CategorySearchHint, WizardBottomBar, WizardHeading} from './wizard-chrome';
@@ -248,7 +248,12 @@ export function PaymentCreateWizardFlow({
         )}
         {step === 4 && (
           <>
-            <EndDateStep
+            <PaymentSettingsStep
+              draftType={draftType}
+              reminderOffsetDays={draft.reminderOffsetDays}
+              onReminderOffsetDaysChange={(reminderOffsetDays) =>
+                setDraft((prev) => ({ ...prev, reminderOffsetDays }))
+              }
               endDate={draft.endDate}
               onEndDateChange={(endDate) => setDraft((prev) => ({ ...prev, endDate }))}
               today={today}

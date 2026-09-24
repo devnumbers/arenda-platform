@@ -25,14 +25,11 @@ import (
 
 // RentalManager is the consumer-side port of these handlers (ADR 0035): the
 // rental use cases. The concrete application service satisfies it; the
-// handler tests run against func-backed fakes that mirror this method block
-// one to one — an accepted dupl, not a second contract.
-//
-//nolint:dupl // mirrored one to one by the func-backed test double.
+// handler tests run against func-backed fakes that back these methods one to
+// one — a test double, not a second contract.
 type RentalManager interface {
 	// The wire signatures are long — each use case wraps its command and view
-	// types; the block is mirrored one to one by the test double (dupl by
-	// design).
+	// types; the block is backed one to one by the test double.
 	CreateRental(
 		ctx context.Context, actor, propertyID uuid.UUID, cmd rentalsapp.CreateRentalCommand,
 	) (rentalsapp.RentalView, error)
@@ -384,6 +381,9 @@ func createRentalCommand(body openapi.RentalCreateRequest) (rentalsapp.CreateRen
 		Comment:        stringPtrFromWire(body.Comment),
 		AutoPay:        body.AutoPay,
 	}
+	if body.ReminderOffsetDays != nil {
+		cmd.ReminderOffsetDays = new(int(*body.ReminderOffsetDays))
+	}
 	if body.DepositKopecks != nil {
 		cmd.DepositKopecks = body.DepositKopecks
 	}
@@ -586,6 +586,10 @@ func rentalResponse(view rentalsapp.RentalView) (openapi.RentalResponse, error) 
 		PaymentDay:    paymentDay,
 		AutoPay:       view.Payment.AutoPay,
 		NextPayment:   nextPaymentToWire(view.NextPayment, view.Today),
+	}
+	if view.Payment.ReminderOffsetDays != nil {
+		offset := openapi.RentalPaymentViewReminderOffsetDays(*view.Payment.ReminderOffsetDays)
+		response.RentPayment.ReminderOffsetDays = &offset
 	}
 	return response, nil
 }

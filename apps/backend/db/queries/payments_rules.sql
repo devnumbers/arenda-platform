@@ -18,6 +18,7 @@ SELECT pay.id,
        pay.since,
        pay.end_date,
        pay.auto_pay,
+       pay.reminder_offset_days,
        pay.payment_form,
        pay.category_slug,
        pay.user_category_id,
@@ -43,6 +44,7 @@ SELECT pay.id,
        pay.since,
        pay.end_date,
        pay.auto_pay,
+       pay.reminder_offset_days,
        pay.payment_form,
        pay.category_slug,
        pay.user_category_id,
@@ -60,12 +62,13 @@ ORDER BY pay.created_at, pay.id;
 -- name: InsertPayment :exec
 -- ids and since are app-side (UUIDv7, the owner's today); recurrence is the
 -- domain-validated jsonb; the category arrives as a default-catalog slug in
--- this slice (user_category_id stays NULL).
+-- this slice (user_category_id stays NULL). reminder_offset_days is the
+-- nullable reminder lead time (карта #822; NULL = напоминаний нет).
 INSERT INTO payments (
     id, owner_id, property_id, type, title, amount_kopecks, recurrence,
-    since, end_date, auto_pay, payment_form, category_slug
+    since, end_date, auto_pay, reminder_offset_days, payment_form, category_slug
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
 
 -- name: UpdatePayment :exec
 -- Partial PATCH is resolved by the application layer; the statement always
@@ -78,8 +81,9 @@ SET type = $3,
     recurrence = $6,
     end_date = $7,
     auto_pay = $8,
-    payment_form = $9,
-    category_slug = $10
+    reminder_offset_days = $9,
+    payment_form = $10,
+    category_slug = $11
 WHERE id = $1 AND owner_id = $2;
 
 -- name: DeletePayment :execrows

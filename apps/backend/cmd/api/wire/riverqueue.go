@@ -147,6 +147,7 @@ func WireRiverQueue(
 	paymentDeliverer := &notificationsjob.DeferredPaymentBoundaryDeliverer{}
 	river.AddWorker(workers, notificationsjob.NewPaymentDueWorker(paymentDeliverer, p.Clock, p.Logger))
 	river.AddWorker(workers, notificationsjob.NewPaymentOverdueWorker(paymentDeliverer, p.Clock, p.Logger))
+	river.AddWorker(workers, notificationsjob.NewPaymentReminderWorker(paymentDeliverer, p.Clock, p.Logger))
 	rentalDeliverer := &notificationsjob.DeferredRentalBoundaryDeliverer{}
 	river.AddWorker(workers, notificationsjob.NewRentalCompletedWorker(rentalDeliverer, p.Clock, p.Logger))
 
