@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ArrowLeft, BoldUser, Search } from '@/shared/assets/icons';
 import { type HistoryFilterOptions, type HistoryObjectOption } from '@/entities/history';
 import type { HistoryActorGroup } from '@/features/history';
+import { useMe } from '@/features/auth';
 import { PropertyAvatar } from '@/entities/property';
 import {
   groupHistoryByDay,
@@ -70,10 +71,22 @@ const HEADER_LINK =
  * actor_id — тап ведёт на «Действия участника» (#712, ниже; решение
  * #709 о ссылке на страницу участника заменено: владельцы и своя шапка
  * тоже кликабельны — страница действий не читает участников, 404 не
- * бывает; обезличенные записи, actor_id null, не ссылки). Роль на экране
+ * бывает; обезличенные записи, actor_id null, не ссылки). Свой актор
+ * (actor_id = id сессии, useMe) подписан серым суффиксом «(Вы)» — канон
+ * шита фильтров, семантика «как в Telegram» (решение владельца 24.09):
+ * каждый зритель видит метку у себя; на кликабельность метка не влияет.
+ * Роль на экране
  * не показывается (как в макете) — словарь роли живёт в entity
- * (ADR 0061). Вход — хаб «Совместный доступ» (решение владельца 22.09),
- * фолбэк «Назад» — туда же.
+ * (ADR 0061). Вход — кебаб «Ваших участников» (#843, решение владельца
+ * 24.09), фолбэк «Назад» — туда же.
+ *
+ * Пока лента не заполняет вьюпорт, она прижата к нижнему краю — как
+ * свежее сообщение в мессенджере (решение владельца 24.09): при живых
+ * записях PageContent несёт flex-1 + justify-end — узел контента
+ * ScreenLayout уже flex-1 от min-h-screen оболочки, поэтому лента тянется
+ * ровно до нижнего края на всех ярусах (высота шапки и safe-area
+ * учитываются сами, без констант). Пустые состояния — не сообщения:
+ * «Действий не было» и «Ничего не найдено» живут как раньше.
  *
  * Поиск по истории (#710) — иконка в шапке ленты (макет 2157-56876),
  * шапка меняется на поисковую поверх того же экрана (прецедент «Ваших
@@ -245,11 +258,19 @@ export function HistoryFeedScreen({
     { enabled: scope !== null },
   );
   const filtersQuery = useHistoryFilters();
+  // Свой актор (решение владельца 24.09): узнаём по id сессии — канон
+  // шита фильтров (#710); серый суффикс «(Вы)» у своей шапки.
+  const meQuery = useMe();
+  const meId = meQuery.data?.id;
   // Экран с плавающей нижней кнопкой — TabBar глушится (канон
   // StickyBottomBar, без белого шита: макет оставляет контент видимым).
   useTabBarSuppression();
 
   const entries = feedQuery.data ?? [];
+  // Якорь низа — строго по факту рендера ленты: keepPreviousData
+  // удерживает прежние entries под «в ноль»-фильтрами и ошибкой, а эти
+  // ветки рисуют пустые состояния — без якоря (решение владельца 24.09).
+  const feedRendered = scope !== null && feedQuery.isSuccess && entries.length > 0;
   const today = dateToIsoLocal(new Date());
   const days = groupHistoryByDay(entries, today);
   const options = propertyOptions(filtersQuery.data);
@@ -335,7 +356,13 @@ export function HistoryFeedScreen({
         </TopNav>
       )}
 
-      <PageContent className="px-4">
+      {/* Якорь низа (решение владельца 24.09): при живых записях лента
+        * прижата к нижнему краю вьюпорта, пока не заполняет его, — как
+        * свежее сообщение в мессенджере. Механизм — flex-1 от узла
+        * контента ScreenLayout (уже flex-1 от min-h-screen), точный низ
+        * на всех ярусах без констант; пустые состояния (ниже) — не
+        * сообщения, без якоря. */}
+      <PageContent className={feedRendered ? 'flex-1 justify-end px-4' : 'px-4'}>
         {scope === null ? (
           /* Фильтры выбраны «в ноль» — результат пуст по семантике
             * (запроса нет, #711). */
@@ -407,22 +434,12 @@ export function HistoryFeedScreen({
                         * Шапки актёров кликабельны только на странице
                         * объекта — на странице пары человек тоже её
                         * предмет (зеркало #712), шапки статичны. */
-                      <div
+                      <ActorCards
                         key={`${object_.propertyId}-${objectIndex}`}
-                        className="flex flex-col gap-1.5"
-                      >
-                        {object_.actors.map((actor, actorIndex) => (
-                          <ActorCard
-                            key={`${actor.key}-${actorIndex}`}
-                            actor={actor}
-                            headerHref={
-                              !isMemberPage && actor.actorId !== null
-                                ? ROUTES.historyParticipant(actor.actorId)
-                                : null
-                            }
-                          />
-                        ))}
-                      </div>
+                        actors={object_.actors}
+                        isMemberPage={isMemberPage}
+                        meId={meId}
+                      />
                     ) : (
                       <section
                         key={`${object_.propertyId}-${objectIndex}`}
@@ -438,19 +455,7 @@ export function HistoryFeedScreen({
                             address={objectOptions?.address}
                           />
                         </Link>
-                        <div className="flex flex-col gap-1.5">
-                          {object_.actors.map((actor, actorIndex) => (
-                            <ActorCard
-                              key={`${actor.key}-${actorIndex}`}
-                              actor={actor}
-                              headerHref={
-                                !isMemberPage && actor.actorId !== null
-                                  ? ROUTES.historyParticipant(actor.actorId)
-                                  : null
-                              }
-                            />
-                          ))}
-                        </div>
+                        <ActorCards actors={object_.actors} isMemberPage={isMemberPage} meId={meId} />
                       </section>
                     );
                   })}
@@ -488,21 +493,53 @@ export function HistoryFeedScreen({
   );
 }
 
-/** Серая карточка актёра (день → актёр → строки): шапка + строки записей.
+/** Карточки актёров одной объектной группы (общие для всех скоупов):
+ * isSelf — актёр = читатель (решение владельца 24.09, по id сессии),
  * headerHref — вход в «Действия участника» (#712: в общей ленте и на
  * «Истории объекта» #840 любая запись с actor_id кликабельна, владелец
- * включительно; на странице участника шапки статичны — человек уже её
+ * включительно; на прибитых страницах шапки статичны — человек уже их
  * предмет; обезличенные записи, actor_id null, не ссылки нигде). */
+function ActorCards({
+  actors,
+  isMemberPage,
+  meId,
+}: {
+  readonly actors: readonly HistoryActorGroup[];
+  readonly isMemberPage: boolean;
+  readonly meId?: string;
+}): JSX.Element {
+  return (
+    <div className="flex flex-col gap-1.5">
+      {actors.map((actor, actorIndex) => (
+        <ActorCard
+          key={`${actor.key}-${actorIndex}`}
+          actor={actor}
+          isSelf={meId !== undefined && actor.actorId === meId}
+          headerHref={
+            !isMemberPage && actor.actorId !== null
+              ? ROUTES.historyParticipant(actor.actorId)
+              : null
+          }
+        />
+      ))}
+    </div>
+  );
+}
+
+/** Серая карточка актёра (день → актёр → строки): шапка + строки записей.
+ * isSelf — серый суффикс «(Вы)» в шапке, кликабельность не трогает. */
 function ActorCard({
   actor,
+  isSelf,
   headerHref,
 }: {
   readonly actor: HistoryActorGroup;
+  readonly isSelf: boolean;
   readonly headerHref: string | null;
 }): JSX.Element {
   return (
     <div className="flex flex-col gap-2 rounded-m bg-surface-muted p-3">
-      <ActorHeader name={actor.name} href={headerHref} />
+      <ActorHeader name={actor.name} isSelf={isSelf} href={headerHref} />
       <div className="flex flex-col gap-2">
         {actor.entries.map((entry) => (
           <HistoryRow key={entry.id} entry={entry} />
@@ -551,14 +588,26 @@ function PropertyHeaderContent({
 }
 
 /** Шапка актёра в карточке: белый кружок-плейсхолдер + имя; с href —
- * ссылка на страницу участника, без — статичная шапка. */
-function ActorHeader({ name, href }: { readonly name: string; readonly href: string | null }): JSX.Element {
+ * ссылка на страницу участника, без — статичная шапка. Свой актёр
+ * подписан серым суффиксом «(Вы)» — канон шита фильтров (#710). */
+function ActorHeader({
+  name,
+  isSelf,
+  href,
+}: {
+  readonly name: string;
+  readonly isSelf: boolean;
+  readonly href: string | null;
+}): JSX.Element {
   const content: ReactNode = (
     <>
       <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-pill bg-white">
         <BoldUser className="h-3.5 w-3.5" aria-hidden />
       </span>
-      <h3 className="min-w-0 truncate text-xs font-medium leading-[15px] text-content">{name}</h3>
+      <h3 className="min-w-0 truncate text-xs font-medium leading-[15px] text-content">
+        {name}
+        {isSelf && <span className="text-content-tertiary"> (Вы)</span>}
+      </h3>
     </>
   );
   return href !== null ? (

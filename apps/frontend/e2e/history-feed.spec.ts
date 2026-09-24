@@ -3,8 +3,10 @@ import {
   expect,
   execE2eSql,
   openCabinetWithSeededSession,
+  openCabinetWithSessionToken,
   SEEDED_APARTMENT_PROPERTY_ID,
   SEEDED_GARAGE_PROPERTY_ID,
+  seededMemberSessionToken,
   test,
   type SeededUser,
 } from './fixtures';
@@ -386,4 +388,118 @@ test('прокрутка вверх догружает старое: prepend 55 
   await expect(page.getByText('Платёж создан: платёж-06')).toBeInViewport();
 
   await captureScreen(page, testInfo, 'history-feed-prepend');
+});
+
+test('короткая лента прижата к низу вьюпорта — страница не прокручивается (мессенджер)', async ({ page, seededUser }) => {
+  await execE2eSql('DELETE FROM action_journal;');
+  await openCabinetWithSeededSession(page, seededUser);
+
+  // Две записи за сегодня — лента заведомо короче вьюпорта: как одно
+  // сообщение в мессенджере, она висит у нижнего края, а не у верхнего
+  // (решение владельца 24.09). Пустые состояния — не «сообщения», их
+  // прижатие не касается.
+  await seedEntry(
+    {
+      id: 'a0000000-0000-4000-8000-000000000021',
+      createdAt: new Date(Date.now() - 5 * 60_000).toISOString(),
+      segments: '[{"text": "Платёж создан: Первая запись"}]',
+      searchable: 'Платёж создан: Первая запись Иван Иванов',
+    },
+    seededUser,
+  );
+  await seedEntry(
+    {
+      id: 'a0000000-0000-4000-8000-000000000022',
+      createdAt: new Date(Date.now() - 60_000).toISOString(),
+      segments: '[{"text": "Платёж создан: Вторая запись"}]',
+      searchable: 'Платёж создан: Вторая запись Иван Иванов',
+    },
+    seededUser,
+  );
+
+  await page.goto('/history');
+  await expect(page.getByText('Сегодня', { exact: true })).toBeVisible();
+
+  // Страница ровно вьюпорт: узел контента ScreenLayout — flex-1 от
+  // min-h-screen оболочки, лента с flex-1 тянется до нижнего края на
+  // всех ярусах (высота шапки и safe-area учитываются сами). Иначе —
+  // не якорь.
+  const metrics = await page.evaluate(() => ({
+    scrollHeight: document.documentElement.scrollHeight,
+    innerHeight: window.innerHeight,
+  }));
+  expect(Math.abs(metrics.scrollHeight - metrics.innerHeight)).toBeLessThanOrEqual(1);
+
+  // Последняя строка прижата к низу: под ней только резерв плавающей
+  // кнопки «Настройки» — pb-136 PageContent (кнопка сама fixed и высоты
+  // страницы не занимает).
+  const lastRow = page.getByText('Платёж создан: Вторая запись');
+  await expect(lastRow).toBeVisible();
+  const box = await lastRow.boundingBox();
+  const boxBottom = (box?.y ?? 0) + (box?.height ?? 0);
+  const gapToBottom = metrics.innerHeight - boxBottom;
+  expect(gapToBottom).toBeGreaterThan(96);
+  expect(gapToBottom).toBeLessThanOrEqual(176);
+});
+
+test('свой актор подписан «(Вы)»: в ленте и на прибитой странице про себя', async ({ page, seededUser }) => {
+  await execE2eSql('DELETE FROM action_journal;');
+  await openCabinetWithSeededSession(page, seededUser);
+
+  // Свой актор (владелец сеанса) и чужой — метка только у своего
+  // (actor_id = id сессии, семантика «как в Telegram», решение
+  // владельца 24.09); канон подписи — серый суффикс шита фильтров (#710).
+  await seedEntry(
+    {
+      id: 'a0000000-0000-4000-8000-000000000031',
+      createdAt: new Date(Date.now() - 5 * 60_000).toISOString(),
+      segments: '[{"text": "Платёж создан: Аренда за сентябрь"}]',
+      searchable: 'Платёж создан: Аренда за сентябрь Иван Иванов',
+    },
+    seededUser,
+  );
+  await seedEntry(
+    {
+      id: 'a0000000-0000-4000-8000-000000000032',
+      createdAt: new Date(Date.now() - 60_000).toISOString(),
+      actorIdSql: memberActorId(),
+      actorName: 'Мария Петрова',
+      actorRole: 'full_access',
+      segments: '[{"text": "Задача выполнена: Заменить кран"}]',
+      searchable: 'Задача выполнена: Заменить кран Мария Петрова',
+      action: 'task.completed',
+      baseAction: 'completed',
+      kind: 'task',
+    },
+    seededUser,
+  );
+
+  await page.goto('/history');
+
+  // Своя шапка — имя с суффиксом; чужая — имя без него.
+  await expect(page.getByRole('heading', { name: 'Иван Иванов (Вы)', exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Мария Петрова', exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Мария Петрова (Вы)' })).toHaveCount(0);
+
+  // Метка не меняет кликабельность (#712): своя шапка в общей ленте —
+  // по-прежнему ссылка в «Действия участника».
+  await expect(page.getByRole('link', { name: 'Иван Иванов (Вы)' }).first()).toHaveAttribute(
+    'href',
+    /\/history\/participants\//,
+  );
+
+  // На прибитой странице про себя (#712) та же метка — шапка там статична
+  // (человек — предмет страницы), ссылок из шапок нет.
+  const meId = await execE2eSql(`SELECT id FROM users WHERE email = '${seededUser.email}'`);
+  await page.goto(`/history/participants/${meId}`);
+  await expect(page.getByRole('heading', { name: 'Иван Иванов (Вы)', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Иван Иванов (Вы)' })).toHaveCount(0);
+
+  // Глазами приглашённого — семантика Telegram: своя группа подписана
+  // «(Вы)», владелец — без метки (решение владельца 24.09).
+  await openCabinetWithSessionToken(page, seededMemberSessionToken());
+  await page.goto('/history');
+  await expect(page.getByRole('heading', { name: 'Мария Петрова (Вы)', exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Иван Иванов', exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Иван Иванов (Вы)' })).toHaveCount(0);
 });
