@@ -10,9 +10,11 @@ import {
   groupHistoryByDay,
   historyFeedScope,
   historyMemberFeedScope,
+  historyMemberPropertyFeedScope,
   historyPropertyFeedScope,
   isDefaultHistoryFilters,
   memberHistoryFilters,
+  memberPropertyHistoryFilters,
   propertyHistoryFilters,
   useHistoryFeed,
   useHistoryFilters,
@@ -130,13 +132,34 @@ const HEADER_LINK =
  * 24.09, зеркало «Участников» #712); propertyHistoryFilters не читает
  * URL-objects, «Применить» его вычищает. Вход — кебаб «Участников
  * объекта» (макет 1980-139712), фолбэк «Назад» — туда же.
+ *
+ * ## Действия участника в объекте (#841; макет 2177-59620 — вход)
+ *
+ * Та же лента, прибитая к паре человек+объект: маршрут
+ * /history/participants/[participantId]/properties/[propertyId] несёт
+ * uuid юзера (actor_id журнала) и uuid объекта — actor_ids и
+ * property_ids по одному (ADR 0061 §7: тот же GET /history; сервер
+ * AND'ит обе группы — бэк #708 без изменений), группы адреса действуют
+ * поверх пары (historyMemberPropertyFeedScope). Оба предмета — предмет
+ * страницы: шапка-карточка объекта стоит над всей лентой (зеркало
+ * #840), шапки актёров статичны (зеркало #712 — человек прибит),
+ * группировка внутри дней вырождена — сразу карточки актёра без
+ * объектных секций. Шит «Настройки» — группы «Участники» и «Объекты»
+ * ОБЕ прибиты серым («1/1», незабираемые); memberPropertyHistoryFilters
+ * не читает URL-actors/URL-objects, «Применить» их вычищает. Вход —
+ * строка «Действия участника в объекте» на «Правах участника»
+ * (макет 2177-59620; только у зарегистрированных — у pending действий
+ * не бывает, канон кебаба #712). Фолбэк «Назад» — «Права участника»
+ * (источник входа).
  */
 export type HistoryFeedScreenProps = {
   /** Действия участника (#712): uuid юзера, прибивающий ленту
-   * (actor_ids = один); undefined — общая лента по всем объектам. */
+   * (actor_ids = один); вместе с propertyId — «Действия участника в
+   * объекте» (#841, двойной пин). Undefined — общая лента. */
   readonly participantId?: string;
   /** История объекта (#840): uuid объекта, прибивающий ленту
-   * (property_ids = один); undefined — общая лента. */
+   * (property_ids = один); вместе с participantId — двойной пин #841.
+   * Undefined — общая лента. */
   readonly propertyId?: string;
 };
 
@@ -145,10 +168,22 @@ export function HistoryFeedScreen({
   propertyId,
 }: HistoryFeedScreenProps = {}): JSX.Element {
   // Личность экрана: страница участника прибивает человека, страница
-  // объекта — объект; заголовок, фолбэк «Назад» и прибитая группа шита
-  // следуют за предметом; прибитая группа в URL не живёт.
+  // объекта — объект, страница пары (#841) — обоих; заголовок, фолбэк
+  // «Назад» и прибитые группы шита следуют за предметом; прибитые
+  // группы в URL не живут.
+  // Личность экрана одним вычислением (ревью #841 — один каскад вместо
+  // пяти): заголовок живёт в TopNavTitle и в шите, остальное — в
+  // нормализаторе фильтров и фабрике скоупа ниже.
   const isMemberPage = participantId !== undefined;
   const isPropertyPage = propertyId !== undefined;
+  const isMemberPropertyPage = isMemberPage && isPropertyPage;
+  const pageTitle = isMemberPropertyPage
+    ? 'Действия участника в объекте'
+    : isMemberPage
+      ? 'Действия участника'
+      : isPropertyPage
+        ? 'История объекта'
+        : 'История действий';
   const [searchMode, setSearchMode] = useState(false);
   const [search, setSearch] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -157,15 +192,19 @@ export function HistoryFeedScreen({
   // Фильтры (#711) живут в адресе ленты; чтение и запись — через канон
   // useUrlParams (DESIGN.md §3), применение — push («назад» возвращает
   // без фильтров). На странице участника группа «Участники» не читается
-  // (человек прибит путём), на странице объекта — «Объекты»: и в шит, и
-  // в скоуп идёт нормализованная модель (memberHistoryFilters /
-  // propertyHistoryFilters), «Применить» заодно вычищает чужой параметр.
+  // (человек прибит путём), на странице объекта — «Объекты», на странице
+  // пары (#841) — обе: и в шит, и в скоуп идёт нормализованная модель
+  // (memberHistoryFilters / propertyHistoryFilters /
+  // memberPropertyHistoryFilters), «Применить» заодно вычищает чужой
+  // параметр.
   const { filters: urlFilters, applyFilters } = useHistoryFiltersState();
-  const filters = isMemberPage
-    ? memberHistoryFilters(urlFilters)
-    : isPropertyPage
-      ? propertyHistoryFilters(urlFilters)
-      : urlFilters;
+  const filters = isMemberPropertyPage
+    ? memberPropertyHistoryFilters(urlFilters)
+    : isMemberPage
+      ? memberHistoryFilters(urlFilters)
+      : isPropertyPage
+        ? propertyHistoryFilters(urlFilters)
+        : urlFilters;
 
   // Открытие поиска сразу делает поле активным (программный фокус —
   // устоявшийся a11y-паттерн вместо autoFocus).
@@ -185,14 +224,17 @@ export function HistoryFeedScreen({
 
   // Скоуп ленты = фильтры адреса (#711) + живой поиск (#710); на странице
   // участника поверх — прибитый человек (historyMemberFeedScope), на
-  // странице объекта — прибитый объект (historyPropertyFeedScope). Группа
+  // странице объекта — прибитый объект (historyPropertyFeedScope), на
+  // странице пары — оба (#841, historyMemberPropertyFeedScope). Группа
   // фильтров, выбранная «в ноль», означает пустой результат — скоупа нет
   // (null), запрос не делается.
-  const scope = isMemberPage
-    ? historyMemberFeedScope(filters, participantId)
-    : isPropertyPage
-      ? historyPropertyFeedScope(filters, propertyId)
-      : historyFeedScope(filters);
+  const scope = isMemberPropertyPage
+    ? historyMemberPropertyFeedScope(filters, participantId, propertyId)
+    : isMemberPage
+      ? historyMemberFeedScope(filters, participantId)
+      : isPropertyPage
+        ? historyPropertyFeedScope(filters, propertyId)
+        : historyFeedScope(filters);
   const feedQuery = useHistoryFeed(
     scope === null ? {} : searchMode && searching ? { ...scope, q } : scope,
     { enabled: scope !== null },
@@ -261,11 +303,13 @@ export function HistoryFeedScreen({
           leading={
             <TopNavBackButton
               fallbackHref={
-                isMemberPage
-                  ? ROUTES.history
-                  : isPropertyPage
-                    ? ROUTES.propertyParticipants(propertyId)
-                    : ROUTES.participants
+                isMemberPropertyPage
+                  ? ROUTES.participantRights(participantId, propertyId)
+                  : isMemberPage
+                    ? ROUTES.history
+                    : isPropertyPage
+                      ? ROUTES.propertyParticipants(propertyId)
+                      : ROUTES.participants
               }
             />
           }
@@ -282,9 +326,7 @@ export function HistoryFeedScreen({
             ) : undefined
           }
         >
-          <TopNavTitle
-            title={isMemberPage ? 'Действия участника' : isPropertyPage ? 'История объекта' : 'История действий'}
-          />
+          <TopNavTitle title={pageTitle} />
         </TopNav>
       )}
 
@@ -344,9 +386,13 @@ export function HistoryFeedScreen({
                   {day.objects.map((object_, objectIndex) => {
                     const objectOptions = options.get(object_.propertyId);
                     return isPropertyPage ? (
-                      /* История объекта (#840): объект один — предмет
+                      /* История объекта (#840) и «Действия участника в
+                        * объекте» (#841): объект прибит — предмет
                         * страницы, шапка стоит над всей лентой; внутри
-                        * дня сразу карточки актёров (макет 2184-95600). */
+                        * дня сразу карточки актёров (макет 2184-95600).
+                        * Шапки актёров кликабельны только на странице
+                        * объекта — на странице пары человек тоже её
+                        * предмет (зеркало #712), шапки статичны. */
                       <div
                         key={`${object_.propertyId}-${objectIndex}`}
                         className="flex flex-col gap-1.5"
@@ -356,7 +402,7 @@ export function HistoryFeedScreen({
                             key={`${actor.key}-${actorIndex}`}
                             actor={actor}
                             headerHref={
-                              actor.actorId !== null
+                              !isMemberPage && actor.actorId !== null
                                 ? ROUTES.historyParticipant(actor.actorId)
                                 : null
                             }
@@ -414,7 +460,7 @@ export function HistoryFeedScreen({
         <HistoryFiltersSheet
           applied={filters}
           optionsQuery={filtersQuery}
-          title={isMemberPage ? 'Действия участника' : isPropertyPage ? 'История объекта' : undefined}
+          title={isMemberPage || isPropertyPage ? pageTitle : undefined}
           pinnedParticipantId={participantId}
           pinnedPropertyId={propertyId}
           onApply={(draft: HistoryFilters) => {

@@ -4,11 +4,13 @@ import {
   historyFeedScope,
   historyFiltersParams,
   historyMemberFeedScope,
+  historyMemberPropertyFeedScope,
   historyParticipantTitle,
   historyPeriodChipLabel,
   historyPropertyFeedScope,
   isDefaultHistoryFilters,
   memberHistoryFilters,
+  memberPropertyHistoryFilters,
   propertyHistoryFilters,
   readHistoryFilters,
   toggleHistoryFilterGroup,
@@ -285,6 +287,81 @@ describe('historyPropertyFeedScope', () => {
   it('группа адреса «ни один» (кроме «Объектов») — скоуп null, запроса нет', () => {
     expect(historyPropertyFeedScope({ ...DEFAULT_HISTORY_FILTERS, kinds: [] }, UUID_A)).toBeNull();
     expect(historyPropertyFeedScope({ ...DEFAULT_HISTORY_FILTERS, actorIds: [] }, UUID_A)).toBeNull();
+  });
+});
+
+describe('memberPropertyHistoryFilters', () => {
+  it('обе прибитые группы адреса не читаются: человек и объект прибиты страницей, не фильтр (#841)', () => {
+    expect(
+      memberPropertyHistoryFilters({ ...DEFAULT_HISTORY_FILTERS, actorIds: [UUID_A], propertyIds: [UUID_B] }),
+    ).toEqual(DEFAULT_HISTORY_FILTERS);
+    expect(
+      memberPropertyHistoryFilters({ ...DEFAULT_HISTORY_FILTERS, actorIds: [], propertyIds: [] }),
+    ).toEqual(DEFAULT_HISTORY_FILTERS);
+  });
+
+  it('остальные группы проходят без изменений', () => {
+    expect(
+      memberPropertyHistoryFilters({
+        period: { from: '2026-08-01', to: '2026-08-20' },
+        actions: ['added'],
+        kinds: ['payment'],
+        actorIds: [UUID_A],
+        propertyIds: [UUID_B],
+      }),
+    ).toEqual({
+      period: { from: '2026-08-01', to: '2026-08-20' },
+      actions: ['added'],
+      kinds: ['payment'],
+      actorIds: null,
+      propertyIds: null,
+    });
+  });
+});
+
+describe('historyMemberPropertyFeedScope', () => {
+  it('лента прибита к паре человек+объект: actor_ids и property_ids = по одному id (ADR 0061 §7)', () => {
+    expect(historyMemberPropertyFeedScope(DEFAULT_HISTORY_FILTERS, UUID_A, UUID_B)).toEqual({
+      actorIds: [UUID_A],
+      propertyIds: [UUID_B],
+    });
+  });
+
+  it('прибитые человек и объект сильнее своих групп: даже «ни одного» ([]) лента не опустошается', () => {
+    expect(
+      historyMemberPropertyFeedScope({ ...DEFAULT_HISTORY_FILTERS, actorIds: [], propertyIds: [] }, UUID_A, UUID_B),
+    ).toEqual({ actorIds: [UUID_A], propertyIds: [UUID_B] });
+  });
+
+  it('период и выбор групп адреса действуют поверх прибитой пары', () => {
+    expect(
+      historyMemberPropertyFeedScope(
+        {
+          period: { from: '2026-08-01', to: '2026-08-20' },
+          actions: ['added'],
+          kinds: null,
+          actorIds: [UUID_B],
+          propertyIds: [UUID_A],
+        },
+        UUID_A,
+        UUID_B,
+      ),
+    ).toEqual({
+      dateFrom: '2026-08-01',
+      dateTo: '2026-08-20',
+      actions: ['added'],
+      actorIds: [UUID_A],
+      propertyIds: [UUID_B],
+    });
+  });
+
+  it('группа адреса «ни один» (кроме прибитых) — скоуп null, запроса нет', () => {
+    expect(
+      historyMemberPropertyFeedScope({ ...DEFAULT_HISTORY_FILTERS, kinds: [] }, UUID_A, UUID_B),
+    ).toBeNull();
+    expect(
+      historyMemberPropertyFeedScope({ ...DEFAULT_HISTORY_FILTERS, actions: [] }, UUID_A, UUID_B),
+    ).toBeNull();
   });
 });
 

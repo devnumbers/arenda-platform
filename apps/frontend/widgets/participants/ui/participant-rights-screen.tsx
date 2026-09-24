@@ -3,7 +3,7 @@
 import { useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/shared/lib/cn';
-import { Block } from '@/shared/assets/icons';
+import { Block, TimeHistory } from '@/shared/assets/icons';
 import { goBack } from '@/shared/lib/navigation';
 import { ROUTES } from '@/shared/config/routes';
 import {
@@ -37,13 +37,24 @@ import { ParticipantSuccessPopup } from './participant-success-popup';
 import { ParticipantRoleSegmented } from './participant-role-segmented';
 import { ParticipantRightsSkeleton } from './participants-skeletons';
 
+/** Row Button нижних строк макета 2177-59620: ведущий слот-круг 44 под
+ * иконку 24, подпись 16/18 Medium; высота строки 52 (44 + py 4). Общая
+ * для «Действий участника в объекте» и красного отзыва — иконки обеих
+ * строк стоят на одной оси. */
+const RIGHTS_ROW_ACTION_CLASS = cn(
+  'flex w-full items-center rounded-button py-1 text-left text-base font-medium outline-none',
+  'transition-opacity hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:opacity-80',
+);
+
 /**
  * Экран «Права участника» (карта #692, тикет #698; Figma 2177-59620):
  * шапка «назад + Права участника», строка объекта с бейджем роли,
  * сегмент-переключатель «Просмотр | Редактирование» (активная роль — белая
- * с тенью) и красная строка «Отозвать доступ к объекту». Пункт макета
- * «Действия участника в объекте» — вход в журнал (#712, карта «История
- * действий»), вне скоупа #698.
+ * с тенью), строка «Действия участника в объекте» — вход в ленту истории,
+ * прибитую к паре человек+объект (#841, тот же макет; только у
+ * зарегистрированных — у pending действий не бывает, канон кебаба
+ * страницы участника #712) — и красная строка «Отозвать доступ к объекту»;
+ * обе строки — Row Button макета с ведущим слотом-кругом 44 под иконку 24.
  *
  * Данные: агрегат GET /participants/{id} и строки
  * GET /properties/{id}/access/members; участник связывается со строкой
@@ -86,6 +97,10 @@ export function ParticipantRightsScreen({
     : undefined;
   const property = propertiesQuery.data?.find((item) => item.id === propertyId);
   const leg = participant?.properties.find((item) => item.propertyId === propertyId);
+  // «Действия участника в объекте» (#841): вход в прибитую ленту — только
+  // у зарегистрированных (uuid юзера = actor_id журнала); у pending
+  // действий не бывает (канон кебаба страницы участника #712).
+  const actionsUserId = participant?.userId;
 
   const mutationPending =
     updateMember.isPending ||
@@ -184,17 +199,32 @@ export function ParticipantRightsScreen({
           ariaLabel="Роль участника на объекте"
         />
 
-        <button
-          type="button"
-          onClick={() => setConfirmRevokeOpen(true)}
-          className={cn(
-            'flex w-full items-center gap-2 rounded-button py-3 text-left text-base font-medium text-error outline-none',
-            'transition-opacity hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:opacity-80',
+        <div className="flex flex-col">
+          {actionsUserId !== undefined && (
+            <button
+              type="button"
+              onClick={() => router.push(ROUTES.historyMemberProperty(actionsUserId, propertyId))}
+              className={RIGHTS_ROW_ACTION_CLASS}
+              data-testid="participant-property-actions"
+            >
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill">
+                <TimeHistory className="h-6 w-6" aria-hidden />
+              </span>
+              <span className="pl-1 leading-[18px]">Действия участника в объекте</span>
+            </button>
           )}
-        >
-          <Block className="h-6 w-6 shrink-0" aria-hidden />
-          Отозвать доступ к объекту
-        </button>
+          <button
+            type="button"
+            onClick={() => setConfirmRevokeOpen(true)}
+            className={cn(RIGHTS_ROW_ACTION_CLASS, 'text-error')}
+            data-testid="participant-property-revoke"
+          >
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill">
+              <Block className="h-6 w-6" aria-hidden />
+            </span>
+            <span className="pl-1 leading-[18px]">Отозвать доступ к объекту</span>
+          </button>
+        </div>
       </div>
     );
   }

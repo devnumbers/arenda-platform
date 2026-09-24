@@ -212,6 +212,36 @@ export function historyPropertyFeedScope(
   return base !== null ? { ...base, propertyIds: [propertyId] } : null;
 }
 
+/**
+ * Фильтры адреса на странице «Действия участника в объекте» (#841): и
+ * человек, и объект прибиты путём страницы — обе группы адреса не
+ * читаются (в шите они видны серыми незабираемыми строками «1/1», но не
+ * пишут в черновик; hand-crafted ?actors=/?objects= игнорируются, а
+ * «Применить фильтры» их вычищает — запись групп своя).
+ */
+export function memberPropertyHistoryFilters(filters: HistoryFilters): HistoryFilters {
+  return { ...filters, actorIds: null, propertyIds: null };
+}
+
+/**
+ * Скоуп «Действий участника в объекте» (#841, ADR 0061 §7 — тот же GET
+ * /history, actor_ids и property_ids = по одному; сервер AND'ит их —
+ * бэк #708 без изменений): группы адреса действуют поверх прибитой
+ * пары; null — как у historyFeedScope, какая-то из неприбитых групп
+ * выбрана «в ноль». Группы «Участники»/«Объекты» адреса не действуют
+ * никогда — пара прибита страницей (memberPropertyHistoryFilters).
+ */
+export function historyMemberPropertyFeedScope(
+  filters: HistoryFilters,
+  participantId: string,
+  propertyId: string,
+): HistoryFeedScope | null {
+  const base = historyFeedScope(memberPropertyHistoryFilters(filters));
+  return base !== null
+    ? { ...base, actorIds: [participantId], propertyIds: [propertyId] }
+    : null;
+}
+
 /** Лейбл чипа периода шита: без периода — «Выбрать период» (макет
  * 2177-60527), с периодом — формат чипа канона (макет 2067-162950). */
 export function historyPeriodChipLabel(period: IsoRange | null): string {

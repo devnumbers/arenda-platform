@@ -224,15 +224,23 @@ export function HistoryFiltersSheet({
   }, [periodPickerOpen, onClose]);
 
   // Строки «Участников»: в общей ленте — все опции; на «Действиях
-  // участника» (#712) — только прибитый человек (группа «1/1», макет
-  // 2184-92510). Не нашёлся в опциях (мусорный id) — группа не рисуется.
+  // участника» (#712) и на странице пары (#841) — только прибитый
+  // человек (группа «1/1», макет 2184-92510). Пин не нашёлся в
+  // загруженных опциях (мусорный id) — группа не рисуется вовсе:
+  // показывать всех участников серыми значило бы врать о прибитости
+  // (зеркало guard'а «Объектов» #840).
   const pinnedParticipant =
     pinnedParticipantId !== undefined
       ? (optionsQuery.data?.participants ?? []).find(
           (participant) => participant.id === pinnedParticipantId,
         )
       : undefined;
-  const participantsSource = pinnedParticipant !== undefined ? [pinnedParticipant] : (optionsQuery.data?.participants ?? []);
+  const participantsSource =
+    pinnedParticipantId !== undefined && pinnedParticipant === undefined
+      ? []
+      : pinnedParticipant !== undefined
+        ? [pinnedParticipant]
+        : (optionsQuery.data?.participants ?? []);
 
   const participantRows: ReadonlyArray<HistoryFilterOptionRow> = participantsSource.map(
     (participant) => ({

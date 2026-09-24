@@ -193,6 +193,13 @@ export const ROUTES = {
    * uuid объекта; вход — кебаб «Участников объекта» (макет 1980-139712). */
   historyProperty: (propertyId: string) =>
     `/history/properties/${encodeURIComponent(propertyId)}`,
+  /** «Действия участника в объекте» (карта #838, тикет #841): та же
+   * лента, прибитая к паре человек+объект (actor_ids и property_ids =
+   * по одному, ADR 0061 §7; сервер AND'ит обе группы — бэк #708 без
+   * изменений). Идентификаторы — uuid юзера (actor_id журнала) и uuid
+   * объекта; вход — строка на «Правах участника» (макет 2177-59620). */
+  historyMemberProperty: (participantId: string, propertyId: string) =>
+    `/history/participants/${encodeURIComponent(participantId)}/properties/${encodeURIComponent(propertyId)}`,
   /** Центр уведомлений — лента (карта #734, тикет #744): хаб-маршрут
    * среднего таба TabBar и пилюли ПК. */
   notifications: '/notifications',
