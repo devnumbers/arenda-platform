@@ -22,8 +22,9 @@ var (
 
 // PaymentScanStore answers the payments scan's questions (#749, #776) over
 // the owning tables directly: the sweep targets' zones, the zone's due-day
-// operations, the zone's overdue ones, the upcoming boundaries' booking
-// lists, the boundary jobs' reloads and the properties' active members.
+// operations, the zone's reminder-day ones, the zone's overdue ones, the
+// upcoming boundaries' booking lists, the boundary jobs' reloads and the
+// properties' active members.
 // Read-only — the scan publishes through the pipeline, it writes nothing
 // here.
 type PaymentScanStore struct {
@@ -182,9 +183,82 @@ func (s *PaymentScanStore) GetScheduledOverduePayment(
 		row.PropertyID, row.PropertyName, row.PropertyAddress, row.OwnerID), true, nil
 }
 
+// ListReminderTargets lists the zone's planned operations of rules with a
+// reminder set whose reminder day — the operation date minus the rule's lead
+// time — is exactly the zone's today (карта #822, #824), auto-pay rules
+// included (решение #823: напоминание независимо от auto_pay).
+func (s *PaymentScanStore) ListReminderTargets(
+	ctx context.Context, zone string, today time.Time,
+) ([]application.PaymentScanTarget, error) {
+	rows, err := postgres.New(s.db).ListPaymentReminderTargets(ctx, postgres.ListPaymentReminderTargetsParams{
+		Timezone: zone,
+		Column2:  pgconv.DateToPgtype(today),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list reminder payments of zone %s: %w", zone, err)
+	}
+	targets := make([]application.PaymentScanTarget, 0, len(rows))
+	for _, row := range rows {
+		targets = append(targets, paymentScanTarget(
+			row.PaymentID, row.Date, row.Title, row.AmountKopecks,
+			row.PropertyID, row.PropertyName, row.PropertyAddress, row.OwnerID))
+	}
+	return targets, nil
+}
+
+// ListScheduledReminderTargets lists the operations whose reminder boundary
+// — 00:00 of (operation date − lead time) in the owner's timezone — falls in
+// the window (from, until]; the reminder leg's booking list (карта #822),
+// auto-pay rules included.
+func (s *PaymentScanStore) ListScheduledReminderTargets(
+	ctx context.Context, from, until time.Time,
+) ([]application.PaymentScheduleTarget, error) {
+	rows, err := postgres.New(s.db).ListPaymentScheduledReminderTargets(ctx, postgres.ListPaymentScheduledReminderTargetsParams{
+		Column1: pgconv.TimePtrToPgtype(&from),
+		Column2: pgconv.TimePtrToPgtype(&until),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list scheduled reminder payments: %w", err)
+	}
+	targets := make([]application.PaymentScheduleTarget, 0, len(rows))
+	for _, row := range rows {
+		targets = append(targets, application.PaymentScheduleTarget{
+			PaymentID: pgconv.UUIDFromPgtype(row.PaymentID),
+			DueDate:   pgconv.DateFromPgtype(row.Date),
+			FireAt:    pgconv.TimestamptzToTime(row.FireAt),
+		})
+	}
+	return targets, nil
+}
+
+// GetScheduledReminderPayment reloads one operation at its reminder boundary
+// (карта #822) — the reminder job's delivery-time resolution. A paid,
+// cancelled, moved or orphaned operation, an archived property, a lead time
+// changed after the booking (the rule's current reminder day is no longer
+// today) and a job awake after the day rolled over are pgx.ErrNoRows here
+// and answer live=false.
+func (s *PaymentScanStore) GetScheduledReminderPayment(
+	ctx context.Context, paymentID uuid.UUID, date, now time.Time,
+) (application.PaymentScanTarget, bool, error) {
+	row, err := postgres.New(s.db).GetScheduledReminderPayment(ctx, postgres.GetScheduledReminderPaymentParams{
+		Column1: pgconv.UUIDToPgtype(paymentID),
+		Column2: pgconv.DateToPgtype(date),
+		Column3: pgconv.TimePtrToPgtype(&now),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return application.PaymentScanTarget{}, false, nil
+		}
+		return application.PaymentScanTarget{}, false, fmt.Errorf("load scheduled reminder payment %s: %w", paymentID, err)
+	}
+	return paymentScanTarget(
+		row.PaymentID, row.Date, row.Title, row.AmountKopecks,
+		row.PropertyID, row.PropertyName, row.PropertyAddress, row.OwnerID), true, nil
+}
+
 // paymentScanTarget maps one scan row's fields to the application target.
-// The two sqlc legs (due, overdue) share the select shape but not the
-// generated row type, so the mapping travels by value.
+// The three sqlc legs (due, reminder, overdue) share the select shape but
+// not the generated row type, so the mapping travels by value.
 func paymentScanTarget(
 	paymentID pgtype.UUID, date pgtype.Date, title string, amountKopecks int64,
 	propertyID pgtype.UUID, propertyName, propertyAddress string, ownerID pgtype.UUID,

@@ -1,31 +1,75 @@
 'use client';
 
 import type { JSX } from 'react';
-import { WizardHeading, AutoPayRow } from './wizard-chrome';
+import {
+  PAYMENT_REMINDER_OPTIONS,
+  paymentReminderOptionLabel,
+  type PaymentReminderOffset,
+} from '@/entities/payment';
+import { useMe } from '@/features/auth';
+import {
+  emailReminderCaption,
+  EmailNotificationsRow,
+} from '@/features/notifications';
+import { AutoPayRow, PickerSelectField, WizardHeading } from './wizard-chrome';
 
 /**
- * Шаг 3 «Настройки аренды» (Figma 1270:37343): единственный тумблер
- * «Сделать платеж автоматическим?» — включённый автоплатёж фиксирует
- * оплату в назначенный день сам, выключенный оставляет отметку владельцу.
- * Тумблеры email-уведомлений макета вырезаны (решение картирования #526,
- * в контракте аренды их нет). Строка тумблера — общая с правкой условий
- * (#532, AutoPayRow).
+ * Шаг «Настройки аренды» (карта #822, тикет #826; Figma 1428-58757):
+ * тумблер автоплатежа (канон AutoPayRow), селект «За сколько напоминать»
+ * — предвыбран «За 1 день» (RENTAL_REMINDER_DEFAULT) и виден независимо
+ * от тумблера (по макету оба блока на экране одновременно), и тумблер
+ * «Включить уведомления об оплате на почту» — общий EmailNotificationsRow
+ * (шоткат категории «Платежи и операции»). Выбранный оффсет протекает в
+ * создаваемый арендой Платёж 1:1 (buildRentalCreateCommand). Подпись почты
+ * повторяет структуру канона шага 4 платежей (#825) с арендным предметом
+ * («об оплате») — сломанную грамматику макета не воспроизводим. Ранее
+ * экран нёс один тумблер: email-тумблеры макета были вырезаны решением
+ * картирования #526 — карта #822 решение отменяет.
  */
 
 export type SettingsStepProps = {
   readonly autoPay: boolean;
   readonly onAutoPayChange: (autoPay: boolean) => void;
+  readonly reminderOffsetDays: PaymentReminderOffset;
+  readonly onReminderOffsetChange: (offset: PaymentReminderOffset) => void;
 };
 
 export function SettingsStep({
   autoPay,
   onAutoPayChange,
+  reminderOffsetDays,
+  onReminderOffsetChange,
 }: SettingsStepProps): JSX.Element {
+  const meQuery = useMe();
+  const email = meQuery.data?.email ?? null;
+  const emailCaption = emailReminderCaption('об оплате', email);
+
   return (
     <>
       <WizardHeading title="Настройки аренды" />
       <div className="flex flex-col gap-8 px-6 pt-6">
         <AutoPayRow checked={autoPay} onCheckedChange={onAutoPayChange} />
+        <PickerSelectField
+          title="За сколько напоминать"
+          valueLabel={paymentReminderOptionLabel(reminderOffsetDays)}
+          groups={[
+            {
+              options: PAYMENT_REMINDER_OPTIONS.map((option) => ({
+                label: option.label,
+                selected: reminderOffsetDays === option.offset,
+                onSelect: () => onReminderOffsetChange(option.offset),
+              })),
+            },
+          ]}
+        />
+      </div>
+      {/* py-3 строки + pt-5 — те же 32px до тумблера почты, что между
+          блоками в колонке (макет 1428-58757). */}
+      <div className="pt-5">
+        <EmailNotificationsRow
+          title="Включить уведомления об оплате на почту"
+          caption={emailCaption}
+        />
       </div>
     </>
   );

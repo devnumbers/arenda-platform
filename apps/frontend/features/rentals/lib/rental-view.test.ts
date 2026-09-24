@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import type { Rental } from '@/entities/rental';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import {
+  hasProgressCard,
   rentalElapsedLine,
   rentalNextPaymentLine,
+  rentalOverdueLine,
   rentalPaidTitle,
   rentalProgressPercent,
   rentalRemainingLine,
@@ -47,7 +49,7 @@ function rentalFixture(overrides: Partial<Rental> = {}): Rental {
         daysUntil: 150,
       },
     },
-    progress: { paidMonths: 6, totalMonths: 24, monthsRemaining: 23 },
+    progress: { paidMonths: 6, totalMonths: 24, monthsRemaining: 23, overdueMonths: null },
     today: '2026-09-05',
     createdAt: '2026-09-05T10:00:00Z',
     ...overrides,
@@ -56,31 +58,31 @@ function rentalFixture(overrides: Partial<Rental> = {}): Rental {
 
 describe('rentalPaidTitle', () => {
   it('срочная аренда — «N из M месяцев» по числительному итога', () => {
-    expect(rentalPaidTitle({ paidMonths: 6, totalMonths: 24, monthsRemaining: 23 })).toBe(
+    expect(rentalPaidTitle({ paidMonths: 6, totalMonths: 24, monthsRemaining: 23, overdueMonths: null })).toBe(
       '6 из 24 месяцев',
     );
-    expect(rentalPaidTitle({ paidMonths: 6, totalMonths: 1, monthsRemaining: 0 })).toBe(
+    expect(rentalPaidTitle({ paidMonths: 6, totalMonths: 1, monthsRemaining: 0, overdueMonths: null })).toBe(
       '6 из 1 месяца',
     );
-    expect(rentalPaidTitle({ paidMonths: 1, totalMonths: 2, monthsRemaining: 1 })).toBe(
+    expect(rentalPaidTitle({ paidMonths: 1, totalMonths: 2, monthsRemaining: 1, overdueMonths: null })).toBe(
       '1 из 2 месяцев',
     );
-    expect(rentalPaidTitle({ paidMonths: 0, totalMonths: 21, monthsRemaining: 21 })).toBe(
+    expect(rentalPaidTitle({ paidMonths: 0, totalMonths: 21, monthsRemaining: 21, overdueMonths: null })).toBe(
       '0 из 21 месяца',
     );
-    expect(rentalPaidTitle({ paidMonths: 9, totalMonths: 11, monthsRemaining: 2 })).toBe(
+    expect(rentalPaidTitle({ paidMonths: 9, totalMonths: 11, monthsRemaining: 2, overdueMonths: null })).toBe(
       '9 из 11 месяцев',
     );
   });
 
   it('бессрочная аренда — только оплаченные месяцы', () => {
-    expect(rentalPaidTitle({ paidMonths: 6, totalMonths: null, monthsRemaining: null })).toBe(
+    expect(rentalPaidTitle({ paidMonths: 6, totalMonths: null, monthsRemaining: null, overdueMonths: null })).toBe(
       '6 месяцев',
     );
-    expect(rentalPaidTitle({ paidMonths: 1, totalMonths: null, monthsRemaining: null })).toBe(
+    expect(rentalPaidTitle({ paidMonths: 1, totalMonths: null, monthsRemaining: null, overdueMonths: null })).toBe(
       '1 месяц',
     );
-    expect(rentalPaidTitle({ paidMonths: 0, totalMonths: null, monthsRemaining: null })).toBe(
+    expect(rentalPaidTitle({ paidMonths: 0, totalMonths: null, monthsRemaining: null, overdueMonths: null })).toBe(
       '0 месяцев',
     );
   });
@@ -88,13 +90,13 @@ describe('rentalPaidTitle', () => {
 
 describe('rentalProgressPercent', () => {
   it('доля оплаченных месяцев срочной аренды, 0…100', () => {
-    expect(rentalProgressPercent({ paidMonths: 6, totalMonths: 24, monthsRemaining: 23 })).toBe(25);
-    expect(rentalProgressPercent({ paidMonths: 0, totalMonths: 12, monthsRemaining: 12 })).toBe(0);
-    expect(rentalProgressPercent({ paidMonths: 12, totalMonths: 12, monthsRemaining: 0 })).toBe(100);
+    expect(rentalProgressPercent({ paidMonths: 6, totalMonths: 24, monthsRemaining: 23, overdueMonths: null })).toBe(25);
+    expect(rentalProgressPercent({ paidMonths: 0, totalMonths: 12, monthsRemaining: 12, overdueMonths: null })).toBe(0);
+    expect(rentalProgressPercent({ paidMonths: 12, totalMonths: 12, monthsRemaining: 0, overdueMonths: null })).toBe(100);
   });
 
   it('бессрочная аренда — процента нет', () => {
-    expect(rentalProgressPercent({ paidMonths: 6, totalMonths: null, monthsRemaining: null })).toBe(
+    expect(rentalProgressPercent({ paidMonths: 6, totalMonths: null, monthsRemaining: null, overdueMonths: null })).toBe(
       null,
     );
   });
@@ -137,6 +139,19 @@ describe('rentalNextPaymentLine', () => {
         daysUntil: 0,
       }),
     ).toBe('Платёж сегодня');
+  });
+});
+
+describe('rentalOverdueLine', () => {
+  it('красная строка просрочки со склонением (#817: «Просрочен 1 месяц» / «Просрочено 2 месяца»)', () => {
+    expect(rentalOverdueLine(1)).toBe('Просрочен 1 месяц');
+    expect(rentalOverdueLine(2)).toBe('Просрочено 2 месяца');
+    expect(rentalOverdueLine(5)).toBe('Просрочено 5 месяцев');
+    expect(rentalOverdueLine(11)).toBe('Просрочено 11 месяцев');
+    expect(rentalOverdueLine(21)).toBe('Просрочен 21 месяц');
+    expect(rentalOverdueLine(22)).toBe('Просрочено 22 месяца');
+    expect(rentalOverdueLine(101)).toBe('Просрочен 101 месяц');
+    expect(rentalOverdueLine(111)).toBe('Просрочено 111 месяцев');
   });
 });
 
@@ -209,7 +224,7 @@ describe('rentalTermsRows', () => {
         plannedEndDate: null,
         depositKopecks: null,
         commissionKopecks: null,
-        progress: { paidMonths: 6, totalMonths: null, monthsRemaining: null },
+        progress: { paidMonths: 6, totalMonths: null, monthsRemaining: null, overdueMonths: null },
         comment: '',
       }),
       '2026-09-05',
@@ -231,7 +246,7 @@ describe('rentalTermsRows', () => {
       rentalFixture({
         startDate: '2026-05-10',
         plannedEndDate: '2026-11-10',
-        progress: { paidMonths: 1, totalMonths: 6, monthsRemaining: 2 },
+        progress: { paidMonths: 1, totalMonths: 6, monthsRemaining: 2, overdueMonths: null },
       }),
       '2026-09-05',
     );
@@ -275,5 +290,40 @@ describe('rentalTenantTitle', () => {
         phone: '+79934302010',
       }),
     ).toBe('Александр Петров');
+  });
+});
+
+describe('hasProgressCard', () => {
+  it('со следующим платежом карточка видима (1232:61259)', () => {
+    const rental = rentalFixture();
+    expect(hasProgressCard(rental.rentPayment.nextPayment, rental.progress)).toBe(true);
+  });
+
+  it('F1: день планового окончания и «Ожидает действия» — карточка скрыта целиком', () => {
+    const rental = rentalFixture({
+      progress: { paidMonths: 6, totalMonths: 24, monthsRemaining: 0, overdueMonths: null },
+    });
+    expect(hasProgressCard(null, rental.progress)).toBe(false);
+  });
+
+  it('#817: просрочка — содержимое карточки: жива и без синей строки и остатка', () => {
+    const rental = rentalFixture({
+      progress: { paidMonths: 4, totalMonths: 24, monthsRemaining: 0, overdueMonths: 2 },
+    });
+    expect(hasProgressCard(null, rental.progress)).toBe(true);
+  });
+
+  it('без платежа, но с остатком — карточка остаётся ради строки «Осталось N»', () => {
+    const rental = rentalFixture({
+      progress: { paidMonths: 6, totalMonths: 24, monthsRemaining: 3, overdueMonths: null },
+    });
+    expect(hasProgressCard(null, rental.progress)).toBe(true);
+  });
+
+  it('бессрочная без платежа — карточка остаётся ради «Прошло N месяцев»', () => {
+    const rental = rentalFixture({
+      progress: { paidMonths: 0, totalMonths: null, monthsRemaining: null, overdueMonths: null },
+    });
+    expect(hasProgressCard(null, rental.progress)).toBe(true);
   });
 });

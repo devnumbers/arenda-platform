@@ -13,6 +13,8 @@ const (
 	dayStart   = "2026-01-10"
 	dayMidTerm = "2026-03-01"
 	dayJan1    = "2026-01-01"
+	dayJan15   = "2026-01-15"
+	dayMar2    = "2026-03-02"
 )
 
 // date is the UTC-midnight calendar date convention of the module (ADR 0048).
@@ -76,7 +78,7 @@ func TestStatusOf(t *testing.T) {
 			mutate: func(r *domain.Rental) {
 				r.PlannedEndDate = new(date(dayMidTerm))
 			},
-			today: "2026-03-02",
+			today: dayMar2,
 			want:  domain.StatusNeedsAttention,
 		},
 		{
@@ -93,7 +95,7 @@ func TestStatusOf(t *testing.T) {
 				r.PlannedEndDate = new(date(dayJan1)) // Even a past planned end.
 				r.CompletedDate = new(date("2026-02-01"))
 			},
-			today: "2026-03-02",
+			today: dayMar2,
 			want:  domain.StatusCompleted,
 		},
 	}
@@ -121,14 +123,36 @@ func TestCountPaymentDays(t *testing.T) {
 		want  int
 	}{
 		{
-			name:  "full months inclusive both ends",
-			start: "2026-01-15", end: "2026-04-15", day: 15,
-			want: 4,
+			// #802 F2: the term window is half-open — the occurrence on the
+			// planned end opens a month beyond the rental.
+			name:  "end on the payment day does not count",
+			start: dayJan15, end: "2026-04-15", day: 15,
+			want: 3,
+		},
+		{
+			name:  "12-month term yields 12 payments",
+			start: "2026-10-01", end: "2027-10-01", day: 1,
+			want: 12,
+		},
+		{
+			// The clamped occurrence can land on the end itself (a last-day
+			// rent due Apr 30 with the term ending Apr 30): the half-open
+			// window drops it too — one occurrence short of the calendar
+			// months, consistent with FullMonthsBetween.
+			name:  "clamped occurrence on the end does not count",
+			start: dayJan1, end: "2026-04-30", day: 31,
+			want: 3, // Jan 31, Feb 28, Mar 31; the Apr 30 rent is the end.
+		},
+		{
+			// Гараж, the #802 audit case: the end falls between occurrences.
+			name:  "end between occurrences keeps the count",
+			start: "2026-03-10", end: "2028-03-09", day: 10,
+			want: 24,
 		},
 		{
 			name:  "day before the first occurrence",
-			start: "2026-01-16", end: "2026-04-15", day: 15,
-			want: 3,
+			start: "2026-01-16", end: "2026-04-14", day: 15,
+			want: 2,
 		},
 		{
 			name:  "end before the first occurrence",
@@ -136,23 +160,28 @@ func TestCountPaymentDays(t *testing.T) {
 			want: 0,
 		},
 		{
+			name:  "end on the start counts nothing",
+			start: dayJan15, end: dayJan15, day: 15,
+			want: 0,
+		},
+		{
 			name:  "day 31 clamps to the month's last day",
-			start: dayJan1, end: "2026-04-30", day: 31,
+			start: dayJan1, end: "2026-05-01", day: 31,
 			want: 4, // Jan 31, Feb 28, Mar 31, Apr 30.
 		},
 		{
 			name:  "day 30 clamps in February",
-			start: dayJan1, end: "2026-04-30", day: 30,
+			start: dayJan1, end: "2026-05-01", day: 30,
 			want: 4, // Jan 30, Feb 28, Mar 30, Apr 30.
 		},
 		{
 			name:  "leap February clamps to the 29th",
-			start: "2028-01-01", end: "2028-04-30", day: 30,
+			start: "2028-01-01", end: "2028-05-01", day: 30,
 			want: 4, // Jan 30, Feb 29, Mar 30, Apr 30.
 		},
 		{
 			name:  "one day of month counts each month",
-			start: dayJan1, end: dayMidTerm, day: 1,
+			start: dayJan1, end: dayMar2, day: 1,
 			want: 3,
 		},
 		{

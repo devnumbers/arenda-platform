@@ -408,26 +408,95 @@
     }
 }
 
-/* Шит «Еще» TabBar (Figma 1721:57140, #560; рецепт — docs/research/
-   2026-09-08-sheet-eshche-animation.md): выезд 400ms, закрытие 300ms на
-   канонной кривой vaul cubic-bezier(0.32,0.72,0,1), оверлей — канонный
-   fade 250ms. Специфичность class+attr перебивает CSS-бейзлайн vaul
-   (animation/transition-duration 0.5s на [data-vaul-drawer]/[data-vaul-overlay])
-   независимо от порядка стилей; после drag-release vaul ставит duration
-   inline — флик закрывается по инерции, это канон (research §2). */
-.more-sheet-drawer[data-vaul-drawer] {
-    animation-duration: 400ms;
-    transition-duration: 400ms;
+/* Шит «Еще» TabBar (Figma 1721:57140, #560). Motion-модель 2026-09-22 —
+   прерываемые transitions вместо keyframes vaul (research:
+   docs/research/2026-09-22-bottom-sheet-motion-best-practices.md; keyframes
+   не разворачивались из текущей позиции). Модель «одного целого» с баром
+   (решение владельца 22.09.2026): лист z-45 поднимается из-за бара
+   (z-50, над оверлеем z-40 — бар не темнеет и кликабелен в любой фазе).
+   Тайминги — по образцу системных шитов iOS: пружина без отскока
+   (критическое затухание, UISpringTimingParameters dampingRatio 1.0),
+   выезд 440ms на cubic-bezier(0.32,0.72,0,1) — задокументированный
+   «mimic iOS's Sheet», закрытие 330ms (ускоряющийся уход с экрана),
+   затемнение гаснет синхронно листу. Движение листа и оверлея ведёт
+   transition по transform/opacity; data-state=closed разворачивает его
+   из текущей позиции, @starting-style задаёт старт выезда без keyframes.
+   Keyframes-стражи more-sheet-presence-in/-out — без визуального эффекта,
+   нужны только Radix Presence: размонтирование портала ждёт animationend,
+   у закрытия — своё имя анимации, чтобы страж гарантированно стартовал
+   при смене data-state. Во время drag vaul двигает шит inline-стилями
+   (transition:none) — правила ниже их не перебивают; на старте закрытия
+   inline-стили сносит MoreSheet (onClose/onOpenChange), дальше движением
+   управляет эта transition-модель, включая разворот из недо-свайпнутой
+   позиции. */
+/* Keyframes-стражи Presence — на кастомном свойстве: ноль визуального
+   эффекта и, главное, никакой конкуренции с transition по opacity
+   (анимация на том же свойстве глушит transition — оверлей вспыхивал
+   без фейда). Имена in/out разные, чтобы при смене data-state страж
+   гарантированно перезапустился и Presence дождался animationend. */
+@keyframes more-sheet-presence-in {
+    from {
+        --more-sheet-presence: 0;
+    }
+
+    to {
+        --more-sheet-presence: 1;
+    }
 }
 
-.more-sheet-drawer[data-vaul-drawer][data-state='closed'] {
-    animation-duration: 300ms;
-    transition-duration: 300ms;
+@keyframes more-sheet-presence-out {
+    from {
+        --more-sheet-presence: 0;
+    }
+
+    to {
+        --more-sheet-presence: 1;
+    }
 }
 
-.more-sheet-overlay[data-vaul-overlay][data-vaul-snap-points='false'] {
-    animation-duration: 250ms;
-    transition-duration: 250ms;
+/* Специфичность селекторов зеркалит пер-стейт правила vaul
+   ([data-vaul-drawer][data-vaul-snap-points…][data-state…], 0,4,0 —
+   инжектятся рантаймом ПОСЛЕ наших стилей и на ничьей побеждают):
+   класс + те же атрибуты + state дают 0,5,0 — animation-name vaul
+   (slideFromBottom/slideToBottom) гарантированно перебит нашими
+   стражами Presence. */
+.more-sheet-drawer[data-vaul-drawer][data-vaul-snap-points='false'][data-vaul-drawer-direction='bottom'][data-state='open'] {
+    animation: more-sheet-presence-in 440ms linear;
+    transform: translateY(0);
+    transition: transform 440ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@starting-style {
+    .more-sheet-drawer[data-vaul-drawer][data-vaul-snap-points='false'][data-vaul-drawer-direction='bottom'][data-state='open'] {
+        transform: translateY(100%);
+    }
+}
+
+.more-sheet-drawer[data-vaul-drawer][data-vaul-snap-points='false'][data-vaul-drawer-direction='bottom'][data-state='closed'] {
+    animation: more-sheet-presence-out 330ms linear;
+    transform: translateY(100%);
+    transition: transform 330ms cubic-bezier(0.32, 0, 0.67, 0);
+}
+
+/* Бэкдроп — свой div внутри портала (в non-modal vaul рендерит Overlay
+   как null), data-state ведёт MoreSheet из пропа open; селекторы без
+   vaul-атрибутов — injected-правила vaul на элемент не попадают. */
+.more-sheet-backdrop[data-state='open'] {
+    animation: more-sheet-presence-in 440ms linear;
+    opacity: 1;
+    transition: opacity 440ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@starting-style {
+    .more-sheet-backdrop[data-state='open'] {
+        opacity: 0;
+    }
+}
+
+.more-sheet-backdrop[data-state='closed'] {
+    animation: more-sheet-presence-out 330ms linear;
+    opacity: 0;
+    transition: opacity 330ms cubic-bezier(0.32, 0, 0.67, 0);
 }
 
 /* Компакт-бар хаба (решение владельца 2026-09-09, Figma 1603-93157 →
@@ -453,9 +522,10 @@
    fade сохраняем; drag-жесты не трогаем — это управление, не декор
    (research §9). */
 @media (prefers-reduced-motion: reduce) {
-    .more-sheet-drawer[data-vaul-drawer],
-    .more-sheet-drawer[data-vaul-drawer][data-state='closed'],
-    .more-sheet-overlay[data-vaul-overlay][data-vaul-snap-points='false'] {
+    .more-sheet-drawer[data-vaul-drawer][data-vaul-snap-points='false'][data-vaul-drawer-direction='bottom'][data-state='open'],
+    .more-sheet-drawer[data-vaul-drawer][data-vaul-snap-points='false'][data-vaul-drawer-direction='bottom'][data-state='closed'],
+    .more-sheet-backdrop[data-state='open'],
+    .more-sheet-backdrop[data-state='closed'] {
         animation-duration: 150ms;
         transition-duration: 150ms;
     }

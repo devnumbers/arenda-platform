@@ -11,6 +11,7 @@ export {
   draftAfterStartChange,
   paymentDayFromPicker,
   paymentDayLabel,
+  RENTAL_REMINDER_DEFAULT,
   rentalPlannedEndDateError,
   rentalStartDateError,
   utilitiesLabel,
@@ -39,11 +40,14 @@ export {
   rentalExtendSuccessCopy,
   rentalSuccessCopy,
 } from './lib/success-copy';
+export { rentalExtendMinDate } from './lib/extend-model';
 export {
   currentRentalOf,
+  hasProgressCard,
   rentalCommentText,
   rentalElapsedLine,
   rentalNextPaymentLine,
+  rentalOverdueLine,
   rentalPaidTitle,
   rentalProgressPercent,
   rentalRemainingLine,

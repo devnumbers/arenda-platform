@@ -6469,6 +6469,14 @@ components:
         autoPay:
           type: boolean
           default: false
+        reminderOffsetDays:
+          type: integer
+          nullable: true
+          enum: [1, 3, 7]
+          description: >-
+            За сколько дней предупреждать о вхождении («Напоминание о
+            платеже», карта #822): 1, 3 или 7. Null/omitted — напоминаний нет
+            (выбор опционален). Напоминание живёт независимо от autoPay.
 
     PaymentUpdateRequest:
       description: >-
@@ -6500,8 +6508,19 @@ components:
           type: string
           format: date
           nullable: true
+          description: >
+            Tri-state: omitted keeps the value, null clears it (open-ended),
+            a date sets it.
         autoPay:
           type: boolean
+        reminderOffsetDays:
+          type: integer
+          nullable: true
+          enum: [1, 3, 7]
+          description: >
+            Tri-state lead time of the payment reminder («Напоминание о
+            платеже»): omitted keeps the current value, null turns reminders
+            off, 1/3/7 sets the lead time.
 
     CategoryView:
       description: >-
@@ -6538,7 +6557,7 @@ components:
 
     PaymentResponse:
       type: object
-      required: [id, propertyId, type, title, amountKopecks, recurrence, since, autoPay, paymentForm, category, isFavorite, isCompleted, pauses, createdAt, updatedAt]
+      required: [id, propertyId, type, title, amountKopecks, recurrence, since, autoPay, paymentForm, category, isFavorite, isCompleted, isRentalManaged, pauses, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -6570,6 +6589,13 @@ components:
           enum: [transfer, cash]
         category:
           $ref: '#/components/schemas/CategoryView'
+        reminderOffsetDays:
+          type: integer
+          nullable: true
+          enum: [1, 3, 7]
+          description: >-
+            The payment reminder's lead time in days (карта #822); null —
+            напоминаний нет. Живёт независимо от autoPay.
         isFavorite:
           type: boolean
           description: The rule's favorite star (PUT favorite); returned in the reads and the lists.
@@ -6581,6 +6607,18 @@ components:
             and no occurrence beyond the last materialized date of any
             status. Never stored, never written by the client; derived on
             every read like the operation's overdue.
+        isRentalManaged:
+          type: boolean
+          description: >-
+            The rule is the rental's managed rent payment (ADR 0053, ticket
+            #818): a rental row references it, any rental state — a completed
+            rental is final and its payment is final with it. The rental is
+            the source of truth for the amount, the payment day, the
+            auto-pay and the planned end, so the rule mutations (pause,
+            resume, patch, delete) answer 409; the payment facts («Оплатить»)
+            and the favorite star stay open. The reads carry the flag so the
+            client hides the mutation actions instead of learning the 409
+            live.
         pauses:
           type: array
           items:
@@ -8078,6 +8116,15 @@ components:
           maxLength: 2000
         autoPay:
           type: boolean
+        reminderOffsetDays:
+          type: integer
+          nullable: true
+          enum: [1, 3, 7]
+          description: >-
+            За сколько дней предупреждать о платеже арендной платы
+            («Напоминание о платеже», карта #822): 1, 3 или 7. Null/omitted —
+            напоминаний нет. Аренда ставит его вместе с автоплатежом; по
+            макетам дефолт выбора на экране — «За 1 день» (решение #823).
 
     RentalUpdateRequest:
       description: >-
@@ -8191,9 +8238,12 @@ components:
       description: >-
         Прогресс «Оплачено N из M месяцев» (ADR 0053 §2): paidMonths — число
         paid-операций Платежа; totalMonths и monthsRemaining — только у
-        срочной аренды (null у бессрочной).
+        срочной аренды (null у бессрочной). overdueMonths — серверная
+        просрочка Платежа арендной платы (#817): число planned-вхождений
+        раньше «сегодня» собственника (платёжные месяцы, не календарные);
+        null — просрочки нет.
       type: object
-      required: [paidMonths, totalMonths, monthsRemaining]
+      required: [paidMonths, totalMonths, monthsRemaining, overdueMonths]
       properties:
         paidMonths:
           type: integer
@@ -8201,6 +8251,9 @@ components:
           type: integer
           nullable: true
         monthsRemaining:
+          type: integer
+          nullable: true
+        overdueMonths:
           type: integer
           nullable: true
 
@@ -8224,6 +8277,13 @@ components:
           $ref: '#/components/schemas/RentalPaymentDay'
         autoPay:
           type: boolean
+        reminderOffsetDays:
+          type: integer
+          nullable: true
+          enum: [1, 3, 7]
+          description: >-
+            Lead time of the managed payment's reminder (карта #822); null —
+            напоминаний нет.
         nextPayment:
           $ref: '#/components/schemas/RentalNextPayment'
           nullable: true

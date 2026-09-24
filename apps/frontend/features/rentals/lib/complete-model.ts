@@ -2,6 +2,7 @@ import { cmp, fullMonthsBetween, type IsoDate } from '@/shared/lib/calendar';
 import { parseRublesToKopecks } from '@/shared/lib/format-money';
 import { pluralize } from '@/shared/lib/pluralize';
 import type { Rental, RentalCompleteCommand } from '@/entities/rental';
+import { monthsWord } from './months-word';
 
 /** Черновик мастера завершения (#534): «сырое» поле суммы залога (как в
  * формах аренды) и комментарий возврата. Форма-состояние сценария — живёт
@@ -21,10 +22,6 @@ export type RentalCompleteDraft = {
 
 function yearsWord(count: number): string {
   return pluralize(count, 'год', 'года', 'лет');
-}
-
-function monthsWord(count: number): string {
-  return pluralize(count, 'месяц', 'месяца', 'месяцев');
 }
 
 /** Срок аренды для итогов (Figma 1433:61927 «2 года, 8 месяцев»): полные

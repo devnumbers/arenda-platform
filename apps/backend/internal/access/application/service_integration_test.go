@@ -113,6 +113,10 @@ func (r *memRepo) UpdateRole(_ context.Context, id, propertyID uuid.UUID, role d
 	for i := range r.rows {
 		if r.rows[i].ID == id && r.rows[i].PropertyID == propertyID {
 			r.rows[i].Role = role
+			// The production table maintains updated_at by trigger (000094);
+			// the in-memory double mirrors it — the role-change event stamps
+			// its dedup key with this instant (тикет #830).
+			r.rows[i].UpdatedAt = time.Now()
 			return r.rows[i], nil
 		}
 	}

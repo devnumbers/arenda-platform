@@ -22,6 +22,7 @@ import (
 	paymentspg "github.com/nambers/arenda-planform/apps/backend/internal/payments/adapters/postgres"
 	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
 	pgdb "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
+	rentalspg "github.com/nambers/arenda-planform/apps/backend/internal/rentals/adapters/postgres"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
@@ -162,6 +163,7 @@ func TestHistory_FailingInsertRollsMutationBack(t *testing.T) {
 		paymentspg.NewOperationStore(h.pool),
 		paymentspg.NewPropertyStore(h.pool),
 		paymentspg.NewGlobalPaymentStore(h.pool),
+		rentalspg.NewRentalLinkReader(h.pool),
 		auditapp.NewService(auditpg.NewWriter(h.pool), clk),
 		failingHistory{},
 		pgdb.NewUoW(h.pool, logger),

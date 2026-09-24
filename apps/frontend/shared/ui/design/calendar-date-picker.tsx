@@ -22,10 +22,12 @@ import {
 // точки входа сами по себе), как в мастере платежей.
 import {
   booleanRunSegments,
+  calendarDayDisabled,
   calendarFeedStart,
   calendarMonthIndex,
   calendarMonthOf,
   calendarMonthOfIndex,
+  calendarPastFloor,
   type CalendarMonthRef,
   type IsoDate,
   type IsoRange,
@@ -47,12 +49,17 @@ import { MONTH_LABELS, daysInMonth, firstWeekdayOfMonth, WEEKDAY_LABELS } from '
  * бесконечна вперёд: старт — самый ранний из «сегодня» и значения (якорь
  * правки #502), месяцы дорисовываются годом при приближении к нижнему
  * краю, а оффскрин-блоки не участвуют в layout (content-visibility) —
- * прокрутка остаётся плавной на любой глубине. Сегодня собственника
- * предвыбрано сразу, поэтому «Выбрать» активна без действий (подсказка
- * владельца к #500); дни раньше сегодня недоступны — задним числом даты
- * не выбираются (контракт #498), кроме текущего значения-якоря в прошлом
- * при правке (#502). Рендерится только в открытом состоянии — состояние
- * ленты и черновик живут, пока пикер смонтирован.
+ * прокрутка остаётся плавной на любой глубине. Открывается сеткой на
+ * месяце якоря — значения, а без него «сегодня», прижатое в
+ * [minDate, maxDate] (решение владельца #802 23.09: продление с далёким
+ * минимумом открывается на первом доступном месяце). Черновик предвыбран
+ * сразу — «сегодня» либо граница [minDate, maxDate] (продление #802
+ * прижимает к первому доступному месяцу), поэтому «Выбрать» активна без
+ * действий (подсказка владельца к #500); дни раньше сегодня недоступны —
+ * задним числом даты не выбираются (контракт #498), кроме текущего
+ * значения-якоря в прошлом при правке (#502). Рендерится только в
+ * открытом состоянии — состояние ленты и черновик живут, пока пикер
+ * смонтирован.
  *
  * Снятие даты (решение владельца 2026-09-03): повторный тап по выбранному
  * дню опустошает черновик, «Выбрать» остаётся активной и подтверждает
@@ -73,6 +80,12 @@ import { MONTH_LABELS, daysInMonth, firstWeekdayOfMonth, WEEKDAY_LABELS } from '
  * начало + 1); значение раньше минимума в пикер не попадает — потребитель
  * чистит его при смене начала. Пустой черновик стартует с первого
  * доступного дня (сегодня либо minDate, если он позже).
+ *
+ * Открытое прошлое (проп allowPast, #805): прошедшие дни до minDate
+ * тапабельны, лента стартует от месяца minDate — дата завершения аренды
+ * бывает задним числом (ADR 0053 §3: start ≤ дата ≤ сегодня). Без пропа
+ * прошлое закрыто сегодняшним (контракт #498); проп не трогает якорь
+ * значения-в-прошлом правки (#502) и границы maxDate.
  *
  * Максимальная дата (проп maxDate, #534): дни позже недоступны — дата
  * завершения аренды не бывает будущей (ADR 0053 §3, потребитель передаёт
@@ -104,6 +117,11 @@ export type CalendarDatePickerProps = {
   /** Первый доступный день; дни раньше недоступны (окончание аренды —
    * строго позже начала). */
   readonly minDate?: IsoDate;
+  /** Прошедшие дни открыты до minDate — дата бывает задним числом (мастер
+   * завершения аренды, ADR 0053 §3: start ≤ дата ≤ сегодня, #805). Без
+   * пропа прошлое закрыто сегодняшним (задним числом даты не создаются,
+   * #498). */
+  readonly allowPast?: boolean;
   /** Последний доступный день; дни позже недоступны (дата завершения
    * аренды — не будущее, ADR 0053 §3). */
   readonly maxDate?: IsoDate;
@@ -137,17 +155,26 @@ export function CalendarDatePicker({
   required,
   minDate,
   maxDate,
+  allowPast = false,
   onClose,
   onConfirm,
 }: CalendarDatePickerProps): JSX.Element {
   // Лента от самого раннего из сегодня и значения вперёд без конца;
-  // значение дальше стартового года открывает ленту, уже дорисованную
-  // до него, и скроллит к нему при монтаже.
-  const feedStart = calendarFeedStart(today, value);
+  // якорь открытия — значение, а без него «сегодня», прижатое в границы
+  // [minDate, maxDate] (решение #802 23.09: продление с далёким minDate
+  // открывается на первом доступном месяце, а не на сегодня, где выбирать
+  // нечего); лента под якорь дорисована, скролл к нему при монтаже.
+  const initialAnchor = value ?? initialDraft(today, minDate, maxDate);
+  const pastFloor = calendarPastFloor(today, minDate, allowPast);
+  const feedStart = calendarFeedStart(
+    today,
+    value,
+    pastFloor === today ? undefined : calendarMonthOf(pastFloor),
+  );
   const startIndex = calendarMonthIndex(feedStart);
-  const valueIndex =
-    value !== null ? calendarMonthIndex(calendarMonthOf(value)) - startIndex : -1;
-  const [monthsCount, setMonthsCount] = useState(() => Math.max(FEED_MONTHS, valueIndex + 1));
+  const anchorIndex =
+    calendarMonthIndex(calendarMonthOf(initialAnchor)) - startIndex;
+  const [monthsCount, setMonthsCount] = useState(() => Math.max(FEED_MONTHS, anchorIndex + 1));
   const [draft, setDraft] = useState<IsoDate | null>(
     value ?? initialDraft(today, minDate, maxDate),
   );
@@ -162,13 +189,14 @@ export function CalendarDatePicker({
   // Чип месяца показывает месяц черновика; у пустого — текущий месяц.
   const draftMonth = calendarMonthOf(draft ?? today);
 
-  // Значение за пределами стартового года — сразу к нему при открытии.
+  // Открытие — сразу к месяцу якоря (значение или ближайший доступный
+  // день), когда он не стартовый месяц ленты.
   useEffect(() => {
-    if (valueIndex >= FEED_MONTHS) {
-      const target = calendarMonthOfIndex(startIndex + valueIndex);
+    if (anchorIndex > 0) {
+      const target = calendarMonthOfIndex(startIndex + anchorIndex);
       monthRefs.current.get(monthKey(target.year, target.month0))?.scrollIntoView({ block: 'start' });
     }
-  }, [valueIndex, startIndex]);
+  }, [anchorIndex, startIndex]);
 
   // Дорисовка прыжка за край — после монтирования новых месяцев.
   useEffect(() => {
@@ -308,19 +336,24 @@ export function CalendarDatePicker({
                         className="aspect-square h-auto w-full"
                         state={selected ? 'selected' : isToday ? 'today' : 'default'}
                         aria-current={isToday ? 'date' : undefined}
-                        // Прошлые дни недоступны — задним числом даты не
-                        // создаются (контракт #498); исключение — текущее
-                        // значение-якорь в прошлом (правка #502): оно остаётся
-                        // тапабельным, повторный тап снимает дату. Дни раньше
-                        // minDate недоступны без исключений (minDate — первый
-                        // доступный: окончание аренды строго позже начала,
-                        // ADR 0053); дни позже maxDate — тоже (дата
+                        // Прошлые дни закрыты полом (calendarDayDisabled):
+                        // сегодня по умолчанию — задним числом даты не
+                        // создаются (#498), minDate при allowPast — дата
+                        // завершения бывает задним числом (#805); текущее
+                        // значение-якорь в прошлом остаётся тапабельным
+                        // (правка #502), повторный тап снимает дату. Дни
+                        // раньше minDate недоступны без исключений (minDate —
+                        // первый доступный: окончание аренды строго позже
+                        // начала, ADR 0053); дни позже maxDate — тоже (дата
                         // завершения не бывает будущей, #534).
-                        disabled={
-                          (iso < today && iso !== value)
-                          || (minDate !== undefined && iso < minDate)
-                          || (maxDate !== undefined && iso > maxDate)
-                        }
+                        disabled={calendarDayDisabled({
+                          iso,
+                          today,
+                          value,
+                          minDate,
+                          maxDate,
+                          allowPast,
+                        })}
                         // Повторный тап по выбранному дню снимает выбор
                         // (решение владельца 2026-09-03); с required дата
                         // обязательна — тап её держит.

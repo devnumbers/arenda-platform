@@ -46,11 +46,13 @@ export type RentalPaymentView = {
 };
 
 /** Прогресс «Оплачено N из M месяцев»: totalMonths/monthsRemaining — только
- * у срочной аренды (null у бессрочной). */
+ * у срочной аренды (null у бессрочной); overdueMonths — серверная просрочка
+ * Платежа арендной платы (#817), null — просрочки нет. */
 export type RentalProgress = {
   readonly paidMonths: number;
   readonly totalMonths: number | null;
   readonly monthsRemaining: number | null;
+  readonly overdueMonths: number | null;
 };
 
 /** Аренда с вычисляемым сервером состоянием: статус, прогресс, «сегодня» и
@@ -92,6 +94,11 @@ export type RentalCreateCommand = {
   readonly commissionKopecks: number | null;
   readonly contactId: string | null;
   readonly autoPay: boolean;
+  /** Лид-тайм напоминания о платеже арендной платы, протекает в её Платёж
+   * 1:1 (карта #822): литералы контракта 1|3|7 — словарь опций живёт
+   * слайсом платежа (PAYMENT_REMINDER_OPTIONS), entity-слой соседних
+   * слайсов не импортирует. */
+  readonly reminderOffsetDays: 1 | 3 | 7;
 };
 
 /**

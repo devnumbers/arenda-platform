@@ -59,6 +59,7 @@ type seamHarness struct {
 	pool   *pgxpool.Pool
 	svc    *rentalsapp.RentalService
 	paySvc *paymentsapp.PaymentService
+	ops    *paymentsapp.OperationService
 	tick   *paymentsapp.TickService
 	owner  uuid.UUID
 	propID uuid.UUID
@@ -91,6 +92,7 @@ func newSeamHarness(t *testing.T) *seamHarness {
 		paymentspg.NewOperationStore(pool),
 		paymentspg.NewPropertyStore(pool),
 		paymentspg.NewGlobalPaymentStore(pool),
+		rentalspg.NewRentalLinkReader(pool),
 		audit,
 		historyRecorder(pool),
 		pgdb.NewUoW(pool, logger),
@@ -100,6 +102,7 @@ func newSeamHarness(t *testing.T) *seamHarness {
 		pool:   pool,
 		svc:    rentalsapp.NewRentalService(factory, calendar, nil),
 		paySvc: paymentsapp.NewPaymentService(payFactory, calendar, nil),
+		ops:    paymentsapp.NewOperationService(payFactory, calendar, nil),
 		tick: paymentsapp.NewTickService(payFactory, paymentspg.NewTickZoneDirectory(pool),
 			calendar, nil),
 	}
@@ -128,15 +131,23 @@ func (h *seamHarness) seedOwner() {
 
 // createRental starts tomorrow (upcoming, no materialized occurrences yet).
 func (h *seamHarness) createRental() rentalsapp.RentalView {
+	return h.createRentalWithReminderOffset(nil)
+}
+
+// createRentalWithReminderOffset is the same create with an explicit reminder
+// lead time (nil = без напоминаний) for the tests that pin the seam's copy
+// into the managed payment.
+func (h *seamHarness) createRentalWithReminderOffset(offset *int) rentalsapp.RentalView {
 	t := h.t
 	t.Helper()
 	view, err := h.svc.CreateRental(context.Background(), h.owner, h.propID,
 		rentalsapp.CreateRentalCommand{
-			AmountKopecks: 5_000_000,
-			PaymentDay:    rentalsdomain.MustPaymentDay(15),
-			StartDate:     seamToday,
-			Utilities:     rentalsdomain.UtilitiesIncluded,
-			AutoPay:       true,
+			AmountKopecks:      5_000_000,
+			PaymentDay:         rentalsdomain.MustPaymentDay(15),
+			StartDate:          seamToday,
+			Utilities:          rentalsdomain.UtilitiesIncluded,
+			AutoPay:            true,
+			ReminderOffsetDays: offset,
 		})
 	require.NoError(t, err)
 	return view
@@ -147,7 +158,9 @@ func TestSeam_CreateBuildsTheManagedPaymentAndMaterializes(t *testing.T) {
 	h := newSeamHarness(t)
 	h.seedOwner()
 
-	view := h.createRental()
+	// The explicit reminder lead time rides the seed through the seam.
+	offset := 1
+	view := h.createRentalWithReminderOffset(&offset)
 
 	// The managed payment is the ordinary payments rule: income, «Арендная
 	// плата», transfer, the rent category, monthly on the payment day,
@@ -164,6 +177,7 @@ func TestSeam_CreateBuildsTheManagedPaymentAndMaterializes(t *testing.T) {
 	assert.Equal(t, []int{15}, payment.Recurrence.DaysOfMonth())
 	assert.Equal(t, seamToday, payment.Since)
 	assert.True(t, payment.AutoPay)
+	assert.Equal(t, 1, *payment.ReminderOffsetDays)
 
 	// The in-transaction tick stood the single future planned at the payment
 	// day of the start month (start == today, day 15 ahead).
@@ -351,4 +365,59 @@ func TestSeam_SummaryReadsThePaidOperations(t *testing.T) {
 // the same composition the wire runs (карта #704, ADR 0061).
 func historyRecorder(pool *pgxpool.Pool) historyapp.Recorder {
 	return historyapp.NewService(historypg.NewEntryStore(pool), historypg.NewActorStore(pool), nil)
+}
+
+// Прогресс несёт серверный счётчик просрочки (#817): planned-вхождения с
+// датой раньше «сегодня» собственника. Upcoming не имеет просрочек по
+// построению — null; просроченные месяцы материализуются тиком как долг и
+// считаются гейтвеем на реальном SQL.
+func TestSeam_ProgressCountsTheOverdueOccurrences(t *testing.T) {
+	t.Parallel()
+	h := newSeamHarness(t)
+	h.seedOwner()
+	view := h.createRental()
+
+	// Upcoming (старт в будущем): вхождения начинаются со старта — просрочек
+	// не бывает, счётчик null.
+	future := mustSeamDate("2026-09-10")
+	_, err := h.pool.Exec(context.Background(),
+		`UPDATE rentals SET start_date = $1 WHERE id = $2`, future, view.Rental.ID)
+	require.NoError(t, err)
+	upcoming, err := h.svc.GetRental(context.Background(), h.owner, h.propID, view.Rental.ID)
+	require.NoError(t, err)
+	assert.Equal(t, rentalsdomain.StatusUpcoming, upcoming.Status)
+	assert.Nil(t, upcoming.Progress.OverdueMonths)
+
+	// Backdate the pair into July (the seeding scenario, as completion) and
+	// run the owner tick: Jul 15 and Aug 15 materialize as the overdue debt,
+	// Sep 15 stands the single future planned — the count is 2.
+	start := mustSeamDate("2026-07-15")
+	_, err = h.pool.Exec(context.Background(),
+		`UPDATE rentals SET start_date = $1 WHERE id = $2`, start, view.Rental.ID)
+	require.NoError(t, err)
+	_, err = h.pool.Exec(context.Background(),
+		`UPDATE payments SET since = $1 WHERE id = $2`, start, view.Rental.PaymentID)
+	require.NoError(t, err)
+	require.NoError(t, h.tick.RunOwnerTick(context.Background(), h.owner))
+
+	overdue, err := h.svc.GetRental(context.Background(), h.owner, h.propID, view.Rental.ID)
+	require.NoError(t, err)
+	require.NotNil(t, overdue.Progress.OverdueMonths)
+	assert.Equal(t, 2, *overdue.Progress.OverdueMonths)
+	require.NotNil(t, overdue.NextPayment,
+		"the future planned stays — the blue line keeps its data")
+	assert.Equal(t, mustSeamDate("2026-09-15"), overdue.NextPayment.Date)
+
+	// A paid fact closes its month (решение #815): marking Aug 15 paid drops
+	// the count to 1 — paid rows never read as overdue.
+	_, err = h.pool.Exec(context.Background(),
+		`UPDATE operations SET status = 'paid', paid_date = $2
+		 WHERE payment_id = $1 AND status = 'planned' AND date = $2`,
+		view.Rental.PaymentID, mustSeamDate("2026-08-15"))
+	require.NoError(t, err)
+	paid, err := h.svc.GetRental(context.Background(), h.owner, h.propID, view.Rental.ID)
+	require.NoError(t, err)
+	require.NotNil(t, paid.Progress.OverdueMonths)
+	assert.Equal(t, 1, *paid.Progress.OverdueMonths)
+	assert.Equal(t, 1, paid.Progress.PaidMonths)
 }

@@ -28,22 +28,20 @@ import (
 
 // fakeRentalManager is the func-backed RentalManager double: every use case
 // is optional; an unset one fails the test loudly instead of silently
-// succeeding. The field block mirrors the port one to one (an accepted dupl
-// of the interface) — a test double, not a second contract.
-//
-//nolint:dupl // mirror of the RentalManager port block — a test double, not a second contract.
+// succeeding. The func fields back the port's methods one to one; the field
+// order is alphabetical, unlike the port.
 type fakeRentalManager struct {
-	create func(ctx context.Context, actor, propertyID uuid.UUID, cmd rentalsapp.CreateRentalCommand) (rentalsapp.RentalView, error)
-	list   func(ctx context.Context, actor, propertyID uuid.UUID) ([]rentalsapp.RentalView, error)
-	get    func(ctx context.Context, actor, propertyID, rentalID uuid.UUID) (rentalsapp.RentalView, error)
-	update func(
-		ctx context.Context, actor, propertyID, rentalID uuid.UUID, cmd rentalsapp.UpdateRentalCommand,
-	) (rentalsapp.RentalView, error)
 	complete func(
 		ctx context.Context, actor, propertyID, rentalID uuid.UUID, cmd rentalsapp.CompleteRentalCommand,
 	) (rentalsapp.RentalView, error)
+	create  func(ctx context.Context, actor, propertyID uuid.UUID, cmd rentalsapp.CreateRentalCommand) (rentalsapp.RentalView, error)
 	del     func(ctx context.Context, actor, propertyID, rentalID uuid.UUID) error
+	get     func(ctx context.Context, actor, propertyID, rentalID uuid.UUID) (rentalsapp.RentalView, error)
+	list    func(ctx context.Context, actor, propertyID uuid.UUID) ([]rentalsapp.RentalView, error)
 	summary func(ctx context.Context, actor, propertyID, rentalID uuid.UUID, until *time.Time) (rentalsapp.RentalSummary, error)
+	update  func(
+		ctx context.Context, actor, propertyID, rentalID uuid.UUID, cmd rentalsapp.UpdateRentalCommand,
+	) (rentalsapp.RentalView, error)
 }
 
 func (f *fakeRentalManager) CreateRental(
@@ -154,10 +152,11 @@ func viewFixture(t *testing.T) rentalsapp.RentalView {
 		},
 		Status: rentalsdomain.StatusActive,
 		Payment: rentalsapp.RentPaymentState{
-			PaymentID:     paymentID,
-			AmountKopecks: 5_000_000,
-			PaymentDay:    day,
-			AutoPay:       true,
+			PaymentID:          paymentID,
+			AmountKopecks:      5_000_000,
+			PaymentDay:         day,
+			AutoPay:            true,
+			ReminderOffsetDays: func() *int { v := 3; return &v }(),
 		},
 		NextPayment: &rentalsapp.PlannedOccurrence{
 			OperationID:   uuid.Must(uuid.NewV7()),
@@ -168,6 +167,7 @@ func viewFixture(t *testing.T) rentalsapp.RentalView {
 			PaidMonths:      0,
 			TotalMonths:     func() *int { v := 12; return &v }(),
 			MonthsRemaining: func() *int { v := 11; return &v }(),
+			OverdueMonths:   func() *int { v := 2; return &v }(),
 		},
 		Today: wireDate("2026-09-04").Time,
 	}
@@ -194,7 +194,8 @@ func TestCreateRental_Created(t *testing.T) {
 		"depositKopecks": 10000000,
 		"contactId": "%s",
 		"comment": "нюансы",
-		"autoPay": true
+		"autoPay": true,
+		"reminderOffsetDays": 3
 	}`
 	contact := uuid.Must(uuid.NewV7())
 	req := rentalRequest(t, http.MethodPost, view.Rental.OwnerID,
@@ -212,6 +213,8 @@ func TestCreateRental_Created(t *testing.T) {
 	assert.Equal(t, contact, *gotCmd.ContactID)
 	assert.Equal(t, "2026-09-04", gotCmd.StartDate.Format(time.DateOnly))
 	assert.True(t, gotCmd.AutoPay)
+	require.NotNil(t, gotCmd.ReminderOffsetDays)
+	assert.Equal(t, 3, *gotCmd.ReminderOffsetDays)
 
 	var response openapi.RentalResponse
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&response))
@@ -221,11 +224,47 @@ func TestCreateRental_Created(t *testing.T) {
 	assert.Equal(t, int64(5_000_000), response.RentPayment.AmountKopecks)
 	assert.Equal(t, "2026-09-15", response.RentPayment.NextPayment.Date.Format(time.DateOnly))
 	assert.Equal(t, 11, response.RentPayment.NextPayment.DaysUntil)
+	require.NotNil(t, response.RentPayment.ReminderOffsetDays)
+	assert.Equal(t, openapi.RentalPaymentViewReminderOffsetDays(3), *response.RentPayment.ReminderOffsetDays)
 	require.NotNil(t, response.Tenant)
 	assert.Equal(t, "Иван", response.Tenant.FirstName)
 	require.NotNil(t, response.Progress.TotalMonths)
 	assert.Equal(t, 12, *response.Progress.TotalMonths)
+	require.NotNil(t, response.Progress.OverdueMonths,
+		"the server-counted overdue rides the progress node (#817)")
+	assert.Equal(t, 2, *response.Progress.OverdueMonths)
 	assert.Equal(t, "2026-09-04", response.Today.Format(time.DateOnly))
+}
+
+// TestCreateRental_NoReminderOffset pins the nil leg of reminderOffsetDays
+// (the payments wire-test «absent — no reminders» case mirrored): a body
+// without the field decodes to no command pointer, and a view without the
+// leg renders no reminderOffsetDays key back to the wire.
+func TestCreateRental_NoReminderOffset(t *testing.T) {
+	t.Parallel()
+	view := viewFixture(t)
+	view.Payment.ReminderOffsetDays = nil
+	var gotCmd rentalsapp.CreateRentalCommand
+	svc := &fakeRentalManager{create: func(
+		_ context.Context, _, _ uuid.UUID, cmd rentalsapp.CreateRentalCommand,
+	) (rentalsapp.RentalView, error) {
+		gotCmd = cmd
+		return view, nil
+	}}
+	h := NewRentalHandlers(svc, nil)
+
+	body := `{"amountKopecks": 5000000, "paymentDay": 15, "startDate": "2026-09-04",
+	          "utilities": "meters_only", "autoPay": false}`
+	req := rentalRequest(t, http.MethodPost, view.Rental.OwnerID,
+		fmt.Sprintf("/properties/%s/rentals", view.Rental.PropertyID), body)
+	rec := httptest.NewRecorder()
+
+	h.CreateRental(rec, req, view.Rental.PropertyID)
+
+	require.Equal(t, http.StatusCreated, rec.Code)
+	assert.Nil(t, gotCmd.ReminderOffsetDays)
+	assert.NotContains(t, rec.Body.String(), "reminderOffsetDays",
+		"a view without the leg must render no reminderOffsetDays key")
 }
 
 func TestCreateRental_PaymentDayLast(t *testing.T) {

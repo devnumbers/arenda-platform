@@ -44,8 +44,9 @@ type fakePaymentManager struct {
 	update   func(
 		ctx context.Context, actor, propertyID, paymentID uuid.UUID, cmd application.UpdatePaymentCommand,
 	) (domain.Payment, error)
-	completedStatus   func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (bool, error)
-	completedStatuses func(ctx context.Context, actor, propertyID uuid.UUID) (map[uuid.UUID]bool, error)
+	completedStatus     func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (bool, error)
+	paymentFlags        func(ctx context.Context, actor, propertyID uuid.UUID) (completed, managed map[uuid.UUID]bool, err error)
+	rentalManagedStatus func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (bool, error)
 }
 
 // CompletedStatus defaults to false — the pre-completion behaviour the older
@@ -59,13 +60,26 @@ func (f *fakePaymentManager) CompletedStatus(
 	return f.completedStatus(ctx, actor, propertyID, paymentID)
 }
 
-func (f *fakePaymentManager) CompletedStatuses(
+// PaymentFlags defaults to two empty maps — no listed rule carries either
+// flag unless a test sets the hook.
+func (f *fakePaymentManager) PaymentFlags(
 	ctx context.Context, actor, propertyID uuid.UUID,
-) (map[uuid.UUID]bool, error) {
-	if f.completedStatuses == nil {
-		return map[uuid.UUID]bool{}, nil
+) (completed, managed map[uuid.UUID]bool, err error) {
+	if f.paymentFlags == nil {
+		return map[uuid.UUID]bool{}, map[uuid.UUID]bool{}, nil
 	}
-	return f.completedStatuses(ctx, actor, propertyID)
+	return f.paymentFlags(ctx, actor, propertyID)
+}
+
+// RentalManagedStatus defaults to false — the ordinary (unmanaged) rule the
+// older wire assertions expect unless a test sets the hook.
+func (f *fakePaymentManager) RentalManagedStatus(
+	ctx context.Context, actor, propertyID, paymentID uuid.UUID,
+) (bool, error) {
+	if f.rentalManagedStatus == nil {
+		return false, nil
+	}
+	return f.rentalManagedStatus(ctx, actor, propertyID, paymentID)
 }
 
 // The method set mirrors the port; the long signatures are the contract's.
@@ -549,6 +563,137 @@ func TestUpdatePayment_EndDateTriState(t *testing.T) {
 	}
 }
 
+func TestCreatePayment_MapsReminderOffset(t *testing.T) {
+	t.Parallel()
+	actor := uuid.Must(uuid.NewV7())
+	propertyID := uuid.Must(uuid.NewV7())
+
+	// Build a create payload with the given reminder lead time; the long
+	// JSON stays assembled, not one long line.
+	reminderCreateBody := func(days string) string {
+		return `{"type":"expense","title":"Аренда","amountKopecks":5000000,` +
+			`"recurrence":{"kind":"daily"},"paymentForm":"transfer","categorySlug":"rent",` +
+			`"reminderOffsetDays":` + days + `}`
+	}
+
+	cases := []struct {
+		name     string
+		body     string
+		wantNil  bool
+		wantDays int
+	}{
+		{"absent — no reminders", validCreateBody, true, 0},
+		{"explicit 3", reminderCreateBody("3"), false, 3},
+		{"explicit 7", reminderCreateBody("7"), false, 7},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var gotCmd application.CreatePaymentCommand
+			h := NewPaymentHandlers(&fakePaymentManager{
+				create: func(_ context.Context, _, _ uuid.UUID, cmd application.CreatePaymentCommand) (domain.Payment, error) {
+					gotCmd = cmd
+					return validFixturePayment(), nil
+				},
+			}, nil)
+			w := httptest.NewRecorder()
+			h.CreatePayment(w, paymentRequest(t, http.MethodPost, actor, tc.body), propertyID)
+			if w.Code != http.StatusCreated {
+				t.Fatalf("status = %d, want 201; body: %s", w.Code, w.Body.String())
+			}
+			if tc.wantNil {
+				if gotCmd.ReminderOffsetDays != nil {
+					t.Fatalf("command reminder offset = %v, want nil", gotCmd.ReminderOffsetDays)
+				}
+				return
+			}
+			if gotCmd.ReminderOffsetDays == nil || *gotCmd.ReminderOffsetDays != tc.wantDays {
+				t.Fatalf("command reminder offset = %v, want %d", gotCmd.ReminderOffsetDays, tc.wantDays)
+			}
+		})
+	}
+}
+
+func TestUpdatePayment_ReminderOffsetTriState(t *testing.T) {
+	t.Parallel()
+	actor := uuid.Must(uuid.NewV7())
+	propertyID := uuid.Must(uuid.NewV7())
+	paymentID := uuid.Must(uuid.NewV7())
+
+	// Table fields mirror the endDate tri-state: wantSet — the command
+	// carries a ReminderOffsetUpdate; wantClr — the update turns reminders
+	// off; wantDays — the set lead time.
+	cases := []struct {
+		name     string
+		body     string
+		wantSet  bool
+		wantClr  bool
+		wantDays int
+	}{
+		{"omitted keeps", `{"title": "Новое название"}`, false, false, 0},
+		{"null clears", `{"reminderOffsetDays": null}`, true, true, 0},
+		{"1 sets", `{"reminderOffsetDays": 1}`, true, false, 1},
+		{"7 sets", `{"reminderOffsetDays": 7}`, true, false, 7},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var gotCmd application.UpdatePaymentCommand
+			h := NewPaymentHandlers(&fakePaymentManager{
+				update: func(_ context.Context, _, _, _ uuid.UUID, cmd application.UpdatePaymentCommand) (domain.Payment, error) {
+					gotCmd = cmd
+					return validFixturePayment(), nil
+				},
+			}, nil)
+			w := httptest.NewRecorder()
+			h.UpdatePayment(w, paymentRequest(t, http.MethodPatch, actor, tc.body),
+				propertyID, paymentID)
+			if w.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+			}
+			if present := gotCmd.ReminderOffsetDays != nil; present != tc.wantSet {
+				t.Fatalf("command ReminderOffsetDays update present = %v, want %v", present, tc.wantSet)
+			}
+			if tc.wantSet {
+				if tc.wantClr != (gotCmd.ReminderOffsetDays.Value == nil) {
+					t.Fatalf("ReminderOffsetDays.Value = %v, cleared=%v", gotCmd.ReminderOffsetDays.Value, tc.wantClr)
+				}
+				if !tc.wantClr && (gotCmd.ReminderOffsetDays.Value == nil || *gotCmd.ReminderOffsetDays.Value != tc.wantDays) {
+					t.Fatalf("ReminderOffsetDays.Value = %v, want %d", gotCmd.ReminderOffsetDays.Value, tc.wantDays)
+				}
+			}
+		})
+	}
+}
+
+func TestPaymentResponse_CarriesReminderOffset(t *testing.T) {
+	t.Parallel()
+	offset := 3
+	respond := validFixturePayment()
+	respond.ReminderOffsetDays = &offset
+
+	h := NewPaymentHandlers(&fakePaymentManager{
+		get: func(_ context.Context, _, _, _ uuid.UUID) (domain.Payment, error) {
+			return respond, nil
+		},
+	}, nil)
+	w := httptest.NewRecorder()
+	h.GetPayment(w, paymentRequest(t, http.MethodGet, uuid.Must(uuid.NewV7()), ""),
+		uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		ReminderOffsetDays *int `json:"reminderOffsetDays"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.ReminderOffsetDays == nil || *resp.ReminderOffsetDays != 3 {
+		t.Fatalf("response reminderOffsetDays = %v, want 3", resp.ReminderOffsetDays)
+	}
+}
+
 func TestDeletePayment_KeepOverdueDefault(t *testing.T) {
 	t.Parallel()
 	actor := uuid.Must(uuid.NewV7())
@@ -604,6 +749,7 @@ func TestPaymentHandlers_ErrorMapping(t *testing.T) {
 		{"archived property", application.ErrArchivedProperty, http.StatusConflict, "Нельзя изменить архивный объект"},
 		{"already paused", application.ErrAlreadyPaused, http.StatusConflict, "Платёж уже на паузе"},
 		{"not paused", application.ErrNotPaused, http.StatusConflict, "Платёж не на паузе"},
+		{"rental-managed", application.ErrRentManagedPayment, http.StatusConflict, "Платёж управляется арендой"},
 		{"invalid input", application.ErrInvalidInput, http.StatusBadRequest, "Некорректные данные платежа"},
 		{"wrapped not found", wrapped(application.ErrNotFound), http.StatusNotFound, testDetailNotFmt},
 		{"internal", errors.New("boom"), http.StatusInternalServerError, ""},

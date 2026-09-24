@@ -445,6 +445,21 @@ linters:
       - linters: [forbidigo]
         path: ^cmd/
         text: 'exit policy \(bar #323\)'
+      # Шов «управляемый платёж аренды» (ADR 0053 §2): порт
+      # RentPaymentGateway.NextPlannedOccurrence (и его тест-фейк) отвечает
+      # (nil, nil), когда будущего вхождения нет — после планового окончания
+      # или у завершённой аренды. Это документированное значение порта
+      # («nil — нет вхождения»), а не забытая ошибка; сентинел-ошибка
+      # заставила бы каждое чтение view различать «нет будущего» как ошибку.
+      # Две точки — реализация в композиционном корне и фейк в
+      # интеграционных тестах rentals; новые появляются через nilnil-файлы
+      # гейта #344, не молча.
+      - linters: [nilnil]
+        path: ^cmd/api/wire/rentals\.go$
+        text: 'return both a `nil` error and an invalid value'
+      - linters: [nilnil]
+        path: ^internal/rentals/application/integration_test\.go$
+        text: 'return both a `nil` error and an invalid value'
 
 formatters:
   enable:

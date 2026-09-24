@@ -22,18 +22,45 @@ const MaxAmountKopecks = 1_000_000_000
 // copy limit, not a byte limit.
 const MaxTitleLength = 255
 
+// reminderOffsets are the reminder lead times the product speaks (карта
+// #822): 1, 3 or 7 days before an occurrence — the same vocabulary the
+// schema CHECK enforces durably.
+var reminderOffsets = [3]int{1, 3, 7}
+
+// isValidReminderOffset reports whether the reminder lead time is one of the
+// contract's values; nil (no reminders) is always valid.
+func isValidReminderOffset(offset *int) bool {
+	if offset == nil {
+		return true
+	}
+	for _, valid := range reminderOffsets {
+		if *offset == valid {
+			return true
+		}
+	}
+	return false
+}
+
+// IsValidReminderOffset is the exported read of the reminder contract for
+// the sibling contexts that write payment rules through their own seams (the
+// rentals' managed payment): nil or 1/3/7 is valid, anything else is not.
+func IsValidReminderOffset(offset *int) bool {
+	return isValidReminderOffset(offset)
+}
+
 // CreatePaymentCommand is the validated create payload of a payment rule.
 // The since date is not part of it: the server sets it to the owner's today
 // (ADR 0048), and it never changes afterwards.
 type CreatePaymentCommand struct {
-	Type          domain.PaymentType
-	Title         string
-	AmountKopecks int64
-	Recurrence    domain.Recurrence
-	PaymentForm   domain.PaymentForm
-	CategorySlug  string
-	EndDate       *time.Time
-	AutoPay       bool
+	Type               domain.PaymentType
+	Title              string
+	AmountKopecks      int64
+	Recurrence         domain.Recurrence
+	PaymentForm        domain.PaymentForm
+	CategorySlug       string
+	EndDate            *time.Time
+	AutoPay            bool
+	ReminderOffsetDays *int
 }
 
 // EndDateUpdate is the PATCH resolution of endDate: Value nil clears the end
@@ -55,6 +82,15 @@ type UpdatePaymentCommand struct {
 	// non-nil one applies the EndDateUpdate (set or clear).
 	EndDate *EndDateUpdate
 	AutoPay *bool
+	// ReminderOffsetDays is tri-state the same way: omit keeps, a set value
+	// applies (1/3/7), a clear turns reminders off.
+	ReminderOffsetDays *ReminderOffsetUpdate
+}
+
+// ReminderOffsetUpdate is the PATCH resolution of reminderOffsetDays: Value
+// nil clears the reminders, 1/3/7 sets the lead time.
+type ReminderOffsetUpdate struct {
+	Value *int
 }
 
 // PaymentService orchestrates the payment rule use cases (ticket #457,
@@ -109,17 +145,18 @@ func (s *PaymentService) CreatePayment(
 	return runMutation(s.conveyor(), ctx, actor, propertyID, uuid.Nil, s.writeGate,
 		func(ctx context.Context, stores *txStores, scope uuid.UUID, _ domain.Payment, today time.Time) (mutationOutcome[domain.Payment], error) {
 			draft := domain.Payment{
-				OwnerID:       scope,
-				PropertyID:    propertyID,
-				Type:          cmd.Type,
-				Title:         strings.TrimSpace(cmd.Title),
-				AmountKopecks: cmd.AmountKopecks,
-				Recurrence:    cmd.Recurrence,
-				Since:         today,
-				EndDate:       cmd.EndDate,
-				AutoPay:       cmd.AutoPay,
-				PaymentForm:   cmd.PaymentForm,
-				Category:      domain.CategoryRef{Slug: &cmd.CategorySlug},
+				OwnerID:            scope,
+				PropertyID:         propertyID,
+				Type:               cmd.Type,
+				Title:              strings.TrimSpace(cmd.Title),
+				AmountKopecks:      cmd.AmountKopecks,
+				Recurrence:         cmd.Recurrence,
+				Since:              today,
+				EndDate:            cmd.EndDate,
+				AutoPay:            cmd.AutoPay,
+				ReminderOffsetDays: cmd.ReminderOffsetDays,
+				PaymentForm:        cmd.PaymentForm,
+				Category:           domain.CategoryRef{Slug: &cmd.CategorySlug},
 			}
 			if err := validateRule(draft); err != nil {
 				return mutationOutcome[domain.Payment]{}, err
@@ -190,7 +227,12 @@ func (s *PaymentService) UpdatePayment(
 	ctx context.Context, actor, propertyID, paymentID uuid.UUID, cmd UpdatePaymentCommand,
 ) (domain.Payment, error) {
 	return runMutation(s.conveyor(), ctx, actor, propertyID, paymentID, s.writeGate,
-		func(ctx context.Context, stores *txStores, _ uuid.UUID, rule domain.Payment, today time.Time) (mutationOutcome[domain.Payment], error) {
+		func(
+			ctx context.Context, stores *txStores, scope uuid.UUID, rule domain.Payment, today time.Time,
+		) (mutationOutcome[domain.Payment], error) {
+			if err := ensureNotRentalManaged(ctx, stores, scope, rule.ID); err != nil {
+				return mutationOutcome[domain.Payment]{}, err
+			}
 			applyUpdate(&rule, cmd)
 			if err := validateRule(rule); err != nil {
 				return mutationOutcome[domain.Payment]{}, err
@@ -228,6 +270,12 @@ func (s *PaymentService) DeletePayment(
 		func(
 			ctx context.Context, stores *txStores, scope uuid.UUID, rule domain.Payment, today time.Time,
 		) (mutationOutcome[domain.Payment], error) {
+			// The rentals RESTRICT FK forbids the direct delete for any
+			// rental state — the gate states the same in the domain's own
+			// words (ticket #818): delete the rental, the payment follows.
+			if err := ensureNotRentalManaged(ctx, stores, scope, rule.ID); err != nil {
+				return mutationOutcome[domain.Payment]{}, err
+			}
 			if err := stores.payments.DeletePlannedFrom(ctx, rule.ID, today); err != nil {
 				return mutationOutcome[domain.Payment]{}, err
 			}
@@ -259,7 +307,14 @@ func (s *PaymentService) PausePayment(
 	ctx context.Context, actor, propertyID, paymentID uuid.UUID,
 ) (domain.Payment, error) {
 	return runMutation(s.conveyor(), ctx, actor, propertyID, paymentID, s.writeGate,
-		func(ctx context.Context, stores *txStores, _ uuid.UUID, rule domain.Payment, today time.Time) (mutationOutcome[domain.Payment], error) {
+		func(
+			ctx context.Context, stores *txStores, scope uuid.UUID, rule domain.Payment, today time.Time,
+		) (mutationOutcome[domain.Payment], error) {
+			// The gate precedes the rule's own state: pausing a rent payment
+			// would silently stop the rental's materialization (#818).
+			if err := ensureNotRentalManaged(ctx, stores, scope, rule.ID); err != nil {
+				return mutationOutcome[domain.Payment]{}, err
+			}
 			if _, active := domain.ActivePause(rule.Pauses); active {
 				return mutationOutcome[domain.Payment]{}, ErrAlreadyPaused
 			}
@@ -285,7 +340,12 @@ func (s *PaymentService) ResumePayment(
 	ctx context.Context, actor, propertyID, paymentID uuid.UUID,
 ) (domain.Payment, error) {
 	return runMutation(s.conveyor(), ctx, actor, propertyID, paymentID, s.writeGate,
-		func(ctx context.Context, stores *txStores, _ uuid.UUID, rule domain.Payment, today time.Time) (mutationOutcome[domain.Payment], error) {
+		func(
+			ctx context.Context, stores *txStores, scope uuid.UUID, rule domain.Payment, today time.Time,
+		) (mutationOutcome[domain.Payment], error) {
+			if err := ensureNotRentalManaged(ctx, stores, scope, rule.ID); err != nil {
+				return mutationOutcome[domain.Payment]{}, err
+			}
 			if _, active := domain.ActivePause(rule.Pauses); !active {
 				return mutationOutcome[domain.Payment]{}, ErrNotPaused
 			}
@@ -360,6 +420,9 @@ func validateRule(rule domain.Payment) error {
 	if rule.EndDate != nil && rule.EndDate.Before(rule.Since) {
 		return ErrInvalidInput
 	}
+	if !isValidReminderOffset(rule.ReminderOffsetDays) {
+		return ErrInvalidInput
+	}
 	return nil
 }
 
@@ -408,6 +471,9 @@ func applyUpdate(payment *domain.Payment, cmd UpdatePaymentCommand) {
 	if cmd.AutoPay != nil {
 		payment.AutoPay = *cmd.AutoPay
 	}
+	if cmd.ReminderOffsetDays != nil {
+		payment.ReminderOffsetDays = cmd.ReminderOffsetDays.Value
+	}
 }
 
 // updatedFields lists the field names a command changes; the audit context
@@ -438,6 +504,9 @@ func updatedFields(cmd UpdatePaymentCommand) []string {
 	if cmd.AutoPay != nil {
 		fields = append(fields, "auto_pay")
 	}
+	if cmd.ReminderOffsetDays != nil {
+		fields = append(fields, "reminder_offset_days")
+	}
 	return fields
 }
 
@@ -460,33 +529,67 @@ func (s *PaymentService) CompletedStatus(
 	return s.ruleCompleted(ctx, scope, payment)
 }
 
-// CompletedStatuses computes the completion flag for every rule of the
-// property: the list response carries the flag per item, while the list rows
-// themselves hold no operation data to derive it client-side.
-func (s *PaymentService) CompletedStatuses(
+// PaymentFlags computes both list-response flags in a single pass over the
+// property's rule list (#815, #818, ADR 0053): one ListByProperty read fills
+// isCompleted per rule (the settlement view) and isRentalManaged (the rental
+// gate's read flag) — the list rows themselves hold no operation data to
+// derive the flags client-side, and the unmanaged rules travel out as false.
+func (s *PaymentService) PaymentFlags(
 	ctx context.Context, actor, propertyID uuid.UUID,
-) (map[uuid.UUID]bool, error) {
+) (completed, managed map[uuid.UUID]bool, err error) {
 	scope, err := s.readScope(ctx, actor, propertyID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	payments, err := s.payments.ListByProperty(ctx, scope, propertyID, "")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	today, err := ownerToday(s.calendar, ctx, scope)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	statuses := make(map[uuid.UUID]bool, len(payments))
+	ids := make([]uuid.UUID, 0, len(payments))
+	completed = make(map[uuid.UUID]bool, len(payments))
 	for _, payment := range payments {
-		completed, err := s.ruleCompletedToday(ctx, scope, today, payment)
+		flag, err := s.ruleCompletedToday(ctx, scope, today, payment)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		statuses[payment.ID] = completed
+		completed[payment.ID] = flag
+		ids = append(ids, payment.ID)
 	}
-	return statuses, nil
+	// The reader answers the managed subset; every listed rule travels out
+	// of this read, the unmanaged ones as false.
+	managedSub, err := s.rentalManaged.ManagedPaymentIDs(ctx, scope, ids)
+	if err != nil {
+		return nil, nil, fmt.Errorf("rental-managed statuses: %w", err)
+	}
+	managed = make(map[uuid.UUID]bool, len(ids))
+	for _, id := range ids {
+		managed[id] = managedSub[id]
+	}
+	return completed, managed, nil
+}
+
+// RentalManagedStatus reports whether the rule is managed by a rental
+// (ADR 0053, ticket #818): the read the payment screen uses to hide the
+// rule mutations the gate rejects. Reads never tick.
+func (s *PaymentService) RentalManagedStatus(
+	ctx context.Context, actor, propertyID, paymentID uuid.UUID,
+) (bool, error) {
+	scope, err := s.readScope(ctx, actor, propertyID)
+	if err != nil {
+		return false, err
+	}
+	if _, err := s.payments.Get(ctx, paymentID, scope, propertyID); err != nil {
+		return false, err
+	}
+	managed, err := s.rentalManaged.ManagedPaymentIDs(ctx, scope, []uuid.UUID{paymentID})
+	if err != nil {
+		return false, fmt.Errorf("rental-managed status: %w", err)
+	}
+	return managed[paymentID], nil
 }
 
 // ruleCompleted resolves the data owner's today and computes the flag for a

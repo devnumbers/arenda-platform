@@ -59,6 +59,10 @@ type RentPaymentSeed struct {
 	StartDate      time.Time
 	PlannedEndDate *time.Time
 	AutoPay        bool
+	// ReminderOffsetDays is the managed payment's reminder lead time
+	// (карта #822): 1/3/7, nil = без напоминаний. Аренда ставит его вместе
+	// с автоплатежом (решение #823).
+	ReminderOffsetDays *int
 }
 
 // RentPaymentChange is the partial sync payload of the terms edit: a nil
@@ -81,6 +85,9 @@ type RentPaymentState struct {
 	AmountKopecks int64
 	PaymentDay    domain.PaymentDay
 	AutoPay       bool
+	// ReminderOffsetDays is the managed payment's reminder lead time read
+	// back for the settings screens (карта #822); nil = без напоминаний.
+	ReminderOffsetDays *int
 }
 
 // PlannedOccurrence is the payment's single future planned operation
@@ -152,6 +159,14 @@ type RentPaymentGateway interface {
 	// CountPaidOperations counts the payment's paid operations — the
 	// progress' paidMonths, «N из M» (ADR 0053 §2).
 	CountPaidOperations(ctx context.Context, scope, propertyID, paymentID uuid.UUID) (int, error)
+	// CountOverdueOccurrences counts the payment's overdue occurrences — the
+	// planned rows dated before the owner's today — the progress'
+	// overdueMonths, «Просрочено N месяцев» (#817). An upcoming rental has
+	// none by construction: the occurrences begin at the start, and the
+	// start is never in the past.
+	CountOverdueOccurrences(
+		ctx context.Context, scope, propertyID, paymentID uuid.UUID, today time.Time,
+	) (int, error)
 	// SummarizePaidOperations totals the property's paid operations — of any
 	// payment and manual ones — with the operation date inside [from, until]
 	// (решение №13: the period is by the operation date, not the payment

@@ -26,6 +26,7 @@ function operation(overrides: Partial<PaymentOperation>): PaymentOperation {
 function payment(overrides: Partial<Payment>): Payment {
   return {
     isCompleted: false,
+    isRentalManaged: false,
     id: 'pay-1',
     propertyId: 'p-1',
     type: 'expense',

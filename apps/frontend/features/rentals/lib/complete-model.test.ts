@@ -103,7 +103,7 @@ describe('completePlannedEndDate', () => {
         autoPay: false,
         nextPayment: null,
       },
-      progress: { paidMonths: 0, totalMonths: 12, monthsRemaining: 12 },
+      progress: { paidMonths: 0, totalMonths: 12, monthsRemaining: 12, overdueMonths: null },
       today: '2027-06-01',
       createdAt: '2026-05-10T00:00:00Z',
       ...overrides,

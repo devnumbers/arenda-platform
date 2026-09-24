@@ -127,3 +127,13 @@ SELECT property_id, owner_id, start_date, planned_end_date
 FROM rentals
 WHERE completed_date IS NULL
   AND property_id = ANY(@property_ids::uuid[]);
+
+-- name: ListRentalManagedPaymentIDs :many
+-- The scope's payment ids a rental row references (any rental state) — the
+-- payments rule-mutation gate's input and the isRentalManaged read flag
+-- (ADR 0053, ticket #818): the rent payment is created, edited and deleted
+-- only through the rental. An empty id list never reaches the query.
+SELECT payment_id
+FROM rentals
+WHERE owner_id = $1
+  AND payment_id = ANY(@payment_ids::uuid[]);

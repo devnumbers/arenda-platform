@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDateTimeHeading, formatDayMonth, formatDayMonthTime, formatDayMonthWithYear, formatIsoRangeChipLabel, formatOverdueDays, formatRangeBound, formatSessionLastSeen, formatTime } from './date-format';
+import { formatDateTimeHeading, formatDayMonth, formatDayMonthTime, formatDayMonthWithYear, formatDayMonthYear, formatIsoRangeChipLabel, formatOverdueDays, formatRangeBound, formatSessionLastSeen, formatTime } from './date-format';
 
 describe('date-format', () => {
   it('день и склонённый месяц без года: «11 августа»', () => {
@@ -15,6 +15,11 @@ describe('date-format', () => {
     const today = '2026-09-04';
     expect(formatDayMonthWithYear('2026-05-13', today)).toBe('13 мая');
     expect(formatDayMonthWithYear('2027-05-13', today)).toBe('13 мая, 2027');
+  });
+
+  it('год всегда, в том числе в текущем: «11 августа, 2026» — канон групп истории', () => {
+    expect(formatDayMonthYear('2026-08-11')).toBe('11 августа, 2026');
+    expect(formatDayMonthYear('2025-05-13')).toBe('13 мая, 2025');
   });
 
   it('формат границы диапазона: текущий год — «1 ноября», другой — «01.01.2025»', () => {

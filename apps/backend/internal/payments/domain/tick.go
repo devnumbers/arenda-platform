@@ -55,7 +55,8 @@ func NewMaterializedOperation(p Payment, date time.Time) Operation {
 // operation keys (ADR 0049 §2–§3). Applying it is idempotent.
 type PaymentTickPlan struct {
 	// Materialize lists due occurrence dates (<= today) that have no
-	// operation yet; each becomes a planned operation. Overdue debt
+	// operation yet and whose recurrence period no operation of the rule
+	// claims yet; each becomes a planned operation. Overdue debt
 	// accumulates here and is never auto-closed.
 	Materialize []time.Time
 	// AutoPayToday runs the auto-pay day payment: the planned occurrence with
@@ -75,20 +76,34 @@ type PaymentTickPlan struct {
 
 // PlanPaymentTick computes the tick plan for one payment rule. The existing map holds
 // the rule's stored operations keyed by date. Paid operations are never
-// touched; overdue planned operations (date < today) are left as debt.
+// touched; overdue planned operations (date < today) are left as debt. A
+// period of the recurrence's own calendar (the month for monthly rules, the
+// week for weekly, the year for yearly) that already holds one of the rule's
+// operations is never re-materialized on a re-dated schedule — the #802 F1
+// phantom fix (ticket #815).
 func PlanPaymentTick(p Payment, today time.Time, existing map[time.Time]OperationStatus) PaymentTickPlan {
 	byDate := existing
 	var plan PaymentTickPlan
 
 	// 1. Materialize everything due: occurrences <= today (>= since, <=
-	// end_date, outside pauses) that do not exist yet.
+	// end_date, outside pauses) that do not exist yet. A period already
+	// holding an operation of the rule is claimed: after a payment-day edit
+	// the old occurrences keep standing at the old dates, and exact-date
+	// dedup alone would resurrect every paid month as phantom overdue debt
+	// (ticket #815).
+	claimedPeriods := make(map[time.Time]struct{}, len(byDate))
+	for date := range byDate {
+		claimedPeriods[periodOf(p.Recurrence, date)] = struct{}{}
+	}
 	todayOccurs := false
 	for _, d := range OccurrencesBetween(p, p.Since, today) {
 		if d.Equal(today) {
 			todayOccurs = true
 		}
 		if _, ok := byDate[d]; !ok {
-			plan.Materialize = append(plan.Materialize, d)
+			if _, taken := claimedPeriods[periodOf(p.Recurrence, d)]; !taken {
+				plan.Materialize = append(plan.Materialize, d)
+			}
 		}
 	}
 

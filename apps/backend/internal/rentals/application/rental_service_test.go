@@ -256,6 +256,7 @@ type fakeGateway struct {
 	state   RentPaymentState
 	next    *PlannedOccurrence
 	paid    int
+	overdue int
 	totals  PaymentsTotals
 	stateEr error
 
@@ -283,6 +284,12 @@ func (g *fakeGateway) NextPlannedOccurrence(
 
 func (g *fakeGateway) CountPaidOperations(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (int, error) {
 	return g.paid, nil
+}
+
+func (g *fakeGateway) CountOverdueOccurrences(
+	context.Context, uuid.UUID, uuid.UUID, uuid.UUID, time.Time,
+) (int, error) {
+	return g.overdue, nil
 }
 
 func (g *fakeGateway) SummarizePaidOperations(
@@ -398,6 +405,39 @@ func TestGetRental_ViewCarriesPaymentID(t *testing.T) {
 	view, err := h.svc.GetRental(t.Context(), h.owner, h.property, rentalID)
 	require.NoError(t, err)
 	assert.Equal(t, h.store.rentals[rentalID].PaymentID, view.Payment.PaymentID)
+}
+
+// Прогресс несёт серверный счётчик просрочки Платежа арендной платы (#817):
+// число просроченных вхождений приходит из гейтвея, ноль — null (строки на
+// экране нет). Форма срока на чтение не влияет: бессрочная считается так же,
+// у upcoming просрочек не бывает по построению (вхождения начинаются со
+// старта, а старт не в прошлом).
+func TestGetRental_ProgressCarriesOverdueMonths(t *testing.T) {
+	t.Parallel()
+	term := func(r *domain.Rental) { r.PlannedEndDate = new(mustDate("2027-09-01")) }
+	tests := []struct {
+		name   string
+		count  int
+		mutate func(*domain.Rental)
+		want   *int
+	}{
+		{"zero overdue is null", 0, term, nil},
+		{"one overdue month", 1, term, new(1)},
+		{"two overdue months", 2, term, new(2)},
+		{"open-ended reads the same", 3, nil, new(3)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			h := newHarness(t)
+			h.gateway.overdue = tt.count
+			rentalID := h.seedRental(tt.mutate)
+
+			view, err := h.svc.GetRental(t.Context(), h.owner, h.property, rentalID)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, view.Progress.OverdueMonths)
+		})
+	}
 }
 
 func TestCreateRental_TodayStartIsActive(t *testing.T) {

@@ -1,5 +1,6 @@
 export { RentalCompletedScreen } from './ui/rental-completed-screen';
 export { RentalCompleteScreen } from './ui/rental-complete-screen';
+export { RentalContactPickerScreen } from './ui/rental-contact-picker-screen';
 export { RentalCreateWizardScreen } from './ui/rental-create-wizard-screen';
 export { RentalExtendScreen } from './ui/rental-extend-screen';
 export { RentalHistoryScreen } from './ui/rental-history-screen';

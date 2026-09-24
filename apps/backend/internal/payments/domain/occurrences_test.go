@@ -17,6 +17,9 @@ const (
 	dayT0    = "2026-08-25"
 	dayNext  = "2026-08-26"
 	dayNext2 = "2026-08-27"
+	// The 5th of the month after today: the re-dated schedule's next
+	// occurrence in the day-edit fixtures (ticket #815).
+	daySep5 = "2026-09-05"
 )
 
 // d parses a calendar date ('YYYY-MM-DD' at UTC midnight) — the domain's date
@@ -81,7 +84,7 @@ func TestOccurrencesBetween_MonthlyAnchorInSinceMonthAlreadyPassed(t *testing.T)
 	p := rule(t, rec, "2026-08-20", nil)
 
 	got := dates(OccurrencesBetween(p, d("2026-08-01"), d("2026-09-30")))
-	assert.Equal(t, []string{"2026-09-05"}, got)
+	assert.Equal(t, []string{daySep5}, got)
 }
 
 func TestNextOccurrenceAfter_ClampedFebruary(t *testing.T) {
@@ -165,8 +168,8 @@ func TestOccurrencesBetween_WeeklyOnlySelectedDaysFromSince(t *testing.T) {
 	rec := mustWeekly(t, time.Saturday)
 	p := rule(t, rec, "2026-08-26", nil)
 
-	got := dates(OccurrencesBetween(p, d("2026-08-20"), d("2026-09-05")))
-	assert.Equal(t, []string{"2026-08-29", "2026-09-05"}, got)
+	got := dates(OccurrencesBetween(p, d("2026-08-20"), d(daySep5)))
+	assert.Equal(t, []string{"2026-08-29", daySep5}, got)
 }
 
 func TestOccurrencesBetween_YearlyClampsLeapDay(t *testing.T) {

@@ -2867,6 +2867,11 @@ export interface components {
             endDate?: string | null;
             /** @default false */
             autoPay: boolean;
+            /**
+             * @description За сколько дней предупреждать о вхождении («Напоминание о платеже», карта #822): 1, 3 или 7. Null/omitted — напоминаний нет (выбор опционален). Напоминание живёт независимо от autoPay.
+             * @enum {integer|null}
+             */
+            reminderOffsetDays?: 1 | 3 | 7 | null;
         };
         /** @description Partial payment update: an omitted field is left unchanged. endDate is tri-state — omitted keeps it, null clears it (open-ended), a date sets it. The since date is not editable. */
         PaymentUpdateRequest: {
@@ -2879,9 +2884,17 @@ export interface components {
             /** @enum {string} */
             paymentForm?: "transfer" | "cash";
             categorySlug?: string;
-            /** Format: date */
+            /**
+             * Format: date
+             * @description Tri-state: omitted keeps the value, null clears it (open-ended), a date sets it.
+             */
             endDate?: string | null;
             autoPay?: boolean;
+            /**
+             * @description Tri-state lead time of the payment reminder («Напоминание о платеже»): omitted keeps the current value, null turns reminders off, 1/3/7 sets the lead time.
+             * @enum {integer|null}
+             */
+            reminderOffsetDays?: 1 | 3 | 7 | null;
         };
         /** @description The payment's category reference resolved by the server: a default catalog slug (label from the code catalog; a slug removed from the catalog falls back to the label «Прочее») or a user category. Icon and color are frontend catalog metadata keyed by slug. */
         CategoryView: {
@@ -2918,10 +2931,17 @@ export interface components {
             /** @enum {string} */
             paymentForm: "transfer" | "cash";
             category: components["schemas"]["CategoryView"];
+            /**
+             * @description The payment reminder's lead time in days (карта #822); null — напоминаний нет. Живёт независимо от autoPay.
+             * @enum {integer|null}
+             */
+            reminderOffsetDays?: 1 | 3 | 7 | null;
             /** @description The rule's favorite star (PUT favorite); returned in the reads and the lists. */
             isFavorite: boolean;
             /** @description Server-computed settlement view of the rule (CONTEXT.md, «Завершённый платёж»): no planned operations — overdue included — and no occurrence beyond the last materialized date of any status. Never stored, never written by the client; derived on every read like the operation's overdue. */
             isCompleted: boolean;
+            /** @description The rule is the rental's managed rent payment (ADR 0053, ticket #818): a rental row references it, any rental state — a completed rental is final and its payment is final with it. The rental is the source of truth for the amount, the payment day, the auto-pay and the planned end, so the rule mutations (pause, resume, patch, delete) answer 409; the payment facts («Оплатить») and the favorite star stay open. The reads carry the flag so the client hides the mutation actions instead of learning the 409 live. */
+            isRentalManaged: boolean;
             pauses: components["schemas"]["PauseIntervalView"][];
             /** Format: date-time */
             createdAt: string;
@@ -3710,6 +3730,11 @@ export interface components {
             contactId?: string | null;
             comment?: string;
             autoPay: boolean;
+            /**
+             * @description За сколько дней предупреждать о платеже арендной платы («Напоминание о платеже», карта #822): 1, 3 или 7. Null/omitted — напоминаний нет. Аренда ставит его вместе с автоплатежом; по макетам дефолт выбора на экране — «За 1 день» (решение #823).
+             * @enum {integer|null}
+             */
+            reminderOffsetDays?: 1 | 3 | 7 | null;
         };
         /** @description Частичная правка условий аренды. Начало не правится. Nullable-поля (plannedEndDate, depositKopecks, commissionKopecks, contactId, comment) — tri-state: omitted оставляет значение, явный null очищает. Сумма, день оплаты, автоплатёж и плановое окончание синхронно правят Платёж арендной платы. Завершённая аренда — 409. */
         RentalUpdateRequest: {
@@ -3771,11 +3796,12 @@ export interface components {
             /** @description date − today по TZ собственника. */
             daysUntil: number;
         };
-        /** @description Прогресс «Оплачено N из M месяцев» (ADR 0053 §2): paidMonths — число paid-операций Платежа; totalMonths и monthsRemaining — только у срочной аренды (null у бессрочной). */
+        /** @description Прогресс «Оплачено N из M месяцев» (ADR 0053 §2): paidMonths — число paid-операций Платежа; totalMonths и monthsRemaining — только у срочной аренды (null у бессрочной). overdueMonths — серверная просрочка Платежа арендной платы (#817): число planned-вхождений раньше «сегодня» собственника (платёжные месяцы, не календарные); null — просрочки нет. */
         RentalProgress: {
             paidMonths: number;
             totalMonths: number | null;
             monthsRemaining: number | null;
+            overdueMonths: number | null;
         };
         /** @description Состояние Платежа арендной платы: рендер читается из платежа — дня оплаты на аренде нет (решение №5). paymentId — переход на экран платежа с детализации аренды (#531): платеж не ищется слагом категории, на объекте бывают и другие платежи rent. */
         RentalPaymentView: {
@@ -3788,6 +3814,11 @@ export interface components {
             amountKopecks: number;
             paymentDay: components["schemas"]["RentalPaymentDay"];
             autoPay: boolean;
+            /**
+             * @description Lead time of the managed payment's reminder (карта #822); null — напоминаний нет.
+             * @enum {integer|null}
+             */
+            reminderOffsetDays?: 1 | 3 | 7 | null;
             /** @description Null, когда будущего вхождения нет (после планового окончания, у завершённой). */
             nextPayment?: components["schemas"]["RentalNextPayment"];
         };

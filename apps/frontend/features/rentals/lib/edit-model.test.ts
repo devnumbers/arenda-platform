@@ -30,7 +30,7 @@ const RENTAL: Rental = {
     autoPay: true,
     nextPayment: null,
   },
-  progress: { paidMonths: 3, totalMonths: 24, monthsRemaining: 17 },
+  progress: { paidMonths: 3, totalMonths: 24, monthsRemaining: 17, overdueMonths: null },
   today: TODAY,
   createdAt: '2026-09-05T10:00:00Z',
 };

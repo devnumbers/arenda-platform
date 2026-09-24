@@ -52,11 +52,13 @@ export function mapPayment(dto: PaymentDto): Payment {
         : dto.recurrence,
     since: dto.since,
     endDate: dto.endDate ?? undefined,
+    reminderOffsetDays: dto.reminderOffsetDays ?? undefined,
     autoPay: dto.autoPay,
     paymentForm: dto.paymentForm,
     category: mapCategoryView(dto.category),
     isFavorite: dto.isFavorite,
     isCompleted: dto.isCompleted,
+    isRentalManaged: dto.isRentalManaged,
     pauses: dto.pauses.map((pause) => ({
       from: pause.fromDate,
       to: pause.toDate ?? undefined,

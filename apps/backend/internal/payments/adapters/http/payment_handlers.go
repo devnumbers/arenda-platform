@@ -37,7 +37,8 @@ type PaymentManager interface {
 	ResumePayment(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error)
 	SetPaymentFavorite(ctx context.Context, actor, propertyID, paymentID uuid.UUID, favorite bool) (domain.Payment, error)
 	CompletedStatus(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (bool, error)
-	CompletedStatuses(ctx context.Context, actor, propertyID uuid.UUID) (map[uuid.UUID]bool, error)
+	PaymentFlags(ctx context.Context, actor, propertyID uuid.UUID) (completed, managed map[uuid.UUID]bool, err error)
+	RentalManagedStatus(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (bool, error)
 }
 
 // PaymentHandlers implements the generated payment endpoints.
@@ -82,6 +83,14 @@ var staticPaymentProblems = []httpsupport.ErrorProblem{
 	{
 		Err: application.ErrAlreadyPaid, Status: http.StatusConflict,
 		Title: httpsupport.ProblemTitleConflict, Detail: "Операция уже оплачена",
+	},
+	{
+		// The rent payment's rule mutations answer the domain's own words
+		// (ADR 0053, ticket #818): the rental owns the amount, the payment
+		// day, the auto-pay and the planned end.
+		Err: application.ErrRentManagedPayment, Status: http.StatusConflict,
+		Title:  httpsupport.ProblemTitleConflict,
+		Detail: "Платёж управляется арендой — поставить на паузу, изменить или удалить его можно только в аренде",
 	},
 }
 
@@ -135,7 +144,6 @@ func (h *PaymentHandlers) CreatePayment(w http.ResponseWriter, r *http.Request, 
 		h.handlePaymentError(w, r, err)
 		return
 	}
-
 	payment, err := h.svc.CreatePayment(r.Context(), actor, propertyID, cmd)
 	if err != nil {
 		h.handlePaymentError(w, r, err)
@@ -164,7 +172,7 @@ func (h *PaymentHandlers) ListPayments(
 		h.handlePaymentError(w, r, err)
 		return
 	}
-	completed, err := h.svc.CompletedStatuses(r.Context(), actor, propertyID)
+	completed, managed, err := h.svc.PaymentFlags(r.Context(), actor, propertyID)
 	if err != nil {
 		h.writeInternal(w, r, err)
 		return
@@ -172,7 +180,7 @@ func (h *PaymentHandlers) ListPayments(
 
 	items := make([]openapi.PaymentResponse, 0, len(payments))
 	for _, payment := range payments {
-		resp, err := paymentResponse(payment, completed[payment.ID])
+		resp, err := paymentResponse(payment, completed[payment.ID], managed[payment.ID])
 		if err != nil {
 			h.writeInternal(w, r, err)
 			return
@@ -206,7 +214,7 @@ func (h *PaymentHandlers) UpdatePayment(w http.ResponseWriter, r *http.Request, 
 	}
 
 	var body openapi.PaymentUpdateRequest
-	endDateRaw, err := h.decodeUpdateBody(w, r, &body)
+	endDateRaw, reminderRaw, err := h.decodeUpdateBody(w, r, &body)
 	if err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode update payment request",
 			slog.String("error", httpsupport.SanitizeError(err)))
@@ -215,7 +223,7 @@ func (h *PaymentHandlers) UpdatePayment(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	cmd, err := updateCommand(body, endDateRaw)
+	cmd, err := updateCommand(body, endDateRaw, reminderRaw)
 	if err != nil {
 		h.handlePaymentError(w, r, err)
 		return
@@ -355,52 +363,55 @@ func createCommand(body openapi.PaymentCreateRequest) (application.CreatePayment
 		autoPay = *body.AutoPay
 	}
 	return application.CreatePaymentCommand{
-		Type:          domain.PaymentType(body.Type),
-		Title:         body.Title,
-		AmountKopecks: body.AmountKopecks,
-		Recurrence:    recurrence,
-		PaymentForm:   domain.PaymentForm(body.PaymentForm),
-		CategorySlug:  body.CategorySlug,
-		EndDate:       datePtrFromWire(body.EndDate),
-		AutoPay:       autoPay,
+		Type:               domain.PaymentType(body.Type),
+		Title:              body.Title,
+		AmountKopecks:      body.AmountKopecks,
+		Recurrence:         recurrence,
+		PaymentForm:        domain.PaymentForm(body.PaymentForm),
+		CategorySlug:       body.CategorySlug,
+		EndDate:            datePtrFromWire(body.EndDate),
+		AutoPay:            autoPay,
+		ReminderOffsetDays: reminderOffsetFromWire(body.ReminderOffsetDays),
 	}, nil
 }
 
 // decodeUpdateBody reads the update body once and decodes it two ways: the
 // strict contract decode (bounded, unknown fields rejected) and a shadow pass
-// that preserves the tri-state endDate. The shadow exists because
-// encoding/json collapses absent and null onto the same nil pointer for every
-// optional field, while a non-pointer json.RawMessage receives the raw "null"
-// bytes — that distinction is exactly the PATCH semantics of endDate
-// (omit keeps, null clears, a date sets).
+// that preserves the tri-state endDate and reminderOffsetDays. The shadow
+// exists because encoding/json collapses absent and null onto the same nil
+// pointer for every optional field, while a non-pointer json.RawMessage
+// receives the raw "null" bytes — that distinction is exactly the PATCH
+// semantics of both fields (omit keeps, null clears, a value sets).
 func (h *PaymentHandlers) decodeUpdateBody(
 	w http.ResponseWriter, r *http.Request, body *openapi.PaymentUpdateRequest,
-) (json.RawMessage, error) {
+) (endDateRaw, reminderRaw json.RawMessage, err error) {
 	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, httpsupport.MaxRequestBodySize))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(body); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var shadow struct {
-		EndDate json.RawMessage `json:"endDate"`
+		EndDate            json.RawMessage `json:"endDate"`
+		ReminderOffsetDays json.RawMessage `json:"reminderOffsetDays"`
 	}
 	if err := json.Unmarshal(raw, &shadow); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	// A nil raw message means omitted — no change; "null" and a date string
-	// both arrive as bytes for endDateUpdateFromWire to resolve.
-	return shadow.EndDate, nil
+	// A nil raw message means omitted — no change; "null" and a value
+	// both arrive as bytes for their resolvers.
+	return shadow.EndDate, shadow.ReminderOffsetDays, nil
 }
 
 // updateCommand folds the PATCH body into the application command and
-// resolves the tri-state endDate from its raw wire bytes: omitted keeps (nil
-// raw), null clears, a date sets. The contract rules live in the payment
-// rule module (validateRule); the transport only builds.
-func updateCommand(body openapi.PaymentUpdateRequest, endDateRaw json.RawMessage) (application.UpdatePaymentCommand, error) {
+// resolves the tri-state endDate and reminderOffsetDays from their raw wire
+// bytes: omitted keeps (nil raw), null clears, a value sets. The contract
+// rules live in the payment rule module (validateRule); the transport only
+// builds.
+func updateCommand(body openapi.PaymentUpdateRequest, endDateRaw, reminderRaw json.RawMessage) (application.UpdatePaymentCommand, error) {
 	cmd := application.UpdatePaymentCommand{}
 	if len(endDateRaw) > 0 {
 		endDate, err := endDateUpdateFromWire(endDateRaw)
@@ -408,6 +419,13 @@ func updateCommand(body openapi.PaymentUpdateRequest, endDateRaw json.RawMessage
 			return application.UpdatePaymentCommand{}, err
 		}
 		cmd.EndDate = endDate
+	}
+	if len(reminderRaw) > 0 {
+		reminder, err := reminderOffsetUpdateFromWire(reminderRaw)
+		if err != nil {
+			return application.UpdatePaymentCommand{}, err
+		}
+		cmd.ReminderOffsetDays = reminder
 	}
 	if body.Type != nil {
 		cmd.Type = new(domain.PaymentType(*body.Type))
@@ -504,6 +522,34 @@ func endDateUpdateFromWire(raw json.RawMessage) (*application.EndDateUpdate, err
 	return &application.EndDateUpdate{Value: new(date.Time)}, nil
 }
 
+// reminderOffsetUpdateFromWire resolves the tri-state reminderOffsetDays:
+// JSON null clears the reminders, a number sets the lead time — its value is
+// re-checked by validateRule, a non-integer literal is invalid input.
+func reminderOffsetUpdateFromWire(raw json.RawMessage) (*application.ReminderOffsetUpdate, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 {
+		return nil, application.ErrInvalidInput
+	}
+	if bytes.Equal(trimmed, []byte("null")) {
+		return &application.ReminderOffsetUpdate{Value: nil}, nil
+	}
+	var value openapi.PaymentUpdateRequestReminderOffsetDays
+	if err := json.Unmarshal(trimmed, &value); err != nil {
+		return nil, application.ErrInvalidInput
+	}
+	offset := int(value)
+	return &application.ReminderOffsetUpdate{Value: &offset}, nil
+}
+
+// reminderOffsetFromWire converts the optional create enum into the command's
+// *int; nil (absent) means no reminders.
+func reminderOffsetFromWire(value *openapi.PaymentCreateRequestReminderOffsetDays) *int {
+	if value == nil {
+		return nil
+	}
+	return new(int(*value))
+}
+
 // datePtrFromWire converts an optional request date into a *time.Time.
 func datePtrFromWire(d *openapi_types.Date) *time.Time {
 	if d == nil {
@@ -515,9 +561,10 @@ func datePtrFromWire(d *openapi_types.Date) *time.Time {
 // paymentResponse maps the domain rule onto the wire response: the category
 // reference is resolved (CategoryView with the «Прочее» fallback), the
 // recurrence goes back through its per-kind shape and the pauses travel as
-// intervals. The isCompleted flag is the server-computed settlement view
-// the use case passes in — the mapping itself stays pure.
-func paymentResponse(p domain.Payment, isCompleted bool) (openapi.PaymentResponse, error) {
+// intervals. The isCompleted flag is the server-computed settlement view and
+// isRentalManaged the rental gate's read flag (#818) — both the use case
+// passes in, the mapping itself stays pure.
+func paymentResponse(p domain.Payment, isCompleted, isRentalManaged bool) (openapi.PaymentResponse, error) {
 	recurrence, err := recurrenceResponse(p.Recurrence)
 	if err != nil {
 		return openapi.PaymentResponse{}, err
@@ -530,23 +577,35 @@ func paymentResponse(p domain.Payment, isCompleted bool) (openapi.PaymentRespons
 		})
 	}
 	return openapi.PaymentResponse{
-		Id:            p.ID,
-		PropertyId:    p.PropertyID,
-		Type:          openapi.PaymentResponseType(p.Type),
-		Title:         p.Title,
-		AmountKopecks: p.AmountKopecks,
-		Recurrence:    recurrence,
-		Since:         openapi_types.Date{Time: p.Since},
-		EndDate:       httpsupport.DatePtrToOpenAPI(p.EndDate),
-		AutoPay:       p.AutoPay,
-		PaymentForm:   openapi.PaymentResponsePaymentForm(p.PaymentForm),
-		Category:      categoryView(p.Category),
-		IsFavorite:    p.IsFavorite,
-		IsCompleted:   isCompleted,
-		Pauses:        pauses,
-		CreatedAt:     p.CreatedAt,
-		UpdatedAt:     p.UpdatedAt,
+		Id:                 p.ID,
+		PropertyId:         p.PropertyID,
+		Type:               openapi.PaymentResponseType(p.Type),
+		Title:              p.Title,
+		AmountKopecks:      p.AmountKopecks,
+		Recurrence:         recurrence,
+		Since:              openapi_types.Date{Time: p.Since},
+		EndDate:            httpsupport.DatePtrToOpenAPI(p.EndDate),
+		AutoPay:            p.AutoPay,
+		PaymentForm:        openapi.PaymentResponsePaymentForm(p.PaymentForm),
+		Category:           categoryView(p.Category),
+		ReminderOffsetDays: reminderOffsetResponse(p.ReminderOffsetDays),
+		IsFavorite:         p.IsFavorite,
+		IsCompleted:        isCompleted,
+		IsRentalManaged:    isRentalManaged,
+		Pauses:             pauses,
+		CreatedAt:          p.CreatedAt,
+		UpdatedAt:          p.UpdatedAt,
 	}, nil
+}
+
+// reminderOffsetResponse converts the domain lead time into the response
+// enum; nil (no reminders) stays nil.
+func reminderOffsetResponse(offset *int) *openapi.PaymentResponseReminderOffsetDays {
+	if offset == nil {
+		return nil
+	}
+	value := openapi.PaymentResponseReminderOffsetDays(*offset)
+	return &value
 }
 
 // recurrenceResponse rebuilds the wire union from the domain recurrence.
@@ -616,7 +675,12 @@ func (h *PaymentHandlers) respondWithPayment(
 		h.writeInternal(w, r, err)
 		return
 	}
-	resp, err := paymentResponse(payment, completed)
+	managed, err := h.svc.RentalManagedStatus(r.Context(), actor, propertyID, payment.ID)
+	if err != nil {
+		h.writeInternal(w, r, err)
+		return
+	}
+	resp, err := paymentResponse(payment, completed, managed)
 	if err != nil {
 		h.writeInternal(w, r, err)
 		return

@@ -95,8 +95,8 @@ type grantTarget struct {
 // property, every row is audited in the same transaction (ADR 0020/0033),
 // and a batch reports per-property outcomes instead of failing as a whole.
 // The only direct email is the batch invite one; the lifecycle notifications
-// (the suspended grant, the revoked active legs) leave the context as events
-// (карта #734, #751).
+// (the granted landing, the suspended grant, the revoked active legs) leave
+// the context as events (карта #734, #751).
 type ParticipantMutationService struct {
 	txStoreFactory
 	access   *AccessService
@@ -242,10 +242,24 @@ func (s *ParticipantMutationService) grantProperties(
 		return nil, err
 	}
 
+	// Each active landing notifies the new member post-commit (issue #829):
+	// one «Приглашение в объект» event per active leg, the granter the actor.
 	// A grant created without a free tariff slot pauses the new member's
-	// access (issue #158, T4): the system «Доступ приостановлен» notification
-	// is the event subscriber's (карта #734, #751) — published post-commit,
-	// best-effort, no actor.
+	// access (issue #158, T4) and speaks the system «Доступ приостановлен»
+	// instead — the event subscriber's (карта #734, #751), published
+	// post-commit, best-effort, no actor.
+	var grantedActive []domain.Membership
+	for _, r := range results {
+		if r.Outcome != ParticipantGrantActive {
+			continue
+		}
+		grantedActive = append(grantedActive, domain.Membership{
+			ID:         r.MembershipID,
+			PropertyID: r.PropertyID,
+			UserID:     target.userID,
+		})
+	}
+	publishGrantedEvents(ctx, s.events, s.logger, actor, grantedActive)
 	publishSuspendedEvents(ctx, s.events, s.logger, suspended)
 
 	// The single batch invite email goes out after the commit; a send failure

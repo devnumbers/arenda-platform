@@ -18,20 +18,27 @@ import (
 // them.
 type EventType string
 
-// Feed catalog v1 (решение #737, дополненный #741) in catalog order: the
-// category of each value is the authoritative FeedCategory mapping — Аренда;
-// Платежи и операции; Задачи; Совместный доступ; Тариф; Системные.
+// Feed catalog v1 (решение #737, дополненный #741, картой #822 (#824) и
+// #830) in catalog order: the category of each value is the authoritative
+// FeedCategory mapping — Аренда; Платежи и операции; Задачи; Совместный
+// доступ; Тариф; Системные.
 const (
-	EventRentalCompleted              EventType = "rental_completed"
-	EventPaymentDue                   EventType = "payment_due"
-	EventPaymentOverdue               EventType = "payment_overdue"
-	EventTaskOverdue                  EventType = "task_overdue"
-	EventPropertyInvitation           EventType = "property_invitation"
-	EventInvitationAccepted           EventType = "invitation_accepted"
-	EventAccessRevoked                EventType = "access_revoked"
-	EventAccessPaused                 EventType = "access_paused"
-	EventAccessResumed                EventType = "access_resumed"
-	EventMemberLeft                   EventType = "member_left"
+	EventRentalCompleted    EventType = "rental_completed"
+	EventPaymentDue         EventType = "payment_due"
+	EventPaymentOverdue     EventType = "payment_overdue"
+	EventPaymentReminder    EventType = "payment_reminder"
+	EventTaskOverdue        EventType = "task_overdue"
+	EventPropertyInvitation EventType = "property_invitation"
+	EventInvitationAccepted EventType = "invitation_accepted"
+	EventAccessRevoked      EventType = "access_revoked"
+	EventAccessPaused       EventType = "access_paused"
+	EventAccessResumed      EventType = "access_resumed"
+	EventMemberLeft         EventType = "member_left"
+	// EventAccessRoleChanged is the role-change notice (карта #828, тикет
+	// #830, решение владельца 23.09): a manager changed the member's role —
+	// the «изменение ваших прав» part of the settings-matrix promise the
+	// catalog v1 did not cover yet.
+	EventAccessRoleChanged            EventType = "access_role_changed"
 	EventSubscriptionPaymentFailed    EventType = "subscription_payment_failed"
 	EventSubscriptionPaymentReminder  EventType = "subscription_payment_reminder"
 	EventSubscriptionPaymentSucceeded EventType = "subscription_payment_succeeded"
@@ -48,9 +55,12 @@ var feedCatalog = map[EventType]struct {
 	category Category
 	actions  []ActionKind
 }{
-	EventRentalCompleted:              {CategoryRental, []ActionKind{ActionRentalExtend, ActionRentalComplete}},
-	EventPaymentDue:                   {CategoryPaymentsOperations, []ActionKind{ActionOpenPayment}},
-	EventPaymentOverdue:               {CategoryPaymentsOperations, []ActionKind{ActionOpenPayment}},
+	EventRentalCompleted: {CategoryRental, []ActionKind{ActionRentalExtend, ActionRentalComplete}},
+	EventPaymentDue:      {CategoryPaymentsOperations, []ActionKind{ActionOpenPayment}},
+	EventPaymentOverdue:  {CategoryPaymentsOperations, []ActionKind{ActionOpenPayment}},
+	// «Напоминание о платеже» (карта #822, #824): та же категория и кнопка,
+	// что у платёжной пары решения #737 — переход на страницу правила.
+	EventPaymentReminder:              {CategoryPaymentsOperations, []ActionKind{ActionOpenPayment}},
 	EventTaskOverdue:                  {CategoryTasks, []ActionKind{ActionOpenTask}},
 	EventPropertyInvitation:           {CategorySharedAccess, []ActionKind{ActionOpenProperty}},
 	EventInvitationAccepted:           {CategorySharedAccess, []ActionKind{ActionOpenPropertyMembers}},
@@ -58,6 +68,7 @@ var feedCatalog = map[EventType]struct {
 	EventAccessPaused:                 {CategorySharedAccess, nil},
 	EventAccessResumed:                {CategorySharedAccess, nil},
 	EventMemberLeft:                   {CategorySharedAccess, nil},
+	EventAccessRoleChanged:            {CategorySharedAccess, []ActionKind{ActionOpenPropertyMembers}},
 	EventSubscriptionPaymentFailed:    {CategoryTariff, []ActionKind{ActionOpenTariffs}},
 	EventSubscriptionPaymentReminder:  {CategoryTariff, []ActionKind{ActionOpenTariffs}},
 	EventSubscriptionPaymentSucceeded: {CategoryTariff, nil},

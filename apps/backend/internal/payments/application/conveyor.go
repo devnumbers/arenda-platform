@@ -169,6 +169,27 @@ func lockActiveProperty(
 	return prop, today, nil
 }
 
+// ensureNotRentalManaged rejects the rule mutations of the rent payment
+// (ADR 0053, ticket #818): the payment a rental references is created,
+// edited and deleted only through the rental, so pause/resume/update/delete
+// from the payments side are ErrRentManagedPayment — the honest 409 the
+// rentals RESTRICT FK always implied. The check runs inside the conveyor's
+// transaction under the property lock — the same serialization point the
+// rentals mutations take — and the rental pipeline's own gateway writes run
+// past it by construction (they use the stores, not this conveyor). The
+// payment facts (pay) and the favorite star never call it: they are not the
+// rental's terms.
+func ensureNotRentalManaged(ctx context.Context, stores *txStores, scope, paymentID uuid.UUID) error {
+	managed, err := stores.rentalManaged.ManagedPaymentIDs(ctx, scope, []uuid.UUID{paymentID})
+	if err != nil {
+		return fmt.Errorf("rental-managed gate: %w", err)
+	}
+	if managed[paymentID] {
+		return ErrRentManagedPayment
+	}
+	return nil
+}
+
 // ownerToday resolves the data owner's calendar date (ADR 0048), failing
 // loudly when the calendar was never wired — a construction mistake, not a
 // runtime condition.

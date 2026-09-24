@@ -35,7 +35,7 @@ const DTO: RentalResponseDto = {
       daysUntil: 5,
     },
   },
-  progress: { paidMonths: 0, totalMonths: 12, monthsRemaining: 12 },
+  progress: { paidMonths: 0, totalMonths: 12, monthsRemaining: 12, overdueMonths: 2 },
   today: '2026-09-05',
   createdAt: '2026-09-05T10:00:00Z',
 };
@@ -73,7 +73,7 @@ describe('mapRental', () => {
           daysUntil: 5,
         },
       },
-      progress: { paidMonths: 0, totalMonths: 12, monthsRemaining: 12 },
+      progress: { paidMonths: 0, totalMonths: 12, monthsRemaining: 12, overdueMonths: 2 },
       today: '2026-09-05',
       createdAt: '2026-09-05T10:00:00Z',
     });

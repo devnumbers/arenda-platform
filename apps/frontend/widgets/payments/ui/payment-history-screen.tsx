@@ -27,23 +27,21 @@ import {
   TopNav,
   TopNavTitle,
 } from '@/shared/ui/design';
-import { operationStatusLabel } from '../lib/operation-status-label';
-import {
-  PaymentsHeading,
-  PaymentsStateCard,
-} from './payments-sections';
+import { PaymentsHeading, PaymentsStateCard } from './payments-sections';
 import { PaymentGroupedListSkeleton } from './payments-skeletons';
 
 /**
- * Подэкран «История операций» (#466, Figma 671:7776): только paid-вхождения,
- * группы «Сегодня» / «Вчера» / дата; чип «Новые» переключает сортировку
- * «сначала новые ↔ сначала старые» (серверная — порядок закреплён за API);
- * направление живёт в адресе (?order=asc, дефолт не пишется, #785) —
- * переживает перезагрузку. Серверные порции по 50 с бесконечным скроллом.
- * Суммы расходов — со знаком минус (Figma). Группировка по дате вхождения:
- * досрочно оплаченное будущее вхождение остаётся в дате своего периода
- * (учёт, не касса). Пустая история — иллюстрация и «Платежей еще не было»
- * (Figma 858:21271).
+ * Подэкран «История операций» (#466): только paid-вхождения,
+ * группы «Сегодня» / «Вчера» / дата с годом (канон 1302:52209); чип
+ * «Сначала новые» переключает сортировку «сначала новые ↔ сначала
+ * старые» (серверная — порядок закреплён за API); направление живёт в
+ * адресе (?order=asc, дефолт не пишется, #785) — переживает перезагрузку.
+ * Серверные порции по 50 с бесконечным скроллом. Суммы расходов — со
+ * знаком минус (Figma). Группировка по дате вхождения: досрочно
+ * оплаченное будущее вхождение остаётся в дате своего периода (учёт, не
+ * касса). Пустая история — иллюстрация и «Платежей еще не было»
+ * (Figma 858:21271). Подписей-дат в строках нет — канон 1302:52209
+ * (решение #802 23.09; «Заранее/Задержан» видны на странице операции).
  */
 export function PaymentHistoryScreen({
   propertyId,
@@ -95,7 +93,7 @@ export function PaymentHistoryScreen({
                     : 'Сортировка: сначала старые — переключить на «сначала новые»'
                 }
               >
-                {order === 'desc' ? 'Новые' : 'Старые'}
+                {order === 'desc' ? 'Сначала новые' : 'Сначала старые'}
               </ChipButton>
             </div>
           )}
@@ -163,11 +161,10 @@ export function PaymentHistoryScreen({
   );
 }
 
-/** Строка истории (Figma 671:7776, 1332:61665): иконка категории с белым
- * кантом (строка внутри страницы), название, подпись оплаты — «Заранее
- * на N дней» / «Задержан на N дней» / дата при точном попадании; сумма
- * справа знаковая: расход с минусом, доход с плюсом зелёным. onSelect
- * ведёт на страницу операции. */
+/** Строка истории (1302:52209, решение #802 23.09): иконка категории с
+ * белым кантом (строка внутри страницы), название, сумма справа знаковая:
+ * расход с минусом, доход с плюсом зелёным; подписей-дат в строке нет —
+ * групповой заголовок несёт дату. onSelect ведёт на страницу операции. */
 function HistoryRow({
   operation,
   onSelect,
@@ -176,14 +173,12 @@ function HistoryRow({
   readonly onSelect?: () => void;
 }): JSX.Element {
   const style = categoryStyle('default', operation.categorySlug);
-  const label = operationStatusLabel(operation);
 
   return (
     <PaymentRowButton
       className="px-3 py-3"
       categoryIcon={<CategoryIcon icon={style.icon} color={style.color} surface="white" />}
       title={operation.title}
-      subtitle={label?.text}
       amountKopecks={
         operation.type === 'expense' ? -operation.amountKopecks : operation.amountKopecks
       }

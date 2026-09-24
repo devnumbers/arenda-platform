@@ -1,10 +1,12 @@
 import type { IsoDate, PaymentOperation } from '@/entities/payment';
 import { addDays, formatDayMonth, formatDayMonthWithYear } from '@/entities/payment';
+import { formatDayMonthYear } from '@/shared/lib/date-format';
 import { parseEnumParam } from '@/shared/lib/parse-enum-param';
 
 /**
  * Группировка «Истории платежей» по датам (резолюция #452): «Сегодня»,
- * «Вчера», дальше «11 августа» (год добавляется вне текущего). Порядок групп
+ * «Вчера», дальше датовые группы с годом всегда — «11 августа, 2026»
+ * (канон 1302:52209, решение #802 23.09). Порядок групп
  * повторяет серверную сортировку входа (order asc/desc закреплён за API),
  * даты в странице монотонны — одна дата даёт ровно одну группу подряд.
  * «Сегодня»/«Вчера» — от клиентского «сегодня»
@@ -96,7 +98,9 @@ function historyGroupLabel(date: IsoDate, today: IsoDate, yesterday: IsoDate): s
   if (date === yesterday) {
     return 'Вчера';
   }
-  return formatDayMonthWithYear(date, today);
+  // Канон групп истории — formatDayMonthYear из канона дат
+  // (1302:52209, решение #802 23.09): год в датовой группе всегда.
+  return formatDayMonthYear(date);
 }
 
 function operationsGroupLabel(date: IsoDate, today: IsoDate, yesterday: IsoDate): string {

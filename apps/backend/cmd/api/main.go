@@ -217,7 +217,8 @@ func run() error {
 
 	// 11.8 Access notifications (карта #734, #751): the access lifecycle
 	//     events — the invitation's activation, the revoke, the slot pause
-	//     and recovery, the member's self-exit — publish to the stored feed
+	//     and recovery, the member's self-exit, the member's role change
+	//     (карта #828, #830) — publish to the stored feed
 	//     + delivery queue through the same pipeline publisher (the
 	//     Совместный доступ category, gated per-channel by the settings
 	//     matrix at delivery time). The dispatchers are synchronous, so the
@@ -560,6 +561,15 @@ func subscribeAccessEvents(
 			e.Suspended, e.At,
 		)
 	})
+	eventDispatcher.Subscribe(accessevents.EventMembershipGranted, func(ctx context.Context, event any) error {
+		e, ok := event.(accessapp.MembershipGranted)
+		if !ok {
+			return fmt.Errorf("unexpected event type %T", event)
+		}
+		return accessPublisher.NotifyMembershipGranted(
+			ctx, e.MembershipID, e.PropertyID, e.RecipientID, e.ActorID,
+		)
+	})
 	eventDispatcher.Subscribe(accessevents.EventMembershipSuspended, func(ctx context.Context, event any) error {
 		e, ok := event.(accessapp.MembershipSuspended)
 		if !ok {
@@ -594,6 +604,16 @@ func subscribeAccessEvents(
 		}
 		return accessPublisher.NotifyMemberLeft(
 			ctx, e.MembershipID, e.PropertyID, e.OwnerID, e.MemberID,
+		)
+	})
+	eventDispatcher.Subscribe(accessevents.EventMembershipRoleChanged, func(ctx context.Context, event any) error {
+		e, ok := event.(accessapp.MembershipRoleChanged)
+		if !ok {
+			return fmt.Errorf("unexpected event type %T", event)
+		}
+		return accessPublisher.NotifyRoleChanged(
+			ctx, e.MembershipID, e.PropertyID, e.RecipientID, e.ActorID,
+			string(e.Role), e.ChangedAt,
 		)
 	})
 }

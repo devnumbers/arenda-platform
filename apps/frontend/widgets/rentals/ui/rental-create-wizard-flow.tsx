@@ -7,7 +7,7 @@ import { ArrowLeft, Cancel } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
-import { clientTodayIso, type IsoDate } from '@/entities/payment';
+import { clientTodayIso, type IsoDate, type PaymentReminderOffset } from '@/entities/payment';
 import type { Rental } from '@/entities/rental';
 import {
   useCreateRental,
@@ -15,6 +15,7 @@ import {
   wizardStepReady,
   draftAfterStartChange,
   WIZARD_TOTAL_STEPS,
+  RENTAL_REMINDER_DEFAULT,
   buildRentalCreateCommand,
   type RentalWizardDraft,
   type RentalWizardStep,
@@ -39,9 +40,9 @@ import { WizardBottomBar } from './wizard-chrome';
  * Поток шагов визарда создания аренды (#530, клиентское состояние на одном
  * маршруте): монтируется после гидрации черновика и загрузки объекта,
  * восстанавливается на первый незавершённый шаг; черновик живёт в
- * localStorage per объект — переживает уход в ветку создания контакта
- * (#509): созданный контакт выбирается арендатором прямо в черновике
- * (экран #509 патчит тем же хуком), возврат — goBack.
+ * localStorage per объект — переживает уход в ветви шага контакта: экран
+ * выбора арендатора (#807) и создание контакта (#509) патчат тот же
+ * черновик тем же хуком, возврат — goBack.
  */
 
 export type RentalCreateWizardFlowProps = {
@@ -159,6 +160,10 @@ export function RentalCreateWizardFlow({
             <SettingsStep
               autoPay={draft.autoPay ?? false}
               onAutoPayChange={(autoPay) => setDraft((prev) => ({ ...prev, autoPay }))}
+              reminderOffsetDays={draft.reminderOffsetDays ?? RENTAL_REMINDER_DEFAULT}
+              onReminderOffsetChange={(reminderOffsetDays: PaymentReminderOffset) =>
+                setDraft((prev) => ({ ...prev, reminderOffsetDays }))
+              }
             />
             {/* Шаг всегда готов (тумблер с дефолтом) — кнопка видна всегда. */}
             <StickyBottomBar fullWidthContent>
@@ -197,7 +202,8 @@ export function RentalCreateWizardFlow({
   );
 
   /** Выход из визарда (крестик на любом шаге, «Хорошо» на экране успеха):
-   * история назад, черновик остаётся в localStorage. */
+   * история назад, при пустой истории — фолбэк goBack'а на объект,
+   * черновик остаётся в localStorage. */
   function closeWizard(): void {
     goBack(router, ROUTES.property(propertyId));
   }

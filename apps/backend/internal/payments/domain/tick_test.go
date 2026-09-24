@@ -227,6 +227,174 @@ func TestPlanPaymentTick_PaidOperationsNeverTouched(t *testing.T) {
 	assert.Equal(t, StatusPlanned, byDate[d(dayT0)])
 }
 
+func TestPlanPaymentTick_PaidMonthsNotReMaterializedAfterDayEdit(t *testing.T) {
+	t.Parallel()
+	// #802 F1 (ticket #815): a rental rule with six paid months on the
+	// 10th; the payment day is edited to the 5th. Exact-date dedup alone
+	// would materialize the 5th into every already-paid month — phantom
+	// overdue debt on a fully paid history. A calendar month holding an
+	// operation of the rule is closed: it is not re-materialized.
+	rec := mustMonthly(t, 5)
+	p := rule(t, rec, "2026-03-10", nil)
+	byDate := map[time.Time]OperationStatus{
+		d("2026-03-10"): StatusPaid,
+		d("2026-04-10"): StatusPaid,
+		d("2026-05-10"): StatusPaid,
+		d("2026-06-10"): StatusPaid,
+		d("2026-07-10"): StatusPaid,
+		d("2026-08-10"): StatusPaid,
+	}
+
+	plan := PlanPaymentTick(p, d(dayT0), byDate)
+	assert.Empty(t, dates(plan.Materialize), "paid months stay closed — no phantom overdue")
+	require.NotNil(t, plan.KeepFuture)
+	assert.Equal(t, daySep5, plan.KeepFuture.Format(time.DateOnly),
+		"the future follows the new day")
+	require.NotNil(t, plan.InsertFuture)
+	assert.Equal(t, daySep5, plan.InsertFuture.Format(time.DateOnly))
+
+	// The applied plan is idempotent under the new schedule: the rerun
+	// neither re-materializes the paid months nor grows the future.
+	applyPlan(d(dayT0), plan, byDate)
+	tickOnce(t, p, dayT0, byDate)
+	assert.Equal(t, map[string]OperationStatus{
+		"2026-03-10": StatusPaid,
+		"2026-04-10": StatusPaid,
+		"2026-05-10": StatusPaid,
+		"2026-06-10": StatusPaid,
+		"2026-07-10": StatusPaid,
+		"2026-08-10": StatusPaid,
+		daySep5:      StatusPlanned,
+	}, stringStatuses(byDate))
+}
+
+func TestPlanPaymentTick_MonthWithoutFactStillMaterializesDebt(t *testing.T) {
+	t.Parallel()
+	// The same edit with May never paid (no operation at all): the new-day
+	// occurrence materializes as honest overdue debt — the fix closes only
+	// months the rule's history actually covers, it does not forgive.
+	rec := mustMonthly(t, 5)
+	p := rule(t, rec, "2026-03-10", nil)
+	byDate := map[time.Time]OperationStatus{
+		d("2026-03-10"): StatusPaid,
+		d("2026-04-10"): StatusPaid,
+		d("2026-06-10"): StatusPaid,
+		d("2026-07-10"): StatusPaid,
+		d("2026-08-10"): StatusPaid,
+	}
+
+	plan := PlanPaymentTick(p, d(dayT0), byDate)
+	assert.Equal(t, []string{"2026-05-05"}, dates(plan.Materialize),
+		"the month without a fact materializes on the new day — debt")
+}
+
+func TestPlanPaymentTick_UnpaidMonthNotDuplicatedAfterDayEdit(t *testing.T) {
+	t.Parallel()
+	// May is overdue: the old-day operation stands planned. The re-dated
+	// schedule must not materialize a second May obligation — the standing
+	// row is the month's debt, and the edit does not double it.
+	rec := mustMonthly(t, 5)
+	p := rule(t, rec, "2026-03-10", nil)
+	byDate := map[time.Time]OperationStatus{
+		d("2026-04-10"): StatusPaid,
+		d("2026-05-10"): StatusPlanned,
+		d("2026-06-10"): StatusPaid,
+		d("2026-07-10"): StatusPaid,
+		d("2026-08-10"): StatusPaid,
+	}
+
+	plan := PlanPaymentTick(p, d(dayT0), byDate)
+	assert.Empty(t, dates(plan.Materialize), "the claimed month is not re-materialized — no double debt")
+	assert.Equal(t, StatusPlanned, byDate[d("2026-05-10")], "the standing debt is untouched")
+}
+
+func TestPlanPaymentTick_DayEditRebuildsFutureOnTheNewDay(t *testing.T) {
+	t.Parallel()
+	// The future rebuild keeps its own rules under a re-dated schedule: the
+	// first new-day occurrence without an operation becomes the single
+	// future planned — even when its month holds a paid fact of the old
+	// schedule. September was paid ahead on the 10th ("Оплатить сейчас");
+	// after the edit the future stands on the 5th, the paid fact untouched.
+	rec := mustMonthly(t, 5)
+	p := rule(t, rec, "2026-03-10", nil)
+	byDate := map[time.Time]OperationStatus{
+		d("2026-03-10"): StatusPaid,
+		d("2026-04-10"): StatusPaid,
+		d("2026-05-10"): StatusPaid,
+		d("2026-06-10"): StatusPaid,
+		d("2026-07-10"): StatusPaid,
+		d("2026-08-10"): StatusPaid,
+		d("2026-09-10"): StatusPaid,
+	}
+
+	plan := PlanPaymentTick(p, d(dayT0), byDate)
+	assert.Empty(t, dates(plan.Materialize))
+	require.NotNil(t, plan.KeepFuture)
+	assert.Equal(t, daySep5, plan.KeepFuture.Format(time.DateOnly))
+	require.NotNil(t, plan.InsertFuture)
+	assert.Equal(t, daySep5, plan.InsertFuture.Format(time.DateOnly))
+}
+
+func TestPlanPaymentTick_WeekdayEditDoesNotReMaterializeThePaidWeek(t *testing.T) {
+	t.Parallel()
+	// The same invariant at the weekly recurrence's own period: Monday
+	// paid, the rule re-dated to Tuesdays — the paid Monday's week is not
+	// re-materialized on the Tuesday; weeks without a fact keep accruing.
+	rec := mustWeekly(t, time.Tuesday)
+	p := rule(t, rec, "2026-08-10", nil)
+	byDate := map[time.Time]OperationStatus{
+		d("2026-08-24"): StatusPaid,
+	}
+
+	plan := PlanPaymentTick(p, d(dayT0), byDate)
+	assert.Equal(t, []string{"2026-08-11", "2026-08-18"}, dates(plan.Materialize),
+		"unclaimed weeks materialize; the paid week does not")
+}
+
+func TestPlanPaymentTick_YearlyEditDoesNotReMaterializePaidYears(t *testing.T) {
+	t.Parallel()
+	// Yearly on March 1st, every year paid; re-dated to June 1st: no June
+	// occurrence materializes into an already-paid year — the next fresh
+	// obligation is 2027.
+	rec := mustYearly(t, time.June, 1)
+	p := rule(t, rec, "2024-03-01", nil)
+	byDate := map[time.Time]OperationStatus{
+		d("2024-03-01"): StatusPaid,
+		d("2025-03-01"): StatusPaid,
+		d("2026-03-01"): StatusPaid,
+	}
+
+	plan := PlanPaymentTick(p, d(dayT0), byDate)
+	assert.Empty(t, dates(plan.Materialize), "paid years stay closed")
+	require.NotNil(t, plan.KeepFuture)
+	assert.Equal(t, "2027-06-01", plan.KeepFuture.Format(time.DateOnly))
+}
+
+func TestPlanPaymentTick_MultiDayRuleClaimedMonthStaysAtOldDates(t *testing.T) {
+	t.Parallel()
+	// A rule with two obligations per month (1st and 15th) re-dated to
+	// (1st and 20th): a claimed month keeps its standing rows — the paid
+	// 1st and the overdue 15th — and gains no re-dated duplicates; the
+	// first unclaimed slot (September 1st) becomes the future planned.
+	rec := mustMonthly(t, 1, 20)
+	p := rule(t, rec, "2026-07-01", nil)
+	byDate := map[time.Time]OperationStatus{
+		d("2026-07-01"): StatusPaid,
+		d("2026-07-15"): StatusPlanned,
+		d("2026-08-01"): StatusPaid,
+	}
+
+	plan := PlanPaymentTick(p, d(dayT0), byDate)
+	assert.Empty(t, dates(plan.Materialize),
+		"July and August are claimed — no re-dated second obligations")
+	assert.Equal(t, StatusPlanned, byDate[d("2026-07-15")], "the standing debt is untouched")
+	require.NotNil(t, plan.KeepFuture)
+	assert.Equal(t, "2026-09-01", plan.KeepFuture.Format(time.DateOnly),
+		"the first unclaimed slot is the future")
+	require.NotNil(t, plan.InsertFuture)
+	assert.Equal(t, "2026-09-01", plan.InsertFuture.Format(time.DateOnly))
+}
+
 func TestNewMaterializedOperation_SnapshotsRule(t *testing.T) {
 	t.Parallel()
 	rec := mustMonthly(t, 15)

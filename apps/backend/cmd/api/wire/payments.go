@@ -5,6 +5,7 @@ import (
 
 	paymentspg "github.com/nambers/arenda-planform/apps/backend/internal/payments/adapters/postgres"
 	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
+	rentalspg "github.com/nambers/arenda-planform/apps/backend/internal/rentals/adapters/postgres"
 )
 
 // Payments holds the payments module's services wired by WirePayments: the
@@ -44,6 +45,10 @@ func WirePayments(p platformDeps) (*Payments, error) {
 		operationStore,
 		propertyStore,
 		globalPayments,
+		// The rental-managed gate's reader (ADR 0053, ticket #818): the
+		// rentals table stays the rentals context's own — payments ask it
+		// through this consumer port.
+		rentalspg.NewRentalLinkReader(p.DB),
 		p.AuditRecorder,
 		p.HistoryRecorder,
 		p.UoW,

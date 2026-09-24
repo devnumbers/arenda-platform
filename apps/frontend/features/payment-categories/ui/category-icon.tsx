@@ -12,8 +12,9 @@ import { cn } from '@/shared/lib/cn';
  * в углу (651:6759): у ПЛАТЕЖА с накопленной просрочкой (1323:61133,
  * State=Expired — в обеих поверхностях). Проп `check` — синяя галочка
  * CheckWhite 24×24 в правом нижнем углу круга (889:25528, Show Check:
- * выступает на 8px за край, как Notification Dot в своём): пометка
- * платежа на удаление из избранного в режиме правки (тикет #579).
+ * выступает на 8px за край, как Notification Dot в своём): выделение
+ * платежа на удаление в правке избранного (#579 — пометка строк,
+ * #814 — выделение зажатием/кликом вместо StarOff-пометок).
  */
 
 export type CategoryIconBadge = 'danger' | 'notification';
@@ -28,7 +29,7 @@ export type CategoryIconProps = {
   readonly color: string;
   readonly badge?: CategoryIconBadge;
   readonly surface?: CategoryIconSurface;
-  /** Пометка на удаление из избранного (889:25528, тикет #579). */
+  /** Выделение платежа на удаление в правке избранного (889:25528; #579 — пометка строк, #814 — выделение зажатием/кликом). */
   readonly check?: boolean;
   readonly className?: string;
 };
