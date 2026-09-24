@@ -1,8 +1,8 @@
 import { fullMonthsBetween, type IsoDate } from '@/shared/lib/calendar';
 import { formatDottedDate } from '@/shared/lib/date-format';
-import { pluralize } from '@/shared/lib/pluralize';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import type { RentalPaymentDay } from '@/entities/rental';
+import { monthsWord } from './months-word';
 import { paymentDayPhrase } from './wizard-model';
 
 /**
@@ -51,12 +51,7 @@ export function rentalExtendSuccessCopy(input: RentalExtendSuccessCopyInput): st
   if (months === 0) {
     return `Аренда продлена до ${formatDottedDate(input.newEnd)}`;
   }
-  return `Аренда продлена еще на ${months} ${pluralize(
-    months,
-    'месяц',
-    'месяца',
-    'месяцев',
-  )} до ${formatDottedDate(input.newEnd)}`;
+  return `Аренда продлена еще на ${months} ${monthsWord(months)} до ${formatDottedDate(input.newEnd)}`;
 }
 
 /** Заголовок финального экрана завершения аренды (#534, Figma 1433:60975):
