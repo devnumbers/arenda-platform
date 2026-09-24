@@ -136,7 +136,7 @@ test.describe('подэкран «История платежей»', () => {
 
     // Сумма расхода — с минусом (Figma 671:7776). Подписей-дат в строках
     // больше нет (канон 1302:52209, решение #802) — «Заранее/Задержан»
-    // живут на экране платежа.
+    // живут на странице операции.
     await expect(page.getByText('-1 000 ₽').first()).toBeVisible();
 
     await captureScreen(page, testInfo, 'payment-history-mobile');
