@@ -10,7 +10,7 @@ import { contactSortByRecent, ContactRowButton } from '@/entities/contact';
 import { useContacts } from '@/features/contacts';
 import { useRentalWizardDraft } from '@/features/rentals';
 import {
-  Button,
+  ErrorCard,
   IconButton,
   InfiniteQueryTail,
   PageContent,
@@ -94,18 +94,10 @@ export function RentalContactPickerScreen({
             ))}
           </div>
         ) : contactsQuery.isError ? (
-          <div className="flex flex-col items-center gap-4 pt-16">
-            <p className="text-center text-base leading-[18px] text-content-secondary">
-              Не удалось загрузить контакты
-            </p>
-            <Button
-              variant="secondary"
-              size="small"
-              onClick={() => void contactsQuery.refetch()}
-            >
-              Повторить
-            </Button>
-          </div>
+          <ErrorCard
+            title="Не удалось загрузить контакты"
+            onRetry={() => void contactsQuery.refetch()}
+          />
         ) : contacts.length === 0 ? (
           <p className="px-6 pt-16 text-center text-base leading-[18px] text-content-secondary">
             Такого контакта нет

@@ -87,6 +87,10 @@ export function ContactStep({
     );
   };
 
+  const openContactCard = (contactId: string): void => {
+    router.push(ROUTES.propertyContact(propertyId, contactId));
+  };
+
   const handleDelete = (): void => {
     void (async () => {
       try {
@@ -115,7 +119,7 @@ export function ContactStep({
               className="min-w-0 flex-1"
               /* Тап по выбранному — карточка контакта (решение владельца
                   2026-09-22); смена арендатора — через «Выбрать другой». */
-              onSelect={() => router.push(ROUTES.propertyContact(propertyId, selectedTenant.id))}
+              onSelect={() => openContactCard(selectedTenant.id)}
             />
             <Menu>
               <MenuTrigger asChild>
@@ -127,7 +131,7 @@ export function ContactStep({
                     Icon/R/Edit, Icon/R/TrashBin. */}
                 <MenuItem
                   icon={<AccountSetting className="h-6 w-6" />}
-                  onSelect={() => router.push(ROUTES.propertyContact(propertyId, selectedTenant.id))}
+                  onSelect={() => openContactCard(selectedTenant.id)}
                 >
                   Открыть
                 </MenuItem>
