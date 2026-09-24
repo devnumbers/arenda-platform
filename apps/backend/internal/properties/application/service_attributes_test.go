@@ -62,6 +62,7 @@ const (
 	attrBalconyNone       = "none"
 	attrAreaTotal         = "area_total"
 	attrFloor             = "floor"
+	attrLandArea          = "land_area"
 )
 
 // TestCreateProperty_WithValidAttributes verifies that a fully valid attribute
@@ -479,7 +480,7 @@ func TestUpdateProperty_AttributesValidatedAgainstNewType(t *testing.T) {
 		repo := newLockingFakePropertyRepo(property)
 		svc := newAttrService(repo)
 
-		houseAttrs := map[string]any{"land_area": float64(6.0)}
+		houseAttrs := map[string]any{attrLandArea: float64(6.0)}
 		updated, err := svc.UpdateProperty(ctx, ownerID, propertyID, UpdatePropertyCommand{
 			Type:       ptr(string(domain.PropertyTypeHouse)),
 			Attributes: &houseAttrs,
@@ -487,7 +488,7 @@ func TestUpdateProperty_AttributesValidatedAgainstNewType(t *testing.T) {
 		if err != nil {
 			t.Fatalf("expected house-valid attributes to be accepted, got: %v", err)
 		}
-		if got := updated.Attributes["land_area"]; got != float64(6.0) {
+		if got := updated.Attributes[attrLandArea]; got != float64(6.0) {
 			t.Errorf("expected land_area to be 6.0, got %v", got)
 		}
 	})

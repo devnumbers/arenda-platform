@@ -41,11 +41,11 @@ func newTestFactoryWithHistory(
 // historyFixture wires the membership services over the in-memory repos with
 // a capturing history recorder, the access-test canon.
 type historyFixture struct {
-	t       *testing.T
-	owner   uuid.UUID
-	member  uuid.UUID
-	strager uuid.UUID // Stand-in id of an unregistered person (never resolved).
-	invited uuid.UUID
+	t        *testing.T
+	owner    uuid.UUID
+	member   uuid.UUID
+	stranger uuid.UUID // Stand-in id of an unregistered person (never resolved).
+	invited  uuid.UUID
 
 	property uuid.UUID
 	repo     *memRepo
@@ -57,23 +57,23 @@ func newHistoryFixture(t *testing.T) *historyFixture {
 	t.Helper()
 	owner := uuid.Must(uuid.NewV7())
 	member := uuid.Must(uuid.NewV7())
-	strager := uuid.Must(uuid.NewV7())
+	stranger := uuid.Must(uuid.NewV7())
 	invited := uuid.Must(uuid.NewV7())
 	property := uuid.Must(uuid.NewV7())
 
 	repo := newMemRepo()
 	resolver := staticResolver{property: owner}
 	lookup := fakeUserLookup{
-		owner:   {ID: owner, Name: new("Иван"), Surname: new("Иванов"), Phone: "+79120000001"},
-		member:  {ID: member, Name: new("Пётр"), Surname: new("Сидоров"), Phone: "+79120000002"},
-		strager: {ID: strager, Phone: "+79120000003"},
+		owner:    {ID: owner, Name: new("Иван"), Surname: new("Иванов"), Phone: "+79120000001"},
+		member:   {ID: member, Name: new("Пётр"), Surname: new("Сидоров"), Phone: "+79120000002"},
+		stranger: {ID: stranger, Phone: "+79120000003"},
 	}
 	history := &fakeHistory{}
 	policy := NewMembershipPolicy(resolver, repo)
 	svc := NewAccessService(repo, resolver, nil, lookup, policy, nil, nil,
 		newTestFactoryWithHistory(repo, &memInvitationsRepo{}, auditapp.Noop{}, history), nil)
 	return &historyFixture{
-		t: t, owner: owner, member: member, strager: strager, invited: invited,
+		t: t, owner: owner, member: member, stranger: stranger, invited: invited,
 		property: property, repo: repo, history: history, svc: svc,
 	}
 }
@@ -190,9 +190,6 @@ func TestHistory_InvitationLifecycleRows(t *testing.T) {
 	svc := NewInvitationService(access, repo, invitations, owners, nil, lookup, policy,
 		nil, nil, nil, nil,
 		newTestFactoryWithHistory(repo, invitations, auditapp.Noop{}, history), nil, nil, nil)
-	// The email is unknown to the user book: the unregistered path journals
-	// by email — the only label the platform knows (ADR 0061 §5).
-
 	// The unregistered invitee journals by email — the only label the
 	// platform knows at this point (ADR 0061 §5).
 	if _, err := svc.InviteByEmail(context.Background(), owner, property, testNewUserEmail, domain.RoleViewer); err != nil {

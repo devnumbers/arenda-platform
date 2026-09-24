@@ -33,10 +33,12 @@ func (h *fakeHistory) Record(_ context.Context, e historydomain.Entry) error {
 
 func (h *fakeHistory) WithTx(transaction.Tx) historyapp.Recorder { return h }
 
-// The fixture names the rename assertions read back.
+// The fixture names and addresses the rename assertions read back.
 const (
-	fixtureOldName = "Old Name"
-	renamedName    = "Новое имя"
+	fixtureOldName    = "Old Name"
+	fixtureOldAddress = "Old Address"
+	renamedName       = "Новое имя"
+	renamedAddress    = "Москва, Тверская 1"
 )
 
 func newHistoryTestService(t *testing.T, history *fakeHistory) (*PropertyService, uuid.UUID) {
@@ -47,7 +49,7 @@ func newHistoryTestService(t *testing.T, history *fakeHistory) (*PropertyService
 		ID:      propertyID,
 		OwnerID: owner,
 		Name:    fixtureOldName,
-		Address: "Old Address",
+		Address: fixtureOldAddress,
 		Type:    domain.PropertyTypeApartment,
 		Status:  domain.PropertyStatusActive,
 	}
@@ -72,7 +74,7 @@ func TestHistory_PropertyMutationRows(t *testing.T) {
 	ctx := context.Background()
 
 	created, err := svc.CreateProperty(ctx, owner, CreatePropertyCommand{
-		Name: "Новая квартира", Address: "Москва, Тверская 1", Type: "apartment",
+		Name: "Новая квартира", Address: renamedAddress, Type: "apartment",
 	})
 	if err != nil {
 		t.Fatalf("CreateProperty: %v", err)
@@ -135,7 +137,7 @@ func TestHistory_RenameCarriesOldAndNew(t *testing.T) {
 	if e.Action != historydomain.ActionPropertyRenamed {
 		t.Fatalf("action = %s, want property.renamed", e.Action)
 	}
-	if e.Context["old_name"] != "Old Name" || e.Context["new_name"] != "Новое имя" {
+	if e.Context["old_name"] != fixtureOldName || e.Context["new_name"] != renamedName {
 		t.Errorf("context = %v, want the old/new names", e.Context)
 	}
 }
