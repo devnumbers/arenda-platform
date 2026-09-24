@@ -33,9 +33,9 @@ func (h *fakeHistory) Record(_ context.Context, e historydomain.Entry) error {
 func (h *fakeHistory) WithTx(transaction.Tx) historyapp.Recorder { return h }
 
 func newTestFactoryWithHistory(
-	members MembershipRepository, invitations InvitationRepository, audit auditapp.Recorder, history historyapp.Recorder,
+	members MembershipRepository, invitations InvitationRepository, history historyapp.Recorder,
 ) txStoreFactory {
-	return NewTxStoreFactory(members, invitations, audit, history, fakeUoW{beginner: noopBeginner{}})
+	return NewTxStoreFactory(members, invitations, auditapp.Noop{}, history, fakeUoW{beginner: noopBeginner{}})
 }
 
 // historyFixture wires the membership services over the in-memory repos with
@@ -71,7 +71,7 @@ func newHistoryFixture(t *testing.T) *historyFixture {
 	history := &fakeHistory{}
 	policy := NewMembershipPolicy(resolver, repo)
 	svc := NewAccessService(repo, resolver, nil, lookup, policy, nil, nil,
-		newTestFactoryWithHistory(repo, &memInvitationsRepo{}, auditapp.Noop{}, history), nil)
+		newTestFactoryWithHistory(repo, &memInvitationsRepo{}, history), nil)
 	return &historyFixture{
 		t: t, owner: owner, member: member, stranger: stranger, invited: invited,
 		property: property, repo: repo, history: history, svc: svc,
@@ -174,6 +174,72 @@ func TestHistory_LeaveCarriesTheLeaver(t *testing.T) {
 	}
 }
 
+// newInvitationHistoryFixture wires the invitation service over the in-memory
+// repos with a capturing history recorder — the invitation-lifecycle twin of
+// newHistoryFixture (the invitation use cases live on InvitationService, the
+// factory wiring is the same).
+func newInvitationHistoryFixture(t *testing.T) (
+	svc *InvitationService, invitations *memInvitationsRepo, history *fakeHistory, owner, property uuid.UUID,
+) {
+	t.Helper()
+	owner = uuid.Must(uuid.NewV7())
+	property = uuid.Must(uuid.NewV7())
+
+	repo := newMemRepo()
+	invitations = &memInvitationsRepo{removalScope: repo.inManageScope}
+	owners := staticResolver{property: owner}
+	lookup := newFakeLookup()
+	history = &fakeHistory{}
+	policy := NewMembershipPolicy(owners, repo)
+	access := NewAccessService(repo, owners, nil, lookup, policy, nil, nil,
+		newTestFactoryWithHistory(repo, invitations, history), nil)
+	svc = NewInvitationService(access, repo, invitations, owners, nil, lookup, policy,
+		nil, nil, nil, nil,
+		newTestFactoryWithHistory(repo, invitations, history), nil, nil, nil)
+	return svc, invitations, history, owner, property
+}
+
+// TestHistory_InvitationRoleChangeRow pins the owner decision of 24.09: the
+// manual role change of a pending invitation journals like the rest of the
+// invitation lifecycle — one member.role_changed row in the mutation's
+// transaction, the unregistered invitee named by email (ADR 0061 §5), and a
+// same-role re-set writes no row (ADR 0061 §3).
+func TestHistory_InvitationRoleChangeRow(t *testing.T) {
+	t.Parallel()
+	svc, invitations, history, owner, property := newInvitationHistoryFixture(t)
+	ctx := context.Background()
+
+	if _, err := svc.InviteByEmail(ctx, owner, property, testNewUserEmail, domain.RoleViewer); err != nil {
+		t.Fatalf("InviteByEmail: %v", err)
+	}
+	history.entries = nil
+	pending := invitations.rows[0]
+
+	if _, err := svc.ChangeInvitationRole(ctx, owner, property, pending.ID, domain.RoleFullAccess); err != nil {
+		t.Fatalf("ChangeInvitationRole: %v", err)
+	}
+	if len(history.entries) != 1 {
+		t.Fatalf("journal entries = %d, want 1", len(history.entries))
+	}
+	changed := history.entries[0]
+	if changed.Action != historydomain.ActionMemberRoleChanged {
+		t.Fatalf("action = %s, want member.role_changed", changed.Action)
+	}
+	if text := changed.Segments.PlainText(); text != "Роль участника изменена: "+testNewUserEmail+": Просмотр → Полный доступ" {
+		t.Errorf("row text = %q, want the old → new roles over the email snapshot", text)
+	}
+	if changed.ActorRole != historydomain.ActorRoleOwner {
+		t.Errorf("actor role = %s, want owner", changed.ActorRole)
+	}
+
+	if _, err := svc.ChangeInvitationRole(ctx, owner, property, pending.ID, domain.RoleFullAccess); err != nil {
+		t.Fatalf("ChangeInvitationRole (same role): %v", err)
+	}
+	if len(history.entries) != 1 {
+		t.Fatalf("journal entries = %d, want still 1 — a same-role change writes no row", len(history.entries))
+	}
+}
+
 func TestHistory_InvitationLifecycleRows(t *testing.T) {
 	t.Parallel()
 	owner := uuid.Must(uuid.NewV7())
@@ -186,10 +252,10 @@ func TestHistory_InvitationLifecycleRows(t *testing.T) {
 	history := &fakeHistory{}
 	policy := NewMembershipPolicy(owners, repo)
 	access := NewAccessService(repo, owners, nil, lookup, policy, nil, nil,
-		newTestFactoryWithHistory(repo, invitations, auditapp.Noop{}, history), nil)
+		newTestFactoryWithHistory(repo, invitations, history), nil)
 	svc := NewInvitationService(access, repo, invitations, owners, nil, lookup, policy,
 		nil, nil, nil, nil,
-		newTestFactoryWithHistory(repo, invitations, auditapp.Noop{}, history), nil, nil, nil)
+		newTestFactoryWithHistory(repo, invitations, history), nil, nil, nil)
 	// The unregistered invitee journals by email — the only label the
 	// platform knows at this point (ADR 0061 §5).
 	if _, err := svc.InviteByEmail(context.Background(), owner, property, testNewUserEmail, domain.RoleViewer); err != nil {
@@ -213,5 +279,72 @@ func TestHistory_InvitationLifecycleRows(t *testing.T) {
 	}
 	if cancelled.Segments.PlainText() != "Приглашение отменено: "+testNewUserEmail {
 		t.Errorf("row text = %q, want the email snapshot", cancelled.Segments.PlainText())
+	}
+}
+
+// TestHistory_ParticipantRemovedRows pins the journal of the bulk «Отозвать и
+// удалить» (issue #694): a person holding a membership and a pending
+// invitation in the actor's scope gets exactly one member.participant_removed
+// row per leg, both naming the same person; only the membership leg carries
+// the target's user id in the context — the invitation leg knows them by
+// email only (ADR 0061 §5).
+func TestHistory_ParticipantRemovedRows(t *testing.T) {
+	t.Parallel()
+	owner := uuid.Must(uuid.NewV7())
+	member := uuid.Must(uuid.NewV7())
+	property := uuid.Must(uuid.NewV7())
+
+	repo := newMemRepo()
+	invitations := &memInvitationsRepo{removalScope: repo.inManageScope}
+	owners := staticResolver{property: owner}
+	repo.SetOwner(property, owner)
+	lookup := newFakeLookup()
+	emails := fakeEmailResolver{member: testMemberEmail}
+	history := &fakeHistory{}
+	policy := NewMembershipPolicy(owners, repo)
+	access := NewAccessService(repo, owners, nil, lookup, policy, nil, nil,
+		newTestFactoryWithHistory(repo, invitations, history), nil)
+	svc := NewParticipantMutationService(access, owners, nil, lookup, emails, policy,
+		nil, nil, nil, nil,
+		newTestFactoryWithHistory(repo, invitations, history), nil, nil)
+
+	ctx := context.Background()
+	if _, err := repo.Create(ctx, domain.Membership{
+		ID: uuid.Must(uuid.NewV7()), PropertyID: property, UserID: member,
+		Role: domain.RoleViewer, GrantedBy: owner,
+	}); err != nil {
+		t.Fatalf("seed membership: %v", err)
+	}
+	if _, err := invitations.Create(ctx, domain.Invitation{
+		ID: uuid.Must(uuid.NewV7()), PropertyID: property, Email: testMemberEmail,
+		Role: domain.RoleViewer, InvitedBy: owner,
+	}); err != nil {
+		t.Fatalf("seed invitation: %v", err)
+	}
+
+	if err := svc.Remove(ctx, owner, member.String()); err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+	if len(history.entries) != 2 {
+		t.Fatalf("journal entries = %d, want 2 — one row per removal leg", len(history.entries))
+	}
+	for i, e := range history.entries {
+		if e.Action != historydomain.ActionMemberParticipantRemoved {
+			t.Fatalf("entries[%d] action = %s, want member.participant_removed", i, e.Action)
+		}
+		if e.PropertyID != property {
+			t.Errorf("entries[%d] property = %s, want %s", i, e.PropertyID, property)
+		}
+		if e.Segments.PlainText() != "Участник удалён: Member" {
+			t.Errorf("entries[%d] row text = %q, want the display-name snapshot on both legs", i, e.Segments.PlainText())
+		}
+	}
+	// The legs differ in the structured context: the membership leg names the
+	// removed user's id, the invitation leg has none to name.
+	if got := history.entries[0].Context[historydomain.CtxKeyUserID]; got != member {
+		t.Errorf("membership leg user_id = %v, want %s", got, member)
+	}
+	if got, ok := history.entries[1].Context[historydomain.CtxKeyUserID]; ok {
+		t.Errorf("invitation leg carries user_id %v, want none", got)
 	}
 }

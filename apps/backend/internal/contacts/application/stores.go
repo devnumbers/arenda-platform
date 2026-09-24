@@ -21,11 +21,11 @@ type txStores struct {
 	history  historyapp.Recorder
 }
 
-// txStoreFactory holds the non-transactional repositories plus the
-// Unit-of-Work and builds a transactional txStores from each runInTx call
-// (ADR 0033 γ-factory). The non-transactional contact and property stores
-// also serve the pre-transaction reads the authorization needs; the property
-// store never enters a contact transaction.
+// txStoreFactory holds the non-transactional repositories, the audit and
+// history recorders plus the Unit-of-Work, and builds a transactional
+// txStores from each runInTx call (ADR 0033 γ-factory). The non-transactional
+// contact and property stores also serve the pre-transaction reads the
+// authorization needs; the property store never enters a contact transaction.
 type txStoreFactory struct {
 	contacts   ContactStore
 	properties PropertyStore
@@ -35,11 +35,11 @@ type txStoreFactory struct {
 }
 
 // NewTxStoreFactory bundles the contact and property repositories, the audit
-// recorder and the Unit-of-Work into the single factory the contacts service
-// embeds. A nil audit defaults to a Noop recorder so a caller that does not
-// care about audit still gets a safe factory. The type stays unexported;
-// callers use := to hold it (standard Go pattern for a factory returning an
-// unexported type).
+// and history recorders, and the Unit-of-Work into the single factory the
+// contacts service embeds. A nil recorder defaults to a Noop so a caller that
+// does not care about audit or history still gets a safe factory. The type
+// stays unexported; callers use := to hold it (standard Go pattern for a
+// factory returning an unexported type).
 func NewTxStoreFactory(
 	contacts ContactStore, properties PropertyStore,
 	audit auditapp.Recorder, history historyapp.Recorder, uow transaction.UoW,

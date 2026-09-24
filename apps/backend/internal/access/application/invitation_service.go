@@ -32,10 +32,10 @@ type InviteOutcome struct {
 // and FIFO activation when the invitee registers. The invite email is the only
 // email sent by this service itself; the lifecycle notifications (the
 // activation notice to the inviter, the paused access on a suspended
-// activation) leave the context as events (карта #734, #751). Persistence and
-// audit share the same transaction through the embedded txStoreFactory
-// (ADR 0033); the invitee email is PII and never appears in audit context
-// (ADR 0020).
+// activation) leave the context as events (карта #734, #751). Persistence,
+// the audit entries and the action journal rows (ADR 0061) share the same
+// transaction through the embedded txStoreFactory (ADR 0033); the invitee
+// email is PII and never appears in audit context (ADR 0020).
 type InvitationService struct {
 	txStoreFactory
 	access      *AccessService
@@ -261,6 +261,9 @@ func (s *InvitationService) ResendInvitation(ctx context.Context, actor, propert
 
 // ChangeInvitationRole changes the role of a pending invitation. No new email
 // is sent; the role current at registration time is applied on activation.
+// The change journals in the same transaction over the member.role_changed
+// vocabulary — the pending invitee is named by the invitation's email; a
+// same-role re-set is not a state change and writes no row (ADR 0061 §3).
 func (s *InvitationService) ChangeInvitationRole(
 	ctx context.Context,
 	actor, propertyID, invitationID uuid.UUID,
@@ -275,11 +278,12 @@ func (s *InvitationService) ChangeInvitationRole(
 	err = s.runInTx(ctx, func(stores *txStores) error {
 		// Confirm the invitation exists and belongs to this property before
 		// updating; a missing row is a not-found outcome rather than a silent no-op.
-		if _, err := stores.invitations.GetByID(ctx, invitationID, propertyID); err != nil {
+		existing, err := stores.invitations.GetByID(ctx, invitationID, propertyID)
+		if err != nil {
 			return err
 		}
+		roleChanged := existing.Role != role
 
-		var err error
 		updated, err = stores.invitations.UpdateRole(ctx, invitationID, propertyID, role)
 		if err != nil {
 			return fmt.Errorf("update invitation role: %w", err)
@@ -297,6 +301,20 @@ func (s *InvitationService) ChangeInvitationRole(
 			},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
+		}
+
+		// The action journal row (ADR 0061): the pending invitee is known by
+		// the invitation's email — the row survives the later acceptance or
+		// cancellation. The invitee has no user id yet, so the row carries no
+		// member link.
+		if roleChanged {
+			if err := historyapp.RecordScoped(ctx, stores.history, propertyID, actor,
+				sharedpolicy.HistoryActorRole(actorRole),
+				historydomain.MemberRoleChanged(uuid.Nil, existing.Email,
+					historydomain.ActorRole(toSharedRole(existing.Role)),
+					historydomain.ActorRole(toSharedRole(role)))); err != nil {
+				return err
+			}
 		}
 		return nil
 	})

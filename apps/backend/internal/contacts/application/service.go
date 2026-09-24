@@ -61,8 +61,9 @@ type UpdateContactCommand struct {
 // card is visible to the property's shared members (CanView) and editable by
 // them (CanEdit), the owner rules their whole book, and a card without a
 // property belongs to the owner's book alone. Every mutation records its
-// audit entry inside the same transaction (ADR 0020); the context never
-// carries the card's PII.
+// audit entry inside the same transaction (ADR 0020), a property-bound one
+// also its action journal row (ADR 0061); the context never carries the
+// card's PII.
 type ContactService struct {
 	txStoreFactory
 	policy sharedpolicy.Policy
