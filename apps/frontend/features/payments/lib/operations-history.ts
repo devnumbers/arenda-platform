@@ -1,5 +1,6 @@
 import type { IsoDate, PaymentOperation } from '@/entities/payment';
 import { addDays, formatDayMonth, formatDayMonthWithYear } from '@/entities/payment';
+import { formatDayMonthYear } from '@/shared/lib/date-format';
 import { parseEnumParam } from '@/shared/lib/parse-enum-param';
 
 /**
@@ -97,9 +98,9 @@ function historyGroupLabel(date: IsoDate, today: IsoDate, yesterday: IsoDate): s
   if (date === yesterday) {
     return 'Вчера';
   }
-  // Канон «Истории операций» (1302:52209, решение #802 23.09): год в
-  // датовой группе всегда — «10 мая, 2028».
-  return `${formatDayMonth(date)}, ${date.slice(0, 4)}`;
+  // Канон групп истории — formatDayMonthYear из канона дат
+  // (1302:52209, решение #802 23.09): год в датовой группе всегда.
+  return formatDayMonthYear(date);
 }
 
 function operationsGroupLabel(date: IsoDate, today: IsoDate, yesterday: IsoDate): string {
