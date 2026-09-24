@@ -77,6 +77,7 @@ const (
 	NotificationEventTypeAccessPaused                 NotificationEventType = "access_paused"
 	NotificationEventTypeAccessResumed                NotificationEventType = "access_resumed"
 	NotificationEventTypeMemberLeft                   NotificationEventType = "member_left"
+	NotificationEventTypeAccessRoleChanged            NotificationEventType = "access_role_changed"
 	NotificationEventTypeSubscriptionPaymentFailed    NotificationEventType = "subscription_payment_failed"
 	NotificationEventTypeSubscriptionPaymentReminder  NotificationEventType = "subscription_payment_reminder"
 	NotificationEventTypeSubscriptionPaymentSucceeded NotificationEventType = "subscription_payment_succeeded"
