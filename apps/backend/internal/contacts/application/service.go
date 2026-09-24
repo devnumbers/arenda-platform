@@ -296,7 +296,13 @@ func (s *ContactService) UpdateContact(
 		// The row hangs on the card's final binding and records a change,
 		// not a no-op (ADR 0061 §3): a same-form PATCH without a move writes
 		// no row; a move between properties journals on the destination; an
-		// unbound card writes no row.
+		// unbound card writes no row. A move or a detail-only edit (phone,
+		// note — contactChanged) may keep the ФИО unchanged: the row records
+		// the rebinding/card change, not a name delta, so the accepted old →
+		// new form repeats the same ФИО («X → X»). A dedicated binding
+		// wording stays a possible future walkthrough decision and is not
+		// accepted here — the ADR 0061 §4 dictionary gains no action id for
+		// it.
 		if stored.PropertyID != nil && (moved || contactChanged(before, stored)) {
 			if err := historyapp.RecordScoped(ctx, stores.history, *stored.PropertyID, actor,
 				sharedpolicy.HistoryActorRole(role),
