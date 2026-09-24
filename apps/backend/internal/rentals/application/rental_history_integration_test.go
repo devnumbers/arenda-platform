@@ -15,8 +15,7 @@ import (
 
 	auditpg "github.com/nambers/arenda-planform/apps/backend/internal/audit/adapters/postgres"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
-	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
-	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/history/historytest"
 	paymentspg "github.com/nambers/arenda-planform/apps/backend/internal/payments/adapters/postgres"
 	pgdb "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/testdb"
@@ -24,17 +23,11 @@ import (
 	rentalsapp "github.com/nambers/arenda-planform/apps/backend/internal/rentals/application"
 	rentalsdomain "github.com/nambers/arenda-planform/apps/backend/internal/rentals/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
-	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
-// failingJournal is the recorder double whose every insert fails.
-type failingJournal struct{}
-
+// errJournalDown is the failing journal's sentinel: the shared capturing
+// recorder returns it from every insert.
 var errJournalDown = errors.New("journal store down")
-
-func (failingJournal) Record(context.Context, historydomain.Entry) error { return errJournalDown }
-
-func (failingJournal) WithTx(transaction.Tx) historyapp.Recorder { return failingJournal{} }
 
 func TestHistory_FailingJournalRollsRentalBack(t *testing.T) {
 	t.Parallel()
@@ -46,7 +39,7 @@ func TestHistory_FailingJournalRollsRentalBack(t *testing.T) {
 		gateway,
 		nil,
 		auditapp.NewService(auditpg.NewWriter(pool), nil),
-		failingJournal{},
+		&historytest.CapturingRecorder{Err: errJournalDown},
 		pgdb.NewUoW(pool, slog.New(slog.DiscardHandler)),
 	)
 	h := &rentalsHarness{

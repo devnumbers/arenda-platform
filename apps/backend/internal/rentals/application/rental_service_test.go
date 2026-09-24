@@ -14,8 +14,8 @@ import (
 	"github.com/google/uuid"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
-	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/history/historytest"
 	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/rentals/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
@@ -110,22 +110,14 @@ func (a *fakeAudit) Record(_ context.Context, entry auditdomain.Entry) error {
 
 func (a *fakeAudit) WithTx(transaction.Tx) auditapp.Recorder { return a }
 
-type fakeHistory struct {
-	journal *journal
-	entries []historydomain.Entry
-	err     error
-}
-
-func (h *fakeHistory) Record(_ context.Context, entry historydomain.Entry) error {
-	h.journal.add(eventHistoryRecord)
-	if h.err != nil {
-		return h.err
+// journalingHistory is the shared capturing recorder wired into the
+// cross-fake call journal: every action-journal write marks the conveyor
+// order, the entries themselves stay available on the recorder.
+func journalingHistory(j *journal) *historytest.CapturingRecorder {
+	return &historytest.CapturingRecorder{
+		OnRecord: func(historydomain.Entry) { j.add(eventHistoryRecord) },
 	}
-	h.entries = append(h.entries, entry)
-	return nil
 }
-
-func (h *fakeHistory) WithTx(transaction.Tx) historyapp.Recorder { return h }
 
 type fakeTenantReader struct{ exists bool }
 
@@ -306,7 +298,7 @@ type harness struct {
 	store     *fakeRentalStore
 	gateway   *fakeGateway
 	audit     *fakeAudit
-	history   *fakeHistory
+	history   *historytest.CapturingRecorder
 	svc       *RentalService
 	owner     uuid.UUID
 	property  uuid.UUID
@@ -333,7 +325,7 @@ func newHarnessWithArchivedProperty(t *testing.T, archived bool) *harness {
 	}
 	audit := &fakeAudit{journal: j}
 	propStore := fakePropertyStore{owner: owner, archived: archived}
-	history := &fakeHistory{journal: j}
+	history := journalingHistory(j)
 	factory := NewTxStoreFactory(store, propStore, gateway, fakeTenantReader{exists: true}, audit, history, fakeUoW{})
 	svc := NewRentalService(factory, fakeCalendar{}, fakePolicy{role: sharedpolicy.RoleOwner})
 	return &harness{
@@ -512,7 +504,7 @@ func TestCreateRental_UnknownTenantIsInvalid(t *testing.T) {
 		&fakeGateway{journal: j},
 		fakeTenantReader{exists: false},
 		&fakeAudit{journal: j},
-		&fakeHistory{journal: j},
+		journalingHistory(j),
 		fakeUoW{},
 	)
 	svc := NewRentalService(factory, fakeCalendar{}, fakePolicy{role: sharedpolicy.RoleOwner})
@@ -723,7 +715,7 @@ func TestRoleMatrix(t *testing.T) {
 		t.Parallel()
 		stranger := fakePolicy{role: sharedpolicy.RoleNone}
 		svc := NewRentalService(
-			NewTxStoreFactory(h.store, h.propStore, h.gateway, fakeTenantReader{exists: true}, h.audit, &fakeHistory{journal: h.journal}, fakeUoW{}),
+			NewTxStoreFactory(h.store, h.propStore, h.gateway, fakeTenantReader{exists: true}, h.audit, journalingHistory(h.journal), fakeUoW{}),
 			fakeCalendar{}, stranger,
 		)
 		_, err := svc.GetRental(t.Context(), h.owner, h.property, mustID(t))

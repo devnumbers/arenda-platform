@@ -24,10 +24,10 @@ func TestHistory_RentalCreatedCarriesTenantAndPeriod(t *testing.T) {
 		t.Fatalf("CreateRental: %v", err)
 	}
 
-	if len(h.history.entries) != 1 {
-		t.Fatalf("journal entries = %d, want 1", len(h.history.entries))
+	if len(h.history.Entries) != 1 {
+		t.Fatalf("journal entries = %d, want 1", len(h.history.Entries))
 	}
-	e := h.history.entries[0]
+	e := h.history.Entries[0]
 	if e.Action != historydomain.ActionRentalCreated {
 		t.Fatalf("action = %s, want rental.created", e.Action)
 	}
@@ -54,10 +54,10 @@ func TestHistory_RentalDeletedKeepsLabelWithoutLink(t *testing.T) {
 	if err := h.svc.DeleteRental(t.Context(), h.owner, h.property, rentalID); err != nil {
 		t.Fatalf("DeleteRental: %v", err)
 	}
-	if len(h.history.entries) == 0 {
+	if len(h.history.Entries) == 0 {
 		t.Fatal("the deletion wrote no journal row")
 	}
-	e := h.history.entries[len(h.history.entries)-1]
+	e := h.history.Entries[len(h.history.Entries)-1]
 	if e.Action != historydomain.ActionRentalDeleted {
 		t.Fatalf("action = %s, want rental.deleted", e.Action)
 	}

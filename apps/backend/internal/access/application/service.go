@@ -351,8 +351,8 @@ func (s *AccessService) ChangeMemberRole(
 			if err := historyapp.RecordScoped(ctx, stores.history, propertyID, actor,
 				sharedpolicy.HistoryActorRole(actorRole),
 				historydomain.MemberRoleChanged(updated.UserID, label,
-					historydomain.ActorRole(toSharedRole(existing.Role)),
-					historydomain.ActorRole(toSharedRole(role)))); err != nil {
+					sharedpolicy.HistoryActorRole(toSharedRole(existing.Role)),
+					sharedpolicy.HistoryActorRole(toSharedRole(role)))); err != nil {
 				return err
 			}
 		}
@@ -590,13 +590,16 @@ func (s *AccessService) LeaveProperty(ctx context.Context, actor, propertyID uui
 			return fmt.Errorf("record audit: %w", err)
 		}
 
-		// The action journal row (ADR 0061): the leaver is their own label.
+		// The action journal row (ADR 0061): the leaver is their own label,
+		// attributed to the membership's real role — the policy's suspended
+		// verdict says the access is hidden, not that the role was the
+		// owner's, so the attribution reads the row the transaction holds.
 		label, err := userLabel(ctx, s.users, actor)
 		if err != nil {
 			return err
 		}
 		if err := historyapp.RecordScoped(ctx, stores.history, propertyID, actor,
-			sharedpolicy.HistoryActorRole(role), historydomain.MemberLeft(label)); err != nil {
+			sharedpolicy.HistoryActorRole(toSharedRole(membership.Role)), historydomain.MemberLeft(label)); err != nil {
 			return err
 		}
 		return nil

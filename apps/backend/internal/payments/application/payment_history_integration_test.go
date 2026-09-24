@@ -9,7 +9,6 @@ package application_test
 // canon: the action and its journal row share the transaction's fate.
 
 import (
-	"context"
 	"errors"
 	"log/slog"
 	"strings"
@@ -17,14 +16,12 @@ import (
 
 	auditpg "github.com/nambers/arenda-planform/apps/backend/internal/audit/adapters/postgres"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
-	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
-	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/history/historytest"
 	paymentspg "github.com/nambers/arenda-planform/apps/backend/internal/payments/adapters/postgres"
 	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
 	pgdb "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
 	rentalspg "github.com/nambers/arenda-planform/apps/backend/internal/rentals/adapters/postgres"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
-	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 // cleaningSlug is a valid default-catalog expense category for the fixtures.
@@ -165,7 +162,7 @@ func TestHistory_FailingInsertRollsMutationBack(t *testing.T) {
 		paymentspg.NewGlobalPaymentStore(h.pool),
 		rentalspg.NewRentalLinkReader(h.pool),
 		auditapp.NewService(auditpg.NewWriter(h.pool), clk),
-		failingHistory{},
+		&historytest.CapturingRecorder{Err: errHistoryDown},
 		pgdb.NewUoW(h.pool, logger),
 	)
 	calendar := paymentspg.NewOwnerCalendar(h.pool, clk)
@@ -191,11 +188,6 @@ func TestHistory_FailingInsertRollsMutationBack(t *testing.T) {
 	}
 }
 
-// failingHistory is the recorder double whose every insert fails.
-type failingHistory struct{}
-
+// errHistoryDown is the failing journal's sentinel: the shared capturing
+// recorder returns it from every insert.
 var errHistoryDown = errors.New("history store down")
-
-func (failingHistory) Record(context.Context, historydomain.Entry) error { return errHistoryDown }
-
-func (failingHistory) WithTx(transaction.Tx) historyapp.Recorder { return failingHistory{} }

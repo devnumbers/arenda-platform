@@ -36,8 +36,8 @@ func TestHistory_BoundContactRows(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("UpdateContact (same form): %v", err)
 	}
-	if len(h.history.entries) != 1 {
-		t.Fatalf("journal entries after the no-op update = %d, want 1", len(h.history.entries))
+	if len(h.history.Entries) != 1 {
+		t.Fatalf("journal entries after the no-op update = %d, want 1", len(h.history.Entries))
 	}
 
 	// A real change carries the old → new ФИО snapshot.
@@ -51,8 +51,8 @@ func TestHistory_BoundContactRows(t *testing.T) {
 		t.Fatalf("DeleteContact: %v", err)
 	}
 
-	if len(h.history.entries) != 3 {
-		t.Fatalf("journal entries = %d, want 3", len(h.history.entries))
+	if len(h.history.Entries) != 3 {
+		t.Fatalf("journal entries = %d, want 3", len(h.history.Entries))
 	}
 	want := []struct{ action, text string }{
 		{string(historydomain.ActionContactCreated), "Добавлен контакт: " + createdContactFullName},
@@ -60,7 +60,7 @@ func TestHistory_BoundContactRows(t *testing.T) {
 		{string(historydomain.ActionContactDeleted), "Контакт удалён: Пётр Сидоров"},
 	}
 	for i, w := range want {
-		e := h.history.entries[i]
+		e := h.history.Entries[i]
 		if string(e.Action) != w.action {
 			t.Errorf("entry %d action = %s, want %s", i, e.Action, w.action)
 		}
@@ -72,7 +72,7 @@ func TestHistory_BoundContactRows(t *testing.T) {
 		}
 	}
 	// The label snapshot is the ФИО — the phone never enters the row text.
-	for _, e := range h.history.entries {
+	for _, e := range h.history.Entries {
 		if text := e.Segments.PlainText(); strings.Contains(text, "89161234567") || strings.Contains(text, "+79161234567") {
 			t.Errorf("row text %q must never carry the phone", text)
 		}
@@ -91,8 +91,8 @@ func TestHistory_UnboundContactWritesNothing(t *testing.T) {
 		t.Fatalf("DeleteContact: %v", err)
 	}
 
-	if len(h.history.entries) != 0 {
-		t.Errorf("journal entries = %d, want 0 — an unbound card has no property anchor", len(h.history.entries))
+	if len(h.history.Entries) != 0 {
+		t.Errorf("journal entries = %d, want 0 — an unbound card has no property anchor", len(h.history.Entries))
 	}
 	if len(h.audit.entries) == 0 {
 		t.Error("the audit trail must stay complete regardless of the journal scope")
@@ -107,10 +107,10 @@ func TestHistory_MemberEditAttributedToRole(t *testing.T) {
 		t.Fatalf("CreateContact (member): %v", err)
 	}
 
-	if len(h.history.entries) != 1 {
-		t.Fatalf("journal entries = %d, want 1", len(h.history.entries))
+	if len(h.history.Entries) != 1 {
+		t.Fatalf("journal entries = %d, want 1", len(h.history.Entries))
 	}
-	if got := h.history.entries[0].ActorRole; got != historydomain.ActorRoleFullAccess {
+	if got := h.history.Entries[0].ActorRole; got != historydomain.ActorRoleFullAccess {
 		t.Errorf("actor role = %s, want full_access (the audit attribution pattern)", got)
 	}
 }

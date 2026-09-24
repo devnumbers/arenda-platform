@@ -311,8 +311,8 @@ func (s *InvitationService) ChangeInvitationRole(
 			if err := historyapp.RecordScoped(ctx, stores.history, propertyID, actor,
 				sharedpolicy.HistoryActorRole(actorRole),
 				historydomain.MemberRoleChanged(uuid.Nil, existing.Email,
-					historydomain.ActorRole(toSharedRole(existing.Role)),
-					historydomain.ActorRole(toSharedRole(role)))); err != nil {
+					sharedpolicy.HistoryActorRole(toSharedRole(existing.Role)),
+					sharedpolicy.HistoryActorRole(toSharedRole(role)))); err != nil {
 				return err
 			}
 		}

@@ -12,26 +12,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/history/historytest"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
-	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
-
-type fakeHistory struct {
-	entries []historydomain.Entry
-	err     error
-}
-
-func (h *fakeHistory) Record(_ context.Context, e historydomain.Entry) error {
-	if h.err != nil {
-		return h.err
-	}
-	h.entries = append(h.entries, e)
-	return nil
-}
-
-func (h *fakeHistory) WithTx(transaction.Tx) historyapp.Recorder { return h }
 
 // The fixture names and addresses the rename assertions read back.
 const (
@@ -41,7 +25,7 @@ const (
 	renamedAddress    = "Москва, Тверская 1"
 )
 
-func newHistoryTestService(t *testing.T, history *fakeHistory) (*PropertyService, uuid.UUID) {
+func newHistoryTestService(t *testing.T, history *historytest.CapturingRecorder) (*PropertyService, uuid.UUID) {
 	t.Helper()
 	owner := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -69,7 +53,7 @@ func newHistoryTestService(t *testing.T, history *fakeHistory) (*PropertyService
 
 func TestHistory_PropertyMutationRows(t *testing.T) {
 	t.Parallel()
-	history := &fakeHistory{}
+	history := &historytest.CapturingRecorder{}
 	svc, owner := newHistoryTestService(t, history)
 	ctx := context.Background()
 
@@ -94,8 +78,8 @@ func TestHistory_PropertyMutationRows(t *testing.T) {
 		t.Fatalf("ArchiveProperty: %v", err)
 	}
 
-	if len(history.entries) != 4 {
-		t.Fatalf("journal entries = %d, want 4 (create, rename, pin, archive; re-pin silent)", len(history.entries))
+	if len(history.Entries) != 4 {
+		t.Fatalf("journal entries = %d, want 4 (create, rename, pin, archive; re-pin silent)", len(history.Entries))
 	}
 	want := []struct{ action, text string }{
 		{string(historydomain.ActionPropertyCreated), "Добавлен объект: Новая квартира"},
@@ -104,7 +88,7 @@ func TestHistory_PropertyMutationRows(t *testing.T) {
 		{string(historydomain.ActionPropertyArchived), "Объект отправлен в архив"},
 	}
 	for i, w := range want {
-		e := history.entries[i]
+		e := history.Entries[i]
 		if string(e.Action) != w.action {
 			t.Errorf("entry %d action = %s, want %s", i, e.Action, w.action)
 		}
@@ -122,7 +106,7 @@ func TestHistory_PropertyMutationRows(t *testing.T) {
 
 func TestHistory_RenameCarriesOldAndNew(t *testing.T) {
 	t.Parallel()
-	history := &fakeHistory{}
+	history := &historytest.CapturingRecorder{}
 	svc, owner := newHistoryTestService(t, history)
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 
@@ -133,7 +117,7 @@ func TestHistory_RenameCarriesOldAndNew(t *testing.T) {
 		t.Fatalf("UpdateProperty: %v", err)
 	}
 
-	e := history.entries[0]
+	e := history.Entries[0]
 	if e.Action != historydomain.ActionPropertyRenamed {
 		t.Fatalf("action = %s, want property.renamed", e.Action)
 	}
@@ -144,7 +128,7 @@ func TestHistory_RenameCarriesOldAndNew(t *testing.T) {
 
 func TestHistory_FailingInsertFailsMutation(t *testing.T) {
 	t.Parallel()
-	history := &fakeHistory{err: errors.New("journal down")}
+	history := &historytest.CapturingRecorder{Err: errors.New("journal down")}
 	svc, owner := newHistoryTestService(t, history)
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 

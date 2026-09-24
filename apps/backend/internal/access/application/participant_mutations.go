@@ -512,9 +512,13 @@ func (s *ParticipantMutationService) actorRoleOn(ctx context.Context, actor, pro
 }
 
 // removeMembershipLegs deletes the person's membership rows with an audit
-// entry per row, reports how many active (slot-occupying) ones were freed and
-// appends the removed active rows to the collector — the caller publishes
-// their revocation events post-commit (карта #734, #751).
+// entry and an action-journal row per leg (ADR 0061 §3: a journal row per
+// removed access), reports how many active (slot-occupying) ones were freed
+// and appends the removed active rows to the collector — the caller publishes
+// their revocation events post-commit (карта #734, #751). targetLabel is the
+// person's journal label resolved once for the whole batch (the display name,
+// or the email for the unregistered invitee — ADR 0061 §5): every leg's row
+// names the same person by it.
 func (s *ParticipantMutationService) removeMembershipLegs(
 	ctx context.Context, stores *txStores, actor uuid.UUID, legs []domain.Membership, targetLabel string,
 ) (int, []domain.Membership, error) {
@@ -537,7 +541,9 @@ func (s *ParticipantMutationService) removeMembershipLegs(
 }
 
 // removeInvitationLegs deletes the person's pending invitation rows with an
-// audit entry per row.
+// audit entry and an action-journal row per leg (ADR 0061 §3). targetLabel is
+// the same batch-wide label snapshot the membership legs carry, so both legs
+// of the removal name the person identically.
 func (s *ParticipantMutationService) removeInvitationLegs(
 	ctx context.Context, stores *txStores, actor uuid.UUID, legs []domain.Invitation, targetLabel string,
 ) error {

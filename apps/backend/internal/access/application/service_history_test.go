@@ -14,23 +14,8 @@ import (
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
-	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
+	"github.com/nambers/arenda-planform/apps/backend/internal/history/historytest"
 )
-
-type fakeHistory struct {
-	entries []historydomain.Entry
-	err     error
-}
-
-func (h *fakeHistory) Record(_ context.Context, e historydomain.Entry) error {
-	if h.err != nil {
-		return h.err
-	}
-	h.entries = append(h.entries, e)
-	return nil
-}
-
-func (h *fakeHistory) WithTx(transaction.Tx) historyapp.Recorder { return h }
 
 func newTestFactoryWithHistory(
 	members MembershipRepository, invitations InvitationRepository, history historyapp.Recorder,
@@ -49,7 +34,7 @@ type historyFixture struct {
 
 	property uuid.UUID
 	repo     *memRepo
-	history  *fakeHistory
+	history  *historytest.CapturingRecorder
 	svc      *AccessService
 }
 
@@ -68,7 +53,7 @@ func newHistoryFixture(t *testing.T) *historyFixture {
 		member:   {ID: member, Name: new("Пётр"), Surname: new("Сидоров"), Phone: "+79120000002"},
 		stranger: {ID: stranger, Phone: "+79120000003"},
 	}
-	history := &fakeHistory{}
+	history := &historytest.CapturingRecorder{}
 	policy := NewMembershipPolicy(resolver, repo)
 	svc := NewAccessService(repo, resolver, nil, lookup, policy, nil, nil,
 		newTestFactoryWithHistory(repo, &memInvitationsRepo{}, history), nil)
@@ -86,7 +71,7 @@ func TestHistory_MembershipLifecycleRows(t *testing.T) {
 	if _, err := h.svc.AddMember(ctx, h.owner, h.property, h.member, domain.RoleFullAccess); err != nil {
 		t.Fatalf("AddMember: %v", err)
 	}
-	added := h.history.entries[len(h.history.entries)-1]
+	added := h.history.Entries[len(h.history.Entries)-1]
 	if added.Action != historydomain.ActionMemberAdded {
 		t.Fatalf("action = %s, want member.added", added.Action)
 	}
@@ -100,7 +85,7 @@ func TestHistory_MembershipLifecycleRows(t *testing.T) {
 	if _, err := h.svc.ChangeMemberRole(ctx, h.owner, h.property, h.repo.rows[0].ID, domain.RoleViewer); err != nil {
 		t.Fatalf("ChangeMemberRole: %v", err)
 	}
-	changed := h.history.entries[len(h.history.entries)-1]
+	changed := h.history.Entries[len(h.history.Entries)-1]
 	if changed.Action != historydomain.ActionMemberRoleChanged {
 		t.Fatalf("action = %s, want member.role_changed", changed.Action)
 	}
@@ -111,7 +96,7 @@ func TestHistory_MembershipLifecycleRows(t *testing.T) {
 	if err := h.svc.RevokeMember(ctx, h.owner, h.property, h.repo.rows[0].ID); err != nil {
 		t.Fatalf("RevokeMember: %v", err)
 	}
-	revoked := h.history.entries[len(h.history.entries)-1]
+	revoked := h.history.Entries[len(h.history.Entries)-1]
 	if revoked.Action != historydomain.ActionMemberRemoved {
 		t.Fatalf("action = %s, want member.removed", revoked.Action)
 	}
@@ -131,13 +116,13 @@ func TestHistory_MemberRoleNoOpWritesNoRow(t *testing.T) {
 	if _, err := h.svc.AddMember(ctx, h.owner, h.property, h.member, domain.RoleFullAccess); err != nil {
 		t.Fatalf("AddMember: %v", err)
 	}
-	h.history.entries = nil
+	h.history.Entries = nil
 
 	if _, err := h.svc.ChangeMemberRole(ctx, h.owner, h.property, h.repo.rows[0].ID, domain.RoleFullAccess); err != nil {
 		t.Fatalf("ChangeMemberRole (same role): %v", err)
 	}
-	if len(h.history.entries) != 0 {
-		t.Fatalf("journal entries = %d, want 0 — a same-role change writes no row", len(h.history.entries))
+	if len(h.history.Entries) != 0 {
+		t.Fatalf("journal entries = %d, want 0 — a same-role change writes no row", len(h.history.Entries))
 	}
 }
 
@@ -149,15 +134,15 @@ func TestHistory_LeaveCarriesTheLeaver(t *testing.T) {
 	if _, err := h.svc.AddMember(ctx, h.owner, h.property, h.member, domain.RoleFullAccess); err != nil {
 		t.Fatalf("AddMember: %v", err)
 	}
-	h.history.entries = nil
+	h.history.Entries = nil
 
 	if err := h.svc.LeaveProperty(ctx, h.member, h.property); err != nil {
 		t.Fatalf("LeaveProperty: %v", err)
 	}
-	if len(h.history.entries) != 1 {
-		t.Fatalf("journal entries = %d, want 1", len(h.history.entries))
+	if len(h.history.Entries) != 1 {
+		t.Fatalf("journal entries = %d, want 1", len(h.history.Entries))
 	}
-	e := h.history.entries[0]
+	e := h.history.Entries[0]
 	if e.Action != historydomain.ActionMemberLeft {
 		t.Fatalf("action = %s, want member.left", e.Action)
 	}
@@ -174,12 +159,45 @@ func TestHistory_LeaveCarriesTheLeaver(t *testing.T) {
 	}
 }
 
+// TestHistory_SuspendedLeaveCarriesTheRealRole pins the suspended self-exit
+// attribution: the policy resolves a suspended member to the no-capability
+// «suspended» verdict, but the journal row still attributes the leaver to the
+// membership's real role — suspension hides the object, it does not rewrite
+// who held which role (ADR 0061 §3, the audit pattern).
+func TestHistory_SuspendedLeaveCarriesTheRealRole(t *testing.T) {
+	t.Parallel()
+	h := newHistoryFixture(t)
+	ctx := context.Background()
+
+	if _, err := h.svc.AddMember(ctx, h.owner, h.property, h.member, domain.RoleViewer); err != nil {
+		t.Fatalf("AddMember: %v", err)
+	}
+	if err := h.repo.Suspend(ctx, h.repo.rows[0].ID, h.property); err != nil {
+		t.Fatalf("Suspend: %v", err)
+	}
+	h.history.Entries = nil
+
+	if err := h.svc.LeaveProperty(ctx, h.member, h.property); err != nil {
+		t.Fatalf("LeaveProperty: %v", err)
+	}
+	if len(h.history.Entries) != 1 {
+		t.Fatalf("journal entries = %d, want 1", len(h.history.Entries))
+	}
+	e := h.history.Entries[0]
+	if e.Action != historydomain.ActionMemberLeft {
+		t.Fatalf("action = %s, want member.left", e.Action)
+	}
+	if e.ActorRole != historydomain.ActorRoleViewer {
+		t.Errorf("actor role = %s, want viewer — the membership's real role, not the owner fallback", e.ActorRole)
+	}
+}
+
 // newInvitationHistoryFixture wires the invitation service over the in-memory
 // repos with a capturing history recorder — the invitation-lifecycle twin of
 // newHistoryFixture (the invitation use cases live on InvitationService, the
 // factory wiring is the same).
 func newInvitationHistoryFixture(t *testing.T) (
-	svc *InvitationService, invitations *memInvitationsRepo, history *fakeHistory, owner, property uuid.UUID,
+	svc *InvitationService, invitations *memInvitationsRepo, history *historytest.CapturingRecorder, owner, property uuid.UUID,
 ) {
 	t.Helper()
 	owner = uuid.Must(uuid.NewV7())
@@ -189,7 +207,7 @@ func newInvitationHistoryFixture(t *testing.T) (
 	invitations = &memInvitationsRepo{removalScope: repo.inManageScope}
 	owners := staticResolver{property: owner}
 	lookup := newFakeLookup()
-	history = &fakeHistory{}
+	history = &historytest.CapturingRecorder{}
 	policy := NewMembershipPolicy(owners, repo)
 	access := NewAccessService(repo, owners, nil, lookup, policy, nil, nil,
 		newTestFactoryWithHistory(repo, invitations, history), nil)
@@ -212,16 +230,16 @@ func TestHistory_InvitationRoleChangeRow(t *testing.T) {
 	if _, err := svc.InviteByEmail(ctx, owner, property, testNewUserEmail, domain.RoleViewer); err != nil {
 		t.Fatalf("InviteByEmail: %v", err)
 	}
-	history.entries = nil
+	history.Entries = nil
 	pending := invitations.rows[0]
 
 	if _, err := svc.ChangeInvitationRole(ctx, owner, property, pending.ID, domain.RoleFullAccess); err != nil {
 		t.Fatalf("ChangeInvitationRole: %v", err)
 	}
-	if len(history.entries) != 1 {
-		t.Fatalf("journal entries = %d, want 1", len(history.entries))
+	if len(history.Entries) != 1 {
+		t.Fatalf("journal entries = %d, want 1", len(history.Entries))
 	}
-	changed := history.entries[0]
+	changed := history.Entries[0]
 	if changed.Action != historydomain.ActionMemberRoleChanged {
 		t.Fatalf("action = %s, want member.role_changed", changed.Action)
 	}
@@ -235,8 +253,8 @@ func TestHistory_InvitationRoleChangeRow(t *testing.T) {
 	if _, err := svc.ChangeInvitationRole(ctx, owner, property, pending.ID, domain.RoleFullAccess); err != nil {
 		t.Fatalf("ChangeInvitationRole (same role): %v", err)
 	}
-	if len(history.entries) != 1 {
-		t.Fatalf("journal entries = %d, want still 1 — a same-role change writes no row", len(history.entries))
+	if len(history.Entries) != 1 {
+		t.Fatalf("journal entries = %d, want still 1 — a same-role change writes no row", len(history.Entries))
 	}
 }
 
@@ -249,7 +267,7 @@ func TestHistory_InvitationLifecycleRows(t *testing.T) {
 	invitations := &memInvitationsRepo{removalScope: repo.inManageScope}
 	owners := staticResolver{property: owner}
 	lookup := newFakeLookup()
-	history := &fakeHistory{}
+	history := &historytest.CapturingRecorder{}
 	policy := NewMembershipPolicy(owners, repo)
 	access := NewAccessService(repo, owners, nil, lookup, policy, nil, nil,
 		newTestFactoryWithHistory(repo, invitations, history), nil)
@@ -261,7 +279,7 @@ func TestHistory_InvitationLifecycleRows(t *testing.T) {
 	if _, err := svc.InviteByEmail(context.Background(), owner, property, testNewUserEmail, domain.RoleViewer); err != nil {
 		t.Fatalf("InviteByEmail: %v", err)
 	}
-	invited := history.entries[len(history.entries)-1]
+	invited := history.Entries[len(history.Entries)-1]
 	if invited.Action != historydomain.ActionMemberInvited {
 		t.Fatalf("action = %s, want member.invited", invited.Action)
 	}
@@ -273,7 +291,7 @@ func TestHistory_InvitationLifecycleRows(t *testing.T) {
 	if err := svc.CancelInvitation(context.Background(), owner, property, pending.ID); err != nil {
 		t.Fatalf("CancelInvitation: %v", err)
 	}
-	cancelled := history.entries[len(history.entries)-1]
+	cancelled := history.Entries[len(history.Entries)-1]
 	if cancelled.Action != historydomain.ActionMemberInvitationCancelled {
 		t.Fatalf("action = %s, want member.invitation_cancelled", cancelled.Action)
 	}
@@ -300,7 +318,7 @@ func TestHistory_ParticipantRemovedRows(t *testing.T) {
 	repo.SetOwner(property, owner)
 	lookup := newFakeLookup()
 	emails := fakeEmailResolver{member: testMemberEmail}
-	history := &fakeHistory{}
+	history := &historytest.CapturingRecorder{}
 	policy := NewMembershipPolicy(owners, repo)
 	access := NewAccessService(repo, owners, nil, lookup, policy, nil, nil,
 		newTestFactoryWithHistory(repo, invitations, history), nil)
@@ -325,10 +343,10 @@ func TestHistory_ParticipantRemovedRows(t *testing.T) {
 	if err := svc.Remove(ctx, owner, member.String()); err != nil {
 		t.Fatalf("Remove: %v", err)
 	}
-	if len(history.entries) != 2 {
-		t.Fatalf("journal entries = %d, want 2 — one row per removal leg", len(history.entries))
+	if len(history.Entries) != 2 {
+		t.Fatalf("journal entries = %d, want 2 — one row per removal leg", len(history.Entries))
 	}
-	for i, e := range history.entries {
+	for i, e := range history.Entries {
 		if e.Action != historydomain.ActionMemberParticipantRemoved {
 			t.Fatalf("entries[%d] action = %s, want member.participant_removed", i, e.Action)
 		}
@@ -341,10 +359,10 @@ func TestHistory_ParticipantRemovedRows(t *testing.T) {
 	}
 	// The legs differ in the structured context: the membership leg names the
 	// removed user's id, the invitation leg has none to name.
-	if got := history.entries[0].Context[historydomain.CtxKeyUserID]; got != member {
+	if got := history.Entries[0].Context[historydomain.CtxKeyUserID]; got != member {
 		t.Errorf("membership leg user_id = %v, want %s", got, member)
 	}
-	if got, ok := history.entries[1].Context[historydomain.CtxKeyUserID]; ok {
+	if got, ok := history.Entries[1].Context[historydomain.CtxKeyUserID]; ok {
 		t.Errorf("invitation leg carries user_id %v, want none", got)
 	}
 }
