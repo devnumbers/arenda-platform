@@ -96,16 +96,18 @@ WHERE actor_can_read_history(aj.property_id, $1::uuid)
            AND aj.id > $11::uuid))
   AND (
        $12::text = ''
-       OR ($12::text = 'trgm'
-           AND aj.searchable ILIKE '%' || $13::text || '%' ESCAPE '\')
-       OR ($12::text = 'fts'
-           AND aj.search_tsv @@ websearch_to_tsquery('russian', $14::text))
-       OR ($12::text = 'both'
-           AND (aj.search_tsv @@ websearch_to_tsquery('russian', $14::text)
-                OR aj.searchable ILIKE '%' || $13::text || '%' ESCAPE '\'))
+       OR (
+           aj.search_tsv @@ CASE
+               WHEN plainto_tsquery('russian', $12::text)::text = ''
+                   THEN ''::tsquery
+               ELSE to_tsquery('russian',
+                    plainto_tsquery('russian', $12::text)::text || ':*')
+           END
+           OR aj.searchable ILIKE '%' || $13::text || '%' ESCAPE '\'
+       )
       )
 ORDER BY aj.created_at DESC, aj.id DESC
-LIMIT $15::int
+LIMIT $14::int
 `
 
 type ListActionJournalParams struct {
@@ -120,9 +122,8 @@ type ListActionJournalParams struct {
 	BeforeID    pgtype.UUID        `json:"before_id"`
 	AfterTs     pgtype.Timestamptz `json:"after_ts"`
 	AfterID     pgtype.UUID        `json:"after_id"`
-	Mode        string             `json:"mode"`
-	QTrgm       string             `json:"q_trgm"`
 	QRaw        string             `json:"q_raw"`
+	QTrgm       string             `json:"q_trgm"`
 	PageLimit   int32              `json:"page_limit"`
 }
 
@@ -155,11 +156,16 @@ type ListActionJournalRow struct {
 // увести строку из окна (канон #597).
 //
 // Фильтры: csv-списки (” = фильтра нет), период по created_at (верхняя
-// граница исключающая — экран считает датой+24ч), поиск — маршрутизация
-// trgm/fts/both приложением (решение #705): q_trgm — экранированный
-// ILIKE-паттерн, q_raw — сырой ввод для websearch_to_tsquery (безопасен для
-// пользовательского ввода); mode=” — поиска нет. Записи с обезличенным
-// актёром (actor_id IS NULL) под фильтр actor_ids не попадают.
+// граница исключающая — экран считает датой+24ч), поиск — всегда-OR
+// предикат «как в Telegram» (ресерч #839, тикет #842): prefix-FTS
+// (plainto_tsquery санитизирует произвольный ввод, ':*' на хвосте делает
+// последнюю лексему префиксной; CASE-гард обязателен — to_tsquery(':*') на
+// пустом plainto бросает syntax error) OR ILIKE-trgm (подстроки, почты,
+// фрагменты внутри слова; q_trgm — экранированный паттерн, ESCAPE '\').
+// q_raw=” — поиска нет. Маршрутизация trgm/fts/both (#705) снесена: любая
+// маршрутизация — предсказание интента, обе ноги через GIN-индексы 000136
+// всегда дешевле неверного угадывания. Записи с обезличенным актёром
+// (actor_id IS NULL) под фильтр actor_ids не попадают.
 func (q *Queries) ListActionJournal(ctx context.Context, arg ListActionJournalParams) ([]ListActionJournalRow, error) {
 	rows, err := q.db.Query(ctx, listActionJournal,
 		arg.Actor,
@@ -173,9 +179,8 @@ func (q *Queries) ListActionJournal(ctx context.Context, arg ListActionJournalPa
 		arg.BeforeID,
 		arg.AfterTs,
 		arg.AfterID,
-		arg.Mode,
-		arg.QTrgm,
 		arg.QRaw,
+		arg.QTrgm,
 		arg.PageLimit,
 	)
 	if err != nil {

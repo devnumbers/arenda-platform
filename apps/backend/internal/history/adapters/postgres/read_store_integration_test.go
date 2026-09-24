@@ -418,7 +418,7 @@ func TestReadStore_Filters(t *testing.T) {
 	}
 }
 
-func TestReadStore_SearchRouting(t *testing.T) {
+func TestReadStore_SearchRespectsScope(t *testing.T) {
 	t.Parallel()
 	pool := testdb.Setup(t)
 	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
@@ -427,10 +427,8 @@ func TestReadStore_SearchRouting(t *testing.T) {
 	seedMembership(t, pool, property, member)
 
 	base := time.Unix(1000, 0)
-	// «Изменено» — словоформа: находит FTS-нога маршрутизации.
 	seedEntry(t, pool, owner, property, base, domain.KindProperty, domain.ActionPropertyRenamed,
 		domain.BaseChanged, "Название объекта изменено")
-	// Почта и снапшот имени участника — территория trgm-ноги.
 	seedEntry(t, pool, member, property, base.Add(time.Second), domain.KindContact, domain.ActionContactCreated,
 		domain.BaseAdded, "Контакт создан: Анна Ленина")
 
@@ -445,30 +443,200 @@ func TestReadStore_SearchRouting(t *testing.T) {
 		return len(page.Items)
 	}
 
-	if got := search(owner, "изменено"); got != 1 {
-		t.Fatalf("fts morphology («изменено»): want 1 row, got %d", got)
-	}
-	if got := search(owner, "Название объекта изменено"); got != 1 {
-		t.Fatalf("fts multiword: want 1 row, got %d", got)
-	}
-	if got := search(owner, "petr.petrov"); got != 1 {
-		t.Fatalf("trgm email local part: want 1 row, got %d", got)
-	}
-	// Обе почты кончаются на @example — trgm-нога находит обе строки.
-	if got := search(owner, "@example"); got != 2 {
-		t.Fatalf("trgm email fragment: want 2 rows, got %d", got)
-	}
 	if got := search(owner, "qqqqzzzz"); got != 0 {
 		t.Fatalf("garbage query: want 0 rows, got %d", got)
 	}
 	// Поиск уважает скоуп: зритель находит строку владельца по его имени,
-	// свою — по своей почте.
+	// свою — по своей почте (семантика предиката — TestReadStore_SearchPredicate).
 	if got := search(member, "Иванов"); got != 1 {
 		t.Fatalf("member search by owner name: want 1 row, got %d", got)
 	}
 	if got := search(member, "Петров"); got != 1 {
 		t.Fatalf("member search by own name: want 1 row, got %d", got)
 	}
+}
+
+// newPredicateSearch создаёт замыкание поиска от лица владельца: на вход
+// строка, на выходе множество id строк выдачи.
+func newPredicateSearch(t *testing.T, svc *historyapp.HistoryReadService, owner uuid.UUID) func(string) map[uuid.UUID]bool {
+	t.Helper()
+	ctx := context.Background()
+	return func(q string) map[uuid.UUID]bool {
+		page, err := svc.Feed(ctx, owner, historyapp.FeedQuery{Query: q})
+		if err != nil {
+			t.Fatalf("search %q: %v", q, err)
+		}
+		ids := make(map[uuid.UUID]bool, len(page.Items))
+		for _, item := range page.Items {
+			ids[item.ID] = true
+		}
+		return ids
+	}
+}
+
+// searchPredicateCount сверяет выдачу поиска с точным ожиданием строк.
+func searchPredicateCount(t *testing.T, search func(string) map[uuid.UUID]bool, q string, want int) {
+	t.Helper()
+	if got := len(search(q)); got != want {
+		t.Fatalf("search %q: want %d rows, got %d", q, want, got)
+	}
+}
+
+// newRowIDAt создаёт вычитку засеянной строки по зафиксированному created_at.
+func newRowIDAt(t *testing.T, pool *pgxpool.Pool, property uuid.UUID) func(time.Time) uuid.UUID {
+	t.Helper()
+	return func(at time.Time) uuid.UUID {
+		var id uuid.UUID
+		if err := pool.QueryRow(context.Background(),
+			`SELECT id FROM action_journal WHERE property_id = $1 AND created_at = $2`,
+			property, at,
+		).Scan(&id); err != nil {
+			t.Fatalf("locate seeded row at %s: %v", at, err)
+		}
+		return id
+	}
+}
+
+// searchPredicatePrefixes проверяет префиксные сценарии: «петр» находит
+// «Петрова»; любой ввод семьи «иван/иванов/Иванова» находит обе формы
+// фамилии (стеммер асимметричен, и to_tsquery нормализует лексему
+// префикса: 'иванов':* живёт как 'ива':* — выручает союз prefix-FTS и
+// ILIKE-ног). Имена актёров в searchable («Иван Иванов» в каждой строке
+// владельца) точные счётчики ломают — семья фамилии проверяется сабсетом.
+func searchPredicatePrefixes(t *testing.T, search func(string) map[uuid.UUID]bool, idsA, idsE uuid.UUID) {
+	t.Helper()
+	searchPredicateCount(t, search, "петр", 1)
+	for _, q := range []string{"иван", "иванов", "ив", "Иванова"} {
+		got := search(q)
+		if !got[idsA] || !got[idsE] {
+			t.Fatalf("prefix %q: want both surname forms found, got %v rows", q, len(got))
+		}
+	}
+}
+
+// searchPredicateKeyset проверяет пустой ввод (фильтра нет — лента целиком)
+// и постраничный обход выдачи keyset'ом без дублей и дыр: «счёт» находит
+// три строки (две «выставила счёт» и «счёт 100% оплачен»), порция в две.
+func searchPredicateKeyset(t *testing.T, svc *historyapp.HistoryReadService, owner uuid.UUID, total int) {
+	t.Helper()
+	ctx := context.Background()
+	for _, q := range []string{"", "   "} {
+		page, err := svc.Feed(ctx, owner, historyapp.FeedQuery{Query: q})
+		if err != nil {
+			t.Fatalf("empty search %q: %v", q, err)
+		}
+		if len(page.Items) != total {
+			t.Fatalf("empty query %q: want %d rows, got %d", q, total, len(page.Items))
+		}
+	}
+	seen := map[uuid.UUID]bool{}
+	cursor := ""
+	pages := 0
+	for {
+		page, err := svc.Feed(ctx, owner, historyapp.FeedQuery{Query: "счёт", Limit: 2, BeforeCursor: cursor})
+		if err != nil {
+			t.Fatalf("search page %d: %v", pages, err)
+		}
+		for _, item := range page.Items {
+			if seen[item.ID] {
+				t.Fatalf("search page %d: duplicate row %s", pages, item.ID)
+			}
+			seen[item.ID] = true
+		}
+		pages++
+		if page.NextCursor == "" {
+			break
+		}
+		cursor = page.NextCursor
+	}
+	if len(seen) != 3 || pages != 2 {
+		t.Fatalf("search keyset walk: want 3 rows over 2 pages, got %d rows over %d pages", len(seen), pages)
+	}
+}
+
+// TestReadStore_SearchPredicate гоняет всегда-OR предикат поиска (ресерч
+// #839, тикет #842) по сценарию «как в Telegram»: префикс слова, фрагмент
+// внутри слова, морфология, почта, обрубки и инъекции — на одном сиде
+// («Иванов заплатил», «Петрова выставила счёт», «renewed contract»,
+// «счёт 100% оплачен», «Иванова выставила счёт», «ivanov.petr@example.com»).
+func TestReadStore_SearchPredicate(t *testing.T) {
+	t.Parallel()
+	pool := testdb.Setup(t)
+	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
+	maria := seedUser(t, pool, "Мария", "Петрова", "+79990000002", "maria@example.com")
+	property := seedProperty(t, pool, owner)
+	seedMembership(t, pool, property, maria)
+
+	base := time.Unix(1000, 0)
+	seedEntry(t, pool, owner, property, base, domain.KindPayment, domain.ActionPaymentCreated,
+		domain.BaseAdded, "Иванов заплатил")
+	seedEntry(t, pool, maria, property, base.Add(time.Second), domain.KindOperation, domain.ActionOperationPaid,
+		domain.BaseCompleted, "Петрова выставила счёт")
+	seedEntry(t, pool, owner, property, base.Add(2*time.Second), domain.KindProperty, domain.ActionPropertyRenamed,
+		domain.BaseChanged, "renewed contract")
+	seedEntry(t, pool, owner, property, base.Add(3*time.Second), domain.KindOperation, domain.ActionOperationPaid,
+		domain.BaseCompleted, "счёт 100% оплачен")
+	seedEntry(t, pool, owner, property, base.Add(4*time.Second), domain.KindOperation, domain.ActionOperationPaid,
+		domain.BaseCompleted, "Иванова выставила счёт")
+	seedEntry(t, pool, owner, property, base.Add(5*time.Second), domain.KindContact, domain.ActionContactCreated,
+		domain.BaseAdded, "ivanov.petr@example.com")
+
+	svc := newReadStack(pool)
+	const total = 6
+	search := newPredicateSearch(t, svc, owner)
+	rowIDAt := newRowIDAt(t, pool, property)
+	idsA, idsE := rowIDAt(base), rowIDAt(base.Add(4*time.Second))
+
+	t.Run("префиксы", func(t *testing.T) {
+		t.Parallel()
+		searchPredicatePrefixes(t, search, idsA, idsE)
+	})
+	t.Run("морфология и фрагменты", func(t *testing.T) {
+		t.Parallel()
+		// «заплатила» → «заплатил», «renewing» → «renewed»; «трова» —
+		// фрагмент внутри слова, видит только ILIKE-нога.
+		searchPredicateCount(t, search, "заплатила", 1)
+		searchPredicateCount(t, search, "renewing", 1)
+		searchPredicateCount(t, search, "трова", 1)
+	})
+	t.Run("почта", func(t *testing.T) {
+		t.Parallel()
+		// Обрубок локальной части, точка внутри локальной части, домен.
+		searchPredicateCount(t, search, "maria@", 1)
+		searchPredicateCount(t, search, "ivanov.petr", 1)
+		searchPredicateCount(t, search, "@example.com", total)
+	})
+	t.Run("обрубки и цифры", func(t *testing.T) {
+		t.Parallel()
+		// Хвостовая точка не мешает префиксу, отсутствующие цифры дают
+		// пустую выдачу без ошибки; один символ «ё» живёт только в «счёт»
+		// (три строки), FTS-нога на стоп-слове молчит — ищет ILIKE-нога.
+		searchPredicateCount(t, search, "петр.", 1)
+		searchPredicateCount(t, search, "125000", 0)
+		searchPredicateCount(t, search, "ё", 3)
+	})
+	t.Run("многословие", func(t *testing.T) {
+		t.Parallel()
+		// AND по лексемам; последнее слово едет префиксом (семантика
+		// инкрементального ввода — «выставила сч» находит обе «выставила
+		// счёт»), стоп-слово снимается до приклейки ':*'.
+		searchPredicateCount(t, search, "иванова выставила", 1)
+		searchPredicateCount(t, search, "выставила сч", 2)
+		searchPredicateCount(t, search, "петр и", 1)
+	})
+	t.Run("инъекции", func(t *testing.T) {
+		t.Parallel()
+		// Не роняют запрос и не превращаются в wildcard: '%' и '_' ищутся
+		// литерально (escapeLikePattern + ESCAPE '\').
+		searchPredicateCount(t, search, "'", 0)
+		searchPredicateCount(t, search, "'; --", 0)
+		searchPredicateCount(t, search, "_", 0)
+		searchPredicateCount(t, search, "0%", 1)
+	})
+	t.Run("пустое и keyset", func(t *testing.T) {
+		t.Parallel()
+		searchPredicateKeyset(t, svc, owner, total)
+	})
 }
 
 func TestReadStore_FilterOptionsParticipants(t *testing.T) {

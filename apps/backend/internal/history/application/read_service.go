@@ -1,11 +1,12 @@
-// The history feed's reading side (карта #704, тикет #708, ADR 0061 §7):
-// the keyset page with the contract's 400/privacy-404, the filter-sheet
-// options, and the trgm/fts/both search routing (research #705). The
-// visibility predicate itself lives in the store's SQL
-// (actor_can_read_history, 000137) — rows outside the reader's scope never
-// leave the database; this service proves the property_ids scope before the
-// store is touched so one invisible id hides the whole request (the privacy
-// 404, the tasks feed's #547 discipline).
+// The history feed's reading side (карта #704, тикеты #708/#842, ADR 0061
+// §7): the keyset page with the contract's 400/privacy-404, the filter-sheet
+// options, and the sanitized search input — the always-OR predicate itself
+// (prefix-FTS OR ILIKE-trgm, research #839) lives in the store's SQL. The
+// visibility predicate lives there too (actor_can_read_history, 000137) —
+// rows outside the reader's scope never leave the database; this service
+// proves the property_ids scope before the store is touched so one invisible
+// id hides the whole request (the privacy 404, the tasks feed's #547
+// discipline).
 
 package application
 
@@ -15,8 +16,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
@@ -24,8 +23,9 @@ import (
 )
 
 // The contract's read errors: ErrInvalidInput is the 400 (malformed cursor,
-// unknown vocabulary, bad page size), ErrNotFound — the privacy 404 (an
-// invisible or unknown property id: the request's existence is not revealed).
+// unknown vocabulary, bad page size, oversized query), ErrNotFound — the
+// privacy 404 (an invisible or unknown property id: the request's existence
+// is not revealed).
 var (
 	ErrInvalidInput = errors.New("history: invalid input")
 	ErrNotFound     = errors.New("history: not found")
@@ -37,13 +37,10 @@ const (
 	FeedMaxLimit     = 100
 )
 
-// Search modes of the routed predicate (research #705). The empty mode is
-// no search at all.
-const (
-	searchModeTrgm = "trgm"
-	searchModeFTS  = "fts"
-	searchModeBoth = "both"
-)
+// searchMaxBytes is the search input's server-side ceiling (research #839):
+// the wire contract caps q at 255 characters, this byte backstop catches
+// multibyte and contract-less callers before the predicate chews them.
+const searchMaxBytes = 400
 
 // EntryReader reads the journal for the feed and the filter options.
 // Implemented by persistence adapters.
@@ -53,18 +50,9 @@ type EntryReader interface {
 	FilterObjects(ctx context.Context, actor uuid.UUID, propertyIDs []uuid.UUID) ([]domain.FilterObject, error)
 }
 
-// SearchRoute is the search predicate the store applies: which of the two
-// GIN indexes (or both) the query walks, and the trimmed raw input for
-// websearch_to_tsquery. The ILIKE pattern for the trgm leg is the store's
-// business — the LIKE-escaping canon lives beside the other searches in the
-// adapters.
-type SearchRoute struct {
-	Mode string
-	Raw  string
-}
-
 // JournalQuery is the store-level page request: every filter already
-// validated, the search already routed, the cursors already decoded.
+// validated, the search already sanitized (trimmed; empty — no search), the
+// cursors already decoded.
 type JournalQuery struct {
 	PropertyIDs []uuid.UUID
 	ActorIDs    []uuid.UUID
@@ -73,7 +61,7 @@ type JournalQuery struct {
 	// DateFrom is inclusive, DateTo exclusive — the screen means «дата+24ч».
 	DateFrom *time.Time
 	DateTo   *time.Time
-	Search   SearchRoute
+	Search   string
 	Before   *CursorKey
 	After    *CursorKey
 	Limit    int
@@ -141,6 +129,10 @@ func (s *HistoryReadService) Feed(ctx context.Context, actor uuid.UUID, q FeedQu
 	if err != nil {
 		return FeedPage{}, err
 	}
+	search, err := sanitizeSearch(q.Query)
+	if err != nil {
+		return FeedPage{}, err
+	}
 	if err := s.provePropertiesVisible(ctx, actor, q.PropertyIDs); err != nil {
 		return FeedPage{}, err
 	}
@@ -152,7 +144,7 @@ func (s *HistoryReadService) Feed(ctx context.Context, actor uuid.UUID, q FeedQu
 		BaseActions: baseActions,
 		DateFrom:    q.DateFrom,
 		DateTo:      q.DateTo,
-		Search:      routeSearch(q.Query),
+		Search:      search,
 		Before:      before,
 		After:       after,
 		Limit:       limit,
@@ -278,74 +270,16 @@ func parseBaseActions(actions []string) ([]domain.BaseAction, error) {
 	return out, nil
 }
 
-// routeSearch decides which search predicate the query walks (research
-// #705, the v1 rules): mails and dot-fragments, ≤2-char fragments and
-// cut-off words — trgm (only trgm sees substrings); plain words — FTS (the
-// morphology trgm is blind to); a word plus a mail token in one query —
-// both legs. Refinements (the UI's «искать по фрагменту» switch) — the
-// search screen's walkthrough (тикет #710).
-func routeSearch(q string) SearchRoute {
+// sanitizeSearch prepares the wire's q for the store's always-OR search
+// predicate (research #839): trims the edges, folds whitespace-only input
+// into «no search» and rejects oversized input with the contract's 400.
+// There is no routing here on purpose — guessing the intent from the
+// input's shape was the v1 mistake the research retired: the SQL predicate
+// applies prefix-FTS and ILIKE-trgm to any input.
+func sanitizeSearch(q string) (string, error) {
 	query := strings.TrimSpace(q)
-	if query == "" {
-		return SearchRoute{}
+	if len(query) >= searchMaxBytes {
+		return "", fmt.Errorf("query %d bytes: %w", len(query), ErrInvalidInput)
 	}
-	mode := searchModeFTS
-	switch {
-	case hasMailAndWord(query):
-		mode = searchModeBoth
-	case strings.ContainsRune(query, '@'),
-		hasDotInsideWord(query),
-		utf8.RuneCountInString(query) <= 2,
-		startsOrEndsWithNonLetter(query):
-		mode = searchModeTrgm
-	}
-	return SearchRoute{Mode: mode, Raw: query}
-}
-
-// hasMailAndWord reports a mixed query: a mail token plus a standalone ≥3-letter
-// word without mail punctuation — the word needs FTS morphology, the mail
-// only trgm finds.
-func hasMailAndWord(q string) bool {
-	if !strings.ContainsRune(q, '@') {
-		return false
-	}
-	for token := range strings.FieldsSeq(q) {
-		if !strings.ContainsRune(token, '@') &&
-			!strings.ContainsRune(token, '.') &&
-			utf8.RuneCountInString(token) >= 3 {
-			return true
-		}
-	}
-	return false
-}
-
-// hasDotInsideWord reports a dot with alphanumeric neighbours on both sides
-// — the email-local-part/fragment shape («ivanov.petr»), which FTS reads as
-// one email-ish token and only trgm matches.
-func hasDotInsideWord(q string) bool {
-	runes := []rune(q)
-	for i, r := range runes {
-		if r != '.' || i == 0 || i == len(runes)-1 {
-			continue
-		}
-		if isAlnum(runes[i-1]) && isAlnum(runes[i+1]) {
-			return true
-		}
-	}
-	return false
-}
-
-// startsOrEndsWithNonLetter reports a cut-off fragment («иван.», «125000»,
-// «(черновик)») — a substring intent, trgm territory. An empty query never
-// reaches here (routeSearch returns early), the guard makes it total anyway.
-func startsOrEndsWithNonLetter(q string) bool {
-	runes := []rune(q)
-	if len(runes) == 0 {
-		return false
-	}
-	return !unicode.IsLetter(runes[0]) || !unicode.IsLetter(runes[len(runes)-1])
-}
-
-func isAlnum(r rune) bool {
-	return unicode.IsLetter(r) || unicode.IsDigit(r)
+	return query, nil
 }

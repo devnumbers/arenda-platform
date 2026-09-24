@@ -175,6 +175,63 @@ test('живой поиск: слова и почта сужают ленту, �
   await captureScreen(page, testInfo, 'history-search-live');
 });
 
+test('префиксы и словоформы «как в Telegram»: «петр» находит Петрову (тикет #842)', async ({ page, seededUser }, testInfo) => {
+  await seedSearchJournal(seededUser);
+  await openCabinetWithSeededSession(page, seededUser);
+  await page.goto('/history');
+  await page.getByRole('button', { name: 'Поиск по истории' }).click();
+  const field = page.getByPlaceholder('Поиск действий');
+
+  const paymentRow = page.getByText('Платёж создан:').first();
+  const renameRow = page.getByText('Название объекта изменено: Гараж на Садовой');
+  const operationRow = page.getByText('Операция оплачена: Вода');
+  const taskRow = page.getByText('Задача выполнена: Заменить кран');
+
+  // Инкремент недопечатанного слова: «и» (ILIKE-нога широкого префикса —
+  // лента целиком, FTS-нога молчит на стоп-слове) → «ив» → «ива» — запись
+  // участника уходит, три строки Иванова остаются на каждой ступени.
+  await field.fill('и');
+  await expect(paymentRow).toBeVisible();
+  await expect(operationRow).toBeVisible();
+  await expect(taskRow).toBeVisible();
+
+  await field.fill('ив');
+  await expect(taskRow).toHaveCount(0);
+  await expect(paymentRow).toBeVisible();
+  await expect(renameRow).toBeVisible();
+  await expect(operationRow).toBeVisible();
+
+  await field.fill('ива');
+  await expect(taskRow).toHaveCount(0);
+  await expect(paymentRow).toBeVisible();
+  await expect(operationRow).toBeVisible();
+
+  // Морфология: «Иванова» находит записи про «Иванов» ('иванов' после
+  // нормализации живёт как префикс 'ива':*).
+  await field.fill('Иванова');
+  await expect(taskRow).toHaveCount(0);
+  await expect(paymentRow).toBeVisible();
+  await expect(operationRow).toBeVisible();
+
+  // Префикс чужой фамилии: «петр» находит «Петрову», строки владельца уходят.
+  await field.fill('петр');
+  await expect(taskRow).toBeVisible();
+  await expect(paymentRow).toHaveCount(0);
+  await expect(operationRow).toHaveCount(0);
+
+  // Фрагмент внутри слова — «трова» видит только ILIKE-нога.
+  await field.fill('трова');
+  await expect(taskRow).toBeVisible();
+  await expect(paymentRow).toHaveCount(0);
+
+  // Регресс полной почты: не только обрубок «e2e-member@».
+  await field.fill('e2e-member@example.com');
+  await expect(taskRow).toBeVisible();
+  await expect(paymentRow).toHaveCount(0);
+
+  await captureScreen(page, testInfo, 'history-search-telegram-like');
+});
+
 test('без совпадений — «Ничего не найдено», очистка возвращает ленту', async ({ page, seededUser }, testInfo) => {
   await seedSearchJournal(seededUser);
   await openCabinetWithSeededSession(page, seededUser);

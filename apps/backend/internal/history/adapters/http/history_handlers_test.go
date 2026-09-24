@@ -112,7 +112,7 @@ func TestHistoryHandlers_GetHistoryPage(t *testing.T) {
 	assert.Equal(t, []domain.Kind{"operation", "contact"}, reader.gotFeed.Kinds)
 	assert.Equal(t, []domain.BaseAction{"completed"}, reader.gotFeed.BaseActions)
 	assert.Equal(t, []uuid.UUID{reader.rows[0].PropertyID}, reader.gotFeed.PropertyIDs)
-	assert.Equal(t, "fts", reader.gotFeed.Search.Mode)
+	assert.Equal(t, "оплачена", reader.gotFeed.Search)
 
 	var page struct {
 		Items []struct {

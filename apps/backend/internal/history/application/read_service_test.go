@@ -238,8 +238,17 @@ func TestFeedFoldsValidatedParamsIntoStoreQuery(t *testing.T) {
 		t.Fatalf("base actions: %+v", got.BaseActions)
 	}
 	assertIDFilters(t, got, actorID, propertyID)
-	if got.Search.Mode != "" {
+	if got.Search != "" {
 		t.Fatalf("empty query must carry no search, got %+v", got.Search)
+	}
+
+	// Поиск едет в стор обрезанным; решение о предикате принимает SQL —
+	// всегда-OR обеих ног (ресерч #839), в Go только trim и гард длины.
+	if _, err := svc.Feed(t.Context(), actor, FeedQuery{Query: "  петр  ", PropertyIDs: []uuid.UUID{propertyID}}); err != nil {
+		t.Fatalf("feed search: %v", err)
+	}
+	if got := reader.gotQuery.Search; got != "петр" {
+		t.Fatalf("search must travel trimmed, got %q", got)
 	}
 }
 
@@ -305,38 +314,42 @@ func TestCursorRoundtrip(t *testing.T) {
 	}
 }
 
-func TestRouteSearchFollowsResearchRules(t *testing.T) {
+func TestSanitizeSearch(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
-		query string
-		mode  string
-	}{
-		{"", ""},
-		{"   ", ""},
-		{"изменило", searchModeFTS}, // Словоформа глагола — только FTS.
-		{"аренда январь", searchModeFTS}, // Многословный — только FTS.
-		{"коммунальные", searchModeFTS},
-		{"лена", searchModeFTS},       // Внутри слова FTS не найдёт, но правило v1 — слово.
-		{"  аренда  ", searchModeFTS}, // Края не участвуют в матче (канон поиска).
-		{"mail.ru", searchModeTrgm},
-		{"ivanov.petr", searchModeTrgm},
-		{"ivanov.petr@mail.ru", searchModeTrgm},
-		{"12", searchModeTrgm},    // ≤2 символов.
-		{"и", searchModeTrgm},     // Одна буква.
-		{"иван.", searchModeTrgm}, // Край — не буква (обрезанный фрагмент).
-		{"(черновик)", searchModeTrgm},
-		{"125000", searchModeTrgm},                     // Цифры — подстрока суммы-фрагмента.
-		{"иванов ivanov.petr@mail.ru", searchModeBoth}, // Слово + почта — обе ноги.
-		{"иванов mail.ru", searchModeTrgm},             // Домен без @ — фрагмент, одна нога trgm.
+	// Пустое и пробельное — поиска нет (канон #601: пустой ввод запроса
+	// не порождает).
+	for name, q := range map[string]string{"empty": "", "spaces": "   "} {
+		got, err := sanitizeSearch(q)
+		if err != nil {
+			t.Fatalf("%s: want no search, got error %v", name, err)
+		}
+		if got != "" {
+			t.Fatalf("%s: want no search, got %q", name, got)
+		}
 	}
-	for _, tc := range cases {
-		got := routeSearch(tc.query)
-		if got.Mode != tc.mode {
-			t.Fatalf("routeSearch(%q): want mode %q, got %q", tc.query, tc.mode, got.Mode)
-		}
-		if got.Mode != "" && got.Raw != strings.TrimSpace(tc.query) {
-			t.Fatalf("routeSearch(%q): raw input must travel trimmed, got %q", tc.query, got.Raw)
-		}
+
+	// Края не участвуют в матче (канон поиска).
+	got, err := sanitizeSearch("  аренда  ")
+	if err != nil || got != "аренда" {
+		t.Fatalf("trim: want «аренда», got %q, %v", got, err)
+	}
+
+	// Гард длины (ресерч #839): 400 байт и больше — контрактный 400; 399 —
+	// проходит целиком.
+	_, err = sanitizeSearch(strings.Repeat("a", searchMaxBytes))
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("%d bytes: want ErrInvalidInput, got %v", searchMaxBytes, err)
+	}
+	got, err = sanitizeSearch(strings.Repeat("a", searchMaxBytes-1))
+	if err != nil || len(got) != searchMaxBytes-1 {
+		t.Fatalf("%d bytes: want pass-through, got %d bytes, %v", searchMaxBytes-1, len(got), err)
+	}
+
+	// Гард считается по байтам: 255 кириллических символов контракта —
+	// 510 байт, серверный бэкстоп срабатывает и на них.
+	_, err = sanitizeSearch(strings.Repeat("а", 255))
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("255 cyrillic chars (510 bytes): want ErrInvalidInput, got %v", err)
 	}
 }

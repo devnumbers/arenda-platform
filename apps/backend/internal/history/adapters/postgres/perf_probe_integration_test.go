@@ -2,11 +2,11 @@
 
 package postgres_test
 
-// Перф-проба чтения журнала (карта #704, тикет #708; требование тикета —
-// «перф-проба на сиде 100k+ строк, замер p95 ленты/поиска»). Сеет 120 000
-// синтетических строк с человеческим словарём за 3 года, затем меряет p50/p95
-// страниц ленты (первая/глубокая/скоупы/фильтры) и поисковых запросов на
-// обеих ногах маршрутизации (research #705).
+// Перф-проба чтения журнала (карта #704, тикеты #708/#842; требование
+// тикета — «перф-проба на сиде 100k+ строк, замер p95 ленты/поиска»).
+// Сеет 120 000 синтетических строк с человеческим словарём за 3 года, затем
+// меряет p50/p95 страниц ленты (первая/глубокая/скоупы/фильтры) и поисковых
+// запросов всегда-OR предиката — prefix-FTS OR ILIKE-trgm (ресерч #839).
 //
 // В CI не участвует: запуск вручную —
 //	HISTORY_PERF_PROBE=1 go test -tags=integration -run TestHistoryPerfProbe \
@@ -104,24 +104,31 @@ func TestHistoryPerfProbe(t *testing.T) {
 			_, err := svc.Feed(ctx, owner, historyapp.FeedQuery{Limit: 50, Kinds: []string{kindPayment}, DateFrom: &from})
 			return err
 		}},
-		{"search_fts_frequent", func() error {
+		{"search_word", func() error {
 			_, err := svc.Feed(ctx, owner, historyapp.FeedQuery{Limit: 50, Query: "оплачена"})
 			return err
 		}},
-		{"search_fts_wordform", func() error {
+		{"search_wordform", func() error {
 			_, err := svc.Feed(ctx, owner, historyapp.FeedQuery{Limit: 50, Query: "изменено"})
 			return err
 		}},
-		{"search_fts_multiword", func() error {
+		{"search_multiword", func() error {
 			_, err := svc.Feed(ctx, owner, historyapp.FeedQuery{Limit: 50, Query: "аренда январь"})
 			return err
 		}},
-		{"search_trgm_email", func() error {
+		{"search_email_fragment", func() error {
 			_, err := svc.Feed(ctx, owner, historyapp.FeedQuery{Limit: 50, Query: "@example"})
 			return err
 		}},
-		{"search_trgm_digits", func() error {
+		{"search_digits", func() error {
 			_, err := svc.Feed(ctx, owner, historyapp.FeedQuery{Limit: 50, Query: "2007"})
+			return err
+		}},
+		{"search_prefix_wide", func() error {
+			// Префикс одной частой буквы — худший случай всегда-OR:
+			// широкий bitmap и FTS-, и ILIKE-ноги (ресерч #839 — «%а%»,
+			// приемлемо для v1, мониторить).
+			_, err := svc.Feed(ctx, owner, historyapp.FeedQuery{Limit: 50, Query: "о"})
 			return err
 		}},
 		{"feed_member_of_one", func() error {

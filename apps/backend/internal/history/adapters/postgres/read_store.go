@@ -48,9 +48,8 @@ func (s *ReadStore) List(ctx context.Context, actor uuid.UUID, q application.Jou
 		ActorIds:    joinUUIDs(q.ActorIDs),
 		Kinds:       joinStrings(kindStrings(q.Kinds)),
 		BaseActions: joinStrings(baseActionStrings(q.BaseActions)),
-		Mode:        q.Search.Mode,
-		QRaw:        q.Search.Raw,
-		QTrgm:       escapeLikePattern(q.Search.Raw),
+		QRaw:        q.Search,
+		QTrgm:       escapeLikePattern(q.Search),
 		PageLimit:   int32(q.Limit),
 	}
 	if q.DateFrom != nil {

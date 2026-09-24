@@ -584,11 +584,16 @@ type Querier interface {
 	// увести строку из окна (канон #597).
 	//
 	// Фильтры: csv-списки ('' = фильтра нет), период по created_at (верхняя
-	// граница исключающая — экран считает датой+24ч), поиск — маршрутизация
-	// trgm/fts/both приложением (решение #705): q_trgm — экранированный
-	// ILIKE-паттерн, q_raw — сырой ввод для websearch_to_tsquery (безопасен для
-	// пользовательского ввода); mode='' — поиска нет. Записи с обезличенным
-	// актёром (actor_id IS NULL) под фильтр actor_ids не попадают.
+	// граница исключающая — экран считает датой+24ч), поиск — всегда-OR
+	// предикат «как в Telegram» (ресерч #839, тикет #842): prefix-FTS
+	// (plainto_tsquery санитизирует произвольный ввод, ':*' на хвосте делает
+	// последнюю лексему префиксной; CASE-гард обязателен — to_tsquery(':*') на
+	// пустом plainto бросает syntax error) OR ILIKE-trgm (подстроки, почты,
+	// фрагменты внутри слова; q_trgm — экранированный паттерн, ESCAPE '\').
+	// q_raw='' — поиска нет. Маршрутизация trgm/fts/both (#705) снесена: любая
+	// маршрутизация — предсказание интента, обе ноги через GIN-индексы 000136
+	// всегда дешевле неверного угадывания. Записи с обезличенным актёром
+	// (actor_id IS NULL) под фильтр actor_ids не попадают.
 	//
 	ListActionJournal(ctx context.Context, arg ListActionJournalParams) ([]ListActionJournalRow, error)
 	ListActiveMembersByPropertyOwner(ctx context.Context, ownerID pgtype.UUID) ([]PropertyMember, error)
