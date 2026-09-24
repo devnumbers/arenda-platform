@@ -18,10 +18,10 @@ import (
 // them.
 type EventType string
 
-// Feed catalog v1 (решение #737, дополненный #741 и #830) in catalog
-// order: the category of each value is the authoritative FeedCategory
-// mapping — Аренда; Платежи и операции; Задачи; Совместный доступ; Тариф;
-// Системные.
+// Feed catalog v1 (решение #737, дополненный #741, картой #822 (#824) и
+// #830) in catalog order: the category of each value is the authoritative
+// FeedCategory mapping — Аренда; Платежи и операции; Задачи; Совместный
+// доступ; Тариф; Системные.
 const (
 	EventRentalCompleted    EventType = "rental_completed"
 	EventPaymentDue         EventType = "payment_due"

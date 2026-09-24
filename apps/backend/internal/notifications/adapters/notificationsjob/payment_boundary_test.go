@@ -112,8 +112,8 @@ func TestDeferredPaymentBoundaryDelivererRequiresBinding(t *testing.T) {
 // The scheduler is the application port over the River client: a repeat ask
 // for the same (leg, rule, date) answers the standing job (unique in all
 // non-terminal states) — the hourly scan re-asks freely and one job per
-// boundary stands. The two legs book different kinds, so a rule's due and
-// overdue jobs coexist.
+// boundary stands. The three legs book different kinds, so a rule's due,
+// reminder and overdue jobs coexist.
 //
 // This test runs against a real Postgres via TEST_DATABASE_URL and is
 // skipped when it is unset (the notifications integration convention): the

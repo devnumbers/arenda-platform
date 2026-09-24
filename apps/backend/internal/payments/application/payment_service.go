@@ -21,7 +21,7 @@ const MaxAmountKopecks = 1_000_000_000
 // copy limit, not a byte limit.
 const MaxTitleLength = 255
 
-// ReminderOffsets are the reminder lead times the product speaks (карта
+// reminderOffsets are the reminder lead times the product speaks (карта
 // #822): 1, 3 or 7 days before an occurrence — the same vocabulary the
 // schema CHECK enforces durably.
 var reminderOffsets = [3]int{1, 3, 7}

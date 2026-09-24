@@ -24,10 +24,10 @@ const (
 )
 
 // fakePaymentSource is the payments scan source stub: per zone it answers the
-// due and the overdue targets the caller asks for and records every
+// due, reminder and overdue targets the caller asks for and records every
 // (leg, zone, today) question, so the tests assert each zone was swept with
-// its own calendar date on both legs. The booking windows and the boundary
-// jobs' reloads answer through the scheduled/live fields (#776).
+// its own calendar date on all three legs. The booking windows and the
+// boundary jobs' reloads answer through the scheduled/live fields (#776).
 type fakePaymentSource struct {
 	due     map[string][]PaymentScanTarget
 	overdue map[string][]PaymentScanTarget
@@ -36,7 +36,8 @@ type fakePaymentSource struct {
 	asked    []string
 	recips   map[uuid.UUID][]uuid.UUID
 	recErr   map[uuid.UUID]error
-	// SchedDue and schedOverdue answer the boundary-booking windows;
+	// SchedDue, schedOverdue and schedReminder answer the boundary-booking
+	// windows;
 	// schedAsked records the "leg|from|until" questions in order. Live
 	// answers the boundary jobs' reloads keyed "leg|rule|date".
 	schedDue      []PaymentScheduleTarget

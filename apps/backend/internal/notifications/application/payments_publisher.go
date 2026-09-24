@@ -196,7 +196,9 @@ func (p *PaymentsPublisher) RunZoneScans(ctx context.Context, now time.Time) err
 
 // scheduleBoundaries books the boundary jobs of the operations whose
 // boundaries fall into the horizon window — the due leg's ahead of the
-// operation date's midnight, the overdue leg's ahead of the day after's.
+// operation date's midnight, the reminder leg's ahead of the operation date
+// minus the rule's lead time (карта #822), the overdue leg's ahead of the
+// day after's.
 // A broken booking is isolated — the rest of the window books on.
 func (p *PaymentsPublisher) scheduleBoundaries(ctx context.Context, now time.Time) []error {
 	var errs []error
