@@ -4,7 +4,9 @@ import { Skeleton } from '@/shared/ui/design';
 /**
  * Состояния ленты «Истории действий» (#709): скелет с паритетом финального
  * лейаута (макет 2157-56876) — плашка дня, шапка объекта, серые карточки
- * актёров со строками (§7 канона скелетонов). Пустое состояние — на самом
+ * актёров со строками (§7 канона скелетонов: бары внутри серой карточки —
+ * bg-surface-muted-hover, иначе тон бара сливается с карточкой). Пустое
+ * состояние — на самом
  * экране (макет 2050-158499: только серая строка «Действий не было», без
  * иллюстрации). Скелетоны прибитых страниц — паритет их композиции
  * (решение владельца 24.09): «Действия участника» — одна группа, «История
@@ -21,14 +23,14 @@ function HistoryFeedSkeletonActorCard({ rows }: { readonly rows: number }): JSX.
     <div aria-hidden className="flex flex-col gap-2 rounded-m bg-surface-muted p-3">
       <div className="flex items-center gap-2">
         <Skeleton className="h-6 w-6 shrink-0 rounded-pill bg-white" />
-        <Skeleton className="h-[15px] w-28" />
+        <Skeleton className="h-[15px] w-28 bg-surface-muted-hover" />
       </div>
       {ROW_WIDTHS.slice(0, rows).map((width, index) => (
         <div key={index} className="flex items-end gap-2">
-          <Skeleton className="h-4 w-[3px] shrink-0 self-stretch rounded-pill" />
-          <Skeleton className="h-4 w-4 shrink-0 rounded-pill" />
-          <Skeleton className={`h-[15px] ${width}`} />
-          <Skeleton className="ml-auto h-[15px] w-10 shrink-0" />
+          <Skeleton className="h-4 w-[3px] shrink-0 self-stretch rounded-pill bg-surface-muted-hover" />
+          <Skeleton className="h-4 w-4 shrink-0 rounded-pill bg-surface-muted-hover" />
+          <Skeleton className={`h-[15px] bg-surface-muted-hover ${width}`} />
+          <Skeleton className="ml-auto h-[15px] w-10 shrink-0 bg-surface-muted-hover" />
         </div>
       ))}
     </div>
@@ -144,9 +146,9 @@ export function HistoryFiltersSheetSkeleton(): JSX.Element {
       {[0, 1, 2, 3].map((index) => (
         <div key={index} className="rounded-3xl bg-surface-muted py-1">
           <div className="flex min-h-14 items-center gap-2 py-4 pl-5 pr-5">
-            <Skeleton className="h-6 w-6 shrink-0 rounded-lg" />
-            <Skeleton className="h-[18px] w-36" />
-            <Skeleton className="ml-auto h-[15px] w-10" />
+            <Skeleton className="h-6 w-6 shrink-0 rounded-lg bg-surface-muted-hover" />
+            <Skeleton className="h-[18px] w-36 bg-surface-muted-hover" />
+            <Skeleton className="ml-auto h-[15px] w-10 bg-surface-muted-hover" />
           </div>
         </div>
       ))}

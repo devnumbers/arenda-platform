@@ -1,7 +1,8 @@
 import type { IsoDate, IsoRange } from '@/shared/lib/calendar';
 import type { HistoryBaseAction, HistoryKind, HistoryParticipantOption } from '@/entities/history';
-import { HISTORY_KINDS } from '@/entities/history';
+import { HISTORY_BASE_ACTIONS, HISTORY_KINDS } from '@/entities/history';
 import { formatIsoRangeChipLabel } from '@/shared/lib/date-format';
+import { readCsvUuidParam } from '@/shared/lib/parse-csv-uuid-param';
 import { readIsoRangeParam, type UrlParamsSource } from '@/shared/lib/parse-iso-range-param';
 import type { HistoryFeedScope } from '@/shared/api/query-keys';
 
@@ -47,14 +48,17 @@ export const DEFAULT_HISTORY_FILTERS: HistoryFilters = {
  */
 export type HistoryParamsSource = UrlParamsSource;
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-const BASE_ACTIONS: ReadonlyArray<HistoryBaseAction> = ['added', 'changed', 'completed', 'deleted'];
 const KIND_SET = new Set<string>(HISTORY_KINDS);
 
+/** CSV-группа uuid с семантикой группы шита: параметр отсутствует — «все»
+ * (null), значение чистит канон readCsvUuidParam. */
+function readUuidGroup(raw: string | null): ReadonlyArray<string> | null {
+  return raw === null ? null : readCsvUuidParam(raw);
+}
+
 /**
- * CSV-группа: пустое значение — «ни один» ([]), отсутствующее — «все»
- * (null); элементы чистятся (валидные слаги/uuid, без дублей, порядок
+ * CSV-группа слагов: пустое значение — «ни один» ([]), отсутствующее —
+ * «все» (null); элементы чистятся (валидные слаги, без дублей, порядок
  * сохранён). Неизвестные значения отбрасываются — ссылка с мусором читается
  * как ближайшее осмысленное состояние, а не ломает ленту.
  */
@@ -80,16 +84,17 @@ function readCsvGroup<T extends string>(
 
 /** Чтение фильтров из адреса: период — канон readIsoRangeParam (правила
  * #477: битые даты, перевёрнутый период отбрасываются; будущий хвост
- * обрезается «сегодня»), CSV-группы — чистка валидных значений без дублей. */
+ * обрезается «сегодня»), группы — чистка валидных значений без дублей
+ * (слаги — readCsvGroup, uuid — канон readCsvUuidParam). */
 export function readHistoryFilters(params: HistoryParamsSource, today: IsoDate): HistoryFilters {
   return {
     period: readIsoRangeParam(params, 'from', 'to', today),
     actions: readCsvGroup(params.get('actions'), (value): value is HistoryBaseAction =>
-      BASE_ACTIONS.includes(value as HistoryBaseAction),
+      HISTORY_BASE_ACTIONS.includes(value as HistoryBaseAction),
     ),
     kinds: readCsvGroup(params.get('kinds'), (value): value is HistoryKind => KIND_SET.has(value)),
-    actorIds: readCsvGroup(params.get('actors'), (value): value is string => UUID_RE.test(value)),
-    propertyIds: readCsvGroup(params.get('objects'), (value): value is string => UUID_RE.test(value)),
+    actorIds: readUuidGroup(params.get('actors')),
+    propertyIds: readUuidGroup(params.get('objects')),
   };
 }
 

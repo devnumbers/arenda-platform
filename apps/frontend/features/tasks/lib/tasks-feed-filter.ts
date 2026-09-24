@@ -8,6 +8,8 @@
  * владельца 2026-09-07); «Все задачи» — оба пустые, весь merged-фид.
  */
 
+import { readCsvUuidParam } from '@/shared/lib/parse-csv-uuid-param';
+
 /** Разобранный фильтр ленты: пустые оба поля — «Все задачи». */
 export type TasksFeedFilter = {
   readonly propertyIds: ReadonlyArray<string>;
@@ -28,30 +30,20 @@ export type TasksFeedFilterParamsSource = {
 
 const PROPERTY_PARAM = 'property';
 const WITHOUT_PROPERTY_PARAM = 'withoutProperty';
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Имена параметров адреса — единый источник для чтения и записи. */
 export const tasksFeedPropertyParam = PROPERTY_PARAM;
 export const tasksFeedWithoutPropertyParam = WITHOUT_PROPERTY_PARAM;
 
-/** Чтение фильтра из URL: битые элементы отбрасываются по одному, дубли
- * схлопываются — ссылка с одним мусорным id открывает срез остальных, а не
- * весь фид; одни битые — ленту без фильтра. withoutProperty читают только
- * «1»/«true», прочие значения молча выключают флаг. */
+/** Чтение фильтра из URL: объекты — канон readCsvUuidParam (битые элементы
+ * отбрасываются по одному, дубли схлопываются — ссылка с одним мусорным id
+ * открывает срез остальных, а не весь фид; одни битые — ленту без
+ * фильтра). withoutProperty читают только «1»/«true», прочие значения
+ * молча выключают флаг. */
 export function readTasksFeedFilter(params: TasksFeedFilterParamsSource): TasksFeedFilter {
-  const raw = params.get(PROPERTY_PARAM);
-  const seen = new Set<string>();
-  if (raw !== null) {
-    for (const part of raw.split(',')) {
-      const id = part.trim();
-      if (UUID_RE.test(id)) {
-        seen.add(id);
-      }
-    }
-  }
   const withoutRaw = params.get(WITHOUT_PROPERTY_PARAM);
   return {
-    propertyIds: [...seen],
+    propertyIds: readCsvUuidParam(params.get(PROPERTY_PARAM)),
     withoutProperty: withoutRaw === '1' || withoutRaw === 'true',
   };
 }

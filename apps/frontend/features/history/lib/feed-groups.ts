@@ -11,7 +11,7 @@
  * по снимку имени.
  */
 
-import type { HistoryActorRole, HistoryEntry } from '@/entities/history';
+import type { HistoryEntry } from '@/entities/history';
 import { addDays, dateToIsoLocal, type IsoDate } from '@/shared/lib/calendar';
 import { formatDayMonthWithYear } from '@/shared/lib/date-format';
 
@@ -22,7 +22,6 @@ export type HistoryActorGroup = {
   /** actor_id, обезличенным записям — ключ по снимку имени. */
   readonly key: string;
   readonly name: string;
-  readonly role: HistoryActorRole;
   readonly entries: readonly HistoryEntry[];
 };
 
@@ -43,7 +42,6 @@ type MutableActorGroup = {
   actorId: string | null;
   key: string;
   name: string;
-  role: HistoryActorRole;
   entries: HistoryEntry[];
 };
 type MutableObjectGroup = {
@@ -88,7 +86,6 @@ export function groupHistoryByDay(
         actorId: entry.actorId,
         key: actorKey,
         name: entry.actorName,
-        role: entry.actorRole,
         entries: [],
       };
       object_.actors.push(actor);

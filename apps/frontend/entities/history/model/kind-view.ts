@@ -5,7 +5,7 @@
  * отображения, как у base-action-view.
  */
 
-import type { HistoryKind } from './types';
+import type { HistoryBaseAction, HistoryKind } from './types';
 
 /** Все виды словаря в каноническом порядке (макет 2050-158280). */
 export const HISTORY_KINDS: ReadonlyArray<HistoryKind> = [
@@ -16,6 +16,16 @@ export const HISTORY_KINDS: ReadonlyArray<HistoryKind> = [
   'contact',
   'task',
   'member',
+];
+
+/** Все основные действия в каноническом порядке (ADR 0061 §4): каталог
+ * группы чекбоксов фильтра «Основные действия» (#711) и семантики
+ * «все, кроме переключённой» (null → список). */
+export const HISTORY_BASE_ACTIONS: ReadonlyArray<HistoryBaseAction> = [
+  'added',
+  'changed',
+  'completed',
+  'deleted',
 ];
 
 export function kindLabel(kind: HistoryKind): string {

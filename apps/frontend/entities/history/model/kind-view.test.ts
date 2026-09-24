@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HISTORY_KINDS, kindLabel } from './kind-view';
+import { HISTORY_BASE_ACTIONS, HISTORY_KINDS, kindLabel } from './kind-view';
 
 describe('kind-view', () => {
   it('канонические подписи видов действий — группы чекбоксов фильтра (#711)', () => {
@@ -22,5 +22,9 @@ describe('kind-view', () => {
       'task',
       'member',
     ]);
+  });
+
+  it('HISTORY_BASE_ACTIONS — все четыре основных действия (ADR 0061 §4) в порядке макета', () => {
+    expect([...HISTORY_BASE_ACTIONS]).toEqual(['added', 'changed', 'completed', 'deleted']);
   });
 });

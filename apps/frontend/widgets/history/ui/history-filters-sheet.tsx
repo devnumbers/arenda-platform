@@ -27,6 +27,7 @@ import {
 import {
   actorRoleLabel,
   baseActionLabel,
+  HISTORY_BASE_ACTIONS,
   HISTORY_KINDS,
   kindLabel,
   type HistoryBaseAction,
@@ -144,11 +145,10 @@ const KIND_ICONS: Record<HistoryKind, JSX.Element> = {
   member: <Team />,
 };
 
-/** Каталог основных действий в порядке макета — тот же список идёт в
- * строки группы и в семантику «все, кроме переключённой» (null → список). */
-const ACTION_IDS = ['added', 'changed', 'completed', 'deleted'] as const;
-
-const ACTION_ROWS: ReadonlyArray<HistoryFilterOptionRow> = ACTION_IDS.map((id) => ({
+/** Строки группы «Основные действия» — из канона HISTORY_BASE_ACTIONS:
+ * тот же список идёт в семантику «все, кроме переключённой» (null →
+ * список) при переключении опции. */
+const ACTION_ROWS: ReadonlyArray<HistoryFilterOptionRow> = HISTORY_BASE_ACTIONS.map((id) => ({
   id,
   label: baseActionLabel(id),
   leading: BASE_ACTION_ICONS[id],
@@ -337,7 +337,7 @@ export function HistoryFiltersSheet({
                   setDraft((state) => ({
                     ...state,
                     actions: toggleHistoryFilterOption(
-                      ACTION_IDS,
+                      HISTORY_BASE_ACTIONS,
                       state.actions,
                       id as HistoryBaseAction,
                     ),

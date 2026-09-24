@@ -2,6 +2,7 @@ import type { IsoDate } from '@/entities/payment';
 import { buildUrlWithParams } from '@/shared/lib/url-params';
 import { pluralize } from '@/shared/lib/pluralize';
 import { safeInternalPath } from '@/shared/lib/safe-internal-path';
+import { readCsvUuidParam } from '@/shared/lib/parse-csv-uuid-param';
 import {
   readOperationsFilters,
   type OperationsFilters,
@@ -22,8 +23,6 @@ export type GlobalOperationsFilters = OperationsFilters & {
   readonly archived: boolean;
 };
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 /**
  * Куда возвращаться со страниц выбора фильтров глобальной ленты (#542):
  * только маршруты зоны /operations (главная лента, поиск #543, категории
@@ -41,24 +40,20 @@ export function resolveGlobalFilterReturnPath(raw: string | null): string {
 
 /** Чтение фильтров глобальной ленты: период и категории — правила
  * объектного экрана (битые даты/перевёрнутый период/будущий хвост
- * отбрасываются), объекты — непустые uuid без дублей, порядок выбора
- * сохраняется; архив включён только явным archived=1 (#549). */
+ * отбрасываются), объекты — канон readCsvUuidParam (валидные uuid без
+ * дублей, порядок выбора сохраняется); архив включён только явным
+ * archived=1 (#549). */
 export function readGlobalOperationsFilters(
   params: OperationsParamsSource,
   today: IsoDate,
 ): GlobalOperationsFilters {
   const { period, categories } = readOperationsFilters(params, today);
-  const propertyIds: string[] = [];
-  const seen = new Set<string>();
-  for (const raw of (params.get('property') ?? '').split(',')) {
-    const candidate = raw.trim();
-    if (candidate.length === 0 || seen.has(candidate) || !UUID_RE.test(candidate)) {
-      continue;
-    }
-    seen.add(candidate);
-    propertyIds.push(candidate);
-  }
-  return { period, categories, propertyIds, archived: params.get('archived') === '1' };
+  return {
+    period,
+    categories,
+    propertyIds: readCsvUuidParam(params.get('property')),
+    archived: params.get('archived') === '1',
+  };
 }
 
 /** Параметры URL фильтров глобальной ленты: те же правила записи, что на
