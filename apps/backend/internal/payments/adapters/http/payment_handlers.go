@@ -37,9 +37,8 @@ type PaymentManager interface {
 	ResumePayment(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error)
 	SetPaymentFavorite(ctx context.Context, actor, propertyID, paymentID uuid.UUID, favorite bool) (domain.Payment, error)
 	CompletedStatus(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (bool, error)
-	CompletedStatuses(ctx context.Context, actor, propertyID uuid.UUID) (map[uuid.UUID]bool, error)
+	PaymentFlags(ctx context.Context, actor, propertyID uuid.UUID) (completed, managed map[uuid.UUID]bool, err error)
 	RentalManagedStatus(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (bool, error)
-	RentalManagedStatuses(ctx context.Context, actor, propertyID uuid.UUID) (map[uuid.UUID]bool, error)
 }
 
 // PaymentHandlers implements the generated payment endpoints.
@@ -173,18 +172,13 @@ func (h *PaymentHandlers) ListPayments(
 		h.handlePaymentError(w, r, err)
 		return
 	}
-	completed, err := h.svc.CompletedStatuses(r.Context(), actor, propertyID)
+	completed, managed, err := h.svc.PaymentFlags(r.Context(), actor, propertyID)
 	if err != nil {
 		h.writeInternal(w, r, err)
 		return
 	}
 
 	items := make([]openapi.PaymentResponse, 0, len(payments))
-	managed, err := h.svc.RentalManagedStatuses(r.Context(), actor, propertyID)
-	if err != nil {
-		h.writeInternal(w, r, err)
-		return
-	}
 	for _, payment := range payments {
 		resp, err := paymentResponse(payment, completed[payment.ID], managed[payment.ID])
 		if err != nil {

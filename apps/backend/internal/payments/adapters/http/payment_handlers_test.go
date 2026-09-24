@@ -44,10 +44,9 @@ type fakePaymentManager struct {
 	update   func(
 		ctx context.Context, actor, propertyID, paymentID uuid.UUID, cmd application.UpdatePaymentCommand,
 	) (domain.Payment, error)
-	completedStatus       func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (bool, error)
-	completedStatuses     func(ctx context.Context, actor, propertyID uuid.UUID) (map[uuid.UUID]bool, error)
-	rentalManagedStatus   func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (bool, error)
-	rentalManagedStatuses func(ctx context.Context, actor, propertyID uuid.UUID) (map[uuid.UUID]bool, error)
+	completedStatus     func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (bool, error)
+	paymentFlags        func(ctx context.Context, actor, propertyID uuid.UUID) (completed, managed map[uuid.UUID]bool, err error)
+	rentalManagedStatus func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (bool, error)
 }
 
 // CompletedStatus defaults to false — the pre-completion behaviour the older
@@ -61,13 +60,15 @@ func (f *fakePaymentManager) CompletedStatus(
 	return f.completedStatus(ctx, actor, propertyID, paymentID)
 }
 
-func (f *fakePaymentManager) CompletedStatuses(
+// PaymentFlags defaults to two empty maps — no listed rule carries either
+// flag unless a test sets the hook.
+func (f *fakePaymentManager) PaymentFlags(
 	ctx context.Context, actor, propertyID uuid.UUID,
-) (map[uuid.UUID]bool, error) {
-	if f.completedStatuses == nil {
-		return map[uuid.UUID]bool{}, nil
+) (completed, managed map[uuid.UUID]bool, err error) {
+	if f.paymentFlags == nil {
+		return map[uuid.UUID]bool{}, map[uuid.UUID]bool{}, nil
 	}
-	return f.completedStatuses(ctx, actor, propertyID)
+	return f.paymentFlags(ctx, actor, propertyID)
 }
 
 // RentalManagedStatus defaults to false — the ordinary (unmanaged) rule the
@@ -79,15 +80,6 @@ func (f *fakePaymentManager) RentalManagedStatus(
 		return false, nil
 	}
 	return f.rentalManagedStatus(ctx, actor, propertyID, paymentID)
-}
-
-func (f *fakePaymentManager) RentalManagedStatuses(
-	ctx context.Context, actor, propertyID uuid.UUID,
-) (map[uuid.UUID]bool, error) {
-	if f.rentalManagedStatuses == nil {
-		return map[uuid.UUID]bool{}, nil
-	}
-	return f.rentalManagedStatuses(ctx, actor, propertyID)
 }
 
 // The method set mirrors the port; the long signatures are the contract's.

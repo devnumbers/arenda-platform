@@ -115,7 +115,7 @@ func TestGate_ManagedPaymentKeepsFactsAndFavorite(t *testing.T) {
 	require.NoError(t, err)
 
 	// The list read carries the flag per rule.
-	statuses, err := h.paySvc.RentalManagedStatuses(ctx, h.owner, h.propID)
+	_, statuses, err := h.paySvc.PaymentFlags(ctx, h.owner, h.propID)
 	require.NoError(t, err)
 	assert.Equal(t, map[uuid.UUID]bool{paymentID: true}, statuses)
 }
@@ -175,7 +175,7 @@ func TestGate_OrdinaryPaymentStaysMutable(t *testing.T) {
 	require.NoError(t, err)
 
 	// The flag read names the ordinary rule false.
-	statuses, err := h.paySvc.RentalManagedStatuses(ctx, h.owner, h.propID)
+	_, statuses, err := h.paySvc.PaymentFlags(ctx, h.owner, h.propID)
 	require.NoError(t, err)
 	assert.Equal(t, map[uuid.UUID]bool{created.ID: false}, statuses)
 
