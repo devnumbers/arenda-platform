@@ -1,4 +1,5 @@
 import {
+  captureScreen,
   expect,
   execE2eSql,
   openCabinetWithSeededSession,
@@ -124,7 +125,7 @@ test.describe('визард создания аренды — шаг «Конт�
   test('пустая книга: только «Создать контакт», ветвь #509 с ролью, футер глушится, «Закрыть» возвращает на источник', async ({
     page,
     seededUser,
-  }) => {
+  }, testInfo) => {
     await passToContactStep(page, seededUser, GARAGE_WIZARD_URL, GARAGE_URL);
 
     // Заголовок серии 1855 + пустая книга (решение владельца): единственная
@@ -134,6 +135,7 @@ test.describe('визард создания аренды — шаг «Конт�
     ).toBeVisible();
     await expect(page.getByRole('button', { name: 'Выбрать контакт' })).toBeHidden();
     await expect(page.getByRole('button', { name: 'Создать контакт' })).toBeVisible();
+    await captureScreen(page, testInfo, 'rentals-wizard-contact-step-empty-book');
 
     // Ветка #509: роль «Арендатор» подставлена; футер глушится, как на
     // шагах визарда (#807, P3).
@@ -143,6 +145,7 @@ test.describe('визард создания аренды — шаг «Конт�
     await expect(
       page.getByRole('navigation', { name: 'Нижняя навигация' }),
     ).toBeHidden();
+    await captureScreen(page, testInfo, 'rentals-wizard-contact-create-form');
 
     // «Закрыть» визарда: goBack возвращает на источник по истории
     // (вход был со страницы объекта, как в реальном потоке).
@@ -181,12 +184,14 @@ test.describe('визард создания аренды — шаг «Конт�
       const borisBox = (await borisRow.boundingBox()) as { y: number };
       const alekseiBox = (await alekseiRow.boundingBox()) as { y: number };
       expect(borisBox.y).toBeLessThan(alekseiBox.y);
+      await captureScreen(page, testInfo, 'rentals-wizard-contact-picker');
 
       // Серверный ?search=: фильтр по подстроке имени, прежний срез держится
       // (keepPreviousData), сброс возвращает книгу.
       await page.getByRole('searchbox', { name: 'Поиск контактов' }).fill('Бор');
       await expect(alekseiRow).toBeHidden();
       await expect(borisRow).toBeVisible();
+      await captureScreen(page, testInfo, 'rentals-wizard-contact-picker-search');
       await page.getByRole('searchbox', { name: 'Поиск контактов' }).fill('');
       await expect(alekseiRow).toBeVisible();
 
@@ -285,6 +290,7 @@ test.describe('визард создания аренды — шаг «Конт�
       const goodBox = (await good.boundingBox()) as { y: number };
       const openBox = (await open.boundingBox()) as { y: number };
       expect(goodBox.y).toBeLessThan(openBox.y);
+      await captureScreen(page, testInfo, 'rentals-wizard-success-swapped');
 
       await open.click();
       await expect(page).toHaveURL(
