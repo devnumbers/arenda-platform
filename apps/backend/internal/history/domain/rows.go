@@ -2,6 +2,7 @@ package domain
 
 import (
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -37,7 +38,7 @@ const (
 	ctxKeyDueDate  = "due_date"
 )
 
-// Объект.
+// Общее.
 
 // RoleLabel is the human-readable membership role for the role-change rows.
 func RoleLabel(r ActorRole) string {
@@ -265,40 +266,56 @@ func RentalUpdated(entityID uuid.UUID, tenantName string, from, to time.Time) En
 
 // RentalCompleted builds the completion row.
 func RentalCompleted(entityID uuid.UUID, tenantName string) Entry {
+	// An unnamed tenant reads without the colon, and the row drops the
+	// link — nothing to attach it to.
+	segments := Segments{
+		{Text: "Аренда завершена: "},
+		{Text: tenantName, Link: entityLink(KindRental, entityID)},
+	}
+	if tenantName == "" {
+		segments = Segments{{Text: "Аренда завершена"}}
+	}
 	return Entry{
 		Kind:       KindRental,
 		Action:     ActionRentalCompleted,
 		BaseAction: BaseCompleted,
-		Segments: Segments{
-			{Text: "Аренда завершена: "},
-			{Text: tenantName, Link: entityLink(KindRental, entityID)},
-		},
-		Context: map[string]any{ctxKeyTenant: tenantName},
+		Segments:   segments,
+		Context:    map[string]any{ctxKeyTenant: tenantName},
 	}
 }
 
 // RentalDeleted builds the deletion row — no link, the entity is gone.
 func RentalDeleted(entityID uuid.UUID, tenantName string) Entry {
+	// An unnamed tenant reads without the dangling colon.
+	segments := Segments{{Text: "Аренда удалена: "}, {Text: tenantName}}
+	if tenantName == "" {
+		segments = Segments{{Text: "Аренда удалена"}}
+	}
 	return Entry{
 		Kind:       KindRental,
 		Action:     ActionRentalDeleted,
 		BaseAction: BaseDeleted,
-		Segments: Segments{
-			{Text: "Аренда удалена: "},
-			{Text: tenantName},
-		},
-		Context: map[string]any{ctxKeyTenant: tenantName},
+		Segments:   segments,
+		Context:    map[string]any{ctxKeyTenant: tenantName},
 	}
 }
 
 func rentalRow(action Action, base BaseAction, prefix string, entityID uuid.UUID, tenantName string, from, to time.Time) Entry {
-	segments := Segments{
-		{Text: prefix},
-		{Text: tenantName, Link: entityLink(KindRental, entityID)},
+	// An unnamed tenant (a rental without a contact) reads without the
+	// colon, and the row drops the link — nothing to attach it to.
+	segments := make(Segments, 0, 2)
+	if tenantName == "" {
+		segments = append(segments, Segment{Text: strings.TrimSuffix(prefix, ": ")})
+	} else {
+		segments = append(segments,
+			Segment{Text: prefix},
+			Segment{Text: tenantName, Link: entityLink(KindRental, entityID)},
+		)
 	}
-	if period := formatPeriod(from, to); period != "" {
-		segments = append(segments, Segment{Text: " (" + period + ")"})
-	}
+	// The period segment is appended unconditionally: formatPeriod is never
+	// empty (formatDate is a plain t.Format), the indefinite form included
+	// (to = zero → «(дата)»).
+	segments = append(segments, Segment{Text: " (" + formatPeriod(from, to) + ")"})
 	return Entry{
 		Kind:       KindRental,
 		Action:     action,
@@ -540,7 +557,8 @@ func MemberInvited(email string) Entry {
 }
 
 // MemberAdded builds the membership row for a registered participant; the
-// label prefers the display name and falls back to the email.
+// label is the display-name snapshot with a fallback to the masked phone —
+// never the email (the access canon: userLabel).
 func MemberAdded(userID uuid.UUID, label string) Entry {
 	return Entry{
 		Kind:       KindMember,

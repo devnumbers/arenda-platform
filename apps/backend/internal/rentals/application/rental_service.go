@@ -322,41 +322,7 @@ func (s *RentalService) UpdateRental(
 		func(
 			ctx context.Context, stores *txStores, scope uuid.UUID, rental domain.Rental, today time.Time,
 		) (mutationOutcome, error) {
-			if rental.CompletedDate != nil {
-				return mutationOutcome{}, ErrRentalCompleted
-			}
-			change, paymentChanged, err := paymentSyncFromUpdate(cmd, rental.StartDate, today)
-			if err != nil {
-				return mutationOutcome{}, err
-			}
-			applyRentalUpdate(&rental, cmd)
-			if err := validateRentalRow(rental); err != nil {
-				return mutationOutcome{}, err
-			}
-			if cmd.ContactID != nil && cmd.ContactID.Value != nil {
-				if _, err := s.validatedTenantName(ctx, scope, cmd.ContactID.Value); err != nil {
-					return mutationOutcome{}, err
-				}
-			}
-			if paymentChanged {
-				if err := stores.pay.Update(ctx, scope, propertyID, rental.PaymentID, change, today); err != nil {
-					return mutationOutcome{}, fmt.Errorf("sync rent payment: %w", err)
-				}
-			}
-			if err := stores.rentals.Update(ctx, rental); err != nil {
-				return mutationOutcome{}, fmt.Errorf("update rental: %w", err)
-			}
-			tenantName, err := s.tenantName(ctx, scope, rental.ContactID)
-			if err != nil {
-				return mutationOutcome{}, err
-			}
-			return mutationOutcome{
-				RentalID: rental.ID,
-				Audit:    auditActionRentalUpdated,
-				AuditCtx: map[string]any{"fields": updatedRentalFields(cmd)},
-				History:  new(historydomain.RentalUpdated(rental.ID, tenantName, rental.StartDate, derefDate(rental.PlannedEndDate))),
-				Tick:     paymentChanged,
-			}, nil
+			return s.updatedRentalOutcome(ctx, stores, scope, propertyID, rental, today, cmd)
 		})
 	if err != nil {
 		return RentalView{}, err
@@ -366,6 +332,55 @@ func (s *RentalService) UpdateRental(
 		return RentalView{}, err
 	}
 	return s.loadView(ctx, scope, propertyID, changedRentalID)
+}
+
+// updatedRentalOutcome is the change step of the terms edit: it validates the
+// patch against the loaded rental, syncs the editable payment terms and
+// returns the outcome the conveyor journals, journals history from and ticks
+// on.
+func (s *RentalService) updatedRentalOutcome(
+	ctx context.Context, stores *txStores, scope, propertyID uuid.UUID, rental domain.Rental, today time.Time,
+	cmd UpdateRentalCommand,
+) (mutationOutcome, error) {
+	if rental.CompletedDate != nil {
+		return mutationOutcome{}, ErrRentalCompleted
+	}
+	change, paymentChanged, err := paymentSyncFromUpdate(cmd, rental.StartDate, today)
+	if err != nil {
+		return mutationOutcome{}, err
+	}
+	applyRentalUpdate(&rental, cmd)
+	if err := validateRentalRow(rental); err != nil {
+		return mutationOutcome{}, err
+	}
+	// The journal label is resolved once: a set contact carries the name
+	// its validation already read, an unchanged one reads the stored card.
+	var tenantName string
+	if cmd.ContactID != nil && cmd.ContactID.Value != nil {
+		if tenantName, err = s.validatedTenantName(ctx, scope, cmd.ContactID.Value); err != nil {
+			return mutationOutcome{}, err
+		}
+	}
+	if paymentChanged {
+		if err := stores.pay.Update(ctx, scope, propertyID, rental.PaymentID, change, today); err != nil {
+			return mutationOutcome{}, fmt.Errorf("sync rent payment: %w", err)
+		}
+	}
+	if err := stores.rentals.Update(ctx, rental); err != nil {
+		return mutationOutcome{}, fmt.Errorf("update rental: %w", err)
+	}
+	if cmd.ContactID == nil || cmd.ContactID.Value == nil {
+		if tenantName, err = s.tenantName(ctx, scope, rental.ContactID); err != nil {
+			return mutationOutcome{}, err
+		}
+	}
+	return mutationOutcome{
+		RentalID: rental.ID,
+		Audit:    auditActionRentalUpdated,
+		AuditCtx: map[string]any{"fields": updatedRentalFields(cmd)},
+		History:  new(historydomain.RentalUpdated(rental.ID, tenantName, rental.StartDate, derefDate(rental.PlannedEndDate))),
+		Tick:     paymentChanged,
+	}, nil
 }
 
 // CompleteRental records the completion (решение №8): the factual date within

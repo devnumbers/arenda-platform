@@ -263,20 +263,16 @@ func (s *ContactService) UpdateContact(
 	if len(fields) > 0 {
 		auditCtx["fields"] = fields
 	}
+	var moved bool
 	if cmd.PropertyID != nil {
-		target, moved, err := s.resolvePropertyBinding(ctx, actor, contact, *cmd.PropertyID)
+		target, didMove, err := s.rebindContact(ctx, actor, contact, *cmd.PropertyID, auditCtx)
 		if err != nil {
 			return domain.Contact{}, err
 		}
 		contact.PropertyID = target
-		if moved {
-			if target == nil {
-				auditCtx["property_cleared"] = true
-			} else {
-				auditCtx["to_property_id"] = *target
-			}
-		}
+		moved = didMove
 	}
+	before := contact
 	oldFullName := contact.FullName()
 	if err := applyUpdate(&contact, cmd); err != nil {
 		return domain.Contact{}, err
@@ -294,10 +290,11 @@ func (s *ContactService) UpdateContact(
 		if err := recordContactAudit(ctx, stores, actor, role, auditdomain.ActionContactUpdated, contact.ID, auditCtx); err != nil {
 			return err
 		}
-		// The row hangs on the card's final binding — a move between
-		// properties journals on the destination; an unbound card writes
-		// no row.
-		if stored.PropertyID != nil {
+		// The row hangs on the card's final binding and records a change,
+		// not a no-op (ADR 0061 §3): a same-form PATCH without a move writes
+		// no row; a move between properties journals on the destination; an
+		// unbound card writes no row.
+		if stored.PropertyID != nil && (moved || contactChanged(before, stored)) {
 			if err := recordContactHistory(ctx, stores, actor, role, *stored.PropertyID,
 				historydomain.ContactUpdated(contact.ID, oldFullName, stored.FullName())); err != nil {
 				return err
@@ -309,6 +306,27 @@ func (s *ContactService) UpdateContact(
 		return domain.Contact{}, err
 	}
 	return stored, nil
+}
+
+// rebindContact rebinds the card onto the requested property and records the
+// move's audit facts into auditCtx: the cleared binding or the destination
+// property id. The returned target rebinds the card; moved says whether the
+// binding actually changed.
+func (s *ContactService) rebindContact(
+	ctx context.Context, actor uuid.UUID, contact domain.Contact, upd PropertyIDUpdate, auditCtx map[string]any,
+) (*uuid.UUID, bool, error) {
+	target, moved, err := s.resolvePropertyBinding(ctx, actor, contact, upd)
+	if err != nil {
+		return nil, false, err
+	}
+	if moved {
+		if target == nil {
+			auditCtx["property_cleared"] = true
+		} else {
+			auditCtx["to_property_id"] = *target
+		}
+	}
+	return target, moved, nil
 }
 
 // DeleteContact removes the card from the book, scoped by (id, owner_id) like
@@ -470,6 +488,20 @@ func applyUpdate(contact *domain.Contact, cmd UpdateContactCommand) error {
 		contact.Note = strings.TrimSpace(*cmd.Note)
 	}
 	return nil
+}
+
+// contactChanged compares the card fields the journal row speaks about
+// (ADR 0061 §4): the ФИО and the contact details. The property binding is
+// not part of the row text — a binding-only change travels in UpdateContact's
+// moved flag, never here.
+func contactChanged(before, after domain.Contact) bool {
+	return before.FullName() != after.FullName() ||
+		before.Role != after.Role ||
+		before.Phone != after.Phone ||
+		before.Email != after.Email ||
+		before.MessengerName != after.MessengerName ||
+		before.MessengerUsername != after.MessengerUsername ||
+		before.Note != after.Note
 }
 
 // normalizePhoneField folds an absent phone to "" and normalizes a present
