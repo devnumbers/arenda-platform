@@ -24,7 +24,7 @@ const MaxTitleLength = 255
 // ReminderOffsets are the reminder lead times the product speaks (карта
 // #822): 1, 3 or 7 days before an occurrence — the same vocabulary the
 // schema CHECK enforces durably.
-var ReminderOffsets = [3]int{1, 3, 7}
+var reminderOffsets = [3]int{1, 3, 7}
 
 // isValidReminderOffset reports whether the reminder lead time is one of the
 // contract's values; nil (no reminders) is always valid.
@@ -32,7 +32,7 @@ func isValidReminderOffset(offset *int) bool {
 	if offset == nil {
 		return true
 	}
-	for _, valid := range ReminderOffsets {
+	for _, valid := range reminderOffsets {
 		if *offset == valid {
 			return true
 		}
