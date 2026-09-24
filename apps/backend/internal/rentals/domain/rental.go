@@ -164,19 +164,22 @@ func MustPaymentDay(day int) PaymentDay {
 	return d
 }
 
-// CountPaymentDays counts the payment-day occurrences in the inclusive
-// window [start, end]: each month's day clamped to the month's length (the
+// CountPaymentDays counts the payment-day occurrences in the half-open
+// window [start, end): each month's day clamped to the month's length (the
 // same clamp semantics the payments monthly recurrence materializes with).
-// It is the progress' totalMonths for a term rental — «N из M месяцев»
-// (ADR 0053 §2). An end before start counts nothing.
+// The occurrence exactly on `end` — the planned end — does not count: the
+// month it opens lies beyond the rental, so a 12-month term is 12 payments
+// (the #802 F2 half-open window fix, ticket #816). It is the progress'
+// totalMonths for a term rental — «N из M месяцев» (ADR 0053 §2). An end on
+// or before start counts nothing.
 func CountPaymentDays(start, end time.Time, day PaymentDay) int {
-	if end.Before(start) {
+	if !end.After(start) {
 		return 0
 	}
 	count := 0
 	for year, month := start.Year(), start.Month(); ; {
 		d := dayInMonth(year, month, day)
-		if d.After(end) {
+		if !d.Before(end) {
 			break
 		}
 		if !d.Before(start) {

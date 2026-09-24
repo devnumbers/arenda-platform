@@ -2868,6 +2868,8 @@ export interface components {
             isFavorite: boolean;
             /** @description Server-computed settlement view of the rule (CONTEXT.md, «Завершённый платёж»): no planned operations — overdue included — and no occurrence beyond the last materialized date of any status. Never stored, never written by the client; derived on every read like the operation's overdue. */
             isCompleted: boolean;
+            /** @description The rule is the rental's managed rent payment (ADR 0053, ticket #818): a rental row references it, any rental state — a completed rental is final and its payment is final with it. The rental is the source of truth for the amount, the payment day, the auto-pay and the planned end, so the rule mutations (pause, resume, patch, delete) answer 409; the payment facts («Оплатить») and the favorite star stay open. The reads carry the flag so the client hides the mutation actions instead of learning the 409 live. */
+            isRentalManaged: boolean;
             pauses: components["schemas"]["PauseIntervalView"][];
             /** Format: date-time */
             createdAt: string;
@@ -3584,11 +3586,12 @@ export interface components {
             /** @description date − today по TZ собственника. */
             daysUntil: number;
         };
-        /** @description Прогресс «Оплачено N из M месяцев» (ADR 0053 §2): paidMonths — число paid-операций Платежа; totalMonths и monthsRemaining — только у срочной аренды (null у бессрочной). */
+        /** @description Прогресс «Оплачено N из M месяцев» (ADR 0053 §2): paidMonths — число paid-операций Платежа; totalMonths и monthsRemaining — только у срочной аренды (null у бессрочной). overdueMonths — серверная просрочка Платежа арендной платы (#817): число planned-вхождений раньше «сегодня» собственника (платёжные месяцы, не календарные); null — просрочки нет. */
         RentalProgress: {
             paidMonths: number;
             totalMonths: number | null;
             monthsRemaining: number | null;
+            overdueMonths: number | null;
         };
         /** @description Состояние Платежа арендной платы: рендер читается из платежа — дня оплаты на аренде нет (решение №5). paymentId — переход на экран платежа с детализации аренды (#531): платеж не ищется слагом категории, на объекте бывают и другие платежи rent. */
         RentalPaymentView: {

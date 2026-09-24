@@ -42,6 +42,12 @@ export function formatDayMonthWithYear(iso: IsoDate, today: IsoDate): string {
   return `${base}, ${isoYear(iso)}`;
 }
 
+/** День-месяц с годом всегда, даже в текущем: «11 августа, 2026» —
+ * датовые группы «Истории операций» (канон 1302:52209, решение #802). */
+export function formatDayMonthYear(iso: IsoDate): string {
+  return `${formatDayMonth(iso)}, ${isoYear(iso)}`;
+}
+
 /** Месяцы в предложном падеже (индекс 0..11): заголовки «Операции в
  * сентябре» (#589). Словарь склонений живёт в каноне дат, не на местах. */
 export const MONTH_PREPOSITIONAL: ReadonlyArray<string> = [

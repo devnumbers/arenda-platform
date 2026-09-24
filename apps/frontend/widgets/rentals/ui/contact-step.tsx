@@ -4,23 +4,19 @@ import { useState } from 'react';
 import type { JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import {
+  AccountSetting,
   Add,
   BoldUser,
+  Change,
   Edit,
   Kebab,
   TrashBin,
 } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { notify } from '@/shared/lib/notifications';
-import {
-  ContactRowButton,
-  contactSortByName,
-  groupContactsByLetter,
-} from '@/entities/contact';
-import type { Contact } from '@/entities/contact';
+import { ContactRowButton } from '@/entities/contact';
 import { useContacts, useContact, useDeleteContact } from '@/features/contacts';
 import {
-  Button,
   ConfirmDialog,
   IconButton,
   ListRow,
@@ -28,21 +24,22 @@ import {
   MenuContent,
   MenuItem,
   MenuTrigger,
-  InfiniteQueryTail,
 } from '@/shared/ui/design';
-import { RentalContactBookSkeleton } from './rental-skeletons';
 import { WizardHeading } from './wizard-chrome';
 
 /**
- * Шаг 4 «Контакт арендатора» (Figma 1270:46738 / 1285:54887 / 1285:54989 /
- * 1419:27158): выбранному контакту — строка с кебабом «Открыть / Изменить /
- * Удалить» (меню макета 1285:54989; Открыть — карточка контакта, Изменить —
- * форма правки, Удалить — контакт удаляется из книги и отвязывается от
- * аренд и объектов, шит подтверждения 1419:27158); без выбора — строка
- * «Создать контакт» (ветвь ведёт в форму #509 с ?pick=rental и возвратом в
- * визард) и книга объекта: серая карточка с алфавитными группами (канон
- * «Контактов объекта» #508, макет 1539:83613), тап по строке выбирает
- * арендатора и сворачивает список. Арендатор необязателен.
+ * Шаг 4 «Контакт арендатора» (Figma 1855:63385 / 64129 / 64385): заголовок
+ * «Добавьте контакт арендатора» + подзаголовок; без выбора — два действия,
+ * «Выбрать контакт» (экран выбора, отдельный маршрут 1855:64129) и «Создать
+ * контакт» (ветвь ведёт в форму #509 с ?pick=rental и возвратом в визард);
+ * с выбранным — строка арендатора с кебабом из четырёх пунктов (1855:64385,
+ * меню 1855:64502 — иконки семейства R: AccountSetting / Change / Edit /
+ * TrashBin): Открыть — карточка контакта, Выбрать другой — экран выбора,
+ * Изменить — форма правки, Удалить — контакт удаляется из книги и
+ * отвязывается от аренд и объектов (шит подтверждения; тап по строке —
+ * тот же Открыть, решение владельца 2026-09-22). Строка «Создать контакт»
+ * видна и в выбранном состоянии; пустая книга (макета нет, решение
+ * владельца) — только «Создать контакт». Арендатор необязателен.
  */
 
 export type ContactStepProps = {
@@ -58,27 +55,40 @@ export function ContactStep({
   onContactChange,
 }: ContactStepProps): JSX.Element {
   const router = useRouter();
-  const [picking, setPicking] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
+  // Книга нужна шагу, чтобы отличить пустую (одна строка создания) от
+  // непустой (два действия); сам список живёт на экране выбора.
   const contactsQuery = useContacts(propertyId);
   const tenantQuery = useContact(contactId ?? '');
   const deleteContact = useDeleteContact(contactId ?? '');
 
   // Выбранный арендатор реально существует, только когда его карточка
   // загрузилась: id из черновика может указывать на удалённый контакт
-  // (книгу стерли, откат сида) — тогда шаг деградирует к списку книги,
-  // а не к «осиротевшему» кебабу. picking — тап по выбранному, чтобы
-  // сменить его.
+  // (книгу стерли, откат сида) — тогда шаг деградирует к состоянию без
+  // выбора, а не к «осиротевшему» кебабу.
   const selectedTenant =
-    contactId !== undefined && !picking && !tenantQuery.isError
-      ? tenantQuery.data
-      : undefined;
+    contactId !== undefined && !tenantQuery.isError ? tenantQuery.data : undefined;
+
+  // Сбой чтения книги не блокирует шаг: экран выбора покажет свой
+  // повтор, а «Создать контакт» работает всегда. Строка «Выбрать
+  // контакт» — только при подтверждённой непустой книге (пустая книга —
+  // единственная строка создания без мерцания, решение владельца).
+  const showPickerRow =
+    !contactsQuery.isPending && !contactsQuery.isError && contactsQuery.data.length > 0;
+
+  const openPicker = (): void => {
+    router.push(ROUTES.propertyRentalNewContact(propertyId));
+  };
 
   const openCreateBranch = (): void => {
     router.push(
       `${ROUTES.propertyContactNew(propertyId)}?role=${encodeURIComponent('Арендатор')}&pick=rental`,
     );
+  };
+
+  const openContactCard = (contactId: string): void => {
+    router.push(ROUTES.propertyContact(propertyId, contactId));
   };
 
   const handleDelete = (): void => {
@@ -96,52 +106,37 @@ export function ContactStep({
 
   return (
     <>
-      <WizardHeading title="Контакт арендатора" />
-      <div className="flex flex-col gap-6 px-6 pt-6">
-        {/* Строка создания видна, пока арендатор не выбран (макет
-            1270:46738): в выбранном состоянии (1285:54887) макет показывает
-            только строку арендатора с кебабом. */}
-        {selectedTenant === undefined && (
-          <ListRow
-            leading={
-              <span
-                aria-hidden
-                className="flex h-11 w-11 items-center justify-center rounded-pill bg-surface-muted shadow-[0_0_0_2.5px_var(--dl-surface)]"
-              >
-                <Add className="h-6 w-6" />
-              </span>
-            }
-            title="Создать контакт"
-            onSelect={openCreateBranch}
-            className="-mx-6"
-          />
-        )}
-
-        {selectedTenant === undefined ? (
-          <BookList query={contactsQuery} onPick={(picked) => {
-            onContactChange(picked);
-            setPicking(false);
-          }} />
-        ) : (
+      <WizardHeading
+        title="Добавьте контакт арендатора"
+        subtitle="Выберите существующий или создайте новый контакт"
+      />
+      <div className="flex flex-col gap-4 px-6 pt-6">
+        {selectedTenant !== undefined && (
           <div className="flex items-center gap-1">
             <ContactRowButton
               contact={selectedTenant}
               surface="white"
               className="min-w-0 flex-1"
-              /* Тап по выбранному контакту снова раскрывает книгу —
-                  не разрушительный способ сменить арендатора. */
-              onSelect={() => setPicking(true)}
+              /* Тап по выбранному — карточка контакта (решение владельца
+                  2026-09-22); смена арендатора — через «Выбрать другой». */
+              onSelect={() => openContactCard(selectedTenant.id)}
             />
             <Menu>
               <MenuTrigger asChild>
                 <IconButton icon={<Kebab className="h-6 w-6" />} label="Меню контакта" />
               </MenuTrigger>
               <MenuContent collisionPadding={24}>
+                {/* Иконки пунктов — семейство R по меню макета
+                    (1855:64502): Icon/R/AccountSetting, Icon/R/Change,
+                    Icon/R/Edit, Icon/R/TrashBin. */}
                 <MenuItem
-                  icon={<BoldUser className="h-6 w-6" />}
-                  onSelect={() => router.push(ROUTES.propertyContact(propertyId, selectedTenant.id))}
+                  icon={<AccountSetting className="h-6 w-6" />}
+                  onSelect={() => openContactCard(selectedTenant.id)}
                 >
                   Открыть
+                </MenuItem>
+                <MenuItem icon={<Change className="h-6 w-6" />} onSelect={openPicker}>
+                  Выбрать другой
                 </MenuItem>
                 <MenuItem
                   icon={<Edit className="h-6 w-6" />}
@@ -159,6 +154,26 @@ export function ContactStep({
             </Menu>
           </div>
         )}
+
+        {/* В выбранном состоянии (1855:64385) строка создания остаётся
+            видимой; в состоянии без выбора (1855:63385) идут два действия,
+            а в пустой книге (решение владельца) — только «Создать
+            контакт». Пока книга едет — рисуем создание (безопасный
+            дефолт: контакты появятся — добавится «Выбрать контакт»). */}
+        {selectedTenant === undefined && showPickerRow && (
+          <ListRow
+            leading={<ActionRowIcon icon={<BoldUser className="h-6 w-6" />} />}
+            title="Выбрать контакт"
+            onSelect={openPicker}
+            className="-mx-6"
+          />
+        )}
+        <ListRow
+          leading={<ActionRowIcon icon={<Add className="h-6 w-6" />} />}
+          title="Создать контакт"
+          onSelect={openCreateBranch}
+          className="-mx-6"
+        />
       </div>
 
       <ConfirmDialog
@@ -175,66 +190,15 @@ export function ContactStep({
   );
 }
 
-/** Книга объекта (канон #508): серая карточка с алфавитными группами,
- * сортировка по имени А→Я; тап по строке выбирает арендатора. */
-function BookList({
-  query,
-  onPick,
-}: {
-  readonly query: ReturnType<typeof useContacts>;
-  readonly onPick: (contactId: string) => void;
-}): JSX.Element {
-  const contacts = query.data ?? [];
-
-  if (query.isPending) {
-    // Паритет книги (#607): та же карточка с группами, без своей вставки —
-    // контейнер шага приносит px-6.
-    return <RentalContactBookSkeleton />;
-  }
-  if (query.isError) {
-    return (
-      <div className="flex flex-col items-center gap-4 pt-6">
-        <p className="text-center text-base leading-[18px] text-content-secondary">
-          Не удалось загрузить контакты
-        </p>
-        <Button variant="secondary" size="small" onClick={() => void query.refetch()}>
-          Повторить
-        </Button>
-      </div>
-    );
-  }
-  if (contacts.length === 0) {
-    // Книга пуста — только «Создать контакт» (макет 1270:46738).
-    return <div />;
-  }
-
-  const groups = groupContactsByLetter(contactSortByName(contacts, 'asc'));
-
+/** Кружок 44 действий шага (1855:63385): приглушённая подложка с белым
+ * кольцом — та же анатомия, что у аватара ContactRowButton. */
+function ActionRowIcon({ icon }: { readonly icon: JSX.Element }): JSX.Element {
   return (
-    <section
-      aria-label="Контакты объекта: выберите арендатора"
-      className="flex flex-col gap-4 rounded-card bg-surface-muted pb-3 pl-5 pr-4 pt-6"
+    <span
+      aria-hidden
+      className="flex h-11 w-11 items-center justify-center rounded-pill bg-surface-muted shadow-[0_0_0_2.5px_var(--dl-surface)]"
     >
-      {groups.map((group) => (
-        <div key={group.letter} className="flex flex-col">
-          <span aria-hidden className="pl-2 text-base font-medium text-content-tertiary">
-            {group.letter}
-          </span>
-          <div className="flex flex-col">
-            {group.contacts.map((contact: Contact) => (
-              <ContactRowButton
-                key={contact.id}
-                contact={contact}
-                surface="muted"
-                onSelect={() => onPick(contact.id)}
-              />
-            ))}
-          </div>
-        </div>
-      ))}
-      {/* Хвост порций (#633): sentinel + индикатор догрузки — серая
-       * карточка книги, тон muted. */}
-      <InfiniteQueryTail query={query} tone="muted" />
-    </section>
+      {icon}
+    </span>
   );
 }

@@ -67,7 +67,8 @@ test.describe('сортировки переживают перезагрузк�
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto(`/properties/${APARTMENT}/payments/${INTERNET_PAYMENT_ID}/history`);
 
-    // Дефолт «сначала новые»: первая группа — свежая дата без года.
+    // Дефолт «сначала новые»: первая группа — свежая дата (датовые группы
+    // несут год, канон 1302:52209; «Сегодня/Вчера» — без).
     const freshChip = await settle(
       page.getByRole('button', { name: /Сортировка: сначала новые/ }),
     );

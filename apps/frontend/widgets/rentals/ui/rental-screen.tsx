@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import type { JSX } from 'react';
-import { ArrowLeft } from '@/shared/assets/icons';
+import { ArrowLeft, Edit } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { useProperty } from '@/features/properties';
@@ -26,7 +26,8 @@ import { RentalDetailSkeleton } from './rental-skeletons';
  * с кнопкой «Добавить аренду» в нижней панели (кнопка скрыта у смотрящего —
  * создание только Full Access, ADR 0053 §3) и, если завершённые есть,
  * входом в «Прошлые аренды» (#535); с незавершённой — детализация первой
- * аренды списка.
+ * аренды. Карандаш в шапке — быстрый вход в правку условий (1550:93664,
+ * решение #802 23.09), только у того, кто может править.
  */
 export function RentalScreen({ propertyId }: { readonly propertyId: string }): JSX.Element {
   const router = useRouter();
@@ -53,6 +54,15 @@ export function RentalScreen({ propertyId }: { readonly propertyId: string }): J
             label="Назад"
             onClick={() => goBack(router, ROUTES.property(propertyId))}
           />
+        }
+        trailing={
+          canMutate && currentRental !== undefined ? (
+            <IconButton
+              icon={<Edit />}
+              label="Редактировать аренду"
+              onClick={() => router.push(ROUTES.propertyRentalTermsEdit(propertyId))}
+            />
+          ) : undefined
         }
       >
         <TopNavTitle title="Аренда" />

@@ -152,3 +152,23 @@ func NextOccurrenceAfter(p Payment, date time.Time) (time.Time, bool) {
 	}
 	return time.Time{}, false
 }
+
+// periodOf maps a date onto the schedule slot of the recurrence that
+// contains it: the day itself for daily rules, the Sunday-based week for
+// weekly, the calendar month for monthly and the calendar year for yearly.
+// Any operation of the rule inside a slot claims it — the slot's obligation
+// already stands (a paid fact, planned debt or a cancellation tombstone),
+// and a re-dated schedule must not materialize a second one there (ticket
+// #815). For daily rules this collapses into the exact-date dedup.
+func periodOf(r Recurrence, date time.Time) time.Time {
+	switch r.Kind() {
+	case RecurrenceWeekly:
+		return time.Date(date.Year(), date.Month(), date.Day()-int(date.Weekday()), 0, 0, 0, 0, time.UTC)
+	case RecurrenceMonthly:
+		return time.Date(date.Year(), date.Month(), 1, 0, 0, 0, 0, time.UTC)
+	case RecurrenceYearly:
+		return time.Date(date.Year(), time.January, 1, 0, 0, 0, 0, time.UTC)
+	default:
+		return date
+	}
+}

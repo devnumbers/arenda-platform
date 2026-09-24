@@ -44,8 +44,9 @@ type fakePaymentManager struct {
 	update   func(
 		ctx context.Context, actor, propertyID, paymentID uuid.UUID, cmd application.UpdatePaymentCommand,
 	) (domain.Payment, error)
-	completedStatus   func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (bool, error)
-	completedStatuses func(ctx context.Context, actor, propertyID uuid.UUID) (map[uuid.UUID]bool, error)
+	completedStatus     func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (bool, error)
+	paymentFlags        func(ctx context.Context, actor, propertyID uuid.UUID) (completed, managed map[uuid.UUID]bool, err error)
+	rentalManagedStatus func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (bool, error)
 }
 
 // CompletedStatus defaults to false — the pre-completion behaviour the older
@@ -59,13 +60,26 @@ func (f *fakePaymentManager) CompletedStatus(
 	return f.completedStatus(ctx, actor, propertyID, paymentID)
 }
 
-func (f *fakePaymentManager) CompletedStatuses(
+// PaymentFlags defaults to two empty maps — no listed rule carries either
+// flag unless a test sets the hook.
+func (f *fakePaymentManager) PaymentFlags(
 	ctx context.Context, actor, propertyID uuid.UUID,
-) (map[uuid.UUID]bool, error) {
-	if f.completedStatuses == nil {
-		return map[uuid.UUID]bool{}, nil
+) (completed, managed map[uuid.UUID]bool, err error) {
+	if f.paymentFlags == nil {
+		return map[uuid.UUID]bool{}, map[uuid.UUID]bool{}, nil
 	}
-	return f.completedStatuses(ctx, actor, propertyID)
+	return f.paymentFlags(ctx, actor, propertyID)
+}
+
+// RentalManagedStatus defaults to false — the ordinary (unmanaged) rule the
+// older wire assertions expect unless a test sets the hook.
+func (f *fakePaymentManager) RentalManagedStatus(
+	ctx context.Context, actor, propertyID, paymentID uuid.UUID,
+) (bool, error) {
+	if f.rentalManagedStatus == nil {
+		return false, nil
+	}
+	return f.rentalManagedStatus(ctx, actor, propertyID, paymentID)
 }
 
 // The method set mirrors the port; the long signatures are the contract's.
@@ -735,6 +749,7 @@ func TestPaymentHandlers_ErrorMapping(t *testing.T) {
 		{"archived property", application.ErrArchivedProperty, http.StatusConflict, "Нельзя изменить архивный объект"},
 		{"already paused", application.ErrAlreadyPaused, http.StatusConflict, "Платёж уже на паузе"},
 		{"not paused", application.ErrNotPaused, http.StatusConflict, "Платёж не на паузе"},
+		{"rental-managed", application.ErrRentManagedPayment, http.StatusConflict, "Платёж управляется арендой"},
 		{"invalid input", application.ErrInvalidInput, http.StatusBadRequest, "Некорректные данные платежа"},
 		{"wrapped not found", wrapped(application.ErrNotFound), http.StatusNotFound, testDetailNotFmt},
 		{"internal", errors.New("boom"), http.StatusInternalServerError, ""},

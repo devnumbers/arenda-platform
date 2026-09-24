@@ -31,8 +31,10 @@ const roundCircleVariants = cva(
 export type RoundActionButtonProps = ComponentProps<'button'> &
   VariantProps<typeof roundCircleVariants> & {
     readonly icon: ReactNode;
-    /** Подпись под кругом: «На паузу», «Оплатить» и т.д.; часть имени кнопки. */
-    readonly caption: string;
+    /** Подпись под кругом: «На паузу», «Оплатить» и т.д.; часть имени
+     * кнопки. ReactNode — многострочные подписи макета (решение #802:
+     * «Завершить/аренду» переносом). */
+    readonly caption: ReactNode;
     readonly loading?: boolean;
   };
 

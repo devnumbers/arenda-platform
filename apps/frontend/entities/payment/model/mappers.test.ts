@@ -19,6 +19,7 @@ const paymentDto: PaymentDto = {
   category: { source: 'default', slug: 'rent', label: 'Арендная плата' },
   isFavorite: false,
   isCompleted: false,
+  isRentalManaged: false,
   pauses: [
     { fromDate: '2026-03-01', toDate: '2026-04-01' },
     { fromDate: '2026-05-01', toDate: null },
@@ -47,6 +48,12 @@ describe('mapPayment — DTO → entity', () => {
 
   it('nullables нормализуются к опциональности', () => {
     expect(payment.endDate).toBeUndefined();
+  });
+
+  it('isRentalManaged переносится как есть — флаг гейта мутаций аренды (#818)', () => {
+    expect(payment.isRentalManaged).toBe(false);
+    const managed = mapPayment({ ...paymentDto, isRentalManaged: true });
+    expect(managed.isRentalManaged).toBe(true);
   });
 
   it('напоминание: оффсет приходит числом, null и отсутствие — «нет напоминания» (карта #822)', () => {

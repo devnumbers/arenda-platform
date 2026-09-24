@@ -67,6 +67,13 @@ type Querier interface {
 	// are the list's rows.
 	CountGlobalPaymentRules(ctx context.Context, arg CountGlobalPaymentRulesParams) (int64, error)
 	CountNewUsersLast30dAdmin(ctx context.Context) (int64, error)
+	// The overdue-occurrences count of one rule (#817: the rentals progress'
+	// overdueMonths — «Просрочено N месяцев» counts the managed payment's
+	// planned rows dated before the owner's today). The same computed truth the
+	// listings report (domain.OperationView mirrors the predicate; ticket
+	// #461); paid facts never read as overdue, cancelled tombstones never count,
+	// the nested payment→property path is enforced in the WHERE clause.
+	CountOverdueOperationsByPayment(ctx context.Context, arg CountOverdueOperationsByPaymentParams) (int64, error)
 	// The paid-operations count of one rule (ADR 0053 §2: the rentals progress'
 	// paidMonths — «N из M месяцев» counts the managed payment's paid facts).
 	// Cancelled tombstones never count; the nested payment→property path is
@@ -892,6 +899,11 @@ type Querier interface {
 	// (name, address) travels for the publication cards (решение владельца
 	// 19.09.2026, #745).
 	ListRentalCompletedTargets(ctx context.Context, arg ListRentalCompletedTargetsParams) ([]ListRentalCompletedTargetsRow, error)
+	// The scope's payment ids a rental row references (any rental state) — the
+	// payments rule-mutation gate's input and the isRentalManaged read flag
+	// (ADR 0053, ticket #818): the rent payment is created, edited and deleted
+	// only through the rental. An empty id list never reaches the query.
+	ListRentalManagedPaymentIDs(ctx context.Context, arg ListRentalManagedPaymentIDsParams) ([]pgtype.UUID, error)
 	// The rental scan's booking list of the completed boundary (issue #777):
 	// the unfinished rentals whose boundary — 00:00 of the day after the
 	// planned end read in the owner's timezone — falls in the window (from,

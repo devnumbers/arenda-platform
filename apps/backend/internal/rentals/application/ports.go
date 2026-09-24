@@ -159,6 +159,14 @@ type RentPaymentGateway interface {
 	// CountPaidOperations counts the payment's paid operations — the
 	// progress' paidMonths, «N из M» (ADR 0053 §2).
 	CountPaidOperations(ctx context.Context, scope, propertyID, paymentID uuid.UUID) (int, error)
+	// CountOverdueOccurrences counts the payment's overdue occurrences — the
+	// planned rows dated before the owner's today — the progress'
+	// overdueMonths, «Просрочено N месяцев» (#817). An upcoming rental has
+	// none by construction: the occurrences begin at the start, and the
+	// start is never in the past.
+	CountOverdueOccurrences(
+		ctx context.Context, scope, propertyID, paymentID uuid.UUID, today time.Time,
+	) (int, error)
 	// SummarizePaidOperations totals the property's paid operations — of any
 	// payment and manual ones — with the operation date inside [from, until]
 	// (решение №13: the period is by the operation date, not the payment

@@ -7,19 +7,22 @@ import { Calendar, Cancel } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
-import { addDays, cmp, type IsoDate } from '@/shared/lib/calendar';
+import type { IsoDate } from '@/shared/lib/calendar';
 import { formatDayMonthWithYear } from '@/shared/lib/date-format';
-import { currentRentalOf, rentalExtendSuccessCopy, useRentals, useUpdateRental } from '@/features/rentals';
+import {
+  currentRentalOf,
+  rentalExtendMinDate,
+  rentalExtendSuccessCopy,
+  useRentals,
+  useUpdateRental,
+} from '@/features/rentals';
 import type { Rental } from '@/entities/rental';
 import {
   Button,
   CalendarDatePicker,
   IconButton,
-  Modal,
-  ModalContent,
   PageContent,
   Skeleton,
-  StatusIcon,
   StickyBottomBar,
   TopNav,
 } from '@/shared/ui/design';
@@ -28,19 +31,23 @@ import { PickerTriggerBox } from './wizard-chrome';
 /**
  * Экран «Продление аренды» (#533, Figma 1428:58218): вопрос «На сколько
  * продлить аренду?» с единственным полем «Новая дата» — канонический
- * календарь с нижней границей «строго позже текущего окончания» (правило
- * продления, ADR 0053 §3/§5; у needs_attention-аренды окончание в прошлом —
- * нижняя граница today, сервер PATCH принимает даты не раньше сегодняшнего).
+ * календарь. Нижняя граница — правило продления (ADR 0053 §3/§5): у срочной
+ * «строго позже текущего окончания», у needs_attention (окончание в прошлом)
+ * и у бессрочной — today (контракт PATCH: даты не раньше сегодняшнего),
+ * у незапущенной бессрочной — день после начала (rentalExtendMinDate).
  * Условия (сумма/день оплаты) в продлении не меняются — PATCH несёт только
  * plannedEndDate, сервер синхронно переставляет платёж аренды. Шапка —
  * крестик без заголовка (как шаг 1 визарда #530), панель «Отменить /
  * Продлить»: продление притушено, пока дата не выбрана (макет — Disabled).
- * Успех — попап «Аренда продлена еще на N месяцев до ДД.ММ.ГГГГ»
- * (Figma 1550:93723); детализация пересчитывается инвалидацией useUpdateRental.
+ * Успех — тост «Аренда продлена еще на N месяцев до ДД.ММ.ГГГГ» на
+ * детализации (1550:93664, решение #802 23.09; прежний попап 1550:93723
+ * заменён); детализация пересчитывается инвалидацией useUpdateRental.
  *
  * Точка входа — круглая «Продлить аренду» на детализации (там и живёт
- * доступность: Full Access и только срочная аренда). Бессрочной продлевать
- * нечего — сюда не попадают; прямой заход показывает честный отказ.
+ * доступность: Full Access). Продление — сценарий любой незавершённой
+ * аренды; бессрочной задаёт первую дату окончания (домен «Продление»,
+ * rentals/CONTEXT.md; бэк-контракт PATCH это же и держит — seam-тест
+ * бессрочной в rentals_seam_integration_test.go).
  */
 export function RentalExtendScreen({
   propertyId,
@@ -91,18 +98,6 @@ export function RentalExtendScreen({
     );
   }
 
-  if (rental.plannedEndDate === null) {
-    return (
-      <ExtendShell onClose={close}>
-        <div className="pt-6">
-          <p className="text-center text-base leading-[18px] text-content-secondary">
-            Бессрочную аренду продлить нельзя — у неё нет даты окончания
-          </p>
-        </div>
-      </ExtendShell>
-    );
-  }
-
   return <RentalExtendForm key={rental.id} rental={rental} onClose={close} />;
 }
 
@@ -134,7 +129,7 @@ function ExtendTopNav({ onClose }: { readonly onClose: () => void }): JSX.Elemen
   );
 }
 
-/** Форма продления: черновик даты и попап успеха живут здесь; key по id
+/** Форма продления: черновик даты живёт здесь; key по id
  * аренды пересоздаёт форму при смене данных (прецедент правки условий). */
 function RentalExtendForm({
   rental,
@@ -151,26 +146,24 @@ function RentalExtendForm({
 
   const [newEnd, setNewEnd] = useState<IsoDate | undefined>(undefined);
   const [pickerOpen, setPickerOpen] = useState(false);
-  // Старое окончание фиксируется на момент сабмита: после успешного PATCH
-  // аренда перечитается уже с новой датой, а попапу нужна прежняя.
-  const [extended, setExtended] = useState<{ previousEnd: IsoDate; newEnd: IsoDate } | null>(
-    null,
-  );
 
   // «Строго позже текущего окончания» (ADR 0053 §5); у needs_attention
-  // окончание в прошлом — нижняя граница today (контракт PATCH: не в прошлое).
-  const minDate =
-    currentEnd !== null && cmp(currentEnd, today) >= 0 ? addDays(currentEnd, 1) : today;
+  // окончание в прошлом, а у бессрочной его нет вовсе — границу ведёт
+  // контракт PATCH (не в прошлое и не раньше дня после начала).
+  const minDate = rentalExtendMinDate(currentEnd, rental.startDate, today);
 
   const extend = async (): Promise<void> => {
-    // Оба условия гарантированы UI (кнопка живёт только у срочной аренды
-    // с выбранной датой); проверка — для типизации снимка старой даты.
-    if (newEnd === undefined || currentEnd === null) {
+    // Гарантировано UI (кнопка живёт только с выбранной датой).
+    if (newEnd === undefined) {
       return;
     }
     try {
       await updateRental.mutateAsync({ plannedEndDate: newEnd });
-      setExtended({ previousEnd: currentEnd, newEnd });
+      // Успех — тост на детализации (1550:93664): текст считает либа
+      // success-copy, старое окончание снимком до перечитания аренды
+      // (у бессрочной его нет — тост без счётчика месяцев).
+      notify.success(rentalExtendSuccessCopy({ previousEnd: currentEnd, newEnd }));
+      onClose();
     } catch (error) {
       notify.scenarios.rentals.updateError(error);
     }
@@ -233,30 +226,6 @@ function RentalExtendForm({
             setPickerOpen(false);
           }}
         />
-      )}
-
-      {/* Попап успеха (Figma 1550:93723): зелёная галочка 48 и текст
-          успеха; детализация под ним уже перечитана инвалидацией. Крестик —
-          явно в углу карточки: канонный showClose живёт в ветке видимого
-          заголовка, а попап без заголовка (title sr-only ради a11y). На
-          мобиле закрытие — свайп/оверлей, как у всех шитов канона. */}
-      {extended !== null && (
-        <Modal open onOpenChange={(open) => open || onClose()}>
-          <ModalContent title="Аренда продлена" titleSrOnly>
-            <IconButton
-              icon={<Cancel />}
-              label="Закрыть"
-              onClick={onClose}
-              className="hidden desktop:absolute desktop:right-3 desktop:top-3 desktop:block"
-            />
-            <div className="flex flex-col items-center gap-2">
-              <StatusIcon status="good" className="h-12 w-12" />
-              <p className="text-center text-base font-medium leading-[18px] text-success">
-                {rentalExtendSuccessCopy(extended)}
-              </p>
-            </div>
-          </ModalContent>
-        </Modal>
       )}
     </>
   );

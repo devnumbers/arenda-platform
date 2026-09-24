@@ -105,10 +105,13 @@ type CompleteRentalCommand struct {
 // RentalProgress is the «N из M месяцев» read model (ADR 0053 §2): paidMonths
 // counts the managed payment's paid operations; totalMonths and
 // monthsRemaining exist for a term rental only (nil for an open-ended one).
+// OverdueMonths is the managed payment's overdue occurrences — «Просрочено
+// N месяцев» (#817); nil when nothing is overdue (no red line on the card).
 type RentalProgress struct {
 	PaidMonths      int
 	TotalMonths     *int
 	MonthsRemaining *int
+	OverdueMonths   *int
 }
 
 // RentalView is the assembled rental response model (ADR 0053 §4): the
@@ -529,7 +532,13 @@ func (s *RentalService) assembleView(
 	if err != nil {
 		return RentalView{}, fmt.Errorf("count paid operations: %w", err)
 	}
-	progress := RentalProgress{PaidMonths: paid}
+	// Серверная просрочка (#817, ADR 0053 §2 — всё считает сервер): счётчик
+	// planned-вхождений раньше «сегодня» собственника; ноль — null.
+	overdue, err := s.gateway.CountOverdueOccurrences(ctx, scope, propertyID, rental.PaymentID, today)
+	if err != nil {
+		return RentalView{}, fmt.Errorf("count overdue occurrences: %w", err)
+	}
+	progress := RentalProgress{PaidMonths: paid, OverdueMonths: nilIfZero(overdue)}
 	if rental.PlannedEndDate != nil {
 		total := domain.CountPaymentDays(rental.StartDate, *rental.PlannedEndDate, state.PaymentDay)
 		progress.TotalMonths = &total
@@ -544,6 +553,15 @@ func (s *RentalService) assembleView(
 		Progress:    progress,
 		Today:       today,
 	}, nil
+}
+
+// nilIfZero folds a zero count into null — the wire's «просрочки нет»
+// (#817: без просрочки красной строки нет).
+func nilIfZero(n int) *int {
+	if n == 0 {
+		return nil
+	}
+	return &n
 }
 
 // tenantExists resolves the tenant contact through the book reader; the

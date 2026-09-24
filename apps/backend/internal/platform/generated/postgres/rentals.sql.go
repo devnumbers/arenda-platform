@@ -238,6 +238,42 @@ func (q *Queries) InsertRental(ctx context.Context, arg InsertRentalParams) erro
 	return err
 }
 
+const listRentalManagedPaymentIDs = `-- name: ListRentalManagedPaymentIDs :many
+SELECT payment_id
+FROM rentals
+WHERE owner_id = $1
+  AND payment_id = ANY($2::uuid[])
+`
+
+type ListRentalManagedPaymentIDsParams struct {
+	OwnerID    pgtype.UUID   `json:"owner_id"`
+	PaymentIds []pgtype.UUID `json:"payment_ids"`
+}
+
+// The scope's payment ids a rental row references (any rental state) — the
+// payments rule-mutation gate's input and the isRentalManaged read flag
+// (ADR 0053, ticket #818): the rent payment is created, edited and deleted
+// only through the rental. An empty id list never reaches the query.
+func (q *Queries) ListRentalManagedPaymentIDs(ctx context.Context, arg ListRentalManagedPaymentIDsParams) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listRentalManagedPaymentIDs, arg.OwnerID, arg.PaymentIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var payment_id pgtype.UUID
+		if err := rows.Scan(&payment_id); err != nil {
+			return nil, err
+		}
+		items = append(items, payment_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRentalsByProperty = `-- name: ListRentalsByProperty :many
 SELECT r.id,
        r.owner_id,

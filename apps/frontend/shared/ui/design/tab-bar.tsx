@@ -50,14 +50,19 @@ const TabBarSuppressionContext = createContext<TabBarSuppression>(absentSuppress
 const useIsomorphicLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
 /** Глушит TabBar, пока монтирован вызывавший компонент (канонично —
- * StickyBottomBar). Layout-эффект меняет счётчик до отрисовки кадра —
- * футер не мигает поверх нижней кнопки действия; серверу эффект не нужен. */
-export function useTabBarSuppression(): void {
+ * StickyBottomBar); enabled=false — экран живёт с футером (условные
+ * ветви вроде создания контакта вне визарда #807). Layout-эффект меняет
+ * счётчик до отрисовки кадра — футер не мигает поверх нижней кнопки
+ * действия; серверу эффект не нужен. */
+export function useTabBarSuppression(enabled = true): void {
   const { acquire, release } = useContext(TabBarSuppressionContext);
   useIsomorphicLayoutEffect(() => {
+    if (!enabled) {
+      return;
+    }
     acquire();
     return release;
-  }, [acquire, release]);
+  }, [enabled, acquire, release]);
 }
 
 /** Состояние глушения — для нижнего хрома, который прячется вместе с

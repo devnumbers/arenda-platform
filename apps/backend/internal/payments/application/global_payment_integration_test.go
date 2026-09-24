@@ -21,6 +21,7 @@ import (
 	paymentspg "github.com/nambers/arenda-planform/apps/backend/internal/payments/adapters/postgres"
 	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
 	pgdb "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
+	rentalspg "github.com/nambers/arenda-planform/apps/backend/internal/rentals/adapters/postgres"
 )
 
 // dateOf renders a row's calendar date the way the assertions read it.
@@ -51,6 +52,7 @@ func (h *paymentsHarness) globalSvc() *paymentsapp.GlobalPaymentService {
 		paymentspg.NewOperationStore(h.pool),
 		paymentspg.NewPropertyStore(h.pool),
 		store,
+		rentalspg.NewRentalLinkReader(h.pool),
 		audit,
 		pgdb.NewUoW(h.pool, slog.New(slog.DiscardHandler)),
 	)

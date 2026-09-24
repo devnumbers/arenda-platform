@@ -9,6 +9,7 @@ import type {
   RentalProgress,
   RentalTenant,
 } from '@/entities/rental';
+import { monthsWord } from './months-word';
 import { paymentDayLabel, utilitiesLabel } from './wizard-model';
 
 /**
@@ -23,10 +24,6 @@ export type RentalTermsRow = {
   readonly label: string;
   readonly value: string;
 };
-
-function monthsWord(count: number): string {
-  return pluralize(count, 'месяц', 'месяца', 'месяцев');
-}
 
 /** Существительное после «из N» — родительный падеж: «из 24 месяцев»,
  * «из 21 месяца» (макет 1232:61492); единственное число — у 1, 21, 31…
@@ -65,15 +62,42 @@ export function rentalNextPaymentLine(nextPayment: RentalNextPayment): string {
   return `${formatOverdueDays(nextPayment.daysUntil)} до следующего платежа`;
 }
 
+/** Красная строка просрочки карточки прогресса (#817, решение владельца
+ * 23.09): «Просрочен 1 месяц» / «Просрочено 2 месяца»; единственное число —
+ * у 1, 21, 31… (11, 111 — множительное). N — платёжные месяцы, счётчик
+ * серверный (ADR 0053 §2). */
+export function rentalOverdueLine(overdueMonths: number): string {
+  const verb = pluralize(overdueMonths, 'Просрочен', 'Просрочено', 'Просрочено');
+  return `${verb} ${overdueMonths} ${monthsWord(overdueMonths)}`;
+}
+
 /** Строка «Осталось 23 месяца аренды»; у бессрочной остатка нет — строки нет.
  * Глагол согласуется числом: «Остался 21 месяц», но «Осталось 11 месяцев». */
 export function rentalRemainingLine(monthsRemaining: number | null): string | undefined {
   if (monthsRemaining === null) {
     return undefined;
   }
-  const singular = monthsRemaining % 10 === 1 && monthsRemaining % 100 !== 11;
-  const remained = singular ? 'Остался' : 'Осталось';
+  const remained = pluralize(monthsRemaining, 'Остался', 'Осталось', 'Осталось');
   return `${remained} ${monthsRemaining} ${monthsWord(monthsRemaining)} аренды`;
+}
+
+/** Карточка прогресса на детализации видима, пока ей есть что жить: со
+ * следующим платежом — строка дней и бар (1232:61259), без него — строка
+ * остатка или прошедших месяцев, просрочка — красная строка (#817). У
+ * срочной в день планового окончания и в «Ожидает действия» содержимого
+ * нет — карточка прячется целиком: пустого контейнера макеты не рисуют
+ * (F1, решение владельца 23.09); задолженность появляется — содержимое
+ * снова есть. */
+export function hasProgressCard(
+  nextPayment: RentalNextPayment | null,
+  progress: RentalProgress,
+): boolean {
+  return (
+    nextPayment !== null ||
+    progress.overdueMonths !== null ||
+    progress.totalMonths === null ||
+    (progress.monthsRemaining ?? 0) > 0
+  );
 }
 
 /** Строка бессрочной аренды (решение владельца 2026-09-07): полных месяцев
@@ -84,8 +108,8 @@ export function rentalElapsedLine(startDate: IsoDate, today: IsoDate): string {
   if (elapsed === 0) {
     return 'Идёт 1 месяц';
   }
-  const singular = elapsed % 10 === 1 && elapsed % 100 !== 11;
-  return `${singular ? 'Прошёл' : 'Прошло'} ${elapsed} ${monthsWord(elapsed)}`;
+  const verb = pluralize(elapsed, 'Прошёл', 'Прошло', 'Прошло');
+  return `${verb} ${elapsed} ${monthsWord(elapsed)}`;
 }
 
 /** Плата условиями аренды: «56 000 ₽ в месяц» (Figma 1232:61525). */

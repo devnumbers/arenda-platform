@@ -20,6 +20,7 @@ type txStores struct {
 	operations     OperationStore
 	properties     PropertyStore
 	favoriteOrders GlobalPaymentOrderStore
+	rentalManaged  RentalManagedReader
 	audit          auditapp.Recorder
 }
 
@@ -35,6 +36,7 @@ type txStoreFactory struct {
 	operations     OperationStore
 	properties     PropertyStore
 	favoriteOrders GlobalPaymentOrderStore
+	rentalManaged  RentalManagedReader
 	audit          auditapp.Recorder
 	uow            transaction.UoW
 }
@@ -48,7 +50,7 @@ type txStoreFactory struct {
 func NewTxStoreFactory(
 	tick TickStore, payments PaymentStore, operations OperationStore,
 	properties PropertyStore, favoriteOrders GlobalPaymentOrderStore,
-	audit auditapp.Recorder, uow transaction.UoW,
+	rentalManaged RentalManagedReader, audit auditapp.Recorder, uow transaction.UoW,
 ) txStoreFactory {
 	if audit == nil {
 		audit = auditapp.Noop{}
@@ -59,6 +61,7 @@ func NewTxStoreFactory(
 		operations:     operations,
 		properties:     properties,
 		favoriteOrders: favoriteOrders,
+		rentalManaged:  rentalManaged,
 		audit:          audit,
 		uow:            uow,
 	}
@@ -93,12 +96,17 @@ func (f *txStoreFactory) runInTx(ctx context.Context, work func(*txStores) error
 		if err != nil {
 			return fmt.Errorf("bind favorite order store to tx: %w", err)
 		}
+		rentalManaged, err := f.rentalManaged.WithTx(tx)
+		if err != nil {
+			return fmt.Errorf("bind rental-managed reader to tx: %w", err)
+		}
 		return work(&txStores{
 			tick:           tick,
 			payments:       payments,
 			operations:     operations,
 			properties:     properties,
 			favoriteOrders: favoriteOrders,
+			rentalManaged:  rentalManaged,
 			audit:          f.audit.WithTx(tx),
 		})
 	})

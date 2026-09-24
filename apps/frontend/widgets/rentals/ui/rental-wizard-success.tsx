@@ -10,10 +10,11 @@ import { Button, StatusIcon, StickyBottomBar } from '@/shared/ui/design';
 import { WizardBottomBar } from './wizard-chrome';
 
 /**
- * Экран успеха визарда аренды (Figma 1371:63753): синий круг 96 с ключом и
- * галочкой «выполнено», заголовок «Вы создали аренду» и описание условий
- * (день оплаты + сумма + способ отметки). Кнопка «Открыть аренду» макета
- * ведёт на детализацию аренды — экран появился в #531.
+ * Экран успеха визарда аренды (Figma 1371:63753 / 1419:27092): синий круг
+ * 96 с ключом и галочкой «выполнено», заголовок «Вы создали аренду» и
+ * описание условий (день оплаты + сумма + способ отметки). Кнопки по
+ * макету (свап #807): «Хорошо» — синяя primary закрывает поток (возврат на
+ * объект), «Открыть аренду» — серая secondary ведёт на детализацию (#531).
  */
 
 export type RentalWizardSuccessProps = {
@@ -57,16 +58,19 @@ export function RentalWizardSuccess({
       </div>
       <StickyBottomBar>
         <WizardBottomBar>
-          {/* Завершение потока созданием → новая страница заменяет
-              переходную запись истории (CODING_STANDARDS, Navigation). */}
+          {/* «Хорошо» закрывает поток: история назад, черновик остаётся в
+              localStorage. «Открыть аренду» завершает поток созданием →
+              новая страница заменяет переходную запись истории
+              (CODING_STANDARDS, Navigation). */}
+          <Button className="w-full" onClick={onClose}>
+            Хорошо
+          </Button>
           <Button
+            variant="secondary"
             className="w-full"
             onClick={() => router.replace(ROUTES.propertyRental(created.propertyId))}
           >
             Открыть аренду
-          </Button>
-          <Button variant="secondary" className="w-full" onClick={onClose}>
-            Хорошо
           </Button>
         </WizardBottomBar>
       </StickyBottomBar>

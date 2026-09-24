@@ -69,6 +69,11 @@ export type Payment = {
   /** Завершённый платёж (CONTEXT.md): неоплаченных вхождений больше нет.
    * Вычисляется сервером на чтение, не хранится. */
   readonly isCompleted: boolean;
+  /** Платёж управляется арендой (ADR 0053, #818): сумму, день оплаты,
+   * автоплатёж и плановое окончание задаёт аренда — мутации правила
+   * (пауза, правка, удаление) дают 409, экран их скрывает; «Оплатить» и
+   * звезда остаются. */
+  readonly isRentalManaged: boolean;
   readonly pauses: ReadonlyArray<PauseInterval>;
   readonly createdAt: string;
   readonly updatedAt: string;

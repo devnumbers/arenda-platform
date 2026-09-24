@@ -18,6 +18,7 @@ function paymentFixture(overrides: Partial<Payment> = {}): Payment {
     category: { source: 'default', slug: 'internet', label: 'Интернет' },
     isFavorite: false,
     isCompleted: false,
+    isRentalManaged: false,
     pauses: [],
     createdAt: '2026-01-10T00:00:00Z',
     updatedAt: '2026-01-10T00:00:00Z',

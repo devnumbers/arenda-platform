@@ -6351,7 +6351,7 @@ components:
 
     PaymentResponse:
       type: object
-      required: [id, propertyId, type, title, amountKopecks, recurrence, since, autoPay, paymentForm, category, isFavorite, isCompleted, pauses, createdAt, updatedAt]
+      required: [id, propertyId, type, title, amountKopecks, recurrence, since, autoPay, paymentForm, category, isFavorite, isCompleted, isRentalManaged, pauses, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -6401,6 +6401,18 @@ components:
             and no occurrence beyond the last materialized date of any
             status. Never stored, never written by the client; derived on
             every read like the operation's overdue.
+        isRentalManaged:
+          type: boolean
+          description: >-
+            The rule is the rental's managed rent payment (ADR 0053, ticket
+            #818): a rental row references it, any rental state — a completed
+            rental is final and its payment is final with it. The rental is
+            the source of truth for the amount, the payment day, the
+            auto-pay and the planned end, so the rule mutations (pause,
+            resume, patch, delete) answer 409; the payment facts («Оплатить»)
+            and the favorite star stay open. The reads carry the flag so the
+            client hides the mutation actions instead of learning the 409
+            live.
         pauses:
           type: array
           items:
@@ -7829,9 +7841,12 @@ components:
       description: >-
         Прогресс «Оплачено N из M месяцев» (ADR 0053 §2): paidMonths — число
         paid-операций Платежа; totalMonths и monthsRemaining — только у
-        срочной аренды (null у бессрочной).
+        срочной аренды (null у бессрочной). overdueMonths — серверная
+        просрочка Платежа арендной платы (#817): число planned-вхождений
+        раньше «сегодня» собственника (платёжные месяцы, не календарные);
+        null — просрочки нет.
       type: object
-      required: [paidMonths, totalMonths, monthsRemaining]
+      required: [paidMonths, totalMonths, monthsRemaining, overdueMonths]
       properties:
         paidMonths:
           type: integer
@@ -7839,6 +7854,9 @@ components:
           type: integer
           nullable: true
         monthsRemaining:
+          type: integer
+          nullable: true
+        overdueMonths:
           type: integer
           nullable: true
 

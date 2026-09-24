@@ -572,6 +572,7 @@ func rentalResponse(view rentalsapp.RentalView) (openapi.RentalResponse, error) 
 			PaidMonths:      view.Progress.PaidMonths,
 			TotalMonths:     view.Progress.TotalMonths,
 			MonthsRemaining: view.Progress.MonthsRemaining,
+			OverdueMonths:   view.Progress.OverdueMonths,
 		},
 		Today:     dateToOpenAPI(view.Today),
 		CreatedAt: rental.CreatedAt,

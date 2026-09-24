@@ -6,7 +6,7 @@ import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { useDebounce } from '@/shared/lib/hooks/useDebounce';
-import { useContactBook } from '@/features/contacts';
+import { CONTACTS_SEARCH_DEBOUNCE_MS, useContactBook } from '@/features/contacts';
 import {
   IconButton,
   InfiniteQueryTail,
@@ -22,9 +22,6 @@ import {
   ContactsSearchHint,
   ContactsSkeleton,
 } from './contacts-states';
-
-/** Задержка дебаунса поиска (мс) — серверный фильтр по ?search=. */
-const SEARCH_DEBOUNCE_MS = 300;
 
 /**
  * Поиск по плоской книге (глобальная страница контактов) — отдельная
@@ -49,7 +46,7 @@ export function ContactBookSearchScreen(): JSX.Element {
     searchInputRef.current?.focus();
   }, []);
 
-  const debouncedSearch = useDebounce(search, SEARCH_DEBOUNCE_MS);
+  const debouncedSearch = useDebounce(search, CONTACTS_SEARCH_DEBOUNCE_MS);
   // Сервер фильтр не нормализует — пробелы по краям срезаем клиентски.
   const trimmedSearch = debouncedSearch.trim();
   const contactsQuery = useContactBook(trimmedSearch);

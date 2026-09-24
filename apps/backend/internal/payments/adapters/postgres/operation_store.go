@@ -176,6 +176,24 @@ func (s *OperationStore) CountPaidOperationsByPayment(
 	return count, nil
 }
 
+// CountOverdueOperationsByPayment counts one rule's overdue occurrences
+// (#817: the rentals progress' overdueMonths). The query counts in SQL —
+// the count never rides a paginated listing.
+func (s *OperationStore) CountOverdueOperationsByPayment(
+	ctx context.Context, scope, propertyID, paymentID uuid.UUID, today time.Time,
+) (int64, error) {
+	count, err := s.q().CountOverdueOperationsByPayment(ctx, postgres.CountOverdueOperationsByPaymentParams{
+		Owner:    pgconv.UUIDToPgtype(scope),
+		Property: pgconv.UUIDToPgtype(propertyID),
+		Payment:  pgconv.UUIDToPgtype(paymentID),
+		Today:    pgconv.DateToPgtype(today),
+	})
+	if err != nil {
+		return 0, fmt.Errorf("count overdue operations of payment %s: %w", paymentID, err)
+	}
+	return count, nil
+}
+
 // ListGlobal returns one page of the actor's visible paid operations — the
 // merged feed (ticket #540); the visibility predicate and the archive cut
 // are the query's. The bounds re-check the service applied

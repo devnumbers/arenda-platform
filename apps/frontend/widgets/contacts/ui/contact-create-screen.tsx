@@ -24,6 +24,7 @@ import {
   StickyBottomBar,
   TopNav,
   TopNavTitle,
+  useTabBarSuppression,
 } from '@/shared/ui/design';
 import { contactCreateGate } from '../lib/contact-create-gate';
 import { ContactForm } from './contact-form';
@@ -79,6 +80,9 @@ export function ContactCreateScreen({
   // строку-ключ: вне объекта (глобальная книга) ветка визарда недостижима,
   // фолбэк-ключ никогда не читается.
   const rentalDraft = useRentalWizardDraft(propertyId ?? '');
+  // Ветвь визарда аренды глушит футер, как его шаги (#807, P3): вне ветви
+  // (книга, страница объекта) TabBar остаётся.
+  useTabBarSuppression(returnToRentalWizard);
 
   const [form, setForm] = useState<ContactFormFields>(() => ({
     firstName: '',

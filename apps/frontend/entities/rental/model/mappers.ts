@@ -89,5 +89,6 @@ function mapProgress(dto: components['schemas']['RentalProgress']): RentalProgre
     paidMonths: dto.paidMonths,
     totalMonths: dto.totalMonths,
     monthsRemaining: dto.monthsRemaining,
+    overdueMonths: dto.overdueMonths,
   };
 }

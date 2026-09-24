@@ -100,6 +100,9 @@ export const ROUTES = {
     `/properties/${id}/payments/new?type=${type}`,
   /** Визард создания аренды (#530): 4 шага на одном маршруте. */
   propertyRentalNew: (id: string) => `/properties/${id}/rentals/new`,
+  /** Экран выбора арендатора (#807, макет 1855:64129): отдельный маршрут
+   * шага «Контакт арендатора» — поиск и плоский список книги объекта. */
+  propertyRentalNewContact: (id: string) => `/properties/${id}/rentals/new/contact`,
   /** Экран «Аренда» (#531): пустое состояние или детализация текущей аренды. */
   propertyRental: (id: string) => `/properties/${id}/rentals`,
   /** «Условия аренды» read-only (#531) — полный просмотр условий текущей аренды. */

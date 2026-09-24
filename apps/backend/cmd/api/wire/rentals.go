@@ -278,7 +278,8 @@ func (g *rentPaymentGateway) RentPaymentState(
 }
 
 // NextPlannedOccurrence returns the payment's single future planned operation
-// — the earliest view-planned (date >= today) — or nil when there is none.
+// — the earliest view-planned (date >= today) — or nil when there is none:
+// nil — будущего вхождения нет, не ошибка (ADR 0053 §2).
 func (g *rentPaymentGateway) NextPlannedOccurrence(
 	ctx context.Context, scope, propertyID, paymentID uuid.UUID, today time.Time,
 ) (*rentalsapp.PlannedOccurrence, error) {
@@ -310,6 +311,19 @@ func (g *rentPaymentGateway) CountPaidOperations(
 	ctx context.Context, scope, propertyID, paymentID uuid.UUID,
 ) (int, error) {
 	count, err := g.operations.CountPaidOperationsByPayment(ctx, scope, propertyID, paymentID)
+	if err != nil {
+		return 0, err
+	}
+	return int(count), nil
+}
+
+// CountOverdueOccurrences counts the payment's overdue occurrences — the
+// planned dated before the owner's today — the progress' overdueMonths
+// (#817).
+func (g *rentPaymentGateway) CountOverdueOccurrences(
+	ctx context.Context, scope, propertyID, paymentID uuid.UUID, today time.Time,
+) (int, error) {
+	count, err := g.operations.CountOverdueOperationsByPayment(ctx, scope, propertyID, paymentID, today)
 	if err != nil {
 		return 0, err
 	}
