@@ -42,7 +42,7 @@ import { ParticipantRightsSkeleton } from './participants-skeletons';
  * для «Действий участника в объекте» и красного отзыва — иконки обеих
  * строк стоят на одной оси. */
 const RIGHTS_ROW_ACTION_CLASS = cn(
-  'flex w-full items-center rounded-button py-1 text-left text-base font-medium outline-none',
+  'flex w-full cursor-pointer items-center rounded-button py-1 text-left text-base font-medium outline-none',
   'transition-opacity hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:opacity-80',
 );
 
