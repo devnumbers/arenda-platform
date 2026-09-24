@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, type JSX } from 'react';
-import { ArrowDown, BoldUser, Edit, Exit, EyeSmall, Kebab } from '@/shared/assets/icons';
+import { useRouter } from 'next/navigation';
+import { ArrowDown, BoldUser, Edit, Exit, EyeSmall, Kebab, TimeHistory } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { useUrlParams } from '@/shared/lib/hooks/use-url-params';
 import { ParticipantRowBadge, sortOrderPickerGroups } from '@/entities/participants';
@@ -48,10 +49,12 @@ import { ParticipantSuccessPopup } from './participant-success-popup';
  * Кебаб карточки открывает шит «Действия с объектом» (2010-132581/133849):
  * карточка объекта, ряд владельца, статус доступа и «Покинуть объект» —
  * ConfirmDialog 2010-132970 (кнопки в ряд) → DELETE members/self → попап
- * «Вы покинули объект» (2010-133204). Кебаб шапки — «Покинуть все объекты»
- * (2010-133435) → ConfirmDialog 2010-133563 (столбиком) → DELETE по каждому
- * → попап 2010-133727; частичный сбой попапом успеха не считается (канон
- * «Отозвать всех» #697). Имя и почта владельца — из деталей
+ * «Вы покинули объект» (2010-133204). Кебаб шапки — «История действий»
+ * (#843: вход приглашённого участника в общую ленту, решение владельца
+ * 24.09) и «Покинуть все объекты» (2010-133435) → ConfirmDialog
+ * 2010-133563 (столбиком) → DELETE по каждому → попап 2010-133727;
+ * частичный сбой попапом успеха не считается (канон «Отозвать всех»
+ * #697). Имя и почта владельца — из деталей
  * GET /properties/{id} (в списке их нет; owner_email добавлен контрактом
  * #702 для шита причины suspended-доступа).
  *
@@ -63,6 +66,7 @@ export function ParticipantsPropertiesScreen({
 }: {
   readonly initialOrder?: ParticipantsPropertySortOrder;
 }): JSX.Element {
+  const router = useRouter();
   const { write } = useUrlParams();
   const propertiesQuery = useProperties();
   const leave = useLeaveProperty();
@@ -164,6 +168,15 @@ export function ParticipantsPropertiesScreen({
                   <IconButton icon={<Kebab />} label="Еще — действия со списком" />
                 </MenuTrigger>
                 <MenuContent>
+                  {/* История действий (#843): вход в общую ленту для
+                    * приглашённого участника (решение владельца 24.09);
+                    * строка-вход с хаба снята тем же тикетом. */}
+                  <MenuItem
+                    icon={<TimeHistory className="h-6 w-6" />}
+                    onSelect={() => router.push(ROUTES.history)}
+                  >
+                    История действий
+                  </MenuItem>
                   <MenuItem
                     icon={<Exit className="h-6 w-6 text-error" />}
                     className="text-error"

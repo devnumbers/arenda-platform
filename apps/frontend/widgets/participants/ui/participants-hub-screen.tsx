@@ -4,7 +4,7 @@ import type { ComponentType, JSX } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Objects, SmallArrowRight, Team, TeamAdd, TimeHistory } from '@/shared/assets/icons';
+import { Objects, SmallArrowRight, Team, TeamAdd } from '@/shared/assets/icons';
 import { useParticipantsSummary } from '@/features/participants';
 import { ROUTES } from '@/shared/config/routes';
 import {
@@ -13,7 +13,6 @@ import {
   HubCollapseAnchor,
   HubTitle,
   IconButton,
-  ListRow,
   PageContent,
   StickyBottomBar,
   TopNav,
@@ -36,6 +35,10 @@ import { ParticipantSuccessPopup } from './participant-success-popup';
  * иконка-приглашение — в строке заголовка и в компакт-баре (как «+»
  * «Задач» #523). 3D-иллюстрации карточек — общие с «Возможностями»
  * «О тарифе» (тот же артефакт Figma «Новые экраны сервиса»).
+ *
+ * Строка-вход «История действий» (#709, решение владельца 22.09) снята
+ * по макету 1967-86441 (решение владельца 24.09, #843) — вход в ленту
+ * переехал в кебабы «Ваших участников» и «Объектов пользователей».
  */
 export function ParticipantsHubScreen(): JSX.Element {
   const router = useRouter();
@@ -99,23 +102,6 @@ export function ParticipantsHubScreen(): JSX.Element {
           </div>
         )}
 
-        {/* Лента «История действий» (#709): вход в журнал по всем доступным
-         * объектам (решение владельца 22.09 — точка входа карты #704 на
-         * этом хабе). Живёт вне загрузки summary: раздел есть у любого
-         * читателя, даже без участников. */}
-        <div className="mt-4">
-          <ListRow
-            leading={
-              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-surface-muted">
-                <TimeHistory className="h-6 w-6 text-content" />
-              </span>
-            }
-            title="История действий"
-            subtitle="Что происходило с вашими объектами"
-            trailing={<SmallArrowRight className="h-6 w-6 text-content-tertiary" />}
-            onSelect={() => router.push(ROUTES.history)}
-          />
-        </div>
       </PageContent>
 
       <StickyBottomBar>

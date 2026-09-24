@@ -12,8 +12,9 @@ import {
 // Экран «История действий» (карта #704, тикет #709): мессенджерская лента
 // по всем доступным объектам — новые снизу, прокрутка вверх догружает
 // старое (двусторонний keyset #708, порция 50). Группировка «дата →
-// объект → актёр → строки»; вход — строка на хабе «Совместный доступ»
-// (решение владельца 22.09). Журнал сеется прямым INSERT'ом в
+// объект → актёр → строки»; вход — кебаб «Ваших участников» (#843,
+// макет 2008-47514; решение владельца 22.09 о строке на хабе заменено —
+// #843). Журнал сеется прямым INSERT'ом в
 // action_journal (запись журнала идёт в транзакциях мутаций — сиду
 // проще класть строки тем же контрактом, что миграция 000136).
 
@@ -30,6 +31,8 @@ function expectedDayChip(daysAgo: number): string {
 function ownerActorId(user: SeededUser): string {
   return `(SELECT id FROM users WHERE email = '${user.email}')`;
 }
+
+const header = 'header[aria-label="Навигация экрана"]';
 
 function memberActorId(): string {
   return `(SELECT id FROM users WHERE email = 'e2e-member@example.com')`;
@@ -70,13 +73,14 @@ async function seedEntry(entry: SeededEntry, user: SeededUser): Promise<string> 
   `);
 }
 
-test('вход с хаба «Совместный доступ», пустая лента — «Действий не было» и кнопка «Настройки»', async ({ page, seededUser }, testInfo) => {
+test('вход с кебаба «Ваших участников», пустая лента — «Действий не было» и кнопка «Настройки»', async ({ page, seededUser }, testInfo) => {
   await execE2eSql('DELETE FROM action_journal;');
   await openCabinetWithSeededSession(page, seededUser);
 
-  // Точка входа — строка на хабе (решение владельца 22.09).
-  await page.goto('/participants');
-  await page.getByRole('button', { name: /История действий/ }).click();
+  // Точка входа — кебаб «Ваших участников» (#843, макет 2008-47514).
+  await page.goto('/participants/list');
+  await page.locator(header).getByRole('button', { name: 'Еще — действия со списком' }).click();
+  await page.getByRole('menuitem', { name: 'История действий' }).click();
   await page.waitForURL('**/history');
 
   await expect(page.getByText('Действий не было')).toBeVisible();

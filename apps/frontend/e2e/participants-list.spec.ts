@@ -8,7 +8,9 @@ import {
 
 // Экран «Ваши участники» (карта #692, тикет #697): список агрегатов
 // GET /participants, чипы агрегат-статуса, клиентские поиск и сортировка
-// «Имя», кебаб «Отозвать доступ всем». Сид: владелец «Квартиры на Ленина»
+// «Имя», кебаб-трио «Пригласить участника» / «История действий» /
+// «Отозвать доступ всем» (#843, макет 2008-47514). Сид: владелец
+// «Квартиры на Ленина»
 // с двумя участниками — Мария Петрова (full_access) и Сергей Сидоров
 // (viewer), оба active на одном объекте из трёх в скоупе владельца →
 // агрегат-статус partial, чип «Доступно 1 объект».
@@ -96,6 +98,23 @@ test('сортировка «Имя»: «Убывание» переворачи
   const rows = page.getByRole('button', { name: /@example\.com/ });
   await expect(rows).toHaveCount(2);
   await expect(rows.first()).toContainText('Сергей Сидоров');
+});
+
+test('кебаб: трио пунктов по макету 2008-47514, «История действий» ведёт в ленту', async ({ page, seededUser }) => {
+  await openCabinetWithSeededSession(page, seededUser);
+  await page.goto('/participants/list');
+
+  await page.locator(header).getByRole('button', { name: 'Еще — действия со списком' }).click();
+
+  // Состав кебаба (#843): «Пригласить участника», «История действий» и
+  // красное «Отозвать доступ всем» — анатомия макета 2008-47514.
+  await expect(page.getByRole('menuitem', { name: 'Пригласить участника' })).toBeVisible();
+  const historyItem = page.getByRole('menuitem', { name: 'История действий' });
+  await expect(historyItem).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Отозвать доступ всем' })).toBeVisible();
+
+  await historyItem.click();
+  await page.waitForURL('**/history');
 });
 
 test('кебаб: «Отозвать доступ всем» открывает подтверждение, «Отмена» ничего не делает', async ({ page, seededUser }) => {
