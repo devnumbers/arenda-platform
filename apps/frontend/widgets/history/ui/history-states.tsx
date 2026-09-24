@@ -35,10 +35,11 @@ function HistoryFeedSkeletonActorCard({ rows }: { readonly rows: number }): JSX.
   );
 }
 
-/** Плашка дня скелетона. */
+/** Плашка дня скелетона: зазор до блоков дня — 24, как у реальной
+ * липкой плашки ленты (§7 #604 — контент встаёт на место скелетона). */
 function HistoryFeedSkeletonDayPill(): JSX.Element {
   return (
-    <div className="mb-3 flex justify-center">
+    <div className="mb-6 flex justify-center">
       <Skeleton className="h-[31px] w-28 rounded-pill" />
     </div>
   );
@@ -88,7 +89,7 @@ function HistoryFeedSkeletonGroup(): JSX.Element {
  * актёров) — лента по всем объектам реально длинная. */
 export function HistoryFeedSkeleton(): JSX.Element {
   return (
-    <div aria-hidden className="pt-2">
+    <div aria-hidden>
       <HistoryFeedSkeletonGroup />
       <HistoryFeedSkeletonGroup />
     </div>
@@ -101,7 +102,7 @@ export function HistoryFeedSkeleton(): JSX.Element {
  * 24.09). */
 export function HistoryMemberFeedSkeleton(): JSX.Element {
   return (
-    <div aria-hidden className="pt-2">
+    <div aria-hidden>
       <HistoryFeedSkeletonDayPill />
       <div className="flex flex-col gap-3">
         <HistoryFeedSkeletonObjectHeader />
@@ -119,7 +120,7 @@ export function HistoryMemberFeedSkeleton(): JSX.Element {
  * актёров. */
 export function HistoryPropertyFeedSkeleton(): JSX.Element {
   return (
-    <div aria-hidden className="pt-2">
+    <div aria-hidden>
       <HistoryFeedSkeletonPinnedProperty />
       <HistoryFeedSkeletonDayPill />
       <div className="flex flex-col gap-1.5">
