@@ -1,5 +1,6 @@
 import type { IsoDate, OperationsCategorySummary } from '@/entities/payment';
 import { formatIsoRangeChipLabel } from '@/shared/lib/date-format';
+import { readCsvParam } from '@/shared/lib/parse-csv-uuid-param';
 import { readIsoRangeParam, type UrlParamsSource } from '@/shared/lib/parse-iso-range-param';
 import { buildUrlWithParams } from '@/shared/lib/url-params';
 import { pluralize } from '@/shared/lib/pluralize';
@@ -52,22 +53,17 @@ export type OperationsParamsSource = UrlParamsSource;
  * Чтение фильтров из URL: период — канон readIsoRangeParam (битые даты,
  * перевёрнутый или целиком будущий период отбрасываются — экраны операций
  * только paid, будущего в скоупе не бывает, резолюция #474; будущий хвост
- * обрезается «сегодня»). Категории — непустые слаги без дублей.
+ * обрезается «сегодня»). Категории — канон readCsvParam без предиката:
+ * непустые слаги без дублей, порядок первого появления сохранён.
  */
 export function readOperationsFilters(
   params: OperationsParamsSource,
   today: IsoDate,
 ): OperationsFilters {
-  const categories: string[] = [];
-  const seen = new Set<string>();
-  for (const slug of (params.get('category') ?? '').split(',')) {
-    const trimmed = slug.trim();
-    if (trimmed.length > 0 && !seen.has(trimmed)) {
-      seen.add(trimmed);
-      categories.push(trimmed);
-    }
-  }
-  return { period: readIsoRangeParam(params, 'from', 'to', today), categories };
+  return {
+    period: readIsoRangeParam(params, 'from', 'to', today),
+    categories: readCsvParam(params.get('category')),
+  };
 }
 
 /**
