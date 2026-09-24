@@ -399,7 +399,7 @@ func OperationDeleted(entityID uuid.UUID, title string, due time.Time) Entry {
 		Kind:       KindOperation,
 		Action:     ActionOperationDeleted,
 		BaseAction: BaseDeleted,
-		Segments:   operationSegments("Отменённая операция: ", title, due, nil),
+		Segments:   titledWithDeadlineSegments("Отменённая операция: ", title, due, nil),
 		Context:    map[string]any{ctxKeyTitle: title, ctxKeyDueDate: formatContextDate(due)},
 	}
 }
@@ -409,12 +409,15 @@ func operationRow(action Action, base BaseAction, prefix string, entityID uuid.U
 		Kind:       KindOperation,
 		Action:     action,
 		BaseAction: base,
-		Segments:   operationSegments(prefix, title, due, entityLink(KindOperation, entityID)),
+		Segments:   titledWithDeadlineSegments(prefix, title, due, entityLink(KindOperation, entityID)),
 		Context:    map[string]any{ctxKeyTitle: title, ctxKeyDueDate: formatContextDate(due)},
 	}
 }
 
-func operationSegments(prefix, title string, due time.Time, link *Link) Segments {
+// titledWithDeadlineSegments builds the «prefix + title (срок дата)» run —
+// the shape shared by the operation and task rows; a nil link is the deleted
+// operation's no-link tombstone, a zero due drops the deadline segment.
+func titledWithDeadlineSegments(prefix, title string, due time.Time, link *Link) Segments {
 	segments := Segments{{Text: prefix}, {Text: title, Link: link}}
 	if !due.IsZero() {
 		segments = append(segments, Segment{Text: " (срок " + formatDate(due) + ")"})
@@ -511,7 +514,7 @@ func TaskCompleted(entityID uuid.UUID, title string, due time.Time) Entry {
 		Kind:       KindTask,
 		Action:     ActionTaskCompleted,
 		BaseAction: BaseCompleted,
-		Segments:   operationSegments("Задача выполнена: ", title, due, entityLink(KindTask, entityID)),
+		Segments:   titledWithDeadlineSegments("Задача выполнена: ", title, due, entityLink(KindTask, entityID)),
 		Context:    map[string]any{ctxKeyTitle: title, ctxKeyDueDate: formatContextDate(due)},
 	}
 }

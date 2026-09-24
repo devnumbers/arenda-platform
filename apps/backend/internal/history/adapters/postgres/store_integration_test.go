@@ -11,7 +11,6 @@ package postgres_test
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -259,5 +258,3 @@ func TestStore_ActorSnapshotMaskedPhoneFallback(t *testing.T) {
 		t.Errorf("Email = %q, want empty", snap.Email)
 	}
 }
-
-var _ = fmt.Sprintf
