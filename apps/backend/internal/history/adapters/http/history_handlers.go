@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -187,32 +186,13 @@ func historyPageResponse(page historyapp.FeedPage) openapi.HistoryPageResponse {
 
 // splitCSV decodes a comma-separated wire list; blanks are dropped.
 func splitCSV(raw string) []string {
-	out := make([]string, 0, 4)
-	for part := range strings.SplitSeq(raw, ",") {
-		if part = strings.TrimSpace(part); part != "" {
-			out = append(out, part)
-		}
-	}
-	return out
+	return httpsupport.SplitCSVParam(raw)
 }
 
 // parseUUIDList decodes a comma-separated uuid list; a malformed id is the
 // contract's 400.
 func parseUUIDList(raw *string, what string) ([]uuid.UUID, error) {
-	if raw == nil || strings.TrimSpace(*raw) == "" {
-		return nil, nil
-	}
-	ids := make([]uuid.UUID, 0, 4)
-	for part := range strings.SplitSeq(*raw, ",") {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-		id, err := uuid.Parse(part)
-		if err != nil {
-			return nil, fmt.Errorf("%w: %s %q is not a uuid", historyapp.ErrInvalidInput, what, part)
-		}
-		ids = append(ids, id)
-	}
-	return ids, nil
+	return httpsupport.ParseUUIDList(raw, func(bad string) error {
+		return fmt.Errorf("%w: %s %q is not a uuid", historyapp.ErrInvalidInput, what, bad)
+	})
 }
