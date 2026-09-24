@@ -13,8 +13,8 @@ import type { PaymentReminderOffset } from '../model/types';
  * Figma 781:12299). Выбор опционален: начальное состояние — ничего
  * не выбрано; выбранный пункт не снимается повторным тапом (радио).
  * Экран настроек аренды (#826) по своему макету 1428-58757 взял селект
- * (ReminderPickerField), общий с этим пикером — кортеж опций
- * PAYMENT_REMINDER_OPTIONS.
+ * (PickerSelectField из widgets/rentals/ui/wizard-chrome), общий с этим
+ * пикером — кортеж опций PAYMENT_REMINDER_OPTIONS.
  */
 
 export type PaymentReminderPickerProps = {
