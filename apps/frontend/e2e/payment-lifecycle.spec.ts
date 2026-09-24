@@ -79,8 +79,8 @@ async function createMonthlyPaymentToday(
   }
   await page.getByRole('button', { name: 'Продолжить' }).click();
 
-  // Шаг 4 — окончание не задаём.
-  await expect(page.getByRole('heading', { name: 'Окончание платежа' })).toBeVisible();
+  // Шаг 4 — напоминание и настройки не задаём.
+  await expect(page.getByRole('heading', { name: 'Настройте платеж' })).toBeVisible();
   await page.getByRole('button', { name: 'Далее' }).click();
 
   // Шаг 5 — сумма, направление и форма оплаты. Чипы-переключатели (Figma
