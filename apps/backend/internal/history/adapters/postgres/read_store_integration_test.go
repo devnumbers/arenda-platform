@@ -6,7 +6,7 @@ package postgres_test
 // #708, ADR 0061 §7): the SQL visibility (actor_can_read_history, 000137) —
 // owner, active members (viewer included), suspended and revoked excluded,
 // the archive visible to the owner only — the bidirectional keyset walk
-// (before/after, no duplicates, no drops), the filters, the routed search
+// (before/after, no duplicates, no drops), the filters, the always-OR search
 // through the service seam and the filter-sheet options (current members ∪
 // historical actors; objects with the photo avatar).
 
@@ -185,7 +185,6 @@ func TestReadStore_InvisiblePropertyIDIsPrivacy404(t *testing.T) {
 	}
 	if page, err := svc.Feed(context.Background(), owner, historyapp.FeedQuery{PropertyIDs: []uuid.UUID{property}}); err != nil ||
 		len(page.Items) != 1 {
-		t.Fatalf("owner scoped feed: %v / %d rows", err, len(page.Items))
 		t.Fatalf("owner scoped feed: %v / %d rows", err, len(page.Items))
 	}
 }

@@ -125,9 +125,9 @@ func TestStore_InsertRoundTrip(t *testing.T) {
 	if !tsvPresent {
 		t.Error("the generated search_tsv must match its own searchable text")
 	}
-	// The search probes mirror the research #705 routing: the FTS leg for
-	// the Russian word forms, the trgm leg (ILIKE) for the substrings and
-	// the emails.
+	// The search probes exercise both legs of the always-OR predicate
+	// (research #839): the FTS leg for the Russian word forms, the trgm leg
+	// (ILIKE) for the substrings and the emails.
 	const trgmSubstring = `searchable ILIKE '%' || $1::text || '%'`
 	probes := []struct{ sql, term string }{
 		{`search_tsv @@ plainto_tsquery('russian', $1::text)`, "оплачена"},

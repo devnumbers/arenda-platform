@@ -16,8 +16,9 @@ SET statement_timeout = '5s';
 -- Поиск по большим объёмам — гибрид исследования #705: материализованная при
 -- записи колонка searchable (конкатенация сегментов + имя + почта актёра) с
 -- двумя GIN — trgm (подстроки, названия, email) и to_tsvector('russian')
--- STORED (морфология); маршрутизация trgm/fts/both — на стороне приложения
--- при чтении (тикеты #708+). Расширение pg_trgm создаётся миграцией 000124.
+-- STORED (морфология); обе ноги — один всегда-OR предикат при чтении:
+-- prefix-FTS OR ILIKE-trgm (ресерч #839); маршрутизация trgm/fts/both
+-- снесена #842. Расширение pg_trgm создаётся миграцией 000124.
 CREATE TABLE action_journal (
     id          UUID PRIMARY KEY,
     property_id UUID NOT NULL REFERENCES properties(id) ON DELETE CASCADE,

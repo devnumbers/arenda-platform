@@ -16,7 +16,8 @@ import (
 // The read service's unit seam (тикет #708): the wire params are validated
 // and folded into the store query here — the SQL carries the visibility and
 // the search predicates, the service owns the contract (400/privacy-404),
-// the cursors and the trgm/fts/both routing (research #705).
+// the cursors and the always-OR search predicate (research #839; routing
+// retired by #842).
 
 type readerFake struct {
 	listRows     []domain.FeedEntry
