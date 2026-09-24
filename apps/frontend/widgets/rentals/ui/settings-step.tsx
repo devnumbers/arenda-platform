@@ -7,7 +7,10 @@ import {
   type PaymentReminderOffset,
 } from '@/entities/payment';
 import { useMe } from '@/features/auth';
-import { EmailNotificationsRow } from '@/features/notifications';
+import {
+  emailReminderCaption,
+  EmailNotificationsRow,
+} from '@/features/notifications';
 import { AutoPayRow, PickerSelectField, WizardHeading } from './wizard-chrome';
 
 /**
@@ -16,7 +19,7 @@ import { AutoPayRow, PickerSelectField, WizardHeading } from './wizard-chrome';
  * — предвыбран «За 1 день» (RENTAL_REMINDER_DEFAULT) и виден независимо
  * от тумблера (по макету оба блока на экране одновременно), и тумблер
  * «Включить уведомления об оплате на почту» — общий EmailNotificationsRow
- * (шоткат категории «Платежи и операции»). Выбранный оффал протекает в
+ * (шоткат категории «Платежи и операции»). Выбранный оффсет протекает в
  * создаваемый арендой Платёж 1:1 (buildRentalCreateCommand). Подпись почты
  * повторяет структуру канона шага 4 платежей (#825) с арендным предметом
  * («об оплате») — сломанную грамматику макета не воспроизводим. Ранее
@@ -39,10 +42,7 @@ export function SettingsStep({
 }: SettingsStepProps): JSX.Element {
   const meQuery = useMe();
   const email = meQuery.data?.email ?? null;
-  const emailCaption =
-    email !== null
-      ? `Будем напоминать об оплате на вашу почту ${email}`
-      : 'Будем напоминать об оплате на вашу почту';
+  const emailCaption = emailReminderCaption('об оплате', email);
 
   return (
     <>

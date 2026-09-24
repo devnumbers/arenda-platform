@@ -6,7 +6,10 @@ import { SmallArrowRight } from '@/shared/assets/icons';
 import type { IsoDate, PaymentReminderOffset } from '@/entities/payment';
 import { formatDayMonthWithYear, PaymentReminderPicker } from '@/entities/payment';
 import { useMe } from '@/features/auth';
-import { EmailNotificationsRow } from '@/features/notifications';
+import {
+  emailReminderCaption,
+  EmailNotificationsRow,
+} from '@/features/notifications';
 import type { PaymentDraftType } from '@/features/payments';
 import { CalendarDatePicker, ListRow } from '@/shared/ui/design';
 import { WizardHeading } from './wizard-chrome';
@@ -48,10 +51,7 @@ export function PaymentSettingsStep({
   const [pickerOpen, setPickerOpen] = useState(false);
   const meQuery = useMe();
   const email = meQuery.data?.email ?? null;
-  const emailCaption =
-    email !== null
-      ? `Будем напоминать о платеже на вашу почту ${email}`
-      : 'Будем напоминать о платеже на вашу почту';
+  const emailCaption = emailReminderCaption('о платеже', email);
 
   return (
     <>
