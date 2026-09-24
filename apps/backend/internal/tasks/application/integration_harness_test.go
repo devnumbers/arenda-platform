@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	auditpg "github.com/nambers/arenda-planform/apps/backend/internal/audit/adapters/postgres"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	historypg "github.com/nambers/arenda-planform/apps/backend/internal/history/adapters/postgres"
 	pgdb "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/testdb"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/actor"
@@ -52,6 +53,10 @@ func (c *mutableClock) Now() time.Time { return c.now }
 // role-matrix double. The real membership policy is the access context's own
 // seam; here only the role resolution contract matters.
 type stubPropertyPolicy struct{ role sharedpolicy.Role }
+
+// taskCompletedAction is the dotted id the audit and the action journal both
+// use for a manual task completion (goconst: three test sites share it).
+const taskCompletedAction = "task.completed"
 
 func (p stubPropertyPolicy) Role(context.Context, uuid.UUID, uuid.UUID) (sharedpolicy.Role, error) {
 	return sharedpolicy.RoleNone, nil
@@ -98,7 +103,7 @@ func newTasksHarnessWithPolicy(t *testing.T, policy sharedpolicy.Policy) *tasksH
 	ownerClock := taskspg.NewOwnerClock(pool, clk)
 	zones := taskspg.NewTickZoneDirectory(pool)
 	factory := tasksapp.NewTxStoreFactory(
-		tickStore, ruleStore, taskStore, propertyStore, audit, uow,
+		tickStore, ruleStore, taskStore, propertyStore, audit, historypg.NewRecorder(pool), uow,
 	)
 
 	return &tasksHarness{

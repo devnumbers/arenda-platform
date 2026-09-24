@@ -476,14 +476,15 @@ func (s *TaskStore) DeleteCompletedJournal(ctx context.Context, scope, propertyI
 }
 
 // DeleteCompletedJournalOwnerBook removes the owner book's completed tasks
-// of deleted rules across both slices in one query and reports the count
-// (ticket #536).
-func (s *TaskStore) DeleteCompletedJournalOwnerBook(ctx context.Context, scope uuid.UUID) (int64, error) {
-	cleared, err := s.q().DeleteCompletedJournalOwnerBook(ctx, pgconv.UUIDToPgtype(scope))
+// of deleted rules across both slices in one query and returns the removed
+// rows' property anchors — one per removed row, uuid.Nil for the
+// property-less ones (ticket #536, ADR 0052).
+func (s *TaskStore) DeleteCompletedJournalOwnerBook(ctx context.Context, scope uuid.UUID) ([]uuid.UUID, error) {
+	removed, err := s.q().DeleteCompletedJournalOwnerBook(ctx, pgconv.UUIDToPgtype(scope))
 	if err != nil {
-		return 0, fmt.Errorf("delete completed journal of owner %s: %w", scope, err)
+		return nil, fmt.Errorf("delete completed journal of owner %s: %w", scope, err)
 	}
-	return cleared, nil
+	return pgconv.UUIDSliceFromPgtype(removed), nil
 }
 
 // ListUncompletedTaskIDs returns the rule's standing uncompleted tasks' ids

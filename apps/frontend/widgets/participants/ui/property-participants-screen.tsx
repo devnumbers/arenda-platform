@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   ArrowDown,
   ArrowLeft,
+  Block,
   BoldUser,
   Cancel,
   EditSmall,
@@ -14,6 +15,8 @@ import {
   Search,
   SmallArrowDown,
   SmallArrowRight,
+  TeamAdd,
+  TimeHistory,
 } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { cn } from '@/shared/lib/cn';
@@ -91,9 +94,10 @@ const EMAIL_ROLE_ICONS: Record<PropertyParticipantEmailIcon, typeof EyeSmall> = 
  * экрана (1980-108531): объём мал, серверного ?search= нет (прецедент
  * #697). Выбор обоих чипов живёт в адресе (?order= и ?role=, дефолты не
  * пишутся — конвенция состояния в адресе, #785). Кебаб (1980-139712):
- * «Пригласить участника» и «Отозвать доступ
+ * «Пригласить участника», «История объекта» (#840 — вход в ленту,
+ * прибитую к этому объекту; есть и на архивном) и «Отозвать доступ
  * всем» (2035-82619 — партия DELETE members/invitations в скоупе одного
- * объекта; пункт «История объекта» — журнал #712, вне скоупа тикета).
+ * объекта).
  * CTA «Пригласить участника» — приглашение от объекта без выбора объектов.
  *
  * Тап по ряду — страница участника (#698, агрегат): uuid юзера, у
@@ -308,6 +312,7 @@ export function PropertyParticipantsScreen({
                     <MenuContent>
                       {!isArchived && (
                         <MenuItem
+                          icon={<TeamAdd className="h-6 w-6" />}
                           onSelect={() =>
                             router.push(ROUTES.propertyParticipantsInvite(propertyId))
                           }
@@ -315,7 +320,20 @@ export function PropertyParticipantsScreen({
                           Пригласить участника
                         </MenuItem>
                       )}
-                      <MenuItem onSelect={() => setConfirmOpen(true)}>
+                      {/* История объекта (#840, макет 1980-139712): вход в
+                        * ленту, прибитую к этому объекту; есть и на
+                        * архивном — журнал живёт, пока живёт объект. */}
+                      <MenuItem
+                        icon={<TimeHistory className="h-6 w-6" />}
+                        onSelect={() => router.push(ROUTES.historyProperty(propertyId))}
+                      >
+                        История объекта
+                      </MenuItem>
+                      <MenuItem
+                        icon={<Block className="h-6 w-6 text-error" />}
+                        className="text-error"
+                        onSelect={() => setConfirmOpen(true)}
+                      >
                         Отозвать доступ всем
                       </MenuItem>
                     </MenuContent>

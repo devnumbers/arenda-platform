@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowDown, ArrowLeft, Cancel, Kebab, Search } from '@/shared/assets/icons';
+import { ArrowDown, ArrowLeft, Block, Cancel, Kebab, Search, TeamAdd, TimeHistory } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { useUrlParams } from '@/shared/lib/hooks/use-url-params';
 import {
@@ -52,9 +52,16 @@ import { ParticipantSuccessPopup } from './participant-success-popup';
  * ряды участников-агрегатов (#693) с чипом агрегат-статуса, чип-сортировка
  * «Имя» (сервер приходит name ASC — направление из меню применяется
  * клиентски; выбор живёт в адресе ?order=, дефолт «А→Я» не пишется —
- * конвенция состояния в адресе, #785), кебаб «Отозвать доступ всем» и
- * CTA «Пригласить участника» в постоянной нижней панели (макет держит
- * её во всех состояниях).
+ * конвенция состояния в адресе, #785). Кебаб действий — в шапке
+ * (trailing-слот TopNav), в постоянной нижней панели — только CTA
+ * «Пригласить участника» (макет держит панель во всех состояниях).
+ *
+ * Кебаб шапки — трио по макету 2008-47514 (#843): «Пригласить участника»
+ * (`TeamAdd`), «История действий» (`TimeHistory` — вход в общую ленту
+ * журнала; строка-вход с хаба снята тем же тикетом) и красное «Отозвать
+ * доступ всем» (`Block`) — канон кебабов #698/#840. При пустом списке
+ * кебаб скрыт по §7 — решение владельца 24.09: у читателя без
+ * участников входа в общую ленту нет.
  *
  * Поиск — иконка в шапке, поверх этого же экрана (макеты 2008-84003 /
  * 2010-134629: шапка сменяется поисковой, чип сортировки прячется):
@@ -212,7 +219,26 @@ export function ParticipantsListScreen({
                     <IconButton icon={<Kebab />} label="Еще — действия со списком" />
                   </MenuTrigger>
                   <MenuContent>
-                    <MenuItem onSelect={() => setConfirmOpen(true)}>
+                    <MenuItem
+                      icon={<TeamAdd className="h-6 w-6" />}
+                      onSelect={() => router.push(ROUTES.participantsInvite)}
+                    >
+                      Пригласить участника
+                    </MenuItem>
+                    {/* История действий (#843, макет 2008-47514): вход в
+                      * общую ленту журнала; строка с хаба снята тем же
+                      * тикетом — кебабы списков заменили её. */}
+                    <MenuItem
+                      icon={<TimeHistory className="h-6 w-6" />}
+                      onSelect={() => router.push(ROUTES.history)}
+                    >
+                      История действий
+                    </MenuItem>
+                    <MenuItem
+                      icon={<Block className="h-6 w-6 text-error" />}
+                      className="text-error"
+                      onSelect={() => setConfirmOpen(true)}
+                    >
                       Отозвать доступ всем
                     </MenuItem>
                   </MenuContent>

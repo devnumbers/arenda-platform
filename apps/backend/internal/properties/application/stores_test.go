@@ -126,7 +126,7 @@ func TestRunInTx_BuildsStoresFromTxAndCommits(t *testing.T) {
 	photos := fakePropertyPhotoRepo{}
 	limiter := fakeSubscriptionLimiter{limit: 5}
 	audit := &countingRecorder{}
-	f := NewTxStoreFactory(repo, photos, limiter, audit, fakeUoW{beginner: b})
+	f := NewTxStoreFactory(repo, photos, limiter, audit, nil, fakeUoW{beginner: b})
 
 	workCalled := false
 	var got *txStores
@@ -183,7 +183,7 @@ func TestRunInTx_OptionalStoresStayNilWhenUnwired(t *testing.T) {
 	b := &countingBeginner{}
 	repo := newFakePropertyRepo()
 	audit := &countingRecorder{}
-	f := NewTxStoreFactory(repo, nil, nil, audit, fakeUoW{beginner: b})
+	f := NewTxStoreFactory(repo, nil, nil, audit, nil, fakeUoW{beginner: b})
 
 	var got *txStores
 	err := f.runInTx(t.Context(), func(stores *txStores) error {
@@ -218,7 +218,7 @@ func TestRunInTx_LimiterBindErrorRollsBack(t *testing.T) {
 	f := NewTxStoreFactory(
 		newFakePropertyRepo(), fakePropertyPhotoRepo{},
 		bindFailingLimiter{},
-		&countingRecorder{}, fakeUoW{beginner: b},
+		&countingRecorder{}, nil, fakeUoW{beginner: b},
 	)
 
 	workCalled := false
@@ -253,7 +253,7 @@ func TestRunInTx_PanicRollsBackAndRepanics(t *testing.T) {
 	t.Parallel()
 
 	b := &countingBeginner{}
-	f := NewTxStoreFactory(newFakePropertyRepo(), nil, nil, &countingRecorder{}, fakeUoW{beginner: b})
+	f := NewTxStoreFactory(newFakePropertyRepo(), nil, nil, &countingRecorder{}, nil, fakeUoW{beginner: b})
 
 	panicVal := storesSentinelError{"kaboom"}
 	defer func() {
@@ -289,7 +289,7 @@ func TestRunInTx_RollsBackOnWorkError(t *testing.T) {
 	t.Parallel()
 
 	b := &countingBeginner{}
-	f := NewTxStoreFactory(newFakePropertyRepo(), nil, nil, &countingRecorder{}, fakeUoW{beginner: b})
+	f := NewTxStoreFactory(newFakePropertyRepo(), nil, nil, &countingRecorder{}, nil, fakeUoW{beginner: b})
 
 	workErr := errors.New("business rule violated")
 	err := f.runInTx(t.Context(), func(*txStores) error {
@@ -315,7 +315,7 @@ func TestRunInTx_RollsBackOnWorkError(t *testing.T) {
 func TestRunInTx_ReturnsErrorWhenUoWMissing(t *testing.T) {
 	t.Parallel()
 
-	f := NewTxStoreFactory(newFakePropertyRepo(), nil, nil, &countingRecorder{}, nil)
+	f := NewTxStoreFactory(newFakePropertyRepo(), nil, nil, &countingRecorder{}, nil, nil)
 
 	workCalled := false
 	err := f.runInTx(t.Context(), func(*txStores) error {

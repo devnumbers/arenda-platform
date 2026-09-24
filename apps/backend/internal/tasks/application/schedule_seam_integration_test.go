@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	auditpg "github.com/nambers/arenda-planform/apps/backend/internal/audit/adapters/postgres"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	historypg "github.com/nambers/arenda-planform/apps/backend/internal/history/adapters/postgres"
 	pgdb "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
 	taskspg "github.com/nambers/arenda-planform/apps/backend/internal/tasks/adapters/postgres"
 	tasksapp "github.com/nambers/arenda-planform/apps/backend/internal/tasks/application"
@@ -163,6 +164,7 @@ func (h *tasksHarness) withRuleLog(log *captureLog) *tasksHarness {
 		taskspg.NewTaskStore(h.pool),
 		taskspg.NewPropertyStore(h.pool),
 		auditapp.NewService(auditpg.NewWriter(h.pool), h.clock),
+		historypg.NewRecorder(h.pool),
 		pgdb.NewUoW(h.pool, slog.New(log)),
 	)
 	h.rules = tasksapp.NewRuleService(factory, taskspg.NewOwnerClock(h.pool, h.clock), nil, slog.New(log))

@@ -41,10 +41,11 @@ test('страница участника: шапка, чип агрегата, 
   await expect(apartmentRow).toBeVisible();
   await expect(apartmentRow.getByText('Редактирование')).toBeVisible();
 
-  // Кебаб шапки: приглашение и отзыв (макет 2008-48318; пункт «Действия
-  // участника» — #712, не в этом тикете).
+  // Кебаб шапки: приглашение, действия участника (#712) и отзыв
+  // (макет 2008-48318).
   await page.locator(header).getByRole('button', { name: 'Еще — действия с участником' }).click();
   await expect(page.getByRole('menuitem', { name: 'Пригласить в объект' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Действия участника' })).toBeVisible();
   await expect(page.getByRole('menuitem', { name: 'Отозвать доступ к объектам' })).toBeVisible();
   await page.keyboard.press('Escape');
 

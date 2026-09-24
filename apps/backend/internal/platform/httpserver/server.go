@@ -17,6 +17,8 @@ import (
 	billinghttp "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/http"
 	contactshttp "github.com/nambers/arenda-planform/apps/backend/internal/contacts/adapters/http"
 	contactsapp "github.com/nambers/arenda-planform/apps/backend/internal/contacts/application"
+	historyhttp "github.com/nambers/arenda-planform/apps/backend/internal/history/adapters/http"
+	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	identityhttp "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/http"
 	notificationshttp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/http"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
@@ -82,6 +84,9 @@ type Deps struct {
 	Participants         accessapp.ParticipantsManager
 	ParticipantMutations accessapp.ParticipantMutations
 	PushSubscriptions    *notificationsapp.PushSubscriptionService
+	// HistoryRead is the action journal's reading service (карта #704,
+	// тикет #708); the feed and the filter options.
+	HistoryRead *historyapp.HistoryReadService
 	// NotificationsFeed is the stored feed's reading service (#743); nil
 	// keeps the feed endpoints answering from the Unimplemented stub.
 	NotificationsFeed *notificationsapp.FeedService
@@ -198,6 +203,7 @@ func New(deps Deps) http.Handler {
 	pushSubscriptionHandlers := notificationshttp.NewPushSubscriptionHandlers(deps.PushSubscriptions, deps.VAPIDPublicKey, deps.Logger)
 	streamHandlers := notificationshttp.NewStreamHandlers(deps.NotificationsStreamHub, deps.Logger)
 	notificationPrefsHandlers := notificationshttp.NewNotificationPreferencesHandlers(deps.NotificationSettings, deps.Logger)
+	historyHandlers := historyhttp.NewHistoryHandlers(deps.HistoryRead, deps.Logger)
 	feedHandlers := notificationshttp.NewFeedHandlers(deps.NotificationsFeed, deps.Logger)
 	popupHandlers := popupshttp.NewPopupHandlers(deps.Popups, deps.Logger)
 	billingHandlers := billinghttp.NewBillingHandlers(
@@ -223,6 +229,7 @@ func New(deps Deps) http.Handler {
 		PushSubscriptionHandlers:        pushSubscriptionHandlers,
 		StreamHandlers:                  streamHandlers,
 		NotificationPreferencesHandlers: notificationPrefsHandlers,
+		HistoryHandlers:                 historyHandlers,
 		FeedHandlers:                    feedHandlers,
 		PopupHandlers:                   popupHandlers,
 		BillingHandlers:                 billingHandlers,
@@ -354,6 +361,7 @@ type composedHandler struct {
 	*notificationshttp.PushSubscriptionHandlers
 	*notificationshttp.StreamHandlers
 	*notificationshttp.NotificationPreferencesHandlers
+	*historyhttp.HistoryHandlers
 	*notificationshttp.FeedHandlers
 	*popupshttp.PopupHandlers
 	*billinghttp.BillingHandlers

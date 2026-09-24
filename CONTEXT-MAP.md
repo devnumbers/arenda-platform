@@ -16,6 +16,7 @@ DDD modular monolith (Go, `apps/backend/internal/`). Domain glossary is split by
 - [Billing](./apps/backend/internal/billing/CONTEXT.md) — tariffs, subscriptions, payment methods, T-Kassa integration.
 - [Access](./apps/backend/internal/access/CONTEXT.md) — property sharing, member roles, derived object access.
 - [Audit](./apps/backend/internal/audit/CONTEXT.md) — audit log of user/admin/system actions (append-only; records about the removed leases/operations domain are kept as history).
+- [История](./apps/backend/internal/history/CONTEXT.md) — the product «История действий» feed over properties: manual user actions with human-readable label snapshots, server-built row text and hybrid search (ADR 0061).
 - [Popups](./apps/backend/internal/popups/CONTEXT.md) — onboarding popups, popup views.
 
 ## Relationships
@@ -33,6 +34,8 @@ DDD modular monolith (Go, `apps/backend/internal/`). Domain glossary is split by
 - **Billing → Properties**: Grace entry (ADR 0055) archives the owner's active properties beyond one — the snapshot of archived ids on the subscription is the debt a later successful payment restores through the same bridge.
 - **Billing → Access**: Downgrade/grace-period may suspend shared access when limits shrink.
 - **All → Audit**: Every context records user/admin/system actions to the audit log.
+- **Properties, Rentals, Payments, Tasks, Contacts, Access → История**: manual user actions in these contexts write a history entry in the action's transaction (ADR 0061); system and auto-actions are not written in MVP. `property_id` FK CASCADE: deleting a property deletes its history.
+- **Access → История**: reading follows derived object access (ADR 0028) — a property's history is visible to its owner and members (viewer included); suspended access sees nothing.
 
 ## Shared kernel
 

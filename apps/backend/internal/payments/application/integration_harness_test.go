@@ -22,6 +22,7 @@ import (
 	accessapp "github.com/nambers/arenda-planform/apps/backend/internal/access/application"
 	auditpg "github.com/nambers/arenda-planform/apps/backend/internal/audit/adapters/postgres"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	historypg "github.com/nambers/arenda-planform/apps/backend/internal/history/adapters/postgres"
 	paymentspg "github.com/nambers/arenda-planform/apps/backend/internal/payments/adapters/postgres"
 	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/payments/domain"
@@ -105,7 +106,7 @@ func newPaymentsHarnessWithPolicy(t *testing.T, policy sharedpolicy.Policy) *pay
 	zones := paymentspg.NewTickZoneDirectory(pool)
 	factory := paymentsapp.NewTxStoreFactory(
 		tickStore, paymentStore, operationStore, propertyStore, favoriteOrders,
-		rentalspg.NewRentalLinkReader(pool), audit, uow,
+		rentalspg.NewRentalLinkReader(pool), audit, historypg.NewRecorder(pool), uow,
 	)
 
 	return &paymentsHarness{
@@ -141,6 +142,7 @@ func newPaymentsHarnessWithRealPolicy(t *testing.T) *paymentsHarness {
 		paymentspg.NewGlobalPaymentStore(h.pool),
 		rentalspg.NewRentalLinkReader(h.pool),
 		auditapp.NewService(auditpg.NewWriter(h.pool), clk),
+		historypg.NewRecorder(h.pool),
 		pgdb.NewUoW(h.pool, logger),
 	)
 	calendar := paymentspg.NewOwnerCalendar(h.pool, clk)

@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
+	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/payments/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
@@ -97,8 +98,9 @@ type ReminderOffsetUpdate struct {
 // pause, resume and favorite. Every mutation runs through the shared
 // runMutation conveyor, which owns the ordering invariants structurally: the
 // role gate, the property row lock, the owner's today, the change step, its
-// audit entry in the same transaction and the materialization tick when the
-// step's verdict asks for it. Reads never tick and never write.
+// audit entry and its action journal row (ADR 0061) in the same transaction,
+// and the materialization tick when the step's verdict asks for it. Reads
+// never tick and never write.
 type PaymentService struct {
 	txStoreFactory
 	policy    sharedpolicy.Policy
@@ -168,10 +170,13 @@ func (s *PaymentService) CreatePayment(
 			if err := stores.payments.Create(ctx, draft); err != nil {
 				return mutationOutcome[domain.Payment]{}, fmt.Errorf("create payment: %w", err)
 			}
+			created := historydomain.PaymentCreated(draft.ID, draft.Title)
+			created.Context[historydomain.CtxKeyAmountKopecks] = draft.AmountKopecks
 			return mutationOutcome[domain.Payment]{
 				Response:        draft,
 				Audit:           auditdomain.ActionPaymentCreated,
 				AuditEntityID:   &draft.ID,
+				History:         new(created),
 				Tick:            true,
 				RereadPaymentID: &draft.ID,
 			}, nil
@@ -239,11 +244,14 @@ func (s *PaymentService) UpdatePayment(
 			if err := stores.payments.DeleteFuturePlanned(ctx, rule.ID, today); err != nil {
 				return mutationOutcome[domain.Payment]{}, err
 			}
+			updated := historydomain.PaymentUpdated(rule.ID, rule.Title)
+			updated.Context[historydomain.CtxKeyAmountKopecks] = rule.AmountKopecks
 			return mutationOutcome[domain.Payment]{
 				Response:        rule,
 				Audit:           auditdomain.ActionPaymentUpdated,
 				AuditEntityID:   &rule.ID,
 				AuditCtx:        map[string]any{auditFieldsKey: updatedFields(cmd)},
+				History:         new(updated),
 				Tick:            true,
 				RereadPaymentID: &rule.ID,
 			}, nil
@@ -285,6 +293,7 @@ func (s *PaymentService) DeletePayment(
 				Audit:         auditdomain.ActionPaymentDeleted,
 				AuditEntityID: &rule.ID,
 				AuditCtx:      map[string]any{"keep_overdue": keepOverdue},
+				History:       new(historydomain.PaymentDeleted(rule.ID, rule.Title)),
 			}, nil
 		})
 	return err
@@ -317,6 +326,7 @@ func (s *PaymentService) PausePayment(
 				Response:        rule,
 				Audit:           auditdomain.ActionPaymentPaused,
 				AuditEntityID:   &rule.ID,
+				History:         new(historydomain.PaymentPaused(rule.ID, rule.Title)),
 				Tick:            true,
 				RereadPaymentID: &rule.ID,
 			}, nil
@@ -347,6 +357,7 @@ func (s *PaymentService) ResumePayment(
 				Response:        rule,
 				Audit:           auditdomain.ActionPaymentResumed,
 				AuditEntityID:   &rule.ID,
+				History:         new(historydomain.PaymentResumed(rule.ID, rule.Title)),
 				Tick:            true,
 				RereadPaymentID: &rule.ID,
 			}, nil

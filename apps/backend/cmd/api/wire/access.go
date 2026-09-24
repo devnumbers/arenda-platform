@@ -91,10 +91,10 @@ func WireAccess(
 	policy := accessapp.NewMembershipPolicy(ownerResolver, memberRepo)
 
 	// The single canonical txStoreFactory bundles the access
-	// repositories, the audit recorder, and the UoW (ADR 0033 γ-factory). It is
-	// passed to every access service so adding an Nth repository is a change
-	// here, not in several constructors.
-	factory := accessapp.NewTxStoreFactory(memberRepo, invitationRepo, p.AuditRecorder, p.UoW)
+	// repositories, the audit and history recorders, and the UoW
+	// (ADR 0033 γ-factory). It is passed to every access service so adding an
+	// Nth repository is a change here, not in several constructors.
+	factory := accessapp.NewTxStoreFactory(memberRepo, invitationRepo, p.AuditRecorder, p.HistoryRecorder, p.UoW)
 
 	// Slot coordinator bridges (issue #158, T4). The billing limiter wraps the
 	// billing application SubscriptionPropertyLimiter; the owned-property port

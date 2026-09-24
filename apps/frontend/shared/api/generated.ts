@@ -1158,6 +1158,82 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Страница ленты «История действий» (двусторонний keyset, канон #597)
+         * @description Лента журнала действий по объектам, доступным читателю (ADR 0061 §7,
+         *     карта #704, тикет #708): объекты, где читатель — владелец (включая
+         *     архивные — история переживает архив), и объекты с его активным
+         *     участием full_access/viewer (архив участнику ленту не раскрывает —
+         *     канон невидимости архива, #163). Приостановленное участие (suspended)
+         *     ленту не пускает; чужие объекты невидимы — их строк в ответе нет.
+         *
+         *     Один эндпоинт обслуживает все четыре экрана карты #704: общая лента,
+         *     история объекта (property_ids = один id), «Действия участника»
+         *     (actor_ids = один id) и «Действия участника в объекте» (actor_ids и
+         *     property_ids = по одному, сервер AND'ит их — #841). Группировка
+         *     «дата → объект → актёр» — работа экрана; счётчика «найдено N» нет
+         *     (решение #706).
+         *
+         *     Курсор двусторонний: before_cursor продолжает ленту в старую сторону
+         *     (бесконечный скролл вверх), after_cursor запрашивает записи моложе
+         *     уже загруженных (prepend новых, канон InfiniteQueryTail); передавать
+         *     оба сразу — 400. Строки страницы всегда идут по (created_at, id)
+         *     DESC. Появившиеся и удалённые между загрузками записи не дублируются
+         *     и не теряются — курсор возобновляется строго после ключа.
+         *
+         *     Поиск q ищет по конкатенации текста строки и снапшотов актёра
+         *     (имя + почта) — колонке searchable, материализованной при записи:
+         *     «как в Telegram» — по началу слова (префикс), по фрагменту внутри
+         *     слова и по словоформам; всегда-OR предикат prefix-FTS OR ILIKE на
+         *     сервере (ресерч #839, тикет #842). Суммы в поиске не участвуют
+         *     (их в тексте нет, ADR 0061 §5).
+         */
+        get: operations["getHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/history/filters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Опции шита фильтров «Истории действий»
+         * @description Опции фильтров ленты в области чтения читателя (ADR 0061 §7): те же
+         *     правила доступа, что у GET /history. «Участники» — владелец и
+         *     участники области сейчас ∪ все актёры, встречающиеся в журнале
+         *     области (отозванные и вышедшие остаются фильтруемыми — их записи
+         *     переживают отзыв). «Объекты» — объекты области с названием, адресом
+         *     и фото-аватаром (первое по времени фото, #582). property_ids сужает
+         *     область (история одного объекта); та же дисциплина privacy-404, что
+         *     у ленты: один невидимый или неизвестный id — 404 всего запроса.
+         *     Счётчики N/M групп чекбоксов клиент считает сам; сами группы
+         *     (4 основных действия, 7 видов) — статический словарь экрана
+         *     (ADR 0061 §4).
+         */
+        get: operations["getHistoryFilters"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/notifications": {
         parameters: {
             query?: never;
@@ -3473,6 +3549,146 @@ export interface components {
             /** @description Непрозрачный курсор следующей страницы; отсутствует в конце ленты. */
             next_cursor?: string;
         };
+        /** @description Страница ленты «История действий» (двусторонний keyset, ADR 0061 §7). */
+        HistoryPageResponse: {
+            items: components["schemas"]["HistoryItem"][];
+            /**
+             * @description Непрозрачный курсор страницы СТАРШЕ (в before_cursor следующего
+             *     запроса): продолжение ленты в прошлое. Отсутствует на пустой или
+             *     неполной странице — дальше старше ничего нет.
+             */
+            next_cursor?: string;
+            /**
+             * @description Непрозрачный курсор страницы МОЛОЖЕ (в after_cursor следующего
+             *     запроса): prepend записей, появившихся после загрузки видимых.
+             *     Отсутствует только на пустой странице.
+             */
+            prev_cursor?: string;
+        };
+        /**
+         * @description Одна строка ленты — снимок действия при записи (ADR 0061 §3–§6).
+         *     Переименования и удаления сущность-строку не меняют; у удалённой
+         *     сущности сегмент остаётся без ссылки. Отдельного эндпоинта деталей
+         *     нет — payload строки полон, «детали» = существующие страницы сущностей
+         *     по ссылкам сегментов (тикет #713).
+         */
+        HistoryItem: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            property_id: string;
+            /** @description Название объекта для шапки группы ленты (снимок живого названия — читается при чтении). */
+            property_name: string;
+            /**
+             * Format: uuid
+             * @description Актёр действия; null — пользователь удалён (запись обезличена,
+             *     снимки при этом остаются). Под фильтр actor_ids такие записи не
+             *     попадают.
+             */
+            actor_id?: string | null;
+            /** @description Снимок отображаемого имени актёра на момент действия. */
+            actor_name: string;
+            /** @description Снимок почты актёра (видна всем участникам, решение 2026-09-20); '' — почты не было. */
+            actor_email: string;
+            /**
+             * @description Роль актёра на объекте в момент действия (снимок, ADR 0061 §4).
+             * @enum {string}
+             */
+            actor_role: "owner" | "full_access" | "viewer";
+            /**
+             * @description Вид действия — группа чекбоксов фильтра и маршрутизатор ссылок сегментов.
+             * @enum {string}
+             */
+            kind: "property" | "rental" | "payment" | "operation" | "contact" | "task" | "member";
+            /**
+             * @description Стабильный точечный id действия (ADR 0061 §4), например property.renamed, operation.paid.
+             * @example operation.paid
+             */
+            action: string;
+            /**
+             * @description Основное действие — группа фильтра, иконка и цвет строки.
+             * @enum {string}
+             */
+            base_action: "added" | "changed" | "completed" | "deleted";
+            /**
+             * @description Текст строки, собранный сервером при записи (ADR 0061 §6): экран
+             *     рендерит фрагменты дословно, склеивая в одно предложение, и
+             *     оборачивает связанные. Актёра в тексте нет — он поле записи.
+             */
+            segments: components["schemas"]["HistorySegment"][];
+            /**
+             * @description Структурные дополнения действия (ADR 0061 §5): суммы — BIGINT
+             *     копейки, даты, old/new значения; ключи зависят от действия.
+             *     Текстом строки не является и в поиске не участвует.
+             */
+            context: Record<string, never>;
+            /**
+             * Format: date-time
+             * @description Момент действия, UTC instant; группировка «Сегодня/Вчера» — дело экрана.
+             */
+            created_at: string;
+        };
+        /** @description Один фрагмент текста строки; видимое предложение — точная склейка текстов. */
+        HistorySegment: {
+            text: string;
+            link?: components["schemas"]["HistorySegmentLink"];
+        };
+        /**
+         * @description Ссылка фрагмента на страницу сущности (синие переходы, тикет #713);
+         *     отсутствует у несвязанных фрагментов и у строк удалённых сущностей.
+         */
+        HistorySegmentLink: {
+            /** @enum {string} */
+            kind: "property" | "rental" | "payment" | "operation" | "contact" | "task" | "member";
+            /** Format: uuid */
+            id: string;
+        };
+        /** @description Опции шита фильтров «Истории действий» в области чтения (ADR 0061 §7). */
+        HistoryFiltersResponse: {
+            /**
+             * @description Владелец и текущие участники области ∪ все актёры журнала области
+             *     (отозванные остаются фильтруемыми). Именованные пользователи — по
+             *     алфавиту имени, затем фамилии; безымянные (name — маскированный
+             *     телефон) — в конце списка: сортировка по исходным колонкам, а не
+             *     по отображаемому имени.
+             */
+            participants: components["schemas"]["HistoryParticipant"][];
+            /** @description Объекты области с фото-аватаром; отсортированы по названию. */
+            objects: components["schemas"]["HistoryObject"][];
+        };
+        /**
+         * @description Участник-вариант фильтра. name — канон отображаемого имени платформы
+         *     («Имя Фамилия», иначе маскированный телефон); email — текущая почта
+         *     пользователя; first_name — имя без фамилии для строки «(Вы)»;
+         *     is_owner — замок владельца объектов (макет 2067-163528); role —
+         *     иконка роли строки (макет 2184-94261): максимальный доступ в области,
+         *     живое членство сильнее снимка журнала отозванного участника.
+         */
+        HistoryParticipant: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @description Текущая почта; '' — почты нет. */
+            email: string;
+            /** @description Имя без фамилии; '' — имени нет (тогда name — маскированный телефон). */
+            first_name: string;
+            /** @description Пользователь владеет хотя бы одним объектом области чтения. */
+            is_owner: boolean;
+            /**
+             * @description Максимальная роль в области чтения (owner совпадает с is_owner по построению).
+             * @enum {string}
+             */
+            role: "owner" | "full_access" | "viewer";
+        };
+        /** @description Объект-вариант фильтра с фото-аватаром карточки (первое по времени фото, #582). */
+        HistoryObject: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            address: string;
+            /** @description URL первого по времени фото; '' — фото нет. */
+            photo_url: string;
+        };
         UnreadCountResponse: {
             /** Format: int64 */
             count: number;
@@ -3789,6 +4005,26 @@ export interface components {
         PropertiesSearchLimit: number;
         /** @description The opaque continuation cursor from the previous page's nextCursor (keyset pagination over (name, id), ticket #597's pattern). A missing or empty value starts the list from the beginning; a malformed value is a 400. */
         PropertiesSearchCursor: string;
+        /** @description Непрозрачный курсор страницы СТАРШЕ ключа (продолжение ленты в прошлое, скролл вверх): берётся из next_cursor предыдущей страницы. Ключ keyset — (created_at, id); страница возобновляется строго после него. Отсутствие — лента читается с самых новых записей. Некорректный blob — 400; вместе с after_cursor передавать нельзя — 400. */
+        HistoryBeforeCursor: string;
+        /** @description Непрозрачный курсор страницы МОЛОЖЕ ключа (prepend новых записей, канон InfiniteQueryTail): берётся из prev_cursor страницы с самими свежими из уже загруженных записей. Порядок строк страницы — по-прежнему (created_at, id) DESC. Пустой ответ — новых записей нет. Вместе с before_cursor передавать нельзя — 400. */
+        HistoryAfterCursor: string;
+        /** @description Размер страницы (канон #597: 50 по умолчанию, 100 потолок). */
+        HistoryLimit: number;
+        /** @description Включительная нижняя граница периода по created_at — календарная дата в 00:00:00 UTC (канон фильтра периода админ-аудита). */
+        HistoryDateFrom: string;
+        /** @description Включительная верхняя граница периода по created_at — матчингется как дата + 24ч без включения самой границы (канон фильтра периода админ-аудита). */
+        HistoryDateTo: string;
+        /** @description Фильтр по основным действиям — через запятую, одно или несколько из словаря (ADR 0061 §4). Неизвестное значение — 400. */
+        HistoryBaseActions: string;
+        /** @description Фильтр по видам действий — через запятую, одно или несколько из семи групп словаря (ADR 0061 §4). Неизвестное значение — 400. */
+        HistoryKinds: string;
+        /** @description Фильтр по актёрам — uuid через запятую; один id — экран «Действия участника». Записи с обезличенным актёром (пользователь удалён) под фильтр по актёру не попадают никогда. Некорректный uuid — 400. */
+        HistoryActorIds: string;
+        /** @description Фильтр по объектам — uuid через запятую; один id — история объекта. Каждый перечисленный объект должен быть видим читателю (один невидимый или неизвестный id — privacy-404 всего запроса, канон ленты задач #547); архивные объекты владельца строки отдают, у участника архивные объекты ничего не добавляют. Некорректный uuid — 400. */
+        HistoryPropertyIds: string;
+        /** @description Поисковая строка по журналу области чтения: ищет по тексту строки и снапшотам актёра (имя, почта) — «как в Telegram»: по началу слова (префикс), по фрагменту внутри слова и по словоформам; всегда-OR предикат prefix-FTS OR ILIKE (ресерч #839, тикет #842). Пробелы по краям не участвуют; пустая строка — фильтра нет. Серверный бэкстоп: ввод 400 байт и больше — 400 (255 символа кириллицы потолок схемы превышают; практические поисковые вводы на порядок короче). */
+        HistoryQuery: string;
         /** @description Filter by the operation's view status. overdue is not stored anywhere — the server computes it against today in the property owner's timezone (planned with the date already past), so clients never need the owner's timezone. */
         OperationsStatusFilter: "planned" | "paid" | "overdue";
         /** @description Inclusive lower bound of the period on the operation date. */
@@ -6117,6 +6353,76 @@ export interface operations {
                 };
                 content?: never;
             };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getHistory: {
+        parameters: {
+            query?: {
+                /** @description Непрозрачный курсор страницы СТАРШЕ ключа (продолжение ленты в прошлое, скролл вверх): берётся из next_cursor предыдущей страницы. Ключ keyset — (created_at, id); страница возобновляется строго после него. Отсутствие — лента читается с самых новых записей. Некорректный blob — 400; вместе с after_cursor передавать нельзя — 400. */
+                before_cursor?: components["parameters"]["HistoryBeforeCursor"];
+                /** @description Непрозрачный курсор страницы МОЛОЖЕ ключа (prepend новых записей, канон InfiniteQueryTail): берётся из prev_cursor страницы с самими свежими из уже загруженных записей. Порядок строк страницы — по-прежнему (created_at, id) DESC. Пустой ответ — новых записей нет. Вместе с before_cursor передавать нельзя — 400. */
+                after_cursor?: components["parameters"]["HistoryAfterCursor"];
+                /** @description Размер страницы (канон #597: 50 по умолчанию, 100 потолок). */
+                limit?: components["parameters"]["HistoryLimit"];
+                /** @description Включительная нижняя граница периода по created_at — календарная дата в 00:00:00 UTC (канон фильтра периода админ-аудита). */
+                date_from?: components["parameters"]["HistoryDateFrom"];
+                /** @description Включительная верхняя граница периода по created_at — матчингется как дата + 24ч без включения самой границы (канон фильтра периода админ-аудита). */
+                date_to?: components["parameters"]["HistoryDateTo"];
+                /** @description Фильтр по основным действиям — через запятую, одно или несколько из словаря (ADR 0061 §4). Неизвестное значение — 400. */
+                actions?: components["parameters"]["HistoryBaseActions"];
+                /** @description Фильтр по видам действий — через запятую, одно или несколько из семи групп словаря (ADR 0061 §4). Неизвестное значение — 400. */
+                kinds?: components["parameters"]["HistoryKinds"];
+                /** @description Фильтр по актёрам — uuid через запятую; один id — экран «Действия участника». Записи с обезличенным актёром (пользователь удалён) под фильтр по актёру не попадают никогда. Некорректный uuid — 400. */
+                actor_ids?: components["parameters"]["HistoryActorIds"];
+                /** @description Фильтр по объектам — uuid через запятую; один id — история объекта. Каждый перечисленный объект должен быть видим читателю (один невидимый или неизвестный id — privacy-404 всего запроса, канон ленты задач #547); архивные объекты владельца строки отдают, у участника архивные объекты ничего не добавляют. Некорректный uuid — 400. */
+                property_ids?: components["parameters"]["HistoryPropertyIds"];
+                /** @description Поисковая строка по журналу области чтения: ищет по тексту строки и снапшотам актёра (имя, почта) — «как в Telegram»: по началу слова (префикс), по фрагменту внутри слова и по словоформам; всегда-OR предикат prefix-FTS OR ILIKE (ресерч #839, тикет #842). Пробелы по краям не участвуют; пустая строка — фильтра нет. Серверный бэкстоп: ввод 400 байт и больше — 400 (255 символа кириллицы потолок схемы превышают; практические поисковые вводы на порядок короче). */
+                q?: components["parameters"]["HistoryQuery"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Страница ленты */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryPageResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getHistoryFilters: {
+        parameters: {
+            query?: {
+                /** @description Фильтр по объектам — uuid через запятую; один id — история объекта. Каждый перечисленный объект должен быть видим читателю (один невидимый или неизвестный id — privacy-404 всего запроса, канон ленты задач #547); архивные объекты владельца строки отдают, у участника архивные объекты ничего не добавляют. Некорректный uuid — 400. */
+                property_ids?: components["parameters"]["HistoryPropertyIds"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Опции фильтров области */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryFiltersResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
         };

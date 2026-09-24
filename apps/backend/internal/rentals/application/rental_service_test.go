@@ -14,6 +14,8 @@ import (
 	"github.com/google/uuid"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
+	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/history/historytest"
 	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/rentals/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
@@ -52,8 +54,12 @@ func (fakeUoW) Do(ctx context.Context, work func(transaction.Tx) error) error {
 	return work(fakeTx{})
 }
 
-// eventAuditRecord is the journal marker of the audit write.
-const eventAuditRecord = "audit.Record"
+// eventAuditRecord and eventHistoryRecord are the journal markers of the
+// audit and the action journal writes.
+const (
+	eventAuditRecord   = "audit.Record"
+	eventHistoryRecord = "history.Record"
+)
 
 // journal records the cross-fake call order.
 type journal struct{ events []string }
@@ -104,10 +110,24 @@ func (a *fakeAudit) Record(_ context.Context, entry auditdomain.Entry) error {
 
 func (a *fakeAudit) WithTx(transaction.Tx) auditapp.Recorder { return a }
 
+// journalingHistory is the shared capturing recorder wired into the
+// cross-fake call journal: every action-journal write marks the conveyor
+// order, the entries themselves stay available on the recorder.
+func journalingHistory(j *journal) *historytest.CapturingRecorder {
+	return &historytest.CapturingRecorder{
+		OnRecord: func(historydomain.Entry) { j.add(eventHistoryRecord) },
+	}
+}
+
 type fakeTenantReader struct{ exists bool }
 
-func (r fakeTenantReader) Exists(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
-	return r.exists, nil
+func (r fakeTenantReader) ValidatedTenantLabel(
+	context.Context, uuid.UUID, uuid.UUID,
+) (label string, ok bool, err error) {
+	if !r.exists {
+		return "", false, nil
+	}
+	return "Иван Tenant", true, nil
 }
 
 type fakeRentalStore struct {
@@ -278,6 +298,7 @@ type harness struct {
 	store     *fakeRentalStore
 	gateway   *fakeGateway
 	audit     *fakeAudit
+	history   *historytest.CapturingRecorder
 	svc       *RentalService
 	owner     uuid.UUID
 	property  uuid.UUID
@@ -304,10 +325,11 @@ func newHarnessWithArchivedProperty(t *testing.T, archived bool) *harness {
 	}
 	audit := &fakeAudit{journal: j}
 	propStore := fakePropertyStore{owner: owner, archived: archived}
-	factory := NewTxStoreFactory(store, propStore, gateway, fakeTenantReader{exists: true}, audit, fakeUoW{})
+	history := journalingHistory(j)
+	factory := NewTxStoreFactory(store, propStore, gateway, fakeTenantReader{exists: true}, audit, history, fakeUoW{})
 	svc := NewRentalService(factory, fakeCalendar{}, fakePolicy{role: sharedpolicy.RoleOwner})
 	return &harness{
-		t: t, journal: j, store: store, gateway: gateway, audit: audit,
+		t: t, journal: j, store: store, gateway: gateway, audit: audit, history: history,
 		svc: svc, owner: owner, property: property, propStore: propStore,
 	}
 }
@@ -338,6 +360,7 @@ func TestCreateRental_HappyPath(t *testing.T) {
 		"pay.Create",
 		"rentals.Create",
 		eventAuditRecord,
+		eventHistoryRecord,
 		"pay.RunTick",
 	}, h.journal.events)
 
@@ -481,6 +504,7 @@ func TestCreateRental_UnknownTenantIsInvalid(t *testing.T) {
 		&fakeGateway{journal: j},
 		fakeTenantReader{exists: false},
 		&fakeAudit{journal: j},
+		journalingHistory(j),
 		fakeUoW{},
 	)
 	svc := NewRentalService(factory, fakeCalendar{}, fakePolicy{role: sharedpolicy.RoleOwner})
@@ -508,7 +532,7 @@ func TestUpdateRental_PaymentTermsSyncAndTick(t *testing.T) {
 	view, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID, cmd)
 	require.NoError(t, err)
 
-	assert.Equal(t, []string{"pay.Update", "rentals.Update", eventAuditRecord, "pay.RunTick"}, h.journal.events)
+	assert.Equal(t, []string{"pay.Update", "rentals.Update", eventAuditRecord, eventHistoryRecord, "pay.RunTick"}, h.journal.events)
 	require.Len(t, h.gateway.changes, 1)
 	change := h.gateway.changes[0]
 	require.NotNil(t, change.AmountKopecks)
@@ -536,7 +560,7 @@ func TestUpdateRental_NonPaymentFieldsSkipTick(t *testing.T) {
 	_, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID, cmd)
 	require.NoError(t, err)
 
-	assert.Equal(t, []string{"rentals.Update", eventAuditRecord}, h.journal.events,
+	assert.Equal(t, []string{"rentals.Update", eventAuditRecord, eventHistoryRecord}, h.journal.events,
 		"the tick runs only when the payment changed")
 }
 
@@ -593,7 +617,7 @@ func TestCompleteRental(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	assert.Equal(t, []string{"pay.Stop", "rentals.Complete", eventAuditRecord}, h.journal.events,
+	assert.Equal(t, []string{"pay.Stop", "rentals.Complete", eventAuditRecord, eventHistoryRecord}, h.journal.events,
 		"the completion resolves the plan itself — no tick")
 	require.NotNil(t, h.gateway.stoppedAt)
 	assert.Equal(t, completed, *h.gateway.stoppedAt)
@@ -648,7 +672,7 @@ func TestDeleteRental(t *testing.T) {
 		rentalID := h.seedRental(func(r *domain.Rental) { r.StartDate = today.AddDate(0, 0, 3) })
 
 		require.NoError(t, h.svc.DeleteRental(t.Context(), h.owner, h.property, rentalID))
-		assert.Equal(t, []string{"rentals.Delete", "pay.Delete", eventAuditRecord}, h.journal.events,
+		assert.Equal(t, []string{"rentals.Delete", "pay.Delete", eventAuditRecord, eventHistoryRecord}, h.journal.events,
 			"the rentals row releases the RESTRICT FK before the payment goes")
 		assert.True(t, h.gateway.deleted)
 	})
@@ -691,7 +715,7 @@ func TestRoleMatrix(t *testing.T) {
 		t.Parallel()
 		stranger := fakePolicy{role: sharedpolicy.RoleNone}
 		svc := NewRentalService(
-			NewTxStoreFactory(h.store, h.propStore, h.gateway, fakeTenantReader{exists: true}, h.audit, fakeUoW{}),
+			NewTxStoreFactory(h.store, h.propStore, h.gateway, fakeTenantReader{exists: true}, h.audit, journalingHistory(h.journal), fakeUoW{}),
 			fakeCalendar{}, stranger,
 		)
 		_, err := svc.GetRental(t.Context(), h.owner, h.property, mustID(t))

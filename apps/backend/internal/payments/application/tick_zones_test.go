@@ -197,7 +197,7 @@ func newSweepFixture(t *testing.T, zones []TickZone, snapshot OwnerSnapshot) *sw
 	store := &fakeTickStore{snapshot: snapshot}
 	uow := &fakeUoW{}
 	factory := NewTxStoreFactory(store, noopPaymentStore{}, noopOperationStore{},
-		noopPropertyStore{}, newFakeFavoriteOrderStore(nil), noopRentalManaged{}, nil, uow)
+		noopPropertyStore{}, newFakeFavoriteOrderStore(nil), noopRentalManaged{}, nil, nil, uow)
 	return &sweepFixture{
 		tick:  NewTickService(factory, &fakeTickZoneDirectory{zones: zones}, nil, nil),
 		store: store,

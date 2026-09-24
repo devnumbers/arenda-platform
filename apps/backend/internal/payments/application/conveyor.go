@@ -4,8 +4,9 @@ package application
 // cases. Every mutation of the context — rules and operations alike — runs
 // through the same ordering invariants structurally (ADR 0049 §3): the role
 // gate, the property row lock, the owner's today, the change step, its audit
-// entry in the same transaction and the materialization tick after the
-// change. Reads never tick and never write.
+// entry and its action journal row (ADR 0061) in the same transaction, and
+// the materialization tick after the change. Reads never tick and never
+// write.
 
 import (
 	"context"
@@ -15,6 +16,8 @@ import (
 
 	"github.com/google/uuid"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
+	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
+	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/payments/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
@@ -44,6 +47,11 @@ type mutationOutcome[T any] struct {
 	AuditCtx      map[string]any
 	AuditEntity   auditdomain.EntityType
 	AuditEntityID *uuid.UUID
+	// History is the action journal row of the mutation (ADR 0061), built by
+	// the step from the row-text catalog and recorded inside the same
+	// transaction (fail-safe like the audit). A nil entry writes no row — the
+	// noise actions (the favorite star) are excluded by the map charter.
+	History *historydomain.Entry
 	// Tick runs the materialization tick for the owner after the change;
 	// every use case states its need explicitly (deletion sets false).
 	Tick bool
@@ -65,9 +73,10 @@ type mutationGates struct {
 // context — rules and operations alike. It runs, in one transaction and in
 // this order: the role gate, the property serialization lock (FOR UPDATE —
 // ADR 0049 §3), the owner's today, the load of the target rule (skipped for a
-// zero paymentID), the change step, its audit entry, and the materialization
-// tick when the step asked for it. After commit it returns the step's
-// response, post-commit-re-read applied.
+// zero paymentID), the change step, its audit entry and its action journal
+// row (ADR 0061) in the same transaction, and the materialization tick when
+// the step asked for it. After commit it returns the step's response,
+// post-commit-re-read applied.
 func runMutation[T any](
 	g mutationGates,
 	ctx context.Context, actor, propertyID, paymentID uuid.UUID,
@@ -105,6 +114,13 @@ func runMutation[T any](
 		entityID := out.AuditEntityID
 		if err := recordAudit(ctx, stores, actor, role, out.Audit, entityType, entityID, out.AuditCtx); err != nil {
 			return err
+		}
+		// A nil entry (the excluded noise actions) writes no row.
+		if out.History != nil {
+			if err := historyapp.RecordScoped(ctx, stores.history, propertyID, actor,
+				sharedpolicy.HistoryActorRole(role), *out.History); err != nil {
+				return err
+			}
 		}
 		if !out.Tick {
 			return nil

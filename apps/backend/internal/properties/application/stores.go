@@ -6,13 +6,15 @@ import (
 	"fmt"
 
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 // txStores bundles the properties repositories, the cross-context ports and
-// the audit recorder all bound to the same transaction. It is the only handle
-// a use case receives inside runInTx, so it is impossible to forget WithTx or
-// to record audit outside the transaction (ADR 0033, ADR 0020).
+// the audit and history recorders all bound to the same transaction. It is
+// the only handle a use case receives inside runInTx, so it is impossible to
+// forget WithTx or to record audit or history outside the transaction
+// (ADR 0033, ADR 0020, ADR 0061).
 //
 // The optional stores (photos, limiter) cover what the property service uses
 // beyond the main repository; runInTx skips binding an unwired optional store
@@ -31,15 +33,16 @@ type txStores struct {
 	photos  PropertyPhotoRepository
 	limiter SubscriptionLimiter
 	audit   auditapp.Recorder
+	history historyapp.Recorder
 	tx      transaction.Tx
 }
 
 // txStoreFactory holds the non-transactional properties repositories, the
-// cross-context ports and the audit recorder plus the Unit-of-Work, and builds
-// a transactional txStores from each runInTx call. It is embedded anonymously
-// by the property service so the context shares one canonical transactional
-// shape (ADR 0033 γ-factory): a use case only sees runInTx(ctx, work) and the
-// *txStores it hands out.
+// cross-context ports and the audit and history recorders plus the
+// Unit-of-Work, and builds a transactional txStores from each runInTx call.
+// It is embedded anonymously by the property service so the context shares
+// one canonical transactional shape (ADR 0033 γ-factory): a use case only
+// sees runInTx(ctx, work) and the *txStores it hands out.
 //
 // Build it once with NewTxStoreFactory at the wire layer, so adding an Nth
 // repository is a change to one constructor call, not several.
@@ -48,31 +51,37 @@ type txStoreFactory struct {
 	photos  PropertyPhotoRepository
 	limiter SubscriptionLimiter
 	audit   auditapp.Recorder
+	history historyapp.Recorder
 	uow     transaction.UoW
 }
 
 // NewTxStoreFactory bundles the properties repositories, the cross-context
-// ports, the audit recorder, and the Unit-of-Work into the single
-// txStoreFactory the property service embeds (ADR 0033 γ-factory). A nil
-// audit defaults to a Noop recorder so a caller that does not care about audit
-// still gets a safe factory; the optional stores may be nil (see txStores).
-// The type stays unexported; callers use := to hold it (standard Go pattern
-// for a factory returning an unexported type).
+// ports, the audit and history recorders, and the Unit-of-Work into the
+// single txStoreFactory the property service embeds (ADR 0033 γ-factory).
+// A nil recorder defaults to a Noop so a caller that does not care about
+// audit or history still gets a safe factory; the optional stores may be nil
+// (see txStores). The type stays unexported; callers use := to hold it
+// (standard Go pattern for a factory returning an unexported type).
 func NewTxStoreFactory(
 	repo PropertyRepository,
 	photos PropertyPhotoRepository,
 	limiter SubscriptionLimiter,
 	audit auditapp.Recorder,
+	history historyapp.Recorder,
 	uow transaction.UoW,
 ) txStoreFactory {
 	if audit == nil {
 		audit = auditapp.Noop{}
+	}
+	if history == nil {
+		history = historyapp.Noop{}
 	}
 	return txStoreFactory{
 		repo:    repo,
 		photos:  photos,
 		limiter: limiter,
 		audit:   audit,
+		history: history,
 		uow:     uow,
 	}
 }
@@ -97,9 +106,10 @@ func (f *txStoreFactory) runInTx(ctx context.Context, work func(*txStores) error
 	}
 	return f.uow.Do(ctx, func(tx transaction.Tx) error {
 		stores := &txStores{
-			repo:  f.repo.WithTx(tx),
-			audit: f.audit.WithTx(tx),
-			tx:    tx,
+			repo:    f.repo.WithTx(tx),
+			audit:   f.audit.WithTx(tx),
+			history: f.history.WithTx(tx),
+			tx:      tx,
 		}
 		if f.photos != nil {
 			stores.photos = f.photos.WithTx(tx)

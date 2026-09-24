@@ -2623,6 +2623,99 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /history:
+    get:
+      operationId: getHistory
+      summary: "Страница ленты «История действий» (двусторонний keyset, канон #597)"
+      description: |
+        Лента журнала действий по объектам, доступным читателю (ADR 0061 §7,
+        карта #704, тикет #708): объекты, где читатель — владелец (включая
+        архивные — история переживает архив), и объекты с его активным
+        участием full_access/viewer (архив участнику ленту не раскрывает —
+        канон невидимости архива, #163). Приостановленное участие (suspended)
+        ленту не пускает; чужие объекты невидимы — их строк в ответе нет.
+
+        Один эндпоинт обслуживает все четыре экрана карты #704: общая лента,
+        история объекта (property_ids = один id), «Действия участника»
+        (actor_ids = один id) и «Действия участника в объекте» (actor_ids и
+        property_ids = по одному, сервер AND'ит их — #841). Группировка
+        «дата → объект → актёр» — работа экрана; счётчика «найдено N» нет
+        (решение #706).
+
+        Курсор двусторонний: before_cursor продолжает ленту в старую сторону
+        (бесконечный скролл вверх), after_cursor запрашивает записи моложе
+        уже загруженных (prepend новых, канон InfiniteQueryTail); передавать
+        оба сразу — 400. Строки страницы всегда идут по (created_at, id)
+        DESC. Появившиеся и удалённые между загрузками записи не дублируются
+        и не теряются — курсор возобновляется строго после ключа.
+
+        Поиск q ищет по конкатенации текста строки и снапшотов актёра
+        (имя + почта) — колонке searchable, материализованной при записи:
+        «как в Telegram» — по началу слова (префикс), по фрагменту внутри
+        слова и по словоформам; всегда-OR предикат prefix-FTS OR ILIKE на
+        сервере (ресерч #839, тикет #842). Суммы в поиске не участвуют
+        (их в тексте нет, ADR 0061 §5).
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/HistoryBeforeCursor'
+        - $ref: '#/components/parameters/HistoryAfterCursor'
+        - $ref: '#/components/parameters/HistoryLimit'
+        - $ref: '#/components/parameters/HistoryDateFrom'
+        - $ref: '#/components/parameters/HistoryDateTo'
+        - $ref: '#/components/parameters/HistoryBaseActions'
+        - $ref: '#/components/parameters/HistoryKinds'
+        - $ref: '#/components/parameters/HistoryActorIds'
+        - $ref: '#/components/parameters/HistoryPropertyIds'
+        - $ref: '#/components/parameters/HistoryQuery'
+      responses:
+        '200':
+          description: Страница ленты
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoryPageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /history/filters:
+    get:
+      operationId: getHistoryFilters
+      summary: Опции шита фильтров «Истории действий»
+      description: |
+        Опции фильтров ленты в области чтения читателя (ADR 0061 §7): те же
+        правила доступа, что у GET /history. «Участники» — владелец и
+        участники области сейчас ∪ все актёры, встречающиеся в журнале
+        области (отозванные и вышедшие остаются фильтруемыми — их записи
+        переживают отзыв). «Объекты» — объекты области с названием, адресом
+        и фото-аватаром (первое по времени фото, #582). property_ids сужает
+        область (история одного объекта); та же дисциплина privacy-404, что
+        у ленты: один невидимый или неизвестный id — 404 всего запроса.
+        Счётчики N/M групп чекбоксов клиент считает сам; сами группы
+        (4 основных действия, 7 видов) — статический словарь экрана
+        (ADR 0061 §4).
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/HistoryPropertyIds'
+      responses:
+        '200':
+          description: Опции фильтров области
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoryFiltersResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /notifications:
     get:
       operationId: listNotifications
@@ -4579,6 +4672,121 @@ components:
         is a 400.
       schema:
         type: string
+
+    HistoryBeforeCursor:
+      name: before_cursor
+      in: query
+      required: false
+      description: >-
+        Непрозрачный курсор страницы СТАРШЕ ключа (продолжение ленты в
+        прошлое, скролл вверх): берётся из next_cursor предыдущей страницы.
+        Ключ keyset — (created_at, id); страница возобновляется строго после
+        него. Отсутствие — лента читается с самых новых записей. Некорректный
+        blob — 400; вместе с after_cursor передавать нельзя — 400.
+      schema:
+        type: string
+    HistoryAfterCursor:
+      name: after_cursor
+      in: query
+      required: false
+      description: >-
+        Непрозрачный курсор страницы МОЛОЖЕ ключа (prepend новых записей,
+        канон InfiniteQueryTail): берётся из prev_cursor страницы с самими
+        свежими из уже загруженных записей. Порядок строк страницы — по-прежнему
+        (created_at, id) DESC. Пустой ответ — новых записей нет. Вместе с
+        before_cursor передавать нельзя — 400.
+      schema:
+        type: string
+    HistoryLimit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        default: 50
+        minimum: 1
+        maximum: 100
+      description: "Размер страницы (канон #597: 50 по умолчанию, 100 потолок)."
+    HistoryDateFrom:
+      name: date_from
+      in: query
+      required: false
+      description: >-
+        Включительная нижняя граница периода по created_at — календарная дата
+        в 00:00:00 UTC (канон фильтра периода админ-аудита).
+      schema:
+        type: string
+        format: date
+    HistoryDateTo:
+      name: date_to
+      in: query
+      required: false
+      description: >-
+        Включительная верхняя граница периода по created_at — матчингется как
+        дата + 24ч без включения самой границы (канон фильтра периода
+        админ-аудита).
+      schema:
+        type: string
+        format: date
+    HistoryBaseActions:
+      name: actions
+      in: query
+      required: false
+      description: >-
+        Фильтр по основным действиям — через запятую, одно или несколько из
+        словаря (ADR 0061 §4). Неизвестное значение — 400.
+      schema:
+        type: string
+        example: added,deleted
+    HistoryKinds:
+      name: kinds
+      in: query
+      required: false
+      description: >-
+        Фильтр по видам действий — через запятую, одно или несколько из семи
+        групп словаря (ADR 0061 §4). Неизвестное значение — 400.
+      schema:
+        type: string
+        example: payment,operation
+    HistoryActorIds:
+      name: actor_ids
+      in: query
+      required: false
+      description: >-
+        Фильтр по актёрам — uuid через запятую; один id — экран «Действия
+        участника». Записи с обезличенным актёром (пользователь удалён) под
+        фильтр по актёру не попадают никогда. Некорректный uuid — 400.
+      schema:
+        type: string
+        example: 0198bef4-16a2-7dd0-a52d-4b1f0e3c9a11
+    HistoryPropertyIds:
+      name: property_ids
+      in: query
+      required: false
+      description: >-
+        Фильтр по объектам — uuid через запятую; один id — история объекта.
+        Каждый перечисленный объект должен быть видим читателю (один
+        невидимый или неизвестный id — privacy-404 всего запроса, канон
+        ленты задач #547); архивные объекты владельца строки отдают, у
+        участника архивные объекты ничего не добавляют. Некорректный uuid —
+        400.
+      schema:
+        type: string
+    HistoryQuery:
+      name: q
+      in: query
+      required: false
+      description: >-
+        Поисковая строка по журналу области чтения: ищет по тексту строки и
+        снапшотам актёра (имя, почта) — «как в Telegram»: по началу слова
+        (префикс), по фрагменту внутри слова и по словоформам; всегда-OR
+        предикат prefix-FTS OR ILIKE (ресерч #839, тикет #842). Пробелы по
+        краям не участвуют; пустая строка — фильтра нет. Серверный бэкстоп:
+        ввод 400 байт и больше — 400 (255 символа кириллицы потолок схемы
+        превышают; практические поисковые вводы на порядок короче).
+      schema:
+        type: string
+        maxLength: 255
 
     OperationsStatusFilter:
       name: status
@@ -7620,6 +7828,199 @@ components:
           type: string
           description: |
             Непрозрачный курсор следующей страницы; отсутствует в конце ленты.
+
+    HistoryPageResponse:
+      type: object
+      description: Страница ленты «История действий» (двусторонний keyset, ADR 0061 §7).
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/HistoryItem'
+        next_cursor:
+          type: string
+          description: |
+            Непрозрачный курсор страницы СТАРШЕ (в before_cursor следующего
+            запроса): продолжение ленты в прошлое. Отсутствует на пустой или
+            неполной странице — дальше старше ничего нет.
+        prev_cursor:
+          type: string
+          description: |
+            Непрозрачный курсор страницы МОЛОЖЕ (в after_cursor следующего
+            запроса): prepend записей, появившихся после загрузки видимых.
+            Отсутствует только на пустой странице.
+
+    HistoryItem:
+      type: object
+      description: |
+        Одна строка ленты — снимок действия при записи (ADR 0061 §3–§6).
+        Переименования и удаления сущность-строку не меняют; у удалённой
+        сущности сегмент остаётся без ссылки. Отдельного эндпоинта деталей
+        нет — payload строки полон, «детали» = существующие страницы сущностей
+        по ссылкам сегментов (тикет #713).
+      required:
+        - id
+        - property_id
+        - property_name
+        - actor_name
+        - actor_email
+        - actor_role
+        - kind
+        - action
+        - base_action
+        - segments
+        - context
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        property_id:
+          type: string
+          format: uuid
+        property_name:
+          type: string
+          description: Название объекта для шапки группы ленты (снимок живого названия — читается при чтении).
+        actor_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            Актёр действия; null — пользователь удалён (запись обезличена,
+            снимки при этом остаются). Под фильтр actor_ids такие записи не
+            попадают.
+        actor_name:
+          type: string
+          description: Снимок отображаемого имени актёра на момент действия.
+        actor_email:
+          type: string
+          description: Снимок почты актёра (видна всем участникам, решение 2026-09-20); '' — почты не было.
+        actor_role:
+          type: string
+          enum: [owner, full_access, viewer]
+          description: Роль актёра на объекте в момент действия (снимок, ADR 0061 §4).
+        kind:
+          type: string
+          enum: [property, rental, payment, operation, contact, task, member]
+          description: Вид действия — группа чекбоксов фильтра и маршрутизатор ссылок сегментов.
+        action:
+          type: string
+          description: Стабильный точечный id действия (ADR 0061 §4), например property.renamed, operation.paid.
+          example: operation.paid
+        base_action:
+          type: string
+          enum: [added, changed, completed, deleted]
+          description: Основное действие — группа фильтра, иконка и цвет строки.
+        segments:
+          type: array
+          description: |
+            Текст строки, собранный сервером при записи (ADR 0061 §6): экран
+            рендерит фрагменты дословно, склеивая в одно предложение, и
+            оборачивает связанные. Актёра в тексте нет — он поле записи.
+          items:
+            $ref: '#/components/schemas/HistorySegment'
+        context:
+          type: object
+          description: |
+            Структурные дополнения действия (ADR 0061 §5): суммы — BIGINT
+            копейки, даты, old/new значения; ключи зависят от действия.
+            Текстом строки не является и в поиске не участвует.
+        created_at:
+          type: string
+          format: date-time
+          description: Момент действия, UTC instant; группировка «Сегодня/Вчера» — дело экрана.
+
+    HistorySegment:
+      type: object
+      description: Один фрагмент текста строки; видимое предложение — точная склейка текстов.
+      required: [text]
+      properties:
+        text:
+          type: string
+        link:
+          $ref: '#/components/schemas/HistorySegmentLink'
+
+    HistorySegmentLink:
+      type: object
+      description: |
+        Ссылка фрагмента на страницу сущности (синие переходы, тикет #713);
+        отсутствует у несвязанных фрагментов и у строк удалённых сущностей.
+      required: [kind, id]
+      properties:
+        kind:
+          type: string
+          enum: [property, rental, payment, operation, contact, task, member]
+        id:
+          type: string
+          format: uuid
+
+    HistoryFiltersResponse:
+      type: object
+      description: Опции шита фильтров «Истории действий» в области чтения (ADR 0061 §7).
+      required: [participants, objects]
+      properties:
+        participants:
+          type: array
+          description: |
+            Владелец и текущие участники области ∪ все актёры журнала области
+            (отозванные остаются фильтруемыми). Именованные пользователи — по
+            алфавиту имени, затем фамилии; безымянные (name — маскированный
+            телефон) — в конце списка: сортировка по исходным колонкам, а не
+            по отображаемому имени.
+          items:
+            $ref: '#/components/schemas/HistoryParticipant'
+        objects:
+          type: array
+          description: Объекты области с фото-аватаром; отсортированы по названию.
+          items:
+            $ref: '#/components/schemas/HistoryObject'
+
+    HistoryParticipant:
+      type: object
+      description: |
+        Участник-вариант фильтра. name — канон отображаемого имени платформы
+        («Имя Фамилия», иначе маскированный телефон); email — текущая почта
+        пользователя; first_name — имя без фамилии для строки «(Вы)»;
+        is_owner — замок владельца объектов (макет 2067-163528); role —
+        иконка роли строки (макет 2184-94261): максимальный доступ в области,
+        живое членство сильнее снимка журнала отозванного участника.
+      required: [id, name, email, first_name, is_owner, role]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          description: Текущая почта; '' — почты нет.
+        first_name:
+          type: string
+          description: Имя без фамилии; '' — имени нет (тогда name — маскированный телефон).
+        is_owner:
+          type: boolean
+          description: Пользователь владеет хотя бы одним объектом области чтения.
+        role:
+          type: string
+          enum: [owner, full_access, viewer]
+          description: Максимальная роль в области чтения (owner совпадает с is_owner по построению).
+
+    HistoryObject:
+      type: object
+      description: "Объект-вариант фильтра с фото-аватаром карточки (первое по времени фото, #582)."
+      required: [id, name, address, photo_url]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        address:
+          type: string
+        photo_url:
+          type: string
+          description: URL первого по времени фото; '' — фото нет.
 
     UnreadCountResponse:
       type: object

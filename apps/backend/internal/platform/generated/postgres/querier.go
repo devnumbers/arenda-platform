@@ -188,8 +188,11 @@ type Querier interface {
 	// the bound rows and the property-less ones (nullable property_id, ADR 0052).
 	// Archived properties stay frozen (ADR 0025) and the shared-to properties'
 	// journals are other owners' books (owner-scope, ADR 0028). The completed
-	// tasks of live rules stay — the tick's dedup keys (ADR 0051).
-	DeleteCompletedJournalOwnerBook(ctx context.Context, ownerID pgtype.UUID) (int64, error)
+	// tasks of live rules stay — the tick's dedup keys (ADR 0051). Returns the
+	// removed rows' property anchors, one per removed row (NULL is the
+	// property-less leg) — the use case groups them into the per-object
+	// journal rows (ADR 0061 §3).
+	DeleteCompletedJournalOwnerBook(ctx context.Context, ownerID pgtype.UUID) ([]pgtype.UUID, error)
 	DeleteContact(ctx context.Context, arg DeleteContactParams) (int64, error)
 	DeleteEmailChangeGrantByID(ctx context.Context, id pgtype.UUID) error
 	DeleteEmailChangeGrantsByUserID(ctx context.Context, userID pgtype.UUID) error
@@ -547,6 +550,7 @@ type Querier interface {
 	// failures carries the delta to add; first_failure_at is intentionally left
 	// untouched on the conflict branch because the window is not being reset.
 	IncrementLoginAttempt(ctx context.Context, arg IncrementLoginAttemptParams) error
+	InsertActionJournal(ctx context.Context, arg InsertActionJournalParams) (pgtype.UUID, error)
 	InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) (pgtype.UUID, error)
 	InsertContact(ctx context.Context, arg InsertContactParams) (Contact, error)
 	InsertEmailChangeGrant(ctx context.Context, arg InsertEmailChangeGrantParams) error
@@ -585,6 +589,45 @@ type Querier interface {
 	// stood the single future planned up yet; CONTEXT.md «Материализация»).
 	// Cancelled tombstones are not materialized facts.
 	LastOperationDatesOfPayments(ctx context.Context, paymentIds string) ([]LastOperationDatesOfPaymentsRow, error)
+	// Чтение журнала (карта #704, тикет #708, ADR 0061 §7): страница ленты
+	// «История действий» по объектам read-скоупа читателя. Область видимости —
+	// SQL-функция actor_can_read_history (000137): владелец (включая архивные
+	// объекты) и активные участники неархивных объектов; suspended и чужие
+	// объекты строк не отдают (privacy-404 — существование не раскрывается).
+	//
+	// Курсор двусторонний по ключу (created_at, id): before_ts/before_id —
+	// страница СТАРШЕ ключа (скролл вверх), after_ts/after_id — страница МОЛОЖЕ
+	// (prepend новых); аргументы пары ходят вместе, NULL — нет курсора. Порядок
+	// DESC-запроса — (created_at DESC, id DESC); after-нога читается отдельным
+	// ASC-запросом (ListActionJournalAfter), адаптер разворачивает её страницу
+	// обратно — на проводе порядок строк всегда (created_at DESC, id DESC), и
+	// переименование объекта не может увести строку из окна (канон #597).
+	//
+	// Фильтры: csv-списки ('' = фильтра нет), период по created_at (верхняя
+	// граница исключающая — экран считает датой+24ч), поиск — всегда-OR
+	// предикат «как в Telegram» (ресерч #839, тикет #842): prefix-FTS
+	// (plainto_tsquery санитизирует произвольный ввод, ':*' на хвосте делает
+	// последнюю лексему префиксной; CASE-гард обязателен — to_tsquery(':*') на
+	// пустом plainto бросает syntax error) OR ILIKE-trgm (подстроки, почты,
+	// фрагменты внутри слова; q_trgm — экранированный паттерн, ESCAPE '\').
+	// q_raw='' — поиска нет. Маршрутизация trgm/fts/both (#705) снесена: любая
+	// маршрутизация — предсказание интента, обе ноги через GIN-индексы 000140
+	// всегда дешевле неверного угадывания. Записи с обезличенным актёром
+	// (actor_id IS NULL) под фильтр actor_ids не попадают.
+	//
+	ListActionJournal(ctx context.Context, arg ListActionJournalParams) ([]ListActionJournalRow, error)
+	// After-нога двустороннего курсора (prepend новых, «новые снизу» ленты):
+	// тот же скоуп, фильтры и поиск, что у ListActionJournal, окно «строго
+	// новее якоря» (after_ts/after_id) — но от якоря В СТОРОНУ НЕПРЕРЫВНОСТИ:
+	// (created_at ASC, id ASC) забирает старейшие строки окна, поэтому
+	// after-цепочка продолжает ленту от якоря вверх и всплеск новых записей
+	// больше страницы доносится целиком (контракт openapi «появившиеся записи
+	// не теряются») — DESC-порядок здесь взял бы из всплеска новейшие и отрезал
+	// старейший хвост. Один sqlc-запрос двух порядков не несёт; контрактный
+	// DESC страницы возвращает адаптер разворотом. Before-пару запрос не принимает:
+	// ноги курсора взаимоисключающие на сервисе.
+	//
+	ListActionJournalAfter(ctx context.Context, arg ListActionJournalAfterParams) ([]ListActionJournalAfterRow, error)
 	ListActiveMembersByPropertyOwner(ctx context.Context, ownerID pgtype.UUID) ([]PropertyMember, error)
 	// The recipient's shared-pool entries for slot accounting. Memberships on
 	// archived properties are excluded: an archived object does not occupy a
@@ -725,6 +768,33 @@ type Querier interface {
 	// sort key — a rename would move rows across the window. Both cursor args
 	// travel together; NULL (no cursor) reads from the beginning.
 	ListGlobalPaymentRules(ctx context.Context, arg ListGlobalPaymentRulesParams) ([]ListGlobalPaymentRulesRow, error)
+	// Объекты области для шита фильтров: те же свойства, что отдаёт лента,
+	// плюс фото-аватар карточки — первое по времени фото (канон #582);
+	// '' = фото нет (COALESCE: sqlc верит NOT NULL колонке, а lateral LEFT
+	// JOIN промахивается в NULL). Сужение property_ids — тот же фильтр ленты.
+	//
+	ListHistoryFilterObjects(ctx context.Context, arg ListHistoryFilterObjectsParams) ([]ListHistoryFilterObjectsRow, error)
+	// Опции фильтров ленты (ADR 0061 §7, тикет #708): участники области =
+	// владелец ∪ текущие участники (включая приостановленных — suspend не
+	// вытирает их записи из журнала) ∪ все актёры журнала области (отозванные
+	// и вышедшие остаются фильтруемыми — записи переживают отзыв). Живые имена
+	// читаются из users: чип фильтра — метаданные UI, не строка журнала; снимки
+	// строк остаются в самом журнале. Обезличенные актёры (пользователь удалён)
+	// не фильтруемы по определению. Отображаемое имя собирает адаптер по канону
+	// access.DisplayNameOf (маскированный телефон вместо сырого — PII).
+	// is_owner (#711, макет 2067-163528): замок владельца — пользователь —
+	// владелец ХОТЯ БЫ ОДНОГО объекта области (bool_or по ноге properties
+	// UNION'а); приглашённый без своих объектов флага не получает. first_name —
+	// имя без фамилии (u.name) для строки «(Вы)»; '' у безымянных (тогда
+	// имя в чипе — маскированный телефон).
+	// role (#840, макет 2184-94261): иконка роли строки шита — максимальный
+	// доступ в области (MIN ранга: 0 owner, 1 full_access, 2 viewer); живая
+	// нога property_members сильнее снимка журнала (actor_role) — она и есть
+	// ранг строки members. role='owner' жёстко совпадает с is_owner: снимок
+	// 'owner' от бывшего владельца в журнале замка не даёт (фолбэк в
+	// full_access).
+	//
+	ListHistoryFilterParticipants(ctx context.Context, arg ListHistoryFilterParticipantsParams) ([]ListHistoryFilterParticipantsRow, error)
 	// The user's feed page, newest first, deleted rows never appear. The walk
 	// resumes strictly after the (created_at, id) the previous page ended on
 	// (канон #597), so rows created between loads never duplicate or drop; both

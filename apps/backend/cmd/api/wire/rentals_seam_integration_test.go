@@ -20,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	auditpg "github.com/nambers/arenda-planform/apps/backend/internal/audit/adapters/postgres"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	historypg "github.com/nambers/arenda-planform/apps/backend/internal/history/adapters/postgres"
 	paymentspg "github.com/nambers/arenda-planform/apps/backend/internal/payments/adapters/postgres"
 	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
 	paymentsdomain "github.com/nambers/arenda-planform/apps/backend/internal/payments/domain"
@@ -80,6 +81,7 @@ func newSeamHarness(t *testing.T) *seamHarness {
 		gateway,
 		nil,
 		audit,
+		historypg.NewRecorder(pool),
 		pgdb.NewUoW(pool, logger),
 	)
 	// The real payments factory backs the tick re-run assertions.
@@ -91,6 +93,7 @@ func newSeamHarness(t *testing.T) *seamHarness {
 		paymentspg.NewGlobalPaymentStore(pool),
 		rentalspg.NewRentalLinkReader(pool),
 		audit,
+		historypg.NewRecorder(pool),
 		pgdb.NewUoW(pool, logger),
 	)
 	return &seamHarness{

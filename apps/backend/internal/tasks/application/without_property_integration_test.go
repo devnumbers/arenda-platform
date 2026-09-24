@@ -377,7 +377,7 @@ func TestWithoutPropertyAuditTrail(t *testing.T) {
 		t.Fatalf("rule audit trail = %v, want %v", actions, want)
 	}
 	completedActions := h.auditActions(t, "task", today.ID)
-	if !slices.Equal(completedActions, []string{"task.completed"}) {
+	if !slices.Equal(completedActions, []string{taskCompletedAction}) {
 		t.Fatalf("task audit trail = %v, want [task.completed]", completedActions)
 	}
 }

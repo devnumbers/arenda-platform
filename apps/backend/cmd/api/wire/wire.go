@@ -24,6 +24,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	auditpg "github.com/nambers/arenda-planform/apps/backend/internal/audit/adapters/postgres"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	historypg "github.com/nambers/arenda-planform/apps/backend/internal/history/adapters/postgres"
+	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/config"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database"
 	platformpostgres "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
@@ -50,20 +52,21 @@ const (
 // constructor. Fields are populated once by WirePlatform and passed by value
 // (or pointer where appropriate) into the per-module wire functions.
 type platformDeps struct {
-	Cfg           *config.Config
-	DB            *database.InstrumentedPool
-	Pool          *pgxpool.Pool
-	Logger        *slog.Logger
-	Encryptor     encryption.Encryptor
-	Renderer      *mailer.Renderer
-	AuditRecorder auditapp.Recorder
-	Policy        sharedpolicy.Policy
-	Clock         clock.Clock
-	Beginner      transaction.Beginner
-	UoW           transaction.UoW
-	OTelShutdown  func(ctx context.Context) error
-	StopSignalCtx context.CancelFunc
-	PoolConfigLog func() // Logs the database pool config; nil-safe.
+	Cfg             *config.Config
+	DB              *database.InstrumentedPool
+	Pool            *pgxpool.Pool
+	Logger          *slog.Logger
+	Encryptor       encryption.Encryptor
+	Renderer        *mailer.Renderer
+	AuditRecorder   auditapp.Recorder
+	HistoryRecorder historyapp.Recorder
+	Policy          sharedpolicy.Policy
+	Clock           clock.Clock
+	Beginner        transaction.Beginner
+	UoW             transaction.UoW
+	OTelShutdown    func(ctx context.Context) error
+	StopSignalCtx   context.CancelFunc
+	PoolConfigLog   func() // Logs the database pool config; nil-safe.
 }
 
 // Platform is the result of WirePlatform. It exposes the shared platform
@@ -170,6 +173,13 @@ func WirePlatform() (*Platform, context.Context, error) {
 	db := database.NewInstrumentedPool(pool, appLogger)
 	auditWriter := auditpg.NewWriter(db)
 	auditRecorder := auditapp.NewService(auditWriter, clock.Real{})
+	// The action journal (карта #704, ADR 0061): entry writer and actor
+	// snapshot source over the same pool, one recorder service on top.
+	historyRecorder := historyapp.NewService(
+		historypg.NewEntryStore(db),
+		historypg.NewActorStore(db),
+		clock.Real{},
+	)
 	appLogger.InfoContext(ctx, "database pool initialized",
 		"max_conns", poolConfig.MaxConns,
 		"min_conns", poolConfig.MinConns,
@@ -183,19 +193,20 @@ func WirePlatform() (*Platform, context.Context, error) {
 	policy := platformpolicy.NewOwnerOnlyPolicy()
 
 	deps := platformDeps{
-		Cfg:           &cfg,
-		DB:            db,
-		Pool:          pool,
-		Logger:        appLogger,
-		Encryptor:     encryptor,
-		Renderer:      renderer,
-		AuditRecorder: auditRecorder,
-		Policy:        policy,
-		Clock:         clock.Real{},
-		Beginner:      platformpostgres.NewBeginner(pool, appLogger),
-		UoW:           platformpostgres.NewUoW(pool, appLogger),
-		OTelShutdown:  otelSDK.Shutdown,
-		StopSignalCtx: stop,
+		Cfg:             &cfg,
+		DB:              db,
+		Pool:            pool,
+		Logger:          appLogger,
+		Encryptor:       encryptor,
+		Renderer:        renderer,
+		AuditRecorder:   auditRecorder,
+		HistoryRecorder: historyRecorder,
+		Policy:          policy,
+		Clock:           clock.Real{},
+		Beginner:        platformpostgres.NewBeginner(pool, appLogger),
+		UoW:             platformpostgres.NewUoW(pool, appLogger),
+		OTelShutdown:    otelSDK.Shutdown,
+		StopSignalCtx:   stop,
 	}
 
 	cleanup := func() {

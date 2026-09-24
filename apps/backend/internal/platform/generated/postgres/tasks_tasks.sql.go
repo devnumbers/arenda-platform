@@ -190,7 +190,7 @@ func (q *Queries) DeleteCompletedJournal(ctx context.Context, arg DeleteComplete
 	return result.RowsAffected(), nil
 }
 
-const deleteCompletedJournalOwnerBook = `-- name: DeleteCompletedJournalOwnerBook :execrows
+const deleteCompletedJournalOwnerBook = `-- name: DeleteCompletedJournalOwnerBook :many
 DELETE FROM tasks t
 WHERE t.owner_id = $1
   AND t.completed_date IS NOT NULL
@@ -199,6 +199,7 @@ WHERE t.owner_id = $1
         SELECT 1 FROM properties p
         WHERE p.id = t.property_id AND p.status != 'archived'
       ))
+RETURNING t.property_id
 `
 
 // «Удалить все выполненные» across the owner's whole book (ticket #536):
@@ -206,13 +207,28 @@ WHERE t.owner_id = $1
 // the bound rows and the property-less ones (nullable property_id, ADR 0052).
 // Archived properties stay frozen (ADR 0025) and the shared-to properties'
 // journals are other owners' books (owner-scope, ADR 0028). The completed
-// tasks of live rules stay — the tick's dedup keys (ADR 0051).
-func (q *Queries) DeleteCompletedJournalOwnerBook(ctx context.Context, ownerID pgtype.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteCompletedJournalOwnerBook, ownerID)
+// tasks of live rules stay — the tick's dedup keys (ADR 0051). Returns the
+// removed rows' property anchors, one per removed row (NULL is the
+// property-less leg) — the use case groups them into the per-object
+// journal rows (ADR 0061 §3).
+func (q *Queries) DeleteCompletedJournalOwnerBook(ctx context.Context, ownerID pgtype.UUID) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, deleteCompletedJournalOwnerBook, ownerID)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return result.RowsAffected(), nil
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var property_id pgtype.UUID
+		if err := rows.Scan(&property_id); err != nil {
+			return nil, err
+		}
+		items = append(items, property_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getTask = `-- name: GetTask :one

@@ -27,7 +27,7 @@ func newPropertyTestFactory(
 	photos PropertyPhotoRepository,
 	limiter SubscriptionLimiter,
 ) txStoreFactory {
-	return NewTxStoreFactory(repo, photos, limiter, nil, fakeUoW{beginner: fakePropertyTxBeginner{}})
+	return NewTxStoreFactory(repo, photos, limiter, nil, nil, fakeUoW{beginner: fakePropertyTxBeginner{}})
 }
 
 // testOwnerPolicy is the policy used by property service tests that pre-date

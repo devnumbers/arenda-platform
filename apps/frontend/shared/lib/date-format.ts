@@ -8,7 +8,7 @@
  * format-date.ts (локальное время, другой контракт).
  */
 
-import type { IsoDate } from './calendar';
+import type { IsoDate, IsoRange } from './calendar';
 import { fromIso, isoYear } from './calendar';
 import { pluralize } from './pluralize';
 
@@ -27,6 +27,39 @@ const localTimeFormatter = new Intl.DateTimeFormat('ru-RU', {
   hour: '2-digit',
   minute: '2-digit',
 });
+
+/** Месяцы в сокращении без точки (индекс 0..11): словарь сокращений
+ * живёт в каноне дат, не на местах (чипы периода фильтров). */
+export const MONTH_SHORT: ReadonlyArray<string> = [
+  'янв', 'фев', 'мар', 'апр', 'май', 'июн',
+  'июл', 'авг', 'сен', 'окт', 'ноя', 'дек',
+];
+
+/**
+ * Лейбл чипа применённого периода — формат диапазона чипов фильтров:
+ * один день — «5 ноя», один месяц — «1 — 30 ноя», через месяцы — «10 окт —
+ * 19 ноя», через годы — точечные границы «01.01.2025 — 01.01.2026». Канон
+ * с фильтра операций (Figma 1506-72116, 1510-74149), чип периода истории —
+ * тот же формат (макет 2067-162950, #711).
+ */
+export function formatIsoRangeChipLabel(range: IsoRange): string {
+  const fromDay = Number(range.from.slice(8, 10));
+  const fromMonth = Number(range.from.slice(5, 7));
+  const toDay = Number(range.to.slice(8, 10));
+  const toMonth = Number(range.to.slice(5, 7));
+  if (isoYear(range.from) !== isoYear(range.to)) {
+    return `${formatDottedDate(range.from)} — ${formatDottedDate(range.to)}`;
+  }
+  const fromLabel = `${fromDay} ${MONTH_SHORT[fromMonth - 1] ?? ''}`.trim();
+  if (range.from === range.to) {
+    return fromLabel;
+  }
+  if (fromMonth === toMonth) {
+    return `${fromDay} — ${toDay} ${MONTH_SHORT[toMonth - 1] ?? ''}`.trim();
+  }
+  const toLabel = `${toDay} ${MONTH_SHORT[toMonth - 1] ?? ''}`.trim();
+  return `${fromLabel} — ${toLabel}`;
+}
 
 /** День и склонённый месяц без года: «11 августа». */
 export function formatDayMonth(iso: IsoDate): string {

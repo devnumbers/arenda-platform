@@ -10,6 +10,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
+	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
+	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
@@ -417,6 +419,18 @@ func (s *ParticipantMutationService) Remove(ctx context.Context, actor uuid.UUID
 		return domain.ErrParticipantNotFound
 	}
 
+	// The journal label resolves once for the whole batch — every leg's row
+	// names the same person (the display name, or the email for the
+	// unregistered invitee; ADR 0061 §5).
+	targetLabel := email
+	if userID != (uuid.UUID{}) {
+		label, err := userLabel(ctx, s.users, userID)
+		if err != nil {
+			return err
+		}
+		targetLabel = label
+	}
+
 	freedActive := 0
 	var revokedActive []domain.Membership
 	err = s.runInTx(ctx, func(stores *txStores) error {
@@ -427,11 +441,11 @@ func (s *ParticipantMutationService) Remove(ctx context.Context, actor uuid.UUID
 		if len(legs) == 0 && len(invitationLegs) == 0 {
 			return domain.ErrParticipantNotFound
 		}
-		freedActive, revokedActive, err = s.removeMembershipLegs(ctx, stores, actor, legs)
+		freedActive, revokedActive, err = s.removeMembershipLegs(ctx, stores, actor, legs, targetLabel)
 		if err != nil {
 			return err
 		}
-		if err := s.removeInvitationLegs(ctx, stores, actor, invitationLegs); err != nil {
+		if err := s.removeInvitationLegs(ctx, stores, actor, invitationLegs, targetLabel); err != nil {
 			return err
 		}
 		// Every freed active slot lets the oldest suspended access come back
@@ -498,11 +512,15 @@ func (s *ParticipantMutationService) actorRoleOn(ctx context.Context, actor, pro
 }
 
 // removeMembershipLegs deletes the person's membership rows with an audit
-// entry per row, reports how many active (slot-occupying) ones were freed and
-// appends the removed active rows to the collector — the caller publishes
-// their revocation events post-commit (карта #734, #751).
+// entry and an action-journal row per leg (ADR 0061 §3: a journal row per
+// removed access), reports how many active (slot-occupying) ones were freed
+// and appends the removed active rows to the collector — the caller publishes
+// their revocation events post-commit (карта #734, #751). targetLabel is the
+// person's journal label resolved once for the whole batch (the display name,
+// or the email for the unregistered invitee — ADR 0061 §5): every leg's row
+// names the same person by it.
 func (s *ParticipantMutationService) removeMembershipLegs(
-	ctx context.Context, stores *txStores, actor uuid.UUID, legs []domain.Membership,
+	ctx context.Context, stores *txStores, actor uuid.UUID, legs []domain.Membership, targetLabel string,
 ) (int, []domain.Membership, error) {
 	freedActive := 0
 	var revokedActive []domain.Membership
@@ -511,7 +529,8 @@ func (s *ParticipantMutationService) removeMembershipLegs(
 		if err != nil {
 			return 0, nil, err
 		}
-		if err := removeMembershipInTx(ctx, stores, actor, actorRole, m, &revokedActive); err != nil {
+		if err := removeMembershipInTx(ctx, stores, actor, actorRole, m, &revokedActive,
+			historydomain.MemberParticipantRemoved(targetLabel)); err != nil {
 			return 0, nil, err
 		}
 		if !m.IsSuspended() {
@@ -522,9 +541,11 @@ func (s *ParticipantMutationService) removeMembershipLegs(
 }
 
 // removeInvitationLegs deletes the person's pending invitation rows with an
-// audit entry per row.
+// audit entry and an action-journal row per leg (ADR 0061 §3). targetLabel is
+// the same batch-wide label snapshot the membership legs carry, so both legs
+// of the removal name the person identically.
 func (s *ParticipantMutationService) removeInvitationLegs(
-	ctx context.Context, stores *txStores, actor uuid.UUID, legs []domain.Invitation,
+	ctx context.Context, stores *txStores, actor uuid.UUID, legs []domain.Invitation, targetLabel string,
 ) error {
 	for _, inv := range legs {
 		if err := stores.invitations.Delete(ctx, inv.ID, inv.PropertyID); err != nil {
@@ -545,6 +566,13 @@ func (s *ParticipantMutationService) removeInvitationLegs(
 			},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
+		}
+		// The invitation leg of the bulk removal journals as the same user
+		// action — «участник удалён» per property (ADR 0061 §3).
+		if err := historyapp.RecordScoped(ctx, stores.history, inv.PropertyID, actor,
+			sharedpolicy.HistoryActorRole(actorRole),
+			historydomain.MemberParticipantRemoved(targetLabel)); err != nil {
+			return err
 		}
 	}
 	return nil

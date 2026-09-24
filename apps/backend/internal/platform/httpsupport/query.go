@@ -3,6 +3,9 @@ package httpsupport
 import (
 	"context"
 	"net/http"
+	"strings"
+
+	"github.com/google/uuid"
 )
 
 // listAdminItems runs a paginated admin list use case and maps the resulting
@@ -68,4 +71,41 @@ func OptString[T ~string](dst *string, src *T) {
 	if src != nil {
 		*dst = string(*src)
 	}
+}
+
+// SplitCSVParam decodes a comma-separated wire list: each element is trimmed
+// and blanks are dropped, so "a, b ,," is the two-element list. The result
+// is never nil, so an empty list stays serializable as [] rather than null.
+func SplitCSVParam(raw string) []string {
+	out := make([]string, 0, 4)
+	for part := range strings.SplitSeq(raw, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
+}
+
+// ParseUUIDList decodes a comma-separated uuid list with the same
+// blank-dropping rules; an absent or blank value decodes to nothing
+// (nil, nil). A malformed element aborts the decode and the error comes
+// back from onBad — the platform package stays context-neutral because each
+// context wraps the failure into its own invalid-input sentinel.
+func ParseUUIDList(raw *string, onBad func(bad string) error) ([]uuid.UUID, error) {
+	if raw == nil || strings.TrimSpace(*raw) == "" {
+		return nil, nil
+	}
+	ids := make([]uuid.UUID, 0, 4)
+	for part := range strings.SplitSeq(*raw, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		id, err := uuid.Parse(part)
+		if err != nil {
+			return nil, onBad(part)
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
 }

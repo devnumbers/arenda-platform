@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/url"
 	"path"
+	"reflect"
 	"slices"
 	"sort"
 	"strings"
@@ -19,6 +20,8 @@ import (
 	"github.com/google/uuid"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
+	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
+	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
@@ -276,6 +279,11 @@ func (s *PropertyService) CreateProperty(ctx context.Context, actor uuid.UUID, c
 			Context:    map[string]any{"name": created.Name, "type": string(created.Type)},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
+		}
+		if err := historyapp.RecordScoped(ctx, stores.history, created.ID, actor,
+			sharedpolicy.HistoryActorRole(sharedpolicy.RoleOwner),
+			historydomain.PropertyCreated(created.ID, created.Name)); err != nil {
+			return err
 		}
 		return nil
 	})
@@ -653,6 +661,7 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, actor, id uuid.UUI
 			return err
 		}
 
+		before := property
 		if err := applyPropertyUpdate(ctx, stores, &property, cmd); err != nil {
 			return err
 		}
@@ -676,6 +685,12 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, actor, id uuid.UUI
 			Context:    map[string]any{auditFieldsKey: updatedPropertyFields(cmd)},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
+		}
+		if entry, ok := propertyUpdateHistoryEntry(id, before, updated); ok {
+			if err := historyapp.RecordScoped(ctx, stores.history, id, actor,
+				sharedpolicy.HistoryActorRole(role), entry); err != nil {
+				return err
+			}
 		}
 		return nil
 	})
@@ -712,15 +727,11 @@ func (s *PropertyService) SetPropertyPin(ctx context.Context, actor, id uuid.UUI
 			return err
 		}
 
-		var pinnedAt *time.Time
-		if pinned {
-			if property.PinnedAt != nil {
-				pinnedAt = property.PinnedAt
-			} else {
-				now := s.clock.Now()
-				pinnedAt = &now
-			}
-		}
+		pinnedAt := resolvedPinnedAt(property.PinnedAt, pinned, s.clock.Now())
+
+		// The journal records a state change, not an idempotent re-pin: a
+		// PUT that keeps the pin (or the absence) writes no history row.
+		pinChanged := pinned != (property.PinnedAt != nil)
 
 		updated, err = stores.repo.SetPin(ctx, id, property.OwnerID, pinnedAt)
 		if err != nil {
@@ -739,6 +750,16 @@ func (s *PropertyService) SetPropertyPin(ctx context.Context, actor, id uuid.UUI
 			Context:    map[string]any{auditFieldsKey: []string{"pinnedAt"}},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
+		}
+		if pinChanged {
+			entry := historydomain.PropertyPinned(id)
+			if !pinned {
+				entry = historydomain.PropertyUnpinned(id)
+			}
+			if err := historyapp.RecordScoped(ctx, stores.history, id, actor,
+				sharedpolicy.HistoryActorRole(role), entry); err != nil {
+				return err
+			}
 		}
 		return nil
 	})
@@ -868,6 +889,10 @@ func (s *PropertyService) ArchiveProperty(ctx context.Context, actor, id uuid.UU
 			EntityID:   &id,
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
+		}
+		if err := historyapp.RecordScoped(ctx, stores.history, id, actor,
+			sharedpolicy.HistoryActorRole(role), historydomain.PropertyArchived(id)); err != nil {
+			return err
 		}
 
 		// Archiving a shared object freed one tariff slot for each recipient: try to
@@ -1331,6 +1356,10 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, actor, id uuid.
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
 		}
+		if err := historyapp.RecordScoped(ctx, stores.history, id, actor,
+			sharedpolicy.HistoryActorRole(role), historydomain.PropertyUnarchived(id)); err != nil {
+			return err
+		}
 
 		// Unarchiving the object re-enters every recipient's tariff pool: suspend any
 		// recipient already at the limit so the object does not occupy a slot until
@@ -1436,6 +1465,10 @@ func (s *PropertyService) AddPropertyPhoto(
 			Context:    map[string]any{"property_id": propertyID},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
+		}
+		if err := historyapp.RecordScoped(ctx, stores.history, propertyID, actor,
+			sharedpolicy.HistoryActorRole(role), historydomain.PropertyPhotoAdded(propertyID)); err != nil {
+			return err
 		}
 		return nil
 	})
@@ -1553,6 +1586,10 @@ func (s *PropertyService) DeletePropertyPhoto(ctx context.Context, actor, proper
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
 		}
+		if err := historyapp.RecordScoped(ctx, stores.history, propertyID, actor,
+			sharedpolicy.HistoryActorRole(role), historydomain.PropertyPhotoDeleted(propertyID)); err != nil {
+			return err
+		}
 		return nil
 	})
 	if err != nil {
@@ -1659,4 +1696,93 @@ func updatedPropertyFields(cmd UpdatePropertyCommand) []string {
 		fields = append(fields, "status")
 	}
 	return fields
+}
+
+// resolvedPinnedAt computes the pin timestamp a PUT pin writes: a re-pin
+// keeps the original pin time (the PUT's idempotency), a fresh pin takes the
+// clock's now, an unpin clears it.
+func resolvedPinnedAt(current *time.Time, pinned bool, now time.Time) *time.Time {
+	if !pinned {
+		return nil
+	}
+	if current != nil {
+		return current
+	}
+	return &now
+}
+
+// propertyUpdateHistoryEntry composes the action journal entry for an edit
+// from the old/new property states (ADR 0061 §4): a single changed field
+// group gets its precise action id, several at once get the generic
+// property.updated with the label list. The status is not part of the
+// journal dictionary — a status-only edit yields no entry (ok=false).
+func propertyUpdateHistoryEntry(propertyID uuid.UUID, before, after domain.Property) (historydomain.Entry, bool) {
+	nameChanged := before.Name != after.Name
+	addressChanged := before.Address != after.Address
+	descriptionChanged := before.Description != after.Description
+	typeChanged := before.Type != after.Type
+	attrChanges := attributeChanges(before.Attributes, after.Attributes)
+
+	labels := make([]string, 0, 5)
+	if nameChanged {
+		labels = append(labels, "название")
+	}
+	if addressChanged {
+		labels = append(labels, "адрес")
+	}
+	if descriptionChanged {
+		labels = append(labels, "описание")
+	}
+	if typeChanged {
+		labels = append(labels, "тип")
+	}
+	if len(attrChanges) > 0 {
+		labels = append(labels, "характеристики")
+	}
+
+	switch {
+	case len(labels) == 0:
+		return historydomain.Entry{}, false
+	case len(labels) == 1:
+		switch {
+		case nameChanged:
+			return historydomain.PropertyRenamed(propertyID, before.Name, after.Name), true
+		case addressChanged:
+			return historydomain.PropertyAddressChanged(propertyID, before.Address, after.Address), true
+		case descriptionChanged:
+			return historydomain.PropertyDescriptionChanged(propertyID, before.Description, after.Description), true
+		case len(attrChanges) > 0:
+			return historydomain.PropertyAttributesChanged(propertyID, attrChanges), true
+		default: // The type field alone changed.
+			return historydomain.PropertyUpdated(propertyID, labels), true
+		}
+	default:
+		return historydomain.PropertyUpdated(propertyID, labels), true
+	}
+}
+
+// attributeChanges diffs two attribute maps over the union of their keys;
+// nil folds to an empty map so a cleared attribute set reads as removals.
+func attributeChanges(before, after domain.Attributes) []historydomain.AttributeChange {
+	if before == nil {
+		before = domain.Attributes{}
+	}
+	if after == nil {
+		after = domain.Attributes{}
+	}
+	changes := make([]historydomain.AttributeChange, 0, len(after))
+	for key, newVal := range after {
+		oldVal, existed := before[key]
+		if existed && reflect.DeepEqual(oldVal, newVal) {
+			continue
+		}
+		changes = append(changes, historydomain.AttributeChange{Key: key, Old: oldVal, New: newVal})
+	}
+	for key, oldVal := range before {
+		if _, exists := after[key]; !exists {
+			changes = append(changes, historydomain.AttributeChange{Key: key, Old: oldVal})
+		}
+	}
+	sort.Slice(changes, func(i, j int) bool { return changes[i].Key < changes[j].Key })
+	return changes
 }

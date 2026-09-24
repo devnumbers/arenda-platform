@@ -4,9 +4,9 @@ package application
 // cases. Every mutation of the context runs through the same ordering
 // invariants structurally (ADR 0053 §3, the payments discipline): the role
 // gate, the property row lock, the owner's today, the change step, its audit
-// entry in the same transaction and the payments tick after the change when
-// the step's verdict says the payment changed. Reads never tick and never
-// write.
+// entry and its action journal row (ADR 0061) in the same transaction, and
+// the payments tick after the change when the step's verdict says the
+// payment changed. Reads never tick and never write.
 
 import (
 	"context"
@@ -16,6 +16,8 @@ import (
 
 	"github.com/google/uuid"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
+	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
+	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/rentals/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
@@ -52,6 +54,10 @@ type mutationOutcome struct {
 	// derivation from the response.
 	Audit    auditdomain.Action
 	AuditCtx map[string]any
+	// History is the action journal row of the mutation (ADR 0061), built by
+	// the step from the row-text catalog and recorded inside the same
+	// transaction (fail-safe like the audit).
+	History *historydomain.Entry
 	// Tick runs the payments materialization tick for the owner after the
 	// change; only a step that changed the managed payment sets it (ADR 0053
 	// §3). Completion and deletion resolve the plan themselves and set false.
@@ -70,8 +76,9 @@ type mutationGates struct {
 // context. It runs, in one transaction and in this order: the role gate, the
 // property serialization lock (FOR UPDATE — ADR 0053 §3), the owner's today,
 // the load of the target rental (skipped for a zero rentalID), the change
-// step, its audit entry, and the payments tick when the step changed the
-// payment. After commit it returns the changed rental's id for the re-read.
+// step, its audit entry and its action journal row (ADR 0061) in the same
+// transaction, and the payments tick when the step changed the payment.
+// After commit it returns the changed rental's id for the re-read.
 func runRentalMutation(
 	g mutationGates,
 	ctx context.Context, actor, propertyID, rentalID uuid.UUID,
@@ -103,6 +110,12 @@ func runRentalMutation(
 		}
 		if err := recordAudit(ctx, stores, actor, role, out.Audit, out.RentalID, out.AuditCtx); err != nil {
 			return err
+		}
+		if out.History != nil {
+			if err := historyapp.RecordScoped(ctx, stores.history, propertyID, actor,
+				sharedpolicy.HistoryActorRole(role), *out.History); err != nil {
+				return err
+			}
 		}
 		if !out.Tick {
 			return nil

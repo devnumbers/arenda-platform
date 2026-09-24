@@ -91,7 +91,7 @@ func newOrderService(
 	uow := &fakeUoW{}
 	factory := NewTxStoreFactory(
 		&fakeTickStore{}, noopPaymentStore{}, noopOperationStore{}, noopPropertyStore{},
-		orders, noopRentalManaged{}, audit, uow,
+		orders, noopRentalManaged{}, audit, nil, uow,
 	)
 	calendar := fakeGlobalCalendar{todays: map[uuid.UUID]time.Time{
 		uuid.Must(uuid.NewV7()): utcDate(2026, time.September, 8),

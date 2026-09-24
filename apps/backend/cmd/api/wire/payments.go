@@ -50,6 +50,7 @@ func WirePayments(p platformDeps) (*Payments, error) {
 		// through this consumer port.
 		rentalspg.NewRentalLinkReader(p.DB),
 		p.AuditRecorder,
+		p.HistoryRecorder,
 		p.UoW,
 	)
 

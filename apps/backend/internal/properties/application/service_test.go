@@ -202,8 +202,8 @@ func TestUpdateProperty_ConcurrentUpdatesDoNotOverwrite(t *testing.T) {
 	property := domain.Property{
 		ID:      propertyID,
 		OwnerID: ownerID,
-		Name:    "Old Name",
-		Address: "Old Address",
+		Name:    fixtureOldName,
+		Address: fixtureOldAddress,
 		Type:    domain.PropertyTypeApartment,
 		Status:  domain.PropertyStatusActive,
 	}

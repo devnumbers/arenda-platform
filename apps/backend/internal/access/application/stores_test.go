@@ -99,7 +99,7 @@ func (r *countingRecorder) WithTx(transaction.Tx) auditapp.Recorder {
 // through the real runInTx seam without a database. Both repositories are
 // required: runInTx binds the whole context store set, like the wire factory.
 func newTestFactory(members MembershipRepository, invitations InvitationRepository, audit auditapp.Recorder) txStoreFactory {
-	return NewTxStoreFactory(members, invitations, audit, fakeUoW{beginner: noopBeginner{}})
+	return NewTxStoreFactory(members, invitations, audit, nil, fakeUoW{beginner: noopBeginner{}})
 }
 
 // TestRunInTx_BuildsStoresFromTxAndCommits proves runInTx binds both
@@ -112,7 +112,7 @@ func TestRunInTx_BuildsStoresFromTxAndCommits(t *testing.T) {
 	members := newMemRepo()
 	invitations := &memInvitationsRepo{}
 	audit := &countingRecorder{}
-	f := NewTxStoreFactory(members, invitations, audit, fakeUoW{beginner: b})
+	f := NewTxStoreFactory(members, invitations, audit, nil, fakeUoW{beginner: b})
 
 	workCalled := false
 	var got *txStores
@@ -164,7 +164,7 @@ func TestRunInTx_BuildsStoresFromTxAndCommits(t *testing.T) {
 func TestRunInTx_PanicRollsBackAndRepanics(t *testing.T) {
 	t.Parallel()
 	b := &countingBeginner{}
-	f := NewTxStoreFactory(newMemRepo(), &memInvitationsRepo{}, &countingRecorder{}, fakeUoW{beginner: b})
+	f := NewTxStoreFactory(newMemRepo(), &memInvitationsRepo{}, &countingRecorder{}, nil, fakeUoW{beginner: b})
 
 	panicVal := storesSentinelError{"kaboom"}
 	defer func() {
@@ -200,7 +200,7 @@ func TestRunInTx_PanicRollsBackAndRepanics(t *testing.T) {
 func TestRunInTx_RollsBackOnWorkError(t *testing.T) {
 	t.Parallel()
 	b := &countingBeginner{}
-	f := NewTxStoreFactory(newMemRepo(), &memInvitationsRepo{}, &countingRecorder{}, fakeUoW{beginner: b})
+	f := NewTxStoreFactory(newMemRepo(), &memInvitationsRepo{}, &countingRecorder{}, nil, fakeUoW{beginner: b})
 
 	workErr := errors.New("business rule violated")
 	err := f.runInTx(t.Context(), func(*txStores) error {
@@ -225,7 +225,7 @@ func TestRunInTx_RollsBackOnWorkError(t *testing.T) {
 // UoW fails loudly at the call site instead of nil-dereferencing.
 func TestRunInTx_ReturnsErrorWhenUoWMissing(t *testing.T) {
 	t.Parallel()
-	f := NewTxStoreFactory(newMemRepo(), &memInvitationsRepo{}, &countingRecorder{}, nil)
+	f := NewTxStoreFactory(newMemRepo(), &memInvitationsRepo{}, &countingRecorder{}, nil, nil)
 
 	workCalled := false
 	err := f.runInTx(t.Context(), func(*txStores) error {

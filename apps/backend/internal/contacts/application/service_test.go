@@ -10,6 +10,7 @@ import (
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/contacts/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/history/historytest"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
@@ -168,6 +169,7 @@ type serviceHarness struct {
 	svc      *ContactService
 	contacts *fakeContactStore
 	audit    *fakeRecorder
+	history  *historytest.CapturingRecorder
 
 	owner     uuid.UUID
 	member    uuid.UUID
@@ -204,10 +206,12 @@ func newServiceHarnessWithPolicy(
 		property:  uuid.Must(uuid.NewV7()),
 		otherProp: uuid.Must(uuid.NewV7()),
 	}
+	h.history = &historytest.CapturingRecorder{}
 	factory := NewTxStoreFactory(
 		h.contacts,
 		fakePropertyStore{owners: map[uuid.UUID]uuid.UUID{h.property: owner, h.otherProp: owner}},
 		audit,
+		h.history,
 		fakeUoW{},
 	)
 	h.svc = NewContactService(factory, build(h))

@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
@@ -20,6 +21,7 @@ type txStores struct {
 	properties paymentsapp.PropertyStore
 	pay        RentPaymentGatewayTx
 	audit      auditapp.Recorder
+	history    historyapp.Recorder
 }
 
 // txStoreFactory is the composite factory of the rentals context (ADR 0053
@@ -34,6 +36,7 @@ type txStoreFactory struct {
 	gateway    RentPaymentGateway
 	tenants    TenantReader
 	audit      auditapp.Recorder
+	history    historyapp.Recorder
 	uow        transaction.UoW
 }
 
@@ -46,10 +49,13 @@ type txStoreFactory struct {
 func NewTxStoreFactory(
 	rentals RentalStore, properties paymentsapp.PropertyStore,
 	gateway RentPaymentGateway, tenants TenantReader,
-	audit auditapp.Recorder, uow transaction.UoW,
+	audit auditapp.Recorder, history historyapp.Recorder, uow transaction.UoW,
 ) txStoreFactory {
 	if audit == nil {
 		audit = auditapp.Noop{}
+	}
+	if history == nil {
+		history = historyapp.Noop{}
 	}
 	return txStoreFactory{
 		rentals:    rentals,
@@ -57,6 +63,7 @@ func NewTxStoreFactory(
 		gateway:    gateway,
 		tenants:    tenants,
 		audit:      audit,
+		history:    history,
 		uow:        uow,
 	}
 }
@@ -88,6 +95,7 @@ func (f *txStoreFactory) runInTx(ctx context.Context, work func(*txStores) error
 			properties: properties,
 			pay:        pay,
 			audit:      f.audit.WithTx(tx),
+			history:    f.history.WithTx(tx),
 		})
 	})
 }

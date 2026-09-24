@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
+	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/tasks/domain"
 )
@@ -57,10 +58,11 @@ type UpdateRuleCommand struct {
 // partial update and delete. Every mutation runs through the shared
 // runMutation conveyor, which owns the ordering invariants structurally: the
 // role gate, the property row lock, the owner's today, the change step, its
-// audit entry in the same transaction and the materialization tick when the
-// step's verdict asks for it. Create and edit also hand the rule's standing
-// tasks to the notifications scheduling seam after the commit (issue #775,
-// best-effort). Reads never tick and never write.
+// audit entry and its action journal row (ADR 0061) in the same transaction,
+// and the materialization tick when the step's verdict asks for it. Create
+// and edit also hand the rule's standing tasks to the notifications
+// scheduling seam after the commit (issue #775, best-effort). Reads never
+// tick and never write.
 type RuleService struct {
 	txStoreFactory
 	policy      sharedpolicy.Policy
@@ -251,6 +253,7 @@ func patchRule(
 		Audit:         auditdomain.ActionTaskRuleUpdated,
 		AuditEntityID: &rule.ID,
 		AuditCtx:      map[string]any{"fields": updatedFields(cmd)},
+		History:       ruleHistory(historydomain.TaskRuleUpdated(rule.ID, rule.Title), rule.PropertyID),
 		Tick:          true,
 		RereadRuleID:  &rule.ID,
 		// The edit's invalidation + tick settled the rule's rows: the
@@ -315,6 +318,7 @@ func createRule(
 		Response:      draft,
 		Audit:         auditdomain.ActionTaskRuleCreated,
 		AuditEntityID: &draft.ID,
+		History:       ruleHistory(historydomain.TaskRuleCreated(draft.ID, draft.Title), propertyID),
 		Tick:          true,
 		RereadRuleID:  &draft.ID,
 		// The first materialization settled the rule's rows: the standing
@@ -342,6 +346,7 @@ func deleteRule(
 		Response:      rule, // The pre-delete state; nothing re-reads it.
 		Audit:         auditdomain.ActionTaskRuleDeleted,
 		AuditEntityID: &rule.ID,
+		History:       ruleHistory(historydomain.TaskRuleDeleted(rule.ID, rule.Title), rule.PropertyID),
 	}, nil
 }
 
@@ -425,4 +430,15 @@ func updatedFields(cmd UpdateRuleCommand) []string {
 		fields = append(fields, "repeat")
 	}
 	return fields
+}
+
+// ruleHistory attaches a built journal entry to the outcome — but only for
+// the property-bound rules: the property-less book (ADR 0052) has no object
+// the row could hang on, so a nil propertyID yields no history. The pointer
+// keeps the nil-vs-entry verdict explicit.
+func ruleHistory(entry historydomain.Entry, propertyID *uuid.UUID) *historydomain.Entry {
+	if propertyID == nil {
+		return nil
+	}
+	return &entry
 }

@@ -6,11 +6,16 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 )
+
+// strPtr is a small helper for optional-string query parameters in tests.
+func strPtr(s string) *string { return &s }
 
 // The generic list envelope behind RespondAdminList must serialize exactly
 // like the per-entity oapi-codegen response structs, so the helper can stand
@@ -153,4 +158,109 @@ func TestRespondAdminListDelegatesErrors(t *testing.T) {
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusNotFound)
 	}
+}
+
+// The CSV wire-list decoders shared by the adapters: a comma split with
+// TrimSpace per element and blanks dropped, so "a, b ,," is the two-element
+// list. SplitCSVParam never returns nil — an absent list stays serializable
+// as [] — and ParseUUIDList decodes absent or blank as nothing at all.
+func TestSplitCSVParam(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		raw  string
+		want []string
+	}{
+		{name: "plain list", raw: "book,amend", want: []string{"book", "amend"}},
+		{name: "spaces and blanks dropped", raw: " book , ,amend,, ", want: []string{"book", "amend"}},
+		{name: "empty raw", raw: "", want: []string{}},
+		{name: "blanks only", raw: " , , ", want: []string{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := SplitCSVParam(tt.raw)
+			if !slices.Equal(got, tt.want) {
+				t.Fatalf("SplitCSVParam(%q) = %v, want %v", tt.raw, got, tt.want)
+			}
+			if got == nil {
+				t.Fatal("SplitCSVParam returned nil, want a non-nil empty slice")
+			}
+		})
+	}
+}
+
+// ParseUUIDList applies the same blank-dropping rules to uuid elements; a
+// malformed element aborts the decode and hands the raw element to onBad —
+// the caller builds the error because each context wraps its own
+// invalid-input sentinel, which the platform package cannot import.
+func TestParseUUIDList(t *testing.T) {
+	t.Parallel()
+
+	t.Run("absent and blank decode to nothing", func(t *testing.T) {
+		t.Parallel()
+
+		for _, raw := range []*string{nil, strPtr(""), strPtr("   ")} {
+			got, err := ParseUUIDList(raw, func(string) error { return errors.New("unexpected bad element") })
+			if err != nil {
+				t.Fatalf("ParseUUIDList(%v): %v", raw, err)
+			}
+			if got != nil {
+				t.Fatalf("ParseUUIDList(%v) = %v, want nil", raw, got)
+			}
+		}
+	})
+
+	t.Run("commas and blanks only decode to an empty list", func(t *testing.T) {
+		t.Parallel()
+
+		// "  ,  " trims to a non-empty ",", so the blank check does not
+		// fire: the loop drops every element and the list stays empty
+		// non-nil.
+		got, err := ParseUUIDList(strPtr("  ,  "), func(string) error { return errors.New("unexpected bad element") })
+		if err != nil {
+			t.Fatalf("ParseUUIDList: %v", err)
+		}
+		if got == nil || len(got) != 0 {
+			t.Fatalf("ParseUUIDList = %v, want a non-nil empty list", got)
+		}
+	})
+
+	t.Run("trimmed elements in order, blanks dropped", func(t *testing.T) {
+		t.Parallel()
+
+		a := uuid.MustParse("0197c0a9-8b7d-7de1-a5de-6a6f1f5f0001")
+		b := uuid.MustParse("0197c0a9-8b7d-7de1-a5de-6a6f1f5f0002")
+		got, err := ParseUUIDList(strPtr(" "+a.String()+" , ,"+b.String()), func(string) error {
+			return errors.New("unexpected bad element")
+		})
+		if err != nil {
+			t.Fatalf("ParseUUIDList: %v", err)
+		}
+		if want := []uuid.UUID{a, b}; !slices.Equal(got, want) {
+			t.Fatalf("ParseUUIDList = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("malformed element aborts with caller-built error", func(t *testing.T) {
+		t.Parallel()
+
+		sentinel := errors.New("invalid input")
+		var gotBad string
+		got, err := ParseUUIDList(strPtr("not-a-uuid, "), func(bad string) error {
+			gotBad = bad
+			return errors.Join(sentinel, errors.New(bad))
+		})
+		if got != nil {
+			t.Fatalf("ids = %v, want nil", got)
+		}
+		if gotBad != "not-a-uuid" {
+			t.Fatalf("bad element = %q, want the trimmed %q", gotBad, "not-a-uuid")
+		}
+		if !errors.Is(err, sentinel) {
+			t.Fatalf("err = %v, want it to carry the caller's sentinel", err)
+		}
+	})
 }

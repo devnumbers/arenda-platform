@@ -41,7 +41,7 @@ func TestPropertyService_UpdateProperty_ArchivedConflict(t *testing.T) {
 		nil,
 	)
 
-	name := "Новое имя"
+	name := renamedName
 	if _, err := svc.UpdateProperty(ctx, ownerID, property.ID, UpdatePropertyCommand{Name: &name}); !errors.Is(err, ErrArchivedProperty) {
 		t.Errorf("archived card update err = %v, want ErrArchivedProperty", err)
 	}

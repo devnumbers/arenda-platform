@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/rentals/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
@@ -145,8 +146,9 @@ type RentalSummary struct {
 // delete and the period summary. Every mutation runs through the shared
 // runRentalMutation conveyor, which owns the ordering invariants
 // structurally: the role gate, the property row lock, the owner's today, the
-// change step, its audit entry in the same transaction and the payments tick
-// when the managed payment changed. Reads never tick and never write.
+// change step, its audit entry and its action journal row (ADR 0061) in the
+// same transaction, and the payments tick when the managed payment changed.
+// Reads never tick and never write.
 type RentalService struct {
 	txStoreFactory
 	policy    sharedpolicy.Policy
@@ -204,14 +206,9 @@ func (s *RentalService) CreateRental(
 			if err := validateCreate(cmd, today); err != nil {
 				return mutationOutcome{}, err
 			}
-			if cmd.ContactID != nil {
-				ok, err := s.tenantExists(ctx, scope, *cmd.ContactID)
-				if err != nil {
-					return mutationOutcome{}, err
-				}
-				if !ok {
-					return mutationOutcome{}, ErrInvalidInput
-				}
+			tenantName, err := s.validatedTenantName(ctx, scope, cmd.ContactID)
+			if err != nil {
+				return mutationOutcome{}, err
 			}
 			occupied, err := stores.rentals.HasUnfinished(ctx, scope, propertyID)
 			if err != nil {
@@ -256,6 +253,7 @@ func (s *RentalService) CreateRental(
 			return mutationOutcome{
 				RentalID: rentalID,
 				Audit:    auditActionRentalCreated,
+				History:  new(historydomain.RentalCreated(rentalID, tenantName, cmd.StartDate, derefDate(cmd.PlannedEndDate))),
 				Tick:     true, // The new payment materializes its first planned.
 			}, nil
 		})
@@ -325,40 +323,7 @@ func (s *RentalService) UpdateRental(
 		func(
 			ctx context.Context, stores *txStores, scope uuid.UUID, rental domain.Rental, today time.Time,
 		) (mutationOutcome, error) {
-			if rental.CompletedDate != nil {
-				return mutationOutcome{}, ErrRentalCompleted
-			}
-			change, paymentChanged, err := paymentSyncFromUpdate(cmd, rental.StartDate, today)
-			if err != nil {
-				return mutationOutcome{}, err
-			}
-			applyRentalUpdate(&rental, cmd)
-			if err := validateRentalRow(rental); err != nil {
-				return mutationOutcome{}, err
-			}
-			if cmd.ContactID != nil && cmd.ContactID.Value != nil {
-				ok, err := s.tenantExists(ctx, scope, *cmd.ContactID.Value)
-				if err != nil {
-					return mutationOutcome{}, err
-				}
-				if !ok {
-					return mutationOutcome{}, ErrInvalidInput
-				}
-			}
-			if paymentChanged {
-				if err := stores.pay.Update(ctx, scope, propertyID, rental.PaymentID, change, today); err != nil {
-					return mutationOutcome{}, fmt.Errorf("sync rent payment: %w", err)
-				}
-			}
-			if err := stores.rentals.Update(ctx, rental); err != nil {
-				return mutationOutcome{}, fmt.Errorf("update rental: %w", err)
-			}
-			return mutationOutcome{
-				RentalID: rental.ID,
-				Audit:    auditActionRentalUpdated,
-				AuditCtx: map[string]any{"fields": updatedRentalFields(cmd)},
-				Tick:     paymentChanged,
-			}, nil
+			return s.updatedRentalOutcome(ctx, stores, scope, propertyID, rental, today, cmd)
 		})
 	if err != nil {
 		return RentalView{}, err
@@ -368,6 +333,55 @@ func (s *RentalService) UpdateRental(
 		return RentalView{}, err
 	}
 	return s.loadView(ctx, scope, propertyID, changedRentalID)
+}
+
+// updatedRentalOutcome is the change step of the terms edit: it validates the
+// patch against the loaded rental, syncs the editable payment terms and
+// returns the outcome the conveyor journals, journals history from and ticks
+// on.
+func (s *RentalService) updatedRentalOutcome(
+	ctx context.Context, stores *txStores, scope, propertyID uuid.UUID, rental domain.Rental, today time.Time,
+	cmd UpdateRentalCommand,
+) (mutationOutcome, error) {
+	if rental.CompletedDate != nil {
+		return mutationOutcome{}, ErrRentalCompleted
+	}
+	change, paymentChanged, err := paymentSyncFromUpdate(cmd, rental.StartDate, today)
+	if err != nil {
+		return mutationOutcome{}, err
+	}
+	applyRentalUpdate(&rental, cmd)
+	if err := validateRentalRow(rental); err != nil {
+		return mutationOutcome{}, err
+	}
+	// The journal label is resolved once: a set contact carries the name
+	// its validation already read, an unchanged one reads the stored card.
+	var tenantName string
+	if cmd.ContactID != nil && cmd.ContactID.Value != nil {
+		if tenantName, err = s.validatedTenantName(ctx, scope, cmd.ContactID.Value); err != nil {
+			return mutationOutcome{}, err
+		}
+	}
+	if paymentChanged {
+		if err := stores.pay.Update(ctx, scope, propertyID, rental.PaymentID, change, today); err != nil {
+			return mutationOutcome{}, fmt.Errorf("sync rent payment: %w", err)
+		}
+	}
+	if err := stores.rentals.Update(ctx, rental); err != nil {
+		return mutationOutcome{}, fmt.Errorf("update rental: %w", err)
+	}
+	if cmd.ContactID == nil || cmd.ContactID.Value == nil {
+		if tenantName, err = s.tenantName(ctx, scope, rental.ContactID); err != nil {
+			return mutationOutcome{}, err
+		}
+	}
+	return mutationOutcome{
+		RentalID: rental.ID,
+		Audit:    auditActionRentalUpdated,
+		AuditCtx: map[string]any{"fields": updatedRentalFields(cmd)},
+		History:  new(historydomain.RentalUpdated(rental.ID, tenantName, rental.StartDate, derefDate(rental.PlannedEndDate))),
+		Tick:     paymentChanged,
+	}, nil
 }
 
 // CompleteRental records the completion (решение №8): the factual date within
@@ -398,9 +412,14 @@ func (s *RentalService) CompleteRental(
 			if err := stores.rentals.Complete(ctx, rental.ID, scope, cmd.CompletedDate, cmd.DepositReturn); err != nil {
 				return mutationOutcome{}, fmt.Errorf("complete rental: %w", err)
 			}
+			tenantName, err := s.tenantName(ctx, scope, rental.ContactID)
+			if err != nil {
+				return mutationOutcome{}, err
+			}
 			out := mutationOutcome{
 				RentalID: rental.ID,
 				Audit:    auditActionRentalCompleted,
+				History:  new(historydomain.RentalCompleted(rental.ID, tenantName)),
 				Tick:     false,
 			}
 			if cmd.DepositReturn != nil {
@@ -441,9 +460,14 @@ func (s *RentalService) DeleteRental(
 			if err := stores.pay.Delete(ctx, scope, rental.PaymentID, today); err != nil {
 				return mutationOutcome{}, fmt.Errorf("delete rent payment: %w", err)
 			}
+			tenantName, err := s.tenantName(ctx, scope, rental.ContactID)
+			if err != nil {
+				return mutationOutcome{}, err
+			}
 			return mutationOutcome{
 				RentalID: rental.ID,
 				Audit:    auditActionRentalDeleted,
+				History:  new(historydomain.RentalDeleted(rental.ID, tenantName)),
 				Tick:     false,
 			}, nil
 		})
@@ -562,21 +586,6 @@ func nilIfZero(n int) *int {
 		return nil
 	}
 	return &n
-}
-
-// tenantExists resolves the tenant contact through the book reader; the
-// contacts owner check is the application's duty (ADR 0053 — the FK does not
-// verify the owner). A missing reader is a wiring mistake only when a command
-// actually names a contact.
-func (s *RentalService) tenantExists(ctx context.Context, scope, contactID uuid.UUID) (bool, error) {
-	if s.tenants == nil {
-		return false, errors.New("rentals: tenant reader must be configured to name a contact")
-	}
-	ok, err := s.tenants.Exists(ctx, scope, contactID)
-	if err != nil {
-		return false, fmt.Errorf("check tenant contact: %w", err)
-	}
-	return ok, nil
 }
 
 // validateCreate enforces the create contract (ADR 0053 §4): the amount
@@ -774,4 +783,54 @@ func updatedRentalFields(cmd UpdateRentalCommand) []string {
 		fields = append(fields, "comment")
 	}
 	return fields
+}
+
+// tenantName resolves the tenant card's display name for the action journal
+// row (ADR 0061 §3); a rental without a tenant card yields an empty label.
+// The read is loud: a failing card read is a database trouble, not a missing
+// label. The card belongs to the stored rental — its ownership has been
+// validated at write time, so the boolean half of the port is not consulted.
+func (s *RentalService) tenantName(ctx context.Context, scope uuid.UUID, contactID *uuid.UUID) (string, error) {
+	if contactID == nil || s.tenants == nil {
+		return "", nil
+	}
+	name, _, err := s.tenants.ValidatedTenantLabel(ctx, scope, *contactID)
+	if err != nil {
+		return "", fmt.Errorf("resolve tenant name: %w", err)
+	}
+	return name, nil
+}
+
+// validatedTenantName checks a create/update contact reference and resolves
+// its display name for the action journal row: an unknown or foreign card is
+// ErrInvalidInput, a nil contact is a tenant-less rental. The card is read
+// once — the owner check and the label come from the same port call. A
+// missing reader is a wiring mistake only when a command actually names a
+// contact.
+func (s *RentalService) validatedTenantName(
+	ctx context.Context, scope uuid.UUID, contactID *uuid.UUID,
+) (string, error) {
+	if contactID == nil {
+		return "", nil
+	}
+	if s.tenants == nil {
+		return "", errors.New("rentals: tenant reader must be configured to name a contact")
+	}
+	label, ok, err := s.tenants.ValidatedTenantLabel(ctx, scope, *contactID)
+	if err != nil {
+		return "", fmt.Errorf("check tenant contact: %w", err)
+	}
+	if !ok {
+		return "", ErrInvalidInput
+	}
+	return label, nil
+}
+
+// derefDate materializes an optional date for the row-text builders: a nil
+// becomes the zero time the builders omit.
+func derefDate(t *time.Time) time.Time {
+	if t == nil {
+		return time.Time{}
+	}
+	return *t
 }

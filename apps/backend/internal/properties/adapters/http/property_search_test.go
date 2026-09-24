@@ -127,7 +127,7 @@ func searchWireHandler(t *testing.T, repo *searchWireRepo) *PropertyHandlers {
 	// bundle.
 	svc := propertiesapp.NewPropertyService(
 		repo, searchWirePhotos{}, nil,
-		propertiesapp.NewTxStoreFactory(repo, searchWirePhotos{}, nil, nil, nil),
+		propertiesapp.NewTxStoreFactory(repo, searchWirePhotos{}, nil, nil, nil, nil),
 		nil, nil, slog.New(slog.DiscardHandler),
 	)
 	return NewPropertyHandlers(svc, nil, slog.New(slog.DiscardHandler), nil)
