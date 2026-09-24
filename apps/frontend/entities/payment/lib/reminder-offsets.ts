@@ -15,7 +15,7 @@ export const PAYMENT_REMINDER_OPTIONS = [
   readonly label: string;
 }>;
 
-/** Метка оффала («За 3 дня») — из того же кортежа, что и пикер. */
+/** Метка оффсета («За 3 дня») — из того же кортежа, что и пикер. */
 export function paymentReminderOptionLabel(offset: PaymentReminderOffset): string {
   const option = PAYMENT_REMINDER_OPTIONS.find(
     (candidate) => candidate.offset === offset,

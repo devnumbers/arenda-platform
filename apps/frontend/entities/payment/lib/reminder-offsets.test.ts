@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { PAYMENT_REMINDER_OPTIONS, paymentReminderOptionLabel } from './reminder-offsets';
 
 describe('опции напоминания о платеже (карта #822)', () => {
-  it('контрактные оффалы 1/3/7 в порядке макета с метками нужного падежа', () => {
+  it('контрактные оффсеты 1/3/7 в порядке макета с метками нужного падежа', () => {
     expect(PAYMENT_REMINDER_OPTIONS.map((option) => option.offset)).toStrictEqual([1, 3, 7]);
     expect(paymentReminderOptionLabel(1)).toBe('За 1 день');
     expect(paymentReminderOptionLabel(3)).toBe('За 3 дня');

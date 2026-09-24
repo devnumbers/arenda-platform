@@ -18,7 +18,7 @@ import type { PaymentReminderOffset } from '../model/types';
  */
 
 export type PaymentReminderPickerProps = {
-  /** Выбранный оффал; undefined — ничего не выбрано (дефолт). */
+  /** Выбранный оффсет; undefined — ничего не выбрано (дефолт). */
   readonly value: PaymentReminderOffset | undefined;
   readonly onChange: (offset: PaymentReminderOffset) => void;
 };

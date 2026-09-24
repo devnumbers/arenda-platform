@@ -110,7 +110,7 @@ export function validateRentalWizardDraft(parsed: unknown): RentalWizardDraft {
     ? record.commissionKopecks
     : undefined;
   const contactId = isFilledString(record.contactId) ? record.contactId : undefined;
-  // Напоминание — контрактный оффал из того же кортежа, что и селект.
+  // Напоминание — контрактный оффсет из того же кортежа, что и селект.
   const reminderOffsetDays = PAYMENT_REMINDER_OPTIONS.find(
     (option) => option.offset === record.reminderOffsetDays,
   )?.offset;

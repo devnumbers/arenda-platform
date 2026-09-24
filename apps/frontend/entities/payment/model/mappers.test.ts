@@ -49,7 +49,7 @@ describe('mapPayment — DTO → entity', () => {
     expect(payment.endDate).toBeUndefined();
   });
 
-  it('напоминание: оффал приходит числом, null и отсутствие — «нет напоминания» (карта #822)', () => {
+  it('напоминание: оффсет приходит числом, null и отсутствие — «нет напоминания» (карта #822)', () => {
     expect(payment.reminderOffsetDays).toBeUndefined();
     expect(mapPayment({ ...paymentDto, reminderOffsetDays: null }).reminderOffsetDays).toBeUndefined();
     expect(mapPayment({ ...paymentDto, reminderOffsetDays: 3 }).reminderOffsetDays).toBe(3);

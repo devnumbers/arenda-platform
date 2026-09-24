@@ -58,7 +58,7 @@ describe('validateRentalWizardDraft', () => {
     expect(validateRentalWizardDraft({ paymentDay: 1.5 })).toStrictEqual({});
   });
 
-  it('напоминание — только контрактные оффалы 1/3/7, прочие роняются', () => {
+  it('напоминание — только контрактные оффсеты 1/3/7, прочие роняются', () => {
     expect(validateRentalWizardDraft({ reminderOffsetDays: 3 })).toStrictEqual({
       reminderOffsetDays: 3,
     });

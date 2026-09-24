@@ -47,7 +47,7 @@ describe('validatePaymentWizardDraft', () => {
     expect(validatePaymentWizardDraft({ type: 'weekly' })).toStrictEqual({});
   });
 
-  it('напоминание сохраняется, чужой оффал роняет черновик (карта #822)', () => {
+  it('напоминание сохраняется, чужой оффсет роняет черновик (карта #822)', () => {
     expect(validatePaymentWizardDraft({ title: 'x', reminderOffsetDays: 3 })).toStrictEqual({
       title: 'x',
       reminderOffsetDays: 3,

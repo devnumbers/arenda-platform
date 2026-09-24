@@ -196,7 +196,7 @@ export function validatePaymentWizardDraft(parsed: unknown): PaymentWizardDraft 
 
   const endDate = typeof record.endDate === 'string' && record.endDate.length > 0 ? record.endDate : undefined;
 
-  // Напоминание — контрактный оффал из того же кортежа, что и пикер.
+  // Напоминание — контрактный оффсет из того же кортежа, что и пикер.
   const isReminderOffset = (value: unknown): value is PaymentReminderOffset =>
     PAYMENT_REMINDER_OPTIONS.some((option) => option.offset === value);
   if (record.reminderOffsetDays !== undefined && !isReminderOffset(record.reminderOffsetDays)) {

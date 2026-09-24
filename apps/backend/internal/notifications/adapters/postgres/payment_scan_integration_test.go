@@ -490,7 +490,7 @@ func scheduleTargetsOfProps(targets []application.PaymentScheduleTarget, rules .
 }
 
 // Нога напоминания (карта #822, #824): planned-вхождения правил с заданным
-// напоминанием, чей «день напоминания» (дата операции − оффал) — ровно
+// напоминанием, чей «день напоминания» (дата операции − оффсет) — ровно
 // «сегодня» пояса. Автоплатёжные включены (решение #823); без напоминания,
 // гашеные, чужой пояс и архив — мимо.
 func TestPaymentScanStore_ListReminderTargets(t *testing.T) {
@@ -509,7 +509,7 @@ func TestPaymentScanStore_ListReminderTargets(t *testing.T) {
 	autoRule := insertScanReminderPayment(t, pool, msk, autoProp, true, 7)
 	insertScanOperation(t, pool, msk, autoProp, autoRule, "2026-09-26", "planned") // Reminder day = 2026-09-19.
 
-	// Мимо: другой оффал (день напоминания не сегодня), гашеное вхождение,
+	// Мимо: другой оффсет (день напоминания не сегодня), гашеное вхождение,
 	// правило без напоминания.
 	offProp := createLiveProperty(t, pool, msk)
 	offRule := insertScanReminderPayment(t, pool, msk, offProp, false, 7)
@@ -545,7 +545,7 @@ func TestPaymentScanStore_ListReminderTargets(t *testing.T) {
 	assert.Equal(t, time.Date(2026, 9, 26, 0, 0, 0, 0, time.UTC), dates[autoRule])
 }
 
-// Букинг ноги напоминания: граница — полночь «дата − оффал» по поясу
+// Букинг ноги напоминания: граница — полночь «дата − оффсет» по поясу
 // (Московская полночь 19-го = 2026-09-18T21:00Z), окно (from, until].
 func TestPaymentScanStore_ListScheduledReminderTargets(t *testing.T) {
 	t.Parallel()
@@ -558,7 +558,7 @@ func TestPaymentScanStore_ListScheduledReminderTargets(t *testing.T) {
 	rule := insertScanReminderPayment(t, pool, msk, prop, false, 3)
 	insertScanOperation(t, pool, msk, prop, rule, "2026-09-22", "planned") // Boundary 2026-09-18T21:00Z.
 
-	// Автоплатёжное — включено; другой оффал — граница вне окна; без
+	// Автоплатёжное — включено; другой оффсет — граница вне окна; без
 	// напоминания — мимо.
 	autoProp := createLiveProperty(t, pool, msk)
 	autoRule := insertScanReminderPayment(t, pool, msk, autoProp, true, 1)
@@ -592,7 +592,7 @@ func TestPaymentScanStore_ListScheduledReminderTargets(t *testing.T) {
 
 // Разрешение в момент доставки (карта #822): planned-вхождение правила с
 // напоминанием, чей ТЕКУЩИЙ день напоминания — «сегодня» пояса, отвечает
-// live; смена оффала после букинга, гашеное, архив и ролловер — нет.
+// live; смена оффсета после букинга, гашеное, архив и ролловер — нет.
 func TestPaymentScanStore_GetScheduledReminderPayment(t *testing.T) {
 	t.Parallel()
 
@@ -604,7 +604,7 @@ func TestPaymentScanStore_GetScheduledReminderPayment(t *testing.T) {
 	rule := insertScanReminderPayment(t, pool, msk, prop, false, 3)
 	insertScanOperation(t, pool, msk, prop, rule, "2026-09-22", "planned")
 
-	// Мёртвые состояния: гашеное вхождение; правило, чей оффал сменён после
+	// Мёртвые состояния: гашеное вхождение; правило, чей оффсет сменён после
 	// букинга (3 → 7: день напоминания уехал на 15-е); архив.
 	paidProp := createLiveProperty(t, pool, msk)
 	paidRule := insertScanReminderPayment(t, pool, msk, paidProp, false, 3)
