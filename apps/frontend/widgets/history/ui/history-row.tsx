@@ -1,6 +1,6 @@
 'use client';
 
-import type { ComponentType, JSX } from 'react';
+import type { ComponentType, JSX, SVGProps } from 'react';
 import Link from 'next/link';
 import { AddSmall, CheckSmall, EditSmall, TrashBinSmall } from '@/shared/assets/icons';
 import {
@@ -15,7 +15,7 @@ import { cn } from '@/shared/lib/cn';
 
 /** Иконка основного действия по канону иконок: S-стиль 16×16 (макет
  * 2157-56876) — нейтральный тёмный глиф, тон строки несёт полоска слева. */
-const TONE_ICON: Record<HistoryBaseActionTone, ComponentType<{ className?: string }>> = {
+const TONE_ICON: Record<HistoryBaseActionTone, ComponentType<SVGProps<SVGSVGElement>>> = {
   success: AddSmall,
   warning: EditSmall,
   primary: CheckSmall,
@@ -50,6 +50,7 @@ export function HistoryRow({ entry }: { readonly entry: HistoryEntry }): JSX.Ele
         <span aria-hidden className={cn('w-[3px] shrink-0 self-stretch rounded-pill', TONE_BAR[tone])} />
         <Icon
           className="h-4 w-4 shrink-0 text-content"
+          role="img"
           aria-label={baseActionLabel(entry.baseAction)}
         />
         <p className="min-w-0 flex-1 text-xs leading-[15px] text-content">

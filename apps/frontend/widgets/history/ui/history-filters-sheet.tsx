@@ -25,6 +25,7 @@ import {
   Wallet,
 } from '@/shared/assets/icons';
 import {
+  actorRoleLabel,
   baseActionLabel,
   HISTORY_KINDS,
   kindLabel,
@@ -44,6 +45,7 @@ import {
   type HistoryFilters,
 } from '@/features/history';
 import { dateToIsoLocal, type IsoRange } from '@/shared/lib/calendar';
+import { cn } from '@/shared/lib/cn';
 import {
   Button,
   CalendarRangePicker,
@@ -484,7 +486,10 @@ function FilterGroupCard({
           * 2050-158281: «нажимается по этой области, при свернутом виде
           * тоже»): паддинги на label, не margin на кнопке — иначе
           * preflight `button{margin:0}` их съедает (#753). */}
-        <label htmlFor={masterId} className="flex cursor-pointer items-center py-4 pl-5 pr-2">
+        <label
+          htmlFor={masterId}
+          className={cn('flex items-center py-4 pl-5 pr-2', disabled ? 'cursor-default' : 'cursor-pointer')}
+        >
           <Checkbox
             id={masterId}
             className="h-6 w-6"
@@ -605,15 +610,17 @@ function FilterOptionRow({
 
 /** Иконка роли 16 перед подзаголовком строки участника (#840, макет
  * 2184-94261): owner — замок (канон #711), full_access — силуэт,
- * viewer — глаз (канон «Просмотра», #698). Роль — смысловая информация
- * строки, поэтому иконка несёт accessible name, а не aria-hidden. */
+ * viewer — глаз (канон «Просмотра», #698). Подпись роли — резолвер
+ * actorRoleLabel (словарь ролей shared/model/access, решение чарта #692);
+ * роль — смысловая информация строки, поэтому иконка несёт accessible
+ * name, а не aria-hidden. */
 function RoleIcon({ role }: { readonly role: HistoryParticipantOption['role'] }): JSX.Element {
   const className = 'h-4 w-4 shrink-0 text-content-tertiary';
   if (role === 'owner') {
-    return <LockSmall className={className} role="img" aria-label="Роль: владелец" />;
+    return <LockSmall className={className} role="img" aria-label={`Роль: ${actorRoleLabel(role)}`} />;
   }
   if (role === 'viewer') {
-    return <EyeSmall className={className} role="img" aria-label="Роль: просмотр" />;
+    return <EyeSmall className={className} role="img" aria-label={`Роль: ${actorRoleLabel(role)}`} />;
   }
-  return <FullAccessSmall className={className} role="img" aria-label="Роль: полный доступ" />;
+  return <FullAccessSmall className={className} role="img" aria-label={`Роль: ${actorRoleLabel(role)}`} />;
 }
