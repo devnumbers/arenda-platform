@@ -1,8 +1,8 @@
 /**
  * Модель экрана «Настроить уведомления» (#746, карта #734, решение #738):
- * источник состояния пуш-колонки, затемнение при выключенном мастере и
- * вердикты флоу «Разрешите пуши». Чистые функции — экран только связывает
- * их с хуками; проверяются модульными тестами рядом.
+ * источник состояния пуш-колонки и вердикты флоу «Разрешите пуши».
+ * Чистые функции — экран только связывает их с хуками; проверяются
+ * модульными тестами рядом.
  */
 
 import type { NotificationCategoryPreferences, NotificationSettingsCategory } from '@/entities/notification';
@@ -42,9 +42,6 @@ export type PushDisplay = {
   readonly visible: boolean;
   readonly masterOn: boolean;
   readonly categories: NotificationCategoryPreferences;
-  /** Мастер выключен — категорийные тумблеры затемнены и некликабельны
-   * (2333-180696); их значения хранятся и возвращаются с мастером. */
-  readonly categoriesInteractive: boolean;
   /** Карточка «Разрешите пуши» под мастером (2329-150165): мастер включён,
    * проба браузера осела, разрешение не выдано. */
   readonly needsPermission: boolean;
@@ -83,18 +80,19 @@ export function resolvePushDisplay(input: PushDisplayInput): PushDisplay {
       visible: false,
       masterOn: false,
       categories: allCategoriesEnabled(),
-      categoriesInteractive: false,
       needsPermission: false,
     };
   }
 
   const state = resolvePushState(input.endpoint, input.server, input.local);
 
+  // Мастер выключен только глушит доставку: тумблеры категорий остаются
+  // кликабельными и хранят значения (сверка с макетом #827 — 2333-180696
+  // показывает включённый пуш-тумблер под выключенным мастером).
   return {
     visible: true,
     masterOn: state.enabled,
     categories: state.categories,
-    categoriesInteractive: state.enabled,
     needsPermission:
       state.enabled && input.probeSettled && !input.permissionGranted,
   };

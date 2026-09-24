@@ -57,12 +57,13 @@ describe('resolvePushDisplay — источник состояния', () => {
 });
 
 describe('resolvePushDisplay — мастер и разрешения', () => {
-  it('мастер выключен — категорийные тумблеры затемнены (2333-180696), значения хранятся', () => {
+  it('мастер выключен — тумблеры категорий кликабельны, значения хранятся (2333-180696: включённый пуш под выключенным мастером)', () => {
     const display = resolvePushDisplay({
       ...settledInput,
       server: { enabled: false, categories: { ...ALL_ON.categories, rental: true } },
     });
-    expect(display.categoriesInteractive).toBe(false);
+    // gating-флага в модели нет: экран не затемняет и не disables категории
+    expect('categoriesInteractive' in display).toBe(false);
     expect(display.categories.rental).toBe(true);
   });
 
