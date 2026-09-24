@@ -1,7 +1,9 @@
 import {
   captureScreen,
   expect,
+  mockEmailCategoryShortcut,
   openCabinetWithSeededSession,
+  pickCalendarDay,
   SEEDED_APARTMENT_PROPERTY_ID,
   test,
 } from './fixtures';
@@ -11,7 +13,7 @@ import {
 // черновик в localStorage, создание через POST и экран успеха с датой
 // первого вхождения. Скриншоты — материал для сверки с Figma-фреймами #449
 // (823:4243, 830:16721, 823:11219 + ветки дат, 843:8345, 834:19662,
-// 835:19893).
+// 835:19893, шаг 4: 1084-24863, 1056-54338).
 
 const APARTMENT_PAYMENTS_URL = `/properties/${SEEDED_APARTMENT_PROPERTY_ID}/payments`;
 const wizardUrl = (type: 'payment' | 'autopayment'): string =>
@@ -54,25 +56,6 @@ async function passTitleStep(page: Parameters<typeof openCabinetWithSeededSessio
   }
   await page.getByRole('button', { name: 'Продолжить' }).click();
   await expect(page.getByRole('heading', { name: 'Периодичность платежа' })).toBeVisible();
-}
-
-/**
- * Тап по дню в канонном бесконечном календаре (04.09): секция месяца
- * опознаётся по заголовку «Месяц, год» — в ленте остаются и прошлые
- * месяцы, где тот же день был бы disabled. Сам тап только кладёт черновик;
- * коммит — отдельная кнопка «Выбрать» (choose via `confirm`).
- */
-async function pickCalendarDay(
-  page: Parameters<typeof openCabinetWithSeededSession>[0],
-  date: Date,
-): Promise<void> {
-  const monthLabel = date
-    .toLocaleDateString('ru-RU', { month: 'long' })
-    .replace(/^./, (ch) => ch.toUpperCase());
-  const section = page
-    .locator('section')
-    .filter({ has: page.getByRole('heading', { name: `${monthLabel}, ${date.getFullYear()}` }) });
-  await section.getByRole('button', { name: String(date.getDate()), exact: true }).click();
 }
 
 /** Подтвердить черновик канонного календаря кнопкой «Выбрать» —
@@ -178,7 +161,7 @@ test.describe('визард создания платежа', () => {
     );
     await captureScreen(page, testInfo, 'wizard-step3-month-days-mobile');
 
-    // Шаг 4 — окончание необязательно: пропускаем.
+    // Шаг 4 — напоминание и настройки необязательны: пропускаем.
     await page.getByRole('button', { name: 'Продолжить' }).click();
     await expect(page.getByRole('heading', { name: 'Настройте платеж' })).toBeVisible();
     await page.getByRole('button', { name: 'Далее' }).click();
@@ -296,7 +279,7 @@ test.describe('визард создания платежа', () => {
     await passTitleStep(page, title);
 
     await page.getByRole('button', { name: 'Каждый день' }).click();
-    // Ветка не открылась — сразу шаг окончания.
+    // Ветка не открылась — сразу шаг «Настройте платеж».
     await expect(page.getByRole('heading', { name: 'Настройте платеж' })).toBeVisible();
     await page.getByRole('button', { name: 'Далее' }).click();
 
@@ -586,10 +569,10 @@ test.describe('визард создания платежа', () => {
     await expect(page.getByRole('button', { name: 'Расход' })).toBeVisible();
   });
 
-  test('напоминание: радио пустые по умолчанию, «За 3 дня» переживает перезагрузку и попадает в контракт', async ({
+  test('напоминание: «За 3 дня» переживает перезагрузку и попадает в контракт', async ({
     page,
     seededUser,
-  }) => {
+  }, testInfo) => {
     const title = 'E2E платеж с напоминанием';
     await openWizard(page, seededUser);
     await selectCategory(page);
@@ -607,6 +590,7 @@ test.describe('визард создания платежа', () => {
     await expect(page.getByRole('button', { name: 'За 7 дней' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Настройки платежа' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Выбрать дату' })).toBeVisible();
+    await captureScreen(page, testInfo, 'wizard-step4-reminder-manual-mobile');
     await page.getByRole('button', { name: 'За 3 дня' }).click();
 
     // Черновик с напоминанием переживает перезагрузку: восстановление на
@@ -629,17 +613,7 @@ test.describe('визард создания платежа', () => {
     // Email-матрица аккаунта (#743): тумблер шага отражает её значение,
     // клик пишет PUT с флипом категории — пер-платёжных override нет (#822).
     // Мок stateful: refetch после PUT возвращает сохранённое состояние.
-    let current = { rental: true, payments_operations: true, tasks: true, shared_access: true };
-    let savedCategories: typeof current | undefined;
-    await page.route('**/api/notification-preferences', async (route) => {
-      if (route.request().method() === 'PUT') {
-        savedCategories = (route.request().postDataJSON() as { email: typeof current }).email;
-        current = { ...savedCategories };
-        await route.fulfill({ json: { email: current } });
-        return;
-      }
-      await route.fulfill({ json: { email: current } });
-    });
+    const { savedCategories } = await mockEmailCategoryShortcut(page);
 
     await openWizard(page, seededUser);
     await selectCategory(page);
@@ -654,14 +628,14 @@ test.describe('визард создания платежа', () => {
     // Оптимистичный флип и PUT — трекер запросов только через expect.poll.
     await expect(toggle).toHaveAttribute('aria-checked', 'false');
     await expect
-      .poll(() => savedCategories?.payments_operations, { timeout: 5_000 })
+      .poll(() => savedCategories()?.payments_operations, { timeout: 5_000 })
       .toBe(false);
   });
 
   test('автоплатёж создаётся с флагом autoPay и заголовком успеха про автоплатёж', async ({
     page,
     seededUser,
-  }) => {
+  }, testInfo) => {
     const title = 'E2E автоплатеж коммуналки';
     await openWizard(page, seededUser, 'autopayment');
     await selectCategory(page);
@@ -676,6 +650,7 @@ test.describe('визард создания платежа', () => {
     await expect(page.getByRole('heading', { name: 'Уведомления об оплате' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Окончание платежа' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'За 1 день' })).toHaveCount(0);
+    await captureScreen(page, testInfo, 'wizard-step4-autopayment-mobile');
     await page.getByRole('button', { name: 'Далее' }).click();
 
     await page.getByRole('textbox', { name: 'Сумма' }).fill('3300');

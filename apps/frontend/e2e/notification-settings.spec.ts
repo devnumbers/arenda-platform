@@ -1,4 +1,5 @@
 import {
+  captureScreen,
   expect,
   openCabinetWithSeededSession,
   test,
@@ -18,7 +19,7 @@ test.describe('настройки уведомлений — пуш-колонк
   test('мастер выключен — тумблер категории активен, строка не затемнена', async ({
     page,
     seededUser,
-  }) => {
+  }, testInfo) => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto('/profile/notifications');
 
@@ -27,10 +28,13 @@ test.describe('настройки уведомлений — пуш-колонк
     });
     await expect(master).toBeVisible();
     await master.click();
+    // Дефолт устройства — мастер включён (#738), клик обязан его выключить.
+    await expect(master).toHaveAttribute('aria-checked', 'false');
 
     const rentalPush = page.getByRole('switch', { name: 'Пуш-уведомления — Аренда' });
     await expect(rentalPush).toBeEnabled();
     // строка в полную непрозрачность — затемнения нет
     await expect(rentalPush.locator('xpath=..')).toHaveCSS('opacity', '1');
+    await captureScreen(page, testInfo, 'notification-settings-master-off');
   });
 });

@@ -2,7 +2,9 @@ import {
   captureScreen,
   execE2eSql,
   expect,
+  mockEmailCategoryShortcut,
   openCabinetWithSeededSession,
+  pickCalendarDay,
   SEEDED_APARTMENT_PROPERTY_ID,
   SEEDED_STUDIO_PROPERTY_ID,
   test,
@@ -81,13 +83,7 @@ async function passToSettings(
   await expect(page.getByRole('heading', { name: 'Условия аренды' })).toBeVisible();
   await page.getByRole('button', { name: 'Начало аренды: Выбрать дату' }).click();
   const date = tomorrow();
-  const monthLabel = date
-    .toLocaleDateString('ru-RU', { month: 'long' })
-    .replace(/^./, (ch) => ch.toUpperCase());
-  const monthSection = page
-    .locator('section')
-    .filter({ has: page.getByRole('heading', { name: `${monthLabel}, ${date.getFullYear()}` }) });
-  await monthSection.getByRole('button', { name: String(date.getDate()), exact: true }).click();
+  await pickCalendarDay(page, date);
   // exact: триггеры полей «…: Выбрать дату» мечатся подстрокой «Выбрать».
   await page.getByRole('button', { name: 'Выбрать', exact: true }).click();
 
@@ -205,17 +201,7 @@ test.describe.serial('настройки аренды: «За сколько н�
     // Тот же шоткат, что на шаге 4 платежей (#825): значение и запись —
     // глобальная email-матрица аккаунта. Мок stateful: refetch после PUT
     // возвращает сохранённое состояние.
-    let current = { rental: true, payments_operations: true, tasks: true, shared_access: true };
-    let savedCategories: typeof current | undefined;
-    await page.route('**/api/notification-preferences', async (route) => {
-      if (route.request().method() === 'PUT') {
-        savedCategories = (route.request().postDataJSON() as { email: typeof current }).email;
-        current = { ...savedCategories };
-        await route.fulfill({ json: { email: current } });
-        return;
-      }
-      await route.fulfill({ json: { email: current } });
-    });
+    const { savedCategories } = await mockEmailCategoryShortcut(page);
 
     await passToSettings(page, seededUser, SEEDED_APARTMENT_PROPERTY_ID);
 
@@ -224,7 +210,7 @@ test.describe.serial('настройки аренды: «За сколько н�
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-checked', 'false');
     await expect
-      .poll(() => savedCategories?.payments_operations, { timeout: 5_000 })
+      .poll(() => savedCategories()?.payments_operations, { timeout: 5_000 })
       .toBe(false);
   });
 });
