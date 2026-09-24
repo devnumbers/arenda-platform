@@ -181,11 +181,10 @@ type RentPaymentGateway interface {
 // contacts owner check is the application's duty (ADR 0053: the FK does not
 // verify the owner), so the reader answers for the scope's book only.
 type TenantReader interface {
-	// Exists reports whether the contact belongs to the scope owner's book.
-	Exists(ctx context.Context, scope, contactID uuid.UUID) (bool, error)
-	// DisplayName resolves the tenant card's display name (the ФИО) — the
-	// label snapshot the action journal rows carry (ADR 0061 §3). An unknown
-	// or foreign card is an error like Exists' miss: the caller validated
-	// the card first.
-	DisplayName(ctx context.Context, scope, contactID uuid.UUID) (string, error)
+	// ValidatedTenantLabel reads the tenant card once and resolves its
+	// display name (the ФИО) — the label snapshot the action journal rows
+	// carry (ADR 0061 §3). The boolean reports whether the card belongs to
+	// the scope owner's book: an unknown or foreign card is an empty label
+	// and false, not an error.
+	ValidatedTenantLabel(ctx context.Context, scope, contactID uuid.UUID) (string, bool, error)
 }

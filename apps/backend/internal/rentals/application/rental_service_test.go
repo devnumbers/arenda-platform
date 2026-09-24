@@ -129,12 +129,13 @@ func (h *fakeHistory) WithTx(transaction.Tx) historyapp.Recorder { return h }
 
 type fakeTenantReader struct{ exists bool }
 
-func (r fakeTenantReader) Exists(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
-	return r.exists, nil
-}
-
-func (r fakeTenantReader) DisplayName(context.Context, uuid.UUID, uuid.UUID) (string, error) {
-	return "Иван Tenant", nil
+func (r fakeTenantReader) ValidatedTenantLabel(
+	context.Context, uuid.UUID, uuid.UUID,
+) (label string, ok bool, err error) {
+	if !r.exists {
+		return "", false, nil
+	}
+	return "Иван Tenant", true, nil
 }
 
 type fakeRentalStore struct {

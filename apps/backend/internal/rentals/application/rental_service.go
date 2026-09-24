@@ -588,21 +588,6 @@ func nilIfZero(n int) *int {
 	return &n
 }
 
-// tenantExists resolves the tenant contact through the book reader; the
-// contacts owner check is the application's duty (ADR 0053 — the FK does not
-// verify the owner). A missing reader is a wiring mistake only when a command
-// actually names a contact.
-func (s *RentalService) tenantExists(ctx context.Context, scope, contactID uuid.UUID) (bool, error) {
-	if s.tenants == nil {
-		return false, errors.New("rentals: tenant reader must be configured to name a contact")
-	}
-	ok, err := s.tenants.Exists(ctx, scope, contactID)
-	if err != nil {
-		return false, fmt.Errorf("check tenant contact: %w", err)
-	}
-	return ok, nil
-}
-
 // validateCreate enforces the create contract (ADR 0053 §4): the amount
 // within 1..10⁹, the utilities mode, the start today or later (no backdated
 // rentals), the planned end strictly after the start, the optional records in
@@ -803,12 +788,13 @@ func updatedRentalFields(cmd UpdateRentalCommand) []string {
 // tenantName resolves the tenant card's display name for the action journal
 // row (ADR 0061 §3); a rental without a tenant card yields an empty label.
 // The read is loud: a failing card read is a database trouble, not a missing
-// label.
+// label. The card belongs to the stored rental — its ownership has been
+// validated at write time, so the boolean half of the port is not consulted.
 func (s *RentalService) tenantName(ctx context.Context, scope uuid.UUID, contactID *uuid.UUID) (string, error) {
 	if contactID == nil || s.tenants == nil {
 		return "", nil
 	}
-	name, err := s.tenants.DisplayName(ctx, scope, *contactID)
+	name, _, err := s.tenants.ValidatedTenantLabel(ctx, scope, *contactID)
 	if err != nil {
 		return "", fmt.Errorf("resolve tenant name: %w", err)
 	}
@@ -817,21 +803,27 @@ func (s *RentalService) tenantName(ctx context.Context, scope uuid.UUID, contact
 
 // validatedTenantName checks a create/update contact reference and resolves
 // its display name for the action journal row: an unknown or foreign card is
-// ErrInvalidInput, a nil contact is a tenant-less rental.
+// ErrInvalidInput, a nil contact is a tenant-less rental. The card is read
+// once — the owner check and the label come from the same port call. A
+// missing reader is a wiring mistake only when a command actually names a
+// contact.
 func (s *RentalService) validatedTenantName(
 	ctx context.Context, scope uuid.UUID, contactID *uuid.UUID,
 ) (string, error) {
 	if contactID == nil {
 		return "", nil
 	}
-	ok, err := s.tenantExists(ctx, scope, *contactID)
+	if s.tenants == nil {
+		return "", errors.New("rentals: tenant reader must be configured to name a contact")
+	}
+	label, ok, err := s.tenants.ValidatedTenantLabel(ctx, scope, *contactID)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("check tenant contact: %w", err)
 	}
 	if !ok {
 		return "", ErrInvalidInput
 	}
-	return s.tenantName(ctx, scope, contactID)
+	return label, nil
 }
 
 // derefDate materializes an optional date for the row-text builders: a nil

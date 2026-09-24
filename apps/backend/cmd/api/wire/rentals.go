@@ -365,29 +365,23 @@ func NewTenantBookReader(contacts contactsapp.ContactStore) rentalsapp.TenantRea
 	return &tenantBookReader{contacts: contacts}
 }
 
-// Exists reports whether the contact belongs to the scope owner's book; a
-// missing card is simply not a tenant candidate, not an error.
-func (r *tenantBookReader) Exists(ctx context.Context, scope, contactID uuid.UUID) (bool, error) {
+// ValidatedTenantLabel reads the tenant card once and resolves its ФИО for
+// the action journal rows (ADR 0061 §3); the boolean reports whether the
+// card belongs to the scope owner's book (ADR 0053 — the FK does not verify
+// the owner). An unknown or foreign card is an empty label and false, not
+// an error; a failing read is loud.
+func (r *tenantBookReader) ValidatedTenantLabel(
+	ctx context.Context, scope, contactID uuid.UUID,
+) (label string, ok bool, err error) {
 	contact, err := r.contacts.GetByID(ctx, contactID)
 	if errors.Is(err, contactsapp.ErrNotFound) {
-		return false, nil
+		return "", false, nil
 	}
 	if err != nil {
-		return false, err
-	}
-	return contact.OwnerID == scope, nil
-}
-
-// DisplayName resolves the tenant card's ФИО for the action journal rows
-// (ADR 0061 §3); a foreign or missing card is an error — the caller has
-// validated the card through Exists first.
-func (r *tenantBookReader) DisplayName(ctx context.Context, scope, contactID uuid.UUID) (string, error) {
-	contact, err := r.contacts.GetByID(ctx, contactID)
-	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	if contact.OwnerID != scope {
-		return "", contactsapp.ErrNotFound
+		return "", false, nil
 	}
-	return contact.FullName(), nil
+	return contact.FullName(), true, nil
 }
