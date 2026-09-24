@@ -70,6 +70,7 @@ const (
 	NotificationEventTypeRentalCompleted              NotificationEventType = "rental_completed"
 	NotificationEventTypePaymentDue                   NotificationEventType = "payment_due"
 	NotificationEventTypePaymentOverdue               NotificationEventType = "payment_overdue"
+	NotificationEventTypePaymentReminder              NotificationEventType = "payment_reminder"
 	NotificationEventTypeTaskOverdue                  NotificationEventType = "task_overdue"
 	NotificationEventTypePropertyInvitation           NotificationEventType = "property_invitation"
 	NotificationEventTypeInvitationAccepted           NotificationEventType = "invitation_accepted"
@@ -85,7 +86,6 @@ const (
 	NotificationEventTypeSubscriptionGraceEntered     NotificationEventType = "subscription_grace_entered"
 	NotificationEventTypeSubscriptionGraceExpiring    NotificationEventType = "subscription_grace_expiring"
 	NotificationEventTypeSystemMaintenance            NotificationEventType = "system_maintenance"
-	NotificationEventTypePaymentReminder              NotificationEventType = "payment_reminder"
 )
 
 func (e *NotificationEventType) Scan(src interface{}) error {
