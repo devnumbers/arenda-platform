@@ -16,14 +16,19 @@
 -- the fake email sender), and the pre-authenticated session row lets screen
 -- tests skip the login flow entirely.
 
-INSERT INTO users (id, phone, role, name, surname, email, phone_encrypted)
-VALUES ('11111111-1111-4111-8111-111111111111', :'phone_det', 'owner', 'Иван', 'Иванов', 'e2e@example.com', TRUE)
+-- Календарь владельца (ADR 0048: «сегодня» сервера = users.timezone) — UTC,
+-- в одну линию с timezoneId браузера под Playwright (#796): иначе в
+-- полуночном окне 00:00–03:00 МСК валидация «дата не в прошлом» отбивает
+-- 400 на создание аренды/платежа из визардов, у которых префилл — «сегодня».
+INSERT INTO users (id, phone, role, name, surname, email, phone_encrypted, timezone)
+VALUES ('11111111-1111-4111-8111-111111111111', :'phone_det', 'owner', 'Иван', 'Иванов', 'e2e@example.com', TRUE, 'UTC')
 ON CONFLICT (id) DO UPDATE
 SET phone = EXCLUDED.phone,
     phone_encrypted = TRUE,
     email = EXCLUDED.email,
     name = EXCLUDED.name,
-    surname = EXCLUDED.surname;
+    surname = EXCLUDED.surname,
+    timezone = EXCLUDED.timezone;
 
 INSERT INTO sessions (id, user_id, token_hash, expires_at, created_at, last_used_at)
 VALUES ('22222222-2222-4222-8222-222222222222',
@@ -56,16 +61,17 @@ ON CONFLICT (id) DO NOTHING;
 -- Совместный доступ к квартире (#467): полный доступ (правит без удаления)
 -- и смотрящий (экран правки недоступен). Собственные сессии — те же
 -- pre-authenticated cookie-токены оркестратора.
-INSERT INTO users (id, phone, role, name, surname, email, phone_encrypted)
+INSERT INTO users (id, phone, role, name, surname, email, phone_encrypted, timezone)
 VALUES
-    ('12111111-1111-4111-8111-111111111121', :'member_phone_det', 'owner', 'Мария', 'Петрова', 'e2e-member@example.com', TRUE),
-    ('13111111-1111-4111-8111-111111111131', :'viewer_phone_det', 'owner', 'Сергей', 'Сидоров', 'e2e-viewer@example.com', TRUE)
+    ('12111111-1111-4111-8111-111111111121', :'member_phone_det', 'owner', 'Мария', 'Петрова', 'e2e-member@example.com', TRUE, 'UTC'),
+    ('13111111-1111-4111-8111-111111111131', :'viewer_phone_det', 'owner', 'Сергей', 'Сидоров', 'e2e-viewer@example.com', TRUE, 'UTC')
 ON CONFLICT (id) DO UPDATE
 SET phone = EXCLUDED.phone,
     phone_encrypted = TRUE,
     email = EXCLUDED.email,
     name = EXCLUDED.name,
-    surname = EXCLUDED.surname;
+    surname = EXCLUDED.surname,
+    timezone = EXCLUDED.timezone;
 
 INSERT INTO sessions (id, user_id, token_hash, expires_at, created_at, last_used_at)
 VALUES
