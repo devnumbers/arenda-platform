@@ -101,7 +101,6 @@ export function ParticipantsHubScreen(): JSX.Element {
             />
           </div>
         )}
-
       </PageContent>
 
       <StickyBottomBar>
