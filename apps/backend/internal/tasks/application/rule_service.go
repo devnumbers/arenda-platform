@@ -58,10 +58,11 @@ type UpdateRuleCommand struct {
 // partial update and delete. Every mutation runs through the shared
 // runMutation conveyor, which owns the ordering invariants structurally: the
 // role gate, the property row lock, the owner's today, the change step, its
-// audit entry in the same transaction and the materialization tick when the
-// step's verdict asks for it. Create and edit also hand the rule's standing
-// tasks to the notifications scheduling seam after the commit (issue #775,
-// best-effort). Reads never tick and never write.
+// audit entry and its action journal row (ADR 0061) in the same transaction,
+// and the materialization tick when the step's verdict asks for it. Create
+// and edit also hand the rule's standing tasks to the notifications
+// scheduling seam after the commit (issue #775, best-effort). Reads never
+// tick and never write.
 type RuleService struct {
 	txStoreFactory
 	policy      sharedpolicy.Policy

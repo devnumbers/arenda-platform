@@ -146,8 +146,9 @@ type RentalSummary struct {
 // delete and the period summary. Every mutation runs through the shared
 // runRentalMutation conveyor, which owns the ordering invariants
 // structurally: the role gate, the property row lock, the owner's today, the
-// change step, its audit entry in the same transaction and the payments tick
-// when the managed payment changed. Reads never tick and never write.
+// change step, its audit entry and its action journal row (ADR 0061) in the
+// same transaction, and the payments tick when the managed payment changed.
+// Reads never tick and never write.
 type RentalService struct {
 	txStoreFactory
 	policy    sharedpolicy.Policy
