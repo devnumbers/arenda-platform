@@ -32,12 +32,12 @@ CREATE TABLE action_journal (
     id           uuid PRIMARY KEY,               -- app-generated UUIDv7 (ADR 0019)
     property_id  uuid NOT NULL REFERENCES properties (id) ON DELETE CASCADE,
     actor_id     uuid REFERENCES users (id) ON DELETE SET NULL,
-    actor_role   text NOT NULL,                  -- owner | full_access | viewer (shared/policy mapper, ADR 0020 pattern)
+    actor_role   text NOT NULL CHECK (actor_role IN ('owner','full_access','viewer')),  -- shared/policy mapper, ADR 0020 pattern
     actor_name   text NOT NULL,                  -- snapshot of the actor's display name at action time
     actor_email  text NOT NULL DEFAULT '',       -- snapshot of the actor's email (searchable; visible to members)
-    kind         text NOT NULL,                  -- property | rental | payment | operation | contact | task | member
+    kind         text NOT NULL CHECK (kind IN ('property','rental','payment','operation','contact','task','member')),  -- the seven mockup filter groups (§4)
     action       text NOT NULL,                  -- stable dotted id, e.g. property.renamed, operation.paid
-    base_action  text NOT NULL,                  -- added | changed | completed | deleted (filter + icon + color)
+    base_action  text NOT NULL CHECK (base_action IN ('added','changed','completed','deleted')),  -- filter + icon + color
     segments     jsonb NOT NULL,                 -- server-built row text: [{text, link?: {kind, id}}]
     searchable   text NOT NULL,                  -- segments plain text + actor_name + actor_email, materialized at write
     search_tsv   tsvector GENERATED ALWAYS AS (to_tsvector('russian', searchable)) STORED,
