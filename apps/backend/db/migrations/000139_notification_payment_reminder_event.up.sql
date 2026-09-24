@@ -1,3 +1,6 @@
+SET lock_timeout = '1s';
+SET statement_timeout = '5s';
+
 -- Событие ленты «Напоминание о платеже» (карта #822, #824): категория
 -- payments_operations, нога издателя платежей.
 
