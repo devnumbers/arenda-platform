@@ -203,6 +203,8 @@ export function DesignLayerShowcase(): JSX.Element {
     const [datePickerMinValue, setDatePickerMinValue] = useState<string | null>(null);
     const [datePickerMaxOpen, setDatePickerMaxOpen] = useState(false);
     const [datePickerMaxValue, setDatePickerMaxValue] = useState<string | null>(null);
+    const [datePickerAllowPastOpen, setDatePickerAllowPastOpen] = useState(false);
+    const [datePickerAllowPastValue, setDatePickerAllowPastValue] = useState<string | null>(null);
     const [rangePickerOpen, setRangePickerOpen] = useState(false);
     const [rangePickerValue, setRangePickerValue] = useState<IsoRange | null>(null);
     const [rangePickerEmptyOpen, setRangePickerEmptyOpen] = useState(false);
@@ -724,6 +726,29 @@ export function DesignLayerShowcase(): JSX.Element {
                             onConfirm={(date) => {
                                 setDatePickerMaxValue(date);
                                 setDatePickerMaxOpen(false);
+                            }}
+                        />
+                    )}
+                    <div className={styles.column}>
+                        <Button onClick={() => setDatePickerAllowPastOpen(true)}>
+                            Открыть пикер (allowPast: minDate в прошлом)
+                        </Button>
+                        {datePickerAllowPastValue !== null && (
+                            <p className="px-6 text-base text-content-secondary">
+                                Выбрано: {datePickerAllowPastValue}
+                            </p>
+                        )}
+                    </div>
+                    {datePickerAllowPastOpen && (
+                        <CalendarDatePicker
+                            allowPast
+                            minDate={addDays(dateToIso(new Date()), -10)}
+                            today={dateToIso(new Date())}
+                            value={datePickerAllowPastValue}
+                            onClose={() => setDatePickerAllowPastOpen(false)}
+                            onConfirm={(date) => {
+                                setDatePickerAllowPastValue(date);
+                                setDatePickerAllowPastOpen(false);
                             }}
                         />
                     )}
