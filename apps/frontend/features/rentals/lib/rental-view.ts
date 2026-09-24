@@ -9,6 +9,7 @@ import type {
   RentalProgress,
   RentalTenant,
 } from '@/entities/rental';
+import { monthsWord } from './months-word';
 import { paymentDayLabel, utilitiesLabel } from './wizard-model';
 
 /**
@@ -23,10 +24,6 @@ export type RentalTermsRow = {
   readonly label: string;
   readonly value: string;
 };
-
-function monthsWord(count: number): string {
-  return pluralize(count, 'месяц', 'месяца', 'месяцев');
-}
 
 /** Существительное после «из N» — родительный падеж: «из 24 месяцев»,
  * «из 21 месяца» (макет 1232:61492); единственное число — у 1, 21, 31…
@@ -70,8 +67,8 @@ export function rentalNextPaymentLine(nextPayment: RentalNextPayment): string {
  * у 1, 21, 31… (11, 111 — множительное). N — платёжные месяцы, счётчик
  * серверный (ADR 0053 §2). */
 export function rentalOverdueLine(overdueMonths: number): string {
-  const singular = overdueMonths % 10 === 1 && overdueMonths % 100 !== 11;
-  return `${singular ? 'Просрочен' : 'Просрочено'} ${overdueMonths} ${monthsWord(overdueMonths)}`;
+  const verb = pluralize(overdueMonths, 'Просрочен', 'Просрочено', 'Просрочено');
+  return `${verb} ${overdueMonths} ${monthsWord(overdueMonths)}`;
 }
 
 /** Строка «Осталось 23 месяца аренды»; у бессрочной остатка нет — строки нет.
@@ -80,8 +77,7 @@ export function rentalRemainingLine(monthsRemaining: number | null): string | un
   if (monthsRemaining === null) {
     return undefined;
   }
-  const singular = monthsRemaining % 10 === 1 && monthsRemaining % 100 !== 11;
-  const remained = singular ? 'Остался' : 'Осталось';
+  const remained = pluralize(monthsRemaining, 'Остался', 'Осталось', 'Осталось');
   return `${remained} ${monthsRemaining} ${monthsWord(monthsRemaining)} аренды`;
 }
 
@@ -112,8 +108,8 @@ export function rentalElapsedLine(startDate: IsoDate, today: IsoDate): string {
   if (elapsed === 0) {
     return 'Идёт 1 месяц';
   }
-  const singular = elapsed % 10 === 1 && elapsed % 100 !== 11;
-  return `${singular ? 'Прошёл' : 'Прошло'} ${elapsed} ${monthsWord(elapsed)}`;
+  const verb = pluralize(elapsed, 'Прошёл', 'Прошло', 'Прошло');
+  return `${verb} ${elapsed} ${monthsWord(elapsed)}`;
 }
 
 /** Плата условиями аренды: «56 000 ₽ в месяц» (Figma 1232:61525). */

@@ -1,8 +1,8 @@
 import { fullMonthsBetween, type IsoDate } from '@/shared/lib/calendar';
 import { formatDayMonthWithYear } from '@/shared/lib/date-format';
-import { pluralize } from '@/shared/lib/pluralize';
 import type { PaymentOperationOrder } from '@/shared/api/query-keys';
 import type { Rental } from '@/entities/rental';
+import { monthsWord } from './months-word';
 import { rentAmountPerMonth, type RentalTermsRow } from './rental-view';
 
 /**
@@ -11,10 +11,6 @@ import { rentAmountPerMonth, type RentalTermsRow } from './rental-view';
  * «Не было платежей»), строки карточки и порядковые номера платежей
  * истории. Только правила текстов — экраны и данные в слоях выше.
  */
-
-function monthsWord(count: number): string {
-  return pluralize(count, 'месяц', 'месяца', 'месяцев');
-}
 
 /** Завершённые аренды списка «Прошлые аренды»: сервер кладёт их после
  * незавершённой по дате завершения, свежие сверху (ADR 0053 §4) —
