@@ -53,14 +53,6 @@ const SURFACE_ICON: Record<NonNullable<PropertyAvatarProps['surface']>, string> 
   filter: 'h-[18px] w-[18px]',
 };
 
-const SURFACE_GLYPH: Record<NonNullable<PropertyAvatarProps['surface']>, string> = {
-  card: 'text-[#D3D7D9]',
-  row: 'text-[#D3D7D9]',
-  hero: 'text-[#D3D7D9]',
-  feed: 'text-[#D3D7D9]',
-  filter: 'text-[#D3D7D9]',
-};
-
 export function PropertyAvatar({
   photoUrl,
   surface = 'card',
@@ -78,7 +70,7 @@ export function PropertyAvatar({
         {photoUrl ? (
           <img src={photoUrl} alt="" className="h-full w-full object-cover" />
         ) : (
-          <BoldHome className={cn(SURFACE_GLYPH[surface], SURFACE_ICON[surface])} aria-hidden />
+          <BoldHome className={cn('text-[#D3D7D9]', SURFACE_ICON[surface])} aria-hidden />
         )}
       </span>
       {withAttentionDot && (
