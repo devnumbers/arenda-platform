@@ -186,6 +186,32 @@ export function historyMemberFeedScope(
   return base !== null ? { ...base, actorIds: [participantId] } : null;
 }
 
+/**
+ * Фильтры адреса на странице «История объекта» (#840): объект прибит путём
+ * страницы и в черновик фильтров не входит — группа «Объекты» адреса не
+ * читается (в шите она видна как серая незабираемая строка, макет
+ * 2184-94176, но не пишет в черновик; hand-crafted ?objects= игнорируется,
+ * а «Применить фильтры» его вычищает — запись группы своя).
+ */
+export function propertyHistoryFilters(filters: HistoryFilters): HistoryFilters {
+  return { ...filters, propertyIds: null };
+}
+
+/**
+ * Скоуп «Истории объекта» (#840, ADR 0061 §7 — тот же GET /history,
+ * property_ids = один): группы адреса действуют поверх прибитого объекта;
+ * null — как у historyFeedScope, какая-то из групп адреса выбрана «в ноль».
+ * Группа «Объекты» адреса не действует никогда — объект прибит страницей
+ * (propertyHistoryFilters).
+ */
+export function historyPropertyFeedScope(
+  filters: HistoryFilters,
+  propertyId: string,
+): HistoryFeedScope | null {
+  const base = historyFeedScope(propertyHistoryFilters(filters));
+  return base !== null ? { ...base, propertyIds: [propertyId] } : null;
+}
+
 /** Лейбл чипа периода шита: без периода — «Выбрать период» (макет
  * 2177-60527), с периодом — формат чипа канона (макет 2067-162950). */
 export function historyPeriodChipLabel(period: IsoRange | null): string {

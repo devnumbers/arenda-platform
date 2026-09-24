@@ -315,6 +315,12 @@ export function PropertyParticipantsScreen({
                           Пригласить участника
                         </MenuItem>
                       )}
+                      {/* История объекта (#840, макет 1980-139712): вход в
+                        * ленту, прибитую к этому объекту; есть и на
+                        * архивном — журнал живёт, пока живёт объект. */}
+                      <MenuItem onSelect={() => router.push(ROUTES.historyProperty(propertyId))}>
+                        История объекта
+                      </MenuItem>
                       <MenuItem onSelect={() => setConfirmOpen(true)}>
                         Отозвать доступ всем
                       </MenuItem>

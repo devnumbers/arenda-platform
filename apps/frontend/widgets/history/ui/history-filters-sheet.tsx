@@ -169,6 +169,10 @@ export type HistoryFiltersSheetProps = {
    * серым (disabled-чекбокс канона Checkbox), тапы не проходят; он не
    * часть черновика — «Сбросить» и «Применить» его не трогают. */
   readonly pinnedParticipantId?: string;
+  /** История объекта (#840, макет 2184-94176, решение владельца 24.09):
+   * зеркало пина участника для группы «Объекты» — только прибитый
+   * объект, серым и незабираемым; не часть черновика. */
+  readonly pinnedPropertyId?: string;
 };
 
 export function HistoryFiltersSheet({
@@ -178,6 +182,7 @@ export function HistoryFiltersSheet({
   onClose,
   title = 'История действий',
   pinnedParticipantId,
+  pinnedPropertyId,
 }: HistoryFiltersSheetProps): JSX.Element {
   const [draft, setDraft] = useState<HistoryFilters>(() => applied);
   // Раскрытие групп — локально, свёрнуто по умолчанию (аннотация макета
@@ -236,15 +241,31 @@ export function HistoryFiltersSheet({
     }),
   );
 
-  const objectRows: ReadonlyArray<HistoryFilterOptionRow> = (optionsQuery.data?.objects ?? []).map(
-    (object_) => ({
-      id: object_.id,
-      label: object_.name,
-      subtitle: object_.address,
-      leadingSize: 'object',
-      photoUrl: object_.photoUrl,
-    }),
-  );
+  const objectRows: ReadonlyArray<HistoryFilterOptionRow> = (
+    optionsQuery.data?.objects ?? []
+  ).map((object_) => ({
+    id: object_.id,
+    label: object_.name,
+    subtitle: object_.address,
+    leadingSize: 'object',
+    photoUrl: object_.photoUrl,
+  }));
+
+  // Строки «Объектов»: в общей ленте — все опции; на «Истории объекта»
+  // (#840, макет 2184-94176) — только прибитый объект (группа «1/1»,
+  // зеркало «Участников» #712). Пин не нашёлся в загруженных опциях
+  // (мусорный id) — группа не рисуется вовсе: показывать все объекты
+  // серыми значило бы врать о прибитости.
+  const pinnedObjectRow =
+    pinnedPropertyId !== undefined
+      ? objectRows.find((row) => row.id === pinnedPropertyId)
+      : undefined;
+  const objectsSource =
+    pinnedPropertyId !== undefined && pinnedObjectRow === undefined
+      ? []
+      : pinnedObjectRow !== undefined
+        ? [pinnedObjectRow]
+        : objectRows;
 
   return (
     <div
@@ -353,24 +374,27 @@ export function HistoryFiltersSheet({
                       }
                     />
                   )}
-                  <FilterGroupCard
-                    title="Объекты"
-                    rows={objectRows}
-                    selected={draft.propertyIds}
-                    expanded={expanded.objects}
-                    onToggleExpanded={() => toggleExpanded('objects')}
-                    onToggleAll={(propertyIds) => setDraft((state) => ({ ...state, propertyIds }))}
-                    onToggleOption={(id) =>
-                      setDraft((state) => ({
-                        ...state,
-                        propertyIds: toggleHistoryFilterOption(
-                          objectRows.map((row) => row.id),
-                          state.propertyIds,
-                          id,
-                        ),
-                      }))
-                    }
-                  />
+                  {(pinnedPropertyId === undefined || objectsSource.length > 0) && (
+                    <FilterGroupCard
+                      title="Объекты"
+                      rows={objectsSource}
+                      selected={draft.propertyIds}
+                      disabled={pinnedPropertyId !== undefined}
+                      expanded={expanded.objects}
+                      onToggleExpanded={() => toggleExpanded('objects')}
+                      onToggleAll={(propertyIds) => setDraft((state) => ({ ...state, propertyIds }))}
+                      onToggleOption={(id) =>
+                        setDraft((state) => ({
+                          ...state,
+                          propertyIds: toggleHistoryFilterOption(
+                            objectsSource.map((row) => row.id),
+                            state.propertyIds,
+                            id,
+                          ),
+                        }))
+                      }
+                    />
+                  )}
                 </>
               )}
 
