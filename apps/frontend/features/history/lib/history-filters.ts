@@ -131,115 +131,74 @@ export function isDefaultHistoryFilters(filters: HistoryFilters): boolean {
 }
 
 /**
- * Скоуп ленты GET /history (#708) из фильтров; null — какая-то из групп
- * выбрана «в ноль»: по семантике фильтра результат пуст, а серверный
- * контракт пустой список не отличает от «все» — лента не запрашивается
- * вовсе (экран рисует пустое состояние без запроса).
+ * Пины страницы: предметы, прибитые путём страницы, а не фильтрами
+ * («Действия участника» #712 — человек, «История объекта» #840 — объект,
+ * «Действия участника в объекте» #841 — пара). Заданный пин значит «своя
+ * группа адреса не читается»: в шите она видна серой незабираемой строкой
+ * (макеты 2184-92510, 2184-94176; на странице пары — обе, «1/1»), но не
+ * пишет в черновик; hand-crafted ?actors=/?objects= игнорируются, а
+ * «Применить фильтры» их вычищает — запись группы своя.
  */
-export function historyFeedScope(filters: HistoryFilters): HistoryFeedScope | null {
-  if (filters.actions !== null && filters.actions.length === 0) {
-    return null;
-  }
-  if (filters.kinds !== null && filters.kinds.length === 0) {
-    return null;
-  }
-  if (filters.actorIds !== null && filters.actorIds.length === 0) {
-    return null;
-  }
-  if (filters.propertyIds !== null && filters.propertyIds.length === 0) {
-    return null;
+export type HistoryFilterPins = {
+  /** Прибитый человек (#712): uuid юзера из пути (actor_id журнала). */
+  readonly actorId?: string;
+  /** Прибитый объект (#840): uuid объекта из пути. */
+  readonly propertyId?: string;
+};
+
+/**
+ * Фильтры адреса с занулением прибитых групп: пин задан — своя группа
+ * не читается (HistoryFilterPins), неприбитые группы проходят без
+ * изменений; без пинов фильтры как есть (общая лента #711).
+ */
+export function pinnedHistoryFilters(
+  filters: HistoryFilters,
+  pins?: HistoryFilterPins,
+): HistoryFilters {
+  if (pins === undefined) {
+    return filters;
   }
   return {
-    dateFrom: filters.period?.from,
-    dateTo: filters.period?.to,
-    actions: filters.actions ?? undefined,
-    kinds: filters.kinds ?? undefined,
-    actorIds: filters.actorIds ?? undefined,
-    propertyIds: filters.propertyIds ?? undefined,
+    ...filters,
+    actorIds: pins.actorId !== undefined ? null : filters.actorIds,
+    propertyIds: pins.propertyId !== undefined ? null : filters.propertyIds,
   };
 }
 
 /**
- * Фильтры адреса на странице «Действия участника» (#712): человек прибит
- * путём страницы и в черновик фильтров не входит — группа «Участники»
- * адреса не читается (в шите она видна как серая незабираемая строка,
- * макет 2184-92510, но не пишет в черновик; hand-crafted ?actors=
- * игнорируется, а «Применить фильтры» его вычищает — запись группы
- * своя).
+ * Скоуп ленты GET /history (#708) из фильтров; null — какая-то из групп
+ * выбрана «в ноль»: по семантике фильтра результат пуст, а серверный
+ * контракт пустой список не отличает от «все» — лента не запрашивается
+ * вовсе (экран рисует пустое состояние без запроса).
+ *
+ * С пинами (ADR 0061 §7 — на прибитых страницах #712/#840/#841 тот же
+ * GET /history, actor_ids и property_ids = по одному; сервер AND'ит их —
+ * бэк #708 без изменений) группы адреса действуют поверх прибитых
+ * предметов, а прибитые id подставляются в скоуп сильнее своих групп:
+ * даже «ни одного» ([]) прибитая группа ленту не опустошает.
  */
-export function memberHistoryFilters(filters: HistoryFilters): HistoryFilters {
-  return { ...filters, actorIds: null };
-}
-
-/**
- * Скоуп «Действий участника» (#712, ADR 0061 §7 — тот же GET /history,
- * actor_ids = один): группы адреса действуют поверх прибитого актёра;
- * null — как у historyFeedScope, какая-то из групп адреса выбрана «в
- * ноль». Группа «Участники» адреса не действует никогда — человек прибит
- * страницей (memberHistoryFilters).
- */
-export function historyMemberFeedScope(
+export function historyFeedScope(
   filters: HistoryFilters,
-  participantId: string,
+  pins?: HistoryFilterPins,
 ): HistoryFeedScope | null {
-  const base = historyFeedScope(memberHistoryFilters(filters));
-  return base !== null ? { ...base, actorIds: [participantId] } : null;
-}
-
-/**
- * Фильтры адреса на странице «История объекта» (#840): объект прибит путём
- * страницы и в черновик фильтров не входит — группа «Объекты» адреса не
- * читается (в шите она видна как серая незабираемая строка, макет
- * 2184-94176, но не пишет в черновик; hand-crafted ?objects= игнорируется,
- * а «Применить фильтры» его вычищает — запись группы своя).
- */
-export function propertyHistoryFilters(filters: HistoryFilters): HistoryFilters {
-  return { ...filters, propertyIds: null };
-}
-
-/**
- * Скоуп «Истории объекта» (#840, ADR 0061 §7 — тот же GET /history,
- * property_ids = один): группы адреса действуют поверх прибитого объекта;
- * null — как у historyFeedScope, какая-то из групп адреса выбрана «в ноль».
- * Группа «Объекты» адреса не действует никогда — объект прибит страницей
- * (propertyHistoryFilters).
- */
-export function historyPropertyFeedScope(
-  filters: HistoryFilters,
-  propertyId: string,
-): HistoryFeedScope | null {
-  const base = historyFeedScope(propertyHistoryFilters(filters));
-  return base !== null ? { ...base, propertyIds: [propertyId] } : null;
-}
-
-/**
- * Фильтры адреса на странице «Действия участника в объекте» (#841): и
- * человек, и объект прибиты путём страницы — обе группы адреса не
- * читаются (в шите они видны серыми незабираемыми строками «1/1», но не
- * пишут в черновик; hand-crafted ?actors=/?objects= игнорируются, а
- * «Применить фильтры» их вычищает — запись групп своя).
- */
-export function memberPropertyHistoryFilters(filters: HistoryFilters): HistoryFilters {
-  return { ...filters, actorIds: null, propertyIds: null };
-}
-
-/**
- * Скоуп «Действий участника в объекте» (#841, ADR 0061 §7 — тот же GET
- * /history, actor_ids и property_ids = по одному; сервер AND'ит их —
- * бэк #708 без изменений): группы адреса действуют поверх прибитой
- * пары; null — как у historyFeedScope, какая-то из неприбитых групп
- * выбрана «в ноль». Группы «Участники»/«Объекты» адреса не действуют
- * никогда — пара прибита страницей (memberPropertyHistoryFilters).
- */
-export function historyMemberPropertyFeedScope(
-  filters: HistoryFilters,
-  participantId: string,
-  propertyId: string,
-): HistoryFeedScope | null {
-  const base = historyFeedScope(memberPropertyHistoryFilters(filters));
-  return base !== null
-    ? { ...base, actorIds: [participantId], propertyIds: [propertyId] }
-    : null;
+  const pinned = pinnedHistoryFilters(filters, pins);
+  if (
+    (pinned.actions !== null && pinned.actions.length === 0) ||
+    (pinned.kinds !== null && pinned.kinds.length === 0) ||
+    (pinned.actorIds !== null && pinned.actorIds.length === 0) ||
+    (pinned.propertyIds !== null && pinned.propertyIds.length === 0)
+  ) {
+    return null;
+  }
+  return {
+    dateFrom: pinned.period?.from,
+    dateTo: pinned.period?.to,
+    actions: pinned.actions ?? undefined,
+    kinds: pinned.kinds ?? undefined,
+    actorIds: pins?.actorId !== undefined ? [pins.actorId] : (pinned.actorIds ?? undefined),
+    propertyIds:
+      pins?.propertyId !== undefined ? [pins.propertyId] : (pinned.propertyIds ?? undefined),
+  };
 }
 
 /** Лейбл чипа периода шита: без периода — «Выбрать период» (макет

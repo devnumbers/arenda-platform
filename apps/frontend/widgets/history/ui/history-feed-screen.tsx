@@ -10,13 +10,8 @@ import { PropertyAvatar } from '@/entities/property';
 import {
   groupHistoryByDay,
   historyFeedScope,
-  historyMemberFeedScope,
-  historyMemberPropertyFeedScope,
-  historyPropertyFeedScope,
   isDefaultHistoryFilters,
-  memberHistoryFilters,
-  memberPropertyHistoryFilters,
-  propertyHistoryFilters,
+  pinnedHistoryFilters,
   useHistoryFeed,
   useHistoryFilters,
   useHistoryFiltersState,
@@ -118,13 +113,14 @@ const HEADER_LINK =
  * Та же лента, прибитая к одному человеку: маршрут
  * /history/participants/[participantId] несёт uuid юзера (actor_id
  * журнала), скоуп — actor_ids = один (ADR 0061 §7: тот же GET /history),
- * группы адреса действуют поверх (historyMemberFeedScope). Группировка
- * «день → объект → актёр → строки» переиспользуется как есть — в рамках
+ * группы адреса действуют поверх (historyFeedScope с пином actorId).
+ * Группировка «день → объект → актёр → строки» переиспользуется как
+ * есть — в рамках
  * одного человека объекты внутри дня остаются секциями (макет 2184-94731:
  * шапки объектов и серые карточки). Поиск и «Настройки» переиспользуются;
  * группа «Участники» шита показывает прибитого человека — серым и
  * незабираемым (макет 2184-92510, решение владельца 23.09), в черновик и
- * адрес он не пишется: memberHistoryFilters не читает URL-actors, а
+ * адрес он не пишется: pinnedHistoryFilters не читает URL-actors, а
  * «Применить» его вычищает. Вход — тап по актёру в общей ленте (все
  * записи с actor_id — включая владельца: страница не читает участников,
  * 404 не бывает; решение #709 о ссылке на страницу участника заменено:
@@ -137,7 +133,8 @@ const HEADER_LINK =
  * Та же лента, прибитая к одному объекту: маршрут
  * /history/properties/[propertyId] несёт uuid объекта (property_ids =
  * один, ADR 0061 §7: тот же GET /history), группы адреса действуют
- * поверх (historyPropertyFeedScope). Объект — предмет страницы: шапка-
+ * поверх (historyFeedScope с пином propertyId). Объект — предмет
+ * страницы: шапка-
  * карточка (аватар, название, адрес — те же «History Title» ленты)
  * стоит ОДНА над всей лентой (макет 2184-95600: карточки актёров идут
  * без объектных секций), статична и рисуется из опций /history/filters —
@@ -147,7 +144,7 @@ const HEADER_LINK =
  * сразу карточки актёров. Актёры кликабельны, как в общей ленте — вход
  * в «Действия участника». Шит: группа «Объекты» показывает прибитый
  * объект — серым и незабираемым (макет 2184-94176, решение владельца
- * 24.09, зеркало «Участников» #712); propertyHistoryFilters не читает
+ * 24.09, зеркало «Участников» #712); pinnedHistoryFilters не читает
  * URL-objects, «Применить» его вычищает. Вход — кебаб «Участников
  * объекта» (макет 1980-139712), фолбэк «Назад» — туда же.
  *
@@ -158,12 +155,12 @@ const HEADER_LINK =
  * uuid юзера (actor_id журнала) и uuid объекта — actor_ids и
  * property_ids по одному (ADR 0061 §7: тот же GET /history; сервер
  * AND'ит обе группы — бэк #708 без изменений), группы адреса действуют
- * поверх пары (historyMemberPropertyFeedScope). Оба предмета — предмет
+ * поверх пары (historyFeedScope с парой пинов). Оба предмета — предмет
  * страницы: шапка-карточка объекта стоит над всей лентой (зеркало
  * #840), шапки актёров статичны (зеркало #712 — человек прибит),
  * группировка внутри дней вырождена — сразу карточки актёра без
  * объектных секций. Шит «Настройки» — группы «Участники» и «Объекты»
- * ОБЕ прибиты серым («1/1», незабираемые); memberPropertyHistoryFilters
+ * ОБЕ прибиты серым («1/1», незабираемые); pinnedHistoryFilters
  * не читает URL-actors/URL-objects, «Применить» их вычищает. Вход —
  * строка «Действия участника в объекте» на «Правах участника»
  * (макет 2177-59620; только у зарегистрированных — у pending действий
@@ -189,9 +186,8 @@ export function HistoryFeedScreen({
   // объекта — объект, страница пары (#841) — обоих; заголовок, фолбэк
   // «Назад» и прибитые группы шита следуют за предметом; прибитые
   // группы в URL не живут.
-  // Личность экрана одним вычислением (ревью #841 — один каскад вместо
-  // пяти): заголовок живёт в TopNavTitle и в шите, остальное — в
-  // нормализаторе фильтров и фабрике скоупа ниже.
+  // Личность экрана одним вычислением: заголовок живёт в TopNavTitle и
+  // в шите, прибитые группы и скоуп — в пинах страницы ниже.
   const isMemberPage = participantId !== undefined;
   const isPropertyPage = propertyId !== undefined;
   const isMemberPropertyPage = isMemberPage && isPropertyPage;
@@ -209,20 +205,22 @@ export function HistoryFeedScreen({
 
   // Фильтры (#711) живут в адресе ленты; чтение и запись — через канон
   // useUrlParams (DESIGN.md §3), применение — push («назад» возвращает
-  // без фильтров). На странице участника группа «Участники» не читается
-  // (человек прибит путём), на странице объекта — «Объекты», на странице
-  // пары (#841) — обе: и в шит, и в скоуп идёт нормализованная модель
-  // (memberHistoryFilters / propertyHistoryFilters /
-  // memberPropertyHistoryFilters), «Применить» заодно вычищает чужой
-  // параметр.
+  // без фильтров). Прибитые группы адреса не читаются: на странице
+  // участника — «Участники» (человек прибит путём), на странице объекта —
+  // «Объекты», на странице пары (#841) — обе: и в шит, и в скоуп идёт
+  // нормализованная модель (pinnedHistoryFilters по пинам выше),
+  // «Применить» заодно вычищает чужой параметр.
   const { filters: urlFilters, applyFilters } = useHistoryFiltersState();
-  const filters = isMemberPropertyPage
-    ? memberPropertyHistoryFilters(urlFilters)
+  // Пины страницы (HistoryFilterPins): прибитые человек/объект/пара
+  // считаются один раз и для нормализатора фильтров (ниже), и для скоупа.
+  const pins = isMemberPropertyPage
+    ? { actorId: participantId, propertyId }
     : isMemberPage
-      ? memberHistoryFilters(urlFilters)
+      ? { actorId: participantId }
       : isPropertyPage
-        ? propertyHistoryFilters(urlFilters)
-        : urlFilters;
+        ? { propertyId }
+        : undefined;
+  const filters = pinnedHistoryFilters(urlFilters, pins);
 
   // Открытие поиска сразу делает поле активным (программный фокус —
   // устоявшийся a11y-паттерн вместо autoFocus).
@@ -240,19 +238,12 @@ export function HistoryFeedScreen({
   const q = debounced.trim();
   const searching = q.length > 0;
 
-  // Скоуп ленты = фильтры адреса (#711) + живой поиск (#710); на странице
-  // участника поверх — прибитый человек (historyMemberFeedScope), на
-  // странице объекта — прибитый объект (historyPropertyFeedScope), на
-  // странице пары — оба (#841, historyMemberPropertyFeedScope). Группа
-  // фильтров, выбранная «в ноль», означает пустой результат — скоупа нет
-  // (null), запрос не делается.
-  const scope = isMemberPropertyPage
-    ? historyMemberPropertyFeedScope(filters, participantId, propertyId)
-    : isMemberPage
-      ? historyMemberFeedScope(filters, participantId)
-      : isPropertyPage
-        ? historyPropertyFeedScope(filters, propertyId)
-        : historyFeedScope(filters);
+  // Скоуп ленты = фильтры адреса (#711) + живой поиск (#710) + пины
+  // страницы (historyFeedScope: прибитые человек/объект/пара #712/#840/
+  // #841 подставляются в скоуп, неприбитые группы адреса действуют
+  // поверх). Группа фильтров, выбранная «в ноль», означает пустой
+  // результат — скоупа нет (null), запрос не делается.
+  const scope = historyFeedScope(filters, pins);
   const feedQuery = useHistoryFeed(
     scope === null ? {} : searchMode && searching ? { ...scope, q } : scope,
     { enabled: scope !== null },

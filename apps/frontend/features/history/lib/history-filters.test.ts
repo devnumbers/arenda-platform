@@ -3,18 +3,14 @@ import {
   DEFAULT_HISTORY_FILTERS,
   historyFeedScope,
   historyFiltersParams,
-  historyMemberFeedScope,
-  historyMemberPropertyFeedScope,
   historyParticipantTitle,
   historyPeriodChipLabel,
-  historyPropertyFeedScope,
   isDefaultHistoryFilters,
-  memberHistoryFilters,
-  memberPropertyHistoryFilters,
-  propertyHistoryFilters,
+  pinnedHistoryFilters,
   readHistoryFilters,
   toggleHistoryFilterGroup,
   toggleHistoryFilterOption,
+  type HistoryFilters,
 } from './history-filters';
 
 const TODAY = '2026-09-23';
@@ -156,23 +152,58 @@ describe('historyFeedScope', () => {
   });
 });
 
-describe('memberHistoryFilters', () => {
-  it('группа «Участники» на странице участника не читается: человек прибит страницей, не фильтр', () => {
-    expect(memberHistoryFilters({ ...DEFAULT_HISTORY_FILTERS, actorIds: [UUID_A] })).toEqual(
-      DEFAULT_HISTORY_FILTERS,
-    );
-    expect(memberHistoryFilters({ ...DEFAULT_HISTORY_FILTERS, actorIds: [] }).actorIds).toBeNull();
+describe('pinnedHistoryFilters', () => {
+  it('без пинов фильтры проходят как есть (общая лента #711)', () => {
+    const filters: HistoryFilters = { ...DEFAULT_HISTORY_FILTERS, actorIds: [UUID_A], propertyIds: [UUID_B] };
+    expect(pinnedHistoryFilters(filters)).toBe(filters);
   });
 
-  it('остальные группы проходят без изменений', () => {
+  it('пин actorId зануляет группу «Участники»: человек прибит страницей, не фильтр (#712)', () => {
     expect(
-      memberHistoryFilters({
-        period: { from: '2026-08-01', to: '2026-08-20' },
-        actions: ['added'],
-        kinds: ['payment'],
-        actorIds: [UUID_A],
-        propertyIds: null,
-      }),
+      pinnedHistoryFilters({ ...DEFAULT_HISTORY_FILTERS, actorIds: [UUID_A] }, { actorId: UUID_A }),
+    ).toEqual(DEFAULT_HISTORY_FILTERS);
+    // Даже «ни одного» ([]): прибитый сильнее адреса, запись группы своя.
+    expect(
+      pinnedHistoryFilters({ ...DEFAULT_HISTORY_FILTERS, actorIds: [] }, { actorId: UUID_A }).actorIds,
+    ).toBeNull();
+  });
+
+  it('пин propertyId зануляет группу «Объекты»: объект прибит страницей, не фильтр (#840)', () => {
+    expect(
+      pinnedHistoryFilters({ ...DEFAULT_HISTORY_FILTERS, propertyIds: [UUID_A] }, { propertyId: UUID_A }),
+    ).toEqual(DEFAULT_HISTORY_FILTERS);
+    expect(
+      pinnedHistoryFilters({ ...DEFAULT_HISTORY_FILTERS, propertyIds: [] }, { propertyId: UUID_A }).propertyIds,
+    ).toBeNull();
+  });
+
+  it('пара пинов зануляет обе группы: человек и объект прибиты страницей (#841)', () => {
+    expect(
+      pinnedHistoryFilters(
+        { ...DEFAULT_HISTORY_FILTERS, actorIds: [UUID_A], propertyIds: [UUID_B] },
+        { actorId: UUID_A, propertyId: UUID_B },
+      ),
+    ).toEqual(DEFAULT_HISTORY_FILTERS);
+    expect(
+      pinnedHistoryFilters(
+        { ...DEFAULT_HISTORY_FILTERS, actorIds: [], propertyIds: [] },
+        { actorId: UUID_A, propertyId: UUID_B },
+      ),
+    ).toEqual(DEFAULT_HISTORY_FILTERS);
+  });
+
+  it('неприбитые группы проходят без изменений', () => {
+    expect(
+      pinnedHistoryFilters(
+        {
+          period: { from: '2026-08-01', to: '2026-08-20' },
+          actions: ['added'],
+          kinds: ['payment'],
+          actorIds: [UUID_A],
+          propertyIds: [UUID_B],
+        },
+        { actorId: UUID_A, propertyId: UUID_B },
+      ),
     ).toEqual({
       period: { from: '2026-08-01', to: '2026-08-20' },
       actions: ['added'],
@@ -183,170 +214,57 @@ describe('memberHistoryFilters', () => {
   });
 });
 
-describe('historyMemberFeedScope', () => {
-  it('лента прибита к одному человеку: actor_ids = один id (ADR 0061 §7)', () => {
-    expect(historyMemberFeedScope(DEFAULT_HISTORY_FILTERS, UUID_A)).toEqual({ actorIds: [UUID_A] });
-  });
-
-  it('прибитый актёр сильнее группы «Участники»: даже «ни одного» ([]) лента не опустошается', () => {
-    expect(historyMemberFeedScope({ ...DEFAULT_HISTORY_FILTERS, actorIds: [] }, UUID_A)).toEqual({
+describe('historyFeedScope с пинами', () => {
+  it('лента прибита к человеку/объекту/паре: прибитые id по одному (ADR 0061 §7, #712/#840/#841)', () => {
+    expect(historyFeedScope(DEFAULT_HISTORY_FILTERS, { actorId: UUID_A })).toEqual({ actorIds: [UUID_A] });
+    expect(historyFeedScope(DEFAULT_HISTORY_FILTERS, { propertyId: UUID_B })).toEqual({ propertyIds: [UUID_B] });
+    expect(historyFeedScope(DEFAULT_HISTORY_FILTERS, { actorId: UUID_A, propertyId: UUID_B })).toEqual({
       actorIds: [UUID_A],
+      propertyIds: [UUID_B],
     });
   });
 
-  it('период и выбор групп адреса действуют поверх прибитого актёра', () => {
+  it('прибитые сильнее своих групп: даже «ни одного» ([]) лента не опустошается', () => {
+    expect(historyFeedScope({ ...DEFAULT_HISTORY_FILTERS, actorIds: [] }, { actorId: UUID_A })).toEqual({
+      actorIds: [UUID_A],
+    });
+    expect(historyFeedScope({ ...DEFAULT_HISTORY_FILTERS, propertyIds: [] }, { propertyId: UUID_A })).toEqual({
+      propertyIds: [UUID_A],
+    });
     expect(
-      historyMemberFeedScope(
-        {
-          period: { from: '2026-08-01', to: '2026-08-20' },
-          actions: ['added'],
-          kinds: null,
-          actorIds: [UUID_B],
-          propertyIds: [UUID_B],
-        },
-        UUID_A,
+      historyFeedScope(
+        { ...DEFAULT_HISTORY_FILTERS, actorIds: [], propertyIds: [] },
+        { actorId: UUID_A, propertyId: UUID_B },
       ),
-    ).toEqual({
+    ).toEqual({ actorIds: [UUID_A], propertyIds: [UUID_B] });
+  });
+
+  it('период и выбор неприбитых групп адреса действуют поверх прибитых', () => {
+    const filters: HistoryFilters = {
+      period: { from: '2026-08-01', to: '2026-08-20' },
+      actions: ['added'],
+      kinds: null,
+      actorIds: [UUID_B],
+      propertyIds: [UUID_B],
+    };
+    // Пин актёра: его id сильнее группы «Участники», остальные — из адреса.
+    expect(historyFeedScope(filters, { actorId: UUID_A })).toEqual({
       dateFrom: '2026-08-01',
       dateTo: '2026-08-20',
       actions: ['added'],
       actorIds: [UUID_A],
       propertyIds: [UUID_B],
     });
-  });
-
-  it('группа адреса «ни один» (кроме «Участников») — скоуп null, запроса нет', () => {
-    expect(historyMemberFeedScope({ ...DEFAULT_HISTORY_FILTERS, kinds: [] }, UUID_A)).toBeNull();
-    expect(historyMemberFeedScope({ ...DEFAULT_HISTORY_FILTERS, propertyIds: [] }, UUID_A)).toBeNull();
-  });
-});
-
-describe('propertyHistoryFilters', () => {
-  it('группа «Объекты» на странице объекта не читается: объект прибит страницей, не фильтр', () => {
-    expect(propertyHistoryFilters({ ...DEFAULT_HISTORY_FILTERS, propertyIds: [UUID_A] })).toEqual(
-      DEFAULT_HISTORY_FILTERS,
-    );
-    expect(
-      propertyHistoryFilters({ ...DEFAULT_HISTORY_FILTERS, propertyIds: [] }).propertyIds,
-    ).toBeNull();
-  });
-
-  it('остальные группы проходят без изменений', () => {
-    expect(
-      propertyHistoryFilters({
-        period: { from: '2026-08-01', to: '2026-08-20' },
-        actions: ['added'],
-        kinds: ['payment'],
-        actorIds: [UUID_A],
-        propertyIds: [UUID_B],
-      }),
-    ).toEqual({
-      period: { from: '2026-08-01', to: '2026-08-20' },
-      actions: ['added'],
-      kinds: ['payment'],
-      actorIds: [UUID_A],
-      propertyIds: null,
-    });
-  });
-});
-
-describe('historyPropertyFeedScope', () => {
-  it('лента прибита к одному объекту: property_ids = один id (ADR 0061 §7)', () => {
-    expect(historyPropertyFeedScope(DEFAULT_HISTORY_FILTERS, UUID_A)).toEqual({
-      propertyIds: [UUID_A],
-    });
-  });
-
-  it('прибитый объект сильнее группы «Объекты»: даже «ни одного» ([]) лента не опустошается', () => {
-    expect(
-      historyPropertyFeedScope({ ...DEFAULT_HISTORY_FILTERS, propertyIds: [] }, UUID_A),
-    ).toEqual({ propertyIds: [UUID_A] });
-  });
-
-  it('период и выбор групп адреса действуют поверх прибитого объекта', () => {
-    expect(
-      historyPropertyFeedScope(
-        {
-          period: { from: '2026-08-01', to: '2026-08-20' },
-          actions: ['added'],
-          kinds: null,
-          actorIds: [UUID_B],
-          propertyIds: [UUID_B],
-        },
-        UUID_A,
-      ),
-    ).toEqual({
+    // Зеркально для пина объекта.
+    expect(historyFeedScope(filters, { propertyId: UUID_A })).toEqual({
       dateFrom: '2026-08-01',
       dateTo: '2026-08-20',
       actions: ['added'],
       actorIds: [UUID_B],
       propertyIds: [UUID_A],
     });
-  });
-
-  it('группа адреса «ни один» (кроме «Объектов») — скоуп null, запроса нет', () => {
-    expect(historyPropertyFeedScope({ ...DEFAULT_HISTORY_FILTERS, kinds: [] }, UUID_A)).toBeNull();
-    expect(historyPropertyFeedScope({ ...DEFAULT_HISTORY_FILTERS, actorIds: [] }, UUID_A)).toBeNull();
-  });
-});
-
-describe('memberPropertyHistoryFilters', () => {
-  it('обе прибитые группы адреса не читаются: человек и объект прибиты страницей, не фильтр (#841)', () => {
-    expect(
-      memberPropertyHistoryFilters({ ...DEFAULT_HISTORY_FILTERS, actorIds: [UUID_A], propertyIds: [UUID_B] }),
-    ).toEqual(DEFAULT_HISTORY_FILTERS);
-    expect(
-      memberPropertyHistoryFilters({ ...DEFAULT_HISTORY_FILTERS, actorIds: [], propertyIds: [] }),
-    ).toEqual(DEFAULT_HISTORY_FILTERS);
-  });
-
-  it('остальные группы проходят без изменений', () => {
-    expect(
-      memberPropertyHistoryFilters({
-        period: { from: '2026-08-01', to: '2026-08-20' },
-        actions: ['added'],
-        kinds: ['payment'],
-        actorIds: [UUID_A],
-        propertyIds: [UUID_B],
-      }),
-    ).toEqual({
-      period: { from: '2026-08-01', to: '2026-08-20' },
-      actions: ['added'],
-      kinds: ['payment'],
-      actorIds: null,
-      propertyIds: null,
-    });
-  });
-});
-
-describe('historyMemberPropertyFeedScope', () => {
-  it('лента прибита к паре человек+объект: actor_ids и property_ids = по одному id (ADR 0061 §7)', () => {
-    expect(historyMemberPropertyFeedScope(DEFAULT_HISTORY_FILTERS, UUID_A, UUID_B)).toEqual({
-      actorIds: [UUID_A],
-      propertyIds: [UUID_B],
-    });
-  });
-
-  it('прибитые человек и объект сильнее своих групп: даже «ни одного» ([]) лента не опустошается', () => {
-    expect(
-      historyMemberPropertyFeedScope({ ...DEFAULT_HISTORY_FILTERS, actorIds: [], propertyIds: [] }, UUID_A, UUID_B),
-    ).toEqual({ actorIds: [UUID_A], propertyIds: [UUID_B] });
-  });
-
-  it('период и выбор групп адреса действуют поверх прибитой пары', () => {
-    expect(
-      historyMemberPropertyFeedScope(
-        {
-          period: { from: '2026-08-01', to: '2026-08-20' },
-          actions: ['added'],
-          kinds: null,
-          actorIds: [UUID_B],
-          propertyIds: [UUID_A],
-        },
-        UUID_A,
-        UUID_B,
-      ),
-    ).toEqual({
+    // Пара пинов: оба id из пути, от адреса — период и действия.
+    expect(historyFeedScope(filters, { actorId: UUID_A, propertyId: UUID_B })).toEqual({
       dateFrom: '2026-08-01',
       dateTo: '2026-08-20',
       actions: ['added'],
@@ -355,13 +273,17 @@ describe('historyMemberPropertyFeedScope', () => {
     });
   });
 
-  it('группа адреса «ни один» (кроме прибитых) — скоуп null, запроса нет', () => {
+  it('неприбитая группа «ни один» — скоуп null, запроса нет', () => {
     expect(
-      historyMemberPropertyFeedScope({ ...DEFAULT_HISTORY_FILTERS, kinds: [] }, UUID_A, UUID_B),
+      historyFeedScope({ ...DEFAULT_HISTORY_FILTERS, kinds: [] }, { actorId: UUID_A, propertyId: UUID_B }),
     ).toBeNull();
     expect(
-      historyMemberPropertyFeedScope({ ...DEFAULT_HISTORY_FILTERS, actions: [] }, UUID_A, UUID_B),
+      historyFeedScope({ ...DEFAULT_HISTORY_FILTERS, actions: [] }, { actorId: UUID_A, propertyId: UUID_B }),
     ).toBeNull();
+    // Своя прибитая группа «в ноль» ленту не опустошает (кейс выше),
+    // чужая — опустошает.
+    expect(historyFeedScope({ ...DEFAULT_HISTORY_FILTERS, actorIds: [] }, { propertyId: UUID_A })).toBeNull();
+    expect(historyFeedScope({ ...DEFAULT_HISTORY_FILTERS, propertyIds: [] }, { actorId: UUID_A })).toBeNull();
   });
 });
 
