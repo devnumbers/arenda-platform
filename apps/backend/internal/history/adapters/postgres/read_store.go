@@ -116,7 +116,7 @@ func (s *ReadStore) FilterParticipants(ctx context.Context, actor uuid.UUID, pro
 }
 
 // FilterObjects returns the scope's objects with the card photo avatar —
-// the first (oldest) photo or ” without any.
+// the first (oldest) photo or '' without any.
 func (s *ReadStore) FilterObjects(ctx context.Context, actor uuid.UUID, propertyIDs []uuid.UUID) ([]domain.FilterObject, error) {
 	rows, err := postgres.New(s.db).ListHistoryFilterObjects(ctx, postgres.ListHistoryFilterObjectsParams{
 		Actor:       pgconv.UUIDToPgtype(actor),

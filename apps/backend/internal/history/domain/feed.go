@@ -52,7 +52,7 @@ type FilterParticipant struct {
 }
 
 // FilterObject is one «Объекты» option of the filter sheet: the object with
-// its card photo avatar — the first (oldest) one, ” when it has none.
+// its card photo avatar — the first (oldest) one, '' when it has none.
 type FilterObject struct {
 	ID       uuid.UUID
 	Name     string
