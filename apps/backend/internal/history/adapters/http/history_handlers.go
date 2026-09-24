@@ -19,8 +19,10 @@ import (
 
 // HistoryHandlers implements the journal's reading endpoints: the
 // bidirectional-keyset feed and the filter options. The same feed endpoint
-// serves all three screens: the general feed, an object's history
-// (property_ids = one), a participant's actions (actor_ids = one).
+// serves all four screens: the general feed, an object's history
+// (property_ids = one), a participant's actions (actor_ids = one), a
+// participant's actions within one object (actor_ids and property_ids =
+// one each, AND-combined — ticket #841).
 type HistoryHandlers struct {
 	svc    *historyapp.HistoryReadService
 	logger *slog.Logger
