@@ -21,3 +21,8 @@ export {
   isContactFormField,
 } from './lib/contact-form';
 export type { ContactFormFields } from './lib/contact-form';
+export {
+  CONTACTS_SEARCH_DEBOUNCE_MS,
+  ContactsErrorCard,
+  ContactsNoResults,
+} from './ui/contact-search-states';

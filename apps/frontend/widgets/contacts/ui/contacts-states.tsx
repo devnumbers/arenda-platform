@@ -2,12 +2,15 @@ import type { JSX } from 'react';
 import { cn } from '@/shared/lib/cn';
 import {
   EmptyState,
-  ErrorCard,
   Skeleton,
   SkeletonListRow,
   skeletonBlockClass,
   skeletonRowWidths,
 } from '@/shared/ui/design';
+
+// Канон состояний поиска живёт в слайсе контактов — вызователи виджета
+// продолжают читать его отсюда.
+export { ContactsErrorCard, ContactsNoResults } from '@/features/contacts';
 
 const headingClass = 'text-xl font-semibold leading-6 text-content';
 /** Пояснение состояния (16/18, серый #6F787C — макет 1527:74479). */
@@ -74,19 +77,6 @@ export function ContactsBookSkeleton(): JSX.Element {
       <ContactsBookGroupSkeleton rows={2} />
       <ContactsBookGroupSkeleton rows={3} />
     </section>
-  );
-}
-
-/** Карточка ошибки загрузки с повтором — канон design ErrorCard (#697). */
-export function ContactsErrorCard({
-  onRetry,
-  className,
-}: {
-  readonly onRetry: () => void;
-  readonly className?: string;
-}): JSX.Element {
-  return (
-    <ErrorCard title="Не удалось загрузить контакты" onRetry={onRetry} className={className} />
   );
 }
 
@@ -168,11 +158,6 @@ export function ContactsSearchHint(): JSX.Element {
       Начните искать по имени, номеру телефона, электронной почте, имени пользователя или по роли
     </p>
   );
-}
-
-/** Поиск без совпадений (1527:74825): «Такого контакта нет», по центру. */
-export function ContactsNoResults(): JSX.Element {
-  return <p className={`${searchNoteClass} px-6 pt-16 text-center`}>Такого контакта нет</p>;
 }
 
 /** Правка недоступна (гейт ADR 0028, тексты — как у правки платежей):

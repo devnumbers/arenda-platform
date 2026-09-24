@@ -7,10 +7,14 @@ import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { useDebounce } from '@/shared/lib/hooks/useDebounce';
 import { contactSortByRecent, ContactRowButton } from '@/entities/contact';
-import { useContacts } from '@/features/contacts';
+import {
+  CONTACTS_SEARCH_DEBOUNCE_MS,
+  ContactsErrorCard,
+  ContactsNoResults,
+  useContacts,
+} from '@/features/contacts';
 import { useRentalWizardDraft } from '@/features/rentals';
 import {
-  ErrorCard,
   IconButton,
   InfiniteQueryTail,
   PageContent,
@@ -19,10 +23,6 @@ import {
   TopNav,
   useTabBarSuppression,
 } from '@/shared/ui/design';
-
-/** Задержка дебаунса поиска (мс) — серверный фильтр по ?search=, как в
- * поиске книги контактов (#508). */
-const SEARCH_DEBOUNCE_MS = 300;
 
 /**
  * Экран выбора арендатора (#807, макет 1855:64129): отдельный маршрут
@@ -54,7 +54,7 @@ export function RentalContactPickerScreen({
     searchInputRef.current?.focus();
   }, []);
 
-  const debouncedSearch = useDebounce(search, SEARCH_DEBOUNCE_MS);
+  const debouncedSearch = useDebounce(search, CONTACTS_SEARCH_DEBOUNCE_MS);
   // Сервер фильтр не нормализует — пробелы по краям срезаем клиентски.
   const trimmedSearch = debouncedSearch.trim();
   const contactsQuery = useContacts(propertyId, trimmedSearch);
@@ -94,14 +94,9 @@ export function RentalContactPickerScreen({
             ))}
           </div>
         ) : contactsQuery.isError ? (
-          <ErrorCard
-            title="Не удалось загрузить контакты"
-            onRetry={() => void contactsQuery.refetch()}
-          />
+          <ContactsErrorCard onRetry={() => void contactsQuery.refetch()} />
         ) : contacts.length === 0 ? (
-          <p className="px-6 pt-16 text-center text-base leading-[18px] text-content-secondary">
-            Такого контакта нет
-          </p>
+          <ContactsNoResults />
         ) : (
           /* Плоский список (1855:64129): белые строки без групп, свежие
            * сверху, подзаголовок — роль; тап выбирает арендатора. */
