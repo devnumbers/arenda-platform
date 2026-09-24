@@ -52,8 +52,8 @@ type mutationOutcome[T any] struct {
 	// History is the action journal row of the mutation (ADR 0061), built by
 	// the step from the row-text catalog and recorded inside the same
 	// transaction (fail-safe like the audit). Only the property-bound
-	// conveyor records it — the property-less book (ADR 0052) passes a nil
-	// entry (no object the row could hang on) and journals through
+	// conveyor records it — the property-less book's (ADR 0052) steps leave
+	// it nil (no object the row could hang on) and journal through
 	// HistoryByProperty instead.
 	History *historydomain.Entry
 	// HistoryByProperty holds the per-property journal rows of a bulk
@@ -149,7 +149,7 @@ func runMutation[T any](
 			return err
 		}
 		if err := recordTrail(ctx, stores, actor, role, propertyID,
-			auditdomain.EntityTaskRule, out.AuditEntity, out.Audit, out.AuditEntityID, out.AuditCtx, out.History); err != nil {
+			auditdomain.EntityTaskRule, out); err != nil {
 			return err
 		}
 		if !out.Tick {
@@ -198,8 +198,9 @@ func rereadRule[T any](
 // the owner-row serialization lock (FOR UPDATE users — the anchor ADR 0052
 // chose for the property-less slice), the owner's today, the load of the
 // target property-less rule (skipped for a zero ruleID), the change step,
-// its audit entry and the property-less materialization tick. After commit
-// it returns the step's response, post-commit-re-read applied.
+// its audit entry and its per-property action journal rows (ADR 0061 §3) in
+// the same transaction, and the property-less materialization tick. After
+// commit it returns the step's response, post-commit-re-read applied.
 func runOwnerMutation[T any](
 	g mutationGates,
 	ctx context.Context, actor, ruleID uuid.UUID,
@@ -228,7 +229,7 @@ func runOwnerMutation[T any](
 			return err
 		}
 		if err := recordTrail(ctx, stores, actor, sharedpolicy.RoleOwner, uuid.Nil,
-			auditdomain.EntityTaskRule, out.AuditEntity, out.Audit, out.AuditEntityID, out.AuditCtx, nil); err != nil {
+			auditdomain.EntityTaskRule, out); err != nil {
 			return err
 		}
 		// The bulk step's journal: one row per touched object, each with its
@@ -369,25 +370,27 @@ func recordAudit(
 }
 
 // recordTrail writes the mutation's audit entry and its action journal row
-// inside the transaction — the shared tail of both conveyors. The empty
-// entity type defaults to the rule (the audit contract); the journal is
-// skipped by a nil entry — which is exactly what the property-less
-// conveyor passes, the guard itself only knows the nil entry.
-func recordTrail(
+// inside the transaction — the shared tail of both conveyors. The trail
+// fields travel in the step's outcome. The empty entity type defaults to
+// the rule (the audit contract); the journal is skipped by a nil entry —
+// the property-less conveyor's outcomes never carry one (the book has no
+// object the row could hang on, its bulk rows travel through
+// HistoryByProperty instead), so the guard stays the single point of truth
+// for the skip.
+func recordTrail[T any](
 	ctx context.Context, stores *txStores, actor uuid.UUID, role sharedpolicy.Role,
-	propertyID uuid.UUID, defaultEntity auditdomain.EntityType,
-	entity auditdomain.EntityType, action auditdomain.Action, entityID *uuid.UUID,
-	auditCtx map[string]any, history *historydomain.Entry,
+	propertyID uuid.UUID, defaultEntity auditdomain.EntityType, out mutationOutcome[T],
 ) error {
+	entity := out.AuditEntity
 	if entity == "" {
 		entity = defaultEntity
 	}
-	if err := recordAudit(ctx, stores, actor, role, action, entity, entityID, auditCtx); err != nil {
+	if err := recordAudit(ctx, stores, actor, role, out.Audit, entity, out.AuditEntityID, out.AuditCtx); err != nil {
 		return err
 	}
-	if history != nil {
+	if out.History != nil {
 		return historyapp.RecordScoped(ctx, stores.history, propertyID, actor,
-			sharedpolicy.HistoryActorRole(role), *history)
+			sharedpolicy.HistoryActorRole(role), *out.History)
 	}
 	return nil
 }
