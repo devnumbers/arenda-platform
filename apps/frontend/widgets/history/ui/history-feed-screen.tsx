@@ -376,7 +376,7 @@ export function HistoryFeedScreen({
         ) : entries.length === 0 ? (
           searching || !isDefaultHistoryFilters(filters) ? (
             /* Без совпадений — серая строка без иллюстрации (макет
-              * 2092-166866; канон «пусто без иллюстрации» #697); активные
+              * 2092-166866; канон «пусто без иллюстрации» #624); активные
               * фильтры с пустой выдачей — тот же канон (#711: действия
               * были, но не подходят под фильтр). */
             <p className="pt-16 text-center text-base leading-[18px] text-content-secondary">
