@@ -33,7 +33,7 @@ CREATE TABLE action_journal (
     property_id  uuid NOT NULL REFERENCES properties (id) ON DELETE CASCADE,
     actor_id     uuid REFERENCES users (id) ON DELETE SET NULL,
     actor_role   text NOT NULL CHECK (actor_role IN ('owner','full_access','viewer')),  -- shared/policy mapper, ADR 0020 pattern
-    actor_name   text NOT NULL,                  -- snapshot of the actor's display name at action time
+    actor_name   text NOT NULL DEFAULT '',       -- snapshot of the actor's display name at action time
     actor_email  text NOT NULL DEFAULT '',       -- snapshot of the actor's email (searchable; visible to members)
     kind         text NOT NULL CHECK (kind IN ('property','rental','payment','operation','contact','task','member')),  -- the seven mockup filter groups (§4)
     action       text NOT NULL,                  -- stable dotted id, e.g. property.renamed, operation.paid
@@ -60,6 +60,7 @@ CREATE INDEX ... ON action_journal USING gin (search_tsv);
 - Snapshots of human-readable labels are taken at action time and never re-resolved: the row survives renaming and deletion of the entity (a deleted entity leaves a row without a link).
 - **Only manual user actions are recorded in MVP.** System writes are NOT recorded — including the slot coordinator's suspend/reactivate and invitation activation on registration (owner decision 2026-09-22, against the agent's recommendation; accepted cost: the member feed does not explain limit-driven disappearances). Auto-ticks (auto-payments, auto-tasks) stay excluded per the map charter.
 - **Noise excluded**: payment favorite flag, favorite-order save, invitation resend. Photo add/delete and property pin are recorded. A no-op action writes no row: an idempotent re-pin of an already pinned object, and a completed-journal clear that removed nothing.
+- **The active↔maintenance flip is not recorded**: the manual maintenance-status change (PATCH /properties/{id}, `cmd.Status`) writes no row in MVP — a status-only edit is a silent no-op, a mixed PATCH records only the other changed groups. A dedicated `property.status_changed` action id was considered and declined — the dictionary keeps no id for the flip, and silent no-entry is the settled MVP behavior.
 - **One row per user action**: a PATCH touching several field groups at once gets one `property.updated` row naming the groups; single-group edits get their precise ids. Amounts travel in `context` on the money rows (created/updated rules and operations), in kopecks.
 - `property.deleted` is never recorded: rows cascade with the property in the same transaction, so the row would be dead-born.
 - Identity/profile/session changes, notifications, push subscriptions, popups are not property data — out of the journal.
