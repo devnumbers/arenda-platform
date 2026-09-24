@@ -26,13 +26,16 @@ import {
 const OWNER_NAME = 'Иван Иванов';
 const MEMBER_NAME = 'Мария Петрова';
 
+/** Четыре записи «сегодня» под фильтры Истории. Сиды анкерятся к началу
+ * текущих суток фиксированным часом (9 часов — канон createdAtSql из
+ * fixtures), а не к моменту запуска: возле полуночи Date.now()-минуты
+ * уезжали бы из «Сегодня». */
 async function seedHistory(user: SeededUser): Promise<void> {
   await execE2eSql('DELETE FROM action_journal;');
-  const now = Date.now();
   await seedJournalEntry(
     {
       id: 'b0000000-0000-4000-8000-000000000001',
-      createdAt: new Date(now - 4 * 60_000).toISOString(),
+      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '4 minutes'`,
       text: 'Платёж создан: Аренда за сентябрь',
     },
     user,
@@ -40,7 +43,7 @@ async function seedHistory(user: SeededUser): Promise<void> {
   await seedJournalEntry(
     {
       id: 'b0000000-0000-4000-8000-000000000002',
-      createdAt: new Date(now - 3 * 60_000).toISOString(),
+      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '3 minutes'`,
       kind: 'operation',
       action: 'operation.paid',
       baseAction: 'completed',
@@ -51,7 +54,7 @@ async function seedHistory(user: SeededUser): Promise<void> {
   await seedJournalEntry(
     {
       id: 'b0000000-0000-4000-8000-000000000003',
-      createdAt: new Date(now - 2 * 60_000).toISOString(),
+      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '2 minutes'`,
       actorIdSql: memberActorIdSql(),
       actorName: MEMBER_NAME,
       actorRole: 'full_access',
@@ -65,7 +68,7 @@ async function seedHistory(user: SeededUser): Promise<void> {
   await seedJournalEntry(
     {
       id: 'b0000000-0000-4000-8000-000000000004',
-      createdAt: new Date(now - 60_000).toISOString(),
+      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '1 minute'`,
       propertyId: SEEDED_GARAGE_PROPERTY_ID,
       kind: 'property',
       action: 'property.pinned',
