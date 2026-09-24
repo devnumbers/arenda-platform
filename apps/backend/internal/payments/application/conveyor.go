@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
+	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/payments/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
@@ -114,8 +115,12 @@ func runMutation[T any](
 		if err := recordAudit(ctx, stores, actor, role, out.Audit, entityType, entityID, out.AuditCtx); err != nil {
 			return err
 		}
-		if err := recordHistory(ctx, stores, actor, role, propertyID, out.History); err != nil {
-			return err
+		// A nil entry (the excluded noise actions) writes no row.
+		if out.History != nil {
+			if err := historyapp.RecordScoped(ctx, stores.history, propertyID, actor,
+				sharedpolicy.HistoryActorRole(role), *out.History); err != nil {
+				return err
+			}
 		}
 		if !out.Tick {
 			return nil
@@ -224,27 +229,6 @@ func recordAudit(
 		Context:    auditCtx,
 	}); err != nil {
 		return fmt.Errorf("record audit: %w", err)
-	}
-	return nil
-}
-
-// recordHistory writes the mutation's action journal entry inside the
-// transaction (fail-safe like the audit: an insert error rolls the mutation
-// back, ADR 0061 §3) — the row and the action share the transaction's fate.
-// The role is the one the gate resolved before the transaction opened. A nil
-// entry (the excluded noise actions) writes nothing.
-func recordHistory(
-	ctx context.Context, stores *txStores, actor uuid.UUID, role sharedpolicy.Role,
-	propertyID uuid.UUID, entry *historydomain.Entry,
-) error {
-	if entry == nil {
-		return nil
-	}
-	entry.PropertyID = propertyID
-	entry.ActorID = &actor
-	entry.ActorRole = sharedpolicy.HistoryActorRole(role)
-	if err := stores.history.Record(ctx, *entry); err != nil {
-		return fmt.Errorf("record history: %w", err)
 	}
 	return nil
 }

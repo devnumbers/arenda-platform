@@ -20,6 +20,7 @@ import (
 	"github.com/google/uuid"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
+	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
@@ -279,7 +280,8 @@ func (s *PropertyService) CreateProperty(ctx context.Context, actor uuid.UUID, c
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
 		}
-		if err := recordHistory(ctx, stores, actor, sharedpolicy.RoleOwner, created.ID,
+		if err := historyapp.RecordScoped(ctx, stores.history, created.ID, actor,
+			sharedpolicy.HistoryActorRole(sharedpolicy.RoleOwner),
 			historydomain.PropertyCreated(created.ID, created.Name)); err != nil {
 			return err
 		}
@@ -685,7 +687,8 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, actor, id uuid.UUI
 			return fmt.Errorf("record audit: %w", err)
 		}
 		if entry, ok := propertyUpdateHistoryEntry(id, before, updated); ok {
-			if err := recordHistory(ctx, stores, actor, role, id, entry); err != nil {
+			if err := historyapp.RecordScoped(ctx, stores.history, id, actor,
+				sharedpolicy.HistoryActorRole(role), entry); err != nil {
 				return err
 			}
 		}
@@ -753,7 +756,8 @@ func (s *PropertyService) SetPropertyPin(ctx context.Context, actor, id uuid.UUI
 			if !pinned {
 				entry = historydomain.PropertyUnpinned(id)
 			}
-			if err := recordHistory(ctx, stores, actor, role, id, entry); err != nil {
+			if err := historyapp.RecordScoped(ctx, stores.history, id, actor,
+				sharedpolicy.HistoryActorRole(role), entry); err != nil {
 				return err
 			}
 		}
@@ -886,7 +890,8 @@ func (s *PropertyService) ArchiveProperty(ctx context.Context, actor, id uuid.UU
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
 		}
-		if err := recordHistory(ctx, stores, actor, role, id, historydomain.PropertyArchived(id)); err != nil {
+		if err := historyapp.RecordScoped(ctx, stores.history, id, actor,
+			sharedpolicy.HistoryActorRole(role), historydomain.PropertyArchived(id)); err != nil {
 			return err
 		}
 
@@ -1351,7 +1356,8 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, actor, id uuid.
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
 		}
-		if err := recordHistory(ctx, stores, actor, role, id, historydomain.PropertyUnarchived(id)); err != nil {
+		if err := historyapp.RecordScoped(ctx, stores.history, id, actor,
+			sharedpolicy.HistoryActorRole(role), historydomain.PropertyUnarchived(id)); err != nil {
 			return err
 		}
 
@@ -1460,7 +1466,8 @@ func (s *PropertyService) AddPropertyPhoto(
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
 		}
-		if err := recordHistory(ctx, stores, actor, role, propertyID, historydomain.PropertyPhotoAdded(propertyID)); err != nil {
+		if err := historyapp.RecordScoped(ctx, stores.history, propertyID, actor,
+			sharedpolicy.HistoryActorRole(role), historydomain.PropertyPhotoAdded(propertyID)); err != nil {
 			return err
 		}
 		return nil
@@ -1579,7 +1586,8 @@ func (s *PropertyService) DeletePropertyPhoto(ctx context.Context, actor, proper
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
 		}
-		if err := recordHistory(ctx, stores, actor, role, propertyID, historydomain.PropertyPhotoDeleted(propertyID)); err != nil {
+		if err := historyapp.RecordScoped(ctx, stores.history, propertyID, actor,
+			sharedpolicy.HistoryActorRole(role), historydomain.PropertyPhotoDeleted(propertyID)); err != nil {
 			return err
 		}
 		return nil
@@ -1701,23 +1709,6 @@ func resolvedPinnedAt(current *time.Time, pinned bool, now time.Time) *time.Time
 		return current
 	}
 	return &now
-}
-
-// recordHistory writes the mutation's action journal entry inside the
-// transaction (fail-safe like the audit: an insert error rolls the mutation
-// back, ADR 0061 §3). The role is the one the gate resolved before the
-// transaction opened.
-func recordHistory(
-	ctx context.Context, stores *txStores, actor uuid.UUID, role sharedpolicy.Role,
-	propertyID uuid.UUID, entry historydomain.Entry,
-) error {
-	entry.PropertyID = propertyID
-	entry.ActorID = &actor
-	entry.ActorRole = sharedpolicy.HistoryActorRole(role)
-	if err := stores.history.Record(ctx, entry); err != nil {
-		return fmt.Errorf("record history: %w", err)
-	}
-	return nil
 }
 
 // propertyUpdateHistoryEntry composes the action journal entry for an edit

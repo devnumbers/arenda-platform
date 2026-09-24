@@ -119,3 +119,23 @@ func (Noop) Record(_ context.Context, _ domain.Entry) error { return nil }
 
 // WithTx returns the same Noop recorder.
 func (n Noop) WithTx(_ transaction.Tx) Recorder { return n }
+
+// RecordScoped fills the entry's property anchor and actor fields and
+// records it — the shared tail of the calling modules' journal writes
+// (ADR 0061 §3). The role arrives already mapped onto the journal's
+// vocabulary: each owning module maps the policy role it resolved before
+// its transaction opened, as the audit does. Fail-safe like the audit
+// (ADR 0020): the wrapped error returns to a transaction-bound caller, so
+// the mutation and its journal row are born and die together.
+func RecordScoped(
+	ctx context.Context, rec Recorder, propertyID, actor uuid.UUID,
+	actorRole domain.ActorRole, entry domain.Entry,
+) error {
+	entry.PropertyID = propertyID
+	entry.ActorID = &actor
+	entry.ActorRole = actorRole
+	if err := rec.Record(ctx, entry); err != nil {
+		return fmt.Errorf("record history: %w", err)
+	}
+	return nil
+}

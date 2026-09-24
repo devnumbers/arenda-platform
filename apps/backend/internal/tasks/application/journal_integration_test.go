@@ -201,7 +201,13 @@ func TestClearCompletedJournalOwnerBook_WholeBook(t *testing.T) {
 	if err != nil {
 		t.Fatalf("clear completed journal of owner book: %v", err)
 	}
-	assertWholeBookClearState(t, h, archivedProp, foreign, cleared)
+	// The immediate repeat finds nothing left to remove — the empty-cleanup
+	// leg of the journal contract below (no removed rows, no rows written).
+	repeat, err := h.tasks.ClearCompletedJournalOwnerBook(h.ctx(), h.owner)
+	if err != nil {
+		t.Fatalf("repeat clear of owner book: %v", err)
+	}
+	assertWholeBookClearState(t, h, archivedProp, foreign, cleared, repeat)
 }
 
 // seedSurvivingJournalRows inserts the journal rows the book-wide clear must
@@ -237,14 +243,19 @@ func (h *tasksHarness) seedSurvivingJournalRows() (archivedProp, foreign uuid.UU
 // assertWholeBookClearState pins the post-clear state: only the clearable
 // journal rows of the owner's book are gone; the live rules' dedup keys, the
 // archived and the foreign journals survive; the audit entry carries the
-// removed count.
+// removed count; the action journal carries one task.completed_cleared row
+// per touched object and nothing for the property-less leg or the 0-removed
+// repeat (ADR 0061 §3).
 func assertWholeBookClearState(
-	t *testing.T, h *tasksHarness, archivedProp, foreign uuid.UUID, cleared int64,
+	t *testing.T, h *tasksHarness, archivedProp, foreign uuid.UUID, cleared, repeat int64,
 ) {
 	t.Helper()
 
 	if cleared != 4 {
 		t.Fatalf("cleared = %d, want 4 (3 bound journal rows + 1 property-less)", cleared)
+	}
+	if repeat != 0 {
+		t.Fatalf("repeat clear = %d, want 0 (the book was just cleared)", repeat)
 	}
 	// No clearable journal row survived on either slice...
 	countJournal(t, h, `owner_id = $1 AND completed_date IS NOT NULL AND rule_id IS NULL
@@ -273,6 +284,45 @@ func assertWholeBookClearState(
 	}
 	if auditCount != "4" {
 		t.Fatalf("audit count = %q, want \"4\"", auditCount)
+	}
+
+	// The action journal follows the bulk canon (ADR 0061 §3): exactly one
+	// task.completed_cleared row per touched object — the one active
+	// property, carrying its 3 removed rows in the count. The property-less
+	// removal anchors no row (every row anchors to a property), and the
+	// 0-removed repeat wrote none.
+	type clearedRow struct {
+		property uuid.UUID
+		count    *string
+	}
+	var rows []clearedRow
+	clearedRows, err := h.pool.Query(h.ctx(), `
+		SELECT property_id, context->>'count' FROM action_journal
+		WHERE action = 'task.completed_cleared' AND actor_id = $1`,
+		h.owner)
+	if err != nil {
+		t.Fatalf("query cleared journal rows: %v", err)
+	}
+	defer clearedRows.Close()
+	for clearedRows.Next() {
+		var row clearedRow
+		if err := clearedRows.Scan(&row.property, &row.count); err != nil {
+			t.Fatalf("scan cleared journal row: %v", err)
+		}
+		rows = append(rows, row)
+	}
+	if err := clearedRows.Err(); err != nil {
+		t.Fatalf("iterate cleared journal rows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("task.completed_cleared journal rows = %d, want 1 (one per touched object; "+
+			"property-less legs and empty clears write none)", len(rows))
+	}
+	if rows[0].property != h.propID {
+		t.Fatalf("cleared journal row anchored to %s, want the touched property %s", rows[0].property, h.propID)
+	}
+	if rows[0].count == nil || *rows[0].count != "3" {
+		t.Fatalf("cleared journal row count = %v, want \"3\"", rows[0].count)
 	}
 }
 

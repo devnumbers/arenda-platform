@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/contacts/domain"
+	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
@@ -125,7 +126,8 @@ func (s *ContactService) CreateContact(
 		// property writes no row (ADR 0061 — the schema anchors every row
 		// to a property).
 		if draft.PropertyID != nil {
-			if err := recordContactHistory(ctx, stores, actor, role, *draft.PropertyID,
+			if err := historyapp.RecordScoped(ctx, stores.history, *draft.PropertyID, actor,
+				sharedpolicy.HistoryActorRole(role),
 				historydomain.ContactCreated(draft.ID, draft.FullName())); err != nil {
 				return err
 			}
@@ -295,7 +297,8 @@ func (s *ContactService) UpdateContact(
 		// no row; a move between properties journals on the destination; an
 		// unbound card writes no row.
 		if stored.PropertyID != nil && (moved || contactChanged(before, stored)) {
-			if err := recordContactHistory(ctx, stores, actor, role, *stored.PropertyID,
+			if err := historyapp.RecordScoped(ctx, stores.history, *stored.PropertyID, actor,
+				sharedpolicy.HistoryActorRole(role),
 				historydomain.ContactUpdated(contact.ID, oldFullName, stored.FullName())); err != nil {
 				return err
 			}
@@ -352,7 +355,8 @@ func (s *ContactService) DeleteContact(ctx context.Context, actor, id uuid.UUID)
 			return err
 		}
 		if contact.PropertyID != nil {
-			if err := recordContactHistory(ctx, stores, actor, role, *contact.PropertyID,
+			if err := historyapp.RecordScoped(ctx, stores.history, *contact.PropertyID, actor,
+				sharedpolicy.HistoryActorRole(role),
 				historydomain.ContactDeleted(contact.ID, contact.FullName())); err != nil {
 				return err
 			}
@@ -571,22 +575,6 @@ func recordContactAudit(
 		Context:    auditCtx,
 	}); err != nil {
 		return fmt.Errorf("record audit: %w", err)
-	}
-	return nil
-}
-
-// recordContactHistory writes the mutation's action journal row inside the
-// transaction (fail-safe like the audit, ADR 0061 §3). The role is the one
-// the gate resolved; the label snapshot is the card's ФИО — never the phone.
-func recordContactHistory(
-	ctx context.Context, stores *txStores, actor uuid.UUID, role sharedpolicy.Role,
-	propertyID uuid.UUID, entry historydomain.Entry,
-) error {
-	entry.PropertyID = propertyID
-	entry.ActorID = &actor
-	entry.ActorRole = sharedpolicy.HistoryActorRole(role)
-	if err := stores.history.Record(ctx, entry); err != nil {
-		return fmt.Errorf("record history: %w", err)
 	}
 	return nil
 }

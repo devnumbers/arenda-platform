@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
+	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
@@ -23,23 +24,6 @@ const (
 	auditKeyTrigger    = "trigger"
 	auditKeyUserID     = "user_id"
 )
-
-// recordAccessHistory writes the action journal row inside the transaction
-// (fail-safe like the audit: an insert error rolls the mutation back,
-// ADR 0061 §3). The role is the one the gate resolved before the transaction
-// opened.
-func recordAccessHistory(
-	ctx context.Context, stores *txStores, actor uuid.UUID, actorRole sharedpolicy.Role,
-	propertyID uuid.UUID, entry historydomain.Entry,
-) error {
-	entry.PropertyID = propertyID
-	entry.ActorID = &actor
-	entry.ActorRole = sharedpolicy.HistoryActorRole(actorRole)
-	if err := stores.history.Record(ctx, entry); err != nil {
-		return fmt.Errorf("record history: %w", err)
-	}
-	return nil
-}
 
 // userLabel resolves the row-text label of a participant: the display name
 // (the audit's masking canon — «Name Surname», иначе замаскированный телефон,
@@ -101,8 +85,8 @@ type AccessService struct {
 // the publications (tests that don't exercise them). Statuses reports the
 // archived flag of a property (issue #163); it may be nil to skip the
 // archived-property checks. Factory bundles the membership repository, the
-// audit recorder, and the Unit-of-Work every mutating use case runs through
-// (ADR 0033 γ-factory).
+// audit and history recorders, and the Unit-of-Work every mutating use case
+// runs through (ADR 0033 γ-factory).
 func NewAccessService(
 	members MembershipRepository,
 	owners PropertyOwnerResolver,
@@ -218,7 +202,8 @@ func (s *AccessService) createInvitationInTx(
 	// by the email only — the email is the label snapshot here.
 	entry := historydomain.MemberInvited(invitation.Email)
 	entry.Context[historydomain.CtxKeyRole] = string(invitation.Role)
-	if err := recordAccessHistory(ctx, stores, actor, actorRole, invitation.PropertyID, entry); err != nil {
+	if err := historyapp.RecordScoped(ctx, stores.history, invitation.PropertyID, actor,
+		sharedpolicy.HistoryActorRole(actorRole), entry); err != nil {
 		return domain.Invitation{}, err
 	}
 	return created, nil
@@ -302,7 +287,8 @@ func (s *AccessService) createMembershipInTx(
 	}
 	entry := historydomain.MemberAdded(membership.UserID, label)
 	entry.Context[historydomain.CtxKeyRole] = string(membership.Role)
-	if err := recordAccessHistory(ctx, stores, actor, actorRole, membership.PropertyID, entry); err != nil {
+	if err := historyapp.RecordScoped(ctx, stores.history, membership.PropertyID, actor,
+		sharedpolicy.HistoryActorRole(actorRole), entry); err != nil {
 		return domain.Membership{}, false, err
 	}
 	return created, suspend, nil
@@ -362,7 +348,8 @@ func (s *AccessService) ChangeMemberRole(
 			if err != nil {
 				return err
 			}
-			if err := recordAccessHistory(ctx, stores, actor, actorRole, propertyID,
+			if err := historyapp.RecordScoped(ctx, stores.history, propertyID, actor,
+				sharedpolicy.HistoryActorRole(actorRole),
 				historydomain.MemberRoleChanged(updated.UserID, label,
 					historydomain.ActorRole(toSharedRole(existing.Role)),
 					historydomain.ActorRole(toSharedRole(role)))); err != nil {
@@ -438,7 +425,8 @@ func removeMembershipInTx(
 	// single revoke and the bulk participant removal write their own action
 	// ids over the same core.
 	historyEntry.Context[historydomain.CtxKeyUserID] = membership.UserID
-	if err := recordAccessHistory(ctx, stores, actor, actorRole, membership.PropertyID, historyEntry); err != nil {
+	if err := historyapp.RecordScoped(ctx, stores.history, membership.PropertyID, actor,
+		sharedpolicy.HistoryActorRole(actorRole), historyEntry); err != nil {
 		return err
 	}
 	return nil
@@ -607,8 +595,8 @@ func (s *AccessService) LeaveProperty(ctx context.Context, actor, propertyID uui
 		if err != nil {
 			return err
 		}
-		if err := recordAccessHistory(ctx, stores, actor, role, propertyID,
-			historydomain.MemberLeft(label)); err != nil {
+		if err := historyapp.RecordScoped(ctx, stores.history, propertyID, actor,
+			sharedpolicy.HistoryActorRole(role), historydomain.MemberLeft(label)); err != nil {
 			return err
 		}
 		return nil

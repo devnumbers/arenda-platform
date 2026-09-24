@@ -205,9 +205,11 @@ func (s *TaskService) ClearCompletedJournal(
 // bound rows and the property-less ones (ADR 0052) in the same store query;
 // the shared-to properties' journals are other owners' books (owner-scope,
 // ADR 0028) and the archived ones stay frozen (ADR 0025). The same live-rule
-// protection as the property-scoped clear (ADR 0051). Serialized on the
-// owner's users row — the book-level anchor (ADR 0052); the verdict states
-// Tick=false: no rule data changed, the tick is a no-op by construction.
+// protection as the property-scoped clear (ADR 0051). The journal follows
+// the bulk canon (ADR 0061 §3): one row per touched object with its removed
+// count, the property-less legs anchor none. Serialized on the owner's users
+// row — the book-level anchor (ADR 0052); the verdict states Tick=false: no
+// rule data changed, the tick is a no-op by construction.
 func (s *TaskService) ClearCompletedJournalOwnerBook(
 	ctx context.Context, actor uuid.UUID,
 ) (int64, error) {
@@ -215,17 +217,37 @@ func (s *TaskService) ClearCompletedJournalOwnerBook(
 		func(
 			ctx context.Context, stores *txStores, scope uuid.UUID, _ domain.TaskRule, _ time.Time,
 		) (mutationOutcome[int64], error) {
-			cleared, err := stores.tasks.DeleteCompletedJournalOwnerBook(ctx, scope)
+			removed, err := stores.tasks.DeleteCompletedJournalOwnerBook(ctx, scope)
 			if err != nil {
 				return mutationOutcome[int64]{}, fmt.Errorf("clear completed journal of owner book: %w", err)
 			}
 			return mutationOutcome[int64]{
-				Response:    cleared,
-				Audit:       auditdomain.ActionTaskCompletedCleared,
-				AuditEntity: auditdomain.EntityTask,
-				AuditCtx:    map[string]any{"count": cleared},
+				Response:          int64(len(removed)),
+				Audit:             auditdomain.ActionTaskCompletedCleared,
+				AuditEntity:       auditdomain.EntityTask,
+				AuditCtx:          map[string]any{"count": int64(len(removed))},
+				HistoryByProperty: clearedJournalByProperty(removed),
 			}, nil
 		})
+}
+
+// clearedJournalByProperty groups the removed rows' anchors into the bulk
+// journal rows — one task.completed_cleared entry per touched object with
+// its removed count (ADR 0061 §3); the property-less legs (uuid.Nil) anchor
+// no row — every journal row anchors to a property.
+func clearedJournalByProperty(removed []uuid.UUID) map[uuid.UUID]historydomain.Entry {
+	counts := make(map[uuid.UUID]int)
+	for _, propertyID := range removed {
+		if propertyID == uuid.Nil {
+			continue
+		}
+		counts[propertyID]++
+	}
+	rows := make(map[uuid.UUID]historydomain.Entry, len(counts))
+	for propertyID, count := range counts {
+		rows[propertyID] = historydomain.TaskCompletedCleared(count)
+	}
+	return rows
 }
 
 // ListGlobalTasks returns one page of the actor's visible tasks for the

@@ -160,8 +160,10 @@ type TaskStore interface {
 	// property-less ones (ADR 0052); the archived properties' journals stay
 	// frozen (ADR 0025) and other owners' books are untouched (owner-scope,
 	// ADR 0028). The same live-rule protection as the property-scoped
-	// variant. It returns the number of removed rows.
-	DeleteCompletedJournalOwnerBook(ctx context.Context, scope uuid.UUID) (int64, error)
+	// variant. It returns the removed rows' property anchors — one per
+	// removed row, uuid.Nil for the property-less ones — for the use case to
+	// group the per-object journal counts (ADR 0061 §3).
+	DeleteCompletedJournalOwnerBook(ctx context.Context, scope uuid.UUID) ([]uuid.UUID, error)
 	// ListUncompletedTaskIDs returns the rule's standing uncompleted tasks'
 	// ids — the scheduling seam's in-transaction handover (issue #775):
 	// read after the materialization tick has settled the rule's rows, so

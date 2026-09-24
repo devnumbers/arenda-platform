@@ -27,11 +27,12 @@ type txStores struct {
 	tx          transaction.Tx
 }
 
-// txStoreFactory holds the non-transactional access repositories and audit
-// recorder plus the Unit-of-Work, and builds a transactional txStores from each
-// runInTx call. It is embedded anonymously by every access service so they
-// share one canonical transactional shape (ADR 0033 γ-factory): a use case only
-// sees runInTx(ctx, work) and the *txStores it hands out.
+// txStoreFactory holds the non-transactional access repositories and the
+// audit and history recorders plus the Unit-of-Work, and builds a
+// transactional txStores from each runInTx call. It is embedded anonymously
+// by every access service so they share one canonical transactional shape
+// (ADR 0033 γ-factory): a use case only sees runInTx(ctx, work) and the
+// *txStores it hands out.
 //
 // Build it once with NewTxStoreFactory at the wire layer and pass the same value
 // to every access service constructor, so adding an Nth repository is a change
@@ -44,12 +45,12 @@ type txStoreFactory struct {
 	uow         transaction.UoW
 }
 
-// NewTxStoreFactory bundles the access repositories, the audit recorder, and
-// the Unit-of-Work into the single txStoreFactory every access service embeds
-// (ADR 0033 γ-factory). A nil audit defaults to a Noop recorder so a caller
-// that does not care about audit still gets a safe factory. The type stays
-// unexported; callers use := to hold it (standard Go pattern for a factory
-// returning an unexported type).
+// NewTxStoreFactory bundles the access repositories, the audit and history
+// recorders, and the Unit-of-Work into the single txStoreFactory every access
+// service embeds (ADR 0033 γ-factory). A nil recorder defaults to a Noop so a
+// caller that does not care about audit or history still gets a safe
+// factory. The type stays unexported; callers use := to hold it (standard Go
+// pattern for a factory returning an unexported type).
 func NewTxStoreFactory(
 	members MembershipRepository,
 	invitations InvitationRepository,

@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
+	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
@@ -61,8 +62,8 @@ type InvitationService struct {
 // disable the publications; emails may be nil to skip the member-email
 // enrichment of ListMembers. Statuses reports the archived flag of a
 // property (issue #163); it may be nil to skip the archived-property checks.
-// Factory bundles the repositories, the audit recorder, and the Unit-of-Work
-// every mutating use case runs through (ADR 0033 γ-factory).
+// Factory bundles the repositories, the audit and history recorders, and the
+// Unit-of-Work every mutating use case runs through (ADR 0033 γ-factory).
 func NewInvitationService(
 	access *AccessService,
 	members MembershipRepository,
@@ -338,7 +339,8 @@ func (s *InvitationService) CancelInvitation(ctx context.Context, actor, propert
 
 		// The action journal row (ADR 0061): the invitee is known by the
 		// invitation's email — the row survives the cancelled invitation.
-		if err := recordAccessHistory(ctx, stores, actor, actorRole, propertyID,
+		if err := historyapp.RecordScoped(ctx, stores.history, propertyID, actor,
+			sharedpolicy.HistoryActorRole(actorRole),
 			historydomain.MemberInvitationCancelled(invitation.Email)); err != nil {
 			return err
 		}

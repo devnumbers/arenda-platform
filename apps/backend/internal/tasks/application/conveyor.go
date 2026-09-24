@@ -17,6 +17,7 @@ import (
 
 	"github.com/google/uuid"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
+	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
@@ -51,9 +52,16 @@ type mutationOutcome[T any] struct {
 	// History is the action journal row of the mutation (ADR 0061), built by
 	// the step from the row-text catalog and recorded inside the same
 	// transaction (fail-safe like the audit). Only the property-bound
-	// conveyor records it — the property-less book (ADR 0052) has no object
-	// the row could hang on, so runOwnerMutation ignores this field.
+	// conveyor records it — the property-less book (ADR 0052) passes a nil
+	// entry (no object the row could hang on) and journals through
+	// HistoryByProperty instead.
 	History *historydomain.Entry
+	// HistoryByProperty holds the per-property journal rows of a bulk
+	// mutation (ADR 0061 §3: one row per affected object, its removed count
+	// in the row text). Only the property-less conveyor records them — each
+	// row carries its own property anchor, so a bulk step cannot travel
+	// through the single-anchored History.
+	HistoryByProperty map[uuid.UUID]historydomain.Entry
 	// Tick runs the materialization tick for the owner after the change;
 	// every use case states its need explicitly (deletion and the completed
 	// journal clear set false).
@@ -223,6 +231,15 @@ func runOwnerMutation[T any](
 			auditdomain.EntityTaskRule, out.AuditEntity, out.Audit, out.AuditEntityID, out.AuditCtx, nil); err != nil {
 			return err
 		}
+		// The bulk step's journal: one row per touched object, each with its
+		// own anchor (ADR 0061 §3) — recorded with the owner role the
+		// property-less conveyor runs under.
+		for propertyID, entry := range out.HistoryByProperty {
+			if err := historyapp.RecordScoped(ctx, stores.history, propertyID, actor,
+				sharedpolicy.HistoryActorRole(sharedpolicy.RoleOwner), entry); err != nil {
+				return err
+			}
+		}
 		if !out.Tick {
 			return nil
 		}
@@ -353,8 +370,9 @@ func recordAudit(
 
 // recordTrail writes the mutation's audit entry and its action journal row
 // inside the transaction — the shared tail of both conveyors. The empty
-// entity type defaults to the rule (the audit contract); a zero propertyID
-// (the property-less book) skips the journal.
+// entity type defaults to the rule (the audit contract); the journal is
+// skipped by a nil entry — which is exactly what the property-less
+// conveyor passes, the guard itself only knows the nil entry.
 func recordTrail(
 	ctx context.Context, stores *txStores, actor uuid.UUID, role sharedpolicy.Role,
 	propertyID uuid.UUID, defaultEntity auditdomain.EntityType,
@@ -367,26 +385,9 @@ func recordTrail(
 	if err := recordAudit(ctx, stores, actor, role, action, entity, entityID, auditCtx); err != nil {
 		return err
 	}
-	return recordHistory(ctx, stores, actor, role, propertyID, history)
-}
-
-// recordHistory writes the mutation's action journal entry inside the
-// transaction (fail-safe like the audit: an insert error rolls the mutation
-// back, ADR 0061 §3). The role is the one the gate resolved before the
-// transaction opened. A nil entry (the property-less book's outcomes) writes
-// nothing — a journal row needs a property to hang on.
-func recordHistory(
-	ctx context.Context, stores *txStores, actor uuid.UUID, role sharedpolicy.Role,
-	propertyID uuid.UUID, entry *historydomain.Entry,
-) error {
-	if entry == nil {
-		return nil
-	}
-	entry.PropertyID = propertyID
-	entry.ActorID = &actor
-	entry.ActorRole = sharedpolicy.HistoryActorRole(role)
-	if err := stores.history.Record(ctx, *entry); err != nil {
-		return fmt.Errorf("record history: %w", err)
+	if history != nil {
+		return historyapp.RecordScoped(ctx, stores.history, propertyID, actor,
+			sharedpolicy.HistoryActorRole(role), *history)
 	}
 	return nil
 }

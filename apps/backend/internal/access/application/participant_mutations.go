@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
+	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
@@ -562,7 +563,8 @@ func (s *ParticipantMutationService) removeInvitationLegs(
 		}
 		// The invitation leg of the bulk removal journals as the same user
 		// action — «участник удалён» per property (ADR 0061 §3).
-		if err := recordAccessHistory(ctx, stores, actor, actorRole, inv.PropertyID,
+		if err := historyapp.RecordScoped(ctx, stores.history, inv.PropertyID, actor,
+			sharedpolicy.HistoryActorRole(actorRole),
 			historydomain.MemberParticipantRemoved(targetLabel)); err != nil {
 			return err
 		}

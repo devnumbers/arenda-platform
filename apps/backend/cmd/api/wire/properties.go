@@ -60,9 +60,9 @@ func WireProperties(
 	}
 
 	// The single canonical txStoreFactory bundles the properties
-	// repositories, the cross-context ports, the audit recorder, and the UoW
-	// (ADR 0033 γ-factory). Adding an Nth repository is a change here, not in
-	// several constructors.
+	// repositories, the cross-context ports, the audit and history recorders,
+	// and the UoW (ADR 0033 γ-factory). Adding an Nth repository is a change
+	// here, not in several constructors.
 	factory := propertiesapp.NewTxStoreFactory(
 		propertyRepo,
 		propertyPhotoRepo,

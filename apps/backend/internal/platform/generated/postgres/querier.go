@@ -188,8 +188,11 @@ type Querier interface {
 	// the bound rows and the property-less ones (nullable property_id, ADR 0052).
 	// Archived properties stay frozen (ADR 0025) and the shared-to properties'
 	// journals are other owners' books (owner-scope, ADR 0028). The completed
-	// tasks of live rules stay — the tick's dedup keys (ADR 0051).
-	DeleteCompletedJournalOwnerBook(ctx context.Context, ownerID pgtype.UUID) (int64, error)
+	// tasks of live rules stay — the tick's dedup keys (ADR 0051). Returns the
+	// removed rows' property anchors, one per removed row (NULL is the
+	// property-less leg) — the use case groups them into the per-object
+	// journal rows (ADR 0061 §3).
+	DeleteCompletedJournalOwnerBook(ctx context.Context, ownerID pgtype.UUID) ([]pgtype.UUID, error)
 	DeleteContact(ctx context.Context, arg DeleteContactParams) (int64, error)
 	DeleteEmailChangeGrantByID(ctx context.Context, id pgtype.UUID) error
 	DeleteEmailChangeGrantsByUserID(ctx context.Context, userID pgtype.UUID) error
