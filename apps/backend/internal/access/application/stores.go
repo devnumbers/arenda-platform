@@ -9,10 +9,11 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
-// txStores bundles the access repositories and audit recorder all bound to the
-// same transaction. It is the only handle a use case receives inside runInTx,
-// so it is impossible to forget WithTx or to record audit outside the
-// transaction (ADR 0033, ADR 0020).
+// txStores bundles the access repositories and the audit and history
+// recorders all bound to the same transaction. It is the only handle a use
+// case receives inside runInTx, so it is impossible to forget WithTx or to
+// record audit or history outside the transaction (ADR 0033, ADR 0020,
+// ADR 0061).
 //
 // Tx additionally exposes the raw transaction handle: the SlotCoordinator port
 // takes a transaction.Tx because properties and billing call it inside their

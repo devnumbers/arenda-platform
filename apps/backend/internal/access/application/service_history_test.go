@@ -120,6 +120,27 @@ func TestHistory_MembershipLifecycleRows(t *testing.T) {
 	}
 }
 
+// TestHistory_MemberRoleNoOpWritesNoRow pins ADR 0061 §3 «A no-op action
+// writes no row»: re-setting the member's current role journals nothing —
+// the same gate the role-change notice applies below the transaction.
+func TestHistory_MemberRoleNoOpWritesNoRow(t *testing.T) {
+	t.Parallel()
+	h := newHistoryFixture(t)
+	ctx := context.Background()
+
+	if _, err := h.svc.AddMember(ctx, h.owner, h.property, h.member, domain.RoleFullAccess); err != nil {
+		t.Fatalf("AddMember: %v", err)
+	}
+	h.history.entries = nil
+
+	if _, err := h.svc.ChangeMemberRole(ctx, h.owner, h.property, h.repo.rows[0].ID, domain.RoleFullAccess); err != nil {
+		t.Fatalf("ChangeMemberRole (same role): %v", err)
+	}
+	if len(h.history.entries) != 0 {
+		t.Fatalf("journal entries = %d, want 0 — a same-role change writes no row", len(h.history.entries))
+	}
+}
+
 func TestHistory_LeaveCarriesTheLeaver(t *testing.T) {
 	t.Parallel()
 	h := newHistoryFixture(t)

@@ -10,10 +10,11 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
-// txStores bundles the contact repository and the audit recorder bound to the
-// same transaction. It is the only handle a use case receives inside runInTx,
-// so it is impossible to forget WithTx, to write outside the transaction or
-// to record audit outside it (ADR 0033, ADR 0020).
+// txStores bundles the contact repository and the audit and history recorders
+// bound to the same transaction. It is the only handle a use case receives
+// inside runInTx, so it is impossible to forget WithTx, to write outside the
+// transaction or to record audit or history outside it (ADR 0033, ADR 0020,
+// ADR 0061).
 type txStores struct {
 	contacts ContactStore
 	audit    auditapp.Recorder

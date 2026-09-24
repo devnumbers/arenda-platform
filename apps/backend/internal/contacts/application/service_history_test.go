@@ -3,7 +3,8 @@ package application
 // The action journal of the contact mutations (карта #704, тикет #707,
 // ADR 0061): a property-bound card journals with the ФИО snapshot — never
 // the phone — an unbound card journals nothing (the row anchors to a
-// property), and the update carries the old → new ФИО.
+// property), a no-op update journals nothing (§3), and the update carries
+// the old → new ФИО.
 
 import (
 	"context"
@@ -27,9 +28,22 @@ func TestHistory_BoundContactRows(t *testing.T) {
 		t.Fatalf("CreateContact: %v", err)
 	}
 
-	newName := contactFirstName
+	// A same-form PATCH without a move is a no-op: it journals nothing
+	// (ADR 0061 §3) — only the create row stands before the delete.
+	sameName := contactFirstName
 	if _, err := h.svc.UpdateContact(context.Background(), h.owner, created.ID, UpdateContactCommand{
-		FirstName: &newName,
+		FirstName: &sameName,
+	}); err != nil {
+		t.Fatalf("UpdateContact (same form): %v", err)
+	}
+	if len(h.history.entries) != 1 {
+		t.Fatalf("journal entries after the no-op update = %d, want 1", len(h.history.entries))
+	}
+
+	// A real change carries the old → new ФИО snapshot.
+	newLastName := "Сидоров"
+	if _, err := h.svc.UpdateContact(context.Background(), h.owner, created.ID, UpdateContactCommand{
+		LastName: &newLastName,
 	}); err != nil {
 		t.Fatalf("UpdateContact: %v", err)
 	}
@@ -42,8 +56,8 @@ func TestHistory_BoundContactRows(t *testing.T) {
 	}
 	want := []struct{ action, text string }{
 		{string(historydomain.ActionContactCreated), "Добавлен контакт: " + createdContactFullName},
-		{string(historydomain.ActionContactUpdated), "Контакт изменён: " + createdContactFullName + " → Пётр Иванов"},
-		{string(historydomain.ActionContactDeleted), "Контакт удалён: Пётр Иванов"},
+		{string(historydomain.ActionContactUpdated), "Контакт изменён: " + createdContactFullName + " → Пётр Сидоров"},
+		{string(historydomain.ActionContactDeleted), "Контакт удалён: Пётр Сидоров"},
 	}
 	for i, w := range want {
 		e := h.history.entries[i]

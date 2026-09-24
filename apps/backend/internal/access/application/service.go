@@ -217,7 +217,7 @@ func (s *AccessService) createInvitationInTx(
 	// The action journal row (ADR 0061 §5): an unregistered invitee is known
 	// by the email only — the email is the label snapshot here.
 	entry := historydomain.MemberInvited(invitation.Email)
-	entry.Context["role"] = string(invitation.Role)
+	entry.Context[historydomain.CtxKeyRole] = string(invitation.Role)
 	if err := recordAccessHistory(ctx, stores, actor, actorRole, invitation.PropertyID, entry); err != nil {
 		return domain.Invitation{}, err
 	}
@@ -354,15 +354,20 @@ func (s *AccessService) ChangeMemberRole(
 			return fmt.Errorf("record audit: %w", err)
 		}
 
-		label, err := userLabel(ctx, s.users, updated.UserID)
-		if err != nil {
-			return err
-		}
-		if err := recordAccessHistory(ctx, stores, actor, actorRole, propertyID,
-			historydomain.MemberRoleChanged(updated.UserID, label,
-				historydomain.ActorRole(toSharedRole(existing.Role)),
-				historydomain.ActorRole(toSharedRole(role)))); err != nil {
-			return err
+		// The journal records a state change, not an idempotent re-set of the
+		// same role (ADR 0061 §3): a same-role edit writes no row — the gate
+		// the role-change notice below applies to its event too.
+		if roleChanged {
+			label, err := userLabel(ctx, s.users, updated.UserID)
+			if err != nil {
+				return err
+			}
+			if err := recordAccessHistory(ctx, stores, actor, actorRole, propertyID,
+				historydomain.MemberRoleChanged(updated.UserID, label,
+					historydomain.ActorRole(toSharedRole(existing.Role)),
+					historydomain.ActorRole(toSharedRole(role)))); err != nil {
+				return err
+			}
 		}
 		return nil
 	})
