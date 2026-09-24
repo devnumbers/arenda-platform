@@ -631,6 +631,116 @@ func TestReadStore_FilterOptionsParticipantOwnerFlag(t *testing.T) {
 	}
 }
 
+// Роль строки шита (#840, макет 2184-94261): максимальный доступ в области
+// — владелец → owner, живое членство → его роль, отозванный актёр → роль
+// из снимка журнала (actor_role); у человека с членством и журнальным
+// снимком разных ролей побеждает более широкая (MIN ранга).
+func TestReadStore_FilterOptionsParticipantRoles(t *testing.T) {
+	t.Parallel()
+	pool := testdb.Setup(t)
+	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
+	fullAccess := seedUser(t, pool, "Пётр", "Петров", "+79990000002", "petr@example.com")
+	viewer := seedUser(t, pool, "Анна", "Сидорова", "+79990000003", "anna@example.com")
+	exited := seedUser(t, pool, "Олег", "Ушёл", "+79990000004", "oleg@example.com")
+	mixed := seedUser(t, pool, "Мария", "Петрова", "+79990000005", "maria@example.com")
+
+	property := seedProperty(t, pool, owner)
+	seedMembership(t, pool, property, fullAccess)
+	seedMembership(t, pool, property, exited)
+	// Viewer-членство прямым INSERT'ом: хелпер сеет только full_access.
+	if _, err := pool.Exec(t.Context(),
+		`INSERT INTO property_members (id, property_id, user_id, role, granted_by)
+		 VALUES ($1, $2, $3, 'viewer', $3)`,
+		uuid.Must(uuid.NewV7()), property, viewer,
+	); err != nil {
+		t.Fatalf("seed viewer membership: %v", err)
+	}
+	// Олег вышел из объекта — в опциях остаётся снимком журнала
+	// (actor_role full_access).
+	exitedEntry := domain.Entry{
+		PropertyID: property,
+		ActorID:    &exited,
+		ActorRole:  domain.ActorRoleFullAccess,
+		Kind:       domain.KindRental,
+		Action:     domain.ActionRentalCreated,
+		BaseAction: domain.BaseAdded,
+		Segments:   domain.Segments{{Text: "Аренда создана"}},
+		Context:    map[string]any{},
+		CreatedAt:  time.Unix(1000, 0),
+	}
+	if err := newRecorder(pool).Record(context.Background(), exitedEntry); err != nil {
+		t.Fatalf("seed exited entry: %v", err)
+	}
+	if _, err := pool.Exec(t.Context(),
+		`DELETE FROM property_members WHERE property_id = $1 AND user_id = $2`, property, exited,
+	); err != nil {
+		t.Fatalf("revoke membership: %v", err)
+	}
+	// Мария: viewer-членство на объекте + журнальный снимок full_access —
+	// более широкая роль побеждает.
+	if _, err := pool.Exec(t.Context(),
+		`INSERT INTO property_members (id, property_id, user_id, role, granted_by)
+		 VALUES ($1, $2, $3, 'viewer', $3)`,
+		uuid.Must(uuid.NewV7()), property, mixed,
+	); err != nil {
+		t.Fatalf("seed mixed membership: %v", err)
+	}
+	mixedEntry := domain.Entry{
+		PropertyID: property,
+		ActorID:    &mixed,
+		ActorRole:  domain.ActorRoleFullAccess,
+		Kind:       domain.KindTask,
+		Action:     domain.ActionTaskCompleted,
+		BaseAction: domain.BaseCompleted,
+		Segments:   domain.Segments{{Text: "Задача выполнена"}},
+		Context:    map[string]any{},
+		CreatedAt:  time.Unix(1001, 0),
+	}
+	if err := newRecorder(pool).Record(context.Background(), mixedEntry); err != nil {
+		t.Fatalf("seed mixed entry: %v", err)
+	}
+
+	svc := newReadStack(pool)
+	opts, err := svc.Filters(context.Background(), owner, nil)
+	if err != nil {
+		t.Fatalf("filters: %v", err)
+	}
+	byID := map[uuid.UUID]domain.FilterParticipant{}
+	for _, p := range opts.Participants {
+		byID[p.ID] = p
+	}
+	wantRoles := map[uuid.UUID]string{
+		owner:      string(domain.ActorRoleOwner),
+		fullAccess: string(domain.ActorRoleFullAccess),
+		viewer:     string(domain.ActorRoleViewer),
+		exited:     string(domain.ActorRoleFullAccess),
+		mixed:      string(domain.ActorRoleFullAccess),
+	}
+	tests := []struct {
+		name      string
+		id        uuid.UUID
+		wantOwner bool
+	}{
+		{"владелец области", owner, true},
+		{"full access member", fullAccess, false},
+		{"viewer member", viewer, false},
+		{"exited actor by journal snapshot", exited, false},
+		{"journal snapshot vs membership — wider wins", mixed, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			p := byID[tt.id]
+			if p.Role != wantRoles[tt.id] {
+				t.Errorf("role: want %q, got %+v", wantRoles[tt.id], p)
+			}
+			if p.IsOwner != tt.wantOwner {
+				t.Errorf("is_owner: want %v, got %+v", tt.wantOwner, p)
+			}
+		})
+	}
+}
+
 func TestReadStore_FilterOptionsObjects(t *testing.T) {
 	t.Parallel()
 	pool := testdb.Setup(t)

@@ -13,12 +13,12 @@ import { BoldHome, NotificationDot } from '@/shared/assets/icons';
  * шапках детали и правки (1186:44997, 1550:95852 — серый круг без канта);
  * feed — 24 в шапках групп ленты «Истории» (макет 2157-56876, #709 —
  * серый круг без канта, как hero); filter — 32 в строках «Объектов» шита
- * фильтров истории (макет 2050-158280, #711 — серый круг без канта, как
- * feed). Точка — вне клипающего фото контейнера: круг с overflow-hidden
- * срезал бы её углы. Плейсхолдер поверхностей: светлый круг + серый дом
- * #D3D7D9, кроме filter (#712, макет 2184-92510, решение владельца
- * 23.09) — инвертирован как в каноне Category Icon (Background=Gray):
- * серый круг #D3D7D9 + белый дом.
+ * фильтров истории (макет 2184-94261, #840 — белый круг без канта, как
+ * у аватара участника). Точка — вне клипающего фото контейнера: круг с
+ * overflow-hidden срезал бы её углы. Плейсхолдер всех поверхностей:
+ * светлый круг + серый дом #D3D7D9 (решение владельца 24.09: инверсия
+ * «серый круг + белый дом» в filter отменена — оба аватара шита, участник
+ * и объект, рисуются одинаково на серой карточке группы).
  */
 export type PropertyAvatarProps = {
   readonly photoUrl?: string | null;
@@ -42,7 +42,7 @@ const SURFACE_CIRCLE: Record<NonNullable<PropertyAvatarProps['surface']>, string
   row: 'bg-surface-muted shadow-[0_0_0_2.5px_var(--dl-surface)]',
   hero: 'bg-surface-muted',
   feed: 'bg-surface-muted',
-  filter: 'bg-[#D3D7D9]',
+  filter: 'bg-surface',
 };
 
 const SURFACE_ICON: Record<NonNullable<PropertyAvatarProps['surface']>, string> = {
@@ -58,7 +58,7 @@ const SURFACE_GLYPH: Record<NonNullable<PropertyAvatarProps['surface']>, string>
   row: 'text-[#D3D7D9]',
   hero: 'text-[#D3D7D9]',
   feed: 'text-[#D3D7D9]',
-  filter: 'text-white',
+  filter: 'text-[#D3D7D9]',
 };
 
 export function PropertyAvatar({

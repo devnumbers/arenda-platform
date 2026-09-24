@@ -46,6 +46,7 @@ export function mapHistoryFilterOptions(dto: HistoryFiltersDto): HistoryFilterOp
       email: participant.email,
       firstName: participant.first_name,
       isOwner: participant.is_owner,
+      role: participant.role,
     })),
     objects: dto.objects.map((object_) => ({
       id: object_.id,

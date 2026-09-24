@@ -58,7 +58,7 @@ describe('mapHistoryItem', () => {
 });
 
 describe('mapHistoryFilterOptions', () => {
-  it('переводит опции шита в camelCase вместе с first_name/is_owner (#711)', () => {
+  it('переводит опции шита в camelCase вместе с first_name/is_owner/role (#711, #840)', () => {
     const options = mapHistoryFilterOptions({
       participants: [
         {
@@ -67,6 +67,15 @@ describe('mapHistoryFilterOptions', () => {
           email: 'ivan@example.com',
           first_name: 'Иван',
           is_owner: true,
+          role: 'owner',
+        },
+        {
+          id: 'user-2',
+          name: 'Анна Сидорова',
+          email: 'anna@example.com',
+          first_name: 'Анна',
+          is_owner: false,
+          role: 'viewer',
         },
       ],
       objects: [
@@ -81,6 +90,15 @@ describe('mapHistoryFilterOptions', () => {
         email: 'ivan@example.com',
         firstName: 'Иван',
         isOwner: true,
+        role: 'owner',
+      },
+      {
+        id: 'user-2',
+        name: 'Анна Сидорова',
+        email: 'anna@example.com',
+        firstName: 'Анна',
+        isOwner: false,
+        role: 'viewer',
       },
     ]);
     expect(options.objects).toEqual([

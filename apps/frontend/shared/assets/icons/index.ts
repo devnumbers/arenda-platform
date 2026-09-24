@@ -228,6 +228,11 @@ export { default as CancelColor } from './cancel-color.svg';
 export { default as EditSmall } from './edit-small.svg';
 export { default as EyeSmall } from './eye-small.svg';
 
+// Иконка роли «Полный доступ» в шите фильтров «Истории» (#840, Figma
+// Icon/S/FullAccess 2184-94261): контурный 16×16, currentColor — сосед
+// EyeSmall («Просмотр») и LockSmall (владелец).
+export { default as FullAccessSmall } from './full-access-small.svg';
+
 // Лента «История действий» (#709, Figma 2157-56876): строки действий —
 // Icon/S/Add 2041:133285, Icon/S/Check 2140:125448 и Icon/S/TrashBin
 // 2041:133286 (16×16, контур 1.2 — нейтральный тёмный, тон строки несёт

@@ -57,13 +57,16 @@ export type HistoryEntry = {
 
 /** Участник-вариант шита фильтров (GET /history/filters, #708). firstName —
  * имя без фамилии для строки «(Вы)» ('' — имени нет); isOwner — владелец
- * хотя бы одного объекта области чтения (иконка-замок, макет 2067-163528). */
+ * хотя бы одного объекта области чтения (иконка-замок, макет 2067-163528);
+ * role — максимальная роль в области (иконка роли строки, макет
+ * 2184-94261: owner — замок, full_access — силуэт, viewer — глаз). */
 export type HistoryParticipantOption = {
   readonly id: string;
   readonly name: string;
   readonly email: string;
   readonly firstName: string;
   readonly isOwner: boolean;
+  readonly role: 'owner' | 'full_access' | 'viewer';
 };
 
 /** Объект-вариант шита фильтров с фото-аватаром ('' — фото нет). */

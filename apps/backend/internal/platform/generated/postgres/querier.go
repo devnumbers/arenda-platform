@@ -749,7 +749,13 @@ type Querier interface {
 	// владелец ХОТЯ БЫ ОДНОГО объекта области (bool_or по ноге properties
 	// UNION'а); приглашённый без своих объектов флага не получает. first_name —
 	// имя без фамилии (u.name) для строки «(Вы)»; '' у безымянных (тогда
-	// name — маскированный телефон).
+	// имя в чипе — маскированный телефон).
+	// role (#840, макет 2184-94261): иконка роли строки шита — максимальный
+	// доступ в области (MIN ранга: 0 owner, 1 full_access, 2 viewer); живая
+	// нога property_members сильнее снимка журнала (actor_role) — она и есть
+	// ранг строки members. role='owner' жёстко совпадает с is_owner: снимок
+	// 'owner' от бывшего владельца в журнале замка не даёт (фолбэк в
+	// full_access).
 	//
 	ListHistoryFilterParticipants(ctx context.Context, arg ListHistoryFilterParticipantsParams) ([]ListHistoryFilterParticipantsRow, error)
 	// The user's feed page, newest first, deleted rows never appear. The walk

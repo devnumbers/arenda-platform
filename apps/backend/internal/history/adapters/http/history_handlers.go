@@ -114,6 +114,7 @@ func (h *HistoryHandlers) GetHistoryFilters(w http.ResponseWriter, r *http.Reque
 			Email:     p.Email,
 			FirstName: p.FirstName,
 			IsOwner:   p.IsOwner,
+			Role:      openapi.HistoryParticipantRole(p.Role),
 		}
 	}
 	objects := make([]openapi.HistoryObject, len(options.Objects))

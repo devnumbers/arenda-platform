@@ -110,6 +110,7 @@ func (s *ReadStore) FilterParticipants(ctx context.Context, actor uuid.UUID, pro
 			Email:     pgconv.TextToString(row.Email),
 			FirstName: row.FirstName,
 			IsOwner:   row.IsOwner,
+			Role:      row.Role,
 		}
 	}
 	return out, nil

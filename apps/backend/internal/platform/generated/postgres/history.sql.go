@@ -271,21 +271,22 @@ func (q *Queries) ListHistoryFilterObjects(ctx context.Context, arg ListHistoryF
 }
 
 const listHistoryFilterParticipants = `-- name: ListHistoryFilterParticipants :many
-WITH scope_participant(user_id, is_owner) AS (
-    SELECT p.owner_id, TRUE
+WITH scope_participant(user_id, is_owner, role_rank) AS (
+    SELECT p.owner_id, TRUE, 0
     FROM properties p
     WHERE actor_can_read_history(p.id, $1::uuid)
       AND ($2::text = ''
            OR p.id = ANY(string_to_array($2::text, ',')::uuid[]))
     UNION
-    SELECT m.user_id, FALSE
+    SELECT m.user_id, FALSE, CASE WHEN m.role = 'full_access' THEN 1 ELSE 2 END
     FROM property_members m
     JOIN properties p ON p.id = m.property_id
     WHERE actor_can_read_history(m.property_id, $1::uuid)
       AND ($2::text = ''
            OR m.property_id = ANY(string_to_array($2::text, ',')::uuid[]))
     UNION
-    SELECT aj.actor_id, FALSE
+    SELECT aj.actor_id, FALSE,
+           CASE aj.actor_role WHEN 'owner' THEN 0 WHEN 'full_access' THEN 1 ELSE 2 END
     FROM action_journal aj
     JOIN properties p ON p.id = aj.property_id
     WHERE actor_can_read_history(aj.property_id, $1::uuid)
@@ -295,7 +296,10 @@ WITH scope_participant(user_id, is_owner) AS (
 )
 SELECT u.id, u.name, u.surname, u.phone, u.email,
        COALESCE(u.name, '') AS first_name,
-       bool_or(s.is_owner) AS is_owner
+       bool_or(s.is_owner) AS is_owner,
+       CASE WHEN bool_or(s.is_owner) THEN 'owner'
+            WHEN MIN(s.role_rank) <= 1 THEN 'full_access'
+            ELSE 'viewer' END AS role
 FROM scope_participant s
 JOIN users u ON u.id = s.user_id
 GROUP BY u.id
@@ -315,6 +319,7 @@ type ListHistoryFilterParticipantsRow struct {
 	Email     pgtype.Text `json:"email"`
 	FirstName string      `json:"first_name"`
 	IsOwner   bool        `json:"is_owner"`
+	Role      string      `json:"role"`
 }
 
 // Опции фильтров ленты (ADR 0061 §7, тикет #708): участники области =
@@ -329,7 +334,13 @@ type ListHistoryFilterParticipantsRow struct {
 // владелец ХОТЯ БЫ ОДНОГО объекта области (bool_or по ноге properties
 // UNION'а); приглашённый без своих объектов флага не получает. first_name —
 // имя без фамилии (u.name) для строки «(Вы)»; ” у безымянных (тогда
-// name — маскированный телефон).
+// имя в чипе — маскированный телефон).
+// role (#840, макет 2184-94261): иконка роли строки шита — максимальный
+// доступ в области (MIN ранга: 0 owner, 1 full_access, 2 viewer); живая
+// нога property_members сильнее снимка журнала (actor_role) — она и есть
+// ранг строки members. role='owner' жёстко совпадает с is_owner: снимок
+// 'owner' от бывшего владельца в журнале замка не даёт (фолбэк в
+// full_access).
 func (q *Queries) ListHistoryFilterParticipants(ctx context.Context, arg ListHistoryFilterParticipantsParams) ([]ListHistoryFilterParticipantsRow, error) {
 	rows, err := q.db.Query(ctx, listHistoryFilterParticipants, arg.Actor, arg.PropertyIds)
 	if err != nil {
@@ -347,6 +358,7 @@ func (q *Queries) ListHistoryFilterParticipants(ctx context.Context, arg ListHis
 			&i.Email,
 			&i.FirstName,
 			&i.IsOwner,
+			&i.Role,
 		); err != nil {
 			return nil, err
 		}

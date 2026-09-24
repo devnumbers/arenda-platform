@@ -7936,8 +7936,10 @@ components:
         Участник-вариант фильтра. name — канон отображаемого имени платформы
         («Имя Фамилия», иначе маскированный телефон); email — текущая почта
         пользователя; first_name — имя без фамилии для строки «(Вы)»;
-        is_owner — замок владельца объектов (макет 2067-163528).
-      required: [id, name, email, first_name, is_owner]
+        is_owner — замок владельца объектов (макет 2067-163528); role —
+        иконка роли строки (макет 2184-94261): максимальный доступ в области,
+        живое членство сильнее снимка журнала отозванного участника.
+      required: [id, name, email, first_name, is_owner, role]
       properties:
         id:
           type: string
@@ -7953,6 +7955,10 @@ components:
         is_owner:
           type: boolean
           description: Пользователь владеет хотя бы одним объектом области чтения.
+        role:
+          type: string
+          enum: [owner, full_access, viewer]
+          description: Максимальная роль в области чтения (owner совпадает с is_owner по построению).
 
     HistoryObject:
       type: object

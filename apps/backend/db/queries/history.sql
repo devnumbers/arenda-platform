@@ -87,24 +87,31 @@ LIMIT sqlc.arg('page_limit')::int;
 -- владелец ХОТЯ БЫ ОДНОГО объекта области (bool_or по ноге properties
 -- UNION'а); приглашённый без своих объектов флага не получает. first_name —
 -- имя без фамилии (u.name) для строки «(Вы)»; '' у безымянных (тогда
--- name — маскированный телефон).
+-- имя в чипе — маскированный телефон).
+-- role (#840, макет 2184-94261): иконка роли строки шита — максимальный
+-- доступ в области (MIN ранга: 0 owner, 1 full_access, 2 viewer); живая
+-- нога property_members сильнее снимка журнала (actor_role) — она и есть
+-- ранг строки members. role='owner' жёстко совпадает с is_owner: снимок
+-- 'owner' от бывшего владельца в журнале замка не даёт (фолбэк в
+-- full_access).
 --
 -- name: ListHistoryFilterParticipants :many
-WITH scope_participant(user_id, is_owner) AS (
-    SELECT p.owner_id, TRUE
+WITH scope_participant(user_id, is_owner, role_rank) AS (
+    SELECT p.owner_id, TRUE, 0
     FROM properties p
     WHERE actor_can_read_history(p.id, sqlc.arg('actor')::uuid)
       AND (sqlc.arg('property_ids')::text = ''
            OR p.id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[]))
     UNION
-    SELECT m.user_id, FALSE
+    SELECT m.user_id, FALSE, CASE WHEN m.role = 'full_access' THEN 1 ELSE 2 END
     FROM property_members m
     JOIN properties p ON p.id = m.property_id
     WHERE actor_can_read_history(m.property_id, sqlc.arg('actor')::uuid)
       AND (sqlc.arg('property_ids')::text = ''
            OR m.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[]))
     UNION
-    SELECT aj.actor_id, FALSE
+    SELECT aj.actor_id, FALSE,
+           CASE aj.actor_role WHEN 'owner' THEN 0 WHEN 'full_access' THEN 1 ELSE 2 END
     FROM action_journal aj
     JOIN properties p ON p.id = aj.property_id
     WHERE actor_can_read_history(aj.property_id, sqlc.arg('actor')::uuid)
@@ -114,7 +121,10 @@ WITH scope_participant(user_id, is_owner) AS (
 )
 SELECT u.id, u.name, u.surname, u.phone, u.email,
        COALESCE(u.name, '') AS first_name,
-       bool_or(s.is_owner) AS is_owner
+       bool_or(s.is_owner) AS is_owner,
+       CASE WHEN bool_or(s.is_owner) THEN 'owner'
+            WHEN MIN(s.role_rank) <= 1 THEN 'full_access'
+            ELSE 'viewer' END AS role
 FROM scope_participant s
 JOIN users u ON u.id = s.user_id
 GROUP BY u.id

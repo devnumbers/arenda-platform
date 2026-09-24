@@ -39,13 +39,16 @@ type FeedEntry struct {
 // is the name without the surname (the «(Вы)» row, макет 2067-163528) and
 // stays empty when the user has no name — Name is a masked phone then;
 // IsOwner marks the owner of at least one object of the scope — the
-// owner-lock icon.
+// owner-lock icon. Role is the widest access in the scope ('owner' /
+// 'full_access' / 'viewer', the row role icon, макет 2184-94261): the live
+// membership outranks the journal snapshot of an exited actor.
 type FilterParticipant struct {
 	ID        uuid.UUID
 	Name      string
 	Email     string
 	FirstName string
 	IsOwner   bool
+	Role      string
 }
 
 // FilterObject is one «Объекты» option of the filter sheet: the object with

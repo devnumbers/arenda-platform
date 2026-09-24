@@ -10,6 +10,8 @@ import {
   Check,
   CheckmarkCircle,
   Edit,
+  EyeSmall,
+  FullAccessSmall,
   HomeMain,
   Key,
   LockSmall,
@@ -29,6 +31,7 @@ import {
   type HistoryBaseAction,
   type HistoryFilterOptions,
   type HistoryKind,
+  type HistoryParticipantOption,
 } from '@/entities/history';
 import { PropertyAvatar } from '@/entities/property';
 import { useMe } from '@/features/auth';
@@ -107,7 +110,8 @@ import { HistoryFiltersSheetSkeleton } from './history-states';
 /** Строка группы: id значения, подпись, опциональный подзаголовок и
  * ведущая иконка/аватар (макет 2067-163528: 24-иконка действий/видов,
  * кружок 36 у участников, аватар объекта 32). isMe — суффикс «(Вы)»;
- * ownerLock — замок владельца объектов перед подзаголовком. */
+ * roleIcon — иконка роли 16 перед подзаголовком (#840, макет 2184-94261:
+ * owner — замок, full_access — силуэт, viewer — глаз). */
 type HistoryFilterOptionRow = {
   readonly id: string;
   readonly label: string;
@@ -117,7 +121,7 @@ type HistoryFilterOptionRow = {
   /** Фото объекта для ведущего аватара (leadingSize 'object'). */
   readonly photoUrl?: string;
   readonly isMe?: boolean;
-  readonly ownerLock?: boolean;
+  readonly roleIcon?: HistoryParticipantOption['role'];
 };
 
 const BASE_ACTION_ICONS: Record<HistoryBaseAction, JSX.Element> = {
@@ -237,7 +241,7 @@ export function HistoryFiltersSheet({
       subtitle: participant.email,
       leadingSize: 'participant',
       isMe: participant.id === meId,
-      ownerLock: participant.isOwner,
+      roleIcon: participant.isOwner ? 'owner' : participant.role,
     }),
   );
 
@@ -524,9 +528,9 @@ function FilterGroupCard({
  * сепаратор #ebebeb на контейнере текста (кроме последней строки).
  * Вся строка — label: клик в любое место переключает опцию; цвет текста
  * от состояния чекбокса не зависит (макет 2050-158281: невыбранная
- * остаётся чёрной). У себя — суффикс «(Вы)» серым, у владельца объектов —
- * замок 16 перед подзаголовком. Disabled (#712): чекбокс серый, текст
- * приглушён, тапы не проходят. */
+ * остаётся чёрной). У себя — суффикс «(Вы)» серым; перед подзаголовком —
+ * иконка роли 16 (#840, макет 2184-94261). Disabled (#712): чекбокс
+ * серый, текст приглушён, тапы не проходят. */
 function FilterOptionRow({
   row,
   last,
@@ -580,9 +584,7 @@ function FilterOptionRow({
         </span>
         {row.subtitle !== undefined && (
           <span className="flex items-center gap-1">
-            {row.ownerLock === true && (
-              <LockSmall className="h-4 w-4 shrink-0 text-content-tertiary" aria-hidden />
-            )}
+            {row.roleIcon !== undefined && <RoleIcon role={row.roleIcon} />}
             <span className="truncate text-[13px] leading-[15px] text-content-tertiary">
               {row.subtitle}
             </span>
@@ -591,4 +593,19 @@ function FilterOptionRow({
       </span>
     </label>
   );
+}
+
+/** Иконка роли 16 перед подзаголовком строки участника (#840, макет
+ * 2184-94261): owner — замок (канон #711), full_access — силуэт,
+ * viewer — глаз (канон «Просмотра», #698). Роль — смысловая информация
+ * строки, поэтому иконка несёт accessible name, а не aria-hidden. */
+function RoleIcon({ role }: { readonly role: HistoryParticipantOption['role'] }): JSX.Element {
+  const className = 'h-4 w-4 shrink-0 text-content-tertiary';
+  if (role === 'owner') {
+    return <LockSmall className={className} role="img" aria-label="Роль: владелец" />;
+  }
+  if (role === 'viewer') {
+    return <EyeSmall className={className} role="img" aria-label="Роль: просмотр" />;
+  }
+  return <FullAccessSmall className={className} role="img" aria-label="Роль: полный доступ" />;
 }

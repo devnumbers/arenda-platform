@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   ArrowDown,
   ArrowLeft,
+  Block,
   BoldUser,
   Cancel,
   EditSmall,
@@ -14,6 +15,8 @@ import {
   Search,
   SmallArrowDown,
   SmallArrowRight,
+  TeamAdd,
+  TimeHistory,
 } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { cn } from '@/shared/lib/cn';
@@ -308,6 +311,7 @@ export function PropertyParticipantsScreen({
                     <MenuContent>
                       {!isArchived && (
                         <MenuItem
+                          icon={<TeamAdd className="h-6 w-6" />}
                           onSelect={() =>
                             router.push(ROUTES.propertyParticipantsInvite(propertyId))
                           }
@@ -318,10 +322,17 @@ export function PropertyParticipantsScreen({
                       {/* История объекта (#840, макет 1980-139712): вход в
                         * ленту, прибитую к этому объекту; есть и на
                         * архивном — журнал живёт, пока живёт объект. */}
-                      <MenuItem onSelect={() => router.push(ROUTES.historyProperty(propertyId))}>
+                      <MenuItem
+                        icon={<TimeHistory className="h-6 w-6" />}
+                        onSelect={() => router.push(ROUTES.historyProperty(propertyId))}
+                      >
                         История объекта
                       </MenuItem>
-                      <MenuItem onSelect={() => setConfirmOpen(true)}>
+                      <MenuItem
+                        icon={<Block className="h-6 w-6 text-error" />}
+                        className="text-error"
+                        onSelect={() => setConfirmOpen(true)}
+                      >
                         Отозвать доступ всем
                       </MenuItem>
                     </MenuContent>

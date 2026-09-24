@@ -314,7 +314,7 @@ test('участники «в ноль» — «Ничего не найдено�
   await expect(page.getByText('Платёж создан: Аренда за сентябрь')).toBeVisible();
 });
 
-test('участники: своя строка «Иван (Вы)» с замком владельца, чужая — полное имя без замка (макет 2067-163528)', async ({ page, seededUser }) => {
+test('участники: своя строка «Иван (Вы)» с замком владельца, чужая — иконка роли (макеты 2067-163528, 2184-94261)', async ({ page, seededUser }) => {
   await openHistoryWithFeed(page, seededUser);
 
   await page.getByRole('button', { name: 'Настройки' }).click();
@@ -322,21 +322,22 @@ test('участники: своя строка «Иван (Вы)» с замк�
   await dialog.getByRole('button', { name: 'Участники' }).click();
 
   // Своя строка: имя без фамилии + серый суффикс «(Вы)»; владелец
-  // объектов области — замок перед почтой (вторая svg строки: аватар + замок).
+  // объектов области — замок перед почтой (#711).
   const ownRow = page
     .locator('.min-h-14')
     .filter({ has: page.getByRole('checkbox', { name: 'Иван (Вы)' }) });
   await expect(ownRow).toHaveCount(1);
   await expect(ownRow.getByText('(Вы)', { exact: true })).toBeVisible();
-  // Замок владельца — приглушённая svg в подзаголовке рядом с почтой.
-  await expect(ownRow.locator('svg.text-content-tertiary')).toHaveCount(1);
+  await expect(ownRow.getByRole('img', { name: 'Роль: владелец' })).toHaveCount(1);
 
-  // Приглашённая без своих объектов: канон имени, замка нет.
+  // Приглашённая без своих объектов: канон имени + иконка роли
+  // full_access (#840, макет 2184-94261).
   const memberRow = page
     .locator('.min-h-14')
     .filter({ has: page.getByRole('checkbox', { name: 'Мария Петрова' }) });
   await expect(memberRow).toHaveCount(1);
-  await expect(memberRow.locator('svg.text-content-tertiary')).toHaveCount(0);
+  await expect(memberRow.getByRole('img', { name: 'Роль: полный доступ' })).toHaveCount(1);
+  await expect(memberRow.getByRole('img', { name: 'Роль: владелец' })).toHaveCount(0);
 });
 
 test('прямая ссылка с фильтром (?kinds=task) открывает отфильтрованную ленту', async ({ page, seededUser }) => {
