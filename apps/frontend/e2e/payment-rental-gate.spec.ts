@@ -144,7 +144,7 @@ test.describe('гейт мутаций платежа аренды', () => {
     });
     expect(patch.status()).toBe(409);
 
-    const del = await page.request.delete(`${base}?keepOverdue=true`);
+    const del = await page.request.delete(`${base}?keep_overdue=true`);
     expect(del.status()).toBe(409);
 
     // Звезда — не условие аренды: гейт её не трогает (и возвращается назад).
