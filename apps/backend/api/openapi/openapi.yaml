@@ -7866,7 +7866,9 @@ components:
           type: integer
           nullable: true
           enum: [1, 3, 7]
-          description: Lead time of the managed payment's reminder (карта #822); null — напоминаний нет.
+          description: >-
+            Lead time of the managed payment's reminder (карта #822); null —
+            напоминаний нет.
         nextPayment:
           $ref: '#/components/schemas/RentalNextPayment'
           nullable: true

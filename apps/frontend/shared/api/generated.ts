@@ -3602,7 +3602,7 @@ export interface components {
             paymentDay: components["schemas"]["RentalPaymentDay"];
             autoPay: boolean;
             /**
-             * @description Lead time of the managed payment's reminder (карта
+             * @description Lead time of the managed payment's reminder (карта #822); null — напоминаний нет.
              * @enum {integer|null}
              */
             reminderOffsetDays?: 1 | 3 | 7 | null;
