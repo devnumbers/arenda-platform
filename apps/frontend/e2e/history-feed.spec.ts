@@ -56,11 +56,14 @@ test('лента из сида: чипы дней, группы «объект �
   await execE2eSql('DELETE FROM action_journal;');
   await openCabinetWithSeededSession(page, seededUser);
 
-  // Сегодня: два объекта и два актёра сериями (канон мессенджера).
+  // Сегодня: два объекта и два актёра сериями (канон мессенджера). Дневные
+  // сиды анкерятся к началу текущих суток фиксированным часом (9 часов —
+  // как в prepend-сиде ниже), а не к моменту запуска: возле полуночи
+  // Date.now()-минуты уезжали бы в чужие сутки.
   await seedJournalEntry(
     {
       id: 'a0000000-0000-4000-8000-000000000001',
-      createdAt: new Date(Date.now() - 3 * 60_000).toISOString(),
+      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '3 minutes'`,
       segments: '[{"text": "Платёж создан: "}, {"text": "Аренда за сентябрь", "link": {"kind": "payment", "id": "11111111-1111-4111-8111-111111111111"}}]',
       searchable: 'Платёж создан: Аренда за сентябрь Иван Иванов',
     },
@@ -69,7 +72,7 @@ test('лента из сида: чипы дней, группы «объект �
   await seedJournalEntry(
     {
       id: 'a0000000-0000-4000-8000-000000000002',
-      createdAt: new Date(Date.now() - 2 * 60_000).toISOString(),
+      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '2 minutes'`,
       segments: '[{"text": "Название объекта изменено: "}, {"text": "Гараж на Садовой", "link": {"kind": "property", "id": "' + SEEDED_GARAGE_PROPERTY_ID + '"}}]',
       searchable: 'Название объекта изменено: Гараж на Садовой Иван Иванов',
     },
@@ -78,7 +81,7 @@ test('лента из сида: чипы дней, группы «объект �
   await seedJournalEntry(
     {
       id: 'a0000000-0000-4000-8000-000000000003',
-      createdAt: new Date(Date.now() - 60_000).toISOString(),
+      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '1 minute'`,
       propertyId: SEEDED_GARAGE_PROPERTY_ID,
       segments: '[{"text": "Гараж на Садовой закреплён"}]',
       searchable: 'Гараж на Садовой закреплён Иван Иванов',
@@ -108,7 +111,7 @@ test('лента из сида: чипы дней, группы «объект �
   await seedJournalEntry(
     {
       id: 'a0000000-0000-4000-8000-000000000005',
-      createdAt: new Date(Date.now() - 24 * 3600_000).toISOString(),
+      createdAtSql: `date_trunc('day', now()) - interval '1 day' + interval '9 hours'`,
       segments: '[{"text": "Операция оплачена: Вода"}]',
       searchable: 'Операция оплачена: Вода Иван Иванов',
       action: 'operation.paid',
@@ -120,7 +123,7 @@ test('лента из сида: чипы дней, группы «объект �
   await seedJournalEntry(
     {
       id: 'a0000000-0000-4000-8000-000000000006',
-      createdAt: new Date(Date.now() - 12 * 24 * 3600_000).toISOString(),
+      createdAtSql: `date_trunc('day', now()) - interval '12 days' + interval '9 hours'`,
       segments: '[{"text": "Платёж удалён: Старый платёж"}]',
       searchable: 'Платёж удалён: Старый платёж Иван Иванов',
       action: 'payment.deleted',
@@ -207,7 +210,7 @@ test('синие переходы #713: связанные сегменты ве
   await seedJournalEntry(
     {
       id: 'a0000000-0000-4000-8000-000000000011',
-      createdAt: new Date(Date.now() - 3 * 60_000).toISOString(),
+      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '3 minutes'`,
       segments: `[{"text": "Платёж изменён: "}, {"text": "Аренда за сентябрь", "link": {"kind": "payment", "id": "${paymentId}"}}]`,
       searchable: 'Платёж изменён: Аренда за сентябрь Иван Иванов',
       action: 'payment.updated',
@@ -218,7 +221,7 @@ test('синие переходы #713: связанные сегменты ве
   await seedJournalEntry(
     {
       id: 'a0000000-0000-4000-8000-000000000012',
-      createdAt: new Date(Date.now() - 2 * 60_000).toISOString(),
+      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '2 minutes'`,
       propertyId: SEEDED_GARAGE_PROPERTY_ID,
       segments: `[{"text": "Гараж на Садовой закреплён", "link": {"kind": "property", "id": "${SEEDED_GARAGE_PROPERTY_ID}"}}]`,
       searchable: 'Гараж на Садовой закреплён Иван Иванов',
@@ -231,7 +234,7 @@ test('синие переходы #713: связанные сегменты ве
   await seedJournalEntry(
     {
       id: 'a0000000-0000-4000-8000-000000000013',
-      createdAt: new Date(Date.now() - 60_000).toISOString(),
+      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '1 minute'`,
       segments: `[{"text": "Добавлен участник: "}, {"text": "Мария Петрова", "link": {"kind": "member", "id": "${memberUserId}"}}]`,
       searchable: 'Добавлен участник: Мария Петрова Иван Иванов',
       action: 'member.added',
@@ -360,7 +363,7 @@ test('короткая лента прижата к низу вьюпорта �
   await seedJournalEntry(
     {
       id: 'a0000000-0000-4000-8000-000000000021',
-      createdAt: new Date(Date.now() - 5 * 60_000).toISOString(),
+      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '5 minutes'`,
       segments: '[{"text": "Платёж создан: Первая запись"}]',
       searchable: 'Платёж создан: Первая запись Иван Иванов',
     },
@@ -369,7 +372,7 @@ test('короткая лента прижата к низу вьюпорта �
   await seedJournalEntry(
     {
       id: 'a0000000-0000-4000-8000-000000000022',
-      createdAt: new Date(Date.now() - 60_000).toISOString(),
+      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '1 minute'`,
       segments: '[{"text": "Платёж создан: Вторая запись"}]',
       searchable: 'Платёж создан: Вторая запись Иван Иванов',
     },
@@ -411,7 +414,7 @@ test('свой актор подписан «(Вы)»: в ленте и на п�
   await seedJournalEntry(
     {
       id: 'a0000000-0000-4000-8000-000000000031',
-      createdAt: new Date(Date.now() - 5 * 60_000).toISOString(),
+      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '5 minutes'`,
       segments: '[{"text": "Платёж создан: Аренда за сентябрь"}]',
       searchable: 'Платёж создан: Аренда за сентябрь Иван Иванов',
     },
@@ -420,7 +423,7 @@ test('свой актор подписан «(Вы)»: в ленте и на п�
   await seedJournalEntry(
     {
       id: 'a0000000-0000-4000-8000-000000000032',
-      createdAt: new Date(Date.now() - 60_000).toISOString(),
+      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '1 minute'`,
       actorIdSql: memberActorIdSql(),
       actorName: 'Мария Петрова',
       actorRole: 'full_access',

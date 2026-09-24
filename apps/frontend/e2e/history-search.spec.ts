@@ -21,13 +21,16 @@ import {
 // текст сегментов + имя + почта актёра.
 
 /** Три записи: две сегодняшних (владелец) и одна вчерашняя; у записи
- * участника searchable несёт почту — лег trgm-поиска по почте. */
+ * участника searchable несет почту — лег trgm-поиска по почте. Сиды
+ * анкерятся к началу текущих суток фиксированным часом (9 часов), а не к
+ * моменту запуска: возле полуночи «сегодня»/«вчера» уезжали бы в чужие
+ * сутки вместе с чипами дней. */
 async function seedSearchJournal(user: SeededUser): Promise<void> {
   await execE2eSql('DELETE FROM action_journal;');
   await seedJournalEntry(
     {
       id: 'b0000000-0000-4000-8000-000000000001',
-      createdAt: new Date(Date.now() - 120_000).toISOString(),
+      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '2 minutes'`,
       segments: '[{"text": "Платёж создан: "}, {"text": "Аренда за сентябрь", "link": {"kind": "payment", "id": "11111111-1111-4111-8111-111111111111"}}]',
       searchable: `Платёж создан: Аренда за сентябрь Иван Иванов ${user.email}`,
     },
@@ -36,7 +39,7 @@ async function seedSearchJournal(user: SeededUser): Promise<void> {
   await seedJournalEntry(
     {
       id: 'b0000000-0000-4000-8000-000000000002',
-      createdAt: new Date(Date.now() - 60_000).toISOString(),
+      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '1 minute'`,
       propertyId: SEEDED_GARAGE_PROPERTY_ID,
       segments: '[{"text": "Название объекта изменено: Гараж на Садовой"}]',
       searchable: 'Название объекта изменено: Гараж на Садовой Иван Иванов',
@@ -49,7 +52,7 @@ async function seedSearchJournal(user: SeededUser): Promise<void> {
   await seedJournalEntry(
     {
       id: 'b0000000-0000-4000-8000-000000000003',
-      createdAt: new Date(Date.now() - 24 * 3600_000).toISOString(),
+      createdAtSql: `date_trunc('day', now()) - interval '1 day' + interval '9 hours'`,
       segments: '[{"text": "Операция оплачена: Вода"}]',
       searchable: 'Операция оплачена: Вода Иван Иванов',
       action: 'operation.paid',
@@ -63,7 +66,7 @@ async function seedSearchJournal(user: SeededUser): Promise<void> {
   await seedJournalEntry(
     {
       id: 'b0000000-0000-4000-8000-000000000004',
-      createdAt: new Date(Date.now() - 30_000).toISOString(),
+      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '30 seconds'`,
       actorIdSql: memberActorIdSql(),
       actorName: 'Мария Петрова',
       actorRole: 'full_access',

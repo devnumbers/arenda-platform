@@ -80,9 +80,19 @@ export function memberActorIdSql(): string {
 export async function seedJournalEntry(
   entry: {
     readonly id: string;
-    readonly createdAt: string;
+    readonly createdAt?: string;
+    /** Сырое SQL-выражение вместо литерала createdAt: дневочувствительные
+     * сиды («Сегодня»/«Вчера») анкерятся к началу текущих суток —
+     * date_trunc('day', now()) + фиксированный час — а не к моменту
+     * запуска прогона, иначе возле полуночи запись уезжает в чужие сутки. */
+    readonly createdAtSql?: string;
     readonly propertyId?: string;
     readonly actorIdSql?: string;
+    /** Почта актёра строки контрактом рекордера — снапшот по actor_id
+     * (recorder резолвит имя и почту из entry.ActorID); дефолт — подзапрос
+     * по actor_id самой строки, чтобы member-строки не несли хозяйскую
+     * почту сида. */
+    readonly actorEmailSql?: string;
     readonly actorName?: string;
     readonly actorRole?: string;
     readonly action?: string;
@@ -96,24 +106,29 @@ export async function seedJournalEntry(
   },
   user: SeededUser,
 ): Promise<string> {
+  if (entry.createdAt === undefined && entry.createdAtSql === undefined) {
+    throw new Error('seedJournalEntry: задай момент записи — createdAt или createdAtSql');
+  }
   const segments = entry.segments ?? `[{"text": "${entry.text}"}]`;
   const searchable = entry.searchable ?? `${entry.text} ${entry.actorName ?? 'Иван Иванов'}`;
+  const actorIdSql = entry.actorIdSql ?? ownerActorIdSql(user);
+  const actorEmailSql = entry.actorEmailSql ?? `(SELECT email FROM users WHERE id = ${actorIdSql})`;
   return execE2eSql(`
     INSERT INTO action_journal
       (id, property_id, actor_id, actor_role, actor_name, actor_email, kind, action, base_action, segments, searchable, created_at)
     VALUES (
       '${entry.id}',
       '${entry.propertyId ?? SEEDED_APARTMENT_PROPERTY_ID}',
-      ${entry.actorIdSql ?? ownerActorIdSql(user)},
+      ${actorIdSql},
       '${entry.actorRole ?? 'owner'}',
       '${entry.actorName ?? 'Иван Иванов'}',
-      '${user.email}',
+      ${actorEmailSql},
       '${entry.kind ?? 'payment'}',
       '${entry.action ?? 'payment.created'}',
       '${entry.baseAction ?? 'added'}',
       $j$${segments}$j$::jsonb,
       '${searchable.replace(/'/g, "''")}',
-      '${entry.createdAt}'
+      ${entry.createdAtSql ?? `'${entry.createdAt}'`}
     );
   `);
 }

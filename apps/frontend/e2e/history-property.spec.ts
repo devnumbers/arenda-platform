@@ -22,13 +22,15 @@ const APARTMENT_ID = SEEDED_APARTMENT_PROPERTY_ID;
 const GARAGE_ID = SEEDED_GARAGE_PROPERTY_ID;
 
 /** Три записи квартиры (владелец и участница Мария) и одна запись гаража —
- * чужой объект не должен попадать в прибитую ленту; все сегодня. */
+ * чужой объект не должен попадать в прибитую ленту; все сегодня. Сиды
+ * анкерятся к началу текущих суток фиксированным часом (9 часов), а не к
+ * моменту запуска: возле полуночи Date.now()-минуты уезжали бы из «Сегодня». */
 async function seedPropertyJournal(user: SeededUser): Promise<void> {
   await execE2eSql('DELETE FROM action_journal;');
   await seedJournalEntry(
     {
       id: 'd0000000-0000-4000-8000-000000000001',
-      createdAt: new Date(Date.now() - 5 * 60_000).toISOString(),
+      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '5 minutes'`,
       segments: '[{"text": "Платёж создан: "}, {"text": "Аренда за сентябрь", "link": {"kind": "payment", "id": "11111111-1111-4111-8111-111111111111"}}]',
       searchable: 'Платёж создан: Аренда за сентябрь Иван Иванов',
     },
@@ -37,7 +39,7 @@ async function seedPropertyJournal(user: SeededUser): Promise<void> {
   await seedJournalEntry(
     {
       id: 'd0000000-0000-4000-8000-000000000002',
-      createdAt: new Date(Date.now() - 4 * 60_000).toISOString(),
+      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '4 minutes'`,
       segments: '[{"text": "Название объекта изменено: Квартира на Ленина"}]',
       searchable: 'Название объекта изменено: Квартира на Ленина Иван Иванов',
       action: 'property.renamed',
@@ -49,7 +51,7 @@ async function seedPropertyJournal(user: SeededUser): Promise<void> {
   await seedJournalEntry(
     {
       id: 'd0000000-0000-4000-8000-000000000003',
-      createdAt: new Date(Date.now() - 3 * 60_000).toISOString(),
+      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '3 minutes'`,
       actorIdSql: memberActorIdSql(),
       actorName: 'Мария Петрова',
       actorRole: 'full_access',
@@ -64,7 +66,7 @@ async function seedPropertyJournal(user: SeededUser): Promise<void> {
   await seedJournalEntry(
     {
       id: 'd0000000-0000-4000-8000-000000000004',
-      createdAt: new Date(Date.now() - 60_000).toISOString(),
+      createdAtSql: `date_trunc('day', now()) + interval '9 hours' - interval '1 minute'`,
       propertyId: GARAGE_ID,
       segments: '[{"text": "Платёж удалён: Аренда гаража"}]',
       searchable: 'Платёж удалён: Аренда гаража Иван Иванов',
