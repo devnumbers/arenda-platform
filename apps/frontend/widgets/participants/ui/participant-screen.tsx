@@ -79,6 +79,9 @@ export function ParticipantScreen({
   // Иконки/меню шапки — только когда участник загружен (§7: пустых и
   // ошибочных состояний они не касаются).
   const kebabVisible = headerLoaded;
+  // Пункт кебаба «Действия участника»: переход по uuid юзера — это и есть
+  // actor_id журнала; у pending-строки userId нет.
+  const actionsUserId = participant?.userId;
   const propertyById = new Map(
     (propertiesQuery.data ?? []).map((property) => [property.id, property]),
   );
@@ -104,16 +107,12 @@ export function ParticipantScreen({
                   >
                     Пригласить в объект
                   </MenuItem>
-                  {participant.userId !== undefined && (
+                  {actionsUserId !== undefined && (
                     <MenuItem
                       icon={<TimeHistory className="h-6 w-6" />}
-                      onSelect={() => {
-                        // Переход по uuid юзера — это и есть actor_id
-                        // журнала; у pending-строки userId нет.
-                        if (participant.userId !== undefined) {
-                          router.push(ROUTES.historyParticipant(participant.userId));
-                        }
-                      }}
+                      onSelect={() =>
+                        router.push(ROUTES.historyParticipant(actionsUserId))
+                      }
                     >
                       Действия участника
                     </MenuItem>
