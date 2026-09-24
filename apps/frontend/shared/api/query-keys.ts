@@ -331,7 +331,9 @@ export const notificationKeys = {
  * периода ('YYYY-MM-DD'), основные действия, виды, актёры, объекты и
  * поисковый запрос целиком уходят в ключ react-query и в query-параметры.
  * #709 читает ленту без скоупа; поиск (#710), шит фильтров (#711) и
- * «Действия участника» (#712) доопределяют поля.
+ * прибитые экраны «Действия участника» (#712), «История объекта» (#840)
+ * и пары участник-в-объекте (#841) доопределяют поля (пины
+ * actor_ids/property_ids).
  */
 export type HistoryFeedScope = {
   readonly dateFrom?: string;
@@ -362,8 +364,7 @@ export const historyKeys = {
       scope.q ?? '',
     ] as const,
   /** Опции шита фильтров GET /history/filters (#708, экран #711). */
-  filters: (propertyIds: ReadonlyArray<string>) =>
-    [...historyKeys.all, 'filters', propertyIds.join(',')] as const,
+  filters: () => [...historyKeys.all, 'filters'] as const,
 };
 
 // features/subscription

@@ -88,18 +88,11 @@ async function fetchHistoryPage(
  * человека скоупом ленты, а не опций — объектные шапки и фильтр «Объекты»
  * работают по всей области.
  */
-export function useHistoryFilters(
-  propertyIds: ReadonlyArray<string> = [],
-): UseQueryResult<HistoryFilterOptions, ApiError> {
+export function useHistoryFilters(): UseQueryResult<HistoryFilterOptions, ApiError> {
   return useQuery({
-    queryKey: historyKeys.filters([...propertyIds]),
+    queryKey: historyKeys.filters(),
     queryFn: async () => {
-      const query = new URLSearchParams();
-      if (propertyIds.length > 0) {
-        query.set('property_ids', propertyIds.join(','));
-      }
-      const suffix = query.size > 0 ? `?${query.toString()}` : '';
-      const response = await apiClient<HistoryFiltersDto>(`/history/filters${suffix}`);
+      const response = await apiClient<HistoryFiltersDto>('/history/filters');
       return mapHistoryFilterOptions(response);
     },
   });
