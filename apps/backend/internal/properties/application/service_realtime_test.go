@@ -49,7 +49,7 @@ func TestCreatePropertyPublishesPropertyAndHistoryFrames(t *testing.T) {
 	realtime := bindPropertyRealtime(t, svc)
 
 	created, err := svc.CreateProperty(ctx, ownerID, CreatePropertyCommand{
-		Name:    "Квартира",
+		Name:    searchName,
 		Type:    string(domain.PropertyTypeApartment),
 		Address: "Москва, Тверская 1",
 	})
@@ -135,28 +135,34 @@ func TestArchivedMutationPublishesNothing(t *testing.T) {
 // dispatch (карта #714, #716; ADR 0062 §3) — the reactivated rows are the
 // access legs whose propertyIds the service must collect into access pairs.
 type recoverySlotPolicy struct {
-	// forProperty legs keyed by the archived/deleted property's id.
+	// ForProperty legs keyed by the archived/deleted property's id.
 	forProperty map[uuid.UUID][]accessdomain.Membership
-	// afterDelete legs keyed the same way, for the delete path.
+	// AfterDelete legs keyed the same way, for the delete path.
 	afterDelete map[uuid.UUID][]accessdomain.Membership
-	// onUnarchive legs keyed by the unarchived property's id — the
+	// OnUnarchive legs keyed by the unarchived property's id — the
 	// memberships the enforcement suspends on the pool re-entry, the mirror
 	// image of the recoveries.
 	onUnarchive map[uuid.UUID][]accessdomain.Membership
-	// forRecipient legs of the owner's own suspended queue — returned on
+	// ForRecipient legs of the owner's own suspended queue — returned on
 	// every RecoverSuspended call, as the real queue would be.
 	forRecipient []accessdomain.Membership
 }
 
-func (p *recoverySlotPolicy) RecoverSuspendedForProperty(_ context.Context, _ transaction.Tx, propertyID uuid.UUID) ([]accessdomain.Membership, error) {
+func (p *recoverySlotPolicy) RecoverSuspendedForProperty(
+	_ context.Context, _ transaction.Tx, propertyID uuid.UUID,
+) ([]accessdomain.Membership, error) {
 	return p.forProperty[propertyID], nil
 }
 
-func (p *recoverySlotPolicy) EnforceOnUnarchiveForProperty(_ context.Context, _ transaction.Tx, propertyID uuid.UUID) ([]accessdomain.Membership, error) {
+func (p *recoverySlotPolicy) EnforceOnUnarchiveForProperty(
+	_ context.Context, _ transaction.Tx, propertyID uuid.UUID,
+) ([]accessdomain.Membership, error) {
 	return p.onUnarchive[propertyID], nil
 }
 
-func (p *recoverySlotPolicy) RecoverAfterPropertyDelete(_ context.Context, _ transaction.Tx, propertyID uuid.UUID) ([]accessdomain.Membership, error) {
+func (p *recoverySlotPolicy) RecoverAfterPropertyDelete(
+	_ context.Context, _ transaction.Tx, propertyID uuid.UUID,
+) ([]accessdomain.Membership, error) {
 	return p.afterDelete[propertyID], nil
 }
 
@@ -205,7 +211,7 @@ func TestUnarchivePropertyPublishesFrames(t *testing.T) {
 
 	ctx := context.Background()
 	ownerID := uuid.Must(uuid.NewV7())
-	foreign := uuid.Must(uuid.NewV7()) // the suspended leg's object
+	foreign := uuid.Must(uuid.NewV7()) // The suspended leg's object.
 
 	repo := newFakePropertyRepo()
 	svc := NewPropertyService(
@@ -219,7 +225,7 @@ func TestUnarchivePropertyPublishesFrames(t *testing.T) {
 	)
 
 	created, err := svc.CreateProperty(ctx, ownerID, CreatePropertyCommand{
-		Name:    "Квартира",
+		Name:    searchName,
 		Type:    string(domain.PropertyTypeApartment),
 		Address: "Москва, Тверская 1",
 	})
@@ -264,8 +270,8 @@ func TestArchivePropertyPublishesRecoveryAccessPairs(t *testing.T) {
 	ctx := context.Background()
 	ownerID := uuid.Must(uuid.NewV7())
 	propertyID := uuid.Must(uuid.NewV7())
-	foreignA := uuid.Must(uuid.NewV7()) // two restored legs on one object
-	foreignB := uuid.Must(uuid.NewV7()) // the owner-tail leg's object
+	foreignA := uuid.Must(uuid.NewV7()) // Two restored legs on one object.
+	foreignB := uuid.Must(uuid.NewV7()) // The owner-tail leg's object.
 
 	repo := newFakePropertyRepo(domain.Property{
 		ID: propertyID, OwnerID: ownerID, Name: testPropertyName, Address: testPropertyAddress,
@@ -312,8 +318,8 @@ func TestDeletePropertyPublishesRecoveryAccessPairs(t *testing.T) {
 	ctx := context.Background()
 	ownerID := uuid.Must(uuid.NewV7())
 	propertyID := uuid.Must(uuid.NewV7())
-	foreignA := uuid.Must(uuid.NewV7()) // two restored legs on one object
-	foreignB := uuid.Must(uuid.NewV7()) // the owner-tail leg's object
+	foreignA := uuid.Must(uuid.NewV7()) // Two restored legs on one object.
+	foreignB := uuid.Must(uuid.NewV7()) // The owner-tail leg's object.
 
 	repo := newFakePropertyRepo(domain.Property{
 		ID: propertyID, OwnerID: ownerID, Name: testPropertyName, Address: testPropertyAddress,
@@ -356,20 +362,20 @@ func TestArchiveExcessPropertiesPublishesRecoveryAccessPairs(t *testing.T) {
 
 	ctx := context.Background()
 	ownerID := uuid.Must(uuid.NewV7())
-	excessA := uuid.Must(uuid.NewV7()) // Updated 06-02, archived first.
-	excessB := uuid.Must(uuid.NewV7()) // Updated 06-01, archived second.
-	foreignA := uuid.Must(uuid.NewV7()) // two restored legs on one object
-	foreignB := uuid.Must(uuid.NewV7()) // the second archive's leg
-	foreignC := uuid.Must(uuid.NewV7()) // the owner-tail leg, restored twice
+	excessA := uuid.Must(uuid.NewV7())  // Updated 06-02, archived first.
+	excessB := uuid.Must(uuid.NewV7())  // Updated 06-01, archived second.
+	foreignA := uuid.Must(uuid.NewV7()) // Two restored legs on one object.
+	foreignB := uuid.Must(uuid.NewV7()) // The second archive's leg.
+	foreignC := uuid.Must(uuid.NewV7()) // The owner-tail leg, restored twice.
 
 	repo := newFakePropertyRepo(
 		domain.Property{
-			ID: excessA, OwnerID: ownerID, Name: "Excess A", Address: testPropertyAddress,
+			ID: excessA, OwnerID: ownerID, Name: excessNameA, Address: testPropertyAddress,
 			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive,
 			UpdatedAt: time.Date(2026, 6, 2, 0, 0, 0, 0, time.UTC),
 		},
 		domain.Property{
-			ID: excessB, OwnerID: ownerID, Name: "Excess B", Address: testPropertyAddress,
+			ID: excessB, OwnerID: ownerID, Name: excessNameB, Address: testPropertyAddress,
 			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive,
 			UpdatedAt: time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC),
 		},

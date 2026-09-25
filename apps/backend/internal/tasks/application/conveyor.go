@@ -113,7 +113,8 @@ type mutationGates struct {
 // #546), the owner's today, the load of the target rule (skipped for a zero
 // ruleID), the change step, its audit entry and its action journal row
 // (ADR 0061) in the same transaction, and the materialization tick when the
-// step asked for it. After commit it returns the step's response,
+// step asked for it. After commit it dispatches the step's realtime frames
+// (ADR 0062 §3, best-effort) and returns the step's response;
 // post-commit-re-read applied.
 //
 // The owner-wide lock must be the transaction's first property lock: two
@@ -206,7 +207,7 @@ func historyAnchors[T any](out mutationOutcome[T], propertyID uuid.UUID) []uuid.
 // no history pair (realtimedom.HistoryOn's contract) — so the helper takes
 // no single-row anchor and nothing can hand the dispatch the zero property.
 func ownerBookHistoryAnchors[T any](out mutationOutcome[T]) []uuid.UUID {
-	var anchors []uuid.UUID
+	anchors := make([]uuid.UUID, 0, len(out.HistoryByProperty))
 	for prop := range out.HistoryByProperty {
 		anchors = append(anchors, prop)
 	}
@@ -242,7 +243,8 @@ func rereadRule[T any](
 // target property-less rule (skipped for a zero ruleID), the change step,
 // its audit entry and its per-property action journal rows (ADR 0061 §3) in
 // the same transaction, and the property-less materialization tick. After
-// commit it returns the step's response, post-commit-re-read applied.
+// commit it dispatches the step's realtime frames (ADR 0062 §3, best-effort)
+// and returns the step's response; post-commit-re-read applied.
 func runOwnerMutation[T any](
 	g mutationGates,
 	ctx context.Context, actor, ruleID uuid.UUID,

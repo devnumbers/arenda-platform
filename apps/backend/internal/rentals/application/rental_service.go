@@ -399,7 +399,8 @@ func (s *RentalService) updatedRentalOutcome(
 		realtimedom.On(realtimedom.EntityPayments, propertyID), // The managed payment follows the rental.
 	}
 	if paymentChanged {
-		changed = append(changed, realtimedom.On(realtimedom.EntityOperations, propertyID)) // The tick re-stands the planned operations in the same transaction.
+		// The tick re-stands the planned operations in the same transaction.
+		changed = append(changed, realtimedom.On(realtimedom.EntityOperations, propertyID))
 	}
 	return mutationOutcome{
 		RentalID: rental.ID,

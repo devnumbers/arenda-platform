@@ -1165,7 +1165,9 @@ func (s *PropertyService) notifyPropertyDeleted(ctx context.Context, id uuid.UUI
 // Their own suspended shared queue is recovered FIFO as well. The reactivated
 // memberships are returned so the caller dispatches their access pairs
 // post-commit (карта #714, #716; ADR 0062 §3).
-func (s *PropertyService) recoverSlotsAfterDelete(ctx context.Context, stores *txStores, actor, id uuid.UUID) ([]accessdomain.Membership, error) {
+func (s *PropertyService) recoverSlotsAfterDelete(
+	ctx context.Context, stores *txStores, actor, id uuid.UUID,
+) ([]accessdomain.Membership, error) {
 	if s.slots == nil {
 		return nil, nil
 	}

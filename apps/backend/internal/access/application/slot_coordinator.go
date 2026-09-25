@@ -270,7 +270,9 @@ func (c *SlotCoordinator) RecoverSuspended(ctx context.Context, tx transaction.T
 // recoverSuspendedForRecipient is the shared recovery body, factored out so the
 // per-property variant can reuse it without re-resolving the limiter per
 // recipient.
-func (c *SlotCoordinator) recoverSuspendedForRecipient(ctx context.Context, tx transaction.Tx, recipientID uuid.UUID) ([]domain.Membership, error) {
+func (c *SlotCoordinator) recoverSuspendedForRecipient(
+	ctx context.Context, tx transaction.Tx, recipientID uuid.UUID,
+) ([]domain.Membership, error) {
 	txMembers := c.members.WithTx(tx)
 
 	suspended, err := txMembers.ListSuspendedByUser(ctx, recipientID)
@@ -358,7 +360,9 @@ func (c *SlotCoordinator) recoverSuspendedForRecipient(ctx context.Context, tx t
 // PropertyService (issue #158, T4): archiving/deleting the object freed one
 // slot for each recipient, so each recipient's suspended queue is recovered
 // FIFO in the same transaction.
-func (c *SlotCoordinator) RecoverSuspendedForProperty(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) ([]domain.Membership, error) {
+func (c *SlotCoordinator) RecoverSuspendedForProperty(
+	ctx context.Context, tx transaction.Tx, propertyID uuid.UUID,
+) ([]domain.Membership, error) {
 	txMembers := c.members.WithTx(tx)
 
 	memberships, err := txMembers.ListByProperty(ctx, propertyID)
@@ -388,7 +392,9 @@ func (c *SlotCoordinator) RecoverSuspendedForProperty(ctx context.Context, tx tr
 // delete cascade then finds nothing to cascade). Dropping the membership first
 // is what frees the recipient's slot so the FIFO recovery sees it. See issue
 // #158 (T4).
-func (c *SlotCoordinator) RecoverAfterPropertyDelete(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) ([]domain.Membership, error) {
+func (c *SlotCoordinator) RecoverAfterPropertyDelete(
+	ctx context.Context, tx transaction.Tx, propertyID uuid.UUID,
+) ([]domain.Membership, error) {
 	txMembers := c.members.WithTx(tx)
 
 	memberships, err := txMembers.ListByProperty(ctx, propertyID)
@@ -429,7 +435,9 @@ func (c *SlotCoordinator) RecoverAfterPropertyDelete(ctx context.Context, tx tra
 // memberships it suspended are returned — the caller collects their access
 // pairs for the realtime dispatch the same way the recoveries do (карта
 // #714, #716; ADR 0062 §3).
-func (c *SlotCoordinator) EnforceOnUnarchiveForProperty(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) ([]domain.Membership, error) {
+func (c *SlotCoordinator) EnforceOnUnarchiveForProperty(
+	ctx context.Context, tx transaction.Tx, propertyID uuid.UUID,
+) ([]domain.Membership, error) {
 	txMembers := c.members.WithTx(tx)
 
 	memberships, err := txMembers.ListByProperty(ctx, propertyID)

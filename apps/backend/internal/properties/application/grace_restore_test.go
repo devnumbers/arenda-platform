@@ -50,11 +50,11 @@ func TestPropertyService_ArchiveExcessProperties_ReturnsArchivedIDs(t *testing.T
 			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive, UpdatedAt: time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC),
 		},
 		domain.Property{
-			ID: excessAID, OwnerID: ownerID, Name: "Excess A", Address: testPropertyAddress,
+			ID: excessAID, OwnerID: ownerID, Name: excessNameA, Address: testPropertyAddress,
 			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive, UpdatedAt: time.Date(2026, 6, 2, 0, 0, 0, 0, time.UTC),
 		},
 		domain.Property{
-			ID: excessBID, OwnerID: ownerID, Name: "Excess B", Address: testPropertyAddress,
+			ID: excessBID, OwnerID: ownerID, Name: excessNameB, Address: testPropertyAddress,
 			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive, UpdatedAt: time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC),
 		},
 	)
