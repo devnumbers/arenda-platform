@@ -98,12 +98,14 @@ across the same pipelines.
 
 3. **Carrier publication at the mutation seams, strictly post-commit.**
    The same discipline as grace_events, tariff_events and the history
-   journal: each context's transaction captures the distinct
-   (entity, property) pairs it changed; publication dispatches strictly
-   after the commit and is best-effort — a failed frame is logged and never
-   fails or rolls back the mutation. Per-transaction dedup: one frame per
-   distinct pair, so a bulk operation (e.g. «Удалить все выполненные»)
-   emits one frame, not N. The in-process domain dispatcher
+   journal: each context's transaction captures the (entity, property)
+   pairs it changed — repeats allowed, the carrier's per-call dedup
+   collapses them; publication dispatches strictly after the commit and is
+   best-effort — a failed frame is logged and never fails or rolls back the
+   mutation. One frame per distinct pair is the wire's guarantee, not the
+   seam's: the seams forward the raw capture, the stream Publisher dedups
+   per call — a bulk operation (e.g. «Удалить все выполненные») emits one
+   frame, not N. The in-process domain dispatcher
    ([ADR 0014](./0014-in-memory-event-dispatcher.md)) stays out of the
    path: there is one consumer, and the indirection would hide the
    publication from the pipelines that own the facts. The publisher port
@@ -114,9 +116,18 @@ across the same pipelines.
    materialization) publishes no frames — recorded out-of-v1 (#716): those
    changes are not other people's edits, the hourly cadence and the on-open
    re-read cover them. The billing worker's tariff phases
-   (Enforce/Recover/ArchiveExcess/RestoreGrace) stay silent in v1 the same
-   way — the recipient's screens catch up on the next stream open; full
-   publication is a v2 candidate (owner decision, R3 gate).
+   (Enforce/Recover/ArchiveExcess/RestoreGrace) stay silent in v1 only in
+   their phase frames and suspend/restore legs: no property/history frames
+   at the tariff transitions, and the Enforce suspensions, the Recover
+   restorations and the RestoreGrace unarchive suspensions dispatch
+   nothing — for those silences the affected screens catch up on the next
+   stream open. The recovery access pairs are outside that silence:
+   wherever recovery runs through a publishing seam, the pairs publish
+   exactly as the manual seams publish them — ArchiveExcessProperties
+   mirrors the manual archive and dispatches the restored legs' access
+   pairs post-commit. Full publication (the phases' property/history
+   frames, suspend frames at the billing transitions) stays a v2 candidate
+   (owner decision, R3 gate).
 
 4. **Audience is resolved at publication time, the actor included.** The
    adapter resolves each frame's recipients through derived property access

@@ -87,9 +87,12 @@ func (e recipientSlotEnforcer) Enforce(ctx context.Context, userID uuid.UUID, tr
 }
 
 // Recover reactivates the recipient's oldest suspended shared memberships
-// FIFO (issue #695). The reactivated rows are discarded: billing worker
-// phases publish no realtime frames in v1 (ADR 0062 §3, issue #716) — the
-// restored access reaches the recipient's screens on their next stream open.
+// FIFO (issue #695). The reactivated rows are discarded: this bridge
+// dispatches no frames itself — the billing phases' recovery access pairs
+// publish through the properties seam (the ArchiveExcessProperties
+// dispatch, the auto-archive mirroring the manual archive); only the phase
+// frames and the suspend/restore legs — this phase's restorations among
+// them — stay silent in v1 (ADR 0062 §3, issue #716).
 func (e recipientSlotEnforcer) Recover(ctx context.Context, userID uuid.UUID) error {
 	_, err := e.coordinator.RecoverSuspended(ctx, e.tx, userID)
 	return err
