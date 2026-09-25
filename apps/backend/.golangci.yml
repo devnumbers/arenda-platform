@@ -141,6 +141,8 @@ linters:
               desc: domain must not depend on adapters
             - pkg: github.com/nambers/arenda-planform/apps/backend/internal/history/adapters
               desc: domain must not depend on adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/realtime/adapters
+              desc: domain must not depend on adapters
             - pkg: github.com/nambers/arenda-planform/apps/backend/internal/admin/adapters
               desc: domain must not depend on adapters
             # Явные deny для config и openapi-gen (волна 1A, решение #295): раньше
@@ -192,6 +194,8 @@ linters:
             - pkg: github.com/nambers/arenda-planform/apps/backend/internal/audit/adapters
               desc: application layer must not depend on adapters
             - pkg: github.com/nambers/arenda-planform/apps/backend/internal/history/adapters
+              desc: application layer must not depend on adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/realtime/adapters
               desc: application layer must not depend on adapters
             - pkg: github.com/nambers/arenda-planform/apps/backend/internal/admin/adapters
               desc: application layer must not depend on adapters
