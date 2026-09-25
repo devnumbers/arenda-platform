@@ -6,10 +6,11 @@ import { openCabinetWithSeededSession, expect, SEEDED_GARAGE_PROPERTY_ID, test }
 // центрируется во всём вьюпорте на любом ярусе; полноэкранные поверхности
 // пикеров начинаются на границе сайдбара (меню видно), их колонки легают
 // с колонками страниц; хром ПК не исчезает под открытой поверхностью —
-// крылья рисует поверхность, пилюли остаются, сайдбар кликабелен; шит
-// панели поверхности на ПК — колонка 560; планшетные шапки подэкранов —
-// слоты у краёв вьюпорта; глушение нижнего хрома на всех брейкпоинтах
-// (панели страниц — TabBar+пилюли, панели поверхностей — только TabBar);
+// крылья рисует поверхность, пилюли остаются, сайдбар кликабелен; нижняя
+// панель на ПК — колонка 560 (углы свободны, пилюли не глушатся никогда —
+// «хром ПК постоянен», решение 25.09, правка #561); планшетные шапки
+// подэкранов — слоты у краёв вьюпорта; TabBar глушится нижними панелями
+// на мобайле и планшете;
 // ноль дёрганья шапок хабов. Геометрия меряется bounding-box'ами —
 // вердикт живьём остаётся за /ui-walkthrough, спека держит регресс-гейт
 // на трёх ярусах (мобайл 375 / планшет 768 / ПК 1440).
@@ -135,17 +136,18 @@ test('ПК: пикер периода не накрывает сайдбар, к
   await expect(page).toHaveURL(/\/payments$/);
 });
 
-test('ПК: пилюли глушатся, пока смонтирована нижняя панель, и возвращаются после', async ({ page, seededUser }) => {
+test('ПК: нижняя панель страницы — колонка 560, пилюли не глушатся никогда', async ({ page, seededUser }) => {
   await openCabinetWithSeededSession(page, seededUser);
   await page.setViewportSize(PC);
 
-  // Страница с нижней кнопкой действия: пилюль нет.
+  // Страница с нижней кнопкой действия: панель — колонка 560 по центру,
+  // углы свободны, пилюли на месте («хром ПК постоянен», решение 25.09 —
+  // правка канона #561, тикет #865).
   await page.goto(`/properties/${SEEDED_GARAGE_PROPERTY_ID}/edit`);
   await expect(bottomBarButton(page, /Сохранить/)).toBeVisible();
-  await expect(page.locator('nav[aria-label="Дополнительная навигация"] .fixed')).toHaveCount(0);
+  await expect(page.locator('nav[aria-label="Дополнительная навигация"] .fixed')).toHaveCount(2);
 
-  // Кап колонки нижней панели — 560 (max-w-column), шит во всю ширину
-  // вьюпорта, колонка — по центру вьюпорта (как контент страницы).
+  // Шит панели — колонка 560, по центру вьюпорта (как контент страницы).
   const bar = await page.evaluate(() => {
     const sheet = [...document.querySelectorAll('.fixed.inset-x-0.bottom-0')].find(
       (el) => getComputedStyle(el).display !== 'none',
@@ -155,13 +157,14 @@ test('ПК: пилюли глушатся, пока смонтирована н�
     if (!column) throw new Error('колонка панели не найдена');
     const c = column.getBoundingClientRect();
     const s = sheet.getBoundingClientRect();
-    return { columnWidth: c.width, columnLeft: c.left, sheetLeft: s.left };
+    return { columnWidth: c.width, columnLeft: c.left, sheetLeft: s.left, sheetWidth: s.width };
   });
   expect(bar.columnWidth).toBe(560);
-  expect(bar.sheetLeft).toBe(0);
+  expect(bar.sheetWidth).toBe(560);
   expect(Math.abs(bar.columnLeft - (PC.width - 560) / 2)).toBeLessThanOrEqual(2);
+  expect(Math.abs(bar.sheetLeft - (PC.width - 560) / 2)).toBeLessThanOrEqual(2);
 
-  // Хаб без нижней панели: пилюли на месте.
+  // Хаб без нижней панели: пилюли тоже на месте.
   await page.goto('/operations');
   await expect(page.getByRole('heading', { level: 1, name: 'Операции' })).toBeVisible();
   await expect(page.locator('nav[aria-label="Дополнительная навигация"] .fixed')).toHaveCount(2);

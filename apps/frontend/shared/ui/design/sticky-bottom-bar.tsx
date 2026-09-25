@@ -11,7 +11,8 @@ import { useTabBarSuppression } from './tab-bar';
  * включения, если канва вернёт ручку. На широких экранах контент — в
  * колонке max-560. Низ уважает safe-area (home indicator). PageContent даёт
  * снизу 136px, чтобы контент не уходил под панель. Пока панель смонтирована,
- * глушит TabBar: экран с нижней кнопкой действия футера не имеет. */
+ * глушит TabBar: экран с нижней кнопкой действия футера не имеет (мобайл
+ * и планшет; на ПК TabBar скрыт всегда). */
 export type StickyBottomBarProps = {
   readonly children: ReactNode;
   readonly dragHandle?: boolean;
@@ -22,14 +23,6 @@ export type StickyBottomBarProps = {
    * #561); на ПК ≥1024 и на мобиле ≤560 — как всегда (базовое решение
    * 2026-09-04 для полноэкранного пикера даты). */
   readonly fullWidthContent?: boolean;
-  /** Панель живёт внутри полноэкранной поверхности (пикеры, шит фильтров,
-   * экраны успеха — класс .fullscreen-surface): глушит только TabBar
-   * (поверхность накрывает низ целиком), а пилюли десктопа не трогает —
-   * хром ПК не исчезает под открытой поверхностью (решение владельца
-   * 25.09, доработка #865); шит на ПК сужается до колонки 560, освобождая
-   * углы пилюлям. Панели страниц (значение по умолчанию) глушат весь
-   * нижний хром — канон «честной недоступности» #561. */
-  readonly surface?: boolean;
 };
 
 export function StickyBottomBar({
@@ -37,18 +30,19 @@ export function StickyBottomBar({
   dragHandle = false,
   className,
   fullWidthContent = false,
-  surface = false,
 }: StickyBottomBarProps): JSX.Element {
-  useTabBarSuppression(true, surface ? 'surface' : 'page');
+  useTabBarSuppression();
 
   return (
     <div
       className={cn(
         'fixed inset-x-0 bottom-0 z-40 rounded-t-sheet bg-surface font-sans',
-        // Шит поверхности на ПК — колонка 560 по центру: left/right уже
-        // нулевые (inset-x-0), margin auto центрирует при capped ширине;
-        // углы снизу остаются хрому (пилюли).
-        surface && 'desktop:mx-auto desktop:max-w-column',
+        // «Хром ПК постоянен» (решение владельца 25.09, правка канона
+        // #561, тикет #865): шит панели на ПК — колонка 560 по центру
+        // (left/right уже нулевые, margin auto центрирует при capped
+        // ширине), углы снизу свободны — пилюли «Уведомления/Поддержка»
+        // не глушатся и кликабельны на любом экране.
+        'desktop:mx-auto desktop:max-w-column',
         className,
       )}
     >

@@ -429,7 +429,7 @@ export function HistoryFiltersSheet({
         * скрывается вместо погашенной кнопки; черновик правится и при
         * ошибке опций — находка ревью #711). */}
       {!optionsQuery.isPending && (
-        <StickyBottomBar surface>
+        <StickyBottomBar>
           <Button type="button" className="w-full" onClick={() => onApply(draft)}>
             Применить фильтры
           </Button>

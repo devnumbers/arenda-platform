@@ -294,7 +294,7 @@ function InviteObjectsPicker({
         </div>
       </div>
 
-      <StickyBottomBar surface>
+      <StickyBottomBar>
         <Button
           className="w-full"
           disabled={draft.size === 0}

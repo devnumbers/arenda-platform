@@ -111,7 +111,7 @@ export function TariffChangeSuccess(): JSX.Element {
         </div>
       </div>
 
-      <StickyBottomBar surface>{state.action}</StickyBottomBar>
+      <StickyBottomBar>{state.action}</StickyBottomBar>
     </div>
   );
 }

@@ -379,7 +379,7 @@ export function CalendarDatePicker({
           (решение владельца 2026-09-04: хедер и шит на планшете во всю
           ширину — кнопка тоже). */}
       {!(required === true && draft === null) && (
-        <StickyBottomBar fullWidthContent surface>
+        <StickyBottomBar fullWidthContent>
           <Button className="w-full" onClick={() => onConfirm(draft)}>
             {confirmLabel}
           </Button>
@@ -682,7 +682,7 @@ export function CalendarRangePicker({
           подтверждать нечего. «Сбросить» — рядом, когда потребителю нужен
           возврат к состоянию «без периода» (канон пары: secondary слева,
           primary справа, как в WizardBottomBar потоков). */}
-      <StickyBottomBar fullWidthContent surface>
+      <StickyBottomBar fullWidthContent>
         <div className="flex w-full gap-2">
           {onReset !== undefined && (
             <Button variant="secondary" className="w-full" onClick={onReset}>

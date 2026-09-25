@@ -34,7 +34,7 @@ export function TariffDisableSuccessScreen({
         </div>
       </div>
 
-      <StickyBottomBar surface>
+      <StickyBottomBar>
         {/* replace, а не goBack: история несёт «О тарифе» → «Отключение»,
             один назад вернул бы на «О тарифе», а не на главный «Тариф». */}
         <Button onClick={() => router.replace(ROUTES.profileTariff)}>Хорошо</Button>

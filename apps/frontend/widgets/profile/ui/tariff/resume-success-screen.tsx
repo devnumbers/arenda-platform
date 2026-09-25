@@ -35,7 +35,7 @@ export function ResumeSuccessScreen({
         </div>
       </div>
 
-      <StickyBottomBar surface>
+      <StickyBottomBar>
         <Button onClick={() => goBack(router, ROUTES.profileTariff)}>Хорошо</Button>
       </StickyBottomBar>
     </div>

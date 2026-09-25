@@ -18,20 +18,18 @@ import { useTabBarSuppressionState } from './tab-bar';
  * /support снесена, пилюля открывает модалку «Связаться с нами». Только ПК
  * ≥1024 (hidden desktop:block; ярусы владельца 08.09: пилюли — часть
  * ПК-хрома, в 561–1023 планшетный хром с TabBar). Рендерит ScreenLayout.
- * Пока на экране смонтирована нижняя панель СТРАНИЦЫ, пилюли глушатся
- * вместе с TabBar (useTabBarSuppression, канон #561 «честной
- * недоступности»); панели внутри полноэкранных поверхностей пилюли не
- * глушат — хром ПК не исчезает под открытой поверхностью (решение
- * владельца 25.09, доработка #865). Класс .desktop-chrome — хук для
- * globals.css: при открытой поверхности хром поднимается над ней (z-60),
- * оставаясь кликабельным. */
+ * «Хром ПК постоянен» (решение владельца 25.09, правка канона #561,
+ * тикет #865): пилюли не глушатся нижними панелями — шит панели на ПК
+ * сужается до колонки 560, углы свободны. Класс .desktop-chrome — хук для
+ * globals.css: при открытой полноэкранной поверхности хром поднимается
+ * над ней (z-60), оставаясь кликабельным. */
 export function DesktopNavPills({ notificationsBadge = 0 }: { readonly notificationsBadge?: number } = {}): JSX.Element | null {
-  const { present, bars } = useTabBarSuppressionState();
+  const { present } = useTabBarSuppressionState();
   const pathname = usePathname();
   const [supportOpen, setSupportOpen] = useState(false);
   const activeSectionId = getActiveNavItem(pathname, secondaryNavSections)?.id;
 
-  if (!present || bars > 0) return null;
+  if (!present) return null;
 
   return (
     <nav
