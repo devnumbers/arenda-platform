@@ -24,11 +24,11 @@ export function ResumeSuccessScreen({
 
   return (
     <div
-      className="fullscreen-surface fixed inset-0 z-50 flex flex-col bg-surface"
+      className="fullscreen-surface fixed inset-0 z-50 flex flex-col"
       role="dialog"
       aria-label={title}
     >
-      <div className="flex flex-1 items-center justify-center px-6">
+      <div className="relative flex flex-1 items-center justify-center px-6">
         <div className="flex flex-col items-center gap-4">
           <CheckNoneLine className="h-16 w-16" aria-hidden />
           <p className="m-0 text-xl font-semibold leading-6 text-content">{title}</p>

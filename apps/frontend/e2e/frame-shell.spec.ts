@@ -1,12 +1,14 @@
 import type { Page } from '@playwright/test';
 import { openCabinetWithSeededSession, expect, SEEDED_GARAGE_PROPERTY_ID, test } from './fixtures';
 
-// Каркас-шелл страницы (карта #862, тикет #865): ПК-колонка правее
-// сайдбара, полноэкранные поверхности не накрывают сайдбар, глушение
-// нижнего хрома на всех брейкпоинтах, кап нижней кнопки 560/24, ноль
-// дёрганья шапок хабов. Геометрия меряется bounding-box'ами — вердикт
-// живьём остаётся за /ui-walkthrough (три брейкпоинта), спека держит
-// регресс-гейт на трёх ярусах (мобайл 375 / планшет 768 / ПК 1440).
+// Каркас-шелл страницы (карта #862, тикет #865 + доработка 25.09 по
+// макетам 1185-40815/40811/40814): колонка контента центрируется во всём
+// вьюпорте на любом ярусе; полноэкранные поверхности пикеров начинаются на
+// границе сайдбара (меню видно), их колонки легают с колонками страниц;
+// планшетные шапки подэкранов — слоты у краёв вьюпорта; глушение нижнего
+// хрома на всех брейкпоинтах; ноль дёрганья шапок хабов. Геометрия меряется
+// bounding-box'ами — вердикт живьём остаётся за /ui-walkthrough, спека
+// держит регресс-гейт на трёх ярусах (мобайл 375 / планшет 768 / ПК 1440).
 
 const PC = { width: 1440, height: 900 };
 const TABLET = { width: 768, height: 1024 };
@@ -24,7 +26,7 @@ async function contentColumnRect(page: Page): Promise<{ left: number; right: num
   });
 }
 
-test('ПК: колонка контента центрируется правее сайдбара', async ({ page, seededUser }) => {
+test('ПК: колонка контента центрируется во всём вьюпорте', async ({ page, seededUser }) => {
   await openCabinetWithSeededSession(page, seededUser);
   await page.setViewportSize(PC);
   await page.goto('/operations');
@@ -32,10 +34,9 @@ test('ПК: колонка контента центрируется праве�
 
   const column = await contentColumnRect(page);
   expect(column.width).toBe(560);
-  // Колонка целиком правее сайдбара и центрирована в оставшемся пространстве
-  // (зазоры слева/справа от неё совпадают в пределах допуска на субпиксели).
-  expect(column.left).toBeGreaterThanOrEqual(SIDEBAR_TOTAL);
-  const leftGap = column.left - SIDEBAR_TOTAL;
+  // Колонка — ровно по центру вьюпорта (макет 1185-40815: слот x=488 при
+  // фрейме 1536), зазоры к краям совпадают в пределах допуска на субпиксели.
+  const leftGap = column.left;
   const rightGap = PC.width - column.right;
   expect(Math.abs(leftGap - rightGap)).toBeLessThanOrEqual(2);
 
@@ -59,11 +60,12 @@ function bottomBarButton(page: Page, name: RegExp): ReturnType<Page['getByRole']
     .getByRole('button', { name });
 }
 
-test('ПК: пикер периода не накрывает сайдбар', async ({ page, seededUser }) => {
+test('ПК: пикер периода не накрывает сайдбар, колонка пикера легает с колонкой страницы', async ({ page, seededUser }) => {
   await openCabinetWithSeededSession(page, seededUser);
   await page.setViewportSize(PC);
   await page.goto('/operations');
   await expect(page.getByRole('heading', { level: 1, name: 'Операции' })).toBeVisible();
+  const pageColumn = await contentColumnRect(page);
 
   await page.getByRole('button', { name: /Период/ }).click();
   const surface = page.locator('[role="dialog"][aria-label="Выберите период"]');
@@ -73,16 +75,21 @@ test('ПК: пикер периода не накрывает сайдбар', a
     const dialog = document.querySelector('[role="dialog"][aria-label="Выберите период"]');
     const sidebar = document.querySelector('nav[aria-label="Основная навигация"]');
     if (!dialog || !sidebar) throw new Error('поверхность или сайдбар не найдены');
-    const d = dialog.getBoundingClientRect();
-    const probe = document.elementFromPoint(100, 200);
+    const column = dialog.querySelector('.max-w-column');
+    const c = column?.getBoundingClientRect();
+    // Белый лист поверхности — псевдоэлемент .fullscreen-surface::before:
+    // на ПК он начинается на границе сайдбара, меню остаётся видимым.
+    const sheetLeft = getComputedStyle(dialog, '::before').left;
     return {
-      surfaceLeft: d.left,
-      sidebarUnderSurface: probe ? sidebar.contains(probe) : false,
+      sheetLeft,
+      pickerColumnLeft: c ? c.left : null,
     };
   });
-  // Поверхность начинается на границе сайдбара — сайдбар видим и кликабелен.
-  expect(geometry.surfaceLeft).toBe(SIDEBAR_TOTAL);
-  expect(geometry.sidebarUnderSurface).toBe(true);
+  // Лист — правее сайдбара; колонка пикера — по центру вьюпорта, на оси
+  // колонки страницы (открытие пикера не сдвигает контент).
+  expect(geometry.sheetLeft).toBe(`${SIDEBAR_TOTAL}px`);
+  expect(geometry.pickerColumnLeft).not.toBeNull();
+  expect(Math.abs((geometry.pickerColumnLeft ?? 0) - pageColumn.left)).toBeLessThanOrEqual(2);
 
   await page.getByRole('button', { name: 'Назад' }).click();
   await expect(surface).not.toBeVisible();
@@ -97,8 +104,8 @@ test('ПК: пилюли глушатся, пока смонтирована н�
   await expect(bottomBarButton(page, /Сохранить/)).toBeVisible();
   await expect(page.locator('nav[aria-label="Дополнительная навигация"] .fixed')).toHaveCount(0);
 
-  // Кап колонки нижней панели — 560 (max-w-column), кнопка 512 (24 по бокам);
-  // сам шит начинается на границе сайдбара, колонка центрирована правее него.
+  // Кап колонки нижней панели — 560 (max-w-column), шит во всю ширину
+  // вьюпорта, колонка — по центру вьюпорта (как контент страницы).
   const bar = await page.evaluate(() => {
     const sheet = [...document.querySelectorAll('.fixed.inset-x-0.bottom-0')].find(
       (el) => getComputedStyle(el).display !== 'none',
@@ -111,12 +118,8 @@ test('ПК: пилюли глушатся, пока смонтирована н�
     return { columnWidth: c.width, columnLeft: c.left, sheetLeft: s.left };
   });
   expect(bar.columnWidth).toBe(560);
-  expect(bar.sheetLeft).toBe(SIDEBAR_TOTAL);
-  // Колонка центрирована в пространстве правее сайдбара: зазоры слева и
-  // справа от неё (внутри этого пространства) совпадают.
-  const leftGap = bar.columnLeft - SIDEBAR_TOTAL;
-  const rightGap = PC.width - (bar.columnLeft + bar.columnWidth);
-  expect(Math.abs(leftGap - rightGap)).toBeLessThanOrEqual(2);
+  expect(bar.sheetLeft).toBe(0);
+  expect(Math.abs(bar.columnLeft - (PC.width - 560) / 2)).toBeLessThanOrEqual(2);
 
   // Хаб без нижней панели: пилюли на месте.
   await page.goto('/operations');
@@ -148,7 +151,7 @@ test('ПК: топ заголовка хаба — 24 от хедера на в�
   }
 });
 
-test('планшет: TabBar глушится нижней панелью и возвращается; колонка — по центру вьюпорта', async ({ page, seededUser }) => {
+test('планшет: слоты шапки подэкрана у краёв вьюпорта, TabBar глушится панелью', async ({ page, seededUser }) => {
   await openCabinetWithSeededSession(page, seededUser);
   await page.setViewportSize(TABLET);
 
@@ -158,7 +161,14 @@ test('планшет: TabBar глушится нижней панелью и в�
   // Планшет живёт без сайдбара: колонка центрирована во всём вьюпорте.
   expect(Math.abs(hubColumn.left - (TABLET.width - 560) / 2)).toBeLessThanOrEqual(2);
 
+  // Шапка подэкрана во всю ширину (макет 1185-40814): ведущая кнопка —
+  // у левого края вьюпорта (pl-3.5 ≈ 14px), не у края колонки.
   await page.goto(`/properties/${SEEDED_GARAGE_PROPERTY_ID}/edit`);
+  const leading = page.locator('header[aria-label="Навигация экрана"]').getByRole('button', { name: 'Закрыть' });
+  await expect(leading).toBeVisible();
+  const leadingBox = await leading.boundingBox();
+  expect(leadingBox).not.toBeNull();
+  expect(leadingBox?.x ?? 999).toBeLessThan(30);
   await expect(bottomBarButton(page, /Сохранить/)).toBeVisible();
   await expect(page.locator('nav[aria-label="Нижняя навигация"]')).toHaveCount(0);
 

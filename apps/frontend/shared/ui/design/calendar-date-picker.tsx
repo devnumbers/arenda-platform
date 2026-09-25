@@ -256,7 +256,7 @@ export function CalendarDatePicker({
       role="dialog"
       aria-modal="true"
       aria-label={title}
-      className="fullscreen-surface fixed inset-0 z-50 flex flex-col bg-surface font-sans"
+      className="fullscreen-surface fixed inset-0 z-50 flex flex-col font-sans"
     >
       <TopNav
         overlay
@@ -269,7 +269,7 @@ export function CalendarDatePicker({
           (требование владельца к бесконечному календарю); на десктопе TopNav
           зафиксирован над экраном — шапка встаёт под ним, лента скроллится
           между шапкой и нижней панелью. */}
-      <div className="shrink-0 tablet:mt-[72px]">
+      <div className="relative shrink-0 tablet:mt-[72px]">
         <div className="mx-auto w-full max-w-column">
           <div className="px-6 pt-6">
             <MonthJumpChip
@@ -297,7 +297,7 @@ export function CalendarDatePicker({
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="min-h-0 flex-1 overflow-y-auto"
+        className="relative min-h-0 flex-1 overflow-y-auto"
       >
         <div className="mx-auto w-full max-w-column pb-[136px]">
           {months.map(({ year, month0 }, index) => {
@@ -590,7 +590,7 @@ export function CalendarRangePicker({
       role="dialog"
       aria-modal="true"
       aria-label={title}
-      className="fullscreen-surface fixed inset-0 z-50 flex flex-col bg-surface font-sans"
+      className="fullscreen-surface fixed inset-0 z-50 flex flex-col font-sans"
     >
       <TopNav
         overlay
@@ -602,7 +602,7 @@ export function CalendarRangePicker({
       {/* Закреплённая шапка: поля границ «с …/по …» (следуют за тапами
           вживую), чип месяца для прыжка и строка дней недели над
           прокруткой; на десктопе TopNav зафиксирован над экраном. */}
-      <div className="shrink-0 tablet:mt-[72px]">
+      <div className="relative shrink-0 tablet:mt-[72px]">
         <div className="mx-auto w-full max-w-column">
           {/* Поля границ «с …/по …» следуют за тапами вживую; без выбора
               (#670) — плейсхолдеры, пока диапазон не начат. */}
@@ -636,7 +636,7 @@ export function CalendarRangePicker({
         </div>
       </div>
 
-      <div ref={scrollRef} onScroll={handleScroll} className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={scrollRef} onScroll={handleScroll} className="relative min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-column pb-[136px]">
           {months.map(({ year, month0 }, index) => {
             const future = calendarMonthIndex({ year, month0 }) > todayIdx;

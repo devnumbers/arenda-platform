@@ -59,18 +59,9 @@ export function ScreenLayout({ children }: { readonly children: ReactNode }): JS
     <TabBarVisibilityProvider>
       <HubPrefetchProvider>
         <TopNavUserProvider>
-          {/* `screen-layout` (globals.css) на ПК выставляет --sidebar-inset —
-             им TopNav центрирует свою колонку правее сайдбара; обёртка
-             контента несёт тот же сдвиг паддингом, поэтому PageContent
-             центрируется в пространстве правее сайдбара (тикет #865, макет
-             1603-89079). Fixed-хром (сайдбар, пилюли, TabBar) паддинг не
-             двигает. */}
-          <div className="screen-layout flex min-h-screen flex-col tablet:pt-[72px]">
+          <div className="flex min-h-screen flex-col tablet:pt-[72px]">
             <DesktopSidebar propertiesHref={propertiesHref} />
-            <div
-              className="flex min-w-0 flex-1 flex-col desktop:pl-[var(--sidebar-total)]"
-              ref={contentRef}
-            >
+            <div className="flex min-w-0 flex-1 flex-col" ref={contentRef}>
               {children}
             </div>
             <DesktopNavPills notificationsBadge={notificationsBadge ?? 0} />

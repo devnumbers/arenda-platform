@@ -64,7 +64,7 @@ export function PropertyAddressSearch({
       role="dialog"
       aria-modal="true"
       aria-label="Поиск адреса"
-      className="fullscreen-surface fixed inset-0 z-50 overflow-y-auto bg-white"
+      className="fullscreen-surface fixed inset-0 z-50 overflow-y-auto"
     >
       <TopNav
         variant="search"
@@ -81,7 +81,7 @@ export function PropertyAddressSearch({
           onClear={clear}
         />
       </TopNav>
-      <PageContent className="pt-0">
+      <PageContent className="relative pt-0">
         {showList && (
           <AddressSuggestionList
             containerRef={listRef}

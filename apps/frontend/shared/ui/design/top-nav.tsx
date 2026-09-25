@@ -50,13 +50,15 @@ export type TopNavCollapse = {
  *
  * Крылья и ведущая кнопка (решение владельца 2026-09-08, аудит #563):
  * на планшетном ярусе (561–1023) у подэкранов с leading-кнопкой крылья
- * не рисуются — колонка 560 начинается там же, где кончается лого, и
- * «крыло» наложилось бы на неё; их хедер — мобильная анатомия (leading,
- * центр, trailing) в закреплённой колонке. На ПК ≥1024 крылья всегда —
- * до колонки >=232px, наложения нет. Хаб-экраны (без leading) держат
- * крылья на всём планшетно-ПК диапазоне (Figma 1603:93153). mobileWings
- * и leading вместе не сочетаются: mobileWings — признак хаба, хаб без
- * leading. */
+ * не рисуются; их хедер — мобильная анатомия (leading, центр, trailing)
+ * и стоит во всю ширину вьюпорта: слоты у краёв (←24/тайтл по центру/⋮24,
+ * макет 1185-40814, решение 25.09 при доработке #865). На ПК ≥1024
+ * крылья всегда, слоты подэкрана — в колонке 560 (макет 1185:40819).
+ * Хаб-экраны (без leading) держат крылья на всём планшетно-ПК диапазоне
+ * (Figma 1603:93153); их компакт-слоты остаются в колонке 560 — края
+ * вьюпорта на планшете заняты крыльями (решение 25.09, гриллинг
+ * доработки #865, Q5-А). mobileWings и leading вместе не сочетаются:
+ * mobileWings — признак хаба, хаб без leading. */
 export type TopNavProps = {
   readonly leading?: ReactNode;
   readonly trailing?: ReactNode;
@@ -75,10 +77,11 @@ export type TopNavProps = {
    * (HubCollapseAnchor пишет `--hub-collapse`). */
   readonly collapse?: TopNavCollapse;
   /** TopNav внутри полноэкранной поверхности (пикер, визард-оверлей, шит
-   * фильтров — класс .fullscreen-surface, тикет #865): поверхность на ПК
-   * сама живёт правее сайдбара, поэтому сдвиг под сайдбар не применяется,
-   * а «крылья» не рисуются вовсе — они дублировали бы крылья страницы,
-   * видимые рядом с поверхностью. */
+   * фильтров — класс .fullscreen-surface): поверхность на ПК начинается
+   * правее сайдбара (globals.css), её бары растягиваются на весь вьюпорт,
+   * поэтому колонка TopNav легает на колонку страницы; «крылья» не
+   * рисуются вовсе — они дублировали бы крылья страницы, видимые рядом с
+   * поверхностью. */
   readonly overlay?: boolean;
 };
 
@@ -112,12 +115,6 @@ export function TopNav({
       className={cn(
         'relative z-40 w-full bg-white font-sans pt-[env(safe-area-inset-top)]',
         'tablet:fixed tablet:inset-x-0 tablet:top-0',
-        // ПК (≥1024): центральная колонка центрируется правее сайдбара —
-        // паддинг двигает только поток (крылья абсолютны и остаются у краёв
-        // вьюпорта). Инсет ставит корень ScreenLayout (.screen-layout в
-        // globals.css); вне его (/ui-kit) переменной нет — сдвига нет.
-        // Поверхностям (overlay) сдвиг не нужен: их бокс уже правее сайдбара.
-        !overlay && 'desktop:pl-[var(--sidebar-inset,0px)]',
         className,
       )}
     >
@@ -142,23 +139,31 @@ export function TopNav({
         <UserButton name={displayName} onClick={() => router.push(ROUTES.profile)} />
       </div>
       {variant === 'search' ? (
-        <div className="relative mx-auto flex h-[72px] w-full tablet:max-w-column items-center pl-3.5 pr-3.5">
+        /* Поисковая шапка: слоты и поле — во всю ширину вьюпорта на мобайле
+         * и планшете (макет 1185-40814, решение 25.09 — как у LoginShell),
+         * на ПК — в колонке 560 (макет 1185:40819). */
+        <div className="relative mx-auto flex h-[72px] w-full desktop:max-w-column items-center pl-3.5 pr-3.5">
           {leading !== undefined && <div className="flex shrink-0 items-center">{leading}</div>}
           <div className="ml-1 flex h-full min-w-0 flex-1 items-center">{children}</div>
         </div>
       ) : (
         /* Слоты — абсолютные слои по краям (Figma 1425:55798): центр
          * центрируется относительно всей полосы и не смещается от
-         * наличия/отсутствия кнопок (правый слот всегда «зарезервирован»). */
-        <div className="relative mx-auto h-[72px] w-full tablet:max-w-column">
+         * наличия/отсутствия кнопок (правый слот всегда «зарезервирован»).
+         * Кап колонки — только на ПК: на планшете слоты подэкрана (без
+         * крыльев) стоят у краёв вьюпорта, тайтл — по центру вьюпорта
+         * (макет 1185-40814, решение 25.09). */
+        <div className="relative mx-auto h-[72px] w-full desktop:max-w-column">
           {leading !== undefined && (
             <div className="absolute left-0 top-0 flex h-full items-center pl-3.5">{leading}</div>
           )}
           {collapse ? (
-            /* Компакт-бар на планшете и ПК — в самом закреплённом баре:
-             * заголовок строго по центру колонки, лупа в левом слоте
-             * (скрыта на 561–800px — место занято крылом-лого). */
-            <>
+            /* Компакт-бар: слоты (лупа, «+») — в колонке 560 на планшете и
+             * ПК, потому что края вьюпорта там заняты крыльями (лого и
+             * кнопка профиля) — решение 25.09, гриллинг доработки #865
+             * (Q5-А); лупа скрыта на 561–800px — место занято крылом-лого.
+             * На мобайле слой во всю ширину (капа нет) — слоты у краёв. */
+            <div className="absolute inset-0 mx-auto h-full w-full tablet:max-w-column">
               {collapse.search && (
                 <div className="hub-compact absolute left-0 top-0 hidden h-full items-center pl-3.5 min-[800px]:flex">
                   <Link
@@ -173,18 +178,18 @@ export function TopNav({
               <div className="hub-compact flex h-full w-full min-w-0 items-center justify-center px-3">
                 <TopNavTitle title={collapse.title} />
               </div>
-            </>
+              {collapse.trailing !== undefined && (
+                <div className="hub-compact absolute right-0 top-0 flex h-full items-center pr-3.5">
+                  {collapse.trailing}
+                </div>
+              )}
+            </div>
           ) : (
             <div className="flex h-full w-full min-w-0 items-center justify-center gap-2 px-3">{children}</div>
           )}
-          {(collapse?.trailing ?? trailing) !== undefined && (
-            <div
-              className={cn(
-                'absolute right-0 top-0 flex h-full items-center pr-3.5',
-                collapse && 'hub-compact',
-              )}
-            >
-              {collapse?.trailing ?? trailing}
+          {!collapse && trailing !== undefined && (
+            <div className="absolute right-0 top-0 flex h-full items-center pr-3.5">
+              {trailing}
             </div>
           )}
         </div>

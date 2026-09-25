@@ -233,7 +233,7 @@ export function PaymentDayPicker({
       role="dialog"
       aria-modal="true"
       aria-label="Выбор дня оплаты"
-      className="fullscreen-surface fixed inset-0 z-50 flex flex-col bg-surface"
+      className="fullscreen-surface fixed inset-0 z-50 flex flex-col"
     >
       <TopNav
         overlay
@@ -243,7 +243,7 @@ export function PaymentDayPicker({
       >
         <TopNavTitle title="Выберите день" />
       </TopNav>
-      <PageContent className="flex h-[calc(100dvh-72px)] flex-col pb-0">
+      <PageContent className="relative flex h-[calc(100dvh-72px)] flex-col pb-0">
         <div className="flex-1 min-h-0 overflow-y-auto pb-6">
           <div className="pt-6">
             <MonthDaysGrid

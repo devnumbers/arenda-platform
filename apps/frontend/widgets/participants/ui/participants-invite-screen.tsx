@@ -265,7 +265,7 @@ function InviteObjectsPicker({
       role="dialog"
       aria-modal="true"
       aria-label="Выбрать объект"
-      className="fullscreen-surface fixed inset-0 z-50 flex flex-col bg-surface font-sans"
+      className="fullscreen-surface fixed inset-0 z-50 flex flex-col font-sans"
     >
       <TopNav
         overlay
@@ -279,7 +279,7 @@ function InviteObjectsPicker({
       {/* На десктопе TopNav зафиксирован над экраном (tablet:fixed) —
        * контент встаёт под ним на высоту шапки (канон CalendarDatePicker
        * #500); на мобайле шапка в потоке и отступ не нужен. */}
-      <div className="min-h-0 flex-1 overflow-y-auto tablet:mt-[72px]">
+      <div className="relative min-h-0 flex-1 overflow-y-auto tablet:mt-[72px]">
         <div className="mx-auto w-full max-w-column pb-[136px]">
           {/* Ряды с боковым отступом 24px по макету 2008-46627. */}
           <div className="flex flex-col px-6 pt-2">
