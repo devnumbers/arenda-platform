@@ -202,7 +202,7 @@ func run() error {
 	defer riverMod.ProviderLimiter.Stop()
 	notificationsStream := riverMod.Stream
 
-	// 11.5.2 The realtime carrier (карта #714, #716; ADR 0062): the port the
+	// 11.5.1 The realtime carrier (карта #714, #716; ADR 0062): the port the
 	//     mutation pipelines publish their entity.changed frames through —
 	//     the audience resolver over the shared pool, the envelope frames
 	//     fanned out through the same hub the notifications stream serves.
@@ -216,14 +216,10 @@ func run() error {
 		p.Logger,
 	)
 
-	// The carrier late-binds into every entity-owning context's mutating
-	// services (карта #714, #716; ADR 0062) — the tasks scheduling seam's
-	// canon: the modules built earlier than the delivery queue's hub, the
-	// frames are best-effort, a broken carrier never fails the committed
-	// mutation.
+	// Late-bound into the entity-owning contexts below — the same grace-events canon (see 11.5.1).
 	bindRealtimePublisher(realtimeCarrier, paymentsMod, tasksMod, contactsMod, rentalsMod, propertiesMod, accessMod)
 
-	// 11.5.1 The tasks scheduling seam (issue #775): the rule create/edit
+	// 11.5.2 The tasks scheduling seam (issue #775): the rule create/edit
 	//     flows hand their standing tasks' ids over post-commit — a live
 	//     timed task books its due-minute job at once (the term before the
 	//     next hourly pass is exactly the delay this removes), a task born
