@@ -139,6 +139,10 @@ type recoverySlotPolicy struct {
 	forProperty map[uuid.UUID][]accessdomain.Membership
 	// afterDelete legs keyed the same way, for the delete path.
 	afterDelete map[uuid.UUID][]accessdomain.Membership
+	// onUnarchive legs keyed by the unarchived property's id — the
+	// memberships the enforcement suspends on the pool re-entry, the mirror
+	// image of the recoveries.
+	onUnarchive map[uuid.UUID][]accessdomain.Membership
 	// forRecipient legs of the owner's own suspended queue — returned on
 	// every RecoverSuspended call, as the real queue would be.
 	forRecipient []accessdomain.Membership
@@ -148,8 +152,8 @@ func (p *recoverySlotPolicy) RecoverSuspendedForProperty(_ context.Context, _ tr
 	return p.forProperty[propertyID], nil
 }
 
-func (p *recoverySlotPolicy) EnforceOnUnarchiveForProperty(context.Context, transaction.Tx, uuid.UUID) error {
-	return nil
+func (p *recoverySlotPolicy) EnforceOnUnarchiveForProperty(_ context.Context, _ transaction.Tx, propertyID uuid.UUID) ([]accessdomain.Membership, error) {
+	return p.onUnarchive[propertyID], nil
 }
 
 func (p *recoverySlotPolicy) RecoverAfterPropertyDelete(_ context.Context, _ transaction.Tx, propertyID uuid.UUID) ([]accessdomain.Membership, error) {
@@ -174,14 +178,86 @@ func suspendedLegOn(propertyID uuid.UUID) accessdomain.Membership {
 	}
 }
 
+// distinctPairs drops repeated pairs while preserving the order. Collapse is
+// the carrier's contract (publisher_test.go): the seam forwards the raw pair
+// batch, and the recording double captures it without the carrier's dedup —
+// so the assertions compare the distinct pairs the real carrier would emit.
+func distinctPairs(pairs []string) []string {
+	seen := make(map[string]struct{}, len(pairs))
+	out := make([]string, 0, len(pairs))
+	for _, p := range pairs {
+		if _, dup := seen[p]; dup {
+			continue
+		}
+		seen[p] = struct{}{}
+		out = append(out, p)
+	}
+	return out
+}
+
+// TestUnarchivePropertyPublishesFrames closes the unarchive into the dispatch
+// canon: the journaled unarchive piggybacks its history pair next to the
+// property pair, and the over-limit legs the slot enforcement suspends on the
+// pool re-entry dispatch their access pairs post-commit — the mirror image of
+// the archive's recovery pairs (карта #714, #716; ADR 0062 §3).
+func TestUnarchivePropertyPublishesFrames(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	ownerID := uuid.Must(uuid.NewV7())
+	foreign := uuid.Must(uuid.NewV7()) // the suspended leg's object
+
+	repo := newFakePropertyRepo()
+	svc := NewPropertyService(
+		repo,
+		fakePropertyPhotoRepo{},
+		fakePropertyPhotoStorage{},
+		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, fakeSubscriptionLimiter{limit: 100}),
+		fakePropertyClock{now: time.Now()},
+		testOwnerPolicy{},
+		nil,
+	)
+
+	created, err := svc.CreateProperty(ctx, ownerID, CreatePropertyCommand{
+		Name:    "Квартира",
+		Type:    string(domain.PropertyTypeApartment),
+		Address: "Москва, Тверская 1",
+	})
+	require.NoError(t, err)
+	_, err = svc.ArchiveProperty(ctx, ownerID, created.ID)
+	require.NoError(t, err)
+
+	// The carrier binds after the setup mutations: this test asserts the
+	// unarchive's own dispatch, not the create/archive frames.
+	realtime := bindPropertyRealtime(t, svc)
+	svc.SetRecipientSlotPolicy(&recoverySlotPolicy{
+		onUnarchive: map[uuid.UUID][]accessdomain.Membership{
+			created.ID: {suspendedLegOn(foreign)},
+		},
+	})
+
+	_, err = svc.UnarchiveProperty(ctx, ownerID, created.ID)
+	require.NoError(t, err)
+
+	require.Len(t, realtime.Publications, 2)
+	assert.Equal(t, ownerID, realtime.Publications[0].Actor)
+	assert.Equal(t,
+		[]string{
+			"property:" + created.ID.String(),
+			"history:" + created.ID.String(),
+			"access:" + foreign.String(),
+		},
+		realtime.Pairs())
+}
+
 // TestArchivePropertyPublishesRecoveryAccessPairs extends the archive
 // dispatch with the properties-side recovery pairs (карта #714, #716; ADR
 // 0062 §3): freeing the recipients' slots restores their suspended legs on
 // other objects, and each restored object's participants view is dirtied —
-// several legs on one object collapse into one pair, the owner-tail recovery
-// (the owner's own suspended queue in yet other owners' objects) rides the
-// same dispatch, and the archive's own property and history pairs stay
-// singular.
+// several legs on one object ride the batch as repeated pairs, the
+// owner-tail recovery (the owner's own suspended queue in yet other owners'
+// objects) rides the same dispatch, and the archive's own property and
+// history pairs stay singular.
 func TestArchivePropertyPublishesRecoveryAccessPairs(t *testing.T) {
 	t.Parallel()
 
@@ -213,6 +289,9 @@ func TestArchivePropertyPublishesRecoveryAccessPairs(t *testing.T) {
 	_, err := svc.ArchiveProperty(ctx, ownerID, propertyID)
 	require.NoError(t, err)
 
+	// The seam forwards the raw batch — the two foreignA legs stay two pairs
+	// in the recording double; collapse is the carrier's contract
+	// (publisher_test.go), so the assertion compares the distinct pairs.
 	assert.Equal(t,
 		[]string{
 			"property:" + propertyID.String(),
@@ -220,7 +299,7 @@ func TestArchivePropertyPublishesRecoveryAccessPairs(t *testing.T) {
 			"access:" + foreignA.String(),
 			"access:" + foreignB.String(),
 		},
-		realtime.Pairs())
+		distinctPairs(realtime.Pairs()))
 }
 
 // TestDeletePropertyPublishesRecoveryAccessPairs extends the delete with the
@@ -257,12 +336,14 @@ func TestDeletePropertyPublishesRecoveryAccessPairs(t *testing.T) {
 
 	require.NoError(t, svc.DeleteProperty(ctx, ownerID, propertyID))
 
+	// Collapse is the carrier's contract (publisher_test.go): the seam
+	// forwards the raw batch, the assertion compares the distinct pairs.
 	assert.Equal(t,
 		[]string{
 			"access:" + foreignA.String(),
 			"access:" + foreignB.String(),
 		},
-		realtime.Pairs())
+		distinctPairs(realtime.Pairs()))
 }
 
 // TestArchiveExcessPropertiesPublishesRecoveryAccessPairs extends the billing
@@ -317,11 +398,13 @@ func TestArchiveExcessPropertiesPublishesRecoveryAccessPairs(t *testing.T) {
 
 	// The capture order per archived property: its per-property legs, then the
 	// owner tail — so C (restored first at excessA) precedes B (excessB's leg).
+	// Collapse is the carrier's contract (publisher_test.go): the seam
+	// forwards the raw batch, the assertion compares the distinct pairs.
 	assert.Equal(t,
 		[]string{
 			"access:" + foreignA.String(),
 			"access:" + foreignC.String(),
 			"access:" + foreignB.String(),
 		},
-		realtime.Pairs())
+		distinctPairs(realtime.Pairs()))
 }

@@ -113,18 +113,14 @@ func (s *PropertyService) publishChanged(ctx context.Context, actor, propertyID 
 }
 
 // recoveryAccessFrames collects the slot recovery's access pairs: every
-// reactivated membership dirties its object's participants view, and several
-// restored legs on one object collapse into one pair. No journal anchors —
-// the slot coordinator journals no recovery row (карта #714, #716; ADR 0062
-// §3), like the access seam's recovery dispatch.
+// reactivated membership dirties its object's participants view. The batch
+// forwards raw — collapsing the repeated pairs is the carrier's contract (the
+// per-call dedup of the stream Publisher's EntityChanged), the same reliance
+// as the access seam's recovery dispatch. No journal anchors — the slot
+// coordinator journals no recovery row (карта #714, #716; ADR 0062 §3).
 func recoveryAccessFrames(recovered []accessdomain.Membership) []realtimedom.Change {
 	changed := make([]realtimedom.Change, 0, len(recovered))
-	seen := make(map[uuid.UUID]struct{}, len(recovered))
 	for _, m := range recovered {
-		if _, dup := seen[m.PropertyID]; dup {
-			continue
-		}
-		seen[m.PropertyID] = struct{}{}
 		changed = append(changed, realtimedom.On(realtimedom.EntityAccess, m.PropertyID))
 	}
 	return changed
@@ -1424,9 +1420,13 @@ func (s *PropertyService) RestoreGraceArchivedProperties(
 			return nil, fmt.Errorf("record audit: %w", err)
 		}
 		// Same as a manual unarchive: the object re-enters every recipient's
-		// tariff pool, so suspend any recipient already at their limit.
+		// tariff pool, so suspend any recipient already at their limit. The
+		// suspended legs are deliberately not published: the restore runs on
+		// the billing phase of the background worker, outside the v1
+		// realtime boundary (ADR 0062 §3, #716) — the owner learns the
+		// participants state through the next reread of the screen.
 		if s.slots != nil {
-			if err := s.slots.EnforceOnUnarchiveForProperty(ctx, tx, id); err != nil {
+			if _, err := s.slots.EnforceOnUnarchiveForProperty(ctx, tx, id); err != nil {
 				return nil, fmt.Errorf("enforce recipient slot on grace restore: %w", err)
 			}
 		}
@@ -1441,6 +1441,10 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, actor, id uuid.
 	}
 
 	var unarchived domain.Property
+	// The suspended legs captured inside the transaction; their access pairs
+	// dispatch post-commit next to publishChanged (карта #714, #716; ADR 0062
+	// §3).
+	var suspended []accessdomain.Membership
 	err = s.runInTx(ctx, func(stores *txStores) error {
 		if err := ensurePropertyArchived(ctx, stores, actor, id); err != nil {
 			return err
@@ -1475,17 +1479,25 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, actor, id uuid.
 
 		// Unarchiving the object re-enters every recipient's tariff pool: suspend any
 		// recipient already at the limit so the object does not occupy a slot until
-		// one frees up (issue #158, T4).
+		// one frees up (issue #158, T4). The suspended legs are captured: their
+		// access pairs are the properties-side publication of the suspension,
+		// dispatched post-commit below like publishChanged — each suspended leg
+		// dirties its object's participants view the same way a restored one does
+		// (карта #714, #716; ADR 0062 §3).
 		if s.slots != nil {
-			if err := s.slots.EnforceOnUnarchiveForProperty(ctx, stores.tx, id); err != nil {
+			legs, err := s.slots.EnforceOnUnarchiveForProperty(ctx, stores.tx, id)
+			if err != nil {
 				return fmt.Errorf("enforce recipient slot on unarchive: %w", err)
 			}
+			suspended = append(suspended, legs...)
 		}
 		return nil
 	})
 	if err != nil {
 		return domain.Property{}, err
 	}
+	s.publishChanged(ctx, actor, id, true)
+	s.publishRecoveredAccess(ctx, actor, suspended)
 
 	properties, err := s.withPhotos(ctx, unarchived)
 	if err != nil {

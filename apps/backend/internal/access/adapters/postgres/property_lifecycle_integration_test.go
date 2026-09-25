@@ -325,7 +325,7 @@ func unarchiveSlotScenario(t *testing.T, limit int, withOccupied bool) (repo *Me
 	if _, err := f.q.UnarchiveProperty(ctx, genpostgres.UnarchivePropertyParams{ID: pgUUID(target), OwnerID: pgUUID(owner)}); err != nil {
 		t.Fatalf("UnarchiveProperty: %v", err)
 	}
-	if err := f.slots.EnforceOnUnarchiveForProperty(ctx, accessNoCommitTx{f.tx}, target); err != nil {
+	if _, err := f.slots.EnforceOnUnarchiveForProperty(ctx, accessNoCommitTx{f.tx}, target); err != nil {
 		t.Fatalf("EnforceOnUnarchiveForProperty: %v", err)
 	}
 	return repo, recipient, target

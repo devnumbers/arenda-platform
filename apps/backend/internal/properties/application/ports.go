@@ -163,10 +163,13 @@ type RentalDeletionGuard interface {
 // this per-recipient entry reactivates the owner's own suspended shared queue
 // FIFO. The recoveries return the reactivated membership rows — the caller
 // may collect their access pairs for the realtime dispatch (карта #714,
-// #716; ADR 0062). See issue #158 (T4).
+// #716; ADR 0062). EnforceOnUnarchiveForProperty returns the memberships it
+// suspended — the mirror image of the recoveries: a re-entered pool suspends
+// the over-limit legs, and the suspended legs dirty their objects'
+// participants views the same way. See issue #158 (T4).
 type RecipientSlotPolicy interface {
 	RecoverSuspendedForProperty(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) ([]accessdomain.Membership, error)
-	EnforceOnUnarchiveForProperty(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) error
+	EnforceOnUnarchiveForProperty(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) ([]accessdomain.Membership, error)
 	RecoverAfterPropertyDelete(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) ([]accessdomain.Membership, error)
 	RecoverSuspended(ctx context.Context, tx transaction.Tx, recipientID uuid.UUID) ([]accessdomain.Membership, error)
 }

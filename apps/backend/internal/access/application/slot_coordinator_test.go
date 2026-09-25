@@ -685,8 +685,14 @@ func TestSlotCoordinator_EnforceOnUnarchiveForProperty_SuspendsWhenNoSlot(t *tes
 	f.ownedProps.add(recipient, pOwn, t2New) // Own property occupies one slot.
 	f.limiter.set(recipient, 1)              // Pool=2 > limit=1 → suspend on unarchive.
 
-	if err := f.coordinator.EnforceOnUnarchiveForProperty(context.Background(), noopTx{}, pUnarchived); err != nil {
+	suspended, err := f.coordinator.EnforceOnUnarchiveForProperty(context.Background(), noopTx{}, pUnarchived)
+	if err != nil {
 		t.Fatalf("EnforceOnUnarchiveForProperty: %v", err)
+	}
+	// The suspended legs ride the return — the caller collects their access
+	// pairs for the realtime dispatch.
+	if len(suspended) != 1 || suspended[0].ID != mUnarchived {
+		t.Errorf("suspended = %v, want the unarchived membership %s", suspended, mUnarchived)
 	}
 
 	f.assertStatus(t, mUnarchived, pUnarchived, domain.MemberStatusSuspended, "unarchived member suspended when no free slot")
@@ -711,8 +717,13 @@ func TestSlotCoordinator_EnforceOnUnarchiveForProperty_StaysActiveAtLimit(t *tes
 	f.addActiveMember(t, mOther, pOther, owner, recipient, t2New)
 	f.limiter.set(recipient, 2) // Pool=2 == limit=2 → fits, stays active.
 
-	if err := f.coordinator.EnforceOnUnarchiveForProperty(context.Background(), noopTx{}, pUnarchived); err != nil {
+	suspended, err := f.coordinator.EnforceOnUnarchiveForProperty(context.Background(), noopTx{}, pUnarchived)
+	if err != nil {
 		t.Fatalf("EnforceOnUnarchiveForProperty: %v", err)
+	}
+	// Nothing suspended — nothing returned.
+	if len(suspended) != 0 {
+		t.Errorf("suspended = %v, want none at exactly the limit", suspended)
 	}
 
 	f.assertStatus(t, mUnarchived, pUnarchived, domain.MemberStatusActive, "unarchived member stays active at exactly the limit")

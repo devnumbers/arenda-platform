@@ -32,8 +32,8 @@ func (f *fakeSharedDeleteFlow) RecoverSuspendedForProperty(context.Context, tran
 	return nil, nil
 }
 
-func (f *fakeSharedDeleteFlow) EnforceOnUnarchiveForProperty(context.Context, transaction.Tx, uuid.UUID) error {
-	return nil
+func (f *fakeSharedDeleteFlow) EnforceOnUnarchiveForProperty(context.Context, transaction.Tx, uuid.UUID) ([]accessdomain.Membership, error) {
+	return nil, nil
 }
 
 func (f *fakeSharedDeleteFlow) RecoverAfterPropertyDelete(context.Context, transaction.Tx, uuid.UUID) ([]accessdomain.Membership, error) {

@@ -857,9 +857,9 @@ func (p *recordingSlotPolicy) RecoverSuspendedForProperty(_ context.Context, _ t
 	return nil, nil
 }
 
-func (p *recordingSlotPolicy) EnforceOnUnarchiveForProperty(_ context.Context, _ transaction.Tx, propertyID uuid.UUID) error {
+func (p *recordingSlotPolicy) EnforceOnUnarchiveForProperty(_ context.Context, _ transaction.Tx, propertyID uuid.UUID) ([]accessdomain.Membership, error) {
 	p.enforcedOnUnarchive = append(p.enforcedOnUnarchive, propertyID)
-	return nil
+	return nil, nil
 }
 
 func (p *recordingSlotPolicy) RecoverAfterPropertyDelete(context.Context, transaction.Tx, uuid.UUID) ([]accessdomain.Membership, error) {

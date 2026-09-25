@@ -425,14 +425,18 @@ func (c *SlotCoordinator) RecoverAfterPropertyDelete(ctx context.Context, tx tra
 // active and therefore counted, so it is suspended only when the pool is
 // strictly over the limit — a pool exactly at the limit still fits and the
 // membership stays active. This is the third source of suspended access after
-// activation without a slot and a billing limit drop (issue #158, T4).
-func (c *SlotCoordinator) EnforceOnUnarchiveForProperty(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) error {
+// activation without a slot and a billing limit drop (issue #158, T4). The
+// memberships it suspended are returned — the caller collects their access
+// pairs for the realtime dispatch the same way the recoveries do (карта
+// #714, #716; ADR 0062 §3).
+func (c *SlotCoordinator) EnforceOnUnarchiveForProperty(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) ([]domain.Membership, error) {
 	txMembers := c.members.WithTx(tx)
 
 	memberships, err := txMembers.ListByProperty(ctx, propertyID)
 	if err != nil {
-		return fmt.Errorf("list memberships by property: %w", err)
+		return nil, fmt.Errorf("list memberships by property: %w", err)
 	}
+	var suspended []domain.Membership
 	for _, m := range memberships {
 		if m.IsSuspended() {
 			// Already suspended: leave it for FIFO recovery when a slot frees.
@@ -443,14 +447,15 @@ func (c *SlotCoordinator) EnforceOnUnarchiveForProperty(ctx context.Context, tx 
 		// pool strictly exceeds the limit.
 		over, err := c.poolOverLimit(ctx, tx, txMembers, m.UserID)
 		if err != nil {
-			return fmt.Errorf("check recipient slot on unarchive: %w", err)
+			return nil, fmt.Errorf("check recipient slot on unarchive: %w", err)
 		}
 		if !over {
 			continue
 		}
 		if err := txMembers.Suspend(ctx, m.ID, propertyID); err != nil {
-			return fmt.Errorf("suspend membership %s on unarchive: %w", m.ID, err)
+			return nil, fmt.Errorf("suspend membership %s on unarchive: %w", m.ID, err)
 		}
+		suspended = append(suspended, m)
 		if err := c.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 			ActorRole:  auditdomain.ActorRoleSystem,
 			Action:     auditdomain.ActionPropertyMemberSuspended,
@@ -462,7 +467,7 @@ func (c *SlotCoordinator) EnforceOnUnarchiveForProperty(ctx context.Context, tx 
 				auditKeyUserID:     m.UserID,
 			},
 		}); err != nil {
-			return fmt.Errorf("record suspend audit on unarchive: %w", err)
+			return nil, fmt.Errorf("record suspend audit on unarchive: %w", err)
 		}
 		// The paused-access notification on the unarchive path (карта #734,
 		// #751) — in-transaction, best-effort; the lifecycle email it
@@ -477,7 +482,7 @@ func (c *SlotCoordinator) EnforceOnUnarchiveForProperty(ctx context.Context, tx 
 			})
 		})
 	}
-	return nil
+	return suspended, nil
 }
 
 // buildRecipientPool assembles the recipient's full tariff pool: own active
