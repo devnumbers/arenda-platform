@@ -56,7 +56,9 @@ func (s *ReadStore) List(ctx context.Context, actor uuid.UUID, q application.Jou
 		BaseActions: joinStrings(baseActionStrings(q.BaseActions)),
 		QRaw:        q.Search,
 		QTrgm:       escapeLikePattern(q.Search),
-		PageLimit:   int32(q.Limit),
+		// The application layer folds Limit to [0, FeedMaxLimit=100] before
+		// the store call — the narrowing is bounded by that contract.
+		PageLimit: toPageLimit(q.Limit),
 	}
 	if q.DateFrom != nil {
 		params.DateFrom = pgtype.Timestamptz{Time: *q.DateFrom, Valid: true}
@@ -104,7 +106,9 @@ func (s *ReadStore) listAfter(ctx context.Context, actor uuid.UUID, q applicatio
 		QTrgm:       escapeLikePattern(q.Search),
 		AfterTs:     pgtype.Timestamptz{Time: q.After.CreatedAt, Valid: true},
 		AfterID:     pgconv.UUIDToPgtype(q.After.ID),
-		PageLimit:   int32(q.Limit),
+		// The application layer folds Limit to [0, FeedMaxLimit=100] before
+		// the store call — the narrowing is bounded by that contract.
+		PageLimit: toPageLimit(q.Limit),
 	}
 	if q.DateFrom != nil {
 		params.DateFrom = pgtype.Timestamptz{Time: *q.DateFrom, Valid: true}
@@ -165,7 +169,7 @@ func (s *ReadStore) FilterParticipants(ctx context.Context, actor uuid.UUID, pro
 }
 
 // FilterObjects returns the scope's objects with the card photo avatar —
-// the first (oldest) photo or '' without any.
+// the first (oldest) photo or ” without any.
 func (s *ReadStore) FilterObjects(ctx context.Context, actor uuid.UUID, propertyIDs []uuid.UUID) ([]domain.FilterObject, error) {
 	rows, err := postgres.New(s.db).ListHistoryFilterObjects(ctx, postgres.ListHistoryFilterObjectsParams{
 		Actor:       pgconv.UUIDToPgtype(actor),
@@ -258,4 +262,15 @@ var likePatternEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 
 func escapeLikePattern(q string) string {
 	return likePatternEscaper.Replace(q)
+}
+
+// toPageLimit narrows the feed's page limit to the SQL parameter's int32.
+// The application layer folds Limit to [0, FeedMaxLimit=100] before the store
+// call (foldLimit), so the value is bounded — the guard keeps the narrowing
+// honest at this layer too.
+func toPageLimit(limit int) int32 {
+	if limit < 0 || limit > 100 {
+		return 0
+	}
+	return int32(limit)
 }

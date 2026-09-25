@@ -14,9 +14,6 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 )
 
-// strPtr is a small helper for optional-string query parameters in tests.
-func strPtr(s string) *string { return &s }
-
 // The generic list envelope behind RespondAdminList must serialize exactly
 // like the per-entity oapi-codegen response structs, so the helper can stand
 // in for the generated types without changing the wire format. The empty-page
@@ -202,7 +199,7 @@ func TestParseUUIDList(t *testing.T) {
 	t.Run("absent and blank decode to nothing", func(t *testing.T) {
 		t.Parallel()
 
-		for _, raw := range []*string{nil, strPtr(""), strPtr("   ")} {
+		for _, raw := range []*string{nil, new(""), new("   ")} {
 			got, err := ParseUUIDList(raw, func(string) error { return errors.New("unexpected bad element") })
 			if err != nil {
 				t.Fatalf("ParseUUIDList(%v): %v", raw, err)
@@ -219,7 +216,7 @@ func TestParseUUIDList(t *testing.T) {
 		// "  ,  " trims to a non-empty ",", so the blank check does not
 		// fire: the loop drops every element and the list stays empty
 		// non-nil.
-		got, err := ParseUUIDList(strPtr("  ,  "), func(string) error { return errors.New("unexpected bad element") })
+		got, err := ParseUUIDList(new("  ,  "), func(string) error { return errors.New("unexpected bad element") })
 		if err != nil {
 			t.Fatalf("ParseUUIDList: %v", err)
 		}
@@ -233,7 +230,7 @@ func TestParseUUIDList(t *testing.T) {
 
 		a := uuid.MustParse("0197c0a9-8b7d-7de1-a5de-6a6f1f5f0001")
 		b := uuid.MustParse("0197c0a9-8b7d-7de1-a5de-6a6f1f5f0002")
-		got, err := ParseUUIDList(strPtr(" "+a.String()+" , ,"+b.String()), func(string) error {
+		got, err := ParseUUIDList(new(" "+a.String()+" , ,"+b.String()), func(string) error {
 			return errors.New("unexpected bad element")
 		})
 		if err != nil {
@@ -249,7 +246,7 @@ func TestParseUUIDList(t *testing.T) {
 
 		sentinel := errors.New("invalid input")
 		var gotBad string
-		got, err := ParseUUIDList(strPtr("not-a-uuid, "), func(bad string) error {
+		got, err := ParseUUIDList(new("not-a-uuid, "), func(bad string) error {
 			gotBad = bad
 			return errors.Join(sentinel, errors.New(bad))
 		})
