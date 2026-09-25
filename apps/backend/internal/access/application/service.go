@@ -418,7 +418,10 @@ func (s *AccessService) ChangeMemberRole(
 	// — best-effort (карта #734, #751). A suspended membership stays silent:
 	// the object was already hidden from its holder (issue #162, T6 canon).
 	// A same-role no-op stays silent too — there is no change for the holder
-	// to learn about.
+	// to learn about. The silence covers the realtime stream as well: no
+	// change dispatches no access frame (the same no-change-no-frame canon as
+	// TestSuspendedRevokePublishesNothing and TestRollbackPublishesNothing in
+	// access_realtime_test.go pin it).
 	if !wasSuspended && roleChanged {
 		publishAccessEvent(ctx, s.events, s.logger, "membership_role_changed", func() error {
 			return s.events.PublishMembershipRoleChanged(ctx, MembershipRoleChanged{
@@ -431,10 +434,11 @@ func (s *AccessService) ChangeMemberRole(
 			})
 		})
 	}
+	// The role change's frame rides the journal anchor: the journal row the
+	// change wrote piggybacks its history pair. A same-role no-op dispatches
+	// nothing — no change, no frame (see the silence canon above).
 	if roleChanged {
 		s.publishRealtime(ctx, actor, accessFrame(propertyID), propertyID)
-	} else {
-		s.publishRealtime(ctx, actor, accessFrame(propertyID))
 	}
 	return updated, nil
 }

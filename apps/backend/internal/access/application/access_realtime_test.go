@@ -61,6 +61,33 @@ func TestChangeMemberRolePublishesFrames(t *testing.T) {
 		f.realtime.Pairs())
 }
 
+// TestSameRoleChangeMemberRolePublishesNothing extends the same-role no-op
+// canon (ADR 0061 §3) to the realtime stream: a role re-set that changes
+// nothing journals no row and dispatches no frame — no change, no access-view
+// delta for the subscribers to re-read.
+func TestSameRoleChangeMemberRolePublishesNothing(t *testing.T) {
+	t.Parallel()
+
+	f := newMutationFixture()
+	prop := uuid.Must(uuid.NewV7())
+	f.addProperty(prop, f.owner, testFirstTitle)
+	member := uuid.Must(uuid.NewV7())
+	f.limiter.set(member, 1)
+	_, err := f.access.AddMember(t.Context(), f.owner, prop, member, domain.RoleViewer)
+	require.NoError(t, err)
+	f.realtime.Publications = nil
+
+	members, err := f.access.ListMembers(t.Context(), f.owner, prop)
+	require.NoError(t, err)
+	membershipID := membershipOf(t, members, member)
+	require.NotEqual(t, uuid.Nil, membershipID)
+
+	_, err = f.access.ChangeMemberRole(t.Context(), f.owner, prop, membershipID, domain.RoleViewer)
+	require.NoError(t, err)
+	assert.Empty(t, f.realtime.Publications,
+		"the same-role no-op dispatches no realtime frame")
+}
+
 // TestRevokeAccessPublishesFrames pins the revocation's frames; the revoked
 // member's audience resolves out at the next publication — the frames just
 // stop.
@@ -255,6 +282,27 @@ func TestInviteByEmailPendingPublishesFrames(t *testing.T) {
 	assert.Equal(t,
 		[]string{"access:" + prop.String(), "history:" + prop.String()},
 		f.realtime.Pairs())
+}
+
+// TestSameRoleChangeInvitationRolePublishesNothing extends the same-role
+// no-op canon to the pending invitation: re-setting the invitation's role to
+// the current one journals no row (ADR 0061 §3) and dispatches no frame.
+func TestSameRoleChangeInvitationRolePublishesNothing(t *testing.T) {
+	t.Parallel()
+
+	f := newInvitationFixture()
+	owner := uuid.Must(uuid.NewV7())
+	prop := f.addProperty(owner)
+
+	outcome, err := f.svc.InviteByEmail(t.Context(), owner, prop, testNewUserEmail, domain.RoleViewer)
+	require.NoError(t, err)
+	require.NotNil(t, outcome.Invitation)
+	f.realtime.Publications = nil
+
+	_, err = f.svc.ChangeInvitationRole(t.Context(), owner, prop, outcome.Invitation.ID, domain.RoleViewer)
+	require.NoError(t, err)
+	assert.Empty(t, f.realtime.Publications,
+		"the same-role invitation no-op dispatches no realtime frame")
 }
 
 // membershipOf finds the member's membership row in the participants list.

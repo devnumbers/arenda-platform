@@ -327,10 +327,10 @@ func (s *InvitationService) ChangeInvitationRole(
 	if err != nil {
 		return domain.Invitation{}, err
 	}
+	// The role change's frame rides the journal anchor; a same-role no-op
+	// journals no row and dispatches nothing — no change, no frame.
 	if journaled {
 		s.access.publishRealtime(ctx, actor, accessFrame(propertyID), propertyID)
-	} else {
-		s.access.publishRealtime(ctx, actor, accessFrame(propertyID))
 	}
 	return updated, nil
 }
