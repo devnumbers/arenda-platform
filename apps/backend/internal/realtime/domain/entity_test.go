@@ -10,30 +10,35 @@ import (
 
 // TestEntityDictionaryIsTheContract pins the dictionary of eight entities
 // (ADR 0062 §2): the names are the invalidation contract between the backend
-// capture points and the frontend query-key families. A rename here breaks
-// every live client silently — it must fail this test loudly instead.
+// capture points and the frontend query-key families. The want side is
+// literals, not the constants — comparing All() against its own constants
+// would pass even if a constant's value changed — so a renamed or revalued
+// entry breaks every live client silently no longer: this test fails loudly.
 func TestEntityDictionaryIsTheContract(t *testing.T) {
 	t.Parallel()
 
-	want := []domain.Entity{
-		domain.EntityPayments,
-		domain.EntityOperations,
-		domain.EntityTasks,
-		domain.EntityContacts,
-		domain.EntityRentals,
-		domain.EntityProperty,
-		domain.EntityAccess,
-		domain.EntityHistory,
+	want := []string{
+		"payments",
+		"operations",
+		"tasks",
+		"contacts",
+		"rentals",
+		"property",
+		"access",
+		"history",
 	}
-	assert.ElementsMatch(t, want, domain.All())
-
-	for _, entity := range want {
-		assert.NotEmpty(t, string(entity))
+	got := make([]string, 0, len(domain.All()))
+	for _, entity := range domain.All() {
+		got = append(got, string(entity))
 	}
+	assert.ElementsMatch(t, want, got)
 }
 
-// TestAllCoversEveryConstant guards the canonical enumeration: a new constant
-// that never lands in All() would be invisible to the contract test above.
+// TestAllCoversEveryConstant guards All() against duplicate entries. Go
+// cannot enumerate a package's constants, so no backend test can see a new
+// constant that never lands in All() — the cross-boundary dictionary check
+// is held by the frontend's literal list REALTIME_ENTITY_NAMES (ADR 0062 §2),
+// and this test keeps the canonical enumeration itself duplicate-free.
 func TestAllCoversEveryConstant(t *testing.T) {
 	t.Parallel()
 
