@@ -1,3 +1,7 @@
+import {
+  connectEventStream,
+  type EventSourceLike,
+} from '@/shared/api/sse-client';
 import { parseStreamFrame, type StreamFrame } from './stream-frame';
 
 /**
@@ -5,7 +9,9 @@ import { parseStreamFrame, type StreamFrame } from './stream-frame';
  * GET /notifications/stream (#742, ADR 0060) без React — чистая логика
  * соединения, реакт-обвязка в notification-stream-provider. Компонент
  * держит EventSource на каждую вкладку — бэк рассчитан на это (лимит хаба
- * 8 соединений на пользователя, вкладки/устройства).
+ * 8 соединений на пользователя, вкладки/устройства). Соединение живёт,
+ * пока жива вкладка, независимо от видимости — уведомления нужны и в
+ * фоне; state-машина переподключения — общее ядро sse-client.
  *
  * Переподключение двоякое: сетевые обрывы браузер ретраит сам (retry-hint
  * бэка 3с, readyState CONNECTING) — не мешаем; fail-соединение
@@ -15,15 +21,7 @@ import { parseStreamFrame, type StreamFrame } from './stream-frame';
  * перечитывает живое через react-query (replay-курсора в v1 нет).
  */
 
-/** Срез EventSource, который использует соединение (тесты подсовывают фейк). */
-export type EventSourceLike = {
-  readonly readyState: number;
-  close(): void;
-  addEventListener(type: string, listener: FakeListener): void;
-  removeEventListener(type: string, listener: FakeListener): void;
-};
-
-export type FakeListener = (event: { data?: unknown }) => void;
+export type { EventSourceLike };
 
 export type NotificationStreamHandlers = {
   /** Стрим открыт — время перечитать живое (react-query-инвалидация). */
@@ -31,12 +29,6 @@ export type NotificationStreamHandlers = {
   /** Разобранный кадр стрима; мусорные кадры сюда не доходят. */
   readonly onFrame?: (frame: StreamFrame) => void;
 };
-
-/** readyState спецификации EventSource: авто-reconnect браузера идёт в
- * CONNECTING, fail-соединение — CLOSED. */
-const READY_STATE_CLOSED = 2;
-
-const RETRY_DELAYS_MS = [1000, 2000, 4000, 8000, 16000, 30000] as const;
 
 /** Имена кадров стрима (ADR 0060): стабильные грубые имена — добавление
  * новых имён назад-совместимо, старый клиент их просто не слушает. */
@@ -53,68 +45,16 @@ export function connectNotificationStream(deps: {
    * подменяют ручным. Возвращает cancel. */
   readonly scheduleRetry?: (fn: () => void, delayMs: number) => () => void;
 }): () => void {
-  const { createSource, handlers } = deps;
-  const scheduleRetry = deps.scheduleRetry ?? defaultScheduleRetry;
-
-  let disposed = false;
-  let source: EventSourceLike | undefined;
-  let retryIndex = 0;
-  let retryTimer: (() => void) | undefined;
-
-  function clearRetryTimer(): void {
-    retryTimer?.();
-    retryTimer = undefined;
-  }
-
-  function open(): void {
-    if (disposed) return;
-    const current = createSource();
-    source = current;
-
-    const onOpen = (): void => {
-      retryIndex = 0;
-      handlers.onOpen?.();
-    };
-
-    const onFrame = (name: string) => (event: { data?: unknown }): void => {
-      if (disposed || typeof event.data !== 'string') return;
-      const frame = parseStreamFrame(name, event.data);
-      if (frame !== null) handlers.onFrame?.(frame);
-    };
-
-    const onError = (): void => {
-      if (disposed || current !== source) return;
-      if (current.readyState !== READY_STATE_CLOSED) return; // браузер ретраит сам
-      // Fail-соединение: ручной перезапуск с бэкоффом (один таймер на раз —
-      // повторные error при живом таймере игнорируются).
-      if (retryTimer !== undefined) return;
-      // Индекс cap'ится длиной массива, «?? 30000» — для noUncheckedIndexedAccess.
-      const delay = RETRY_DELAYS_MS[Math.min(retryIndex, RETRY_DELAYS_MS.length - 1)] ?? 30000;
-      retryIndex += 1;
-      retryTimer = scheduleRetry(() => {
-        retryTimer = undefined;
-        open();
-      }, delay);
-    };
-
-    current.addEventListener('open', onOpen);
-    current.addEventListener('error', onError);
-    for (const name of STREAM_EVENT_NAMES) {
-      current.addEventListener(name, onFrame(name));
-    }
-  }
-
-  open();
-
-  return () => {
-    disposed = true;
-    clearRetryTimer();
-    source?.close();
-    source = undefined;
-  };
-}
-
-function defaultScheduleRetry(fn: () => void, delayMs: number): () => void {
-  const timer = setTimeout(fn, delayMs);
-  return () => clearTimeout(timer);
+  return connectEventStream({
+    createSource: deps.createSource,
+    eventNames: STREAM_EVENT_NAMES,
+    scheduleRetry: deps.scheduleRetry,
+    handlers: {
+      onOpen: deps.handlers.onOpen,
+      onEvent: (name, data) => {
+        const frame = parseStreamFrame(name, data);
+        if (frame !== null) deps.handlers.onFrame?.(frame);
+      },
+    },
+  });
 }

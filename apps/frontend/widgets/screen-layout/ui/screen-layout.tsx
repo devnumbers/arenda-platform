@@ -12,6 +12,7 @@ import {
   TabBarVisibilityProvider,
 } from '@/shared/ui/design';
 import { usePropertiesLandingHref } from '@/features/properties';
+import { RealtimeStreamProvider } from '@/features/realtime';
 import { HubPrefetchProvider } from './hub-prefetch-provider';
 import { NotificationStreamGate } from './notification-stream-gate';
 import { PushPermissionGate } from './push-permission-gate';
@@ -71,6 +72,7 @@ export function ScreenLayout({ children }: { readonly children: ReactNode }): JS
             <PullToRefresh contentRef={contentRef} />
             <PushPermissionGate />
             <NotificationStreamGate />
+            <RealtimeStreamProvider />
           </div>
         </TopNavUserProvider>
       </HubPrefetchProvider>

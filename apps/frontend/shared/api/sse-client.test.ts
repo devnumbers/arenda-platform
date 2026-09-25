@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { connectNotificationStream, type EventSourceLike } from './notification-stream';
-import type { EventStreamListener } from '@/shared/api/sse-client';
-import type { StreamFrame } from './stream-frame';
+import {
+  connectEventStream,
+  type EventSourceLike,
+  type EventStreamVisibility,
+} from './sse-client';
 
 /** Минимальный фейк EventSource: слушатели по именам, ручной контроль
  * readyState и диспетчеризации. Числа readyState — из спецификации
@@ -13,9 +15,9 @@ class FakeEventSource implements EventSourceLike {
 
   readyState = FakeEventSource.CONNECTING;
   closed = false;
-  readonly listeners = new Map<string, Set<EventStreamListener>>();
+  readonly listeners = new Map<string, Set<(event: { data?: unknown }) => void>>();
 
-  addEventListener(type: string, listener: EventStreamListener): void {
+  addEventListener(type: string, listener: (event: { data?: unknown }) => void): void {
     let set = this.listeners.get(type);
     if (!set) {
       set = new Set();
@@ -24,7 +26,7 @@ class FakeEventSource implements EventSourceLike {
     set.add(listener);
   }
 
-  removeEventListener(type: string, listener: EventStreamListener): void {
+  removeEventListener(type: string, listener: (event: { data?: unknown }) => void): void {
     this.listeners.get(type)?.delete(listener);
   }
 
@@ -59,8 +61,37 @@ class FakeScheduler {
   }
 }
 
-function frameData(payload: unknown): string {
-  return JSON.stringify({ v: 1, occurredAt: '2026-09-19T10:40:00Z', payload });
+/** Фейк видимости: тест переключает вкладку вручную. */
+class FakeVisibility implements EventStreamVisibility {
+  visible = true;
+  private readonly listeners = new Set<() => void>();
+  private unsubscribeCount = 0;
+
+  isVisible(): boolean {
+    return this.visible;
+  }
+
+  onChange(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+      this.unsubscribeCount += 1;
+    };
+  }
+
+  hide(): void {
+    this.visible = false;
+    for (const listener of [...this.listeners]) listener();
+  }
+
+  show(): void {
+    this.visible = true;
+    for (const listener of [...this.listeners]) listener();
+  }
+
+  get unsubscribed(): number {
+    return this.unsubscribeCount;
+  }
 }
 
 /** Доступ по индексу без non-null assertions (eslint-канон): в тестах
@@ -71,36 +102,42 @@ function at<T>(items: ReadonlyArray<T>, index: number): T {
   return item;
 }
 
-function createFixture() {
+const TWO_NAMES = ['stream.event-a', 'stream.event-b'] as const;
+
+function createFixture(overrides?: {
+  visibility?: FakeVisibility;
+}) {
   const sources: FakeEventSource[] = [];
   const scheduler = new FakeScheduler();
-  const frames: StreamFrame[] = [];
+  const events: Array<{ name: string; data: string }> = [];
   let openCount = 0;
-  const dispose = connectNotificationStream({
+  const dispose = connectEventStream({
     createSource: () => {
       const source = new FakeEventSource();
       sources.push(source);
       return source;
     },
+    eventNames: TWO_NAMES,
     handlers: {
       onOpen: () => {
         openCount += 1;
       },
-      onFrame: (frame) => {
-        frames.push(frame);
+      onEvent: (name, data) => {
+        events.push({ name, data });
       },
     },
     scheduleRetry: (fn, delayMs) => scheduler.schedule(fn, delayMs),
+    ...(overrides?.visibility ? { visibility: overrides.visibility } : {}),
   });
-  return { sources, scheduler, frames, getOpenCount: () => openCount, dispose };
+  return { sources, scheduler, events, getOpenCount: () => openCount, dispose };
 }
 
-describe('connectNotificationStream — подключение', () => {
-  it('открывает источник сразу и слушает три имени стрима', () => {
+describe('connectEventStream — подключение', () => {
+  it('открывает источник сразу и слушает имена стрима плюс open/error', () => {
     const { sources } = createFixture();
     expect(sources).toHaveLength(1);
     expect([...at(sources, 0).listeners.keys()].sort()).toEqual(
-      ['connected', 'error', 'notification.created', 'notification.unread_count', 'open'].sort(),
+      ['error', 'open', 'stream.event-a', 'stream.event-b'].sort(),
     );
   });
 
@@ -111,24 +148,24 @@ describe('connectNotificationStream — подключение', () => {
     expect(getOpenCount()).toBe(1);
   });
 
-  it('кадры диспатчатся в onFrame разобранными', () => {
-    const { sources, frames } = createFixture();
-    at(sources, 0).emit('notification.created', frameData({ id: 'n1', title: 'Привет', category: 'tasks', body: '' }));
-    at(sources, 0).emit('notification.unread_count', frameData({ count: 3 }));
-    expect(frames).toEqual([
-      expect.objectContaining({ kind: 'created', id: 'n1' }),
-      expect.objectContaining({ kind: 'unread-count', count: 3 }),
+  it('события диспатчатся в onEvent с именем и data-строкой', () => {
+    const { sources, events } = createFixture();
+    at(sources, 0).emit('stream.event-a', '{"x":1}');
+    at(sources, 0).emit('stream.event-b', '{}');
+    expect(events).toEqual([
+      { name: 'stream.event-a', data: '{"x":1}' },
+      { name: 'stream.event-b', data: '{}' },
     ]);
   });
 
-  it('мусорный кадр молча игнорируется', () => {
-    const { sources, frames } = createFixture();
-    at(sources, 0).emit('notification.created', 'не json');
-    expect(frames).toHaveLength(0);
+  it('не-строковые data в onEvent не доходят', () => {
+    const { sources, events } = createFixture();
+    at(sources, 0).listeners.get('stream.event-a')?.forEach((listener) => listener({}));
+    expect(events).toHaveLength(0);
   });
 });
 
-describe('connectNotificationStream — reconnect', () => {
+describe('connectEventStream — reconnect', () => {
   it('fail-соединение (readyState CLOSED — браузер сам не переподключится) перезапускается через 1с', () => {
     const { sources, scheduler } = createFixture();
     at(sources, 0).readyState = FakeEventSource.CLOSED;
@@ -185,20 +222,72 @@ describe('connectNotificationStream — reconnect', () => {
   });
 });
 
-describe('connectNotificationStream — dispose', () => {
+describe('connectEventStream — видимость вкладки', () => {
+  it('скрытая вкладка источник не открывает — открытие ждёт показа', () => {
+    const visibility = new FakeVisibility();
+    visibility.hide();
+    const { sources } = createFixture({ visibility });
+    expect(sources).toHaveLength(0);
+    visibility.show();
+    expect(sources).toHaveLength(1);
+  });
+
+  it('скрытие закрывает источник и глушит висящий таймер переподключения', () => {
+    const visibility = new FakeVisibility();
+    const { sources, scheduler } = createFixture({ visibility });
+    at(sources, 0).readyState = FakeEventSource.CLOSED;
+    at(sources, 0).emit('error');
+    expect(scheduler.entries).toHaveLength(1);
+
+    visibility.hide();
+    expect(at(sources, 0).closed).toBe(true);
+    scheduler.runAll();
+    expect(sources).toHaveLength(1); // таймер погашен — источник не пересоздался
+    expect(scheduler.entries.every((entry) => entry.cancelled)).toBe(true);
+  });
+
+  it('возврат видимости открывает свежий источник со сброшенным бэкоффом', () => {
+    const visibility = new FakeVisibility();
+    const { sources, scheduler } = createFixture({ visibility });
+    at(sources, 0).readyState = FakeEventSource.CLOSED;
+    at(sources, 0).emit('error'); // бэкофф 1с запланирован
+
+    visibility.hide();
+    visibility.show();
+
+    expect(sources).toHaveLength(2);
+    at(sources, 1).readyState = FakeEventSource.CLOSED;
+    at(sources, 1).emit('error');
+    // Бэкофф начался заново с 1с, а не продолжился с накопленной.
+    expect(at(scheduler.entries, scheduler.entries.length - 1).delayMs).toBe(1000);
+  });
+
+  it('повторное скрытие при закрытом источнике безопасно', () => {
+    const visibility = new FakeVisibility();
+    const { sources, dispose } = createFixture({ visibility });
+    visibility.hide();
+    visibility.hide();
+    expect(at(sources, 0).closed).toBe(true);
+    expect(() => visibility.show()).not.toThrow();
+    dispose();
+  });
+});
+
+describe('connectEventStream — dispose', () => {
   it('закрывает источник, глушит таймер и слушатели', () => {
     const source = new FakeEventSource();
     const scheduler = new FakeScheduler();
-    const frames: StreamFrame[] = [];
-    const dispose = connectNotificationStream({
+    const events: Array<{ name: string; data: string }> = [];
+    const dispose = connectEventStream({
       createSource: () => source,
-      handlers: { onFrame: (frame) => frames.push(frame) },
+      eventNames: TWO_NAMES,
+      handlers: { onEvent: (name, data) => events.push({ name, data }) },
       scheduleRetry: (fn, delayMs) => scheduler.schedule(fn, delayMs),
     });
     dispose();
     expect(source.closed).toBe(true);
-    source.emit('notification.created', frameData({ id: 'x', title: 't' }));
-    expect(frames).toHaveLength(0);
+    source.emit('stream.event-a', '{"x":1}');
+    expect(events).toHaveLength(0);
     source.readyState = FakeEventSource.CLOSED;
     source.emit('error');
     scheduler.runAll();
@@ -211,5 +300,17 @@ describe('connectNotificationStream — dispose', () => {
       dispose();
       dispose();
     }).not.toThrow();
+  });
+
+  it('отписывается от видимости', () => {
+    const visibility = new FakeVisibility();
+    const { dispose } = createFixture({ visibility });
+    expect(visibility.unsubscribed).toBe(0);
+    dispose();
+    expect(visibility.unsubscribed).toBe(1);
+    // После dispose смена видимости соединение не трогает.
+    visibility.hide();
+    visibility.show();
+    expect(visibility.unsubscribed).toBe(1);
   });
 });
