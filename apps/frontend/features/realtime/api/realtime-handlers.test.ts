@@ -13,9 +13,9 @@ import {
   taskKeys,
 } from '@/shared/api/query-keys';
 import { subscribeRealtimeEntity } from '@/shared/api/realtime-subscriptions';
-import { REALTIME_FAMILIES } from '../api/entity-invalidations';
-import type { RealtimeFrame } from '../api/realtime-frame';
-import { handleRealtimeFrame, realtimeHandlers, type StreamQueryClient } from './realtime-stream-provider';
+import { REALTIME_FAMILIES } from './entity-invalidations';
+import type { RealtimeFrame } from './realtime-frame';
+import { handleRealtimeFrame, realtimeHandlers, type StreamQueryClient } from './realtime-handlers';
 
 /** Фейк QueryClient структурного среза обработчика: фиксирует инвалидации —
  * без vi.fn, сигнатура совпадает с Pick<QueryClient…>. */
