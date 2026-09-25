@@ -33,13 +33,22 @@ export function StickyBottomBar({
   useTabBarSuppression();
 
   return (
-    <div className={cn('fixed inset-x-0 bottom-0 z-40 rounded-t-sheet bg-surface font-sans', className)}>
+    /* ПК ≥1024 (тикет #865): шит начинается на границе сайдбара
+       (--sidebar-inset из .screen-layout; внутри полноэкранной поверхности
+       переменная обнулена — её бокс уже правее сайдбара). */
+    <div
+      className={cn(
+        'fixed inset-x-0 bottom-0 z-40 rounded-t-sheet bg-surface font-sans desktop:left-[var(--sidebar-inset,0px)]',
+        className,
+      )}
+    >
       {dragHandle && <SheetDragHandle />}
-      {/* Колонка контента 560 по центру на любой ширине — как PageContent;
-          fullWidthContent снимает кап в планшетном диапазоне. */}
+      {/* Колонка контента 560 (max-w-column, тикет #865) по центру на любой
+          ширине — как PageContent; fullWidthContent снимает кап в планшетном
+          диапазоне. */}
       <div
         className={cn(
-          'mx-auto flex w-full max-w-[560px] flex-col gap-4 p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]',
+          'mx-auto flex w-full max-w-column flex-col gap-4 p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]',
           fullWidthContent && 'max-desktop:min-[561px]:max-w-none',
         )}
       >

@@ -137,7 +137,11 @@ export function OperationsGlobalScreen(): JSX.Element {
 
       <PageContent>
         <HubCollapseAnchor>
-          <div className="flex items-center justify-between pr-3.5">
+          {/* Строка заголовка h-8 (тикет #865): топ заголовка — ровно 24
+              от хедера (96), как у хабов без кнопки; кнопка 44 переполняет
+              строку симметрично — центрирована против линии заголовка
+              (макет 1733-27411), без +6px items-center от её высоты. */}
+          <div className="flex h-8 items-center justify-between pr-3.5">
             <HubTitle>Операции</HubTitle>
             {showAdd && addButton}
           </div>

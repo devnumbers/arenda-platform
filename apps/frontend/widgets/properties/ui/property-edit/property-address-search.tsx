@@ -64,10 +64,11 @@ export function PropertyAddressSearch({
       role="dialog"
       aria-modal="true"
       aria-label="Поиск адреса"
-      className="fixed inset-0 z-50 overflow-y-auto bg-white"
+      className="fullscreen-surface fixed inset-0 z-50 overflow-y-auto bg-white"
     >
       <TopNav
         variant="search"
+        overlay
         leading={<IconButton icon={<Cancel />} label="Закрыть" onClick={onClose} />}
       >
         <SearchField

@@ -10,7 +10,7 @@ import {
 
 describe('isAppRoute', () => {
   it('returns true for exact app routes', () => {
-    expect(isAppRoute('/dashboard')).toBe(true);
+    expect(isAppRoute('/properties')).toBe(true);
     expect(isAppRoute('/profile')).toBe(true);
     expect(isAppRoute('/login')).toBe(true);
   });
@@ -35,9 +35,9 @@ describe('isAppRoute', () => {
   });
 
   it('ignores query string and hash', () => {
-    expect(isAppRoute('/dashboard?tab=overview')).toBe(true);
+    expect(isAppRoute('/properties?tab=overview')).toBe(true);
     expect(isAppRoute('/profile#settings')).toBe(true);
-    expect(isAppRoute('/?returnTo=/dashboard')).toBe(false);
+    expect(isAppRoute('/?returnTo=/properties')).toBe(false);
   });
 
   it('returns false for the landing root and marketing routes (invariant)', () => {
@@ -49,8 +49,9 @@ describe('isAppRoute', () => {
   });
 
   it('returns false for prefixes that merely share a stem', () => {
-    // /dashboard must not match /dashboards or /dashboard-x
-    expect(isAppRoute('/dashboards')).toBe(false);
+    // /properties must not match /properties-extra or /property
+    expect(isAppRoute('/properties-extra')).toBe(false);
+    expect(isAppRoute('/property')).toBe(false);
     expect(isAppRoute('/profile-extra')).toBe(false);
     expect(isAppRoute('/loginpage')).toBe(false);
   });
@@ -75,6 +76,14 @@ describe('isAppRoute', () => {
     // модалка «Связаться с нами», старые ссылки уходят в сеть как 404.
     expect(isAppRoute('/support')).toBe(false);
     expect(isAppRoute('/support/faq')).toBe(false);
+  });
+
+  it('returns false for the removed dashboard route (тикет #865)', () => {
+    // Легаси /dashboard снесён (карта #862, тикет #865): дом кабинета —
+    // /properties, start_url манифеста переведён на него; старые ссылки
+    // уходят в сеть как обычный 404.
+    expect(isAppRoute('/dashboard')).toBe(false);
+    expect(isAppRoute('/dashboard/tab')).toBe(false);
   });
 });
 

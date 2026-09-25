@@ -256,9 +256,10 @@ export function CalendarDatePicker({
       role="dialog"
       aria-modal="true"
       aria-label={title}
-      className="fixed inset-0 z-50 flex flex-col bg-surface font-sans"
+      className="fullscreen-surface fixed inset-0 z-50 flex flex-col bg-surface font-sans"
     >
       <TopNav
+        overlay
         leading={<IconButton icon={<ArrowLeft />} label="Назад" onClick={onClose} />}
       >
         <TopNavTitle title={title} />
@@ -269,7 +270,7 @@ export function CalendarDatePicker({
           зафиксирован над экраном — шапка встаёт под ним, лента скроллится
           между шапкой и нижней панелью. */}
       <div className="shrink-0 tablet:mt-[72px]">
-        <div className="mx-auto w-full max-w-[560px]">
+        <div className="mx-auto w-full max-w-column">
           <div className="px-6 pt-6">
             <MonthJumpChip
               label={`${MONTH_LABELS[draftMonth.month0]} ${draftMonth.year}`}
@@ -298,7 +299,7 @@ export function CalendarDatePicker({
         onScroll={handleScroll}
         className="min-h-0 flex-1 overflow-y-auto"
       >
-        <div className="mx-auto w-full max-w-[560px] pb-[136px]">
+        <div className="mx-auto w-full max-w-column pb-[136px]">
           {months.map(({ year, month0 }, index) => {
             const days = daysInMonth(year, month0);
             const leadingBlanks = firstWeekdayOfMonth(year, month0);
@@ -589,9 +590,10 @@ export function CalendarRangePicker({
       role="dialog"
       aria-modal="true"
       aria-label={title}
-      className="fixed inset-0 z-50 flex flex-col bg-surface font-sans"
+      className="fullscreen-surface fixed inset-0 z-50 flex flex-col bg-surface font-sans"
     >
       <TopNav
+        overlay
         leading={<IconButton icon={<ArrowLeft />} label="Назад" onClick={onClose} />}
       >
         <TopNavTitle title={title} />
@@ -601,7 +603,7 @@ export function CalendarRangePicker({
           вживую), чип месяца для прыжка и строка дней недели над
           прокруткой; на десктопе TopNav зафиксирован над экраном. */}
       <div className="shrink-0 tablet:mt-[72px]">
-        <div className="mx-auto w-full max-w-[560px]">
+        <div className="mx-auto w-full max-w-column">
           {/* Поля границ «с …/по …» следуют за тапами вживую; без выбора
               (#670) — плейсхолдеры, пока диапазон не начат. */}
           <div aria-live="polite" className="grid grid-cols-2 gap-2 px-6 pt-6">
@@ -635,7 +637,7 @@ export function CalendarRangePicker({
       </div>
 
       <div ref={scrollRef} onScroll={handleScroll} className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-[560px] pb-[136px]">
+        <div className="mx-auto w-full max-w-column pb-[136px]">
           {months.map(({ year, month0 }, index) => {
             const future = calendarMonthIndex({ year, month0 }) > todayIdx;
             return (

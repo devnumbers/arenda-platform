@@ -354,9 +354,7 @@ export function PaymentFavoritesScreen(): JSX.Element {
       </PageContent>
 
       {editing && (
-        // Кабинетная зона: BottomNav не глушится подавлением канонного
-        // TabBar — панель поднимается над ним (как на выборщиках операций).
-        <StickyBottomBar className="max-[1199px]:bottom-[calc(5rem_+_env(safe-area-inset-bottom))]">
+        <StickyBottomBar>
           <Button
             data-testid="favorites-save"
             className="w-full"

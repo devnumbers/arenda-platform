@@ -74,6 +74,12 @@ export type TopNavProps = {
   /** Компакт-бар хаба: проявляется по прогрессу прокрутки хаб-шапки
    * (HubCollapseAnchor пишет `--hub-collapse`). */
   readonly collapse?: TopNavCollapse;
+  /** TopNav внутри полноэкранной поверхности (пикер, визард-оверлей, шит
+   * фильтров — класс .fullscreen-surface, тикет #865): поверхность на ПК
+   * сама живёт правее сайдбара, поэтому сдвиг под сайдбар не применяется,
+   * а «крылья» не рисуются вовсе — они дублировали бы крылья страницы,
+   * видимые рядом с поверхностью. */
+  readonly overlay?: boolean;
 };
 
 export function TopNav({
@@ -84,6 +90,7 @@ export function TopNav({
   variant = 'default',
   mobileWings = false,
   collapse,
+  overlay = false,
 }: TopNavProps): JSX.Element {
   const router = useRouter();
   const user = useTopNavUser();
@@ -93,10 +100,11 @@ export function TopNav({
   // Крылья: мобайл — только с mobileWings; планшет (561–1023) — без
   // leading-кнопки (иначе наложение на колонку 560, см. JSDoc), ПК — всегда.
   // Boolean — чтобы условный leading={cond && <Button/>} при cond=false
-  // считался «без leading».
+  // считался «без leading». Внутри полноэкранной поверхности (overlay)
+  // крыльев нет ни на одном ярусе — они дублировали бы крылья страницы.
   const hasLeading = Boolean(leading);
-  const wingsMobileClass = mobileWings ? 'flex' : 'hidden';
-  const wingsTierClass = hasLeading ? 'desktop:flex' : 'tablet:flex';
+  const wingsMobileClass = !overlay && mobileWings ? 'flex' : 'hidden';
+  const wingsTierClass = overlay ? 'hidden' : hasLeading ? 'desktop:flex' : 'tablet:flex';
 
   return (
     <header
@@ -104,6 +112,12 @@ export function TopNav({
       className={cn(
         'relative z-40 w-full bg-white font-sans pt-[env(safe-area-inset-top)]',
         'tablet:fixed tablet:inset-x-0 tablet:top-0',
+        // ПК (≥1024): центральная колонка центрируется правее сайдбара —
+        // паддинг двигает только поток (крылья абсолютны и остаются у краёв
+        // вьюпорта). Инсет ставит корень ScreenLayout (.screen-layout в
+        // globals.css); вне его (/ui-kit) переменной нет — сдвига нет.
+        // Поверхностям (overlay) сдвиг не нужен: их бокс уже правее сайдбара.
+        !overlay && 'desktop:pl-[var(--sidebar-inset,0px)]',
         className,
       )}
     >
@@ -128,7 +142,7 @@ export function TopNav({
         <UserButton name={displayName} onClick={() => router.push(ROUTES.profile)} />
       </div>
       {variant === 'search' ? (
-        <div className="relative mx-auto flex h-[72px] w-full tablet:max-w-[560px] items-center pl-3.5 pr-3.5">
+        <div className="relative mx-auto flex h-[72px] w-full tablet:max-w-column items-center pl-3.5 pr-3.5">
           {leading !== undefined && <div className="flex shrink-0 items-center">{leading}</div>}
           <div className="ml-1 flex h-full min-w-0 flex-1 items-center">{children}</div>
         </div>
@@ -136,7 +150,7 @@ export function TopNav({
         /* Слоты — абсолютные слои по краям (Figma 1425:55798): центр
          * центрируется относительно всей полосы и не смещается от
          * наличия/отсутствия кнопок (правый слот всегда «зарезервирован»). */
-        <div className="relative mx-auto h-[72px] w-full tablet:max-w-[560px]">
+        <div className="relative mx-auto h-[72px] w-full tablet:max-w-column">
           {leading !== undefined && (
             <div className="absolute left-0 top-0 flex h-full items-center pl-3.5">{leading}</div>
           )}

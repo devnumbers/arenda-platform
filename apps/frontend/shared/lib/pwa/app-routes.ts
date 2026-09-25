@@ -25,9 +25,6 @@ export const APP_ROUTE_PREFIXES: ReadonlyArray<string> = [
     '/contacts',
     '/payments',
     '/participants',
-    // /dashboard — постоянный редирект на /properties (PWA start_url и старые
-    // ссылки); роут живой, поэтому остаётся в списке сервис-воркера.
-    '/dashboard',
 ];
 
 /** The offline fallback page precached by the service worker. */

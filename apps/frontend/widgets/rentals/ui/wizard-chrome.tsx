@@ -233,9 +233,10 @@ export function PaymentDayPicker({
       role="dialog"
       aria-modal="true"
       aria-label="Выбор дня оплаты"
-      className="fixed inset-0 z-50 flex flex-col bg-surface"
+      className="fullscreen-surface fixed inset-0 z-50 flex flex-col bg-surface"
     >
       <TopNav
+        overlay
         leading={
           <IconButton icon={<ArrowLeft />} label="Назад" onClick={onClose} />
         }

@@ -61,7 +61,7 @@ describe('summarizeCspReports', () => {
   it('maps a report-uri body to one queryable record', () => {
     const records = summarizeCspReports({
       'csp-report': {
-        'document-uri': 'https://dev.rentlee.ru/dashboard',
+        'document-uri': 'https://dev.rentlee.ru/properties',
         'effective-directive': 'style-src-attr',
         'violated-directive': 'style-src',
         'blocked-uri': 'inline',
@@ -76,7 +76,7 @@ describe('summarizeCspReports', () => {
     expect(records).toStrictEqual([
       {
         msg: 'csp_report',
-        documentUri: 'https://dev.rentlee.ru/dashboard',
+        documentUri: 'https://dev.rentlee.ru/properties',
         directive: 'style-src-attr',
         blockedUri: 'inline',
         sample: 'color:red',

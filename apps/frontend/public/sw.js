@@ -79,8 +79,8 @@ function readStandaloneFlag() {
 }
 
 // App route prefixes — keep in sync with shared/lib/pwa/app-routes.ts.
-// /dashboard остаётся: это постоянный редирект на /properties, зашитый в
-// start_url манифеста PWA.
+// Легаси /dashboard снесён (карта #862, тикет #865): start_url манифеста
+// переведён на /properties, старые ссылки уходят в сеть как 404.
 const APP_ROUTE_PREFIXES = [
   '/login',
   '/properties',
@@ -92,7 +92,6 @@ const APP_ROUTE_PREFIXES = [
   '/contacts',
   '/payments',
   '/participants',
-  '/dashboard',
 ];
 
 function isAppPath(pathname) {

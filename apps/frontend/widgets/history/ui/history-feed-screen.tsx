@@ -460,12 +460,16 @@ export function HistoryFeedScreen({
       </PageContent>
 
       {/* Шит «Настройки» (#711): primary по контенту (не на всю ширину,
-        * макет 2184-94734), по центру; открывает шит фильтров поверх
-        * ленты. */}
-      <div className="fixed inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom))] z-40 flex justify-center">
-        <Button type="button" onClick={() => setFiltersOpen(true)}>
-          Настройки
-        </Button>
+        * макет 2184-94734), по центру КОЛОНКИ (max-w-column — тикет #865:
+        * на ПК строка сдвигается за сайдбар --sidebar-inset'ом и не
+        * перекрывает его нижний угол прозрачной полосой); открывает шит
+        * фильтров поверх ленты. */}
+      <div className="fixed inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom))] z-40 flex justify-center desktop:left-[var(--sidebar-inset,0px)]">
+        <div className="mx-auto flex w-full max-w-column justify-center">
+          <Button type="button" onClick={() => setFiltersOpen(true)}>
+            Настройки
+          </Button>
+        </div>
       </div>
 
       {filtersOpen && (

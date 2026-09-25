@@ -95,7 +95,7 @@ export function TariffChangeSuccess(): JSX.Element {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col bg-surface"
+      className="fullscreen-surface fixed inset-0 z-50 flex flex-col bg-surface"
       role="dialog"
       aria-label={state.title}
     >
