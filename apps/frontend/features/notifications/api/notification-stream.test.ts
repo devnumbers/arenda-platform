@@ -1,74 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { connectNotificationStream, type EventSourceLike } from './notification-stream';
-import type { EventStreamListener } from '@/shared/api/sse-client';
+import { at, FakeEventSource, FakeScheduler } from '@/shared/api/sse-test-fakes';
+import { connectNotificationStream } from './notification-stream';
 import type { StreamFrame } from './stream-frame';
-
-/** Минимальный фейк EventSource: слушатели по именам, ручной контроль
- * readyState и диспетчеризации. Числа readyState — из спецификации
- * EventSource: CONNECTING=0, OPEN=1, CLOSED=2. */
-class FakeEventSource implements EventSourceLike {
-  static readonly CONNECTING = 0;
-  static readonly OPEN = 1;
-  static readonly CLOSED = 2;
-
-  readyState = FakeEventSource.CONNECTING;
-  closed = false;
-  readonly listeners = new Map<string, Set<EventStreamListener>>();
-
-  addEventListener(type: string, listener: EventStreamListener): void {
-    let set = this.listeners.get(type);
-    if (!set) {
-      set = new Set();
-      this.listeners.set(type, set);
-    }
-    set.add(listener);
-  }
-
-  removeEventListener(type: string, listener: EventStreamListener): void {
-    this.listeners.get(type)?.delete(listener);
-  }
-
-  close(): void {
-    this.closed = true;
-    this.readyState = FakeEventSource.CLOSED;
-  }
-
-  emit(type: string, data?: string): void {
-    for (const listener of [...(this.listeners.get(type) ?? [])]) {
-      listener({ data });
-    }
-  }
-}
-
-/** Ручной планировщик: копит (fn, delay), тест дергает сам. */
-class FakeScheduler {
-  readonly entries: Array<{ fn: () => void; delayMs: number; cancelled: boolean }> = [];
-
-  schedule(fn: () => void, delayMs: number): () => void {
-    const entry = { fn, delayMs, cancelled: false };
-    this.entries.push(entry);
-    return () => {
-      entry.cancelled = true;
-    };
-  }
-
-  runAll(): void {
-    for (const entry of [...this.entries]) {
-      if (!entry.cancelled) entry.fn();
-    }
-  }
-}
 
 function frameData(payload: unknown): string {
   return JSON.stringify({ v: 1, occurredAt: '2026-09-19T10:40:00Z', payload });
-}
-
-/** Доступ по индексу без non-null assertions (eslint-канон): в тестах
- * отсутствие элемента — ошибка сценария, не ветка логики. */
-function at<T>(items: ReadonlyArray<T>, index: number): T {
-  const item = items[index];
-  if (item === undefined) throw new Error(`нет элемента #${index}`);
-  return item;
 }
 
 function createFixture() {
