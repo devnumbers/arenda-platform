@@ -27,6 +27,7 @@ import {
   SubScreenShell,
 } from '@/shared/ui/design';
 import { resolveParticipantMemberRow } from '../lib/participant-member-lookup';
+import { resolvePropertyParticipantsError } from '../lib/property-participants-error';
 import {
   ObjectAvatarGlyph,
   PARTICIPANT_ROW_BASE_CLASS,
@@ -158,13 +159,19 @@ export function ParticipantRightsScreen({
         />
       );
   } else if (membersQuery.isError) {
-    content = (
-      <ErrorCard
-        title="Не удалось загрузить права участника"
-        onRetry={() => void membersQuery.refetch()}
-        className="mt-6"
-      />
-    );
+    content =
+      // Свой доступ к объекту отозван/приостановлен в открытой сессии
+      // (#719): список отвечает 404 — тот же not-found канон, что у
+      // агрегата выше; иначе generic-ошибка с бесполезным «Повторить».
+      resolvePropertyParticipantsError(membersQuery.error) === 'not_found' ? (
+        <ParticipantNotFound />
+      ) : (
+        <ErrorCard
+          title="Не удалось загрузить права участника"
+          onRetry={() => void membersQuery.refetch()}
+          className="mt-6"
+        />
+      );
   } else if (member === undefined) {
     // Список успешен, а строки нет — нога уже отозвана (контракт
     // participant-member-lookup: «строки нет — доступ уже снят»); честный

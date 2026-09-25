@@ -29,7 +29,12 @@ export const ENTITY_INVALIDATIONS: Record<RealtimeEntity, ReadonlyArray<readonly
   contacts: [contactKeys.all],
   rentals: [rentalKeys.all],
   property: [propertyKeys.all],
-  access: [accessKeys.all, participantsKeys.all],
+  // #719: access-кадры перечитывают и семейства объекта. Получатель
+  // гранта/восстановления активен на момент публикации и кадр получает,
+  // но его хаб-список объектов и пилюля роли на детали живут в
+  // propertyKeys — без этой строки новый объект появился бы в книге
+  // только после перезагрузки (таблица ADR 0062 §2).
+  access: [accessKeys.all, participantsKeys.all, propertyKeys.all],
   history: [historyKeys.all],
 };
 

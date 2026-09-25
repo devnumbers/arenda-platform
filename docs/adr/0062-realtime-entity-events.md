@@ -68,8 +68,15 @@ across the same pipelines.
    | `contacts` | contactKeys |
    | `rentals` | rentalKeys |
    | `property` | propertyKeys |
-   | `access` | accessKeys, participantsKeys |
+   | `access` | accessKeys, participantsKeys, propertyKeys |
    | `history` | historyKeys |
+
+   The `access` row covers the property families as well (consumer ticket
+   #719): a grant, a resume or a role change is published as an `access`
+   frame, and the recipient — an active member at publication, hence in the
+   audience — reads the change on surfaces living in `propertyKeys` (their
+   properties hub list, the role pill on the property detail). Without the
+   coverage the new object would appear in their book only after a reload.
 
    The provider may scope invalidation by the frame's `propertyId` or
    invalidate whole families; over-invalidation is the accepted cost of

@@ -26,7 +26,14 @@ describe('ENTITY_INVALIDATIONS — словарь → семейства query-k
     expect(ENTITY_INVALIDATIONS.contacts).toStrictEqual([contactKeys.all]);
     expect(ENTITY_INVALIDATIONS.rentals).toStrictEqual([rentalKeys.all]);
     expect(ENTITY_INVALIDATIONS.property).toStrictEqual([propertyKeys.all]);
-    expect(ENTITY_INVALIDATIONS.access).toStrictEqual([accessKeys.all, participantsKeys.all]);
+    // #719: access-кадры перечитывают и семейства объекта — грант/восстановление
+    // меняют список объектов получателя, смена роли — пилюлю роли на детали;
+    // получатель таких переходов активен на момент публикации и кадр получает.
+    expect(ENTITY_INVALIDATIONS.access).toStrictEqual([
+      accessKeys.all,
+      participantsKeys.all,
+      propertyKeys.all,
+    ]);
     expect(ENTITY_INVALIDATIONS.history).toStrictEqual([historyKeys.all]);
   });
 
@@ -35,6 +42,9 @@ describe('ENTITY_INVALIDATIONS — словарь → семейства query-k
   });
 
   it('REALTIME_FAMILIES — объединение всех семейств для перечитывания на открытии', () => {
+    // propertyKeys входит дважды — из строки property и из строки access
+    // (#719): объединение выводится из маппинга как есть, повторная
+    // инвалидация того же корня безвредна.
     expect(REALTIME_FAMILIES).toStrictEqual([
       paymentKeys.all,
       globalPaymentKeys.all,
@@ -46,6 +56,7 @@ describe('ENTITY_INVALIDATIONS — словарь → семейства query-k
       propertyKeys.all,
       accessKeys.all,
       participantsKeys.all,
+      propertyKeys.all,
       historyKeys.all,
     ]);
   });

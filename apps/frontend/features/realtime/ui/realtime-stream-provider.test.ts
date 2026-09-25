@@ -47,10 +47,14 @@ describe('handleRealtimeFrame — грубый кадр → инвалидаци
     expect(qc.invalidated).toStrictEqual([paymentOperationKeys.all, globalOperationKeys.all]);
   });
 
-  it('access инвалидирует доступ к объекту и хаб участников', () => {
+  it('access инвалидирует доступ к объекту, хаб участников и семейства объекта (#719)', () => {
     const qc = fakeQueryClient();
     handleRealtimeFrame(frame('access'), qc);
-    expect(qc.invalidated).toStrictEqual([accessKeys.all, participantsKeys.all]);
+    expect(qc.invalidated).toStrictEqual([
+      accessKeys.all,
+      participantsKeys.all,
+      propertyKeys.all,
+    ]);
   });
 
   it('односемейные сущности инвалидируют свой корень; propertyId кадра не сужает', () => {
