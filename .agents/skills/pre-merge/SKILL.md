@@ -47,8 +47,9 @@ The full suite runs via `world.run` through the `test-log` make target — a rea
 ## During the run (main agent duties)
 
 - **Do not poll.** The completion notification arrives on its own; `TaskOutput` only when the owner asks you to wait.
-- **Answer escalations.** Subagents raise blocking questions (`dwfq-…`): ambiguous conflict calls, behavior-change sanctions, unclear findings. Put each to the owner with `AskUserQuestion` — one question, options with a recommendation, grilling discipline — then answer via `ResolveWorkflowQuestion`. Nothing answers on your behalf; a dropped question parks the subagent forever.
+- **Answer escalations.** Subagents raise blocking questions (`dwfq-…`): ambiguous conflict calls, behavior-change sanctions, unclear findings. Escalations of the same round go to the owner **batched in one `AskUserQuestion`** (several questions, each with options and a recommendation). The moment an answer lands, send its `ResolveWorkflowQuestion` **before touching the next escalation** — an answer you have not resolved is not delivered, and the subagent keeps waiting. Before handling a new escalation, glance at `GetWorkflowRun` for pending «questions awaiting» and clear them first. Nothing answers on your behalf; a dropped question parks the subagent forever.
 - **Repair, don't restart.** A run heading the wrong way is fixed by editing the run's script file (the notification and `GetWorkflowRun` name it) and calling `AmendWorkflow` with that `path` — never by starting a new `CreateWorkflow`, never by `TaskStop` first. errored → fix the script, resubmit via `AmendWorkflow`. stopped → resume only on the owner's word (`ResumeWorkflowRun`); a `user` stop means leave it alone.
+- **Ceiling stop → amend, not a fresh gate.** A run stopped by the `SWEEP_ROUNDS` ceiling with live blockers ends cleanly and needs no rerun from zero: on the owner's word to continue, bump `SWEEP_ROUNDS` in the draft's CONFIG and `AmendWorkflow` the **completed** run — its finished steps (integration, baseline, rounds 1–N) replay from the journal for free, only the new rounds are paid. A fresh `CreateWorkflow` re-pays the whole pipeline (the history night of 25.09: +2h45m and ~190M tokens for one extra review round).
 
 ## After the run
 
@@ -63,6 +64,7 @@ The full suite runs via `world.run` through the `test-log` make target — a rea
 - **Comments in fixed code** are Russian, written for the next reader, and never mention the review, the agents, or the run.
 - **The command set is fixed literals**: git, make, node, npm, gh — no push, no destructive docker commands anywhere in the script.
 - `make test` does not include e2e. The honest exit code is the one `world.run` returns — never a piped `echo $?` after it.
+- **An owner's answer without its `ResolveWorkflowQuestion` is a lost answer.** During the history gate (24.09) the run stood parked for 1h45m because the next escalation's notification arrived mid-handling and swallowed the previous resolve. The sequence is always: owner answers → resolve immediately → only then the next escalation.
 
 ## Files
 

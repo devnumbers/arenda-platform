@@ -52,3 +52,5 @@ Before implementing or reviewing frontend code, read `CODING_STANDARDS.md` (same
 ## Quality Gates
 
 Before claiming frontend work complete: `npm run lint`, `npm run build` (from `apps/frontend`), and `make frontend-test`. Tickets touching screens, forms, flows, or widgets also gate on `/ui-walkthrough` with **P0 + P1 green** before the commit (P2/P3 findings report as Issues without blocking).
+
+E2E seeds and fixtures anchor dates to the start of the **UTC** day — `todayAt` in `e2e/fixtures.ts` is the canon, never a bare local `new Date()`. The owner's calendar is MSK, the Playwright browser is UTC; local wall-clock dates have shipped three TZ-flake families (#796, #805, the midnight-window seed of #704/#838) — each paid for with a red suite and a seed fix.
