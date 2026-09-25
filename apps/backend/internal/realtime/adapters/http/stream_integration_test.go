@@ -17,7 +17,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -26,6 +25,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/testdb"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/sse"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/sse/ssetest"
 	realtimepg "github.com/nambers/arenda-planform/apps/backend/internal/realtime/adapters/postgres"
 	realtimestream "github.com/nambers/arenda-planform/apps/backend/internal/realtime/adapters/stream"
 	"github.com/nambers/arenda-planform/apps/backend/internal/realtime/domain"
@@ -71,29 +71,9 @@ func openRealtimeStream(t *testing.T, hub *sse.Hub, user uuid.UUID) *http.Respon
 		}
 	})
 
-	handshake := readUntil(t, resp.Body, "event: connected")
+	handshake := ssetest.ReadUntilContains(t, resp.Body, "event: connected")
 	require.Contains(t, handshake, "event: connected")
 	return resp
-}
-
-// readUntil reads the stream until the buffer contains the marker and returns
-// everything read so far.
-func readUntil(t *testing.T, body io.Reader, marker string) string {
-	t.Helper()
-	var acc bytes.Buffer
-	buf := make([]byte, 4096)
-	for !strings.Contains(acc.String(), marker) {
-		n, err := body.Read(buf)
-		if n > 0 {
-			if _, werr := acc.Write(buf[:n]); werr != nil {
-				t.Fatalf("buffer write: %v", werr)
-			}
-		}
-		if err != nil {
-			t.Fatalf("stream ended before %q: %v (read so far: %q)", marker, err, acc.String())
-		}
-	}
-	return acc.String()
 }
 
 // drainFor reads whatever arrives within the window and returns the bytes —
@@ -177,10 +157,10 @@ func TestRealtimeStreamAudience(t *testing.T) {
 	// stranger does not.
 	carrier.EntityChanged(ctx, member, domain.On(domain.EntityPayments, propID))
 
-	ownerFrame := readUntil(t, ownerResp.Body, "event: entity.changed")
+	ownerFrame := ssetest.ReadUntilContains(t, ownerResp.Body, "event: entity.changed")
 	assert.Contains(t, ownerFrame, `"propertyId":"`+propID.String()+`"`)
 	assert.Contains(t, ownerFrame, `"entity":"payments"`)
-	memberFrame := readUntil(t, memberResp.Body, "event: entity.changed")
+	memberFrame := ssetest.ReadUntilContains(t, memberResp.Body, "event: entity.changed")
 	assert.Contains(t, memberFrame, propID.String())
 	outsiderDrain := drainFor(t, outsiderResp.Body, 200*time.Millisecond)
 	assert.NotContains(t, outsiderDrain, "event: entity.changed", "a stranger gets no frames")
@@ -192,7 +172,7 @@ func TestRealtimeStreamAudience(t *testing.T) {
 	require.NoError(t, err)
 	carrier.EntityChanged(ctx, owner, domain.On(domain.EntityOperations, propID))
 
-	ownerFrame2 := readUntil(t, ownerResp.Body, "event: entity.changed")
+	ownerFrame2 := ssetest.ReadUntilContains(t, ownerResp.Body, "event: entity.changed")
 	assert.Contains(t, ownerFrame2, "operations")
 
 	revokedDrain := drainFor(t, memberResp.Body, 200*time.Millisecond)
@@ -255,7 +235,7 @@ func TestRealtimeStreamArchivedPropertyAudience(t *testing.T) {
 	// pair stands in for it — the audience query is entity-agnostic.
 	carrier.EntityChanged(ctx, member, domain.On(domain.EntityPayments, propID))
 
-	ownerFrame := readUntil(t, ownerResp.Body, "event: entity.changed")
+	ownerFrame := ssetest.ReadUntilContains(t, ownerResp.Body, "event: entity.changed")
 	assert.Contains(t, ownerFrame, `"propertyId":"`+propID.String()+`"`,
 		"the owner reads the archive — the frame rides")
 	memberDrain := drainFor(t, memberResp.Body, 200*time.Millisecond)
