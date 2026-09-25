@@ -201,3 +201,66 @@ func TestRealtimeStreamAudience(t *testing.T) {
 	assert.Contains(t, revokedDrain, ": ping",
 		"the revoked member's connection stays alive — the heartbeat flows")
 }
+
+// The archive's invisibility canon (#163, the member leg of
+// actor_can_read_history in 000137) covers the realtime frames too: an
+// active member of a just-archived object is no reader — the frame dies for
+// them while the owner keeps reading it (the owner's leg is unconditional).
+// No connection management (ADR 0062 §4): the member's stream itself stays
+// alive, only the frames stop.
+func TestRealtimeStreamArchivedPropertyAudience(t *testing.T) {
+	t.Parallel()
+
+	pool := testdb.Setup(t)
+	ctx := context.Background()
+	logger := slog.New(slog.DiscardHandler)
+
+	owner := uuid.Must(uuid.NewV7())
+	member := uuid.Must(uuid.NewV7())
+	propID := uuid.Must(uuid.NewV7())
+
+	for _, u := range []uuid.UUID{owner, member} {
+		phone := fmt.Sprintf("+7999%010d", time.Now().UnixNano()%10000000000)
+		_, err := pool.Exec(ctx,
+			`INSERT INTO users (id, phone, role, timezone) VALUES ($1, $2, $3, 'Europe/Moscow')`,
+			u, phone, actor.RoleOwner)
+		require.NoError(t, err)
+	}
+	_, err := pool.Exec(ctx,
+		`INSERT INTO properties (id, owner_id, name, type, address, status)
+		 VALUES ($1, $2, 'Квартира', 'apartment', 'Москва, Тверская 1', 'active')`,
+		propID, owner)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx,
+		`INSERT INTO property_members (id, property_id, user_id, role, granted_by, status)
+		 VALUES ($1, $2, $3, 'viewer', $4, 'active')`,
+		uuid.Must(uuid.NewV7()), propID, member, owner)
+	require.NoError(t, err)
+
+	// The archive lands after the membership is in place — the audience
+	// resolves at the moment of publication, so the archive status is what
+	// must cut the member off.
+	_, err = pool.Exec(ctx,
+		`UPDATE properties SET status = 'archived' WHERE id = $1`, propID)
+	require.NoError(t, err)
+
+	hub := sse.NewHub(nil)
+	audience := realtimepg.NewAudienceStore(database.NewInstrumentedPool(pool, logger))
+	carrier := realtimestream.NewPublisher(hub, audience, fixedRealtimeClock{}, logger)
+
+	ownerResp := openRealtimeStream(t, hub, owner)   //nolint:bodyclose // the helper registers the body close in t.Cleanup
+	memberResp := openRealtimeStream(t, hub, member) //nolint:bodyclose // the helper registers the body close in t.Cleanup
+
+	// ArchiveProperty publishes its property frame post-commit; the payments
+	// pair stands in for it — the audience query is entity-agnostic.
+	carrier.EntityChanged(ctx, member, domain.On(domain.EntityPayments, propID))
+
+	ownerFrame := readUntil(t, ownerResp.Body, "event: entity.changed")
+	assert.Contains(t, ownerFrame, `"propertyId":"`+propID.String()+`"`,
+		"the owner reads the archive — the frame rides")
+	memberDrain := drainFor(t, memberResp.Body, 200*time.Millisecond)
+	assert.NotContains(t, memberDrain, "event: entity.changed",
+		"the archived object's active member gets no frames")
+	assert.Contains(t, memberDrain, ": ping",
+		"the member's connection stays alive — the heartbeat flows")
+}
