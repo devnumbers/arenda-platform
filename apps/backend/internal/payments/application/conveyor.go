@@ -87,7 +87,8 @@ type mutationGates struct {
 // ADR 0049 §3), the owner's today, the load of the target rule (skipped for a
 // zero paymentID), the change step, its audit entry and its action journal
 // row (ADR 0061) in the same transaction, and the materialization tick when
-// the step asked for it. After commit it returns the step's response,
+// the step asked for it. After commit it dispatches the step's realtime
+// frames (ADR 0062 §3, best-effort) and returns the step's response;
 // post-commit-re-read applied.
 func runMutation[T any](
 	g mutationGates,

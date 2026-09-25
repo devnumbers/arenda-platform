@@ -91,7 +91,8 @@ type mutationGates struct {
 // the load of the target rental (skipped for a zero rentalID), the change
 // step, its audit entry and its action journal row (ADR 0061) in the same
 // transaction, and the payments tick when the step changed the payment.
-// After commit it returns the changed rental's id for the re-read.
+// After commit it dispatches the step's realtime frames (ADR 0062 §3,
+// best-effort) and returns the changed rental's id for the re-read.
 func runRentalMutation(
 	g mutationGates,
 	ctx context.Context, actor, propertyID, rentalID uuid.UUID,
