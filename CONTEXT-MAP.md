@@ -17,6 +17,7 @@ DDD modular monolith (Go, `apps/backend/internal/`). Domain glossary is split by
 - [Access](./apps/backend/internal/access/CONTEXT.md) — property sharing, member roles, derived object access.
 - [Audit](./apps/backend/internal/audit/CONTEXT.md) — audit log of user/admin/system actions (append-only; records about the removed leases/operations domain are kept as history).
 - [История](./apps/backend/internal/history/CONTEXT.md) — the product «История действий» feed over properties: manual user actions with human-readable label snapshots, server-built row text and hybrid search (ADR 0061).
+- [Realtime](./apps/backend/internal/realtime/CONTEXT.md) — the live invalidation stream for open clients: coarse `entity.changed` frames over the shared SSE transport (ADR 0060), the entity dictionary and the post-commit publication port (ADR 0062).
 - [Popups](./apps/backend/internal/popups/CONTEXT.md) — onboarding popups, popup views.
 
 ## Relationships
@@ -36,6 +37,8 @@ DDD modular monolith (Go, `apps/backend/internal/`). Domain glossary is split by
 - **All → Audit**: Every context records user/admin/system actions to the audit log.
 - **Properties, Rentals, Payments, Tasks, Contacts, Access → История**: manual user actions in these contexts write a history entry in the action's transaction (ADR 0061); system and auto-actions are not written in MVP. `property_id` FK CASCADE: deleting a property deletes its history.
 - **Access → История**: reading follows derived object access (ADR 0028) — a property's history is visible to its owner and members (viewer included); suspended access sees nothing.
+- **Payments, Tasks, Contacts, Rentals, Properties, Access, История → Realtime**: mutation seams capture the (entity, property) pairs a transaction changed and publish them strictly post-commit through the realtime publication port (ADR 0062); delivery rides the shared SSE transport (ADR 0060).
+- **Access → Realtime**: the audience of a frame is the property's derived read access at publication time (ADR 0028) — revoked and suspended members stop receiving frames without connection management; the actor is included (their other tabs need the invalidation).
 
 ## Shared kernel
 
