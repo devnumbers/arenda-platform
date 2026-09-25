@@ -37,6 +37,9 @@ import (
 // home).
 const contactFirstName = "Пётр"
 
+// contactLastName is the shared surname literal of the fixtures.
+const contactLastName = "Сантехников"
+
 // plumberRole is the shared role literal of the fixtures.
 const plumberRole = "сантехник"
 
@@ -282,7 +285,7 @@ func TestContactsIntegration_SearchAndScopes(t *testing.T) {
 	h.property = h.seedProperty(h.owner)
 
 	plumber := h.create(contactsapp.CreateContactCommand{
-		FirstName: "Иван", LastName: "Сантехников", Role: plumberRole, Phone: "+79160000001",
+		FirstName: "Иван", LastName: contactLastName, Role: plumberRole, Phone: "+79160000001",
 	})
 	cleaner := h.create(contactsapp.CreateContactCommand{
 		FirstName: "Мария", Role: "уборщица", Email: "maria@example.ru",

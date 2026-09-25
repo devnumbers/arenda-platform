@@ -24,9 +24,9 @@ func TestCreateBoundContactPublishesContactsAndHistoryFrames(t *testing.T) {
 	h.property = h.seedProperty(h.owner)
 
 	cmd := contactsapp.CreateContactCommand{
-		FirstName: "Пётр",
-		LastName:  "Сантехников",
-		Role:      "plumber",
+		FirstName: contactFirstName,
+		LastName:  contactLastName,
+		Role:      plumberRole,
 		Phone:     "89161234567",
 	}
 	cmd.PropertyID = &h.property
@@ -52,7 +52,7 @@ func TestCreateUnboundContactPublishesOwnerBookFrame(t *testing.T) {
 	cmd := contactsapp.CreateContactCommand{
 		FirstName: "Личная",
 		LastName:  "Запись",
-		Role:      "plumber",
+		Role:      plumberRole,
 		Phone:     "89161234568",
 	}
 	_, err := h.svc.CreateContact(h.t.Context(), h.owner, cmd)
@@ -60,4 +60,74 @@ func TestCreateUnboundContactPublishesOwnerBookFrame(t *testing.T) {
 
 	require.Len(t, h.realtime.Publications, 1)
 	assert.Equal(t, []string{"contacts:"}, h.realtime.Pairs())
+}
+
+// TestMoveContactPublishesSourceAndDestinationFrames pins the move's both
+// ends: the origin object's card grid loses the row and the destination's
+// gains it, so one dispatch carries both contacts pairs; the journal row
+// anchors the history pair on the destination, where the move journals
+// (ADR 0061 §3) (карта #714, #716).
+func TestMoveContactPublishesSourceAndDestinationFrames(t *testing.T) {
+	t.Parallel()
+
+	h := newContactsHarness(t)
+	h.owner = h.seedUser()
+	h.property = h.seedProperty(h.owner)
+	destination := h.seedPropertyNamed(h.owner, "Дача")
+
+	cmd := contactsapp.CreateContactCommand{
+		FirstName: contactFirstName,
+		LastName:  contactLastName,
+		Role:      plumberRole,
+		Phone:     "89161234567",
+	}
+	cmd.PropertyID = &h.property
+	card, err := h.svc.CreateContact(h.t.Context(), h.owner, cmd)
+	require.NoError(t, err)
+	h.realtime.Publications = nil
+
+	_, err = h.svc.UpdateContact(h.t.Context(), h.owner, card.ID, contactsapp.UpdateContactCommand{
+		PropertyID: &contactsapp.PropertyIDUpdate{Value: &destination},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t,
+		[]string{
+			"contacts:" + h.property.String(),
+			"contacts:" + destination.String(),
+			"history:" + destination.String(),
+		},
+		h.realtime.Pairs())
+}
+
+// TestUnbindContactPublishesSourceAndOwnerBookFrames pins the unbind: the
+// origin object's pair for the leaving row plus the owner-book pair of the
+// now-unbound card; no journal row is written for an unbound card, so no
+// history pair rides along (карта #714, #716).
+func TestUnbindContactPublishesSourceAndOwnerBookFrames(t *testing.T) {
+	t.Parallel()
+
+	h := newContactsHarness(t)
+	h.owner = h.seedUser()
+	h.property = h.seedProperty(h.owner)
+
+	cmd := contactsapp.CreateContactCommand{
+		FirstName: contactFirstName,
+		LastName:  contactLastName,
+		Role:      plumberRole,
+		Phone:     "89161234569",
+	}
+	cmd.PropertyID = &h.property
+	card, err := h.svc.CreateContact(h.t.Context(), h.owner, cmd)
+	require.NoError(t, err)
+	h.realtime.Publications = nil
+
+	_, err = h.svc.UpdateContact(h.t.Context(), h.owner, card.ID, contactsapp.UpdateContactCommand{
+		PropertyID: &contactsapp.PropertyIDUpdate{Value: nil},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t,
+		[]string{"contacts:" + h.property.String(), "contacts:"},
+		h.realtime.Pairs())
 }

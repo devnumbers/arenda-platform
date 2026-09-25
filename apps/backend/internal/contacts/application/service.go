@@ -101,6 +101,34 @@ func (s *ContactService) publishChanged(ctx context.Context, actor uuid.UUID, pr
 	realtimeapp.Dispatch(ctx, s.realtime, actor, []realtimedom.Change{pair}, anchors...)
 }
 
+// publishMoved hands the committed card move's frames to the realtime
+// carrier (карта #714, #716): a move dirties both ends — the origin pair for
+// the leaving row, the destination pair (or the owner-book pair when the
+// card unbinds) for the arriving one. One dispatch carries both; the
+// carrier's per-call dedup collapses a same-object rewrite into one frame.
+// The journal row anchors the destination (ADR 0061 §3), so the history pair
+// rides there.
+func (s *ContactService) publishMoved(
+	ctx context.Context, actor uuid.UUID, source, destination *uuid.UUID, journaled bool,
+) {
+	pairs := make([]realtimedom.Change, 0, 2)
+	var anchors []uuid.UUID
+	if source != nil {
+		pairs = append(pairs, realtimedom.On(realtimedom.EntityContacts, *source))
+	}
+	if destination != nil {
+		pairs = append(pairs, realtimedom.On(realtimedom.EntityContacts, *destination))
+		if journaled {
+			anchors = append(anchors, *destination)
+		}
+	} else {
+		// The card ended unbound: the owner's book view lost/holds the row —
+		// its null-property pair marks the change when no object pair exists.
+		pairs = append(pairs, realtimedom.InOwnerBook(realtimedom.EntityContacts))
+	}
+	realtimeapp.Dispatch(ctx, s.realtime, actor, pairs, anchors...)
+}
+
 // NewContactService builds the contact use case service over the shared
 // transactional store factory and the authorization policy. A nil policy or
 // property store is a wiring mistake: every property-scoped use case fails
@@ -299,6 +327,11 @@ func (s *ContactService) UpdateContact(
 	if len(fields) > 0 {
 		auditCtx["fields"] = fields
 	}
+	// The source binding is captured before the rebind: a move dirties both
+	// objects — the origin's card grid loses the row, the destination's gains
+	// it — and one post-commit dispatch carries both ends (карта #714, #716;
+	// ADR 0062 §3).
+	source := contact.PropertyID
 	var moved bool
 	if cmd.PropertyID != nil {
 		target, didMove, err := s.rebindContact(ctx, actor, contact, *cmd.PropertyID, auditCtx)
@@ -350,7 +383,7 @@ func (s *ContactService) UpdateContact(
 	if err != nil {
 		return domain.Contact{}, err
 	}
-	s.publishChanged(ctx, actor, stored.PropertyID, journaled)
+	s.publishMoved(ctx, actor, source, stored.PropertyID, journaled)
 	return stored, nil
 }
 
