@@ -316,7 +316,10 @@ func (s *PaymentService) DeletePayment(
 				AuditEntityID: &rule.ID,
 				AuditCtx:      map[string]any{"keep_overdue": keepOverdue},
 				History:       new(historydomain.PaymentDeleted(rule.ID, rule.Title)),
-				Changed:       []realtimedom.Change{realtimedom.On(realtimedom.EntityPayments, propertyID)},
+				Changed: []realtimedom.Change{
+					realtimedom.On(realtimedom.EntityPayments, propertyID),
+					realtimedom.On(realtimedom.EntityOperations, propertyID), // The change step itself deletes the planned in the same transaction — no tick needed.
+				},
 			}, nil
 		})
 	return err

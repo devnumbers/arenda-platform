@@ -81,6 +81,33 @@ func TestPayOperationPublishesOperationsAndPayments(t *testing.T) {
 	assert.Contains(t, pairs, "history:"+h.propID.String())
 }
 
+// TestDeletePaymentPublishesOperationsPair pins the deletion's frame pairs:
+// the change step resolves the rule's planned operations in the same
+// transaction (DeletePlannedFrom/DeletePlannedBefore), so the operations
+// family — by-payment and overdue lists — is dirty with the payments one;
+// the journal's PaymentDeleted piggybacks history.
+func TestDeletePaymentPublishesOperationsPair(t *testing.T) {
+	t.Parallel()
+
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+
+	created, err := h.svc.CreatePayment(h.ctx(), h.owner, h.propID, h.createCmd())
+	require.NoError(t, err)
+	h.realtime.Publications = nil // The create's dispatch is its own test's subject.
+
+	err = h.svc.DeletePayment(h.ctx(), h.owner, h.propID, created.ID, false)
+	require.NoError(t, err)
+
+	require.Len(t, h.realtime.Publications, 1)
+	assert.Equal(t,
+		[]string{
+			"payments:" + h.propID.String(),
+			"operations:" + h.propID.String(),
+			"history:" + h.propID.String(),
+		},
+		h.realtime.Pairs())
+}
+
 // operationsQueryForRule is the bounded query the pay test reads the fresh
 // rule's planned operation with.
 func operationsQueryForRule() paymentsapp.OperationsListQuery {
