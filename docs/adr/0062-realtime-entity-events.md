@@ -84,11 +84,11 @@ across the same pipelines.
    points — backward compatible by construction. A screen may also become a
    precise consumer of its entity's frames (ticket #718, the live history
    feed): while such a subscriber is mounted, the provider delivers the
-   frame to it and suppresses that family's blanket invalidation — the
-   feed prepends fresh pages through its backward keyset instead of
-   refetching the loaded window (a window refetch slides the keyset and
-   yanks a reader of old rows); with no subscriber the blanket path
-   applies unchanged, and the on-open re-read still re-anchors the
+   frame to it and suppresses the blanket invalidation of that entity's
+   families — the feed prepends fresh pages through its backward keyset
+   instead of refetching the loaded window (a window refetch slides the
+   keyset and yanks a reader of old rows); with no subscriber the blanket
+   path applies unchanged, and the on-open re-read still re-anchors the
    mounted feed's window.
 
 3. **Carrier publication at the mutation seams, strictly post-commit.**
