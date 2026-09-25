@@ -27,10 +27,6 @@ export class FakeEventSource implements EventSourceLike {
     set.add(listener);
   }
 
-  removeEventListener(type: string, listener: (event: { data?: unknown }) => void): void {
-    this.listeners.get(type)?.delete(listener);
-  }
-
   close(): void {
     this.closed = true;
     this.readyState = FakeEventSource.CLOSED;

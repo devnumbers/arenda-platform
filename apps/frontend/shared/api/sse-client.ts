@@ -22,7 +22,6 @@ export type EventSourceLike = {
   readonly readyState: number;
   close(): void;
   addEventListener(type: string, listener: EventStreamListener): void;
-  removeEventListener(type: string, listener: EventStreamListener): void;
 };
 
 /** Слушатель события EventSource; ядро читает только data-строку. */

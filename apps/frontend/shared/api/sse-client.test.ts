@@ -174,7 +174,7 @@ describe('connectEventStream — видимость вкладки', () => {
 });
 
 describe('connectEventStream — dispose', () => {
-  it('закрывает источник, глушит таймер и слушатели', () => {
+  it('закрывает источник и глушит таймер', () => {
     const source = new FakeEventSource();
     const scheduler = new FakeScheduler();
     const events: Array<{ name: string; data: string }> = [];

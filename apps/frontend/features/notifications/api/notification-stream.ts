@@ -21,8 +21,6 @@ import { parseStreamFrame, type StreamFrame } from './stream-frame';
  * перечитывает живое через react-query (replay-курсора в v1 нет).
  */
 
-export type { EventSourceLike };
-
 export type NotificationStreamHandlers = {
   /** Стрим открыт — время перечитать живое (react-query-инвалидация). */
   readonly onOpen?: () => void;
