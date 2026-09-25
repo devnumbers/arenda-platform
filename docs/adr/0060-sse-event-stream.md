@@ -9,7 +9,12 @@ consumer of the same transport.
 
 ## Status
 
-Accepted. Implements the realtime axis of the map #734 charter decision
+Accepted (amended 2026-09-25: the §5 event-name sketch for map #714 —
+`access.updated` and friends — is superseded by
+[ADR 0062](./0062-realtime-entity-events.md): those events ride the
+dedicated `GET /realtime/stream` as the single `entity.changed` name, and
+the notifications stream contract stays frozen; everything else in this
+ADR stands). Implements the realtime axis of the map #734 charter decision
 («SSE — общий пользовательский стрим»), based on research #736
 (`docs/research/2026-09-17-notifications-sse.md`). Complements
 [ADR 0059](./0059-notification-delivery-queue-river.md) (the delivery
@@ -69,8 +74,11 @@ map #714 all need a push channel. The facts that shaped the decision:
 5. **Envelope v1, coarse event names.** Every frame: `id` (the hub's
    monotonic sequence — a replay cursor for a future v2 buffer), `event`
    (stable name: `connected`, `notification.created`,
-   `notification.unread_count`; map #714 adds `access.updated` and friends —
-   unknown names are ignored by old clients, so adding is backward
+   `notification.unread_count`; the map #714 sketch — `access.updated` and
+   friends — is superseded by
+   [ADR 0062](./0062-realtime-entity-events.md): those events ride
+   `GET /realtime/stream` as the single `entity.changed` name; unknown
+   names are ignored by old clients, so adding is backward
    compatible), `data` — one line of JSON `{v, occurredAt, payload}`.
    Payloads carry ids and display fields only; clients re-read state through
    the API — the stream never becomes a second system of record.
