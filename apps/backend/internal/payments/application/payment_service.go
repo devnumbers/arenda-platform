@@ -187,11 +187,14 @@ func (s *PaymentService) CreatePayment(
 			created := historydomain.PaymentCreated(draft.ID, draft.Title)
 			created.Context[historydomain.CtxKeyAmountKopecks] = draft.AmountKopecks
 			return mutationOutcome[domain.Payment]{
-				Response:        draft,
-				Audit:           auditdomain.ActionPaymentCreated,
-				AuditEntityID:   &draft.ID,
-				History:         new(created),
-				Changed:         []realtimedom.Change{realtimedom.On(realtimedom.EntityPayments, propertyID)},
+				Response:      draft,
+				Audit:         auditdomain.ActionPaymentCreated,
+				AuditEntityID: &draft.ID,
+				History:       new(created),
+				Changed: []realtimedom.Change{
+					realtimedom.On(realtimedom.EntityPayments, propertyID),
+					realtimedom.On(realtimedom.EntityOperations, propertyID), // The tick materializes the first planned in the same transaction.
+				},
 				Tick:            true,
 				RereadPaymentID: &draft.ID,
 			}, nil
@@ -262,12 +265,15 @@ func (s *PaymentService) UpdatePayment(
 			updated := historydomain.PaymentUpdated(rule.ID, rule.Title)
 			updated.Context[historydomain.CtxKeyAmountKopecks] = rule.AmountKopecks
 			return mutationOutcome[domain.Payment]{
-				Response:        rule,
-				Audit:           auditdomain.ActionPaymentUpdated,
-				AuditEntityID:   &rule.ID,
-				AuditCtx:        map[string]any{auditFieldsKey: updatedFields(cmd)},
-				History:         new(updated),
-				Changed:         []realtimedom.Change{realtimedom.On(realtimedom.EntityPayments, propertyID)},
+				Response:      rule,
+				Audit:         auditdomain.ActionPaymentUpdated,
+				AuditEntityID: &rule.ID,
+				AuditCtx:      map[string]any{auditFieldsKey: updatedFields(cmd)},
+				History:       new(updated),
+				Changed: []realtimedom.Change{
+					realtimedom.On(realtimedom.EntityPayments, propertyID),
+					realtimedom.On(realtimedom.EntityOperations, propertyID), // The tick stands the strictly future planned again in the same transaction.
+				},
 				Tick:            true,
 				RereadPaymentID: &rule.ID,
 			}, nil
@@ -340,11 +346,14 @@ func (s *PaymentService) PausePayment(
 				return mutationOutcome[domain.Payment]{}, fmt.Errorf("insert pause: %w", err)
 			}
 			return mutationOutcome[domain.Payment]{
-				Response:        rule,
-				Audit:           auditdomain.ActionPaymentPaused,
-				AuditEntityID:   &rule.ID,
-				History:         new(historydomain.PaymentPaused(rule.ID, rule.Title)),
-				Changed:         []realtimedom.Change{realtimedom.On(realtimedom.EntityPayments, propertyID)},
+				Response:      rule,
+				Audit:         auditdomain.ActionPaymentPaused,
+				AuditEntityID: &rule.ID,
+				History:       new(historydomain.PaymentPaused(rule.ID, rule.Title)),
+				Changed: []realtimedom.Change{
+					realtimedom.On(realtimedom.EntityPayments, propertyID),
+					realtimedom.On(realtimedom.EntityOperations, propertyID), // The tick removes the future planned in the same transaction.
+				},
 				Tick:            true,
 				RereadPaymentID: &rule.ID,
 			}, nil
@@ -372,11 +381,14 @@ func (s *PaymentService) ResumePayment(
 				return mutationOutcome[domain.Payment]{}, fmt.Errorf("close active pause: %w", err)
 			}
 			return mutationOutcome[domain.Payment]{
-				Response:        rule,
-				Audit:           auditdomain.ActionPaymentResumed,
-				AuditEntityID:   &rule.ID,
-				History:         new(historydomain.PaymentResumed(rule.ID, rule.Title)),
-				Changed:         []realtimedom.Change{realtimedom.On(realtimedom.EntityPayments, propertyID)},
+				Response:      rule,
+				Audit:         auditdomain.ActionPaymentResumed,
+				AuditEntityID: &rule.ID,
+				History:       new(historydomain.PaymentResumed(rule.ID, rule.Title)),
+				Changed: []realtimedom.Change{
+					realtimedom.On(realtimedom.EntityPayments, propertyID),
+					realtimedom.On(realtimedom.EntityOperations, propertyID), // The tick stands the future planned back in the same transaction.
+				},
 				Tick:            true,
 				RereadPaymentID: &rule.ID,
 			}, nil

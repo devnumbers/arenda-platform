@@ -18,8 +18,9 @@ import (
 )
 
 // TestCreatePaymentPublishesFramesAfterCommit pins the carrier canon on the
-// rule creation: one post-commit dispatch carrying the payments pair and the
-// piggybacked history pair, the actor the author.
+// rule creation: one post-commit dispatch carrying the payments pair, the
+// tick's operations pair (the creation materializes its first planned in the
+// same transaction) and the piggybacked history pair, the actor the author.
 func TestCreatePaymentPublishesFramesAfterCommit(t *testing.T) {
 	t.Parallel()
 
@@ -47,7 +48,11 @@ func TestCreatePaymentPublishesFramesAfterCommit(t *testing.T) {
 	assert.Equal(t, h.owner, publication.Actor)
 	assert.True(t, seenCommitted, "the dispatch ran after the commit: the row was visible")
 	assert.Equal(t,
-		[]string{"payments:" + h.propID.String(), "history:" + h.propID.String()},
+		[]string{
+			"payments:" + h.propID.String(),
+			"operations:" + h.propID.String(),
+			"history:" + h.propID.String(),
+		},
 		h.realtime.Pairs())
 }
 

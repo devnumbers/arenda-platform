@@ -270,7 +270,8 @@ func (s *RentalService) CreateRental(
 				History:  new(historydomain.RentalCreated(rentalID, tenantName, cmd.StartDate, derefDate(cmd.PlannedEndDate))),
 				Changed: []realtimedom.Change{
 					realtimedom.On(realtimedom.EntityRentals, propertyID),
-					realtimedom.On(realtimedom.EntityPayments, propertyID), // The managed payment is born with the rental.
+					realtimedom.On(realtimedom.EntityPayments, propertyID),   // The managed payment is born with the rental.
+					realtimedom.On(realtimedom.EntityOperations, propertyID), // The tick materializes the first planned in the same transaction.
 				},
 				Tick: true, // The new payment materializes its first planned.
 			}, nil
@@ -393,16 +394,20 @@ func (s *RentalService) updatedRentalOutcome(
 			return mutationOutcome{}, err
 		}
 	}
+	changed := []realtimedom.Change{
+		realtimedom.On(realtimedom.EntityRentals, propertyID),
+		realtimedom.On(realtimedom.EntityPayments, propertyID), // The managed payment follows the rental.
+	}
+	if paymentChanged {
+		changed = append(changed, realtimedom.On(realtimedom.EntityOperations, propertyID)) // The tick re-stands the planned operations in the same transaction.
+	}
 	return mutationOutcome{
 		RentalID: rental.ID,
 		Audit:    auditActionRentalUpdated,
 		AuditCtx: map[string]any{"fields": updatedRentalFields(cmd)},
 		History:  new(historydomain.RentalUpdated(rental.ID, tenantName, rental.StartDate, derefDate(rental.PlannedEndDate))),
-		Changed: []realtimedom.Change{
-			realtimedom.On(realtimedom.EntityRentals, propertyID),
-			realtimedom.On(realtimedom.EntityPayments, propertyID), // The managed payment follows the rental.
-		},
-		Tick: paymentChanged,
+		Changed:  changed,
+		Tick:     paymentChanged,
 	}, nil
 }
 
