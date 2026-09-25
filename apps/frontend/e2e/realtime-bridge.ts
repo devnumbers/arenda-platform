@@ -10,7 +10,9 @@ import type { Page } from '@playwright/test';
  * Мост ставится addInitScript'ом ДО навигации — бандл приложения получает
  * фейк вместо настоящего EventSource и реальный SSE не открывается.
  */
-const BRIDGE_SCRIPT = `
+/** Тело моста одной строкой-скриптом: исполняется в браузере через
+ * addInitScript и в node-тестах ниже (e2e/realtime-bridge.test.ts). */
+export const BRIDGE_SCRIPT = `
   (() => {
     const sources = [];
     class FakeEventSource extends EventTarget {
@@ -26,6 +28,11 @@ const BRIDGE_SCRIPT = `
       }
       close() {
         this.readyState = 2;
+        // Живой EventSource после close() событий не шлёт — как и гвард
+        // видимости sse-client (скрытая вкладка закрывает источник),
+        // выпадаем из рассылки __emitRealtimeFrame.
+        const i = sources.indexOf(this);
+        if (i !== -1) sources.splice(i, 1);
       }
     }
     window.EventSource = FakeEventSource;
