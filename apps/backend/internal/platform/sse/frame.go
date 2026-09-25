@@ -1,7 +1,8 @@
 // Package sse is the shared user event stream's transport primitives
 // (карта #734, #742; ADR 0060): the SSE frame writer and the per-user
 // subscription hub. The package knows nothing about notification semantics —
-// contexts format their own envelopes and address recipients through the hub;
+// the envelope's wire contract lives here too (envelope.go, ADR 0060 §5),
+// contexts fill only their payload and address recipients through the hub;
 // the stream's first consumer is notifications (#742), the map #714 rewires
 // as a consumer of the same transport.
 package sse

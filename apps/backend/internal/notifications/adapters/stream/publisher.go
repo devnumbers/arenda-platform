@@ -25,10 +25,6 @@ const (
 	EventUnreadCount         = "notification.unread_count"
 )
 
-// envelopeVersion is the envelope schema version (ADR 0060): breaking payload
-// changes bump it, additive ones keep it.
-const envelopeVersion = 1
-
 // Publisher implements application.StreamPublisher over the platform hub.
 type Publisher struct {
 	hub *sse.Hub
@@ -46,10 +42,10 @@ func NewPublisher(hub *sse.Hub, clk clock.Clock) *Publisher {
 // NotificationCreated pushes the "notification.created" frame — the toast
 // payload: category, title, body and the event's deep link.
 func (p *Publisher) NotificationCreated(ctx context.Context, n domain.Notification) {
-	data, err := json.Marshal(envelope{
-		V:          envelopeVersion,
+	data, err := json.Marshal(sse.Envelope{
+		V:          sse.EnvelopeVersion,
 		OccurredAt: p.clk.Now().UTC().Format(time.RFC3339),
-		Payload: marshalPayload(createdPayload{
+		Payload: sse.MarshalPayload(createdPayload{
 			ID:           n.ID.String(),
 			Category:     string(n.Category),
 			ContextLabel: n.ContextLabel,
@@ -69,10 +65,10 @@ func (p *Publisher) NotificationCreated(ctx context.Context, n domain.Notificati
 
 // UnreadCount pushes the "notification.unread_count" frame — the badge value.
 func (p *Publisher) UnreadCount(ctx context.Context, userID uuid.UUID, count int64) {
-	data, err := json.Marshal(envelope{
-		V:          envelopeVersion,
+	data, err := json.Marshal(sse.Envelope{
+		V:          sse.EnvelopeVersion,
 		OccurredAt: p.clk.Now().UTC().Format(time.RFC3339),
-		Payload:    marshalPayload(unreadPayload{Count: count}),
+		Payload:    sse.MarshalPayload(unreadPayload{Count: count}),
 	})
 	if err != nil {
 		return
@@ -81,15 +77,6 @@ func (p *Publisher) UnreadCount(ctx context.Context, userID uuid.UUID, count int
 		UserID: userID,
 		Frame:  sse.Frame{Event: EventUnreadCount, Data: string(data)},
 	})
-}
-
-// envelope is the JSON wrapper inside every frame's data line (ADR 0060):
-// version, occurrence instant, per-type payload. The payload carries ids and
-// display fields only — the client re-reads state through its API.
-type envelope struct {
-	V          int             `json:"v"`
-	OccurredAt string          `json:"occurredAt"`
-	Payload    json.RawMessage `json:"payload"`
 }
 
 type createdPayload struct {

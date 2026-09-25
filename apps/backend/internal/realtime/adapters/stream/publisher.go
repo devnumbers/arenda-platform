@@ -24,10 +24,6 @@ import (
 // entity.changed listener.
 const EventEntityChanged = "entity.changed"
 
-// envelopeVersion is the envelope schema version (ADR 0060 §5): breaking
-// payload changes bump it, additive ones keep it.
-const envelopeVersion = 1
-
 // Publisher implements realtimeapp.Publisher over the platform hub: it
 // dedups the transaction's change pairs, resolves each pair's audience
 // through derived property access at the moment of publication (ADR 0028)
@@ -107,10 +103,10 @@ func (p *Publisher) recipients(ctx context.Context, actor uuid.UUID, c domain.Ch
 // The hub's Publish never blocks and never fails (slow consumers are
 // dismissed, not errored), so there is nothing to report back.
 func (p *Publisher) publish(ctx context.Context, recipients []uuid.UUID, c domain.Change) {
-	data, err := json.Marshal(envelope{
-		V:          envelopeVersion,
+	data, err := json.Marshal(sse.Envelope{
+		V:          sse.EnvelopeVersion,
 		OccurredAt: p.clk.Now().UTC().Format(time.RFC3339),
-		Payload:    marshalPayload(payloadOf(c)),
+		Payload:    sse.MarshalPayload(payloadOf(c)),
 	})
 	if err != nil {
 		// The envelope marshal of plain strings and ids cannot fail; the
@@ -123,14 +119,6 @@ func (p *Publisher) publish(ctx context.Context, recipients []uuid.UUID, c domai
 			Frame:  sse.Frame{Event: EventEntityChanged, Data: string(data)},
 		})
 	}
-}
-
-// envelope is the JSON wrapper inside every frame's data line (ADR 0060 §5):
-// version, occurrence instant, per-type payload.
-type envelope struct {
-	V          int             `json:"v"`
-	OccurredAt string          `json:"occurredAt"`
-	Payload    json.RawMessage `json:"payload"`
 }
 
 // payload is the coarse frame's body (ADR 0062 §2): the dictionary name and
@@ -148,17 +136,6 @@ func payloadOf(c domain.Change) payload {
 		p.PropertyID = &id
 	}
 	return p
-}
-
-// marshalPayload marshals a payload struct of plain strings and numbers.
-// Such a marshal cannot fail, but the frames are best-effort anyway: the
-// fallback is an empty payload, never an error path.
-func marshalPayload(v any) json.RawMessage {
-	data, err := json.Marshal(v)
-	if err != nil {
-		return json.RawMessage(`{}`)
-	}
-	return data
 }
 
 // changePropertyID renders the change's property id for the log line.
