@@ -3,6 +3,7 @@
 import { useEffect, type JSX } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { EventStreamVisibility } from '@/shared/api/sse-client';
+import { realtimeEntitySubscribers } from '@/shared/api/realtime-subscriptions';
 import { ENTITY_INVALIDATIONS, REALTIME_FAMILIES } from '../api/entity-invalidations';
 import {
   connectRealtimeStream,
@@ -33,7 +34,15 @@ export function handleRealtimeFrame(
 /** Открытые-хендлеры стрима: на каждом открытии (включая переподключение и
  * возврат видимости — реплея в v1 нет, ADR 0062 §5) клиент перечитывает
  * живое: инвалидируются все семейства маппинга, смонтированные запросы
- * перечитывают, немонтированные помечаются устаревшими. */
+ * перечитывают, немонтированные помечаются устаревшими.
+ *
+ * Кадр сущности, у которой есть живой точный потребитель (реестр
+ * realtime-subscriptions, тикет #718), уходит только ему — blanket-инвалидация
+ * его семейств подавлена: точный потребитель знает лучше (лента истории
+ * prepend'ит свежие страницы, перечитывание окна сдвинуло бы keyset и дёрнуло
+ * читающего старые строки). onOpen подавления не имеет: перечитывание на
+ * открытии делает сама инвалидация, и после разрыва окно ленты обязано
+ * реанкероваться целиком. */
 export function realtimeHandlers(queryClient: StreamQueryClient): RealtimeStreamHandlers {
   return {
     onOpen: () => {
@@ -42,6 +51,13 @@ export function realtimeHandlers(queryClient: StreamQueryClient): RealtimeStream
       }
     },
     onFrame: (frame) => {
+      const subscribers = realtimeEntitySubscribers(frame.entity);
+      if (subscribers.length > 0) {
+        for (const handler of subscribers) {
+          handler.onFrame?.(frame);
+        }
+        return;
+      }
       handleRealtimeFrame(frame, queryClient);
     },
   };

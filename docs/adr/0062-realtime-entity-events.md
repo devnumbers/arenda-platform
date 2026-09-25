@@ -17,7 +17,8 @@ nothing in ADR 0060 changes and the notifications stream keeps its endpoint
 and contract untouched. ADR 0060 §5 sketched map #714's events as new event
 names on the notifications stream; this ADR supersedes that sketch — the
 events ride a dedicated endpoint instead, so the notifications stream
-contract stays frozen.
+contract stays frozen. The §2 precise-consumer extension (ticket #718) is
+amended in place with the code that introduced it.
 
 ## Context
 
@@ -73,7 +74,15 @@ across the same pipelines.
    The provider may scope invalidation by the frame's `propertyId` or
    invalidate whole families; over-invalidation is the accepted cost of
    coarse frames. Adding an entity is one dictionary entry plus its capture
-   points — backward compatible by construction.
+   points — backward compatible by construction. A screen may also become a
+   precise consumer of its entity's frames (ticket #718, the live history
+   feed): while such a subscriber is mounted, the provider delivers the
+   frame to it and suppresses that family's blanket invalidation — the
+   feed prepends fresh pages through its backward keyset instead of
+   refetching the loaded window (a window refetch slides the keyset and
+   yanks a reader of old rows); with no subscriber the blanket path
+   applies unchanged, and the on-open re-read still re-anchors the
+   mounted feed's window.
 
 3. **Carrier publication at the mutation seams, strictly post-commit.**
    The same discipline as grace_events, tariff_events and the history

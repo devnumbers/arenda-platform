@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type JSX, type ReactNode } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, BoldUser, Search } from '@/shared/assets/icons';
+import { ArrowDown, ArrowLeft, BoldUser, Search } from '@/shared/assets/icons';
 import { type HistoryFilterOptions, type HistoryObjectOption } from '@/entities/history';
 import type { HistoryActorGroup } from '@/features/history';
 import { useMe } from '@/features/auth';
@@ -33,6 +33,7 @@ import {
 } from '@/shared/ui/design';
 import { ROUTES } from '@/shared/config/routes';
 import { HistoryRow } from './history-row';
+import { FOLLOW_BOTTOM_PX, decideFeedScroll, distanceToBottom, type FeedEdges } from '../lib/feed-scroll';
 import {
   HistoryFeedSkeleton,
   HistoryMemberFeedSkeleton,
@@ -97,6 +98,17 @@ const HEADER_LINK =
  * чипы дней сохраняются (макеты 2092-166284/166621); без совпадений —
  * серая строка «Ничего не найдено» без иллюстрации (макет 2092-166866,
  * канон «пусто без иллюстрации»); выход — «Назад» возвращает ленту.
+ *
+ * Лента живая (карта #714, тикет #718): кадры history realtime-стрима
+ * догоняют ленту снизу — prepend свежих страниц в useHistoryFeed, окна
+ * перечитывание не сдвигает. Прокрутка решается по границам выдачи
+ * (widgets/history/lib/feed-scroll.ts): свежие строки сами открываются
+ * только у читателя на дне («как в мессенджере»); листающий старое
+ * остаётся на месте без рывков — над кнопкой «Настройки» появляется чип
+ * «Есть новые» в стиле плашек дней, клик — плавный ход к свежим, ручной
+ * доскролл до низа гасит индикатор. На открытии стрима (переподключение,
+ * возврат видимости) лента перечитывается целиком — окно реанкеруется
+ * на самые свежие записи.
  *
  * Кнопка «Настройки» стоит на месте по макету (в т.ч. на пустой ленте и
  * в поиске — 2092-166284): primary по контенту (не на всю ширину, макет
@@ -268,31 +280,66 @@ export function HistoryFeedScreen({
   const days = groupHistoryByDay(entries, today);
   const options = propertyOptions(filtersQuery.data);
 
-  // Мессенджерская прокрутка: на первой загрузке окно встаёт на низ
-  // (видны самые новые), prepend старых при прокрутке вверх удерживает
-  // позицию компенсацией дельты высоты (iOS overflow-anchor не умеем);
-  // сужение выдачи поиском (макет 2092-166284 — «Сегодня» под шапкой)
-  // ведёт себя как первая загрузка: окно на самых свежих найденных.
+  // Живая лента (#718): выдача растёт с двух сторон keyset и сдвигается
+  // перечитыванием после разрыва — решение скролла по границам выдачи
+  // (decideFeedScroll): prepend старых держит позицию компенсацией дельты,
+  // append свежих открывается только у читателя на дне, выше появляется
+  // индикатор «Есть новые» (клик — плавный ход к свежим), перечитывание
+  // окна реанкерует на дно. Края выдачи — примитивы в депсах, тело эффекта
+  // читает их из замыкания того же коммита.
+  const [hasNewBelow, setHasNewBelow] = useState(false);
   const entryCount = entries.length;
-  const previous = useRef<{ count: number | null; height: number }>({ count: null, height: 0 });
+  const firstEntryId = entries[0]?.id ?? null;
+  const lastEntryId = entries[entries.length - 1]?.id ?? null;
+  const scroll = useRef<{ edges: FeedEdges | null; height: number }>({ edges: null, height: 0 });
   useLayoutEffect(() => {
+    const edges: FeedEdges = { count: entryCount, firstId: firstEntryId, lastId: lastEntryId };
     const height = document.documentElement.scrollHeight;
-    const { count: prevCount, height: prevHeight } = previous.current;
-    previous.current = { count: entryCount, height };
-    if (entryCount === 0) {
-      return;
-    }
-    if (prevCount === null || prevCount === 0 || entryCount < prevCount) {
+    const prev = scroll.current;
+    scroll.current = { edges, height };
+    const action = decideFeedScroll(
+      {
+        edges: prev.edges,
+        height: prev.height,
+        distanceToOldBottom: prev.height - (window.scrollY + window.innerHeight),
+      },
+      edges,
+      height,
+    );
+    if (action.kind === 'anchor') {
       window.scrollTo({ top: height });
+      setHasNewBelow(false);
+    } else if (action.kind === 'compensate' || action.kind === 'follow') {
+      if (action.delta > 0) {
+        window.scrollBy({ top: action.delta });
+      }
+      if (action.kind === 'follow') {
+        setHasNewBelow(false);
+      }
+    } else if (action.kind === 'indicate') {
+      setHasNewBelow(true);
+    }
+  }, [entryCount, firstEntryId, lastEntryId]);
+
+  // Индикатор гаснет и от ручного доскролла до низа — читатель сам дошёл
+  // до свежих записей, «есть новые» больше не новость.
+  useEffect(() => {
+    if (!hasNewBelow) {
       return;
     }
-    if (entryCount > prevCount) {
-      const delta = height - prevHeight;
-      if (delta > 0) {
-        window.scrollBy({ top: delta });
+    const onScroll = (): void => {
+      if (distanceToBottom() < FOLLOW_BOTTOM_PX) {
+        setHasNewBelow(false);
       }
-    }
-  }, [entryCount]);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [hasNewBelow]);
+
+  const scrollToFresh = (): void => {
+    setHasNewBelow(false);
+    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
+  };
 
   const closeSearch = (): void => {
     setSearch('');
@@ -458,6 +505,24 @@ export function HistoryFeedScreen({
           </>
         )}
       </PageContent>
+
+      {/* Индикатор «Есть новые» (#718): читатель листает старое, снизу
+        * подъехали свежие записи — чип в стиле плашек дней этого же макета
+        * висит над кнопкой «Настройки» (кнопка 56 + зазор 12); клик —
+        * плавный ход к низу, ручной доскролл гасит его тоже. Обёртка без
+        * pointer-events — строки ленты под зазорами кликабельны. */}
+      {hasNewBelow && feedRendered && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-[calc(max(1.5rem,env(safe-area-inset-bottom))_+_68px)] z-40 flex justify-center">
+          <button
+            type="button"
+            onClick={scrollToFresh}
+            className="pointer-events-auto flex items-center gap-1.5 rounded-pill bg-white px-3.5 py-2 text-xs leading-[15px] text-content shadow-[0_8px_24px_rgba(0,0,0,0.12)] outline-none transition-opacity hover:opacity-80 active:opacity-80 focus-visible:ring-4 focus-visible:ring-primary"
+          >
+            <ArrowDown className="h-4 w-4" aria-hidden />
+            Есть новые
+          </button>
+        </div>
+      )}
 
       {/* Шит «Настройки» (#711): primary по контенту (не на всю ширину,
         * макет 2184-94734), по центру; открывает шит фильтров поверх

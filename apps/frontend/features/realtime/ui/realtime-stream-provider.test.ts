@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   accessKeys,
   contactKeys,
@@ -12,6 +12,7 @@ import {
   rentalKeys,
   taskKeys,
 } from '@/shared/api/query-keys';
+import { subscribeRealtimeEntity } from '@/shared/api/realtime-subscriptions';
 import { REALTIME_FAMILIES } from '../api/entity-invalidations';
 import type { RealtimeFrame } from '../api/realtime-frame';
 import { handleRealtimeFrame, realtimeHandlers, type StreamQueryClient } from './realtime-stream-provider';
@@ -86,5 +87,40 @@ describe('realtimeHandlers — перечитывание живого на от
     const qc = fakeQueryClient();
     realtimeHandlers(qc).onFrame?.(frame('history'));
     expect(qc.invalidated).toStrictEqual([historyKeys.all]);
+  });
+});
+
+describe('кадр сущности с точным потребителем (тикет #718)', () => {
+  it('пока подписчик жив — blanket-инвалидации нет, кадр уходит только ему', () => {
+    const qc = fakeQueryClient();
+    const onFrame = vi.fn();
+    const unsubscribe = subscribeRealtimeEntity('history', { onFrame });
+
+    realtimeHandlers(qc).onFrame?.(frame('history'));
+    realtimeHandlers(qc).onFrame?.(frame('payments'));
+
+    expect(onFrame).toHaveBeenCalledExactlyOnceWith(frame('history'));
+    expect(qc.invalidated).toStrictEqual([paymentKeys.all, globalPaymentKeys.all]);
+    unsubscribe();
+  });
+
+  it('после отписки сущность снова инвалидируется как раньше', () => {
+    const qc = fakeQueryClient();
+    const unsubscribe = subscribeRealtimeEntity('history', {});
+
+    unsubscribe();
+    realtimeHandlers(qc).onFrame?.(frame('history'));
+
+    expect(qc.invalidated).toStrictEqual([historyKeys.all]);
+  });
+
+  it('onOpen перечитывает все семейства, включая сущности с подписчиками', () => {
+    const qc = fakeQueryClient();
+    const unsubscribe = subscribeRealtimeEntity('history', {});
+
+    realtimeHandlers(qc).onOpen?.();
+
+    expect(qc.invalidated).toStrictEqual([...REALTIME_FAMILIES]);
+    unsubscribe();
   });
 });
