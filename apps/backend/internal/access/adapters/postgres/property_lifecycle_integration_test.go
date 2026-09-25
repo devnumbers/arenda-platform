@@ -162,7 +162,7 @@ func TestPropertyLifecycle_ArchiveActiveMemberRecoversSuspendedFIFO(t *testing.T
 	}
 
 	// The service call that recovers the freed slot.
-	if err := f.slots.RecoverSuspendedForProperty(ctx, accessNoCommitTx{f.tx}, target); err != nil {
+	if _, err := f.slots.RecoverSuspendedForProperty(ctx, accessNoCommitTx{f.tx}, target); err != nil {
 		t.Fatalf("RecoverSuspendedForProperty: %v", err)
 	}
 
@@ -212,7 +212,7 @@ func TestPropertyLifecycle_ArchiveKeepsSuspendedMembersAndPendingInvitations(t *
 	if _, err := f.q.ArchiveProperty(ctx, genpostgres.ArchivePropertyParams{ID: pgUUID(property), OwnerID: pgUUID(owner)}); err != nil {
 		t.Fatalf("ArchiveProperty: %v", err)
 	}
-	if err := f.slots.RecoverSuspendedForProperty(ctx, accessNoCommitTx{f.tx}, property); err != nil {
+	if _, err := f.slots.RecoverSuspendedForProperty(ctx, accessNoCommitTx{f.tx}, property); err != nil {
 		t.Fatalf("RecoverSuspendedForProperty: %v", err)
 	}
 
@@ -422,7 +422,7 @@ func TestPropertyLifecycle_DeleteDropsMembershipsAndRecoversFIFO(t *testing.T) {
 	// The slot-significant delete steps in the PropertyService.DeleteProperty
 	// order: drop the memberships and recover the freed slots first, then
 	// remove the property row.
-	if err := f.slots.RecoverAfterPropertyDelete(ctx, accessNoCommitTx{f.tx}, target); err != nil {
+	if _, err := f.slots.RecoverAfterPropertyDelete(ctx, accessNoCommitTx{f.tx}, target); err != nil {
 		t.Fatalf("RecoverAfterPropertyDelete: %v", err)
 	}
 

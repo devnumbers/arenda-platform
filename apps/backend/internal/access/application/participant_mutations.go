@@ -435,14 +435,17 @@ func (s *ParticipantMutationService) Remove(ctx context.Context, actor uuid.UUID
 
 	freedActive := 0
 	var revokedActive []domain.Membership
+	var invitationLegs []domain.Invitation
+	var recovered []domain.Membership
 	err = s.runInTx(ctx, func(stores *txStores) error {
-		legs, invitationLegs, err := s.listRemovalLegs(ctx, stores, userID, email, actor)
+		legs, invLegs, err := s.listRemovalLegs(ctx, stores, userID, email, actor)
 		if err != nil {
 			return err
 		}
-		if len(legs) == 0 && len(invitationLegs) == 0 {
+		if len(legs) == 0 && len(invLegs) == 0 {
 			return domain.ErrParticipantNotFound
 		}
+		invitationLegs = invLegs
 		freedActive, revokedActive, err = s.removeMembershipLegs(ctx, stores, actor, legs, targetLabel)
 		if err != nil {
 			return err
@@ -453,7 +456,8 @@ func (s *ParticipantMutationService) Remove(ctx context.Context, actor uuid.UUID
 		// Every freed active slot lets the oldest suspended access come back
 		// FIFO; one recovery pass covers the whole batch.
 		if freedActive > 0 && s.slots != nil && userID != (uuid.UUID{}) {
-			if err := s.slots.RecoverSuspended(ctx, stores.tx, userID); err != nil {
+			recovered, err = s.slots.RecoverSuspended(ctx, stores.tx, userID)
+			if err != nil {
 				return fmt.Errorf("recover suspended after participant removal: %w", err)
 			}
 		}
@@ -467,24 +471,26 @@ func (s *ParticipantMutationService) Remove(ctx context.Context, actor uuid.UUID
 	// (карта #734, #751); suspended legs publish nothing — the object was
 	// already hidden from them (issue #162, T6 canon).
 	publishRevokedEvents(ctx, s.events, s.logger, actor, revokedActive)
-	s.publishRemovedRealtime(ctx, actor, revokedActive)
+	s.publishRemovedRealtime(ctx, actor, revokedActive, invitationLegs, recovered)
 	return nil
 }
 
 // publishRemovedRealtime hands the whole removal transaction's frames to the
 // realtime carrier in one post-commit dispatch (карта #714, #716; ADR 0062):
 // every removed active leg dirties its object's participants view and
-// journals its row — the per-transaction dedup collapses a batch into one
-// frame per pair.
+// journals its row, every removed pending leg dirties its object the same way
+// (the pending row leaves the participants view), and the freed slots' FIFO
+// recovery dirties each restored object — the per-transaction dedup collapses
+// the batch into one frame per pair.
 func (s *ParticipantMutationService) publishRemovedRealtime(
-	ctx context.Context, actor uuid.UUID, revokedActive []domain.Membership,
+	ctx context.Context, actor uuid.UUID, revokedActive []domain.Membership, removedPending []domain.Invitation, recovered []domain.Membership,
 ) {
-	changed := make([]realtimedom.Change, 0, len(revokedActive))
-	anchors := make([]uuid.UUID, 0, len(revokedActive))
-	for _, m := range revokedActive {
-		changed = append(changed, realtimedom.On(realtimedom.EntityAccess, m.PropertyID))
-		anchors = append(anchors, m.PropertyID)
+	changed, anchors := removedAccessFrames(revokedActive)
+	for _, inv := range removedPending {
+		changed = append(changed, realtimedom.On(realtimedom.EntityAccess, inv.PropertyID))
+		anchors = append(anchors, inv.PropertyID)
 	}
+	changed = append(changed, recoveredAccessFrames(recovered)...)
 	s.access.publishRealtime(ctx, actor, changed, anchors...)
 }
 

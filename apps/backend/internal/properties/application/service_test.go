@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	accessdomain "github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
@@ -851,9 +852,9 @@ type recordingSlotPolicy struct {
 	enforcedOnUnarchive []uuid.UUID
 }
 
-func (p *recordingSlotPolicy) RecoverSuspendedForProperty(_ context.Context, _ transaction.Tx, propertyID uuid.UUID) error {
+func (p *recordingSlotPolicy) RecoverSuspendedForProperty(_ context.Context, _ transaction.Tx, propertyID uuid.UUID) ([]accessdomain.Membership, error) {
 	p.recovered = append(p.recovered, propertyID)
-	return nil
+	return nil, nil
 }
 
 func (p *recordingSlotPolicy) EnforceOnUnarchiveForProperty(_ context.Context, _ transaction.Tx, propertyID uuid.UUID) error {
@@ -861,13 +862,13 @@ func (p *recordingSlotPolicy) EnforceOnUnarchiveForProperty(_ context.Context, _
 	return nil
 }
 
-func (p *recordingSlotPolicy) RecoverAfterPropertyDelete(context.Context, transaction.Tx, uuid.UUID) error {
-	return nil
+func (p *recordingSlotPolicy) RecoverAfterPropertyDelete(context.Context, transaction.Tx, uuid.UUID) ([]accessdomain.Membership, error) {
+	return nil, nil
 }
 
-func (p *recordingSlotPolicy) RecoverSuspended(_ context.Context, _ transaction.Tx, recipientID uuid.UUID) error {
+func (p *recordingSlotPolicy) RecoverSuspended(_ context.Context, _ transaction.Tx, recipientID uuid.UUID) ([]accessdomain.Membership, error) {
 	p.recoveredRecipients = append(p.recoveredRecipients, recipientID)
-	return nil
+	return nil, nil
 }
 
 var _ RecipientSlotPolicy = (*recordingSlotPolicy)(nil)

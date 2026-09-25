@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	accessdomain "github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
@@ -27,21 +28,21 @@ type fakeSharedDeleteFlow struct {
 	sentWith []string
 }
 
-func (f *fakeSharedDeleteFlow) RecoverSuspendedForProperty(context.Context, transaction.Tx, uuid.UUID) error {
-	return nil
+func (f *fakeSharedDeleteFlow) RecoverSuspendedForProperty(context.Context, transaction.Tx, uuid.UUID) ([]accessdomain.Membership, error) {
+	return nil, nil
 }
 
 func (f *fakeSharedDeleteFlow) EnforceOnUnarchiveForProperty(context.Context, transaction.Tx, uuid.UUID) error {
 	return nil
 }
 
-func (f *fakeSharedDeleteFlow) RecoverAfterPropertyDelete(context.Context, transaction.Tx, uuid.UUID) error {
+func (f *fakeSharedDeleteFlow) RecoverAfterPropertyDelete(context.Context, transaction.Tx, uuid.UUID) ([]accessdomain.Membership, error) {
 	f.events = append(f.events, "recover_after_delete")
-	return nil
+	return nil, nil
 }
 
-func (f *fakeSharedDeleteFlow) RecoverSuspended(context.Context, transaction.Tx, uuid.UUID) error {
-	return nil
+func (f *fakeSharedDeleteFlow) RecoverSuspended(context.Context, transaction.Tx, uuid.UUID) ([]accessdomain.Membership, error) {
+	return nil, nil
 }
 
 func (f *fakeSharedDeleteFlow) CollectFormerMemberEmails(_ context.Context, _ transaction.Tx, propertyID uuid.UUID) ([]string, error) {

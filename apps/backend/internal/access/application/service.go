@@ -103,6 +103,32 @@ func accessFrame(propertyID uuid.UUID) []realtimedom.Change {
 	return []realtimedom.Change{realtimedom.On(realtimedom.EntityAccess, propertyID)}
 }
 
+// removedAccessFrames collects the removal batch's frames: every removed
+// active leg dirties its object's participants view and anchors the history
+// pair of the journal row the removal wrote (ADR 0061 §3) — the per-call
+// dedup of the carrier collapses a batch into one frame per pair (ADR 0062
+// §3). Shared by the single revoke and the bulk participant removal.
+func removedAccessFrames(revoked []domain.Membership) ([]realtimedom.Change, []uuid.UUID) {
+	changed := make([]realtimedom.Change, 0, len(revoked))
+	anchors := make([]uuid.UUID, 0, len(revoked))
+	for _, m := range revoked {
+		changed = append(changed, realtimedom.On(realtimedom.EntityAccess, m.PropertyID))
+		anchors = append(anchors, m.PropertyID)
+	}
+	return changed, anchors
+}
+
+// recoveredAccessFrames collects the FIFO-recovered legs' access pairs — each
+// restored access dirties its object's participants view. No journal anchors:
+// the coordinator journals no recovery row (карта #714, #716; ADR 0062).
+func recoveredAccessFrames(recovered []domain.Membership) []realtimedom.Change {
+	changed := make([]realtimedom.Change, 0, len(recovered))
+	for _, m := range recovered {
+		changed = append(changed, realtimedom.On(realtimedom.EntityAccess, m.PropertyID))
+	}
+	return changed
+}
+
 // NewAccessService creates an AccessService. Slots is the recipient tariff slot
 // coordinator (issue #158, T4); it may be nil to disable slot enforcement
 // (pre-T4 behaviour, e.g. in tests that don't exercise the limit). Events is
@@ -527,6 +553,7 @@ func (s *AccessService) RevokeMember(ctx context.Context, actor, propertyID, mem
 
 	var membership domain.Membership
 	var revoked []domain.Membership
+	var recovered []domain.Membership
 	err = s.runInTx(ctx, func(stores *txStores) error {
 		var err error
 		membership, err = stores.members.GetByID(ctx, memberID, propertyID)
@@ -552,7 +579,8 @@ func (s *AccessService) RevokeMember(ctx context.Context, actor, propertyID, mem
 		// Revoking the recipient freed one of their tariff slots: try to recover the
 		// oldest suspended membership FIFO (issue #158, T4).
 		if s.slots != nil {
-			if err := s.slots.RecoverSuspended(ctx, stores.tx, membership.UserID); err != nil {
+			recovered, err = s.slots.RecoverSuspended(ctx, stores.tx, membership.UserID)
+			if err != nil {
 				return fmt.Errorf("recover suspended after revoke: %w", err)
 			}
 		}
@@ -563,13 +591,12 @@ func (s *AccessService) RevokeMember(ctx context.Context, actor, propertyID, mem
 	}
 	publishRevokedEvents(ctx, s.events, s.logger, actor, revoked)
 	// One dispatch for the whole transaction: the pairs dedup per call, a
-	// bulk revoke emits one frame per pair (карта #714, #716).
-	changed := make([]realtimedom.Change, 0, len(revoked))
-	anchors := make([]uuid.UUID, 0, len(revoked))
-	for _, m := range revoked {
-		changed = append(changed, realtimedom.On(realtimedom.EntityAccess, m.PropertyID))
-		anchors = append(anchors, m.PropertyID)
-	}
+	// bulk revoke emits one frame per pair (карта #714, #716). The freed
+	// slot's FIFO recovery dirties each restored object's participants view
+	// in the same dispatch — the coordinator journals no recovery row, so no
+	// history pair piggybacks for it.
+	changed, anchors := removedAccessFrames(revoked)
+	changed = append(changed, recoveredAccessFrames(recovered)...)
 	s.publishRealtime(ctx, actor, changed, anchors...)
 	return nil
 }
@@ -595,6 +622,7 @@ func (s *AccessService) LeaveProperty(ctx context.Context, actor, propertyID uui
 	}
 
 	var membership domain.Membership
+	var recovered []domain.Membership
 	err = s.runInTx(ctx, func(stores *txStores) error {
 		var err error
 		membership, err = stores.members.GetByPropertyAndUser(ctx, propertyID, actor)
@@ -612,7 +640,8 @@ func (s *AccessService) LeaveProperty(ctx context.Context, actor, propertyID uui
 		// reason sheet's «Покинуть объект», ticket #702) frees nothing, so
 		// the recovery is skipped.
 		if !membership.IsSuspended() && s.slots != nil {
-			if err := s.slots.RecoverSuspended(ctx, stores.tx, actor); err != nil {
+			recovered, err = s.slots.RecoverSuspended(ctx, stores.tx, actor)
+			if err != nil {
 				return fmt.Errorf("recover suspended after leave: %w", err)
 			}
 		}
@@ -667,7 +696,13 @@ func (s *AccessService) LeaveProperty(ctx context.Context, actor, propertyID uui
 			MemberID:     actor,
 		})
 	})
-	s.publishRealtime(ctx, actor, accessFrame(propertyID), propertyID)
+	// The self-exit and the freed slot's FIFO recovery share one dispatch
+	// (карта #714, #716): the exit dirties the object the member left, the
+	// restored legs dirty their own objects — the leaver stays in the
+	// audience at publication (ADR 0062 §4), so the restoration reaches them.
+	frames := accessFrame(propertyID)
+	frames = append(frames, recoveredAccessFrames(recovered)...)
+	s.publishRealtime(ctx, actor, frames, propertyID)
 	return nil
 }
 

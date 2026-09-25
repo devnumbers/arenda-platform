@@ -135,6 +135,109 @@ func TestRollbackPublishesNothing(t *testing.T) {
 	assert.Empty(t, f.realtime.Publications)
 }
 
+// TestRemovePendingLegPublishesAccessPair extends the removal canon to the
+// unregistered invitee: a person holding only pending legs is removed, and
+// every affected object's participants view is dirtied — the pending row
+// leaves the list; the journal row of the cancellation piggybacks.
+func TestRemovePendingLegPublishesAccessPair(t *testing.T) {
+	t.Parallel()
+
+	f := newMutationFixture()
+	prop := uuid.Must(uuid.NewV7())
+	f.addProperty(prop, f.owner, testFirstTitle)
+	if _, err := f.invitations.Create(t.Context(), domain.Invitation{
+		ID: uuid.Must(uuid.NewV7()), PropertyID: prop, Email: testNewUserEmail,
+		Role: domain.RoleViewer, InvitedBy: f.owner, LastSentAt: f.clk.now, CreatedAt: f.clk.now,
+	}); err != nil {
+		t.Fatalf("seed invitation: %v", err)
+	}
+
+	require.NoError(t, f.svc.Remove(t.Context(), f.owner, testNewUserEmail))
+
+	assert.Equal(t,
+		[]string{"access:" + prop.String(), "history:" + prop.String()},
+		f.realtime.Pairs())
+}
+
+// TestRevokeMemberRecoversFifoPair extends the revocation dispatch with the
+// FIFO recovery: freeing the revoked member's slot restores their oldest
+// suspended access on another object, and that object's participants view is
+// dirtied in the same dispatch (the journal row belongs to the revocation
+// only — the coordinator journals no recovery row).
+func TestRevokeMemberRecoversFifoPair(t *testing.T) {
+	t.Parallel()
+
+	f := newMutationFixture()
+	prop := uuid.Must(uuid.NewV7())
+	f.addProperty(prop, f.owner, testFirstTitle)
+	other := uuid.Must(uuid.NewV7())
+	restored := uuid.Must(uuid.NewV7())
+	f.addProperty(restored, other, testSecondTitle)
+	member := uuid.Must(uuid.NewV7())
+	f.limiter.set(member, 1) // One free slot: the landing lands active.
+	_, err := f.access.AddMember(context.Background(), f.owner, prop, member, domain.RoleViewer)
+	require.NoError(t, err)
+	// The member's suspended leg on another object waits in the FIFO queue.
+	if _, err := f.repo.CreateWithStatus(t.Context(), domain.Membership{
+		ID: uuid.Must(uuid.NewV7()), PropertyID: restored, UserID: member,
+		Role: domain.RoleViewer, GrantedBy: other, Status: domain.MemberStatusSuspended,
+	}); err != nil {
+		t.Fatalf("seed suspended leg: %v", err)
+	}
+	f.realtime.Publications = nil
+
+	members, err := f.access.ListMembers(context.Background(), f.owner, prop)
+	require.NoError(t, err)
+	membershipID := membershipOf(t, members, member)
+	require.NotEqual(t, uuid.Nil, membershipID)
+
+	require.NoError(t, f.access.RevokeMember(context.Background(), f.owner, prop, membershipID))
+
+	assert.Equal(t,
+		[]string{
+			"access:" + prop.String(),
+			"access:" + restored.String(),
+			"history:" + prop.String(),
+		},
+		f.realtime.Pairs())
+}
+
+// TestLeavePropertyRecoversFifoPair extends the self-exit dispatch with the
+// FIFO recovery: the leaver's freed slot restores their oldest suspended
+// access on another object — its pair rides the same dispatch, and the
+// leaver stays in the audience at publication (ADR 0062 §4).
+func TestLeavePropertyRecoversFifoPair(t *testing.T) {
+	t.Parallel()
+
+	f := newMutationFixture()
+	prop := uuid.Must(uuid.NewV7())
+	f.addProperty(prop, f.owner, testFirstTitle)
+	other := uuid.Must(uuid.NewV7())
+	restored := uuid.Must(uuid.NewV7())
+	f.addProperty(restored, other, testSecondTitle)
+	member := uuid.Must(uuid.NewV7())
+	f.limiter.set(member, 1)
+	_, err := f.access.AddMember(context.Background(), f.owner, prop, member, domain.RoleViewer)
+	require.NoError(t, err)
+	if _, err := f.repo.CreateWithStatus(t.Context(), domain.Membership{
+		ID: uuid.Must(uuid.NewV7()), PropertyID: restored, UserID: member,
+		Role: domain.RoleViewer, GrantedBy: other, Status: domain.MemberStatusSuspended,
+	}); err != nil {
+		t.Fatalf("seed suspended leg: %v", err)
+	}
+	f.realtime.Publications = nil
+
+	require.NoError(t, f.access.LeaveProperty(context.Background(), member, prop))
+
+	assert.Equal(t,
+		[]string{
+			"access:" + prop.String(),
+			"access:" + restored.String(),
+			"history:" + prop.String(),
+		},
+		f.realtime.Pairs())
+}
+
 // TestInviteByEmailPendingPublishesFrames pins the pending invitation's
 // frames: the participants view gains the pending row, the journal row
 // piggybacks.

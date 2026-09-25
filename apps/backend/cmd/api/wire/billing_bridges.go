@@ -87,9 +87,12 @@ func (e recipientSlotEnforcer) Enforce(ctx context.Context, userID uuid.UUID, tr
 }
 
 // Recover reactivates the recipient's oldest suspended shared memberships
-// FIFO (issue #695).
+// FIFO (issue #695). The reactivated rows are discarded: the billing worker's
+// own transitions do not dispatch the recovery's realtime pairs — that
+// publication is the access context's, on the transitions it owns.
 func (e recipientSlotEnforcer) Recover(ctx context.Context, userID uuid.UUID) error {
-	return e.coordinator.RecoverSuspended(ctx, e.tx, userID)
+	_, err := e.coordinator.RecoverSuspended(ctx, e.tx, userID)
+	return err
 }
 
 // ActivePropertyExists reports whether the property belongs to the owner and

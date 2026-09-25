@@ -120,7 +120,7 @@ func TestSlotCoordinator_RecoverSuspended_OwnArchiveFreesSlotTxVisible(t *testin
 	}); err != nil {
 		t.Fatalf("ArchiveProperty: %v", err)
 	}
-	if err := slots.RecoverSuspended(ctx, accessNoCommitTx{testTx}, recipient); err != nil {
+	if _, err := slots.RecoverSuspended(ctx, accessNoCommitTx{testTx}, recipient); err != nil {
 		t.Fatalf("RecoverSuspended: %v", err)
 	}
 
