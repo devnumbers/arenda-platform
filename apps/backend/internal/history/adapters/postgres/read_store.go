@@ -22,6 +22,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared"
 )
 
 // ReadStore reads the action journal.
@@ -56,8 +57,8 @@ func (s *ReadStore) List(ctx context.Context, actor uuid.UUID, q application.Jou
 		BaseActions: joinStrings(baseActionStrings(q.BaseActions)),
 		QRaw:        q.Search,
 		QTrgm:       escapeLikePattern(q.Search),
-		// The application layer folds Limit to [0, FeedMaxLimit=100] before
-		// the store call — the narrowing is bounded by that contract.
+		// Сервис гарантирует 1..application.FeedMaxLimit (гвард List выше) —
+		// сужение int→int32 ограничено этим контрактом.
 		PageLimit: toPageLimit(q.Limit),
 	}
 	if q.DateFrom != nil {
@@ -106,8 +107,8 @@ func (s *ReadStore) listAfter(ctx context.Context, actor uuid.UUID, q applicatio
 		QTrgm:       escapeLikePattern(q.Search),
 		AfterTs:     pgtype.Timestamptz{Time: q.After.CreatedAt, Valid: true},
 		AfterID:     pgconv.UUIDToPgtype(q.After.ID),
-		// The application layer folds Limit to [0, FeedMaxLimit=100] before
-		// the store call — the narrowing is bounded by that contract.
+		// Сервис гарантирует 1..application.FeedMaxLimit (гвард List выше) —
+		// сужение int→int32 ограничено этим контрактом.
 		PageLimit: toPageLimit(q.Limit),
 	}
 	if q.DateFrom != nil {
@@ -264,13 +265,9 @@ func escapeLikePattern(q string) string {
 	return likePatternEscaper.Replace(q)
 }
 
-// toPageLimit narrows the feed's page limit to the SQL parameter's int32.
-// The application layer folds Limit to [0, FeedMaxLimit=100] before the store
-// call (foldLimit), so the value is bounded — the guard keeps the narrowing
-// honest at this layer too.
+// toPageLimit сужает page-limit фида до int32 SQL-параметра: сервис
+// гарантирует 1..application.FeedMaxLimit (гвард List выше), сечение —
+// санкционированный shared.ToInt32Clamped (clamp к границам int32).
 func toPageLimit(limit int) int32 {
-	if limit < 0 || limit > 100 {
-		return 0
-	}
-	return int32(limit)
+	return shared.ToInt32Clamped(limit)
 }

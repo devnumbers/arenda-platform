@@ -331,8 +331,11 @@ func (s *OperationService) DeleteOperation(
 			}
 			if op.PaymentID != nil {
 				outcome.AuditCtx = map[string]any{"payment_id": *op.PaymentID}
-				// The cancelled fact frees the rule's slot — the tick stands
-				// the occurrence back; the rule's screens are dirty too.
+				// The canceled payment fact dirties the rule's derived view —
+				// paid vs unpaid, planned counts — with no tick involvement:
+				// the row keeps its (payment_id, date) key, so the tick never
+				// re-materializes the canceled occurrence (see DeleteOperation's
+				// doc).
 				outcome.Changed = append(outcome.Changed,
 					realtimedom.On(realtimedom.EntityPayments, propertyID))
 			}

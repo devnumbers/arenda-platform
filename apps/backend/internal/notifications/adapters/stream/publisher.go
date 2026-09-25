@@ -94,14 +94,3 @@ type createdPayload struct {
 type unreadPayload struct {
 	Count int64 `json:"count"`
 }
-
-// marshalPayload marshals a payload struct of plain strings and numbers.
-// Such a marshal cannot fail, but the frames are best-effort anyway: the
-// fallback is an empty payload, never an error path.
-func marshalPayload(v any) json.RawMessage {
-	data, err := json.Marshal(v)
-	if err != nil {
-		return json.RawMessage(`{}`)
-	}
-	return data
-}
