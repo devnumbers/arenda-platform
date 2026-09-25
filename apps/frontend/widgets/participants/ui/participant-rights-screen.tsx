@@ -27,10 +27,12 @@ import {
   SubScreenShell,
 } from '@/shared/ui/design';
 import { resolveParticipantMemberRow } from '../lib/participant-member-lookup';
+import { resolvePropertyParticipantsError } from '../lib/property-participants-error';
 import {
   ObjectAvatarGlyph,
   PARTICIPANT_ROW_BASE_CLASS,
   ParticipantNotFound,
+  PropertyAccessNotFound,
 } from './participant-fragments';
 import { stageParticipantPopup } from '../lib/participant-popups';
 import { ParticipantSuccessPopup } from './participant-success-popup';
@@ -158,13 +160,19 @@ export function ParticipantRightsScreen({
         />
       );
   } else if (membersQuery.isError) {
-    content = (
-      <ErrorCard
-        title="Не удалось загрузить права участника"
-        onRetry={() => void membersQuery.refetch()}
-        className="mt-6"
-      />
-    );
+    content =
+      resolvePropertyParticipantsError(membersQuery.error) === 'not_found' ? (
+        // Свой доступ отозван/приостановлен в открытой сессии (#719):
+        // бэк скрывает нечитаемый объект как 404 — канон в доке
+        // PropertyAccessNotFound.
+        <PropertyAccessNotFound />
+      ) : (
+        <ErrorCard
+          title="Не удалось загрузить права участника"
+          onRetry={() => void membersQuery.refetch()}
+          className="mt-6"
+        />
+      );
   } else if (member === undefined) {
     // Список успешен, а строки нет — нога уже отозвана (контракт
     // participant-member-lookup: «строки нет — доступ уже снят»); честный

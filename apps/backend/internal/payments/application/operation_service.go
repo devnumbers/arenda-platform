@@ -11,6 +11,8 @@ import (
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/payments/domain"
+	realtimeapp "github.com/nambers/arenda-planform/apps/backend/internal/realtime/application"
+	realtimedom "github.com/nambers/arenda-planform/apps/backend/internal/realtime/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
 
@@ -139,6 +141,18 @@ type OperationService struct {
 	policy    sharedpolicy.Policy
 	calendar  OwnerCalendar
 	writeGate gateFunc // Full Access+: pay.
+	// Realtime is the late-bound carrier the mutations' frames dispatch
+	// through after the commit (карта #714, #716; ADR 0062); nil keeps the
+	// pre-#716 silence.
+	realtime realtimeapp.Publisher
+}
+
+// SetRealtimePublisher late-binds the realtime carrier (карта #714, #716;
+// ADR 0062): the frames of the committed mutations dispatch through it —
+// the grace-events canon, best-effort, a broken carrier never fails the
+// mutation.
+func (s *OperationService) SetRealtimePublisher(p realtimeapp.Publisher) {
+	s.realtime = p
 }
 
 // NewOperationService builds the operation use cases over the canonical
@@ -152,6 +166,12 @@ func NewOperationService(factory txStoreFactory, calendar OwnerCalendar, policy 
 		calendar:       calendar,
 		writeGate:      newCapabilityGate(policy, sharedpolicy.CanEdit),
 	}
+}
+
+// conveyor bundles this service's factory and calendar for the shared
+// mutation conveyor.
+func (s *OperationService) conveyor() mutationGates {
+	return mutationGates{factory: s.txStoreFactory, calendar: s.calendar, realtime: s.realtime}
 }
 
 // PayOperation implements «Оплатить сейчас» (POST …/operations/{id}/pay): a
@@ -191,10 +211,16 @@ func (s *OperationService) PayOperation(
 				AuditEntity:   auditdomain.EntityOperation,
 				AuditEntityID: &op.ID,
 				History:       new(history),
+				Changed:       []realtimedom.Change{realtimedom.On(realtimedom.EntityOperations, propertyID)},
 				Tick:          true,
 			}
 			if op.PaymentID != nil {
 				outcome.AuditCtx = map[string]any{"payment_id": *op.PaymentID}
+				// The paid fact moves the rule's schedule cursor — the tick
+				// stands the next occurrence; the rule's screens are dirty
+				// too.
+				outcome.Changed = append(outcome.Changed,
+					realtimedom.On(realtimedom.EntityPayments, propertyID))
 			}
 			return outcome, nil
 		})
@@ -257,6 +283,7 @@ func (s *OperationService) CreateOperation(
 				AuditEntity:   auditdomain.EntityOperation,
 				AuditEntityID: &draft.ID,
 				History:       new(history),
+				Changed:       []realtimedom.Change{realtimedom.On(realtimedom.EntityOperations, propertyID)},
 				Tick:          true,
 			}, nil
 		})
@@ -300,9 +327,17 @@ func (s *OperationService) DeleteOperation(
 				AuditEntity:   auditdomain.EntityOperation,
 				AuditEntityID: &op.ID,
 				History:       new(history),
+				Changed:       []realtimedom.Change{realtimedom.On(realtimedom.EntityOperations, propertyID)},
 			}
 			if op.PaymentID != nil {
 				outcome.AuditCtx = map[string]any{"payment_id": *op.PaymentID}
+				// The canceled payment fact dirties the rule's derived view —
+				// paid vs unpaid, planned counts — with no tick involvement:
+				// the row keeps its (payment_id, date) key, so the tick never
+				// re-materializes the canceled occurrence (see DeleteOperation's
+				// doc).
+				outcome.Changed = append(outcome.Changed,
+					realtimedom.On(realtimedom.EntityPayments, propertyID))
 			}
 			return outcome, nil
 		})
@@ -585,12 +620,6 @@ func (s *OperationService) listScoped(
 		items[i] = OperationListItem{Operation: op, ViewStatus: domain.OperationView(op, today)}
 	}
 	return items, nil
-}
-
-// conveyor bundles this service's factory and calendar for the shared
-// mutation conveyor.
-func (s *OperationService) conveyor() mutationGates {
-	return mutationGates{factory: s.txStoreFactory, calendar: s.calendar}
 }
 
 // validateManualOperation is the single validator of the manual-operation

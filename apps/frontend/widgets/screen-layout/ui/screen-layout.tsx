@@ -12,6 +12,7 @@ import {
   TabBarVisibilityProvider,
 } from '@/shared/ui/design';
 import { usePropertiesLandingHref } from '@/features/properties';
+import { RealtimeStreamProvider } from '@/features/realtime';
 import { HubPrefetchProvider } from './hub-prefetch-provider';
 import { NotificationStreamGate } from './notification-stream-gate';
 import { PushPermissionGate } from './push-permission-gate';
@@ -35,7 +36,9 @@ import { TopNavUserProvider } from './top-nav-user-provider';
  * приложения (ADR 0031/0032): регистрация и тихое обновление service
  * worker, pull-to-refresh (ADR 0031 — ref делится с узлом контента:
  * жест двигает transform'ом именно его; сайдбар, пилюли и TabBar
- * `position: fixed` и остаются на месте) и PushPermissionGate —
+ * `position: fixed` и остаются на месте) и PushPermissionGate — невидимый
+ * гейт, держащий пуш-подписку живой (системный промпт он сам не поднимает).
+ */
 /** Число непрочитанных для бейджей навигации (#747): тот же react-query
  * запрос, что у чипа ленты — SSE и refetch-on-focus обновляют кэш один
  * раз, все потребители перерисовываются. null — счёт ещё не приходил
@@ -71,6 +74,7 @@ export function ScreenLayout({ children }: { readonly children: ReactNode }): JS
             <PullToRefresh contentRef={contentRef} />
             <PushPermissionGate />
             <NotificationStreamGate />
+            <RealtimeStreamProvider />
           </div>
         </TopNavUserProvider>
       </HubPrefetchProvider>

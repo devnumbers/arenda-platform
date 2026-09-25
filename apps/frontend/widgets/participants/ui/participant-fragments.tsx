@@ -2,6 +2,8 @@
 
 import type { JSX } from 'react';
 import { BoldHome, BoldObjects, CheckBoxFalse, CheckBoxTrue, Minus } from '@/shared/assets/icons';
+import { ROUTES } from '@/shared/config/routes';
+import { EmptyState } from '@/shared/ui/empty-state';
 
 /** Базовый класс кликабельного ряда списков участника (Row Button
  * 936:39348): общий для страницы участника, экрана прав и мультичека
@@ -43,6 +45,23 @@ export function ParticipantNotFound(): JSX.Element {
     <p className="pt-16 text-center text-base leading-[18px] text-content-secondary">
       Участник не найден
     </p>
+  );
+}
+
+/** 404-канон невидимого объекта (#719, копирайт PropertyNotFoundScreen):
+ * свой доступ отозван/приостановлен в открытой сессии — перечитывание
+ * отвечает 404, бэк скрывает нечитаемый объект как 404. Фрагмент здесь,
+ * а не импорт из чужого виджета — cross-slice импорт виджетов запрещён. */
+export function PropertyAccessNotFound(): JSX.Element {
+  return (
+    <EmptyState
+      imageSrc="/images/empty-logo.png"
+      imageAlt="Логотип"
+      title="Объект не найден или у вас нет к нему доступа"
+      subtitle="Проверьте ссылку или попросите владельца выдать вам доступ к объекту"
+      actionHref={ROUTES.properties}
+      actionText="К списку объектов"
+    />
   );
 }
 

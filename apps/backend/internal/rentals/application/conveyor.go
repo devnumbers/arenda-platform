@@ -19,6 +19,8 @@ import (
 	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
+	realtimeapp "github.com/nambers/arenda-planform/apps/backend/internal/realtime/application"
+	realtimedom "github.com/nambers/arenda-planform/apps/backend/internal/realtime/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/rentals/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
@@ -62,6 +64,13 @@ type mutationOutcome struct {
 	// change; only a step that changed the managed payment sets it (ADR 0053
 	// §3). Completion and deletion resolve the plan themselves and set false.
 	Tick bool
+	// Changed states the realtime frames the change produced (карта #714,
+	// #716; ADR 0062): the (entity, object) pairs the step's writes made
+	// dirty — the rental's own view plus the managed payment rule's, stated
+	// explicitly per step like the audit action. The conveyor dispatches
+	// them to the carrier strictly after the commit and piggybacks the
+	// history pair of the journal row the transaction recorded.
+	Changed []realtimedom.Change
 }
 
 // mutationGates bundles the dependencies the conveyor needs beyond the
@@ -70,6 +79,10 @@ type mutationOutcome struct {
 type mutationGates struct {
 	factory  txStoreFactory
 	calendar paymentsapp.OwnerCalendar
+	// Realtime is the late-bound carrier the frames dispatch through after
+	// the commit (карта #714, #716; ADR 0062); nil keeps the pre-#716
+	// silence.
+	realtime realtimeapp.Publisher
 }
 
 // runRentalMutation is the mutation conveyor shared by every use case of this
@@ -78,7 +91,8 @@ type mutationGates struct {
 // the load of the target rental (skipped for a zero rentalID), the change
 // step, its audit entry and its action journal row (ADR 0061) in the same
 // transaction, and the payments tick when the step changed the payment.
-// After commit it returns the changed rental's id for the re-read.
+// After commit it dispatches the step's realtime frames (ADR 0062 §3,
+// best-effort) and returns the changed rental's id for the re-read.
 func runRentalMutation(
 	g mutationGates,
 	ctx context.Context, actor, propertyID, rentalID uuid.UUID,
@@ -125,7 +139,17 @@ func runRentalMutation(
 	if err != nil {
 		return uuid.Nil, err
 	}
+	realtimeapp.Dispatch(ctx, g.realtime, actor, out.Changed, historyAnchor(out, propertyID)...)
 	return out.RentalID, nil
+}
+
+// historyAnchor is the journal anchor of the transaction's realtime dispatch:
+// the single-anchored journal row hangs on the conveyor's property.
+func historyAnchor(out mutationOutcome, propertyID uuid.UUID) []uuid.UUID {
+	if out.History == nil {
+		return nil
+	}
+	return []uuid.UUID{propertyID}
 }
 
 // lockActiveProperty loads the property with its row locked — the mutation's

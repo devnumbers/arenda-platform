@@ -13,6 +13,8 @@ import (
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
+	realtimeapp "github.com/nambers/arenda-planform/apps/backend/internal/realtime/application"
+	realtimedom "github.com/nambers/arenda-planform/apps/backend/internal/realtime/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
 
@@ -72,6 +74,59 @@ type AccessService struct {
 	slots    *SlotCoordinator
 	events   AccessEventPublisher
 	logger   *slog.Logger
+	// Realtime is the late-bound carrier the transitions' frames dispatch
+	// through after the commit (карта #714, #716; ADR 0062); nil keeps the
+	// pre-#716 silence. The invitation and participant-mutation services
+	// publish through it too — they run this service's transactional cores.
+	realtime realtimeapp.Publisher
+}
+
+// SetRealtimePublisher late-binds the realtime carrier (карта #714, #716;
+// ADR 0062): the frames of the committed transitions dispatch through it —
+// the grace-events canon, best-effort, a broken carrier never fails the
+// transition.
+func (s *AccessService) SetRealtimePublisher(p realtimeapp.Publisher) {
+	s.realtime = p
+}
+
+// publishRealtime hands the committed transition's frames to the realtime
+// carrier (карта #714, #716; ADR 0062) through the shared post-commit tail —
+// strictly after the commit, best-effort, the nil carrier silent.
+func (s *AccessService) publishRealtime(ctx context.Context, actor uuid.UUID, changes []realtimedom.Change, journaledAnchors ...uuid.UUID) {
+	realtimeapp.Dispatch(ctx, s.realtime, actor, changes, journaledAnchors...)
+}
+
+// accessFrame is one transition's pair on one object: every membership or
+// invitation transition dirties the object's participants view. The journal
+// pair piggybacks through the dispatch's journaled anchors.
+func accessFrame(propertyID uuid.UUID) []realtimedom.Change {
+	return []realtimedom.Change{realtimedom.On(realtimedom.EntityAccess, propertyID)}
+}
+
+// removedAccessFrames collects the removal batch's frames: every removed
+// active leg dirties its object's participants view and anchors the history
+// pair of the journal row the removal wrote (ADR 0061 §3) — the per-call
+// dedup of the carrier collapses a batch into one frame per pair (ADR 0062
+// §3). Shared by the single revoke and the bulk participant removal.
+func removedAccessFrames(revoked []domain.Membership) ([]realtimedom.Change, []uuid.UUID) {
+	changed := make([]realtimedom.Change, 0, len(revoked))
+	anchors := make([]uuid.UUID, 0, len(revoked))
+	for _, m := range revoked {
+		changed = append(changed, realtimedom.On(realtimedom.EntityAccess, m.PropertyID))
+		anchors = append(anchors, m.PropertyID)
+	}
+	return changed, anchors
+}
+
+// recoveredAccessFrames collects the FIFO-recovered legs' access pairs — each
+// restored access dirties its object's participants view. No journal anchors:
+// the coordinator journals no recovery row (карта #714, #716; ADR 0062).
+func recoveredAccessFrames(recovered []domain.Membership) []realtimedom.Change {
+	changed := make([]realtimedom.Change, 0, len(recovered))
+	for _, m := range recovered {
+		changed = append(changed, realtimedom.On(realtimedom.EntityAccess, m.PropertyID))
+	}
+	return changed
 }
 
 // NewAccessService creates an AccessService. Slots is the recipient tariff slot
@@ -155,6 +210,7 @@ func (s *AccessService) AddMember(ctx context.Context, actor, propertyID, userID
 	} else {
 		publishGrantedEvents(ctx, s.events, s.logger, actor, []domain.Membership{created})
 	}
+	s.publishRealtime(ctx, actor, accessFrame(propertyID), propertyID)
 	return created, nil
 }
 
@@ -362,7 +418,10 @@ func (s *AccessService) ChangeMemberRole(
 	// — best-effort (карта #734, #751). A suspended membership stays silent:
 	// the object was already hidden from its holder (issue #162, T6 canon).
 	// A same-role no-op stays silent too — there is no change for the holder
-	// to learn about.
+	// to learn about. The silence covers the realtime stream as well: no
+	// change dispatches no access frame (the same no-change-no-frame canon as
+	// TestSuspendedRevokePublishesNothing and TestRollbackPublishesNothing in
+	// access_realtime_test.go pin it).
 	if !wasSuspended && roleChanged {
 		publishAccessEvent(ctx, s.events, s.logger, "membership_role_changed", func() error {
 			return s.events.PublishMembershipRoleChanged(ctx, MembershipRoleChanged{
@@ -374,6 +433,12 @@ func (s *AccessService) ChangeMemberRole(
 				ChangedAt:    updated.UpdatedAt,
 			})
 		})
+	}
+	// The role change's frame rides the journal anchor: the journal row the
+	// change wrote piggybacks its history pair. A same-role no-op dispatches
+	// nothing — no change, no frame (see the silence canon above).
+	if roleChanged {
+		s.publishRealtime(ctx, actor, accessFrame(propertyID), propertyID)
 	}
 	return updated, nil
 }
@@ -492,6 +557,7 @@ func (s *AccessService) RevokeMember(ctx context.Context, actor, propertyID, mem
 
 	var membership domain.Membership
 	var revoked []domain.Membership
+	var recovered []domain.Membership
 	err = s.runInTx(ctx, func(stores *txStores) error {
 		var err error
 		membership, err = stores.members.GetByID(ctx, memberID, propertyID)
@@ -517,7 +583,8 @@ func (s *AccessService) RevokeMember(ctx context.Context, actor, propertyID, mem
 		// Revoking the recipient freed one of their tariff slots: try to recover the
 		// oldest suspended membership FIFO (issue #158, T4).
 		if s.slots != nil {
-			if err := s.slots.RecoverSuspended(ctx, stores.tx, membership.UserID); err != nil {
+			recovered, err = s.slots.RecoverSuspended(ctx, stores.tx, membership.UserID)
+			if err != nil {
 				return fmt.Errorf("recover suspended after revoke: %w", err)
 			}
 		}
@@ -527,6 +594,14 @@ func (s *AccessService) RevokeMember(ctx context.Context, actor, propertyID, mem
 		return err
 	}
 	publishRevokedEvents(ctx, s.events, s.logger, actor, revoked)
+	// One dispatch for the whole transaction: the pairs dedup per call, a
+	// bulk revoke emits one frame per pair (карта #714, #716). The freed
+	// slot's FIFO recovery dirties each restored object's participants view
+	// in the same dispatch — the coordinator journals no recovery row, so no
+	// history pair piggybacks for it.
+	changed, anchors := removedAccessFrames(revoked)
+	changed = append(changed, recoveredAccessFrames(recovered)...)
+	s.publishRealtime(ctx, actor, changed, anchors...)
 	return nil
 }
 
@@ -551,6 +626,7 @@ func (s *AccessService) LeaveProperty(ctx context.Context, actor, propertyID uui
 	}
 
 	var membership domain.Membership
+	var recovered []domain.Membership
 	err = s.runInTx(ctx, func(stores *txStores) error {
 		var err error
 		membership, err = stores.members.GetByPropertyAndUser(ctx, propertyID, actor)
@@ -568,7 +644,8 @@ func (s *AccessService) LeaveProperty(ctx context.Context, actor, propertyID uui
 		// reason sheet's «Покинуть объект», ticket #702) frees nothing, so
 		// the recovery is skipped.
 		if !membership.IsSuspended() && s.slots != nil {
-			if err := s.slots.RecoverSuspended(ctx, stores.tx, actor); err != nil {
+			recovered, err = s.slots.RecoverSuspended(ctx, stores.tx, actor)
+			if err != nil {
 				return fmt.Errorf("recover suspended after leave: %w", err)
 			}
 		}
@@ -606,23 +683,32 @@ func (s *AccessService) LeaveProperty(ctx context.Context, actor, propertyID uui
 
 	// Self-exit notifies the owner post-commit (карта #734, #751; the direct
 	// lifecycle email it replaced is gone); the leaving member receives
-	// nothing. A failed owner lookup leaves nobody to notify — logged, not an
-	// error.
+	// nothing. A failed owner lookup skips only the owner notification — the
+	// realtime pairs below don't read the owner, and swallowing them with the
+	// lookup would silence the leaver's and the restored legs' screens until
+	// the next stream open (карта #714, #716).
 	owner, err := s.owners.GetOwnerID(ctx, propertyID)
 	if err != nil {
 		s.logger.WarnContext(ctx, "access: owner lookup for member left event failed",
 			slog.String(auditKeyPropertyID, propertyID.String()),
 			slog.String("error", err.Error()))
-		return nil
-	}
-	publishAccessEvent(ctx, s.events, s.logger, "member_left", func() error {
-		return s.events.PublishMemberLeft(ctx, MemberLeft{
-			MembershipID: membership.ID,
-			PropertyID:   propertyID,
-			OwnerID:      owner,
-			MemberID:     actor,
+	} else {
+		publishAccessEvent(ctx, s.events, s.logger, "member_left", func() error {
+			return s.events.PublishMemberLeft(ctx, MemberLeft{
+				MembershipID: membership.ID,
+				PropertyID:   propertyID,
+				OwnerID:      owner,
+				MemberID:     actor,
+			})
 		})
-	})
+	}
+	// The self-exit and the freed slot's FIFO recovery share one dispatch
+	// (карта #714, #716): the exit dirties the object the member left, the
+	// restored legs dirty their own objects — the leaver stays in the
+	// audience at publication (ADR 0062 §4), so the restoration reaches them.
+	frames := accessFrame(propertyID)
+	frames = append(frames, recoveredAccessFrames(recovered)...)
+	s.publishRealtime(ctx, actor, frames, propertyID)
 	return nil
 }
 

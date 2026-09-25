@@ -11,6 +11,8 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/contacts/domain"
 	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
+	realtimeapp "github.com/nambers/arenda-planform/apps/backend/internal/realtime/application"
+	realtimedom "github.com/nambers/arenda-planform/apps/backend/internal/realtime/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
 
@@ -67,6 +69,64 @@ type UpdateContactCommand struct {
 type ContactService struct {
 	txStoreFactory
 	policy sharedpolicy.Policy
+	// Realtime is the late-bound carrier the mutations' frames dispatch
+	// through after the commit (карта #714, #716; ADR 0062); nil keeps the
+	// pre-#716 silence.
+	realtime realtimeapp.Publisher
+}
+
+// SetRealtimePublisher late-binds the realtime carrier (карта #714, #716;
+// ADR 0062): the frames of the committed mutations dispatch through it —
+// the grace-events canon, best-effort, a broken carrier never fails the
+// mutation.
+func (s *ContactService) SetRealtimePublisher(p realtimeapp.Publisher) {
+	s.realtime = p
+}
+
+// publishChanged hands the committed card mutation's frames to the realtime
+// carrier (карта #714, #716; ADR 0062) — strictly post-commit, best-effort:
+// a rolled-back transaction dispatches nothing, a nil carrier keeps the
+// pre-#716 silence. The card's binding picks the pair (the owner-book card
+// dirties the owner's own book view); a journaled mutation piggybacks the
+// history pair — a written row is a history change for the object's feed.
+func (s *ContactService) publishChanged(ctx context.Context, actor uuid.UUID, propertyID *uuid.UUID, journaled bool) {
+	pair := realtimedom.InOwnerBook(realtimedom.EntityContacts)
+	var anchors []uuid.UUID
+	if propertyID != nil {
+		pair = realtimedom.On(realtimedom.EntityContacts, *propertyID)
+		if journaled {
+			anchors = append(anchors, *propertyID)
+		}
+	}
+	realtimeapp.Dispatch(ctx, s.realtime, actor, []realtimedom.Change{pair}, anchors...)
+}
+
+// publishMoved hands the committed card move's frames to the realtime
+// carrier (карта #714, #716): a move dirties both ends — the origin pair for
+// the leaving row, the destination pair (or the owner-book pair when the
+// card unbinds) for the arriving one. One dispatch carries both; the
+// carrier's per-call dedup collapses a same-object rewrite into one frame.
+// The journal row anchors the destination (ADR 0061 §3), so the history pair
+// rides there.
+func (s *ContactService) publishMoved(
+	ctx context.Context, actor uuid.UUID, source, destination *uuid.UUID, journaled bool,
+) {
+	pairs := make([]realtimedom.Change, 0, 2)
+	var anchors []uuid.UUID
+	if source != nil {
+		pairs = append(pairs, realtimedom.On(realtimedom.EntityContacts, *source))
+	}
+	if destination != nil {
+		pairs = append(pairs, realtimedom.On(realtimedom.EntityContacts, *destination))
+		if journaled {
+			anchors = append(anchors, *destination)
+		}
+	} else {
+		// The card ended unbound: the owner's book view lost/holds the row —
+		// its null-property pair marks the change when no object pair exists.
+		pairs = append(pairs, realtimedom.InOwnerBook(realtimedom.EntityContacts))
+	}
+	realtimeapp.Dispatch(ctx, s.realtime, actor, pairs, anchors...)
 }
 
 // NewContactService builds the contact use case service over the shared
@@ -138,6 +198,7 @@ func (s *ContactService) CreateContact(
 	if err != nil {
 		return domain.Contact{}, err
 	}
+	s.publishChanged(ctx, actor, draft.PropertyID, draft.PropertyID != nil)
 	return created, nil
 }
 
@@ -266,6 +327,11 @@ func (s *ContactService) UpdateContact(
 	if len(fields) > 0 {
 		auditCtx["fields"] = fields
 	}
+	// The source binding is captured before the rebind: a move dirties both
+	// objects — the origin's card grid loses the row, the destination's gains
+	// it — and one post-commit dispatch carries both ends (карта #714, #716;
+	// ADR 0062 §3).
+	source := contact.PropertyID
 	var moved bool
 	if cmd.PropertyID != nil {
 		target, didMove, err := s.rebindContact(ctx, actor, contact, *cmd.PropertyID, auditCtx)
@@ -285,6 +351,7 @@ func (s *ContactService) UpdateContact(
 	}
 
 	var stored domain.Contact
+	var journaled bool
 	err = s.runInTx(ctx, func(stores *txStores) error {
 		stored, err = stores.contacts.Update(ctx, contact)
 		if err != nil {
@@ -309,12 +376,14 @@ func (s *ContactService) UpdateContact(
 				historydomain.ContactUpdated(contact.ID, oldFullName, stored.FullName())); err != nil {
 				return err
 			}
+			journaled = true
 		}
 		return nil
 	})
 	if err != nil {
 		return domain.Contact{}, err
 	}
+	s.publishMoved(ctx, actor, source, stored.PropertyID, journaled)
 	return stored, nil
 }
 
@@ -354,7 +423,7 @@ func (s *ContactService) DeleteContact(ctx context.Context, actor, id uuid.UUID)
 	if contact.PropertyID != nil {
 		auditCtx["property_id"] = *contact.PropertyID
 	}
-	return s.runInTx(ctx, func(stores *txStores) error {
+	err = s.runInTx(ctx, func(stores *txStores) error {
 		if err := stores.contacts.Delete(ctx, contact.ID, contact.OwnerID); err != nil {
 			return err
 		}
@@ -370,6 +439,11 @@ func (s *ContactService) DeleteContact(ctx context.Context, actor, id uuid.UUID)
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	s.publishChanged(ctx, actor, contact.PropertyID, contact.PropertyID != nil)
+	return nil
 }
 
 // gate applies the ADR 0028 capability gate over the policy and returns the

@@ -405,41 +405,55 @@ func TestReadStore_AfterCursorBurstWalk(t *testing.T) {
 		if err != nil {
 			t.Fatalf("after page %d: %v", pages, err)
 		}
-		if len(page.Items) == 0 {
-			if page.NextCursor != "" || page.PrevCursor != "" {
-				t.Fatal("an empty after-page must carry neither cursor")
-			}
-			break
-		}
-		for i := 1; i < len(page.Items); i++ {
-			if page.Items[i].CreatedAt.After(page.Items[i-1].CreatedAt) {
-				t.Fatal("an after-page must keep the (created_at, id) DESC order")
-			}
-		}
-		for _, item := range page.Items {
-			if got[item.ID] {
-				t.Fatalf("after page %d: duplicate row %s", pages, item.ID)
-			}
-			if !seeded[item.ID] {
-				t.Fatalf("after page %d: row %s is not part of the burst", pages, item.ID)
-			}
-			got[item.ID] = true
-		}
-		pages++
-		if pages > burst/pageSize+1 {
-			t.Fatal("the after-walk did not end within the burst's pages")
-		}
-		if len(page.Items) < pageSize {
+		if assertAfterPage(t, page, seeded, got, pages, pageSize) {
 			break
 		}
 		if page.PrevCursor == "" {
 			t.Fatal("a full after-page must carry prev_cursor")
+		}
+		pages++
+		if pages > burst/pageSize+1 {
+			t.Fatal("the after-walk did not end within the burst's pages")
 		}
 		after = page.PrevCursor
 	}
 	if len(got) != burst {
 		t.Fatalf("after-walk: want all %d burst rows, got %d — %d lost", burst, len(got), burst-len(got))
 	}
+}
+
+// assertAfterPage verifies one after-walk page: the empty page carries
+// neither cursor, the (created_at, id) DESC order holds, every row is a
+// first-seen burst row. Returns true when the walk must end (an empty page
+// or a short one).
+func assertAfterPage(
+	t *testing.T,
+	page historyapp.FeedPage,
+	seeded, got map[uuid.UUID]bool,
+	pages, pageSize int,
+) bool {
+	t.Helper()
+	if len(page.Items) == 0 {
+		if page.NextCursor != "" || page.PrevCursor != "" {
+			t.Fatal("an empty after-page must carry neither cursor")
+		}
+		return true
+	}
+	for i := 1; i < len(page.Items); i++ {
+		if page.Items[i].CreatedAt.After(page.Items[i-1].CreatedAt) {
+			t.Fatal("an after-page must keep the (created_at, id) DESC order")
+		}
+	}
+	for _, item := range page.Items {
+		if got[item.ID] {
+			t.Fatalf("after page %d: duplicate row %s", pages, item.ID)
+		}
+		if !seeded[item.ID] {
+			t.Fatalf("after page %d: row %s is not part of the burst", pages, item.ID)
+		}
+		got[item.ID] = true
+	}
+	return len(page.Items) < pageSize
 }
 
 func TestReadStore_Filters(t *testing.T) {

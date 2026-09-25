@@ -28,6 +28,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/payments/domain"
 	pgdb "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/testdb"
+	realtimetest "github.com/nambers/arenda-planform/apps/backend/internal/realtime/realtimetest"
 	rentalspg "github.com/nambers/arenda-planform/apps/backend/internal/rentals/adapters/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/actor"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
@@ -79,8 +80,11 @@ type paymentsHarness struct {
 	svc    *paymentsapp.PaymentService
 	ops    *paymentsapp.OperationService
 	global *paymentsapp.GlobalPaymentService
-	owner  uuid.UUID
-	propID uuid.UUID
+	// Realtime is the recording carrier the services dispatch their frames
+	// through — the realtime seam's test double (карта #714, #716).
+	realtime *realtimetest.RecordingPublisher
+	owner    uuid.UUID
+	propID   uuid.UUID
 }
 
 func newPaymentsHarness(t *testing.T) *paymentsHarness {
@@ -109,14 +113,23 @@ func newPaymentsHarnessWithPolicy(t *testing.T, policy sharedpolicy.Policy) *pay
 		rentalspg.NewRentalLinkReader(pool), audit, historypg.NewRecorder(pool), uow,
 	)
 
+	realtime := &realtimetest.RecordingPublisher{}
+	svc := paymentsapp.NewPaymentService(factory, calendar, policy)
+	ops := paymentsapp.NewOperationService(factory, calendar, policy)
+	global := paymentsapp.NewGlobalPaymentService(favoriteOrders, calendar, factory)
+	svc.SetRealtimePublisher(realtime)
+	ops.SetRealtimePublisher(realtime)
+	global.SetRealtimePublisher(realtime)
+
 	return &paymentsHarness{
-		t:      t,
-		pool:   pool,
-		clock:  clk,
-		tick:   paymentsapp.NewTickService(factory, zones, calendar, nil),
-		svc:    paymentsapp.NewPaymentService(factory, calendar, policy),
-		ops:    paymentsapp.NewOperationService(factory, calendar, policy),
-		global: paymentsapp.NewGlobalPaymentService(favoriteOrders, calendar, factory),
+		t:        t,
+		pool:     pool,
+		clock:    clk,
+		tick:     paymentsapp.NewTickService(factory, zones, calendar, nil),
+		svc:      svc,
+		ops:      ops,
+		global:   global,
+		realtime: realtime,
 	}
 }
 
@@ -150,6 +163,9 @@ func newPaymentsHarnessWithRealPolicy(t *testing.T) *paymentsHarness {
 	h.svc = paymentsapp.NewPaymentService(factory, calendar, policy)
 	h.ops = paymentsapp.NewOperationService(factory, calendar, policy)
 	h.global = paymentsapp.NewGlobalPaymentService(paymentspg.NewGlobalPaymentStore(h.pool), calendar, factory)
+	h.svc.SetRealtimePublisher(h.realtime)
+	h.ops.SetRealtimePublisher(h.realtime)
+	h.global.SetRealtimePublisher(h.realtime)
 	return h
 }
 

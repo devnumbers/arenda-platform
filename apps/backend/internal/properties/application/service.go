@@ -18,11 +18,14 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	accessdomain "github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
+	realtimeapp "github.com/nambers/arenda-planform/apps/backend/internal/realtime/application"
+	realtimedom "github.com/nambers/arenda-planform/apps/backend/internal/realtime/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
@@ -79,6 +82,60 @@ type PropertyService struct {
 	rentalDeletion     RentalDeletionGuard
 	ownerCalendar      OwnerCalendar
 	logger             *slog.Logger
+	// Realtime is the late-bound carrier the mutations' frames dispatch
+	// through after the commit (карта #714, #716; ADR 0062); nil keeps the
+	// pre-#716 silence.
+	realtime realtimeapp.Publisher
+}
+
+// SetRealtimePublisher late-binds the realtime carrier (карта #714, #716;
+// ADR 0062): the frames of the committed mutations dispatch through it —
+// the grace-events canon, best-effort, a broken carrier never fails the
+// mutation.
+func (s *PropertyService) SetRealtimePublisher(p realtimeapp.Publisher) {
+	s.realtime = p
+}
+
+// publishChanged hands the committed object mutation's frames to the realtime
+// carrier (карта #714, #716; ADR 0062) — strictly post-commit, best-effort: a
+// rolled-back transaction dispatches nothing, a nil carrier keeps the
+// pre-#716 silence. A journaled mutation piggybacks the history pair — a
+// written row is a history change for the object's feed. (The delete's frame
+// has no audience by construction: post-commit the object row is gone and the
+// derived access resolves to nobody, so DeleteProperty dispatches nothing.)
+func (s *PropertyService) publishChanged(ctx context.Context, actor, propertyID uuid.UUID, journaled bool) {
+	var anchors []uuid.UUID
+	if journaled {
+		anchors = append(anchors, propertyID)
+	}
+	realtimeapp.Dispatch(ctx, s.realtime, actor,
+		[]realtimedom.Change{realtimedom.On(realtimedom.EntityProperty, propertyID)}, anchors...)
+}
+
+// slotAccessFrames collects the slot policy's access pairs — recovered legs
+// dirty their objects' participants views the same way freshly suspended ones
+// do. The batch forwards raw — collapsing the repeated pairs is the carrier's
+// contract (the per-call dedup of the stream Publisher's EntityChanged), the
+// same reliance as the access seam's recovery dispatch. No journal anchors —
+// the slot coordinator journals no recovery row (карта #714, #716; ADR 0062 §3).
+func slotAccessFrames(legs []accessdomain.Membership) []realtimedom.Change {
+	changed := make([]realtimedom.Change, 0, len(legs))
+	for _, m := range legs {
+		changed = append(changed, realtimedom.On(realtimedom.EntityAccess, m.PropertyID))
+	}
+	return changed
+}
+
+// publishSlotAccess hands the slot policy's access pairs (recovered —
+// archive/delete seams; suspended — unarchive) to the realtime carrier
+// (карта #714, #716; ADR 0062 §3). The caller captures the legs inside its
+// transaction and invokes this after the commit; best-effort, a nil carrier
+// keeps the pre-#716 silence.
+func (s *PropertyService) publishSlotAccess(ctx context.Context, actor uuid.UUID, legs []accessdomain.Membership) {
+	if len(legs) == 0 {
+		return
+	}
+	realtimeapp.Dispatch(ctx, s.realtime, actor, slotAccessFrames(legs))
 }
 
 // SetSharedMemberships injects the access-context adapter that resolves the
@@ -290,6 +347,7 @@ func (s *PropertyService) CreateProperty(ctx context.Context, actor uuid.UUID, c
 	if err != nil {
 		return domain.Property{}, err
 	}
+	s.publishChanged(ctx, actor, created.ID, true)
 
 	created.Photos = []domain.Photo{}
 	created.AccessRole = sharedpolicy.RoleOwner
@@ -655,6 +713,7 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, actor, id uuid.UUI
 	}
 
 	var updated domain.Property
+	var journaled bool
 	err = s.runInTx(ctx, func(stores *txStores) error {
 		property, err := lockEditableProperty(ctx, stores.repo, id)
 		if err != nil {
@@ -691,12 +750,14 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, actor, id uuid.UUI
 				sharedpolicy.HistoryActorRole(role), entry); err != nil {
 				return err
 			}
+			journaled = true
 		}
 		return nil
 	})
 	if err != nil {
 		return domain.Property{}, err
 	}
+	s.publishChanged(ctx, actor, id, journaled)
 
 	properties, err := s.withPhotos(ctx, updated)
 	if err != nil {
@@ -721,6 +782,7 @@ func (s *PropertyService) SetPropertyPin(ctx context.Context, actor, id uuid.UUI
 	}
 
 	var updated domain.Property
+	var journaled bool
 	err = s.runInTx(ctx, func(stores *txStores) error {
 		property, err := lockEditableProperty(ctx, stores.repo, id)
 		if err != nil {
@@ -760,12 +822,14 @@ func (s *PropertyService) SetPropertyPin(ctx context.Context, actor, id uuid.UUI
 				sharedpolicy.HistoryActorRole(role), entry); err != nil {
 				return err
 			}
+			journaled = true
 		}
 		return nil
 	})
 	if err != nil {
 		return domain.Property{}, err
 	}
+	s.publishChanged(ctx, actor, id, journaled)
 
 	properties, err := s.withPhotos(ctx, updated)
 	if err != nil {
@@ -874,6 +938,10 @@ func (s *PropertyService) ArchiveProperty(ctx context.Context, actor, id uuid.UU
 	}
 
 	var archived domain.Property
+	// The recovery legs captured inside the transaction; their access pairs
+	// dispatch post-commit next to publishChanged (карта #714, #716; ADR 0062
+	// §3).
+	var recovered []accessdomain.Membership
 	err = s.runInTx(ctx, func(stores *txStores) error {
 		var err error
 		archived, err = s.archivePropertyInTx(ctx, stores.repo, actor, id)
@@ -897,24 +965,33 @@ func (s *PropertyService) ArchiveProperty(ctx context.Context, actor, id uuid.UU
 
 		// Archiving a shared object freed one tariff slot for each recipient: try to
 		// recover their oldest suspended memberships FIFO in the same transaction
-		// (issue #158, T4).
+		// (issue #158, T4). The reactivated legs are captured: their access pairs
+		// are the properties-side publication of the recovery, dispatched
+		// post-commit below like publishChanged (карта #714, #716; ADR 0062 §3).
 		if s.slots != nil {
-			if err := s.slots.RecoverSuspendedForProperty(ctx, stores.tx, id); err != nil {
+			legs, err := s.slots.RecoverSuspendedForProperty(ctx, stores.tx, id)
+			if err != nil {
 				return fmt.Errorf("recover suspended memberships after archive: %w", err)
 			}
+			recovered = append(recovered, legs...)
 			// Archiving one of the owner's OWN objects also freed one of the owner's
 			// own tariff slots: the owner is never a member row of their own object,
 			// so RecoverSuspendedForProperty above did not visit them. Recover their
-			// own suspended shared queue FIFO in the same transaction.
-			if err := s.slots.RecoverSuspended(ctx, stores.tx, actor); err != nil {
+			// own suspended shared queue FIFO in the same transaction — its legs
+			// live in other owners' objects and ride the same recovery dispatch.
+			legs, err = s.slots.RecoverSuspended(ctx, stores.tx, actor)
+			if err != nil {
 				return fmt.Errorf("recover owner suspended memberships after archive: %w", err)
 			}
+			recovered = append(recovered, legs...)
 		}
 		return nil
 	})
 	if err != nil {
 		return domain.Property{}, err
 	}
+	s.publishChanged(ctx, actor, id, true)
+	s.publishSlotAccess(ctx, actor, recovered)
 
 	properties, err := s.withPhotos(ctx, archived)
 	if err != nil {
@@ -936,12 +1013,13 @@ func (s *PropertyService) DeleteProperty(
 		return err
 	}
 
-	// The deleted property's name, photos and former members' emails escape
-	// the work closure for the post-commit cleanup.
+	// The deleted property's name, photos, former members' emails and the slot
+	// recovery's legs escape the work closure for the post-commit cleanup.
 	var (
 		property           domain.Property
 		photos             []domain.Photo
 		formerMemberEmails []string
+		recovered          []accessdomain.Membership
 	)
 	err := s.runInTx(ctx, func(stores *txStores) error {
 		var err error
@@ -980,7 +1058,8 @@ func (s *PropertyService) DeleteProperty(
 			return fmt.Errorf("list photos: %w", err)
 		}
 
-		if err := s.recoverSlotsAfterDelete(ctx, stores, actor, id); err != nil {
+		recovered, err = s.recoverSlotsAfterDelete(ctx, stores, actor, id)
+		if err != nil {
 			return err
 		}
 
@@ -1006,6 +1085,11 @@ func (s *PropertyService) DeleteProperty(
 	// Post-commit cleanup never fails the delete itself.
 	s.cleanupPropertyPhotos(ctx, id, photos)
 	s.notifyPropertyDeleted(ctx, id, property.Name, formerMemberEmails)
+	// The deleted object's own row dispatches nothing by construction — the
+	// derived access resolves to nobody — but the recovery's reactivated legs
+	// live in other owners' objects, and their access pairs dispatch here
+	// (карта #714, #716; ADR 0062 §3).
+	s.publishSlotAccess(ctx, actor, recovered)
 
 	return nil
 }
@@ -1078,18 +1162,27 @@ func (s *PropertyService) notifyPropertyDeleted(ctx context.Context, id uuid.UUI
 // removed (issue #158, T4). Deleting one of the owner's OWN objects also freed
 // one of the owner's own tariff slots: the owner is never a member row of
 // their own object, so RecoverAfterPropertyDelete above did not visit them.
-// Their own suspended shared queue is recovered FIFO as well.
-func (s *PropertyService) recoverSlotsAfterDelete(ctx context.Context, stores *txStores, actor, id uuid.UUID) error {
+// Their own suspended shared queue is recovered FIFO as well. The reactivated
+// memberships are returned so the caller dispatches their access pairs
+// post-commit (карта #714, #716; ADR 0062 §3).
+func (s *PropertyService) recoverSlotsAfterDelete(
+	ctx context.Context, stores *txStores, actor, id uuid.UUID,
+) ([]accessdomain.Membership, error) {
 	if s.slots == nil {
-		return nil
+		return nil, nil
 	}
-	if err := s.slots.RecoverAfterPropertyDelete(ctx, stores.tx, id); err != nil {
-		return fmt.Errorf("recover suspended memberships before delete: %w", err)
+	var recovered []accessdomain.Membership
+	legs, err := s.slots.RecoverAfterPropertyDelete(ctx, stores.tx, id)
+	if err != nil {
+		return nil, fmt.Errorf("recover suspended memberships before delete: %w", err)
 	}
-	if err := s.slots.RecoverSuspended(ctx, stores.tx, actor); err != nil {
-		return fmt.Errorf("recover owner suspended memberships after delete: %w", err)
+	recovered = append(recovered, legs...)
+	legs, err = s.slots.RecoverSuspended(ctx, stores.tx, actor)
+	if err != nil {
+		return nil, fmt.Errorf("recover owner suspended memberships after delete: %w", err)
 	}
-	return nil
+	recovered = append(recovered, legs...)
+	return recovered, nil
 }
 
 // cleanupPropertyPhotos removes the deleted property's photo objects from
@@ -1213,6 +1306,10 @@ func (s *PropertyService) ArchiveExcessProperties(
 	txAudit := s.audit.WithTx(tx)
 
 	var archived []uuid.UUID
+	// The recovery legs captured across the loop; their access pairs dispatch
+	// once after it — the whole auto-archive batch emits one frame per
+	// restored object (карта #714, #716; ADR 0062 §3).
+	var recovered []accessdomain.Membership
 	for _, p := range properties[limit:] {
 		_, err := s.archivePropertyInTx(ctx, txRepo, scope, p.ID)
 		if err != nil {
@@ -1241,19 +1338,32 @@ func (s *PropertyService) ArchiveExcessProperties(
 
 		// Same as a manual archive (issue #163): archiving freed one tariff slot
 		// for each recipient, so recover their oldest suspended memberships FIFO
-		// in the same transaction.
+		// in the same transaction. The reactivated legs are captured: their
+		// access pairs are the properties-side publication of the recovery
+		// (карта #714, #716; ADR 0062 §3), dispatched after the loop below.
 		if s.slots != nil {
-			if err := s.slots.RecoverSuspendedForProperty(ctx, tx, p.ID); err != nil {
+			legs, err := s.slots.RecoverSuspendedForProperty(ctx, tx, p.ID)
+			if err != nil {
 				return nil, fmt.Errorf("recover suspended memberships after auto-archive: %w", err)
 			}
+			recovered = append(recovered, legs...)
 			// Same as a manual archive: archiving one of the owner's OWN objects
 			// also freed one of the owner's own tariff slots, so recover their own
-			// suspended shared queue FIFO in the same transaction.
-			if err := s.slots.RecoverSuspended(ctx, tx, scope); err != nil {
+			// suspended shared queue FIFO in the same transaction — its legs live
+			// in other owners' objects and ride the same recovery dispatch.
+			legs, err = s.slots.RecoverSuspended(ctx, tx, scope)
+			if err != nil {
 				return nil, fmt.Errorf("recover owner suspended memberships after auto-archive: %w", err)
 			}
+			recovered = append(recovered, legs...)
 		}
 	}
+	// The archiver bridge runs on the billing phase's transaction: the phase
+	// commits right after the archiver hands its outcome back, so the
+	// dispatch sits as close to the commit as the bridge boundary allows —
+	// the frames are coarse and best-effort, a phase rollback past this point
+	// leaves at most a spurious refetch (ADR 0062 §5).
+	s.publishSlotAccess(ctx, scope, recovered)
 	return archived, nil
 }
 
@@ -1312,9 +1422,13 @@ func (s *PropertyService) RestoreGraceArchivedProperties(
 			return nil, fmt.Errorf("record audit: %w", err)
 		}
 		// Same as a manual unarchive: the object re-enters every recipient's
-		// tariff pool, so suspend any recipient already at their limit.
+		// tariff pool, so suspend any recipient already at their limit. The
+		// suspended legs are deliberately not published: the restore runs on
+		// the billing phase of the background worker, outside the v1
+		// realtime boundary (ADR 0062 §3, #716) — the owner learns the
+		// participants state through the next reread of the screen.
 		if s.slots != nil {
-			if err := s.slots.EnforceOnUnarchiveForProperty(ctx, tx, id); err != nil {
+			if _, err := s.slots.EnforceOnUnarchiveForProperty(ctx, tx, id); err != nil {
 				return nil, fmt.Errorf("enforce recipient slot on grace restore: %w", err)
 			}
 		}
@@ -1329,6 +1443,10 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, actor, id uuid.
 	}
 
 	var unarchived domain.Property
+	// The suspended legs captured inside the transaction; their access pairs
+	// dispatch post-commit next to publishChanged (карта #714, #716; ADR 0062
+	// §3).
+	var suspended []accessdomain.Membership
 	err = s.runInTx(ctx, func(stores *txStores) error {
 		if err := ensurePropertyArchived(ctx, stores, actor, id); err != nil {
 			return err
@@ -1363,17 +1481,25 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, actor, id uuid.
 
 		// Unarchiving the object re-enters every recipient's tariff pool: suspend any
 		// recipient already at the limit so the object does not occupy a slot until
-		// one frees up (issue #158, T4).
+		// one frees up (issue #158, T4). The suspended legs are captured: their
+		// access pairs are the properties-side publication of the suspension,
+		// dispatched post-commit below like publishChanged — each suspended leg
+		// dirties its object's participants view the same way a restored one does
+		// (карта #714, #716; ADR 0062 §3).
 		if s.slots != nil {
-			if err := s.slots.EnforceOnUnarchiveForProperty(ctx, stores.tx, id); err != nil {
+			legs, err := s.slots.EnforceOnUnarchiveForProperty(ctx, stores.tx, id)
+			if err != nil {
 				return fmt.Errorf("enforce recipient slot on unarchive: %w", err)
 			}
+			suspended = append(suspended, legs...)
 		}
 		return nil
 	})
 	if err != nil {
 		return domain.Property{}, err
 	}
+	s.publishChanged(ctx, actor, id, true)
+	s.publishSlotAccess(ctx, actor, suspended)
 
 	properties, err := s.withPhotos(ctx, unarchived)
 	if err != nil {
@@ -1475,6 +1601,7 @@ func (s *PropertyService) AddPropertyPhoto(
 	if err != nil {
 		return domain.Property{}, err
 	}
+	s.publishChanged(ctx, actor, propertyID, true)
 
 	photos, err := s.photoRepo.GetByPropertyID(ctx, propertyID)
 	if err != nil {
@@ -1595,6 +1722,7 @@ func (s *PropertyService) DeletePropertyPhoto(ctx context.Context, actor, proper
 	if err != nil {
 		return err
 	}
+	s.publishChanged(ctx, actor, propertyID, true)
 
 	key, err := photoStorageKey(propertyID, photoID, photo.URL)
 	if err != nil {

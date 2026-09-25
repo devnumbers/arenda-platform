@@ -12,6 +12,7 @@ import (
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
+	realtimedom "github.com/nambers/arenda-planform/apps/backend/internal/realtime/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
@@ -262,6 +263,7 @@ func (s *ParticipantMutationService) grantProperties(
 	}
 	publishGrantedEvents(ctx, s.events, s.logger, actor, grantedActive)
 	publishSuspendedEvents(ctx, s.events, s.logger, suspended)
+	s.publishGrantRealtime(ctx, actor, grantedActive, suspended, results)
 
 	// The single batch invite email goes out after the commit; a send failure
 	// does not roll the invitations back (a manual resend is available).
@@ -433,14 +435,17 @@ func (s *ParticipantMutationService) Remove(ctx context.Context, actor uuid.UUID
 
 	freedActive := 0
 	var revokedActive []domain.Membership
+	var invitationLegs []domain.Invitation
+	var recovered []domain.Membership
 	err = s.runInTx(ctx, func(stores *txStores) error {
-		legs, invitationLegs, err := s.listRemovalLegs(ctx, stores, userID, email, actor)
+		legs, invLegs, err := s.listRemovalLegs(ctx, stores, userID, email, actor)
 		if err != nil {
 			return err
 		}
-		if len(legs) == 0 && len(invitationLegs) == 0 {
+		if len(legs) == 0 && len(invLegs) == 0 {
 			return domain.ErrParticipantNotFound
 		}
+		invitationLegs = invLegs
 		freedActive, revokedActive, err = s.removeMembershipLegs(ctx, stores, actor, legs, targetLabel)
 		if err != nil {
 			return err
@@ -451,7 +456,8 @@ func (s *ParticipantMutationService) Remove(ctx context.Context, actor uuid.UUID
 		// Every freed active slot lets the oldest suspended access come back
 		// FIFO; one recovery pass covers the whole batch.
 		if freedActive > 0 && s.slots != nil && userID != (uuid.UUID{}) {
-			if err := s.slots.RecoverSuspended(ctx, stores.tx, userID); err != nil {
+			recovered, err = s.slots.RecoverSuspended(ctx, stores.tx, userID)
+			if err != nil {
 				return fmt.Errorf("recover suspended after participant removal: %w", err)
 			}
 		}
@@ -465,7 +471,55 @@ func (s *ParticipantMutationService) Remove(ctx context.Context, actor uuid.UUID
 	// (карта #734, #751); suspended legs publish nothing — the object was
 	// already hidden from them (issue #162, T6 canon).
 	publishRevokedEvents(ctx, s.events, s.logger, actor, revokedActive)
+	s.publishRemovedRealtime(ctx, actor, revokedActive, invitationLegs, recovered)
 	return nil
+}
+
+// publishRemovedRealtime hands the whole removal transaction's frames to the
+// realtime carrier in one post-commit dispatch (карта #714, #716; ADR 0062):
+// every removed active leg dirties its object's participants view and
+// journals its row, every removed pending leg dirties its object the same way
+// (the pending row leaves the participants view), and the freed slots' FIFO
+// recovery dirties each restored object — the per-transaction dedup collapses
+// the batch into one frame per pair.
+func (s *ParticipantMutationService) publishRemovedRealtime(
+	ctx context.Context, actor uuid.UUID, revokedActive []domain.Membership, removedPending []domain.Invitation, recovered []domain.Membership,
+) {
+	changed, anchors := removedAccessFrames(revokedActive)
+	for _, inv := range removedPending {
+		changed = append(changed, realtimedom.On(realtimedom.EntityAccess, inv.PropertyID))
+		anchors = append(anchors, inv.PropertyID)
+	}
+	changed = append(changed, recoveredAccessFrames(recovered)...)
+	s.access.publishRealtime(ctx, actor, changed, anchors...)
+}
+
+// publishGrantRealtime hands the whole grant transaction's frames to the
+// realtime carrier in one post-commit dispatch (карта #714, #716; ADR 0062):
+// each landed leg (active or suspended) and each pending invitation dirties
+// its object's participants view, the journal rows piggyback their history
+// pairs — one frame per pair for the whole batch.
+func (s *ParticipantMutationService) publishGrantRealtime(
+	ctx context.Context, actor uuid.UUID,
+	grantedActive, suspended []domain.Membership, results []ParticipantGrantResult,
+) {
+	changed := make([]realtimedom.Change, 0, len(grantedActive)+len(suspended)+len(results))
+	anchors := make([]uuid.UUID, 0, cap(changed))
+	for _, m := range grantedActive {
+		changed = append(changed, realtimedom.On(realtimedom.EntityAccess, m.PropertyID))
+		anchors = append(anchors, m.PropertyID)
+	}
+	for _, m := range suspended {
+		changed = append(changed, realtimedom.On(realtimedom.EntityAccess, m.PropertyID))
+		anchors = append(anchors, m.PropertyID)
+	}
+	for _, r := range results {
+		if r.Outcome == ParticipantGrantPending {
+			changed = append(changed, realtimedom.On(realtimedom.EntityAccess, r.PropertyID))
+			anchors = append(anchors, r.PropertyID)
+		}
+	}
+	s.access.publishRealtime(ctx, actor, changed, anchors...)
 }
 
 // listRemovalLegs enumerates the person's removal scope: their memberships
@@ -515,7 +569,7 @@ func (s *ParticipantMutationService) actorRoleOn(ctx context.Context, actor, pro
 // entry and an action-journal row per leg (ADR 0061 §3: a journal row per
 // removed access), reports how many active (slot-occupying) ones were freed
 // and appends the removed active rows to the collector — the caller publishes
-// their revocation events post-commit (карта #734, #751). targetLabel is the
+// their revocation events post-commit (карта #734, #751); the targetLabel is the
 // person's journal label resolved once for the whole batch (the display name,
 // or the email for the unregistered invitee — ADR 0061 §5): every leg's row
 // names the same person by it.
@@ -541,9 +595,9 @@ func (s *ParticipantMutationService) removeMembershipLegs(
 }
 
 // removeInvitationLegs deletes the person's pending invitation rows with an
-// audit entry and an action-journal row per leg (ADR 0061 §3). targetLabel is
-// the same batch-wide label snapshot the membership legs carry, so both legs
-// of the removal name the person identically.
+// audit entry and an action-journal row per leg (ADR 0061 §3). The
+// targetLabel is the same batch-wide label snapshot the membership legs
+// carry, so both legs of the removal name the person identically.
 func (s *ParticipantMutationService) removeInvitationLegs(
 	ctx context.Context, stores *txStores, actor uuid.UUID, legs []domain.Invitation, targetLabel string,
 ) error {

@@ -29,6 +29,9 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/sse"
+	realtimepg "github.com/nambers/arenda-planform/apps/backend/internal/realtime/adapters/postgres"
+	realtimestream "github.com/nambers/arenda-planform/apps/backend/internal/realtime/adapters/stream"
+	realtimeapp "github.com/nambers/arenda-planform/apps/backend/internal/realtime/application"
 )
 
 func main() {
@@ -199,7 +202,24 @@ func run() error {
 	defer riverMod.ProviderLimiter.Stop()
 	notificationsStream := riverMod.Stream
 
-	// 11.5.1 The tasks scheduling seam (issue #775): the rule create/edit
+	// 11.5.1 The realtime carrier (карта #714, #716; ADR 0062): the port the
+	//     mutation pipelines publish their entity.changed frames through —
+	//     the audience resolver over the shared pool, the envelope frames
+	//     fanned out through the same hub the notifications stream serves.
+	//     Late-bound into the entity-owning contexts below (they build
+	//     earlier than the delivery queue — the grace-events canon:
+	//     best-effort, a broken seam never fails the committed mutation).
+	realtimeCarrier := realtimestream.NewPublisher(
+		notificationsStream,
+		realtimepg.NewAudienceStore(p.DB),
+		p.Clock,
+		p.Logger,
+	)
+
+	// Late-bound into the entity-owning contexts below — the same grace-events canon (see 11.5.1).
+	bindRealtimePublisher(realtimeCarrier, paymentsMod, tasksMod, contactsMod, rentalsMod, propertiesMod, accessMod)
+
+	// 11.5.2 The tasks scheduling seam (issue #775): the rule create/edit
 	//     flows hand their standing tasks' ids over post-commit — a live
 	//     timed task books its due-minute job at once (the term before the
 	//     next hourly pass is exactly the delay this removes), a task born
@@ -326,6 +346,7 @@ func run() error {
 		NotificationsFeed:        notificationsMod.FeedService,
 		NotificationSettings:     notificationsMod.SettingsService,
 		NotificationsStreamHub:   notificationsStream,
+		RealtimeStreamHub:        notificationsStream,
 		VAPIDPublicKey:           p.Cfg.VAPIDPublicKey,
 		Popups:                   popupsMod.Service,
 		AppBaseURL:               p.Cfg.AppBaseURL,
@@ -362,6 +383,33 @@ func run() error {
 	}
 
 	return serveAndWait(ctx, server, workers, notificationsStream, p.Logger, p.Cfg)
+}
+
+// realtimeBindings enumerates the services the composition root late-binds
+// the realtime carrier into (карта #714, #716; ADR 0062). Kept one function
+// — the single place the binding happens — so the layer-3 wiring test
+// (main_wiring_test.go, testing-strategy) can replay it over fresh service
+// instances and turn red the moment any setter goes missing: a nil carrier
+// is the pre-#716 silence, a forgotten binding would only surface on a live
+// stage.
+func bindRealtimePublisher(
+	p realtimeapp.Publisher,
+	paymentsMod *wire.Payments,
+	tasksMod *wire.Tasks,
+	contactsMod *wire.Contacts,
+	rentalsMod *wire.Rentals,
+	propertiesMod *wire.Properties,
+	accessMod *wire.Access,
+) {
+	paymentsMod.PaymentService.SetRealtimePublisher(p)
+	paymentsMod.OperationService.SetRealtimePublisher(p)
+	paymentsMod.GlobalPayments.SetRealtimePublisher(p)
+	tasksMod.RuleService.SetRealtimePublisher(p)
+	tasksMod.TaskService.SetRealtimePublisher(p)
+	contactsMod.ContactService.SetRealtimePublisher(p)
+	rentalsMod.RentalService.SetRealtimePublisher(p)
+	propertiesMod.PropertyService.SetRealtimePublisher(p)
+	accessMod.AccessService.SetRealtimePublisher(p)
 }
 
 // injectPropertyServiceAccess wires the access-context adapters into the
@@ -645,9 +693,11 @@ func serveAndWait(
 
 	select {
 	case <-ctx.Done():
-		// The stream hub closes first: every SSE handler returns at once, so
-		// the graceful HTTP shutdown below is not held up by long-lived
-		// streams inside its 5-second window.
+		// The stream hub closes first (it serves both SSE streams — the
+		// notifications one and the realtime entity-events one, ADR 0062):
+		// every SSE handler returns at once, so the graceful HTTP shutdown
+		// below is not held up by long-lived streams inside its 5-second
+		// window.
 		notificationsStream.Close(ctx)
 		// The lifecycle context is already cancelled, so the shutdown window
 		// derives from its value-bearing, cancellation-stripped view (same

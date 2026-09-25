@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	accessdomain "github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
@@ -851,23 +852,29 @@ type recordingSlotPolicy struct {
 	enforcedOnUnarchive []uuid.UUID
 }
 
-func (p *recordingSlotPolicy) RecoverSuspendedForProperty(_ context.Context, _ transaction.Tx, propertyID uuid.UUID) error {
+func (p *recordingSlotPolicy) RecoverSuspendedForProperty(
+	_ context.Context, _ transaction.Tx, propertyID uuid.UUID,
+) ([]accessdomain.Membership, error) {
 	p.recovered = append(p.recovered, propertyID)
-	return nil
+	return nil, nil
 }
 
-func (p *recordingSlotPolicy) EnforceOnUnarchiveForProperty(_ context.Context, _ transaction.Tx, propertyID uuid.UUID) error {
+func (p *recordingSlotPolicy) EnforceOnUnarchiveForProperty(
+	_ context.Context, _ transaction.Tx, propertyID uuid.UUID,
+) ([]accessdomain.Membership, error) {
 	p.enforcedOnUnarchive = append(p.enforcedOnUnarchive, propertyID)
-	return nil
+	return nil, nil
 }
 
-func (p *recordingSlotPolicy) RecoverAfterPropertyDelete(context.Context, transaction.Tx, uuid.UUID) error {
-	return nil
+func (p *recordingSlotPolicy) RecoverAfterPropertyDelete(context.Context, transaction.Tx, uuid.UUID) ([]accessdomain.Membership, error) {
+	return nil, nil
 }
 
-func (p *recordingSlotPolicy) RecoverSuspended(_ context.Context, _ transaction.Tx, recipientID uuid.UUID) error {
+func (p *recordingSlotPolicy) RecoverSuspended(
+	_ context.Context, _ transaction.Tx, recipientID uuid.UUID,
+) ([]accessdomain.Membership, error) {
 	p.recoveredRecipients = append(p.recoveredRecipients, recipientID)
-	return nil
+	return nil, nil
 }
 
 var _ RecipientSlotPolicy = (*recordingSlotPolicy)(nil)
@@ -891,11 +898,11 @@ func TestPropertyService_ArchiveExcessProperties_RecoversSuspendedMembers(t *tes
 			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive, UpdatedAt: time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC),
 		},
 		domain.Property{
-			ID: excessAID, OwnerID: ownerID, Name: "Excess A", Address: testPropertyAddress,
+			ID: excessAID, OwnerID: ownerID, Name: excessNameA, Address: testPropertyAddress,
 			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive, UpdatedAt: time.Date(2026, 6, 2, 0, 0, 0, 0, time.UTC),
 		},
 		domain.Property{
-			ID: excessBID, OwnerID: ownerID, Name: "Excess B", Address: testPropertyAddress,
+			ID: excessBID, OwnerID: ownerID, Name: excessNameB, Address: testPropertyAddress,
 			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive, UpdatedAt: time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC),
 		},
 	)

@@ -17,7 +17,9 @@ nothing in ADR 0060 changes and the notifications stream keeps its endpoint
 and contract untouched. ADR 0060 §5 sketched map #714's events as new event
 names on the notifications stream; this ADR supersedes that sketch — the
 events ride a dedicated endpoint instead, so the notifications stream
-contract stays frozen.
+contract stays frozen. The §2 precise-consumer extension (ticket #718) is
+amended in place with the code that introduced it. The §2 owner-book
+null-propertyId frames (`InOwnerBook`) are amended in place likewise.
 
 ## Context
 
@@ -54,7 +56,10 @@ across the same pipelines.
 2. **Coarse frames, one event name, dictionary of eight entities.** The
    stream speaks one event name, `entity.changed`, in the envelope v1
    (`{v, occurredAt, payload}`, ADR 0060 §5); the payload is
-   `{propertyId, entity}`. Frames carry no entity data — clients re-read
+   `{propertyId, entity}`. `propertyId` is null for the owner-book
+   mutations outside any property (contacts and tasks created without one,
+   the `InOwnerBook` pairs), and such a frame is delivered to the author
+   alone. Frames carry no entity data — clients re-read
    through the API; the stream never becomes a second system of record.
    The entity dictionary is the invalidation contract between backend and
    frontend:
@@ -67,27 +72,65 @@ across the same pipelines.
    | `contacts` | contactKeys |
    | `rentals` | rentalKeys |
    | `property` | propertyKeys |
-   | `access` | accessKeys, participantsKeys |
+   | `access` | accessKeys, participantsKeys, propertyKeys |
    | `history` | historyKeys |
+
+   The `access` row covers the property families as well (consumer ticket
+   #719): a grant, a resume or a role change is published as an `access`
+   frame, and the recipient — an active member at publication, hence in the
+   audience — reads the change on surfaces living in `propertyKeys` (their
+   properties hub list, the role pill on the property detail). Without the
+   coverage the new object would appear in their book only after a reload.
 
    The provider may scope invalidation by the frame's `propertyId` or
    invalidate whole families; over-invalidation is the accepted cost of
    coarse frames. Adding an entity is one dictionary entry plus its capture
-   points — backward compatible by construction.
+   points — backward compatible by construction. A screen may also become a
+   precise consumer of its entity's frames (ticket #718, the live history
+   feed): while such a subscriber is mounted, the provider delivers the
+   frame to it and suppresses the blanket invalidation of that entity's
+   families — the feed merges fresh rows into the cached first page (a
+   page-prepend breaks refetch, #718) instead of refetching the loaded
+   window (a window refetch slides the keyset and yanks a reader of old
+   rows); with no subscriber the blanket
+   path applies unchanged, and the on-open re-read still re-anchors the
+   mounted feed's window.
 
 3. **Carrier publication at the mutation seams, strictly post-commit.**
    The same discipline as grace_events, tariff_events and the history
-   journal: each context's transaction captures the distinct
-   (entity, property) pairs it changed; publication dispatches strictly
-   after the commit and is best-effort — a failed frame is logged and never
-   fails or rolls back the mutation. Per-transaction dedup: one frame per
-   distinct pair, so a bulk operation (e.g. «Удалить все выполненные»)
-   emits one frame, not N. The in-process domain dispatcher
+   journal: each context's transaction captures the (entity, property)
+   pairs it changed — repeats allowed, the carrier's per-call dedup
+   collapses them; publication dispatches strictly after the commit and is
+   best-effort — a failed frame is logged and never fails or rolls back the
+   mutation. One frame per distinct pair is the wire's guarantee, not the
+   seam's: the seams forward the raw capture, the stream Publisher dedups
+   per call — a bulk operation (e.g. «Удалить все выполненные») emits one
+   frame, not N. The in-process domain dispatcher
    ([ADR 0014](./0014-in-memory-event-dispatcher.md)) stays out of the
    path: there is one consumer, and the indirection would hide the
    publication from the pipelines that own the facts. The publisher port
    lives in the realtime context's application layer; publisher contexts
    depend on the port, the hub-facing adapter computes delivery.
+
+   Scheduled system materialization (the hourly zone sweep and the tick
+   materialization) publishes no frames — recorded out-of-v1 (#716): those
+   changes are not other people's edits, the hourly cadence and the on-open
+   re-read cover them. The billing worker's tariff phases
+   (Enforce/Recover/ArchiveExcess/RestoreGrace) stay silent in v1 only in
+   their phase frames and suspend/restore legs: no property/history frames
+   at the tariff transitions, and the Enforce suspensions, the Recover
+   restorations and the RestoreGrace unarchive suspensions dispatch
+   nothing — for those silences the affected screens catch up on the next
+   stream open. The recovery access pairs are outside that silence:
+   wherever recovery runs through a publishing seam, the pairs publish
+   exactly as the manual seams publish them — ArchiveExcessProperties
+   mirrors the manual archive and dispatches the restored legs' access
+   pairs as close to the commit as the bridge boundary allows: the
+   archiver runs inside the phase's transaction and the phase commits
+   right after the archiver hands its outcome back, so a rollback past
+   the dispatch costs at most a spurious refetch. Full publication (the
+   phases' property/history frames, suspend frames at the billing
+   transitions) stays a v2 candidate (owner decision, R3 gate).
 
 4. **Audience is resolved at publication time, the actor included.** The
    adapter resolves each frame's recipients through derived property access
@@ -96,7 +139,11 @@ across the same pipelines.
    management on access changes (the earlier «revocation closes the
    stream» reading of ticket #716 is dropped with the per-user topology).
    The audience includes the actor: their other tabs and devices need the
-   invalidation, and the origin tab re-reads idempotently.
+   invalidation, and the origin tab re-reads idempotently. For the
+   null-propertyId owner-book frames the audience degenerates to the actor
+   alone: the book has no members to resolve, so the adapter short-circuits
+   to `[actor]` without touching derived access — the open API's
+   `/realtime/stream` description states the same null case.
 
 5. **No replay in v1.** Same contract as ADR 0060 §8: on every open
    (including every reconnect) the provider re-reads live state through
@@ -124,6 +171,6 @@ across the same pipelines.
 - (−) Coarse frames over-invalidate: a change to one object may refetch
   mounted queries of other objects in the same family; acceptable for the
   product's scale (few properties per owner).
-- (−) Frames are in-memory per instance (ADR 0060 §9): they do not survive
-  deploys and do not cross replicas — the reconnect-and-reread contract
-  absorbs both.
+- (−) Frames are in-memory per instance (ADR 0060, Consequences): they do
+  not survive deploys and do not cross replicas — the reconnect-and-reread
+  contract absorbs both.

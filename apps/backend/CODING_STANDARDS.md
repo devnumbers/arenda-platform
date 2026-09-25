@@ -26,7 +26,14 @@ Rules that no linter can check:
 Adding a new bounded context — checklist:
 
 1. `internal/<context>/{domain,application,adapters}` + `CONTEXT.md` (via `/domain-modeling`).
-2. Add the context to **both** `domain-clean` and `application-clean` deny lists in `.golangci.yml` (they enumerate contexts explicitly; a missed entry silently disables the guard).
+2. The clean-architecture depguards (`domain-clean`, `application-clean`) key on file globs (`**/internal/**/domain|application/*.go`), so the base denies — `database/sql`, `net/http`, `pgx`, `aws-sdk-go-v2`, `internal/platform`, `platform/config`, `platform/openapi` — cover a new context automatically. The adapters ban is not automatic: both rules run `list-mode: lax` over explicit per-context deny entries, so a new context's domain/application can import `adapters/` (its own or another context's) without lint failing. Add `internal/<context>/adapters` to the deny list of **both** rules in `.golangci.yml`:
+
+   ```yaml
+   - pkg: github.com/nambers/arenda-planform/apps/backend/internal/<context>/adapters
+     desc: domain must not depend on adapters
+   ```
+
+   Under `application-clean` the same `pkg` entry carries `desc: application layer must not depend on adapters`.
 3. Decide the transaction story: UoW from the start — a production `Begin` outside `internal/platform` fails `make backend-lint` with no migration-ticket escape hatch (test fixtures are exempt, ADR 0033).
 
 ## Errors

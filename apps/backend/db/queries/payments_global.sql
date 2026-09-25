@@ -294,6 +294,7 @@ GROUP BY op.payment_id;
 -- star's (#461, Full Access+), resolved per row beside the data. Ids
 -- travel as the file's csv list; an empty list never reaches the query.
 SELECT pay.id,
+       pay.property_id,
        pay.is_favorite,
        CASE WHEN pay.owner_id = sqlc.arg('actor') THEN 'owner' ELSE pm.role END::text AS actor_role
 FROM payments pay

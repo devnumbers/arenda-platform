@@ -18,6 +18,10 @@ process.env.TZ = 'UTC';
 // comparison — see docs/testing-strategy.md, "Экранные e2e (Playwright)".
 export default defineConfig({
   testDir: './e2e',
+  // Только спеки: дефолтный testMatch цепляет и *.test.ts, а vitest-тесты
+  // хелперов (e2e/realtime-bridge.test.ts) живут рядом и коллекционером
+  // playwright импортироваться не должны.
+  testMatch: '**/*.spec.ts',
   // One browser, sequential: the suite shares a single seeded backend, and
   // UI-login scenarios consume per-send login codes from its log.
   fullyParallel: false,
