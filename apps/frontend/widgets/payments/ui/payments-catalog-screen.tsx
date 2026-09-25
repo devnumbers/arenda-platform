@@ -27,7 +27,7 @@ import {
   OverdueOperationRow,
   PaymentRow,
   PaymentsEmptyState,
-  PaymentsSkeleton,
+  PaymentsRowsSkeleton,
   PaymentsStateCard,
 } from './payments-sections';
 
@@ -141,10 +141,11 @@ function OverdueList({
   const operations = overdueQuery.data ?? [];
 
   if (overdueQuery.isPending) {
+    // Контент — плоский список строк OverdueOperationRow, скелетон — ряды
+    // канона (#604: композиция скелетона равна композиции страницы).
     return (
-      <div className="flex flex-col gap-2">
-        <PaymentsSkeleton withHeading />
-        <PaymentsSkeleton />
+      <div className="flex flex-col">
+        <PaymentsRowsSkeleton />
       </div>
     );
   }
@@ -205,10 +206,10 @@ function RulesList({
   const today = clientTodayIso();
 
   if (paymentsQuery.isPending) {
+    // Контент — плоский список строк PaymentRow, скелетон — ряды канона.
     return (
-      <div className="flex flex-col gap-2">
-        <PaymentsSkeleton withHeading />
-        <PaymentsSkeleton />
+      <div className="flex flex-col">
+        <PaymentsRowsSkeleton />
       </div>
     );
   }
