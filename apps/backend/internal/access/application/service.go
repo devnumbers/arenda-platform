@@ -683,23 +683,25 @@ func (s *AccessService) LeaveProperty(ctx context.Context, actor, propertyID uui
 
 	// Self-exit notifies the owner post-commit (карта #734, #751; the direct
 	// lifecycle email it replaced is gone); the leaving member receives
-	// nothing. A failed owner lookup leaves nobody to notify — logged, not an
-	// error.
+	// nothing. A failed owner lookup skips only the owner notification — the
+	// realtime pairs below don't read the owner, and swallowing them with the
+	// lookup would silence the leaver's and the restored legs' screens until
+	// the next stream open (карта #714, #716).
 	owner, err := s.owners.GetOwnerID(ctx, propertyID)
 	if err != nil {
 		s.logger.WarnContext(ctx, "access: owner lookup for member left event failed",
 			slog.String(auditKeyPropertyID, propertyID.String()),
 			slog.String("error", err.Error()))
-		return nil
-	}
-	publishAccessEvent(ctx, s.events, s.logger, "member_left", func() error {
-		return s.events.PublishMemberLeft(ctx, MemberLeft{
-			MembershipID: membership.ID,
-			PropertyID:   propertyID,
-			OwnerID:      owner,
-			MemberID:     actor,
+	} else {
+		publishAccessEvent(ctx, s.events, s.logger, "member_left", func() error {
+			return s.events.PublishMemberLeft(ctx, MemberLeft{
+				MembershipID: membership.ID,
+				PropertyID:   propertyID,
+				OwnerID:      owner,
+				MemberID:     actor,
+			})
 		})
-	})
+	}
 	// The self-exit and the freed slot's FIFO recovery share one dispatch
 	// (карта #714, #716): the exit dirties the object the member left, the
 	// restored legs dirty their own objects — the leaver stays in the

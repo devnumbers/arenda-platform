@@ -3,9 +3,11 @@ package application
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/realtime/realtimetest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -263,6 +265,72 @@ func TestLeavePropertyRecoversFifoPair(t *testing.T) {
 			"history:" + prop.String(),
 		},
 		f.realtime.Pairs())
+}
+
+// flakyOwnerResolver resolves through the embedded static map; failAfter is
+// an absolute call number — calls beyond it fail with ErrMemberNotFound. The
+// policy shares the resolver (its role checks must keep resolving), so the
+// trip is armed between mutations: one success is left for the
+// pre-transaction role check, the next call — the post-commit owner lookup —
+// fails.
+type flakyOwnerResolver struct {
+	staticResolver
+	calls     int
+	failAfter int
+}
+
+func (f *flakyOwnerResolver) GetOwnerID(ctx context.Context, propertyID uuid.UUID) (uuid.UUID, error) {
+	f.calls++
+	if f.failAfter > 0 && f.calls > f.failAfter {
+		return uuid.Nil, domain.ErrMemberNotFound
+	}
+	return f.staticResolver.GetOwnerID(ctx, propertyID)
+}
+
+// TestLeavePropertyPublishesFramesWhenOwnerLookupFails pins the dispatch's
+// independence from the owner lookup (карта #714, #716): the lookup serves
+// only the owner notification, so its post-commit failure skips the email
+// event — never the realtime pairs, which a swallowed dispatch would silence
+// on the leaver's and the restored legs' screens until the next stream open.
+func TestLeavePropertyPublishesFramesWhenOwnerLookupFails(t *testing.T) {
+	t.Parallel()
+
+	owners := &flakyOwnerResolver{staticResolver: staticResolver{}}
+	repo := newMemRepo()
+	statuses := fakeStatuses{}
+	policy := NewMembershipPolicy(owners, repo)
+	events := &fakeEventPublisher{}
+	clk := &fixedClock{now: time.Now()}
+	limiter := newFakeRecipientLimiter()
+	audit := &capturingRecorder{}
+	coordinator := NewSlotCoordinator(repo, owners, limiter, newFakeOwnedProps(),
+		events, audit, noopBeginner{}, clk, nil)
+	realtime := &realtimetest.RecordingPublisher{}
+	access := NewAccessService(repo, owners, statuses, newFakeLookup(), policy,
+		coordinator, events,
+		newTestFactory(repo, &memInvitationsRepo{removalScope: repo.inManageScope}, audit), nil)
+	access.SetRealtimePublisher(realtime)
+
+	owner := uuid.Must(uuid.NewV7())
+	prop := uuid.Must(uuid.NewV7())
+	owners.staticResolver[prop] = owner
+	repo.SetOwner(prop, owner)
+	member := uuid.Must(uuid.NewV7())
+	limiter.set(member, 1)
+	_, err := access.AddMember(context.Background(), owner, prop, member, domain.RoleViewer)
+	require.NoError(t, err)
+	realtime.Publications = nil
+	events.events = nil
+	// The next call is LeaveProperty's role check — it must still resolve;
+	// the one after it is the post-commit owner lookup — it fails.
+	owners.failAfter = owners.calls + 1
+
+	require.NoError(t, access.LeaveProperty(context.Background(), member, prop))
+
+	assert.Equal(t,
+		[]string{"access:" + prop.String(), "history:" + prop.String()},
+		realtime.Pairs())
+	assert.Empty(t, events.events, "the failed owner lookup skips only the notification")
 }
 
 // TestInviteByEmailPendingPublishesFrames pins the pending invitation's
