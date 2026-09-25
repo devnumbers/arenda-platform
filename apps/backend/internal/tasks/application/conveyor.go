@@ -178,37 +178,25 @@ func runMutation[T any](
 		return zero, err
 	}
 	dispatchSeamTasks(g, ctx, seamTaskIDs)
-	dispatchRealtime(g, ctx, actor, propertyID, out)
+	realtimeapp.Dispatch(ctx, g.realtime, actor, out.Changed, historyAnchors(out, propertyID)...)
 	if out.RereadRuleID == nil {
 		return out.Response, nil
 	}
 	return rereadRule[T](g, ctx, scope, propertyID, *out.RereadRuleID)
 }
 
-// dispatchRealtime hands the transaction's captured change pairs to the
-// realtime carrier strictly after the commit — the grace-events canon
-// (карта #714, #716; ADR 0062 §3): a rolled-back transaction dispatches
-// nothing, a nil carrier keeps the pre-#716 silence, and the carrier itself
-// is best-effort (it never fails the committed mutation). Every journal row
-// the transaction recorded piggybacks its history pair: a written row is a
-// history change for the object's feed — the single-anchored row of the
-// property-bound conveyor and the per-property rows of the bulk outcomes.
-func dispatchRealtime[T any](
-	g mutationGates, ctx context.Context, actor, propertyID uuid.UUID, out mutationOutcome[T],
-) {
-	if g.realtime == nil {
-		return
-	}
-	changed := out.Changed
+// historyAnchors collects the journal anchors of the transaction's realtime
+// dispatch: the single-anchored row hangs on the conveyor's property, the
+// bulk rows carry one anchor per touched object (ADR 0061 §3).
+func historyAnchors[T any](out mutationOutcome[T], propertyID uuid.UUID) []uuid.UUID {
+	var anchors []uuid.UUID
 	if out.History != nil {
-		changed = append(changed, realtimedom.HistoryOn(propertyID))
+		anchors = append(anchors, propertyID)
 	}
 	for prop := range out.HistoryByProperty {
-		changed = append(changed, realtimedom.HistoryOn(prop))
+		anchors = append(anchors, prop)
 	}
-	if len(changed) > 0 {
-		g.realtime.EntityChanged(ctx, actor, changed...)
-	}
+	return anchors
 }
 
 // rereadRule re-reads the stored rule after commit so the response carries
@@ -294,7 +282,7 @@ func runOwnerMutation[T any](
 		return zero, err
 	}
 	dispatchSeamTasks(g, ctx, seamTaskIDs)
-	dispatchRealtime(g, ctx, actor, uuid.Nil, out)
+	realtimeapp.Dispatch(ctx, g.realtime, actor, out.Changed, historyAnchors(out, uuid.Nil)...)
 	if out.RereadRuleID == nil {
 		return out.Response, nil
 	}

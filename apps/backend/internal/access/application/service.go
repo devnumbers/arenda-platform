@@ -90,26 +90,17 @@ func (s *AccessService) SetRealtimePublisher(p realtimeapp.Publisher) {
 }
 
 // publishRealtime hands the committed transition's frames to the realtime
-// carrier (карта #714, #716; ADR 0062) — strictly post-commit, best-effort:
-// a rolled-back transition dispatches nothing, a nil carrier keeps the
-// pre-#716 silence.
-func (s *AccessService) publishRealtime(ctx context.Context, actor uuid.UUID, changes []realtimedom.Change) {
-	if s.realtime == nil || len(changes) == 0 {
-		return
-	}
-	s.realtime.EntityChanged(ctx, actor, changes...)
+// carrier (карта #714, #716; ADR 0062) through the shared post-commit tail —
+// strictly after the commit, best-effort, the nil carrier silent.
+func (s *AccessService) publishRealtime(ctx context.Context, actor uuid.UUID, changes []realtimedom.Change, journaledAnchors ...uuid.UUID) {
+	realtimeapp.Dispatch(ctx, s.realtime, actor, changes, journaledAnchors...)
 }
 
-// accessFrames are one transition's frames on one object: the access pair —
-// every membership or invitation transition dirties the object's participants
-// view — plus the history pair when the transaction journaled the transition
-// (a written journal row is a history change for the object's feed).
-func accessFrames(propertyID uuid.UUID, journaled bool) []realtimedom.Change {
-	changed := []realtimedom.Change{realtimedom.On(realtimedom.EntityAccess, propertyID)}
-	if journaled {
-		changed = append(changed, realtimedom.HistoryOn(propertyID))
-	}
-	return changed
+// accessFrame is one transition's pair on one object: every membership or
+// invitation transition dirties the object's participants view. The journal
+// pair piggybacks through the dispatch's journaled anchors.
+func accessFrame(propertyID uuid.UUID) []realtimedom.Change {
+	return []realtimedom.Change{realtimedom.On(realtimedom.EntityAccess, propertyID)}
 }
 
 // NewAccessService creates an AccessService. Slots is the recipient tariff slot
@@ -193,7 +184,7 @@ func (s *AccessService) AddMember(ctx context.Context, actor, propertyID, userID
 	} else {
 		publishGrantedEvents(ctx, s.events, s.logger, actor, []domain.Membership{created})
 	}
-	s.publishRealtime(ctx, actor, accessFrames(propertyID, true))
+	s.publishRealtime(ctx, actor, accessFrame(propertyID), propertyID)
 	return created, nil
 }
 
@@ -414,7 +405,11 @@ func (s *AccessService) ChangeMemberRole(
 			})
 		})
 	}
-	s.publishRealtime(ctx, actor, accessFrames(propertyID, roleChanged))
+	if roleChanged {
+		s.publishRealtime(ctx, actor, accessFrame(propertyID), propertyID)
+	} else {
+		s.publishRealtime(ctx, actor, accessFrame(propertyID))
+	}
 	return updated, nil
 }
 
@@ -567,9 +562,15 @@ func (s *AccessService) RevokeMember(ctx context.Context, actor, propertyID, mem
 		return err
 	}
 	publishRevokedEvents(ctx, s.events, s.logger, actor, revoked)
+	// One dispatch for the whole transaction: the pairs dedup per call, a
+	// bulk revoke emits one frame per pair (карта #714, #716).
+	changed := make([]realtimedom.Change, 0, len(revoked))
+	anchors := make([]uuid.UUID, 0, len(revoked))
 	for _, m := range revoked {
-		s.publishRealtime(ctx, actor, accessFrames(m.PropertyID, true))
+		changed = append(changed, realtimedom.On(realtimedom.EntityAccess, m.PropertyID))
+		anchors = append(anchors, m.PropertyID)
 	}
+	s.publishRealtime(ctx, actor, changed, anchors...)
 	return nil
 }
 
@@ -666,7 +667,7 @@ func (s *AccessService) LeaveProperty(ctx context.Context, actor, propertyID uui
 			MemberID:     actor,
 		})
 	})
-	s.publishRealtime(ctx, actor, accessFrames(propertyID, true))
+	s.publishRealtime(ctx, actor, accessFrame(propertyID), propertyID)
 	return nil
 }
 

@@ -103,14 +103,12 @@ func (s *PropertyService) SetRealtimePublisher(p realtimeapp.Publisher) {
 // has no audience by construction: post-commit the object row is gone and the
 // derived access resolves to nobody, so DeleteProperty dispatches nothing.)
 func (s *PropertyService) publishChanged(ctx context.Context, actor, propertyID uuid.UUID, journaled bool) {
-	if s.realtime == nil {
-		return
-	}
-	changed := []realtimedom.Change{realtimedom.On(realtimedom.EntityProperty, propertyID)}
+	var anchors []uuid.UUID
 	if journaled {
-		changed = append(changed, realtimedom.HistoryOn(propertyID))
+		anchors = append(anchors, propertyID)
 	}
-	s.realtime.EntityChanged(ctx, actor, changed...)
+	realtimeapp.Dispatch(ctx, s.realtime, actor,
+		[]realtimedom.Change{realtimedom.On(realtimedom.EntityProperty, propertyID)}, anchors...)
 }
 
 // SetSharedMemberships injects the access-context adapter that resolves the

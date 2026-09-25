@@ -12,6 +12,7 @@ import (
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
+	realtimedom "github.com/nambers/arenda-planform/apps/backend/internal/realtime/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
@@ -470,35 +471,49 @@ func (s *ParticipantMutationService) Remove(ctx context.Context, actor uuid.UUID
 	return nil
 }
 
-// publishRemovedRealtime hands the removed active legs' frames to the
-// realtime carrier post-commit (карта #714, #716; ADR 0062).
+// publishRemovedRealtime hands the whole removal transaction's frames to the
+// realtime carrier in one post-commit dispatch (карта #714, #716; ADR 0062):
+// every removed active leg dirties its object's participants view and
+// journals its row — the per-transaction dedup collapses a batch into one
+// frame per pair.
 func (s *ParticipantMutationService) publishRemovedRealtime(
 	ctx context.Context, actor uuid.UUID, revokedActive []domain.Membership,
 ) {
+	changed := make([]realtimedom.Change, 0, len(revokedActive))
+	anchors := make([]uuid.UUID, 0, len(revokedActive))
 	for _, m := range revokedActive {
-		s.access.publishRealtime(ctx, actor, accessFrames(m.PropertyID, true))
+		changed = append(changed, realtimedom.On(realtimedom.EntityAccess, m.PropertyID))
+		anchors = append(anchors, m.PropertyID)
 	}
+	s.access.publishRealtime(ctx, actor, changed, anchors...)
 }
 
-// publishGrantRealtime hands the batch grant's frames to the realtime carrier
-// post-commit (карта #714, #716; ADR 0062): each landed leg (active or
-// suspended) and each pending invitation dirties its object's participants
-// view; the landed legs journal member.added — the history pair piggybacks.
+// publishGrantRealtime hands the whole grant transaction's frames to the
+// realtime carrier in one post-commit dispatch (карта #714, #716; ADR 0062):
+// each landed leg (active or suspended) and each pending invitation dirties
+// its object's participants view, the journal rows piggyback their history
+// pairs — one frame per pair for the whole batch.
 func (s *ParticipantMutationService) publishGrantRealtime(
 	ctx context.Context, actor uuid.UUID,
 	grantedActive, suspended []domain.Membership, results []ParticipantGrantResult,
 ) {
+	changed := make([]realtimedom.Change, 0, len(grantedActive)+len(suspended)+len(results))
+	anchors := make([]uuid.UUID, 0, cap(changed))
 	for _, m := range grantedActive {
-		s.access.publishRealtime(ctx, actor, accessFrames(m.PropertyID, true))
+		changed = append(changed, realtimedom.On(realtimedom.EntityAccess, m.PropertyID))
+		anchors = append(anchors, m.PropertyID)
 	}
 	for _, m := range suspended {
-		s.access.publishRealtime(ctx, actor, accessFrames(m.PropertyID, true))
+		changed = append(changed, realtimedom.On(realtimedom.EntityAccess, m.PropertyID))
+		anchors = append(anchors, m.PropertyID)
 	}
 	for _, r := range results {
 		if r.Outcome == ParticipantGrantPending {
-			s.access.publishRealtime(ctx, actor, accessFrames(r.PropertyID, true))
+			changed = append(changed, realtimedom.On(realtimedom.EntityAccess, r.PropertyID))
+			anchors = append(anchors, r.PropertyID)
 		}
 	}
+	s.access.publishRealtime(ctx, actor, changed, anchors...)
 }
 
 // listRemovalLegs enumerates the person's removal scope: their memberships

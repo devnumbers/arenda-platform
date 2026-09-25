@@ -165,7 +165,7 @@ func (s *InvitationService) InviteByEmail(
 	// The pending row dirties the object's participants view (карта #714,
 	// #716; ADR 0062); its creation journals MemberInvited — the history
 	// pair piggybacks.
-	s.access.publishRealtime(ctx, actor, accessFrames(propertyID, true))
+	s.access.publishRealtime(ctx, actor, accessFrame(propertyID), propertyID)
 
 	// The invite email goes out after the commit; a send failure does not roll
 	// back the invitation (a manual resend is available).
@@ -327,7 +327,11 @@ func (s *InvitationService) ChangeInvitationRole(
 	if err != nil {
 		return domain.Invitation{}, err
 	}
-	s.access.publishRealtime(ctx, actor, accessFrames(propertyID, journaled))
+	if journaled {
+		s.access.publishRealtime(ctx, actor, accessFrame(propertyID), propertyID)
+	} else {
+		s.access.publishRealtime(ctx, actor, accessFrame(propertyID))
+	}
 	return updated, nil
 }
 
@@ -374,7 +378,7 @@ func (s *InvitationService) CancelInvitation(ctx context.Context, actor, propert
 	if err != nil {
 		return err
 	}
-	s.access.publishRealtime(ctx, actor, accessFrames(propertyID, true))
+	s.access.publishRealtime(ctx, actor, accessFrame(propertyID), propertyID)
 	return nil
 }
 
@@ -464,7 +468,7 @@ func (s *InvitationService) activateInvitation(ctx context.Context, userID uuid.
 	// The landed activation dirties the object's participants view (карта
 	// #714, #716; ADR 0062); the activation journals no row — the actor is
 	// the registration, not a member manager.
-	s.access.publishRealtime(ctx, userID, accessFrames(invitation.PropertyID, false))
+	s.access.publishRealtime(ctx, userID, accessFrame(invitation.PropertyID))
 	return nil
 }
 

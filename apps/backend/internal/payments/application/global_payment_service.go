@@ -428,27 +428,18 @@ func (s *GlobalPaymentService) saveFavoriteOrderTx(
 }
 
 // publishFavoriteOrderRealtime hands the save's frames to the realtime
-// carrier (карта #714, #716; ADR 0062): the save dirties the `payments` view
-// of every touched rule's property — one frame per distinct property,
-// dispatched strictly post-commit, best-effort like the carrier itself.
+// carrier through the shared post-commit tail (карта #714, #716; ADR 0062):
+// the save dirties the `payments` view of every touched rule's property —
+// the carrier's per-transaction dedup collapses the repeated pairs into one
+// frame per property.
 func (s *GlobalPaymentService) publishFavoriteOrderRealtime(
 	ctx context.Context, actor uuid.UUID, locked []GlobalPaymentFavoriteLock,
 ) {
-	if s.realtime == nil || len(locked) == 0 {
-		return
-	}
-	seen := make(map[uuid.UUID]struct{}, len(locked))
 	changed := make([]realtimedom.Change, 0, len(locked))
 	for _, row := range locked {
-		if _, dup := seen[row.PropertyID]; dup {
-			continue
-		}
-		seen[row.PropertyID] = struct{}{}
 		changed = append(changed, realtimedom.On(realtimedom.EntityPayments, row.PropertyID))
 	}
-	if len(changed) > 0 {
-		s.realtime.EntityChanged(ctx, actor, changed...)
-	}
+	realtimeapp.Dispatch(ctx, s.realtime, actor, changed)
 }
 
 // ownerTodays resolves the calendar date per distinct data owner of the

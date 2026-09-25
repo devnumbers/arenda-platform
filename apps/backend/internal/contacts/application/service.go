@@ -90,18 +90,15 @@ func (s *ContactService) SetRealtimePublisher(p realtimeapp.Publisher) {
 // dirties the owner's own book view); a journaled mutation piggybacks the
 // history pair — a written row is a history change for the object's feed.
 func (s *ContactService) publishChanged(ctx context.Context, actor uuid.UUID, propertyID *uuid.UUID, journaled bool) {
-	if s.realtime == nil {
-		return
-	}
 	pair := realtimedom.InOwnerBook(realtimedom.EntityContacts)
+	var anchors []uuid.UUID
 	if propertyID != nil {
 		pair = realtimedom.On(realtimedom.EntityContacts, *propertyID)
+		if journaled {
+			anchors = append(anchors, *propertyID)
+		}
 	}
-	changed := []realtimedom.Change{pair}
-	if journaled && propertyID != nil {
-		changed = append(changed, realtimedom.HistoryOn(*propertyID))
-	}
-	s.realtime.EntityChanged(ctx, actor, changed...)
+	realtimeapp.Dispatch(ctx, s.realtime, actor, []realtimedom.Change{pair}, anchors...)
 }
 
 // NewContactService builds the contact use case service over the shared

@@ -26,7 +26,7 @@ Rules that no linter can check:
 Adding a new bounded context — checklist:
 
 1. `internal/<context>/{domain,application,adapters}` + `CONTEXT.md` (via `/domain-modeling`).
-2. Add the context to **both** `domain-clean` and `application-clean` deny lists in `.golangci.yml` (they enumerate contexts explicitly; a missed entry silently disables the guard).
+2. The clean-architecture depguards (`domain-clean`, `application-clean`) key on file globs (`**/internal/**/domain|application/*.go`), so a new context is guarded automatically — no `.golangci.yml` entry is needed. (The early explicit per-context deny lists are gone; if you re-introduce one, this checklist item must say so.)
 3. Decide the transaction story: UoW from the start — a production `Begin` outside `internal/platform` fails `make backend-lint` with no migration-ticket escape hatch (test fixtures are exempt, ADR 0033).
 
 ## Errors

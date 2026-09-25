@@ -138,14 +138,17 @@ func runRentalMutation(
 	if err != nil {
 		return uuid.Nil, err
 	}
-	if g.realtime != nil && (len(out.Changed) > 0 || out.History != nil) {
-		changed := out.Changed
-		if out.History != nil {
-			changed = append(changed, realtimedom.HistoryOn(propertyID))
-		}
-		g.realtime.EntityChanged(ctx, actor, changed...)
-	}
+	realtimeapp.Dispatch(ctx, g.realtime, actor, out.Changed, historyAnchor(out, propertyID)...)
 	return out.RentalID, nil
+}
+
+// historyAnchor is the journal anchor of the transaction's realtime dispatch:
+// the single-anchored journal row hangs on the conveyor's property.
+func historyAnchor(out mutationOutcome, propertyID uuid.UUID) []uuid.UUID {
+	if out.History == nil {
+		return nil
+	}
+	return []uuid.UUID{propertyID}
 }
 
 // lockActiveProperty loads the property with its row locked — the mutation's

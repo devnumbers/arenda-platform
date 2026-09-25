@@ -142,33 +142,20 @@ func runMutation[T any](
 	if err != nil {
 		return zero, err
 	}
-	dispatchRealtime(g, ctx, actor, propertyID, out)
+	realtimeapp.Dispatch(ctx, g.realtime, actor, out.Changed, historyAnchors(out, propertyID)...)
 	if out.RereadPaymentID == nil {
 		return out.Response, nil
 	}
 	return rereadPayment[T](g, ctx, scope, propertyID, *out.RereadPaymentID)
 }
 
-// dispatchRealtime hands the transaction's captured change pairs to the
-// realtime carrier strictly after the commit — the grace-events canon
-// (карта #714, #716; ADR 0062 §3): a rolled-back transaction dispatches
-// nothing, a nil carrier keeps the pre-#716 silence, and the carrier itself
-// is best-effort (it never fails the committed mutation). Every journal row
-// the transaction recorded piggybacks its history pair: a written row is a
-// history change for the object's feed.
-func dispatchRealtime[T any](
-	g mutationGates, ctx context.Context, actor, propertyID uuid.UUID, out mutationOutcome[T],
-) {
-	if g.realtime == nil {
-		return
+// historyAnchors collects the journal anchors of the transaction's realtime
+// dispatch: the single-anchored journal row hangs on the conveyor's property.
+func historyAnchors[T any](out mutationOutcome[T], propertyID uuid.UUID) []uuid.UUID {
+	if out.History == nil {
+		return nil
 	}
-	changed := out.Changed
-	if out.History != nil {
-		changed = append(changed, realtimedom.HistoryOn(propertyID))
-	}
-	if len(changed) > 0 {
-		g.realtime.EntityChanged(ctx, actor, changed...)
-	}
+	return []uuid.UUID{propertyID}
 }
 
 // rereadPayment re-reads the stored rule after commit so the response carries
