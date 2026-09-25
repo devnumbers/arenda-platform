@@ -31,6 +31,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/sse"
 	realtimepg "github.com/nambers/arenda-planform/apps/backend/internal/realtime/adapters/postgres"
 	realtimestream "github.com/nambers/arenda-planform/apps/backend/internal/realtime/adapters/stream"
+	realtimeapp "github.com/nambers/arenda-planform/apps/backend/internal/realtime/application"
 )
 
 func main() {
@@ -220,15 +221,7 @@ func run() error {
 	// canon: the modules built earlier than the delivery queue's hub, the
 	// frames are best-effort, a broken carrier never fails the committed
 	// mutation.
-	paymentsMod.PaymentService.SetRealtimePublisher(realtimeCarrier)
-	paymentsMod.OperationService.SetRealtimePublisher(realtimeCarrier)
-	paymentsMod.GlobalPayments.SetRealtimePublisher(realtimeCarrier)
-	tasksMod.RuleService.SetRealtimePublisher(realtimeCarrier)
-	tasksMod.TaskService.SetRealtimePublisher(realtimeCarrier)
-	contactsMod.ContactService.SetRealtimePublisher(realtimeCarrier)
-	rentalsMod.RentalService.SetRealtimePublisher(realtimeCarrier)
-	propertiesMod.PropertyService.SetRealtimePublisher(realtimeCarrier)
-	accessMod.AccessService.SetRealtimePublisher(realtimeCarrier)
+	bindRealtimePublisher(realtimeCarrier, paymentsMod, tasksMod, contactsMod, rentalsMod, propertiesMod, accessMod)
 
 	// 11.5.1 The tasks scheduling seam (issue #775): the rule create/edit
 	//     flows hand their standing tasks' ids over post-commit — a live
@@ -394,6 +387,33 @@ func run() error {
 	}
 
 	return serveAndWait(ctx, server, workers, notificationsStream, p.Logger, p.Cfg)
+}
+
+// realtimeBindings enumerates the services the composition root late-binds
+// the realtime carrier into (карта #714, #716; ADR 0062). Kept one function
+// — the single place the binding happens — so the layer-3 wiring test
+// (main_wiring_test.go, testing-strategy) can replay it over fresh service
+// instances and turn red the moment any setter goes missing: a nil carrier
+// is the pre-#716 silence, a forgotten binding would only surface on a live
+// stage.
+func bindRealtimePublisher(
+	p realtimeapp.Publisher,
+	paymentsMod *wire.Payments,
+	tasksMod *wire.Tasks,
+	contactsMod *wire.Contacts,
+	rentalsMod *wire.Rentals,
+	propertiesMod *wire.Properties,
+	accessMod *wire.Access,
+) {
+	paymentsMod.PaymentService.SetRealtimePublisher(p)
+	paymentsMod.OperationService.SetRealtimePublisher(p)
+	paymentsMod.GlobalPayments.SetRealtimePublisher(p)
+	tasksMod.RuleService.SetRealtimePublisher(p)
+	tasksMod.TaskService.SetRealtimePublisher(p)
+	contactsMod.ContactService.SetRealtimePublisher(p)
+	rentalsMod.RentalService.SetRealtimePublisher(p)
+	propertiesMod.PropertyService.SetRealtimePublisher(p)
+	accessMod.AccessService.SetRealtimePublisher(p)
 }
 
 // injectPropertyServiceAccess wires the access-context adapters into the
