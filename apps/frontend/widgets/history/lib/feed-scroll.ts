@@ -16,6 +16,14 @@
  *   доprepend'ов) сдвигает ОБА края выдачи — реанкерует на дно: содержимое
  *   под читателем уже сменилось, честнее показать самые свежие записи;
  *   когда вырос только нижний край (live-prepend), читателя не трогаем.
+ *
+ * Рост может прийти из двух источников в ОДНОМ React-коммите: useLayoutEffect
+ * видит уже смерженные края и по одним только границам не отличит «перечитали
+ * окно» от «fetchNextPage дописал старые сверху, пока live-prepend влил
+ * свежие снизу». Об источнике говорит opts.liveMerged (метка времени
+ * последнего live-влития против времени снимка краёв — см. экран ленты):
+ * гонка трактуется как prepend свежих — читателя старых строк не реанкерим,
+ * решаем follow/indicate по расстоянию до старого дна.
  */
 
 /** Расстояние от текущей прокрутки до нижнего края документа (px). */
@@ -55,6 +63,7 @@ export function decideFeedScroll(
   prev: FeedScrollPrev,
   next: FeedEdges,
   nextHeight: number,
+  opts: { readonly liveMerged?: boolean } = {},
 ): FeedScrollAction {
   // Пустая выдача — пустые состояния («Действий не было», «Ничего не
   // найдено») не сообщения: никакого скролла и якоря (решение 24.09).
@@ -74,6 +83,17 @@ export function decideFeedScroll(
   if (next.count > previous.count) {
     const delta = nextHeight - prev.height;
     if (next.firstId !== previous.firstId && next.lastId !== previous.lastId) {
+      if (opts.liveMerged) {
+        // Гонка источников роста в одном коммите (fetchNextPage дописал
+        // старые сверху, live-prepend влил свежие снизу): для читателя это
+        // prepend свежих — семантика живого догона, реанкерить его нельзя.
+        // Осознанная цена: live-влитие в одном коммите с onOpen-перечитыванием
+        // окна тоже попадает сюда и остаётся follow/indicate вместо реанкера —
+        // читателя доставляет до свежих клик по индикатору «Есть новые».
+        return prev.distanceToOldBottom < FOLLOW_BOTTOM_PX
+          ? { kind: 'follow', delta }
+          : { kind: 'indicate' };
+      }
       // Перечитанное окно (сдвинулись оба края): реанкер на дно.
       return { kind: 'anchor' };
     }

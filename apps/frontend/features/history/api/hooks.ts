@@ -135,6 +135,19 @@ export function mergeFreshIntoFirstPage(
   return { ...old, pages: [mergedFirst, ...old.pages.slice(1)] };
 }
 
+/** Метки времени последнего live-влития в ленту — по ключу скоупа (модульный
+ * реестр: решение прокрутки на экране принимается в useLayoutEffect по краям
+ * выдачи, а рост из двух источников может приехать в одном React-коммите —
+ * fetchNextPage дописал старые сверху, live-prepend влил свежие снизу; экран
+ * отличает гонку от перечитывания окна, сравнивая метку с временем своего
+ * прошлого снимка краёв — widgets/history/lib/feed-scroll.ts). */
+const lastLiveMergeTimes = new Map<string, number>();
+
+/** Момент последнего live-влития в ленту скоупа (0 — влитий не было). */
+export function lastLiveMergeAt(scope: HistoryFeedScope): number {
+  return lastLiveMergeTimes.get(historyKeys.feed(scope).join('/')) ?? 0;
+}
+
 /** Подписка ленты на кадры history (тикет #718): обработчик живёт столько же,
  * сколько хук, и читает актуальные query/scope через рефы (синхронизация —
  * в эффекте, до подписки: SSE-кадры — макротаски, к их приходу эффекты
@@ -176,6 +189,10 @@ function useLiveFeedFrames(
           key,
           (old) => mergeFreshIntoFirstPage(old, freshItems, response.prev_cursor ?? null),
         );
+        // Метка влития — сразу после записи в кэш: следующий коммит краёв на
+        // экране позже кадра, поэтому «метка > времени снимка» ловит влитие,
+        // приехавшее в один коммит с prepend'ом старых (гонка скролла).
+        lastLiveMergeTimes.set(key.join('/'), Date.now());
         return { hasMore: freshItems.length >= HISTORY_PAGE_SIZE };
       },
       refetch: () => queryRef.current.refetch(),

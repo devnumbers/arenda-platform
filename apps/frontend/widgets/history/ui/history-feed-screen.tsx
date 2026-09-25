@@ -11,6 +11,7 @@ import {
   groupHistoryByDay,
   historyFeedScope,
   isDefaultHistoryFilters,
+  lastLiveMergeAt,
   pinnedHistoryFilters,
   useHistoryFeed,
   useHistoryFilters,
@@ -258,10 +259,18 @@ export function HistoryFeedScreen({
   // поверх). Группа фильтров, выбранная «в ноль», означает пустой
   // результат — скоупа нет (null), запрос не делается.
   const scope = historyFeedScope(filters, pins);
-  const feedQuery = useHistoryFeed(
-    scope === null ? {} : searchMode && searching ? { ...scope, q } : scope,
-    { enabled: scope !== null },
-  );
+  // Скоуп запроса ленты одним значением: тот же объект уходит и в решатель
+  // прокрутки (метка live-влития реестра ключуется по скоупу, hooks.ts).
+  // Объект скоупа новый на каждом рендере (фильтры перечитываются из адреса
+  // без мемоизации, use-history-filters.ts) — в эффект прокрутки идёт через
+  // реф, как скоуп подписки в hooks.ts; смена скоупа и смена краёв всегда
+  // в разных коммитах (ключ запроса меняется — данные едут асинхронно).
+  const feedScope = scope === null ? {} : searchMode && searching ? { ...scope, q } : scope;
+  const feedQuery = useHistoryFeed(feedScope, { enabled: scope !== null });
+  const feedScopeRef = useRef(feedScope);
+  useEffect(() => {
+    feedScopeRef.current = feedScope;
+  });
   const filtersQuery = useHistoryFilters();
   // Свой актор (решение владельца 24.09): узнаём по id сессии — канон
   // шита фильтров (#710); серый суффикс «(Вы)» у своей шапки.
@@ -286,17 +295,26 @@ export function HistoryFeedScreen({
   // append свежих открывается только у читателя на дне, выше появляется
   // индикатор «Есть новые» (клик — плавный ход к свежим), перечитывание
   // окна реанкерует на дно. Края выдачи — примитивы в депсах, тело эффекта
-  // читает их из замыкания того же коммита.
+  // читает их (и скоуп — через реф выше) из замыкания того же коммита.
   const [hasNewBelow, setHasNewBelow] = useState(false);
   const entryCount = entries.length;
   const firstEntryId = entries[0]?.id ?? null;
   const lastEntryId = entries[entries.length - 1]?.id ?? null;
-  const scroll = useRef<{ edges: FeedEdges | null; height: number }>({ edges: null, height: 0 });
+  // at — время снимка краёв: live-влитие свежих (метка в реестре, hooks.ts)
+  // позже прошлого снимка значит, что рост этого коммита может включать
+  // свежие снизу — при смене обоих краёв это гонка «fetchNextPage дописал
+  // старые сверху + live-prepend влил свежие снизу», а не перечитывание
+  // окна, и реанкерить читателя старых строк нельзя (feed-scroll.ts).
+  const scroll = useRef<{ edges: FeedEdges | null; height: number; at: number }>({
+    edges: null,
+    height: 0,
+    at: 0,
+  });
   useLayoutEffect(() => {
     const edges: FeedEdges = { count: entryCount, firstId: firstEntryId, lastId: lastEntryId };
     const height = document.documentElement.scrollHeight;
     const prev = scroll.current;
-    scroll.current = { edges, height };
+    scroll.current = { edges, height, at: Date.now() };
     const action = decideFeedScroll(
       {
         edges: prev.edges,
@@ -305,6 +323,7 @@ export function HistoryFeedScreen({
       },
       edges,
       height,
+      { liveMerged: lastLiveMergeAt(feedScopeRef.current) > prev.at },
     );
     if (action.kind === 'anchor') {
       window.scrollTo({ top: height });

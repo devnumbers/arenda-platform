@@ -59,6 +59,24 @@ describe('decideFeedScroll — мессенджерская прокрутка �
     expect(action).toStrictEqual({ kind: 'anchor' });
   });
 
+  it('гонка (prepend старых + live-влитие свежих): читатель выше дна — индикатор, не рывок на дно', () => {
+    // fetchNextPage дописал старые сверху (firstId сменился), live-prepend
+    // влил свежие снизу (lastId сменился) — оба края в одном коммите.
+    const prev = { edges: edges(50, 'r50', 'r1'), height: 5000, distanceToOldBottom: 2000 };
+    const action = decideFeedScroll(prev, edges(60, 'r100', 'f2'), 6200, { liveMerged: true });
+    expect(action).toStrictEqual({ kind: 'indicate' });
+  });
+
+  it('гонка (prepend старых + live-влитие свежих): читатель на дне — follow на всю дельту', () => {
+    const prev = {
+      edges: edges(50, 'r50', 'r1'),
+      height: 5000,
+      distanceToOldBottom: FOLLOW_BOTTOM_PX - 1,
+    };
+    const action = decideFeedScroll(prev, edges(60, 'r100', 'f2'), 6200, { liveMerged: true });
+    expect(action).toStrictEqual({ kind: 'follow', delta: 1200 });
+  });
+
   it('равная выдача с новыми границами — окно сдвинулось (рефетч после разрыва): на дно', () => {
     const prev = { edges: edges(50, 'r50', 'r1'), height: 5000, distanceToOldBottom: 2000 };
     const action = decideFeedScroll(prev, edges(50, 's50', 's1'), 5000);
