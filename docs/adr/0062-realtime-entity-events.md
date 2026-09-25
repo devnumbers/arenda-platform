@@ -89,9 +89,10 @@ across the same pipelines.
    precise consumer of its entity's frames (ticket #718, the live history
    feed): while such a subscriber is mounted, the provider delivers the
    frame to it and suppresses the blanket invalidation of that entity's
-   families — the feed prepends fresh pages through its backward keyset
-   instead of refetching the loaded window (a window refetch slides the
-   keyset and yanks a reader of old rows); with no subscriber the blanket
+   families — the feed merges fresh rows into the cached first page (a
+   page-prepend breaks refetch, #718) instead of refetching the loaded
+   window (a window refetch slides the keyset and yanks a reader of old
+   rows); with no subscriber the blanket
    path applies unchanged, and the on-open re-read still re-anchors the
    mounted feed's window.
 
@@ -108,6 +109,14 @@ across the same pipelines.
    publication from the pipelines that own the facts. The publisher port
    lives in the realtime context's application layer; publisher contexts
    depend on the port, the hub-facing adapter computes delivery.
+
+   Scheduled system materialization (the hourly zone sweep and the tick
+   materialization) publishes no frames — recorded out-of-v1 (#716): those
+   changes are not other people's edits, the hourly cadence and the on-open
+   re-read cover them. The billing worker's tariff phases
+   (Enforce/Recover/ArchiveExcess/RestoreGrace) stay silent in v1 the same
+   way — the recipient's screens catch up on the next stream open; full
+   publication is a v2 candidate (owner decision, R3 gate).
 
 4. **Audience is resolved at publication time, the actor included.** The
    adapter resolves each frame's recipients through derived property access
