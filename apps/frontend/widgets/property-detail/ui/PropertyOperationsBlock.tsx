@@ -28,6 +28,22 @@ function OperationsTotalsGroup({
   );
 }
 
+/** Скелетон сводки (§7, приглушённый в серой карточке) — общий для
+ * isLoading-ветки блока и страничного скелетона деталей (паритет #604:
+ * одна анатомия на обе фазы загрузки). */
+export function PropertyOperationsSkeleton(): JSX.Element {
+  return (
+    <>
+      {[0, 1].map((column) => (
+        <div key={column} className="flex min-w-0 flex-1 flex-col gap-3">
+          <Skeleton className="h-5 w-24 bg-surface-muted-hover" />
+          <Skeleton className="h-1.5 w-full bg-surface-muted-hover" />
+        </div>
+      ))}
+    </>
+  );
+}
+
 /**
  * Сводка «Операции в <месяц>» на детали объекта (тикет #589, Figma
  * 1185:40820): две группы 50/50 — «Расходы» и «Доходы», сумма 16/500 над
@@ -46,16 +62,7 @@ export function PropertyOperationsBlock({
   return (
     <div className="flex items-center gap-5 px-6 pb-6 pt-4" data-testid="property-operations-block">
       {isLoading ? (
-        <>
-          <div className="flex min-w-0 flex-1 flex-col gap-3">
-            <Skeleton className="h-5 w-24 bg-surface-muted-hover" />
-            <Skeleton className="h-1.5 w-full bg-surface-muted-hover" />
-          </div>
-          <div className="flex min-w-0 flex-1 flex-col gap-3">
-            <Skeleton className="h-5 w-24 bg-surface-muted-hover" />
-            <Skeleton className="h-1.5 w-full bg-surface-muted-hover" />
-          </div>
-        </>
+        <PropertyOperationsSkeleton />
       ) : (
         <>
           <OperationsTotalsGroup

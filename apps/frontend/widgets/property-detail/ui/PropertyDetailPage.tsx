@@ -58,7 +58,7 @@ import {propertySectionCta} from '../lib/property-section-cta';
 import {operationsSectionTitle} from '../lib/operations-section';
 import {propertyDetailTasks} from '../lib/detail-tasks';
 import {propertyApartmentSummaryRows} from '../lib/apartment-summary';
-import {TopNav, TopNavBackButton, TopNavTitle, IconButton, PageContent, ConfirmDialog, Skeleton} from '@/shared/ui/design';
+import {TopNav, TopNavBackButton, TopNavTitle, IconButton, PageContent, ConfirmDialog} from '@/shared/ui/design';
 import {StarOutline} from '@/shared/assets/icons';
 import {PropertyMediaBlock} from './PropertyMediaBlock';
 import {
@@ -82,23 +82,13 @@ import {PropertyAccessPill} from './PropertyAccessPill';
 import {PropertyArchivedPill} from './PropertyArchivedPill';
 import {propertyHeaderPills} from '../lib/property-header-pills';
 import {PropertyOwnerSection} from './PropertyOwnerSection';
-import {PropertyDetailLoading} from './PropertyDetailLoading';
+import {PropertyDetailLoading, PropertySectionEmptySkeleton, PropertyPaymentsStripSkeleton} from './PropertyDetailLoading';
 import {PropertyDetailError} from './PropertyDetailError';
 import {PropertyNotFoundScreen} from './PropertyNotFoundScreen';
 import {PropertySuspendedScreen} from './PropertySuspendedScreen';
 
 function showMutationError(error: ApiError): void {
     notify.scenarios.property.saveError({description: error.detail});
-}
-
-/** Плейсхолдер строки секции, пока данные секции едут (§7: скелетон
- * приглушён внутри серой карточки). */
-function PropertySectionSkeleton(): JSX.Element {
-    return (
-        <div className="flex flex-col gap-3 px-6 pb-6 pt-4" aria-hidden>
-            <Skeleton className="h-11 w-full bg-surface-muted-hover"/>
-        </div>
-    );
 }
 
 /**
@@ -589,7 +579,7 @@ export function PropertyDetailPage(): JSX.Element {
                             className="mt-20"
                         >
                             {rentalsQuery.isPending ? (
-                                <PropertySectionSkeleton/>
+                                <PropertySectionEmptySkeleton/>
                             ) : currentRental !== undefined ? (
                                 <PropertyRentalBlock
                                     rental={currentRental}
@@ -619,7 +609,7 @@ export function PropertyDetailPage(): JSX.Element {
                             href={ROUTES.propertyPayments(id)}
                         >
                             {paymentsQuery.isPending ? (
-                                <PropertySectionSkeleton/>
+                                <PropertyPaymentsStripSkeleton/>
                             ) : payments.length > 0 ? (
                                 <PropertyPaymentsIconsBlock groups={paymentGroups}/>
                             ) : (
@@ -654,7 +644,7 @@ export function PropertyDetailPage(): JSX.Element {
                             href={ROUTES.propertyContacts(id)}
                         >
                             {contactsQuery.isPending ? (
-                                <PropertySectionSkeleton/>
+                                <PropertySectionEmptySkeleton/>
                             ) : tenant !== null || propertyContacts.length > 0 ? (
                                 <PropertyContactsBlock
                                     tenant={tenant}
@@ -678,7 +668,7 @@ export function PropertyDetailPage(): JSX.Element {
                             href={ROUTES.propertyTasks(id)}
                         >
                             {tasksQuery.isPending ? (
-                                <PropertySectionSkeleton/>
+                                <PropertySectionEmptySkeleton/>
                             ) : detailTasks.length > 0 ? (
                                 <PropertyTasksBlock
                                     tasks={detailTasks}
