@@ -125,9 +125,12 @@ across the same pipelines.
    wherever recovery runs through a publishing seam, the pairs publish
    exactly as the manual seams publish them — ArchiveExcessProperties
    mirrors the manual archive and dispatches the restored legs' access
-   pairs post-commit. Full publication (the phases' property/history
-   frames, suspend frames at the billing transitions) stays a v2 candidate
-   (owner decision, R3 gate).
+   pairs as close to the commit as the bridge boundary allows: the
+   archiver runs inside the phase's transaction and the phase commits
+   right after the archiver hands its outcome back, so a rollback past
+   the dispatch costs at most a spurious refetch. Full publication (the
+   phases' property/history frames, suspend frames at the billing
+   transitions) stays a v2 candidate (owner decision, R3 gate).
 
 4. **Audience is resolved at publication time, the actor included.** The
    adapter resolves each frame's recipients through derived property access
@@ -168,6 +171,6 @@ across the same pipelines.
 - (−) Coarse frames over-invalidate: a change to one object may refetch
   mounted queries of other objects in the same family; acceptable for the
   product's scale (few properties per owner).
-- (−) Frames are in-memory per instance (ADR 0060 §9): they do not survive
-  deploys and do not cross replicas — the reconnect-and-reread contract
-  absorbs both.
+- (−) Frames are in-memory per instance (ADR 0060, Consequences): they do
+  not survive deploys and do not cross replicas — the reconnect-and-reread
+  contract absorbs both.
