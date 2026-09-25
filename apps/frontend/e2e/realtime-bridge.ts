@@ -1,5 +1,7 @@
 import type { Page } from '@playwright/test';
 
+import type { RealtimeEntity } from '@/features/realtime';
+
 /**
  * Тестовый мост realtime-стрима для e2e (карта #714, тикет #718): подменяет
  * браузерный EventSource фейком, который мгновенно «открывается», и даёт
@@ -49,7 +51,8 @@ export async function installRealtimeBridge(page: Page): Promise<void> {
 }
 
 type RealtimeTestFrame = {
-  readonly entity: string;
+  /** Имя категории из словаря ADR 0062 §2 — опечатка ловится tsc, а не тихим таймаутом спеки. */
+  readonly entity: RealtimeEntity;
   readonly propertyId: string | null;
 };
 
