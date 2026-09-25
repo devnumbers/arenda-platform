@@ -1,57 +1,56 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createLiveFeedFrameHandler, type LiveFeedDeps } from './live-feed-frames';
 
-/** Стенд обработчика: prepend возвращает курсор свежей границы из очереди
- * (как это делает реальный результат fetchPreviousPage), пустая очередь —
- * граница упёрлась в дно (null). */
+function historyFrame(propertyId: string | null = 'p1') {
+  return { entity: 'history', propertyId };
+}
+
+/** Стенд обработчика: fetchFresh возвращает полноту порции из очереди
+ * (пустая очередь — «дно»: порция легла не в полный размер). */
 function harness(overrides: Partial<LiveFeedDeps> = {}) {
   const calls: string[] = [];
-  const cursorQueue: (string | null)[] = [];
+  const portionQueue: boolean[] = [];
   let enabled = true;
-  let hasPreviousPage = true;
+  let hasPages = true;
   let scopePropertyIds: ReadonlyArray<string> | undefined;
 
-  const prepend = vi.fn((): Promise<{ firstPrevCursor: string | null } | null> => {
-    calls.push('prepend');
-    return Promise.resolve({ firstPrevCursor: cursorQueue.shift() ?? null });
+  const fetchFresh = vi.fn((): Promise<{ hasMore: boolean } | null> => {
+    calls.push('fetchFresh');
+    return Promise.resolve({ hasMore: portionQueue.shift() ?? false });
   });
   const refetch = vi.fn((): Promise<void> => {
     calls.push('refetch');
     return Promise.resolve();
   });
-  const state = vi.fn(() => ({ enabled, hasPreviousPage, scopePropertyIds }));
+  const state = vi.fn(() => ({ enabled, hasPages, scopePropertyIds }));
 
-  const handle = createLiveFeedFrameHandler({ state, prepend, refetch, ...overrides });
+  const handle = createLiveFeedFrameHandler({ state, fetchFresh, refetch, ...overrides });
   return {
     handle,
     calls,
-    prepend,
+    fetchFresh,
     refetch,
     setEnabled: (value: boolean) => {
       enabled = value;
     },
-    setHasPreviousPage: (value: boolean) => {
-      hasPreviousPage = value;
+    setHasPages: (value: boolean) => {
+      hasPages = value;
     },
     setScopePropertyIds: (value: ReadonlyArray<string> | undefined) => {
       scopePropertyIds = value;
     },
-    /** Что вернут следующие prepend'ы как курсор свежей границы страницы. */
-    enqueueFirstPrevCursors: (...values: (string | null)[]) => {
-      cursorQueue.push(...values);
+    /** Полнота порций следующих догона (true — порция ровно в pageSize). */
+    enqueuePortions: (...values: boolean[]) => {
+      portionQueue.push(...values);
     },
   };
 }
 
-function historyFrame(propertyId: string | null = 'p1') {
-  return { entity: 'history', propertyId };
-}
-
-describe('createLiveFeedFrameHandler — кадр истории → prepend свежих (тикет #718)', () => {
-  it('кадр по объекту ленты prependит свежую страницу', async () => {
+describe('createLiveFeedFrameHandler — кадр истории → догон снизу (тикет #718)', () => {
+  it('кадр по объекту ленты запускает догон', async () => {
     const h = harness();
     h.handle(historyFrame());
-    await vi.waitFor(() => expect(h.calls).toStrictEqual(['prepend']));
+    await vi.waitFor(() => expect(h.calls).toStrictEqual(['fetchFresh']));
   });
 
   it('кадр по чужому объекту при фильтре объектов ленты игнорируется', async () => {
@@ -70,13 +69,13 @@ describe('createLiveFeedFrameHandler — кадр истории → prepend с�
 
     h.handle(historyFrame('p2'));
 
-    await vi.waitFor(() => expect(h.calls).toStrictEqual(['prepend']));
+    await vi.waitFor(() => expect(h.calls).toStrictEqual(['fetchFresh']));
   });
 
-  it('кадр без propertyId (безобъектная книга) prependит', async () => {
+  it('кадр без propertyId (безобъектная книга) догоняет', async () => {
     const h = harness();
     h.handle(historyFrame(null));
-    await vi.waitFor(() => expect(h.calls).toStrictEqual(['prepend']));
+    await vi.waitFor(() => expect(h.calls).toStrictEqual(['fetchFresh']));
   });
 
   it('запрос не готов (первая загрузка/выключен) — кадр молча пропускается', async () => {
@@ -89,38 +88,56 @@ describe('createLiveFeedFrameHandler — кадр истории → prepend с�
     expect(h.calls).toStrictEqual([]);
   });
 
-  it('нет границы свежих (пустая лента) — кадр перечитывает ленту целиком', async () => {
+  it('лента пуста (вливать не во что) — кадр перечитывает ленту целиком', async () => {
     const h = harness();
-    h.setHasPreviousPage(false);
+    h.setHasPages(false);
 
     h.handle(historyFrame());
 
     await vi.waitFor(() => expect(h.calls).toStrictEqual(['refetch']));
   });
 
-  it('догоняет страницу за страницей, пока свежая граница не упрётся в дно', async () => {
+  it('полная порция тянет следующий догон, неполная — дно', async () => {
     const h = harness();
-    h.enqueueFirstPrevCursors('cursor-1', null);
+    h.enqueuePortions(true, false);
 
     h.handle(historyFrame());
 
-    await vi.waitFor(() => expect(h.calls).toStrictEqual(['prepend', 'prepend']));
+    await vi.waitFor(() => expect(h.calls).toStrictEqual(['fetchFresh', 'fetchFresh']));
   });
 
-  it('кадры во время полёта не параллелятся — цепочка промисов', async () => {
+  it('после потолка полных порций лента перечитывается целиком (редкий burst)', async () => {
+    const h = harness();
+    h.enqueuePortions(true, true, true, true, true);
+
+    h.handle(historyFrame());
+
+    await vi.waitFor(() => {
+      expect(h.calls).toStrictEqual([
+        'fetchFresh',
+        'fetchFresh',
+        'fetchFresh',
+        'fetchFresh',
+        'fetchFresh',
+        'refetch',
+      ]);
+    });
+  });
+
+  it('кадры во время полёта догона не параллелятся — цепочка промисов', async () => {
     let release!: () => void;
-    const gate = new Promise<{ firstPrevCursor: string | null }>((resolve) => {
-      release = () => resolve({ firstPrevCursor: null });
+    const gate = new Promise<{ hasMore: boolean } | null>((resolve) => {
+      release = () => resolve({ hasMore: false });
     });
     const h = harness();
     let active = 0;
     let overlapped = false;
-    h.prepend.mockImplementation(() => {
+    h.fetchFresh.mockImplementation(() => {
       if (active > 0) {
         overlapped = true;
       }
       active += 1;
-      const result = active === 1 ? gate : Promise.resolve({ firstPrevCursor: null });
+      const result = active === 1 ? gate : Promise.resolve({ hasMore: false });
       return result.finally(() => {
         active -= 1;
       });
@@ -130,29 +147,11 @@ describe('createLiveFeedFrameHandler — кадр истории → prepend с�
     h.handle(historyFrame());
     h.handle(historyFrame());
 
-    await vi.waitFor(() => expect(h.prepend).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(h.fetchFresh).toHaveBeenCalledTimes(1));
     expect(overlapped).toBe(false);
     release();
-    await vi.waitFor(() => expect(h.prepend).toHaveBeenCalledTimes(3));
-    // Три кадра — три последовательных прогона без единого наложения.
+    await vi.waitFor(() => expect(h.fetchFresh).toHaveBeenCalledTimes(3));
+    // Три кадра — три последовательных догона без единого наложения.
     expect(overlapped).toBe(false);
-  });
-
-  it('после потолка доprependов лента перечитывается целиком (редкий burst)', async () => {
-    const h = harness();
-    h.enqueueFirstPrevCursors('more-1', 'more-2', 'more-3', 'more-4', 'more-5');
-
-    h.handle(historyFrame());
-
-    await vi.waitFor(() => {
-      expect(h.calls).toStrictEqual([
-        'prepend',
-        'prepend',
-        'prepend',
-        'prepend',
-        'prepend',
-        'refetch',
-      ]);
-    });
   });
 });

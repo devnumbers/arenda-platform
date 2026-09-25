@@ -12,6 +12,7 @@ import { subscribeRealtimeEntity } from '@/shared/api/realtime-subscriptions';
 
 import {
   historyFeedUrl,
+  HISTORY_PAGE_SIZE,
   type HistoryFeedPageParam,
 } from './history-url';
 import { createLiveFeedFrameHandler } from './live-feed-frames';
@@ -52,12 +53,13 @@ export type HistoryFeedPage = {
  * Лента живая (карта #714, тикет #718): хук подписан на кадры history
  * realtime-стрима (ADR 0062) — точный потребитель вместо blanket-инвалидации
  * (реестр realtime-subscriptions; провайдер подавляет инвалидацию семейства,
- * пока подписка жива). Кадр догоняет ленту СНИЗУ — prepend свежих страниц
- * по стороне prev двустороннего keyset — не перечитывая окно: keyset-страницы
- * иммутабельны, а перечитывание сдвинуло бы границы окна и дёрнуло читающего
- * старые строки. Правила prepend'а — в createLiveFeedFrameHandler; на открытии
- * стрима (переподключение, возврат видимости) ленту перечитывает
- * onOpen-инвалидация провайдера — окно реанкеруется целиком.
+ * пока подписка жива). Кадр догоняет ленту СНИЗУ — свежие строки вливаются
+ * в первую страницу кэша (mergeFreshIntoFirstPage), не перечитывая окно:
+ * keyset-страницы иммутабельны, а перечитывание сдвинуло бы границы окна и
+ * дёрнуло читающего старые строки. Правила догона — в
+ * createLiveFeedFrameHandler; на открытии стрима (переподключение, возврат
+ * видимости) ленту перечитывает onOpen-инвалидация провайдера — окно
+ * реанкеруется целиком.
  */
 export function useHistoryFeed(
   scope: HistoryFeedScope = {},
@@ -90,18 +92,48 @@ export function useHistoryFeed(
 type LiveFeedQuery = {
   readonly isEnabled: boolean;
   readonly isPending: boolean;
-  readonly hasPreviousPage: boolean;
-  fetchPreviousPage(options: { cancelRefetch: boolean }): Promise<unknown>;
+  /** SELECT-данные (#709) — плоская хронология; длина = «есть загруженные
+   * строки» (к границе можно вливать свежие). */
+  readonly data?: HistoryEntry[];
   refetch(): Promise<unknown>;
 };
+
+/** Вливает свежие строки в первую страницу кэша (канон prepend'а TanStack):
+ * страница растёт без добавления страницы — pageParams[0] остаётся undefined,
+ * поэтому последующий refetch ленты перечитывает её целиком и консистентен
+ * (prepend отдельной страницей через fetchPreviousPage ломал refetch:
+ * неполная prepend-страница не несёт next_cursor — контракт #708 отдаёт его
+ * только у полных порций — и обход страниц обрывался, обрезая ленту;
+ * найдено живой приёмкой #718). Свежие строки НОВЕЕ всех загруженных —
+ * в начало массива items первой страницы (порядок внутри страницы — по
+ * убыванию времени); prevCursor первой страницы сдвигается на свежайшую
+ * строку (граница следующего догона), nextCursor не трогается — граница
+ * в прошлое неизменна. */
+export function mergeFreshIntoFirstPage(
+  old: InfiniteData<HistoryFeedPage> | undefined,
+  freshItems: HistoryEntry[],
+  freshPrevCursor: string | null,
+): InfiniteData<HistoryFeedPage> | undefined {
+  if (old === undefined || old.pages.length === 0) {
+    return old;
+  }
+  const first = old.pages[0];
+  if (first === undefined) {
+    return old;
+  }
+  const mergedFirst: HistoryFeedPage = {
+    items: [...freshItems, ...first.items],
+    nextCursor: first.nextCursor,
+    prevCursor: freshPrevCursor ?? first.prevCursor,
+  };
+  return { ...old, pages: [mergedFirst, ...old.pages.slice(1)] };
+}
 
 /** Подписка ленты на кадры history (тикет #718): обработчик живёт столько же,
  * сколько хук, и читает актуальные query/scope через рефы (синхронизация —
  * в эффекте, до подписки: SSE-кадры — макротаски, к их приходу эффекты
- * последнего коммита сброшены); prepend догоняет свежие страницы снизу
- * (логика — createLiveFeedFrameHandler). Результат fetchPreviousPage несёт
- * SELECT-данные (плоский массив, #709) — курсор свежей границы читается из
- * сырых страниц кэша. */
+ * последнего коммита сброшены); кадр догоняет ленту снизу (логика —
+ * createLiveFeedFrameHandler). */
 function useLiveFeedFrames(
   scope: HistoryFeedScope,
   query: LiveFeedQuery,
@@ -117,15 +149,28 @@ function useLiveFeedFrames(
     const handler = createLiveFeedFrameHandler({
       state: () => ({
         enabled: queryRef.current.isEnabled && !queryRef.current.isPending,
-        hasPreviousPage: queryRef.current.hasPreviousPage,
+        hasPages: (queryRef.current.data?.length ?? 0) > 0,
         scopePropertyIds: scopeRef.current.propertyIds,
       }),
-      prepend: async () => {
-        await queryRef.current.fetchPreviousPage({ cancelRefetch: false });
-        const raw = queryClient.getQueryData<InfiniteData<HistoryFeedPage>>(
-          historyKeys.feed(scopeRef.current),
+      fetchFresh: async () => {
+        const key = historyKeys.feed(scopeRef.current);
+        const raw = queryClient.getQueryData<InfiniteData<HistoryFeedPage>>(key);
+        const boundary = raw?.pages[0]?.prevCursor;
+        if (raw === undefined || raw.pages.length === 0 || boundary === null) {
+          return null;
+        }
+        const response = await apiClient<HistoryPageDto>(
+          historyFeedUrl(scopeRef.current, { after: boundary }),
         );
-        return { firstPrevCursor: raw?.pages[0]?.prevCursor ?? null };
+        const freshItems = response.items.map(mapHistoryItem);
+        if (freshItems.length === 0) {
+          return { hasMore: false };
+        }
+        queryClient.setQueryData<InfiniteData<HistoryFeedPage>>(
+          key,
+          (old) => mergeFreshIntoFirstPage(old, freshItems, response.prev_cursor ?? null),
+        );
+        return { hasMore: freshItems.length >= HISTORY_PAGE_SIZE };
       },
       refetch: () => queryRef.current.refetch(),
     });
