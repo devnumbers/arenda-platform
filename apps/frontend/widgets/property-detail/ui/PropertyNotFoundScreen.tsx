@@ -7,7 +7,7 @@ import { EmptyState } from '@/shared/ui/empty-state';
 export function PropertyNotFoundScreen(): JSX.Element {
   return (
     <EmptyState
-      imageSrc="/images/empty-logo.png"
+      imageSrc="/images/empty-logo.webp"
       imageAlt="Логотип"
       title="Объект не найден или у вас нет к нему доступа"
       subtitle="Проверьте ссылку или попросите владельца выдать вам доступ к объекту"
