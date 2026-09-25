@@ -44,8 +44,8 @@ var _ clock.Clock = fixedRealtimeClock{}
 // fastStreamTimers shrinks the heartbeat so the liveness proof runs fast; the
 // TTL stays long — the revoked member's connection must outlive the check.
 func fastStreamTimers(h *RealtimeStreamHandlers) *RealtimeStreamHandlers {
-	h.heartbeat = 30 * time.Millisecond
-	h.ttl = 5 * time.Second
+	h.Heartbeat = 30 * time.Millisecond
+	h.TTL = 5 * time.Second
 	return h
 }
 

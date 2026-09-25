@@ -21,8 +21,8 @@ import (
 // fastStreamTimers shrink the heartbeat and the connection TTL so the
 // lifecycle paths run in tests. The production values are in the handler.
 func fastStreamTimers(h *StreamHandlers) *StreamHandlers {
-	h.heartbeat = 15 * time.Millisecond
-	h.ttl = 150 * time.Millisecond
+	h.Heartbeat = 15 * time.Millisecond
+	h.TTL = 150 * time.Millisecond
 	return h
 }
 

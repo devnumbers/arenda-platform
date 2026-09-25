@@ -5,9 +5,7 @@ package http
 import (
 	"log/slog"
 	"net/http"
-	"time"
 
-	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/sse"
 )
 
@@ -16,16 +14,10 @@ import (
 // endpoint over the session middleware's actor, carrying the coarse
 // entity.changed invalidation frames. No entity data rides the stream — the
 // clients re-read through their APIs. The connection loop is the shared
-// transport (sse.Serve, the notifications stream's twin); this handler owns
-// the endpoint's auth and availability answers.
+// transport (sse.Serve, the notifications stream's twin); the auth and
+// availability answers live in the embedded shared shell.
 type RealtimeStreamHandlers struct {
-	hub    *sse.Hub
-	logger *slog.Logger
-
-	// Heartbeat and TTL hold the production lifecycle values; tests shrink
-	// them in place.
-	heartbeat time.Duration
-	ttl       time.Duration
+	*sse.StreamHandler
 }
 
 // NewRealtimeStreamHandlers creates the realtime stream handler. The per-user
@@ -34,26 +26,11 @@ type RealtimeStreamHandlers struct {
 // counts two of its owner's eight.
 func NewRealtimeStreamHandlers(hub *sse.Hub, logger *slog.Logger) *RealtimeStreamHandlers {
 	return &RealtimeStreamHandlers{
-		hub:       hub,
-		logger:    logger,
-		heartbeat: sse.DefaultHeartbeat,
-		ttl:       sse.DefaultConnTTL,
+		StreamHandler: sse.NewStreamHandler(hub, logger),
 	}
 }
 
 // StreamRealtime implements GET /realtime/stream.
 func (h *RealtimeStreamHandlers) StreamRealtime(w http.ResponseWriter, r *http.Request) {
-	userID, ok := httpsupport.UserIDFromContext(r.Context())
-	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
-			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
-		return
-	}
-	if h.hub == nil {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusServiceUnavailable,
-			httpsupport.Problem(r.Context(), "Service Unavailable", "Стрим событий недоступен"))
-		return
-	}
-
-	sse.Serve(w, r, h.hub, userID, h.heartbeat, h.ttl, h.logger)
+	h.ServeStream(w, r)
 }
