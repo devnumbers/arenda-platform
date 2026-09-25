@@ -2928,11 +2928,14 @@ paths:
         Формат кадров — WHATWG SSE: retry-подсказка и стартовое событие
         connected на старте, id — монотонная последовательность (курсор
         Last-Event-ID; replay в v1 не реализован), event — стабильное грубое
-        имя (notification.created, notification.unread_count; допишут #714),
-        data — JSON-конверт {v, occurredAt, payload}. Heartbeat-комментарий
-        каждые 25 с, соединение закрывается через час (пере-аутентификация
-        при переподключении). Кадры best-effort: состояние клиент дочитывает
-        через обычные эндпоинты.
+        имя (notification.created, notification.unread_count; новые
+        имена — аддитивно), data — JSON-конверт {v, occurredAt, payload}.
+        Heartbeat-комментарий каждые 25 с, соединение закрывается через час
+        (пере-аутентификация при переподключении). Кадры best-effort:
+        состояние клиент дочитывает через обычные эндпоинты. События
+        изменений сущностей (карта #714) в этот стрим не входят: они едут
+        отдельным стримом /realtime/stream — ADR 0062 superseded зарисовку
+        §5 ADR 0060; контракт этого стрима заморожен.
       security:
         - sessionCookie: []
       responses:
