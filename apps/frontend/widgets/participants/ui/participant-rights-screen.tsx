@@ -32,10 +32,10 @@ import {
   ObjectAvatarGlyph,
   PARTICIPANT_ROW_BASE_CLASS,
   ParticipantNotFound,
+  PropertyAccessNotFound,
 } from './participant-fragments';
 import { stageParticipantPopup } from '../lib/participant-popups';
 import { ParticipantSuccessPopup } from './participant-success-popup';
-import { EmptyState } from '@/shared/ui/empty-state';
 import { ParticipantRoleSegmented } from './participant-role-segmented';
 import { ParticipantRightsSkeleton } from './participants-skeletons';
 
@@ -163,17 +163,9 @@ export function ParticipantRightsScreen({
     content =
       resolvePropertyParticipantsError(membersQuery.error) === 'not_found' ? (
         // Свой доступ отозван/приостановлен в открытой сессии (#719):
-        // бэк скрывает нечитаемый объект как 404 — тот же not-found
-        // канон, что у детали объекта (копирайт PropertyNotFoundScreen;
-        // рендер свой — cross-slice импорт виджетов запрещён).
-        <EmptyState
-          imageSrc="/images/empty-logo.png"
-          imageAlt="Логотип"
-          title="Объект не найден или у вас нет к нему доступа"
-          subtitle="Проверьте ссылку или попросите владельца выдать вам доступ к объекту"
-          actionHref={ROUTES.properties}
-          actionText="К списку объектов"
-        />
+        // бэк скрывает нечитаемый объект как 404 — канон в доке
+        // PropertyAccessNotFound.
+        <PropertyAccessNotFound />
       ) : (
         <ErrorCard
           title="Не удалось загрузить права участника"

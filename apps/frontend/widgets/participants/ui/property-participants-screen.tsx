@@ -75,7 +75,7 @@ import {
 import { popParticipantPopup, useParticipantPopup } from '../lib/participant-popups';
 import { resolvePropertyParticipantsError } from '../lib/property-participants-error';
 import { ParticipantSuccessPopup } from './participant-success-popup';
-import { EmptyState } from '@/shared/ui/empty-state';
+import { PropertyAccessNotFound } from './participant-fragments';
 
 const EMAIL_ROLE_ICONS: Record<PropertyParticipantEmailIcon, typeof EyeSmall> = {
   owner: LockSmall,
@@ -365,17 +365,9 @@ export function PropertyParticipantsScreen({
         ) : membersQuery.isError ? (
           membersErrorKind === 'not_found' ? (
             // Свой доступ отозван/приостановлен в открытой сессии (#719):
-            // бэк скрывает нечитаемый объект как 404 — тот же not-found
-            // канон, что у детали объекта (копирайт PropertyNotFoundScreen;
-            // рендер свой — cross-slice импорт виджетов запрещён).
-            <EmptyState
-              imageSrc="/images/empty-logo.png"
-              imageAlt="Логотип"
-              title="Объект не найден или у вас нет к нему доступа"
-              subtitle="Проверьте ссылку или попросите владельца выдать вам доступ к объекту"
-              actionHref={ROUTES.properties}
-              actionText="К списку объектов"
-            />
+            // бэк скрывает нечитаемый объект как 404 — канон в доке
+            // PropertyAccessNotFound.
+            <PropertyAccessNotFound />
           ) : (
             <ErrorCard
               title="Не удалось загрузить участников"
