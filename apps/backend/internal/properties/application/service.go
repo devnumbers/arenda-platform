@@ -112,30 +112,30 @@ func (s *PropertyService) publishChanged(ctx context.Context, actor, propertyID 
 		[]realtimedom.Change{realtimedom.On(realtimedom.EntityProperty, propertyID)}, anchors...)
 }
 
-// recoveryAccessFrames collects the slot recovery's access pairs: every
-// reactivated membership dirties its object's participants view. The batch
-// forwards raw — collapsing the repeated pairs is the carrier's contract (the
-// per-call dedup of the stream Publisher's EntityChanged), the same reliance
-// as the access seam's recovery dispatch. No journal anchors — the slot
-// coordinator journals no recovery row (карта #714, #716; ADR 0062 §3).
-func recoveryAccessFrames(recovered []accessdomain.Membership) []realtimedom.Change {
-	changed := make([]realtimedom.Change, 0, len(recovered))
-	for _, m := range recovered {
+// slotAccessFrames collects the slot policy's access pairs — recovered legs
+// dirty their objects' participants views the same way freshly suspended ones
+// do. The batch forwards raw — collapsing the repeated pairs is the carrier's
+// contract (the per-call dedup of the stream Publisher's EntityChanged), the
+// same reliance as the access seam's recovery dispatch. No journal anchors —
+// the slot coordinator journals no recovery row (карта #714, #716; ADR 0062 §3).
+func slotAccessFrames(legs []accessdomain.Membership) []realtimedom.Change {
+	changed := make([]realtimedom.Change, 0, len(legs))
+	for _, m := range legs {
 		changed = append(changed, realtimedom.On(realtimedom.EntityAccess, m.PropertyID))
 	}
 	return changed
 }
 
-// publishRecoveredAccess hands the slot recovery's access pairs to the
-// realtime carrier (карта #714, #716; ADR 0062 §3) — the properties-side
-// mirror of the access seam's recovery dispatch. The caller captures the
-// reactivated memberships inside its transaction and invokes this after the
-// commit; best-effort, a nil carrier keeps the pre-#716 silence.
-func (s *PropertyService) publishRecoveredAccess(ctx context.Context, actor uuid.UUID, recovered []accessdomain.Membership) {
-	if len(recovered) == 0 {
+// publishSlotAccess hands the slot policy's access pairs (recovered —
+// archive/delete seams; suspended — unarchive) to the realtime carrier
+// (карта #714, #716; ADR 0062 §3). The caller captures the legs inside its
+// transaction and invokes this after the commit; best-effort, a nil carrier
+// keeps the pre-#716 silence.
+func (s *PropertyService) publishSlotAccess(ctx context.Context, actor uuid.UUID, legs []accessdomain.Membership) {
+	if len(legs) == 0 {
 		return
 	}
-	realtimeapp.Dispatch(ctx, s.realtime, actor, recoveryAccessFrames(recovered))
+	realtimeapp.Dispatch(ctx, s.realtime, actor, slotAccessFrames(legs))
 }
 
 // SetSharedMemberships injects the access-context adapter that resolves the
@@ -991,7 +991,7 @@ func (s *PropertyService) ArchiveProperty(ctx context.Context, actor, id uuid.UU
 		return domain.Property{}, err
 	}
 	s.publishChanged(ctx, actor, id, true)
-	s.publishRecoveredAccess(ctx, actor, recovered)
+	s.publishSlotAccess(ctx, actor, recovered)
 
 	properties, err := s.withPhotos(ctx, archived)
 	if err != nil {
@@ -1089,7 +1089,7 @@ func (s *PropertyService) DeleteProperty(
 	// derived access resolves to nobody — but the recovery's reactivated legs
 	// live in other owners' objects, and their access pairs dispatch here
 	// (карта #714, #716; ADR 0062 §3).
-	s.publishRecoveredAccess(ctx, actor, recovered)
+	s.publishSlotAccess(ctx, actor, recovered)
 
 	return nil
 }
@@ -1361,7 +1361,7 @@ func (s *PropertyService) ArchiveExcessProperties(
 	// dispatch sits as close to the commit as the bridge boundary allows —
 	// the frames are coarse and best-effort, a phase rollback past this point
 	// leaves at most a spurious refetch (ADR 0062 §5).
-	s.publishRecoveredAccess(ctx, scope, recovered)
+	s.publishSlotAccess(ctx, scope, recovered)
 	return archived, nil
 }
 
@@ -1497,7 +1497,7 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, actor, id uuid.
 		return domain.Property{}, err
 	}
 	s.publishChanged(ctx, actor, id, true)
-	s.publishRecoveredAccess(ctx, actor, suspended)
+	s.publishSlotAccess(ctx, actor, suspended)
 
 	properties, err := s.withPhotos(ctx, unarchived)
 	if err != nil {
