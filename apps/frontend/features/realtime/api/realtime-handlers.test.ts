@@ -80,11 +80,28 @@ describe('handleRealtimeFrame — грубый кадр → инвалидаци
   });
 });
 
-describe('realtimeHandlers — перечитывание живого на открытии (реплея нет)', () => {
-  it('onOpen инвалидирует все семейства маппинга разом', () => {
+describe('realtimeHandlers — перечитывание живого на переоткрытии (реплея нет)', () => {
+  it('первое открытие сессии не перечитывает — холодный вход уже свеж (#769)', () => {
     const qc = fakeQueryClient();
     realtimeHandlers(qc).onOpen?.();
+    expect(qc.invalidated).toStrictEqual([]);
+  });
+
+  it('переоткрытие (переподключение, возврат видимости) инвалидирует все семейства разом', () => {
+    const qc = fakeQueryClient();
+    const handlers = realtimeHandlers(qc);
+    handlers.onOpen?.();
+    handlers.onOpen?.();
     expect(qc.invalidated).toStrictEqual([...REALTIME_FAMILIES]);
+  });
+
+  it('каждое следующее переоткрытие перечитывает снова', () => {
+    const qc = fakeQueryClient();
+    const handlers = realtimeHandlers(qc);
+    handlers.onOpen?.();
+    handlers.onOpen?.();
+    handlers.onOpen?.();
+    expect(qc.invalidated).toStrictEqual([...REALTIME_FAMILIES, ...REALTIME_FAMILIES]);
   });
 
   it('onFrame диспатчит в handleRealtimeFrame', () => {
@@ -118,11 +135,13 @@ describe('кадр сущности с точным потребителем (т
     expect(qc.invalidated).toStrictEqual([historyKeys.all]);
   });
 
-  it('onOpen перечитывает все семейства, включая сущности с подписчиками', () => {
+  it('onOpen переоткрытия перечитывает все семейства, включая сущности с подписчиками', () => {
     const qc = fakeQueryClient();
     const unsubscribe = subscribeRealtimeEntity('history', {});
+    const handlers = realtimeHandlers(qc);
 
-    realtimeHandlers(qc).onOpen?.();
+    handlers.onOpen?.();
+    handlers.onOpen?.();
 
     expect(qc.invalidated).toStrictEqual([...REALTIME_FAMILIES]);
     unsubscribe();
