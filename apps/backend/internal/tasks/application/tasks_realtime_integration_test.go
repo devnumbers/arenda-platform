@@ -37,7 +37,6 @@ func TestCreateRulePublishesTasksAndHistoryFrames(t *testing.T) {
 func TestOwnerBookMutationPublishesNullPropertyFrame(t *testing.T) {
 	t.Parallel()
 
-	// Kamchatka keeps the harness helper's tz parameter meaningfully varied.
 	h := newTasksHarness(t).withOwnerWithoutProperty()
 
 	_, err := h.rules.CreateRuleWithoutProperty(h.ctx(), h.owner, h.createCmd())

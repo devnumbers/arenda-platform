@@ -199,6 +199,20 @@ func historyAnchors[T any](out mutationOutcome[T], propertyID uuid.UUID) []uuid.
 	return anchors
 }
 
+// ownerBookHistoryAnchors is runOwnerMutation's journal-anchor collector for
+// the realtime dispatch: only the per-property rows of the bulk canon (ADR
+// 0061 §3). A single-anchored journal row is forbidden on the owner-book
+// path — the journal anchors every row to a property, so the owner book has
+// no history pair (realtimedom.HistoryOn's contract) — so the helper takes
+// no single-row anchor and nothing can hand the dispatch the zero property.
+func ownerBookHistoryAnchors[T any](out mutationOutcome[T]) []uuid.UUID {
+	var anchors []uuid.UUID
+	for prop := range out.HistoryByProperty {
+		anchors = append(anchors, prop)
+	}
+	return anchors
+}
+
 // rereadRule re-reads the stored rule after commit so the response carries
 // persisted timestamps. A re-read always yields a rule; only rule-shaped
 // outcomes ask for one, so the assertion holds by construction.
@@ -282,7 +296,7 @@ func runOwnerMutation[T any](
 		return zero, err
 	}
 	dispatchSeamTasks(g, ctx, seamTaskIDs)
-	realtimeapp.Dispatch(ctx, g.realtime, actor, out.Changed, historyAnchors(out, uuid.Nil)...)
+	realtimeapp.Dispatch(ctx, g.realtime, actor, out.Changed, ownerBookHistoryAnchors(out)...)
 	if out.RereadRuleID == nil {
 		return out.Response, nil
 	}
