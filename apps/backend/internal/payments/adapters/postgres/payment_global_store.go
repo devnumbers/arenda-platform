@@ -286,6 +286,7 @@ func (s *GlobalPaymentStore) LockVisibleFavorites(
 	for _, row := range rows {
 		out = append(out, application.GlobalPaymentFavoriteLock{
 			ID:         pgconv.UUIDFromPgtype(row.ID),
+			PropertyID: pgconv.UUIDFromPgtype(row.PropertyID),
 			IsFavorite: row.IsFavorite,
 			Role:       sharedpolicy.Role(row.ActorRole),
 		})

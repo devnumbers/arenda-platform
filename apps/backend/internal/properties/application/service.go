@@ -23,6 +23,8 @@ import (
 	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
+	realtimeapp "github.com/nambers/arenda-planform/apps/backend/internal/realtime/application"
+	realtimedom "github.com/nambers/arenda-planform/apps/backend/internal/realtime/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
@@ -79,6 +81,36 @@ type PropertyService struct {
 	rentalDeletion     RentalDeletionGuard
 	ownerCalendar      OwnerCalendar
 	logger             *slog.Logger
+	// Realtime is the late-bound carrier the mutations' frames dispatch
+	// through after the commit (карта #714, #716; ADR 0062); nil keeps the
+	// pre-#716 silence.
+	realtime realtimeapp.Publisher
+}
+
+// SetRealtimePublisher late-binds the realtime carrier (карта #714, #716;
+// ADR 0062): the frames of the committed mutations dispatch through it —
+// the grace-events canon, best-effort, a broken carrier never fails the
+// mutation.
+func (s *PropertyService) SetRealtimePublisher(p realtimeapp.Publisher) {
+	s.realtime = p
+}
+
+// publishChanged hands the committed object mutation's frames to the realtime
+// carrier (карта #714, #716; ADR 0062) — strictly post-commit, best-effort: a
+// rolled-back transaction dispatches nothing, a nil carrier keeps the
+// pre-#716 silence. A journaled mutation piggybacks the history pair — a
+// written row is a history change for the object's feed. (The delete's frame
+// has no audience by construction: post-commit the object row is gone and the
+// derived access resolves to nobody, so DeleteProperty dispatches nothing.)
+func (s *PropertyService) publishChanged(ctx context.Context, actor, propertyID uuid.UUID, journaled bool) {
+	if s.realtime == nil {
+		return
+	}
+	changed := []realtimedom.Change{realtimedom.On(realtimedom.EntityProperty, propertyID)}
+	if journaled {
+		changed = append(changed, realtimedom.HistoryOn(propertyID))
+	}
+	s.realtime.EntityChanged(ctx, actor, changed...)
 }
 
 // SetSharedMemberships injects the access-context adapter that resolves the
@@ -290,6 +322,7 @@ func (s *PropertyService) CreateProperty(ctx context.Context, actor uuid.UUID, c
 	if err != nil {
 		return domain.Property{}, err
 	}
+	s.publishChanged(ctx, actor, created.ID, true)
 
 	created.Photos = []domain.Photo{}
 	created.AccessRole = sharedpolicy.RoleOwner
@@ -655,6 +688,7 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, actor, id uuid.UUI
 	}
 
 	var updated domain.Property
+	var journaled bool
 	err = s.runInTx(ctx, func(stores *txStores) error {
 		property, err := lockEditableProperty(ctx, stores.repo, id)
 		if err != nil {
@@ -691,12 +725,14 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, actor, id uuid.UUI
 				sharedpolicy.HistoryActorRole(role), entry); err != nil {
 				return err
 			}
+			journaled = true
 		}
 		return nil
 	})
 	if err != nil {
 		return domain.Property{}, err
 	}
+	s.publishChanged(ctx, actor, id, journaled)
 
 	properties, err := s.withPhotos(ctx, updated)
 	if err != nil {
@@ -721,6 +757,7 @@ func (s *PropertyService) SetPropertyPin(ctx context.Context, actor, id uuid.UUI
 	}
 
 	var updated domain.Property
+	var journaled bool
 	err = s.runInTx(ctx, func(stores *txStores) error {
 		property, err := lockEditableProperty(ctx, stores.repo, id)
 		if err != nil {
@@ -760,12 +797,14 @@ func (s *PropertyService) SetPropertyPin(ctx context.Context, actor, id uuid.UUI
 				sharedpolicy.HistoryActorRole(role), entry); err != nil {
 				return err
 			}
+			journaled = true
 		}
 		return nil
 	})
 	if err != nil {
 		return domain.Property{}, err
 	}
+	s.publishChanged(ctx, actor, id, journaled)
 
 	properties, err := s.withPhotos(ctx, updated)
 	if err != nil {
@@ -915,6 +954,7 @@ func (s *PropertyService) ArchiveProperty(ctx context.Context, actor, id uuid.UU
 	if err != nil {
 		return domain.Property{}, err
 	}
+	s.publishChanged(ctx, actor, id, true)
 
 	properties, err := s.withPhotos(ctx, archived)
 	if err != nil {
@@ -1475,6 +1515,7 @@ func (s *PropertyService) AddPropertyPhoto(
 	if err != nil {
 		return domain.Property{}, err
 	}
+	s.publishChanged(ctx, actor, propertyID, true)
 
 	photos, err := s.photoRepo.GetByPropertyID(ctx, propertyID)
 	if err != nil {
@@ -1595,6 +1636,7 @@ func (s *PropertyService) DeletePropertyPhoto(ctx context.Context, actor, proper
 	if err != nil {
 		return err
 	}
+	s.publishChanged(ctx, actor, propertyID, true)
 
 	key, err := photoStorageKey(propertyID, photoID, photo.URL)
 	if err != nil {

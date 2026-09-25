@@ -9,6 +9,8 @@ import (
 	"github.com/google/uuid"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
+	realtimeapp "github.com/nambers/arenda-planform/apps/backend/internal/realtime/application"
+	realtimedom "github.com/nambers/arenda-planform/apps/backend/internal/realtime/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/tasks/domain"
 )
@@ -23,6 +25,18 @@ type TaskService struct {
 	calendar  OwnerCalendar
 	clock     OwnerClock
 	writeGate gateFunc // Full Access and Owner: complete/uncomplete/clear (resolution #496).
+	// Realtime is the late-bound carrier the mutations' frames dispatch
+	// through after the commit (карта #714, #716; ADR 0062); nil keeps the
+	// pre-#716 silence.
+	realtime realtimeapp.Publisher
+}
+
+// SetRealtimePublisher late-binds the realtime carrier (карта #714, #716;
+// ADR 0062): the frames of the committed mutations dispatch through it —
+// the grace-events canon, best-effort, a broken carrier never fails the
+// mutation.
+func (s *TaskService) SetRealtimePublisher(p realtimeapp.Publisher) {
+	s.realtime = p
 }
 
 // NewTaskService builds the task use cases over the shared transactional
@@ -45,7 +59,7 @@ func NewTaskService(
 // conveyor bundles this service's factory and calendar for the shared
 // mutation conveyor.
 func (s *TaskService) conveyor() mutationGates {
-	return mutationGates{factory: s.txStoreFactory, calendar: s.calendar}
+	return mutationGates{factory: s.txStoreFactory, calendar: s.calendar, realtime: s.realtime}
 }
 
 // ListTasks returns one page of the property's tasks — the active ones or
@@ -116,6 +130,7 @@ func (s *TaskService) CompleteTask(
 				AuditEntityID: &task.ID,
 				AuditCtx:      auditRuleCtx(task.RuleID),
 				History:       new(history),
+				Changed:       []realtimedom.Change{realtimedom.On(realtimedom.EntityTasks, propertyID)},
 				Tick:          true,
 			}, nil
 		})
@@ -156,6 +171,7 @@ func (s *TaskService) UncompleteTask(
 				AuditEntityID: &task.ID,
 				AuditCtx:      auditRuleCtx(task.RuleID),
 				History:       new(historydomain.TaskUncompleted(ruleLinkID(task.RuleID), task.Title)),
+				Changed:       []realtimedom.Change{realtimedom.On(realtimedom.EntityTasks, propertyID)},
 				Tick:          true,
 			}, nil
 		})
@@ -193,6 +209,7 @@ func (s *TaskService) ClearCompletedJournal(
 				AuditEntity: auditdomain.EntityTask,
 				AuditCtx:    map[string]any{"count": cleared},
 				History:     history,
+				Changed:     []realtimedom.Change{realtimedom.On(realtimedom.EntityTasks, propertyID)},
 			}, nil
 		})
 	return cleared, err
@@ -221,12 +238,20 @@ func (s *TaskService) ClearCompletedJournalOwnerBook(
 			if err != nil {
 				return mutationOutcome[int64]{}, fmt.Errorf("clear completed journal of owner book: %w", err)
 			}
+			// The clear dirties every touched object's tasks view plus the
+			// owner's own book list (карта #714, #716; ADR 0062) — the bulk
+			// canon dedups to one frame per pair.
+			changed := []realtimedom.Change{realtimedom.InOwnerBook(realtimedom.EntityTasks)}
+			for propertyID := range clearedJournalByProperty(removed) {
+				changed = append(changed, realtimedom.On(realtimedom.EntityTasks, propertyID))
+			}
 			return mutationOutcome[int64]{
 				Response:          int64(len(removed)),
 				Audit:             auditdomain.ActionTaskCompletedCleared,
 				AuditEntity:       auditdomain.EntityTask,
 				AuditCtx:          map[string]any{"count": int64(len(removed))},
 				HistoryByProperty: clearedJournalByProperty(removed),
+				Changed:           changed,
 			}, nil
 		})
 }
@@ -417,6 +442,7 @@ func (s *TaskService) CompleteTaskWithoutProperty(
 				AuditEntity:   auditdomain.EntityTask,
 				AuditEntityID: &task.ID,
 				AuditCtx:      auditRuleCtx(task.RuleID),
+				Changed:       []realtimedom.Change{realtimedom.InOwnerBook(realtimedom.EntityTasks)},
 				Tick:          true,
 			}, nil
 		})
@@ -453,6 +479,7 @@ func (s *TaskService) UncompleteTaskWithoutProperty(
 				AuditEntity:   auditdomain.EntityTask,
 				AuditEntityID: &task.ID,
 				AuditCtx:      auditRuleCtx(task.RuleID),
+				Changed:       []realtimedom.Change{realtimedom.InOwnerBook(realtimedom.EntityTasks)},
 				Tick:          true,
 			}, nil
 		})

@@ -11,6 +11,8 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/contacts/domain"
 	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
+	realtimeapp "github.com/nambers/arenda-planform/apps/backend/internal/realtime/application"
+	realtimedom "github.com/nambers/arenda-planform/apps/backend/internal/realtime/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
 
@@ -67,6 +69,39 @@ type UpdateContactCommand struct {
 type ContactService struct {
 	txStoreFactory
 	policy sharedpolicy.Policy
+	// Realtime is the late-bound carrier the mutations' frames dispatch
+	// through after the commit (карта #714, #716; ADR 0062); nil keeps the
+	// pre-#716 silence.
+	realtime realtimeapp.Publisher
+}
+
+// SetRealtimePublisher late-binds the realtime carrier (карта #714, #716;
+// ADR 0062): the frames of the committed mutations dispatch through it —
+// the grace-events canon, best-effort, a broken carrier never fails the
+// mutation.
+func (s *ContactService) SetRealtimePublisher(p realtimeapp.Publisher) {
+	s.realtime = p
+}
+
+// publishChanged hands the committed card mutation's frames to the realtime
+// carrier (карта #714, #716; ADR 0062) — strictly post-commit, best-effort:
+// a rolled-back transaction dispatches nothing, a nil carrier keeps the
+// pre-#716 silence. The card's binding picks the pair (the owner-book card
+// dirties the owner's own book view); a journaled mutation piggybacks the
+// history pair — a written row is a history change for the object's feed.
+func (s *ContactService) publishChanged(ctx context.Context, actor uuid.UUID, propertyID *uuid.UUID, journaled bool) {
+	if s.realtime == nil {
+		return
+	}
+	pair := realtimedom.InOwnerBook(realtimedom.EntityContacts)
+	if propertyID != nil {
+		pair = realtimedom.On(realtimedom.EntityContacts, *propertyID)
+	}
+	changed := []realtimedom.Change{pair}
+	if journaled && propertyID != nil {
+		changed = append(changed, realtimedom.HistoryOn(*propertyID))
+	}
+	s.realtime.EntityChanged(ctx, actor, changed...)
 }
 
 // NewContactService builds the contact use case service over the shared
@@ -138,6 +173,7 @@ func (s *ContactService) CreateContact(
 	if err != nil {
 		return domain.Contact{}, err
 	}
+	s.publishChanged(ctx, actor, draft.PropertyID, draft.PropertyID != nil)
 	return created, nil
 }
 
@@ -285,6 +321,7 @@ func (s *ContactService) UpdateContact(
 	}
 
 	var stored domain.Contact
+	var journaled bool
 	err = s.runInTx(ctx, func(stores *txStores) error {
 		stored, err = stores.contacts.Update(ctx, contact)
 		if err != nil {
@@ -309,12 +346,14 @@ func (s *ContactService) UpdateContact(
 				historydomain.ContactUpdated(contact.ID, oldFullName, stored.FullName())); err != nil {
 				return err
 			}
+			journaled = true
 		}
 		return nil
 	})
 	if err != nil {
 		return domain.Contact{}, err
 	}
+	s.publishChanged(ctx, actor, stored.PropertyID, journaled)
 	return stored, nil
 }
 
@@ -354,7 +393,7 @@ func (s *ContactService) DeleteContact(ctx context.Context, actor, id uuid.UUID)
 	if contact.PropertyID != nil {
 		auditCtx["property_id"] = *contact.PropertyID
 	}
-	return s.runInTx(ctx, func(stores *txStores) error {
+	err = s.runInTx(ctx, func(stores *txStores) error {
 		if err := stores.contacts.Delete(ctx, contact.ID, contact.OwnerID); err != nil {
 			return err
 		}
@@ -370,6 +409,11 @@ func (s *ContactService) DeleteContact(ctx context.Context, actor, id uuid.UUID)
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	s.publishChanged(ctx, actor, contact.PropertyID, contact.PropertyID != nil)
+	return nil
 }
 
 // gate applies the ADR 0028 capability gate over the policy and returns the

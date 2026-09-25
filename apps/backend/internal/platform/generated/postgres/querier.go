@@ -954,6 +954,12 @@ type Querier interface {
 	ListPropertyPhotosByPropertyID(ctx context.Context, propertyID pgtype.UUID) ([]PropertyPhoto, error)
 	ListPropertyPhotosByPropertyIDs(ctx context.Context, dollar_1 []pgtype.UUID) ([]PropertyPhoto, error)
 	ListPushSubscriptionsByUser(ctx context.Context, userID pgtype.UUID) ([]PushSubscription, error)
+	// The frame audience of one object (карта #714, тикет #716; ADR 0062 §4):
+	// the owner plus the active members — the derived read access (ADR 0028)
+	// resolved at the moment of publication. A suspended membership is no access
+	// (the status filter, issue #158 T4 canon); a deleted property resolves to
+	// nobody, so its frames simply die.
+	ListRealtimePropertyReaders(ctx context.Context, id pgtype.UUID) ([]pgtype.UUID, error)
 	ListRecentSubscriptionPaymentsAdmin(ctx context.Context) ([]ListRecentSubscriptionPaymentsAdminRow, error)
 	ListRecentUsersAdmin(ctx context.Context) ([]ListRecentUsersAdminRow, error)
 	// The rental-completed scan's sweep targets (карта #734, #748; ADR 0048

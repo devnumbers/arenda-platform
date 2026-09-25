@@ -28,6 +28,7 @@ import (
 	historypg "github.com/nambers/arenda-planform/apps/backend/internal/history/adapters/postgres"
 	pgdb "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/testdb"
+	realtimetest "github.com/nambers/arenda-planform/apps/backend/internal/realtime/realtimetest"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/actor"
 	sharedclock "github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 )
@@ -62,6 +63,9 @@ type contactsHarness struct {
 	t    *testing.T
 	pool *pgxpool.Pool
 	svc  *contactsapp.ContactService
+	// Realtime is the recording carrier the service dispatches its frames
+	// through — the realtime seam's test double (карта #714, #716).
+	realtime *realtimetest.RecordingPublisher
 
 	owner     uuid.UUID
 	member    uuid.UUID
@@ -89,10 +93,14 @@ func newContactsHarness(t *testing.T) *contactsHarness {
 		historypg.NewRecorder(pool),
 		uow,
 	)
+	realtime := &realtimetest.RecordingPublisher{}
+	svc := contactsapp.NewContactService(factory, policy)
+	svc.SetRealtimePublisher(realtime)
 	return &contactsHarness{
-		t:    t,
-		pool: pool,
-		svc:  contactsapp.NewContactService(factory, policy),
+		t:        t,
+		pool:     pool,
+		svc:      svc,
+		realtime: realtime,
 	}
 }
 

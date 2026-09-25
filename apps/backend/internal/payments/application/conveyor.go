@@ -19,6 +19,8 @@ import (
 	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/payments/domain"
+	realtimeapp "github.com/nambers/arenda-planform/apps/backend/internal/realtime/application"
+	realtimedom "github.com/nambers/arenda-planform/apps/backend/internal/realtime/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
 
@@ -55,6 +57,13 @@ type mutationOutcome[T any] struct {
 	// Tick runs the materialization tick for the owner after the change;
 	// every use case states its need explicitly (deletion sets false).
 	Tick bool
+	// Changed states the realtime frames the change produced (карта #714,
+	// #716; ADR 0062): the (entity, object) pairs the step's writes made
+	// dirty — stated explicitly per step, like the audit target. The
+	// conveyor dispatches them to the carrier strictly after the commit and
+	// piggybacks the history pair of every journal row the transaction
+	// recorded.
+	Changed []realtimedom.Change
 	// RereadPaymentID asks the conveyor to re-read this stored payment after
 	// commit so the response carries persisted timestamps, pauses and category
 	// view. Only payment-shaped outcomes set it — the name carries that fact.
@@ -62,11 +71,14 @@ type mutationOutcome[T any] struct {
 }
 
 // mutationGates bundles the dependencies the conveyor needs beyond the
-// transactional stores: the owner calendar for the day boundary; the role
-// gate arrives per call, already resolved over the caller's policy.
+// transactional stores: the owner calendar for the day boundary and the
+// realtime carrier the frames dispatch through after the commit (карта
+// #714, #716; nil keeps the pre-#716 silence — the grace-events canon); the
+// role gate arrives per call, already resolved over the caller's policy.
 type mutationGates struct {
 	factory  txStoreFactory
 	calendar OwnerCalendar
+	realtime realtimeapp.Publisher
 }
 
 // runMutation is the mutation conveyor shared by every use case of this
@@ -130,10 +142,33 @@ func runMutation[T any](
 	if err != nil {
 		return zero, err
 	}
+	dispatchRealtime(g, ctx, actor, propertyID, out)
 	if out.RereadPaymentID == nil {
 		return out.Response, nil
 	}
 	return rereadPayment[T](g, ctx, scope, propertyID, *out.RereadPaymentID)
+}
+
+// dispatchRealtime hands the transaction's captured change pairs to the
+// realtime carrier strictly after the commit — the grace-events canon
+// (карта #714, #716; ADR 0062 §3): a rolled-back transaction dispatches
+// nothing, a nil carrier keeps the pre-#716 silence, and the carrier itself
+// is best-effort (it never fails the committed mutation). Every journal row
+// the transaction recorded piggybacks its history pair: a written row is a
+// history change for the object's feed.
+func dispatchRealtime[T any](
+	g mutationGates, ctx context.Context, actor, propertyID uuid.UUID, out mutationOutcome[T],
+) {
+	if g.realtime == nil {
+		return
+	}
+	changed := out.Changed
+	if out.History != nil {
+		changed = append(changed, realtimedom.HistoryOn(propertyID))
+	}
+	if len(changed) > 0 {
+		g.realtime.EntityChanged(ctx, actor, changed...)
+	}
 }
 
 // rereadPayment re-reads the stored rule after commit so the response carries

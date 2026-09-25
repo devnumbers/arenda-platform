@@ -412,7 +412,11 @@ type GlobalPaymentReader interface {
 // actor's role on the rule's property — the write gate's raw material (the
 // favorite star's matrix, #461: Full Access+).
 type GlobalPaymentFavoriteLock struct {
-	ID         uuid.UUID
+	ID uuid.UUID
+	// PropertyID is the rule's object — the realtime carrier's frame anchor
+	// (карта #714, #716): the order save dirties the `payments` view of
+	// every touched rule's property.
+	PropertyID uuid.UUID
 	IsFavorite bool
 	Role       sharedpolicy.Role
 }

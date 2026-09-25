@@ -471,6 +471,7 @@ func (q *Queries) ListGlobalPaymentRules(ctx context.Context, arg ListGlobalPaym
 
 const lockGlobalPaymentFavorites = `-- name: LockGlobalPaymentFavorites :many
 SELECT pay.id,
+       pay.property_id,
        pay.is_favorite,
        CASE WHEN pay.owner_id = $1 THEN 'owner' ELSE pm.role END::text AS actor_role
 FROM payments pay
@@ -492,6 +493,7 @@ type LockGlobalPaymentFavoritesParams struct {
 
 type LockGlobalPaymentFavoritesRow struct {
 	ID         pgtype.UUID `json:"id"`
+	PropertyID pgtype.UUID `json:"property_id"`
 	IsFavorite bool        `json:"is_favorite"`
 	ActorRole  string      `json:"actor_role"`
 }
@@ -514,7 +516,12 @@ func (q *Queries) LockGlobalPaymentFavorites(ctx context.Context, arg LockGlobal
 	items := []LockGlobalPaymentFavoritesRow{}
 	for rows.Next() {
 		var i LockGlobalPaymentFavoritesRow
-		if err := rows.Scan(&i.ID, &i.IsFavorite, &i.ActorRole); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.PropertyID,
+			&i.IsFavorite,
+			&i.ActorRole,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

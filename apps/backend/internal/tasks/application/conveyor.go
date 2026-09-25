@@ -19,6 +19,8 @@ import (
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
+	realtimeapp "github.com/nambers/arenda-planform/apps/backend/internal/realtime/application"
+	realtimedom "github.com/nambers/arenda-planform/apps/backend/internal/realtime/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
 	"github.com/nambers/arenda-planform/apps/backend/internal/tasks/domain"
@@ -77,6 +79,13 @@ type mutationOutcome[T any] struct {
 	// materialized and the kept standing tasks alike. Only the rule
 	// create/edit flows set it, always with Tick=true.
 	ScheduleOverdueOf *uuid.UUID
+	// Changed states the realtime frames the change produced (карта #714,
+	// #716; ADR 0062): the (entity, object) pairs the step's writes made
+	// dirty — stated explicitly per step, like the audit target. The
+	// conveyor dispatches them to the carrier strictly after the commit and
+	// piggybacks the history pair of every journal row the transaction
+	// recorded.
+	Changed []realtimedom.Change
 }
 
 // mutationGates bundles the dependencies the conveyor needs beyond the
@@ -90,7 +99,11 @@ type mutationGates struct {
 	factory     txStoreFactory
 	calendar    OwnerCalendar
 	overdueSeam MaterializedTaskNotifier
-	log         *slog.Logger
+	// Realtime is the late-bound carrier the frames dispatch through after
+	// the commit (карта #714, #716; ADR 0062); nil keeps the pre-#716
+	// silence.
+	realtime realtimeapp.Publisher
+	log      *slog.Logger
 }
 
 // runMutation is the mutation conveyor shared by every use case of this
@@ -165,10 +178,37 @@ func runMutation[T any](
 		return zero, err
 	}
 	dispatchSeamTasks(g, ctx, seamTaskIDs)
+	dispatchRealtime(g, ctx, actor, propertyID, out)
 	if out.RereadRuleID == nil {
 		return out.Response, nil
 	}
 	return rereadRule[T](g, ctx, scope, propertyID, *out.RereadRuleID)
+}
+
+// dispatchRealtime hands the transaction's captured change pairs to the
+// realtime carrier strictly after the commit — the grace-events canon
+// (карта #714, #716; ADR 0062 §3): a rolled-back transaction dispatches
+// nothing, a nil carrier keeps the pre-#716 silence, and the carrier itself
+// is best-effort (it never fails the committed mutation). Every journal row
+// the transaction recorded piggybacks its history pair: a written row is a
+// history change for the object's feed — the single-anchored row of the
+// property-bound conveyor and the per-property rows of the bulk outcomes.
+func dispatchRealtime[T any](
+	g mutationGates, ctx context.Context, actor, propertyID uuid.UUID, out mutationOutcome[T],
+) {
+	if g.realtime == nil {
+		return
+	}
+	changed := out.Changed
+	if out.History != nil {
+		changed = append(changed, realtimedom.HistoryOn(propertyID))
+	}
+	for prop := range out.HistoryByProperty {
+		changed = append(changed, realtimedom.HistoryOn(prop))
+	}
+	if len(changed) > 0 {
+		g.realtime.EntityChanged(ctx, actor, changed...)
+	}
 }
 
 // rereadRule re-reads the stored rule after commit so the response carries
@@ -254,6 +294,7 @@ func runOwnerMutation[T any](
 		return zero, err
 	}
 	dispatchSeamTasks(g, ctx, seamTaskIDs)
+	dispatchRealtime(g, ctx, actor, uuid.Nil, out)
 	if out.RereadRuleID == nil {
 		return out.Response, nil
 	}

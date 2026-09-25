@@ -29,6 +29,8 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/sse"
+	realtimepg "github.com/nambers/arenda-planform/apps/backend/internal/realtime/adapters/postgres"
+	realtimestream "github.com/nambers/arenda-planform/apps/backend/internal/realtime/adapters/stream"
 )
 
 func main() {
@@ -199,6 +201,35 @@ func run() error {
 	defer riverMod.ProviderLimiter.Stop()
 	notificationsStream := riverMod.Stream
 
+	// 11.5.2 The realtime carrier (карта #714, #716; ADR 0062): the port the
+	//     mutation pipelines publish their entity.changed frames through —
+	//     the audience resolver over the shared pool, the envelope frames
+	//     fanned out through the same hub the notifications stream serves.
+	//     Late-bound into the entity-owning contexts below (they build
+	//     earlier than the delivery queue — the grace-events canon:
+	//     best-effort, a broken seam never fails the committed mutation).
+	realtimeCarrier := realtimestream.NewPublisher(
+		notificationsStream,
+		realtimepg.NewAudienceStore(p.DB),
+		p.Clock,
+		p.Logger,
+	)
+
+	// The carrier late-binds into every entity-owning context's mutating
+	// services (карта #714, #716; ADR 0062) — the tasks scheduling seam's
+	// canon: the modules built earlier than the delivery queue's hub, the
+	// frames are best-effort, a broken carrier never fails the committed
+	// mutation.
+	paymentsMod.PaymentService.SetRealtimePublisher(realtimeCarrier)
+	paymentsMod.OperationService.SetRealtimePublisher(realtimeCarrier)
+	paymentsMod.GlobalPayments.SetRealtimePublisher(realtimeCarrier)
+	tasksMod.RuleService.SetRealtimePublisher(realtimeCarrier)
+	tasksMod.TaskService.SetRealtimePublisher(realtimeCarrier)
+	contactsMod.ContactService.SetRealtimePublisher(realtimeCarrier)
+	rentalsMod.RentalService.SetRealtimePublisher(realtimeCarrier)
+	propertiesMod.PropertyService.SetRealtimePublisher(realtimeCarrier)
+	accessMod.AccessService.SetRealtimePublisher(realtimeCarrier)
+
 	// 11.5.1 The tasks scheduling seam (issue #775): the rule create/edit
 	//     flows hand their standing tasks' ids over post-commit — a live
 	//     timed task books its due-minute job at once (the term before the
@@ -326,6 +357,7 @@ func run() error {
 		NotificationsFeed:        notificationsMod.FeedService,
 		NotificationSettings:     notificationsMod.SettingsService,
 		NotificationsStreamHub:   notificationsStream,
+		RealtimeStreamHub:        notificationsStream,
 		VAPIDPublicKey:           p.Cfg.VAPIDPublicKey,
 		Popups:                   popupsMod.Service,
 		AppBaseURL:               p.Cfg.AppBaseURL,
@@ -645,9 +677,11 @@ func serveAndWait(
 
 	select {
 	case <-ctx.Done():
-		// The stream hub closes first: every SSE handler returns at once, so
-		// the graceful HTTP shutdown below is not held up by long-lived
-		// streams inside its 5-second window.
+		// The stream hub closes first (it serves both SSE streams — the
+		// notifications one and the realtime entity-events one, ADR 0062):
+		// every SSE handler returns at once, so the graceful HTTP shutdown
+		// below is not held up by long-lived streams inside its 5-second
+		// window.
 		notificationsStream.Close(ctx)
 		// The lifecycle context is already cancelled, so the shutdown window
 		// derives from its value-bearing, cancellation-stripped view (same

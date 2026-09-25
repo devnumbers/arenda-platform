@@ -90,7 +90,7 @@ func TestScheduleSeam_CreateTimedRuleHandsOver(t *testing.T) {
 func TestScheduleSeam_CreateWithoutPropertyHandsOver(t *testing.T) {
 	t.Parallel()
 
-	h := newTasksHarness(t).withOwnerWithoutProperty(taskMoscowTZ).withSeam(&fakeSeam{})
+	h := newTasksHarness(t).withOwnerWithoutProperty().withSeam(&fakeSeam{})
 
 	rule, err := h.rules.CreateRuleWithoutProperty(h.ctx(), h.owner, withoutPropertyCreateCmd())
 	require.NoError(t, err)

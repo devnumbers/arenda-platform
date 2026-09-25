@@ -19,6 +19,8 @@ import (
 	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
+	realtimeapp "github.com/nambers/arenda-planform/apps/backend/internal/realtime/application"
+	realtimedom "github.com/nambers/arenda-planform/apps/backend/internal/realtime/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/rentals/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
@@ -62,6 +64,13 @@ type mutationOutcome struct {
 	// change; only a step that changed the managed payment sets it (ADR 0053
 	// §3). Completion and deletion resolve the plan themselves and set false.
 	Tick bool
+	// Changed states the realtime frames the change produced (карта #714,
+	// #716; ADR 0062): the (entity, object) pairs the step's writes made
+	// dirty — the rental's own view plus the managed payment rule's, stated
+	// explicitly per step like the audit action. The conveyor dispatches
+	// them to the carrier strictly after the commit and piggybacks the
+	// history pair of the journal row the transaction recorded.
+	Changed []realtimedom.Change
 }
 
 // mutationGates bundles the dependencies the conveyor needs beyond the
@@ -70,6 +79,10 @@ type mutationOutcome struct {
 type mutationGates struct {
 	factory  txStoreFactory
 	calendar paymentsapp.OwnerCalendar
+	// Realtime is the late-bound carrier the frames dispatch through after
+	// the commit (карта #714, #716; ADR 0062); nil keeps the pre-#716
+	// silence.
+	realtime realtimeapp.Publisher
 }
 
 // runRentalMutation is the mutation conveyor shared by every use case of this
@@ -124,6 +137,13 @@ func runRentalMutation(
 	})
 	if err != nil {
 		return uuid.Nil, err
+	}
+	if g.realtime != nil && (len(out.Changed) > 0 || out.History != nil) {
+		changed := out.Changed
+		if out.History != nil {
+			changed = append(changed, realtimedom.HistoryOn(propertyID))
+		}
+		g.realtime.EntityChanged(ctx, actor, changed...)
 	}
 	return out.RentalID, nil
 }

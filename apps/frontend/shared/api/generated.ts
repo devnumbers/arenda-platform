@@ -1405,6 +1405,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/realtime/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Живой стрим изменений сущностей (SSE)
+         * @description Второй пользовательский Server-Sent Events стрим — кадры инвалидации
+         *     карты #714 (тикет #716; ADR 0062) поверх транспорта ADR 0060
+         *     (heartbeat 25 с, TTL час, тот же хаб и бюджет 8 соединений на
+         *     пользователя, что и у /notifications/stream). Авторизация —
+         *     cookie-сессия тем же SessionMiddleware; без актора хендлер отвечает
+         *     401 problem+json до старта стрима. Единственное имя события —
+         *     entity.changed, data — JSON-конверт {v, occurredAt, payload} с грубым
+         *     payload {propertyId, entity}: имени из словаря (payments, operations,
+         *     tasks, contacts, rentals, property, access, history) и объекта (null
+         *     для внеобъектных правок книжки владельца). Данных сущности кадр не
+         *     несёт — клиент перечитывает состояние через API. Аудитория кадра —
+         *     производный доступ на чтение объекта на момент публикации (ADR 0028),
+         *     включая автора; отзыв или приостановка доступа посреди стрима просто
+         *     прекращают кадры, соединение не закрывается. Replay в v1 нет — при
+         *     каждом открытии и переподключении клиент перечитывает живое
+         *     состояние.
+         */
+        get: operations["streamRealtime"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/push/vapid-public-key": {
         parameters: {
             query?: never;
@@ -6628,6 +6663,36 @@ export interface operations {
         };
     };
     streamNotifications: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Поток событий в формате text/event-stream */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description Стрим недоступен (хаб не сконфигурирован) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    streamRealtime: {
         parameters: {
             query?: never;
             header?: never;

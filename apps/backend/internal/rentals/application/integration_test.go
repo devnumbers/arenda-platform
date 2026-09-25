@@ -28,6 +28,7 @@ import (
 	pgdb "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/testdb"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
+	realtimetest "github.com/nambers/arenda-planform/apps/backend/internal/realtime/realtimetest"
 	rentalspg "github.com/nambers/arenda-planform/apps/backend/internal/rentals/adapters/postgres"
 	rentalsapp "github.com/nambers/arenda-planform/apps/backend/internal/rentals/application"
 	rentalsdomain "github.com/nambers/arenda-planform/apps/backend/internal/rentals/domain"
@@ -183,8 +184,11 @@ type rentalsHarness struct {
 	pool    *pgxpool.Pool
 	gateway *fakeSeamGateway
 	svc     *rentalsapp.RentalService
-	owner   uuid.UUID
-	propID  uuid.UUID
+	// Realtime is the recording carrier the service dispatches its frames
+	// through — the realtime seam's test double (карта #714, #716).
+	realtime *realtimetest.RecordingPublisher
+	owner    uuid.UUID
+	propID   uuid.UUID
 }
 
 func newRentalsHarness(t *testing.T) *rentalsHarness {
@@ -201,11 +205,15 @@ func newRentalsHarness(t *testing.T) *rentalsHarness {
 		historypg.NewRecorder(pool),
 		pgdb.NewUoW(pool, slog.New(slog.DiscardHandler)),
 	)
+	realtime := &realtimetest.RecordingPublisher{}
+	svc := rentalsapp.NewRentalService(factory, intClock{}, intPolicy{role: sharedpolicy.RoleOwner})
+	svc.SetRealtimePublisher(realtime)
 	return &rentalsHarness{
-		t:       t,
-		pool:    pool,
-		gateway: gateway,
-		svc:     rentalsapp.NewRentalService(factory, intClock{}, intPolicy{role: sharedpolicy.RoleOwner}),
+		t:        t,
+		pool:     pool,
+		gateway:  gateway,
+		svc:      svc,
+		realtime: realtime,
 	}
 }
 

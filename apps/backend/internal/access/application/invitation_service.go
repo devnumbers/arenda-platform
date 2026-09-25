@@ -162,6 +162,10 @@ func (s *InvitationService) InviteByEmail(
 	if err != nil {
 		return InviteOutcome{}, err
 	}
+	// The pending row dirties the object's participants view (карта #714,
+	// #716; ADR 0062); its creation journals MemberInvited — the history
+	// pair piggybacks.
+	s.access.publishRealtime(ctx, actor, accessFrames(propertyID, true))
 
 	// The invite email goes out after the commit; a send failure does not roll
 	// back the invitation (a manual resend is available).
@@ -275,6 +279,7 @@ func (s *InvitationService) ChangeInvitationRole(
 	}
 
 	var updated domain.Invitation
+	var journaled bool
 	err = s.runInTx(ctx, func(stores *txStores) error {
 		// Confirm the invitation exists and belongs to this property before
 		// updating; a missing row is a not-found outcome rather than a silent no-op.
@@ -315,12 +320,14 @@ func (s *InvitationService) ChangeInvitationRole(
 					sharedpolicy.HistoryActorRole(toSharedRole(role)))); err != nil {
 				return err
 			}
+			journaled = true
 		}
 		return nil
 	})
 	if err != nil {
 		return domain.Invitation{}, err
 	}
+	s.access.publishRealtime(ctx, actor, accessFrames(propertyID, journaled))
 	return updated, nil
 }
 
@@ -332,7 +339,7 @@ func (s *InvitationService) CancelInvitation(ctx context.Context, actor, propert
 		return err
 	}
 
-	return s.runInTx(ctx, func(stores *txStores) error {
+	err = s.runInTx(ctx, func(stores *txStores) error {
 		invitation, err := stores.invitations.GetByID(ctx, invitationID, propertyID)
 		if err != nil {
 			return err
@@ -364,6 +371,11 @@ func (s *InvitationService) CancelInvitation(ctx context.Context, actor, propert
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	s.access.publishRealtime(ctx, actor, accessFrames(propertyID, true))
+	return nil
 }
 
 // ActivatePendingInvitations turns every pending invitation for the email into
@@ -449,6 +461,10 @@ func (s *InvitationService) activateInvitation(ctx context.Context, userID uuid.
 			At:           at,
 		})
 	})
+	// The landed activation dirties the object's participants view (карта
+	// #714, #716; ADR 0062); the activation journals no row — the actor is
+	// the registration, not a member manager.
+	s.access.publishRealtime(ctx, userID, accessFrames(invitation.PropertyID, false))
 	return nil
 }
 

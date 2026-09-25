@@ -11,6 +11,8 @@ import (
 	"github.com/google/uuid"
 	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
+	realtimeapp "github.com/nambers/arenda-planform/apps/backend/internal/realtime/application"
+	realtimedom "github.com/nambers/arenda-planform/apps/backend/internal/realtime/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/rentals/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
@@ -156,6 +158,18 @@ type RentalService struct {
 	viewGate  gateFunc // Viewer reads.
 	writeGate gateFunc // Full Access+: create/edit/complete.
 	delGate   gateFunc // Owner alone: deletion.
+	// Realtime is the late-bound carrier the mutations' frames dispatch
+	// through after the commit (карта #714, #716; ADR 0062); nil keeps the
+	// pre-#716 silence.
+	realtime realtimeapp.Publisher
+}
+
+// SetRealtimePublisher late-binds the realtime carrier (карта #714, #716;
+// ADR 0062): the frames of the committed mutations dispatch through it —
+// the grace-events canon, best-effort, a broken carrier never fails the
+// mutation.
+func (s *RentalService) SetRealtimePublisher(p realtimeapp.Publisher) {
+	s.realtime = p
 }
 
 // NewRentalService builds the rental use case service over the composite
@@ -179,7 +193,7 @@ func NewRentalService(
 // conveyor bundles this service's factory and calendar for the shared
 // mutation conveyor.
 func (s *RentalService) conveyor() mutationGates {
-	return mutationGates{factory: s.txStoreFactory, calendar: s.calendar}
+	return mutationGates{factory: s.txStoreFactory, calendar: s.calendar, realtime: s.realtime}
 }
 
 // readScope applies the read gate and returns the data owner whose SQL reads
@@ -254,7 +268,11 @@ func (s *RentalService) CreateRental(
 				RentalID: rentalID,
 				Audit:    auditActionRentalCreated,
 				History:  new(historydomain.RentalCreated(rentalID, tenantName, cmd.StartDate, derefDate(cmd.PlannedEndDate))),
-				Tick:     true, // The new payment materializes its first planned.
+				Changed: []realtimedom.Change{
+					realtimedom.On(realtimedom.EntityRentals, propertyID),
+					realtimedom.On(realtimedom.EntityPayments, propertyID), // The managed payment is born with the rental.
+				},
+				Tick: true, // The new payment materializes its first planned.
 			}, nil
 		})
 	if err != nil {
@@ -380,7 +398,11 @@ func (s *RentalService) updatedRentalOutcome(
 		Audit:    auditActionRentalUpdated,
 		AuditCtx: map[string]any{"fields": updatedRentalFields(cmd)},
 		History:  new(historydomain.RentalUpdated(rental.ID, tenantName, rental.StartDate, derefDate(rental.PlannedEndDate))),
-		Tick:     paymentChanged,
+		Changed: []realtimedom.Change{
+			realtimedom.On(realtimedom.EntityRentals, propertyID),
+			realtimedom.On(realtimedom.EntityPayments, propertyID), // The managed payment follows the rental.
+		},
+		Tick: paymentChanged,
 	}, nil
 }
 
@@ -420,7 +442,11 @@ func (s *RentalService) CompleteRental(
 				RentalID: rental.ID,
 				Audit:    auditActionRentalCompleted,
 				History:  new(historydomain.RentalCompleted(rental.ID, tenantName)),
-				Tick:     false,
+				Changed: []realtimedom.Change{
+					realtimedom.On(realtimedom.EntityRentals, propertyID),
+					realtimedom.On(realtimedom.EntityPayments, propertyID), // The managed payment stopped at the completion date.
+				},
+				Tick: false,
 			}
 			if cmd.DepositReturn != nil {
 				out.AuditCtx = map[string]any{"fields": []string{"deposit_return"}}
@@ -468,7 +494,11 @@ func (s *RentalService) DeleteRental(
 				RentalID: rental.ID,
 				Audit:    auditActionRentalDeleted,
 				History:  new(historydomain.RentalDeleted(rental.ID, tenantName)),
-				Tick:     false,
+				Changed: []realtimedom.Change{
+					realtimedom.On(realtimedom.EntityRentals, propertyID),
+					realtimedom.On(realtimedom.EntityPayments, propertyID), // The managed payment dies with the rental.
+				},
+				Tick: false,
 			}, nil
 		})
 	return err

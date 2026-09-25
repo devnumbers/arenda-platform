@@ -262,6 +262,7 @@ func (s *ParticipantMutationService) grantProperties(
 	}
 	publishGrantedEvents(ctx, s.events, s.logger, actor, grantedActive)
 	publishSuspendedEvents(ctx, s.events, s.logger, suspended)
+	s.publishGrantRealtime(ctx, actor, grantedActive, suspended, results)
 
 	// The single batch invite email goes out after the commit; a send failure
 	// does not roll the invitations back (a manual resend is available).
@@ -465,7 +466,39 @@ func (s *ParticipantMutationService) Remove(ctx context.Context, actor uuid.UUID
 	// (карта #734, #751); suspended legs publish nothing — the object was
 	// already hidden from them (issue #162, T6 canon).
 	publishRevokedEvents(ctx, s.events, s.logger, actor, revokedActive)
+	s.publishRemovedRealtime(ctx, actor, revokedActive)
 	return nil
+}
+
+// publishRemovedRealtime hands the removed active legs' frames to the
+// realtime carrier post-commit (карта #714, #716; ADR 0062).
+func (s *ParticipantMutationService) publishRemovedRealtime(
+	ctx context.Context, actor uuid.UUID, revokedActive []domain.Membership,
+) {
+	for _, m := range revokedActive {
+		s.access.publishRealtime(ctx, actor, accessFrames(m.PropertyID, true))
+	}
+}
+
+// publishGrantRealtime hands the batch grant's frames to the realtime carrier
+// post-commit (карта #714, #716; ADR 0062): each landed leg (active or
+// suspended) and each pending invitation dirties its object's participants
+// view; the landed legs journal member.added — the history pair piggybacks.
+func (s *ParticipantMutationService) publishGrantRealtime(
+	ctx context.Context, actor uuid.UUID,
+	grantedActive, suspended []domain.Membership, results []ParticipantGrantResult,
+) {
+	for _, m := range grantedActive {
+		s.access.publishRealtime(ctx, actor, accessFrames(m.PropertyID, true))
+	}
+	for _, m := range suspended {
+		s.access.publishRealtime(ctx, actor, accessFrames(m.PropertyID, true))
+	}
+	for _, r := range results {
+		if r.Outcome == ParticipantGrantPending {
+			s.access.publishRealtime(ctx, actor, accessFrames(r.PropertyID, true))
+		}
+	}
 }
 
 // listRemovalLegs enumerates the person's removal scope: their memberships
@@ -515,7 +548,7 @@ func (s *ParticipantMutationService) actorRoleOn(ctx context.Context, actor, pro
 // entry and an action-journal row per leg (ADR 0061 §3: a journal row per
 // removed access), reports how many active (slot-occupying) ones were freed
 // and appends the removed active rows to the collector — the caller publishes
-// their revocation events post-commit (карта #734, #751). targetLabel is the
+// their revocation events post-commit (карта #734, #751); the targetLabel is the
 // person's journal label resolved once for the whole batch (the display name,
 // or the email for the unregistered invitee — ADR 0061 §5): every leg's row
 // names the same person by it.
@@ -541,9 +574,9 @@ func (s *ParticipantMutationService) removeMembershipLegs(
 }
 
 // removeInvitationLegs deletes the person's pending invitation rows with an
-// audit entry and an action-journal row per leg (ADR 0061 §3). targetLabel is
-// the same batch-wide label snapshot the membership legs carry, so both legs
-// of the removal name the person identically.
+// audit entry and an action-journal row per leg (ADR 0061 §3). The
+// targetLabel is the same batch-wide label snapshot the membership legs
+// carry, so both legs of the removal name the person identically.
 func (s *ParticipantMutationService) removeInvitationLegs(
 	ctx context.Context, stores *txStores, actor uuid.UUID, legs []domain.Invitation, targetLabel string,
 ) error {

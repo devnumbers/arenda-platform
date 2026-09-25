@@ -10,6 +10,8 @@ import (
 	"github.com/google/uuid"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/payments/domain"
+	realtimeapp "github.com/nambers/arenda-planform/apps/backend/internal/realtime/application"
+	realtimedom "github.com/nambers/arenda-planform/apps/backend/internal/realtime/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
 
@@ -111,6 +113,18 @@ type GlobalPaymentService struct {
 	reader   GlobalPaymentReader
 	calendar OwnerCalendar
 	factory  txStoreFactory
+	// Realtime is the late-bound carrier the favorites order save's frames
+	// dispatch through after the commit (карта #714, #716; ADR 0062); nil
+	// keeps the pre-#716 silence.
+	realtime realtimeapp.Publisher
+}
+
+// SetRealtimePublisher late-binds the realtime carrier (карта #714, #716;
+// ADR 0062): the frames of the committed mutations dispatch through it —
+// the grace-events canon, best-effort, a broken carrier never fails the
+// mutation.
+func (s *GlobalPaymentService) SetRealtimePublisher(p realtimeapp.Publisher) {
+	s.realtime = p
 }
 
 // NewGlobalPaymentService builds the global reads and the favorites order
@@ -355,8 +369,24 @@ func (s *GlobalPaymentService) SaveFavoriteOrder(ctx context.Context, actor uuid
 	sorted := slices.Clone(orderedIDs)
 	slices.SortFunc(sorted, func(a, b uuid.UUID) int { return strings.Compare(a.String(), b.String()) })
 
-	return s.factory.runInTx(ctx, func(stores *txStores) error {
-		locked, err := stores.favoriteOrders.LockVisibleFavorites(ctx, actor, sorted)
+	locked, err := s.saveFavoriteOrderTx(ctx, actor, sorted, orderedIDs)
+	if err != nil {
+		return err
+	}
+	s.publishFavoriteOrderRealtime(ctx, actor, locked)
+	return nil
+}
+
+// saveFavoriteOrderTx is the save's transactional body: the lock pass, the
+// full-replacement order write and the audit entry in one transaction; the
+// locked rows travel out for the post-commit realtime dispatch.
+func (s *GlobalPaymentService) saveFavoriteOrderTx(
+	ctx context.Context, actor uuid.UUID, sorted, orderedIDs []uuid.UUID,
+) ([]GlobalPaymentFavoriteLock, error) {
+	var locked []GlobalPaymentFavoriteLock
+	err := s.factory.runInTx(ctx, func(stores *txStores) error {
+		var err error
+		locked, err = stores.favoriteOrders.LockVisibleFavorites(ctx, actor, sorted)
 		if err != nil {
 			return fmt.Errorf("lock visible favorites: %w", err)
 		}
@@ -394,6 +424,31 @@ func (s *GlobalPaymentService) SaveFavoriteOrder(ctx context.Context, actor uuid
 				"count":        len(orderedIDs),
 			})
 	})
+	return locked, err
+}
+
+// publishFavoriteOrderRealtime hands the save's frames to the realtime
+// carrier (карта #714, #716; ADR 0062): the save dirties the `payments` view
+// of every touched rule's property — one frame per distinct property,
+// dispatched strictly post-commit, best-effort like the carrier itself.
+func (s *GlobalPaymentService) publishFavoriteOrderRealtime(
+	ctx context.Context, actor uuid.UUID, locked []GlobalPaymentFavoriteLock,
+) {
+	if s.realtime == nil || len(locked) == 0 {
+		return
+	}
+	seen := make(map[uuid.UUID]struct{}, len(locked))
+	changed := make([]realtimedom.Change, 0, len(locked))
+	for _, row := range locked {
+		if _, dup := seen[row.PropertyID]; dup {
+			continue
+		}
+		seen[row.PropertyID] = struct{}{}
+		changed = append(changed, realtimedom.On(realtimedom.EntityPayments, row.PropertyID))
+	}
+	if len(changed) > 0 {
+		s.realtime.EntityChanged(ctx, actor, changed...)
+	}
 }
 
 // ownerTodays resolves the calendar date per distinct data owner of the

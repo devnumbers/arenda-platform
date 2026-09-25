@@ -31,6 +31,7 @@ import (
 	popupsapp "github.com/nambers/arenda-planform/apps/backend/internal/popups/application"
 	propertieshttp "github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/http"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
+	realtimehttp "github.com/nambers/arenda-planform/apps/backend/internal/realtime/adapters/http"
 	rentalshttp "github.com/nambers/arenda-planform/apps/backend/internal/rentals/adapters/http"
 	rentalsapp "github.com/nambers/arenda-planform/apps/backend/internal/rentals/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
@@ -96,7 +97,13 @@ type Deps struct {
 	// NotificationsStreamHub is the shared event stream's hub (карта #734,
 	// #742; ADR 0060). The generated /notifications/stream route serves from
 	// it; nil answers 503 (a build without the stream).
-	NotificationsStreamHub   *sse.Hub
+	NotificationsStreamHub *sse.Hub
+	// RealtimeStreamHub is the realtime entity-events stream's hub (карта
+	// #714, #716; ADR 0062). The generated /realtime/stream route serves
+	// from it; the composition root passes the same hub instance as the
+	// notifications stream — the 8-connections-per-user budget covers both
+	// streams. Nil answers 503 (a build without the stream).
+	RealtimeStreamHub        *sse.Hub
 	VAPIDPublicKey           string
 	Popups                   *popupsapp.PopupService
 	AppBaseURL               string
@@ -202,6 +209,7 @@ func New(deps Deps) http.Handler {
 	accessParticipantHandlers := accesshttp.NewParticipantHandlers(deps.Participants, deps.ParticipantMutations, deps.Logger)
 	pushSubscriptionHandlers := notificationshttp.NewPushSubscriptionHandlers(deps.PushSubscriptions, deps.VAPIDPublicKey, deps.Logger)
 	streamHandlers := notificationshttp.NewStreamHandlers(deps.NotificationsStreamHub, deps.Logger)
+	realtimeStreamHandlers := realtimehttp.NewRealtimeStreamHandlers(deps.RealtimeStreamHub, deps.Logger)
 	notificationPrefsHandlers := notificationshttp.NewNotificationPreferencesHandlers(deps.NotificationSettings, deps.Logger)
 	historyHandlers := historyhttp.NewHistoryHandlers(deps.HistoryRead, deps.Logger)
 	feedHandlers := notificationshttp.NewFeedHandlers(deps.NotificationsFeed, deps.Logger)
@@ -228,6 +236,7 @@ func New(deps Deps) http.Handler {
 		ParticipantHandlers:             accessParticipantHandlers,
 		PushSubscriptionHandlers:        pushSubscriptionHandlers,
 		StreamHandlers:                  streamHandlers,
+		RealtimeStreamHandlers:          realtimeStreamHandlers,
 		NotificationPreferencesHandlers: notificationPrefsHandlers,
 		HistoryHandlers:                 historyHandlers,
 		FeedHandlers:                    feedHandlers,
@@ -360,6 +369,7 @@ type composedHandler struct {
 	*accesshttp.ParticipantHandlers
 	*notificationshttp.PushSubscriptionHandlers
 	*notificationshttp.StreamHandlers
+	*realtimehttp.RealtimeStreamHandlers
 	*notificationshttp.NotificationPreferencesHandlers
 	*historyhttp.HistoryHandlers
 	*notificationshttp.FeedHandlers

@@ -13,6 +13,8 @@ import (
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
+	realtimeapp "github.com/nambers/arenda-planform/apps/backend/internal/realtime/application"
+	realtimedom "github.com/nambers/arenda-planform/apps/backend/internal/realtime/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
 
@@ -72,6 +74,42 @@ type AccessService struct {
 	slots    *SlotCoordinator
 	events   AccessEventPublisher
 	logger   *slog.Logger
+	// Realtime is the late-bound carrier the transitions' frames dispatch
+	// through after the commit (карта #714, #716; ADR 0062); nil keeps the
+	// pre-#716 silence. The invitation and participant-mutation services
+	// publish through it too — they run this service's transactional cores.
+	realtime realtimeapp.Publisher
+}
+
+// SetRealtimePublisher late-binds the realtime carrier (карта #714, #716;
+// ADR 0062): the frames of the committed transitions dispatch through it —
+// the grace-events canon, best-effort, a broken carrier never fails the
+// transition.
+func (s *AccessService) SetRealtimePublisher(p realtimeapp.Publisher) {
+	s.realtime = p
+}
+
+// publishRealtime hands the committed transition's frames to the realtime
+// carrier (карта #714, #716; ADR 0062) — strictly post-commit, best-effort:
+// a rolled-back transition dispatches nothing, a nil carrier keeps the
+// pre-#716 silence.
+func (s *AccessService) publishRealtime(ctx context.Context, actor uuid.UUID, changes []realtimedom.Change) {
+	if s.realtime == nil || len(changes) == 0 {
+		return
+	}
+	s.realtime.EntityChanged(ctx, actor, changes...)
+}
+
+// accessFrames are one transition's frames on one object: the access pair —
+// every membership or invitation transition dirties the object's participants
+// view — plus the history pair when the transaction journaled the transition
+// (a written journal row is a history change for the object's feed).
+func accessFrames(propertyID uuid.UUID, journaled bool) []realtimedom.Change {
+	changed := []realtimedom.Change{realtimedom.On(realtimedom.EntityAccess, propertyID)}
+	if journaled {
+		changed = append(changed, realtimedom.HistoryOn(propertyID))
+	}
+	return changed
 }
 
 // NewAccessService creates an AccessService. Slots is the recipient tariff slot
@@ -155,6 +193,7 @@ func (s *AccessService) AddMember(ctx context.Context, actor, propertyID, userID
 	} else {
 		publishGrantedEvents(ctx, s.events, s.logger, actor, []domain.Membership{created})
 	}
+	s.publishRealtime(ctx, actor, accessFrames(propertyID, true))
 	return created, nil
 }
 
@@ -375,6 +414,7 @@ func (s *AccessService) ChangeMemberRole(
 			})
 		})
 	}
+	s.publishRealtime(ctx, actor, accessFrames(propertyID, roleChanged))
 	return updated, nil
 }
 
@@ -527,6 +567,9 @@ func (s *AccessService) RevokeMember(ctx context.Context, actor, propertyID, mem
 		return err
 	}
 	publishRevokedEvents(ctx, s.events, s.logger, actor, revoked)
+	for _, m := range revoked {
+		s.publishRealtime(ctx, actor, accessFrames(m.PropertyID, true))
+	}
 	return nil
 }
 
@@ -623,6 +666,7 @@ func (s *AccessService) LeaveProperty(ctx context.Context, actor, propertyID uui
 			MemberID:     actor,
 		})
 	})
+	s.publishRealtime(ctx, actor, accessFrames(propertyID, true))
 	return nil
 }
 

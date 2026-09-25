@@ -11,6 +11,8 @@ import (
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/payments/domain"
+	realtimeapp "github.com/nambers/arenda-planform/apps/backend/internal/realtime/application"
+	realtimedom "github.com/nambers/arenda-planform/apps/backend/internal/realtime/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
 
@@ -107,6 +109,10 @@ type PaymentService struct {
 	calendar  OwnerCalendar
 	writeGate gateFunc // Full Access+: create/edit/pause/resume/favorite.
 	delGate   gateFunc // Owner alone: deletion.
+	// Realtime is the late-bound carrier the mutations' frames dispatch
+	// through after the commit (карта #714, #716; ADR 0062); nil keeps the
+	// pre-#716 silence.
+	realtime realtimeapp.Publisher
 }
 
 // NewPaymentService builds the payment use case service over the shared
@@ -124,10 +130,18 @@ func NewPaymentService(factory txStoreFactory, calendar OwnerCalendar, policy sh
 	}
 }
 
+// SetRealtimePublisher late-binds the realtime carrier (карта #714, #716;
+// ADR 0062): the frames of the committed mutations dispatch through it —
+// the grace-events canon, best-effort, a broken carrier never fails the
+// mutation.
+func (s *PaymentService) SetRealtimePublisher(p realtimeapp.Publisher) {
+	s.realtime = p
+}
+
 // conveyor bundles this service's factory and calendar for the shared
 // mutation conveyor.
 func (s *PaymentService) conveyor() mutationGates {
-	return mutationGates{factory: s.txStoreFactory, calendar: s.calendar}
+	return mutationGates{factory: s.txStoreFactory, calendar: s.calendar, realtime: s.realtime}
 }
 
 // readScope applies the read gate and returns the data owner whose scope the
@@ -177,6 +191,7 @@ func (s *PaymentService) CreatePayment(
 				Audit:           auditdomain.ActionPaymentCreated,
 				AuditEntityID:   &draft.ID,
 				History:         new(created),
+				Changed:         []realtimedom.Change{realtimedom.On(realtimedom.EntityPayments, propertyID)},
 				Tick:            true,
 				RereadPaymentID: &draft.ID,
 			}, nil
@@ -252,6 +267,7 @@ func (s *PaymentService) UpdatePayment(
 				AuditEntityID:   &rule.ID,
 				AuditCtx:        map[string]any{auditFieldsKey: updatedFields(cmd)},
 				History:         new(updated),
+				Changed:         []realtimedom.Change{realtimedom.On(realtimedom.EntityPayments, propertyID)},
 				Tick:            true,
 				RereadPaymentID: &rule.ID,
 			}, nil
@@ -294,6 +310,7 @@ func (s *PaymentService) DeletePayment(
 				AuditEntityID: &rule.ID,
 				AuditCtx:      map[string]any{"keep_overdue": keepOverdue},
 				History:       new(historydomain.PaymentDeleted(rule.ID, rule.Title)),
+				Changed:       []realtimedom.Change{realtimedom.On(realtimedom.EntityPayments, propertyID)},
 			}, nil
 		})
 	return err
@@ -327,6 +344,7 @@ func (s *PaymentService) PausePayment(
 				Audit:           auditdomain.ActionPaymentPaused,
 				AuditEntityID:   &rule.ID,
 				History:         new(historydomain.PaymentPaused(rule.ID, rule.Title)),
+				Changed:         []realtimedom.Change{realtimedom.On(realtimedom.EntityPayments, propertyID)},
 				Tick:            true,
 				RereadPaymentID: &rule.ID,
 			}, nil
@@ -358,6 +376,7 @@ func (s *PaymentService) ResumePayment(
 				Audit:           auditdomain.ActionPaymentResumed,
 				AuditEntityID:   &rule.ID,
 				History:         new(historydomain.PaymentResumed(rule.ID, rule.Title)),
+				Changed:         []realtimedom.Change{realtimedom.On(realtimedom.EntityPayments, propertyID)},
 				Tick:            true,
 				RereadPaymentID: &rule.ID,
 			}, nil
@@ -384,6 +403,7 @@ func (s *PaymentService) SetPaymentFavorite(
 				Audit:         auditdomain.ActionPaymentUpdated,
 				AuditEntityID: &rule.ID,
 				AuditCtx:      map[string]any{auditFieldsKey: []string{"favorite"}},
+				Changed:       []realtimedom.Change{realtimedom.On(realtimedom.EntityPayments, propertyID)},
 			}, nil
 		})
 }
