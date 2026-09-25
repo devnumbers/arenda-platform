@@ -17,7 +17,7 @@ DDD modular monolith (Go, `apps/backend/internal/`). Domain glossary is split by
 - [Access](./apps/backend/internal/access/CONTEXT.md) — property sharing, member roles, derived object access.
 - [Audit](./apps/backend/internal/audit/CONTEXT.md) — audit log of user/admin/system actions (append-only; records about the removed leases/operations domain are kept as history).
 - [История](./apps/backend/internal/history/CONTEXT.md) — the product «История действий» feed over properties: manual user actions with human-readable label snapshots, server-built row text and hybrid search (ADR 0061).
-- [Realtime](./apps/backend/internal/realtime/CONTEXT.md) — the live invalidation stream for open clients: coarse `entity.changed` frames over the shared SSE transport (ADR 0060), the entity dictionary and the post-commit publication port (ADR 0062).
+- [Realtime](./apps/backend/internal/realtime/CONTEXT.md) — the live invalidation stream for open clients: coarse `entity.changed` frames over the shared SSE transport (ADR 0060), the entity dictionary and the post-commit carrier publication port (ADR 0062).
 - [Popups](./apps/backend/internal/popups/CONTEXT.md) — onboarding popups, popup views.
 
 ## Relationships

@@ -18,7 +18,8 @@ and contract untouched. ADR 0060 §5 sketched map #714's events as new event
 names on the notifications stream; this ADR supersedes that sketch — the
 events ride a dedicated endpoint instead, so the notifications stream
 contract stays frozen. The §2 precise-consumer extension (ticket #718) is
-amended in place with the code that introduced it.
+amended in place with the code that introduced it. The §2 owner-book
+null-propertyId frames (`InOwnerBook`) are amended in place likewise.
 
 ## Context
 
@@ -55,7 +56,10 @@ across the same pipelines.
 2. **Coarse frames, one event name, dictionary of eight entities.** The
    stream speaks one event name, `entity.changed`, in the envelope v1
    (`{v, occurredAt, payload}`, ADR 0060 §5); the payload is
-   `{propertyId, entity}`. Frames carry no entity data — clients re-read
+   `{propertyId, entity}`. `propertyId` is null for the owner-book
+   mutations outside any property (contacts and tasks created without one,
+   the `InOwnerBook` pairs), and such a frame is delivered to the author
+   alone. Frames carry no entity data — clients re-read
    through the API; the stream never becomes a second system of record.
    The entity dictionary is the invalidation contract between backend and
    frontend:
@@ -112,7 +116,11 @@ across the same pipelines.
    management on access changes (the earlier «revocation closes the
    stream» reading of ticket #716 is dropped with the per-user topology).
    The audience includes the actor: their other tabs and devices need the
-   invalidation, and the origin tab re-reads idempotently.
+   invalidation, and the origin tab re-reads idempotently. For the
+   null-propertyId owner-book frames the audience degenerates to the actor
+   alone: the book has no members to resolve, so the adapter short-circuits
+   to `[actor]` without touching derived access — the open API's
+   `/realtime/stream` description states the same null case.
 
 5. **No replay in v1.** Same contract as ADR 0060 §8: on every open
    (including every reconnect) the provider re-reads live state through
