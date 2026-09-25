@@ -108,7 +108,11 @@ type LiveFeedQuery = {
  * в начало массива items первой страницы (порядок внутри страницы — по
  * убыванию времени); prevCursor первой страницы сдвигается на свежайшую
  * строку (граница следующего догона), nextCursor не трогается — граница
- * в прошлое неизменна. */
+ * в прошлое неизменна. Догон может приехать параллельно с полным
+ * перечитыванием ленты (onOpen-инвалидация провайдера): refetch успел
+ * перезаписать кэш между чтением границы и setQueryData — первая страница
+ * уже содержит свежие строки, и повторный влив тех же строк устраняется
+ * дедупом по id. */
 export function mergeFreshIntoFirstPage(
   old: InfiniteData<HistoryFeedPage> | undefined,
   freshItems: HistoryEntry[],
@@ -121,8 +125,10 @@ export function mergeFreshIntoFirstPage(
   if (first === undefined) {
     return old;
   }
+  const knownIds = new Set(first.items.map((item) => item.id));
+  const novelItems = freshItems.filter((item) => !knownIds.has(item.id));
   const mergedFirst: HistoryFeedPage = {
-    items: [...freshItems, ...first.items],
+    items: [...novelItems, ...first.items],
     nextCursor: first.nextCursor,
     prevCursor: freshPrevCursor ?? first.prevCursor,
   };
