@@ -2,13 +2,17 @@ import type { Page } from '@playwright/test';
 import { openCabinetWithSeededSession, expect, SEEDED_GARAGE_PROPERTY_ID, test } from './fixtures';
 
 // Каркас-шелл страницы (карта #862, тикет #865 + доработка 25.09 по
-// макетам 1185-40815/40811/40814): колонка контента центрируется во всём
-// вьюпорте на любом ярусе; полноэкранные поверхности пикеров начинаются на
-// границе сайдбара (меню видно), их колонки легают с колонками страниц;
-// планшетные шапки подэкранов — слоты у краёв вьюпорта; глушение нижнего
-// хрома на всех брейкпоинтах; ноль дёрганья шапок хабов. Геометрия меряется
-// bounding-box'ами — вердикт живьём остаётся за /ui-walkthrough, спека
-// держит регресс-гейт на трёх ярусах (мобайл 375 / планшет 768 / ПК 1440).
+// макетам 1185-40815/40811/40814 + хром-фикс 25.09): колонка контента
+// центрируется во всём вьюпорте на любом ярусе; полноэкранные поверхности
+// пикеров начинаются на границе сайдбара (меню видно), их колонки легают
+// с колонками страниц; хром ПК не исчезает под открытой поверхностью —
+// крылья рисует поверхность, пилюли остаются, сайдбар кликабелен; шит
+// панели поверхности на ПК — колонка 560; планшетные шапки подэкранов —
+// слоты у краёв вьюпорта; глушение нижнего хрома на всех брейкпоинтах
+// (панели страниц — TabBar+пилюли, панели поверхностей — только TabBar);
+// ноль дёрганья шапок хабов. Геометрия меряется bounding-box'ами —
+// вердикт живьём остаётся за /ui-walkthrough, спека держит регресс-гейт
+// на трёх ярусах (мобайл 375 / планшет 768 / ПК 1440).
 
 const PC = { width: 1440, height: 900 };
 const TABLET = { width: 768, height: 1024 };
@@ -91,8 +95,44 @@ test('ПК: пикер периода не накрывает сайдбар, к
   expect(geometry.pickerColumnLeft).not.toBeNull();
   expect(Math.abs((geometry.pickerColumnLeft ?? 0) - pageColumn.left)).toBeLessThanOrEqual(2);
 
-  await page.getByRole('button', { name: 'Назад' }).click();
+  // Хром ПК не исчезает под открытой поверхностью (решение владельца
+  // 25.09, доработка #865): шапку с крыльями рисует сама поверхность,
+  // пилюли остаются смонтированными, шит панели пикера — колонка 560
+  // (углы свободны), клик над сайдбаром ловит пункт меню.
+  const chrome = await page.evaluate(() => {
+    const dialog = document.querySelector('[role="dialog"][aria-label="Выберите период"]');
+    const sheet = dialog?.querySelector('.fixed.inset-x-0.bottom-0');
+    const s = sheet?.getBoundingClientRect();
+    const logo = dialog?.querySelector('a[aria-label="Объекты"]');
+    const l = logo?.getBoundingClientRect();
+    const pills = document.querySelectorAll('nav[aria-label="Дополнительная навигация"] .fixed');
+    const hit = document.elementFromPoint(110, 300);
+    return {
+      logoX: l?.x ?? null,
+      pills: pills.length,
+      sheetWidth: s?.width ?? null,
+      sheetLeft: s?.left ?? null,
+      hitInSidebar: hit instanceof HTMLElement ? hit.closest('nav[aria-label="Основная навигация"]') !== null : false,
+    };
+  });
+  expect(chrome.logoX).toBe(0);
+  expect(chrome.pills).toBe(2);
+  // Правое крыло — кнопка профиля в шапке поверхности, у правого края
+  // вьюпорта (паддинг даёт сама кнопка).
+  const profile = surface.locator('header').getByRole('button', { name: /Иван/ });
+  await expect(profile).toBeVisible();
+  const profileBox = await profile.boundingBox();
+  expect(profileBox).not.toBeNull();
+  // Если бокса нет — зазор вырождается во всю ширину и падает по допуску.
+  expect(PC.width - ((profileBox?.x ?? 0) + (profileBox?.width ?? 0))).toBeLessThanOrEqual(2);
+  expect(chrome.sheetWidth).toBe(560);
+  expect(Math.abs((chrome.sheetLeft ?? 0) - (PC.width - 560) / 2)).toBeLessThanOrEqual(2);
+  expect(chrome.hitInSidebar).toBe(true);
+
+  // Меню кликабельно при открытом пикере (§1): клик уводит из пикера.
+  await page.getByRole('link', { name: 'Платежи' }).click();
   await expect(surface).not.toBeVisible();
+  await expect(page).toHaveURL(/\/payments$/);
 });
 
 test('ПК: пилюли глушатся, пока смонтирована нижняя панель, и возвращаются после', async ({ page, seededUser }) => {
@@ -173,6 +213,23 @@ test('планшет: слоты шапки подэкрана у краёв в�
   await expect(page.locator('nav[aria-label="Нижняя навигация"]')).toHaveCount(0);
 
   await page.goto('/operations');
+  await expect(page.locator('nav[aria-label="Нижняя навигация"]')).toBeVisible();
+
+  // Пикер на планшете: TabBar под поверхностью заглушён, шит панели — во
+  // всю ширину (сужение surface-шита до колонки — только ПК).
+  await page.getByRole('button', { name: /Период/ }).click();
+  const picker = page.locator('[role="dialog"][aria-label="Выберите период"]');
+  await expect(picker).toBeVisible();
+  await expect(page.locator('nav[aria-label="Нижняя навигация"]')).toHaveCount(0);
+  const pickerSheetWidth = await picker
+    .locator('.fixed.inset-x-0.bottom-0')
+    .evaluate((el) => el.getBoundingClientRect().width);
+  expect(pickerSheetWidth).toBe(TABLET.width);
+  // Крыльев у поверхности на планшете нет (анатомия подэкрана, §2) —
+  // лого рисует только ПК.
+  await expect(picker.locator('a[aria-label="Объекты"]')).toBeHidden();
+  await page.getByRole('button', { name: 'Назад' }).click();
+  await expect(picker).not.toBeVisible();
   await expect(page.locator('nav[aria-label="Нижняя навигация"]')).toBeVisible();
 });
 

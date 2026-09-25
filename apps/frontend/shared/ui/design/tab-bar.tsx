@@ -34,16 +34,31 @@ import { TabBarRow } from './tab-bar-row';
  * открытом шите: «Еще» — тумблер (подсвечен активным, пока шит открыт),
  * табы-ссылки ведут на разделы и закрывают шит; лист поднимается
  * из-за бара. */
+/** Откуда панель: страница (глушит весь нижний хром — и TabBar, и пилюли,
+ * канон #561) или полноэкранная поверхность (пикеры и др.; глушит только
+ * TabBar — на ПК хром не исчезает под открытой поверхностью, решение
+ * владельца 25.09, доработка #865). */
+export type TabBarSuppressionScope = 'page' | 'surface';
+
 type TabBarSuppression = {
   /** Провайдер в дереве есть; без него TabBar считается неуместным. */
   readonly present: boolean;
   /** Число смонтированных глушителей (нижних панелей действия). */
   readonly bars: number;
-  readonly acquire: () => void;
-  readonly release: () => void;
+  /** Из них — панели внутри полноэкранных поверхностей: TabBar глушат,
+   * пилюли десктопа нет. */
+  readonly surfaceBars: number;
+  readonly acquire: (scope: TabBarSuppressionScope) => void;
+  readonly release: (scope: TabBarSuppressionScope) => void;
 };
 
-const absentSuppression: TabBarSuppression = { present: false, bars: 0, acquire: () => {}, release: () => {} };
+const absentSuppression: TabBarSuppression = {
+  present: false,
+  bars: 0,
+  surfaceBars: 0,
+  acquire: () => {},
+  release: () => {},
+};
 
 const TabBarSuppressionContext = createContext<TabBarSuppression>(absentSuppression);
 
@@ -51,35 +66,52 @@ const useIsomorphicLayoutEffect = typeof window === 'undefined' ? useEffect : us
 
 /** Глушит TabBar, пока монтирован вызывавший компонент (канонично —
  * StickyBottomBar); enabled=false — экран живёт с футером (условные
- * ветви вроде создания контакта вне визарда #807). Layout-эффект меняет
- * счётчик до отрисовки кадра — футер не мигает поверх нижней кнопки
- * действия; серверу эффект не нужен. */
-export function useTabBarSuppression(enabled = true): void {
+ * ветви вроде создания контакта вне визарда #807). scope='surface' —
+ * панель внутри полноэкранной поверхности: глушит только TabBar (он под
+ * поверхностью), пилюли десктопа остаются (решение владельца 25.09,
+ * доработка #865). Layout-эффект меняет счётчик до отрисовки кадра — футер
+ * не мигает поверх нижней кнопки действия; серверу эффект не нужен. */
+export function useTabBarSuppression(enabled = true, scope: TabBarSuppressionScope = 'page'): void {
   const { acquire, release } = useContext(TabBarSuppressionContext);
   useIsomorphicLayoutEffect(() => {
     if (!enabled) {
       return;
     }
-    acquire();
-    return release;
-  }, [enabled, acquire, release]);
+    acquire(scope);
+    return () => release(scope);
+  }, [enabled, acquire, release, scope]);
 }
 
 /** Состояние глушения — для нижнего хрома, который прячется вместе с
- * TabBar, пока смонтирована нижняя панель действия (пилюли десктопа
- * #561): вне провайдера present=false (хром неуместен, рендер null),
- * bars>0 — панель перекрывает низ. */
+ * TabBar, пока смонтирована нижняя панель действия страницы (пилюли
+ * десктопа #561): вне провайдера present=false (хром неуместен, рендер
+ * null), bars>0 — панель перекрывает низ. Панели поверхностей считаются в
+ * surfaceBars — пилюли их не слушаются (хром ПК не исчезает под открытой
+ * поверхностью). */
 export function useTabBarSuppressionState(): TabBarSuppression {
   return useContext(TabBarSuppressionContext);
 }
 
 export function TabBarVisibilityProvider({ children }: { readonly children: ReactNode }): JSX.Element {
   const [bars, setBars] = useState(0);
-  const acquire = useCallback((): void => setBars((n) => n + 1), []);
-  const release = useCallback((): void => setBars((n) => n - 1), []);
+  const [surfaceBars, setSurfaceBars] = useState(0);
+  const acquire = useCallback((scope: TabBarSuppressionScope): void => {
+    if (scope === 'surface') {
+      setSurfaceBars((n) => n + 1);
+    } else {
+      setBars((n) => n + 1);
+    }
+  }, []);
+  const release = useCallback((scope: TabBarSuppressionScope): void => {
+    if (scope === 'surface') {
+      setSurfaceBars((n) => n - 1);
+    } else {
+      setBars((n) => n - 1);
+    }
+  }, []);
   const value = useMemo<TabBarSuppression>(
-    () => ({ present: true, bars, acquire, release }),
-    [bars, acquire, release],
+    () => ({ present: true, bars, surfaceBars, acquire, release }),
+    [bars, surfaceBars, acquire, release],
   );
 
   return <TabBarSuppressionContext.Provider value={value}>{children}</TabBarSuppressionContext.Provider>;
@@ -89,10 +121,13 @@ export function TabBar({
   propertiesHref,
   notificationsUnread = false,
 }: { readonly propertiesHref?: string; readonly notificationsUnread?: boolean } = {}): JSX.Element | null {
-  const { present, bars } = useContext(TabBarSuppressionContext);
+  const { present, bars, surfaceBars } = useContext(TabBarSuppressionContext);
   const [moreOpen, setMoreOpen] = useState(false);
 
-  if (!present || bars > 0) return null;
+  // Глушат панели обоих скоупов: поверхность накрывает низ целиком — под
+  // ней футера быть не должно на любом ярусе (решение 25.09: пилюли это
+  // не касается — они глушатся только панелями страниц).
+  if (!present || bars + surfaceBars > 0) return null;
 
   return (
     <>

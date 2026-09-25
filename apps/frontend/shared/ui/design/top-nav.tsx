@@ -77,11 +77,13 @@ export type TopNavProps = {
    * (HubCollapseAnchor пишет `--hub-collapse`). */
   readonly collapse?: TopNavCollapse;
   /** TopNav внутри полноэкранной поверхности (пикер, визард-оверлей, шит
-   * фильтров — класс .fullscreen-surface): поверхность на ПК начинается
-   * правее сайдбара (globals.css), её бары растягиваются на весь вьюпорт,
-   * поэтому колонка TopNav легает на колонку страницы; «крылья» не
-   * рисуются вовсе — они дублировали бы крылья страницы, видимые рядом с
-   * поверхностью. */
+   * фильтров — класс .fullscreen-surface): на мобайле и планшете крыльев
+   * нет (анатомия подэкрана). На ПК ≥1024 крылья рисует сама поверхность —
+   * хром ПК не исчезает под открытой поверхностью (решение владельца
+   * 25.09, доработка #865): лого и профиль в тех же слотах, что у страниц;
+   * дублей нет — страница под поверхностью накрыта целиком. Колонка TopNav
+   * легает на колонку страницы (бары поверхности растянуты на весь
+   * вьюпорт — globals.css). */
   readonly overlay?: boolean;
 };
 
@@ -104,10 +106,11 @@ export function TopNav({
   // leading-кнопки (иначе наложение на колонку 560, см. JSDoc), ПК — всегда.
   // Boolean — чтобы условный leading={cond && <Button/>} при cond=false
   // считался «без leading». Внутри полноэкранной поверхности (overlay)
-  // крыльев нет ни на одном ярусе — они дублировали бы крылья страницы.
+  // крылья на мобайле/планшете отсутствуют, на ПК их рисует сама
+  // поверхность — хром ПК не исчезает (решение 25.09, доработка #865).
   const hasLeading = Boolean(leading);
   const wingsMobileClass = !overlay && mobileWings ? 'flex' : 'hidden';
-  const wingsTierClass = overlay ? 'hidden' : hasLeading ? 'desktop:flex' : 'tablet:flex';
+  const wingsTierClass = hasLeading || overlay ? 'desktop:flex' : 'tablet:flex';
 
   return (
     <header

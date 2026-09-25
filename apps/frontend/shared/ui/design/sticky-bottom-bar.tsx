@@ -22,6 +22,14 @@ export type StickyBottomBarProps = {
    * #561); на ПК ≥1024 и на мобиле ≤560 — как всегда (базовое решение
    * 2026-09-04 для полноэкранного пикера даты). */
   readonly fullWidthContent?: boolean;
+  /** Панель живёт внутри полноэкранной поверхности (пикеры, шит фильтров,
+   * экраны успеха — класс .fullscreen-surface): глушит только TabBar
+   * (поверхность накрывает низ целиком), а пилюли десктопа не трогает —
+   * хром ПК не исчезает под открытой поверхностью (решение владельца
+   * 25.09, доработка #865); шит на ПК сужается до колонки 560, освобождая
+   * углы пилюлям. Панели страниц (значение по умолчанию) глушат весь
+   * нижний хром — канон «честной недоступности» #561. */
+  readonly surface?: boolean;
 };
 
 export function StickyBottomBar({
@@ -29,11 +37,21 @@ export function StickyBottomBar({
   dragHandle = false,
   className,
   fullWidthContent = false,
+  surface = false,
 }: StickyBottomBarProps): JSX.Element {
-  useTabBarSuppression();
+  useTabBarSuppression(true, surface ? 'surface' : 'page');
 
   return (
-    <div className={cn('fixed inset-x-0 bottom-0 z-40 rounded-t-sheet bg-surface font-sans', className)}>
+    <div
+      className={cn(
+        'fixed inset-x-0 bottom-0 z-40 rounded-t-sheet bg-surface font-sans',
+        // Шит поверхности на ПК — колонка 560 по центру: left/right уже
+        // нулевые (inset-x-0), margin auto центрирует при capped ширине;
+        // углы снизу остаются хрому (пилюли).
+        surface && 'desktop:mx-auto desktop:max-w-column',
+        className,
+      )}
+    >
       {dragHandle && <SheetDragHandle />}
       {/* Колонка контента 560 (max-w-column, тикет #865) по центру на любой
           ширине — как PageContent; fullWidthContent снимает кап в планшетном
