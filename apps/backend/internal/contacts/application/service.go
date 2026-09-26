@@ -106,8 +106,10 @@ func (s *ContactService) publishChanged(ctx context.Context, actor uuid.UUID, pr
 // the leaving row, the destination pair (or the owner-book pair when the
 // card unbinds) for the arriving one. One dispatch carries both; the
 // carrier's per-call dedup collapses a same-object rewrite into one frame.
-// The journal row anchors the destination (ADR 0061 §3), so the history pair
-// rides there.
+// The journal rows anchor every end that got one (ADR 0061 §4, тикет #856:
+// the move pair, the one-ended bind/unbind), so the history pairs ride
+// there — the anchors stay duplicate-free, a same-binding update carries
+// its single end once.
 func (s *ContactService) publishMoved(
 	ctx context.Context, actor uuid.UUID, source, destination *uuid.UUID, journaled bool,
 ) {
@@ -115,10 +117,13 @@ func (s *ContactService) publishMoved(
 	var anchors []uuid.UUID
 	if source != nil {
 		pairs = append(pairs, realtimedom.On(realtimedom.EntityContacts, *source))
+		if journaled {
+			anchors = append(anchors, *source)
+		}
 	}
 	if destination != nil {
 		pairs = append(pairs, realtimedom.On(realtimedom.EntityContacts, *destination))
-		if journaled {
+		if journaled && (source == nil || *source != *destination) {
 			anchors = append(anchors, *destination)
 		}
 	} else {
@@ -342,7 +347,6 @@ func (s *ContactService) UpdateContact(
 		moved = didMove
 	}
 	before := contact
-	oldFullName := contact.FullName()
 	if err := applyUpdate(&contact, cmd); err != nil {
 		return domain.Contact{}, err
 	}
@@ -360,31 +364,67 @@ func (s *ContactService) UpdateContact(
 		if err := recordContactAudit(ctx, stores, actor, role, auditdomain.ActionContactUpdated, contact.ID, auditCtx); err != nil {
 			return err
 		}
-		// The row hangs on the card's final binding and records a change,
-		// not a no-op (ADR 0061 §3): a same-form PATCH without a move writes
-		// no row; a move between properties journals on the destination; an
-		// unbound card writes no row. A move or a detail-only edit (phone,
-		// note — contactChanged) may keep the ФИО unchanged: the row records
-		// the rebinding/card change, not a name delta, so the accepted old →
-		// new form repeats the same ФИО («X → X»). A dedicated binding
-		// wording stays a possible future walkthrough decision and is not
-		// accepted here — the ADR 0061 §4 dictionary gains no action id for
-		// it.
-		if stored.PropertyID != nil && (moved || contactChanged(before, stored)) {
-			if err := historyapp.RecordScoped(ctx, stores.history, *stored.PropertyID, actor,
-				sharedpolicy.HistoryActorRole(role),
-				historydomain.ContactUpdated(contact.ID, oldFullName, stored.FullName())); err != nil {
-				return err
-			}
-			journaled = true
-		}
-		return nil
+		journaled, err = recordContactJournal(ctx, stores, actor, role, source, moved, before, stored)
+		return err
 	})
 	if err != nil {
 		return domain.Contact{}, err
 	}
 	s.publishMoved(ctx, actor, source, stored.PropertyID, journaled)
 	return stored, nil
+}
+
+// recordContactJournal writes the update's journal rows in one pass over the
+// rebind and the detail edit (ADR 0061 §3–§4, тикет #856) and reports
+// whether any row was written. A binding change anchors on every end it
+// touches: a cross-property move writes the contact.moved pair — the source
+// leg first (the card leaves before it arrives), then the destination leg;
+// a bind or an unbind owns a single end and writes contact.bound /
+// contact.unbound there, an unbound card itself still journaling nothing
+// (§3 — the row hangs on the object the card left or joined). A
+// same-binding detail edit keeps the contact.updated row with the old → new
+// ФИО on the card's binding. One manual action writes one row per affected
+// object: a mixed unbind + details PATCH folds into the single source row,
+// the ФИО traveling as the action-time snapshot — the row names the
+// binding change, not a name delta.
+func recordContactJournal(
+	ctx context.Context, stores *txStores, actor uuid.UUID, role sharedpolicy.Role,
+	source *uuid.UUID, moved bool, before, stored domain.Contact,
+) (bool, error) {
+	fullName := stored.FullName()
+	record := func(propertyID uuid.UUID, entry historydomain.Entry) error {
+		return historyapp.RecordScoped(ctx, stores.history, propertyID, actor,
+			sharedpolicy.HistoryActorRole(role), entry)
+	}
+	if moved {
+		if source != nil {
+			entry := historydomain.ContactUnbound(stored.ID, fullName)
+			if stored.PropertyID != nil {
+				entry = historydomain.ContactMovedFrom(stored.ID, fullName)
+			}
+			if err := record(*source, entry); err != nil {
+				return false, err
+			}
+		}
+		if stored.PropertyID != nil {
+			entry := historydomain.ContactBound(stored.ID, fullName)
+			if source != nil {
+				entry = historydomain.ContactMovedTo(stored.ID, fullName)
+			}
+			if err := record(*stored.PropertyID, entry); err != nil {
+				return false, err
+			}
+		}
+		return source != nil || stored.PropertyID != nil, nil
+	}
+	if stored.PropertyID != nil && contactChanged(before, stored) {
+		if err := record(*stored.PropertyID,
+			historydomain.ContactUpdated(stored.ID, before.FullName(), fullName)); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	return false, nil
 }
 
 // rebindContact rebinds the card onto the requested property and records the
