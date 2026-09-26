@@ -301,7 +301,9 @@ func (s *RentalService) GetRental(
 
 // ListRentals returns the property's rentals as assembled views: unfinished
 // first, then the completed by completion date, fresh on top (the store's
-// ordering). Reads never tick.
+// ordering). Reads never tick. The progress counters of the whole list ride
+// one batched read (ticket #845) — both counters of every rental's payment
+// in one SQL where the per-rental pair took two per row.
 func (s *RentalService) ListRentals(
 	ctx context.Context, actor, propertyID uuid.UUID,
 ) ([]RentalView, error) {
@@ -317,9 +319,22 @@ func (s *RentalService) ListRentals(
 	if err != nil {
 		return nil, err
 	}
+	paymentIDs := make([]uuid.UUID, 0, len(rentals))
+	for _, r := range rentals {
+		paymentIDs = append(paymentIDs, r.PaymentID)
+	}
+	// A payment with no operations is absent from the batch — the lookup
+	// below defaults its zeros; the empty list never reaches the query.
+	var counts map[uuid.UUID]ProgressCounts
+	if len(paymentIDs) > 0 {
+		counts, err = s.gateway.CountProgressByPayments(ctx, scope, propertyID, paymentIDs, today)
+		if err != nil {
+			return nil, fmt.Errorf("count progress by payments: %w", err)
+		}
+	}
 	views := make([]RentalView, 0, len(rentals))
 	for _, r := range rentals {
-		view, err := s.assembleView(ctx, scope, propertyID, r, today)
+		view, err := s.assembleView(ctx, scope, propertyID, r, today, counts[r.PaymentID])
 		if err != nil {
 			return nil, err
 		}
@@ -556,6 +571,8 @@ func (s *RentalService) RentalSummary(
 }
 
 // loadView re-reads the stored rental after commit and assembles the view.
+// The single view reads its progress counters per-rental — the batched
+// read (#845) carries only the list's.
 func (s *RentalService) loadView(
 	ctx context.Context, scope, propertyID, rentalID uuid.UUID,
 ) (RentalView, error) {
@@ -567,15 +584,29 @@ func (s *RentalService) loadView(
 	if err != nil {
 		return RentalView{}, err
 	}
-	return s.assembleView(ctx, scope, propertyID, rental, today)
+	paid, err := s.gateway.CountPaidOperations(ctx, scope, propertyID, rental.PaymentID)
+	if err != nil {
+		return RentalView{}, fmt.Errorf("count paid operations: %w", err)
+	}
+	overdue, err := s.gateway.CountOverdueOccurrences(ctx, scope, propertyID, rental.PaymentID, today)
+	if err != nil {
+		return RentalView{}, fmt.Errorf("count overdue occurrences: %w", err)
+	}
+	return s.assembleView(ctx, scope, propertyID, rental, today, ProgressCounts{
+		PaidCount:    paid,
+		OverdueCount: overdue,
+	})
 }
 
 // assembleView computes everything the TZ-blind client renders (ADR 0053
 // §2): the status, the payment's render state, the single future planned
-// operation, the «N из M» progress. The bounded read queries stay per-rental;
-// the list response assembles the same way.
+// operation, the «N из M» progress. The state and next-planned reads stay
+// per-rental; the progress counters arrive pre-read — the list carries them
+// in one batched GROUP BY over its payments (ticket #845), the single view
+// in its own per-rental pair.
 func (s *RentalService) assembleView(
 	ctx context.Context, scope, propertyID uuid.UUID, rental domain.Rental, today time.Time,
+	counts ProgressCounts,
 ) (RentalView, error) {
 	state, err := s.gateway.RentPaymentState(ctx, scope, propertyID, rental.PaymentID)
 	if err != nil {
@@ -588,17 +619,9 @@ func (s *RentalService) assembleView(
 	if err != nil {
 		return RentalView{}, fmt.Errorf("next planned occurrence: %w", err)
 	}
-	paid, err := s.gateway.CountPaidOperations(ctx, scope, propertyID, rental.PaymentID)
-	if err != nil {
-		return RentalView{}, fmt.Errorf("count paid operations: %w", err)
-	}
 	// Серверная просрочка (#817, ADR 0053 §2 — всё считает сервер): счётчик
 	// planned-вхождений раньше «сегодня» собственника; ноль — null.
-	overdue, err := s.gateway.CountOverdueOccurrences(ctx, scope, propertyID, rental.PaymentID, today)
-	if err != nil {
-		return RentalView{}, fmt.Errorf("count overdue occurrences: %w", err)
-	}
-	progress := RentalProgress{PaidMonths: paid, OverdueMonths: nilIfZero(overdue)}
+	progress := RentalProgress{PaidMonths: counts.PaidCount, OverdueMonths: nilIfZero(counts.OverdueCount)}
 	if rental.PlannedEndDate != nil {
 		total := domain.CountPaymentDays(rental.StartDate, *rental.PlannedEndDate, state.PaymentDay)
 		progress.TotalMonths = &total

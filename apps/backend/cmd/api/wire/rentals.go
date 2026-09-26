@@ -331,6 +331,27 @@ func (g *rentPaymentGateway) CountOverdueOccurrences(
 	return int(count), nil
 }
 
+// CountProgressByPayments reads the listed payments' progress counters in
+// one batched query (#845): the store's GROUP BY answers one row per rule
+// — a payment without operations is absent from the rows, the returned map
+// defaults its zeros on the lookup.
+func (g *rentPaymentGateway) CountProgressByPayments(
+	ctx context.Context, scope, propertyID uuid.UUID, paymentIDs []uuid.UUID, today time.Time,
+) (map[uuid.UUID]rentalsapp.ProgressCounts, error) {
+	counts, err := g.operations.CountPaidAndOverdueByPaymentIDs(ctx, scope, propertyID, paymentIDs, today)
+	if err != nil {
+		return nil, err
+	}
+	progress := make(map[uuid.UUID]rentalsapp.ProgressCounts, len(counts))
+	for _, c := range counts {
+		progress[c.PaymentID] = rentalsapp.ProgressCounts{
+			PaidCount:    int(c.PaidCount),
+			OverdueCount: int(c.OverdueCount),
+		}
+	}
+	return progress, nil
+}
+
 // SummarizePaidOperations totals the property's paid operations with the
 // operation date inside [from, until] — of any payment and manual ones.
 func (g *rentPaymentGateway) SummarizePaidOperations(

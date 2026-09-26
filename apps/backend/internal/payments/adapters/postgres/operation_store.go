@@ -194,6 +194,38 @@ func (s *OperationStore) CountOverdueOperationsByPayment(
 	return count, nil
 }
 
+// CountPaidAndOverdueByPaymentIDs reads the listed rules' progress counters
+// in one batched query (#845: the rentals list progress) — one GROUP BY
+// where the per-rule pair took two queries. A rule with no matching
+// operations is absent from the rows — the consumer defaults its zeros.
+// The query counts in SQL — the counts never ride a paginated listing; the
+// empty id list never reaches it.
+func (s *OperationStore) CountPaidAndOverdueByPaymentIDs(
+	ctx context.Context, scope, propertyID uuid.UUID, paymentIDs []uuid.UUID, today time.Time,
+) ([]application.PaidOverdueCount, error) {
+	counts := make([]application.PaidOverdueCount, 0, len(paymentIDs))
+	if len(paymentIDs) == 0 {
+		return counts, nil
+	}
+	rows, err := s.q().CountPaidAndOverdueByPaymentIDs(ctx, postgres.CountPaidAndOverdueByPaymentIDsParams{
+		Owner:      pgconv.UUIDToPgtype(scope),
+		Property:   pgconv.UUIDToPgtype(propertyID),
+		PaymentIds: pgconv.UUIDSliceToPgtype(paymentIDs),
+		Today:      pgconv.DateToPgtype(today),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("count paid and overdue of %d payments: %w", len(paymentIDs), err)
+	}
+	for _, row := range rows {
+		counts = append(counts, application.PaidOverdueCount{
+			PaymentID:    pgconv.UUIDFromPgtype(row.PaymentID),
+			PaidCount:    row.PaidCount,
+			OverdueCount: row.OverdueCount,
+		})
+	}
+	return counts, nil
+}
+
 // ListGlobal returns one page of the actor's visible paid operations — the
 // merged feed (ticket #540); the visibility predicate and the archive cut
 // are the query's. The bounds re-check the service applied

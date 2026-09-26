@@ -115,6 +115,15 @@ func (g *fakeSeamGateway) CountOverdueOccurrences(
 	return 0, nil
 }
 
+// CountProgressByPayments answers the batched list read (#845): the double
+// seeds no operations rows, so every payment's counters are the defaults —
+// the empty map's zero lookups.
+func (g *fakeSeamGateway) CountProgressByPayments(
+	context.Context, uuid.UUID, uuid.UUID, []uuid.UUID, time.Time,
+) (map[uuid.UUID]rentalsapp.ProgressCounts, error) {
+	return nil, nil
+}
+
 func (g *fakeSeamGateway) SummarizePaidOperations(
 	context.Context, uuid.UUID, uuid.UUID, time.Time, time.Time, time.Time,
 ) (rentalsapp.PaymentsTotals, error) {
