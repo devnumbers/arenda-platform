@@ -22,11 +22,10 @@ const searchNoteClass = 'text-base leading-[18px] text-content-secondary';
 const MUTED = skeletonBlockClass('muted');
 
 /**
- * Состояния экрана «Контакты объекта» (#508): скелет загрузки, ошибка с
- * действием, пустой список с иллюстрацией (1527:74479) и поисковые
- * подсказки (1527:74813/74825).
+ * Транзитный скелетон под поисковой выдачей книги (плоские белые строки
+ * без групп): виден только в гонке «холодный вход + мгновенный ввод» —
+ * выдача книги ещё едет, а поиск уже начат.
  */
-
 export function ContactsSkeleton({ className }: { readonly className?: string }): JSX.Element {
   return (
     <section className={cn('mx-6 rounded-card bg-surface-muted px-6 py-6', className)} aria-hidden>
@@ -149,7 +148,11 @@ export function ContactFormSkeleton(): JSX.Element {
         <Skeleton className="h-14 w-full rounded-button" />
       </section>
 
-      <SkeletonFormField labelWidth="w-16" />
+      {/* «Заметка» — Textarea min-h-92 rounded-button (паритет §7). */}
+      <section className="flex flex-col gap-2">
+        <Skeleton className="h-[18px] w-16" />
+        <Skeleton className="h-[92px] w-full rounded-button" />
+      </section>
     </div>
   );
 }
