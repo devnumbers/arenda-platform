@@ -30,7 +30,6 @@ import {
   ChipButton,
   IconButton,
   PageContent,
-  Skeleton,
   StepsChip,
   StickyBottomBar,
   Textarea,
@@ -39,6 +38,7 @@ import {
 } from '@/shared/ui/design';
 import { MoneyField, PickerTriggerBox, WizardBottomBar } from './wizard-chrome';
 import { RentalSummaryContent } from './rental-summary-content';
+import { RentalSummarySkeleton } from './rental-skeletons';
 
 /**
  * Поток мастера «Завершение аренды» (#534, клиентское состояние на одном
@@ -348,13 +348,7 @@ export function RentalCompleteFlow({
                 </div>
               </div>
 
-              {summaryQuery.isPending && (
-                <div className="flex flex-col gap-4 px-6 pt-6">
-                  <Skeleton className="h-14 w-full" />
-                  <Skeleton className="h-14 w-full" />
-                  <Skeleton className="h-14 w-full" />
-                </div>
-              )}
+              {summaryQuery.isPending && <RentalSummarySkeleton />}
               {summaryQuery.isError && (
                 <div className="flex flex-col items-center gap-4 px-6 pt-6">
                   <p className="text-center text-base leading-[18px] text-content-secondary">

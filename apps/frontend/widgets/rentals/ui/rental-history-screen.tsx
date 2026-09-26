@@ -25,10 +25,10 @@ import {
   IconButton,
   InfiniteQueryTail,
   PageContent,
-  Skeleton,
   TopNav,
   TopNavTitle,
 } from '@/shared/ui/design';
+import { RentalHistoryFeedSkeleton } from './rental-skeletons';
 
 /**
  * «История операций» завершённой аренды (#535, Figma 1302:52209):
@@ -86,12 +86,8 @@ export function RentalHistoryScreen({
 
       <PageContent>
         <div className="flex flex-col gap-2">
-          {rentalsQuery.isPending && (
-            <div className="flex flex-col gap-4 pt-6">
-              <Skeleton className="h-14 w-full" />
-              <Skeleton className="h-14 w-full" />
-              <Skeleton className="h-14 w-full" />
-            </div>
+          {(rentalsQuery.isPending || historyQuery.isPending) && (
+            <RentalHistoryFeedSkeleton />
           )}
 
           {(rentalsQuery.isError || historyQuery.isError) && (
@@ -112,7 +108,10 @@ export function RentalHistoryScreen({
             </div>
           )}
 
-          {!rentalsQuery.isPending && !rentalsQuery.isError && !historyQuery.isError && (
+          {!rentalsQuery.isPending &&
+            !rentalsQuery.isError &&
+            !historyQuery.isPending &&
+            !historyQuery.isError && (
             <>
               {groups.length === 0 ? (
                 <EmptyState

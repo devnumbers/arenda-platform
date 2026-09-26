@@ -332,6 +332,50 @@ export function RentalExtendSkeleton(): JSX.Element {
   );
 }
 
+/** Скелетон ленты «Истории операций» завершённой аренды (#535): чип
+ * сортировки (h-11) и группы по датам — заголовок H2 и строки канона с
+ * порядковым номером (subtitle) и суммой (value), как HistoryRow; общий
+ * для ожидания аренды и ожидания ленты. */
+export function RentalHistoryFeedSkeleton(): JSX.Element {
+  const widths = skeletonRowWidths(4);
+  return (
+    <div aria-hidden className="flex flex-col">
+      <div className="px-6 pb-2">
+        <Skeleton className="h-11 w-32 rounded-pill" />
+      </div>
+      {Array.from({ length: 2 }, (_, group) => (
+        <section key={group} className="flex flex-col">
+          <div className="px-6">
+            <Skeleton className="h-6 w-24" />
+          </div>
+          <div className="flex flex-col">
+            {widths.slice(group * 2, group * 2 + 2).map((width, index) => (
+              <SkeletonListRow key={index} subtitle value widths={width} className="px-3 py-3" />
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+/** Скелетон шага подтверждения мастера завершения (#534): герой «Завершить
+ * аренду?» — ключ 96, заголовок H1 и две строки описания (обёртка шага:
+ * зазор 32, боковые 48). Панель «Отменить / Продолжить» появляется с
+ * формой. */
+export function RentalCompleteConfirmSkeleton(): JSX.Element {
+  return (
+    <div aria-hidden className="flex flex-col items-center gap-8 px-12 pt-6">
+      <Skeleton className="h-24 w-24" />
+      <div className="flex flex-col items-center gap-2">
+        <Skeleton className="h-6 w-44" />
+        <Skeleton className="h-[18px] w-3/4" />
+        <Skeleton className="h-[18px] w-1/2" />
+      </div>
+    </div>
+  );
+}
+
 /**
  * Скелетон шага 1 визарда создания аренды «Цена и число оплаты» (#607,
  * паритет — §7 DESIGN.md): каркас AmountDayStep — MoneyField «Арендная
