@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /* Единственный preflight — слоёный Tailwind v4 (снос HeroUI #901): без
-   безслойного normalize @heroui/styles revert-layer-хак не нужен —
+   безслойного normalize снесённого пакета revert-layer-хак не нужен —
    margin/padding-утилиты на голых <button> работают сами. */
 
 /* Шрифты приложения самохостятся из public/fonts — компиляция и рантайм не

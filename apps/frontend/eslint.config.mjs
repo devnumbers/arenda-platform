@@ -358,8 +358,8 @@ const eslintConfig = defineConfig([
 // Виджеты и страницы не знают о DTO: данные приходят им маплеными в
 // entity-модели из entities/features. Files-scoped правило перекрывает
 // базовое no-restricted-imports для этих слоёв, поэтому паттерны
-// rehype-raw/generated продублированы здесь (@heroui снят — пакет
-// снесён, тикет #901).
+// rehype-raw/generated продублированы здесь (граница снесённого
+// легаси-пакета снята, тикет #901).
   {
     files: ["widgets/**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}", "app/**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}"],
     rules: {
