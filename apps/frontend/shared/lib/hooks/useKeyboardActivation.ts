@@ -18,6 +18,12 @@ import type { KeyboardEvent } from 'react';
 export type KeyboardActivationEvent = {
   readonly key: string;
   readonly repeat: boolean;
+  /** Элемент, на котором случился keydown: у keydown это сфокусированный
+   * элемент. Равен currentTarget, когда фокус на самой строке; иначе
+   * keydown всплыл из вложенного сфокусированного элемента. */
+  readonly target: unknown;
+  /** Элемент-строка, на который навешан onKeyDown. */
+  readonly currentTarget: unknown;
   readonly preventDefault: () => void;
 };
 
@@ -48,6 +54,13 @@ export function createKeyboardActivation<E extends KeyboardActivationEvent>({
 
   const handleKeyDown = (event: E): void => {
     if (!interactive) {
+      return;
+    }
+    if (event.target !== event.currentTarget) {
+      // Keydown всплыл из вложенного сфокусированного элемента (например,
+      // звезда «Убрать из избранного» в /payments/favorites): активация —
+      // дело самого элемента, а preventDefault строки давил бы его
+      // нативный активационный click (#831).
       return;
     }
     if (event.key === 'Enter' || event.key === ' ') {
