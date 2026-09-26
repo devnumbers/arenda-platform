@@ -1,3 +1,6 @@
+/** Экраны «Платежей» и «Операций» — один виджет на оба раздела:
+ * Operations*-экраны живут здесь же (общий конверт платежей и операций),
+ * каталога widgets/operations нет. */
 export { PaymentsGlobalScreen } from './ui/payments-global-screen';
 export { PaymentFavoritesScreen } from './ui/payments-favorites-screen';
 export { PaymentOverdueGlobalScreen } from './ui/payment-overdue-global-screen';

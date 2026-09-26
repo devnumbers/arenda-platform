@@ -42,13 +42,19 @@ Data surfaces are judged not only on their loaded state but on the **transition*
 Mechanics: local stacks answer in tens of milliseconds — too fast to judge a skeleton honestly, so slow the API down and meter the shifts. Pitfalls verified live on #605 (2026-09-10):
 
 - **Never busy-wait inside a `page.route` handler** — it blocks the runner's event loop, so goto/timers/screenshots all stall until the wait is over and the "loading" frame is shot after data has already arrived. Delay with `page.waitForTimeout` inside the handler (there is no `setTimeout` in the JS sandbox, but Playwright's own timer works).
-- **Neutralize the service worker first**: the PWA `sw.js` intercepts navigations and its controlled fetches bypass `page.route` («route.continue: already handled»). Fix: `page.route('**/sw.js', r => r.fulfill({ body: '', contentType: 'application/javascript' }))` + unregister existing registrations, then reload.
+- **Neutralize the service worker first** — the PWA `sw.js` intercepts navigations and its controlled fetches bypass `page.route` («route.continue: already handled»), and an already-registered SW survives re-armed routes on a reused tab. The arm snippet below fulfills `sw.js` **and unregisters existing registrations** — run it on every freeze, not once per session; the next hard `goto` loads uncontrolled.
 - **Never `unroute` mid-flight** — requests parked in a removed handler hang forever. Release by time (release-at deadline inside the handler) and unroute only after the loaded screenshot.
 - **SPA navigation can be legitimately instant** (react-query `staleTime`), so shoot the loading frame on a cold hard `goto`, not an in-app click.
 
 ```js
-// Delay every API response (~4 s release deadline) for the transition under test:
+// Arm a freeze: fulfill sw.js AND unregister existing registrations — a
+// controlled SW's fetches bypass page.route and survive re-armed routes on
+// a reused tab. Then delay every API response (~4 s release deadline):
 await page.route('**/sw.js', (r) => r.fulfill({ body: '', contentType: 'application/javascript' }));
+await page.evaluate(async () => {
+  const regs = await navigator.serviceWorker.getRegistrations();
+  await Promise.all(regs.map((r) => r.unregister()));
+});
 const releaseAt = Date.now() + 4000;
 await page.route('**/api/**', async (route) => {
   const wait = releaseAt - Date.now();
@@ -71,7 +77,7 @@ Caveat: on a fast local stack a swap can land inside the platform's 500 ms `hadR
 
 The canonical text is `DESIGN.md` §14 «Чеклист приёмки страницы» — four sections (каркас / стабильность / данные / мобильный UX) with items anchored to §1–§13; this section is the operational wrapper. It gates every audit ticket of map #862 («Фронт в порядке»): each page in the ticket's scope walks the checklist, and the ticket fixes its P0/P1 findings on the spot («карта несёт исполнение»). Other frontend tickets: the P3 tier plus «Loading stability» already cover most of it — pulling in the full checklist is welcome, not mandatory.
 
-Run it **per page**: Каркас gets a verdict on each of the three widths (Adaptive widths below; defaults 375 / 768 / 1440, the Figma mockup widths override), Стабильность and Данные once per page, Мобильный UX on the mobile width:
+Run it **per page**: Каркас gets a verdict on each sweep width (Adaptive widths below; default sweep 375 / 768 / 1100 / 1440, the Figma mockup widths override), Стабильность and Данные once per page, Мобильный UX on the mobile width:
 
 - **Каркас** — judged on each width against the mockup of its tier: hub anatomy (`mobileWings` + `HubTitle` + `HubCollapseAnchor` compact + search pill, where the mockup has one) vs subscreen anatomy (`SubScreenShell`); column cap 560/24; on desktop nothing permanently overlaps the sidebar or pills — the PC chrome is permanent (an open fullscreen surface keeps it alive: its header draws the wings, sidebar and pills stay visible and clickable above it; a bottom bar's sheet sits in the 560 column and never mutes the pills — решение 25.09, правка #561); bottom chrome (TabBar / StickyBottomBar / safe-area) conflict-free — a mounted bar mutes the TabBar on mobile/tablet (§14).
 - **Стабильность** — one verdict per page; the evidence comes from the «Loading stability» group above (screenshot pair per transition): header never jumps, content never shifts on data arrival, skeleton parity (#604) including composition parity for pinned feeds, and the segment's loading strategy matches DESIGN.md §7 — `loading.tsx` with the page archetype where the route renders the header, in-component skeleton where the screen assembles the header itself.
@@ -141,7 +147,7 @@ async (page) => {
 
 **Lane B — widths < 500 (mobile): viewport emulation in a throwaway tab.** A real window physically cannot go there, so emulate: open a fresh tab (`browser_tabs` action `new`), call `browser_resize` with the mobile size, run the checks, close the tab. `browser_resize` calls `page.setViewportSize()`, which flips a tab into permanent viewport emulation — the site re-lays-out but the window keeps its old size, and the tab never returns to window-sized rendering (`Emulation.clearDeviceMetricsOverride` does not help). That is why this lane never touches the walkthrough's main tab: a contaminated main tab keeps failing after the sweep is over. CSS, media queries and screenshots are honest under emulation — mark the check as emulated in the report.
 
-Default sweep: 375 (lane B) / 768 / 1440 (lane A) — mobile / tablet / desktop; exact widths from the ticket or its Figma mockup override the defaults. Trust the snippet's returned `viewport` (lane A) or `browser_resize`'s applied size (lane B), never an assumption, and capture a screenshot per width (`.playwright-mcp/artifacts/<ticket>-NN-w375.png`) — each width carries its own P3 verdict.
+Default sweep: 375 (lane B) / 768 / 1440 (lane A) — mobile / tablet / desktop; on audit tickets add **1100** (lane A): arbitrary breakpoints in code (`min-[1200px]`, found on #870) branch inside the desktop tier, so a layout hack can sleep at 1440 and fire at 1100 — the three Figma tiers alone do not cover every branch. Exact widths from the ticket or its Figma mockup override the defaults. Judge widths by `window.innerWidth` (the snippet's returned `viewport`, lane A) or `browser_resize`'s applied size (lane B), never by the OS window size you set — docked DevTools keeps the viewport hundreds of px narrower than the window (#870: "1440 window" measured 1150 viewport). Capture a screenshot per width (`.playwright-mcp/artifacts/<ticket>-NN-w375.png`) — each width carries its own P3 verdict.
 
 ## Mode: headed run
 
