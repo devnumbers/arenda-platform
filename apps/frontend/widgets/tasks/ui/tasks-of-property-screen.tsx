@@ -39,7 +39,6 @@ import {
   MenuTrigger,
   PageContent,
   PickerMenu,
-  Skeleton,
   StickyBottomBar,
   TopNav,
   TopNavTitle,
@@ -47,6 +46,7 @@ import {
 import { TaskRow } from '@/features/tasks';
 import { TaskSectionCard } from './task-section-card';
 import { TasksDeleteCompletedDialog } from './tasks-delete-completed-dialog';
+import { TasksOfPropertySkeleton } from './tasks-skeletons';
 import { taskSectionTone } from '@/features/tasks';
 import { sectionKey } from './tasks-section-utils';
 import { SortChip, sortPickerGroups } from './tasks-sort';
@@ -162,41 +162,41 @@ export function TasksOfPropertyScreen({
 
       <PageContent>
         <div className="flex flex-col gap-6 pb-6">
-          <div className="flex items-center justify-between pr-3.5 pl-6">
-            <PickerMenu title="Сортировать" groups={sortPickerGroups(sort, changeSort)}>
-              <SortChip sort={sort} data-testid="tasks-sort-chip" />
-            </PickerMenu>
-            {canMutate && (active.length > 0 || completedTotal > 0) && (
-              <Menu>
-                <MenuTrigger asChild>
-                  <IconButton icon={<VerticalMenu />} label="Действия со списком" />
-                </MenuTrigger>
-                <MenuContent>
-                  {active.length > 0 && (
-                    <MenuItem
-                      icon={<Checkmark />}
-                      disabled={completeAll.isPending}
-                      onSelect={() => completeAll.mutate(active.map((task) => task.id))}
-                    >
-                      Отметить все задачи
-                    </MenuItem>
-                  )}
-                  {completedTotal > 0 && (
-                    <MenuItem icon={<TrashBin />} onSelect={() => setDeleteOpen(true)}>
-                      Удалить выполненные задачи
-                    </MenuItem>
-                  )}
-                </MenuContent>
-              </Menu>
-            )}
-          </div>
+          {!showEmpty && (
+            <div className="flex items-center justify-between pr-3.5 pl-6">
+              <PickerMenu title="Сортировать" groups={sortPickerGroups(sort, changeSort)}>
+                <SortChip sort={sort} data-testid="tasks-sort-chip" />
+              </PickerMenu>
+              {canMutate && (active.length > 0 || completedTotal > 0) && (
+                <Menu>
+                  <MenuTrigger asChild>
+                    <IconButton icon={<VerticalMenu />} label="Действия со списком" />
+                  </MenuTrigger>
+                  <MenuContent>
+                    {active.length > 0 && (
+                      <MenuItem
+                        icon={<Checkmark />}
+                        disabled={completeAll.isPending}
+                        onSelect={() => completeAll.mutate(active.map((task) => task.id))}
+                      >
+                        Отметить все задачи
+                      </MenuItem>
+                    )}
+                    {completedTotal > 0 && (
+                      <MenuItem icon={<TrashBin />} onSelect={() => setDeleteOpen(true)}>
+                        Удалить выполненные задачи
+                      </MenuItem>
+                    )}
+                  </MenuContent>
+                </Menu>
+              )}
+            </div>
+          )}
 
           {activeQuery.isPending || completedQuery.isPending ? (
-            <>
-              <TasksSkeleton />
-              <TasksSkeleton />
-              <TasksSkeleton />
-            </>
+            // Паритет §7: та же композиция секций, что у глобальной ленты,
+            // строки без строки объекта (#499); чипы выше — вне фазы загрузки.
+            <TasksOfPropertySkeleton />
           ) : activeQuery.isError ? (
             <TasksStateCard
               title="Не удалось загрузить задачи"
@@ -321,20 +321,6 @@ export function TasksStateCard({
         <Button size="small" variant="secondary" onClick={onRetry}>
           Повторить
         </Button>
-      </div>
-    </section>
-  );
-}
-
-/** Скелет секции на время загрузки — серая карточка с пульсирующими строками.
- * Общая с экраном правки задачи (#502). */
-export function TasksSkeleton(): JSX.Element {
-  return (
-    <section className="mx-6 rounded-card bg-surface-muted px-6 py-6" aria-hidden>
-      <Skeleton className="mb-4 h-6 w-40 bg-surface-muted-hover" />
-      <div className="flex flex-col gap-4">
-        <Skeleton className="h-11 bg-surface-muted-hover" />
-        <Skeleton className="h-11 w-4/5 bg-surface-muted-hover" />
       </div>
     </section>
   );

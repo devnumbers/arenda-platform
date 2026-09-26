@@ -149,16 +149,17 @@ function ObjectRowButton({
   );
 }
 
-/** Скелет строк объектов на время загрузки списка. */
+/** Скелет строк объектов на время загрузки списка — каркас ObjectRowButton
+ * (аватар 44, заголовок 16/18 + подпись 14/16, зазор 12, py-3 строки). */
 function ObjectRowsSkeleton(): JSX.Element {
   return (
-    <div aria-hidden className="flex flex-col gap-6 py-6">
+    <div aria-hidden className="flex flex-col py-3">
       {[0, 1, 2, 3].map((row) => (
-        <div key={row} className="flex items-center gap-2">
-          <Skeleton className="h-12 w-12 rounded-full" />
-          <div className="flex flex-1 flex-col gap-2">
-            <Skeleton className="h-4 w-2/5" />
-            <Skeleton className="h-3.5 w-3/5" />
+        <div key={row} className="flex items-center gap-3 py-3">
+          <Skeleton className="h-11 w-11 shrink-0 rounded-full" />
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <Skeleton className="h-[18px] w-2/5" />
+            <Skeleton className="h-4 w-3/5" />
           </div>
         </div>
       ))}
