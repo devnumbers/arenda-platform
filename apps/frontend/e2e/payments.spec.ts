@@ -109,35 +109,6 @@ test.describe('экран «Платежи объекта»', () => {
     await expect(page.getByText(/\d+ (день|дня|дней)/).first()).toBeVisible();
   });
 
-  // UI поиска на экране не реализован (кнопки «Поиск» нет в компонентах,
-  // title-search.ts — мёртвый экспорт): #491. Перевести в test, когда поиск
-  // появится.
-  test.fixme('поиск фильтрует каждую секцию независимо', async ({ page, seededUser }) => {
-    await openCabinetWithSeededSession(page, seededUser);
-    await page.goto(APARTMENT_PAYMENTS_URL);
-    // Ищем оверлейное правило: параллельные сценарии его не трогают.
-    await page.getByRole('button', { name: 'Поиск' }).click();
-    await page.getByRole('searchbox', { name: 'Поиск по названиям' }).fill('клининг');
-
-    await expect(page.getByTestId('section-payments').getByText('Клининг холла')).toBeVisible();
-    await expect(page.getByTestId('section-payments').getByText('₽')).toHaveCount(1);
-    await expect(page.getByTestId('section-auto').getByText('₽')).toHaveCount(0);
-    await expect(page.getByTestId('section-overdue').getByText('₽')).toHaveCount(0);
-  });
-
-  test.fixme('поиск без совпадений — «Ничего не нашлось» в каждой секции', async ({
-    page,
-    seededUser,
-  }) => {
-    await openCabinetWithSeededSession(page, seededUser);
-    await page.goto(APARTMENT_PAYMENTS_URL);
-
-    await page.getByRole('button', { name: 'Поиск' }).click();
-    await page.getByRole('searchbox', { name: 'Поиск по названиям' }).fill('ипотека');
-
-    await expect(page.getByText('Ничего не нашлось').first()).toBeVisible();
-  });
-
   test('пустые состояния секций на объекте без платежей; скриншот', async ({
     page,
     seededUser,
