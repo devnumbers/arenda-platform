@@ -350,11 +350,6 @@ const eslintConfig = defineConfig([
               message:
                 "The generated API client is imported only inside shared/api — import DTO types from @/shared/api/dto instead.",
             },
-            {
-              group: ["@heroui/styles", "@heroui/styles/*"],
-              message:
-                "@heroui/styles (BEM classes) must not be imported in React components — use @heroui/react components (HeroUI v3 boundary).",
-            },
           ],
         },
       ],
@@ -363,7 +358,8 @@ const eslintConfig = defineConfig([
 // Виджеты и страницы не знают о DTO: данные приходят им маплеными в
 // entity-модели из entities/features. Files-scoped правило перекрывает
 // базовое no-restricted-imports для этих слоёв, поэтому паттерны
-// rehype-raw/generated/@heroui продублированы здесь.
+// rehype-raw/generated продублированы здесь (@heroui снят — пакет
+// снесён, тикет #901).
   {
     files: ["widgets/**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}", "app/**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}"],
     rules: {
@@ -381,11 +377,6 @@ const eslintConfig = defineConfig([
               group: ["@/shared/api/generated", "@/shared/api/generated.*", "**/shared/api/generated*"],
               message:
                 "The generated API client is imported only inside shared/api — import DTO types from @/shared/api/dto instead.",
-            },
-            {
-              group: ["@heroui/styles", "@heroui/styles/*"],
-              message:
-                "@heroui/styles (BEM classes) must not be imported in React components — use @heroui/react components (HeroUI v3 boundary).",
             },
           ],
         },
