@@ -1,24 +1,28 @@
 import Image from "next/image";
 import { Reveal } from "@/components/reveal";
-import { TestimonialsSlides } from "@/components/sections/testimonials-slides";
+import { TestimonialsReviews, TestimonialsSlides } from "@/components/sections/testimonials-slides";
 import avatar from "@/assets/sections/testimonial-avatar.webp";
 
-// «Опыт пользователей» — макет 2814-979: H2 56 по центру; строка из двух
-// половин (шаг 56): цитата 36/40 Medium + автор (аватар 64, имя 20/24
-// Medium, подпись 18/22 gray-2, шаги 32/16/8) и лента фото-слайдов.
+// «Опыт пользователей» — макеты 2814-979 (десктоп: H2 56, колонка цитаты
+// 36/40 + автор под ней (аватар 64), лента слайдов, шаг 76) и 2871:5925 /
+// 2837:152224 (планшет/мобайл: карусель отзыв-карточек с цитатами).
 export function Testimonials() {
   return (
-    <section id="testimonials" className="mt-20 desk:mt-[156px]">
-      <div className="mx-auto w-full max-w-[1000px] px-5 desk:px-10">
+    <section id="testimonials" className="mt-24 desk:mt-[156px]">
+      <div className="mx-auto w-full max-w-[1048px] px-6 desk:max-w-[1000px] desk:px-0">
         <Reveal>
           <h2 className="text-center text-[28px] font-semibold leading-8 desk:text-h2 desk:leading-[60px]">
             Опыт пользователей
           </h2>
         </Reveal>
         <Reveal delay={100}>
-          <div className="mt-14 flex flex-col gap-10 desk:flex-row desk:gap-14">
-            <div className="flex shrink-0 flex-col justify-between gap-8 desk:w-[452px] desk:self-stretch">
-              <blockquote className="text-xl font-medium leading-6 desk:text-h3 desk:leading-10">
+          {/* Планшет/мобайл — карусель отзывов; десктоп — цитата + лента. */}
+          <div className="mt-8 desk:hidden">
+            <TestimonialsReviews />
+          </div>
+          <div className="mt-14 hidden flex-col gap-[76px] desk:flex desk:flex-row">
+            <div className="flex w-[452px] shrink-0 flex-col gap-8">
+              <blockquote className="text-h3 font-medium leading-10">
                 Приложение заменило мне заметки и Excel
               </blockquote>
               <div className="flex items-center gap-4">
