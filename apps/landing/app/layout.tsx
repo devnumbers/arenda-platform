@@ -6,6 +6,18 @@ export const metadata: Metadata = {
   title: "Рентли — сервис учёта аренды недвижимости",
   description:
     "Рентли — учёт аренды для собственников и небольшого арендного бизнеса: объекты, договоры и платежи в одном месте, напоминания об оплатах, совместный доступ и отчёты по итогам аренды.",
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    type: "website",
+    locale: "ru_RU",
+    url: "https://rentlee.ru/",
+    siteName: "Рентли",
+  },
+  twitter: {
+    card: "summary_large_image",
+  },
 };
 
 export const viewport: Viewport = {

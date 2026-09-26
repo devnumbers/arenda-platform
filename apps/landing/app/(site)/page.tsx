@@ -1,6 +1,7 @@
 // Главная лендинга — порядок секций по макету 2814-728. Хедер, футер
 // и маркер id="landing-root" приходят из (site)/layout.tsx.
 
+import { JsonLd } from "@/components/json-ld";
 import { Audience } from "@/components/sections/audience";
 import { Contact } from "@/components/sections/contact";
 import { Cta } from "@/components/sections/cta";
@@ -18,6 +19,7 @@ import { Testimonials } from "@/components/sections/testimonials";
 export default function LandingPage() {
   return (
     <>
+      <JsonLd />
       <Hero />
       <Showcase />
       <Rentals />

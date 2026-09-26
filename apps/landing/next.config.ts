@@ -20,6 +20,10 @@ const nextConfig: NextConfig = {
   output: "standalone",
   reactStrictMode: true,
   poweredByHeader: false,
+  images: {
+    // AVIF для картинок: меньше LCP-полезная нагрузка при том же качестве.
+    formats: ["image/avif", "image/webp"],
+  },
   // Dev-чек Origin (как во фронте): walkthrough-браузер ходит на 127.0.0.1.
   allowedDevOrigins: ["127.0.0.1"],
   async headers() {
