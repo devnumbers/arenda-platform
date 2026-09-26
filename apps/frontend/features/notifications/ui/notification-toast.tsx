@@ -7,10 +7,8 @@ import { Cancel } from '@/shared/assets/icons';
 import { formatTime } from '@/shared/lib/date-format';
 import { ROUTES } from '@/shared/config/routes';
 import { NotificationCategoryIcon } from '@/entities/notification';
-import type { StreamFrame } from '@/features/notifications/api/stream-frame';
+import type { NotificationCreatedFrame } from '@/features/notifications/api/stream-frame';
 import styles from '@/shared/ui/toast/ToastProvider.module.css';
-
-export type NotificationCreatedFrame = Extract<StreamFrame, { kind: 'created' }>;
 
 /** Автозакрытие тоста уведомления: читается дольше канонных 4с
  * подтверждений; пауза при наведении канона остаётся. */
