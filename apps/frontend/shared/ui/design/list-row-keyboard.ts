@@ -1,5 +1,5 @@
 import { createKeyboardActivation } from '@/shared/lib/hooks/useKeyboardActivation';
-import { runListboxAction } from '@/shared/ui/select/listbox-keyboard';
+import { runListboxAction } from './listbox-keyboard';
 
 /**
  * Клавиатура ListRow одним швом (дизайн-слой, рядом с list-row.tsx):

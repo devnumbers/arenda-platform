@@ -1,10 +1,10 @@
 'use client';
 
 import type {JSX, ReactNode} from 'react';
+import NextLink from 'next/link';
 import {BadgeDanger, BadgeGood, BadgeInfo, BadgeWarning, Sync} from '@/shared/assets/icons';
 import type {NotificationAction} from '@/shared/lib/notifications/types';
-import {Button} from '@/shared/ui/button';
-import {LinkButton} from '@/shared/ui/link-button';
+import {buttonVariants, Button} from '@/shared/ui/design';
 import styles from './ToastProvider.module.css';
 
 export type ToastVariant =
@@ -46,6 +46,10 @@ function VariantIcon({
     }
 }
 
+/** Действие тоста на каноне (легаси Button/LinkButton снесены, #901):
+ * onPress — канонная кнопка Clear, href — ссылка-кнопка
+ * NextLink+buttonVariants (next/link не дружит с Radix Slot — прецедент
+ * канонного button.tsx); оба закрывают тост по клику. */
 function ToastAction({
                          action,
                          closeToast,
@@ -71,15 +75,13 @@ function ToastAction({
 
     if (action.href) {
         return (
-            <LinkButton
+            <NextLink
                 href={action.href}
-                variant='primary'
-                size="small"
-                className={styles.action}
+                className={buttonVariants({variant: 'primary', size: 'small', className: styles.action})}
                 onClick={() => closeToast?.()}
             >
                 {action.label}
-            </LinkButton>
+            </NextLink>
         );
     }
 

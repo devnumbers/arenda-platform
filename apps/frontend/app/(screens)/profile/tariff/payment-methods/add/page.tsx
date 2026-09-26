@@ -4,7 +4,7 @@ import { useCallback, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { notify } from '@/shared/lib/notifications';
 import { SubScreenShell } from '@/shared/ui/design';
-import { Button } from '@/shared/ui/button';
+import { Button } from '@/shared/ui/design';
 import { useAddPaymentMethod } from '@/features/billing';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
@@ -54,16 +54,11 @@ export default function AddPaymentMethodPage(): JSX.Element {
               </Button>
             </div>
           ) : add.isPending ? (
-            <Button loading fullWidth size="large" variant="primary">
+            <Button loading className="w-full">
               Подключаем банковскую форму…
             </Button>
           ) : (
-            <Button
-              onClick={startAdd}
-              fullWidth
-              size="large"
-              variant="primary"
-            >
+            <Button onClick={startAdd} className="w-full">
               Подключить банковскую форму
             </Button>
           )}
