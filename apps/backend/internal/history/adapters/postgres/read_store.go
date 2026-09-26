@@ -2,7 +2,7 @@ package postgres
 
 // The action journal's reading store (карта #704, тикет #708, ADR 0061 §7):
 // the feed page, the filter-sheet participants and objects. The visibility
-// predicate lives in the SQL (actor_can_read_history, 000137) — rows outside
+// predicate lives in the SQL (actor_can_read_property, 000142) — rows outside
 // the reader's scope never leave the database; this adapter only marshals
 // the jsonb columns back and composes the participants' display names by the
 // access canon (DisplayNameOf: «Имя Фамилия», иначе маскированный телефон —

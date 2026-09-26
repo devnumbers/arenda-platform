@@ -49,7 +49,7 @@ func TestHistoryPerfProbe(t *testing.T) {
 		t.Fatalf("pick scope: %v", err)
 	}
 
-	// Участник одного объекта из сорока: цена предиката actor_can_read_history
+	// Участник одного объекта из сорока: цена предиката actor_can_read_property
 	// для не-владельца — отсекает 39/40 объектов сида.
 	member := uuid.Must(uuid.NewV7())
 	if _, err := pool.Exec(ctx,

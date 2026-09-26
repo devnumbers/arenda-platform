@@ -2,7 +2,7 @@
 // §7): the keyset page with the contract's 400/privacy-404, the filter-sheet
 // options, and the sanitized search input — the always-OR predicate itself
 // (prefix-FTS OR ILIKE-trgm, research #839) lives in the store's SQL. The
-// visibility predicate lives there too (actor_can_read_history, 000137) —
+// visibility predicate lives there too (actor_can_read_property, 000142) —
 // rows outside the reader's scope never leave the database; this service
 // proves the property_ids scope before the store is touched so one invisible
 // id hides the whole request (the privacy 404, the tasks feed's #547
