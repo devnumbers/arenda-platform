@@ -67,6 +67,7 @@ export {
   type PaymentHistoryGroup,
 } from './lib/operations-history';
 export { useHistoryOrder } from './lib/use-history-order';
+export { HistoryOrderChip } from './ui/history-order-chip';
 export {
   operationsMonthOf,
   operationsMonthRange,
