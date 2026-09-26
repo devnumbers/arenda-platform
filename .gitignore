@@ -10,7 +10,6 @@
 !.env.prod.example
 *.exe
 node_modules/
-apps/landing/dist
 *.log
 .tmp
 # Одноразовые экспорты макетов из Figma (скретч сессий)

@@ -89,9 +89,13 @@ services:
   landing:
     image: ${LANDING_IMAGE}
     restart: unless-stopped
-    mem_limit: 128m
+    mem_limit: 256m
     cpus: 0.25
     logging: *default-logging
+    environment:
+      # Tariff-aware хедер лендинга читает /me напрямую по compose-сети
+      # (ADR 0063); compose-уровень — дрейф-чек ENV_FILE не задевается.
+      BACKEND_URL: http://backend:8080
     ports:
       - "127.0.0.1:13002:8080"
     healthcheck:

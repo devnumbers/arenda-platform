@@ -37,10 +37,11 @@
 	}
 
 	# Лендинг — явное исключение: корень, юрстраницы, robots/sitemap,
-	# Vite-бандлы и шрифты. handle, НЕ handle_path: nginx-контейнер лендинга
-	# ждёт полный путь (/assets/index-<hash>.js). Форма префиксов — только
+	# статика Next (/_next/*: бандлы, изображения оптимизатора) и шрифты.
+	# handle, НЕ handle_path: контейнер лендинга (Next standalone, ADR 0063)
+	# ждёт полный путь (/_next/static/...). Форма префиксов — только
 	# /prefix/* (со слешем перед *), не /prefix*.
-	@landing path / /privacy /terms /robots.txt /sitemap.xml /assets/* /landing-fonts/*
+	@landing path / /privacy /terms /robots.txt /sitemap.xml /_next/* /fonts/* /icon.png
 	handle @landing {
 		reverse_proxy 127.0.0.1:{args[1]}
 	}

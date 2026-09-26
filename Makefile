@@ -127,7 +127,7 @@ DEFAULT_GOAL := help
 	frontend-install frontend-dev frontend-build frontend-test frontend-api-check frontend-e2e \
 	frontend-e2e-headed frontend-e2e-live-up frontend-e2e-live-down \
 	admin-install admin-dev admin-build admin-typecheck admin-test \
-	landing-install landing-dev landing-build \
+	landing-install landing-dev landing-build landing-lint landing-typecheck \
 	test backend-test backend-test-integration tools-test \
 	attributes-gen attributes-check \
 	categories-gen categories-check \
@@ -349,11 +349,17 @@ admin-typecheck: ## Typecheck the admin (tsc)
 landing-install: ## Install landing dependencies (npm install)
 	cd $(LANDING_DIR) && npm install
 
-landing-dev: ## Run the landing dev server (vite)
+landing-dev: ## Run the landing dev server (next dev)
 	cd $(LANDING_DIR) && npm run dev
 
-landing-build: ## Build the landing for production (vite build)
+landing-build: ## Build the landing for production (next build)
 	cd $(LANDING_DIR) && npm run build
+
+landing-lint: ## Lint the landing (eslint)
+	cd $(LANDING_DIR) && npm run lint
+
+landing-typecheck: ## Typecheck the landing (tsc)
+	cd $(LANDING_DIR) && npm run typecheck
 
 ##@ Tests
 # backend-test runs unit tests with -race (mandatory per docs/testing-strategy.md).
@@ -656,8 +662,9 @@ trivy-fs: ## Scan the repo filesystem with trivy (vuln, HIGH/CRITICAL); .worktre
 # separate decision once the per-package knip.json configs stabilize
 # (docs/agents/tooling.md). Monorepo mode requires a root package.json the
 # repo deliberately doesn't have, so each package runs standalone; apps/landing
-# is out of scope — a Figma Make export whose template ui-library makes the
-# dead-code signal non-actionable. Self-sufficient like tools-test: installs
+# is out of scope — маленький маркетинговый одностраничник, где сигнал
+# dead-code не окупает настройку (решение карты #888, тикет T1).
+# Self-sufficient like tools-test: installs
 # node_modules when missing (knip resolves imports through them).
 knip: ## Print the advisory dead-code report (knip; not a gate)
 	@set -e; status=0; for dir in $(KNIP_DIRS); do \

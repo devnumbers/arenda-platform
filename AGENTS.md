@@ -15,7 +15,7 @@ Arenda Platform is a fintech platform for rental-property finance management for
 - Backend: `apps/backend` — a Go module linked by root `go.work`; local infra runs through `apps/backend/docker-compose.local.yml`, the backend itself on the host with Go.
 - Frontend: `apps/frontend` — a Next.js React application.
 - Admin: `apps/admin` — a Vite + React SPA on react-admin 5 and MUI 7, a separate stack from the frontend.
-- Landing: `apps/landing` — a standalone Vite + React SPA served by nginx as the public site at `/`.
+- Landing: `apps/landing` — a standalone Next.js application (SSR/SSG, ADR 0063) serving the public site at `/`.
 - Product docs: `docs/`; domain glossary: `CONTEXT-MAP.md` (index) + per-context `CONTEXT.md` under `apps/backend/internal/<context>/`; architecture decisions: `docs/adr/`; agent workflow registry: `docs/agents/`.
 - Stage/prod deploy: GitHub Actions → GHCR → SSH, nothing built or hand-edited on the server (`docs/deployment.md`, `docs/adr/0024`, `docs/adr/0045`); observability — the Uptrace stack in devnumbers/observability (`docs/deployment.md`, section "Observability").
 
