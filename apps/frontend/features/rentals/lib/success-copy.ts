@@ -1,8 +1,8 @@
 import { fullMonthsBetween, type IsoDate } from '@/shared/lib/calendar';
 import { formatDottedDate } from '@/shared/lib/date-format';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
+import { monthsWord } from '@/shared/lib/months-word';
 import type { RentalPaymentDay } from '@/entities/rental';
-import { monthsWord } from './months-word';
 import { paymentDayPhrase } from './wizard-model';
 
 /**

@@ -1,8 +1,8 @@
 import { fullMonthsBetween, type IsoDate } from '@/shared/lib/calendar';
 import { formatDayMonthWithYear } from '@/shared/lib/date-format';
+import { monthsWord } from '@/shared/lib/months-word';
 import type { PaymentOperationOrder } from '@/shared/api/query-keys';
 import type { Rental } from '@/entities/rental';
-import { monthsWord } from './months-word';
 import { rentAmountPerMonth, type RentalTermsRow } from './rental-view';
 
 /**

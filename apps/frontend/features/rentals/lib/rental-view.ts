@@ -2,6 +2,7 @@ import type { IsoDate } from '@/shared/lib/calendar';
 import { fullMonthsBetween } from '@/shared/lib/calendar';
 import { formatDayMonth, formatDayMonthWithYear, formatOverdueDays } from '@/shared/lib/date-format';
 import { formatMoneyKopecks, ratioToPercent } from '@/shared/lib/format-money';
+import { monthsWord } from '@/shared/lib/months-word';
 import { pluralize } from '@/shared/lib/pluralize';
 import type {
   Rental,
@@ -9,7 +10,6 @@ import type {
   RentalProgress,
   RentalTenant,
 } from '@/entities/rental';
-import { monthsWord } from './months-word';
 import { paymentDayLabel, utilitiesLabel } from './wizard-model';
 
 /**
