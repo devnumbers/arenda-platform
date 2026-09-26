@@ -1,8 +1,7 @@
 'use client';
 
 import type {JSX, ReactNode} from 'react';
-import {Spinner} from '@heroui/react';
-import {BadgeDanger, BadgeGood, BadgeInfo, BadgeWarning} from '@/shared/assets/icons';
+import {BadgeDanger, BadgeGood, BadgeInfo, BadgeWarning, Sync} from '@/shared/assets/icons';
 import type {NotificationAction} from '@/shared/lib/notifications/types';
 import {Button} from '@/shared/ui/button';
 import {LinkButton} from '@/shared/ui/link-button';
@@ -39,7 +38,9 @@ function VariantIcon({
         case 'info':
             return <BadgeInfo aria-hidden/>;
         case 'loading':
-            return <Spinner color="current" size="sm"/>;
+            // Спиннер — канонная иконка Sync в спине (паттерн loading
+            // канонного Button): цвет наследует варианту тоста.
+            return <Sync className="h-6 w-6 animate-spin" aria-hidden/>;
         case 'default':
             return null;
     }

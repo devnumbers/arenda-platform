@@ -1,20 +1,8 @@
 @import "tailwindcss";
-@import "@heroui/styles";
 
-/* Ресет нормализации форм HeroUI (решение 2026-08-26): @heroui/styles
-   содержит БЕЗСЛОЙНЫЙ normalize (button,input,optgroup,select,textarea
-   {font-family:inherit;font-size:100%;line-height:1.15}), а безслойные
-   правила перебивают любые @layer utilities — кегли контролов дизайн-слоя
-   (text-sm/text-base) молча не применялись. Обёртка @layer{} невозможна
-   (пакет построен на @utility: «cannot be nested»), layer()-квалификатор
-   @import сборщик не сохраняет. revert-layer возвращает выбор значению из
-   слоёв Tailwind (utilities → base); виджеты HeroUI (class*=heroui)
-   нормализацию сохраняют. */
-:where(button, input, select, textarea):not([class*='heroui']) {
-    font-family: revert-layer;
-    font-size: revert-layer;
-    line-height: revert-layer;
-}
+/* Единственный preflight — слоёный Tailwind v4 (снос HeroUI #901): без
+   безслойного normalize @heroui/styles revert-layer-хак не нужен —
+   margin/padding-утилиты на голых <button> работают сами. */
 
 /* Шрифты приложения самохостятся из public/fonts — компиляция и рантайм не
    зависят от доступности Google Fonts (next/font/google качал шрифты на каждом
