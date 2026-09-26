@@ -33,7 +33,6 @@ export type {
 export { firstOccurrence, isDatePaused, nextOccurrenceAfter, nextOccurrencesAfter, occurrencesBetween } from './lib/occurrences';
 export { PAYMENT_REMINDER_OPTIONS, paymentReminderOptionLabel } from './lib/reminder-offsets';
 export { addDays, inclusiveDays } from '@/shared/lib/calendar';
-export { clientTodayIso } from './lib/client-today';
 export { formatDayMonth, formatDayMonthWithYear, formatOverdueDays } from '@/shared/lib/date-format';
 export { recurrenceLabel } from './lib/recurrence-label';
 export { PaymentRowButton, type PaymentRowButtonProps } from './ui/payment-row-button';

@@ -6,7 +6,8 @@ import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { buildReturnUrl, goBack } from '@/shared/lib/navigation';
 import { useSearchQueryState } from '@/shared/lib/hooks/useSearchQueryState';
-import { clientTodayIso, formatDayMonthWithYear } from '@/entities/payment';
+import { formatDayMonthWithYear } from '@/entities/payment';
+import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
   globalOperationsFiltersParams,
   useGlobalOperationsFilters,
@@ -61,7 +62,7 @@ export function OperationsGlobalSearchScreen(): JSX.Element {
     inputRef.current?.focus();
   }, []);
 
-  const today = clientTodayIso();
+  const today = dateToIsoLocal(new Date());
 
   const summaryQuery = useGlobalOperationsSummary(
     {

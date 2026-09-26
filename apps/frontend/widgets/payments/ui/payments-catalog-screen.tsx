@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
-import { clientTodayIso } from '@/entities/payment';
+import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
   usePayments,
   usePropertyOperationsPaged,
@@ -137,7 +137,7 @@ function OverdueList({
     order: 'asc',
   });
 
-  const today = clientTodayIso();
+  const today = dateToIsoLocal(new Date());
   const operations = overdueQuery.data ?? [];
 
   if (overdueQuery.isPending) {
@@ -202,7 +202,7 @@ function RulesList({
   // просроченных операций объекта (порция 50 — глубже не бейджим).
   const overdueQuery = usePropertyOverdueOperations(propertyId);
   const overduePaymentIds = overduePaymentIdsOf(overdueQuery.data ?? []);
-  const today = clientTodayIso();
+  const today = dateToIsoLocal(new Date());
 
   if (paymentsQuery.isPending) {
     return (

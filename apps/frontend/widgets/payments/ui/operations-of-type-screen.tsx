@@ -15,7 +15,8 @@ import {
   TopNav,
   TopNavTitle,
 } from "@/shared/ui/design";
-import { clientTodayIso, type PaymentOperation } from "@/entities/payment";
+import { type PaymentOperation } from "@/entities/payment";
+import { dateToIsoLocal } from "@/shared/lib/calendar";
 import {
   groupOperationsByDate,
   operationsCategoryChipLabel,
@@ -88,7 +89,7 @@ export function OperationsOfTypeScreen({
     propertyQuery.isSuccess ? propertyQuery.data : undefined,
   ).canEdit;
 
-  const today = clientTodayIso();
+  const today = dateToIsoLocal(new Date());
   // Пикер периода — канонический оверлей поверх списка (решение владельца
   // 2026-09-04, раньше — отдельный маршрут /operations/period).
   const [periodOpen, setPeriodOpen] = useState(false);

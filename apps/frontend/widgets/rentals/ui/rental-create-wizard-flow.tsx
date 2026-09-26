@@ -7,7 +7,8 @@ import { ArrowLeft, Cancel } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
-import { clientTodayIso, type IsoDate, type PaymentReminderOffset } from '@/entities/payment';
+import { dateToIsoLocal } from '@/shared/lib/calendar';
+import { type IsoDate, type PaymentReminderOffset } from '@/entities/payment';
 import type { Rental } from '@/entities/rental';
 import {
   useCreateRental,
@@ -58,7 +59,7 @@ export function RentalCreateWizardFlow({
   // Визард — экран создания: футер глушится на всех шагах.
   useTabBarSuppression();
   const [created, setCreated] = useState<Rental | null>(null);
-  const today: IsoDate = clientTodayIso();
+  const today: IsoDate = dateToIsoLocal(new Date());
   const [step, setStep] = useState<RentalWizardStep>(() => initialStep(draft, today));
 
   if (created !== null) {

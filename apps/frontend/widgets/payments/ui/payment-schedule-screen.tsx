@@ -6,8 +6,8 @@ import { ArrowLeft, Star } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { useInfiniteScroll } from '@/shared/lib/hooks/useInfiniteScroll';
+import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
-  clientTodayIso,
   formatDayMonthWithYear,
   isDatePaused,
   PaymentRowButton,
@@ -109,7 +109,7 @@ export function PaymentScheduleScreen({
               paymentId={paymentId}
               schedule={payment}
               plannedOperations={plannedOperations}
-              today={clientTodayIso()}
+              today={dateToIsoLocal(new Date())}
             />
           )}
         </div>

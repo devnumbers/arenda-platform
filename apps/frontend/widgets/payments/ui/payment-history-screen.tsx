@@ -6,8 +6,8 @@ import Image from 'next/image';
 import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
+import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
-  clientTodayIso,
   PaymentRowButton,
   type PaymentOperation,
 } from '@/entities/payment';
@@ -61,7 +61,7 @@ export function PaymentHistoryScreen({
     order,
   });
 
-  const today = clientTodayIso();
+  const today = dateToIsoLocal(new Date());
   const groups = groupPaidOperations(historyQuery.data ?? [], today);
 
   return (

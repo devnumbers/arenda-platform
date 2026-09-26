@@ -19,7 +19,7 @@ import {
   useTabBarSuppression,
 } from '@/shared/ui/design';
 import type { IsoDate, Payment } from '@/entities/payment';
-import { clientTodayIso } from '@/entities/payment';
+import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
   branchKind,
   buildPaymentCreateCommand,
@@ -103,7 +103,7 @@ export function PaymentCreateWizardFlow({
     return () => document.removeEventListener('mousedown', handleOutside);
   }, [categorySearchOpen, categoryQuery]);
 
-  const today: IsoDate = clientTodayIso();
+  const today: IsoDate = dateToIsoLocal(new Date());
 
   if (created !== null) {
     return (

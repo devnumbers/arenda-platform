@@ -26,7 +26,7 @@ import {
   TopNav,
   TopNavTitle,
 } from '@/shared/ui/design';
-import { clientTodayIso } from '@/entities/payment';
+import { dateToIsoLocal } from '@/shared/lib/calendar';
 import type { Payment } from '@/entities/payment';
 import { daysOverdue } from '../lib/overdue-days';
 import { overduePaymentIdsOf, sortPaymentsByNextOccurrence } from '@/features/payments';
@@ -67,7 +67,7 @@ export function PaymentsOfPropertyScreen({
   const paymentsQuery = usePayments(propertyId);
   const overdueQuery = usePropertyOverdueOperations(propertyId);
 
-  const today = clientTodayIso();
+  const today = dateToIsoLocal(new Date());
 
   const payments = paymentsQuery.data ?? [];
   const overdue = overdueQuery.data ?? [];

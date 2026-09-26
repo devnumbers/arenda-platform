@@ -19,8 +19,8 @@ import {
 } from '@/shared/lib/format-money';
 import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
+import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
-  clientTodayIso,
   formatDayMonthWithYear,
   recurrenceLabel,
   type IsoDate,
@@ -296,7 +296,7 @@ function PaymentEditForm({
   const updatePayment = useUpdatePayment(propertyId, payment.id);
   const deletePayment = useDeletePayment(propertyId, payment.id);
 
-  const today: IsoDate = clientTodayIso();
+  const today: IsoDate = dateToIsoLocal(new Date());
   const resolveTitle = (slug: string): string | undefined =>
     paymentCategoryBySlug(slug)?.label;
 

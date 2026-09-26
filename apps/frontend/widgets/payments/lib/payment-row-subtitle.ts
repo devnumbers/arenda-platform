@@ -6,7 +6,7 @@ import type { IsoDate, Payment } from '@/entities/payment';
  * дата ближайшего вхождения «11 августа»): активная пауза — «на паузе»
  * (даты у приостановленного правила нет), завершённое правило — без
  * подзаголовка. Чистая функция над клиентским портом прототипа: «сегодня»
- * приходит параметром (клиентская проекция — см. entities/payment/lib/client-today).
+ * приходит параметром (клиентская проекция — см. dateToIsoLocal в shared/lib/calendar).
  */
 export type PaymentRowSubtitle =
   | { readonly kind: 'date'; readonly iso: IsoDate }

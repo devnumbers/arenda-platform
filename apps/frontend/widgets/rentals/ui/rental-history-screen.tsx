@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
+import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
-  clientTodayIso,
   PaymentRowButton,
   type PaymentOperation,
 } from '@/entities/payment';
@@ -61,7 +61,7 @@ export function RentalHistoryScreen({
   );
 
   const operations = historyQuery.data ?? [];
-  const groups = groupPaidOperations(operations, clientTodayIso());
+  const groups = groupPaidOperations(operations, dateToIsoLocal(new Date()));
   // Итог оплаченных сервер считает по TZ собственника; рассинхрон с длиной
   // списка гасится в paidPaymentNumber.
   const paidTotal = Math.max(rental?.progress.paidMonths ?? 0, operations.length);

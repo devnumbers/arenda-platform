@@ -4,7 +4,7 @@ import { useState, type JSX } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { BoldArchive, BoldHome, BoldObjects, Cancel, Check } from '@/shared/assets/icons';
 import { buildReturnUrl, goBack } from '@/shared/lib/navigation';
-import { clientTodayIso } from '@/entities/payment';
+import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
   globalOperationsFiltersParams,
   readGlobalOperationsFilters,
@@ -45,7 +45,7 @@ export function OperationsObjectsSelectScreen(): JSX.Element {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const filters = readGlobalOperationsFilters(searchParams, clientTodayIso());
+  const filters = readGlobalOperationsFilters(searchParams, dateToIsoLocal(new Date()));
   // Черновик живёт от монтирования до монтирования: страница монтируется
   // заново на каждый вход, useState инициализируется применённым выбором.
   const [draft, setDraft] = useState<ReadonlyArray<string>>(filters.propertyIds);

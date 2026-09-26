@@ -18,8 +18,8 @@ import { ROUTES } from '@/shared/config/routes';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
+import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
-  clientTodayIso,
   formatDayMonth,
   isDatePaused,
   recurrenceLabel,
@@ -192,7 +192,7 @@ function PaymentDetailBody({
   const overdueQuery = usePaymentOperationsByStatus(propertyId, payment.id, 'overdue');
   const plannedQuery = usePaymentOperationsByStatus(propertyId, payment.id, 'planned');
 
-  const today = clientTodayIso();
+  const today = dateToIsoLocal(new Date());
   const paused = isDatePaused(payment.pauses, today);
   // Завершённость для состава кнопок — клиентский предикат (история 44
   // спеки #453): серверный isCompleted у бессрочной паузы уже true.
