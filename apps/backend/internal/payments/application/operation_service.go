@@ -142,7 +142,7 @@ type OperationService struct {
 	txStoreFactory
 	policy    sharedpolicy.Policy
 	calendar  OwnerCalendar
-	writeGate gateFunc // Full Access+: pay.
+	writeGate gateFunc // Full Access+: pay/create/delete.
 	// Realtime is the late-bound carrier the mutations' frames dispatch
 	// through after the commit (карта #714, #716; ADR 0062); nil keeps the
 	// pre-#716 silence.
