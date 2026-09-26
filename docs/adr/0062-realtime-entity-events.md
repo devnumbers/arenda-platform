@@ -145,10 +145,14 @@ across the same pipelines.
    to `[actor]` without touching derived access — the open API's
    `/realtime/stream` description states the same null case.
 
-5. **No replay in v1.** Same contract as ADR 0060 §8: on every open
-   (including every reconnect) the provider re-reads live state through
-   react-query invalidation; `Last-Event-ID` is logged, not served. A
-   replay buffer stays the pre-planned v2 of ADR 0060.
+5. **No replay in v1.** Same contract as ADR 0060 §8: every re-open
+   (a reconnect or the tab's return to visibility) re-reads live state
+   through react-query invalidation; the session's first open does not —
+   the page has just mounted, its mounted queries are fresh, and a
+   re-read there would be a pure duplicate of the cold-start request
+   (the one-request-cold-start canon, spec #769). `Last-Event-ID` is
+   logged, not served. A replay buffer stays the pre-planned v2 of
+   ADR 0060.
 
 ## Out of scope
 
