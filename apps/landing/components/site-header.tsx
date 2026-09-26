@@ -3,6 +3,7 @@ import Link from "next/link";
 import { LandingLink } from "./button";
 import { Logo } from "./logo";
 import { MobileMenu } from "./mobile-menu";
+import { ScrollShadow } from "./scroll-shadow";
 import { getMe } from "@/lib/auth";
 import { NAV } from "@/lib/nav";
 
@@ -22,9 +23,11 @@ function HeaderAction({ authed }: { authed: boolean }) {
   );
 }
 
+// Тень появляется только при скролле (вверху её нет — макет 2814-1164),
+// мягкая: 0 4px 20px rgba(0,0,0,.08), плавное появление 300ms.
 function DesktopBar({ action }: { action: ReactNode }) {
   return (
-    <div className="hidden h-16 grid-cols-[1fr_auto_1fr] items-center rounded-3xl bg-white pl-3 pr-2.5 shadow-[0_8px_12px_rgba(0,0,0,0.12)] desk:grid">
+    <div className="hidden h-16 grid-cols-[1fr_auto_1fr] items-center rounded-3xl bg-white pl-3 pr-2.5 shadow-[0_4px_20px_rgba(0,0,0,0)] transition-shadow duration-300 group-data-scrolled:shadow-[0_4px_20px_rgba(0,0,0,0.08)] desk:grid">
       <Link
         href="/"
         aria-label="Рентли — на главную"
@@ -78,9 +81,11 @@ function HeaderFallback() {
 export function SiteHeader() {
   return (
     <header className="sticky top-0 z-50 px-2 pt-2">
-      <Suspense fallback={<HeaderFallback />}>
-        <HeaderContent />
-      </Suspense>
+      <ScrollShadow className="group mx-auto max-w-[1520px]">
+        <Suspense fallback={<HeaderFallback />}>
+          <HeaderContent />
+        </Suspense>
+      </ScrollShadow>
     </header>
   );
 }
