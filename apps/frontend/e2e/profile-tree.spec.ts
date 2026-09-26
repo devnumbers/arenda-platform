@@ -199,10 +199,11 @@ test.describe('дерево профиля — ПК ≥1024', () => {
   test('вход в дерево по кнопке юзера в хедере', async ({ page, seededUser }) => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto('/properties');
+    const header = screenHeader(page);
 
     // «Крыло» UserButton ведёт на /profile.
-    await screenHeader(page).getByRole('button', { name: USER_WING }).click();
+    await header.getByRole('button', { name: USER_WING }).click();
     await expect(page).toHaveURL(/\/profile$/);
-    await expect(screenHeader(page).getByText('Профиль', { exact: true })).toBeVisible();
+    await expect(header.getByText('Профиль', { exact: true })).toBeVisible();
   });
 });

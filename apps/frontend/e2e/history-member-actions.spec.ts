@@ -99,9 +99,10 @@ test('вход со страницы участника: кебаб ведёт �
   const actors = await trackHistoryScope(page);
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto(`/participants/${MARIA_ID}`);
+  const header = screenHeader(page);
   await expect(page.getByRole('heading', { name: 'Мария Петрова' })).toBeVisible();
 
-  await screenHeader(page).getByRole('button', { name: 'Еще — действия с участником' }).click();
+  await header.getByRole('button', { name: 'Еще — действия с участником' }).click();
   await page.getByRole('menuitem', { name: 'Действия участника' }).click();
   await page.waitForURL(`**/history/participants/${MARIA_ID}`);
 
@@ -109,7 +110,7 @@ test('вход со страницы участника: кебаб ведёт �
   await expect(page.getByText('Задача выполнена: Заменить кран')).toBeVisible();
 
   // «Назад» возвращает на страницу участника (источник входа).
-  await screenHeader(page).getByRole('button', { name: 'Назад' }).click();
+  await header.getByRole('button', { name: 'Назад' }).click();
   await page.waitForURL(`**/participants/${MARIA_ID}`);
 });
 

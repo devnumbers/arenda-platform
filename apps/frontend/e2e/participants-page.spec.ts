@@ -67,9 +67,10 @@ test('deep-link на отозванного/чужого участника — 
 test('права участника: смена роли сегментом, попап «Права изменены»; сид восстанавливается', async ({ page, seededUser }) => {
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto(`/participants/${MARIA_ID}`);
+  const header = screenHeader(page);
 
   await page.getByRole('button', { name: /Квартира на Ленина/ }).click();
-  await expect(screenHeader(page).getByText('Права участника')).toBeVisible();
+  await expect(header.getByText('Права участника')).toBeVisible();
   await expect(page.getByRole('radio', { name: 'Редактирование' })).toBeChecked();
 
   try {
@@ -81,7 +82,7 @@ test('права участника: смена роли сегментом, п�
     await page.keyboard.press('Escape');
 
     // Бейдж на странице участника перечитан (инвалидация агрегатов).
-    await screenHeader(page).getByRole('button', { name: 'Назад' }).click();
+    await header.getByRole('button', { name: 'Назад' }).click();
     await expect(
       page.getByRole('button', { name: /Квартира на Ленина/ }).getByText('Просмотр'),
     ).toBeVisible();

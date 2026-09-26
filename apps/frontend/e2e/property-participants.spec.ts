@@ -66,8 +66,9 @@ test('manage-участник: своя строка «(Вы)» инертная
   // но своей ноги в её manage-скоупе нет — /participants/{себя} был бы 404.
   await openCabinetWithSessionToken(page, seededMemberSessionToken());
   await page.goto(`/properties/${APARTMENT_ID}/participants`);
+  const header = screenHeader(page);
 
-  await expect(screenHeader(page).getByText('Участники объекта')).toBeVisible();
+  await expect(header.getByText('Участники объекта')).toBeVisible();
 
   // Своя строка с «(Вы)» — статичный ряд: не role=button, без шеврона.
   await expect(page.getByText('Мария Петрова (Вы)')).toBeVisible();
@@ -75,13 +76,13 @@ test('manage-участник: своя строка «(Вы)» инертная
 
   // Тап по своей строке никуда не ведёт — экран остаётся на месте.
   await page.getByText('Мария Петрова (Вы)').click();
-  await expect(screenHeader(page).getByText('Участники объекта')).toBeVisible();
+  await expect(header.getByText('Участники объекта')).toBeVisible();
   await expect(page.getByText('Участник не найден')).toHaveCount(0);
   await expect(page).toHaveURL(new RegExp(`/properties/${APARTMENT_ID}/participants$`));
 
   // Чужие ряды manage-скоупа кликабельны, как и раньше.
   await page.getByRole('button', { name: /Сергей Сидоров/ }).click();
-  await expect(screenHeader(page).getByText('Участник', { exact: true }).first()).toBeVisible();
+  await expect(header.getByText('Участник', { exact: true }).first()).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Сергей Сидоров' })).toBeVisible();
 });
 
@@ -231,8 +232,9 @@ test('кебаб «Отозвать доступ всем»: подтвержд�
 test('зритель: список без manage-контролов, свой ряд с «(Вы)»', async ({ page }) => {
   await openCabinetWithSessionToken(page, seededViewerSessionToken());
   await page.goto(`/properties/${APARTMENT_ID}/participants`);
+  const header = screenHeader(page);
 
-  await expect(screenHeader(page).getByText('Участники объекта')).toBeVisible();
+  await expect(header.getByText('Участники объекта')).toBeVisible();
   // Ряды без manage-прав статичные (страница участника вне скоупа
   // зрителя) — проверяем текстами, не role=button.
   await expect(page.getByText('Иван Иванов')).toBeVisible();
@@ -242,6 +244,6 @@ test('зритель: список без manage-контролов, свой р
     page.getByRole('button', { name: 'Пригласить участника' }).filter({ hasText: 'Пригласить участника' }),
   ).toHaveCount(0);
   await expect(
-    screenHeader(page).getByRole('button', { name: 'Еще — действия со списком' }),
+    header.getByRole('button', { name: 'Еще — действия со списком' }),
   ).toHaveCount(0);
 });

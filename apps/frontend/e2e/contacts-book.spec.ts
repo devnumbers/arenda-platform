@@ -28,8 +28,7 @@ test.describe('книга контактов — хаб нового хрома'
     await page.goto('/contacts');
 
     // Хаб-шапка: крылья и на мобайле (лого — ссылка на объекты).
-    const header = screenHeader(page);
-    await expect(header.getByRole('link', { name: 'Объекты' })).toBeVisible();
+    await expect(screenHeader(page).getByRole('link', { name: 'Объекты' })).toBeVisible();
     await expect(
       page.getByRole('heading', { level: 1, name: 'Контакты', exact: true }),
     ).toBeVisible();
