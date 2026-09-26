@@ -6,32 +6,59 @@ import type { KeyboardEvent } from 'react';
  * несёт собственные кнопки, а вложенные кнопки в HTML невалидны. Enter/Space
  * вызывают onSelect; без onSelect строка неинтерактивна (role/tabIndex
  * не навешиваются).
+ *
+ * Логика активации живёт в чистой фабрике createKeyboardActivation:
+ * события — обычные аргументы, никаких React-рефов и DOM (юнит-слой
+ * тестируется в node); useKeyboardActivation — тонкая обёртка
+ * (прецедент — createLongPress/useLongPress).
  */
+/** Срез keydown-события, достаточный активации: фабрика не знает ни
+ * React-событий, ни DOM — хук подставляет React-событие, тесты —
+ * литералы. */
+export type KeyboardActivationEvent = {
+  readonly key: string;
+  readonly repeat: boolean;
+  readonly preventDefault: () => void;
+};
+
 export type KeyboardActivationOptions = {
   readonly onSelect?: () => void;
   readonly disabled?: boolean;
 };
 
-export type KeyboardActivatorProps = {
+export type CreatedKeyboardActivation<E extends KeyboardActivationEvent> = {
   readonly role: 'button' | undefined;
   readonly tabIndex: 0 | undefined;
   readonly 'aria-disabled': boolean | undefined;
   readonly onClick: (() => void) | undefined;
-  readonly onKeyDown: ((event: KeyboardEvent<HTMLDivElement>) => void) | undefined;
+  readonly onKeyDown: ((event: E) => void) | undefined;
 };
 
-export function useKeyboardActivation({
+/** React-обёртка над фабричным типом: событие —
+ * KeyboardEvent<HTMLDivElement>; докстринги полей — у фабричных типов
+ * выше, здесь не дублируются. */
+export type KeyboardActivatorProps =
+  CreatedKeyboardActivation<KeyboardEvent<HTMLDivElement>>;
+
+export function createKeyboardActivation<E extends KeyboardActivationEvent>({
   onSelect,
   disabled = false,
-}: KeyboardActivationOptions): KeyboardActivatorProps {
+}: KeyboardActivationOptions): CreatedKeyboardActivation<E> {
   const interactive = onSelect !== undefined && !disabled;
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
+  const handleKeyDown = (event: E): void => {
     if (!interactive) {
       return;
     }
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
+      if (event.repeat) {
+        // Авто-повтор удержания — не повторное нажатие: onSelect
+        // срабатывает один раз, повторы глушатся (#833); preventDefault
+        // выше остаётся, чтобы удержание не скроллило и не активировало
+        // нативно.
+        return;
+      }
       onSelect();
     }
   };
@@ -43,4 +70,10 @@ export function useKeyboardActivation({
     onClick: interactive ? onSelect : undefined,
     onKeyDown: interactive ? handleKeyDown : undefined,
   };
+}
+
+export function useKeyboardActivation(
+  options: KeyboardActivationOptions,
+): KeyboardActivatorProps {
+  return createKeyboardActivation<KeyboardEvent<HTMLDivElement>>(options);
 }
