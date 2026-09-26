@@ -17,6 +17,8 @@ const VARIANTS = {
   primary:
     "bg-primary text-white hover:bg-primary-hover active:bg-primary-active",
   gray: "bg-surface text-ink hover:bg-surface-hover active:bg-surface-active",
+  // Белая кнопка на цветной подложке (хиро): hover/active — приглушение в серый.
+  white: "bg-white text-ink hover:bg-surface active:bg-surface-hover",
 } as const;
 
 const SIZES = {

@@ -101,6 +101,13 @@
 }
 
 @layer base {
+  /* Стрипы-«вылезайки» (showcase) не должны расширять канву; clip, не hidden —
+     hidden создаёт скролл-контейнер и ломает sticky-хедер (канон #709). */
+  html,
+  body {
+    overflow-x: clip;
+  }
+
   body {
     @apply bg-white font-sans text-ink antialiased;
   }
