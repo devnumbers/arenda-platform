@@ -200,7 +200,7 @@ export function TestimonialsReviews() {
                 />
                 <div className="flex flex-col gap-0.5">
                   <p className="text-s leading-5 text-white">{review.name}</p>
-                  <p className="text-xs leading-[18px] text-white/70">{review.sub}</p>
+                  <p className="max-w-[180px] text-xs leading-[18px] text-white/70">{review.sub}</p>
                 </div>
               </div>
             </figcaption>

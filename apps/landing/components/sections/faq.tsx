@@ -34,7 +34,7 @@ export function Faq() {
                     const key = `${group.category}:${item.question}`;
                     const expanded = open === key;
                     return (
-                      <div key={key} className="flex w-full flex-col py-3">
+                      <div key={key} className="flex w-full flex-col py-3 tab:py-3.5 desk:py-[13px]">
                         <button
                           type="button"
                           aria-expanded={expanded}

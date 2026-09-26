@@ -3,29 +3,31 @@ import { Reveal } from "@/components/reveal";
 import sharingPhoto1 from "@/assets/sections/sharing-photo-1.webp";
 import sharingPhoto2 from "@/assets/sections/sharing-photo-2.webp";
 
-// «Делитесь объектом» — макеты 2814-951 (десктоп: заголовок слева, панель
-// r40 h-450, карточка 400 на (72,72), пара 380 справа снизу), 2859-3561
-// (планшет: всё по центру, панель r32 h-450, карточка 326, пара 380),
-// 2826-151461 (мобайл: панель r32 h-500, карточка 223 r24, пара 260).
-// Панель — primary на 10% альфы (по живому канвасу Figma, 26.09).
+// «Делитесь объектом» — макеты 2814-951 (десктоп: заголовок по центру,
+// панель r40 h-450, карточка 400 на (72,72) выступает за низ панели),
+// 2859-3561 (планшет: всё по центру, панель r32 h-450, карточка 326,
+// пара 380 вплотную к низу), 2826-151461 (мобайл: панель r32 h-500,
+// карточка 223 r24, пара 260). Панель — primary на 10% альфы (по живому
+// канвасу Figma, 26.09); overflow-hidden нет — карточка десктопа выступает
+// ниже панели, как в макете.
 export function Sharing() {
   return (
     <section id="sharing" className="mt-24 desk:mt-[156px]">
       <div className="mx-auto w-full max-w-[1048px] px-6 desk:max-w-[1000px] desk:px-0">
         <Reveal>
-          <div className="flex flex-col items-center gap-3 text-center desk:items-start desk:gap-6 desk:text-left">
+          <div className="flex flex-col items-center gap-3 text-center">
             <h2 className="text-[28px] font-semibold leading-8 desk:text-h2 desk:leading-[60px]">
               Делитесь объектом
             </h2>
-            <p className="text-s leading-5 text-gray-2 desk:text-[28px] desk:leading-8">
+            <p className="text-s leading-5 text-gray-2 [text-shadow:0_8px_24px_rgba(0,0,0,0.12)] desk:text-[28px] desk:leading-8">
               Приглашайте партнеров и управляйте объектом вместе
             </p>
           </div>
         </Reveal>
         <Reveal delay={100}>
-          {/* Десктоп — абсолютная композиция по макету; планшет/мобайл — свои
-              размеры и позиции фото (в процентах от ширины панели). */}
-          <div className="relative mt-8 h-[500px] overflow-hidden rounded-[32px] bg-primary-light desk:mt-14 desk:block desk:h-[450px] desk:rounded-[40px]">
+          {/* Планшет/мобайл — свои размеры и позиции фото (в процентах от
+              ширины панели); на десктопе — абсолютная композиция по макету. */}
+          <div className="relative mt-8 h-[500px] rounded-[32px] bg-primary-light tab:h-[450px] desk:mt-14 desk:h-[450px] desk:rounded-[40px]">
             <Image
               src={sharingPhoto2}
               alt="Партнеры работают с объектом вместе"

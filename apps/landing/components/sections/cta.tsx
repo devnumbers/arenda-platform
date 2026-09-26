@@ -25,7 +25,7 @@ export function Cta() {
               <h2 className="text-balance text-[28px] font-semibold leading-8 desk:text-h2 desk:leading-[60px]">
                 Попробуйте Рентли в деле
               </h2>
-              <p className="text-s leading-5 opacity-80 desk:text-l desk:leading-[26px]">
+              <p className="mx-auto max-w-[300px] text-s leading-5 opacity-80 desk:max-w-none desk:text-l desk:leading-[26px]">
                 Добавьте объект и начните отслеживать аренду
               </p>
             </div>

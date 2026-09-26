@@ -49,7 +49,7 @@ export function Steps() {
                     </button>
                   ))}
                 </div>
-                <p className="text-center text-s leading-5 text-ink opacity-50 desk:text-l desk:leading-[26px]">
+                <p className="mx-auto max-w-[250px] text-center text-s leading-5 text-ink opacity-50 tab:max-w-none desk:text-l desk:leading-[26px]">
                   {step.text}
                 </p>
               </div>

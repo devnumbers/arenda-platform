@@ -27,12 +27,12 @@ export function Hero() {
           />
         </picture>
         <Reveal>
-          <div className="relative flex max-w-[855px] flex-col items-center gap-8 text-center desk:items-start desk:text-left">
+          <div className="relative flex max-w-[855px] flex-col items-center gap-6 text-center desk:gap-8 desk:items-start desk:text-left">
             <div className="flex flex-col gap-4 [text-shadow:0_8px_24px_rgba(0,0,0,0.12)] desk:gap-6">
               <h1 className="text-balance text-[28px] font-semibold leading-8 text-white tab:text-[36px] tab:font-medium tab:leading-10 desk:text-h1 desk:font-semibold desk:leading-[76px]">
                 Сервис управления арендой недвижимости
               </h1>
-              <p className="text-s font-normal leading-5 text-white/70 tab:text-m tab:font-medium tab:leading-6 desk:text-h4 desk:font-medium desk:leading-8 desk:text-white">
+              <p className="text-balance text-s font-normal leading-5 text-white/70 tab:text-m tab:font-medium tab:leading-6 desk:text-h4 desk:font-medium desk:leading-8 desk:text-white">
                 Управляйте сдачей жилья без таблиц и заметок
               </p>
             </div>
