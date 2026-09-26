@@ -33,15 +33,28 @@ export type KeyboardActivationOptions = {
 };
 
 export type CreatedKeyboardActivation<E extends KeyboardActivationEvent> = {
+  /** ARIA-роль строки-кнопки: 'button' при наличии onSelect; строка без
+   * onSelect неинтерактивна и роль не навешивается. */
   readonly role: 'button' | undefined;
+  /** Включение в tab-порядок: 0 только у интерактивной строки (onSelect
+   * есть и не disabled), иначе не навешивается. */
   readonly tabIndex: 0 | undefined;
+  /** Признак недоступной строки: true только при disabled, у включённой
+   * атрибут не навешивается. */
   readonly 'aria-disabled': boolean | undefined;
+  /** Активация кликом мыши/тача — прокидывается сам onSelect: клик и
+   * клавиатура (Enter/Space) делают одно и то же действие; иначе не
+   * навешивается. */
   readonly onClick: (() => void) | undefined;
+  /** Клавиатурная активация: Enter/Space вызывают onSelect; keydown,
+   * всплывший из вложенного сфокусированного элемента, строку не
+   * активирует (#831), авто-повтор удержания глушится (#833). У
+   * неинтерактивной строки не навешивается. */
   readonly onKeyDown: ((event: E) => void) | undefined;
 };
 
 /** React-обёртка над фабричным типом: событие —
- * KeyboardEvent<HTMLDivElement>; докстринги полей — у фабричных типов
+ * KeyboardEvent<HTMLDivElement>; докстринги полей — у фабричного типа
  * выше, здесь не дублируются. */
 export type KeyboardActivatorProps =
   CreatedKeyboardActivation<KeyboardEvent<HTMLDivElement>>;
