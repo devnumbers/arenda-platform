@@ -44,18 +44,21 @@ Mechanics: local stacks answer in tens of milliseconds — too fast to judge a s
 - **Never busy-wait inside a `page.route` handler** — it blocks the runner's event loop, so goto/timers/screenshots all stall until the wait is over and the "loading" frame is shot after data has already arrived. Delay with `page.waitForTimeout` inside the handler (there is no `setTimeout` in the JS sandbox, but Playwright's own timer works).
 - **Neutralize the service worker first** — the PWA `sw.js` intercepts navigations and its controlled fetches bypass `page.route` («route.continue: already handled»), and an already-registered SW survives re-armed routes on a reused tab. The arm snippet below fulfills `sw.js` **and unregisters existing registrations** — run it on every freeze, not once per session; the next hard `goto` loads uncontrolled.
 - **Never `unroute` mid-flight** — requests parked in a removed handler hang forever. Release by time (release-at deadline inside the handler) and unroute only after the loaded screenshot.
+- **Release deadline ≥12 s, and shoot the loading frame the moment `goto` returns** — `browser_navigate` comes back on the load event, before the delayed API resolves, and the MCP round-trip to the screenshot tool eats more seconds: with the old 4 s deadline the first screenshot landed on the loaded frame, twice now (#868, #873).
+- **Keep the `**/sw.js` arm route active until ALL verification on the stand is done** — unroute the API delay when the transition is shot, but re-arming `sw.js` is mandatory before every later navigation: a session where the neutralization was dropped lets the real service worker re-register and serve stale chunks on the next hard reload, so a shipped fix reads as «not applied» (hit on #873; cost a rebuild cycle). If a fix seems absent: `navigator.serviceWorker.getRegistrations()` → unregister + `caches.keys()` → delete each, then re-judge before touching the build.
 - **SPA navigation can be legitimately instant** (react-query `staleTime`), so shoot the loading frame on a cold hard `goto`, not an in-app click.
 
 ```js
 // Arm a freeze: fulfill sw.js AND unregister existing registrations — a
 // controlled SW's fetches bypass page.route and survive re-armed routes on
-// a reused tab. Then delay every API response (~4 s release deadline):
+// a reused tab. Then delay every API response (~12 s release deadline; the
+// load event returns before it, MCP round-trips eat the rest):
 await page.route('**/sw.js', (r) => r.fulfill({ body: '', contentType: 'application/javascript' }));
 await page.evaluate(async () => {
   const regs = await navigator.serviceWorker.getRegistrations();
   await Promise.all(regs.map((r) => r.unregister()));
 });
-const releaseAt = Date.now() + 4000;
+const releaseAt = Date.now() + 12000;
 await page.route('**/api/**', async (route) => {
   const wait = releaseAt - Date.now();
   if (wait > 0) await page.waitForTimeout(wait);
@@ -83,14 +86,14 @@ Run it **per page**: Каркас gets a verdict on each sweep width (Adaptive w
 
 - **Каркас** — judged on each width against the mockup of its tier: hub anatomy (`mobileWings` + `HubTitle` + `HubCollapseAnchor` compact + search pill, where the mockup has one) vs subscreen anatomy (`SubScreenShell`); column cap 560/24; on desktop nothing permanently overlaps the sidebar or pills — the PC chrome is permanent (an open fullscreen surface keeps it alive: its header draws the wings, sidebar and pills stay visible and clickable above it; a bottom bar's sheet sits in the 560 column and never mutes the pills — решение 25.09, правка #561); bottom chrome (TabBar / StickyBottomBar / safe-area) conflict-free — a mounted bar mutes the TabBar on mobile/tablet (§14).
 - **Стабильность** — one verdict per page; the evidence comes from the «Loading stability» group above (screenshot pair per transition): header never jumps, content never shifts on data arrival, skeleton parity (#604) including composition parity for pinned feeds, and the segment's loading strategy matches DESIGN.md §7 — `loading.tsx` with the page archetype where the route renders the header, in-component skeleton where the screen assembles the header itself.
-- **Данные** — a cold entry fires each request exactly once (the network sweep of «Server truth» layer 1 doubles as the evidence); hub warm-up intact: a warmed hub section opens on data with zero blocking API requests (#626) — prefetch and screen must read the same query-keys; empty/error states per canon (ErrorCard / EmptyState / section empties).
+- **Данные** — a cold entry fires each request exactly once (the network sweep of «Server truth» layer 1 doubles as the evidence); hub warm-up intact: a warmed hub section opens on data with zero blocking API requests (#626) — prefetch and screen must read the same query-keys; empty/error states per canon (ErrorCard / EmptyState / section empties). A bare request in the sweep can belong to the shell's hub warm-up, not the screen: `hub-prefetch-provider` prefetches the properties list on every cabinet page (#626) and react-query dedupes it with any screen subscription — check the warm registry before calling a request «лишним» (false positive on #873; the screen-level fix is an `enabled` gate on invisible data, the request itself legitimately stays).
 - **Мобильный UX** — judged on the mobile width: tap targets ≥44px (visual may be smaller, the tap zone may not), safe-area respected top and bottom, sheets on canonical timings (§8 curve; MoreSheet fade 250 / slide 400 / close 300), native pull-to-refresh works on normally scrolling pages (a full-height screen with inner scroll deliberately keeps the gesture — pattern contract, not a finding), no hover-only affordances, scroll and sticky behavior intact (sticky day pills latch and release; body is `overflow-x: clip`, never hidden).
 
 Scope guard (charter decision): audits judge the page in the current mechanics — a page does not fail for missing server prefetch (#866) or missing transition animations (#867); those land as through-passes after their tickets, and the loading-strategy item checks the current §7 canon, not the future HydrationBoundary one (research #863).
 
 Findings keep the standard tiers: **P0** — the page is unusable or shows wrong data; **P1** — a §14 item broken in a user-visible way (frame off the mockup, jitter, broken sticky/safe-area, non-canonical states). P0/P1 are fixed in the audit ticket before it closes; P2/P3 report without blocking. The ticket-level gate stays P0 + P1 green (step 5).
 
-Reconcile by code before closing, not by pages visited (found on #872): the live sweep only shows what the seeded data loaded — a generic skeleton behind an empty state or a cached query never surfaces. Before closing an audit ticket, grep the subtree for the known-bad loading shapes (`Skeleton className="h-14 w-full"` generic rows and friends) and reconcile every hit against the findings list; a hit with no finding is a missed one.
+Reconcile by code before closing, not by pages visited (found on #872): the live sweep only shows what the seeded data loaded — a generic skeleton behind an empty state or a cached query never surfaces. Before closing an audit ticket, grep the subtree for the known-bad loading shapes (`Skeleton className="h-14 w-full"` generic rows and friends) and reconcile every hit against the findings list; a hit with no finding is a missed one. Grep by name **and** by geometry: a skeleton component you just fixed can have near-twins in other widgets under the same name (ObjectRowsSkeleton lived in tasks and contacts — the second copy surfaced only in code review, #873), so also sweep `apps/frontend` for the touched component's name and its old class signatures before the commit — the reconcile runs at fix time, not as a code-review afterthought.
 
 ## Server truth (серверная правда)
 
