@@ -38,3 +38,6 @@ export { recurrenceLabel } from './lib/recurrence-label';
 export { PaymentRowButton, type PaymentRowButtonProps } from './ui/payment-row-button';
 export { PaymentCardButton, type PaymentCardButtonProps } from './ui/payment-card-button';
 export { PaymentReminderPicker, type PaymentReminderPickerProps } from './ui/payment-reminder-picker';
+// Тест-онли: fixture-билдер для юнит-тестов, в продукте не импортируется
+// (прецедент shared/api/sse-test-fakes).
+export { makePayment } from './model/testing';
