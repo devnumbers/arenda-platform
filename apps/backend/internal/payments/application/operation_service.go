@@ -133,9 +133,11 @@ type CreateOperationCommand struct {
 }
 
 // OperationService carries the operation use cases of the second contracts
-// slice (ticket #461): «Оплатить сейчас» and the two paginated listings (of
-// one rule and of the whole property). It runs through the same serialization
-// and read-scope discipline as the rule service; only the pay mutation writes.
+// slice (ticket #461) and the manual-operation mutations of #569: pay
+// («Оплатить сейчас»), create («+ операция») and delete («Удалить
+// операцию») write, the two paginated listings (of one rule and of the
+// whole property) read. It runs through the same serialization and
+// read-scope discipline as the rule service.
 type OperationService struct {
 	txStoreFactory
 	policy    sharedpolicy.Policy
