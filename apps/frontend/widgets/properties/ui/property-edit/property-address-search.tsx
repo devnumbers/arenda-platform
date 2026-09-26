@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, JSX, KeyboardEvent } from 'react';
 import Image from 'next/image';
-import { focusListboxEdge } from '@/shared/ui/select/listbox-keyboard';
+import { focusListboxEdge } from '@/shared/ui/design/listbox-keyboard';
 import { IconButton, PageContent, SearchField, TopNav } from '@/shared/ui/design';
 import { Cancel } from '@/shared/assets/icons';
 import { AddressSuggestionList } from '../property-fields/address-suggestion-list';

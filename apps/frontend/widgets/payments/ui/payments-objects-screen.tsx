@@ -2,6 +2,7 @@
 
 import type { JSX } from "react";
 import { useRouter } from "next/navigation";
+import NextLink from "next/link";
 import { Archive, ArrowLeft, Pin, Search } from "@/shared/assets/icons";
 import { ROUTES } from "@/shared/config/routes";
 import { propertyPermissions } from "@/entities/property";
@@ -17,6 +18,7 @@ import type {
 } from "@/entities/payment";
 import {
   Button,
+  buttonVariants,
   EmptyState,
   IconButton,
   PageContent,
@@ -24,7 +26,6 @@ import {
   TopNav,
   TopNavTitle,
 } from "@/shared/ui/design";
-import { LinkButton } from "@/shared/ui/link-button";
 import { goBack } from "@/shared/lib/navigation";
 import {
   isPaymentlessObject,
@@ -131,8 +132,7 @@ export function PaymentsObjectsScreen(): JSX.Element {
         {!showEmptyState && (
           <>
             {/* Ритм страницы — канон #578: обёртка гасит вставку кабинета и
-             * держит 24px сама; детям списка вставки не нужны (margin-утилиты
-             * на <button> всё равно глушит безслойный normalize HeroUI). */}
+             * держит 24px сама; детям списка вставки не нужны. */}
             <div className="-mx-5 flex min-[1200px]:mx-0 flex-col gap-4 px-6 pt-1">
               {pending && (
                 <>
@@ -217,18 +217,18 @@ function PaymentsObjectsEmpty({
 }
 
 /** Кнопка «Архивные объекты» (654:7558): серая, с иконкой архива, на
- * существующую страницу архива; во всю ширину карточек. */
+ * существующую страницу архива; во всю ширину карточек. Ссылка-кнопка на
+ * каноне (легаси LinkButton снесён, #901): NextLink+buttonVariants
+ * (next/link не дружит с Radix Slot — прецедент канонного button.tsx). */
 function ArchivedObjectsButton(): JSX.Element {
   return (
-    <LinkButton
+    <NextLink
       href={ROUTES.propertyArchive}
-      variant="secondary"
-      size="large"
-      fullWidth
-      leftIcon={<Archive />}
+      className={buttonVariants({ variant: "secondary", className: "w-full" })}
     >
+      <Archive className="h-6 w-6 shrink-0" aria-hidden />
       Архивные объекты
-    </LinkButton>
+    </NextLink>
   );
 }
 

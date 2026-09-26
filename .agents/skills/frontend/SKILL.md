@@ -21,7 +21,7 @@ A thin orientation skill: the rules live in repo documents and ESLint gates; thi
 - UI stays dumb; business logic lives in `features/` and `entities/`.
 - Map backend DTOs to entity models at the `shared/api` boundary; `widgets/**` and `app/**` never import DTO types. Money arrives as integer kopecks and is formatted only via `formatMoneyKopecks` (`shared/lib/format-money.ts`).
 - Server Components by default; `'use client'` only for interactivity, browser APIs, or hooks requiring a client boundary.
-- New UI is built on shadcn/ui over Radix primitives, styled with Tailwind utilities on top of the tokens in `shared/styles/tokens.css` (ADR 0050; Tailwind v4 is wired in `app/globals.css`). HeroUI v3 is legacy — never use it in new code; `@heroui/styles` BEM classes never appear in React components.
+- New UI is built on shadcn/ui over Radix primitives, styled with Tailwind utilities on top of the tokens in `shared/styles/tokens.css` (ADR 0050; Tailwind v4 is wired in `app/globals.css`).
 - Generated files (`shared/api/generated.ts`, attributes catalog) are never hand-edited — change the contract or catalog and regenerate.
 
 ## Primary sources (verify here, in this order)

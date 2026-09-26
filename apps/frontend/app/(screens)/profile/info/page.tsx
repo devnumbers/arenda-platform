@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import NextLink from 'next/link';
-import { Card } from '@heroui/react/card';
 import { SubScreenShell } from '@/shared/ui/design';
 import { Icon } from '@/shared/ui/icon';
 import { SmallArrowRight } from '@/shared/assets/icons';
@@ -40,12 +39,14 @@ export default function InfoPage() {
               className={styles.link}
               aria-label={`Перейти к документу «${item.title}»`}
             >
-              <Card className={styles.card}>
+              {/* Карточка ссылки — голый div: хром (рамка, радиус, фон)
+                  целиком в .card CSS-модуля; HeroUI Card снесён (#901). */}
+              <div className={styles.card}>
                 <span className={styles.itemTitle}>{item.title}</span>
                 <Icon size="s">
                   <SmallArrowRight />
                 </Icon>
-              </Card>
+              </div>
             </NextLink>
           ))}
         </nav>

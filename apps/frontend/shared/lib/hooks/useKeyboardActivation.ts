@@ -2,7 +2,7 @@ import type { KeyboardEvent } from 'react';
 
 /**
  * Клавиатурная активация строк-кнопок дизайн-слоя (ListRow — кнопочный
- * вариант, option ведёт listbox-модуль shared/ui/select/listbox-keyboard;
+ * вариант, option ведёт listbox-модуль shared/ui/design/listbox-keyboard;
  * PaymentRowButton, PaymentCardButton): строка — div с role=button, потому
  * что trailing-слот несёт собственные кнопки, а вложенные кнопки в HTML
  * невалидны. Enter/Space вызывают onSelect; без onSelect строка

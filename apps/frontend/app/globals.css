@@ -1,20 +1,22 @@
 @import "tailwindcss";
-@import "@heroui/styles";
 
-/* Ресет нормализации форм HeroUI (решение 2026-08-26): @heroui/styles
-   содержит БЕЗСЛОЙНЫЙ normalize (button,input,optgroup,select,textarea
-   {font-family:inherit;font-size:100%;line-height:1.15}), а безслойные
-   правила перебивают любые @layer utilities — кегли контролов дизайн-слоя
-   (text-sm/text-base) молча не применялись. Обёртка @layer{} невозможна
-   (пакет построен на @utility: «cannot be nested»), layer()-квалификатор
-   @import сборщик не сохраняет. revert-layer возвращает выбор значению из
-   слоёв Tailwind (utilities → base); виджеты HeroUI (class*=heroui)
-   нормализацию сохраняют. */
-:where(button, input, select, textarea):not([class*='heroui']) {
-    font-family: revert-layer;
-    font-size: revert-layer;
-    line-height: revert-layer;
-}
+/* Preflight два: слоёный Tailwind v4 (снос HeroUI #901) и легаси-сброс
+   приложения, живущий в @layer base ниже. Селекторные правила сброса
+   (h1/h2, a, форм-контролы) перенесены в слой: безслойное правило сильнее
+   @layer utilities и молча гасило утилиты. Остаток безслойного сброса в
+   разделе Forms ниже неоднороден: вендорные и IE-исправления на
+   псевдоэлементах и псевдоклассах утилитам недоступны, но пять обычных
+   правил тоже сильнее слоя и глушат утилиты — button,input
+   {overflow:visible}, button,select{text-transform:none},
+   fieldset{padding}, textarea{overflow:auto} и
+   [type=checkbox],[type=radio]{box-sizing;border-box;padding:0}. Они
+   оставлены без слоя сознательно: перенос в @layer base отдал бы
+   overflow/text-transform/padding утилитам и изменил бы вид контролов —
+   канонный Textarea (shared/ui/design/text-area.tsx) рендерит утилиту
+   overflow-hidden, которую безслойный textarea{overflow:auto} побеждает
+   по слою независимо от специфичности. revert-layer-хак не нужен:
+   margin/padding-утилиты на голых <button> работают сами — правила
+   font/margin перенесены в @layer base. */
 
 /* Шрифты приложения самохостятся из public/fonts — компиляция и рантайм не
    зависят от доступности Google Fonts (next/font/google качал шрифты на каждом
@@ -681,22 +683,6 @@ img {
    ========================================================================== */
 
 /**
- * 1. Change the font styles in all browsers.
- * 2. Remove the margin in Firefox and Safari.
- */
-
-button,
-input,
-optgroup,
-select,
-textarea {
-    font-family: inherit; /* 1 */
-    font-size: 100%; /* 1 */
-    line-height: 1.15; /* 1 */
-    margin: 0; /* 2 */
-}
-
-/**
  * Show the overflow in IE.
  * 1. Show the overflow in Edge.
  */
@@ -933,6 +919,23 @@ body > * {
     * {
         box-sizing: border-box;
         padding: 0;
+        margin: 0;
+    }
+
+    /* Легаси-сброс форм-контролов (перенесён из безслойной части: безслойное
+       правило сильнее @layer utilities и после сноса revert-layer-хака #901
+       молча гасило кеглевые и margin-утилиты на голых <button> —
+       text-sm/text-base канонного Button не применялись). Значения сохранены,
+       поэтому контролы без явных стилей выглядят как раньше; утилиты теперь
+       выигрывают по слою. */
+    button,
+    input,
+    optgroup,
+    select,
+    textarea {
+        font-family: inherit;
+        font-size: 100%;
+        line-height: 1.15;
         margin: 0;
     }
 

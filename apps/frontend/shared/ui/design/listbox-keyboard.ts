@@ -1,6 +1,7 @@
 // Keyboard semantics of a listbox with roving focus (ARIA listbox pattern),
-// shared by the Select dropdown options and the custom listbox rows built on
-// top of them (CategorySelect's inline-create row, the address suggestions).
+// shared by the option variant of ListRow (its key handling delegates to
+// runListboxAction via list-row-keyboard) and the address suggestions in
+// properties (the search field enters the list with focusListboxEdge).
 // listboxKeyAction is the pure tested core; the DOM half (focus movement and
 // key dispatch) lives next to it.
 
