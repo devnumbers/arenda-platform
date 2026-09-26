@@ -58,13 +58,21 @@
 @theme {
   --font-sans: "Onest", ui-sans-serif, system-ui, sans-serif;
 
+  /* Брейкпоинты адаптива лендинга: десктоп ≥1200, планшет 481–1199,
+     мобайл ≤480 (классы desk:* — от 1200). */
+  --breakpoint-desk: 1200px;
+
   --color-primary: #2b7fff;
+  --color-primary-hover: #2175f5;
+  --color-primary-active: #176beb;
   --color-primary-disabled: #95bfff;
   --color-primary-light: #2b7fff1a;
   --color-ink: #171a1c;
   --color-gray-2: #6f787c;
   --color-gray-3: #9fa8ac;
   --color-surface: #f3f4f6;
+  --color-surface-hover: #e9eaec;
+  --color-surface-active: #dfe0e2;
   --color-line: #ebebeb;
 
   /* Типографическая шкала Figma (Landing/*): имена утилит = имена стилей. */
@@ -84,6 +92,8 @@
   --text-m--line-height: 1.5rem; /* 24 */
   --text-r: 1.125rem; /* 18 */
   --text-r--line-height: 1.375rem; /* 22 */
+  --text-s: 1rem; /* 16 */
+  --text-s--line-height: 1.25rem; /* 20 */
   --text-xs: 0.875rem; /* 14 */
   --text-xs--line-height: 1.125rem; /* 18 */
 

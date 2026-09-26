@@ -20,6 +20,8 @@ const nextConfig: NextConfig = {
   output: "standalone",
   reactStrictMode: true,
   poweredByHeader: false,
+  // Dev-чек Origin (как во фронте): walkthrough-браузер ходит на 127.0.0.1.
+  allowedDevOrigins: ["127.0.0.1"],
   async headers() {
     return [
       { source: "/:path*", headers: SECURITY_HEADERS },
