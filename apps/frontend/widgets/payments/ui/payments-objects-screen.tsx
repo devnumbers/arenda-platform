@@ -132,8 +132,7 @@ export function PaymentsObjectsScreen(): JSX.Element {
         {!showEmptyState && (
           <>
             {/* Ритм страницы — канон #578: обёртка гасит вставку кабинета и
-             * держит 24px сама; детям списка вставки не нужны (margin-утилиты
-             * на <button> всё равно глушит безслойный normalize HeroUI). */}
+             * держит 24px сама; детям списка вставки не нужны. */}
             <div className="-mx-5 flex min-[1200px]:mx-0 flex-col gap-4 px-6 pt-1">
               {pending && (
                 <>
