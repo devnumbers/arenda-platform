@@ -1,8 +1,12 @@
 @import "tailwindcss";
 
-/* Единственный preflight — слоёный Tailwind v4 (снос HeroUI #901): без
-   безслойного normalize снесённого пакета revert-layer-хак не нужен —
-   margin/padding-утилиты на голых <button> работают сами. */
+/* Preflight два: слоёный Tailwind v4 (снос HeroUI #901) и легаси-сброс
+   приложения, живущий в @layer base ниже. Селекторные правила сброса
+   (h1/h2, a, форм-контролы) перенесены в слой: безслойное правило сильнее
+   @layer utilities и молча гасило утилиты; остальные безслойные
+   normalize-правила — вендорные и IE-исправления, утилиты не глушат.
+   Поэтому revert-layer-хак не нужен — margin/padding-утилиты на голых
+   <button> работают сами. */
 
 /* Шрифты приложения самохостятся из public/fonts — компиляция и рантайм не
    зависят от доступности Google Fonts (next/font/google качал шрифты на каждом
@@ -669,22 +673,6 @@ img {
    ========================================================================== */
 
 /**
- * 1. Change the font styles in all browsers.
- * 2. Remove the margin in Firefox and Safari.
- */
-
-button,
-input,
-optgroup,
-select,
-textarea {
-    font-family: inherit; /* 1 */
-    font-size: 100%; /* 1 */
-    line-height: 1.15; /* 1 */
-    margin: 0; /* 2 */
-}
-
-/**
  * Show the overflow in IE.
  * 1. Show the overflow in Edge.
  */
@@ -921,6 +909,23 @@ body > * {
     * {
         box-sizing: border-box;
         padding: 0;
+        margin: 0;
+    }
+
+    /* Легаси-сброс форм-контролов (перенесён из безслойной части: безслойное
+       правило сильнее @layer utilities и после сноса revert-layer-хака #901
+       молча гасило кеглевые и margin-утилиты на голых <button> —
+       text-sm/text-base канонного Button не применялись). Значения сохранены,
+       поэтому контролы без явных стилей выглядят как раньше; утилиты теперь
+       выигрывают по слою. */
+    button,
+    input,
+    optgroup,
+    select,
+    textarea {
+        font-family: inherit;
+        font-size: 100%;
+        line-height: 1.15;
         margin: 0;
     }
 
