@@ -199,16 +199,19 @@ const PERSONA_FIXER =
   "Ты старший фронтенд/бэкенд-инженер, закрываешь диспозиции ревью-гейта перед влитием ветки. " +
   "Правь минимально и в стиле окружающего кода; комментарии в коде — по-русски, как в соседних файлах, и никогда не упоминай ревью, агентов или этот прогон — комментарий объясняет код следующему читателю. " +
   "Ты работаешь ТОЛЬКО в файлах своего кластера (плюс новые тесты рядом с ними), НЕ делаешь git-коммитов, НЕ запускаешь e2e/docker/полные сьюты и не трогаешь сгенерированное (generated.ts, openapi, sqlc). " +
+  "Находки линтеров исправляй КОДОМ: глушение (//nolint, eslint-disable, @ts-ignore) и обход pre-commit-хуков запрещены — если находка кажется ложной, скажи об этом прямо в ответе вместо глушения. " +
   "Целевые тесты гонять можно и нужно (vitest/go test по своим файлам); behavior-правки делай test-first: падающий тест → фикс → зелёный. " +
   "Если задача невыполнима или инструкции противоречат друг другу — скажи об этом прямо, не изобретай обходных путей.";
 
 const PERSONA_REPAIRER =
   "Ты чинишь падения тестовых гейтов в ворктри ветки минимальными правками, не меняя смысл уже сделанных диспозиций. " +
+  "Находки линтеров исправляй кодом, а не глушением (//nolint, eslint-disable запрещены как обход). " +
   "Не коммитишь, e2e/docker не трогаешь, сгенерированное (generated.ts, openapi, sqlc) руками не правишь. " +
   "Если падение нельзя починить без чужих файлов или оно противоречит задаче — скажи прямо.";
 
 const PERSONA_COMMITTER =
   "Ты аккуратный коммитер: выполняешь ровно то, что сказано в задании — git add перечисленных путей и git commit с готовым сообщением в ворктри ветки. " +
+  "Обход pre-commit-хуков ЗАПРЕЩЁН: ни --no-verify, ни LEFTHOOK=0. Если хук упал — коммит не делай, верни в ответе хвост вывода упавшего хука как есть: чинильщик получит его и исправит. " +
   "Ничего не правишь, ничего не пушишь, гейтов не гоняешь, лишних файлов не добавляешь.";
 
 const PERSONA_EDITOR =
@@ -485,6 +488,7 @@ const committer = agent("коммитёр", PERSONA_COMMITTER);
 let converged = false;
 let blockedReason = "";
 let roundsDone = 0;
+let lastBlocking: DisposedFinding[] = [];
 const declinesAll: Array<{ label: string; reason: string }> = [];
 const issuesFiled: string[] = [];
 const appliedClusters: string[] = [];
@@ -597,6 +601,9 @@ for (let round = 1; round <= SWEEP_ROUNDS; round++) {
   const lowsBlock = round <= 2;
   const blockingConfirmed = lowsBlock ? confirmedHere : confirmedHere.filter((f) => f.severity !== "low");
   const blockingUnclear = lowsBlock ? unclearHere : unclearHere.filter((f) => f.severity !== "low");
+  if (blockingConfirmed.length > 0) {
+    lastBlocking = blockingConfirmed;
+  }
   if (!lowsBlock) {
     for (const f of confirmedHere) {
       if (f.severity === "low") lowLeftovers.push(f);
@@ -732,6 +739,7 @@ for (let round = 1; round <= SWEEP_ROUNDS; round++) {
   const runLint = () => world.run("npm", ["--prefix", WT + "/apps/frontend", "run", "lint"], { timeoutMs: 600_000 });
   const runVitest = () => world.run("make", ["-C", WT, "frontend-test"], { timeoutMs: GATE_TIMEOUT_MS });
   const runGo = () => world.run("make", ["-C", WT, "backend-test"], { timeoutMs: GATE_TIMEOUT_MS });
+  const runBackendLint = () => world.run("make", ["-C", WT, "backend-lint"], { timeoutMs: GATE_TIMEOUT_MS });
   let gateFailures: GateFailure[] = [];
   for (let gr = 1; gr <= REPAIR_ROUNDS; gr++) {
     gateFailures = [];
@@ -743,6 +751,8 @@ for (let round = 1; round <= SWEEP_ROUNDS; round++) {
     if (vitest.exitCode !== 0) gateFailures.push({ gate: "vitest (make frontend-test)", output: (vitest.stdout + "\n" + vitest.stderr).slice(-2500) });
     const go = await runGo();
     if (go.exitCode !== 0) gateFailures.push({ gate: "go test (make backend-test)", output: (go.stdout + "\n" + go.stderr).slice(-2500) });
+    const goLint = await runBackendLint();
+    if (goLint.exitCode !== 0) gateFailures.push({ gate: "backend-lint (make backend-lint)", output: (goLint.stdout + "\n" + goLint.stderr).slice(-2500) });
     log("Быстрые гейты (попытка " + gr + "): " + (gateFailures.length === 0 ? "все зелёные" : "красные: " + gateFailures.map((f) => f.gate).join(", ")));
     if (gateFailures.length === 0) break;
     if (gr === REPAIR_ROUNDS) break;
@@ -802,6 +812,7 @@ if (blockedReason.length > 0) {
     "",
     ...summaries.map((s) => "- " + s),
     "",
+    lastBlocking.length > 0 ? "## Блокирующие находки последнего раунда (поимённо)\n\n" + lastBlocking.map((f) => "- `" + f.where + "` — " + f.what + " _(" + f.severity + ", " + f.kind + "; " + f.confirmReason + ")_").join("\n") + "\n" : "",
     declinesAll.length > 0 ? "## Диспозиции\n\n" + declinesAll.map((d) => "- " + d.label + " — " + d.reason).join("\n") + "\n" : "",
     unclearHere.length > 0 ? "## Неясные находки (не подтверждены и не опровергнуты)\n\n" + unclearHere.map((f) => "- `" + f.where + "` — " + f.what + " _(" + f.confirmReason + ")_").join("\n") + "\n" : "",
     lowLeftovers.length > 0 ? "## Low-остаток (после раунда 2 не блокирует, принято без правок)\n\n" + lowLeftovers.map((f) => "- `" + f.where + "` — " + f.what).join("\n") + "\n" : "",
