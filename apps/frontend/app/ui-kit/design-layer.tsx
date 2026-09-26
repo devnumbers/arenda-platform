@@ -939,6 +939,11 @@ export function DesignLayerShowcase(): JSX.Element {
                             value="2 500 ₽"
                             description="11 сентября"
                             trailing={<IconButton icon={<Move />} label="Переставить" />}
+                            // Интерактивная строка с фокусируемым вложенным
+                            // кнопкой: Enter/Space на «Переставить» активируют
+                            // кнопку, а не строку (гвард вложенного keydown,
+                            // #831) — без onSelect геометрия непрогоняема.
+                            onSelect={() => undefined}
                         />
                         <ListRow
                             leading={<StatusIcon status="danger" />}
