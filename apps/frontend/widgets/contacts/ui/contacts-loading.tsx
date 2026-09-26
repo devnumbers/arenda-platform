@@ -14,9 +14,9 @@ import {
 } from '@/shared/ui/design';
 import {
   ContactDetailSkeleton,
+  ContactFormSkeleton,
   ContactsBookSkeleton,
   ContactsSearchHint,
-  ContactsSkeleton,
 } from './contacts-states';
 import { BookSearchPill, BookSortChip } from './contact-book-screen';
 
@@ -91,7 +91,7 @@ export function ContactDetailLoading(): JSX.Element {
 }
 
 /** Правка контакта: шапка правки без ✓ (как EditHeader живого экрана) и
- * скелетон книги. */
+ * скелетон формы (паритет §7 — форма приходит на место скелетона). */
 export function ContactEditLoading(): JSX.Element {
   return (
     <>
@@ -100,7 +100,7 @@ export function ContactEditLoading(): JSX.Element {
       </TopNav>
 
       <PageContent>
-        <ContactsSkeleton />
+        <ContactFormSkeleton />
       </PageContent>
     </>
   );

@@ -37,11 +37,11 @@ import {
   type PickerMenuGroup,
 } from '@/shared/ui/design';
 import {
+  ContactsBookSkeleton,
   ContactsEmptyState,
   ContactsErrorCard,
   ContactsNoResults,
   ContactsSearchHint,
-  ContactsSkeleton,
 } from './contacts-states';
 import {
   CONTACT_ORDER_PARAMS,
@@ -161,7 +161,19 @@ export function ContactsOfPropertyScreen({
 
       <PageContent>
         {contactsQuery.isPending ? (
-          <ContactsSkeleton />
+          <>
+            {/* Паритет §7: чип сортировки реальный — вне фазы загрузки
+             * (та же механика, что у книги #605; переключение сортировки
+             * во время загрузки безвредно: запрос уходит с новым ключом);
+             * прячется вместе с пустым списком. Скелетон — книга объекта:
+             * алфавитные группы с буквами и строками канона. */}
+            <div className="mx-6 mb-6">
+              <PickerMenu title="Сортировать" groups={orderPickerGroups(sortOrder, changeOrder)}>
+                <ContactsSortChip order={sortOrder} />
+              </PickerMenu>
+            </div>
+            <ContactsBookSkeleton />
+          </>
         ) : contactsQuery.isError ? (
           <ContactsErrorCard onRetry={() => void contactsQuery.refetch()} />
         ) : searchOpen && !searching ? (
