@@ -1,7 +1,7 @@
 import type { KeyboardEvent, ReactNode } from 'react';
 import type { JSX } from 'react';
 import { cn } from '@/shared/lib/cn';
-import { runListboxAction } from '@/shared/ui/select/listbox-keyboard';
+import { createListRowKeyboard } from './list-row-keyboard';
 
 /** Строка списка дизайн-слоя (Figma 699:7254): слоты — ведущий элемент
  * (иконка категории 44×44 кладётся слотом), заголовок + подзаголовок с
@@ -11,7 +11,11 @@ import { runListboxAction } from '@/shared/ui/select/listbox-keyboard';
  *
  * Строка — div с role=button, а не <button>: trailing-слот несёт
  * собственные кнопки-иконки, а вложенные кнопки в HTML невалидны (ловится
- * hydration-ошибкой). Клавиатура: Enter/Space вызывают onSelect.
+ * hydration-ошибкой). Клавиатура — общая фабрика клавиатуры ListRow
+ * (list-row-keyboard): кнопочный вариант ведёт себя как остальные
+ * строки-кнопки (Enter/Space вызывают onSelect, keydown из вложенной
+ * сфокусированной кнопки строку не активирует и её preventDefault не давит,
+ * авто-повтор удержания глушится), option — listbox-модуль.
  *
  * Вариант option — строка popup-списка (listbox, подсказки адреса):
  * role=option внутри контейнера role=listbox, roving focus (Tab список
@@ -61,21 +65,11 @@ export function ListRow({
   const interactive = onSelect !== undefined && !disabled;
   const isOption = variant === 'option';
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
-    if (!interactive) {
-      return;
-    }
-    // Опция списка ведёт клавиатуру через общий listbox-модуль (стрелки,
-    // Home/End, Enter/Space; Escape всплывает контейнеру списка).
-    if (isOption) {
-      runListboxAction(event, { onSelect });
-      return;
-    }
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      onSelect();
-    }
-  };
+  const { onKeyDown } = createListRowKeyboard<KeyboardEvent<HTMLDivElement>>({
+    onSelect,
+    disabled,
+    variant,
+  });
 
   return (
     <div
@@ -84,7 +78,7 @@ export function ListRow({
       tabIndex={interactive ? (isOption ? -1 : 0) : undefined}
       aria-disabled={disabled || undefined}
       onClick={interactive ? onSelect : undefined}
-      onKeyDown={handleKeyDown}
+      onKeyDown={onKeyDown}
       className={cn(
         'group/row flex w-full cursor-pointer items-center gap-3 px-6 py-2 text-left font-sans outline-none',
         'transition-colors focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white',
