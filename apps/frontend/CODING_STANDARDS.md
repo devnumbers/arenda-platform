@@ -45,7 +45,7 @@ No form library and no schema validator — this is deliberate, not a gap:
 
 ## Components, styling, and React Compiler
 
-- Styling: existing components use CSS Modules + design tokens (`shared/styles/tokens.css`); new design-layer components (ADR 0050) are shadcn/ui over Radix, styled with Tailwind utilities on the same tokens. The transitional mix is accepted until the app-wide migration.
+- Styling: existing components use CSS Modules + design tokens (`shared/styles/tokens.css`); new design-layer components (ADR 0050) are shadcn/ui over Radix, styled with Tailwind utilities on the same tokens. The mix of design-layer Tailwind utilities and local CSS modules — the canon outside `design/` and in screen modules of `widgets`/`features`/`app` — is the target state as of the ADR 0050 amendment (2026-09-26, #901); no separate migration effort is recorded.
 - Motion, hover, and focus conventions (the unified Apple curve, touch-safe hover, no focus rings on inputs) live in `DESIGN.md` §8 — read it before styling anything.
 - `shared/ui/` is the app's own kit; its canon is `shared/ui/design/` — components on Tailwind utilities over the tokens, no CSS modules. Folder-per-component with a CSS module (`IconLink.tsx` + `IconLink.module.css` + `index.ts`) remains the canon outside `design/` (icon, icon-link, markdown-content, pull-to-refresh, toast) and in screen modules. Wrap, don't bypass; `/ui-kit` is the gallery route.
 - ~~HeroUI v3 (legacy widgets only, ADR 0050)~~ — снято: пакет снесён, react- и стилевой слои в дереве отсутствуют (аменд ADR 0050 2026-09-26, тикет #901).
