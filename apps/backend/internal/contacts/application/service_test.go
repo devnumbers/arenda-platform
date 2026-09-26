@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
@@ -501,6 +502,8 @@ func TestListContactsSortOrderForwarded(t *testing.T) {
 		{"defaults", "", "", ListSortName, ListOrderAsc, false},
 		{"name ascending", ListSortName, ListOrderAsc, ListSortName, ListOrderAsc, false},
 		{"property descending", ListSortProperty, ListOrderDesc, ListSortProperty, ListOrderDesc, false},
+		{"created ascending", ListSortCreated, ListOrderAsc, ListSortCreated, ListOrderAsc, false},
+		{"created descending", ListSortCreated, ListOrderDesc, ListSortCreated, ListOrderDesc, false},
 		{"unknown sort", "sideways", ListOrderAsc, "", "", true},
 		{"unknown order", ListSortName, "upside", "", "", true},
 	}
@@ -587,6 +590,26 @@ func TestListContactsCursorDecoded(t *testing.T) {
 		}
 		if gotQuery.After == nil || *gotQuery.After != key {
 			t.Fatalf("after key = %+v, want %+v", gotQuery.After, &key)
+		}
+	})
+
+	t.Run("created cursor decodes into the store keyset key", func(t *testing.T) {
+		t.Parallel()
+		h := newServiceHarness(t, sharedpolicy.RoleOwner)
+		createdAt := time.Date(2026, 9, 27, 12, 30, 0, 123456000, time.UTC)
+		key := ContactCursorKey{CreatedAt: createdAt, ID: uuid.Must(uuid.NewV7())}
+		var gotQuery ListQuery
+		h.contacts.listFn = func(_ uuid.UUID, q ListQuery) ([]ListedContact, error) {
+			gotQuery = q
+			return nil, nil
+		}
+		cursor := EncodeContactCursor(key, ListSortCreated, ListOrderDesc)
+		q := ListQuery{Scope: ListScopeAll, Sort: ListSortCreated, Order: ListOrderDesc, Limit: DefaultContactsPageSize, Cursor: cursor}
+		if _, err := h.svc.ListContacts(t.Context(), h.owner, q); err != nil {
+			t.Fatalf("list: %v", err)
+		}
+		if gotQuery.After == nil || gotQuery.After.ID != key.ID || !gotQuery.After.CreatedAt.Equal(createdAt) {
+			t.Fatalf("after key = %+v, want id %s created %v", gotQuery.After, key.ID, createdAt)
 		}
 	})
 

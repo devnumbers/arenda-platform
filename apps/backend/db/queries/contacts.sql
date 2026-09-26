@@ -28,6 +28,9 @@ WHERE id = $1;
 -- property's name, unbound cards first in both directions («Общие
 -- контакты»), contact name ordering inside the groups. Both keys use the
 -- Russian ICU collation to match the client's letter grouping; id ties off.
+-- 'created' orders by the creation moment (ticket #847 — the «свежие
+-- контакты сверху» promise server-side): the key is immutable, so a walked
+-- card never moves across the window boundary.
 --
 -- The page walks the listing's own order by keyset (ticket #600): the
 -- window resumes strictly after the (sort key, id) the previous page ended
@@ -119,6 +122,16 @@ WHERE (
                                      OR (concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" = sqlc.narg('after_name')::text
                                          AND c.id > sqlc.narg('after_id')::uuid))))))
                        ))
+        OR (sqlc.arg('sort')::text = 'created'
+            AND sqlc.arg('order')::text = 'asc'
+            AND (c.created_at > sqlc.narg('after_created_at')::timestamptz
+                 OR (c.created_at = sqlc.narg('after_created_at')::timestamptz
+                     AND c.id > sqlc.narg('after_id')::uuid)))
+        OR (sqlc.arg('sort')::text = 'created'
+            AND sqlc.arg('order')::text = 'desc'
+            AND (c.created_at < sqlc.narg('after_created_at')::timestamptz
+                 OR (c.created_at = sqlc.narg('after_created_at')::timestamptz
+                     AND c.id > sqlc.narg('after_id')::uuid)))
       )
 ORDER BY
   CASE WHEN sqlc.arg('sort')::text = 'property'
@@ -135,6 +148,10 @@ ORDER BY
        THEN p.name COLLATE "ru-RU-x-icu" END DESC,
   CASE WHEN sqlc.arg('sort')::text = 'property' AND sqlc.arg('order')::text = 'desc'
        THEN concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" END DESC,
+  CASE WHEN sqlc.arg('sort')::text = 'created' AND sqlc.arg('order')::text = 'asc'
+       THEN c.created_at END ASC,
+  CASE WHEN sqlc.arg('sort')::text = 'created' AND sqlc.arg('order')::text = 'desc'
+       THEN c.created_at END DESC,
   c.id ASC
 LIMIT sqlc.arg('page_limit');
 

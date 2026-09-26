@@ -53,12 +53,15 @@ export type ContactsPageData = {
 export function useContacts(
   propertyId: string,
   search = '',
-  options: { readonly enabled?: boolean } = {},
+  options: { readonly enabled?: boolean; readonly sort?: 'created' } = {},
 ): UseInfiniteQueryResult<Contact[], ApiError> {
+  // sort едет в ключ кэша: срез 'created' и дефолтный 'name' — разные
+  // наборы, один ключ смешал бы их (канон contactKeys.list).
+  const sort = options.sort ?? 'name';
   return useInfiniteQuery({
-    queryKey: contactKeys.list(propertyId, search),
+    queryKey: contactKeys.list(propertyId, search, sort),
     queryFn: ({ pageParam }) =>
-      fetchContactsPage({ propertyId, search, cursor: pageParam }),
+      fetchContactsPage({ propertyId, search, sort, cursor: pageParam }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: keysetNextPageParam,
     select: (data) => data.pages.flatMap((page) => page.items),
@@ -76,12 +79,13 @@ export type ContactBookOrder = 'asc' | 'desc';
 
 /** Общее горло порции GET /contacts (#600): с propertyId — срез объекта,
  * без — плоская книга; sort/order уходят только отличные от дефолта
- * (сервер нормализует пустые сам), cursor — keyset-продолжение прошлого
- * ответа, undefined читает с начала. */
+ * (сервер нормализует пустые сам; created — серверная ось «свежие сверху»,
+ * #847), cursor — keyset-продолжение прошлого ответа, undefined читает
+ * с начала. */
 async function fetchContactsPage(params: {
   propertyId?: string;
   search?: string;
-  sort?: ContactBookSort;
+  sort?: ContactBookSort | 'created';
   order?: ContactBookOrder;
   cursor?: string;
 }): Promise<ContactsPageData> {

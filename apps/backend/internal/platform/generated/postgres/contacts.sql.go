@@ -229,6 +229,16 @@ WHERE (
                                      OR (concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" = $8::text
                                          AND c.id > $5::uuid))))))
                        ))
+        OR ($6::text = 'created'
+            AND $7::text = 'asc'
+            AND (c.created_at > $11::timestamptz
+                 OR (c.created_at = $11::timestamptz
+                     AND c.id > $5::uuid)))
+        OR ($6::text = 'created'
+            AND $7::text = 'desc'
+            AND (c.created_at < $11::timestamptz
+                 OR (c.created_at = $11::timestamptz
+                     AND c.id > $5::uuid)))
       )
 ORDER BY
   CASE WHEN $6::text = 'property'
@@ -245,22 +255,27 @@ ORDER BY
        THEN p.name COLLATE "ru-RU-x-icu" END DESC,
   CASE WHEN $6::text = 'property' AND $7::text = 'desc'
        THEN concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" END DESC,
+  CASE WHEN $6::text = 'created' AND $7::text = 'asc'
+       THEN c.created_at END ASC,
+  CASE WHEN $6::text = 'created' AND $7::text = 'desc'
+       THEN c.created_at END DESC,
   c.id ASC
-LIMIT $11
+LIMIT $12
 `
 
 type ListContactsParams struct {
-	Scope             string      `json:"scope"`
-	ActorID           pgtype.UUID `json:"actor_id"`
-	PropertyID        pgtype.UUID `json:"property_id"`
-	Search            string      `json:"search"`
-	AfterID           pgtype.UUID `json:"after_id"`
-	Sort              string      `json:"sort"`
-	Order             string      `json:"order"`
-	AfterName         pgtype.Text `json:"after_name"`
-	AfterUnbound      pgtype.Bool `json:"after_unbound"`
-	AfterPropertyName pgtype.Text `json:"after_property_name"`
-	PageLimit         int32       `json:"page_limit"`
+	Scope             string             `json:"scope"`
+	ActorID           pgtype.UUID        `json:"actor_id"`
+	PropertyID        pgtype.UUID        `json:"property_id"`
+	Search            string             `json:"search"`
+	AfterID           pgtype.UUID        `json:"after_id"`
+	Sort              string             `json:"sort"`
+	Order             string             `json:"order"`
+	AfterName         pgtype.Text        `json:"after_name"`
+	AfterUnbound      pgtype.Bool        `json:"after_unbound"`
+	AfterPropertyName pgtype.Text        `json:"after_property_name"`
+	AfterCreatedAt    pgtype.Timestamptz `json:"after_created_at"`
+	PageLimit         int32              `json:"page_limit"`
 }
 
 type ListContactsRow struct {
@@ -299,6 +314,9 @@ type ListContactsRow struct {
 // property's name, unbound cards first in both directions («Общие
 // контакты»), contact name ordering inside the groups. Both keys use the
 // Russian ICU collation to match the client's letter grouping; id ties off.
+// 'created' orders by the creation moment (ticket #847 — the «свежие
+// контакты сверху» promise server-side): the key is immutable, so a walked
+// card never moves across the window boundary.
 //
 // The page walks the listing's own order by keyset (ticket #600): the
 // window resumes strictly after the (sort key, id) the previous page ended
@@ -324,6 +342,7 @@ func (q *Queries) ListContacts(ctx context.Context, arg ListContactsParams) ([]L
 		arg.AfterName,
 		arg.AfterUnbound,
 		arg.AfterPropertyName,
+		arg.AfterCreatedAt,
 		arg.PageLimit,
 	)
 	if err != nil {

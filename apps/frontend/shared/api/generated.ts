@@ -4774,8 +4774,8 @@ export interface operations {
                 property_id?: string;
                 /** @description Case-insensitive substring search over the name fields, phone, email, messenger username and role. A missing or empty value disables the filter; LIKE metacharacters in the value are literals. */
                 search?: string;
-                /** @description The sort key: `name` — the contact's display name (default); `property` — the bound property's name with the unbound cards first in both directions («Общие контакты»), contact name order inside. The Russian collation matches the client's letter grouping. */
-                sort?: "name" | "property";
+                /** @description The sort key: `name` — the contact's display name (default); `property` — the bound property's name with the unbound cards first in both directions («Общие контакты»), contact name order inside; `created` — the card's creation moment (ticket #847 — the «свежие контакты сверху» promise server-side: descending leads with the freshest cards whatever the book's size). The name/property keys use the Russian collation to match the client's letter grouping. */
+                sort?: "name" | "property" | "created";
                 /** @description The sort direction: ascending (default) or descending. */
                 order?: "asc" | "desc";
                 /** @description The page size of the keyset window (ticket #600). A missing value means the default page; an out-of-range value is a 400. */
@@ -4789,7 +4789,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Contacts page. The window is keyset pagination over the listing's own sort key and id (ticket #600): the page always resumes strictly after the cursor's key, so cards created or deleted between loads never duplicate or drop. The sort keys are mutable (display name, property binding): a rename or rebind of a card the walk has already passed can move it across the window boundary. The cursor is bound to the sort/order it was issued under — echoing it with a different sort is a 400. nextCursor is null once the matches are exhausted. */
+            /** @description Contacts page. The window is keyset pagination over the listing's own sort key and id (ticket #600): the page always resumes strictly after the cursor's key, so cards created or deleted between loads never duplicate or drop. The name/property sort keys are mutable (display name, property binding): a rename or rebind of a card the walk has already passed can move it across the window boundary; the created key is immutable, so a walked card never moves. The cursor is bound to the sort/order it was issued under — echoing it with a different sort is a 400. nextCursor is null once the matches are exhausted. */
             200: {
                 headers: {
                     [name: string]: unknown;

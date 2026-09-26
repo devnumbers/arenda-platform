@@ -83,6 +83,7 @@ func (s *ContactStore) List(
 		params.AfterName = pgtype.Text{String: q.After.Name, Valid: true}
 		params.AfterPropertyName = pgtype.Text{String: q.After.PropertyName, Valid: true}
 		params.AfterUnbound = pgtype.Bool{Bool: q.After.Unbound, Valid: true}
+		params.AfterCreatedAt = pgtype.Timestamptz{Time: q.After.CreatedAt, Valid: true}
 	}
 	rows, err := s.q().ListContacts(ctx, params)
 	if err != nil {

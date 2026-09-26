@@ -28,8 +28,8 @@ import {
  * Экран выбора арендатора (#807, макет 1855:64129): отдельный маршрут
  * шага «Контакт арендатора» визарда создания аренды. Поисковая шапка
  * («←» возвращает на шаг, поле «Найти контакт» в фокусе), ниже — плоский
- * белый список книги объекта без групп: свежие контакты сверху
- * (created_at DESC — аннотация макета), подзаголовок — роль. Тап по строке
+ * белый список книги объекта без групп: свежие контакты сверху —
+ * серверная ось sort=created (#847), подзаголовок — роль. Тап по строке
  * выбирает арендатора в черновик визарда (тот же хук черновика, что у
  * ветки создания #509) и возвращает на шаг goBack'ом. Поиск — серверный
  * ?search= с keepPreviousData (канон поиска книги). Экран — ветвь визарда:
@@ -57,7 +57,13 @@ export function RentalContactPickerScreen({
   const debouncedSearch = useDebounce(search, CONTACTS_SEARCH_DEBOUNCE_MS);
   // Сервер фильтр не нормализует — пробелы по краям срезаем клиентски.
   const trimmedSearch = debouncedSearch.trim();
-  const contactsQuery = useContacts(propertyId, trimmedSearch);
+  // Свежие сверху — серверная ось sort=created (#847, макет 1855:64129):
+  // свежая карточка наверху при книге любой длины, а не только в первой
+  // порции по имени. Клиентская contactSortByRecent ниже остаётся
+  // деградацией для тёплого кэша.
+  const contactsQuery = useContacts(propertyId, trimmedSearch, {
+    sort: 'created',
+  });
   const rentalDraft = useRentalWizardDraft(propertyId);
 
   const contacts = contactsQuery.data ?? [];
@@ -99,7 +105,8 @@ export function RentalContactPickerScreen({
           <ContactsNoResults />
         ) : (
           /* Плоский список (1855:64129): белые строки без групп, свежие
-           * сверху, подзаголовок — роль; тап выбирает арендатора. */
+           * сверху (sort=created, #847), подзаголовок — роль; тап выбирает
+           * арендатора. */
           <div className="flex flex-col px-6">
             {contactSortByRecent(contacts).map((contact) => (
               <ContactRowButton

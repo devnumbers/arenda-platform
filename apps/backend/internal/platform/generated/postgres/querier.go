@@ -703,6 +703,9 @@ type Querier interface {
 	// property's name, unbound cards first in both directions («Общие
 	// контакты»), contact name ordering inside the groups. Both keys use the
 	// Russian ICU collation to match the client's letter grouping; id ties off.
+	// 'created' orders by the creation moment (ticket #847 — the «свежие
+	// контакты сверху» promise server-side): the key is immutable, so a walked
+	// card never moves across the window boundary.
 	//
 	// The page walks the listing's own order by keyset (ticket #600): the
 	// window resumes strictly after the (sort key, id) the previous page ended

@@ -9,6 +9,7 @@ package application
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/contacts/domain"
@@ -56,6 +57,19 @@ func TestContactCursorRoundTrip(t *testing.T) {
 			},
 			sort:  ListSortProperty,
 			order: ListOrderAsc,
+		},
+		{
+			// The created sort's leading key is the creation moment; the
+			// round trip must keep it to the microsecond the database stores
+			// — a coarser blob would skip rows equal to the truncated value.
+			// Both sides decode into UTC, so == compares the same instant.
+			name: "created sort key",
+			key: ContactCursorKey{
+				CreatedAt: time.Date(2026, 9, 27, 12, 30, 0, 123456000, time.UTC),
+				ID:        uuid.Must(uuid.NewV7()),
+			},
+			sort:  ListSortCreated,
+			order: ListOrderDesc,
 		},
 	}
 	for _, tc := range cases {
@@ -127,7 +141,7 @@ func TestListedContactCursorKeySortName(t *testing.T) {
 		{
 			name: "full name joins non-empty parts",
 			contact: domain.Contact{
-				ID: id, FirstName: "Пётр", LastName: "Иванов", Patronymic: "Сергеевич",
+				ID: id, FirstName: contactFirstName, LastName: "Иванов", Patronymic: "Сергеевич",
 				PropertyID: &propertyID,
 			},
 			wantSort: "Пётр Иванов Сергеевич",
@@ -170,7 +184,7 @@ func TestListedContactCursorKeyPropertyName(t *testing.T) {
 	id := uuid.Must(uuid.NewV7())
 	propertyID := uuid.Must(uuid.NewV7())
 	bound := ListedContact{
-		Contact:      domain.Contact{ID: id, FirstName: "Пётр", PropertyID: &propertyID},
+		Contact:      domain.Contact{ID: id, FirstName: contactFirstName, PropertyID: &propertyID},
 		PropertyName: studioPropertyName,
 	}
 	key := bound.CursorKey()
@@ -179,5 +193,22 @@ func TestListedContactCursorKeyPropertyName(t *testing.T) {
 	}
 	if key.PropertyName != studioPropertyName {
 		t.Fatalf("property name = %q, want %q", key.PropertyName, studioPropertyName)
+	}
+}
+
+// TestListedContactCursorKeyCreatedAt pins the created sort's keyset key
+// component (ticket #847): the continuation carries the row's creation
+// moment — the leading key of the created walk.
+func TestListedContactCursorKeyCreatedAt(t *testing.T) {
+	t.Parallel()
+
+	id := uuid.Must(uuid.NewV7())
+	createdAt := time.Date(2026, 9, 27, 9, 0, 0, 500000, time.UTC)
+	key := ListedContact{Contact: domain.Contact{ID: id, FirstName: contactFirstName, CreatedAt: createdAt}}.CursorKey()
+	if !key.CreatedAt.Equal(createdAt) {
+		t.Fatalf("created at = %v, want %v", key.CreatedAt, createdAt)
+	}
+	if key.ID != id {
+		t.Fatalf("id = %s, want %s", key.ID, id)
 	}
 }
