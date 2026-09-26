@@ -46,7 +46,7 @@ export function PaymentsLoading(): JSX.Element {
           <HubTitle>Платежи</HubTitle>
         </HubCollapseAnchor>
 
-        <div className="-mx-5 flex min-[1200px]:mx-0 flex-col gap-6 px-6 pt-4">
+        <div className="flex flex-col gap-6 px-6 pt-4">
           <PaymentsSearchPill onOpenSearch={() => {}} />
 
           <PaymentsGlobalSectionSkeleton />
@@ -90,7 +90,7 @@ export function PaymentsObjectsLoading(): JSX.Element {
       </TopNav>
 
       <PageContent>
-        <div className="-mx-5 flex min-[1200px]:mx-0 flex-col gap-4 px-6 pt-1">
+        <div className="flex flex-col gap-4 px-6 pt-1">
           <Skeleton className="h-[120px] rounded-card" />
           <Skeleton className="h-[120px] rounded-card" />
         </div>

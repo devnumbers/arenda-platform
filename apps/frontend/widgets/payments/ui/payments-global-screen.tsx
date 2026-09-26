@@ -115,10 +115,7 @@ export function PaymentsGlobalScreen(): JSX.Element {
             onAddProperty={() => router.push(ROUTES.propertyNew)}
           />
         ) : (
-          <div className="-mx-5 flex min-[1200px]:mx-0 flex-col gap-6 px-6 pt-4">
-            {/* Ритм страницы — ровно 24px по бокам, как на «Операциях»:
-             * контент кабинета даёт 20px до 1200px, страница выравнивает
-             * себя до 24 сама. */}
+          <div className="flex flex-col gap-6 px-6 pt-4">
             <PaymentsSearchPill
               onOpenSearch={() => router.push(ROUTES.paymentsSearch)}
             />
@@ -498,7 +495,7 @@ function PaymentsGlobalEmpty({
       // Растягиваем блок до нижнего края видимой области: CTA прижата книзу
       // (879:9399). 216px = верх страницы (PageHeader + отступ контента) и
       // нижний резерв PageContent под TabBar (pb-[136px]).
-      className="-mx-5 flex min-h-[calc(100dvh-216px)] min-[1200px]:mx-0 flex-col px-6"
+      className="flex min-h-[calc(100dvh-216px)] flex-col px-6"
     >
       <div className="flex flex-1 items-center justify-center">
         <EmptyState

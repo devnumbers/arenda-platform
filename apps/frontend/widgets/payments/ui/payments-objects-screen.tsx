@@ -130,10 +130,10 @@ export function PaymentsObjectsScreen(): JSX.Element {
 
         {!showEmptyState && (
           <>
-            {/* Ритм страницы — канон #578: обёртка гасит вставку кабинета и
-             * держит 24px сама; детям списка вставки не нужны (margin-утилиты
-             * на <button> всё равно глушит безслойный normalize HeroUI). */}
-            <div className="-mx-5 flex min-[1200px]:mx-0 flex-col gap-4 px-6 pt-1">
+            {/* Поля 24px несёт обёртка (§14); детям списка вставки не нужны
+             * (margin-утилиты на <button> всё равно глушит безслойный
+             * normalize HeroUI). */}
+            <div className="flex flex-col gap-4 px-6 pt-1">
               {pending && (
                 <>
                   <Skeleton className="h-[120px] rounded-card" />
@@ -198,7 +198,7 @@ function PaymentsObjectsEmpty({
   return (
     <div
       data-testid="payments-objects-empty"
-      className="-mx-5 flex min-h-[calc(100dvh-216px)] min-[1200px]:mx-0 flex-col px-6"
+      className="flex min-h-[calc(100dvh-216px)] flex-col px-6"
     >
       <div className="flex flex-1 items-center justify-center">
         <EmptyState
