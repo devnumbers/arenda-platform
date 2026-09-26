@@ -27,21 +27,24 @@ const GLASS_INSET_SHADOW =
 
 const CARD_THEMES = {
   basic: {
-    background: "#f3f4f6",
+    backgroundImage: "",
+    backgroundColor: "#f3f4f6",
     text: "text-ink",
     sub: "text-gray-2",
     featureSub: "text-gray-2",
   },
   pro: {
-    background:
+    backgroundImage:
       "linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(217,217,217,0.1) 100%), linear-gradient(180deg, rgb(100,100,100) 0%, rgb(30,30,30) 100%)",
+    backgroundColor: "transparent",
     text: "text-white",
     sub: "text-white/80",
     featureSub: "text-white/80",
   },
   business: {
-    background:
+    backgroundImage:
       "linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(217,217,217,0.1) 100%), linear-gradient(180deg, rgb(136,183,255) 0%, rgb(43,127,255) 100%)",
+    backgroundColor: "transparent",
     text: "text-white",
     sub: "text-white/80",
     featureSub: "text-white/80",
@@ -61,11 +64,17 @@ export function TariffCards({
 
   return (
     <>
-      <div
-        className="flex h-14 w-64 items-center self-center gap-0.5 rounded-[16px] bg-surface p-0.5"
-        role="tablist"
-        aria-label="Период оплаты"
-      >
+      {/* Заголовок и переключатель: на планшете/мобайле — столбиком по центру,
+          на десктопе — в одну строку от левого края (макет 2846-153712). */}
+      <div className="flex flex-col items-center gap-6 desk:flex-row desk:items-center desk:self-stretch desk:gap-8">
+        <h2 className="text-center text-[28px] font-semibold leading-8 desk:text-h2 desk:leading-[60px]">
+          Тарифы
+        </h2>
+        <div
+          className="flex h-14 w-64 items-center gap-0.5 rounded-[16px] bg-surface p-0.5"
+          role="tablist"
+          aria-label="Период оплаты"
+        >
         {(
           [
             ["yearly", "Год", true],
@@ -92,8 +101,9 @@ export function TariffCards({
             )}
           </button>
         ))}
+        </div>
       </div>
-      <div className="mt-8 flex justify-center">
+      <div className="mt-8 flex justify-start desk:mt-14">
         <div className="grid w-full grid-cols-1 gap-3 tab:w-[984px] tab:shrink-0 tab:grid-cols-3 desk:w-full desk:grid-cols-3 desk:gap-5">
           {tariffs.map((tariff, index) => {
             const isCurrent = currentTariff === tariff.id;
@@ -107,8 +117,11 @@ export function TariffCards({
             return (
               <Reveal key={tariff.id} delay={index * 100} className="h-full">
                 <article
-                  style={{ backgroundImage: theme.background }}
-                  className={`relative flex h-auto w-full flex-col justify-between gap-12 overflow-clip rounded-[32px] border border-[rgba(156,156,156,0.5)] p-8 backdrop-blur-[10px] tab:h-[453px] tab:w-[320px] desk:h-[550px] desk:rounded-[40px] desk:p-10 ${theme.text} ${GLASS_INSET_SHADOW}`}
+                  style={{
+                    backgroundImage: theme.backgroundImage || undefined,
+                    backgroundColor: theme.backgroundColor,
+                  }}
+                  className={`relative flex h-auto w-full flex-col justify-between gap-8 overflow-clip rounded-[32px] border border-[rgba(156,156,156,0.5)] p-8 backdrop-blur-[10px] tab:h-[453px] tab:w-[320px] desk:h-[550px] desk:gap-12 desk:rounded-[40px] desk:p-10 ${theme.text} ${GLASS_INSET_SHADOW}`}
                 >
                   <div className="flex flex-col gap-[15px]">
                     <h3 className="text-s leading-5 desk:text-r desk:leading-[22px]">
@@ -117,7 +130,7 @@ export function TariffCards({
                     <div className="flex flex-col gap-2.5">
                       <p className="text-[28px] font-semibold leading-8">{price}</p>
                       {billing === "yearly" && tariff.id !== "basic" && (
-                        <p className={`text-s leading-5 ${theme.sub}`}>
+                        <p className={`text-s leading-5 desk:text-r desk:leading-[22px] ${theme.sub}`}>
                           При оплате {tariff.yearlyTotal.toLocaleString("ru-RU")} ₽ за год
                         </p>
                       )}

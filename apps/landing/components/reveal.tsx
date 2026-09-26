@@ -24,8 +24,11 @@ export function Reveal({
     }
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       // Без анимации: правим DOM напрямую (внешняя система) — без setState.
+      // translate-y-6 в Tailwind v4 — отдельное свойство `translate`, его
+      // надо гасить отдельно, transform: none его не снимает.
       el.style.opacity = "1";
       el.style.transform = "none";
+      el.style.translate = "none";
       return;
     }
     const observer = new IntersectionObserver(

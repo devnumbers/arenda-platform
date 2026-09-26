@@ -30,7 +30,7 @@ export function CardTrio({
             {title}
           </h2>
         </Reveal>
-        <div className="mt-8 flex justify-center desk:mt-14">
+        <div className="mt-8 flex justify-start desk:mt-14">
           <div className="grid w-full grid-cols-1 gap-3 tab:w-[984px] tab:shrink-0 tab:grid-cols-3 desk:w-full desk:grid-cols-3 desk:gap-5">
             {cards.map((card, index) => (
               <Reveal key={card.title} delay={index * 100} className="h-full">

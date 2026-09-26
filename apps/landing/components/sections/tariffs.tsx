@@ -11,12 +11,7 @@ export async function Tariffs() {
   return (
     <section id="tariffs" className="mt-24 desk:mt-[156px]">
       <div className="mx-auto flex w-full max-w-[1048px] flex-col items-center px-6 desk:max-w-[1000px] desk:px-0">
-        <Reveal className="w-full">
-          <h2 className="text-center text-[28px] font-semibold leading-8 desk:text-h2 desk:leading-[60px]">
-            Тарифы
-          </h2>
-        </Reveal>
-        <Reveal delay={100} className="mt-6 flex w-full flex-col items-center">
+        <Reveal delay={100} className="flex w-full flex-col items-center">
           <TariffCards tariffs={TARIFFS} currentTariff={me?.tariff} />
         </Reveal>
       </div>
