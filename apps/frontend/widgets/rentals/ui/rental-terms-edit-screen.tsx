@@ -27,7 +27,6 @@ import {
   CalendarDatePicker,
   IconButton,
   PageContent,
-  Skeleton,
   StickyBottomBar,
   TextField,
   TopNav,
@@ -41,6 +40,7 @@ import {
   PickerTriggerBox,
   UtilitiesPickerField,
 } from './wizard-chrome';
+import { RentalTermsEditFormSkeleton } from './rental-skeletons';
 
 /**
  * Экран «Изменить условия» (#532, Figma 1302:53055): форма, не визард —
@@ -74,11 +74,7 @@ export function RentalTermsEditScreen({
   if (rentalsQuery.isPending) {
     return (
       <EditShell onClose={close}>
-        <div className="flex flex-col gap-4 pt-6">
-          <Skeleton className="h-14 w-full" />
-          <Skeleton className="h-14 w-full" />
-          <Skeleton className="h-14 w-full" />
-        </div>
+        <RentalTermsEditFormSkeleton />
       </EditShell>
     );
   }
@@ -115,7 +111,10 @@ export function RentalTermsEditScreen({
   return <RentalTermsEditForm key={rental.id} rental={rental} onClose={close} />;
 }
 
-/** Оболочка состояний без формы: шапка с крестиком + контент страницы. */
+/** Оболочка состояний без формы: шапка с крестиком и титулом + контент
+ * страницы. Титул рендерится вне фазы загрузки (§7): состав шапки не
+ * меняется при приходе данных — у формы добавляется только галочка
+ * сохранения. */
 function EditShell({
   onClose,
   children,
@@ -129,7 +128,9 @@ function EditShell({
         leading={
           <IconButton icon={<Cancel />} label="Отменить правку" onClick={onClose} />
         }
-      />
+      >
+        <TopNavTitle title="Изменить условия" />
+      </TopNav>
       <PageContent>{children}</PageContent>
     </>
   );

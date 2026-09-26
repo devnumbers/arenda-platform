@@ -6,7 +6,8 @@ import { ArrowLeft, Edit } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { currentRentalOf, rentalCommentText, rentalTermsRows, useRentals } from '@/features/rentals';
-import { Button, EmptyState, IconButton, PageContent, Skeleton, TopNav, TopNavTitle } from '@/shared/ui/design';
+import { Button, EmptyState, IconButton, PageContent, TopNav, TopNavTitle } from '@/shared/ui/design';
+import { RentalTermsCardSkeleton } from './rental-skeletons';
 import { TermRow } from './term-row';
 
 /**
@@ -65,13 +66,7 @@ export function RentalTermsScreen({
       </TopNav>
 
       <PageContent>
-        {rentalsQuery.isPending && (
-          <div className="flex flex-col gap-4 pt-6">
-            <Skeleton className="h-14 w-full" />
-            <Skeleton className="h-14 w-full" />
-            <Skeleton className="h-14 w-full" />
-          </div>
-        )}
+        {rentalsQuery.isPending && <RentalTermsCardSkeleton />}
 
         {rentalsQuery.isError && (
           <div className="flex flex-col items-center gap-4 pt-6">
