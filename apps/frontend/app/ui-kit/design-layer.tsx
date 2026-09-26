@@ -74,8 +74,8 @@ import {
     WheelPickerSheet,
     amountKopecks,
     monthTitle,
+    paddedItems,
     type PickerOption,
-    type WheelPickerItem,
 } from '@/shared/ui/design';
 import { navSectionById, supportNavSection } from '@/shared/config/navigation';
 import { addDays, dateToIso } from '@/shared/lib/calendar';
@@ -96,15 +96,10 @@ const dlButtonVariants = ['primary', 'secondary', 'danger', 'clear', 'white'] as
 const dlIconVariants = ['primary', 'secondary', 'danger'] as const;
 const statusGradations = ['danger', 'warning', 'good', 'check', 'info'] as const;
 
-/** Колёса демо-шита WheelPickerSheet: часы 00–23 и минуты 00–59. Значения
- * совпадают с метками (паддинг): состояние демо держит HH:MM-строки, иначе
- * колесо не находит выбранное и садится на первый ряд (находка приёмки
- * #810). */
-const paddedItems = (length: number): ReadonlyArray<WheelPickerItem> =>
-    Array.from({ length }, (_, value) => {
-        const label = String(value).padStart(2, '0');
-        return { value: label, label };
-    });
+/** Колёса демо-шита WheelPickerSheet: часы 00–23 и минуты 00–59. Состояние
+ * демо держит HH:MM-строки, значения совпадают с метками (паддинг —
+ * контракт shared paddedItems), иначе колесо не находит выбранное и садится
+ * на первый ряд (находка приёмки #810). */
 const sheetHourItems = paddedItems(24);
 const sheetMinuteItems = paddedItems(60);
 

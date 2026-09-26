@@ -26,6 +26,7 @@ export { MonthDaysGrid, type MonthDaysGridProps } from './month-days-grid';
 export { monthTitle, MONTH_LABELS } from './month-grid';
 export { MonthYearPicker, type MonthYearPickerProps } from './month-year-picker';
 export { WheelPicker, type WheelPickerProps, type WheelPickerItem } from './wheel-picker';
+export { paddedItems } from './wheel-items';
 export {
   WheelPickerSheet,
   type WheelPickerSheetProps,
