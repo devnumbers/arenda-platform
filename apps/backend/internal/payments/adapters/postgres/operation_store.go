@@ -209,7 +209,7 @@ func (s *OperationStore) ListGlobal(
 		PropertyIds:     joinPropertyIDs(q.PropertyIDs),
 		DateFrom:        pgconv.DatePtrToPgtype(q.DateFrom),
 		DateTo:          pgconv.DatePtrToPgtype(q.DateTo),
-		Search:          escapeLikePattern(q.Search),
+		Search:          pgconv.EscapeLikePattern(q.Search),
 		SearchDigits:    searchAmountDigits(q.Search),
 		Type:            operationsTypeFilter(q.Type),
 		Categories:      joinCategorySlugs(q.Categories),
@@ -251,7 +251,7 @@ func (s *OperationStore) CountGlobal(
 		PropertyIds:     joinPropertyIDs(q.PropertyIDs),
 		DateFrom:        pgconv.DatePtrToPgtype(q.DateFrom),
 		DateTo:          pgconv.DatePtrToPgtype(q.DateTo),
-		Search:          escapeLikePattern(q.Search),
+		Search:          pgconv.EscapeLikePattern(q.Search),
 		SearchDigits:    searchAmountDigits(q.Search),
 		Type:            operationsTypeFilter(q.Type),
 		Categories:      joinCategorySlugs(q.Categories),
@@ -272,7 +272,7 @@ func (s *OperationStore) CountGlobal(
 func (s *OperationStore) SummarizeGlobal(
 	ctx context.Context, actor uuid.UUID, q application.GlobalOperationsSummaryQuery,
 ) (application.OperationsSummary, error) {
-	search := escapeLikePattern(q.Search)
+	search := pgconv.EscapeLikePattern(q.Search)
 	searchDigits := searchAmountDigits(q.Search)
 	propertyIDs := joinPropertyIDs(q.PropertyIDs)
 	totalsParams := postgres.SumPaidOperationTotalsGlobalParams{
@@ -336,7 +336,7 @@ func listOperationsParams(
 	params.Today = pgconv.DateToPgtype(q.Today)
 	params.DateFrom = pgconv.DatePtrToPgtype(q.DateFrom)
 	params.DateTo = pgconv.DatePtrToPgtype(q.DateTo)
-	params.Search = escapeLikePattern(q.Search)
+	params.Search = pgconv.EscapeLikePattern(q.Search)
 	params.SearchDigits = searchAmountDigits(q.Search)
 	params.Type = operationsTypeFilter(q.Type)
 	params.Categories = joinCategorySlugs(q.Categories)
@@ -357,7 +357,7 @@ func (s *OperationStore) SummarizeByProperty(
 ) (application.OperationsSummary, error) {
 	// The totals deliberately carry no direction filter — the contract
 	// reports both directions whatever the categories are narrowed to.
-	search := escapeLikePattern(q.Search)
+	search := pgconv.EscapeLikePattern(q.Search)
 	searchDigits := searchAmountDigits(q.Search)
 	params := postgres.SumOperationTotalsParams{
 		Owner:        pgconv.UUIDToPgtype(scope),

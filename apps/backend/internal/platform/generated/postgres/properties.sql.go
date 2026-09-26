@@ -623,15 +623,7 @@ LEFT JOIN property_members pm
        ON pm.property_id = p.id
       AND pm.user_id = $1::uuid
       AND pm.status = 'active'
-WHERE (
-       p.owner_id = $1::uuid
-       OR EXISTS (
-            SELECT 1 FROM property_members vpm
-            WHERE vpm.property_id = p.id
-              AND vpm.user_id = $1::uuid
-              AND vpm.status = 'active'
-          )
-      )
+WHERE actor_can_read_property(p.id, $1::uuid)
   AND p.status IN ('active', 'maintenance')
   AND (p.name ILIKE '%' || $2::text || '%' ESCAPE '\'
        OR p.address ILIKE '%' || $2::text || '%' ESCAPE '\')
@@ -683,7 +675,8 @@ type SearchVisiblePropertiesRow struct {
 // together; NULL (no cursor) reads from the beginning.
 // access_role names the actor's role on the row: 'owner' for own
 // properties, the active membership's role for shared ones (T11) — the
-// LEFT JOIN row is unique per (property, user).
+// LEFT JOIN row is unique per (property, user) and carries the role only;
+// the visibility verdict is the function call in the WHERE.
 func (q *Queries) SearchVisibleProperties(ctx context.Context, arg SearchVisiblePropertiesParams) ([]SearchVisiblePropertiesRow, error) {
 	rows, err := q.db.Query(ctx, searchVisibleProperties,
 		arg.Actor,

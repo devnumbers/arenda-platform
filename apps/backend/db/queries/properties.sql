@@ -83,7 +83,8 @@ ORDER BY properties.updated_at DESC;
 -- together; NULL (no cursor) reads from the beginning.
 -- access_role names the actor's role on the row: 'owner' for own
 -- properties, the active membership's role for shared ones (T11) — the
--- LEFT JOIN row is unique per (property, user).
+-- LEFT JOIN row is unique per (property, user) and carries the role only;
+-- the visibility verdict is the function call in the WHERE.
 SELECT p.*,
        ((SELECT COUNT(*) FROM property_members pm
          WHERE pm.property_id = p.id) +
@@ -97,15 +98,7 @@ LEFT JOIN property_members pm
        ON pm.property_id = p.id
       AND pm.user_id = sqlc.arg('actor')::uuid
       AND pm.status = 'active'
-WHERE (
-       p.owner_id = sqlc.arg('actor')::uuid
-       OR EXISTS (
-            SELECT 1 FROM property_members vpm
-            WHERE vpm.property_id = p.id
-              AND vpm.user_id = sqlc.arg('actor')::uuid
-              AND vpm.status = 'active'
-          )
-      )
+WHERE actor_can_read_property(p.id, sqlc.arg('actor')::uuid)
   AND p.status IN ('active', 'maintenance')
   AND (p.name ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
        OR p.address ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\')

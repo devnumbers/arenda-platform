@@ -183,7 +183,7 @@ func TestRealtimeStreamAudience(t *testing.T) {
 }
 
 // The archive's invisibility canon (#163, the member leg of
-// actor_can_read_history in 000137) covers the realtime frames too: an
+// actor_can_read_property in 000142) covers the realtime frames too: an
 // active member of a just-archived object is no reader — the frame dies for
 // them while the owner keeps reading it (the owner's leg is unconditional).
 // No connection management (ADR 0062 §4): the member's stream itself stays
