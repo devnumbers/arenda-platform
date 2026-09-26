@@ -64,7 +64,9 @@ await page.route('**/api/**', async (route) => {
 // … goto (hard load), screenshot the loading frame at ~700 ms, waitForTimeout past
 // the deadline, screenshot loaded, then: await page.unrouteAll({ behavior: 'ignoreErrors' });
 
-// Shift meter (install before the transition, read after; buffered replays earlier shifts):
+// Shift meter (install before the transition, read after; buffered replays earlier shifts).
+// For a cold hard goto install it via page.addInitScript — an evaluate before
+// goto dies with the document, and the metric reads undefined on the new one:
 window.__cls = 0;
 new PerformanceObserver((list) => {
   for (const e of list.getEntries()) if (!e.hadRecentInput) window.__cls += e.value;
@@ -87,6 +89,8 @@ Run it **per page**: Каркас gets a verdict on each sweep width (Adaptive w
 Scope guard (charter decision): audits judge the page in the current mechanics — a page does not fail for missing server prefetch (#866) or missing transition animations (#867); those land as through-passes after their tickets, and the loading-strategy item checks the current §7 canon, not the future HydrationBoundary one (research #863).
 
 Findings keep the standard tiers: **P0** — the page is unusable or shows wrong data; **P1** — a §14 item broken in a user-visible way (frame off the mockup, jitter, broken sticky/safe-area, non-canonical states). P0/P1 are fixed in the audit ticket before it closes; P2/P3 report without blocking. The ticket-level gate stays P0 + P1 green (step 5).
+
+Reconcile by code before closing, not by pages visited (found on #872): the live sweep only shows what the seeded data loaded — a generic skeleton behind an empty state or a cached query never surfaces. Before closing an audit ticket, grep the subtree for the known-bad loading shapes (`Skeleton className="h-14 w-full"` generic rows and friends) and reconcile every hit against the findings list; a hit with no finding is a missed one.
 
 ## Server truth (серверная правда)
 
@@ -145,7 +149,7 @@ async (page) => {
 }
 ```
 
-**Lane B — widths < 500 (mobile): viewport emulation in a throwaway tab.** A real window physically cannot go there, so emulate: open a fresh tab (`browser_tabs` action `new`), call `browser_resize` with the mobile size, run the checks, close the tab. `browser_resize` calls `page.setViewportSize()`, which flips a tab into permanent viewport emulation — the site re-lays-out but the window keeps its old size, and the tab never returns to window-sized rendering (`Emulation.clearDeviceMetricsOverride` does not help). That is why this lane never touches the walkthrough's main tab: a contaminated main tab keeps failing after the sweep is over. CSS, media queries and screenshots are honest under emulation — mark the check as emulated in the report.
+**Lane B — widths < 500 (mobile): viewport emulation in a throwaway tab.** A real window physically cannot go there, so emulate: open a fresh tab (`browser_tabs` action `new`), call `browser_resize` with the mobile size, run the checks, close the tab. `browser_resize` calls `page.setViewportSize()`, which flips a tab into permanent viewport emulation — the site re-lays-out but the window keeps its old size, and the tab never returns to window-sized rendering (`Emulation.clearDeviceMetricsOverride` does not help). That is why this lane never touches the walkthrough's main tab: a contaminated main tab keeps failing after the sweep is over. CSS, media queries and screenshots are honest under emulation — mark the check as emulated in the report. `browser_navigate`, `browser_run_code_unsafe` and every other driving tool ride the **current** tab: after the Lane B sweep, select the main tab back (`browser_tabs` action `select`) before resuming desktop work — otherwise desktop checks silently shoot inside the 375 emulation (hit on #872; benign only because the mobile evidence was valid too).
 
 Default sweep: 375 (lane B) / 768 / 1440 (lane A) — mobile / tablet / desktop; on audit tickets add **1100** (lane A): arbitrary breakpoints in code (`min-[1200px]`, found on #870) branch inside the desktop tier, so a layout hack can sleep at 1440 and fire at 1100 — the three Figma tiers alone do not cover every branch. Exact widths from the ticket or its Figma mockup override the defaults. Judge widths by `window.innerWidth` (the snippet's returned `viewport`, lane A) or `browser_resize`'s applied size (lane B), never by the OS window size you set — docked DevTools keeps the viewport hundreds of px narrower than the window (#870: "1440 window" measured 1150 viewport). Capture a screenshot per width (`.playwright-mcp/artifacts/<ticket>-NN-w375.png`) — each width carries its own P3 verdict.
 
@@ -156,5 +160,5 @@ Default sweep: 375 (lane B) / 768 / 1440 (lane A) — mobile / tablet / desktop;
 ## Environment facts
 
 - Stack URLs: frontend `http://127.0.0.1:3010`, backend `http://127.0.0.1:8081/healthz`; postgres owns port 5436. Override ports via `E2E_PG_PORT` / `E2E_BACKEND_PORT` / `E2E_FRONTEND_PORT`.
-- Seed (tools/e2e/frontend/seed.sql): owner «Иван Иванов» (+7 915 000 0001, e2e@example.com), properties «Квартира на Ленина» (payments of #463) and «Гараж на Садовой» (paymentless — empty states).
+- Seed (tools/e2e/frontend/seed.sql): owner «Иван Иванов» (+7 915 000 0001, e2e@example.com), properties «Квартира на Ленина» (payments of #463) and «Гараж на Садовой» (paymentless — empty states). **The seed has no rentals** (#872): for rental-subtree walkthroughs create them through the wizard (`/properties/<id>/rentals/new` — start date «today» is the button with `aria-current="date"`; on an empty contact book the picker route is hidden by design — drive the `?pick=rental` contact branch). Completion wizard gotchas: the step button appears only after the field fills (tap the «0 ₽» chip), and the success screen's «Хорошо» runs `history.back()` — after a full page load onto another object's `/new` it lands there by design.
 - Walkthrough artifacts live under `.playwright-mcp/` — gitignored and disposable; the durable artifact is the chat checklist.
