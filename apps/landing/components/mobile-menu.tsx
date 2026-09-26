@@ -22,7 +22,7 @@ export function MobileMenu({
   return (
     <div className="rounded-3xl bg-white shadow-[0_4px_20px_rgba(0,0,0,0)] transition-shadow duration-300 group-data-scrolled:shadow-[0_4px_20px_rgba(0,0,0,0.08)]">
       <div
-        className={`flex h-16 items-center pl-3 pr-2.5 transition-colors duration-300 ${
+        className={`flex h-16 items-center pl-4 pr-2.5 transition-colors duration-300 ${
           open ? "border-b border-line" : ""
         }`}
       >

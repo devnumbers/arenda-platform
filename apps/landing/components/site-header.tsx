@@ -27,7 +27,7 @@ function HeaderAction({ authed }: { authed: boolean }) {
 // мягкая: 0 4px 20px rgba(0,0,0,.08), плавное появление 300ms.
 function DesktopBar({ action }: { action: ReactNode }) {
   return (
-    <div className="hidden h-16 grid-cols-[1fr_auto_1fr] items-center rounded-3xl bg-white pl-3 pr-2.5 shadow-[0_4px_20px_rgba(0,0,0,0)] transition-shadow duration-300 group-data-scrolled:shadow-[0_4px_20px_rgba(0,0,0,0.08)] desk:grid">
+    <div className="hidden h-16 grid-cols-[1fr_auto_1fr] items-center rounded-3xl bg-white pl-4 pr-2.5 shadow-[0_4px_20px_rgba(0,0,0,0)] transition-shadow duration-300 group-data-scrolled:shadow-[0_4px_20px_rgba(0,0,0,0.08)] desk:grid">
       <Link
         href="/"
         aria-label="Рентли — на главную"
