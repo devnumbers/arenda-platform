@@ -1242,7 +1242,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Страница ленты уведомлений (keyset, канон
+         * Страница ленты уведомлений (keyset, канон #597)
          * @description Хранимая лента пользователя, newest-first keyset-пагинация (карта
          *     #734, решение #737, #743). Удалённые строки не появляются. Курсор —
          *     непрозрачный blob из next_cursor предыдущей страницы; страницы
@@ -3082,7 +3082,7 @@ export interface components {
             /** @description The «Платежи» group — the object's non-auto-pay rules. */
             otherRules: components["schemas"]["PaymentObjectKey"][];
         };
-        /** @description The global «Объекты» screen of the payments map (ticket */
+        /** @description The global «Объекты» screen of the payments map (ticket #575). */
         PaymentObjectsGlobalResponse: {
             items: components["schemas"]["PaymentObjectItem"][];
         };
@@ -3509,7 +3509,7 @@ export interface components {
             enabled: boolean;
             categories: components["schemas"]["NotificationCategoryPreferences"];
         };
-        /** @description Флаги четырёх настраиваемых категорий одного канала (решение */
+        /** @description Флаги четырёх настраиваемых категорий одного канала (решение #738) — email держит копию на аккаунте, push — на устройстве. Тариф и Системные всегда включены и здесь не хранятся. */
         NotificationCategoryPreferences: {
             rental: boolean;
             payments_operations: boolean;
@@ -3522,7 +3522,7 @@ export interface components {
         NotificationPreferencesResponse: {
             email: components["schemas"]["NotificationCategoryPreferences"];
         };
-        /** @description Строка ленты одного получателя (решение */
+        /** @description Строка ленты одного получателя (решение #737): снимок текста, payload-ссылки, личные флаги. */
         NotificationItem: {
             /** Format: uuid */
             id: string;
@@ -7282,7 +7282,7 @@ export interface operations {
                 status?: components["schemas"]["SubscriptionPaymentStatus"];
                 /** @description Exact match on the user's phone number. */
                 user_phone?: string;
-                /** @description Filters payments by the payer's current subscription status (issue */
+                /** @description Filters payments by the payer's current subscription status (issue #254). */
                 subscription_status?: components["schemas"]["SubscriptionStatus"];
                 /** @description Sort field (camelCase). Allowed: createdAt, amountKopecks, status. Defaults to createdAt descending. */
                 sort?: string;

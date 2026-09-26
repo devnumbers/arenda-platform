@@ -133,14 +133,16 @@ type CreateOperationCommand struct {
 }
 
 // OperationService carries the operation use cases of the second contracts
-// slice (ticket #461): «Оплатить сейчас» and the two paginated listings (of
-// one rule and of the whole property). It runs through the same serialization
-// and read-scope discipline as the rule service; only the pay mutation writes.
+// slice (ticket #461: pay «Оплатить сейчас» and the two paginated listings
+// that read) and the manual-operation mutations: create («+ операция»,
+// #569) and delete («Удалить операцию») — pay, create and delete write.
+// It runs through the same serialization and read-scope discipline as the
+// rule service.
 type OperationService struct {
 	txStoreFactory
 	policy    sharedpolicy.Policy
 	calendar  OwnerCalendar
-	writeGate gateFunc // Full Access+: pay.
+	writeGate gateFunc // Full Access+: pay/create/delete.
 	// Realtime is the late-bound carrier the mutations' frames dispatch
 	// through after the commit (карта #714, #716; ADR 0062); nil keeps the
 	// pre-#716 silence.

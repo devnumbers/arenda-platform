@@ -64,9 +64,9 @@ func TestCreateUnboundContactPublishesOwnerBookFrame(t *testing.T) {
 
 // TestMoveContactPublishesSourceAndDestinationFrames pins the move's both
 // ends: the origin object's card grid loses the row and the destination's
-// gains it, so one dispatch carries both contacts pairs; the journal row
-// anchors the history pair on the destination, where the move journals
-// (ADR 0061 §3) (карта #714, #716).
+// gains it, so one dispatch carries both contacts pairs; the journal pair
+// (contact.moved, one leg per end — тикет #856) anchors the history on both
+// ends of the move (ADR 0061 §4) (карта #714, #716).
 func TestMoveContactPublishesSourceAndDestinationFrames(t *testing.T) {
 	t.Parallel()
 
@@ -95,6 +95,7 @@ func TestMoveContactPublishesSourceAndDestinationFrames(t *testing.T) {
 		[]string{
 			"contacts:" + h.property.String(),
 			"contacts:" + destination.String(),
+			"history:" + h.property.String(),
 			"history:" + destination.String(),
 		},
 		h.realtime.Pairs())
@@ -102,8 +103,10 @@ func TestMoveContactPublishesSourceAndDestinationFrames(t *testing.T) {
 
 // TestUnbindContactPublishesSourceAndOwnerBookFrames pins the unbind: the
 // origin object's pair for the leaving row plus the owner-book pair of the
-// now-unbound card; no journal row is written for an unbound card, so no
-// history pair rides along (карта #714, #716).
+// now-unbound card; the unbind journals its contact.unbound row on the
+// source — the single existing end (ADR 0061 §4, тикет #856) — so that one
+// history pair rides along; §3's «unbound card writes no rows» stays about
+// cards without any binding (карта #714, #716).
 func TestUnbindContactPublishesSourceAndOwnerBookFrames(t *testing.T) {
 	t.Parallel()
 
@@ -128,6 +131,6 @@ func TestUnbindContactPublishesSourceAndOwnerBookFrames(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t,
-		[]string{"contacts:" + h.property.String(), "contacts:"},
+		[]string{"contacts:" + h.property.String(), "contacts:", "history:" + h.property.String()},
 		h.realtime.Pairs())
 }

@@ -2719,7 +2719,7 @@ paths:
   /notifications:
     get:
       operationId: listNotifications
-      summary: Страница ленты уведомлений (keyset, канон #597)
+      summary: "Страница ленты уведомлений (keyset, канон #597)"
       description: |
         Хранимая лента пользователя, newest-first keyset-пагинация (карта
         #734, решение #737, #743). Удалённые строки не появляются. Курсор —
@@ -3521,7 +3521,9 @@ paths:
         - name: subscription_status
           in: query
           required: false
-          description: Filters payments by the payer's current subscription status (issue #254).
+          description: >-
+            Filters payments by the payer's current subscription status
+            (issue #254).
           schema:
             $ref: '#/components/schemas/SubscriptionStatus'
         - name: sort
@@ -6886,7 +6888,8 @@ components:
             $ref: '#/components/schemas/PaymentObjectKey'
 
     PaymentObjectsGlobalResponse:
-      description: The global «Объекты» screen of the payments map (ticket #575).
+      description: >-
+        The global «Объекты» screen of the payments map (ticket #575).
       type: object
       required: [items]
       properties:
@@ -7736,7 +7739,10 @@ components:
 
     NotificationCategoryPreferences:
       type: object
-      description: Флаги четырёх настраиваемых категорий одного канала (решение #738) — email держит копию на аккаунте, push — на устройстве. Тариф и Системные всегда включены и здесь не хранятся.
+      description: >-
+        Флаги четырёх настраиваемых категорий одного канала (решение #738) —
+        email держит копию на аккаунте, push — на устройстве. Тариф и
+        Системные всегда включены и здесь не хранятся.
       required: [rental, payments_operations, tasks, shared_access]
       properties:
         rental:
@@ -7764,7 +7770,9 @@ components:
 
     NotificationItem:
       type: object
-      description: Строка ленты одного получателя (решение #737): снимок текста, payload-ссылки, личные флаги.
+      description: >-
+        Строка ленты одного получателя (решение #737): снимок текста,
+        payload-ссылки, личные флаги.
       required: [id, event_type, category, title, body, created_at]
       properties:
         id:
