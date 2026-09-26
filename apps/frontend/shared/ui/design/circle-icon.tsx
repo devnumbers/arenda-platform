@@ -4,7 +4,8 @@ import { circleIconPair, type CircleIconVariant } from './circle-icon-variants';
 
 export type CircleIconProps = ComponentProps<'span'> & {
   /** Подложка под кругом: muted — серая (--dl-surface-muted), white — белая
-   * (--dl-surface); кант красится цветом подложки (circle-icon.ts). */
+   * (--dl-surface); кант красится цветом подложки
+   * (circle-icon-variants.ts). */
   readonly variant: CircleIconVariant;
 };
 

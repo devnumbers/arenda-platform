@@ -179,7 +179,8 @@ export function ListRowSection(): JSX.Element {
 /** Канон «круг 44 с кольцом 2.5px» (#846): слот иконки/аватара строк,
  * вариант — подложка (muted — серая, white — белая), кант красится её
  * цветом. Размер 96 — классом потребителя; круг под фото (overflow-hidden
- * rounded-full) показан на живых строках ListRow выше и в экранах. */
+ * rounded-full) — в экранах, живой пример — ObjectAvatarGlyph
+ * (widgets/participants/ui/participant-fragments.tsx:26). */
 export function CircleIconSection(): JSX.Element {
     return (
         <div className={styles.group}>
