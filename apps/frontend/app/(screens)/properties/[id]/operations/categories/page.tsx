@@ -13,13 +13,9 @@ export const metadata: Metadata = {
   title: 'Выбрать категорию — Рентли',
 };
 
-type OperationsCategoriesPageProps = {
-  params: Promise<{ id: string }>;
-};
-
 export default async function PropertyOperationsCategoriesRoutePage({
   params,
-}: OperationsCategoriesPageProps) {
+}: PageProps<'/properties/[id]/operations/categories'>) {
   const { id } = await params;
 
   return (

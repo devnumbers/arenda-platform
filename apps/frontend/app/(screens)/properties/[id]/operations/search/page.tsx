@@ -13,13 +13,9 @@ export const metadata: Metadata = {
   title: 'Поиск операций — Рентли',
 };
 
-type OperationsSearchPageProps = {
-  params: Promise<{ id: string }>;
-};
-
 export default async function PropertyOperationsSearchRoutePage({
   params,
-}: OperationsSearchPageProps): Promise<JSX.Element> {
+}: PageProps<'/properties/[id]/operations/search'>): Promise<JSX.Element> {
   const { id } = await params;
 
   return (

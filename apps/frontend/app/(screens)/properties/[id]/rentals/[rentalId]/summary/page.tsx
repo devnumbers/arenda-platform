@@ -10,13 +10,9 @@ export const metadata: Metadata = {
   title: 'Итоги аренды — Рентли',
 };
 
-type RentalSummaryRoutePageProps = {
-  params: Promise<{ id: string; rentalId: string }>;
-};
-
 export default async function RentalSummaryRoutePage({
   params,
-}: RentalSummaryRoutePageProps) {
+}: PageProps<'/properties/[id]/rentals/[rentalId]/summary'>) {
   const { id, rentalId } = await params;
 
   return <RentalSummaryScreen propertyId={id} rentalId={rentalId} />;

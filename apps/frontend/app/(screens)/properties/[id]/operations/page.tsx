@@ -13,11 +13,7 @@ export const metadata: Metadata = {
   title: 'Операции объекта — Рентли',
 };
 
-type OperationsPageProps = {
-  params: Promise<{ id: string }>;
-};
-
-export default async function PropertyOperationsRoutePage({ params }: OperationsPageProps) {
+export default async function PropertyOperationsRoutePage({ params }: PageProps<'/properties/[id]/operations'>) {
   const { id } = await params;
 
   return (

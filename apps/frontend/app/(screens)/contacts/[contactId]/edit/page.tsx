@@ -8,11 +8,7 @@ export const metadata: Metadata = {
   title: 'Изменить контакт — Рентли',
 };
 
-type ContactEditRoutePageProps = {
-  params: Promise<{ contactId: string }>;
-};
-
-export default async function ContactEditRoutePage({ params }: ContactEditRoutePageProps) {
+export default async function ContactEditRoutePage({ params }: PageProps<'/contacts/[contactId]/edit'>) {
   const { contactId } = await params;
 
   return <ContactEditScreen contactId={contactId} />;

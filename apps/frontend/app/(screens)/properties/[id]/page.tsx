@@ -1,10 +1,6 @@
 import type {Metadata} from 'next';
 import {PropertyDetailPage} from '@/widgets/property-detail';
 
-type PropertyDetailRoutePageProps = {
-    params: Promise<{ id: string }>;
-};
-
 export const metadata: Metadata = {
     title: 'Объект — Рентли',
     description: 'Просмотр объекта недвижимости',
@@ -12,7 +8,7 @@ export const metadata: Metadata = {
 
 export default async function PropertyDetailRoutePage({
     params,
-}: PropertyDetailRoutePageProps) {
+}: PageProps<'/properties/[id]'>) {
     await params;
 
     return <PropertyDetailPage/>;

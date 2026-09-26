@@ -17,13 +17,9 @@ export const metadata: Metadata = {
   description: 'Лента действий одного участника',
 };
 
-type HistoryParticipantRoutePageProps = {
-  params: Promise<{ participantId: string }>;
-};
-
 export default async function HistoryParticipantRoutePage({
   params,
-}: HistoryParticipantRoutePageProps): Promise<JSX.Element> {
+}: PageProps<'/history/participants/[participantId]'>): Promise<JSX.Element> {
   const { participantId } = await params;
 
   return (

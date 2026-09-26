@@ -10,13 +10,9 @@ export const metadata: Metadata = {
   title: 'Операция — Рентли',
 };
 
-type ProjectedOperationRoutePageProps = {
-  params: Promise<{ id: string; paymentId: string; date: string }>;
-};
-
 export default async function ProjectedOperationRoutePage({
   params,
-}: ProjectedOperationRoutePageProps) {
+}: PageProps<'/properties/[id]/payments/[paymentId]/operations/projected/[date]'>) {
   const { id, paymentId, date } = await params;
 
   return <ProjectedOperationScreen propertyId={id} paymentId={paymentId} date={date} />;
