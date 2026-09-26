@@ -1,9 +1,11 @@
+import { cache } from "react";
 import { headers } from "next/headers";
 
 // Состояние авторизации для tariff-aware хедера (ADR 0063): сервер читает
 // сессионную cookie кабинета и ходит на GET /me напрямую через BACKEND_URL
 // (compose-сеть в stage/prod, слотовый бэк локально). Любая ошибка/таймаут —
-// fail-open в гостевой хедер; тариф нужен только именем.
+// fail-open в гостевой хедер; тариф нужен только именем. cache(): layout и
+// страница рендерятся в одном запросе — /me зовётся один раз.
 export type TariffName = "basic" | "pro" | "business";
 
 export type Me = { tariff?: TariffName };
@@ -14,7 +16,7 @@ export const TARIFF_TITLES: Record<TariffName, string> = {
   business: "Бизнес",
 };
 
-export async function getMe(): Promise<Me | null> {
+export const getMe = cache(async (): Promise<Me | null> => {
   const cookieHeader = (await headers()).get("cookie") ?? "";
   // Имена cookie кабинета: __Host-session_id (secure) / session_id.
   if (!cookieHeader.includes("session_id")) {
@@ -33,10 +35,10 @@ export async function getMe(): Promise<Me | null> {
       return null;
     }
     const data = (await res.json()) as {
-      subscription?: { tariff?: TariffName };
+      subscription?: { tariff?: { name?: TariffName } };
     };
-    return { tariff: data.subscription?.tariff };
+    return { tariff: data.subscription?.tariff?.name };
   } catch {
     return null;
   }
-}
+});
