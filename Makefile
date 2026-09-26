@@ -444,13 +444,16 @@ tools-test: ## Run contract tests of the tools/ packages (self-installing)
 # internally. The test database (apps/backend/docker-compose.test.yml) is
 # reserved for ad-hoc runs via TEST_DATABASE_URL + make
 # backend-test-integration when testcontainers is unavailable.
-test: ## Run the full test suite (backend + frontend + admin + tools; Docker required)
+test: ## Run the full test suite (backend + frontend + admin + landing + tools; Docker required)
 	@docker info >/dev/null 2>&1 || { echo "ERROR: Docker is not available, but make test requires it: integration tests start PostgreSQL via testcontainers. Start Docker and retry; to push past the pre-push hook use: git push --no-verify"; exit 1; }
 	@set -e; \
 	$(MAKE) backend-test; \
 	$(MAKE) backend-test-integration; \
 	$(MAKE) frontend-test; \
 	$(MAKE) admin-test; \
+	$(MAKE) landing-lint; \
+	$(MAKE) landing-typecheck; \
+	$(MAKE) landing-build; \
 	$(MAKE) tools-test
 
 # Full suite with output captured to a file: for agents/workflows that gate on
