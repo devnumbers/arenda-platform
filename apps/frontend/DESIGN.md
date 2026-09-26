@@ -526,7 +526,7 @@ leading-слот, заголовок + подзаголовок, значени�
 | `Header` подэкрана (Back + Title) | `sub-screen-shell.tsx` (#568 — `TopNav` + `TopNavBackButton` + `TopNavTitle` + PageContent) |
 | `Page Content` | `page-content.tsx` |
 | `Row Button` | `list-row.tsx` и семейство строк (§6) |
-| `Category Icon` | круглый слот иконки в строках (§6); категория уведомлений — `NotificationCategoryIcon` (3D-PNG эталоны + запечённая точка, #744) |
+| `Category Icon` | круглый слот иконки в строках (§6) — канон `CircleIcon` (кольцо 2.5px по подложке, варианты muted/white, #846); с каталог-подложкой и бейджами — `CategoryIcon`; категория уведомлений — `NotificationCategoryIcon` (3D-PNG эталоны + запечённая точка, #744) |
 | `StatusHouseBadge` | бейджи статуса объекта (`PropertyStatusBadge`) |
 | `Notification Dot` | `notification-dot.svg` (§10, запечённый) |
 | `Modal` вариант Popup (успех-попап, 2329:148661) | `success-popup.tsx` (#744 — карточка на любой ширине, фон не затемняется) |

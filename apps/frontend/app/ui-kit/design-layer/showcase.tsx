@@ -15,6 +15,7 @@ import {
 } from './sections/fields';
 import {
     CalendarButtonSection,
+    CircleIconSection,
     ErrorCardSection,
     ListRowSection,
     PickerMenuSection,
@@ -97,6 +98,7 @@ export function DesignLayerShowcase(): JSX.Element {
                 <MonthDaysGridSection />
                 <AmountFieldSection />
                 <ListRowSection />
+                <CircleIconSection />
                 <CategoryIconSection />
                 <PaymentButtonsSection />
                 <TopNavSection value={searchValue} onValueChange={setSearchValue} />

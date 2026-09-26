@@ -14,6 +14,7 @@ import { useProperties } from '@/features/properties';
 import {
   Button,
   Checkbox,
+  CircleIcon,
   IconButton,
   ListRow,
   PageContent,
@@ -208,15 +209,12 @@ export function SelectAvatar({ photoUrl, fallback }: {
   readonly fallback: JSX.Element;
 }): JSX.Element {
   return (
-    <span
-      aria-hidden
-      className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-muted shadow-[0_0_0_2.5px_var(--dl-surface)]"
-    >
+    <CircleIcon variant="white" aria-hidden className="relative overflow-hidden rounded-full">
       {photoUrl !== undefined ? (
         <img src={photoUrl} alt="" className="h-full w-full object-cover" />
       ) : (
         fallback
       )}
-    </span>
+    </CircleIcon>
   );
 }

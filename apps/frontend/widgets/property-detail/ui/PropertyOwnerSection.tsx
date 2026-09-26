@@ -1,5 +1,6 @@
 import type { JSX } from 'react';
 import { BoldUser } from '@/shared/assets/icons';
+import { CircleIcon } from '@/shared/ui/design';
 import { PropertySectionCard } from './PropertySectionCard';
 
 export type PropertyOwnerSectionProps = {
@@ -27,12 +28,9 @@ export function PropertyOwnerSection({
   return (
     <PropertySectionCard title="Владелец объекта">
       <div className="flex items-center gap-3 px-6 pb-4 pt-4">
-        <span
-          aria-hidden
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill bg-surface shadow-[0_0_0_2.5px_var(--dl-surface-muted)]"
-        >
+        <CircleIcon variant="muted" aria-hidden>
           <BoldUser className="h-6 w-6 text-content" />
-        </span>
+        </CircleIcon>
         <span className="flex min-w-0 flex-col justify-center gap-1">
           <span className="truncate text-base font-medium leading-[18px] text-content">
             {ownerName}

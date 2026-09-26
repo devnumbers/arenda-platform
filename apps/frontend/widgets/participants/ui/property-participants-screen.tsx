@@ -43,6 +43,7 @@ import {
   MenuTrigger,
   Modal,
   ModalContent,
+  CircleIcon,
   PageContent,
   PickerMenu,
   SearchField,
@@ -474,12 +475,9 @@ function PropertyParticipantRowView({
           : 'cursor-default',
       )}
     >
-      <span
-        aria-hidden
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill bg-surface-muted shadow-[0_0_0_2.5px_var(--dl-surface)]"
-      >
+      <CircleIcon variant="white" aria-hidden>
         <BoldUser className="h-6 w-6" />
-      </span>
+      </CircleIcon>
       <span className="flex min-w-0 flex-1 flex-col justify-center gap-1">
         <span className="truncate text-base font-medium text-content">{row.title}</span>
         {/* Иконка роли — постоянная часть второй строки (макет ставит её

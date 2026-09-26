@@ -2,6 +2,7 @@
 
 import type { JSX } from 'react';
 import { BoldUser } from '@/shared/assets/icons';
+import { CircleIcon } from '@/shared/ui/design';
 import { cn } from '@/shared/lib/cn';
 import { useKeyboardActivation } from '@/shared/lib/hooks/useKeyboardActivation';
 import { contactFullName } from '../lib/full-name';
@@ -53,17 +54,9 @@ export function ContactRowButton({
         className,
       )}
     >
-      <span
-        aria-hidden
-        className={cn(
-          'flex h-11 w-11 shrink-0 items-center justify-center rounded-pill',
-          surface === 'muted'
-            ? 'bg-surface shadow-[0_0_0_2.5px_var(--dl-surface-muted)]'
-            : 'bg-surface-muted shadow-[0_0_0_2.5px_var(--dl-surface)]',
-        )}
-      >
+      <CircleIcon variant={surface} aria-hidden>
         <BoldUser className="h-6 w-6" />
-      </span>
+      </CircleIcon>
       <span className="flex min-w-0 flex-1 flex-col justify-center gap-1">
         <span className="truncate text-base font-medium text-content">{contactFullName(contact)}</span>
         {rowSubtitle !== undefined && (

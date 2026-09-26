@@ -1,10 +1,12 @@
 'use client';
 
 import type { JSX } from 'react';
-import { ArrowDown, BoldSofa, Move, Star, StarOff } from '@/shared/assets/icons';
+import { ArrowDown, BoldSofa, BoldUser, Move, Star, StarOff } from '@/shared/assets/icons';
 import {
     CalendarButton,
     ChipButton,
+    CircleIcon,
+    circleIconRing,
     ErrorCard,
     IconButton,
     ListRow,
@@ -13,6 +15,7 @@ import {
     StepsChip,
     UserButton,
 } from '@/shared/ui/design';
+import { cn } from '@/shared/lib/cn';
 import styles from '../../page.module.css';
 
 const statusGradations = ['danger', 'warning', 'good', 'check', 'info'] as const;
@@ -128,7 +131,7 @@ export function ListRowSection(): JSX.Element {
             <div className={styles.column} style={{ maxWidth: 480 }}>
                 <ListRow
                     leading={
-                        <span className="flex h-11 w-11 items-center justify-center rounded-pill bg-[#FF8904] text-white shadow-[0_0_0_2.5px_#ffffff]">
+                        <span className={cn('flex h-11 w-11 items-center justify-center rounded-pill bg-[#FF8904] text-white', circleIconRing.white)}>
                             <BoldSofa className="h-6 w-6" />
                         </span>
                     }
@@ -168,6 +171,31 @@ export function ListRowSection(): JSX.Element {
                     titleClassName="text-primary"
                     onSelect={() => undefined}
                 />
+            </div>
+        </div>
+    );
+}
+
+/** Канон «круг 44 с кольцом 2.5px» (#846): слот иконки/аватара строк,
+ * вариант — подложка (muted — серая, white — белая), кант красится её
+ * цветом. Размер 96 — классом потребителя; круг под фото (overflow-hidden
+ * rounded-full) показан на живых строках ListRow выше и в экранах. */
+export function CircleIconSection(): JSX.Element {
+    return (
+        <div className={styles.group}>
+            <h3 className={styles.groupTitle}>CircleIcon</h3>
+            <div className={styles.links}>
+                <div className="flex items-center gap-4">
+                    <CircleIcon variant="white" aria-hidden>
+                        <BoldUser className="h-6 w-6" />
+                    </CircleIcon>
+                    <CircleIcon variant="muted" aria-hidden>
+                        <BoldUser className="h-6 w-6 text-content" />
+                    </CircleIcon>
+                    <CircleIcon variant="white" aria-hidden className="h-24 w-24">
+                        <BoldUser className="h-[52px] w-[52px]" />
+                    </CircleIcon>
+                </div>
             </div>
         </div>
     );

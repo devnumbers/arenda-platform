@@ -14,7 +14,7 @@ import {
 } from '@/features/rentals';
 import type { Rental } from '@/entities/rental';
 import { PaymentRowButton } from '@/entities/payment';
-import { Button, EmptyState, IconButton, PageContent, Skeleton, TopNav, TopNavTitle } from '@/shared/ui/design';
+import { Button, CircleIcon, EmptyState, IconButton, PageContent, Skeleton, TopNav, TopNavTitle } from '@/shared/ui/design';
 import { RentalGroup } from './rental-group';
 import { TermRows } from './term-row';
 
@@ -122,12 +122,9 @@ function PastTenantRow({ name }: { readonly name: string }): JSX.Element {
       variant="gray"
       className="pointer-events-none px-3 py-2"
       categoryIcon={
-        <span
-          aria-hidden
-          className="flex h-11 w-11 items-center justify-center rounded-pill bg-surface shadow-[0_0_0_2.5px_var(--dl-surface-muted)]"
-        >
+        <CircleIcon variant="muted" aria-hidden>
           <BoldUser className="h-6 w-6 text-content" />
-        </span>
+        </CircleIcon>
       }
       title={name}
       subtitle="Арендатор"

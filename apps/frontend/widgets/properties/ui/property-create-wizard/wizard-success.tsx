@@ -8,7 +8,7 @@ import {
   propertyTypeIcons,
 } from '@/features/properties';
 import { notify } from '@/shared/lib/notifications';
-import { Button, StatusIcon, StickyBottomBar } from '@/shared/ui/design';
+import { Button, CircleIcon, StatusIcon, StickyBottomBar } from '@/shared/ui/design';
 import { PropertyWizardBottomBar } from './wizard-chrome';
 
 /**
@@ -39,9 +39,9 @@ export function WizardSuccess({ created, onOpen }: WizardSuccessProps): JSX.Elem
             «готово» 52 накладывается со смещением (61, 61) — выходит за
             круг в правый нижний угол. */}
         <span className="relative block h-24 w-24">
-          <span className="flex h-24 w-24 items-center justify-center rounded-full bg-surface-muted shadow-[0_0_0_2.5px_var(--dl-surface)]">
+          <CircleIcon variant="white" className="h-24 w-24 rounded-full">
             <Icon className="h-[52px] w-[52px] text-input-border" aria-hidden />
-          </span>
+          </CircleIcon>
           <StatusIcon
             status="good"
             className="absolute left-[61px] top-[61px] h-[52px] w-[52px]"

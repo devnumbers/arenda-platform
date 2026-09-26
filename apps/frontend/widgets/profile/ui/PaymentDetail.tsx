@@ -9,6 +9,7 @@ import {
   Skeleton,
   StickyBottomBar,
   SubScreenShell,
+  circleIconRing,
 } from '@/shared/ui/design';
 import {
   useSubscriptionPayment,
@@ -144,7 +145,7 @@ function PaymentDetailBody({ payment }: { readonly payment: SubscriptionPayment 
             alt=""
             width={128}
             height={128}
-            className="h-24 w-24 rounded-full bg-primary/10 p-[17px] shadow-[0_0_0_2.5px_var(--dl-surface)]"
+            className={cn('h-24 w-24 rounded-full bg-primary/10 p-[17px]', circleIconRing.white)}
           />
           <h1 className="m-0 text-xl font-normal leading-6 text-content">
             Тариф {getTariffLabel(payment.tariff.name)}

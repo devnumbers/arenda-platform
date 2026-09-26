@@ -39,6 +39,12 @@ export {
   type CalendarRangePickerProps,
 } from './calendar-date-picker';
 export { ListRow, type ListRowProps } from './list-row';
+export { CircleIcon, type CircleIconProps } from './circle-icon';
+export {
+  type CircleIconVariant,
+  circleIconPair,
+  circleIconRing,
+} from './circle-icon-variants';
 export { RoundActionButton, type RoundActionButtonProps } from './round-action-button';
 export { StickyBottomBar, type StickyBottomBarProps } from './sticky-bottom-bar';
 export { StatusIcon, type StatusIconProps, type StatusIconStatus } from './status-icon';

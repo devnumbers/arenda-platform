@@ -2,6 +2,7 @@ import type { JSX } from 'react';
 import { BoldOther, StatusIconCheck, StatusIconDanger } from '@/shared/assets/icons';
 import { categoryIconComponents } from '@/features/payment-categories/lib/icon-registry';
 import { cn } from '@/shared/lib/cn';
+import { circleIconRing } from '@/shared/ui/design';
 
 /**
  * Иконка категории платежа (компонент Figma «Category Icon», 651:5925 —
@@ -48,9 +49,7 @@ export function CategoryIcon({
     <span
       className={cn(
         'relative flex h-11 w-11 shrink-0 items-center justify-center rounded-pill',
-        surface === 'muted'
-          ? 'shadow-[0_0_0_2.5px_var(--dl-surface-muted)]'
-          : 'shadow-[0_0_0_2.5px_var(--dl-surface)]',
+        circleIconRing[surface],
         className,
       )}
       style={{ backgroundColor: color }}
@@ -71,9 +70,7 @@ export function CategoryIcon({
         <span
           className={cn(
             'absolute left-0 top-0 h-2.5 w-2.5 rounded-full bg-danger',
-            surface === 'muted'
-              ? 'shadow-[0_0_0_2.5px_var(--dl-surface-muted)]'
-              : 'shadow-[0_0_0_2.5px_var(--dl-surface)]',
+            circleIconRing[surface],
           )}
           aria-hidden
         />
