@@ -101,11 +101,15 @@ export function NotificationsFeedScreen({
   // Пустая лента без фильтра — «Уведомлений нет» (макет 2329-152324):
   // служебный чип прячется вместе со списком, кебаб нечего касаться —
   // вместо него шестерёнка настроек. При фильтре чип остаётся (фильтр
-  // можно выключить), кебаб — тоже (макет 2333-159051).
+  // можно выключить), кебаб — тоже (макет 2333-159051). В pending
+  // чип-ряд и кебаб не рисуются: трейлинг зависит от данных (§7,
+  // прецедент «Ваших участников» #697 — иначе иконка мелькает до
+  // ответа), кадр совпадает с loading-архетипом без trailing.
   const feedEmpty = feedQuery.isSuccess && notifications.length === 0;
+  const feedPending = feedQuery.isPending;
   const showEmptyAll = feedEmpty && !unreadOnly;
   const showEmptyUnread = feedEmpty && unreadOnly;
-  const showToolbar = !showEmptyAll && !feedQuery.isPending && !feedQuery.isError;
+  const showToolbar = !showEmptyAll && !feedPending && !feedQuery.isError;
 
   const kebab = (
     <Menu>
@@ -131,6 +135,8 @@ export function NotificationsFeedScreen({
       label="Настроить уведомления"
       onClick={() => router.push(ROUTES.profileNotifications)}
     />
+  ) : feedPending ? (
+    undefined
   ) : (
     kebab
   );

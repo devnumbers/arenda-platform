@@ -36,8 +36,10 @@ const SUBPAGE_TITLES: ReadonlyArray<readonly [string, string]> = [
 
 const SCREEN_HEADER = 'header[aria-label="Навигация экрана"]';
 const BOTTOM_NAV = 'nav[aria-label="Нижняя навигация"]';
-// Сид-юзер «Иван Иванов»; до загрузки useMe кнопка показывает плейсхолдер.
-const USER_WING = /Пользователь|Иван/;
+// Сид-юзер «Иван Иванов» — имя в крыле после загрузки useMe; в pending
+// кнопка — скелетон с aria-label «Профиль» (аудит #876), «Пользователь» —
+// текстовый плейсхолдер вне провайдера.
+const USER_WING = /Пользователь|Иван|Профиль/;
 
 test.describe('дерево профиля — хром #566', () => {
   test.use({ viewport: { width: 390, height: 844 } });

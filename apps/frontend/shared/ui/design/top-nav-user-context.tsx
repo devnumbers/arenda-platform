@@ -6,9 +6,12 @@ import { createContext, useContext, type JSX, type ReactNode } from 'react';
  * пользователя). Сам TopNav живёт в shared и не может зависеть от
  * фич (границы слоёв), поэтому источник данных — провайдер в слое
  * widgets (ScreenLayout подставляет useMe); вне провайдера — null и
- * плейсхолдер имени. */
+ * плейсхолдер имени. pending — useMe ещё в полёте: TopNav рисует
+ * скелетон вместо имени; ошибка и имя-null — терминальные состояния,
+ * остаются на текстовом плейсхолдере. */
 export type TopNavUser = {
   readonly name?: string;
+  readonly pending?: boolean;
 };
 
 export const TopNavUserContext = createContext<TopNavUser | null>(null);

@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  keepPreviousData,
   useInfiniteQuery,
   useMutation,
   useQuery,
@@ -48,6 +49,8 @@ export type NotificationsPageData = {
  * Лента уведомлений (#744): порции по 50 keyset-курсором (канон #597),
  * newest-first. unreadOnly — фильтр «Непрочитанные», часть ключа: тап по
  * чипу читает ленту с другим ключом, кэши обоих срезов живут независимо.
+ * Смена среза держит прежнюю выдачу до ответа (keepPreviousData, канон
+ * §14/#710) — первый тап по чипу не мигает скелетоном и не прячет чип-ряд.
  */
 export function useNotificationsFeed(
   unreadOnly: boolean,
@@ -57,6 +60,7 @@ export function useNotificationsFeed(
     queryFn: ({ pageParam }) => fetchNotificationsPage({ unreadOnly, cursor: pageParam }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: keysetNextPageParam,
+    placeholderData: keepPreviousData,
     select: (data) => data.pages.flatMap((page) => page.items),
   });
 }

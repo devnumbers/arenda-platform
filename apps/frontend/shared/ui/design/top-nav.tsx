@@ -40,7 +40,8 @@ export type TopNavCollapse = {
  * страницы), по краям вьюпорта — крылья: лого «Рентли» (отступ 22) и
  * кнопка профиля (отступ даёт её собственный паддинг 14). Имя в кнопке
  * приносит TopNavUserContext (источник — useMe в widgets/screen-layout);
- * до загрузки и при ошибке — плейсхолдер.
+ * пока useMe в полёте — скелетон, при ошибке/без имени и вне провайдера —
+ * текстовый плейсхолдер.
  *
  * Раскладка центра — заголовок центрируется относительно всей полосы,
  * слоты leading/trailing наложены абсолютно по краям (Figma 1425:55798):
@@ -101,7 +102,14 @@ export function TopNav({
   const user = useTopNavUser();
 
   const firstName = user?.name;
-  const displayName = firstName?.length ? firstName : 'Пользователь';
+  // pending — useMe в полёте (провайдер пометил сам): скелетон вместо
+  // текста — текстовый плейсхолдер «Пользователь» раздувал крыло и
+  // наезжал на заголовок хаба на мобайле (аудит #876), ширина кнопки
+  // должна быть стабильной. Ошибка useMe и имя-null — терминальные
+  // состояния, вне провайдера контекста нет — все три показывают
+  // текстовый плейсхолдер, как раньше.
+  const pending = user !== null && user.pending === true && firstName === undefined;
+  const wingName = pending ? undefined : (firstName ?? 'Пользователь');
   // Крылья: мобайл — только с mobileWings; планшет (561–1023) — без
   // leading-кнопки (иначе наложение на колонку 560, см. JSDoc), ПК — всегда.
   // Boolean — чтобы условный leading={cond && <Button/>} при cond=false
@@ -139,7 +147,7 @@ export function TopNav({
           wingsTierClass,
         )}
       >
-        <UserButton name={displayName} onClick={() => router.push(ROUTES.profile)} />
+        <UserButton name={wingName} pending={pending} onClick={() => router.push(ROUTES.profile)} />
       </div>
       {variant === 'search' ? (
         /* Поисковая шапка: слоты и поле — во всю ширину вьюпорта на мобайле
