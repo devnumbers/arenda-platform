@@ -3,10 +3,20 @@
 /* Preflight два: слоёный Tailwind v4 (снос HeroUI #901) и легаси-сброс
    приложения, живущий в @layer base ниже. Селекторные правила сброса
    (h1/h2, a, форм-контролы) перенесены в слой: безслойное правило сильнее
-   @layer utilities и молча гасило утилиты; остальные безслойные
-   normalize-правила — вендорные и IE-исправления, утилиты не глушат.
-   Поэтому revert-layer-хак не нужен — margin/padding-утилиты на голых
-   <button> работают сами. */
+   @layer utilities и молча гасило утилиты. Остаток безслойного сброса в
+   разделе Forms ниже неоднороден: вендорные и IE-исправления на
+   псевдоэлементах и псевдоклассах утилитам недоступны, но пять обычных
+   правил тоже сильнее слоя и глушат утилиты — button,input
+   {overflow:visible}, button,select{text-transform:none},
+   fieldset{padding}, textarea{overflow:auto} и
+   [type=checkbox],[type=radio]{box-sizing;border-box;padding:0}. Они
+   оставлены без слоя сознательно: перенос в @layer base отдал бы
+   overflow/text-transform/padding утилитам и изменил бы вид контролов —
+   канонный Textarea (shared/ui/design/text-area.tsx) рендерит утилиту
+   overflow-hidden, которую безслойный textarea{overflow:auto} побеждает
+   по слою независимо от специфичности. revert-layer-хак не нужен:
+   margin/padding-утилиты на голых <button> работают сами — правила
+   font/margin перенесены в @layer base. */
 
 /* Шрифты приложения самохостятся из public/fonts — компиляция и рантайм не
    зависят от доступности Google Fonts (next/font/google качал шрифты на каждом
