@@ -3,6 +3,7 @@ import {
   expect,
   execE2eSql,
   openCabinetWithSeededSession,
+  screenHeader,
   test,
 } from './fixtures';
 
@@ -15,8 +16,6 @@ import {
 // 13111111-…31), оба active на квартире; гараж (44444444-…) свободен.
 // Разрушающие тесты восстанавливают сид через execE2eSql (workers=1).
 
-const header = 'header[aria-label="Навигация экрана"]';
-
 const MARIA_ID = '12111111-1111-4111-8111-111111111121';
 const SERGEY_ID = '13111111-1111-4111-8111-111111111131';
 const APARTMENT_ID = '33333333-3333-4333-8333-333333333333';
@@ -26,10 +25,10 @@ test('страница участника: шапка, чип агрегата, 
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto(`/participants/${MARIA_ID}`);
 
+  const header = screenHeader(page);
+
   // exact+first: в переходный момент в шапке встречается дубль-спан.
-  await expect(
-    page.locator(header).getByText('Участник', { exact: true }).first(),
-  ).toBeVisible();
+  await expect(header.getByText('Участник', { exact: true }).first()).toBeVisible();
 
   // Блок участника: имя, почта, чип агрегата (partial — активна 1 из 3).
   await expect(page.getByRole('heading', { name: 'Мария Петрова' })).toBeVisible();
@@ -43,7 +42,7 @@ test('страница участника: шапка, чип агрегата, 
 
   // Кебаб шапки: приглашение, действия участника (#712) и отзыв
   // (макет 2008-48318).
-  await page.locator(header).getByRole('button', { name: 'Еще — действия с участником' }).click();
+  await header.getByRole('button', { name: 'Еще — действия с участником' }).click();
   await expect(page.getByRole('menuitem', { name: 'Пригласить в объект' })).toBeVisible();
   await expect(page.getByRole('menuitem', { name: 'Действия участника' })).toBeVisible();
   await expect(page.getByRole('menuitem', { name: 'Отозвать доступ к объектам' })).toBeVisible();
@@ -57,12 +56,12 @@ test('deep-link на отозванного/чужого участника — 
   // Существующий пользователь, но вне сцопа читающего — приватный 404.
   await page.goto('/participants/00000000-0000-4000-8000-000000000000');
 
+  const header = screenHeader(page);
+
   await expect(page.getByText('Участник не найден')).toBeVisible();
   // Кебаб не показывается без данных (§7), назад в шапке жив.
-  await expect(
-    page.locator(header).getByRole('button', { name: 'Еще — действия с участником' }),
-  ).toHaveCount(0);
-  await expect(page.locator(header).getByRole('button', { name: 'Назад' })).toBeVisible();
+  await expect(header.getByRole('button', { name: 'Еще — действия с участником' })).toHaveCount(0);
+  await expect(header.getByRole('button', { name: 'Назад' })).toBeVisible();
 });
 
 test('права участника: смена роли сегментом, попап «Права изменены»; сид восстанавливается', async ({ page, seededUser }) => {
@@ -70,7 +69,7 @@ test('права участника: смена роли сегментом, п�
   await page.goto(`/participants/${MARIA_ID}`);
 
   await page.getByRole('button', { name: /Квартира на Ленина/ }).click();
-  await expect(page.locator(header).getByText('Права участника')).toBeVisible();
+  await expect(screenHeader(page).getByText('Права участника')).toBeVisible();
   await expect(page.getByRole('radio', { name: 'Редактирование' })).toBeChecked();
 
   try {
@@ -82,7 +81,7 @@ test('права участника: смена роли сегментом, п�
     await page.keyboard.press('Escape');
 
     // Бейдж на странице участника перечитан (инвалидация агрегатов).
-    await page.locator(header).getByRole('button', { name: 'Назад' }).click();
+    await screenHeader(page).getByRole('button', { name: 'Назад' }).click();
     await expect(
       page.getByRole('button', { name: /Квартира на Ленина/ }).getByText('Просмотр'),
     ).toBeVisible();
@@ -101,10 +100,12 @@ test('пригласить в объект: мультичек гаража, ш�
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto(`/participants/${MARIA_ID}`);
 
-  await page.locator(header).getByRole('button', { name: 'Еще — действия с участником' }).click();
+  const header = screenHeader(page);
+
+  await header.getByRole('button', { name: 'Еще — действия с участником' }).click();
   await page.getByRole('menuitem', { name: 'Пригласить в объект' }).click();
 
-  await expect(page.locator(header).getByText('Пригласить в объект')).toBeVisible();
+  await expect(header.getByText('Пригласить в объект')).toBeVisible();
 
   // Квартира уже выдана — в списке гараж и студия; «Все объекты» unchecked.
   const garageRow = page.getByRole('checkbox', { name: /Гараж на Садовой/ });
@@ -169,7 +170,7 @@ test('отзыв из объекта: подтверждение, попап у�
   await page.goto(`/participants/${SERGEY_ID}`);
 
   await page.getByRole('button', { name: /Гараж на Садовой/ }).click();
-  await expect(page.locator(header).getByText('Права участника')).toBeVisible();
+  await expect(screenHeader(page).getByText('Права участника')).toBeVisible();
 
   await page.getByRole('button', { name: 'Отозвать доступ к объекту' }).click();
 
@@ -199,10 +200,13 @@ test('кебаб «Отозвать доступ к объектам»: подт
   // Путь пользователя: список → ряд Сергея (нужна история — успех
   // возврата по канону goBack ведёт именно на список).
   await page.goto('/participants/list');
-  await page.getByRole('button', { name: /Сергей Сидоров/ }).click();
-  await expect(page.locator(header).getByText('Участник')).toBeVisible();
 
-  await page.locator(header).getByRole('button', { name: 'Еще — действия с участником' }).click();
+  const header = screenHeader(page);
+
+  await page.getByRole('button', { name: /Сергей Сидоров/ }).click();
+  await expect(header.getByText('Участник')).toBeVisible();
+
+  await header.getByRole('button', { name: 'Еще — действия с участником' }).click();
   await page.getByRole('menuitem', { name: 'Отозвать доступ к объектам' }).click();
 
   const dialog = page.getByRole('dialog');
@@ -214,7 +218,7 @@ test('кебаб «Отозвать доступ к объектам»: подт
 
     // Возврат на список «Участники» с попапом «Участник удален»
     // (2008-83716); Сергей из списка исчез, Мария осталась.
-    await expect(page.locator(header).getByText('Ваши участники')).toBeVisible();
+    await expect(header.getByText('Ваши участники')).toBeVisible();
     await expect(
       page.getByRole('dialog').locator('p', { hasText: 'Участник удален' }),
     ).toBeVisible();
@@ -246,7 +250,9 @@ test('pending-участник: deep-link по почте, бейдж «Приг
     // Идентификатор pending-участника — почта (контракт #693).
     await page.goto('/participants/e2e-pending%40example.com');
 
-    await expect(page.locator(header).getByText('Участник', { exact: true }).first()).toBeVisible();
+    const header = screenHeader(page);
+
+    await expect(header.getByText('Участник', { exact: true }).first()).toBeVisible();
     // Имени нет — почта титул (контракт: «the email is the label»); чип
     // агрегата в шапке — «Приглашён» (#772: считанный partial/0 как
     // «Доступно 0 объектов» читался как отказ). first(): шапка в DOM раньше
@@ -258,7 +264,7 @@ test('pending-участник: deep-link по почте, бейдж «Приг
     await expect(garageRow.getByText('Приглашён')).toBeVisible();
 
     await garageRow.click();
-    await expect(page.locator(header).getByText('Права участника')).toBeVisible();
+    await expect(header.getByText('Права участника')).toBeVisible();
     await expect(page.getByRole('radio', { name: 'Просмотр' })).toBeChecked();
 
     await page.getByRole('radio', { name: 'Редактирование' }).click();

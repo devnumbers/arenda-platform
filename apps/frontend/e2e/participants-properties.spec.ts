@@ -5,6 +5,7 @@ import {
   execE2eSql,
   openCabinetWithSeededSession,
   openCabinetWithSessionToken,
+  screenHeader,
   seededMemberSessionToken,
   test,
 } from './fixtures';
@@ -17,7 +18,6 @@ import {
 // (e2e-member) — full_access на «Квартире на Ленина» владельца Ивана
 // Иванова; у самого Ивана чужих объектов нет (пустое состояние).
 
-const header = 'header[aria-label="Навигация экрана"]';
 const APARTMENT_ROW = /Квартира на Ленина/;
 const MEMBER_MEMBERSHIP_ID = '99999999-9999-4999-8999-999999999931';
 
@@ -39,7 +39,9 @@ async function restoreMemberMembership(): Promise<void> {
 test('список: чужой объект с бейджем роли «Редактирование», чип «Название»', async ({ page }, testInfo) => {
   await openAsMember(page);
 
-  await expect(page.locator(header).getByText('Доступные объекты')).toBeVisible();
+  const header = screenHeader(page);
+
+  await expect(header.getByText('Доступные объекты')).toBeVisible();
 
   const apartmentRow = page.getByText(APARTMENT_ROW).first();
   await expect(apartmentRow).toBeVisible();
@@ -47,9 +49,7 @@ test('список: чужой объект с бейджем роли «Ред�
   await expect(page.getByText('Редактирование')).toBeVisible();
 
   await expect(page.getByRole('button', { name: 'Название' })).toBeVisible();
-  await expect(
-    page.locator(header).getByRole('button', { name: 'Еще — действия со списком' }),
-  ).toBeVisible();
+  await expect(header.getByRole('button', { name: 'Еще — действия со списком' })).toBeVisible();
   await expect(
     page.getByRole('button', { name: 'Действия с объектом «Квартира на Ленина»' }),
   ).toBeVisible();
@@ -64,7 +64,7 @@ test('владелец без чужих объектов: пустое сост
   await expect(page.getByText('Вас не пригласили в объекты')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Название' })).toHaveCount(0);
   await expect(
-    page.locator(header).getByRole('button', { name: 'Еще — действия со списком' }),
+    screenHeader(page).getByRole('button', { name: 'Еще — действия со списком' }),
   ).toHaveCount(0);
 });
 
@@ -128,8 +128,10 @@ test('«Покинуть объект»: доступ снят, попап ус�
 test('кебаб шапки: «История действий» ведёт в общую ленту, «Покинуть все объекты» — подтверждение', async ({ page }) => {
   await openAsMember(page);
 
+  const header = screenHeader(page);
+
   try {
-    await page.locator(header).getByRole('button', { name: 'Еще — действия со списком' }).click();
+    await header.getByRole('button', { name: 'Еще — действия со списком' }).click();
 
     // «История действий» (#843) — вход приглашённого участника в общую
     // ленту (решение владельца 24.09); красный пункт остаётся в кебабе.
@@ -138,7 +140,7 @@ test('кебаб шапки: «История действий» ведёт в �
     await page.waitForURL('**/history');
     await page.goBack();
 
-    await page.locator(header).getByRole('button', { name: 'Еще — действия со списком' }).click();
+    await header.getByRole('button', { name: 'Еще — действия со списком' }).click();
     await page.getByRole('menuitem', { name: 'Покинуть все объекты' }).click();
 
     // Подтверждение (2010-133563): кнопки столбиком, подтверждение сверху.

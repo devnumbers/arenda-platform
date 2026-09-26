@@ -9,6 +9,7 @@ import {
   propertyRenamedEntry,
   SEEDED_GARAGE_PROPERTY_ID,
   seedJournalEntry,
+  screenHeader,
   test,
   todayAt,
   trackHistoryScope,
@@ -100,7 +101,7 @@ test('вход со страницы участника: кебаб ведёт �
   await page.goto(`/participants/${MARIA_ID}`);
   await expect(page.getByRole('heading', { name: 'Мария Петрова' })).toBeVisible();
 
-  await page.locator('header[aria-label="Навигация экрана"]').getByRole('button', { name: 'Еще — действия с участником' }).click();
+  await screenHeader(page).getByRole('button', { name: 'Еще — действия с участником' }).click();
   await page.getByRole('menuitem', { name: 'Действия участника' }).click();
   await page.waitForURL(`**/history/participants/${MARIA_ID}`);
 
@@ -108,7 +109,7 @@ test('вход со страницы участника: кебаб ведёт �
   await expect(page.getByText('Задача выполнена: Заменить кран')).toBeVisible();
 
   // «Назад» возвращает на страницу участника (источник входа).
-  await page.locator('header[aria-label="Навигация экрана"]').getByRole('button', { name: 'Назад' }).click();
+  await screenHeader(page).getByRole('button', { name: 'Назад' }).click();
   await page.waitForURL(`**/participants/${MARIA_ID}`);
 });
 
@@ -212,7 +213,7 @@ test('pending-участник: пункта «Действия участник
     await page.goto('/participants/e2e-pending%40example.com');
     await expect(page.getByText('e2e-pending@example.com').first()).toBeVisible();
 
-    await page.locator('header[aria-label="Навигация экрана"]').getByRole('button', { name: 'Еще — действия с участником' }).click();
+    await screenHeader(page).getByRole('button', { name: 'Еще — действия с участником' }).click();
     await expect(page.getByRole('menuitem', { name: 'Пригласить в объект' })).toBeVisible();
     await expect(page.getByRole('menuitem', { name: 'Действия участника' })).toHaveCount(0);
   } finally {

@@ -2,6 +2,7 @@ import {
   captureScreen,
   expect,
   openCabinetWithSeededSession,
+  screenHeader,
   test,
 } from './fixtures';
 
@@ -27,7 +28,7 @@ test.describe('книга контактов — хаб нового хрома'
     await page.goto('/contacts');
 
     // Хаб-шапка: крылья и на мобайле (лого — ссылка на объекты).
-    const header = page.locator('header[aria-label="Навигация экрана"]');
+    const header = screenHeader(page);
     await expect(header.getByRole('link', { name: 'Объекты' })).toBeVisible();
     await expect(
       page.getByRole('heading', { level: 1, name: 'Контакты', exact: true }),

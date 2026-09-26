@@ -12,6 +12,7 @@ import {
   SEEDED_APARTMENT_PROPERTY_ID,
   SEEDED_GARAGE_PROPERTY_ID,
   seedJournalEntry,
+  screenHeader,
   seededMemberSessionToken,
   test,
   todayAt,
@@ -36,15 +37,13 @@ function expectedDayChip(daysAgo: number): string {
   return day.getUTCFullYear() === today.getUTCFullYear() ? base : `${base}, ${day.getUTCFullYear()}`;
 }
 
-const header = 'header[aria-label="Навигация экрана"]';
-
 test('вход с кебаба «Ваших участников», пустая лента — «Действий не было» и кнопка «Настройки»', async ({ page, seededUser }, testInfo) => {
   await execE2eSql('DELETE FROM action_journal;');
   await openCabinetWithSeededSession(page, seededUser);
 
   // Точка входа — кебаб «Ваших участников» (#843, макет 2008-47514).
   await page.goto('/participants/list');
-  await page.locator(header).getByRole('button', { name: 'Еще — действия со списком' }).click();
+  await screenHeader(page).getByRole('button', { name: 'Еще — действия со списком' }).click();
   await page.getByRole('menuitem', { name: 'История действий' }).click();
   await page.waitForURL('**/history');
 

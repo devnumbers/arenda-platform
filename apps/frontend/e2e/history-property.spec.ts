@@ -9,6 +9,7 @@ import {
   SEEDED_APARTMENT_PROPERTY_ID,
   SEEDED_GARAGE_PROPERTY_ID,
   seedJournalEntry,
+  screenHeader,
   test,
   todayAt,
   trackHistoryScope,
@@ -57,7 +58,7 @@ test('вход из кебаба «Участников объекта»: лен
   // TopNavTitle — span, не heading: ждём текст шапки.
   await expect(page.getByText('Участники объекта').first()).toBeVisible();
 
-  await page.locator('header[aria-label="Навигация экрана"]').getByRole('button', { name: 'Еще — действия со списком' }).click();
+  await screenHeader(page).getByRole('button', { name: 'Еще — действия со списком' }).click();
   await page.getByRole('menuitem', { name: 'История объекта' }).click();
   await page.waitForURL(`**/history/properties/${APARTMENT_ID}`);
 

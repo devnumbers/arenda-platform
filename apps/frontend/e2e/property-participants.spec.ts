@@ -6,6 +6,7 @@ import {
   openCabinetWithSessionToken,
   seededMemberSessionToken,
   seededViewerSessionToken,
+  screenHeader,
   test,
 } from './fixtures';
 
@@ -17,8 +18,6 @@ import {
 // Сидоров (viewer, member …932); их собственные сессии — E2E_MEMBER_/
 // E2E_VIEWER_SESSION_TOKEN. Разрушающие тесты восстанавливают сид через
 // execE2eSql (workers=1).
-
-const header = 'header[aria-label="Навигация экрана"]';
 
 const APARTMENT_ID = '33333333-3333-4333-8333-333333333333';
 const MARIA_ID = '12111111-1111-4111-8111-111111111121';
@@ -33,7 +32,7 @@ test('вход из детали объекта: «Управление» → «
 
   // Путь пользователя: секция «Управление» → пункт «Совместный доступ».
   await page.getByRole('button', { name: 'Совместный доступ' }).click();
-  await expect(page.locator(header).getByText('Участники объекта')).toBeVisible();
+  await expect(screenHeader(page).getByText('Участники объекта')).toBeVisible();
 
   // Владелец — отдельный первый ряд с «(Вы)» (статичный, без шеврона),
   // участники — с почтой.
@@ -58,7 +57,7 @@ test('тап по ряду — страница участника агрега�
   await page.goto(`/properties/${APARTMENT_ID}/participants`);
 
   await page.getByRole('button', { name: /Мария Петрова/ }).click();
-  await expect(page.locator(header).getByText('Участник', { exact: true }).first()).toBeVisible();
+  await expect(screenHeader(page).getByText('Участник', { exact: true }).first()).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Мария Петрова' })).toBeVisible();
 });
 
@@ -68,7 +67,7 @@ test('manage-участник: своя строка «(Вы)» инертная
   await openCabinetWithSessionToken(page, seededMemberSessionToken());
   await page.goto(`/properties/${APARTMENT_ID}/participants`);
 
-  await expect(page.locator(header).getByText('Участники объекта')).toBeVisible();
+  await expect(screenHeader(page).getByText('Участники объекта')).toBeVisible();
 
   // Своя строка с «(Вы)» — статичный ряд: не role=button, без шеврона.
   await expect(page.getByText('Мария Петрова (Вы)')).toBeVisible();
@@ -76,13 +75,13 @@ test('manage-участник: своя строка «(Вы)» инертная
 
   // Тап по своей строке никуда не ведёт — экран остаётся на месте.
   await page.getByText('Мария Петрова (Вы)').click();
-  await expect(page.locator(header).getByText('Участники объекта')).toBeVisible();
+  await expect(screenHeader(page).getByText('Участники объекта')).toBeVisible();
   await expect(page.getByText('Участник не найден')).toHaveCount(0);
   await expect(page).toHaveURL(new RegExp(`/properties/${APARTMENT_ID}/participants$`));
 
   // Чужие ряды manage-скоупа кликабельны, как и раньше.
   await page.getByRole('button', { name: /Сергей Сидоров/ }).click();
-  await expect(page.locator(header).getByText('Участник', { exact: true }).first()).toBeVisible();
+  await expect(screenHeader(page).getByText('Участник', { exact: true }).first()).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Сергей Сидоров' })).toBeVisible();
 });
 
@@ -90,7 +89,7 @@ test('поиск: подсказка пустого, находка по име�
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto(`/properties/${APARTMENT_ID}/participants`);
 
-  await page.locator(header).getByRole('button', { name: 'Поиск участников' }).click();
+  await screenHeader(page).getByRole('button', { name: 'Поиск участников' }).click();
   const field = page.getByRole('searchbox', { name: 'Поиск участников' });
 
   // Пустой запрос — подсказка макета 1980-108531.
@@ -153,7 +152,7 @@ test('приглашение от объекта: свой email — 400, све
   try {
     await page.getByRole('button', { name: 'Пригласить' }).filter({ hasText: 'Пригласить' }).click();
 
-    await expect(page.locator(header).getByText('Участники объекта')).toBeVisible();
+    await expect(screenHeader(page).getByText('Участники объекта')).toBeVisible();
     await expect(
       page.getByRole('dialog').locator('p', { hasText: 'Участник приглашен' }),
     ).toBeVisible();
@@ -194,7 +193,7 @@ test('кебаб «Отозвать доступ всем»: подтвержд�
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto(`/properties/${APARTMENT_ID}/participants`);
 
-  await page.locator(header).getByRole('button', { name: 'Еще — действия со списком' }).click();
+  await screenHeader(page).getByRole('button', { name: 'Еще — действия со списком' }).click();
   await page.getByRole('menuitem', { name: 'Отозвать доступ всем' }).click();
 
   const dialog = page.getByRole('dialog');
@@ -233,7 +232,7 @@ test('зритель: список без manage-контролов, свой р
   await openCabinetWithSessionToken(page, seededViewerSessionToken());
   await page.goto(`/properties/${APARTMENT_ID}/participants`);
 
-  await expect(page.locator(header).getByText('Участники объекта')).toBeVisible();
+  await expect(screenHeader(page).getByText('Участники объекта')).toBeVisible();
   // Ряды без manage-прав статичные (страница участника вне скоупа
   // зрителя) — проверяем текстами, не role=button.
   await expect(page.getByText('Иван Иванов')).toBeVisible();
@@ -243,6 +242,6 @@ test('зритель: список без manage-контролов, свой р
     page.getByRole('button', { name: 'Пригласить участника' }).filter({ hasText: 'Пригласить участника' }),
   ).toHaveCount(0);
   await expect(
-    page.locator(header).getByRole('button', { name: 'Еще — действия со списком' }),
+    screenHeader(page).getByRole('button', { name: 'Еще — действия со списком' }),
   ).toHaveCount(0);
 });

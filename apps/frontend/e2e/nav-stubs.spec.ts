@@ -2,6 +2,7 @@ import {
   captureScreen,
   expect,
   openCabinetWithSeededSession,
+  screenHeader,
   test,
 } from './fixtures';
 
@@ -15,7 +16,7 @@ test('хаб «Совместный доступ»: карточки со счё
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto('/participants');
 
-  const header = page.locator('header[aria-label="Навигация экрана"]');
+  const header = screenHeader(page);
   await expect(header.getByRole('link', { name: 'Объекты' })).toBeVisible();
   await expect(
     page.getByRole('heading', { level: 1, name: 'Совместный доступ' }),
@@ -56,7 +57,7 @@ test('хаб «Совместный доступ»: карточки со счё
 test('цели карточек хаба — живые маршруты-каркасы, не 404', async ({ page, seededUser }) => {
   await openCabinetWithSeededSession(page, seededUser);
 
-  const header = page.locator('header[aria-label="Навигация экрана"]');
+  const header = screenHeader(page);
 
   await page.goto('/participants/list');
   await expect(header.getByText('Ваши участники')).toBeVisible();
