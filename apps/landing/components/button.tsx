@@ -22,7 +22,8 @@ const VARIANTS = {
 } as const;
 
 const SIZES = {
-  lg: "h-16 px-9 text-r",
+  // Мобильный макет — кнопки 56px (Small), десктоп — 64px (Default).
+  lg: "h-14 px-9 text-r desk:h-16",
   md: "h-11 rounded-xl px-5 text-xs",
 } as const;
 

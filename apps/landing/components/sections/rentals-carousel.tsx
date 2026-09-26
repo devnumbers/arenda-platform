@@ -114,14 +114,18 @@ export function RentalsCarousel() {
         {CARDS.map((card) => (
           <article
             key={card.title}
-            className="relative h-[550px] w-[300px] shrink-0 snap-start overflow-clip rounded-[40px] bg-surface px-10 py-[52px] desk:w-[380px]"
+            className="relative h-[500px] w-[320px] shrink-0 snap-start overflow-clip rounded-[40px] bg-surface px-6 pt-12 desk:h-[550px] desk:w-[380px] desk:px-10 desk:pt-[52px]"
           >
             <div className="flex flex-col items-center gap-3 text-center">
               <h3 className="text-m font-medium leading-6 desk:text-[28px] desk:leading-8">
                 {card.title}
               </h3>
               <p
-                className={`text-gray-2 ${card.textSmall ? "text-xs leading-[18px]" : "text-r"}`}
+                className={`text-s leading-5 text-gray-2 ${
+                  card.textSmall
+                    ? "desk:text-xs desk:leading-[18px]"
+                    : "desk:text-r desk:leading-[22px]"
+                }`}
               >
                 {card.text}
               </p>
@@ -131,7 +135,7 @@ export function RentalsCarousel() {
               alt={card.alt}
               width={card.imgWidth}
               height={card.imgWidth}
-              sizes="(min-width: 1200px) 380px, 300px"
+              sizes="(min-width: 1200px) 380px, 320px"
               className="absolute bottom-0 left-1/2 h-auto -translate-x-1/2"
               style={{ maxWidth: card.imgWidth, marginBottom: card.imgBottom }}
             />

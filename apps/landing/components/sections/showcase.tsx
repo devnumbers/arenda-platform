@@ -22,25 +22,26 @@ export function Showcase() {
           </div>
         </Reveal>
         <Reveal delay={100} className="w-full">
-          <Image
-            src={cardBar}
-            alt="Карточка объекта в Рентли"
-            sizes="(min-width: 1200px) 1000px, 100vw"
-            className="h-auto w-full"
-          />
+          {/* Оба стрипа шире колонки и на мобайле (650/503 на 313 — доска
+              2826-151222), центрированный вылезающий блок; клип — на обёртке
+              и глобальном overflow-x: clip. */}
+          <div className="overflow-hidden">
+            <Image
+              src={cardBar}
+              alt="Карточка объекта в Рентли"
+              sizes="(min-width: 1200px) 1000px, 100vw"
+              className="relative left-1/2 h-auto w-[650px] max-w-none -translate-x-1/2 desk:left-0 desk:w-full desk:translate-x-0"
+            />
+          </div>
         </Reveal>
         <Reveal delay={150} className="w-full">
-          {/* Стрип шире колонки: центрированный вылезающий блок 1600×400;
-              клип на обёртке — иначе 200vw расширяет канву страницы. */}
           <div className="overflow-hidden">
-            <div className="relative left-1/2 w-[200vw] -translate-x-1/2 desk:w-[1600px]">
-              <Image
-                src={screens}
-                alt="Скриншоты экранов приложения Рентли"
-                sizes="1600px"
-                className="h-auto w-full"
-              />
-            </div>
+            <Image
+              src={screens}
+              alt="Скриншоты экранов приложения Рентли"
+              sizes="(min-width: 1200px) 1600px, 100vw"
+              className="relative left-1/2 h-auto w-[503px] max-w-none -translate-x-1/2 desk:left-0 desk:w-[1600px] desk:translate-x-0"
+            />
           </div>
         </Reveal>
         <Reveal delay={200}>
