@@ -4,33 +4,32 @@ import { Reveal } from "@/components/reveal";
 import cardBar from "@/assets/sections/showcase-card-bar.webp";
 import screens from "@/assets/sections/showcase-screens.webp";
 
-// «Стройте арендный бизнес» — макет 2814-738: центрированный заголовочный
-// блок (H2 56 + подпись 28 gray-2, шаг 24), полоса-фрагмент 3000×300,
-// широкий скриншот 1600×400 с вылезанием за колонку, синяя кнопка; шаг 56.
+// «Стройте арендный бизнес» — макеты 2814-738 (десктоп), 2859-3464
+// (планшет: поля 40, полоса 1025×102.5, скриншоты 1106×484 cover),
+// 2826-151232 (мобайл: полоса 650×65, скриншоты 503×220 cover): заголовок
+// H4 28/32 + подпись 16/20 gray-2 (десктоп — 56 + 28/32), шаг 32; оба
+// стрипа — вылезающие за колонку, клип на обёртке и overflow-x: clip.
 export function Showcase() {
   return (
     <section id="showcase" className="mt-20 desk:mt-[156px]">
-      <div className="mx-auto flex max-w-[1000px] flex-col items-center gap-12 px-5 desk:gap-14 desk:px-10">
+      <div className="mx-auto flex max-w-[1048px] flex-col items-center gap-8 px-10 desk:max-w-[1000px] desk:gap-14 desk:px-0">
         <Reveal className="w-full">
-          <div className="flex w-full flex-col items-center gap-6 text-center">
-            <h2 className="text-[28px] font-semibold leading-8 desk:text-h2 desk:leading-[60px]">
+          <div className="flex w-full flex-col items-center gap-3 text-center desk:gap-6">
+            <h2 className="text-balance text-[28px] font-semibold leading-8 desk:text-h2 desk:leading-[60px]">
               Создайте карточку своей недвижимости
             </h2>
-            <p className="text-r desk:text-[28px] desk:leading-8 desk:text-gray-2">
+            <p className="text-s leading-5 text-gray-2 desk:text-[28px] desk:leading-8">
               Добавьте квартиру, дом, помещение
             </p>
           </div>
         </Reveal>
         <Reveal delay={100} className="w-full">
-          {/* Оба стрипа шире колонки и на мобайле (650/503 на 313 — доска
-              2826-151222), центрированный вылезающий блок; клип — на обёртке
-              и глобальном overflow-x: clip. */}
           <div className="overflow-hidden">
             <Image
               src={cardBar}
               alt="Карточка объекта в Рентли"
-              sizes="(min-width: 1200px) 1000px, 100vw"
-              className="relative left-1/2 h-auto w-[650px] max-w-none -translate-x-1/2 desk:left-0 desk:w-full desk:translate-x-0"
+              sizes="(min-width: 1200px) 1000px, 1025px"
+              className="relative left-1/2 h-auto w-[650px] max-w-none -translate-x-1/2 tab:w-[1025px] desk:left-0 desk:w-full desk:translate-x-0"
             />
           </div>
         </Reveal>
@@ -39,8 +38,8 @@ export function Showcase() {
             <Image
               src={screens}
               alt="Скриншоты экранов приложения Рентли"
-              sizes="(min-width: 1200px) 1600px, 100vw"
-              className="relative left-1/2 h-auto w-[503px] max-w-none -translate-x-1/2 desk:left-0 desk:w-[1600px] desk:translate-x-0"
+              sizes="(min-width: 1200px) 1600px, 1106px"
+              className="relative left-1/2 h-[220px] w-[503px] max-w-none -translate-x-1/2 object-cover tab:h-[484px] tab:w-[1106px] desk:left-0 desk:h-auto desk:w-[1600px] desk:translate-x-0"
             />
           </div>
         </Reveal>
