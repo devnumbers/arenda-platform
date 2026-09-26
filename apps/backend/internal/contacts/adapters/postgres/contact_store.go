@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -74,7 +73,7 @@ func (s *ContactStore) List(
 		ActorID:    pgconv.UUIDToPgtype(actorID),
 		Scope:      string(q.Scope),
 		PropertyID: pgconv.UUIDToPgtype(q.PropertyID),
-		Search:     escapeLikePattern(q.Search),
+		Search:     pgconv.EscapeLikePattern(q.Search),
 		Sort:       string(q.Sort),
 		Order:      string(q.Order),
 		PageLimit:  q.Limit,
@@ -241,15 +240,4 @@ func textOrNull(s string) pgtype.Text {
 		return pgtype.Text{}
 	}
 	return pgtype.Text{String: s, Valid: true}
-}
-
-// likePatternEscaper escapes the ILIKE metacharacters in user-supplied search
-// text. The matching SQL pattern uses ESCAPE '\'.
-var likePatternEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
-
-// escapeLikePattern trims and escapes a user-supplied substring so it can be
-// safely embedded in an ILIKE '%...%' pattern. An empty result disables the
-// filter on the SQL side.
-func escapeLikePattern(q string) string {
-	return likePatternEscaper.Replace(strings.TrimSpace(q))
 }

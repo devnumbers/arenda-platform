@@ -722,7 +722,7 @@ func TestReadStore_SearchPredicate(t *testing.T) {
 	t.Run("инъекции", func(t *testing.T) {
 		t.Parallel()
 		// Не роняют запрос и не превращаются в wildcard: '%' и '_' ищутся
-		// литерально (escapeLikePattern + ESCAPE '\').
+		// литерально (pgconv.EscapeLikePattern + ESCAPE '\').
 		searchPredicateCount(t, search, "'", 0)
 		searchPredicateCount(t, search, "'; --", 0)
 		searchPredicateCount(t, search, "_", 0)

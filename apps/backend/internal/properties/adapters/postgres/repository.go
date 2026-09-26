@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -238,7 +237,7 @@ func (r *PropertyRepository) SearchVisible(
 	}
 	rows, err := r.q().SearchVisibleProperties(ctx, postgres.SearchVisiblePropertiesParams{
 		Actor:     pgconv.UUIDToPgtype(actor),
-		Search:    escapeLikePattern(q.Search),
+		Search:    pgconv.EscapeLikePattern(q.Search),
 		AfterName: afterName,
 		AfterID:   afterID,
 		PageLimit: q.Limit,
@@ -265,16 +264,6 @@ func (r *PropertyRepository) SearchVisible(
 		properties = append(properties, p)
 	}
 	return properties, nil
-}
-
-// likePatternEscaper escapes the ILIKE metacharacters in user-supplied search
-// substrings — the payments and contacts stores' convention (ESCAPE '\').
-var likePatternEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
-
-// escapeLikePattern trims and escapes a user-supplied substring so it can be
-// embedded into an ILIKE pattern; the surrounding % travel in the query.
-func escapeLikePattern(q string) string {
-	return likePatternEscaper.Replace(strings.TrimSpace(q))
 }
 
 func (r *PropertyRepository) Update(ctx context.Context, scope uuid.UUID, property domain.Property) (domain.Property, error) {

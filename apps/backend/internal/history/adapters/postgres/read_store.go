@@ -55,8 +55,12 @@ func (s *ReadStore) List(ctx context.Context, actor uuid.UUID, q application.Jou
 		ActorIds:    joinUUIDs(q.ActorIDs),
 		Kinds:       joinStrings(kindStrings(q.Kinds)),
 		BaseActions: joinStrings(baseActionStrings(q.BaseActions)),
-		QRaw:        q.Search,
-		QTrgm:       escapeLikePattern(q.Search),
+		// Поиск в двух ногах предиката: QRaw — prefix-FTS, QTrgm — ILIKE-trgm
+		// (эскейп метасимволов, ESCAPE '\', — общий pgconv.EscapeLikePattern,
+		// прежняя локальная «canon»-копия снесена); trim q сделал сервис
+		// (sanitizeSearch).
+		QRaw:  q.Search,
+		QTrgm: pgconv.EscapeLikePattern(q.Search),
 		// Сервис гарантирует 1..application.FeedMaxLimit (гвард List выше) —
 		// сужение int→int32 ограничено этим контрактом.
 		PageLimit: toPageLimit(q.Limit),
@@ -104,7 +108,7 @@ func (s *ReadStore) listAfter(ctx context.Context, actor uuid.UUID, q applicatio
 		Kinds:       joinStrings(kindStrings(q.Kinds)),
 		BaseActions: joinStrings(baseActionStrings(q.BaseActions)),
 		QRaw:        q.Search,
-		QTrgm:       escapeLikePattern(q.Search),
+		QTrgm:       pgconv.EscapeLikePattern(q.Search),
 		AfterTs:     pgtype.Timestamptz{Time: q.After.CreatedAt, Valid: true},
 		AfterID:     pgconv.UUIDToPgtype(q.After.ID),
 		// Сервис гарантирует 1..application.FeedMaxLimit (гвард List выше) —
@@ -253,16 +257,6 @@ func joinUUIDs(ids []uuid.UUID) string {
 		parts[i] = id.String()
 	}
 	return strings.Join(parts, ",")
-}
-
-// likePatternEscaper and escapeLikePattern are the searches' canon (the
-// payments/contacts/properties stores carry the same local helper): the
-// application hands the raw trimmed query, the store owns the ILIKE
-// mechanics (ESCAPE '\').
-var likePatternEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
-
-func escapeLikePattern(q string) string {
-	return likePatternEscaper.Replace(q)
 }
 
 // toPageLimit сужает page-limit фида до int32 SQL-параметра: сервис
