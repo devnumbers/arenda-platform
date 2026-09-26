@@ -11,11 +11,7 @@ export const metadata: Metadata = {
   title: 'Операция — Рентли',
 };
 
-type OperationRoutePageProps = {
-  params: Promise<{ id: string; operationId: string }>;
-};
-
-export default async function OperationRoutePage({ params }: OperationRoutePageProps) {
+export default async function OperationRoutePage({ params }: PageProps<'/properties/[id]/operations/[operationId]'>) {
   const { id, operationId } = await params;
 
   return <OperationDetailScreen propertyId={id} operationId={operationId} />;

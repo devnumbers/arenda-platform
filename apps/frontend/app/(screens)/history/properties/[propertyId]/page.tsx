@@ -18,13 +18,9 @@ export const metadata: Metadata = {
   description: 'Лента действий одного объекта',
 };
 
-type HistoryPropertyRoutePageProps = {
-  params: Promise<{ propertyId: string }>;
-};
-
 export default async function HistoryPropertyRoutePage({
   params,
-}: HistoryPropertyRoutePageProps): Promise<JSX.Element> {
+}: PageProps<'/history/properties/[propertyId]'>): Promise<JSX.Element> {
   const { propertyId } = await params;
 
   return (

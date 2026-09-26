@@ -8,13 +8,9 @@ export const metadata: Metadata = {
   title: 'Права участника — Рентли',
 };
 
-type ParticipantRightsRoutePageProps = {
-  params: Promise<{ participantId: string; propertyId: string }>;
-};
-
 export default async function ParticipantRightsRoutePage({
   params,
-}: ParticipantRightsRoutePageProps): Promise<JSX.Element> {
+}: PageProps<'/participants/[participantId]/properties/[propertyId]'>): Promise<JSX.Element> {
   const { participantId, propertyId } = await params;
 
   return <ParticipantRightsScreen participantId={participantId} propertyId={propertyId} />;

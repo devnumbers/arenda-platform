@@ -13,13 +13,9 @@ export const metadata: Metadata = {
   title: 'Расходы объекта — Рентли',
 };
 
-type OperationsExpensePageProps = {
-  params: Promise<{ id: string }>;
-};
-
 export default async function PropertyOperationsExpenseRoutePage({
   params,
-}: OperationsExpensePageProps) {
+}: PageProps<'/properties/[id]/operations/expense'>) {
   const { id } = await params;
 
   return (

@@ -7,11 +7,7 @@ export const metadata: Metadata = {
   title: 'Изменить задачу — Рентли',
 };
 
-type TaskEditRoutePageProps = {
-  params: Promise<{ id: string; ruleId: string }>;
-};
-
-export default async function TaskEditRoutePage({ params }: TaskEditRoutePageProps) {
+export default async function TaskEditRoutePage({ params }: PageProps<'/properties/[id]/tasks/[ruleId]/edit'>) {
   const { id, ruleId } = await params;
 
   return <TaskEditScreen propertyId={id} ruleId={ruleId} />;

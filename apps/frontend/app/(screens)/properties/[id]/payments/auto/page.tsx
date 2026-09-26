@@ -10,11 +10,7 @@ export const metadata: Metadata = {
   title: 'Автоплатежи объекта — Рентли',
 };
 
-type AutoCatalogPageProps = {
-  params: Promise<{ id: string }>;
-};
-
-export default async function PropertyPaymentsAutoRoutePage({ params }: AutoCatalogPageProps) {
+export default async function PropertyPaymentsAutoRoutePage({ params }: PageProps<'/properties/[id]/payments/auto'>) {
   const { id } = await params;
 
   return <PaymentsCatalogScreen propertyId={id} variant="auto" />;

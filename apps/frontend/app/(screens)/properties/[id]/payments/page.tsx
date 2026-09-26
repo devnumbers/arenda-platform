@@ -9,11 +9,7 @@ export const metadata: Metadata = {
   title: 'Платежи объекта — Рентли',
 };
 
-type PaymentsRoutePageProps = {
-  params: Promise<{ id: string }>;
-};
-
-export default async function PaymentsRoutePage({ params }: PaymentsRoutePageProps) {
+export default async function PaymentsRoutePage({ params }: PageProps<'/properties/[id]/payments'>) {
   const { id } = await params;
 
   return <PaymentsOfPropertyScreen propertyId={id} />;

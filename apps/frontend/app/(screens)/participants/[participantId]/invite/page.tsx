@@ -10,13 +10,9 @@ export const metadata: Metadata = {
   title: 'Пригласить в объект — Рентли',
 };
 
-type ParticipantInviteRoutePageProps = {
-  params: Promise<{ participantId: string }>;
-};
-
 export default async function ParticipantInviteRoutePage({
   params,
-}: ParticipantInviteRoutePageProps): Promise<JSX.Element> {
+}: PageProps<'/participants/[participantId]/invite'>): Promise<JSX.Element> {
   const { participantId } = await params;
 
   return <ParticipantInviteScreen participantId={participantId} />;

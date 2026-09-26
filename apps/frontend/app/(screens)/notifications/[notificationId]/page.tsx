@@ -8,11 +8,7 @@ export const metadata: Metadata = {
   description: 'Страница уведомления',
 };
 
-type NotificationRoutePageProps = {
-  params: Promise<{ notificationId: string }>;
-};
-
-export default async function NotificationRoutePage({ params }: NotificationRoutePageProps) {
+export default async function NotificationRoutePage({ params }: PageProps<'/notifications/[notificationId]'>) {
   const { notificationId } = await params;
 
   return <NotificationDetailScreen notificationId={notificationId} />;

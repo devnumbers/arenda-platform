@@ -10,11 +10,7 @@ export const metadata: Metadata = {
   title: 'Продление аренды — Рентли',
 };
 
-type RentalExtendRoutePageProps = {
-  params: Promise<{ id: string }>;
-};
-
-export default async function RentalExtendRoutePage({ params }: RentalExtendRoutePageProps) {
+export default async function RentalExtendRoutePage({ params }: PageProps<'/properties/[id]/rentals/extend'>) {
   const { id } = await params;
 
   return <RentalExtendScreen propertyId={id} />;
