@@ -10,7 +10,7 @@ import { parseEnumParam } from '@/shared/lib/parse-enum-param';
  * повторяет серверную сортировку входа (order asc/desc закреплён за API),
  * даты в странице монотонны — одна дата даёт ровно одну группу подряд.
  * «Сегодня»/«Вчера» — от клиентского «сегодня»
- * (entities/payment/lib/client-today): зоны смотрящего сервер не сообщает,
+ * (dateToIsoLocal, shared/lib/calendar): зоны смотрящего сервер не сообщает,
  * расхождение с TZ собственника ограничено краевыми часами суток.
  */
 export type PaymentHistoryGroup = {

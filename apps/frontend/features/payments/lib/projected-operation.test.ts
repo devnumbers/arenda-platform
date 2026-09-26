@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Payment, PaymentOperation } from '@/entities/payment';
+import { makePayment, type Payment, type PaymentOperation } from '@/entities/payment';
 import { projectedOperation } from './projected-operation';
 
 /**
@@ -8,26 +8,20 @@ import { projectedOperation } from './projected-operation';
  * прошлом проекции нет — страница показывает «вхождение не найдено».
  */
 
+/** Правило «Страхование», 15-е число; остальное — канон makePayment. */
 function payment(overrides: Partial<Payment> = {}): Payment {
-  return {
+  return makePayment({
     id: 'pay-1',
     propertyId: 'prop-1',
-    type: 'expense',
     title: 'Страхование',
     amountKopecks: 320_000,
     recurrence: { kind: 'monthly', daysOfMonth: [15], lastDay: false },
     since: '2026-01-15',
-    autoPay: false,
-    paymentForm: 'transfer',
     category: { source: 'default', slug: 'insurance', label: 'Страхование' },
-    isFavorite: false,
-    isCompleted: false,
-    isRentalManaged: false,
-    pauses: [],
     createdAt: '2026-01-15T00:00:00Z',
     updatedAt: '2026-01-15T00:00:00Z',
     ...overrides,
-  };
+  });
 }
 
 describe('projectedOperation', () => {

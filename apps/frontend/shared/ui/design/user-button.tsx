@@ -1,6 +1,7 @@
 import type { ComponentProps, JSX } from 'react';
 import { BoldUser } from '@/shared/assets/icons';
 import { cn } from '@/shared/lib/cn';
+import { CircleIcon } from './circle-icon';
 
 /** Кнопка профиля дизайн-слоя (Figma 699:8867, «User Button»): имя
  * (M/500 14/16, #171A1C → hover #9FA8AC → active #6F787C) и справа
@@ -26,12 +27,9 @@ export function UserButton({ name, className, ...props }: UserButtonProps): JSX.
       {...props}
     >
       {name}
-      <span
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill bg-surface-muted shadow-[0_0_0_2.5px_var(--dl-surface)]"
-        aria-hidden
-      >
+      <CircleIcon variant="white" aria-hidden>
         <BoldUser className="h-6 w-6" />
-      </span>
+      </CircleIcon>
     </button>
   );
 }

@@ -4,7 +4,7 @@ import { useState, type JSX } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Cancel } from '@/shared/assets/icons';
 import { buildReturnUrl, goBack } from '@/shared/lib/navigation';
-import { clientTodayIso } from '@/entities/payment';
+import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
   globalOperationsFiltersParams,
   operationsCategoryRows,
@@ -51,7 +51,7 @@ export function OperationsGlobalCategoriesScreen(): JSX.Element {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const today = clientTodayIso();
+  const today = dateToIsoLocal(new Date());
   const filters = readGlobalOperationsFilters(searchParams, today);
   // Дефолт периода страницы — весь период (#672): даты в запросе только
   // с явным выбором.

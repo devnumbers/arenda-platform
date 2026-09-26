@@ -1,33 +1,27 @@
 import { describe, expect, it } from 'vitest';
-import type { Payment } from '@/entities/payment';
+import { makePayment, type Payment } from '@/entities/payment';
 import {
   buildPaymentUpdateCommand,
   editFormReady,
   type PaymentEditForm,
 } from './update-model';
 
-/** Правило-база: все поля заполнены, категория из дефолтного каталога. */
+/** Правило-база: все поля заполнены, категория из дефолтного каталога;
+ * значения согласованы с baseForm ниже. Остальное — канон makePayment. */
 function basePayment(overrides: Partial<Payment> = {}): Payment {
-  return {
-    isCompleted: false,
-    isRentalManaged: false,
+  return makePayment({
     id: '019abcde-0000-7000-8000-000000000001',
     propertyId: '019abcde-0000-7000-8000-000000000002',
-    type: 'expense',
     title: 'Страхование',
     amountKopecks: 320_000,
     recurrence: { kind: 'monthly', daysOfMonth: [15], lastDay: false },
     since: '2026-08-01',
-    endDate: undefined,
-    autoPay: false,
     paymentForm: 'cash',
     category: { source: 'default', slug: 'insurance', label: 'Страхование' },
-    isFavorite: false,
-    pauses: [],
     createdAt: '2026-08-01T10:00:00Z',
     updatedAt: '2026-08-01T10:00:00Z',
     ...overrides,
-  };
+  });
 }
 
 /** Форма-база: значения совпадают с правилом-базой. */

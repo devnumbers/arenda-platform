@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Payment, PaymentOperation } from '@/entities/payment';
+import { makePayment, type Payment, type PaymentOperation } from '@/entities/payment';
 import {
   isOperationPayable,
   isPaymentCompleted,
@@ -23,26 +23,15 @@ function operation(overrides: Partial<PaymentOperation>): PaymentOperation {
   };
 }
 
+/** Правило страницы платежа: идентификаторы согласованы с локальной
+ * operation(); остальное — канон makePayment. */
 function payment(overrides: Partial<Payment>): Payment {
-  return {
-    isCompleted: false,
-    isRentalManaged: false,
+  return makePayment({
     id: 'pay-1',
     propertyId: 'p-1',
-    type: 'expense',
-    title: 'Арендная плата',
-    amountKopecks: 4500000,
-    recurrence: { kind: 'monthly', daysOfMonth: [1], lastDay: false },
-    since: '2026-01-01',
-    autoPay: false,
-    paymentForm: 'transfer',
     category: { source: 'default', slug: 'rent', label: 'Аренда' },
-    isFavorite: false,
-    pauses: [],
-    createdAt: '2026-01-01T00:00:00Z',
-    updatedAt: '2026-01-01T00:00:00Z',
     ...overrides,
-  };
+  });
 }
 
 describe('oldestUnpaidOperation', () => {

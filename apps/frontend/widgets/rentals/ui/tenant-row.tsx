@@ -2,6 +2,7 @@
 
 import type { JSX } from 'react';
 import { BoldUser } from '@/shared/assets/icons';
+import { CircleIcon } from '@/shared/ui/design';
 import { PaymentRowButton } from '@/entities/payment';
 
 /** Строка арендатора секции «Арендатор» (Figma 1232:62429): белый круг
@@ -21,12 +22,9 @@ export function TenantRow({
       variant="gray"
       className="px-3 py-2"
       categoryIcon={
-        <span
-          aria-hidden
-          className="flex h-11 w-11 items-center justify-center rounded-pill bg-surface shadow-[0_0_0_2.5px_var(--dl-surface-muted)]"
-        >
+        <CircleIcon variant="muted" aria-hidden>
           <BoldUser className="h-6 w-6 text-content" />
-        </span>
+        </CircleIcon>
       }
       title={tenantName}
       subtitle={phone}

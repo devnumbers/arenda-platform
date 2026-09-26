@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { Add, ArrowLeft, Search } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
-import { clientTodayIso, type PaymentType } from '@/entities/payment';
+import { type PaymentType } from '@/entities/payment';
+import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
   globalOperationsFiltersHref,
   groupOperationsByDate,
@@ -71,7 +72,7 @@ export function OperationsGlobalDirectionScreen({
   const title = type === 'income' ? 'Доходы' : 'Расходы';
   const selfRoute = type === 'income' ? ROUTES.operationsIncomes : ROUTES.operationsExpenses;
 
-  const today = clientTodayIso();
+  const today = dateToIsoLocal(new Date());
   // Дефолт направления — весь период (#671): период в запросе только с
   // явным выбором, без него даты не уходят; пикер открывается пустым,
   // «Сбросить» возвращает к дефолту.

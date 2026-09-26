@@ -3,6 +3,7 @@ import {
   expect,
   execE2eSql,
   openCabinetWithSeededSession,
+  screenHeader,
   test,
 } from './fixtures';
 
@@ -15,13 +16,12 @@ import {
 // (viewer), оба active на одном объекте из трёх в скоупе владельца →
 // агрегат-статус partial, чип «Доступно 1 объект».
 
-const header = 'header[aria-label="Навигация экрана"]';
-
 test('список участников: ряды сида с чипами статусов, чип «Имя», CTA', async ({ page, seededUser }, testInfo) => {
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto('/participants/list');
 
-  await expect(page.locator(header).getByText('Ваши участники')).toBeVisible();
+  const header = screenHeader(page);
+  await expect(header.getByText('Ваши участники')).toBeVisible();
 
   // Ряды агрегатов: имя + почта + чип «Доступно 1 объект» (у обоих
   // активный доступ к одному объекту из трёх в скоупе — partial).
@@ -42,10 +42,8 @@ test('список участников: ряды сида с чипами ст�
 
   // Чип сортировки и служебные иконки шапки.
   await expect(page.getByRole('button', { name: 'Имя' })).toBeVisible();
-  await expect(page.locator(header).getByRole('button', { name: 'Поиск участников' })).toBeVisible();
-  await expect(
-    page.locator(header).getByRole('button', { name: 'Еще — действия со списком' }),
-  ).toBeVisible();
+  await expect(header.getByRole('button', { name: 'Поиск участников' })).toBeVisible();
+  await expect(header.getByRole('button', { name: 'Еще — действия со списком' })).toBeVisible();
 
   // CTA нижней панели — текстовая кнопка (вне шапки).
   await expect(
@@ -61,7 +59,8 @@ test('поиск: фильтрует по имени и почте, пустой
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto('/participants/list');
 
-  await page.locator(header).getByRole('button', { name: 'Поиск участников' }).click();
+  const header = screenHeader(page);
+  await header.getByRole('button', { name: 'Поиск участников' }).click();
 
   const searchField = page.getByRole('searchbox', { name: 'Поиск участников' });
   await expect(searchField).toBeFocused();
@@ -81,7 +80,7 @@ test('поиск: фильтрует по имени и почте, пустой
   await expect(page.getByText('Участник не найден')).toBeVisible();
 
   // Выход из поиска возвращает список целиком.
-  await page.locator(header).getByRole('button', { name: 'Закрыть поиск' }).click();
+  await header.getByRole('button', { name: 'Закрыть поиск' }).click();
   await expect(page.getByRole('button', { name: /Мария Петрова/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /Сергей Сидоров/ })).toBeVisible();
 });
@@ -104,7 +103,7 @@ test('кебаб: трио пунктов по макету 2008-47514, «Ист
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto('/participants/list');
 
-  await page.locator(header).getByRole('button', { name: 'Еще — действия со списком' }).click();
+  await screenHeader(page).getByRole('button', { name: 'Еще — действия со списком' }).click();
 
   // Состав кебаба (#843): «Пригласить участника», «История действий» и
   // красное «Отозвать доступ всем» — анатомия макета 2008-47514.
@@ -121,7 +120,7 @@ test('кебаб: «Отозвать доступ всем» открывает 
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto('/participants/list');
 
-  await page.locator(header).getByRole('button', { name: 'Еще — действия со списком' }).click();
+  await screenHeader(page).getByRole('button', { name: 'Еще — действия со списком' }).click();
   await page.getByRole('menuitem', { name: 'Отозвать доступ всем' }).click();
 
   const dialog = page.getByRole('dialog');
@@ -140,7 +139,8 @@ test('«Отозвать и удалить»: ряды исчезают, поп�
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto('/participants/list');
 
-  await page.locator(header).getByRole('button', { name: 'Еще — действия со списком' }).click();
+  const header = screenHeader(page);
+  await header.getByRole('button', { name: 'Еще — действия со списком' }).click();
   await page.getByRole('menuitem', { name: 'Отозвать доступ всем' }).click();
 
   const dialog = page.getByRole('dialog');
@@ -158,9 +158,7 @@ test('«Отозвать и удалить»: ряды исчезают, поп�
     await page.keyboard.press('Escape');
     // Пустой список: служебные иконки шапки спрятаны, иллюстрация на месте.
     await expect(page.getByText('Участников пока нет')).toBeVisible();
-    await expect(
-      page.locator(header).getByRole('button', { name: 'Поиск участников' }),
-    ).toHaveCount(0);
+    await expect(header.getByRole('button', { name: 'Поиск участников' })).toHaveCount(0);
   } finally {
     // Восстановление сида (воркеры=1 — позже по сюиту сид нужен
     // payment-edit-delete: кабинет сид-участников).

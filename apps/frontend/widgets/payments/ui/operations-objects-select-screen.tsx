@@ -4,7 +4,7 @@ import { useState, type JSX } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { BoldArchive, BoldHome, BoldObjects, Cancel, Check } from '@/shared/assets/icons';
 import { buildReturnUrl, goBack } from '@/shared/lib/navigation';
-import { clientTodayIso } from '@/entities/payment';
+import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
   globalOperationsFiltersParams,
   readGlobalOperationsFilters,
@@ -14,6 +14,7 @@ import { useProperties } from '@/features/properties';
 import {
   Button,
   Checkbox,
+  CircleIcon,
   IconButton,
   ListRow,
   PageContent,
@@ -44,7 +45,7 @@ export function OperationsObjectsSelectScreen(): JSX.Element {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const filters = readGlobalOperationsFilters(searchParams, clientTodayIso());
+  const filters = readGlobalOperationsFilters(searchParams, dateToIsoLocal(new Date()));
   // Черновик живёт от монтирования до монтирования: страница монтируется
   // заново на каждый вход, useState инициализируется применённым выбором.
   const [draft, setDraft] = useState<ReadonlyArray<string>>(filters.propertyIds);
@@ -208,15 +209,12 @@ export function SelectAvatar({ photoUrl, fallback }: {
   readonly fallback: JSX.Element;
 }): JSX.Element {
   return (
-    <span
-      aria-hidden
-      className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-muted shadow-[0_0_0_2.5px_var(--dl-surface)]"
-    >
+    <CircleIcon variant="white" aria-hidden className="relative overflow-hidden rounded-full">
       {photoUrl !== undefined ? (
         <img src={photoUrl} alt="" className="h-full w-full object-cover" />
       ) : (
         fallback
       )}
-    </span>
+    </CircleIcon>
   );
 }

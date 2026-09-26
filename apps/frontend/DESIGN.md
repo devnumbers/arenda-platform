@@ -433,9 +433,10 @@ leading-слот, заголовок + подзаголовок, значени�
 
 - Даты — только `shared/lib/calendar` (ISO-математика: `fromIso`, `addDays`,
   `daysOverdue`, месяцы, лента пикера) и `shared/lib/date-format` («11 августа»,
-  «13 мая, 2027», «N дней» через `pluralize`). Ручные `slice`-парсинг, Intl и
-  склонения на местах запрещены. «Сегодня» — параметром от сервера (ADR 0048),
-  клиент часов не держит; всё в UTC.
+  «13 мая, 2027», «N дней» через `pluralize`); склонение месяца («N месяцев»)
+  — `shared/lib/months-word` (`monthsWord`) рядом с `pluralize` (#851).
+  Ручные `slice`-парсинг, Intl и склонения на местах запрещены. «Сегодня» —
+  параметром от сервера (ADR 0048), клиент часов не держит; всё в UTC.
 - Группировка ленты по createdAt-таймстампам (подписочные «Операции»,
   #624) — по локальному дню смотрящего (`dateToIsoLocal`), «сегодня» —
   клиентское: бэк для таймстампов календарный день не отдаёт, расхождение
@@ -526,7 +527,7 @@ leading-слот, заголовок + подзаголовок, значени�
 | `Header` подэкрана (Back + Title) | `sub-screen-shell.tsx` (#568 — `TopNav` + `TopNavBackButton` + `TopNavTitle` + PageContent) |
 | `Page Content` | `page-content.tsx` |
 | `Row Button` | `list-row.tsx` и семейство строк (§6) |
-| `Category Icon` | круглый слот иконки в строках (§6); категория уведомлений — `NotificationCategoryIcon` (3D-PNG эталоны + запечённая точка, #744) |
+| `Category Icon` | круглый слот иконки в строках (§6) — канон `CircleIcon` (кольцо 2.5px по подложке, варианты muted/white, #846); с каталог-подложкой и бейджами — `CategoryIcon`; категория уведомлений — `NotificationCategoryIcon` (3D-PNG эталоны + запечённая точка, #744) |
 | `StatusHouseBadge` | бейджи статуса объекта (`PropertyStatusBadge`) |
 | `Notification Dot` | `notification-dot.svg` (§10, запечённый) |
 | `Modal` вариант Popup (успех-попап, 2329:148661) | `success-popup.tsx` (#744 — карточка на любой ширине, фон не затемняется) |

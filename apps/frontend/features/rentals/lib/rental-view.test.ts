@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Rental } from '@/entities/rental';
+import { makeRental, type Rental } from '@/entities/rental';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import {
   hasProgressCard,
@@ -16,20 +16,16 @@ import {
 } from './rental-view';
 
 /** Фикстура аренды из макета #531 (1232:61291): 56 000 ₽, 10-е число,
- * 10.10 → 10.10+24 мес., оплачено 6 из 24. */
+ * 10.10 → 10.10+24 мес., оплачено 6 из 24. Остальное — канон makeRental. */
 function rentalFixture(overrides: Partial<Rental> = {}): Rental {
-  return {
+  return makeRental({
     id: '0198f6a1-7c1a-7d0f-9f4f-6f3c1e2b4a55',
     propertyId: '0198f6a1-7c1a-7d0f-9f4f-6f3c1e2b4a01',
-    status: 'active',
     startDate: '2026-10-10',
     plannedEndDate: '2028-10-10',
-    completedDate: null,
     utilities: 'meters_only',
     depositKopecks: 5_600_000,
     commissionKopecks: 0,
-    depositReturnKopecks: null,
-    depositReturnComment: null,
     tenant: {
       contactId: '0198f6a1-7c1a-7d0f-9f4f-6f3c1e2b4a66',
       firstName: 'Александр',
@@ -49,11 +45,10 @@ function rentalFixture(overrides: Partial<Rental> = {}): Rental {
         daysUntil: 150,
       },
     },
-    progress: { paidMonths: 6, totalMonths: 24, monthsRemaining: 23, overdueMonths: null },
     today: '2026-09-05',
     createdAt: '2026-09-05T10:00:00Z',
     ...overrides,
-  };
+  });
 }
 
 describe('rentalPaidTitle', () => {

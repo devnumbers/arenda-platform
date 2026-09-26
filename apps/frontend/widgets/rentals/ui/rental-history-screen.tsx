@@ -2,11 +2,11 @@
 
 import { type JSX, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, ChangeVertical } from '@/shared/assets/icons';
+import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
+import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
-  clientTodayIso,
   PaymentRowButton,
   type PaymentOperation,
 } from '@/entities/payment';
@@ -16,11 +16,11 @@ import {
   groupPaidOperations,
   useHistoryOrder,
   usePaymentOperationsPaged,
+  HistoryOrderChip,
   type HistoryOrder,
 } from '@/features/payments';
 import {
   Button,
-  ChipButton,
   EmptyState,
   IconButton,
   InfiniteQueryTail,
@@ -61,7 +61,7 @@ export function RentalHistoryScreen({
   );
 
   const operations = historyQuery.data ?? [];
-  const groups = groupPaidOperations(operations, clientTodayIso());
+  const groups = groupPaidOperations(operations, dateToIsoLocal(new Date()));
   // Итог оплаченных сервер считает по TZ собственника; рассинхрон с длиной
   // списка гасится в paidPaymentNumber.
   const paidTotal = Math.max(rental?.progress.paidMonths ?? 0, operations.length);
@@ -122,17 +122,7 @@ export function RentalHistoryScreen({
               ) : (
                 <>
                   <div className="px-6 pb-2">
-                    <ChipButton
-                      trailingIcon={<ChangeVertical />}
-                      onClick={toggleOrder}
-                      aria-label={
-                        order === 'desc'
-                          ? 'Сортировка: сначала новые — переключить на «сначала старые»'
-                          : 'Сортировка: сначала старые — переключить на «сначала новые»'
-                      }
-                    >
-                      {order === 'desc' ? 'Сначала новые' : 'Сначала старые'}
-                    </ChipButton>
+                    <HistoryOrderChip order={order} onToggle={toggleOrder} />
                   </div>
 
                   {groups.map((group) => (

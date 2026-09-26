@@ -1,29 +1,24 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Payment } from '@/entities/payment';
+import { makePayment, type Payment } from '@/entities/payment';
 
 import { propertyPaymentGroups } from './payments-strip';
 
+/** Полоса объекта живёт на правиле «Интернет», 10-е число; остальное —
+ * канон makePayment. */
 function paymentFixture(overrides: Partial<Payment> = {}): Payment {
-  return {
+  return makePayment({
     id: 'payment-1',
     propertyId: 'property-1',
-    type: 'expense',
     title: 'Интернет',
     amountKopecks: 50000,
     recurrence: { kind: 'monthly', daysOfMonth: [10], lastDay: false },
     since: '2026-01-10',
-    autoPay: false,
-    paymentForm: 'transfer',
     category: { source: 'default', slug: 'internet', label: 'Интернет' },
-    isFavorite: false,
-    isCompleted: false,
-    isRentalManaged: false,
-    pauses: [],
     createdAt: '2026-01-10T00:00:00Z',
     updatedAt: '2026-01-10T00:00:00Z',
     ...overrides,
-  };
+  });
 }
 
 describe('propertyPaymentGroups', () => {

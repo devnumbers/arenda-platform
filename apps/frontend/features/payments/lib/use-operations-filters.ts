@@ -1,6 +1,6 @@
 'use client';
 
-import { clientTodayIso } from '@/entities/payment';
+import { dateToIsoLocal } from '@/shared/lib/calendar';
 import { useUrlParams } from '@/shared/lib/hooks/use-url-params';
 import {
   operationsFiltersParams,
@@ -38,7 +38,7 @@ export function useOperationsFilters(): {
 } {
   const { params, write } = useUrlParams();
 
-  const filters = readOperationsFilters(params, clientTodayIso());
+  const filters = readOperationsFilters(params, dateToIsoLocal(new Date()));
 
   const apply = (next: OperationsFilters, replace: boolean): void => {
     write(operationsFiltersParams(next), {

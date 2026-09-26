@@ -2,6 +2,7 @@ import {
   captureScreen,
   expect,
   openCabinetWithSeededSession,
+  screenHeader,
   test,
 } from './fixtures';
 
@@ -34,7 +35,6 @@ const SUBPAGE_TITLES: ReadonlyArray<readonly [string, string]> = [
   ['/profile/tariff/payments', 'Операции'],
 ];
 
-const SCREEN_HEADER = 'header[aria-label="Навигация экрана"]';
 const BOTTOM_NAV = 'nav[aria-label="Нижняя навигация"]';
 // Сид-юзер «Иван Иванов»; до загрузки useMe кнопка показывает плейсхолдер.
 const USER_WING = /Пользователь|Иван/;
@@ -51,7 +51,7 @@ test.describe('дерево профиля — хром #566', () => {
 
     // Саб-экран #746 (макеты 1789-100250/2329-150165): ведущий «Назад»,
     // заголовок в шапке; крыльев нет — экран дерева профиля.
-    const header = page.locator(SCREEN_HEADER);
+    const header = screenHeader(page);
     await expect(header.getByRole('button', { name: 'Назад' })).toBeVisible();
     // Фильтр visible — Next держит в body скрытый клон дерева,
     // текстовые локаторы без него ресолвят обе копии шапки.
@@ -93,7 +93,7 @@ test.describe('дерево профиля — хром #566', () => {
     await page.goto('/profile');
 
     // Хаб профиля (#592): крылья на мобайле, ведущего «Назад» нет.
-    const header = page.locator(SCREEN_HEADER);
+    const header = screenHeader(page);
     await expect(header.getByRole('button', { name: 'Назад' })).toHaveCount(0);
     await expect(header.getByRole('link', { name: 'Объекты' })).toBeVisible();
     await expect(header.getByText('Профиль', { exact: true })).toBeVisible();
@@ -149,7 +149,7 @@ test.describe('дерево профиля — хром #566', () => {
 
     for (const [path, title] of SUBPAGE_TITLES) {
       await page.goto(path);
-      const header = page.locator(SCREEN_HEADER);
+      const header = screenHeader(page);
       await expect(header.getByRole('button', { name: 'Назад' })).toBeVisible();
       await expect(header.getByText(title, { exact: true })).toBeVisible();
     }
@@ -161,7 +161,7 @@ test.describe('дерево профиля — хром #566', () => {
   }) => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.setViewportSize({ width: 561, height: 900 });
-    const header = page.locator(SCREEN_HEADER);
+    const header = screenHeader(page);
 
     // Хаб профиля: крылья и на планшете (канон хаб-экранов), без «Назад».
     await page.goto('/profile');
@@ -199,15 +199,11 @@ test.describe('дерево профиля — ПК ≥1024', () => {
   test('вход в дерево по кнопке юзера в хедере', async ({ page, seededUser }) => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto('/properties');
+    const header = screenHeader(page);
 
     // «Крыло» UserButton ведёт на /profile.
-    await page
-      .locator(SCREEN_HEADER)
-      .getByRole('button', { name: USER_WING })
-      .click();
+    await header.getByRole('button', { name: USER_WING }).click();
     await expect(page).toHaveURL(/\/profile$/);
-    await expect(
-      page.locator(SCREEN_HEADER).getByText('Профиль', { exact: true }),
-    ).toBeVisible();
+    await expect(header.getByText('Профиль', { exact: true })).toBeVisible();
   });
 });

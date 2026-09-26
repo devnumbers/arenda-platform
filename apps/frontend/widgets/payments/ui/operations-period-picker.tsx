@@ -1,7 +1,7 @@
 'use client';
 
 import type { JSX } from 'react';
-import { clientTodayIso } from '@/entities/payment';
+import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
   type OperationsPeriod,
   useGlobalOperationsFilters,
@@ -29,7 +29,7 @@ function PeriodPickerDialogBody({
   ) => void;
   readonly onClose: () => void;
 }): JSX.Element {
-  const today = clientTodayIso();
+  const today = dateToIsoLocal(new Date());
 
   return (
     <CalendarRangePicker

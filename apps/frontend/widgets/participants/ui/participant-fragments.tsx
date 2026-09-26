@@ -4,7 +4,7 @@ import type { JSX } from 'react';
 import { BoldHome, BoldObjects, CheckBoxFalse, CheckBoxTrue, Minus } from '@/shared/assets/icons';
 import NextLink from 'next/link';
 import { ROUTES } from '@/shared/config/routes';
-import { buttonVariants, EmptyState } from '@/shared/ui/design';
+import { buttonVariants, CircleIcon, EmptyState } from '@/shared/ui/design';
 
 /** Базовый класс кликабельного ряда списков участника (Row Button
  * 936:39348): общий для страницы участника, экрана прав и мультичека
@@ -23,10 +23,7 @@ export function ObjectAvatarGlyph({
   readonly isAll?: boolean;
 }): JSX.Element {
   return (
-    <span
-      aria-hidden
-      className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-muted shadow-[0_0_0_2.5px_var(--dl-surface)]"
-    >
+    <CircleIcon variant="white" aria-hidden className="relative overflow-hidden rounded-full">
       {photoUrl !== undefined ? (
         <img src={photoUrl} alt="" className="h-full w-full object-cover" />
       ) : isAll ? (
@@ -34,7 +31,7 @@ export function ObjectAvatarGlyph({
       ) : (
         <BoldHome className="h-6 w-6 text-content-tertiary" />
       )}
-    </span>
+    </CircleIcon>
   );
 }
 
