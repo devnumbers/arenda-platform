@@ -27,7 +27,8 @@ import {
   TopNav,
   TopNavTitle,
 } from '@/shared/ui/design';
-import { PaymentsSkeleton, PaymentsStateCard } from './payments-sections';
+import { PaymentsStateCard } from './payments-sections';
+import { OperationsCategoriesSkeleton } from './operations-skeletons';
 import { OperationsPeriodChipDisplay } from './operations-filter-chips';
 
 export type OperationsCategoriesScreenProps = {
@@ -129,7 +130,9 @@ export function OperationsCategoriesScreen({
 
         <div className="min-h-0 flex-1 overflow-y-auto pt-2 pb-[calc(6.5rem+env(safe-area-inset-bottom))]">
           {summaryQuery.isPending ? (
-            <PaymentsSkeleton />
+            // Паритет §7: строки «иконка + название + сумма + чекбокс»;
+            // чипы контекста выше — вне фазы загрузки.
+            <OperationsCategoriesSkeleton />
           ) : summaryQuery.isError ? (
             <PaymentsStateCard
               title="Не удалось загрузить категории"

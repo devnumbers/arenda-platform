@@ -5,6 +5,7 @@ import {
   skeletonBlockClass,
   skeletonRowWidths,
 } from '@/shared/ui/design';
+import { PaymentsRowsSkeleton } from './payments-sections';
 
 /**
  * Скелетоны-архетипы зоны операций (#605, паритет — §7 DESIGN.md):
@@ -127,6 +128,33 @@ export function OperationsObjectsSkeleton(): JSX.Element {
       {widths.map((rowWidths, index) => (
         <SkeletonListRow key={index} trailing widths={rowWidths} />
       ))}
+    </div>
+  );
+}
+
+/**
+ * Поисковая выдача операций-заглушка (#543/#476): контент — две секции
+ * («Категории» — заголовок + чипы, «Операции» — заголовок + ряды), скелетон
+ * зеркалит их анатомию: заголовки-полоски, чипы-заглушки, ряды канона #605.
+ * description — дата под суммой в строках глобального поиска (#543);
+ * в объектном (#476) строки без неё.
+ */
+export function OperationsSearchSkeleton({
+  description = false,
+}: {
+  readonly description?: boolean;
+}): JSX.Element {
+  return (
+    <div aria-hidden className="flex flex-col gap-6 pt-4">
+      <Skeleton className="ml-6 h-6 w-40" />
+      <div className="flex gap-1.5 px-6 pt-2">
+        <Skeleton className="h-9 w-28 rounded-full" />
+        <Skeleton className="h-9 w-36 rounded-full" />
+      </div>
+      <Skeleton className="ml-6 h-6 w-40" />
+      <div className="flex flex-col pt-2">
+        <PaymentsRowsSkeleton description={description} />
+      </div>
     </div>
   );
 }

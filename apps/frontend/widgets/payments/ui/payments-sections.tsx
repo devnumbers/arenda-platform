@@ -297,13 +297,25 @@ export function PaymentsSkeleton({ withHeading }: { readonly withHeading?: boole
 
 /** Скелетон плоского списка строк правил (#605): строки канона
  * PaymentRowButton px-6 py-2 — иконка 44, название + объект, справа сумма и
- * дата (списки избранного #579 и просроченных #580). */
-export function PaymentsRowsSkeleton({ rows = 5 }: { readonly rows?: number }): JSX.Element {
+ * дата (списки избранного #579 и просроченных #580). description=false —
+ * строки без правого нижнего поля (сумма одной строкой). */
+export function PaymentsRowsSkeleton({
+  rows = 5,
+  description = true,
+}: {
+  readonly rows?: number;
+  readonly description?: boolean;
+}): JSX.Element {
   const widths = skeletonRowWidths(rows);
   return (
     <div aria-hidden className="flex flex-col">
       {widths.map((rowWidths, index) => (
-        <SkeletonListRow key={index} value description widths={rowWidths} />
+        <SkeletonListRow
+          key={index}
+          value
+          description={description}
+          widths={rowWidths}
+        />
       ))}
     </div>
   );

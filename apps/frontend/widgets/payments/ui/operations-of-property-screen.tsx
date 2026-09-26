@@ -27,7 +27,8 @@ import {
   TopNav,
   TopNavTitle,
 } from "@/shared/ui/design";
-import { PaymentsSkeleton, PaymentsStateCard } from "./payments-sections";
+import { PaymentsStateCard } from "./payments-sections";
+import { OperationsDateFeedSkeleton, OperationsSummarySkeleton } from "./operations-skeletons";
 import {
   OperationsDateList,
   OperationsNeverHad,
@@ -208,8 +209,10 @@ export function OperationsOfPropertyScreen({
 
             {pending && (
               <>
-                <PaymentsSkeleton withHeading />
-                <PaymentsSkeleton withHeading />
+                {/* Паритет §7: копия контента — ряд карточек сводки и
+                 * группы дат со строками; чипы выше — вне фазы загрузки. */}
+                <OperationsSummarySkeleton cards={2} />
+                <OperationsDateFeedSkeleton />
               </>
             )}
 

@@ -21,7 +21,8 @@ import {
   TopNav,
 } from '@/shared/ui/design';
 import { OperationRow } from './operations-list';
-import { PaymentsHeading, PaymentsSkeleton, PaymentsStateCard } from './payments-sections';
+import { PaymentsHeading, PaymentsStateCard } from './payments-sections';
+import { OperationsSearchSkeleton } from './operations-skeletons';
 import {
   searchCategoryChips,
   searchListScope,
@@ -142,10 +143,9 @@ export function OperationsSearchScreen({
         )}
 
         {pending && (
-          <>
-            <PaymentsSkeleton withHeading />
-            <PaymentsSkeleton withHeading />
-          </>
+          // Паритет §7/#604: скелетон зеркалит две секции контента — чипы
+          // категорий и строки операций.
+          <OperationsSearchSkeleton />
         )}
 
         {showResults &&
