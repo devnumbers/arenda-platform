@@ -4774,7 +4774,7 @@ export interface operations {
                 property_id?: string;
                 /** @description Case-insensitive substring search over the name fields, phone, email, messenger username and role. A missing or empty value disables the filter; LIKE metacharacters in the value are literals. */
                 search?: string;
-                /** @description The sort key: `name` — the contact's display name (default); `property` — the bound property's name with the unbound cards first in both directions («Общие контакты»), contact name order inside; `created` — the card's creation moment (ticket #847 — the «свежие контакты сверху» promise server-side: descending leads with the freshest cards whatever the book's size). The name/property keys use the Russian collation to match the client's letter grouping. */
+                /** @description The sort key: `name` — the contact's display name (default); `property` — the bound property's name with the unbound cards first in both directions («Общие контакты»), contact name order inside; `created` — the card's creation moment (ticket #847 — the «свежие контакты сверху» promise server-side: descending leads with the freshest cards whatever the book's size; the default order is asc, so a bare sort=created lists oldest-first — the freshness promise needs an explicit order=desc, as the tenant picker sends). The name/property keys use the Russian collation to match the client's letter grouping. */
                 sort?: "name" | "property" | "created";
                 /** @description The sort direction: ascending (default) or descending. */
                 order?: "asc" | "desc";

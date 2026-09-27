@@ -689,9 +689,11 @@ paths:
             first in both directions («Общие контакты»), contact name order
             inside; `created` — the card's creation moment (ticket #847 —
             the «свежие контакты сверху» promise server-side: descending
-            leads with the freshest cards whatever the book's size). The
-            name/property keys use the Russian collation to match the
-            client's letter grouping.
+            leads with the freshest cards whatever the book's size; the
+            default order is asc, so a bare sort=created lists oldest-first —
+            the freshness promise needs an explicit order=desc, as the
+            tenant picker sends). The name/property keys use the Russian
+            collation to match the client's letter grouping.
           schema:
             type: string
             enum: [name, property, created]
