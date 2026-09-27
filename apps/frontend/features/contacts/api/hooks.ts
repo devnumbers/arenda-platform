@@ -39,6 +39,20 @@ export type ContactsPageData = {
 };
 
 /**
+ * Конфиг keyset-обхода книги контактов — возвращаемый тип билдеров
+ * contactsListQuery/contactBookQuery: экспорты features/ несут явные
+ * возвращаемые типы (apps/frontend/AGENTS.md), члены — их выведенная форма.
+ */
+export type ContactsListQueryConfig = {
+  readonly queryKey: ReturnType<typeof contactKeys.list>;
+  readonly queryFn: (context: {
+    readonly pageParam?: string;
+  }) => Promise<ContactsPageData>;
+  readonly initialPageParam: string | undefined;
+  readonly getNextPageParam: typeof keysetNextPageParam;
+};
+
+/**
  * Книга контактов объекта (ADR 0054, экран #508): порции по 50 keyset-курсором
  * (#600) — pageParam это курсор прошлого ответа, без него чтение с начала.
  * search — серверный регистронезависимый подстрочный фильтр по имени,
@@ -136,7 +150,7 @@ export function contactsListQuery({
   readonly search: string;
   readonly sort: ContactBookSort | 'created';
   readonly order: ContactBookOrder;
-}) {
+}): ContactsListQueryConfig {
   return {
     queryKey: contactKeys.list(propertyId, search, sort, order),
     queryFn: ({ pageParam }: { pageParam?: string }) =>
@@ -153,7 +167,7 @@ export function contactBookQuery(
   search = '',
   sort: ContactBookSort = 'name',
   order: ContactBookOrder = 'asc',
-) {
+): ContactsListQueryConfig {
   return contactsListQuery({ search, sort, order });
 }
 
