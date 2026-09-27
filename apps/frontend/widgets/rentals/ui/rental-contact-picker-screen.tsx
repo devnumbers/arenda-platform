@@ -57,12 +57,13 @@ export function RentalContactPickerScreen({
   const debouncedSearch = useDebounce(search, CONTACTS_SEARCH_DEBOUNCE_MS);
   // Сервер фильтр не нормализует — пробелы по краям срезаем клиентски.
   const trimmedSearch = debouncedSearch.trim();
-  // Свежие сверху — серверная ось sort=created (#847, макет 1855:64129):
-  // свежая карточка наверху при книге любой длины, а не только в первой
-  // порции по имени. Клиентская contactSortByRecent ниже остаётся
+  // Свежие сверху — серверная ось sort=created + order=desc (#847, макет
+  // 1855:64129): свежая карточка наверху при книге любой длины, а не только
+  // в первой порции по имени. Клиентская contactSortByRecent ниже остаётся
   // деградацией для тёплого кэша.
   const contactsQuery = useContacts(propertyId, trimmedSearch, {
     sort: 'created',
+    order: 'desc',
   });
   const rentalDraft = useRentalWizardDraft(propertyId);
 
@@ -105,8 +106,8 @@ export function RentalContactPickerScreen({
           <ContactsNoResults />
         ) : (
           /* Плоский список (1855:64129): белые строки без групп, свежие
-           * сверху (sort=created, #847), подзаголовок — роль; тап выбирает
-           * арендатора. */
+           * сверху (sort=created + order=desc, #847), подзаголовок — роль;
+           * тап выбирает арендатора. */
           <div className="flex flex-col px-6">
             {contactSortByRecent(contacts).map((contact) => (
               <ContactRowButton

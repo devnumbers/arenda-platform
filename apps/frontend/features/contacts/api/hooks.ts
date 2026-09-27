@@ -43,6 +43,9 @@ export type ContactsPageData = {
  * (#600) — pageParam это курсор прошлого ответа, без него чтение с начала.
  * search — серверный регистронезависимый подстрочный фильтр по имени,
  * телефону, почте, имени пользователя мессенджера и роли ('' = без фильтра).
+ * sort — серверная ось сортировки ('created' — «свежие сверху», #847),
+ * order — направление ('asc'/'desc', дефолт asc); оба едут в ключ кэша:
+ * срезы разных осей — разные наборы, один ключ смешал бы их.
  * Чтение через view-гейт объекта: участник с ролью CanView видит привязанные
  * к объекту контакты (403 — проблема Forbidden).
  * keepPreviousData — прежний срез держится на экране, пока едет запрос
@@ -53,18 +56,20 @@ export type ContactsPageData = {
 export function useContacts(
   propertyId: string,
   search = '',
-  options: { readonly enabled?: boolean; readonly sort?: 'created' } = {},
+  options: {
+    readonly enabled?: boolean;
+    readonly sort?: 'created';
+    readonly order?: ContactBookOrder;
+  } = {},
 ): UseInfiniteQueryResult<Contact[], ApiError> {
-  // sort едет в ключ кэша: срез 'created' и дефолтный 'name' — разные
-  // наборы, один ключ смешал бы их (канон contactKeys.list).
+  // sort/order едут в ключ кэша: срез 'created'desc и дефолтный 'name'asc —
+  // разные наборы, один ключ смешал бы их (канон contactKeys.list).
   const sort = options.sort ?? 'name';
+  const order = options.order ?? 'asc';
   return useInfiniteQuery({
-    queryKey: contactKeys.list(propertyId, search, sort),
-    queryFn: ({ pageParam }) =>
-      fetchContactsPage({ propertyId, search, sort, cursor: pageParam }),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: keysetNextPageParam,
-    select: (data) => data.pages.flatMap((page) => page.items),
+    ...contactsListQuery({ propertyId, search, sort, order }),
+    select: (data: InfiniteData<ContactsPageData>) =>
+      data.pages.flatMap((page) => page.items),
     placeholderData: keepPreviousData,
     enabled: (options.enabled ?? true) && Boolean(propertyId),
   });
@@ -83,7 +88,7 @@ export type ContactBookOrder = 'asc' | 'desc';
  * #847), cursor — keyset-продолжение прошлого ответа, undefined читает
  * с начала. */
 async function fetchContactsPage(params: {
-  propertyId?: string;
+  propertyId?: string | null;
   search?: string;
   sort?: ContactBookSort | 'created';
   order?: ContactBookOrder;
@@ -115,21 +120,41 @@ async function fetchContactsPage(params: {
   };
 }
 
-/** Конфиг keyset-обхода плоской книги (#600) — общее горло useContactBook
- * и прогрева хабов #626: один ключ, один fetch, одно правило продолжения —
- * прогрев не может разъехаться с экраном. */
+/** Конфиг keyset-обхода списка контактов (#600) — общее горло useContacts,
+ * useContactBook и прогрева хабов #626: один ключ, один fetch, одно правило
+ * продолжения — прогрев не может разъехаться с экраном. propertyId — срез
+ * объекта (null/undefined — плоская книга), search — серверный фильтр,
+ * sort/order — серверная ось и направление ('created'desc — пикер арендатора,
+ * #847). */
+export function contactsListQuery({
+  propertyId = null,
+  search,
+  sort,
+  order,
+}: {
+  readonly propertyId?: string | null;
+  readonly search: string;
+  readonly sort: ContactBookSort | 'created';
+  readonly order: ContactBookOrder;
+}) {
+  return {
+    queryKey: contactKeys.list(propertyId, search, sort, order),
+    queryFn: ({ pageParam }: { pageParam?: string }) =>
+      fetchContactsPage({ propertyId, search, sort, order, cursor: pageParam }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: keysetNextPageParam,
+  };
+}
+
+/** Конфиг keyset-обхода плоской книги (#600) — частный случай
+ * contactsListQuery для потребителей без среза объекта (useContactBook,
+ * прогрев хабов #626). */
 export function contactBookQuery(
   search = '',
   sort: ContactBookSort = 'name',
   order: ContactBookOrder = 'asc',
 ) {
-  return {
-    queryKey: contactKeys.list(null, search, sort, order),
-    queryFn: ({ pageParam }: { pageParam?: string }) =>
-      fetchContactsPage({ search, sort, order, cursor: pageParam }),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: keysetNextPageParam,
-  };
+  return contactsListQuery({ search, sort, order });
 }
 
 /**
