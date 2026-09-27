@@ -23,8 +23,9 @@ import (
 // contactCursorPayload is the cursor's decoded form: the page's last row in
 // the listing's own order — the display name, the unbound-flag with the
 // bound property's display name (the property sort's leading keys, "" when
-// unbound), the creation moment (the created sort's leading key, zero for
-// the name/property walks), the card id (the tie-off) and the sort/order the
+// unbound), the creation moment (the created sort's leading key — carried
+// on every walk, read only by the created sort's predicate), the card id
+// (the tie-off) and the sort/order the
 // page was walked with. The sort vocabulary rides in the blob: echoing the
 // cursor under a different sort would silently misread every key, so the
 // mismatch is the contract's 400.
@@ -42,7 +43,8 @@ type contactCursorPayload struct {
 // the tuple the listing's SQL resumes strictly after. PropertyName is the
 // bound property's display name ("" when unbound); Name is the contact's
 // display sort name; CreatedAt is the card's creation moment — the created
-// sort's leading key (zero for the name/property walks).
+// sort's leading key (carried on every walk; read only by the created
+// sort's predicate).
 type ContactCursorKey struct {
 	Unbound      bool
 	PropertyName string
