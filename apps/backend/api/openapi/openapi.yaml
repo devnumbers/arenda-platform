@@ -687,11 +687,16 @@ paths:
             The sort key: `name` — the contact's display name (default);
             `property` — the bound property's name with the unbound cards
             first in both directions («Общие контакты»), contact name order
-            inside. The Russian collation matches the client's letter
-            grouping.
+            inside; `created` — the card's creation moment (ticket #847 —
+            the «свежие контакты сверху» promise server-side: descending
+            leads with the freshest cards whatever the book's size; the
+            default order is asc, so a bare sort=created lists oldest-first —
+            the freshness promise needs an explicit order=desc, as the
+            tenant picker sends). The name/property keys use the Russian
+            collation to match the client's letter grouping.
           schema:
             type: string
-            enum: [name, property]
+            enum: [name, property, created]
             default: name
         - name: order
           in: query
@@ -710,12 +715,13 @@ paths:
             Contacts page. The window is keyset pagination over the listing's
             own sort key and id (ticket #600): the page always resumes
             strictly after the cursor's key, so cards created or deleted
-            between loads never duplicate or drop. The sort keys are mutable
-            (display name, property binding): a rename or rebind of a card
-            the walk has already passed can move it across the window
-            boundary. The cursor is bound to the sort/order it was issued
-            under — echoing it with a different sort is a 400. nextCursor is
-            null once the matches are exhausted.
+            between loads never duplicate or drop. The name/property sort
+            keys are mutable (display name, property binding): a rename or
+            rebind of a card the walk has already passed can move it across
+            the window boundary; the created key is immutable, so a walked
+            card never moves. The cursor is bound to the sort/order it was
+            issued under — echoing it with a different sort is a 400.
+            nextCursor is null once the matches are exhausted.
           content:
             application/json:
               schema:

@@ -234,7 +234,7 @@ func prepareListQuery(q *ListQuery) error {
 		return ErrInvalidInput
 	}
 	switch q.Sort {
-	case "", ListSortName, ListSortProperty:
+	case "", ListSortName, ListSortProperty, ListSortCreated:
 	default:
 		return ErrInvalidInput
 	}

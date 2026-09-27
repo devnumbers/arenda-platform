@@ -78,13 +78,17 @@ type ContactBookPage struct {
 }
 
 // ListSort selects the sort key of a book listing: the contact's display
-// name, or the bound property's name (the unbound cards lead both ways —
-// the «Общие контакты» group) with contact-name order inside.
+// name, the bound property's name (the unbound cards lead both ways —
+// the «Общие контакты» group) with contact-name order inside, or the card's
+// creation moment (ticket #847 — the «свежие контакты сверху» promise moves
+// server-side: the freshest card leads the descending walk whatever the
+// book's size).
 type ListSort string
 
 const (
 	ListSortName     ListSort = "name"
 	ListSortProperty ListSort = "property"
+	ListSortCreated  ListSort = "created"
 )
 
 // ListOrder is the sort direction of a book listing.

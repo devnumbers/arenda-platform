@@ -131,6 +131,17 @@ type PaymentStore interface {
 	WithTx(tx transaction.Tx) (PaymentStore, error)
 }
 
+// PaidOverdueCount is one payment's two progress counters (ticket #845):
+// the paid facts and the overdue planned rows of one rule — the read the
+// Rentals list progress consumes through the RentPaymentGateway. A rule
+// with no matching operations is absent from the batch — the consumer
+// defaults its zeros.
+type PaidOverdueCount struct {
+	PaymentID    uuid.UUID
+	PaidCount    int64
+	OverdueCount int64
+}
+
 // OperationStore is the persistence port of the operations (ticket #461).
 // Reads and writes are scoped by the data owner and the nested property path
 // lives in the queries themselves. The mutating methods must run inside the
@@ -175,6 +186,15 @@ type OperationStore interface {
 	CountOverdueOperationsByPayment(
 		ctx context.Context, scope, propertyID, paymentID uuid.UUID, today time.Time,
 	) (int64, error)
+	// CountPaidAndOverdueByPaymentIDs returns the listed rules' progress
+	// counters in one batched read (ticket #845) — the same paid and
+	// overdue predicates the per-payment counts encode, one GROUP BY over
+	// the list where the per-rule pair took two queries. A rule with no
+	// matching operations is absent from the result — the consumer defaults
+	// its zeros. Read-only — never ticks.
+	CountPaidAndOverdueByPaymentIDs(
+		ctx context.Context, scope, propertyID uuid.UUID, paymentIDs []uuid.UUID, today time.Time,
+	) ([]PaidOverdueCount, error)
 	// ListGlobal returns one page of the actor's visible paid operations —
 	// the global «Операции» screen's merged feed (ticket #540): the paid
 	// facts of the actor's own properties plus the properties they can view,

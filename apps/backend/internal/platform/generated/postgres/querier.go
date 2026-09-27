@@ -74,6 +74,15 @@ type Querier interface {
 	// #461); paid facts never read as overdue, cancelled tombstones never count,
 	// the nested payment→property path is enforced in the WHERE clause.
 	CountOverdueOperationsByPayment(ctx context.Context, arg CountOverdueOperationsByPaymentParams) (int64, error)
+	// The progress counters of the listed rules in one batched read (ticket
+	// #845): the rentals list's «N из M» / «Просрочено N месяцев» — the same
+	// paid and overdue predicates the per-payment counts encode, split by
+	// COUNT FILTER over one GROUP BY instead of a query pair per rule. A rule
+	// with no matching operations yields no row — its zeros default in the
+	// application. Cancelled tombstones never count; the nested
+	// payment→property path is enforced in the WHERE clause. An empty id list
+	// never reaches the query (the ListRentalManagedPaymentIDs precedent).
+	CountPaidAndOverdueByPaymentIDs(ctx context.Context, arg CountPaidAndOverdueByPaymentIDsParams) ([]CountPaidAndOverdueByPaymentIDsRow, error)
 	// The paid-operations count of one rule (ADR 0053 §2: the rentals progress'
 	// paidMonths — «N из M месяцев» counts the managed payment's paid facts).
 	// Cancelled tombstones never count; the nested payment→property path is
@@ -694,6 +703,9 @@ type Querier interface {
 	// property's name, unbound cards first in both directions («Общие
 	// контакты»), contact name ordering inside the groups. Both keys use the
 	// Russian ICU collation to match the client's letter grouping; id ties off.
+	// 'created' orders by the creation moment (ticket #847 — the «свежие
+	// контакты сверху» promise server-side): the key is immutable, so a walked
+	// card never moves across the window boundary.
 	//
 	// The page walks the listing's own order by keyset (ticket #600): the
 	// window resumes strictly after the (sort key, id) the previous page ended

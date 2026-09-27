@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"testing"
 	"time"
 
@@ -839,6 +840,8 @@ func TestContactsIntegration_KeysetPages(t *testing.T) {
 		{"name descending", contactsapp.ListSortName, contactsapp.ListOrderDesc},
 		{"property ascending", contactsapp.ListSortProperty, contactsapp.ListOrderAsc},
 		{"property descending", contactsapp.ListSortProperty, contactsapp.ListOrderDesc},
+		{"created ascending", contactsapp.ListSortCreated, contactsapp.ListOrderAsc},
+		{"created descending", contactsapp.ListSortCreated, contactsapp.ListOrderDesc},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -859,5 +862,89 @@ func TestContactsIntegration_KeysetPages(t *testing.T) {
 		by50 := walkBook(t, h.svc, h.owner, base, 50)
 		by100 := walkBook(t, h.svc, h.owner, base, 100)
 		assertSameWalk(t, by50, by100, 140)
+	})
+}
+
+// TestContactsIntegration_CreatedSortNewestFirst pins the created sort's
+// server-side promise (ticket #847, макет 1855:64129 «свежие контакты
+// сверху»): the freshest card opens the created-descending walk whatever the
+// book's size — a card beyond the first name-ordered page of 50 no longer
+// depends on the client sorting the loaded slice — and the created keyset
+// cursor pages the whole book in both directions in exact reverse/creation
+// order without duplicates or drops.
+func TestContactsIntegration_CreatedSortNewestFirst(t *testing.T) {
+	t.Parallel()
+
+	h := newContactsHarness(t)
+	h.owner = h.seedUser()
+
+	// 55 cards, each a couple of milliseconds apart: the creation order is
+	// the strict (created_at, id) order the walk must reproduce — the gaps
+	// keep the creation moments distinct at the database's microsecond
+	// precision.
+	created := make([]domain.Contact, 0, 55)
+	for i := 1; i <= 55; i++ {
+		time.Sleep(2 * time.Millisecond)
+		created = append(created, h.create(contactsapp.CreateContactCommand{
+			FirstName: fmt.Sprintf("Контакт %02d", i),
+		}))
+	}
+	reversed := make([]uuid.UUID, 0, len(created))
+	for _, v := range slices.Backward(created) {
+		reversed = append(reversed, v.ID)
+	}
+	assertIDSequence := func(name string, got, want []uuid.UUID) {
+		t.Helper()
+		if len(got) != len(want) {
+			t.Fatalf("%s: collected %d ids, want %d", name, len(got), len(want))
+		}
+		for i := range want {
+			if got[i] != want[i] {
+				t.Fatalf("%s: order breaks at %d: %s, want %s", name, i, got[i], want[i])
+			}
+		}
+	}
+
+	t.Run("the freshest card opens the first descending page", func(t *testing.T) {
+		t.Parallel()
+		page, err := h.svc.ListContacts(t.Context(), h.owner, contactsapp.ListQuery{
+			Scope: contactsapp.ListScopeAll, Sort: contactsapp.ListSortCreated, Order: contactsapp.ListOrderDesc,
+		})
+		if err != nil {
+			t.Fatalf("list: %v", err)
+		}
+		if len(page.Items) != 50 {
+			t.Fatalf("first page holds %d rows, want 50", len(page.Items))
+		}
+		if page.Items[0].Contact.ID != created[len(created)-1].ID {
+			t.Fatalf("freshest = %s, want the last created %s",
+				page.Items[0].Contact.ID, created[len(created)-1].ID)
+		}
+	})
+
+	t.Run("created descending walks the book newest first", func(t *testing.T) {
+		t.Parallel()
+		base := contactsapp.ListQuery{
+			Scope: contactsapp.ListScopeAll, Sort: contactsapp.ListSortCreated, Order: contactsapp.ListOrderDesc,
+		}
+		by50 := walkBook(t, h.svc, h.owner, base, 50)
+		by100 := walkBook(t, h.svc, h.owner, base, 100)
+		assertSameWalk(t, by50, by100, 55)
+		assertIDSequence("created desc order", by50, reversed)
+	})
+
+	t.Run("created ascending follows the creation order", func(t *testing.T) {
+		t.Parallel()
+		base := contactsapp.ListQuery{
+			Scope: contactsapp.ListScopeAll, Sort: contactsapp.ListSortCreated, Order: contactsapp.ListOrderAsc,
+		}
+		by50 := walkBook(t, h.svc, h.owner, base, 50)
+		by100 := walkBook(t, h.svc, h.owner, base, 100)
+		assertSameWalk(t, by50, by100, 55)
+		want := make([]uuid.UUID, 0, len(created))
+		for _, c := range created {
+			want = append(want, c.ID)
+		}
+		assertIDSequence("created asc order", by50, want)
 	})
 }
