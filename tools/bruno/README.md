@@ -19,20 +19,11 @@ Arenda backend endpoints.
 Each request has a minimal assertion so it can be run on its own from the
 Bruno app or the Bruno CLI.
 
-A separate coverage gate (`tools/e2e/check-bruno-coverage.sh`) verifies that
-every public backend endpoint has a matching request in at least one of the
-Bruno collections.
-
 ## E2E tests
 
-System end-to-end tests, SQL checks, and the test orchestrator live in a
-separate folder:
-
-```
-tools/e2e/
-```
-
-See `tools/e2e/README.md` for how to run the full E2E suite.
+The Playwright screen suite of the frontend lives in `tools/e2e/frontend/`
+and runs from the repository root via `make frontend-e2e`. See
+`tools/e2e/README.md` and `tools/e2e/frontend/README.md` for details.
 
 ## Run a request with the CLI
 
