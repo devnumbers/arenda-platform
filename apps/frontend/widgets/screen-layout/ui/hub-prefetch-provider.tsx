@@ -4,20 +4,14 @@ import { useEffect, type JSX, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { ROUTES } from '@/shared/config/routes';
+import { type GlobalOperationScope } from '@/shared/api/query-keys';
 import {
-  globalOperationKeys,
-  globalPaymentKeys,
-  taskKeys,
-  type GlobalOperationScope,
-} from '@/shared/api/query-keys';
-import {
-  fetchGlobalOperationsPage,
-  fetchGlobalOperationsSummary,
-  fetchGlobalPaymentObjects,
+  globalOperationsPagedQueryOptions,
+  globalOperationsSummaryQueryOptions,
+  globalPaymentObjectsQueryOptions,
   globalPaymentsFeedQueryOptions,
 } from '@/features/payments';
-import { keysetNextPageParam } from '@/shared/lib/keyset';
-import { fetchGlobalTasks } from '@/features/tasks';
+import { globalTasksQueryOptions } from '@/features/tasks';
 import { contactBookQuery } from '@/features/contacts';
 import { propertiesListQueryOptions } from '@/features/properties';
 
@@ -56,10 +50,7 @@ const HUB_ENTRIES: ReadonlyArray<HubPrefetchEntry> = [
     prefix: ROUTES.payments,
     prefetch: (client) => {
       void client.prefetchQuery(globalPaymentsFeedQueryOptions());
-      void client.prefetchQuery({
-        queryKey: globalPaymentKeys.objects(''),
-        queryFn: () => fetchGlobalPaymentObjects(''),
-      });
+      void client.prefetchQuery(globalPaymentObjectsQueryOptions());
     },
   },
   {
@@ -70,30 +61,24 @@ const HUB_ENTRIES: ReadonlyArray<HubPrefetchEntry> = [
     // на экране в дефолтном состоянии.
     prefetch: (client) => {
       const scope: GlobalOperationScope = { order: 'desc' };
-      void client.prefetchInfiniteQuery({
-        queryKey: globalOperationKeys.listPaged(scope),
-        queryFn: ({ pageParam }) => fetchGlobalOperationsPage(scope, pageParam),
-        initialPageParam: undefined as string | undefined,
-        getNextPageParam: keysetNextPageParam,
-      });
-      void client.prefetchQuery({
-        queryKey: globalOperationKeys.summary(scope),
-        queryFn: () => fetchGlobalOperationsSummary(scope),
-      });
+      void client.prefetchInfiniteQuery(globalOperationsPagedQueryOptions({ scope }));
+      void client.prefetchQuery(globalOperationsSummaryQueryOptions({ scope }));
     },
   },
   {
     prefix: ROUTES.tasks,
     // Бакеты без фильтра — дефолт EMPTY_TASKS_FEED_FILTER экрана ленты.
     prefetch: (client) => {
-      void client.prefetchQuery({
-        queryKey: taskKeys.global(false, [], false),
-        queryFn: () => fetchGlobalTasks(false, [], false),
-      });
-      void client.prefetchQuery({
-        queryKey: taskKeys.global(true, [], false),
-        queryFn: () => fetchGlobalTasks(true, [], false),
-      });
+      void client.prefetchQuery(globalTasksQueryOptions({
+        completed: false,
+        propertyIds: [],
+        withoutProperty: false,
+      }));
+      void client.prefetchQuery(globalTasksQueryOptions({
+        completed: true,
+        propertyIds: [],
+        withoutProperty: false,
+      }));
       void client.prefetchQuery(propertiesListQueryOptions());
     },
   },

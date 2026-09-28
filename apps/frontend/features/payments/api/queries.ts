@@ -34,27 +34,17 @@ export type GlobalOperationsPageData = {
   readonly nextCursor: string | null;
 };
 
-
-
 type PaymentsResponse = components['schemas']['PaymentsResponse'];
 type OperationsResponse = components['schemas']['OperationsResponse'];
 type OperationsSummaryResponse = components['schemas']['OperationsSummaryResponse'];
 type PaymentResponseDto = components['schemas']['PaymentResponse'];
 type OperationResponseDto = components['schemas']['OperationResponse'];
-
 
 /** Двойной модуль API-слоя payments (без 'use client'): чистые fetch-функции
  * и queryOptions-фабрики канона #887 — общий источник ключ+fetch для
  * клиентских хуков, прогрева хабов #626 и серверного префетча. Хуки — в
  * hooks.ts ('use client'); мутации, поиск и отфильтрованные срезы остаются
- * там же.
-
-type PaymentsResponse = components['schemas']['PaymentsResponse'];
-type OperationsResponse = components['schemas']['OperationsResponse'];
-type OperationsSummaryResponse = components['schemas']['OperationsSummaryResponse'];
-type PaymentResponseDto = components['schemas']['PaymentResponse'];
-type OperationResponseDto = components['schemas']['OperationResponse'];
-
+ * там же. */
 
 /** Чистый fetch списка платежей объекта — общее горло хука и серверного
  * префетча #887 (transport выбирает окружение). */
@@ -87,7 +77,6 @@ export function paymentListQueryOptions({
   });
 }
 
-
 /** Чистый fetch платежа — общее горло хука и серверного префетча #887. */
 export async function fetchPayment(
   propertyId: string,
@@ -116,7 +105,6 @@ export function paymentDetailQueryOptions({
     queryFn: () => fetchPayment(propertyId, paymentId, transport),
   });
 }
-
 
 /** Чистый fetch просрочек объекта — общее горло хука и серверного
  * префетча #887. */
@@ -148,7 +136,6 @@ export function paymentOperationsOverdueQueryOptions({
     queryFn: () => fetchPropertyOperationsOverdue(propertyId, search, transport),
   });
 }
-
 
 /** Чистый fetch сводки объекта — общее горло хука и серверного префетча
  * #887. */
@@ -194,7 +181,6 @@ export function paymentOperationsSummaryQueryOptions({
   });
 }
 
-
 /** Чистый fetch фида «Платежей» — общее горло хука, прогрева хабов
  * #626 и серверного префетча #887 (кэш прогревается тем же кодом, что
  * читает экран). */
@@ -217,7 +203,6 @@ export function globalPaymentsFeedQueryOptions(
     queryFn: () => fetchGlobalPaymentsFeed(transport),
   });
 }
-
 
 /** Чистый fetch стопок объектов «Платежей» — общее горло хука, prefetch
  * и серверного префетча #887. */
@@ -246,7 +231,6 @@ export function globalPaymentObjectsQueryOptions({
     queryFn: () => fetchGlobalPaymentObjects(search, transport),
   });
 }
-
 
 /** Чистый fetch порции глобальной ленты — общее горло хука, прогрева
  * хабов #626 и серверного префетча #887. cursor — keyset-продолжение
@@ -300,7 +284,6 @@ export function globalOperationsPagedQueryOptions({
   };
 }
 
-
 /** Чистый fetch сводки операций — общее горло хука, прогрева хабов #626
  * и серверного префетча #887. */
 export async function fetchGlobalOperationsSummary(
@@ -329,7 +312,6 @@ export function globalOperationsSummaryQueryOptions({
     queryFn: () => fetchGlobalOperationsSummary(scope, transport),
   });
 }
-
 
 /** Чистый fetch статусного списка операций платежа — общее горло хука
  * и серверного префетча #887. */
@@ -365,7 +347,6 @@ export function paymentOperationsByStatusQueryOptions({
   });
 }
 
-
 /** Чистый fetch операции — общее горло хука и серверного префетча #887. */
 export async function fetchOperation(
   propertyId: string,
@@ -395,7 +376,6 @@ export function paymentOperationQueryOptions({
     queryFn: () => fetchOperation(propertyId, operationId, transport),
   });
 }
-
 
 /** Чистый fetch порции операций платежа — общее горло хука и серверного
  * префетча #887. */
@@ -451,7 +431,6 @@ export function paymentOperationsPagedQueryOptions({
     getNextPageParam: operationsOffsetNextPageParam,
   };
 }
-
 
 /** Скоуп глобальной ленты → общая часть query-параметров (объекты, период,
  * направление, архив, поиск); пагинация и порядок — у порции, сводка их не

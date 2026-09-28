@@ -22,12 +22,7 @@ type TaskResponseDto = components['schemas']['TaskResponse'];
 type TaskRuleResponseDto = components['schemas']['TaskRuleResponse'];
 type TasksPageDto = components['schemas']['TasksResponse'];
 
-import { activeTasksQueryOptions, fetchGlobalTasks } from './queries';
-
-/** Лимит листинга: экран группирует весь список целиком, поэтому берёт
- * максимум контракта одной страницей (серверный дефолт — 100, максимум
- * 500); порции с догрузкой — если у объекта появится больше задач. */
-const TASKS_PAGE_LIMIT = 500;
+import { activeTasksQueryOptions, fetchGlobalTasks, TASKS_PAGE_LIMIT } from './queries';
 
 /**
  * Активные задачи объекта — сырьё секций «Просроченные / Сегодня / Завтра /
