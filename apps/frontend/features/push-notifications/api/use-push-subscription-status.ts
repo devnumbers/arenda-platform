@@ -1,51 +1,17 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import {
   isPushSupported,
   readNotificationPermission,
 } from '../lib/platform';
+import {
+  PENDING_PUSH_STATUS,
+  resolveInitialPushStatus,
+  type PushSubscriptionStatus,
+} from '../lib/push-subscription-status';
 
-export type PushSubscriptionStatus = {
-  /** The browser cannot receive push at all. */
-  readonly isUnsupported: boolean;
-  /** Notification permission has not been granted. */
-  readonly needsPermission: boolean;
-  /** The user explicitly denied notification permission — the system prompt cannot be re-shown. */
-  readonly permissionDenied: boolean;
-  /** Permission granted but no active subscription on this device. */
-  readonly needsSubscription: boolean;
-  /** Push is supported, permission granted, and an active subscription exists. */
-  readonly isReady: boolean;
-  /** Initial SSR-safe state — no decision yet. */
-  readonly isPending: boolean;
-  /**
-   * Endpoint URL of the active browser subscription — the device key of the
-   * per-device preferences API (#743, решение #738). null until a live
-   * subscription is probed (pending / unsupported / no subscription).
-   */
-  readonly endpoint: string | null;
-};
-
-const PENDING: PushSubscriptionStatus = {
-  isUnsupported: false,
-  needsPermission: false,
-  permissionDenied: false,
-  needsSubscription: false,
-  isReady: false,
-  isPending: true,
-  endpoint: null,
-};
-
-const UNSUPPORTED: PushSubscriptionStatus = {
-  isUnsupported: true,
-  needsPermission: false,
-  permissionDenied: false,
-  needsSubscription: false,
-  isReady: false,
-  isPending: false,
-  endpoint: null,
-};
+export type { PushSubscriptionStatus };
 
 export type PushSubscriptionStatusResult = PushSubscriptionStatus & {
   /**
@@ -58,86 +24,123 @@ export type PushSubscriptionStatusResult = PushSubscriptionStatus & {
   readonly refresh: () => void;
 };
 
+// Синхронная часть пробы (поддержка + разрешение) — снапшот-хранилище без
+// событий: браузер не уведомляет об их изменении, обновление приходит
+// ре-рендером после явных действий (refresh). getServerSnapshot держит SSR и
+// гидратацию в нейтральном pending — расхождение сервер/клиент React
+// закрывает пере-рендером без ошибки гидратации (#418).
+const subscribeToNothing = (): (() => void) => () => {};
+const getSyncPushStatus = (): PushSubscriptionStatus =>
+  resolveInitialPushStatus({
+    supported: isPushSupported(),
+    permission: readNotificationPermission(),
+  });
+const getServerPushStatus = (): PushSubscriptionStatus => PENDING_PUSH_STATUS;
+
+/** Вердикт асинхронной половины пробы — подписка браузера. */
+type SubscriptionVerdict = {
+  readonly probed: boolean;
+  readonly endpoint: string | null;
+};
+
+const NOT_PROBED: SubscriptionVerdict = { probed: false, endpoint: null };
+
 /**
  * Inspect the browser push capability and return a coarse-grained status the
  * notification-settings UI can branch on.
  *
- * `isUnsupported` is resolved eagerly during the first render (it is a
- * synchronous capability check) so the effect never calls `setState` in the
- * unsupported branch — ESLint's `react-hooks/set-state-in-effect` rule fires
- * on unconditional `setState` calls inside effects. The async subscription
- * check lives in `.then` callbacks, which the rule treats as legitimate
- * (state settles after an awaited operation, not synchronously on mount).
+ * The synchronous parts (support, permission) settle through
+ * `useSyncExternalStore` right after hydration; the settings screen holds its
+ * loading archetype until then — a late card insert shifted the sections
+ * (audit #877, CLS 0.15). Only the subscription check is async: its setState
+ * lives in `.then`/`setTimeout` callbacks, which the set-state-in-effect rule
+ * treats as legitimate (state settles after an awaited operation, not
+ * synchronously on mount).
  */
 export function usePushSubscriptionStatus(): PushSubscriptionStatusResult {
-  // Resolve synchronously on the client first render; on SSR `isPending`
-  // stays true and the caller renders the neutral UI.
-  const getInitial = (): PushSubscriptionStatus => {
-    if (typeof window !== 'undefined' && !isPushSupported()) {
-      return UNSUPPORTED;
+  const syncStatus = useSyncExternalStore(
+    subscribeToNothing,
+    getSyncPushStatus,
+    getServerPushStatus,
+  );
+  const [verdict, setVerdict] = useState<SubscriptionVerdict>(NOT_PROBED);
+
+  // Ручная мемоизация с комментарием (CODING_STANDARDS, React Compiler):
+  // слияние синхронного вердикта и вердикта подписки — зависимостей ровно
+  // две, компилятору тут полагаться нечего кэшировать сверх этого.
+  const status = useMemo<PushSubscriptionStatus>(() => {
+    if (!syncStatus.isPending) {
+      return syncStatus;
     }
-    return PENDING;
-  };
-  const [status, setStatus] = useState<PushSubscriptionStatus>(getInitial);
-
-  // Re-read the browser push capability/permission/subscription and push the
-  // result into state. Explicit useCallback, not the compiler's automatic
-  // memoization: exhaustive-deps is static and cannot see it, so a plain
-  // function plus `[refresh]` deps below is a lint error; with useCallback the
-  // identity is stable by construction and the mount effect runs exactly
-  // once. `cancelled` is threaded in by the mount effect so a probe that
-  // resolves after unmount does not call setState.
-  const refresh = useCallback(async (cancelled: () => boolean = () => false): Promise<void> => {
-    if (!isPushSupported()) return;
-
-    const permission = readNotificationPermission();
-    if (permission !== 'granted') {
-      if (!cancelled()) {
-        setStatus({
-          isUnsupported: false,
-          needsPermission: true,
-          permissionDenied: permission === 'denied',
-          needsSubscription: false,
-          isReady: false,
-          isPending: false,
-          endpoint: null,
-        });
-      }
-      return;
+    if (!verdict.probed) {
+      return PENDING_PUSH_STATUS;
     }
-
-    const registration = await navigator.serviceWorker.ready;
-    const subscription = await registration.pushManager.getSubscription();
-    if (cancelled()) return;
-    setStatus({
+    return {
       isUnsupported: false,
       needsPermission: false,
       permissionDenied: false,
-      needsSubscription: subscription === null,
-      isReady: subscription !== null,
+      needsSubscription: verdict.endpoint === null,
+      isReady: verdict.endpoint !== null,
       isPending: false,
-      endpoint: subscription?.endpoint ?? null,
-    });
+      endpoint: verdict.endpoint,
+    };
+  }, [syncStatus, verdict]);
+
+  // Re-read the browser push capability/permission/subscription. Explicit
+  // useCallback, not the compiler's automatic memoization: exhaustive-deps
+  // is static and cannot see it, so a plain function plus `[refresh]` deps
+  // below is a lint error; with useCallback the identity is stable by
+  // construction. `cancelled` is threaded in by the mount effect so a probe
+  // that resolves after unmount does not call setState.
+  const refresh = useCallback(async (cancelled: () => boolean = () => false): Promise<void> => {
+    if (!isPushSupported()) return;
+    // Не-выданное разрешение — синхронная ветка: её вердикт уже в снапшоте
+    // (обновится следующим ре-рендером), подписку у браузера не ждём.
+    if (readNotificationPermission() !== 'granted') return;
+
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.getSubscription();
+      if (!cancelled()) {
+        setVerdict({ probed: true, endpoint: subscription?.endpoint ?? null });
+      }
+    } catch {
+      // Деградация: проба подписки не сошлась (SW не зарегистрировался) —
+      // считаем подписки нет, тумблеры живут на локальном состоянии.
+      if (!cancelled()) {
+        setVerdict({ probed: true, endpoint: null });
+      }
+    }
   }, []);
 
   useEffect(() => {
-    // The synchronous-unsupported case was handled by the initializer; bail
-    // out here so no setState is reached for unsupported browsers. The same
-    // synchronous check (not `status.isUnsupported`) keeps the effect free of
-    // the status value in its reads; `refresh` is compiler-memoized, so the
-    // effect still runs exactly once per mount.
-    if (!isPushSupported()) return;
-
+    // The synchronous cases (unsupported, permission verdict) settle in the
+    // snapshot; the mount probe adds the subscription verdict on top. The
+    // async IIFE keeps the setState calls behind an await so ESLint's
+    // react-hooks/set-state-in-effect rule does not fire.
     let cancelled = false;
-    // Run once on mount. The async IIFE keeps the setStatus calls behind an
-    // await so ESLint's react-hooks/set-state-in-effect rule does not fire.
+    // Страховка вечного pending: если проба подписки не сошлась за 3с
+    // (SW-регистрация зависла), экран выходит из архетипа с вердиктом «без
+    // подписки»; поздний успех refresh всё равно обновит endpoint.
+    const fallback = setTimeout(() => {
+      if (!cancelled) {
+        setVerdict({ probed: true, endpoint: null });
+      }
+    }, 3000);
     void (async () => {
       await refresh(() => cancelled);
+      clearTimeout(fallback);
     })();
     return () => {
       cancelled = true;
+      clearTimeout(fallback);
     };
   }, [refresh]);
 
-  return { ...status, refresh: () => void refresh() };
+  // Ручная мемоизация (CODING_STANDARDS, React Compiler): объект результата
+  // собирается заново только при смене verdict'а или refresh.
+  return useMemo(
+    () => ({ ...status, refresh: () => void refresh() }),
+    [status, refresh],
+  );
 }

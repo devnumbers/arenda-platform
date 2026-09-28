@@ -88,6 +88,9 @@ export function TimezonePickerScreen(): JSX.Element {
             <ListRow
               key={option.value}
               title={option.label}
+              // Строки текстовые, без leading-слота: min-h держит зону тапа
+              // ≥44 (§14) и шаг макета 1869-70821 ~52.
+              className="min-h-13"
               titleClassName={option.value === selected ? 'text-primary' : undefined}
               disabled={updateMe.isPending}
               onSelect={() => handleSelect(option.value)}
