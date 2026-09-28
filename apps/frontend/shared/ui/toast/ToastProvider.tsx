@@ -52,6 +52,11 @@ const ToastTransition = cssTransition({
     collapseDuration: 250,
 });
 
+/** Канон автоухода тостов — 5с у всех (решение владельца 28.09, аудит
+ * #876, как в iOS): единый источник для контейнера и всех вызывающих;
+ * hover и потеря фокуса ставят таймер на паузу. */
+export const TOAST_AUTO_CLOSE_MS = 5000;
+
 export function ToastProvider(): JSX.Element {
     const isMobile = useIsMobile();
 
@@ -67,7 +72,7 @@ export function ToastProvider(): JSX.Element {
             closeOnClick={false}
             pauseOnHover
             pauseOnFocusLoss
-            autoClose={false}
+            autoClose={TOAST_AUTO_CLOSE_MS}
             draggable
             draggableDirection={isMobile ? 'y' : 'x'}
             draggablePercent={40}

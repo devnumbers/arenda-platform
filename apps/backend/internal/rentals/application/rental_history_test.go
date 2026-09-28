@@ -31,9 +31,10 @@ func TestHistory_RentalCreatedCarriesTenantAndPeriod(t *testing.T) {
 	if e.Action != historydomain.ActionRentalCreated {
 		t.Fatalf("action = %s, want rental.created", e.Action)
 	}
-	// The label snapshot: the tenant display name (the contacts seam) plus
-	// the period — the fixture plans 2026-09-01 → 2027-09-01.
-	want := "Добавлена аренда: Иван Tenant (" + today.Format("02.01.2006") + " – 01.09.2027)"
+	// The label snapshot: the tenant display name (the contacts seam);
+	// the period lives in context only (аудит #876 — голые даты из строк
+	// убраны). The fixture plans 2026-09-01 → 2027-09-01.
+	want := "Добавлена аренда: Иван Tenant"
 	if e.Segments.PlainText() != want {
 		t.Errorf("row text = %q, want %q", e.Segments.PlainText(), want)
 	}

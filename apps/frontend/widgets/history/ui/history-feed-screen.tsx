@@ -460,10 +460,12 @@ export function HistoryFeedScreen({
       </PageContent>
 
       {/* Шит «Настройки» (#711): primary по контенту (не на всю ширину,
-        * макет 2184-94734), по центру колонки; открывает шит фильтров
-        * поверх ленты. */}
-      <div className="fixed inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom))] z-40 flex justify-center">
-        <div className="mx-auto flex w-full max-w-column justify-center">
+        * макет 2184-94734), по центру колонки. Контейнер — прозрачная
+        * полоса на весь вьюпорт: pointer-events-none, чтобы она не глушила
+        * клики нижнего хрома по краям (пилюли ПК #876), кликабельна только
+        * сама кнопка. */}
+      <div className="pointer-events-none fixed inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom))] z-40 flex justify-center">
+        <div className="pointer-events-auto mx-auto flex w-full max-w-column justify-center">
           <Button type="button" onClick={() => setFiltersOpen(true)}>
             Настройки
           </Button>

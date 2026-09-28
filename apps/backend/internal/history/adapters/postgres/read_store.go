@@ -22,6 +22,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared"
 )
 
 // ReadStore reads the action journal.
@@ -56,7 +57,7 @@ func (s *ReadStore) List(ctx context.Context, actor uuid.UUID, q application.Jou
 		BaseActions: joinStrings(baseActionStrings(q.BaseActions)),
 		QRaw:        q.Search,
 		QTrgm:       escapeLikePattern(q.Search),
-		PageLimit:   int32(q.Limit),
+		PageLimit:   shared.ToInt32Clamped(q.Limit),
 	}
 	if q.DateFrom != nil {
 		params.DateFrom = pgtype.Timestamptz{Time: *q.DateFrom, Valid: true}
@@ -104,7 +105,7 @@ func (s *ReadStore) listAfter(ctx context.Context, actor uuid.UUID, q applicatio
 		QTrgm:       escapeLikePattern(q.Search),
 		AfterTs:     pgtype.Timestamptz{Time: q.After.CreatedAt, Valid: true},
 		AfterID:     pgconv.UUIDToPgtype(q.After.ID),
-		PageLimit:   int32(q.Limit),
+		PageLimit:   shared.ToInt32Clamped(q.Limit),
 	}
 	if q.DateFrom != nil {
 		params.DateFrom = pgtype.Timestamptz{Time: *q.DateFrom, Valid: true}
@@ -165,7 +166,7 @@ func (s *ReadStore) FilterParticipants(ctx context.Context, actor uuid.UUID, pro
 }
 
 // FilterObjects returns the scope's objects with the card photo avatar —
-// the first (oldest) photo or '' without any.
+// the first (oldest) photo or ” without any.
 func (s *ReadStore) FilterObjects(ctx context.Context, actor uuid.UUID, propertyIDs []uuid.UUID) ([]domain.FilterObject, error) {
 	rows, err := postgres.New(s.db).ListHistoryFilterObjects(ctx, postgres.ListHistoryFilterObjectsParams{
 		Actor:       pgconv.UUIDToPgtype(actor),

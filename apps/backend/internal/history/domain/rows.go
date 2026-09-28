@@ -74,17 +74,6 @@ func PropertyAttributesChanged(entityID uuid.UUID, changes []AttributeChange) En
 	}
 }
 
-func formatDate(t time.Time) string {
-	return t.Format("02.01.2006")
-}
-
-func formatPeriod(from, to time.Time) string {
-	if to.IsZero() {
-		return formatDate(from)
-	}
-	return formatDate(from) + " – " + formatDate(to)
-}
-
 func entityLink(kind Kind, id uuid.UUID) *Link {
 	if id == uuid.Nil {
 		return nil
@@ -303,6 +292,8 @@ func RentalDeleted(entityID uuid.UUID, tenantName string) Entry {
 func rentalRow(action Action, base BaseAction, prefix string, entityID uuid.UUID, tenantName string, from, to time.Time) Entry {
 	// An unnamed tenant (a rental without a contact) reads without the
 	// colon, and the row drops the link — nothing to attach it to.
+	// Период аренды в строку не пишется (аудит #876: голые подписи дат
+	// убраны из ленты) — живёт в context для деталей.
 	segments := make(Segments, 0, 2)
 	if tenantName == "" {
 		segments = append(segments, Segment{Text: strings.TrimSuffix(prefix, ": ")})
@@ -312,10 +303,6 @@ func rentalRow(action Action, base BaseAction, prefix string, entityID uuid.UUID
 			Segment{Text: tenantName, Link: entityLink(KindRental, entityID)},
 		)
 	}
-	// The period segment is appended unconditionally: formatPeriod is never
-	// empty (formatDate is a plain t.Format), the indefinite form included
-	// (to = zero → «(дата)»).
-	segments = append(segments, Segment{Text: " (" + formatPeriod(from, to) + ")"})
 	return Entry{
 		Kind:       KindRental,
 		Action:     action,
@@ -399,7 +386,7 @@ func OperationDeleted(entityID uuid.UUID, title string, due time.Time) Entry {
 		Kind:       KindOperation,
 		Action:     ActionOperationDeleted,
 		BaseAction: BaseDeleted,
-		Segments:   titledWithDeadlineSegments("Отменённая операция: ", title, due, nil),
+		Segments:   titledSegments("Отменённая операция: ", title, nil),
 		Context:    map[string]any{ctxKeyTitle: title, ctxKeyDueDate: formatContextDate(due)},
 	}
 }
@@ -409,20 +396,17 @@ func operationRow(action Action, base BaseAction, prefix string, entityID uuid.U
 		Kind:       KindOperation,
 		Action:     action,
 		BaseAction: base,
-		Segments:   titledWithDeadlineSegments(prefix, title, due, entityLink(KindOperation, entityID)),
+		Segments:   titledSegments(prefix, title, entityLink(KindOperation, entityID)),
 		Context:    map[string]any{ctxKeyTitle: title, ctxKeyDueDate: formatContextDate(due)},
 	}
 }
 
-// titledWithDeadlineSegments builds the «prefix + title (срок дата)» run —
-// the shape shared by the operation and task rows; a nil link is the deleted
-// operation's no-link tombstone, a zero due drops the deadline segment.
-func titledWithDeadlineSegments(prefix, title string, due time.Time, link *Link) Segments {
-	segments := Segments{{Text: prefix}, {Text: title, Link: link}}
-	if !due.IsZero() {
-		segments = append(segments, Segment{Text: " (срок " + formatDate(due) + ")"})
-	}
-	return segments
+// titledSegments builds the «prefix + title» run shared by the operation
+// and task rows; a nil link is the deleted operation's no-link tombstone.
+// Срок в строку не пишется (аудит #876: голые подписи дат убраны из
+// ленты) — живёт в context для деталей.
+func titledSegments(prefix, title string, link *Link) Segments {
+	return Segments{{Text: prefix}, {Text: title, Link: link}}
 }
 
 // Контакты.
@@ -514,7 +498,7 @@ func TaskCompleted(entityID uuid.UUID, title string, due time.Time) Entry {
 		Kind:       KindTask,
 		Action:     ActionTaskCompleted,
 		BaseAction: BaseCompleted,
-		Segments:   titledWithDeadlineSegments("Задача выполнена: ", title, due, entityLink(KindTask, entityID)),
+		Segments:   titledSegments("Задача выполнена: ", title, entityLink(KindTask, entityID)),
 		Context:    map[string]any{ctxKeyTitle: title, ctxKeyDueDate: formatContextDate(due)},
 	}
 }

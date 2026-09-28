@@ -63,6 +63,14 @@ export type TopNavCollapse = {
 export type TopNavProps = {
   readonly leading?: ReactNode;
   readonly trailing?: ReactNode;
+  /** Постоянный правый слот бара хаба (аудит #876): действие, живущее в
+   * баре всегда, а не по скроллу компакта — кебаб/шестерёнка «Уведомлений»
+   * (канон §2 «кебаб в правом слоте бара»). На ПК — у правого края колонки
+   * 560 (макет 2329-148700), крыло профиля остаётся у края вьюпорта; на
+   * мобайле/планшете слот встаёт левее крыла-аватара (имя крыла ниже ПК
+   * скрыто — ширина крыла стабильна, клиренс константный). Отличать от
+   * trailing подэкрана: тот живёт в мобильной анатомии без крыльев. */
+  readonly barTrailing?: ReactNode;
   readonly children?: ReactNode;
   readonly className?: string;
   /** `search` — вариант поиска (Figma 706:12598): children (SearchField)
@@ -91,6 +99,7 @@ export type TopNavProps = {
 export function TopNav({
   leading,
   trailing,
+  barTrailing,
   children,
   className,
   variant = 'default',
@@ -147,7 +156,16 @@ export function TopNav({
           wingsTierClass,
         )}
       >
-        <UserButton name={wingName} pending={pending} onClick={() => router.push(ROUTES.profile)} />
+        {/* Имя крыла — только на ПК (аудит #876): на мобайле/планшете
+         * аватар-only делает ширину крыла константной, и постоянные слоты
+         * бара (barTrailing) получают стабильный клиренс; имя доступно в
+         * профиле и на ПК. */}
+        <UserButton
+          name={wingName}
+          pending={pending}
+          hideNameBelowDesktop
+          onClick={() => router.push(ROUTES.profile)}
+        />
       </div>
       {variant === 'search' ? (
         /* Поисковая шапка: слоты и поле — во всю ширину вьюпорта на мобайле
@@ -201,6 +219,20 @@ export function TopNav({
           {!collapse && trailing !== undefined && (
             <div className="absolute right-0 top-0 flex h-full items-center pr-3.5">
               {trailing}
+            </div>
+          )}
+          {/* Постоянный правый слот бара хаба: на ПК — правый край колонки
+           * 560 (макет 2329-148700); на мобайле/планшете с крыльями — левее
+           * аватар-крыла (его ширина 72 = px-[14px] + круг 44 + px-[14px], зазор
+           * 14 до слота). Прецедент канона §2 — «Уведомления» #876. */}
+          {!collapse && barTrailing !== undefined && (
+            <div
+              className={cn(
+                'absolute top-0 flex h-full items-center',
+                mobileWings ? 'right-[72px] desktop:right-0 desktop:pr-3.5' : 'right-0 pr-3.5',
+              )}
+            >
+              {barTrailing}
             </div>
           )}
         </div>

@@ -397,10 +397,24 @@ func TestReadStore_AfterCursorBurstWalk(t *testing.T) {
 		seeded[rowIDAt(at)] = true
 	}
 
+	got := walkAfterPages(t, ctx, svc, owner, first.PrevCursor, seeded, burst)
+	if len(got) != burst {
+		t.Fatalf("after-walk: want all %d burst rows, got %d — %d lost", burst, len(got), burst-len(got))
+	}
+}
+
+// walkAfterPages turns the pages after the anchor cursor until exhaustion,
+// asserting each page's order, burst membership and cursor hygiene — the
+// loop body of TestReadStore_AfterCursorBurstWalk (граница gocognit).
+func walkAfterPages(
+	t *testing.T, ctx context.Context, svc *historyapp.HistoryReadService, owner uuid.UUID,
+	after string, seeded map[uuid.UUID]bool, burst int,
+) map[uuid.UUID]bool {
+	t.Helper()
 	const pageSize = 50
 	got := map[uuid.UUID]bool{}
 	pages := 0
-	for after := first.PrevCursor; after != ""; {
+	for after != "" {
 		page, err := svc.Feed(ctx, owner, historyapp.FeedQuery{Limit: pageSize, AfterCursor: after})
 		if err != nil {
 			t.Fatalf("after page %d: %v", pages, err)
@@ -411,20 +425,7 @@ func TestReadStore_AfterCursorBurstWalk(t *testing.T) {
 			}
 			break
 		}
-		for i := 1; i < len(page.Items); i++ {
-			if page.Items[i].CreatedAt.After(page.Items[i-1].CreatedAt) {
-				t.Fatal("an after-page must keep the (created_at, id) DESC order")
-			}
-		}
-		for _, item := range page.Items {
-			if got[item.ID] {
-				t.Fatalf("after page %d: duplicate row %s", pages, item.ID)
-			}
-			if !seeded[item.ID] {
-				t.Fatalf("after page %d: row %s is not part of the burst", pages, item.ID)
-			}
-			got[item.ID] = true
-		}
+		assertAfterPageShape(t, page, pages, seeded, got)
 		pages++
 		if pages > burst/pageSize+1 {
 			t.Fatal("the after-walk did not end within the burst's pages")
@@ -437,8 +438,29 @@ func TestReadStore_AfterCursorBurstWalk(t *testing.T) {
 		}
 		after = page.PrevCursor
 	}
-	if len(got) != burst {
-		t.Fatalf("after-walk: want all %d burst rows, got %d — %d lost", burst, len(got), burst-len(got))
+	return got
+}
+
+// assertAfterPageShape checks one after-page: the (created_at, id) DESC
+// order, burst-only membership without duplicates — collecting fresh ids
+// into got (граница gocognit у walkAfterPages).
+func assertAfterPageShape(
+	t *testing.T, page historyapp.FeedPage, pages int, seeded, got map[uuid.UUID]bool,
+) {
+	t.Helper()
+	for i := 1; i < len(page.Items); i++ {
+		if page.Items[i].CreatedAt.After(page.Items[i-1].CreatedAt) {
+			t.Fatal("an after-page must keep the (created_at, id) DESC order")
+		}
+	}
+	for _, item := range page.Items {
+		if got[item.ID] {
+			t.Fatalf("after page %d: duplicate row %s", pages, item.ID)
+		}
+		if !seeded[item.ID] {
+			t.Fatalf("after page %d: row %s is not part of the burst", pages, item.ID)
+		}
+		got[item.ID] = true
 	}
 }
 

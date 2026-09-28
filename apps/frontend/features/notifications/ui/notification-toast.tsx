@@ -9,12 +9,9 @@ import { ROUTES } from '@/shared/config/routes';
 import { NotificationCategoryIcon } from '@/entities/notification';
 import type { StreamFrame } from '@/features/notifications/api/stream-frame';
 import styles from '@/shared/ui/toast/ToastProvider.module.css';
+import { TOAST_AUTO_CLOSE_MS } from '@/shared/ui/toast/ToastProvider';
 
 export type NotificationCreatedFrame = Extract<StreamFrame, { kind: 'created' }>;
-
-/** Автозакрытие тоста уведомления: читается дольше канонных 4с
- * подтверждений; пауза при наведении канона остаётся. */
-const NOTIFICATION_TOAST_AUTOCLOSE_MS = 6000;
 
 /**
  * Тост о новом уведомлении (макет 2343:57307, тикеты #747/#778): круг иконки
@@ -98,6 +95,6 @@ export function notifyNotificationCreated(frame: NotificationCreatedFrame): void
     toastId: `notification-${frame.id}`,
     className: `${styles.toast} ${styles.notification}`,
     closeButton: false,
-    autoClose: NOTIFICATION_TOAST_AUTOCLOSE_MS,
+    autoClose: TOAST_AUTO_CLOSE_MS,
   });
 }
