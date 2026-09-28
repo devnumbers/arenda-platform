@@ -14,7 +14,7 @@ export function Organization() {
       cards={[
         {
           title: "Записывайте контакты",
-          text: "Телефоны арендатаров, мастеров и управляющих",
+          text: "Телефоны арендаторов, мастеров и управляющих",
           images: [
             {
               src: orgContacts,
