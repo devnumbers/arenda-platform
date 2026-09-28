@@ -22,14 +22,20 @@ import slide5 from "@/assets/sections/slide-5.webp";
 //   активной карточки (колонка 472px: цитата 36/40 + аватар 64 + имя
 //   20/24 + подпись 18/22), справа лента голых фото во всю ширину до
 //   края окна: активное 338×450, соседние 300×400 (зазор 20, r40,
-//   по центру ряда), при смене активного размеры плавно дорастают,
-//   соседние приглушены до 0.6 (решение владельца — как у аренды),
-//   отзыв слева меняется кроссфейдом.
+//   по центру ряда), соседние приглушены до 0.6 (решение владельца —
+//   как у аренды), отзыв слева меняется кроссфейдом. Смена активного —
+//   «уход назад», как в секции «Опыт наших партнёров» на
+//   pay.yandex.ru/business (решение владельца): уходящая карточка не
+//   уезжает влево вместе с лентой — остаётся на линии покоя и уходит
+//   вглубь (сжатие до 0.6, растворение в ноль), а новая въезжает на её
+//   место, дорастая 300→338 и проявляясь 0.6→1.
 //
 // Механика лент — канон карусели «Управляйте арендой» (rentals-carousel):
 // глайд с пружинкой-перелётом цели, докатка после свайпа по простою
 // скролла, CSS-снап выключен, overscroll-x contain, prefers-reduced-motion
-// без пружинки и анимаций. Отличие десктопа: позиции покоя арифметические
+// без пружинки и анимаций. Уход назад на десктопе привязан к прогрессу
+// скролла (пересчёт на каждом скролл-событии), так что одинаково живёт
+// на пружинке, свайпе и докатке. Отличие десктопа: позиции покоя арифметические
 // — шаг 320 (малая карточка 300 + зазор 20), активная карточка стоит у
 // левой линии ленты, у края скролла (последняя видна целиком, до левой
 // линии не дотянуться) активна последняя.
@@ -379,8 +385,22 @@ const REST_STEP = 320;
 // Кроссфейд отзыва слева (таймаут подмены = длительности перехода).
 const REVIEW_FADE_MS = 350;
 
+// «Уход назад» уходящей карточки: сжатие до 0.6 и растворение в ноль
+// (у Яндекса активный слайд — scale 1.11, ушедший оседает на 0.6).
+const ACTIVE_SCALE_X = 338 / 300;
+const ACTIVE_SCALE_Y = 450 / 400;
+const RECESSED_SCALE = 0.6;
+const IDLE_OPACITY = 0.6;
+// Добор позиции соседей: активная дорастает до 338 при базе 300, поэтому
+// все правые стоят на 38 дальше линии шага — зазор 20 сохраняется.
+const ACTIVE_EXTRA_PX = 38;
+// Рецесс подтормаживает на старте (степень > 1): пружинковый перелёт
+// цели на паре пикселей не дёргает только что приземлившуюся карточку.
+const RECEDE_EASE = 1.35;
+
 export function TestimonialsDesktop() {
   const scroller = useRef<HTMLDivElement>(null);
+  const cards = useRef<Array<HTMLElement | null>>([]);
   const glideRaf = useRef(0);
   const glideActive = useRef(false);
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -399,6 +419,19 @@ export function TestimonialsDesktop() {
     reduced.current = rm.matches;
     const onRmChange = () => {
       reduced.current = rm.matches;
+      if (rm.matches) {
+        // Уход назад считается JS-трансформами; под reduce их снимаем —
+        // дальше карточками правят классы состояния покоя.
+        for (const card of cards.current) {
+          if (!card) {
+            continue;
+          }
+          card.style.translate = "";
+          card.style.scale = "";
+          card.style.opacity = "";
+          card.style.zIndex = "";
+        }
+      }
     };
     rm.addEventListener("change", onRmChange);
     return () => rm.removeEventListener("change", onRmChange);
@@ -447,6 +480,74 @@ export function TestimonialsDesktop() {
       Math.min(REST_STEP * index, el.scrollWidth - el.clientWidth),
     );
   }, []);
+
+  // Уход назад: на каждом скролл-событии пересчитываем сдвиг, масштаб и
+  // прозрачность карточек по их прогрессу p относительно линии покоя
+  // (шаг ленты). Карточки всегда в базовом размере 300×400, активная
+  // дорастает трансформом — лента не рефловит, арифметика покоя неизменна.
+  const applyProgress = useCallback(() => {
+    const el = scroller.current;
+    if (!el || reduced.current) {
+      return;
+    }
+    const s = el.scrollLeft;
+    const a = activeRef.current;
+    for (let i = 0; i < REVIEWS.length; i += 1) {
+      const card = cards.current[i];
+      if (!card) {
+        continue;
+      }
+      const p = (s - REST_STEP * i) / REST_STEP;
+      let translate = 0;
+      let scale = "";
+      let opacity = IDLE_OPACITY;
+      let z = 0;
+      if (p >= 1) {
+        // Прошлая: растворилась в ноль за левой линией.
+        opacity = 0;
+      } else if (p >= 0) {
+        // Уходящая: добор 320·p гасит ход ленты — карточка остаётся на
+        // линии покоя и уходит назад (сжатие + растворение).
+        const e = p ** RECEDE_EASE;
+        translate = REST_STEP * p;
+        scale = `${ACTIVE_SCALE_X + (RECESSED_SCALE - ACTIVE_SCALE_X) * e} ${
+          ACTIVE_SCALE_Y + (RECESSED_SCALE - ACTIVE_SCALE_Y) * e
+        }`;
+        opacity = 1 - e;
+        z = 1;
+      } else if (p > -1) {
+        // Приближающаяся: доезжает до линии, дорастая и проявляясь. Добор
+        // 38·(−p) тает по мере хода и на границе покоя (p = −1) непрерывно
+        // переходит в постоянный добор будущих карточек.
+        let q = 1 + p;
+        if (q < 0) {
+          q = 0;
+        }
+        if (i === a && Math.abs(s - restFor(a)) < 2) {
+          // Лента в покое и не дотянула до линии (край скролла) — карточка
+          // всё равно активная, показываем её в полный рост.
+          q = 1;
+        }
+        translate = ACTIVE_EXTRA_PX * Math.min(1, -p);
+        scale = `${1 + (ACTIVE_SCALE_X - 1) * q} ${1 + (ACTIVE_SCALE_Y - 1) * q}`;
+        opacity = IDLE_OPACITY + (1 - IDLE_OPACITY) * q;
+        z = 5;
+      } else {
+        // Будущая в покое: на 38 дальше линии своего шага.
+        translate = ACTIVE_EXTRA_PX;
+      }
+      card.style.translate = `${translate}px 0px`;
+      card.style.scale = scale;
+      card.style.opacity = String(opacity);
+      card.style.zIndex = String(z);
+    }
+  }, [restFor]);
+
+  // Первый расчёт после гидрации: классы дают состояние покоя, трансформы
+  // активной карточки проставляет JS.
+  useEffect(() => {
+    applyProgress();
+  }, [applyProgress]);
 
   const stopGlide = useCallback(() => {
     cancelAnimationFrame(glideRaf.current);
@@ -578,6 +679,7 @@ export function TestimonialsDesktop() {
         setFading(false);
       }, reduced.current ? 0 : REVIEW_FADE_MS);
     }
+    applyProgress();
     if (glideActive.current) {
       return;
     }
@@ -585,7 +687,7 @@ export function TestimonialsDesktop() {
       clearTimeout(settleTimer.current);
     }
     settleTimer.current = setTimeout(settle, SETTLE_IDLE_MS);
-  }, [activeFor, settle]);
+  }, [activeFor, applyProgress, settle]);
 
   const goTo = useCallback(
     (index: number) => {
@@ -627,8 +729,8 @@ export function TestimonialsDesktop() {
           </div>
         </div>
         {/* Лента уезжает вправо за колонку до края окна (макет 2814-980).
-            Высота фиксированная 450 — высота ряда по макету: без неё секция
-            «дышит», пока активное фото сжимается, а новое дорастает. */}
+            Высота 450 — высота ряда по макету: активное фото в полный
+            рост 450, соседние 400 по центру. */}
         <div
           ref={scroller}
           onScroll={onScroll}
@@ -639,23 +741,26 @@ export function TestimonialsDesktop() {
           {REVIEWS.map((item, index) => (
             <Image
               key={item.alt}
+              ref={(el) => {
+                cards.current[index] = el;
+              }}
               src={item.photo}
               alt={item.alt}
               width={338}
               height={450}
               sizes="338px"
-              className={`shrink-0 rounded-[40px] object-cover transition-[width,height,opacity] duration-300 ease-out motion-reduce:transition-none ${
+              className={`h-[400px] w-[300px] shrink-0 origin-left rounded-[40px] object-cover will-change-[translate,scale,opacity] ${
                 active === index
-                  ? "h-[450px] w-[338px] opacity-100"
-                  : "h-[400px] w-[300px] opacity-60"
+                  ? "z-[5] scale-[1.1267_1.125] opacity-100"
+                  : "opacity-60"
               }`}
             />
           ))}
           {/* Хвостовой спейсер: достаёт контент до «последнее фото прижато
               слева» — максимум скролла становится ровно 320×4 при любом
-              десктопном вьюпорте (100% здесь — контент-бокс скроллера; 20px
-              съедает flex-gap перед спейсером). */}
-          <div aria-hidden className="w-[calc(100%_-_358px)] shrink-0" />
+              десктопном вьюпорте (100% здесь — контент-бокс скроллера; 320
+              = шаг покоя, из них 20px съедает flex-gap перед спейсером). */}
+          <div aria-hidden className="w-[calc(100%_-_320px)] shrink-0" />
         </div>
       </div>
       <div className="mt-14 flex items-center justify-center gap-4">
