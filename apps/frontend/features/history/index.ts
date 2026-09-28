@@ -1,4 +1,9 @@
 export {
+  historyFeedQueryOptions,
+  historyFiltersQueryOptions,
+  fetchHistoryFilters,
+} from './api/queries';
+export {
   useHistoryFeed,
   useHistoryFilters,
   historyFeedScopeKey,

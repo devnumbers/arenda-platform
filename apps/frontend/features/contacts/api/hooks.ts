@@ -20,38 +20,26 @@ import type {
   ContactUpdateCommand,
 } from '@/entities/contact';
 import { contactKeys } from '@/shared/api/query-keys';
-import { keysetNextPageParam } from '@/shared/lib/keyset';
 import type { components } from '@/shared/api/dto';
 
-type ContactsResponse = components['schemas']['ContactsResponse'];
-type ContactResponse = components['schemas']['ContactResponse'];
+import {
+  contactBookQuery,
+  contactDetailQueryOptions,
+  contactsListQuery,
+  type ContactBookOrder,
+  type ContactBookSort,
+  type ContactsListQueryConfig,
+  type ContactsPageData,
+} from './queries';
 
-/** Порция списка контактов: контракт книги (#600) — порции по 50. */
-export const CONTACTS_PAGE_SIZE = 50;
+export type { ContactBookSort, ContactBookOrder, ContactsPageData };
+export type { ContactsListQueryConfig };
+type ContactResponse = components['schemas']['ContactResponse'];
 
 /**
  * Порция списка контактов (#600): строки плюс keyset-продолжение —
  * opaque-курсор следующей порции, null = порций больше нет.
  */
-export type ContactsPageData = {
-  readonly items: Contact[];
-  readonly nextCursor: string | null;
-};
-
-/**
- * Конфиг keyset-обхода книги контактов — возвращаемый тип билдеров
- * contactsListQuery/contactBookQuery: экспорты features/ несут явные
- * возвращаемые типы (apps/frontend/AGENTS.md), члены — их выведенная форма.
- */
-export type ContactsListQueryConfig = {
-  readonly queryKey: ReturnType<typeof contactKeys.list>;
-  readonly queryFn: (context: {
-    readonly pageParam?: string;
-  }) => Promise<ContactsPageData>;
-  readonly initialPageParam: string | undefined;
-  readonly getNextPageParam: typeof keysetNextPageParam;
-};
-
 /**
  * Книга контактов объекта (ADR 0054, экран #508): порции по 50 keyset-курсором
  * (#600) — pageParam это курсор прошлого ответа, без него чтение с начала.
@@ -87,88 +75,6 @@ export function useContacts(
     placeholderData: keepPreviousData,
     enabled: (options.enabled ?? true) && Boolean(propertyId),
   });
-}
-
-/** Поле сортировки плоской книги: по имени или по объекту (макет
- * 1726:65136 — шит «Сортировать»). */
-export type ContactBookSort = 'name' | 'property';
-
-/** Направление сортировки плоской книги. */
-export type ContactBookOrder = 'asc' | 'desc';
-
-/** Общее горло порции GET /contacts (#600): с propertyId — срез объекта,
- * без — плоская книга; sort/order уходят только отличные от дефолта
- * (сервер нормализует пустые сам; created — серверная ось «свежие сверху»,
- * #847), cursor — keyset-продолжение прошлого ответа, undefined читает
- * с начала. */
-async function fetchContactsPage(params: {
-  propertyId?: string | null;
-  search?: string;
-  sort?: ContactBookSort | 'created';
-  order?: ContactBookOrder;
-  cursor?: string;
-}): Promise<ContactsPageData> {
-  const query = new URLSearchParams();
-  if (params.propertyId) {
-    query.set('property_id', params.propertyId);
-  }
-  if (params.search) {
-    query.set('search', params.search);
-  }
-  if (params.sort && params.sort !== 'name') {
-    query.set('sort', params.sort);
-  }
-  if (params.order && params.order !== 'asc') {
-    query.set('order', params.order);
-  }
-  query.set('limit', String(CONTACTS_PAGE_SIZE));
-  if (params.cursor) {
-    query.set('cursor', params.cursor);
-  }
-  const response = await apiClient<ContactsResponse>(
-    `/contacts?${query.toString()}`,
-  );
-  return {
-    items: response.items.map(mapContact),
-    nextCursor: response.nextCursor ?? null,
-  };
-}
-
-/** Конфиг keyset-обхода списка контактов (#600) — общее горло useContacts,
- * useContactBook и прогрева хабов #626: один ключ, один fetch, одно правило
- * продолжения — прогрев не может разъехаться с экраном. propertyId — срез
- * объекта (null/undefined — плоская книга), search — серверный фильтр,
- * sort/order — серверная ось и направление ('created'desc — пикер арендатора,
- * #847). */
-export function contactsListQuery({
-  propertyId = null,
-  search,
-  sort,
-  order,
-}: {
-  readonly propertyId?: string | null;
-  readonly search: string;
-  readonly sort: ContactBookSort | 'created';
-  readonly order: ContactBookOrder;
-}): ContactsListQueryConfig {
-  return {
-    queryKey: contactKeys.list(propertyId, search, sort, order),
-    queryFn: ({ pageParam }: { pageParam?: string }) =>
-      fetchContactsPage({ propertyId, search, sort, order, cursor: pageParam }),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: keysetNextPageParam,
-  };
-}
-
-/** Конфиг keyset-обхода плоской книги (#600) — частный случай
- * contactsListQuery для потребителей без среза объекта (useContactBook,
- * прогрев хабов #626). */
-export function contactBookQuery(
-  search = '',
-  sort: ContactBookSort = 'name',
-  order: ContactBookOrder = 'asc',
-): ContactsListQueryConfig {
-  return contactsListQuery({ search, sort, order });
 }
 
 /**
@@ -230,13 +136,7 @@ export function useCreateContact(): UseMutationResult<
  */
 export function useContact(contactId: string): UseQueryResult<Contact, ApiError> {
   return useQuery({
-    queryKey: contactKeys.detail(contactId),
-    queryFn: async () => {
-      const response = await apiClient<ContactResponse>(
-        `/contacts/${encodeURIComponent(contactId)}`,
-      );
-      return mapContact(response);
-    },
+    ...contactDetailQueryOptions({ contactId }),
     enabled: Boolean(contactId),
   });
 }

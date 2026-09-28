@@ -13,20 +13,23 @@ import {
 import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
 import {
-  mapNotification,
-  mapNotificationDetail,
   mapCategoryPreferences,
   type Notification,
   type NotificationDetail,
   type NotificationCategoryPreferences,
 } from '@/entities/notification';
 import { notificationKeys } from '@/shared/api/query-keys';
-import { keysetNextPageParam } from '@/shared/lib/keyset';
 import type { components } from '@/shared/api/dto';
 
-type NotificationsPageDto = components['schemas']['NotificationsPageResponse'];
-type UnreadCountDto = components['schemas']['UnreadCountResponse'];
-type NotificationDetailDto = components['schemas']['NotificationDetailResponse'];
+
+import {
+  notificationDetailQueryOptions,
+  notificationsFeedQueryOptions,
+  unreadNotificationsCountQueryOptions,
+  type NotificationsPageData,
+} from './queries';
+
+export type { NotificationsPageData };
 type PreferencesDto = components['schemas']['NotificationPreferencesResponse'];
 type PreferencesRequestDto =
   components['schemas']['NotificationPreferencesRequest'];
@@ -40,11 +43,6 @@ export const NOTIFICATIONS_PAGE_SIZE = 50;
  * следующей порции, null = порций больше нет (удалённые строки не приходят,
  * #743).
  */
-export type NotificationsPageData = {
-  readonly items: Notification[];
-  readonly nextCursor: string | null;
-};
-
 /**
  * Лента уведомлений (#744): порции по 50 keyset-курсором (канон #597),
  * newest-first. unreadOnly — фильтр «Непрочитанные», часть ключа: тап по
@@ -56,36 +54,10 @@ export function useNotificationsFeed(
   unreadOnly: boolean,
 ): UseInfiniteQueryResult<Notification[], ApiError> {
   return useInfiniteQuery({
-    queryKey: notificationKeys.list(unreadOnly),
-    queryFn: ({ pageParam }) => fetchNotificationsPage({ unreadOnly, cursor: pageParam }),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: keysetNextPageParam,
+    ...notificationsFeedQueryOptions({ unreadOnly }),
     placeholderData: keepPreviousData,
     select: (data) => data.pages.flatMap((page) => page.items),
   });
-}
-
-/** Общее горло порции GET /notifications (#743): cursor — keyset-продолжение
- * прошлого ответа, undefined читает с начала. */
-async function fetchNotificationsPage(params: {
-  unreadOnly: boolean;
-  cursor?: string;
-}): Promise<NotificationsPageData> {
-  const query = new URLSearchParams();
-  if (params.unreadOnly) {
-    query.set('unread', 'true');
-  }
-  query.set('limit', String(NOTIFICATIONS_PAGE_SIZE));
-  if (params.cursor) {
-    query.set('cursor', params.cursor);
-  }
-  const response = await apiClient<NotificationsPageDto>(
-    `/notifications?${query.toString()}`,
-  );
-  return {
-    items: response.items.map(mapNotification),
-    nextCursor: response.next_cursor ?? null,
-  };
 }
 
 /** Счётчик непрочитанных (бейдж чипа «Непрочитанные N» и бейджей
@@ -94,11 +66,7 @@ async function fetchNotificationsPage(params: {
  * вкладку перечитывает счёт (глобальный дефолт канона выключен, #747). */
 export function useUnreadNotificationsCount(): UseQueryResult<number, ApiError> {
   return useQuery({
-    queryKey: notificationKeys.unreadCount(),
-    queryFn: async () => {
-      const response = await apiClient<UnreadCountDto>('/notifications/unread-count');
-      return response.count;
-    },
+    ...unreadNotificationsCountQueryOptions(),
     refetchOnWindowFocus: true,
   });
 }
@@ -112,11 +80,7 @@ export function useUnreadNotificationsCount(): UseQueryResult<number, ApiError> 
  */
 export function useNotificationDetail(id: string): UseQueryResult<NotificationDetail, ApiError> {
   return useQuery({
-    queryKey: notificationKeys.detail(id),
-    queryFn: async () => {
-      const response = await apiClient<NotificationDetailDto>(`/notifications/${id}`);
-      return mapNotificationDetail(response);
-    },
+    ...notificationDetailQueryOptions({ id }),
     staleTime: 0,
   });
 }

@@ -1,4 +1,5 @@
 export { RentalCompletedScreen } from './ui/rental-completed-screen';
+export { RentalCompletedSkeleton } from './ui/rental-skeletons';
 export { RentalCompleteScreen } from './ui/rental-complete-screen';
 export { RentalContactPickerScreen } from './ui/rental-contact-picker-screen';
 export { RentalCreateWizardScreen } from './ui/rental-create-wizard-screen';

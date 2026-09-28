@@ -12,7 +12,7 @@ import type { ApiError } from '@/shared/api/errors';
 import { authKeys } from '@/shared/api/query-keys';
 import type { components } from '@/shared/api/dto';
 import type { User } from '@/entities/user';
-import { mapMeResponse } from '@/entities/user';
+import { meQueryOptions } from './queries';
 
 type MeResponse = components['schemas']['MeResponse'];
 type SendCodeRequest = components['schemas']['SendCodeRequest'];
@@ -22,13 +22,7 @@ type VerifyCodeRequest = components['schemas']['VerifyCodeRequest'];
 export function useMe(): UseQueryResult<User, ApiError> {
   // Без локального retry: 4xx (включая 401) гасит глобальный предикат
   // (#769), сетевые/5xx сбои ретраются по общему дефолту.
-  return useQuery({
-    queryKey: authKeys.me,
-    queryFn: async () => {
-      const res = await apiClient<MeResponse>('/me');
-      return mapMeResponse(res);
-    },
-  });
+  return useQuery(meQueryOptions());
 }
 
 export function useSendCode(): UseMutationResult<

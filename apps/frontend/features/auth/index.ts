@@ -1,3 +1,4 @@
+export { fetchMe, meQueryOptions } from './api/queries';
 export { useLogout, useMe, useSendCode, useVerifyCode } from './api/hooks';
 export { RESEND_TIMEOUT } from './lib/constants';
 export { deviceTimezone } from './lib/device-timezone';

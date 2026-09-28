@@ -1,5 +1,11 @@
 export * from './api';
 
+export {
+  fetchProperties,
+  fetchProperty,
+  propertiesListQueryOptions,
+  propertyDetailQueryOptions,
+} from './api/queries';
 export { usePropertiesWithMeta, usePropertiesLandingHref } from './api/hooks';
 export type { PropertiesListResult, SuspendedSharedProperty } from './api/hooks';
 export { propertyTypeLabels, propertyTypeOptions } from './lib/property-types';

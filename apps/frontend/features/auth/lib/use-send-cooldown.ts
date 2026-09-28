@@ -1,3 +1,5 @@
+'use client';
+
 import { useSyncExternalStore } from 'react';
 import { RESEND_TIMEOUT } from './constants';
 

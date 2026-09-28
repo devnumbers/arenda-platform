@@ -7,7 +7,6 @@ import { ROUTES } from '@/shared/config/routes';
 import {
   globalOperationKeys,
   globalPaymentKeys,
-  propertyKeys,
   taskKeys,
   type GlobalOperationScope,
 } from '@/shared/api/query-keys';
@@ -15,12 +14,12 @@ import {
   fetchGlobalOperationsPage,
   fetchGlobalOperationsSummary,
   fetchGlobalPaymentObjects,
-  fetchGlobalPaymentsFeed,
+  globalPaymentsFeedQueryOptions,
 } from '@/features/payments';
 import { keysetNextPageParam } from '@/shared/lib/keyset';
 import { fetchGlobalTasks } from '@/features/tasks';
 import { contactBookQuery } from '@/features/contacts';
-import { fetchProperties } from '@/features/properties';
+import { propertiesListQueryOptions } from '@/features/properties';
 
 /**
  * Прогрев верхнеуровневых данных хабов на маунте оболочки (#626, карта
@@ -50,16 +49,13 @@ const HUB_ENTRIES: ReadonlyArray<HubPrefetchEntry> = [
   {
     prefix: ROUTES.properties,
     prefetch: (client) => {
-      void client.prefetchQuery({ queryKey: propertyKeys.list, queryFn: fetchProperties });
+      void client.prefetchQuery(propertiesListQueryOptions());
     },
   },
   {
     prefix: ROUTES.payments,
     prefetch: (client) => {
-      void client.prefetchQuery({
-        queryKey: globalPaymentKeys.feed,
-        queryFn: fetchGlobalPaymentsFeed,
-      });
+      void client.prefetchQuery(globalPaymentsFeedQueryOptions());
       void client.prefetchQuery({
         queryKey: globalPaymentKeys.objects(''),
         queryFn: () => fetchGlobalPaymentObjects(''),
@@ -98,7 +94,7 @@ const HUB_ENTRIES: ReadonlyArray<HubPrefetchEntry> = [
         queryKey: taskKeys.global(true, [], false),
         queryFn: () => fetchGlobalTasks(true, [], false),
       });
-      void client.prefetchQuery({ queryKey: propertyKeys.list, queryFn: fetchProperties });
+      void client.prefetchQuery(propertiesListQueryOptions());
     },
   },
   {

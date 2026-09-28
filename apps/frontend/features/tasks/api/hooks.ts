@@ -22,6 +22,8 @@ type TaskResponseDto = components['schemas']['TaskResponse'];
 type TaskRuleResponseDto = components['schemas']['TaskRuleResponse'];
 type TasksPageDto = components['schemas']['TasksResponse'];
 
+import { activeTasksQueryOptions, fetchGlobalTasks } from './queries';
+
 /** Лимит листинга: экран группирует весь список целиком, поэтому берёт
  * максимум контракта одной страницей (серверный дефолт — 100, максимум
  * 500); порции с догрузкой — если у объекта появится больше задач. */
@@ -38,13 +40,7 @@ export function useActiveTasks(
   options: { readonly enabled?: boolean } = {},
 ): UseQueryResult<TasksPage, ApiError> {
   return useQuery({
-    queryKey: taskKeys.active(propertyId),
-    queryFn: async () => {
-      const response = await apiClient<TasksPageDto>(
-        `/properties/${encodeURIComponent(propertyId)}/tasks?completed=false&limit=${TASKS_PAGE_LIMIT}`,
-      );
-      return mapTasksPage(response);
-    },
+    ...activeTasksQueryOptions({ propertyId }),
     enabled: (options.enabled ?? true) && Boolean(propertyId),
   });
 }
@@ -259,25 +255,6 @@ export function usePropertylessTasks(
   });
 }
 
-/** Путь активного/выполненного бакета глобального листинга GET /tasks:
- * фильтр (#524/#547) — необязательный comma-separated сегмент propertyId и
- * флаг withoutProperty («Общие задачи», union с объектами — решение
- * владельца 2026-09-07) перед бакетом. */
-const globalTasksPath = (
-  completed: boolean,
-  propertyIds: ReadonlyArray<string>,
-  withoutProperty: boolean,
-): string => {
-  const parts: string[] = [];
-  if (propertyIds.length > 0) {
-    parts.push(`propertyId=${encodeURIComponent(propertyIds.join(','))}`);
-  }
-  if (withoutProperty) {
-    parts.push('withoutProperty=true');
-  }
-  parts.push(`completed=${completed}`, `limit=${TASKS_PAGE_LIMIT}`);
-  return `/tasks?${parts.join('&')}`;
-};
 
 /**
  * Активный бакет глобальной ленты GET /tasks (#521, экран #523):
@@ -296,15 +273,6 @@ const globalTasksPath = (
  * ленты и прогрева хабов #626: прогрев кэша идёт тем же кодом, что
  * читает экран (детали среза — у useGlobalActiveTasks ниже).
  */
-export function fetchGlobalTasks(
-  completed: boolean,
-  propertyIds: ReadonlyArray<string>,
-  withoutProperty: boolean,
-): Promise<TasksPage> {
-  return apiClient<TasksPageDto>(globalTasksPath(completed, propertyIds, withoutProperty))
-    .then(mapTasksPage);
-}
-
 /**
  * Активный бакет глобальной ленты GET /tasks (#521, экран #523):
  * merged-фид читателя (свои задачи + задачи видимых объектов, архивы мимо —

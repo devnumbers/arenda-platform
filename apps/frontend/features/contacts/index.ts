@@ -1,5 +1,10 @@
 export {
   contactBookQuery,
+  contactDetailQueryOptions,
+  contactsListQuery,
+  fetchContact,
+} from './api/queries';
+export {
   useContacts,
   useContactBook,
   useCreateContact,
@@ -7,11 +12,8 @@ export {
   useUpdateContact,
   useDeleteContact,
 } from './api/hooks';
-export type {
-  ContactBookSort,
-  ContactBookOrder,
-  ContactsPageData,
-} from './api/hooks';
+export type { ContactBookSort, ContactBookOrder } from './api/queries';
+export type { ContactsPageData } from './api/hooks';
 export {
   buildContactCreateCommand,
   buildContactUpdateCommand,
