@@ -18,12 +18,15 @@ function reduce(state: Parameters<typeof reduceLiveValue>[0], event: Parameters<
   return reduceLiveValue(state, event, mode, CANON_TIMINGS);
 }
 
+const dueAt = (step: ReturnType<typeof reduceLiveValue>): number | null => step.state.dueAt;
+
 describe('live-value machine — канон C: dim → hold → кроссфейд+вспышка (#880)', () => {
   it('idle: старт перечитывания приглушает — фаза dim', () => {
     const next = reduce(initialLiveValueState(), { type: 'refreshStart', at: 1000 });
     expect(next.state.phase).toBe('stale');
     expect(next.state).toMatchObject({ startedAt: 1000, sawChange: false });
-    expect(next.dueAt).toBeNull();
+    // Дедлайн dim — страховочный STALE_MAX (смена ещё не приехала).
+    expect(dueAt(next)).toBe(1000 + STALE_MAX_MS);
   });
 
   it('режим B (flash): перечитывание не приглушает — вспышка без dim', () => {
@@ -35,7 +38,7 @@ describe('live-value machine — канон C: dim → hold → кроссфей
     let step = reduce(initialLiveValueState(), { type: 'refreshStart', at: 1000 });
     step = reduce(step.state, { type: 'refreshEnd', at: 1400 });
     expect(step.state.phase).toBe('idle');
-    expect(step.dueAt).toBeNull();
+    expect(dueAt(step)).toBeNull();
   });
 
   it('hold на фактическое перечитывание: быстрая доставка держит dim до 650мс, свап откладывается', () => {
@@ -44,14 +47,14 @@ describe('live-value machine — канон C: dim → hold → кроссфей
     expect(step.state.phase).toBe('stale');
     expect(step.state).toMatchObject({ sawChange: true });
     step = reduce(step.state, { type: 'refreshEnd', at: 1250 });
-    // 1250 < 1000 + 650 — свап ещё рано, компоненту назначен таймер.
+    // 1250 < 1000 + 650 — свап ещё рано, hold-дедлайн стоит в состоянии.
     expect(step.state.phase).toBe('stale');
-    expect(step.dueAt).toBe(1000 + staleTotalMs);
+    expect(dueAt(step)).toBe(1000 + staleTotalMs);
     // Таймер сгорел — свап.
     step = reduce(step.state, { type: 'due', at: 1000 + staleTotalMs });
     expect(step.state.phase).toBe('swap');
     expect(step.state.generation).toBe(1);
-    expect(step.dueAt).toBe(1000 + staleTotalMs + settleMs);
+    expect(dueAt(step)).toBe(1000 + staleTotalMs + settleMs);
   });
 
   it('медленная доставка: свап сразу по завершении перечитывания — hold уже вычтен', () => {
@@ -60,14 +63,14 @@ describe('live-value machine — канон C: dim → hold → кроссфей
     step = reduce(step.state, { type: 'refreshEnd', at: 1000 + staleTotalMs + 50 });
     expect(step.state.phase).toBe('swap');
     expect(step.state.generation).toBe(1);
-    expect(step.dueAt).toBe(1000 + staleTotalMs + 50 + settleMs);
+    expect(dueAt(step)).toBe(1000 + staleTotalMs + 50 + settleMs);
   });
 
   it('прямая смена без перечитывания (влитие в кэш): сразу кроссфейд+вспышка', () => {
     const next = reduce(initialLiveValueState(), { type: 'change', at: 500, own: false });
     expect(next.state.phase).toBe('swap');
     expect(next.state.generation).toBe(1);
-    expect(next.dueAt).toBe(500 + settleMs);
+    expect(dueAt(next)).toBe(500 + settleMs);
   });
 
   it('своё изменение — без анимаций в любой фазе', () => {
@@ -75,7 +78,7 @@ describe('live-value machine — канон C: dim → hold → кроссфей
     let step = reduce(initialLiveValueState(), { type: 'refreshStart', at: 1000 });
     step = reduce(step.state, { type: 'change', at: 1100, own: true });
     expect(step.state.phase).toBe('idle');
-    expect(step.dueAt).toBeNull();
+    expect(dueAt(step)).toBeNull();
   });
 
   it('смена значения во время кроссфейда становится в очередь и переигрывает свап', () => {
@@ -88,18 +91,18 @@ describe('live-value machine — канон C: dim → hold → кроссфей
     step = reduce(step.state, { type: 'due', at: 500 + settleMs });
     expect(step.state.phase).toBe('swap');
     expect(step.state).toMatchObject({ pendingChange: false, generation: firstGeneration + 1 });
-    expect(step.dueAt).toBe(500 + settleMs + settleMs);
+    expect(dueAt(step)).toBe(500 + settleMs + settleMs);
     // Второй сеттл без очереди — покой.
     const done = reduce(step.state, { type: 'due', at: 500 + settleMs + settleMs });
     expect(done.state.phase).toBe('idle');
-    expect(done.dueAt).toBeNull();
+    expect(dueAt(done)).toBeNull();
   });
 
   it('сеттл без очереди возвращает idle', () => {
     let step = reduce(initialLiveValueState(), { type: 'change', at: 500, own: false });
     step = reduce(step.state, { type: 'due', at: 500 + settleMs });
     expect(step.state.phase).toBe('idle');
-    expect(step.dueAt).toBeNull();
+    expect(dueAt(step)).toBeNull();
   });
 
   it('reduced-motion укорачивает hold и чистку до ~150мс-порядка', () => {
@@ -113,7 +116,7 @@ describe('live-value machine — канон C: dim → hold → кроссфей
     );
     step = reduceLiveValue(step.state, { type: 'change', at: 1100, own: false }, 'crossfade', REDUCED_TIMINGS);
     step = reduceLiveValue(step.state, { type: 'refreshEnd', at: 1150 }, 'crossfade', REDUCED_TIMINGS);
-    expect(step.dueAt).toBe(1000 + REDUCED_TIMINGS.staleTotalMs);
+    expect(dueAt(step)).toBe(1000 + REDUCED_TIMINGS.staleTotalMs);
   });
 });
 
@@ -136,14 +139,14 @@ describe('live-value machine — самозалечивание stale (#880, г�
     let step = reduce(initialLiveValueState(), { type: 'refreshStart', at: 1000 });
     step = reduce(step.state, { type: 'due', at: 1000 + staleTotalMs });
     expect(step.state.phase).toBe('stale');
-    expect(step.dueAt).toBeNull();
+    expect(dueAt(step)).toBe(1000 + STALE_MAX_MS);
   });
 
   it('due в stale без смены после STALE_MAX поднимает dim — застрявшая фаза невозможна', () => {
     let step = reduce(initialLiveValueState(), { type: 'refreshStart', at: 1000 });
     step = reduce(step.state, { type: 'due', at: 1000 + STALE_MAX_MS });
     expect(step.state.phase).toBe('idle');
-    expect(step.dueAt).toBeNull();
+    expect(dueAt(step)).toBeNull();
   });
 
   it('STALE_MAX — страховочный дедлайн dim, канонные hold его не трогают', () => {

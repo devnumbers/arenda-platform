@@ -224,8 +224,9 @@ function useLiveFeedFrames(
         // экране позже кадра, поэтому «метка > времени снимка» ловит влитие,
         // приехавшее в один коммит с prepend'ом старых (гонка скролла).
         const mergedAt = Date.now();
-        lastLiveMergeTimes.set(key.join('/'), mergedAt);
-        noteFreshFeedEntryIds(key.join('/'), novelIds, mergedAt);
+        const scopeKey = key.join('/');
+        lastLiveMergeTimes.set(scopeKey, mergedAt);
+        noteFreshFeedEntryIds(scopeKey, novelIds, mergedAt);
         return { hasMore: freshItems.length >= HISTORY_PAGE_SIZE };
       },
       refetch: () => queryRef.current.refetch(),

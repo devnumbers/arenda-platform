@@ -5,14 +5,13 @@ import { useEffect, useState } from 'react';
 const REDUCED_MOTION_MEDIA_QUERY = '(prefers-reduced-motion: reduce)';
 
 /**
- * Reactive `prefers-reduced-motion` flag.
+ * Реактивный флаг `prefers-reduced-motion`.
  *
- * Returns `false` on the server and during the first client render (to match
- * hydration), then resolves to the real media value and re-subscribes on the
- * `change` event. Motion consumers use it to shorten their JS-side waits —
- * the CSS side shortens itself through the `prefers-reduced-motion` media
- * overrides on the design tokens (tokens.css, §8: анимацию не отключаем,
- * а укорачиваем до ~150ms-порядка).
+ * На сервере и в первый клиентский рендер — `false` (в лад гидратации),
+ * дальше настоящее значение медиазапроса с переподпиской на `change`.
+ * Потребители движения укорачивают им JS-ожидания; CSS-сторона
+ * укорачивается сама медиа-переопределениями токенов (tokens.css, §8:
+ * анимацию не отключаем, а укорачиваем до ~150мс-порядка).
  */
 export function useReducedMotion(): boolean {
     const [reduced, setReduced] = useState(false);

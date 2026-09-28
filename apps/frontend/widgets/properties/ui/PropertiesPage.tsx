@@ -1,6 +1,6 @@
 'use client';
 
-import {type JSX, useEffect, useMemo, useRef, useState} from 'react';
+import {type JSX, useEffect, useRef, useState} from 'react';
 import {useRouter} from 'next/navigation';
 import {
   useProperties,
@@ -75,7 +75,7 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
   const [reasonTarget, setReasonTarget] = useState<SuspendedSharedProperty | null>(null);
 
   const visible = sortProperties(data ?? [], sort);
-  const suspendedShared = useMemo(() => metaQuery.data?.suspendedShared ?? [], [metaQuery.data]);
+  const suspendedShared = metaQuery.data?.suspendedShared ?? [];
   const showSuspended = !isLoading && !isError && suspendedShared.length > 0;
 
   // Свежая подвеска — blur-in канона C (#880): блюр-карточка, приехавшая
@@ -89,19 +89,20 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
   );
   const seenSuspendedRef = useRef<Set<string> | null>(null);
   useEffect(() => {
-    const ids = new Set(suspendedShared.map((placeholder) => placeholder.propertyId));
+    const suspended = metaQuery.data?.suspendedShared ?? [];
+    const ids = new Set(suspended.map((placeholder) => placeholder.propertyId));
     const prev = seenSuspendedRef.current;
     seenSuspendedRef.current = ids;
     if (prev === null) {
       return;
     }
-    const fresh = suspendedShared
+    const fresh = suspended
       .filter((placeholder) => !prev.has(placeholder.propertyId))
       .map((placeholder) => placeholder.propertyId);
     if (fresh.length > 0) {
       setFreshSuspendedIds(new Set(fresh));
     }
-  }, [suspendedShared, metaQuery.data]);
+  }, [metaQuery.data]);
 
   // Запись — канон useUrlParams (#786): экран владеет только sort/order,
   // чужие параметры адреса переживают смену сортировки, дефолт снимается.

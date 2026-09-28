@@ -30,6 +30,10 @@ export type LiveValueState = {
   /** Номер входа в свап: растёт на каждом (пере)старте — ключ
    * перемонтирования оверлея, чтобы keyframes переигрывались. */
   readonly generation: number;
+  /** Абсолютный дедлайн таймера фазы — единственная правда о таймерах:
+   * компонент ставит ровно один таймер на state.dueAt, машина —
+   * единственный авторитет таймингов. null — таймер не нужен. */
+  readonly dueAt: number | null;
 };
 
 export type LiveValueEvent =
@@ -39,10 +43,9 @@ export type LiveValueEvent =
   /** Сгорел таймер, назначенный в dueAt (свап по hold или сеттл). */
   | { type: 'due'; at: number };
 
-/** Что назначить компоненту: таймер, который при сгорании шлёт `due`. */
+/** Результат перехода: состояние уже несёт дедлайн таймера (dueAt). */
 export type LiveValueReduction = {
   readonly state: LiveValueState;
-  readonly dueAt: number | null;
 };
 
 /** Канон: 350 dim + 300 hold = 650 до свапа; чистка оверлея после
@@ -66,8 +69,23 @@ export type LiveValueTimings = {
   readonly settleMs: number;
 };
 
+/** Дедлайн фазы одной формулой — и в переходах, и у компонента один
+ * источник: stale держится на hold (со сменой) или на страховочном
+ * STALE_MAX (без неё — потерянный refreshEnd не застревает в dim),
+ * свап чистится после затухания вспышки. */
+function dueAtOf(state: Omit<LiveValueState, 'dueAt'>, timings: LiveValueTimings): number | null {
+  switch (state.phase) {
+    case 'stale':
+      return state.startedAt + (state.sawChange ? timings.staleTotalMs : STALE_MAX_MS);
+    case 'swap':
+      return state.startedAt + timings.settleMs;
+    case 'idle':
+      return null;
+  }
+}
+
 export function initialLiveValueState(): LiveValueState {
-  return { phase: 'idle', startedAt: 0, sawChange: false, pendingChange: false, generation: 0 };
+  return { phase: 'idle', startedAt: 0, sawChange: false, pendingChange: false, generation: 0, dueAt: null };
 }
 
 export function reduceLiveValue(
@@ -76,59 +94,63 @@ export function reduceLiveValue(
   mode: LiveValueMode,
   timings: LiveValueTimings,
 ): LiveValueReduction {
-  const idle: LiveValueState = {
+  const settle = (next: Omit<LiveValueState, 'dueAt'>): LiveValueReduction => ({
+    state: { ...next, dueAt: dueAtOf(next, timings) },
+  });
+  const idle = (): Omit<LiveValueState, 'dueAt'> => ({
     phase: 'idle',
     startedAt: event.at,
     sawChange: false,
     pendingChange: false,
     generation: state.generation,
-  };
-  const swap = (at: number, pending = false): LiveValueReduction => ({
-    state: {
+  });
+  const swap = (at: number, pending = false): LiveValueReduction =>
+    settle({
       phase: 'swap',
       startedAt: at,
       sawChange: false,
       pendingChange: pending,
       generation: state.generation + 1,
-    },
-    dueAt: at + timings.settleMs,
-  });
+    });
 
   switch (event.type) {
     case 'refreshStart':
       // Режим B приглушения не знает; повторный refreshStart в dim — шум.
       if (mode === 'flash' || state.phase !== 'idle') {
-        return { state, dueAt: null };
+        return { state };
       }
-      return {
-        state: { phase: 'stale', startedAt: event.at, sawChange: false, pendingChange: false, generation: state.generation },
-        dueAt: null,
-      };
+      return settle({
+        phase: 'stale',
+        startedAt: event.at,
+        sawChange: false,
+        pendingChange: false,
+        generation: state.generation,
+      });
 
     case 'refreshEnd':
       if (state.phase !== 'stale') {
-        return { state, dueAt: null };
+        return { state };
       }
       if (!state.sawChange) {
         // Перечитывание не принесло смены — просто снимаем приглушение
         // (transition на .stale вернёт плавно).
-        return { state: idle, dueAt: null };
+        return settle(idle());
       }
-      return startSwapFromStale(state, event.at, timings);
+      return startSwapFromStale(state, event.at, timings, settle);
 
     case 'due':
       if (state.phase === 'stale') {
         if (state.sawChange) {
           // Смена уже в кэше: свап по hold, потерянный refreshEnd не нужен.
-          return startSwapFromStale(state, event.at, timings);
+          return startSwapFromStale(state, event.at, timings, settle);
         }
         if (event.at - state.startedAt >= STALE_MAX_MS) {
           // Перечитывание затянулось за страховочный дедлайн — снимаем dim
           // (приезд значения позже сыграет прямой кроссфейд из idle).
-          return { state: idle, dueAt: null };
+          return settle(idle());
         }
-        // Dim держится на фактическое перечитывание.
-        return { state, dueAt: null };
+        // Dim держится на фактическое перечитывание — дедлайн не сдвинулся.
+        return { state };
       }
       if (state.phase === 'swap') {
         if (state.pendingChange) {
@@ -136,27 +158,25 @@ export function reduceLiveValue(
           // оверлея), новая чистка.
           return swap(event.at);
         }
-        return { state: idle, dueAt: null };
+        return settle(idle());
       }
-      return { state, dueAt: null };
+      return { state };
 
     case 'change':
       if (event.own) {
-        // Своё изменение (оптимистичный UI): мгновенно и тихо из любой
-        // фазы — таймеры компонент гасит по dueAt: null.
-        return { state: idle, dueAt: null };
+        // Своё изменение (оптимистичный UI): мгновенно и тихо из любой фазы.
+        return settle(idle());
       }
       if (state.phase === 'idle') {
         return swap(event.at);
       }
       if (state.phase === 'stale') {
-        return {
-          state: { ...state, sawChange: true },
-          dueAt: null,
-        };
+        // Смена в кэше — hold-дедлайн становится актуальным даже при
+        // потерянном refreshEnd.
+        return settle({ ...state, sawChange: true });
       }
       // swap: смена в очередь — сеттл переиграет.
-      return { state: { ...state, pendingChange: true }, dueAt: null };
+      return settle({ ...state, pendingChange: true });
   }
 }
 
@@ -164,22 +184,20 @@ function startSwapFromStale(
   state: LiveValueState,
   at: number,
   timings: LiveValueTimings,
+  settle: (next: Omit<LiveValueState, 'dueAt'>) => LiveValueReduction,
 ): LiveValueReduction {
   const elapsed = at - state.startedAt;
   if (elapsed >= timings.staleTotalMs) {
     // Hold уже вычтен фактической доставкой — свап немедленно.
-    return {
-      state: {
-        phase: 'swap',
-        startedAt: at,
-        sawChange: false,
-        pendingChange: false,
-        generation: state.generation + 1,
-      },
-      dueAt: at + timings.settleMs,
-    };
+    return settle({
+      phase: 'swap',
+      startedAt: at,
+      sawChange: false,
+      pendingChange: false,
+      generation: state.generation + 1,
+    });
   }
-  // Доставлено слишком быстро — держим dim до полного hold, компоненту
-  // назначен таймер «due» на остаток.
-  return { state, dueAt: state.startedAt + timings.staleTotalMs };
+  // Доставлено слишком быстро — держим dim до полного hold (дедлайн уже
+  // стоит в состоянии), due доиграет свап.
+  return { state };
 }

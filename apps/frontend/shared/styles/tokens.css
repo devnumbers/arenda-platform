@@ -106,7 +106,7 @@
      по прототипу #879): dim → hold на перечитывание → blur-кроссфейд +
      вспышка. Фазы удлинены сознательно — последовательность «читается
      глазом, а не мигает»; вспышка — primary на 18% (цвет rgba(43,127,255,
-     0.18) демо #879 через color-mix от токена). reduced-motion укорачивает
+     0.18). reduced-motion укорачивает
      всё до ~150мс-порядка (§8) — JS-фазы ждут то же через
      REDUCED_TIMINGS (shared/ui/live-value). */
   --live-dim: 350ms;
@@ -114,8 +114,9 @@
   --live-blur-in: 380ms;
   --live-blur-delay: 130ms;
   --live-flash: 1200ms;
-  /* Цвет вспышки — литерал демо #879 (primary #2b7fff на 18%). */
-  --live-flash-bg: rgba(43, 127, 255, 0.18);
+  /* Цвет вспышки — primary на 18% (литерал демо #879, rgba(43,127,255,0.18)),
+     выводится из токена — смена палитры тянет вспышку за собой. */
+  --live-flash-bg: color-mix(in srgb, var(--dl-primary) 18%, transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {

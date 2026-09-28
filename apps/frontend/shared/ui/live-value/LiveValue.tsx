@@ -13,7 +13,6 @@ import { cn } from '@/shared/lib/cn';
 import {
   CANON_TIMINGS,
   REDUCED_TIMINGS,
-  STALE_MAX_MS,
   initialLiveValueState,
   reduceLiveValue,
   type LiveValueEvent,
@@ -171,29 +170,20 @@ export function LiveValue({
     }
   }, [valueKey, refreshing, transition]);
 
-  // Таймеры выводятся из состояния (самовосстановление вместо ручного
-  // реестра). В stale таймер стоит ВСЕГДА — потеря события конца
-  // перечитывания (грабля живой приёмки) не может застревать dim: со
-  // сменой в кэше свап играет по hold, без — dim снимается на
-  // страховочном дедлайне STALE_MAX. Отсчёт от абсолютного startedAt —
+  // Один таймер на дедлайн из состояния: машина — единственный авторитет
+  // таймингов (hold-свап, чистка оверлея, страховка от застрявшего dim —
+  // все дедлайны в state.dueAt). Отсчёт от абсолютного дедлайна —
   // перезапуск эффекта не сдвигает момент срабатывания.
   useLayoutEffect(() => {
-    const delay =
-      state.phase === 'swap'
-        ? Math.max(0, state.startedAt + timings.settleMs - performance.now())
-        : state.phase === 'stale'
-          ? Math.max(
-              0,
-              (state.startedAt + (state.sawChange ? timings.staleTotalMs : STALE_MAX_MS)) -
-                performance.now(),
-            )
-          : null;
-    if (delay === null) {
+    if (state.dueAt === null) {
       return;
     }
-    const timer = setTimeout(() => transition({ type: 'due', at: performance.now() }), delay);
+    const timer = setTimeout(
+      () => transition({ type: 'due', at: performance.now() }),
+      Math.max(0, state.dueAt - performance.now()),
+    );
     return () => clearTimeout(timer);
-  }, [state, timings, transition]);
+  }, [state, transition]);
 
   // Снапшот детей — последним эффектом каждого коммита: переходы выше
   // читают прошлый коммит как «старую сторону».
