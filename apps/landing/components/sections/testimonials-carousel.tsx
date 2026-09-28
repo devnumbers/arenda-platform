@@ -625,13 +625,15 @@ export function TestimonialsDesktop() {
             </div>
           </div>
         </div>
-        {/* Лента уезжает вправо за колонку до края окна (макет 2814-980). */}
+        {/* Лента уезжает вправо за колонку до края окна (макет 2814-980).
+            Высота фиксированная 450 — высота ряда по макету: без неё секция
+            «дышит», пока активное фото сжимается, а новое дорастает. */}
         <div
           ref={scroller}
           onScroll={onScroll}
           onPointerDown={stopGlide}
           onWheel={stopGlide}
-          className="desk:-mr-[calc((100vw_-_1000px)/2)] flex min-w-0 flex-1 items-center gap-5 overflow-x-auto overscroll-x-contain pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="desk:-mr-[calc((100vw_-_1000px)/2)] flex h-[450px] min-w-0 flex-1 items-center gap-5 overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           {REVIEWS.map((item, index) => (
             <Image
@@ -648,6 +650,11 @@ export function TestimonialsDesktop() {
               }`}
             />
           ))}
+          {/* Хвостовой спейсер: достаёт контент до «последнее фото прижато
+              слева» — максимум скролла становится ровно 320×4 при любом
+              десктопном вьюпорте (100% здесь — контент-бокс скроллера; 20px
+              съедает flex-gap перед спейсером). */}
+          <div aria-hidden className="w-[calc(100%_-_358px)] shrink-0" />
         </div>
       </div>
       <div className="mt-14 flex items-center justify-center gap-4">
