@@ -9,6 +9,7 @@ import type { HistoryEntry, HistoryFilterOptions } from '@/entities/history';
 import { mapHistoryFilterOptions, mapHistoryItem } from '@/entities/history';
 import { historyKeys, type HistoryFeedScope } from '@/shared/api/query-keys';
 import { subscribeRealtimeEntity } from '@/shared/api/realtime-subscriptions';
+import { noteFreshFeedEntryIds } from './live-fresh';
 
 import {
   historyFeedUrl,
@@ -125,7 +126,7 @@ export function mergeFreshIntoFirstPage(
   if (first === undefined) {
     return old;
   }
-  const knownIds = new Set(first.items.map((item) => item.id));
+  const knownIds = firstPageKnownIds(old);
   const novelItems = freshItems.filter((item) => !knownIds.has(item.id));
   const mergedFirst: HistoryFeedPage = {
     items: [...novelItems, ...first.items],
@@ -133,6 +134,23 @@ export function mergeFreshIntoFirstPage(
     prevCursor: freshPrevCursor ?? first.prevCursor,
   };
   return { ...old, pages: [mergedFirst, ...old.pages.slice(1)] };
+}
+
+/** Идентификаторы строк первой страницы кэша — одна «уже известная»
+ * сторона дедупа для влития и для метки «новое» (#880). */
+function firstPageKnownIds(old: InfiniteData<HistoryFeedPage> | undefined): Set<string> {
+  return new Set(old?.pages[0]?.items.map((item) => item.id) ?? []);
+}
+
+/** Свежие строки, которых ещё нет в ленте (#880): догон может приехать
+ * параллельно с onOpen-перечитыванием — уже влитые строки метки «новое»
+ * не получают. Тот же дедуп по id, что у влития (firstPageKnownIds). */
+export function novelFeedEntryIds(
+  old: InfiniteData<HistoryFeedPage> | undefined,
+  freshItems: HistoryEntry[],
+): string[] {
+  const knownIds = firstPageKnownIds(old);
+  return freshItems.filter((item) => !knownIds.has(item.id)).map((item) => item.id);
 }
 
 /** Метки времени последнего live-влития в ленту — по ключу скоупа (модульный
@@ -145,7 +163,13 @@ const lastLiveMergeTimes = new Map<string, number>();
 
 /** Момент последнего live-влития в ленту скоупа (0 — влитий не было). */
 export function lastLiveMergeAt(scope: HistoryFeedScope): number {
-  return lastLiveMergeTimes.get(historyKeys.feed(scope).join('/')) ?? 0;
+  return lastLiveMergeTimes.get(historyFeedScopeKey(scope)) ?? 0;
+}
+
+/** Ключ скоупа ленты одной строкой — общий у реестров влития (метка
+ * live-влития, свежие строки #880) и экрана (дельта снимков краёв). */
+export function historyFeedScopeKey(scope: HistoryFeedScope): string {
+  return historyKeys.feed(scope).join('/');
 }
 
 /** Подписка ленты на кадры history (тикет #718): обработчик живёт столько же,
@@ -185,6 +209,13 @@ function useLiveFeedFrames(
         if (freshItems.length === 0) {
           return { hasMore: false };
         }
+        // Строки, которых в ленте не было (#880), отмечаются ДО влития —
+        // дедуп по первой странице прошлого состояния кэша; они получают
+        // row-in и метку «новое», пока читатель их не увидит (live-fresh.ts).
+        const novelIds = novelFeedEntryIds(
+          queryClient.getQueryData<InfiniteData<HistoryFeedPage>>(key),
+          freshItems,
+        );
         queryClient.setQueryData<InfiniteData<HistoryFeedPage>>(
           key,
           (old) => mergeFreshIntoFirstPage(old, freshItems, response.prev_cursor ?? null),
@@ -192,7 +223,9 @@ function useLiveFeedFrames(
         // Метка влития — сразу после записи в кэш: следующий коммит краёв на
         // экране позже кадра, поэтому «метка > времени снимка» ловит влитие,
         // приехавшее в один коммит с prepend'ом старых (гонка скролла).
-        lastLiveMergeTimes.set(key.join('/'), Date.now());
+        const mergedAt = Date.now();
+        lastLiveMergeTimes.set(key.join('/'), mergedAt);
+        noteFreshFeedEntryIds(key.join('/'), novelIds, mergedAt);
         return { hasMore: freshItems.length >= HISTORY_PAGE_SIZE };
       },
       refetch: () => queryRef.current.refetch(),

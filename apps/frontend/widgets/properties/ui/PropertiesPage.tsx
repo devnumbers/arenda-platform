@@ -1,6 +1,6 @@
 'use client';
 
-import {type JSX, useState} from 'react';
+import {type JSX, useEffect, useMemo, useRef, useState} from 'react';
 import {useRouter} from 'next/navigation';
 import {
   useProperties,
@@ -75,8 +75,33 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
   const [reasonTarget, setReasonTarget] = useState<SuspendedSharedProperty | null>(null);
 
   const visible = sortProperties(data ?? [], sort);
-  const suspendedShared = metaQuery.data?.suspendedShared ?? [];
+  const suspendedShared = useMemo(() => metaQuery.data?.suspendedShared ?? [], [metaQuery.data]);
   const showSuspended = !isLoading && !isError && suspendedShared.length > 0;
+
+  // Свежая подвеска — blur-in канона C (#880): блюр-карточка, приехавшая
+  // живым перечитыванием (кадр property от действий владельца — автор в
+  // аудитории, ADR 0062 §4), проявляется из блюра. Снапшот id прошлого
+  // рендера: null = холодный вход (первая доставка без анимации), дальше
+  // дельта снапшотов = живое появление; разметка — в эффекте (рендер
+  // читает только state).
+  const [freshSuspendedIds, setFreshSuspendedIds] = useState<ReadonlySet<string>>(
+    () => new Set<string>(),
+  );
+  const seenSuspendedRef = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const ids = new Set(suspendedShared.map((placeholder) => placeholder.propertyId));
+    const prev = seenSuspendedRef.current;
+    seenSuspendedRef.current = ids;
+    if (prev === null) {
+      return;
+    }
+    const fresh = suspendedShared
+      .filter((placeholder) => !prev.has(placeholder.propertyId))
+      .map((placeholder) => placeholder.propertyId);
+    if (fresh.length > 0) {
+      setFreshSuspendedIds(new Set(fresh));
+    }
+  }, [suspendedShared, metaQuery.data]);
 
   // Запись — канон useUrlParams (#786): экран владеет только sort/order,
   // чужие параметры адреса переживают смену сортировки, дефолт снимается.
@@ -156,6 +181,7 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
               <SuspendedPropertyCard
                 placeholder={placeholder}
                 onReason={setReasonTarget}
+                fresh={freshSuspendedIds.has(placeholder.propertyId)}
               />
             </li>
           ))}

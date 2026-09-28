@@ -1,8 +1,13 @@
 export {
   useHistoryFeed,
   useHistoryFilters,
+  historyFeedScopeKey,
   lastLiveMergeAt,
 } from './api/hooks';
+export {
+  acknowledgeFreshFeedEntryIds,
+  freshFeedEntryIdsMergedSince,
+} from './api/live-fresh';
 export { groupHistoryByDay, type HistoryActorGroup } from './lib/feed-groups';
 export {
   DEFAULT_HISTORY_FILTERS,

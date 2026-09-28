@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef, useState, type JSX, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type JSX, type ReactNode } from 'react';
 import Link from 'next/link';
 import { ArrowDown, ArrowLeft, BoldUser, Search } from '@/shared/assets/icons';
 import { type HistoryFilterOptions, type HistoryObjectOption } from '@/entities/history';
@@ -8,8 +8,11 @@ import type { HistoryActorGroup } from '@/features/history';
 import { useMe } from '@/features/auth';
 import { PropertyAvatar } from '@/entities/property';
 import {
+  acknowledgeFreshFeedEntryIds,
   groupHistoryByDay,
   historyFeedScope,
+  historyFeedScopeKey,
+  freshFeedEntryIdsMergedSince,
   isDefaultHistoryFilters,
   lastLiveMergeAt,
   pinnedHistoryFilters,
@@ -44,6 +47,10 @@ import { HistoryFiltersSheet } from './history-filters-sheet';
 
 /** Задержка дебаунса поиска (мс) — канон поисков (#601). */
 const SEARCH_DEBOUNCE_MS = 300;
+
+/** Канонная пауза метки «новое» у читателя на дне (мс) — механика F демо
+ * #879: строки видны сразу, метка гаснет сама (тикет #880). */
+const FRESH_VISIBLE_MS = 2600;
 
 /** Канон строки-ссылки (хаб «Совместный доступ»): подложка hover/active
  * не меняется, только прозрачность; фокус-ринг с клавиатуры. */
@@ -297,6 +304,33 @@ export function HistoryFeedScreen({
   // индикатор «Есть новые» (клик — плавный ход к свежим), перечитывание
   // окна реанкерует на дно. Края выдачи — примитивы в депсах, тело эффекта
   // читает их (и скоуп — через реф выше) из замыкания того же коммита.
+  // Свежие строки live-влития (#880): row-in 350мс + метка «новое», пока
+  // читатель их не увидит — на дне гаснут по канонной паузе, выше держатся
+  // до доскролла. Реестр влитий — features/history (live-fresh.ts), дельта
+  // читается в эффекте краёв ниже от снимка prev.at.
+  const [freshIds, setFreshIds] = useState<ReadonlySet<string>>(() => new Set<string>());
+  const freshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const feedScopeKey = historyFeedScopeKey(feedScope);
+  const acknowledgeFresh = useCallback((): void => {
+    if (freshTimerRef.current !== null) {
+      clearTimeout(freshTimerRef.current);
+      freshTimerRef.current = null;
+    }
+    acknowledgeFreshFeedEntryIds(feedScopeKey);
+    setFreshIds((prev) => (prev.size > 0 ? new Set<string>() : prev));
+  }, [feedScopeKey]);
+  // Смена скоупа (фильтры, поиск, пин) — чужой реестр и метки не умеют:
+  // гасим свои; уход с экрана чистит за собой.
+  useEffect(() => {
+    return () => {
+      if (freshTimerRef.current !== null) {
+        clearTimeout(freshTimerRef.current);
+        freshTimerRef.current = null;
+      }
+      acknowledgeFreshFeedEntryIds(feedScopeKey);
+    };
+  }, [feedScopeKey]);
+
   const [hasNewBelow, setHasNewBelow] = useState(false);
   const entryCount = entries.length;
   const firstEntryId = entries[0]?.id ?? null;
@@ -326,6 +360,28 @@ export function HistoryFeedScreen({
       height,
       { liveMerged: lastLiveMergeAt(feedScopeRef.current) > prev.at },
     );
+    // Дельта свежих строк этого коммита (#880): влитие между снимками —
+    // строки получают row-in и метку «новое»; у читателя на дне метки
+    // гаснут по канонной паузе, выше держатся до доскролла.
+    const justMerged = freshFeedEntryIdsMergedSince(
+      historyFeedScopeKey(feedScopeRef.current),
+      prev.at,
+    );
+    if (justMerged.length > 0) {
+      setFreshIds((prevFresh) => {
+        const next = new Set(prevFresh);
+        for (const id of justMerged) {
+          next.add(id);
+        }
+        return next;
+      });
+      if (action.kind === 'follow' || action.kind === 'anchor') {
+        if (freshTimerRef.current !== null) {
+          clearTimeout(freshTimerRef.current);
+        }
+        freshTimerRef.current = setTimeout(acknowledgeFresh, FRESH_VISIBLE_MS);
+      }
+    }
     if (action.kind === 'anchor') {
       window.scrollTo({ top: height });
       setHasNewBelow(false);
@@ -339,10 +395,11 @@ export function HistoryFeedScreen({
     } else if (action.kind === 'indicate') {
       setHasNewBelow(true);
     }
-  }, [entryCount, firstEntryId, lastEntryId]);
+  }, [entryCount, firstEntryId, lastEntryId, acknowledgeFresh]);
 
   // Индикатор гаснет и от ручного доскролла до низа — читатель сам дошёл
-  // до свежих записей, «есть новые» больше не новость.
+  // до свежих записей, «есть новые» больше не новость; метки «новое»
+  // гаснут там же (#880).
   useEffect(() => {
     if (!hasNewBelow) {
       return;
@@ -350,14 +407,16 @@ export function HistoryFeedScreen({
     const onScroll = (): void => {
       if (distanceToBottom() < FOLLOW_BOTTOM_PX) {
         setHasNewBelow(false);
+        acknowledgeFresh();
       }
     };
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
-  }, [hasNewBelow]);
+  }, [hasNewBelow, acknowledgeFresh]);
 
   const scrollToFresh = (): void => {
     setHasNewBelow(false);
+    acknowledgeFresh();
     window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
   };
 
@@ -499,6 +558,7 @@ export function HistoryFeedScreen({
                         actors={object_.actors}
                         isMemberPage={isMemberPage}
                         meId={meId}
+                        freshIds={freshIds}
                       />
                     ) : (
                       <section
@@ -515,7 +575,7 @@ export function HistoryFeedScreen({
                             address={objectOptions?.address}
                           />
                         </Link>
-                        <ActorCards actors={object_.actors} isMemberPage={isMemberPage} meId={meId} />
+                        <ActorCards actors={object_.actors} isMemberPage={isMemberPage} meId={meId} freshIds={freshIds} />
                       </section>
                     );
                   })}
@@ -580,15 +640,18 @@ export function HistoryFeedScreen({
  * headerHref — вход в «Действия участника» (#712: в общей ленте и на
  * «Истории объекта» #840 любая запись с actor_id кликабельна, владелец
  * включительно; на прибитых страницах шапки статичны — человек уже их
- * предмет; обезличенные записи, actor_id null, не ссылки нигде). */
+ * предмет; обезличенные записи, actor_id null, не ссылки нигде),
+ * freshIds — строки live-влития (#880): row-in + метка «новое». */
 function ActorCards({
   actors,
   isMemberPage,
   meId,
+  freshIds,
 }: {
   readonly actors: readonly HistoryActorGroup[];
   readonly isMemberPage: boolean;
   readonly meId?: string;
+  readonly freshIds: ReadonlySet<string>;
 }): JSX.Element {
   return (
     <div className="flex flex-col gap-1.5">
@@ -602,6 +665,7 @@ function ActorCards({
               ? ROUTES.historyParticipant(actor.actorId)
               : null
           }
+          freshIds={freshIds}
         />
       ))}
     </div>
@@ -614,17 +678,19 @@ function ActorCard({
   actor,
   isSelf,
   headerHref,
+  freshIds,
 }: {
   readonly actor: HistoryActorGroup;
   readonly isSelf: boolean;
   readonly headerHref: string | null;
+  readonly freshIds: ReadonlySet<string>;
 }): JSX.Element {
   return (
     <div className="flex flex-col gap-2 rounded-m bg-surface-muted p-3">
       <ActorHeader name={actor.name} isSelf={isSelf} href={headerHref} />
       <div className="flex flex-col gap-2">
         {actor.entries.map((entry) => (
-          <HistoryRow key={entry.id} entry={entry} />
+          <HistoryRow key={entry.id} entry={entry} fresh={freshIds.has(entry.id)} />
         ))}
       </div>
     </div>

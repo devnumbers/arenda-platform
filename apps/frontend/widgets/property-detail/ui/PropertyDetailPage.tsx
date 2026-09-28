@@ -566,7 +566,7 @@ export function PropertyDetailPage(): JSX.Element {
                                         pill.kind === 'archived' ? (
                                             <PropertyArchivedPill key="archived"/>
                                         ) : (
-                                            <PropertyAccessPill key="access" role={pill.role}/>
+                                            <PropertyAccessPill key="access" role={pill.role} refreshing={propertyQuery.isFetching}/>
                                         ),
                                     )}
                                 </div>

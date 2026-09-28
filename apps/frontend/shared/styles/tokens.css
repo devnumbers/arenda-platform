@@ -101,4 +101,29 @@
   --dl-ease: cubic-bezier(0.32, 0.72, 0, 1);
   --dl-duration-fast: 250ms;
   --dl-duration-move: 350ms;
+
+  /* Канон realtime-оживания значения (тикет #880, решение владельца 25.09
+     по прототипу #879): dim → hold на перечитывание → blur-кроссфейд +
+     вспышка. Фазы удлинены сознательно — последовательность «читается
+     глазом, а не мигает»; вспышка — primary на 18% (цвет rgba(43,127,255,
+     0.18) демо #879 через color-mix от токена). reduced-motion укорачивает
+     всё до ~150мс-порядка (§8) — JS-фазы ждут то же через
+     REDUCED_TIMINGS (shared/ui/live-value). */
+  --live-dim: 350ms;
+  --live-blur-out: 220ms;
+  --live-blur-in: 380ms;
+  --live-blur-delay: 130ms;
+  --live-flash: 1200ms;
+  /* Цвет вспышки — литерал демо #879 (primary #2b7fff на 18%). */
+  --live-flash-bg: rgba(43, 127, 255, 0.18);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --live-dim: 120ms;
+    --live-blur-out: 80ms;
+    --live-blur-in: 100ms;
+    --live-blur-delay: 30ms;
+    --live-flash: 250ms;
+  }
 }
