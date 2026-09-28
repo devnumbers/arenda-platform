@@ -7,8 +7,12 @@ import { Logo } from "./logo";
 // 2826:151662 (планшет/мобайл: поля 32, шаг 32, кнопки столбиком во всю
 // ширину с зазором 10, юрблок столбиком 16px: политики, копирайт
 // последним, шаг 36, нижний паддинг 36). Ссылки политик — hover в синий
-// (компонент 2865-5440).
+// (компонент 2865-5440). Год копирайта — серверный текущий (макет
+// литералом «2026»; главная и юрстраницы рендерятся динамически,
+// поэтому год переворачивается сам без пересборки).
 export function SiteFooter() {
+  const year = new Date().getFullYear();
+
   return (
     <footer className="px-8 pb-9 desk:px-20 desk:pb-20">
       <div className="mx-auto flex w-full max-w-[1000px] flex-col gap-8 desk:gap-16">
@@ -48,7 +52,7 @@ export function SiteFooter() {
           >
             Пользовательское соглашение
           </Link>
-          <span className="leading-[22px] text-gray-3 desk:order-1">© 2026 Рентли</span>
+          <span className="leading-[22px] text-gray-3 desk:order-1">© {year} Рентли</span>
         </div>
       </div>
     </footer>
