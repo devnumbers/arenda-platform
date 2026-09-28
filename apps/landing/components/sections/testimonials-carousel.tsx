@@ -603,9 +603,10 @@ export function TestimonialsDesktop() {
   return (
     <div>
       <div className="flex gap-14">
+        {/* Панель отзыва гаснет и проявляется на месте — без сдвигов. */}
         <div
-          className={`w-[472px] shrink-0 transition-[opacity,translate] duration-200 ease-out motion-reduce:transition-none ${
-            fading ? "translate-y-1 opacity-0" : "translate-y-0 opacity-100"
+          className={`w-[472px] shrink-0 transition-opacity duration-200 motion-reduce:transition-none ${
+            fading ? "opacity-0" : "opacity-100"
           }`}
         >
           <blockquote className="text-h3 font-medium leading-10">
