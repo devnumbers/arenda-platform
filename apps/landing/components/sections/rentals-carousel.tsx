@@ -17,11 +17,14 @@ import rentalReport from "@/assets/sections/rental-report.webp";
 // Десктоп — «полка» в стиле Apple: активная карточка стоит по центру окна,
 // по краям призрачное место (крайние карточки тоже встают по центру);
 // клик по точке и докатка после свайпа — пружинка с лёгким перелётом цели
-// и упругим возвратом (CSS-снап на десктопе выключен, докатку ведём сами
-// по простою скролла), соседние карточки чуть меньше и приглушены — по
+// и упругим возвратом (CSS-снап выключен везде, докатку ведём сами по
+// простою скролла), соседние карточки чуть меньше и приглушены — по
 // дистанции до центра в rAF, без внешних зависимостей. 6 точек-кнопок
 // снизу по макету 2814-885 — на всех брейкпоинтах.
-// Планшет/мобайл — снап-карусель вплотную к левому краю.
+// Планшет/мобайл — та же логика (макет 2859-3475): карточки 320 с зазором
+// 12, отступ 24px до первой и после последней (хвостовой спейсер даёт
+// последней встать на ту же линию), тач-моментум нативный, докатка — наша
+// пружинка; overscroll-x contain не даёт краевому свайпу дёргать навигацию.
 // prefers-reduced-motion — без пружинки и «полки», скролл мгновенный.
 type Card = {
   title: string;
@@ -100,6 +103,10 @@ const CARDS: Card[] = [
 ];
 
 const DESK_QUERY = "(min-width: 1200px)";
+
+// Отступ первой/последней карточки на планшете-мобайле (макет 2859-3475):
+// линия покоя карточки = её offsetLeft минус этот паддинг скроллера.
+const TOUCH_INSET = 24;
 
 // «Полка»: масштаб и приглушение карточки на краю окна (у активной — 1).
 const SHELF_SCALE_FAR = 0.93;
@@ -331,14 +338,22 @@ export function RentalsCarousel() {
     }
     return desk
       ? card.offsetLeft + card.offsetWidth / 2 - el.clientWidth / 2
-      : card.offsetLeft;
+      : card.offsetLeft - TOUCH_INSET;
   }, [desk]);
 
   // Докатка после свайпа: скролл затих — сами тянем полосу к ближайшей
-  // карточке пружинкой (CSS-снап на десктопе ради этого выключен).
+  // карточке пружинкой (CSS-снап ради этого выключен на всех брейкпоинтах).
   const settle = useCallback(() => {
     const el = scroller.current;
     if (!el || glideActive.current) {
+      return;
+    }
+    // Резинка на краях (iOS): пока полоса за границами — не докатываем,
+    // отскок пришлёт новые скролл-события и таймер перезапустится.
+    if (
+      el.scrollLeft < 0 ||
+      el.scrollLeft > el.scrollWidth - el.clientWidth
+    ) {
       return;
     }
     const left = nearestCardLeft();
@@ -370,7 +385,7 @@ export function RentalsCarousel() {
       glideTo(
         desk
           ? card.offsetLeft + card.offsetWidth / 2 - el.clientWidth / 2
-          : card.offsetLeft,
+          : card.offsetLeft - TOUCH_INSET,
       );
     },
     [desk, glideTo],
@@ -397,7 +412,7 @@ export function RentalsCarousel() {
         onScroll={onScroll}
         onPointerDown={stopGlide}
         onWheel={stopGlide}
-        className="relative order-1 flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 [scrollbar-width:none] desk:snap-none desk:gap-5 desk:px-[calc((100%_-_380px)/2)] [&::-webkit-scrollbar]:hidden"
+        className="relative order-1 flex gap-3 overflow-x-auto overscroll-x-contain px-6 pb-2 [scrollbar-width:none] desk:gap-5 desk:px-[calc((100%_-_380px)/2)] [&::-webkit-scrollbar]:hidden"
       >
         {CARDS.map((card, i) => (
           <article
@@ -405,7 +420,7 @@ export function RentalsCarousel() {
             ref={(el) => {
               cards.current[i] = el;
             }}
-            className="relative h-[500px] w-[320px] shrink-0 snap-start overflow-clip rounded-[32px] bg-surface px-6 pt-12 desk:h-[550px] desk:w-[380px] desk:snap-center desk:rounded-[40px] desk:px-10 desk:pt-[52px] desk:will-change-transform"
+            className="relative h-[500px] w-[320px] shrink-0 overflow-clip rounded-[32px] bg-surface px-6 pt-12 desk:h-[550px] desk:w-[380px] desk:rounded-[40px] desk:px-10 desk:pt-[52px] desk:will-change-transform"
           >
             <div className="mx-auto flex w-full max-w-[220px] flex-col items-center gap-2 text-center desk:gap-3 desk:max-w-[300px]">
               <h3 className="text-[22px] font-medium leading-[26px] desk:text-[28px] desk:leading-8">
@@ -434,6 +449,13 @@ export function RentalsCarousel() {
             />
           </article>
         ))}
+        {/* Хвостовой отступ 24px: последняя карточка встаёт на ту же линию,
+            что и первая (100% здесь — контент-бокс без паддингов; 12px
+            съедает flex-gap перед спейсером). */}
+        <div
+          aria-hidden
+          className="w-[calc(100%_-_332px)] shrink-0 desk:hidden"
+        />
       </div>
     </div>
   );
