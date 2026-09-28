@@ -108,10 +108,16 @@ export function LiveValue({
   // DOM-узлы свапа для замера ширины (Apple-рецепт «контейнер едет
   // вместе с контентом»): эффект ниже лочит коробку на старой ширине и
   // едет к новой той же кривой, что проявляет значение.
+  const rootRef = useRef<HTMLSpanElement | null>(null);
   const swapRef = useRef<HTMLSpanElement | null>(null);
   const oldOverlayRef = useRef<HTMLSpanElement | null>(null);
   const newOverlayRef = useRef<HTMLSpanElement | null>(null);
   const widthAnimationRef = useRef<Animation | null>(null);
+  const heightAnimationRef = useRef<Animation | null>(null);
+  // Натуральная высота idle-коробки прошлых коммитов (дробная): с неё
+  // стартует движение высоты. Замер — в последнем эффекте коммита (см.
+  // ниже), только в idle — в других фазах коробка перекроена свапом.
+  const naturalHeightRef = useRef<number | null>(null);
 
   // Стабильный переход: читает только реф-книжение, событий — от эффектов.
   const transition = useCallback((event: LiveValueEvent): void => {
@@ -197,58 +203,85 @@ export function LiveValue({
   }, [state, transition]);
 
   // Снапшот детей — последним эффектом каждого коммита: переходы выше
-  // читают прошлый коммит как «старую сторону».
+  // читают прошлый коммит как «старую сторону». Заодно — натуральная
+  // высота idle-коробки (дробная): стартовая точка движения высоты.
   useLayoutEffect(() => {
     childrenPropRef.current = children;
     lastCommittedChildrenRef.current = children;
-  }, [children]);
+    const root = rootRef.current;
+    if (root && stateRef.current.phase === 'idle') {
+      naturalHeightRef.current = root.getBoundingClientRect().height;
+    }
+  });
 
-  // Ширина свапа едет, а не щёлкает (доработка 28.09, решение владельца
-  // «как у Apple»): контейнер размера контента — та же динамика, что у
-  // Dynamic Island/SwiftUI, где фрейм анимируется тем же движением, что и
-  // содержимое (WWDC23 «Animate with springs»: единое движение лэйаута и
-  // контента). Замер до краски; статичная ширина = целевая, движение от
-  // ширины старого значения — WAAPI: CSS-переход на элементе,
-  // вмонтированном в этот же кадр, не стартует (проверено живым замером
-  // на членах №880 — лок/reflow и двойной rAF не помогают). Длительность —
-  // --live-blur-in (380мс; reduced 100мс), кривая --dl-ease: размер и
-  // резкость нового значения доезжают вместе (Q3: старт немедленно).
-  // Высота — max сторон (совпадает у однострочных значений). На settle
-  // контейнер разбирается, idle рендерит новое значение в потоке —
-  // натуральная ширина совпадает с анимированной, прыжка нет. Режим B и
-  // own без свапа — не затронуты.
+  // Размер свапа едет, а не щёлкает, ОБЕИМИ осями (доработки 28.09,
+  // решения владельца «как у Apple»): контейнер размера контента — та же
+  // динамика, что у Dynamic Island/SwiftUI, где фрейм анимируется тем же
+  // движением, что и содержимое (WWDC23 «Animate with springs»: единое
+  // движение лэйаута и контента — оси едут одновременно, не по очереди).
+  // Ширина: статичная целевая на внутренней коробке, движение от ширины
+  // старого значения — WAAPI (CSS-переход на элементе, вмонтированном в
+  // этот же кадр, не стартует — проверено живым замером #880). Высота:
+  // лок на ВНЕШНЕЙ коробке (флекс-элемент пилюли) — структурная
+  // перестройка свапа (паддинги flashBox, ~3.5px) остаётся внутри
+  // замороженной коробки и наружу не торчит; движение — от натуральной
+  // высоты idle прошлых коммитов к высоте нового значения. Замеры —
+  // дробные getBoundingClientRect (offsetHeight округляет до целого —
+  // субпиксельные щелчки на входе/выходе). Длительность --live-blur-in
+  // (380мс; reduced 100мс), кривая --dl-ease: размер и резкость
+  // доезжают вместе. На settle контейнер разбирается, лок высоты
+  // снимается — натуральные размеры idle-рендера совпадают с
+  // доезженными, прыжка нет. Режим B и own без свапа — не затронуты.
   useLayoutEffect(() => {
+    const root = rootRef.current;
     const swap = swapRef.current;
     const oldOverlay = oldOverlayRef.current;
     const newOverlay = newOverlayRef.current;
-    if (state.phase !== 'swap' || mode !== 'crossfade' || !swap || !oldOverlay || !newOverlay) {
+    if (state.phase !== 'swap' || mode !== 'crossfade' || !swap || !oldOverlay || !newOverlay || !root) {
+      // Вне свапа лока нет: корневая коробка персистентна — снимаем.
+      if (root) {
+        root.style.height = '';
+      }
       return;
     }
-    const startWidth = Math.max(oldOverlay.offsetWidth, 1);
-    const targetWidth = Math.max(newOverlay.offsetWidth, 1);
-    const height = Math.max(oldOverlay.offsetHeight, newOverlay.offsetHeight);
+    const startWidth = Math.max(oldOverlay.getBoundingClientRect().width, 1);
+    const targetWidth = Math.max(newOverlay.getBoundingClientRect().width, 1);
+    const startHeight =
+      naturalHeightRef.current ??
+      Math.max(oldOverlay.getBoundingClientRect().height, newOverlay.getBoundingClientRect().height);
+    const targetHeight = Math.max(
+      oldOverlay.getBoundingClientRect().height,
+      newOverlay.getBoundingClientRect().height,
+    );
     swap.style.width = `${targetWidth}px`;
-    swap.style.height = `${height}px`;
+    swap.style.height = `${targetHeight}px`;
+    root.style.height = `${startHeight}px`;
     widthAnimationRef.current?.cancel();
+    heightAnimationRef.current?.cancel();
+    const timing: KeyframeAnimationOptions = {
+      duration: reducedMotion ? 100 : 380,
+      easing: 'cubic-bezier(0.32, 0.72, 0, 1)',
+    };
     widthAnimationRef.current = swap.animate(
       [{ width: `${startWidth}px` }, { width: `${targetWidth}px` }],
-      {
-        duration: reducedMotion ? 100 : 380,
-        easing: 'cubic-bezier(0.32, 0.72, 0, 1)',
-      },
+      timing,
+    );
+    heightAnimationRef.current = root.animate(
+      [{ height: `${startHeight}px` }, { height: `${targetHeight}px` }],
+      timing,
     );
   }, [state, mode, reducedMotion]);
 
   if (state.phase === 'stale') {
     return (
-      <span className={cn(styles.root, styles.stale, 'tabular-nums', className)}>
+      <span ref={rootRef} className={cn(styles.root, styles.stale, 'tabular-nums', className)}>
         {snapshots.stale ?? children}
       </span>
     );
   }
   if (state.phase === 'swap') {
     return (
-      <span className={cn(styles.root, 'tabular-nums', className)}>
+      <span ref={rootRef} className={cn(styles.root, 'tabular-nums', className)}>
         <span key={state.generation} className={styles.flashBox}>
           {mode === 'crossfade' ? (
             <span ref={swapRef} className={styles.swap}>
@@ -267,6 +300,8 @@ export function LiveValue({
     );
   }
   return (
-    <span className={cn(styles.root, 'tabular-nums', className)}>{children}</span>
+    <span ref={rootRef} className={cn(styles.root, 'tabular-nums', className)}>
+      {children}
+    </span>
   );
 }
