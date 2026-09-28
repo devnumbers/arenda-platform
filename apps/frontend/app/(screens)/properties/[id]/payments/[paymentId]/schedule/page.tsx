@@ -10,11 +10,7 @@ export const metadata: Metadata = {
   title: 'График платежей — Рентли',
 };
 
-type ScheduleRoutePageProps = {
-  params: Promise<{ id: string; paymentId: string }>;
-};
-
-export default async function PaymentScheduleRoutePage({ params }: ScheduleRoutePageProps) {
+export default async function PaymentScheduleRoutePage({ params }: PageProps<'/properties/[id]/payments/[paymentId]/schedule'>) {
   const { id, paymentId } = await params;
 
   return <PaymentScheduleScreen propertyId={id} paymentId={paymentId} />;

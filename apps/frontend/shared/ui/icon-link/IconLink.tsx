@@ -1,19 +1,29 @@
 'use client';
 
-import type {AnchorHTMLAttributes, ButtonHTMLAttributes, JSX} from 'react';
+import type {AnchorHTMLAttributes, JSX, ReactNode} from 'react';
 import NextLink from 'next/link';
 import clsx from 'clsx';
 import {Sync} from '@/shared/assets/icons';
 import {Icon, type IconSize} from '@/shared/ui/icon';
-import type {ButtonSize} from '@/shared/ui/button/Button';
-import type {IconButtonProps} from '@/shared/ui/icon-button/IconButton';
 import styles from './IconLink.module.css';
+
+/** Типы локальные (легаси button/icon-button снесены, #901): вариант и
+ * размер ссылаются на классы собственного CSS-модуля, набор повторяет
+ * снесённый IconButton (primary/secondary/clear/icon-black × 4 размера). */
+export type IconLinkVariant = 'primary' | 'secondary' | 'clear' | 'icon-black';
+export type IconLinkSize = 'large' | 'medium' | 'small' | 'tiny';
 
 export type IconLinkProps = {
     href: string;
-} & Omit<IconButtonProps, keyof ButtonHTMLAttributes<HTMLButtonElement>> & AnchorHTMLAttributes<HTMLAnchorElement>;
+    variant?: IconLinkVariant;
+    size?: IconLinkSize;
+    rounded?: boolean;
+    loading?: boolean;
+    icon: ReactNode;
+    'aria-label'?: string;
+} & AnchorHTMLAttributes<HTMLAnchorElement>;
 
-const iconSizeMap: Record<ButtonSize, IconSize> = {
+const iconSizeMap: Record<IconLinkSize, IconSize> = {
     large: 'l',
     medium: 'm',
     small: 's',

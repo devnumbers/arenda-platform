@@ -13,6 +13,9 @@ const (
 	testPropertyAddress = "Addr"
 	// Короткое имя объекта access-тестов (деталь и исходы доступа).
 	testObjName = "Obj"
+	// Имена пары сверхлимитных объектов в тестах биллинг-архива.
+	excessNameA = "Excess A"
+	excessNameB = "Excess B"
 )
 
 // newPropertyTestFactory builds the txStoreFactory for the property service

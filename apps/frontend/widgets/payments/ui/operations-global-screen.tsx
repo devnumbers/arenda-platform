@@ -4,7 +4,7 @@ import { useState, type JSX } from "react";
 import { useRouter } from "next/navigation";
 import { Add, Search } from "@/shared/assets/icons";
 import { ROUTES } from "@/shared/config/routes";
-import { clientTodayIso } from "@/entities/payment";
+import { dateToIsoLocal } from "@/shared/lib/calendar";
 import { propertyPermissions } from "@/entities/property";
 import { useKeyboardActivation } from "@/shared/lib/hooks/useKeyboardActivation";
 import {
@@ -65,7 +65,7 @@ export function OperationsGlobalScreen(): JSX.Element {
     propertyPermissions(property).canEdit,
   );
 
-  const today = clientTodayIso();
+  const today = dateToIsoLocal(new Date());
   // Пикер периода — канонический оверлей поверх списка.
   const [periodOpen, setPeriodOpen] = useState(false);
   // Список сужается выбранными категориями; сводка (#540) категорийный

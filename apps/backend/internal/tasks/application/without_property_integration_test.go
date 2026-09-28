@@ -319,7 +319,7 @@ func TestWithoutPropertyTickMaterialization(t *testing.T) {
 
 func TestWithoutPropertyTickZones(t *testing.T) {
 	t.Parallel()
-	h := newTasksHarness(t).withOwnerWithoutProperty(taskMoscowTZ)
+	h := newTasksHarness(t).withOwnerWithoutProperty()
 
 	// An owner with only a property-less rule is a sweep target even though
 	// they own no properties at all.

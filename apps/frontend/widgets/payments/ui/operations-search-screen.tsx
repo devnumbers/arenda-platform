@@ -6,7 +6,8 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { useSearchQueryState } from '@/shared/lib/hooks/useSearchQueryState';
-import { clientTodayIso, formatDayMonthWithYear } from '@/entities/payment';
+import { formatDayMonthWithYear } from '@/entities/payment';
+import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
   usePropertyOperationsScopedPaged,
   usePropertyOperationsSummary,
@@ -76,7 +77,7 @@ export function OperationsSearchScreen({
     { enabled: debounced !== '' },
   );
 
-  const today = clientTodayIso();
+  const today = dateToIsoLocal(new Date());
   const operations = listQuery.data ?? [];
 
   const emptyQuery = value.trim() === '';

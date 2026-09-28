@@ -33,7 +33,7 @@ import {
   useCompleteTask,
   useUncompleteTask,
 } from '@/features/tasks';
-import {clientTodayIso} from '@/entities/payment';
+import {dateToIsoLocal} from '@/shared/lib/calendar';
 import {useSubscription} from '@/features/subscription';
 import {isPaidTariff} from '@/entities/user';
 import type {ApiError} from '@/shared/api/errors';
@@ -160,7 +160,7 @@ export function PropertyDetailPage(): JSX.Element {
     // оплаченных операций за текущий месяц (+ all-time — выбор между
     // сводкой и «Операций еще не было», как на экране операций), контакты
     // объекта и активные задачи.
-    const today = clientTodayIso();
+    const today = dateToIsoLocal(new Date());
     const paymentsQuery = usePayments(id, '', { enabled: propertyLoaded });
     const overdueQuery = usePropertyOverdueOperations(id, '', { enabled: propertyLoaded });
     // Сводка секции «Операции в <месяц>» — за текущий календарный месяц
@@ -302,7 +302,7 @@ export function PropertyDetailPage(): JSX.Element {
             return;
         }
         completeRental.mutate(
-            {completedDate: clientTodayIso()},
+            {completedDate: dateToIsoLocal(new Date())},
             {
                 onSuccess: () => {
                     setCompleteSheetOpen(false);
@@ -340,7 +340,7 @@ export function PropertyDetailPage(): JSX.Element {
             },
         };
         completeRental.mutate(
-            {completedDate: clientTodayIso()},
+            {completedDate: dateToIsoLocal(new Date())},
             {
                 onSuccess: () => {
                     if (action === 'archive') {

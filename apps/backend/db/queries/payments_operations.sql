@@ -215,6 +215,25 @@ WHERE owner_id = sqlc.arg('owner')
   AND status = 'planned'
   AND date < sqlc.arg('today');
 
+-- name: CountPaidAndOverdueByPaymentIDs :many
+-- The progress counters of the listed rules in one batched read (ticket
+-- #845): the rentals list's «N из M» / «Просрочено N месяцев» — the same
+-- paid and overdue predicates the per-payment counts encode, split by
+-- COUNT FILTER over one GROUP BY instead of a query pair per rule. A rule
+-- with no matching operations yields no row — its zeros default in the
+-- application. Cancelled tombstones never count; the nested
+-- payment→property path is enforced in the WHERE clause. An empty id list
+-- never reaches the query (the ListRentalManagedPaymentIDs precedent).
+SELECT payment_id,
+       COUNT(*) FILTER (WHERE status = 'paid') AS paid_count,
+       COUNT(*) FILTER (WHERE status = 'planned' AND date < sqlc.arg('today')) AS overdue_count
+FROM operations
+WHERE owner_id = sqlc.arg('owner')
+  AND property_id = sqlc.arg('property')
+  AND payment_id = ANY(@payment_ids::uuid[])
+  AND status IN ('paid', 'planned')
+GROUP BY payment_id;
+
 -- The global read side (ticket #540): the actor-scoped cross-property read
 -- over the paid facts of their own book plus the properties they can view.
 -- The visibility predicate is this SQL's (the tasks global feed precedent,

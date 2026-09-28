@@ -142,7 +142,7 @@ func TestHistory_TaskCompletionAndJournalClear(t *testing.T) {
 func TestHistory_PropertyLessRulesJournalNothing(t *testing.T) {
 	t.Parallel()
 
-	h := newTasksHarness(t).withOwnerWithoutProperty("Europe/Moscow")
+	h := newTasksHarness(t).withOwnerWithoutProperty()
 
 	created, err := h.rules.CreateRuleWithoutProperty(h.ctx(), h.owner, h.createCmd())
 	if err != nil {

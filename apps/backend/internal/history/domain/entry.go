@@ -100,6 +100,15 @@ const (
 	ActionContactCreated Action = "contact.created"
 	ActionContactUpdated Action = "contact.updated"
 	ActionContactDeleted Action = "contact.deleted"
+	// ActionContactMoved records the cross-property move (тикет #856): the
+	// rebind writes a pair of rows — one on the source object, one on the
+	// destination (ADR 0061 §4, the per-leg pattern of §3).
+	ActionContactMoved Action = "contact.moved"
+	// ActionContactBound and ActionContactUnbound record the one-ended
+	// rebinds: an unbound card landing on an object, a bound card leaving
+	// it for the owner's book — the single existing end carries the row.
+	ActionContactBound   Action = "contact.bound"
+	ActionContactUnbound Action = "contact.unbound"
 
 	ActionTaskRuleCreated Action = "task_rule.created"
 	ActionTaskRuleUpdated Action = "task_rule.updated"

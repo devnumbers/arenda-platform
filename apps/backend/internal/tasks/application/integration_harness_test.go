@@ -22,6 +22,7 @@ import (
 	historypg "github.com/nambers/arenda-planform/apps/backend/internal/history/adapters/postgres"
 	pgdb "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/testdb"
+	realtimetest "github.com/nambers/arenda-planform/apps/backend/internal/realtime/realtimetest"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/actor"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	taskspg "github.com/nambers/arenda-planform/apps/backend/internal/tasks/adapters/postgres"
@@ -80,6 +81,9 @@ type tasksHarness struct {
 	seam   *fakeSeam
 	owner  uuid.UUID
 	propID uuid.UUID
+	// Realtime is the recording carrier the services dispatch their frames
+	// through — the realtime seam's test double (карта #714, #716).
+	realtime *realtimetest.RecordingPublisher
 }
 
 func newTasksHarness(t *testing.T) *tasksHarness {
@@ -106,13 +110,20 @@ func newTasksHarnessWithPolicy(t *testing.T, policy sharedpolicy.Policy) *tasksH
 		tickStore, ruleStore, taskStore, propertyStore, audit, historypg.NewRecorder(pool), uow,
 	)
 
+	realtime := &realtimetest.RecordingPublisher{}
+	rules := tasksapp.NewRuleService(factory, ownerClock, policy, logger)
+	taskSvc := tasksapp.NewTaskService(factory, ownerClock, ownerClock, policy)
+	rules.SetRealtimePublisher(realtime)
+	taskSvc.SetRealtimePublisher(realtime)
+
 	return &tasksHarness{
-		t:     t,
-		pool:  pool,
-		clock: clk,
-		tick:  tasksapp.NewTickService(factory, zones, ownerClock, nil),
-		rules: tasksapp.NewRuleService(factory, ownerClock, policy, logger),
-		tasks: tasksapp.NewTaskService(factory, ownerClock, ownerClock, policy),
+		t:        t,
+		pool:     pool,
+		clock:    clk,
+		tick:     tasksapp.NewTickService(factory, zones, ownerClock, nil),
+		rules:    rules,
+		tasks:    taskSvc,
+		realtime: realtime,
 	}
 }
 
@@ -175,10 +186,12 @@ func (h *tasksHarness) withOwner(tz string) *tasksHarness {
 	return h
 }
 
-// withOwnerWithoutProperty seeds a user with the given timezone and no
-// properties at all — the pure property-less book (ADR 0052). The propID
+// withOwnerWithoutProperty seeds a user in the Moscow fixture timezone with
+// no properties at all — the pure property-less book (ADR 0052). The propID
 // field stays the zero UUID: the property-less use cases never touch it.
-func (h *tasksHarness) withOwnerWithoutProperty(tz string) *tasksHarness {
+// (The former tz parameter never varied — every call site anchored the same
+// Moscow fixtures — so it is gone.)
+func (h *tasksHarness) withOwnerWithoutProperty() *tasksHarness {
 	t := h.t
 	t.Helper()
 
@@ -189,7 +202,7 @@ func (h *tasksHarness) withOwnerWithoutProperty(tz string) *tasksHarness {
 	phone := fmt.Sprintf("+7999%010d", time.Now().UnixNano()%10000000000)
 	if _, err := h.pool.Exec(h.ctx(),
 		`INSERT INTO users (id, phone, role, timezone) VALUES ($1, $2, $3, $4)`,
-		owner, phone, actor.RoleOwner, tz,
+		owner, phone, actor.RoleOwner, taskMoscowTZ,
 	); err != nil {
 		t.Fatalf("seed user: %v", err)
 	}

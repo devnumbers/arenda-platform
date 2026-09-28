@@ -4,6 +4,7 @@ package testdb
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -39,12 +40,7 @@ var (
 func startPostgres() string {
 	ctx := context.Background()
 
-	ctr, err := postgres.Run(ctx, postgresImage,
-		postgres.WithDatabase("arenda"),
-		postgres.WithUsername("arenda"),
-		postgres.WithPassword("arenda"),
-		postgres.BasicWaitStrategies(),
-	)
+	ctr, err := startPostgresContainer(ctx)
 	if err != nil {
 		panic(fmt.Errorf("testdb: start postgres container: %w", err))
 	}
@@ -59,6 +55,41 @@ func startPostgres() string {
 	}
 
 	return connStr
+}
+
+// startPostgresContainer runs the postgres image and returns a ready
+// container, retrying once. Docker Desktop on macOS occasionally stalls its
+// API for about a minute under the parallel load of a full test run: the
+// container itself starts and serves fine, while the mapped-port wait burns
+// its whole budget on «port 5432/tcp not found» and inspect
+// context-deadline errors — several packages hit the same window in one run.
+// A failed attempt leaves the live container behind (create and start both
+// succeeded, the readiness wait did not), so it is terminated before the
+// fresh attempt; a second failure is still fatal.
+func startPostgresContainer(ctx context.Context) (*postgres.PostgresContainer, error) {
+	run := func() (*postgres.PostgresContainer, error) {
+		return postgres.Run(ctx, postgresImage,
+			postgres.WithDatabase("arenda"),
+			postgres.WithUsername("arenda"),
+			postgres.WithPassword("arenda"),
+			postgres.BasicWaitStrategies(),
+		)
+	}
+
+	ctr, err := run()
+	if err == nil {
+		return ctr, nil
+	}
+	if ctr != nil {
+		if termErr := testcontainers.TerminateContainer(ctr); termErr != nil {
+			err = errors.Join(err, termErr)
+		}
+	}
+	retried, retryErr := run()
+	if retryErr != nil {
+		return nil, errors.Join(err, retryErr)
+	}
+	return retried, nil
 }
 
 // terminateContainer stops and removes the PostgreSQL container if one was

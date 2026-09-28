@@ -7,11 +7,9 @@ import { Cancel } from '@/shared/assets/icons';
 import { formatTime } from '@/shared/lib/date-format';
 import { ROUTES } from '@/shared/config/routes';
 import { NotificationCategoryIcon } from '@/entities/notification';
-import type { StreamFrame } from '@/features/notifications/api/stream-frame';
+import type { NotificationCreatedFrame } from '@/features/notifications/api/stream-frame';
 import styles from '@/shared/ui/toast/ToastProvider.module.css';
 import { TOAST_AUTO_CLOSE_MS } from '@/shared/ui/toast/ToastProvider';
-
-export type NotificationCreatedFrame = Extract<StreamFrame, { kind: 'created' }>;
 
 /**
  * Тост о новом уведомлении (макет 2343:57307, тикеты #747/#778): круг иконки

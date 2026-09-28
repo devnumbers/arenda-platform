@@ -453,6 +453,45 @@ func ContactDeleted(entityID uuid.UUID, fullName string) Entry {
 	}
 }
 
+// ContactMovedFrom builds the source leg of the cross-property move row
+// (тикет #856): this object's feed lost the card to another one. The ФИО is
+// the action-time snapshot, the link points at the card's own page.
+func ContactMovedFrom(entityID uuid.UUID, fullName string) Entry {
+	return contactRebindRow(ActionContactMoved, "Контакт перенесён на другой объект: ", entityID, fullName)
+}
+
+// ContactMovedTo builds the destination leg of the cross-property move row:
+// this object's feed gained the card from another one.
+func ContactMovedTo(entityID uuid.UUID, fullName string) Entry {
+	return contactRebindRow(ActionContactMoved, "Контакт перенесён с другого объекта: ", entityID, fullName)
+}
+
+// ContactBound builds the bind row (тикет #856): a previously unbound card
+// landed on the object — the single end the rebind touches.
+func ContactBound(entityID uuid.UUID, fullName string) Entry {
+	return contactRebindRow(ActionContactBound, "Контакт привязан к объекту: ", entityID, fullName)
+}
+
+// ContactUnbound builds the unbind row: the card left the object for the
+// owner's book — the source is the only end to anchor (ADR 0061 §3 keeps
+// «an unbound card writes no rows»: the card is bound at action time).
+func ContactUnbound(entityID uuid.UUID, fullName string) Entry {
+	return contactRebindRow(ActionContactUnbound, "Контакт отвязан от объекта: ", entityID, fullName)
+}
+
+func contactRebindRow(action Action, prefix string, entityID uuid.UUID, fullName string) Entry {
+	return Entry{
+		Kind:       KindContact,
+		Action:     action,
+		BaseAction: BaseChanged,
+		Segments: Segments{
+			{Text: prefix},
+			{Text: fullName, Link: entityLink(KindContact, entityID)},
+		},
+		Context: map[string]any{ctxKeyName: fullName},
+	}
+}
+
 // Задачи.
 
 // TaskRuleCreated builds the rule row (the product word for a rule is

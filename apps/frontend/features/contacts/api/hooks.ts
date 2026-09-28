@@ -39,10 +39,27 @@ export type ContactsPageData = {
 };
 
 /**
+ * Конфиг keyset-обхода книги контактов — возвращаемый тип билдеров
+ * contactsListQuery/contactBookQuery: экспорты features/ несут явные
+ * возвращаемые типы (apps/frontend/AGENTS.md), члены — их выведенная форма.
+ */
+export type ContactsListQueryConfig = {
+  readonly queryKey: ReturnType<typeof contactKeys.list>;
+  readonly queryFn: (context: {
+    readonly pageParam?: string;
+  }) => Promise<ContactsPageData>;
+  readonly initialPageParam: string | undefined;
+  readonly getNextPageParam: typeof keysetNextPageParam;
+};
+
+/**
  * Книга контактов объекта (ADR 0054, экран #508): порции по 50 keyset-курсором
  * (#600) — pageParam это курсор прошлого ответа, без него чтение с начала.
  * search — серверный регистронезависимый подстрочный фильтр по имени,
  * телефону, почте, имени пользователя мессенджера и роли ('' = без фильтра).
+ * sort — серверная ось сортировки ('created' — «свежие сверху», #847),
+ * order — направление ('asc'/'desc', дефолт asc); оба едут в ключ кэша:
+ * срезы разных осей — разные наборы, один ключ смешал бы их.
  * Чтение через view-гейт объекта: участник с ролью CanView видит привязанные
  * к объекту контакты (403 — проблема Forbidden).
  * keepPreviousData — прежний срез держится на экране, пока едет запрос
@@ -53,15 +70,20 @@ export type ContactsPageData = {
 export function useContacts(
   propertyId: string,
   search = '',
-  options: { readonly enabled?: boolean } = {},
+  options: {
+    readonly enabled?: boolean;
+    readonly sort?: 'created';
+    readonly order?: ContactBookOrder;
+  } = {},
 ): UseInfiniteQueryResult<Contact[], ApiError> {
+  // sort/order едут в ключ кэша: срез 'created'desc и дефолтный 'name'asc —
+  // разные наборы, один ключ смешал бы их (канон contactKeys.list).
+  const sort = options.sort ?? 'name';
+  const order = options.order ?? 'asc';
   return useInfiniteQuery({
-    queryKey: contactKeys.list(propertyId, search),
-    queryFn: ({ pageParam }) =>
-      fetchContactsPage({ propertyId, search, cursor: pageParam }),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: keysetNextPageParam,
-    select: (data) => data.pages.flatMap((page) => page.items),
+    ...contactsListQuery({ propertyId, search, sort, order }),
+    select: (data: InfiniteData<ContactsPageData>) =>
+      data.pages.flatMap((page) => page.items),
     placeholderData: keepPreviousData,
     enabled: (options.enabled ?? true) && Boolean(propertyId),
   });
@@ -76,12 +98,13 @@ export type ContactBookOrder = 'asc' | 'desc';
 
 /** Общее горло порции GET /contacts (#600): с propertyId — срез объекта,
  * без — плоская книга; sort/order уходят только отличные от дефолта
- * (сервер нормализует пустые сам), cursor — keyset-продолжение прошлого
- * ответа, undefined читает с начала. */
+ * (сервер нормализует пустые сам; created — серверная ось «свежие сверху»,
+ * #847), cursor — keyset-продолжение прошлого ответа, undefined читает
+ * с начала. */
 async function fetchContactsPage(params: {
-  propertyId?: string;
+  propertyId?: string | null;
   search?: string;
-  sort?: ContactBookSort;
+  sort?: ContactBookSort | 'created';
   order?: ContactBookOrder;
   cursor?: string;
 }): Promise<ContactsPageData> {
@@ -111,21 +134,41 @@ async function fetchContactsPage(params: {
   };
 }
 
-/** Конфиг keyset-обхода плоской книги (#600) — общее горло useContactBook
- * и прогрева хабов #626: один ключ, один fetch, одно правило продолжения —
- * прогрев не может разъехаться с экраном. */
+/** Конфиг keyset-обхода списка контактов (#600) — общее горло useContacts,
+ * useContactBook и прогрева хабов #626: один ключ, один fetch, одно правило
+ * продолжения — прогрев не может разъехаться с экраном. propertyId — срез
+ * объекта (null/undefined — плоская книга), search — серверный фильтр,
+ * sort/order — серверная ось и направление ('created'desc — пикер арендатора,
+ * #847). */
+export function contactsListQuery({
+  propertyId = null,
+  search,
+  sort,
+  order,
+}: {
+  readonly propertyId?: string | null;
+  readonly search: string;
+  readonly sort: ContactBookSort | 'created';
+  readonly order: ContactBookOrder;
+}): ContactsListQueryConfig {
+  return {
+    queryKey: contactKeys.list(propertyId, search, sort, order),
+    queryFn: ({ pageParam }: { pageParam?: string }) =>
+      fetchContactsPage({ propertyId, search, sort, order, cursor: pageParam }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: keysetNextPageParam,
+  };
+}
+
+/** Конфиг keyset-обхода плоской книги (#600) — частный случай
+ * contactsListQuery для потребителей без среза объекта (useContactBook,
+ * прогрев хабов #626). */
 export function contactBookQuery(
   search = '',
   sort: ContactBookSort = 'name',
   order: ContactBookOrder = 'asc',
-) {
-  return {
-    queryKey: contactKeys.list(null, search, sort, order),
-    queryFn: ({ pageParam }: { pageParam?: string }) =>
-      fetchContactsPage({ search, sort, order, cursor: pageParam }),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: keysetNextPageParam,
-  };
+): ContactsListQueryConfig {
+  return contactsListQuery({ search, sort, order });
 }
 
 /**

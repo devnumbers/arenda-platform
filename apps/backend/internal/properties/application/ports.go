@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	accessdomain "github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
@@ -160,12 +161,17 @@ type RentalDeletionGuard interface {
 // or the billing auto-archive): the owner is never a member row of their own
 // object, so the per-property entries above do not visit them as a recipient —
 // this per-recipient entry reactivates the owner's own suspended shared queue
-// FIFO. See issue #158 (T4).
+// FIFO. The recoveries return the reactivated membership rows — the caller
+// may collect their access pairs for the realtime dispatch (карта #714,
+// #716; ADR 0062). EnforceOnUnarchiveForProperty returns the memberships it
+// suspended — the mirror image of the recoveries: a re-entered pool suspends
+// the over-limit legs, and the suspended legs dirty their objects'
+// participants views the same way. See issue #158 (T4).
 type RecipientSlotPolicy interface {
-	RecoverSuspendedForProperty(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) error
-	EnforceOnUnarchiveForProperty(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) error
-	RecoverAfterPropertyDelete(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) error
-	RecoverSuspended(ctx context.Context, tx transaction.Tx, recipientID uuid.UUID) error
+	RecoverSuspendedForProperty(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) ([]accessdomain.Membership, error)
+	EnforceOnUnarchiveForProperty(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) ([]accessdomain.Membership, error)
+	RecoverAfterPropertyDelete(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) ([]accessdomain.Membership, error)
+	RecoverSuspended(ctx context.Context, tx transaction.Tx, recipientID uuid.UUID) ([]accessdomain.Membership, error)
 }
 
 // SharedMembersDeleteMailer bridges the property deletion flow to the access

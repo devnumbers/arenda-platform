@@ -9,11 +9,7 @@ export const metadata: Metadata = {
   title: 'Создать задачу — Рентли',
 };
 
-type TaskCreateRoutePageProps = {
-  params: Promise<{ id: string }>;
-};
-
-export default async function TaskCreateRoutePage({ params }: TaskCreateRoutePageProps) {
+export default async function TaskCreateRoutePage({ params }: PageProps<'/properties/[id]/tasks/new'>) {
   const { id } = await params;
 
   return <TaskCreateScreen initialPropertyId={id} />;

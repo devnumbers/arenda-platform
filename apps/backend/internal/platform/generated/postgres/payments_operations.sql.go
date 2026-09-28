@@ -72,6 +72,64 @@ func (q *Queries) CountOverdueOperationsByPayment(ctx context.Context, arg Count
 	return column_1, err
 }
 
+const countPaidAndOverdueByPaymentIDs = `-- name: CountPaidAndOverdueByPaymentIDs :many
+SELECT payment_id,
+       COUNT(*) FILTER (WHERE status = 'paid') AS paid_count,
+       COUNT(*) FILTER (WHERE status = 'planned' AND date < $1) AS overdue_count
+FROM operations
+WHERE owner_id = $2
+  AND property_id = $3
+  AND payment_id = ANY($4::uuid[])
+  AND status IN ('paid', 'planned')
+GROUP BY payment_id
+`
+
+type CountPaidAndOverdueByPaymentIDsParams struct {
+	Today      pgtype.Date   `json:"today"`
+	Owner      pgtype.UUID   `json:"owner"`
+	Property   pgtype.UUID   `json:"property"`
+	PaymentIds []pgtype.UUID `json:"payment_ids"`
+}
+
+type CountPaidAndOverdueByPaymentIDsRow struct {
+	PaymentID    pgtype.UUID `json:"payment_id"`
+	PaidCount    int64       `json:"paid_count"`
+	OverdueCount int64       `json:"overdue_count"`
+}
+
+// The progress counters of the listed rules in one batched read (ticket
+// #845): the rentals list's «N из M» / «Просрочено N месяцев» — the same
+// paid and overdue predicates the per-payment counts encode, split by
+// COUNT FILTER over one GROUP BY instead of a query pair per rule. A rule
+// with no matching operations yields no row — its zeros default in the
+// application. Cancelled tombstones never count; the nested
+// payment→property path is enforced in the WHERE clause. An empty id list
+// never reaches the query (the ListRentalManagedPaymentIDs precedent).
+func (q *Queries) CountPaidAndOverdueByPaymentIDs(ctx context.Context, arg CountPaidAndOverdueByPaymentIDsParams) ([]CountPaidAndOverdueByPaymentIDsRow, error) {
+	rows, err := q.db.Query(ctx, countPaidAndOverdueByPaymentIDs,
+		arg.Today,
+		arg.Owner,
+		arg.Property,
+		arg.PaymentIds,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CountPaidAndOverdueByPaymentIDsRow{}
+	for rows.Next() {
+		var i CountPaidAndOverdueByPaymentIDsRow
+		if err := rows.Scan(&i.PaymentID, &i.PaidCount, &i.OverdueCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const countPaidOperationsByPayment = `-- name: CountPaidOperationsByPayment :one
 SELECT COUNT(*)::bigint
 FROM operations

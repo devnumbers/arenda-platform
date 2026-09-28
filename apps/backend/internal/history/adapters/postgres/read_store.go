@@ -2,7 +2,7 @@ package postgres
 
 // The action journal's reading store (карта #704, тикет #708, ADR 0061 §7):
 // the feed page, the filter-sheet participants and objects. The visibility
-// predicate lives in the SQL (actor_can_read_history, 000137) — rows outside
+// predicate lives in the SQL (actor_can_read_property, 000142) — rows outside
 // the reader's scope never leave the database; this adapter only marshals
 // the jsonb columns back and composes the participants' display names by the
 // access canon (DisplayNameOf: «Имя Фамилия», иначе маскированный телефон —
@@ -55,9 +55,15 @@ func (s *ReadStore) List(ctx context.Context, actor uuid.UUID, q application.Jou
 		ActorIds:    joinUUIDs(q.ActorIDs),
 		Kinds:       joinStrings(kindStrings(q.Kinds)),
 		BaseActions: joinStrings(baseActionStrings(q.BaseActions)),
-		QRaw:        q.Search,
-		QTrgm:       escapeLikePattern(q.Search),
-		PageLimit:   shared.ToInt32Clamped(q.Limit),
+		// Поиск в двух ногах предиката: QRaw — prefix-FTS, QTrgm — ILIKE-trgm
+		// (эскейп метасимволов, ESCAPE '\', — общий pgconv.EscapeLikePattern,
+		// прежняя локальная «canon»-копия снесена); trim q сделал сервис
+		// (sanitizeSearch).
+		QRaw:  q.Search,
+		QTrgm: pgconv.EscapeLikePattern(q.Search),
+		// Сервис гарантирует 1..application.FeedMaxLimit (гвард List выше) —
+		// сужение int→int32 ограничено этим контрактом.
+		PageLimit: toPageLimit(q.Limit),
 	}
 	if q.DateFrom != nil {
 		params.DateFrom = pgtype.Timestamptz{Time: *q.DateFrom, Valid: true}
@@ -102,10 +108,12 @@ func (s *ReadStore) listAfter(ctx context.Context, actor uuid.UUID, q applicatio
 		Kinds:       joinStrings(kindStrings(q.Kinds)),
 		BaseActions: joinStrings(baseActionStrings(q.BaseActions)),
 		QRaw:        q.Search,
-		QTrgm:       escapeLikePattern(q.Search),
+		QTrgm:       pgconv.EscapeLikePattern(q.Search),
 		AfterTs:     pgtype.Timestamptz{Time: q.After.CreatedAt, Valid: true},
 		AfterID:     pgconv.UUIDToPgtype(q.After.ID),
-		PageLimit:   shared.ToInt32Clamped(q.Limit),
+		// Сервис гарантирует 1..application.FeedMaxLimit (гвард List выше) —
+		// сужение int→int32 ограничено этим контрактом.
+		PageLimit: toPageLimit(q.Limit),
 	}
 	if q.DateFrom != nil {
 		params.DateFrom = pgtype.Timestamptz{Time: *q.DateFrom, Valid: true}
@@ -251,12 +259,9 @@ func joinUUIDs(ids []uuid.UUID) string {
 	return strings.Join(parts, ",")
 }
 
-// likePatternEscaper and escapeLikePattern are the searches' canon (the
-// payments/contacts/properties stores carry the same local helper): the
-// application hands the raw trimmed query, the store owns the ILIKE
-// mechanics (ESCAPE '\').
-var likePatternEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
-
-func escapeLikePattern(q string) string {
-	return likePatternEscaper.Replace(q)
+// toPageLimit сужает page-limit фида до int32 SQL-параметра: сервис
+// гарантирует 1..application.FeedMaxLimit (гвард List выше), сечение —
+// санкционированный shared.ToInt32Clamped (clamp к границам int32).
+func toPageLimit(limit int) int32 {
+	return shared.ToInt32Clamped(limit)
 }

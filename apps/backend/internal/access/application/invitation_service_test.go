@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	realtimetest "github.com/nambers/arenda-planform/apps/backend/internal/realtime/realtimetest"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
@@ -224,8 +225,11 @@ type invitationFixture struct {
 	mailer      *fakeAccessMailer
 	clk         *fixedClock
 	limiter     *fakeRecipientLimiter
-	access      *AccessService
-	svc         *InvitationService
+	// Realtime is the recording carrier the access service dispatches its
+	// frames through — the realtime seam's test double (карта #714, #716).
+	realtime *realtimetest.RecordingPublisher
+	access   *AccessService
+	svc      *InvitationService
 }
 
 func newInvitationFixture() *invitationFixture {
@@ -243,8 +247,10 @@ func newInvitationFixture() *invitationFixture {
 	// invite email only, no event publication is part of them.
 	coordinator := NewSlotCoordinator(repo, owners, limiter, newFakeOwnedProps(),
 		nil, auditapp.Noop{}, noopBeginner{}, nil, nil)
+	realtime := &realtimetest.RecordingPublisher{}
 	access := NewAccessService(repo, owners, statuses, lookup, policy, coordinator, nil,
 		newTestFactory(repo, invitations, auditapp.Noop{}), nil)
+	access.SetRealtimePublisher(realtime)
 	svc := NewInvitationService(access, repo, invitations, owners, statuses, lookup, policy,
 		coordinator, mailer, nil, fakeTitles(testNevskyTitle),
 		newTestFactory(repo, invitations, auditapp.Noop{}), clk, nil, emails)
@@ -258,6 +264,7 @@ func newInvitationFixture() *invitationFixture {
 		mailer:      mailer,
 		clk:         clk,
 		limiter:     limiter,
+		realtime:    realtime,
 		access:      access,
 		svc:         svc,
 	}

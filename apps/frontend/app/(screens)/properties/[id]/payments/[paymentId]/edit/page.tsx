@@ -10,11 +10,7 @@ export const metadata: Metadata = {
   title: 'Редактирование платежа — Рентли',
 };
 
-type PaymentEditRoutePageProps = {
-  params: Promise<{ id: string; paymentId: string }>;
-};
-
-export default async function PaymentEditRoutePage({ params }: PaymentEditRoutePageProps) {
+export default async function PaymentEditRoutePage({ params }: PageProps<'/properties/[id]/payments/[paymentId]/edit'>) {
   const { id, paymentId } = await params;
 
   return <PaymentEditScreen propertyId={id} paymentId={paymentId} />;

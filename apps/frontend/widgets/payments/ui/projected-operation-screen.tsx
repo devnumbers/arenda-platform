@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
-import { clientTodayIso, formatDayMonth, type IsoDate } from '@/entities/payment';
+import { formatDayMonth, type IsoDate } from '@/entities/payment';
+import { dateToIsoLocal } from '@/shared/lib/calendar';
 import { useProperty } from '@/features/properties';
 import { projectedOperation, usePayment } from '@/features/payments';
 import { Button, IconButton, PageContent, TopNav, TopNavTitle } from '@/shared/ui/design';
@@ -41,7 +42,7 @@ export function ProjectedOperationScreen({
   const loading = paymentQuery.isPending || propertyQuery.isPending;
   const failed = paymentQuery.isError || propertyQuery.isError;
 
-  const today = clientTodayIso();
+  const today = dateToIsoLocal(new Date());
   const operation =
     payment !== undefined ? projectedOperation(payment, date, today) : undefined;
 

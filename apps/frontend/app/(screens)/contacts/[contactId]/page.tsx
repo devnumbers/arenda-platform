@@ -7,11 +7,7 @@ export const metadata: Metadata = {
   title: 'Контакт — Рентли',
 };
 
-type ContactRoutePageProps = {
-  params: Promise<{ contactId: string }>;
-};
-
-export default async function ContactRoutePage({ params }: ContactRoutePageProps) {
+export default async function ContactRoutePage({ params }: PageProps<'/contacts/[contactId]'>) {
   const { contactId } = await params;
 
   return <ContactDetailScreen contactId={contactId} />;

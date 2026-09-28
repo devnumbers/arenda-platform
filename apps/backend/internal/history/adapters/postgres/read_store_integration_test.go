@@ -3,7 +3,7 @@
 package postgres_test
 
 // The integration suite of the journal's reading side (карта #704, тикет
-// #708, ADR 0061 §7): the SQL visibility (actor_can_read_history, 000137) —
+// #708, ADR 0061 §7): the SQL visibility (actor_can_read_property, 000142) —
 // owner, active members (viewer included), suspended and revoked excluded,
 // the archive visible to the owner only — the bidirectional keyset walk
 // (before/after, no duplicates, no drops), the filters, the always-OR search
@@ -419,35 +419,38 @@ func walkAfterPages(
 		if err != nil {
 			t.Fatalf("after page %d: %v", pages, err)
 		}
-		if len(page.Items) == 0 {
-			if page.NextCursor != "" || page.PrevCursor != "" {
-				t.Fatal("an empty after-page must carry neither cursor")
-			}
-			break
-		}
-		assertAfterPageShape(t, page, pages, seeded, got)
-		pages++
-		if pages > burst/pageSize+1 {
-			t.Fatal("the after-walk did not end within the burst's pages")
-		}
-		if len(page.Items) < pageSize {
+		if assertAfterPage(t, page, seeded, got, pages, pageSize) {
 			break
 		}
 		if page.PrevCursor == "" {
 			t.Fatal("a full after-page must carry prev_cursor")
+		}
+		pages++
+		if pages > burst/pageSize+1 {
+			t.Fatal("the after-walk did not end within the burst's pages")
 		}
 		after = page.PrevCursor
 	}
 	return got
 }
 
-// assertAfterPageShape checks one after-page: the (created_at, id) DESC
-// order, burst-only membership without duplicates — collecting fresh ids
-// into got (граница gocognit у walkAfterPages).
-func assertAfterPageShape(
-	t *testing.T, page historyapp.FeedPage, pages int, seeded, got map[uuid.UUID]bool,
-) {
+// assertAfterPage verifies one after-walk page: the empty page carries
+// neither cursor, the (created_at, id) DESC order holds, every row is a
+// first-seen burst row. Returns true when the walk must end (an empty page
+// or a short one).
+func assertAfterPage(
+	t *testing.T,
+	page historyapp.FeedPage,
+	seeded, got map[uuid.UUID]bool,
+	pages, pageSize int,
+) bool {
 	t.Helper()
+	if len(page.Items) == 0 {
+		if page.NextCursor != "" || page.PrevCursor != "" {
+			t.Fatal("an empty after-page must carry neither cursor")
+		}
+		return true
+	}
 	for i := 1; i < len(page.Items); i++ {
 		if page.Items[i].CreatedAt.After(page.Items[i-1].CreatedAt) {
 			t.Fatal("an after-page must keep the (created_at, id) DESC order")
@@ -462,6 +465,7 @@ func assertAfterPageShape(
 		}
 		got[item.ID] = true
 	}
+	return len(page.Items) < pageSize
 }
 
 func TestReadStore_Filters(t *testing.T) {
@@ -730,7 +734,7 @@ func TestReadStore_SearchPredicate(t *testing.T) {
 	t.Run("инъекции", func(t *testing.T) {
 		t.Parallel()
 		// Не роняют запрос и не превращаются в wildcard: '%' и '_' ищутся
-		// литерально (escapeLikePattern + ESCAPE '\').
+		// литерально (pgconv.EscapeLikePattern + ESCAPE '\').
 		searchPredicateCount(t, search, "'", 0)
 		searchPredicateCount(t, search, "'; --", 0)
 		searchPredicateCount(t, search, "_", 0)

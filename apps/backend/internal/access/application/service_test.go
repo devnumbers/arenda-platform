@@ -199,6 +199,47 @@ func TestAccessService_LeavePropertyAuditActorRole(t *testing.T) {
 	}
 }
 
+// TestAccessService_SuspendedLeaveCarriesTheRealRole pins the suspended
+// self-exit attribution in the audit half (issue #859, the journal twin
+// TestHistory_SuspendedLeaveCarriesTheRealRole): the policy resolves a
+// suspended member to the no-capability «suspended» verdict, but the audit
+// row still attributes the leaver to the membership's real role — suspension
+// hides the object, it does not rewrite who held which role.
+func TestAccessService_SuspendedLeaveCarriesTheRealRole(t *testing.T) {
+	t.Parallel()
+	owner := uuid.Must(uuid.NewV7())
+	member := uuid.Must(uuid.NewV7())
+	property := uuid.Must(uuid.NewV7())
+
+	repo := newMemRepo()
+	resolver := staticResolver{property: owner}
+	policy := NewMembershipPolicy(resolver, repo)
+	audit := &fakeAuditRecorder{}
+	svc := NewAccessService(repo, resolver, nil, stubLookup{}, policy, nil, nil, newTestFactory(repo, &memInvitationsRepo{}, audit), nil)
+
+	if _, err := svc.AddMember(t.Context(), owner, property, member, domain.RoleViewer); err != nil {
+		t.Fatalf("AddMember: %v", err)
+	}
+	if err := repo.Suspend(t.Context(), repo.rows[0].ID, property); err != nil {
+		t.Fatalf("Suspend: %v", err)
+	}
+	audit.entries = nil
+
+	if err := svc.LeaveProperty(t.Context(), member, property); err != nil {
+		t.Fatalf("LeaveProperty: %v", err)
+	}
+	if len(audit.entries) != 1 {
+		t.Fatalf("audit entries: want 1, got %d", len(audit.entries))
+	}
+	entry := audit.entries[0]
+	if entry.Action != auditdomain.ActionPropertyMemberLeft {
+		t.Fatalf("audit action: want %q, got %q", auditdomain.ActionPropertyMemberLeft, entry.Action)
+	}
+	if entry.ActorRole != auditdomain.ActorRoleViewer {
+		t.Errorf("audit actor role: want viewer — the membership's real role, not the owner fallback, got %q", entry.ActorRole)
+	}
+}
+
 // TestAccessService_ManageAuditActorRole verifies that member-management
 // actions performed by a full-access member are attributed with the full
 // role, while the owner's own actions stay attributed as owner (issue #166

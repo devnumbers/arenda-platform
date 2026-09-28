@@ -56,17 +56,9 @@ func newAccessPublisherHarness() *accessPublisherHarness {
 	}
 }
 
-// The shared id fixture of the table tests: a property, the two users of an
-// access transition and the membership the transition landed on.
-var (
-	testAccessPropertyID   = uuid.MustParse("00000000-0000-7000-8000-00000000a001")
-	testAccessOwnerID      = uuid.MustParse("00000000-0000-7000-8000-00000000a002")
-	testAccessMemberID     = uuid.MustParse("00000000-0000-7000-8000-00000000a003")
-	testAccessMembershipID = uuid.MustParse("00000000-0000-7000-8000-00000000a004")
-)
-
-// accessIDs is the shared id fixture of the tests: a property, the two users
-// of an access transition and the membership the transition landed on.
+// accessIDs is the shared id fixture of the tests — table-driven and plain
+// alike: a property, the two users of an access transition and the membership
+// the transition landed on, spelled once as the stable …a001–…a004 literals.
 type accessIDs struct {
 	property   uuid.UUID
 	owner      uuid.UUID
@@ -198,6 +190,7 @@ func TestNotifyInvitationActivatedSuspended(t *testing.T) {
 func TestNotifyMembershipSuspendedCopy(t *testing.T) {
 	t.Parallel()
 
+	ids := newAccessIDs()
 	for _, tc := range []struct {
 		name         string
 		actorID      uuid.UUID
@@ -214,7 +207,7 @@ func TestNotifyMembershipSuspendedCopy(t *testing.T) {
 		},
 		{
 			name:         "human actor names the copy and the card",
-			actorID:      testAccessOwnerID,
+			actorID:      ids.owner,
 			actorProfile: "Пётр Петров",
 			actorEmail:   "owner@example.com",
 			wantBody:     "Пётр Петров приостановил ваш доступ к объекту «Дом на Рублёвке». Данные объекта скрыты, пока доступ приостановлен",
@@ -224,14 +217,14 @@ func TestNotifyMembershipSuspendedCopy(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			h := newAccessPublisherHarness()
-			h.plantProperty(testAccessPropertyID, "Дом на Рублёвке", "")
+			h.plantProperty(ids.property, "Дом на Рублёвке", "")
 			if tc.actorProfile != "" {
 				h.plantUser(tc.actorID, tc.actorProfile, tc.actorEmail)
 			}
 
 			suspendedAt := time.Date(2026, 9, 20, 15, 30, 0, 0, time.UTC)
 			err := h.pub.NotifyMembershipSuspended(
-				t.Context(), testAccessMembershipID, testAccessPropertyID, testAccessMemberID,
+				t.Context(), ids.membership, ids.property, ids.member,
 				tc.actorID, suspendedAt,
 			)
 			require.NoError(t, err)
@@ -239,12 +232,12 @@ func TestNotifyMembershipSuspendedCopy(t *testing.T) {
 
 			n := h.feed.inserted[0]
 			assert.Equal(t, domain.EventAccessPaused, n.EventType)
-			assert.Equal(t, testAccessMemberID, n.UserID)
+			assert.Equal(t, ids.member, n.UserID)
 			assert.Equal(t, "Доступ приостановлен", n.Title)
 			assert.Equal(t, tc.wantBody, n.Body)
 			assert.Equal(t, "Дом на Рублёвке", n.ContextLabel)
 			assert.Equal(t,
-				domain.DedupKey("access_paused:"+testAccessMembershipID.String()+":"+unixDedupStamp(suspendedAt)),
+				domain.DedupKey("access_paused:"+ids.membership.String()+":"+unixDedupStamp(suspendedAt)),
 				n.DedupKey)
 			if tc.wantActorRef {
 				require.NotNil(t, n.Payload.Actor)
@@ -430,14 +423,15 @@ func TestNotifyInvitationActivatedDedupStable(t *testing.T) {
 	t.Parallel()
 
 	h := newAccessPublisherHarness()
-	h.plantProperty(testAccessPropertyID, "Дом на Рублёвке", "")
-	h.plantUser(testAccessOwnerID, "Пётр Петров", "inviter@example.com")
-	h.plantUser(testAccessMemberID, "Иван Иванов", "invitee@example.com")
+	ids := newAccessIDs()
+	h.plantProperty(ids.property, "Дом на Рублёвке", "")
+	h.plantUser(ids.owner, "Пётр Петров", "inviter@example.com")
+	h.plantUser(ids.member, "Иван Иванов", "invitee@example.com")
 
 	for range 2 {
 		err := h.pub.NotifyInvitationActivated(
-			t.Context(), testAccessMembershipID, testAccessPropertyID,
-			testAccessOwnerID, testAccessMemberID, false, time.Date(2026, 9, 20, 12, 0, 0, 0, time.UTC),
+			t.Context(), ids.membership, ids.property,
+			ids.owner, ids.member, false, time.Date(2026, 9, 20, 12, 0, 0, 0, time.UTC),
 		)
 		require.NoError(t, err)
 	}

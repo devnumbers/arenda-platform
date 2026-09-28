@@ -1,6 +1,7 @@
 export {
   useHistoryFeed,
   useHistoryFilters,
+  lastLiveMergeAt,
 } from './api/hooks';
 export { groupHistoryByDay, type HistoryActorGroup } from './lib/feed-groups';
 export {

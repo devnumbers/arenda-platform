@@ -6,7 +6,7 @@ import {
   formatOverdueDays,
   PaymentRowButton,
 } from '@/entities/payment';
-import { EmptyState, Skeleton, SkeletonListRow, skeletonRowWidths } from '@/shared/ui/design';
+import { CircleIcon, circleIconRing, EmptyState, Skeleton, SkeletonListRow, skeletonRowWidths } from '@/shared/ui/design';
 import type { GlobalPayment, IsoDate, Payment, PaymentOperation } from '@/entities/payment';
 import { CategoryIcon, categoryStyle, type CategoryIconSurface } from '@/features/payment-categories';
 import { daysOverdue } from '../lib/overdue-days';
@@ -15,7 +15,8 @@ import { paymentRowSubtitle } from '../lib/payment-row-subtitle';
 /**
  * Иконка категории строки правила глобальных платежей (#575): красная
  * точка при накопленной просрочке правила (overdueOperationCount фида),
- * галочка пометки — в правке избранного (#579). Поверхность канта: white —
+ * галочка выделения для удаления — в правке избранного (#579 — пометка,
+ * #814 — выделение зажатием/кликом). Поверхность канта: white —
  * строки на белом, muted — карточки на серых лентах главного экрана.
  */
 export function GlobalPaymentRuleIcon({
@@ -59,7 +60,7 @@ export function GlobalCardIcon({
     <span
       className={cn(
         'relative flex h-11 w-11 shrink-0 items-center justify-center rounded-pill',
-        'shadow-[0_0_0_2.5px_var(--dl-surface-muted)]',
+        circleIconRing.muted,
         variant === 'primary' ? 'bg-primary' : 'bg-surface',
       )}
     >
@@ -73,7 +74,10 @@ export function GlobalCardIcon({
       </span>
       {hasNotification && (
         <span
-          className="absolute left-0 top-0 h-2.5 w-2.5 rounded-full bg-danger shadow-[0_0_0_2.5px_var(--dl-surface-muted)]"
+          className={cn(
+            'absolute left-0 top-0 h-2.5 w-2.5 rounded-full bg-danger',
+            circleIconRing.muted,
+          )}
           aria-hidden
         />
       )}
@@ -95,21 +99,17 @@ export function PaymentObjectAvatar({
   readonly surface: 'card' | 'row';
 }): JSX.Element {
   return (
-    <span
+    <CircleIcon
+      variant={surface === 'card' ? 'muted' : 'white'}
       aria-hidden
-      className={cn(
-        'relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full',
-        surface === 'card'
-          ? 'bg-surface shadow-[0_0_0_2.5px_var(--dl-surface-muted)]'
-          : 'bg-surface-muted shadow-[0_0_0_2.5px_var(--dl-surface)]',
-      )}
+      className="relative overflow-hidden rounded-full"
     >
       {photoUrl !== null ? (
         <img src={photoUrl} alt="" className="h-full w-full object-cover" />
       ) : (
         <BoldHome className="h-6 w-6 text-[#D3D7D9]" />
       )}
-    </span>
+    </CircleIcon>
   );
 }
 

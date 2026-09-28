@@ -11,6 +11,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
+	realtimetest "github.com/nambers/arenda-planform/apps/backend/internal/realtime/realtimetest"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -59,8 +60,13 @@ type mutationFixture struct {
 	clk         *fixedClock
 	limiter     *fakeRecipientLimiter
 	audit       *capturingRecorder
-	owner       uuid.UUID
-	svc         *ParticipantMutationService
+	// Realtime is the recording carrier both services dispatch their frames
+	// through — the realtime seam's test double (карта #714, #716); the
+	// participant service publishes through the access service's carrier.
+	realtime *realtimetest.RecordingPublisher
+	owner    uuid.UUID
+	svc      *ParticipantMutationService
+	access   *AccessService
 }
 
 func newMutationFixture() *mutationFixture {
@@ -79,8 +85,10 @@ func newMutationFixture() *mutationFixture {
 	audit := &capturingRecorder{}
 	coordinator := NewSlotCoordinator(repo, owners, limiter, newFakeOwnedProps(),
 		events, audit, noopBeginner{}, clk, nil)
+	realtime := &realtimetest.RecordingPublisher{}
 	access := NewAccessService(repo, owners, statuses, lookup, policy, coordinator,
 		events, newTestFactory(repo, invitations, audit), nil)
+	access.SetRealtimePublisher(realtime)
 	svc := NewParticipantMutationService(access, owners, statuses, lookup, emails, policy,
 		coordinator, mailer, events, titles, newTestFactory(repo, invitations, audit), clk, nil)
 	return &mutationFixture{
@@ -96,8 +104,10 @@ func newMutationFixture() *mutationFixture {
 		clk:         clk,
 		limiter:     limiter,
 		audit:       audit,
+		realtime:    realtime,
 		owner:       uuid.Must(uuid.NewV7()),
 		svc:         svc,
+		access:      access,
 	}
 }
 

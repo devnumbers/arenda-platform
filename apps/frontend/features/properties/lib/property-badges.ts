@@ -1,7 +1,7 @@
 import type { IsoDate } from '@/shared/lib/calendar';
 import { fullMonthsBetween } from '@/shared/lib/calendar';
 import { formatDayMonthDotted } from '@/shared/lib/date-format';
-import { pluralize } from '@/shared/lib/pluralize';
+import { monthsWord } from '@/shared/lib/months-word';
 import type { Property } from '@/entities/property';
 
 /**
@@ -41,7 +41,7 @@ export function rentalMonthsLeftLabel(
   if (months === 1) {
     return 'Остался 1 месяц аренды';
   }
-  return `Осталось ${months} ${pluralize(months, 'месяц', 'месяца', 'месяцев')} аренды`;
+  return `Осталось ${months} ${monthsWord(months)} аренды`;
 }
 
 /** Арендный бейдж по приоритету резолюции #584; без аренды или у активной

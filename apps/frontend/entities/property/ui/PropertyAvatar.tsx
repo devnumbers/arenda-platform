@@ -1,6 +1,7 @@
 import type { JSX } from 'react';
 import { cn } from '@/shared/lib/cn';
 import { BoldHome, NotificationDot } from '@/shared/assets/icons';
+import { circleIconPair } from '@/shared/ui/design';
 
 /**
  * Круглый аватар объекта (Figma Category Icon 651:5923, тикет #586): фото
@@ -38,8 +39,10 @@ const SURFACE_BOX: Record<NonNullable<PropertyAvatarProps['surface']>, string> =
 };
 
 const SURFACE_CIRCLE: Record<NonNullable<PropertyAvatarProps['surface']>, string> = {
-  card: 'bg-surface shadow-[0_0_0_2.5px_var(--dl-surface-muted)]',
-  row: 'bg-surface-muted shadow-[0_0_0_2.5px_var(--dl-surface)]',
+  // Кантовые поверхности — канон «круг 44 с кольцом 2.5px» (circleIconPair):
+  // card — белый круг на серой карточке, row — серый круг на белой странице.
+  card: circleIconPair.muted,
+  row: circleIconPair.white,
   hero: 'bg-surface-muted',
   feed: 'bg-surface-muted',
   filter: 'bg-surface',

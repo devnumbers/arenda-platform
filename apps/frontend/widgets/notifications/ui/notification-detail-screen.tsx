@@ -21,6 +21,7 @@ import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
 import {
   Button,
+  CircleIcon,
   ConfirmDialog,
   IconButton,
   PageContent,
@@ -238,9 +239,7 @@ function NotificationEntityCardBody({
 }): JSX.Element {
   return (
     <>
-      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill bg-surface-muted ring-[2.5px] ring-white">
-        {icon}
-      </div>
+      <CircleIcon variant="white">{icon}</CircleIcon>
       <div className="min-w-0 flex-1">
         <p className="truncate text-base font-medium leading-[18px] text-content">{name}</p>
         {detail && (

@@ -409,13 +409,20 @@ func TestSlotCoordinator_RecoverSuspended_FIFORecoversEarliest(t *testing.T) {
 	f.addSuspendedMember(t, m2, p2, owner, recipient, t2New, t2New)
 	f.limiter.set(recipient, 1) // Used=0, freeSlots=1 → recover 1.
 
-	if err := f.coordinator.RecoverSuspended(context.Background(), noopTx{}, recipient); err != nil {
+	recovered, err := f.coordinator.RecoverSuspended(context.Background(), noopTx{}, recipient)
+	if err != nil {
 		t.Fatalf("RecoverSuspended: %v", err)
 	}
 
 	// M1 (earliest) reactivated, m2 stays suspended.
 	f.assertStatus(t, m1, p1, domain.MemberStatusActive, "earliest suspended should be reactivated (FIFO)")
 	f.assertStatus(t, m2, p2, domain.MemberStatusSuspended, "later suspended should stay suspended")
+
+	// The reactivated rows come back in FIFO order — the caller collects
+	// their access pairs from them.
+	if len(recovered) != 1 || recovered[0].ID != m1 || recovered[0].PropertyID != p1 {
+		t.Errorf("recovered = %+v, want the earliest membership %s on %s", recovered, m1, p1)
+	}
 
 	f.assertOneActiveOneSuspended(t, recipient)
 }
@@ -438,8 +445,12 @@ func TestSlotCoordinator_RecoverSuspended_NoFreeSlotRecoverNothing(t *testing.T)
 	f.addSuspendedMember(t, mSuspended, pSuspended, owner, recipient, t2New, t2New)
 	f.limiter.set(recipient, 1) // Used=1, freeSlots=0.
 
-	if err := f.coordinator.RecoverSuspended(context.Background(), noopTx{}, recipient); err != nil {
+	recovered, err := f.coordinator.RecoverSuspended(context.Background(), noopTx{}, recipient)
+	if err != nil {
 		t.Fatalf("RecoverSuspended: %v", err)
+	}
+	if len(recovered) != 0 {
+		t.Errorf("recovered = %+v, want none (no free slot)", recovered)
 	}
 
 	f.assertStatus(t, mSuspended, pSuspended, domain.MemberStatusSuspended, "suspended should stay suspended (no free slot)")
@@ -593,7 +604,7 @@ func TestSlotCoordinator_RecoverSuspendedForProperty_PerRecipientRecovery(t *tes
 	f.limiter.set(r1, 1)
 	f.limiter.set(r2, 1)
 
-	if err := f.coordinator.RecoverSuspendedForProperty(context.Background(), noopTx{}, pArchived); err != nil {
+	if _, err := f.coordinator.RecoverSuspendedForProperty(context.Background(), noopTx{}, pArchived); err != nil {
 		t.Fatalf("RecoverSuspendedForProperty: %v", err)
 	}
 
@@ -610,7 +621,7 @@ func TestSlotCoordinator_RecoverSuspendedForProperty_PerRecipientRecovery(t *tes
 	if err := f.repo.Delete(context.Background(), mArchivedR2, pArchived); err != nil {
 		t.Fatalf("Delete mArchivedR2: %v", err)
 	}
-	if err := f.coordinator.RecoverSuspendedForProperty(context.Background(), noopTx{}, pArchived); err != nil {
+	if _, err := f.coordinator.RecoverSuspendedForProperty(context.Background(), noopTx{}, pArchived); err != nil {
 		t.Fatalf("RecoverSuspendedForProperty (after free): %v", err)
 	}
 
@@ -620,7 +631,7 @@ func TestSlotCoordinator_RecoverSuspendedForProperty_PerRecipientRecovery(t *tes
 	// own RecoverSuspended, not the per-property entry point. Exercise that
 	// directly to assert the slot-freed outcome.
 	for _, r := range []uuid.UUID{r1, r2} {
-		if err := f.coordinator.RecoverSuspended(context.Background(), noopTx{}, r); err != nil {
+		if _, err := f.coordinator.RecoverSuspended(context.Background(), noopTx{}, r); err != nil {
 			t.Fatalf("RecoverSuspended(%s): %v", r, err)
 		}
 	}
@@ -646,7 +657,7 @@ func TestSlotCoordinator_RecoverAfterPropertyDelete_DropsAndRecovers(t *testing.
 	f.addSuspendedMember(t, mSuspended, pSuspended, owner, recipient, t2New, t2New)
 	f.limiter.set(recipient, 1)
 
-	if err := f.coordinator.RecoverAfterPropertyDelete(context.Background(), noopTx{}, pDeleted); err != nil {
+	if _, err := f.coordinator.RecoverAfterPropertyDelete(context.Background(), noopTx{}, pDeleted); err != nil {
 		t.Fatalf("RecoverAfterPropertyDelete: %v", err)
 	}
 
@@ -674,8 +685,14 @@ func TestSlotCoordinator_EnforceOnUnarchiveForProperty_SuspendsWhenNoSlot(t *tes
 	f.ownedProps.add(recipient, pOwn, t2New) // Own property occupies one slot.
 	f.limiter.set(recipient, 1)              // Pool=2 > limit=1 → suspend on unarchive.
 
-	if err := f.coordinator.EnforceOnUnarchiveForProperty(context.Background(), noopTx{}, pUnarchived); err != nil {
+	suspended, err := f.coordinator.EnforceOnUnarchiveForProperty(context.Background(), noopTx{}, pUnarchived)
+	if err != nil {
 		t.Fatalf("EnforceOnUnarchiveForProperty: %v", err)
+	}
+	// The suspended legs ride the return — the caller collects their access
+	// pairs for the realtime dispatch.
+	if len(suspended) != 1 || suspended[0].ID != mUnarchived {
+		t.Errorf("suspended = %v, want the unarchived membership %s", suspended, mUnarchived)
 	}
 
 	f.assertStatus(t, mUnarchived, pUnarchived, domain.MemberStatusSuspended, "unarchived member suspended when no free slot")
@@ -700,8 +717,13 @@ func TestSlotCoordinator_EnforceOnUnarchiveForProperty_StaysActiveAtLimit(t *tes
 	f.addActiveMember(t, mOther, pOther, owner, recipient, t2New)
 	f.limiter.set(recipient, 2) // Pool=2 == limit=2 → fits, stays active.
 
-	if err := f.coordinator.EnforceOnUnarchiveForProperty(context.Background(), noopTx{}, pUnarchived); err != nil {
+	suspended, err := f.coordinator.EnforceOnUnarchiveForProperty(context.Background(), noopTx{}, pUnarchived)
+	if err != nil {
 		t.Fatalf("EnforceOnUnarchiveForProperty: %v", err)
+	}
+	// Nothing suspended — nothing returned.
+	if len(suspended) != 0 {
+		t.Errorf("suspended = %v, want none at exactly the limit", suspended)
 	}
 
 	f.assertStatus(t, mUnarchived, pUnarchived, domain.MemberStatusActive, "unarchived member stays active at exactly the limit")
@@ -734,7 +756,7 @@ func TestSlotCoordinator_RecoverSuspended_RecipientFreesOwnSlot(t *testing.T) {
 	f.limiter.set(recipient, 1)              // Pool = 1 own, used = 1, freeSlots = 0.
 
 	// Sanity: with the own slot still occupied, recovery does nothing.
-	if err := f.coordinator.RecoverSuspended(context.Background(), noopTx{}, recipient); err != nil {
+	if _, err := f.coordinator.RecoverSuspended(context.Background(), noopTx{}, recipient); err != nil {
 		t.Fatalf("RecoverSuspended (slot still full): %v", err)
 	}
 	f.assertStatus(t, mShared, pShared, domain.MemberStatusSuspended, "stays suspended while own slot occupied")
@@ -743,7 +765,7 @@ func TestSlotCoordinator_RecoverSuspended_RecipientFreesOwnSlot(t *testing.T) {
 	// used drops to 0 and one slot frees.
 	f.ownedProps.byOwner[recipient] = nil
 
-	if err := f.coordinator.RecoverSuspended(context.Background(), noopTx{}, recipient); err != nil {
+	if _, err := f.coordinator.RecoverSuspended(context.Background(), noopTx{}, recipient); err != nil {
 		t.Fatalf("RecoverSuspended (slot freed): %v", err)
 	}
 	f.assertStatus(t, mShared, pShared, domain.MemberStatusActive, "suspended reactivated once own slot freed")

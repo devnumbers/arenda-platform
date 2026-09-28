@@ -1,7 +1,6 @@
 'use client';
 
 import type { JSX } from 'react';
-import { Tooltip } from '@heroui/react';
 import { Button, EmptyState } from '@/shared/ui/design';
 
 /**
@@ -42,10 +41,10 @@ export function PropertiesEmptyState({
       className="pt-6"
       action={
         canAdd === false && !isLoading ? (
-          <Tooltip>
-            <Tooltip.Trigger>{button}</Tooltip.Trigger>
-            <Tooltip.Content>Достигнут лимит объектов по тарифу</Tooltip.Content>
-          </Tooltip>
+          // Подсказка о лимите — нативный title на обёртке (HeroUI Tooltip
+          // снесён, #901): кнопка задизейблена и тап не ловит, подсказку
+          // показывает обёртка; смысл продублирован в aria-label кнопки.
+          <span title="Достигнут лимит объектов по тарифу">{button}</span>
         ) : (
           button
         )

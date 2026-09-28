@@ -11,6 +11,8 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/contacts/domain"
 	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
+	realtimeapp "github.com/nambers/arenda-planform/apps/backend/internal/realtime/application"
+	realtimedom "github.com/nambers/arenda-planform/apps/backend/internal/realtime/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
 
@@ -61,12 +63,75 @@ type UpdateContactCommand struct {
 // card is visible to the property's shared members (CanView) and editable by
 // them (CanEdit), the owner rules their whole book, and a card without a
 // property belongs to the owner's book alone. Every mutation records its
-// audit entry inside the same transaction (ADR 0020), a property-bound one
-// also its action journal row (ADR 0061); the context never carries the
-// card's PII.
+// audit entry inside the same transaction (ADR 0020), and also its action
+// journal row where the journal anchors one (ADR 0061 §3–§4); the context
+// never carries the card's PII.
 type ContactService struct {
 	txStoreFactory
 	policy sharedpolicy.Policy
+	// Realtime is the late-bound carrier the mutations' frames dispatch
+	// through after the commit (карта #714, #716; ADR 0062); nil keeps the
+	// pre-#716 silence.
+	realtime realtimeapp.Publisher
+}
+
+// SetRealtimePublisher late-binds the realtime carrier (карта #714, #716;
+// ADR 0062): the frames of the committed mutations dispatch through it —
+// the grace-events canon, best-effort, a broken carrier never fails the
+// mutation.
+func (s *ContactService) SetRealtimePublisher(p realtimeapp.Publisher) {
+	s.realtime = p
+}
+
+// publishChanged hands the committed card mutation's frames to the realtime
+// carrier (карта #714, #716; ADR 0062) — strictly post-commit, best-effort:
+// a rolled-back transaction dispatches nothing, a nil carrier keeps the
+// pre-#716 silence. The card's binding picks the pair (the owner-book card
+// dirties the owner's own book view); a journaled mutation piggybacks the
+// history pair — a written row is a history change for the object's feed.
+func (s *ContactService) publishChanged(ctx context.Context, actor uuid.UUID, propertyID *uuid.UUID, journaled bool) {
+	pair := realtimedom.InOwnerBook(realtimedom.EntityContacts)
+	var anchors []uuid.UUID
+	if propertyID != nil {
+		pair = realtimedom.On(realtimedom.EntityContacts, *propertyID)
+		if journaled {
+			anchors = append(anchors, *propertyID)
+		}
+	}
+	realtimeapp.Dispatch(ctx, s.realtime, actor, []realtimedom.Change{pair}, anchors...)
+}
+
+// publishMoved hands the committed card move's frames to the realtime
+// carrier (карта #714, #716): a move dirties both ends — the origin pair for
+// the leaving row, the destination pair (or the owner-book pair when the
+// card unbinds) for the arriving one. One dispatch carries both; the
+// carrier's per-call dedup collapses a same-object rewrite into one frame.
+// The journal rows anchor every end that got one (ADR 0061 §4, тикет #856:
+// the move pair, the one-ended bind/unbind), so the history pairs ride
+// there — the anchors stay duplicate-free, a same-binding update carries
+// its single end once.
+func (s *ContactService) publishMoved(
+	ctx context.Context, actor uuid.UUID, source, destination *uuid.UUID, journaled bool,
+) {
+	pairs := make([]realtimedom.Change, 0, 2)
+	var anchors []uuid.UUID
+	if source != nil {
+		pairs = append(pairs, realtimedom.On(realtimedom.EntityContacts, *source))
+		if journaled {
+			anchors = append(anchors, *source)
+		}
+	}
+	if destination != nil {
+		pairs = append(pairs, realtimedom.On(realtimedom.EntityContacts, *destination))
+		if journaled && (source == nil || *source != *destination) {
+			anchors = append(anchors, *destination)
+		}
+	} else {
+		// The card ended unbound: the owner's book view lost/holds the row —
+		// its null-property pair marks the change when no object pair exists.
+		pairs = append(pairs, realtimedom.InOwnerBook(realtimedom.EntityContacts))
+	}
+	realtimeapp.Dispatch(ctx, s.realtime, actor, pairs, anchors...)
 }
 
 // NewContactService builds the contact use case service over the shared
@@ -138,6 +203,7 @@ func (s *ContactService) CreateContact(
 	if err != nil {
 		return domain.Contact{}, err
 	}
+	s.publishChanged(ctx, actor, draft.PropertyID, draft.PropertyID != nil)
 	return created, nil
 }
 
@@ -168,7 +234,7 @@ func prepareListQuery(q *ListQuery) error {
 		return ErrInvalidInput
 	}
 	switch q.Sort {
-	case "", ListSortName, ListSortProperty:
+	case "", ListSortName, ListSortProperty, ListSortCreated:
 	default:
 		return ErrInvalidInput
 	}
@@ -266,6 +332,11 @@ func (s *ContactService) UpdateContact(
 	if len(fields) > 0 {
 		auditCtx["fields"] = fields
 	}
+	// The source binding is captured before the rebind: a move dirties both
+	// objects — the origin's card grid loses the row, the destination's gains
+	// it — and one post-commit dispatch carries both ends (карта #714, #716;
+	// ADR 0062 §3).
+	source := contact.PropertyID
 	var moved bool
 	if cmd.PropertyID != nil {
 		target, didMove, err := s.rebindContact(ctx, actor, contact, *cmd.PropertyID, auditCtx)
@@ -276,7 +347,6 @@ func (s *ContactService) UpdateContact(
 		moved = didMove
 	}
 	before := contact
-	oldFullName := contact.FullName()
 	if err := applyUpdate(&contact, cmd); err != nil {
 		return domain.Contact{}, err
 	}
@@ -285,6 +355,7 @@ func (s *ContactService) UpdateContact(
 	}
 
 	var stored domain.Contact
+	var journaled bool
 	err = s.runInTx(ctx, func(stores *txStores) error {
 		stored, err = stores.contacts.Update(ctx, contact)
 		if err != nil {
@@ -293,29 +364,67 @@ func (s *ContactService) UpdateContact(
 		if err := recordContactAudit(ctx, stores, actor, role, auditdomain.ActionContactUpdated, contact.ID, auditCtx); err != nil {
 			return err
 		}
-		// The row hangs on the card's final binding and records a change,
-		// not a no-op (ADR 0061 §3): a same-form PATCH without a move writes
-		// no row; a move between properties journals on the destination; an
-		// unbound card writes no row. A move or a detail-only edit (phone,
-		// note — contactChanged) may keep the ФИО unchanged: the row records
-		// the rebinding/card change, not a name delta, so the accepted old →
-		// new form repeats the same ФИО («X → X»). A dedicated binding
-		// wording stays a possible future walkthrough decision and is not
-		// accepted here — the ADR 0061 §4 dictionary gains no action id for
-		// it.
-		if stored.PropertyID != nil && (moved || contactChanged(before, stored)) {
-			if err := historyapp.RecordScoped(ctx, stores.history, *stored.PropertyID, actor,
-				sharedpolicy.HistoryActorRole(role),
-				historydomain.ContactUpdated(contact.ID, oldFullName, stored.FullName())); err != nil {
-				return err
-			}
-		}
-		return nil
+		journaled, err = recordContactJournal(ctx, stores, actor, role, source, moved, before, stored)
+		return err
 	})
 	if err != nil {
 		return domain.Contact{}, err
 	}
+	s.publishMoved(ctx, actor, source, stored.PropertyID, journaled)
 	return stored, nil
+}
+
+// recordContactJournal writes the update's journal rows in one pass over the
+// rebind and the detail edit (ADR 0061 §3–§4, тикет #856) and reports
+// whether any row was written. A binding change anchors on every end it
+// touches: a cross-property move writes the contact.moved pair — the source
+// leg first (the card leaves before it arrives), then the destination leg;
+// a bind or an unbind owns a single end and writes contact.bound /
+// contact.unbound there, an unbound card itself still journaling nothing
+// (§3 — the row hangs on the object the card left or joined). A
+// same-binding detail edit keeps the contact.updated row with the old → new
+// ФИО on the card's binding. One manual action writes one row per affected
+// object: a mixed unbind + details PATCH folds into the single source row,
+// the ФИО traveling as the action-time snapshot — the row names the
+// binding change, not a name delta.
+func recordContactJournal(
+	ctx context.Context, stores *txStores, actor uuid.UUID, role sharedpolicy.Role,
+	source *uuid.UUID, moved bool, before, stored domain.Contact,
+) (bool, error) {
+	fullName := stored.FullName()
+	record := func(propertyID uuid.UUID, entry historydomain.Entry) error {
+		return historyapp.RecordScoped(ctx, stores.history, propertyID, actor,
+			sharedpolicy.HistoryActorRole(role), entry)
+	}
+	if moved {
+		if source != nil {
+			entry := historydomain.ContactUnbound(stored.ID, fullName)
+			if stored.PropertyID != nil {
+				entry = historydomain.ContactMovedFrom(stored.ID, fullName)
+			}
+			if err := record(*source, entry); err != nil {
+				return false, err
+			}
+		}
+		if stored.PropertyID != nil {
+			entry := historydomain.ContactBound(stored.ID, fullName)
+			if source != nil {
+				entry = historydomain.ContactMovedTo(stored.ID, fullName)
+			}
+			if err := record(*stored.PropertyID, entry); err != nil {
+				return false, err
+			}
+		}
+		return source != nil || stored.PropertyID != nil, nil
+	}
+	if stored.PropertyID != nil && contactChanged(before, stored) {
+		if err := record(*stored.PropertyID,
+			historydomain.ContactUpdated(stored.ID, before.FullName(), fullName)); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	return false, nil
 }
 
 // rebindContact rebinds the card onto the requested property and records the
@@ -354,7 +463,7 @@ func (s *ContactService) DeleteContact(ctx context.Context, actor, id uuid.UUID)
 	if contact.PropertyID != nil {
 		auditCtx["property_id"] = *contact.PropertyID
 	}
-	return s.runInTx(ctx, func(stores *txStores) error {
+	err = s.runInTx(ctx, func(stores *txStores) error {
 		if err := stores.contacts.Delete(ctx, contact.ID, contact.OwnerID); err != nil {
 			return err
 		}
@@ -370,6 +479,11 @@ func (s *ContactService) DeleteContact(ctx context.Context, actor, id uuid.UUID)
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	s.publishChanged(ctx, actor, contact.PropertyID, contact.PropertyID != nil)
+	return nil
 }
 
 // gate applies the ADR 0028 capability gate over the policy and returns the

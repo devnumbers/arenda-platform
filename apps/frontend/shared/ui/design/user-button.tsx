@@ -1,13 +1,15 @@
 import type { ComponentProps, JSX } from 'react';
 import { BoldUser } from '@/shared/assets/icons';
 import { cn } from '@/shared/lib/cn';
+import { CircleIcon } from './circle-icon';
 import { Skeleton } from './skeleton';
 
 /** Кнопка профиля дизайн-слоя (Figma 699:8867, «User Button»): имя
  * (M/500 14/16, #171A1C → hover #9FA8AC → active #6F787C) и справа
- * аватар-плейсхолдер — круг 44×44 на #F3F4F6 с белым гало 2.5px и глифом
- * Bold/User 24×24 (заливка #D3D7D9 запечена в SVG — это тон плейсхолдера,
- * а не контекстный цвет). Focus-visible — обводка 2px #2B7FFF, только с
+ * аватар-плейсхолдер — канонный круглый слот CircleIcon variant="white":
+ * круг 44×44 на #F3F4F6 с белым гало 2.5px и глифом Bold/User 24×24
+ * (заливка #D3D7D9 запечена в SVG — это тон плейсхолдера, а не контекстный
+ * цвет). Focus-visible — обводка 2px #2B7FFF, только с
  * клавиатуры. Полный «Category Icon» с бейджами (Check/Danger/точка) —
  * отдельный компонент набора 651:5925, сюда не входит.
  *
@@ -55,12 +57,9 @@ export function UserButton({
           <span className={hideNameBelowDesktop ? 'hidden desktop:inline' : undefined}>{name}</span>
         )
       )}
-      <span
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill bg-surface-muted shadow-[0_0_0_2.5px_var(--dl-surface)]"
-        aria-hidden
-      >
+      <CircleIcon variant="white" aria-hidden>
         <BoldUser className="h-6 w-6" />
-      </span>
+      </CircleIcon>
     </button>
   );
 }

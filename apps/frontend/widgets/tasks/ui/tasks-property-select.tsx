@@ -2,7 +2,7 @@
 
 import type { JSX } from 'react';
 import { BoldHome, BoldObjects, Cancel, Check, CheckBoxFalse, CheckBoxTrue } from '@/shared/assets/icons';
-import { Button, IconButton, PageContent, Skeleton, StickyBottomBar, TopNav, TopNavTitle } from '@/shared/ui/design';
+import { Button, CircleIcon, IconButton, PageContent, Skeleton, StickyBottomBar, TopNav, TopNavTitle } from '@/shared/ui/design';
 import { EMPTY_TASKS_FEED_FILTER, type TasksFeedFilter } from '@/features/tasks';
 import { useProperties } from '@/features/properties';
 
@@ -135,10 +135,7 @@ function ObjectRowButton({
       onClick={onCheck}
       className="flex w-full cursor-pointer items-center gap-3 py-3 text-left outline-none transition-opacity hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:opacity-80"
     >
-      <span
-        aria-hidden
-        className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-muted shadow-[0_0_0_2.5px_var(--dl-surface)]"
-      >
+      <CircleIcon variant="white" aria-hidden className="relative overflow-hidden rounded-full">
         {photoUrl !== undefined ? (
           <img src={photoUrl} alt="" className="h-full w-full object-cover" />
         ) : isAll ? (
@@ -146,7 +143,7 @@ function ObjectRowButton({
         ) : (
           <BoldHome className="h-6 w-6 text-content-tertiary" />
         )}
-      </span>
+      </CircleIcon>
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="truncate text-base font-medium leading-[18px] text-content">{title}</span>
         {subtitle !== undefined && (

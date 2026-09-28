@@ -19,6 +19,8 @@ import (
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
+	realtimeapp "github.com/nambers/arenda-planform/apps/backend/internal/realtime/application"
+	realtimedom "github.com/nambers/arenda-planform/apps/backend/internal/realtime/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
 	"github.com/nambers/arenda-planform/apps/backend/internal/tasks/domain"
@@ -77,6 +79,13 @@ type mutationOutcome[T any] struct {
 	// materialized and the kept standing tasks alike. Only the rule
 	// create/edit flows set it, always with Tick=true.
 	ScheduleOverdueOf *uuid.UUID
+	// Changed states the realtime frames the change produced (карта #714,
+	// #716; ADR 0062): the (entity, object) pairs the step's writes made
+	// dirty — stated explicitly per step, like the audit target. The
+	// conveyor dispatches them to the carrier strictly after the commit and
+	// piggybacks the history pair of every journal row the transaction
+	// recorded.
+	Changed []realtimedom.Change
 }
 
 // mutationGates bundles the dependencies the conveyor needs beyond the
@@ -90,7 +99,11 @@ type mutationGates struct {
 	factory     txStoreFactory
 	calendar    OwnerCalendar
 	overdueSeam MaterializedTaskNotifier
-	log         *slog.Logger
+	// Realtime is the late-bound carrier the frames dispatch through after
+	// the commit (карта #714, #716; ADR 0062); nil keeps the pre-#716
+	// silence.
+	realtime realtimeapp.Publisher
+	log      *slog.Logger
 }
 
 // runMutation is the mutation conveyor shared by every use case of this
@@ -100,7 +113,8 @@ type mutationGates struct {
 // #546), the owner's today, the load of the target rule (skipped for a zero
 // ruleID), the change step, its audit entry and its action journal row
 // (ADR 0061) in the same transaction, and the materialization tick when the
-// step asked for it. After commit it returns the step's response,
+// step asked for it. After commit it dispatches the step's realtime frames
+// (ADR 0062 §3, best-effort) and returns the step's response;
 // post-commit-re-read applied.
 //
 // The owner-wide lock must be the transaction's first property lock: two
@@ -165,10 +179,39 @@ func runMutation[T any](
 		return zero, err
 	}
 	dispatchSeamTasks(g, ctx, seamTaskIDs)
+	realtimeapp.Dispatch(ctx, g.realtime, actor, out.Changed, historyAnchors(out, propertyID)...)
 	if out.RereadRuleID == nil {
 		return out.Response, nil
 	}
 	return rereadRule[T](g, ctx, scope, propertyID, *out.RereadRuleID)
+}
+
+// historyAnchors collects the journal anchors of the transaction's realtime
+// dispatch: the single-anchored row hangs on the conveyor's property, the
+// bulk rows carry one anchor per touched object (ADR 0061 §3).
+func historyAnchors[T any](out mutationOutcome[T], propertyID uuid.UUID) []uuid.UUID {
+	var anchors []uuid.UUID
+	if out.History != nil {
+		anchors = append(anchors, propertyID)
+	}
+	for prop := range out.HistoryByProperty {
+		anchors = append(anchors, prop)
+	}
+	return anchors
+}
+
+// ownerBookHistoryAnchors is runOwnerMutation's journal-anchor collector for
+// the realtime dispatch: only the per-property rows of the bulk canon (ADR
+// 0061 §3). A single-anchored journal row is forbidden on the owner-book
+// path — the journal anchors every row to a property, so the owner book has
+// no history pair (realtimedom.HistoryOn's contract) — so the helper takes
+// no single-row anchor and nothing can hand the dispatch the zero property.
+func ownerBookHistoryAnchors[T any](out mutationOutcome[T]) []uuid.UUID {
+	anchors := make([]uuid.UUID, 0, len(out.HistoryByProperty))
+	for prop := range out.HistoryByProperty {
+		anchors = append(anchors, prop)
+	}
+	return anchors
 }
 
 // rereadRule re-reads the stored rule after commit so the response carries
@@ -200,7 +243,8 @@ func rereadRule[T any](
 // target property-less rule (skipped for a zero ruleID), the change step,
 // its audit entry and its per-property action journal rows (ADR 0061 §3) in
 // the same transaction, and the property-less materialization tick. After
-// commit it returns the step's response, post-commit-re-read applied.
+// commit it dispatches the step's realtime frames (ADR 0062 §3, best-effort)
+// and returns the step's response; post-commit-re-read applied.
 func runOwnerMutation[T any](
 	g mutationGates,
 	ctx context.Context, actor, ruleID uuid.UUID,
@@ -254,6 +298,7 @@ func runOwnerMutation[T any](
 		return zero, err
 	}
 	dispatchSeamTasks(g, ctx, seamTaskIDs)
+	realtimeapp.Dispatch(ctx, g.realtime, actor, out.Changed, ownerBookHistoryAnchors(out)...)
 	if out.RereadRuleID == nil {
 		return out.Response, nil
 	}

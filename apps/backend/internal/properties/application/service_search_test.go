@@ -152,7 +152,7 @@ func TestSearchProperties_AttachesPhotos(t *testing.T) {
 
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 	repo := &searchRecordingRepo{page: []domain.Property{{
-		ID: propertyID, OwnerID: searchActor, Name: "Квартира", Status: domain.PropertyStatusActive,
+		ID: propertyID, OwnerID: searchActor, Name: searchName, Status: domain.PropertyStatusActive,
 	}}}
 
 	photoRepo := &fakePhotoRepo{photos: map[uuid.UUID][]domain.Photo{

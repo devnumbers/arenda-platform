@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/sse"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/sse/ssetest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -21,8 +22,8 @@ import (
 // fastStreamTimers shrink the heartbeat and the connection TTL so the
 // lifecycle paths run in tests. The production values are in the handler.
 func fastStreamTimers(h *StreamHandlers) *StreamHandlers {
-	h.heartbeat = 15 * time.Millisecond
-	h.ttl = 150 * time.Millisecond
+	h.Heartbeat = 15 * time.Millisecond
+	h.TTL = 150 * time.Millisecond
 	return h
 }
 
@@ -56,7 +57,7 @@ func openStream(t *testing.T, srv *httptest.Server, headers map[string]string, c
 		}
 	}()
 
-	consume(resp, readUntilContains(t, resp.Body, "event: connected"))
+	consume(resp, ssetest.ReadUntilContains(t, resp.Body, "event: connected"))
 }
 
 // getAnonymous calls the server without any auth context and hands the raw
@@ -73,24 +74,6 @@ func getAnonymous(t *testing.T, srv *httptest.Server, check func(resp *http.Resp
 		}
 	}()
 	check(resp)
-}
-
-// readUntilContains reads the stream until the buffer contains the marker and
-// returns everything read so far.
-func readUntilContains(t *testing.T, body io.Reader, marker string) string {
-	t.Helper()
-	var acc bytes.Buffer
-	buf := make([]byte, 4096)
-	for !strings.Contains(acc.String(), marker) {
-		n, err := body.Read(buf)
-		if _, err := acc.Write(buf[:n]); err != nil {
-			t.Fatalf("buffer write: %v", err)
-		}
-		if err != nil {
-			t.Fatalf("stream ended before %q: %v (read so far: %q)", marker, err, acc.String())
-		}
-	}
-	return acc.String()
 }
 
 // expectEOF asserts the stream is over: the server closed the response.
@@ -169,7 +152,7 @@ func TestStreamDeliversPublishedFrames(t *testing.T) {
 			Frame:  sse.Frame{Event: "notification.created", Data: `{"v":1}`},
 		})
 
-		frame := readUntilContains(t, resp.Body, "event: notification.created")
+		frame := ssetest.ReadUntilContains(t, resp.Body, "event: notification.created")
 		assert.Contains(t, frame, "id: 1", "the hub's monotonic id travels with the frame")
 		assert.Contains(t, frame, `data: {"v":1}`)
 	})
@@ -183,7 +166,7 @@ func TestStreamHeartbeatKeepsConnectionAlive(t *testing.T) {
 	srv := newStreamTestServer(t, fastStreamTimers(h), user)
 
 	openStream(t, srv, nil, func(resp *http.Response, _ string) {
-		assert.Contains(t, readUntilContains(t, resp.Body, ": ping"), ": ping")
+		assert.Contains(t, ssetest.ReadUntilContains(t, resp.Body, ": ping"), ": ping")
 	})
 }
 

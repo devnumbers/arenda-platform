@@ -65,6 +65,8 @@ The full suite runs via `world.run` through the `test-log` make target — a rea
 - **The command set is fixed literals**: git, make, node, npm, gh — no push, no destructive docker commands anywhere in the script.
 - `make test` does not include e2e. The honest exit code is the one `world.run` returns — never a piped `echo $?` after it.
 - **An owner's answer without its `ResolveWorkflowQuestion` is a lost answer.** During the history gate (24.09) the run stood parked for 1h45m because the next escalation's notification arrived mid-handling and swallowed the previous resolve. The sequence is always: owner answers → resolve immediately → only then the next escalation.
+- **Amend replays journaled git observations verbatim.** After a manual environment change between attempts (a branch switch of the main checkout, a rebuild), a resumed run's cached `git` checks answer with the old world and deterministic code throws on stale data — twice on the realtime gate (25.09) the merge-readiness check re-played «frontend-foundation» after the checkout to `dev`; reflog proved nobody switched back. The cure: a live `world.run` with a fresh journal key before the checks (a new call site or new args) — it executes live and invalidates the cache of every observation after it.
+- **The blocked report's low list is cumulative.** Lows recorded in rounds 1..N are never pruned when a later round's fix clusters close them, so a ceiling-stop report names items already fixed at HEAD — half of the 26-item list was stale when the owner said «почини тоже» (realtime gate, 25.09). Verify each item against HEAD before acting on it.
 
 ## Files
 

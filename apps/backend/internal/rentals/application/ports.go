@@ -99,6 +99,13 @@ type PlannedOccurrence struct {
 	AmountKopecks int64
 }
 
+// ProgressCounts is one payment's progress counters (ticket #845): the paid
+// facts and the overdue planned rows behind the «N из M» progress.
+type ProgressCounts struct {
+	PaidCount    int
+	OverdueCount int
+}
+
 // PaymentsTotals is the paid-operations aggregate of the property over a
 // period: both directions, always (the profit computes as income − expense
 // and may be negative).
@@ -167,6 +174,15 @@ type RentPaymentGateway interface {
 	CountOverdueOccurrences(
 		ctx context.Context, scope, propertyID, paymentID uuid.UUID, today time.Time,
 	) (int, error)
+	// CountProgressByPayments reads the listed payments' progress counters
+	// in one batched read (ticket #845): the list's «N из M» / «Просрочено
+	// N месяцев» — one query where the per-rental pair takes two. A payment
+	// with no operations is absent from the result — the map lookup
+	// defaults its zeros. The single-rental views keep their per-rental
+	// reads.
+	CountProgressByPayments(
+		ctx context.Context, scope, propertyID uuid.UUID, paymentIDs []uuid.UUID, today time.Time,
+	) (map[uuid.UUID]ProgressCounts, error)
 	// SummarizePaidOperations totals the property's paid operations — of any
 	// payment and manual ones — with the operation date inside [from, until]
 	// (решение №13: the period is by the operation date, not the payment

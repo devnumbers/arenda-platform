@@ -3,7 +3,7 @@
 import { useState, type JSX } from 'react';
 import {
   WheelPicker,
-  type WheelPickerItem,
+  paddedItems,
   WheelPickerSheet,
   type WheelPickerSheetAction,
 } from '@/shared/ui/design';
@@ -29,15 +29,9 @@ function currentTimeHHMM(): string {
   return `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
 }
 
-const HOUR_ITEMS: ReadonlyArray<WheelPickerItem> = Array.from({ length: 24 }, (_, value) => {
-  const label = pad2(value);
-  return { value: label, label };
-});
+const HOUR_ITEMS = paddedItems(24);
 
-const MINUTE_ITEMS: ReadonlyArray<WheelPickerItem> = Array.from({ length: 60 }, (_, value) => {
-  const label = pad2(value);
-  return { value: label, label };
-});
+const MINUTE_ITEMS = paddedItems(60);
 
 function timeParts(time: string): { readonly hour: string; readonly minute: string } {
   const [hour = '00', minute = '00'] = time.split(':');

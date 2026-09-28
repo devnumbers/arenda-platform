@@ -10,11 +10,7 @@ export const metadata: Metadata = {
   title: 'Просроченные операции — Рентли',
 };
 
-type OverdueRoutePageProps = {
-  params: Promise<{ id: string; paymentId: string }>;
-};
-
-export default async function PaymentOverdueRoutePage({ params }: OverdueRoutePageProps) {
+export default async function PaymentOverdueRoutePage({ params }: PageProps<'/properties/[id]/payments/[paymentId]/overdue'>) {
   const { id, paymentId } = await params;
 
   return <PaymentOverdueScreen propertyId={id} paymentId={paymentId} />;

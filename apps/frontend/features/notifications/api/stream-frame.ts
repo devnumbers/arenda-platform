@@ -26,6 +26,9 @@ export type StreamFrame =
     }
   | { readonly kind: 'unread-count'; readonly count: number; readonly occurredAt: string };
 
+/** Кадр нового уведомления — единственный, что рождает тост (#747). */
+export type NotificationCreatedFrame = Extract<StreamFrame, { kind: 'created' }>;
+
 /** envelopeVersion бэка (ADR 0060): ломающее изменение payload поднимает v —
  * такой кадр старый клиент игнорирует; аддитивные поля остаются в v1. */
 const ENVELOPE_VERSION = 1;

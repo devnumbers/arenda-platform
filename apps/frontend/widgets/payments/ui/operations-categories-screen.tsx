@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Cancel } from '@/shared/assets/icons';
 import { goBack } from '@/shared/lib/navigation';
 import { buildUrlWithParams } from '@/shared/lib/url-params';
-import { clientTodayIso } from '@/entities/payment';
+import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
   operationsCategoryRows,
   operationsFiltersParams,
@@ -59,7 +59,7 @@ export function OperationsCategoriesScreen({
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const today = clientTodayIso();
+  const today = dateToIsoLocal(new Date());
   const filters = readOperationsFilters(searchParams, today);
   // Дефолт категорий — весь период (#676, как на глобальных #672):
   // без явного выбора даты в запрос не уходят, чип нейтральный.

@@ -11,6 +11,8 @@ import (
 	"github.com/google/uuid"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
+	realtimeapp "github.com/nambers/arenda-planform/apps/backend/internal/realtime/application"
+	realtimedom "github.com/nambers/arenda-planform/apps/backend/internal/realtime/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/tasks/domain"
 )
@@ -69,7 +71,11 @@ type RuleService struct {
 	calendar    OwnerCalendar
 	writeGate   gateFunc // Full Access and Owner: create/edit/delete (resolution #496).
 	overdueSeam MaterializedTaskNotifier
-	log         *slog.Logger
+	// Realtime is the late-bound carrier the mutations' frames dispatch
+	// through after the commit (карта #714, #716; ADR 0062); nil keeps the
+	// pre-#716 silence.
+	realtime realtimeapp.Publisher
+	log      *slog.Logger
 }
 
 // NewRuleService builds the rule use cases over the shared transactional
@@ -101,6 +107,14 @@ func (s *RuleService) SetOverdueSeam(seam MaterializedTaskNotifier) {
 	s.overdueSeam = seam
 }
 
+// SetRealtimePublisher late-binds the realtime carrier (карта #714, #716;
+// ADR 0062): the frames of the committed mutations dispatch through it —
+// the grace-events canon, best-effort, a broken carrier never fails the
+// mutation.
+func (s *RuleService) SetRealtimePublisher(p realtimeapp.Publisher) {
+	s.realtime = p
+}
+
 // conveyor bundles this service's factory, calendar and scheduling seam for
 // the shared mutation conveyor.
 func (s *RuleService) conveyor() mutationGates {
@@ -108,6 +122,7 @@ func (s *RuleService) conveyor() mutationGates {
 		factory:     s.txStoreFactory,
 		calendar:    s.calendar,
 		overdueSeam: s.overdueSeam,
+		realtime:    s.realtime,
 		log:         s.log,
 	}
 }
@@ -254,6 +269,7 @@ func patchRule(
 		AuditEntityID: &rule.ID,
 		AuditCtx:      map[string]any{"fields": updatedFields(cmd)},
 		History:       ruleHistory(historydomain.TaskRuleUpdated(rule.ID, rule.Title), rule.PropertyID),
+		Changed:       ruleChanged(rule.PropertyID),
 		Tick:          true,
 		RereadRuleID:  &rule.ID,
 		// The edit's invalidation + tick settled the rule's rows: the
@@ -319,6 +335,7 @@ func createRule(
 		Audit:         auditdomain.ActionTaskRuleCreated,
 		AuditEntityID: &draft.ID,
 		History:       ruleHistory(historydomain.TaskRuleCreated(draft.ID, draft.Title), propertyID),
+		Changed:       ruleChanged(propertyID),
 		Tick:          true,
 		RereadRuleID:  &draft.ID,
 		// The first materialization settled the rule's rows: the standing
@@ -347,6 +364,7 @@ func deleteRule(
 		Audit:         auditdomain.ActionTaskRuleDeleted,
 		AuditEntityID: &rule.ID,
 		History:       ruleHistory(historydomain.TaskRuleDeleted(rule.ID, rule.Title), rule.PropertyID),
+		Changed:       ruleChanged(rule.PropertyID),
 	}, nil
 }
 
@@ -441,4 +459,16 @@ func ruleHistory(entry historydomain.Entry, propertyID *uuid.UUID) *historydomai
 		return nil
 	}
 	return &entry
+}
+
+// ruleChanged is the realtime frame pair of a rule mutation (карта #714,
+// #716; ADR 0062): the tasks view of the rule's object — or the owner-book
+// pair for the property-less slice, mirroring ruleHistory's split (a
+// property-less rule writes no journal row but still dirties the owner's
+// task screens).
+func ruleChanged(propertyID *uuid.UUID) []realtimedom.Change {
+	if propertyID == nil {
+		return []realtimedom.Change{realtimedom.InOwnerBook(realtimedom.EntityTasks)}
+	}
+	return []realtimedom.Change{realtimedom.On(realtimedom.EntityTasks, *propertyID)}
 }

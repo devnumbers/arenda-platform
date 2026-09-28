@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -82,7 +81,7 @@ func (s *PaymentStore) ListByProperty(
 	rows, err := s.q().ListPaymentsByProperty(ctx, postgres.ListPaymentsByPropertyParams{
 		OwnerID:    pgconv.UUIDToPgtype(scope),
 		PropertyID: pgconv.UUIDToPgtype(propertyID),
-		Search:     escapeLikePattern(search),
+		Search:     pgconv.EscapeLikePattern(search),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list payments of property %s: %w", propertyID, err)
@@ -255,15 +254,4 @@ func attachPausesAsSlice(ctx context.Context, s *PaymentStore, payments ...domai
 func marshalRecurrence(p domain.Payment) ([]byte, error) {
 	var marshaler json.Marshaler = &p.Recurrence
 	return json.Marshal(marshaler)
-}
-
-// likePatternEscaper escapes the ILIKE metacharacters in user-supplied search
-// text. The matching SQL patterns use ESCAPE '\'.
-var likePatternEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
-
-// escapeLikePattern trims and escapes a user-supplied substring so it can be
-// safely embedded in an ILIKE '%...%' pattern. An empty result disables the
-// filter on the SQL side.
-func escapeLikePattern(q string) string {
-	return likePatternEscaper.Replace(strings.TrimSpace(q))
 }

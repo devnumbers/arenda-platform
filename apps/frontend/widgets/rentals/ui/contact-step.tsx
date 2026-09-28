@@ -17,6 +17,7 @@ import { notify } from '@/shared/lib/notifications';
 import { ContactRowButton } from '@/entities/contact';
 import { useContacts, useContact, useDeleteContact } from '@/features/contacts';
 import {
+  CircleIcon,
   ConfirmDialog,
   IconButton,
   ListRow,
@@ -191,14 +192,12 @@ export function ContactStep({
 }
 
 /** Кружок 44 действий шага (1855:63385): приглушённая подложка с белым
- * кольцом — та же анатомия, что у аватара ContactRowButton. */
+ * кольцом — канон CircleIcon (та же анатомия, что у аватара
+ * ContactRowButton). */
 function ActionRowIcon({ icon }: { readonly icon: JSX.Element }): JSX.Element {
   return (
-    <span
-      aria-hidden
-      className="flex h-11 w-11 items-center justify-center rounded-pill bg-surface-muted shadow-[0_0_0_2.5px_var(--dl-surface)]"
-    >
+    <CircleIcon variant="white" aria-hidden>
       {icon}
-    </span>
+    </CircleIcon>
   );
 }

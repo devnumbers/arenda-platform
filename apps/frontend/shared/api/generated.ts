@@ -1242,7 +1242,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Страница ленты уведомлений (keyset, канон
+         * Страница ленты уведомлений (keyset, канон #597)
          * @description Хранимая лента пользователя, newest-first keyset-пагинация (карта
          *     #734, решение #737, #743). Удалённые строки не появляются. Курсор —
          *     непрозрачный blob из next_cursor предыдущей страницы; страницы
@@ -1390,13 +1390,52 @@ export interface paths {
          *     Формат кадров — WHATWG SSE: retry-подсказка и стартовое событие
          *     connected на старте, id — монотонная последовательность (курсор
          *     Last-Event-ID; replay в v1 не реализован), event — стабильное грубое
-         *     имя (notification.created, notification.unread_count; допишут #714),
-         *     data — JSON-конверт {v, occurredAt, payload}. Heartbeat-комментарий
-         *     каждые 25 с, соединение закрывается через час (пере-аутентификация
-         *     при переподключении). Кадры best-effort: состояние клиент дочитывает
-         *     через обычные эндпоинты.
+         *     имя (notification.created, notification.unread_count; новые
+         *     имена — аддитивно), data — JSON-конверт {v, occurredAt, payload}.
+         *     Heartbeat-комментарий каждые 25 с, соединение закрывается через час
+         *     (пере-аутентификация при переподключении). Кадры best-effort:
+         *     состояние клиент дочитывает через обычные эндпоинты. События
+         *     изменений сущностей (карта #714) в этот стрим не входят: они едут
+         *     отдельным стримом /realtime/stream — ADR 0062 superseded зарисовку
+         *     §5 ADR 0060; контракт этого стрима заморожен.
          */
         get: operations["streamNotifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/realtime/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Живой стрим изменений сущностей (SSE)
+         * @description Второй пользовательский Server-Sent Events стрим — кадры инвалидации
+         *     карты #714 (тикет #716; ADR 0062) поверх транспорта ADR 0060
+         *     (heartbeat 25 с, TTL час, тот же хаб и бюджет 8 соединений на
+         *     пользователя, что и у /notifications/stream). Авторизация —
+         *     cookie-сессия тем же SessionMiddleware; без актора хендлер отвечает
+         *     401 problem+json до старта стрима. Единственное имя события —
+         *     entity.changed, data — JSON-конверт {v, occurredAt, payload} с грубым
+         *     payload {propertyId, entity}: имени из словаря (payments, operations,
+         *     tasks, contacts, rentals, property, access, history) и объекта (null
+         *     для внеобъектных правок книжки владельца). Данных сущности кадр не
+         *     несёт — клиент перечитывает состояние через API. Аудитория кадра —
+         *     производный доступ на чтение объекта на момент публикации (ADR 0028),
+         *     включая автора; кадр с propertyId=null (внеобъектные правки книжки
+         *     владельца) доставляется только автору; отзыв или приостановка доступа
+         *     посреди стрима просто прекращают кадры, соединение не закрывается.
+         *     Replay в v1 нет — при каждом открытии и переподключении
+         *     клиент перечитывает живое состояние.
+         */
+        get: operations["streamRealtime"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3043,7 +3082,7 @@ export interface components {
             /** @description The «Платежи» group — the object's non-auto-pay rules. */
             otherRules: components["schemas"]["PaymentObjectKey"][];
         };
-        /** @description The global «Объекты» screen of the payments map (ticket */
+        /** @description The global «Объекты» screen of the payments map (ticket #575). */
         PaymentObjectsGlobalResponse: {
             items: components["schemas"]["PaymentObjectItem"][];
         };
@@ -3470,7 +3509,7 @@ export interface components {
             enabled: boolean;
             categories: components["schemas"]["NotificationCategoryPreferences"];
         };
-        /** @description Флаги четырёх настраиваемых категорий одного канала (решение */
+        /** @description Флаги четырёх настраиваемых категорий одного канала (решение #738) — email держит копию на аккаунте, push — на устройстве. Тариф и Системные всегда включены и здесь не хранятся. */
         NotificationCategoryPreferences: {
             rental: boolean;
             payments_operations: boolean;
@@ -3483,7 +3522,7 @@ export interface components {
         NotificationPreferencesResponse: {
             email: components["schemas"]["NotificationCategoryPreferences"];
         };
-        /** @description Строка ленты одного получателя (решение */
+        /** @description Строка ленты одного получателя (решение #737): снимок текста, payload-ссылки, личные флаги. */
         NotificationItem: {
             /** Format: uuid */
             id: string;
@@ -4735,8 +4774,8 @@ export interface operations {
                 property_id?: string;
                 /** @description Case-insensitive substring search over the name fields, phone, email, messenger username and role. A missing or empty value disables the filter; LIKE metacharacters in the value are literals. */
                 search?: string;
-                /** @description The sort key: `name` — the contact's display name (default); `property` — the bound property's name with the unbound cards first in both directions («Общие контакты»), contact name order inside. The Russian collation matches the client's letter grouping. */
-                sort?: "name" | "property";
+                /** @description The sort key: `name` — the contact's display name (default); `property` — the bound property's name with the unbound cards first in both directions («Общие контакты»), contact name order inside; `created` — the card's creation moment (ticket #847 — the «свежие контакты сверху» promise server-side: descending leads with the freshest cards whatever the book's size; the default order is asc, so a bare sort=created lists oldest-first — the freshness promise needs an explicit order=desc, as the tenant picker sends). The name/property keys use the Russian collation to match the client's letter grouping. */
+                sort?: "name" | "property" | "created";
                 /** @description The sort direction: ascending (default) or descending. */
                 order?: "asc" | "desc";
                 /** @description The page size of the keyset window (ticket #600). A missing value means the default page; an out-of-range value is a 400. */
@@ -4750,7 +4789,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Contacts page. The window is keyset pagination over the listing's own sort key and id (ticket #600): the page always resumes strictly after the cursor's key, so cards created or deleted between loads never duplicate or drop. The sort keys are mutable (display name, property binding): a rename or rebind of a card the walk has already passed can move it across the window boundary. The cursor is bound to the sort/order it was issued under — echoing it with a different sort is a 400. nextCursor is null once the matches are exhausted. */
+            /** @description Contacts page. The window is keyset pagination over the listing's own sort key and id (ticket #600): the page always resumes strictly after the cursor's key, so cards created or deleted between loads never duplicate or drop. The name/property sort keys are mutable (display name, property binding): a rename or rebind of a card the walk has already passed can move it across the window boundary; the created key is immutable, so a walked card never moves. The cursor is bound to the sort/order it was issued under — echoing it with a different sort is a 400. nextCursor is null once the matches are exhausted. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6657,6 +6696,36 @@ export interface operations {
             };
         };
     };
+    streamRealtime: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Поток событий в формате text/event-stream */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description Стрим недоступен (хаб не сконфигурирован) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     getVapidPublicKey: {
         parameters: {
             query?: never;
@@ -7213,7 +7282,7 @@ export interface operations {
                 status?: components["schemas"]["SubscriptionPaymentStatus"];
                 /** @description Exact match on the user's phone number. */
                 user_phone?: string;
-                /** @description Filters payments by the payer's current subscription status (issue */
+                /** @description Filters payments by the payer's current subscription status (issue #254). */
                 subscription_status?: components["schemas"]["SubscriptionStatus"];
                 /** @description Sort field (camelCase). Allowed: createdAt, amountKopecks, status. Defaults to createdAt descending. */
                 sort?: string;

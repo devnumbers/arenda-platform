@@ -1,7 +1,6 @@
 -- Deterministic seed for the frontend Playwright e2e stack (ticket #456).
 -- Applied by tools/e2e/frontend/run-frontend-e2e.sh against the disposable
--- arenda-e2e database right after migrations. SQL-seeding precedent:
--- tools/e2e/sql of the Bruno API-e2e.
+-- arenda-e2e database right after migrations.
 --
 -- Ids are fixed so the seed is reproducible; :token_hash is the per-run
 -- HMAC-SHA256 of the raw session token the orchestrator hands to Playwright
