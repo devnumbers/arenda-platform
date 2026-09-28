@@ -4,14 +4,14 @@ import { IconButton, PageContent, TopNav, TopNavTitle } from '@/shared/ui/design
 import { NotificationDetailSkeleton, NotificationsFeedSkeleton } from './notifications-states';
 
 /** Route-loading архетип зоны уведомлений (#609): хаб-шапка с заголовком
- * в баре (трейлинг-действия зависят от данных и в фазе загрузки не
- * рисуются), контент — скелетон групп ленты (§7). Используется как
- * loading.tsx сегмента. */
+ * в баре только на ПК (тайтл ниже ПК убран из бара — решение владельца
+ * 28.09, кадр совпадает с фазой загрузки экрана), контент — скелетон групп
+ * ленты (§7). Используется как loading.tsx сегмента. */
 export function NotificationsLoading(): JSX.Element {
   return (
     <>
       <TopNav mobileWings>
-        <TopNavTitle title="Уведомления" />
+        <TopNavTitle title="Уведомления" className="hidden desktop:flex" />
       </TopNav>
       <PageContent>
         <NotificationsFeedSkeleton />
