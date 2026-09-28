@@ -64,12 +64,16 @@ const NO_SNAPSHOTS: LiveValueSnapshots = { stale: null, old: null, fresh: null }
  * правок при появлении новых инвалидаций. Смена без перечитывания
  * (влитие в кэш) идёт сразу в кроссфейд.
  *
- * Layout не двигаем: во время анимации новое значение живёт абсолютом
- * над старым, вспышка — на коробке с компенсирующими полями; место
- * значения резервируется старым (правило E демо: анимируем только
- * реально изменившееся поле, экран целиком не мигает). Reduced-motion
- * укорачивает фазы до ~150мс-порядка (§8) — CSS через медиа-токены,
- * JS-ожидания через REDUCED_TIMINGS. Машина состояний и тайминги — в
+ * Layout не дёргается: коробка свапа ЕДЕТ по ширине от старого значения
+ * к новому той же кривой и длительностью, что проявляет новое (решение
+ * владельца 28.09 — «как у Apple»: контейнер анимируется вместе с
+ * контентом; числа — на tabular-nums, у смен той же длины ширины не
+ * меняется вовсе); при разношироких значениях ничего не клипается — оба
+ * слоя абсолютом max-content. Вспышка — на коробке с компенсирующими
+ * полями. Правило E демо: анимируем только реально изменившееся поле,
+ * экран целиком не мигает. Reduced-motion укорачивает фазы до
+ * ~150мс-порядка (§8) — CSS через медиа-токены, JS-ожидания через
+ * REDUCED_TIMINGS. Машина состояний и тайминги — в
  * `live-value-machine.ts` (чистые, тестированные); здесь только клей:
  * переходы диспетчатся из layout-эффектов до краски (классы свапа — в
  * первом кадре), рендер читает только state.
@@ -101,6 +105,13 @@ export function LiveValue({
   const newChildrenRef = useRef<ReactNode>(children);
   const prevKeyRef = useRef(valueKey);
   const prevRefreshingRef = useRef(refreshing);
+  // DOM-узлы свапа для замера ширины (Apple-рецепт «контейнер едет
+  // вместе с контентом»): эффект ниже лочит коробку на старой ширине и
+  // едет к новой той же кривой, что проявляет значение.
+  const swapRef = useRef<HTMLSpanElement | null>(null);
+  const oldOverlayRef = useRef<HTMLSpanElement | null>(null);
+  const newOverlayRef = useRef<HTMLSpanElement | null>(null);
+  const widthAnimationRef = useRef<Animation | null>(null);
 
   // Стабильный переход: читает только реф-книжение, событий — от эффектов.
   const transition = useCallback((event: LiveValueEvent): void => {
@@ -192,23 +203,61 @@ export function LiveValue({
     lastCommittedChildrenRef.current = children;
   }, [children]);
 
+  // Ширина свапа едет, а не щёлкает (доработка 28.09, решение владельца
+  // «как у Apple»): контейнер размера контента — та же динамика, что у
+  // Dynamic Island/SwiftUI, где фрейм анимируется тем же движением, что и
+  // содержимое (WWDC23 «Animate with springs»: единое движение лэйаута и
+  // контента). Замер до краски; статичная ширина = целевая, движение от
+  // ширины старого значения — WAAPI: CSS-переход на элементе,
+  // вмонтированном в этот же кадр, не стартует (проверено живым замером
+  // на членах №880 — лок/reflow и двойной rAF не помогают). Длительность —
+  // --live-blur-in (380мс; reduced 100мс), кривая --dl-ease: размер и
+  // резкость нового значения доезжают вместе (Q3: старт немедленно).
+  // Высота — max сторон (совпадает у однострочных значений). На settle
+  // контейнер разбирается, idle рендерит новое значение в потоке —
+  // натуральная ширина совпадает с анимированной, прыжка нет. Режим B и
+  // own без свапа — не затронуты.
+  useLayoutEffect(() => {
+    const swap = swapRef.current;
+    const oldOverlay = oldOverlayRef.current;
+    const newOverlay = newOverlayRef.current;
+    if (state.phase !== 'swap' || mode !== 'crossfade' || !swap || !oldOverlay || !newOverlay) {
+      return;
+    }
+    const startWidth = Math.max(oldOverlay.offsetWidth, 1);
+    const targetWidth = Math.max(newOverlay.offsetWidth, 1);
+    const height = Math.max(oldOverlay.offsetHeight, newOverlay.offsetHeight);
+    swap.style.width = `${targetWidth}px`;
+    swap.style.height = `${height}px`;
+    widthAnimationRef.current?.cancel();
+    widthAnimationRef.current = swap.animate(
+      [{ width: `${startWidth}px` }, { width: `${targetWidth}px` }],
+      {
+        duration: reducedMotion ? 100 : 380,
+        easing: 'cubic-bezier(0.32, 0.72, 0, 1)',
+      },
+    );
+  }, [state, mode, reducedMotion]);
+
   if (state.phase === 'stale') {
     return (
-      <span className={cn(styles.root, styles.stale, className)}>
+      <span className={cn(styles.root, styles.stale, 'tabular-nums', className)}>
         {snapshots.stale ?? children}
       </span>
     );
   }
   if (state.phase === 'swap') {
     return (
-      <span className={cn(styles.root, className)}>
+      <span className={cn(styles.root, 'tabular-nums', className)}>
         <span key={state.generation} className={styles.flashBox}>
           {mode === 'crossfade' ? (
-            <span className={styles.swap}>
-              <span className={styles.oldValue} aria-hidden="true">
+            <span ref={swapRef} className={styles.swap}>
+              <span ref={oldOverlayRef} className={styles.oldValue} aria-hidden="true">
                 {snapshots.old}
               </span>
-              <span className={styles.newValue}>{snapshots.fresh}</span>
+              <span ref={newOverlayRef} className={styles.newValue}>
+                {snapshots.fresh}
+              </span>
             </span>
           ) : (
             children
@@ -217,5 +266,7 @@ export function LiveValue({
       </span>
     );
   }
-  return <span className={cn(styles.root, className)}>{children}</span>;
+  return (
+    <span className={cn(styles.root, 'tabular-nums', className)}>{children}</span>
+  );
 }

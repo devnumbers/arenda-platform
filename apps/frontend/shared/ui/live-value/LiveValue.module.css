@@ -40,24 +40,33 @@
   }
 }
 
-/* Оверлей свапа: старое значение в потоке (держит коробку), новое —
-* абсолютом поверх, без переноса строк (шире старого — выступает за
-* коробку на время кроссфейда, layout не двигаем). */
+/* Оверлей свапа: оба значения абсолютом max-content (ничего не
+* переносится и не клипается при любой разнице ширин), размер коробки
+* держит компонент — ширину он анимирует от старой к новой WAAPI
+* (Apple-рецепт «контейнер едет вместе с контентом», решение 28.09;
+* длительность --live-blur-in, кривая --dl-ease — размер и резкость
+* нового значения доезжают вместе). Ширину/высоту ставит инлайном
+* компонент до краски (замер — локальный layout-эффект). */
 .swap {
   position: relative;
   display: inline-block;
 }
 
 .oldValue {
+  position: absolute;
+  top: 0;
+  left: 0;
   display: inline-block;
+  width: max-content;
   animation: live-blur-out var(--live-blur-out) var(--dl-ease) forwards;
 }
 
 .newValue {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
   display: inline-block;
-  white-space: nowrap;
+  width: max-content;
   pointer-events: none;
   opacity: 0;
   animation: live-blur-in var(--live-blur-in) var(--dl-ease) var(--live-blur-delay) forwards;
