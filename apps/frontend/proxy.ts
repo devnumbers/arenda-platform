@@ -118,9 +118,19 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
+  // Все разделы кабинета под /me-гейтом (#887): неавторизованный холодный
+  // вход в любой раздел — редирект на /login?from=…, а не ErrorCard
+  // раздела. dashboard снят — снесён фундаментом карты #862 (тикет #865);
+  // ui-kit — демо-поверхности за тем же гейтом.
   matcher: [
-    '/dashboard/:path*',
     '/properties/:path*',
+    '/payments/:path*',
+    '/operations/:path*',
+    '/tasks/:path*',
+    '/contacts/:path*',
+    '/notifications/:path*',
+    '/history/:path*',
+    '/participants/:path*',
     '/profile/:path*',
     '/ui-kit/:path*',
     '/login',
