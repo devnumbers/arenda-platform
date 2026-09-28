@@ -1,6 +1,7 @@
 export { AccountScreen } from './ui/AccountScreen';
 export { DevicesScreen } from './ui/DevicesScreen';
 export { EmailChangeScreen } from './ui/EmailChangeScreen';
+export { LegalDocument } from './ui/LegalDocument';
 export { PaymentDetail } from './ui/PaymentDetail';
 export { PaymentList } from './ui/PaymentList';
 export { PaymentMethodList } from './ui/PaymentMethodList';
