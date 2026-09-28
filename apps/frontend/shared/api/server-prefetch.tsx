@@ -1,7 +1,7 @@
 import 'server-only';
 import type { JSX, ReactNode } from 'react';
-import { HydrationBoundary } from '@tanstack/react-query';
 import type { QueryClient } from '@tanstack/react-query';
+import { SyncHydrationBoundary } from '@/shared/providers/sync-hydration-boundary';
 import {
   createServerQueryClient,
   dehydrateServerPrefetch,
@@ -28,6 +28,9 @@ import {
  * рендера виджета: холодный вход рисует первый кадр с данными, живой
  * SSE-кадр, успевший между ответом сервера и гидратацией, не затирается
  * (гарды dataUpdatedAt/dehydratedAt в hydrate — фиксируется тестом).
+ * Граница — SyncHydrationBoundary: HydrationBoundary откладывает запросы,
+ * уже существующие в кэше, в useEffect, а на сервере эффекты не идут —
+ * Shell-запросы (useMe пилюли профиля) оставались пустыми в SSR-HTML.
  */
 export async function ServerPrefetchBoundary({
   prefetch,
@@ -42,8 +45,8 @@ export async function ServerPrefetchBoundary({
   dropUnhydratableQueries(queryClient);
 
   return (
-    <HydrationBoundary state={dehydrateServerPrefetch(queryClient)}>
+    <SyncHydrationBoundary state={dehydrateServerPrefetch(queryClient)}>
       {children}
-    </HydrationBoundary>
+    </SyncHydrationBoundary>
   );
 }
