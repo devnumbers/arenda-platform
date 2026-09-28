@@ -376,8 +376,8 @@ export function TestimonialsCarousel() {
 
 // Позиция покоя активной карточки: шаг 320 = малая 300 + зазор 20.
 const REST_STEP = 320;
-// Кроссфейд отзыва слева.
-const REVIEW_FADE_MS = 200;
+// Кроссфейд отзыва слева (таймаут подмены = длительности перехода).
+const REVIEW_FADE_MS = 350;
 
 export function TestimonialsDesktop() {
   const scroller = useRef<HTMLDivElement>(null);
@@ -605,7 +605,7 @@ export function TestimonialsDesktop() {
       <div className="flex gap-14">
         {/* Панель отзыва гаснет и проявляется на месте — без сдвигов. */}
         <div
-          className={`w-[472px] shrink-0 transition-opacity duration-200 motion-reduce:transition-none ${
+          className={`w-[472px] shrink-0 transition-opacity duration-[350ms] motion-reduce:transition-none ${
             fading ? "opacity-0" : "opacity-100"
           }`}
         >
