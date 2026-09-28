@@ -15,12 +15,14 @@ import rentalReport from "@/assets/sections/rental-report.webp";
 // прижаты к низу по макету каждой карточки.
 //
 // Десктоп — «полка» в стиле Apple: активная карточка стоит по центру окна,
-// по краям призрачное место (крайние карточки тоже встают по центру),
-// 6 точек-кнопок над стрипом; клик — плавный глайд (easeOutCubic, длительность
-// от дистанции), снап липнет к центру, соседние карточки чуть меньше и
-// приглушены — по дистанции до центра в rAF, без внешних зависимостей.
-// Планшет/мобайл — снап-карусель вплотную к левому краю, 6 точек снизу.
-// prefers-reduced-motion — без глайда и «полки», скролл мгновенный.
+// по краям призрачное место (крайние карточки тоже встают по центру);
+// клик по точке и докатка после свайпа — пружинка с лёгким перелётом цели
+// и упругим возвратом (CSS-снап на десктопе выключен, докатку ведём сами
+// по простою скролла), соседние карточки чуть меньше и приглушены — по
+// дистанции до центра в rAF, без внешних зависимостей. 6 точек-кнопок
+// снизу по макету 2814-885 — на всех брейкпоинтах.
+// Планшет/мобайл — снап-карусель вплотную к левому краю.
+// prefers-reduced-motion — без пружинки и «полки», скролл мгновенный.
 type Card = {
   title: string;
   text: string;
@@ -108,6 +110,16 @@ const GLIDE_BASE_MS = 350;
 const GLIDE_MAX_MS = 850;
 const GLIDE_MS_PER_PX = 0.25;
 
+// Пружинка: лёгкий перелёт цели и упругий возврат.
+const OVERSHOOT_MIN_PX = 6;
+const OVERSHOOT_MAX_PX = 24;
+const OVERSHOOT_RATIO = 0.05;
+const OVERSHOOT_SETTLE_MS = 360;
+const HOP_MAX_PX = 40; // короче — мягкий переход без перелёта
+const HOP_MS = 420;
+// Докатка после свайпа: простой скролла, прежде сами тянем к ближайшей.
+const SETTLE_IDLE_MS = 140;
+
 export function RentalsCarousel() {
   // relative на скроллере делает offsetLeft карточек координатами скролла —
   // на них построены и глайд, и «полка».
@@ -115,6 +127,8 @@ export function RentalsCarousel() {
   const cards = useRef<Array<HTMLElement | null>>([]);
   const frame = useRef(0);
   const glideRaf = useRef(0);
+  const glideActive = useRef(false);
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reduced = useRef(false);
   const [desk, setDesk] = useState(false);
   const [active, setActive] = useState(0);
@@ -201,53 +215,150 @@ export function RentalsCarousel() {
     () => () => {
       cancelAnimationFrame(frame.current);
       cancelAnimationFrame(glideRaf.current);
+      if (settleTimer.current) {
+        clearTimeout(settleTimer.current);
+      }
     },
     [],
   );
 
-  const onScroll = useCallback(() => {
-    cancelAnimationFrame(frame.current);
-    frame.current = requestAnimationFrame(sync);
-  }, [sync]);
-
   const stopGlide = useCallback(() => {
     cancelAnimationFrame(glideRaf.current);
+    glideActive.current = false;
   }, []);
 
+  // Пружинка: мягкий разгон-торможение, лёгкий перелёт цели, упругий возврат.
+  // Короткие ходы (< HOP_MAX_PX) — просто плавный переход без перелёта.
   const glideTo = useCallback((targetLeft: number) => {
     const el = scroller.current;
     if (!el) {
       return;
     }
     cancelAnimationFrame(glideRaf.current);
+    if (settleTimer.current) {
+      clearTimeout(settleTimer.current);
+      settleTimer.current = null;
+    }
     const left = Math.max(
       0,
       Math.min(targetLeft, el.scrollWidth - el.clientWidth),
     );
-    if (reduced.current) {
-      el.scrollLeft = left;
-      return;
-    }
+    glideActive.current = true;
+    const finish = () => {
+      glideActive.current = false;
+    };
     const from = el.scrollLeft;
     const delta = left - from;
-    if (Math.abs(delta) < 1) {
+    if (reduced.current || Math.abs(delta) < 1) {
+      el.scrollLeft = left;
+      finish();
       return;
     }
-    const duration = Math.min(
+    const easeInOutCubic = (t: number) =>
+      t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
+    const easeOutCubic = (t: number) => 1 - (1 - t) ** 3;
+    const start = performance.now();
+    if (Math.abs(delta) < HOP_MAX_PX) {
+      const step = (now: number) => {
+        const t = Math.min(1, (now - start) / HOP_MS);
+        el.scrollLeft = from + delta * easeInOutCubic(t);
+        if (t < 1) {
+          glideRaf.current = requestAnimationFrame(step);
+        } else {
+          finish();
+        }
+      };
+      glideRaf.current = requestAnimationFrame(step);
+      return;
+    }
+    const peak =
+      left +
+      Math.sign(delta) *
+        Math.min(
+          OVERSHOOT_MAX_PX,
+          Math.max(OVERSHOOT_MIN_PX, Math.abs(delta) * OVERSHOOT_RATIO),
+        );
+    const mainDuration = Math.min(
       GLIDE_MAX_MS,
       GLIDE_BASE_MS + Math.abs(delta) * GLIDE_MS_PER_PX,
     );
-    const start = performance.now();
-    const easeOutCubic = (t: number) => 1 - (1 - t) ** 3;
     const step = (now: number) => {
-      const t = Math.min(1, (now - start) / duration);
-      el.scrollLeft = from + delta * easeOutCubic(t);
-      if (t < 1) {
+      const t1 = (now - start) / mainDuration;
+      if (t1 < 1) {
+        el.scrollLeft = from + (peak - from) * easeInOutCubic(Math.max(0, t1));
         glideRaf.current = requestAnimationFrame(step);
+        return;
+      }
+      const t2 = (now - start - mainDuration) / OVERSHOOT_SETTLE_MS;
+      el.scrollLeft =
+        peak + (left - peak) * easeOutCubic(Math.min(1, Math.max(0, t2)));
+      if (t2 < 1) {
+        glideRaf.current = requestAnimationFrame(step);
+      } else {
+        el.scrollLeft = left;
+        finish();
       }
     };
     glideRaf.current = requestAnimationFrame(step);
   }, []);
+
+  // Ближайшая к целевой точке карточка: её позиция скролла (центр/левый край).
+  const nearestCardLeft = useCallback(() => {
+    const el = scroller.current;
+    const nodes = cards.current;
+    if (!el || nodes.length === 0) {
+      return null;
+    }
+    const target =
+      el.scrollLeft +
+      (desk ? el.clientWidth / 2 : (nodes[0]?.offsetWidth ?? 0) / 2);
+    let best = -1;
+    let bestDist = Infinity;
+    for (let i = 0; i < nodes.length; i += 1) {
+      const card = nodes[i];
+      if (!card) {
+        continue;
+      }
+      const dist = Math.abs(card.offsetLeft + card.offsetWidth / 2 - target);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = i;
+      }
+    }
+    const card = nodes[best];
+    if (!card) {
+      return null;
+    }
+    return desk
+      ? card.offsetLeft + card.offsetWidth / 2 - el.clientWidth / 2
+      : card.offsetLeft;
+  }, [desk]);
+
+  // Докатка после свайпа: скролл затих — сами тянем полосу к ближайшей
+  // карточке пружинкой (CSS-снап на десктопе ради этого выключен).
+  const settle = useCallback(() => {
+    const el = scroller.current;
+    if (!el || glideActive.current) {
+      return;
+    }
+    const left = nearestCardLeft();
+    if (left === null || Math.abs(left - el.scrollLeft) < 2) {
+      return;
+    }
+    glideTo(left);
+  }, [glideTo, nearestCardLeft]);
+
+  const onScroll = useCallback(() => {
+    cancelAnimationFrame(frame.current);
+    frame.current = requestAnimationFrame(sync);
+    if (glideActive.current) {
+      return;
+    }
+    if (settleTimer.current) {
+      clearTimeout(settleTimer.current);
+    }
+    settleTimer.current = setTimeout(settle, SETTLE_IDLE_MS);
+  }, [sync, settle]);
 
   const goTo = useCallback(
     (index: number) => {
@@ -267,7 +378,7 @@ export function RentalsCarousel() {
 
   return (
     <div className="flex flex-col">
-      <div className="order-2 mt-6 flex items-center justify-center gap-4 desk:order-1 desk:mb-8 desk:mt-0">
+      <div className="order-2 mt-6 flex items-center justify-center gap-4 desk:mt-12">
         {CARDS.map((card, i) => (
           <button
             key={card.title}
@@ -275,7 +386,7 @@ export function RentalsCarousel() {
             aria-label={card.title}
             aria-current={active === i}
             onClick={() => goTo(i)}
-            className={`size-3 rounded-full transition-colors duration-200 ${
+            className={`size-3 cursor-pointer rounded-full transition-colors duration-200 ${
               active === i ? "bg-ink" : "bg-line hover:bg-gray-3"
             }`}
           />
@@ -286,7 +397,7 @@ export function RentalsCarousel() {
         onScroll={onScroll}
         onPointerDown={stopGlide}
         onWheel={stopGlide}
-        className="relative order-1 flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 [scrollbar-width:none] desk:order-2 desk:gap-5 desk:px-[calc((100%_-_380px)/2)] [&::-webkit-scrollbar]:hidden"
+        className="relative order-1 flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 [scrollbar-width:none] desk:snap-none desk:gap-5 desk:px-[calc((100%_-_380px)/2)] [&::-webkit-scrollbar]:hidden"
       >
         {CARDS.map((card, i) => (
           <article
