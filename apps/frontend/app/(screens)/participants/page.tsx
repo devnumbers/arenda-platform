@@ -1,5 +1,9 @@
+import { Suspense } from 'react';
 import type { Metadata } from 'next';
-import { ParticipantsHubScreen } from '@/widgets/participants';
+import { ParticipantsHubScreen, ParticipantsHubSkeleton } from '@/widgets/participants';
+import { participantsSummaryQueryOptions } from '@/features/participants';
+import { ServerPrefetchBoundary } from '@/shared/api/server-prefetch';
+import { serverApiClient } from '@/shared/api/server-client';
 
 /**
  * Хаб «Совместный доступ» (карта #692, тикет #696): пункт навбара
@@ -12,5 +16,15 @@ export const metadata: Metadata = {
 };
 
 export default function ParticipantsRoutePage() {
-  return <ParticipantsHubScreen />;
+  return (
+    <Suspense fallback={<ParticipantsHubSkeleton />}>
+      <ServerPrefetchBoundary
+        prefetch={(queryClient) => {
+          void queryClient.prefetchQuery(participantsSummaryQueryOptions(serverApiClient));
+        }}
+      >
+        <ParticipantsHubScreen />
+      </ServerPrefetchBoundary>
+    </Suspense>
+  );
 }

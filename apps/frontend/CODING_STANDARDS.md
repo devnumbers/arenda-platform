@@ -64,6 +64,8 @@ No form library and no schema validator — this is deliberate, not a gap:
 
 Every page assembles its chrome from the design-layer primitives — `<TopNav>`, `<PageContent>`, `<StickyBottomBar>` — in one fixed order and composition. The anatomy, widths, breakpoints, full-height-scroll pattern, and the surface-choice table (route / fullscreen overlay / modal / picker menu) live in `DESIGN.md` §1–4 and are mandatory reading before UI work.
 
+Server prefetch rule (#887): a content page whose first frame reads a query serves that frame with data on a cold entry — the RSC page wraps the screen in `<Suspense fallback={<ScreenSkeleton />}>` + `ServerPrefetchBoundary` and lays out its first-frame queries through the `queryOptions` factories of the feature's dual `api/queries.ts` module with `serverApiClient`. Mechanics, scope rules, and gates live in `DESIGN.md` §15; hooks stay in `api/hooks.ts` ('use client') reading the same factories.
+
 Column width rule (решение владельца 26.09, аудит #870): the content column is exactly the `PageContent` cap — `max-w-column` (560) — on every breakpoint. Content blocks sit **inside** the column with their own `px-6` (24px each side), so cards/pills render 512 wide on tablet/desktop and full-width-minus-24 on mobile. Negative-margin compensation (`-mx-N` + breakpoint `mx-0`, «гашу вставку кабинета») against the page wrapper is forbidden: the wrapper carries no horizontal padding since #865, so such a hack only pushes the block past the 560 cap (600px bug on the payments hubs). Inner `-mx` cancelling a container's **own** padding (a list spanning its padded card, `picker-field`) stays legitimate.
 
 ## Testing
