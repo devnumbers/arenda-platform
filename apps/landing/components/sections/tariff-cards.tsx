@@ -146,7 +146,7 @@ export function TariffCards({
               role="tab"
               aria-selected={billing === value}
               onClick={() => selectBilling(value)}
-              className={`relative flex h-[52px] flex-1 items-center justify-center gap-2 rounded-[14px] text-xs transition-colors duration-200 outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+              className={`relative flex h-[52px] flex-1 cursor-pointer items-center justify-center gap-2 rounded-[14px] text-xs transition-colors duration-200 outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
                 billing === value ? "text-ink" : "text-gray-2"
               }`}
             >
@@ -201,8 +201,15 @@ export function TariffCards({
                       }`}
                     >
                       <p className="text-[28px] font-semibold leading-8">{price}</p>
-                      {displayedBilling === "yearly" && tariff.id !== "basic" && (
-                        <p className={`text-s leading-5 desk:text-r desk:leading-[22px] ${theme.sub}`}>
+                      {/* Строка года резервируется и в «Месяце» (invisible):
+                          без неё justify-between карточки сдвигает блок фич
+                          на 16px при каждом переключении. */}
+                      {tariff.id !== "basic" && (
+                        <p
+                          className={`text-s leading-5 desk:text-r desk:leading-[22px] ${theme.sub} ${
+                            displayedBilling === "yearly" ? "" : "invisible"
+                          }`}
+                        >
                           При оплате {tariff.yearlyTotal.toLocaleString("ru-RU")} ₽ за год
                         </p>
                       )}
