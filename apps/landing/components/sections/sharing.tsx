@@ -5,11 +5,17 @@ import sharingPhoto2 from "@/assets/sections/sharing-photo-2.webp";
 
 // «Делитесь объектом» — макеты 2814-951 (десктоп: заголовок по центру,
 // панель r40 h-450, карточка 400 на (72,72) выступает за низ панели),
-// 2859-3561 (планшет: всё по центру, панель r32 h-450, карточка 326,
-// пара 380 вплотную к низу), 2826-151461 (мобайл: панель r32 h-500,
-// карточка 223 r24, пара 260). Панель — primary на 10% альфы (по живому
-// канвасу Figma, 26.09); overflow-hidden нет — карточка десктопа выступает
-// ниже панели, как в макете.
+// 2859-3561 (планшет 768: панель 720 r32 h-450, карточка 326 на left 8%
+// top 62, пара 380 вплотную к низу и в 43px от правого края), 2826-151462
+// (мобайл: панель r32 h-500, карточка 223 r24 по центру, top 45, пара 260
+// по центру, вплотную к низу). Планшет: левый край карточки 8% и правый
+// край пары 6% от ширины панели, ширины min(макетный px, % панели) —
+// на 768 пиксельно по макету, ниже композиция сжимается вместе с панелью
+// и не вылезает на всём диапазоне 481–1199. Мобайл: картинки центрируются
+// left-1/2 — проценты, откалиброванные под 393, гуляли от центра на
+// остальных ширинах. Панель — primary на 10% альфы (по живому канвасу
+// Figma, 26.09); overflow-hidden нет — карточка десктопа выступает ниже
+// панели, как в макете.
 export function Sharing() {
   return (
     <section id="sharing" className="mt-24 desk:mt-[156px]">
@@ -32,13 +38,13 @@ export function Sharing() {
               src={sharingPhoto2}
               alt="Партнеры работают с объектом вместе"
               sizes="(min-width: 1200px) 400px, (min-width: 481px) 326px, 223px"
-              className="absolute left-[17.5%] top-[45px] h-[223px] w-[223px] rounded-[24px] shadow-[0_8px_24px_rgba(43,127,255,0.08)] tab:left-[8%] tab:top-[62px] tab:h-[326px] tab:w-[326px] tab:rounded-[32px] desk:left-[72px] desk:top-[72px] desk:h-[400px] desk:w-[400px] desk:rounded-[40px]"
+              className="absolute left-1/2 top-[45px] h-[223px] w-[223px] -translate-x-1/2 rounded-[24px] shadow-[0_8px_24px_rgba(43,127,255,0.08)] tab:left-[8%] tab:top-[62px] tab:h-auto tab:w-[min(326px,45.3%)] tab:translate-x-0 tab:rounded-[32px] desk:left-[72px] desk:top-[72px] desk:h-[400px] desk:w-[400px] desk:rounded-[40px]"
             />
             <Image
               src={sharingPhoto1}
               alt="Совместный доступ к объекту в Рентли"
               sizes="(min-width: 1200px) 380px, (min-width: 481px) 380px, 260px"
-              className="absolute left-[12%] top-[240px] h-[260px] w-[260px] tab:left-[41%] tab:top-[70px] tab:h-[380px] tab:w-[380px] desk:bottom-0 desk:left-[542px] desk:top-auto desk:h-[380px] desk:w-[380px]"
+              className="absolute bottom-0 left-1/2 h-[260px] w-[260px] -translate-x-1/2 tab:left-auto tab:right-[6%] tab:h-auto tab:w-[min(380px,52.8%)] tab:translate-x-0 desk:left-[542px] desk:right-auto desk:h-[380px] desk:w-[380px]"
             />
           </div>
         </Reveal>
