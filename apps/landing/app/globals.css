@@ -116,6 +116,22 @@
       translate: 0 0;
     }
   }
+
+  /* Въезд цены тарифа при смене Год/Месяц (tariff-cards.tsx) — та же
+     хореография 180/280, что у текста steps: уход вверх-фейд 180мс,
+     подмена, въезд снизу 280мс. */
+  --animate-tariff-price-in: tariff-price-in 280ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  @keyframes tariff-price-in {
+    from {
+      opacity: 0;
+      translate: 0 6px;
+    }
+    to {
+      opacity: 1;
+      translate: 0 0;
+    }
+  }
 }
 
 @layer base {
@@ -128,5 +144,39 @@
 
   body {
     @apply bg-white font-sans text-ink antialiased;
+  }
+}
+
+@layer components {
+  /* Конический градиент-обвод стеклянных тарифных карточек (узел Figma
+     2846-153711, stroke fill_f0f18fa9): border-image не умеет скруглённые
+     углы, поэтому кольцо 1px рисует псевдоэлемент с двухслойной маской
+     (content-box внутрь, кольцо наружу). */
+  .glass-ring::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: conic-gradient(
+      from 103deg at 50% 53%,
+      rgba(156, 156, 156, 0.5) 3%,
+      rgba(156, 156, 156, 0.35) 9%,
+      rgba(255, 255, 255, 0.5) 17%,
+      rgba(255, 255, 255, 0.5) 30%,
+      rgba(156, 156, 156, 0.35) 52%,
+      rgba(249, 249, 249, 1) 58%,
+      rgba(255, 255, 255, 0.5) 80%,
+      rgba(249, 249, 249, 0.5) 91%
+    );
+    -webkit-mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+    pointer-events: none;
   }
 }
