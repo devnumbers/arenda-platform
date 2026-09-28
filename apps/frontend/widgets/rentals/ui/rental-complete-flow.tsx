@@ -131,7 +131,7 @@ export function RentalCompleteFlow({
             </h1>
           </div>
         </PageContent>
-        <StickyBottomBar fullWidthContent>
+        <StickyBottomBar>
           <WizardBottomBar>
             <Button className="w-full" onClick={finishFlow}>
               Хорошо
@@ -192,7 +192,7 @@ export function RentalCompleteFlow({
         {/* Панель подтверждения (Figma 1428:58303): «Отмена» и «Продолжить»
             рядом равными долями. */}
         {stage === 'confirm' && (
-          <StickyBottomBar fullWidthContent>
+          <StickyBottomBar>
             <div className="flex gap-2">
               <Button variant="secondary" className="flex-1" onClick={onClose}>
                 Отменить
@@ -236,7 +236,7 @@ export function RentalCompleteFlow({
               </div>
             </div>
             {completedDate !== undefined && (
-              <StickyBottomBar fullWidthContent>
+              <StickyBottomBar>
                 <WizardBottomBar>
                   <Button className="w-full" onClick={() => setStage('deposit')}>
                     Продолжить
@@ -290,7 +290,7 @@ export function RentalCompleteFlow({
               />
             </div>
             {depositAmount !== undefined && (
-              <StickyBottomBar fullWidthContent>
+              <StickyBottomBar>
                 <WizardBottomBar>
                   <Button className="w-full" onClick={() => setStage('summary')}>
                     Продолжить
@@ -378,7 +378,7 @@ export function RentalCompleteFlow({
             {/* Панель hero-экрана — только <561; панель обзора — после
                 «Подвести итоги» и на ≥561 всегда. */}
             {!summaryRevealed && (
-              <StickyBottomBar className="min-[561px]:hidden" fullWidthContent>
+              <StickyBottomBar className="min-[561px]:hidden">
                 <WizardBottomBar>
                   <Button className="w-full" onClick={() => setSummaryRevealed(true)}>
                     Подвести итоги
@@ -388,7 +388,6 @@ export function RentalCompleteFlow({
             )}
             <StickyBottomBar
               className={summaryRevealed ? undefined : 'hidden min-[561px]:block'}
-              fullWidthContent
             >
               <WizardBottomBar>
                 <Button

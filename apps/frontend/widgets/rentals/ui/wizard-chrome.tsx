@@ -275,7 +275,7 @@ export function PaymentDayPicker({
         {/* Футер только с черновиком выбора (решение владельца 2026-09-05:
             скрытие вместо дизейбла); на планшете тянется с шитом. */}
         {ready && (
-          <StickyBottomBar fullWidthContent>
+          <StickyBottomBar>
             <WizardBottomBar>
               <Button
                 className="w-full"

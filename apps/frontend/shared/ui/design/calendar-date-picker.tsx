@@ -92,9 +92,10 @@ import { MONTH_LABELS, daysInMonth, firstWeekdayOfMonth, WEEKDAY_LABELS } from '
  * «сегодня» собственника). Симметрично минимуму: пустой черновик
  * прижимается к границе, если «сегодня» за ней.
  *
- * Планшет (561–768, решение владельца 2026-09-04): TopNav и белый шит
- * футера тянутся во всю ширину — кнопка «Выбрать» тоже (StickyBottomBar
- * fullWidthContent); на десктопе ≥769 футер возвращается в колонку 560. */
+ * Планшет (561–768): TopNav и белый шит футера тянутся во всю ширину —
+ * кнопка «Выбрать» тоже (StickyBottomBar, универсальное правило планшета,
+ * решение владельца 28.09); на десктопе ≥769 футер возвращается в колонку
+ * 560. */
 
 /** Стартовая лента и шаг дорисовки — год месяцев. */
 const FEED_MONTHS = 12;
@@ -379,7 +380,7 @@ export function CalendarDatePicker({
           (решение владельца 2026-09-04: хедер и шит на планшете во всю
           ширину — кнопка тоже). */}
       {!(required === true && draft === null) && (
-        <StickyBottomBar fullWidthContent>
+        <StickyBottomBar>
           <Button className="w-full" onClick={() => onConfirm(draft)}>
             {confirmLabel}
           </Button>
@@ -474,8 +475,9 @@ export type CalendarRangePickerProps = {
  * открывается пятью месяцами контекста у текущего. Опциональный onReset
  * добавляет «Сбросить» рядом с «Выбрать» (secondary слева) — потребитель
  * решает, что сброс означает. Футер на планшете тянется вместе с шитом
- * (fullWidthContent). Рендерится только в открытом состоянии — лента и
- * черновик живут, пока пикер смонтирован. */
+ * (универсальное правило планшета, решение владельца 28.09). Рендерится
+ * только в открытом состоянии — лента и черновик живут, пока пикер
+ * смонтирован. */
 export function CalendarRangePicker({
   title = 'Выберите период',
   confirmLabel = 'Выбрать',
@@ -682,7 +684,7 @@ export function CalendarRangePicker({
           подтверждать нечего. «Сбросить» — рядом, когда потребителю нужен
           возврат к состоянию «без периода» (канон пары: secondary слева,
           primary справа, как в WizardBottomBar потоков). */}
-      <StickyBottomBar fullWidthContent>
+      <StickyBottomBar>
         <div className="flex w-full gap-2">
           {onReset !== undefined && (
             <Button variant="secondary" className="w-full" onClick={onReset}>
