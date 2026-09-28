@@ -46,13 +46,17 @@ export default function InfoPage() {
             <NextLink
               key={item.href}
               href={item.href}
-              className="flex min-h-[52px] items-center justify-between gap-4 rounded-card bg-surface-muted px-6 py-3 outline-none focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+              className="flex min-h-[52px] items-center justify-between rounded-card bg-surface-muted px-6 py-4 outline-none focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
               aria-label={`Перейти к документу «${item.title}»`}
             >
               <span className="text-base font-medium leading-[18px] text-content">
                 {item.title}
               </span>
-              <SmallArrowRight className="shrink-0 text-content-tertiary" aria-hidden />
+              {/* Слот шеврона 44 (Icon Button макета): задаёт строке высоту
+                  76 = 44 + паддинги 16×2 — все строки карточки одной высоты. */}
+              <span className="flex size-11 shrink-0 items-center justify-center">
+                <SmallArrowRight className="text-content-tertiary" aria-hidden />
+              </span>
             </NextLink>
           ))}
         </nav>
