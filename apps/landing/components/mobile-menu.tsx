@@ -41,7 +41,7 @@ export function MobileMenu({
             aria-expanded={open}
             aria-controls="mobile-menu"
             aria-label={open ? "Закрыть меню" : "Открыть меню"}
-            className="flex h-11 w-11 items-center justify-center rounded-xl bg-surface transition-colors duration-200 outline-none hover:bg-surface-hover active:bg-surface-active focus-visible:ring-2 focus-visible:ring-primary/40"
+            className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-xl bg-surface transition-colors duration-200 outline-none hover:bg-surface-hover active:bg-surface-active focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
           >
             {open ? <CloseIcon /> : <BurgerIcon />}
           </button>
@@ -60,7 +60,7 @@ export function MobileMenu({
                 <a
                   href={item.href}
                   onClick={() => setOpen(false)}
-                  className="flex min-h-[52px] items-center rounded-xl px-6 text-s text-ink transition-colors duration-200 hover:bg-surface active:bg-surface-active"
+                  className="flex min-h-[52px] items-center rounded-xl px-6 text-s text-ink transition-colors duration-200 hover:bg-surface active:bg-surface"
                 >
                   {item.label}
                 </a>

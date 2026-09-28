@@ -1,24 +1,26 @@
 import type { ButtonHTMLAttributes, AnchorHTMLAttributes, ReactNode } from "react";
 
-// Система кнопок лендинга — стили из Figma REST (компоненты 2864-5099,
-// 2865-5138/5246, 2865-5362): текст кнопок Onest 400 (большие 18/22,
-// хедерные 14/18); primary #2b7fff (hover #2175f5, active #176beb),
-// gray #f3f4f6 (hover #e9eaec, active #dfe0e2); радиусы: 64px-кнопки 16,
-// хедерные 44px-чипы 12.
+// Система кнопок лендинга — сверено с доской состояний 2864-5099:
+// текст Onest 400 (большие 18/22, хедерные 14/18); primary #2b7fff
+// (hover #2175f5, active #176beb), gray/white — Default/Hover/Active
+// #f3f4f6/#e9eaec/#dfe0e2 (белая на цветной подложке гаснет той же
+// лесенкой); фокус — инсет-кольцо 2px (у синей кнопки #171a1c, у серой
+// и белой #2b7fff); радиусы: 64px-кнопки 16, хедерные 44px-чипы 12.
+// cursor-pointer задан явно: Tailwind v4 не даёт <button> pointer сам.
 
 function cx(...classes: Array<string | false | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
 const BASE =
-  "inline-flex items-center justify-center rounded-2xl transition-colors duration-200 outline-none focus-visible:ring-2 focus-visible:ring-primary/40 select-none";
+  "inline-flex cursor-pointer items-center justify-center rounded-2xl transition-colors duration-200 outline-none select-none focus-visible:ring-2 focus-visible:ring-inset";
 
 const VARIANTS = {
   primary:
-    "bg-primary text-white hover:bg-primary-hover active:bg-primary-active",
-  gray: "bg-surface text-ink hover:bg-surface-hover active:bg-surface-active",
-  // Белая кнопка на цветной подложке (хиро): hover/active — приглушение в серый.
-  white: "bg-white text-ink hover:bg-surface active:bg-surface-hover",
+    "bg-primary text-white hover:bg-primary-hover active:bg-primary-active focus-visible:ring-ink",
+  gray: "bg-surface text-ink hover:bg-surface-hover active:bg-surface-active focus-visible:ring-primary",
+  white:
+    "bg-white text-ink hover:bg-surface-hover active:bg-surface-active focus-visible:ring-primary",
 } as const;
 
 const SIZES = {

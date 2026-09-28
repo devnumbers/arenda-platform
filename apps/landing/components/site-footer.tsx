@@ -40,19 +40,21 @@ export function SiteFooter() {
           </LandingLink>
         </div>
         <div className="flex flex-col gap-3.5 text-s desk:flex-row desk:flex-wrap desk:items-center desk:gap-6 desk:text-r">
+          {/* Политики — доска 2865-5440: hover #2b7fff, active #176beb,
+              фокус — синий текст; Default 18/22, Small (мобайл) 16/20. */}
           <Link
             href="/privacy"
-            className="leading-[22px] text-ink transition-colors duration-200 hover:text-primary desk:order-2"
+            className="leading-5 text-ink transition-colors duration-200 hover:text-primary active:text-primary-active focus-visible:text-primary desk:order-2 desk:leading-[22px]"
           >
             Политика конфиденциальности
           </Link>
           <Link
             href="/terms"
-            className="leading-[22px] text-ink transition-colors duration-200 hover:text-primary desk:order-3"
+            className="leading-5 text-ink transition-colors duration-200 hover:text-primary active:text-primary-active focus-visible:text-primary desk:order-3 desk:leading-[22px]"
           >
             Пользовательское соглашение
           </Link>
-          <span className="leading-[22px] text-gray-3 desk:order-1">© {year} Рентли</span>
+          <span className="leading-5 text-gray-3 desk:order-1 desk:leading-[22px]">© {year} Рентли</span>
         </div>
       </div>
     </footer>

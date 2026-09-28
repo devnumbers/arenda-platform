@@ -39,7 +39,7 @@ export function Faq() {
                           type="button"
                           aria-expanded={expanded}
                           onClick={() => setOpen(expanded ? null : key)}
-                          className="flex w-full items-center gap-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                          className="flex w-full cursor-pointer items-center gap-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                         >
                           <span className="min-h-5 flex-1 text-s leading-5 text-ink desk:text-r desk:leading-[22px]">
                             {item.question}
