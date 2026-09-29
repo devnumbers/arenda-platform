@@ -24,7 +24,7 @@ export function Contact() {
                 className="object-cover"
               />
             </div>
-            <div className="relative flex w-full max-w-[260px] flex-col gap-3 tab:max-w-[260px] desk:max-w-[290px] desk:gap-[156px]">
+            <div className="relative flex w-full max-w-[260px] flex-col gap-3 desk:max-w-[290px] desk:gap-[156px]">
               <p className="text-[28px] font-semibold leading-8 desk:text-h3 desk:font-medium desk:leading-10">
                 Установите сайт как приложение
               </p>
