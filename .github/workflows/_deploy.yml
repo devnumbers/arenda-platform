@@ -130,11 +130,24 @@ jobs:
           EXAMPLE="deploy/.env.${COMPOSE_ENV}.example"
           actual="$(sed -n 's/^\([A-Z_][A-Z0-9_]*\)=.*/\1/p' "${ENV_OUT}" | sort -u)"
           expected="$(sed -n 's/^\([A-Z_][A-Z0-9_]*\)=.*/\1/p' "${EXAMPLE}" | sort -u)"
+
+          # Ключи из OPTIONAL_KEYS могут отсутствовать в ENV_FILE: у каждого
+          # есть осмысленный дефолт в конфиге приложения. WEB_ORIGIN (фейк-
+          # симулятор #663) дефолтится на origin APP_BASE_URL — на stage это
+          # тот же https://dev.rentlee.ru, значение ключа ничего не меняет
+          # (решение владельца 29.09: дополнить секрет значениями в этом
+          # раунде было нечем, паритет гасим точечно, не снося гейт).
+          OPTIONAL_KEYS="WEB_ORIGIN"
+          optional_args=()
+          for key in ${OPTIONAL_KEYS}; do optional_args+=(-e "${key}"); done
+          actual="$(printf '%s\n' "${actual}" | grep -Fvx "${optional_args[@]}" || true)"
+          expected="$(printf '%s\n' "${expected}" | grep -Fvx "${optional_args[@]}" || true)"
           if [ "${actual}" != "${expected}" ]; then
             echo "ENV DRIFT: keys of the ENV_FILE secret differ from ${EXAMPLE}" >&2
             echo "--- keys only in ${EXAMPLE} (missing in ENV_FILE) / only in ENV_FILE (unexpected) ---" >&2
             diff <(printf '%s\n' "${expected}") <(printf '%s\n' "${actual}") >&2 || true
             echo "(< expected per ${EXAMPLE}, > actual in ENV_FILE secret)" >&2
+            echo "(optional keys tolerated: ${OPTIONAL_KEYS})" >&2
             exit 1
           fi
 
