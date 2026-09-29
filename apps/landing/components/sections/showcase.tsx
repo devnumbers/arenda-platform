@@ -14,7 +14,7 @@ import screensSub from "@/assets/sections/showcase-screens-sub.webp";
 // (4096×1792 из Figma, соотношение 1106/484), у десктопа — 1600×400.
 export function Showcase() {
   return (
-    <section id="showcase" className="mt-24 desk:mt-[156px]">
+    <section id="showcase" className="mt-24 scroll-mt-[88px] desk:mt-[156px] desk:scroll-mt-[104px]">
       <div className="mx-auto flex max-w-[1048px] flex-col items-center gap-8 px-10 desk:max-w-[1000px] desk:gap-14 desk:px-0">
         <Reveal className="w-full">
           <div className="flex w-full flex-col items-center gap-3 text-center desk:gap-6">

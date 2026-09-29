@@ -9,7 +9,7 @@ export async function Tariffs() {
   const me = await getMe();
 
   return (
-    <section id="tariffs" className="mt-24 desk:mt-[156px]">
+    <section id="tariffs" className="mt-24 scroll-mt-[88px] desk:mt-[156px] desk:scroll-mt-[104px]">
       <div className="mx-auto flex w-full max-w-[1048px] flex-col items-center px-6 desk:max-w-[1000px] desk:px-0">
         <Reveal delay={100} className="flex w-full flex-col items-center">
           <TariffCards tariffs={TARIFFS} currentTariff={me?.tariff} />

@@ -10,7 +10,7 @@ import contactIphone from "@/assets/sections/contact-iphone.webp";
 // p-32, айфон 302 снизу справа).
 export function Contact() {
   return (
-    <section id="contact" className="mt-24 desk:mt-[156px]">
+    <section id="contact" className="mt-24 scroll-mt-[88px] desk:mt-[156px] desk:scroll-mt-[104px]">
       <div className="mx-auto w-full max-w-[1048px] px-6 desk:max-w-[1000px] desk:px-0">
         <Reveal className="w-full">
           <div className="relative flex h-[550px] items-start justify-between overflow-clip rounded-[32px] p-8 tab:h-[500px] tab:rounded-[40px] tab:p-[52px] desk:h-[406px] desk:p-[52px]">

@@ -70,7 +70,7 @@ export function Steps() {
   const text = STEPS[textStep] ?? step;
 
   return (
-    <section id="steps" className="mt-24 desk:mt-[156px]">
+    <section id="steps" className="mt-24 scroll-mt-[88px] desk:mt-[156px] desk:scroll-mt-[104px]">
       <div className="flex flex-col items-center gap-8 desk:gap-14">
         <div className="w-full px-0 desk:px-2">
           <div className="relative flex w-full flex-col items-center justify-end overflow-hidden rounded-[32px] bg-[linear-gradient(180deg,rgba(43,127,255,0)_0%,rgba(43,127,255,0.1)_100%)] px-8 desk:px-10">

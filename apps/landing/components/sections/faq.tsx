@@ -15,7 +15,7 @@ export function Faq() {
   const [open, setOpen] = useState<string | null>(null);
 
   return (
-    <section id="faq" className="mt-24 desk:mt-[156px]">
+    <section id="faq" className="mt-24 scroll-mt-[88px] desk:mt-[156px] desk:scroll-mt-[104px]">
       <div className="mx-auto w-full max-w-[1048px] px-6 desk:max-w-[1000px] desk:px-0">
         <Reveal>
           <h2 className="text-center text-[28px] font-semibold leading-8 desk:text-h2 desk:leading-[60px]">

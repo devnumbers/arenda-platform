@@ -18,7 +18,7 @@ import sharingPhoto2 from "@/assets/sections/sharing-photo-2.webp";
 // панели, как в макете.
 export function Sharing() {
   return (
-    <section id="sharing" className="mt-24 desk:mt-[156px]">
+    <section id="sharing" className="mt-24 scroll-mt-[88px] desk:mt-[156px] desk:scroll-mt-[104px]">
       <div className="mx-auto w-full max-w-[1048px] px-6 desk:max-w-[1000px] desk:px-0">
         <Reveal>
           <div className="flex flex-col items-center gap-3 text-center">

@@ -14,7 +14,7 @@ export function Cta() {
   return (
     <section
       id="cta"
-      className="mt-24 mb-24 desk:mt-[156px] desk:mb-[156px] desk:px-2"
+      className="mt-24 mb-24 scroll-mt-[88px] desk:mt-[156px] desk:mb-[156px] desk:scroll-mt-[104px] desk:px-2"
     >
       <Reveal className="w-full">
         <div className="flex flex-col items-center rounded-[40px] bg-gradient-to-b from-[#88b7ff] to-[#2b7fff] px-8 py-24 desk:py-[156px]">
