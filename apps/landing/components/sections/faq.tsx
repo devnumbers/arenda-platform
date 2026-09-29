@@ -10,7 +10,8 @@ import { FAQ } from "@/lib/content";
 // и 2859-3733 / 2826-151577 (планшет/мобайл: r32, паддинг 32/32/24,
 // категория 20/24 Medium над списком с шагом 8, вопросы 16/20, шевроны
 // серые 20×20, шаг между карточками 12). Внизу — CTA-карточка bg-surface
-// (на планшете/мобайле по центру). Кнопка — решение владельца (TODO).
+// (на планшете/мобайле по центру) — 2814-1131 / 2859-3799 / 2826-151643,
+// кнопка primary «Задать вопрос» (решение владельца 29.09).
 export function Faq() {
   const [open, setOpen] = useState<string | null>(null);
 
@@ -85,19 +86,17 @@ export function Faq() {
             </Reveal>
           ))}
           <Reveal delay={150} className="w-full">
-            {/* TODO(владелец): хэндл Telegram-канала — плейсхолдер t.me/rentlee;
-                в макете кнопка primary «Задать вопрос». */}
+            {/* Хэндл Telegram-канала — плейсхолдер t.me/rentlee до финального от владельца. */}
             <div className="flex flex-col items-center gap-6 rounded-[32px] bg-surface px-8 py-16 text-center desk:flex-row desk:justify-between desk:gap-6 desk:rounded-[40px] desk:py-10 desk:pl-[52px] desk:pr-10 desk:text-left">
               <p className="text-m font-medium leading-6 desk:text-h3 desk:leading-10">
                 Не нашли ответ на свой вопрос?
               </p>
               <LandingLink
-                variant="gray"
                 href="https://t.me/rentlee"
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                Написать в Telegram
+                Задать вопрос
               </LandingLink>
             </div>
           </Reveal>
