@@ -16,6 +16,13 @@ export function Testimonials() {
           Опыт пользователей
         </h2>
       </Reveal>
+      {/* Оба варианта — карусель и десктоп — смонтированы всегда и прячутся
+          CSS-ом (desk:hidden / hidden desk:block) — осознанно: мгновенное
+          переключение брейкпоинта 1200px без потери скролл-позиции;
+          matchMedia-размонтирование в духе rentals-carousel.tsx:152-155
+          отвергнуто — сбросило бы скролл при пересечении брейкпоинта; цена —
+          холостые matchMedia-листенеры и applyProgress в display:none
+          (testimonials-carousel.tsx:417-438, :548-550), принята. */}
       <Reveal delay={100} className="mt-8 desk:hidden">
         <TestimonialsCarousel />
       </Reveal>
