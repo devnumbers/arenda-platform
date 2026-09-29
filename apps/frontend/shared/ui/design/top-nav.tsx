@@ -195,25 +195,7 @@ export function TopNav({
              * (Q5-А); лупа скрыта на 561–800px — место занято крылом-лого.
              * На мобайле слой во всю ширину (капа нет) — слоты у краёв. */
             <div className="absolute inset-0 mx-auto h-full w-full tablet:max-w-column">
-              {collapse.search && (
-                <div className="hub-compact absolute left-0 top-0 hidden h-full items-center pl-3.5 min-[800px]:flex">
-                  <Link
-                    href={collapse.search.href}
-                    aria-label={collapse.search.label}
-                    className="flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-button outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                  >
-                    <Search className="h-6 w-6 text-content" aria-hidden />
-                  </Link>
-                </div>
-              )}
-              <div className="hub-compact flex h-full w-full min-w-0 items-center justify-center px-3">
-                <TopNavTitle title={collapse.title} />
-              </div>
-              {collapse.trailing !== undefined && (
-                <div className="hub-compact absolute right-0 top-0 flex h-full items-center pr-3.5">
-                  {collapse.trailing}
-                </div>
-              )}
+              <TopNavCompactSlots collapse={collapse} tier="inline" />
             </div>
           ) : (
             <div className="flex h-full w-full min-w-0 items-center justify-center gap-2 px-3">{children}</div>
@@ -244,27 +226,73 @@ export function TopNav({
          * проявляется отдельным закреплённым клоном (Figma 1733:93740). */
         <div className="hub-compact hub-compact-bar fixed inset-x-0 top-0 z-40 bg-white pt-[env(safe-area-inset-top)] font-sans tablet:hidden">
           <div className="relative mx-auto h-[72px] w-full">
-            {collapse.search && (
-              <Link
-                href={collapse.search.href}
-                aria-label={collapse.search.label}
-                className="absolute left-0 top-0 flex h-full items-center pl-3.5 outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              >
-                <Search className="h-6 w-6 text-content" aria-hidden />
-              </Link>
-            )}
-            <div className="flex h-full items-center justify-center px-14">
-              <TopNavTitle title={collapse.title} />
-            </div>
-            {collapse.trailing && (
-              <div className="absolute right-0 top-0 flex h-full items-center pr-3.5">
-                {collapse.trailing}
-              </div>
-            )}
+            <TopNavCompactSlots collapse={collapse} tier="mobile" />
           </div>
         </div>
       )}
     </header>
+  );
+}
+
+/** Ярусы компакт-бара: inline — слой в закреплённом баре (планшет/ПК,
+ * кап колонки даёт родитель), mobile — внутри отдельного закреплённого
+ * клона (бар хаба уезжает при прокрутке, Figma 1733:93740). */
+type TopNavCompactTier = 'inline' | 'mobile';
+
+type TopNavCompactSlotsProps = {
+  readonly collapse: TopNavCollapse;
+  readonly tier: TopNavCompactTier;
+};
+
+/** Трио слотов компакт-бара хаба (лупа, тайтл, trailing) — общее для
+ * обоих мест рендера: ручные копии инлайна и клона дрейфовали (лупа
+ * клона теряла size-11/cursor-pointer/rounded-button, паддинг тайтла
+ * расходился), теперь расхождение классов слотов невозможно — ярусным
+ * параметром остаются только обёртки: видимость (в инлайне hub-compact
+ * стоит на каждом слое, у клона — на контейнере: дубль класса на слое
+ * умножал бы прозрачность), скрытие лупы на 561–800px (место занято
+ * крылом-лого) и паддинг тайтла px-3/px-14. Лупа едина: хит-зона 44
+ * (size-11) и клик-курсор на обоих ярусах. */
+function TopNavCompactSlots({ collapse, tier }: TopNavCompactSlotsProps): JSX.Element {
+  const inline = tier === 'inline';
+  // Видимость слоёв — параметр яруса; clsx отбрасывает undefined клона.
+  const slotVisibility = inline ? 'hub-compact' : undefined;
+  return (
+    <>
+      {collapse.search !== undefined && (
+        <div
+          className={cn(
+            'absolute left-0 top-0 h-full items-center pl-3.5',
+            slotVisibility,
+            inline ? 'hidden min-[800px]:flex' : 'flex',
+          )}
+        >
+          <Link
+            href={collapse.search.href}
+            aria-label={collapse.search.label}
+            className="flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-button outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            <Search className="h-6 w-6 text-content" aria-hidden />
+          </Link>
+        </div>
+      )}
+      <div
+        className={cn(
+          'flex h-full w-full min-w-0 items-center justify-center',
+          slotVisibility,
+          inline ? 'px-3' : 'px-14',
+        )}
+      >
+        <TopNavTitle title={collapse.title} />
+      </div>
+      {collapse.trailing !== undefined && (
+        <div
+          className={cn('absolute right-0 top-0 flex h-full items-center pr-3.5', slotVisibility)}
+        >
+          {collapse.trailing}
+        </div>
+      )}
+    </>
   );
 }
 
