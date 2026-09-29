@@ -30,7 +30,7 @@ export function Showcase() {
           <Image
             src={cardBar}
             alt="Карточка объекта в Рентли"
-            sizes="(min-width: 1200px) 1000px, 1025px"
+            sizes="(min-width: 1200px) 1000px, (min-width: 481px) 1025px, 650px"
             className="relative left-1/2 h-auto w-[650px] max-w-none -translate-x-1/2 tab:w-[1025px] desk:w-full"
           />
         </Reveal>
