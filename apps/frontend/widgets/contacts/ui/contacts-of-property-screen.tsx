@@ -126,6 +126,20 @@ export function ContactsOfPropertyScreen({
     setSearch('');
   };
 
+  // Чип сортировки общий: реальный чип уже в фазе загрузки (паритет §7,
+  // механика книги #605) и стоит над готовым списком; прячется вместе
+  // с пустым списком. Переключение направления во время загрузки
+  // безвредно: сортировка клиентская — пересортировываются уже пришедшие
+  // порции (contactSortByName), направление чипа в запрос и его ключ
+  // кэша не едет (в отличие от книги #605, где ось — серверная).
+  const sortChipRow = (
+    <div className="mx-6 mb-6">
+      <PickerMenu title="Сортировать" groups={orderPickerGroups(sortOrder, changeOrder)}>
+        <ContactsSortChip order={sortOrder} />
+      </PickerMenu>
+    </div>
+  );
+
   return (
     <>
       {searchOpen ? (
@@ -162,16 +176,9 @@ export function ContactsOfPropertyScreen({
       <PageContent>
         {contactsQuery.isPending ? (
           <>
-            {/* Паритет §7: чип сортировки реальный — вне фазы загрузки
-             * (та же механика, что у книги #605; переключение сортировки
-             * во время загрузки безвредно: запрос уходит с новым ключом);
-             * прячется вместе с пустым списком. Скелетон — книга объекта:
-             * алфавитные группы с буквами и строками канона. */}
-            <div className="mx-6 mb-6">
-              <PickerMenu title="Сортировать" groups={orderPickerGroups(sortOrder, changeOrder)}>
-                <ContactsSortChip order={sortOrder} />
-              </PickerMenu>
-            </div>
+            {sortChipRow}
+            {/* Скелетон — книга объекта: алфавитные группы с буквами
+             * и строками канона. */}
             <ContactsBookSkeleton />
           </>
         ) : contactsQuery.isError ? (
@@ -200,11 +207,7 @@ export function ContactsOfPropertyScreen({
           <ContactsEmptyState />
         ) : (
           <>
-            <div className="mx-6 mb-6">
-              <PickerMenu title="Сортировать" groups={orderPickerGroups(sortOrder, changeOrder)}>
-                <ContactsSortChip order={sortOrder} />
-              </PickerMenu>
-            </div>
+            {sortChipRow}
             {/* Книга (1527:74139): одна серая карточка с алфавитными
              * группами; буква — над своими строками. */}
             <section className="mx-6 flex flex-col gap-4 rounded-card bg-surface-muted pb-3 pl-5 pr-4 pt-6">
