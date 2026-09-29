@@ -51,9 +51,10 @@ function DesktopBar({ action }: { action: ReactNode }) {
   );
 }
 
-async function HeaderContent() {
-  const me = await getMe();
-  const action = <HeaderAction authed={me !== null} />;
+// Обвязка хедера: контейнер + десктоп-бар + мобильное меню. И контент, и
+// fallback рендерятся в ней, поэтому геометрия двух состояний совпадает
+// структурно, а не по копипасте.
+function HeaderShell({ action }: { action: ReactNode }) {
   return (
     <div className="mx-auto max-w-[1520px]">
       <DesktopBar action={action} />
@@ -64,18 +65,15 @@ async function HeaderContent() {
   );
 }
 
+async function HeaderContent() {
+  const me = await getMe();
+  return <HeaderShell action={<HeaderAction authed={me !== null} />} />;
+}
+
 // Fallback Suspense-дырки: гостевой хедер той же геометрии — авторизованным
 // чип «Войти»→«Профиль» меняется без сдвига (обе кнопки 44px, прижаты вправо).
 function HeaderFallback() {
-  const action = <HeaderAction authed={false} />;
-  return (
-    <div className="mx-auto max-w-[1520px]">
-      <DesktopBar action={action} />
-      <div className="desk:hidden">
-        <MobileMenu nav={NAV} action={action} />
-      </div>
-    </div>
-  );
+  return <HeaderShell action={<HeaderAction authed={false} />} />;
 }
 
 export function SiteHeader() {
