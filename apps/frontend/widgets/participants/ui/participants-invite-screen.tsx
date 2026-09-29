@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Cancel, SmallArrowDown } from '@/shared/assets/icons';
 import { goBack } from '@/shared/lib/navigation';
 import { ROUTES } from '@/shared/config/routes';
+import { cn } from '@/shared/lib/cn';
 import { pluralize } from '@/shared/lib/pluralize';
 import {
   allInvitedProperties,
@@ -21,6 +22,7 @@ import {
   Button,
   EmptyState,
   ErrorCard,
+  fullscreenSurfaceClass,
   IconButton,
   PageContent,
   StickyBottomBar,
@@ -265,7 +267,7 @@ function InviteObjectsPicker({
       role="dialog"
       aria-modal="true"
       aria-label="Выбрать объект"
-      className="fullscreen-surface fixed inset-0 z-50 flex flex-col font-sans"
+      className={cn(fullscreenSurfaceClass, 'font-sans')}
     >
       <TopNav
         overlay

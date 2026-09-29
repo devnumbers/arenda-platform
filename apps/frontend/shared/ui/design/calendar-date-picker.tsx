@@ -12,6 +12,7 @@ import { cn } from '@/shared/lib/cn';
 import {
   Button,
   CalendarButton,
+  fullscreenSurfaceClass,
   IconButton,
   MonthYearPicker,
   StickyBottomBar,
@@ -92,10 +93,10 @@ import { MONTH_LABELS, daysInMonth, firstWeekdayOfMonth, WEEKDAY_LABELS } from '
  * «сегодня» собственника). Симметрично минимуму: пустой черновик
  * прижимается к границе, если «сегодня» за ней.
  *
- * Планшет (561–768): TopNav и белый шит футера тянутся во всю ширину —
- * кнопка «Выбрать» тоже (StickyBottomBar, универсальное правило планшета,
- * решение владельца 28.09); на десктопе ≥769 футер возвращается в колонку
- * 560. */
+ * Планшет (561–1023): TopNav и белый шит футера тянутся во всю ширину —
+ * кнопка «Выбрать» тоже (StickyBottomBar, универсальное правило планшета:
+ * нижние панели во всю ширину, на ПК ≥1024 — колонка 560; решение
+ * владельца 28.09 после аудита #877, канон DESIGN.md §5). */
 
 /** Стартовая лента и шаг дорисовки — год месяцев. */
 const FEED_MONTHS = 12;
@@ -257,7 +258,7 @@ export function CalendarDatePicker({
       role="dialog"
       aria-modal="true"
       aria-label={title}
-      className="fullscreen-surface fixed inset-0 z-50 flex flex-col font-sans"
+      className={cn(fullscreenSurfaceClass, 'font-sans')}
     >
       <TopNav
         overlay
@@ -376,9 +377,9 @@ export function CalendarDatePicker({
           черновика) — решение владельца 2026-09-05: скрытие вместо
           погашенной кнопки, у пикерных «Выбрать» так же. Без required
           активна всегда: с пустым черновиком подтверждает «без даты».
-          Футер тянется вместе с шитом в планшетном диапазоне 561–768
-          (решение владельца 2026-09-04: хедер и шит на планшете во всю
-          ширину — кнопка тоже). */}
+          Футер тянется вместе с шитом в планшетном диапазоне 561–1023
+          (универсальное правило планшета, решение владельца 28.09, #877:
+          на ПК ≥1024 — колонка 560, канон DESIGN.md §5). */}
       {!(required === true && draft === null) && (
         <StickyBottomBar>
           <Button className="w-full" onClick={() => onConfirm(draft)}>
@@ -592,7 +593,7 @@ export function CalendarRangePicker({
       role="dialog"
       aria-modal="true"
       aria-label={title}
-      className="fullscreen-surface fixed inset-0 z-50 flex flex-col font-sans"
+      className={cn(fullscreenSurfaceClass, 'font-sans')}
     >
       <TopNav
         overlay

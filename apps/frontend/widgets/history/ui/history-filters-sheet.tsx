@@ -52,6 +52,7 @@ import {
   CalendarRangePicker,
   Checkbox,
   ErrorCard,
+  fullscreenSurfaceClass,
   IconButton,
   StickyBottomBar,
   TopNav,
@@ -287,7 +288,7 @@ export function HistoryFiltersSheet({
       role="dialog"
       aria-modal="true"
       aria-label="Фильтры истории"
-      className="fullscreen-surface fixed inset-0 z-50 flex flex-col font-sans"
+      className={cn(fullscreenSurfaceClass, 'font-sans')}
     >
       <TopNav
         overlay

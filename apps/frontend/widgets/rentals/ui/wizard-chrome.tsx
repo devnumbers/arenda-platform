@@ -6,6 +6,7 @@ import { cn } from '@/shared/lib/cn';
 import {
   Button,
   Checkbox,
+  fullscreenSurfaceClass,
   groupedAmount,
   IconButton,
   ListRow,
@@ -233,7 +234,7 @@ export function PaymentDayPicker({
       role="dialog"
       aria-modal="true"
       aria-label="Выбор дня оплаты"
-      className="fullscreen-surface fixed inset-0 z-50 flex flex-col"
+      className={fullscreenSurfaceClass}
     >
       <TopNav
         overlay

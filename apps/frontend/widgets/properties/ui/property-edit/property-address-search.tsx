@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, JSX, KeyboardEvent } from 'react';
 import Image from 'next/image';
+import { cn } from '@/shared/lib/cn';
 import { focusListboxEdge } from '@/shared/ui/design/listbox-keyboard';
-import { IconButton, PageContent, SearchField, TopNav } from '@/shared/ui/design';
+import { fullscreenSurfaceClass, IconButton, PageContent, SearchField, TopNav } from '@/shared/ui/design';
 import { Cancel } from '@/shared/assets/icons';
 import { AddressSuggestionList } from '../property-fields/address-suggestion-list';
 import {
@@ -64,7 +65,7 @@ export function PropertyAddressSearch({
       role="dialog"
       aria-modal="true"
       aria-label="Поиск адреса"
-      className="fullscreen-surface fixed inset-0 z-50 overflow-y-auto"
+      className={cn(fullscreenSurfaceClass, 'overflow-y-auto')}
     >
       <TopNav
         variant="search"
