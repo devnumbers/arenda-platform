@@ -25,6 +25,8 @@ export const APP_ROUTE_PREFIXES: ReadonlyArray<string> = [
     '/contacts',
     '/payments',
     '/participants',
+    '/history',
+    '/notifications',
 ];
 
 /** The offline fallback page precached by the service worker. */

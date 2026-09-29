@@ -92,6 +92,8 @@ const APP_ROUTE_PREFIXES = [
   '/contacts',
   '/payments',
   '/participants',
+  '/history',
+  '/notifications',
 ];
 
 function isAppPath(pathname) {
