@@ -15,7 +15,7 @@
   `lib/legal-content.ts`), `/healthz` (контейнерный healthcheck).
 - **Авторизация/тариф**: серверный компонент хедера читает сессионную cookie и
   ходит на `GET /me` через `BACKEND_URL` (compose-сеть; локально — dev-бэк),
-  fail-open в гостевой хедер; см. `lib/auth.ts` (появляется тикетом T2 карты).
+  fail-open в гостевой хедер; см. `lib/auth.ts` (тикет T2 карты).
 - **Контент секций** — константы `lib/content.ts` (тарифы/FAQ по макету),
   не API: цены и тексты лендинга меняются релизом лендинга.
 
@@ -39,11 +39,14 @@ make landing-typecheck   # tsc --noEmit
   node standalone, `PORT=8080`, healthcheck `/healthz`); версии Node штампует
   `make versions-sync` (`FROM node:24-alpine`).
 - Caddy-матчер `@landing` (`deploy/caddy/rentlee.caddy`): `/`, `/privacy`,
-  `/terms`, `/robots.txt`, `/sitemap.xml`, `/_next/*`, `/fonts/*`, `/icon.png`.
-  Новый публичный путь = файл в `public/` (или app-маршрут) **+ строка в
-  матчере**.
+  `/terms`, `/robots.txt`, `/sitemap.xml`, `/_next/*`, `/fonts/*`, `/icon.png`,
+  `/opengraph-image`, `/apple-icon.png`, `/favicon.ico`.
+  Новый публичный путь = app-маршрут `app/(site)/<путь>/page.tsx` (страница)
+  или статика `public/` (ассет) **+ строка в матчере**: файл из `public/`
+  маршрутом в Next не становится — `/privacy` и `/terms` уже app-маршруты.
 - Smoke `_deploy.yml` ждёт от `/` маркер `id="landing-root"`, работающий
-  `/_next/static/*.js` (immutable), `/icon.png` и `robots.txt` (text/plain).
+  `/_next/static/*.js` (immutable), `/icon.png`, `robots.txt` (text/plain)
+  и `og:image` (200).
 - `robots.txt` и `sitemap.xml` — статика `public/`; `Disallow` зеркалит
   кабинетные префиксы (`apps/frontend/shared/lib/pwa/app-routes.ts` минус
   `/login`), `Sitemap` — прод-канон `https://rentlee.ru`.
