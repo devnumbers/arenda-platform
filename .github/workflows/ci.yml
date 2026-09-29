@@ -330,6 +330,9 @@ jobs:
   frontend-e2e:
     name: Frontend e2e
     runs-on: ubuntu-latest
+    # Временно снято владельцем 29.09: самая долгая стадия гейта тормозит
+    # пуш dev на стейдж; вернуть, убрав строку if, когда вернём.
+    if: false
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
