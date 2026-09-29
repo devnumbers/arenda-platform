@@ -20,7 +20,8 @@ import { Skeleton } from './skeleton';
  * терминальные состояния (ошибка чтения, имя-null) рендерит вызывающий,
  * подставляя плейсхолдер. Когда имени не видно (pending или
  * hideNameBelowDesktop), кнопка получает доступное имя «Профиль: {имя}»
- * — на десктопе aria-label не ставится, скринридер читает видимое имя. */
+ * — на любой ширине: и на десктопе при hideNameBelowDesktop aria-label
+ * остаётся и перекрывает видимое имя (осознанно). */
 export type UserButtonProps = ComponentProps<'button'> & {
   readonly name?: string;
   readonly pending?: boolean;
