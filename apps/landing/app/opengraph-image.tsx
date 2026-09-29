@@ -2,10 +2,10 @@ import { ImageResponse } from "next/og";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-// OG-картинка (1200×630): градиент финального CTA (#88b7ff→#2b7ff),
-// 3D-логотип и заголовок. Satori не читает woff2 — рядом лежит
-// assets/onest-og.ttf (срез cyrillic из public/fonts, конверт fonttools;
-// шрифт OFL).
+// OG-картинка (1200×630): градиент финального CTA (#88b7ff→#2b7fff),
+// 3D-логотип и заголовок. Satori не читает woff2 — рядом лежат
+// assets/onest-og-400.ttf / onest-og-600.ttf (срез cyrillic из
+// public/fonts, конверт fonttools; шрифт OFL).
 export const alt = "Рентли — сервис управления арендой недвижимости";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
