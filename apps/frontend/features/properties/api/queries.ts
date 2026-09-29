@@ -42,7 +42,6 @@ function mapSuspendedShared(
   }));
 }
 
-
 export type PropertiesListResult = {
   readonly items: Property[];
   /** Подвесшие общие объекты получателя (#702) — блюр-карточки хаба вместо
@@ -51,7 +50,6 @@ export type PropertiesListResult = {
   /** «Сегодня владельца» (ADR 0048) — граница бейджа «Осталось N месяцев» (#586). */
   readonly today: IsoDate;
 };
-
 
 /** Полный payload GET /properties — строки, suspended-плейсхолдеры (#702) и
  * «сегодня владельца» (ADR 0048). Общее горло обоих хуков и прогрева хабов
@@ -71,7 +69,6 @@ export async function fetchProperties(
   };
 }
 
-
 /** Конфиг справочника объектов (канон #887) — возвращаемый тип фабрики
  * propertiesListQueryOptions: экспорты features/ несут явные возвращаемые
  * типы (apps/frontend/AGENTS.md), члены — их выведенная форма. */
@@ -90,7 +87,6 @@ export function propertiesListQueryOptions(
     queryFn: () => fetchProperties(transport),
   };
 }
-
 
 /** Чистый fetch детали объекта — общее горло хука и серверного префетча
  * #887. */
@@ -116,4 +112,3 @@ export function propertyDetailQueryOptions({
     queryFn: () => fetchProperty(id, transport),
   });
 }
-

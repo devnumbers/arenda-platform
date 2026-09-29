@@ -48,7 +48,6 @@ export function participantsSummaryQueryOptions(
   });
 }
 
-
 /** Чистый fetch страницы участника — общее горло хука и серверного
  * префетча #887. */
 export async function fetchParticipant(
@@ -75,4 +74,3 @@ export function participantQueryOptions({
     queryFn: () => fetchParticipant(participantId, transport),
   });
 }
-

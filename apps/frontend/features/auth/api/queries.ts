@@ -28,4 +28,3 @@ export function meQueryOptions(
     queryFn: () => fetchMe(transport),
   });
 }
-

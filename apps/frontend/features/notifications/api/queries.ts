@@ -57,12 +57,10 @@ async function fetchNotificationsPage(params: {
   };
 }
 
-
 export type NotificationsFeedQueryConfig = KeysetPagedQueryConfig<
   ReturnType<typeof notificationKeys.list>,
   NotificationsPageData
 >;
-
 
 /** Опции ленты уведомлений (канон #887): один источник ключ+fetch для
  * хука и серверного префетча. */
@@ -82,7 +80,6 @@ export function notificationsFeedQueryOptions({
   };
 }
 
-
 /** Чистый fetch счётчика непрочитанных — общее горло хука и серверного
  * префетча #887. */
 export async function fetchUnreadNotificationsCount(
@@ -91,7 +88,6 @@ export async function fetchUnreadNotificationsCount(
   const response = await transport<UnreadCountDto>('/notifications/unread-count');
   return response.count;
 }
-
 
 /** Опции счётчика непрочитанных (канон #887): один источник ключ+fetch
  * для хука и серверного префетча. */
@@ -104,7 +100,6 @@ export function unreadNotificationsCountQueryOptions(
   });
 }
 
-
 /** Чистый fetch страницы уведомления — общее горло хука и серверного
  * префетча #887. */
 export async function fetchNotificationDetail(
@@ -114,7 +109,6 @@ export async function fetchNotificationDetail(
   const response = await transport<NotificationDetailDto>(`/notifications/${id}`);
   return mapNotificationDetail(response);
 }
-
 
 /** Опции страницы уведомления (канон #887): один источник ключ+fetch для
  * хука и серверного префетча; живые действия требуют свежести — staleTime
@@ -131,4 +125,3 @@ export function notificationDetailQueryOptions({
     queryFn: () => fetchNotificationDetail(id, transport),
   });
 }
-

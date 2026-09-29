@@ -38,4 +38,3 @@ export function rentalsQueryOptions({
     queryFn: () => fetchRentals(propertyId, transport),
   });
 }
-

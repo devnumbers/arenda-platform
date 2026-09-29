@@ -492,4 +492,3 @@ function operationsScopeParams(scope: GlobalOperationScope): URLSearchParams {
   }
   return params;
 }
-

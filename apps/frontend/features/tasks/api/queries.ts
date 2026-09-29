@@ -40,7 +40,7 @@ function globalTasksPath(
 
 /** Чистый fetch бакета глобального листинга GET /tasks — общее горло хуков
  * ленты и прогрева хабов #626: прогрев кэша идёт тем же кодом, что
- * читает экран (детали среза — у useGlobalActiveTasks ниже). */
+ * читает экран (детали среза — у useGlobalActiveTasks в hooks.ts). */
 export function fetchGlobalTasks(
   completed: boolean,
   propertyIds: ReadonlyArray<string>,
@@ -50,7 +50,6 @@ export function fetchGlobalTasks(
   return transport<TasksPageDto>(globalTasksPath(completed, propertyIds, withoutProperty))
     .then(mapTasksPage);
 }
-
 
 /** Чистый fetch активных задач объекта — общее горло хука и серверного
  * префетча #887. */
@@ -79,7 +78,6 @@ export function activeTasksQueryOptions({
   });
 }
 
-
 /** Опции бакета глобальной ленты (канон #887): один источник ключ+fetch
  * для хуков, прогрева хабов #626 и серверного префетча. */
 export function globalTasksQueryOptions({
@@ -98,4 +96,3 @@ export function globalTasksQueryOptions({
     queryFn: () => fetchGlobalTasks(completed, propertyIds, withoutProperty, transport),
   });
 }
-

@@ -31,4 +31,3 @@ export function subscriptionQueryOptions(
     queryFn: () => fetchSubscription(transport),
   });
 }
-

@@ -47,7 +47,6 @@ export async function fetchHistoryPage(
   };
 }
 
-
 /** Конфиг keyset-обхода ленты (канон #887) — возвращаемый тип фабрики
  * historyFeedQueryOptions: экспорты features/ несут явные возвращаемые
  * типы (apps/frontend/AGENTS.md), члены — их выведенная форма. */
@@ -61,7 +60,6 @@ export type HistoryFeedQueryConfig = {
     lastPage: HistoryFeedPage,
   ) => HistoryFeedPageParam | undefined;
 };
-
 
 /** Опции ленты истории (канон #887): один источник ключ+fetch для хука
  * и серверного префетча; дефолтный срез — пустой скоуп. */
@@ -82,7 +80,6 @@ export function historyFeedQueryOptions({
   };
 }
 
-
 /** Чистый fetch опций шита фильтров — общее горло хука и серверного
  * префетча #887. */
 export async function fetchHistoryFilters(
@@ -91,7 +88,6 @@ export async function fetchHistoryFilters(
   const response = await transport<HistoryFiltersDto>('/history/filters');
   return mapHistoryFilterOptions(response);
 }
-
 
 /** Опции шита фильтров (канон #887): один источник ключ+fetch для хука
  * и серверного префетча. */
@@ -103,4 +99,3 @@ export function historyFiltersQueryOptions(
     queryFn: () => fetchHistoryFilters(transport),
   });
 }
-

@@ -84,7 +84,6 @@ async function fetchContactsPage(params: {
   };
 }
 
-
 /** Конфиг keyset-обхода списка контактов (#600) — общее горло useContacts,
  * useContactBook и прогрева хабов #626: один ключ, один fetch, одно правило
  * продолжения — прогрев не может разъехаться с экраном. propertyId — срез
@@ -115,7 +114,6 @@ export function contactsListQuery({
   };
 }
 
-
 /** Конфиг keyset-обхода плоской книги (#600) — частный случай
  * contactsListQuery для потребителей без среза объекта (useContactBook,
  * прогрев хабов #626). */
@@ -126,7 +124,6 @@ export function contactBookQuery(
 ): ContactsListQueryConfig {
   return contactsListQuery({ search, sort, order });
 }
-
 
 /** Чистый fetch карточки контакта — общее горло хука и серверного
  * префетча #887. */
@@ -154,4 +151,3 @@ export function contactDetailQueryOptions({
     queryFn: () => fetchContact(contactId, transport),
   });
 }
-
