@@ -469,10 +469,14 @@ jobs:
                 200|307) ;;
                 *) echo "/properties (cabinet catch-all) returned ${prop_status}, expected 200/307" >&2; return 1 ;;
               esac
+              # /dashboard снесена в карте #862 (свернули дашборд-хаб):
+              # кабинет отвечает 404; тикет #975 держит вопрос финального
+              # слова владельца 404-vs-redirect. Проверяем факт снесённого
+              # маршрута, а не легаси-редирект (находка деплоя 29.09).
               dash_status="$(get_status "${BASE_URL}/dashboard")"
               case "${dash_status}" in
-                307|308) ;;
-                *) echo "/dashboard expected the cabinet redirect (307/308), got ${dash_status}" >&2; return 1 ;;
+                404) ;;
+                *) echo "/dashboard (route removed in #862) returned ${dash_status}, expected 404" >&2; return 1 ;;
               esac
               bad_status="$(get_status "${BASE_URL}/nosuch-caddy-smoke-$RANDOM")"
               [ "${bad_status}" = "404" ] || { echo "unknown path returned ${bad_status}, expected 404 from the cabinet" >&2; return 1; }
