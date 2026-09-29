@@ -9,7 +9,6 @@ import {
   BoldStar,
   BoldWarning,
   Filter,
-  Search,
   SmallArrowDown,
 } from "@/shared/assets/icons";
 import { ROUTES } from "@/shared/config/routes";
@@ -29,10 +28,10 @@ import {
   HubCollapseAnchor,
   HubTitle,
   PageContent,
+  SearchPill,
   Skeleton,
   TopNav,
 } from "@/shared/ui/design";
-import { useKeyboardActivation } from "@/shared/lib/hooks/useKeyboardActivation";
 import {
   globalFavoritePayments,
   globalOverduePayments,
@@ -215,29 +214,23 @@ export function PaymentsGlobalScreen(): JSX.Element {
   );
 }
 
-/** Пилюля поиска (879:9683): серый rounded-pill, лупа и подпись «Найти
- * платёж»; тап открывает страницу поиска (#581). Слайдеры справа — декор
- * макета: не кнопка, кликается вся пилюля целиком. */
-/** Пилюля поиска платежей — экспорт для route-loading (#609). */
+/** Пилюля поиска платежей (879:9683) — адаптер канона SearchPill: подпись
+ * «Найти платёж», тап открывает страницу поиска (#581); pr-4 — отступ
+ * декора-слайдеров справа (не кнопка, кликается вся пилюля целиком).
+ * Экспорт для route-loading (#609). */
 export function PaymentsSearchPill({
   onOpenSearch,
 }: {
   readonly onOpenSearch: () => void;
 }): JSX.Element {
-  const activatorProps = useKeyboardActivation({ onSelect: onOpenSearch });
-
   return (
-    <div
-      {...activatorProps}
-      data-testid="payments-search-pill"
-      className="flex h-14 w-full cursor-pointer items-center rounded-pill bg-surface-muted pl-[18px] pr-4 text-left outline-none transition-opacity hover:opacity-90 focus-visible:ring-4 focus-visible:ring-primary active:opacity-90"
-    >
-      <Search className="h-6 w-6 shrink-0 text-content" aria-hidden />
-      <span className="min-w-0 flex-1 truncate px-2 text-base font-medium text-content">
-        Найти платёж
-      </span>
-      <Filter className="h-6 w-6 shrink-0 text-content" aria-hidden />
-    </div>
+    <SearchPill
+      onOpenSearch={onOpenSearch}
+      label="Найти платёж"
+      testId="payments-search-pill"
+      className="pr-4"
+      trailing={<Filter className="h-6 w-6 shrink-0 text-content" aria-hidden />}
+    />
   );
 }
 
@@ -511,10 +504,9 @@ function PaymentsGlobalEmpty({
   );
 }
 
-/** Скелетон секции на время загрузки: строка заголовка и пара плиток
- * карточек. */
 /** Секция-заглушка хаба «Платежи» (#605): каркас PaymentsGlobalSection —
- * заголовок и лента плиток-карточек. Экспорт для route-loading (#609). */
+ * заголовок и лента плиток-карточек на время загрузки. Экспорт для
+ * route-loading (#609). */
 export function PaymentsGlobalSectionSkeleton(): JSX.Element {
   return (
     <section className="flex flex-col gap-4" aria-hidden>

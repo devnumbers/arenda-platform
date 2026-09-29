@@ -2,11 +2,10 @@
 
 import { useState, type JSX } from "react";
 import { useRouter } from "next/navigation";
-import { Add, Search } from "@/shared/assets/icons";
+import { Add } from "@/shared/assets/icons";
 import { ROUTES } from "@/shared/config/routes";
 import { dateToIsoLocal } from "@/shared/lib/calendar";
 import { propertyPermissions } from "@/entities/property";
-import { useKeyboardActivation } from "@/shared/lib/hooks/useKeyboardActivation";
 import {
   globalOperationsFiltersHref,
   groupOperationsByDate,
@@ -18,7 +17,7 @@ import {
   useGlobalOperationsSummary,
 } from "@/features/payments";
 import { useProperties } from "@/features/properties";
-import { HubCollapseAnchor, HubTitle, IconButton, InfiniteQueryTail, Button, PageContent, TopNav } from "@/shared/ui/design";
+import { HubCollapseAnchor, HubTitle, IconButton, InfiniteQueryTail, Button, PageContent, SearchPill, TopNav } from "@/shared/ui/design";
 import { PaymentsStateCard } from "./payments-sections";
 import { OperationsDateFeedSkeleton, OperationsSummarySkeleton } from "./operations-skeletons";
 import {
@@ -290,27 +289,15 @@ export function OperationsGlobalScreen(): JSX.Element {
   );
 }
 
-/** Пилюля поиска (макет 1726-90017): серый rounded-pill на всю ширину,
- * лупа и подпись «Найти операцию»; тап открывает страницу поиска #543.
+/** Пилюля поиска операций (макет 1726-90017) — адаптер канона SearchPill
+ * с подписью «Найти операцию»; тап открывает страницу поиска #543.
  * Кнопка «+» рядом с пилюлей переехала в шапку страницы (решение
- * владельца 2026-09-08 #571 — отмена решения #539). */
-/** Пилюля поиска операций (#543) — экспорт для route-loading (#609). */
+ * владельца 2026-09-08 #571 — отмена решения #539). Экспорт для
+ * route-loading (#609). */
 export function OperationsSearchPill({
   onOpenSearch,
 }: {
   readonly onOpenSearch: () => void;
 }): JSX.Element {
-  const activatorProps = useKeyboardActivation({ onSelect: onOpenSearch });
-
-  return (
-    <div
-      {...activatorProps}
-      className="flex h-14 w-full cursor-pointer items-center rounded-pill bg-surface-muted pl-[18px] text-left outline-none transition-opacity hover:opacity-90 focus-visible:ring-4 focus-visible:ring-primary active:opacity-90"
-    >
-      <Search className="h-6 w-6 shrink-0 text-content" aria-hidden />
-      <span className="min-w-0 flex-1 truncate px-2 text-base font-medium text-content">
-        Найти операцию
-      </span>
-    </div>
-  );
+  return <SearchPill onOpenSearch={onOpenSearch} label="Найти операцию" />;
 }

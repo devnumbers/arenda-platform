@@ -202,8 +202,8 @@ export function OperationsObjectsSelectScreen(): JSX.Element {
  * #F3F4F6 с белым кольцом 2.5px; фото объекта или иконка-плейсхолдер —
  * дом (BoldHome) у объектов, BoldObjects (Figma 208:2994) у «Все объекты»,
  * BoldArchive у опции архива (#549). Цвет плейсхолдеров — #D3D7D9 по макету
- * (1733-26805/26831, пиксельная сверка 07.09), не text-content-tertiary. */
-/** Круг-плейсхолдер ряда объекта — экспорт для route-loading (#609). */
+ * (1733-26805/26831, пиксельная сверка 07.09), не text-content-tertiary.
+ * Экспорт для route-loading (#609). */
 export function SelectAvatar({ photoUrl, fallback }: {
   readonly photoUrl?: string;
   readonly fallback: JSX.Element;

@@ -4,13 +4,11 @@ import { useState, type ComponentProps, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Add,
-  Search,
   SmallArrowDown,
   SortingBigSmall,
   SortingSmallBig,
 } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { useKeyboardActivation } from '@/shared/lib/hooks/useKeyboardActivation';
 import { useUrlParams } from '@/shared/lib/hooks/use-url-params';
 import {
   useContactBook,
@@ -25,6 +23,7 @@ import {
   InfiniteQueryTail,
   PageContent,
   PickerMenu,
+  SearchPill,
   TopNav,
   type PickerMenuGroup,
 } from '@/shared/ui/design';
@@ -191,13 +190,11 @@ export function ContactBookScreen({
   );
 }
 
-/**
- * Поисковая пилюля книги (макет 1726:65083, Search Button 1031:20955): серая
- * пилюля 56px, лупа слева, плейсхолдер «Найти контакт»; тап по пилюле
- * открывает поисковую страницу, «+» справа — создание контакта (кнопка
- * внутри строки-кнопки — паттерн useKeyboardActivation, DESIGN.md §6).
- */
-/** Пилюля поиска книги — экспорт для route-loading (#609). */
+/** Поисковая пилюля книги (макет 1726:65083, Search Button 1031:20955) —
+ * адаптер канона SearchPill с подписью «Найти контакт»; тап открывает
+ * поисковую страницу, «+» справа — создание контакта (кнопка хвоста глушит
+ * всплытие клика, активация строки — паттерн useKeyboardActivation,
+ * DESIGN.md §6). Экспорт для route-loading (#609). */
 export function BookSearchPill({
   onOpenSearch,
   onCreate,
@@ -205,26 +202,22 @@ export function BookSearchPill({
   readonly onOpenSearch: () => void;
   readonly onCreate: () => void;
 }): JSX.Element {
-  const activatorProps = useKeyboardActivation({ onSelect: onOpenSearch });
-
   return (
-    <div
-      {...activatorProps}
-      className="flex h-14 w-full cursor-pointer items-center rounded-pill bg-surface-muted pl-[18px] pr-2 text-left outline-none transition-opacity hover:opacity-90 focus-visible:ring-4 focus-visible:ring-primary active:opacity-90"
-    >
-      <Search className="h-6 w-6 shrink-0 text-content" aria-hidden />
-      <span className="min-w-0 flex-1 truncate px-2 text-base font-medium text-content">
-        Найти контакт
-      </span>
-      <IconButton
-        icon={<Add />}
-        label="Добавить контакт"
-        onClick={(event) => {
-          event.stopPropagation();
-          onCreate();
-        }}
-      />
-    </div>
+    <SearchPill
+      onOpenSearch={onOpenSearch}
+      label="Найти контакт"
+      className="pr-2"
+      trailing={
+        <IconButton
+          icon={<Add />}
+          label="Добавить контакт"
+          onClick={(event) => {
+            event.stopPropagation();
+            onCreate();
+          }}
+        />
+      }
+    />
   );
 }
 
@@ -232,8 +225,8 @@ export function BookSearchPill({
  * («Имя»/«Объект»), ведущая иконка — направление (возрастание —
  * SortingSmallBig 418:4608, убывание — SortingBigSmall 418:4607), хвостовая
  * стрелка всегда вниз (671:7320). Прокидывает все пропсы кнопки: триггер
- * PickerMenu через asChild передаёт ему свои обработчики и aria. */
-/** Чип сортировки книги — экспорт для route-loading (#609). */
+ * PickerMenu через asChild передаёт ему свои обработчики и aria. Экспорт
+ * для route-loading (#609). */
 export function BookSortChip({
   field,
   order,
