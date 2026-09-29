@@ -118,6 +118,12 @@ export function LiveValue({
   // стартует движение высоты. Замер — в последнем эффекте коммита (см.
   // ниже), только в idle — в других фазах коробка перекроена свапом.
   const naturalHeightRef = useRef<number | null>(null);
+  // Generation последнего свапа, чьё движение уже запущено: смена значения
+  // в разгар свапа кладёт pendingChange новым объектом state без смены
+  // generation (машина ставит его в очередь) — эффект размеров
+  // перезапускается, но движение играть заново не должен. Новое
+  // generation приезжает только переигрыванием свапа на settle.
+  const lastSwapGenerationRef = useRef(-1);
 
   // Стабильный переход: читает только реф-книжение, событий — от эффектов.
   // Дети коммита (committedChildren) диспетч-эффекты шлют вторым
@@ -261,6 +267,16 @@ export function LiveValue({
       }
       return;
     }
+    if (state.generation === lastSwapGenerationRef.current) {
+      // Тот же свап: эффект перезапустился на смене в очереди
+      // (pendingChange — объект состояния новый, generation прежний).
+      // Инлайн-локи ширины/высоты стоят с прошлого запуска этого
+      // generation, идущие движения размера доигрывают: перезапуск
+      // анимаций срывал бы их к стартовым размерам, пока blur-кроссфейд
+      // (remount-ключ generation) не переигрывается.
+      return;
+    }
+    lastSwapGenerationRef.current = state.generation;
     const startWidth = Math.max(oldOverlay.getBoundingClientRect().width, 1);
     const targetWidth = Math.max(newOverlay.getBoundingClientRect().width, 1);
     const startHeight =
