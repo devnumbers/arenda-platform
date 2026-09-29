@@ -184,7 +184,11 @@ jobs:
   deploy:
     name: Deploy
     needs: collect
-    if: github.event_name == 'workflow_dispatch' || needs.collect.result == 'success'
+    # !cancelled() обязателен: без него GitHub скипает джобу вместе со
+    # скипнутым needs (на dispatch collect скипается по design) ДО вычисления
+    # выражения — задокументированный ручной деплой/откат не работал ни разу
+    # (все dispatch-прогоны в истории со скипнутым Deploy; находка пуша 29.09).
+    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || needs.collect.result == 'success') }}
     uses: ./.github/workflows/_deploy.yml
     # Deliberate `secrets: inherit` (triaged in #318): the reusable workflow
     # resolves environment-scoped secrets (ENV_FILE, SSH_*, GHCR_*) itself via

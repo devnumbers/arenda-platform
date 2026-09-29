@@ -373,6 +373,10 @@ jobs:
             apps/frontend/playwright-report
             apps/frontend/test-results
           if-no-files-found: warn
+          # Отчёт ~120МБ на прогон; дефолтные 90 дней набили квоту артефактов
+          # репозитория (находка пуша 29.09: 84 артефакта / 974МБ) и легли на
+          # гейт деплоя. Недели хватает на разбор красного прогона.
+          retention-days: 7
 
   admin:
     name: Admin
