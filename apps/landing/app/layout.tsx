@@ -50,9 +50,11 @@ export default function RootLayout({
         />
       </head>
       <body>
-        {/* Reveal-секции до гидратации прозрачны — без JS показываем сразу. */}
+        {/* Reveal-секции до гидратации прозрачны — без JS показываем сразу.
+            translate-y-6 в Tailwind v4 — отдельное свойство translate,
+            transform: none его не снимает. */}
         <noscript>
-          <style>{`[data-reveal]{opacity:1!important;transform:none!important}`}</style>
+          <style>{`[data-reveal]{opacity:1!important;transform:none!important;translate:none!important}`}</style>
         </noscript>
         {children}
       </body>
