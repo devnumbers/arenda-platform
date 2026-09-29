@@ -38,6 +38,9 @@ function globalTasksPath(
   return `/tasks?${parts.join('&')}`;
 }
 
+/** Чистый fetch бакета глобального листинга GET /tasks — общее горло хуков
+ * ленты и прогрева хабов #626: прогрев кэша идёт тем же кодом, что
+ * читает экран (детали среза — у useGlobalActiveTasks ниже). */
 export function fetchGlobalTasks(
   completed: boolean,
   propertyIds: ReadonlyArray<string>,
