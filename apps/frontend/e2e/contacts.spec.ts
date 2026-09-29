@@ -68,8 +68,9 @@ test.describe('жизненный цикл контакта', () => {
     await page.getByRole('button', { name: 'Поиск' }).click();
     await page.getByRole('searchbox', { name: 'Поиск контактов' }).fill(contactName);
     await expect(page.getByText(contactName, { exact: true })).toBeVisible();
-    // Тосты не автозакрываются (autoClose=false) и висят поверх шапки,
-    // перехватывая клик по «Закрыть поиск» — гасим крестиком, как юзер.
+    // Тост уходит сам за 5с (TOAST_AUTO_CLOSE_MS) и висит поверх шапки,
+    // перехватывая клик по «Закрыть поиск» — гасим крестиком, как юзер
+    // (ускоренный путь до истечения).
     await page.locator('.Toastify').getByRole('button', { name: 'Закрыть' }).click();
     await page.getByRole('button', { name: 'Закрыть поиск' }).click();
     const row = page.getByText(contactName, { exact: true });

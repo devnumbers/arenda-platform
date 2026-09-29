@@ -4,7 +4,8 @@ export { default as Search } from './search.svg';
 export { default as Support } from './support.svg';
 export { default as BoldKey } from './bold-key.svg';
 // Notification Dot 651:6759 (владелец 07.09): красная точка уведомления
-// 14×14 с кантом #F3F4F6 — цвета запечены по макету.
+// 14×14 с белым кантом #FFFFFF (решение владельца, #876) — цвета запечены
+// по макету.
 export { default as NotificationDot } from './notification-dot.svg';
 export { default as Filter } from './filter.svg';
 export { default as BadgeDanger } from './badge-danger.svg';
