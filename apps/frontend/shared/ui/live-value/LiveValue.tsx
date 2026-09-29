@@ -92,7 +92,7 @@ export function LiveValue({
   const [state, setState] = useState<LiveValueState>(initialLiveValueState);
   const [snapshots, setSnapshots] = useState<LiveValueSnapshots>(NO_SNAPSHOTS);
 
-  // Книжение машины — в рефах: эффекты переходов читают прошлый коммит
+  // Хранение машины — в рефах: эффекты переходов читают прошлый коммит
   // как «старую сторону», рендер в рефы не заглядывает.
   const stateRef = useRef(state);
   const timingsRef = useRef(timings);
@@ -125,7 +125,7 @@ export function LiveValue({
   // generation приезжает только переигрыванием свапа на settle.
   const lastSwapGenerationRef = useRef(-1);
 
-  // Стабильный переход: читает только реф-книжение, событий — от эффектов.
+  // Стабильный переход: читает только реф-хранилище, событий — от эффектов.
   // Дети коммита (committedChildren) диспетч-эффекты шлют вторым
   // аргументом: они стоят выше снапшота детей, реф ещё держит прошлый
   // коммит — без аргумента свап играл бы старое→старое. Таймерный путь

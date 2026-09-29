@@ -93,7 +93,7 @@ export type TopNavProps = {
    * хром ПК не исчезает под открытой поверхностью (решение владельца
    * 25.09, доработка #865): лого и профиль в тех же слотах, что у страниц;
    * дублей нет — страница под поверхностью накрыта целиком. Колонка TopNav
-   * легает на колонку страницы (бары поверхности растянуты на весь
+   * ложится на колонку страницы (бары поверхности растянуты на весь
    * вьюпорт — globals.css). */
   readonly overlay?: boolean;
 };
@@ -120,7 +120,10 @@ export function TopNav({
   // состояния, вне провайдера контекста нет — все три показывают
   // текстовый плейсхолдер, как раньше.
   const pending = user !== null && user.pending === true && firstName === undefined;
-  const wingName = pending ? undefined : (firstName ?? 'Пользователь');
+  // «Пользователь» — плейсхолдер и для пустой строки имени (контракт её
+  // допускает): фолбэчим и её, не только null/undefined.
+  const wingName =
+    pending ? undefined : firstName === undefined || firstName === '' ? 'Пользователь' : firstName;
   // Крылья: мобайл — только с mobileWings; планшет (561–1023) — без
   // leading-кнопки, ПК — всегда.
   // Boolean — чтобы условный leading={cond && <Button/>} при cond=false
