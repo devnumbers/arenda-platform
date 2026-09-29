@@ -1,5 +1,5 @@
 import type { JSX, ReactNode } from 'react';
-import type { LegalParagraphSegment } from '../lib/legal-documents';
+import type { LegalParagraphSegment, LegalSection } from '../lib/legal-documents';
 import { placeholderLegalSection } from '../lib/legal-documents';
 
 /** Типовая страница правового документа «Информации» (макет 2349-68011,
@@ -7,11 +7,18 @@ import { placeholderLegalSection } from '../lib/legal-documents';
  * (в баре тайтла нет — только «Назад»), секции H2 20/24 с номером в тексте,
  * текст 14/16; ссылки синим #2B7FFF с подчёркиванием (аннотация
  * макета «Ссылки синим и подчеркивание»). Рендерер секций из модуля
- * lib/legal-documents: текст пока один типовой для всех трёх документов
- * (политика/соглашение/оферта) — заглушка из макета, боевые тексты лягут
- * в модуль (per-document) без правки рендерера. */
-export function LegalDocument({ title }: { readonly title: string }): JSX.Element {
-  const { heading, paragraphs } = placeholderLegalSection;
+ * lib/legal-documents: секция приходит пропом sections, по умолчанию —
+ * типовая заглушка из макета (одна на все три документа:
+ * политика/соглашение/оферта); боевые per-document тексты лягут в модуль
+ * и передадутся тем же пропом — правка рендерера не понадобится. */
+export function LegalDocument({
+  title,
+  sections = placeholderLegalSection,
+}: {
+  readonly title: string;
+  readonly sections?: LegalSection;
+}): JSX.Element {
+  const { heading, paragraphs } = sections;
   return (
     <article className="flex flex-col gap-6 pb-6 [word-break:break-word] text-content">
       <h1 className="m-0 text-[28px] font-semibold leading-8">{title}</h1>
