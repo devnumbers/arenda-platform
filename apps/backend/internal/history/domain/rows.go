@@ -309,7 +309,7 @@ func rentalRow(action Action, base BaseAction, prefix string, entityID uuid.UUID
 		Action:     action,
 		BaseAction: base,
 		Segments:   segments,
-		Context:    map[string]any{"tenant": tenantName, "period_from": formatContextDate(from), "period_to": formatContextDate(to)},
+		Context:    map[string]any{ctxKeyTenant: tenantName, "period_from": formatContextDate(from), "period_to": formatContextDate(to)},
 	}
 }
 
