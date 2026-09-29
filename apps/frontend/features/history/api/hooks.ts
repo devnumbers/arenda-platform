@@ -21,10 +21,8 @@ import {
   historyFeedQueryOptions,
   historyFiltersQueryOptions,
   type HistoryFeedPage,
-  type HistoryFeedQueryConfig,
 } from './queries';
 
-export type { HistoryFeedPage, HistoryFeedQueryConfig };
 import { createLiveFeedFrameHandler } from './live-feed-frames';
 
 type HistoryPageDto = components['schemas']['HistoryPageResponse'];
@@ -35,8 +33,8 @@ type HistoryPageDto = components['schemas']['HistoryPageResponse'];
  * next: fetchNextPage читает СТАРШЕ (before_cursor), поэтому «следующая»
  * страница в модели react-query рисуется НАД загруженными — prepend старых
  * при прокрутке вверх. Сторона prev (after_cursor) — prepend свежих
- * записей, появившихся после загрузки; сам prepend свежих подключит
- * realtime-карта (#714). select разворачивает ПЛОСКИЙ список страниц в
+ * записей, появившихся после загрузки; свежие prepend'ит live-догон
+ * (#718). select разворачивает ПЛОСКИЙ список страниц в
  * хронологию — страницы приходят [новейшая, …, старейшая], внутри
  * страницы строки по убыванию; реверс целого даёт «старые сверху, новые
  * снизу» независимо от того, с какой стороны rides порция (реверс

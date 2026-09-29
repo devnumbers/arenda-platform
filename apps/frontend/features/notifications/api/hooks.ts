@@ -26,10 +26,8 @@ import {
   notificationDetailQueryOptions,
   notificationsFeedQueryOptions,
   unreadNotificationsCountQueryOptions,
-  type NotificationsPageData,
 } from './queries';
 
-export type { NotificationsPageData };
 type PreferencesDto = components['schemas']['NotificationPreferencesResponse'];
 type PreferencesRequestDto =
   components['schemas']['NotificationPreferencesRequest'];

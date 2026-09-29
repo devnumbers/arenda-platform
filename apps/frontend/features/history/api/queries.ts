@@ -1,4 +1,4 @@
-import type { UseQueryOptions } from '@tanstack/react-query';
+import { queryOptions, type UseQueryOptions } from '@tanstack/react-query';
 import { apiClient, type ApiTransport } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
 import type { components } from '@/shared/api/dto';
@@ -96,9 +96,9 @@ export async function fetchHistoryFilters(
 export function historyFiltersQueryOptions(
   transport: ApiTransport = apiClient,
 ): UseQueryOptions<HistoryFilterOptions, ApiError, HistoryFilterOptions, ReturnType<typeof historyKeys.filters>> {
-  return {
+  return queryOptions({
     queryKey: historyKeys.filters(),
     queryFn: () => fetchHistoryFilters(transport),
-  };
+  });
 }
 

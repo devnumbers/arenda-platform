@@ -1,4 +1,4 @@
-import type { UseQueryOptions } from '@tanstack/react-query';
+import { queryOptions, type UseQueryOptions } from '@tanstack/react-query';
 import { apiClient, type ApiTransport } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
 import { mapContact } from '@/entities/contact';
@@ -149,9 +149,9 @@ export function contactDetailQueryOptions({
   readonly contactId: string;
   readonly transport?: ApiTransport;
 }): UseQueryOptions<Contact, ApiError, Contact, ReturnType<typeof contactKeys.detail>> {
-  return {
+  return queryOptions({
     queryKey: contactKeys.detail(contactId),
     queryFn: () => fetchContact(contactId, transport),
-  };
+  });
 }
 

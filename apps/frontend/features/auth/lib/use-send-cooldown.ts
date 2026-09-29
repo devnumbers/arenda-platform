@@ -142,7 +142,10 @@ function createCooldownStore(): CooldownStore {
 
 const cooldownStore = createCooldownStore();
 
-export function useSendCooldown() {
+export function useSendCooldown(): {
+  readonly remainingSeconds: number;
+  readonly recordSendWithRemainingSeconds: (remainingSeconds: number) => void;
+} {
   const remainingSeconds = useSyncExternalStore(
     cooldownStore.subscribe,
     cooldownStore.getSnapshot,

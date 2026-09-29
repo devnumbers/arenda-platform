@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { HistoryEntry } from '@/entities/history';
-import { mergeFreshIntoFirstPage, novelFeedEntryIds, type HistoryFeedPage } from './hooks';
+import { mergeFreshIntoFirstPage, novelFeedEntryIds } from './hooks';
+import type { HistoryFeedPage } from './queries';
 
 function entry(id: string): HistoryEntry {
   return { id } as HistoryEntry;

@@ -28,12 +28,10 @@ import {
   contactsListQuery,
   type ContactBookOrder,
   type ContactBookSort,
-  type ContactsListQueryConfig,
   type ContactsPageData,
 } from './queries';
 
 export type { ContactBookSort, ContactBookOrder, ContactsPageData };
-export type { ContactsListQueryConfig };
 type ContactResponse = components['schemas']['ContactResponse'];
 
 /**
