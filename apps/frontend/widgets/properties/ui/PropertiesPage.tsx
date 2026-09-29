@@ -1,6 +1,6 @@
 'use client';
 
-import {type JSX, useEffect, useRef, useState} from 'react';
+import {type JSX, useLayoutEffect, useRef, useState} from 'react';
 import {useRouter} from 'next/navigation';
 import {
   useProperties,
@@ -82,13 +82,16 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
   // живым перечитыванием (кадр property от действий владельца — автор в
   // аудитории, ADR 0062 §4), проявляется из блюра. Снапшот id прошлого
   // рендера: null = холодный вход (первая доставка без анимации), дальше
-  // дельта снапшотов = живое появление; разметка — в эффекте (рендер
-  // читает только state).
+  // дельта снапшотов = живое появление; снапшот — в layout-эффекте:
+  // класс freshIn попадает в первый кадр краски (пассивный эффект вешал
+  // бы его после коммита — карточка рисовала резкий кадр до старта
+  // blur-in, канон LiveValue «переходы до краски»); рендер читает
+  // только state.
   const [freshSuspendedIds, setFreshSuspendedIds] = useState<ReadonlySet<string>>(
     () => new Set<string>(),
   );
   const seenSuspendedRef = useRef<Set<string> | null>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const suspended = metaQuery.data?.suspendedShared ?? [];
     const ids = new Set(suspended.map((placeholder) => placeholder.propertyId));
     const prev = seenSuspendedRef.current;
