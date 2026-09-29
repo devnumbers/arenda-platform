@@ -4,6 +4,7 @@ import { SmallArrowRight, RentlyLockup } from '@/shared/assets/icons';
 import { SubScreenShell } from '@/shared/ui/design';
 import { ROUTES } from '@/shared/config/routes';
 import { SUPPORT_EMAIL } from '@/shared/config/support';
+import { CopyrightYear } from './copyright-year';
 
 export const metadata: Metadata = {
   title: 'Информация — Рентли',
@@ -14,8 +15,9 @@ export const metadata: Metadata = {
  * аудита #877): в баре только «Назад» (тайтла нет), бренд-локап, три
  * документа (политика / соглашение / оферта — строки-карточки radius 24
  * с шевроном, зазор 8), ниже почта поддержки 20/24 синим и «© Рентли
- * {год}» 16/18 серым; строки «Данные о городах — DB-IP» по макету больше
- * нет. Документы — типовой текст-заглушка (LegalDocument). */
+ * {живой год — CopyrightYear}» 16/18 серым; строки «Данные о городах —
+ * DB-IP» по макету больше нет. Документы — типовой текст-заглушка
+ * (LegalDocument). */
 type InfoItem = {
   title: string;
   href: string;
@@ -68,7 +70,7 @@ export default function InfoPage() {
             {SUPPORT_EMAIL}
           </a>
           <p className="m-0 text-base leading-[18px] text-content-tertiary">
-            © Рентли {new Date().getFullYear()}
+            © Рентли <CopyrightYear initialYear={new Date().getFullYear()} />
           </p>
         </div>
       </div>
