@@ -1,6 +1,12 @@
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
-import { ContactBookLoading, ContactBookScreen, parseContactBookSortParams } from '@/widgets/contacts';
+import {
+  ContactBookLoading,
+  ContactBookScreen,
+  DEFAULT_CONTACT_BOOK_ORDER,
+  DEFAULT_CONTACT_BOOK_SORT,
+  parseContactBookSortParams,
+} from '@/widgets/contacts';
 import { contactsListQuery } from '@/features/contacts';
 import { ServerPrefetchBoundary } from '@/shared/api/server-prefetch';
 import { serverApiClient } from '@/shared/api/server-client';
@@ -31,8 +37,8 @@ export default async function ContactsRoutePage({
           void queryClient.prefetchInfiniteQuery(contactsListQuery({
             propertyId: null,
             search: '',
-            sort: 'name',
-            order: 'asc',
+            sort: DEFAULT_CONTACT_BOOK_SORT,
+            order: DEFAULT_CONTACT_BOOK_ORDER,
             transport: serverApiClient,
           }));
         }}
