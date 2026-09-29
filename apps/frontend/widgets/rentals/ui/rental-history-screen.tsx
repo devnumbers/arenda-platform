@@ -76,6 +76,17 @@ export function RentalHistoryScreen({
         : ROUTES.propertyRentalPast(propertyId),
     );
 
+  // Чип сортировки — вне фазы загрузки (паритет §7, механика истории
+  // платежей #605): живой уже в pending, над скелетоном и готовым списком;
+  // на пустой истории прячется вместе с контентом. Направление — в адресе
+  // (#785), переключение во время загрузки безвредно: меняет ключ
+  // серверного запроса.
+  const sortChipRow = (
+    <div className="px-6 pb-2">
+      <HistoryOrderChip order={order} onToggle={toggleOrder} />
+    </div>
+  );
+
   return (
     <>
       <TopNav
@@ -91,7 +102,10 @@ export function RentalHistoryScreen({
               его pending/error значимы только при найденной аренде. */}
           {(rentalsQuery.isPending ||
             (rental !== undefined && historyQuery.isPending)) && (
-            <RentalHistoryFeedSkeleton />
+            <>
+              {sortChipRow}
+              <RentalHistoryFeedSkeleton />
+            </>
           )}
 
           {(rentalsQuery.isError || (rental !== undefined && historyQuery.isError)) && (
@@ -134,9 +148,7 @@ export function RentalHistoryScreen({
                 />
               ) : (
                 <>
-                  <div className="px-6 pb-2">
-                    <HistoryOrderChip order={order} onToggle={toggleOrder} />
-                  </div>
+                  {sortChipRow}
 
                   {groups.map((group) => (
                     <section key={group.label} className="flex flex-col">

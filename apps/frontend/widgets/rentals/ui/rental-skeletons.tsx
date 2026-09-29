@@ -333,17 +333,15 @@ export function RentalExtendSkeleton(): JSX.Element {
   );
 }
 
-/** Скелетон ленты «Истории операций» завершённой аренды (#535): чип
- * сортировки (h-11) и группы по датам — заголовок H2 и строки канона с
- * порядковым номером (subtitle) и суммой (value), как HistoryRow; общий
- * для ожидания аренды и ожидания ленты. */
+/** Скелетон ленты «Истории операций» завершённой аренды (#535): группы по
+ * датам — заголовок H2 и строки канона с порядковым номером (subtitle) и
+ * суммой (value), как HistoryRow; общий для ожидания аренды и ожидания
+ * ленты. Чип сортировки скелетоном не подменяется — живой чип рендерится
+ * вне фазы загрузки, над скелетоном (§7). */
 export function RentalHistoryFeedSkeleton(): JSX.Element {
   const widths = skeletonRowWidths(4);
   return (
     <div aria-hidden className="flex flex-col">
-      <div className="px-6 pb-2">
-        <Skeleton className="h-11 w-32 rounded-pill" />
-      </div>
       {Array.from({ length: 2 }, (_, group) => (
         <section key={group} className="flex flex-col">
           <div className="px-6">
