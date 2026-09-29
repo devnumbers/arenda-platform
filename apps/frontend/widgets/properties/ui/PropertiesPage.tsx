@@ -22,6 +22,7 @@ import {
   TopNav,
 } from '@/shared/ui/design';
 import {ROUTES} from '@/shared/config/routes';
+import {resolveFreshSuspendedIds} from '../lib/fresh-suspended';
 import {
   DEFAULT_PROPERTY_SORT,
   PROPERTY_SORT_PARAMS,
@@ -81,29 +82,28 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
   // Свежая подвеска — blur-in канона C (#880): блюр-карточка, приехавшая
   // живым перечитыванием (кадр property от действий владельца — автор в
   // аудитории, ADR 0062 §4), проявляется из блюра. Снапшот id прошлого
-  // рендера: null = холодный вход (первая доставка без анимации), дальше
-  // дельта снапшотов = живое появление; снапшот — в layout-эффекте:
-  // класс freshIn попадает в первый кадр краски (пассивный эффект вешал
-  // бы его после коммита — карточка рисовала резкий кадр до старта
-  // blur-in, канон LiveValue «переходы до краски»); рендер читает
-  // только state.
+  // рендера: null = доставки ещё не было (холодный вход и фаза загрузки
+  // meta-запроса — первая доставка без анимации), дальше дельта снапшотов
+  // = живое появление; свёртка — resolveFreshSuspendedIds в ../lib/
+  // fresh-suspended. Снапшот — в layout-эффекте: класс freshIn попадает
+  // в первый кадр краски (пассивный эффект вешал бы его после коммита —
+  // карточка рисовала резкий кадр до старта blur-in, канон LiveValue
+  // «переходы до краски»); рендер читает только state.
   const [freshSuspendedIds, setFreshSuspendedIds] = useState<ReadonlySet<string>>(
     () => new Set<string>(),
   );
-  const seenSuspendedRef = useRef<Set<string> | null>(null);
+  const seenSuspendedRef = useRef<ReadonlySet<string> | null>(null);
   useLayoutEffect(() => {
-    const suspended = metaQuery.data?.suspendedShared ?? [];
-    const ids = new Set(suspended.map((placeholder) => placeholder.propertyId));
-    const prev = seenSuspendedRef.current;
-    seenSuspendedRef.current = ids;
-    if (prev === null) {
-      return;
-    }
-    const fresh = suspended
-      .filter((placeholder) => !prev.has(placeholder.propertyId))
-      .map((placeholder) => placeholder.propertyId);
-    if (fresh.length > 0) {
-      setFreshSuspendedIds(new Set(fresh));
+    // undefined-доставка (холодный вход /properties без префетча, уход в
+    // refetch) не сеет пустой снапшот и не тратит прежний — null-гард
+    // живёт до первой настоящей доставки.
+    const resolution = resolveFreshSuspendedIds(
+      seenSuspendedRef.current,
+      metaQuery.data?.suspendedShared,
+    );
+    seenSuspendedRef.current = resolution.next;
+    if (resolution.fresh.size > 0) {
+      setFreshSuspendedIds(resolution.fresh);
     }
   }, [metaQuery.data]);
 
