@@ -4,14 +4,18 @@
  * worker. Everything else (landing `/`, marketing pages, `/api`, `/_next`)
  * is treated as passthrough.
  *
- * This list mirrors the `@frontend path` matcher in the Caddyfile
- * (see `docs/deployment.md`); the top-level surface is the unified chrome
- * (map #556): global sections from `shared/config/navigation.ts` plus
- * auth/subscription/profile and utility routes.
+ * In Caddy the app has no per-path matcher of its own: the cabinet is the
+ * catch-all complement of the `@landing` exceptions (see the routing
+ * contract in `docs/deployment.md` and `deploy/caddy/rentlee.caddy`), so
+ * this list is not a proxy mirror. The top-level surface is the unified
+ * chrome (map #556): global sections from `shared/config/navigation.ts`
+ * plus auth/subscription/profile and utility routes.
  *
- * The service worker (`public/sw.js`) keeps its own inline copy because a
- * static SW script cannot import TypeScript at runtime. The unit test
- * `app-routes.test.ts` guards against drift between the two.
+ * The list is mirrored by the inline copy in the service worker
+ * (`public/sw.js` — a static SW script cannot import TypeScript at
+ * runtime), by the `Disallow` block of the landing `robots.txt` and by the
+ * matcher in `proxy.ts`. The unit test `app-routes.test.ts` guards against
+ * drift between them.
  */
 export const APP_ROUTE_PREFIXES: ReadonlyArray<string> = [
     '/login',

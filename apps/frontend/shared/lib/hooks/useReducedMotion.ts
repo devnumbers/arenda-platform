@@ -14,15 +14,15 @@ const REDUCED_MOTION_MEDIA_QUERY = '(prefers-reduced-motion: reduce)';
  * анимацию не отключаем, а укорачиваем до ~150мс-порядка).
  */
 export function useReducedMotion(): boolean {
-    const [reduced, setReduced] = useState(false);
+  const [reduced, setReduced] = useState(false);
 
-    useEffect(() => {
-        const mql = window.matchMedia(REDUCED_MOTION_MEDIA_QUERY);
-        const onChange = (): void => setReduced(mql.matches);
-        onChange();
-        mql.addEventListener('change', onChange);
-        return () => mql.removeEventListener('change', onChange);
-    }, []);
+  useEffect(() => {
+    const mql = window.matchMedia(REDUCED_MOTION_MEDIA_QUERY);
+    const onChange = (): void => setReduced(mql.matches);
+    onChange();
+    mql.addEventListener('change', onChange);
+    return () => mql.removeEventListener('change', onChange);
+  }, []);
 
-    return reduced;
+  return reduced;
 }

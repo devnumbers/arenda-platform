@@ -10,10 +10,9 @@
  * §4 "Подводные камни scope на общем origin с лендингом".
  *
  * The app route prefixes below mirror
- * `apps/frontend/shared/lib/pwa/app-routes.ts` and the `@frontend path`
- * matcher in the Caddyfile (docs/deployment.md). The unit test
- * `app-routes.test.ts` guards against drift between the TS source and this
- * inline copy.
+ * `apps/frontend/shared/lib/pwa/app-routes.ts` — the TS source of truth.
+ * The unit test `app-routes.test.ts` guards against drift between the TS
+ * source and this inline copy.
  */
 
 const CACHE_VERSION = 'v2';
