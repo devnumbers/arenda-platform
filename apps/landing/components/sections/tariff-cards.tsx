@@ -1,10 +1,11 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { LandingLink } from "@/components/button";
 import { GLASS_GRADIENT, GLASS_INSET_SHADOW } from "@/components/glass";
 import { Reveal } from "@/components/reveal";
+import { useSwapPhase } from "@/components/use-swap-phase";
 import iconHomeMain from "@/assets/icons/icon-home-main.svg";
 import iconObjects from "@/assets/icons/icon-objects.svg";
 import iconTeam from "@/assets/icons/icon-team.svg";
@@ -25,8 +26,6 @@ import type { Tariff, TariffFeature } from "@/lib/content";
 // prefers-reduced-motion глушит и пилюлю, и смену цены. Кнопка «Ваш
 // тариф» — White Disabled (серый текст).
 const PRICE_OUT_MS = 180;
-
-type PricePhase = "idle" | "leaving" | "entering";
 
 const FEATURE_ICONS: Record<TariffFeature["icon"], { src: string; alt: string }> = {
   home: { src: iconHomeMain.src, alt: "Иконка объекта" },
@@ -68,17 +67,12 @@ export function TariffCards({
   currentTariff?: string;
 }) {
   const [billing, setBilling] = useState<Billing>("yearly");
-  const [displayedBilling, setDisplayedBilling] = useState<Billing>("yearly");
-  const [pricePhase, setPricePhase] = useState<PricePhase>("idle");
-  const swapTimer = useRef<number | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (swapTimer.current !== null) {
-        window.clearTimeout(swapTimer.current);
-      }
-    };
-  }, []);
+  const {
+    phase: pricePhase,
+    value: displayedBilling,
+    swap: swapPrice,
+    settle: settlePrice,
+  } = useSwapPhase<Billing>({ initial: "yearly", outMs: PRICE_OUT_MS });
 
   const selectBilling = (value: Billing) => {
     if (value === billing) {
@@ -86,25 +80,7 @@ export function TariffCards({
     }
     // Пилюля уезжает сразу по клику, цена догоняет в хореографии steps.
     setBilling(value);
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setDisplayedBilling(value);
-      setPricePhase("idle");
-      return;
-    }
-    if (swapTimer.current !== null) {
-      window.clearTimeout(swapTimer.current);
-    }
-    if (pricePhase === "entering") {
-      // Клик посреди въезда: старая цена ещё полупрозрачна — подменяем
-      // её сразу и переигрываем въезд, не гоняя лишнюю фазу ухода.
-      setDisplayedBilling(value);
-      return;
-    }
-    setPricePhase("leaving");
-    swapTimer.current = window.setTimeout(() => {
-      setDisplayedBilling(value);
-      setPricePhase("entering");
-    }, PRICE_OUT_MS);
+    swapPrice(value);
   };
 
   return (
@@ -185,9 +161,7 @@ export function TariffCards({
                     </h3>
                     <div
                       key={animated ? displayedBilling : undefined}
-                      onAnimationEnd={
-                        animated ? () => setPricePhase("idle") : undefined
-                      }
+                      onAnimationEnd={animated ? settlePrice : undefined}
                       className={`flex flex-col gap-2.5 ${
                         animated && pricePhase === "leaving"
                           ? "-translate-y-1 opacity-0 transition-[opacity,translate] duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:transition-none"

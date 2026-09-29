@@ -1,9 +1,10 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { LandingLink } from "@/components/button";
 import { Reveal } from "@/components/reveal";
+import { useSwapPhase } from "@/components/use-swap-phase";
 import { STEPS } from "@/lib/content";
 
 // «Как начать пользоваться» — макеты 2859-2531 (десктоп), 2859-3647
@@ -20,21 +21,14 @@ import { STEPS } from "@/lib/content";
 // текст мгновенно и глушит кроссфейд.
 const TEXT_OUT_MS = 180;
 
-type TextPhase = "idle" | "leaving" | "entering";
-
 export function Steps() {
   const [active, setActive] = useState(0);
-  const [textStep, setTextStep] = useState(0);
-  const [textPhase, setTextPhase] = useState<TextPhase>("idle");
-  const swapTimer = useRef<number | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (swapTimer.current !== null) {
-        window.clearTimeout(swapTimer.current);
-      }
-    };
-  }, []);
+  const {
+    phase: textPhase,
+    value: textStep,
+    swap: swapTextStep,
+    settle: settleText,
+  } = useSwapPhase<number>({ initial: 0, outMs: TEXT_OUT_MS });
 
   const step = STEPS[active] ?? STEPS[0];
   if (!step) {
@@ -46,25 +40,7 @@ export function Steps() {
       return;
     }
     setActive(index);
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setTextStep(index);
-      setTextPhase("idle");
-      return;
-    }
-    if (swapTimer.current !== null) {
-      window.clearTimeout(swapTimer.current);
-    }
-    if (textPhase === "entering") {
-      // Клик посреди въезда: старый текст ещё полупрозрачен — подменяем
-      // его сразу и переигрываем въезд, не гоняя лишнюю фазу ухода.
-      setTextStep(index);
-      return;
-    }
-    setTextPhase("leaving");
-    swapTimer.current = window.setTimeout(() => {
-      setTextStep(index);
-      setTextPhase("entering");
-    }, TEXT_OUT_MS);
+    swapTextStep(index);
   };
 
   const text = STEPS[textStep] ?? step;
@@ -100,7 +76,7 @@ export function Steps() {
                 </div>
                 <p
                   key={textStep}
-                  onAnimationEnd={() => setTextPhase("idle")}
+                  onAnimationEnd={settleText}
                   className={`mx-auto max-w-[250px] text-center text-s leading-5 text-ink/50 tab:max-w-none desk:text-l desk:leading-[26px] ${
                     textPhase === "leaving"
                       ? "-translate-y-1 opacity-0 transition-[opacity,translate] duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:transition-none"
