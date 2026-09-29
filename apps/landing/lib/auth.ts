@@ -10,12 +10,6 @@ export type TariffName = "basic" | "pro" | "business";
 
 export type Me = { tariff?: TariffName };
 
-export const TARIFF_TITLES: Record<TariffName, string> = {
-  basic: "Базовый",
-  pro: "Про",
-  business: "Бизнес",
-};
-
 export const getMe = cache(async (): Promise<Me | null> => {
   const cookieHeader = (await headers()).get("cookie") ?? "";
   // Имена cookie кабинета: __Host-session_id (secure) / session_id.
