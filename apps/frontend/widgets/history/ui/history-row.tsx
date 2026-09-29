@@ -42,8 +42,9 @@ const TONE_BAR: Record<HistoryBaseActionTone, string> = {
  *
  * Свежая строка live-влития (#880, механика F демо #879): мягкое
  * появление row-in (350мс, --dl-duration-move) и метка «новое» —
- * анимация уже созданной строки, не свап значения; метка гасит экран
- * ленты, когда читатель увидел строки (гашение в history-feed-screen).
+ * анимация уже созданной строки, не свап значения; метку гасит
+ * экран ленты, когда читатель увидел строки (acknowledgeFresh в
+ * history-feed-screen).
  */
 export function HistoryRow({ entry, fresh = false }: { readonly entry: HistoryEntry; readonly fresh?: boolean }): JSX.Element {
   const tone = baseActionTone(entry.baseAction);
