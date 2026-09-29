@@ -1,51 +1,47 @@
-import type { JSX } from 'react';
+import type { JSX, ReactNode } from 'react';
+import type { LegalParagraphSegment } from '../lib/legal-documents';
+import { placeholderLegalSection } from '../lib/legal-documents';
 
 /** Типовая страница правового документа «Информации» (макет 2349-68011,
  * решение владельца 28.09 после аудита #877): крупный h1 28/32 в контенте
- * (в баре тайтла нет — только «Назад»), секции H3 20/24 нумерованным
- * списком, текст 14/16; ссылки синим #2B7FFF с подчёркиванием (аннотация
- * макета «Ссылки синим и подчеркивание»). Текст пока один типовой для всех
- * трёх документов (политика/соглашение/оферта) — заглушка из макета,
- * боевые тексты заменят контент позже. */
+ * (в баре тайтла нет — только «Назад»), секции H2 20/24 с номером в тексте,
+ * текст 14/16; ссылки синим #2B7FFF с подчёркиванием (аннотация
+ * макета «Ссылки синим и подчеркивание»). Рендерер секций из модуля
+ * lib/legal-documents: текст пока один типовой для всех трёх документов
+ * (политика/соглашение/оферта) — заглушка из макета, боевые тексты лягут
+ * в модуль (per-document) без правки рендерера. */
 export function LegalDocument({ title }: { readonly title: string }): JSX.Element {
+  const { heading, paragraphs } = placeholderLegalSection;
   return (
     <article className="flex flex-col gap-6 pb-6 [word-break:break-word] text-content">
       <h1 className="m-0 text-[28px] font-semibold leading-8">{title}</h1>
       <section className="flex flex-col items-start gap-3">
-        <h2 className="m-0 w-full text-xl font-semibold leading-6">
-          <ol className="list-decimal" start={1}>
-            <li className="ms-[30px]">Общие положения</li>
-          </ol>
-        </h2>
+        <h2 className="m-0 w-full text-xl font-semibold leading-6">{heading}</h2>
         <div className="text-sm leading-4">
-          <p className="m-0 mb-4">
-            Настоящая политика обработки персональных данных составлена в соответствии с
-            требованиями Федерального закона от 27.07.2006. № 152-ФЗ «О персональных данных»
-            (далее — Закон о персональных данных) и определяет порядок обработки персональных
-            данных и меры по обеспечению безопасности персональных данных, предпринимаемые ИП
-            Гончаров Артем Александрович (далее — Оператор).
-          </p>
-          <p className="m-0 mb-4">
-            1.1. Оператор ставит своей важнейшей целью и условием осуществления своей деятельности
-            соблюдение прав и свобод человека и гражданина при обработке его персональных данных,
-            в том числе защиты прав на неприкосновенность частной жизни, личную и семейную тайну.
-          </p>
-          <p className="m-0">
-            1.2. Настоящая политика Оператора в отношении обработки персональных данных (далее —
-            Политика) применяется ко всей информации, которую Оператор может получить о посетителях
-            веб-сайта{' '}
-            <a
-              href="https://alterix.ru/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary underline decoration-from-font"
-            >
-              https://alterix.ru/
-            </a>
-            .
-          </p>
+          {paragraphs.map((paragraph, index) => (
+            <p key={index} className={index === paragraphs.length - 1 ? 'm-0' : 'm-0 mb-4'}>
+              {paragraph.map(renderSegment)}
+            </p>
+          ))}
         </div>
       </section>
     </article>
+  );
+}
+
+function renderSegment(segment: LegalParagraphSegment, index: number): ReactNode {
+  if (segment.href === undefined) {
+    return segment.text;
+  }
+  return (
+    <a
+      key={index}
+      href={segment.href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-primary underline decoration-from-font"
+    >
+      {segment.text}
+    </a>
   );
 }

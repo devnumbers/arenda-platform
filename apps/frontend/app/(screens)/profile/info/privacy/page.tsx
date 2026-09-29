@@ -4,7 +4,7 @@ import { SubScreenShell } from '@/shared/ui/design';
 import { ROUTES } from '@/shared/config/routes';
 
 export const metadata: Metadata = {
-  title: 'Политика конфиденциальности — Рентли',
+  title: 'Политика обработки персональных данных — Рентли',
   description: 'Политика обработки персональных данных',
 };
 

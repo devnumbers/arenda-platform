@@ -22,7 +22,7 @@ export function NotificationSettingsContentSkeleton(): JSX.Element {
       {[0, 1, 2, 3].map((group) => (
         <section key={group} className="mt-6">
           <Skeleton className="h-8 w-52" />
-          <div className="mb-3 mt-2 flex flex-col gap-2">
+          <div className="mb-3 mt-2 flex flex-col">
             <Skeleton className="h-[18px] w-full" />
             <Skeleton className="h-[18px] w-[233px]" />
           </div>
