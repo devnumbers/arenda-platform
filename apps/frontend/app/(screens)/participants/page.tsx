@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
-import { ParticipantsHubScreen, ParticipantsHubSkeleton } from '@/widgets/participants';
+import { ParticipantsHubLoading, ParticipantsHubScreen } from '@/widgets/participants';
 import { participantsSummaryQueryOptions } from '@/features/participants';
 import { ServerPrefetchBoundary } from '@/shared/api/server-prefetch';
 import { serverApiClient } from '@/shared/api/server-client';
@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 
 export default function ParticipantsRoutePage() {
   return (
-    <Suspense fallback={<ParticipantsHubSkeleton />}>
+    <Suspense fallback={<ParticipantsHubLoading />}>
       <ServerPrefetchBoundary
         prefetch={(queryClient) => {
           void queryClient.prefetchQuery(participantsSummaryQueryOptions(serverApiClient));

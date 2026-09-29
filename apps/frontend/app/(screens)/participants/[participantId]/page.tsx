@@ -1,6 +1,6 @@
 import { Suspense, type JSX } from 'react';
 import type { Metadata } from 'next';
-import { ParticipantScreen, ParticipantScreenSkeleton } from '@/widgets/participants';
+import { ParticipantLoading, ParticipantScreen } from '@/widgets/participants';
 import { participantQueryOptions } from '@/features/participants';
 import { ServerPrefetchBoundary } from '@/shared/api/server-prefetch';
 import { serverApiClient } from '@/shared/api/server-client';
@@ -17,7 +17,7 @@ export default async function ParticipantRoutePage({
   const { participantId } = await params;
 
   return (
-    <Suspense fallback={<ParticipantScreenSkeleton />}>
+    <Suspense fallback={<ParticipantLoading />}>
       <ServerPrefetchBoundary prefetch={(queryClient) => {
         void queryClient.prefetchQuery(participantQueryOptions({ participantId, transport: serverApiClient }));
       }}>
