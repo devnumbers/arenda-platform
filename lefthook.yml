@@ -30,13 +30,18 @@ pre-commit:
     - name: admin lint
       glob: "apps/admin/**/*.{ts,tsx}"
       run: npm --prefix apps/admin run lint
+    # Landing (ADR 0063, карта #888): same shape as frontend — the package lint
+    # runs whole; staged files act only as the trigger.
+    - name: landing lint
+      glob: "apps/landing/**/*.{ts,tsx}"
+      run: npm --prefix apps/landing run lint
     # TS suppression gate (quality mode #378, gate #399): zero eslint-disable
     # comments, @ts-ignore/@ts-expect-error/@ts-nocheck and explicit `any` in
-    # the manual code of both apps — staged files only; the full pass runs in
-    # CI and the Stop-gate (generated/artifacts/node_modules excluded by the
-    # script itself).
+    # the manual code of the frontend/admin/landing apps — staged files only;
+    # the full pass runs in CI and the Stop-gate (generated/artifacts/
+    # node_modules excluded by the script itself).
     - name: ts suppressions gate
-      glob: "{apps/frontend,apps/admin}/**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}"
+      glob: "{apps/frontend,apps/admin,apps/landing}/**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}"
       run: make ts-suppressions FILES="{staged_files}"
     # Migration lint (wave 3, #309): squawk (apps/backend/.squawk.toml) + domain rules
     # (money BIGINT kopecks, no DEFAULT on id) over the staged migrations only.
