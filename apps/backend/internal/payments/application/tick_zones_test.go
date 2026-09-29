@@ -328,7 +328,7 @@ func TestRunZoneTicks_NoZonesIsNoopSuccess(t *testing.T) {
 // nothing. Not parallel (it swaps the global OTel MeterProvider for a
 // manual reader and restores it on exit) — the paralleltest exemption the
 // global-state swap earns.
-func TestRunZoneTicks_Heartbeat(t *testing.T) { //nolint:paralleltest // global OTel MeterProvider swap
+func TestRunZoneTicks_Heartbeat(t *testing.T) {
 	reader := sdkmetric.NewManualReader()
 	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
 	prev := otel.GetMeterProvider()

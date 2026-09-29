@@ -11,7 +11,7 @@ import (
 // same allowlist the fake providers live on — and the config validator fails
 // at startup when a production process asks for it.
 
-func TestTimeTravelDefaultsToOff(t *testing.T) { //nolint:paralleltest // fixture uses t.Setenv
+func TestTimeTravelDefaultsToOff(t *testing.T) {
 	setRequiredLocalEnv(t)
 
 	cfg, err := Load()

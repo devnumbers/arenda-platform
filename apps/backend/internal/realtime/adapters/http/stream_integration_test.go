@@ -50,8 +50,9 @@ func fastStreamTimers(h *RealtimeStreamHandlers) *RealtimeStreamHandlers {
 }
 
 // openRealtimeStream serves the handler for the user and opens the stream,
-// reading up to the connected handshake.
-func openRealtimeStream(t *testing.T, hub *sse.Hub, user uuid.UUID) *http.Response {
+// reading up to the connected handshake. Returns the stream body; the close
+// and the server teardown live in t.Cleanup.
+func openRealtimeStream(t *testing.T, hub *sse.Hub, user uuid.UUID) io.Reader {
 	t.Helper()
 	h := fastStreamTimers(NewRealtimeStreamHandlers(hub, slog.New(slog.DiscardHandler)))
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -73,7 +74,7 @@ func openRealtimeStream(t *testing.T, hub *sse.Hub, user uuid.UUID) *http.Respon
 
 	handshake := ssetest.ReadUntilContains(t, resp.Body, "event: connected")
 	require.Contains(t, handshake, "event: connected")
-	return resp
+	return resp.Body
 }
 
 // drainFor reads whatever arrives within the window and returns the bytes —
@@ -148,21 +149,21 @@ func TestRealtimeStreamAudience(t *testing.T) {
 	audience := realtimepg.NewAudienceStore(database.NewInstrumentedPool(pool, logger))
 	carrier := realtimestream.NewPublisher(hub, audience, fixedRealtimeClock{}, logger)
 
-	ownerResp := openRealtimeStream(t, hub, owner)       //nolint:bodyclose // the helper registers the body close in t.Cleanup
-	memberResp := openRealtimeStream(t, hub, member)     //nolint:bodyclose // the helper registers the body close in t.Cleanup
-	outsiderResp := openRealtimeStream(t, hub, outsider) //nolint:bodyclose // the helper registers the body close in t.Cleanup
+	ownerBody := openRealtimeStream(t, hub, owner)
+	memberBody := openRealtimeStream(t, hub, member)
+	outsiderBody := openRealtimeStream(t, hub, outsider)
 
 	// The mutation's frame (the mutation pipeline itself is proven in the
 	// contexts' integration suites): the owner and the member ride it, the
 	// stranger does not.
 	carrier.EntityChanged(ctx, member, domain.On(domain.EntityPayments, propID))
 
-	ownerFrame := ssetest.ReadUntilContains(t, ownerResp.Body, "event: entity.changed")
+	ownerFrame := ssetest.ReadUntilContains(t, ownerBody, "event: entity.changed")
 	assert.Contains(t, ownerFrame, `"propertyId":"`+propID.String()+`"`)
 	assert.Contains(t, ownerFrame, `"entity":"payments"`)
-	memberFrame := ssetest.ReadUntilContains(t, memberResp.Body, "event: entity.changed")
+	memberFrame := ssetest.ReadUntilContains(t, memberBody, "event: entity.changed")
 	assert.Contains(t, memberFrame, propID.String())
-	outsiderDrain := drainFor(t, outsiderResp.Body, 200*time.Millisecond)
+	outsiderDrain := drainFor(t, outsiderBody, 200*time.Millisecond)
 	assert.NotContains(t, outsiderDrain, "event: entity.changed", "a stranger gets no frames")
 
 	// Revocation mid-stream: the frames stop for the revoked member, the
@@ -172,10 +173,10 @@ func TestRealtimeStreamAudience(t *testing.T) {
 	require.NoError(t, err)
 	carrier.EntityChanged(ctx, owner, domain.On(domain.EntityOperations, propID))
 
-	ownerFrame2 := ssetest.ReadUntilContains(t, ownerResp.Body, "event: entity.changed")
+	ownerFrame2 := ssetest.ReadUntilContains(t, ownerBody, "event: entity.changed")
 	assert.Contains(t, ownerFrame2, "operations")
 
-	revokedDrain := drainFor(t, memberResp.Body, 200*time.Millisecond)
+	revokedDrain := drainFor(t, memberBody, 200*time.Millisecond)
 	assert.NotContains(t, revokedDrain, "event: entity.changed",
 		"the revoked member's frames stop")
 	assert.Contains(t, revokedDrain, ": ping",
@@ -228,17 +229,17 @@ func TestRealtimeStreamArchivedPropertyAudience(t *testing.T) {
 	audience := realtimepg.NewAudienceStore(database.NewInstrumentedPool(pool, logger))
 	carrier := realtimestream.NewPublisher(hub, audience, fixedRealtimeClock{}, logger)
 
-	ownerResp := openRealtimeStream(t, hub, owner)   //nolint:bodyclose // the helper registers the body close in t.Cleanup
-	memberResp := openRealtimeStream(t, hub, member) //nolint:bodyclose // the helper registers the body close in t.Cleanup
+	ownerBody := openRealtimeStream(t, hub, owner)
+	memberBody := openRealtimeStream(t, hub, member)
 
 	// ArchiveProperty publishes its property frame post-commit; the payments
 	// pair stands in for it — the audience query is entity-agnostic.
 	carrier.EntityChanged(ctx, member, domain.On(domain.EntityPayments, propID))
 
-	ownerFrame := ssetest.ReadUntilContains(t, ownerResp.Body, "event: entity.changed")
+	ownerFrame := ssetest.ReadUntilContains(t, ownerBody, "event: entity.changed")
 	assert.Contains(t, ownerFrame, `"propertyId":"`+propID.String()+`"`,
 		"the owner reads the archive — the frame rides")
-	memberDrain := drainFor(t, memberResp.Body, 200*time.Millisecond)
+	memberDrain := drainFor(t, memberBody, 200*time.Millisecond)
 	assert.NotContains(t, memberDrain, "event: entity.changed",
 		"the archived object's active member gets no frames")
 	assert.Contains(t, memberDrain, ": ping",
