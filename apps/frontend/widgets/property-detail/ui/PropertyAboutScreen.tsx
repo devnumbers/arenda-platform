@@ -157,26 +157,33 @@ export function PropertyAboutScreen(): JSX.Element {
     );
 }
 
-/** Скелетон «Об объекте» — геометрия двух карточек (§7, гейт Loading
- * stability): шапка-строка + ряды данных/атрибутов. */
+/** Скелетон «Об объекте» — геометрия двух карточек PropertySectionCard
+ * (§7, гейт Loading stability): карточка без собственных паддингов,
+ * заголовок px-6 pt-6; «Данные» — ряды метка/значение; «Характеристики» —
+ * анатомия пустого состояния (Figma 1550:97124: иллюстрация 64, текст
+ * 14/16 в две строки, кнопка 56) — оно и приезжает чаще всего. */
 function AboutLoading(): JSX.Element {
     return (
         <>
-            <div className="mt-6 rounded-card bg-surface-muted px-6 pb-6 pt-3">
-                <Skeleton className="h-5 w-24 bg-surface-muted-hover"/>
-                <div className="mt-4 flex flex-col gap-4">
+            <div className="mt-6 rounded-card bg-surface-muted">
+                <div className="px-6 pt-6" aria-hidden>
+                    <Skeleton className="h-6 w-24 bg-surface-muted-hover"/>
+                </div>
+                <div className="flex flex-col gap-6 px-6 pb-6 pt-4">
                     <Skeleton className="h-9 bg-surface-muted-hover"/>
                     <Skeleton className="h-9 bg-surface-muted-hover"/>
                     <Skeleton className="h-9 bg-surface-muted-hover"/>
                 </div>
             </div>
-            <div className="mt-4 rounded-card bg-surface-muted px-6 pb-6 pt-3">
-                <Skeleton className="h-5 w-36 bg-surface-muted-hover"/>
-                <div className="mt-4 flex flex-col gap-2">
-                    <Skeleton className="h-4 bg-surface-muted-hover"/>
-                    <Skeleton className="h-4 bg-surface-muted-hover"/>
-                    <Skeleton className="h-4 bg-surface-muted-hover"/>
-                    <Skeleton className="h-4 w-2/3 bg-surface-muted-hover"/>
+            <div className="mt-4 rounded-card bg-surface-muted">
+                <div className="px-6 pt-6" aria-hidden>
+                    <Skeleton className="h-6 w-36 bg-surface-muted-hover"/>
+                </div>
+                <div className="flex flex-col items-center px-8 pb-8 pt-4 text-center" aria-hidden>
+                    <Skeleton className="h-16 w-16 rounded-pill bg-surface-muted-hover"/>
+                    <Skeleton className="mt-3 h-4 w-[281px] bg-surface-muted-hover"/>
+                    <Skeleton className="h-4 w-56 bg-surface-muted-hover"/>
+                    <Skeleton className="mt-6 h-14 w-[128px] rounded-button bg-surface-muted-hover"/>
                 </div>
             </div>
         </>

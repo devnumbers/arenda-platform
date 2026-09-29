@@ -24,8 +24,8 @@ func TestRentalRows_EmptyTenantLabel(t *testing.T) {
 		text string
 		e    Entry
 	}{
-		{"created", "Добавлена аренда (01.09.2026 – 01.09.2027)", RentalCreated(id, "", from, to)},
-		{"updated", "Условия аренды изменены (01.09.2026 – 01.09.2027)", RentalUpdated(id, "", from, to)},
+		{"created", "Добавлена аренда", RentalCreated(id, "", from, to)},
+		{"updated", "Условия аренды изменены", RentalUpdated(id, "", from, to)},
 		{"completed", "Аренда завершена", RentalCompleted(id, "")},
 		{"deleted", "Аренда удалена", RentalDeleted(id, "")},
 	}
@@ -54,20 +54,30 @@ func TestRentalRows_EmptyTenantLabel(t *testing.T) {
 	}
 }
 
-func TestRentalRows_PeriodSegmentAlwaysPresent(t *testing.T) {
+func TestRentalRows_PeriodLivesInContextOnly(t *testing.T) {
 	t.Parallel()
-	// The period segment is appended unconditionally: formatPeriod is never
-	// empty (formatDate is a plain t.Format), the indefinite form included
-	// (to = zero → «(01.09.2026)»).
+	// Аудит #876: голые подписи дат убраны из строк — период аренды не
+	// пишется в сегменты (ни definite, ни бессрочная «(дата)»), он живёт
+	// в context. Два вида поиска дат расходятся: период-фильтр ленты режет
+	// по created_at и от текста строк не зависит — не задет; текстовый же
+	// q-поиск матчит только search_tsv/searchable, а searchable — это
+	// PlainText сегментов плюс имя и почта актёра, context в searchable и
+	// search_tsv не входит. Поэтому голые даты новых строк (сроки операций
+	// и задач — хвост «(срок DD.MM.YYYY)» в searchable до сноса bb327123)
+	// текстовым поиском больше не находятся: та же признанная потеря, что
+	// и период аренды после сноса из сегментов.
 	from := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 	e := RentalCreated(uuid.Must(uuid.NewV7()), "Иван Иванов", from, time.Time{})
-	want := "Добавлена аренда: Иван Иванов (01.09.2026)"
+	want := "Добавлена аренда: Иван Иванов"
 	if got := e.Segments.PlainText(); got != want {
 		t.Errorf("row text = %q, want %q", got, want)
 	}
 	// The named label keeps the link on the tenant segment.
-	if len(e.Segments) != 3 || e.Segments[1].Link == nil {
-		t.Errorf("segments = %+v, want the linked tenant run between the prefix and the period", e.Segments)
+	if len(e.Segments) != 2 || e.Segments[1].Link == nil {
+		t.Errorf("segments = %+v, want the linked tenant run after the prefix", e.Segments)
+	}
+	if v, ok := e.Context["period_from"]; !ok || v != "2026-09-01T00:00:00Z" {
+		t.Errorf("context period_from = %v, want the RFC3339 snapshot", v)
 	}
 }
 

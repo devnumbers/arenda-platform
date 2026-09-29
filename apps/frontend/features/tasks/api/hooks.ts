@@ -22,10 +22,7 @@ type TaskResponseDto = components['schemas']['TaskResponse'];
 type TaskRuleResponseDto = components['schemas']['TaskRuleResponse'];
 type TasksPageDto = components['schemas']['TasksResponse'];
 
-/** Лимит листинга: экран группирует весь список целиком, поэтому берёт
- * максимум контракта одной страницей (серверный дефолт — 100, максимум
- * 500); порции с догрузкой — если у объекта появится больше задач. */
-const TASKS_PAGE_LIMIT = 500;
+import { activeTasksQueryOptions, globalTasksQueryOptions, TASKS_PAGE_LIMIT } from './queries';
 
 /**
  * Активные задачи объекта — сырьё секций «Просроченные / Сегодня / Завтра /
@@ -38,13 +35,7 @@ export function useActiveTasks(
   options: { readonly enabled?: boolean } = {},
 ): UseQueryResult<TasksPage, ApiError> {
   return useQuery({
-    queryKey: taskKeys.active(propertyId),
-    queryFn: async () => {
-      const response = await apiClient<TasksPageDto>(
-        `/properties/${encodeURIComponent(propertyId)}/tasks?completed=false&limit=${TASKS_PAGE_LIMIT}`,
-      );
-      return mapTasksPage(response);
-    },
+    ...activeTasksQueryOptions({ propertyId }),
     enabled: (options.enabled ?? true) && Boolean(propertyId),
   });
 }
@@ -259,52 +250,6 @@ export function usePropertylessTasks(
   });
 }
 
-/** Путь активного/выполненного бакета глобального листинга GET /tasks:
- * фильтр (#524/#547) — необязательный comma-separated сегмент propertyId и
- * флаг withoutProperty («Общие задачи», union с объектами — решение
- * владельца 2026-09-07) перед бакетом. */
-const globalTasksPath = (
-  completed: boolean,
-  propertyIds: ReadonlyArray<string>,
-  withoutProperty: boolean,
-): string => {
-  const parts: string[] = [];
-  if (propertyIds.length > 0) {
-    parts.push(`propertyId=${encodeURIComponent(propertyIds.join(','))}`);
-  }
-  if (withoutProperty) {
-    parts.push('withoutProperty=true');
-  }
-  parts.push(`completed=${completed}`, `limit=${TASKS_PAGE_LIMIT}`);
-  return `/tasks?${parts.join('&')}`;
-};
-
-/**
- * Активный бакет глобальной ленты GET /tasks (#521, экран #523):
- * merged-фид читателя (свои задачи + задачи видимых объектов, архивы мимо —
- * решения #522); фильтр (#524/#547) — срез перечисленных объектов,
- * «Общие задачи» — безобъектная книга читателя, вместе — union (решение
- * владельца 2026-09-07); смена фильтра меняет ключ и перечитывает. Лимит —
- * максимум контракта: лента группируется целиком, как на объекте. today —
- * календарь читателя (на срезе одного объекта — владельца данных).
- * Сестринский хук журнала — useGlobalCompletedTasks. keepPreviousData —
- * смена фильтра (#524) держит прежний срез на экране, пока едет новый
- * запрос: лента не мигает скелетоном (#609, канон платежей).
- */
-/**
- * Чистый fetch бакета глобального листинга GET /tasks — общее горло хуков
- * ленты и прогрева хабов #626: прогрев кэша идёт тем же кодом, что
- * читает экран (детали среза — у useGlobalActiveTasks ниже).
- */
-export function fetchGlobalTasks(
-  completed: boolean,
-  propertyIds: ReadonlyArray<string>,
-  withoutProperty: boolean,
-): Promise<TasksPage> {
-  return apiClient<TasksPageDto>(globalTasksPath(completed, propertyIds, withoutProperty))
-    .then(mapTasksPage);
-}
-
 /**
  * Активный бакет глобальной ленты GET /tasks (#521, экран #523):
  * merged-фид читателя (свои задачи + задачи видимых объектов, архивы мимо —
@@ -322,8 +267,7 @@ export function useGlobalActiveTasks(
   withoutProperty = false,
 ): UseQueryResult<TasksPage, ApiError> {
   return useQuery({
-    queryKey: taskKeys.global(false, propertyIds, withoutProperty),
-    queryFn: () => fetchGlobalTasks(false, propertyIds, withoutProperty),
+    ...globalTasksQueryOptions({ completed: false, propertyIds, withoutProperty }),
     placeholderData: keepPreviousData,
   });
 }
@@ -335,8 +279,7 @@ export function useGlobalCompletedTasks(
   withoutProperty = false,
 ): UseQueryResult<TasksPage, ApiError> {
   return useQuery({
-    queryKey: taskKeys.global(true, propertyIds, withoutProperty),
-    queryFn: () => fetchGlobalTasks(true, propertyIds, withoutProperty),
+    ...globalTasksQueryOptions({ completed: true, propertyIds, withoutProperty }),
     placeholderData: keepPreviousData,
   });
 }

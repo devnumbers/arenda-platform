@@ -12,7 +12,7 @@ import {
 } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
-import { mapGlobalPaymentFeed, mapGlobalPaymentObject, mapGlobalPaymentSearch, mapPayment, mapPaymentOperation, mapOperationsSummary } from '@/entities/payment';
+import { mapGlobalPaymentSearch, mapPayment, mapPaymentOperation } from '@/entities/payment';
 import type {
   GlobalPaymentFeed,
   GlobalPaymentObject,
@@ -37,18 +37,30 @@ import {
   type PaymentOperationStatusFilter,
 } from '@/shared/api/query-keys';
 import type { components } from '@/shared/api/dto';
+
+type OperationsResponse = components['schemas']['OperationsResponse'];
+type PaymentResponseDto = components['schemas']['PaymentResponse'];
+type OperationResponseDto = components['schemas']['OperationResponse'];
+
+import {
+  globalOperationsPagedQueryOptions,
+  globalOperationsSummaryQueryOptions,
+  globalPaymentObjectsQueryOptions,
+  globalPaymentsFeedQueryOptions,
+  paymentDetailQueryOptions,
+  paymentListQueryOptions,
+  paymentOperationQueryOptions,
+  paymentOperationsByStatusQueryOptions,
+  paymentOperationsOverdueQueryOptions,
+  paymentOperationsPagedQueryOptions,
+  paymentOperationsSummaryQueryOptions,
+} from './queries';
 import { keysetNextPageParam } from '@/shared/lib/keyset';
 import {
   OPERATIONS_PAGE_SIZE,
   operationsOffsetNextPageParam,
 } from '../lib/operations-pages';
 import { flattenUniqueById } from '../lib/feed-pages';
-
-type PaymentsResponse = components['schemas']['PaymentsResponse'];
-type OperationsResponse = components['schemas']['OperationsResponse'];
-type OperationsSummaryResponse = components['schemas']['OperationsSummaryResponse'];
-type PaymentResponseDto = components['schemas']['PaymentResponse'];
-type OperationResponseDto = components['schemas']['OperationResponse'];
 
 /** Список платежей объекта — правил с флагом автоплатежа и избранным
  * (ADR 0049): без пагинации, порядок — серверный (по дате заведения).
@@ -60,14 +72,7 @@ export function usePayments(
   options: { readonly enabled?: boolean } = {},
 ): UseQueryResult<Payment[], ApiError> {
   return useQuery({
-    queryKey: paymentKeys.list(propertyId, search),
-    queryFn: async () => {
-      const query = search ? `?search=${encodeURIComponent(search)}` : '';
-      const response = await apiClient<PaymentsResponse>(
-        `/properties/${encodeURIComponent(propertyId)}/payments${query}`,
-      );
-      return response.items.map(mapPayment);
-    },
+    ...paymentListQueryOptions({ propertyId, search }),
     enabled: (options.enabled ?? true) && Boolean(propertyId),
   });
 }
@@ -86,14 +91,7 @@ export function usePropertyOverdueOperations(
   options: { readonly enabled?: boolean } = {},
 ): UseQueryResult<PaymentOperation[], ApiError> {
   return useQuery({
-    queryKey: paymentOperationKeys.overdueByProperty(propertyId, search),
-    queryFn: async () => {
-      const query = search ? `&search=${encodeURIComponent(search)}` : '';
-      const response = await apiClient<OperationsResponse>(
-        `/properties/${encodeURIComponent(propertyId)}/operations?status=overdue&order=asc${query}`,
-      );
-      return response.items.map(mapPaymentOperation);
-    },
+    ...paymentOperationsOverdueQueryOptions({ propertyId, search }),
     enabled: (options.enabled ?? true) && Boolean(propertyId),
   });
 }
@@ -240,13 +238,7 @@ export function usePayment(
   paymentId: string,
 ): UseQueryResult<Payment, ApiError> {
   return useQuery({
-    queryKey: paymentKeys.detail(propertyId, paymentId),
-    queryFn: async () => {
-      const response = await apiClient<PaymentResponseDto>(
-        `/properties/${encodeURIComponent(propertyId)}/payments/${encodeURIComponent(paymentId)}`,
-      );
-      return mapPayment(response);
-    },
+    ...paymentDetailQueryOptions({ propertyId, paymentId }),
     enabled: Boolean(propertyId) && Boolean(paymentId),
   });
 }
@@ -267,14 +259,7 @@ export function usePaymentOperationsByStatus(
   options: { readonly enabled?: boolean } = {},
 ): UseQueryResult<PaymentOperation[], ApiError> {
   return useQuery({
-    queryKey: paymentOperationKeys.byPaymentWithStatus(propertyId, paymentId, status),
-    queryFn: async () => {
-      const response = await apiClient<OperationsResponse>(
-        `/properties/${encodeURIComponent(propertyId)}/payments/${encodeURIComponent(paymentId)}`
-          + `/operations?status=${status}&order=asc`,
-      );
-      return response.items.map(mapPaymentOperation);
-    },
+    ...paymentOperationsByStatusQueryOptions({ propertyId, paymentId, status }),
     enabled: (options.enabled ?? true) && Boolean(propertyId) && Boolean(paymentId),
   });
 }
@@ -293,17 +278,7 @@ export function usePaymentOperationsPaged(
 ): UseInfiniteQueryResult<ReadonlyArray<PaymentOperation>, ApiError> {
   const { status, order } = params;
   return useInfiniteQuery({
-    queryKey: paymentOperationKeys.byPaymentPaged(propertyId, paymentId, status, order),
-    queryFn: async ({ pageParam }) => {
-      const response = await apiClient<OperationsResponse>(
-        `/properties/${encodeURIComponent(propertyId)}/payments/${encodeURIComponent(paymentId)}`
-          + `/operations?status=${status}&order=${order}`
-          + `&limit=${OPERATIONS_PAGE_SIZE}&offset=${String(pageParam)}`,
-      );
-      return response.items.map(mapPaymentOperation);
-    },
-    initialPageParam: 0,
-    getNextPageParam: operationsOffsetNextPageParam,
+    ...paymentOperationsPagedQueryOptions({ propertyId, paymentId, status, order }),
     select: (data) => data.pages.flat(),
     enabled: Boolean(propertyId) && Boolean(paymentId),
   });
@@ -377,86 +352,10 @@ export function usePropertyOperationsSummary(
   options: { readonly enabled?: boolean } = {},
 ): UseQueryResult<OperationsSummary, ApiError> {
   return useQuery({
-    queryKey: paymentOperationKeys.summary(propertyId, scope),
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      params.set('status', scope.status);
-      if (scope.type !== undefined) {
-        params.set('type', scope.type);
-      }
-      if (scope.dateFrom !== undefined) {
-        params.set('date_from', scope.dateFrom);
-      }
-      if (scope.dateTo !== undefined) {
-        params.set('date_to', scope.dateTo);
-      }
-      if (scope.search !== undefined && scope.search !== '') {
-        params.set('search', scope.search);
-      }
-      const response = await apiClient<OperationsSummaryResponse>(
-        `/properties/${encodeURIComponent(propertyId)}/operations/summary?${params.toString()}`,
-      );
-      return mapOperationsSummary(response);
-    },
+    ...paymentOperationsSummaryQueryOptions({ propertyId, scope }),
     placeholderData: keepPreviousData,
     enabled: (options.enabled ?? true) && Boolean(propertyId),
   });
-}
-
-/** Скоуп глобальной ленты → общая часть query-параметров (объекты, период,
- * направление, архив, поиск); пагинация и порядок — у порции, сводка их не
- * принимает. Общее горло хуков и прогрева хабов #626. */
-function operationsScopeParams(scope: GlobalOperationScope): URLSearchParams {
-  const params = new URLSearchParams();
-  if (scope.propertyIds !== undefined && scope.propertyIds.length > 0) {
-    params.set('propertyIds', scope.propertyIds.join(','));
-  }
-  if (scope.categories !== undefined && scope.categories.length > 0) {
-    params.set('category', scope.categories.join(','));
-  }
-  if (scope.type !== undefined) {
-    params.set('type', scope.type);
-  }
-  if (scope.includeArchived) {
-    params.set('includeArchived', 'true');
-  }
-  if (scope.dateFrom !== undefined) {
-    params.set('date_from', scope.dateFrom);
-  }
-  if (scope.dateTo !== undefined) {
-    params.set('date_to', scope.dateTo);
-  }
-  if (scope.search !== undefined && scope.search !== '') {
-    params.set('search', scope.search);
-  }
-  return params;
-}
-
-/** Порция глобальной ленты (#597): строки плюс keyset-продолжение —
- * opaque-курсор следующей порции, null = лента исчерпана. */
-export type GlobalOperationsPageData = {
-  readonly items: ReadonlyArray<PaymentOperation>;
-  readonly nextCursor: string | null;
-};
-
-/** Чистый fetch порции глобальной ленты — общее горло хука и прогрева
- * хабов #626. cursor — keyset-продолжение прошлого ответа (#597);
- * undefined читает ленту с начала. */
-export async function fetchGlobalOperationsPage(
-  scope: GlobalOperationScope,
-  cursor?: string,
-): Promise<GlobalOperationsPageData> {
-  const params = operationsScopeParams(scope);
-  params.set('order', scope.order);
-  params.set('limit', String(OPERATIONS_PAGE_SIZE));
-  if (cursor) {
-    params.set('cursor', cursor);
-  }
-  const response = await apiClient<OperationsResponse>(`/operations?${params.toString()}`);
-  return {
-    items: response.items.map(mapPaymentOperation),
-    nextCursor: response.nextCursor ?? null,
-  };
 }
 
 /**
@@ -474,26 +373,11 @@ export function useGlobalOperationsPaged(
   options: { readonly enabled?: boolean } = {},
 ): UseInfiniteQueryResult<ReadonlyArray<PaymentOperation>, ApiError> {
   return useInfiniteQuery({
-    queryKey: globalOperationKeys.listPaged(scope),
-    queryFn: ({ pageParam }) => fetchGlobalOperationsPage(scope, pageParam),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: keysetNextPageParam,
+    ...globalOperationsPagedQueryOptions({ scope }),
     select: (data) => flattenUniqueById(data.pages.map((page) => page.items)),
     placeholderData: keepPreviousData,
     enabled: options.enabled ?? true,
   });
-}
-
-/** Чистый fetch сводки операций — общее горло хука и прогрева хабов #626. */
-export async function fetchGlobalOperationsSummary(
-  scope: GlobalOperationScope,
-): Promise<OperationsSummary> {
-  const params = operationsScopeParams(scope);
-  const query = params.toString();
-  const response = await apiClient<OperationsSummaryResponse>(
-    `/operations/summary${query.length > 0 ? `?${query}` : ''}`,
-  );
-  return mapOperationsSummary(response);
 }
 
 /**
@@ -535,8 +419,7 @@ export function useGlobalOperationsSummary(
   options: { readonly enabled?: boolean } = {},
 ): UseQueryResult<OperationsSummary, ApiError> {
   return useQuery({
-    queryKey: globalOperationKeys.summary(scope),
-    queryFn: () => fetchGlobalOperationsSummary(scope),
+    ...globalOperationsSummaryQueryOptions({ scope }),
     placeholderData: keepPreviousData,
     enabled: options.enabled ?? true,
   });
@@ -652,14 +535,7 @@ export function useOperation(
   operationId: string,
 ): UseQueryResult<PaymentOperation, ApiError> {
   return useQuery({
-    queryKey: paymentOperationKeys.byId(propertyId, operationId),
-    queryFn: async () => {
-      const response = await apiClient<components['schemas']['OperationResponse']>(
-        `/properties/${encodeURIComponent(propertyId)}`
-          + `/operations/${encodeURIComponent(operationId)}`,
-      );
-      return mapPaymentOperation(response);
-    },
+    ...paymentOperationQueryOptions({ propertyId, operationId }),
     enabled: Boolean(propertyId) && Boolean(operationId),
   });
 }
@@ -693,15 +569,6 @@ export function usePayOperation(
   });
 }
 
-/** Чистый fetch фида «Платежей» — общее горло хука и прогрева хабов
- * #626 (кэш прогревается тем же кодом, что читает экран). */
-export async function fetchGlobalPaymentsFeed(): Promise<GlobalPaymentFeed> {
-  const response = await apiClient<components['schemas']['PaymentsGlobalResponse']>(
-    '/payments',
-  );
-  return mapGlobalPaymentFeed(response);
-}
-
 /**
  * Фид главного экрана «Платежи» (карта #573, #575): все правила видимой
  * книги целиком (пагинации нет) плюс счётчики целого скоупа — карточки
@@ -710,21 +577,7 @@ export async function fetchGlobalPaymentsFeed(): Promise<GlobalPaymentFeed> {
  * сортировку избранного по favoriteOrder (#576).
  */
 export function useGlobalPayments(): UseQueryResult<GlobalPaymentFeed, ApiError> {
-  return useQuery({
-    queryKey: globalPaymentKeys.feed,
-    queryFn: fetchGlobalPaymentsFeed,
-  });
-}
-
-/** Чистый fetch стопок объектов «Платежей» — общее горло хука и prefetch. */
-export async function fetchGlobalPaymentObjects(
-  search = '',
-): Promise<ReadonlyArray<GlobalPaymentObject>> {
-  const query = search ? `?search=${encodeURIComponent(search)}` : '';
-  const response = await apiClient<components['schemas']['PaymentObjectsGlobalResponse']>(
-    `/payments/objects${query}`,
-  );
-  return response.items.map(mapGlobalPaymentObject);
+  return useQuery(globalPaymentsFeedQueryOptions());
 }
 
 /**
@@ -740,8 +593,7 @@ export function useGlobalPaymentObjects(
   options: { readonly enabled?: boolean } = {},
 ): UseQueryResult<ReadonlyArray<GlobalPaymentObject>, ApiError> {
   return useQuery({
-    queryKey: globalPaymentKeys.objects(search),
-    queryFn: () => fetchGlobalPaymentObjects(search),
+    ...globalPaymentObjectsQueryOptions({ search }),
     placeholderData: keepPreviousData,
     enabled: options.enabled ?? true,
   });

@@ -1,29 +1,20 @@
 import type { Metadata } from 'next';
-import fs from 'node:fs';
-import path from 'node:path';
+import { LegalDocument } from '@/widgets/profile';
 import { SubScreenShell } from '@/shared/ui/design';
 import { ROUTES } from '@/shared/config/routes';
-import { MarkdownContent } from '@/shared/ui/markdown-content';
-import styles from './page.module.css';
 
 export const metadata: Metadata = {
-  title: 'Политика конфиденциальности — Рентли',
+  title: 'Политика обработки персональных данных — Рентли',
   description: 'Политика обработки персональных данных',
 };
 
+/** Страница документа (макет 2349-68011): бар только с «Назад» (тайтл в
+ * баре пустой), крупный h1 в контенте; текст пока типовой-заглушка
+ * (LegalDocument). */
 export default function PrivacyPage() {
-  const content = fs.readFileSync(
-    path.join(process.cwd(), 'content', 'privacy.md'),
-    'utf-8'
-  );
-
   return (
-    <>
-      <SubScreenShell title="Политика конфиденциальности" fallbackHref={ROUTES.profileInfo}>
-        <section className={styles.section}>
-          <MarkdownContent>{content}</MarkdownContent>
-        </section>
-      </SubScreenShell>
-    </>
+    <SubScreenShell title="" fallbackHref={ROUTES.profileInfo}>
+      <LegalDocument title="Политика обработки персональных данных" />
+    </SubScreenShell>
   );
 }

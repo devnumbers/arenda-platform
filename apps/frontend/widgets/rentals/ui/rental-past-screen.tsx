@@ -14,8 +14,9 @@ import {
 } from '@/features/rentals';
 import type { Rental } from '@/entities/rental';
 import { PaymentRowButton } from '@/entities/payment';
-import { Button, CircleIcon, EmptyState, IconButton, PageContent, Skeleton, TopNav, TopNavTitle } from '@/shared/ui/design';
+import { Button, CircleIcon, EmptyState, IconButton, PageContent, TopNav, TopNavTitle } from '@/shared/ui/design';
 import { RentalGroup } from './rental-group';
+import { RentalPastListSkeleton } from './rental-skeletons';
 import { TermRows } from './term-row';
 
 /**
@@ -46,13 +47,7 @@ export function RentalPastScreen({ propertyId }: { readonly propertyId: string }
       </TopNav>
 
       <PageContent>
-        {rentalsQuery.isPending && (
-          <div className="flex flex-col gap-4 pt-6">
-            <Skeleton className="h-14 w-full" />
-            <Skeleton className="h-14 w-full" />
-            <Skeleton className="h-14 w-full" />
-          </div>
-        )}
+        {rentalsQuery.isPending && <RentalPastListSkeleton />}
 
         {rentalsQuery.isError && (
           <div className="flex flex-col items-center gap-4 pt-6">

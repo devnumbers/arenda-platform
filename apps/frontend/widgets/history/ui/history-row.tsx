@@ -1,5 +1,3 @@
-'use client';
-
 import type { ComponentType, JSX, SVGProps } from 'react';
 import Link from 'next/link';
 import { AddSmall, CheckSmall, EditSmall, TrashBinSmall } from '@/shared/assets/icons';
@@ -12,6 +10,7 @@ import {
 } from '@/entities/history';
 import { formatTime } from '@/shared/lib/date-format';
 import { cn } from '@/shared/lib/cn';
+import styles from './history-row.module.css';
 
 /** Иконка основного действия по канону иконок: S-стиль 16×16 (макет
  * 2157-56876) — нейтральный тёмный глиф, тон строки несёт полоска слева. */
@@ -40,12 +39,18 @@ const TONE_BAR: Record<HistoryBaseActionTone, string> = {
  * (#713): резолвер — entities/history, строка не кнопка, переходом служат
  * только синие фрагменты. Время — справа по нижней строке текста
  * (items-end).
+ *
+ * Свежая строка live-влития (#880, механика F демо #879): мягкое
+ * появление row-in (350мс, --dl-duration-move) и метка «новое» —
+ * анимация уже созданной строки, не свап значения; метку гасит
+ * экран ленты, когда читатель увидел строки (acknowledgeFresh в
+ * history-feed-screen).
  */
-export function HistoryRow({ entry }: { readonly entry: HistoryEntry }): JSX.Element {
+export function HistoryRow({ entry, fresh = false }: { readonly entry: HistoryEntry; readonly fresh?: boolean }): JSX.Element {
   const tone = baseActionTone(entry.baseAction);
   const Icon = TONE_ICON[tone];
   return (
-    <div className="flex items-end gap-2">
+    <div className={cn('flex items-end gap-2', fresh && styles.rowIn)}>
       <div className="flex min-w-0 flex-1 items-start gap-2">
         <span aria-hidden className={cn('w-[3px] shrink-0 self-stretch rounded-pill', TONE_BAR[tone])} />
         <Icon
@@ -68,6 +73,13 @@ export function HistoryRow({ entry }: { readonly entry: HistoryEntry }): JSX.Ele
               <span key={index}>{segment.text}</span>
             );
           })}
+          {fresh && (
+            /* Метка «новое» (макет-механика F демо #879): чип 10/600
+             * на --dl-surface-info рядом с текстом строки. */
+            <span className="ml-1.5 inline-block rounded-md bg-surface-info px-1.5 py-0.5 align-baseline text-[10px] font-semibold leading-[13px] text-primary">
+              новое
+            </span>
+          )}
         </p>
       </div>
       <span className="shrink-0 text-xs leading-[15px] text-content-secondary">

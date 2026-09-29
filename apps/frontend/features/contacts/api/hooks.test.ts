@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@/shared/api/client', () => ({ apiClient: vi.fn() }));
 
 import { apiClient } from '@/shared/api/client';
-import { CONTACTS_PAGE_SIZE, contactsListQuery } from './hooks';
+import { CONTACTS_PAGE_SIZE, contactsListQuery } from './queries';
 import type { useContacts } from './hooks';
 
 const apiClientMock = vi.mocked(apiClient);

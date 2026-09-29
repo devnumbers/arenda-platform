@@ -15,6 +15,7 @@ export { Checkbox, type CheckboxProps } from './checkbox';
 export { RadioGroup, type RadioGroupProps, RadioGroupItem, type RadioGroupItemProps } from './radio';
 export { Switch, type SwitchProps } from './switch';
 export { SearchField, type SearchFieldProps } from './search-field';
+export { SearchPill, type SearchPillProps } from './search-pill';
 export { PickerField, type PickerFieldProps, type PickerOption } from './picker-field';
 export { ChipButton, type ChipButtonProps } from './chip-button';
 export { StepsChip, type StepsChipProps, type StepsChipSize } from './steps-chip';
@@ -47,6 +48,7 @@ export {
 } from './circle-icon-variants';
 export { RoundActionButton, type RoundActionButtonProps } from './round-action-button';
 export { StickyBottomBar, type StickyBottomBarProps } from './sticky-bottom-bar';
+export { fullscreenSurfaceClass } from './fullscreen-surface';
 export { StatusIcon, type StatusIconProps, type StatusIconStatus } from './status-icon';
 export { PageContent, type PageContentProps } from './page-content';
 export { TopNav, type TopNavProps, TopNavTitle, type TopNavTitleProps } from './top-nav';

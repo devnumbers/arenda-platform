@@ -52,6 +52,7 @@ import {
   CalendarRangePicker,
   Checkbox,
   ErrorCard,
+  fullscreenSurfaceClass,
   IconButton,
   StickyBottomBar,
   TopNav,
@@ -287,16 +288,17 @@ export function HistoryFiltersSheet({
       role="dialog"
       aria-modal="true"
       aria-label="Фильтры истории"
-      className="fixed inset-0 z-50 flex flex-col bg-surface font-sans"
+      className={cn(fullscreenSurfaceClass, 'font-sans')}
     >
       <TopNav
+        overlay
         leading={<IconButton icon={<Cancel />} label="Закрыть фильтры" onClick={onClose} />}
       >
         <TopNavTitle title={title} />
       </TopNav>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-[560px] px-6 pb-[136px] pt-6 tablet:mt-[72px]">
+      <div className="relative min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-column px-6 pb-[136px] pt-6 tablet:mt-[72px]">
           {optionsQuery.isPending ? (
             <HistoryFiltersSheetSkeleton />
           ) : (

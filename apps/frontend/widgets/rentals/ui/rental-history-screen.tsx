@@ -25,10 +25,10 @@ import {
   IconButton,
   InfiniteQueryTail,
   PageContent,
-  Skeleton,
   TopNav,
   TopNavTitle,
 } from '@/shared/ui/design';
+import { RentalHistoryFeedSkeleton } from './rental-skeletons';
 
 /**
  * «История операций» завершённой аренды (#535, Figma 1302:52209):
@@ -76,6 +76,17 @@ export function RentalHistoryScreen({
         : ROUTES.propertyRentalPast(propertyId),
     );
 
+  // Чип сортировки — вне фазы загрузки (паритет §7, механика истории
+  // платежей #605): живой уже в pending, над скелетоном и готовым списком;
+  // на пустой истории прячется вместе с контентом. Направление — в адресе
+  // (#785), переключение во время загрузки безвредно: меняет ключ
+  // серверного запроса.
+  const sortChipRow = (
+    <div className="px-6 pb-2">
+      <HistoryOrderChip order={order} onToggle={toggleOrder} />
+    </div>
+  );
+
   return (
     <>
       <TopNav
@@ -86,15 +97,18 @@ export function RentalHistoryScreen({
 
       <PageContent>
         <div className="flex flex-col gap-2">
-          {rentalsQuery.isPending && (
-            <div className="flex flex-col gap-4 pt-6">
-              <Skeleton className="h-14 w-full" />
-              <Skeleton className="h-14 w-full" />
-              <Skeleton className="h-14 w-full" />
-            </div>
+          {/* Ветви взаимоисключающие — по достигнутому состоянию: запрос
+              истории заглушен, пока аренда не найдена (пустой paymentId),
+              его pending/error значимы только при найденной аренде. */}
+          {(rentalsQuery.isPending ||
+            (rental !== undefined && historyQuery.isPending)) && (
+            <>
+              {sortChipRow}
+              <RentalHistoryFeedSkeleton />
+            </>
           )}
 
-          {(rentalsQuery.isError || historyQuery.isError) && (
+          {(rentalsQuery.isError || (rental !== undefined && historyQuery.isError)) && (
             <div className="flex flex-col items-center gap-4 pt-6">
               <p className="text-center text-base leading-[18px] text-content-secondary">
                 Не удалось загрузить историю
@@ -112,7 +126,20 @@ export function RentalHistoryScreen({
             </div>
           )}
 
-          {!rentalsQuery.isPending && !rentalsQuery.isError && !historyQuery.isError && (
+          {/* Прямая ссылка на несуществующую аренду — честная пустота
+              вместо вечного скелетона. */}
+          {rentalsQuery.isSuccess && rental === undefined && (
+            <EmptyState
+              imageSrc="/images/rentals/rental-hero.png"
+              title="Аренда не найдена"
+              description="Возможно, она была удалена"
+            />
+          )}
+
+          {rental !== undefined &&
+            !rentalsQuery.isError &&
+            !historyQuery.isPending &&
+            !historyQuery.isError && (
             <>
               {groups.length === 0 ? (
                 <EmptyState
@@ -121,9 +148,7 @@ export function RentalHistoryScreen({
                 />
               ) : (
                 <>
-                  <div className="px-6 pb-2">
-                    <HistoryOrderChip order={order} onToggle={toggleOrder} />
-                  </div>
+                  {sortChipRow}
 
                   {groups.map((group) => (
                     <section key={group.label} className="flex flex-col">
@@ -189,4 +214,3 @@ function HistoryRow({
     />
   );
 }
-

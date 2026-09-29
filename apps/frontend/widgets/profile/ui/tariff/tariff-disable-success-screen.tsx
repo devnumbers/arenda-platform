@@ -3,16 +3,18 @@
 import type { JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { CancelColor } from '@/shared/assets/icons';
-import { Button, StickyBottomBar } from '@/shared/ui/design';
+import { Button } from '@/shared/ui/design';
 import { ROUTES } from '@/shared/config/routes';
 import type { TariffName } from '@/entities/user';
 import { disableSuccessTitle } from '@/widgets/profile/lib/tariff-disable';
+import { TariffSuccessScreen } from './tariff-success-screen';
 
-/** Полноэкранный успех отключения (#622, макет 1933-78038): шапки нет,
- * в центре — Icon/Color/Cancel 64 и заголовок «Тариф X отключен», внизу
- * Primary «Хорошо» → на главный «Тариф» в состоянии «отключен». Рендерится
- * поверх экрана «Отключение тарифа» после успешного
- * POST /subscription/cancel — отдельного маршрута у состояния нет. */
+/** Полноэкранный успех отключения (#622, макет 1933-78038) на общем
+ * каркасе TariffSuccessScreen: иконка Icon/Color/Cancel 64, заголовок
+ * «Тариф X отключен», внизу Primary «Хорошо» → на главный «Тариф» в
+ * состоянии «отключен». Рендерится поверх экрана «Отключение тарифа» после
+ * успешного POST /subscription/cancel — отдельного маршрута у состояния
+ * нет. */
 export function TariffDisableSuccessScreen({
   tariffName,
 }: {
@@ -22,23 +24,14 @@ export function TariffDisableSuccessScreen({
   const title = disableSuccessTitle(tariffName);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex flex-col bg-surface"
-      role="dialog"
-      aria-label={title}
-    >
-      <div className="flex flex-1 items-center justify-center px-6">
-        <div className="flex flex-col items-center gap-4">
-          <CancelColor className="h-16 w-16" aria-hidden />
-          <p className="m-0 text-xl font-semibold leading-6 text-content">{title}</p>
-        </div>
-      </div>
-
-      <StickyBottomBar>
-        {/* replace, а не goBack: история несёт «О тарифе» → «Отключение»,
-            один назад вернул бы на «О тарифе», а не на главный «Тариф». */}
+    <TariffSuccessScreen
+      icon={<CancelColor className="h-16 w-16" aria-hidden />}
+      title={title}
+      action={
+        // replace, а не goBack: история несёт «О тарифе» → «Отключение»,
+        // один назад вернул бы на «О тарифе», а не на главный «Тариф».
         <Button onClick={() => router.replace(ROUTES.profileTariff)}>Хорошо</Button>
-      </StickyBottomBar>
-    </div>
+      }
+    />
   );
 }

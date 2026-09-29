@@ -10,10 +10,9 @@
  * §4 "Подводные камни scope на общем origin с лендингом".
  *
  * The app route prefixes below mirror
- * `apps/frontend/shared/lib/pwa/app-routes.ts` and the `@frontend path`
- * matcher in the Caddyfile (docs/deployment.md). The unit test
- * `app-routes.test.ts` guards against drift between the TS source and this
- * inline copy.
+ * `apps/frontend/shared/lib/pwa/app-routes.ts` — the TS source of truth.
+ * The unit test `app-routes.test.ts` guards against drift between the TS
+ * source and this inline copy.
  */
 
 const CACHE_VERSION = 'v2';
@@ -79,8 +78,8 @@ function readStandaloneFlag() {
 }
 
 // App route prefixes — keep in sync with shared/lib/pwa/app-routes.ts.
-// /dashboard остаётся: это постоянный редирект на /properties, зашитый в
-// start_url манифеста PWA.
+// Легаси /dashboard снесён (карта #862, тикет #865): start_url манифеста
+// переведён на /properties, старые ссылки уходят в сеть как 404.
 const APP_ROUTE_PREFIXES = [
   '/login',
   '/properties',
@@ -92,7 +91,8 @@ const APP_ROUTE_PREFIXES = [
   '/contacts',
   '/payments',
   '/participants',
-  '/dashboard',
+  '/history',
+  '/notifications',
 ];
 
 function isAppPath(pathname) {

@@ -18,7 +18,7 @@ import {
 import {
   OverdueOperationRow,
   PaymentsEmptyState,
-  PaymentsSkeleton,
+  PaymentsRowsSkeleton,
   PaymentsStateCard,
 } from './payments-sections';
 
@@ -64,10 +64,8 @@ export function PaymentOverdueScreen({
       <PageContent>
         <div className="flex flex-col gap-2">
           {overdueQuery.isPending && (
-            <>
-              <PaymentsSkeleton withHeading />
-              <PaymentsSkeleton withHeading />
-            </>
+            // Контент — плоский список строк, скелетон — ряды канона (#604).
+            <PaymentsRowsSkeleton />
           )}
 
           {overdueQuery.isError && (

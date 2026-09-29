@@ -1,6 +1,6 @@
 'use client';
 
-import {type JSX, useState} from 'react';
+import {type JSX, useLayoutEffect, useRef, useState} from 'react';
 import {useRouter} from 'next/navigation';
 import {
   useProperties,
@@ -22,6 +22,7 @@ import {
   TopNav,
 } from '@/shared/ui/design';
 import {ROUTES} from '@/shared/config/routes';
+import {resolveFreshSuspendedIds} from '../lib/fresh-suspended';
 import {
   DEFAULT_PROPERTY_SORT,
   PROPERTY_SORT_PARAMS,
@@ -78,6 +79,34 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
   const suspendedShared = metaQuery.data?.suspendedShared ?? [];
   const showSuspended = !isLoading && !isError && suspendedShared.length > 0;
 
+  // Свежая подвеска — blur-in канона C (#880): блюр-карточка, приехавшая
+  // живым перечитыванием (кадр property от действий владельца — автор в
+  // аудитории, ADR 0062 §4), проявляется из блюра. Снапшот id прошлого
+  // рендера: null = доставки ещё не было (холодный вход и фаза загрузки
+  // meta-запроса — первая доставка без анимации), дальше дельта снапшотов
+  // = живое появление; свёртка — resolveFreshSuspendedIds в ../lib/
+  // fresh-suspended. Снапшот — в layout-эффекте: класс freshIn попадает
+  // в первый кадр краски (пассивный эффект вешал бы его после коммита —
+  // карточка рисовала резкий кадр до старта blur-in, канон LiveValue
+  // «переходы до краски»); рендер читает только state.
+  const [freshSuspendedIds, setFreshSuspendedIds] = useState<ReadonlySet<string>>(
+    () => new Set<string>(),
+  );
+  const seenSuspendedRef = useRef<ReadonlySet<string> | null>(null);
+  useLayoutEffect(() => {
+    // undefined-доставка (холодный вход /properties без префетча, уход в
+    // refetch) не сеет пустой снапшот и не тратит прежний — null-гард
+    // живёт до первой настоящей доставки.
+    const resolution = resolveFreshSuspendedIds(
+      seenSuspendedRef.current,
+      metaQuery.data?.suspendedShared,
+    );
+    seenSuspendedRef.current = resolution.next;
+    if (resolution.fresh.size > 0) {
+      setFreshSuspendedIds(resolution.fresh);
+    }
+  }, [metaQuery.data]);
+
   // Запись — канон useUrlParams (#786): экран владеет только sort/order,
   // чужие параметры адреса переживают смену сортировки, дефолт снимается.
   const changeSort = (next: PropertySort) => {
@@ -86,8 +115,12 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
   };
 
   const isEmpty = !isLoading && !isError && visible.length === 0;
-  // Служебный ряд (сортировка + «Архив») и список живут только вместе (§7).
-  const showControls = !isLoading && !isError && !isEmpty;
+  // Ряд сортировки — тулбар хаба: рендерится вне фазы загрузки и не
+  // подменяется скелетоном (§7, паритет #604; прецедент хаба «Задачи»
+  // #605), скрывается только на подтверждённой пустоте (§7).
+  const showSortRow = !isEmpty;
+  // Список и «+ Создать объект» — контент данных, живут только вместе.
+  const showList = !isLoading && !isError && !isEmpty;
 
   // 404 подписки хук отдаёт null (#768) — это не pending и не ошибка:
   // canAdd=false ниже ведёт на смену тарифа, кнопки не висят в disabled.
@@ -119,6 +152,8 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
     <div className="flex flex-col gap-4 px-6 pt-6">
       <PropertiesSearchPill onCreate={openCreate} createLabel={createLabel} createDisabled={isActionLoading}/>
 
+      {showSortRow && <PropertiesSortRow sort={sort} onChange={changeSort}/>}
+
       {isLoading && <PropertiesLoading/>}
 
       {!isLoading && isError && <PropertiesErrorState onRetry={() => void refetch()} isLoading={isFetching}/>}
@@ -127,20 +162,17 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
         <PropertiesEmptyState canAdd={canAdd} isLoading={isActionLoading} onAdd={openCreate}/>
       )}
 
-      {showControls && (
-        <>
-          <PropertiesSortRow sort={sort} onChange={changeSort}/>
-          <ul className={styles.list} data-testid="properties-list">
-            {visible.map((property) => (
-              <li key={property.id}>
-                <PropertyCard
-                  property={property}
-                  today={metaQuery.data?.today}
-                />
-              </li>
-            ))}
-          </ul>
-        </>
+      {showList && (
+        <ul className={styles.list} data-testid="properties-list">
+          {visible.map((property) => (
+            <li key={property.id}>
+              <PropertyCard
+                property={property}
+                today={metaQuery.data?.today}
+              />
+            </li>
+          ))}
+        </ul>
       )}
 
       {/* Подвесшие общие объекты (#702): блюр-карточки вместо сноски
@@ -153,13 +185,14 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
               <SuspendedPropertyCard
                 placeholder={placeholder}
                 onReason={setReasonTarget}
+                fresh={freshSuspendedIds.has(placeholder.propertyId)}
               />
             </li>
           ))}
         </ul>
       )}
 
-      {showControls && (
+      {showList && (
         <Button
           variant="white"
           size="small"

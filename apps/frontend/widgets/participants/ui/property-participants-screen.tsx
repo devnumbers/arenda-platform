@@ -56,6 +56,7 @@ import {
   TopNavTitle,
   type PickerMenuGroup,
 } from '@/shared/ui/design';
+import { LiveValue } from '@/shared/ui/live-value';
 import {
   DEFAULT_PROPERTY_PARTICIPANT_ORDER,
   DEFAULT_PROPERTY_PARTICIPANT_ROLE_FILTER,
@@ -482,9 +483,16 @@ function PropertyParticipantRowView({
         <span className="truncate text-base font-medium text-content">{row.title}</span>
         {/* Иконка роли — постоянная часть второй строки (макет ставит её
          * у почты; когда почта скрыта контрактом или обогащение не
-         * принесло адрес — индикатор роли остаётся сам по себе). */}
+         * принесло адрес — индикатор роли остаётся сам по себе). Смена
+         * роли чужой рукой оживает каноном B (#880: вспышка без
+         * кроссфейда — канон плотных списков); own-защёлки не нужно —
+         * свою правку роли делают на «Правах участника», сюда читатель
+         * возвращается ремонтом списка. Источник перечитывания режиму B
+         * не нужен: вспышка играется самой сменой значения. */}
         <span className="flex min-w-0 items-center gap-1 text-sm text-content-secondary">
-          <EmailIcon className="h-4 w-4 shrink-0" aria-hidden />
+          <LiveValue valueKey={row.emailIcon} mode="flash">
+            <EmailIcon className="h-4 w-4 shrink-0" aria-hidden />
+          </LiveValue>
           {row.subtitle !== undefined && <span className="truncate">{row.subtitle}</span>}
         </span>
         {row.suspended && (

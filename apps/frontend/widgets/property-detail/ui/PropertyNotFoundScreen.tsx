@@ -10,7 +10,7 @@ import { buttonVariants, EmptyState } from '@/shared/ui/design';
 export function PropertyNotFoundScreen(): JSX.Element {
   return (
     <EmptyState
-      imageSrc="/images/empty-logo.png"
+      imageSrc="/images/empty-logo.webp"
       imageAlt="Логотип"
       title="Объект не найден или у вас нет к нему доступа"
       description="Проверьте ссылку или попросите владельца выдать вам доступ к объекту"

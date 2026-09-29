@@ -10,7 +10,7 @@ import { buttonVariants, EmptyState } from '@/shared/ui/design';
 export function PropertySuspendedScreen(): JSX.Element {
   return (
     <EmptyState
-      imageSrc="/images/empty-logo.png"
+      imageSrc="/images/empty-logo.webp"
       imageAlt="Логотип"
       title="Превышен лимит объектов"
       description="Доступ к объекту приостановлен из-за лимита вашего тарифа. Он вернётся автоматически, когда освободится слот — например, после перехода на старший тариф или архивации другого объекта"

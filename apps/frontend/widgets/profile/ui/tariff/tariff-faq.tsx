@@ -1,7 +1,6 @@
 'use client';
 
-import type { JSX, ReactNode } from 'react';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@radix-ui/react-collapsible';
+import { useState, type JSX, type ReactNode } from 'react';
 import NextLink from 'next/link';
 import { SmallArrowDown } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
@@ -13,8 +12,16 @@ import { cn } from '@/shared/lib/cn';
  * вопросов-аккордеонов (строка R/500 16/18 + SmallArrowDown, развёрнут —
  * SmallArrowUp поворотом на 180°), ответ M/400 14/16 серым. Тексты —
  * статика из макета, опечатки исправлены («объекты будет заблокированы»,
- * слитые абзацы, имена тарифов с заглавной); ссылки ответа про возврат —
- * правила (страница оферты) и почта поддержки, синим #2B7FFF. */
+ * слитые абзацы, имена тарифов с заглавной); ссылки ответа про возврат
+ * синим #2B7FFF: «правилами возврата средств» ведёт на страницу
+ * Пользовательского соглашения (ROUTES.profileTerms), вторая — почта
+ * поддержки.
+ *
+ * Поведение и анимация — с FAQ-секции лендинга (решение владельца 28.09
+ * после аудита #877): один вопрос открыт одновременно (тап по открытому
+ * закрывает), раскрытие — transition `grid-template-rows: 0fr→1fr` +
+ * opacity за 300мс ease-out (контент всегда в DOM, без высотных
+ * keyframes Radix), шеврон — 300мс. */
 type FaqSegment = { readonly text: string } | { readonly link: string; readonly href: string };
 
 type FaqItem = {
@@ -110,6 +117,10 @@ const FAQ_ITEMS: ReadonlyArray<FaqItem> = [
 ];
 
 export function TariffFaq(): JSX.Element {
+  // Один открытый вопрос на всю карточку (ключ — текст вопроса), как на
+  // лендинге: тап по открытому закрывает его.
+  const [open, setOpen] = useState<string | null>(null);
+
   return (
     <section className="rounded-card bg-surface-muted pb-3">
       <h2 className="m-0 px-6 pt-6 text-lg font-semibold leading-6 text-content">
@@ -117,17 +128,33 @@ export function TariffFaq(): JSX.Element {
       </h2>
       <div>
         {FAQ_ITEMS.map((item) => (
-          <FaqEntry key={item.question} item={item} />
+          <FaqEntry
+            key={item.question}
+            item={item}
+            expanded={open === item.question}
+            onToggle={() => setOpen(open === item.question ? null : item.question)}
+          />
         ))}
       </div>
     </section>
   );
 }
 
-function FaqEntry({ item }: { readonly item: FaqItem }): JSX.Element {
+function FaqEntry({
+  item,
+  expanded,
+  onToggle,
+}: {
+  readonly item: FaqItem;
+  readonly expanded: boolean;
+  readonly onToggle: () => void;
+}): JSX.Element {
   return (
-    <Collapsible className="group">
-      <CollapsibleTrigger
+    <div>
+      <button
+        type="button"
+        aria-expanded={expanded}
+        onClick={onToggle}
         className={cn(
           'flex w-full cursor-pointer items-center justify-between gap-4 px-6 py-3 text-left font-sans outline-none',
           'focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-card',
@@ -135,22 +162,35 @@ function FaqEntry({ item }: { readonly item: FaqItem }): JSX.Element {
       >
         <span className="text-base font-medium leading-[18px] text-content">{item.question}</span>
         <SmallArrowDown
-          className="shrink-0 text-content-tertiary transition-transform duration-200 group-data-[state=open]:rotate-180"
           aria-hidden
+          className={cn(
+            'shrink-0 text-content-tertiary transition-transform duration-300 ease-out',
+            expanded && 'rotate-180',
+          )}
         />
-      </CollapsibleTrigger>
-      <CollapsibleContent
-        className="overflow-hidden px-6 pb-3 data-[state=open]:animate-[faq-open_300ms_var(--dl-ease)] data-[state=closed]:animate-[faq-close_250ms_var(--dl-ease)]"
+      </button>
+      {/* Раскрытие с лендинга: сетка 0fr→1fr + opacity, внутренний div
+          режет переполнение — высота не измеряется, контент всегда в DOM.
+          inert держит свёрнутый ответ вне tab-порядка — паритет со
+          снесённым Radix, который закрытый контент не фокусировал. */}
+      <div
+        inert={!expanded}
+        className={cn(
+          'grid transition-[grid-template-rows,opacity] duration-300 ease-out',
+          expanded ? 'opacity-100 [grid-template-rows:1fr]' : 'opacity-0 [grid-template-rows:0fr]',
+        )}
       >
-        <div className="flex flex-col gap-2">
-          {item.answer.map((paragraph, index) => (
-            <p key={index} className="m-0 text-sm leading-4 text-content-secondary">
-              {paragraph.map(renderSegment)}
-            </p>
-          ))}
+        <div className="overflow-hidden">
+          <div className="flex flex-col gap-2 px-6 pb-3">
+            {item.answer.map((paragraph, index) => (
+              <p key={index} className="m-0 text-sm leading-4 text-content-secondary">
+                {paragraph.map(renderSegment)}
+              </p>
+            ))}
+          </div>
         </div>
-      </CollapsibleContent>
-    </Collapsible>
+      </div>
+    </div>
   );
 }
 

@@ -1,3 +1,4 @@
+import type { Locator, Page } from '@playwright/test';
 import {
   captureScreen,
   expect,
@@ -17,14 +18,13 @@ import {
  * требует id платежа, канон его шапки совпадает со списком.
  * /profile/personal снесён в #593 — поглощён экраном /profile/account.
  * /profile/tariff/change/success не входит — канонный полноэкранный успех
- * (#623) без SubScreenShell. */
+ * (#623) без SubScreenShell. Info-маршруты в таблицу не входят: после
+ * редизайна ad04300b их канон другой — в баре только «Назад», тайтла нет
+ * (INFO_ROUTES ниже). */
 const SUBPAGE_TITLES: ReadonlyArray<readonly [string, string]> = [
   ['/profile/account', 'Аккаунт'],
   ['/profile/account/phone', 'Изменение телефона'],
   ['/profile/devices', 'Устройства'],
-  ['/profile/info', 'Информация'],
-  ['/profile/info/privacy', 'Политика конфиденциальности'],
-  ['/profile/info/terms', 'Пользовательское соглашение'],
   ['/profile/notifications', 'Настроить уведомления'],
   ['/profile/tariff', 'Тариф'],
   ['/profile/tariff/about', 'О тарифе'],
@@ -35,9 +35,31 @@ const SUBPAGE_TITLES: ReadonlyArray<readonly [string, string]> = [
   ['/profile/tariff/payments', 'Операции'],
 ];
 
+/** Info-группа (редизайн ad04300b): в баре только «Назад», заголовок живёт
+ * в контенте — у privacy/terms/offer это крупный h1 (LegalDocument), у
+ * самой /profile/info h1 нет вовсе: смысл экрана держат бренд-локап и nav
+ * «Правовая информация» строк-документов. */
+const INFO_ROUTES: ReadonlyArray<readonly [string, (page: Page) => Locator]> = [
+  ['/profile/info', (page) => page.getByRole('navigation', { name: 'Правовая информация' })],
+  [
+    '/profile/info/privacy',
+    (page) => page.getByRole('heading', { name: 'Политика обработки персональных данных' }),
+  ],
+  [
+    '/profile/info/terms',
+    (page) => page.getByRole('heading', { name: 'Пользовательское соглашение' }),
+  ],
+  [
+    '/profile/info/offer',
+    (page) => page.getByRole('heading', { name: 'Публичная оферта' }),
+  ],
+];
+
 const BOTTOM_NAV = 'nav[aria-label="Нижняя навигация"]';
-// Сид-юзер «Иван Иванов»; до загрузки useMe кнопка показывает плейсхолдер.
-const USER_WING = /Пользователь|Иван/;
+// Сид-юзер «Иван Иванов» — имя в крыле после загрузки useMe; в pending
+// кнопка — скелетон с aria-label «Профиль» (аудит #876), «Пользователь» —
+// текстовый плейсхолдер вне провайдера.
+const USER_WING = /Пользователь|Иван|Профиль/;
 
 test.describe('дерево профиля — хром #566', () => {
   test.use({ viewport: { width: 390, height: 844 } });
@@ -152,6 +174,15 @@ test.describe('дерево профиля — хром #566', () => {
       const header = screenHeader(page);
       await expect(header.getByRole('button', { name: 'Назад' })).toBeVisible();
       await expect(header.getByText(title, { exact: true })).toBeVisible();
+    }
+
+    // Info-группа: в шапке проверяется только «Назад», канонный заголовок —
+    // в контенте (редизайн ad04300b).
+    for (const [path, content] of INFO_ROUTES) {
+      await page.goto(path);
+      const header = screenHeader(page);
+      await expect(header.getByRole('button', { name: 'Назад' })).toBeVisible();
+      await expect(content(page)).toBeVisible();
     }
   });
 

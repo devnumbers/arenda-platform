@@ -74,7 +74,7 @@ export function OperationsLoading(): JSX.Element {
 
       <PageContent>
         <HubCollapseAnchor>
-          <div className="flex items-center justify-between pr-3.5">
+          <div className="flex h-8 items-center justify-between pr-3.5">
             <HubTitle>Операции</HubTitle>
             <IconButton icon={<Add />} label="Добавить операцию" />
           </div>

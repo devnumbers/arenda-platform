@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type JSX } from 'react';
+import { useEffect, useRef, useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/shared/lib/cn';
 import { Block, TimeHistory } from '@/shared/assets/icons';
@@ -26,6 +26,7 @@ import {
   ErrorCard,
   SubScreenShell,
 } from '@/shared/ui/design';
+import { LiveValue } from '@/shared/ui/live-value';
 import { resolveParticipantMemberRow } from '../lib/participant-member-lookup';
 import { resolvePropertyParticipantsError } from '../lib/property-participants-error';
 import {
@@ -47,6 +48,12 @@ const RIGHTS_ROW_ACTION_CLASS = cn(
   'flex w-full cursor-pointer items-center rounded-button py-1 text-left text-base font-medium outline-none',
   'transition-opacity hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:opacity-80',
 );
+
+/** Окно «своего» изменения бейджа роли после локальной мутации (мс):
+ * инвалидация onSettled приносит перечитывание с уже новым значением —
+ * своя правка не анимируется (канон #880: вспышка и dim — сигнал «кто-то
+ * другой поменял»); окно с запасом покрывает перечитывание. */
+const OWN_CHANGE_WINDOW_MS = 3000;
 
 /**
  * Экран «Права участника» (карта #692, тикет #698; Figma 2177-59620):
@@ -92,6 +99,18 @@ export function ParticipantRightsScreen({
 
   const [showRoleChanged, setShowRoleChanged] = useState(false);
   const [confirmRevokeOpen, setConfirmRevokeOpen] = useState(false);
+  // Защёлка «своего» изменения (канон #880): своя смена роли — мгновенно,
+  // без dim/вспышки на бейдже; чужая правка (второй manage-читатель)
+  // анимируется. Булев latch с таймером — рендер остаётся чистым.
+  const [ownChangeLatch, setOwnChangeLatch] = useState(false);
+  const ownLatchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (ownLatchTimerRef.current !== null) {
+        clearTimeout(ownLatchTimerRef.current);
+      }
+    };
+  }, []);
 
   const participant = participantQuery.data;
   const member: PropertyAccessMember | undefined = participant
@@ -115,8 +134,13 @@ export function ParticipantRightsScreen({
       return;
     }
     // Инвалидацию обеих семей делает access-хук (onSettled) — здесь только
-    // попап.
+    // попап и защёлка «своего» изменения.
     const onSuccess = (): void => {
+      setOwnChangeLatch(true);
+      if (ownLatchTimerRef.current !== null) {
+        clearTimeout(ownLatchTimerRef.current);
+      }
+      ownLatchTimerRef.current = setTimeout(() => setOwnChangeLatch(false), OWN_CHANGE_WINDOW_MS);
       setShowRoleChanged(true);
     };
     if (member.status === 'pending') {
@@ -194,7 +218,17 @@ export function ParticipantRightsScreen({
             )}
             {leg !== undefined && (
               <span>
-                <ParticipantRowBadge badge={participantLegBadge(leg)} />
+                {/* Бейдж роли оживает каноном C (#880): чужая смена роли
+                  * (кадр access инвалидирует агрегат — #719) гасит бейдж на
+                  * перечитывание и проявляет новое значение кроссфейдом;
+                  * своя правка (защёлка выше) — мгновенно. */}
+                <LiveValue
+                  valueKey={`${leg.status}-${leg.role}`}
+                  refreshing={participantQuery.isFetching}
+                  own={mutationPending || ownChangeLatch}
+                >
+                  <ParticipantRowBadge badge={participantLegBadge(leg)} />
+                </LiveValue>
               </span>
             )}
           </span>

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient, type UseMutationResult, type Use
 import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
 import { mapRental, mapRentalSummary } from '@/entities/rental';
+import { rentalsQueryOptions } from './queries';
 import type {
   Rental,
   RentalCompleteCommand,
@@ -17,7 +18,7 @@ import type { components } from '@/shared/api/dto';
 
 type RentalResponseDto = components['schemas']['RentalResponse'];
 type RentalSummaryDto = components['schemas']['RentalSummaryResponse'];
-type RentalsResponseDto = components['schemas']['RentalsResponse'];
+
 
 /**
  * Создание аренды (#530): POST /properties/{propertyId}/rentals — аренда и
@@ -55,13 +56,7 @@ export function useRentals(
   options: { readonly enabled?: boolean } = {},
 ): UseQueryResult<Rental[], ApiError> {
   return useQuery({
-    queryKey: rentalKeys.list(propertyId),
-    queryFn: async () => {
-      const response = await apiClient<RentalsResponseDto>(
-        `/properties/${encodeURIComponent(propertyId)}/rentals`,
-      );
-      return response.items.map(mapRental);
-    },
+    ...rentalsQueryOptions({ propertyId }),
     enabled: (options.enabled ?? true) && Boolean(propertyId),
   });
 }

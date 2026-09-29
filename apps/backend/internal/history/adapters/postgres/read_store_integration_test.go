@@ -397,10 +397,24 @@ func TestReadStore_AfterCursorBurstWalk(t *testing.T) {
 		seeded[rowIDAt(at)] = true
 	}
 
+	got := walkAfterPages(t, ctx, svc, owner, first.PrevCursor, seeded, burst)
+	if len(got) != burst {
+		t.Fatalf("after-walk: want all %d burst rows, got %d — %d lost", burst, len(got), burst-len(got))
+	}
+}
+
+// walkAfterPages turns the pages after the anchor cursor until exhaustion,
+// asserting each page's order, burst membership and cursor hygiene — the
+// loop body of TestReadStore_AfterCursorBurstWalk (граница gocognit).
+func walkAfterPages(
+	t *testing.T, ctx context.Context, svc *historyapp.HistoryReadService, owner uuid.UUID,
+	after string, seeded map[uuid.UUID]bool, burst int,
+) map[uuid.UUID]bool {
+	t.Helper()
 	const pageSize = 50
 	got := map[uuid.UUID]bool{}
 	pages := 0
-	for after := first.PrevCursor; after != ""; {
+	for after != "" {
 		page, err := svc.Feed(ctx, owner, historyapp.FeedQuery{Limit: pageSize, AfterCursor: after})
 		if err != nil {
 			t.Fatalf("after page %d: %v", pages, err)
@@ -417,9 +431,7 @@ func TestReadStore_AfterCursorBurstWalk(t *testing.T) {
 		}
 		after = page.PrevCursor
 	}
-	if len(got) != burst {
-		t.Fatalf("after-walk: want all %d burst rows, got %d — %d lost", burst, len(got), burst-len(got))
-	}
+	return got
 }
 
 // assertAfterPage verifies one after-walk page: the empty page carries

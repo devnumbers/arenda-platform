@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { HistoryEntry } from '@/entities/history';
-import { mergeFreshIntoFirstPage, type HistoryFeedPage } from './hooks';
+import { mergeFreshIntoFirstPage, novelFeedEntryIds } from './hooks';
+import type { HistoryFeedPage } from './queries';
 
 function entry(id: string): HistoryEntry {
   return { id } as HistoryEntry;
@@ -68,5 +69,27 @@ describe('mergeFreshIntoFirstPage — влитие свежих строк в п
 
   it('пустой кэш возвращается как есть', () => {
     expect(mergeFreshIntoFirstPage(undefined, [entry('c1')], 'cursor-c1')).toBeUndefined();
+  });
+});
+
+describe('novelFeedEntryIds — свежие строки, которых ещё нет в ленте (#880: метка «новое»)', () => {
+  it('догон без пересечения — все строки новы', () => {
+    const old = { pages: [page(['b2', 'b1'], 'cursor-b2', 'cursor-b1')], pageParams: [undefined] };
+    expect(novelFeedEntryIds(old, [entry('c1'), entry('c2')])).toStrictEqual(['c1', 'c2']);
+  });
+
+  it('гонка с onOpen-перечитыванием: уже влитые строки не считаются новыми', () => {
+    const old = { pages: [page(['c1', 'b2', 'b1'], 'cursor-c1', 'cursor-b1')], pageParams: [undefined] };
+    expect(novelFeedEntryIds(old, [entry('c1'), entry('c2')])).toStrictEqual(['c2']);
+  });
+
+  it('пустая лента или отсутствие кэша — всё, что привез догон', () => {
+    expect(novelFeedEntryIds(undefined, [entry('c1')])).toStrictEqual(['c1']);
+    expect(novelFeedEntryIds({ pages: [], pageParams: [] }, [entry('c1')])).toStrictEqual(['c1']);
+  });
+
+  it('без свежих строк — пусто', () => {
+    const old = { pages: [page(['b1'], null, null)], pageParams: [undefined] };
+    expect(novelFeedEntryIds(old, [])).toStrictEqual([]);
   });
 });

@@ -1,3 +1,6 @@
+/** Экраны «Платежей» и «Операций» — один виджет на оба раздела:
+ * Operations*-экраны живут здесь же (общий конверт платежей и операций),
+ * каталога widgets/operations нет. */
 export { PaymentsGlobalScreen } from './ui/payments-global-screen';
 export { PaymentFavoritesScreen } from './ui/payments-favorites-screen';
 export { PaymentOverdueGlobalScreen } from './ui/payment-overdue-global-screen';
@@ -20,6 +23,7 @@ export type { PaymentsCatalogVariant } from './ui/payments-catalog-screen';
 export { PaymentCreateWizardScreen } from './ui/payment-create-wizard/payment-create-wizard-screen';
 export { PaymentDetailScreen } from './ui/payment-detail-screen';
 export { OperationDetailScreen } from './ui/operation-detail-screen';
+export { PaymentDetailSkeleton, OperationDetailSkeleton } from './ui/payments-skeletons';
 export { ProjectedOperationScreen } from './ui/projected-operation-screen';
 export { PaymentEditScreen } from './ui/payment-edit-screen';
 export { PaymentScheduleScreen } from './ui/payment-schedule-screen';
@@ -27,6 +31,7 @@ export { PaymentHistoryScreen } from './ui/payment-history-screen';
 export { PaymentOverdueScreen } from './ui/payment-overdue-screen';
 export { OperationCreateWizardScreen } from './ui/operation-create-wizard/operation-create-wizard-screen';
 /* Route-loading (#609). */
+export { OperationDetailLoading, PaymentDetailLoading } from './ui/payments-detail-loading';
 export {
   OperationCreateLoading,
   OperationsCategoriesLoading,

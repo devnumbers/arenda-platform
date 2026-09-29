@@ -56,6 +56,8 @@ import {
     SkeletonPrimitivesSection,
     SkeletonShowcaseSection,
 } from './sections/feedback';
+import { LiveValueSection } from './sections/live-value';
+import { SearchPillSection } from './sections/search-pill';
 
 /** Витрина дизайн-слоя (ADR 0050, тикет #455): шадкн/ui поверх Radix,
  * Tailwind на токенах, шрифт Onest. Внешний вид сверен с экспортами
@@ -82,6 +84,7 @@ export function DesignLayerShowcase(): JSX.Element {
                 <TextFieldTitleInSection />
                 <CheckboxRadioSwitchSection />
                 <SearchFieldSection value={searchValue} onValueChange={setSearchValue} />
+                <SearchPillSection />
                 <ChipButtonSection />
                 <PickerMenuSection />
                 <StepsChipSection />
@@ -116,6 +119,7 @@ export function DesignLayerShowcase(): JSX.Element {
                 <SkeletonShowcaseSection />
                 <SkeletonPrimitivesSection />
                 <InfiniteQueryTailSection />
+                <LiveValueSection />
                 <ConfirmDialogSection />
                 <StickyBottomBarSection />
                 <SuccessPopupSection />

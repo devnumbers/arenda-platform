@@ -30,7 +30,11 @@ import {
 } from '@/shared/ui/design';
 import { ContactForm } from './contact-form';
 import { ContactObjectSelectPage } from './contact-object-select';
-import { ContactsErrorCard, ContactsSkeleton, ContactsUnavailableCard } from './contacts-states';
+import {
+  ContactFormSkeleton,
+  ContactsErrorCard,
+  ContactsUnavailableCard,
+} from './contacts-states';
 
 /**
  * Экран «Изменить контакт» (#510, макет 1302-58933): форма создания
@@ -105,7 +109,7 @@ export function ContactEditScreen({
       <>
         <EditHeader onBack={backToCard} />
         <PageContent>
-          <ContactsSkeleton />
+          <ContactFormSkeleton />
         </PageContent>
       </>
     );
@@ -155,7 +159,7 @@ export function ContactEditScreen({
       <>
         <EditHeader onBack={backToCard} />
         <PageContent>
-          <ContactsSkeleton />
+          <ContactFormSkeleton />
         </PageContent>
       </>
     );

@@ -12,11 +12,11 @@ import {
   EmptyState,
   IconButton,
   PageContent,
-  Skeleton,
   TopNav,
   TopNavTitle,
 } from '@/shared/ui/design';
 import { RentalSummaryContent } from './rental-summary-content';
+import { RentalSummarySkeleton } from './rental-skeletons';
 
 /**
  * «Итоги аренды» завершённой (#535, Figma 1795:101495): read-only повтор
@@ -72,13 +72,7 @@ export function RentalSummaryScreen({
       </TopNav>
 
       <PageContent>
-        {loading && (
-          <div className="flex flex-col gap-4 pt-6">
-            <Skeleton className="h-14 w-full" />
-            <Skeleton className="h-14 w-full" />
-            <Skeleton className="h-14 w-full" />
-          </div>
-        )}
+        {loading && <RentalSummarySkeleton />}
 
         {!loading && (rentalsQuery.isError || propertyQuery.isError || summaryQuery.isError) && (
           <div className="flex flex-col items-center gap-4 pt-6">

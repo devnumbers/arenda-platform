@@ -5,7 +5,7 @@ import { safeInternalPath } from './safe-internal-path';
 
 describe('safeInternalPath', () => {
     it('allows internal absolute paths', () => {
-        expect(safeInternalPath('/dashboard')).toBe('/dashboard');
+        expect(safeInternalPath('/properties')).toBe('/properties');
         expect(safeInternalPath('/leases/123?tab=payments')).toBe('/leases/123?tab=payments');
         expect(safeInternalPath('/')).toBe('/');
     });
@@ -37,7 +37,7 @@ describe('safeInternalPath', () => {
 
     it('rejects /login targets to avoid redirect loops', () => {
         expect(safeInternalPath('/login')).toBeNull();
-        expect(safeInternalPath('/login?from=/dashboard')).toBeNull();
+        expect(safeInternalPath('/login?from=/properties')).toBeNull();
         expect(safeInternalPath('/login/sub')).toBeNull();
     });
 

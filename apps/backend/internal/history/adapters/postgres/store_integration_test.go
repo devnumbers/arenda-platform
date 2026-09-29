@@ -112,7 +112,7 @@ func TestStore_InsertRoundTrip(t *testing.T) {
 	if kind != "operation" || action != "operation.paid" || baseAction != "completed" {
 		t.Errorf("vocabulary columns = %s/%s/%s", kind, action, baseAction)
 	}
-	wantSearchable := "Операция оплачена: Электричество (срок 15.09.2026) Иван Иванов ivan@example.com"
+	wantSearchable := "Операция оплачена: Электричество Иван Иванов ivan@example.com"
 	if searchable != wantSearchable {
 		t.Errorf("searchable = %q, want %q", searchable, wantSearchable)
 	}

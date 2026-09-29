@@ -9,7 +9,8 @@ import { useProperty } from '@/features/properties';
 import { propertyPermissions } from '@/entities/property';
 import { currentRentalOf, useRentals } from '@/features/rentals';
 import type { Rental } from '@/entities/rental';
-import { Button, PageContent, Skeleton, TopNav } from '@/shared/ui/design';
+import { Button, PageContent, TopNav } from '@/shared/ui/design';
+import { RentalCompleteConfirmSkeleton } from './rental-skeletons';
 import { RentalCompleteFlow } from './rental-complete-flow';
 
 /**
@@ -52,11 +53,7 @@ export function RentalCompleteScreen({
         <>
           <TopNav />
           <PageContent>
-            <div className="flex flex-col gap-4 pt-6">
-              <Skeleton className="h-14 w-full" />
-              <Skeleton className="h-14 w-full" />
-              <Skeleton className="h-14 w-full" />
-            </div>
+            <RentalCompleteConfirmSkeleton />
           </PageContent>
         </>
       )}

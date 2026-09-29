@@ -5,17 +5,17 @@
 User-agent: *
 Allow: /
 
-Disallow: /dashboard
 Disallow: /properties
+Disallow: /profile
+Disallow: /subscription
+Disallow: /ui-kit
+Disallow: /tasks
 Disallow: /operations
+Disallow: /contacts
 Disallow: /payments
 Disallow: /participants
-Disallow: /tasks
-Disallow: /contacts
-Disallow: /subscription
-Disallow: /profile
-Disallow: /support
-Disallow: /ui-kit
+Disallow: /history
+Disallow: /notifications
 
 Disallow: /api/
 Disallow: /webhooks/
