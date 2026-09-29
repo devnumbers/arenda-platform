@@ -306,7 +306,9 @@ localhost-порты контейнеров. Конфигурация — мод
   колбэки на полный путь);
 - лендинг (`@landing`): `/` (точный), `/privacy`, `/terms`, `/robots.txt`,
   `/sitemap.xml`, `/_next/*` (бандлы и image-оптимизатор Next),
-  `/fonts/*` (self-hosted Onest), `/icon.png` (favicon) — через `handle`,
+  `/fonts/*` (self-hosted Onest), метадата-маршруты Next `/icon.png`,
+  `/opengraph-image`, `/apple-icon.png`, `/favicon.ico` (OG-картинка,
+  apple-touch-icon, favicon — конечные пути, точные) — через `handle`,
   НЕ `handle_path`: контейнер лендинга (Next standalone, ADR 0063)
   ждёт полный путь;
 - всё остальное → кабинет (`127.0.0.1:13000` prod / `:23000` stage).

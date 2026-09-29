@@ -39,10 +39,13 @@
 
 	# Лендинг — явное исключение: корень, юрстраницы, robots/sitemap,
 	# статика Next (/_next/*: бандлы, изображения оптимизатора) и шрифты.
+	# Метадата-маршруты Next — OG-картинка /opengraph-image, apple-touch-icon
+	# /apple-icon.png, favicon /favicon.ico — конечные пути, выписаны точно
+	# (как /icon.png): промах ушёл бы в кабинетный catch-all.
 	# handle, НЕ handle_path: контейнер лендинга (Next standalone, ADR 0063)
 	# ждёт полный путь (/_next/static/...). Форма префиксов — только
 	# /prefix/* (со слешем перед *), не /prefix*.
-	@landing path / /privacy /terms /robots.txt /sitemap.xml /_next/* /fonts/* /icon.png
+	@landing path / /privacy /terms /robots.txt /sitemap.xml /_next/* /fonts/* /icon.png /opengraph-image /apple-icon.png /favicon.ico
 	handle @landing {
 		reverse_proxy 127.0.0.1:{args[1]}
 	}
