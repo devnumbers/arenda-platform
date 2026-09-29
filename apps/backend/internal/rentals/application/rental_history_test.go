@@ -33,10 +33,18 @@ func TestHistory_RentalCreatedCarriesTenantAndPeriod(t *testing.T) {
 	}
 	// The label snapshot: the tenant display name (the contacts seam);
 	// the period lives in context only (аудит #876 — голые даты из строк
-	// убраны). The fixture plans 2026-09-01 → 2027-09-01.
+	// убраны). The fixture plans 2026-09-04 (today) → 2027-09-01.
 	want := "Добавлена аренда: Иван Tenant"
 	if e.Segments.PlainText() != want {
 		t.Errorf("row text = %q, want %q", e.Segments.PlainText(), want)
+	}
+	// The context carries the period as the RFC3339 snapshot of the planned
+	// dates — the promise of the test's name beyond the label.
+	if v, ok := e.Context["period_from"]; !ok || v != "2026-09-04T00:00:00Z" {
+		t.Errorf("context period_from = %v, want the RFC3339 snapshot", v)
+	}
+	if v, ok := e.Context["period_to"]; !ok || v != "2027-09-01T00:00:00Z" {
+		t.Errorf("context period_to = %v, want the RFC3339 snapshot", v)
 	}
 	if e.PropertyID != h.property || e.ActorID == nil || *e.ActorID != h.owner {
 		t.Errorf("entry must carry the scope and the actor, got %s/%v", e.PropertyID, e.ActorID)
