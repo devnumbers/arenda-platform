@@ -53,7 +53,7 @@ export default async function RentalCompletedRoutePage({
   const { id, rentalId } = await params;
 
   return (
-    <Suspense fallback={<RentalCompletedLoading />}>
+    <Suspense fallback={<RentalCompletedLoading propertyId={id} />}>
       <ServerPrefetchBoundary prefetch={(queryClient) => prefetchRentalScreen(queryClient, id, rentalId)}>
         <RentalCompletedScreen propertyId={id} rentalId={rentalId} />
       </ServerPrefetchBoundary>

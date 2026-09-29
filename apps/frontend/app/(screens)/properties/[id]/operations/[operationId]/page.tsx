@@ -54,7 +54,7 @@ export default async function OperationRoutePage({ params }: PageProps<'/propert
   const { id, operationId } = await params;
 
   return (
-    <Suspense fallback={<OperationDetailLoading />}>
+    <Suspense fallback={<OperationDetailLoading propertyId={id} />}>
       <ServerPrefetchBoundary prefetch={(queryClient) => prefetchOperationScreen(queryClient, id, operationId)}>
         <OperationDetailScreen propertyId={id} operationId={operationId} />
       </ServerPrefetchBoundary>

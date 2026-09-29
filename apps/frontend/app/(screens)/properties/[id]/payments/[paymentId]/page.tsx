@@ -49,7 +49,7 @@ export default async function PaymentRoutePage({ params }: PageProps<'/propertie
   const { id, paymentId } = await params;
 
   return (
-    <Suspense fallback={<PaymentDetailLoading />}>
+    <Suspense fallback={<PaymentDetailLoading propertyId={id} />}>
       <ServerPrefetchBoundary prefetch={(queryClient) => prefetchPaymentScreen(queryClient, id, paymentId)}>
         <PaymentDetailScreen propertyId={id} paymentId={paymentId} />
       </ServerPrefetchBoundary>
