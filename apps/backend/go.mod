@@ -1,6 +1,6 @@
 module github.com/nambers/arenda-planform/apps/backend
 
-go 1.26.5
+go 1.26.6
 
 require (
 	github.com/LumenResearch/uasurfer v0.3.0
