@@ -69,9 +69,7 @@ export function PaymentsFavoritesLoading(): JSX.Element {
       </TopNav>
 
       <PageContent>
-        <div className="flex flex-col">
-          <PaymentsRowsSkeleton />
-        </div>
+        <PaymentsRowsSkeleton />
       </PageContent>
     </>
   );

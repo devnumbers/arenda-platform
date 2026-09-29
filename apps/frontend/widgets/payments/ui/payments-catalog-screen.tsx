@@ -143,11 +143,7 @@ function OverdueList({
   if (overdueQuery.isPending) {
     // Контент — плоский список строк OverdueOperationRow, скелетон — ряды
     // канона (#604: композиция скелетона равна композиции страницы).
-    return (
-      <div className="flex flex-col">
-        <PaymentsRowsSkeleton />
-      </div>
-    );
+    return <PaymentsRowsSkeleton />;
   }
   if (overdueQuery.isError) {
     return (
@@ -207,11 +203,7 @@ function RulesList({
 
   if (paymentsQuery.isPending) {
     // Контент — плоский список строк PaymentRow, скелетон — ряды канона.
-    return (
-      <div className="flex flex-col">
-        <PaymentsRowsSkeleton />
-      </div>
-    );
+    return <PaymentsRowsSkeleton />;
   }
   if (paymentsQuery.isError) {
     return (

@@ -19,7 +19,7 @@ import {
   SearchField,
   TopNav,
 } from '@/shared/ui/design';
-import { OperationsSearchSkeleton } from './operations-skeletons';
+import { SearchResultsSkeleton } from './operations-skeletons';
 import { GlobalPaymentRuleIcon, PaymentsHeading, PaymentsStateCard } from './payments-sections';
 import { nearestDateLine } from '../lib/payments-global-model';
 import {
@@ -149,9 +149,9 @@ export function PaymentsGlobalSearchScreen(): JSX.Element {
           // Контент — две секции (чипы категорий, строки платежей); скелетон
           // зеркалит их анатомию — заголовки-полоски, чипы-заглушки, ряды
           // канона (#604: композиция скелетона равна композиции страницы).
-          // Архетип OperationsSearchSkeleton: description — дата под суммой
+          // Архетип SearchResultsSkeleton: description — дата под суммой
           // в строках выдачи, как у операций-соседа.
-          <OperationsSearchSkeleton description />
+          <SearchResultsSkeleton description />
         )}
 
         {showResults &&

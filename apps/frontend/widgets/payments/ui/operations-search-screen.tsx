@@ -23,7 +23,7 @@ import {
 } from '@/shared/ui/design';
 import { OperationRow } from './operations-list';
 import { PaymentsHeading, PaymentsStateCard } from './payments-sections';
-import { OperationsSearchSkeleton } from './operations-skeletons';
+import { SearchResultsSkeleton } from './operations-skeletons';
 import {
   searchCategoryChips,
   searchListScope,
@@ -146,7 +146,7 @@ export function OperationsSearchScreen({
         {pending && (
           // Паритет §7/#604: скелетон зеркалит две секции контента — чипы
           // категорий и строки операций.
-          <OperationsSearchSkeleton />
+          <SearchResultsSkeleton />
         )}
 
         {showResults &&

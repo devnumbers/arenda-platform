@@ -26,7 +26,7 @@ import {
 } from '@/shared/ui/design';
 import { OperationRow } from './operations-list';
 import { PaymentsHeading, PaymentsStateCard } from './payments-sections';
-import { OperationsSearchSkeleton } from './operations-skeletons';
+import { SearchResultsSkeleton } from './operations-skeletons';
 import {
   globalSearchListScope,
   globalSearchSummaryScope,
@@ -164,7 +164,7 @@ export function OperationsGlobalSearchScreen(): JSX.Element {
         {pending && (
           // Паритет §7/#604: скелетон зеркалит две секции контента — чипы
           // категорий и строки операций (дата под суммой, #543).
-          <OperationsSearchSkeleton description />
+          <SearchResultsSkeleton description />
         )}
 
         {showResults &&
