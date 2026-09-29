@@ -136,9 +136,12 @@ export function OperationsObjectsSkeleton(): JSX.Element {
  * Поисковая выдача-заглушка (#543/#476): контент — две секции («Категории» —
  * заголовок + чипы, «Операции»/«Платежи» — заголовок + ряды), скелетон
  * зеркалит их анатомию: заголовки-полоски, чипы-заглушки (высота канона
- * ChipButton), ряды канона #605. Общий архетип поисковых экранов операций
- * и платежей. description — дата под суммой в строках глобального поиска;
- * в объектном (#476) строки без неё.
+ * ChipButton), ряды канона #605. Пара «заголовок + контент» живёт в своей
+ * секции, как <section aria-label> живой выдачи: зазор заголовок→контент
+ * держит pt-2 контента (8px), gap-6 контейнера делит только секции —
+ * иначе контент уезжает вверх на смене загрузки→выдача. Общий архетип
+ * поисковых экранов операций и платежей. description — дата под суммой
+ * в строках глобального поиска; в объектном (#476) строки без неё.
  */
 export function SearchResultsSkeleton({
   description = false,
@@ -147,15 +150,19 @@ export function SearchResultsSkeleton({
 }): JSX.Element {
   return (
     <div aria-hidden className="flex flex-col gap-6 pt-4">
-      <Skeleton className="ml-6 h-6 w-40" />
-      <div className="flex gap-1.5 px-6 pt-2">
-        <Skeleton className="h-11 w-28 rounded-full" />
-        <Skeleton className="h-11 w-36 rounded-full" />
-      </div>
-      <Skeleton className="ml-6 h-6 w-40" />
-      <div className="flex flex-col pt-2">
-        <PaymentsRowsSkeleton description={description} />
-      </div>
+      <section aria-hidden className="flex flex-col">
+        <Skeleton className="ml-6 h-6 w-40" />
+        <div className="flex gap-1.5 px-6 pt-2">
+          <Skeleton className="h-11 w-28 rounded-full" />
+          <Skeleton className="h-11 w-36 rounded-full" />
+        </div>
+      </section>
+      <section aria-hidden className="flex flex-col">
+        <Skeleton className="ml-6 h-6 w-40" />
+        <div className="flex flex-col pt-2">
+          <PaymentsRowsSkeleton description={description} />
+        </div>
+      </section>
     </div>
   );
 }
