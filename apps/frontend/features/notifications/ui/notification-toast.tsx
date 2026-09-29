@@ -72,7 +72,7 @@ export function NotificationToast({
           event.stopPropagation();
           closeToast();
         }}
-        className="absolute right-2 top-2 flex h-11 w-11 items-center justify-center rounded-pill text-content-secondary outline-none transition-colors hover:text-content focus-visible:ring-2 focus-visible:ring-primary"
+        className="absolute right-2 top-2 flex h-11 w-11 cursor-pointer items-center justify-center rounded-pill text-content-secondary outline-none transition-colors hover:text-content focus-visible:ring-2 focus-visible:ring-primary"
       >
         <Cancel width={24} height={24} aria-hidden />
       </button>
