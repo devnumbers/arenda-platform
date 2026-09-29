@@ -1,8 +1,7 @@
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import type { QueryClient } from '@tanstack/react-query';
-import { RentalCompletedScreen } from '@/widgets/rentals';
-import { RentalCompletedSkeleton } from '@/widgets/rentals';
+import { RentalCompletedScreen, RentalCompletedSkeleton } from '@/widgets/rentals';
 import { propertyDetailQueryOptions } from '@/features/properties';
 import { rentalsQueryOptions } from '@/features/rentals';
 import { paymentOperationsPagedQueryOptions } from '@/features/payments';

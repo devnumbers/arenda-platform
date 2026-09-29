@@ -1,7 +1,6 @@
 import { Suspense, type JSX } from 'react';
 import type { Metadata } from 'next';
-import { ParticipantScreen } from '@/widgets/participants';
-import { ParticipantScreenSkeleton } from '@/widgets/participants';
+import { ParticipantScreen, ParticipantScreenSkeleton } from '@/widgets/participants';
 import { participantQueryOptions } from '@/features/participants';
 import { ServerPrefetchBoundary } from '@/shared/api/server-prefetch';
 import { serverApiClient } from '@/shared/api/server-client';

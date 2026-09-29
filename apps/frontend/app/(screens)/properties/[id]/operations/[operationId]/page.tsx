@@ -1,8 +1,7 @@
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import type { QueryClient } from '@tanstack/react-query';
-import { OperationDetailScreen } from '@/widgets/payments';
-import { OperationDetailSkeleton } from '@/widgets/payments';
+import { OperationDetailScreen, OperationDetailSkeleton } from '@/widgets/payments';
 import {
   paymentOperationQueryOptions,
   paymentOperationsByStatusQueryOptions,
