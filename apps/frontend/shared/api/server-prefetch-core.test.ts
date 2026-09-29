@@ -69,6 +69,27 @@ describe('dropUnhydratableQueries + dehydrateServerPrefetch', () => {
     expect(queryClient.getQueryState(['failed'])).toBeUndefined();
     expect(queryClient.getQueryState(['hung'])).toBeUndefined();
   });
+
+  it('падение родителя не сносит успешного потомка с расширенным ключом', async () => {
+    const queryClient = createServerQueryClient();
+    void queryClient.prefetchQuery({
+      queryKey: ['payments'],
+      queryFn: () => Promise.reject(new ApiError('network_error', 'сбой')),
+    });
+    await queryClient.prefetchQuery({
+      queryKey: ['payments', 'summary'],
+      queryFn: () => Promise.resolve(42),
+    });
+    await settleServerPrefetch(queryClient, 20);
+    dropUnhydratableQueries(queryClient);
+
+    // removeQueries без exact матчит ключи префиксно (partialMatchKey в
+    // query-core) — без exact падение родителя унесло бы и успех потомка.
+    expect(queryClient.getQueryState(['payments'])).toBeUndefined();
+    expect(queryClient.getQueryData(['payments', 'summary'])).toBe(42);
+    const state = dehydrateServerPrefetch(queryClient);
+    expect(state.queries.map((query) => query.queryKey)).toStrictEqual([['payments', 'summary']]);
+  });
 });
 
 describe('гонка SSE×гидратация (канон #887)', () => {

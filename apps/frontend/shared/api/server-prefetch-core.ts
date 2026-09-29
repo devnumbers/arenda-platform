@@ -94,7 +94,10 @@ export async function settleServerPrefetch(
 export function dropUnhydratableQueries(queryClient: QueryClient): void {
   for (const query of queryClient.getQueryCache().getAll()) {
     if (query.state.status !== 'success') {
-      queryClient.removeQueries({ queryKey: query.queryKey });
+      // exact: без него removeQueries матчит ключи префиксно (partialMatchKey
+      // в query-core) — падение родителя снесло бы успешных потомков с
+      // расширенными ключами, и те ушли бы из hydration.
+      queryClient.removeQueries({ queryKey: query.queryKey, exact: true });
     }
   }
 }

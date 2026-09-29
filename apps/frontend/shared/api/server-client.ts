@@ -1,3 +1,4 @@
+import 'server-only';
 import { cookies } from 'next/headers';
 import { BACKEND_URL } from '@/shared/config/backend-url';
 import { ApiError } from './errors';
