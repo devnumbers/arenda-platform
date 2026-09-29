@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Suppression gate (quality mode #378, gate ticket #399): a suppression
-// directive or an explicit `any` in the manual TS/JS code of apps/frontend and
-// apps/admin is a finding — the target state is 0 suppressions, so there is no
+// directive or an explicit `any` in the manual TS/JS code of apps/frontend,
+// apps/admin and apps/landing is a finding — the target state is 0
+// suppressions, so there is no
 // whitelist: a genuine exclusion belongs in the ESLint config (or an ADR-backed
 // tool exclusion), not in a code comment. The ESLint rules already in force
 // validate what exists; this gate enforces that nothing exists to validate —

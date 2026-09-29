@@ -23,8 +23,8 @@ import { spawn, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 // Mirrors the pre-commit gates in lefthook.yml; keep the two in sync. A gate
-// lists every path prefix that trips it (the TS suppression gate spans both
-// frontend and admin — one full-tree scan either way).
+// lists every path prefix that trips it (the TS suppression gate spans all
+// three apps — one full-tree scan either way).
 const PACKAGE_GATES = [
   { name: "backend", prefixes: ["apps/backend/"], command: ["make", "backend-lint"] },
   // Same prefix as the backend gate — both run in parallel on any backend
@@ -32,8 +32,8 @@ const PACKAGE_GATES = [
   { name: "backend nolint", prefixes: ["apps/backend/"], command: ["make", "backend-nolint"] },
   { name: "frontend", prefixes: ["apps/frontend/"], command: ["npm", "--prefix", "apps/frontend", "run", "lint"] },
   // Suppression gate #399: zero eslint-disable/@ts-*/explicit-any in the
-  // manual code of both apps; a change in either app runs the full pass.
-  { name: "ts suppressions", prefixes: ["apps/frontend/", "apps/admin/"], command: ["make", "ts-suppressions"] },
+  // manual code of all three apps; a change in any of them runs the full pass.
+  { name: "ts suppressions", prefixes: ["apps/frontend/", "apps/admin/", "apps/landing/"], command: ["make", "ts-suppressions"] },
   { name: "admin typecheck", prefixes: ["apps/admin/"], command: ["make", "admin-typecheck"] },
   { name: "admin lint", prefixes: ["apps/admin/"], command: ["npm", "--prefix", "apps/admin", "run", "lint"] },
   // Coarser than lefthook's *.sql glob by design (prefix matching): a

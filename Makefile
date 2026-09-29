@@ -534,15 +534,16 @@ categories-check: ## Fail if the payment-categories catalog artifacts are stale
 ##@ Quality and security
 # TS suppression gate (quality mode #378, gate #399): an eslint-disable
 # comment, a @ts-ignore/@ts-expect-error/@ts-nocheck, or an explicit `any` in
-# the manual TS/JS code of apps/frontend + apps/admin is a finding — zero
-# suppressions, no whitelist. Generated code, build artifacts and node_modules
-# are excluded by the script itself (the counter looks only at hand-written
-# code: .next/types alone carries 20 `any` and 102 `@ts-ignore`). Without
-# FILES checks every source file under both apps (CI, Stop-gate); with FILES
+# the manual TS/JS code of apps/frontend + apps/admin + apps/landing is a
+# finding — zero suppressions, no whitelist. Generated code, build artifacts
+# and node_modules are excluded by the script itself (the counter looks only
+# at hand-written code: .next/types alone carries 20 `any` and 102
+# `@ts-ignore`). Without FILES checks every source file under all three apps
+# (CI, Stop-gate); with FILES
 # checks only the listed files (pre-commit: make ts-suppressions
 # FILES="{staged_files}"); non-source entries and staged deletions are skipped
 # by the filter/the script itself.
-ts-suppressions: ## Fail on any suppression in manual frontend/admin TS/JS code (FILES= to scope)
+ts-suppressions: ## Fail on any suppression in manual frontend/admin/landing TS/JS code (FILES= to scope)
 	@set +e; status=0; \
 	if [ -n "$(FILES)" ]; then \
 		files=`echo "$(FILES)" | tr ' ' '\n' | grep -E '\.(ts|tsx|js|jsx|mjs|cjs|mts|cts)$$' | tr '\n' ' '`; \
@@ -553,8 +554,8 @@ ts-suppressions: ## Fail on any suppression in manual frontend/admin TS/JS code 
 			echo "==> suppression gate (skip: no source files in FILES)"; \
 		fi; \
 	else \
-		echo "==> suppression gate apps/frontend + apps/admin manual sources"; \
-		files=`find apps/frontend apps/admin -type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.jsx' -o -name '*.mjs' -o -name '*.cjs' -o -name '*.mts' -o -name '*.cts' \) -not -path '*/node_modules/*' -not -path '*/.next/*' -not -path '*/dist/*'`; \
+		echo "==> suppression gate apps/frontend + apps/admin + apps/landing manual sources"; \
+		files=`find apps/frontend apps/admin apps/landing -type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.jsx' -o -name '*.mjs' -o -name '*.cjs' -o -name '*.mts' -o -name '*.cts' \) -not -path '*/node_modules/*' -not -path '*/.next/*' -not -path '*/dist/*'`; \
 		node tools/suppression-gate/suppression-gate.mjs $$files || status=1; \
 	fi; \
 	if [ $$status -ne 0 ]; then echo "ERROR: suppression gate failed (see above)"; exit 1; fi
