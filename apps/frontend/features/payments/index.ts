@@ -125,6 +125,7 @@ export {
   paymentListQueryOptions,
   paymentOperationQueryOptions,
   paymentOperationsByStatusQueryOptions,
+  paymentOperationsGateQueryOptions,
   paymentOperationsOverdueQueryOptions,
   paymentOperationsPagedQueryOptions,
   paymentOperationsSummaryQueryOptions,

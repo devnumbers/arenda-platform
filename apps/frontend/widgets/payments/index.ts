@@ -31,6 +31,7 @@ export { PaymentHistoryScreen } from './ui/payment-history-screen';
 export { PaymentOverdueScreen } from './ui/payment-overdue-screen';
 export { OperationCreateWizardScreen } from './ui/operation-create-wizard/operation-create-wizard-screen';
 /* Route-loading (#609). */
+export { OperationDetailLoading, PaymentDetailLoading } from './ui/payments-detail-loading';
 export {
   OperationCreateLoading,
   OperationsCategoriesLoading,

@@ -1,7 +1,7 @@
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import type { QueryClient } from '@tanstack/react-query';
-import { RentalCompletedScreen, RentalCompletedSkeleton } from '@/widgets/rentals';
+import { RentalCompletedLoading, RentalCompletedScreen } from '@/widgets/rentals';
 import { propertyDetailQueryOptions } from '@/features/properties';
 import { rentalsQueryOptions } from '@/features/rentals';
 import { paymentOperationsPagedQueryOptions } from '@/features/payments';
@@ -53,7 +53,7 @@ export default async function RentalCompletedRoutePage({
   const { id, rentalId } = await params;
 
   return (
-    <Suspense fallback={<RentalCompletedSkeleton />}>
+    <Suspense fallback={<RentalCompletedLoading />}>
       <ServerPrefetchBoundary prefetch={(queryClient) => prefetchRentalScreen(queryClient, id, rentalId)}>
         <RentalCompletedScreen propertyId={id} rentalId={rentalId} />
       </ServerPrefetchBoundary>

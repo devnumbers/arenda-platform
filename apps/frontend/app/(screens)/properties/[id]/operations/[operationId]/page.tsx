@@ -1,10 +1,10 @@
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import type { QueryClient } from '@tanstack/react-query';
-import { OperationDetailScreen, OperationDetailSkeleton } from '@/widgets/payments';
+import { OperationDetailLoading, OperationDetailScreen } from '@/widgets/payments';
 import {
   paymentOperationQueryOptions,
-  paymentOperationsByStatusQueryOptions,
+  paymentOperationsGateQueryOptions,
 } from '@/features/payments';
 import { propertyDetailQueryOptions } from '@/features/properties';
 import { paymentOperationKeys } from '@/shared/api/query-keys';
@@ -43,19 +43,18 @@ async function prefetchOperationScreen(
   if (operation === undefined || operation.paymentId === null) {
     return;
   }
-  void queryClient.prefetchQuery(paymentOperationsByStatusQueryOptions({
-    propertyId, paymentId: operation.paymentId, status: 'overdue', transport: serverApiClient,
-  }));
-  void queryClient.prefetchQuery(paymentOperationsByStatusQueryOptions({
-    propertyId, paymentId: operation.paymentId, status: 'planned', transport: serverApiClient,
-  }));
+  const [overdue, planned] = paymentOperationsGateQueryOptions({
+    propertyId, paymentId: operation.paymentId, transport: serverApiClient,
+  });
+  void queryClient.prefetchQuery(overdue);
+  void queryClient.prefetchQuery(planned);
 }
 
 export default async function OperationRoutePage({ params }: PageProps<'/properties/[id]/operations/[operationId]'>) {
   const { id, operationId } = await params;
 
   return (
-    <Suspense fallback={<OperationDetailSkeleton />}>
+    <Suspense fallback={<OperationDetailLoading />}>
       <ServerPrefetchBoundary prefetch={(queryClient) => prefetchOperationScreen(queryClient, id, operationId)}>
         <OperationDetailScreen propertyId={id} operationId={operationId} />
       </ServerPrefetchBoundary>

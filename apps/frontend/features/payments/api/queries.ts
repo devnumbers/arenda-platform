@@ -347,6 +347,38 @@ export function paymentOperationsByStatusQueryOptions({
   });
 }
 
+/**
+ * Конфиг пары гасящих списков «Оплатить» — возвращаемый тип фабрики
+ * paymentOperationsGateQueryOptions: экспорты features/ несут явные
+ * возвращаемые типы (apps/frontend/AGENTS.md).
+ */
+export type PaymentOperationsGateQueryOptions = readonly [
+  ReturnType<typeof paymentOperationsByStatusQueryOptions>,
+  ReturnType<typeof paymentOperationsByStatusQueryOptions>,
+];
+
+/**
+ * Пара гасящих списков «Оплатить» (#465): просроченные и плановые операции
+ * правила — те же ключи, что читает usePaymentOperationsByStatus экрана,
+ * поэтому серверный прогрев пары гасит кнопку без перезапроса. Порядок
+ * закреплён за страницами: просроченные первыми (приоритет долга —
+ * порядок накопления, канон «Оплатить»).
+ */
+export function paymentOperationsGateQueryOptions({
+  propertyId,
+  paymentId,
+  transport = apiClient,
+}: {
+  readonly propertyId: string;
+  readonly paymentId: string;
+  readonly transport?: ApiTransport;
+}): PaymentOperationsGateQueryOptions {
+  return [
+    paymentOperationsByStatusQueryOptions({ propertyId, paymentId, status: 'overdue', transport }),
+    paymentOperationsByStatusQueryOptions({ propertyId, paymentId, status: 'planned', transport }),
+  ] as const;
+}
+
 /** Чистый fetch операции — общее горло хука и серверного префетча #887. */
 export async function fetchOperation(
   propertyId: string,

@@ -1,7 +1,7 @@
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import type { QueryClient } from '@tanstack/react-query';
-import { PropertyDetailLoading, PropertyDetailPage } from '@/widgets/property-detail';
+import { PropertyDetailPage, PropertyDetailRouteLoading } from '@/widgets/property-detail';
 import { ServerPrefetchBoundary } from '@/shared/api/server-prefetch';
 import { serverApiClient } from '@/shared/api/server-client';
 import { dateToIsoLocal } from '@/shared/lib/calendar';
@@ -78,7 +78,7 @@ export default async function PropertyDetailRoutePage({
   const { id } = await params;
 
   return (
-    <Suspense fallback={<PropertyDetailLoading />}>
+    <Suspense fallback={<PropertyDetailRouteLoading />}>
       <ServerPrefetchBoundary prefetch={(queryClient) => prefetchPropertyScreen(queryClient, id)}>
         <PropertyDetailPage />
       </ServerPrefetchBoundary>
