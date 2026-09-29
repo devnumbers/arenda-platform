@@ -1,5 +1,11 @@
 import Image from "next/image";
-import { GLASS_GRADIENT, GLASS_INSET_SHADOW } from "@/components/glass";
+import {
+  GLASS_FILL_INK,
+  GLASS_FILL_LIGHT,
+  GLASS_FILL_PRIMARY,
+  GLASS_GRADIENT,
+  GLASS_INSET_SHADOW,
+} from "@/components/glass";
 import { Reveal } from "@/components/reveal";
 import iconBriefcase01 from "@/assets/icons/icon-briefcase-01.svg";
 import iconBuilding05 from "@/assets/icons/icon-building-05.svg";
@@ -16,8 +22,8 @@ import iconUser02 from "@/assets/icons/icon-user-02.svg";
 // конический градиент .glass-ring (тот же токен, что у 2846-153711;
 // прежнее плоское серое inset-кольцо rgba(156,156,156,0.5) снято),
 // заливки — на самой карточке, у «Собственников» сплошной #F3F4F6
-// под стеклом, как у «Базового». Стеклянный градиент и блики — общие
-// константы components/glass.ts.
+// под стеклом, как у «Базового». Стеклянный градиент, блики и заливки —
+// общие константы components/glass.ts.
 const CARDS = [
   {
     title: "Собственники",
@@ -25,7 +31,7 @@ const CARDS = [
     icon: iconUser02,
     alt: "Иконка собственника",
     backgroundImage: GLASS_GRADIENT,
-    backgroundColor: "#f3f4f6",
+    backgroundColor: GLASS_FILL_LIGHT,
     light: true,
   },
   {
@@ -33,7 +39,7 @@ const CARDS = [
     text: "Сдаете офисы, склады, торговые помещения, гаражи",
     icon: iconBriefcase01,
     alt: "Иконка бизнеса",
-    backgroundImage: `${GLASS_GRADIENT}, linear-gradient(180deg, rgb(100,100,100) 0%, rgb(30,30,30) 100%)`,
+    backgroundImage: `${GLASS_GRADIENT}, ${GLASS_FILL_INK}`,
     backgroundColor: "transparent",
     light: false,
   },
@@ -42,7 +48,7 @@ const CARDS = [
     text: "Сдаете десятки или сотни объектов",
     icon: iconBuilding05,
     alt: "Иконка агентства",
-    backgroundImage: `${GLASS_GRADIENT}, linear-gradient(180deg, rgb(136,183,255) 0%, rgb(43,127,255) 100%)`,
+    backgroundImage: `${GLASS_GRADIENT}, ${GLASS_FILL_PRIMARY}`,
     backgroundColor: "transparent",
     light: false,
   },

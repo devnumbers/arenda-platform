@@ -3,7 +3,13 @@
 import Image from "next/image";
 import { useState } from "react";
 import { LandingLink } from "@/components/button";
-import { GLASS_GRADIENT, GLASS_INSET_SHADOW } from "@/components/glass";
+import {
+  GLASS_FILL_INK,
+  GLASS_FILL_LIGHT,
+  GLASS_FILL_PRIMARY,
+  GLASS_GRADIENT,
+  GLASS_INSET_SHADOW,
+} from "@/components/glass";
 import { Reveal } from "@/components/reveal";
 import { useSwapPhase } from "@/components/use-swap-phase";
 import iconHomeMain from "@/assets/icons/icon-home-main.svg";
@@ -36,20 +42,20 @@ const FEATURE_ICONS: Record<TariffFeature["icon"], { src: string; alt: string }>
 const CARD_THEMES = {
   basic: {
     backgroundImage: GLASS_GRADIENT,
-    backgroundColor: "#f3f4f6",
+    backgroundColor: GLASS_FILL_LIGHT,
     text: "text-ink",
     sub: "text-gray-2",
     featureSub: "text-gray-2",
   },
   pro: {
-    backgroundImage: `${GLASS_GRADIENT}, linear-gradient(180deg, rgb(100,100,100) 0%, rgb(30,30,30) 100%)`,
+    backgroundImage: `${GLASS_GRADIENT}, ${GLASS_FILL_INK}`,
     backgroundColor: "transparent",
     text: "text-white",
     sub: "text-white/80",
     featureSub: "text-white/80",
   },
   business: {
-    backgroundImage: `${GLASS_GRADIENT}, linear-gradient(180deg, rgb(136,183,255) 0%, rgb(43,127,255) 100%)`,
+    backgroundImage: `${GLASS_GRADIENT}, ${GLASS_FILL_PRIMARY}`,
     backgroundColor: "transparent",
     text: "text-white",
     sub: "text-white/80",
@@ -205,10 +211,14 @@ export function TariffCards({
                     ))}
                   </div>
                   {isCurrent ? (
+                    // aria-disabled-ссылка остаётся фокусируемой: мышь
+                    // глушит pointer-events-none, Enter с клавиатуры —
+                    // preventDefault (паттерн ARIA disabled-link).
                     <LandingLink
                       variant="white"
                       href={tariff.href}
                       aria-disabled
+                      onClick={(event) => event.preventDefault()}
                       className="pointer-events-none w-full text-gray-2!"
                     >
                       Ваш тариф
