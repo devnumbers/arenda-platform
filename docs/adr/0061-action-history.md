@@ -77,18 +77,18 @@ Seven kinds (the mockup filter groups), stable `action` ids, base-action mapping
 | | property.photo_added / photo_deleted | added / deleted | — |
 | | property.pinned / unpinned | changed | — |
 | | property.archived / unarchived | changed | — |
-| Аренда | rental.created / updated (incl. extension) | added / changed | имя арендатора + период |
+| Аренда | rental.created / updated (incl. extension) | added / changed | имя арендатора (период — в context) |
 | | rental.completed | completed | имя арендатора |
 | | rental.deleted | deleted | имя арендатора |
 | Платежи | payment.created / updated / deleted | added / changed / deleted | название |
 | | payment.paused / resumed | changed | название |
-| Операции | operation.created | added | название + дата |
-| | operation.paid | completed | название + срок |
-| | operation.deleted («Отменённая операция») | deleted | название + дата |
+| Операции | operation.created | added | название (дата — в context) |
+| | operation.paid | completed | название (срок — в context) |
+| | operation.deleted («Отменённая операция») | deleted | название (дата — в context) |
 | Контакты | contact.created / updated / deleted | added / changed / deleted | ФИО (updated — old → new) |
 | | contact.moved (cross-property move — a pair of rows, one per end) / contact.bound / contact.unbound (bind / unbind — the single existing end) | changed | ФИО |
 | Задачи | task_rule.created / updated / deleted | added / changed / deleted | название |
-| | task.completed | completed | название + срок |
+| | task.completed | completed | название (срок — в context) |
 | | task.uncompleted | changed | название |
 | | task.completed_cleared (bulk) | deleted | N |
 | Участники | member.invited / member.added | added | имя или email |
@@ -105,7 +105,7 @@ Mapping rulings: archive/unarchive, pause/resume, task uncomplete, rental extens
 
 ### 6. Row text = server-built segments
 
-The server is the **single source of row text**: at write time the Recorder builds `segments` — an ordered array of `{text}` runs where a run may carry `link: {kind, id}` pointing at the target entity (the blue spans in the mockups). The frontend renders segments verbatim and wraps linked runs; `searchable` is their plain-text concatenation (plus actor name/email). Frontend-owned templates were rejected: they would diverge from the searchable text («ищется не то, что показано») and duplicate the copy layer.
+The server is the **single source of row text**: at write time the Recorder builds `segments` — an ordered array of `{text}` runs where a run may carry `link: {kind, id}` pointing at the target entity (the blue spans in the mockups). The frontend renders segments verbatim and wraps linked runs; at mapping time it strips the bare date tails (« (срок DD.MM.YYYY)» of operations and tasks, the rental period/date tails) the backend stopped writing in audit #876 — the strip cleans rows recorded before that (`entities/history/model/date-tails.ts`, `mappers.ts`). `searchable` is their plain-text concatenation (plus actor name/email). Frontend-owned templates were rejected: they would diverge from the searchable text («ищется не то, что показано») and duplicate the copy layer.
 
 The actor is never inside the row text: it is a payload field, grouped as a header by the frontend (date → object → actor; per-scope screens pin one group level).
 

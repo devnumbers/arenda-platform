@@ -59,7 +59,9 @@ func TestRentalRows_PeriodLivesInContextOnly(t *testing.T) {
 	// Аудит #876: голые подписи дат убраны из строк — период аренды не
 	// пишется в сегменты (ни definite, ни бессрочная «(дата)»), он живёт
 	// в context. Поиск по датам ленты этим не стирается: даты операций
-	// ищутся по created_at, период аренды — по context.
+	// ищутся по created_at (не задето); период аренды после сноса из
+	// сегментов текстовым поиском не находится (context в searchable и
+	// search_tsv не входит) — по периоду ленту фильтрует created_at.
 	from := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 	e := RentalCreated(uuid.Must(uuid.NewV7()), "Иван Иванов", from, time.Time{})
 	want := "Добавлена аренда: Иван Иванов"

@@ -242,7 +242,8 @@ func PropertyUnarchived(entityID uuid.UUID) Entry {
 
 // Аренда.
 
-// RentalCreated builds the rental row: the tenant name plus the period.
+// RentalCreated builds the rental row: the tenant name (the period lives
+// in the context only).
 func RentalCreated(entityID uuid.UUID, tenantName string, from, to time.Time) Entry {
 	return rentalRow(ActionRentalCreated, BaseAdded, "Добавлена аренда: ", entityID, tenantName, from, to)
 }
@@ -368,7 +369,8 @@ func paymentRow(action Action, base BaseAction, prefix string, entityID uuid.UUI
 
 // Операции.
 
-// OperationCreated builds the operation row: the title plus the due date.
+// OperationCreated builds the operation row: the title (the due date lives
+// in the context only).
 func OperationCreated(entityID uuid.UUID, title string, due time.Time) Entry {
 	return operationRow(ActionOperationCreated, BaseAdded, "Добавлена операция: ", entityID, title, due)
 }
@@ -530,8 +532,8 @@ func taskRuleRow(action Action, base BaseAction, prefix string, entityID uuid.UU
 	}
 }
 
-// TaskCompleted builds the completion row: the title plus the occurrence's
-// due date.
+// TaskCompleted builds the completion row: the title (the occurrence's
+// due date lives in the context only).
 func TaskCompleted(entityID uuid.UUID, title string, due time.Time) Entry {
 	return Entry{
 		Kind:       KindTask,
