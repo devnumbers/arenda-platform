@@ -5,6 +5,11 @@ export const metadata: Metadata = {
   title: "Политика конфиденциальности",
   description:
     "Какие данные собирает Рентли, зачем и как они используются, хранятся и защищаются.",
+  // Собственный canonical: без него действует canonical "/" корневого layout,
+  // и страница объявляет канонической главную.
+  alternates: {
+    canonical: "/privacy",
+  },
 };
 
 export default function PrivacyPage() {

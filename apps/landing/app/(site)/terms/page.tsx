@@ -5,6 +5,11 @@ export const metadata: Metadata = {
   title: "Пользовательское соглашение",
   description:
     "Условия использования сервиса учёта аренды недвижимости Рентли.",
+  // Собственный canonical: без него действует canonical "/" корневого layout,
+  // и страница объявляет канонической главную.
+  alternates: {
+    canonical: "/terms",
+  },
 };
 
 export default function TermsPage() {
