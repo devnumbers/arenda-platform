@@ -55,8 +55,8 @@ const NO_SNAPSHOTS: LiveValueSnapshots = { stale: null, old: null, fresh: null }
  * владельца 25.09 по прототипу #879, тикет #880): чужая правка по кадру
  * приглушает старое значение (dim 350мс), пауза держится на фактическое
  * перечитывание (≥300мс), новое проявляется blur-кроссфейдом (220/380мс)
- * с подсветкой-вспышкой (1200мс). Эталон — демо
- * `.scratch/ui-demos/realtime-updates` ветки frontend-foundation.
+ * с подсветкой-вспышкой (1200мс). Эталон — DESIGN.md §8, раздел
+ * „Realtime-оживание значения — канон C“ (apps/frontend/DESIGN.md:473-500).
  *
  * Источник правки компоненту неизвестен: он анимирует любую смену
  * `valueKey`, приехавшую через react-query (SSE-кадры лишь инвалидируют
@@ -120,7 +120,11 @@ export function LiveValue({
   const naturalHeightRef = useRef<number | null>(null);
 
   // Стабильный переход: читает только реф-книжение, событий — от эффектов.
-  const transition = useCallback((event: LiveValueEvent): void => {
+  // Дети коммита (committedChildren) диспетч-эффекты шлют вторым
+  // аргументом: они стоят выше снапшота детей, реф ещё держит прошлый
+  // коммит — без аргумента свап играл бы старое→старое. Таймерный путь
+  // (due) зовёт без аргумента: к сгоревшему дедлайну снапшот актуален.
+  const transition = useCallback((event: LiveValueEvent, committedChildren?: ReactNode): void => {
     const prevPhase = stateRef.current.phase;
     const prevGeneration = stateRef.current.generation;
     const result = reduceLiveValue(stateRef.current, event, modeRef.current, timingsRef.current);
@@ -143,7 +147,10 @@ export function LiveValue({
               // проявилось (новая сторона прошлого свапа).
               newChildrenRef.current
             : lastCommittedChildrenRef.current;
-      newChildrenRef.current = childrenPropRef.current;
+      // Новая сторона — дети коммита, диспетчащего свап; таймерный путь
+      // (hold-свап, переигранный свап по due) читает реф — к тому моменту
+      // снапшот последним эффектом уже актуален.
+      newChildrenRef.current = committedChildren ?? childrenPropRef.current;
     }
     stateRef.current = next;
     const nextSnapshots: LiveValueSnapshots = {
@@ -176,16 +183,19 @@ export function LiveValue({
     prevKeyRef.current = valueKey;
     prevRefreshingRef.current = refreshing;
     if (keyChanged) {
-      transition({ type: 'change', at: performance.now(), own: ownRef.current });
+      transition({ type: 'change', at: performance.now(), own: ownRef.current }, children);
     }
     if (refreshFlipped) {
       transition(
         refreshing
           ? { type: 'refreshStart', at: performance.now() }
           : { type: 'refreshEnd', at: performance.now() },
+        // Быстрая доставка: refreshEnd открывает свап прямо здесь — новая
+        // сторона от этого коммита, а не от прошлого.
+        refreshing ? undefined : children,
       );
     }
-  }, [valueKey, refreshing, transition]);
+  }, [valueKey, refreshing, transition, children]);
 
   // Один таймер на дедлайн из состояния: машина — единственный авторитет
   // таймингов (hold-свап, чистка оверлея, страховка от застрявшего dim —
@@ -202,8 +212,9 @@ export function LiveValue({
     return () => clearTimeout(timer);
   }, [state, transition]);
 
-  // Снапшот детей — последним эффектом каждого коммита: переходы выше
-  // читают прошлый коммит как «старую сторону». Заодно — натуральная
+  // Снапшот детей — последним эффектом каждого коммита: диспетч-эффекты
+  // выше шлют детей этого коммита вторым аргументом, а таймерные переходы
+  // (due) к срабатыванию читают реф уже актуальным. Заодно — натуральная
   // высота idle-коробки (дробная): стартовая точка движения высоты.
   useLayoutEffect(() => {
     childrenPropRef.current = children;
@@ -227,9 +238,9 @@ export function LiveValue({
   // замороженной коробки и наружу не торчит; движение — от натуральной
   // высоты idle прошлых коммитов к высоте нового значения. Замеры —
   // дробные getBoundingClientRect (offsetHeight округляет до целого —
-  // субпиксельные щелчки на входе/выходе). Длительность --live-blur-in
-  // (380мс; reduced 100мс), кривая --dl-ease: размер и резкость
-  // доезжают вместе. На settle контейнер разбирается, лок высоты
+  // субпиксельные щелчки на входе/выходе). Длительность — blurInMs
+  // таймингов машины (токен --live-blur-in), кривая --dl-ease: размер и
+  // резкость доезжают вместе. На settle контейнер разбирается, лок высоты
   // снимается — натуральные размеры idle-рендера совпадают с
   // доезженными, прыжка нет. Режим B и own без свапа — не затронуты.
   useLayoutEffect(() => {
@@ -238,7 +249,11 @@ export function LiveValue({
     const oldOverlay = oldOverlayRef.current;
     const newOverlay = newOverlayRef.current;
     if (state.phase !== 'swap' || mode !== 'crossfade' || !swap || !oldOverlay || !newOverlay || !root) {
-      // Вне свапа лока нет: корневая коробка персистентна — снимаем.
+      // Вне свапа лока нет: доигрывающие движения гасим — own-смена в
+      // разгар свапа уводит в idle мгновенно, и незаконченная анимация
+      // высоты не должна доигрывать поверх натуральной коробки.
+      widthAnimationRef.current?.cancel();
+      heightAnimationRef.current?.cancel();
       if (root) {
         root.style.height = '';
       }
@@ -259,7 +274,7 @@ export function LiveValue({
     widthAnimationRef.current?.cancel();
     heightAnimationRef.current?.cancel();
     const timing: KeyframeAnimationOptions = {
-      duration: reducedMotion ? 100 : 380,
+      duration: timingsRef.current.blurInMs,
       easing: 'cubic-bezier(0.32, 0.72, 0, 1)',
     };
     widthAnimationRef.current = swap.animate(
@@ -270,7 +285,7 @@ export function LiveValue({
       [{ height: `${startHeight}px` }, { height: `${targetHeight}px` }],
       timing,
     );
-  }, [state, mode, reducedMotion]);
+  }, [state, mode]);
 
   if (state.phase === 'stale') {
     return (

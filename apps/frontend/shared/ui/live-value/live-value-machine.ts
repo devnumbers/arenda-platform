@@ -49,8 +49,9 @@ export type LiveValueReduction = {
 };
 
 /** Канон: 350 dim + 300 hold = 650 до свапа; чистка оверлея после
- * затухания вспышки (1200) с малым хвостом. */
-export const CANON_TIMINGS: LiveValueTimings = { staleTotalMs: 650, settleMs: 1250 };
+ * затухания вспышки (1200) с малым хвостом; проявление нового значения —
+ * blur-кроссфейд (токен --live-blur-in). */
+export const CANON_TIMINGS: LiveValueTimings = { staleTotalMs: 650, settleMs: 1250, blurInMs: 380 };
 
 /** Страховочный дедлайн фазы dim (грабля живой приёмки #880): событие
  * конца перечитывания не может потеряться навсегда — при_hold-таймер без
@@ -60,13 +61,16 @@ export const STALE_MAX_MS = 4000;
 
 /** reduced-motion: ~150мс-порядок на фазу (§8, решение владельца
  * 2026-09-08) — CSS-токены укорачиваются медиазапросом, JS ждёт то же. */
-export const REDUCED_TIMINGS: LiveValueTimings = { staleTotalMs: 250, settleMs: 300 };
+export const REDUCED_TIMINGS: LiveValueTimings = { staleTotalMs: 250, settleMs: 300, blurInMs: 100 };
 
 export type LiveValueTimings = {
   /** Минимальная суммарная пауза dim+hold до свапа от начала dim. */
   readonly staleTotalMs: number;
   /** От старта свапа до снятия оверлея (вспышка 1200 + хвост). */
   readonly settleMs: number;
+  /** Проявление нового значения blur-кроссфейдом (WAAPI-движения размера
+   * и резкости в компоненте) — токен --live-blur-in tokens.css. */
+  readonly blurInMs: number;
 };
 
 /** Дедлайн фазы одной формулой — и в переходах, и у компонента один

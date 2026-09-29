@@ -105,6 +105,13 @@ describe('live-value machine — канон C: dim → hold → кроссфей
     expect(dueAt(step)).toBeNull();
   });
 
+  it('blur-кроссфейд живёт в таймингах машины синхронно токену --live-blur-in', () => {
+    // tokens.css: --live-blur-in 380мс (канон) / 100мс (reduced) —
+    // JS-движения размера и резкости ждут те же интервалы.
+    expect(CANON_TIMINGS.blurInMs).toBe(380);
+    expect(REDUCED_TIMINGS.blurInMs).toBe(100);
+  });
+
   it('reduced-motion укорачивает hold и чистку до ~150мс-порядка', () => {
     expect(REDUCED_TIMINGS.staleTotalMs).toBeLessThanOrEqual(250);
     expect(REDUCED_TIMINGS.settleMs).toBeLessThanOrEqual(300);
