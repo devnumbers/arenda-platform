@@ -2,7 +2,7 @@ import 'server-only';
 import { cookies } from 'next/headers';
 import { BACKEND_URL } from '@/shared/config/backend-url';
 import { ApiError } from './errors';
-import { apiErrorFromResponse } from './problem';
+import { normalizeRequestHeaders, parseTransportResponse } from './transport-wire';
 
 const BACKEND_TIMEOUT_MS = 30000;
 
@@ -25,13 +25,7 @@ export async function serverApiClient<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const headers = new Headers(options.headers);
-  if (!headers.has('Accept')) {
-    headers.set('Accept', 'application/json');
-  }
-  if (typeof options.body === 'string' && !headers.has('Content-Type')) {
-    headers.set('Content-Type', 'application/json');
-  }
+  const headers = normalizeRequestHeaders(options);
 
   const cookieStore = await cookies();
   const cookieHeader = cookieStore.toString();
@@ -61,13 +55,5 @@ export async function serverApiClient<T>(
     clearTimeout(timeoutId);
   }
 
-  if (!response.ok) {
-    throw await apiErrorFromResponse(response);
-  }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  return response.json() as Promise<T>;
+  return parseTransportResponse<T>(response);
 }
