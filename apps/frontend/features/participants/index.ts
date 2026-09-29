@@ -1,4 +1,10 @@
 export {
+  fetchParticipant,
+  fetchParticipantsSummary,
+  participantQueryOptions,
+  participantsSummaryQueryOptions,
+} from './api/queries';
+export {
   useParticipantsList,
   useParticipantsSummary,
   useRevokeAllParticipants,

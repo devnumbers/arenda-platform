@@ -29,6 +29,7 @@ import {
 } from '../lib/notification-settings';
 import { PushPermissionCard } from './settings-permission-card';
 import { NotificationPermissionSheet } from './settings-permission-sheet';
+import { NotificationSettingsContentSkeleton } from './notification-settings-skeleton';
 
 /** Описания групп — с макета 1789-100250 (карта #734, #746). */
 const GROUP_DESCRIPTIONS: Record<NotificationSettingsCategory, string> = {
@@ -84,9 +85,17 @@ export function NotificationSettingsScreen(): JSX.Element {
     server: pushPrefsQuery.data,
     local: localPush,
   });
-  // Пуш-тумблеры рисуем скелетоном, пока неясно состояние (проба браузера
-  // или GET устройства при живой подписке).
-  const pushLoading = !probeSettled || (endpoint !== null && pushPrefsQuery.isPending);
+  // Пуш-состав (мастер, карточка «Разрешите пуши», тумблеры) известен только
+  // после гидратации: до оседания пробы экран целиком держит контентный
+  // скелетон (шелл — на странице, §7 — шапка скелетоном не подменяется);
+  // поздняя вставка карточки между секциями сдвигала бы их (аудит #877,
+  // CLS 0.15).
+  if (!probeSettled) {
+    return <NotificationSettingsContentSkeleton />;
+  }
+  // Пуш-тумблеры рисуем скелетоном, пока неясно состояние (GET устройства
+  // при живой подписке).
+  const pushLoading = endpoint !== null && pushPrefsQuery.isPending;
 
   const currentPushState = (): PushDevicePreferences =>
     resolvePushState(endpoint, pushPrefsQuery.data, localPush);

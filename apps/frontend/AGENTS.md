@@ -16,7 +16,7 @@ Rules for the Next.js frontend in `apps/frontend`. Also follow the root `AGENTS.
 
 Before building or changing any screen, surface, or design-layer component, read `DESIGN.md` (same directory): breakpoints and widths, header/page anatomy, which surface to choose (route / fullscreen overlay / modal / picker menu), pickers and wheels, list states, icons, motion/hover/focus, date and money formatting, Figma-first workflow, and how owner design decisions get recorded. The live catalog of design-layer components is the `/ui-kit` route.
 
-New UI (payments design layer onward, ADR 0050) is shadcn/ui over Radix primitives styled with Tailwind utilities on the tokens (`shared/styles/tokens.css`; Tailwind v4 wired in `app/globals.css`) — do not use HeroUI in new code.
+New UI (payments design layer onward, ADR 0050) is shadcn/ui over Radix primitives styled with Tailwind utilities on the tokens (`shared/styles/tokens.css`; Tailwind v4 wired in `app/globals.css`). HeroUI снесён целиком (аменд ADR 0050 2026-09-26, тикет #901) — импортировать его неоткуда и незачем.
 
 Icons: use only the canonical set in `shared/assets/icons` (owner-approved SVGs from Figma — Bold/R 24×24 plus the S 16×16 style; mapping in `shared/assets/icons/README.md`). Never draw, inline, or generate icons yourself — a missing icon means exporting its node from Figma or asking the owner (DESIGN.md §10). Render small sizes with the same file, never create size-duplicate files.
 

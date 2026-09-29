@@ -1,0 +1,343 @@
+'use client';
+
+import {
+  useCallback,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type JSX,
+  type ReactNode,
+} from 'react';
+import { useReducedMotion } from '@/shared/lib/hooks/useReducedMotion';
+import { cn } from '@/shared/lib/cn';
+import {
+  CANON_TIMINGS,
+  REDUCED_TIMINGS,
+  initialLiveValueState,
+  reduceLiveValue,
+  type LiveValueEvent,
+  type LiveValueMode,
+  type LiveValueState,
+  type LiveValueTimings,
+} from './live-value-machine';
+import styles from './LiveValue.module.css';
+
+export type LiveValueProps = {
+  /** Сменяемый дискриминатор значения (роль, статус, метка): сравнение
+   * prev/next запускает канон. Дети — визуал ТЕКУЩЕГО значения. */
+  readonly valueKey: string | number;
+  /** Значение в полёте перечитывания (react-query isFetching): фаза dim
+   * канона C. В режиме B приглушения нет. */
+  readonly refreshing?: boolean;
+  /** Своё изменение (локальная мутация, оптимистичный UI) — без
+   * анимаций: вспышка и dim — сигнал «кто-то другой поменял». */
+  readonly own?: boolean;
+  /** Канон подачи: crossfade — базовый C (поля, пилюли); flash — B
+   * (плотные списки и таблицы, без кроссфейда). */
+  readonly mode?: LiveValueMode;
+  readonly className?: string;
+  readonly children: ReactNode;
+};
+
+/** Снапшоты детей для фаз: dim держит старое значение, свап кладёт
+ * старое/новое друг на друга. В state, не в рефах — рендер читает
+ * только состояние (правило react-hooks/refs). */
+type LiveValueSnapshots = {
+  readonly stale: ReactNode | null;
+  readonly old: ReactNode | null;
+  readonly fresh: ReactNode | null;
+};
+
+const NO_SNAPSHOTS: LiveValueSnapshots = { stale: null, old: null, fresh: null };
+
+/**
+ * Оживающее значение — канон C подачи realtime-обновлений (решение
+ * владельца 25.09 по прототипу #879, тикет #880): чужая правка по кадру
+ * приглушает старое значение (dim 350мс), пауза держится на фактическое
+ * перечитывание (≥300мс), новое проявляется blur-кроссфейдом (220/380мс)
+ * с подсветкой-вспышкой (1200мс). Эталон — DESIGN.md §8, раздел
+ * „Realtime-оживание значения — канон C“ (apps/frontend/DESIGN.md:474-520).
+ *
+ * Источник правки компоненту неизвестен: он анимирует любую смену
+ * `valueKey`, приехавшую через react-query (SSE-кадры лишь инвалидируют
+ * семейства — ADR 0062 §2, wiring #717), поэтому потребители оживают без
+ * правок при появлении новых инвалидаций. Смена без перечитывания
+ * (влитие в кэш) идёт сразу в кроссфейд.
+ *
+ * Layout не дёргается: коробка свапа ЕДЕТ по ширине от старого значения
+ * к новому той же кривой и длительностью, что проявляет новое (решение
+ * владельца 28.09 — «как у Apple»: контейнер анимируется вместе с
+ * контентом; числа — на tabular-nums, у смен той же длины ширины не
+ * меняется вовсе); при разношироких значениях ничего не клипается — оба
+ * слоя абсолютом max-content. Вспышка — на коробке с компенсирующими
+ * полями. Правило E демо: анимируем только реально изменившееся поле,
+ * экран целиком не мигает. Reduced-motion укорачивает фазы до
+ * ~150мс-порядка (§8) — CSS через медиа-токены, JS-ожидания через
+ * REDUCED_TIMINGS. Машина состояний и тайминги — в
+ * `live-value-machine.ts` (чистые, тестированные); здесь только клей:
+ * переходы диспетчатся из layout-эффектов до краски (классы свапа — в
+ * первом кадре), рендер читает только state.
+ */
+export function LiveValue({
+  valueKey,
+  refreshing = false,
+  own = false,
+  mode = 'crossfade',
+  className,
+  children,
+}: LiveValueProps): JSX.Element {
+  const reducedMotion = useReducedMotion();
+  const timings: LiveValueTimings = reducedMotion ? REDUCED_TIMINGS : CANON_TIMINGS;
+
+  const [state, setState] = useState<LiveValueState>(initialLiveValueState);
+  const [snapshots, setSnapshots] = useState<LiveValueSnapshots>(NO_SNAPSHOTS);
+
+  // Хранение машины — в рефах: эффекты переходов читают прошлый коммит
+  // как «старую сторону», рендер в рефы не заглядывает.
+  const stateRef = useRef(state);
+  const timingsRef = useRef(timings);
+  const modeRef = useRef(mode);
+  const ownRef = useRef(own);
+  const childrenPropRef = useRef(children);
+  const lastCommittedChildrenRef = useRef<ReactNode>(children);
+  const staleChildrenRef = useRef<ReactNode>(children);
+  const oldChildrenRef = useRef<ReactNode>(children);
+  const newChildrenRef = useRef<ReactNode>(children);
+  const prevKeyRef = useRef(valueKey);
+  const prevRefreshingRef = useRef(refreshing);
+  // DOM-узлы свапа для замера ширины (Apple-рецепт «контейнер едет
+  // вместе с контентом»): эффект ниже лочит коробку на старой ширине и
+  // едет к новой той же кривой, что проявляет значение.
+  const rootRef = useRef<HTMLSpanElement | null>(null);
+  const swapRef = useRef<HTMLSpanElement | null>(null);
+  const oldOverlayRef = useRef<HTMLSpanElement | null>(null);
+  const newOverlayRef = useRef<HTMLSpanElement | null>(null);
+  const widthAnimationRef = useRef<Animation | null>(null);
+  const heightAnimationRef = useRef<Animation | null>(null);
+  // Натуральная высота idle-коробки прошлых коммитов (дробная): с неё
+  // стартует движение высоты. Замер — в последнем эффекте коммита (см.
+  // ниже), только в idle — в других фазах коробка перекроена свапом.
+  const naturalHeightRef = useRef<number | null>(null);
+  // Generation последнего свапа, чьё движение уже запущено: смена значения
+  // в разгар свапа кладёт pendingChange новым объектом state без смены
+  // generation (машина ставит его в очередь) — эффект размеров
+  // перезапускается, но движение играть заново не должен. Новое
+  // generation приезжает только переигрыванием свапа на settle.
+  const lastSwapGenerationRef = useRef(-1);
+
+  // Стабильный переход: читает только реф-хранилище, событий — от эффектов.
+  // Дети коммита (committedChildren) диспетч-эффекты шлют вторым
+  // аргументом: они стоят выше снапшота детей, реф ещё держит прошлый
+  // коммит — без аргумента свап играл бы старое→старое. Таймерный путь
+  // (due) зовёт без аргумента: к сгоревшему дедлайну снапшот актуален.
+  const transition = useCallback((event: LiveValueEvent, committedChildren?: ReactNode): void => {
+    const prevPhase = stateRef.current.phase;
+    const prevGeneration = stateRef.current.generation;
+    const result = reduceLiveValue(stateRef.current, event, modeRef.current, timingsRef.current);
+    if (result.state === stateRef.current) {
+      return;
+    }
+    const next = result.state;
+    if (next.phase === 'stale' && prevPhase === 'idle') {
+      // Вход в dim: снапшот прошлого коммита — ещё старое значение
+      // (данные прилетят позже), оно остаётся на экране приглушённым.
+      staleChildrenRef.current = lastCommittedChildrenRef.current;
+    }
+    if (next.generation !== prevGeneration) {
+      // Вход в свап: старая сторона — то, что было на экране.
+      oldChildrenRef.current =
+        prevPhase === 'stale'
+          ? staleChildrenRef.current
+          : prevPhase === 'swap'
+            ? // Переигранный свап: старая сторона — то, что только что
+              // проявилось (новая сторона прошлого свапа).
+              newChildrenRef.current
+            : lastCommittedChildrenRef.current;
+      // Новая сторона — дети коммита, диспетчащего свап; таймерный путь
+      // (hold-свап, переигранный свап по due) читает реф — к тому моменту
+      // снапшот последним эффектом уже актуален.
+      newChildrenRef.current = committedChildren ?? childrenPropRef.current;
+    }
+    stateRef.current = next;
+    const nextSnapshots: LiveValueSnapshots = {
+      stale: staleChildrenRef.current,
+      old: oldChildrenRef.current,
+      fresh: newChildrenRef.current,
+    };
+    setState(next);
+    setSnapshots(nextSnapshots);
+  }, []);
+
+  // Зеркало пропов для эффектов: layout-эффекты не читают пропы прошлых
+  // замыканий, пишем актуальные значения до переходных эффектов (порядок
+  // эффектов — определение выше-раньше).
+  useLayoutEffect(() => {
+    timingsRef.current = timings;
+    modeRef.current = mode;
+    ownRef.current = own;
+  }, [timings, mode, own]);
+
+  // Смена значения и перечитывание — одним эффектом до краски (классы
+  // фаз в первом кадре): оба входа сверяются с прошлым коммитом в одном
+  // месте, порядок событий машины не зависит от порядка двух эффектов.
+  useLayoutEffect(() => {
+    const keyChanged = prevKeyRef.current !== valueKey;
+    const refreshFlipped = prevRefreshingRef.current !== refreshing;
+    if (!keyChanged && !refreshFlipped) {
+      return;
+    }
+    prevKeyRef.current = valueKey;
+    prevRefreshingRef.current = refreshing;
+    if (keyChanged) {
+      transition({ type: 'change', at: performance.now(), own: ownRef.current }, children);
+    }
+    if (refreshFlipped) {
+      transition(
+        refreshing
+          ? { type: 'refreshStart', at: performance.now() }
+          : { type: 'refreshEnd', at: performance.now() },
+        // Быстрая доставка: refreshEnd открывает свап прямо здесь — новая
+        // сторона от этого коммита, а не от прошлого.
+        refreshing ? undefined : children,
+      );
+    }
+  }, [valueKey, refreshing, transition, children]);
+
+  // Один таймер на дедлайн из состояния: машина — единственный авторитет
+  // таймингов (hold-свап, чистка оверлея, страховка от застрявшего dim —
+  // все дедлайны в state.dueAt). Отсчёт от абсолютного дедлайна —
+  // перезапуск эффекта не сдвигает момент срабатывания.
+  useLayoutEffect(() => {
+    if (state.dueAt === null) {
+      return;
+    }
+    const timer = setTimeout(
+      () => transition({ type: 'due', at: performance.now() }),
+      Math.max(0, state.dueAt - performance.now()),
+    );
+    return () => clearTimeout(timer);
+  }, [state, transition]);
+
+  // Снапшот детей — последним эффектом каждого коммита: диспетч-эффекты
+  // выше шлют детей этого коммита вторым аргументом, а таймерные переходы
+  // (due) к срабатыванию читают реф уже актуальным. Заодно — натуральная
+  // высота idle-коробки (дробная): стартовая точка движения высоты.
+  useLayoutEffect(() => {
+    childrenPropRef.current = children;
+    lastCommittedChildrenRef.current = children;
+    const root = rootRef.current;
+    if (root && stateRef.current.phase === 'idle') {
+      naturalHeightRef.current = root.getBoundingClientRect().height;
+    }
+  });
+
+  // Размер свапа едет, а не щёлкает, ОБЕИМИ осями (доработки 28.09,
+  // решения владельца «как у Apple»): контейнер размера контента — та же
+  // динамика, что у Dynamic Island/SwiftUI, где фрейм анимируется тем же
+  // движением, что и содержимое (WWDC23 «Animate with springs»: единое
+  // движение лэйаута и контента — оси едут одновременно, не по очереди).
+  // Ширина: статичная целевая на внутренней коробке, движение от ширины
+  // старого значения — WAAPI (CSS-переход на элементе, вмонтированном в
+  // этот же кадр, не стартует — проверено живым замером #880). Высота:
+  // лок на ВНЕШНЕЙ коробке (флекс-элемент пилюли) — структурная
+  // перестройка свапа (паддинги flashBox, ~3.5px) остаётся внутри
+  // замороженной коробки и наружу не торчит; движение — от натуральной
+  // высоты idle прошлых коммитов к высоте нового значения. Замеры —
+  // дробные getBoundingClientRect (offsetHeight округляет до целого —
+  // субпиксельные щелчки на входе/выходе). Длительность — blurInMs
+  // таймингов машины (токен --live-blur-in), кривая --dl-ease: размер и
+  // резкость доезжают вместе. Инлайн-лок высоты стоит на цели с первого
+  // кадра, движение играет поверх инлайна (анимации без fill — после
+  // finish держит инлайн). На settle контейнер разбирается, лок высоты
+  // снимается — натуральные размеры idle-рендера совпадают с
+  // доезженными, прыжка нет. Режим B и own без свапа — не затронуты.
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    const swap = swapRef.current;
+    const oldOverlay = oldOverlayRef.current;
+    const newOverlay = newOverlayRef.current;
+    if (state.phase !== 'swap' || mode !== 'crossfade' || !swap || !oldOverlay || !newOverlay || !root) {
+      // Вне свапа лока нет: доигрывающие движения гасим — own-смена в
+      // разгар свапа уводит в idle мгновенно, и незаконченная анимация
+      // высоты не должна доигрывать поверх натуральной коробки.
+      widthAnimationRef.current?.cancel();
+      heightAnimationRef.current?.cancel();
+      if (root) {
+        root.style.height = '';
+      }
+      return;
+    }
+    if (state.generation === lastSwapGenerationRef.current) {
+      // Тот же свап: эффект перезапустился на смене в очереди
+      // (pendingChange — объект состояния новый, generation прежний).
+      // Инлайн-локи ширины/высоты стоят с прошлого запуска этого
+      // generation, идущие движения размера доигрывают: перезапуск
+      // анимаций срывал бы их к стартовым размерам, пока blur-кроссфейд
+      // (remount-ключ generation) не переигрывается.
+      return;
+    }
+    lastSwapGenerationRef.current = state.generation;
+    const startWidth = Math.max(oldOverlay.getBoundingClientRect().width, 1);
+    const targetWidth = Math.max(newOverlay.getBoundingClientRect().width, 1);
+    const startHeight =
+      naturalHeightRef.current ??
+      Math.max(oldOverlay.getBoundingClientRect().height, newOverlay.getBoundingClientRect().height);
+    const targetHeight = Math.max(
+      oldOverlay.getBoundingClientRect().height,
+      newOverlay.getBoundingClientRect().height,
+    );
+    swap.style.width = `${targetWidth}px`;
+    swap.style.height = `${targetHeight}px`;
+    // Лок внешней коробки стоит на ЦЕЛЕВОЙ высоте (симметрично ширине
+    // свапа выше): WAAPI-движение играет поверх инлайна и без fill —
+    // после finish инлайн держит цель до самого settle, прыжка нет.
+    root.style.height = `${targetHeight}px`;
+    widthAnimationRef.current?.cancel();
+    heightAnimationRef.current?.cancel();
+    const timing: KeyframeAnimationOptions = {
+      duration: timingsRef.current.blurInMs,
+      easing: 'cubic-bezier(0.32, 0.72, 0, 1)',
+    };
+    widthAnimationRef.current = swap.animate(
+      [{ width: `${startWidth}px` }, { width: `${targetWidth}px` }],
+      timing,
+    );
+    heightAnimationRef.current = root.animate(
+      [{ height: `${startHeight}px` }, { height: `${targetHeight}px` }],
+      timing,
+    );
+  }, [state, mode]);
+
+  if (state.phase === 'stale') {
+    return (
+      <span ref={rootRef} className={cn(styles.root, styles.stale, 'tabular-nums', className)}>
+        {snapshots.stale ?? children}
+      </span>
+    );
+  }
+  if (state.phase === 'swap') {
+    return (
+      <span ref={rootRef} className={cn(styles.root, 'tabular-nums', className)}>
+        <span key={state.generation} className={styles.flashBox}>
+          {mode === 'crossfade' ? (
+            <span ref={swapRef} className={styles.swap}>
+              <span ref={oldOverlayRef} className={styles.oldValue} aria-hidden="true">
+                {snapshots.old}
+              </span>
+              <span ref={newOverlayRef} className={styles.newValue}>
+                {snapshots.fresh}
+              </span>
+            </span>
+          ) : (
+            children
+          )}
+        </span>
+      </span>
+    );
+  }
+  return (
+    <span ref={rootRef} className={cn(styles.root, 'tabular-nums', className)}>
+      {children}
+    </span>
+  );
+}

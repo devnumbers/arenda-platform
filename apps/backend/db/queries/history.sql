@@ -8,7 +8,8 @@ RETURNING id;
 
 -- Чтение журнала (карта #704, тикет #708, ADR 0061 §7): страница ленты
 -- «История действий» по объектам read-скоупа читателя. Область видимости —
--- SQL-функция actor_can_read_history (000137): владелец (включая архивные
+-- SQL-функция actor_can_read_property (000142, до #884 —
+-- actor_can_read_history 000137): владелец (включая архивные
 -- объекты) и активные участники неархивных объектов; suspended и чужие
 -- объекты строк не отдают (privacy-404 — существование не раскрывается).
 --
@@ -48,7 +49,7 @@ SELECT aj.id,
        aj.created_at
 FROM action_journal aj
 JOIN properties p ON p.id = aj.property_id
-WHERE actor_can_read_history(aj.property_id, sqlc.arg('actor')::uuid)
+WHERE actor_can_read_property(aj.property_id, sqlc.arg('actor')::uuid)
   AND (sqlc.arg('property_ids')::text = ''
        OR aj.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[]))
   AND (sqlc.arg('actor_ids')::text = ''
@@ -111,7 +112,7 @@ SELECT aj.id,
        aj.created_at
 FROM action_journal aj
 JOIN properties p ON p.id = aj.property_id
-WHERE actor_can_read_history(aj.property_id, sqlc.arg('actor')::uuid)
+WHERE actor_can_read_property(aj.property_id, sqlc.arg('actor')::uuid)
   AND (sqlc.arg('property_ids')::text = ''
        OR aj.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[]))
   AND (sqlc.arg('actor_ids')::text = ''
@@ -166,14 +167,14 @@ LIMIT sqlc.arg('page_limit')::int;
 WITH scope_participant(user_id, is_owner, role_rank) AS (
     SELECT p.owner_id, TRUE, 0
     FROM properties p
-    WHERE actor_can_read_history(p.id, sqlc.arg('actor')::uuid)
+    WHERE actor_can_read_property(p.id, sqlc.arg('actor')::uuid)
       AND (sqlc.arg('property_ids')::text = ''
            OR p.id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[]))
     UNION
     SELECT m.user_id, FALSE, CASE WHEN m.role = 'full_access' THEN 1 ELSE 2 END
     FROM property_members m
     JOIN properties p ON p.id = m.property_id
-    WHERE actor_can_read_history(m.property_id, sqlc.arg('actor')::uuid)
+    WHERE actor_can_read_property(m.property_id, sqlc.arg('actor')::uuid)
       AND (sqlc.arg('property_ids')::text = ''
            OR m.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[]))
     UNION
@@ -181,7 +182,7 @@ WITH scope_participant(user_id, is_owner, role_rank) AS (
            CASE aj.actor_role WHEN 'owner' THEN 0 WHEN 'full_access' THEN 1 ELSE 2 END
     FROM action_journal aj
     JOIN properties p ON p.id = aj.property_id
-    WHERE actor_can_read_history(aj.property_id, sqlc.arg('actor')::uuid)
+    WHERE actor_can_read_property(aj.property_id, sqlc.arg('actor')::uuid)
       AND (sqlc.arg('property_ids')::text = ''
            OR aj.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[]))
       AND aj.actor_id IS NOT NULL
@@ -215,7 +216,7 @@ LEFT JOIN LATERAL (
     ORDER BY pp.created_at, pp.id
     LIMIT 1
 ) ph ON true
-WHERE actor_can_read_history(p.id, sqlc.arg('actor')::uuid)
+WHERE actor_can_read_property(p.id, sqlc.arg('actor')::uuid)
   AND (sqlc.arg('property_ids')::text = ''
        OR p.id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[]))
 ORDER BY p.name ASC, p.id ASC;

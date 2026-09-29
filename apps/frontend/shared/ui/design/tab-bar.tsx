@@ -51,9 +51,11 @@ const useIsomorphicLayoutEffect = typeof window === 'undefined' ? useEffect : us
 
 /** Глушит TabBar, пока монтирован вызывавший компонент (канонично —
  * StickyBottomBar); enabled=false — экран живёт с футером (условные
- * ветви вроде создания контакта вне визарда #807). Layout-эффект меняет
- * счётчик до отрисовки кадра — футер не мигает поверх нижней кнопки
- * действия; серверу эффект не нужен. */
+ * ветви вроде создания контакта вне визарда #807). Пилюли десктопа это
+ * не касается: «хром ПК постоянен» — нижняя панель на ПК сужается до
+ * колонки, углы свободны (решение владельца 25.09, правка канона #561,
+ * тикет #865). Layout-эффект меняет счётчик до отрисовки кадра — футер
+ * не мигает поверх нижней кнопки действия; серверу эффект не нужен. */
 export function useTabBarSuppression(enabled = true): void {
   const { acquire, release } = useContext(TabBarSuppressionContext);
   useIsomorphicLayoutEffect(() => {
@@ -65,10 +67,8 @@ export function useTabBarSuppression(enabled = true): void {
   }, [enabled, acquire, release]);
 }
 
-/** Состояние глушения — для нижнего хрома, который прячется вместе с
- * TabBar, пока смонтирована нижняя панель действия (пилюли десктопа
- * #561): вне провайдера present=false (хром неуместен, рендер null),
- * bars>0 — панель перекрывает низ. */
+/** Состояние глушения: пилюли десктопа его больше не слушают (хром ПК
+ * постоянен, решение владельца 25.09 #865) и читают только present. */
 export function useTabBarSuppressionState(): TabBarSuppression {
   return useContext(TabBarSuppressionContext);
 }

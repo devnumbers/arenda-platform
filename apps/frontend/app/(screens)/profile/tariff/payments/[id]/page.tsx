@@ -10,9 +10,7 @@ export const metadata: Metadata = {
  * дата-время платежа, он известен только после загрузки (#624). */
 export default async function PaymentDetailPage({
   params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+}: PageProps<'/profile/tariff/payments/[id]'>) {
   const { id } = await params;
 
   return <PaymentDetail id={id} />;

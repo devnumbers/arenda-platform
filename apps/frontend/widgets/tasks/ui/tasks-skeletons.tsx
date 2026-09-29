@@ -19,20 +19,23 @@ import {
 const MUTED = skeletonBlockClass('muted');
 
 /** Строка задачи-заглушка: каркас TaskRow — кружок-чекбокс 24, колонка
- * «название 16/18 + строка объекта 14/16 + строка времени 14/16» с зазором
- * 6 (px-6 py-3 строки). */
+ * «название 16/18 + строки 14/16 с зазором 6» (px-6 py-3 строки). lines —
+ * сколько строк в колонке: 3 — глобальная лента (объект + время, #523),
+ * 2 — объектный экран (время, #499), 1 — строка без времени. */
 function SkeletonTaskRow({
   widths,
+  lines = 3,
 }: {
   readonly widths: SkeletonRowWidths;
+  readonly lines?: 1 | 2 | 3;
 }): JSX.Element {
   return (
     <div aria-hidden className="flex w-full items-start gap-4 px-6 py-3">
       <Skeleton className={`mt-px h-6 w-6 shrink-0 rounded-pill ${MUTED}`} />
       <span className="flex min-w-0 flex-1 flex-col gap-1.5">
         <Skeleton className={`h-[18px] ${widths.title} ${MUTED}`} />
-        <Skeleton className={`h-4 ${widths.subtitle} ${MUTED}`} />
-        <Skeleton className={`h-4 w-1/4 ${MUTED}`} />
+        {lines >= 2 && <Skeleton className={`h-4 ${widths.subtitle} ${MUTED}`} />}
+        {lines >= 3 && <Skeleton className={`h-4 w-1/4 ${MUTED}`} />}
       </span>
     </div>
   );
@@ -40,7 +43,13 @@ function SkeletonTaskRow({
 
 /** Секция-карточка-заглушка: каркас TaskSectionCard — заголовок H3 20/24
  * (pt-6 pb-2) и строки задач, снизу баланс 8. */
-function SkeletonSectionCard({ rows }: { readonly rows: number }): JSX.Element {
+function SkeletonSectionCard({
+  rows,
+  lines = 3,
+}: {
+  readonly rows: number;
+  readonly lines?: 1 | 2 | 3;
+}): JSX.Element {
   const widths = skeletonRowWidths(rows);
   return (
     <section aria-hidden className="mx-6 rounded-card bg-surface-muted pb-2">
@@ -49,7 +58,7 @@ function SkeletonSectionCard({ rows }: { readonly rows: number }): JSX.Element {
       </div>
       <div className="flex flex-col">
         {widths.map((rowWidths, index) => (
-          <SkeletonTaskRow key={index} widths={rowWidths} />
+          <SkeletonTaskRow key={index} widths={rowWidths} lines={lines} />
         ))}
       </div>
     </section>
@@ -80,6 +89,21 @@ export function TasksFeedSkeleton(): JSX.Element {
     <>
       <SkeletonSectionCard rows={3} />
       <SkeletonSectionCard rows={1} />
+      <SkeletonCompletedSection />
+    </>
+  );
+}
+
+/**
+ * Скелетон ленты задач объекта (#499, паритет — §7 DESIGN.md): та же
+ * композиция трёх блоков, строки без строки объекта — «название + время»,
+ * у строки без срока только название (анатомия TaskRow объектного экрана).
+ */
+export function TasksOfPropertySkeleton(): JSX.Element {
+  return (
+    <>
+      <SkeletonSectionCard rows={3} lines={2} />
+      <SkeletonSectionCard rows={1} lines={1} />
       <SkeletonCompletedSection />
     </>
   );

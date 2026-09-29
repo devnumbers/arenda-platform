@@ -7,9 +7,14 @@
 -- The visibility predicate is the global listings' (ticket #521): the
 -- actor's own rows plus the rows of the properties they share with an
 -- active membership (ADR 0028 read scope); a suspended membership grants
--- no read. The rules of archived properties are out of every read (map
--- #573). No single scope exists to resolve through the policy port — the
--- actor-scoped read carries its visibility predicate here, beside the data.
+-- no read. The composition lives in one place — the SQL function
+-- actor_can_read_property (000142, ADR 0028's derived read); the queries
+-- below call it and keep the feed's own stricter archive cut beside it:
+-- the rules of archived properties are out of every read (map #573) —
+-- the owner included, unlike the history canon where the owner's leg is
+-- unconditional. No single scope exists to resolve through the policy
+-- port — the actor-scoped read carries its visibility predicate here,
+-- beside the data.
 --
 -- Every per-row schedule computation (nearest date, overdue) runs against
 -- the property owner's calendar date (ADR 0048): the merged feed mixes
@@ -24,15 +29,7 @@
 -- lists them all the same.
 SELECT DISTINCT p.owner_id
 FROM properties p
-WHERE (
-       p.owner_id = sqlc.arg('actor')
-       OR EXISTS (
-            SELECT 1 FROM property_members pm
-            WHERE pm.property_id = p.id
-              AND pm.user_id = sqlc.arg('actor')
-              AND pm.status = 'active'
-          )
-      )
+WHERE actor_can_read_property(p.id, sqlc.arg('actor')::uuid)
   AND p.status != 'archived';
 
 -- name: ListGlobalPaymentRules :many
@@ -99,15 +96,7 @@ LEFT JOIN LATERAL (
     ORDER BY op.date ASC, op.id ASC
     LIMIT 1
 ) oldest ON true
-WHERE (
-       pay.owner_id = sqlc.arg('actor')
-       OR EXISTS (
-            SELECT 1 FROM property_members pm
-            WHERE pm.property_id = pay.property_id
-              AND pm.user_id = sqlc.arg('actor')
-              AND pm.status = 'active'
-          )
-      )
+WHERE actor_can_read_property(pay.property_id, sqlc.arg('actor')::uuid)
   AND p.status != 'archived'
   AND (sqlc.arg('search')::text = ''
        OR pay.title ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
@@ -143,15 +132,7 @@ JOIN (
               unnest(string_to_array(sqlc.arg('todays')::text, ',')::date[]) AS today
      ) AS t ON t.owner_id = pay.owner_id
 LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
-WHERE (
-       pay.owner_id = sqlc.arg('actor')
-       OR EXISTS (
-            SELECT 1 FROM property_members pm
-            WHERE pm.property_id = pay.property_id
-              AND pm.user_id = sqlc.arg('actor')
-              AND pm.status = 'active'
-          )
-      )
+WHERE actor_can_read_property(pay.property_id, sqlc.arg('actor')::uuid)
   AND p.status != 'archived'
   AND (sqlc.arg('search')::text = ''
        OR pay.title ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
@@ -185,15 +166,7 @@ LEFT JOIN LATERAL (
       AND op.status = 'planned'
       AND op.date < t.today
 ) agg ON true
-WHERE (
-       pay.owner_id = sqlc.arg('actor')
-       OR EXISTS (
-            SELECT 1 FROM property_members pm
-            WHERE pm.property_id = pay.property_id
-              AND pm.user_id = sqlc.arg('actor')
-              AND pm.status = 'active'
-          )
-      )
+WHERE actor_can_read_property(pay.property_id, sqlc.arg('actor')::uuid)
   AND p.status != 'archived';
 
 -- name: SumGlobalPaymentSearchCategories :many
@@ -211,15 +184,7 @@ SELECT pay.category_slug,
 FROM payments pay
 JOIN properties p ON p.id = pay.property_id
 LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
-WHERE (
-       pay.owner_id = sqlc.arg('actor')
-       OR EXISTS (
-            SELECT 1 FROM property_members pm
-            WHERE pm.property_id = pay.property_id
-              AND pm.user_id = sqlc.arg('actor')
-              AND pm.status = 'active'
-          )
-      )
+WHERE actor_can_read_property(pay.property_id, sqlc.arg('actor')::uuid)
   AND p.status != 'archived'
   AND (pay.category_slug IS NOT NULL OR pay.user_category_id IS NOT NULL)
   AND (sqlc.arg('search')::text = ''
@@ -256,15 +221,7 @@ LEFT JOIN LATERAL (
     ORDER BY pp.created_at, pp.id
     LIMIT 1
 ) ph ON true
-WHERE (
-       p.owner_id = sqlc.arg('actor')
-       OR EXISTS (
-            SELECT 1 FROM property_members pm
-            WHERE pm.property_id = p.id
-              AND pm.user_id = sqlc.arg('actor')
-              AND pm.status = 'active'
-          )
-      )
+WHERE actor_can_read_property(p.id, sqlc.arg('actor')::uuid)
   AND p.status != 'archived'
   AND (sqlc.arg('search')::text = ''
        OR p.name ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
@@ -299,11 +256,14 @@ SELECT pay.id,
        CASE WHEN pay.owner_id = sqlc.arg('actor') THEN 'owner' ELSE pm.role END::text AS actor_role
 FROM payments pay
 JOIN properties p ON p.id = pay.property_id
+-- The role's row only — the visibility is the function call in the WHERE:
+-- the join's active-status condition is the membership snapshot's, not a
+-- second copy of the predicate.
 LEFT JOIN property_members pm ON pm.property_id = pay.property_id
      AND pm.user_id = sqlc.arg('actor')
      AND pm.status = 'active'
 WHERE pay.id = ANY(string_to_array(sqlc.arg('ids')::text, ',')::uuid[])
-  AND (pay.owner_id = sqlc.arg('actor') OR pm.user_id IS NOT NULL)
+  AND actor_can_read_property(pay.property_id, sqlc.arg('actor')::uuid)
   AND p.status != 'archived'
 ORDER BY pay.id
 FOR UPDATE OF pay;
@@ -322,15 +282,7 @@ WHERE pay.property_id = p.id
   AND pay.favorite_order IS NOT NULL
   AND (sqlc.arg('keep_ids')::text = ''
        OR pay.id <> ALL(string_to_array(sqlc.arg('keep_ids')::text, ',')::uuid[]))
-  AND (
-       pay.owner_id = sqlc.arg('actor')
-       OR EXISTS (
-            SELECT 1 FROM property_members pm
-            WHERE pm.property_id = pay.property_id
-              AND pm.user_id = sqlc.arg('actor')
-              AND pm.status = 'active'
-          )
-      )
+  AND actor_can_read_property(pay.property_id, sqlc.arg('actor')::uuid)
   AND p.status != 'archived';
 
 -- name: SetPaymentFavoriteOrder :execrows

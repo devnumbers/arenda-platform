@@ -2,8 +2,9 @@
 
 import type { JSX } from 'react';
 import { BoldHome, BoldObjects, CheckBoxFalse, CheckBoxTrue, Minus } from '@/shared/assets/icons';
+import NextLink from 'next/link';
 import { ROUTES } from '@/shared/config/routes';
-import { EmptyState } from '@/shared/ui/empty-state';
+import { buttonVariants, CircleIcon, EmptyState } from '@/shared/ui/design';
 
 /** Базовый класс кликабельного ряда списков участника (Row Button
  * 936:39348): общий для страницы участника, экрана прав и мультичека
@@ -22,10 +23,7 @@ export function ObjectAvatarGlyph({
   readonly isAll?: boolean;
 }): JSX.Element {
   return (
-    <span
-      aria-hidden
-      className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-muted shadow-[0_0_0_2.5px_var(--dl-surface)]"
-    >
+    <CircleIcon variant="white" aria-hidden className="relative overflow-hidden rounded-full">
       {photoUrl !== undefined ? (
         <img src={photoUrl} alt="" className="h-full w-full object-cover" />
       ) : isAll ? (
@@ -33,7 +31,7 @@ export function ObjectAvatarGlyph({
       ) : (
         <BoldHome className="h-6 w-6 text-content-tertiary" />
       )}
-    </span>
+    </CircleIcon>
   );
 }
 
@@ -51,16 +49,22 @@ export function ParticipantNotFound(): JSX.Element {
 /** 404-канон невидимого объекта (#719, копирайт PropertyNotFoundScreen):
  * свой доступ отозван/приостановлен в открытой сессии — перечитывание
  * отвечает 404, бэк скрывает нечитаемый объект как 404. Фрагмент здесь,
- * а не импорт из чужого виджета — cross-slice импорт виджетов запрещён. */
+ * а не импорт из чужого виджета — cross-slice импорт виджетов запрещён.
+ * Канонный EmptyState (легаси снесён, #901); действие — ссылка-кнопка
+ * NextLink+buttonVariants (next/link не дружит с Radix Slot — прецедент
+ * канонного button.tsx). */
 export function PropertyAccessNotFound(): JSX.Element {
   return (
     <EmptyState
-      imageSrc="/images/empty-logo.png"
+      imageSrc="/images/empty-logo.webp"
       imageAlt="Логотип"
       title="Объект не найден или у вас нет к нему доступа"
-      subtitle="Проверьте ссылку или попросите владельца выдать вам доступ к объекту"
-      actionHref={ROUTES.properties}
-      actionText="К списку объектов"
+      description="Проверьте ссылку или попросите владельца выдать вам доступ к объекту"
+      action={
+        <NextLink href={ROUTES.properties} className={buttonVariants({ size: 'small' })}>
+          К списку объектов
+        </NextLink>
+      }
     />
   );
 }

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
-import { clientTodayIso } from '@/entities/payment';
+import { dateToIsoLocal } from '@/shared/lib/calendar';
 import { usePaymentOperationsPaged } from '@/features/payments';
 import {
   Button,
@@ -18,7 +18,7 @@ import {
 import {
   OverdueOperationRow,
   PaymentsEmptyState,
-  PaymentsSkeleton,
+  PaymentsRowsSkeleton,
   PaymentsStateCard,
 } from './payments-sections';
 
@@ -44,7 +44,7 @@ export function PaymentOverdueScreen({
     order: 'asc',
   });
 
-  const today = clientTodayIso();
+  const today = dateToIsoLocal(new Date());
   const operations = overdueQuery.data ?? [];
 
   return (
@@ -64,10 +64,8 @@ export function PaymentOverdueScreen({
       <PageContent>
         <div className="flex flex-col gap-2">
           {overdueQuery.isPending && (
-            <>
-              <PaymentsSkeleton withHeading />
-              <PaymentsSkeleton withHeading />
-            </>
+            // Контент — плоский список строк, скелетон — ряды канона (#604).
+            <PaymentsRowsSkeleton />
           )}
 
           {overdueQuery.isError && (

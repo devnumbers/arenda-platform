@@ -11,9 +11,7 @@ export const metadata: Metadata = {
  * сохранения, поля и StickyBottomBar собирает клиентский экран. */
 export default async function PropertyEditPage({
   params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+}: PageProps<'/properties/[id]/edit'>) {
   const { id } = await params;
 
   return <PropertyEditScreen propertyId={id} />;

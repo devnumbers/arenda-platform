@@ -3,6 +3,7 @@ import {
   execE2eSql,
   expect,
   openCabinetWithSeededSession,
+  screenHeader,
   test,
 } from './fixtures';
 
@@ -15,8 +16,6 @@ import {
 // (46464646-…) — три объекта в скоупе; Мария Петрова (12111111-…21)
 // active на квартире. Разрушающие тесты восстанавливают сид через
 // execE2eSql (workers=1).
-
-const header = 'header[aria-label="Навигация экрана"]';
 
 const MARIA_ID = '12111111-1111-4111-8111-111111111121';
 const GARAGE_ID = '44444444-4444-4444-8444-444444444444';
@@ -127,7 +126,7 @@ test('приглашение незарегистрированной почты
       .click();
 
     // Попап «Участник приглашен» (2010-134458) на списке «Ваши участники».
-    await expect(page.locator(header).getByText('Ваши участники')).toBeVisible();
+    await expect(screenHeader(page).getByText('Ваши участники')).toBeVisible();
     await expect(
       page.getByRole('dialog').locator('p', { hasText: 'Участник приглашен' }),
     ).toBeVisible();

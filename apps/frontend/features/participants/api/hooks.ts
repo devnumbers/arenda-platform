@@ -16,18 +16,15 @@ import {
   type InviteParticipantCommand,
 } from './wire';
 
-type ParticipantsSummaryResponse =
-  components['schemas']['ParticipantsSummaryResponse'];
 type ParticipantsResponse = components['schemas']['ParticipantsResponse'];
 
-/** Счётчики хаба «Совместный доступ» (#693, GET /participants/summary):
- * участники читающего (агрегат members∪invitations его скоупа) и чужие
- * объекты, к которым у него есть активный доступ. */
-export type ParticipantsSummary = {
-  readonly participantsCount: number;
-  readonly accessiblePropertiesCount: number;
-};
+import {
+  participantQueryOptions,
+  participantsSummaryQueryOptions,
+  type ParticipantsSummary,
+} from './queries';
 
+export type { ParticipantsSummary };
 /** Строки участников проецируются в двух видах: агрегаты
  * GET /participants* и списки объекта GET /properties/{id}/access/members
  * (#700). Инвалидация обеих семей обязательна у каждой participants-мутации:
@@ -39,18 +36,7 @@ function invalidateParticipantProjections(queryClient: QueryClient): void {
 
 /** Счётчики хаба «Совместный доступ» (карта #692, тикет #696). */
 export function useParticipantsSummary(): UseQueryResult<ParticipantsSummary, ApiError> {
-  return useQuery({
-    queryKey: participantsKeys.summary,
-    queryFn: async (): Promise<ParticipantsSummary> => {
-      const response = await apiClient<ParticipantsSummaryResponse>(
-        '/participants/summary',
-      );
-      return {
-        participantsCount: response.participants_count,
-        accessiblePropertiesCount: response.accessible_properties_count,
-      };
-    },
-  });
+  return useQuery(participantsSummaryQueryOptions());
 }
 
 /** Список «Ваши участники» (тикет #697, GET /participants #693): агрегаты
@@ -105,13 +91,7 @@ export function useParticipant(
   participantId: string,
 ): UseQueryResult<Participant, ApiError> {
   return useQuery({
-    queryKey: participantsKeys.detail(participantId),
-    queryFn: async (): Promise<Participant> => {
-      const response = await apiClient<components['schemas']['ParticipantResponse']>(
-        `/participants/${encodeURIComponent(participantId)}`,
-      );
-      return mapParticipant(response);
-    },
+    ...participantQueryOptions({ participantId }),
     enabled: participantId.length > 0,
   });
 }

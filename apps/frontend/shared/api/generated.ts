@@ -1242,7 +1242,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Страница ленты уведомлений (keyset, канон
+         * Страница ленты уведомлений (keyset, канон #597)
          * @description Хранимая лента пользователя, newest-first keyset-пагинация (карта
          *     #734, решение #737, #743). Удалённые строки не появляются. Курсор —
          *     непрозрачный blob из next_cursor предыдущей страницы; страницы
@@ -3082,7 +3082,7 @@ export interface components {
             /** @description The «Платежи» group — the object's non-auto-pay rules. */
             otherRules: components["schemas"]["PaymentObjectKey"][];
         };
-        /** @description The global «Объекты» screen of the payments map (ticket */
+        /** @description The global «Объекты» screen of the payments map (ticket #575). */
         PaymentObjectsGlobalResponse: {
             items: components["schemas"]["PaymentObjectItem"][];
         };
@@ -3509,7 +3509,7 @@ export interface components {
             enabled: boolean;
             categories: components["schemas"]["NotificationCategoryPreferences"];
         };
-        /** @description Флаги четырёх настраиваемых категорий одного канала (решение */
+        /** @description Флаги четырёх настраиваемых категорий одного канала (решение #738) — email держит копию на аккаунте, push — на устройстве. Тариф и Системные всегда включены и здесь не хранятся. */
         NotificationCategoryPreferences: {
             rental: boolean;
             payments_operations: boolean;
@@ -3522,7 +3522,7 @@ export interface components {
         NotificationPreferencesResponse: {
             email: components["schemas"]["NotificationCategoryPreferences"];
         };
-        /** @description Строка ленты одного получателя (решение */
+        /** @description Строка ленты одного получателя (решение #737): снимок текста, payload-ссылки, личные флаги. */
         NotificationItem: {
             /** Format: uuid */
             id: string;
@@ -3652,7 +3652,9 @@ export interface components {
             /**
              * @description Текст строки, собранный сервером при записи (ADR 0061 §6): экран
              *     рендерит фрагменты дословно, склеивая в одно предложение, и
-             *     оборачивает связанные. Актёра в тексте нет — он поле записи.
+             *     оборачивает связанные; дословность — про строки после стрипа,
+             *     у записанных до него экран при маппинге срезает легаси голые
+             *     хвосты дат (аудит #876). Актёра в тексте нет — он поле записи.
              */
             segments: components["schemas"]["HistorySegment"][];
             /**
@@ -3667,7 +3669,11 @@ export interface components {
              */
             created_at: string;
         };
-        /** @description Один фрагмент текста строки; видимое предложение — точная склейка текстов. */
+        /**
+         * @description Один фрагмент текста строки; видимое предложение — точная склейка
+         *     текстов; дословность — про строки после стрипа, у записанных до
+         *     него экран при маппинге срезает легаси голые хвосты дат (аудит #876).
+         */
         HistorySegment: {
             text: string;
             link?: components["schemas"]["HistorySegmentLink"];
@@ -4774,8 +4780,8 @@ export interface operations {
                 property_id?: string;
                 /** @description Case-insensitive substring search over the name fields, phone, email, messenger username and role. A missing or empty value disables the filter; LIKE metacharacters in the value are literals. */
                 search?: string;
-                /** @description The sort key: `name` — the contact's display name (default); `property` — the bound property's name with the unbound cards first in both directions («Общие контакты»), contact name order inside. The Russian collation matches the client's letter grouping. */
-                sort?: "name" | "property";
+                /** @description The sort key: `name` — the contact's display name (default); `property` — the bound property's name with the unbound cards first in both directions («Общие контакты»), contact name order inside; `created` — the card's creation moment (ticket #847 — the «свежие контакты сверху» promise server-side: descending leads with the freshest cards whatever the book's size; the default order is asc, so a bare sort=created lists oldest-first — the freshness promise needs an explicit order=desc, as the tenant picker sends). The name/property keys use the Russian collation to match the client's letter grouping. */
+                sort?: "name" | "property" | "created";
                 /** @description The sort direction: ascending (default) or descending. */
                 order?: "asc" | "desc";
                 /** @description The page size of the keyset window (ticket #600). A missing value means the default page; an out-of-range value is a 400. */
@@ -4789,7 +4795,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Contacts page. The window is keyset pagination over the listing's own sort key and id (ticket #600): the page always resumes strictly after the cursor's key, so cards created or deleted between loads never duplicate or drop. The sort keys are mutable (display name, property binding): a rename or rebind of a card the walk has already passed can move it across the window boundary. The cursor is bound to the sort/order it was issued under — echoing it with a different sort is a 400. nextCursor is null once the matches are exhausted. */
+            /** @description Contacts page. The window is keyset pagination over the listing's own sort key and id (ticket #600): the page always resumes strictly after the cursor's key, so cards created or deleted between loads never duplicate or drop. The name/property sort keys are mutable (display name, property binding): a rename or rebind of a card the walk has already passed can move it across the window boundary; the created key is immutable, so a walked card never moves. The cursor is bound to the sort/order it was issued under — echoing it with a different sort is a 400. nextCursor is null once the matches are exhausted. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7282,7 +7288,7 @@ export interface operations {
                 status?: components["schemas"]["SubscriptionPaymentStatus"];
                 /** @description Exact match on the user's phone number. */
                 user_phone?: string;
-                /** @description Filters payments by the payer's current subscription status (issue */
+                /** @description Filters payments by the payer's current subscription status (issue #254). */
                 subscription_status?: components["schemas"]["SubscriptionStatus"];
                 /** @description Sort field (camelCase). Allowed: createdAt, amountKopecks, status. Defaults to createdAt descending. */
                 sort?: string;

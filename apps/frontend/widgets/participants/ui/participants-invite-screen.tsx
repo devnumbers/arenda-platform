@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Cancel, SmallArrowDown } from '@/shared/assets/icons';
 import { goBack } from '@/shared/lib/navigation';
 import { ROUTES } from '@/shared/config/routes';
+import { cn } from '@/shared/lib/cn';
 import { pluralize } from '@/shared/lib/pluralize';
 import {
   allInvitedProperties,
@@ -21,6 +22,7 @@ import {
   Button,
   EmptyState,
   ErrorCard,
+  fullscreenSurfaceClass,
   IconButton,
   PageContent,
   StickyBottomBar,
@@ -265,9 +267,10 @@ function InviteObjectsPicker({
       role="dialog"
       aria-modal="true"
       aria-label="Выбрать объект"
-      className="fixed inset-0 z-50 flex flex-col bg-surface font-sans"
+      className={cn(fullscreenSurfaceClass, 'font-sans')}
     >
       <TopNav
+        overlay
         leading={
           <IconButton icon={<Cancel />} label="Закрыть выбор объектов" onClick={onClose} />
         }
@@ -278,8 +281,8 @@ function InviteObjectsPicker({
       {/* На десктопе TopNav зафиксирован над экраном (tablet:fixed) —
        * контент встаёт под ним на высоту шапки (канон CalendarDatePicker
        * #500); на мобайле шапка в потоке и отступ не нужен. */}
-      <div className="min-h-0 flex-1 overflow-y-auto tablet:mt-[72px]">
-        <div className="mx-auto w-full max-w-[560px] pb-[136px]">
+      <div className="relative min-h-0 flex-1 overflow-y-auto tablet:mt-[72px]">
+        <div className="mx-auto w-full max-w-column pb-[136px]">
           {/* Ряды с боковым отступом 24px по макету 2008-46627. */}
           <div className="flex flex-col px-6 pt-2">
             <InvitePropertiesRows

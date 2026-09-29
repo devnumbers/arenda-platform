@@ -20,11 +20,12 @@
 	# Стрим событий не сжимается: дефолтный матчер encode включает text/*,
 	# и gzip начал бы буферизовать SSE-кадры после 512 байт (карта #734,
 	# #742; ADR 0058). reverse_proxy сам флешит text/event-stream немедленно.
-	encode zstd gzip {
-		match {
-			not header Content-Type text/event-stream
-		}
-	}
+	# Ответные матчеры encode не умеют отрицания по значению заголовка
+	# (официальная дока: только status и header с !-отсутствием поля), поэтому
+	# стрим исключается по пути запроса — /api/notifications/stream (ADR 0060);
+	# encode сортируется до handle_path, так что путь здесь с префиксом /api.
+	@not_sse not path /api/notifications/stream*
+	encode @not_sse zstd gzip
 
 	# Префикс /api снимается: бэкенд ждёт пути без /api.
 	handle_path /api/* {

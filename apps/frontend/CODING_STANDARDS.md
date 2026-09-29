@@ -4,10 +4,10 @@ How the Next.js frontend is built and reviewed. Read before implementing or revi
 
 Not duplicated here — single sources of truth elsewhere:
 
-- Import boundaries, the DTO isolation gates, and the `@heroui/styles` ban are enforced by `eslint.config.mjs` (`boundaries/dependencies`, `no-restricted-imports`); review does not re-report what lint blocks.
+- Import boundaries and the DTO isolation gates are enforced by `eslint.config.mjs` (`boundaries/dependencies`, `no-restricted-imports`); review does not re-report what lint blocks.
 - The security lint gates are enforced by `eslint.config.mjs` (see the Security contour section below).
 - Invariants and commands: `AGENTS.md` (same directory). Domain language: per-context `CONTEXT.md` (index in `CONTEXT-MAP.md`). Decisions: `docs/adr/`.
-- New UI (payments design layer onward) is built on shadcn/ui over Radix primitives, styled with Tailwind utilities on top of our tokens (ADR 0050). Legacy HeroUI v3 widgets: verify APIs through the `heroui-react` MCP server until migrated — v3 is beta and not in model training data.
+- New UI (payments design layer onward) is built on shadcn/ui over Radix primitives, styled with Tailwind utilities on top of our tokens (ADR 0050). Легаси HeroUI снесён целиком (аменд ADR 0050 2026-09-26, тикет #901) — нового HeroUI-кода не бывает, его MCP-доки сняты.
 
 ## FSD slice anatomy
 
@@ -45,10 +45,10 @@ No form library and no schema validator — this is deliberate, not a gap:
 
 ## Components, styling, and React Compiler
 
-- Styling: existing components use CSS Modules + design tokens (`shared/styles/tokens.css`); new design-layer components (ADR 0050) are shadcn/ui over Radix, styled with Tailwind utilities on the same tokens. The transitional mix is accepted until the app-wide migration.
+- Styling: existing components use CSS Modules + design tokens (`shared/styles/tokens.css`); new design-layer components (ADR 0050) are shadcn/ui over Radix, styled with Tailwind utilities on the same tokens. The mix of design-layer Tailwind utilities and local CSS modules — the canon outside `design/` and in screen modules of `widgets`/`features`/`app` — is the target state as of the ADR 0050 amendment (2026-09-26, #901); no separate migration effort is recorded.
 - Motion, hover, and focus conventions (the unified Apple curve, touch-safe hover, no focus rings on inputs) live in `DESIGN.md` §8 — read it before styling anything.
-- `shared/ui/` is the app's own kit: folder-per-component (`Button.tsx` + `Button.module.css` + `index.ts`). Wrap, don't bypass; `/ui-kit` is the gallery route.
-- HeroUI v3 (legacy widgets only, ADR 0050): provider-less — import `@heroui/react` components directly. `@heroui/styles` appears exactly once — the `@import` in `app/globals.css` — and never in TSX.
+- `shared/ui/` is the app's own kit; its canon is `shared/ui/design/` — components on Tailwind utilities over the tokens, no CSS modules. Folder-per-component with a CSS module (`IconLink.tsx` + `IconLink.module.css` + `index.ts`) remains the canon outside `design/` (icon, icon-link, live-value, pull-to-refresh, toast) and in screen modules. Wrap, don't bypass; `/ui-kit` is the gallery route.
+- ~~HeroUI v3 (legacy widgets only, ADR 0050)~~ — снято: пакет снесён, react- и стилевой слои в дереве отсутствуют (аменд ADR 0050 2026-09-26, тикет #901).
 - **React Compiler is on** (`next.config.ts`). Manual `useMemo`/`useCallback`/`memo` is not the default: write plain code and let the compiler memoize. Reach for manual memoization only where the compiler provably can't help (values escaping to non-React code) and justify it with a comment.
 - The memoization, derived-state, and effect-synchronizer smells are enforced by the tool, not the review rubric: the react-hooks v7 compiler rules run through `eslint-config-next` (the plugin's `recommended` preset is spread whole) — `purity`, `set-state-in-effect`, `set-state-in-render`, `use-memo`, `immutability`, `refs`, `preserve-manual-memoization`, `static-components`, `globals`, `error-boundaries`, `gating`, `rules-of-hooks`, `exhaustive-deps` at error; `incompatible-library`/`unsupported-syntax` at warn. Fix them at lint time.
 
@@ -63,6 +63,10 @@ No form library and no schema validator — this is deliberate, not a gap:
 ## Screen shell
 
 Every page assembles its chrome from the design-layer primitives — `<TopNav>`, `<PageContent>`, `<StickyBottomBar>` — in one fixed order and composition. The anatomy, widths, breakpoints, full-height-scroll pattern, and the surface-choice table (route / fullscreen overlay / modal / picker menu) live in `DESIGN.md` §1–4 and are mandatory reading before UI work.
+
+Server prefetch rule (#887): a content page whose first frame reads a query serves that frame with data on a cold entry — the RSC page wraps the screen in `<Suspense fallback={<ScreenSkeleton />}>` + `ServerPrefetchBoundary` and lays out its first-frame queries through the `queryOptions` factories of the feature's dual `api/queries.ts` module with `serverApiClient`. Mechanics, scope rules, and gates live in `DESIGN.md` §15; hooks stay in `api/hooks.ts` ('use client') reading the same factories.
+
+Column width rule (решение владельца 26.09, аудит #870): the content column is exactly the `PageContent` cap — `max-w-column` (560) — on every breakpoint. Content blocks sit **inside** the column with their own `px-6` (24px each side), so cards/pills render 512 wide on tablet/desktop and full-width-minus-24 on mobile. Negative-margin compensation (`-mx-N` + breakpoint `mx-0`, «гашу вставку кабинета») against the page wrapper is forbidden: the wrapper carries no horizontal padding since #865, so such a hack only pushes the block past the 560 cap (600px bug on the payments hubs). Inner `-mx` cancelling a container's **own** padding (a list spanning its padded card, `picker-field`) stays legitimate.
 
 ## Testing
 
@@ -92,7 +96,7 @@ A type-checked ESLint block (project service) with named rules, not a preset. Ca
 - `no-floating-promises` — a promise is handled or explicitly discarded, three canonical spellings: `void` on fire-and-forget `invalidateQueries` (hooks' `onSuccess`, post-mutation invalidation; `removeQueries` is synchronous in v5 and stays bare); `void` on `refetch()` in retry/conflict handlers — v5's `refetch` never rejects without `throwOnError` (query-core swallows the rejection; the error surfaces through `isError` → the error-state UI the handler serves); a real `.catch` with meaningful handling where the promise can genuinely reject (the SW updater's `serviceWorker.ready` reports via `reportClientError`) — never an empty catch.
 - `no-misused-promises` — an async function never goes into a void-signature prop (`onClick`, `onSubmit`, `onRetry`, `onConfirm`, …) directly; the call site wraps it: `onClick={() => void handleSubmit()}`. The two shapes the wrappers bridge cannot reject: full-try/catch handlers (every `mutateAsync` path notifies its own error) and `refetch()`. A handler that can genuinely reject gets a real `.catch` at the wrapper instead — the wrapper must never be where an error dies silently.
 - `no-deprecated` — deprecated APIs are replaced, not suppressed. Two spellings this codebase hit: form submit handlers take `SubmitEvent<T>` from `react` (React 19.2 deprecated `FormEvent`), and a deprecated Web API is replaced by the signal it actually carried (the iPadOS detector reads the `Macintosh` UA token instead of `navigator.platform`, pinned by a device-table characterization test).
-- jsx-a11y `recommended` at error — the whole preset, no per-rule exceptions. `alt-text` keeps next's `img: ["Image"]` scope unioned with the preset's defaults. Custom listbox controls are keyboard-operable through `shared/ui/select/listbox-keyboard.ts`: Enter/Space select, Escape closes back onto the trigger, arrows/Home/End move roving focus with wrap-around, selection hands focus back to the trigger. Anchors carry real navigable `href`s — no `href="#"` placeholders. `autoFocus` is banned: step forms focus their field programmatically (`ref` + `useEffect` on the step, the login CodeStep's pattern).
+- jsx-a11y `recommended` at error — the whole preset, no per-rule exceptions. `alt-text` keeps next's `img: ["Image"]` scope unioned with the preset's defaults. Custom listbox controls are keyboard-operable through `shared/ui/design/listbox-keyboard.ts`: Enter/Space select, Escape closes back onto the trigger, arrows/Home/End move roving focus with wrap-around, selection hands focus back to the trigger. Anchors carry real navigable `href`s — no `href="#"` placeholders. `autoFocus` is banned: step forms focus their field programmatically (`ref` + `useEffect` on the step, the login CodeStep's pattern).
 - tsconfig `noUncheckedIndexedAccess` — index access returns `T | undefined`, handled explicitly, never with `!`. Canonical spellings: a `Record<K, string>` class map keyed by a literal union takes `styles.x ?? ''` in the initializer (missing class degrades to unstyled); an indexed element is bound and narrowed before use; regexp groups are extracted and checked; a fixed-shape array return types as a tuple (`weekDates` → `readonly [string × 7]`); iterating bytes/collections is for-of. CSS-module `styles.*` reads are `string | undefined` — compose class names with `clsx`, never by template interpolation.
 
 ### Money and condition gates
@@ -110,7 +114,7 @@ A type-checked ESLint block (project service) with named rules, not a preset. Ca
 
 Four blocking gates in `eslint.config.mjs`, wired through the existing lint runs (pre-commit `frontend lint`, the CI `frontend` job):
 
-- **Markdown stays secure by default**: the `rehype-raw` import is banned and the `urlTransform` prop may not be passed at all — react-markdown's default URL sanitizer is the policy; runtime sanitization (`rehype-sanitize`) was rejected. Changing the markdown content source from repo files to API/DB reopens the decision.
+- **Markdown is out of the product; its lint gates are tripwires**: the renderer was removed — react-markdown is gone from `package.json` and `MarkdownContent` from `shared/ui/`, no source renders markdown today. The `rehype-raw` import ban and the `urlTransform` prop ban remain in `eslint.config.mjs` as deliberate tripwires against a silent reintroduction; bringing the renderer back reactivates the policy (#331: `rehype-raw` stays banned, the renderer's default URL sanitizer is the policy, runtime sanitization (`rehype-sanitize`) was rejected) and the tripwires' fate is decided with it.
 - **`NEXT_PUBLIC_*` reads are banned** in every static form (member, computed literal, destructuring from `process.env`); the `PUBLIC_ENV_ALLOWLIST` in the config is the deliberate exposure list — empty today, so exposing a variable to the client bundle is a config edit, never a silent code read.
 - **Web storage is banned outside its two owners**: `localStorage`/`sessionStorage` (bare, `window.`, `globalThis.` forms) live only in `features/auth/lib/**` (login draft, resend cooldown) and `shared/lib/hooks/useDraftStore.ts` — session tokens stay in httpOnly cookies.
 - **Dangerous browser APIs are banned** (see Configuration gates).

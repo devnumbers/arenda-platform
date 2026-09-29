@@ -65,8 +65,8 @@ export function ParticipantsHubScreen(): JSX.Element {
 
       <PageContent>
         <HubCollapseAnchor>
-          <div className="flex items-center justify-between pr-3.5 pl-6">
-            <HubTitle className="pl-0">Совместный доступ</HubTitle>
+          <div className="flex h-8 items-center justify-between pr-3.5">
+            <HubTitle>Совместный доступ</HubTitle>
             {inviteButton}
           </div>
         </HubCollapseAnchor>

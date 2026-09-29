@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Add, ArrowLeft, Search } from "@/shared/assets/icons";
 import { ROUTES } from "@/shared/config/routes";
 import { buildUrlWithParams } from "@/shared/lib/url-params";
-import { clientTodayIso } from "@/entities/payment";
+import { dateToIsoLocal } from "@/shared/lib/calendar";
 import type { PaymentOperationScope } from "@/shared/api/query-keys";
 import {
   groupOperationsByDate,
@@ -27,7 +27,8 @@ import {
   TopNav,
   TopNavTitle,
 } from "@/shared/ui/design";
-import { PaymentsSkeleton, PaymentsStateCard } from "./payments-sections";
+import { PaymentsStateCard } from "./payments-sections";
+import { OperationsDateFeedSkeleton, OperationsSummarySkeleton } from "./operations-skeletons";
 import {
   OperationsDateList,
   OperationsNeverHad,
@@ -80,7 +81,7 @@ export function OperationsOfPropertyScreen({
     propertyQuery.isSuccess ? propertyQuery.data : undefined,
   ).canEdit;
 
-  const today = clientTodayIso();
+  const today = dateToIsoLocal(new Date());
   // Дефолт — весь период (#674): период в запросе только с явным выбором,
   // без него даты не уходят; пикер открывается пустым, «Сбросить»
   // возвращает к дефолту.
@@ -208,8 +209,10 @@ export function OperationsOfPropertyScreen({
 
             {pending && (
               <>
-                <PaymentsSkeleton withHeading />
-                <PaymentsSkeleton withHeading />
+                {/* Паритет §7: копия контента — ряд карточек сводки и
+                 * группы дат со строками; чипы выше — вне фазы загрузки. */}
+                <OperationsSummarySkeleton cards={2} />
+                <OperationsDateFeedSkeleton />
               </>
             )}
 

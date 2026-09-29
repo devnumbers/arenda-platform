@@ -464,6 +464,25 @@ linters:
       - linters: [nilnil]
         path: ^internal/rentals/application/integration_test\.go$
         text: 'return both a `nil` error and an invalid value'
+      # paralleltest: тесты с глобальным состоянием процесса, параллельность
+      # им противопоказана по природе фикстуры — t.Setenv паникует в
+      # параллельном тесте (конфиг-фикстура setRequiredLocalEnv выставляет
+      # несколько переменных окружения, их нельзя ронять в гонку), а
+      # heartbeat-тест платежей меняет глобальный OTel MeterProvider.
+      # Исключения поимённые: новый серийный тест обязан заработать своё
+      # правило, а не утащить чужое.
+      - linters: [paralleltest]
+        path: ^internal/payments/application/tick_zones_test\.go$
+        text: 'Function TestRunZoneTicks_Heartbeat missing the call to method parallel'
+      - linters: [paralleltest]
+        path: ^internal/platform/config/config_fake_simulator_test\.go$
+        text: 'Function TestFakeSimulatorWebOriginDefaultsToAppBaseURLOrigin missing the call to method parallel'
+      - linters: [paralleltest]
+        path: ^internal/platform/config/config_fake_simulator_test\.go$
+        text: 'Function TestFakeSimulatorAutoConfirmDefaultsToAuto missing the call to method parallel'
+      - linters: [paralleltest]
+        path: ^internal/platform/config/config_time_travel_test\.go$
+        text: 'Function TestTimeTravelDefaultsToOff missing the call to method parallel'
 
 formatters:
   enable:

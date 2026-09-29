@@ -29,7 +29,7 @@ import {
 import { contactCreateGate } from '../lib/contact-create-gate';
 import { ContactForm } from './contact-form';
 import { ContactObjectSelectPage } from './contact-object-select';
-import { ContactsSkeleton } from './contacts-states';
+import { ContactFormSkeleton } from './contacts-states';
 
 const SHORT_TEXT_MAX = 256;
 
@@ -176,7 +176,7 @@ export function ContactCreateScreen({
         <>
           <CancelHeader onClick={() => goBack(router, backHref)} />
           <PageContent>
-            <ContactsSkeleton />
+            <ContactFormSkeleton />
           </PageContent>
         </>
       );

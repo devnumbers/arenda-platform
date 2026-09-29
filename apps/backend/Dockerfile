@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM golang:1.26.5-bookworm  AS build
+FROM golang:1.26.6-bookworm  AS build
 
 WORKDIR /src/apps/backend
 
@@ -16,14 +16,18 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/arenda-
 # back to the current month, then to the previous one (the file for the
 # running month may not be published yet in its first days).
 ARG DBIP_MONTH=""
+# DB-IP отдаёт lite-файлы только в gzip (с 09.2026 голые .mmdb-URL отдают 404),
+# поэтому качаем .mmdb.gz и распаковываем; gunzip есть в bookworm-образе.
 RUN set -eux; \
     month="${DBIP_MONTH:-$(date +%Y-%m)}"; \
     prev="$(date -d "$month-01 -1 month" +%Y-%m)"; \
     mkdir -p /out/geoip; \
-    curl --max-time 600 --retry 2 -fsSL -o /out/geoip/dbip-city-lite.mmdb \
-      "https://download.db-ip.com/free/dbip-city-lite-${month}.mmdb" \
-    || curl --max-time 600 --retry 2 -fsSL -o /out/geoip/dbip-city-lite.mmdb \
-      "https://download.db-ip.com/free/dbip-city-lite-${prev}.mmdb"
+    curl --max-time 600 --retry 2 -fsSL -o /tmp/dbip-city-lite.mmdb.gz \
+      "https://download.db-ip.com/free/dbip-city-lite-${month}.mmdb.gz" \
+    || curl --max-time 600 --retry 2 -fsSL -o /tmp/dbip-city-lite.mmdb.gz \
+      "https://download.db-ip.com/free/dbip-city-lite-${prev}.mmdb.gz"; \
+    gunzip -c /tmp/dbip-city-lite.mmdb.gz > /out/geoip/dbip-city-lite.mmdb; \
+    rm -f /tmp/dbip-city-lite.mmdb.gz
 
 FROM debian:bookworm-slim AS runtime
 

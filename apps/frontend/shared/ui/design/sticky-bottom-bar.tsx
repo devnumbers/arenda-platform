@@ -8,41 +8,44 @@ import { useTabBarSuppression } from './tab-bar';
 /** Нижняя закреплённая панель дизайн-слоя (Figma 1043:60106): белый «шит»
  * radius 40 сверху со слотом контента (паддинг 24, зазор 16); каноника —
  * без grabber-ручки (Show Grabber: false), проп `dragHandle` оставлен для
- * включения, если канва вернёт ручку. На широких экранах контент — в
- * колонке max-560. Низ уважает safe-area (home indicator). PageContent даёт
- * снизу 136px, чтобы контент не уходил под панель. Пока панель смонтирована,
- * глушит TabBar: экран с нижней кнопкой действия футера не имеет. */
+ * включения, если канва вернёт ручку. Контент — в колонке max-560 на мобайле
+ * и ПК; на планшете 561–1023 тянется с шитом во всю ширину (кнопка от края
+ * до края минус паддинг 24 — решение владельца 28.09, правка после аудита
+ * #877: правило универсальное, прежний opt-in `fullWidthContent` пикера дат
+ * и визардов аренды снесён). Низ уважает safe-area (home indicator).
+ * PageContent даёт снизу 136px, чтобы контент не уходил под панель. Пока
+ * панель смонтирована, глушит TabBar: экран с нижней кнопкой действия футера
+ * не имеет (мобайл и планшет; на ПК TabBar скрыт всегда). */
 export type StickyBottomBarProps = {
   readonly children: ReactNode;
   readonly dragHandle?: boolean;
   readonly className?: string;
-  /** Контент тянется вместе с шитом в планшетном ярусе 561–1023 (кнопка
-   * от края до края минус паддинг 24; при переносе desktop-границы на
-   * 1024 диапазон расширился автоматически — решение владельца 08.09
-   * #561); на ПК ≥1024 и на мобиле ≤560 — как всегда (базовое решение
-   * 2026-09-04 для полноэкранного пикера даты). */
-  readonly fullWidthContent?: boolean;
 };
 
 export function StickyBottomBar({
   children,
   dragHandle = false,
   className,
-  fullWidthContent = false,
 }: StickyBottomBarProps): JSX.Element {
   useTabBarSuppression();
 
   return (
-    <div className={cn('fixed inset-x-0 bottom-0 z-40 rounded-t-sheet bg-surface font-sans', className)}>
+    <div
+      className={cn(
+        'fixed inset-x-0 bottom-0 z-40 rounded-t-sheet bg-surface font-sans',
+        // «Хром ПК постоянен» (решение владельца 25.09, правка канона
+        // #561, тикет #865): шит панели на ПК — колонка 560 по центру
+        // (left/right уже нулевые, margin auto центрирует при capped
+        // ширине), углы снизу свободны — пилюли «Уведомления/Поддержка»
+        // не глушатся и кликабельны на любом экране.
+        'desktop:mx-auto desktop:max-w-column',
+        className,
+      )}
+    >
       {dragHandle && <SheetDragHandle />}
-      {/* Колонка контента 560 по центру на любой ширине — как PageContent;
-          fullWidthContent снимает кап в планшетном диапазоне. */}
-      <div
-        className={cn(
-          'mx-auto flex w-full max-w-[560px] flex-col gap-4 p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]',
-          fullWidthContent && 'max-desktop:min-[561px]:max-w-none',
-        )}
-      >
+      {/* Колонка контента 560 (max-w-column, тикет #865) на мобайле и ПК;
+          в планшетном ярусе кап снят — кнопка во всю ширину шита. */}
+      <div className="mx-auto flex w-full max-w-column max-desktop:min-[561px]:max-w-none flex-col gap-4 p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
         {children}
       </div>
     </div>

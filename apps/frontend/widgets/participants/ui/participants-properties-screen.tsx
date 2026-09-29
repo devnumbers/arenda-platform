@@ -427,4 +427,3 @@ function ObjectCard({
     </div>
   );
 }
-

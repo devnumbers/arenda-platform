@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { BoldHome } from '@/shared/assets/icons';
 import {
   Button,
+  CircleIcon,
   ConfirmDialog,
   RadioGroup,
   RadioGroupItem,
@@ -195,16 +196,13 @@ function PropertyPickRow({
 
   return (
     <label className="flex cursor-pointer items-center gap-3 py-3">
-      <span
-        aria-hidden
-        className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface shadow-[0_0_0_2.5px_var(--dl-surface-muted)]"
-      >
+      <CircleIcon variant="muted" aria-hidden className="relative overflow-hidden rounded-full">
         {photoUrl !== undefined ? (
           <img src={photoUrl} alt="" className="h-full w-full object-cover" />
         ) : (
           <BoldHome className="h-6 w-6 text-[#D3D7D9]" />
         )}
-      </span>
+      </CircleIcon>
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="text-base font-medium leading-[18px] text-content">{property.name}</span>
         <span className="truncate text-sm leading-4 text-content-secondary">

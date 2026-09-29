@@ -6,6 +6,7 @@ import { cn } from '@/shared/lib/cn';
 import {
   Button,
   Checkbox,
+  fullscreenSurfaceClass,
   groupedAmount,
   IconButton,
   ListRow,
@@ -233,16 +234,17 @@ export function PaymentDayPicker({
       role="dialog"
       aria-modal="true"
       aria-label="Выбор дня оплаты"
-      className="fixed inset-0 z-50 flex flex-col bg-surface"
+      className={fullscreenSurfaceClass}
     >
       <TopNav
+        overlay
         leading={
           <IconButton icon={<ArrowLeft />} label="Назад" onClick={onClose} />
         }
       >
         <TopNavTitle title="Выберите день" />
       </TopNav>
-      <PageContent className="flex h-[calc(100dvh-72px)] flex-col pb-0">
+      <PageContent className="relative flex h-[calc(100dvh-72px)] flex-col pb-0">
         <div className="flex-1 min-h-0 overflow-y-auto pb-6">
           <div className="pt-6">
             <MonthDaysGrid
@@ -274,7 +276,7 @@ export function PaymentDayPicker({
         {/* Футер только с черновиком выбора (решение владельца 2026-09-05:
             скрытие вместо дизейбла); на планшете тянется с шитом. */}
         {ready && (
-          <StickyBottomBar fullWidthContent>
+          <StickyBottomBar>
             <WizardBottomBar>
               <Button
                 className="w-full"

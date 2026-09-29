@@ -35,6 +35,7 @@ import {
   CollapsibleSection,
   EmptyState,
   HubCollapseAnchor,
+  HubTitle,
   IconButton,
   Menu,
   MenuContent,
@@ -75,8 +76,9 @@ import { SortChip, sortPickerGroups } from './tasks-sort';
  * маршрутизируются по срезу (ADR 0052), зритель читает (ADR 0028).
  *
  * Шапка — стандартный TopNav хаба с «крыльями» и на мобайле (`mobileWings`,
- * Figma 1733-27411); смена на компактный заголовок по прокрутке (1733-92349)
- * отложена — решение владельца 2026-09-05. Чип «Объект» — фильтр ленты
+ * Figma 1733-27411); смена на компактный заголовок по прокрутке
+ * (Figma 1733-92349) работает (решение владельца 2026-09-09, DESIGN.md §2).
+ * Чип «Объект» — фильтр ленты
  * (#524/#547, Figma 1726-88880/1726-86913): выбранные объекты и «Общие
  * задачи» живут в адресе (?property=<id>[,<id>…], ?withoutProperty=1 —
  * union, решение владельца 2026-09-07), страница выбора — строгий черновик
@@ -219,8 +221,8 @@ export function TasksFeedScreen({
 
       <PageContent>
         <HubCollapseAnchor>
-          <div className="flex items-center justify-between pr-3.5 pl-6">
-            <h1 className="m-0 text-[28px] font-semibold leading-8 text-content">Задачи</h1>
+          <div className="flex h-8 items-center justify-between pr-3.5">
+            <HubTitle>Задачи</HubTitle>
             {createButton}
           </div>
 

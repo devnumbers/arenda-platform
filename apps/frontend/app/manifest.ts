@@ -9,6 +9,9 @@ import type { MetadataRoute } from 'next';
  *
  * `id` and `start_url` MUST NOT change after publication — changing them breaks
  * recognition of already-installed apps (web.dev, Web app manifest).
+ * start_url historically pointed at легаси /dashboard; маршрут снесён
+ * (карта #862, тикет #865), дом кабинета — /properties. Публикации не было
+ * (пуш = деплой stage не делался), поэтому смена безопасна.
  */
 export default function manifest(): MetadataRoute.Manifest {
     return {
@@ -17,7 +20,7 @@ export default function manifest(): MetadataRoute.Manifest {
         short_name: 'Рентли',
         description: 'Управление арендной недвижимостью',
         lang: 'ru',
-        start_url: '/dashboard',
+        start_url: '/properties',
         scope: '/',
         display: 'standalone',
         // White so the macOS PWA title-bar strip behind the traffic-light

@@ -32,9 +32,11 @@ jobs:
       - name: Scan
         run: semgrep scan --config=p/ci --config=p/xss --error
 
-  # Dependency vulnerabilities are covered by Dependabot (.github/dependabot.yml:
-  # security updates + grouped weekly version updates into dev) and govulncheck
-  # in ci.yml; this workflow keeps SAST (semgrep) and the trivy filesystem scan.
+  # Dependency vulnerabilities are covered by govulncheck in ci.yml and the
+  # npm-audit gate (make npm-audit, high+); Dependabot (version + security
+  # updates) is disabled by the owner as of 2026-09-29 — dependabot.yml was
+  # removed, restore it from git history to re-enable. This workflow keeps
+  # SAST (semgrep) and the trivy filesystem scan.
   trivy-fs:
     name: Trivy filesystem scan
     runs-on: ubuntu-latest

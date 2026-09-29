@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { components } from '@/shared/api/dto';
-import { mapPropertyResponse } from './mappers';
+import { mapPropertyPhoto, mapPropertyResponse } from './mappers';
 
 function makeDto(
   overrides: Partial<components['schemas']['PropertyResponse']> = {},
@@ -19,6 +19,20 @@ function makeDto(
     ...overrides,
   };
 }
+
+describe('mapPropertyPhoto', () => {
+  it('maps id and url as-is (wire already canonical, entity boundary)', () => {
+    const photo = mapPropertyPhoto({
+      id: '0198b6a7-1000-7000-8000-00000000ph01',
+      url: 'https://cdn.example.com/property-1/photo.jpg',
+    });
+
+    expect(photo).toEqual({
+      id: '0198b6a7-1000-7000-8000-00000000ph01',
+      url: 'https://cdn.example.com/property-1/photo.jpg',
+    });
+  });
+});
 
 describe('mapPropertyResponse access', () => {
   it('maps access role and owner_name to camelCase ownerName', () => {

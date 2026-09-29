@@ -1,0 +1,92 @@
+/* Канон realtime-оживания значения (тикет #880, решение владельца 25.09
+* по прототипу #879) — DESIGN.md §8, раздел „Realtime-оживание значения —
+* канон C“ (apps/frontend/DESIGN.md:474-520); тайминги на токенах --live-*
+* (tokens.css), кривая --dl-ease. Layout не
+* двигаем: вспышка живёт на коробке с компенсирующими отрицательными
+* полями, оверлей нового значения абсолютен. */
+
+.root {
+  position: relative;
+  display: inline-block;
+  /* Dim канона C (приглушение на перечитывание): transition живёт на
+  * корне всегда — и затухание, и возврат из dim играются плавно. */
+  transition:
+    opacity var(--live-dim) var(--dl-ease),
+    filter var(--live-dim) var(--dl-ease);
+}
+
+.stale {
+  opacity: 0.4;
+  filter: saturate(0.4);
+}
+
+/* Коробка вспышки: поля компенсируют паддинг — соседний layout стоит на
+* месте и в покое, и во время вспышки (§8: вспышка — на коробке с
+* компенсирующими полями). Ключ generation от компонента перемонтирует
+* коробку — keyframes переигрываются при смене значения в очереди. */
+.flashBox {
+  display: inline-block;
+  border-radius: 8px;
+  padding: 2px 6px;
+  margin: -2px -6px;
+  animation: live-flash var(--live-flash) var(--dl-ease);
+}
+
+@keyframes live-flash {
+  0% {
+    background-color: var(--live-flash-bg);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+/* Оверлей свапа: оба значения абсолютом max-content (ничего не
+* переносится и не клипается при любой разнице ширин), размер коробки
+* держит компонент — ширину он анимирует от старой к новой WAAPI
+* (Apple-рецепт «контейнер едет вместе с контентом», решение 28.09;
+* длительность --live-blur-in, кривая --dl-ease — размер и резкость
+* нового значения доезжают вместе). Ширину/высоту ставит инлайном
+* компонент до краски (замер — локальный layout-эффект). */
+.swap {
+  position: relative;
+  display: inline-block;
+}
+
+.oldValue {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: inline-block;
+  width: max-content;
+  animation: live-blur-out var(--live-blur-out) var(--dl-ease) forwards;
+}
+
+.newValue {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: inline-block;
+  width: max-content;
+  pointer-events: none;
+  opacity: 0;
+  animation: live-blur-in var(--live-blur-in) var(--dl-ease) var(--live-blur-delay) forwards;
+}
+
+@keyframes live-blur-out {
+  to {
+    opacity: 0;
+    filter: blur(6px);
+  }
+}
+
+@keyframes live-blur-in {
+  from {
+    opacity: 0;
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}

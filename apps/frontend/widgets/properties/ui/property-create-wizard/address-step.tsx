@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, JSX, KeyboardEvent } from 'react';
-import { focusListboxEdge } from '@/shared/ui/select/listbox-keyboard';
+import { focusListboxEdge } from '@/shared/ui/design/listbox-keyboard';
 import { TextField } from '@/shared/ui/design';
 import { AddressSuggestionList } from '../property-fields/address-suggestion-list';
 import {

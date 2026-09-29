@@ -6,7 +6,8 @@ import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { buildReturnUrl, goBack } from '@/shared/lib/navigation';
 import { useSearchQueryState } from '@/shared/lib/hooks/useSearchQueryState';
-import { clientTodayIso, formatDayMonthWithYear } from '@/entities/payment';
+import { formatDayMonthWithYear } from '@/entities/payment';
+import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
   globalOperationsFiltersParams,
   useGlobalOperationsFilters,
@@ -24,7 +25,8 @@ import {
   TopNav,
 } from '@/shared/ui/design';
 import { OperationRow } from './operations-list';
-import { PaymentsHeading, PaymentsSkeleton, PaymentsStateCard } from './payments-sections';
+import { PaymentsHeading, PaymentsStateCard } from './payments-sections';
+import { SearchResultsSkeleton } from './operations-skeletons';
 import {
   globalSearchListScope,
   globalSearchSummaryScope,
@@ -61,7 +63,7 @@ export function OperationsGlobalSearchScreen(): JSX.Element {
     inputRef.current?.focus();
   }, []);
 
-  const today = clientTodayIso();
+  const today = dateToIsoLocal(new Date());
 
   const summaryQuery = useGlobalOperationsSummary(
     {
@@ -160,10 +162,9 @@ export function OperationsGlobalSearchScreen(): JSX.Element {
         )}
 
         {pending && (
-          <>
-            <PaymentsSkeleton withHeading />
-            <PaymentsSkeleton withHeading />
-          </>
+          // Паритет §7/#604: скелетон зеркалит две секции контента — чипы
+          // категорий и строки операций (дата под суммой, #543).
+          <SearchResultsSkeleton description />
         )}
 
         {showResults &&

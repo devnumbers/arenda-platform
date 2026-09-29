@@ -80,7 +80,7 @@ func (s *GlobalPaymentStore) ListGlobalPaymentRules(
 		OwnerIds:       ownerIDs,
 		Todays:         todaysCSV,
 		Actor:          pgconv.UUIDToPgtype(actor),
-		Search:         escapeLikePattern(q.Search),
+		Search:         pgconv.EscapeLikePattern(q.Search),
 		CategorySlugs:  strings.Join(q.CategorySlugs, ","),
 		CategoryFilter: q.Category,
 		TypeFilter:     string(q.Type),
@@ -134,7 +134,7 @@ func (s *GlobalPaymentStore) CountGlobalPaymentRules(
 		OwnerIds:       ownerIDs,
 		Todays:         todaysCSV,
 		Actor:          pgconv.UUIDToPgtype(actor),
-		Search:         escapeLikePattern(q.Search),
+		Search:         pgconv.EscapeLikePattern(q.Search),
 		CategorySlugs:  strings.Join(q.CategorySlugs, ","),
 		CategoryFilter: q.Category,
 		TypeFilter:     string(q.Type),
@@ -176,7 +176,7 @@ func (s *GlobalPaymentStore) SumGlobalPaymentSearchCategories(
 ) ([]domain.CategoryRef, error) {
 	rows, err := s.q().SumGlobalPaymentSearchCategories(ctx, postgres.SumGlobalPaymentSearchCategoriesParams{
 		Actor:         pgconv.UUIDToPgtype(actor),
-		Search:        escapeLikePattern(q.Search),
+		Search:        pgconv.EscapeLikePattern(q.Search),
 		CategorySlugs: strings.Join(q.CategorySlugs, ","),
 	})
 	if err != nil {
@@ -200,7 +200,7 @@ func (s *GlobalPaymentStore) ListGlobalPaymentObjects(
 ) ([]application.GlobalPaymentObject, error) {
 	rows, err := s.q().ListGlobalPaymentObjects(ctx, postgres.ListGlobalPaymentObjectsParams{
 		Actor:  pgconv.UUIDToPgtype(actor),
-		Search: escapeLikePattern(search),
+		Search: pgconv.EscapeLikePattern(search),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list global payment objects: %w", err)

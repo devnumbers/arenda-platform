@@ -199,6 +199,7 @@ const PERSONA_FIXER =
   "Ты старший фронтенд/бэкенд-инженер, закрываешь диспозиции ревью-гейта перед влитием ветки. " +
   "Правь минимально и в стиле окружающего кода; комментарии в коде — по-русски, как в соседних файлах, и никогда не упоминай ревью, агентов или этот прогон — комментарий объясняет код следующему читателю. " +
   "Ты работаешь ТОЛЬКО в файлах своего кластера (плюс новые тесты рядом с ними), НЕ делаешь git-коммитов, НЕ запускаешь e2e/docker/полные сьюты и не трогаешь сгенерированное (generated.ts, openapi, sqlc). " +
+  "Черновиков в ворктри не оставляй: правь файл на месте, никаких *.bak/*.orig/*.tmp — грязное дерево останавливает влитие. " +
   "Находки линтеров исправляй КОДОМ: глушение (//nolint, eslint-disable, @ts-ignore) и обход pre-commit-хуков запрещены — если находка кажется ложной, скажи об этом прямо в ответе вместо глушения. " +
   "Целевые тесты гонять можно и нужно (vitest/go test по своим файлам); behavior-правки делай test-first: падающий тест → фикс → зелёный. " +
   "Если задача невыполнима или инструкции противоречат друг другу — скажи об этом прямо, не изобретай обходных путей.";
@@ -206,7 +207,7 @@ const PERSONA_FIXER =
 const PERSONA_REPAIRER =
   "Ты чинишь падения тестовых гейтов в ворктри ветки минимальными правками, не меняя смысл уже сделанных диспозиций. " +
   "Находки линтеров исправляй кодом, а не глушением (//nolint, eslint-disable запрещены как обход). " +
-  "Не коммитишь, e2e/docker не трогаешь, сгенерированное (generated.ts, openapi, sqlc) руками не правишь. " +
+  "Не коммитишь, e2e/docker не трогаешь, сгенерированное (generated.ts, openapi, sqlc) руками не правишь; черновиков (*.bak, *.orig, *.tmp) в ворктри не оставляй. " +
   "Если падение нельзя починить без чужих файлов или оно противоречит задаче — скажи прямо.";
 
 const PERSONA_COMMITTER =
@@ -324,6 +325,16 @@ async function publishReport(mdText: string, title: string, description: string)
   } catch (e) {
     log("Не удалось опубликовать markdown-отчёт: " + String(e).slice(0, 200));
   }
+}
+
+// Борда находок — живой вид для наблюдающего, но у воркфлоу жёсткий cap 256 report()-элементов
+// на прогон, а много-раундовый гейт его пробивает (гейт #862 упал на 257-м вызове). После
+// исчерпания бюджета статусы живут только в финальном отчёте-артефакте — прогон не падает.
+let reportBudget = 250;
+function reportFinding(item: unknown): void {
+  if (reportBudget <= 0) return;
+  reportBudget -= 1;
+  report(item, "verdicts");
 }
 
 // --- Борда для наблюдающего за прогоном ---
@@ -552,6 +563,12 @@ for (let round = 1; round <= SWEEP_ROUNDS; round++) {
         "Проверь дифф ветки " + BRANCH + " (ворктри " + WT + ", база " + base.slice(0, 7) + "...HEAD, кончик " + tip + ") на соответствие спеке.",
         "Спека: карта " + MAP_ISSUE + " — прочитай её и связанные тикеты читающими командами gh (issue view, комментарии).",
         "Ищи (kind=\"spec\"): (а) требования спеки, которых нет или они частичные; (б) поведение в диффе, которого спека не просила (scope creep); (в) реализованное, но выглядящее неправильно. Каждую находку подкрепляй цитатой спеки и путь:строка. Пустой список — честный ответ. Файлы не редактируй, сьюты не гоняй.",
+        "",
+        // Спека-кан обязан видеть диспозиции наравне с зонными ревьюверами: слепой канал
+        // каждый раунд переоткрывал уже решённое владельцем (гейт #862: снятые пункты карты
+        // всплывали три раунда подряд и подняли второй потолок).
+        "ДИСПОЗИЦИИ ПРОШЛЫХ РАУНДОВ И ПИНЫ (это НЕ находки, не переоткрывай):",
+        dispoText,
       ].join("\n"),
     );
     const judged: JudgedFinding[] = await Promise.all(
@@ -586,14 +603,14 @@ for (let round = 1; round <= SWEEP_ROUNDS; round++) {
       const df: DisposedFinding = { ...f, id: fid++, round };
       if (f.verdict === "Подтверждено") {
         confirmedHere.push(df);
-        report({ where: df.where, status: "Подтверждено", what: df.what, severity: df.severity, area: df.area, round }, "verdicts");
+        reportFinding({ where: df.where, status: "Подтверждено", what: df.what, severity: df.severity, area: df.area, round });
       } else if (f.verdict === "Опровергнуто") {
         refutedCount++;
         declinesAll.push({ label: roundTag + " опровергнуто " + df.where, reason: df.confirmReason });
-        report({ where: df.where, status: "Диспозиция", what: "Опровергнуто: " + df.what, severity: df.severity, area: df.area, round }, "verdicts");
+        reportFinding({ where: df.where, status: "Диспозиция", what: "Опровергнуто: " + df.what, severity: df.severity, area: df.area, round });
       } else {
         unclearHere.push(df);
-        report({ where: df.where, status: "Неясно", what: df.what, severity: df.severity, area: df.area, round }, "verdicts");
+        reportFinding({ where: df.where, status: "Неясно", what: df.what, severity: df.severity, area: df.area, round });
       }
     }
   }
@@ -691,7 +708,20 @@ for (let round = 1; round <= SWEEP_ROUNDS; round++) {
   for (const d of triage.declines) {
     const f = confirmedHere.find((x) => x.id === d.findingId);
     declinesAll.push({ label: f ? f.where : String(d.findingId), reason: d.reason });
-    if (f) report({ where: f.where, status: "Диспозиция", what: "Отклонено: " + d.reason.slice(0, 80), severity: f.severity, area: f.area, round }, "verdicts");
+    if (f) reportFinding({ where: f.where, status: "Диспозиция", what: "Отклонено: " + d.reason.slice(0, 80), severity: f.severity, area: f.area, round });
+  }
+  // Отклонённое триажёром становится пином следующего раунда: иначе свежий ревьювер/спека-кан
+  // переоткрывает его с нуля (гейт #862: снятые владельцем пункты всплывали каждый раунд).
+  if (triage.declines.length > 0) {
+    dispo.push(
+      "Раунд " + roundTag + " отклонено триажём (не переоткрывать): " +
+      triage.declines
+        .map((d) => {
+          const f = confirmedHere.find((x) => x.id === d.findingId);
+          return (f ? f.where : String(d.findingId)) + " — " + d.reason.slice(0, 140);
+        })
+        .join("; "),
+    );
   }
   for (const it of triage.issuesToFile) {
     const created = await world.run("gh", ["issue", "create", "--title", it.title, "--body", it.body]);
@@ -712,7 +742,7 @@ for (let round = 1; round <= SWEEP_ROUNDS; round++) {
   for (const c of clusters) {
     for (const fidT of c.findingIds) {
       const f = confirmedHere.find((x) => x.id === fidT);
-      if (f) report({ where: f.where, status: "Правится", what: f.what, severity: f.severity, area: f.area, round }, "verdicts");
+      if (f) reportFinding({ where: f.where, status: "Правится", what: f.what, severity: f.severity, area: f.area, round });
     }
   }
 
@@ -784,7 +814,7 @@ for (let round = 1; round <= SWEEP_ROUNDS; round++) {
     appliedClusters.push(fr.cluster.title + " (" + commit.hash + ")");
     for (const fidT of fr.cluster.findingIds) {
       const f = confirmedHere.find((x) => x.id === fidT);
-      if (f) report({ where: f.where, status: "Закоммичено", what: commit.hash + " " + commit.subject.slice(0, 70), severity: f.severity, area: f.area, round }, "verdicts");
+      if (f) reportFinding({ where: f.where, status: "Закоммичено", what: commit.hash + " " + commit.subject.slice(0, 70), severity: f.severity, area: f.area, round });
     }
   }
   const wtStatusMid = await world.run("git", ["-C", WT, "status", "--porcelain"]);
@@ -801,7 +831,11 @@ for (let round = 1; round <= SWEEP_ROUNDS; round++) {
 // Блокировка: потолок раундов или красные гейты — влития нет
 // ================================================================
 if (blockedReason.length > 0) {
-  const wtStatus = await world.run("git", ["-C", WT, "status", "--porcelain"]);
+  // --untracked-files=normal (дефолтная семантика): аргумент существует, чтобы у этого сайта
+  // был свой ключ журнала воркфлоу. Инвариант: никакие два git-status сайта не делят аргументы —
+  // аменд-реплей кэширует наблюдения построго по ним, и совпавший аргумент отвечал бы старым
+  // миром (гейт #862: после ручной чистки .bak фазовая проверка дважды отвечала грязным деревом).
+  const wtStatus = await world.run("git", ["-C", WT, "status", "--porcelain", "--untracked-files=normal"]);
   const dirty = wtStatus.stdout.split("\n").map((s) => s.trim()).filter((s) => s.length > 0);
   const mdBlocked = [
     "# Гейт /pre-merge остановлен: " + blockedReason,
@@ -875,7 +909,9 @@ if (!finalSuite.ok) {
 // Фаза 10. Влитие в dev (главный чекаут)
 // ================================================================
 phase("Проверяем готовность dev к влитию");
-const wtStatusFinal = await world.run("git", ["-C", WT, "status", "--porcelain"]);
+// --untracked-files=all: третий уникальный аргументный набор git-status (инвариант развода сайтов —
+// см. комментарий в blocked-ветке); семантика проверки та же: любой вывод = грязное дерево.
+const wtStatusFinal = await world.run("git", ["-C", WT, "status", "--porcelain", "--untracked-files=all"]);
 const dirtyFinal = wtStatusFinal.stdout.split("\n").map((s) => s.trim()).filter((s) => s.length > 0);
 if (dirtyFinal.length > 0) {
   throw new Error("Ворктри не чист перед влитием: " + dirtyFinal.slice(0, 10).join("; "));

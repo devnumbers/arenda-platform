@@ -35,12 +35,15 @@ export type TopNavCollapse = {
  * центре children (Title+Subtitle, StepsChip, поиск или лого — композиция
  * экрана). Мобайл (560 и уже): полоса во всю ширину вьюпорта, в потоке
  * страницы — не закрепляется, уходит вместе со скроллом (футер снизу
- * закрепляет TabBar). Планшет и ПК (от 561): полоса закреплена над
- * прокруткой, центральная часть — колонка max-560 по центру (как контент
- * страницы), по краям вьюпорта — крылья: лого «Рентли» (отступ 22) и
+ * закрепляет TabBar). Планшет (561–1023): полоса закреплена над
+ * прокруткой и стоит во всю ширину вьюпорта — слоты у краёв (у хабов
+ * крайние слоты заняты «крыльями»). ПК (от 1024): полоса закреплена,
+ * центральная часть — колонка max-560 по центру (кап колонки — только
+ * на ПК), по краям вьюпорта — крылья: лого «Рентли» (отступ 22) и
  * кнопка профиля (отступ даёт её собственный паддинг 14). Имя в кнопке
  * приносит TopNavUserContext (источник — useMe в widgets/screen-layout);
- * до загрузки и при ошибке — плейсхолдер.
+ * пока useMe в полёте — скелетон, при ошибке/без имени и вне провайдера —
+ * текстовый плейсхолдер.
  *
  * Раскладка центра — заголовок центрируется относительно всей полосы,
  * слоты leading/trailing наложены абсолютно по краям (Figma 1425:55798):
@@ -50,16 +53,26 @@ export type TopNavCollapse = {
  *
  * Крылья и ведущая кнопка (решение владельца 2026-09-08, аудит #563):
  * на планшетном ярусе (561–1023) у подэкранов с leading-кнопкой крылья
- * не рисуются — колонка 560 начинается там же, где кончается лого, и
- * «крыло» наложилось бы на неё; их хедер — мобильная анатомия (leading,
- * центр, trailing) в закреплённой колонке. На ПК ≥1024 крылья всегда —
- * до колонки >=232px, наложения нет. Хаб-экраны (без leading) держат
- * крылья на всём планшетно-ПК диапазоне (Figma 1603:93153). mobileWings
- * и leading вместе не сочетаются: mobileWings — признак хаба, хаб без
- * leading. */
+ * не рисуются; их хедер — мобильная анатомия (leading, центр, trailing)
+ * и стоит во всю ширину вьюпорта: слоты у краёв (←24/тайтл по центру/⋮24,
+ * макет 1185-40814, решение 25.09 при доработке #865). На ПК ≥1024
+ * крылья всегда, слоты подэкрана — в колонке 560 (макет 1185:40819).
+ * Хаб-экраны (без leading) держат крылья на всём планшетно-ПК диапазоне
+ * (Figma 1603:93153); их компакт-слоты остаются в колонке 560 — края
+ * вьюпорта на планшете заняты крыльями (решение 25.09, гриллинг
+ * доработки #865, Q5-А). mobileWings и leading вместе не сочетаются:
+ * mobileWings — признак хаба, хаб без leading. */
 export type TopNavProps = {
   readonly leading?: ReactNode;
   readonly trailing?: ReactNode;
+  /** Постоянный правый слот бара хаба (аудит #876): действие, живущее в
+   * баре всегда, а не по скроллу компакта — кебаб/шестерёнка «Уведомлений»
+   * (канон §2 «кебаб в правом слоте бара»). На ПК — у правого края колонки
+   * 560 (макет 2329-148700), крыло профиля остаётся у края вьюпорта; на
+   * мобайле/планшете слот встаёт левее крыла-аватара (имя крыла ниже ПК
+   * скрыто — ширина крыла стабильна, клиренс константный). Отличать от
+   * trailing подэкрана: тот живёт в мобильной анатомии без крыльев. */
+  readonly barTrailing?: ReactNode;
   readonly children?: ReactNode;
   readonly className?: string;
   /** `search` — вариант поиска (Figma 706:12598): children (SearchField)
@@ -74,29 +87,52 @@ export type TopNavProps = {
   /** Компакт-бар хаба: проявляется по прогрессу прокрутки хаб-шапки
    * (HubCollapseAnchor пишет `--hub-collapse`). */
   readonly collapse?: TopNavCollapse;
+  /** TopNav внутри полноэкранной поверхности (пикер, визард-оверлей, шит
+   * фильтров — класс .fullscreen-surface): на мобайле и планшете крыльев
+   * нет (анатомия подэкрана). На ПК ≥1024 крылья рисует сама поверхность —
+   * хром ПК не исчезает под открытой поверхностью (решение владельца
+   * 25.09, доработка #865): лого и профиль в тех же слотах, что у страниц;
+   * дублей нет — страница под поверхностью накрыта целиком. Колонка TopNav
+   * ложится на колонку страницы (бары поверхности растянуты на весь
+   * вьюпорт — globals.css). */
+  readonly overlay?: boolean;
 };
 
 export function TopNav({
   leading,
   trailing,
+  barTrailing,
   children,
   className,
   variant = 'default',
   mobileWings = false,
   collapse,
+  overlay = false,
 }: TopNavProps): JSX.Element {
   const router = useRouter();
   const user = useTopNavUser();
 
   const firstName = user?.name;
-  const displayName = firstName?.length ? firstName : 'Пользователь';
+  // pending — useMe в полёте (провайдер пометил сам): скелетон вместо
+  // текста — текстовый плейсхолдер «Пользователь» раздувал крыло и
+  // наезжал на заголовок хаба на мобайле (аудит #876), ширина кнопки
+  // должна быть стабильной. Ошибка useMe и имя-null — терминальные
+  // состояния, вне провайдера контекста нет — все три показывают
+  // текстовый плейсхолдер, как раньше.
+  const pending = user !== null && user.pending === true && firstName === undefined;
+  // «Пользователь» — плейсхолдер и для пустой строки имени (контракт её
+  // допускает): фолбэчим и её, не только null/undefined.
+  const wingName =
+    pending ? undefined : firstName === undefined || firstName === '' ? 'Пользователь' : firstName;
   // Крылья: мобайл — только с mobileWings; планшет (561–1023) — без
-  // leading-кнопки (иначе наложение на колонку 560, см. JSDoc), ПК — всегда.
+  // leading-кнопки, ПК — всегда.
   // Boolean — чтобы условный leading={cond && <Button/>} при cond=false
-  // считался «без leading».
+  // считался «без leading». Внутри полноэкранной поверхности (overlay)
+  // крылья на мобайле/планшете отсутствуют, на ПК их рисует сама
+  // поверхность — хром ПК не исчезает (решение 25.09, доработка #865).
   const hasLeading = Boolean(leading);
-  const wingsMobileClass = mobileWings ? 'flex' : 'hidden';
-  const wingsTierClass = hasLeading ? 'desktop:flex' : 'tablet:flex';
+  const wingsMobileClass = !overlay && mobileWings ? 'flex' : 'hidden';
+  const wingsTierClass = hasLeading || overlay ? 'desktop:flex' : 'tablet:flex';
 
   return (
     <header
@@ -125,52 +161,67 @@ export function TopNav({
           wingsTierClass,
         )}
       >
-        <UserButton name={displayName} onClick={() => router.push(ROUTES.profile)} />
+        {/* Имя крыла — только на ПК (аудит #876): на мобайле/планшете
+         * аватар-only делает ширину крыла константной, и постоянные слоты
+         * бара (barTrailing) получают стабильный клиренс; имя доступно в
+         * профиле и на ПК. */}
+        <UserButton
+          name={wingName}
+          pending={pending}
+          hideNameBelowDesktop
+          onClick={() => router.push(ROUTES.profile)}
+        />
       </div>
       {variant === 'search' ? (
-        <div className="relative mx-auto flex h-[72px] w-full tablet:max-w-[560px] items-center pl-3.5 pr-3.5">
+        /* Поисковая шапка: слоты и поле — во всю ширину вьюпорта на мобайле
+         * и планшете (макет 1185-40814, решение 25.09 — как у LoginShell),
+         * на ПК — в колонке 560 (макет 1185:40819). */
+        <div className="relative mx-auto flex h-[72px] w-full desktop:max-w-column items-center pl-3.5 pr-3.5">
           {leading !== undefined && <div className="flex shrink-0 items-center">{leading}</div>}
           <div className="ml-1 flex h-full min-w-0 flex-1 items-center">{children}</div>
         </div>
       ) : (
         /* Слоты — абсолютные слои по краям (Figma 1425:55798): центр
          * центрируется относительно всей полосы и не смещается от
-         * наличия/отсутствия кнопок (правый слот всегда «зарезервирован»). */
-        <div className="relative mx-auto h-[72px] w-full tablet:max-w-[560px]">
+         * наличия/отсутствия кнопок (правый слот всегда «зарезервирован»).
+         * Кап колонки — только на ПК: на планшете слоты подэкрана (без
+         * крыльев) стоят у краёв вьюпорта, тайтл — по центру вьюпорта
+         * (макет 1185-40814, решение 25.09). */
+        <div className="relative mx-auto h-[72px] w-full desktop:max-w-column">
           {leading !== undefined && (
             <div className="absolute left-0 top-0 flex h-full items-center pl-3.5">{leading}</div>
           )}
           {collapse ? (
-            /* Компакт-бар на планшете и ПК — в самом закреплённом баре:
-             * заголовок строго по центру колонки, лупа в левом слоте
-             * (скрыта на 561–800px — место занято крылом-лого). */
-            <>
-              {collapse.search && (
-                <div className="hub-compact absolute left-0 top-0 hidden h-full items-center pl-3.5 min-[800px]:flex">
-                  <Link
-                    href={collapse.search.href}
-                    aria-label={collapse.search.label}
-                    className="flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-button outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                  >
-                    <Search className="h-6 w-6 text-content" aria-hidden />
-                  </Link>
-                </div>
-              )}
-              <div className="hub-compact flex h-full w-full min-w-0 items-center justify-center px-3">
-                <TopNavTitle title={collapse.title} />
-              </div>
-            </>
+            /* Компакт-бар: слоты (лупа, «+») — в колонке 560 на планшете и
+             * ПК, потому что края вьюпорта там заняты крыльями (лого и
+             * кнопка профиля) — решение 25.09, гриллинг доработки #865
+             * (Q5-А); лупа скрыта на 561–800px — место занято крылом-лого.
+             * На мобайле слой во всю ширину (капа нет) — слоты у краёв. */
+            <div className="absolute inset-0 mx-auto h-full w-full tablet:max-w-column">
+              <TopNavCompactSlots collapse={collapse} tier="inline" />
+            </div>
           ) : (
             <div className="flex h-full w-full min-w-0 items-center justify-center gap-2 px-3">{children}</div>
           )}
-          {(collapse?.trailing ?? trailing) !== undefined && (
+          {!collapse && trailing !== undefined && (
+            <div className="absolute right-0 top-0 flex h-full items-center pr-3.5">
+              {trailing}
+            </div>
+          )}
+          {/* Постоянный правый слот бара хаба: на ПК — правый край колонки
+           * 560 (макет 2329-148700); на мобайле/планшете с крыльями — левее
+           * аватар-крыла, клиренс ведёт токен --topnav-wing-inset.
+           * Прецедент канона §2 — «Уведомления» #876. */}
+          {!collapse && barTrailing !== undefined && (
             <div
               className={cn(
-                'absolute right-0 top-0 flex h-full items-center pr-3.5',
-                collapse && 'hub-compact',
+                'absolute top-0 flex h-full items-center',
+                mobileWings
+                  ? 'right-[var(--topnav-wing-inset)] desktop:right-0 desktop:pr-3.5'
+                  : 'right-0 pr-3.5',
               )}
             >
-              {collapse?.trailing ?? trailing}
+              {barTrailing}
             </div>
           )}
         </div>
@@ -180,27 +231,73 @@ export function TopNav({
          * проявляется отдельным закреплённым клоном (Figma 1733:93740). */
         <div className="hub-compact hub-compact-bar fixed inset-x-0 top-0 z-40 bg-white pt-[env(safe-area-inset-top)] font-sans tablet:hidden">
           <div className="relative mx-auto h-[72px] w-full">
-            {collapse.search && (
-              <Link
-                href={collapse.search.href}
-                aria-label={collapse.search.label}
-                className="absolute left-0 top-0 flex h-full items-center pl-3.5 outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              >
-                <Search className="h-6 w-6 text-content" aria-hidden />
-              </Link>
-            )}
-            <div className="flex h-full items-center justify-center px-14">
-              <TopNavTitle title={collapse.title} />
-            </div>
-            {collapse.trailing && (
-              <div className="absolute right-0 top-0 flex h-full items-center pr-3.5">
-                {collapse.trailing}
-              </div>
-            )}
+            <TopNavCompactSlots collapse={collapse} tier="mobile" />
           </div>
         </div>
       )}
     </header>
+  );
+}
+
+/** Ярусы компакт-бара: inline — слой в закреплённом баре (планшет/ПК,
+ * кап колонки даёт родитель), mobile — внутри отдельного закреплённого
+ * клона (бар хаба уезжает при прокрутке, Figma 1733:93740). */
+type TopNavCompactTier = 'inline' | 'mobile';
+
+type TopNavCompactSlotsProps = {
+  readonly collapse: TopNavCollapse;
+  readonly tier: TopNavCompactTier;
+};
+
+/** Трио слотов компакт-бара хаба (лупа, тайтл, trailing) — общее для
+ * обоих мест рендера: ручные копии инлайна и клона дрейфовали (лупа
+ * клона теряла size-11/cursor-pointer/rounded-button, паддинг тайтла
+ * расходился), теперь расхождение классов слотов невозможно — ярусным
+ * параметром остаются только обёртки: видимость (в инлайне hub-compact
+ * стоит на каждом слое, у клона — на контейнере: дубль класса на слое
+ * умножал бы прозрачность), скрытие лупы на 561–800px (место занято
+ * крылом-лого) и паддинг тайтла px-3/px-14. Лупа едина: хит-зона 44
+ * (size-11) и клик-курсор на обоих ярусах. */
+function TopNavCompactSlots({ collapse, tier }: TopNavCompactSlotsProps): JSX.Element {
+  const inline = tier === 'inline';
+  // Видимость слоёв — параметр яруса; clsx отбрасывает undefined клона.
+  const slotVisibility = inline ? 'hub-compact' : undefined;
+  return (
+    <>
+      {collapse.search !== undefined && (
+        <div
+          className={cn(
+            'absolute left-0 top-0 h-full items-center pl-3.5',
+            slotVisibility,
+            inline ? 'hidden min-[800px]:flex' : 'flex',
+          )}
+        >
+          <Link
+            href={collapse.search.href}
+            aria-label={collapse.search.label}
+            className="flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-button outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            <Search className="h-6 w-6 text-content" aria-hidden />
+          </Link>
+        </div>
+      )}
+      <div
+        className={cn(
+          'flex h-full w-full min-w-0 items-center justify-center',
+          slotVisibility,
+          inline ? 'px-3' : 'px-14',
+        )}
+      >
+        <TopNavTitle title={collapse.title} />
+      </div>
+      {collapse.trailing !== undefined && (
+        <div
+          className={cn('absolute right-0 top-0 flex h-full items-center pr-3.5', slotVisibility)}
+        >
+          {collapse.trailing}
+        </div>
+      )}
+    </>
   );
 }
 

@@ -253,6 +253,14 @@ type fakeGateway struct {
 	totals  PaymentsTotals
 	stateEr error
 
+	// Progress is the batched counters' answer (#845): per payment id, the
+	// same data the per-rental counters fall back to (a payment absent from
+	// the map has no row — the flat fields answer). BatchCalls/singleCalls
+	// pin which seam the list and the single views consult.
+	progress    map[uuid.UUID]ProgressCounts
+	batchCalls  int
+	singleCalls int
+
 	createSeed RentPaymentSeed
 	changes    []RentPaymentChange
 	stoppedAt  *time.Time
@@ -275,14 +283,34 @@ func (g *fakeGateway) NextPlannedOccurrence(
 	return g.next, nil
 }
 
-func (g *fakeGateway) CountPaidOperations(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (int, error) {
+func (g *fakeGateway) CountPaidOperations(
+	_ context.Context, _, _, paymentID uuid.UUID,
+) (int, error) {
+	g.singleCalls++
+	if c, ok := g.progress[paymentID]; ok {
+		return c.PaidCount, nil
+	}
 	return g.paid, nil
 }
 
 func (g *fakeGateway) CountOverdueOccurrences(
-	context.Context, uuid.UUID, uuid.UUID, uuid.UUID, time.Time,
+	_ context.Context, _, _, paymentID uuid.UUID, _ time.Time,
 ) (int, error) {
+	g.singleCalls++
+	if c, ok := g.progress[paymentID]; ok {
+		return c.OverdueCount, nil
+	}
 	return g.overdue, nil
+}
+
+// CountProgressByPayments answers the batched read (#845): the map keyed by
+// payment — a payment with no operations is absent, the service defaults
+// its zeros on the lookup.
+func (g *fakeGateway) CountProgressByPayments(
+	context.Context, uuid.UUID, uuid.UUID, []uuid.UUID, time.Time,
+) (map[uuid.UUID]ProgressCounts, error) {
+	g.batchCalls++
+	return g.progress, nil
 }
 
 func (g *fakeGateway) SummarizePaidOperations(
@@ -431,6 +459,76 @@ func TestGetRental_ProgressCarriesOverdueMonths(t *testing.T) {
 			assert.Equal(t, tt.want, view.Progress.OverdueMonths)
 		})
 	}
+}
+
+// Список читает оба счётчика прогресса одним батчем (#845): по аренде
+// раньше уходила пара gateway-запросов (paid + overdue), список берёт оба
+// счётчика всех платежей одним GROUP BY. Ответ эквивалентен: у платежа без
+// операций строки в батче нет — нули дефолтятся (просрочка нулевая — null,
+// красной строки на экране нет, #817).
+func TestListRentals_ProgressReadsTheBatchedCounters(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	termed := h.seedRental(func(r *domain.Rental) { r.PlannedEndDate = new(mustDate("2027-09-01")) })
+	openEnded := h.seedRental(nil)
+	// Связь аренда→платёж 1:1 (UNIQUE на payment_id) — у каждой аренды свой
+	// платёж: первый несёт 3 оплаченных и 2 просроченных месяца, у второго
+	// операций нет и строки в батче нет.
+	termedPayment := h.store.rentals[termed].PaymentID
+	h.gateway.progress = map[uuid.UUID]ProgressCounts{
+		termedPayment: {PaidCount: 3, OverdueCount: 2},
+	}
+
+	views, err := h.svc.ListRentals(t.Context(), h.owner, h.property)
+	require.NoError(t, err)
+	require.Len(t, views, 2)
+
+	// Порядок списка в double не детерминирован — разворачиваем по id.
+	byID := make(map[uuid.UUID]RentalView, len(views))
+	for _, v := range views {
+		byID[v.Rental.ID] = v
+	}
+	termedView, openView := byID[termed], byID[openEnded]
+	assert.Equal(t, 3, termedView.Progress.PaidMonths)
+	require.NotNil(t, termedView.Progress.OverdueMonths)
+	assert.Equal(t, 2, *termedView.Progress.OverdueMonths)
+	assert.Zero(t, openView.Progress.PaidMonths, "a payment without rows defaults its zeros")
+	assert.Nil(t, openView.Progress.OverdueMonths, "zero overdue reads as null (#817)")
+
+	// Суть тикета (#845): весь список берёт счётчики одним батч-запросом —
+	// поарендная пара остаётся путём одиночного чтения.
+	assert.Equal(t, 1, h.gateway.batchCalls)
+	assert.Zero(t, h.gateway.singleCalls)
+}
+
+// Эквивалентность ответа (#845): списочный прогресс аренды равен
+// одиночному чтению той же аренды — батч меняет число запросов, не ответ.
+func TestListRentals_ProgressMatchesTheSingleView(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	rentalID := h.seedRental(func(r *domain.Rental) { r.PlannedEndDate = new(mustDate("2027-09-01")) })
+	h.gateway.progress = map[uuid.UUID]ProgressCounts{
+		h.store.rentals[rentalID].PaymentID: {PaidCount: 3, OverdueCount: 2},
+	}
+
+	listed, err := h.svc.ListRentals(t.Context(), h.owner, h.property)
+	require.NoError(t, err)
+	single, err := h.svc.GetRental(t.Context(), h.owner, h.property, rentalID)
+	require.NoError(t, err)
+	require.Len(t, listed, 1)
+	assert.Equal(t, single.Progress, listed[0].Progress)
+}
+
+// Пустой список до запроса не доходит (прецедент ListRentalManagedPaymentIDs):
+// батч не зовётся вовсе.
+func TestListRentals_EmptyPropertySkipsTheBatch(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+
+	views, err := h.svc.ListRentals(t.Context(), h.owner, h.property)
+	require.NoError(t, err)
+	assert.Empty(t, views)
+	assert.Zero(t, h.gateway.batchCalls, "an empty list never reaches the query")
 }
 
 func TestCreateRental_TodayStartIsActive(t *testing.T) {

@@ -4,11 +4,16 @@ import type { JSX, KeyboardEvent } from 'react';
 import type { SuspendedSharedProperty } from '@/features/properties';
 import { PropertyCard } from './PropertyCard';
 import { LockSmall } from '@/shared/assets/icons';
+import { cn } from '@/shared/lib/cn';
 import styles from './SuspendedPropertyCard.module.css';
 
 export type SuspendedPropertyCardProps = {
   readonly placeholder: SuspendedSharedProperty;
   readonly onReason: (placeholder: SuspendedSharedProperty) => void;
+  /** Карточка появилась живым перечитыванием (#880): проявляется из
+   * блюра (токен --live-blur-in) раз на маунт; холодный вход списка —
+   * без анимации. */
+  readonly fresh?: boolean;
 };
 
 /**
@@ -28,6 +33,7 @@ export type SuspendedPropertyCardProps = {
 export function SuspendedPropertyCard({
   placeholder,
   onReason,
+  fresh = false,
 }: SuspendedPropertyCardProps): JSX.Element {
   const property = {
     id: placeholder.propertyId,
@@ -54,7 +60,7 @@ export function SuspendedPropertyCard({
     <div
       role="button"
       tabIndex={0}
-      className={styles.root}
+      className={cn(styles.root, fresh && styles.freshIn)}
       data-testid="suspended-property-card"
       aria-label="Объект недоступен — узнать причину"
       onClick={() => onReason(placeholder)}

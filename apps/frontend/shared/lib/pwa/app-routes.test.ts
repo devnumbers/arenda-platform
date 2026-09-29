@@ -10,7 +10,7 @@ import {
 
 describe('isAppRoute', () => {
   it('returns true for exact app routes', () => {
-    expect(isAppRoute('/dashboard')).toBe(true);
+    expect(isAppRoute('/properties')).toBe(true);
     expect(isAppRoute('/profile')).toBe(true);
     expect(isAppRoute('/login')).toBe(true);
   });
@@ -35,9 +35,9 @@ describe('isAppRoute', () => {
   });
 
   it('ignores query string and hash', () => {
-    expect(isAppRoute('/dashboard?tab=overview')).toBe(true);
+    expect(isAppRoute('/properties?tab=overview')).toBe(true);
     expect(isAppRoute('/profile#settings')).toBe(true);
-    expect(isAppRoute('/?returnTo=/dashboard')).toBe(false);
+    expect(isAppRoute('/?returnTo=/properties')).toBe(false);
   });
 
   it('returns false for the landing root and marketing routes (invariant)', () => {
@@ -49,8 +49,9 @@ describe('isAppRoute', () => {
   });
 
   it('returns false for prefixes that merely share a stem', () => {
-    // /dashboard must not match /dashboards or /dashboard-x
-    expect(isAppRoute('/dashboards')).toBe(false);
+    // /properties must not match /properties-extra or /property
+    expect(isAppRoute('/properties-extra')).toBe(false);
+    expect(isAppRoute('/property')).toBe(false);
     expect(isAppRoute('/profile-extra')).toBe(false);
     expect(isAppRoute('/loginpage')).toBe(false);
   });
@@ -76,17 +77,96 @@ describe('isAppRoute', () => {
     expect(isAppRoute('/support')).toBe(false);
     expect(isAppRoute('/support/faq')).toBe(false);
   });
+
+  it('returns false for the removed dashboard route (тикет #865)', () => {
+    // Легаси /dashboard снесён (карта #862, тикет #865): дом кабинета —
+    // /properties, start_url манифеста переведён на него; старые ссылки
+    // уходят в сеть как обычный 404.
+    expect(isAppRoute('/dashboard')).toBe(false);
+    expect(isAppRoute('/dashboard/tab')).toBe(false);
+  });
 });
+
+/** Читает строки в одинарных кавычках из блока исходника между startMarker
+ * и закрывающей `]`. Так тесты сверяют инлайн-копии списков в файлах,
+ * которые нельзя импортировать (public/sw.js) или которые не экспортируют
+ * список константой (proxy.ts, robots.txt). */
+function extractQuotedList(source: string, startMarker: string): ReadonlyArray<string> {
+  const start = source.indexOf(startMarker);
+  expect(start, `marker not found in source: ${startMarker}`).toBeGreaterThanOrEqual(0);
+  const end = source.indexOf(']', start);
+  expect(end, `closing ']' not found after: ${startMarker}`).toBeGreaterThan(start);
+  return Array.from(
+    source.slice(start, end).matchAll(/'([^']+)'/g),
+    (match) => match[1] ?? '',
+  );
+}
 
 describe('app route list sync with service worker', () => {
   // Guards against drift between the TS source of truth and the inline copy
   // kept in public/sw.js (which cannot import TS at runtime).
-  it('public/sw.js contains the same prefix list', () => {
+  it('public/sw.js keeps an exact mirror of the prefix list', () => {
     const swPath = resolve(process.cwd(), 'public/sw.js');
     const swSource = readFileSync(swPath, 'utf8');
 
+    // Двунаправленная сверка множеств: инлайн-копия не должна ни терять
+    // префиксы (навигация уйдёт мимо offline-фолбэка), ни копить лишние
+    // (SW начнёт перехватывать чужие навигации).
+    const swPrefixes = extractQuotedList(swSource, 'const APP_ROUTE_PREFIXES = [');
+    expect([...swPrefixes].sort()).toEqual([...APP_ROUTE_PREFIXES].sort());
+  });
+});
+
+describe('app route list sync with landing robots.txt', () => {
+  // robots.txt лендинга — владелец публичной поверхности хоста (карта #649):
+  // Disallow-блок кабинета зеркалит APP_ROUTE_PREFIXES минус /login (цель
+  // CTA лендинга). Лишняя строка прячет живой раздел от индексации,
+  // пропущенная — открывает приватную ленту краулеру, поэтому сверяем
+  // множества в обе стороны.
+  it('Disallow block equals APP_ROUTE_PREFIXES minus /login', () => {
+    const robotsPath = resolve(process.cwd(), '../landing/public/robots.txt');
+    const robotsSource = readFileSync(robotsPath, 'utf8');
+
+    const disallowPaths = Array.from(
+      robotsSource.matchAll(/^Disallow:\s*(\S+)/gm),
+      (match) => match[1] ?? '',
+    );
+
+    // Отдельный хвостовой блок robots.txt прячет бэкенд-пасстру (/api/,
+    // /webhooks/) — он вне зеркала кабинных префиксов и объявлен здесь явно.
+    const backendPassthrough = ['/api/', '/webhooks/'];
+    const expected = [
+      ...APP_ROUTE_PREFIXES.filter((prefix) => prefix !== '/login'),
+      ...backendPassthrough,
+    ];
+
+    expect(disallowPaths.sort()).toEqual(expected.sort());
+  });
+});
+
+describe('app route list sync with proxy matcher', () => {
+  // proxy.ts — /me-гейт разделов кабинета (#887); его matcher держит те же
+  // топ-пути. Сверяем покрытие в одну сторону (префиксы → matcher): matcher
+  // вправе покрывать пути вне списка префиксов, строгого равенства не требуем.
+  it('covers every prefix with an exact <prefix> or <prefix>/:path* pattern', () => {
+    const proxyPath = resolve(process.cwd(), 'proxy.ts');
+    const proxySource = readFileSync(proxyPath, 'utf8');
+
+    const matcherEntries = extractQuotedList(proxySource, 'matcher: [');
+
+    // /subscription сознательно вне /me-гейта прокси — унификация требует
+    // behavior-решения, вне скоупа гейта.
+    const outsideProxyGate: ReadonlySet<string> = new Set(['/subscription']);
+
     for (const prefix of APP_ROUTE_PREFIXES) {
-      expect(swSource, `public/sw.js missing prefix ${prefix}`).toContain(`'${prefix}'`);
+      const covered = matcherEntries.some(
+        (entry) => entry === prefix || entry === `${prefix}/:path*`,
+      );
+      if (outsideProxyGate.has(prefix)) {
+        expect(covered, `${prefix} must stay outside the proxy /me-gate`).toBe(false);
+        continue;
+      }
+      expect(covered, `proxy.ts matcher missing exact pattern for ${prefix}`).toBe(true);
     }
   });
 });

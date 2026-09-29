@@ -43,6 +43,7 @@ import {
   MenuTrigger,
   Modal,
   ModalContent,
+  CircleIcon,
   PageContent,
   PickerMenu,
   SearchField,
@@ -55,6 +56,7 @@ import {
   TopNavTitle,
   type PickerMenuGroup,
 } from '@/shared/ui/design';
+import { LiveValue } from '@/shared/ui/live-value';
 import {
   DEFAULT_PROPERTY_PARTICIPANT_ORDER,
   DEFAULT_PROPERTY_PARTICIPANT_ROLE_FILTER,
@@ -474,19 +476,23 @@ function PropertyParticipantRowView({
           : 'cursor-default',
       )}
     >
-      <span
-        aria-hidden
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill bg-surface-muted shadow-[0_0_0_2.5px_var(--dl-surface)]"
-      >
+      <CircleIcon variant="white" aria-hidden>
         <BoldUser className="h-6 w-6" />
-      </span>
+      </CircleIcon>
       <span className="flex min-w-0 flex-1 flex-col justify-center gap-1">
         <span className="truncate text-base font-medium text-content">{row.title}</span>
         {/* Иконка роли — постоянная часть второй строки (макет ставит её
          * у почты; когда почта скрыта контрактом или обогащение не
-         * принесло адрес — индикатор роли остаётся сам по себе). */}
+         * принесло адрес — индикатор роли остаётся сам по себе). Смена
+         * роли чужой рукой оживает каноном B (#880: вспышка без
+         * кроссфейда — канон плотных списков); own-защёлки не нужно —
+         * свою правку роли делают на «Правах участника», сюда читатель
+         * возвращается ремонтом списка. Источник перечитывания режиму B
+         * не нужен: вспышка играется самой сменой значения. */}
         <span className="flex min-w-0 items-center gap-1 text-sm text-content-secondary">
-          <EmailIcon className="h-4 w-4 shrink-0" aria-hidden />
+          <LiveValue valueKey={row.emailIcon} mode="flash">
+            <EmailIcon className="h-4 w-4 shrink-0" aria-hidden />
+          </LiveValue>
           {row.subtitle !== undefined && <span className="truncate">{row.subtitle}</span>}
         </span>
         {row.suspended && (

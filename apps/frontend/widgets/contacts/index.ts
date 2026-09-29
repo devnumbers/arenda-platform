@@ -4,7 +4,11 @@ export { ContactBookSearchScreen } from './ui/contact-book-search-screen';
 export { ContactCreateScreen } from './ui/contact-create-screen';
 export { ContactDetailScreen } from './ui/contact-detail-screen';
 export { ContactEditScreen } from './ui/contact-edit-screen';
-export { parseContactBookSortParams } from './lib/contact-book-model';
+export {
+  DEFAULT_CONTACT_BOOK_ORDER,
+  DEFAULT_CONTACT_BOOK_SORT,
+  parseContactBookSortParams,
+} from './lib/contact-book-model';
 export { parseContactListOrderParams } from './lib/contact-list-model';
 /* Route-loading (#609). */
 export {

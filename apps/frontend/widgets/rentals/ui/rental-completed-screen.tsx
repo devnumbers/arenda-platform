@@ -35,6 +35,7 @@ import {
   TopNavTitle,
 } from '@/shared/ui/design';
 import { RentalGroup } from './rental-group';
+import { RentalCompletedSkeleton } from './rental-skeletons';
 import { TermRows } from './term-row';
 import { TenantRow } from './tenant-row';
 
@@ -83,11 +84,7 @@ export function RentalCompletedScreen({
 
       {rentalsQuery.isPending && (
         <PageContent>
-          <div className="flex flex-col gap-4 pt-6">
-            <Skeleton className="h-14 w-full" />
-            <Skeleton className="h-14 w-full" />
-            <Skeleton className="h-14 w-full" />
-          </div>
+          <RentalCompletedSkeleton />
         </PageContent>
       )}
 

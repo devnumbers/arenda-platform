@@ -33,7 +33,7 @@ import {
   useCompleteTask,
   useUncompleteTask,
 } from '@/features/tasks';
-import {clientTodayIso} from '@/entities/payment';
+import {dateToIsoLocal} from '@/shared/lib/calendar';
 import {useSubscription} from '@/features/subscription';
 import {isPaidTariff} from '@/entities/user';
 import type {ApiError} from '@/shared/api/errors';
@@ -58,7 +58,7 @@ import {propertySectionCta} from '../lib/property-section-cta';
 import {operationsSectionTitle} from '../lib/operations-section';
 import {propertyDetailTasks} from '../lib/detail-tasks';
 import {propertyApartmentSummaryRows} from '../lib/apartment-summary';
-import {TopNav, TopNavBackButton, TopNavTitle, IconButton, PageContent, ConfirmDialog, Skeleton} from '@/shared/ui/design';
+import {TopNav, TopNavBackButton, TopNavTitle, IconButton, PageContent, ConfirmDialog} from '@/shared/ui/design';
 import {StarOutline} from '@/shared/assets/icons';
 import {PropertyMediaBlock} from './PropertyMediaBlock';
 import {
@@ -82,23 +82,13 @@ import {PropertyAccessPill} from './PropertyAccessPill';
 import {PropertyArchivedPill} from './PropertyArchivedPill';
 import {propertyHeaderPills} from '../lib/property-header-pills';
 import {PropertyOwnerSection} from './PropertyOwnerSection';
-import {PropertyDetailLoading} from './PropertyDetailLoading';
+import {PropertyDetailLoading, PropertySectionEmptySkeleton, PropertyPaymentsStripSkeleton} from './PropertyDetailLoading';
 import {PropertyDetailError} from './PropertyDetailError';
 import {PropertyNotFoundScreen} from './PropertyNotFoundScreen';
 import {PropertySuspendedScreen} from './PropertySuspendedScreen';
 
 function showMutationError(error: ApiError): void {
     notify.scenarios.property.saveError({description: error.detail});
-}
-
-/** Плейсхолдер строки секции, пока данные секции едут (§7: скелетон
- * приглушён внутри серой карточки). */
-function PropertySectionSkeleton(): JSX.Element {
-    return (
-        <div className="flex flex-col gap-3 px-6 pb-6 pt-4" aria-hidden>
-            <Skeleton className="h-11 w-full bg-surface-muted-hover"/>
-        </div>
-    );
 }
 
 /**
@@ -170,7 +160,7 @@ export function PropertyDetailPage(): JSX.Element {
     // оплаченных операций за текущий месяц (+ all-time — выбор между
     // сводкой и «Операций еще не было», как на экране операций), контакты
     // объекта и активные задачи.
-    const today = clientTodayIso();
+    const today = dateToIsoLocal(new Date());
     const paymentsQuery = usePayments(id, '', { enabled: propertyLoaded });
     const overdueQuery = usePropertyOverdueOperations(id, '', { enabled: propertyLoaded });
     // Сводка секции «Операции в <месяц>» — за текущий календарный месяц
@@ -312,7 +302,7 @@ export function PropertyDetailPage(): JSX.Element {
             return;
         }
         completeRental.mutate(
-            {completedDate: clientTodayIso()},
+            {completedDate: dateToIsoLocal(new Date())},
             {
                 onSuccess: () => {
                     setCompleteSheetOpen(false);
@@ -350,7 +340,7 @@ export function PropertyDetailPage(): JSX.Element {
             },
         };
         completeRental.mutate(
-            {completedDate: clientTodayIso()},
+            {completedDate: dateToIsoLocal(new Date())},
             {
                 onSuccess: () => {
                     if (action === 'archive') {
@@ -576,7 +566,7 @@ export function PropertyDetailPage(): JSX.Element {
                                         pill.kind === 'archived' ? (
                                             <PropertyArchivedPill key="archived"/>
                                         ) : (
-                                            <PropertyAccessPill key="access" role={pill.role}/>
+                                            <PropertyAccessPill key="access" role={pill.role} refreshing={propertyQuery.isFetching}/>
                                         ),
                                     )}
                                 </div>
@@ -589,7 +579,7 @@ export function PropertyDetailPage(): JSX.Element {
                             className="mt-20"
                         >
                             {rentalsQuery.isPending ? (
-                                <PropertySectionSkeleton/>
+                                <PropertySectionEmptySkeleton/>
                             ) : currentRental !== undefined ? (
                                 <PropertyRentalBlock
                                     rental={currentRental}
@@ -619,7 +609,7 @@ export function PropertyDetailPage(): JSX.Element {
                             href={ROUTES.propertyPayments(id)}
                         >
                             {paymentsQuery.isPending ? (
-                                <PropertySectionSkeleton/>
+                                <PropertyPaymentsStripSkeleton/>
                             ) : payments.length > 0 ? (
                                 <PropertyPaymentsIconsBlock groups={paymentGroups}/>
                             ) : (
@@ -654,7 +644,7 @@ export function PropertyDetailPage(): JSX.Element {
                             href={ROUTES.propertyContacts(id)}
                         >
                             {contactsQuery.isPending ? (
-                                <PropertySectionSkeleton/>
+                                <PropertySectionEmptySkeleton/>
                             ) : tenant !== null || propertyContacts.length > 0 ? (
                                 <PropertyContactsBlock
                                     tenant={tenant}
@@ -678,7 +668,7 @@ export function PropertyDetailPage(): JSX.Element {
                             href={ROUTES.propertyTasks(id)}
                         >
                             {tasksQuery.isPending ? (
-                                <PropertySectionSkeleton/>
+                                <PropertySectionEmptySkeleton/>
                             ) : detailTasks.length > 0 ? (
                                 <PropertyTasksBlock
                                     tasks={detailTasks}

@@ -95,7 +95,12 @@ export function TaskCreateScreen({
 
   const create = useCreateTaskRule();
 
-  const propertiesQuery = useProperties();
+  // Справочник объектов нужен только глобальному входу — подпись поля
+  // «Объект» и страница выбора (#525); на объектном входе имя даёт листинг
+  // объекта. Сам запрос списка остаётся за прогревом хаба «Объекты» (#626) —
+  // экран лишь не подписывается на данные, которые не рисует.
+  const objectSelectAvailable = initialPropertyId === null;
+  const propertiesQuery = useProperties({ enabled: objectSelectAvailable });
   const property = propertyQuery.data;
   // Права объекта — из центрального селектора (#703): зритель и архив
   // объектный вход закрывают; глобальное создание — своя книга.
@@ -128,10 +133,6 @@ export function TaskCreateScreen({
       onError: (error) => notify.scenarios.tasks.createError(error),
     });
   };
-
-  // Поле «Объект» и страница выбора — только глобальный вход (решение
-  // владельца 2026-09-07); с объекта задача всегда на этом объекте.
-  const objectSelectAvailable = initialPropertyId === null;
 
   // Pending-гейт справочников (#607, «Naked data surface»): форма появляется
   // после загрузки данных шага — имена объектов в поле «Объект», today

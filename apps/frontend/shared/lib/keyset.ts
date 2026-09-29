@@ -10,3 +10,28 @@ export function keysetNextPageParam(lastPage: {
 }): string | undefined {
   return lastPage.nextCursor ?? undefined;
 }
+
+/** Порция keyset-ленты: строки плюс keyset-продолжение — opaque-курсор
+ * следующей порции, null = порций больше нет. */
+export type KeysetPage<TItem> = {
+  readonly items: TItem[];
+  readonly nextCursor: string | null;
+};
+
+/**
+ * Конфиг keyset-обхода ленты — общая форма экспортируемых конфигов api-слоя
+ * фич (экспорты features/ несут явные возвращаемые типы,
+ * apps/frontend/AGENTS.md): ключ среза, fetch порции по keyset-курсору,
+ * стартовое отсутствие курсора и правило продолжения keysetNextPageParam.
+ */
+export type KeysetPagedQueryConfig<
+  TKey extends ReadonlyArray<unknown>,
+  TPage,
+> = {
+  readonly queryKey: TKey;
+  readonly queryFn: (context: {
+    readonly pageParam?: string;
+  }) => Promise<TPage>;
+  readonly initialPageParam: string | undefined;
+  readonly getNextPageParam: typeof keysetNextPageParam;
+};

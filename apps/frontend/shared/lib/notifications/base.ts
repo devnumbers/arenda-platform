@@ -6,17 +6,21 @@ import {
   type ToastBodyProps,
   type ToastVariant,
 } from '@/shared/ui/toast/ToastBody';
-import { CloseToastButton } from '@/shared/ui/toast/ToastProvider';
+import { CloseToastButton, TOAST_AUTO_CLOSE_MS } from '@/shared/ui/toast/ToastProvider';
 import type {
   NotificationKey,
   ScenarioOptions,
 } from './types';
 
+// Автоуход всех тостов — канон TOAST_AUTO_CLOSE_MS (решение владельца
+// 28.09, аудит #876 — как в iOS); hover и потеря фокуса ставят таймер
+// на паузу (ToastProvider). Ключи остаются раздельными — длительности
+// типов могут разойтись решением владельца.
 const DEFAULT_DURATIONS = {
-  success: 4000,
-  error: 4000,
-  info: 4000,
-  warning: 4000,
+  success: TOAST_AUTO_CLOSE_MS,
+  error: TOAST_AUTO_CLOSE_MS,
+  info: TOAST_AUTO_CLOSE_MS,
+  warning: TOAST_AUTO_CLOSE_MS,
 } as const;
 
 function normalizeError(error: unknown): string {

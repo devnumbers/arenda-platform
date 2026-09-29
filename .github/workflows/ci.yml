@@ -35,7 +35,7 @@ jobs:
           docker run --rm --user "$(id -u):$(id -g)" \
             -e GOCACHE=/tmp/gocache -e GOMODCACHE=/tmp/gomodcache \
             -v "${{ github.workspace }}:/src" -w /src/apps/backend \
-            golang:1.26.5-bookworm go test -race ./...
+            golang:1.26.6-bookworm go test -race ./...
 
       - name: Vet
         run: go vet ./apps/backend/...
@@ -149,7 +149,7 @@ jobs:
 
   # Интеграционные тесты бэкенда (волна 1B, #304) — закрывают CI-гэп: локальный
   # `make backend-test-integration` теперь подстрахован CI. Toolchain та же, что у
-  # unit-степа джобы backend: контейнер golang:1.26.5-bookworm (образ прода),
+  # unit-степа джобы backend: контейнер golang:1.26.6-bookworm (образ прода),
   # GOCACHE/GOMODCACHE в /tmp. Testcontainers работает изнутри контейнера (DooD):
   # примонтирован Docker-сокет (--group-add даёт runner-юзеру право на него),
   # PostgreSQL 18 стартует sibling-контейнером, а TESTCONTAINERS_HOST_OVERRIDE +
@@ -179,7 +179,7 @@ jobs:
             -e TESTCONTAINERS_RYUK_DISABLED=true \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v "${{ github.workspace }}:/src" -w /src/apps/backend \
-            golang:1.26.5-bookworm go test -tags=integration -race ./...
+            golang:1.26.6-bookworm go test -tags=integration -race ./...
 
   # Freshness-гейты generated-кода платформенной спеки и sqlc (волна 1B, #303):
   # make-таргет перегенерирует артефакт и сравнивает git hash-object до/после —
@@ -330,6 +330,9 @@ jobs:
   frontend-e2e:
     name: Frontend e2e
     runs-on: ubuntu-latest
+    # Временно снято владельцем 29.09: самая долгая стадия гейта тормозит
+    # пуш dev на стейдж; вернуть, убрав строку if, когда вернём.
+    if: false
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -370,6 +373,10 @@ jobs:
             apps/frontend/playwright-report
             apps/frontend/test-results
           if-no-files-found: warn
+          # Отчёт ~120МБ на прогон; дефолтные 90 дней набили квоту артефактов
+          # репозитория (находка пуша 29.09: 84 артефакта / 974МБ) и легли на
+          # гейт деплоя. Недели хватает на разбор красного прогона.
+          retention-days: 7
 
   admin:
     name: Admin

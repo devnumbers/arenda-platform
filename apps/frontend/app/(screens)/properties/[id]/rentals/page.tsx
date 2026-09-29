@@ -9,11 +9,7 @@ export const metadata: Metadata = {
   title: 'Аренда — Рентли',
 };
 
-type RentalRoutePageProps = {
-  params: Promise<{ id: string }>;
-};
-
-export default async function RentalRoutePage({ params }: RentalRoutePageProps) {
+export default async function RentalRoutePage({ params }: PageProps<'/properties/[id]/rentals'>) {
   const { id } = await params;
 
   return <RentalScreen propertyId={id} />;

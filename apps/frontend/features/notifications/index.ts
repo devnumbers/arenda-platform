@@ -1,4 +1,11 @@
 export {
+  fetchNotificationDetail,
+  fetchUnreadNotificationsCount,
+  notificationDetailQueryOptions,
+  notificationsFeedQueryOptions,
+  unreadNotificationsCountQueryOptions,
+} from './api/queries';
+export {
   useNotificationsFeed,
   useUnreadNotificationsCount,
   useNotificationDetail,

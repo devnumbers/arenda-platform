@@ -1,7 +1,10 @@
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
-import { parseTasksSortParams } from '@/features/tasks';
+import { globalTasksQueryOptions, parseTasksSortParams } from '@/features/tasks';
+import { propertiesListQueryOptions } from '@/features/properties';
 import { TasksFeedScreen, TasksLoading } from '@/widgets/tasks';
+import { ServerPrefetchBoundary } from '@/shared/api/server-prefetch';
+import { serverApiClient } from '@/shared/api/server-client';
 
 /**
  * Глобальная лента «Задачи» (#523, Figma 1733-27411/1726-86913/1733-92349):
@@ -22,7 +25,27 @@ export default async function TasksRoutePage({ searchParams }: PageProps<'/tasks
 
   return (
     <Suspense fallback={<TasksLoading />}>
-      <TasksFeedScreen initialSort={initialSort} />
+      <ServerPrefetchBoundary
+        prefetch={(queryClient) => {
+          // Дефолтный срез ленты — бакеты без фильтра, EMPTY_TASKS_FEED_FILTER
+          // экрана; справочник объектов — для фильтра и групп.
+          void queryClient.prefetchQuery(globalTasksQueryOptions({
+            completed: false,
+            propertyIds: [],
+            withoutProperty: false,
+            transport: serverApiClient,
+          }));
+          void queryClient.prefetchQuery(globalTasksQueryOptions({
+            completed: true,
+            propertyIds: [],
+            withoutProperty: false,
+            transport: serverApiClient,
+          }));
+          void queryClient.prefetchQuery(propertiesListQueryOptions(serverApiClient));
+        }}
+      >
+        <TasksFeedScreen initialSort={initialSort} />
+      </ServerPrefetchBoundary>
     </Suspense>
   );
 }

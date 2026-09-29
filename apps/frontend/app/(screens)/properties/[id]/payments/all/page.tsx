@@ -10,11 +10,7 @@ export const metadata: Metadata = {
   title: 'Платежи объекта — Рентли',
 };
 
-type AllCatalogPageProps = {
-  params: Promise<{ id: string }>;
-};
-
-export default async function PropertyPaymentsAllRoutePage({ params }: AllCatalogPageProps) {
+export default async function PropertyPaymentsAllRoutePage({ params }: PageProps<'/properties/[id]/payments/all'>) {
   const { id } = await params;
 
   return <PaymentsCatalogScreen propertyId={id} variant="payments" />;

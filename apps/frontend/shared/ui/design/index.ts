@@ -15,6 +15,7 @@ export { Checkbox, type CheckboxProps } from './checkbox';
 export { RadioGroup, type RadioGroupProps, RadioGroupItem, type RadioGroupItemProps } from './radio';
 export { Switch, type SwitchProps } from './switch';
 export { SearchField, type SearchFieldProps } from './search-field';
+export { SearchPill, type SearchPillProps } from './search-pill';
 export { PickerField, type PickerFieldProps, type PickerOption } from './picker-field';
 export { ChipButton, type ChipButtonProps } from './chip-button';
 export { StepsChip, type StepsChipProps, type StepsChipSize } from './steps-chip';
@@ -26,6 +27,7 @@ export { MonthDaysGrid, type MonthDaysGridProps } from './month-days-grid';
 export { monthTitle, MONTH_LABELS } from './month-grid';
 export { MonthYearPicker, type MonthYearPickerProps } from './month-year-picker';
 export { WheelPicker, type WheelPickerProps, type WheelPickerItem } from './wheel-picker';
+export { paddedItems } from './wheel-items';
 export {
   WheelPickerSheet,
   type WheelPickerSheetProps,
@@ -38,8 +40,15 @@ export {
   type CalendarRangePickerProps,
 } from './calendar-date-picker';
 export { ListRow, type ListRowProps } from './list-row';
+export { CircleIcon, type CircleIconProps } from './circle-icon';
+export {
+  type CircleIconVariant,
+  circleIconPair,
+  circleIconRing,
+} from './circle-icon-variants';
 export { RoundActionButton, type RoundActionButtonProps } from './round-action-button';
 export { StickyBottomBar, type StickyBottomBarProps } from './sticky-bottom-bar';
+export { fullscreenSurfaceClass } from './fullscreen-surface';
 export { StatusIcon, type StatusIconProps, type StatusIconStatus } from './status-icon';
 export { PageContent, type PageContentProps } from './page-content';
 export { TopNav, type TopNavProps, TopNavTitle, type TopNavTitleProps } from './top-nav';

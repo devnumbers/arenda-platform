@@ -154,7 +154,7 @@ func (r *AdminRepository) CountArchivedPropertiesByOwner(ctx context.Context, ow
 func (r *AdminRepository) ListProperties(
 	ctx context.Context, filters adminapp.AdminPropertyFilters,
 ) ([]adminapp.AdminPropertyView, int64, error) {
-	q := escapeLikePattern(filters.Q)
+	q := pgconv.EscapeLikePattern(filters.Q)
 	total, err := r.q().CountPropertiesAdmin(ctx, postgres.CountPropertiesAdminParams{
 		OwnerID: pgconv.UUIDToPgtype(filters.OwnerID),
 		Status:  filters.Status,
@@ -504,15 +504,4 @@ func toInt32(v int) int32 {
 		return math.MinInt32
 	}
 	return int32(v)
-}
-
-// likePatternEscaper escapes the ILIKE metacharacters in user-supplied search
-// text. The matching SQL patterns use ESCAPE '\'.
-var likePatternEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
-
-// escapeLikePattern trims and escapes a user-supplied substring so it can be
-// safely embedded in an ILIKE '%...%' pattern. An empty result disables the
-// filter on the SQL side.
-func escapeLikePattern(q string) string {
-	return likePatternEscaper.Replace(strings.TrimSpace(q))
 }

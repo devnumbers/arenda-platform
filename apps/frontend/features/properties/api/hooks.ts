@@ -13,75 +13,34 @@ import {
 } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
-import type { IsoDate } from '@/shared/lib/calendar';
-import { mapPropertyResponse } from '@/entities/property';
-import type { Property } from '@/entities/property';
+import { mapPropertyPhoto, mapPropertyResponse } from '@/entities/property';
+import type { Property, PropertyPhoto } from '@/entities/property';
 import { propertyKeys } from '@/shared/api/query-keys';
-import { keysetNextPageParam } from '@/shared/lib/keyset';
+import { keysetNextPageParam, type KeysetPage } from '@/shared/lib/keyset';
 import { resolvePropertiesLandingHref } from '../lib/property-landing';
-import type { SharedAccessRole } from '@/shared/model/access';
 import type { components } from '@/shared/api/dto';
 
 type PropertyResponse = components['schemas']['PropertyResponse'];
 type PropertiesResponse = components['schemas']['PropertiesResponse'];
+
+import {
+  propertiesListQueryOptions,
+  propertyDetailQueryOptions,
+  type PropertiesListResult,
+} from './queries';
+
+export type {
+  PropertiesListResult,
+  PropertiesListQueryConfig,
+  SuspendedSharedProperty,
+} from './queries';
 type PropertiesSearchResponse = components['schemas']['PropertiesSearchResponse'];
 type PropertyCreateRequest = components['schemas']['PropertyCreateRequest'];
 type PropertyUpdateRequest = components['schemas']['PropertyUpdateRequest'];
-type PropertyPhoto = components['schemas']['PropertyPhoto'];
+type PropertyPhotoDto = components['schemas']['PropertyPhoto'];
 type AddressSuggestionsResponse =
   components['schemas']['AddressSuggestionsResponse'];
 type AddressSuggestion = components['schemas']['AddressSuggestion'];
-
-/** Подвесший чужой объект списка (карта #692, тикет #702): блюр-карточка —
- * обычная карточка объекта (название, адрес — рендерятся под blur, Figma
- * 2213-99113) плюс контакт владельца для шита причины (Figma 2229-100002;
- * почта владельца — сознательная экспозиция этого экрана). */
-export type SuspendedSharedProperty = {
-  readonly propertyId: string;
-  readonly accessRole: SharedAccessRole;
-  readonly name: string;
-  readonly address: string;
-  readonly ownerName: string;
-  readonly ownerEmail: string;
-};
-
-function mapSuspendedShared(
-  dto: NonNullable<PropertiesResponse['suspended_shared']>,
-): SuspendedSharedProperty[] {
-  return dto.map((item) => ({
-    propertyId: item.property_id,
-    accessRole: item.access_role,
-    name: item.name,
-    address: item.address,
-    ownerName: item.owner_name,
-    ownerEmail: item.owner_email,
-  }));
-}
-
-export type PropertiesListResult = {
-  readonly items: Property[];
-  /** Подвесшие общие объекты получателя (#702) — блюр-карточки хаба вместо
-   * сноски hidden_shared_count (#158 T4). */
-  readonly suspendedShared: SuspendedSharedProperty[];
-  /** «Сегодня владельца» (ADR 0048) — граница бейджа «Осталось N месяцев» (#586). */
-  readonly today: IsoDate;
-};
-
-/** Полный payload GET /properties — строки, suspended-плейсхолдеры (#702) и
- * «сегодня владельца» (ADR 0048). Общее горло обоих хуков и прогрева хабов
- * #626: один cache entry на propertyKeys.list, useProperties и
- * usePropertiesWithMeta — лишь проекции над ним (кэш прогревается тем же
- * кодом, что читает экран). */
-export async function fetchProperties(): Promise<PropertiesListResult> {
-  const response = await apiClient<PropertiesResponse>('/properties');
-  return {
-    items: response.items.map(mapPropertyResponse),
-    suspendedShared: response.suspended_shared
-      ? mapSuspendedShared(response.suspended_shared)
-      : [],
-    today: response.today,
-  };
-}
 
 /** Проекция «только строки» над общим cache entry. Module-level, чтобы
  * ссылка select была стабильной — react-query кэширует её результат. */
@@ -93,8 +52,7 @@ export function useProperties(
   options: { enabled?: boolean; staleTime?: number } = {},
 ): UseQueryResult<Property[], ApiError> {
   return useQuery({
-    queryKey: propertyKeys.list,
-    queryFn: fetchProperties,
+    ...propertiesListQueryOptions(),
     select: selectPropertiesItems,
     enabled: options.enabled,
     staleTime: options.staleTime,
@@ -109,8 +67,7 @@ export function usePropertiesWithMeta(
   options: { enabled?: boolean } = {},
 ): UseQueryResult<PropertiesListResult, ApiError> {
   return useQuery({
-    queryKey: propertyKeys.list,
-    queryFn: fetchProperties,
+    ...propertiesListQueryOptions(),
     enabled: options.enabled,
   });
 }
@@ -135,10 +92,7 @@ export const PROPERTIES_SEARCH_PAGE_SIZE = 50;
  * Порция поиска объектов (#601): строки плюс keyset-продолжение — opaque-
  * курсор следующей порции, null = совпадения исчерпаны.
  */
-export type PropertiesSearchPageData = {
-  readonly items: Property[];
-  readonly nextCursor: string | null;
-};
+export type PropertiesSearchPageData = KeysetPage<Property>;
 
 /** Общее горло порции GET /properties/search: search — обязательный
  * регистронезависимый фильтр по названию и адресу (клиентски тримится),
@@ -193,11 +147,7 @@ export function useProperty(
   id: string,
 ): UseQueryResult<Property, ApiError> {
   return useQuery({
-    queryKey: propertyKeys.detail(id),
-    queryFn: async () => {
-      const response = await apiClient<PropertyResponse>(`/properties/${id}`);
-      return mapPropertyResponse(response);
-    },
+    ...propertyDetailQueryOptions({ id }),
     enabled: Boolean(id),
   });
 }
@@ -223,17 +173,19 @@ export function useCreateProperty(): UseMutationResult<
 }
 
 export function useUpdateProperty(): UseMutationResult<
-  PropertyResponse,
+  Property,
   ApiError,
   { id: string; data: PropertyUpdateRequest }
 > {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }) =>
-      apiClient<PropertyResponse>(`/properties/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify(data),
-      }),
+    mutationFn: async ({ id, data }) =>
+      mapPropertyResponse(
+        await apiClient<PropertyResponse>(`/properties/${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(data),
+        }),
+      ),
     onSuccess: (_, { id }) => {
       void queryClient.invalidateQueries({ queryKey: propertyKeys.list });
       void queryClient.invalidateQueries({ queryKey: propertyKeys.detail(id) });
@@ -242,16 +194,18 @@ export function useUpdateProperty(): UseMutationResult<
 }
 
 export function useArchiveProperty(): UseMutationResult<
-  PropertyResponse,
+  Property,
   ApiError,
   string
 > {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id) =>
-      apiClient<PropertyResponse>(`/properties/${id}/archive`, {
-        method: 'POST',
-      }),
+    mutationFn: async (id) =>
+      mapPropertyResponse(
+        await apiClient<PropertyResponse>(`/properties/${id}/archive`, {
+          method: 'POST',
+        }),
+      ),
     onSuccess: (_, id) => {
       void queryClient.invalidateQueries({ queryKey: propertyKeys.list });
       void queryClient.invalidateQueries({ queryKey: propertyKeys.detail(id) });
@@ -260,16 +214,18 @@ export function useArchiveProperty(): UseMutationResult<
 }
 
 export function useUnarchiveProperty(): UseMutationResult<
-  PropertyResponse,
+  Property,
   ApiError,
   string
 > {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id) =>
-      apiClient<PropertyResponse>(`/properties/${id}/unarchive`, {
-        method: 'POST',
-      }),
+    mutationFn: async (id) =>
+      mapPropertyResponse(
+        await apiClient<PropertyResponse>(`/properties/${id}/unarchive`, {
+          method: 'POST',
+        }),
+      ),
     onSuccess: (_, id) => {
       void queryClient.invalidateQueries({ queryKey: propertyKeys.list });
       void queryClient.invalidateQueries({ queryKey: propertyKeys.detail(id) });
@@ -283,17 +239,19 @@ export function useUnarchiveProperty(): UseMutationResult<
  * Инвалидит список и деталь — порядок карточек держит сервер.
  */
 export function useSetPropertyPin(): UseMutationResult<
-  PropertyResponse,
+  Property,
   ApiError,
   { id: string; pinned: boolean }
 > {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, pinned }) =>
-      apiClient<PropertyResponse>(`/properties/${id}/pin`, {
-        method: 'PUT',
-        body: JSON.stringify({ pinned }),
-      }),
+    mutationFn: async ({ id, pinned }) =>
+      mapPropertyResponse(
+        await apiClient<PropertyResponse>(`/properties/${id}/pin`, {
+          method: 'PUT',
+          body: JSON.stringify({ pinned }),
+        }),
+      ),
     onSuccess: (_, { id }) => {
       void queryClient.invalidateQueries({ queryKey: propertyKeys.list });
       void queryClient.invalidateQueries({ queryKey: propertyKeys.detail(id) });
@@ -323,13 +281,15 @@ export function useUploadPropertyPhoto(): UseMutationResult<
   { propertyId: string; file: File }
 > {
   return useMutation({
-    mutationFn: ({ propertyId, file }) => {
+    mutationFn: async ({ propertyId, file }) => {
       const formData = new FormData();
       formData.append('file', file);
-      return apiClient<PropertyPhoto>(`/properties/${propertyId}/photos`, {
-        method: 'POST',
-        body: formData,
-      });
+      return mapPropertyPhoto(
+        await apiClient<PropertyPhotoDto>(`/properties/${propertyId}/photos`, {
+          method: 'POST',
+          body: formData,
+        }),
+      );
     },
   });
 }

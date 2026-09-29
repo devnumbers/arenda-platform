@@ -18,21 +18,24 @@ import { useTabBarSuppressionState } from './tab-bar';
  * /support снесена, пилюля открывает модалку «Связаться с нами». Только ПК
  * ≥1024 (hidden desktop:block; ярусы владельца 08.09: пилюли — часть
  * ПК-хрома, в 561–1023 планшетный хром с TabBar). Рендерит ScreenLayout.
- * Пока на экране смонтирован StickyBottomBar, пилюли глушатся вместе с
- * TabBar (useTabBarSuppression): нижняя панель — полноширинный белый шит,
- * углы под ним не кликабельны — тот же канон «честной недоступности», что
- * у шита «Еще» (решение не фиксировано картой — «Not yet specified»,
- * предъявлено владельцу на приёмке #561). */
+ * «Хром ПК постоянен» (решение владельца 25.09, правка канона #561,
+ * тикет #865): пилюли не глушатся нижними панелями — шит панели на ПК
+ * сужается до колонки 560, углы свободны. Класс .desktop-chrome — хук для
+ * globals.css: при открытой полноэкранной поверхности хром поднимается
+ * над ней (z-60), оставаясь кликабельным. */
 export function DesktopNavPills({ notificationsBadge = 0 }: { readonly notificationsBadge?: number } = {}): JSX.Element | null {
-  const { present, bars } = useTabBarSuppressionState();
+  const { present } = useTabBarSuppressionState();
   const pathname = usePathname();
   const [supportOpen, setSupportOpen] = useState(false);
   const activeSectionId = getActiveNavItem(pathname, secondaryNavSections)?.id;
 
-  if (!present || bars > 0) return null;
+  if (!present) return null;
 
   return (
-    <nav aria-label="Дополнительная навигация" className="hidden font-sans desktop:block">
+    <nav
+      aria-label="Дополнительная навигация"
+      className="desktop-chrome relative z-30 hidden font-sans desktop:block"
+    >
       <div className="fixed bottom-0 left-0 z-30 p-3">
         <DesktopMenuButton
           section={navSectionById('notifications')}

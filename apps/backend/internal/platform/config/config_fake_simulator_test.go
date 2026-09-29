@@ -10,7 +10,7 @@ import (
 // auto/manual switch of the confirmation endpoints. Both are fake-provider
 // concerns: they load and validate only when PAYMENT_PROVIDER=fake.
 
-func TestFakeSimulatorWebOriginDefaultsToAppBaseURLOrigin(t *testing.T) { //nolint:paralleltest // fixture uses t.Setenv
+func TestFakeSimulatorWebOriginDefaultsToAppBaseURLOrigin(t *testing.T) {
 	setRequiredLocalEnv(t)
 
 	cfg, err := Load()
@@ -57,7 +57,7 @@ func TestFakeSimulatorWebOriginIgnoredUnderTKassa(t *testing.T) {
 	}
 }
 
-func TestFakeSimulatorAutoConfirmDefaultsToAuto(t *testing.T) { //nolint:paralleltest // fixture uses t.Setenv
+func TestFakeSimulatorAutoConfirmDefaultsToAuto(t *testing.T) {
 	setRequiredLocalEnv(t)
 
 	cfg, err := Load()

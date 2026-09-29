@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Rental } from '@/entities/rental';
+import { makeRental, type Rental } from '@/entities/rental';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import {
   completedRentalMonths,
@@ -12,9 +12,10 @@ import {
 } from './past-model';
 
 /** Фикстура завершённой аренды из макета #535 (1302:52462): 56 000 ₽,
- * 10.05.2026 → 10.05.2028 (24 месяца), завершена 10.05.2028, арендатор. */
+ * 10.05.2026 → 10.05.2028 (24 месяца), завершена 10.05.2028, арендатор.
+ * Остальное — канон makeRental. */
 function completedFixture(overrides: Partial<Rental> = {}): Rental {
-  return {
+  return makeRental({
     id: '0198f6a1-7c1a-7d0f-9f4f-6f3c1e2b4a55',
     propertyId: '0198f6a1-7c1a-7d0f-9f4f-6f3c1e2b4a01',
     status: 'completed',
@@ -25,7 +26,6 @@ function completedFixture(overrides: Partial<Rental> = {}): Rental {
     depositKopecks: 0,
     commissionKopecks: 0,
     depositReturnKopecks: 5_600_000,
-    depositReturnComment: null,
     tenant: {
       contactId: '0198f6a1-7c1a-7d0f-9f4f-6f3c1e2b4a66',
       firstName: 'Александр',
@@ -44,7 +44,7 @@ function completedFixture(overrides: Partial<Rental> = {}): Rental {
     today: '2029-01-15',
     createdAt: '2026-05-10T10:00:00Z',
     ...overrides,
-  };
+  });
 }
 
 describe('completedRentalsOf', () => {

@@ -58,9 +58,12 @@ LIMIT $3 OFFSET $4;
 -- visibility of ADR 0052 decision 3). The policy port maps an actor to a
 -- role per property; the merged feed has no single scope to resolve, so the
 -- actor-scoped read carries its visibility predicate here, beside the data.
--- A suspended membership grants no read (the SQL-level status filter, the
--- property_members precedent); the property-less rows are the owner's alone
--- — the member EXISTS needs a property to match.
+-- The bound rows' verdict is the derived-read canon — the SQL function
+-- actor_can_read_property (000142, ADR 0028): the owner plus the active
+-- members of a non-archived object, a suspended membership grants no read
+-- (the SQL-level status filter, #158 T4). The owner term stays beside the
+-- function call: the property-less rows are the owner's alone — the
+-- function needs a property row to say yes.
 --
 -- The bound task rows always carry owner_id of the property's owner (there
 -- is no re-binding), so the owner branch covers the actor's own properties.
@@ -71,15 +74,7 @@ LIMIT $3 OFFSET $4;
 -- тикет #522): non-archived properties plus the property-less cut.
 SELECT count(*) FROM tasks t
 LEFT JOIN properties p ON p.id = t.property_id
-WHERE (
-       t.owner_id = $1
-       OR EXISTS (
-            SELECT 1 FROM property_members pm
-            WHERE pm.property_id = t.property_id
-              AND pm.user_id = $1
-              AND pm.status = 'active'
-          )
-      )
+WHERE (t.owner_id = $1 OR actor_can_read_property(t.property_id, $1))
   AND (t.property_id IS NULL OR p.status != 'archived')
   AND (t.completed_date IS NOT NULL) = $2::boolean;
 
@@ -95,15 +90,7 @@ SELECT t.id, t.owner_id, t.property_id, t.rule_id, t.due_date, t.due_time, t.tit
 FROM tasks t
 LEFT JOIN task_rules r ON r.id = t.rule_id
 LEFT JOIN properties p ON p.id = t.property_id
-WHERE (
-       t.owner_id = $1
-       OR EXISTS (
-            SELECT 1 FROM property_members pm
-            WHERE pm.property_id = t.property_id
-              AND pm.user_id = $1
-              AND pm.status = 'active'
-          )
-      )
+WHERE (t.owner_id = $1 OR actor_can_read_property(t.property_id, $1))
   AND (t.property_id IS NULL OR p.status != 'archived')
   AND t.completed_date IS NULL
 ORDER BY t.due_date ASC NULLS LAST, t.due_time ASC NULLS FIRST, t.created_at ASC, t.id ASC
@@ -118,15 +105,7 @@ SELECT t.id, t.owner_id, t.property_id, t.rule_id, t.due_date, t.due_time, t.tit
 FROM tasks t
 LEFT JOIN task_rules r ON r.id = t.rule_id
 LEFT JOIN properties p ON p.id = t.property_id
-WHERE (
-       t.owner_id = $1
-       OR EXISTS (
-            SELECT 1 FROM property_members pm
-            WHERE pm.property_id = t.property_id
-              AND pm.user_id = $1
-              AND pm.status = 'active'
-          )
-      )
+WHERE (t.owner_id = $1 OR actor_can_read_property(t.property_id, $1))
   AND (t.property_id IS NULL OR p.status != 'archived')
   AND t.completed_date IS NOT NULL
 ORDER BY t.completed_date DESC, t.created_at DESC, t.id ASC
@@ -142,15 +121,7 @@ LIMIT $2 OFFSET $3;
 -- name: CountTasksGlobalOfProperties :one
 SELECT count(*) FROM tasks t
 LEFT JOIN properties p ON p.id = t.property_id
-WHERE (
-       t.owner_id = $1
-       OR EXISTS (
-            SELECT 1 FROM property_members pm
-            WHERE pm.property_id = t.property_id
-              AND pm.user_id = $1
-              AND pm.status = 'active'
-          )
-      )
+WHERE (t.owner_id = $1 OR actor_can_read_property(t.property_id, $1))
   AND (
        t.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[])
        OR (sqlc.arg('without_property')::bool AND t.property_id IS NULL)
@@ -168,15 +139,7 @@ SELECT t.id, t.owner_id, t.property_id, t.rule_id, t.due_date, t.due_time, t.tit
 FROM tasks t
 LEFT JOIN task_rules r ON r.id = t.rule_id
 LEFT JOIN properties p ON p.id = t.property_id
-WHERE (
-       t.owner_id = $1
-       OR EXISTS (
-            SELECT 1 FROM property_members pm
-            WHERE pm.property_id = t.property_id
-              AND pm.user_id = $1
-              AND pm.status = 'active'
-          )
-      )
+WHERE (t.owner_id = $1 OR actor_can_read_property(t.property_id, $1))
   AND (
        t.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[])
        OR (sqlc.arg('without_property')::bool AND t.property_id IS NULL)
@@ -196,15 +159,7 @@ SELECT t.id, t.owner_id, t.property_id, t.rule_id, t.due_date, t.due_time, t.tit
 FROM tasks t
 LEFT JOIN task_rules r ON r.id = t.rule_id
 LEFT JOIN properties p ON p.id = t.property_id
-WHERE (
-       t.owner_id = $1
-       OR EXISTS (
-            SELECT 1 FROM property_members pm
-            WHERE pm.property_id = t.property_id
-              AND pm.user_id = $1
-              AND pm.status = 'active'
-          )
-      )
+WHERE (t.owner_id = $1 OR actor_can_read_property(t.property_id, $1))
   AND (
        t.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[])
        OR (sqlc.arg('without_property')::bool AND t.property_id IS NULL)

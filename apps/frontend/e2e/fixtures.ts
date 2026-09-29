@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { test as base, expect, type Page, type TestInfo } from '@playwright/test';
+import { test as base, expect, type Locator, type Page, type TestInfo } from '@playwright/test';
 
 // Shared fixtures of the frontend e2e suite. The environment contract is
 // filled by tools/e2e/frontend/run-frontend-e2e.sh (`make frontend-e2e`):
@@ -298,11 +298,18 @@ export async function openCabinetWithSessionToken(page: Page, sessionToken: stri
   ]);
 }
 
+/** Общая шапка экрана единого хрома (карта #556): `<header aria-label=
+ * "Навигация экрана">` — кебабы шапки, «Назад», заголовки прибитых
+ * экранов. Канон локатора спек: смена aria-label — правка в одном месте,
+ * а не в каждой спеке (#860). */
+export function screenHeader(page: Page): Locator {
+  return page.locator('header[aria-label="Навигация экрана"]');
+}
+
 /**
  * Extracts the last login code emailed for the seeded user. The fake email
  * sender logs the message body ("Код для входа в Рентли: NNNNNN"); polling
- * covers the send→log latency. Bruno API-e2e precedent (grep of the same
- * log, tools/e2e/run-e2e-with-db-checks.sh).
+ * covers the send→log latency.
  */
 export async function extractLoginCode(user: SeededUser): Promise<string> {
   return extractCodeSentTo(user, user.email);

@@ -6,6 +6,7 @@ import { DEFAULT_TASKS_SORT } from '@/features/tasks';
 import {
   ChipButton,
   HubCollapseAnchor,
+  HubTitle,
   IconButton,
   PageContent,
   TopNav,
@@ -41,8 +42,8 @@ export function TasksLoading(): JSX.Element {
 
       <PageContent>
         <HubCollapseAnchor>
-          <div className="flex items-center justify-between pr-3.5 pl-6">
-            <h1 className="m-0 text-[28px] font-semibold leading-8 text-content">Задачи</h1>
+          <div className="flex h-8 items-center justify-between pr-3.5">
+            <HubTitle>Задачи</HubTitle>
             <IconButton icon={<Add />} label="Создать задачу" />
           </div>
 

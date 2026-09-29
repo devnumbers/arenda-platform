@@ -7,14 +7,9 @@ import { Cancel } from '@/shared/assets/icons';
 import { formatTime } from '@/shared/lib/date-format';
 import { ROUTES } from '@/shared/config/routes';
 import { NotificationCategoryIcon } from '@/entities/notification';
-import type { StreamFrame } from '@/features/notifications/api/stream-frame';
+import type { NotificationCreatedFrame } from '@/features/notifications/api/stream-frame';
 import styles from '@/shared/ui/toast/ToastProvider.module.css';
-
-export type NotificationCreatedFrame = Extract<StreamFrame, { kind: 'created' }>;
-
-/** Автозакрытие тоста уведомления: читается дольше канонных 4с
- * подтверждений; пауза при наведении канона остаётся. */
-const NOTIFICATION_TOAST_AUTOCLOSE_MS = 6000;
+import { TOAST_AUTO_CLOSE_MS } from '@/shared/ui/toast/ToastProvider';
 
 /**
  * Тост о новом уведомлении (макет 2343:57307, тикеты #747/#778): круг иконки
@@ -77,7 +72,7 @@ export function NotificationToast({
           event.stopPropagation();
           closeToast();
         }}
-        className="absolute right-2 top-2 flex h-11 w-11 items-center justify-center rounded-pill text-content-secondary outline-none transition-colors hover:text-content focus-visible:ring-2 focus-visible:ring-primary"
+        className="absolute right-2 top-2 flex h-11 w-11 cursor-pointer items-center justify-center rounded-pill text-content-secondary outline-none transition-colors hover:text-content focus-visible:ring-2 focus-visible:ring-primary"
       >
         <Cancel width={24} height={24} aria-hidden />
       </button>
@@ -98,6 +93,6 @@ export function notifyNotificationCreated(frame: NotificationCreatedFrame): void
     toastId: `notification-${frame.id}`,
     className: `${styles.toast} ${styles.notification}`,
     closeButton: false,
-    autoClose: NOTIFICATION_TOAST_AUTOCLOSE_MS,
+    autoClose: TOAST_AUTO_CLOSE_MS,
   });
 }

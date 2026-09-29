@@ -7,8 +7,8 @@ import { ROUTES } from '@/shared/config/routes';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
+import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
-  clientTodayIso,
   formatDayMonth,
   formatDayMonthWithYear,
   PaymentRowButton,
@@ -266,7 +266,7 @@ function OperationDetailBody({
       propertyId={propertyId}
       operation={operation}
       propertyTitle={propertyTitle}
-      today={clientTodayIso()}
+      today={dateToIsoLocal(new Date())}
       payBar={canMutate && payable
         ? {
             onPay: () => {
@@ -496,7 +496,7 @@ function OperationPaidSuccess({
   readonly onClose: () => void;
 }): JSX.Element {
   const router = useRouter();
-  const today = clientTodayIso();
+  const today = dateToIsoLocal(new Date());
   const paidDate: IsoDate = paid.paidDate ?? today;
   const paymentId = paid.paymentId;
   const style = categoryStyle('default', paid.categorySlug);

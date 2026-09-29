@@ -7,7 +7,8 @@ import { ArrowLeft, Cancel } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
-import { clientTodayIso, type IsoDate, type PaymentReminderOffset } from '@/entities/payment';
+import { dateToIsoLocal } from '@/shared/lib/calendar';
+import { type IsoDate, type PaymentReminderOffset } from '@/entities/payment';
 import type { Rental } from '@/entities/rental';
 import {
   useCreateRental,
@@ -58,7 +59,7 @@ export function RentalCreateWizardFlow({
   // Визард — экран создания: футер глушится на всех шагах.
   useTabBarSuppression();
   const [created, setCreated] = useState<Rental | null>(null);
-  const today: IsoDate = clientTodayIso();
+  const today: IsoDate = dateToIsoLocal(new Date());
   const [step, setStep] = useState<RentalWizardStep>(() => initialStep(draft, today));
 
   if (created !== null) {
@@ -113,7 +114,7 @@ export function RentalCreateWizardFlow({
                 владельца 2026-09-05: скрытие вместо дизейбла); на планшете
                 тянется с шитом во всю ширину, как хедер. */}
             {wizardStepReady(1, draft, today) && (
-              <StickyBottomBar fullWidthContent>
+              <StickyBottomBar>
                 <WizardBottomBar>
                   <Button className="w-full" onClick={() => goToStep(2)}>
                     Продолжить
@@ -145,7 +146,7 @@ export function RentalCreateWizardFlow({
               today={today}
             />
             {wizardStepReady(2, draft, today) && (
-              <StickyBottomBar fullWidthContent>
+              <StickyBottomBar>
                 <WizardBottomBar>
                   <Button className="w-full" onClick={() => goToStep(3)}>
                     Далее
@@ -166,7 +167,7 @@ export function RentalCreateWizardFlow({
               }
             />
             {/* Шаг всегда готов (тумблер с дефолтом) — кнопка видна всегда. */}
-            <StickyBottomBar fullWidthContent>
+            <StickyBottomBar>
               <WizardBottomBar>
                 <Button className="w-full" onClick={() => goToStep(4)}>
                   Продолжить
@@ -184,7 +185,7 @@ export function RentalCreateWizardFlow({
             />
             {/* Шаг всегда готов (арендатор необязателен) — кнопка видна
                 всегда; валидность целиком проверяет сабмит. */}
-            <StickyBottomBar fullWidthContent>
+            <StickyBottomBar>
               <WizardBottomBar>
                 <Button
                   className="w-full"

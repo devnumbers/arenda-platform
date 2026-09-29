@@ -6,7 +6,8 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { useSearchQueryState } from '@/shared/lib/hooks/useSearchQueryState';
-import { clientTodayIso, formatDayMonthWithYear } from '@/entities/payment';
+import { formatDayMonthWithYear } from '@/entities/payment';
+import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
   usePropertyOperationsScopedPaged,
   usePropertyOperationsSummary,
@@ -21,7 +22,8 @@ import {
   TopNav,
 } from '@/shared/ui/design';
 import { OperationRow } from './operations-list';
-import { PaymentsHeading, PaymentsSkeleton, PaymentsStateCard } from './payments-sections';
+import { PaymentsHeading, PaymentsStateCard } from './payments-sections';
+import { SearchResultsSkeleton } from './operations-skeletons';
 import {
   searchCategoryChips,
   searchListScope,
@@ -75,7 +77,7 @@ export function OperationsSearchScreen({
     { enabled: debounced !== '' },
   );
 
-  const today = clientTodayIso();
+  const today = dateToIsoLocal(new Date());
   const operations = listQuery.data ?? [];
 
   const emptyQuery = value.trim() === '';
@@ -142,10 +144,9 @@ export function OperationsSearchScreen({
         )}
 
         {pending && (
-          <>
-            <PaymentsSkeleton withHeading />
-            <PaymentsSkeleton withHeading />
-          </>
+          // Паритет §7/#604: скелетон зеркалит две секции контента — чипы
+          // категорий и строки операций.
+          <SearchResultsSkeleton />
         )}
 
         {showResults &&

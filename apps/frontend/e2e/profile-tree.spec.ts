@@ -1,7 +1,9 @@
+import type { Locator, Page } from '@playwright/test';
 import {
   captureScreen,
   expect,
   openCabinetWithSeededSession,
+  screenHeader,
   test,
 } from './fixtures';
 
@@ -16,14 +18,13 @@ import {
  * требует id платежа, канон его шапки совпадает со списком.
  * /profile/personal снесён в #593 — поглощён экраном /profile/account.
  * /profile/tariff/change/success не входит — канонный полноэкранный успех
- * (#623) без SubScreenShell. */
+ * (#623) без SubScreenShell. Info-маршруты в таблицу не входят: после
+ * редизайна ad04300b их канон другой — в баре только «Назад», тайтла нет
+ * (INFO_ROUTES ниже). */
 const SUBPAGE_TITLES: ReadonlyArray<readonly [string, string]> = [
   ['/profile/account', 'Аккаунт'],
   ['/profile/account/phone', 'Изменение телефона'],
   ['/profile/devices', 'Устройства'],
-  ['/profile/info', 'Информация'],
-  ['/profile/info/privacy', 'Политика конфиденциальности'],
-  ['/profile/info/terms', 'Пользовательское соглашение'],
   ['/profile/notifications', 'Настроить уведомления'],
   ['/profile/tariff', 'Тариф'],
   ['/profile/tariff/about', 'О тарифе'],
@@ -34,10 +35,31 @@ const SUBPAGE_TITLES: ReadonlyArray<readonly [string, string]> = [
   ['/profile/tariff/payments', 'Операции'],
 ];
 
-const SCREEN_HEADER = 'header[aria-label="Навигация экрана"]';
+/** Info-группа (редизайн ad04300b): в баре только «Назад», заголовок живёт
+ * в контенте — у privacy/terms/offer это крупный h1 (LegalDocument), у
+ * самой /profile/info h1 нет вовсе: смысл экрана держат бренд-локап и nav
+ * «Правовая информация» строк-документов. */
+const INFO_ROUTES: ReadonlyArray<readonly [string, (page: Page) => Locator]> = [
+  ['/profile/info', (page) => page.getByRole('navigation', { name: 'Правовая информация' })],
+  [
+    '/profile/info/privacy',
+    (page) => page.getByRole('heading', { name: 'Политика обработки персональных данных' }),
+  ],
+  [
+    '/profile/info/terms',
+    (page) => page.getByRole('heading', { name: 'Пользовательское соглашение' }),
+  ],
+  [
+    '/profile/info/offer',
+    (page) => page.getByRole('heading', { name: 'Публичная оферта' }),
+  ],
+];
+
 const BOTTOM_NAV = 'nav[aria-label="Нижняя навигация"]';
-// Сид-юзер «Иван Иванов»; до загрузки useMe кнопка показывает плейсхолдер.
-const USER_WING = /Пользователь|Иван/;
+// Сид-юзер «Иван Иванов» — имя в крыле после загрузки useMe; в pending
+// кнопка — скелетон с aria-label «Профиль» (аудит #876), «Пользователь» —
+// текстовый плейсхолдер вне провайдера.
+const USER_WING = /Пользователь|Иван|Профиль/;
 
 test.describe('дерево профиля — хром #566', () => {
   test.use({ viewport: { width: 390, height: 844 } });
@@ -51,7 +73,7 @@ test.describe('дерево профиля — хром #566', () => {
 
     // Саб-экран #746 (макеты 1789-100250/2329-150165): ведущий «Назад»,
     // заголовок в шапке; крыльев нет — экран дерева профиля.
-    const header = page.locator(SCREEN_HEADER);
+    const header = screenHeader(page);
     await expect(header.getByRole('button', { name: 'Назад' })).toBeVisible();
     // Фильтр visible — Next держит в body скрытый клон дерева,
     // текстовые локаторы без него ресолвят обе копии шапки.
@@ -93,7 +115,7 @@ test.describe('дерево профиля — хром #566', () => {
     await page.goto('/profile');
 
     // Хаб профиля (#592): крылья на мобайле, ведущего «Назад» нет.
-    const header = page.locator(SCREEN_HEADER);
+    const header = screenHeader(page);
     await expect(header.getByRole('button', { name: 'Назад' })).toHaveCount(0);
     await expect(header.getByRole('link', { name: 'Объекты' })).toBeVisible();
     await expect(header.getByText('Профиль', { exact: true })).toBeVisible();
@@ -149,9 +171,18 @@ test.describe('дерево профиля — хром #566', () => {
 
     for (const [path, title] of SUBPAGE_TITLES) {
       await page.goto(path);
-      const header = page.locator(SCREEN_HEADER);
+      const header = screenHeader(page);
       await expect(header.getByRole('button', { name: 'Назад' })).toBeVisible();
       await expect(header.getByText(title, { exact: true })).toBeVisible();
+    }
+
+    // Info-группа: в шапке проверяется только «Назад», канонный заголовок —
+    // в контенте (редизайн ad04300b).
+    for (const [path, content] of INFO_ROUTES) {
+      await page.goto(path);
+      const header = screenHeader(page);
+      await expect(header.getByRole('button', { name: 'Назад' })).toBeVisible();
+      await expect(content(page)).toBeVisible();
     }
   });
 
@@ -161,7 +192,7 @@ test.describe('дерево профиля — хром #566', () => {
   }) => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.setViewportSize({ width: 561, height: 900 });
-    const header = page.locator(SCREEN_HEADER);
+    const header = screenHeader(page);
 
     // Хаб профиля: крылья и на планшете (канон хаб-экранов), без «Назад».
     await page.goto('/profile');
@@ -199,15 +230,11 @@ test.describe('дерево профиля — ПК ≥1024', () => {
   test('вход в дерево по кнопке юзера в хедере', async ({ page, seededUser }) => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto('/properties');
+    const header = screenHeader(page);
 
     // «Крыло» UserButton ведёт на /profile.
-    await page
-      .locator(SCREEN_HEADER)
-      .getByRole('button', { name: USER_WING })
-      .click();
+    await header.getByRole('button', { name: USER_WING }).click();
     await expect(page).toHaveURL(/\/profile$/);
-    await expect(
-      page.locator(SCREEN_HEADER).getByText('Профиль', { exact: true }),
-    ).toBeVisible();
+    await expect(header.getByText('Профиль', { exact: true })).toBeVisible();
   });
 });

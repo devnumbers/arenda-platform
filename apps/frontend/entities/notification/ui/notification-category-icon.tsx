@@ -4,6 +4,7 @@ import type { JSX } from 'react';
 import Image from 'next/image';
 import { BoldKey, NotificationDot, StatusIconDanger } from '@/shared/assets/icons';
 import { cn } from '@/shared/lib/cn';
+import { circleIconRing } from '@/shared/ui/design';
 import type { NotificationCategory } from '../model/types';
 
 /**
@@ -80,7 +81,8 @@ export function NotificationCategoryIcon({
     <div className={cn('relative shrink-0', sizes.circle)} aria-hidden>
       <div
         className={cn(
-          'flex h-full w-full items-center justify-center rounded-pill ring-[2.5px] ring-white',
+          'flex h-full w-full items-center justify-center rounded-pill',
+          circleIconRing.white,
           visual.className,
         )}
       >

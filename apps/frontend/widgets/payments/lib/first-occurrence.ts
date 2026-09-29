@@ -3,7 +3,7 @@ import { firstOccurrence } from '@/entities/payment';
 
 /**
  * Первое вхождение для превью визарда (#464): правило без пауз, «сегодня» —
- * клиентская проекция (entities/payment/lib/client-today). Общая точка для
+ * клиентская проекция (dateToIsoLocal, shared/lib/calendar). Общая точка для
  * строки над кнопкой шага и текста экрана успеха.
  */
 export function firstOccurrencePreview(

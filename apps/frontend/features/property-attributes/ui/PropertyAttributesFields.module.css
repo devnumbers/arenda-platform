@@ -36,10 +36,6 @@
   gap: 8px;
 }
 
-.chip {
-  min-height: 40px;
-}
-
 .labeledInput {
   display: flex;
   flex-direction: row;
@@ -58,10 +54,4 @@
   line-height: 18px;
   color: var(--color-text-muted);
   white-space: nowrap;
-}
-
-@media (min-width: 768px) {
-  .chip {
-    min-height: 44px;
-  }
 }

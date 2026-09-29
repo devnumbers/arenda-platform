@@ -19,7 +19,8 @@ import {
   SearchField,
   TopNav,
 } from '@/shared/ui/design';
-import { GlobalPaymentRuleIcon, PaymentsHeading, PaymentsSkeleton, PaymentsStateCard } from './payments-sections';
+import { SearchResultsSkeleton } from './operations-skeletons';
+import { GlobalPaymentRuleIcon, PaymentsHeading, PaymentsStateCard } from './payments-sections';
 import { nearestDateLine } from '../lib/payments-global-model';
 import {
   effectiveChipKey,
@@ -145,10 +146,12 @@ export function PaymentsGlobalSearchScreen(): JSX.Element {
         )}
 
         {pending && (
-          <>
-            <PaymentsSkeleton withHeading />
-            <PaymentsSkeleton withHeading />
-          </>
+          // Контент — две секции (чипы категорий, строки платежей); скелетон
+          // зеркалит их анатомию — заголовки-полоски, чипы-заглушки, ряды
+          // канона (#604: композиция скелетона равна композиции страницы).
+          // Архетип SearchResultsSkeleton: description — дата под суммой
+          // в строках выдачи, как у операций-соседа.
+          <SearchResultsSkeleton description />
         )}
 
         {showResults &&

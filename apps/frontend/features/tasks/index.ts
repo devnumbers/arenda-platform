@@ -1,5 +1,10 @@
 export {
+  activeTasksQueryOptions,
+  fetchActiveTasks,
   fetchGlobalTasks,
+  globalTasksQueryOptions,
+} from './api/queries';
+export {
   useActiveTasks,
   useCompleteAllTasks,
   useCompletedTasks,

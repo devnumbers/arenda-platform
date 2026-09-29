@@ -22,11 +22,11 @@ import {
   CalendarDatePicker,
   IconButton,
   PageContent,
-  Skeleton,
   StickyBottomBar,
   TopNav,
 } from '@/shared/ui/design';
 import { PickerTriggerBox } from './wizard-chrome';
+import { RentalExtendSkeleton } from './rental-skeletons';
 
 /**
  * Экран «Продление аренды» (#533, Figma 1428:58218): вопрос «На сколько
@@ -62,10 +62,7 @@ export function RentalExtendScreen({
   if (rentalsQuery.isPending) {
     return (
       <ExtendShell onClose={close}>
-        <div className="flex flex-col gap-4 pt-6">
-          <Skeleton className="h-14 w-full" />
-          <Skeleton className="h-14 w-full" />
-        </div>
+        <RentalExtendSkeleton />
       </ExtendShell>
     );
   }

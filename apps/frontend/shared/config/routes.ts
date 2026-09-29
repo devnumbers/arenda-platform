@@ -240,6 +240,7 @@ export const ROUTES = {
   profileInfo: '/profile/info',
   profilePrivacy: '/profile/info/privacy',
   profileTerms: '/profile/info/terms',
+  profileOffer: '/profile/info/offer',
   /** Юрстраницы лендинга (карта #761, тикет #763): consent-ссылки шага
    * телефона логина. Страницы живут на лендинге за прокси, открываются в
    * новой вкладке; самих страниц пока нет — 404 лендинга не блокирует

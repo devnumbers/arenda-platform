@@ -3,6 +3,7 @@ import { cn } from '@/shared/lib/cn';
 import {
   EmptyState,
   Skeleton,
+  SkeletonFormField,
   SkeletonListRow,
   skeletonBlockClass,
   skeletonRowWidths,
@@ -21,11 +22,10 @@ const searchNoteClass = 'text-base leading-[18px] text-content-secondary';
 const MUTED = skeletonBlockClass('muted');
 
 /**
- * Состояния экрана «Контакты объекта» (#508): скелет загрузки, ошибка с
- * действием, пустой список с иллюстрацией (1527:74479) и поисковые
- * подсказки (1527:74813/74825).
+ * Транзитный скелетон под поисковой выдачей книги (плоские белые строки
+ * без групп): виден только в гонке «холодный вход + мгновенный ввод» —
+ * выдача книги ещё едет, а поиск уже начат.
  */
-
 export function ContactsSkeleton({ className }: { readonly className?: string }): JSX.Element {
   return (
     <section className={cn('mx-6 rounded-card bg-surface-muted px-6 py-6', className)} aria-hidden>
@@ -99,6 +99,61 @@ function SkeletonNoteSection(): JSX.Element {
       <Skeleton className="h-[18px] w-16" />
       <Skeleton className="h-[92px] rounded-2xl" />
     </section>
+  );
+}
+
+/**
+ * Скелетон формы контакта (паритет — §7 DESIGN.md): каркас ContactForm
+ * (#509/#510) — аватар 96 по центру, группы «Личные данные» (три поля
+ * titleIn), «Роль», «Телефон и почта», «Мессенджер», «Привязанный объект»
+ * и «Заметка» — те же контейнеры и зазоры, чтобы контент занял место
+ * скелетона без сдвига.
+ */
+export function ContactFormSkeleton(): JSX.Element {
+  return (
+    <div aria-hidden className="flex flex-col gap-8 px-6">
+      <div className="flex justify-center">
+        <Skeleton className="h-24 w-24 rounded-full" />
+      </div>
+
+      <section className="flex flex-col gap-2">
+        <Skeleton className="h-[18px] w-28" />
+        <div className="flex flex-col gap-2">
+          <Skeleton className="h-14 w-full rounded-button" />
+          <Skeleton className="h-14 w-full rounded-button" />
+          <Skeleton className="h-14 w-full rounded-button" />
+        </div>
+      </section>
+
+      <SkeletonFormField labelWidth="w-12" />
+
+      <section className="flex flex-col gap-2">
+        <Skeleton className="h-[18px] w-32" />
+        <div className="flex flex-col gap-2">
+          <Skeleton className="h-14 w-full rounded-button" />
+          <Skeleton className="h-14 w-full rounded-button" />
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-2">
+        <Skeleton className="h-[18px] w-28" />
+        <div className="flex flex-col gap-2">
+          <Skeleton className="h-14 w-full rounded-button" />
+          <Skeleton className="h-14 w-full rounded-button" />
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-2">
+        <Skeleton className="h-[18px] w-40" />
+        <Skeleton className="h-14 w-full rounded-button" />
+      </section>
+
+      {/* «Заметка» — Textarea min-h-92 rounded-button (паритет §7). */}
+      <section className="flex flex-col gap-2">
+        <Skeleton className="h-[18px] w-16" />
+        <Skeleton className="h-[92px] w-full rounded-button" />
+      </section>
+    </div>
   );
 }
 

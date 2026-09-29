@@ -1,12 +1,14 @@
 /**
  * DTO → доменные модели слайса «История действий». Контракт GET /history
  * и /history/filters (#708) snake_case; опциональные поля нормализуются
- * (actor_id null — запись обезличена). Сегменты рендерятся дословно —
- * маппер только переименовывает поля, текст не трогает.
+ * (actor_id null — запись обезличена). Сегменты рендерятся дословно,
+ * кроме голых подписей дат в хвосте (аудит #876: «(срок …)», период
+ * аренды) — они срезаются, словесные даты остаются.
  */
 
 import type { components } from '@/shared/api/dto';
 
+import { stripBareDateTails } from './date-tails';
 import type {
   HistoryEntry,
   HistoryFilterOptions,
@@ -17,10 +19,12 @@ type HistoryItemDto = components['schemas']['HistoryItem'];
 type HistoryFiltersDto = components['schemas']['HistoryFiltersResponse'];
 
 function toSegments(dto: HistoryItemDto['segments']): HistorySegment[] {
-  return dto.map((segment) => ({
-    text: segment.text,
-    ...(segment.link ? { link: { kind: segment.link.kind, id: segment.link.id } } : {}),
-  }));
+  return stripBareDateTails(
+    dto.map((segment) => ({
+      text: segment.text,
+      ...(segment.link ? { link: { kind: segment.link.kind, id: segment.link.id } } : {}),
+    })),
+  );
 }
 
 export function mapHistoryItem(dto: HistoryItemDto): HistoryEntry {

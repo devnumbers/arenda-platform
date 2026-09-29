@@ -1,0 +1,26 @@
+/* Живая строка ленты «Истории» (тикет #880, механика F демо #879):
+ * свежая строка live-влития мягко проявляется движением — анимация уже
+ * созданной строки, не свап значения; старые строки не перекрашиваются.
+ * Движение — 350мс на --dl-duration-move и --dl-ease. */
+
+.rowIn {
+  animation: history-row-in var(--dl-duration-move) var(--dl-ease);
+}
+
+@keyframes history-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* reduced-motion укорачивает до ~150мс (§8), fade сохраняется. */
+@media (prefers-reduced-motion: reduce) {
+  .rowIn {
+    animation-duration: 150ms;
+  }
+}

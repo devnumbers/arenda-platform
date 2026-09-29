@@ -10,11 +10,7 @@ export const metadata: Metadata = {
   title: 'Изменить условия — Рентли',
 };
 
-type RentalTermsEditRoutePageProps = {
-  params: Promise<{ id: string }>;
-};
-
-export default async function RentalTermsEditRoutePage({ params }: RentalTermsEditRoutePageProps) {
+export default async function RentalTermsEditRoutePage({ params }: PageProps<'/properties/[id]/rentals/terms/edit'>) {
   const { id } = await params;
 
   return <RentalTermsEditScreen propertyId={id} />;

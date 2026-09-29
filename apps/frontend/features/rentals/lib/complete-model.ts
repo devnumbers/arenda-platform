@@ -1,8 +1,8 @@
 import { cmp, fullMonthsBetween, type IsoDate } from '@/shared/lib/calendar';
 import { parseRublesToKopecks } from '@/shared/lib/format-money';
+import { monthsWord } from '@/shared/lib/months-word';
 import { pluralize } from '@/shared/lib/pluralize';
 import type { Rental, RentalCompleteCommand } from '@/entities/rental';
-import { monthsWord } from './months-word';
 
 /** Черновик мастера завершения (#534): «сырое» поле суммы залога (как в
  * формах аренды) и комментарий возврата. Форма-состояние сценария — живёт

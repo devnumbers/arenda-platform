@@ -650,9 +650,11 @@ func (s *AccessService) LeaveProperty(ctx context.Context, actor, propertyID uui
 			}
 		}
 
+		// The audit row carries the same real-role attribution as the
+		// journal row below (issue #859).
 		if err := stores.audit.Record(ctx, auditdomain.Entry{
 			ActorID:    &actor,
-			ActorRole:  sharedpolicy.AuditActorRole(role),
+			ActorRole:  sharedpolicy.AuditActorRole(toSharedRole(membership.Role)),
 			Action:     auditdomain.ActionPropertyMemberLeft,
 			EntityType: auditdomain.EntityPropertyMember,
 			EntityID:   &membership.ID,

@@ -12,6 +12,7 @@ import { cn } from '@/shared/lib/cn';
 import {
   Button,
   CalendarButton,
+  fullscreenSurfaceClass,
   IconButton,
   MonthYearPicker,
   StickyBottomBar,
@@ -92,9 +93,10 @@ import { MONTH_LABELS, daysInMonth, firstWeekdayOfMonth, WEEKDAY_LABELS } from '
  * «сегодня» собственника). Симметрично минимуму: пустой черновик
  * прижимается к границе, если «сегодня» за ней.
  *
- * Планшет (561–768, решение владельца 2026-09-04): TopNav и белый шит
- * футера тянутся во всю ширину — кнопка «Выбрать» тоже (StickyBottomBar
- * fullWidthContent); на десктопе ≥769 футер возвращается в колонку 560. */
+ * Планшет (561–1023): TopNav и белый шит футера тянутся во всю ширину —
+ * кнопка «Выбрать» тоже (StickyBottomBar, универсальное правило планшета:
+ * нижние панели во всю ширину, на ПК ≥1024 — колонка 560; решение
+ * владельца 28.09 после аудита #877, канон DESIGN.md §5). */
 
 /** Стартовая лента и шаг дорисовки — год месяцев. */
 const FEED_MONTHS = 12;
@@ -256,9 +258,10 @@ export function CalendarDatePicker({
       role="dialog"
       aria-modal="true"
       aria-label={title}
-      className="fixed inset-0 z-50 flex flex-col bg-surface font-sans"
+      className={cn(fullscreenSurfaceClass, 'font-sans')}
     >
       <TopNav
+        overlay
         leading={<IconButton icon={<ArrowLeft />} label="Назад" onClick={onClose} />}
       >
         <TopNavTitle title={title} />
@@ -268,8 +271,8 @@ export function CalendarDatePicker({
           (требование владельца к бесконечному календарю); на десктопе TopNav
           зафиксирован над экраном — шапка встаёт под ним, лента скроллится
           между шапкой и нижней панелью. */}
-      <div className="shrink-0 tablet:mt-[72px]">
-        <div className="mx-auto w-full max-w-[560px]">
+      <div className="relative shrink-0 tablet:mt-[72px]">
+        <div className="mx-auto w-full max-w-column">
           <div className="px-6 pt-6">
             <MonthJumpChip
               label={`${MONTH_LABELS[draftMonth.month0]} ${draftMonth.year}`}
@@ -296,9 +299,9 @@ export function CalendarDatePicker({
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="min-h-0 flex-1 overflow-y-auto"
+        className="relative min-h-0 flex-1 overflow-y-auto"
       >
-        <div className="mx-auto w-full max-w-[560px] pb-[136px]">
+        <div className="mx-auto w-full max-w-column pb-[136px]">
           {months.map(({ year, month0 }, index) => {
             const days = daysInMonth(year, month0);
             const leadingBlanks = firstWeekdayOfMonth(year, month0);
@@ -374,11 +377,11 @@ export function CalendarDatePicker({
           черновика) — решение владельца 2026-09-05: скрытие вместо
           погашенной кнопки, у пикерных «Выбрать» так же. Без required
           активна всегда: с пустым черновиком подтверждает «без даты».
-          Футер тянется вместе с шитом в планшетном диапазоне 561–768
-          (решение владельца 2026-09-04: хедер и шит на планшете во всю
-          ширину — кнопка тоже). */}
+          Футер тянется вместе с шитом в планшетном диапазоне 561–1023
+          (универсальное правило планшета, решение владельца 28.09, #877:
+          на ПК ≥1024 — колонка 560, канон DESIGN.md §5). */}
       {!(required === true && draft === null) && (
-        <StickyBottomBar fullWidthContent>
+        <StickyBottomBar>
           <Button className="w-full" onClick={() => onConfirm(draft)}>
             {confirmLabel}
           </Button>
@@ -473,8 +476,9 @@ export type CalendarRangePickerProps = {
  * открывается пятью месяцами контекста у текущего. Опциональный onReset
  * добавляет «Сбросить» рядом с «Выбрать» (secondary слева) — потребитель
  * решает, что сброс означает. Футер на планшете тянется вместе с шитом
- * (fullWidthContent). Рендерится только в открытом состоянии — лента и
- * черновик живут, пока пикер смонтирован. */
+ * (универсальное правило планшета, решение владельца 28.09). Рендерится
+ * только в открытом состоянии — лента и черновик живут, пока пикер
+ * смонтирован. */
 export function CalendarRangePicker({
   title = 'Выберите период',
   confirmLabel = 'Выбрать',
@@ -589,9 +593,10 @@ export function CalendarRangePicker({
       role="dialog"
       aria-modal="true"
       aria-label={title}
-      className="fixed inset-0 z-50 flex flex-col bg-surface font-sans"
+      className={cn(fullscreenSurfaceClass, 'font-sans')}
     >
       <TopNav
+        overlay
         leading={<IconButton icon={<ArrowLeft />} label="Назад" onClick={onClose} />}
       >
         <TopNavTitle title={title} />
@@ -600,8 +605,8 @@ export function CalendarRangePicker({
       {/* Закреплённая шапка: поля границ «с …/по …» (следуют за тапами
           вживую), чип месяца для прыжка и строка дней недели над
           прокруткой; на десктопе TopNav зафиксирован над экраном. */}
-      <div className="shrink-0 tablet:mt-[72px]">
-        <div className="mx-auto w-full max-w-[560px]">
+      <div className="relative shrink-0 tablet:mt-[72px]">
+        <div className="mx-auto w-full max-w-column">
           {/* Поля границ «с …/по …» следуют за тапами вживую; без выбора
               (#670) — плейсхолдеры, пока диапазон не начат. */}
           <div aria-live="polite" className="grid grid-cols-2 gap-2 px-6 pt-6">
@@ -634,8 +639,8 @@ export function CalendarRangePicker({
         </div>
       </div>
 
-      <div ref={scrollRef} onScroll={handleScroll} className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-[560px] pb-[136px]">
+      <div ref={scrollRef} onScroll={handleScroll} className="relative min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-column pb-[136px]">
           {months.map(({ year, month0 }, index) => {
             const future = calendarMonthIndex({ year, month0 }) > todayIdx;
             return (
@@ -680,7 +685,7 @@ export function CalendarRangePicker({
           подтверждать нечего. «Сбросить» — рядом, когда потребителю нужен
           возврат к состоянию «без периода» (канон пары: secondary слева,
           primary справа, как в WizardBottomBar потоков). */}
-      <StickyBottomBar fullWidthContent>
+      <StickyBottomBar>
         <div className="flex w-full gap-2">
           {onReset !== undefined && (
             <Button variant="secondary" className="w-full" onClick={onReset}>

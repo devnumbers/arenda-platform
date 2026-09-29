@@ -9,8 +9,10 @@ import { IconButton } from '@/shared/ui/design';
  * 2343:66417 — десктоп, 2343:67107 — планшет, 2343:67172 — мобайл;
  * карта #761, тикет #763). Фундамент редизайна: раскладки трёх брейкпоинтов
  * и бренд-ассеты (3D-стеклянная иконка и мягкий градиент — экспорт из
- * Figma, imageRef 6ca2192c…/be2ffd8a…), переиспользуются шагами почты
- * (#764) и кода (#765).
+ * Figma, imageRef 6ca2192c…/be2ffd8a…; иконка — WebP q90 1400, 2x
+ * десктопного рендера 700, решение владельца 25.09 #865: PNG 2800 весил
+ * 2.5МБ и качался сырым CSS-фоном мимо next/image-оптимизатора),
+ * переиспользуются шагами почты (#764) и кода (#765).
  *
  * Мобайл 320–560 — белая страница, контент сверху (pt-72 под верхний бар).
  * Планшет 561–1023 — градиент на всю страницу, 3D-домик 700×700 по центру,
@@ -44,7 +46,7 @@ export function LoginShell({ onClose, onBack, hideClose = false, children }: Log
             {/* Планшетный фон: градиент + размытый домик 700×700 по центру. */}
             <div aria-hidden className="absolute inset-0 hidden tablet:block desktop:hidden">
                 <div className="absolute inset-0 bg-[url('/images/login-panel-bg.png')] bg-cover bg-center" />
-                <div className="absolute left-1/2 top-1/2 h-[700px] w-[700px] -translate-x-1/2 -translate-y-1/2 bg-[url('/images/login-house-3d.png')] bg-contain bg-center bg-no-repeat" />
+                <div className="absolute left-1/2 top-1/2 h-[700px] w-[700px] -translate-x-1/2 -translate-y-1/2 bg-[url('/images/login-house-3d.webp')] bg-contain bg-center bg-no-repeat" />
             </div>
 
             <div className="relative flex min-h-dvh items-start justify-center px-6 pb-6 pt-[72px] tablet:items-center tablet:py-6 desktop:gap-6 desktop:p-6">
@@ -53,7 +55,7 @@ export function LoginShell({ onClose, onBack, hideClose = false, children }: Log
                     aria-hidden
                     className="relative hidden flex-1 self-stretch overflow-hidden rounded-[32px] bg-[url('/images/login-panel-bg.png')] bg-cover bg-center desktop:block"
                 >
-                    <div className="absolute left-1/2 top-1/2 h-[360px] w-[360px] -translate-x-1/2 -translate-y-1/2 bg-[url('/images/login-house-3d.png')] bg-contain bg-center bg-no-repeat" />
+                    <div className="absolute left-1/2 top-1/2 h-[360px] w-[360px] -translate-x-1/2 -translate-y-1/2 bg-[url('/images/login-house-3d.webp')] bg-contain bg-center bg-no-repeat" />
                 </div>
 
                 {/* Правая половина (ПК) / вся страница (мобайл, планшет). */}

@@ -3,7 +3,8 @@
 import type { JSX } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { Button, Skeleton } from '@/shared/ui/design';
+import { Button, Skeleton, circleIconRing } from '@/shared/ui/design';
+import { cn } from '@/shared/lib/cn';
 import { useSubscriptionPayments } from '@/features/billing';
 import { PaymentRowButton } from '@/entities/payment';
 import { getTariffLabel } from '@/entities/user';
@@ -18,12 +19,16 @@ import {
 } from '../lib/payment-history-model';
 
 /** Аватар строки — иконка тарифа на голубом круге с белым кантом
- * (Figma 1877-68603, Category Icon 44); у возврата — канон Undo. */
+ * (Figma 1877-68603, Category Icon 44); у возврата — канон Undo. Фон
+ * primary/10 — вне пары surface, кант берётся из карты колец канона. */
 function TariffAvatar({ refunded }: { readonly refunded: boolean }): JSX.Element {
   return (
     <span
       aria-hidden
-      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/10 shadow-[0_0_0_2.5px_var(--dl-surface)]"
+      className={cn(
+        'flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/10',
+        circleIconRing.white,
+      )}
     >
       {refunded ? (
         <Undo className="h-6 w-6 text-content" />

@@ -3,9 +3,7 @@ import { ROUTES } from '@/shared/config/routes';
 
 export default async function SubscriptionPaymentSuccessPage({
   params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+}: PageProps<'/subscription/payments/[id]/success'>) {
   const { id } = await params;
   redirect(`${ROUTES.profileTariffChangeSuccess}?paymentId=${encodeURIComponent(id)}`);
 }

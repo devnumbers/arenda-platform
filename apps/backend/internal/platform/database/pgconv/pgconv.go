@@ -1,4 +1,5 @@
-// Package pgconv converts between Go domain values (UUIDs, timestamps) and pgx wire types.
+// Package pgconv converts between Go domain values (UUIDs, timestamps) and pgx wire types,
+// and shapes SQL-facing strings (ILIKE-pattern escaping via EscapeLikePattern).
 package pgconv
 
 import (

@@ -55,3 +55,38 @@ make frontend-e2e          # из корня репо; нужен Docker + Node 
 сид-сессии → кука `session_id`), `E2E_USER_PHONE` (цифры без +7),
 `E2E_USER_EMAIL`, `E2E_BACKEND_LOG` (путь к логу бекенда для извлечения кода
 входа). Фикстуры и хелперы — `apps/frontend/e2e/fixtures.ts`.
+
+## Отладка одной спеки против живого стека
+
+Полный прогон для отладки одной спеки избыточен. Быстрый цикл: поднять стек
+без Playwright — `make frontend-e2e-live-up` (печатает факты соединения, включая
+сырые токены сессий), погасить — `make frontend-e2e-live-down`. Спека гоняется
+из `apps/frontend` напрямую, оркестраторный env воспроизводится вручную:
+
+```bash
+cd apps/frontend
+E2E_BASE_URL=http://127.0.0.1:3010 \
+E2E_SESSION_TOKEN=<owner-токен из вывода live-up> \
+E2E_MEMBER_SESSION_TOKEN=<full-access-токен> \
+E2E_VIEWER_SESSION_TOKEN=<viewer-токен> \
+E2E_USER_PHONE=9150000001 E2E_USER_EMAIL=e2e@example.com \
+E2E_PG_CONTAINER=arenda-e2e-postgres-1 \
+E2E_BACKEND_LOG=../../.tmp/e2e-frontend/backend.log \
+npx playwright test e2e/payment-detail.spec.ts -g 'отмена в шторке паузы'
+```
+
+`E2E_MEMBER_SESSION_TOKEN` и `E2E_VIEWER_SESSION_TOKEN` нужны только спекам
+матрицы ролей #467 — фикстуры требуют их лениво. Токены ротируются каждым
+пересевом: после `live-down` + `live-up` берите свежие из вывода `live-up`,
+старая кука даёт брошенный на `/login` кабинет. Прогон спеки мутирует сидовые
+данные: после отладочных прогонов пересевите стек.
+
+Переходные окна загрузки (стриминг Suspense-фоллбэков серверного префетча)
+MCP-браузером не ловятся — evaluate приходит после оседания. Рабочий приём —
+одноразовая проба-спека в `e2e/` с поллингом DOM изнутри страницы
+(`page.evaluate` + цикл по 25–30мс, снапшоты в `window`-аккумулятор или лог),
+запускаемая тем же env-контрактом; файл удаляется после разбора. Грабли:
+`next build` тайпчекает `e2e/*.spec.ts` строгим конфигом фронта
+(`noUncheckedIndexedAccess`) — проба с непрогнанным tsc ломает сборку стенда;
+убитый посреди билда прогон оставляет битый turbopack-кэш в `.next`, следующий
+билд висит в холостом event loop — лечится `rm -rf apps/frontend/.next`.

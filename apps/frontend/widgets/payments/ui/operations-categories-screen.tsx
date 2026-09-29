@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Cancel } from '@/shared/assets/icons';
 import { goBack } from '@/shared/lib/navigation';
 import { buildUrlWithParams } from '@/shared/lib/url-params';
-import { clientTodayIso } from '@/entities/payment';
+import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
   operationsCategoryRows,
   operationsFiltersParams,
@@ -27,7 +27,8 @@ import {
   TopNav,
   TopNavTitle,
 } from '@/shared/ui/design';
-import { PaymentsSkeleton, PaymentsStateCard } from './payments-sections';
+import { PaymentsStateCard } from './payments-sections';
+import { OperationsCategoriesSkeleton } from './operations-skeletons';
 import { OperationsPeriodChipDisplay } from './operations-filter-chips';
 
 export type OperationsCategoriesScreenProps = {
@@ -58,7 +59,7 @@ export function OperationsCategoriesScreen({
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const today = clientTodayIso();
+  const today = dateToIsoLocal(new Date());
   const filters = readOperationsFilters(searchParams, today);
   // Дефолт категорий — весь период (#676, как на глобальных #672):
   // без явного выбора даты в запрос не уходят, чип нейтральный.
@@ -129,7 +130,9 @@ export function OperationsCategoriesScreen({
 
         <div className="min-h-0 flex-1 overflow-y-auto pt-2 pb-[calc(6.5rem+env(safe-area-inset-bottom))]">
           {summaryQuery.isPending ? (
-            <PaymentsSkeleton />
+            // Паритет §7: строки «иконка + название + сумма + чекбокс»;
+            // чипы контекста выше — вне фазы загрузки.
+            <OperationsCategoriesSkeleton />
           ) : summaryQuery.isError ? (
             <PaymentsStateCard
               title="Не удалось загрузить категории"
@@ -201,4 +204,3 @@ export function OperationsCategoriesScreen({
     </>
   );
 }
-

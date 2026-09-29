@@ -1,4 +1,8 @@
 export {
+  fetchRentals,
+  rentalsQueryOptions,
+} from './api/queries';
+export {
   useCompleteRental,
   useCreateRental,
   useDeleteRental,

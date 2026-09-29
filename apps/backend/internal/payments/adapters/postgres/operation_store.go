@@ -194,6 +194,38 @@ func (s *OperationStore) CountOverdueOperationsByPayment(
 	return count, nil
 }
 
+// CountPaidAndOverdueByPaymentIDs reads the listed rules' progress counters
+// in one batched query (#845: the rentals list progress) — one GROUP BY
+// where the per-rule pair took two queries. A rule with no matching
+// operations is absent from the rows — the consumer defaults its zeros.
+// The query counts in SQL — the counts never ride a paginated listing; the
+// empty id list never reaches it.
+func (s *OperationStore) CountPaidAndOverdueByPaymentIDs(
+	ctx context.Context, scope, propertyID uuid.UUID, paymentIDs []uuid.UUID, today time.Time,
+) ([]application.PaidOverdueCount, error) {
+	counts := make([]application.PaidOverdueCount, 0, len(paymentIDs))
+	if len(paymentIDs) == 0 {
+		return counts, nil
+	}
+	rows, err := s.q().CountPaidAndOverdueByPaymentIDs(ctx, postgres.CountPaidAndOverdueByPaymentIDsParams{
+		Owner:      pgconv.UUIDToPgtype(scope),
+		Property:   pgconv.UUIDToPgtype(propertyID),
+		PaymentIds: pgconv.UUIDSliceToPgtype(paymentIDs),
+		Today:      pgconv.DateToPgtype(today),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("count paid and overdue of %d payments: %w", len(paymentIDs), err)
+	}
+	for _, row := range rows {
+		counts = append(counts, application.PaidOverdueCount{
+			PaymentID:    pgconv.UUIDFromPgtype(row.PaymentID),
+			PaidCount:    row.PaidCount,
+			OverdueCount: row.OverdueCount,
+		})
+	}
+	return counts, nil
+}
+
 // ListGlobal returns one page of the actor's visible paid operations — the
 // merged feed (ticket #540); the visibility predicate and the archive cut
 // are the query's. The bounds re-check the service applied
@@ -209,7 +241,7 @@ func (s *OperationStore) ListGlobal(
 		PropertyIds:     joinPropertyIDs(q.PropertyIDs),
 		DateFrom:        pgconv.DatePtrToPgtype(q.DateFrom),
 		DateTo:          pgconv.DatePtrToPgtype(q.DateTo),
-		Search:          escapeLikePattern(q.Search),
+		Search:          pgconv.EscapeLikePattern(q.Search),
 		SearchDigits:    searchAmountDigits(q.Search),
 		Type:            operationsTypeFilter(q.Type),
 		Categories:      joinCategorySlugs(q.Categories),
@@ -251,7 +283,7 @@ func (s *OperationStore) CountGlobal(
 		PropertyIds:     joinPropertyIDs(q.PropertyIDs),
 		DateFrom:        pgconv.DatePtrToPgtype(q.DateFrom),
 		DateTo:          pgconv.DatePtrToPgtype(q.DateTo),
-		Search:          escapeLikePattern(q.Search),
+		Search:          pgconv.EscapeLikePattern(q.Search),
 		SearchDigits:    searchAmountDigits(q.Search),
 		Type:            operationsTypeFilter(q.Type),
 		Categories:      joinCategorySlugs(q.Categories),
@@ -272,7 +304,7 @@ func (s *OperationStore) CountGlobal(
 func (s *OperationStore) SummarizeGlobal(
 	ctx context.Context, actor uuid.UUID, q application.GlobalOperationsSummaryQuery,
 ) (application.OperationsSummary, error) {
-	search := escapeLikePattern(q.Search)
+	search := pgconv.EscapeLikePattern(q.Search)
 	searchDigits := searchAmountDigits(q.Search)
 	propertyIDs := joinPropertyIDs(q.PropertyIDs)
 	totalsParams := postgres.SumPaidOperationTotalsGlobalParams{
@@ -336,7 +368,7 @@ func listOperationsParams(
 	params.Today = pgconv.DateToPgtype(q.Today)
 	params.DateFrom = pgconv.DatePtrToPgtype(q.DateFrom)
 	params.DateTo = pgconv.DatePtrToPgtype(q.DateTo)
-	params.Search = escapeLikePattern(q.Search)
+	params.Search = pgconv.EscapeLikePattern(q.Search)
 	params.SearchDigits = searchAmountDigits(q.Search)
 	params.Type = operationsTypeFilter(q.Type)
 	params.Categories = joinCategorySlugs(q.Categories)
@@ -357,7 +389,7 @@ func (s *OperationStore) SummarizeByProperty(
 ) (application.OperationsSummary, error) {
 	// The totals deliberately carry no direction filter — the contract
 	// reports both directions whatever the categories are narrowed to.
-	search := escapeLikePattern(q.Search)
+	search := pgconv.EscapeLikePattern(q.Search)
 	searchDigits := searchAmountDigits(q.Search)
 	params := postgres.SumOperationTotalsParams{
 		Owner:        pgconv.UUIDToPgtype(scope),

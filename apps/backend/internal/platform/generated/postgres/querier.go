@@ -74,6 +74,15 @@ type Querier interface {
 	// #461); paid facts never read as overdue, cancelled tombstones never count,
 	// the nested payment→property path is enforced in the WHERE clause.
 	CountOverdueOperationsByPayment(ctx context.Context, arg CountOverdueOperationsByPaymentParams) (int64, error)
+	// The progress counters of the listed rules in one batched read (ticket
+	// #845): the rentals list's «N из M» / «Просрочено N месяцев» — the same
+	// paid and overdue predicates the per-payment counts encode, split by
+	// COUNT FILTER over one GROUP BY instead of a query pair per rule. A rule
+	// with no matching operations yields no row — its zeros default in the
+	// application. Cancelled tombstones never count; the nested
+	// payment→property path is enforced in the WHERE clause. An empty id list
+	// never reaches the query (the ListRentalManagedPaymentIDs precedent).
+	CountPaidAndOverdueByPaymentIDs(ctx context.Context, arg CountPaidAndOverdueByPaymentIDsParams) ([]CountPaidAndOverdueByPaymentIDsRow, error)
 	// The paid-operations count of one rule (ADR 0053 §2: the rentals progress'
 	// paidMonths — «N из M месяцев» counts the managed payment's paid facts).
 	// Cancelled tombstones never count; the nested payment→property path is
@@ -103,9 +112,12 @@ type Querier interface {
 	// visibility of ADR 0052 decision 3). The policy port maps an actor to a
 	// role per property; the merged feed has no single scope to resolve, so the
 	// actor-scoped read carries its visibility predicate here, beside the data.
-	// A suspended membership grants no read (the SQL-level status filter, the
-	// property_members precedent); the property-less rows are the owner's alone
-	// — the member EXISTS needs a property to match.
+	// The bound rows' verdict is the derived-read canon — the SQL function
+	// actor_can_read_property (000142, ADR 0028): the owner plus the active
+	// members of a non-archived object, a suspended membership grants no read
+	// (the SQL-level status filter, #158 T4). The owner term stays beside the
+	// function call: the property-less rows are the owner's alone — the
+	// function needs a property row to say yes.
 	//
 	// The bound task rows always carry owner_id of the property's owner (there
 	// is no re-binding), so the owner branch covers the actor's own properties.
@@ -591,7 +603,8 @@ type Querier interface {
 	LastOperationDatesOfPayments(ctx context.Context, paymentIds string) ([]LastOperationDatesOfPaymentsRow, error)
 	// Чтение журнала (карта #704, тикет #708, ADR 0061 §7): страница ленты
 	// «История действий» по объектам read-скоупа читателя. Область видимости —
-	// SQL-функция actor_can_read_history (000137): владелец (включая архивные
+	// SQL-функция actor_can_read_property (000142, до #884 —
+	// actor_can_read_history 000137): владелец (включая архивные
 	// объекты) и активные участники неархивных объектов; suspended и чужие
 	// объекты строк не отдают (privacy-404 — существование не раскрывается).
 	//
@@ -690,6 +703,9 @@ type Querier interface {
 	// property's name, unbound cards first in both directions («Общие
 	// контакты»), contact name ordering inside the groups. Both keys use the
 	// Russian ICU collation to match the client's letter grouping; id ties off.
+	// 'created' orders by the creation moment (ticket #847 — the «свежие
+	// контакты сверху» promise server-side): the key is immutable, so a walked
+	// card never moves across the window boundary.
 	//
 	// The page walks the listing's own order by keyset (ticket #600): the
 	// window resumes strictly after the (sort key, id) the previous page ended
@@ -733,9 +749,14 @@ type Querier interface {
 	// The visibility predicate is the global listings' (ticket #521): the
 	// actor's own rows plus the rows of the properties they share with an
 	// active membership (ADR 0028 read scope); a suspended membership grants
-	// no read. The rules of archived properties are out of every read (map
-	// #573). No single scope exists to resolve through the policy port — the
-	// actor-scoped read carries its visibility predicate here, beside the data.
+	// no read. The composition lives in one place — the SQL function
+	// actor_can_read_property (000142, ADR 0028's derived read); the queries
+	// below call it and keep the feed's own stricter archive cut beside it:
+	// the rules of archived properties are out of every read (map #573) —
+	// the owner included, unlike the history canon where the owner's leg is
+	// unconditional. No single scope exists to resolve through the policy
+	// port — the actor-scoped read carries its visibility predicate here,
+	// beside the data.
 	//
 	// Every per-row schedule computation (nearest date, overdue) runs against
 	// the property owner's calendar date (ADR 0048): the merged feed mixes
@@ -955,13 +976,15 @@ type Querier interface {
 	ListPropertyPhotosByPropertyIDs(ctx context.Context, dollar_1 []pgtype.UUID) ([]PropertyPhoto, error)
 	ListPushSubscriptionsByUser(ctx context.Context, userID pgtype.UUID) ([]PushSubscription, error)
 	// The frame audience of one object (карта #714, тикет #716; ADR 0062 §4):
-	// the owner plus the active members — the derived read access (ADR 0028)
-	// resolved at the moment of publication. A suspended membership is no access
-	// (the status filter, issue #158 T4 canon); an archived object's active
-	// member is no reader either — the member leg mirrors actor_can_read_history
-	// (000137, the archive's invisibility canon #163), while the owner's leg
-	// stays unconditional — the owner reads the archive; a deleted property
-	// resolves to nobody, so its frames simply die.
+	// the derived read access (ADR 0028) resolved at the moment of publication.
+	// The predicate lives in one place — the SQL function actor_can_read_property
+	// (000142, the successor of actor_can_read_history 000137): the owner reads
+	// at any property status, an active member only while the property is not
+	// archived (the archive's invisibility canon #163), a suspended membership
+	// is no access (#158 T4), a deleted property resolves to nobody — its frames
+	// simply die. The query enumerates the candidates (the owner plus the
+	// object's members — a small set) and lets the function give the verdict, so
+	// the canon is not re-encoded here.
 	ListRealtimePropertyReaders(ctx context.Context, id pgtype.UUID) ([]pgtype.UUID, error)
 	ListRecentSubscriptionPaymentsAdmin(ctx context.Context) ([]ListRecentSubscriptionPaymentsAdminRow, error)
 	ListRecentUsersAdmin(ctx context.Context) ([]ListRecentUsersAdminRow, error)
@@ -1139,6 +1162,9 @@ type Querier interface {
 	// role on the rule's property — the save's write gate is the favorite
 	// star's (#461, Full Access+), resolved per row beside the data. Ids
 	// travel as the file's csv list; an empty list never reaches the query.
+	// The role's row only — the visibility is the function call in the WHERE:
+	// the join's active-status condition is the membership snapshot's, not a
+	// second copy of the predicate.
 	LockGlobalPaymentFavorites(ctx context.Context, arg LockGlobalPaymentFavoritesParams) ([]LockGlobalPaymentFavoritesRow, error)
 	// Payments context queries: the materialization tick's persistence
 	// (ADR 0049 §3, ticket #458). The owner-level payment listing with pauses
@@ -1219,7 +1245,8 @@ type Querier interface {
 	// together; NULL (no cursor) reads from the beginning.
 	// access_role names the actor's role on the row: 'owner' for own
 	// properties, the active membership's role for shared ones (T11) — the
-	// LEFT JOIN row is unique per (property, user).
+	// LEFT JOIN row is unique per (property, user) and carries the role only;
+	// the visibility verdict is the function call in the WHERE.
 	SearchVisibleProperties(ctx context.Context, arg SearchVisiblePropertiesParams) ([]SearchVisiblePropertiesRow, error)
 	// Atomic PUT favorite (no read-modify-write): the flag is set in one UPDATE.
 	// Existence is already proven inside the same transaction under the property
