@@ -36,8 +36,8 @@ const SUBPAGE_TITLES: ReadonlyArray<readonly [string, string]> = [
 ];
 
 /** Info-группа (редизайн ad04300b): в баре только «Назад», заголовок живёт
- * в контенте — у privacy/terms это крупный h1 (LegalDocument), у самой
- * /profile/info h1 нет вовсе: смысл экрана держат бренд-локап и nav
+ * в контенте — у privacy/terms/offer это крупный h1 (LegalDocument), у
+ * самой /profile/info h1 нет вовсе: смысл экрана держат бренд-локап и nav
  * «Правовая информация» строк-документов. */
 const INFO_ROUTES: ReadonlyArray<readonly [string, (page: Page) => Locator]> = [
   ['/profile/info', (page) => page.getByRole('navigation', { name: 'Правовая информация' })],
@@ -48,6 +48,10 @@ const INFO_ROUTES: ReadonlyArray<readonly [string, (page: Page) => Locator]> = [
   [
     '/profile/info/terms',
     (page) => page.getByRole('heading', { name: 'Пользовательское соглашение' }),
+  ],
+  [
+    '/profile/info/offer',
+    (page) => page.getByRole('heading', { name: 'Публичная оферта' }),
   ],
 ];
 

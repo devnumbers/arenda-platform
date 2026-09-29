@@ -215,6 +215,17 @@ test('планшет: слоты шапки подэкрана у краёв в�
   await expect(bottomBarButton(page, /Сохранить/)).toBeVisible();
   await expect(page.locator('nav[aria-label="Нижняя навигация"]')).toHaveCount(0);
 
+  // Канон планшета (DESIGN.md, правило 561–1023): шит панели не сужается —
+  // во всю ширину вьюпорта, кап колонки 560 включается только на ПК.
+  const barSheetWidth = await page.evaluate(() => {
+    const sheet = [...document.querySelectorAll('.fixed.inset-x-0.bottom-0')].find(
+      (el) => getComputedStyle(el).display !== 'none',
+    );
+    if (!sheet) throw new Error('нижняя панель не найдена');
+    return sheet.getBoundingClientRect().width;
+  });
+  expect(barSheetWidth).toBe(TABLET.width);
+
   await page.goto('/operations');
   await expect(page.locator('nav[aria-label="Нижняя навигация"]')).toBeVisible();
 
