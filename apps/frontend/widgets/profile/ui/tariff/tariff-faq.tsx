@@ -170,8 +170,11 @@ function FaqEntry({
         />
       </button>
       {/* Раскрытие с лендинга: сетка 0fr→1fr + opacity, внутренний div
-          режет переполнение — высота не измеряется, контент всегда в DOM. */}
+          режет переполнение — высота не измеряется, контент всегда в DOM.
+          inert держит свёрнутый ответ вне tab-порядка — паритет со
+          снесённым Radix, который закрытый контент не фокусировал. */}
       <div
+        inert={!expanded}
         className={cn(
           'grid transition-[grid-template-rows,opacity] duration-300 ease-out',
           expanded ? 'opacity-100 [grid-template-rows:1fr]' : 'opacity-0 [grid-template-rows:0fr]',
