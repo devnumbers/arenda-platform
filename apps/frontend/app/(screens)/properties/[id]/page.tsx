@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import type { QueryClient } from '@tanstack/react-query';
+import { DEFAULT_CONTACT_BOOK_ORDER, DEFAULT_CONTACT_BOOK_SORT } from '@/widgets/contacts';
 import { PropertyDetailPage, PropertyDetailRouteLoading } from '@/widgets/property-detail';
 import { ServerPrefetchBoundary } from '@/shared/api/server-prefetch';
 import { serverApiClient } from '@/shared/api/server-client';
@@ -65,8 +66,8 @@ async function prefetchPropertyScreen(queryClient: QueryClient, id: string): Pro
   void queryClient.prefetchInfiniteQuery(contactsListQuery({
     propertyId: id,
     search: '',
-    sort: 'name',
-    order: 'asc',
+    sort: DEFAULT_CONTACT_BOOK_SORT,
+    order: DEFAULT_CONTACT_BOOK_ORDER,
     transport: serverApiClient,
   }));
   void queryClient.prefetchQuery(activeTasksQueryOptions({ propertyId: id, transport: serverApiClient }));
