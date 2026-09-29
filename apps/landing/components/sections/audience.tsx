@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { GLASS_GRADIENT, GLASS_INSET_SHADOW } from "@/components/glass";
 import { Reveal } from "@/components/reveal";
 import iconBriefcase01 from "@/assets/icons/icon-briefcase-01.svg";
 import iconBuilding05 from "@/assets/icons/icon-building-05.svg";
@@ -10,23 +11,21 @@ import iconUser02 from "@/assets/icons/icon-user-02.svg";
 // карточки 28/32 Medium и текст 18/22, text-balance на заголовке секции
 // и текстах карточек (свойство стоит в узлах Figma) — на всех
 // брейкпоинтах.
-// Слои карточки как в макете: непрозрачная заливка → серое кольцо
-// rgba(156,156,156,0.5) → стеклянный градиент с белыми бликами поверх:
-// кольцо просвечивает под стеклом (на тёмной карточке читается ~#8b8b8b,
-// на синей тонируется заливкой), а не рисуется поверх чистым серым.
-const GLASS_GRADIENT =
-  "linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(217,217,217,0.1) 100%)";
-const RING_SHADOW = "shadow-[inset_0_0_0_1px_rgba(156,156,156,0.5)]";
-const GLASS_INSET_SHADOW =
-  "shadow-[inset_0px_-5px_4px_0px_rgba(255,255,255,0.25),inset_0px_4px_4px_0px_rgba(255,255,255,0.25)]";
-
+// Шкурка плашек — та же, что у тарифов: карточки-спеки 2851-154068
+// (154069/154075/154081) дизайнер обновил под тарифные — обводка теперь
+// конический градиент .glass-ring (тот же токен, что у 2846-153711;
+// прежнее плоское серое inset-кольцо rgba(156,156,156,0.5) снято),
+// заливки — на самой карточке, у «Собственников» сплошной #F3F4F6
+// под стеклом, как у «Базового». Стеклянный градиент и блики — общие
+// константы components/glass.ts.
 const CARDS = [
   {
     title: "Собственники",
     text: "Сдаете квартиру, дом, комнату, гараж или помещение",
     icon: iconUser02,
     alt: "Иконка собственника",
-    fill: "linear-gradient(90deg, rgb(243,244,246) 0%, rgb(243,244,246) 100%)",
+    backgroundImage: GLASS_GRADIENT,
+    backgroundColor: "#f3f4f6",
     light: true,
   },
   {
@@ -34,7 +33,8 @@ const CARDS = [
     text: "Сдаете офисы, склады, торговые помещения, гаражи",
     icon: iconBriefcase01,
     alt: "Иконка бизнеса",
-    fill: "linear-gradient(180deg, rgb(100,100,100) 0%, rgb(30,30,30) 100%)",
+    backgroundImage: `${GLASS_GRADIENT}, linear-gradient(180deg, rgb(100,100,100) 0%, rgb(30,30,30) 100%)`,
+    backgroundColor: "transparent",
     light: false,
   },
   {
@@ -42,7 +42,8 @@ const CARDS = [
     text: "Сдаете десятки или сотни объектов",
     icon: iconBuilding05,
     alt: "Иконка агентства",
-    fill: "linear-gradient(180deg, rgb(136,183,255) 0%, rgb(43,127,255) 100%)",
+    backgroundImage: `${GLASS_GRADIENT}, linear-gradient(180deg, rgb(136,183,255) 0%, rgb(43,127,255) 100%)`,
+    backgroundColor: "transparent",
     light: false,
   },
 ];
@@ -71,30 +72,22 @@ export function Audience() {
             delay={index * 100}
             className="h-full tab:w-[320px] tab:shrink-0"
           >
-            <article className="relative flex h-[280px] w-full flex-col justify-between overflow-clip rounded-[32px] p-8 tab:h-[320px] desk:aspect-square desk:h-auto desk:rounded-[40px] desk:p-10">
-              <div
-                aria-hidden
-                className="pointer-events-none absolute inset-0 rounded-[inherit]"
-                style={{ backgroundImage: card.fill }}
-              />
-              <div
-                aria-hidden
-                className={`pointer-events-none absolute inset-0 rounded-[inherit] ${RING_SHADOW}`}
-              />
-              <div
-                aria-hidden
-                className={`pointer-events-none absolute inset-0 rounded-[inherit] backdrop-blur-[10px] ${GLASS_INSET_SHADOW}`}
-                style={{ backgroundImage: GLASS_GRADIENT }}
-              />
+            <article
+              style={{
+                backgroundImage: card.backgroundImage,
+                backgroundColor: card.backgroundColor,
+              }}
+              className={`glass-ring relative flex h-[280px] w-full flex-col justify-between overflow-clip rounded-[32px] p-8 backdrop-blur-[10px] tab:h-[320px] desk:aspect-square desk:h-auto desk:rounded-[40px] desk:p-10 ${GLASS_INSET_SHADOW}`}
+            >
               <Image
                 src={card.icon}
                 alt={card.alt}
                 width={64}
                 height={64}
-                className="relative size-16"
+                className="size-16"
               />
               <div
-                className={`relative flex flex-col gap-3 ${
+                className={`flex flex-col gap-3 ${
                   card.light ? "text-ink" : "text-white"
                 }`}
               >

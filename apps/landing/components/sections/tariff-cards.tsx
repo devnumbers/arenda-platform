@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { LandingLink } from "@/components/button";
+import { GLASS_GRADIENT, GLASS_INSET_SHADOW } from "@/components/glass";
 import { Reveal } from "@/components/reveal";
 import iconHomeMain from "@/assets/icons/icon-home-main.svg";
 import iconObjects from "@/assets/icons/icon-objects.svg";
@@ -15,7 +16,8 @@ import type { Tariff, TariffFeature } from "@/lib/content";
 // светлая #F3F4F6 со стеклянным оверлеем, «Про» — тёмный градиент
 // (100→30), «Бизнес» — синий (136,183,255→43,127,255); стеклянные
 // карточки с белым инсет-светом и конической градиентной обводкой
-// (.glass-ring), заголовки фич — Landing/M (Medium 500).
+// (.glass-ring); константы стекла — общие с «Для кого сервис»
+// (components/glass.ts), заголовки фич — Landing/M (Medium 500).
 // Переключатель 256×56: активный сегмент — белая пилюля, переезжающая
 // между Год/Месяц за 300мс (iOS-сегментконтрол); бейдж «−25%» живёт
 // в сегменте «Год» всегда. Цена при переключении меняется в хореографии
@@ -32,29 +34,23 @@ const FEATURE_ICONS: Record<TariffFeature["icon"], { src: string; alt: string }>
   team: { src: iconTeam.src, alt: "Иконка команды" },
 };
 
-const GLASS_INSET_SHADOW =
-  "shadow-[inset_0px_-5px_4px_0px_rgba(255,255,255,0.25),inset_0px_4px_4px_0px_rgba(255,255,255,0.25)]";
-
 const CARD_THEMES = {
   basic: {
-    backgroundImage:
-      "linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(217,217,217,0.1) 100%)",
+    backgroundImage: GLASS_GRADIENT,
     backgroundColor: "#f3f4f6",
     text: "text-ink",
     sub: "text-gray-2",
     featureSub: "text-gray-2",
   },
   pro: {
-    backgroundImage:
-      "linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(217,217,217,0.1) 100%), linear-gradient(180deg, rgb(100,100,100) 0%, rgb(30,30,30) 100%)",
+    backgroundImage: `${GLASS_GRADIENT}, linear-gradient(180deg, rgb(100,100,100) 0%, rgb(30,30,30) 100%)`,
     backgroundColor: "transparent",
     text: "text-white",
     sub: "text-white/80",
     featureSub: "text-white/80",
   },
   business: {
-    backgroundImage:
-      "linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(217,217,217,0.1) 100%), linear-gradient(180deg, rgb(136,183,255) 0%, rgb(43,127,255) 100%)",
+    backgroundImage: `${GLASS_GRADIENT}, linear-gradient(180deg, rgb(136,183,255) 0%, rgb(43,127,255) 100%)`,
     backgroundColor: "transparent",
     text: "text-white",
     sub: "text-white/80",
