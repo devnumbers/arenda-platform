@@ -320,16 +320,19 @@ export function HistoryFeedScreen({
     setFreshIds((prev) => (prev.size > 0 ? new Set<string>() : prev));
   }, [feedScopeKey]);
   // Смена скоупа (фильтры, поиск, пин) — чужой реестр и метки не умеют:
-  // гасим свои; уход с экрана чистит за собой.
+  // гасим свои целиком через acknowledgeFresh() — разом таймер, реестр и
+  // экранные метки (метки гаснут, когда читатель увидел строки, а строки
+  // чужого скоупа он не видел; ручной таймер+реестр без setFreshIds
+  // оставлял бы чипы «новое» висеть до следующего live-влития). Cleanup
+  // держит замыкание прошлого рендера — гаснет старый скоуп, поэтому в
+  // депсах одна acknowledgeFresh: её личность меняется вместе с ключом
+  // скоупа. Уход с экрана чистит за собой — setFreshIds функциональным
+  // апдейтом после размонтирования no-op.
   useEffect(() => {
     return () => {
-      if (freshTimerRef.current !== null) {
-        clearTimeout(freshTimerRef.current);
-        freshTimerRef.current = null;
-      }
-      acknowledgeFreshFeedEntryIds(feedScopeKey);
+      acknowledgeFresh();
     };
-  }, [feedScopeKey]);
+  }, [acknowledgeFresh]);
 
   const [hasNewBelow, setHasNewBelow] = useState(false);
   const entryCount = entries.length;
