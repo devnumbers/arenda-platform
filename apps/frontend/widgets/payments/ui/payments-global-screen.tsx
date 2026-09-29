@@ -486,7 +486,7 @@ function PaymentsGlobalEmpty({
     <div
       data-testid="payments-global-empty"
       // Растягиваем блок до нижнего края видимой области: CTA прижата книзу
-      // (879:9399). 216px = верх страницы (PageHeader + отступ контента) и
+      // (879:9399). 216px = верх страницы (TopNav + отступ контента) и
       // нижний резерв PageContent под TabBar (pb-[136px]).
       className="flex min-h-[calc(100dvh-216px)] flex-col px-6"
     >
