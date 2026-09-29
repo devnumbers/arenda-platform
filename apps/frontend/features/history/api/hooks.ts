@@ -209,7 +209,7 @@ function useLiveFeedFrames(
         // экране позже кадра, поэтому «метка > времени снимка» ловит влитие,
         // приехавшее в один коммит с prepend'ом старых (гонка скролла).
         const mergedAt = Date.now();
-        const scopeKey = key.join('/');
+        const scopeKey = historyFeedScopeKey(scopeRef.current);
         lastLiveMergeTimes.set(scopeKey, mergedAt);
         noteFreshFeedEntryIds(scopeKey, novelIds, mergedAt);
         return { hasMore: freshItems.length >= HISTORY_PAGE_SIZE };
