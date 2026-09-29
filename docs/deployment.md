@@ -29,9 +29,10 @@ push в dev (stage) или main (prod)
 
 Workflow-файлы: `.github/workflows/{ci,security,_deploy,deploy-stage,deploy-prod}.yml`.
 `security.yml` — это SAST (semgrep) и trivy-fs (ежедневный ночной прогон + non-blocking на PR);
-уязвимости зависимостей закрыты Dependabot (`.github/dependabot.yml`: security
-updates + сгруппированные weekly version updates в ветку `dev`) и govulncheck
-в `ci.yml`.
+уязвимости зависимостей закрывают govulncheck в `ci.yml` и гейт `make npm-audit`
+(high+); Dependabot (security + сгруппированные weekly version updates в ветку
+`dev`) отключён владельцем 29.09.2026 — `.github/dependabot.yml` снесён,
+восстанавливается из git-истории.
 Ручной деплой и откат — `workflow_dispatch` в `deploy-stage.yml` /
 `deploy-prod.yml` с четырьмя digest-inputs.
 
