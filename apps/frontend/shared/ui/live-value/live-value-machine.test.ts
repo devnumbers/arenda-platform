@@ -124,6 +124,28 @@ describe('live-value machine — канон C: dim → hold → кроссфей
     ]);
   });
 
+  it('кривая WAAPI-движений размера — токен --dl-ease посимвольно', () => {
+    // Дрейф-страж: WAAPI не принимает var() — кривая --dl-ease продублирована
+    // в LiveValue.tsx литералом для движений размера; расхождение токена и
+    // литерала разъехало бы размер и резкость, которые §8 требует доезжать
+    // вместе. Сравниваем значение токена и литерал посимвольно.
+    const tokensCss = readFileSync(
+      fileURLToPath(new URL('../../styles/tokens.css', import.meta.url)),
+      'utf8',
+    );
+    const easeValues = [...tokensCss.matchAll(/--dl-ease:\s*(cubic-bezier\([^)]*\))/g)].map(
+      (m) => m[1],
+    );
+    expect(easeValues, 'значение --dl-ease в tokens.css').toHaveLength(1);
+    const source = readFileSync(
+      fileURLToPath(new URL('./LiveValue.tsx', import.meta.url)),
+      'utf8',
+    );
+    const easingValues = [...source.matchAll(/easing:\s*'([^']+)'/g)].map((m) => m[1]);
+    expect(easingValues, 'литерал easing движений размера в LiveValue.tsx').toHaveLength(1);
+    expect(easingValues[0]).toBe(easeValues[0]);
+  });
+
   it('reduced-motion укорачивает hold и чистку до ~150мс-порядка', () => {
     expect(REDUCED_TIMINGS.staleTotalMs).toBeLessThanOrEqual(250);
     expect(REDUCED_TIMINGS.settleMs).toBeLessThanOrEqual(300);

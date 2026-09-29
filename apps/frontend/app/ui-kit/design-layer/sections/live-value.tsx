@@ -10,8 +10,17 @@ import styles from '../../page.module.css';
  * канона C: пилюля доступа объекта и «Права участника». */
 const DEMO_ROLES = ['Администратор', 'Наблюдатель'] as const;
 
+/** Демо-пара разновысоких значений: пилюля та же, длинное значение в
+ * ней переносится на вторую строку — движение высоты свапа видно глазом
+ * (после 380мс коробка стоит на новой высоте, к settle прыжка нет). */
+const DEMO_HEIGHTS = [
+    'Одна строка',
+    'Две строки — уже переносится',
+] as const;
+
 export function LiveValueSection(): JSX.Element {
     const [roleIndex, setRoleIndex] = useState(0);
+    const [heightIndex, setHeightIndex] = useState(0);
     const [own, setOwn] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [mode, setMode] = useState<'crossfade' | 'flash'>('crossfade');
@@ -36,7 +45,9 @@ export function LiveValueSection(): JSX.Element {
                 смена значения в ней держит dim до конца hold, без смены dim снимается
                 плавно. Размер коробки на свапе едет от старого значения к новому
                 (решение 28.09 — «как у Apple»). Демо самодостаточное: анимируется
-                любая смена valueKey, бэкенд не нужен. Вживую: пилюля доступа объекта
+                любая смена valueKey, бэкенд не нужен. Разновысокие значения: после
+                движения (380мс) коробка стоит на новой высоте, к settle (1250мс)
+                прыжка нет. Вживую: пилюля доступа объекта
                 (widgets/property-detail/ui/PropertyAccessPill.tsx), «Права участника»
                 (widgets/participants/ui/participant-rights-screen.tsx).
             </p>
@@ -64,6 +75,17 @@ export function LiveValueSection(): JSX.Element {
                     <ChipButton selected={mode === 'flash'} onClick={() => setMode('flash')}>
                         flash
                     </ChipButton>
+                </div>
+                <div className="flex items-center gap-3 text-sm text-content-secondary">
+                    Разная высота:
+                    <LiveValue valueKey={heightIndex} mode={mode}>
+                        <span className="flex max-w-[200px] items-center rounded-pill bg-surface-muted px-3 py-1.5 text-sm font-medium text-content">
+                            {DEMO_HEIGHTS[heightIndex]}
+                        </span>
+                    </LiveValue>
+                    <Button onClick={() => setHeightIndex((index) => (index + 1) % DEMO_HEIGHTS.length)}>
+                        Сменить значение
+                    </Button>
                 </div>
             </div>
         </div>

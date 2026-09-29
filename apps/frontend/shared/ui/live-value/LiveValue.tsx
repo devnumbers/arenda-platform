@@ -56,7 +56,7 @@ const NO_SNAPSHOTS: LiveValueSnapshots = { stale: null, old: null, fresh: null }
  * приглушает старое значение (dim 350мс), пауза держится на фактическое
  * перечитывание (≥300мс), новое проявляется blur-кроссфейдом (220/380мс)
  * с подсветкой-вспышкой (1200мс). Эталон — DESIGN.md §8, раздел
- * „Realtime-оживание значения — канон C“ (apps/frontend/DESIGN.md:473-500).
+ * „Realtime-оживание значения — канон C“ (apps/frontend/DESIGN.md:474-520).
  *
  * Источник правки компоненту неизвестен: он анимирует любую смену
  * `valueKey`, приехавшую через react-query (SSE-кадры лишь инвалидируют
@@ -240,7 +240,9 @@ export function LiveValue({
   // дробные getBoundingClientRect (offsetHeight округляет до целого —
   // субпиксельные щелчки на входе/выходе). Длительность — blurInMs
   // таймингов машины (токен --live-blur-in), кривая --dl-ease: размер и
-  // резкость доезжают вместе. На settle контейнер разбирается, лок высоты
+  // резкость доезжают вместе. Инлайн-лок высоты стоит на цели с первого
+  // кадра, движение играет поверх инлайна (анимации без fill — после
+  // finish держит инлайн). На settle контейнер разбирается, лок высоты
   // снимается — натуральные размеры idle-рендера совпадают с
   // доезженными, прыжка нет. Режим B и own без свапа — не затронуты.
   useLayoutEffect(() => {
@@ -270,7 +272,10 @@ export function LiveValue({
     );
     swap.style.width = `${targetWidth}px`;
     swap.style.height = `${targetHeight}px`;
-    root.style.height = `${startHeight}px`;
+    // Лок внешней коробки стоит на ЦЕЛЕВОЙ высоте (симметрично ширине
+    // свапа выше): WAAPI-движение играет поверх инлайна и без fill —
+    // после finish инлайн держит цель до самого settle, прыжка нет.
+    root.style.height = `${targetHeight}px`;
     widthAnimationRef.current?.cancel();
     heightAnimationRef.current?.cancel();
     const timing: KeyframeAnimationOptions = {
