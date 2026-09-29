@@ -31,8 +31,10 @@ type HistoryFiltersDto = components['schemas']['HistoryFiltersResponse'];
  * клиентских хуков и серверного префетча. Хуки — в hooks.ts ('use client'). */
 
 /** Общее горло порции GET /history (#708): cursor — двусторонний keyset,
- * undefined читает самую новую страницу. */
-async function fetchHistoryPage(
+ * undefined читает самую новую страницу. Через него идут и keyset-обход
+ * react-query, и live-догон ленты (#718) — чтение порции в кодовой базе
+ * одно. */
+export async function fetchHistoryPage(
   scope: HistoryFeedScope,
   cursor: HistoryFeedPageParam | undefined,
   transport: ApiTransport = apiClient,

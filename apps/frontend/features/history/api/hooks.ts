@@ -2,30 +2,25 @@
 
 import { useEffect, useRef } from 'react';
 import { keepPreviousData, useInfiniteQuery, useQuery, useQueryClient, type InfiniteData, type UseInfiniteQueryResult, type UseQueryResult } from '@tanstack/react-query';
-import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
-import type { components } from '@/shared/api/dto';
 import type { HistoryEntry, HistoryFilterOptions } from '@/entities/history';
-import { mapHistoryItem } from '@/entities/history';
 import { historyKeys, type HistoryFeedScope } from '@/shared/api/query-keys';
 import { subscribeRealtimeEntity } from '@/shared/api/realtime-subscriptions';
 import { noteFreshFeedEntryIds } from './live-fresh';
 
 import {
-  historyFeedUrl,
   HISTORY_PAGE_SIZE,
   type HistoryFeedPageParam,
 } from './history-url';
 
 import {
+  fetchHistoryPage,
   historyFeedQueryOptions,
   historyFiltersQueryOptions,
   type HistoryFeedPage,
 } from './queries';
 
 import { createLiveFeedFrameHandler } from './live-feed-frames';
-
-type HistoryPageDto = components['schemas']['HistoryPageResponse'];
 
 /**
  * Лента «История действий» (#709): двусторонний keyset по (created_at, id)
@@ -192,10 +187,10 @@ function useLiveFeedFrames(
         if (raw === undefined || raw.pages.length === 0 || boundary === null) {
           return null;
         }
-        const response = await apiClient<HistoryPageDto>(
-          historyFeedUrl(scopeRef.current, { after: boundary }),
-        );
-        const freshItems = response.items.map(mapHistoryItem);
+        const page = await fetchHistoryPage(scopeRef.current, { after: boundary });
+        // items порции readonly (HistoryFeedPage) — копия снимает readonly
+        // для дедупа и влития; сами они массив не мутируют.
+        const freshItems = [...page.items];
         if (freshItems.length === 0) {
           return { hasMore: false };
         }
@@ -208,7 +203,7 @@ function useLiveFeedFrames(
         );
         queryClient.setQueryData<InfiniteData<HistoryFeedPage>>(
           key,
-          (old) => mergeFreshIntoFirstPage(old, freshItems, response.prev_cursor ?? null),
+          (old) => mergeFreshIntoFirstPage(old, freshItems, page.prevCursor),
         );
         // Метка влития — сразу после записи в кэш: следующий коммит краёв на
         // экране позже кадра, поэтому «метка > времени снимка» ловит влитие,
