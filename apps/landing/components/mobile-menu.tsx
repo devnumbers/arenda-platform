@@ -1,15 +1,26 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { BurgerIcon, CloseIcon } from "./icons";
 import { Logo } from "./logo";
 import type { NavItem } from "@/lib/nav";
 
-// Мобильный/планшетный хедер (<1200px) — макет 2859-4421: плавающая белая
-// плашка radius-24 с тенью 0 8 12 rgba(0,0,0,.12); при открытии меню строка
-// хедера получает border-b #ebebeb, под ней панель пунктов 52px (16/20,
-// px-24, radius-12, pressed → surface). Раскрытие — плавное (grid-rows).
+// Мобильный/планшетный хедер (<1200px) — макеты 2859-4421 (закрыт) и
+// 2862-4943 (открыт): плавающая белая плашка radius-24, при открытии меню
+// строка хедера получает разделитель border-b #ebebeb, под ним панель
+// пунктов 52px (16/20, px-24, radius-12, pressed → surface). Раскрытие —
+// плавное (grid-rows).
+//
+// Панель — absolute-оверлей под плашкой (решение владельца 29.09): страница
+// за меню не сдвигается ни на пиксель — раньше раскрытие шло «в потоке» и
+// толкало весь контент вниз/вверх на высоту панели.
+//
+// Форма карточки (скругление низа и тень) живёт в состоянии expanded, а не
+// open: оно держится до конца сворачивания — иначе скруглённые нижние углы
+// плашки мгновенно возвращаются в момент клика и в стыке с панелью на весь
+// кадр анимации проглядывает фон страницы. expanded сбрасывается таймаутом
+// на шаг длиннее анимации (transitionend в фоновом табе ненадёжен).
 export function MobileMenu({
   nav,
   action,
@@ -18,12 +29,37 @@ export function MobileMenu({
   action: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      return;
+    }
+    if (!expanded) {
+      return;
+    }
+    const timer = setTimeout(() => setExpanded(false), 400);
+    return () => clearTimeout(timer);
+  }, [open, expanded]);
+
+  const toggle = () => {
+    if (!open) {
+      setExpanded(true);
+    }
+    setOpen((v) => !v);
+  };
 
   return (
-    <div className="rounded-3xl bg-white shadow-[0_4px_20px_rgba(0,0,0,0)] transition-shadow duration-300 group-data-scrolled:shadow-[0_4px_20px_rgba(0,0,0,0.08)]">
+    <div
+      className={`relative bg-white transition-shadow duration-300 ${
+        expanded
+          ? "rounded-t-3xl shadow-[0_4px_20px_rgba(0,0,0,0.08)]"
+          : "rounded-3xl shadow-[0_4px_20px_rgba(0,0,0,0)] group-data-scrolled:shadow-[0_4px_20px_rgba(0,0,0,0.08)]"
+      }`}
+    >
       <div
-        className={`flex h-16 items-center pl-4 pr-2.5 transition-colors duration-300 ${
-          open ? "border-b border-line" : ""
+        className={`flex h-16 items-center border-b pl-4 pr-2.5 transition-colors duration-300 ${
+          open ? "border-line" : "border-transparent"
         }`}
       >
         <Link
@@ -37,7 +73,7 @@ export function MobileMenu({
           {action}
           <button
             type="button"
-            onClick={() => setOpen((v) => !v)}
+            onClick={toggle}
             aria-expanded={open}
             aria-controls="mobile-menu"
             aria-label={open ? "Закрыть меню" : "Открыть меню"}
@@ -49,7 +85,7 @@ export function MobileMenu({
       </div>
       <div
         id="mobile-menu"
-        className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${
+        className={`absolute inset-x-0 top-full grid rounded-b-3xl bg-white shadow-[0_4px_20px_rgba(0,0,0,0.08)] transition-[grid-template-rows,opacity] duration-300 ease-out ${
           open ? "opacity-100 [grid-template-rows:1fr]" : "opacity-0 [grid-template-rows:0fr]"
         }`}
       >
