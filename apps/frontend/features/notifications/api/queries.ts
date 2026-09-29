@@ -9,7 +9,11 @@ import {
   type NotificationDetail,
 } from '@/entities/notification';
 import { notificationKeys } from '@/shared/api/query-keys';
-import { keysetNextPageParam } from '@/shared/lib/keyset';
+import {
+  keysetNextPageParam,
+  type KeysetPage,
+  type KeysetPagedQueryConfig,
+} from '@/shared/lib/keyset';
 
 type NotificationsPageDto = components['schemas']['NotificationsPageResponse'];
 type UnreadCountDto = components['schemas']['UnreadCountResponse'];
@@ -18,13 +22,10 @@ type NotificationDetailDto = components['schemas']['NotificationDetailResponse']
 /** Порция ленты уведомлений: строки плюс keyset-продолжение — opaque-курсор
  * следующей порции, null = порций больше нет (удалённые строки не приходят,
  * #743). */
-export type NotificationsPageData = {
-  readonly items: Notification[];
-  readonly nextCursor: string | null;
-};
+export type NotificationsPageData = KeysetPage<Notification>;
 
 /** Размер порции ленты (#743). */
-const NOTIFICATIONS_PAGE_SIZE = 50;
+export const NOTIFICATIONS_PAGE_SIZE = 50;
 
 /** Двойной модуль API-слоя notifications (без 'use client'): чистые
  * fetch-функции и queryOptions-фабрики канона #887 — общий источник
@@ -57,14 +58,10 @@ async function fetchNotificationsPage(params: {
 }
 
 
-export type NotificationsFeedQueryConfig = {
-  readonly queryKey: ReturnType<typeof notificationKeys.list>;
-  readonly queryFn: (context: {
-    readonly pageParam?: string;
-  }) => Promise<NotificationsPageData>;
-  readonly initialPageParam: string | undefined;
-  readonly getNextPageParam: typeof keysetNextPageParam;
-};
+export type NotificationsFeedQueryConfig = KeysetPagedQueryConfig<
+  ReturnType<typeof notificationKeys.list>,
+  NotificationsPageData
+>;
 
 
 /** Опции ленты уведомлений (канон #887): один источник ключ+fetch для

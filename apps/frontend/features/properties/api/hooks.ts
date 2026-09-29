@@ -16,7 +16,7 @@ import type { ApiError } from '@/shared/api/errors';
 import { mapPropertyResponse } from '@/entities/property';
 import type { Property } from '@/entities/property';
 import { propertyKeys } from '@/shared/api/query-keys';
-import { keysetNextPageParam } from '@/shared/lib/keyset';
+import { keysetNextPageParam, type KeysetPage } from '@/shared/lib/keyset';
 import { resolvePropertiesLandingHref } from '../lib/property-landing';
 import type { components } from '@/shared/api/dto';
 
@@ -42,10 +42,6 @@ type AddressSuggestionsResponse =
   components['schemas']['AddressSuggestionsResponse'];
 type AddressSuggestion = components['schemas']['AddressSuggestion'];
 
-/** Подвесший чужой объект списка (карта #692, тикет #702): блюр-карточка —
- * обычная карточка объекта (название, адрес — рендерятся под blur, Figma
- * 2213-99113) плюс контакт владельца для шита причины (Figma 2229-100002;
- * почта владельца — сознательная экспозиция этого экрана). */
 /** Проекция «только строки» над общим cache entry. Module-level, чтобы
  * ссылка select была стабильной — react-query кэширует её результат. */
 function selectPropertiesItems(meta: PropertiesListResult): Property[] {
@@ -96,10 +92,7 @@ export const PROPERTIES_SEARCH_PAGE_SIZE = 50;
  * Порция поиска объектов (#601): строки плюс keyset-продолжение — opaque-
  * курсор следующей порции, null = совпадения исчерпаны.
  */
-export type PropertiesSearchPageData = {
-  readonly items: Property[];
-  readonly nextCursor: string | null;
-};
+export type PropertiesSearchPageData = KeysetPage<Property>;
 
 /** Общее горло порции GET /properties/search: search — обязательный
  * регистронезависимый фильтр по названию и адресу (клиентски тримится),

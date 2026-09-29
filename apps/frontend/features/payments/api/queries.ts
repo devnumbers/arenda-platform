@@ -26,13 +26,16 @@ import {
   type PaymentOperationStatusFilter,
 } from '@/shared/api/query-keys';
 import type { components } from '@/shared/api/dto';
-import { keysetNextPageParam } from '@/shared/lib/keyset';
+import {
+  keysetNextPageParam,
+  type KeysetPage,
+  type KeysetPagedQueryConfig,
+} from '@/shared/lib/keyset';
 import { OPERATIONS_PAGE_SIZE, operationsOffsetNextPageParam } from '../lib/operations-pages';
 
-export type GlobalOperationsPageData = {
-  readonly items: ReadonlyArray<PaymentOperation>;
-  readonly nextCursor: string | null;
-};
+/** Порция глобальной ленты (#597): строки плюс keyset-продолжение —
+ * opaque-курсор следующей порции, null = лента исчерпана. */
+export type GlobalOperationsPageData = KeysetPage<PaymentOperation>;
 
 type PaymentsResponse = components['schemas']['PaymentsResponse'];
 type OperationsResponse = components['schemas']['OperationsResponse'];
@@ -256,16 +259,13 @@ export async function fetchGlobalOperationsPage(
 /**
  * Конфиг keyset-обхода глобальной ленты (#887) — возвращаемый тип фабрики
  * globalOperationsPagedQueryOptions: экспорты features/ несут явные
- * возвращаемые типы (apps/frontend/AGENTS.md), члены — их выведенная форма.
+ * возвращаемые типы (apps/frontend/AGENTS.md), форма — общий
+ * KeysetPagedQueryConfig из shared/lib/keyset.
  */
-export type GlobalOperationsPagedQueryConfig = {
-  readonly queryKey: ReturnType<typeof globalOperationKeys.listPaged>;
-  readonly queryFn: (context: {
-    readonly pageParam?: string;
-  }) => Promise<GlobalOperationsPageData>;
-  readonly initialPageParam: string | undefined;
-  readonly getNextPageParam: typeof keysetNextPageParam;
-};
+export type GlobalOperationsPagedQueryConfig = KeysetPagedQueryConfig<
+  ReturnType<typeof globalOperationKeys.listPaged>,
+  GlobalOperationsPageData
+>;
 
 /** Опции глобальной ленты (канон #887): один источник ключ+fetch для хука
  * и серверного префетча. */

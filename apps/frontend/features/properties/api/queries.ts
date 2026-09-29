@@ -8,6 +8,10 @@ import type { Property } from '@/entities/property';
 import { mapPropertyResponse } from '@/entities/property';
 import type { SharedAccessRole } from '@/shared/model/access';
 
+/** Подвесший чужой объект списка (карта #692, тикет #702): блюр-карточка —
+ * обычная карточка объекта (название, адрес — рендерятся под blur, Figma
+ * 2213-99113) плюс контакт владельца для шита причины (Figma 2229-100002;
+ * почта владельца — сознательная экспозиция этого экрана). */
 export type SuspendedSharedProperty = {
   readonly propertyId: string;
   readonly accessRole: SharedAccessRole;

@@ -34,15 +34,6 @@ type PreferencesDto = components['schemas']['NotificationPreferencesResponse'];
 type PreferencesRequestDto =
   components['schemas']['NotificationPreferencesRequest'];
 
-/** Порция ленты: контракт GET /notifications (#743) — порции по 50,
- * потолок сервера 100. */
-export const NOTIFICATIONS_PAGE_SIZE = 50;
-
-/**
- * Порция ленты уведомлений: строки плюс keyset-продолжение — opaque-курсор
- * следующей порции, null = порций больше нет (удалённые строки не приходят,
- * #743).
- */
 /**
  * Лента уведомлений (#744): порции по 50 keyset-курсором (канон #597),
  * newest-first. unreadOnly — фильтр «Непрочитанные», часть ключа: тап по

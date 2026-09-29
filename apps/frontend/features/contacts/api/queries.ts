@@ -4,7 +4,11 @@ import type { ApiError } from '@/shared/api/errors';
 import { mapContact } from '@/entities/contact';
 import type { Contact } from '@/entities/contact';
 import { contactKeys } from '@/shared/api/query-keys';
-import { keysetNextPageParam } from '@/shared/lib/keyset';
+import {
+  keysetNextPageParam,
+  type KeysetPage,
+  type KeysetPagedQueryConfig,
+} from '@/shared/lib/keyset';
 import type { components } from '@/shared/api/dto';
 
 type ContactsResponse = components['schemas']['ContactsResponse'];
@@ -12,24 +16,18 @@ type ContactResponse = components['schemas']['ContactResponse'];
 
 /** Порция списка контактов (#600): строки плюс keyset-продолжение —
  * opaque-курсор следующей порции, null = порций больше нет. */
-export type ContactsPageData = {
-  readonly items: Contact[];
-  readonly nextCursor: string | null;
-};
+export type ContactsPageData = KeysetPage<Contact>;
 
 /**
  * Конфиг keyset-обхода книги контактов — возвращаемый тип билдеров
  * contactsListQuery/contactBookQuery: экспорты features/ несут явные
- * возвращаемые типы (apps/frontend/AGENTS.md), члены — их выведенная форма.
+ * возвращаемые типы (apps/frontend/AGENTS.md), форма — общий
+ * KeysetPagedQueryConfig из shared/lib/keyset.
  */
-export type ContactsListQueryConfig = {
-  readonly queryKey: ReturnType<typeof contactKeys.list>;
-  readonly queryFn: (context: {
-    readonly pageParam?: string;
-  }) => Promise<ContactsPageData>;
-  readonly initialPageParam: string | undefined;
-  readonly getNextPageParam: typeof keysetNextPageParam;
-};
+export type ContactsListQueryConfig = KeysetPagedQueryConfig<
+  ReturnType<typeof contactKeys.list>,
+  ContactsPageData
+>;
 
 /** Двойной модуль API-слоя contacts (без 'use client'): чистые fetch-функции
  * и queryOptions-фабрики канона #887 — общий источник ключ+fetch для
