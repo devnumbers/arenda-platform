@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   CANON_TIMINGS,
@@ -106,10 +108,20 @@ describe('live-value machine — канон C: dim → hold → кроссфей
   });
 
   it('blur-кроссфейд живёт в таймингах машины синхронно токену --live-blur-in', () => {
-    // tokens.css: --live-blur-in 380мс (канон) / 100мс (reduced) —
-    // JS-движения размера и резкости ждут те же интервалы.
-    expect(CANON_TIMINGS.blurInMs).toBe(380);
-    expect(REDUCED_TIMINGS.blurInMs).toBe(100);
+    // Дрейф-страж: CSS blur-кроссфейд играет var(--live-blur-in), WAAPI-
+    // движения размера и резкости в LiveValue.tsx — blurInMs; §8 требует,
+    // чтобы размер и резкость доезжали вместе. tokens.css в node-тест не
+    // импортируется — читаем файл от этого теста: --live-blur-in живёт
+    // в канон-блоке (:root) и reduced-блоке (@media) — других вхождений нет.
+    const tokensCss = readFileSync(
+      fileURLToPath(new URL('../../styles/tokens.css', import.meta.url)),
+      'utf8',
+    );
+    const blurInMs = [...tokensCss.matchAll(/--live-blur-in:\s*(\d+)ms/g)].map((m) => Number(m[1]));
+    expect(blurInMs, 'канон-блок и reduced-блок tokens.css').toEqual([
+      CANON_TIMINGS.blurInMs,
+      REDUCED_TIMINGS.blurInMs,
+    ]);
   });
 
   it('reduced-motion укорачивает hold и чистку до ~150мс-порядка', () => {
