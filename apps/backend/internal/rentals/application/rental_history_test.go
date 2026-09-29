@@ -2,8 +2,8 @@ package application
 
 // The action journal of the rentals mutations (карта #704, тикет #707,
 // ADR 0061): the conveyor journals every manual rental action inside the
-// transaction, with the tenant's display name plus the period as the label
-// snapshot.
+// transaction, with the tenant's display name as the label snapshot; the
+// period lives in context only (аудит #876).
 
 import (
 	"testing"
