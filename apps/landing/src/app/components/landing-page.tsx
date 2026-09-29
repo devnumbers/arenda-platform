@@ -139,7 +139,7 @@ export function LandingPage({
                 <p className="leading-[1.15]">арендой недвижимости</p>
               </div>
               <p className="font-['Manrope:Medium',sans-serif] font-medium leading-[1.35] opacity-40 text-[#222] text-[14px] min-[768px]:text-[24px] w-full">
-                {typo("Объекты, арендаторы, платежи и договора в одном месте")}
+                {typo("Объекты, арендаторы, платежи и договоры в одном месте")}
               </p>
             </div>
             <Button variant="primary" onClick={onLogin}>
