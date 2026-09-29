@@ -2,6 +2,11 @@
 
 import Image, { type StaticImageData } from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  createSpring,
+  nearestCardIndex,
+  type Spring,
+} from "@/components/carousel-spring";
 import reviewAvatar1 from "@/assets/sections/review-avatar-1.webp";
 import reviewAvatar2 from "@/assets/sections/review-avatar-2.webp";
 import reviewAvatar3 from "@/assets/sections/review-avatar-3.webp";
@@ -30,10 +35,11 @@ import slide5 from "@/assets/sections/slide-5.webp";
 //   вглубь (сжатие до 0.6, растворение в ноль), а новая въезжает на её
 //   место, дорастая 300→338 и проявляясь 0.6→1.
 //
-// Механика лент — канон карусели «Управляйте арендой» (rentals-carousel):
-// глайд с пружинкой-перелётом цели, докатка после свайпа по простою
-// скролла, CSS-снап выключен, overscroll-x contain, prefers-reduced-motion
-// без пружинки и анимаций. Уход назад на десктопе привязан к прогрессу
+// Механика лент — общая пружинка лент (components/carousel-spring.ts),
+// канон карусели «Управляйте арендой»: глайд с пружинкой-перелётом цели,
+// докатка после свайпа по простою скролла, CSS-снап выключен,
+// overscroll-x contain, prefers-reduced-motion без пружинки и анимаций.
+// Уход назад на десктопе привязан к прогрессу
 // скролла (пересчёт на каждом скролл-событии), так что одинаково живёт
 // на пружинке, свайпе и докатке. Отличие десктопа: позиции покоя арифметические
 // — шаг 320 (малая карточка 300 + зазор 20), активная карточка стоит у
@@ -91,23 +97,6 @@ const REVIEWS: Review[] = [
   },
 ];
 
-// ---- Общие константы пружинки (канон аренды) ----
-
-// Глайд: длительность растёт с дистанцией, потолок 850мс.
-const GLIDE_BASE_MS = 350;
-const GLIDE_MAX_MS = 850;
-const GLIDE_MS_PER_PX = 0.25;
-
-// Пружинка: лёгкий перелёт цели и упругий возврат.
-const OVERSHOOT_MIN_PX = 6;
-const OVERSHOOT_MAX_PX = 24;
-const OVERSHOOT_RATIO = 0.05;
-const OVERSHOOT_SETTLE_MS = 360;
-const HOP_MAX_PX = 40; // короче — мягкий переход без перелёта
-const HOP_MS = 420;
-// Докатка после свайпа: простой скролла, прежде сами тянем к ближайшей.
-const SETTLE_IDLE_MS = 140;
-
 // ---- Планшет/мобайл: отзыв-карточки ----
 
 const TOUCH_INSET = 24;
@@ -117,11 +106,22 @@ export function TestimonialsCarousel() {
   // на них построены глайд и докатка.
   const scroller = useRef<HTMLDivElement>(null);
   const cards = useRef<Array<HTMLElement | null>>([]);
-  const glideRaf = useRef(0);
-  const glideActive = useRef(false);
-  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reduced = useRef(false);
   const [active, setActive] = useState(0);
+  // Глайд и докатка — общая пружинка лент (components/carousel-spring.ts).
+  // Собирается в эффекте: её доступители читают ref-ы ленты, а трогать
+  // ref-ы при рендере нельзя; скролл-события раньше эффектов не бывают.
+  const springRef = useRef<Spring | null>(null);
+  useEffect(() => {
+    springRef.current = createSpring({
+      scroller: () => scroller.current,
+      reduced: () => reduced.current,
+    });
+    return () => {
+      springRef.current?.destroy();
+      springRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     const rm = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -146,96 +146,6 @@ export function TestimonialsCarousel() {
     setActive(Math.round((el.scrollLeft / max) * (REVIEWS.length - 1)));
   }, []);
 
-  useEffect(
-    () => () => {
-      cancelAnimationFrame(glideRaf.current);
-      if (settleTimer.current) {
-        clearTimeout(settleTimer.current);
-      }
-    },
-    [],
-  );
-
-  const stopGlide = useCallback(() => {
-    cancelAnimationFrame(glideRaf.current);
-    glideActive.current = false;
-  }, []);
-
-  // Пружинка: мягкий разгон-торможение, лёгкий перелёт цели, упругий возврат.
-  // Короткие ходы (< HOP_MAX_PX) — просто плавный переход без перелёта.
-  const glideTo = useCallback((targetLeft: number) => {
-    const el = scroller.current;
-    if (!el) {
-      return;
-    }
-    cancelAnimationFrame(glideRaf.current);
-    if (settleTimer.current) {
-      clearTimeout(settleTimer.current);
-      settleTimer.current = null;
-    }
-    const left = Math.max(
-      0,
-      Math.min(targetLeft, el.scrollWidth - el.clientWidth),
-    );
-    glideActive.current = true;
-    const finish = () => {
-      glideActive.current = false;
-    };
-    const from = el.scrollLeft;
-    const delta = left - from;
-    if (reduced.current || Math.abs(delta) < 1) {
-      el.scrollLeft = left;
-      finish();
-      return;
-    }
-    const easeInOutCubic = (t: number) =>
-      t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
-    const easeOutCubic = (t: number) => 1 - (1 - t) ** 3;
-    const start = performance.now();
-    if (Math.abs(delta) < HOP_MAX_PX) {
-      const step = (now: number) => {
-        const t = Math.min(1, (now - start) / HOP_MS);
-        el.scrollLeft = from + delta * easeInOutCubic(t);
-        if (t < 1) {
-          glideRaf.current = requestAnimationFrame(step);
-        } else {
-          finish();
-        }
-      };
-      glideRaf.current = requestAnimationFrame(step);
-      return;
-    }
-    const peak =
-      left +
-      Math.sign(delta) *
-        Math.min(
-          OVERSHOOT_MAX_PX,
-          Math.max(OVERSHOOT_MIN_PX, Math.abs(delta) * OVERSHOOT_RATIO),
-        );
-    const mainDuration = Math.min(
-      GLIDE_MAX_MS,
-      GLIDE_BASE_MS + Math.abs(delta) * GLIDE_MS_PER_PX,
-    );
-    const step = (now: number) => {
-      const t1 = (now - start) / mainDuration;
-      if (t1 < 1) {
-        el.scrollLeft = from + (peak - from) * easeInOutCubic(Math.max(0, t1));
-        glideRaf.current = requestAnimationFrame(step);
-        return;
-      }
-      const t2 = (now - start - mainDuration) / OVERSHOOT_SETTLE_MS;
-      el.scrollLeft =
-        peak + (left - peak) * easeOutCubic(Math.min(1, Math.max(0, t2)));
-      if (t2 < 1) {
-        glideRaf.current = requestAnimationFrame(step);
-      } else {
-        el.scrollLeft = left;
-        finish();
-      }
-    };
-    glideRaf.current = requestAnimationFrame(step);
-  }, []);
-
   // Ближайшая к линии покоя (offsetLeft − TOUCH_INSET) карточка.
   const nearestCardLeft = useCallback(() => {
     const el = scroller.current;
@@ -244,20 +154,7 @@ export function TestimonialsCarousel() {
       return null;
     }
     const target = el.scrollLeft + (nodes[0]?.offsetWidth ?? 0) / 2;
-    let best = -1;
-    let bestDist = Infinity;
-    for (let i = 0; i < nodes.length; i += 1) {
-      const card = nodes[i];
-      if (!card) {
-        continue;
-      }
-      const dist = Math.abs(card.offsetLeft + card.offsetWidth / 2 - target);
-      if (dist < bestDist) {
-        bestDist = dist;
-        best = i;
-      }
-    }
-    const card = nodes[best];
+    const card = nodes[nearestCardIndex(nodes, target)];
     if (!card) {
       return null;
     }
@@ -268,7 +165,7 @@ export function TestimonialsCarousel() {
   // карточке пружинкой (CSS-снап ради этого выключен).
   const settle = useCallback(() => {
     const el = scroller.current;
-    if (!el || glideActive.current) {
+    if (!el || springRef.current?.isGliding()) {
       return;
     }
     // Резинка на краях (iOS): пока полоса за границами — не докатываем,
@@ -283,18 +180,12 @@ export function TestimonialsCarousel() {
     if (left === null || Math.abs(left - el.scrollLeft) < 2) {
       return;
     }
-    glideTo(left);
-  }, [glideTo, nearestCardLeft]);
+    springRef.current?.glideTo(left);
+  }, [nearestCardLeft]);
 
   const onScroll = useCallback(() => {
     syncActive();
-    if (glideActive.current) {
-      return;
-    }
-    if (settleTimer.current) {
-      clearTimeout(settleTimer.current);
-    }
-    settleTimer.current = setTimeout(settle, SETTLE_IDLE_MS);
+    springRef.current?.scheduleSettle(settle);
   }, [settle, syncActive]);
 
   const goTo = useCallback(
@@ -304,9 +195,9 @@ export function TestimonialsCarousel() {
       if (!el || !card) {
         return;
       }
-      glideTo(card.offsetLeft - TOUCH_INSET);
+      springRef.current?.glideTo(card.offsetLeft - TOUCH_INSET);
     },
-    [glideTo],
+    [],
   );
 
   return (
@@ -314,8 +205,8 @@ export function TestimonialsCarousel() {
       <div
         ref={scroller}
         onScroll={onScroll}
-        onPointerDown={stopGlide}
-        onWheel={stopGlide}
+        onPointerDown={() => springRef.current?.stopGlide()}
+        onWheel={() => springRef.current?.stopGlide()}
         className="relative flex gap-3 overflow-x-auto overscroll-x-contain px-6 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {REVIEWS.map((review, index) => (
@@ -401,18 +292,36 @@ const RECEDE_EASE = 1.35;
 export function TestimonialsDesktop() {
   const scroller = useRef<HTMLDivElement>(null);
   const cards = useRef<Array<HTMLElement | null>>([]);
-  const glideRaf = useRef(0);
-  const glideActive = useRef(false);
-  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fadeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // settle зависит от glideTo, а glideTo после посадки перепроверяет линию
-  // через settle — разрываем цикл ref-ом (назначение в эффекте ниже).
+  // settle зависит от пружинки (glideTo), а посадка пружинки перепроверяет
+  // линию через settle — разрываем цикл ref-ом (назначение в эффекте ниже).
   const settleRef = useRef<() => void>(() => {});
   const reduced = useRef(false);
   const activeRef = useRef(0);
   const [active, setActive] = useState(0);
   const [shown, setShown] = useState(0);
   const [fading, setFading] = useState(false);
+  // Глайд и докатка — общая пружинка лент (components/carousel-spring.ts).
+  // Собирается в эффекте: её доступители читают ref-ы ленты, а трогать
+  // ref-ы при рендере нельзя. Посадка перепроверяет линию покоя: размеры
+  // карточек анимируются вслед за активной (поправка, если что-то уехало);
+  // под reduced-motion их снимают классы покоя — перепроверка не нужна.
+  const springRef = useRef<Spring | null>(null);
+  useEffect(() => {
+    springRef.current = createSpring({
+      scroller: () => scroller.current,
+      reduced: () => reduced.current,
+      onLand: (scheduleSettle) => {
+        if (!reduced.current) {
+          scheduleSettle(() => settleRef.current());
+        }
+      },
+    });
+    return () => {
+      springRef.current?.destroy();
+      springRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     const rm = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -439,10 +348,6 @@ export function TestimonialsDesktop() {
 
   useEffect(
     () => () => {
-      cancelAnimationFrame(glideRaf.current);
-      if (settleTimer.current) {
-        clearTimeout(settleTimer.current);
-      }
       if (fadeTimer.current) {
         clearTimeout(fadeTimer.current);
       }
@@ -549,97 +454,9 @@ export function TestimonialsDesktop() {
     applyProgress();
   }, [applyProgress]);
 
-  const stopGlide = useCallback(() => {
-    cancelAnimationFrame(glideRaf.current);
-    glideActive.current = false;
-  }, []);
-
-  // Пружинка — канон аренды: разгон-торможение, лёгкий перелёт цели,
-  // упругий возврат; короткие ходы — мягкий переход без перелёта.
-  const glideTo = useCallback((targetLeft: number) => {
-    const el = scroller.current;
-    if (!el) {
-      return;
-    }
-    cancelAnimationFrame(glideRaf.current);
-    if (settleTimer.current) {
-      clearTimeout(settleTimer.current);
-      settleTimer.current = null;
-    }
-    const left = Math.max(
-      0,
-      Math.min(targetLeft, el.scrollWidth - el.clientWidth),
-    );
-    glideActive.current = true;
-    const finish = () => {
-      glideActive.current = false;
-      // Размеры карточек анимируются вслед за активной — после посадки
-      // перепроверяем линию покоя (поправка, если что-то уехало).
-      if (!reduced.current) {
-        if (settleTimer.current) {
-          clearTimeout(settleTimer.current);
-        }
-        settleTimer.current = setTimeout(() => settleRef.current(), SETTLE_IDLE_MS);
-      }
-    };
-    const from = el.scrollLeft;
-    const delta = left - from;
-    if (reduced.current || Math.abs(delta) < 1) {
-      el.scrollLeft = left;
-      finish();
-      return;
-    }
-    const easeInOutCubic = (t: number) =>
-      t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
-    const easeOutCubic = (t: number) => 1 - (1 - t) ** 3;
-    const start = performance.now();
-    if (Math.abs(delta) < HOP_MAX_PX) {
-      const step = (now: number) => {
-        const t = Math.min(1, (now - start) / HOP_MS);
-        el.scrollLeft = from + delta * easeInOutCubic(t);
-        if (t < 1) {
-          glideRaf.current = requestAnimationFrame(step);
-        } else {
-          finish();
-        }
-      };
-      glideRaf.current = requestAnimationFrame(step);
-      return;
-    }
-    const peak =
-      left +
-      Math.sign(delta) *
-        Math.min(
-          OVERSHOOT_MAX_PX,
-          Math.max(OVERSHOOT_MIN_PX, Math.abs(delta) * OVERSHOOT_RATIO),
-        );
-    const mainDuration = Math.min(
-      GLIDE_MAX_MS,
-      GLIDE_BASE_MS + Math.abs(delta) * GLIDE_MS_PER_PX,
-    );
-    const step = (now: number) => {
-      const t1 = (now - start) / mainDuration;
-      if (t1 < 1) {
-        el.scrollLeft = from + (peak - from) * easeInOutCubic(Math.max(0, t1));
-        glideRaf.current = requestAnimationFrame(step);
-        return;
-      }
-      const t2 = (now - start - mainDuration) / OVERSHOOT_SETTLE_MS;
-      el.scrollLeft =
-        peak + (left - peak) * easeOutCubic(Math.min(1, Math.max(0, t2)));
-      if (t2 < 1) {
-        glideRaf.current = requestAnimationFrame(step);
-      } else {
-        el.scrollLeft = left;
-        finish();
-      }
-    };
-    glideRaf.current = requestAnimationFrame(step);
-  }, []);
-
   const settle = useCallback(() => {
     const el = scroller.current;
-    if (!el || glideActive.current) {
+    if (!el || springRef.current?.isGliding()) {
       return;
     }
     if (
@@ -652,8 +469,8 @@ export function TestimonialsDesktop() {
     if (Math.abs(left - el.scrollLeft) < 2) {
       return;
     }
-    glideTo(left);
-  }, [activeFor, glideTo, restFor]);
+    springRef.current?.glideTo(left);
+  }, [activeFor, restFor]);
 
   useEffect(() => {
     settleRef.current = settle;
@@ -680,20 +497,14 @@ export function TestimonialsDesktop() {
       }, reduced.current ? 0 : REVIEW_FADE_MS);
     }
     applyProgress();
-    if (glideActive.current) {
-      return;
-    }
-    if (settleTimer.current) {
-      clearTimeout(settleTimer.current);
-    }
-    settleTimer.current = setTimeout(settle, SETTLE_IDLE_MS);
+    springRef.current?.scheduleSettle(settle);
   }, [activeFor, applyProgress, settle]);
 
   const goTo = useCallback(
     (index: number) => {
-      glideTo(restFor(index));
+      springRef.current?.glideTo(restFor(index));
     },
-    [glideTo, restFor],
+    [restFor],
   );
 
   // Отзыв панели всегда в границах REVIEWS — shown приходит из activeFor.
@@ -734,8 +545,8 @@ export function TestimonialsDesktop() {
         <div
           ref={scroller}
           onScroll={onScroll}
-          onPointerDown={stopGlide}
-          onWheel={stopGlide}
+          onPointerDown={() => springRef.current?.stopGlide()}
+          onWheel={() => springRef.current?.stopGlide()}
           className="desk:-mr-[calc((100vw_-_1000px)/2)] flex h-[450px] min-w-0 flex-1 items-center gap-5 overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           {REVIEWS.map((item, index) => (
