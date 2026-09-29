@@ -57,6 +57,17 @@ function appendSetCookies(response: NextResponse, setCookies: string[]): NextRes
 }
 
 export async function proxy(request: NextRequest) {
+  // Легаси /dashboard снесён фундаментом карты #862 (тикет #865), слово
+  // владельца 29.09 (#975) — редирект, не 404: старые входы (закладка,
+  // иконка установленной PWA со старым start_url, ?from=/dashboard после
+  // логина) должны заканчиваться на живом экране, дом кабинета —
+  // /properties. 308 перманентный: браузеры и PWA-иконки запомнят.
+  if (
+    request.nextUrl.pathname === '/dashboard' ||
+    request.nextUrl.pathname.startsWith('/dashboard/')
+  ) {
+    return NextResponse.redirect(new URL('/properties', request.url), 308);
+  }
   // Разведка строгой CSP: nonce на каждый запрос. Заголовок запроса Next
   // разбирает при SSR и вешает nonce на фреймворк-скрипты и инлайн-стили
   // (Report-Only он понимает так же, как блокирующий — app-render Next 16);
@@ -120,8 +131,8 @@ export async function proxy(request: NextRequest) {
 export const config = {
   // Все разделы кабинета под /me-гейтом (#887): неавторизованный холодный
   // вход в любой раздел — редирект на /login?from=…, а не ErrorCard
-  // раздела. dashboard снят — снесён фундаментом карты #862 (тикет #865);
-  // ui-kit — демо-поверхности за тем же гейтом.
+  // раздела. dashboard ведёт мимо гейта — легаси-редирект на /properties
+  // выше (слово владельца #975); ui-kit — демо-поверхности за тем же гейтом.
   matcher: [
     '/properties/:path*',
     '/payments/:path*',
@@ -133,6 +144,7 @@ export const config = {
     '/participants/:path*',
     '/profile/:path*',
     '/ui-kit/:path*',
+    '/dashboard/:path*',
     '/login',
   ],
 };

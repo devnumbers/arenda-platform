@@ -266,8 +266,11 @@ test('мобайл: хедер в потоке, TabBar на хабе и глуш
   await expect(page.locator('nav[aria-label="Нижняя навигация"]')).toHaveCount(0);
 });
 
-test('легаси /dashboard снесён — ответ 404, а не редирект', async ({ page, seededUser }) => {
+test('легаси /dashboard редиректит на /properties — слово владельца #975', async ({ page, seededUser }) => {
   await openCabinetWithSeededSession(page, seededUser);
   const response = await page.goto('/dashboard');
-  expect(response?.status()).toBe(404);
+  // 308 перманентный на дом кабинета: старые входы (закладка, иконка PWA
+  // со старым start_url) заканчиваются на живом экране, не на 404.
+  expect(page.url()).toContain('/properties');
+  expect(response?.status()).toBe(200);
 });
