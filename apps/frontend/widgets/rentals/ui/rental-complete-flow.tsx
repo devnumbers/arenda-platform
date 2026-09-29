@@ -464,4 +464,3 @@ export function RentalCompleteFlow({
     router.replace(ROUTES.propertyRentalCompleted(rental.propertyId, rental.id));
   }
 }
-
