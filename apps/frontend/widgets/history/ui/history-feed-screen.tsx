@@ -365,7 +365,8 @@ export function HistoryFeedScreen({
     );
     // Дельта свежих строк этого коммита (#880): влитие между снимками —
     // строки получают row-in и метку «новое»; у читателя на дне метки
-    // гаснут по канонной паузе, выше держатся до доскролла.
+    // гаснут по канонной паузе, метки выше дна держатся до доскролла —
+    // висящий таймер прошлой волны при indicate-влитии гасится.
     const justMerged = freshFeedEntryIdsMergedSince(
       historyFeedScopeKey(feedScopeRef.current),
       prev.at,
@@ -383,6 +384,13 @@ export function HistoryFeedScreen({
           clearTimeout(freshTimerRef.current);
         }
         freshTimerRef.current = setTimeout(acknowledgeFresh, FRESH_VISIBLE_MS);
+      } else if (action.kind === 'indicate') {
+        // Читатель выше дна — метки держатся до доскролла: гасим висящий
+        // таймер прошлой волны, чтобы он не убил непросмотренные метки.
+        if (freshTimerRef.current !== null) {
+          clearTimeout(freshTimerRef.current);
+          freshTimerRef.current = null;
+        }
       }
     }
     if (action.kind === 'anchor') {
