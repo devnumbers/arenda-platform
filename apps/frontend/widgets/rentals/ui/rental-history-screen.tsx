@@ -86,11 +86,15 @@ export function RentalHistoryScreen({
 
       <PageContent>
         <div className="flex flex-col gap-2">
-          {(rentalsQuery.isPending || historyQuery.isPending) && (
+          {/* Ветви взаимоисключающие — по достигнутому состоянию: запрос
+              истории заглушен, пока аренда не найдена (пустой paymentId),
+              его pending/error значимы только при найденной аренде. */}
+          {(rentalsQuery.isPending ||
+            (rental !== undefined && historyQuery.isPending)) && (
             <RentalHistoryFeedSkeleton />
           )}
 
-          {(rentalsQuery.isError || historyQuery.isError) && (
+          {(rentalsQuery.isError || (rental !== undefined && historyQuery.isError)) && (
             <div className="flex flex-col items-center gap-4 pt-6">
               <p className="text-center text-base leading-[18px] text-content-secondary">
                 Не удалось загрузить историю
@@ -108,7 +112,17 @@ export function RentalHistoryScreen({
             </div>
           )}
 
-          {!rentalsQuery.isPending &&
+          {/* Прямая ссылка на несуществующую аренду — честная пустота
+              вместо вечного скелетона. */}
+          {rentalsQuery.isSuccess && rental === undefined && (
+            <EmptyState
+              imageSrc="/images/rentals/rental-hero.png"
+              title="Аренда не найдена"
+              description="Возможно, она была удалена"
+            />
+          )}
+
+          {rental !== undefined &&
             !rentalsQuery.isError &&
             !historyQuery.isPending &&
             !historyQuery.isError && (
