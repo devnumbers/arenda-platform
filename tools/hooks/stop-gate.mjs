@@ -31,6 +31,9 @@ const PACKAGE_GATES = [
   // change (nolint gate #344: zero //nolint directives, full pass).
   { name: "backend nolint", prefixes: ["apps/backend/"], command: ["make", "backend-nolint"] },
   { name: "frontend", prefixes: ["apps/frontend/"], command: ["npm", "--prefix", "apps/frontend", "run", "lint"] },
+  // Landing (ADR 0063): same shape as frontend — the package lint runs whole,
+  // the touched files are only the trigger.
+  { name: "landing", prefixes: ["apps/landing/"], command: ["npm", "--prefix", "apps/landing", "run", "lint"] },
   // Suppression gate #399: zero eslint-disable/@ts-*/explicit-any in the
   // manual code of all three apps; a change in any of them runs the full pass.
   { name: "ts suppressions", prefixes: ["apps/frontend/", "apps/admin/", "apps/landing/"], command: ["make", "ts-suppressions"] },
