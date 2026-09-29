@@ -28,10 +28,15 @@ function OperationsTotalsGroup({
   );
 }
 
-/** Скелетон сводки (§7, приглушённый в серой карточке) — общий для
- * isLoading-ветки блока и страничного скелетона деталей (паритет #604:
- * одна анатомия на обе фазы загрузки). */
-export function PropertyOperationsSkeleton(): JSX.Element {
+/** Раскладка сводки «Операции» — одна на обе фазы загрузки: скелетон
+ * несёт её сам (страничный скелетон деталей рендерит его без обёртки),
+ * живой блок — на своей обёртке с testid. */
+const OPERATIONS_LAYOUT = 'flex items-center gap-5 px-6 pb-6 pt-4';
+
+/** Две колонки скелетона без раскладки секции: живой блок кладёт их в
+ * свою обёртку (вторая обёртка задваивала бы паддинги), самостоятельный
+ * PropertyOperationsSkeleton — в свою. */
+function OperationsSkeletonColumns(): JSX.Element {
   return (
     <>
       {[0, 1].map((column) => (
@@ -41,6 +46,18 @@ export function PropertyOperationsSkeleton(): JSX.Element {
         </div>
       ))}
     </>
+  );
+}
+
+/** Скелетон сводки (§7, приглушённый в серой карточке) — общий для
+ * isLoading-ветки блока и страничного скелетона деталей (паритет #604:
+ * одна анатомия на обе фазы загрузки). Раскладку секции несёт сам
+ * (OPERATIONS_LAYOUT), поэтому страничному скелетону обёртка не нужна. */
+export function PropertyOperationsSkeleton(): JSX.Element {
+  return (
+    <div className={OPERATIONS_LAYOUT}>
+      <OperationsSkeletonColumns />
+    </div>
   );
 }
 
@@ -60,9 +77,9 @@ export function PropertyOperationsBlock({
   readonly isLoading: boolean;
 }): JSX.Element {
   return (
-    <div className="flex items-center gap-5 px-6 pb-6 pt-4" data-testid="property-operations-block">
+    <div className={OPERATIONS_LAYOUT} data-testid="property-operations-block">
       {isLoading ? (
-        <PropertyOperationsSkeleton />
+        <OperationsSkeletonColumns />
       ) : (
         <>
           <OperationsTotalsGroup
