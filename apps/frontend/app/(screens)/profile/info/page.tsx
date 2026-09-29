@@ -1,10 +1,10 @@
 import type { Metadata } from 'next';
 import NextLink from 'next/link';
+import { CopyrightYear } from '@/widgets/profile';
 import { SmallArrowRight, RentlyLockup } from '@/shared/assets/icons';
 import { SubScreenShell } from '@/shared/ui/design';
 import { ROUTES } from '@/shared/config/routes';
 import { SUPPORT_EMAIL } from '@/shared/config/support';
-import { CopyrightYear } from './copyright-year';
 
 export const metadata: Metadata = {
   title: 'Информация — Рентли',
