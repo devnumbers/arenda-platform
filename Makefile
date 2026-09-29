@@ -437,7 +437,8 @@ tools-test: ## Run contract tests of the tools/ packages (self-installing)
 	done; \
 	if [ $$status -ne 0 ]; then echo "ERROR: tools contract tests failed (see above)"; exit 1; fi
 
-# test runs the full test suite: backend unit + integration + frontend + admin.
+# test runs the full test suite: backend unit + integration + frontend + admin
+# + landing + tools.
 # Unit tests run first for fast fail-fast before the slower testcontainers phase.
 # It requires Docker: integration tests use testcontainers-go, which starts a
 # dedicated PostgreSQL 18 container per test binary and applies migrations

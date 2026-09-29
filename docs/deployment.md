@@ -317,7 +317,9 @@ localhost-порты контейнеров. Конфигурация — мод
 
 - новый top-level роут фронта работает без правок прокси;
 - новый публичный путь лендинга = добавление в матчер `@landing`
-  (`deploy/caddy/rentlee.caddy`) + файл в `apps/landing/public/`;
+  (`deploy/caddy/rentlee.caddy`) + app-маршрут `app/(site)/<путь>/page.tsx`
+  (страница) либо файл в `apps/landing/public/` (статический ассет) —
+  файл из `public/` маршрутом в Next не становится;
 - `robots.txt` и `sitemap.xml` отдаёт лендинг (`apps/landing/public/`);
   `Disallow`-список robots.txt зеркалит `APP_ROUTE_PREFIXES` фронта минус
   `/login`;
