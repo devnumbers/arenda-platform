@@ -17,10 +17,10 @@ import {
   InfiniteQueryTail,
   PageContent,
   SearchField,
-  Skeleton,
   TopNav,
 } from '@/shared/ui/design';
-import { GlobalPaymentRuleIcon, PaymentsHeading, PaymentsRowsSkeleton, PaymentsStateCard } from './payments-sections';
+import { OperationsSearchSkeleton } from './operations-skeletons';
+import { GlobalPaymentRuleIcon, PaymentsHeading, PaymentsStateCard } from './payments-sections';
 import { nearestDateLine } from '../lib/payments-global-model';
 import {
   effectiveChipKey,
@@ -149,17 +149,9 @@ export function PaymentsGlobalSearchScreen(): JSX.Element {
           // Контент — две секции (чипы категорий, строки платежей); скелетон
           // зеркалит их анатомию — заголовки-полоски, чипы-заглушки, ряды
           // канона (#604: композиция скелетона равна композиции страницы).
-          <div className="flex flex-col gap-6 pt-4" aria-hidden>
-            <Skeleton className="ml-6 h-6 w-40" />
-            <div className="flex gap-1.5 px-6 pt-2">
-              <Skeleton className="h-9 w-28 rounded-full" />
-              <Skeleton className="h-9 w-36 rounded-full" />
-            </div>
-            <Skeleton className="ml-6 h-6 w-40" />
-            <div className="flex flex-col pt-2">
-              <PaymentsRowsSkeleton />
-            </div>
-          </div>
+          // Архетип OperationsSearchSkeleton: description — дата под суммой
+          // в строках выдачи, как у операций-соседа.
+          <OperationsSearchSkeleton description />
         )}
 
         {showResults &&

@@ -131,9 +131,10 @@ export function PaymentsObjectsScreen(): JSX.Element {
 
         {!showEmptyState && (
           <>
-            {/* Поля 24px несёт обёртка (§14); детям списка вставки не нужны
-             * (margin-утилиты на <button> всё равно глушит безслойный
-             * normalize HeroUI). */}
+            {/* Поля 24px несёт обёртка (§14); детям списка вставки не нужны —
+             * дефолтные маргины кнопок снял легаси-сброс форм-контролов
+             * в @layer base (globals.css, button { margin: 0 }), а
+             * margin-утилиты на голых <button> работают сами (§13). */}
             <div className="flex flex-col gap-4 px-6 pt-1">
               {pending && (
                 <>
