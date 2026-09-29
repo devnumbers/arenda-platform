@@ -2,6 +2,7 @@
 
 import Image, { type StaticImageData } from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { CarouselDots } from "@/components/carousel-dots";
 import {
   createSpring,
   nearestCardIndex,
@@ -288,18 +289,12 @@ export function RentalsCarousel() {
   return (
     <div className="flex flex-col">
       <div className="order-2 mt-6 flex items-center justify-center gap-4 desk:mt-12">
-        {CARDS.map((card, i) => (
-          <button
-            key={card.title}
-            type="button"
-            aria-label={card.title}
-            aria-current={active === i}
-            onClick={() => goTo(i)}
-            className={`size-3 cursor-pointer rounded-full transition-colors duration-200 ${
-              active === i ? "bg-ink" : "bg-line hover:bg-gray-3"
-            }`}
-          />
-        ))}
+        <CarouselDots
+          count={CARDS.length}
+          active={active}
+          onSelect={goTo}
+          labelFor={(i) => CARDS[i]?.title ?? ""}
+        />
       </div>
       <div
         ref={scroller}

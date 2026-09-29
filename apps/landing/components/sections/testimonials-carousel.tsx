@@ -2,6 +2,7 @@
 
 import Image, { type StaticImageData } from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { CarouselDots } from "@/components/carousel-dots";
 import {
   createSpring,
   nearestCardIndex,
@@ -252,18 +253,12 @@ export function TestimonialsCarousel() {
         <div aria-hidden className="w-[calc(100%_-_332px)] shrink-0" />
       </div>
       <div className="mt-6 flex items-center justify-center gap-4">
-        {REVIEWS.map((review, index) => (
-          <button
-            key={review.name}
-            type="button"
-            aria-label={`Слайд ${index + 1}`}
-            aria-current={active === index}
-            onClick={() => goTo(index)}
-            className={`size-3 cursor-pointer rounded-full transition-colors duration-200 ${
-              active === index ? "bg-ink" : "bg-line hover:bg-gray-3"
-            }`}
-          />
-        ))}
+        <CarouselDots
+          count={REVIEWS.length}
+          active={active}
+          onSelect={goTo}
+          labelFor={(i) => `Слайд ${i + 1}`}
+        />
       </div>
     </div>
   );
@@ -278,8 +273,16 @@ const REVIEW_FADE_MS = 350;
 
 // «Уход назад» уходящей карточки: сжатие до 0.6 и растворение в ноль
 // (у Яндекса активный слайд — scale 1.11, ушедший оседает на 0.6).
+// Класс покоя активной карточки (ACTIVE_SCALE_CLASS ниже) — округление
+// этих чисел до 4 знаков; править вместе.
 const ACTIVE_SCALE_X = 338 / 300;
 const ACTIVE_SCALE_Y = 450 / 400;
+// Покой активной карточки в разметке: строка — статический литерал, чтобы
+// Tailwind увидел класс в исходнике и сгенерировал CSS (динамический
+// template literal не сканируется). Значения — ACTIVE_SCALE_X/Y выше,
+// округлённые до 4 знаков (338/300 → 1.1267, 450/400 → 1.125); править
+// вместе с константами.
+const ACTIVE_SCALE_CLASS = "scale-[1.1267_1.125]";
 const RECESSED_SCALE = 0.6;
 const IDLE_OPACITY = 0.6;
 // Добор позиции соседей: активная дорастает до 338 при базе 300, поэтому
@@ -562,7 +565,7 @@ export function TestimonialsDesktop() {
               sizes="338px"
               className={`h-[400px] w-[300px] shrink-0 origin-left rounded-[40px] object-cover will-change-[translate,scale,opacity] ${
                 active === index
-                  ? "z-[5] scale-[1.1267_1.125] opacity-100"
+                  ? `z-[5] ${ACTIVE_SCALE_CLASS} opacity-100`
                   : "opacity-60"
               }`}
             />
@@ -575,18 +578,12 @@ export function TestimonialsDesktop() {
         </div>
       </div>
       <div className="mt-14 flex items-center justify-center gap-4">
-        {REVIEWS.map((item, index) => (
-          <button
-            key={item.name}
-            type="button"
-            aria-label={`Слайд ${index + 1}`}
-            aria-current={active === index}
-            onClick={() => goTo(index)}
-            className={`size-3 cursor-pointer rounded-full transition-colors duration-200 ${
-              active === index ? "bg-ink" : "bg-line hover:bg-gray-3"
-            }`}
-          />
-        ))}
+        <CarouselDots
+          count={REVIEWS.length}
+          active={active}
+          onSelect={goTo}
+          labelFor={(i) => `Слайд ${i + 1}`}
+        />
       </div>
     </div>
   );
