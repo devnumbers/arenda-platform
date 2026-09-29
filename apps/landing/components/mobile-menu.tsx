@@ -29,6 +29,8 @@ import type { NavItem } from "@/lib/nav";
 // open уже false, панель едет вниз до среза; срез — таймаутом на шаг длиннее
 // свёртывания: transitionend в фоновом табе ненадёжен). Форма карточки —
 // прямые нижние углы и тень — живёт на open||closing до самого среза.
+// При reduced-motion фаза closing не заводится вовсе: анимации нет, шторка
+// схлопывается в один кадр — срез совпадает с setOpen(false).
 // Повторное открытие посреди closing продолжает высоту с текущего кадра и
 // перезапускает каскад.
 const EASE = "ease-[cubic-bezier(0.4,0,0.6,1)]";
@@ -82,7 +84,13 @@ export function MobileMenu({
   const startClose = () => {
     if (open && !closing) {
       setOpen(false);
-      setClosing(true);
+      // Reduced-motion: шторка схлопывается мгновенно (motion-reduce на
+      // transition) — анимации нет, значит нет и фазы closing: срез
+      // происходит сразу, вместе с open уходят лок скролла и форма
+      // карточки, а таймер CLOSE_CUT_MS нечего держать.
+      if (!reducedMotion) {
+        setClosing(true);
+      }
     }
   };
 
