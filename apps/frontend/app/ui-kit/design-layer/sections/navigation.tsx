@@ -2,10 +2,11 @@
 
 import { useState } from 'react';
 import type { JSX } from 'react';
-import { ArrowLeft, BoldPerson, Search } from '@/shared/assets/icons';
+import { ArrowLeft, BoldPerson, Cancel, Search, VerticalMenu } from '@/shared/assets/icons';
 import {
     Button,
     DesktopMenuButton,
+    fullscreenSurfaceClass,
     HubTitle,
     IconButton,
     MoreSheet,
@@ -17,6 +18,7 @@ import {
     TopNavBackButton,
     TopNavTitle,
 } from '@/shared/ui/design';
+import { cn } from '@/shared/lib/cn';
 import { navSectionById, supportNavSection } from '@/shared/config/navigation';
 import styles from '../../page.module.css';
 
@@ -27,6 +29,8 @@ type TopNavSectionProps = {
 };
 
 export function TopNavSection({ value, onValueChange }: TopNavSectionProps): JSX.Element {
+    const [overlayOpen, setOverlayOpen] = useState(false);
+
     return (
         <div className={styles.group}>
             <h3 className={styles.groupTitle}>TopNav</h3>
@@ -70,6 +74,54 @@ export function TopNavSection({ value, onValueChange }: TopNavSectionProps): JSX
                  * на ПК ≥1024 — всегда. */}
                 <TopNav mobileWings />
             </div>
+            {/* Поверхностный вариант и постоянный слот бара: TopNav с overlay
+             * живёт внутри полноэкранной поверхности (fullscreenSurfaceClass,
+             * §1 — хром ПК не исчезает: крылья на ПК рисует сама поверхность,
+             * на мобайле/планшете их нет — анатомия подэкрана); barTrailing —
+             * постоянное действие бара в правом слоте (§2: кебаб), на ПК —
+             * правый край колонки 560, на мобайле/планшете — левее крыла-
+             * аватара. Вживую: шит фильтров истории
+             * (widgets/history/ui/history-filters-sheet.tsx), пикеры и визарды-
+             * оверлеи; бар-кебаб — «Уведомления»
+             * (widgets/notifications/ui/notifications-feed-screen.tsx). */}
+            <p className={styles.groupTitle}>
+                TopNav overlay + barTrailing — сборка полноэкранной поверхности
+                (§1 «хром ПК постоянен», §2 «кебаб в правом слоте бара»).
+            </p>
+            <div className={styles.grid}>
+                <Button onClick={() => setOverlayOpen(true)}>Открыть поверхность</Button>
+            </div>
+            {overlayOpen && (
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Демо поверхности с TopNav overlay"
+                    className={cn(fullscreenSurfaceClass, 'font-sans')}
+                >
+                    <TopNav
+                        overlay
+                        leading={
+                            <IconButton
+                                icon={<Cancel />}
+                                label="Закрыть поверхность"
+                                onClick={() => setOverlayOpen(false)}
+                            />
+                        }
+                        barTrailing={<IconButton icon={<VerticalMenu />} label="Действия поверхности" />}
+                    >
+                        <TopNavTitle title="Фильтры" subtitle="Поверхностный вариант бара" />
+                    </TopNav>
+                    <div className="relative min-h-0 flex-1 overflow-y-auto">
+                        <div className="mx-auto w-full max-w-column px-6 pt-6 tablet:mt-[72px]">
+                            <p className="text-sm text-content-secondary">
+                                Контент поверхности в колонке 560. На ПК ≥1024 лого и профиль
+                                рисует сама поверхность — хром не исчезает; на мобайле/планшете
+                                бар — анатомия подэкрана, кебаб стоит левее края бара.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

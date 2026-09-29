@@ -64,9 +64,19 @@ export function UserButtonSection(): JSX.Element {
     return (
         <div className={styles.group}>
             <h3 className={styles.groupTitle}>UserButton</h3>
+            <p className={styles.groupTitle}>
+                Слева направо: имя + аватар; disabled; pending — useMe в полёте,
+                вместо имени скелетон h-4 w-10 (доступное имя «Профиль» даёт
+                сам компонент); hideNameBelowDesktop — имя только на ПК
+                (крыло хаба аватар-only ниже ПК — ширина стабильна, аудит #876),
+                доступное имя «Профиль: Даниил». Вживую оба состояния живут в
+                крыльях TopNav (shared/ui/design/top-nav.tsx).
+            </p>
             <div className={styles.links}>
                 <UserButton name="Даниил" />
                 <UserButton name="Профиль" disabled />
+                <UserButton pending />
+                <UserButton name="Даниил" hideNameBelowDesktop />
             </div>
         </div>
     );
