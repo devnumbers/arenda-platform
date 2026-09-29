@@ -459,7 +459,16 @@ jobs:
               body="$(get "${BASE_URL}/api/healthz")" || { echo "GET /api/healthz failed" >&2; return 1; }
               grep -q '"status":"ok"' <<<"${body}" || { echo "/api/healthz did not report ok" >&2; return 1; }
 
-              [ "$(get_status "${BASE_URL}/properties")" = "200" ] || { echo "/properties (cabinet catch-all) is not 200" >&2; return 1; }
+              # Кабинет для анонима отвечает редиректом на /login (гейт
+              # аутентификации фронта), доки смоука выше обещают «кабинет =
+              # catch-all (200/307)» — принимаем оба; находка деплоя 29.09:
+              # строгая проверка на 200 противоречила собственным докам и
+              # текущему поведению фронта.
+              prop_status="$(get_status "${BASE_URL}/properties")"
+              case "${prop_status}" in
+                200|307) ;;
+                *) echo "/properties (cabinet catch-all) returned ${prop_status}, expected 200/307" >&2; return 1 ;;
+              esac
               dash_status="$(get_status "${BASE_URL}/dashboard")"
               case "${dash_status}" in
                 307|308) ;;
