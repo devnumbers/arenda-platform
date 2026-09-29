@@ -13,8 +13,8 @@ import {
 } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
-import { mapPropertyResponse } from '@/entities/property';
-import type { Property } from '@/entities/property';
+import { mapPropertyPhoto, mapPropertyResponse } from '@/entities/property';
+import type { Property, PropertyPhoto } from '@/entities/property';
 import { propertyKeys } from '@/shared/api/query-keys';
 import { keysetNextPageParam, type KeysetPage } from '@/shared/lib/keyset';
 import { resolvePropertiesLandingHref } from '../lib/property-landing';
@@ -37,7 +37,7 @@ export type {
 type PropertiesSearchResponse = components['schemas']['PropertiesSearchResponse'];
 type PropertyCreateRequest = components['schemas']['PropertyCreateRequest'];
 type PropertyUpdateRequest = components['schemas']['PropertyUpdateRequest'];
-type PropertyPhoto = components['schemas']['PropertyPhoto'];
+type PropertyPhotoDto = components['schemas']['PropertyPhoto'];
 type AddressSuggestionsResponse =
   components['schemas']['AddressSuggestionsResponse'];
 type AddressSuggestion = components['schemas']['AddressSuggestion'];
@@ -173,17 +173,19 @@ export function useCreateProperty(): UseMutationResult<
 }
 
 export function useUpdateProperty(): UseMutationResult<
-  PropertyResponse,
+  Property,
   ApiError,
   { id: string; data: PropertyUpdateRequest }
 > {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }) =>
-      apiClient<PropertyResponse>(`/properties/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify(data),
-      }),
+    mutationFn: async ({ id, data }) =>
+      mapPropertyResponse(
+        await apiClient<PropertyResponse>(`/properties/${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(data),
+        }),
+      ),
     onSuccess: (_, { id }) => {
       void queryClient.invalidateQueries({ queryKey: propertyKeys.list });
       void queryClient.invalidateQueries({ queryKey: propertyKeys.detail(id) });
@@ -192,16 +194,18 @@ export function useUpdateProperty(): UseMutationResult<
 }
 
 export function useArchiveProperty(): UseMutationResult<
-  PropertyResponse,
+  Property,
   ApiError,
   string
 > {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id) =>
-      apiClient<PropertyResponse>(`/properties/${id}/archive`, {
-        method: 'POST',
-      }),
+    mutationFn: async (id) =>
+      mapPropertyResponse(
+        await apiClient<PropertyResponse>(`/properties/${id}/archive`, {
+          method: 'POST',
+        }),
+      ),
     onSuccess: (_, id) => {
       void queryClient.invalidateQueries({ queryKey: propertyKeys.list });
       void queryClient.invalidateQueries({ queryKey: propertyKeys.detail(id) });
@@ -210,16 +214,18 @@ export function useArchiveProperty(): UseMutationResult<
 }
 
 export function useUnarchiveProperty(): UseMutationResult<
-  PropertyResponse,
+  Property,
   ApiError,
   string
 > {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id) =>
-      apiClient<PropertyResponse>(`/properties/${id}/unarchive`, {
-        method: 'POST',
-      }),
+    mutationFn: async (id) =>
+      mapPropertyResponse(
+        await apiClient<PropertyResponse>(`/properties/${id}/unarchive`, {
+          method: 'POST',
+        }),
+      ),
     onSuccess: (_, id) => {
       void queryClient.invalidateQueries({ queryKey: propertyKeys.list });
       void queryClient.invalidateQueries({ queryKey: propertyKeys.detail(id) });
@@ -233,17 +239,19 @@ export function useUnarchiveProperty(): UseMutationResult<
  * Инвалидит список и деталь — порядок карточек держит сервер.
  */
 export function useSetPropertyPin(): UseMutationResult<
-  PropertyResponse,
+  Property,
   ApiError,
   { id: string; pinned: boolean }
 > {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, pinned }) =>
-      apiClient<PropertyResponse>(`/properties/${id}/pin`, {
-        method: 'PUT',
-        body: JSON.stringify({ pinned }),
-      }),
+    mutationFn: async ({ id, pinned }) =>
+      mapPropertyResponse(
+        await apiClient<PropertyResponse>(`/properties/${id}/pin`, {
+          method: 'PUT',
+          body: JSON.stringify({ pinned }),
+        }),
+      ),
     onSuccess: (_, { id }) => {
       void queryClient.invalidateQueries({ queryKey: propertyKeys.list });
       void queryClient.invalidateQueries({ queryKey: propertyKeys.detail(id) });
@@ -273,13 +281,15 @@ export function useUploadPropertyPhoto(): UseMutationResult<
   { propertyId: string; file: File }
 > {
   return useMutation({
-    mutationFn: ({ propertyId, file }) => {
+    mutationFn: async ({ propertyId, file }) => {
       const formData = new FormData();
       formData.append('file', file);
-      return apiClient<PropertyPhoto>(`/properties/${propertyId}/photos`, {
-        method: 'POST',
-        body: formData,
-      });
+      return mapPropertyPhoto(
+        await apiClient<PropertyPhotoDto>(`/properties/${propertyId}/photos`, {
+          method: 'POST',
+          body: formData,
+        }),
+      );
     },
   });
 }
