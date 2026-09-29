@@ -217,6 +217,10 @@
        полноэкранных поверхностей — .fullscreen-surface::before (тикет
        #865). */
     --sidebar-total: 224px;
+    /* Клиренс постоянного слота barTrailing TopNav от аватар-крыла
+       UserButton (px-[14px] + круг 44 + px-[14px], зазор 14 до слота):
+       потребитель — right-[var(--topnav-wing-inset)] в top-nav.tsx. */
+    --topnav-wing-inset: 72px;
 }
 
 /* Дизайн-слой новых экранов (ADR 0050): Tailwind-утилиты поверх токенов

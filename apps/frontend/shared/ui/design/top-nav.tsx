@@ -210,13 +210,15 @@ export function TopNav({
           )}
           {/* Постоянный правый слот бара хаба: на ПК — правый край колонки
            * 560 (макет 2329-148700); на мобайле/планшете с крыльями — левее
-           * аватар-крыла (его ширина 72 = px-[14px] + круг 44 + px-[14px], зазор
-           * 14 до слота). Прецедент канона §2 — «Уведомления» #876. */}
+           * аватар-крыла, клиренс ведёт токен --topnav-wing-inset.
+           * Прецедент канона §2 — «Уведомления» #876. */}
           {!collapse && barTrailing !== undefined && (
             <div
               className={cn(
                 'absolute top-0 flex h-full items-center',
-                mobileWings ? 'right-[72px] desktop:right-0 desktop:pr-3.5' : 'right-0 pr-3.5',
+                mobileWings
+                  ? 'right-[var(--topnav-wing-inset)] desktop:right-0 desktop:pr-3.5'
+                  : 'right-0 pr-3.5',
               )}
             >
               {barTrailing}
