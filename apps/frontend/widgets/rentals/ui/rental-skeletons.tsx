@@ -303,14 +303,15 @@ export function RentalSummarySkeleton(): JSX.Element {
   );
 }
 
-/** Скелетон формы правки условий (#532): шесть полей канона (MoneyField,
- * пикеры, статичное начало, деньги) — метка 16/18 и серый бокс h-14,
- * обёртка шага (зазор 32). Блок комментария и панель сохранения — ниже
+/** Скелетон формы правки условий (#532): семь полевых строк канона
+ * (MoneyField, пикеры, статичное начало, деньги, пикер коммунальных
+ * платежей) — метка 16/18 и серый бокс h-14, обёртка шага (зазор 32).
+ * Тумблер автоплатежа, блок комментария и панель сохранения — ниже
  * сгиба, панель появляется с формой. */
 export function RentalTermsEditFormSkeleton(): JSX.Element {
   return (
     <div aria-hidden className="flex flex-col gap-8 px-6 pt-6">
-      {Array.from({ length: 6 }, (_, index) => (
+      {Array.from({ length: 7 }, (_, index) => (
         <SkeletonFormField key={index} labelWidth={index % 2 === 0 ? 'w-28' : 'w-24'} />
       ))}
     </div>
