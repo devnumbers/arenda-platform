@@ -13,9 +13,9 @@
  *
  * The list is mirrored by the inline copy in the service worker
  * (`public/sw.js` — a static SW script cannot import TypeScript at
- * runtime), by the `Disallow` block of the landing `robots.txt` and by the
- * matcher in `proxy.ts`. The unit test `app-routes.test.ts` guards against
- * drift between them.
+ * runtime) and by the `Disallow` block of the landing `robots.txt`; the
+ * `proxy.ts` /me-gate matcher covers every prefix except `/subscription`
+ * (one-way coverage — see `app-routes.test.ts`).
  */
 export const APP_ROUTE_PREFIXES: ReadonlyArray<string> = [
     '/login',
