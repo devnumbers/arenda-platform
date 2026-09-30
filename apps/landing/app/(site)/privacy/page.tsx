@@ -7,8 +7,18 @@ export const metadata: Metadata = {
     "Какие данные собирает Рентли, зачем и как они используются, хранятся и защищаются.",
   // Собственный canonical: без него действует canonical "/" корневого layout,
   // и страница объявляет канонической главную.
+  // og:url — тот же механизм протекания корневых метаданных: для него фикс
+  // canonical (20ea1020) не распространялся, поэтому openGraph здесь свой.
   alternates: {
     canonical: "/privacy",
+  },
+  // Shallow-мерж Next заменяет блок openGraph целиком — повторяем
+  // type/locale/siteName из корневого layout, иначе они пропадут.
+  openGraph: {
+    type: "website",
+    locale: "ru_RU",
+    url: "/privacy",
+    siteName: "Рентли",
   },
 };
 

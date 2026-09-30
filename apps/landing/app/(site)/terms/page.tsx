@@ -7,8 +7,18 @@ export const metadata: Metadata = {
     "Условия использования сервиса учёта аренды недвижимости Рентли.",
   // Собственный canonical: без него действует canonical "/" корневого layout,
   // и страница объявляет канонической главную.
+  // og:url — тот же механизм протекания корневых метаданных: для него фикс
+  // canonical (20ea1020) не распространялся, поэтому openGraph здесь свой.
   alternates: {
     canonical: "/terms",
+  },
+  // Shallow-мерж Next заменяет блок openGraph целиком — повторяем
+  // type/locale/siteName из корневого layout, иначе они пропадут.
+  openGraph: {
+    type: "website",
+    locale: "ru_RU",
+    url: "/terms",
+    siteName: "Рентли",
   },
 };
 
