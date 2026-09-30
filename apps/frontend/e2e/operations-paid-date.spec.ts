@@ -4,7 +4,7 @@ import {
   SEEDED_STUDIO_PROPERTY_ID,
   test,
 } from './fixtures';
-import { formatDayMonth, formatDayMonthWithYear } from '@/shared/lib/date-format';
+import { formatDayMonth, formatDayMonthWithYear, formatDayMonthYear } from '@/shared/lib/date-format';
 import type { Page, TestInfo } from '@playwright/test';
 
 // Операционные ленты читаются по фактической дате оплаты (#933/#994):
@@ -130,33 +130,58 @@ test.describe('операционные ленты по факту оплаты'
 
     const today = await browserToday(page);
 
+    // Групповые лейблы проверяются по роли заголовка: getByRole не считает
+    // скрытые поддеревья (гонка двойного DOM оставляет фантомные копии
+    // страницы — строгие page-wide getByText на них падают, прогон 30.09).
+    // Лейблы лент — «Сегодня, <дата>», истории — «Сегодня» (канон истории,
+    // без даты через запятую).
+    const feedGroupLabel = paidDate === today
+      ? `Сегодня, ${formatDayMonth(paidDate)}`
+      : formatDayMonthWithYear(paidDate, today);
+    const historyGroupLabel = paidDate === today
+      ? 'Сегодня'
+      : formatDayMonthYear(paidDate);
+    const plannedGroupHeading = formatDayMonthWithYear(plannedDate, today);
+
     // ── Лента объекта: операция — в группе дня оплаты, не плановой даты ──
     await page.goto(OPERATIONS_URL);
     const row = page.getByText(title).first();
     await expect(row).toBeVisible();
     // Оплаченный наперёд платёж лежит в группе факта; когда плановая дата
-    // строго в будущем (F ≠ сегодня), группы плановой даты в ленте нет —
-    // лейбл ровно тот, который группа отрисовала бы (с годом вне текущего).
+    // строго в будущем (F ≠ сегодня), группы плановой даты в ленте нет.
     if (plannedDate > today) {
       await expect(
-        page.getByText(formatDayMonthWithYear(plannedDate, today), { exact: true }),
+        page.getByRole('heading', { name: plannedGroupHeading, exact: true }),
       ).toHaveCount(0);
     }
-    // Группа дня оплаты: «Сегодня, <дата>» при совпадении факта с днём
-    // браузера, иначе — датовая группа факта (TZ-оговорка зоны).
-    const paidGroupLabel = paidDate === today
-      ? `Сегодня, ${formatDayMonth(paidDate)}`
-      : formatDayMonthWithYear(paidDate, today);
-    await expect(page.getByText(paidGroupLabel, { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: feedGroupLabel, exact: true }),
+    ).toBeVisible();
 
     // ── Глобальная лента (#933 — surfaces владельца): та же группа факта ──
     await page.goto('/operations');
     await expect(page.getByText(title).first()).toBeVisible();
     if (plannedDate > today) {
       await expect(
-        page.getByText(formatDayMonthWithYear(plannedDate, today), { exact: true }),
+        page.getByRole('heading', { name: plannedGroupHeading, exact: true }),
       ).toHaveCount(0);
     }
-    await expect(page.getByText(paidGroupLabel, { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: feedGroupLabel, exact: true }),
+    ).toBeVisible();
+
+    // ── История платежа: та же операция — в группе дня оплаты (дополнение
+    // #994, отмена «учёт, не кассы» #466): сорт сервера sort=paid_date,
+    // группировка по факту; плановой группы нет ──
+    await page.goto(`/properties/${PROPERTY}/payments/${created.id}/history`);
+    await expect(page.getByText(title).first()).toBeVisible();
+    if (plannedDate > today) {
+      await expect(
+        page.getByRole('heading', { name: plannedGroupHeading, exact: true }),
+      ).toHaveCount(0);
+    }
+    await expect(
+      page.getByRole('heading', { name: historyGroupLabel, exact: true }),
+    ).toBeVisible();
   });
 });

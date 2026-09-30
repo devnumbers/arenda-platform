@@ -129,14 +129,18 @@ test.describe('следующая дата оплаты из серверног�
     // ── Страница платежа («Ближайшая операция») и хаб — одна и та же новая
     // дата; старой (оплаченной) на поверхностях нет — регрессия #967 ──
     await page.goto(`/properties/${PROPERTY}/payments/${created.id}`);
-    // Секция — по её уникальному видимому заголовку-кнопке: getByRole не
-    // считает скрытые поддеревья (гонка двойного DOM оставляла фантомный
-    // aria-hidden h2, строгий getByText падал на двух совпадениях, прогон
-    // 30.09); реальный дубль секции дал бы два видимых и упал бы так же.
+    // Секция — по её уникальному видимому заголовку-кнопке, дата — внутри
+    // этой секции: getByRole/has не считают скрытые поддеревья (гонка
+    // двойного DOM оставляла фантомные aria-hidden копии, строгие
+    // page-wide getByText падали на двух совпадениях, прогоны 30.09);
+    // реальный дубль секции дал бы два видимых и упал бы так же.
+    const nearestSection = page.locator('section').filter({
+      has: page.getByRole('button', { name: 'Открыть график платежей' }),
+    });
     await expect(
-      page.getByRole('button', { name: 'Открыть график платежей' }),
+      nearestSection.getByRole('button', { name: 'Открыть график платежей' }),
     ).toBeVisible();
-    await expect(page.getByText(afterLabel, { exact: true })).toBeVisible();
+    await expect(nearestSection.getByText(afterLabel, { exact: true })).toBeVisible();
 
     await page.goto(PAYMENTS_URL);
     await expect(rowDate(page, afterLabel)).toBeVisible();

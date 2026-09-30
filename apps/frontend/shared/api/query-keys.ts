@@ -143,12 +143,15 @@ export const paymentOperationKeys = {
    * платежа (#535). */
   byPaymentPrefix: (propertyId: string, paymentId: string) =>
     [...paymentOperationKeys.all, 'by-payment', propertyId, paymentId] as const,
-  /** Порции операций платежа (подэкраны #466): статус и направление — часть ключа. */
+  /** Порции операций платежа (подэкраны #466): статус, направление и
+   * ключ даты — часть ключа (сорт #992; истории платёжных фактов просят
+   * paid_date — решение владельца 30.09, дополнение #994). */
   byPaymentPaged: (
     propertyId: string,
     paymentId: string,
     status: PaymentOperationStatusFilter,
     order: PaymentOperationOrder,
+    sort = '',
   ) =>
     [
       ...paymentOperationKeys.all,
@@ -157,6 +160,7 @@ export const paymentOperationKeys = {
       paymentId,
       status,
       order,
+      sort,
     ] as const,
   /** Префикс всех порций операций платежа — снять кэш удалённого платежа (#535). */
   byPaymentPagedPrefix: (propertyId: string, paymentId: string) =>

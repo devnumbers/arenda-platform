@@ -12,6 +12,7 @@ import {
   type PaymentOperation,
 } from '@/entities/payment';
 import { CategoryIcon, categoryStyle } from '@/features/payment-categories';
+import { OPERATIONS_FEED_SORT } from '@/shared/api/query-keys';
 import {
   groupPaidOperations,
   useHistoryOrder,
@@ -37,9 +38,11 @@ import { PaymentGroupedListSkeleton } from './payments-skeletons';
  * старые» (серверная — порядок закреплён за API); направление живёт в
  * адресе (?order=asc, дефолт не пишется, #785) — переживает перезагрузку.
  * Серверные порции по 50 с бесконечным скроллом. Суммы расходов — со
- * знаком минус (Figma). Группировка по дате вхождения: досрочно
- * оплаченное будущее вхождение остаётся в дате своего периода (учёт, не
- * касса). Пустая история — иллюстрация и «Платежей еще не было»
+ * знаком минус (Figma). Сорт и группировка — по факту оплаты
+ * (sort=paid_date, решение владельца 30.09, дополнение #994: отмена
+ * «учёт, не кассы» #466 — платёж за будущий период, оплаченный сегодня,
+ * стоит в «Сегодня»; плановый период — на странице операции, «Заранее»).
+ * Пустая история — иллюстрация и «Платежей еще не было»
  * (Figma 858:21271). Подписей-дат в строках нет — канон 1302:52209
  * (решение #802 23.09; «Заранее/Задержан» видны на странице операции).
  */
@@ -59,6 +62,7 @@ export function PaymentHistoryScreen({
   const historyQuery = usePaymentOperationsPaged(propertyId, paymentId, {
     status: 'paid',
     order,
+    sort: OPERATIONS_FEED_SORT,
   });
 
   const today = dateToIsoLocal(new Date());

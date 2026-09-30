@@ -26,6 +26,7 @@ import type {
   PaymentUpdateCommand,
 } from '@/entities/payment';
 import {
+  type OperationsSortKey,
   globalOperationKeys,
   globalPaymentKeys,
   paymentKeys,
@@ -274,11 +275,15 @@ export function usePaymentOperationsByStatus(
 export function usePaymentOperationsPaged(
   propertyId: string,
   paymentId: string,
-  params: { readonly status: PaymentOperationStatusFilter; readonly order: PaymentOperationOrder },
+  params: {
+    readonly status: PaymentOperationStatusFilter;
+    readonly order: PaymentOperationOrder;
+    readonly sort?: OperationsSortKey;
+  },
 ): UseInfiniteQueryResult<ReadonlyArray<PaymentOperation>, ApiError> {
-  const { status, order } = params;
+  const { status, order, sort } = params;
   return useInfiniteQuery({
-    ...paymentOperationsPagedQueryOptions({ propertyId, paymentId, status, order }),
+    ...paymentOperationsPagedQueryOptions({ propertyId, paymentId, status, order, sort }),
     select: (data) => data.pages.flat(),
     enabled: Boolean(propertyId) && Boolean(paymentId),
   });

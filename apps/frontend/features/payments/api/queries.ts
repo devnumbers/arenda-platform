@@ -21,6 +21,7 @@ import {
   paymentKeys,
   paymentOperationKeys,
   type GlobalOperationScope,
+  type OperationsSortKey,
   type PaymentOperationOrder,
   type PaymentOperationScope,
   type PaymentOperationStatusFilter,
@@ -413,17 +414,23 @@ export function paymentOperationQueryOptions({
 }
 
 /** Чистый fetch порции операций платежа — общее горло хука и серверного
- * префетча #887. */
+ * префетча #887. sort — ключ даты (#992): истории платёжных фактов просят
+ * paid_date (дополнение #994), просрочки остаются на плановой. */
 export async function fetchPaymentOperationsPagedPage(
   propertyId: string,
   paymentId: string,
-  params: { readonly status: PaymentOperationStatusFilter; readonly order: PaymentOperationOrder },
+  params: {
+    readonly status: PaymentOperationStatusFilter;
+    readonly order: PaymentOperationOrder;
+    readonly sort?: OperationsSortKey;
+  },
   offset: number,
   transport: ApiTransport = apiClient,
 ): Promise<ReadonlyArray<PaymentOperation>> {
+  const sortQuery = params.sort !== undefined ? `&sort=${params.sort}` : '';
   const response = await transport<OperationsResponse>(
     `/properties/${encodeURIComponent(propertyId)}/payments/${encodeURIComponent(paymentId)}`
-      + `/operations?status=${params.status}&order=${params.order}`
+      + `/operations?status=${params.status}&order=${params.order}${sortQuery}`
       + `&limit=${OPERATIONS_PAGE_SIZE}&offset=${String(offset)}`,
   );
   return response.items.map(mapPaymentOperation);
@@ -450,18 +457,22 @@ export function paymentOperationsPagedQueryOptions({
   paymentId,
   status,
   order,
+  sort,
   transport = apiClient,
 }: {
   readonly propertyId: string;
   readonly paymentId: string;
   readonly status: PaymentOperationStatusFilter;
   readonly order: PaymentOperationOrder;
+  readonly sort?: OperationsSortKey;
   readonly transport?: ApiTransport;
 }): PaymentOperationsPagedQueryConfig {
   return {
-    queryKey: paymentOperationKeys.byPaymentPaged(propertyId, paymentId, status, order),
+    queryKey: paymentOperationKeys.byPaymentPaged(propertyId, paymentId, status, order, sort),
     queryFn: ({ pageParam }) =>
-      fetchPaymentOperationsPagedPage(propertyId, paymentId, { status, order }, pageParam, transport),
+      fetchPaymentOperationsPagedPage(
+        propertyId, paymentId, { status, order, sort }, pageParam, transport,
+      ),
     initialPageParam: 0,
     getNextPageParam: operationsOffsetNextPageParam,
   };

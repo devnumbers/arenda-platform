@@ -46,56 +46,66 @@ export function serializeHistoryOrderToParams(order: HistoryOrder): Record<strin
   return order === DEFAULT_HISTORY_ORDER ? {} : { order };
 }
 
+/**
+ * Группировка «Истории операций» платежа (#466) и аренды (#535) по датам
+ * (резолюция #452): «Сегодня», «Вчера», дальше датовые группы с годом
+ * всегда — «11 августа, 2026» (канон 1302:52209, решение #802 23.09).
+ * Порядок групп повторяет серверную сортировку входа (order asc/desc
+ * закреплён за API), даты в странице монотонны — одна дата даёт ровно
+ * одну группу подряд. «Сегодня»/«Вчера» — от клиентского «сегодня»
+ * (dateToIsoLocal, shared/lib/calendar): зоны смотрящего сервер не сообщает,
+ * расхождение с TZ собственника ограничено краевыми часами суток.
+ *
+ * Ключ группы — фактическая дата оплаты (решение владельца 30.09,
+ * дополнение #994): история сортируется сервером по paid_date (контракт
+ * #992 на ленте правила) и читается как платёжные факты — банковский
+ * порядок; плановый период вхождения остаётся на странице операции
+ * («Заранее», обе даты). Отменяет «учёт, не кассу» (#466).
+ */
 export function groupPaidOperations(
   operations: ReadonlyArray<PaymentOperation>,
   today: IsoDate,
 ): ReadonlyArray<PaymentHistoryGroup> {
-  // Ключ группы — плановая дата вхождения: история платежа сортируется по
-  // плановой (дефолт контракта, #992) и остаётся планировочной поверхностью
-  // — досрочно оплаченное будущее вхождение остаётся в дате своего периода
-  // (учёт, не касса; решение #466, подтверждено картой #990).
-  return groupConsecutiveByDateKey(operations, today, historyGroupLabel, (operation) => operation.date);
+  return groupConsecutiveByDateKey(operations, today, historyGroupLabel);
 }
 
 /**
  * Группировка списков «Операций объекта» (#474, Figma 1492-41825): тот же
- * обход, лейблы дня — с датой через запятую: «Сегодня, 10 ноября»,
- * «Вчера, 9 ноября», дальше «1 ноября» («10 декабря, 2025» вне текущего
- * года). Ключ группы — фактическая дата оплаты (решение #933/#994):
- * операционные ленты сортируются по `paid_date` (#992), плановые даты
- * оплаченных наперёд месяцев немонотонны — группировка по ним развалила бы
- * ленту на повторяющиеся группы; банковский порядок собирает один день
- * оплаты одной группой подряд. `paidDate` гарантирован paid-веткой
- * контракта (CHECK paid ⟺ paid_date NOT NULL); запасной ключ — плановая.
+ * обход по дню оплаты, лейблы дня — с датой через запятую: «Сегодня,
+ * 10 ноября», «Вчера, 9 ноября», дальше «1 ноября» («10 декабря, 2025»
+ * вне текущего года). Операционные ленты сортируются по `paid_date`
+ * (#992), плановые даты оплаченных наперёд месяцев немонотонны —
+ * группировка по ним развалила бы ленту на повторяющиеся группы;
+ * банковский порядок собирает один день оплаты одной группой подряд.
  * «Клиентское сегодня» — та же оговорка, что в истории.
  */
 export function groupOperationsByDate(
   operations: ReadonlyArray<PaymentOperation>,
   today: IsoDate,
 ): ReadonlyArray<PaymentHistoryGroup> {
-  return groupConsecutiveByDateKey(operations, today, operationsGroupLabel, paidDateKey);
+  return groupConsecutiveByDateKey(operations, today, operationsGroupLabel);
 }
 
-/** Дата-ключ операционной ленты: факт оплаты; плановой строки в скоупах
- * операций нет (статусный фильтр paid), запасной ключ — плановая дата. */
+/** Дата-ключ группы: факт оплаты; плановой строки в paid-скоупах нет
+ * (статусный фильтр paid), запасной ключ — плановая дата. */
 function paidDateKey(operation: PaymentOperation): IsoDate {
   return operation.paidDate ?? operation.date;
 }
 
-/** Общий обход: подряд идущие операции с одним дата-ключом складываются
- * в группу, лейбл решает стиль подписи, селектор выбирает ключ группы —
- * плановая дата (истории платежей) или факт оплаты (операционные ленты).
+/** Общий обход: подряд идущие операции одного дня оплаты складываются
+ * в группу, лейбл решает стиль подписи (истории — год всегда, ленты —
+ * «Сегодня, 10 ноября»). `paidDate` гарантирован paid-веткой контракта
+ * (CHECK paid ⟺ paid_date NOT NULL); запасной ключ — плановая дата.
  * Внутри группы мутабельны — наружу тип отдаёт их только на чтение. */
 function groupConsecutiveByDateKey(
   operations: ReadonlyArray<PaymentOperation>,
   today: IsoDate,
   label: (date: IsoDate, today: IsoDate, yesterday: IsoDate) => string,
-  key: (operation: PaymentOperation) => IsoDate,
 ): ReadonlyArray<PaymentHistoryGroup> {
   const yesterday = addDays(today, -1);
   const groups: { label: string; date: IsoDate; operations: PaymentOperation[] }[] = [];
   for (const operation of operations) {
-    const operationDate = key(operation);
+    const operationDate = paidDateKey(operation);
     const current = groups.at(-1);
     if (current !== undefined && current.date === operationDate) {
       current.operations.push(operation);
