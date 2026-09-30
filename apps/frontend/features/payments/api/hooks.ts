@@ -308,6 +308,9 @@ export function usePropertyOperationsScopedPaged(
         limit: String(OPERATIONS_PAGE_SIZE),
         offset: String(pageParam),
       });
+      if (scope.sort !== undefined) {
+        params.set('sort', scope.sort);
+      }
       if (scope.type !== undefined) {
         params.set('type', scope.type);
       }

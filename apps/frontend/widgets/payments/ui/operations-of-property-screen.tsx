@@ -6,7 +6,7 @@ import { Add, ArrowLeft, Search } from "@/shared/assets/icons";
 import { ROUTES } from "@/shared/config/routes";
 import { buildUrlWithParams } from "@/shared/lib/url-params";
 import { dateToIsoLocal } from "@/shared/lib/calendar";
-import type { PaymentOperationScope } from "@/shared/api/query-keys";
+import { OPERATIONS_FEED_SORT, type PaymentOperationScope } from "@/shared/api/query-keys";
 import {
   groupOperationsByDate,
   operationsCategoryChipLabel,
@@ -89,9 +89,11 @@ export function OperationsOfPropertyScreen({
   // Список сужается выбранными категориями; сводка (#473) категорийный
   // фильтр не принимает — карточки всегда за выбранный период.
   // Без применённого периода (#674) даты не уходят в запрос — весь период.
+  // Лента платёжных фактов читается по paid_date (решение #933/#994).
   const periodScope: PaymentOperationScope = {
     status: "paid",
     order: "desc",
+    sort: OPERATIONS_FEED_SORT,
     dateFrom: filters.period?.from,
     dateTo: filters.period?.to,
   };
@@ -107,6 +109,7 @@ export function OperationsOfPropertyScreen({
   const everQuery = usePropertyOperationsSummary(propertyId, {
     status: "paid",
     order: "desc",
+    sort: OPERATIONS_FEED_SORT,
   });
 
   const groups = groupOperationsByDate(listQuery.data ?? [], today);

@@ -1,11 +1,13 @@
-import type { GlobalOperationScope } from '@/shared/api/query-keys';
+import { OPERATIONS_FEED_SORT, type GlobalOperationScope } from '@/shared/api/query-keys';
 import type { PaymentType } from '@/entities/payment';
 import type { OperationsPeriod } from '@/features/payments';
 
 /**
  * Модель страницы направления глобальной ленты (#548, Figma 1858-104152):
  * «Расходы»/«Доходы» — лента и сводка глобальной зоны (#541/#540), суженные
- * контрактом `type` (снапшот направления в каждой операции).
+ * контрактом `type` (снапшот направления в каждой операции). Поверхности
+ * операций читаются по фактической дате оплаты (решение #933/#994):
+ * скоупы просят sort=paid_date (#992).
  */
 
 /** Скоуп списка направления: фильтры ленты из адреса — объекты (#542),
@@ -20,6 +22,7 @@ export function globalDirectionListScope(
 ): GlobalOperationScope {
   return {
     order: 'desc',
+    sort: OPERATIONS_FEED_SORT,
     propertyIds,
     ...(period !== null ? { dateFrom: period.from, dateTo: period.to } : {}),
     categories,
@@ -37,6 +40,7 @@ export function globalDirectionSummaryScope(
 ): GlobalOperationScope {
   return {
     order: 'desc',
+    sort: OPERATIONS_FEED_SORT,
     propertyIds,
     ...(period !== null ? { dateFrom: period.from, dateTo: period.to } : {}),
     type,

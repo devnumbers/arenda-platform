@@ -50,41 +50,60 @@ export function groupPaidOperations(
   operations: ReadonlyArray<PaymentOperation>,
   today: IsoDate,
 ): ReadonlyArray<PaymentHistoryGroup> {
-  return groupOperationsByLabel(operations, today, historyGroupLabel);
+  // Ключ группы — плановая дата вхождения: история платежа сортируется по
+  // плановой (дефолт контракта, #992) и остаётся планировочной поверхностью
+  // — досрочно оплаченное будущее вхождение остаётся в дате своего периода
+  // (учёт, не касса; решение #466, подтверждено картой #990).
+  return groupConsecutiveByDateKey(operations, today, historyGroupLabel, (operation) => operation.date);
 }
 
 /**
  * Группировка списков «Операций объекта» (#474, Figma 1492-41825): тот же
  * обход, лейблы дня — с датой через запятую: «Сегодня, 10 ноября»,
  * «Вчера, 9 ноября», дальше «1 ноября» («10 декабря, 2025» вне текущего
- * года). Порядок групп и оговорка о «клиентском сегодня» — как в истории.
+ * года). Ключ группы — фактическая дата оплаты (решение #933/#994):
+ * операционные ленты сортируются по `paid_date` (#992), плановые даты
+ * оплаченных наперёд месяцев немонотонны — группировка по ним развалила бы
+ * ленту на повторяющиеся группы; банковский порядок собирает один день
+ * оплаты одной группой подряд. `paidDate` гарантирован paid-веткой
+ * контракта (CHECK paid ⟺ paid_date NOT NULL); запасной ключ — плановая.
+ * «Клиентское сегодня» — та же оговорка, что в истории.
  */
 export function groupOperationsByDate(
   operations: ReadonlyArray<PaymentOperation>,
   today: IsoDate,
 ): ReadonlyArray<PaymentHistoryGroup> {
-  return groupOperationsByLabel(operations, today, operationsGroupLabel);
+  return groupConsecutiveByDateKey(operations, today, operationsGroupLabel, paidDateKey);
 }
 
-/** Общий обход: подряд идущие операции одной даты складываются в группу,
- * лейбл решает стиль подписи. Внутри группы мутабельны — наружу тип отдаёт
- * их только на чтение. */
-function groupOperationsByLabel(
+/** Дата-ключ операционной ленты: факт оплаты; плановой строки в скоупах
+ * операций нет (статусный фильтр paid), запасной ключ — плановая дата. */
+function paidDateKey(operation: PaymentOperation): IsoDate {
+  return operation.paidDate ?? operation.date;
+}
+
+/** Общий обход: подряд идущие операции с одним дата-ключом складываются
+ * в группу, лейбл решает стиль подписи, селектор выбирает ключ группы —
+ * плановая дата (истории платежей) или факт оплаты (операционные ленты).
+ * Внутри группы мутабельны — наружу тип отдаёт их только на чтение. */
+function groupConsecutiveByDateKey(
   operations: ReadonlyArray<PaymentOperation>,
   today: IsoDate,
   label: (date: IsoDate, today: IsoDate, yesterday: IsoDate) => string,
+  key: (operation: PaymentOperation) => IsoDate,
 ): ReadonlyArray<PaymentHistoryGroup> {
   const yesterday = addDays(today, -1);
   const groups: { label: string; date: IsoDate; operations: PaymentOperation[] }[] = [];
   for (const operation of operations) {
+    const operationDate = key(operation);
     const current = groups.at(-1);
-    if (current !== undefined && current.date === operation.date) {
+    if (current !== undefined && current.date === operationDate) {
       current.operations.push(operation);
       continue;
     }
     groups.push({
-      label: label(operation.date, today, yesterday),
-      date: operation.date,
+      label: label(operationDate, today, yesterday),
+      date: operationDate,
       operations: [operation],
     });
   }

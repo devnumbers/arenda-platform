@@ -9,7 +9,8 @@ import {
 
 /** Модель экрана поиска операций (#476): чипы совпавших категорий из
  * разбивки сводки и скоупы серверных запросов (только оплаченные — решение
- * карты #472). */
+ * карты #472). Поверхности операций читаются по фактической дате — скоупы
+ * просят sort=paid_date (решение #933/#994). */
 
 const categories = [
   { slug: 'security', label: 'Охрана', type: 'expense', totalKopecks: 550000 },
@@ -45,6 +46,7 @@ describe('searchListScope', () => {
     expect(searchListScope('охра', null)).toEqual({
       status: 'paid',
       order: 'desc',
+      sort: 'paid_date',
       search: 'охра',
     });
   });
@@ -53,6 +55,7 @@ describe('searchListScope', () => {
     expect(searchListScope('охра', 'security')).toEqual({
       status: 'paid',
       order: 'desc',
+      sort: 'paid_date',
       search: 'охра',
       categories: ['security'],
     });
@@ -64,6 +67,7 @@ describe('searchSummaryScope', () => {
     expect(searchSummaryScope('охра')).toEqual({
       status: 'paid',
       order: 'desc',
+      sort: 'paid_date',
       search: 'охра',
     });
   });
@@ -75,6 +79,7 @@ describe('globalSearchListScope', () => {
   it('несёт фильтры ленты из адреса (объекты + период) и запрос серверу', () => {
     expect(globalSearchListScope(period, ['p1', 'p2'], 'охра', null)).toStrictEqual({
       order: 'desc',
+      sort: 'paid_date',
       propertyIds: ['p1', 'p2'],
       dateFrom: '2026-09-01',
       dateTo: '2026-09-30',
@@ -85,6 +90,7 @@ describe('globalSearchListScope', () => {
   it('выбранный чип сужает список одной категорией', () => {
     expect(globalSearchListScope(period, [], 'охра', 'security')).toStrictEqual({
       order: 'desc',
+      sort: 'paid_date',
       propertyIds: [],
       dateFrom: '2026-09-01',
       dateTo: '2026-09-30',
@@ -96,6 +102,7 @@ describe('globalSearchListScope', () => {
   it('период null (дефолт «весь период» #673) — дат в скоупе нет', () => {
     expect(globalSearchListScope(null, ['p1'], 'охра', null)).toStrictEqual({
       order: 'desc',
+      sort: 'paid_date',
       propertyIds: ['p1'],
       search: 'охра',
     });
@@ -106,6 +113,7 @@ describe('globalSearchSummaryScope', () => {
   it('тот же запрос ленты без сужения по чипу', () => {
     expect(globalSearchSummaryScope({ from: '2026-09-01', to: '2026-09-30' }, ['p1'], 'охра')).toStrictEqual({
       order: 'desc',
+      sort: 'paid_date',
       propertyIds: ['p1'],
       dateFrom: '2026-09-01',
       dateTo: '2026-09-30',
@@ -116,6 +124,7 @@ describe('globalSearchSummaryScope', () => {
   it('период null — сводка за весь период, дат в скоупе нет (#673)', () => {
     expect(globalSearchSummaryScope(null, ['p1'], 'охра')).toStrictEqual({
       order: 'desc',
+      sort: 'paid_date',
       propertyIds: ['p1'],
       search: 'охра',
     });

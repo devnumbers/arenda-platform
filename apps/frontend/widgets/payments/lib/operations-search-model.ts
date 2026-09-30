@@ -1,4 +1,4 @@
-import type { GlobalOperationScope, PaymentOperationScope } from '@/shared/api/query-keys';
+import { OPERATIONS_FEED_SORT, type GlobalOperationScope, type PaymentOperationScope } from '@/shared/api/query-keys';
 import type { OperationsCategorySummary } from '@/entities/payment';
 import type { OperationsPeriod } from '@/features/payments';
 
@@ -10,6 +10,9 @@ import type { OperationsPeriod } from '@/features/payments';
  * (решение карты #472). Глобальный поиск (#543) ищет тем же контрактом
  * `search`, но по всем видимым объектам и с фильтрами ленты из адреса
  * (#541): объекты (#542) и период (дефолт — весь период #673).
+ * Поверхности операций читаются по фактической дате оплаты (решение
+ * #933/#994): скоупы просят sort=paid_date (#992) — порядок, период и
+ * сводка поиска совпадают с лентой.
  */
 
 /** Чип секции «Категории» (Figma 1494-61657): подпись-снапшот и флаг
@@ -43,6 +46,7 @@ export function searchListScope(
   return {
     status: 'paid',
     order: 'desc',
+    sort: OPERATIONS_FEED_SORT,
     search: query,
     ...(selectedSlug !== null ? { categories: [selectedSlug] } : {}),
   };
@@ -51,7 +55,7 @@ export function searchListScope(
 /** Скоуп сводки поиска: тот же запрос без сужения по чипу — чипы всегда
  * показывают все совпавшие категории запроса. */
 export function searchSummaryScope(query: string): PaymentOperationScope {
-  return { status: 'paid', order: 'desc', search: query };
+  return { status: 'paid', order: 'desc', sort: OPERATIONS_FEED_SORT, search: query };
 }
 
 /** Скоуп списка глобального поиска (#543): фильтры ленты из адреса —
@@ -68,6 +72,7 @@ export function globalSearchListScope(
 ): GlobalOperationScope {
   return {
     order: 'desc',
+    sort: OPERATIONS_FEED_SORT,
     propertyIds,
     ...(period !== null ? { dateFrom: period.from, dateTo: period.to } : {}),
     search: query,
@@ -85,6 +90,7 @@ export function globalSearchSummaryScope(
 ): GlobalOperationScope {
   return {
     order: 'desc',
+    sort: OPERATIONS_FEED_SORT,
     propertyIds,
     ...(period !== null ? { dateFrom: period.from, dateTo: period.to } : {}),
     search: query,

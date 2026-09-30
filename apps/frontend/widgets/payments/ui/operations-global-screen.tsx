@@ -4,6 +4,7 @@ import { useState, type JSX } from "react";
 import { useRouter } from "next/navigation";
 import { Add } from "@/shared/assets/icons";
 import { ROUTES } from "@/shared/config/routes";
+import { OPERATIONS_FEED_SORT } from "@/shared/api/query-keys";
 import { dateToIsoLocal } from "@/shared/lib/calendar";
 import { propertyPermissions } from "@/entities/property";
 import {
@@ -70,8 +71,10 @@ export function OperationsGlobalScreen(): JSX.Element {
   // Список сужается выбранными категориями; сводка (#540) категорийный
   // фильтр не принимает — карточки показывают объекты и период целиком.
   // Без применённого периода (#670) даты не уходят в запрос — весь период.
+  // Лента платёжных фактов читается по paid_date (решение #933/#994).
   const periodScope = {
     order: "desc" as const,
+    sort: OPERATIONS_FEED_SORT,
     propertyIds: filters.propertyIds,
     dateFrom: filters.period?.from,
     dateTo: filters.period?.to,
@@ -88,6 +91,7 @@ export function OperationsGlobalScreen(): JSX.Element {
   // отличает «операций не было никогда» (#478) от пустого периода/фильтра.
   const everQuery = useGlobalOperationsSummary({
     order: "desc",
+    sort: OPERATIONS_FEED_SORT,
     propertyIds: filters.propertyIds,
     includeArchived: filters.archived,
   });

@@ -6,6 +6,7 @@ import React from 'react';
 import {notify} from '@/shared/lib/notifications';
 import {goBack} from '@/shared/lib/navigation';
 import {ROUTES} from '@/shared/config/routes';
+import { OPERATIONS_FEED_SORT } from '@/shared/api/query-keys';
 import {
   propertyTypeLabels,
   useArchiveProperty,
@@ -165,17 +166,20 @@ export function PropertyDetailPage(): JSX.Element {
     const overdueQuery = usePropertyOverdueOperations(id, '', { enabled: propertyLoaded });
     // Сводка секции «Операции в <месяц>» — за текущий календарный месяц
     // (карта #669: сводка объекта месячная и после дефолта «весь период»
-    // на лентах); границы берутся напрямую из модели месяца.
+    // на лентах); границы берутся напрямую из модели месяца. Месяц —
+    // по факту оплаты, в согласии с лентой операций (решение #933/#994).
     const operationsPeriod = operationsMonthRange(operationsMonthOf(today));
     const operationsQuery = usePropertyOperationsSummary(id, {
         status: 'paid',
         order: 'desc',
+        sort: OPERATIONS_FEED_SORT,
         dateFrom: operationsPeriod.from,
         dateTo: operationsPeriod.to,
     }, { enabled: propertyLoaded });
     const operationsEverQuery = usePropertyOperationsSummary(id, {
         status: 'paid',
         order: 'desc',
+        sort: OPERATIONS_FEED_SORT,
     }, { enabled: propertyLoaded });
     const contactsQuery = useContacts(id, '', { enabled: propertyLoaded });
     const tasksQuery = useActiveTasks(id, { enabled: propertyLoaded });

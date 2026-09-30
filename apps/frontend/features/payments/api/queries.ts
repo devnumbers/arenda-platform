@@ -149,6 +149,9 @@ export async function fetchPropertyOperationsSummary(
 ): Promise<OperationsSummary> {
   const params = new URLSearchParams();
   params.set('status', scope.status);
+  if (scope.sort !== undefined) {
+    params.set('sort', scope.sort);
+  }
   if (scope.type !== undefined) {
     params.set('type', scope.type);
   }
@@ -464,11 +467,14 @@ export function paymentOperationsPagedQueryOptions({
   };
 }
 
-/** Скоуп глобальной ленты → общая часть query-параметров (объекты, период,
- * направление, архив, поиск); пагинация и порядок — у порции, сводка их не
- * принимает. Общее горло хуков и прогрева хабов #626. */
+/** Скоуп глобальной ленты → общая часть query-параметров (ключ даты,
+ * объекты, период, направление, архив, поиск); пагинация и порядок — у
+ * порции, сводка их не принимает. Общее горло хуков и прогрева хабов #626. */
 function operationsScopeParams(scope: GlobalOperationScope): URLSearchParams {
   const params = new URLSearchParams();
+  if (scope.sort !== undefined) {
+    params.set('sort', scope.sort);
+  }
   if (scope.propertyIds !== undefined && scope.propertyIds.length > 0) {
     params.set('propertyIds', scope.propertyIds.join(','));
   }

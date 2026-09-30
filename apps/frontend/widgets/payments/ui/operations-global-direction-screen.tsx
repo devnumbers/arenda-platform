@@ -3,6 +3,7 @@
 import { useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { Add, ArrowLeft, Search } from '@/shared/assets/icons';
+import { OPERATIONS_FEED_SORT } from '@/shared/api/query-keys';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { type PaymentType } from '@/entities/payment';
@@ -90,6 +91,7 @@ export function OperationsGlobalDirectionScreen({
   // направления не было никогда» (#478) от пустого периода/фильтра.
   const everQuery = useGlobalOperationsSummary({
     order: 'desc',
+    sort: OPERATIONS_FEED_SORT,
     propertyIds: filters.propertyIds,
     type,
     includeArchived: filters.archived,

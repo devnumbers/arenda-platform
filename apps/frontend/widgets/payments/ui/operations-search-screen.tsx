@@ -179,7 +179,9 @@ export function OperationsSearchScreen({
                     <OperationRow
                       key={operation.id}
                       operation={operation}
-                      subtitle={formatDayMonthWithYear(operation.date, today)}
+                      // Дата строки — факт оплаты (#933/#994): поиск операций
+                      // — операционная поверхность, sort=paid_date.
+                      subtitle={formatDayMonthWithYear(operation.paidDate ?? operation.date, today)}
                       onSelect={() => openOperation(operation)}
                     />
                   ))}
