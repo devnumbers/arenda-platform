@@ -354,3 +354,22 @@ ON CONFLICT (id) DO UPDATE
 SET tariff_id = EXCLUDED.tariff_id,
     status = EXCLUDED.status,
     current_period = EXCLUDED.current_period;
+
+-- Pro у сид-участников квартиры (гейты платных разделов #997/#999/#1000
+-- проверяют подписку запрашивающего юзера: без своей подписки member и
+-- viewer ловят 402 tariff_required и редирект на «Выбрать тариф» на
+-- /participants* и /history*, и ролевые спеки #467 падают).
+INSERT INTO user_subscriptions (id, user_id, tariff_id, source, status,
+                                current_period)
+VALUES ('99999999-9999-4999-8999-999999999902',
+        '12111111-1111-4111-8111-111111111121',
+        (SELECT id FROM tariffs WHERE name = 'pro'),
+        'service', 'active', 'month'),
+       ('99999999-9999-4999-8999-999999999903',
+        '13111111-1111-4111-8111-111111111131',
+        (SELECT id FROM tariffs WHERE name = 'pro'),
+        'service', 'active', 'month')
+ON CONFLICT (id) DO UPDATE
+SET tariff_id = EXCLUDED.tariff_id,
+    status = EXCLUDED.status,
+    current_period = EXCLUDED.current_period;

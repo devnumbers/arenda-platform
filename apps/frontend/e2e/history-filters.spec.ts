@@ -304,27 +304,12 @@ test('прямая ссылка с фильтром (?kinds=task) открыва
   await expect(page.getByText('Операция оплачена: Вода')).toHaveCount(0);
 });
 
-test('опции не загрузились: ErrorCard на месте групп, остальные фильтры и применение работают', async ({ page, seededUser }) => {
-  // Роут ставится до монтирования: иначе первый успешный ответ ленты
-  // закроет шит кэшем и ошибки не будет.
-  await page.route('**/api/history/filters*', (route) => route.fulfill({ status: 500 }));
-  await openHistoryWithFeed(page, seededUser);
+// Кейс «опции не загрузились: ErrorCard с „Повторить"» (бывший тест ниже)
+// снят: с серверным префетчем опций (#887, history/page.tsx — «опции шита
+// фильтров … в первом кадре всегда») клиентский запрос /history/filters при
+// открытом шите не случается вовсе — опции приходят в hydration-состоянии,
+// так что перехват сети с 500 больше не приводит запрос в ошибку, и ветка
+// ErrorCard в e2e недостижима. Ветка остаётся страховкой на провал
+// серверного префетча; его нельзя уронить рычагами e2e (page.route не
+// видит серверный fetch, тарифный гейт блокирует саму страницу).
 
-  await page.getByRole('button', { name: 'Настройки' }).click();
-  const dialog = sheet(page);
-  // Статические группы (не зависят от опций) редактируются; 500 ретраится
-  // глобальным предикатом до трёх волн — ждём дольше дефолта.
-  await expect(dialog.getByText('4/4')).toBeVisible({ timeout: 15_000 });
-  await dialog.getByRole('button', { name: 'Основные действия' }).click();
-  await dialog.getByRole('checkbox', { name: 'Добавление' }).click();
-  // Опции-группы заменены канон-ошибкой с «Повторить»; применение доступно.
-  await expect(dialog.getByRole('button', { name: 'Повторить' })).toBeVisible();
-  await dialog.getByRole('button', { name: 'Применить фильтры' }).click();
-  await expect(dialog).toHaveCount(0);
-  await expect(page).toHaveURL(/actions=/);
-
-  const params = new URL(page.url()).searchParams;
-  expect(params.get('actions')).toBe('changed,completed,deleted');
-  await expect(page.getByText('Платёж создан: Аренда за сентябрь')).toHaveCount(0);
-  await expect(page.getByText('Операция оплачена: Вода')).toBeVisible();
-});

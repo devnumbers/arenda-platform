@@ -30,16 +30,51 @@ function requiredEnv(name: string): string {
   return value;
 }
 
-export const test = base.extend<{ seededUser: SeededUser }>({
-  seededUser: async ({}, use) => {
-    await use({
-      phoneDigits: requiredEnv('E2E_USER_PHONE'),
-      email: requiredEnv('E2E_USER_EMAIL'),
-      sessionToken: requiredEnv('E2E_SESSION_TOKEN'),
-      backendLogPath: requiredEnv('E2E_BACKEND_LOG'),
-    });
-  },
-});
+export const test = base
+  .extend<{ seededUser: SeededUser }>({
+    seededUser: async ({}, use) => {
+      await use({
+        phoneDigits: requiredEnv('E2E_USER_PHONE'),
+        email: requiredEnv('E2E_USER_EMAIL'),
+        sessionToken: requiredEnv('E2E_SESSION_TOKEN'),
+        backendLogPath: requiredEnv('E2E_BACKEND_LOG'),
+      });
+    },
+  })
+  .extend({
+    // Дождаться завершения гидрационного свапа RSC-стрима после каждого
+    // goto: при холодном входе Next держит в DOM второй (hidden) экземпляр
+    // дерева страницы (body > div[hidden], окно ~90–350мс на пустой машине
+    // и заметно дольше под нагрузкой прогона) — строгий локатор на текст
+    // шапки/ленты в этом окне ловит дубль и, в отличие от обычных ассертов,
+    // не ретраит (канон #698). Ожидание best-effort: на страницах без
+    // скрытого свапа предикат истинен сразу; спек, проверяющих само окно,
+    // нет (loading-фазы в e2e не тестируются). Канон #698 обходил окно
+    // навигацией через список — обёртка чинит все deep-link входы разом.
+    page: async ({ page }, use) => {
+      const settle = () =>
+        page
+          .waitForFunction(
+            () => !document.querySelector('body > div[hidden] header'),
+            undefined,
+            { timeout: 15_000 },
+          )
+          .catch(() => {});
+      const rawGoto = page.goto.bind(page);
+      page.goto = async (url, options) => {
+        const response = await rawGoto(url, options);
+        await settle();
+        return response;
+      };
+      const rawReload = page.reload.bind(page);
+      page.reload = async (options) => {
+        const response = await rawReload(options);
+        await settle();
+        return response;
+      };
+      await use(page);
+    },
+  });
 export { expect };
 
 /** Session tokens of the seeded co-members of the apartment (#467 role
