@@ -1,7 +1,6 @@
 import type { ComponentProps, JSX, ReactNode } from 'react';
 import { Slot } from '@radix-ui/react-slot';
 import { cva, type VariantProps } from 'class-variance-authority';
-import { Sync } from '@/shared/assets/icons';
 import { cn } from '@/shared/lib/cn';
 
 /**
@@ -17,7 +16,10 @@ import { cn } from '@/shared/lib/cn';
  * не меняют), Clear (белая пилюля, серый текст) и White (белая пилюля,
  * тёмный текст); Clear/White — пилюли с кеглем M в ОБОИХ размерах (Figma
  * 1134:55051, 1185:41649). Focus-visible — ring 4px синий поверх 2px
- * белого смещения (State/Focus), только с клавиатуры.
+ * белого смещения (State/Focus), только с клавиатуры. loading — кнопка
+ * дизейблится и приглушается (disabled:opacity-50), контент остаётся
+ * видимым; иконки загрузки нет (решение владельца 30.09, красная
+ * Sync-заглушка снята вместе с маркерами замен).
  */
 
 /** Заливка Primary — базовый вариант и выбранное состояние пилюли (Figma
@@ -101,22 +103,16 @@ export function Button({
       disabled={asChild ? undefined : (disabled ?? loading)}
       {...props}
     >
-      {loading ? (
-        <Sync className="h-6 w-6 animate-spin text-error" aria-hidden />
-      ) : (
-        <>
-          {leadingIcon !== undefined && (
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center" aria-hidden>
-              {leadingIcon}
-            </span>
-          )}
-          {children}
-          {trailingIcon !== undefined && (
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center" aria-hidden>
-              {trailingIcon}
-            </span>
-          )}
-        </>
+      {leadingIcon !== undefined && (
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center" aria-hidden>
+          {leadingIcon}
+        </span>
+      )}
+      {children}
+      {trailingIcon !== undefined && (
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center" aria-hidden>
+          {trailingIcon}
+        </span>
       )}
     </Comp>
   );

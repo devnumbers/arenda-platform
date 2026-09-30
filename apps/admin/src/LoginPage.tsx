@@ -4,7 +4,6 @@ import {
   Alert,
   Box,
   Button,
-  CircularProgress,
   Container,
   Paper,
   TextField,
@@ -121,7 +120,7 @@ export const LoginPage = () => {
                 sx={{ mt: 3, mb: 2 }}
                 disabled={loading || !isPhoneValid || !email}
               >
-                {loading ? <CircularProgress size={24} /> : 'Отправить код'}
+                Отправить код
               </Button>
             </Box>
           ) : (
@@ -143,7 +142,7 @@ export const LoginPage = () => {
                 sx={{ mt: 3, mb: 2 }}
                 disabled={loading || !code}
               >
-                {loading ? <CircularProgress size={24} /> : 'Войти'}
+                Войти
               </Button>
               <Button
                 fullWidth

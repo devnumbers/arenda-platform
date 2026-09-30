@@ -4,7 +4,7 @@ import { useEffect, type JSX } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/shared/ui/design';
-import { CheckNoneLine, StatusIconDanger, Sync } from '@/shared/assets/icons';
+import { CheckNoneLine, StatusIconDanger } from '@/shared/assets/icons';
 import {
   useSubscription,
   useSubscriptionPayment,
@@ -17,7 +17,9 @@ import { isPaymentFormExpired } from '../lib/payment-history-model';
 import { TariffSuccessScreen } from './tariff/tariff-success-screen';
 
 type TariffChangeSuccessState = {
-  readonly icon: JSX.Element;
+  /** Иконка центра есть у исходов успеха/неуспеха; платёж в обработке
+   * живёт без иконки (решение владельца 30.09 — спиннеров нет). */
+  readonly icon?: JSX.Element;
   readonly title: string;
   readonly descriptions: ReadonlyArray<string>;
   readonly action: JSX.Element;
@@ -52,7 +54,6 @@ export function TariffChangeSuccess(): JSX.Element {
     // экран поллит раз в 5 секунд, время берём на рендере.
     const isStale = payment ? isPaymentFormExpired(payment, new Date()) : false;
     state = {
-      icon: <Sync className="h-16 w-16 animate-spin text-error" aria-hidden />,
       title: 'Платёж обрабатывается',
       descriptions: isStale
         ? [

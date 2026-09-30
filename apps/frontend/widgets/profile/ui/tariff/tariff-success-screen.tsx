@@ -5,8 +5,10 @@ import { cn } from '@/shared/lib/cn';
 import { fullscreenSurfaceClass, StickyBottomBar } from '@/shared/ui/design';
 
 type TariffSuccessScreenProps = {
-  /** Иконка 64 в центре (CheckNoneLine/CancelColor/…), aria-hidden у вызывающего. */
-  readonly icon: ReactNode;
+  /** Иконка 64 в центре (CheckNoneLine/CancelColor/…), aria-hidden у
+   * вызывающего; может отсутствовать — каркас центрирует заголовок один
+   * (платёж в обработке живёт без иконки, решение владельца 30.09). */
+  readonly icon?: ReactNode;
   /** Заголовок H3 — он же aria-label диалога (хелперы tariff-about/tariff-disable). */
   readonly title: string;
   /** Серые строки описания под заголовком (успех смены тарифа #623);

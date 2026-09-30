@@ -47,7 +47,7 @@ No form library and no schema validator — this is deliberate, not a gap:
 
 - Styling: existing components use CSS Modules + design tokens (`shared/styles/tokens.css`); new design-layer components (ADR 0050) are shadcn/ui over Radix, styled with Tailwind utilities on the same tokens. The mix of design-layer Tailwind utilities and local CSS modules — the canon outside `design/` and in screen modules of `widgets`/`features`/`app` — is the target state as of the ADR 0050 amendment (2026-09-26, #901); no separate migration effort is recorded.
 - Motion, hover, and focus conventions (the unified Apple curve, touch-safe hover, no focus rings on inputs) live in `DESIGN.md` §8 — read it before styling anything.
-- `shared/ui/` is the app's own kit; its canon is `shared/ui/design/` — components on Tailwind utilities over the tokens, no CSS modules. Folder-per-component with a CSS module (`IconLink.tsx` + `IconLink.module.css` + `index.ts`) remains the canon outside `design/` (icon, icon-link, live-value, pull-to-refresh, toast) and in screen modules. Wrap, don't bypass; `/ui-kit` is the gallery route.
+- `shared/ui/` is the app's own kit; its canon is `shared/ui/design/` — components on Tailwind utilities over the tokens, no CSS modules. Folder-per-component with a CSS module (`PullToRefresh.tsx` + `PullToRefresh.module.css` + `index.ts`) remains the canon outside `design/` (live-value, pull-to-refresh, toast) and in screen modules. Wrap, don't bypass; `/ui-kit` is the gallery route.
 - ~~HeroUI v3 (legacy widgets only, ADR 0050)~~ — снято: пакет снесён, react- и стилевой слои в дереве отсутствуют (аменд ADR 0050 2026-09-26, тикет #901).
 - **React Compiler is on** (`next.config.ts`). Manual `useMemo`/`useCallback`/`memo` is not the default: write plain code and let the compiler memoize. Reach for manual memoization only where the compiler provably can't help (values escaping to non-React code) and justify it with a comment.
 - The memoization, derived-state, and effect-synchronizer smells are enforced by the tool, not the review rubric: the react-hooks v7 compiler rules run through `eslint-config-next` (the plugin's `recommended` preset is spread whole) — `purity`, `set-state-in-effect`, `set-state-in-render`, `use-memo`, `immutability`, `refs`, `preserve-manual-memoization`, `static-components`, `globals`, `error-boundaries`, `gating`, `rules-of-hooks`, `exhaustive-deps` at error; `incompatible-library`/`unsupported-syntax` at warn. Fix them at lint time.
@@ -73,7 +73,7 @@ Column width rule (решение владельца 26.09, аудит #870): th
 Unit tests are pure-logic only — vitest runs in a node environment with no DOM, no testing-library, no msw. This is the standard, not a gap:
 
 - Colocated `*.test.ts` next to the module. Priority targets: wire serializers and DTO→entity mappers (shape assertions with `toStrictEqual`), pure `lib/` and `shared/lib` modules (navigation, pwa, formatting).
-- Components and API calls are not unit-tested; UI behavior is covered by Playwright e2e.
+- Components and API calls are not unit-tested; UI behavior is covered by Playwright e2e. Narrow exception (2026-09-30, `shared/ui/design/button.test.ts`): a stateless component may be called as a function and its React element tree inspected — no render, no DOM, no testing-library, same node-env canon.
 
 ## Quality bar
 
