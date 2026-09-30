@@ -150,7 +150,16 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
 
   const content = (
     <div className="flex flex-col gap-4 px-6 pt-6">
-      <PropertiesSearchPill onCreate={openCreate} createLabel={createLabel} createDisabled={isActionLoading}/>
+      {/* Пилюля поиска — на подтверждённой пустоте спрятана (#1004):
+       * искать нечего, создание остаётся в CTA пустого состояния; вне
+       * фазы загрузки и на ошибке видна (§7). */}
+      {!isEmpty && (
+        <PropertiesSearchPill
+          onCreate={openCreate}
+          createLabel={createLabel}
+          createDisabled={isActionLoading}
+        />
+      )}
 
       {showSortRow && <PropertiesSortRow sort={sort} onChange={changeSort}/>}
 

@@ -47,11 +47,14 @@ import {
  * сервера). Кликается вся карточка — платежи объекта. Объект без платежей
  * (решения владельца 10.09, вечер): при нескольких объектах — компактная
  * карточка-шапка (890:29967); единственный объект без платежей —
- * полноэкранное пустое состояние (879:9399) с CTA «Добавить платёж» в
- * визард этого объекта. Лупа в шапке — поиск объектов; карандаша макета
- * нет (решение владельца 10.09). Внизу — «Архивные объекты» во всю ширину
- * карточек (существующий архив; архивные в карточках и поиске не
- * участвуют).
+ * полноэкранное пустое состояние (1041-51463/1041-51460/1036-37530 —
+ * как у глобальных платежей: контент сверху, CTA «Добавить платёж» на ПК
+ * под текстом, ниже — прижата к низу) в визард этого объекта. Совсем без
+ * объектов (#1004) — «Объектов пока нет» с CTA «Добавить объект». Лупа в
+ * шапке — поиск объектов, на пустых состояниях спрятана (#1004);
+ * карандаша макета нет (решение владельца 10.09). Внизу — «Архивные
+ * объекты» во всю ширину карточек (существующий архив; архивные в
+ * карточках и поиске не участвуют).
  */
 export function PaymentsObjectsScreen(): JSX.Element {
   const router = useRouter();
@@ -80,6 +83,11 @@ export function PaymentsObjectsScreen(): JSX.Element {
     singleObject !== undefined &&
     isPaymentlessObject(singleObject);
   const showEmptyState = !pending && !error && singleEmpty;
+  // Пустые состояния (#1004): лупа поиска в шапке видна, только когда есть
+  // что искать — прячется на «объектов нет вообще» и на пустоте
+  // единственного объекта; вне фазы загрузки и на ошибке остаётся.
+  const hideHeaderSearch =
+    !pending && !error && (objects.length === 0 || showEmptyState);
 
   // Иконки стопок — категории правил фида (#575): объектный ответ ключей
   // категорий не несёт, джойн по paymentId.
@@ -103,11 +111,13 @@ export function PaymentsObjectsScreen(): JSX.Element {
           />
         }
         trailing={
-          <IconButton
-            icon={<Search />}
-            label="Поиск объектов"
-            onClick={() => router.push(ROUTES.paymentsObjectsSearch)}
-          />
+          hideHeaderSearch ? undefined : (
+            <IconButton
+              icon={<Search />}
+              label="Поиск объектов"
+              onClick={() => router.push(ROUTES.paymentsObjectsSearch)}
+            />
+          )
         }
       >
         <TopNavTitle title="Объекты" />
@@ -160,7 +170,11 @@ export function PaymentsObjectsScreen(): JSX.Element {
                   imageSrc="/images/payments/payments-empty.png"
                   title="Объектов пока нет"
                   description="Создайте объект, чтобы добавлять платежи"
-                  className="py-16"
+                  action={
+                    <Button onClick={() => router.push(ROUTES.propertyNew)}>
+                      Добавить объект
+                    </Button>
+                  }
                 />
               )}
 
@@ -188,10 +202,12 @@ export function PaymentsObjectsScreen(): JSX.Element {
   );
 }
 
-/** Пустое состояние единственного объекта без платежей (879:9399,
- * решение владельца 10.09): иллюстрация с текстами по центру, CTA
- * «Добавить платёж» под ними — в визард платежа этого объекта; списка и
- * кнопки архива нет. */
+/** Пустое состояние единственного объекта без платежей (1041-51463 /
+ * 1041-51460 / 1036-37530, схема глобальных платежей): иллюстрация с
+ * текстами прижаты к верху — канон EmptyState; CTA «Добавить платёж»
+ * раздвоена по ярусам: на ПК (≥1024) — под текстом, на планшете и мобилке
+ * — прижата к низу; ведёт в визард платежа этого объекта; у чистого
+ * зрителя CTA нет вовсе (#703). Списка и кнопки архива нет. */
 function PaymentsObjectsEmpty({
   onAddPayment,
 }: {
@@ -200,19 +216,29 @@ function PaymentsObjectsEmpty({
   return (
     <div
       data-testid="payments-objects-empty"
+      // Растягиваем блок до нижнего края видимой области: на планшете и
+      // мобилке CTA прижата книзу (216px = верх страницы и нижний резерв
+      // PageContent, как у PaymentsGlobalEmpty).
       className="flex min-h-[calc(100dvh-216px)] flex-col px-6"
     >
-      <div className="flex flex-1 items-center justify-center">
-        <EmptyState
-          imageSrc="/images/payments/object-empty.png"
-          title="Вы пока не добавляли платежи"
-          description="Добавьте платежи, чтобы не терять их из виду"
-          descriptionClassName="text-content"
-          className="pt-0"
-        />
-      </div>
+      <EmptyState
+        imageSrc="/images/payments/object-empty.png"
+        title="Вы пока не добавляли платежи"
+        description="Добавьте платежи, чтобы не терять их из виду"
+        action={
+          onAddPayment !== undefined && (
+            <Button onClick={onAddPayment} className="hidden lg:inline-flex">
+              Добавить платёж
+            </Button>
+          )
+        }
+      />
       {onAddPayment !== undefined && (
-        <Button onClick={onAddPayment}>Добавить платёж</Button>
+        // mt-auto прижимает нижнюю кнопку к краю растянутого блока; на ПК
+        // она скрыта — там кнопка живёт в action-слоте под текстом.
+        <Button onClick={onAddPayment} className="mt-auto lg:hidden">
+          Добавить платёж
+        </Button>
       )}
     </div>
   );

@@ -54,7 +54,8 @@ const SECTION_CARDS_LIMIT = 4;
 
 /**
  * Экран «Платежи» — глобальная страница платежей (карта #573, тикет #578;
- * состав — решения владельца #574, макеты 879:9679/880:17866/879:9399).
+ * состав — решения владельца #574, макеты 879:9679/880:17866, пустое
+ * состояние — 1041-51463/1041-51460/1036-37530).
  * Три секции: «Избранные», «Просроченные», «Платежи объектов» (секции «На
  * оплату» в срезе нет); заголовок с шевроном открывает страницу категории,
  * замыкающая карточка «Все …» ведёт туда же. Карточки платежей — канон
@@ -80,7 +81,8 @@ export function PaymentsGlobalScreen(): JSX.Element {
     !objectsQuery.isError;
   const error = feedQuery.isError || objectsQuery.isError;
   const objects = objectsQuery.data ?? [];
-  // Глобальное пустое (879:9399): видимых объектов нет — платежам негде
+  // Глобальное пустое (1041-51463/1041-51460/1036-37530): видимых
+  // объектов нет — платежам негде
   // жить; разделы-плейсхолдеры при этом не показываются.
   const globalEmpty = !pending && !error && objects.length === 0;
 
@@ -475,8 +477,11 @@ function PaymentsGlobalPlaceholder({
   );
 }
 
-/** Глобальное пустое состояние (879:9399): иллюстрация и текст по центру,
- * CTA «Добавить объект» прижата к низу страницы. */
+/** Глобальное пустое состояние (1041-51463 ПК / 1041-51460 планшет /
+ * 1036-37530 мобилка): иллюстрация, заголовок и описание прижаты к верху —
+ * канон EmptyState (pt-16), без вертикального центрирования. CTA «Добавить
+ * объект» раздвоена по ярусам: на ПК (≥1024) — под текстом в action-слоте,
+ * на планшете и мобилке — прижата к низу страницы во всю ширину. */
 function PaymentsGlobalEmpty({
   onAddProperty,
 }: {
@@ -485,21 +490,26 @@ function PaymentsGlobalEmpty({
   return (
     <div
       data-testid="payments-global-empty"
-      // Растягиваем блок до нижнего края видимой области: CTA прижата книзу
-      // (879:9399). 216px = верх страницы (TopNav + отступ контента) и
-      // нижний резерв PageContent под TabBar (pb-[136px]).
+      // Растягиваем блок до нижнего края видимой области: на планшете и
+      // мобилке CTA прижата книзу. 216px = верх страницы (TopNav + отступ
+      // контента) и нижний резерв PageContent под TabBar (pb-[136px]).
       className="flex min-h-[calc(100dvh-216px)] flex-col px-6"
     >
-      <div className="flex flex-1 items-center justify-center">
-        <EmptyState
-          imageSrc="/images/payments/payments-empty.png"
-          title="Вы пока не добавляли платежи"
-          description="Создайте объект, чтобы добавлять платежи"
-          descriptionClassName="text-content"
-          className="pt-0"
-        />
-      </div>
-      <Button onClick={onAddProperty}>Добавить объект</Button>
+      <EmptyState
+        imageSrc="/images/payments/payments-empty.png"
+        title="Вы пока не добавляли платежи"
+        description="Создайте объект, чтобы добавлять платежи"
+        action={
+          <Button onClick={onAddProperty} className="hidden lg:inline-flex">
+            Добавить объект
+          </Button>
+        }
+      />
+      {/* mt-auto прижимает нижнюю кнопку к краю растянутого блока; на ПК
+       * она скрыта — там кнопка живёт в action-слоте под текстом. */}
+      <Button onClick={onAddProperty} className="mt-auto lg:hidden">
+        Добавить объект
+      </Button>
     </div>
   );
 }

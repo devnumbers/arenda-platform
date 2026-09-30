@@ -59,8 +59,8 @@ import {
  * Поиск — не здесь: пилюля — кнопка, тап открывает отдельную поисковую
  * страницу /contacts/search с поисковой шапкой 1:1 как у книги объекта
  * (#508; решение владельца 2026-09-05). «+» в пилюле ведёт на создание.
- * Пустая книга — EmptyState (служебный чип сортировки прячется вместе со
- * списком, DESIGN.md).
+ * Пустая книга (#1004) — EmptyState с CTA «Добавить контакт»; пилюля
+ * поиска и служебный чип сортировки прячутся вместе со списком (§7).
  */
 
 export function ContactBookScreen({
@@ -98,6 +98,13 @@ export function ContactBookScreen({
   const groups =
     sortField === 'property' ? groupBookByProperty(contacts) : groupBookByLetter(contacts);
 
+  // Подтверждённая пустота книги (#1004): вне фазы загрузки и без ошибки —
+  // пилюля поиска спрятана (искать нечего), создание — CTA пустого
+  // состояния (решение владельца 30.09 меняет «пилюля видна всегда»,
+  // 1726:65083; §7).
+  const bookEmpty =
+    !contactsQuery.isPending && !contactsQuery.isError && contacts.length === 0;
+
   return (
     <>
       {/* Хаб-шапка: «крылья» (лого + профиль) и на мобайле, поведение
@@ -113,15 +120,16 @@ export function ContactBookScreen({
       <PageContent>
         <HubCollapseAnchor>
           <HubTitle>Контакты</HubTitle>
-          <div className="mt-4 mb-6 px-6">
-            {/* Пилюля видна всегда — в ней «+» создания (вид пустой книги
-             * по макету 1726:65083 согласован владельцем); вне фазы
-             * загрузки — контент встаёт на её место без сдвига (§7). */}
-            <BookSearchPill
-              onOpenSearch={() => router.push(ROUTES.contactSearch)}
-              onCreate={() => router.push(ROUTES.contactNew)}
-            />
-          </div>
+          {!bookEmpty && (
+            <div className="mt-4 mb-6 px-6">
+              {/* Пилюля поиска — в ней «+» создания (макет 1726:65083);
+               * на подтверждённой пустоте спрятана (#1004, §7). */}
+              <BookSearchPill
+                onOpenSearch={() => router.push(ROUTES.contactSearch)}
+                onCreate={() => router.push(ROUTES.contactNew)}
+              />
+            </div>
+          )}
         </HubCollapseAnchor>
 
         {contactsQuery.isPending ? (
@@ -144,7 +152,7 @@ export function ContactBookScreen({
         ) : (
           <>
             {contacts.length === 0 ? (
-              <ContactsEmptyState />
+              <ContactsEmptyState onAdd={() => router.push(ROUTES.contactNew)} />
             ) : (
               <>
                 <div className="mb-4 px-6">

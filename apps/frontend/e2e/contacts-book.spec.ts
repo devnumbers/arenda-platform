@@ -32,7 +32,12 @@ test.describe('книга контактов — хаб нового хрома'
     await expect(
       page.getByRole('heading', { level: 1, name: 'Контакты', exact: true }),
     ).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Найти контакт' })).toBeVisible();
+    // Пустая книга (#1004): пилюли поиска нет — искать нечего; создание —
+    // CTA пустого состояния.
+    await expect(page.getByRole('button', { name: 'Найти контакт' })).toHaveCount(0);
+    await expect(
+      page.getByRole('button', { name: 'Добавить контакт', exact: true }),
+    ).toBeVisible();
 
     // Таб активен «Еще», в шите пункт «Контакты» подсвечен; тап по пункту
     // закрывает шит и остаётся в книге.
@@ -47,7 +52,7 @@ test.describe('книга контактов — хаб нового хрома'
     await captureScreen(page, testInfo, 'contacts-book-hub-mobile');
   });
 
-  test('создание из книги: «+» пилюли → форма → возврат в книгу', async ({
+  test('создание из книги: CTA пустого состояния → форма → возврат в книгу', async ({
     page,
     seededUser,
   }, testInfo) => {
@@ -56,8 +61,8 @@ test.describe('книга контактов — хаб нового хрома'
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto('/contacts');
 
-    // «+» внутри пилюли (кнопка внутри строки-кнопки) ведёт на создание;
-    // exact — сама пилюля тоже role=button и содержит этот текст.
+    // Пустая книга (#1004): создание — CTA пустого состояния; exact — на
+    // заполненной книге ту же роль носит «+» пилюли поиска.
     await page.getByRole('button', { name: 'Добавить контакт', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Отменить создание' })).toBeVisible();
     // Обязательное поле «Имя»: доступное имя без звёздочки — маркер

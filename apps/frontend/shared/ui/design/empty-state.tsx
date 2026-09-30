@@ -59,7 +59,9 @@ export function EmptyState({
           </p>
         )}
       </div>
-      {action !== undefined && <div>{action}</div>}
+      {/* Гард ловит и false от частого «cond && <Button/>»: иначе пустой
+       * div ловит gap-4 корня — фантомные 16px, когда действия нет. */}
+      {action !== undefined && action !== false && <div>{action}</div>}
     </div>
   );
 }
