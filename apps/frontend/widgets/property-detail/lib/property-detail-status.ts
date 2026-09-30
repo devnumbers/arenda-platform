@@ -1,12 +1,15 @@
 import type { PropertyStatus } from '@/entities/property';
+import type { RentalActionState } from '@/features/rentals';
 
 /**
  * Чистая логика детали объекта по статусам (карта #583, тикет #588):
  * подзаголовок шапки, состав кебаба, шита смены статуса и секции
  * «Управление». Источники — Figma 1186:44996 (кебаб), 1554:100371 /
- * 1581:53679 (шиты), набор секций «Управление» 1554:98469; вариант
- * «Завершить аренду» для объекта с незавершённой арендой — резолюция
- * тикета (свитч Начать ↔ Завершить), уточняется на приёмке.
+ * 1581:53679 (шиты), набор секций «Управление» 1554:98469. Арендная
+ * строка — состояние-машина «Действий аренды» (карта #984, тикет #986,
+ * rentals/CONTEXT.md): аренды нет → «Начать аренду», «Ожидает начала» →
+ * «Удалить аренду», «идёт» → «Завершить аренду»; машина одна — доменная,
+ * surfaces синхронны (правка аренды — только со страницы аренды).
  */
 
 export type PropertyDetailActionKey =
@@ -17,6 +20,7 @@ export type PropertyDetailActionKey =
   | 'unpin'
   | 'start-rental'
   | 'complete-rental'
+  | 'delete-rental'
   | 'start-maintenance'
   | 'finish-maintenance'
   | 'archive'
@@ -67,15 +71,17 @@ export function buildPropertyKebabItems(
 
 /**
  * Шит смены статуса (канон Modal-шита): без аренды — Figma 1554:100371,
- * на ремонте — 1581:53679. У активного с арендой первый пункт —
- * «Завершить аренду» (свитч, уточняется на приёмке). «Перевести в архив»
- * рисуется только владельцу (canLifecycle — зеркало sharedpolicy.CanLifecycle):
- * участнику сервер отвечает 403, мёртвых кнопок быть не должно (приёмка
- * #757). Архивному шита нет — в кебабе прямой пункт «Вернуть из архива».
+ * на ремонте — 1581:53679. Арендная строка — по машине «Действий аренды»
+ * (#986): «Ожидает начала» несёт «Удалить аренду» (danger: удаляет аренду
+ * вместе с платём; подтверждение — канон удаления завершённой аренды).
+ * «Перевести в архив» рисуется только владельцу (canLifecycle — зеркало
+ * sharedpolicy.CanLifecycle): участнику сервер отвечает 403, мёртвых
+ * кнопок быть не должно (приёмка #757). Архивному шита нет — в кебабе
+ * прямой пункт «Вернуть из архива».
  */
 export function buildPropertyStatusSheetItems(
   status: PropertyStatus,
-  hasRental: boolean,
+  rentalState: RentalActionState,
   canLifecycle: boolean,
 ): ReadonlyArray<PropertyDetailAction> {
   if (status === 'archived') return [];
@@ -85,55 +91,70 @@ export function buildPropertyStatusSheetItems(
     return items;
   }
   const items = [
-    hasRental
-      ? action('complete-rental', 'Завершить аренду', false)
-      : action('start-rental', 'Начать аренду', false),
+    rentalAction(rentalState),
     action('start-maintenance', 'Объект на ремонте', false),
   ];
   if (canLifecycle) items.push(action('archive', 'Перевести в архив', false));
   return items;
 }
 
+/** Арендная строка поверхностей объекта — срез машины «Действий аренды»:
+ * none → Начало, upcoming → Удаление, идёт → Завершение. */
+function rentalAction(rentalState: RentalActionState): PropertyDetailAction {
+  switch (rentalState.kind) {
+    case 'none':
+      return action('start-rental', 'Начать аренду', false);
+    case 'upcoming':
+      return action('delete-rental', 'Удалить аренду', true);
+    case 'active':
+      return action('complete-rental', 'Завершить аренду', false);
+  }
+}
+
 /**
  * Guard смены статуса (#628, Figma 1583:55882): у объекта с незавершённой
- * арендой «Объект на ремонте» и «Перевести в архив» (из шита статуса и
- * из секции «Управление») не исполняются сразу — открывается guard-шит
- * «Нельзя изменить статус, пока объект арендован». Его «Завершить» —
- * составное действие (решение владельца 12.09, против двухшаговой
- * аннотации макета): завершает аренду (#627, сегодняшней датой) и тут же
- * применяет выбранный статус. Пункты в списках остаются (гард
- * перехватывает тап, не прячет). Возвращает само действие для narrowing
- * или null — мимо гарда. Чисто фронтовый: бэк переход
+ * арендой — включая «Ожидает начала» (#986) — «Объект на ремонте» и
+ * «Перевести в архив» (из шита статуса и из секции «Управление») не
+ * исполняются сразу — открывается guard-шит «Нельзя изменить статус…».
+ * Его подтверждение — составное действие по машине: у идущей аренды
+ * «Завершить» завершает аренду (#627, сегодняшней датой) и тут же
+ * применяет выбранный статус (решение владельца 12.09); у «Ожидает
+ * начала» — удаляет аренду и тут же применяет статус (решение владельца
+ * 30.09: завершение будущей аренды не существует). Пункты в списках
+ * остаются (гард перехватывает тап, не прячет). Возвращает само действие
+ * для narrowing или null — мимо гарда. Чисто фронтовый: бэк переход
  * active→maintenance разрешает всегда.
  */
 export type GuardedStatusAction = 'start-maintenance' | 'archive';
 
 export function guardedStatusAction(
   key: PropertyDetailActionKey,
-  hasRental: boolean,
+  rentalState: RentalActionState,
 ): GuardedStatusAction | null {
-  if (!hasRental) return null;
+  if (rentalState.kind === 'none') return null;
   if (key === 'start-maintenance' || key === 'archive') return key;
   return null;
 }
 
 /**
- * Гард удаления (#632): у арендованного «Удалить объект» не открывает шит
- * удаления — сперва «Завершить аренду» (#627), шит-подтверждение уже есть.
- * Чисто фронтовый перехват тапа: бэк прикрывает тем же правилом —
- * 409 property_occupied в DeleteProperty.
+ * Гард удаления (#632): у объекта с незавершённой арендой — включая
+ * «Ожидает начала» — «Удалить объект» не открывает шит удаления: сперва
+ * разводка по машине (#986) — «Завершить аренду» у идущей (#627),
+ * «Удалить аренду» у «Ожидает начала». Чисто фронтовый перехват тапа:
+ * бэк прикрывает тем же правилом — 409 property_occupied в DeleteProperty.
  */
 export function deleteBlockedByRental(
   key: PropertyDetailActionKey,
-  hasRental: boolean,
+  rentalState: RentalActionState,
 ): boolean {
-  return key === 'delete' && hasRental;
+  return key === 'delete' && rentalState.kind !== 'none';
 }
 
 export type PropertyManageInput = {
   readonly status: PropertyStatus;
-  /** Незавершённая аренда есть (occupancy списка, резолюция #584). */
-  readonly hasRental: boolean;
+  /** Состояние «Действий аренды» (#986): none → Начать, upcoming →
+   * Удалить, идёт → Завершить. */
+  readonly rentalState: RentalActionState;
   readonly isPinned: boolean;
   /** Мутационный доступ — ролевой canManageMembers (#703); архив его
    * не гасит, билдер ветвит архив сам. */
@@ -162,7 +183,7 @@ export type PropertyManageInput = {
 export function buildPropertyManageActions(
   input: PropertyManageInput,
 ): ReadonlyArray<PropertyDetailAction> {
-  const { status, hasRental, isPinned, canMutate, canPin, canLeave, canLifecycle } = input;
+  const { status, rentalState, isPinned, canMutate, canPin, canLeave, canLifecycle } = input;
 
   if (!canMutate) {
     // Смотрящий без контекста доступа — страховка «только чтение»,
@@ -205,9 +226,7 @@ export function buildPropertyManageActions(
     );
   }
   items.push(
-    hasRental
-      ? action('complete-rental', 'Завершить аренду', false)
-      : action('start-rental', 'Начать аренду', false),
+    rentalAction(rentalState),
     status === 'maintenance'
       ? action('finish-maintenance', 'Завершить ремонт', false)
       : action('start-maintenance', 'Объект на ремонте', false),
