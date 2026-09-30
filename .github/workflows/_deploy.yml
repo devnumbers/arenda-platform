@@ -506,6 +506,51 @@ jobs:
 
             echo "Caddy fragment deployed and smoked: ${FRAG}"
 
+      # Первый посетитель после деплоя не должен платить за холодный кэш
+      # /_next/image: свежевыкатанный лендинг энкодит каждый вариант каждой
+      # картинки на лету, шторм холодных AVIF-энкодов душит контейнер —
+      # часть запросов висит минутами, Caddy отвечает 502 (карта #888,
+      # наряд 30.09: первая загрузка stage + 502 на finance-regular-*).
+      # Прогреваем всё, что просит страница, до смоука: HTML главной →
+      # уникальные URL оптимизатора → GET с тем же Accept, что у браузера.
+      - name: Warm image optimizer
+        env:
+          BASE_URL: ${{ inputs.base_url }}
+        run: |
+          set -euo pipefail
+          html="$(curl -fsS --retry 5 --retry-delay 2 --retry-all-errors "${BASE_URL}/")"
+          # URL в srcset кончаются пробелом (перед дескриптором «640w»);
+          # &amp; из HTML-атрибутов и \u0026 из RSC-пейлоада разворачиваем
+          # назад в & — иначе урл склеивается в мусор вида «webpu0026w=96»
+          # и оптимизатор честно отвечает 400.
+          urls_file="$(mktemp)"
+          warn_file="$(mktemp)"
+          trap 'rm -f "${urls_file}" "${warn_file}"' EXIT
+          grep -oE '/_next/image\?[^" ]+' <<<"${html}" | sed 's/&amp;/\&/g; s/\\u0026/\&/g' | sort -u > "${urls_file}"
+          total="$(wc -l < "${urls_file}" | tr -d ' ')"
+          echo "Warming ${total} optimizer URLs against ${BASE_URL}"
+          export BASE_URL warn_file
+          warm_one() {
+            if curl -fsS -o /dev/null --max-time 90 \
+                -H 'Accept: image/avif,image/webp,image/*,*/*;q=0.8' \
+                --retry 3 --retry-delay 2 --retry-all-errors \
+                "${BASE_URL}$1"; then
+              return 0
+            fi
+            echo "$1" >> "${warn_file}"
+            echo "WARN: warm failed: $1" >&2
+          }
+          export -f warm_one
+          # Шесть воркеров: на холодном деплое это сотни энкодов, sequentially
+          # шаг упирался бы в таймаут; порядок прогрева значения не имеет.
+          xargs -P 6 -I '{}' bash -c 'warm_one "$@"' _ '{}' < "${urls_file}" || true
+          failed="$(wc -l < "${warn_file}" | tr -d ' ')"
+          if [ "${failed}" -ne 0 ]; then
+            echo "${failed}/${total} optimizer URLs failed to warm" >&2
+            exit 1
+          fi
+          echo "All ${total} optimizer URLs warm"
+
       - name: Smoke test (external)
         env:
           BASE_URL: ${{ inputs.base_url }}
