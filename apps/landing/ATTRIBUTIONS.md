@@ -110,7 +110,7 @@ Figma Make-экспорту и описывал shadcn/ui + Unsplash — см. �
 
 ### rental-contacts.webp
 - Использование: `components/sections/rentals-carousel.tsx` — карточка
-  «Добавляйте контакты арендатаров» (alt «Экран контактов арендаторов»).
+  «Добавляйте контакты арендаторов» (alt «Экран контактов арендаторов в Рентли»).
 - Коммиты: добавлен 51f4b93b.
 - Figma: узел `2814:898` «bg_removal [Background removed] 1», imageRef
   `8517c0e38b9aa8889de01c09de11adde240e9c00` — имя слоя сохраняет след
