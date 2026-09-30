@@ -100,16 +100,25 @@ describe('buildPropertyEditCommand', () => {
     expect(buildPropertyEditCommand(draft, stubCatalog)?.description).toBe('Сдаётся');
   });
 
-  it('без типа, названия или адреса команда не строится', () => {
+  it('без типа или адреса команда не строится; пустое название строит — регенерирует бэк (#1001)', () => {
     expect(
       buildPropertyEditCommand({ name: 'Квартира', address: 'Ленина, 34', description: '', attributes: {} }, stubCatalog),
     ).toBeUndefined();
     expect(
-      buildPropertyEditCommand({ type: 'apartment', name: '  ', address: 'Ленина, 34', description: '', attributes: {} }, stubCatalog),
-    ).toBeUndefined();
-    expect(
       buildPropertyEditCommand({ type: 'apartment', name: 'Квартира', address: '  ', description: '', attributes: {} }, stubCatalog),
     ).toBeUndefined();
+    // Очищенное название уходит пустой строкой — сервер генерирует заново.
+    const cleared = buildPropertyEditCommand(
+      { type: 'apartment', name: '   ', address: 'Ленина, 34', description: '', attributes: {} },
+      stubCatalog,
+    );
+    expect(cleared).toStrictEqual({
+      name: '',
+      type: 'apartment',
+      address: 'Ленина, 34',
+      description: undefined,
+      attributes: {},
+    });
   });
 
   it('некорректная характеристика блокирует команду', () => {

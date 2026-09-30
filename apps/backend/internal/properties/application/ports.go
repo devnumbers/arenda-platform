@@ -230,6 +230,10 @@ type PropertyRepository interface {
 	Archive(ctx context.Context, id, scope uuid.UUID) error
 	Unarchive(ctx context.Context, id, scope uuid.UUID) error
 	CountActiveByOwner(ctx context.Context, scope uuid.UUID) (int, error)
+	// CountByOwnerAndType counts the owner's properties of the given type in
+	// every status — archived count too, deleted rows are gone (hard
+	// delete). The auto-name serial source (ticket #1001).
+	CountByOwnerAndType(ctx context.Context, scope uuid.UUID, propertyType domain.PropertyType) (int, error)
 	Delete(ctx context.Context, id, scope uuid.UUID) error
 	WithTx(tx transaction.Tx) PropertyRepository
 }

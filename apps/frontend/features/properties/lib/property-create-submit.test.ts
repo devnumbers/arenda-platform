@@ -61,11 +61,15 @@ describe('buildPropertyCreateCommand', () => {
     });
   });
 
-  it('без названия (обязательное поле) команда не строится', () => {
-    expect(buildPropertyCreateCommand({ type: 'garage', address: 'Ленина, 1' }, stubCatalog)).toBeUndefined();
-    expect(
-      buildPropertyCreateCommand({ type: 'garage', address: 'Ленина, 1', name: '   ' }, stubCatalog),
-    ).toBeUndefined();
+  it('пустое название не попадает в команду — имя сгенерирует бэк (#1001)', () => {
+    const withoutName = buildPropertyCreateCommand({ type: 'garage', address: 'Ленина, 1' }, stubCatalog);
+    expect(withoutName).toStrictEqual({ type: 'garage', address: 'Ленина, 1' });
+    const blankName = buildPropertyCreateCommand(
+      { type: 'garage', address: 'Ленина, 1', name: '   ' },
+      stubCatalog,
+    );
+    expect(blankName).toStrictEqual({ type: 'garage', address: 'Ленина, 1' });
+    expect('name' in (withoutName ?? {})).toBe(false);
   });
 
   it('без типа или адреса команда не строится', () => {

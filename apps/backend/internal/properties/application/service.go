@@ -298,7 +298,17 @@ func (s *PropertyService) CreateProperty(ctx context.Context, actor uuid.UUID, c
 		return domain.Property{}, &AttributesValidationError{Errors: result.Errors}
 	}
 
-	property, err := domain.NewProperty(actor, cmd.Name, cmd.Address, cmd.Description, propertyType, attrs)
+	// Автогенерация названия (#1001): пустое имя выводится из типа. Читается
+	// мимо транзакции: имена не уникальны, гонка двух созданий даёт повтор
+	// серийника без какого-либо вреда.
+	name := cmd.Name
+	if strings.TrimSpace(name) == "" {
+		if name, err = autoName(ctx, s.repo, actor, propertyType); err != nil {
+			return domain.Property{}, err
+		}
+	}
+
+	property, err := domain.NewProperty(actor, name, cmd.Address, cmd.Description, propertyType, attrs)
 	if err != nil {
 		return domain.Property{}, fmt.Errorf("%w: %w", ErrInvalidInput, err)
 	}
@@ -857,6 +867,19 @@ func (s *PropertyService) resolveEditableProperty(ctx context.Context, actor, id
 	return role, nil
 }
 
+// autoName composes the generated property name (#1001): the serial — the
+// owner's property count of the type (active and archived alike, deleted
+// rows gone) plus one, the owner's count-based rule — over the domain
+// phrase map. The repo handle is the caller's store: the plain repo on the
+// create path, the transactional store inside applyPropertyUpdate.
+func autoName(ctx context.Context, repo PropertyRepository, scope uuid.UUID, propertyType domain.PropertyType) (string, error) {
+	count, err := repo.CountByOwnerAndType(ctx, scope, propertyType)
+	if err != nil {
+		return "", fmt.Errorf("count properties for auto name: %w", err)
+	}
+	return domain.AutoPropertyName(propertyType, count+1), nil
+}
+
 // lockEditableProperty loads the property row for update inside a write
 // transaction and rejects archived objects: an archived property is read-only
 // history.
@@ -875,23 +898,36 @@ func lockEditableProperty(ctx context.Context, repo PropertyRepository, id uuid.
 }
 
 // applyPropertyUpdate applies the command's diff to the property and
-// re-validates the aggregate; only the provided fields change.
+// re-validates the aggregate; only the provided fields change. The type is
+// applied before the name: clearing the name (ticket #1001) regenerates it
+// from the type, which the same PATCH may have just changed.
 func applyPropertyUpdate(ctx context.Context, stores *txStores, property *domain.Property, cmd UpdatePropertyCommand) error {
-	if cmd.Name != nil {
-		property.Name = *cmd.Name
-	}
-	if cmd.Address != nil {
-		property.Address = *cmd.Address
-	}
-	if cmd.Description != nil {
-		property.Description = *cmd.Description
-	}
 	if cmd.Type != nil {
 		propertyType, err := domain.ParsePropertyType(*cmd.Type)
 		if err != nil {
 			return fmt.Errorf("%w: invalid property type: %w", ErrInvalidInput, err)
 		}
 		property.Type = propertyType
+	}
+	if cmd.Name != nil {
+		if strings.TrimSpace(*cmd.Name) == "" {
+			// Очистка названия при правке (#1001): регенерация из типа —
+			// тот же серийник, что и при создании; сам объект в счёт
+			// входит.
+			name, err := autoName(ctx, stores.repo, property.OwnerID, property.Type)
+			if err != nil {
+				return err
+			}
+			property.Name = name
+		} else {
+			property.Name = *cmd.Name
+		}
+	}
+	if cmd.Address != nil {
+		property.Address = *cmd.Address
+	}
+	if cmd.Description != nil {
+		property.Description = *cmd.Description
 	}
 	if cmd.Status != nil {
 		if err := applyStatusUpdate(ctx, stores, property, *cmd.Status); err != nil {

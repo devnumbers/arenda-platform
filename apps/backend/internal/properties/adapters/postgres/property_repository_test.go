@@ -326,3 +326,72 @@ func TestPropertyRepository_ArchiveClearsPin(t *testing.T) {
 		t.Errorf("pinnedAt after archive = %v, want nil (the schema CHECK invariant)", got.PinnedAt)
 	}
 }
+
+func TestPropertyRepository_CountByOwnerAndType(t *testing.T) {
+	t.Parallel()
+
+	pool := setupPropertiesIntegrationDB(t)
+	ctx := t.Context()
+	repo := NewPropertyRepository(pool)
+	ownerID := createTestOwner(t, pool)
+	otherOwner := createTestOwner(t, pool)
+
+	// The serial source counts the owner's properties of the type in every
+	// status (archived too), never another owner's (ticket #1001).
+	active := sampleProperty(ownerID, nil)
+	if _, err := repo.Create(ctx, ownerID, active); err != nil {
+		t.Fatalf("create active: %v", err)
+	}
+	archived := sampleProperty(ownerID, nil)
+	archived.Type = domain.PropertyTypeGarage
+	if _, err := repo.Create(ctx, ownerID, archived); err != nil {
+		t.Fatalf("create archived candidate: %v", err)
+	}
+	if err := repo.Archive(ctx, archived.ID, ownerID); err != nil {
+		t.Fatalf("archive: %v", err)
+	}
+	foreign := sampleProperty(otherOwner, nil)
+	if _, err := repo.Create(ctx, otherOwner, foreign); err != nil {
+		t.Fatalf("create foreign: %v", err)
+	}
+
+	count, err := repo.CountByOwnerAndType(ctx, ownerID, domain.PropertyTypeApartment)
+	if err != nil {
+		t.Fatalf("count apartment: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("apartment count = %d, want 1 (the foreign owner's row stays out)", count)
+	}
+
+	count, err = repo.CountByOwnerAndType(ctx, ownerID, domain.PropertyTypeGarage)
+	if err != nil {
+		t.Fatalf("count garage: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("garage count = %d, want 1 (the archived row counts)", count)
+	}
+
+	count, err = repo.CountByOwnerAndType(ctx, ownerID, domain.PropertyTypeHouse)
+	if err != nil {
+		t.Fatalf("count house: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("house count = %d, want 0", count)
+	}
+
+	// Удалённые строки из счёта выпадают (hard delete, #1001).
+	gone := sampleProperty(ownerID, nil)
+	if _, err := repo.Create(ctx, ownerID, gone); err != nil {
+		t.Fatalf("create doomed: %v", err)
+	}
+	if err := repo.Delete(ctx, gone.ID, ownerID); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	count, err = repo.CountByOwnerAndType(ctx, ownerID, domain.PropertyTypeApartment)
+	if err != nil {
+		t.Fatalf("count after delete: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("apartment count after delete = %d, want 1 (the deleted row is gone)", count)
+	}
+}

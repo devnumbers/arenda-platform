@@ -34,7 +34,9 @@ export type PropertyAttributesPort = {
 };
 
 /** Команда создания объекта из черновика; undefined — шаги не завершены
- * (тип/адрес/название) или характеристики не проходят каталог. */
+ * (тип/адрес) или характеристики не проходят каталог. Название
+ * необязательно (#1001): пустое в команду не попадает — имя сгенерирует
+ * бэк из типа. */
 export function buildPropertyCreateCommand(
   draft: PropertyCreateDraft,
   attributeCatalog: PropertyAttributesPort,
@@ -48,8 +50,8 @@ export function buildPropertyCreateCommand(
   }
   // Готовность шагов гарантирует заполненность обязательных полей —
   // сужаем типы для компилятора.
-  const { type, address, name } = draft;
-  if (type === undefined || address === undefined || name === undefined) {
+  const { type, address } = draft;
+  if (type === undefined || address === undefined) {
     return undefined;
   }
 
@@ -72,8 +74,9 @@ export function buildPropertyCreateCommand(
   }
 
   const description = draft.description?.trim();
+  const name = draft.name?.trim();
   return {
-    name: name.trim(),
+    ...(name !== undefined && name.length > 0 && { name }),
     type,
     address: address.trim(),
     ...(description !== undefined && description.length > 0 && { description }),

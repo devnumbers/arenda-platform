@@ -177,6 +177,16 @@ func (r *lockingFakePropertyRepo) CountActiveByOwner(_ context.Context, _ uuid.U
 	return count, nil
 }
 
+func (r *lockingFakePropertyRepo) CountByOwnerAndType(_ context.Context, scope uuid.UUID, propertyType domain.PropertyType) (int, error) {
+	count := 0
+	for _, p := range r.data {
+		if p.OwnerID == scope && p.Type == propertyType {
+			count++
+		}
+	}
+	return count, nil
+}
+
 func (r *lockingFakePropertyRepo) Delete(_ context.Context, _, _ uuid.UUID) error {
 	return errors.New("not implemented")
 }
@@ -654,6 +664,16 @@ func (r *fakePropertyRepo) CountActiveByOwner(_ context.Context, _ uuid.UUID) (i
 	count := 0
 	for _, p := range r.data {
 		if p.Status != domain.PropertyStatusArchived {
+			count++
+		}
+	}
+	return count, nil
+}
+
+func (r *fakePropertyRepo) CountByOwnerAndType(_ context.Context, scope uuid.UUID, propertyType domain.PropertyType) (int, error) {
+	count := 0
+	for _, p := range r.data {
+		if p.OwnerID == scope && p.Type == propertyType {
 			count++
 		}
 	}

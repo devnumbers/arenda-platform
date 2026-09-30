@@ -96,6 +96,9 @@ type Querier interface {
 	// walked page; the search screen shows it as «найдено N».
 	CountPaidOperationsGlobal(ctx context.Context, arg CountPaidOperationsGlobalParams) (int64, error)
 	CountPropertiesAdmin(ctx context.Context, arg CountPropertiesAdminParams) (int64, error)
+	// The auto-name serial (ticket #1001): the owner's properties of this type
+	// in every status — archived count too, deleted rows are gone (hard delete).
+	CountPropertiesByOwnerAndType(ctx context.Context, arg CountPropertiesByOwnerAndTypeParams) (int64, error)
 	CountPropertyPhotosByPropertyID(ctx context.Context, propertyID pgtype.UUID) (int64, error)
 	CountSubscriptionPaymentsAdmin(ctx context.Context, arg CountSubscriptionPaymentsAdminParams) (int64, error)
 	// The count twin of ListSubscriptionPaymentsBySelection for the stuck-payment

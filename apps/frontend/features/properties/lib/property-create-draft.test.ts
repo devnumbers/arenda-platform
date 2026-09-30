@@ -70,11 +70,11 @@ describe('propertyCreateStepReady', () => {
     expect(propertyCreateStepReady(2, { type: 'apartment', address: 'Ленина, 1' })).toBe(true);
   });
 
-  it('шаг 3 готов, когда есть название', () => {
-    expect(propertyCreateStepReady(3, { type: 'apartment', address: 'Ленина, 1' })).toBe(false);
+  it('шаг 3 готов всегда — название необязательно (#1001), пустое регенерирует бэк', () => {
+    expect(propertyCreateStepReady(3, { type: 'apartment', address: 'Ленина, 1' })).toBe(true);
     expect(
       propertyCreateStepReady(3, { type: 'apartment', address: 'Ленина, 1', name: ' ' }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       propertyCreateStepReady(3, { type: 'apartment', address: 'Ленина, 1', name: 'Моя квартира' }),
     ).toBe(true);

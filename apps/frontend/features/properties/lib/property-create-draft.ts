@@ -57,9 +57,10 @@ export function isApartmentCategory(type: PropertyType): boolean {
   return type === 'apartment' || type === 'apartments';
 }
 
-/** Готовность шага: категория выбрана / адрес непустой / название есть.
- * Характеристики и описание на готовность шага 3 не влияют — они
- * необязательные (docs/entities/obekt.md). */
+/** Готовность шага: категория выбрана / адрес непустой / шаг 3 достигнут.
+ * Характеристики, описание и название на готовность шага 3 не влияют —
+ * они необязательные: пустое название регенерирует бэк из типа
+ * («Моя квартира 1», #1001). */
 export function propertyCreateStepReady(
   step: PropertyCreateStep,
   draft: PropertyCreateDraft,
@@ -70,7 +71,7 @@ export function propertyCreateStepReady(
     case 2:
       return draft.address !== undefined && draft.address.trim().length > 0;
     case 3:
-      return draft.name !== undefined && draft.name.trim().length > 0;
+      return true;
   }
 }
 

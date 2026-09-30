@@ -80,6 +80,10 @@ func (r *searchWireRepo) CountActiveByOwner(_ context.Context, _ uuid.UUID) (int
 	return 0, nil
 }
 
+func (r *searchWireRepo) CountByOwnerAndType(_ context.Context, _ uuid.UUID, _ domain.PropertyType) (int, error) {
+	return 0, nil
+}
+
 func (r *searchWireRepo) Delete(_ context.Context, _, _ uuid.UUID) error { return nil }
 
 func (r *searchWireRepo) WithTx(_ transaction.Tx) propertiesapp.PropertyRepository { return r }

@@ -106,7 +106,7 @@ test('шаг 2: подсказки адреса — список, выбор, в
   await captureScreen(page, testInfo, '03-address-picked');
 });
 
-test('шаг 3: характеристики — поля каталога, тип жилья, гейт названия', async ({ page, seededUser }, testInfo) => {
+test('шаг 3: характеристики — поля каталога, тип жилья, название необязательно', async ({ page, seededUser }, testInfo) => {
   await openWizard(page, seededUser);
   await page.getByRole('group', { name: 'Категория объекта' }).getByRole('button', { name: 'Квартира' }).click();
   await page.getByRole('textbox', { name: 'Введите адрес' }).fill('Ленина, 1');
@@ -146,13 +146,12 @@ test('шаг 3: характеристики — поля каталога, ти
   await area.pressSequentially('47,5м');
   await expect(area).toHaveValue('47,5');
 
-  // Заполнение характеристики, «Создать объект» появляется с названием
-  // (обязательное поле), счётчик лимита 64 работает.
+  // «Создать объект» доступен сразу — название необязательно (#1001,
+  // пустое имя регенерирует бэк из типа); счётчик лимита 64 работает.
   const submit = page.getByRole('button', { name: 'Создать объект' });
-  await expect(submit).toBeDisabled();
+  await expect(submit).toBeEnabled();
   await name.fill('Квартира на Ленина');
   await expect(page.getByText('18/64')).toBeVisible();
-  await expect(submit).toBeEnabled();
   await captureScreen(page, testInfo, '04-characteristics');
 });
 
@@ -177,18 +176,19 @@ test('шаг 2: черновик переживает перезагрузку, 
   await expect(page.getByRole('button', { name: 'Продолжить' })).toBeHidden();
 });
 
-test('полный флоу: «Создать объект» ведёт на успех, «Открыть объект» — на карточку', async ({ page, seededUser }, testInfo) => {
+test('полный флоу: создание без названия — автонейм из типа, «Открыть объект» — на карточку', async ({ page, seededUser }, testInfo) => {
   await openWizard(page, seededUser);
   await page.getByRole('group', { name: 'Категория объекта' }).getByRole('button', { name: 'Дом' }).click();
   await page.getByRole('textbox', { name: 'Введите адрес' }).fill('Ленина, 2');
   await page.getByRole('button', { name: 'Продолжить' }).click();
-  const name = page.getByRole('textbox', { name: 'Название объекта' });
-  await name.fill('Дом на Ленина');
+  // Название оставляем пустым: бэк генерирует из типа (#1001) — у сидового
+  // пользователя домов нет, первое создание даёт «Мой дом 1».
   await page.getByRole('button', { name: 'Создать объект' }).click();
 
-  // Успех (Figma 1425-55788): заголовок с названием, подзаголовок макета,
-  // пара кнопок (override владельца); хедер без чипа шага — только крестик.
-  await expect(page.getByRole('heading', { name: 'Объект «Дом на Ленина» создан' })).toBeVisible();
+  // Успех (Figma 1425-55788): заголовок со сгенерированным названием,
+  // подзаголовок макета, пара кнопок (override владельца); хедер без чипа
+  // шага — только крестик.
+  await expect(page.getByRole('heading', { name: 'Объект «Мой дом 1» создан' })).toBeVisible();
   await expect(page.getByText('Вы создали объект, теперь можете добавить аренду')).toBeVisible();
   await expect(page.getByText(/шаг \d из/)).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Добавить аренду' })).toBeVisible();
