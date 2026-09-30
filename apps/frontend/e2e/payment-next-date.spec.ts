@@ -1,4 +1,5 @@
 import {
+  execE2eSql,
   expect,
   openCabinetWithSeededSession,
   SEEDED_GARAGE_PROPERTY_ID,
@@ -52,6 +53,9 @@ test.describe('следующая дата оплаты из серверног�
     const run = String(testInfo.retry);
     const title = `E2E следующая дата ${run}`;
 
+    // Гараж — сидово без платежей: правило убирается в любом исходе, иначе
+    // оно переживает прогон и ломает пустые состояния payments.spec.
+    try {
     // ── Создание правила «каждый месяц, 1-е число» визардом с хаба гаража ──
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto(PAYMENTS_URL);
@@ -148,5 +152,14 @@ test.describe('следующая дата оплаты из серверног�
 
     await page.goto(`${PAYMENTS_URL}/all`);
     await expect(page.getByText(afterLabel, { exact: true })).toBeVisible();
+    } finally {
+      await execE2eSql(
+        `DELETE FROM operations WHERE payment_id IN ` +
+          `(SELECT id FROM payments WHERE property_id = '${SEEDED_GARAGE_PROPERTY_ID}' AND title = '${title}')`,
+      );
+      await execE2eSql(
+        `DELETE FROM payments WHERE property_id = '${SEEDED_GARAGE_PROPERTY_ID}' AND title = '${title}'`,
+      );
+    }
   });
 });

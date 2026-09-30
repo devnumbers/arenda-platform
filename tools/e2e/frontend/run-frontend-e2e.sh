@@ -205,11 +205,13 @@ VIEWER_TOKEN_HASH="$(node "$CRYPTO" hash-token "$E2E_ENCRYPTION_KEY" "$E2E_VIEWE
 PHONE_DET="$(node "$CRYPTO" det-phone "$E2E_ENCRYPTION_KEY" "+7$USER_PHONE_DIGITS")"
 MEMBER_PHONE_DET="$(node "$CRYPTO" det-phone "$E2E_ENCRYPTION_KEY" "+79150000002")"
 VIEWER_PHONE_DET="$(node "$CRYPTO" det-phone "$E2E_ENCRYPTION_KEY" "+79150000003")"
+LIMITED_PHONE_DET="$(node "$CRYPTO" det-phone "$E2E_ENCRYPTION_KEY" "+79150000004")"
 docker exec -i "$PG_CONTAINER" \
   psql -U arenda -d arenda -v ON_ERROR_STOP=1 \
   -v token_hash="$TOKEN_HASH" -v phone_det="$PHONE_DET" \
   -v member_token_hash="$MEMBER_TOKEN_HASH" -v member_phone_det="$MEMBER_PHONE_DET" \
   -v viewer_token_hash="$VIEWER_TOKEN_HASH" -v viewer_phone_det="$VIEWER_PHONE_DET" \
+  -v limited_phone_det="$LIMITED_PHONE_DET" \
   < "$SEED_SQL" >/dev/null
 
 # Поверх базового сида всегда применяется оверлей (live-overlay.sql):

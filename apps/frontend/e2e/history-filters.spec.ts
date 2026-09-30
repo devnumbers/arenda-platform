@@ -94,7 +94,11 @@ test('шит открывается свёрнутым с «всеми выбр�
   await expect(dialog.getByText('Основные действия')).toBeVisible();
   // Основные действия 4/4 и виды 7/7 — статические каталоги; участники и
   // объекты приходят с /history/filters (состав сида не фиксируем).
-  await expect(dialog.getByText('4/4')).toBeVisible();
+  // Счётчик — внутри секции группы: текст «4/4» больше не уникален
+  // на шите (группа «Участники» сида с Анной тоже даёт 4/4).
+  await expect(
+    dialog.locator('section', { hasText: 'Основные действия' }).getByText('4/4'),
+  ).toBeVisible();
   await expect(dialog.getByText('7/7')).toBeVisible();
   await expect(dialog.getByText(/^\d+\/\d+$/)).toHaveCount(4);
   await expect(dialog.getByRole('button', { name: 'Сбросить фильтры' })).toBeVisible();
@@ -118,7 +122,11 @@ test('шит открывается свёрнутым с «всеми выбр�
   }
   await dialog.getByRole('checkbox', { name: 'Выбрать все: Основные действия' }).click();
   await expect(dialog.getByRole('checkbox', { name: 'Выбрать все: Основные действия' })).toHaveAttribute('data-state', 'checked');
-  await expect(dialog.getByText('4/4')).toBeVisible();
+  // Счётчик — внутри секции группы: текст «4/4» больше не уникален
+  // на шите (группа «Участники» сида с Анной тоже даёт 4/4).
+  await expect(
+    dialog.locator('section', { hasText: 'Основные действия' }).getByText('4/4'),
+  ).toBeVisible();
   await expect(dialog.getByRole('checkbox', { name: 'Добавление' })).toHaveAttribute('data-state', 'checked');
 
   // Крестик закрывает без коммита: лента и адрес не тронуты.
@@ -171,7 +179,9 @@ test('снятие опции «Добавление» и «Применить»
   // 2050-158281), не только чекбокс.
   await sheet(page).getByText('Добавление', { exact: true }).click();
   await expect(sheet(page).getByRole('checkbox', { name: 'Добавление' })).toHaveAttribute('data-state', 'checked');
-  await expect(sheet(page).getByText('4/4')).toBeVisible();
+  await expect(
+    sheet(page).locator('section', { hasText: 'Основные действия' }).getByText('4/4'),
+  ).toBeVisible();
   await sheet(page).getByText('Добавление', { exact: true }).click();
   await expect(sheet(page).getByRole('checkbox', { name: 'Добавление' })).toHaveAttribute('data-state', 'unchecked');
   await expect(sheet(page).getByText('3/4')).toBeVisible();
