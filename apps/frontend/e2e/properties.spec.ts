@@ -63,6 +63,33 @@ test('hero-иконка объекта: круг 96, глиф 52 — Figma Categ
   await expect(avatar.locator('svg')).toHaveCSS('height', '52px');
 });
 
+test('секции детали: тап по контенту карточки ведёт в раздел (карта #984)', async ({ page, seededUser }) => {
+  // Раньше ссылка секции жила только в строке заголовка — контент карточки
+  // был мёртвым (карта #984). На сид-квартире с данными: тап по площади
+  // «Регулярных платежей» ниже заголовка ведёт в платежи объекта; тап по
+  // заголовку «Задачи» — прежний путь в раздел.
+  await openCabinetWithSeededSession(page, seededUser);
+  await page.goto(`/properties/${SEEDED_APARTMENT_PROPERTY_ID}`);
+
+  // Стриминговый буфер Suspense держит скрытый клон контента (канон
+  // deep-link из hero-спеки выше) — строгие локаторы берут видимые секции.
+  const paymentsSection = page
+    .locator('section', { hasText: 'Регулярные платежи' })
+    .filter({ visible: true });
+  await expect(paymentsSection).toBeVisible();
+  const paymentsBox = await paymentsSection.boundingBox();
+  await paymentsSection.click({ position: { x: 24, y: (paymentsBox?.height ?? 200) - 16 } });
+  await expect(page).toHaveURL(new RegExp(`/properties/${SEEDED_APARTMENT_PROPERTY_ID}/payments$`));
+
+  await page.goto(`/properties/${SEEDED_APARTMENT_PROPERTY_ID}`);
+  const tasksSection = page
+    .locator('section', { hasText: 'Задачи' })
+    .filter({ visible: true });
+  await expect(tasksSection).toBeVisible();
+  await tasksSection.getByText('Задачи', { exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/properties/${SEEDED_APARTMENT_PROPERTY_ID}/tasks$`));
+});
+
 test('без подписки (404 /subscription): кнопки создания живые, ведут на смену тарифа #768', async ({ page, seededUser }) => {
   // Состояние сид-Марии из обхода #760 воспроизводим перехватом: до фикса
   // 404 держал react-query в вечном pending, и кнопки создания хаба были

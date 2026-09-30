@@ -1,0 +1,13 @@
+/* Кликабельность всей площади секции-карточки детали объекта (карта #984,
+ * канон оверлея — PropertyCard): оверлей-ссылка лежит под контентом, а
+ * контент пропускает клики сквозь себя (pointer-events: none), возвращая
+ * их интерактивным элементам — тап мимо контрола ведёт по назначению
+ * секции, тап по контролу остаётся у контрола. */
+.content {
+  position: relative;
+  pointer-events: none;
+}
+
+.content :is(a, button, [role='button'], [role='checkbox'], input, select, label, summary) {
+  pointer-events: auto;
+}

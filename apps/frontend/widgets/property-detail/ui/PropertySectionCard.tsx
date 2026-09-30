@@ -4,11 +4,14 @@ import Image from 'next/image';
 import { SmallArrowRight } from '@/shared/assets/icons';
 import { Button } from '@/shared/ui/design';
 import type { PropertySectionEmptyCopy } from '../lib/property-sections';
+import styles from './PropertySectionCard.module.css';
 
 export type PropertySectionCardProps = {
   readonly title: string;
-  /** Ссылка шапки секции (шеврон у правого края). Без href — как у
-   * «Управления» и «Данных» — заголовок статичен. */
+  /** Ссылка секции: вся площадь карточки кликабельна (оверлей, канон
+   * PropertyCard). Без href — как у «Управления» и «Данных» — секция
+   * статична. Ховер живёт только на строке заголовка (решение владельца
+   * 30.09, карта #984): всему блоку — курсор, без реакции на наведение. */
   readonly href?: string;
   readonly children: ReactNode;
   /** Отступ секции сверху: первая под медиа-блоком — mt-20 (Figma 98469:
@@ -21,7 +24,15 @@ export type PropertySectionCardProps = {
  * строкой заголовка — название 20/24 SemiBold (Mobile/Heading/H3/600) и
  * шеврон 24 у правого края (gap 12), строка pt-24 px-24 — и содержимым
  * ниже. Нижний паддинг несёт содержимое (у пустого — py-24, у
- * «Управления» — 12, у карточек «Об объекте» — 24/32 по макету). */
+ * «Управления» — 12, у карточек «Об объекте» — 24/32 по макету).
+ *
+ * Кликабельность (карта #984): у секции с href вся площадь — ссылка
+ * (оверлей-канон PropertyCard, курсор без ховера на блоке), при этом
+ * свои действия сохраняют заголовок (с его ховером затемнения) и
+ * интерактивные контролы внутри контента (кнопки блоков, строки задач и
+ * контактов, CTA пустых состояний) — CSS-спасение в модуле. Оверлей
+ * скрыт от клавиатуры и скринридера (tabIndex -1 + aria-hidden):
+ * ссылка секции для них одна — заголовок. */
 export function PropertySectionCard({
   title,
   href,
@@ -41,18 +52,30 @@ export function PropertySectionCard({
     </div>
   );
   return (
-    <section className={`rounded-card bg-surface-muted ${className}`}>
-      {href !== undefined ? (
+    <section className={`relative rounded-card bg-surface-muted ${className}`}>
+      {href !== undefined && (
         <Link
           href={href}
-          className="flex outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-primary"
+          aria-hidden
+          tabIndex={-1}
+          className="absolute inset-0 rounded-[inherit] outline-none"
+        />
+      )}
+      {href !== undefined ? (
+        // relative: над оверлеем (тот же слой по DOM-порядку) — иначе
+        // оверлей забирает и ховер, и клик заголовка.
+        <Link
+          href={href}
+          className="relative flex outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-primary"
         >
           {header}
         </Link>
       ) : (
         header
       )}
-      {children}
+      {/* Passthrough контента нужен только под оверлеем: без href глушить
+       * клики нечем и незачем — текст секции остаётся выделяемым. */}
+      <div className={href !== undefined ? styles.content : undefined}>{children}</div>
     </section>
   );
 }
