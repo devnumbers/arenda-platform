@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { paidSectionGateRedirect } from './paid-sections';
 
 const EXPECTED_PARTICIPANTS_GATE_REDIRECT = '/profile/tariff/change?gate=participants';
+const EXPECTED_HISTORY_GATE_REDIRECT = '/profile/tariff/change?gate=history';
 
 describe('paidSectionGateRedirect', () => {
     it('gates the property participants list on the basic tariff', () => {
@@ -35,6 +36,25 @@ describe('paidSectionGateRedirect', () => {
         ).toBe(EXPECTED_PARTICIPANTS_GATE_REDIRECT);
     });
 
+    it('gates the history journal on the basic tariff', () => {
+        expect(paidSectionGateRedirect('/history', 'basic')).toBe(EXPECTED_HISTORY_GATE_REDIRECT);
+    });
+
+    it('gates deep routes of the history section, both nested entities', () => {
+        expect(
+            paidSectionGateRedirect('/history/participants/0197aaaa-bbbb-7ccc-8ddd-eeeeffff0001', 'basic'),
+        ).toBe(EXPECTED_HISTORY_GATE_REDIRECT);
+        expect(
+            paidSectionGateRedirect('/history/properties/0197aaaa-bbbb-7ccc-8ddd-eeeeffff0001', 'basic'),
+        ).toBe(EXPECTED_HISTORY_GATE_REDIRECT);
+        expect(
+            paidSectionGateRedirect(
+                '/history/participants/0197aaaa-bbbb-7ccc-8ddd-eeeeffff0001/properties/0197aaaa-bbbb-7ccc-8ddd-eeeeffff0002',
+                'basic',
+            ),
+        ).toBe(EXPECTED_HISTORY_GATE_REDIRECT);
+    });
+
     it('passes a paid tariff through', () => {
         expect(
             paidSectionGateRedirect('/properties/0197aaaa-bbbb-7ccc-8ddd-eeeeffff0001/participants', 'pro'),
@@ -42,12 +62,17 @@ describe('paidSectionGateRedirect', () => {
         expect(
             paidSectionGateRedirect('/properties/0197aaaa-bbbb-7ccc-8ddd-eeeeffff0001/participants/invite', 'business'),
         ).toBeNull();
+        expect(paidSectionGateRedirect('/history', 'pro')).toBeNull();
+        expect(
+            paidSectionGateRedirect('/history/properties/0197aaaa-bbbb-7ccc-8ddd-eeeeffff0001', 'business'),
+        ).toBeNull();
     });
 
     it('gates a missing subscription like the basic tariff', () => {
         expect(
             paidSectionGateRedirect('/properties/0197aaaa-bbbb-7ccc-8ddd-eeeeffff0001/participants', null),
         ).toBe('/profile/tariff/change?gate=property-participants');
+        expect(paidSectionGateRedirect('/history', null)).toBe(EXPECTED_HISTORY_GATE_REDIRECT);
     });
 
     it('is a no-op outside the gated routes regardless of the tariff', () => {

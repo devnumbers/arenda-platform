@@ -316,6 +316,12 @@ func New(deps Deps) http.Handler {
 	r.With(paidSections).Get("/participants/{participantId}", wrapper.GetParticipant)
 	r.With(paidSections).Post("/participants/{participantId}/properties", wrapper.AddParticipantProperties)
 
+	// Screen 3 (#1000): the «История действий» journal — both read endpoints
+	// of the section; every nested page and the filter sheet serve from
+	// these two.
+	r.With(paidSections).Get("/history", wrapper.GetHistory)
+	r.With(paidSections).Get("/history/filters", wrapper.GetHistoryFilters)
+
 	// T-Kassa redirects the user here after the add-card bank form. Redirect them
 	// back to the frontend payment-methods page with a query flag so the UI can
 	// refresh the list and show the appropriate toast.

@@ -24,6 +24,13 @@ const PAID_SECTION_ROUTES: ReadonlyArray<{
         pattern: /^\/participants(?:\/|$)/,
         gate: 'participants',
     },
+    {
+        // Экран 3 карты #997: «История действий» — лента и вложенные страницы
+        // участника и объекта; фильтры — шит на хабе, их опции обслуживает
+        // гейтуемый бекенд-эндпойнт GET /history/filters.
+        pattern: /^\/history(?:\/|$)/,
+        gate: 'history',
+    },
 ];
 
 /** Путь редиректа на выбор тарифа с query-контекстом гейта или null, когда

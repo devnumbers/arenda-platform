@@ -11,20 +11,22 @@ import (
 
 	"github.com/google/uuid"
 	accessapp "github.com/nambers/arenda-planform/apps/backend/internal/access/application"
+	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
+	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/actor"
 )
 
 // The composition security test of the paid-sections tariff gate on the
-// global «Участники» section (карта #997, экран 2 #999): every /participants*
-// route is re-registered over the generated OpenAPI router with
-// PaidSectionsMiddleware (chi matches the last registration — the AdminOnly
-// precedent). No handler re-checks the tariff, so a routing refactor that
-// silently drops a re-registration would expose the section to the basic
-// tariff. These tests drive the production router built by httpserver.New —
-// the full middleware chain (session → tariff gate → handler) — and pin both
-// directions: a basic session is refused with 402 tariff_required on every
-// route of the group, and a paid session reaches the handlers.
+// gated sections (карта #997): the group's routes are re-registered over the
+// generated OpenAPI router with PaidSectionsMiddleware (chi matches the last
+// registration — the AdminOnly precedent). No handler re-checks the tariff,
+// so a routing refactor that silently drops a re-registration would expose
+// the section to the basic tariff. These tests drive the production router
+// built by httpserver.New — the full middleware chain (session → tariff gate
+// → handler) — and pin both directions: a basic session is refused with 402
+// tariff_required on every route of the groups, and a paid session reaches
+// the handlers.
 
 // Session cookie values the stub loader resolves; fixed values keep the
 // routing under test deterministic.
@@ -83,6 +85,22 @@ func (emptyParticipants) Summary(context.Context, uuid.UUID) (accessapp.Particip
 	return accessapp.ParticipantsSummary{}, nil
 }
 
+// emptyHistory is the historyapp.EntryReader double: the allow-direction
+// history handlers answer from it with empty pages.
+type emptyHistory struct{}
+
+func (emptyHistory) List(context.Context, uuid.UUID, historyapp.JournalQuery) ([]historydomain.FeedEntry, error) {
+	return nil, nil
+}
+
+func (emptyHistory) FilterParticipants(context.Context, uuid.UUID, []uuid.UUID) ([]historydomain.FilterParticipant, error) {
+	return nil, nil
+}
+
+func (emptyHistory) FilterObjects(context.Context, uuid.UUID, []uuid.UUID) ([]historydomain.FilterObject, error) {
+	return nil, nil
+}
+
 // allowingSubscription is the SubscriptionMutationChecker stand-in: the
 // readonly gate sits in the global chain before routing and would nil-panic
 // on mutations without it — irrelevant to the tariff gate under test.
@@ -99,7 +117,11 @@ func newPaidSectionsRouter(t *testing.T, allows bool) http.Handler {
 			paidSectionsBasicSessionCookie: {userID: uuid.Must(uuid.NewV7()), role: actor.RoleOwner},
 			paidSectionsPaidSessionCookie:  {userID: uuid.Must(uuid.NewV7()), role: actor.RoleOwner},
 		}},
-		Participants:     emptyParticipants{},
+		Participants: emptyParticipants{},
+		// The nil policy is never dereferenced: the journal handlers run with
+		// the empty property scope, and the visibility gate walks it — no
+		// id, no RoleForProperty call.
+		HistoryRead:      historyapp.NewHistoryReadService(emptyHistory{}, nil),
 		ReadonlyGate:     allowingSubscription{},
 		PaidSectionsGate: fixedPaidSectionsGate{allows: allows},
 		Logger:           slog.New(slog.DiscardHandler),
@@ -115,13 +137,15 @@ func doPaidSectionsRequest(t *testing.T, router http.Handler, cookie, method, pa
 	return w
 }
 
-// TestPaidSectionsComposition_BasicRefusedOnEveryParticipantsRoute drives
-// every global participants route of the production router with a basic
-// tariff session and demands exactly 402 tariff_required — exceptions are not
-// intended here (ADR 0064): every consumer of the group lives inside the
-// gated section, «Покинуть объект» goes through /properties/{id}/access/
-// members/self excluded on screen 1.
-func TestPaidSectionsComposition_BasicRefusedOnEveryParticipantsRoute(t *testing.T) {
+// TestPaidSectionsComposition_BasicRefusedOnEveryGatedRoute drives every
+// route of the composition-covered groups — the global participants section
+// and the history journal — of the production router with a basic tariff
+// session and demands exactly 402 tariff_required. Exceptions are not
+// intended in the groups (ADR 0064): every consumer of the participants
+// group lives inside the gated section («Покинуть объект» goes through
+// /properties/{id}/access/members/self excluded on screen 1), the journal
+// serves entirely from its two read endpoints.
+func TestPaidSectionsComposition_BasicRefusedOnEveryGatedRoute(t *testing.T) {
 	t.Parallel()
 	router := newPaidSectionsRouter(t, false)
 
@@ -137,6 +161,8 @@ func TestPaidSectionsComposition_BasicRefusedOnEveryParticipantsRoute(t *testing
 		{"participant page", http.MethodGet, "/participants/" + participantID},
 		{"revoke participant", http.MethodDelete, "/participants/" + participantID},
 		{"grant more properties", http.MethodPost, "/participants/" + participantID + "/properties"},
+		{"journal feed", http.MethodGet, "/history"},
+		{"filter options", http.MethodGet, "/history/filters"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -179,5 +205,31 @@ func TestPaidSectionsComposition_PaidTariffReachesHandlers(t *testing.T) {
 	}
 	if len(response.Items) != 0 {
 		t.Errorf("items = %d, want an empty list from the stub service", len(response.Items))
+	}
+}
+
+// TestPaidSectionsComposition_PaidTariffReachesHistoryHandlers proves the
+// same for the «История действий» journal: both read endpoints of the
+// section pass the tariff middleware and answer 200 from the service.
+func TestPaidSectionsComposition_PaidTariffReachesHistoryHandlers(t *testing.T) {
+	t.Parallel()
+	router := newPaidSectionsRouter(t, true)
+
+	cases := []struct {
+		name string
+		path string
+	}{
+		{"journal feed", "/history"},
+		{"filter options", "/history/filters"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			rec := doPaidSectionsRequest(t, router, paidSectionsPaidSessionCookie, http.MethodGet, tc.path)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200 for a paid tariff on GET %s", rec.Code, tc.path)
+			}
+		})
 	}
 }
