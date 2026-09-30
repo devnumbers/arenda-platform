@@ -1,6 +1,6 @@
 export * from './api';
 
-export { usePropertiesWithMeta, usePropertiesLandingHref } from './api/hooks';
+export { usePropertiesWithMeta, usePropertiesNavItem } from './api/hooks';
 export type { PropertiesListResult, SuspendedSharedProperty } from './api/hooks';
 export { propertyTypeLabels, propertyTypeOptions } from './lib/property-types';
 export {
@@ -11,7 +11,6 @@ export {
   type PropertyBadgeKey,
   type PropertyBadgeTone,
 } from './lib/property-badges';
-export { resolvePropertiesLandingHref } from './lib/property-landing';
 export {
   initialPropertyCreateStep,
   isApartmentCategory,

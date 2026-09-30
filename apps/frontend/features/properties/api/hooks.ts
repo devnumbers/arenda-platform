@@ -17,7 +17,7 @@ import { mapPropertyPhoto, mapPropertyResponse } from '@/entities/property';
 import type { Property, PropertyPhoto } from '@/entities/property';
 import { propertyKeys } from '@/shared/api/query-keys';
 import { keysetNextPageParam, type KeysetPage } from '@/shared/lib/keyset';
-import { resolvePropertiesLandingHref } from '../lib/property-landing';
+import { resolvePropertiesNavItem, type PropertiesNavItem } from '../lib/properties-nav-item';
 import type { components } from '@/shared/api/dto';
 
 type PropertyResponse = components['schemas']['PropertyResponse'];
@@ -73,7 +73,7 @@ export function usePropertiesWithMeta(
 }
 
 export function useArchivedProperties(
-  options: { enabled?: boolean } = {},
+  options: { enabled?: boolean; staleTime?: number } = {},
 ): UseQueryResult<Property[], ApiError> {
   return useQuery({
     queryKey: [...propertyKeys.list, 'archived'],
@@ -82,6 +82,7 @@ export function useArchivedProperties(
       return response.items.map(mapPropertyResponse);
     },
     enabled: options.enabled,
+    staleTime: options.staleTime,
   });
 }
 
@@ -328,13 +329,22 @@ export function useDeleteProperty(): UseMutationResult<void, ApiError, { id: str
 }
 
 /**
- * Адрес, куда ведёт таб «Объекты» (лендинг таба, карта #583): основной
- * объект → его страница; основного нет, но активный один → его страница;
- * иначе список. Пока список не загружен — список (безопасный фолбэк).
- * Хромовые поверхности (ScreenLayout → TabBar/DesktopSidebar) держат
- * кэш тёплым с коротким staleTime, чтобы ссылка жила без шторма запросов.
+ * Пункт «Объекты» единого хрома — подпись и адрес (карта #984): у базового
+ * тарифа с ровно одним живым своим объектом и пустым архивом это «Объект»
+ * со ссылкой на его страницу, иначе всегда «Объекты» на список. Тариф
+ * приходит снаружи (ScreenLayout читает useMe — фича не может тянуть auth).
+ * Архив дозапрашивается только базовому (правило считает и его), платным
+ * тарифам он не нужен. Хромовые поверхности (ScreenLayout → TabBar/
+ * DesktopSidebar) держат кэш тёплым с коротким staleTime, чтобы пункт
+ * жил без шторма запросов; пока данные не загружены — «Объекты» на список.
  */
-export function usePropertiesLandingHref(): string {
+export function usePropertiesNavItem(
+  tariffName: string | null | undefined,
+): PropertiesNavItem {
   const { data } = useProperties({ staleTime: 60_000 });
-  return resolvePropertiesLandingHref(data);
+  const { data: archived } = useArchivedProperties({
+    enabled: tariffName === 'basic',
+    staleTime: 60_000,
+  });
+  return resolvePropertiesNavItem(tariffName, data, archived);
 }

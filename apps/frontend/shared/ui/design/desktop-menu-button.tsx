@@ -8,9 +8,13 @@ import { useNavIntentLink } from './nav-intent';
 
 export type DesktopMenuButtonProps = {
   readonly section: NavSection;
-  /** Переопределение адреса (лендинг «Объектов», карта #583);
+  /** Переопределение адреса (пункт «Объекты», карта #984);
    * undefined — href нав-модели. */
   readonly href?: string;
+  /** Переопределение подписи (пункт «Объекты»: «Объект» у базового
+   * тарифа с единственным объектом, карта #984); undefined — подпись
+   * нав-модели. */
+  readonly label?: string;
   /** Пункт-действие вместо ссылки: рендерится <button> с той же анатомией
    * («Поддержка» пилюли открывает модалку, #766). У такого section нет
    * href, поэтому действие задаётся явно. */
@@ -38,6 +42,7 @@ export type DesktopMenuButtonProps = {
 export function DesktopMenuButton({
   section,
   href,
+  label,
   onClick,
   active = false,
   className,
@@ -58,7 +63,7 @@ export function DesktopMenuButton({
     >
       <span className="flex min-w-0 items-center gap-3">
         <section.Icon className="h-6 w-6 shrink-0" aria-hidden />
-        <span className="truncate text-sm font-medium leading-4">{section.label}</span>
+        <span className="truncate text-sm font-medium leading-4">{label ?? section.label}</span>
       </span>
       {badge !== undefined && badge > 0 && (
         // Число непрочитанных: без потолка — счётчик бэка всегда конечен;
