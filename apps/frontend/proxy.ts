@@ -2,7 +2,9 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { buildCspReportOnlyPolicy, generateCspNonce } from '@/shared/lib/csp';
 import { safeInternalPath } from '@/shared/lib/safe-internal-path';
+import { paidSectionGateRedirect } from '@/shared/lib/paid-sections';
 import { BACKEND_URL } from '@/shared/config/backend-url';
+import type { components } from '@/shared/api/dto';
 
 // CSP шаг 2 — разведка (тикет #406, решение #331): nonce + strict-dynamic
 // в Content-Security-Policy-Report-Only. Флаг ставит только stage-compose
@@ -17,9 +19,23 @@ function hasSessionCookie(request: NextRequest): boolean {
 }
 
 type MeResult =
-  | { kind: 'ok'; setCookies: string[] }
+  | { kind: 'ok'; setCookies: string[]; tariffName: components['schemas']['TariffName'] | null }
   | { kind: 'unauthorized'; setCookies: string[] }
   | { kind: 'error' };
+
+/** Имя тарифа подписки из тела /me (карта #997): раньше тело выбрасывалось,
+ * теперь из него читается subscription.tariff.name для гейта платных
+ * разделов. Разобрать не удалось — null (считается базовым тарифом). */
+async function readSubscriptionTariffName(
+  response: Response,
+): Promise<components['schemas']['TariffName'] | null> {
+  try {
+    const payload = (await response.json()) as components['schemas']['MeResponse'] | null;
+    return payload?.subscription?.tariff.name ?? null;
+  } catch {
+    return null;
+  }
+}
 
 async function fetchMe(request: NextRequest): Promise<MeResult> {
   const cookieHeader = request.headers.get('cookie') ?? '';
@@ -36,7 +52,8 @@ async function fetchMe(request: NextRequest): Promise<MeResult> {
 
     const setCookies = response.headers.getSetCookie();
     if (response.ok) {
-      return { kind: 'ok', setCookies };
+      const tariffName = await readSubscriptionTariffName(response);
+      return { kind: 'ok', setCookies, tariffName };
     }
     if (response.status === 401) {
       return { kind: 'unauthorized', setCookies };
@@ -120,6 +137,16 @@ export async function proxy(request: NextRequest) {
 
   const me = await fetchMe(request);
   if (me.kind === 'ok') {
+    // Гейт платных разделов (карта #997): редирект до отрисовки — кнопки не
+    // прячем, глубокие ссылки, уведомления и закладки покрыты одним местом;
+    // обход мимо UI ловит бекенд-гейт (402 tariff_required).
+    const paidGatePath = paidSectionGateRedirect(request.nextUrl.pathname, me.tariffName);
+    if (paidGatePath !== null) {
+      return appendSetCookies(
+        withReportOnlyCsp(NextResponse.redirect(new URL(paidGatePath, request.url))),
+        me.setCookies,
+      );
+    }
     return appendSetCookies(next(), me.setCookies);
   }
   if (me.kind === 'unauthorized') {

@@ -46,6 +46,9 @@ type Billing struct {
 	// MutationGate adapts the subscription service to the readonly-gate port
 	// declared by platform/httpsupport (ADR 0035 consumer-side interface).
 	MutationGate httpsupport.SubscriptionMutationChecker
+	// PaidSectionsGate adapts the subscription service to the paid-sections
+	// tariff gate port (карта #997, ADR 0064) — same consumer-side rule.
+	PaidSectionsGate httpsupport.PaidSectionsGate
 }
 
 // WireBilling constructs the billing repositories, the shared txStoreFactory
@@ -129,6 +132,7 @@ func WireBilling(ctx context.Context, p platformDeps, eventDispatcher platformev
 		PaymentProvider:   provider,
 		FakeConfirms:      fakeConfirms,
 		MutationGate:      billinghttp.NewMutationGate(services.Subscriptions, p.Clock),
+		PaidSectionsGate:  billinghttp.NewPaidSectionsGate(services.Subscriptions),
 	}, nil
 }
 
