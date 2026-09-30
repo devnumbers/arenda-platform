@@ -131,6 +131,17 @@ export function tariffChangeFooter(
   };
 }
 
+/** Плашка «Эта функция доступна на платных тарифах» (карта #997): видна,
+ * когда пользователь пришёл на выбор тарифа с редиректа платного гейта —
+ * query `gate` ставит proxy.ts. Значение само не показывается, важен факт
+ * контекста; пустое значение контекстом не считается. */
+export function paidGateNoticeVisible(
+    gate: string | string[] | undefined,
+): boolean {
+    const value = Array.isArray(gate) ? gate[0] : gate;
+    return typeof value === 'string' && value.length > 0;
+}
+
 /** Карточка возможностей тарифа (#623, макет 1919-74867): заголовок —
  * имя тарифа H1, ряды — статика макета; тексты совпадают с «О тарифе»
  * (#621) и уточняют базовый. */

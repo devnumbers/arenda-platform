@@ -107,6 +107,13 @@ func (t Tariff) Price(period SubscriptionPeriod) (int64, error) {
 	}
 }
 
+// IsPaid reports whether the tariff grants the platform's paid sections
+// (карта #997): every plan except the free basic one does. The polarity is
+// "not basic" so a future paid plan in the name enum is covered by default.
+func (t Tariff) IsPaid() bool {
+	return t.Name != TariffBasic
+}
+
 // ClassifyTariffChange compares current and next tariffs and returns the
 // direction of the change.
 //

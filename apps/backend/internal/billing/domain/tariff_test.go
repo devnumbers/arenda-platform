@@ -292,3 +292,29 @@ func TestNewTariff(t *testing.T) {
 		t.Errorf("NewTariff(unknown name) error = %v, want %v", err, ErrInvalidTariff)
 	}
 }
+
+// TestTariff_IsPaid proves the paid-sections gate's domain rule (карта #997):
+// every plan except the free basic one grants the paid platform sections. The
+// polarity is "not basic" so a future paid plan added to the name enum is
+// covered by default; the free basic is the only gate.
+func TestTariff_IsPaid(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		tariff Tariff
+		want   bool
+	}{
+		{"basic is free", Tariff{Name: TariffBasic}, false},
+		{"pro is paid", Tariff{Name: TariffPro}, true},
+		{"business is paid", Tariff{Name: TariffBusiness}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := tt.tariff.IsPaid(); got != tt.want {
+				t.Fatalf("IsPaid(%s) = %v, want %v", tt.tariff.Name, got, tt.want)
+			}
+		})
+	}
+}

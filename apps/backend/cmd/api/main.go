@@ -327,6 +327,7 @@ func run() error {
 		BillingFakeConfirms:      billingMod.FakeConfirms,
 		BillingTimeTravel:        billingTimeTravel,
 		ReadonlyGate:             billingMod.MutationGate,
+		PaidSectionsGate:         billingMod.PaidSectionsGate,
 		Admin:                    adminMod.Service,
 		Properties:               propertiesMod.PropertyService,
 		Contacts:                 contactsMod.ContactService,

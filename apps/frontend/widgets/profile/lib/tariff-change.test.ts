@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Subscription, Tariff } from '@/entities/billing';
 import {
   currentBadgeVisible,
+  paidGateNoticeVisible,
   tariffChangeDefaults,
   tariffChangeFooter,
   tariffPriceLine,
@@ -214,4 +215,19 @@ describe('tariffChangeFooter', () => {
       ),
     ).toStrictEqual({ kind: 'connected' });
   });
+});
+
+describe('paidGateNoticeVisible', () => {
+    it('is visible with the gate query from the paid-section redirect', () => {
+        expect(paidGateNoticeVisible('property-participants')).toBe(true);
+    });
+
+    it('is invisible without a non-empty gate value', () => {
+        expect(paidGateNoticeVisible(undefined)).toBe(false);
+        expect(paidGateNoticeVisible('')).toBe(false);
+    });
+
+    it('reads the first value when the query repeats', () => {
+        expect(paidGateNoticeVisible(['property-participants'])).toBe(true);
+    });
 });
