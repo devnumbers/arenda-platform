@@ -923,6 +923,19 @@ html {
     scrollbar-gutter: stable;
 }
 
+/* Лок скролла Radix-оверлеев (Dialog, DropdownMenu → react-remove-scroll-bar)
+   компенсирует «исчезающий» скроллбар margin'ом на body и не знает про
+   scrollbar-gutter: stable выше, — на классических скроллбарах (Windows
+   Chrome) это двойная компенсация и прыжок колонки при открытии (#925).
+   Гюттер уже зарезервирован, поэтому компенсация обнуляется; при равной
+   важности (!important с обеих сторон) побеждает более специфичный
+   селектор с html — независимо от порядка стилей.
+   data-scroll-locked — публичный атрибут лока react-remove-scroll-bar. */
+html body[data-scroll-locked] {
+    margin-right: 0 !important;
+    padding-right: 0 !important;
+}
+
 html,
 body {
     max-width: 100vw;
