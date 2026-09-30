@@ -301,7 +301,7 @@ export function RentalsCarousel() {
         onScroll={onScroll}
         onPointerDown={() => springRef.current?.stopGlide()}
         onWheel={() => springRef.current?.stopGlide()}
-        className="relative order-1 flex gap-3 overflow-x-auto overscroll-x-contain px-6 pb-2 [scrollbar-width:none] desk:gap-5 desk:px-[calc((100%_-_380px)/2)] [&::-webkit-scrollbar]:hidden"
+        className="relative order-1 flex gap-3 hide-scrollbar px-6 pb-2 desk:gap-5 desk:px-[calc((100%_-_380px)/2)]"
       >
         {CARDS.map((card, i) => (
           <article

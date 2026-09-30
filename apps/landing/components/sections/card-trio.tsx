@@ -5,7 +5,8 @@ import { Reveal } from "@/components/reveal";
 // 2814-937 «организуйте дела», 2859-4194, 2826-151417): десктоп — ряд
 // 3×320×550 (r40, p-40, контент прижат к низу); планшет (481–1199) — та же
 // карточка 320×500 (r32, p-32) в горизонтальной скролл-полосе во всю ширину
-// окна: нативный тач-моментум, скрытый скроллбар, overscroll-x-contain,
+// окна (класс полосы — tab:hide-scrollbar, @utility в app/globals.css):
+// нативный тач-моментум, скрытый скроллбар, overscroll-x-contain,
 // отступ 24px до первой и после последней — как у карусели аренды, но без
 // снапа, докатки и точек (решение владельца 28.09: свайп замирает там, где
 // его отпустили, — CSS-снап не добавляется, JS не нужен); мобайл — стопка
@@ -42,7 +43,7 @@ export function CardTrio({
           сжимается: у nowrap-ряда min-content равен полной ширине) и
           mx-auto ставит по центру — на стыке с десктопным рядом (1000 по
           центру) скачка геометрии нет. */}
-      <div className="mt-8 flex w-full flex-col gap-3 px-6 tab:mx-auto tab:w-fit tab:max-w-full tab:flex-row tab:overflow-x-auto tab:overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden desk:mt-14 desk:gap-5 desk:px-0">
+      <div className="mt-8 flex w-full flex-col gap-3 px-6 tab:mx-auto tab:w-fit tab:max-w-full tab:flex-row tab:hide-scrollbar desk:mt-14 desk:gap-5 desk:px-0">
         {cards.map((card, index) => (
           <Reveal
             key={card.title}

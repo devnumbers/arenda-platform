@@ -208,7 +208,7 @@ export function TestimonialsCarousel() {
         onScroll={onScroll}
         onPointerDown={() => springRef.current?.stopGlide()}
         onWheel={() => springRef.current?.stopGlide()}
-        className="relative flex gap-3 overflow-x-auto overscroll-x-contain px-6 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="relative flex gap-3 hide-scrollbar px-6 pb-2"
       >
         {REVIEWS.map((review, index) => (
           <figure
@@ -550,7 +550,7 @@ export function TestimonialsDesktop() {
           onScroll={onScroll}
           onPointerDown={() => springRef.current?.stopGlide()}
           onWheel={() => springRef.current?.stopGlide()}
-          className="desk:-mr-[calc((100vw_-_1000px)/2)] flex h-[450px] min-w-0 flex-1 items-center gap-5 overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="desk:-mr-[calc((100vw_-_1000px)/2)] flex h-[450px] min-w-0 flex-1 items-center gap-5 hide-scrollbar overflow-y-hidden"
         >
           {REVIEWS.map((item, index) => (
             <Image

@@ -143,12 +143,13 @@ export function TariffCards({
           нативный тач-моментум, скрытый скроллбар, overscroll-x-contain,
           отступ 24px до первой и после последней карточки, без снапа,
           докатки и точек — свайп замирает там, где его отпустили (решение
-          владельца 28.09). Ряд 3×320+gap = 984 не влезает в колонку секции
+          владельца 28.09). Классы полосы — tab:hide-scrollbar (@utility в
+          app/globals.css). Ряд 3×320+gap = 984 не влезает в колонку секции
           (viewport−48) на 481–1031 — фрейм 2859-4349 сам показывает обрез
           третьей карточки правым краем окна, то есть в макете это полоса;
           -mx-6 и w-[calc(100%+3rem)] выводят её из-под контейнера max-w,
           на десктопе (≥1200) геометрия ряда прежняя. */}
-      <div className="mt-8 flex justify-start tab:-mx-6 tab:w-[calc(100%_+_3rem)] tab:px-6 tab:overflow-x-auto tab:overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden desk:mx-0 desk:w-auto desk:mt-14 desk:px-0">
+      <div className="mt-8 flex justify-start tab:-mx-6 tab:w-[calc(100%_+_3rem)] tab:px-6 tab:hide-scrollbar desk:mx-0 desk:w-auto desk:mt-14 desk:px-0">
         <div className="grid w-full grid-cols-1 gap-3 tab:w-[984px] tab:shrink-0 tab:grid-cols-3 desk:w-full desk:grid-cols-3 desk:gap-5">
           {tariffs.map((tariff, index) => {
             const isCurrent = currentTariff === tariff.id;

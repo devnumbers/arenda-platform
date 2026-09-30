@@ -68,10 +68,11 @@ export function Audience() {
           («Организуйте дела»): нативный тач-моментум, скрытый скроллбар,
           overscroll-x-contain, отступ 24px до первой и после последней,
           без снапа, докатки и точек — свайп замирает там, где его
-          отпустили. Когда три карточки влезают (1032–1199), max-w-full
+          отпустили. Классы полосы — tab:hide-scrollbar (@utility в
+          app/globals.css). Когда три карточки влезают (1032–1199), max-w-full
           сжимает полосу до контента и mx-auto ставит по центру — на стыке
           с десктопным рядом скачка геометрии нет. */}
-      <div className="mt-8 flex w-full flex-col gap-3 px-6 tab:mx-auto tab:w-fit tab:max-w-full tab:flex-row tab:overflow-x-auto tab:overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden desk:mt-16 desk:gap-5 desk:px-0">
+      <div className="mt-8 flex w-full flex-col gap-3 px-6 tab:mx-auto tab:w-fit tab:max-w-full tab:flex-row tab:hide-scrollbar desk:mt-16 desk:gap-5 desk:px-0">
         {CARDS.map((card, index) => (
           <Reveal
             key={card.title}
