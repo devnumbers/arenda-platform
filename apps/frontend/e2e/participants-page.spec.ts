@@ -18,6 +18,9 @@ import {
 
 const MARIA_ID = '12111111-1111-4111-8111-111111111121';
 const SERGEY_ID = '13111111-1111-4111-8111-111111111131';
+// Свободный сид-юзер (без подписки, лимит исчерпан) для suspended/slot-
+// сценариев приглашений — у Марии и Сергея подписки pro для гейтов #997.
+const LIMITED_ID = '14111111-1111-4111-8111-111111111141';
 const APARTMENT_ID = '33333333-3333-4333-8333-333333333333';
 const GARAGE_ID = '44444444-4444-4444-8444-444444444444';
 
@@ -99,7 +102,9 @@ test('права участника: смена роли сегментом, п�
 
 test('пригласить в объект: мультичек гаража, шит роли, «Доступ выдан»; сид восстанавливается', async ({ page, seededUser }) => {
   await openCabinetWithSeededSession(page, seededUser);
-  await page.goto(`/participants/${MARIA_ID}`);
+  // Приглашаем Анну (без подписки — тарифный слот превышен, сценарий
+  // suspended-гранта); у Марии и Сергея подписки pro для гейтов #997.
+  await page.goto(`/participants/${LIMITED_ID}`);
 
   const header = screenHeader(page);
 
@@ -152,7 +157,7 @@ test('пригласить в объект: мультичек гаража, ш�
     await expect(page.getByRole('button', { name: /Квартира на Ленина/ }).getByText('Редактирование')).toBeVisible();
   } finally {
     await execE2eSql(
-      `DELETE FROM property_members WHERE property_id = '${GARAGE_ID}' AND user_id = '${MARIA_ID}'`,
+      `DELETE FROM property_members WHERE property_id = '${GARAGE_ID}' AND user_id = '${LIMITED_ID}'`,
     );
   }
   await page.reload();

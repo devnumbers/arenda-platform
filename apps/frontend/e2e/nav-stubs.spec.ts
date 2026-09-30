@@ -26,7 +26,7 @@ test('хаб «Совместный доступ»: карточки со счё
   // viewer, seed.sql); чужих объектов у него нет.
   const participantsCard = page.getByRole('link', { name: /Ваши участники/ });
   await expect(participantsCard).toBeVisible();
-  await expect(participantsCard.getByText('2 участника')).toBeVisible();
+  await expect(participantsCard.getByText('3 участника')).toBeVisible();
 
   const propertiesCard = page.getByRole('link', { name: /Объекты пользователей/ });
   await expect(propertiesCard).toBeVisible();

@@ -63,7 +63,8 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO users (id, phone, role, name, surname, email, phone_encrypted, timezone)
 VALUES
     ('12111111-1111-4111-8111-111111111121', :'member_phone_det', 'owner', 'Мария', 'Петрова', 'e2e-member@example.com', TRUE, 'UTC'),
-    ('13111111-1111-4111-8111-111111111131', :'viewer_phone_det', 'owner', 'Сергей', 'Сидоров', 'e2e-viewer@example.com', TRUE, 'UTC')
+    ('13111111-1111-4111-8111-111111111131', :'viewer_phone_det', 'owner', 'Сергей', 'Сидоров', 'e2e-viewer@example.com', TRUE, 'UTC'),
+    ('14111111-1111-4111-8111-111111111141', :'limited_phone_det', 'owner', 'Анна', 'Лимитова', 'e2e-limited@example.com', TRUE, 'UTC')
 ON CONFLICT (id) DO UPDATE
 SET phone = EXCLUDED.phone,
     phone_encrypted = TRUE,
@@ -115,6 +116,11 @@ VALUES
      '33333333-3333-4333-8333-333333333333',
      '13111111-1111-4111-8111-111111111131',
      'viewer',
+     '11111111-1111-4111-8111-111111111111'),
+    ('99999999-9999-4999-8999-999999999935',
+     '33333333-3333-4333-8333-333333333333',
+     '14111111-1111-4111-8111-111111111141',
+     'full_access',
      '11111111-1111-4111-8111-111111111111')
 ON CONFLICT (property_id, user_id) WHERE status = 'active' DO UPDATE
 SET role = EXCLUDED.role,
@@ -355,10 +361,13 @@ SET tariff_id = EXCLUDED.tariff_id,
     status = EXCLUDED.status,
     current_period = EXCLUDED.current_period;
 
--- Pro у сид-участников квартиры (гейты платных разделов #997/#999/#1000
--- проверяют подписку запрашивающего юзера: без своей подписки member и
+-- Pro у сид-участников квартиры: гейты платных разделов (#997/#999/#1000)
+-- проверяют подписку запрашивающего юзера — без своей подписки member и
 -- viewer ловят 402 tariff_required и редирект на «Выбрать тариф» на
--- /participants* и /history*, и ролевые спеки #467 падают).
+-- /participants* и /history*, и ролевые спеки #467 падают. Это осознанное
+-- отклонение от буквы решения grill #760 («подписок у Марии/Сергея нет»):
+-- его смысл — живые suspended/slot-сценарии приглашений — сохранён на
+-- третьем юзере ниже (Анна без подписки, лимит исчерпан).
 INSERT INTO user_subscriptions (id, user_id, tariff_id, source, status,
                                 current_period)
 VALUES ('99999999-9999-4999-8999-999999999902',

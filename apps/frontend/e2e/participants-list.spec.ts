@@ -12,9 +12,11 @@ import {
 // «Имя», кебаб-трио «Пригласить участника» / «История действий» /
 // «Отозвать доступ всем» (#843, макет 2008-47514). Сид: владелец
 // «Квартиры на Ленина»
-// с двумя участниками — Мария Петрова (full_access) и Сергей Сидоров
-// (viewer), оба active на одном объекте из трёх в скоупе владельца →
-// агрегат-статус partial, чип «Доступно 1 объект».
+// с тремя участниками — Анна Лимитова (full_access), Мария Петрова
+// (full_access) и Сергей Сидоров (viewer), все active на одном объекте
+// из трёх в скоупе владельца → агрегат-статус partial, чип «Доступно
+// 1 объект». Анна — свободный сид-юзер suspended/slot-сценариев
+// (у Марии и Сергея подписки pro для гейтов #997).
 
 test('список участников: ряды сида с чипами статусов, чип «Имя», CTA', async ({ page, seededUser }, testInfo) => {
   await openCabinetWithSeededSession(page, seededUser);
@@ -35,10 +37,10 @@ test('список участников: ряды сида с чипами ст�
   await expect(sergeyRow.getByText('e2e-viewer@example.com')).toBeVisible();
   await expect(sergeyRow.getByText('Доступно 1 объект')).toBeVisible();
 
-  // Сервер отдаёт name ASC — Мария первая.
+  // Сервер отдаёт name ASC — Анна первая.
   const names = page.getByRole('button', { name: /@example\.com/ });
-  await expect(names).toHaveCount(2);
-  await expect(names.first()).toContainText('Мария Петрова');
+  await expect(names).toHaveCount(3);
+  await expect(names.first()).toContainText('Анна Лимитова');
 
   // Чип сортировки и служебные иконки шапки.
   await expect(page.getByRole('button', { name: 'Имя' })).toBeVisible();
@@ -74,7 +76,7 @@ test('поиск: фильтрует по имени и почте, пустой
   await expect(page.getByRole('button', { name: /Мария Петрова/ })).toHaveCount(0);
 
   await searchField.fill('example.com');
-  await expect(page.getByRole('button', { name: /@example\.com/ })).toHaveCount(2);
+  await expect(page.getByRole('button', { name: /@example\.com/ })).toHaveCount(3);
 
   await searchField.fill('александр');
   await expect(page.getByText('Участник не найден')).toBeVisible();
@@ -95,7 +97,7 @@ test('сортировка «Имя»: «Убывание» переворачи
   await page.getByRole('menuitem', { name: 'Убывание' }).click();
 
   const rows = page.getByRole('button', { name: /@example\.com/ });
-  await expect(rows).toHaveCount(2);
+  await expect(rows).toHaveCount(3);
   await expect(rows.first()).toContainText('Сергей Сидоров');
 });
 
@@ -165,7 +167,8 @@ test('«Отозвать и удалить»: ряды исчезают, поп�
     await execE2eSql(
       "INSERT INTO property_members (id, property_id, user_id, role, granted_by) VALUES " +
         "('99999999-9999-4999-8999-999999999931', '33333333-3333-4333-8333-333333333333', '12111111-1111-4111-8111-111111111121', 'full_access', '11111111-1111-4111-8111-111111111111'), " +
-        "('99999999-9999-4999-8999-999999999932', '33333333-3333-4333-8333-333333333333', '13111111-1111-4111-8111-111111111131', 'viewer', '11111111-1111-4111-8111-111111111111') " +
+        "('99999999-9999-4999-8999-999999999932', '33333333-3333-4333-8333-333333333333', '13111111-1111-4111-8111-111111111131', 'viewer', '11111111-1111-4111-8111-111111111111'), " +
+        "('99999999-9999-4999-8999-999999999935', '33333333-3333-4333-8333-333333333333', '14111111-1111-4111-8111-111111111141', 'full_access', '11111111-1111-4111-8111-111111111111') " +
         'ON CONFLICT (id) DO NOTHING',
     );
   }

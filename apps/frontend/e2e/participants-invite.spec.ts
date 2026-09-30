@@ -17,10 +17,14 @@ import {
 // active на квартире. Разрушающие тесты восстанавливают сид через
 // execE2eSql (workers=1).
 
-const MARIA_ID = '12111111-1111-4111-8111-111111111121';
 const GARAGE_ID = '44444444-4444-4444-8444-444444444444';
 const STUDIO_ID = '46464646-4646-4646-8646-464646464646';
 const INVITEE_EMAIL = 'e2e-invite@example.com';
+// Свободный сид-юзер (без подписки, лимит исчерпан) для suspended/slot-
+// сценариев приглашений — у Марии и Сергея подписки pro для гейтов
+// платных разделов (#997).
+const LIMITED_EMAIL = 'e2e-limited@example.com';
+const LIMITED_ID = '14111111-1111-4111-8111-111111111141';
 
 test('экран по макету: заголовок, почта, сегмент роли, свёрнутые «Все 3 объекта», CTA погашен', async ({ page, seededUser }, testInfo) => {
   await openCabinetWithSeededSession(page, seededUser);
@@ -240,7 +244,7 @@ test('приглашение зарегистрированной почты н�
     .filter({ hasText: 'Пригласить участника' })
     .click();
 
-  await page.getByRole('textbox', { name: 'Электронная почта' }).fill('e2e-member@example.com');
+  await page.getByRole('textbox', { name: 'Электронная почта' }).fill(LIMITED_EMAIL);
 
   // Снимаем квартиру — приглашаем на гараж и студию (черновик пикера).
   await page.getByText('Все 3 объекта').click();
@@ -250,37 +254,37 @@ test('приглашение зарегистрированной почты н�
   await expect(page.getByText('Все 3 объекта')).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Гараж на Садовой/ })).toBeVisible();
 
-  const mariaRow = page.getByRole('button', { name: /Мария Петрова/ });
+  const limitedRow = page.getByRole('button', { name: /Анна Лимитова/ });
   try {
     await page.getByRole('button', { name: 'Пригласить' })
       .filter({ hasText: 'Пригласить' })
       .click();
 
-    // granted=2 (suspended — у Марии нет подписки, тарифный слот превышен;
+    // granted=2 (suspended — у Анны нет подписки, тарифный слот превышен;
     // грабля #698) — попап успеха, возврат на список.
     await expect(
       page.getByRole('dialog').locator('p', { hasText: 'Участник приглашен' }),
     ).toBeVisible();
     await page.keyboard.press('Escape');
 
-    // Чип агрегата Марии сменился: активна квартира + suspended гараж и
+    // Чип агрегата Анны сменился: активна квартира + suspended гараж и
     // студия — «Превышен лимит объектов» (макет 2036-84861).
-    await expect(mariaRow.getByText('Превышен лимит объектов')).toBeVisible();
+    await expect(limitedRow.getByText('Превышен лимит объектов')).toBeVisible();
 
     // Серверная правда: suspended-членство на гараже.
     expect(
       await execE2eSql(
         `SELECT count(*) FROM property_members ` +
-          `WHERE property_id = '${GARAGE_ID}' AND user_id = '${MARIA_ID}' AND role = 'viewer' AND status = 'suspended'`,
+          `WHERE property_id = '${GARAGE_ID}' AND user_id = '${LIMITED_ID}' AND role = 'viewer' AND status = 'suspended'`,
       ),
     ).toBe('1');
   } finally {
     await execE2eSql(
-      `DELETE FROM property_members WHERE user_id = '${MARIA_ID}' AND property_id IN ('${GARAGE_ID}', '${STUDIO_ID}')`,
+      `DELETE FROM property_members WHERE user_id = '${LIMITED_ID}' AND property_id IN ('${GARAGE_ID}', '${STUDIO_ID}')`,
     );
   }
   await page.reload();
-  await expect(mariaRow.getByText('Превышен лимит объектов')).toHaveCount(0);
+  await expect(limitedRow.getByText('Превышен лимит объектов')).toHaveCount(0);
 });
 
 test('своя почта — ошибка бэка «Нельзя добавить себя участником», экран остаётся на месте', async ({ page, seededUser }) => {
