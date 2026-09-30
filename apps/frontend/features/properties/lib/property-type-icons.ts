@@ -30,6 +30,7 @@ type IconComponent = FC<SVGProps<SVGSVGElement>>;
 export const propertyTypeIcons: Readonly<Record<PropertyType, IconComponent>> = {
   apartment: BoldHome,
   apartments: BoldHome,
+  studio: BoldSofa,
   house: BoldHome,
   room: BoldSofa,
   commercial: BoldBuild,

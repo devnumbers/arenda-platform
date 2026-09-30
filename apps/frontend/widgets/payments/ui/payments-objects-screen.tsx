@@ -204,7 +204,7 @@ function PaymentsObjectsEmpty({
     >
       <div className="flex flex-1 items-center justify-center">
         <EmptyState
-          imageSrc="/images/payments/object-empty.png"
+          imageSrc="/images/payments/object-empty.webp"
           title="Вы пока не добавляли платежи"
           description="Добавьте платежи, чтобы не терять их из виду"
           descriptionClassName="text-content"

@@ -24,6 +24,8 @@ export {
   WIZARD_TOTAL_STEPS,
 } from './lib/wizard-model';
 export type { RentalWizardStep } from './lib/wizard-model';
+export { rentalActionState } from './lib/rental-actions';
+export type { RentalActionState } from './lib/rental-actions';
 export {
   buildRentalUpdateCommand,
   rentalEditFormFromRental,

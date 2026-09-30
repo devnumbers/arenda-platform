@@ -2,6 +2,7 @@ import {
   captureScreen,
   expect,
   openCabinetWithSeededSession,
+  SEEDED_APARTMENT_PROPERTY_ID,
   SEEDED_PROPERTIES,
   test,
 } from './fixtures';
@@ -40,6 +41,53 @@ test('архив объектов: шапка подэкрана с «Назад
   await expect(page.getByText('Архивные объекты')).toBeVisible();
 
   await captureScreen(page, testInfo, 'properties-archive');
+});
+
+test('hero-иконка объекта: круг 96, глиф 52 — Figma Category Icon 2973:52664 (карта #984)', async ({ page, seededUser }) => {
+  // Габариты «лица объекта» в шапке детали (макет 1186:44996): круг 96×96,
+  // дом-плейсхолдер 52×52 (inset 22.73%). Регресс на схлопывание: аватар —
+  // inline-span, вне flex-родителя h-24 w-24 игнорировалось и круг жил
+  // размером глифа (40×40, дом без «воздуха»).
+  await openCabinetWithSeededSession(page, seededUser);
+  await page.goto(`/properties/${SEEDED_APARTMENT_PROPERTY_ID}`);
+
+  // Стриминговый буфер Suspense держит копию контента в hidden-диве конца
+  // body, пока $RC-скрипт не заберёт его (гонка холодного старта: счётчик
+  // 1→2→1 за ~400мс) — строгий локатор канона deep-link берёт видимый
+  // аватар приложения (карта #984).
+  const avatar = page.getByTestId('property-hero-avatar').filter({ visible: true });
+  await expect(avatar).toBeVisible();
+  await expect(avatar).toHaveCSS('width', '96px');
+  await expect(avatar).toHaveCSS('height', '96px');
+  await expect(avatar.locator('svg')).toHaveCSS('width', '52px');
+  await expect(avatar.locator('svg')).toHaveCSS('height', '52px');
+});
+
+test('секции детали: тап по контенту карточки ведёт в раздел (карта #984)', async ({ page, seededUser }) => {
+  // Раньше ссылка секции жила только в строке заголовка — контент карточки
+  // был мёртвым (карта #984). На сид-квартире с данными: тап по площади
+  // «Регулярных платежей» ниже заголовка ведёт в платежи объекта; тап по
+  // заголовку «Задачи» — прежний путь в раздел.
+  await openCabinetWithSeededSession(page, seededUser);
+  await page.goto(`/properties/${SEEDED_APARTMENT_PROPERTY_ID}`);
+
+  // Стриминговый буфер Suspense держит скрытый клон контента (канон
+  // deep-link из hero-спеки выше) — строгие локаторы берут видимые секции.
+  const paymentsSection = page
+    .locator('section', { hasText: 'Регулярные платежи' })
+    .filter({ visible: true });
+  await expect(paymentsSection).toBeVisible();
+  const paymentsBox = await paymentsSection.boundingBox();
+  await paymentsSection.click({ position: { x: 24, y: (paymentsBox?.height ?? 200) - 16 } });
+  await expect(page).toHaveURL(new RegExp(`/properties/${SEEDED_APARTMENT_PROPERTY_ID}/payments$`));
+
+  await page.goto(`/properties/${SEEDED_APARTMENT_PROPERTY_ID}`);
+  const tasksSection = page
+    .locator('section', { hasText: 'Задачи' })
+    .filter({ visible: true });
+  await expect(tasksSection).toBeVisible();
+  await tasksSection.getByText('Задачи', { exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/properties/${SEEDED_APARTMENT_PROPERTY_ID}/tasks$`));
 });
 
 test('без подписки (404 /subscription): кнопки создания живые, ведут на смену тарифа #768', async ({ page, seededUser }) => {

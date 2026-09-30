@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   initialPropertyCreateStep,
+  isApartmentCategory,
   propertyCategoryOptions,
   propertyCreateStepReady,
+  propertyHousingTypeOptions,
   validatePropertyCreateDraft,
   type PropertyCreateDraft,
 } from './property-create-draft';
@@ -35,11 +37,12 @@ describe('validatePropertyCreateDraft', () => {
     expect(validatePropertyCreateDraft({ type: 'castle', address: 'Ленина, 1' })).toStrictEqual({});
   });
 
-  it('все известные типы проходят, включая apartments', () => {
+  it('все известные типы проходят, включая apartments и studio', () => {
     for (const { value } of propertyCategoryOptions) {
       expect(validatePropertyCreateDraft({ type: value })).toStrictEqual({ type: value });
     }
     expect(validatePropertyCreateDraft({ type: 'apartments' })).toStrictEqual({ type: 'apartments' });
+    expect(validatePropertyCreateDraft({ type: 'studio' })).toStrictEqual({ type: 'studio' });
   });
 
   it('атрибуты проходят через coerce: скаляры остаются, остальное сбрасывается', () => {
@@ -70,11 +73,11 @@ describe('propertyCreateStepReady', () => {
     expect(propertyCreateStepReady(2, { type: 'apartment', address: 'Ленина, 1' })).toBe(true);
   });
 
-  it('шаг 3 готов, когда есть название', () => {
-    expect(propertyCreateStepReady(3, { type: 'apartment', address: 'Ленина, 1' })).toBe(false);
+  it('шаг 3 готов всегда — название необязательно (#1001), пустое регенерирует бэк', () => {
+    expect(propertyCreateStepReady(3, { type: 'apartment', address: 'Ленина, 1' })).toBe(true);
     expect(
       propertyCreateStepReady(3, { type: 'apartment', address: 'Ленина, 1', name: ' ' }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       propertyCreateStepReady(3, { type: 'apartment', address: 'Ленина, 1', name: 'Моя квартира' }),
     ).toBe(true);
@@ -93,9 +96,10 @@ describe('initialPropertyCreateStep', () => {
 });
 
 describe('propertyCategoryOptions', () => {
-  it('девять категорий шага 1 — без apartments', () => {
+  it('девять категорий шага 1 — без apartments и studio (они живут в «Тип жилья», #1003)', () => {
     expect(propertyCategoryOptions).toHaveLength(9);
     expect(propertyCategoryOptions.some((option) => option.value === 'apartments')).toBe(false);
+    expect(propertyCategoryOptions.some((option) => option.value === 'studio')).toBe(false);
   });
 
   it('порядок и подписи макета (Figma 1213-52111), лейблы домена', () => {
@@ -110,5 +114,25 @@ describe('propertyCategoryOptions', () => {
       'Машиноместо',
       'Земельный участок',
     ]);
+  });
+});
+
+describe('propertyHousingTypeOptions', () => {
+  it('три чипа «Тип жилья»: квартира → апартаменты → студия (#1003)', () => {
+    expect(propertyHousingTypeOptions.map((option) => option.value)).toStrictEqual([
+      'apartment',
+      'apartments',
+      'studio',
+    ]);
+    expect(propertyHousingTypeOptions.map((option) => option.label)).toStrictEqual([
+      'Квартира',
+      'Апартаменты',
+      'Студия',
+    ]);
+  });
+
+  it('студия внутри категории «Квартира»', () => {
+    expect(isApartmentCategory('studio')).toBe(true);
+    expect(isApartmentCategory('house')).toBe(false);
   });
 });

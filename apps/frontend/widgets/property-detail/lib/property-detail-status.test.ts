@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { makeRental } from '@/entities/rental';
+import type { RentalActionState } from '@/features/rentals';
 import {
   buildPropertyKebabItems,
   buildPropertyManageActions,
@@ -8,6 +10,18 @@ import {
   propertyStatusSubtitle,
   type PropertyDetailActionKey,
 } from './property-detail-status';
+
+/** Состояния машины для тестов: аренды из канона makeRental — самому
+ * билдеру важен только kind, Rental внутри не читается. */
+const NONE: RentalActionState = { kind: 'none' };
+const UPCOMING: RentalActionState = {
+  kind: 'upcoming',
+  rental: makeRental({ id: 'upcoming-1', status: 'upcoming' }),
+};
+const ACTIVE: RentalActionState = {
+  kind: 'active',
+  rental: makeRental({ id: 'active-1', status: 'active' }),
+};
 
 describe('propertyStatusSubtitle (подзаголовок шапки детали)', () => {
   it('активный — без подзаголовка', () => {
@@ -62,38 +76,49 @@ describe('buildPropertyKebabItems (кебаб-меню детали)', () => {
 
 describe('buildPropertyStatusSheetItems (шит смены статуса)', () => {
   it('владелец, без аренды: начать аренду, на ремонте, в архив', () => {
-    expect(buildPropertyStatusSheetItems('active', false, true)).toEqual([
+    expect(buildPropertyStatusSheetItems('active', NONE, true)).toEqual([
       { key: 'start-rental', label: 'Начать аренду', danger: false },
       { key: 'start-maintenance', label: 'Объект на ремонте', danger: false },
       { key: 'archive', label: 'Перевести в архив', danger: false },
     ]);
   });
 
-  it('владелец, с незавершённой арендой: завершить аренду вместо начала', () => {
+  it('владелец, «Ожидает начала»: удалить аренду вместо завершения (#986) — правки нет и здесь', () => {
+    expect(buildPropertyStatusSheetItems('active', UPCOMING, true)).toEqual([
+      { key: 'delete-rental', label: 'Удалить аренду', danger: true },
+      { key: 'start-maintenance', label: 'Объект на ремонте', danger: false },
+      { key: 'archive', label: 'Перевести в архив', danger: false },
+    ]);
+  });
+
+  it('владелец, идущая аренда: завершить аренду вместо начала', () => {
     expect(
-      buildPropertyStatusSheetItems('active', true, true).map((item) => item.key),
+      buildPropertyStatusSheetItems('active', ACTIVE, true).map((item) => item.key),
     ).toEqual(['complete-rental', 'start-maintenance', 'archive']);
   });
 
   it('владелец, на ремонте: завершить ремонт, в архив', () => {
     expect(
-      buildPropertyStatusSheetItems('maintenance', false, true).map((item) => item.key),
+      buildPropertyStatusSheetItems('maintenance', NONE, true).map((item) => item.key),
     ).toEqual(['finish-maintenance', 'archive']);
   });
 
   it('архивный — шит не открывается, набор не строится', () => {
-    expect(buildPropertyStatusSheetItems('archived', false, true)).toEqual([]);
+    expect(buildPropertyStatusSheetItems('archived', NONE, true)).toEqual([]);
   });
 
   it('участник (#757 приёмка: нет мёртвых кнопок): без «Перевести в архив»', () => {
     expect(
-      buildPropertyStatusSheetItems('active', false, false).map((item) => item.key),
+      buildPropertyStatusSheetItems('active', NONE, false).map((item) => item.key),
     ).toEqual(['start-rental', 'start-maintenance']);
     expect(
-      buildPropertyStatusSheetItems('active', true, false).map((item) => item.key),
+      buildPropertyStatusSheetItems('active', UPCOMING, false).map((item) => item.key),
+    ).toEqual(['delete-rental', 'start-maintenance']);
+    expect(
+      buildPropertyStatusSheetItems('active', ACTIVE, false).map((item) => item.key),
     ).toEqual(['complete-rental', 'start-maintenance']);
     expect(
-      buildPropertyStatusSheetItems('maintenance', false, false).map((item) => item.key),
+      buildPropertyStatusSheetItems('maintenance', NONE, false).map((item) => item.key),
     ).toEqual(['finish-maintenance']);
   });
 });
@@ -102,7 +127,7 @@ type ManageInput = Parameters<typeof buildPropertyManageActions>[0];
 
 const baseManage: ManageInput = {
   status: 'active',
-  hasRental: false,
+  rentalState: NONE,
   isPinned: false,
   canMutate: true,
   canPin: true,
@@ -123,12 +148,21 @@ describe('buildPropertyManageActions (секция «Управление»)', (
     ]);
   });
 
-  it('с арендой: «Завершить аренду» вместо «Начать аренду»', () => {
-    const keys = buildPropertyManageActions({ ...baseManage, hasRental: true }).map(
+  it('с идущей арендой: «Завершить аренду» вместо «Начать аренду»', () => {
+    const keys = buildPropertyManageActions({ ...baseManage, rentalState: ACTIVE }).map(
       (item) => item.key,
     );
     expect(keys).toContain('complete-rental');
     expect(keys).not.toContain('start-rental');
+  });
+
+  it('«Ожидает начала» (#986): «Удалить аренду» — danger-строка', () => {
+    const items = buildPropertyManageActions({ ...baseManage, rentalState: UPCOMING });
+    const keys = items.map((item) => item.key);
+    expect(keys).toContain('delete-rental');
+    expect(keys).not.toContain('start-rental');
+    expect(keys).not.toContain('complete-rental');
+    expect(items.find((item) => item.key === 'delete-rental')?.danger).toBe(true);
   });
 
   it('основной объект: «Убрать из основных» вместо «Сделать основным»', () => {
@@ -256,7 +290,8 @@ describe('подписи действий (канон домена)', () => {
   );
 
   it.each([
-    [{ ...baseManage, hasRental: true }, 'complete-rental', 'Завершить аренду'],
+    [{ ...baseManage, rentalState: ACTIVE }, 'complete-rental', 'Завершить аренду'],
+    [{ ...baseManage, rentalState: UPCOMING }, 'delete-rental', 'Удалить аренду'],
     [{ ...baseManage, isPinned: true }, 'unpin', 'Убрать из основных'],
     [{ ...baseManage, status: 'maintenance' }, 'finish-maintenance', 'Завершить ремонт'],
     [{ ...baseManage, status: 'archived' }, 'unarchive', 'Вернуть из архива'],
@@ -270,36 +305,44 @@ describe('подписи действий (канон домена)', () => {
 });
 
 describe('guardedStatusAction (гард смены статуса, #628)', () => {
-  it('с арендой возвращает блокируемое действие для narrowing', () => {
-    expect(guardedStatusAction('start-maintenance', true)).toBe('start-maintenance');
-    expect(guardedStatusAction('archive', true)).toBe('archive');
+  it('с идущей арендой возвращает блокируемое действие для narrowing', () => {
+    expect(guardedStatusAction('start-maintenance', ACTIVE)).toBe('start-maintenance');
+    expect(guardedStatusAction('archive', ACTIVE)).toBe('archive');
+  });
+
+  it('«Ожидает начала» гардит так же — составное действие удаляет аренду (#986, решение владельца 30.09)', () => {
+    expect(guardedStatusAction('start-maintenance', UPCOMING)).toBe('start-maintenance');
+    expect(guardedStatusAction('archive', UPCOMING)).toBe('archive');
   });
 
   it('с арендой остальные действия не гардит', () => {
-    expect(guardedStatusAction('finish-maintenance', true)).toBeNull();
-    expect(guardedStatusAction('complete-rental', true)).toBeNull();
-    expect(guardedStatusAction('edit', true)).toBeNull();
-    expect(guardedStatusAction('delete', true)).toBeNull();
-    expect(guardedStatusAction('unarchive', true)).toBeNull();
+    expect(guardedStatusAction('finish-maintenance', ACTIVE)).toBeNull();
+    expect(guardedStatusAction('complete-rental', ACTIVE)).toBeNull();
+    expect(guardedStatusAction('delete-rental', UPCOMING)).toBeNull();
+    expect(guardedStatusAction('edit', ACTIVE)).toBeNull();
+    expect(guardedStatusAction('delete', ACTIVE)).toBeNull();
+    expect(guardedStatusAction('unarchive', ACTIVE)).toBeNull();
   });
 
   it('без аренды не гардит ничего', () => {
-    expect(guardedStatusAction('start-maintenance', false)).toBeNull();
-    expect(guardedStatusAction('archive', false)).toBeNull();
+    expect(guardedStatusAction('start-maintenance', NONE)).toBeNull();
+    expect(guardedStatusAction('archive', NONE)).toBeNull();
   });
 });
 
 describe('deleteBlockedByRental (гард удаления, #632)', () => {
   it.each([
-    ['delete', true, true, 'у арендованного перехватывает тап удаления'],
-    ['archive', true, false, 'у арендованного остальные действия свободны'],
-    ['complete-rental', true, false, 'гард статуса не дублируется'],
-    ['edit', true, false, 'редактирование не гарлится'],
-    ['delete', false, false, 'у свободного объекта удаление проходит'],
-  ] as ReadonlyArray<readonly [PropertyDetailActionKey, boolean, boolean, string]>)(
-    '%s при hasRental=%s — %s',
-    (key, hasRental, blocked) => {
-      expect(deleteBlockedByRental(key, hasRental)).toBe(blocked);
+    ['delete', ACTIVE, true, 'у арендованного перехватывает тап удаления'],
+    ['delete', UPCOMING, true, 'у «Ожидает начала» тоже — объект занят будущей арендой'],
+    ['archive', ACTIVE, false, 'у арендованного остальные действия свободны'],
+    ['complete-rental', ACTIVE, false, 'гард статуса не дублируется'],
+    ['delete-rental', UPCOMING, false, 'само удаление аренды свободно'],
+    ['edit', ACTIVE, false, 'редактирование не гарлится'],
+    ['delete', NONE, false, 'у свободного объекта удаление проходит'],
+  ] as ReadonlyArray<readonly [PropertyDetailActionKey, RentalActionState, boolean, string]>)(
+    '%s при %s — %s',
+    (key, state, blocked) => {
+      expect(deleteBlockedByRental(key, state)).toBe(blocked);
     },
   );
 });

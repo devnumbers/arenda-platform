@@ -29,6 +29,8 @@ export function propertyActionIcon(key: PropertyDetailActionKey): JSX.Element | 
     case 'start-rental':
     case 'complete-rental':
       return <Key className={iconClass} />;
+    case 'delete-rental':
+      return <TrashBin className={iconClass} />;
     case 'start-maintenance':
     case 'finish-maintenance':
       return <PaintBrush className={iconClass} />;

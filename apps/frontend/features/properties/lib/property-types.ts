@@ -4,6 +4,7 @@ export const propertyTypeLabels: Record<PropertyType, string> = {
   apartment: 'Квартира',
   room: 'Комната',
   apartments: 'Апартаменты',
+  studio: 'Студия',
   house: 'Дом',
   commercial: 'Коммерческое помещение',
   office: 'Офис',

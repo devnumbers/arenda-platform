@@ -338,6 +338,20 @@ func (r *PropertyRepository) CountActiveByOwner(ctx context.Context, scope uuid.
 	return int(count), nil
 }
 
+// CountByOwnerAndType counts the owner's properties of the type in every
+// status (archived included, deleted gone) — the auto-name serial
+// (ticket #1001).
+func (r *PropertyRepository) CountByOwnerAndType(ctx context.Context, scope uuid.UUID, propertyType domain.PropertyType) (int, error) {
+	count, err := r.q().CountPropertiesByOwnerAndType(ctx, postgres.CountPropertiesByOwnerAndTypeParams{
+		OwnerID: pgconv.UUIDToPgtype(scope),
+		Type:    string(propertyType),
+	})
+	if err != nil {
+		return 0, err
+	}
+	return int(count), nil
+}
+
 func (r *PropertyRepository) Delete(ctx context.Context, id, scope uuid.UUID) error {
 	return r.q().DeleteProperty(ctx, postgres.DeletePropertyParams{
 		ID:      pgconv.UUIDToPgtype(id),

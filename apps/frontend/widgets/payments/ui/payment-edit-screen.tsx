@@ -30,6 +30,7 @@ import {
 import { paymentCategoryBySlug } from '@/features/payment-categories';
 import { propertyPermissions } from '@/entities/property';
 import { useProperty } from '@/features/properties';
+import { useRentals } from '@/features/rentals';
 import {
   buildPaymentUpdateCommand,
   branchKind,
@@ -65,7 +66,6 @@ import {
   TopNavTitle,
 } from '@/shared/ui/design';
 import {
-  PaymentsEmptyCard,
   PaymentsStateCard,
 } from './payments-sections';
 import { PaymentEditFormSkeleton } from './payments-skeletons';
@@ -108,8 +108,9 @@ import { CategorySearchHint } from './payment-create-wizard/wizard-chrome';
  * Доступ (ADR 0028): смотрящий экрана не видит вовсе; полный доступ правит
  * без удаления; «Удалить платеж» — только владелец. Архив финансово
  * read-only (#446). Платёж, управляемый арендой (#818), деградирует к
- * карточке «Правка недоступна» с арендной подсказкой — условия задаются
- * в аренде.
+ * карточке «Правка недоступна» с арендной подсказкой — и карточка не тупик:
+ * кнопка «Условия аренды» ведёт прямо в условия аренды (#988), у
+ * завершённой — в архивную карточку с подзаголовком «В архиве» (#535).
  */
 
 export function PaymentEditScreen({
@@ -134,6 +135,14 @@ export function PaymentEditScreen({
   const editable = canEdit && !managed;
   // Удаление — только владелец (история 49 спеки #453).
   const canDelete = property?.access?.role === 'owner';
+
+  // Переход вместо тупика (#988): карточка недоступности ведёт в условия
+  // аренды — найдём её по связи rentPayment.paymentId (ADR 0053 §4);
+  // завершённая живёт в архиве терминов с ?rental= (#535).
+  const rentalsQuery = useRentals(propertyId, { enabled: managed });
+  const managedRental = managed
+    ? rentalsQuery.data?.find((rental) => rental.rentPayment.paymentId === paymentId)
+    : undefined;
 
   const loading = propertyQuery.isPending || paymentQuery.isPending;
   const failed = propertyQuery.isError || paymentQuery.isError;
@@ -193,7 +202,7 @@ export function PaymentEditScreen({
 
           {!loading && !failed && !editable && (
             <div className="pt-6">
-              <PaymentsEmptyCard
+              <PaymentsStateCard
                 title="Правка недоступна"
                 hint={
                   managed
@@ -201,6 +210,28 @@ export function PaymentEditScreen({
                     : property?.status === 'archived'
                       ? 'Объект в архиве — платежи можно только смотреть'
                       : 'У вас доступ только для просмотра этого объекта'
+                }
+                // У управляемого платежа карточка не тупик: условия правятся
+                // на аренде (#988) — кнопка ведёт туда, пока аренда найдена.
+                // White на серой карточке (secondary был бы muted-on-muted,
+                // приёмка #988) — прецедент «Продлить» в PropertyRentalBlock.
+                action={
+                  managed && managedRental !== undefined ? (
+                    <Button
+                      variant="white"
+                      size="small"
+                      radius="m"
+                      onClick={() =>
+                        router.push(
+                          managedRental.status === 'completed'
+                            ? ROUTES.propertyRentalCompletedTerms(propertyId, managedRental.id)
+                            : ROUTES.propertyRentalTerms(propertyId),
+                        )
+                      }
+                    >
+                      Условия аренды
+                    </Button>
+                  ) : undefined
                 }
               />
             </div>

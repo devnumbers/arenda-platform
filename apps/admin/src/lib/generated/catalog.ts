@@ -40,6 +40,20 @@ const roomFields: AttrFieldList = [
   { key: "year_built", kind: 'integer', min: 1800, max: yearBuiltMax, group: "about_building" },
 ];
 
+const studioFields: AttrFieldList = [
+  { key: "area_total", kind: 'number', unit: "м²", min: 1, max: 100000, decimals: 1, group: "about_object" },
+  { key: "area_living", kind: 'number', unit: "м²", min: 1, max: 100000, decimals: 1, group: "about_object" },
+  { key: "area_kitchen", kind: 'number', unit: "м²", min: 1, max: 100000, decimals: 1, group: "about_object" },
+  { key: "floor", kind: 'integer', min: -3, max: 200, group: "about_object" },
+  { key: "floors_total", kind: 'integer', min: 1, max: 200, group: "about_object" },
+  { key: "bathroom", kind: 'enum', options: ["combined", "separate", "multiple"], group: "about_object" },
+  { key: "balcony", kind: 'enum', options: ["none", "balcony", "loggia", "balcony_and_loggia"], group: "about_object" },
+  { key: "renovation", kind: 'enum', options: ["cosmetic", "euro", "design", "required"], group: "about_object" },
+  { key: "year_built", kind: 'integer', min: 1800, max: yearBuiltMax, group: "about_building" },
+  { key: "ceiling_height", kind: 'number', unit: "м", min: 2, max: 10, decimals: 2, group: "about_building" },
+  { key: "parking_type", kind: 'enum', options: ["closed", "underground", "open"], group: "about_building" },
+];
+
 const houseFields: AttrFieldList = [
   { key: "land_area", kind: 'number', unit: "сотки", min: 0.01, max: 1000000, decimals: 2, group: "about_land" },
   { key: "land_type", kind: 'enum', options: ["izhs", "garden", "farm"], group: "about_land" },
@@ -90,6 +104,7 @@ export const catalog: Readonly<Record<PropertyType, AttrFieldList>> = {
   "apartment": apartmentFields,
   "room": roomFields,
   "apartments": apartmentFields,
+  "studio": studioFields,
   "house": houseFields,
   "office": officeFields,
   "commercial": officeFields,

@@ -177,8 +177,15 @@ func (h *PropertyHandlers) CreateProperty(w http.ResponseWriter, r *http.Request
 		attrs = map[string]any(*body.Attributes)
 	}
 
+	// The name is optional (#1001): omitted or empty — the service
+	// generates it from the type.
+	name := ""
+	if body.Name != nil {
+		name = *body.Name
+	}
+
 	cmd := propertiesapp.CreatePropertyCommand{
-		Name:        body.Name,
+		Name:        name,
 		Type:        string(body.Type),
 		Address:     body.Address,
 		Description: description,

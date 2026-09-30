@@ -291,7 +291,7 @@ export function TasksFeedScreen({
             />
           ) : showEmpty ? (
             <EmptyState
-              imageSrc="/images/tasks/empty-tasks.png"
+              imageSrc="/images/tasks/empty-tasks.webp"
               imageRounded
               title="Задач нет"
               description="Добавьте задачу — например, позвонить арендатору, вызвать мастера или проверить состояние объекта"

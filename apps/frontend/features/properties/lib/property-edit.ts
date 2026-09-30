@@ -37,8 +37,10 @@ export function initialPropertyEditDraft(property: Property): PropertyEditDraft 
   };
 }
 
-/** Команда правки объекта; undefined — обязательные поля пусты или
- * характеристики не проходят каталог. */
+/** Команда правки объекта; undefined — обязательные поля (тип, адрес)
+ * пусты или характеристики не проходят каталог. Название необязательно
+ * (#1001): очищенное уходит пустой строкой — сервер регенерирует имя из
+ * типа. */
 export function buildPropertyEditCommand(
   draft: PropertyEditDraft,
   attributeCatalog: PropertyAttributesPort,
@@ -46,7 +48,7 @@ export function buildPropertyEditCommand(
   const { type } = draft;
   const name = draft.name.trim();
   const address = draft.address.trim();
-  if (type === undefined || name.length === 0 || address.length === 0) {
+  if (type === undefined || address.length === 0) {
     return undefined;
   }
 

@@ -132,6 +132,12 @@ RETURNING *;
 SELECT COUNT(*) FROM properties
 WHERE owner_id = $1 AND status IN ('active', 'maintenance');
 
+-- name: CountPropertiesByOwnerAndType :one
+-- The auto-name serial (ticket #1001): the owner's properties of this type
+-- in every status — archived count too, deleted rows are gone (hard delete).
+SELECT COUNT(*) FROM properties
+WHERE owner_id = $1 AND type = $2;
+
 -- name: SetPropertyPin :one
 -- Atomic PUT pin (ticket #577, the PUT favorite's canon #461: no
 -- read-modify-write). The value — a moment or NULL — is resolved by the

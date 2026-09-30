@@ -154,6 +154,13 @@ export function todayAt(minutesAgo: number, daysAgo = 0): string {
   return `date_trunc('day', now()) ${day}+ interval '9 hours' - interval '${minutesAgo} minutes'`;
 }
 
+/** Сегодняшняя дата владельца в ISO ('YYYY-MM-DD') — для API-тел, где
+ * контракт ждёт дату, а не SQL-выражение: сид-владелец живёт в UTC (canon
+ * #796), воркеры наследуют TZ=UTC раннера, календари совпадают. */
+export function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 /** Типовые записи дневной серии: сиды history-спек собраны из трёх
  * канонных строк, спека передаёт свой префикс id, минуты от 9:00 и
  * вариации (propertyId, segments со ссылками, другой текст). */

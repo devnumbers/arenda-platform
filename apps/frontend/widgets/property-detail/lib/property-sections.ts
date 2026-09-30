@@ -33,12 +33,12 @@ export type PropertySectionEmptyCopy = {
  * пустых карт аренды/платежей/контактов/задач — совпадение с макетом 1:1;
  * характеристики — из шаблона «Об объекте» (1550:97124, нода 1550:97390). */
 export const propertySectionImages: Record<PropertyDetailSectionKey, string> = {
-  rental: '/images/rentals/empty-rental.png',
-  payments: '/images/payments/object-empty.png',
-  operations: '/images/payments/operations-empty.png',
-  contacts: '/images/contacts/empty-contacts.png',
-  tasks: '/images/tasks/empty-tasks.png',
-  about: '/images/properties/characteristics-empty.png',
+  rental: '/images/rentals/empty-rental.webp',
+  payments: '/images/payments/object-empty.webp',
+  operations: '/images/payments/operations-empty.webp',
+  contacts: '/images/contacts/empty-contacts.webp',
+  tasks: '/images/tasks/empty-tasks.webp',
+  about: '/images/properties/characteristics-empty.webp',
 };
 
 /** Набор пустых состояний страницы: единственный активный объект —

@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  propertyCreateSuccessCopy,
-  PROPERTY_CREATE_RENTAL_STUB_TOAST,
-} from './property-create-success';
+import { propertyCreateSuccessCopy } from './property-create-success';
 
 describe('propertyCreateSuccessCopy', () => {
   it('заголовок — «Объект «{название}» создан» (Figma 1425-55788)', () => {
@@ -16,9 +13,5 @@ describe('propertyCreateSuccessCopy', () => {
     expect(propertyCreateSuccessCopy('Гараж').description).toBe(
       'Вы создали объект, теперь можете добавить аренду',
     );
-  });
-
-  it('тост-заглушка «Добавить аренду» объясняет, что раздела пока нет', () => {
-    expect(PROPERTY_CREATE_RENTAL_STUB_TOAST).toBe('Раздел «Аренда» скоро появится');
   });
 });

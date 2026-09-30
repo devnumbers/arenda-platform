@@ -576,3 +576,58 @@ func TestAttributesParkingSpotNumber(t *testing.T) {
 	res = ValidateAttributes(PropertyTypeParking, Attributes{attrSpotNumber: 42.0})
 	assertHasField(t, res, attrSpotNumber, "expected a string")
 }
+
+func TestAttributesStudio(t *testing.T) {
+	t.Parallel()
+
+	// Студия делит набор характеристик с квартирой (каталог, тикет #1003):
+	// те же поля и те же кросс-правила.
+	t.Run("apartment field set is valid for studio", func(t *testing.T) {
+		t.Parallel()
+		res := ValidateAttributes(PropertyTypeStudio, Attributes{
+			attrAreaTotal:     24.5,
+			attrAreaLiving:    18.0,
+			attrAreaKitchen:   6.5,
+			attrFloor:         float64(3),
+			attrFloorsTotal:   float64(9),
+			attrYearBuilt:     float64(2021),
+			attrCeilingHeight: 2.7,
+		})
+		if !res.Valid() {
+			t.Fatalf("apartment-style attributes must be valid for studio, got: %+v", res.Errors)
+		}
+	})
+
+	t.Run("floor exceeds floors_total", func(t *testing.T) {
+		t.Parallel()
+		res := ValidateAttributes(PropertyTypeStudio, Attributes{
+			attrFloor:       float64(5),
+			attrFloorsTotal: float64(3),
+		})
+		assertHasField(t, res, attrFloor, "")
+	})
+
+	t.Run("area_living exceeds area_total", func(t *testing.T) {
+		t.Parallel()
+		res := ValidateAttributes(PropertyTypeStudio, Attributes{
+			attrAreaLiving: 80.0,
+			attrAreaTotal:  50.0,
+		})
+		assertHasField(t, res, attrAreaLiving, "")
+	})
+
+	t.Run("area_kitchen exceeds area_total", func(t *testing.T) {
+		t.Parallel()
+		res := ValidateAttributes(PropertyTypeStudio, Attributes{
+			attrAreaKitchen: 40.0,
+			attrAreaTotal:   30.0,
+		})
+		assertHasField(t, res, attrAreaKitchen, "")
+	})
+
+	t.Run("house-only key is unknown for studio", func(t *testing.T) {
+		t.Parallel()
+		res := ValidateAttributes(PropertyTypeStudio, Attributes{attrLandArea: 6.0})
+		assertHasField(t, res, attrLandArea, "")
+	})
+}

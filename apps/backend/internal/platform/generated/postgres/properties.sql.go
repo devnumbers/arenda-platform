@@ -100,6 +100,25 @@ func (q *Queries) CountPropertiesAdmin(ctx context.Context, arg CountPropertiesA
 	return count, err
 }
 
+const countPropertiesByOwnerAndType = `-- name: CountPropertiesByOwnerAndType :one
+SELECT COUNT(*) FROM properties
+WHERE owner_id = $1 AND type = $2
+`
+
+type CountPropertiesByOwnerAndTypeParams struct {
+	OwnerID pgtype.UUID `json:"owner_id"`
+	Type    string      `json:"type"`
+}
+
+// The auto-name serial (ticket #1001): the owner's properties of this type
+// in every status — archived count too, deleted rows are gone (hard delete).
+func (q *Queries) CountPropertiesByOwnerAndType(ctx context.Context, arg CountPropertiesByOwnerAndTypeParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countPropertiesByOwnerAndType, arg.OwnerID, arg.Type)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createProperty = `-- name: CreateProperty :one
 INSERT INTO properties (id, owner_id, name, type, address, description, attributes, status)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)

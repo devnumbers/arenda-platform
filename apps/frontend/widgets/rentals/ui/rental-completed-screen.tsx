@@ -8,6 +8,7 @@ import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { formatDayMonthWithYear } from '@/shared/lib/date-format';
 import type { IsoDate } from '@/shared/lib/calendar';
+import { notify } from '@/shared/lib/notifications';
 import {
   pastRentalCardTitle,
   pastRentalTitle,
@@ -289,6 +290,8 @@ function RentalCompletedBody({
               setDeleteOpen(false);
               goBack(router, ROUTES.propertyRentalPast(propertyId));
             },
+            // Канон тостов аренды (#986): ошибки удаления не молчат.
+            onError: (error) => notify.scenarios.rentals.deleteError(error),
           })
         }
       />

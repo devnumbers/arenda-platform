@@ -10,9 +10,12 @@ describe('реестр иконок типов объекта', () => {
     expect(propertyTypeIcons.house).toBe(propertyTypeIcons.apartment);
   });
 
+  it('студия — диван, как у комнаты (спальное место, #1003)', () => {
+    expect(propertyTypeIcons.studio).toBe(propertyTypeIcons.room);
+  });
+
   it('остальные типы различаются: у каждого не-жилого типа своя иконка', () => {
     const distinct = [
-      propertyTypeIcons.room,
       propertyTypeIcons.commercial,
       propertyTypeIcons.office,
       propertyTypeIcons.warehouse,

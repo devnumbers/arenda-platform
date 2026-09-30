@@ -2,11 +2,13 @@
 
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import type { JSX, ReactNode } from 'react';
-import { Calendar, Check, Edit, Key } from '@/shared/assets/icons';
+import { useState, type JSX, type ReactNode } from 'react';
+import { Calendar, Check, Edit, Key, TrashBin } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { formatDayMonth } from '@/shared/lib/date-format';
 import { formatPhoneDisplay } from '@/shared/lib/phone';
+import { goBack } from '@/shared/lib/navigation';
+import { notify } from '@/shared/lib/notifications';
 import {
   hasProgressCard,
   rentalElapsedLine,
@@ -17,11 +19,13 @@ import {
   rentalRemainingLine,
   rentalTeaserRows,
   rentalTenantTitle,
+  useDeleteRental,
+  type RentalActionState,
 } from '@/features/rentals';
 import { CategoryIcon, categoryStyle } from '@/features/payment-categories';
 import type { Rental } from '@/entities/rental';
 import { PaymentRowButton } from '@/entities/payment';
-import { ListRow, PageContent, RoundActionButton } from '@/shared/ui/design';
+import { ListRow, PageContent, RoundActionButton, ConfirmDialog } from '@/shared/ui/design';
 import { RentalGroup } from './rental-group';
 import { TermRows } from './term-row';
 import { TenantRow } from './tenant-row';
@@ -45,19 +49,34 @@ import { TenantRow } from './tenant-row';
  * (решение владельца 2026-09-07), а карточка прогресса срочной после
  * планового окончания прячется целиком — пустого контейнера макеты не
  * рисуют (F1, решение владельца 23.09).
+ *
+ * Жизненные действия задаёт машина «Действий аренды» (#987, карта #984):
+ * состояние едет с экрана (общий селектор с объектом, #986 — синхронность
+ * поверхностей по построению). «Идёт» — «Завершить аренду» (тройка и
+ * строка, мастер #534); «Ожидает начала» — завершения не существует
+ * (ADR 0053 §3), его слот в тройке по-прежнему пуст (#802), а действие —
+ * красная строка «Удалить аренду» (канон удаления завершённой #535: шит
+ * «Удалить аренду?», успех без тоста — страница сама уходит на объект,
+ * где блок «Аренда» перетекает в пустое). «Продлить» — у любой
+ * незавершённой (#804), в тройку синхронизации не входит.
  */
 export function RentalDetailBody({
   propertyId,
   rental,
+  actionState,
   canMutate,
   hasCompletedRentals,
 }: {
   readonly propertyId: string;
   readonly rental: Rental;
+  /** Срез машины «Действий аренды» для текущей аренды — считается
+   * экраном на полном списке (#987). */
+  readonly actionState: RentalActionState;
   readonly canMutate: boolean;
   readonly hasCompletedRentals: boolean;
 }): JSX.Element {
   const router = useRouter();
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   // Платёж арендной платы называется самим ответом аренды (связь 1:1,
   // ADR 0053 §4) — переход на экран платежа без поиска по категориям.
@@ -77,13 +96,22 @@ export function RentalDetailBody({
   const openPayment = () => router.push(ROUTES.propertyPayment(propertyId, rentPaymentId));
 
   // Круглая тройка макета (1550:93664, решение #802 23.09): «Завершить» —
-  // только у начавшейся аренды (как строка «Управления»), «Продлить» — у
-  // любой незавершённой (#804), раскладка по числу видимых действий —
-  // тройка/пара сеткой, одиночная по центру.
+  // только у «идёт» (машина #987: у upcoming завершения не существует,
+  // слот пуст — деструктивное удаление живёт строкой «Управления»),
+  // «Продлить» — у любой незавершённой (#804), раскладка по числу видимых
+  // действий — тройка/пара сеткой, одиночная по центру.
+  const isUpcoming = actionState.kind === 'upcoming';
   const roundCount =
-    (rental.status !== 'upcoming' ? 1 : 0) +
+    (actionState.kind === 'active' ? 1 : 0) +
     1 /* «Продлить» — у любой незавершённой (#804) */ +
     (nextPayment !== null ? 1 : 0);
+
+  // Удаление «Ожидает начала» (#987, «передумал до старта»): DELETE
+  // уносит аренду вместе с платём (бэк #985 — 204). Успех — без тоста
+  // (канон #986), страница уходит на объект: аренды нет — блок «Аренда»
+  // перетекает в пустое, «Управление» показывает «Начать аренду». Отказ —
+  // тост канона аренды, шит остаётся открытым.
+  const deleteRental = useDeleteRental(propertyId, rental.id, rentPaymentId);
 
   return (
     <PageContent>
@@ -119,10 +147,11 @@ export function RentalDetailBody({
                     : 'flex justify-center'
               }
             >
-              {/* «Завершить аренду» — левая круглая тройки (1550:93664):
-                  ведёт в мастер завершения #534, как строка «Управления».
-                  Подписи тройки — в две строки по макету (#802). */}
-              {rental.status !== 'upcoming' && (
+              {/* «Завершить аренду» — левая круглая тройки (1550:93664),
+                  только у «идёт» (машина #987): ведёт в мастер завершения
+                  #534, как строка «Управления». Подписи тройки — в две
+                  строки по макету (#802). */}
+              {actionState.kind === 'active' && (
                 <RoundActionButton
                   variant="secondary"
                   icon={<Key />}
@@ -229,9 +258,11 @@ export function RentalDetailBody({
           )}
 
           {/* Секция «Управление» (Figma 1232:62297): строки ведут на экраны
-              #532/#534/#533. «Завершить» — только у начавшейся аренды (дата
-              завершения не бывает раньше начала, ADR 0053 §3), «Продлить» —
-              у любой незавершённой: бессрочной задаёт первую дату окончания
+              #532/#534/#533. Жизненное действие — по машине (#987): у
+              «идёт» — «Завершить» (дата завершения не бывает раньше
+              начала, ADR 0053 §3), у «Ожидает начала» — красное «Удалить
+              аренду» (канон удаления завершённой #535). «Продлить» — у
+              любой незавершённой: бессрочной задаёт первую дату окончания
               (домен «Продление», #804; как круглая кнопка #533). Смотрящему
               секции нет — все строки мутирующие. */}
           {canMutate && (
@@ -242,11 +273,18 @@ export function RentalDetailBody({
                   label="Редактировать аренду"
                   onClick={() => router.push(ROUTES.propertyRentalTermsEdit(propertyId))}
                 />
-                {rental.status !== 'upcoming' && (
+                {actionState.kind === 'active' && (
                   <ManageRow
                     icon={<Key className="h-6 w-6 text-content" />}
                     label="Завершить аренду"
                     onClick={() => router.push(ROUTES.propertyRentalComplete(propertyId))}
+                  />
+                )}
+                {isUpcoming && (
+                  <ManageRow
+                    icon={<TrashBin className="h-6 w-6 text-danger" />}
+                    label={<span className="text-danger">Удалить аренду</span>}
+                    onClick={() => setDeleteOpen(true)}
                   />
                 )}
                 <ManageRow
@@ -274,19 +312,46 @@ export function RentalDetailBody({
           )}
         </div>
       </div>
+
+      {/* Шит удаления «Ожидает начала» (#987): канон удаления завершённой
+          аренды (#535) — канон ConfirmDialog, danger-«Удалить». Кнопка в
+          loading на время мутации; успех без тоста — страница уходит на
+          объект (#985 снёс аренду вместе с платём), отказ — тост, шит
+          открыт. */}
+      <ConfirmDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="Удалить аренду?"
+        description="Аренда и её платеж будут удалены. Операции останутся в истории объекта."
+        confirmLabel="Удалить"
+        cancelLabel="Отмена"
+        confirmVariant="danger"
+        pending={deleteRental.isPending}
+        onConfirm={() =>
+          deleteRental.mutate(undefined, {
+            onSuccess: () => {
+              setDeleteOpen(false);
+              goBack(router, ROUTES.property(propertyId));
+            },
+            // Канон тостов аренды (#986): ошибки удаления не молчат.
+            onError: (error) => notify.scenarios.rentals.deleteError(error),
+          })
+        }
+      />
     </PageContent>
   );
 }
 
 /** Строка секции «Управление» (Figma 1232:62297): строчная иконка 24 и
- * подпись; канонный ListRow без хвостовых слотов. */
+ * подпись; канонный ListRow без хвостовых слотов. Подпись — ReactNode:
+ * деструктивные строки несут красный текст (канон #535). */
 function ManageRow({
   icon,
   label,
   onClick,
 }: {
   readonly icon: ReactNode;
-  readonly label: string;
+  readonly label: ReactNode;
   readonly onClick: () => void;
 }): JSX.Element {
   return <ListRow leading={icon} title={label} onSelect={onClick} />;

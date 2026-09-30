@@ -7,7 +7,7 @@ import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { useProperty } from '@/features/properties';
 import { propertyPermissions } from '@/entities/property';
-import { currentRentalOf, useRentals } from '@/features/rentals';
+import { rentalActionState, useRentals, type RentalActionState } from '@/features/rentals';
 import {
   Button,
   EmptyState,
@@ -27,7 +27,9 @@ import { RentalDetailSkeleton } from './rental-skeletons';
  * создание только Full Access, ADR 0053 §3) и, если завершённые есть,
  * входом в «Прошлые аренды» (#535); с незавершённой — детализация первой
  * аренды. Карандаш в шапке — быстрый вход в правку условий (1550:93664,
- * решение #802 23.09), только у того, кто может править.
+ * решение #802 23.09), только у того, кто может править. Жизненные
+ * действия детализации задаёт машина «Действий аренды» (#987, карта
+ * #984) — тот же селектор, что на странице объекта (#986).
  */
 export function RentalScreen({ propertyId }: { readonly propertyId: string }): JSX.Element {
   const router = useRouter();
@@ -42,7 +44,11 @@ export function RentalScreen({ propertyId }: { readonly propertyId: string }): J
   // Незавершённая аренда всегда первая (ADR 0053 §4); завершённые —
   // материал «Прошлых аренд» (#535), экраном текущей не являются.
   const rentals = rentalsQuery.data ?? [];
-  const currentRental = currentRentalOf(rentals);
+  // Машина «Действий аренды» (#987, карта #984): тот же доменный
+  // селектор, что ест страница объекта (#986) — «Ожидает начала» →
+  // Удаление, «идёт» → Завершение; расхождение поверхностей баг.
+  const actionState: RentalActionState = rentalActionState(rentals);
+  const currentRental = actionState.kind === 'none' ? undefined : actionState.rental;
   const hasCompletedRentals = rentals.some((rental) => rental.status === 'completed');
 
   return (
@@ -98,7 +104,7 @@ export function RentalScreen({ propertyId }: { readonly propertyId: string }): J
         <>
           <PageContent>
             <EmptyState
-              imageSrc="/images/rentals/empty-rental.png"
+              imageSrc="/images/rentals/empty-rental.webp"
               title="Аренда не создана"
               description="Добавьте аренду и отслеживайте оплату"
             />
@@ -132,6 +138,7 @@ export function RentalScreen({ propertyId }: { readonly propertyId: string }): J
           key={currentRental.id}
           propertyId={propertyId}
           rental={currentRental}
+          actionState={actionState}
           canMutate={canMutate}
           hasCompletedRentals={hasCompletedRentals}
         />

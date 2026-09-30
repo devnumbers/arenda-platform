@@ -90,10 +90,11 @@ export function PropertyEditScreen({ propertyId }: PropertyEditScreenProps): JSX
 
   const isSubmitting = updateProperty.isPending;
 
+  // Название необязательно (#1001): очищенное при сохранении
+  // регенерирует бэк из типа.
   const ready =
     draft !== null
     && draft.type !== undefined
-    && draft.name.trim().length > 0
     && draft.address.trim().length > 0;
 
   const dirty =
@@ -208,7 +209,6 @@ export function PropertyEditScreen({ propertyId }: PropertyEditScreenProps): JSX
           />
           <TextField
             title="Название объекта"
-            required
             maxLength={NAME_MAX_LENGTH}
             value={draft.name}
             onChange={(event) => updateDraft({ name: event.currentTarget.value })}

@@ -18,6 +18,7 @@ const (
 	PropertyTypeApartment  PropertyType = "apartment"
 	PropertyTypeRoom       PropertyType = "room"
 	PropertyTypeApartments PropertyType = "apartments"
+	PropertyTypeStudio     PropertyType = "studio"
 	PropertyTypeHouse      PropertyType = "house"
 	PropertyTypeCommercial PropertyType = "commercial"
 	PropertyTypeOffice     PropertyType = "office"
@@ -42,6 +43,7 @@ func (t PropertyType) Valid() bool {
 	case PropertyTypeApartment,
 		PropertyTypeRoom,
 		PropertyTypeApartments,
+		PropertyTypeStudio,
 		PropertyTypeHouse,
 		PropertyTypeCommercial,
 		PropertyTypeOffice,

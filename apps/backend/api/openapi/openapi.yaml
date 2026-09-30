@@ -4522,6 +4522,13 @@ paths:
       operationId: deleteRental
       security:
         - sessionCookie: []
+      description: >-
+        Deletes the rental together with its managed rent payment (the rental
+        row goes first, releasing the payment FK). Only a not-started
+        («передумал до старта» — all planned occurrences are future and go
+        cleanly) or a completed rental deletes; a started unfinished rental
+        answers 409 — it only goes through completion. Overdue operations
+        survive the payment as the property's debt.
       parameters:
         - $ref: '#/components/parameters/PropertyId'
         - name: rentalId
@@ -4540,13 +4547,25 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          $ref: '#/components/responses/Conflict'
+          description: The rental has already started — finish it instead
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
 
   /properties/{propertyId}/rentals/{rentalId}/complete:
     post:
       operationId: completeRental
       security:
         - sessionCookie: []
+      description: >-
+        Completes the rental: records the completion date (start ≤ date ≤
+        today in the owner's timezone — «По плану» is the UI's substitution)
+        and stops the managed rent payment at that date — the strictly future
+        planned operations are torn down, the due ones stay with the owner.
+        The optional deposit return is a record, not an operation. Completing
+        a future rental is impossible by design — a start date in the future
+        leaves the valid window empty (400).
       parameters:
         - $ref: '#/components/parameters/PropertyId'
         - name: rentalId
@@ -4569,7 +4588,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/RentalResponse'
         '400':
-          $ref: '#/components/responses/BadRequest'
+          description: The completion date is before the start or in the future
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -4577,7 +4600,11 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          $ref: '#/components/responses/Conflict'
+          description: The rental is already completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
 
   /properties/{propertyId}/rentals/{rentalId}/summary:
     get:
@@ -6077,11 +6104,16 @@ components:
 
     PropertyCreateRequest:
       type: object
-      required: [name, type, address]
+      required: [type, address]
       properties:
         name:
           type: string
           maxLength: 255
+          description: >
+            Optional. Omit (or send empty) to let the server generate the name
+            from the property type — «Моя квартира 1», «Мой гараж 1»
+            (ticket #1001). The serial is the owner's property count of the
+            type (archived included, deleted gone) plus one.
         type:
           $ref: '#/components/schemas/PropertyType'
         address:
@@ -6099,6 +6131,10 @@ components:
         name:
           type: string
           maxLength: 255
+          description: >
+            Omit to leave the name unchanged. An empty string clears the name
+            and regenerates it from the property type — «Моя квартира 1»
+            (ticket #1001).
         type:
           $ref: '#/components/schemas/PropertyType'
         address:
@@ -7625,7 +7661,7 @@ components:
 
     PropertyType:
       type: string
-      enum: [apartment, room, apartments, house, commercial, office, warehouse, garage, parking, land]
+      enum: [apartment, room, apartments, studio, house, commercial, office, warehouse, garage, parking, land]
 
     PropertyStatus:
       type: string

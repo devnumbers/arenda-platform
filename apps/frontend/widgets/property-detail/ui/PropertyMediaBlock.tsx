@@ -24,7 +24,7 @@ export function PropertyMediaBlock({
   return (
     <section className="flex flex-col items-center px-0 pt-6 text-center">
       <div aria-hidden>
-        <PropertyAvatar surface="hero" />
+        <PropertyAvatar surface="hero" data-testid="property-hero-avatar" />
       </div>
       <h1 className="m-0 mt-6 max-w-[345px] text-2xl font-semibold leading-8 text-content">
         {name}

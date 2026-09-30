@@ -106,19 +106,20 @@ test('шаг 2: подсказки адреса — список, выбор, в
   await captureScreen(page, testInfo, '03-address-picked');
 });
 
-test('шаг 3: характеристики — поля каталога, тип жилья, гейт названия', async ({ page, seededUser }, testInfo) => {
+test('шаг 3: характеристики — поля каталога, тип жилья, название необязательно', async ({ page, seededUser }, testInfo) => {
   await openWizard(page, seededUser);
   await page.getByRole('group', { name: 'Категория объекта' }).getByRole('button', { name: 'Квартира' }).click();
   await page.getByRole('textbox', { name: 'Введите адрес' }).fill('Ленина, 1');
   await page.getByRole('button', { name: 'Продолжить' }).click();
 
   // Заголовок и подсказка шага 3; «Тип жилья» только у категории
-  // «Квартира» (закрывает тип apartments).
+  // «Квартира» (закрывает типы apartments и studio — #1003).
   await expect(page.getByRole('heading', { name: 'Характеристики' })).toBeVisible();
   await expect(page.getByText('Вы можете создать объект, а характеристики заполнить позже')).toBeVisible();
   const housing = page.getByRole('group', { name: 'Тип жилья' });
   await expect(housing.getByRole('button', { name: 'Квартира' })).toHaveAttribute('aria-pressed', 'true');
   await expect(housing.getByRole('button', { name: 'Апартаменты' })).toHaveAttribute('aria-pressed', 'false');
+  await expect(housing.getByRole('button', { name: 'Студия' })).toHaveAttribute('aria-pressed', 'false');
 
   // Поля каталога квартиры: enum-чипы (комнат в наборе больше нет) и
   // единицы слева внутри бокса.
@@ -132,9 +133,12 @@ test('шаг 3: характеристики — поля каталога, ти
   await expect(name).toBeFocused();
 
   // Смена типа жилья — чипы перезаключаются, набор полей тот же (один
-  // каталог у квартиры и апартаментов), смена тихая — без нотиса.
+  // каталог у квартиры, апартаментов и студии — #1003), смена тихая —
+  // без нотиса.
   await housing.getByRole('button', { name: 'Апартаменты' }).click();
   await expect(housing.getByRole('button', { name: 'Апартаменты' })).toHaveAttribute('aria-pressed', 'true');
+  await housing.getByRole('button', { name: 'Студия' }).click();
+  await expect(housing.getByRole('button', { name: 'Студия' })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('group', { name: 'Санузел' }).getByRole('button', { name: 'Раздельный' })).toBeVisible();
   await expect(page.getByRole('status')).toHaveCount(0);
 
@@ -146,13 +150,12 @@ test('шаг 3: характеристики — поля каталога, ти
   await area.pressSequentially('47,5м');
   await expect(area).toHaveValue('47,5');
 
-  // Заполнение характеристики, «Создать объект» появляется с названием
-  // (обязательное поле), счётчик лимита 64 работает.
+  // «Создать объект» доступен сразу — название необязательно (#1001,
+  // пустое имя регенерирует бэк из типа); счётчик лимита 64 работает.
   const submit = page.getByRole('button', { name: 'Создать объект' });
-  await expect(submit).toBeDisabled();
+  await expect(submit).toBeEnabled();
   await name.fill('Квартира на Ленина');
   await expect(page.getByText('18/64')).toBeVisible();
-  await expect(submit).toBeEnabled();
   await captureScreen(page, testInfo, '04-characteristics');
 });
 
@@ -177,36 +180,46 @@ test('шаг 2: черновик переживает перезагрузку, 
   await expect(page.getByRole('button', { name: 'Продолжить' })).toBeHidden();
 });
 
-test('полный флоу: «Создать объект» ведёт на успех, «Открыть объект» — на карточку', async ({ page, seededUser }, testInfo) => {
+test('полный флоу: создание без названия — автонейм из типа, «Открыть объект» — на карточку', async ({ page, seededUser }, testInfo) => {
   await openWizard(page, seededUser);
   await page.getByRole('group', { name: 'Категория объекта' }).getByRole('button', { name: 'Дом' }).click();
   await page.getByRole('textbox', { name: 'Введите адрес' }).fill('Ленина, 2');
   await page.getByRole('button', { name: 'Продолжить' }).click();
-  const name = page.getByRole('textbox', { name: 'Название объекта' });
-  await name.fill('Дом на Ленина');
+  // Название оставляем пустым: бэк генерирует из типа (#1001) — у сидового
+  // пользователя домов нет, первое создание даёт «Мой дом 1».
   await page.getByRole('button', { name: 'Создать объект' }).click();
 
-  // Успех (Figma 1425-55788): заголовок с названием, подзаголовок макета,
-  // пара кнопок (override владельца: «Добавить аренду» — заглушка); хедер
-  // без чипа шага — только крестик.
-  await expect(page.getByRole('heading', { name: 'Объект «Дом на Ленина» создан' })).toBeVisible();
+  // Успех (Figma 1425-55788): заголовок со сгенерированным названием,
+  // подзаголовок макета, пара кнопок (override владельца); хедер без чипа
+  // шага — только крестик.
+  await expect(page.getByRole('heading', { name: 'Объект «Мой дом 1» создан' })).toBeVisible();
   await expect(page.getByText('Вы создали объект, теперь можете добавить аренду')).toBeVisible();
   await expect(page.getByText(/шаг \d из/)).toHaveCount(0);
-  const openProperty = page.getByRole('button', { name: 'Открыть объект' });
   await expect(page.getByRole('button', { name: 'Добавить аренду' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Открыть объект' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Закрыть' })).toBeVisible();
-
-  // Заглушка аренды: тост-объяснение, экран остаётся на месте.
-  await page.getByRole('button', { name: 'Добавить аренду' }).click();
-  await expect(page.getByText('Раздел «Аренда» скоро появится')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Объект «Дом на Ленина» создан' })).toBeVisible();
   await captureScreen(page, testInfo, '05-success');
 
-  // «Открыть объект» ведёт на карточку созданного объекта (крестик —
-  // тот же переход, проверяется живой приёмкой).
-  await openProperty.click();
-  await expect(page).toHaveURL(/\/properties\/[0-9a-f-]{36}$/);
-  await expect(page.getByRole('heading', { name: 'Дом на Ленина' })).toBeVisible();
+  // «Добавить аренду» — настоящий вход в визард создания аренды
+  // созданного объекта (карта #984: заглушка ADR 0046 снесена). Переход
+  // «Открыть объект»/крестика на карточку проверяется живой приёмкой.
+  await page.getByRole('button', { name: 'Добавить аренду' }).click();
+  await expect(page).toHaveURL(/\/properties\/[0-9a-f-]{36}\/rentals\/new$/);
+  await expect(page.getByRole('heading', { name: 'Цена и число оплаты' })).toBeVisible();
+  const createdPropertyId = page.url().match(/properties\/([0-9a-f-]{36})\/rentals\/new/)?.[1] ?? '';
+  expect(createdPropertyId).not.toBe('');
+
+  // Секции детали созданного объекта — вся карточка кликабельна (карта
+  // #984): CTA пустой «Аренды» не оглушён оверлеем — ведёт в визард
+  // аренды, а не в хаб аренды объекта. Тап по контенту секции проверяет
+  // properties.spec на сид-квартире с данными.
+  await page.goto(`/properties/${createdPropertyId}`);
+  const rentalSection = page
+    .locator('section', { hasText: 'Аренда не добавлена' })
+    .filter({ visible: true });
+  await expect(rentalSection).toBeVisible();
+  await rentalSection.getByRole('button', { name: 'Добавить' }).click();
+  await expect(page).toHaveURL(new RegExp(`/properties/${createdPropertyId}/rentals/new$`));
 });
 
 test('returnTo: успех пропускается, redirect на returnTo с propertyId', async ({ page, seededUser }) => {

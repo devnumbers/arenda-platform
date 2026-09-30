@@ -11,7 +11,8 @@ import {
   TabBar,
   TabBarVisibilityProvider,
 } from '@/shared/ui/design';
-import { usePropertiesLandingHref } from '@/features/properties';
+import { useMe } from '@/features/auth';
+import { usePropertiesNavItem } from '@/features/properties';
 import { RealtimeStreamProvider } from '@/features/realtime';
 import { HubPrefetchProvider } from './hub-prefetch-provider';
 import { NotificationStreamGate } from './notification-stream-gate';
@@ -52,10 +53,12 @@ export function ScreenLayout({ children }: { readonly children: ReactNode }): JS
   // PullToRefresh drives `transform` on the content node during the gesture,
   // so the layout shares its ref with the component.
   const contentRef = useRef<HTMLDivElement>(null);
-  // Лендинг таба «Объекты» (карта #583): основной объект / единственный
-  // активный / список — пока список не загружен, обе поверхности ведут
-  // на список (безопасный фолбэк хука).
-  const propertiesHref = usePropertiesLandingHref();
+  // Пункт «Объекты» хрома (карта #984): подпись и адрес решает тариф +
+  // книга объектов; пока данные не загружены, обе поверхности показывают
+  // «Объекты» со ссылкой на список (безопасный фолбэк хука). useMe — тот
+  // же ключ authKeys.me, что у TopNavUserProvider: запрос один.
+  const { data: me } = useMe();
+  const propertiesNav = usePropertiesNavItem(me?.subscription?.tariff.name);
   const notificationsBadge = useNavigationBadge();
 
   return (
@@ -63,12 +66,16 @@ export function ScreenLayout({ children }: { readonly children: ReactNode }): JS
       <HubPrefetchProvider>
         <TopNavUserProvider>
           <div className="flex min-h-screen flex-col tablet:pt-[72px]">
-            <DesktopSidebar propertiesHref={propertiesHref} />
+            <DesktopSidebar propertiesHref={propertiesNav.href} propertiesLabel={propertiesNav.label} />
             <div className="flex min-w-0 flex-1 flex-col" ref={contentRef}>
               {children}
             </div>
             <DesktopNavPills notificationsBadge={notificationsBadge ?? 0} />
-            <TabBar propertiesHref={propertiesHref} notificationsUnread={(notificationsBadge ?? 0) > 0} />
+            <TabBar
+              propertiesHref={propertiesNav.href}
+              propertiesLabel={propertiesNav.label}
+              notificationsUnread={(notificationsBadge ?? 0) > 0}
+            />
             <ServiceWorkerRegister />
             <ServiceWorkerUpdater />
             <PullToRefresh contentRef={contentRef} />
