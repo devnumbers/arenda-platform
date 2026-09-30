@@ -9,7 +9,7 @@
 
 ## Consequences
 
-- Caddy-матчер `@landing` (`deploy/caddy/rentlee.caddy`) переходит с Vite-путей (`/assets/*`, `/landing-fonts/*`) на Next-пути (`/_next/*`, `/fonts/*`, `/icon.png`); smoke-проверки `_deploy.yml` обновлены под маркер `id="landing-root"` и `/_next/static/*`.
+- Caddy-матчер `@landing` (`deploy/caddy/rentlee.caddy`) переходит с Vite-путей (`/assets/*`, `/landing-fonts/*`) на Next-пути (`/_next/*`, `/fonts/*`, `/icon.png` и точные метадата-маршруты `/opengraph-image`, `/apple-icon.png`, `/favicon.ico`); smoke-проверки `_deploy.yml` обновлены под маркер `id="landing-root"`, immutable `/_next/static/*` и 200 на og:image.
 - Dockerfile лендинга — node standalone runtime (как у фронта) вместо nginx; healthcheck `/healthz` — route handler; `PORT=8080`.
 - Сервису landing в compose (stage+prod) добавлен `environment: BACKEND_URL: http://backend:8080` — compose-уровень, дрейф-чек ENV_FILE не задевается.
 - HTML лендинга с авторизованным хедером рендерится на каждый запрос (динамическая дырка хедера) — CDN-кэш HTML не шарится; осознанно: трафик лендинга мал, остальная страница и ассеты кэшируются как обычно.
