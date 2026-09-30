@@ -187,26 +187,35 @@ test('полный флоу: «Создать объект» ведёт на у�
   await page.getByRole('button', { name: 'Создать объект' }).click();
 
   // Успех (Figma 1425-55788): заголовок с названием, подзаголовок макета,
-  // пара кнопок (override владельца: «Добавить аренду» — заглушка); хедер
-  // без чипа шага — только крестик.
+  // пара кнопок (override владельца); хедер без чипа шага — только крестик.
   await expect(page.getByRole('heading', { name: 'Объект «Дом на Ленина» создан' })).toBeVisible();
   await expect(page.getByText('Вы создали объект, теперь можете добавить аренду')).toBeVisible();
   await expect(page.getByText(/шаг \d из/)).toHaveCount(0);
-  const openProperty = page.getByRole('button', { name: 'Открыть объект' });
   await expect(page.getByRole('button', { name: 'Добавить аренду' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Открыть объект' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Закрыть' })).toBeVisible();
-
-  // Заглушка аренды: тост-объяснение, экран остаётся на месте.
-  await page.getByRole('button', { name: 'Добавить аренду' }).click();
-  await expect(page.getByText('Раздел «Аренда» скоро появится')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Объект «Дом на Ленина» создан' })).toBeVisible();
   await captureScreen(page, testInfo, '05-success');
 
-  // «Открыть объект» ведёт на карточку созданного объекта (крестик —
-  // тот же переход, проверяется живой приёмкой).
-  await openProperty.click();
-  await expect(page).toHaveURL(/\/properties\/[0-9a-f-]{36}$/);
-  await expect(page.getByRole('heading', { name: 'Дом на Ленина' })).toBeVisible();
+  // «Добавить аренду» — настоящий вход в визард создания аренды
+  // созданного объекта (карта #984: заглушка ADR 0046 снесена). Переход
+  // «Открыть объект»/крестика на карточку проверяется живой приёмкой.
+  await page.getByRole('button', { name: 'Добавить аренду' }).click();
+  await expect(page).toHaveURL(/\/properties\/[0-9a-f-]{36}\/rentals\/new$/);
+  await expect(page.getByRole('heading', { name: 'Цена и число оплаты' })).toBeVisible();
+  const createdPropertyId = page.url().match(/properties\/([0-9a-f-]{36})\/rentals\/new/)?.[1] ?? '';
+  expect(createdPropertyId).not.toBe('');
+
+  // Секции детали созданного объекта — вся карточка кликабельна (карта
+  // #984): CTA пустой «Аренды» не оглушён оверлеем — ведёт в визард
+  // аренды, а не в хаб аренды объекта. Тап по контенту секции проверяет
+  // properties.spec на сид-квартире с данными.
+  await page.goto(`/properties/${createdPropertyId}`);
+  const rentalSection = page
+    .locator('section', { hasText: 'Аренда не добавлена' })
+    .filter({ visible: true });
+  await expect(rentalSection).toBeVisible();
+  await rentalSection.getByRole('button', { name: 'Добавить' }).click();
+  await expect(page).toHaveURL(new RegExp(`/properties/${createdPropertyId}/rentals/new$`));
 });
 
 test('returnTo: успех пропускается, redirect на returnTo с propertyId', async ({ page, seededUser }) => {

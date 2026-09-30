@@ -42,7 +42,9 @@ import { WizardSuccess } from './wizard-success';
  * успешного POST показывается экран успеха (#483, Figma 1425-55788) —
  * он шагом не считается и черновик к тому моменту очищен. Хедер успеха —
  * только крестик слева (без чипа), он ведёт на карточку созданного
- * объекта; туда же ведёт кнопка «Открыть объект».
+ * объекта; туда же ведёт кнопка «Открыть объект». Кнопка «Добавить
+ * аренду» открывает визард создания аренды созданного объекта (карта
+ * #984, push: возврат из визарда — на экран успеха).
  *
  * С заданным returnTo (#483, контракт возврата в вызывающий флоу) экран
  * успеха пропускается: визард заменяет запись истории на адрес returnTo,
@@ -78,7 +80,11 @@ export function PropertyCreateWizardFlow({ returnTo }: PropertyCreateWizardFlowP
           }
         />
         <PageContent>
-          <WizardSuccess created={created} onOpen={openCreatedProperty} />
+          <WizardSuccess
+            created={created}
+            onAddRental={() => router.push(ROUTES.propertyRentalNew(created.id))}
+            onOpen={openCreatedProperty}
+          />
         </PageContent>
       </>
     );

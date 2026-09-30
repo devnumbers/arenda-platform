@@ -2,12 +2,7 @@
 
 import type { JSX } from 'react';
 import type { Property } from '@/entities/property';
-import {
-  PROPERTY_CREATE_RENTAL_STUB_TOAST,
-  propertyCreateSuccessCopy,
-  propertyTypeIcons,
-} from '@/features/properties';
-import { notify } from '@/shared/lib/notifications';
+import { propertyCreateSuccessCopy, propertyTypeIcons } from '@/features/properties';
 import { Button, CircleIcon, StatusIcon, StickyBottomBar } from '@/shared/ui/design';
 import { PropertyWizardBottomBar } from './wizard-chrome';
 
@@ -17,17 +12,20 @@ import { PropertyWizardBottomBar } from './wizard-chrome';
  * типа (#D3D7D9, как в макете), снизу справа белый бейдж «готово»; под ней
  * заголовок «Объект «{название}» создан» (20/24 SemiBold) и подзаголовок.
  * Кнопки — пара из макета (override владельца 2026-09-02): primary
- * «Добавить аренду» и secondary «Открыть объект». Домена аренд в продукте
- * нет (ADR 0046) — «Добавить аренду» заглушка: тост и остаёмся на экране.
- * Хедер экрана рисует флоу: только крестик слева, без чипа шага.
+ * «Добавить аренду» и secondary «Открыть объект». «Добавить аренду» —
+ * настоящий вход в визард создания аренды (карта #984): заглушка эпохи
+ * ADR 0046 снесена. Хедер экрана рисует флоу: только крестик слева, без
+ * чипа шага.
  */
 
 export type WizardSuccessProps = {
   readonly created: Property;
+  /** «Добавить аренду» — визард создания аренды созданного объекта. */
+  readonly onAddRental: () => void;
   readonly onOpen: () => void;
 };
 
-export function WizardSuccess({ created, onOpen }: WizardSuccessProps): JSX.Element {
+export function WizardSuccess({ created, onAddRental, onOpen }: WizardSuccessProps): JSX.Element {
   const copy = propertyCreateSuccessCopy(created.name);
   // Выборка из статичного реестра, не вызов: react-hooks/static-components.
   const Icon = propertyTypeIcons[created.type];
@@ -58,10 +56,7 @@ export function WizardSuccess({ created, onOpen }: WizardSuccessProps): JSX.Elem
       </div>
       <StickyBottomBar>
         <PropertyWizardBottomBar>
-          <Button
-            className="w-full"
-            onClick={() => notify.info(PROPERTY_CREATE_RENTAL_STUB_TOAST)}
-          >
+          <Button className="w-full" onClick={onAddRental}>
             Добавить аренду
           </Button>
           <Button variant="secondary" className="w-full" onClick={onOpen}>
