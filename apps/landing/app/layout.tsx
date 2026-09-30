@@ -1,0 +1,63 @@
+import type { Metadata, Viewport } from "next";
+import "./globals.css";
+
+export const metadata: Metadata = {
+  metadataBase: new URL("https://rentlee.ru"),
+  title: "Рентли — сервис учёта аренды недвижимости",
+  description:
+    "Рентли — учёт аренды для собственников и небольшого арендного бизнеса: объекты, договоры и платежи в одном месте, напоминания об оплатах, совместный доступ и отчёты по итогам аренды.",
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    type: "website",
+    locale: "ru_RU",
+    url: "https://rentlee.ru/",
+    siteName: "Рентли",
+  },
+  twitter: {
+    card: "summary_large_image",
+  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#ffffff",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{ children: React.ReactNode }>) {
+  return (
+    <html lang="ru">
+      <head>
+        {/* Предзагрузка двух основных срезов Onest; ext-срезы доезжают по
+            unicode-range при первом использовании. */}
+        <link
+          rel="preload"
+          href="/fonts/onest-cyrillic.woff2"
+          as="font"
+          type="font/woff2"
+          crossOrigin="anonymous"
+        />
+        <link
+          rel="preload"
+          href="/fonts/onest-latin.woff2"
+          as="font"
+          type="font/woff2"
+          crossOrigin="anonymous"
+        />
+      </head>
+      <body>
+        {/* Reveal-секции до гидратации прозрачны — без JS показываем сразу.
+            translate-y-6 в Tailwind v4 — отдельное свойство translate,
+            transform: none его не снимает. */}
+        <noscript>
+          <style>{`[data-reveal]{opacity:1!important;transform:none!important;translate:none!important}`}</style>
+        </noscript>
+        {children}
+      </body>
+    </html>
+  );
+}

@@ -127,7 +127,7 @@ DEFAULT_GOAL := help
 	frontend-install frontend-dev frontend-build frontend-test frontend-api-check frontend-e2e \
 	frontend-e2e-headed frontend-e2e-live-up frontend-e2e-live-down \
 	admin-install admin-dev admin-build admin-typecheck admin-test \
-	landing-install landing-dev landing-build \
+	landing-install landing-dev landing-build landing-lint landing-typecheck \
 	test backend-test backend-test-integration tools-test \
 	attributes-gen attributes-check \
 	categories-gen categories-check \
@@ -349,11 +349,17 @@ admin-typecheck: ## Typecheck the admin (tsc)
 landing-install: ## Install landing dependencies (npm install)
 	cd $(LANDING_DIR) && npm install
 
-landing-dev: ## Run the landing dev server (vite)
+landing-dev: ## Run the landing dev server (next dev)
 	cd $(LANDING_DIR) && npm run dev
 
-landing-build: ## Build the landing for production (vite build)
+landing-build: ## Build the landing for production (next build)
 	cd $(LANDING_DIR) && npm run build
+
+landing-lint: ## Lint the landing (eslint)
+	cd $(LANDING_DIR) && npm run lint
+
+landing-typecheck: ## Typecheck the landing (tsc)
+	cd $(LANDING_DIR) && npm run typecheck
 
 ##@ Tests
 # backend-test runs unit tests with -race (mandatory per docs/testing-strategy.md).
@@ -431,20 +437,24 @@ tools-test: ## Run contract tests of the tools/ packages (self-installing)
 	done; \
 	if [ $$status -ne 0 ]; then echo "ERROR: tools contract tests failed (see above)"; exit 1; fi
 
-# test runs the full test suite: backend unit + integration + frontend + admin.
+# test runs the full test suite: backend unit + integration + frontend + admin
+# + landing + tools.
 # Unit tests run first for fast fail-fast before the slower testcontainers phase.
 # It requires Docker: integration tests use testcontainers-go, which starts a
 # dedicated PostgreSQL 18 container per test binary and applies migrations
 # internally. The test database (apps/backend/docker-compose.test.yml) is
 # reserved for ad-hoc runs via TEST_DATABASE_URL + make
 # backend-test-integration when testcontainers is unavailable.
-test: ## Run the full test suite (backend + frontend + admin + tools; Docker required)
+test: ## Run the full test suite (backend + frontend + admin + landing + tools; Docker required)
 	@docker info >/dev/null 2>&1 || { echo "ERROR: Docker is not available, but make test requires it: integration tests start PostgreSQL via testcontainers. Start Docker and retry; to push past the pre-push hook use: git push --no-verify"; exit 1; }
 	@set -e; \
 	$(MAKE) backend-test; \
 	$(MAKE) backend-test-integration; \
 	$(MAKE) frontend-test; \
 	$(MAKE) admin-test; \
+	$(MAKE) landing-lint; \
+	$(MAKE) landing-typecheck; \
+	$(MAKE) landing-build; \
 	$(MAKE) tools-test
 
 # Full suite with output captured to a file: for agents/workflows that gate on
@@ -525,15 +535,16 @@ categories-check: ## Fail if the payment-categories catalog artifacts are stale
 ##@ Quality and security
 # TS suppression gate (quality mode #378, gate #399): an eslint-disable
 # comment, a @ts-ignore/@ts-expect-error/@ts-nocheck, or an explicit `any` in
-# the manual TS/JS code of apps/frontend + apps/admin is a finding — zero
-# suppressions, no whitelist. Generated code, build artifacts and node_modules
-# are excluded by the script itself (the counter looks only at hand-written
-# code: .next/types alone carries 20 `any` and 102 `@ts-ignore`). Without
-# FILES checks every source file under both apps (CI, Stop-gate); with FILES
+# the manual TS/JS code of apps/frontend + apps/admin + apps/landing is a
+# finding — zero suppressions, no whitelist. Generated code, build artifacts
+# and node_modules are excluded by the script itself (the counter looks only
+# at hand-written code: .next/types alone carries 20 `any` and 102
+# `@ts-ignore`). Without FILES checks every source file under all three apps
+# (CI, Stop-gate); with FILES
 # checks only the listed files (pre-commit: make ts-suppressions
 # FILES="{staged_files}"); non-source entries and staged deletions are skipped
 # by the filter/the script itself.
-ts-suppressions: ## Fail on any suppression in manual frontend/admin TS/JS code (FILES= to scope)
+ts-suppressions: ## Fail on any suppression in manual frontend/admin/landing TS/JS code (FILES= to scope)
 	@set +e; status=0; \
 	if [ -n "$(FILES)" ]; then \
 		files=`echo "$(FILES)" | tr ' ' '\n' | grep -E '\.(ts|tsx|js|jsx|mjs|cjs|mts|cts)$$' | tr '\n' ' '`; \
@@ -544,8 +555,8 @@ ts-suppressions: ## Fail on any suppression in manual frontend/admin TS/JS code 
 			echo "==> suppression gate (skip: no source files in FILES)"; \
 		fi; \
 	else \
-		echo "==> suppression gate apps/frontend + apps/admin manual sources"; \
-		files=`find apps/frontend apps/admin -type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.jsx' -o -name '*.mjs' -o -name '*.cjs' -o -name '*.mts' -o -name '*.cts' \) -not -path '*/node_modules/*' -not -path '*/.next/*' -not -path '*/dist/*'`; \
+		echo "==> suppression gate apps/frontend + apps/admin + apps/landing manual sources"; \
+		files=`find apps/frontend apps/admin apps/landing -type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.jsx' -o -name '*.mjs' -o -name '*.cjs' -o -name '*.mts' -o -name '*.cts' \) -not -path '*/node_modules/*' -not -path '*/.next/*' -not -path '*/dist/*'`; \
 		node tools/suppression-gate/suppression-gate.mjs $$files || status=1; \
 	fi; \
 	if [ $$status -ne 0 ]; then echo "ERROR: suppression gate failed (see above)"; exit 1; fi
@@ -656,8 +667,9 @@ trivy-fs: ## Scan the repo filesystem with trivy (vuln, HIGH/CRITICAL); .worktre
 # separate decision once the per-package knip.json configs stabilize
 # (docs/agents/tooling.md). Monorepo mode requires a root package.json the
 # repo deliberately doesn't have, so each package runs standalone; apps/landing
-# is out of scope — a Figma Make export whose template ui-library makes the
-# dead-code signal non-actionable. Self-sufficient like tools-test: installs
+# is out of scope — маленький маркетинговый одностраничник, где сигнал
+# dead-code не окупает настройку (решение карты #888, тикет T1).
+# Self-sufficient like tools-test: installs
 # node_modules when missing (knip resolves imports through them).
 knip: ## Print the advisory dead-code report (knip; not a gate)
 	@set -e; status=0; for dir in $(KNIP_DIRS); do \

@@ -54,7 +54,7 @@ Workflow-файлы: `.github/workflows/{ci,security,_deploy,deploy-stage,deploy
 - Deploy-каталоги на сервере содержат только `docker-compose.<env>.yml`,
   `.env.<env>` (+ `.prev`), `.previous-images`, `.deploy-run-id`; репозитория
   и git-чекаута на сервере нет.
-- Лендинг (`apps/landing`) слушает `127.0.0.1:13002` в prod и `127.0.0.1:23002` в stage; Caddy отдаёт его как явное исключение на публичном домене (`/`, `/assets/*`, юрстраницы, `robots.txt`), всё остальное уходит кабинету — см. раздел «Caddy».
+- Лендинг (`apps/landing`, Next.js standalone — ADR 0063) слушает `127.0.0.1:13002` в prod и `127.0.0.1:23002` в stage; Caddy отдаёт его как явное исключение на публичном домене (`/`, `/_next/*`, юрстраницы, `robots.txt`), всё остальное уходит кабинету — см. раздел «Caddy».
 - При каждом деплое backend недоступен 5–15 секунд (один инстанс) — принято.
 - Каждый деплой stage/prod также раскатывает Caddy-фрагмент rentlee
   (`deploy/caddy/rentlee.caddy` → `/etc/caddy/conf.d/rentlee.caddy`) —
@@ -305,16 +305,21 @@ localhost-порты контейнеров. Конфигурация — мод
 - `/webhooks/*` → бэкенд через `handle` (префикс НЕ снимается — T-Kassa шлёт
   колбэки на полный путь);
 - лендинг (`@landing`): `/` (точный), `/privacy`, `/terms`, `/robots.txt`,
-  `/sitemap.xml`, `/assets/*` (Vite-бандлы и favicon лендинга),
-  `/landing-fonts/*` — через `handle`, НЕ `handle_path`: nginx-контейнер
-  лендинга ждёт полный путь;
+  `/sitemap.xml`, `/_next/*` (бандлы и image-оптимизатор Next),
+  `/fonts/*` (self-hosted Onest), метадата-маршруты Next `/icon.png`,
+  `/opengraph-image`, `/apple-icon.png`, `/favicon.ico` (OG-картинка,
+  apple-touch-icon, favicon — конечные пути, точные) — через `handle`,
+  НЕ `handle_path`: контейнер лендинга (Next standalone, ADR 0063)
+  ждёт полный путь;
 - всё остальное → кабинет (`127.0.0.1:13000` prod / `:23000` stage).
 
 Следствия:
 
 - новый top-level роут фронта работает без правок прокси;
 - новый публичный путь лендинга = добавление в матчер `@landing`
-  (`deploy/caddy/rentlee.caddy`) + файл в `apps/landing/public/`;
+  (`deploy/caddy/rentlee.caddy`) + app-маршрут `app/(site)/<путь>/page.tsx`
+  (страница) либо файл в `apps/landing/public/` (статический ассет) —
+  файл из `public/` маршрутом в Next не становится;
 - `robots.txt` и `sitemap.xml` отдаёт лендинг (`apps/landing/public/`);
   `Disallow`-список robots.txt зеркалит `APP_ROUTE_PREFIXES` фронта минус
   `/login`;
@@ -326,10 +331,12 @@ localhost-порты контейнеров. Конфигурация — мод
 - дедупликация prod/stage-блоков — snippet `(rentlee_site)` с позиционными
   аргументами `{args[0]}` (канон Caddy ≥2.7; на сервере v2.11.4);
 - SSE-стрим (`/api/notifications/stream`, ADR 0060) исключён из `encode`
-  матчером `not header Content-Type text/event-stream`: дефолтный матчер
-  сжатия включает `text/*`, и gzip начал бы буферизовать кадры после 512
-  байт; `reverse_proxy` сам флешит `text/event-stream` немедленно —
-  `flush_interval` не нужен;
+  именованным матчером по пути запроса — `@not_sse not path
+  /api/notifications/stream*`: ответные матчеры `encode` не умеют отрицания
+  по значению заголовка (только `status` и `header` с `!`-отсутствием
+  поля), а дефолтный матчер сжатия включает `text/*`, и gzip начал бы
+  буферизовать кадры после 512 байт; `reverse_proxy` сам флешит
+  `text/event-stream` немедленно — `flush_interval` не нужен;
 - `www.rentlee.ru` — permanent redir на канон; admin-блоки — catch-all на
   админку с тем же `handle_path /api/*`;
 - access-лог — общий `/var/log/caddy/access.log` (JSON, roll 50mb × 5),
@@ -399,14 +406,14 @@ Sudo: deploy-пользователю нужны passwordless-права на
 выполняет deploy-джоба снаружи; вручную их можно повторить так:
 
 ```bash
-curl -fsS https://dev.rentlee.ru/ | grep -q 'id="root"'
+curl -fsS https://dev.rentlee.ru/ | grep -q 'id="landing-root"'
 curl -fsS https://dev.rentlee.ru/login | grep -qi '<html'
 curl -fsS https://admin.dev.rentlee.ru/ | grep -q 'id="root"'
 test "$(curl -fsS https://admin.dev.rentlee.ru/healthz)" = "ok"
 curl -fsS https://dev.rentlee.ru/api/healthz | grep -q '"status":"ok"'
 test "$(curl -sS -o /tmp/arenda-stage-me.out -w '%{http_code}' https://dev.rentlee.ru/api/me)" = "401"
 
-curl -fsS https://rentlee.ru/ | grep -q 'id="root"'
+curl -fsS https://rentlee.ru/ | grep -q 'id="landing-root"'
 curl -fsS https://rentlee.ru/login | grep -qi '<html'
 curl -fsS https://admin.rentlee.ru/ | grep -q 'id="root"'
 test "$(curl -fsS https://admin.rentlee.ru/healthz)" = "ok"
@@ -427,7 +434,7 @@ esac
 
 ```bash
 # Лендинг — явное исключение.
-curl -fsS https://dev.rentlee.ru/privacy | grep -q 'id="root"'
+curl -fsS https://dev.rentlee.ru/privacy | grep -qi 'Политика конфиденциальности'
 curl -fsS https://dev.rentlee.ru/robots.txt           # text/plain, Disallow-правила
 curl -fsS https://dev.rentlee.ru/sitemap.xml          # xml, три URL
 # Кабинет — catch-all.

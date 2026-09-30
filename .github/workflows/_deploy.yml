@@ -428,24 +428,40 @@ jobs:
               done
 
               body="$(get "${BASE_URL}/")" || { echo "GET / failed" >&2; return 1; }
-              grep -q 'id="root"' <<<"${body}" || { echo "/ did not return the landing HTML" >&2; return 1; }
-              asset="$(grep -oE '/assets/[^"]+\.js' <<<"${body}" | head -n1)"
+              grep -q 'id="landing-root"' <<<"${body}" || { echo "/ did not return the landing HTML" >&2; return 1; }
+              # Next standalone (ADR 0063): hashed /_next/static chunks are
+              # content-addressed and served immutable by Next itself.
+              asset="$(grep -oE '/_next/static/[^"]+\.js' <<<"${body}" | head -n1)"
               if [ -z "${asset}" ]; then
-                echo "no /assets/*.js reference found in the landing HTML" >&2
+                echo "no /_next/static/*.js reference found in the landing HTML" >&2
                 return 1
               fi
               [ "$(get_status "${BASE_URL}${asset}")" = "200" ] || { echo "landing asset ${asset} is not 200" >&2; return 1; }
-              # Favicon moved to src/assets in the same change (#652): it must
-              # resolve through the hashed /assets path with the immutable cache.
-              icon="$(grep -oE '/assets/[^"]+\.png' <<<"${body}" | head -n1)"
+              asset_headers="$(curl -sS --max-time 15 --retry 3 --retry-delay 2 --retry-all-errors -D - -o /dev/null "${BASE_URL}${asset}")" \
+                || { echo "GET ${asset} failed" >&2; return 1; }
+              grep -qi '^cache-control: .*immutable' <<<"${asset_headers}" || { echo "static chunk ${asset} lost the immutable cache header" >&2; return 1; }
+              # Favicon: app/icon.png → /icon.png, referenced from the landing HTML.
+              icon="$(grep -oE 'href="/icon\.png[^"]*"' <<<"${body}" | head -n1 | sed -e 's/^href="//' -e 's/"$//')"
               if [ -z "${icon}" ]; then
-                echo "no /assets/*.png favicon reference found in the landing HTML" >&2
+                echo "no /icon.png favicon reference found in the landing HTML" >&2
                 return 1
               fi
               icon_headers="$(curl -sS --max-time 15 --retry 3 --retry-delay 2 --retry-all-errors -D - -o /dev/null "${BASE_URL}${icon}")" \
                 || { echo "GET ${icon} failed" >&2; return 1; }
               head -n1 <<<"${icon_headers}" | grep -qi '^HTTP/.* 200' || { echo "favicon ${icon} is not 200" >&2; return 1; }
-              grep -qi '^cache-control: .*immutable' <<<"${icon_headers}" || { echo "favicon ${icon} lost the immutable cache header" >&2; return 1; }
+              # OG-картинка: метадата-маршрут /opengraph-image из той же
+              # главной; metadataBase делает URL в HTML абсолютным и всегда
+              # прод-ориджином (app/layout.tsx) — хост переписываем на
+              # BASE_URL: на stage выматываем собственный маршрут
+              # свежераскатанного фрагмента, а не аптайм прода; для
+              # prod-деплоя перезапись no-op.
+              og_image="$(grep -oE 'property="og:image" content="[^"]*"' <<<"${body}" | head -n1 | sed -e 's/^property="og:image" content="//' -e 's/"$//')"
+              if [ -z "${og_image}" ]; then
+                echo "no og:image reference found in the landing HTML" >&2
+                return 1
+              fi
+              stage_og="${BASE_URL}$(printf '%s' "${og_image}" | sed -e 's#^[a-zA-Z][a-zA-Z0-9+.-]*://[^/]*##')"
+              [ "$(get_status "${stage_og}")" = "200" ] || { echo "og:image ${stage_og} is not 200" >&2; return 1; }
 
               body="$(get "${BASE_URL}/robots.txt")" || { echo "GET /robots.txt failed" >&2; return 1; }
               grep -q 'Disallow:' <<<"${body}" || { echo "/robots.txt does not contain Disallow rules" >&2; return 1; }

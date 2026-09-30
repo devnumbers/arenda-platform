@@ -66,16 +66,24 @@ const ADMIN_PACKAGE_JSON = JSON.stringify(
   2,
 );
 
+const LANDING_PACKAGE_JSON = JSON.stringify(
+  { name: "fixture-landing", private: true, scripts: { lint: "node ../../mark-gate.mjs landing" } },
+  null,
+  2,
+);
+
 function makeFixture(name) {
   const dir = path.join(tmpdir(), `stop-gate-${name}-${process.pid}-${Date.now()}`);
   mkdirSync(path.join(dir, "apps/backend/db/migrations"), { recursive: true });
   mkdirSync(path.join(dir, "apps/frontend"), { recursive: true });
   mkdirSync(path.join(dir, "apps/admin"), { recursive: true });
+  mkdirSync(path.join(dir, "apps/landing"), { recursive: true });
   mkdirSync(path.join(dir, "docs"), { recursive: true });
   writeFileSync(path.join(dir, "Makefile"), MAKEFILE);
   writeFileSync(path.join(dir, "mark-gate.mjs"), MARK_GATE);
   writeFileSync(path.join(dir, "apps/frontend/package.json"), FRONTEND_PACKAGE_JSON);
   writeFileSync(path.join(dir, "apps/admin/package.json"), ADMIN_PACKAGE_JSON);
+  writeFileSync(path.join(dir, "apps/landing/package.json"), LANDING_PACKAGE_JSON);
   // Tracked baseline so a new migration file shows as its full path in
   // `git status --porcelain` (an untracked directory would collapse to
   // "?? apps/backend/", exactly like in the real repo).
@@ -155,6 +163,14 @@ describe("stop-gate: gates by touched package", () => {
     const res = runStopGate(path.join(dir, "stop-gate.mjs"), dir);
     expect(res.code).toBe(0);
     expect(gatesRun(dir)).toEqual(["admin", "admin-lint", "ts-suppressions"]);
+  });
+
+  it("uncommitted landing change runs only the landing gates", () => {
+    const dir = fixture("landing");
+    writeFileSync(path.join(dir, "apps/landing/x.ts"), "export {};\n");
+    const res = runStopGate(path.join(dir, "stop-gate.mjs"), dir);
+    expect(res.code).toBe(0);
+    expect(gatesRun(dir)).toEqual(["landing", "ts-suppressions"]);
   });
 
   it("changes across all three packages run all the gates", () => {

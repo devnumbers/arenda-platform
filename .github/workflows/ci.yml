@@ -502,6 +502,14 @@ jobs:
         working-directory: apps/landing
         run: npm ci
 
+      - name: Lint
+        working-directory: apps/landing
+        run: npm run lint
+
+      - name: Typecheck
+        working-directory: apps/landing
+        run: npm run typecheck
+
       - name: Build
         working-directory: apps/landing
         run: npm run build
