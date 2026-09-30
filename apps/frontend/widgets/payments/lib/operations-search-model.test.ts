@@ -17,6 +17,15 @@ const categories = [
   { slug: 'cleaning', label: 'Клининг', type: 'expense', totalKopecks: 1250000 },
 ] as const;
 
+/** Баг #950: одна категория в двух направлениях — сводка отдаёт две строки
+ * (артефакт размерности GROUP BY), чип должен быть один. */
+const bothDirections = [
+  { slug: 'damage-compensation', label: 'Возмещение ущерба', type: 'income', totalKopecks: 300000 },
+  { slug: 'damage-compensation', label: 'Возмещение ущерба', type: 'expense', totalKopecks: 200000 },
+] as const;
+
+const security = { slug: 'security', label: 'Охрана', type: 'expense', totalKopecks: 550000 } as const;
+
 describe('searchCategoryChips', () => {
   it('переносит разбивку сводки в чипы без выбора', () => {
     expect(searchCategoryChips(categories, null)).toEqual([
@@ -34,6 +43,19 @@ describe('searchCategoryChips', () => {
 
   it('выбранный слаг, которого нет в разбивке, ничего не выбирает', () => {
     expect(searchCategoryChips(categories, 'rent').every((chip) => !chip.selected)).toBe(true);
+  });
+
+  it('категория в обоих направлениях — один чип (баг #950, сводка отдаёт строку на слаг+направление)', () => {
+    expect(searchCategoryChips([...bothDirections, security], null)).toEqual([
+      { slug: 'damage-compensation', label: 'Возмещение ущерба', selected: false },
+      { slug: 'security', label: 'Охрана', selected: false },
+    ]);
+  });
+
+  it('склейка не ломает выбор чипа', () => {
+    expect(searchCategoryChips(bothDirections, 'damage-compensation')).toEqual([
+      { slug: 'damage-compensation', label: 'Возмещение ущерба', selected: true },
+    ]);
   });
 
   it('пустая разбивка — пустые чипы', () => {

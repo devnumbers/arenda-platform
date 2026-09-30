@@ -1,6 +1,6 @@
 import { OPERATIONS_FEED_SORT, type GlobalOperationScope, type PaymentOperationScope } from '@/shared/api/query-keys';
 import type { OperationsCategorySummary } from '@/entities/payment';
-import type { OperationsPeriod } from '@/features/payments';
+import { operationsCategoryRows, type OperationsPeriod } from '@/features/payments';
 
 /**
  * Модель экрана поиска операций (#476, Figma 1494-61633/61657/61679/63035):
@@ -24,16 +24,19 @@ export type SearchCategoryChip = {
 };
 
 /** Чипы «Категорий» — разбивка сводки по поисковому запросу (категории с
- * совпавшими операциями, по сумме убывание). Выбор — одиночный: selectedSlug,
- * которого в разбивке нет (запрос изменился), молча ничего не выбирает. */
+ * совпавшими операциями, по сумме убывание). Сводка отдаёт строку на
+ * слаг+направление — склейка по слагу каноном operationsCategoryRows
+ * (прецедент #602): одна категория — один чип (#950, дубль ломал и
+ * React-ключи). Выбор — одиночный: selectedSlug, которого в разбивке нет
+ * (запрос изменился), молча ничего не выбирает. */
 export function searchCategoryChips(
   categories: ReadonlyArray<OperationsCategorySummary>,
   selectedSlug: string | null,
 ): ReadonlyArray<SearchCategoryChip> {
-  return categories.map((category) => ({
-    slug: category.slug,
-    label: category.label,
-    selected: category.slug === selectedSlug,
+  return operationsCategoryRows(categories).map((row) => ({
+    slug: row.slug,
+    label: row.label,
+    selected: row.slug === selectedSlug,
   }));
 }
 
