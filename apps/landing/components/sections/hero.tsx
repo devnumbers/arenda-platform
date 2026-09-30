@@ -1,4 +1,4 @@
-import Image from "next/image";
+import Image, { getImageProps } from "next/image";
 import { LandingLink } from "@/components/button";
 import { Reveal } from "@/components/reveal";
 import heroBg from "@/assets/sections/hero-bg.webp";
@@ -11,17 +11,30 @@ import heroBgMobile from "@/assets/sections/hero-bg-mobile.webp";
 // подзаголовок 16/20). У планшета и мобайла свои кропы фонового фото —
 // imageRef-заливки узлов Figma, поэтому <picture> с media-источниками.
 export function Hero() {
+  // Медиа-ветки <picture> считаем через getImageProps, чтобы планшетный и
+  // мобильный кропы шли через /_next/image-оптимизатор (AVIF q90 из
+  // next.config), а не сырым webp; в <source> передаём только srcSet/sizes.
+  const mobileBg = getImageProps({ src: heroBgMobile, alt: "", fill: true, sizes: "100vw", quality: 90 });
+  const tabletBg = getImageProps({ src: heroBgTablet, alt: "", fill: true, sizes: "100vw", quality: 90 });
   return (
     <section id="hero" className="px-2 pt-2">
       <div className="relative flex h-[788px] flex-col justify-start overflow-hidden rounded-[32px] p-8 pt-12 tab:h-[936px] tab:px-12 tab:pt-16 tab:pb-12 desk:h-[607px] desk:justify-end desk:rounded-[40px] desk:p-10">
         <picture>
-          <source media="(max-width: 480px)" srcSet={heroBgMobile.src} />
-          <source media="(min-width: 481px) and (max-width: 1199px)" srcSet={heroBgTablet.src} />
+          <source media="(max-width: 480px)" srcSet={mobileBg.props.srcSet} sizes={mobileBg.props.sizes} />
+          <source
+            media="(min-width: 481px) and (max-width: 1199px)"
+            srcSet={tabletBg.props.srcSet}
+            sizes={tabletBg.props.sizes}
+          />
           <Image
             src={heroBg}
             alt="Интерфейс Рентли на экране телефона на фоне квартиры"
             fill
-            priority
+            // LCP-фон первого экрана грузим сразу, но без priority: тот
+            // эмитит <link rel=preload> по десктопному srcSet, холостому
+            // на ≤1199 — картинка показывается из media-ветки <picture>.
+            loading="eager"
+            fetchPriority="high"
             sizes="100vw"
             className="object-cover"
           />

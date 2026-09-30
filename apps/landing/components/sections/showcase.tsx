@@ -1,4 +1,4 @@
-import Image from "next/image";
+import Image, { getImageProps } from "next/image";
 import { LandingLink } from "@/components/button";
 import { Reveal } from "@/components/reveal";
 import cardBar from "@/assets/sections/showcase-card-bar.webp";
@@ -13,6 +13,15 @@ import screensSub from "@/assets/sections/showcase-screens-sub.webp";
 // overflow-x: clip на html/body, у планшета/мобайла свой кроп скриншотов
 // (4096×1792 из Figma, соотношение 1106/484), у десктопа — 1600×400.
 export function Showcase() {
+  // Ветка ≤1199 считается через getImageProps, чтобы планшетный кроп
+  // (4096×1792) шёл через /_next/image-оптимизатор (AVIF q90), а не сырым
+  // webp; слоты 503/1106 — это w-[503px] и tab:w-[1106px] у Image ниже.
+  const screensSubImg = getImageProps({
+    src: screensSub,
+    alt: "",
+    sizes: "(max-width: 480px) 503px, 1106px",
+    quality: 90,
+  });
   return (
     <section id="showcase" className="mt-24 scroll-mt-[88px] desk:mt-[156px] desk:scroll-mt-[104px]">
       <div className="mx-auto flex max-w-[1048px] flex-col items-center gap-8 px-10 desk:max-w-[1000px] desk:gap-14 desk:px-0">
@@ -36,7 +45,11 @@ export function Showcase() {
         </Reveal>
         <Reveal delay={150} className="w-full">
           <picture>
-            <source media="(max-width: 1199px)" srcSet={screensSub.src} />
+            <source
+              media="(max-width: 1199px)"
+              srcSet={screensSubImg.props.srcSet}
+              sizes={screensSubImg.props.sizes}
+            />
             <Image
               src={screens}
               alt="Скриншоты экранов приложения Рентли"
