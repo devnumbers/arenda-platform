@@ -12,6 +12,11 @@ FROM node:24-alpine AS build
 WORKDIR /app/apps/landing
 
 ENV NEXT_TELEMETRY_DISABLED=1
+# Ассеты лендинга в образе публикуются под /landing/_next/*: кабинет тоже
+# Next.js и владеет общим /_next/* (контракт Caddy, карта #649, ADR 0063);
+# префикс снимает Caddy (deploy/caddy/rentlee.caddy). В dev-прогонах
+# (make landing-dev) переменной нет — пути остаются дефолтными /_next/*.
+ENV LANDING_ASSET_PREFIX=/landing
 
 COPY --from=deps /app/apps/landing/node_modules ./node_modules
 COPY apps/landing ./

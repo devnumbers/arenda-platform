@@ -430,16 +430,31 @@ jobs:
               body="$(get "${BASE_URL}/")" || { echo "GET / failed" >&2; return 1; }
               grep -q 'id="landing-root"' <<<"${body}" || { echo "/ did not return the landing HTML" >&2; return 1; }
               # Next standalone (ADR 0063): hashed /_next/static chunks are
-              # content-addressed and served immutable by Next itself.
-              asset="$(grep -oE '/_next/static/[^"]+\.js' <<<"${body}" | head -n1)"
+              # content-addressed and served immutable by Next itself. The
+              # landing publishes them under its own /landing prefix
+              # (assetPrefix): the cabinet — also a Next.js app — owns the
+              # bare /_next/* through the catch-all.
+              asset="$(grep -oE '/landing/_next/static/[^"]+\.js' <<<"${body}" | head -n1)"
               if [ -z "${asset}" ]; then
-                echo "no /_next/static/*.js reference found in the landing HTML" >&2
+                echo "no /landing/_next/static/*.js reference found in the landing HTML" >&2
                 return 1
               fi
               [ "$(get_status "${BASE_URL}${asset}")" = "200" ] || { echo "landing asset ${asset} is not 200" >&2; return 1; }
               asset_headers="$(curl -sS --max-time 15 --retry 3 --retry-delay 2 --retry-all-errors -D - -o /dev/null "${BASE_URL}${asset}")" \
                 || { echo "GET ${asset} failed" >&2; return 1; }
               grep -qi '^cache-control: .*immutable' <<<"${asset_headers}" || { echo "static chunk ${asset} lost the immutable cache header" >&2; return 1; }
+              # Cabinet assets: the cabinet is a Next.js app too, and its bare
+              # /_next/* must be served by the cabinet catch-all. Breakage on
+              # 30.09: @landing swallowed /_next/*, every cabinet chunk 404'd
+              # (white screen) while this smoke stayed green — HTML checks
+              # alone never touched a cabinet bundle.
+              cab_body="$(get "${BASE_URL}/login")" || { echo "GET /login failed" >&2; return 1; }
+              cab_asset="$(grep -oE '/_next/static/[^"]+\.js' <<<"${cab_body}" | head -n1)"
+              if [ -z "${cab_asset}" ]; then
+                echo "no /_next/static/*.js reference found in the cabinet /login HTML" >&2
+                return 1
+              fi
+              [ "$(get_status "${BASE_URL}${cab_asset}")" = "200" ] || { echo "cabinet asset ${cab_asset} is not 200" >&2; return 1; }
               # Favicon: app/icon.png → /icon.png, referenced from the landing HTML.
               icon="$(grep -oE 'href="/icon\.png[^"]*"' <<<"${body}" | head -n1 | sed -e 's/^href="//' -e 's/"$//')"
               if [ -z "${icon}" ]; then
@@ -522,11 +537,14 @@ jobs:
           # URL в srcset кончаются пробелом (перед дескриптором «640w»);
           # &amp; из HTML-атрибутов и \u0026 из RSC-пейлоада разворачиваем
           # назад в & — иначе урл склеивается в мусор вида «webpu0026w=96»
-          # и оптимизатор честно отвечает 400.
+          # и оптимизатор честно отвечает 400. Оптимизатор лендинга живёт
+          # под /landing/_next/image (assetPrefix, ADR 0063): экстракция
+          # обязана начинаться с префикса — голый /_next/image уходит
+          # кабинетному catch-all и греет чужой 404.
           urls_file="$(mktemp)"
           warn_file="$(mktemp)"
           trap 'rm -f "${urls_file}" "${warn_file}"' EXIT
-          grep -oE '/_next/image\?[^" ]+' <<<"${html}" | sed 's/&amp;/\&/g; s/\\u0026/\&/g' | sort -u > "${urls_file}"
+          grep -oE '/landing/_next/image\?[^" ]+' <<<"${html}" | sed 's/&amp;/\&/g; s/\\u0026/\&/g' | sort -u > "${urls_file}"
           total="$(wc -l < "${urls_file}" | tr -d ' ')"
           echo "Warming ${total} optimizer URLs against ${BASE_URL}"
           export BASE_URL warn_file

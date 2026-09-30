@@ -54,7 +54,7 @@ Workflow-файлы: `.github/workflows/{ci,security,_deploy,deploy-stage,deploy
 - Deploy-каталоги на сервере содержат только `docker-compose.<env>.yml`,
   `.env.<env>` (+ `.prev`), `.previous-images`, `.deploy-run-id`; репозитория
   и git-чекаута на сервере нет.
-- Лендинг (`apps/landing`, Next.js standalone — ADR 0063) слушает `127.0.0.1:13002` в prod и `127.0.0.1:23002` в stage; Caddy отдаёт его как явное исключение на публичном домене (`/`, `/_next/*`, юрстраницы, `robots.txt`), всё остальное уходит кабинету — см. раздел «Caddy».
+- Лендинг (`apps/landing`, Next.js standalone — ADR 0063) слушает `127.0.0.1:13002` в prod и `127.0.0.1:23002` в stage; Caddy отдаёт его как явное исключение на публичном домене (`/`, `/landing/_next/*` — assetPrefix, юрстраницы, `robots.txt`), всё остальное уходит кабинету — см. раздел «Caddy».
 - При каждом деплое backend недоступен 5–15 секунд (один инстанс) — принято.
 - Каждый деплой stage/prod также раскатывает Caddy-фрагмент rentlee
   (`deploy/caddy/rentlee.caddy` → `/etc/caddy/conf.d/rentlee.caddy`) —
@@ -304,18 +304,26 @@ localhost-порты контейнеров. Конфигурация — мод
 - `/api/*` → бэкенд через `handle_path` (префикс `/api` снимается);
 - `/webhooks/*` → бэкенд через `handle` (префикс НЕ снимается — T-Kassa шлёт
   колбэки на полный путь);
+- ассеты лендинга — `/landing/_next/*`: оба приложения — Next.js, и «голый»
+  `/_next/*` принадлежит кабинету, поэтому лендинг собран с
+  `assetPrefix /landing` (env `LANDING_ASSET_PREFIX` в Dockerfile,
+  `apps/landing/next.config.ts`); Caddy снимает `/landing`
+  (`handle` + `uri strip_prefix`) — контейнер ждёт честный `/_next/*`;
+  попытка отдать лендингу весь `/_next/*` (первая редакция ADR 0063)
+  ломала кабинет на stage 30.09: HTML 200, каждый чанк 404;
 - лендинг (`@landing`): `/` (точный), `/privacy`, `/terms`, `/robots.txt`,
-  `/sitemap.xml`, `/_next/*` (бандлы и image-оптимизатор Next),
-  `/fonts/*` (self-hosted Onest), метадата-маршруты Next `/icon.png`,
-  `/opengraph-image`, `/apple-icon.png`, `/favicon.ico` (OG-картинка,
-  apple-touch-icon, favicon — конечные пути, точные) — через `handle`,
-  НЕ `handle_path`: контейнер лендинга (Next standalone, ADR 0063)
+  `/sitemap.xml`, `/fonts/*` (self-hosted Onest), метадата-маршруты Next
+  `/icon.png`, `/opengraph-image`, `/apple-icon.png`, `/favicon.ico`
+  (OG-картинка, apple-touch-icon, favicon — конечные пути, точные) — через
+  `handle`, НЕ `handle_path`: контейнер лендинга (Next standalone, ADR 0063)
   ждёт полный путь;
-- всё остальное → кабинет (`127.0.0.1:13000` prod / `:23000` stage).
+- всё остальное → кабинет (`127.0.0.1:13000` prod / `:23000` stage), включая
+  его `/_next/*`.
 
 Следствия:
 
-- новый top-level роут фронта работает без правок прокси;
+- новый top-level роут фронта работает без правок прокси — включая его
+  `/_next/*`-статику;
 - новый публичный путь лендинга = добавление в матчер `@landing`
   (`deploy/caddy/rentlee.caddy`) + app-маршрут `app/(site)/<путь>/page.tsx`
   (страница) либо файл в `apps/landing/public/` (статический ассет) —
@@ -328,8 +336,9 @@ localhost-порты контейнеров. Конфигурация — мод
   добавлять (ADR 0032); `Content-Type` обязан быть
   `text/javascript`/`application/javascript`, иначе регистрация SW упадёт
   (требование спецификации — JS MIME);
-- дедупликация prod/stage-блоков — snippet `(rentlee_site)` с позиционными
-  аргументами `{args[0]}` (канон Caddy ≥2.7; на сервере v2.11.4);
+- дедупликация prod/stage-блоков — snippets `(rentlee_site)`, `(rentlee_admin)`
+  и `(rentlee_log)` с позиционными аргументами `{args[0]}` (канон Caddy ≥2.7;
+  на сервере v2.11.4); access-лог — один snippet на все блоки хоста;
 - SSE-стрим (`/api/notifications/stream`, ADR 0060) исключён из `encode`
   именованным матчером по пути запроса — `@not_sse not path
   /api/notifications/stream*`: ответные матчеры `encode` не умеют отрицания
@@ -360,9 +369,12 @@ localhost-порты контейнеров. Конфигурация — мод
    (фрагмент резолвится только через import);
 7. `systemctl reload caddy` — graceful, zero-downtime; при невалидном конфиге
    работающий инстанс остаётся на старом;
-8. smoke инвертированной маршрутизации: лендинг-исключения = 200, кабинет =
-   catch-all (200/307), чужой путь = 404, `/api/healthz` = ok, `/sw.js` =
-   no-store + JS MIME, `robots.txt` = text/plain;
+8. smoke инвертированной маршрутизации: лендинг-исключения = 200, чанк
+   лендинга `/landing/_next/static/*.js` = 200 + immutable, чанк кабинета
+   `/_next/static/*.js` = 200 (поломка 30.09 прошла мимо смоука без этой
+   проверки), кабинет = catch-all (200/307), чужой путь = 404,
+   `/api/healthz` = ok, `/sw.js` = no-store + JS MIME, `robots.txt` =
+   text/plain;
 9. провал validate/reload/smoke → откат: `rentlee.caddy.prev` на место +
    reload, шаг падает громко (образы при провале смоука откатит штатный
    «Rollback on failure»).
