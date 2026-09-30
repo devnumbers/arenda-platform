@@ -2150,6 +2150,7 @@ export interface paths {
         get: operations["getRental"];
         put?: never;
         post?: never;
+        /** @description Deletes the rental together with its managed rent payment (the rental row goes first, releasing the payment FK). Only a not-started («передумал до старта» — all planned occurrences are future and go cleanly) or a completed rental deletes; a started unfinished rental answers 409 — it only goes through completion. Overdue operations survive the payment as the property's debt. */
         delete: operations["deleteRental"];
         options?: never;
         head?: never;
@@ -2165,6 +2166,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** @description Completes the rental: records the completion date (start ≤ date ≤ today in the owner's timezone — «По плану» is the UI's substitution) and stops the managed rent payment at that date — the strictly future planned operations are torn down, the due ones stay with the owner. The optional deposit return is a record, not an operation. Completing a future rental is impossible by design — a start date in the future leaves the valid window empty (400). */
         post: operations["completeRental"];
         delete?: never;
         options?: never;
@@ -8013,7 +8015,15 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
+            /** @description The rental has already started — finish it instead */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     updateRental: {
@@ -8073,11 +8083,27 @@ export interface operations {
                     "application/json": components["schemas"]["RentalResponse"];
                 };
             };
-            400: components["responses"]["BadRequest"];
+            /** @description The completion date is before the start or in the future */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
+            /** @description The rental is already completed */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     getRentalSummary: {
