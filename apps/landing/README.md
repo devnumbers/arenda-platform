@@ -38,15 +38,26 @@ make landing-typecheck   # tsc --noEmit
 - Образ `landing` собирается из корня репо (`apps/landing/Dockerfile`,
   node standalone, `PORT=8080`, healthcheck `/healthz`); версии Node штампует
   `make versions-sync` (`FROM node:24-alpine`).
+- В образе (`apps/landing/Dockerfile`) выставлен
+  `LANDING_ASSET_PREFIX=/landing` → в `next.config.ts` это `assetPrefix`:
+  ассеты публикуются как `/landing/_next/*`, потому что кабинет — тоже
+  Next.js и владеет «голым» `/_next/*` (контракт Caddy, карта #649; попытка
+  отдать лендингу весь `/_next/*` сломала кабинет на stage 30.09 — ADR 0063).
+  Префикс снимает Caddy; в dev (`make landing-dev`) переменной нет.
+  Image-оптимизатор под префикс не попадает (серверный рендер всегда пишет
+  `/_next/image`) — Caddy разводит его по параметру `url`
+  (`@landing_optimizer`).
 - Caddy-матчер `@landing` (`deploy/caddy/rentlee.caddy`): `/`, `/privacy`,
-  `/terms`, `/robots.txt`, `/sitemap.xml`, `/_next/*`, `/fonts/*`, `/icon.png`,
-  `/opengraph-image`, `/apple-icon.png`, `/favicon.ico`.
+  `/terms`, `/robots.txt`, `/sitemap.xml`, `/fonts/*`, `/icon.png`,
+  `/opengraph-image`, `/apple-icon.png`, `/favicon.ico`; ассеты идут мимо
+  матчера отдельным `handle /landing/_next/*` (Caddy снимает `/landing`).
   Новый публичный путь = app-маршрут `app/(site)/<путь>/page.tsx` (страница)
   или статика `public/` (ассет) **+ строка в матчере**: файл из `public/`
   маршрутом в Next не становится — `/privacy` и `/terms` уже app-маршруты.
 - Smoke `_deploy.yml` ждёт от `/` маркер `id="landing-root"`, работающий
-  `/_next/static/*.js` (immutable), `/icon.png`, `robots.txt` (text/plain)
-  и `og:image` (200).
+  `/landing/_next/static/*.js` (immutable), `/icon.png`, `robots.txt`
+  (text/plain), `og:image` (200) и кабинетный чанк `/_next/static/*.js`
+  (200) — проверка появилась после поломки 30.09.
 - `robots.txt` и `sitemap.xml` — статика `public/`; `Disallow` зеркалит
   кабинетные префиксы (`apps/frontend/shared/lib/pwa/app-routes.ts` минус
   `/login`), `Sitemap` — прод-канон `https://rentlee.ru`.

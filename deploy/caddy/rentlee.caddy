@@ -1,4 +1,4 @@
-# Рентли: пять публичных блоков rentlee.ru — зеркало серверного
+# Рентли: публичные блоки rentlee.ru — зеркало серверного
 # /etc/caddy/conf.d/rentlee.caddy. Источник правды — этот файл в репо: правки
 # только через репо и деплой (deploy-stage/prod раскатывают фрагмент в conf.d),
 # руками на сервере не редактировать. Остальные проекты живут своими файлами
@@ -6,13 +6,36 @@
 # (docs/deployment.md, раздел «Caddy»).
 #
 # Контракт публичного сайта — инверсия фолбэка (карта #649): кабинет Next.js
-# дефолтный catch-all, лендинг — явное исключение. Новый top-level роут фронта
+# дефолтный catch-all, лендинг — явные исключения. Новый top-level роут фронта
 # работает без правок прокси; новый публичный путь лендинга = добавление
 # в матчер @landing. На /sw.js никаких заголовков Caddy не ставит —
 # Cache-Control: no-store приходит от Next (ADR 0032).
+#
+# Оба приложения — Next.js, внутренние ассеты обоих живут в /_next/*, по пути
+# их не развести. Поэтому кабинет владеет /_next/* catch-all'ом (карта
+# #649), а лендинг собран с assetPrefix /landing (apps/landing/next.config.ts):
+# его бандлы публикуются как /landing/_next/*, Caddy снимает /landing —
+# контейнер ждёт честный /_next/*. Image-оптимизатор лендинга префикса не
+# получает (серверный рендер Next всегда пишет /_next/image) и разводится по
+# параметру url — см. комментарий у @landing_optimizer. Попытка отдать
+# лендингу весь /_next/* (ADR 0063, исправлено 30.09) ломала кабинет на
+# stage: HTML отвечал 200, а каждый чанк уходил в лендинг и падал 404 —
+# белый экран.
+
+# Access-лог общий для всех блоков хоста: /var/log/caddy/access.log
+# (JSON, roll 50mb × 5), пишут все проекты сервера; ротацию делает сам Caddy.
+(rentlee_log) {
+	log {
+		output file /var/log/caddy/access.log {
+			roll_size 50mb
+			roll_keep 5
+		}
+		format json
+	}
+}
 
 # Один публичный сайт кабинета: /api и /webhooks — бэкенд, лендинг —
-# исключение, всё остальное — кабинет. handle-блоки взаимоисключающие;
+# явные исключения, всё остальное — кабинет. handle-блоки взаимоисключающие;
 # порядок гарантируется алгоритмом сортировки Caddy (матчерные до безматчерного
 # fallback), выписан в порядке приоритета для читаемости.
 # Аргументы: {args[0]} — backend, {args[1]} — landing, {args[2]} — frontend.
@@ -37,97 +60,80 @@
 		reverse_proxy 127.0.0.1:{args[0]}
 	}
 
-	# Лендинг — явное исключение: корень, юрстраницы, robots/sitemap,
-	# статика Next (/_next/*: бандлы, изображения оптимизатора) и шрифты.
-	# Метадата-маршруты Next — OG-картинка /opengraph-image, apple-touch-icon
-	# /apple-icon.png, favicon /favicon.ico — конечные пути, выписаны точно
-	# (как /icon.png): промах ушёл бы в кабинетный catch-all.
-	# handle, НЕ handle_path: контейнер лендинга (Next standalone, ADR 0063)
-	# ждёт полный путь (/_next/static/...). Форма префиксов — только
-	# /prefix/* (со слешем перед *), не /prefix*.
-	@landing path / /privacy /terms /robots.txt /sitemap.xml /_next/* /fonts/* /icon.png /opengraph-image /apple-icon.png /favicon.ico
+	# Ассеты лендинга — /landing/_next/* (assetPrefix, см. шапку файла).
+	# uri strip_prefix снимает только /landing: контейнер ждёт /_next/...
+	handle /landing/_next/* {
+		uri strip_prefix /landing
+		reverse_proxy 127.0.0.1:{args[1]}
+	}
+
+	# Image-оптимизатор лендинга: его endpoint assetPrefix не получает —
+	# серверный (RSC) рендер лендинга пишет /_next/image всегда (images.path
+	# в Next 16 на серверный srcset не влияет, проверено сборкой), зато
+	# параметр url у лендинга всегда начинается с /landing (все картинки —
+	# статические импорты), у кабинета — никогда. Разводим по нему: CEL,
+	# а не query-матчер — частичный wildcard значения в доке query не обещан.
+	@landing_optimizer {
+		path /_next/image
+		expression `{query.url}.startsWith('/landing/')`
+	}
+	handle @landing_optimizer {
+		reverse_proxy 127.0.0.1:{args[1]}
+	}
+
+	# Публичные пути лендинга: корень, юрстраницы, robots/sitemap, шрифты
+	# (self-hosted Onest) и метадата-маршруты Next — OG-картинка
+	# /opengraph-image, apple-touch-icon /apple-icon.png, favicon /favicon.ico
+	# и /icon.png — конечные пути, выписаны точно: промах ушёл бы в кабинетный
+	# catch-all. handle, НЕ handle_path: контейнер лендинга (Next standalone,
+	# ADR 0063) ждёт полный путь. Форма префиксов — только /prefix/* (со слешем
+	# перед *), не /prefix*.
+	@landing path / /privacy /terms /robots.txt /sitemap.xml /fonts/* /icon.png /opengraph-image /apple-icon.png /favicon.ico
 	handle @landing {
 		reverse_proxy 127.0.0.1:{args[1]}
 	}
 
-	# Всё остальное — кабинет Next.js.
+	# Всё остальное — кабинет Next.js, включая его /_next/*.
 	handle {
 		reverse_proxy 127.0.0.1:{args[2]}
 	}
 }
 
+# Админка: /api — бэкенд (префикс снимается), остальное — SPA на react-admin.
+# Аргументы: {args[0]} — backend, {args[1]} — admin SPA.
+(rentlee_admin) {
+	encode zstd gzip
+
+	handle_path /api/* {
+		reverse_proxy 127.0.0.1:{args[0]}
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:{args[1]}
+	}
+}
+
 www.rentlee.ru {
 	redir https://rentlee.ru{uri} permanent
-
-	log {
-		output file /var/log/caddy/access.log {
-			roll_size 50mb
-			roll_keep 5
-		}
-		format json
-	}
+	import rentlee_log
 }
 
 rentlee.ru {
 	import rentlee_site 18080 13002 13000
-
-	log {
-		output file /var/log/caddy/access.log {
-			roll_size 50mb
-			roll_keep 5
-		}
-		format json
-	}
+	import rentlee_log
 }
 
 dev.rentlee.ru {
 	import rentlee_site 28080 23002 23000
-
-	log {
-		output file /var/log/caddy/access.log {
-			roll_size 50mb
-			roll_keep 5
-		}
-		format json
-	}
+	import rentlee_log
 }
 
 admin.rentlee.ru {
-	encode zstd gzip
-
-	handle_path /api/* {
-		reverse_proxy 127.0.0.1:18080
-	}
-
-	handle {
-		reverse_proxy 127.0.0.1:13001
-	}
-
-	log {
-		output file /var/log/caddy/access.log {
-			roll_size 50mb
-			roll_keep 5
-		}
-		format json
-	}
+	import rentlee_admin 18080 13001
+	import rentlee_log
 }
 
 admin.dev.rentlee.ru {
-	encode zstd gzip
-
-	handle_path /api/* {
-		reverse_proxy 127.0.0.1:28080
-	}
-
-	handle {
-		reverse_proxy 127.0.0.1:23001
-	}
-
-	log {
-		output file /var/log/caddy/access.log {
-			roll_size 50mb
-			roll_keep 5
-		}
-		format json
-	}
+	import rentlee_admin 28080 23001
+	import rentlee_log
 }

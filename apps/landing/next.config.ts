@@ -20,7 +20,18 @@ const nextConfig: NextConfig = {
   output: "standalone",
   reactStrictMode: true,
   poweredByHeader: false,
+  // Ассеты публикуются под /landing/_next/*: кабинет — тоже Next.js и по
+  // контракту прокси владеет общим /_next/* (карта #649; попытка отдать
+  // лендингу весь /_next/* сломала кабинет на stage 30.09 — ADR 0063).
+  // Снимает префикс Caddy (deploy/caddy/rentlee.caddy): контейнер по-прежнему
+  // раздаёт честные /_next/*. Переменная задаётся только в Dockerfile —
+  // в next dev и локальных сборках без Caddy пути остаются дефолтными.
+  assetPrefix: process.env.LANDING_ASSET_PREFIX ?? undefined,
   images: {
+    // Endpoint оптимизатора (/_next/image) НЕ следует за assetPrefix:
+    // серверный (RSC) рендер всегда пишет дефолтный путь, поэтому лендинг
+    // разводится с кабинетом по параметру url в Caddy
+    // (@landing_optimizer в deploy/caddy/rentlee.caddy).
     // AVIF для картинок: меньше LCP-полезной нагрузки при том же качестве.
     formats: ["image/avif", "image/webp"],
     // Качество выдачи 90: дефолтные 75 дают видимые артефакты на фото;
