@@ -361,6 +361,36 @@ Figma Make-экспорту и описывал shadcn/ui + Unsplash — см. �
   3D-рендер логотипа; источник рендера не зафиксирован — провенанс
   не подтверждён, требует проверки владельцем.
 
+## Метадата-битмапы `app/`
+
+### app/icon.png
+- Использование: favicon (конвенция `app/icon.png` Metadata API Next.js) и
+  иконка на OG-картинке — `app/opengraph-image.tsx:17` читает файл как
+  data-URL (next/image в OG-рендере недоступен); это единственная кодовая
+  ссылка.
+- Коммиты: исходно `apps/frontend/app/icon.png` — e9407576 «feat(frontend):
+  replace favicon.ico with icon.png»; в лендинг пришёл 0bb522b3
+  (`apps/landing/public/icon.png`), перенесён в `src/assets` 6141bb53
+  (#653); в ветке переименован `src/assets` → `app` 6d78bdf0 (R100, контент
+  не менялся).
+- Внешний источник: провенанс не подтверждён — требует проверки владельцем.
+
+### app/apple-icon.png
+- Использование: apple-touch-icon — файловая конвенция Metadata API
+  Next.js, явных ссылок в коде нет.
+- Коммиты: добавлен 486f39aa — «apple-icon 180 (из app/icon.png)»,
+  производный от `app/icon.png`.
+- Внешний источник: производный от `app/icon.png`; провенанс исходного
+  битмапа не подтверждён — требует проверки владельцем.
+
+### app/favicon.ico
+- Использование: `/favicon.ico` — файловая конвенция Metadata API Next.js,
+  явных ссылок в коде нет.
+- Коммиты: добавлен 486f39aa — производный от `app/icon.png` («Favicon-набор:
+  favicon.ico + apple-icon 180 (из app/icon.png)»).
+- Внешний источник: производный от `app/icon.png`; провенанс исходного
+  битмапа не подтверждён — требует проверки владельцем.
+
 ## Шрифты
 
 ### assets/onest-og-400.ttf, assets/onest-og-600.ttf
