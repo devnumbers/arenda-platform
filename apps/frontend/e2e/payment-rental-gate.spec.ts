@@ -6,6 +6,7 @@ import {
   openCabinetWithSeededSession,
   SEEDED_APARTMENT_PROPERTY_ID,
   test,
+  todayIso,
 } from './fixtures';
 
 // Гейт мутаций Платежа арендной платы (#818): платёж, на который ссылается
@@ -30,12 +31,15 @@ interface RentalFromApi {
   rentPayment: { paymentId: string };
 }
 
-/** Аренда фикстуры: существующая незавершённая переиспользуется (retry),
- * иначе создаётся с началом «сегодня по TZ собственника» (Europe/Moscow —
- * браузер живёт в UTC, у границы суток дата другая). Запоминается для
- * afterAll-уборки: квартиры ждёт и rentals-wizard — инвариант №12 (одна
- * незавершённая на объект) не должен ломать соседние спеки. */
-let fixtureRental: { rentalId: string; paymentId: string } | null = null;
+/** Аренды фикстуры: существующая незавершённая переиспользуется (retry),
+ * иначе создаётся с началом «сегодня по TZ собственника» — сид держит
+ * владельца в UTC (canon fixtures, #796), так что календарь владельца и
+ * браузера совпадают и у границы суток. Все созданные/переиспользованные
+ * аренды попадают в список уборки: ретрай теста завершения создаёт вторую
+ * аренду (завершённая не переиспользуется), и без полного списка она
+ * оставалась бы призраком на общей квартире — afterAll обещает соседним
+ * спекам квартиру без аренд. */
+let fixtureRentals: ReadonlyArray<{ rentalId: string; paymentId: string }> = [];
 
 async function ensureRental(page: Page): Promise<{ rentalId: string; paymentId: string }> {
   const list = await page.request.get(`/api/properties/${PROPERTY}/rentals`);
@@ -43,11 +47,13 @@ async function ensureRental(page: Page): Promise<{ rentalId: string; paymentId: 
   const { items } = (await list.json()) as { items: ReadonlyArray<RentalFromApi> };
   const unfinished = items.find((rental) => rental.completedDate === null);
   if (unfinished !== undefined) {
-    fixtureRental = { rentalId: unfinished.id, paymentId: unfinished.rentPayment.paymentId };
-    return fixtureRental;
+    const found = { rentalId: unfinished.id, paymentId: unfinished.rentPayment.paymentId };
+    if (!fixtureRentals.some((fixture) => fixture.rentalId === found.rentalId)) {
+      fixtureRentals = [...fixtureRentals, found];
+    }
+    return found;
   }
-  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Moscow' })
-    .format(new Date());
+  const today = todayIso();
   const created = await page.request.post(`/api/properties/${PROPERTY}/rentals`, {
     data: {
       amountKopecks: 3_000_000,
@@ -60,25 +66,24 @@ async function ensureRental(page: Page): Promise<{ rentalId: string; paymentId: 
   });
   expect(created.status()).toBe(201);
   const rental = (await created.json()) as RentalFromApi;
-  fixtureRental = { rentalId: rental.id, paymentId: rental.rentPayment.paymentId };
-  return fixtureRental;
+  const made = { rentalId: rental.id, paymentId: rental.rentPayment.paymentId };
+  fixtureRentals = [...fixtureRentals, made];
+  return made;
 }
 
 test.describe('гейт мутаций платежа аренды', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  // Уборка фикстуры в порядке rentals → operations → payments — как в
+  // Уборка фикстур в порядке rentals → operations → payments — как в
   // cleanupRental rentals-wizard: следующая спека (визард, режимы объекта)
   // ждёт квартиру без аренды.
   test.afterAll(async () => {
-    if (fixtureRental === null) {
-      return;
+    for (const { rentalId, paymentId } of fixtureRentals) {
+      await execE2eSql(`DELETE FROM rentals WHERE id = '${rentalId}'`);
+      await execE2eSql(`DELETE FROM operations WHERE payment_id = '${paymentId}'`);
+      await execE2eSql(`DELETE FROM payment_pauses WHERE payment_id = '${paymentId}'`);
+      await execE2eSql(`DELETE FROM payments WHERE id = '${paymentId}'`);
     }
-    const { rentalId, paymentId } = fixtureRental;
-    await execE2eSql(`DELETE FROM rentals WHERE id = '${rentalId}'`);
-    await execE2eSql(`DELETE FROM operations WHERE payment_id = '${paymentId}'`);
-    await execE2eSql(`DELETE FROM payment_pauses WHERE payment_id = '${paymentId}'`);
-    await execE2eSql(`DELETE FROM payments WHERE id = '${paymentId}'`);
   });
 
   test('флаг isRentalManaged в контракте; на экране платежа — только «Оплатить»', async ({
@@ -185,5 +190,86 @@ test.describe('гейт мутаций платежа аренды', () => {
     await page.goto(`/properties/${ORDINARY_PAYMENT}`);
     await expect(page.getByRole('button', { name: 'Изменить' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'На паузу' })).toBeVisible();
+  });
+
+  test('карточка правки ведёт в условия аренды — переход вместо тупика (#988)', async ({
+    page,
+    seededUser,
+  }, testInfo) => {
+    await openCabinetWithSeededSession(page, seededUser);
+    const { paymentId } = await ensureRental(page);
+
+    await page.goto(`/properties/${PROPERTY}/payments/${paymentId}/edit`);
+    await expect(page.getByText('Правка недоступна')).toBeVisible();
+    await page.getByRole('button', { name: 'Условия аренды' }).click();
+
+    await expect(page).toHaveURL(new RegExp(`/properties/${PROPERTY}/rentals/terms`));
+    await expect(page.getByText('Условия аренды').first()).toBeVisible();
+
+    await captureScreen(page, testInfo, 'rental-payment-edit-to-terms');
+  });
+
+  test('завершение аренды: платёж остановлен и завершён без противоречивых действий (#988)', async ({
+    page,
+    seededUser,
+  }, testInfo) => {
+    await openCabinetWithSeededSession(page, seededUser);
+    const { rentalId, paymentId } = await ensureRental(page);
+
+    // Конвейер аренды: платёж остановлен на дате завершения, будущие
+    // плановые снесены (ADR 0053 §3), действий противоречия на экране нет.
+    const stopDate = todayIso();
+    const completed = await page.request.post(
+      `/api/properties/${PROPERTY}/rentals/${rentalId}/complete`,
+      { data: { completedDate: stopDate } },
+    );
+    expect(completed.ok()).toBe(true);
+
+    // Остановка: у выживших операций дата не позже стопа — будущие плановые
+    // снесены, просрочки до стопа остались (серверная правда, не только UI).
+    for (const status of ['planned', 'overdue'] as const) {
+      const left = await page.request.get(
+        `/api/properties/${PROPERTY}/payments/${paymentId}/operations?status=${status}`,
+      );
+      expect(left.ok()).toBe(true);
+      const { items } = (await left.json()) as { items: ReadonlyArray<{ date: string }> };
+      expect(items.every((operation) => operation.date <= stopDate)).toBe(true);
+    }
+
+    await page.goto(`/properties/${PROPERTY}/payments/${paymentId}`);
+    await expect(page.getByText('Арендная плата').first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Оплатить' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Оплатить' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'На паузу' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Возобновить' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Изменить' })).toHaveCount(0);
+
+    // Гасим всё неоплаченное до стопа — серверный isCompleted становится
+    // true («Завершённый платёж» вычисляемый, CONTEXT.md).
+    for (const status of ['planned', 'overdue'] as const) {
+      const list = await page.request.get(
+        `/api/properties/${PROPERTY}/payments/${paymentId}/operations?status=${status}`,
+      );
+      expect(list.ok()).toBe(true);
+      const { items } = (await list.json()) as { items: ReadonlyArray<{ id: string }> };
+      for (const operation of items) {
+        const paid = await page.request.post(
+          `/api/properties/${PROPERTY}/operations/${operation.id}/pay`,
+        );
+        expect(paid.ok()).toBe(true);
+      }
+    }
+
+    await page.goto(`/properties/${PROPERTY}/payments/${paymentId}`);
+    // Deep-link даёт транзиентное двойное дерево гидрации (~100мс, грабля
+    // #987): строгий локатор ловит обе копии — берём первую видимую.
+    await expect(
+      page.getByText('Платеж завершен').filter({ visible: true }).first(),
+    ).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Оплатить' }).first()).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'На паузу' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Изменить' })).toHaveCount(0);
+
+    await captureScreen(page, testInfo, 'rental-payment-completed-after-rental');
   });
 });
