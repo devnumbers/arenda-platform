@@ -5,7 +5,6 @@ import type {
   PaymentType,
   Recurrence,
 } from '@/entities/payment';
-import { formatYearlyDayMonth, weekdayShortLabel } from '@/entities/payment';
 import { dateInMonth, isoYear } from '@/shared/lib/calendar';
 import type { PaymentWizardDraft } from './use-payment-wizard-draft';
 
@@ -119,26 +118,6 @@ export function pickPeriodicityKind(
   }
   const kept = recurrence?.kind === kind ? recurrence : defaultForKind(kind);
   return { recurrence: kept, branch: branchKind(kept) };
-}
-
-/** Видимый выбор строки меню (дефект Б #948, канон пикера аренды —
- * выбранное всегда видно): короткое значение готовой периодичности.
- * Ежедневное правило и неготовая ветка значения не имеют. Год — день
- * и месяц без года (правило года не хранит), 29 февраля сохраняется
- * общим с recurrenceLabel якорем високосного 2024-го. */
-export function periodicityMenuValue(recurrence: Recurrence | undefined): string | undefined {
-  if (recurrence === undefined || !periodicityReady(recurrence)) return undefined;
-  switch (recurrence.kind) {
-    case 'daily':
-      return undefined;
-    case 'weekly':
-      return weekdayShortLabel(recurrence.weekdays);
-    case 'monthly':
-      // ready гарантирует непустой список: числа или последний день.
-      return [...recurrence.daysOfMonth, ...(recurrence.lastDay ? ['последний'] : [])].join(', ');
-    case 'yearly':
-      return formatYearlyDayMonth(recurrence.month, recurrence.day);
-  }
 }
 
 /** Регулярность считается выбранной, когда её ветка дат завершена. */

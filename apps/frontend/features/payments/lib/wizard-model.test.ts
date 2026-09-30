@@ -7,7 +7,6 @@ import {
   buildPaymentCreateCommand,
   effectivePaymentForm,
   effectivePaymentType,
-  periodicityMenuValue,
   periodicityReady,
   pickPeriodicityKind,
   togglePaymentForm,
@@ -195,33 +194,6 @@ describe('pickPeriodicityKind — выбор пункта меню период�
       recurrence: monthlyReady,
       branch: 'monthDays',
     });
-  });
-});
-
-describe('periodicityMenuValue — видимый выбор строки меню (дефект Б #948, канон пикера аренды)', () => {
-  it('годовое правило — день и месяц без года, 29 февраля сохраняется', () => {
-    expect(periodicityMenuValue({ kind: 'yearly', month: 10, day: 15 })).toBe('15 октября');
-    expect(periodicityMenuValue({ kind: 'yearly', month: 2, day: 29 })).toBe('29 февраля');
-  });
-
-  it('неделя перечисляет дни коротко от понедельника', () => {
-    expect(periodicityMenuValue({ kind: 'weekly', weekdays: [0, 2, 4] })).toBe('вт, чт, вс');
-    expect(periodicityMenuValue({ kind: 'weekly', weekdays: [1] })).toBe('пн');
-  });
-
-  it('месяц перечисляет числа, последний день — словами', () => {
-    expect(periodicityMenuValue({ kind: 'monthly', daysOfMonth: [1, 15], lastDay: false })).toBe('1, 15');
-    expect(periodicityMenuValue({ kind: 'monthly', daysOfMonth: [], lastDay: true })).toBe('последний');
-    expect(periodicityMenuValue({ kind: 'monthly', daysOfMonth: [1, 15], lastDay: true })).toBe(
-      '1, 15, последний',
-    );
-  });
-
-  it('неготовая или ежедневная ветка значения не имеет', () => {
-    expect(periodicityMenuValue(undefined)).toBeUndefined();
-    expect(periodicityMenuValue({ kind: 'daily' })).toBeUndefined();
-    expect(periodicityMenuValue({ kind: 'weekly', weekdays: [] })).toBeUndefined();
-    expect(periodicityMenuValue({ kind: 'monthly', daysOfMonth: [], lastDay: false })).toBeUndefined();
   });
 });
 

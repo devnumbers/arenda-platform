@@ -33,8 +33,8 @@ function mondayFirst(weekdays: ReadonlyArray<number>): number[] {
 }
 
 /** Короткие имена выбранных дней через запятую, от понедельника:
- * «пн, чт, вс» — словарь фраз повторяемости, общий с меню периодичности. */
-export function weekdayShortLabel(weekdays: ReadonlyArray<number>): string {
+ * «пн, чт, вс» — словарь фраз повторяемости. */
+function weekdayShortLabel(weekdays: ReadonlyArray<number>): string {
   return mondayFirst(weekdays)
     .map((weekday) => WEEKDAYS_SHORT[weekday])
     .filter((name) => name !== undefined)
@@ -42,9 +42,8 @@ export function weekdayShortLabel(weekdays: ReadonlyArray<number>): string {
 }
 
 /** День и месяц годового правила без года: «13 мая»; якорь-високосный
- * 2024 сохраняет 29 февраля — общий словарь recurrenceLabel и меню
- * периодичности визарда (#995). */
-export function formatYearlyDayMonth(month: number, day: number): string {
+ * 2024 сохраняет 29 февраля. */
+function formatYearlyDayMonth(month: number, day: number): string {
   return formatDayMonth(dateInMonth(2024, month - 1, day));
 }
 

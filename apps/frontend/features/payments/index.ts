@@ -34,7 +34,6 @@ export {
   buildPaymentCreateCommand,
   effectivePaymentForm,
   effectivePaymentType,
-  periodicityMenuValue,
   periodicityReady,
   pickPeriodicityKind,
   togglePaymentForm,

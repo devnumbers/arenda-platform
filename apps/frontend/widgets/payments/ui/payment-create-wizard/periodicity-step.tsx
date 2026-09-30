@@ -8,7 +8,6 @@ import { isoDayOfMonth, isoMonthNumber } from '@/shared/lib/calendar';
 import {
   PERIODICITY_OPTIONS,
   WEEKDAY_BUTTONS,
-  periodicityMenuValue,
   pickPeriodicityKind,
   toggleWeekday,
   yearlyAnchorDate,
@@ -25,7 +24,9 @@ import { WizardHeading } from './wizard-chrome';
  * MonthDaysGrid с «последним днем месяца» (1056:53076/53077, тикет
  * #809), год — бесконечный календарь как в
  * задачах (решение владельца 2026-09-04, раньше был грид месяца
- * 829:11606/1056:53547). У ежедневного правила ветки нет — выбор сразу
+ * 829:11606/1056:53547); подтверждение года в визарде — кнопкой
+ * «Продолжить» сразу на следующий шаг (решение владельца 2026-09-30,
+ * #995). У ежедневного правила ветки нет — выбор сразу
  * завершает шаг.
  */
 
@@ -59,6 +60,11 @@ export type PeriodicityStepProps = {
   readonly onRecurrenceChange: (recurrence: Recurrence | undefined) => void;
   /** Ежедневное правило готово сразу — выбор ведёт на следующий шаг. */
   readonly onDailyPick: () => void;
+  /** Годовое правило подтверждено — хост ведёт дальше (визард: сразу
+   * следующий шаг, кнопка календаря «Продолжить»; решение владельца
+   * 30.09.2026, #995). Без пропа — канон пикера: «Выбрать» закрывает
+   * ветку (экран правки). */
+  readonly onYearlyConfirm?: () => void;
   /** «Сегодня» клиентской проекции — якорь предвыбора годового правила. */
   readonly today: IsoDate;
   /** Заголовки шага рисует хост (шит правки #467 несёт их в ModalContent). */
@@ -71,6 +77,7 @@ export function PeriodicityStep({
   onOpenBranch,
   onRecurrenceChange,
   onDailyPick,
+  onYearlyConfirm,
   today,
   withHeading = true,
 }: PeriodicityStepProps): JSX.Element {
@@ -88,10 +95,6 @@ export function PeriodicityStep({
   };
 
   if (openBranch === null) {
-    // Видимый выбор (дефект Б #948, канон пикера аренды): готовая
-    // периодичность читается в строке своего пункта — «Каждый год ·
-    // 15 октября»; неготовая ветка значения не имеет.
-    const selectedValue = periodicityMenuValue(recurrence);
     return (
       <>
         {heading('Периодичность платежа')}
@@ -100,11 +103,7 @@ export function PeriodicityStep({
             <ListRow
               key={option.kind}
               className="py-3.5"
-              title={
-                selectedValue !== undefined && recurrence?.kind === option.kind
-                  ? `${option.label} · ${selectedValue}`
-                  : option.label
-              }
+              title={option.label}
               onSelect={() => pickKind(option.kind)}
               trailing={<SmallArrowRight className="h-6 w-6" aria-hidden />}
             />
@@ -200,6 +199,7 @@ export function PeriodicityStep({
           recurrence={recurrence?.kind === 'yearly' ? recurrence : undefined}
           today={today}
           onChange={onRecurrenceChange}
+          onYearlyConfirm={onYearlyConfirm}
           onClose={() => onOpenBranch(null)}
         />
       );
@@ -213,28 +213,39 @@ export function PeriodicityStep({
  * обязательна (required) — правила «без даты» не существует. Год в
  * правиле не хранится (yearly = месяц и день): от подтверждённой даты
  * остаются месяц и день; существующее правило календарь предвыбирает
- * ближайшим будущим вхождением (yearlyAnchorDate). */
+ * ближайшим будущим вхождением (yearlyAnchorDate). В визарде (хост с
+ * onConfirm) кнопка календаря — «Продолжить» и подтверждение сразу
+ * ведёт на следующий шаг, минуя меню (решение владельца 30.09.2026,
+ * #995); без хоста-визарда — канон «Выбрать» закрывает ветку. */
 function YearlyBranch({
   recurrence,
   today,
   onChange,
+  onYearlyConfirm,
   onClose,
 }: {
   readonly recurrence: Recurrence | undefined;
   readonly today: IsoDate;
-  readonly onChange: (recurrence: Recurrence) => void;
+  readonly onChange: (recurrence: Recurrence | undefined) => void;
+  /** Хост, ведущий дальше после подтверждения (визард). */
+  readonly onYearlyConfirm: (() => void) | undefined;
   readonly onClose: () => void;
 }): JSX.Element {
   return (
     <CalendarDatePicker
       required
       today={today}
+      confirmLabel={onYearlyConfirm !== undefined ? 'Продолжить' : undefined}
       value={recurrence?.kind === 'yearly' ? yearlyAnchorDate(recurrence, today) : null}
       onClose={onClose}
       onConfirm={(date) => {
         // required исключает пустое подтверждение — страховка контракта.
         if (date === null) return;
         onChange({ kind: 'yearly', month: isoMonthNumber(date), day: isoDayOfMonth(date) });
+        if (onYearlyConfirm !== undefined) {
+          onYearlyConfirm();
+          return;
+        }
         onClose();
       }}
     />
