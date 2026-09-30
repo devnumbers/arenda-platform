@@ -590,8 +590,8 @@ func favoriteReadback(t *testing.T, h *paymentsHarness, paymentID uuid.UUID) boo
 	}
 	var listedIsFavorite bool
 	for _, rule := range list {
-		if rule.ID == paymentID {
-			listedIsFavorite = rule.IsFavorite
+		if rule.Payment.ID == paymentID {
+			listedIsFavorite = rule.Payment.IsFavorite
 		}
 	}
 	if got.IsFavorite != listedIsFavorite {

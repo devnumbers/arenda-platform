@@ -435,3 +435,22 @@ WHERE op.owner_id = sqlc.arg('owner')
   AND op.status = 'planned'
   AND op.date < sqlc.arg('today')
   AND op.property_id = ANY(sqlc.arg('property_ids')::uuid[]);
+
+-- name: NearestDateInputsOfPayments :many
+-- The stored aggregates the next payment date resolution consumes (ticket
+-- #991) in one batched read: the earliest planned operation on or after
+-- today (the stored half — a paid prepaid nearest is not «следующая») and
+-- the newest materialized date across planned and paid (the projection
+-- cursor — the IsCompleted rule; the tick has not stood the single future
+-- planned up yet). Cancelled tombstones are not materialized facts. A rule
+-- with no matching operations yields no row — the consumer resolves from
+-- nils. The nested payment→property path is enforced in the WHERE clause;
+-- an empty id list never reaches the query.
+SELECT payment_id,
+       MIN(date) FILTER (WHERE status = 'planned' AND date >= sqlc.arg('today'))::date AS next_planned_date,
+       MAX(date) FILTER (WHERE status <> 'cancelled')::date AS last_materialized_date
+FROM operations
+WHERE owner_id = sqlc.arg('owner')
+  AND property_id = sqlc.arg('property')
+  AND payment_id = ANY(@payment_ids::uuid[])
+GROUP BY payment_id;

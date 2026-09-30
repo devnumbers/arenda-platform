@@ -26,6 +26,19 @@ func OperationView(op Operation, today time.Time) OperationViewStatus {
 	return OperationViewStatus(op.Status)
 }
 
+// ProjectionCursor is the day the schedule's «what's next» math projects
+// from (ticket #991): the newest materialized date when the rule has facts,
+// yesterday when nothing has been materialized — so a rule whose occurrences
+// all lie ahead still projects its first one. IsCompleted and the next
+// payment date resolution share the rule.
+func ProjectionCursor(today time.Time, lastMaterialized *time.Time) time.Time {
+	cursor := today.AddDate(0, 0, -1)
+	if lastMaterialized != nil && lastMaterialized.After(cursor) {
+		cursor = *lastMaterialized
+	}
+	return cursor
+}
+
 // IsCompleted reports whether the payment rule has no unsettled occurrences
 // left: nothing planned and no occurrence beyond the last materialized date
 // of any status. Like overdue it is a computed read-side view, never stored —
@@ -39,10 +52,6 @@ func IsCompleted(p Payment, today time.Time, lastMaterialized *time.Time, hasPla
 	if hasPlanned {
 		return false
 	}
-	cursor := today.AddDate(0, 0, -1)
-	if lastMaterialized != nil && lastMaterialized.After(cursor) {
-		cursor = *lastMaterialized
-	}
-	_, ok := NextOccurrenceAfter(p, cursor)
+	_, ok := NextOccurrenceAfter(p, ProjectionCursor(today, lastMaterialized))
 	return !ok
 }

@@ -690,6 +690,64 @@ func (q *Queries) ListPropertyIDsWithOverdueOperations(ctx context.Context, arg 
 	return items, nil
 }
 
+const nearestDateInputsOfPayments = `-- name: NearestDateInputsOfPayments :many
+SELECT payment_id,
+       MIN(date) FILTER (WHERE status = 'planned' AND date >= $1)::date AS next_planned_date,
+       MAX(date) FILTER (WHERE status <> 'cancelled')::date AS last_materialized_date
+FROM operations
+WHERE owner_id = $2
+  AND property_id = $3
+  AND payment_id = ANY($4::uuid[])
+GROUP BY payment_id
+`
+
+type NearestDateInputsOfPaymentsParams struct {
+	Today      pgtype.Date   `json:"today"`
+	Owner      pgtype.UUID   `json:"owner"`
+	Property   pgtype.UUID   `json:"property"`
+	PaymentIds []pgtype.UUID `json:"payment_ids"`
+}
+
+type NearestDateInputsOfPaymentsRow struct {
+	PaymentID            pgtype.UUID `json:"payment_id"`
+	NextPlannedDate      pgtype.Date `json:"next_planned_date"`
+	LastMaterializedDate pgtype.Date `json:"last_materialized_date"`
+}
+
+// The stored aggregates the next payment date resolution consumes (ticket
+// #991) in one batched read: the earliest planned operation on or after
+// today (the stored half — a paid prepaid nearest is not «следующая») and
+// the newest materialized date across planned and paid (the projection
+// cursor — the IsCompleted rule; the tick has not stood the single future
+// planned up yet). Cancelled tombstones are not materialized facts. A rule
+// with no matching operations yields no row — the consumer resolves from
+// nils. The nested payment→property path is enforced in the WHERE clause;
+// an empty id list never reaches the query.
+func (q *Queries) NearestDateInputsOfPayments(ctx context.Context, arg NearestDateInputsOfPaymentsParams) ([]NearestDateInputsOfPaymentsRow, error) {
+	rows, err := q.db.Query(ctx, nearestDateInputsOfPayments,
+		arg.Today,
+		arg.Owner,
+		arg.Property,
+		arg.PaymentIds,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []NearestDateInputsOfPaymentsRow{}
+	for rows.Next() {
+		var i NearestDateInputsOfPaymentsRow
+		if err := rows.Scan(&i.PaymentID, &i.NextPlannedDate, &i.LastMaterializedDate); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const payOperationByID = `-- name: PayOperationByID :execrows
 UPDATE operations
 SET status = 'paid', paid_date = $3

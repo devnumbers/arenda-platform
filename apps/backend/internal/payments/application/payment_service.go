@@ -201,13 +201,22 @@ func (s *PaymentService) CreatePayment(
 		})
 }
 
+// PaymentListItem is the object payments list's read row (ticket #991):
+// the rule plus its server-resolved next payment date — the shared
+// NearestDateOfPayment seam; the single-rule reads have no place for it.
+type PaymentListItem struct {
+	Payment     domain.Payment
+	NearestDate *time.Time
+}
+
 // ListPayments returns the property's payment rules in creation order with
-// their pause intervals. Search is a case-insensitive substring filter on
-// the title (” = no filter). Any actor with the view capability may read; a
-// stranger gets ErrNotFound. Reads never tick.
+// their pause intervals and next payment dates (ticket #991). Search is a
+// case-insensitive substring filter on the title (” = no filter). Any actor
+// with the view capability may read; a stranger gets ErrNotFound. Reads
+// never tick.
 func (s *PaymentService) ListPayments(
 	ctx context.Context, actor, propertyID uuid.UUID, search string,
-) ([]domain.Payment, error) {
+) ([]PaymentListItem, error) {
 	scope, err := s.readScope(ctx, actor, propertyID)
 	if err != nil {
 		return nil, err
@@ -216,7 +225,29 @@ func (s *PaymentService) ListPayments(
 	if err != nil {
 		return nil, fmt.Errorf("list payments: %w", err)
 	}
-	return payments, nil
+	items := make([]PaymentListItem, len(payments))
+	if len(payments) == 0 {
+		return items, nil
+	}
+	today, err := ownerToday(s.calendar, ctx, scope)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]uuid.UUID, len(payments))
+	for i, payment := range payments {
+		ids[i] = payment.ID
+	}
+	inputs, err := s.operations.NearestDateInputsOfPayments(ctx, scope, propertyID, today, ids)
+	if err != nil {
+		return nil, err
+	}
+	for i, payment := range payments {
+		items[i] = PaymentListItem{
+			Payment:     payment,
+			NearestDate: NearestDateOfPayment(payment, today, inputs[payment.ID]),
+		}
+	}
+	return items, nil
 }
 
 // GetPayment returns one rule with its pause intervals. Any actor with the

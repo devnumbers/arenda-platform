@@ -38,7 +38,7 @@ type fakePaymentManager struct {
 	del      func(ctx context.Context, actor, propertyID, paymentID uuid.UUID, keepOverdue bool) error
 	favorite func(ctx context.Context, actor, propertyID, paymentID uuid.UUID, favorite bool) (domain.Payment, error)
 	get      func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error)
-	list     func(ctx context.Context, actor, propertyID uuid.UUID, search string) ([]domain.Payment, error)
+	list     func(ctx context.Context, actor, propertyID uuid.UUID, search string) ([]application.PaymentListItem, error)
 	pause    func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error)
 	resume   func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error)
 	update   func(
@@ -93,7 +93,9 @@ func (f *fakePaymentManager) CreatePayment(
 	return f.create(ctx, actor, propertyID, cmd)
 }
 
-func (f *fakePaymentManager) ListPayments(ctx context.Context, actor, propertyID uuid.UUID, search string) ([]domain.Payment, error) {
+func (f *fakePaymentManager) ListPayments(
+	ctx context.Context, actor, propertyID uuid.UUID, search string,
+) ([]application.PaymentListItem, error) {
 	if f.list == nil {
 		return nil, errors.New("unexpected ListPayments call")
 	}
@@ -790,7 +792,7 @@ func TestListPayments_MapsItems(t *testing.T) {
 	actor := uuid.Must(uuid.NewV7())
 	propertyID := uuid.Must(uuid.NewV7())
 	h := NewPaymentHandlers(&fakePaymentManager{
-		list: func(context.Context, uuid.UUID, uuid.UUID, string) ([]domain.Payment, error) {
+		list: func(context.Context, uuid.UUID, uuid.UUID, string) ([]application.PaymentListItem, error) {
 			return nil, nil
 		},
 	}, nil)

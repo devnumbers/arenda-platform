@@ -858,7 +858,9 @@ paths:
         - $ref: '#/components/parameters/TitleSearch'
       responses:
         '200':
-          description: Payments list
+          description: >
+            Payments list; every row carries the rule's next payment date
+            (ticket #991) — null when the schedule has no next occurrence.
           content:
             application/json:
               schema:
@@ -6610,7 +6612,7 @@ components:
 
     PaymentResponse:
       type: object
-      required: [id, propertyId, type, title, amountKopecks, recurrence, since, autoPay, paymentForm, category, isFavorite, isCompleted, isRentalManaged, pauses, createdAt, updatedAt]
+      required: [id, propertyId, type, title, amountKopecks, recurrence, since, autoPay, paymentForm, category, isFavorite, isCompleted, nearestDate, isRentalManaged, pauses, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -6660,6 +6662,17 @@ components:
             and no occurrence beyond the last materialized date of any
             status. Never stored, never written by the client; derived on
             every read like the operation's overdue.
+        nearestDate:
+          type: string
+          format: date
+          nullable: true
+          description: >-
+            «Следующая дата оплаты» (ticket #991, CONTEXT.md): the earliest
+            stored planned operation on or after the owner's today (ADR
+            0048), else the rule's projection. Null when the schedule has no
+            next occurrence — an open pause or a settled rule. The object
+            payments list resolves it on every row; the single-rule reads do
+            not compute it and always carry null.
         isRentalManaged:
           type: boolean
           description: >-

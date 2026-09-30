@@ -1209,6 +1209,16 @@ type Querier interface {
 	// already-read or deleted row matches nothing (0 rows).
 	MarkNotificationRead(ctx context.Context, arg MarkNotificationReadParams) (int64, error)
 	MarkPopupSeen(ctx context.Context, arg MarkPopupSeenParams) error
+	// The stored aggregates the next payment date resolution consumes (ticket
+	// #991) in one batched read: the earliest planned operation on or after
+	// today (the stored half — a paid prepaid nearest is not «следующая») and
+	// the newest materialized date across planned and paid (the projection
+	// cursor — the IsCompleted rule; the tick has not stood the single future
+	// planned up yet). Cancelled tombstones are not materialized facts. A rule
+	// with no matching operations yields no row — the consumer resolves from
+	// nils. The nested payment→property path is enforced in the WHERE clause;
+	// an empty id list never reaches the query.
+	NearestDateInputsOfPayments(ctx context.Context, arg NearestDateInputsOfPaymentsParams) ([]NearestDateInputsOfPaymentsRow, error)
 	// «Оплатить сейчас» (planned → paid, paid_date = today in the owner's
 	// timezone). The planned guard is belt-and-suspenders over the application's
 	// loaded check: rows affected = 0 means already paid or gone.

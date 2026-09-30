@@ -226,6 +226,36 @@ func (s *OperationStore) CountPaidAndOverdueByPaymentIDs(
 	return counts, nil
 }
 
+// NearestDateInputsOfPayments reads the listed rules' next-payment-date
+// aggregates in one batched query (ticket #991) — one GROUP BY feeding the
+// shared NearestDateOfPayment resolution. A rule with no matching
+// operations is absent from the rows — the consumer resolves from nils.
+// The empty id list never reaches the query.
+func (s *OperationStore) NearestDateInputsOfPayments(
+	ctx context.Context, scope, propertyID uuid.UUID, today time.Time, paymentIDs []uuid.UUID,
+) (map[uuid.UUID]application.NearestDateInputs, error) {
+	out := make(map[uuid.UUID]application.NearestDateInputs, len(paymentIDs))
+	if len(paymentIDs) == 0 {
+		return out, nil
+	}
+	rows, err := s.q().NearestDateInputsOfPayments(ctx, postgres.NearestDateInputsOfPaymentsParams{
+		Owner:      pgconv.UUIDToPgtype(scope),
+		Property:   pgconv.UUIDToPgtype(propertyID),
+		PaymentIds: pgconv.UUIDSliceToPgtype(paymentIDs),
+		Today:      pgconv.DateToPgtype(today),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("nearest date inputs of %d payments: %w", len(paymentIDs), err)
+	}
+	for _, row := range rows {
+		out[pgconv.UUIDFromPgtype(row.PaymentID)] = application.NearestDateInputs{
+			NextPlannedDate:  pgconv.DatePtrFromPgtype(row.NextPlannedDate),
+			LastMaterialized: pgconv.DatePtrFromPgtype(row.LastMaterializedDate),
+		}
+	}
+	return out, nil
+}
+
 // ListGlobal returns one page of the actor's visible paid operations — the
 // merged feed (ticket #540); the visibility predicate and the archive cut
 // are the query's. The bounds re-check the service applied

@@ -2983,6 +2983,11 @@ export interface components {
             isFavorite: boolean;
             /** @description Server-computed settlement view of the rule (CONTEXT.md, «Завершённый платёж»): no planned operations — overdue included — and no occurrence beyond the last materialized date of any status. Never stored, never written by the client; derived on every read like the operation's overdue. */
             isCompleted: boolean;
+            /**
+             * Format: date
+             * @description «Следующая дата оплаты» (ticket #991, CONTEXT.md): the earliest stored planned operation on or after the owner's today (ADR 0048), else the rule's projection. Null when the schedule has no next occurrence — an open pause or a settled rule. The object payments list resolves it on every row; the single-rule reads do not compute it and always carry null.
+             */
+            nearestDate: string | null;
             /** @description The rule is the rental's managed rent payment (ADR 0053, ticket #818): a rental row references it, any rental state — a completed rental is final and its payment is final with it. The rental is the source of truth for the amount, the payment day, the auto-pay and the planned end, so the rule mutations (pause, resume, patch, delete) answer 409; the payment facts («Оплатить») and the favorite star stay open. The reads carry the flag so the client hides the mutation actions instead of learning the 409 live. */
             isRentalManaged: boolean;
             pauses: components["schemas"]["PauseIntervalView"][];
@@ -4929,7 +4934,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Payments list */
+            /** @description Payments list; every row carries the rule's next payment date (ticket #991) — null when the schedule has no next occurrence. */
             200: {
                 headers: {
                     [name: string]: unknown;
