@@ -46,7 +46,7 @@ export function Showcase() {
         <Reveal delay={150} className="w-full">
           <picture>
             <source
-              media="(max-width: 1199px)"
+              media="(max-width: 1199.98px)"
               srcSet={screensSubImg.props.srcSet}
               sizes={screensSubImg.props.sizes}
             />

@@ -20,9 +20,9 @@ export function Hero() {
     <section id="hero" className="px-2 pt-2">
       <div className="relative flex h-[788px] flex-col justify-start overflow-hidden rounded-[32px] p-8 pt-12 tab:h-[936px] tab:px-12 tab:pt-16 tab:pb-12 desk:h-[607px] desk:justify-end desk:rounded-[40px] desk:p-10">
         <picture>
-          <source media="(max-width: 480px)" srcSet={mobileBg.props.srcSet} sizes={mobileBg.props.sizes} />
+          <source media="(max-width: 480.98px)" srcSet={mobileBg.props.srcSet} sizes={mobileBg.props.sizes} />
           <source
-            media="(min-width: 481px) and (max-width: 1199px)"
+            media="(min-width: 480.98px) and (max-width: 1199.98px)"
             srcSet={tabletBg.props.srcSet}
             sizes={tabletBg.props.sizes}
           />
