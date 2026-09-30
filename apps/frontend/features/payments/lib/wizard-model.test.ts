@@ -7,7 +7,9 @@ import {
   buildPaymentCreateCommand,
   effectivePaymentForm,
   effectivePaymentType,
+  periodicityMenuValue,
   periodicityReady,
+  pickPeriodicityKind,
   togglePaymentForm,
   togglePaymentType,
   toggleWeekday,
@@ -137,6 +139,89 @@ describe('yearlyAnchorDate — ближайшее будущее вхожден�
     // ближайшее будущее вхождение от 01.03.2026 — 28.02.2027, не високосный
     // 2028-й; пользователь может отскроллить и выбрать 29.02.2028 заново.
     expect(yearlyAnchorDate({ month: 2, day: 29 }, '2026-03-01')).toBe('2027-02-28');
+  });
+});
+
+describe('pickPeriodicityKind — выбор пункта меню периодичности (#995)', () => {
+  const monthlyReady = { kind: 'monthly', daysOfMonth: [15], lastDay: false } as const;
+
+  it('ежедневное правило готово сразу, ветки дат нет', () => {
+    expect(pickPeriodicityKind('daily', monthlyReady)).toStrictEqual({
+      recurrence: { kind: 'daily' },
+      branch: null,
+    });
+  });
+
+  it('weekly сбрасывает готовый месяц в пустую ветку недели', () => {
+    expect(pickPeriodicityKind('weekly', monthlyReady)).toStrictEqual({
+      recurrence: { kind: 'weekly', weekdays: [] },
+      branch: 'weekdays',
+    });
+  });
+
+  it('monthly готовит пустую ветку месяца на чужом черновике', () => {
+    expect(pickPeriodicityKind('monthly', { kind: 'weekly', weekdays: [1] })).toStrictEqual({
+      recurrence: { kind: 'monthly', daysOfMonth: [], lastDay: false },
+      branch: 'monthDays',
+    });
+  });
+
+  it('годовая ветка сбрасывает прежнюю готовую периодичность (дефект А #948): до подтверждения календаря правила нет', () => {
+    expect(pickPeriodicityKind('yearly', monthlyReady)).toStrictEqual({
+      recurrence: undefined,
+      branch: 'yearly',
+    });
+    expect(pickPeriodicityKind('yearly', { kind: 'daily' })).toStrictEqual({
+      recurrence: undefined,
+      branch: 'yearly',
+    });
+  });
+
+  it('повторный выбор годовой хранит подтверждённое правило (календарь предвыбирает якорь)', () => {
+    const yearly = { kind: 'yearly', month: 10, day: 15 } as const;
+    expect(pickPeriodicityKind('yearly', yearly)).toStrictEqual({
+      recurrence: yearly,
+      branch: 'yearly',
+    });
+  });
+
+  it('повторный выбор своего вида хранит готовую ветку (weekly/monthly)', () => {
+    const weekly = { kind: 'weekly', weekdays: [2, 5] } as const;
+    expect(pickPeriodicityKind('weekly', weekly)).toStrictEqual({
+      recurrence: weekly,
+      branch: 'weekdays',
+    });
+    expect(pickPeriodicityKind('monthly', monthlyReady)).toStrictEqual({
+      recurrence: monthlyReady,
+      branch: 'monthDays',
+    });
+  });
+});
+
+describe('periodicityMenuValue — видимый выбор строки меню (дефект Б #948, канон пикера аренды)', () => {
+  it('годовое правило — день и месяц без года, 29 февраля сохраняется', () => {
+    expect(periodicityMenuValue({ kind: 'yearly', month: 10, day: 15 })).toBe('15 октября');
+    expect(periodicityMenuValue({ kind: 'yearly', month: 2, day: 29 })).toBe('29 февраля');
+  });
+
+  it('неделя перечисляет дни коротко от понедельника', () => {
+    expect(periodicityMenuValue({ kind: 'weekly', weekdays: [0, 2, 4] })).toBe('вт, чт, вс');
+    expect(periodicityMenuValue({ kind: 'weekly', weekdays: [1] })).toBe('пн');
+  });
+
+  it('месяц перечисляет числа, последний день — словами', () => {
+    expect(periodicityMenuValue({ kind: 'monthly', daysOfMonth: [1, 15], lastDay: false })).toBe('1, 15');
+    expect(periodicityMenuValue({ kind: 'monthly', daysOfMonth: [], lastDay: true })).toBe('последний');
+    expect(periodicityMenuValue({ kind: 'monthly', daysOfMonth: [1, 15], lastDay: true })).toBe(
+      '1, 15, последний',
+    );
+  });
+
+  it('неготовая или ежедневная ветка значения не имеет', () => {
+    expect(periodicityMenuValue(undefined)).toBeUndefined();
+    expect(periodicityMenuValue({ kind: 'daily' })).toBeUndefined();
+    expect(periodicityMenuValue({ kind: 'weekly', weekdays: [] })).toBeUndefined();
+    expect(periodicityMenuValue({ kind: 'monthly', daysOfMonth: [], lastDay: false })).toBeUndefined();
   });
 });
 

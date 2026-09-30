@@ -34,7 +34,7 @@ export { firstOccurrence, isDatePaused, nextOccurrenceAfter, nextOccurrencesAfte
 export { PAYMENT_REMINDER_OPTIONS, paymentReminderOptionLabel } from './lib/reminder-offsets';
 export { addDays, inclusiveDays } from '@/shared/lib/calendar';
 export { formatDayMonth, formatDayMonthWithYear, formatOverdueDays } from '@/shared/lib/date-format';
-export { recurrenceLabel } from './lib/recurrence-label';
+export { formatYearlyDayMonth, recurrenceLabel, weekdayShortLabel } from './lib/recurrence-label';
 export { PaymentRowButton, type PaymentRowButtonProps } from './ui/payment-row-button';
 export { PaymentCardButton, type PaymentCardButtonProps } from './ui/payment-card-button';
 export { PaymentReminderPicker, type PaymentReminderPickerProps } from './ui/payment-reminder-picker';

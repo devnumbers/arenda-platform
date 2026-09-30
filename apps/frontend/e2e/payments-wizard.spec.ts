@@ -19,6 +19,12 @@ const APARTMENT_PAYMENTS_URL = `/properties/${SEEDED_APARTMENT_PROPERTY_ID}/paym
 const wizardUrl = (type: 'payment' | 'autopayment'): string =>
   `${APARTMENT_PAYMENTS_URL}/new?type=${type}`;
 
+/** Родительные падежи месяцев — ожидаемые подписи formatDayMonth. */
+const MONTH_GENITIVE = [
+  'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
+];
+
 /** Открыть визард под сеансом сидированного пользователя.
  * Перед визардом заходим на «Платежи объекта»: как в реальном потоке —
  * тогда закрытие успеха возвращается назад по истории на источник,
@@ -332,6 +338,102 @@ test.describe('визард создания платежа', () => {
     expect(created?.recurrence.month).toBe(targetMonth);
   });
 
+  test('годовая ветка: готовый месяц сбрасывается без подтверждения календаря, выбор виден в меню (#948)', async ({
+    page,
+    seededUser,
+  }) => {
+    const title = 'E2E годовой взнос вместо месяца';
+    await openWizard(page, seededUser);
+    await selectCategory(page);
+    await passTitleStep(page, title);
+
+    // Готовый месяц: 15-е число; назад в меню — выбор читается в строке
+    // (дефект Б, канон пикера аренды).
+    await page.getByRole('button', { name: 'Каждый месяц' }).click();
+    await page.getByRole('button', { name: '15', exact: true }).first().click();
+    await page.getByRole('button', { name: 'Назад' }).click();
+    await expect(page.getByRole('heading', { name: 'Периодичность платежа' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Каждый месяц · 15' })).toBeVisible();
+
+    // «Каждый год» открывает календарь; выход без подтверждения сбрасывает
+    // готовый месяц (дефект А): «Продолжить» со старым видом не показан.
+    await page.getByRole('button', { name: 'Каждый год' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Выбрать дату' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Назад' }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Продолжить' })).toHaveCount(0);
+    // В меню нет ни старого выбора месяца, ни годового до подтверждения.
+    await expect(page.getByRole('button', { name: 'Каждый месяц', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Каждый год ·/ })).toHaveCount(0);
+
+    // Повторный выбор годовой: подтверждение даты пишет правило, меню
+    // показывает выбор, «Продолжить» создаёт именно годовой платёж.
+    await page.getByRole('button', { name: 'Каждый год' }).click();
+    const target = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+    await pickCalendarDay(page, target);
+    await confirmCalendar(page);
+    await expect(
+      page.getByRole('button', {
+        name: `Каждый год · ${target.getDate()} ${MONTH_GENITIVE[target.getMonth()]}`,
+      }),
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'Продолжить' }).click();
+
+    await expect(page.getByRole('heading', { name: 'Настройте платеж' })).toBeVisible();
+    await page.getByRole('button', { name: 'Далее' }).click();
+    await page.getByRole('textbox', { name: 'Сумма' }).fill('1200');
+    await page.getByRole('button', { name: 'Создать платеж' }).click();
+    await expect(page.getByRole('heading', { name: /Вы создали платеж/ })).toContainText(`«${title}»`);
+
+    const items = await fetchPayments(page);
+    const created = items.find((payment) => payment.title === title);
+    expect(created?.recurrence).toStrictEqual({
+      kind: 'yearly',
+      month: target.getMonth() + 1,
+      day: target.getDate(),
+    });
+  });
+
+  test('ежегодная ветка: дата в следующем году через пикер года (дыра «только текущий месяц»)', async ({
+    page,
+    seededUser,
+  }) => {
+    const title = 'E2E годовой взнос следующего года';
+    await openWizard(page, seededUser);
+    await selectCategory(page);
+    await passTitleStep(page, title);
+
+    await page.getByRole('button', { name: 'Каждый год' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Выбрать дату' });
+    await dialog.getByRole('button', { name: /\d{4}/ }).click();
+    const year = new Date().getFullYear();
+    const yearWheel = page.getByRole('listbox', { name: 'Год' });
+    await yearWheel.getByText(String(year + 1)).click();
+    await expect(yearWheel.getByRole('option', { selected: true })).toHaveText(String(year + 1));
+    await page.getByRole('dialog', { name: 'Месяц и год' }).getByRole('button', { name: 'Выбрать' }).click();
+
+    // Календарь прыгнул на текущий месяц следующего года; 10-е существует
+    // в любом месяце, дни будущего года все доступны.
+    const target = new Date(year + 1, new Date().getMonth(), 10);
+    await pickCalendarDay(page, target);
+    await confirmCalendar(page);
+    await expect(
+      page.getByRole('button', { name: `Каждый год · 10 ${MONTH_GENITIVE[target.getMonth()]}` }),
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'Продолжить' }).click();
+
+    await expect(page.getByRole('heading', { name: 'Настройте платеж' })).toBeVisible();
+    await page.getByRole('button', { name: 'Далее' }).click();
+    await page.getByRole('textbox', { name: 'Сумма' }).fill('2400');
+    await page.getByRole('button', { name: 'Создать платеж' }).click();
+    await expect(page.getByRole('heading', { name: /Вы создали платеж/ })).toContainText(`«${title}»`);
+
+    const items = await fetchPayments(page);
+    const created = items.find((payment) => payment.title === title);
+    expect(created?.recurrence).toStrictEqual({ kind: 'yearly', month: target.getMonth() + 1, day: 10 });
+  });
+
   test('ежегодная ветка: пикер месяца и года — месяц меняется, год не раньше текущего', async ({
     page,
     seededUser,
@@ -418,10 +520,7 @@ test.describe('визард создания платежа', () => {
     // Модалка закрылась, дата вернулась на экран окончания; дата текущего
     // года рендерится без года (formatDayMonthWithYear), месяц — родительный.
     await expect(dialog).toHaveCount(0);
-    const monthGenitive = [
-      'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
-      'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
-    ][new Date().getMonth()];
+    const monthGenitive = MONTH_GENITIVE[new Date().getMonth()];
     const dayExpected = String(new Date().getDate());
     await expect(page.getByText(new RegExp(`^${dayExpected} ${monthGenitive}$`))).toBeVisible();
 

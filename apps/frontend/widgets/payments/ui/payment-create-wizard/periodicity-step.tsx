@@ -8,7 +8,8 @@ import { isoDayOfMonth, isoMonthNumber } from '@/shared/lib/calendar';
 import {
   PERIODICITY_OPTIONS,
   WEEKDAY_BUTTONS,
-  branchKind,
+  periodicityMenuValue,
+  pickPeriodicityKind,
   toggleWeekday,
   yearlyAnchorDate,
   type PeriodicityBranch,
@@ -53,33 +54,16 @@ export type PeriodicityStepProps = {
   readonly recurrence: Recurrence | undefined;
   readonly openBranch: PeriodicityBranch | null;
   readonly onOpenBranch: (branch: PeriodicityBranch | null) => void;
-  /** Замена регулярности целиком. */
-  readonly onRecurrenceChange: (recurrence: Recurrence) => void;
+  /** Замена регулярности целиком; undefined — прежняя готовая ветка
+   * сброшена (годовая подтверждается календарём, дефект А #948). */
+  readonly onRecurrenceChange: (recurrence: Recurrence | undefined) => void;
   /** Ежедневное правило готово сразу — выбор ведёт на следующий шаг. */
   readonly onDailyPick: () => void;
-  /** «Сегодня» клиентской проекции — дефолты якорей вида месяц/год. */
+  /** «Сегодня» клиентской проекции — якорь предвыбора годового правила. */
   readonly today: IsoDate;
   /** Заголовки шага рисует хост (шит правки #467 несёт их в ModalContent). */
   readonly withHeading?: boolean;
 };
-
-function defaultForKind(
-  kind: Exclude<PeriodicityKind, 'daily'>,
-  today: IsoDate,
-): Recurrence {
-  const todayDay = isoDayOfMonth(today);
-  const todayMonth = isoMonthNumber(today);
-  switch (kind) {
-    case 'weekly':
-      return { kind: 'weekly', weekdays: [] };
-    case 'monthly':
-      // По фрейму 1056:53076 ничего не предвыбрано: правило готово после
-      // первого дня или отметки последнего дня.
-      return { kind: 'monthly', daysOfMonth: [], lastDay: false };
-    case 'yearly':
-      return { kind: 'yearly', month: todayMonth, day: todayDay };
-  }
-}
 
 export function PeriodicityStep({
   recurrence,
@@ -94,25 +78,20 @@ export function PeriodicityStep({
     withHeading ? <WizardHeading title={title} subtitle={subtitle} /> : null;
 
   const pickKind = (kind: PeriodicityKind): void => {
-    if (kind === 'daily') {
-      onRecurrenceChange({ kind: 'daily' });
+    const pick = pickPeriodicityKind(kind, recurrence);
+    onRecurrenceChange(pick.recurrence);
+    if (pick.branch === null) {
       onDailyPick();
       return;
     }
-    if (kind === 'yearly') {
-      // Годовая ветка открывается без предвыбора: правило пишется после
-      // подтверждения календаря, дефолт не создаётся.
-      onOpenBranch('yearly');
-      return;
-    }
-    const kept =
-      recurrence?.kind === kind ? recurrence : defaultForKind(kind, today);
-    onRecurrenceChange(kept);
-    // kind ≠ daily здесь гарантирован ранним возвратом выше.
-    onOpenBranch(branchKind(kept));
+    onOpenBranch(pick.branch);
   };
 
   if (openBranch === null) {
+    // Видимый выбор (дефект Б #948, канон пикера аренды): готовая
+    // периодичность читается в строке своего пункта — «Каждый год ·
+    // 15 октября»; неготовая ветка значения не имеет.
+    const selectedValue = periodicityMenuValue(recurrence);
     return (
       <>
         {heading('Периодичность платежа')}
@@ -121,7 +100,11 @@ export function PeriodicityStep({
             <ListRow
               key={option.kind}
               className="py-3.5"
-              title={option.label}
+              title={
+                selectedValue !== undefined && recurrence?.kind === option.kind
+                  ? `${option.label} · ${selectedValue}`
+                  : option.label
+              }
               onSelect={() => pickKind(option.kind)}
               trailing={<SmallArrowRight className="h-6 w-6" aria-hidden />}
             />

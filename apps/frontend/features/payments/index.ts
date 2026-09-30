@@ -34,7 +34,9 @@ export {
   buildPaymentCreateCommand,
   effectivePaymentForm,
   effectivePaymentType,
+  periodicityMenuValue,
   periodicityReady,
+  pickPeriodicityKind,
   togglePaymentForm,
   togglePaymentType,
   toggleWeekday,
@@ -42,6 +44,7 @@ export {
   yearlyAnchorDate,
   type PeriodicityBranch,
   type PeriodicityKind,
+  type PeriodicityPick,
   type WizardStep,
 } from './lib/wizard-model';
 export { successScreenCopy, type SuccessScreenCopyInput } from './lib/success-copy';

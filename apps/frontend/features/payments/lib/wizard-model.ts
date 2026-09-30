@@ -5,6 +5,7 @@ import type {
   PaymentType,
   Recurrence,
 } from '@/entities/payment';
+import { formatYearlyDayMonth, weekdayShortLabel } from '@/entities/payment';
 import { dateInMonth, isoYear } from '@/shared/lib/calendar';
 import type { PaymentWizardDraft } from './use-payment-wizard-draft';
 
@@ -74,6 +75,70 @@ export function yearlyAnchorDate(
   return candidate < today
     ? dateInMonth(isoYear(today) + 1, month0, recurrence.day)
     : candidate;
+}
+
+/** Дефолт ветки при смене вида на weekly/monthly: неполное правило — шаг
+ * готов только после выбора дат (по фрейму 1056:53076 ничего не
+ * предвыбрано). Годовая ветка сюда не доходит: её правило пишется только
+ * подтверждением календаря. */
+function defaultForKind(kind: 'weekly' | 'monthly'): Recurrence {
+  switch (kind) {
+    case 'weekly':
+      return { kind: 'weekly', weekdays: [] };
+    case 'monthly':
+      return { kind: 'monthly', daysOfMonth: [], lastDay: false };
+  }
+}
+
+/** Итог выбора пункта меню периодичности: что пишется в черновик и какая
+ * ветка дат открывается. */
+export type PeriodicityPick = {
+  /** Новая периодичность черновика; undefined — прежняя готовая сброшена. */
+  readonly recurrence: Recurrence | undefined;
+  /** Ветка дат для открытия; null — у ежедневного правила её нет. */
+  readonly branch: PeriodicityBranch | null;
+};
+
+/** Выбор пункта меню (шаг 3): чужая готовая периодичность сбрасывается —
+ * у weekly/monthly черновиком становится пустая ветка, у yearly (дефект А
+ * #948) правило пишется только подтверждением календаря, поэтому до него
+ * готовой периодичности в черновике нет и «Продолжить» старый вид не
+ * проведёт. Повторный выбор своего вида хранит готовую ветку. */
+export function pickPeriodicityKind(
+  kind: PeriodicityKind,
+  recurrence: Recurrence | undefined,
+): PeriodicityPick {
+  if (kind === 'daily') {
+    return { recurrence: { kind: 'daily' }, branch: null };
+  }
+  if (kind === 'yearly') {
+    return {
+      recurrence: recurrence?.kind === 'yearly' ? recurrence : undefined,
+      branch: 'yearly',
+    };
+  }
+  const kept = recurrence?.kind === kind ? recurrence : defaultForKind(kind);
+  return { recurrence: kept, branch: branchKind(kept) };
+}
+
+/** Видимый выбор строки меню (дефект Б #948, канон пикера аренды —
+ * выбранное всегда видно): короткое значение готовой периодичности.
+ * Ежедневное правило и неготовая ветка значения не имеют. Год — день
+ * и месяц без года (правило года не хранит), 29 февраля сохраняется
+ * общим с recurrenceLabel якорем високосного 2024-го. */
+export function periodicityMenuValue(recurrence: Recurrence | undefined): string | undefined {
+  if (recurrence === undefined || !periodicityReady(recurrence)) return undefined;
+  switch (recurrence.kind) {
+    case 'daily':
+      return undefined;
+    case 'weekly':
+      return weekdayShortLabel(recurrence.weekdays);
+    case 'monthly':
+      // ready гарантирует непустой список: числа или последний день.
+      return [...recurrence.daysOfMonth, ...(recurrence.lastDay ? ['последний'] : [])].join(', ');
+    case 'yearly':
+      return formatYearlyDayMonth(recurrence.month, recurrence.day);
+  }
 }
 
 /** Регулярность считается выбранной, когда её ветка дат завершена. */
