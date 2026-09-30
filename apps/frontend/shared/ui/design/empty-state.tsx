@@ -6,7 +6,7 @@ import { cn } from '@/shared/lib/cn';
 
 /** Пустое состояние дизайн-слоя — канон полноэкранных и внутристраничных
  * «пусто» (унификация 2026-09-04; до этого — локальные копии в задачах,
- * контактах, платежах и легаси EmptyState): PNG-иллюстрация 128 по центру,
+ * контактах, платежах и легаси EmptyState): WebP-иллюстрация 128 по центру,
  * заголовок H2 20/24 и серое описание 16/18 (максимум 360), опциональное
  * действие под описанием. Вертикальный отступ верха — pt-16, переопределяется
  * className (например py-16 у пустого периода операций). `imageRounded` —
@@ -37,11 +37,16 @@ export function EmptyState({
 }: EmptyStateProps): JSX.Element {
   return (
     <div className={cn('flex flex-col items-center gap-4 px-6 pt-16 text-center', className)}>
+      {/* sizes: слот 128 CSS — на 3x-экранах srcset отдаёт 384px-вариант
+       * вместо апскейла 256 (#1002); потолок задаёт источник: меньший файл
+       * Next не растягивает, 384-варианта у него нет. */}
       <Image
         src={imageSrc}
         alt={imageAlt}
         width={128}
         height={128}
+        sizes="128px"
+        quality={90}
         className={cn('h-32 w-32', imageRounded && 'rounded-pill object-cover')}
       />
       <div className="flex flex-col items-center gap-3">

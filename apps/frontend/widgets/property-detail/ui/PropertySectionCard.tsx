@@ -107,7 +107,17 @@ export function PropertySectionEmpty({
 }: PropertySectionEmptyProps): JSX.Element {
   return (
     <div className="flex flex-col items-center px-12 py-6 text-center">
-      <Image src={imageSrc} alt="" width={64} height={64} className="h-16 w-16" />
+      {/* sizes: слот 64 CSS — на 3x-экранах srcset отдаёт даунскейл из
+       * источника вместо апскейла 128 (#1002); потолок задаёт источник. */}
+      <Image
+        src={imageSrc}
+        alt=""
+        width={64}
+        height={64}
+        sizes="64px"
+        quality={90}
+        className="h-16 w-16"
+      />
       <div className="mt-4 flex w-full flex-col items-center gap-6">
         {copy.description !== null ? (
           <div className="flex flex-col items-center gap-2">

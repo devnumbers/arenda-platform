@@ -104,7 +104,7 @@ export function RentalScreen({ propertyId }: { readonly propertyId: string }): J
         <>
           <PageContent>
             <EmptyState
-              imageSrc="/images/rentals/empty-rental.png"
+              imageSrc="/images/rentals/empty-rental.webp"
               title="Аренда не создана"
               description="Добавьте аренду и отслеживайте оплату"
             />

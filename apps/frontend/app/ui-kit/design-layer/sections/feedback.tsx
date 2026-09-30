@@ -43,7 +43,7 @@ export function EmptyStateSection(): JSX.Element {
             </p>
             <div className={styles.grid}>
                 <EmptyState
-                    imageSrc="/images/contacts/empty-contacts.png"
+                    imageSrc="/images/contacts/empty-contacts.webp"
                     title="Контактов нет"
                     description="Добавьте контакты арендатора, мастеров и других специалистов"
                 />

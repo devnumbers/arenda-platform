@@ -36,6 +36,10 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   output: 'standalone',
   reactCompiler: true,
+  // Allowlist качеств оптимизатора (дефолт [75]): 90 — иллюстрации пустых
+  // состояний (quality={90} в EmptyState/PropertySectionEmpty, #1002), чтобы
+  // мягкие градиенты 3D-артов не покрывались артефактами q75.
+  images: { qualities: [75, 90] },
   // Next 16 блокирует дев-ресурсы (/_next/hmr, чанки) с origin'ов вне списка:
   // стек ui-walkthrough живёт на http://127.0.0.1:3010 — пускаем этот хост
   // (localhost разрешён по умолчанию).

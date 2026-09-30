@@ -61,7 +61,7 @@ export function OperationsDateList({
 export function OperationsEmptyPeriod(): JSX.Element {
   return (
     <EmptyState
-      imageSrc="/images/payments/operations-empty.png"
+      imageSrc="/images/payments/operations-empty.webp"
       className="py-16"
       description="Операции не найдены. Попробуйте выбрать другой период"
     />
@@ -84,10 +84,12 @@ export function OperationsNeverHad({
   return (
     <div className="flex flex-col items-center px-6 pt-10">
       <Image
-        src="/images/payments/operations-empty.png"
+        src="/images/payments/operations-empty.webp"
         alt=""
         width={128}
         height={128}
+        sizes="128px"
+        quality={90}
         className="h-32 w-32"
       />
       <div className="mt-4 flex max-w-[320px] flex-col gap-1 text-center">
