@@ -20,6 +20,7 @@ const paymentDto: PaymentDto = {
   isFavorite: false,
   isCompleted: false,
   isRentalManaged: false,
+  nearestDate: '2026-09-01',
   pauses: [
     { fromDate: '2026-03-01', toDate: '2026-04-01' },
     { fromDate: '2026-05-01', toDate: null },
@@ -54,6 +55,13 @@ describe('mapPayment — DTO → entity', () => {
     expect(payment.isRentalManaged).toBe(false);
     const managed = mapPayment({ ...paymentDto, isRentalManaged: true });
     expect(managed.isRentalManaged).toBe(true);
+  });
+
+  it('nearestDate переносится как есть — «Следующая дата оплаты» сервера (#993)', () => {
+    // Список объекта несёт её на каждом правиле; явный null (пауза/
+    // завершённый) остаётся null'ом — «нет даты» часть семантики.
+    expect(payment.nearestDate).toBe('2026-09-01');
+    expect(mapPayment({ ...paymentDto, nearestDate: null }).nearestDate).toBeNull();
   });
 
   it('напоминание: оффсет приходит числом, null и отсутствие — «нет напоминания» (карта #822)', () => {
