@@ -537,15 +537,24 @@ jobs:
           # URL в srcset кончаются пробелом (перед дескриптором «640w»);
           # &amp; из HTML-атрибутов и \u0026 из RSC-пейлоада разворачиваем
           # назад в & — иначе урл склеивается в мусор вида «webpu0026w=96»
-          # и оптимизатор честно отвечает 400. Оптимизатор лендинга живёт
-          # под /landing/_next/image (assetPrefix, ADR 0063): экстракция
-          # обязана начинаться с префикса — голый /_next/image уходит
-          # кабинетному catch-all и греет чужой 404.
+          # и оптимизатор честно отвечает 400. Endpoint оптимизатора лендинга
+          # БЕЗ префикса (серверный RSC-рендер Next всегда пишет
+          # /_next/image), зато параметр url всегда начинается с /landing —
+          # фильтруем по нему (url=%2Flanding%2F в процент-энкоде), иначе
+          # нагрели бы кабинетный оптимизатор чужими параметрами; разводит
+          # их на живом домене CEL-матчер @landing_optimizer (ADR 0063).
           urls_file="$(mktemp)"
           warn_file="$(mktemp)"
           trap 'rm -f "${urls_file}" "${warn_file}"' EXIT
-          grep -oE '/landing/_next/image\?[^" ]+' <<<"${html}" | sed 's/&amp;/\&/g; s/\\u0026/\&/g' | sort -u > "${urls_file}"
+          # || true: пустая выборка не должна ронять шаг молча через pipefail —
+          # ниже громкая проверка (наряд 30.09: деплой умер за 4 секунды без
+          # единой строчки в логе).
+          grep -oE '/_next/image\?[^" ]+' <<<"${html}" | grep 'url=%2Flanding%2F' | sed 's/&amp;/\&/g; s/\\u0026/\&/g' | sort -u > "${urls_file}" || true
           total="$(wc -l < "${urls_file}" | tr -d ' ')"
+          if [ "${total}" -eq 0 ]; then
+            echo "no /_next/image?url=%2Flanding%2F... URLs found in the landing HTML — extraction is broken" >&2
+            exit 1
+          fi
           echo "Warming ${total} optimizer URLs against ${BASE_URL}"
           export BASE_URL warn_file
           warm_one() {
