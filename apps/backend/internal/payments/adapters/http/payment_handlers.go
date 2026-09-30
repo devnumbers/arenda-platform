@@ -29,7 +29,7 @@ import (
 // handler tests run against func-backed fakes.
 type PaymentManager interface {
 	CreatePayment(ctx context.Context, actor, propertyID uuid.UUID, cmd application.CreatePaymentCommand) (domain.Payment, error)
-	ListPayments(ctx context.Context, actor, propertyID uuid.UUID, search string) ([]domain.Payment, error)
+	ListPayments(ctx context.Context, actor, propertyID uuid.UUID, search string) ([]application.PaymentListItem, error)
 	GetPayment(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error)
 	UpdatePayment(ctx context.Context, actor, propertyID, paymentID uuid.UUID, cmd application.UpdatePaymentCommand) (domain.Payment, error)
 	DeletePayment(ctx context.Context, actor, propertyID, paymentID uuid.UUID, keepOverdue bool) error
@@ -179,12 +179,15 @@ func (h *PaymentHandlers) ListPayments(
 	}
 
 	items := make([]openapi.PaymentResponse, 0, len(payments))
-	for _, payment := range payments {
-		resp, err := paymentResponse(payment, completed[payment.ID], managed[payment.ID])
+	for _, item := range payments {
+		resp, err := paymentResponse(item.Payment, completed[item.Payment.ID], managed[item.Payment.ID])
 		if err != nil {
 			h.writeInternal(w, r, err)
 			return
 		}
+		// The list rows carry the next payment date (ticket #991); the
+		// single-rule reads omit it.
+		resp.NearestDate = httpsupport.DatePtrToOpenAPI(item.NearestDate)
 		items = append(items, resp)
 	}
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.PaymentsResponse{Items: items})

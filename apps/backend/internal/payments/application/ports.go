@@ -142,6 +142,16 @@ type PaidOverdueCount struct {
 	OverdueCount int64
 }
 
+// NearestDateInputs is the stored half of the next payment date resolution
+// (ticket #991): the earliest planned operation on or after today and the
+// newest materialized date (the projection cursor). Both travel as nils
+// when the rule has no such facts — the resolver falls to the projection
+// and, when that has nothing either, to the true null.
+type NearestDateInputs struct {
+	NextPlannedDate  *time.Time
+	LastMaterialized *time.Time
+}
+
 // OperationStore is the persistence port of the operations (ticket #461).
 // Reads and writes are scoped by the data owner and the nested property path
 // lives in the queries themselves. The mutating methods must run inside the
@@ -195,6 +205,16 @@ type OperationStore interface {
 	CountPaidAndOverdueByPaymentIDs(
 		ctx context.Context, scope, propertyID uuid.UUID, paymentIDs []uuid.UUID, today time.Time,
 	) ([]PaidOverdueCount, error)
+	// NearestDateInputsOfPayments returns the listed rules' next-payment-date
+	// aggregates in one batched read (ticket #991) — the earliest planned
+	// operation on or after today and the newest materialized date, the two
+	// stored facts the shared NearestDateOfPayment resolution consumes. A
+	// rule with no matching operations is absent from the result — its
+	// inputs are the nils and the resolution falls to the pure projection.
+	// Read-only — never ticks.
+	NearestDateInputsOfPayments(
+		ctx context.Context, scope, propertyID uuid.UUID, today time.Time, paymentIDs []uuid.UUID,
+	) (map[uuid.UUID]NearestDateInputs, error)
 	// ListGlobal returns one page of the actor's visible paid operations —
 	// the global «Операции» screen's merged feed (ticket #540): the paid
 	// facts of the actor's own properties plus the properties they can view,

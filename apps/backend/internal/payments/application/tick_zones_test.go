@@ -148,6 +148,12 @@ func (noopOperationStore) CountPaidAndOverdueByPaymentIDs(
 	panic("unused")
 }
 
+func (noopOperationStore) NearestDateInputsOfPayments(
+	context.Context, uuid.UUID, uuid.UUID, time.Time, []uuid.UUID,
+) (map[uuid.UUID]NearestDateInputs, error) {
+	panic("unused")
+}
+
 func (noopOperationStore) ListGlobal(context.Context, uuid.UUID, GlobalOperationsListQuery) ([]GlobalOperationRow, error) {
 	panic("unused")
 }

@@ -76,6 +76,50 @@ export function yearlyAnchorDate(
     : candidate;
 }
 
+/** Дефолт ветки при смене вида на weekly/monthly: неполное правило — шаг
+ * готов только после выбора дат (по фрейму 1056:53076 ничего не
+ * предвыбрано). Годовая ветка сюда не доходит: её правило пишется только
+ * подтверждением календаря. */
+function defaultForKind(kind: 'weekly' | 'monthly'): Recurrence {
+  switch (kind) {
+    case 'weekly':
+      return { kind: 'weekly', weekdays: [] };
+    case 'monthly':
+      return { kind: 'monthly', daysOfMonth: [], lastDay: false };
+  }
+}
+
+/** Итог выбора пункта меню периодичности: что пишется в черновик и какая
+ * ветка дат открывается. */
+export type PeriodicityPick = {
+  /** Новая периодичность черновика; undefined — прежняя готовая сброшена. */
+  readonly recurrence: Recurrence | undefined;
+  /** Ветка дат для открытия; null — у ежедневного правила её нет. */
+  readonly branch: PeriodicityBranch | null;
+};
+
+/** Выбор пункта меню (шаг 3): чужая готовая периодичность сбрасывается —
+ * у weekly/monthly черновиком становится пустая ветка, у yearly (дефект А
+ * #948) правило пишется только подтверждением календаря, поэтому до него
+ * готовой периодичности в черновике нет и «Продолжить» старый вид не
+ * проведёт. Повторный выбор своего вида хранит готовую ветку. */
+export function pickPeriodicityKind(
+  kind: PeriodicityKind,
+  recurrence: Recurrence | undefined,
+): PeriodicityPick {
+  if (kind === 'daily') {
+    return { recurrence: { kind: 'daily' }, branch: null };
+  }
+  if (kind === 'yearly') {
+    return {
+      recurrence: recurrence?.kind === 'yearly' ? recurrence : undefined,
+      branch: 'yearly',
+    };
+  }
+  const kept = recurrence?.kind === kind ? recurrence : defaultForKind(kind);
+  return { recurrence: kept, branch: branchKind(kept) };
+}
+
 /** Регулярность считается выбранной, когда её ветка дат завершена. */
 export function periodicityReady(recurrence: Recurrence | undefined): boolean {
   if (recurrence === undefined) return false;

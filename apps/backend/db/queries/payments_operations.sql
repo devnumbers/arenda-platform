@@ -62,7 +62,9 @@ VALUES ($1, $2, $3, NULL, 'manual', $4, $4, 'paid', $5, $6, $7, NULL, $8, $9);
 
 -- name: ListOperations :many
 -- The operations of one scope with pagination (limit/offset), the view status
--- filter ('' is any), an inclusive period on the operation date, the sort
+-- filter ('' is any), an inclusive period on the listing's date key, the
+-- sort key (date = the planned operation date — the payment history's
+-- default; paid_date = the actual payment fact, ticket #992), the sort
 -- direction, a search filter ('' = no filter; the application layer escapes
 -- the ILIKE metacharacters, ESCAPE '\'): a case-insensitive substring over
 -- the title and the category snapshot — and, when the query reads as an
@@ -70,6 +72,9 @@ VALUES ($1, $2, $3, NULL, 'manual', $4, $4, 'paid', $5, $6, $7, NULL, $8, $9);
 -- display amount without separators; ticket #476), the direction filter (''
 -- is any) and the comma-separated category slugs filter ('' is any; rows
 -- without a category snapshot never match a slug).
+-- The period bounds follow the sort key: at paid_date a planned row (no
+-- fact) falls out of every window, and sorts below the facts in both
+-- directions (NULLS LAST) — the operational feed reads payment facts.
 -- A NULL payment widens the scope from one rule to every rule of
 -- the property: "planned" and "overdue" split the stored planned rows against
 -- the owner's today — overdue is computed here from the same truth the
@@ -104,8 +109,12 @@ WHERE op.owner_id = sqlc.arg('owner')
     OR (sqlc.arg('status')::text = 'overdue' AND op.status = 'planned'
         AND op.date < sqlc.arg('today'))
   )
-  AND (sqlc.narg('date_from')::date IS NULL OR op.date >= sqlc.narg('date_from'))
-  AND (sqlc.narg('date_to')::date IS NULL OR op.date <= sqlc.narg('date_to'))
+  AND (sqlc.narg('date_from')::date IS NULL
+       OR (CASE WHEN sqlc.arg('sort')::text = 'paid_date' THEN op.paid_date ELSE op.date END)
+             >= sqlc.narg('date_from'))
+  AND (sqlc.narg('date_to')::date IS NULL
+       OR (CASE WHEN sqlc.arg('sort')::text = 'paid_date' THEN op.paid_date ELSE op.date END)
+             <= sqlc.narg('date_to'))
   AND (sqlc.arg('search')::text = ''
        OR op.title ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
        OR op.category_label ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
@@ -115,8 +124,14 @@ WHERE op.owner_id = sqlc.arg('owner')
   AND (sqlc.arg('categories')::text = ''
        OR op.category_slug = ANY(string_to_array(sqlc.arg('categories')::text, ',')))
 ORDER BY
-  CASE WHEN sqlc.arg('order')::text = 'asc' THEN op.date END ASC,
-  CASE WHEN sqlc.arg('order')::text = 'desc' THEN op.date END DESC,
+  CASE WHEN sqlc.arg('sort')::text = 'paid_date'
+        AND sqlc.arg('order')::text = 'asc' THEN op.paid_date END ASC NULLS LAST,
+  CASE WHEN sqlc.arg('sort')::text = 'paid_date'
+        AND sqlc.arg('order')::text = 'desc' THEN op.paid_date END DESC NULLS LAST,
+  CASE WHEN sqlc.arg('sort')::text <> 'paid_date'
+        AND sqlc.arg('order')::text = 'asc' THEN op.date END ASC,
+  CASE WHEN sqlc.arg('sort')::text <> 'paid_date'
+        AND sqlc.arg('order')::text = 'desc' THEN op.date END DESC,
   op.id DESC
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
@@ -144,8 +159,12 @@ WHERE op.owner_id = sqlc.arg('owner')
     OR (sqlc.arg('status')::text = 'overdue' AND op.status = 'planned'
         AND op.date < sqlc.arg('today'))
   )
-  AND (sqlc.narg('date_from')::date IS NULL OR op.date >= sqlc.narg('date_from'))
-  AND (sqlc.narg('date_to')::date IS NULL OR op.date <= sqlc.narg('date_to'))
+  AND (sqlc.narg('date_from')::date IS NULL
+       OR (CASE WHEN sqlc.arg('sort')::text = 'paid_date' THEN op.paid_date ELSE op.date END)
+             >= sqlc.narg('date_from'))
+  AND (sqlc.narg('date_to')::date IS NULL
+       OR (CASE WHEN sqlc.arg('sort')::text = 'paid_date' THEN op.paid_date ELSE op.date END)
+             <= sqlc.narg('date_to'))
   AND (sqlc.arg('search')::text = ''
        OR op.title ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
        OR op.category_label ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
@@ -159,7 +178,8 @@ GROUP BY op.type;
 -- scope, largest total first; rows without a category snapshot are skipped
 -- (no chip identity — their amounts still count in the totals). The search
 -- filter (ticket #476) is the listing's predicate: the breakdown over the
--- searched scope is the search screen's matched-category chips.
+-- searched scope is the search screen's matched-category chips. The period
+-- follows the listing's date key (ticket #992).
 SELECT op.category_slug,
        op.category_label,
        op.type,
@@ -177,8 +197,12 @@ WHERE op.owner_id = sqlc.arg('owner')
     OR (sqlc.arg('status')::text = 'overdue' AND op.status = 'planned'
         AND op.date < sqlc.arg('today'))
   )
-  AND (sqlc.narg('date_from')::date IS NULL OR op.date >= sqlc.narg('date_from'))
-  AND (sqlc.narg('date_to')::date IS NULL OR op.date <= sqlc.narg('date_to'))
+  AND (sqlc.narg('date_from')::date IS NULL
+       OR (CASE WHEN sqlc.arg('sort')::text = 'paid_date' THEN op.paid_date ELSE op.date END)
+             >= sqlc.narg('date_from'))
+  AND (sqlc.narg('date_to')::date IS NULL
+       OR (CASE WHEN sqlc.arg('sort')::text = 'paid_date' THEN op.paid_date ELSE op.date END)
+             <= sqlc.narg('date_to'))
   AND (sqlc.arg('search')::text = ''
        OR op.title ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
        OR op.category_label ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
@@ -250,12 +274,17 @@ GROUP BY payment_id;
 
 -- name: ListPaidOperationsGlobal :many
 -- One page of the actor's visible merged feed, the property listing's
--- ordering (op.date, id tiebreak) and filter vocabulary minus the status
+-- ordering (the sort key, id tiebreak) and filter vocabulary minus the status
 -- filter: paid is the feed's only stored status. property_name is the row's
 -- property label — the global screen's row label.
 --
+-- The sort key (ticket #992): date — the planned operation date (the
+-- default), paid_date — the actual payment fact the operational feeds read;
+-- the feed is paid-only, so the fact is never NULL (CHECK
+-- paid ⟺ paid_date NOT NULL). The period bounds follow the same key.
+--
 -- The page walks the feed's own order by keyset (ticket #597): the window
--- resumes strictly after the (date, id) the previous page ended on, so
+-- resumes strictly after the (sort key, id) the previous page ended on, so
 -- rows created, deleted or renamed between loads never duplicate or drop.
 -- The id tiebreak runs DESC in both directions, so the continuation is
 -- (date ahead of the cursor) or (same date, id below it); the direction
@@ -292,8 +321,12 @@ WHERE op.status = 'paid'
   AND (sqlc.arg('property_ids')::text = ''
        OR op.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[])
        OR (sqlc.arg('include_archived')::bool AND p.status = 'archived'))
-  AND (sqlc.narg('date_from')::date IS NULL OR op.date >= sqlc.narg('date_from'))
-  AND (sqlc.narg('date_to')::date IS NULL OR op.date <= sqlc.narg('date_to'))
+  AND (sqlc.narg('date_from')::date IS NULL
+       OR (CASE WHEN sqlc.arg('sort')::text = 'paid_date' THEN op.paid_date ELSE op.date END)
+             >= sqlc.narg('date_from'))
+  AND (sqlc.narg('date_to')::date IS NULL
+       OR (CASE WHEN sqlc.arg('sort')::text = 'paid_date' THEN op.paid_date ELSE op.date END)
+             <= sqlc.narg('date_to'))
   AND (sqlc.arg('search')::text = ''
        OR op.title ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
        OR op.category_label ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
@@ -304,24 +337,43 @@ WHERE op.status = 'paid'
        OR op.category_slug = ANY(string_to_array(sqlc.arg('categories')::text, ',')))
   AND (sqlc.narg('after_id')::uuid IS NULL
        OR (sqlc.arg('order')::text = 'asc'
-           AND (op.date > sqlc.narg('after_date')::date
-                OR (op.date = sqlc.narg('after_date') AND op.id < sqlc.narg('after_id')::uuid)))
+           AND (sqlc.arg('sort')::text = 'paid_date'
+                AND (op.paid_date > sqlc.narg('after_date')::date
+                     OR (op.paid_date = sqlc.narg('after_date')
+                         AND op.id < sqlc.narg('after_id')::uuid))
+             OR sqlc.arg('sort')::text <> 'paid_date'
+                AND (op.date > sqlc.narg('after_date')::date
+                     OR (op.date = sqlc.narg('after_date')
+                         AND op.id < sqlc.narg('after_id')::uuid))))
        OR (sqlc.arg('order')::text <> 'asc'
-           AND (op.date < sqlc.narg('after_date')::date
-                OR (op.date = sqlc.narg('after_date') AND op.id < sqlc.narg('after_id')::uuid))))
+           AND (sqlc.arg('sort')::text = 'paid_date'
+                AND (op.paid_date < sqlc.narg('after_date')::date
+                     OR (op.paid_date = sqlc.narg('after_date')
+                         AND op.id < sqlc.narg('after_id')::uuid))
+             OR sqlc.arg('sort')::text <> 'paid_date'
+                AND (op.date < sqlc.narg('after_date')::date
+                     OR (op.date = sqlc.narg('after_date')
+                         AND op.id < sqlc.narg('after_id')::uuid)))))
 ORDER BY
-  CASE WHEN sqlc.arg('order')::text = 'asc' THEN op.date END ASC,
-  CASE WHEN sqlc.arg('order')::text = 'desc' THEN op.date END DESC,
+  CASE WHEN sqlc.arg('sort')::text = 'paid_date'
+        AND sqlc.arg('order')::text = 'asc' THEN op.paid_date END ASC NULLS LAST,
+  CASE WHEN sqlc.arg('sort')::text = 'paid_date'
+        AND sqlc.arg('order')::text = 'desc' THEN op.paid_date END DESC NULLS LAST,
+  CASE WHEN sqlc.arg('sort')::text <> 'paid_date'
+        AND sqlc.arg('order')::text = 'asc' THEN op.date END ASC,
+  CASE WHEN sqlc.arg('sort')::text <> 'paid_date'
+        AND sqlc.arg('order')::text = 'desc' THEN op.date END DESC,
   op.id DESC
 LIMIT sqlc.arg('limit');
 
 -- name: CountPaidOperationsGlobal :one
 -- The global feed's whole-scope count (ticket #599): the list query's
 -- predicate — paid, the visibility, the archive cut, the propertyIds
--- multi-select, the period, the search over title/category label/amount
--- digits, the direction and category filters — without the keyset key, the
--- ordering and the window. The count is the scope's own, identical on every
--- walked page; the search screen shows it as «найдено N».
+-- multi-select, the period on the listing's date key, the search over
+-- title/category label/amount digits, the direction and category filters —
+-- without the keyset key, the ordering and the window. The count is the
+-- scope's own, identical on every walked page; the search screen shows it
+-- as «найдено N».
 SELECT COUNT(*)
 FROM operations op
 JOIN properties p ON p.id = op.property_id
@@ -339,8 +391,12 @@ WHERE op.status = 'paid'
   AND (sqlc.arg('property_ids')::text = ''
        OR op.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[])
        OR (sqlc.arg('include_archived')::bool AND p.status = 'archived'))
-  AND (sqlc.narg('date_from')::date IS NULL OR op.date >= sqlc.narg('date_from'))
-  AND (sqlc.narg('date_to')::date IS NULL OR op.date <= sqlc.narg('date_to'))
+  AND (sqlc.narg('date_from')::date IS NULL
+       OR (CASE WHEN sqlc.arg('sort')::text = 'paid_date' THEN op.paid_date ELSE op.date END)
+             >= sqlc.narg('date_from'))
+  AND (sqlc.narg('date_to')::date IS NULL
+       OR (CASE WHEN sqlc.arg('sort')::text = 'paid_date' THEN op.paid_date ELSE op.date END)
+             <= sqlc.narg('date_to'))
   AND (sqlc.arg('search')::text = ''
        OR op.title ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
        OR op.category_label ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
@@ -374,8 +430,12 @@ WHERE op.status = 'paid'
   AND (sqlc.arg('property_ids')::text = ''
        OR op.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[])
        OR (sqlc.arg('include_archived')::bool AND p.status = 'archived'))
-  AND (sqlc.narg('date_from')::date IS NULL OR op.date >= sqlc.narg('date_from'))
-  AND (sqlc.narg('date_to')::date IS NULL OR op.date <= sqlc.narg('date_to'))
+  AND (sqlc.narg('date_from')::date IS NULL
+       OR (CASE WHEN sqlc.arg('sort')::text = 'paid_date' THEN op.paid_date ELSE op.date END)
+             >= sqlc.narg('date_from'))
+  AND (sqlc.narg('date_to')::date IS NULL
+       OR (CASE WHEN sqlc.arg('sort')::text = 'paid_date' THEN op.paid_date ELSE op.date END)
+             <= sqlc.narg('date_to'))
   AND (sqlc.arg('search')::text = ''
        OR op.title ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
        OR op.category_label ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
@@ -387,7 +447,8 @@ GROUP BY op.type;
 -- The per-category breakdown of the actor's visible merged feed (ticket
 -- #540), largest total first; rows without a category snapshot are skipped
 -- (no chip identity — their amounts still count in the totals). Both the
--- type and the category filters narrow this read only.
+-- type and the category filters narrow this read only. The period follows
+-- the listing's date key (ticket #992).
 SELECT op.category_slug,
        op.category_label,
        op.type,
@@ -409,8 +470,12 @@ WHERE op.status = 'paid'
   AND (sqlc.arg('property_ids')::text = ''
        OR op.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[])
        OR (sqlc.arg('include_archived')::bool AND p.status = 'archived'))
-  AND (sqlc.narg('date_from')::date IS NULL OR op.date >= sqlc.narg('date_from'))
-  AND (sqlc.narg('date_to')::date IS NULL OR op.date <= sqlc.narg('date_to'))
+  AND (sqlc.narg('date_from')::date IS NULL
+       OR (CASE WHEN sqlc.arg('sort')::text = 'paid_date' THEN op.paid_date ELSE op.date END)
+             >= sqlc.narg('date_from'))
+  AND (sqlc.narg('date_to')::date IS NULL
+       OR (CASE WHEN sqlc.arg('sort')::text = 'paid_date' THEN op.paid_date ELSE op.date END)
+             <= sqlc.narg('date_to'))
   AND (sqlc.arg('search')::text = ''
        OR op.title ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
        OR op.category_label ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
@@ -435,3 +500,22 @@ WHERE op.owner_id = sqlc.arg('owner')
   AND op.status = 'planned'
   AND op.date < sqlc.arg('today')
   AND op.property_id = ANY(sqlc.arg('property_ids')::uuid[]);
+
+-- name: NearestDateInputsOfPayments :many
+-- The stored aggregates the next payment date resolution consumes (ticket
+-- #991) in one batched read: the earliest planned operation on or after
+-- today (the stored half — a paid prepaid nearest is not «следующая») and
+-- the newest materialized date across planned and paid (the projection
+-- cursor — the IsCompleted rule; the tick has not stood the single future
+-- planned up yet). Cancelled tombstones are not materialized facts. A rule
+-- with no matching operations yields no row — the consumer resolves from
+-- nils. The nested payment→property path is enforced in the WHERE clause;
+-- an empty id list never reaches the query.
+SELECT payment_id,
+       MIN(date) FILTER (WHERE status = 'planned' AND date >= sqlc.arg('today'))::date AS next_planned_date,
+       MAX(date) FILTER (WHERE status <> 'cancelled')::date AS last_materialized_date
+FROM operations
+WHERE owner_id = sqlc.arg('owner')
+  AND property_id = sqlc.arg('property')
+  AND payment_id = ANY(@payment_ids::uuid[])
+GROUP BY payment_id;

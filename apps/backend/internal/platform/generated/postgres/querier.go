@@ -90,10 +90,11 @@ type Querier interface {
 	CountPaidOperationsByPayment(ctx context.Context, arg CountPaidOperationsByPaymentParams) (int64, error)
 	// The global feed's whole-scope count (ticket #599): the list query's
 	// predicate — paid, the visibility, the archive cut, the propertyIds
-	// multi-select, the period, the search over title/category label/amount
-	// digits, the direction and category filters — without the keyset key, the
-	// ordering and the window. The count is the scope's own, identical on every
-	// walked page; the search screen shows it as «найдено N».
+	// multi-select, the period on the listing's date key, the search over
+	// title/category label/amount digits, the direction and category filters —
+	// without the keyset key, the ordering and the window. The count is the
+	// scope's own, identical on every walked page; the search screen shows it
+	// as «найдено N».
 	CountPaidOperationsGlobal(ctx context.Context, arg CountPaidOperationsGlobalParams) (int64, error)
 	CountPropertiesAdmin(ctx context.Context, arg CountPropertiesAdminParams) (int64, error)
 	// The auto-name serial (ticket #1001): the owner's properties of this type
@@ -829,7 +830,9 @@ type Querier interface {
 	ListNotifications(ctx context.Context, arg ListNotificationsParams) ([]Notification, error)
 	ListOpenCardBindingSessionsByUserID(ctx context.Context, userID pgtype.UUID) ([]CardBindingSession, error)
 	// The operations of one scope with pagination (limit/offset), the view status
-	// filter ('' is any), an inclusive period on the operation date, the sort
+	// filter ('' is any), an inclusive period on the listing's date key, the
+	// sort key (date = the planned operation date — the payment history's
+	// default; paid_date = the actual payment fact, ticket #992), the sort
 	// direction, a search filter ('' = no filter; the application layer escapes
 	// the ILIKE metacharacters, ESCAPE '\'): a case-insensitive substring over
 	// the title and the category snapshot — and, when the query reads as an
@@ -837,6 +840,9 @@ type Querier interface {
 	// display amount without separators; ticket #476), the direction filter (''
 	// is any) and the comma-separated category slugs filter ('' is any; rows
 	// without a category snapshot never match a slug).
+	// The period bounds follow the sort key: at paid_date a planned row (no
+	// fact) falls out of every window, and sorts below the facts in both
+	// directions (NULLS LAST) — the operational feed reads payment facts.
 	// A NULL payment widens the scope from one rule to every rule of
 	// the property: "planned" and "overdue" split the stored planned rows against
 	// the owner's today — overdue is computed here from the same truth the
@@ -857,12 +863,17 @@ type Querier interface {
 	// the application layer before this SQL runs — the uuid[] cast never sees a
 	// foreign id (its row would be invisible anyway) or a non-uuid.
 	// One page of the actor's visible merged feed, the property listing's
-	// ordering (op.date, id tiebreak) and filter vocabulary minus the status
+	// ordering (the sort key, id tiebreak) and filter vocabulary minus the status
 	// filter: paid is the feed's only stored status. property_name is the row's
 	// property label — the global screen's row label.
 	//
+	// The sort key (ticket #992): date — the planned operation date (the
+	// default), paid_date — the actual payment fact the operational feeds read;
+	// the feed is paid-only, so the fact is never NULL (CHECK
+	// paid ⟺ paid_date NOT NULL). The period bounds follow the same key.
+	//
 	// The page walks the feed's own order by keyset (ticket #597): the window
-	// resumes strictly after the (date, id) the previous page ended on, so
+	// resumes strictly after the (sort key, id) the previous page ended on, so
 	// rows created, deleted or renamed between loads never duplicate or drop.
 	// The id tiebreak runs DESC in both directions, so the continuation is
 	// (date ahead of the cursor) or (same date, id below it); the direction
@@ -1212,6 +1223,16 @@ type Querier interface {
 	// already-read or deleted row matches nothing (0 rows).
 	MarkNotificationRead(ctx context.Context, arg MarkNotificationReadParams) (int64, error)
 	MarkPopupSeen(ctx context.Context, arg MarkPopupSeenParams) error
+	// The stored aggregates the next payment date resolution consumes (ticket
+	// #991) in one batched read: the earliest planned operation on or after
+	// today (the stored half — a paid prepaid nearest is not «следующая») and
+	// the newest materialized date across planned and paid (the projection
+	// cursor — the IsCompleted rule; the tick has not stood the single future
+	// planned up yet). Cancelled tombstones are not materialized facts. A rule
+	// with no matching operations yields no row — the consumer resolves from
+	// nils. The nested payment→property path is enforced in the WHERE clause;
+	// an empty id list never reaches the query.
+	NearestDateInputsOfPayments(ctx context.Context, arg NearestDateInputsOfPaymentsParams) ([]NearestDateInputsOfPaymentsRow, error)
 	// «Оплатить сейчас» (planned → paid, paid_date = today in the owner's
 	// timezone). The planned guard is belt-and-suspenders over the application's
 	// loaded check: rows affected = 0 means already paid or gone.
@@ -1305,7 +1326,8 @@ type Querier interface {
 	// scope, largest total first; rows without a category snapshot are skipped
 	// (no chip identity — their amounts still count in the totals). The search
 	// filter (ticket #476) is the listing's predicate: the breakdown over the
-	// searched scope is the search screen's matched-category chips.
+	// searched scope is the search screen's matched-category chips. The period
+	// follows the listing's date key (ticket #992).
 	SumOperationsByCategory(ctx context.Context, arg SumOperationsByCategoryParams) ([]SumOperationsByCategoryRow, error)
 	// The period totals by direction of the actor's visible merged feed (ticket
 	// #540): the propertyIds filter and the period narrow the totals, the type
@@ -1316,7 +1338,8 @@ type Querier interface {
 	// The per-category breakdown of the actor's visible merged feed (ticket
 	// #540), largest total first; rows without a category snapshot are skipped
 	// (no chip identity — their amounts still count in the totals). Both the
-	// type and the category filters narrow this read only.
+	// type and the category filters narrow this read only. The period follows
+	// the listing's date key (ticket #992).
 	SumPaidOperationsByCategoryGlobal(ctx context.Context, arg SumPaidOperationsByCategoryGlobalParams) ([]SumPaidOperationsByCategoryGlobalRow, error)
 	SuspendPropertyMember(ctx context.Context, arg SuspendPropertyMemberParams) error
 	// TouchSession persists one request's activity: the sliding expiry, the

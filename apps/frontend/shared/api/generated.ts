@@ -714,7 +714,7 @@ export interface paths {
         };
         /**
          * List the actor's visible paid operations (the global «Операции» screen)
-         * @description The global read side of the operations context (ticket #540). The response is the actor's visible merged feed: the paid operations of their own properties plus those of the properties they can view (ADR 0028; an actor-scoped cross-property read — the visibility predicate lives in the store's SQL, the tasks global feed's rule). The feed is paid-only: planned and overdue occurrences are the property screens' vocabulary, cancelled operations do not exist for reads. The operations of archived properties are not in the feed unless includeArchived lifts the cut (#549). The propertyIds filter narrows the feed to the listed properties, each resolved through its view gate — an unknown or non-visible id is the privacy 404. Every row carries propertyName, the bound property's display name. The period, search, type and category vocabulary is the property listing's; the window is keyset pagination over (date, id) (ticket #597): rows shifting between loads never duplicate or drop — pass the previous page's nextCursor back as cursor. Reads never tick.
+         * @description The global read side of the operations context (ticket #540). The response is the actor's visible merged feed: the paid operations of their own properties plus those of the properties they can view (ADR 0028; an actor-scoped cross-property read — the visibility predicate lives in the store's SQL, the tasks global feed's rule). The feed is paid-only: planned and overdue occurrences are the property screens' vocabulary, cancelled operations do not exist for reads. The operations of archived properties are not in the feed unless includeArchived lifts the cut (#549). The propertyIds filter narrows the feed to the listed properties, each resolved through its view gate — an unknown or non-visible id is the privacy 404. Every row carries propertyName, the bound property's display name. The period, search, type and category vocabulary is the property listing's; the window is keyset pagination over the listing's sort key and id (ticket #597): rows shifting between loads never duplicate or drop — pass the previous page's nextCursor back as cursor (the cursor is bound to the sort it was issued under). Reads never tick.
          */
         get: operations["listOperations"];
         put?: never;
@@ -734,7 +734,7 @@ export interface paths {
         };
         /**
          * Summarize the actor's visible paid operations (the global «Операции» screen)
-         * @description The global twin of the property operations summary (ticket #540) over the same visible merged feed as GET /operations: paid operations of the actor's own properties plus the properties they can view, the archived ones excluded. The propertyIds filter and the period narrow the whole scope — totals and the category breakdown alike; the type and category filters narrow only the categories array, the totals always report both directions. Search is the listing's predicate — the summary of the searched scope stays consistent with its list.
+         * @description The global twin of the property operations summary (ticket #540) over the same visible merged feed as GET /operations: paid operations of the actor's own properties plus the properties they can view, the archived ones excluded. The propertyIds filter and the period narrow the whole scope — totals and the category breakdown alike; the type and category filters narrow only the categories array, the totals always report both directions. Search is the listing's predicate — the summary of the searched scope stays consistent with its list. The period reads the listing's date key (see sort).
          */
         get: operations["summarizeOperations"];
         put?: never;
@@ -2987,6 +2987,11 @@ export interface components {
             isFavorite: boolean;
             /** @description Server-computed settlement view of the rule (CONTEXT.md, «Завершённый платёж»): no planned operations — overdue included — and no occurrence beyond the last materialized date of any status. Never stored, never written by the client; derived on every read like the operation's overdue. */
             isCompleted: boolean;
+            /**
+             * Format: date
+             * @description «Следующая дата оплаты» (ticket #991, CONTEXT.md): the earliest stored planned operation on or after the owner's today (ADR 0048), else the rule's projection. Null when the schedule has no next occurrence — an open pause or a settled rule. The object payments list resolves it on every row; the single-rule reads do not compute it and always carry null.
+             */
+            nearestDate: string | null;
             /** @description The rule is the rental's managed rent payment (ADR 0053, ticket #818): a rental row references it, any rental state — a completed rental is final and its payment is final with it. The rental is the source of truth for the amount, the payment day, the auto-pay and the planned end, so the rule mutations (pause, resume, patch, delete) answer 409; the payment facts («Оплатить») and the favorite star stay open. The reads carry the flag so the client hides the mutation actions instead of learning the 409 live. */
             isRentalManaged: boolean;
             pauses: components["schemas"]["PauseIntervalView"][];
@@ -4076,14 +4081,16 @@ export interface components {
         HistoryQuery: string;
         /** @description Filter by the operation's view status. overdue is not stored anywhere — the server computes it against today in the property owner's timezone (planned with the date already past), so clients never need the owner's timezone. */
         OperationsStatusFilter: "planned" | "paid" | "overdue";
-        /** @description Inclusive lower bound of the period on the operation date. */
+        /** @description Inclusive lower bound of the period on the listing's date key (see sort; the planned operation date by default, the paid_date payment fact under sort=paid_date). */
         OperationsDateFrom: string;
-        /** @description Inclusive upper bound of the period on the operation date. */
+        /** @description Inclusive upper bound of the period on the listing's date key (see sort; the planned operation date by default, the paid_date payment fact under sort=paid_date). */
         OperationsDateTo: string;
-        /** @description Sort by the operation date; asc (oldest first) or desc (default, newest first). */
+        /** @description Which operation date the listing reads (ticket #992): date — the planned operation date, the schedule attribute the payment history, the overdue split and the projection live on (the contract default); paid_date — the actual payment fact date the operational feeds read. The period bounds (date_from/date_to) and the summaries follow the same date. A planned row carries no payment fact and sorts last in both directions under paid_date; on the global feed — paid facts only — the keyset cursor walks the same date and is bound to the sort it was issued under. */
+        OperationsSort: "date" | "paid_date";
+        /** @description Sort direction over the listing's date key (see sort); asc (oldest first) or desc (default, newest first). */
         OperationsOrder: "asc" | "desc";
         OperationsLimit: number;
-        /** @description The opaque continuation cursor from the previous page's nextCursor (keyset pagination over (date, id), ticket #597) — the global feed's window; the property listings keep the offset vocabulary. A missing or empty value starts the feed from the beginning; a malformed value is a 400. */
+        /** @description The opaque continuation cursor from the previous page's nextCursor (keyset pagination over the listing's sort key and id, ticket #597) — the global feed's window; the property listings keep the offset vocabulary. The cursor is bound to the sort it was issued under — echoing it with a different sort is a 400. A missing or empty value starts the feed from the beginning; a malformed value is a 400. */
         OperationsCursor: string;
         OperationsOffset: number;
         /** @description The page size of the keyset window (ticket #600). A missing value means the default page; an out-of-range value is a 400. */
@@ -4933,7 +4940,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Payments list */
+            /** @description Payments list; every row carries the rule's next payment date (ticket #991) — null when the schedule has no next occurrence. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5122,11 +5129,13 @@ export interface operations {
             query?: {
                 /** @description Filter by the operation's view status. overdue is not stored anywhere — the server computes it against today in the property owner's timezone (planned with the date already past), so clients never need the owner's timezone. */
                 status?: components["parameters"]["OperationsStatusFilter"];
-                /** @description Inclusive lower bound of the period on the operation date. */
+                /** @description Inclusive lower bound of the period on the listing's date key (see sort; the planned operation date by default, the paid_date payment fact under sort=paid_date). */
                 date_from?: components["parameters"]["OperationsDateFrom"];
-                /** @description Inclusive upper bound of the period on the operation date. */
+                /** @description Inclusive upper bound of the period on the listing's date key (see sort; the planned operation date by default, the paid_date payment fact under sort=paid_date). */
                 date_to?: components["parameters"]["OperationsDateTo"];
-                /** @description Sort by the operation date; asc (oldest first) or desc (default, newest first). */
+                /** @description Which operation date the listing reads (ticket #992): date — the planned operation date, the schedule attribute the payment history, the overdue split and the projection live on (the contract default); paid_date — the actual payment fact date the operational feeds read. The period bounds (date_from/date_to) and the summaries follow the same date. A planned row carries no payment fact and sorts last in both directions under paid_date; on the global feed — paid facts only — the keyset cursor walks the same date and is bound to the sort it was issued under. */
+                sort?: components["parameters"]["OperationsSort"];
+                /** @description Sort direction over the listing's date key (see sort); asc (oldest first) or desc (default, newest first). */
                 order?: components["parameters"]["OperationsOrder"];
                 limit?: components["parameters"]["OperationsLimit"];
                 offset?: components["parameters"]["OperationsOffset"];
@@ -5222,11 +5231,13 @@ export interface operations {
             query?: {
                 /** @description Filter by the operation's view status. overdue is not stored anywhere — the server computes it against today in the property owner's timezone (planned with the date already past), so clients never need the owner's timezone. */
                 status?: components["parameters"]["OperationsStatusFilter"];
-                /** @description Inclusive lower bound of the period on the operation date. */
+                /** @description Inclusive lower bound of the period on the listing's date key (see sort; the planned operation date by default, the paid_date payment fact under sort=paid_date). */
                 date_from?: components["parameters"]["OperationsDateFrom"];
-                /** @description Inclusive upper bound of the period on the operation date. */
+                /** @description Inclusive upper bound of the period on the listing's date key (see sort; the planned operation date by default, the paid_date payment fact under sort=paid_date). */
                 date_to?: components["parameters"]["OperationsDateTo"];
-                /** @description Sort by the operation date; asc (oldest first) or desc (default, newest first). */
+                /** @description Which operation date the listing reads (ticket #992): date — the planned operation date, the schedule attribute the payment history, the overdue split and the projection live on (the contract default); paid_date — the actual payment fact date the operational feeds read. The period bounds (date_from/date_to) and the summaries follow the same date. A planned row carries no payment fact and sorts last in both directions under paid_date; on the global feed — paid facts only — the keyset cursor walks the same date and is bound to the sort it was issued under. */
+                sort?: components["parameters"]["OperationsSort"];
+                /** @description Sort direction over the listing's date key (see sort); asc (oldest first) or desc (default, newest first). */
                 order?: components["parameters"]["OperationsOrder"];
                 limit?: components["parameters"]["OperationsLimit"];
                 offset?: components["parameters"]["OperationsOffset"];
@@ -5295,10 +5306,12 @@ export interface operations {
             query?: {
                 /** @description Filter by the operation's view status. overdue is not stored anywhere — the server computes it against today in the property owner's timezone (planned with the date already past), so clients never need the owner's timezone. */
                 status?: components["parameters"]["OperationsStatusFilter"];
-                /** @description Inclusive lower bound of the period on the operation date. */
+                /** @description Inclusive lower bound of the period on the listing's date key (see sort; the planned operation date by default, the paid_date payment fact under sort=paid_date). */
                 date_from?: components["parameters"]["OperationsDateFrom"];
-                /** @description Inclusive upper bound of the period on the operation date. */
+                /** @description Inclusive upper bound of the period on the listing's date key (see sort; the planned operation date by default, the paid_date payment fact under sort=paid_date). */
                 date_to?: components["parameters"]["OperationsDateTo"];
+                /** @description Which operation date the listing reads (ticket #992): date — the planned operation date, the schedule attribute the payment history, the overdue split and the projection live on (the contract default); paid_date — the actual payment fact date the operational feeds read. The period bounds (date_from/date_to) and the summaries follow the same date. A planned row carries no payment fact and sorts last in both directions under paid_date; on the global feed — paid facts only — the keyset cursor walks the same date and is bound to the sort it was issued under. */
+                sort?: components["parameters"]["OperationsSort"];
                 /** @description Case-insensitive substring search over the operation title and the operation's category snapshot. A query made only of digits and amount separators (spaces, commas, points, dashes) additionally matches the amount: its digits are searched inside the amount's decimal digits (kopecks), so 2500 finds 2 500,00 ₽ and 2500,50 finds 2 500,50 ₽, while a query holding any letter never matches amounts. A missing or empty value disables the filter; LIKE metacharacters in the value are literals. */
                 search?: components["parameters"]["OperationsSearch"];
                 /** @description Filter by the operation direction: the payment's type snapshot every operation carries. A missing value disables the filter. */
@@ -5612,9 +5625,9 @@ export interface operations {
             query?: {
                 /** @description Comma-separated property ids (the global «Объект» multi-select); operations of any other property are filtered out. Each id is resolved through its view gate (ADR 0028) — an unknown or non-visible id is the privacy 404; an archived property narrows the feed to an empty page (the feed never carries archived rows). A missing or empty value disables the filter — the merged feed. */
                 propertyIds?: components["parameters"]["OperationsPropertyIdsFilter"];
-                /** @description Inclusive lower bound of the period on the operation date. */
+                /** @description Inclusive lower bound of the period on the listing's date key (see sort; the planned operation date by default, the paid_date payment fact under sort=paid_date). */
                 date_from?: components["parameters"]["OperationsDateFrom"];
-                /** @description Inclusive upper bound of the period on the operation date. */
+                /** @description Inclusive upper bound of the period on the listing's date key (see sort; the planned operation date by default, the paid_date payment fact under sort=paid_date). */
                 date_to?: components["parameters"]["OperationsDateTo"];
                 /** @description Case-insensitive substring search over the operation title and the operation's category snapshot. A query made only of digits and amount separators (spaces, commas, points, dashes) additionally matches the amount: its digits are searched inside the amount's decimal digits (kopecks), so 2500 finds 2 500,00 ₽ and 2500,50 finds 2 500,50 ₽, while a query holding any letter never matches amounts. A missing or empty value disables the filter; LIKE metacharacters in the value are literals. */
                 search?: components["parameters"]["OperationsSearch"];
@@ -5624,10 +5637,12 @@ export interface operations {
                 includeArchived?: components["parameters"]["OperationsIncludeArchived"];
                 /** @description Comma-separated category slugs (the chips multi-select); operations of any other category are filtered out. A missing or empty value disables the filter; whitespace around slugs is ignored. */
                 category?: components["parameters"]["OperationsCategoriesFilter"];
-                /** @description Sort by the operation date; asc (oldest first) or desc (default, newest first). */
+                /** @description Which operation date the listing reads (ticket #992): date — the planned operation date, the schedule attribute the payment history, the overdue split and the projection live on (the contract default); paid_date — the actual payment fact date the operational feeds read. The period bounds (date_from/date_to) and the summaries follow the same date. A planned row carries no payment fact and sorts last in both directions under paid_date; on the global feed — paid facts only — the keyset cursor walks the same date and is bound to the sort it was issued under. */
+                sort?: components["parameters"]["OperationsSort"];
+                /** @description Sort direction over the listing's date key (see sort); asc (oldest first) or desc (default, newest first). */
                 order?: components["parameters"]["OperationsOrder"];
                 limit?: components["parameters"]["OperationsLimit"];
-                /** @description The opaque continuation cursor from the previous page's nextCursor (keyset pagination over (date, id), ticket #597) — the global feed's window; the property listings keep the offset vocabulary. A missing or empty value starts the feed from the beginning; a malformed value is a 400. */
+                /** @description The opaque continuation cursor from the previous page's nextCursor (keyset pagination over the listing's sort key and id, ticket #597) — the global feed's window; the property listings keep the offset vocabulary. The cursor is bound to the sort it was issued under — echoing it with a different sort is a 400. A missing or empty value starts the feed from the beginning; a malformed value is a 400. */
                 cursor?: components["parameters"]["OperationsCursor"];
             };
             header?: never;
@@ -5655,10 +5670,12 @@ export interface operations {
             query?: {
                 /** @description Comma-separated property ids (the global «Объект» multi-select); operations of any other property are filtered out. Each id is resolved through its view gate (ADR 0028) — an unknown or non-visible id is the privacy 404; an archived property narrows the feed to an empty page (the feed never carries archived rows). A missing or empty value disables the filter — the merged feed. */
                 propertyIds?: components["parameters"]["OperationsPropertyIdsFilter"];
-                /** @description Inclusive lower bound of the period on the operation date. */
+                /** @description Inclusive lower bound of the period on the listing's date key (see sort; the planned operation date by default, the paid_date payment fact under sort=paid_date). */
                 date_from?: components["parameters"]["OperationsDateFrom"];
-                /** @description Inclusive upper bound of the period on the operation date. */
+                /** @description Inclusive upper bound of the period on the listing's date key (see sort; the planned operation date by default, the paid_date payment fact under sort=paid_date). */
                 date_to?: components["parameters"]["OperationsDateTo"];
+                /** @description Which operation date the listing reads (ticket #992): date — the planned operation date, the schedule attribute the payment history, the overdue split and the projection live on (the contract default); paid_date — the actual payment fact date the operational feeds read. The period bounds (date_from/date_to) and the summaries follow the same date. A planned row carries no payment fact and sorts last in both directions under paid_date; on the global feed — paid facts only — the keyset cursor walks the same date and is bound to the sort it was issued under. */
+                sort?: components["parameters"]["OperationsSort"];
                 /** @description Case-insensitive substring search over the operation title and the operation's category snapshot. A query made only of digits and amount separators (spaces, commas, points, dashes) additionally matches the amount: its digits are searched inside the amount's decimal digits (kopecks), so 2500 finds 2 500,00 ₽ and 2500,50 finds 2 500,50 ₽, while a query holding any letter never matches amounts. A missing or empty value disables the filter; LIKE metacharacters in the value are literals. */
                 search?: components["parameters"]["OperationsSearch"];
                 /** @description Filter by the operation direction: the payment's type snapshot every operation carries. A missing value disables the filter. */

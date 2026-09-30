@@ -3,30 +3,43 @@ import { makePayment } from '@/entities/payment';
 import { sortPaymentsByNextOccurrence } from './sort-payments-by-next-occurrence';
 
 describe('sortPaymentsByNextOccurrence', () => {
-  it('самое раннее вхождение — первым', () => {
-    const monthly5 = makePayment({ id: 'monthly-5', recurrence: { kind: 'monthly', daysOfMonth: [5], lastDay: false } });
-    const monthly1 = makePayment({ id: 'monthly-1' });
-    const weekly = makePayment({ id: 'weekly', recurrence: { kind: 'weekly', weekdays: [6] } });
+  it('порядок — по серверному nearestDate, не по проекции правила', () => {
+    // Сценарий #967: monthly-1 оплатили вперёд — сервер переставил его
+    // ближайшую на 20-е, позади weekly-29; проекция от «сегодня» держала бы
+    // его первым по голому графику.
+    const prepaid = makePayment({ id: 'prepaid', nearestDate: '2026-09-20' });
+    const weekly = makePayment({ id: 'weekly', nearestDate: '2026-09-29' });
+    const monthly1 = makePayment({ id: 'monthly-1', nearestDate: '2026-10-01' });
 
-    const sorted = sortPaymentsByNextOccurrence([monthly5, weekly, monthly1], '2026-08-27');
+    const sorted = sortPaymentsByNextOccurrence([prepaid, monthly1, weekly], '2026-08-27');
 
-    // 27.08.2026 — четверг: суббота (29.08), 1-е (01.09), 5-е (05.09).
-    expect(sorted.map((p) => p.id)).toStrictEqual(['weekly', 'monthly-1', 'monthly-5']);
+    expect(sorted.map((p) => p.id)).toStrictEqual(['prepaid', 'weekly', 'monthly-1']);
   });
 
-  it('завершённые и паузные уходят в конец без дат', () => {
-    const finished = makePayment({ id: 'finished', endDate: '2026-08-01' });
-    const paused = makePayment({ id: 'paused', pauses: [{ from: '2026-08-01' }] });
-    const active = makePayment({ id: 'active' });
+  it('паузные (проверка по сегодня) и правила без даты уходят в конец', () => {
+    const finished = makePayment({ id: 'finished', isCompleted: true, nearestDate: null });
+    const paused = makePayment({ id: 'paused', pauses: [{ from: '2026-08-01' }], nearestDate: null });
+    const boundedPaused = makePayment({
+      id: 'bounded-paused',
+      pauses: [{ from: '2026-08-01', to: '2026-09-01' }],
+      nearestDate: '2026-09-01',
+    });
+    const active = makePayment({ id: 'active', nearestDate: '2026-09-01' });
 
-    const sorted = sortPaymentsByNextOccurrence([finished, paused, active], '2026-08-27');
+    const sorted = sortPaymentsByNextOccurrence(
+      [finished, boundedPaused, paused, active],
+      '2026-08-27',
+    );
 
-    expect(sorted.map((p) => p.id)).toStrictEqual(['active', 'finished', 'paused']);
+    // Ограниченная пауза с сегодня внутри показывается «На паузе» — в конец,
+    // как и раньше; её серверная дата ключом не становится. Null-ключи
+    // стабильны — сохраняют входной порядок (finished, bounded-paused, paused).
+    expect(sorted.map((p) => p.id)).toStrictEqual(['active', 'finished', 'bounded-paused', 'paused']);
   });
 
   it('при равной дате сохраняется серверный порядок (устойчивость)', () => {
-    const first = makePayment({ id: 'first', recurrence: { kind: 'monthly', daysOfMonth: [1], lastDay: false } });
-    const second = makePayment({ id: 'second', recurrence: { kind: 'monthly', daysOfMonth: [1], lastDay: false } });
+    const first = makePayment({ id: 'first', nearestDate: '2026-09-01' });
+    const second = makePayment({ id: 'second', nearestDate: '2026-09-01' });
 
     const sorted = sortPaymentsByNextOccurrence([first, second], '2026-08-27');
 

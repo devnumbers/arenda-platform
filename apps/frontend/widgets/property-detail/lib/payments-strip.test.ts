@@ -51,11 +51,14 @@ describe('propertyPaymentGroups', () => {
   });
 
   it('внутри группы просрочки первыми, затем по ближайшему вхождению', () => {
+    // Ключ порядка — серверный nearestDate «Следующей даты оплаты» (#993):
+    // у просроченных (25-е/28-е) следующее вхождение позади 15-го и 20-го,
+    // вперёд их выносит только правило просрочек-первыми.
     const payments = [
-      paymentFixture({ id: 'next-month', recurrence: { kind: 'monthly', daysOfMonth: [20], lastDay: false } }),
-      paymentFixture({ id: 'plain', recurrence: { kind: 'monthly', daysOfMonth: [15], lastDay: false } }),
-      paymentFixture({ id: 'overdue-1', recurrence: { kind: 'monthly', daysOfMonth: [25], lastDay: false } }),
-      paymentFixture({ id: 'overdue-2', recurrence: { kind: 'monthly', daysOfMonth: [28], lastDay: false } }),
+      paymentFixture({ id: 'next-month', nearestDate: '2026-09-20' }),
+      paymentFixture({ id: 'plain', nearestDate: '2026-09-15' }),
+      paymentFixture({ id: 'overdue-1', nearestDate: '2026-09-25' }),
+      paymentFixture({ id: 'overdue-2', nearestDate: '2026-09-28' }),
     ];
     const groups = propertyPaymentGroups(payments, new Set(['overdue-1', 'overdue-2']), '2026-09-11');
     expect(groups[0]?.items.map((item) => item.payment.id)).toEqual([

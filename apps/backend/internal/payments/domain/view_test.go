@@ -72,6 +72,29 @@ func orToday(date, today time.Time) time.Time {
 	return date
 }
 
+// ProjectionCursor: курсор проекции — последняя материализованная дата,
+// при отсутствии фактов вчера; общее правило IsCompleted и следующей даты
+// оплаты (ticket #991).
+func TestProjectionCursor(t *testing.T) {
+	t.Parallel()
+	today := d(dayT0)
+
+	t.Run("без фактов — вчера: вхождения впереди ещё проецируются", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, d(dayT1), ProjectionCursor(today, nil))
+	})
+
+	t.Run("факты старше вчера не двигают курсор", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, d(dayT1), ProjectionCursor(today, dp(dayT3)))
+	})
+
+	t.Run("оплачено вперёд — курсор по последней материализованной", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, d(daySep5), ProjectionCursor(today, dp(daySep5)))
+	})
+}
+
 // IsCompleted: правило завершено, когда не осталось неоплаченных вхождений —
 // ничего planned и за последней материализованной датой вхождений нет.
 func TestIsCompleted(t *testing.T) {

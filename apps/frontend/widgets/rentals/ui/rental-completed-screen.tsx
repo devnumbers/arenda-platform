@@ -4,6 +4,7 @@ import { useEffect, useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { ArrowLeft, Key, TrashBin } from '@/shared/assets/icons';
+import { OPERATIONS_FEED_SORT } from '@/shared/api/query-keys';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { formatDayMonthWithYear } from '@/shared/lib/date-format';
@@ -138,11 +139,14 @@ function RentalCompletedBody({
   ).canEdit;
   const deleteRental = useDeleteRental(propertyId, rental.id, rental.rentPayment.paymentId);
 
-  // История карточки — paid-вхождения платежа аренды, сначала новые
-  // (серверный порядок); полной ленты здесь не нужно — первые порции.
+  // История карточки — платёжные факты платежа аренды: сорт и даты строк
+  // по факту оплаты (sort=paid_date, решение владельца 30.09, дополнение
+  // #994 — та же семантика, что у полной истории #535); сначала новые;
+  // полной ленты здесь не нужно — первые порции.
   const operationsQuery = usePaymentOperationsPaged(propertyId, rental.rentPayment.paymentId, {
     status: 'paid',
     order: 'desc',
+    sort: OPERATIONS_FEED_SORT,
   });
 
   const operations = operationsQuery.data ?? [];
@@ -327,7 +331,7 @@ function CompletedOperationRow({
       className="px-3 py-3"
       categoryIcon={<CategoryIcon icon={style.icon} color={style.color} surface="muted" />}
       title={operation.title}
-      subtitle={formatDayMonthWithYear(operation.date, today)}
+      subtitle={formatDayMonthWithYear(operation.paidDate ?? operation.date, today)}
       amountKopecks={
         operation.type === 'expense' ? -operation.amountKopecks : operation.amountKopecks
       }

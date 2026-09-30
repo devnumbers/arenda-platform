@@ -228,12 +228,15 @@ export function PaymentCreateWizardFlow({
                 setDraft((prev) => ({ ...prev, recurrence }))
               }
               onDailyPick={() => goToStep(4)}
+              onYearlyConfirm={() => goToStep(4)}
               today={today}
             />
             {/* Панель шага видна, когда периодичность готова и совпадает с
                 открытой веткой: в ветке недели — после первого выбранного
-                дня (Figma 1056:52895), месяц готовит дефолт сразу, год —
-                после выбора дня (Figma 1056:53547). */}
+                дня (Figma 1056:52895), месяц готовит дефолт сразу; год
+                подтверждается в календаре («Продолжить» сразу ведёт на
+                шаг 4), панель на меню — точка возврата к готовому
+                правилу. */}
             {periodicityReady(draft.recurrence)
               && (openBranch === null || openBranch === branchKind(draft.recurrence)) && (
               <StickyBottomBar>

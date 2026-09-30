@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Add, ArrowLeft, Search } from "@/shared/assets/icons";
 import { ROUTES } from "@/shared/config/routes";
 import { buildUrlWithParams } from "@/shared/lib/url-params";
-import type { PaymentOperationScope } from "@/shared/api/query-keys";
+import { OPERATIONS_FEED_SORT, type PaymentOperationScope } from "@/shared/api/query-keys";
 import { summaryBarSegments } from "@/features/payment-categories";
 import {
   Button,
@@ -97,6 +97,7 @@ export function OperationsOfTypeScreen({
   const periodScope: PaymentOperationScope = {
     status: "paid",
     order: "desc",
+    sort: OPERATIONS_FEED_SORT,
     type,
     dateFrom: filters.period?.from,
     dateTo: filters.period?.to,
@@ -113,6 +114,7 @@ export function OperationsOfTypeScreen({
   const everQuery = usePropertyOperationsSummary(propertyId, {
     status: "paid",
     order: "desc",
+    sort: OPERATIONS_FEED_SORT,
   });
 
   const groups = groupOperationsByDate(listQuery.data ?? [], today);

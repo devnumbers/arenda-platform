@@ -12,6 +12,7 @@ import {
 } from '@/entities/payment';
 import { paidPaymentNumber, paymentOrdinalLabel, useRentals } from '@/features/rentals';
 import { CategoryIcon, categoryStyle } from '@/features/payment-categories';
+import { OPERATIONS_FEED_SORT } from '@/shared/api/query-keys';
 import {
   groupPaidOperations,
   useHistoryOrder,
@@ -32,12 +33,15 @@ import { RentalHistoryFeedSkeleton } from './rental-skeletons';
 
 /**
  * «История операций» завершённой аренды (#535, Figma 1302:52209):
- * paid-вхождения Платежа арендной платы, группы по дате вхождения, чип
- * «Сначала новые» переключает сортировку (серверная — порядок закреплён
- * за API, порции по 50 с бесконечным скроллом — канон #452); направление
- * живёт в адресе (?order=asc, дефолт не пишется, #785) — переживает
- * перезагрузку. Подзаголовок строки — порядковый номер платежа: нумерация
- * по дате от старых, итог оплаченных — progress.paidMonths аренды.
+ * paid-вхождения Платежа арендной платы, группы по дате оплаты (сорт
+ * сервера sort=paid_date — решение владельца 30.09, дополнение #994,
+ * как в истории платежа #466), чип «Сначала новые» переключает
+ * сортировку (серверная — порядок закреплён за API, порции по 50 с
+ * бесконечным скроллом — канон #452); направление живёт в адресе
+ * (?order=asc, дефолт не пишется, #785) — переживает перезагрузку.
+ * Подзаголовок строки — порядковый номер платежа: нумерация следует
+ * порядку оплат на экране (решение владельца, дополнение #994 — без
+ * плановой раскладки), итог оплаченных — progress.paidMonths аренды.
  */
 export function RentalHistoryScreen({
   propertyId,
@@ -57,7 +61,7 @@ export function RentalHistoryScreen({
   const historyQuery = usePaymentOperationsPaged(
     propertyId,
     rental?.rentPayment.paymentId ?? '',
-    { status: 'paid', order },
+    { status: 'paid', order, sort: OPERATIONS_FEED_SORT },
   );
 
   const operations = historyQuery.data ?? [];

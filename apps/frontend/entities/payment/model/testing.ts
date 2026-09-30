@@ -24,6 +24,10 @@ export function makePayment(overrides: Partial<Payment> = {}): Payment {
     isFavorite: false,
     isCompleted: false,
     isRentalManaged: false,
+    // Канон правила monthly-1: серверная «Следующая дата оплаты» — 1-е
+    // следующего месяца; сценарные значения (null паузы/завершённого,
+    // предоплата) задаются overrides.
+    nearestDate: '2026-09-01',
     pauses: [],
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',

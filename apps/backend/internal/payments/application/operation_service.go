@@ -23,14 +23,37 @@ const (
 	MaxOperationsPageSize     = 100
 )
 
+// OperationSortKey selects which operation date a listing reads (ticket
+// #992): the planned date — the schedule attribute the payment history, the
+// overdue split and the projection live on — or the actual payment fact
+// date (paid_date) the operational feeds order, filter and summarize by.
+// The zero value is the contract default (the planned date).
+type OperationSortKey string
+
+const (
+	// SortByDate reads the planned operation date — the contract default.
+	SortByDate OperationSortKey = "date"
+	// SortByPaidDate reads paid_date — the payment fact date.
+	SortByPaidDate OperationSortKey = "paid_date"
+)
+
+// Normalized maps the zero value (and anything unknown) onto the contract
+// default: the store encodes exactly 'date' | 'paid_date'.
+func (k OperationSortKey) Normalized() OperationSortKey {
+	if k == SortByPaidDate {
+		return SortByPaidDate
+	}
+	return SortByDate
+}
+
 // OperationsListQuery is the operations listing request of both scopes — per
 // rule and property-wide. The transport fills everything except Today;
 // PrepareOperationsQuery applies the page-size default and the pagination
 // bounds, and the service resolves Today from the owner calendar right before
 // the store runs the query. Status filters on the server-computed view status
 // (nil = no filter); DateFrom/DateTo bound the period inclusively on the
-// operation date; sorting is newest-first by contract (a zero Asc), and only
-// an explicit Asc=true flips it to oldest-first.
+// query's date key (Sort); sorting is newest-first by contract (a zero Asc),
+// and only an explicit Asc=true flips it to oldest-first.
 type OperationsListQuery struct {
 	Status   *domain.OperationViewStatus
 	DateFrom *time.Time
@@ -43,6 +66,9 @@ type OperationsListQuery struct {
 	// Asc is false by default and by contract: sorting is newest-first unless
 	// explicitly requested otherwise.
 	Asc bool
+	// Sort is the listing's date key (OperationSortKey): the planned date by
+	// default, the paid_date fact on the operational surfaces (ticket #992).
+	Sort OperationSortKey
 	// Type filters on the operation direction (nil = no filter) — the
 	// income/expense split the «Доходы/Расходы объекта» screens read.
 	Type *domain.PaymentType
@@ -59,8 +85,11 @@ type OperationsListQuery struct {
 // minus the pagination — the totals and the category breakdown aggregate in
 // SQL, never over a client-side page. Today is resolved by the service.
 type OperationsSummaryQuery struct {
-	Status   *domain.OperationViewStatus
-	Type     *domain.PaymentType
+	Status *domain.OperationViewStatus
+	Type   *domain.PaymentType
+	// Sort is the summary's date key (OperationsListQuery.Sort): the period
+	// bounds read the same date the listing does (ticket #992).
+	Sort     OperationSortKey
 	DateFrom *time.Time
 	DateTo   *time.Time
 	// Search is the listing's search predicate (OperationsListQuery.Search):
@@ -437,6 +466,11 @@ type GlobalOperationsListQuery struct {
 	DateFrom    *time.Time
 	DateTo      *time.Time
 	Limit       int
+	// Sort is the feed's date key (OperationsListQuery.Sort, ticket #992):
+	// the planned date by default, the paid_date fact on the operational
+	// surfaces. The keyset cursor walks the same date and is bound to the
+	// key it was issued under.
+	Sort OperationSortKey
 	// Cursor is the previous page's opaque continuation ('' = from the
 	// beginning); PrepareGlobalOperationsQuery decodes it into AfterDate and
 	// AfterID — the keyset key the page resumes strictly after (ticket
@@ -479,11 +513,16 @@ type GlobalOperationsPage struct {
 // report both directions.
 type GlobalOperationsSummaryQuery struct {
 	PropertyIDs []uuid.UUID
-	DateFrom    *time.Time
-	DateTo      *time.Time
-	Search      string
-	Type        *domain.PaymentType
-	Categories  []string
+	// Sort is the summary's date key (OperationsListQuery.Sort, ticket
+	// #992): the period bounds read the same date the feed does.
+	Sort     OperationSortKey
+	DateFrom *time.Time
+	DateTo   *time.Time
+	Search   string
+	Type     *domain.PaymentType
+	// Categories filters on the operation's category snapshot (nil = no
+	// filter); a row without a category snapshot never matches.
+	Categories []string
 	// IncludeArchived lifts the archive cut (#549): the archived
 	// properties' paid rows count in the totals and the breakdown.
 	// False — the contract default — keeps the archive excluded.
@@ -493,7 +532,10 @@ type GlobalOperationsSummaryQuery struct {
 // PrepareGlobalOperationsQuery validates the global listing request in place:
 // a zero limit becomes the default page, anything out of range is
 // ErrInvalidInput mapped to the contract's 400; the page's continuation
-// cursor (ticket #597) decodes into the AfterDate/AfterID keyset key.
+// cursor (ticket #597) decodes into the AfterDate/AfterID keyset key — under
+// the sort it was issued with, a cursor echoed under another key being
+// ErrInvalidInput (pagination would walk one field and sort by another,
+// ticket #992).
 func PrepareGlobalOperationsQuery(q *GlobalOperationsListQuery) error {
 	if q.Limit == 0 {
 		q.Limit = DefaultOperationsPageSize
@@ -501,15 +543,19 @@ func PrepareGlobalOperationsQuery(q *GlobalOperationsListQuery) error {
 	if q.Limit < 1 || q.Limit > MaxOperationsPageSize {
 		return ErrInvalidInput
 	}
+	q.Sort = q.Sort.Normalized()
 	if q.Cursor == "" {
 		return nil
 	}
-	afterDate, afterID, err := decodeOperationCursor(q.Cursor)
+	decoded, err := decodeOperationCursor(q.Cursor)
 	if err != nil {
 		return err
 	}
-	q.AfterDate = &afterDate
-	q.AfterID = &afterID
+	if decoded.Key != q.Sort {
+		return ErrInvalidInput
+	}
+	q.AfterDate = &decoded.Date
+	q.AfterID = &decoded.ID
 	return nil
 }
 
@@ -551,7 +597,10 @@ func (s *OperationService) ListGlobalOperations(
 	nextCursor := ""
 	if len(items) == q.Limit {
 		last := rows[len(rows)-1]
-		nextCursor = encodeOperationCursor(last.Operation.Date, last.Operation.ID)
+		// The continuation encodes the row's reading date under the page's
+		// sort key (ticket #992) — the paid fact on the operational feeds'
+		// walk, the plan on the default one.
+		nextCursor = encodeOperationCursor(q.Sort, operationSortDate(last.Operation, q.Sort), last.Operation.ID)
 	}
 	// The total counts the whole scope under the query's filters (ticket
 	// #599): the same predicate as the rows with the keyset key aside —
@@ -581,6 +630,18 @@ func (s *OperationService) SummarizeGlobalOperations(
 		return OperationsSummary{}, err
 	}
 	return s.operations.SummarizeGlobal(ctx, actor, q)
+}
+
+// operationSortDate is the row's reading date under the sort key — the
+// keyset continuation encodes exactly this date (ticket #992). The feed is
+// paid-only, so the fact is never nil there; a nil fact (a planned row can
+// never reach the global feed, the guard is belt-and-suspenders) falls back
+// to the planned date.
+func operationSortDate(op domain.Operation, key OperationSortKey) time.Time {
+	if key.Normalized() == SortByPaidDate && op.PaidDate != nil {
+		return *op.PaidDate
+	}
+	return op.Date
 }
 
 // resolveGlobalPropertyFilter runs every propertyIds entry through the read

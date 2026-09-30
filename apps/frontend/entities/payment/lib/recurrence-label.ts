@@ -32,6 +32,21 @@ function mondayFirst(weekdays: ReadonlyArray<number>): number[] {
   return [...weekdays].sort((a, b) => (a + 6) % 7 - ((b + 6) % 7));
 }
 
+/** Короткие имена выбранных дней через запятую, от понедельника:
+ * «пн, чт, вс» — словарь фраз повторяемости. */
+function weekdayShortLabel(weekdays: ReadonlyArray<number>): string {
+  return mondayFirst(weekdays)
+    .map((weekday) => WEEKDAYS_SHORT[weekday])
+    .filter((name) => name !== undefined)
+    .join(', ');
+}
+
+/** День и месяц годового правила без года: «13 мая»; якорь-високосный
+ * 2024 сохраняет 29 февраля. */
+function formatYearlyDayMonth(month: number, day: number): string {
+  return formatDayMonth(dateInMonth(2024, month - 1, day));
+}
+
 export function recurrenceLabel(recurrence: Recurrence): string {
   switch (recurrence.kind) {
     case 'daily':
@@ -43,10 +58,7 @@ export function recurrenceLabel(recurrence: Recurrence): string {
         const weekday = recurrence.weekdays[0] ?? 0;
         return SINGLE_WEEKDAY_PHRASES[weekday] ?? SINGLE_WEEKDAY_PHRASES[0];
       }
-      const days = mondayFirst(recurrence.weekdays)
-        .map((weekday) => WEEKDAYS_SHORT[weekday])
-        .filter((name) => name !== undefined);
-      return `Каждую неделю в ${days.join(', ')}`;
+      return `Каждую неделю в ${weekdayShortLabel(recurrence.weekdays)}`;
     }
     case 'monthly': {
       // Дни перечисляются в родительном падеже («1 и 18 числа»); маркер
@@ -65,7 +77,6 @@ export function recurrenceLabel(recurrence: Recurrence): string {
       return `Каждый месяц ${daysPart}`;
     }
     case 'yearly':
-      // Якорь-високосный 2024 сохраняет 29 февраля для формулировки.
-      return `Каждое ${formatDayMonth(dateInMonth(2024, recurrence.month - 1, recurrence.day))}`;
+      return `Каждое ${formatYearlyDayMonth(recurrence.month, recurrence.day)}`;
   }
 }

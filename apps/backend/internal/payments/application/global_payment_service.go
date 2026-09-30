@@ -477,9 +477,10 @@ func (s *GlobalPaymentService) feedItems(
 }
 
 // enrichItems turns the raw rows into response items. Rows without a
-// stored next planned fall back to the pure projection (the pause and the
-// settled rule being the true nulls); the overdue age is the owner today
-// minus the oldest overdue date.
+// stored next planned fall back to the pure projection through the shared
+// NearestDateOfPayment seam (ticket #991) — the open pause and the settled
+// rule being the true nulls; the overdue age is the owner today minus the
+// oldest overdue date.
 func (s *GlobalPaymentService) enrichItems(
 	ctx context.Context, rows []GlobalPaymentRuleRow,
 ) ([]GlobalPaymentItem, error) {
@@ -489,26 +490,9 @@ func (s *GlobalPaymentService) enrichItems(
 			fallback = append(fallback, i)
 		}
 	}
-	projected := map[uuid.UUID]*time.Time{}
-	if len(fallback) > 0 {
-		ids := make([]uuid.UUID, 0, len(fallback))
-		for _, i := range fallback {
-			ids = append(ids, rows[i].ID)
-		}
-		lastDates, err := s.reader.LastOperationDatesOfPayments(ctx, ids)
-		if err != nil {
-			return nil, fmt.Errorf("last operation dates of payments: %w", err)
-		}
-		for _, i := range fallback {
-			row := rows[i]
-			next, ok, err := s.projectedNext(ctx, row, lastDates[row.ID])
-			if err != nil {
-				return nil, err
-			}
-			if ok {
-				projected[row.ID] = &next
-			}
-		}
+	projected, err := s.projectedDates(ctx, rows, fallback)
+	if err != nil {
+		return nil, err
 	}
 	items := make([]GlobalPaymentItem, len(rows))
 	for i, row := range rows {
@@ -542,28 +526,45 @@ func (s *GlobalPaymentService) enrichItems(
 	return items, nil
 }
 
-// projectedNext computes the rule's first occurrence after the projection
-// cursor — the newest materialized date, or yesterday when nothing has
-// been materialized (the IsCompleted cursor rule). The boolean is false
-// when the schedule has nothing to project: an open pause cuts the
-// occurrences, so a paused rule projects nothing — the true null — and a
-// rule gone mid-read projects nothing either, its row showing no next.
-func (s *GlobalPaymentService) projectedNext(
-	ctx context.Context, row GlobalPaymentRuleRow, lastDate time.Time,
-) (time.Time, bool, error) {
-	rule, found, err := s.reader.GetGlobalPaymentRule(ctx, row.OwnerID, row.PropertyID, row.ID)
+// projectedDates resolves the projection fallback for the rows without a
+// stored next planned (ticket #991): the shared NearestDateOfPayment seam
+// over each rule's fresh body — the newest materialized date is the cursor,
+// absent facts fall to it as nils. A rule gone mid-read projects nothing —
+// its row shows no next.
+func (s *GlobalPaymentService) projectedDates(
+	ctx context.Context, rows []GlobalPaymentRuleRow, fallback []int,
+) (map[uuid.UUID]*time.Time, error) {
+	projected := make(map[uuid.UUID]*time.Time, len(fallback))
+	if len(fallback) == 0 {
+		return projected, nil
+	}
+	ids := make([]uuid.UUID, 0, len(fallback))
+	for _, i := range fallback {
+		ids = append(ids, rows[i].ID)
+	}
+	lastDates, err := s.reader.LastOperationDatesOfPayments(ctx, ids)
 	if err != nil {
-		return time.Time{}, false, fmt.Errorf("load payment rule for projection: %w", err)
+		return nil, fmt.Errorf("last operation dates of payments: %w", err)
 	}
-	if !found {
-		return time.Time{}, false, nil // The rule is gone mid-read; its row shows no next.
+	for _, i := range fallback {
+		row := rows[i]
+		rule, found, err := s.reader.GetGlobalPaymentRule(ctx, row.OwnerID, row.PropertyID, row.ID)
+		if err != nil {
+			return nil, fmt.Errorf("load payment rule for projection: %w", err)
+		}
+		if !found {
+			continue // The rule is gone mid-read; its row shows no next.
+		}
+		var lastDate *time.Time
+		if d, ok := lastDates[row.ID]; ok {
+			lastDate = &d
+		}
+		next := NearestDateOfPayment(rule, row.Today, NearestDateInputs{LastMaterialized: lastDate})
+		if next != nil {
+			projected[row.ID] = next
+		}
 	}
-	cursor := row.Today.AddDate(0, 0, -1)
-	if lastDate.After(cursor) {
-		cursor = lastDate
-	}
-	next, ok := domain.NextOccurrenceAfter(rule, cursor)
-	return next, ok, nil
+	return projected, nil
 }
 
 // defaultCategorySlugsMatching expands the search query into the default

@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Cancel } from '@/shared/assets/icons';
 import { goBack } from '@/shared/lib/navigation';
+import { OPERATIONS_FEED_SORT } from '@/shared/api/query-keys';
 import { buildUrlWithParams } from '@/shared/lib/url-params';
 import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
@@ -73,6 +74,7 @@ export function OperationsCategoriesScreen({
   const summaryQuery = usePropertyOperationsSummary(propertyId, {
     status: 'paid',
     order: 'desc',
+    sort: OPERATIONS_FEED_SORT,
     dateFrom: period?.from,
     dateTo: period?.to,
   });

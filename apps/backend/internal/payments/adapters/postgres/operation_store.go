@@ -226,6 +226,36 @@ func (s *OperationStore) CountPaidAndOverdueByPaymentIDs(
 	return counts, nil
 }
 
+// NearestDateInputsOfPayments reads the listed rules' next-payment-date
+// aggregates in one batched query (ticket #991) — one GROUP BY feeding the
+// shared NearestDateOfPayment resolution. A rule with no matching
+// operations is absent from the rows — the consumer resolves from nils.
+// The empty id list never reaches the query.
+func (s *OperationStore) NearestDateInputsOfPayments(
+	ctx context.Context, scope, propertyID uuid.UUID, today time.Time, paymentIDs []uuid.UUID,
+) (map[uuid.UUID]application.NearestDateInputs, error) {
+	out := make(map[uuid.UUID]application.NearestDateInputs, len(paymentIDs))
+	if len(paymentIDs) == 0 {
+		return out, nil
+	}
+	rows, err := s.q().NearestDateInputsOfPayments(ctx, postgres.NearestDateInputsOfPaymentsParams{
+		Owner:      pgconv.UUIDToPgtype(scope),
+		Property:   pgconv.UUIDToPgtype(propertyID),
+		PaymentIds: pgconv.UUIDSliceToPgtype(paymentIDs),
+		Today:      pgconv.DateToPgtype(today),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("nearest date inputs of %d payments: %w", len(paymentIDs), err)
+	}
+	for _, row := range rows {
+		out[pgconv.UUIDFromPgtype(row.PaymentID)] = application.NearestDateInputs{
+			NextPlannedDate:  pgconv.DatePtrFromPgtype(row.NextPlannedDate),
+			LastMaterialized: pgconv.DatePtrFromPgtype(row.LastMaterializedDate),
+		}
+	}
+	return out, nil
+}
+
 // ListGlobal returns one page of the actor's visible paid operations — the
 // merged feed (ticket #540); the visibility predicate and the archive cut
 // are the query's. The bounds re-check the service applied
@@ -247,6 +277,7 @@ func (s *OperationStore) ListGlobal(
 		Categories:      joinCategorySlugs(q.Categories),
 		IncludeArchived: q.IncludeArchived,
 		Order:           operationsOrder(q.Asc),
+		Sort:            operationsSortKey(q.Sort),
 		AfterDate:       pgconv.DatePtrToPgtype(q.AfterDate),
 		AfterID:         pgconv.UUIDToPgtypePtr(q.AfterID),
 		Limit:           paginationToInt32(q.Limit),
@@ -288,6 +319,7 @@ func (s *OperationStore) CountGlobal(
 		Type:            operationsTypeFilter(q.Type),
 		Categories:      joinCategorySlugs(q.Categories),
 		IncludeArchived: q.IncludeArchived,
+		Sort:            operationsSortKey(q.Sort),
 	})
 	if err != nil {
 		return 0, fmt.Errorf("count global operations: %w", err)
@@ -315,6 +347,7 @@ func (s *OperationStore) SummarizeGlobal(
 		Search:          search,
 		SearchDigits:    searchDigits,
 		IncludeArchived: q.IncludeArchived,
+		Sort:            operationsSortKey(q.Sort),
 	}
 	totals, err := s.q().SumPaidOperationTotalsGlobal(ctx, totalsParams)
 	if err != nil {
@@ -331,6 +364,7 @@ func (s *OperationStore) SummarizeGlobal(
 		Type:            operationsTypeFilter(q.Type),
 		Categories:      joinCategorySlugs(q.Categories),
 		IncludeArchived: q.IncludeArchived,
+		Sort:            totalsParams.Sort,
 	})
 	if err != nil {
 		return application.OperationsSummary{}, fmt.Errorf("sum global operations by category: %w", err)
@@ -359,8 +393,8 @@ func (s *OperationStore) SummarizeGlobal(
 }
 
 // listOperationsParams folds the normalized query into the merged SQL
-// parameters; the pagination width clamp and the direction/status encodings
-// are this adapter's business.
+// parameters; the pagination width clamp and the direction/status/sort-key
+// encodings are this adapter's business.
 func listOperationsParams(
 	params postgres.ListOperationsParams, q application.OperationsListQuery,
 ) postgres.ListOperationsParams {
@@ -373,6 +407,7 @@ func listOperationsParams(
 	params.Type = operationsTypeFilter(q.Type)
 	params.Categories = joinCategorySlugs(q.Categories)
 	params.Order = operationsOrder(q.Asc)
+	params.Sort = operationsSortKey(q.Sort)
 	params.Offset = paginationToInt32(q.Offset)
 	params.Limit = paginationToInt32(q.Limit)
 	return params
@@ -400,6 +435,7 @@ func (s *OperationStore) SummarizeByProperty(
 		DateTo:       pgconv.DatePtrToPgtype(q.DateTo),
 		Search:       search,
 		SearchDigits: searchDigits,
+		Sort:         operationsSortKey(q.Sort),
 	}
 	totals, err := s.q().SumOperationTotals(ctx, params)
 	if err != nil {
@@ -416,6 +452,7 @@ func (s *OperationStore) SummarizeByProperty(
 		Search:       search,
 		SearchDigits: searchDigits,
 		Type:         operationsTypeFilter(q.Type),
+		Sort:         params.Sort,
 	})
 	if err != nil {
 		return application.OperationsSummary{}, fmt.Errorf("sum operations by category of property %s: %w", propertyID, err)
@@ -508,6 +545,12 @@ func operationsOrder(asc bool) string {
 		return "asc"
 	}
 	return "desc"
+}
+
+// operationsSortKey encodes the listing's date key ('date' | 'paid_date');
+// the zero value encodes the contract default — the planned date.
+func operationsSortKey(key application.OperationSortKey) string {
+	return string(key.Normalized())
 }
 
 // amountQuerySeparators are the characters besides digits a query may carry

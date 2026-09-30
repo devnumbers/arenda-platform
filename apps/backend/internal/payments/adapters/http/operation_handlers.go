@@ -308,6 +308,7 @@ func (h *OperationsHandlers) handleOperationError(w http.ResponseWriter, r *http
 func newListOperationsQuery(
 	status *domain.OperationViewStatus,
 	dateFrom, dateTo *openapi_types.Date,
+	sort application.OperationSortKey,
 	asc bool,
 	limit, offset *int,
 	search *string,
@@ -316,6 +317,9 @@ func newListOperationsQuery(
 		Status:   status,
 		DateFrom: datePtrFromWire(dateFrom),
 		DateTo:   datePtrFromWire(dateTo),
+		// The listing's date key (ticket #992): the planned date unless the
+		// request asked for the payment fact.
+		Sort: sort,
 		// Zero value = the contract's descending default; an explicit asc
 		// parameter is the only thing that can flip it, and only here.
 		Asc: asc,
@@ -359,6 +363,18 @@ func foldOrder[T ~string](order *T, valid func(T) bool) (bool, error) {
 	return *order == "asc", nil
 }
 
+// foldSort decodes the listing's date key (ticket #992): the planned date is
+// the contract default; out-of-vocabulary values are contract 400s.
+func foldSort[T ~string](sort *T, valid func(T) bool) (application.OperationSortKey, error) {
+	if sort == nil {
+		return application.SortByDate, nil
+	}
+	if !valid(*sort) {
+		return application.SortByDate, application.ErrInvalidInput
+	}
+	return application.OperationSortKey(*sort), nil
+}
+
 // listOperationsFromPaymentParams adapts the per-rule endpoint's params onto
 // the shared builder.
 func listOperationsFromPaymentParams(
@@ -368,13 +384,17 @@ func listOperationsFromPaymentParams(
 	if err != nil {
 		return application.OperationsListQuery{}, err
 	}
+	sort, err := foldSort(params.Sort, openapi.ListPaymentOperationsParamsSort.Valid)
+	if err != nil {
+		return application.OperationsListQuery{}, err
+	}
 	asc, err := foldOrder(params.Order, openapi.ListPaymentOperationsParamsOrder.Valid)
 	if err != nil {
 		return application.OperationsListQuery{}, err
 	}
 	// The per-rule endpoint has no search parameter in the contract — the
 	// title filter is a property-scope (and payments list) concern.
-	return newListOperationsQuery(status, params.DateFrom, params.DateTo, asc, params.Limit, params.Offset, nil), nil
+	return newListOperationsQuery(status, params.DateFrom, params.DateTo, sort, asc, params.Limit, params.Offset, nil), nil
 }
 
 // listOperationsFromPropertyParams is the property-scope adapter onto the
@@ -386,6 +406,10 @@ func listOperationsFromPropertyParams(
 	if err != nil {
 		return application.OperationsListQuery{}, err
 	}
+	sort, err := foldSort(params.Sort, openapi.ListPropertyOperationsParamsSort.Valid)
+	if err != nil {
+		return application.OperationsListQuery{}, err
+	}
 	asc, err := foldOrder(params.Order, openapi.ListPropertyOperationsParamsOrder.Valid)
 	if err != nil {
 		return application.OperationsListQuery{}, err
@@ -394,7 +418,7 @@ func listOperationsFromPropertyParams(
 	if err != nil {
 		return application.OperationsListQuery{}, err
 	}
-	query := newListOperationsQuery(status, params.DateFrom, params.DateTo, asc, params.Limit, params.Offset, params.Search)
+	query := newListOperationsQuery(status, params.DateFrom, params.DateTo, sort, asc, params.Limit, params.Offset, params.Search)
 	query.Type = typ
 	query.Categories = splitCategorySlugs(params.Category)
 	return query, nil
@@ -402,11 +426,16 @@ func listOperationsFromPropertyParams(
 
 // summarizeFromParams adapts the summary endpoint's params onto the summary
 // request: the same status/period/type vocabulary as the listing, minus the
-// pagination — the aggregate runs in SQL.
+// pagination — the aggregate runs in SQL. The period reads the listing's
+// date key (sort, ticket #992).
 func summarizeFromParams(
 	params openapi.SummarizePropertyOperationsParams,
 ) (application.OperationsSummaryQuery, error) {
 	status, err := foldStatus(params.Status, openapi.SummarizePropertyOperationsParamsStatus.Valid)
+	if err != nil {
+		return application.OperationsSummaryQuery{}, err
+	}
+	sort, err := foldSort(params.Sort, openapi.SummarizePropertyOperationsParamsSort.Valid)
 	if err != nil {
 		return application.OperationsSummaryQuery{}, err
 	}
@@ -416,6 +445,7 @@ func summarizeFromParams(
 	}
 	return application.OperationsSummaryQuery{
 		Status:   status,
+		Sort:     sort,
 		Type:     typ,
 		DateFrom: datePtrFromWire(params.DateFrom),
 		DateTo:   datePtrFromWire(params.DateTo),
@@ -451,6 +481,10 @@ func parsePropertyIDs(raw *string) ([]uuid.UUID, error) {
 func globalOperationsFromListParams(
 	params openapi.ListOperationsParams,
 ) (application.GlobalOperationsListQuery, error) {
+	sort, err := foldSort(params.Sort, openapi.ListOperationsParamsSort.Valid)
+	if err != nil {
+		return application.GlobalOperationsListQuery{}, err
+	}
 	asc, err := foldOrder(params.Order, openapi.ListOperationsParamsOrder.Valid)
 	if err != nil {
 		return application.GlobalOperationsListQuery{}, err
@@ -465,12 +499,13 @@ func globalOperationsFromListParams(
 	}
 	// The global feed's window is the keyset cursor (ticket #597) — the
 	// offset vocabulary belongs to the property listings only.
-	query := newListOperationsQuery(nil, params.DateFrom, params.DateTo, asc, params.Limit, nil, params.Search)
+	query := newListOperationsQuery(nil, params.DateFrom, params.DateTo, sort, asc, params.Limit, nil, params.Search)
 	return application.GlobalOperationsListQuery{
 		PropertyIDs:     propertyIDs,
 		DateFrom:        query.DateFrom,
 		DateTo:          query.DateTo,
 		Limit:           query.Limit,
+		Sort:            query.Sort,
 		Cursor:          derefString(params.Cursor),
 		Search:          query.Search,
 		Asc:             query.Asc,
@@ -482,10 +517,15 @@ func globalOperationsFromListParams(
 
 // globalOperationsFromSummaryParams adapts the global summary's params: the
 // property summary's vocabulary plus the propertyIds multi-select and the
-// category filter (the breakdown-only narrowing lives in the store).
+// category filter (the breakdown-only narrowing lives in the store). The
+// period reads the feed's date key (sort, ticket #992).
 func globalOperationsFromSummaryParams(
 	params openapi.SummarizeOperationsParams,
 ) (application.GlobalOperationsSummaryQuery, error) {
+	sort, err := foldSort(params.Sort, openapi.SummarizeOperationsParamsSort.Valid)
+	if err != nil {
+		return application.GlobalOperationsSummaryQuery{}, err
+	}
 	typ, err := foldType(params.Type, openapi.SummarizeOperationsParamsType.Valid)
 	if err != nil {
 		return application.GlobalOperationsSummaryQuery{}, err
@@ -496,6 +536,7 @@ func globalOperationsFromSummaryParams(
 	}
 	return application.GlobalOperationsSummaryQuery{
 		PropertyIDs:     propertyIDs,
+		Sort:            sort,
 		DateFrom:        datePtrFromWire(params.DateFrom),
 		DateTo:          datePtrFromWire(params.DateTo),
 		Search:          derefString(params.Search),

@@ -8,7 +8,7 @@ import { isoDayOfMonth, isoMonthNumber } from '@/shared/lib/calendar';
 import {
   PERIODICITY_OPTIONS,
   WEEKDAY_BUTTONS,
-  branchKind,
+  pickPeriodicityKind,
   toggleWeekday,
   yearlyAnchorDate,
   type PeriodicityBranch,
@@ -24,7 +24,9 @@ import { WizardHeading } from './wizard-chrome';
  * MonthDaysGrid с «последним днем месяца» (1056:53076/53077, тикет
  * #809), год — бесконечный календарь как в
  * задачах (решение владельца 2026-09-04, раньше был грид месяца
- * 829:11606/1056:53547). У ежедневного правила ветки нет — выбор сразу
+ * 829:11606/1056:53547); подтверждение года в визарде — кнопкой
+ * «Продолжить» сразу на следующий шаг (решение владельца 2026-09-30,
+ * #995). У ежедневного правила ветки нет — выбор сразу
  * завершает шаг.
  */
 
@@ -53,33 +55,21 @@ export type PeriodicityStepProps = {
   readonly recurrence: Recurrence | undefined;
   readonly openBranch: PeriodicityBranch | null;
   readonly onOpenBranch: (branch: PeriodicityBranch | null) => void;
-  /** Замена регулярности целиком. */
-  readonly onRecurrenceChange: (recurrence: Recurrence) => void;
+  /** Замена регулярности целиком; undefined — прежняя готовая ветка
+   * сброшена (годовая подтверждается календарём, дефект А #948). */
+  readonly onRecurrenceChange: (recurrence: Recurrence | undefined) => void;
   /** Ежедневное правило готово сразу — выбор ведёт на следующий шаг. */
   readonly onDailyPick: () => void;
-  /** «Сегодня» клиентской проекции — дефолты якорей вида месяц/год. */
+  /** Годовое правило подтверждено — хост ведёт дальше (визард: сразу
+   * следующий шаг, кнопка календаря «Продолжить»; решение владельца
+   * 30.09.2026, #995). Без пропа — канон пикера: «Выбрать» закрывает
+   * ветку (экран правки). */
+  readonly onYearlyConfirm?: () => void;
+  /** «Сегодня» клиентской проекции — якорь предвыбора годового правила. */
   readonly today: IsoDate;
   /** Заголовки шага рисует хост (шит правки #467 несёт их в ModalContent). */
   readonly withHeading?: boolean;
 };
-
-function defaultForKind(
-  kind: Exclude<PeriodicityKind, 'daily'>,
-  today: IsoDate,
-): Recurrence {
-  const todayDay = isoDayOfMonth(today);
-  const todayMonth = isoMonthNumber(today);
-  switch (kind) {
-    case 'weekly':
-      return { kind: 'weekly', weekdays: [] };
-    case 'monthly':
-      // По фрейму 1056:53076 ничего не предвыбрано: правило готово после
-      // первого дня или отметки последнего дня.
-      return { kind: 'monthly', daysOfMonth: [], lastDay: false };
-    case 'yearly':
-      return { kind: 'yearly', month: todayMonth, day: todayDay };
-  }
-}
 
 export function PeriodicityStep({
   recurrence,
@@ -87,6 +77,7 @@ export function PeriodicityStep({
   onOpenBranch,
   onRecurrenceChange,
   onDailyPick,
+  onYearlyConfirm,
   today,
   withHeading = true,
 }: PeriodicityStepProps): JSX.Element {
@@ -94,22 +85,13 @@ export function PeriodicityStep({
     withHeading ? <WizardHeading title={title} subtitle={subtitle} /> : null;
 
   const pickKind = (kind: PeriodicityKind): void => {
-    if (kind === 'daily') {
-      onRecurrenceChange({ kind: 'daily' });
+    const pick = pickPeriodicityKind(kind, recurrence);
+    onRecurrenceChange(pick.recurrence);
+    if (pick.branch === null) {
       onDailyPick();
       return;
     }
-    if (kind === 'yearly') {
-      // Годовая ветка открывается без предвыбора: правило пишется после
-      // подтверждения календаря, дефолт не создаётся.
-      onOpenBranch('yearly');
-      return;
-    }
-    const kept =
-      recurrence?.kind === kind ? recurrence : defaultForKind(kind, today);
-    onRecurrenceChange(kept);
-    // kind ≠ daily здесь гарантирован ранним возвратом выше.
-    onOpenBranch(branchKind(kept));
+    onOpenBranch(pick.branch);
   };
 
   if (openBranch === null) {
@@ -217,6 +199,7 @@ export function PeriodicityStep({
           recurrence={recurrence?.kind === 'yearly' ? recurrence : undefined}
           today={today}
           onChange={onRecurrenceChange}
+          onYearlyConfirm={onYearlyConfirm}
           onClose={() => onOpenBranch(null)}
         />
       );
@@ -230,28 +213,39 @@ export function PeriodicityStep({
  * обязательна (required) — правила «без даты» не существует. Год в
  * правиле не хранится (yearly = месяц и день): от подтверждённой даты
  * остаются месяц и день; существующее правило календарь предвыбирает
- * ближайшим будущим вхождением (yearlyAnchorDate). */
+ * ближайшим будущим вхождением (yearlyAnchorDate). В визарде (хост с
+ * onConfirm) кнопка календаря — «Продолжить» и подтверждение сразу
+ * ведёт на следующий шаг, минуя меню (решение владельца 30.09.2026,
+ * #995); без хоста-визарда — канон «Выбрать» закрывает ветку. */
 function YearlyBranch({
   recurrence,
   today,
   onChange,
+  onYearlyConfirm,
   onClose,
 }: {
   readonly recurrence: Recurrence | undefined;
   readonly today: IsoDate;
-  readonly onChange: (recurrence: Recurrence) => void;
+  readonly onChange: (recurrence: Recurrence | undefined) => void;
+  /** Хост, ведущий дальше после подтверждения (визард). */
+  readonly onYearlyConfirm: (() => void) | undefined;
   readonly onClose: () => void;
 }): JSX.Element {
   return (
     <CalendarDatePicker
       required
       today={today}
+      confirmLabel={onYearlyConfirm !== undefined ? 'Продолжить' : undefined}
       value={recurrence?.kind === 'yearly' ? yearlyAnchorDate(recurrence, today) : null}
       onClose={onClose}
       onConfirm={(date) => {
         // required исключает пустое подтверждение — страховка контракта.
         if (date === null) return;
         onChange({ kind: 'yearly', month: isoMonthNumber(date), day: isoDayOfMonth(date) });
+        if (onYearlyConfirm !== undefined) {
+          onYearlyConfirm();
+          return;
+        }
         onClose();
       }}
     />

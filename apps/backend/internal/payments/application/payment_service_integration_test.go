@@ -73,7 +73,7 @@ func assertPaymentReadBack(t *testing.T, h *paymentsHarness, created domain.Paym
 	if err != nil {
 		t.Fatalf("list payments: %v", err)
 	}
-	if len(list) != 1 || list[0].ID != created.ID {
+	if len(list) != 1 || list[0].Payment.ID != created.ID {
 		t.Fatalf("list = %d items, want the created one", len(list))
 	}
 }
@@ -489,7 +489,7 @@ func TestPaymentSearch_FiltersByTitle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list payments: %v", err)
 	}
-	if len(got) != 1 || got[0].Title != literalPercentTitle {
+	if len(got) != 1 || got[0].Payment.Title != literalPercentTitle {
 		t.Fatalf("search '100%%' = %+v, want the literal-percent title", got)
 	}
 
@@ -600,7 +600,7 @@ func TestPaymentReminderOffset_Lifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list payments: %v", err)
 	}
-	if len(listed) != 1 || listed[0].ReminderOffsetDays == nil || *listed[0].ReminderOffsetDays != three {
+	if len(listed) != 1 || listed[0].Payment.ReminderOffsetDays == nil || *listed[0].Payment.ReminderOffsetDays != three {
 		t.Fatalf("list reminder offset = %v, want 3", listed)
 	}
 

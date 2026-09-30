@@ -58,6 +58,9 @@ export function mapPayment(dto: PaymentDto): Payment {
     category: mapCategoryView(dto.category),
     isFavorite: dto.isFavorite,
     isCompleted: dto.isCompleted,
+    // Не нормализуется к опциональности: явный null («нет даты» — пауза/
+    // завершённый) часть семантики поля, см. доку на Payment.nearestDate.
+    nearestDate: dto.nearestDate,
     isRentalManaged: dto.isRentalManaged,
     pauses: dto.pauses.map((pause) => ({
       from: pause.fromDate,

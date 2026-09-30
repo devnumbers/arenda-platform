@@ -22,6 +22,13 @@ const paid = (id: string, date: string): PaymentOperation => ({
   categorySlug: 'rent',
 });
 
+/** Оплаченный вперёд: плановая дата вхождения (период, за который платят)
+ * расходится с фактической датой оплаты (решение #933/#994). */
+const paidAhead = (id: string, date: string, paidDate: string): PaymentOperation => ({
+  ...paid(id, date),
+  paidDate,
+});
+
 describe('groupPaidOperations', () => {
   it('называет группы «Сегодня», «Вчера» и датой с годом всегда (1302:52209)', () => {
     const groups = groupPaidOperations(
@@ -48,6 +55,20 @@ describe('groupPaidOperations', () => {
     expect(groups[0]?.operations.map((operation) => operation.id)).toStrictEqual(['a', 'b']);
     expect(groups[1]?.label).toBe('19 августа, 2026');
     expect(groups[1]?.operations.map((operation) => operation.id)).toStrictEqual(['c']);
+  });
+
+  it('досрочно оплаченное будущее вхождение ложится в группу дня оплаты — отмена «учёт, не кассы» (решение владельца 30.09, дополнение #994)', () => {
+    // История сортируется сервером по paid_date (контракт #992 на ленте
+    // правила) и группируется тем же фактом: платёж за октябрь, оплаченный
+    // сегодня, стоит в «Сегодня»; плановый период — на странице операции
+    // («Заранее», обе даты).
+    const groups = groupPaidOperations(
+      [paidAhead('a', '2026-10-01', '2026-08-27'), paid('b', '2026-08-20')],
+      '2026-08-27',
+    );
+    expect(groups.map((group) => group.date)).toStrictEqual(['2026-08-27', '2026-08-20']);
+    expect(groups[0]?.label).toBe('Сегодня');
+    expect(groups[0]?.operations.map((operation) => operation.id)).toStrictEqual(['a']);
   });
 
   it('пустая история даёт пустой список групп', () => {
@@ -81,6 +102,45 @@ describe('groupOperationsByDate', () => {
 
   it('пустой список даёт пустой список групп', () => {
     expect(groupOperationsByDate([], '2026-08-27')).toStrictEqual([]);
+  });
+});
+
+describe('groupOperationsByDate — лента по факту оплаты: ключ группы paidDate (#933/#994)', () => {
+  it('группирует фактической датой: вход отсортирован по факту, плановые даты немонотонны — группы монотонны', () => {
+    // Серверная сортировка sort=paid_date desc (решение #933): оплаченный
+    // сегодня платёж за октябрь стоит выше вчерашнего факта, хотя плановая
+    // дата октябрьская. Ключ группы — день оплаты, не день периода.
+    const groups = groupOperationsByDate(
+      [
+        paidAhead('a', '2026-10-01', '2026-09-30'),
+        paidAhead('b', '2026-11-01', '2026-09-30'),
+        paid('c', '2026-09-29'),
+      ],
+      '2026-09-30',
+    );
+    expect(groups.map((group) => group.date)).toStrictEqual(['2026-09-30', '2026-09-29']);
+    expect(groups.map((group) => group.label)).toStrictEqual([
+      'Сегодня, 30 сентября',
+      'Вчера, 29 сентября',
+    ]);
+    expect(groups[0]?.operations.map((operation) => operation.id)).toStrictEqual(['a', 'b']);
+  });
+
+  it('оплаченные наперёд месяцы одной даты оплаты — одна группа, лента не разваливается на повторяющиеся плановые группы', () => {
+    // Группировка по плановой дате при сортировке по факту дала бы
+    // «Сегодня», «1 октября», «1 ноября»… вперемешку — банковский порядок
+    // требует одного дня факта одной группой подряд.
+    const groups = groupOperationsByDate(
+      [
+        paidAhead('a', '2026-10-01', '2026-09-30'),
+        paidAhead('b', '2026-11-01', '2026-09-30'),
+        paidAhead('c', '2026-12-01', '2026-09-30'),
+      ],
+      '2026-09-30',
+    );
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.label).toBe('Сегодня, 30 сентября');
+    expect(groups[0]?.operations).toHaveLength(3);
   });
 });
 

@@ -1,6 +1,7 @@
 import type { JSX } from 'react';
 import { cn } from '@/shared/lib/cn';
 import {
+  Button,
   EmptyState,
   Skeleton,
   SkeletonFormField,
@@ -81,13 +82,22 @@ export function ContactsBookSkeleton(): JSX.Element {
 }
 
 /** Пустой список (1527:74479): иллюстрация 128, «Контактов нет», пояснение —
- * на каноне EmptyState дизайн-слоя. */
-export function ContactsEmptyState(): JSX.Element {
+ * на каноне EmptyState дизайн-слоя. CTA «Добавить контакт» (#1004): пилюля
+ * с «+» на пустой книге спрятана вместе с поиском — создание остаётся
+ * доступным из самого состояния. */
+export function ContactsEmptyState({
+  onAdd,
+}: {
+  readonly onAdd?: () => void;
+}): JSX.Element {
   return (
     <EmptyState
       imageSrc="/images/contacts/empty-contacts.webp"
       title="Контактов нет"
       description="Добавьте контакты арендатора, мастеров и других специалистов"
+      action={
+        onAdd !== undefined && <Button onClick={onAdd}>Добавить контакт</Button>
+      }
     />
   );
 }

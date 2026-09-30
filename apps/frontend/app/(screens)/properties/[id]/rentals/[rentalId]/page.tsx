@@ -5,7 +5,7 @@ import { RentalCompletedLoading, RentalCompletedScreen } from '@/widgets/rentals
 import { propertyDetailQueryOptions } from '@/features/properties';
 import { rentalsQueryOptions } from '@/features/rentals';
 import { paymentOperationsPagedQueryOptions } from '@/features/payments';
-import { rentalKeys } from '@/shared/api/query-keys';
+import { OPERATIONS_FEED_SORT, rentalKeys } from '@/shared/api/query-keys';
 import type { Rental } from '@/entities/rental';
 import { ServerPrefetchBoundary } from '@/shared/api/server-prefetch';
 import { serverApiClient } from '@/shared/api/server-client';
@@ -43,6 +43,7 @@ async function prefetchRentalScreen(
     paymentId: rental.rentPayment.paymentId,
     status: 'paid',
     order: 'desc',
+    sort: OPERATIONS_FEED_SORT,
     transport: serverApiClient,
   }));
 }

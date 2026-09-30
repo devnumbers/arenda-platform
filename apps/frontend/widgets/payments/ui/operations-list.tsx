@@ -1,7 +1,6 @@
 'use client';
 
 import type { JSX, ReactNode } from 'react';
-import Image from 'next/image';
 import { EmptyState } from '@/shared/ui/design';
 import { CategoryIcon, categoryStyle } from '@/features/payment-categories';
 import { PaymentRowButton, type PaymentOperation } from '@/entities/payment';
@@ -69,12 +68,13 @@ export function OperationsEmptyPeriod(): JSX.Element {
 }
 
 /**
- * Полностью пустой объект (Figma 1518-92899, #478): вместо чипов, сводки
- * и списка — иллюстрация 128 через 64px после хедера (pt-10 поверх
- * встроенных pt-6 PageContent), заголовок 16/500 и подпись 14/400 серым
- * (320 по ширине). Иконка поиска в хедере вместе с этим состоянием
- * скрывается — искать нечего. Опциональный CTA под подписью (#571,
- * решение владельца 2026-09-08) — «Добавить операцию» ведёт в визард.
+ * Полностью пустой объект/книга (#478, Figma 1518-92899): вместо чипов,
+ * сводки и списка — канон EmptyState (унификация #1004: заголовок 20/24,
+ * описание 16/18, канонный отступ pt-16 — прежняя самописная разметка
+ * 16/500 + 14/400 с pt-10 снята). Иконка поиска в хедере вместе с этим
+ * состоянием скрывается — искать нечего. Опциональный CTA под описанием
+ * (#571, решение владельца 2026-09-08) — «Добавить операцию» ведёт в
+ * визард.
  */
 export function OperationsNeverHad({
   action,
@@ -82,26 +82,12 @@ export function OperationsNeverHad({
   readonly action?: ReactNode;
 }): JSX.Element {
   return (
-    <div className="flex flex-col items-center px-6 pt-10">
-      <Image
-        src="/images/payments/operations-empty.webp"
-        alt=""
-        width={128}
-        height={128}
-        sizes="128px"
-        quality={90}
-        className="h-32 w-32"
-      />
-      <div className="mt-4 flex max-w-[320px] flex-col gap-1 text-center">
-        <p className="text-base font-medium leading-[18px] text-content">
-          Операций еще не было
-        </p>
-        <p className="text-sm leading-4 text-content-secondary">
-          Добавьте аренду, другие платежи и начните отмечать оплату
-        </p>
-      </div>
-      {action !== undefined && <div className="mt-6">{action}</div>}
-    </div>
+    <EmptyState
+      imageSrc="/images/payments/operations-empty.webp"
+      title="Операций еще не было"
+      description="Добавьте аренду, другие платежи и начните отмечать оплату"
+      action={action}
+    />
   );
 }
 

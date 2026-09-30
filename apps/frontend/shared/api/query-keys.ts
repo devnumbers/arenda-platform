@@ -78,8 +78,20 @@ export const propertyKeys = {
 /** Статусный фильтр операций, проходящий в query параметром `status`. */
 export type PaymentOperationStatusFilter = 'planned' | 'paid' | 'overdue';
 
-/** Направление сортировки операций по дате вхождения (query `order`). */
+/** Направление сортировки операций по ключу даты списка (query `order`;
+ * сам ключ — `sort`). */
 export type PaymentOperationOrder = 'asc' | 'desc';
+
+/** Ключ даты операционного списка (query `sort`, #992): плановая дата
+ * вхождения или фактическая дата оплаты; период-фильтры и сводки следуют
+ * тому же ключу (payments/CONTEXT.md «Операция»). */
+export type OperationsSortKey = 'date' | 'paid_date';
+
+/** Сорт операционных поверхностей (решение #933/#994): сортировка,
+ * период-фильтры и сводки лент операций читают фактическую дату оплаты.
+ * Дефолт контракта 'date' остаётся планировочным поверхностям (история
+ * платежа, просрочки, проекция). */
+export const OPERATIONS_FEED_SORT: OperationsSortKey = 'paid_date';
 
 /**
  * Скоуп операций объекта для экранов «Операции объекта» (#474): статус,
@@ -89,6 +101,10 @@ export type PaymentOperationOrder = 'asc' | 'desc';
 export type PaymentOperationScope = {
   readonly status: PaymentOperationStatusFilter;
   readonly order: PaymentOperationOrder;
+  /** Ключ даты списка и сводки (#992): операционные поверхности просят
+   * 'paid_date' (решение #933/#994), платёжная история остаётся на
+   * дефолте 'date' (планировочная поверхность). */
+  readonly sort?: OperationsSortKey;
   readonly type?: 'income' | 'expense';
   readonly categories?: ReadonlyArray<string>;
   /** Границы периода включительно, 'YYYY-MM-DD'. */
@@ -127,12 +143,15 @@ export const paymentOperationKeys = {
    * платежа (#535). */
   byPaymentPrefix: (propertyId: string, paymentId: string) =>
     [...paymentOperationKeys.all, 'by-payment', propertyId, paymentId] as const,
-  /** Порции операций платежа (подэкраны #466): статус и направление — часть ключа. */
+  /** Порции операций платежа (подэкраны #466): статус, направление и
+   * ключ даты — часть ключа (сорт #992; истории платёжных фактов просят
+   * paid_date — решение владельца 30.09, дополнение #994). */
   byPaymentPaged: (
     propertyId: string,
     paymentId: string,
     status: PaymentOperationStatusFilter,
     order: PaymentOperationOrder,
+    sort = '',
   ) =>
     [
       ...paymentOperationKeys.all,
@@ -141,6 +160,7 @@ export const paymentOperationKeys = {
       paymentId,
       status,
       order,
+      sort,
     ] as const,
   /** Префикс всех порций операций платежа — снять кэш удалённого платежа (#535). */
   byPaymentPagedPrefix: (propertyId: string, paymentId: string) =>
@@ -169,6 +189,7 @@ export const paymentOperationKeys = {
       propertyId,
       scope.status,
       scope.order,
+      scope.sort ?? '',
       scope.type ?? '',
       scope.categories?.join(',') ?? '',
       scope.dateFrom ?? '',
@@ -182,6 +203,7 @@ export const paymentOperationKeys = {
       'summary',
       propertyId,
       scope.status,
+      scope.sort ?? '',
       scope.type ?? '',
       scope.dateFrom ?? '',
       scope.dateTo ?? '',
@@ -224,6 +246,9 @@ export const taskKeys = {
  */
 export type GlobalOperationScope = {
   readonly order: PaymentOperationOrder;
+  /** Ключ даты ленты и сводки (#992): глобальная лента платёжных фактов
+   * читается по paid_date (решение #933/#994). */
+  readonly sort?: OperationsSortKey;
   readonly propertyIds?: ReadonlyArray<string>;
   readonly categories?: ReadonlyArray<string>;
   /** Границы периода включительно, 'YYYY-MM-DD'. */
@@ -246,6 +271,7 @@ export const globalOperationKeys = {
       ...globalOperationKeys.all,
       'list-paged',
       scope.order,
+      scope.sort ?? '',
       scope.propertyIds?.join(',') ?? '',
       scope.categories?.join(',') ?? '',
       scope.dateFrom ?? '',
@@ -262,6 +288,7 @@ export const globalOperationKeys = {
     [
       ...globalOperationKeys.all,
       'summary',
+      scope.sort ?? '',
       scope.propertyIds?.join(',') ?? '',
       scope.dateFrom ?? '',
       scope.dateTo ?? '',

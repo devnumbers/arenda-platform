@@ -4,7 +4,7 @@ import { useEffect, type JSX, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { ROUTES } from '@/shared/config/routes';
-import { type GlobalOperationScope } from '@/shared/api/query-keys';
+import { OPERATIONS_FEED_SORT, type GlobalOperationScope } from '@/shared/api/query-keys';
 import {
   globalOperationsPagedQueryOptions,
   globalOperationsSummaryQueryOptions,
@@ -58,9 +58,10 @@ const HUB_ENTRIES: ReadonlyArray<HubPrefetchEntry> = [
     // Дефолтный срез ленты — весь период (#670), все объекты, без
     // категорий: те же ключи, что читает экран без применённого периода.
     // Сводка без периода — она же all-time, гейт «Операций еще не было»
-    // на экране в дефолтном состоянии.
+    // на экране в дефолтном состоянии. Лента платёжных фактов читается
+    // по paid_date (#933/#994).
     prefetch: (client) => {
-      const scope: GlobalOperationScope = { order: 'desc' };
+      const scope: GlobalOperationScope = { order: 'desc', sort: OPERATIONS_FEED_SORT };
       void client.prefetchInfiniteQuery(globalOperationsPagedQueryOptions({ scope }));
       void client.prefetchQuery(globalOperationsSummaryQueryOptions({ scope }));
     },

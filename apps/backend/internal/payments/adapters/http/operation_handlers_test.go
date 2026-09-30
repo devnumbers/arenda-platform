@@ -374,6 +374,117 @@ func TestOperationsLists_RejectUnknownFilterValues(t *testing.T) {
 	}
 }
 
+// The sort parameter folds onto the query's date key (ticket #992): the
+// explicit paid_date travels, the missing value is the planned-date default,
+// and an out-of-vocabulary value is the contract's 400.
+func TestOperationsLists_FoldSortKey(t *testing.T) {
+	t.Parallel()
+	t.Run("paid_date folds onto the listing", func(t *testing.T) {
+		t.Parallel()
+		var gotCmd application.OperationsListQuery
+		svc := &fakeOperationsManager{
+			byProp: func(
+				_ context.Context, _, _ uuid.UUID, cmd application.OperationsListQuery,
+			) ([]application.OperationListItem, error) {
+				gotCmd = cmd
+				return nil, nil
+			},
+		}
+		h := NewOperationsHandlers(svc, nil)
+		actor := uuid.Must(uuid.NewV7())
+		paid := openapi.ListPropertyOperationsParamsSortPaidDate
+
+		req := httptest.NewRequestWithContext(
+			httpsupport.WithUserID(t.Context(), actor), http.MethodGet, "/operations", nil,
+		)
+		w := httptest.NewRecorder()
+		h.ListPropertyOperations(w, req, uuid.Must(uuid.NewV7()),
+			openapi.ListPropertyOperationsParams{Sort: &paid})
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200: %s", w.Code, w.Body.String())
+		}
+		if gotCmd.Sort != application.SortByPaidDate {
+			t.Errorf("cmd.Sort = %q, want paid_date", gotCmd.Sort)
+		}
+	})
+
+	t.Run("missing sort is the planned-date default", func(t *testing.T) {
+		t.Parallel()
+		var gotCmd application.OperationsListQuery
+		svc := &fakeOperationsManager{
+			byProp: func(
+				_ context.Context, _, _ uuid.UUID, cmd application.OperationsListQuery,
+			) ([]application.OperationListItem, error) {
+				gotCmd = cmd
+				return nil, nil
+			},
+		}
+		h := NewOperationsHandlers(svc, nil)
+		actor := uuid.Must(uuid.NewV7())
+
+		req := httptest.NewRequestWithContext(
+			httpsupport.WithUserID(t.Context(), actor), http.MethodGet, "/operations", nil,
+		)
+		w := httptest.NewRecorder()
+		h.ListPropertyOperations(w, req, uuid.Must(uuid.NewV7()), openapi.ListPropertyOperationsParams{})
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200", w.Code)
+		}
+		if gotCmd.Sort != application.SortByDate {
+			t.Errorf("cmd.Sort = %q, want the date default", gotCmd.Sort)
+		}
+	})
+
+	t.Run("out-of-vocabulary sort is a 400", func(t *testing.T) {
+		t.Parallel()
+		h := NewOperationsHandlers(&fakeOperationsManager{}, nil)
+		actor := uuid.Must(uuid.NewV7())
+		bogus := openapi.ListPropertyOperationsParamsSort("created")
+
+		req := httptest.NewRequestWithContext(
+			httpsupport.WithUserID(t.Context(), actor), http.MethodGet, "/operations", nil,
+		)
+		w := httptest.NewRecorder()
+		h.ListPropertyOperations(w, req, uuid.Must(uuid.NewV7()),
+			openapi.ListPropertyOperationsParams{Sort: &bogus})
+
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400 for an out-of-vocabulary sort", w.Code)
+		}
+	})
+
+	t.Run("the global feed carries the sort too", func(t *testing.T) {
+		t.Parallel()
+		var gotCmd application.GlobalOperationsListQuery
+		svc := &fakeOperationsManager{
+			globalList: func(
+				_ context.Context, _ uuid.UUID, cmd application.GlobalOperationsListQuery,
+			) (application.GlobalOperationsPage, error) {
+				gotCmd = cmd
+				return application.GlobalOperationsPage{}, nil
+			},
+		}
+		h := NewOperationsHandlers(svc, nil)
+		actor := uuid.Must(uuid.NewV7())
+		paid := openapi.ListOperationsParamsSortPaidDate
+
+		req := httptest.NewRequestWithContext(
+			httpsupport.WithUserID(t.Context(), actor), http.MethodGet, "/operations", nil,
+		)
+		w := httptest.NewRecorder()
+		h.ListOperations(w, req, openapi.ListOperationsParams{Sort: &paid})
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200", w.Code)
+		}
+		if gotCmd.Sort != application.SortByPaidDate {
+			t.Errorf("cmd.Sort = %q, want paid_date", gotCmd.Sort)
+		}
+	})
+}
+
 func TestListPropertyOperations_MapsApplicationErrors(t *testing.T) {
 	t.Parallel()
 

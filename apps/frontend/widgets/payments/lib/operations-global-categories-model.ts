@@ -1,4 +1,4 @@
-import type { GlobalOperationScope } from '@/shared/api/query-keys';
+import { OPERATIONS_FEED_SORT, type GlobalOperationScope } from '@/shared/api/query-keys';
 import type { OperationsPeriod } from '@/features/payments';
 
 /**
@@ -19,6 +19,7 @@ export function globalCategoriesSummaryScope(
 ): GlobalOperationScope {
   return {
     order: 'desc',
+    sort: OPERATIONS_FEED_SORT,
     propertyIds,
     ...(period !== null ? { dateFrom: period.from, dateTo: period.to } : {}),
   };

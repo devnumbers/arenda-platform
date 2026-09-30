@@ -202,7 +202,9 @@ export function OperationsGlobalSearchScreen(): JSX.Element {
                       key={operation.id}
                       operation={operation}
                       subtitle={operation.propertyName}
-                      description={formatDayMonthWithYear(operation.date, today)}
+                      // Дата под суммой — факт оплаты (#933/#994): поиск —
+                      // операционная поверхность, sort=paid_date.
+                      description={formatDayMonthWithYear(operation.paidDate ?? operation.date, today)}
                       onSelect={() => openOperation(operation)}
                     />
                   ))}
