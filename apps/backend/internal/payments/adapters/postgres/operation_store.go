@@ -277,6 +277,7 @@ func (s *OperationStore) ListGlobal(
 		Categories:      joinCategorySlugs(q.Categories),
 		IncludeArchived: q.IncludeArchived,
 		Order:           operationsOrder(q.Asc),
+		Sort:            operationsSortKey(q.Sort),
 		AfterDate:       pgconv.DatePtrToPgtype(q.AfterDate),
 		AfterID:         pgconv.UUIDToPgtypePtr(q.AfterID),
 		Limit:           paginationToInt32(q.Limit),
@@ -318,6 +319,7 @@ func (s *OperationStore) CountGlobal(
 		Type:            operationsTypeFilter(q.Type),
 		Categories:      joinCategorySlugs(q.Categories),
 		IncludeArchived: q.IncludeArchived,
+		Sort:            operationsSortKey(q.Sort),
 	})
 	if err != nil {
 		return 0, fmt.Errorf("count global operations: %w", err)
@@ -345,6 +347,7 @@ func (s *OperationStore) SummarizeGlobal(
 		Search:          search,
 		SearchDigits:    searchDigits,
 		IncludeArchived: q.IncludeArchived,
+		Sort:            operationsSortKey(q.Sort),
 	}
 	totals, err := s.q().SumPaidOperationTotalsGlobal(ctx, totalsParams)
 	if err != nil {
@@ -361,6 +364,7 @@ func (s *OperationStore) SummarizeGlobal(
 		Type:            operationsTypeFilter(q.Type),
 		Categories:      joinCategorySlugs(q.Categories),
 		IncludeArchived: q.IncludeArchived,
+		Sort:            totalsParams.Sort,
 	})
 	if err != nil {
 		return application.OperationsSummary{}, fmt.Errorf("sum global operations by category: %w", err)
@@ -389,8 +393,8 @@ func (s *OperationStore) SummarizeGlobal(
 }
 
 // listOperationsParams folds the normalized query into the merged SQL
-// parameters; the pagination width clamp and the direction/status encodings
-// are this adapter's business.
+// parameters; the pagination width clamp and the direction/status/sort-key
+// encodings are this adapter's business.
 func listOperationsParams(
 	params postgres.ListOperationsParams, q application.OperationsListQuery,
 ) postgres.ListOperationsParams {
@@ -403,6 +407,7 @@ func listOperationsParams(
 	params.Type = operationsTypeFilter(q.Type)
 	params.Categories = joinCategorySlugs(q.Categories)
 	params.Order = operationsOrder(q.Asc)
+	params.Sort = operationsSortKey(q.Sort)
 	params.Offset = paginationToInt32(q.Offset)
 	params.Limit = paginationToInt32(q.Limit)
 	return params
@@ -430,6 +435,7 @@ func (s *OperationStore) SummarizeByProperty(
 		DateTo:       pgconv.DatePtrToPgtype(q.DateTo),
 		Search:       search,
 		SearchDigits: searchDigits,
+		Sort:         operationsSortKey(q.Sort),
 	}
 	totals, err := s.q().SumOperationTotals(ctx, params)
 	if err != nil {
@@ -446,6 +452,7 @@ func (s *OperationStore) SummarizeByProperty(
 		Search:       search,
 		SearchDigits: searchDigits,
 		Type:         operationsTypeFilter(q.Type),
+		Sort:         params.Sort,
 	})
 	if err != nil {
 		return application.OperationsSummary{}, fmt.Errorf("sum operations by category of property %s: %w", propertyID, err)
@@ -538,6 +545,12 @@ func operationsOrder(asc bool) string {
 		return "asc"
 	}
 	return "desc"
+}
+
+// operationsSortKey encodes the listing's date key ('date' | 'paid_date');
+// the zero value encodes the contract default — the planned date.
+func operationsSortKey(key application.OperationSortKey) string {
+	return string(key.Normalized())
 }
 
 // amountQuerySeparators are the characters besides digits a query may carry

@@ -1065,6 +1065,7 @@ paths:
         - $ref: '#/components/parameters/OperationsStatusFilter'
         - $ref: '#/components/parameters/OperationsDateFrom'
         - $ref: '#/components/parameters/OperationsDateTo'
+        - $ref: '#/components/parameters/OperationsSort'
         - $ref: '#/components/parameters/OperationsOrder'
         - $ref: '#/components/parameters/OperationsLimit'
         - $ref: '#/components/parameters/OperationsOffset'
@@ -1215,6 +1216,7 @@ paths:
         - $ref: '#/components/parameters/OperationsStatusFilter'
         - $ref: '#/components/parameters/OperationsDateFrom'
         - $ref: '#/components/parameters/OperationsDateTo'
+        - $ref: '#/components/parameters/OperationsSort'
         - $ref: '#/components/parameters/OperationsOrder'
         - $ref: '#/components/parameters/OperationsLimit'
         - $ref: '#/components/parameters/OperationsOffset'
@@ -1249,6 +1251,7 @@ paths:
         - $ref: '#/components/parameters/OperationsStatusFilter'
         - $ref: '#/components/parameters/OperationsDateFrom'
         - $ref: '#/components/parameters/OperationsDateTo'
+        - $ref: '#/components/parameters/OperationsSort'
         - $ref: '#/components/parameters/OperationsSearch'
         - $ref: '#/components/parameters/OperationsTypeFilter'
       responses:
@@ -1682,9 +1685,10 @@ paths:
         is the privacy 404. Every row carries propertyName, the bound
         property's display name. The period, search, type and category
         vocabulary is the property listing's; the window is keyset
-        pagination over (date, id) (ticket #597): rows shifting between
-        loads never duplicate or drop — pass the previous page's nextCursor
-        back as cursor. Reads never tick.
+        pagination over the listing's sort key and id (ticket #597): rows
+        shifting between loads never duplicate or drop — pass the previous
+        page's nextCursor back as cursor (the cursor is bound to the sort
+        it was issued under). Reads never tick.
       security:
         - sessionCookie: []
       parameters:
@@ -1695,6 +1699,7 @@ paths:
         - $ref: '#/components/parameters/OperationsTypeFilter'
         - $ref: '#/components/parameters/OperationsIncludeArchived'
         - $ref: '#/components/parameters/OperationsCategoriesFilter'
+        - $ref: '#/components/parameters/OperationsSort'
         - $ref: '#/components/parameters/OperationsOrder'
         - $ref: '#/components/parameters/OperationsLimit'
         - $ref: '#/components/parameters/OperationsCursor'
@@ -1728,12 +1733,14 @@ paths:
         and category filters narrow only the categories array, the totals
         always report both directions. Search is the listing's predicate —
         the summary of the searched scope stays consistent with its list.
+        The period reads the listing's date key (see sort).
       security:
         - sessionCookie: []
       parameters:
         - $ref: '#/components/parameters/OperationsPropertyIdsFilter'
         - $ref: '#/components/parameters/OperationsDateFrom'
         - $ref: '#/components/parameters/OperationsDateTo'
+        - $ref: '#/components/parameters/OperationsSort'
         - $ref: '#/components/parameters/OperationsSearch'
         - $ref: '#/components/parameters/OperationsTypeFilter'
         - $ref: '#/components/parameters/OperationsIncludeArchived'
@@ -4857,7 +4864,10 @@ components:
       name: date_from
       in: query
       required: false
-      description: Inclusive lower bound of the period on the operation date.
+      description: >-
+        Inclusive lower bound of the period on the listing's date key (see
+        sort; the planned operation date by default, the paid_date payment
+        fact under sort=paid_date).
       schema:
         type: string
         format: date
@@ -4865,15 +4875,36 @@ components:
       name: date_to
       in: query
       required: false
-      description: Inclusive upper bound of the period on the operation date.
+      description: >-
+        Inclusive upper bound of the period on the listing's date key (see
+        sort; the planned operation date by default, the paid_date payment
+        fact under sort=paid_date).
       schema:
         type: string
         format: date
+    OperationsSort:
+      name: sort
+      in: query
+      required: false
+      description: >-
+        Which operation date the listing reads (ticket #992): date — the
+        planned operation date, the schedule attribute the payment history,
+        the overdue split and the projection live on (the contract default);
+        paid_date — the actual payment fact date the operational feeds read.
+        The period bounds (date_from/date_to) and the summaries follow the
+        same date. A planned row carries no payment fact and sorts last in
+        both directions under paid_date; on the global feed — paid facts
+        only — the keyset cursor walks the same date and is bound to the
+        sort it was issued under.
+      schema:
+        type: string
+        enum: [date, paid_date]
+        default: date
     OperationsOrder:
       name: order
       in: query
       required: false
-      description: Sort by the operation date; asc (oldest first) or desc (default, newest first).
+      description: Sort direction over the listing's date key (see sort); asc (oldest first) or desc (default, newest first).
       schema:
         type: string
         enum: [asc, desc]
@@ -4893,10 +4924,11 @@ components:
       required: false
       description: >-
         The opaque continuation cursor from the previous page's nextCursor
-        (keyset pagination over (date, id), ticket #597) — the global
-        feed's window; the property listings keep the offset vocabulary. A
-        missing or empty value starts the feed from the beginning; a
-        malformed value is a 400.
+        (keyset pagination over the listing's sort key and id, ticket #597)
+        — the global feed's window; the property listings keep the offset
+        vocabulary. The cursor is bound to the sort it was issued under —
+        echoing it with a different sort is a 400. A missing or empty value
+        starts the feed from the beginning; a malformed value is a 400.
       schema:
         type: string
     OperationsOffset:

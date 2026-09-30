@@ -19,7 +19,8 @@ func TestPrepareGlobalOperationsQuery(t *testing.T) {
 
 	cursorID := uuid.Must(uuid.NewV7())
 	cursorDate := time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
-	validCursor := encodeOperationCursor(cursorDate, cursorID)
+	validCursor := encodeOperationCursor(SortByDate, cursorDate, cursorID)
+	paidCursor := encodeOperationCursor(SortByPaidDate, cursorDate, cursorID)
 
 	cases := []struct {
 		name      string
@@ -33,6 +34,15 @@ func TestPrepareGlobalOperationsQuery(t *testing.T) {
 		{"negative limit", GlobalOperationsListQuery{Limit: -1}, 0, ErrInvalidInput},
 		{"a malformed cursor", GlobalOperationsListQuery{Limit: 10, Cursor: "!!!"}, 0, ErrInvalidInput},
 		{"the empty cursor payload", GlobalOperationsListQuery{Limit: 10, Cursor: ""}, 10, nil},
+		// The cursor is bound to the sort it was issued under (ticket #992):
+		// echoing it under another key would walk one field and sort by
+		// another — duplicates and gaps between the portions.
+		{"a date cursor echoed into a paid_date walk", GlobalOperationsListQuery{
+			Limit: 10, Sort: SortByPaidDate, Cursor: validCursor,
+		}, 0, ErrInvalidInput},
+		{"a paid_date cursor echoed into the default walk", GlobalOperationsListQuery{
+			Limit: 10, Cursor: paidCursor,
+		}, 0, ErrInvalidInput},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -50,8 +60,29 @@ func TestPrepareGlobalOperationsQuery(t *testing.T) {
 		})
 	}
 
-	// The valid cursor decodes into the keyset key the page resumes after.
-	q := GlobalOperationsListQuery{Limit: 10, Cursor: validCursor}
+	// The empty cursor is the feed's beginning: no keyset key at all.
+	q := GlobalOperationsListQuery{Limit: 10}
+	if err := PrepareGlobalOperationsQuery(&q); err != nil {
+		t.Fatalf("prepare without cursor: %v", err)
+	}
+	if q.AfterDate != nil || q.AfterID != nil {
+		t.Errorf("after key = %v/%v, want nil/nil", q.AfterDate, q.AfterID)
+	}
+}
+
+// The passing branch of the cursor contract: a cursor under its own sort
+// decodes into the keyset key the page resumes after (ticket #597, key
+// binding #992) — the planned-date key by default, the paid_date key under
+// the paid_date sort.
+func TestPrepareGlobalOperationsQuery_CursorDecodesUnderItsSort(t *testing.T) {
+	t.Parallel()
+	cursorID := uuid.Must(uuid.NewV7())
+	cursorDate := time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
+
+	q := GlobalOperationsListQuery{
+		Limit:  10,
+		Cursor: encodeOperationCursor(SortByDate, cursorDate, cursorID),
+	}
 	if err := PrepareGlobalOperationsQuery(&q); err != nil {
 		t.Fatalf("prepare: %v", err)
 	}
@@ -62,13 +93,18 @@ func TestPrepareGlobalOperationsQuery(t *testing.T) {
 		t.Errorf("after id = %v, want %s", q.AfterID, cursorID)
 	}
 
-	// The empty cursor is the feed's beginning: no keyset key at all.
-	q = GlobalOperationsListQuery{Limit: 10}
-	if err := PrepareGlobalOperationsQuery(&q); err != nil {
-		t.Fatalf("prepare without cursor: %v", err)
+	q = GlobalOperationsListQuery{
+		Limit: 10, Sort: SortByPaidDate,
+		Cursor: encodeOperationCursor(SortByPaidDate, cursorDate, cursorID),
 	}
-	if q.AfterDate != nil || q.AfterID != nil {
-		t.Errorf("after key = %v/%v, want nil/nil", q.AfterDate, q.AfterID)
+	if err := PrepareGlobalOperationsQuery(&q); err != nil {
+		t.Fatalf("prepare paid: %v", err)
+	}
+	if q.AfterDate == nil || !q.AfterDate.Equal(cursorDate) {
+		t.Errorf("paid after date = %v, want %v", q.AfterDate, cursorDate)
+	}
+	if q.AfterID == nil || *q.AfterID != cursorID {
+		t.Errorf("paid after id = %v, want %s", q.AfterID, cursorID)
 	}
 }
 
