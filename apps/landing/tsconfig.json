@@ -28,7 +28,12 @@
       "@/*": ["./*"]
     }
   },
+  // global.d.ts идёт первым — как shared/assets/svg.d.ts во фронте: порядок
+  // include для ambient-деклараций существенен. Файл держит типы импортов
+  // картинок для свежего checkout: next-env.d.ts генерируется Next и в git
+  // не хранится (.gitignore).
   "include": [
+    "global.d.ts",
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
