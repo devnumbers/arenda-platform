@@ -35,6 +35,9 @@ import type { NavItem } from "@/lib/nav";
 // перезапускает каскад.
 const EASE = "ease-[cubic-bezier(0.4,0,0.6,1)]";
 const CLOSE_CUT_MS = 440;
+// Зеркало --breakpoint-desk (globals.css) — та же строка, что в
+// rentals-carousel.tsx: tailwind-классы desk:* из JS не прочитать.
+const DESK_QUERY = "(min-width: 1200px)";
 
 export function MobileMenu({
   nav,
@@ -64,6 +67,23 @@ export function MobileMenu({
     const timer = setTimeout(() => setClosing(false), CLOSE_CUT_MS);
     return () => clearTimeout(timer);
   }, [closing]);
+
+  // Меню, открытое на планшете, при переходе окна в desk гаснет мгновенно —
+  // иначе лок html overflow:hidden переживает переход: бургер и панель уже
+  // скрыты desk:hidden, и закрыть меню, вернув скролл, нечем. Это teardown
+  // при уходе UI из DOM-видимости, а не пользовательское закрытие — фаза
+  // closing не заводится, таймер среза отменяет свой cleanup.
+  useEffect(() => {
+    const mq = window.matchMedia(DESK_QUERY);
+    const onDesk = () => {
+      if (mq.matches) {
+        setOpen(false);
+        setClosing(false);
+      }
+    };
+    mq.addEventListener("change", onDesk);
+    return () => mq.removeEventListener("change", onDesk);
+  }, []);
 
   // Лок скролла на всё открытое состояние (включая свёртывание): overflow
   // правим напрямую (внешняя система), gutter резервирует полосу
