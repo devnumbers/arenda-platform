@@ -96,6 +96,9 @@ services:
       # Tariff-aware хедер лендинга читает /me напрямую по compose-сети
       # (ADR 0063); compose-уровень — дрейф-чек ENV_FILE не задевается.
       BACKEND_URL: http://backend:8080
+    depends_on:
+      backend:
+        condition: service_healthy
     ports:
       - "127.0.0.1:13002:8080"
     healthcheck:
