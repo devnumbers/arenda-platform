@@ -2,7 +2,6 @@ export { AccountScreen } from './ui/AccountScreen';
 export { DevicesScreen } from './ui/DevicesScreen';
 export { EmailChangeScreen } from './ui/EmailChangeScreen';
 export { LegalDocument } from './ui/LegalDocument';
-export { paidGateNoticeVisible } from './lib/tariff-change';
 export { CopyrightYear } from './ui/copyright-year';
 export { PaymentDetail } from './ui/PaymentDetail';
 export { PaymentList } from './ui/PaymentList';
