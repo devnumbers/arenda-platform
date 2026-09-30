@@ -97,9 +97,11 @@ export function TariffCards({
         <h2 className="text-center text-[28px] font-semibold leading-8 desk:text-h2 desk:leading-[60px]">
           Тарифы
         </h2>
+        {/* Переключатель периода — группа честных кнопок без панельной
+            семантики (tabpanel нет), выбранное состояние — aria-pressed. */}
         <div
           className="relative flex h-14 w-64 items-center gap-0.5 rounded-[16px] bg-surface p-0.5"
-          role="tablist"
+          role="group"
           aria-label="Период оплаты"
         >
           <span
@@ -121,8 +123,7 @@ export function TariffCards({
             <button
               key={value}
               type="button"
-              role="tab"
-              aria-selected={billing === value}
+              aria-pressed={billing === value}
               onClick={() => selectBilling(value)}
               className={`relative flex h-[52px] flex-1 cursor-pointer items-center justify-center gap-2 rounded-[14px] text-xs transition-colors duration-200 outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
                 billing === value ? "text-ink" : "text-gray-2"

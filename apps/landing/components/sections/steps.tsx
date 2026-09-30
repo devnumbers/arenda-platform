@@ -55,13 +55,15 @@ export function Steps() {
                 <h2 className="text-center text-[28px] font-semibold leading-8 desk:text-h2 desk:leading-[60px]">
                   Как начать пользоваться
                 </h2>
-                <div className="flex items-center gap-4" role="tablist" aria-label="Шаги">
+                {/* Группа кнопок-переключателей шагов: панельной семантики
+                    (стрелки, roving tabindex, tabpanel) нет, поэтому роль —
+                    group, а выбор шага выражается aria-pressed на кнопке. */}
+                <div className="flex items-center gap-4" role="group" aria-label="Шаги">
                   {STEPS.map((item, index) => (
                     <button
                       key={item.text}
                       type="button"
-                      role="tab"
-                      aria-selected={active === index}
+                      aria-pressed={active === index}
                       aria-label={`Шаг ${index + 1}`}
                       onClick={() => selectStep(index)}
                       className={`flex size-11 cursor-pointer items-center justify-center rounded-[100px] text-xl font-bold transition-colors duration-200 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary [text-shadow:0_8px_24px_rgba(43,127,255,0.08)] ${
