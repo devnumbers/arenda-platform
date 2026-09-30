@@ -237,22 +237,30 @@ func TestSeam_ClearingThePlannedEndMakesThePaymentOpenEnded(t *testing.T) {
 	assert.Nil(t, updated.Progress.TotalMonths, "an open-ended rental has no total")
 }
 
+// backdateRentalToMay moves the started pair into the past — the direct SQL
+// of a seeding scenario: the rental began in May. The caller runs the owner
+// tick to materialize the due months.
+func (h *seamHarness) backdateRentalToMay(ctx context.Context, view rentalsapp.RentalView) {
+	t := h.t
+	t.Helper()
+	start := mustSeamDate("2026-05-04")
+	_, err := h.pool.Exec(ctx,
+		`UPDATE rentals SET start_date = $1 WHERE id = $2`, start, view.Rental.ID)
+	require.NoError(t, err)
+	_, err = h.pool.Exec(ctx,
+		`UPDATE payments SET since = $1 WHERE id = $2`, start, view.Rental.PaymentID)
+	require.NoError(t, err)
+}
+
 func TestSeam_CompleteStopsThePaymentAtTheCompletionDate(t *testing.T) {
 	t.Parallel()
 	h := newSeamHarness(t)
 	h.seedOwner()
 	view := h.createRental()
 
-	// Move the started pair into the past (the direct SQL of a seeding
-	// scenario: the rental began in May), then run the owner tick so the due
-	// months materialize as the overdue debt.
-	start := mustSeamDate("2026-05-04")
-	_, err := h.pool.Exec(context.Background(),
-		`UPDATE rentals SET start_date = $1 WHERE id = $2`, start, view.Rental.ID)
-	require.NoError(t, err)
-	_, err = h.pool.Exec(context.Background(),
-		`UPDATE payments SET since = $1 WHERE id = $2`, start, view.Rental.PaymentID)
-	require.NoError(t, err)
+	// Move the started pair into the past (the rental began in May), then
+	// run the owner tick so the due months materialize as the overdue debt.
+	h.backdateRentalToMay(context.Background(), view)
 	require.NoError(t, h.tick.RunOwnerTick(context.Background(), h.owner))
 
 	completedAt := mustSeamDate("2026-08-20")
@@ -281,6 +289,63 @@ func TestSeam_CompleteStopsThePaymentAtTheCompletionDate(t *testing.T) {
 
 	assert.Equal(t, rentalsdomain.StatusCompleted, completed.Status)
 	assert.Nil(t, completed.NextPayment, "a completed rental has no future payment")
+}
+
+func TestSeam_CompletingRentalSettlesThePaymentCompleted(t *testing.T) {
+	t.Parallel()
+	h := newSeamHarness(t)
+	h.seedOwner()
+	view := h.createRental()
+	paymentID := view.Rental.PaymentID
+	ctx := context.Background()
+
+	// Move the started pair into the past (the rental began in May), then
+	// run the owner tick so the due months materialize as the overdue debt.
+	h.backdateRentalToMay(ctx, view)
+	require.NoError(t, h.tick.RunOwnerTick(ctx, h.owner))
+
+	// Unpaid due months keep the settlement view unfinished.
+	completed, err := h.paySvc.CompletedStatus(ctx, h.owner, h.propID, paymentID)
+	require.NoError(t, err)
+	assert.False(t, completed)
+
+	// The owner pays every due month — the pay facts go past the gate
+	// («Оплатить» is the canon of marking a rent month paid, #818).
+	overdue := paymentsdomain.ViewStatusOverdue
+	ops, err := h.ops.ListPaymentOperations(ctx, h.owner, h.propID, paymentID,
+		paymentsapp.OperationsListQuery{Status: &overdue, Today: seamToday, Limit: 10})
+	require.NoError(t, err)
+	require.Len(t, ops, 4, "the May–August due months")
+	for _, op := range ops {
+		_, err = h.ops.PayOperation(ctx, h.owner, h.propID, op.Operation.ID)
+		require.NoError(t, err)
+	}
+
+	// Everything up to the future stop is settled, but the rule still stands
+	// a future planned — the computed status stays unfinished.
+	completed, err = h.paySvc.CompletedStatus(ctx, h.owner, h.propID, paymentID)
+	require.NoError(t, err)
+	assert.False(t, completed, "the future planned keeps the rule unfinished")
+
+	completedAt := mustSeamDate("2026-08-20")
+	_, err = h.svc.CompleteRental(ctx, h.owner, h.propID, view.Rental.ID,
+		rentalsapp.CompleteRentalCommand{CompletedDate: completedAt})
+	require.NoError(t, err)
+
+	// The stop tore the strictly future planned down and the past months
+	// stayed paid — the settlement read flips to «Завершённый платёж» on its
+	// own. No separate «complete the payment» action exists: the rental
+	// pipeline already carries the semantics (payments/CONTEXT.md; the
+	// owner's question the map #984 answers).
+	completed, err = h.paySvc.CompletedStatus(ctx, h.owner, h.propID, paymentID)
+	require.NoError(t, err)
+	assert.True(t, completed)
+
+	var paid int
+	require.NoError(t, h.pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM operations WHERE payment_id = $1 AND status = 'paid'`,
+		paymentID).Scan(&paid))
+	assert.Equal(t, 4, paid, "the paid months survive the stop")
 }
 
 func TestSeam_DeleteNotStartedRemovesThePair(t *testing.T) {

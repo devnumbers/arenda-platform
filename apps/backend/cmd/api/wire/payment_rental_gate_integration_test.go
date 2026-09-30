@@ -24,6 +24,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// editProbeTitle is the edit-probe title the gate tests push with.
+const editProbeTitle = "Новое название"
+
+// requireRuleMutationsGated runs the four rule mutations past the rental and
+// asserts the rental-managed 409 on each. The domain rule precedes the
+// rule's own state — the resume of a never-paused rule is still the 409,
+// not ErrNotPaused.
+func (h *seamHarness) requireRuleMutationsGated(ctx context.Context, paymentID uuid.UUID) {
+	t := h.t
+	t.Helper()
+	title := editProbeTitle
+	_, err := h.paySvc.UpdatePayment(ctx, h.owner, h.propID, paymentID,
+		paymentsapp.UpdatePaymentCommand{Title: &title})
+	require.ErrorIs(t, err, paymentsapp.ErrRentManagedPayment)
+	_, err = h.paySvc.PausePayment(ctx, h.owner, h.propID, paymentID)
+	require.ErrorIs(t, err, paymentsapp.ErrRentManagedPayment)
+	_, err = h.paySvc.ResumePayment(ctx, h.owner, h.propID, paymentID)
+	require.ErrorIs(t, err, paymentsapp.ErrRentManagedPayment)
+	err = h.paySvc.DeletePayment(ctx, h.owner, h.propID, paymentID, true)
+	require.ErrorIs(t, err, paymentsapp.ErrRentManagedPayment)
+}
+
 // createGateRental starts on seamToday with the payment day on the start day:
 // the in-transaction tick materializes the due occurrence, so the pay-fact
 // canon has its target right away.
@@ -35,6 +57,24 @@ func (h *seamHarness) createGateRental() rentalsapp.RentalView {
 			AmountKopecks: 5_000_000,
 			PaymentDay:    rentalsdomain.MustPaymentDay(seamToday.Day()),
 			StartDate:     seamToday,
+			Utilities:     rentalsdomain.UtilitiesIncluded,
+			AutoPay:       true,
+		})
+	require.NoError(t, err)
+	return view
+}
+
+// createUpcomingGateRental starts in the future — the «Ожидает начала» state
+// of the causal map case (#984): nothing is due yet, deletion is the legal
+// action, and the rule mutations stay gated.
+func (h *seamHarness) createUpcomingGateRental() rentalsapp.RentalView {
+	t := h.t
+	t.Helper()
+	view, err := h.svc.CreateRental(context.Background(), h.owner, h.propID,
+		rentalsapp.CreateRentalCommand{
+			AmountKopecks: 5_000_000,
+			PaymentDay:    rentalsdomain.MustPaymentDay(15),
+			StartDate:     mustSeamDate("2026-09-10"),
 			Utilities:     rentalsdomain.UtilitiesIncluded,
 			AutoPay:       true,
 		})
@@ -70,16 +110,7 @@ func TestGate_RentalManagedPaymentRejectsRuleMutations(t *testing.T) {
 
 	// The domain rule precedes the rule's own state: resume of a rule that
 	// was never paused is still the rental-managed 409, not ErrNotPaused.
-	title := "Новое название"
-	_, err := h.paySvc.UpdatePayment(ctx, h.owner, h.propID, paymentID,
-		paymentsapp.UpdatePaymentCommand{Title: &title})
-	require.ErrorIs(t, err, paymentsapp.ErrRentManagedPayment)
-	_, err = h.paySvc.PausePayment(ctx, h.owner, h.propID, paymentID)
-	require.ErrorIs(t, err, paymentsapp.ErrRentManagedPayment)
-	_, err = h.paySvc.ResumePayment(ctx, h.owner, h.propID, paymentID)
-	require.ErrorIs(t, err, paymentsapp.ErrRentManagedPayment)
-	err = h.paySvc.DeletePayment(ctx, h.owner, h.propID, paymentID, true)
-	require.ErrorIs(t, err, paymentsapp.ErrRentManagedPayment)
+	h.requireRuleMutationsGated(ctx, paymentID)
 
 	// Nothing happened: the rule is whole, no pause row exists.
 	payment, err := h.paySvc.GetPayment(ctx, h.owner, h.propID, paymentID)
@@ -91,6 +122,31 @@ func TestGate_RentalManagedPaymentRejectsRuleMutations(t *testing.T) {
 	managed, err := h.paySvc.RentalManagedStatus(ctx, h.owner, h.propID, paymentID)
 	require.NoError(t, err)
 	assert.True(t, managed)
+}
+
+func TestGate_UpcomingRentalKeepsThePaymentGated(t *testing.T) {
+	t.Parallel()
+	h := newSeamHarness(t)
+	h.seedOwner()
+	view := h.createUpcomingGateRental()
+	paymentID := view.Rental.PaymentID
+	ctx := context.Background()
+
+	// The state is really «Ожидает начала»: nothing due, no operations.
+	upcoming, err := h.svc.GetRental(ctx, h.owner, h.propID, view.Rental.ID)
+	require.NoError(t, err)
+	assert.Equal(t, rentalsdomain.StatusUpcoming, upcoming.Status)
+
+	// The gate reads the rental link, not the rental state: the not-started
+	// pair is gated the same as the running one (#818 — any state; #984 —
+	// the upcoming dead end's half of the story).
+	h.requireRuleMutationsGated(ctx, paymentID)
+
+	// The legal action is the rental's own delete — «передумал до старта»:
+	// the pair goes cleanly, the gate never saw it.
+	require.NoError(t, h.svc.DeleteRental(ctx, h.owner, h.propID, view.Rental.ID))
+	_, err = h.paySvc.GetPayment(ctx, h.owner, h.propID, paymentID)
+	require.ErrorIs(t, err, paymentsapp.ErrNotFound)
 }
 
 func TestGate_ManagedPaymentKeepsFactsAndFavorite(t *testing.T) {
@@ -137,14 +193,7 @@ func TestGate_CompletedRentalKeepsThePaymentGated(t *testing.T) {
 	// The rental is final — and with it its payment: no edit path exists
 	// anywhere, so the rule mutations stay rejected (the honest 409 the
 	// RESTRICT FK always implied for deletion).
-	title := "Новое название"
-	_, err = h.paySvc.UpdatePayment(ctx, h.owner, h.propID, paymentID,
-		paymentsapp.UpdatePaymentCommand{Title: &title})
-	require.ErrorIs(t, err, paymentsapp.ErrRentManagedPayment)
-	_, err = h.paySvc.PausePayment(ctx, h.owner, h.propID, paymentID)
-	require.ErrorIs(t, err, paymentsapp.ErrRentManagedPayment)
-	err = h.paySvc.DeletePayment(ctx, h.owner, h.propID, paymentID, true)
-	require.ErrorIs(t, err, paymentsapp.ErrRentManagedPayment)
+	h.requireRuleMutationsGated(ctx, paymentID)
 
 	managed, err := h.paySvc.RentalManagedStatus(ctx, h.owner, h.propID, paymentID)
 	require.NoError(t, err)
