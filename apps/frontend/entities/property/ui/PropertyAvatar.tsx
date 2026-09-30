@@ -1,4 +1,4 @@
-import type { JSX } from 'react';
+import type { ComponentProps, JSX } from 'react';
 import { cn } from '@/shared/lib/cn';
 import { BoldHome, NotificationDot } from '@/shared/assets/icons';
 import { circleIconPair } from '@/shared/ui/design';
@@ -20,14 +20,19 @@ import { circleIconPair } from '@/shared/ui/design';
  * светлый круг + серый дом #D3D7D9 (решение владельца 24.09: инверсия
  * «серый круг + белый дом» в filter отменена — оба аватара шита, участник
  * и объект, рисуются одинаково на серой карточке группы).
+ *
+ * Корень — `flex`, не inline: span вне flex/block-родителя (медиа-блок
+ * детали, карта #984) иначе схлопывается до размера глифа — размеры на
+ * inline не действуют, круг жил размером дома (40 вместо 96). Глиф hero —
+ * 52 = inset 22.73% макета (Figma Category Icon 2973:52664, круг 96;
+ * карта #984).
  */
-export type PropertyAvatarProps = {
+export type PropertyAvatarProps = ComponentProps<'span'> & {
   readonly photoUrl?: string | null;
   /** card — 64 на серой карточке; row — 44 на белой странице; hero — 96 в шапках; feed — 24 в шапках групп лент; filter — 32 в шите фильтров истории. */
   readonly surface?: 'card' | 'row' | 'hero' | 'feed' | 'filter';
   /** Красная точка (просроченные операции ИЛИ «подошла к концу», #584). */
   readonly withAttentionDot?: boolean;
-  readonly className?: string;
 };
 
 const SURFACE_BOX: Record<NonNullable<PropertyAvatarProps['surface']>, string> = {
@@ -51,7 +56,7 @@ const SURFACE_CIRCLE: Record<NonNullable<PropertyAvatarProps['surface']>, string
 const SURFACE_ICON: Record<NonNullable<PropertyAvatarProps['surface']>, string> = {
   card: 'h-9 w-9',
   row: 'h-6 w-6',
-  hero: 'h-10 w-10',
+  hero: 'h-13 w-13',
   feed: 'h-3.5 w-3.5',
   filter: 'h-[18px] w-[18px]',
 };
@@ -61,9 +66,13 @@ export function PropertyAvatar({
   surface = 'card',
   withAttentionDot = false,
   className,
+  ...props
 }: PropertyAvatarProps): JSX.Element {
   return (
-    <span className={cn('relative shrink-0', SURFACE_BOX[surface], className)}>
+    <span
+      className={cn('relative flex shrink-0', SURFACE_BOX[surface], className)}
+      {...props}
+    >
       <span
         className={cn(
           'flex h-full w-full items-center justify-center overflow-hidden rounded-full',
