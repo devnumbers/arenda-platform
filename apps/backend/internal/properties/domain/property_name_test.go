@@ -13,6 +13,7 @@ func TestAutoPropertyName(t *testing.T) {
 		{"квартира", PropertyTypeApartment, 1, "Моя квартира 1"},
 		{"комната", PropertyTypeRoom, 2, "Моя комната 2"},
 		{"апартаменты", PropertyTypeApartments, 1, "Мои апартаменты 1"},
+		{"студия", PropertyTypeStudio, 1, "Моя студия 1"},
 		{"дом", PropertyTypeHouse, 1, "Мой дом 1"},
 		{"коммерческое — дословно как тип (владелец 30.09, #1001)", PropertyTypeCommercial, 1, "Моё коммерческое помещение 1"},
 		{"офис", PropertyTypeOffice, 1, "Мой офис 1"},
@@ -40,6 +41,7 @@ func TestAutoPropertyName_CoversAllValidTypes(t *testing.T) {
 		PropertyTypeApartment,
 		PropertyTypeRoom,
 		PropertyTypeApartments,
+		PropertyTypeStudio,
 		PropertyTypeHouse,
 		PropertyTypeCommercial,
 		PropertyTypeOffice,
@@ -56,5 +58,22 @@ func TestAutoPropertyName_CoversAllValidTypes(t *testing.T) {
 				t.Fatalf("AutoPropertyName(%q, 1) fell back to the catch-all phrase — add the map entry", typ)
 			}
 		})
+	}
+}
+
+func TestPropertyTypeStudio(t *testing.T) {
+	t.Parallel()
+
+	// Студия — полноценное значение типа (карта #984, тикет #1003): валиден
+	// в ParsePropertyType/Valid, живёт в CHECK-констрейнте.
+	studio, err := ParsePropertyType("studio")
+	if err != nil {
+		t.Fatalf("ParsePropertyType(studio): %v", err)
+	}
+	if !studio.Valid() {
+		t.Fatal("studio must be a valid property type")
+	}
+	if _, err := ParsePropertyType("Studio"); err == nil {
+		t.Fatal("type codes are lowercase: 'Studio' must be rejected")
 	}
 }

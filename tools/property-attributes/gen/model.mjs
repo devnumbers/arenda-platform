@@ -8,6 +8,7 @@ export const TYPE_ORDER = [
   'apartment',
   'room',
   'apartments',
+  'studio',
   'house',
   'office',
   'commercial',

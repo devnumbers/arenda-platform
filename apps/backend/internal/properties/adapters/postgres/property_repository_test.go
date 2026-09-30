@@ -395,3 +395,23 @@ func TestPropertyRepository_CountByOwnerAndType(t *testing.T) {
 		t.Errorf("apartment count after delete = %d, want 1 (the deleted row is gone)", count)
 	}
 }
+
+func TestPropertyRepository_StudioTypeAccepted(t *testing.T) {
+	t.Parallel()
+
+	// 000143: 'studio' проходит CHECK-констрейнт properties.type (#1003).
+	pool := setupPropertiesIntegrationDB(t)
+	ctx := t.Context()
+	repo := NewPropertyRepository(pool)
+	ownerID := createTestOwner(t, pool)
+
+	studio := sampleProperty(ownerID, nil)
+	studio.Type = domain.PropertyTypeStudio
+	created, err := repo.Create(ctx, ownerID, studio)
+	if err != nil {
+		t.Fatalf("create studio property: %v", err)
+	}
+	if created.Type != domain.PropertyTypeStudio {
+		t.Errorf("type = %q, want studio", created.Type)
+	}
+}

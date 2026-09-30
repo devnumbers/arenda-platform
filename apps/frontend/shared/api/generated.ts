@@ -3452,7 +3452,7 @@ export interface components {
             nextCursor: string | null;
         };
         /** @enum {string} */
-        PropertyType: "apartment" | "room" | "apartments" | "house" | "commercial" | "office" | "warehouse" | "garage" | "parking" | "land";
+        PropertyType: "apartment" | "room" | "apartments" | "studio" | "house" | "commercial" | "office" | "warehouse" | "garage" | "parking" | "land";
         /** @enum {string} */
         PropertyStatus: "active" | "maintenance" | "archived";
         /** @enum {string} */

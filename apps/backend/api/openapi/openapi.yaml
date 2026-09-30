@@ -7661,7 +7661,7 @@ components:
 
     PropertyType:
       type: string
-      enum: [apartment, room, apartments, house, commercial, office, warehouse, garage, parking, land]
+      enum: [apartment, room, apartments, studio, house, commercial, office, warehouse, garage, parking, land]
 
     PropertyStatus:
       type: string

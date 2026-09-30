@@ -289,6 +289,111 @@
         }
       }
     },
+    "studio": {
+      "label": "Студия",
+      "fields": {
+        "area_total": {
+          "kind": "number",
+          "label": "Общая площадь",
+          "unit": "м²",
+          "min": 1,
+          "max": 100000,
+          "decimals": 1,
+          "group": "about_object"
+        },
+        "area_living": {
+          "kind": "number",
+          "label": "Жилая площадь",
+          "unit": "м²",
+          "min": 1,
+          "max": 100000,
+          "decimals": 1,
+          "group": "about_object"
+        },
+        "area_kitchen": {
+          "kind": "number",
+          "label": "Площадь кухни",
+          "unit": "м²",
+          "min": 1,
+          "max": 100000,
+          "decimals": 1,
+          "group": "about_object"
+        },
+        "floor": {
+          "kind": "integer",
+          "label": "Этаж",
+          "min": -3,
+          "max": 200,
+          "group": "about_object"
+        },
+        "floors_total": {
+          "kind": "integer",
+          "label": "Этажность дома",
+          "min": 1,
+          "max": 200,
+          "group": "about_object"
+        },
+        "bathroom": {
+          "kind": "enum",
+          "label": "Санузел",
+          "options": [
+            { "key": "combined", "label": "Совмещенный" },
+            { "key": "separate", "label": "Раздельный" },
+            { "key": "multiple", "label": "Несколько" }
+          ],
+          "group": "about_object"
+        },
+        "balcony": {
+          "kind": "enum",
+          "label": "Балкон",
+          "options": [
+            { "key": "none", "label": "Нет" },
+            { "key": "balcony", "label": "Балкон" },
+            { "key": "loggia", "label": "Лоджия" },
+            { "key": "balcony_and_loggia", "label": "Балкон и лоджия" }
+          ],
+          "group": "about_object"
+        },
+        "renovation": {
+          "kind": "enum",
+          "label": "Ремонт",
+          "options": [
+            { "key": "cosmetic", "label": "Косметический" },
+            { "key": "euro", "label": "Евро" },
+            { "key": "design", "label": "Дизайнерский" },
+            { "key": "required", "label": "Требуется" }
+          ],
+          "group": "about_object"
+        },
+        "year_built": {
+          "kind": "integer",
+          "label": "Год постройки",
+          "min": 1800,
+          "max": 2031,
+          "yearBuiltMaxDynamic": true,
+          "group": "about_building"
+        },
+        "ceiling_height": {
+          "kind": "number",
+          "label": "Высота потолков",
+          "unit": "м",
+          "min": 2,
+          "max": 10,
+          "decimals": 2,
+          "group": "about_building"
+        },
+        "parking_type": {
+          "kind": "enum",
+          "label": "Парковка",
+          "options": [
+            { "key": "closed", "label": "Закрытая" },
+            { "key": "underground", "label": "Подземная" },
+            { "key": "open", "label": "Открытая" }
+          ],
+          "group": "about_building"
+        }
+      }
+    },
     "house": {
       "label": "Дом",
       "fields": {
@@ -681,17 +786,17 @@
   },
   "rules": [
     {
-      "types": ["apartment", "apartments", "room", "office", "commercial"],
+      "types": ["apartment", "apartments", "studio", "room", "office", "commercial"],
       "field": "floor",
       "lte": "floors_total"
     },
     {
-      "types": ["apartment", "apartments"],
+      "types": ["apartment", "apartments", "studio"],
       "field": "area_living",
       "lte": "area_total"
     },
     {
-      "types": ["apartment", "apartments", "room"],
+      "types": ["apartment", "apartments", "studio", "room"],
       "field": "area_kitchen",
       "lte": "area_total"
     }

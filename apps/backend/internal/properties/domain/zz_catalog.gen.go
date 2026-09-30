@@ -84,6 +84,20 @@ var (
 		"year_built":   {kind: kindInteger, minInt: 1800, maxInt: maxYearBuilt(), label: "Год постройки"},
 	}
 
+	studioFields = map[string]fieldDef{
+		"area_total":     {kind: kindNumber, minFloat: 1, maxFloat: 100000, label: "Общая площадь"},
+		"area_living":    {kind: kindNumber, minFloat: 1, maxFloat: 100000, label: "Жилая площадь"},
+		"area_kitchen":   {kind: kindNumber, minFloat: 1, maxFloat: 100000, label: "Площадь кухни"},
+		"floor":          {kind: kindInteger, minInt: -3, maxInt: 200, label: "Этаж"},
+		"floors_total":   {kind: kindInteger, minInt: 1, maxInt: 200, label: "Этажность дома"},
+		"bathroom":       {kind: kindEnum, enumVals: []string{"combined", "separate", "multiple"}, enumLabels: map[string]string{"combined": "Совмещенный", "separate": "Раздельный", "multiple": "Несколько"}, label: "Санузел"},
+		"balcony":        {kind: kindEnum, enumVals: []string{"none", "balcony", "loggia", "balcony_and_loggia"}, enumLabels: map[string]string{"none": "Нет", "balcony": "Балкон", "loggia": "Лоджия", "balcony_and_loggia": "Балкон и лоджия"}, label: "Балкон"},
+		"renovation":     {kind: kindEnum, enumVals: []string{"cosmetic", "euro", "design", "required"}, enumLabels: map[string]string{"cosmetic": "Косметический", "euro": "Евро", "design": "Дизайнерский", "required": "Требуется"}, label: "Ремонт"},
+		"year_built":     {kind: kindInteger, minInt: 1800, maxInt: maxYearBuilt(), label: "Год постройки"},
+		"ceiling_height": {kind: kindNumber, minFloat: 2, maxFloat: 10, label: "Высота потолков"},
+		"parking_type":   {kind: kindEnum, enumVals: []string{"closed", "underground", "open"}, enumLabels: map[string]string{"closed": "Закрытая", "underground": "Подземная", "open": "Открытая"}, label: "Парковка"},
+	}
+
 	houseFields = map[string]fieldDef{
 		"land_area":    {kind: kindNumber, minFloat: 0.01, maxFloat: 1000000, label: "Площадь участка"},
 		"land_type":    {kind: kindEnum, enumVals: []string{"izhs", "garden", "farm"}, enumLabels: map[string]string{"izhs": "ИЖС", "garden": "Садовый", "farm": "Фермерский"}, label: "Тип участка"},
@@ -136,11 +150,13 @@ var (
 )
 
 // fieldsForType returns the catalog field map for the given property type.
-// All ten property types are covered. Returns nil only for an unknown type.
+// All eleven property types are covered. Returns nil only for an unknown type.
 func fieldsForType(t PropertyType) map[string]fieldDef {
 	switch t {
 	case PropertyTypeApartment, PropertyTypeApartments:
 		return apartmentFields
+	case PropertyTypeStudio:
+		return studioFields
 	case PropertyTypeRoom:
 		return roomFields
 	case PropertyTypeHouse:
@@ -195,7 +211,7 @@ func (a Attributes) FilterByType(propType PropertyType) Attributes {
 // ValidateAttributes validates the given attributes against the catalog for the
 // given property type. Only keys belonging to the catalog of the current type
 // are accepted; unknown keys and null values are rejected. Numeric ranges,
-// enum membership, and cross-field rules are checked. All ten property types
+// enum membership, and cross-field rules are checked. All eleven property types
 // are supported.
 func ValidateAttributes(propType PropertyType, attrs Attributes) ValidationResult {
 	var res ValidationResult
@@ -344,7 +360,7 @@ func crossFieldErrors(propType PropertyType, fields map[string]fieldDef, attrs A
 	}
 
 	switch propType {
-	case PropertyTypeApartment, PropertyTypeApartments:
+	case PropertyTypeApartment, PropertyTypeApartments, PropertyTypeStudio:
 		if f, ok := numVal("floor"); ok {
 			if ft, ok2 := numVal("floors_total"); ok2 && f > ft {
 				errs = append(errs, AttributeValidationError{
@@ -420,6 +436,8 @@ func PropertyTypeLabel(propType PropertyType) string {
 		return "Комната"
 	case PropertyTypeApartments:
 		return "Апартаменты"
+	case PropertyTypeStudio:
+		return "Студия"
 	case PropertyTypeHouse:
 		return "Дом"
 	case PropertyTypeOffice:

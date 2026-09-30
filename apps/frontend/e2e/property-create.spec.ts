@@ -113,12 +113,13 @@ test('шаг 3: характеристики — поля каталога, ти
   await page.getByRole('button', { name: 'Продолжить' }).click();
 
   // Заголовок и подсказка шага 3; «Тип жилья» только у категории
-  // «Квартира» (закрывает тип apartments).
+  // «Квартира» (закрывает типы apartments и studio — #1003).
   await expect(page.getByRole('heading', { name: 'Характеристики' })).toBeVisible();
   await expect(page.getByText('Вы можете создать объект, а характеристики заполнить позже')).toBeVisible();
   const housing = page.getByRole('group', { name: 'Тип жилья' });
   await expect(housing.getByRole('button', { name: 'Квартира' })).toHaveAttribute('aria-pressed', 'true');
   await expect(housing.getByRole('button', { name: 'Апартаменты' })).toHaveAttribute('aria-pressed', 'false');
+  await expect(housing.getByRole('button', { name: 'Студия' })).toHaveAttribute('aria-pressed', 'false');
 
   // Поля каталога квартиры: enum-чипы (комнат в наборе больше нет) и
   // единицы слева внутри бокса.
@@ -132,9 +133,12 @@ test('шаг 3: характеристики — поля каталога, ти
   await expect(name).toBeFocused();
 
   // Смена типа жилья — чипы перезаключаются, набор полей тот же (один
-  // каталог у квартиры и апартаментов), смена тихая — без нотиса.
+  // каталог у квартиры, апартаментов и студии — #1003), смена тихая —
+  // без нотиса.
   await housing.getByRole('button', { name: 'Апартаменты' }).click();
   await expect(housing.getByRole('button', { name: 'Апартаменты' })).toHaveAttribute('aria-pressed', 'true');
+  await housing.getByRole('button', { name: 'Студия' }).click();
+  await expect(housing.getByRole('button', { name: 'Студия' })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('group', { name: 'Санузел' }).getByRole('button', { name: 'Раздельный' })).toBeVisible();
   await expect(page.getByRole('status')).toHaveCount(0);
 

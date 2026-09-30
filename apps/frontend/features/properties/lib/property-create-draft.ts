@@ -41,20 +41,24 @@ export const DEFAULT_PROPERTY_CREATE_DRAFT: PropertyCreateDraft = {};
  * подписи — из общего реестра типов, лейбл домена вместо опечатки макета
  * («Земельныый участок»). */
 export const propertyCategoryOptions: readonly { value: PropertyType; label: string }[] =
-  propertyTypeOptions.filter((option) => option.value !== 'apartments');
+  propertyTypeOptions.filter(
+    (option) => option.value !== 'apartments' && option.value !== 'studio',
+  );
 
-/** Чип-группа «Тип жилья» шага 3 (Figma 1218-54295): закрывает тип
- * apartments внутри категории «Квартира» — оба значения делят один
- * каталог характеристик, поэтому смена между ними не меняет набор полей. */
+/** Чип-группа «Тип жилья» шага 3 (Figma 1218-54295; студия добавлена по
+ * решению владельца 30.09, тикет #1003): закрывают типы внутри категории
+ * «Квартира» — все три делят один каталог характеристик (студия — клон
+ * набора квартиры), поэтому смена между ними не меняет набор полей. */
 export const propertyHousingTypeOptions: readonly { value: PropertyType; label: string }[] = [
   { value: 'apartment', label: 'Квартира' },
   { value: 'apartments', label: 'Апартаменты' },
+  { value: 'studio', label: 'Студия' },
 ];
 
-/** Категория «Квартира» шага 1 (апартаменты появляются только здесь, на
- * шаге «Тип жилья»). */
+/** Категория «Квартира» шага 1 (апартаменты и студия появляются только
+ * здесь, на шаге «Тип жилья»). */
 export function isApartmentCategory(type: PropertyType): boolean {
-  return type === 'apartment' || type === 'apartments';
+  return type === 'apartment' || type === 'apartments' || type === 'studio';
 }
 
 /** Готовность шага: категория выбрана / адрес непустой / шаг 3 достигнут.

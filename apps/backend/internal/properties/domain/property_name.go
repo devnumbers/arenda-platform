@@ -10,6 +10,7 @@ var propertyNamePhrases = map[PropertyType]string{
 	PropertyTypeApartment:  "Моя квартира",
 	PropertyTypeRoom:       "Моя комната",
 	PropertyTypeApartments: "Мои апартаменты",
+	PropertyTypeStudio:     "Моя студия",
 	PropertyTypeHouse:      "Мой дом",
 	PropertyTypeCommercial: "Моё коммерческое помещение",
 	PropertyTypeOffice:     "Мой офис",

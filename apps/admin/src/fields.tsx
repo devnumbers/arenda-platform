@@ -48,6 +48,7 @@ export const propertyTypeChoices: Choice[] = [
   { id: 'apartment', name: 'Квартира' },
   { id: 'room', name: 'Комната' },
   { id: 'apartments', name: 'Апартаменты' },
+  { id: 'studio', name: 'Студия' },
   { id: 'house', name: 'Дом' },
   { id: 'commercial', name: 'Коммерческое' },
   { id: 'office', name: 'Офис' },
