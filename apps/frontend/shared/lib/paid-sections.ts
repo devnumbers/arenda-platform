@@ -18,6 +18,12 @@ const PAID_SECTION_ROUTES: ReadonlyArray<{
         pattern: /^\/properties\/[^/]+\/participants(?:\/|$)/,
         gate: 'property-participants',
     },
+    {
+        // Экран 2 карты #997: «Участники» — глобальный хаб и все вложенные,
+        // включая глобальную форму приглашения (POST /participants/invite).
+        pattern: /^\/participants(?:\/|$)/,
+        gate: 'participants',
+    },
 ];
 
 /** Путь редиректа на выбор тарифа с query-контекстом гейта или null, когда

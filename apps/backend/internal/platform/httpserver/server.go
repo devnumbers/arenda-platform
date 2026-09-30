@@ -306,6 +306,16 @@ func New(deps Deps) http.Handler {
 	r.With(paidSections).Delete("/properties/{propertyId}/access/members/{memberId}", wrapper.DeletePropertyAccessMember)
 	r.With(paidSections).Patch("/properties/{propertyId}/access/members/{memberId}", wrapper.UpdatePropertyAccessMember)
 
+	// Screen 2 (#999): the global «Участники» section — no exceptions, every
+	// consumer of the group lives inside the gated section; the self-leave
+	// route above stays the only excluded access surface.
+	r.With(paidSections).Get("/participants", wrapper.ListParticipants)
+	r.With(paidSections).Post("/participants/invite", wrapper.InviteParticipant)
+	r.With(paidSections).Get("/participants/summary", wrapper.GetParticipantsSummary)
+	r.With(paidSections).Delete("/participants/{participantId}", wrapper.DeleteParticipant)
+	r.With(paidSections).Get("/participants/{participantId}", wrapper.GetParticipant)
+	r.With(paidSections).Post("/participants/{participantId}/properties", wrapper.AddParticipantProperties)
+
 	// T-Kassa redirects the user here after the add-card bank form. Redirect them
 	// back to the frontend payment-methods page with a query flag so the UI can
 	// refresh the list and show the appropriate toast.
