@@ -26,14 +26,18 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
 -- name: UpdateTaskRule :exec
 -- The editable fields of the rule (the anchor included: edit invalidates the
 -- not-yet-due uncompleted tasks, the in-transaction tick stands the single
--- future again); id/owner_id/property_id never move.
+-- future again) plus the history horizon the row already carries: a dated
+-- edit keeps it (the cleared past stays deleted), an undated one passes NULL
+-- (the edit resets the dormancy marker — the application folds that into the
+-- rule before this runs); id/owner_id/property_id never move.
 UPDATE task_rules
 SET title = $2,
     comment = $3,
     due_date = $4,
     due_time = $5,
-    repeat = $6
-WHERE id = $1 AND owner_id = $7;
+    repeat = $6,
+    history_before = $7
+WHERE id = $1 AND owner_id = $8;
 
 -- name: DeleteTaskRule :exec
 -- The hard rule deletion (resolution #496): the completed journal keeps its
@@ -44,7 +48,7 @@ DELETE FROM task_rules WHERE id = $1 AND owner_id = $2;
 -- name: GetTaskRule :one
 -- The nested path rule→property is part of the key: a foreign or re-hung
 -- row is the privacy 404.
-SELECT id, owner_id, property_id, title, comment, due_date, due_time, repeat, created_at, updated_at
+SELECT id, owner_id, property_id, title, comment, due_date, due_time, repeat, history_before, created_at, updated_at
 FROM task_rules
 WHERE id = $1 AND owner_id = $2 AND property_id = $3;
 
@@ -52,7 +56,7 @@ WHERE id = $1 AND owner_id = $2 AND property_id = $3;
 -- The property-less cut of the rule read (ADR 0052: the slices never mix —
 -- the predicate over property_id picks the slice explicitly). The id-scoped
 -- owner key is the privacy 404; a bound rule is invisible here by design.
-SELECT id, owner_id, property_id, title, comment, due_date, due_time, repeat, created_at, updated_at
+SELECT id, owner_id, property_id, title, comment, due_date, due_time, repeat, history_before, created_at, updated_at
 FROM task_rules
 WHERE id = $1 AND owner_id = $2 AND property_id IS NULL;
 

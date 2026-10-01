@@ -88,14 +88,15 @@ func (s *TickStore) LoadOwnerSnapshot(ctx context.Context, ownerID uuid.UUID) (a
 	ids := make([]uuid.UUID, 0, len(ruleRows))
 	for _, row := range ruleRows {
 		rule := mapRuleRow(taskRuleFields{
-			ID:         pgconv.UUIDFromPgtype(row.ID),
-			OwnerID:    pgconv.UUIDFromPgtype(row.OwnerID),
-			PropertyID: row.PropertyID,
-			Title:      row.Title,
-			Comment:    row.Comment,
-			DueDate:    row.DueDate,
-			DueTime:    row.DueTime,
-			Repeat:     row.Repeat,
+			ID:            pgconv.UUIDFromPgtype(row.ID),
+			OwnerID:       pgconv.UUIDFromPgtype(row.OwnerID),
+			PropertyID:    row.PropertyID,
+			Title:         row.Title,
+			Comment:       row.Comment,
+			DueDate:       row.DueDate,
+			DueTime:       row.DueTime,
+			Repeat:        row.Repeat,
+			HistoryBefore: row.HistoryBefore,
 		})
 		snapshot.Rules = append(snapshot.Rules, rule)
 		ids = append(ids, rule.ID)

@@ -240,15 +240,19 @@ func (s *RuleService) UpdateRule(
 
 // patchRule is the shared body of both rule updates — the property-bound and
 // the property-less path (ADR 0052): fold the diff into the loaded rule,
-// validate, apply the no-backdating check to a newly set anchor (an unchanged
-// past anchor belongs to the already created tasks), persist and invalidate
-// the not-yet-due uncompleted tasks — the in-transaction tick stands the
-// single future again with fresh snapshots; already due and completed tasks
-// keep their frozen snapshots.
+// apply the domain horizon rule (a dated edit keeps the history horizon, an
+// undated one resets the dormancy marker — the in-transaction tick stands
+// the fresh task), validate, apply the no-backdating check to a newly set
+// anchor (an unchanged past anchor belongs to the already created tasks),
+// persist and invalidate the not-yet-due uncompleted tasks — the
+// in-transaction tick stands the single future again with fresh snapshots;
+// already due and completed tasks keep their frozen snapshots.
 func patchRule(
 	ctx context.Context, stores *txStores, rule domain.TaskRule, cmd UpdateRuleCommand, today time.Time,
 ) (mutationOutcome[domain.TaskRule], error) {
+	wasUndated := rule.Undated()
 	applyUpdate(&rule, cmd)
+	rule.HistoryBefore = rule.HorizonAfterEdit(wasUndated)
 	if err := validateRule(rule); err != nil {
 		return mutationOutcome[domain.TaskRule]{}, err
 	}

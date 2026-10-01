@@ -149,7 +149,7 @@ func (q *Queries) GetPropertyForTaskMutation(ctx context.Context, id pgtype.UUID
 }
 
 const getTaskRule = `-- name: GetTaskRule :one
-SELECT id, owner_id, property_id, title, comment, due_date, due_time, repeat, created_at, updated_at
+SELECT id, owner_id, property_id, title, comment, due_date, due_time, repeat, history_before, created_at, updated_at
 FROM task_rules
 WHERE id = $1 AND owner_id = $2 AND property_id = $3
 `
@@ -160,11 +160,25 @@ type GetTaskRuleParams struct {
 	PropertyID pgtype.UUID `json:"property_id"`
 }
 
+type GetTaskRuleRow struct {
+	ID            pgtype.UUID        `json:"id"`
+	OwnerID       pgtype.UUID        `json:"owner_id"`
+	PropertyID    pgtype.UUID        `json:"property_id"`
+	Title         string             `json:"title"`
+	Comment       pgtype.Text        `json:"comment"`
+	DueDate       pgtype.Date        `json:"due_date"`
+	DueTime       pgtype.Time        `json:"due_time"`
+	Repeat        string             `json:"repeat"`
+	HistoryBefore pgtype.Date        `json:"history_before"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
 // The nested path rule→property is part of the key: a foreign or re-hung
 // row is the privacy 404.
-func (q *Queries) GetTaskRule(ctx context.Context, arg GetTaskRuleParams) (TaskRule, error) {
+func (q *Queries) GetTaskRule(ctx context.Context, arg GetTaskRuleParams) (GetTaskRuleRow, error) {
 	row := q.db.QueryRow(ctx, getTaskRule, arg.ID, arg.OwnerID, arg.PropertyID)
-	var i TaskRule
+	var i GetTaskRuleRow
 	err := row.Scan(
 		&i.ID,
 		&i.OwnerID,
@@ -174,6 +188,7 @@ func (q *Queries) GetTaskRule(ctx context.Context, arg GetTaskRuleParams) (TaskR
 		&i.DueDate,
 		&i.DueTime,
 		&i.Repeat,
+		&i.HistoryBefore,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -181,7 +196,7 @@ func (q *Queries) GetTaskRule(ctx context.Context, arg GetTaskRuleParams) (TaskR
 }
 
 const getTaskRuleWithoutProperty = `-- name: GetTaskRuleWithoutProperty :one
-SELECT id, owner_id, property_id, title, comment, due_date, due_time, repeat, created_at, updated_at
+SELECT id, owner_id, property_id, title, comment, due_date, due_time, repeat, history_before, created_at, updated_at
 FROM task_rules
 WHERE id = $1 AND owner_id = $2 AND property_id IS NULL
 `
@@ -191,12 +206,26 @@ type GetTaskRuleWithoutPropertyParams struct {
 	OwnerID pgtype.UUID `json:"owner_id"`
 }
 
+type GetTaskRuleWithoutPropertyRow struct {
+	ID            pgtype.UUID        `json:"id"`
+	OwnerID       pgtype.UUID        `json:"owner_id"`
+	PropertyID    pgtype.UUID        `json:"property_id"`
+	Title         string             `json:"title"`
+	Comment       pgtype.Text        `json:"comment"`
+	DueDate       pgtype.Date        `json:"due_date"`
+	DueTime       pgtype.Time        `json:"due_time"`
+	Repeat        string             `json:"repeat"`
+	HistoryBefore pgtype.Date        `json:"history_before"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
 // The property-less cut of the rule read (ADR 0052: the slices never mix —
 // the predicate over property_id picks the slice explicitly). The id-scoped
 // owner key is the privacy 404; a bound rule is invisible here by design.
-func (q *Queries) GetTaskRuleWithoutProperty(ctx context.Context, arg GetTaskRuleWithoutPropertyParams) (TaskRule, error) {
+func (q *Queries) GetTaskRuleWithoutProperty(ctx context.Context, arg GetTaskRuleWithoutPropertyParams) (GetTaskRuleWithoutPropertyRow, error) {
 	row := q.db.QueryRow(ctx, getTaskRuleWithoutProperty, arg.ID, arg.OwnerID)
-	var i TaskRule
+	var i GetTaskRuleWithoutPropertyRow
 	err := row.Scan(
 		&i.ID,
 		&i.OwnerID,
@@ -206,6 +235,7 @@ func (q *Queries) GetTaskRuleWithoutProperty(ctx context.Context, arg GetTaskRul
 		&i.DueDate,
 		&i.DueTime,
 		&i.Repeat,
+		&i.HistoryBefore,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -218,23 +248,28 @@ SET title = $2,
     comment = $3,
     due_date = $4,
     due_time = $5,
-    repeat = $6
-WHERE id = $1 AND owner_id = $7
+    repeat = $6,
+    history_before = $7
+WHERE id = $1 AND owner_id = $8
 `
 
 type UpdateTaskRuleParams struct {
-	ID      pgtype.UUID `json:"id"`
-	Title   string      `json:"title"`
-	Comment pgtype.Text `json:"comment"`
-	DueDate pgtype.Date `json:"due_date"`
-	DueTime pgtype.Time `json:"due_time"`
-	Repeat  string      `json:"repeat"`
-	OwnerID pgtype.UUID `json:"owner_id"`
+	ID            pgtype.UUID `json:"id"`
+	Title         string      `json:"title"`
+	Comment       pgtype.Text `json:"comment"`
+	DueDate       pgtype.Date `json:"due_date"`
+	DueTime       pgtype.Time `json:"due_time"`
+	Repeat        string      `json:"repeat"`
+	HistoryBefore pgtype.Date `json:"history_before"`
+	OwnerID       pgtype.UUID `json:"owner_id"`
 }
 
 // The editable fields of the rule (the anchor included: edit invalidates the
 // not-yet-due uncompleted tasks, the in-transaction tick stands the single
-// future again); id/owner_id/property_id never move.
+// future again) plus the history horizon the row already carries: a dated
+// edit keeps it (the cleared past stays deleted), an undated one passes NULL
+// (the edit resets the dormancy marker — the application folds that into the
+// rule before this runs); id/owner_id/property_id never move.
 func (q *Queries) UpdateTaskRule(ctx context.Context, arg UpdateTaskRuleParams) error {
 	_, err := q.db.Exec(ctx, updateTaskRule,
 		arg.ID,
@@ -243,6 +278,7 @@ func (q *Queries) UpdateTaskRule(ctx context.Context, arg UpdateTaskRuleParams) 
 		arg.DueDate,
 		arg.DueTime,
 		arg.Repeat,
+		arg.HistoryBefore,
 		arg.OwnerID,
 	)
 	return err
