@@ -11,6 +11,7 @@ import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
   operationsCategoryRows,
   operationsFiltersParams,
+  readDirectionParam,
   readOperationsFilters,
   resolveFilterReturnPath,
   usePropertyOperationsSummary,
@@ -64,6 +65,10 @@ export function OperationsCategoriesScreen({
 
   const today = dateToIsoLocal(new Date());
   const filters = readOperationsFilters(searchParams, today);
+  // Направление (?type= с направленческой ленты, решение владельца
+  // 01.10): сужает разбивку до категорий направления; без параметра —
+  // все категории. В apply не возвращается.
+  const direction = readDirectionParam(searchParams);
   // Дефолт категорий — весь период (#676, как на глобальных #672):
   // без явного выбора даты в запрос не уходят, чип нейтральный.
   const period = filters.period;
@@ -83,6 +88,7 @@ export function OperationsCategoriesScreen({
     sort: OPERATIONS_FEED_SORT,
     dateFrom: period?.from,
     dateTo: period?.to,
+    ...(direction !== undefined ? { type: direction } : {}),
   });
   const rows: ReadonlyArray<OperationsCategoryRow> = operationsCategoryRows(
     summaryQuery.data?.categories ?? [],

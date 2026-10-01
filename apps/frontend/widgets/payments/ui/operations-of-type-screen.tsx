@@ -132,9 +132,12 @@ export function OperationsOfTypeScreen({
   const openCategories = (): void => {
     // Формат query — один хелпер с operationsFiltersHref (#472): знание
     // «как period/categories кодируются в адрес» живёт в одном модуле;
-    // сборка адреса — тот же канон buildUrlWithParams (#792).
+    // сборка адреса — тот же канон buildUrlWithParams (#792). Направление
+    // — в скоуп разбивки пикера (решение владельца 01.10): список
+    // категорий только этого направления; в apply не возвращается.
     const params = new URLSearchParams(operationsFiltersParams(filters));
     params.set("return", pathname);
+    params.set("type", type);
     router.push(
       buildUrlWithParams(ROUTES.propertyOperationsCategories(propertyId), params),
     );

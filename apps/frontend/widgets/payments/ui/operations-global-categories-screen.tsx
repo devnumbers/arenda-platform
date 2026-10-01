@@ -8,6 +8,7 @@ import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
   globalOperationsFiltersParams,
   operationsCategoryRows,
+  readDirectionParam,
   readGlobalOperationsFilters,
   resolveGlobalFilterReturnPath,
   useGlobalOperationsSummary,
@@ -72,7 +73,7 @@ export function OperationsGlobalCategoriesScreen(): JSX.Element {
   const returnTo = resolveGlobalFilterReturnPath(searchParams.get('return'));
 
   const summaryQuery = useGlobalOperationsSummary({
-    ...globalCategoriesSummaryScope(period, filters.propertyIds),
+    ...globalCategoriesSummaryScope(period, filters.propertyIds, readDirectionParam(searchParams)),
     includeArchived: filters.archived,
   });
   const rows = operationsCategoryRows(summaryQuery.data?.categories ?? []);

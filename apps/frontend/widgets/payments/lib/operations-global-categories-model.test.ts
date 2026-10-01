@@ -41,4 +41,26 @@ describe('globalCategoriesSummaryScope', () => {
       propertyIds: ['p1'],
     });
   });
+
+  it('направление с направленческой ленты сужает разбивку (type в скоупе, контракт #540)', () => {
+    expect(globalCategoriesSummaryScope(period, ['p1'], 'expense')).toMatchObject({
+      order: 'desc',
+      sort: 'paid_date',
+      propertyIds: ['p1'],
+      dateFrom: '2026-09-01',
+      dateTo: '2026-09-30',
+      type: 'expense',
+    });
+    expect(globalCategoriesSummaryScope(null, [], 'income')).toMatchObject({
+      order: 'desc',
+      sort: 'paid_date',
+      propertyIds: [],
+      type: 'income',
+    });
+  });
+
+  it('без направления — type в скоупе нет (главная лента, все категории)', () => {
+    const scope = globalCategoriesSummaryScope(period, ['p1']);
+    expect('type' in scope).toBe(false);
+  });
 });

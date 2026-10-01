@@ -85,6 +85,7 @@ export {
   operationsFiltersHref,
   operationsFiltersParams,
   operationsPeriodChipLabel,
+  readDirectionParam,
   readOperationsFilters,
   resolveFilterReturnPath,
   type OperationsCategoryRow,

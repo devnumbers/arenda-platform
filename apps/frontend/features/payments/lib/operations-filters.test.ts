@@ -9,6 +9,7 @@ import {
   operationsFiltersParams,
   operationsPeriodChipLabel,
   operationsPeriodRangeChipLabel,
+  readDirectionParam,
   readOperationsFilters,
 } from './operations-filters';
 
@@ -194,3 +195,15 @@ describe('operationsCategoryChipLabel', () => {
   });
 });
 
+
+describe('readDirectionParam (пикер категорий с направленческой ленты, решение владельца 01.10)', () => {
+  it('валидиные income/expense читаются', () => {
+    expect(readDirectionParam(paramsOf({ type: 'income' }))).toBe('income');
+    expect(readDirectionParam(paramsOf({ type: 'expense' }))).toBe('expense');
+  });
+
+  it('кривое и отсутствующее значение — undefined (пикер без направления)', () => {
+    expect(readDirectionParam(paramsOf({ type: 'garbage' }))).toBeUndefined();
+    expect(readDirectionParam(paramsOf({}))).toBeUndefined();
+  });
+});

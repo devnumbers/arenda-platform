@@ -185,6 +185,10 @@ export function OperationsGlobalDirectionScreen({
                 router.push(
                   globalOperationsFiltersHref(ROUTES.operationsCategories, filters, {
                     return: selfRoute,
+                    // Направление — в скоуп разбивки пикера (решение
+                    // владельца 01.10): список категорий только этого
+                    // направления; в apply не возвращается.
+                    type,
                   }),
                 )
               }
