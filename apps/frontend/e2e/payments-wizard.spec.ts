@@ -182,11 +182,12 @@ test.describe('визард создания платежа', () => {
     // Шаг 5 — сумма и тип; кнопка заблокирована, пока сумма пуста.
     await expect(page.getByRole('button', { name: 'Создать платеж' })).toBeDisabled();
     await page.getByRole('textbox', { name: 'Сумма' }).fill('2500');
-    // Чип формы оплаты снесён (#1008) — на шаге остался только тип; дефолт
-    // «Доход» активирует кнопку сразу, клик меняет тип на альтернативный.
+    // Шаг один в один с операционным (дополнение 01.10): сегмент
+    // «Расход/Доход», «Форма оплаты» снесена; дефолт «Доход» подсвечен и
+    // активирует кнопку сразу, клик по пилюле — явный выбор.
     await expect(page.getByRole('button', { name: 'Перевод' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Создать платеж' })).toBeEnabled();
-    await page.getByRole('button', { name: 'Доход' }).click();
+    await page.getByRole('radio', { name: 'Расход' }).click();
     await captureScreen(page, testInfo, 'wizard-step5-amount-mobile');
     await page.getByRole('button', { name: 'Создать платеж' }).click();
 
@@ -245,7 +246,7 @@ test.describe('визард создания платежа', () => {
     await expect(page.getByRole('heading', { name: 'Настройте платеж' })).toBeVisible();
     await page.getByRole('button', { name: 'Далее' }).click();
     await page.getByRole('textbox', { name: 'Сумма' }).fill('800');
-    await page.getByRole('button', { name: 'Доход' }).click(); // → «Расход»
+    await page.getByRole('radio', { name: 'Расход' }).click();
     await page.getByRole('button', { name: 'Создать платеж' }).click();
     await expect(page.getByRole('heading', { name: /Вы создали платеж/ })).toContainText(`«${title}»`);
 
@@ -270,7 +271,7 @@ test.describe('визард создания платежа', () => {
     await expect(page.getByRole('heading', { name: 'Настройте платеж' })).toBeVisible();
     await page.getByRole('button', { name: 'Далее' }).click();
     await page.getByRole('textbox', { name: 'Сумма' }).fill('40000');
-    await page.getByRole('button', { name: 'Доход' }).click(); // → «Расход»
+    await page.getByRole('radio', { name: 'Расход' }).click();
     await page.getByRole('button', { name: 'Создать платеж' }).click();
     await expect(page.getByRole('heading', { name: /Вы создали платеж/ })).toContainText(`«${title}»`);
     // Прижатие читается в описании успеха канонической меткой периодичности.
@@ -296,7 +297,7 @@ test.describe('визард создания платежа', () => {
     await page.getByRole('button', { name: 'Далее' }).click();
 
     await page.getByRole('textbox', { name: 'Сумма' }).fill('200');
-    await page.getByRole('button', { name: 'Доход' }).click(); // → «Расход»
+    await page.getByRole('radio', { name: 'Расход' }).click();
     await page.getByRole('button', { name: 'Создать платеж' }).click();
     await expect(page.getByRole('heading', { name: /Вы создали платеж/ })).toContainText(`«${title}»`);
     await expect(page.getByText(/далее ежедневно/)).toBeVisible();
@@ -329,7 +330,7 @@ test.describe('визард создания платежа', () => {
     await expect(page.getByRole('heading', { name: 'Настройте платеж' })).toBeVisible();
     await page.getByRole('button', { name: 'Далее' }).click();
     await page.getByRole('textbox', { name: 'Сумма' }).fill('5000');
-    await page.getByRole('button', { name: 'Доход' }).click(); // → «Расход»
+    await page.getByRole('radio', { name: 'Расход' }).click();
     await page.getByRole('button', { name: 'Создать платеж' }).click();
     await expect(page.getByRole('heading', { name: /Вы создали платеж/ })).toContainText(`«${title}»`);
 
@@ -480,7 +481,7 @@ test.describe('визард создания платежа', () => {
     await expect(page.getByRole('heading', { name: 'Настройте платеж' })).toBeVisible();
     await page.getByRole('button', { name: 'Далее' }).click();
     await page.getByRole('textbox', { name: 'Сумма' }).fill('7000');
-    await page.getByRole('button', { name: 'Доход' }).click(); // → «Расход»
+    await page.getByRole('radio', { name: 'Расход' }).click();
     await page.getByRole('button', { name: 'Создать платеж' }).click();
     await expect(page.getByRole('heading', { name: /Вы создали платеж/ })).toContainText(`«${title}»`);
 
@@ -656,12 +657,12 @@ test.describe('визард создания платежа', () => {
     await page.reload();
 
     // Восстановление на шаге 5 с суммой из черновика; кнопка снова активна,
-    // переключатель типа работает с восстановленным значением.
-    await expect(page.getByRole('heading', { name: 'Сумма платежа' })).toBeVisible();
+    // сегмент направления работает с восстановленным значением.
+    await expect(page.getByRole('textbox', { name: 'Сумма' })).toBeVisible();
     await expect(page.getByRole('textbox', { name: 'Сумма' })).toHaveValue(/1\s?234/);
     await expect(page.getByRole('button', { name: 'Создать платеж' })).toBeEnabled();
-    await page.getByRole('button', { name: 'Доход' }).click();
-    await expect(page.getByRole('button', { name: 'Расход' })).toBeVisible();
+    await page.getByRole('radio', { name: 'Расход' }).click();
+    await expect(page.getByRole('radio', { name: 'Расход' })).toBeChecked();
   });
 
   test('напоминание: «За 3 дня» переживает перезагрузку и попадает в контракт', async ({
@@ -691,7 +692,7 @@ test.describe('визард создания платежа', () => {
     // Черновик с напоминанием переживает перезагрузку: восстановление на
     // шаге 5 (обязательные шаги полны), значение доезжает до контракта.
     await page.reload();
-    await expect(page.getByRole('heading', { name: 'Сумма платежа' })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Сумма' })).toBeVisible();
     await page.getByRole('textbox', { name: 'Сумма' }).fill('1500');
     await page.getByRole('button', { name: 'Создать платеж' }).click();
     await expect(page.getByRole('heading', { name: /Вы создали платеж/ })).toBeVisible();
@@ -749,7 +750,7 @@ test.describe('визард создания платежа', () => {
     await page.getByRole('button', { name: 'Далее' }).click();
 
     await page.getByRole('textbox', { name: 'Сумма' }).fill('3300');
-    await page.getByRole('button', { name: 'Доход' }).click(); // → «Расход»
+    await page.getByRole('radio', { name: 'Расход' }).click();
     await page.getByRole('button', { name: 'Создать автоплатеж' }).click();
 
     await expect(page.getByRole('heading', { name: /Вы создали автоплатеж/ })).toContainText(`«${title}»`);
@@ -784,10 +785,10 @@ test.describe('визард создания платежа — десктоп',
     await expect(page.getByRole('heading', { name: 'Настройте платеж' })).toBeVisible();
   });
 
-  // Шаг 5 на широком ярусе (тикет #1008, макет 2913:69551): бокс «Сумма»
-  // 56px Title In вместо дисплейного яруса, один чип типа — «Форма оплаты»
-  // снесена.
-  test('шаг суммы ≥768: бокс «Сумма», чип типа без формы оплаты; гейт кнопки', async ({
+  // Шаг 5 на ПК ≥1024 (тикет #1008, макет 2913:69551): бокс «Сумма» 56px
+  // Title In вместо дисплейного яруса; сегмент направления один в один с
+  // операцией, «Форма оплаты» снесена.
+  test('шаг суммы ≥1024 (ПК): бокс «Сумма», сегмент направления; гейт кнопки', async ({
     page,
     seededUser,
   }, testInfo) => {
@@ -799,18 +800,19 @@ test.describe('визард создания платежа — десктоп',
     await page.getByRole('button', { name: 'Продолжить' }).click();
     await expect(page.getByRole('heading', { name: 'Настройте платеж' })).toBeVisible();
     await page.getByRole('button', { name: 'Далее' }).click();
-    await expect(page.getByRole('heading', { name: 'Сумма платежа' })).toBeVisible();
 
-    // Один input «Сумма» в дереве доступности: бокс яруса ≥768 виден,
+    // Один input «Сумма» в дереве доступности: бокс яруса ПК виден,
     // дисплейный скрыт display:none (канон WizardAmountField); ярус
     // опознаётся по 16px бокса (дисплей — 44px).
     const amount = page.getByRole('textbox', { name: 'Сумма' });
     await expect(amount).toHaveCount(1);
     await expect(amount).toHaveCSS('font-size', '16px');
 
-    // Чип типа остался, чип формы оплаты снесён (#1008).
+    // Сегмент направления без формы оплаты: пилюли «Расход/Доход»,
+    // дефолт «Доход» подсвечен.
     await expect(page.getByRole('button', { name: 'Перевод' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Доход' })).toBeVisible();
+    await expect(page.getByRole('radio', { name: 'Доход' })).toBeVisible();
+    await expect(page.getByRole('radio', { name: 'Доход' })).toBeChecked();
 
     // Гейт кнопки: без суммы заблокирована, группированная сумма включает.
     const submit = page.getByRole('button', { name: 'Создать платеж' });
@@ -820,5 +822,31 @@ test.describe('визард создания платежа — десктоп',
     await expect(submit).toBeEnabled();
 
     await captureScreen(page, testInfo, 'wizard-step5-amount-desktop');
+  });
+
+  // Дополнение карты 01.10: дисплейный ярус — вся мобилка и планшет
+  // (<1024), бокс остался только на ПК.
+  test('шаг суммы на планшете 768–1023: дисплейный ярус, сегмент 232px', async ({
+    page,
+    seededUser,
+  }) => {
+    await page.setViewportSize({ width: 800, height: 1024 });
+    await openWizard(page, seededUser);
+    await selectCategory(page);
+    await passTitleStep(page);
+    await page.getByRole('button', { name: 'Каждую неделю' }).click();
+    await page.getByRole('button', { name: 'Понедельник', exact: true }).click();
+    await page.getByRole('button', { name: 'Продолжить' }).click();
+    await page.getByRole('button', { name: 'Далее' }).click();
+
+    // Дисплейный ярус на планшете — тот же блок, что на мобилке: 44px
+    // дисплей, сегмент 232px, бокс скрыт.
+    const amount = page.getByRole('textbox', { name: 'Сумма' });
+    await expect(amount).toHaveCount(1);
+    await expect(amount).toHaveCSS('font-size', '44px');
+    const segment = page.getByRole('radiogroup', { name: 'Направление платежа' });
+    const segmentBox = await segment.boundingBox();
+    expect(segmentBox?.width).toBeCloseTo(232);
+    await expect(page.getByRole('radio', { name: 'Доход' })).toBeChecked();
   });
 });

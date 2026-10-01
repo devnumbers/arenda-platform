@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import type { JSX } from 'react';
+import type { PaymentType } from '@/entities/payment';
+import { TYPE_LABELS } from '@/features/payments';
 import {
   AmountField,
   groupedAmount,
@@ -68,18 +70,19 @@ export function WizardBottomBar({ children }: { readonly children: ReactNode }):
 
 /** Денежное поле шага суммы визардов — два яруса (карта #1005, решение
  * владельца 01.10; макеты 1858:104557/105397 мобилка, 2913:69551 широкий,
- * DESIGN.md §11): <768 — крупный дисплей «0 ₽» по центру (канон
- * AmountField: скрытый focusable input с цифровой клавиатурой ОС), ≥768 —
- * компактный бокс 56px Title In (маска суммы — sanitizeAmountInput +
- * syncAmountInputDom, как в MoneyField аренды). Контракт — копейки
- * (целые, строго положительные): компонент держит «сырой» буфер набранного
- * — дисплей обоих ярусов, пока поле в фокусе, — иначе эхо копеек
- * переписывало бы бокс под курсором («25,» → «25», «25,5» → «25,50» —
- * блокировка ввода, канон поля правки платежа #467). Вне фокуса значение
- * следует за пропсом: восстановление черновика и нормализация после blur
- * («25,5» → «25,50» — правило экрана). Подгонка состояния при рендере —
- * официальный паттерн React (тот же, что в AmountField). Ярусы разводятся
- * display:none — вне дерева доступности остаётся один input «Сумма». */
+ * DESIGN.md §11): <1024 (мобилка и планшет) — крупный дисплей «0 ₽» по
+ * центру (канон AmountField: скрытый focusable input с цифровой
+ * клавиатурой ОС), ≥1024 (ПК) — компактный бокс 56px Title In (маска
+ * суммы — sanitizeAmountInput + syncAmountInputDom, как в MoneyField
+ * аренды). Контракт — копейки (целые, строго положительные): компонент
+ * держит «сырой» буфер набранного — дисплей обоих ярусов, пока поле в
+ * фокусе, — иначе эхо копеек переписывало бы бокс под курсором («25,» →
+ * «25», «25,5» → «25,50» — блокировка ввода, канон поля правки платежа
+ * #467). Вне фокуса значение следует за пропсом: восстановление черновика
+ * и нормализация после blur («25,5» → «25,50» — правило экрана). Подгонка
+ * состояния при рендере — официальный паттерн React (тот же, что в
+ * AmountField). Ярусы разводятся display:none — вне дерева доступности
+ * остаётся один input «Сумма». */
 export function WizardAmountField({
   label,
   kopecks,
@@ -110,7 +113,7 @@ export function WizardAmountField({
 
   return (
     <>
-      <div className="hidden w-full md:block">
+      <div className="hidden w-full desktop:block">
         <TextField
           variant="titleIn"
           title={label}
@@ -128,7 +131,55 @@ export function WizardAmountField({
           }}
         />
       </div>
-      <AmountField className="md:hidden" value={buffer} onChange={change} label={label} />
+      <AmountField className="desktop:hidden" value={buffer} onChange={change} label={label} />
     </>
+  );
+}
+
+const SEGMENT_ORDER = ['expense', 'income'] as const;
+
+/** Сегмент «Расход/Доход» шага суммы (Figma 1858:104562) — один для обоих
+ * визардов: серый контейнер 232px на дисплейном ярусе (<1024), во всю
+ * колонку на ПК (2913:69741); выбранный — белая пилюля с тенью. Подписи —
+ * TYPE_LABELS («Расход»/«Доход»), направление выбрано явно подсветкой;
+ * видимое значение (пресет входа или дефолт «Доход») вычисляет вызывающий
+ * шаг и отдаёт готовым type. */
+export function WizardDirectionSegment({
+  type,
+  onTypeChange,
+  ariaLabel,
+}: {
+  /** Направление, видимое на сегменте (явный выбор или пресет/дефолт). */
+  readonly type: PaymentType;
+  readonly onTypeChange: (type: PaymentType) => void;
+  readonly ariaLabel: string;
+}): JSX.Element {
+  return (
+    <div
+      role="radiogroup"
+      aria-label={ariaLabel}
+      className="flex w-full max-w-[232px] rounded-2xl bg-surface-muted p-[2px] desktop:max-w-none"
+    >
+      {SEGMENT_ORDER.map((option) => {
+        const selected = type === option;
+        return (
+          <button
+            key={option}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            onClick={() => onTypeChange(option)}
+            className={
+              'min-h-10 flex-1 cursor-pointer rounded-[14px] text-sm font-medium leading-4 transition-colors outline-none focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface '
+              + (selected
+                ? 'bg-surface text-content shadow-[0_2px_4px_rgba(0,0,0,0.16)]'
+                : 'text-content-secondary')
+            }
+          >
+            {TYPE_LABELS[option]}
+          </button>
+        );
+      })}
+    </div>
   );
 }
