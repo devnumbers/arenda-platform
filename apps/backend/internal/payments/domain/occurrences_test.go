@@ -47,7 +47,6 @@ func rule(t *testing.T, recurrence Recurrence, since string, endDate *string, pa
 		AmountKopecks: 100,
 		Recurrence:    recurrence,
 		Since:         d(since),
-		PaymentForm:   FormTransfer,
 		Category:      CategoryRef{Slug: new("utilities")},
 		Pauses:        pauses,
 	}

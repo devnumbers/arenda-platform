@@ -123,6 +123,21 @@ func (h *PaymentHandlers) handlePaymentError(w http.ResponseWriter, r *http.Requ
 	h.writeInternal(w, r, err)
 }
 
+// Migration shim of the removed «Форма оплаты» (карта #1005, тикет #1006):
+// frontend builds before #1008/#1009 still send the field, so the decoder
+// reads it and drops the value, while every other unknown field stays
+// rejected by the strict contract decode. Remove the shims together with the
+// frontend sends (tickets #1008/#1009).
+type paymentCreateWire struct {
+	openapi.PaymentCreateRequest
+	PaymentForm json.RawMessage `json:"paymentForm"`
+}
+
+type paymentUpdateWire struct {
+	openapi.PaymentUpdateRequest
+	PaymentForm json.RawMessage `json:"paymentForm"`
+}
+
 // CreatePayment implements POST /properties/{propertyId}/payments.
 func (h *PaymentHandlers) CreatePayment(w http.ResponseWriter, r *http.Request, propertyID openapi_types.UUID) {
 	actor, ok := httpsupport.RequireUser(w, r)
@@ -130,8 +145,8 @@ func (h *PaymentHandlers) CreatePayment(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	var body openapi.PaymentCreateRequest
-	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
+	var wire paymentCreateWire
+	if err := httpsupport.DecodeJSONBody(w, r, &wire); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode create payment request",
 			slog.String("error", httpsupport.SanitizeError(err)))
 		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
@@ -139,7 +154,7 @@ func (h *PaymentHandlers) CreatePayment(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	cmd, err := createCommand(body)
+	cmd, err := createCommand(wire.PaymentCreateRequest)
 	if err != nil {
 		h.handlePaymentError(w, r, err)
 		return
@@ -370,7 +385,6 @@ func createCommand(body openapi.PaymentCreateRequest) (application.CreatePayment
 		Title:              body.Title,
 		AmountKopecks:      body.AmountKopecks,
 		Recurrence:         recurrence,
-		PaymentForm:        domain.PaymentForm(body.PaymentForm),
 		CategorySlug:       body.CategorySlug,
 		EndDate:            datePtrFromWire(body.EndDate),
 		AutoPay:            autoPay,
@@ -394,9 +408,11 @@ func (h *PaymentHandlers) decodeUpdateBody(
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
-	if err := dec.Decode(body); err != nil {
+	var wire paymentUpdateWire
+	if err := dec.Decode(&wire); err != nil {
 		return nil, nil, err
 	}
+	*body = wire.PaymentUpdateRequest
 	var shadow struct {
 		EndDate            json.RawMessage `json:"endDate"`
 		ReminderOffsetDays json.RawMessage `json:"reminderOffsetDays"`
@@ -445,9 +461,6 @@ func updateCommand(body openapi.PaymentUpdateRequest, endDateRaw, reminderRaw js
 			return application.UpdatePaymentCommand{}, err
 		}
 		cmd.Recurrence = &recurrence
-	}
-	if body.PaymentForm != nil {
-		cmd.PaymentForm = new(domain.PaymentForm(*body.PaymentForm))
 	}
 	if body.CategorySlug != nil {
 		cmd.CategorySlug = body.CategorySlug
@@ -589,7 +602,6 @@ func paymentResponse(p domain.Payment, isCompleted, isRentalManaged bool) (opena
 		Since:              openapi_types.Date{Time: p.Since},
 		EndDate:            httpsupport.DatePtrToOpenAPI(p.EndDate),
 		AutoPay:            p.AutoPay,
-		PaymentForm:        openapi.PaymentResponsePaymentForm(p.PaymentForm),
 		Category:           categoryView(p.Category),
 		ReminderOffsetDays: reminderOffsetResponse(p.ReminderOffsetDays),
 		IsFavorite:         p.IsFavorite,

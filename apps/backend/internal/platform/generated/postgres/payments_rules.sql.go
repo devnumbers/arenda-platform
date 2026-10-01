@@ -127,7 +127,6 @@ SELECT pay.id,
        pay.end_date,
        pay.auto_pay,
        pay.reminder_offset_days,
-       pay.payment_form,
        pay.category_slug,
        pay.user_category_id,
        pay.is_favorite,
@@ -157,7 +156,6 @@ type GetPaymentByIDRow struct {
 	EndDate            pgtype.Date        `json:"end_date"`
 	AutoPay            bool               `json:"auto_pay"`
 	ReminderOffsetDays pgtype.Int4        `json:"reminder_offset_days"`
-	PaymentForm        string             `json:"payment_form"`
 	CategorySlug       pgtype.Text        `json:"category_slug"`
 	UserCategoryID     pgtype.UUID        `json:"user_category_id"`
 	IsFavorite         bool               `json:"is_favorite"`
@@ -189,7 +187,6 @@ func (q *Queries) GetPaymentByID(ctx context.Context, arg GetPaymentByIDParams) 
 		&i.EndDate,
 		&i.AutoPay,
 		&i.ReminderOffsetDays,
-		&i.PaymentForm,
 		&i.CategorySlug,
 		&i.UserCategoryID,
 		&i.IsFavorite,
@@ -242,9 +239,9 @@ func (q *Queries) GetPropertyForPaymentMutation(ctx context.Context, id pgtype.U
 const insertPayment = `-- name: InsertPayment :exec
 INSERT INTO payments (
     id, owner_id, property_id, type, title, amount_kopecks, recurrence,
-    since, end_date, auto_pay, reminder_offset_days, payment_form, category_slug
+    since, end_date, auto_pay, reminder_offset_days, category_slug
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 `
 
 type InsertPaymentParams struct {
@@ -259,7 +256,6 @@ type InsertPaymentParams struct {
 	EndDate            pgtype.Date `json:"end_date"`
 	AutoPay            bool        `json:"auto_pay"`
 	ReminderOffsetDays pgtype.Int4 `json:"reminder_offset_days"`
-	PaymentForm        string      `json:"payment_form"`
 	CategorySlug       pgtype.Text `json:"category_slug"`
 }
 
@@ -280,7 +276,6 @@ func (q *Queries) InsertPayment(ctx context.Context, arg InsertPaymentParams) er
 		arg.EndDate,
 		arg.AutoPay,
 		arg.ReminderOffsetDays,
-		arg.PaymentForm,
 		arg.CategorySlug,
 	)
 	return err
@@ -317,7 +312,6 @@ SELECT pay.id,
        pay.end_date,
        pay.auto_pay,
        pay.reminder_offset_days,
-       pay.payment_form,
        pay.category_slug,
        pay.user_category_id,
        pay.is_favorite,
@@ -350,7 +344,6 @@ type ListPaymentsByPropertyRow struct {
 	EndDate            pgtype.Date        `json:"end_date"`
 	AutoPay            bool               `json:"auto_pay"`
 	ReminderOffsetDays pgtype.Int4        `json:"reminder_offset_days"`
-	PaymentForm        string             `json:"payment_form"`
 	CategorySlug       pgtype.Text        `json:"category_slug"`
 	UserCategoryID     pgtype.UUID        `json:"user_category_id"`
 	IsFavorite         bool               `json:"is_favorite"`
@@ -383,7 +376,6 @@ func (q *Queries) ListPaymentsByProperty(ctx context.Context, arg ListPaymentsBy
 			&i.EndDate,
 			&i.AutoPay,
 			&i.ReminderOffsetDays,
-			&i.PaymentForm,
 			&i.CategorySlug,
 			&i.UserCategoryID,
 			&i.IsFavorite,
@@ -435,8 +427,7 @@ SET type = $3,
     end_date = $7,
     auto_pay = $8,
     reminder_offset_days = $9,
-    payment_form = $10,
-    category_slug = $11
+    category_slug = $10
 WHERE id = $1 AND owner_id = $2
 `
 
@@ -450,7 +441,6 @@ type UpdatePaymentParams struct {
 	EndDate            pgtype.Date `json:"end_date"`
 	AutoPay            bool        `json:"auto_pay"`
 	ReminderOffsetDays pgtype.Int4 `json:"reminder_offset_days"`
-	PaymentForm        string      `json:"payment_form"`
 	CategorySlug       pgtype.Text `json:"category_slug"`
 }
 
@@ -468,7 +458,6 @@ func (q *Queries) UpdatePayment(ctx context.Context, arg UpdatePaymentParams) er
 		arg.EndDate,
 		arg.AutoPay,
 		arg.ReminderOffsetDays,
-		arg.PaymentForm,
 		arg.CategorySlug,
 	)
 	return err

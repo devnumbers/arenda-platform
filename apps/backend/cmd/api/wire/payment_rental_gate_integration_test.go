@@ -94,7 +94,6 @@ func (h *seamHarness) createOrdinaryPayment() paymentsdomain.Payment {
 			Title:         "Интернет",
 			AmountKopecks: 50_000,
 			Recurrence:    paymentsdomain.NewDailyRecurrence(),
-			PaymentForm:   paymentsdomain.FormTransfer,
 			CategorySlug:  slug,
 		})
 	require.NoError(t, err)

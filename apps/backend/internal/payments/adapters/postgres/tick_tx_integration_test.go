@@ -84,8 +84,8 @@ func (h *tickTxHarness) createPaymentInTx(ctx context.Context, dbtx pgxgen.DBTX,
 	}
 	_, err = dbtx.Exec(ctx,
 		`INSERT INTO payments (id, owner_id, property_id, type, title, amount_kopecks,
-		                       recurrence, since, auto_pay, payment_form, category_slug)
-		 VALUES ($1, $2, $3, 'expense', 'ЖКУ', 500000, '{"kind":"daily"}'::jsonb, $4, false, 'transfer', 'utilities')`,
+		                       recurrence, since, auto_pay, category_slug)
+		 VALUES ($1, $2, $3, 'expense', 'ЖКУ', 500000, '{"kind":"daily"}'::jsonb, $4, false, 'utilities')`,
 		id, h.owner, h.propID, since,
 	)
 	return id, err

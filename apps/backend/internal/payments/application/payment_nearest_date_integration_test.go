@@ -46,8 +46,8 @@ func (h *paymentsHarness) seedNearestRule(title, since, recurrence, endDate stri
 	}
 	if _, err := h.pool.Exec(h.ctx(),
 		`INSERT INTO payments (id, owner_id, property_id, type, title, amount_kopecks,
-		                       recurrence, since, end_date, auto_pay, payment_form, category_slug)
-		 VALUES ($1, $2, $3, 'expense', $4, $5, $6::jsonb, $7, $8, false, 'transfer', 'utilities')`,
+		                       recurrence, since, end_date, auto_pay, category_slug)
+		 VALUES ($1, $2, $3, 'expense', $4, $5, $6::jsonb, $7, $8, false, 'utilities')`,
 		id, h.owner, h.propID, title, nearestAmount, recurrence, since, endArg,
 	); err != nil {
 		h.t.Fatalf("seed nearest rule %s: %v", title, err)

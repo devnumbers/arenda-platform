@@ -171,7 +171,7 @@ type OperationStore interface {
 	// Create inserts the manual one-off operation (ticket #569): the fact is
 	// born paid — status='paid' and date=paid_date=today travel app-side —
 	// with no rule behind it: the query writes origin='manual' and leaves
-	// payment_id and payment_form NULL.
+	// payment_id NULL.
 	Create(ctx context.Context, op domain.Operation) error
 	// ListByPayment returns one rule's operations ordered per the query.
 	ListByPayment(

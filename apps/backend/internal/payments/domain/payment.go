@@ -22,17 +22,6 @@ const (
 	TypeExpense PaymentType = "expense"
 )
 
-// PaymentForm is how the payment actually passes: bank transfer or cash. Not
-// "payment method" — that canonical term belongs to the Billing context
-// (ADR 0047).
-type PaymentForm string
-
-// The two payment forms.
-const (
-	FormTransfer PaymentForm = "transfer"
-	FormCash     PaymentForm = "cash"
-)
-
 // OperationStatus is the stored status of an operation. "Overdue" is not a
 // status: it is computed (planned with a date before today) and never stored
 // (prototype decision №2).
@@ -124,9 +113,7 @@ type Payment struct {
 	// reminder still warns (решение владельца, карта #822); the reminders
 	// publisher reads it (notifications/CONTEXT.md).
 	ReminderOffsetDays *int
-	// PaymentForm is how the payment passes; operations snapshot it.
-	PaymentForm PaymentForm
-	Category    CategoryRef
+	Category           CategoryRef
 	// IsFavorite is the rule's favorite star (ticket #461): a pure read-side
 	// flag — it never changes generation, pauses or the tick's behaviour.
 	IsFavorite bool

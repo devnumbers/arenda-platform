@@ -231,9 +231,9 @@ func (q *Queries) CountPaidOperationsGlobal(ctx context.Context, arg CountPaidOp
 const createManualOperation = `-- name: CreateManualOperation :exec
 INSERT INTO operations (
     id, owner_id, property_id, payment_id, origin, date, paid_date, status,
-    type, title, amount_kopecks, payment_form, category_label, category_slug
+    type, title, amount_kopecks, category_label, category_slug
 )
-VALUES ($1, $2, $3, NULL, 'manual', $4, $4, 'paid', $5, $6, $7, NULL, $8, $9)
+VALUES ($1, $2, $3, NULL, 'manual', $4, $4, 'paid', $5, $6, $7, $8, $9)
 `
 
 type CreateManualOperationParams struct {
@@ -251,8 +251,7 @@ type CreateManualOperationParams struct {
 // Ручная разовая операция (тикет #569): рождается оплаченной в «сегодня»
 // владельца — приложение передаёт одну дату, обе колонки берут её. Правила
 // за фактом нет: origin='manual', payment_id NULL (partial unique
-// (payment_id, date) накрывает только платёжные строки и не применяется),
-// payment_form NULL — ручной факт снапшота формы не несёт.
+// (payment_id, date) накрывает только платёжные строки и не применяется).
 func (q *Queries) CreateManualOperation(ctx context.Context, arg CreateManualOperationParams) error {
 	_, err := q.db.Exec(ctx, createManualOperation,
 		arg.ID,
@@ -281,7 +280,6 @@ SELECT op.id,
        op.type,
        op.title,
        op.amount_kopecks,
-       op.payment_form,
        op.category_label,
        op.category_slug
 FROM operations op
@@ -309,7 +307,6 @@ type GetOperationByIDRow struct {
 	Type          string      `json:"type"`
 	Title         string      `json:"title"`
 	AmountKopecks int64       `json:"amount_kopecks"`
-	PaymentForm   pgtype.Text `json:"payment_form"`
 	CategoryLabel string      `json:"category_label"`
 	CategorySlug  pgtype.Text `json:"category_slug"`
 }
@@ -338,7 +335,6 @@ func (q *Queries) GetOperationByID(ctx context.Context, arg GetOperationByIDPara
 		&i.Type,
 		&i.Title,
 		&i.AmountKopecks,
-		&i.PaymentForm,
 		&i.CategoryLabel,
 		&i.CategorySlug,
 	)
@@ -357,7 +353,6 @@ SELECT op.id,
        op.type,
        op.title,
        op.amount_kopecks,
-       op.payment_form,
        op.category_label,
        op.category_slug
 FROM operations op
@@ -432,7 +427,6 @@ type ListOperationsRow struct {
 	Type          string      `json:"type"`
 	Title         string      `json:"title"`
 	AmountKopecks int64       `json:"amount_kopecks"`
-	PaymentForm   pgtype.Text `json:"payment_form"`
 	CategoryLabel string      `json:"category_label"`
 	CategorySlug  pgtype.Text `json:"category_slug"`
 }
@@ -493,7 +487,6 @@ func (q *Queries) ListOperations(ctx context.Context, arg ListOperationsParams) 
 			&i.Type,
 			&i.Title,
 			&i.AmountKopecks,
-			&i.PaymentForm,
 			&i.CategoryLabel,
 			&i.CategorySlug,
 		); err != nil {
@@ -520,7 +513,6 @@ SELECT op.id,
        op.type,
        op.title,
        op.amount_kopecks,
-       op.payment_form,
        op.category_label,
        op.category_slug,
        p.name AS property_name
@@ -615,7 +607,6 @@ type ListPaidOperationsGlobalRow struct {
 	Type          string      `json:"type"`
 	Title         string      `json:"title"`
 	AmountKopecks int64       `json:"amount_kopecks"`
-	PaymentForm   pgtype.Text `json:"payment_form"`
 	CategoryLabel string      `json:"category_label"`
 	CategorySlug  pgtype.Text `json:"category_slug"`
 	PropertyName  string      `json:"property_name"`
@@ -687,7 +678,6 @@ func (q *Queries) ListPaidOperationsGlobal(ctx context.Context, arg ListPaidOper
 			&i.Type,
 			&i.Title,
 			&i.AmountKopecks,
-			&i.PaymentForm,
 			&i.CategoryLabel,
 			&i.CategorySlug,
 			&i.PropertyName,

@@ -19,7 +19,6 @@ SELECT pay.id,
        pay.end_date,
        pay.auto_pay,
        pay.reminder_offset_days,
-       pay.payment_form,
        pay.category_slug,
        pay.user_category_id,
        pay.is_favorite,
@@ -45,7 +44,6 @@ SELECT pay.id,
        pay.end_date,
        pay.auto_pay,
        pay.reminder_offset_days,
-       pay.payment_form,
        pay.category_slug,
        pay.user_category_id,
        pay.is_favorite,
@@ -66,9 +64,9 @@ ORDER BY pay.created_at, pay.id;
 -- nullable reminder lead time (карта #822; NULL = напоминаний нет).
 INSERT INTO payments (
     id, owner_id, property_id, type, title, amount_kopecks, recurrence,
-    since, end_date, auto_pay, reminder_offset_days, payment_form, category_slug
+    since, end_date, auto_pay, reminder_offset_days, category_slug
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
 
 -- name: UpdatePayment :exec
 -- Partial PATCH is resolved by the application layer; the statement always
@@ -82,8 +80,7 @@ SET type = $3,
     end_date = $7,
     auto_pay = $8,
     reminder_offset_days = $9,
-    payment_form = $10,
-    category_slug = $11
+    category_slug = $10
 WHERE id = $1 AND owner_id = $2;
 
 -- name: DeletePayment :execrows

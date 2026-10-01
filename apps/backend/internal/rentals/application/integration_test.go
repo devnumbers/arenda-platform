@@ -149,8 +149,8 @@ func (g *fakeSeamTx) Create(ctx context.Context, seed rentalsapp.RentPaymentSeed
 	}
 	if _, err := g.dbtx.Exec(ctx,
 		`INSERT INTO payments (id, owner_id, property_id, type, title, amount_kopecks,
-		                      recurrence, since, end_date, auto_pay, payment_form, category_slug)
-		 VALUES ($1, $2, $3, 'income', 'Арендная плата', $4, $5::jsonb, $6, $7, $8, 'transfer', 'rent')`,
+		                      recurrence, since, end_date, auto_pay, category_slug)
+		 VALUES ($1, $2, $3, 'income', 'Арендная плата', $4, $5::jsonb, $6, $7, $8, 'rent')`,
 		g.gateway.nextID, seed.OwnerID, seed.PropertyID, seed.AmountKopecks, recurrence,
 		seed.StartDate, seed.PlannedEndDate, seed.AutoPay,
 	); err != nil {
@@ -446,9 +446,9 @@ func (h *rentalsHarness) seedCompletedRental(start, completedAt time.Time) uuid.
 	require.NoError(t, err)
 	_, err = h.pool.Exec(context.Background(),
 		`INSERT INTO payments (id, owner_id, property_id, type, title, amount_kopecks,
-		                      recurrence, since, end_date, auto_pay, payment_form, category_slug)
+		                      recurrence, since, end_date, auto_pay, category_slug)
 		 VALUES ($1, $2, $3, 'income', 'Арендная плата', 5000000,
-		         '{"kind":"monthly","daysOfMonth":[15]}'::jsonb, $4, $5, false, 'transfer', 'rent')`,
+		         '{"kind":"monthly","daysOfMonth":[15]}'::jsonb, $4, $5, false, 'rent')`,
 		paymentID, h.owner, h.propID, start, mustIntDate("2027-01-01"))
 	require.NoError(t, err)
 	_, err = h.pool.Exec(context.Background(),

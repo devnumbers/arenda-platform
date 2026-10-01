@@ -116,7 +116,6 @@ func (s *PaymentStore) Create(ctx context.Context, p domain.Payment) error {
 		EndDate:            pgconv.DatePtrToPgtype(p.EndDate),
 		AutoPay:            p.AutoPay,
 		ReminderOffsetDays: pgconv.Int4PtrToPgtype(p.ReminderOffsetDays),
-		PaymentForm:        string(p.PaymentForm),
 		CategorySlug:       pgconv.StringPtrToPgtype(p.Category.Slug),
 	}); err != nil {
 		return fmt.Errorf("insert payment %s: %w", p.ID, err)
@@ -140,7 +139,6 @@ func (s *PaymentStore) Update(ctx context.Context, p domain.Payment) error {
 		EndDate:            pgconv.DatePtrToPgtype(p.EndDate),
 		AutoPay:            p.AutoPay,
 		ReminderOffsetDays: pgconv.Int4PtrToPgtype(p.ReminderOffsetDays),
-		PaymentForm:        string(p.PaymentForm),
 		CategorySlug:       pgconv.StringPtrToPgtype(p.Category.Slug),
 	}); err != nil {
 		return fmt.Errorf("update payment %s: %w", p.ID, err)

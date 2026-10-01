@@ -409,8 +409,6 @@ func TestNewMaterializedOperation_SnapshotsRule(t *testing.T) {
 	assert.Equal(t, p.Title, op.Title)
 	assert.Equal(t, p.AmountKopecks, op.AmountKopecks)
 	assert.Equal(t, p.Type, op.Type)
-	require.NotNil(t, op.PaymentForm)
-	assert.Equal(t, FormTransfer, *op.PaymentForm)
 	assert.Equal(t, "Ипотека", op.CategoryLabel, "label snapshotted from the default catalog")
 	require.NotNil(t, op.CategorySlug)
 	assert.Equal(t, "mortgage", *op.CategorySlug)

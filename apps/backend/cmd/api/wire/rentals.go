@@ -139,7 +139,6 @@ func (t *rentPaymentGatewayTx) Create(
 		EndDate:            seed.PlannedEndDate,
 		AutoPay:            seed.AutoPay,
 		ReminderOffsetDays: seed.ReminderOffsetDays,
-		PaymentForm:        paymentsdomain.FormTransfer,
 		Category:           paymentsdomain.CategoryRef{Slug: &category},
 	}); err != nil {
 		return uuid.Nil, fmt.Errorf("insert rent payment: %w", err)

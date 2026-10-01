@@ -151,8 +151,6 @@ func fixtureOperation(status domain.OperationStatus) domain.Operation {
 		Type: domain.TypeExpense, Title: "ЖКУ", AmountKopecks: 500000,
 		CategoryLabel: "Коммунальные услуги",
 	}
-	form := domain.FormTransfer
-	op.PaymentForm = &form
 	slug := "utilities"
 	op.CategorySlug = &slug
 	if status == domain.StatusPaid {
@@ -1311,7 +1309,6 @@ func TestCreateOperation_FoldsBodyIntoCommandAndReturns201(t *testing.T) {
 	created := fixtureOperation(domain.StatusPaid)
 	created.Origin = domain.OriginManual
 	created.PaymentID = nil
-	created.PaymentForm = nil
 
 	var gotCmd application.CreateOperationCommand
 	var gotProperty uuid.UUID
@@ -1355,8 +1352,8 @@ func TestCreateOperation_FoldsBodyIntoCommandAndReturns201(t *testing.T) {
 	if resp.Status != openapi.OperationResponseStatusPaid {
 		t.Errorf("status = %q, want the born-paid fact", resp.Status)
 	}
-	if resp.PaymentId != nil || resp.PaymentForm != nil {
-		t.Errorf("paymentId/paymentForm = %v/%v, want both null behind a manual fact", resp.PaymentId, resp.PaymentForm)
+	if resp.PaymentId != nil {
+		t.Errorf("paymentId = %v, want null behind a manual fact", resp.PaymentId)
 	}
 }
 

@@ -76,7 +76,6 @@ func tickOwnerPayment(t *testing.T, id uuid.UUID, since string) domain.Payment {
 		AmountKopecks: 100,
 		Recurrence:    domain.NewDailyRecurrence(),
 		Since:         parsed,
-		PaymentForm:   domain.FormTransfer,
 	}
 }
 

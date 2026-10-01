@@ -638,11 +638,6 @@ func writeOperationsWithTotal(
 // travels only where the listing carried it (the global feed's row label).
 func operationResponse(item application.OperationListItem) openapi.OperationResponse {
 	op := item.Operation
-	var paymentForm *openapi.OperationResponsePaymentForm
-	if op.PaymentForm != nil {
-		form := openapi.OperationResponsePaymentForm(*op.PaymentForm)
-		paymentForm = &form
-	}
 	var propertyName *string
 	if item.PropertyName != "" {
 		propertyName = &item.PropertyName
@@ -658,7 +653,6 @@ func operationResponse(item application.OperationListItem) openapi.OperationResp
 		Type:          openapi.OperationResponseType(op.Type),
 		Title:         op.Title,
 		AmountKopecks: op.AmountKopecks,
-		PaymentForm:   paymentForm,
 		CategoryLabel: op.CategoryLabel,
 		CategorySlug:  copyStringPtr(op.CategorySlug),
 	}

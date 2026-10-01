@@ -84,7 +84,6 @@ type PaymentFromApi = {
   title: string;
   amountKopecks: number;
   type: string;
-  paymentForm: string;
   autoPay: boolean;
   since: string;
   endDate?: string | null;
@@ -205,7 +204,9 @@ test.describe('визард создания платежа', () => {
     expect(created?.recurrence).toStrictEqual({ kind: 'monthly', daysOfMonth: [10, 15], lastDay: false });
     expect(created?.amountKopecks).toBe(250000);
     expect(created?.type).toBe('expense');
-    expect(created?.paymentForm).toBe('cash');
+    // «Форма оплаты» снесена из контракта (карта #1005, #1006): поля в ответе
+    // больше нет, чип визарда уходит в #1008.
+    expect(created && 'paymentForm' in created).toBe(false);
     expect(created?.autoPay).toBe(false);
     expect(created?.since).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(created?.endDate ?? null).toBeNull();

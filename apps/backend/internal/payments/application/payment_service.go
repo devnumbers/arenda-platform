@@ -58,7 +58,6 @@ type CreatePaymentCommand struct {
 	Title              string
 	AmountKopecks      int64
 	Recurrence         domain.Recurrence
-	PaymentForm        domain.PaymentForm
 	CategorySlug       string
 	EndDate            *time.Time
 	AutoPay            bool
@@ -78,7 +77,6 @@ type UpdatePaymentCommand struct {
 	Title         *string
 	AmountKopecks *int64
 	Recurrence    *domain.Recurrence
-	PaymentForm   *domain.PaymentForm
 	CategorySlug  *string
 	// EndDate is tri-state: a nil command field keeps the current value; a
 	// non-nil one applies the EndDateUpdate (set or clear).
@@ -170,7 +168,6 @@ func (s *PaymentService) CreatePayment(
 				EndDate:            cmd.EndDate,
 				AutoPay:            cmd.AutoPay,
 				ReminderOffsetDays: cmd.ReminderOffsetDays,
-				PaymentForm:        cmd.PaymentForm,
 				Category:           domain.CategoryRef{Slug: &cmd.CategorySlug},
 			}
 			if err := validateRule(draft); err != nil {
@@ -460,7 +457,7 @@ const auditFieldsKey = "fields"
 
 // validateRule is the single validator of the create/update contract
 // invariants — the transport decodes and delegates here, so the rules cannot
-// drift between layers. It enforces: the direction and payment form enums, a
+// drift between layers. It enforces: the direction enum, a
 // non-empty title within MaxTitleLength characters (counted in runes: the
 // limit is a product copy limit, not a byte limit), kopecks within 1..10⁹,
 // a resolvable category reference (a default-catalog slug or a user category
@@ -468,9 +465,6 @@ const auditFieldsKey = "fields"
 // recurrence and an end date no earlier than the rule's lower bound.
 func validateRule(rule domain.Payment) error {
 	if rule.Type != domain.TypeIncome && rule.Type != domain.TypeExpense {
-		return ErrInvalidInput
-	}
-	if rule.PaymentForm != domain.FormTransfer && rule.PaymentForm != domain.FormCash {
 		return ErrInvalidInput
 	}
 	if title := strings.TrimSpace(rule.Title); title == "" || utf8.RuneCountInString(title) > MaxTitleLength {
@@ -527,9 +521,6 @@ func applyUpdate(payment *domain.Payment, cmd UpdatePaymentCommand) {
 	if cmd.Recurrence != nil {
 		payment.Recurrence = *cmd.Recurrence
 	}
-	if cmd.PaymentForm != nil {
-		payment.PaymentForm = *cmd.PaymentForm
-	}
 	if cmd.CategorySlug != nil {
 		payment.Category = domain.CategoryRef{Slug: cmd.CategorySlug}
 	}
@@ -559,9 +550,6 @@ func updatedFields(cmd UpdatePaymentCommand) []string {
 	}
 	if cmd.Recurrence != nil {
 		fields = append(fields, "recurrence")
-	}
-	if cmd.PaymentForm != nil {
-		fields = append(fields, "payment_form")
 	}
 	if cmd.CategorySlug != nil {
 		fields = append(fields, "category_slug")

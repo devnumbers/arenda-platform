@@ -110,10 +110,10 @@ func newGlobalVisibilityHarness(t *testing.T) *globalVisibilityHarness {
 		id := uuid.Must(uuid.NewV7())
 		_, err := pool.Exec(ctx,
 			`INSERT INTO payments (id, owner_id, property_id, type, title, amount_kopecks,
-			                       recurrence, since, auto_pay, payment_form, category_slug,
+			                       recurrence, since, auto_pay, category_slug,
 			                       is_favorite, favorite_order)
 			 VALUES ($1, $2, $3, 'expense', 'ЖКУ', 500000, '{"kind":"daily"}'::jsonb, $4,
-			         false, 'transfer', 'utilities', $5, NULLIF($6, 0))`,
+			         false, 'utilities', $5, NULLIF($6, 0))`,
 			id, owner, prop, time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC), favorite, order)
 		require.NoError(t, err)
 		return id

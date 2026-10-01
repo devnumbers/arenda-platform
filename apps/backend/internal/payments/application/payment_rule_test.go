@@ -21,7 +21,6 @@ func validRule() domain.Payment {
 		AmountKopecks: 5000000,
 		Recurrence:    domain.NewDailyRecurrence(),
 		Since:         time.Date(2026, 8, 25, 0, 0, 0, 0, time.UTC),
-		PaymentForm:   domain.FormTransfer,
 		Category:      domain.CategoryRef{Slug: &slug},
 	}
 }
@@ -38,7 +37,6 @@ func TestValidateRule(t *testing.T) {
 	}{
 		{"valid rule as-is", nil, false},
 		{"bad type enum", func(r *domain.Payment) { r.Type = domain.PaymentType("profit") }, true},
-		{"bad payment form enum", func(r *domain.Payment) { r.PaymentForm = domain.PaymentForm("crypto") }, true},
 		{"blank title", func(r *domain.Payment) { r.Title = "   " }, true},
 		{"title over 255 characters", func(r *domain.Payment) { r.Title = strings.Repeat("а", 256) }, true},
 		{

@@ -34,7 +34,6 @@ type paymentRowFields struct {
 	EndDate          pgtype.Date
 	AutoPay          bool
 	ReminderOffset   pgtype.Int4
-	PaymentForm      string
 	CategorySlug     pgtype.Text
 	UserCategoryID   pgtype.UUID
 	UserCategoryName pgtype.Text
@@ -50,7 +49,7 @@ func paymentFieldsFromTickRow(row postgres.ListTickPaymentsByOwnerRow) paymentRo
 		ID: row.ID, OwnerID: row.OwnerID, PropertyID: row.PropertyID, Type: row.Type,
 		Title: row.Title, AmountKopecks: row.AmountKopecks, Recurrence: row.Recurrence,
 		Since: row.Since, EndDate: row.EndDate, AutoPay: row.AutoPay,
-		PaymentForm: row.PaymentForm, CategorySlug: row.CategorySlug,
+		CategorySlug:     row.CategorySlug,
 		UserCategoryID:   row.UserCategoryID,
 		UserCategoryName: row.UserCategoryName,
 	}
@@ -62,8 +61,8 @@ func paymentFieldsFromGetRow(row postgres.GetPaymentByIDRow) paymentRowFields {
 		ID: row.ID, OwnerID: row.OwnerID, PropertyID: row.PropertyID, Type: row.Type,
 		Title: row.Title, AmountKopecks: row.AmountKopecks, Recurrence: row.Recurrence,
 		Since: row.Since, EndDate: row.EndDate, AutoPay: row.AutoPay,
-		ReminderOffset: row.ReminderOffsetDays,
-		PaymentForm:    row.PaymentForm, CategorySlug: row.CategorySlug,
+		ReminderOffset:   row.ReminderOffsetDays,
+		CategorySlug:     row.CategorySlug,
 		UserCategoryID:   row.UserCategoryID,
 		UserCategoryName: row.UserCategoryName,
 		CreatedAt:        row.CreatedAt,
@@ -78,8 +77,8 @@ func paymentFieldsFromListRow(row postgres.ListPaymentsByPropertyRow) paymentRow
 		ID: row.ID, OwnerID: row.OwnerID, PropertyID: row.PropertyID, Type: row.Type,
 		Title: row.Title, AmountKopecks: row.AmountKopecks, Recurrence: row.Recurrence,
 		Since: row.Since, EndDate: row.EndDate, AutoPay: row.AutoPay,
-		ReminderOffset: row.ReminderOffsetDays,
-		PaymentForm:    row.PaymentForm, CategorySlug: row.CategorySlug,
+		ReminderOffset:   row.ReminderOffsetDays,
+		CategorySlug:     row.CategorySlug,
 		UserCategoryID:   row.UserCategoryID,
 		UserCategoryName: row.UserCategoryName,
 		CreatedAt:        row.CreatedAt,
@@ -110,7 +109,6 @@ func mapPaymentRow(row paymentRowFields) (domain.Payment, error) {
 		// The reminder lead time: a NULL column is no reminders (nil). The
 		// tick's rows do not select the column — the tick never reads it.
 		ReminderOffsetDays: pgconv.Int4ToPtr(row.ReminderOffset),
-		PaymentForm:        domain.PaymentForm(row.PaymentForm),
 		Category: domain.CategoryRef{
 			Slug:             pgconv.TextToPtrString(row.CategorySlug),
 			UserCategoryID:   pgconv.UUIDFromPgtypePtr(row.UserCategoryID),
@@ -171,7 +169,6 @@ type operationRowFields struct {
 	Type          string
 	Title         string
 	AmountKopecks int64
-	PaymentForm   pgtype.Text
 	CategoryLabel string
 	CategorySlug  pgtype.Text
 }
@@ -182,8 +179,8 @@ func operationRowFieldsFromGet(row postgres.GetOperationByIDRow) operationRowFie
 		PaymentID: row.PaymentID, Origin: row.Origin, Date: row.Date,
 		PaidDate: row.PaidDate, Status: row.Status, Type: row.Type,
 		Title: row.Title, AmountKopecks: row.AmountKopecks,
-		PaymentForm: row.PaymentForm, CategoryLabel: row.CategoryLabel,
-		CategorySlug: row.CategorySlug,
+		CategoryLabel: row.CategoryLabel,
+		CategorySlug:  row.CategorySlug,
 	}
 }
 
@@ -201,18 +198,7 @@ func mapOperationRow(row operationRowFields) domain.Operation {
 		Type:          domain.PaymentType(row.Type),
 		Title:         row.Title,
 		AmountKopecks: row.AmountKopecks,
-		PaymentForm:   formFromPgText(row.PaymentForm),
 		CategoryLabel: row.CategoryLabel,
 		CategorySlug:  pgconv.TextToPtrString(row.CategorySlug),
 	}
-}
-
-// formFromPgText converts the nullable payment_form snapshot; an absent value
-// leaves room for manual operations (ADR 0049 §1).
-func formFromPgText(t pgtype.Text) *domain.PaymentForm {
-	if !t.Valid || t.String == "" {
-		return nil
-	}
-	form := domain.PaymentForm(t.String)
-	return &form
 }

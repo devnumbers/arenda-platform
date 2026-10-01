@@ -132,7 +132,7 @@ SET role = EXCLUDED.role,
 -- материализует, и в секции «Просроченные» — ровно сидовые операции ниже. Слаги категорий — из дефолтного каталога
 -- (tools/payment-categories/catalog.json), иконку рисует фронт.
 INSERT INTO payments (id, owner_id, property_id, type, title, amount_kopecks,
-                      recurrence, since, end_date, auto_pay, payment_form,
+                      recurrence, since, end_date, auto_pay,
                       category_slug, is_favorite)
 VALUES
     ('55555555-5555-4555-8555-555555555551',
@@ -140,19 +140,19 @@ VALUES
      '33333333-3333-4333-8333-333333333333',
      'expense', 'Арендная плата', 4500000,
      '{"kind": "monthly", "dayOfMonth": 1}',
-     CURRENT_DATE + 5, NULL, FALSE, 'transfer', 'rent', TRUE),
+     CURRENT_DATE + 5, NULL, FALSE, 'rent', TRUE),
     ('55555555-5555-4555-8555-555555555552',
      '11111111-1111-4111-8111-111111111111',
      '33333333-3333-4333-8333-333333333333',
      'expense', 'Страхование', 320000,
      '{"kind": "monthly", "dayOfMonth": 15}',
-     CURRENT_DATE + 5, NULL, FALSE, 'cash', 'insurance', FALSE),
+     CURRENT_DATE + 5, NULL, FALSE, 'insurance', FALSE),
     ('55555555-5555-4555-8555-555555555553',
      '11111111-1111-4111-8111-111111111111',
      '33333333-3333-4333-8333-333333333333',
      'expense', 'Электроэнергия', 120000,
      '{"kind": "monthly", "dayOfMonth": 5}',
-     CURRENT_DATE + 5, NULL, TRUE, 'transfer', 'electricity', FALSE),
+     CURRENT_DATE + 5, NULL, TRUE, 'electricity', FALSE),
 -- Страница платежа (#465): правило на активной бессрочной паузе
 -- («Возобновить», «Ближайший платеж» = «На паузе») и завершённое правило
 -- (endDate в прошлом: без паузы, «Оплатить» отключена).
@@ -161,13 +161,13 @@ VALUES
      '33333333-3333-4333-8333-333333333333',
      'expense', 'Домофон', 15000,
      '{"kind": "monthly", "dayOfMonth": 10}',
-     CURRENT_DATE - 60, NULL, FALSE, 'transfer', 'intercom', FALSE),
+     CURRENT_DATE - 60, NULL, FALSE, 'intercom', FALSE),
     ('55555555-5555-4555-8555-555555555555',
      '11111111-1111-4111-8111-111111111111',
      '33333333-3333-4333-8333-333333333333',
      'expense', 'Техосмотр', 90000,
      '{"kind": "yearly", "month": 2, "day": 29}',
-     CURRENT_DATE - 14, CURRENT_DATE - 14, FALSE, 'cash', 'parking', FALSE),
+     CURRENT_DATE - 14, CURRENT_DATE - 14, FALSE, 'parking', FALSE),
 -- Подэкраны страницы платежа (#466): длинная история оплат (55+ paid —
 -- скролл-догрузка истории; since в будущем, чтобы загрузочный тик ничего
 -- не материализовал поверх сидовых операций — тот же приём, что у аренды)
@@ -177,13 +177,13 @@ VALUES
      '33333333-3333-4333-8333-333333333333',
      'expense', 'Интернет', 100000,
      '{"kind": "monthly", "dayOfMonth": 15}',
-     CURRENT_DATE + 5, NULL, FALSE, 'transfer', 'internet', FALSE),
+     CURRENT_DATE + 5, NULL, FALSE, 'internet', FALSE),
     ('55555555-5555-4555-8555-555555555557',
      '11111111-1111-4111-8111-111111111111',
      '33333333-3333-4333-8333-333333333333',
      'expense', 'Парковка', 20000,
      '{"kind": "daily"}',
-     CURRENT_DATE, CURRENT_DATE + 120, FALSE, 'cash', 'parking', FALSE),
+     CURRENT_DATE, CURRENT_DATE + 120, FALSE, 'parking', FALSE),
 -- Полный список просроченных (#466): правило студии с 55 просрочками
 -- (скролл-догрузка). `since` = сегодня − 5: загрузочный тик не добавляет
 -- задним числом, просрочки — ровно сидовые строки ниже.
@@ -192,7 +192,7 @@ VALUES
      '46464646-4646-4646-8646-464646464646',
      'expense', 'Аренда студии', 3000000,
      '{"kind": "monthly", "dayOfMonth": 10}',
-     CURRENT_DATE - 5, NULL, FALSE, 'transfer', 'rent', FALSE),
+     CURRENT_DATE - 5, NULL, FALSE, 'rent', FALSE),
 -- Экран правки и удаление (#467): пара правил-однодневок на студии (в стороне
 -- от секций квартиры) с просрочками для обоих режимов чекбокса модалки:
 -- «Консьерж-сервис» удаляют без чекбокса (долг остаётся), «Телевидение» —
@@ -203,13 +203,13 @@ VALUES
      '46464646-4646-4646-8646-464646464646',
      'expense', 'Консьерж-сервис', 50000,
      '{"kind": "monthly", "dayOfMonth": 20}',
-     CURRENT_DATE + 5, NULL, FALSE, 'transfer', 'concierge', FALSE),
+     CURRENT_DATE + 5, NULL, FALSE, 'concierge', FALSE),
     ('55555555-5555-4555-8555-55555555555a',
      '11111111-1111-4111-8111-111111111111',
      '46464646-4646-4646-8646-464646464646',
      'expense', 'Телевидение', 70000,
      '{"kind": "monthly", "dayOfMonth": 25}',
-     CURRENT_DATE + 5, NULL, FALSE, 'transfer', 'tv', FALSE)
+     CURRENT_DATE + 5, NULL, FALSE, 'tv', FALSE)
 ON CONFLICT (id) DO UPDATE
 SET title = EXCLUDED.title,
     amount_kopecks = EXCLUDED.amount_kopecks,
@@ -217,7 +217,6 @@ SET title = EXCLUDED.title,
     since = EXCLUDED.since,
     end_date = EXCLUDED.end_date,
     auto_pay = EXCLUDED.auto_pay,
-    payment_form = EXCLUDED.payment_form,
     category_slug = EXCLUDED.category_slug,
     is_favorite = EXCLUDED.is_favorite;
 
@@ -234,20 +233,20 @@ SET from_date = EXCLUDED.from_date,
 -- сервер по «сегодня» в TZ собственника (ADR 0048), хранится статус planned.
 INSERT INTO operations (id, owner_id, property_id, payment_id, origin, date,
                         paid_date, status, type, title, amount_kopecks,
-                        payment_form, category_label, category_slug)
+                        category_label, category_slug)
 VALUES
     ('77777777-7777-4777-8777-777777777771',
      '11111111-1111-4111-8111-111111111111',
      '33333333-3333-4333-8333-333333333333',
      '55555555-5555-4555-8555-555555555551',
      'payment', CURRENT_DATE - 5, NULL, 'planned', 'expense',
-     'Арендная плата', 4500000, 'transfer', 'Арендная плата', 'rent'),
+     'Арендная плата', 4500000, 'Арендная плата', 'rent'),
     ('77777777-7777-4777-8777-777777777772',
      '11111111-1111-4111-8111-111111111111',
      '33333333-3333-4333-8333-333333333333',
      '55555555-5555-4555-8555-555555555552',
      'payment', CURRENT_DATE - 2, NULL, 'planned', 'expense',
-     'Страхование', 320000, 'cash', 'Страхование', 'insurance'),
+     'Страхование', 320000, 'Страхование', 'insurance'),
 -- Просрочки правил под удаление (#467): по паре на «Консьерж-сервис»
 -- (чекбокс не отмечен — долг остаётся) и одна на «Телевидении» (чекбокс
 -- отмечен — сносятся вместе с правилом). Даты старше сидовых просрочек
@@ -258,19 +257,19 @@ VALUES
      '46464646-4646-4646-8646-464646464646',
      '55555555-5555-4555-8555-555555555559',
      'payment', (CURRENT_DATE - (61 || ' month')::interval)::date, NULL, 'planned', 'expense',
-     'Консьерж-сервис', 50000, 'transfer', 'Консьерж', 'concierge'),
+     'Консьерж-сервис', 50000, 'Консьерж', 'concierge'),
     ('77777777-7777-4777-8777-777777777782',
      '11111111-1111-4111-8111-111111111111',
      '46464646-4646-4646-8646-464646464646',
      '55555555-5555-4555-8555-555555555559',
      'payment', (CURRENT_DATE - (62 || ' month')::interval)::date, NULL, 'planned', 'expense',
-     'Консьерж-сервис', 50000, 'transfer', 'Консьерж', 'concierge'),
+     'Консьерж-сервис', 50000, 'Консьерж', 'concierge'),
     ('77777777-7777-4777-8777-777777777783',
      '11111111-1111-4111-8111-111111111111',
      '46464646-4646-4646-8646-464646464646',
      '55555555-5555-4555-8555-55555555555a',
      'payment', (CURRENT_DATE - (63 || ' month')::interval)::date, NULL, 'planned', 'expense',
-     'Телевидение', 70000, 'transfer', 'Телевидение', 'tv'),
+     'Телевидение', 70000, 'Телевидение', 'tv'),
 -- Оплаченный факт «Телевидения» (#467): после удаления правила с чекбоксом
 -- оплаченная операция остаётся с пометкой «платёж удалён» (payment_id → NULL).
     ('77777777-7777-4777-8777-777777777784',
@@ -279,7 +278,7 @@ VALUES
      '55555555-5555-4555-8555-55555555555a',
      'payment', (CURRENT_DATE - (64 || ' month')::interval)::date,
      (CURRENT_DATE - (64 || ' month')::interval)::date, 'paid', 'expense',
-     'Телевидение', 70000, 'transfer', 'Телевидение', 'tv')
+     'Телевидение', 70000, 'Телевидение', 'tv')
 ON CONFLICT (id) DO UPDATE
 SET date = EXCLUDED.date,
     paid_date = EXCLUDED.paid_date,
@@ -291,20 +290,20 @@ SET date = EXCLUDED.date,
 -- сидовый приём, что у просрочки аренды: тик paid-строки не трогает.
 INSERT INTO operations (id, owner_id, property_id, payment_id, origin, date,
                         paid_date, status, type, title, amount_kopecks,
-                        payment_form, category_label, category_slug)
+                        category_label, category_slug)
 VALUES
     ('77777777-7777-4777-8777-000000000001',
      '11111111-1111-4111-8111-111111111111',
      '33333333-3333-4333-8333-333333333333',
      '55555555-5555-4555-8555-555555555556',
      'payment', CURRENT_DATE, CURRENT_DATE, 'paid', 'expense',
-     'Интернет', 100000, 'transfer', 'Интернет', 'internet'),
+     'Интернет', 100000, 'Интернет', 'internet'),
     ('77777777-7777-4777-8777-000000000002',
      '11111111-1111-4111-8111-111111111111',
      '33333333-3333-4333-8333-333333333333',
      '55555555-5555-4555-8555-555555555556',
      'payment', CURRENT_DATE - 1, CURRENT_DATE - 1, 'paid', 'expense',
-     'Интернет', 100000, 'transfer', 'Интернет', 'internet')
+     'Интернет', 100000, 'Интернет', 'internet')
 ON CONFLICT (id) DO UPDATE
 SET date = EXCLUDED.date,
     paid_date = EXCLUDED.paid_date,
@@ -312,7 +311,7 @@ SET date = EXCLUDED.date,
 
 INSERT INTO operations (id, owner_id, property_id, payment_id, origin, date,
                         paid_date, status, type, title, amount_kopecks,
-                        payment_form, category_label, category_slug)
+                        category_label, category_slug)
 SELECT
     ('77777777-7777-4777-8777-' || lpad((77777700 + g)::text, 12, '0'))::uuid,
     '11111111-1111-4111-8111-111111111111',
@@ -321,7 +320,7 @@ SELECT
     'payment',
     (CURRENT_DATE - (g || ' month')::interval)::date,
     (CURRENT_DATE - (g || ' month')::interval)::date,
-    'paid', 'expense', 'Интернет', 100000, 'transfer', 'Интернет', 'internet'
+    'paid', 'expense', 'Интернет', 100000, 'Интернет', 'internet'
 FROM generate_series(1, 53) AS g
 ON CONFLICT (id) DO NOTHING;
 
@@ -329,7 +328,7 @@ ON CONFLICT (id) DO NOTHING;
 -- студии» (даты — месяцы назад; две порции по 50 → скролл-догрузка).
 INSERT INTO operations (id, owner_id, property_id, payment_id, origin, date,
                         paid_date, status, type, title, amount_kopecks,
-                        payment_form, category_label, category_slug)
+                        category_label, category_slug)
 SELECT
     ('77777777-7777-4777-8777-' || lpad((77777800 + g)::text, 12, '0'))::uuid,
     '11111111-1111-4111-8111-111111111111',
@@ -338,7 +337,7 @@ SELECT
     'payment',
     (CURRENT_DATE - (g || ' month')::interval)::date,
     NULL,
-    'planned', 'expense', 'Аренда студии', 3000000, 'transfer', 'Аренда студии', 'rent'
+    'planned', 'expense', 'Аренда студии', 3000000, 'Аренда студии', 'rent'
 FROM generate_series(1, 55) AS g
 ON CONFLICT (id) DO NOTHING;
 

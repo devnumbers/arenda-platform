@@ -151,8 +151,7 @@ type OperationListItem struct {
 
 // CreateOperationCommand is the create payload of a manual operation (ticket
 // #569): a one-off income/expense fact. The date is not part of it — the
-// server sets it to the owner's today like the rule's since — and no payment
-// form exists behind a manual fact: the schema keeps payment_form NULL. The
+// server sets it to the owner's today like the rule's since. The
 // category travels as the default-catalog slug and freezes as the snapshot.
 type CreateOperationCommand struct {
 	Type          domain.PaymentType
@@ -267,7 +266,7 @@ func (s *OperationService) PayOperation(
 // CreateOperation implements the manual «+ операция» (POST
 // …/operations, ticket #569): the one-off fact is born paid with
 // date = paid_date = today in the owner's timezone (ADR 0048), origin
-// manual, no rule behind it — payment_id and payment_form stay NULL. The
+// manual, no rule behind it — payment_id stays NULL. The
 // category freezes as the snapshot right here: the label resolves from the
 // catalog (the validator guarantees the slug resolves), the slug travels.
 // Full Access and Owner may create; a viewer gets ErrForbidden, a stranger

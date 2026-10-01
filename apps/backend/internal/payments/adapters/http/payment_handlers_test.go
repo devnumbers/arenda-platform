@@ -163,13 +163,12 @@ func paymentRequest(t *testing.T, method string, userID uuid.UUID, body string) 
 	return req
 }
 
-// validCreateBody is a well-formed create payload: weekly rent, transfer.
+// validCreateBody is a well-formed create payload: weekly rent.
 const validCreateBody = `{
 	"type": "expense",
 	"title": "Арендная плата",
 	"amountKopecks": 5000000,
 	"recurrence": {"kind": "weekly", "weekdays": [1, 3]},
-	"paymentForm": "transfer",
 	"categorySlug": "rent",
 	"endDate": "2027-01-31",
 	"autoPay": false
@@ -262,7 +261,6 @@ func TestCreatePayment_RejectsInvalidBodies(t *testing.T) {
 			"title":         "Аренда",
 			"amountKopecks": 500000,
 			"recurrence":    map[string]any{"kind": "monthly", "dayOfMonth": 5},
-			"paymentForm":   "transfer",
 			"categorySlug":  "rent",
 		}
 		for i := 0; i+1 < len(pairs); i += 2 {
@@ -327,11 +325,10 @@ func TestCreatePayment_MapsCommandToService(t *testing.T) {
 		Type: domain.TypeExpense, Title: testTitleRent, AmountKopecks: 5000000,
 		Recurrence: mustWeekly(t, 1, 3),
 		Since:      since, EndDate: &endDate, AutoPay: false,
-		PaymentForm: domain.FormTransfer,
-		Category:    domain.CategoryRef{Slug: &slug},
-		Pauses:      []domain.PauseInterval{{From: since}, {From: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), To: &to}},
-		CreatedAt:   time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC),
-		UpdatedAt:   time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC),
+		Category:  domain.CategoryRef{Slug: &slug},
+		Pauses:    []domain.PauseInterval{{From: since}, {From: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), To: &to}},
+		CreatedAt: time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC),
+		UpdatedAt: time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC),
 	}
 	var gotCmd application.CreatePaymentCommand
 	h := NewPaymentHandlers(&fakePaymentManager{
@@ -355,8 +352,8 @@ func TestCreatePayment_MapsCommandToService(t *testing.T) {
 	if len(gotCmd.Recurrence.Weekdays()) != 2 || gotCmd.Recurrence.Weekdays()[0] != time.Monday {
 		t.Fatalf("command weekdays = %v, want [Monday Wednesday]", gotCmd.Recurrence.Weekdays())
 	}
-	if gotCmd.CategorySlug != testSlugRent || gotCmd.PaymentForm != domain.FormTransfer {
-		t.Fatalf("command category/form = %q/%q", gotCmd.CategorySlug, gotCmd.PaymentForm)
+	if gotCmd.CategorySlug != testSlugRent {
+		t.Fatalf("command category = %q", gotCmd.CategorySlug)
 	}
 	if gotCmd.EndDate == nil || gotCmd.EndDate.Format(time.DateOnly) != "2027-01-31" {
 		t.Fatalf("command endDate = %v, want 2027-01-31", gotCmd.EndDate)
@@ -382,11 +379,10 @@ func TestCreatePayment_MapsResponseContract(t *testing.T) {
 		Type: domain.TypeExpense, Title: testTitleRent, AmountKopecks: 5000000,
 		Recurrence: mustWeekly(t, 1, 3),
 		Since:      since, EndDate: &endDate, AutoPay: false,
-		PaymentForm: domain.FormTransfer,
-		Category:    domain.CategoryRef{Slug: &slug},
-		Pauses:      []domain.PauseInterval{{From: since}, {From: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), To: &to}},
-		CreatedAt:   time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC),
-		UpdatedAt:   time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC),
+		Category:  domain.CategoryRef{Slug: &slug},
+		Pauses:    []domain.PauseInterval{{From: since}, {From: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), To: &to}},
+		CreatedAt: time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC),
+		UpdatedAt: time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC),
 	}
 	h := NewPaymentHandlers(&fakePaymentManager{
 		create: func(context.Context, uuid.UUID, uuid.UUID, application.CreatePaymentCommand) (domain.Payment, error) {
@@ -409,7 +405,6 @@ func TestCreatePayment_MapsResponseContract(t *testing.T) {
 		Since         string         `json:"since"`
 		EndDate       *string        `json:"endDate"`
 		AutoPay       bool           `json:"autoPay"`
-		PaymentForm   string         `json:"paymentForm"`
 		Category      struct {
 			Source string  `json:"source"`
 			Slug   *string `json:"slug"`
@@ -565,6 +560,62 @@ func TestUpdatePayment_EndDateTriState(t *testing.T) {
 	}
 }
 
+func TestUpdatePayment_ToleratesLegacyPaymentFormField(t *testing.T) {
+	t.Parallel()
+	actor := uuid.Must(uuid.NewV7())
+	propertyID := uuid.Must(uuid.NewV7())
+	paymentID := uuid.Must(uuid.NewV7())
+
+	var gotCmd application.UpdatePaymentCommand
+	h := NewPaymentHandlers(&fakePaymentManager{
+		update: func(_ context.Context, _, _, _ uuid.UUID, cmd application.UpdatePaymentCommand) (domain.Payment, error) {
+			gotCmd = cmd
+			return validFixturePayment(), nil
+		},
+	}, nil)
+	w := httptest.NewRecorder()
+	h.UpdatePayment(w, paymentRequest(t, http.MethodPatch, actor,
+		`{"title": "Новое название", "paymentForm": "cash"}`), propertyID, paymentID)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	if gotCmd.Title == nil || *gotCmd.Title != "Новое название" {
+		t.Fatalf("command title = %v, want applied", gotCmd.Title)
+	}
+}
+
+// TestCreatePayment_ToleratesLegacyPaymentFormField pins the migration shim of
+// the removed «Форма оплаты» (карта #1005, тикет #1006): frontend builds
+// before #1008/#1009 still send the field, so the decoder reads and drops it —
+// every other unknown field stays rejected (see the cases above and below).
+func TestCreatePayment_ToleratesLegacyPaymentFormField(t *testing.T) {
+	t.Parallel()
+	actor := uuid.Must(uuid.NewV7())
+	propertyID := uuid.Must(uuid.NewV7())
+	paymentID := uuid.Must(uuid.NewV7())
+
+	var gotCmd application.CreatePaymentCommand
+	created := validFixturePayment()
+	created.ID = paymentID
+	h := NewPaymentHandlers(&fakePaymentManager{
+		create: func(_ context.Context, _, _ uuid.UUID, cmd application.CreatePaymentCommand) (domain.Payment, error) {
+			gotCmd = cmd
+			return created, nil
+		},
+	}, nil)
+	w := httptest.NewRecorder()
+	h.CreatePayment(w, paymentRequest(t, http.MethodPost, actor,
+		`{"type":"expense","title":"Аренда","amountKopecks":5000000,`+
+			`"recurrence":{"kind":"daily"},"categorySlug":"rent","paymentForm":"cash"}`),
+		propertyID)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body: %s", w.Code, w.Body.String())
+	}
+	if gotCmd.Title != "Аренда" || gotCmd.AmountKopecks != 5000000 || gotCmd.CategorySlug != "rent" {
+		t.Fatalf("command scalars = %+v", gotCmd)
+	}
+}
+
 func TestCreatePayment_MapsReminderOffset(t *testing.T) {
 	t.Parallel()
 	actor := uuid.Must(uuid.NewV7())
@@ -574,7 +625,7 @@ func TestCreatePayment_MapsReminderOffset(t *testing.T) {
 	// JSON stays assembled, not one long line.
 	reminderCreateBody := func(days string) string {
 		return `{"type":"expense","title":"Аренда","amountKopecks":5000000,` +
-			`"recurrence":{"kind":"daily"},"paymentForm":"transfer","categorySlug":"rent",` +
+			`"recurrence":{"kind":"daily"},"categorySlug":"rent",` +
 			`"reminderOffsetDays":` + days + `}`
 	}
 
@@ -823,7 +874,6 @@ func validFixturePayment() domain.Payment {
 		Title:         "t",
 		AmountKopecks: 100,
 		Recurrence:    domain.NewDailyRecurrence(),
-		PaymentForm:   domain.FormTransfer,
 	}
 }
 
