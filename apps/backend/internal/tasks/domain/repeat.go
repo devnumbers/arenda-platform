@@ -37,8 +37,13 @@ func OccurrencesBetween(rule TaskRule, start, end time.Time) []time.Time {
 		first := maxDate(anchor, start)
 		return dailyBetween(first, end)
 	case RepeatWeekly:
-		first := maxDate(anchor, start)
-		return weeklyBetween(first, end)
+		// The weekday phase lives at the anchor: a walk starting mid-week
+		// (the single-future walk passes start = today) must not drag the
+		// rule onto the start's weekday — shift the first date onto the
+		// anchor's weekday (#1014).
+		from := maxDate(anchor, start)
+		offset := (int(anchor.Weekday()) - int(from.Weekday()) + 7) % 7
+		return weeklyBetween(addDays(from, offset), end)
 	case RepeatMonthly:
 		return monthlyBetween(anchor, start, end)
 	case RepeatYearly:

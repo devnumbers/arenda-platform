@@ -93,6 +93,50 @@ func TestPlanTaskTick_CompletedAheadFutureIsSkipped(t *testing.T) {
 	}
 }
 
+func TestPlanTaskTick_WeeklyFutureKeepsAnchorWeekday(t *testing.T) {
+	t.Parallel()
+
+	// #1014: a weekly rule anchored on Thursdays (09-03) runs its single
+	// future walk on a Friday (today 09-11). The standing Thursday 09-17
+	// must survive and the phase must stay on Thursdays — the walk from a
+	// misaligned today must not delete the standing future in favor of a
+	// Friday (09-18).
+	rule := datedRule(RepeatWeekly, 2026, time.September, 3)
+	today := d(2026, time.September, 11)
+	existing := TaskExistence{Dated: map[time.Time]bool{
+		d(2026, time.September, 17): false, // The standing future (Thursday).
+	}}
+
+	plan := PlanTaskTick(rule, today, existing)
+
+	if plan.KeepFuture == nil || dateOnly(*plan.KeepFuture) != sep17 {
+		t.Fatalf("KeepFuture = %v, want the standing Thursday %s", plan.KeepFuture, sep17)
+	}
+	if plan.InsertFuture != nil {
+		t.Fatalf("InsertFuture = %v, want nil (the standing row occupies the future)", plan.InsertFuture)
+	}
+}
+
+func TestPlanTaskTick_WeeklyFutureRebuildsOnAnchorWeekday(t *testing.T) {
+	t.Parallel()
+
+	// #1014, the deletion leg: the standing Thursday 09-17 is gone (rule
+	// edit / clear) and today is a Friday — the rebuilt future must be the
+	// next anchor-phase occurrence, Thursday 09-17, not the Friday 09-18
+	// the today-phase walk would produce.
+	rule := datedRule(RepeatWeekly, 2026, time.September, 3)
+	today := d(2026, time.September, 11)
+
+	plan := PlanTaskTick(rule, today, TaskExistence{})
+
+	if plan.KeepFuture == nil || dateOnly(*plan.KeepFuture) != sep17 {
+		t.Fatalf("KeepFuture = %v, want Thursday %s", plan.KeepFuture, sep17)
+	}
+	if plan.InsertFuture == nil || dateOnly(*plan.InsertFuture) != sep17 {
+		t.Fatalf("InsertFuture = %v, want Thursday %s", plan.InsertFuture, sep17)
+	}
+}
+
 func TestPlanTaskTick_UndatedRuleMaterializesImmediately(t *testing.T) {
 	t.Parallel()
 
