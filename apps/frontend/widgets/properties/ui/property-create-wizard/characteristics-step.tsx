@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { JSX } from 'react';
 import type { PropertyAttributes, PropertyType } from '@/entities/property';
+import { propertyAutonamePhrase } from '@/features/properties';
 import { TextField } from '@/shared/ui/design';
 import { PropertyCatalogFields } from '../property-fields/property-catalog-fields';
 import { PropertyHousingTypeChips } from '../property-fields/property-housing-type-chips';
@@ -67,7 +68,7 @@ export function CharacteristicsStep({
       <TextField
         ref={nameInputRef}
         title="Название объекта"
-        placeholder="Моя квартира"
+        placeholder={propertyAutonamePhrase(type)}
         maxLength={NAME_MAX_LENGTH}
         value={name}
         onChange={(event) => onNameChange(event.currentTarget.value)}
