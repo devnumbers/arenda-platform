@@ -32,7 +32,6 @@ export function projectedOperation(
     type: payment.type,
     title: payment.title,
     amountKopecks: payment.amountKopecks,
-    paymentForm: payment.paymentForm,
     categoryLabel: payment.category.label,
     categorySlug: payment.category.slug,
   };

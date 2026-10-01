@@ -232,6 +232,14 @@ func TestCreatePayment_RejectsMalformedBodies(t *testing.T) {
 	}{
 		{"broken json", `{"type": "expense"`},
 		{"unknown field", `{"type": "expense", "since": "2026-01-01"}`},
+		// «Форма оплаты» снесена из контракта (карта #1005, тикеты #1006–#1009):
+		// миграционный шим декодера снят — поле строго отклоняется; тело
+		// валидно, чтобы причиной 400 было только неизвестное поле.
+		{
+			"removed paymentForm field",
+			`{"type":"expense","title":"Аренда","amountKopecks":5000000,` +
+				`"recurrence":{"kind":"daily"},"categorySlug":"rent","paymentForm":"cash"}`,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -560,59 +568,22 @@ func TestUpdatePayment_EndDateTriState(t *testing.T) {
 	}
 }
 
-func TestUpdatePayment_ToleratesLegacyPaymentFormField(t *testing.T) {
+// TestUpdatePayment_RejectsLegacyPaymentFormField pins the strict decode
+// after the migration shim of the removed «Форма оплаты» is gone
+// (карта #1005, тикеты #1006–#1009): the field no longer exists in the
+// contract, so an unknown-field body is rejected like any other.
+func TestUpdatePayment_RejectsLegacyPaymentFormField(t *testing.T) {
 	t.Parallel()
 	actor := uuid.Must(uuid.NewV7())
 	propertyID := uuid.Must(uuid.NewV7())
 	paymentID := uuid.Must(uuid.NewV7())
 
-	var gotCmd application.UpdatePaymentCommand
-	h := NewPaymentHandlers(&fakePaymentManager{
-		update: func(_ context.Context, _, _, _ uuid.UUID, cmd application.UpdatePaymentCommand) (domain.Payment, error) {
-			gotCmd = cmd
-			return validFixturePayment(), nil
-		},
-	}, nil)
+	h := NewPaymentHandlers(&fakePaymentManager{}, nil)
 	w := httptest.NewRecorder()
 	h.UpdatePayment(w, paymentRequest(t, http.MethodPatch, actor,
 		`{"title": "Новое название", "paymentForm": "cash"}`), propertyID, paymentID)
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
-	}
-	if gotCmd.Title == nil || *gotCmd.Title != "Новое название" {
-		t.Fatalf("command title = %v, want applied", gotCmd.Title)
-	}
-}
-
-// TestCreatePayment_ToleratesLegacyPaymentFormField pins the migration shim of
-// the removed «Форма оплаты» (карта #1005, тикет #1006): frontend builds
-// before #1008/#1009 still send the field, so the decoder reads and drops it —
-// every other unknown field stays rejected (see the cases above and below).
-func TestCreatePayment_ToleratesLegacyPaymentFormField(t *testing.T) {
-	t.Parallel()
-	actor := uuid.Must(uuid.NewV7())
-	propertyID := uuid.Must(uuid.NewV7())
-	paymentID := uuid.Must(uuid.NewV7())
-
-	var gotCmd application.CreatePaymentCommand
-	created := validFixturePayment()
-	created.ID = paymentID
-	h := NewPaymentHandlers(&fakePaymentManager{
-		create: func(_ context.Context, _, _ uuid.UUID, cmd application.CreatePaymentCommand) (domain.Payment, error) {
-			gotCmd = cmd
-			return created, nil
-		},
-	}, nil)
-	w := httptest.NewRecorder()
-	h.CreatePayment(w, paymentRequest(t, http.MethodPost, actor,
-		`{"type":"expense","title":"Аренда","amountKopecks":5000000,`+
-			`"recurrence":{"kind":"daily"},"categorySlug":"rent","paymentForm":"cash"}`),
-		propertyID)
-	if w.Code != http.StatusCreated {
-		t.Fatalf("status = %d, want 201; body: %s", w.Code, w.Body.String())
-	}
-	if gotCmd.Title != "Аренда" || gotCmd.AmountKopecks != 5000000 || gotCmd.CategorySlug != "rent" {
-		t.Fatalf("command scalars = %+v", gotCmd)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body: %s", w.Code, w.Body.String())
 	}
 }
 

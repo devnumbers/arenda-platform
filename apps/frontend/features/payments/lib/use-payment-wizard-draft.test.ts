@@ -45,13 +45,12 @@ describe('validatePaymentWizardDraft', () => {
     expect(validatePaymentWizardDraft({ type: 'weekly' })).toStrictEqual({});
   });
 
-  it('устаревшая форма оплаты из старого черновика отбрасывается, черновик живёт (#1008)', () => {
-    // Поле снесено из модели: валидное значение — просто мусор из хранилища.
+  it('незнакомые поля из хранилища отбрасываются, черновик живёт (#1008)', () => {
+    // Поля снесённых версий черновика — просто мусор из хранилища.
     expect(
-      validatePaymentWizardDraft({ paymentForm: 'transfer', title: 'x', amountKopecks: 500 }),
+      validatePaymentWizardDraft({ unknownField: 'transfer', title: 'x', amountKopecks: 500 }),
     ).toStrictEqual({ title: 'x', amountKopecks: 500 });
-    // Незнакомое значение поля тоже не роняет черновик — поля больше нет.
-    expect(validatePaymentWizardDraft({ paymentForm: 'card', title: 'x' })).toStrictEqual({
+    expect(validatePaymentWizardDraft({ unknownField: 'card', title: 'x' })).toStrictEqual({
       title: 'x',
     });
   });

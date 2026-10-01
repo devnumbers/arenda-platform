@@ -8,7 +8,6 @@ import {
   effectivePaymentType,
   periodicityReady,
   pickPeriodicityKind,
-  togglePaymentForm,
   togglePaymentType,
   toggleWeekday,
   wizardStepReady,
@@ -82,10 +81,6 @@ describe('дефолты и переключатели шага суммы', () 
   it('клик по чипу меняет значение на альтернативное', () => {
     expect(togglePaymentType('income')).toBe('expense');
     expect(togglePaymentType('expense')).toBe('income');
-    // Форма оплаты ушла из визарда создания (карта #1005), переключатель
-    // живёт только для чипа экрана правки — до его сноса в #1009.
-    expect(togglePaymentForm('transfer')).toBe('cash');
-    expect(togglePaymentForm('cash')).toBe('transfer');
   });
 });
 
@@ -229,10 +224,9 @@ describe('buildPaymentCreateCommand — сериализация чернови�
     expect(command?.autoPay).toBe(true);
   });
 
-  it('без явного типа команда берёт дефолт «доход»; формы оплаты в команде нет (#1008)', () => {
+  it('без явного типа команда берёт дефолт «доход»', () => {
     const command = buildPaymentCreateCommand(draft({ type: undefined }), {});
     expect(command?.type).toBe('income');
-    expect(command !== undefined && Object.hasOwn(command, 'paymentForm')).toBe(false);
   });
 
   it('пустое название замещается лейблом категории', () => {

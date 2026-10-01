@@ -10,7 +10,6 @@
 export type IsoDate = string;
 
 export type PaymentType = 'income' | 'expense';
-export type PaymentForm = 'transfer' | 'cash';
 
 /** За сколько дней предупреждать о вхождении («Напоминание о платеже»,
  * карта #822): контракт 1|3|7, не задан — напоминаний нет. Напоминание
@@ -63,7 +62,6 @@ export type Payment = {
   /** Напоминание «за N дней»; не задано — напоминаний нет (карта #822). */
   readonly reminderOffsetDays?: PaymentReminderOffset;
   readonly autoPay: boolean;
-  readonly paymentForm: PaymentForm;
   readonly category: PaymentCategoryView;
   readonly isFavorite: boolean;
   /** Завершённый платёж (CONTEXT.md): неоплаченных вхождений больше нет.
@@ -100,8 +98,6 @@ export type PaymentOperation = {
   readonly type: PaymentType;
   readonly title: string;
   readonly amountKopecks: number;
-  /** Снапшот формы правила; у ручных операций не задан. */
-  readonly paymentForm?: PaymentForm;
   /** Подпись категории, замороженная при материализации. */
   readonly categoryLabel: string;
   /** Слаг дефолтного каталога для иконки; может отсутствовать. */
@@ -113,8 +109,7 @@ export type PaymentOperation = {
 
 /**
  * Создание платежа: контракт camelCase, тело запроса совпадает с командой
- * один в один (сервер ставит `since`, клиент её не передаёт). Формы оплаты
- * в контракте нет — поле снесено (карта #1005, #1008).
+ * один в один (сервер ставит `since`, клиент её не передаёт).
  */
 export type PaymentCreateCommand = {
   readonly type: PaymentType;
@@ -140,7 +135,7 @@ export type PaymentUpdateCommand = Partial<Omit<PaymentCreateCommand, 'endDate'>
  * Создание ручной операции (#569): контракт camelCase, тело запроса
  * совпадает с командой один в один. Дату (сегодня в TZ собственника) и
  * статус paid ставит сервер — факт рождается оплаченным, клиент их не
- * передаёт; формы оплаты у ручного факта нет.
+ * передаёт.
  */
 export type OperationCreateCommand = {
   readonly type: PaymentType;

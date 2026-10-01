@@ -123,21 +123,6 @@ func (h *PaymentHandlers) handlePaymentError(w http.ResponseWriter, r *http.Requ
 	h.writeInternal(w, r, err)
 }
 
-// Migration shim of the removed «Форма оплаты» (карта #1005, тикет #1006):
-// frontend builds before #1008/#1009 still send the field, so the decoder
-// reads it and drops the value, while every other unknown field stays
-// rejected by the strict contract decode. Remove the shims together with the
-// frontend sends (tickets #1008/#1009).
-type paymentCreateWire struct {
-	openapi.PaymentCreateRequest
-	PaymentForm json.RawMessage `json:"paymentForm"`
-}
-
-type paymentUpdateWire struct {
-	openapi.PaymentUpdateRequest
-	PaymentForm json.RawMessage `json:"paymentForm"`
-}
-
 // CreatePayment implements POST /properties/{propertyId}/payments.
 func (h *PaymentHandlers) CreatePayment(w http.ResponseWriter, r *http.Request, propertyID openapi_types.UUID) {
 	actor, ok := httpsupport.RequireUser(w, r)
@@ -145,7 +130,7 @@ func (h *PaymentHandlers) CreatePayment(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	var wire paymentCreateWire
+	var wire openapi.PaymentCreateRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &wire); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode create payment request",
 			slog.String("error", httpsupport.SanitizeError(err)))
@@ -154,7 +139,7 @@ func (h *PaymentHandlers) CreatePayment(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	cmd, err := createCommand(wire.PaymentCreateRequest)
+	cmd, err := createCommand(wire)
 	if err != nil {
 		h.handlePaymentError(w, r, err)
 		return
@@ -408,11 +393,11 @@ func (h *PaymentHandlers) decodeUpdateBody(
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
-	var wire paymentUpdateWire
+	var wire openapi.PaymentUpdateRequest
 	if err := dec.Decode(&wire); err != nil {
 		return nil, nil, err
 	}
-	*body = wire.PaymentUpdateRequest
+	*body = wire
 	var shadow struct {
 		EndDate            json.RawMessage `json:"endDate"`
 		ReminderOffsetDays json.RawMessage `json:"reminderOffsetDays"`

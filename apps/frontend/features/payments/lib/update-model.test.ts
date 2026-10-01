@@ -16,7 +16,6 @@ function basePayment(overrides: Partial<Payment> = {}): Payment {
     amountKopecks: 320_000,
     recurrence: { kind: 'monthly', daysOfMonth: [15], lastDay: false },
     since: '2026-08-01',
-    paymentForm: 'cash',
     category: { source: 'default', slug: 'insurance', label: 'Страхование' },
     createdAt: '2026-08-01T10:00:00Z',
     updatedAt: '2026-08-01T10:00:00Z',
@@ -31,7 +30,6 @@ function baseForm(overrides: Partial<PaymentEditForm> = {}): PaymentEditForm {
     title: 'Страхование',
     amountKopecks: 320_000,
     categorySlug: undefined,
-    paymentForm: 'cash',
     recurrence: { kind: 'monthly', daysOfMonth: [15], lastDay: false },
     endDate: undefined,
     ...overrides,
@@ -48,16 +46,15 @@ describe('buildPaymentUpdateCommand', () => {
     expect(command).toEqual({ amountKopecks: 400_000 });
   });
 
-  it('изменённые тип и название идут одним PATCH; формы оплаты в команде нет (#1008)', () => {
+  it('изменённые тип и название идут одним PATCH', () => {
     const command = buildPaymentUpdateCommand(
       basePayment(),
-      baseForm({ type: 'income', paymentForm: 'transfer', title: '  Страхование квартиры  ' }),
+      baseForm({ type: 'income', title: '  Страхование квартиры  ' }),
     );
     expect(command).toEqual({
       type: 'income',
       title: 'Страхование квартиры',
     });
-    expect(command !== undefined && Object.hasOwn(command, 'paymentForm')).toBe(false);
   });
 
   it('изменённая регулярность сравнивается по содержимому', () => {

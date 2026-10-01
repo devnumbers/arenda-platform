@@ -26,7 +26,6 @@ export type {
   PaymentReminderOffset,
   PaymentSchedule,
   PaymentType,
-  PaymentForm,
   PaymentUpdateCommand,
   Recurrence,
 } from './model/types';

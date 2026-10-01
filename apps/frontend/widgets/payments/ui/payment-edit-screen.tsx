@@ -35,10 +35,8 @@ import {
   buildPaymentUpdateCommand,
   branchKind,
   editFormReady,
-  FORM_OF_PAYMENT_LABELS,
   periodicityReady,
   recurrencesEqual,
-  togglePaymentForm,
   togglePaymentType,
   TYPE_LABELS,
   useDeletePayment,
@@ -80,10 +78,9 @@ import { CategorySearchHint } from './payment-create-wizard/wizard-chrome';
  * Экран правки платежа (Figma 705:10034; ранее 1127:33146, #467): форма,
  * не визард — все поля на одной странице, значения предзаполнены правилом.
  * В хедере — только «Редактирование» (решение владельца 2026-08-31).
- * Тип («Доход или расход») и «Способ оплаты» — строки-поля, значение
- * меняется простым нажатием по строке, без пикеров. Лейбл «Способ оплаты» —
- * по макету (решение владельца 2026-08-31), хотя глоссарий (CONTEXT-MAP)
- * считает его термином биллинга и предписывает платежам «Форму оплаты».
+ * Тип («Доход или расход») — строка-поле, значение меняется простым
+ * нажатием по строке, без пикеров. «Формы оплаты» на экране нет —
+ * поле снесено из контракта и продукта (карта #1005, тикеты #1006–#1009).
  * Категория — отдельная страница на том же маршруте, как шаг 1 визарда
  * (Figma 781:12299, без карандаша: свои категории — следующий срез);
  * заголовок хедера — «Выбор категории», заголовок страницы без подписи
@@ -300,7 +297,6 @@ function formFromPayment(payment: Payment): PaymentEditForm {
     title: payment.title,
     amountKopecks: payment.amountKopecks,
     categorySlug: undefined,
-    paymentForm: payment.paymentForm,
     recurrence: payment.recurrence,
     endDate: payment.endDate,
   };
@@ -623,14 +619,6 @@ function PaymentEditForm({
         />
 
         <FieldButton
-          title="Способ оплаты"
-          ariaLabel={`Способ оплаты: ${FORM_OF_PAYMENT_LABELS[form.paymentForm]}, нажмите, чтобы сменить`}
-          value={FORM_OF_PAYMENT_LABELS[form.paymentForm]}
-          icon={<ChangeVertical className="h-6 w-6 text-content-secondary" aria-hidden />}
-          onClick={() => update('paymentForm', togglePaymentForm(form.paymentForm))}
-        />
-
-        <FieldButton
           title="Регулярность платежа"
           value={recurrenceLabel(form.recurrence)}
           icon={<Calendar className="h-6 w-6 text-content-secondary" aria-hidden />}
@@ -733,9 +721,9 @@ function PaymentEditForm({
 }
 
 /** Поле-кнопка (Figma «Input Field» с иконкой): бокс 56px со значением и
- * иконкой справа; тап открывает пикер в шите либо (тип, способ оплаты)
- * переключает значение на месте. У переключателей ariaLabel несёт текущее
- * значение — как у чипов шага суммы визарда. */
+ * иконкой справа; тап открывает пикер в шите либо (тип) переключает
+ * значение на месте. У переключателя ariaLabel несёт текущее значение —
+ * как у чипа шага суммы визарда. */
 function FieldButton({
   title,
   value,

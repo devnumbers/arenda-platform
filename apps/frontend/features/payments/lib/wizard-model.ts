@@ -1,7 +1,6 @@
 import type {
   IsoDate,
   PaymentCreateCommand,
-  PaymentForm,
   PaymentType,
   Recurrence,
 } from '@/entities/payment';
@@ -175,13 +174,6 @@ export function effectivePaymentType(type: PaymentType | undefined): PaymentType
 /** Клик по чипу-переключателю меняет значение на альтернативное. */
 export function togglePaymentType(type: PaymentType): PaymentType {
   return type === 'income' ? 'expense' : 'income';
-}
-
-/** Клик по чипу формы оплаты меняет её на альтернативную. Форма оплаты
- * ушла из визарда создания (#1008) — переключатель остался только чипу
- * экрана правки до его сноса в #1009. */
-export function togglePaymentForm(paymentForm: PaymentForm): PaymentForm {
-  return paymentForm === 'transfer' ? 'cash' : 'transfer';
 }
 
 /** Мультивыбор дней недели: сортированный набор без дубликатов. */

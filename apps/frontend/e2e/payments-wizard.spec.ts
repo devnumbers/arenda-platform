@@ -206,9 +206,6 @@ test.describe('визард создания платежа', () => {
     expect(created?.recurrence).toStrictEqual({ kind: 'monthly', daysOfMonth: [10, 15], lastDay: false });
     expect(created?.amountKopecks).toBe(250000);
     expect(created?.type).toBe('expense');
-    // «Форма оплаты» снесена из контракта и из команды создания (карта
-    // #1005, #1006/#1008): поля в ответе нет, клиент его не шлёт.
-    expect(created && 'paymentForm' in created).toBe(false);
     expect(created?.autoPay).toBe(false);
     expect(created?.since).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(created?.endDate ?? null).toBeNull();
@@ -441,19 +438,22 @@ test.describe('визард создания платежа', () => {
     await passTitleStep(page, title);
 
     await page.getByRole('button', { name: 'Каждый год' }).click();
-    // Чип открывает шит-пикер: колесо месяцев (все 12) и годы от текущего.
+    // Чип открывает шит-пикер: колесо месяцев и годы от текущего. В
+    // граничном году кольцо (#810) несёт только разрешённые месяцы от
+    // текущего — «Сентябрь»-хардкод падал с октября, месяц в тесте сезонно-
+    // независимый: «Декабрь» (последний разрешённый текущего года).
     await page.getByRole('dialog', { name: 'Выбрать дату' }).getByRole('button', { name: /\d{4}/ }).click();
     await expect(page.getByText('Отменить')).toBeVisible();
     await expect(page.getByText(String(new Date().getFullYear())).first()).toBeVisible();
 
     // Регресс «декабрь → январь даёт ноябрь»: выбранной остаётся прокрученная
     // строка, значение не уводит колесо к чужому ряду.
-    await page.getByRole('listbox', { name: 'Месяц' }).getByText('Сентябрь').first().click();
+    await page.getByRole('listbox', { name: 'Месяц' }).getByText('Декабрь').first().click();
     await expect(
       page
         .getByRole('listbox', { name: 'Месяц' })
         .getByRole('option', { selected: true }),
-    ).toHaveText('Сентябрь');
+    ).toHaveText('Декабрь');
 
     // Годы без верхней границы: упор в конец списка удлиняет его вперёд.
     // End ставит selected на текущий конец ленты; следующий End жмём только
@@ -469,13 +469,13 @@ test.describe('визард создания платежа', () => {
     await expect(yearWheel.getByText(String(year + 23)).first()).toBeVisible();
     await expect(page.getByText(String(year + 20)).first()).toBeVisible();
 
-    // Подтверждаем колёса: календарь прыгает на сентябрь выбранного года.
+    // Подтверждаем колёса: календарь прыгает на декабрь выбранного года.
     await page.getByRole('dialog', { name: 'Месяц и год' }).getByRole('button', { name: 'Выбрать' }).click();
     const jumpedYear = year + 13;
 
-    // Календарь переключился на сентябрь прыжка; выбираем 10-е — секция
+    // Календарь переключился на декабрь прыжка; выбираем 10-е — секция
     // именно этого месяца: в ленте остаются и прошлые месяцы с тем же днём.
-    await pickCalendarDay(page, new Date(jumpedYear, 8, 10));
+    await pickCalendarDay(page, new Date(jumpedYear, 11, 10));
     await confirmCalendar(page, 'Продолжить');
     await expect(page.getByRole('heading', { name: 'Настройте платеж' })).toBeVisible();
     await page.getByRole('button', { name: 'Далее' }).click();
@@ -487,7 +487,7 @@ test.describe('визард создания платежа', () => {
     const items = await fetchPayments(page);
     const created = items.find((payment) => payment.title === title);
     expect(created?.recurrence.kind).toBe('yearly');
-    expect(created?.recurrence.month).toBe(9);
+    expect(created?.recurrence.month).toBe(12);
     expect(created?.recurrence.day).toBe(10);
   });
 

@@ -221,8 +221,8 @@ export function CategoryRowsSkeleton({ rows = 8 }: { readonly rows?: number }): 
 /**
  * Скелетон формы правки платежа (#607, паритет — §7 DESIGN.md): каркас
  * PaymentEditForm — «Сумма», «Название платежа» (с нижней строкой
- * счётчика 13/15, как у TextField с maxLength), пять полей-кнопок
- * (категория, тип, способ, регулярность, окончание) и danger-кнопка
+ * счётчика 13/15, как у TextField с maxLength), четыре поля-кнопки
+ * (категория, тип, регулярность, окончание) и danger-кнопка
  * удаления. Роль в загрузке неизвестна — строка удаления рисуется
  * всегда: владелец (сценарий по умолчанию) получает точный паритет, а
  * смотрящему форму всё равно замещает карточка «Правка недоступна».
@@ -238,7 +238,6 @@ export function PaymentEditFormSkeleton(): JSX.Element {
       </span>
       <SkeletonFormField labelWidth="w-24" />
       <SkeletonFormField labelWidth="w-32" />
-      <SkeletonFormField labelWidth="w-28" />
       <SkeletonFormField labelWidth="w-44" />
       <SkeletonFormField labelWidth="w-36" />
       <Skeleton className="h-14 w-full rounded-button" />
