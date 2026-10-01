@@ -42,7 +42,11 @@ export function Hero() {
           />
         </picture>
         <Reveal>
-          <div className="relative flex max-w-[855px] flex-col items-center gap-8 text-center desk:items-start desk:text-left">
+          {/* mx-auto центрирует обёртку на мобиле/планшете: при ширине панели
+              больше 855px без него обёртка прилипает влево (нашлось на
+              901–1199 планшетного яруса); на десктопе контент по макету
+              прижат влево — desk:mx-0. */}
+          <div className="relative mx-auto flex max-w-[855px] flex-col items-center gap-8 text-center desk:mx-0 desk:items-start desk:text-left">
             <div className="flex flex-col gap-4 [text-shadow:0_8px_24px_rgba(0,0,0,0.12)] desk:gap-6 desk:[text-shadow:0_8px_32px_rgba(0,0,0,0.24)]">
               <h1 className="text-balance text-[28px] font-semibold leading-8 text-white tab:text-[36px] tab:font-medium tab:leading-10 desk:text-h1 desk:font-semibold desk:leading-[76px]">
                 Сервис управления арендой недвижимости
