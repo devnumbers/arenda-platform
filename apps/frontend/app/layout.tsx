@@ -56,6 +56,12 @@ export const viewport: Viewport = {
     // below, which makes iOS pick dark status-bar text on the light background.
     themeColor: '#ffffff',
     viewportFit: 'cover',
+    // Светлая схема сайта: мета в SSR-разметке парсится до первого кадра и
+    // действует, даже если CSS ещё не загрузился (color-scheme — свойство
+    // документа, а не стилей); далее дублируется color-scheme: light в
+    // globals.css (:root). Без неё на тёмных системах Chromium/WebKit
+    // рисуют тёмные UA-скроллбар и form-контролы.
+    colorScheme: 'light',
 };
 
 export default function RootLayout({

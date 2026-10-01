@@ -92,7 +92,7 @@ async function expectLockedWithoutShift(page: Page, xBefore: number): Promise<vo
   expect(Math.abs(xDuring - xBefore), 'контент не сдвинулся').toBeLessThan(0.5);
 }
 
-test.describe('страница не сдвигается при Radix-оверлеях (#925)', () => {
+test.describe('гард корневого скроллбара: ноль сдвига, светлый с белым треком (#865/#925)', () => {
   // Низкий десктопный вьюпорт — страница гарантированно скроллится,
   // как на реальном Windows-ноутбуке.
   test.use({ viewport: { width: 1280, height: 620 } });
@@ -105,6 +105,27 @@ test.describe('страница не сдвигается при Radix-овер�
 
     // Пейринг с #865 на месте: гюттер зарезервирован production-CSS.
     expect((await lockState(page)).gutter).toBe('stable');
+  });
+
+  // Пейринг с белым треком корневого скроллбара: сайт светло-единственный,
+  // оба слоя заявлены — мета color-scheme в SSR-head (парсится до первого
+  // кадра, действует до загрузки CSS) и production-CSS scrollbar-color
+  // (белый трек + серый ползунок). Слои независимы, закрепляются оба.
+  test('корневой скроллбар заявлен светлым с белым треком', async ({ page }) => {
+    const root = await page.evaluate(() => {
+      const styles = getComputedStyle(document.documentElement);
+      const meta = document.querySelector('meta[name="color-scheme"]');
+      return {
+        colorScheme: styles.colorScheme,
+        scrollbarColor: styles.scrollbarColor,
+        metaContent: meta?.getAttribute('content') ?? null,
+      };
+    });
+
+    expect(root.metaContent, 'мета color-scheme в SSR-head').toBe('light');
+    expect(root.colorScheme, 'действующая схема — светлая').toBe('light');
+    // #999999 (ползунок) + #ffffff (трек) из globals.css.
+    expect(root.scrollbarColor).toBe('rgb(153, 153, 153) rgb(255, 255, 255)');
   });
 
   test('Radix Dialog («Поддержка») не сдвигает контент', async ({ page }) => {
