@@ -26,18 +26,21 @@ import {
   TopNavTitle,
 } from '@/shared/ui/design';
 import { PaymentsStateCard } from './payments-sections';
-import { OperationsPeriodChipDisplay } from './operations-filter-chips';
+import { OperationsPeriodChip } from './operations-filter-chips';
+import { OperationsGlobalPeriodPickerDialog } from './operations-period-picker';
 import { OperationsCategoriesSkeleton } from './operations-skeletons';
 import { globalCategoriesSummaryScope } from '../lib/operations-global-categories-model';
 
 /**
  * Страница «Выбрать категорию» глобальной ленты (#544) — копия объектной
- * страницы (#477, Figma 1506-72116) по всем видимым объектам: чипы контекста
- * (период диапазоном + «Все категории»), строки «иконка + название + сумма
- * периода + чекбокс» из разбивки глобальной сводки (#540) — только категории
- * с операциями в скоупе. Дефолт периода — весь период (#672, как на лентах
- * #670/#671): без явного диапазона суммы за всё время, чип нейтральный.
- * Строгий черновик: тапы меняют подсветку, применяются
+ * страницы (#477, Figma 1506-72116) по всем видимым объектам: чип периода —
+ * кнопка канонного пикера (решение владельца 01.10: период меняется на
+ * месте, применение возвращает к выбору категории; декоративный чип
+ * «Все категории» снесён — мёртвый элемент), строки «иконка + название +
+ * сумма периода + чекбокс» из разбивки глобальной сводки (#540) — только
+ * категории с операциями в скоупе. Дефолт периода — весь период (#672, как
+ * на лентах #670/#671): без явного диапазона суммы за всё время, чип
+ * нейтральный. Строгий черновик: тапы меняют подсветку, применяются
  * «Выбрать» (возврат на список, router.replace), «назад» отбрасывает; период
  * и объекты (#542) переживают применение — categories мержится в return через
  * buildReturnUrl + globalOperationsFiltersParams (единый wire-формат с лентой).
@@ -59,6 +62,10 @@ export function OperationsGlobalCategoriesScreen(): JSX.Element {
   // Черновик живёт от монтирования до монтирования: страница монтируется
   // заново на каждый вход, useState инициализируется применённым выбором.
   const [draft, setDraft] = useState<ReadonlyArray<string>>(filters.categories);
+  // Пикер периода — рендер только в открытом состоянии (как на ленте #541):
+  // подтверждение пишет from/to в URL этой же страницы с заменой записи
+  // истории, сводка пересчитывается, черновик категорий не трогается.
+  const [periodOpen, setPeriodOpen] = useState(false);
 
   // Куда возвращаться: список зоны операций, открывший страницу, иначе —
   // главный список.
@@ -98,15 +105,10 @@ export function OperationsGlobalCategoriesScreen(): JSX.Element {
       <PageContent>
         <div className="flex flex-col gap-6 pt-4">
           <div className="flex flex-wrap gap-1.5 px-6">
-            {/* Чип периода — дисплейный (период наследуется от ленты
-             * через return-параметры), серый «Период» без явного диапазона. */}
-            <OperationsPeriodChipDisplay period={period} />
-            <span
-              aria-hidden
-              className="inline-flex h-11 items-center rounded-pill bg-surface-muted px-5 text-sm font-medium text-content"
-            >
-              Все категории
-            </span>
+            {/* Чип периода — кнопка канонного пикера (решение владельца
+             * 01.10): период меняется на месте, применение возвращает к
+             * выбору категории. Дефолт «весь период» — канон #670. */}
+            <OperationsPeriodChip period={period} onOpen={() => setPeriodOpen(true)} />
           </div>
 
           {summaryQuery.isPending ? (
@@ -173,6 +175,11 @@ export function OperationsGlobalCategoriesScreen(): JSX.Element {
           </Button>
         </StickyBottomBar>
       ) : null}
+
+      {/* Пикер периода — канон ленты #541: пишёт в URL этой страницы. */}
+      {periodOpen && (
+        <OperationsGlobalPeriodPickerDialog onClose={() => setPeriodOpen(false)} />
+      )}
     </>
   );
 }

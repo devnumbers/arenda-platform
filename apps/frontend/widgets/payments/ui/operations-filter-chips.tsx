@@ -89,26 +89,35 @@ export function OperationsFilterChips({
 }
 
 /**
- * Дисплейный чип периода (не кликает): рядом с интерактивными чипами на
- * страницах выбора категорий (объектной #477 и глобальной #544), где
- * период наследуется от ленты через return-параметры и меняется нельзя, и
- * в скелетонах (#474/#544). С применённым периодом — синий с диапазоном,
- * в дефолте «весь период» — серый «Период» (канон #670).
+ * Чип периода: с `onOpen` — кнопка открытия канонного пикера (страницы
+ * выбора категорий — глобальная #544 и объектная #477; решение владельца
+ * 01.10: период меняется на месте, применение возвращает к выбору
+ * категории), без — дисплейный span (скелетоны #474/#544). С применённым
+ * периодом — синий с диапазоном, в дефолте «весь период» — серый
+ * «Период» (канон #670).
  */
-export function OperationsPeriodChipDisplay({
+export function OperationsPeriodChip({
   period,
+  onOpen,
 }: {
   readonly period: OperationsPeriod | null;
+  readonly onOpen?: () => void;
 }): JSX.Element {
+  const className = clsx(
+    "inline-flex h-11 items-center rounded-pill px-5 text-sm font-medium cursor-pointer",
+    period !== null ? "bg-primary text-white" : "bg-surface-muted text-content",
+  );
+  const label = operationsPeriodChipLabel(period);
+  if (onOpen === undefined) {
+    return (
+      <span aria-hidden className={className}>
+        {label}
+      </span>
+    );
+  }
   return (
-    <span
-      aria-hidden
-      className={clsx(
-        "inline-flex h-11 items-center rounded-pill px-5 text-sm font-medium",
-        period !== null ? "bg-primary text-white" : "bg-surface-muted text-content",
-      )}
-    >
-      {operationsPeriodChipLabel(period)}
-    </span>
+    <button type="button" onClick={onOpen} className={className}>
+      {label}
+    </button>
   );
 }
