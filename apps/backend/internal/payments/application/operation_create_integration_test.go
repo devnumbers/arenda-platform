@@ -90,9 +90,6 @@ func assertBornPaidResponse(t *testing.T, item paymentsapp.OperationListItem) {
 	if op.PaymentID != nil {
 		t.Errorf("payment_id = %s, want nil — no rule behind a manual fact", op.PaymentID)
 	}
-	if op.PaymentForm != nil {
-		t.Errorf("payment_form = %s, want nil — a manual fact carries no form snapshot", *op.PaymentForm)
-	}
 	if op.Title != "Ремонт крана" || op.AmountKopecks != 150000 || op.Type != domain.TypeExpense {
 		t.Errorf("payload drifted: %+v", op)
 	}
@@ -105,19 +102,19 @@ func assertBornPaidResponse(t *testing.T, item paymentsapp.OperationListItem) {
 }
 
 // assertStoredManualRow loads the stored row and checks the shape the reads
-// see: NULL payment link and form, the manual paid origin and the label.
+// see: NULL payment link, the manual paid origin and the label.
 func assertStoredManualRow(t *testing.T, h *paymentsHarness, opID uuid.UUID) {
 	t.Helper()
-	var paymentID, paymentForm *string
+	var paymentID *string
 	var origin, status, label string
 	if err := h.pool.QueryRow(h.ctx(),
-		`SELECT payment_id::text, payment_form::text, origin, status, category_label
+		`SELECT payment_id::text, origin, status, category_label
 		 FROM operations WHERE id = $1`, opID,
-	).Scan(&paymentID, &paymentForm, &origin, &status, &label); err != nil {
+	).Scan(&paymentID, &origin, &status, &label); err != nil {
 		t.Fatalf("load stored row: %v", err)
 	}
-	if paymentID != nil || paymentForm != nil {
-		t.Errorf("stored payment_id/payment_form = %v/%v, want NULL/NULL", paymentID, paymentForm)
+	if paymentID != nil {
+		t.Errorf("stored payment_id = %v, want NULL", paymentID)
 	}
 	if origin != "manual" || status != "paid" || label != testIntegrationLabelUtilities {
 		t.Errorf("stored origin/status/label = %s/%s/%q, want manual/paid/%s", origin, status, label, testIntegrationLabelUtilities)

@@ -54,9 +54,9 @@ func (h *paymentsHarness) seedOperationRow(
 	}
 	if _, err := h.pool.Exec(h.ctx(),
 		`INSERT INTO operations (id, owner_id, property_id, payment_id, origin, date, paid_date,
-		                       status, type, title, amount_kopecks, payment_form, category_label, category_slug)
+		                       status, type, title, amount_kopecks, category_label, category_slug)
 		 VALUES ($1, $2, $3, $4, 'payment', $5, $6::date,
-		         $7, $8, $9, $10, 'transfer', $11, $12)`,
+		         $7, $8, $9, $10, $11, $12)`,
 		id, h.owner, h.propID, pay, date, paid, status, typ, title, amountKopecks, label, slugArg,
 	); err != nil {
 		h.t.Fatalf("seed operation row %s (%s): %v", date, status, err)

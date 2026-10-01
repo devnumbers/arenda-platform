@@ -54,9 +54,9 @@ func (q *Queries) GetOwnerTimezone(ctx context.Context, id pgtype.UUID) (string,
 const insertMaterializedOperation = `-- name: InsertMaterializedOperation :exec
 INSERT INTO operations (
     id, owner_id, property_id, payment_id, origin, date, paid_date, status,
-    type, title, amount_kopecks, payment_form, category_label, category_slug
+    type, title, amount_kopecks, category_label, category_slug
 )
-VALUES ($1, $2, $3, $4, 'payment', $5, NULL, 'planned', $6, $7, $8, $9, $10, $11)
+VALUES ($1, $2, $3, $4, 'payment', $5, NULL, 'planned', $6, $7, $8, $9, $10)
 ON CONFLICT (payment_id, date) WHERE payment_id IS NOT NULL DO NOTHING
 `
 
@@ -69,7 +69,6 @@ type InsertMaterializedOperationParams struct {
 	Type          string      `json:"type"`
 	Title         string      `json:"title"`
 	AmountKopecks int64       `json:"amount_kopecks"`
-	PaymentForm   pgtype.Text `json:"payment_form"`
 	CategoryLabel string      `json:"category_label"`
 	CategorySlug  pgtype.Text `json:"category_slug"`
 }
@@ -87,7 +86,6 @@ func (q *Queries) InsertMaterializedOperation(ctx context.Context, arg InsertMat
 		arg.Type,
 		arg.Title,
 		arg.AmountKopecks,
-		arg.PaymentForm,
 		arg.CategoryLabel,
 		arg.CategorySlug,
 	)
@@ -180,7 +178,6 @@ SELECT pay.id,
        pay.since,
        pay.end_date,
        pay.auto_pay,
-       pay.payment_form,
        pay.category_slug,
        pay.user_category_id,
        pc.name AS user_category_name
@@ -202,7 +199,6 @@ type ListTickPaymentsByOwnerRow struct {
 	Since            pgtype.Date `json:"since"`
 	EndDate          pgtype.Date `json:"end_date"`
 	AutoPay          bool        `json:"auto_pay"`
-	PaymentForm      string      `json:"payment_form"`
 	CategorySlug     pgtype.Text `json:"category_slug"`
 	UserCategoryID   pgtype.UUID `json:"user_category_id"`
 	UserCategoryName pgtype.Text `json:"user_category_name"`
@@ -231,7 +227,6 @@ func (q *Queries) ListTickPaymentsByOwner(ctx context.Context, ownerID pgtype.UU
 			&i.Since,
 			&i.EndDate,
 			&i.AutoPay,
-			&i.PaymentForm,
 			&i.CategorySlug,
 			&i.UserCategoryID,
 			&i.UserCategoryName,

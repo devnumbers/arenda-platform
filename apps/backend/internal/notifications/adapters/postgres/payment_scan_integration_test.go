@@ -18,8 +18,8 @@ func insertScanPayment(t *testing.T, pool *pgxpool.Pool, ownerID, propertyID uui
 	t.Helper()
 	id := uuid.Must(uuid.NewV7())
 	_, err := pool.Exec(context.Background(), `
-		INSERT INTO payments (id, owner_id, property_id, type, title, amount_kopecks, recurrence, since, auto_pay, payment_form, category_slug)
-		VALUES ($1, $2, $3, 'expense', 'Обслуживание', 250000, '{"kind": "monthly"}', '2026-08-01', $4, 'transfer', 'maintenance')`,
+		INSERT INTO payments (id, owner_id, property_id, type, title, amount_kopecks, recurrence, since, auto_pay, category_slug)
+		VALUES ($1, $2, $3, 'expense', 'Обслуживание', 250000, '{"kind": "monthly"}', '2026-08-01', $4, 'maintenance')`,
 		id, ownerID, propertyID, autoPay)
 	require.NoError(t, err)
 	return id
@@ -35,9 +35,9 @@ func insertScanReminderPayment(
 	id := uuid.Must(uuid.NewV7())
 	_, err := pool.Exec(context.Background(), `
 		INSERT INTO payments (id, owner_id, property_id, type, title, amount_kopecks, recurrence,
-			since, auto_pay, reminder_offset_days, payment_form, category_slug)
+			since, auto_pay, reminder_offset_days, category_slug)
 		VALUES ($1, $2, $3, 'expense', 'Обслуживание', 250000, '{"kind": "monthly"}',
-			'2026-08-01', $4, $5, 'transfer', 'maintenance')`,
+			'2026-08-01', $4, $5, 'maintenance')`,
 		id, ownerID, propertyID, autoPay, reminderOffsetDays)
 	require.NoError(t, err)
 	return id

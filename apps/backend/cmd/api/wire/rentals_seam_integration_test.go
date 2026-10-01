@@ -162,14 +162,13 @@ func TestSeam_CreateBuildsTheManagedPaymentAndMaterializes(t *testing.T) {
 	view := h.createRentalWithReminderOffset(&offset)
 
 	// The managed payment is the ordinary payments rule: income, «Арендная
-	// плата», transfer, the rent category, monthly on the payment day,
+	// плата», the rent category, monthly on the payment day,
 	// since = the rental start.
 	payment, err := h.paySvc.GetPayment(context.Background(), h.owner, h.propID, view.Rental.PaymentID)
 	require.NoError(t, err)
 	require.Equal(t, paymentsdomain.TypeIncome, payment.Type)
 	assert.Equal(t, "Арендная плата", payment.Title)
 	assert.Equal(t, int64(5_000_000), payment.AmountKopecks)
-	assert.Equal(t, paymentsdomain.FormTransfer, payment.PaymentForm)
 	require.NotNil(t, payment.Category.Slug)
 	assert.Equal(t, "rent", *payment.Category.Slug)
 	assert.Equal(t, paymentsdomain.RecurrenceMonthly, payment.Recurrence.Kind())
@@ -397,9 +396,9 @@ func TestSeam_SummaryReadsThePaidOperations(t *testing.T) {
 		_, err = h.pool.Exec(context.Background(),
 			`INSERT INTO operations (id, owner_id, property_id, payment_id, origin, date,
 			                         paid_date, status, type, title, amount_kopecks,
-			                         payment_form, category_label, category_slug)
+			                         category_label, category_slug)
 			 VALUES ($1, $2, $3, $4, 'payment', $5, $5, 'paid', 'income', 'Арендная плата',
-			         5000000, 'transfer', 'Арендная плата', 'rent')`,
+			         5000000, 'Арендная плата', 'rent')`,
 			opID, h.owner, h.propID, view.Rental.PaymentID, mustSeamDate(day))
 		require.NoError(t, err)
 	}

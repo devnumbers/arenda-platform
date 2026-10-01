@@ -30,7 +30,6 @@ SELECT pay.id,
        pay.since,
        pay.end_date,
        pay.auto_pay,
-       pay.payment_form,
        pay.category_slug,
        pay.user_category_id,
        pc.name AS user_category_name
@@ -61,9 +60,9 @@ WHERE payment_id = ANY($1::uuid[]);
 -- occurrence separately, strictly on its day (ADR 0049 §2).
 INSERT INTO operations (
     id, owner_id, property_id, payment_id, origin, date, paid_date, status,
-    type, title, amount_kopecks, payment_form, category_label, category_slug
+    type, title, amount_kopecks, category_label, category_slug
 )
-VALUES ($1, $2, $3, $4, 'payment', $5, NULL, 'planned', $6, $7, $8, $9, $10, $11)
+VALUES ($1, $2, $3, $4, 'payment', $5, NULL, 'planned', $6, $7, $8, $9, $10)
 ON CONFLICT (payment_id, date) WHERE payment_id IS NOT NULL DO NOTHING;
 
 -- name: PayOperationDueToday :execrows

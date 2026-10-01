@@ -17,7 +17,6 @@ const paid = (id: string, date: string): PaymentOperation => ({
   type: 'expense',
   title: 'Аренда',
   amountKopecks: 4500000,
-  paymentForm: 'transfer',
   categoryLabel: 'Арендная плата',
   categorySlug: 'rent',
 });

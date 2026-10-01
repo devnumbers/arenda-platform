@@ -58,8 +58,8 @@ func (h *paymentsHarness) seedGlobalOperation(
 	}
 	if _, err := h.pool.Exec(h.ctx(),
 		`INSERT INTO operations (id, owner_id, property_id, origin, date, paid_date,
-		                       status, type, title, amount_kopecks, payment_form, category_label, category_slug)
-		 VALUES ($1, $2, $3, 'payment', $4, $5::date, $6, $7, $8, $9, 'transfer', $10, $11)`,
+		                       status, type, title, amount_kopecks, category_label, category_slug)
+		 VALUES ($1, $2, $3, 'payment', $4, $5::date, $6, $7, $8, $9, $10, $11)`,
 		id, ownerID, propertyID, date, paid, status, typ, title, amountKopecks, label, slug,
 	); err != nil {
 		h.t.Fatalf("seed operation %s (%s): %v", title, date, err)

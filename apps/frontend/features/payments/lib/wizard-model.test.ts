@@ -5,11 +5,9 @@ import {
   WIZARD_TOTAL_STEPS,
   branchKind,
   buildPaymentCreateCommand,
-  effectivePaymentForm,
   effectivePaymentType,
   periodicityReady,
   pickPeriodicityKind,
-  togglePaymentForm,
   togglePaymentType,
   toggleWeekday,
   wizardStepReady,
@@ -22,7 +20,6 @@ const draft = (over: Partial<PaymentWizardDraft>): PaymentWizardDraft => ({
   recurrence: { kind: 'monthly', daysOfMonth: [1], lastDay: false },
   endDate: undefined,
   amountKopecks: 250000,
-  paymentForm: 'transfer',
   type: 'expense',
   ...over,
 });
@@ -57,7 +54,6 @@ describe('wizardStepReady — валидация шагов не пускает 
     [4, draft({ endDate: undefined }), true], // окончание необязательно
     [5, draft({ amountKopecks: 250000 }), true],
     [5, draft({ amountKopecks: 0 }), false],
-    [5, draft({ paymentForm: undefined }), true], // у формы дефолт «перевод»
     [5, draft({ type: undefined }), true], // у типа дефолт «доход»
     [5, draft({ amountKopecks: undefined }), false],
   ] as const)('шаг %s → %s', (step, value, expected) => {
@@ -73,22 +69,18 @@ describe('wizardStepReady — валидация шагов не пускает 
   });
 });
 
-describe('дефолты и переключатели шага суммы (Figma 834:19662)', () => {
-  it('до явного выбора показываются «доход» и «перевод»', () => {
+describe('дефолты и переключатели шага суммы', () => {
+  it('до явного выбора показывается «доход»', () => {
     expect(effectivePaymentType(undefined)).toBe('income');
-    expect(effectivePaymentForm(undefined)).toBe('transfer');
   });
 
   it('явный выбор сильнее дефолта', () => {
     expect(effectivePaymentType('expense')).toBe('expense');
-    expect(effectivePaymentForm('cash')).toBe('cash');
   });
 
   it('клик по чипу меняет значение на альтернативное', () => {
     expect(togglePaymentType('income')).toBe('expense');
     expect(togglePaymentType('expense')).toBe('income');
-    expect(togglePaymentForm('transfer')).toBe('cash');
-    expect(togglePaymentForm('cash')).toBe('transfer');
   });
 });
 
@@ -222,7 +214,6 @@ describe('buildPaymentCreateCommand — сериализация чернови�
       title: 'Арендная плата',
       amountKopecks: 250000,
       recurrence: { kind: 'monthly', daysOfMonth: [1], lastDay: false },
-      paymentForm: 'transfer',
       categorySlug: 'rent',
       autoPay: false,
     });
@@ -233,13 +224,9 @@ describe('buildPaymentCreateCommand — сериализация чернови�
     expect(command?.autoPay).toBe(true);
   });
 
-  it('без явных признаков шага суммы команда берёт дефолты «доход/перевод»', () => {
-    const command = buildPaymentCreateCommand(
-      draft({ type: undefined, paymentForm: undefined }),
-      {},
-    );
+  it('без явного типа команда берёт дефолт «доход»', () => {
+    const command = buildPaymentCreateCommand(draft({ type: undefined }), {});
     expect(command?.type).toBe('income');
-    expect(command?.paymentForm).toBe('transfer');
   });
 
   it('пустое название замещается лейблом категории', () => {

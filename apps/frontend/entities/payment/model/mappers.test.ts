@@ -15,7 +15,6 @@ const paymentDto: PaymentDto = {
   since: '2026-01-31',
   endDate: null,
   autoPay: false,
-  paymentForm: 'transfer',
   category: { source: 'default', slug: 'rent', label: 'Арендная плата' },
   isFavorite: false,
   isCompleted: false,
@@ -100,7 +99,6 @@ const operationDto: OperationDto = {
   type: 'expense',
   title: 'ЖКУ',
   amountKopecks: 320_000,
-  paymentForm: null,
   categoryLabel: 'Коммунальные услуги',
   categorySlug: null,
 };
@@ -112,7 +110,6 @@ describe('mapPaymentOperation — DTO → entity', () => {
     expect(operation.status).toBe('overdue');
     expect(operation.paymentId).toBeNull();
     expect(operation.paidDate).toBeUndefined();
-    expect(operation.paymentForm).toBeUndefined();
     expect(operation.categorySlug).toBeUndefined();
     expect(operation.amountKopecks).toBe(320_000);
   });
@@ -123,12 +120,10 @@ describe('mapPaymentOperation — DTO → entity', () => {
       status: 'paid',
       paidDate: '2026-08-25',
       paymentId: '0198b6a7-rule',
-      paymentForm: 'cash',
       categorySlug: 'utilities',
     };
     const mapped = mapPaymentOperation(paid);
     expect(mapped.paidDate).toBe('2026-08-25');
-    expect(mapped.paymentForm).toBe('cash');
     expect(mapped.categorySlug).toBe('utilities');
   });
 });

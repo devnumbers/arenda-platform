@@ -19,7 +19,6 @@ export type PaymentEditForm = {
   readonly title: string;
   readonly amountKopecks: number | undefined;
   readonly categorySlug: string | undefined;
-  readonly paymentForm: Payment['paymentForm'];
   readonly recurrence: Recurrence;
   /** Не задано — бессрочный; на сервер уходит tri-state.endDate (null — открыть срок). */
   readonly endDate: string | undefined;
@@ -121,10 +120,6 @@ export function buildPaymentUpdateCommand(
 
   if (!recurrencesEqual(form.recurrence, payment.recurrence)) {
     command.recurrence = form.recurrence;
-  }
-
-  if (form.paymentForm !== payment.paymentForm) {
-    command.paymentForm = form.paymentForm;
   }
 
   if (form.categorySlug !== undefined && form.categorySlug !== payment.category.slug) {

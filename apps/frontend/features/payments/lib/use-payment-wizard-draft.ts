@@ -5,7 +5,6 @@ import { clearDraftStorage, useDraftStore } from '@/shared/lib/hooks/useDraftSto
 import { PAYMENT_REMINDER_OPTIONS } from '@/entities/payment';
 import type {
   IsoDate,
-  PaymentForm,
   PaymentReminderOffset,
   PaymentType,
   Recurrence,
@@ -38,8 +37,6 @@ export type PaymentWizardDraft = {
   readonly reminderOffsetDays?: PaymentReminderOffset;
   /** Сумма в копейках, целая положительная (шаг 5). */
   readonly amountKopecks?: number;
-  /** Форма оплаты: перевод/наличные (шаг 5). */
-  readonly paymentForm?: PaymentForm;
   /** Момент последней правки (Date.now()) — шит «Добавить» показывает
    * последний тронутый черновик, когда их два. Служебное поле: само по
    * себе черновиком не считается. */
@@ -106,7 +103,6 @@ export function hasPaymentWizardDraftFields(draft: PaymentWizardDraft): boolean 
     || draft.endDate !== undefined
     || draft.reminderOffsetDays !== undefined
     || draft.amountKopecks !== undefined
-    || draft.paymentForm !== undefined
   );
 }
 
@@ -209,10 +205,6 @@ export function validatePaymentWizardDraft(parsed: unknown): PaymentWizardDraft 
   const amountKopecks = isPositiveInt(record.amountKopecks) ? record.amountKopecks : undefined;
   if (record.amountKopecks !== undefined && amountKopecks === undefined) return DEFAULT_DRAFT;
 
-  const paymentForm =
-    record.paymentForm === 'transfer' || record.paymentForm === 'cash' ? record.paymentForm : undefined;
-  if (record.paymentForm !== undefined && paymentForm === undefined) return DEFAULT_DRAFT;
-
   // Служебное поле: мусорный таймстамп просто отбрасывается, черновик
   // не роняет.
   const updatedAt = isPositiveInt(record.updatedAt) ? record.updatedAt : undefined;
@@ -225,7 +217,6 @@ export function validatePaymentWizardDraft(parsed: unknown): PaymentWizardDraft 
     ...(endDate !== undefined && { endDate }),
     ...(reminderOffsetDays !== undefined && { reminderOffsetDays }),
     ...(amountKopecks !== undefined && { amountKopecks }),
-    ...(paymentForm !== undefined && { paymentForm }),
     ...(updatedAt !== undefined && { updatedAt }),
   };
 }

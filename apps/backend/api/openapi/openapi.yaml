@@ -1165,8 +1165,8 @@ paths:
       description: >
         The manual one-off income/expense fact on the property (ticket #569).
         It is born paid: date = paidDate = today in the property owner's
-        timezone (ADR 0048), no originating rule behind it (paymentId null)
-        and no payment form (paymentForm null). The category travels as the
+        timezone (ADR 0048), no originating rule behind it (paymentId null).
+        The category travels as the
         default-catalog slug and freezes as the snapshot with its label.
         Full Access and above may create; on an archived property the
         mutation is the conflict.
@@ -6569,7 +6569,7 @@ components:
         the property owner's timezone) and never accepted from the client;
         backdated occurrences are not generated.
       type: object
-      required: [type, title, amountKopecks, recurrence, paymentForm, categorySlug]
+      required: [type, title, amountKopecks, recurrence, categorySlug]
       properties:
         type:
           type: string
@@ -6585,9 +6585,6 @@ components:
           maximum: 1000000000
         recurrence:
           $ref: '#/components/schemas/Recurrence'
-        paymentForm:
-          type: string
-          enum: [transfer, cash]
         categorySlug:
           type: string
           description: Slug of the default category catalog (user categories arrive in a later slice).
@@ -6628,9 +6625,6 @@ components:
           maximum: 1000000000
         recurrence:
           $ref: '#/components/schemas/Recurrence'
-        paymentForm:
-          type: string
-          enum: [transfer, cash]
         categorySlug:
           type: string
         endDate:
@@ -6686,7 +6680,7 @@ components:
 
     PaymentResponse:
       type: object
-      required: [id, propertyId, type, title, amountKopecks, recurrence, since, autoPay, paymentForm, category, isFavorite, isCompleted, nearestDate, isRentalManaged, pauses, createdAt, updatedAt]
+      required: [id, propertyId, type, title, amountKopecks, recurrence, since, autoPay, category, isFavorite, isCompleted, nearestDate, isRentalManaged, pauses, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -6713,9 +6707,6 @@ components:
           nullable: true
         autoPay:
           type: boolean
-        paymentForm:
-          type: string
-          enum: [transfer, cash]
         category:
           $ref: '#/components/schemas/CategoryView'
         reminderOffsetDays:
@@ -7041,7 +7032,7 @@ components:
         manual fact. status carries overdue as a server-computed view status
         (planned with the date already past in the property owner's timezone).
       type: object
-      required: [id, propertyId, paymentId, date, paidDate, status, type, title, amountKopecks, paymentForm, categoryLabel, categorySlug]
+      required: [id, propertyId, paymentId, date, paidDate, status, type, title, amountKopecks, categoryLabel, categorySlug]
       properties:
         id:
           type: string
@@ -7079,11 +7070,6 @@ components:
         amountKopecks:
           type: integer
           format: int64
-        paymentForm:
-          type: string
-          enum: [transfer, cash]
-          nullable: true
-          description: Snapshot of the rule's form; null leaves room for manual operations.
         categoryLabel:
           type: string
           description: Category label snapshot frozen at materialization time.

@@ -21,19 +21,17 @@ type Operation struct {
 	Type          PaymentType
 	Title         string
 	AmountKopecks int64
-	PaymentForm   *PaymentForm // Snapshot; nil leaves room for manual operations.
-	CategoryLabel string       // Snapshot.
-	CategorySlug  *string      // Snapshot for default-category rendering.
+	CategoryLabel string  // Snapshot.
+	CategorySlug  *string // Snapshot for default-category rendering.
 }
 
 // NewMaterializedOperation builds the planned occurrence of the payment rule
-// at date. The rule's title, amount, type, payment form and category are
-// snapshotted here and never follow later edits of the rule (ADR 0049 §1).
+// at date. The rule's title, amount, type and category are snapshotted here
+// and never follow later edits of the rule (ADR 0049 §1).
 // Auto-pay does not pre-pay at insert: the tick closes today's occurrence
 // separately, strictly on its day (ADR 0049 §2).
 func NewMaterializedOperation(p Payment, date time.Time) Operation {
 	paymentID := p.ID
-	form := p.PaymentForm
 	return Operation{
 		OwnerID:       p.OwnerID,
 		PropertyID:    p.PropertyID,
@@ -44,7 +42,6 @@ func NewMaterializedOperation(p Payment, date time.Time) Operation {
 		Type:          p.Type,
 		Title:         p.Title,
 		AmountKopecks: p.AmountKopecks,
-		PaymentForm:   &form,
 		CategoryLabel: p.Category.SnapshotLabel(),
 		CategorySlug:  p.Category.Slug,
 	}

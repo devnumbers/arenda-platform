@@ -14,8 +14,9 @@ import {
 // предзаполнены правилом, сохранение — частичный PATCH (меняет только
 // будущее, `since` недоступен), danger-кнопка «Удалить платеж» с модалкой
 // выбора судьбы просрочек (тексты — Figma 1127:33148). Форма — по макету
-// 705:10034: тип («Доход или расход») и «Способ оплаты» — строки, значение
-// меняется простым нажатием. Скриншоты — материал для сверки с Figma
+// 705:10034: тип («Доход или расход») — строка, значение меняется простым
+// нажатием; «Формы оплаты» на экране нет — поле снесено (карта #1005,
+// тикеты #1006–#1009). Скриншоты — материал для сверки с Figma
 // (705:10034 правка + модалка, 1096:36680 десктоп).
 //
 // Сид: «Страхование» …552 на квартире — цель правки (сумма 320 000 кап,
@@ -53,13 +54,12 @@ test.describe('экран правки платежа', () => {
     const check = page.getByRole('button', { name: 'Сохранить', exact: true });
     await expect(check).toBeDisabled();
 
-    // Поля предзаполнены: сумма, название, категория, тип, способ оплаты,
-    // регулярность, бессрочное окончание.
+    // Поля предзаполнены: сумма, название, категория, тип, регулярность,
+    // бессрочное окончание.
     await expect(page.getByRole('textbox', { name: 'Сумма' })).toHaveValue(/3\s?200/);
     await expect(page.getByRole('textbox', { name: 'Название платежа' })).toHaveValue('Страхование');
     await expect(page.getByRole('button', { name: 'Категория' })).toHaveText(/Страхование/);
     await expect(page.getByRole('button', { name: 'Доход или расход' })).toHaveText(/Расход/);
-    await expect(page.getByRole('button', { name: 'Способ оплаты' })).toHaveText(/Наличные/);
     await expect(page.getByRole('button', { name: 'Регулярность платежа' })).toHaveText(
       /Каждый месяц 15 числа/,
     );
@@ -137,23 +137,17 @@ test.describe('экран правки платежа', () => {
     await expect(page.getByRole('button', { name: 'Сохранить изменения' })).toBeDisabled();
   });
 
-  test('тип и способ оплаты меняются простым нажатием, без пикера', async ({
-    page,
-    seededUser,
-  }) => {
+  test('тип меняется простым нажатием, без пикера', async ({ page, seededUser }) => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto(URLS.insuranceEdit);
 
     // Нажатие по строке сразу переключает значение — ни пикера, ни шита.
-    await page.getByRole('button', { name: 'Способ оплаты' }).click();
-    await expect(page.getByRole('button', { name: 'Способ оплаты' })).toHaveText(/Перевод/);
-    await expect(page.getByRole('dialog')).toHaveCount(0);
     await page.getByRole('button', { name: 'Доход или расход' }).click();
     await expect(page.getByRole('button', { name: 'Доход или расход' })).toHaveText(/Доход/);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
 
     // Правка не сохранена: после перезагрузки сидовые значения на месте.
     await page.reload();
-    await expect(page.getByRole('button', { name: 'Способ оплаты' })).toHaveText(/Наличные/);
     await expect(page.getByRole('button', { name: 'Доход или расход' })).toHaveText(/Расход/);
   });
 

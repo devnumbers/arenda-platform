@@ -170,10 +170,6 @@ func (s *TickStore) insertOccurrence(ctx context.Context, p domain.Payment, date
 		return fmt.Errorf("materialize occurrence %s of payment %s: payment id is required",
 			date.Format(time.DateOnly), p.ID)
 	}
-	if op.PaymentForm == nil {
-		return fmt.Errorf("materialize occurrence %s of payment %s: payment form snapshot is required",
-			date.Format(time.DateOnly), p.ID)
-	}
 	err = s.q().InsertMaterializedOperation(ctx, postgres.InsertMaterializedOperationParams{
 		ID:            pgconv.UUIDToPgtype(op.ID),
 		OwnerID:       pgconv.UUIDToPgtype(op.OwnerID),
@@ -183,7 +179,6 @@ func (s *TickStore) insertOccurrence(ctx context.Context, p domain.Payment, date
 		Type:          string(op.Type),
 		Title:         op.Title,
 		AmountKopecks: op.AmountKopecks,
-		PaymentForm:   pgtype.Text{String: string(*op.PaymentForm), Valid: true},
 		CategoryLabel: op.CategoryLabel,
 		CategorySlug:  pgconv.StringPtrToPgtype(op.CategorySlug),
 	})

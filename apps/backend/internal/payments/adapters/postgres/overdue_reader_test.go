@@ -84,9 +84,9 @@ func (f *overdueFixture) seedOperation(
 	}
 	_, err = f.pool.Exec(ctx,
 		`INSERT INTO operations (id, owner_id, property_id, payment_id, origin, date, paid_date,
-		                       status, type, title, amount_kopecks, payment_form, category_label, category_slug)
+		                       status, type, title, amount_kopecks, category_label, category_slug)
 		 VALUES ($1, $2, $3, NULL, 'manual', $4::date, $5::date,
-		         $6, 'expense', 'ЖКУ', 500000, 'transfer', 'Коммунальные услуги', 'utilities')`,
+		         $6, 'expense', 'ЖКУ', 500000, 'Коммунальные услуги', 'utilities')`,
 		id, ownerID, propID, date, paid, status)
 	require.NoError(t, err)
 }

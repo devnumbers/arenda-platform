@@ -20,7 +20,6 @@ SELECT op.id,
        op.type,
        op.title,
        op.amount_kopecks,
-       op.payment_form,
        op.category_label,
        op.category_slug
 FROM operations op
@@ -52,13 +51,12 @@ WHERE id = $1 AND owner_id = $2 AND property_id = $3
 -- Ручная разовая операция (тикет #569): рождается оплаченной в «сегодня»
 -- владельца — приложение передаёт одну дату, обе колонки берут её. Правила
 -- за фактом нет: origin='manual', payment_id NULL (partial unique
--- (payment_id, date) накрывает только платёжные строки и не применяется),
--- payment_form NULL — ручной факт снапшота формы не несёт.
+-- (payment_id, date) накрывает только платёжные строки и не применяется).
 INSERT INTO operations (
     id, owner_id, property_id, payment_id, origin, date, paid_date, status,
-    type, title, amount_kopecks, payment_form, category_label, category_slug
+    type, title, amount_kopecks, category_label, category_slug
 )
-VALUES ($1, $2, $3, NULL, 'manual', $4, $4, 'paid', $5, $6, $7, NULL, $8, $9);
+VALUES ($1, $2, $3, NULL, 'manual', $4, $4, 'paid', $5, $6, $7, $8, $9);
 
 -- name: ListOperations :many
 -- The operations of one scope with pagination (limit/offset), the view status
@@ -91,7 +89,6 @@ SELECT op.id,
        op.type,
        op.title,
        op.amount_kopecks,
-       op.payment_form,
        op.category_label,
        op.category_slug
 FROM operations op
@@ -307,7 +304,6 @@ SELECT op.id,
        op.type,
        op.title,
        op.amount_kopecks,
-       op.payment_form,
        op.category_label,
        op.category_slug,
        p.name AS property_name

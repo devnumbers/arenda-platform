@@ -338,7 +338,6 @@ type Operation struct {
 	Type          string             `json:"type"`
 	Title         string             `json:"title"`
 	AmountKopecks int64              `json:"amount_kopecks"`
-	PaymentForm   pgtype.Text        `json:"payment_form"`
 	CategoryLabel string             `json:"category_label"`
 	CategorySlug  pgtype.Text        `json:"category_slug"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
@@ -356,7 +355,6 @@ type Payment struct {
 	Since              pgtype.Date        `json:"since"`
 	EndDate            pgtype.Date        `json:"end_date"`
 	AutoPay            bool               `json:"auto_pay"`
-	PaymentForm        string             `json:"payment_form"`
 	CategorySlug       pgtype.Text        `json:"category_slug"`
 	UserCategoryID     pgtype.UUID        `json:"user_category_id"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`

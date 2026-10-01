@@ -221,8 +221,8 @@ export function CategoryRowsSkeleton({ rows = 8 }: { readonly rows?: number }): 
 /**
  * Скелетон формы правки платежа (#607, паритет — §7 DESIGN.md): каркас
  * PaymentEditForm — «Сумма», «Название платежа» (с нижней строкой
- * счётчика 13/15, как у TextField с maxLength), пять полей-кнопок
- * (категория, тип, способ, регулярность, окончание) и danger-кнопка
+ * счётчика 13/15, как у TextField с maxLength), четыре поля-кнопки
+ * (категория, тип, регулярность, окончание) и danger-кнопка
  * удаления. Роль в загрузке неизвестна — строка удаления рисуется
  * всегда: владелец (сценарий по умолчанию) получает точный паритет, а
  * смотрящему форму всё равно замещает карточка «Правка недоступна».
@@ -238,7 +238,6 @@ export function PaymentEditFormSkeleton(): JSX.Element {
       </span>
       <SkeletonFormField labelWidth="w-24" />
       <SkeletonFormField labelWidth="w-32" />
-      <SkeletonFormField labelWidth="w-28" />
       <SkeletonFormField labelWidth="w-44" />
       <SkeletonFormField labelWidth="w-36" />
       <Skeleton className="h-14 w-full rounded-button" />
@@ -248,15 +247,20 @@ export function PaymentEditFormSkeleton(): JSX.Element {
 
 /**
  * Скелетон шага «Добавить операцию» (#607): каркас OperationAmountStep —
- * крупная сумма 44/48 по центру и сегмент «Расход/Доход» (232px), те же
- * вставки шага (pt-16 pb-16, зазор 8). Нижняя панель «Продолжить» —
- * постоянная часть шага, её приносит экран реальной кнопкой.
+ * денежное поле и сегмент «Расход/Доход» в ярусах шага (дисплейный
+ * <1024: сумма 44/48 по центру и сегмент 232px, py-16/gap-8; ПК ≥1024:
+ * бокс 56px и сегмент во всю колонку, pt-6/gap-6). Нижняя панель
+ * «Продолжить» — постоянная часть шага, её приносит экран реальной
+ * кнопкой.
  */
 export function OperationAmountStepSkeleton(): JSX.Element {
   return (
-    <div aria-hidden className="flex flex-col items-center gap-8 px-6 pt-16 pb-16">
-      <Skeleton className="h-12 w-40" />
-      <Skeleton className="h-10 w-[232px] rounded-2xl" />
+    <div
+      aria-hidden
+      className="flex flex-col items-center gap-8 px-6 pt-16 pb-16 desktop:gap-6 desktop:pt-6"
+    >
+      <Skeleton className="h-12 w-40 desktop:h-14 desktop:w-full desktop:rounded-button" />
+      <Skeleton className="h-10 w-[232px] rounded-2xl desktop:w-full" />
     </div>
   );
 }

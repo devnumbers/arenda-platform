@@ -30,7 +30,6 @@ describe('validatePaymentWizardDraft', () => {
       recurrence: { kind: 'monthly', daysOfMonth: [1], lastDay: false },
       endDate: '2027-01-31',
       amountKopecks: 4500000,
-      paymentForm: 'transfer',
       type: 'expense',
     };
     expect(validatePaymentWizardDraft(parsed)).toStrictEqual(parsed);
@@ -42,9 +41,18 @@ describe('validatePaymentWizardDraft', () => {
     ).toStrictEqual({});
   });
 
-  it('незнакомая форма оплаты и тип роняют черновик', () => {
-    expect(validatePaymentWizardDraft({ paymentForm: 'card' })).toStrictEqual({});
+  it('незнакомый тип роняет черновик', () => {
     expect(validatePaymentWizardDraft({ type: 'weekly' })).toStrictEqual({});
+  });
+
+  it('незнакомые поля из хранилища отбрасываются, черновик живёт (#1008)', () => {
+    // Поля снесённых версий черновика — просто мусор из хранилища.
+    expect(
+      validatePaymentWizardDraft({ unknownField: 'transfer', title: 'x', amountKopecks: 500 }),
+    ).toStrictEqual({ title: 'x', amountKopecks: 500 });
+    expect(validatePaymentWizardDraft({ unknownField: 'card', title: 'x' })).toStrictEqual({
+      title: 'x',
+    });
   });
 
   it('напоминание сохраняется, чужой оффсет роняет черновик (карта #822)', () => {

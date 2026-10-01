@@ -71,8 +71,8 @@ func insertPayment(t *testing.T, pool *pgxpool.Pool, ownerID, propertyID uuid.UU
 	t.Helper()
 	id := uuid.Must(uuid.NewV7())
 	_, err := pool.Exec(context.Background(), `
-		INSERT INTO payments (id, owner_id, property_id, type, title, amount_kopecks, recurrence, since, auto_pay, payment_form, category_slug)
-		VALUES ($1, $2, $3, 'income', 'Аренда', 2000000, '{"kind": "monthly"}', '2026-09-01', false, 'transfer', 'rent')`,
+		INSERT INTO payments (id, owner_id, property_id, type, title, amount_kopecks, recurrence, since, auto_pay, category_slug)
+		VALUES ($1, $2, $3, 'income', 'Аренда', 2000000, '{"kind": "monthly"}', '2026-09-01', false, 'rent')`,
 		id, ownerID, propertyID)
 	require.NoError(t, err)
 	return id

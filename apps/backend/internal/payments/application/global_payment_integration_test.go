@@ -79,8 +79,8 @@ func (h *paymentsHarness) seedGlobalRule(
 	}
 	if _, err := h.pool.Exec(h.ctx(),
 		`INSERT INTO payments (id, owner_id, property_id, type, title, amount_kopecks,
-		                       recurrence, since, auto_pay, payment_form, category_slug, user_category_id, is_favorite)
-		 VALUES ($1, $2, $3, $4, $5, $6, '{"kind":"monthly","daysOfMonth":[1]}'::jsonb, '2026-07-01', $7, 'transfer', $8, $9, $10)`,
+		                       recurrence, since, auto_pay, category_slug, user_category_id, is_favorite)
+		 VALUES ($1, $2, $3, $4, $5, $6, '{"kind":"monthly","daysOfMonth":[1]}'::jsonb, '2026-07-01', $7, $8, $9, $10)`,
 		id, ownerID, propertyID, typ, title, amountKopecks, autoPay, slugArg, userCategoryID, isFavorite,
 	); err != nil {
 		h.t.Fatalf("seed rule %s: %v", title, err)
@@ -104,8 +104,8 @@ func (h *paymentsHarness) seedRuleOperation(
 	}
 	if _, err := h.pool.Exec(h.ctx(),
 		`INSERT INTO operations (id, owner_id, property_id, payment_id, origin, date, paid_date,
-		                       status, type, title, amount_kopecks, payment_form, category_label, category_slug)
-		 VALUES ($1, $2, $3, $4, 'payment', $5, $6::date, $7, $8, $9, $10, 'transfer', 'Прочее', NULL)`,
+		                       status, type, title, amount_kopecks, category_label, category_slug)
+		 VALUES ($1, $2, $3, $4, 'payment', $5, $6::date, $7, $8, $9, $10, 'Прочее', NULL)`,
 		id, ownerID, propertyID, ruleID, date, paid, status, typ, title, amountKopecks,
 	); err != nil {
 		h.t.Fatalf("seed rule operation %s (%s): %v", title, date, err)
@@ -623,9 +623,9 @@ func (h *paymentsHarness) seedGlobalRuleCreatedAt(
 	}
 	if _, err := h.pool.Exec(h.ctx(),
 		`INSERT INTO payments (id, owner_id, property_id, type, title, amount_kopecks,
-		                       recurrence, since, auto_pay, payment_form, category_slug, created_at)
+		                       recurrence, since, auto_pay, category_slug, created_at)
 		 VALUES ($1, $2, $3, 'expense', $4, $5, '{"kind":"monthly","daysOfMonth":[1]}'::jsonb,
-		         '2026-06-01', false, 'transfer', 'utilities', $6)`,
+		         '2026-06-01', false, 'utilities', $6)`,
 		id, ownerID, propertyID, title, amountKopecks, createdAt,
 	); err != nil {
 		h.t.Fatalf("seed rule %s: %v", title, err)

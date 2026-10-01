@@ -83,13 +83,13 @@ async function createMonthlyPaymentToday(
   await expect(page.getByRole('heading', { name: 'Настройте платеж' })).toBeVisible();
   await page.getByRole('button', { name: 'Далее' }).click();
 
-  // Шаг 5 — сумма, направление и форма оплаты. Чипы-переключатели (Figma
-  // 834:19662) показывают текущее значение — по умолчанию «Доход» и
-  // «Перевод»; клик по чипу ставит альтернативное.
+  // Шаг 5 — сумма и направление. Чип-переключатель (макеты суммы карты
+  // #1005) показывает текущее значение — по умолчанию «Доход»; клик по
+  // чипу ставит альтернативное. «Формы оплаты» на шаге нет — поле
+  // снесено из продукта (карта #1005, тикеты #1008/#1009).
   await expect(page.getByRole('button', { name: 'Создать платеж' })).toBeDisabled();
   await page.getByRole('textbox', { name: 'Сумма' }).fill('1990');
   await page.getByRole('button', { name: 'Тип платежа' }).click(); // Доход → Расход
-  await page.getByRole('button', { name: 'Форма оплаты' }).click(); // Перевод → Наличные
   await page.getByRole('button', { name: 'Создать платеж' }).click();
 
   // Экран успеха с первым вхождением из серверного ответа; закрытие — на список.

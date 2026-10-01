@@ -293,8 +293,8 @@ func (s *OperationStore) ListGlobal(
 				PaymentID: row.PaymentID, Origin: row.Origin, Date: row.Date,
 				PaidDate: row.PaidDate, Status: row.Status, Type: row.Type,
 				Title: row.Title, AmountKopecks: row.AmountKopecks,
-				PaymentForm: row.PaymentForm, CategoryLabel: row.CategoryLabel,
-				CategorySlug: row.CategorySlug,
+				CategoryLabel: row.CategoryLabel,
+				CategorySlug:  row.CategorySlug,
 			}),
 			PropertyName: row.PropertyName,
 		})
@@ -495,8 +495,8 @@ func mapOperationRows(rows []postgres.ListOperationsRow) []domain.Operation {
 			PaymentID: row.PaymentID, Origin: row.Origin, Date: row.Date,
 			PaidDate: row.PaidDate, Status: row.Status, Type: row.Type,
 			Title: row.Title, AmountKopecks: row.AmountKopecks,
-			PaymentForm: row.PaymentForm, CategoryLabel: row.CategoryLabel,
-			CategorySlug: row.CategorySlug,
+			CategoryLabel: row.CategoryLabel,
+			CategorySlug:  row.CategorySlug,
 		}))
 	}
 	return out

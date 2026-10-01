@@ -85,9 +85,9 @@ func (f *occupancyFixture) seedRental(
 	require.NoError(t, err)
 	_, err = f.pool.Exec(ctx,
 		`INSERT INTO payments (id, owner_id, property_id, type, title, amount_kopecks,
-		                       recurrence, since, auto_pay, payment_form, category_slug)
+		                       recurrence, since, auto_pay, category_slug)
 		 VALUES ($1, $2, $3, 'income', 'Аренда', 5000000,
-		         '{"kind":"monthly","daysOfMonth":[15]}'::jsonb, $4, false, 'transfer', 'rent')`,
+		         '{"kind":"monthly","daysOfMonth":[15]}'::jsonb, $4, false, 'rent')`,
 		paymentID, ownerID, propID, start)
 	require.NoError(t, err)
 	rentalID, err := uuid.NewV7()

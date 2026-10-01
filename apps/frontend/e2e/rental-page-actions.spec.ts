@@ -50,12 +50,12 @@ test.describe('машина «Действий аренды» на страни�
   async function seedRental(startOffsetDays: number, endOffsetDays: number): Promise<void> {
     await execE2eSql(
       `INSERT INTO payments (id, owner_id, property_id, type, title, amount_kopecks,
-                             recurrence, since, end_date, auto_pay, payment_form, category_slug)
+                             recurrence, since, end_date, auto_pay, category_slug)
        VALUES ('98700000-9870-4000-8000-000000000988', ${OWNER_SQL}, '${PROPERTY_ID}',
                'income', 'Арендная плата', ${RENT_AMOUNT_KOPECKS},
                '{"kind":"monthly","daysOfMonth":[15]}'::jsonb,
                current_date + ${startOffsetDays}, current_date + ${endOffsetDays},
-               false, 'transfer', 'rent')`,
+               false, 'rent')`,
     );
     await execE2eSql(
       `INSERT INTO rentals (id, owner_id, property_id, payment_id, start_date,

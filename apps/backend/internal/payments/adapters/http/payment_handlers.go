@@ -130,8 +130,8 @@ func (h *PaymentHandlers) CreatePayment(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	var body openapi.PaymentCreateRequest
-	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
+	var wire openapi.PaymentCreateRequest
+	if err := httpsupport.DecodeJSONBody(w, r, &wire); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode create payment request",
 			slog.String("error", httpsupport.SanitizeError(err)))
 		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
@@ -139,7 +139,7 @@ func (h *PaymentHandlers) CreatePayment(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	cmd, err := createCommand(body)
+	cmd, err := createCommand(wire)
 	if err != nil {
 		h.handlePaymentError(w, r, err)
 		return
@@ -370,7 +370,6 @@ func createCommand(body openapi.PaymentCreateRequest) (application.CreatePayment
 		Title:              body.Title,
 		AmountKopecks:      body.AmountKopecks,
 		Recurrence:         recurrence,
-		PaymentForm:        domain.PaymentForm(body.PaymentForm),
 		CategorySlug:       body.CategorySlug,
 		EndDate:            datePtrFromWire(body.EndDate),
 		AutoPay:            autoPay,
@@ -394,9 +393,11 @@ func (h *PaymentHandlers) decodeUpdateBody(
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
-	if err := dec.Decode(body); err != nil {
+	var wire openapi.PaymentUpdateRequest
+	if err := dec.Decode(&wire); err != nil {
 		return nil, nil, err
 	}
+	*body = wire
 	var shadow struct {
 		EndDate            json.RawMessage `json:"endDate"`
 		ReminderOffsetDays json.RawMessage `json:"reminderOffsetDays"`
@@ -445,9 +446,6 @@ func updateCommand(body openapi.PaymentUpdateRequest, endDateRaw, reminderRaw js
 			return application.UpdatePaymentCommand{}, err
 		}
 		cmd.Recurrence = &recurrence
-	}
-	if body.PaymentForm != nil {
-		cmd.PaymentForm = new(domain.PaymentForm(*body.PaymentForm))
 	}
 	if body.CategorySlug != nil {
 		cmd.CategorySlug = body.CategorySlug
@@ -589,7 +587,6 @@ func paymentResponse(p domain.Payment, isCompleted, isRentalManaged bool) (opena
 		Since:              openapi_types.Date{Time: p.Since},
 		EndDate:            httpsupport.DatePtrToOpenAPI(p.EndDate),
 		AutoPay:            p.AutoPay,
-		PaymentForm:        openapi.PaymentResponsePaymentForm(p.PaymentForm),
 		Category:           categoryView(p.Category),
 		ReminderOffsetDays: reminderOffsetResponse(p.ReminderOffsetDays),
 		IsFavorite:         p.IsFavorite,

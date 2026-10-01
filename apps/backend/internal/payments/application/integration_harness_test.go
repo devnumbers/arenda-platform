@@ -226,8 +226,8 @@ func (h *paymentsHarness) seedPayment(since, recurrence string, autoPay bool) uu
 	}
 	if _, err := h.pool.Exec(h.ctx(),
 		`INSERT INTO payments (id, owner_id, property_id, type, title, amount_kopecks,
-		                       recurrence, since, end_date, auto_pay, payment_form, category_slug)
-		 VALUES ($1, $2, $3, 'expense', 'ЖКУ', 500000, $4::jsonb, $5, NULL, $6, 'transfer', 'utilities')`,
+		                       recurrence, since, end_date, auto_pay, category_slug)
+		 VALUES ($1, $2, $3, 'expense', 'ЖКУ', 500000, $4::jsonb, $5, NULL, $6, 'utilities')`,
 		id, h.owner, h.propID, recurrence, since, autoPay,
 	); err != nil {
 		h.t.Fatalf("seed payment: %v", err)
@@ -259,7 +259,6 @@ func (h *paymentsHarness) createCmd() paymentsapp.CreatePaymentCommand {
 		Title:         "Аренда",
 		AmountKopecks: 5000000,
 		Recurrence:    domain.NewDailyRecurrence(),
-		PaymentForm:   domain.FormTransfer,
 		CategorySlug:  slug,
 	}
 }

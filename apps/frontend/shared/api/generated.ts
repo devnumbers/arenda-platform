@@ -516,7 +516,7 @@ export interface paths {
         put?: never;
         /**
          * Create a manual operation (the one-off paid fact)
-         * @description The manual one-off income/expense fact on the property (ticket #569). It is born paid: date = paidDate = today in the property owner's timezone (ADR 0048), no originating rule behind it (paymentId null) and no payment form (paymentForm null). The category travels as the default-catalog slug and freezes as the snapshot with its label. Full Access and above may create; on an archived property the mutation is the conflict.
+         * @description The manual one-off income/expense fact on the property (ticket #569). It is born paid: date = paidDate = today in the property owner's timezone (ADR 0048), no originating rule behind it (paymentId null). The category travels as the default-catalog slug and freezes as the snapshot with its label. Full Access and above may create; on an archived property the mutation is the conflict.
          */
         post: operations["createOperation"];
         delete?: never;
@@ -2906,8 +2906,6 @@ export interface components {
             /** Format: int64 */
             amountKopecks: number;
             recurrence: components["schemas"]["Recurrence"];
-            /** @enum {string} */
-            paymentForm: "transfer" | "cash";
             /** @description Slug of the default category catalog (user categories arrive in a later slice). */
             categorySlug: string;
             /** Format: date */
@@ -2928,8 +2926,6 @@ export interface components {
             /** Format: int64 */
             amountKopecks?: number;
             recurrence?: components["schemas"]["Recurrence"];
-            /** @enum {string} */
-            paymentForm?: "transfer" | "cash";
             categorySlug?: string;
             /**
              * Format: date
@@ -2975,8 +2971,6 @@ export interface components {
             /** Format: date */
             endDate?: string | null;
             autoPay: boolean;
-            /** @enum {string} */
-            paymentForm: "transfer" | "cash";
             category: components["schemas"]["CategoryView"];
             /**
              * @description The payment reminder's lead time in days (карта #822); null — напоминаний нет. Живёт независимо от autoPay.
@@ -3137,11 +3131,6 @@ export interface components {
             title: string;
             /** Format: int64 */
             amountKopecks: number;
-            /**
-             * @description Snapshot of the rule's form; null leaves room for manual operations.
-             * @enum {string|null}
-             */
-            paymentForm: "transfer" | "cash" | null;
             /** @description Category label snapshot frozen at materialization time. */
             categoryLabel: string;
             /** @description Default-catalog slug snapshot for icon rendering; null when absent. */

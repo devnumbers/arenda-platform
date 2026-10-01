@@ -22,21 +22,16 @@ export {
 } from './lib/operation-wizard-model';
 export { matchesTitleSearch } from './lib/title-search';
 export { OPERATIONS_PAGE_SIZE } from './lib/operations-pages';
-export {
-  FORM_OF_PAYMENT_LABELS,
-  TYPE_LABELS,
-} from './lib/payment-labels';
+export { TYPE_LABELS } from './lib/payment-labels';
 export {
   PERIODICITY_OPTIONS,
   WEEKDAY_BUTTONS,
   WIZARD_TOTAL_STEPS,
   branchKind,
   buildPaymentCreateCommand,
-  effectivePaymentForm,
   effectivePaymentType,
   periodicityReady,
   pickPeriodicityKind,
-  togglePaymentForm,
   togglePaymentType,
   toggleWeekday,
   wizardStepReady,

@@ -195,7 +195,6 @@ export function SearchFieldSection({ value, onValueChange }: SearchFieldSectionP
 
 export function AmountFieldSection(): JSX.Element {
     const [amount, setAmount] = useState('');
-    const [paymentForm, setPaymentForm] = useState<'transfer' | 'cash'>('transfer');
     const [direction, setDirection] = useState<'income' | 'expense'>('income');
 
     return (
@@ -203,26 +202,14 @@ export function AmountFieldSection(): JSX.Element {
             <h3 className={styles.groupTitle}>AmountField · ввод суммы</h3>
             <p className={styles.groupTitle}>
                 Ввод с клавиатуры, только цифры и запятая (маска до 9 999 999,99 ₽); под суммой
-                — две кнопки: клик меняет их значение, без всплывающих окон (Figma 834:19662
-                «Перевод/Доход» → 835:19795 «Наличные/Расход»). Кнопка заблокирована, пока
-                сумма не введена.
+                — кнопка направления: клик меняет её значение, без всплывающих окон
+                (Figma 835:19795 «Расход»; чип «Формы оплаты» снесён — карта #1005).
+                Кнопка заблокирована, пока сумма не введена.
             </p>
             <div className={styles.column} style={{ maxWidth: 560 }}>
                 <AmountField value={amount} onChange={setAmount} label="Сумма" />
-                {/* одинаковая ширина обеих кнопок: при переключении
-                    значений (Перевод↔Наличные, Доход↔Расход) вёрстка
-                    не дёргается */}
                 <div className="flex justify-center gap-2">
                     <ChipButton
-                        className="w-40"
-                        trailingIcon={<ChangeVertical />}
-                        aria-label={`Форма оплаты: ${paymentForm === 'transfer' ? 'Перевод' : 'Наличные'}. Нажмите, чтобы переключить`}
-                        onClick={() => setPaymentForm((prev) => (prev === 'transfer' ? 'cash' : 'transfer'))}
-                    >
-                        {paymentForm === 'transfer' ? 'Перевод' : 'Наличные'}
-                    </ChipButton>
-                    <ChipButton
-                        className="w-40"
                         trailingIcon={<ChangeVertical />}
                         aria-label={`Направление: ${direction === 'income' ? 'Доход' : 'Расход'}. Нажмите, чтобы переключить`}
                         onClick={() => setDirection((prev) => (prev === 'income' ? 'expense' : 'income'))}

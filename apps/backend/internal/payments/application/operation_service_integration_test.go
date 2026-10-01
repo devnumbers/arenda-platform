@@ -75,13 +75,12 @@ func (h *paymentsHarness) seedOperation(paymentID uuid.UUID, date, status string
 		paid = date
 	}
 	const slug = "utilities"
-	const form = "transfer"
 	if _, err := h.pool.Exec(h.ctx(),
 		`INSERT INTO operations (id, owner_id, property_id, payment_id, origin, date, paid_date,
-		                       status, type, title, amount_kopecks, payment_form, category_label, category_slug)
+		                       status, type, title, amount_kopecks, category_label, category_slug)
 		 VALUES ($1, $2, $3, $4, 'payment', $5, $6::date,
-		         $7, 'expense', 'ЖКУ', 500000, $8, 'Коммунальные услуги', $9)`,
-		id, h.owner, h.propID, paymentID, date, paid, status, form, slug,
+		         $7, 'expense', 'ЖКУ', 500000, 'Коммунальные услуги', $8)`,
+		id, h.owner, h.propID, paymentID, date, paid, status, slug,
 	); err != nil {
 		h.t.Fatalf("seed operation %s (%s): %v", date, status, err)
 	}
