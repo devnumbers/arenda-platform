@@ -4,24 +4,24 @@ import {
   type IsoDate,
   type Recurrence,
 } from '@/entities/payment';
-import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import type { PaymentDraftType } from './use-payment-wizard-draft';
 
 /**
- * Тексты экрана успеха визарда (Figma 835:19893). Заголовок — «Вы создали
+ * Тексты экрана успеха визарда (Figma 835:19893; структура — канон успеха
+ * операций 1858:105544, решение владельца 01.10). Заголовок — «Вы создали
  * платеж/автоплатеж «Название»»; название показывается, только если
  * пользователь его ввёл (правка владельца 2026-08-31: подставленный лейбл
  * категории на экране не пишется — платёж при этом сохраняется с ним же).
  * Описание показывает дату первого вхождения (превью клиентским портом)
  * и продолжение расписания канонической меткой периодичности; при не
- * определённом вхождении абзаца нет вовсе.
+ * определённом вхождении абзаца нет вовсе. Сумма в текстах не живёт — на
+ * экране она большой блок со знаком (рисует компонент).
  */
 
 export type SuccessScreenCopyInput = {
   readonly draftType: PaymentDraftType;
   /** Название, введённое пользователем; undefined — поле оставили пустым. */
   readonly typedTitle?: string;
-  readonly amountKopecks: number;
   readonly recurrence: Recurrence;
   /** null — вхождений не будет (окончание раньше даты заведения). */
   readonly firstOccurrence: IsoDate | null;
@@ -51,8 +51,6 @@ export function successScreenCopy(input: SuccessScreenCopyInput): SuccessScreenC
     description:
       input.firstOccurrence === null
         ? undefined
-        : `${lead} ${formatDayMonth(input.firstOccurrence)} на ${formatMoneyKopecks(
-            input.amountKopecks,
-          )}, далее ${tail}`,
+        : `${lead} ${formatDayMonth(input.firstOccurrence)}, далее ${tail}`,
   };
 }
