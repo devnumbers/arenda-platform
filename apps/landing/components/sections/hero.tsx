@@ -48,8 +48,13 @@ export function Hero() {
               прижат влево — desk:mx-0. */}
           <div className="relative mx-auto flex max-w-[855px] flex-col items-center gap-8 text-center desk:mx-0 desk:items-start desk:text-left">
             <div className="flex flex-col gap-4 [text-shadow:0_8px_24px_rgba(0,0,0,0.12)] desk:gap-6 desk:[text-shadow:0_8px_32px_rgba(0,0,0,0.24)]">
+              {/* Перенос после «управления» — как в планшетном макете
+                  (3005-78026): на ярусе 481–1199 заголовок влезает в одну
+                  строку до ~1199 и balance не срабатывает, поэтому перенос
+                  явный; на мобиле (3 строки) и десктопе — естественный. */}
               <h1 className="text-balance text-[28px] font-semibold leading-8 text-white tab:text-[36px] tab:font-medium tab:leading-10 desk:text-h1 desk:font-semibold desk:leading-[76px]">
-                Сервис управления арендой недвижимости
+                Сервис управления
+                <br className="hidden tab:block desk:hidden" /> арендой недвижимости
               </h1>
               <p className="text-balance text-s font-normal leading-5 text-white/70 tab:text-m tab:font-medium tab:leading-6 desk:text-h4 desk:font-medium desk:leading-8 desk:text-white">
                 Управляйте сдачей жилья без таблиц и заметок
