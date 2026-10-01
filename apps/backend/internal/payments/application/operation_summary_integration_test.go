@@ -160,6 +160,30 @@ func TestSummarizePropertyOperations_TypeFiltersCategoriesOnly(t *testing.T) {
 	}
 }
 
+func TestSummarizePropertyOperations_CategoryNarrowsTotals(t *testing.T) {
+	t.Parallel()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+	pay := h.seedPayment(day22, `{"kind": "monthly", "dayOfMonth": 15}`, false)
+	h.summaryFixture(pay)
+
+	// The category filter narrows the totals too (the card mirrors the
+	// filtered list, решение владельца 01.10): the utilities slice — paid
+	// 1 450 000 plus the planned 300 000 (no status filter — the summary's
+	// whole scope), no income.
+	summary, err := h.ops.SummarizePropertyOperations(h.ctx(), h.owner, h.propID,
+		paymentsapp.OperationsSummaryQuery{Categories: []string{testIntegrationSlugUtilities}})
+	if err != nil {
+		t.Fatalf("summarize: %v", err)
+	}
+	if summary.IncomeTotalKopecks != 0 || summary.ExpenseTotalKopecks != 1750000 {
+		t.Errorf("totals = %d/%d, want 0/1 750 000 — the category filter narrows the totals",
+			summary.IncomeTotalKopecks, summary.ExpenseTotalKopecks)
+	}
+	if len(summary.Categories) != 1 || summary.Categories[0].Slug != testIntegrationSlugUtilities {
+		t.Fatalf("categories = %+v, want the single utilities row", summary.Categories)
+	}
+}
+
 func TestSummarizePropertyOperations_OverdueIsAViewStatus(t *testing.T) {
 	t.Parallel()
 	h := newPaymentsHarness(t).withOwner("Europe/Moscow")

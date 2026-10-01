@@ -368,18 +368,21 @@ func TestSummarizeGlobalOperations_TotalsAndCategories(t *testing.T) {
 	}
 }
 
-func TestSummarizeGlobalOperations_CategoryAndTypeNarrowBreakdownOnly(t *testing.T) {
+func TestSummarizeGlobalOperations_CategoryNarrowsTotals_TypeStillBreakdownOnly(t *testing.T) {
 	t.Parallel()
 	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
 	h.globalFeedFixture()
 
+	// The category filter narrows the totals too (the card mirrors the
+	// filtered list, решение владельца 01.10): the rent slice is
+	// 5 650 000 income + 4 200 000 expense, the rest of the feed — no.
 	rent, err := h.ops.SummarizeGlobalOperations(h.ctx(), h.owner,
 		paymentsapp.GlobalOperationsSummaryQuery{Categories: []string{testIntegrationSlugRent}})
 	if err != nil {
 		t.Fatalf("categories summary: %v", err)
 	}
-	if rent.IncomeTotalKopecks != 5650000 || rent.ExpenseTotalKopecks != 5500000 {
-		t.Errorf("totals = %d/%d, want 5 650 000/5 500 000 — the category filter narrows only the breakdown",
+	if rent.IncomeTotalKopecks != 5650000 || rent.ExpenseTotalKopecks != 4200000 {
+		t.Errorf("totals = %d/%d, want 5 650 000/4 200 000 — the category filter narrows the totals",
 			rent.IncomeTotalKopecks, rent.ExpenseTotalKopecks)
 	}
 	if len(rent.Categories) != 2 {

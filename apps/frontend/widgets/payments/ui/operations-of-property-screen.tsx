@@ -86,8 +86,9 @@ export function OperationsOfPropertyScreen({
   // без него даты не уходят; пикер открывается пустым, «Сбросить»
   // возвращает к дефолту.
   const [periodOpen, setPeriodOpen] = useState(false);
-  // Список сужается выбранными категориями; сводка (#473) категорийный
-  // фильтр не принимает — карточки всегда за выбранный период.
+  // Список и сводка (#473) сужаются выбранными категориями — карточки
+  // зеркалят отфильтрованный список (решение владельца 01.10, прежнее
+  // «сводка категорийный фильтр не принимает» отменено).
   // Без применённого периода (#674) даты не уходят в запрос — весь период.
   // Лента платёжных фактов читается по paid_date (решение #933/#994).
   const periodScope: PaymentOperationScope = {
@@ -103,7 +104,7 @@ export function OperationsOfPropertyScreen({
       : periodScope;
 
   const listQuery = usePropertyOperationsScopedPaged(propertyId, listScope);
-  const summaryQuery = usePropertyOperationsSummary(propertyId, periodScope);
+  const summaryQuery = usePropertyOperationsSummary(propertyId, listScope);
   // All-time сводка (тот же контракт #473 без периода): отличает «операций
   // не было никогда» (#478, Figma 1518-92899) от пустого периода.
   const everQuery = usePropertyOperationsSummary(propertyId, {

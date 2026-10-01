@@ -142,7 +142,8 @@ export function paymentOperationsOverdueQueryOptions({
 }
 
 /** Чистый fetch сводки объекта — общее горло хука и серверного префетча
- * #887. */
+ * #887. Категорийный фильтр уходит в запрос: сводка сужается категорией
+ * вместе со списком (решение владельца 01.10). */
 export async function fetchPropertyOperationsSummary(
   propertyId: string,
   scope: PaymentOperationScope,
@@ -155,6 +156,9 @@ export async function fetchPropertyOperationsSummary(
   }
   if (scope.type !== undefined) {
     params.set('type', scope.type);
+  }
+  if (scope.categories !== undefined && scope.categories.length > 0) {
+    params.set('category', scope.categories.join(','));
   }
   if (scope.dateFrom !== undefined) {
     params.set('date_from', scope.dateFrom);

@@ -30,12 +30,16 @@ export function globalDirectionListScope(
   };
 }
 
-/** Скоуп сводки направления: тот же запрос без категорийного сужения —
- * карточка показывает направление целиком (сводка категорийный фильтр не
- * принимает — контракт #540). */
+/** Скоуп сводки направления: тот же запрос без сужения категориями по
+ * умолчанию; применённый категорийный фильтр (непустой выбор) сужает и
+ * карточку — она зеркалит отфильтрованный список (решение владельца
+ * 01.10, прежнее «сводка категорийный фильтр не принимает» #540 отменено).
+ * Тип направления остаётся карточечным сегментом фронта — тоталы отдают
+ * оба направления. */
 export function globalDirectionSummaryScope(
   period: OperationsPeriod | null,
   propertyIds: ReadonlyArray<string>,
+  categories: ReadonlyArray<string>,
   type: PaymentType,
 ): GlobalOperationScope {
   return {
@@ -43,6 +47,7 @@ export function globalDirectionSummaryScope(
     sort: OPERATIONS_FEED_SORT,
     propertyIds,
     ...(period !== null ? { dateFrom: period.from, dateTo: period.to } : {}),
+    ...(categories.length > 0 ? { categories } : {}),
     type,
   };
 }

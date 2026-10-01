@@ -329,10 +329,11 @@ func (s *OperationStore) CountGlobal(
 
 // SummarizeGlobal runs the global summary's two aggregations (ticket #540)
 // over the actor's visible paid operations: the period totals by direction
-// and the per-category breakdown. The totals carry no direction or category
-// filter — the contract reports both directions whatever the breakdown is
-// narrowed to. The two reads run as plain statements, like every listing
-// read.
+// and the per-category breakdown. The totals carry no direction filter —
+// the contract reports both directions whatever the breakdown is narrowed
+// to; the category filter narrows the totals too, the card mirroring the
+// filtered list (решение владельца 01.10). The two reads run as plain
+// statements, like every listing read.
 func (s *OperationStore) SummarizeGlobal(
 	ctx context.Context, actor uuid.UUID, q application.GlobalOperationsSummaryQuery,
 ) (application.OperationsSummary, error) {
@@ -346,6 +347,7 @@ func (s *OperationStore) SummarizeGlobal(
 		DateTo:          pgconv.DatePtrToPgtype(q.DateTo),
 		Search:          search,
 		SearchDigits:    searchDigits,
+		Categories:      joinCategorySlugs(q.Categories),
 		IncludeArchived: q.IncludeArchived,
 		Sort:            operationsSortKey(q.Sort),
 	}
@@ -423,7 +425,9 @@ func (s *OperationStore) SummarizeByProperty(
 	ctx context.Context, scope, propertyID uuid.UUID, q application.OperationsSummaryQuery,
 ) (application.OperationsSummary, error) {
 	// The totals deliberately carry no direction filter — the contract
-	// reports both directions whatever the categories are narrowed to.
+	// reports both directions whatever the categories are narrowed to; the
+	// category filter narrows the totals too, the card mirroring the
+	// filtered list (решение владельца 01.10).
 	search := pgconv.EscapeLikePattern(q.Search)
 	searchDigits := searchAmountDigits(q.Search)
 	params := postgres.SumOperationTotalsParams{
@@ -435,6 +439,7 @@ func (s *OperationStore) SummarizeByProperty(
 		DateTo:       pgconv.DatePtrToPgtype(q.DateTo),
 		Search:       search,
 		SearchDigits: searchDigits,
+		Categories:   joinCategorySlugs(q.Categories),
 		Sort:         operationsSortKey(q.Sort),
 	}
 	totals, err := s.q().SumOperationTotals(ctx, params)
@@ -452,6 +457,7 @@ func (s *OperationStore) SummarizeByProperty(
 		Search:       search,
 		SearchDigits: searchDigits,
 		Type:         operationsTypeFilter(q.Type),
+		Categories:   params.Categories,
 		Sort:         params.Sort,
 	})
 	if err != nil {

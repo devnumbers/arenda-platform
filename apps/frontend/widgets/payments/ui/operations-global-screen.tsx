@@ -68,9 +68,10 @@ export function OperationsGlobalScreen(): JSX.Element {
   const today = dateToIsoLocal(new Date());
   // Пикер периода — канонический оверлей поверх списка.
   const [periodOpen, setPeriodOpen] = useState(false);
-  // Список сужается выбранными категориями; сводка (#540) категорийный
-  // фильтр не принимает — карточки показывают объекты и период целиком.
-  // Без применённого периода (#670) даты не уходят в запрос — весь период.
+  // Список и сводка (#540) сужаются выбранными категориями — карточки
+  // зеркалят отфильтрованный список (решение владельца 01.10, прежнее
+  // «сводка категорийный фильтр не принимает» отменено). Без применённого
+  // периода (#670) даты не уходят в запрос — весь период.
   // Лента платёжных фактов читается по paid_date (решение #933/#994).
   const periodScope = {
     order: "desc" as const,
@@ -86,7 +87,7 @@ export function OperationsGlobalScreen(): JSX.Element {
       : periodScope;
 
   const listQuery = useGlobalOperationsPaged(listScope);
-  const summaryQuery = useGlobalOperationsSummary(periodScope);
+  const summaryQuery = useGlobalOperationsSummary(listScope);
   // All-time сводка выбранного скоупа объектов (без периода/категорий):
   // отличает «операций не было никогда» (#478) от пустого периода/фильтра.
   const everQuery = useGlobalOperationsSummary({

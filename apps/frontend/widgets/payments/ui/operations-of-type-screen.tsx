@@ -108,7 +108,9 @@ export function OperationsOfTypeScreen({
       : periodScope;
 
   const listQuery = usePropertyOperationsScopedPaged(propertyId, listScope);
-  const summaryQuery = usePropertyOperationsSummary(propertyId, periodScope);
+  // Сводка сужается категориями вместе со списком — карточка зеркалит
+  // отфильтрованный список (решение владельца 01.10).
+  const summaryQuery = usePropertyOperationsSummary(propertyId, listScope);
   // All-time сводка объекта (тот же контракт #473 без периода): отличает
   // «операций не было никогда» (#478) от пустого периода/категории.
   const everQuery = usePropertyOperationsSummary(propertyId, {

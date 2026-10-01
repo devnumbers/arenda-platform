@@ -84,7 +84,7 @@ export function OperationsGlobalDirectionScreen({
     includeArchived: filters.archived,
   });
   const summaryQuery = useGlobalOperationsSummary({
-    ...globalDirectionSummaryScope(filters.period, filters.propertyIds, type),
+    ...globalDirectionSummaryScope(filters.period, filters.propertyIds, filters.categories, type),
     includeArchived: filters.archived,
   });
   // All-time сводка направления (без периода/категорий): отличает «операций
