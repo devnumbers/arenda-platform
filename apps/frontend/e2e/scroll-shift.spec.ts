@@ -107,6 +107,27 @@ test.describe('страница не сдвигается при Radix-овер�
     expect((await lockState(page)).gutter).toBe('stable');
   });
 
+  // Пейринг с белым треком корневого скроллбара: сайт светло-единственный,
+  // оба слоя заявлены — мета color-scheme (до CSS, против мигания тёмным
+  // первым кадром на тёмной Windows) и production-CSS scrollbar-color
+  // (белый трек + серый ползунок). Слои независимы, закрепляются оба.
+  test('корневой скроллбар заявлен светлым с белым треком', async ({ page }) => {
+    const root = await page.evaluate(() => {
+      const styles = getComputedStyle(document.documentElement);
+      const meta = document.querySelector('meta[name="color-scheme"]');
+      return {
+        colorScheme: styles.colorScheme,
+        scrollbarColor: styles.scrollbarColor,
+        metaContent: meta?.getAttribute('content') ?? null,
+      };
+    });
+
+    expect(root.metaContent, 'мета color-scheme в head до CSS').toBe('light');
+    expect(root.colorScheme, 'действующая схема — светлая').toBe('light');
+    // #999999 (ползунок) + #ffffff (трек) из globals.css.
+    expect(root.scrollbarColor).toBe('rgb(153, 153, 153) rgb(255, 255, 255)');
+  });
+
   test('Radix Dialog («Поддержка») не сдвигает контент', async ({ page }) => {
     const xBefore = await contentX(page);
 
