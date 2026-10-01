@@ -10,6 +10,7 @@ import type { AttrErrors, AttrKey } from '@/features/property-attributes';
 import {
   buildPropertyEditCommand,
   initialPropertyEditDraft,
+  propertyAutonamePhrase,
   propertyEditDirty,
   useProperty,
   useUpdateProperty,
@@ -209,6 +210,7 @@ export function PropertyEditScreen({ propertyId }: PropertyEditScreenProps): JSX
           />
           <TextField
             title="Название объекта"
+            placeholder={propertyAutonamePhrase(draft.type)}
             maxLength={NAME_MAX_LENGTH}
             value={draft.name}
             onChange={(event) => updateDraft({ name: event.currentTarget.value })}

@@ -2,7 +2,7 @@ export * from './api';
 
 export { usePropertiesWithMeta, usePropertiesNavItem } from './api/hooks';
 export type { PropertiesListResult, SuspendedSharedProperty } from './api/hooks';
-export { propertyTypeLabels, propertyTypeOptions } from './lib/property-types';
+export { propertyAutonamePhrase, propertyTypeLabels, propertyTypeOptions } from './lib/property-types';
 export {
   archivedPropertyBadge,
   hasPropertyAttentionDot,
