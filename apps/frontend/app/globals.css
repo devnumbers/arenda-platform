@@ -913,8 +913,9 @@ img {
     /* Сайт светло-единственный: без явной схемы Chromium/WebKit разрешают
        схему по теме ОС и на тёмной Windows рисуют чёрный UA-скроллбар и
        тёмные form-контролы на белых страницах. Дублируется
-       <meta name="color-scheme" content="light"> в app/layout.tsx — мета
-       действует до загрузки CSS и не даёт первому кадру мигнуть тёмным. */
+       <meta name="color-scheme" content="light"> в app/layout.tsx: мета
+       парсится из SSR-разметки до первого кадра и действует, даже если
+       CSS ещё не загрузился. */
     color-scheme: light;
 
     --background: #ffffff;
@@ -944,7 +945,8 @@ html {
    webkit-псевдоэлементов, скрытие не откатывается. Safari 18.2–26.1 без
    scrollbar-color остаётся полностью нативным: overlay-скролл, сквозь
    который просвечивает белый фон. forced-colors перекрашивает всё
-   обратно в системное без наших @media. */
+   обратно в системное без наших @media. Обёртка @supports страховочная —
+   браузер без свойства и так отбросил бы декларацию. */
 @supports (scrollbar-color: auto) {
     html {
         scrollbar-color: #999999 #ffffff;
