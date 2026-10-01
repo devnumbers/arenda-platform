@@ -64,15 +64,16 @@ func PlanTaskTick(rule TaskRule, today time.Time, existing TaskExistence) TaskTi
 }
 
 // dueOccurrences lists the due occurrence dates (≤ today) the tick must
-// create: those with no task yet, enumerated from max(anchor, history
-// horizon) — the cleared earlier dates are gone forever.
+// create: those with no task yet. The window enumerates from the anchor —
+// the repeat's phase lives there (a weekly rule stays on its weekday) — and
+// the history horizon filters it: the cleared earlier dates are gone
+// forever, but the days after it keep the rule's own cadence.
 func dueOccurrences(rule TaskRule, today time.Time, existing TaskExistence) []time.Time {
-	from := *rule.DueDate
-	if rule.HistoryBefore != nil && rule.HistoryBefore.After(from) {
-		from = *rule.HistoryBefore
-	}
 	var due []time.Time
-	for _, day := range OccurrencesBetween(rule, from, today) {
+	for _, day := range OccurrencesBetween(rule, *rule.DueDate, today) {
+		if rule.HistoryBefore != nil && day.Before(*rule.HistoryBefore) {
+			continue
+		}
 		if _, ok := existing.Dated[day]; !ok {
 			due = append(due, day)
 		}

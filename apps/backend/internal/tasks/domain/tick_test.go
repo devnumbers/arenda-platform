@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"slices"
 	"testing"
 	"time"
 )
@@ -186,6 +187,30 @@ func TestPlanTaskTick_HorizonSuppressesClearedFutureInsertion(t *testing.T) {
 	}
 	if plan.InsertFuture == nil || dateOnly(*plan.InsertFuture) != sep24 {
 		t.Fatalf("InsertFuture = %v, want %s", plan.InsertFuture, sep24)
+	}
+}
+
+func TestPlanTaskTick_HorizonKeepsWeekdayPhase(t *testing.T) {
+	t.Parallel()
+
+	// The horizon lands right after a cleared occurrence (max deleted due
+	// 09-10 + 1 = Friday 09-11) while the rule runs on Thursdays (anchor
+	// 09-03): the suppressed window must filter occurrences, never restart
+	// the weekly phase from the horizon — the due materialization stays on
+	// Thursdays (09-17, 09-24), no Fridays appear.
+	rule := datedRule(RepeatWeekly, 2026, time.September, 3)
+	horizon := d(2026, time.September, 11)
+	rule.HistoryBefore = &horizon
+
+	plan := PlanTaskTick(rule, d(2026, time.September, 24), TaskExistence{})
+
+	got := make([]string, len(plan.Materialize))
+	for i, day := range plan.Materialize {
+		got[i] = dateOnly(day)
+	}
+	want := []string{sep17, sep24}
+	if !slices.Equal(got, want) {
+		t.Fatalf("Materialize = %v, want %v (Thursday phase kept)", got, want)
 	}
 }
 
