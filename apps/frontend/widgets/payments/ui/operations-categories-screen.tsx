@@ -11,6 +11,7 @@ import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
   operationsCategoryRows,
   operationsFiltersParams,
+  readDirectionParam,
   readOperationsFilters,
   resolveFilterReturnPath,
   usePropertyOperationsSummary,
@@ -30,7 +31,8 @@ import {
 } from '@/shared/ui/design';
 import { PaymentsStateCard } from './payments-sections';
 import { OperationsCategoriesSkeleton } from './operations-skeletons';
-import { OperationsPeriodChipDisplay } from './operations-filter-chips';
+import { OperationsPeriodChip } from './operations-filter-chips';
+import { OperationsPeriodPickerDialog } from './operations-period-picker';
 
 export type OperationsCategoriesScreenProps = {
   readonly propertyId: string;
@@ -39,15 +41,16 @@ export type OperationsCategoriesScreenProps = {
 /**
  * Страница «Выбрать категорию» (#477, Figma 1506-72116, 1510-74149) —
  * не попап, а отдельный маршрут. Верх закреплён: крестик + заголовок и
- * контекстные чипы (период + «Все категории») — контекст всегда перед
- * глазами; строки категорий скроллятся. Дефолт периода — весь период
- * (#676, карта #669, как на глобальных категориях #672): без явного
- * диапазона суммы за всё время, чип нейтральный «Период»; период
- * наследуется от списка через return-параметры. Строки — «иконка +
- * название + сумма за период + чекбокс», только категории с операциями
- * за период (разбивка сводки #473). «Выбрать» — закреплённая нижняя
- * панель, видна при непустом черновике или применённом фильтре (иначе
- * возврат к «Все категории» был бы недостижим); применяет выбор
+ * чип периода — контекст всегда перед глазами; строки категорий скроллятся.
+ * Чип периода — кнопка канонного пикера (решение владельца 01.10: период
+ * меняется на месте, применение возвращает к выбору категории; декоративный
+ * чип «Все категории» снесён — мёртвый элемент). Дефолт периода — весь
+ * период (#676, карта #669, как на глобальных категориях #672): без явного
+ * диапазона суммы за всё время, чип нейтральный «Период». Строки —
+ * «иконка + название + сумма за период + чекбокс», только категории с
+ * операциями за период (разбивка сводки #473). «Выбрать» — закреплённая
+ * нижняя панель, видна при непустом черновике или применённом фильтре
+ * (иначе возврат к «Все категории» был бы недостижим); применяет выбор
  * возвратом на список (router.replace), крестик — goBack без изменений.
  * Пустой период — иллюстрация и подпись вместо строк (Figma 1518-92530,
  * #478); «Выбрать» скрыта, только пока нет ни черновика, ни применённого
@@ -62,10 +65,18 @@ export function OperationsCategoriesScreen({
 
   const today = dateToIsoLocal(new Date());
   const filters = readOperationsFilters(searchParams, today);
+  // Направление (?type= с направленческой ленты, решение владельца
+  // 01.10): сужает разбивку до категорий направления; без параметра —
+  // все категории. В apply не возвращается.
+  const direction = readDirectionParam(searchParams);
   // Дефолт категорий — весь период (#676, как на глобальных #672):
   // без явного выбора даты в запрос не уходят, чип нейтральный.
   const period = filters.period;
   const [draft, setDraft] = useState<ReadonlyArray<string>>(filters.categories);
+  // Пикер периода — рендер только в открытом состоянии (как на ленте):
+  // подтверждение пишет from/to в URL этой же страницы с заменой записи
+  // истории, сводка пересчитывается, черновик категорий не трогается.
+  const [periodOpen, setPeriodOpen] = useState(false);
 
   // Куда возвращаться: список, открывший страницу (только маршруты операций
   // этого объекта), иначе — главный список.
@@ -77,6 +88,7 @@ export function OperationsCategoriesScreen({
     sort: OPERATIONS_FEED_SORT,
     dateFrom: period?.from,
     dateTo: period?.to,
+    ...(direction !== undefined ? { type: direction } : {}),
   });
   const rows: ReadonlyArray<OperationsCategoryRow> = operationsCategoryRows(
     summaryQuery.data?.categories ?? [],
@@ -119,15 +131,10 @@ export function OperationsCategoriesScreen({
 
       <PageContent className="flex h-[calc(100dvh-72px)] flex-col pb-0">
         <div className="flex shrink-0 flex-wrap gap-1.5 px-6">
-          {/* Чип периода — дисплейный (период наследуется от ленты через
-           * return-параметры), серый «Период» без явного диапазона. */}
-          <OperationsPeriodChipDisplay period={period} />
-          <span
-            aria-hidden
-            className="inline-flex h-11 items-center rounded-pill bg-surface-muted px-5 text-sm font-medium text-content"
-          >
-            Все категории
-          </span>
+          {/* Чип периода — кнопка канонного пикера (решение владельца
+           * 01.10): период меняется на месте, применение возвращает к
+           * выбору категории. Дефолт «весь период» — канон #670. */}
+          <OperationsPeriodChip period={period} onOpen={() => setPeriodOpen(true)} />
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto pt-2 pb-[calc(6.5rem+env(safe-area-inset-bottom))]">
@@ -203,6 +210,9 @@ export function OperationsCategoriesScreen({
           </Button>
         </StickyBottomBar>
       ) : null}
+
+      {/* Пикер периода — канон объектных экранов: пишёт в URL страницы. */}
+      {periodOpen && <OperationsPeriodPickerDialog onClose={() => setPeriodOpen(false)} />}
     </>
   );
 }

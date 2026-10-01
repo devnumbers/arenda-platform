@@ -87,6 +87,11 @@ type OperationsListQuery struct {
 type OperationsSummaryQuery struct {
 	Status *domain.OperationViewStatus
 	Type   *domain.PaymentType
+	// Categories filters on the operation's category snapshot (nil = no
+	// filter); a row without a category snapshot never matches. The
+	// category filter narrows the totals and the breakdown alike — the
+	// card mirrors the filtered list (решение владельца 01.10).
+	Categories []string
 	// Sort is the summary's date key (OperationsListQuery.Sort): the period
 	// bounds read the same date the listing does (ticket #992).
 	Sort     OperationSortKey

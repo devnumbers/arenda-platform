@@ -8,7 +8,6 @@ import {
   BoldObjects,
   BoldStar,
   BoldWarning,
-  Filter,
   SmallArrowDown,
 } from "@/shared/assets/icons";
 import { ROUTES } from "@/shared/config/routes";
@@ -217,9 +216,9 @@ export function PaymentsGlobalScreen(): JSX.Element {
 }
 
 /** Пилюля поиска платежей (879:9683) — адаптер канона SearchPill: подпись
- * «Найти платёж», тап открывает страницу поиска (#581); pr-4 — отступ
- * декора-слайдеров справа (не кнопка, кликается вся пилюля целиком).
- * Экспорт для route-loading (#609). */
+ * «Найти платёж», тап открывает страницу поиска (#581). Декор-слайдеры
+ * справа снесены (решение владельца 01.10): мёртвый элемент без действия,
+ * пилюля кликается целиком. Экспорт для route-loading (#609). */
 export function PaymentsSearchPill({
   onOpenSearch,
 }: {
@@ -230,8 +229,6 @@ export function PaymentsSearchPill({
       onOpenSearch={onOpenSearch}
       label="Найти платёж"
       testId="payments-search-pill"
-      className="pr-4"
-      trailing={<Filter className="h-6 w-6 shrink-0 text-content" aria-hidden />}
     />
   );
 }

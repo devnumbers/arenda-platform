@@ -734,7 +734,7 @@ export interface paths {
         };
         /**
          * Summarize the actor's visible paid operations (the global «Операции» screen)
-         * @description The global twin of the property operations summary (ticket #540) over the same visible merged feed as GET /operations: paid operations of the actor's own properties plus the properties they can view, the archived ones excluded. The propertyIds filter and the period narrow the whole scope — totals and the category breakdown alike; the type and category filters narrow only the categories array, the totals always report both directions. Search is the listing's predicate — the summary of the searched scope stays consistent with its list. The period reads the listing's date key (see sort).
+         * @description The global twin of the property operations summary (ticket #540) over the same visible merged feed as GET /operations: paid operations of the actor's own properties plus the properties they can view, the archived ones excluded. The propertyIds filter and the period narrow the whole scope — totals and the category breakdown alike; the type filter narrows only the categories array, the totals always report both directions; the category filter narrows the whole scope too — the totals and the breakdown alike, the card mirroring the filtered list (решение владельца 01.10). Search is the listing's predicate — the summary of the searched scope stays consistent with its list. The period reads the listing's date key (see sort).
          */
         get: operations["summarizeOperations"];
         put?: never;
@@ -5316,6 +5316,8 @@ export interface operations {
                 search?: components["parameters"]["OperationsSearch"];
                 /** @description Filter by the operation direction: the payment's type snapshot every operation carries. A missing value disables the filter. */
                 type?: components["parameters"]["OperationsTypeFilter"];
+                /** @description Comma-separated category slugs (the chips multi-select); operations of any other category are filtered out. A missing or empty value disables the filter; whitespace around slugs is ignored. */
+                category?: components["parameters"]["OperationsCategoriesFilter"];
             };
             header?: never;
             path: {
@@ -5325,7 +5327,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Period totals of the property's operations by direction plus the per-category breakdown. The totals always report both directions — the summary cards read them together — while the type filter narrows only the categories array. Categories with no operations in scope are absent; the array is ordered by total, largest first. */
+            /** @description Period totals of the property's operations by direction plus the per-category breakdown. The totals always report both directions — the summary cards read them together. The category filter narrows the whole scope — the totals and the categories array alike, the card mirroring the filtered list (решение владельца 01.10) — while the type filter narrows only the categories array. Categories with no operations in scope are absent; the array is ordered by total, largest first. */
             200: {
                 headers: {
                     [name: string]: unknown;

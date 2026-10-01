@@ -196,7 +196,9 @@ export const paymentOperationKeys = {
       scope.dateTo ?? '',
       scope.search ?? '',
     ] as const,
-  /** Сводка периода объекта (#474): статус/тип/период/поиск — часть ключа. */
+  /** Сводка периода объекта (#474): статус/тип/период/поиск/категории —
+   * часть ключа: сводка сужается категорией вместе со списком (решение
+   * владельца 01.10), один ключ — один ответ сервера. */
   summary: (propertyId: string, scope: PaymentOperationScope) =>
     [
       ...paymentOperationKeys.all,
@@ -205,6 +207,7 @@ export const paymentOperationKeys = {
       scope.status,
       scope.sort ?? '',
       scope.type ?? '',
+      scope.categories?.join(',') ?? '',
       scope.dateFrom ?? '',
       scope.dateTo ?? '',
       scope.search ?? '',
@@ -280,16 +283,18 @@ export const globalOperationKeys = {
       scope.type ?? '',
       scope.includeArchived ?? false,
     ] as const,
-  /** Глобальная сводка (#540): период, объекты и поиск — часть ключа;
-   * категории в ключ не входят — сводка категорийный фильтр не принимает
-   * (решение владельца #539), а чипы поиска читают сводку поискового
-   * скоупа. */
+  /** Глобальная сводка (#540): период, объекты, поиск и категории — часть
+   * ключа: сводка сужается категорией вместе со списком (решение владельца
+   * 01.10, прежнее «категории в ключ не входят» #539 отменено), один ключ —
+   * один ответ сервера; чипы поиска читают сводку поискового скоупа — у
+   * него категорий в скоупе нет, их ключ не меняется. */
   summary: (scope: GlobalOperationScope) =>
     [
       ...globalOperationKeys.all,
       'summary',
       scope.sort ?? '',
       scope.propertyIds?.join(',') ?? '',
+      scope.categories?.join(',') ?? '',
       scope.dateFrom ?? '',
       scope.dateTo ?? '',
       scope.search ?? '',

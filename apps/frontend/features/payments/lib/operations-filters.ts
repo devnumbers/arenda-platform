@@ -1,4 +1,4 @@
-import type { IsoDate, OperationsCategorySummary } from '@/entities/payment';
+import type { IsoDate, OperationsCategorySummary, PaymentType } from '@/entities/payment';
 import { formatIsoRangeChipLabel } from '@/shared/lib/date-format';
 import { readCsvParam } from '@/shared/lib/parse-csv-uuid-param';
 import { readIsoRangeParam, type UrlParamsSource } from '@/shared/lib/parse-iso-range-param';
@@ -64,6 +64,20 @@ export function readOperationsFilters(
     period: readIsoRangeParam(params, 'from', 'to', today),
     categories: readCsvParam(params.get('category')),
   };
+}
+
+/**
+ * Направление страниц выбора категории, открытых с направленческой ленты
+ * (решение владельца 01.10): ?type=income|expense сужает разбивку категорий
+ * сводки до направления (контракт #540 — type сужает только массив
+ * категорий). Направление ленты живёт в пути, а не в фильтрах, поэтому
+ * сюда оно приходит явным параметром; кривое значение и прямое открытие с
+ * главной ленты дают undefined — разбивка без сужения. В apply параметр не
+ * возвращается: сериализаторы фильтров его не пишут.
+ */
+export function readDirectionParam(params: OperationsParamsSource): PaymentType | undefined {
+  const value = params.get('type');
+  return value === 'income' || value === 'expense' ? value : undefined;
 }
 
 /**

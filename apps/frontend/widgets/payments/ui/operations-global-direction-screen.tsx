@@ -84,7 +84,7 @@ export function OperationsGlobalDirectionScreen({
     includeArchived: filters.archived,
   });
   const summaryQuery = useGlobalOperationsSummary({
-    ...globalDirectionSummaryScope(filters.period, filters.propertyIds, type),
+    ...globalDirectionSummaryScope(filters.period, filters.propertyIds, filters.categories, type),
     includeArchived: filters.archived,
   });
   // All-time сводка направления (без периода/категорий): отличает «операций
@@ -185,6 +185,10 @@ export function OperationsGlobalDirectionScreen({
                 router.push(
                   globalOperationsFiltersHref(ROUTES.operationsCategories, filters, {
                     return: selfRoute,
+                    // Направление — в скоуп разбивки пикера (решение
+                    // владельца 01.10): список категорий только этого
+                    // направления; в apply не возвращается.
+                    type,
                   }),
                 )
               }

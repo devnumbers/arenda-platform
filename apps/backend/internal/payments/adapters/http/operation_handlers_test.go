@@ -844,6 +844,7 @@ func TestSummarizePropertyOperations_FoldsParamsIntoCommand(t *testing.T) {
 	expense := openapi.SummarizePropertyOperationsParamsTypeExpense
 	from := openapi_types.Date{Time: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)}
 	to := openapi_types.Date{Time: time.Date(2026, 8, 31, 0, 0, 0, 0, time.UTC)}
+	category := " utilities, rent "
 	req := httptest.NewRequestWithContext(
 		httpsupport.WithUserID(t.Context(), actor), http.MethodGet, "/operations/summary", nil,
 	)
@@ -853,6 +854,7 @@ func TestSummarizePropertyOperations_FoldsParamsIntoCommand(t *testing.T) {
 		Type:     &expense,
 		DateFrom: &from,
 		DateTo:   &to,
+		Category: &category,
 	})
 
 	if w.Code != http.StatusOK {
@@ -869,6 +871,9 @@ func TestSummarizePropertyOperations_FoldsParamsIntoCommand(t *testing.T) {
 	}
 	if gotCmd.DateFrom == nil || gotCmd.DateTo == nil {
 		t.Errorf("period = %v..%v, want both bounds carried", gotCmd.DateFrom, gotCmd.DateTo)
+	}
+	if len(gotCmd.Categories) != 2 || gotCmd.Categories[0] != testSlugUtilities || gotCmd.Categories[1] != testSlugRent {
+		t.Errorf("cmd.Categories = %v, want [%s %s] — trimmed, empties dropped", gotCmd.Categories, testSlugUtilities, testSlugRent)
 	}
 }
 
@@ -1240,6 +1245,7 @@ func TestSummarizeOperations_FoldsParamsAndMapsPrivacy(t *testing.T) {
 
 	propertyIds := " " + propA.String() + " "
 	income := openapi.SummarizeOperationsParamsTypeIncome
+	category := "rent"
 	from := openapi_types.Date{Time: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)}
 	req := httptest.NewRequestWithContext(
 		httpsupport.WithUserID(t.Context(), actor), http.MethodGet, "/operations/summary", nil,
@@ -1249,6 +1255,7 @@ func TestSummarizeOperations_FoldsParamsAndMapsPrivacy(t *testing.T) {
 		PropertyIds: &propertyIds,
 		Type:        &income,
 		DateFrom:    &from,
+		Category:    &category,
 	})
 
 	if w.Code != http.StatusOK {
@@ -1262,6 +1269,9 @@ func TestSummarizeOperations_FoldsParamsAndMapsPrivacy(t *testing.T) {
 	}
 	if gotCmd.DateFrom == nil || gotCmd.DateTo != nil {
 		t.Errorf("period = %v..%v, want the from bound only", gotCmd.DateFrom, gotCmd.DateTo)
+	}
+	if len(gotCmd.Categories) != 1 || gotCmd.Categories[0] != testSlugRent {
+		t.Errorf("cmd.Categories = %v, want [%s]", gotCmd.Categories, testSlugRent)
 	}
 
 	var body openapi.OperationsSummaryResponse

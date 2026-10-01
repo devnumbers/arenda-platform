@@ -45,8 +45,22 @@ describe('globalDirectionListScope', () => {
 });
 
 describe('globalDirectionSummaryScope', () => {
-  it('тот же запрос с типом, но без категорийного сужения — карточка показывает направление целиком (контракт #540)', () => {
-    expect(globalDirectionSummaryScope({ from: '2026-11-01', to: '2026-11-30' }, ['p1'], 'expense')).toStrictEqual({
+  it('категорийный фильтр сужает и карточку — она зеркалит отфильтрованный список (решение владельца 01.10)', () => {
+    expect(
+      globalDirectionSummaryScope({ from: '2026-11-01', to: '2026-11-30' }, ['p1'], ['tv'], 'expense'),
+    ).toStrictEqual({
+      order: 'desc',
+      sort: 'paid_date',
+      propertyIds: ['p1'],
+      dateFrom: '2026-11-01',
+      dateTo: '2026-11-30',
+      categories: ['tv'],
+      type: 'expense',
+    });
+  });
+
+  it('пустой выбор категорий — без сужения, карточка показывает направление целиком', () => {
+    expect(globalDirectionSummaryScope({ from: '2026-11-01', to: '2026-11-30' }, ['p1'], [], 'expense')).toStrictEqual({
       order: 'desc',
       sort: 'paid_date',
       propertyIds: ['p1'],
@@ -57,7 +71,7 @@ describe('globalDirectionSummaryScope', () => {
   });
 
   it('период null — сводка за весь период, дат в скоупе нет (#671)', () => {
-    expect(globalDirectionSummaryScope(null, ['p1'], 'expense')).toStrictEqual({
+    expect(globalDirectionSummaryScope(null, ['p1'], [], 'expense')).toStrictEqual({
       order: 'desc',
       sort: 'paid_date',
       propertyIds: ['p1'],

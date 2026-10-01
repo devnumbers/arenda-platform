@@ -1254,14 +1254,18 @@ paths:
         - $ref: '#/components/parameters/OperationsSort'
         - $ref: '#/components/parameters/OperationsSearch'
         - $ref: '#/components/parameters/OperationsTypeFilter'
+        - $ref: '#/components/parameters/OperationsCategoriesFilter'
       responses:
         '200':
           description: >-
             Period totals of the property's operations by direction plus the
             per-category breakdown. The totals always report both directions —
-            the summary cards read them together — while the type filter
-            narrows only the categories array. Categories with no operations
-            in scope are absent; the array is ordered by total, largest first.
+            the summary cards read them together. The category filter narrows
+            the whole scope — the totals and the categories array alike, the
+            card mirroring the filtered list (решение владельца 01.10) — while
+            the type filter narrows only the categories array. Categories with
+            no operations in scope are absent; the array is ordered by total,
+            largest first.
           content:
             application/json:
               schema:
@@ -1730,8 +1734,10 @@ paths:
         the actor's own properties plus the properties they can view, the
         archived ones excluded. The propertyIds filter and the period narrow
         the whole scope — totals and the category breakdown alike; the type
-        and category filters narrow only the categories array, the totals
-        always report both directions. Search is the listing's predicate —
+        filter narrows only the categories array, the totals always report
+        both directions; the category filter narrows the whole scope too —
+        the totals and the breakdown alike, the card mirroring the filtered
+        list (решение владельца 01.10). Search is the listing's predicate —
         the summary of the searched scope stays consistent with its list.
         The period reads the listing's date key (see sort).
       security:

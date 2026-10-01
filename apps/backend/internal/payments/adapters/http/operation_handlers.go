@@ -425,9 +425,11 @@ func listOperationsFromPropertyParams(
 }
 
 // summarizeFromParams adapts the summary endpoint's params onto the summary
-// request: the same status/period/type vocabulary as the listing, minus the
-// pagination — the aggregate runs in SQL. The period reads the listing's
-// date key (sort, ticket #992).
+// request: the same status/period/type/category vocabulary as the listing,
+// minus the pagination — the aggregate runs in SQL. The period reads the
+// listing's date key (sort, ticket #992); the category filter narrows the
+// totals and the breakdown alike — the card mirrors the filtered list
+// (решение владельца 01.10).
 func summarizeFromParams(
 	params openapi.SummarizePropertyOperationsParams,
 ) (application.OperationsSummaryQuery, error) {
@@ -444,12 +446,13 @@ func summarizeFromParams(
 		return application.OperationsSummaryQuery{}, err
 	}
 	return application.OperationsSummaryQuery{
-		Status:   status,
-		Sort:     sort,
-		Type:     typ,
-		DateFrom: datePtrFromWire(params.DateFrom),
-		DateTo:   datePtrFromWire(params.DateTo),
-		Search:   derefString(params.Search),
+		Status:     status,
+		Sort:       sort,
+		Type:       typ,
+		DateFrom:   datePtrFromWire(params.DateFrom),
+		DateTo:     datePtrFromWire(params.DateTo),
+		Search:     derefString(params.Search),
+		Categories: splitCategorySlugs(params.Category),
 	}, nil
 }
 

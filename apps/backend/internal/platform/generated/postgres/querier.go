@@ -1316,24 +1316,27 @@ type Querier interface {
 	// the summary cards never re-add a paginated listing client-side. The
 	// direction filter deliberately does not apply here — the totals always
 	// report both directions (the contract: the type filter narrows only the
-	// category breakdown). Types absent from the scope simply miss from the
-	// result — the adapter reports them as zero. Cancelled tombstones never
-	// count. The search filter (ticket #476) is the listing's predicate — the
-	// summary of the searched scope stays consistent with its list.
+	// category breakdown). The category filter narrows the totals (the card
+	// mirrors the filtered list, решение владельца 01.10). Cancelled
+	// tombstones never count. The search filter (ticket #476) is the listing's
+	// predicate — the summary of the searched scope stays consistent with its
+	// list.
 	SumOperationTotals(ctx context.Context, arg SumOperationTotalsParams) ([]SumOperationTotalsRow, error)
 	// The per-category breakdown behind the category chips and the summary
 	// cards' bar (ticket #473): one row per category snapshot present in the
 	// scope, largest total first; rows without a category snapshot are skipped
 	// (no chip identity — their amounts still count in the totals). The search
 	// filter (ticket #476) is the listing's predicate: the breakdown over the
-	// searched scope is the search screen's matched-category chips. The period
-	// follows the listing's date key (ticket #992).
+	// searched scope is the search screen's matched-category chips. The
+	// category filter narrows the breakdown to the selected slugs (the chips
+	// multi-select); the period follows the listing's date key (ticket #992).
 	SumOperationsByCategory(ctx context.Context, arg SumOperationsByCategoryParams) ([]SumOperationsByCategoryRow, error)
 	// The period totals by direction of the actor's visible merged feed (ticket
-	// #540): the propertyIds filter and the period narrow the totals, the type
-	// and category filters deliberately do not — the totals always report both
-	// directions whatever the breakdown is narrowed to. Types absent from the
-	// scope miss from the result — the adapter reports them as zero.
+	// #540): the propertyIds filter, the period and the category filter narrow
+	// the totals (the card mirrors the filtered list, решение владельца
+	// 01.10); the type filter deliberately does not — the totals always report
+	// both directions whatever the breakdown is narrowed to. Types absent from
+	// the scope miss from the result — the adapter reports them as zero.
 	SumPaidOperationTotalsGlobal(ctx context.Context, arg SumPaidOperationTotalsGlobalParams) ([]SumPaidOperationTotalsGlobalRow, error)
 	// The per-category breakdown of the actor's visible merged feed (ticket
 	// #540), largest total first; rows without a category snapshot are skipped
