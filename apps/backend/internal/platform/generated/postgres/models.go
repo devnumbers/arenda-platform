@@ -556,16 +556,17 @@ type Task struct {
 }
 
 type TaskRule struct {
-	ID         pgtype.UUID        `json:"id"`
-	OwnerID    pgtype.UUID        `json:"owner_id"`
-	PropertyID pgtype.UUID        `json:"property_id"`
-	Title      string             `json:"title"`
-	Comment    pgtype.Text        `json:"comment"`
-	DueDate    pgtype.Date        `json:"due_date"`
-	DueTime    pgtype.Time        `json:"due_time"`
-	Repeat     string             `json:"repeat"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	ID            pgtype.UUID        `json:"id"`
+	OwnerID       pgtype.UUID        `json:"owner_id"`
+	PropertyID    pgtype.UUID        `json:"property_id"`
+	Title         string             `json:"title"`
+	Comment       pgtype.Text        `json:"comment"`
+	DueDate       pgtype.Date        `json:"due_date"`
+	DueTime       pgtype.Time        `json:"due_time"`
+	Repeat        string             `json:"repeat"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	HistoryBefore pgtype.Date        `json:"history_before"`
 }
 
 type User struct {

@@ -118,6 +118,92 @@ func TestPlanTaskTick_UndatedRerunIsNoop(t *testing.T) {
 	}
 }
 
+func TestPlanTaskTick_HorizonSuppressesDeletedPast(t *testing.T) {
+	t.Parallel()
+
+	// The «Удалить все выполненные» horizon: the completed 09-03 was cleared
+	// and the rule's history horizon moved to 09-10 — the cleared 09-03 must
+	// not re-materialize, while today's 09-10 (at the horizon itself) and the
+	// single future stand as usual.
+	rule := datedRule(RepeatWeekly, 2026, time.September, 3)
+	horizon := d(2026, time.September, 10)
+	rule.HistoryBefore = &horizon
+
+	plan := PlanTaskTick(rule, todaySep10, TaskExistence{})
+
+	if len(plan.Materialize) != 1 || dateOnly(plan.Materialize[0]) != sep10 {
+		t.Fatalf("Materialize = %v, want [%s] (the cleared 09-03 stays deleted)", plan.Materialize, sep10)
+	}
+	if plan.InsertFuture == nil || dateOnly(*plan.InsertFuture) != sep17 {
+		t.Fatalf("InsertFuture = %v, want %s", plan.InsertFuture, sep17)
+	}
+}
+
+func TestPlanTaskTick_HorizonKeepsStandingFutureOnSuppressedDate(t *testing.T) {
+	t.Parallel()
+
+	// A completed-ahead 09-24 was cleared (horizon 10-01) while the standing
+	// 09-17 stays uncompleted: the horizon suppresses creation, never the
+	// existing rows — the standing row still occupies its suppressed gap, and
+	// the walk resumes after it.
+	rule := datedRule(RepeatWeekly, 2026, time.September, 3)
+	horizon := d(2026, time.October, 1)
+	rule.HistoryBefore = &horizon
+	existing := TaskExistence{Dated: map[time.Time]bool{
+		d(2026, time.September, 17): false, // The standing future task.
+	}}
+
+	plan := PlanTaskTick(rule, todaySep10, existing)
+
+	if len(plan.Materialize) != 0 {
+		t.Fatalf("Materialize = %v, want empty", plan.Materialize)
+	}
+	if plan.KeepFuture == nil || dateOnly(*plan.KeepFuture) != sep17 {
+		t.Fatalf("KeepFuture = %v, want the standing %s", plan.KeepFuture, sep17)
+	}
+	if plan.InsertFuture != nil {
+		t.Fatalf("InsertFuture = %v, want nil (the standing row occupies 09-17)", plan.InsertFuture)
+	}
+}
+
+func TestPlanTaskTick_HorizonSuppressesClearedFutureInsertion(t *testing.T) {
+	t.Parallel()
+
+	// The completed-ahead 09-17 was cleared (horizon 09-24) and no rows are
+	// left: the suppressed 09-17 must not re-materialize — neither as due
+	// debt nor as the single future; the next non-suppressed occurrence stands.
+	rule := datedRule(RepeatWeekly, 2026, time.September, 3)
+	horizon := d(2026, time.September, 24)
+	rule.HistoryBefore = &horizon
+
+	plan := PlanTaskTick(rule, todaySep10, TaskExistence{})
+
+	if len(plan.Materialize) != 0 {
+		t.Fatalf("Materialize = %v, want empty (09-03..09-10 are suppressed)", plan.Materialize)
+	}
+	if plan.KeepFuture == nil || dateOnly(*plan.KeepFuture) != sep24 {
+		t.Fatalf("KeepFuture = %v, want %s (the next non-suppressed occurrence)", plan.KeepFuture, sep24)
+	}
+	if plan.InsertFuture == nil || dateOnly(*plan.InsertFuture) != sep24 {
+		t.Fatalf("InsertFuture = %v, want %s", plan.InsertFuture, sep24)
+	}
+}
+
+func TestPlanTaskTick_UndatedHorizonStaysDormant(t *testing.T) {
+	t.Parallel()
+
+	// An undated rule whose cleared task is gone stays dormant: the horizon
+	// marker (its date part is meaningless here) suppresses the undated
+	// materialization until a rule edit resets it.
+	rule := TaskRule{Repeat: RepeatOnce, HistoryBefore: &todaySep10}
+
+	plan := PlanTaskTick(rule, todaySep10, TaskExistence{})
+
+	if plan.MaterializeUndated {
+		t.Fatal("cleared undated rule must stay dormant (no task rows left).")
+	}
+}
+
 func TestPlanTaskTick_OncePastAnchorHasNoFuture(t *testing.T) {
 	t.Parallel()
 

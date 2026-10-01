@@ -194,19 +194,21 @@ type Querier interface {
 	// «Удалить все» (решение #737): soft-deletes every feed row of the user in
 	// one statement; the result is the number of rows hidden.
 	DeleteAllNotifications(ctx context.Context, userID pgtype.UUID) (int64, error)
-	// «Удалить все выполненные» (resolution #497): the completed tasks of the
-	// property's deleted rules (rule_id IS NULL) are removed forever. The
-	// completed tasks of live rules stay — they hold the tick's dedup keys, and
-	// clearing them would re-materialize the rule's whole past (ADR 0051).
+	// «Удалить все выполненные» (resolution #497, ADR 0051 as amended
+	// 2026-10-01): every completed task of the property is removed forever — the
+	// deleted-rule journal and the live rules' rows alike. The live rules'
+	// horizons were raised by RaiseTaskHistoryHorizons in the same transaction:
+	// the cleared dates never materialize again, the standing rows stand.
 	DeleteCompletedJournal(ctx context.Context, arg DeleteCompletedJournalParams) (int64, error)
 	// «Удалить все выполненные» across the owner's whole book (ticket #536):
-	// the completed tasks of the deleted rules (rule_id IS NULL) in one query —
-	// the bound rows and the property-less ones (nullable property_id, ADR 0052).
-	// Archived properties stay frozen (ADR 0025) and the shared-to properties'
-	// journals are other owners' books (owner-scope, ADR 0028). The completed
-	// tasks of live rules stay — the tick's dedup keys (ADR 0051). Returns the
-	// removed rows' property anchors, one per removed row (NULL is the
-	// property-less leg) — the use case groups them into the per-object
+	// every completed task of the book in one query — the bound rows and the
+	// property-less ones (nullable property_id, ADR 0052), the deleted-rule
+	// journals and the live rules' rows alike (the horizons were raised by
+	// RaiseTaskHistoryHorizonsOwnerBook in the same transaction, ADR 0051 as
+	// amended). Archived properties stay frozen (ADR 0025) and the shared-to
+	// properties' journals are other owners' books (owner-scope, ADR 0028).
+	// Returns the removed rows' property anchors, one per removed row (NULL is
+	// the property-less leg) — the use case groups them into the per-object
 	// journal rows (ADR 0061 §3).
 	DeleteCompletedJournalOwnerBook(ctx context.Context, ownerID pgtype.UUID) ([]pgtype.UUID, error)
 	DeleteContact(ctx context.Context, arg DeleteContactParams) (int64, error)
@@ -546,11 +548,11 @@ type Querier interface {
 	GetTaskOwnerTimezone(ctx context.Context, id pgtype.UUID) (string, error)
 	// The nested path rule→property is part of the key: a foreign or re-hung
 	// row is the privacy 404.
-	GetTaskRule(ctx context.Context, arg GetTaskRuleParams) (TaskRule, error)
+	GetTaskRule(ctx context.Context, arg GetTaskRuleParams) (GetTaskRuleRow, error)
 	// The property-less cut of the rule read (ADR 0052: the slices never mix —
 	// the predicate over property_id picks the slice explicitly). The id-scoped
 	// owner key is the privacy 404; a bound rule is invisible here by design.
-	GetTaskRuleWithoutProperty(ctx context.Context, arg GetTaskRuleWithoutPropertyParams) (TaskRule, error)
+	GetTaskRuleWithoutProperty(ctx context.Context, arg GetTaskRuleWithoutPropertyParams) (GetTaskRuleWithoutPropertyRow, error)
 	// The property-less cut of the task read (ADR 0052: the slices never mix).
 	// rule_repeat is the same live-rule read projection as in GetTask.
 	GetTaskWithoutProperty(ctx context.Context, arg GetTaskWithoutPropertyParams) (GetTaskWithoutPropertyRow, error)
@@ -1151,7 +1153,8 @@ type Querier interface {
 	ListTickTaskKeys(ctx context.Context, dollar_1 []pgtype.UUID) ([]ListTickTaskKeysRow, error)
 	// The owner's tick read side: rules without a property plus rules on
 	// non-archived properties (ADR 0052). The LEFT JOIN keeps the property-less
-	// cut while the status predicate still skips archived ones.
+	// cut while the status predicate still skips archived ones. history_before
+	// rides along — the tick's creation horizon (ADR 0051 as amended).
 	ListTickTaskRulesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListTickTaskRulesByOwnerRow, error)
 	// The hourly zone sweep of the tick worker (ADR 0048 p.3): the distinct owner
 	// timezones having payment rules on active/maintenance properties, with the
@@ -1242,6 +1245,20 @@ type Querier interface {
 	// pause is excluded by the caller (the domain plan), and occurrences inside
 	// a pause are not generated at all.
 	PayOperationDueToday(ctx context.Context, arg PayOperationDueTodayParams) (int64, error)
+	// The horizon leg of «Удалить все выполненные» (ADR 0051 as amended
+	// 2026-10-01): every live rule of the property with completed rows about to
+	// be cleared gets its history horizon raised to max(deleted due)+1 — the
+	// cleared occurrences never materialize again. For an undated rule MAX(due)
+	// is NULL: the CASE stamps the dormancy marker (the owner's today) whose
+	// date part is meaningless. GREATEST keeps an earlier-raised horizon — the
+	// deletion is forever. Runs inside the clear's transaction, before
+	// DeleteCompletedJournal.
+	RaiseTaskHistoryHorizons(ctx context.Context, arg RaiseTaskHistoryHorizonsParams) error
+	// The book-wide horizon leg: the owner's live rules with completed rows
+	// about to be cleared — on non-archived properties and without one (ADR
+	// 0052). The same max(deleted due)+1 raise; archived properties' rules stay
+	// outside (their rows are not cleared — ADR 0025).
+	RaiseTaskHistoryHorizonsOwnerBook(ctx context.Context, arg RaiseTaskHistoryHorizonsOwnerBookParams) error
 	ReactivatePropertyMember(ctx context.Context, arg ReactivatePropertyMemberParams) (PropertyMember, error)
 	// ResetLoginAttempt writes the absolute attempt-window state, used when the
 	// window is new or has expired (TTL reset) and the failure counter must be set
@@ -1382,7 +1399,10 @@ type Querier interface {
 	UpdateTariff(ctx context.Context, arg UpdateTariffParams) (Tariff, error)
 	// The editable fields of the rule (the anchor included: edit invalidates the
 	// not-yet-due uncompleted tasks, the in-transaction tick stands the single
-	// future again); id/owner_id/property_id never move.
+	// future again) plus the history horizon the row already carries: a dated
+	// edit keeps it (the cleared past stays deleted), an undated one passes NULL
+	// (the edit resets the dormancy marker — the application folds that into the
+	// rule before this runs); id/owner_id/property_id never move.
 	UpdateTaskRule(ctx context.Context, arg UpdateTaskRuleParams) error
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
 	UpdateUserEmailVerified(ctx context.Context, arg UpdateUserEmailVerifiedParams) (UpdateUserEmailVerifiedRow, error)

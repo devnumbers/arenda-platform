@@ -28,8 +28,9 @@ SELECT id FROM users WHERE id = $1 FOR UPDATE;
 -- name: ListTickTaskRulesByOwner :many
 -- The owner's tick read side: rules without a property plus rules on
 -- non-archived properties (ADR 0052). The LEFT JOIN keeps the property-less
--- cut while the status predicate still skips archived ones.
-SELECT r.id, r.owner_id, r.property_id, r.title, r.comment, r.due_date, r.due_time, r.repeat
+-- cut while the status predicate still skips archived ones. history_before
+-- rides along — the tick's creation horizon (ADR 0051 as amended).
+SELECT r.id, r.owner_id, r.property_id, r.title, r.comment, r.due_date, r.due_time, r.repeat, r.history_before
 FROM task_rules r
 LEFT JOIN properties pr ON pr.id = r.property_id
 WHERE r.owner_id = $1

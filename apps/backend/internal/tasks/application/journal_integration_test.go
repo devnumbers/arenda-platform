@@ -117,48 +117,142 @@ func TestDeleteRule_KillsUncompletedKeepsCompletedJournal(t *testing.T) {
 	}
 }
 
-func TestClearCompletedJournal_ScopedToDeletedRules(t *testing.T) {
+func TestClearCompletedJournal_ClearsLiveRulesWithHorizon(t *testing.T) {
 	t.Parallel()
 
 	h := newTasksHarness(t).withOwner(taskMoscowTZ)
 
-	// Rule A will be deleted (its journal is the clear's target); rule B
-	// stays alive (its completed task must survive the clear).
+	// Both rules stay alive: the clear removes their completed rows too,
+	// raising each rule's history horizon to max(deleted due)+1 so the tick
+	// never resurrects the cleared past (ADR 0051 as amended 2026-10-01).
 	ruleA := h.seedRule(aug27, "", string(domain.RepeatWeekly), "Правило A")
 	ruleB := h.seedRule(day10, "", string(domain.RepeatOnce), "Правило B")
 	h.runTick()
 
-	h.completeAllBut(ruleA, day17)
-	h.completeAllBut(ruleB, "")
+	h.completeAllBut(ruleA, day17) // Aug 27, Sep 3, Sep 10 completed; the future Sep 17 stands.
+	h.completeAllBut(ruleB, "")    // Today's once task completed.
 
-	if err := h.rules.DeleteRule(h.ctx(), h.owner, h.propID, ruleA); err != nil {
-		t.Fatalf("delete rule A: %v", err)
+	cleared, err := h.tasks.ClearCompletedJournal(h.ctx(), h.owner, h.propID)
+	if err != nil {
+		t.Fatalf("clear completed journal: %v", err)
+	}
+	if cleared != 4 {
+		t.Fatalf("cleared = %d, want 4 (3 of rule A + 1 of rule B)", cleared)
+	}
+
+	// The completed section is empty; the standing future is untouched.
+	for _, task := range h.loadTasks(t) {
+		if task.CompletedDate != nil {
+			t.Fatalf("completed row survived the clear: %+v", task)
+		}
+	}
+
+	// The horizons: max(deleted due)+1 per rule — today's completion is the
+	// latest of both.
+	assertHorizon(t, h, ruleA, "2026-09-11")
+	assertHorizon(t, h, ruleB, "2026-09-11")
+
+	// The resurrection guard: the tick runs over the cleared state and the
+	// past stays deleted — rule A keeps only its future, rule B nothing.
+	h.runTick()
+	if got := datesOf(h.ruleTasks(h, ruleA)); !slices.Equal(got, []string{day17}) {
+		t.Fatalf("rule A tasks after clear+tick = %v, want [%s]", got, day17)
+	}
+	if got := h.ruleTasks(h, ruleB); len(got) != 0 {
+		t.Fatalf("rule B tasks after clear+tick = %v, want none", got)
+	}
+
+	// A dated rule's edit keeps the horizon: renaming rule A must not
+	// resurrect the cleared history.
+	newTitle := "Правило A2"
+	if _, err := h.rules.UpdateRule(h.ctx(), h.owner, h.propID, ruleA, application.UpdateRuleCommand{
+		Title: &newTitle,
+	}); err != nil {
+		t.Fatalf("update rule A: %v", err)
+	}
+	assertHorizon(t, h, ruleA, "2026-09-11")
+	h.runTick()
+	if got := datesOf(h.ruleTasks(h, ruleA)); !slices.Equal(got, []string{day17}) {
+		t.Fatalf("rule A tasks after edit+tick = %v, want [%s]", got, day17)
+	}
+}
+
+func TestClearCompletedJournal_UndatedRuleDormantUntilEdit(t *testing.T) {
+	t.Parallel()
+
+	h := newTasksHarness(t).withOwner(taskMoscowTZ)
+	ruleID := h.seedRule("", "", string(domain.RepeatOnce), "Без срока")
+	h.runTick()
+	// The undated task has no due date — complete it explicitly (the shared
+	// helper skips undated rows).
+	for _, task := range h.ruleTasks(h, ruleID) {
+		if _, err := h.tasks.CompleteTask(h.ctx(), h.owner, h.propID, task.ID); err != nil {
+			t.Fatalf("complete undated task: %v", err)
+		}
 	}
 
 	cleared, err := h.tasks.ClearCompletedJournal(h.ctx(), h.owner, h.propID)
 	if err != nil {
 		t.Fatalf("clear completed journal: %v", err)
 	}
-	// Rule A (weekly) completed three past occurrences before deletion.
-	if cleared != 3 {
-		t.Fatalf("cleared = %d, want the 3 journal rows of rule A", cleared)
+	if cleared != 1 {
+		t.Fatalf("cleared = %d, want the undated completed row", cleared)
 	}
 
-	// No ownerless completed row survived the clear...
-	for _, task := range h.loadTasks(t) {
-		if task.CompletedDate != nil && task.RuleID == nil {
-			t.Fatalf("journal row of the deleted rule survived the clear: %+v", task)
-		}
+	// The dormancy marker rides the same column: the undated rule's date
+	// part is meaningless, the owner's today marks the clear.
+	assertHorizon(t, h, ruleID, day10)
+
+	// The tick leaves the cleared undated rule dormant — the task does not
+	// respawn out of nowhere.
+	h.runTick()
+	if tasks := h.ruleTasks(h, ruleID); len(tasks) != 0 {
+		t.Fatalf("cleared undated task respawned: %+v", tasks)
 	}
-	// ...while the live rule B keeps its completed row (the dedup key).
-	var liveB int
-	for _, task := range h.ruleTasks(h, ruleB) {
-		if task.CompletedDate != nil {
-			liveB++
-		}
+
+	// The rule edit resets the marker: the undated task materializes again
+	// (the in-transaction tick of the edit stands it immediately).
+	newTitle := "Без срока 2"
+	if _, err := h.rules.UpdateRule(h.ctx(), h.owner, h.propID, ruleID, application.UpdateRuleCommand{
+		Title: &newTitle,
+	}); err != nil {
+		t.Fatalf("update undated rule: %v", err)
 	}
-	if liveB != 1 {
-		t.Fatalf("live rule B completed rows = %d, want 1 (the dedup key)", liveB)
+	if tasks := h.ruleTasks(h, ruleID); len(tasks) != 1 {
+		t.Fatalf("edited undated rule has %d tasks, want the fresh one", len(tasks))
+	}
+
+	// The same holds when the edit turns the rule dated: the stale marker
+	// must not survive as a bogus history horizon.
+	due := time.Date(2026, 9, 17, 0, 0, 0, 0, time.UTC)
+	if _, err := h.rules.UpdateRule(h.ctx(), h.owner, h.propID, ruleID, application.UpdateRuleCommand{
+		DueDate: &application.DueDateUpdate{Value: &due},
+	}); err != nil {
+		t.Fatalf("date the undated rule: %v", err)
+	}
+	var horizon *string
+	if err := h.pool.QueryRow(h.ctx(),
+		`SELECT history_before::text FROM task_rules WHERE id = $1`, ruleID,
+	).Scan(&horizon); err != nil {
+		t.Fatalf("read history_before after dating the rule: %v", err)
+	}
+	if horizon != nil {
+		t.Fatalf("history_before after dating the rule = %s, want NULL", *horizon)
+	}
+}
+
+// assertHorizon reads the rule's history horizon straight from the table and
+// fails when it differs from want.
+func assertHorizon(t *testing.T, h *tasksHarness, ruleID uuid.UUID, want string) {
+	t.Helper()
+	var got *string
+	if err := h.pool.QueryRow(h.ctx(),
+		`SELECT history_before::text FROM task_rules WHERE id = $1`, ruleID,
+	).Scan(&got); err != nil {
+		t.Fatalf("read history_before of %s: %v", ruleID, err)
+	}
+	if got == nil || *got != want {
+		t.Fatalf("history_before of %s = %v, want %s", ruleID, got, want)
 	}
 }
 
@@ -167,14 +261,15 @@ func TestClearCompletedJournalOwnerBook_WholeBook(t *testing.T) {
 
 	h := newTasksHarness(t).withOwner(taskMoscowTZ)
 
-	// The bound slice: rule A gets deleted (its journal is the clear's
-	// target), rule B stays alive (its completed row is the dedup key).
+	// The bound slice: rule A gets deleted (its journal rows clear with the
+	// deleted-rule leg), rule B stays alive (its completed row clears with
+	// the live-rule leg, its horizon raised).
 	ruleA := h.seedRule(aug27, "", string(domain.RepeatWeekly), "Правило A")
 	ruleB := h.seedRule(day10, "", string(domain.RepeatOnce), "Правило B")
 	// The property-less slice (ADR 0052) mirrors it: «Личное A» is deleted,
-	// «Личное B» stays alive (its completed row is the dedup key too).
+	// «Личное B» stays alive.
 	wpDead := h.seedRuleWithoutProperty(aug27, "", string(domain.RepeatOnce), "Личное A")
-	h.seedRuleWithoutProperty(day10, "", string(domain.RepeatOnce), "Личное B")
+	wpLive := h.seedRuleWithoutProperty(day10, "", string(domain.RepeatOnce), "Личное B")
 	h.runTick()
 
 	h.completeAllBut(ruleA, day17)
@@ -207,12 +302,14 @@ func TestClearCompletedJournalOwnerBook_WholeBook(t *testing.T) {
 	if err != nil {
 		t.Fatalf("repeat clear of owner book: %v", err)
 	}
-	assertWholeBookClearState(t, h, archivedProp, foreign, cleared, repeat)
+	assertWholeBookClearState(t, h, archivedProp, foreign, wpLive, cleared, repeat)
 }
 
 // seedSurvivingJournalRows inserts the journal rows the book-wide clear must
 // not touch: one on the owner's own archived property, one in a foreign
-// owner's book. Returns the archived property id and the foreign owner id.
+// owner's book — plus a live rule with a completed task on the archived
+// property, whose completed row and history horizon must both stay frozen
+// (ADR 0025). Returns the archived property id and the foreign owner id.
 func (h *tasksHarness) seedSurvivingJournalRows() (archivedProp, foreign uuid.UUID) {
 	h.t.Helper()
 
@@ -229,6 +326,19 @@ func (h *tasksHarness) seedSurvivingJournalRows() (archivedProp, foreign uuid.UU
 		uuid.Must(uuid.NewV7()), h.owner, archivedProp, day10); err != nil {
 		h.t.Fatalf("seed archived journal row: %v", err)
 	}
+	if _, err := h.pool.Exec(h.ctx(),
+		`INSERT INTO task_rules (id, owner_id, property_id, title, comment, due_date, repeat)
+		 VALUES ($1, $2, $3, 'Архивное правило', NULL, $4, 'once')`,
+		uuid.Must(uuid.NewV7()), h.owner, archivedProp, day10); err != nil {
+		h.t.Fatalf("seed archived property rule: %v", err)
+	}
+	if _, err := h.pool.Exec(h.ctx(),
+		`INSERT INTO tasks (id, owner_id, property_id, rule_id, title, completed_date)
+		 SELECT $1, r.owner_id, r.property_id, r.id, r.title, $2
+		 FROM task_rules r WHERE r.title = 'Архивное правило'`,
+		uuid.Must(uuid.NewV7()), day10); err != nil {
+		h.t.Fatalf("seed archived rule's completed task: %v", err)
+	}
 	foreign = uuid.Must(uuid.NewV7())
 	h.seedActor(foreign)
 	if _, err := h.pool.Exec(h.ctx(),
@@ -240,19 +350,20 @@ func (h *tasksHarness) seedSurvivingJournalRows() (archivedProp, foreign uuid.UU
 	return archivedProp, foreign
 }
 
-// assertWholeBookClearState pins the post-clear state: only the clearable
-// journal rows of the owner's book are gone; the live rules' dedup keys, the
-// archived and the foreign journals survive; the audit entry carries the
-// removed count; the action journal carries one task.completed_cleared row
-// per touched object and nothing for the property-less leg or the 0-removed
-// repeat (ADR 0061 §3).
+// assertWholeBookClearState pins the post-clear state: every completed row
+// of the owner's book is gone — the deleted-rule journals and the live
+// rules' rows alike (the live rules' horizons raised, ADR 0051 amended) —
+// while the archived and the foreign journals survive; the audit entry
+// carries the removed count; the action journal carries one
+// task.completed_cleared row per touched object and nothing for the
+// property-less leg or the 0-removed repeat (ADR 0061 §3).
 func assertWholeBookClearState(
-	t *testing.T, h *tasksHarness, archivedProp, foreign uuid.UUID, cleared, repeat int64,
+	t *testing.T, h *tasksHarness, archivedProp, foreign, wpLive uuid.UUID, cleared, repeat int64,
 ) {
 	t.Helper()
 
-	if cleared != 4 {
-		t.Fatalf("cleared = %d, want 4 (3 bound journal rows + 1 property-less)", cleared)
+	if cleared != 6 {
+		t.Fatalf("cleared = %d, want 6 (3 bound journal + 1 live rule B + 1 property-less journal + 1 live «Личное B»)", cleared)
 	}
 	if repeat != 0 {
 		t.Fatalf("repeat clear = %d, want 0 (the book was just cleared)", repeat)
@@ -264,11 +375,31 @@ func assertWholeBookClearState(
 		      WHERE p.id = property_id AND p.status != 'archived'))`, h.owner,
 		"clearable journal rows survived the clear", 0)
 
-	// The live rules keep their completed rows (the dedup keys).
-	countJournal(t, h, `owner_id = $1 AND completed_date IS NOT NULL AND rule_id IS NOT NULL`, h.owner,
-		"live rules' completed rows", 2)
-	// The archived property's journal stays frozen...
-	countJournal(t, h, `property_id = $1`, archivedProp, "archived property journal rows", 1)
+	// The live rules' completed rows are gone too — the horizons took over
+	// the dedup duty.
+	countJournal(t, h, `owner_id = $1 AND completed_date IS NOT NULL AND rule_id IS NOT NULL
+		AND (property_id IS NULL OR EXISTS (
+		      SELECT 1 FROM properties p
+		      WHERE p.id = property_id AND p.status != 'archived'))`, h.owner,
+		"live rules' completed rows", 0)
+	// The horizons of the surviving live rules: max(deleted due)+1 — today's
+	// completions of both.
+	assertHorizon(t, h, ruleBOf(t, h), "2026-09-11")
+	assertHorizon(t, h, wpLive, "2026-09-11")
+	// The archived property's journal stays frozen — both the ownerless row
+	// and the archived rule's completed one...
+	countJournal(t, h, `property_id = $1`, archivedProp, "archived property journal rows", 2)
+	// ...and the archived rule's horizon stays untouched (its rows were
+	// never the clear's business, ADR 0025).
+	var archivedHorizon *string
+	if err := h.pool.QueryRow(h.ctx(),
+		`SELECT history_before::text FROM task_rules WHERE title = 'Архивное правило'`,
+	).Scan(&archivedHorizon); err != nil {
+		t.Fatalf("read archived rule's history_before: %v", err)
+	}
+	if archivedHorizon != nil {
+		t.Fatalf("archived rule's history_before = %s, want NULL", *archivedHorizon)
+	}
 	// ...and the foreign owner's book is untouched.
 	countJournal(t, h, `owner_id = $1 AND completed_date IS NOT NULL AND rule_id IS NULL`, foreign,
 		"foreign owner journal rows", 1)
@@ -282,15 +413,15 @@ func assertWholeBookClearState(
 		h.owner).Scan(&auditCount); err != nil {
 		t.Fatalf("read audit entry: %v", err)
 	}
-	if auditCount != "4" {
-		t.Fatalf("audit count = %q, want \"4\"", auditCount)
+	if auditCount != "6" {
+		t.Fatalf("audit count = %q, want \"6\"", auditCount)
 	}
 
 	// The action journal follows the bulk canon (ADR 0061 §3): exactly one
 	// task.completed_cleared row per touched object — the one active
-	// property, carrying its 3 removed rows in the count. The property-less
-	// removal anchors no row (every row anchors to a property), and the
-	// 0-removed repeat wrote none.
+	// property, carrying its 4 removed rows in the count (3 journal + 1 live
+	// rule B). The property-less removal anchors no row (every row anchors
+	// to a property), and the 0-removed repeat wrote none.
 	type clearedRow struct {
 		property uuid.UUID
 		count    *string
@@ -321,9 +452,22 @@ func assertWholeBookClearState(
 	if rows[0].property != h.propID {
 		t.Fatalf("cleared journal row anchored to %s, want the touched property %s", rows[0].property, h.propID)
 	}
-	if rows[0].count == nil || *rows[0].count != "3" {
-		t.Fatalf("cleared journal row count = %v, want \"3\"", rows[0].count)
+	if rows[0].count == nil || *rows[0].count != "4" {
+		t.Fatalf("cleared journal row count = %v, want \"4\"", rows[0].count)
 	}
+}
+
+// ruleBOf finds the live bound rule by its title — the book-clear test only
+// carries the variable locally, so the state assertion re-reads it by name.
+func ruleBOf(t *testing.T, h *tasksHarness) uuid.UUID {
+	t.Helper()
+	var id uuid.UUID
+	if err := h.pool.QueryRow(h.ctx(),
+		`SELECT id FROM task_rules WHERE owner_id = $1 AND property_id = $2 AND title = 'Правило B'`,
+		h.owner, h.propID).Scan(&id); err != nil {
+		t.Fatalf("read rule B id: %v", err)
+	}
+	return id
 }
 
 // countJournal counts the tasks table rows matching one raw predicate and

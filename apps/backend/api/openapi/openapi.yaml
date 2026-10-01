@@ -1465,15 +1465,16 @@ paths:
       operationId: deleteCompletedTasksWithoutProperty
       summary: «Удалить все выполненные» — clear the actor's book-wide completed journal
       description: >
-        The book-wide twin of the property journal clear (ticket #536): the
-        completed tasks of the actor's deleted rules (rule_id IS NULL) are
-        removed forever across their own book — the bound rows and the
-        property-less ones (ADR 0052) in the same query. The completed tasks
-        of live rules stay — they hold the materialization dedup keys, and
-        clearing them would re-materialize the rule's whole past (ADR 0051).
-        The archived properties' journals stay frozen (ADR 0025), and the
-        shared-to properties' journals are other owners' books — the clear is
-        owner-scope (ADR 0028). No rule data changes — the tick is a no-op.
+        The book-wide twin of the property journal clear (ticket #536): every
+        completed task of the actor's own book is removed forever — the bound
+        rows and the property-less ones (ADR 0052) in the same query, the
+        deleted-rule journals and the live rules' completed rows alike. Each
+        live rule losing rows gets its history horizon raised to
+        max(deleted due)+1, so the cleared occurrences never materialize
+        again (ADR 0051 as amended 2026-10-01). The archived properties'
+        journals stay frozen (ADR 0025), and the shared-to properties'
+        journals are other owners' books — the clear is owner-scope (ADR
+        0028). No rule data changes — the tick is a no-op.
       security:
         - sessionCookie: []
       responses:
@@ -2110,10 +2111,11 @@ paths:
       operationId: deleteCompletedTasks
       summary: «Удалить все выполненные» — clear the completed journal
       description: >
-        Removes the completed tasks of the property's deleted rules forever;
-        rules and active tasks are untouched. The completed tasks of live
-        rules stay — they hold the materialization dedup keys, and clearing
-        them would re-materialize the rule's whole past (ADR 0051).
+        Removes every completed task of the property forever — the
+        deleted-rule journal and the live rules' completed rows alike; rules
+        and active tasks are untouched. Each live rule losing rows gets its
+        history horizon raised to max(deleted due)+1, so the cleared
+        occurrences never materialize again (ADR 0051 as amended 2026-10-01).
       security:
         - sessionCookie: []
       parameters:

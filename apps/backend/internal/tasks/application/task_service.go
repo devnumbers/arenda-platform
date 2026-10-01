@@ -178,22 +178,22 @@ func (s *TaskService) UncompleteTask(
 }
 
 // ClearCompletedJournal implements «Удалить все выполненные» (DELETE
-// …/tasks/completed, resolution #497): the completed tasks of the property's
-// deleted rules (rule_id IS NULL) are removed forever — rules and active
-// tasks are untouched. The completed tasks of live rules stay: they hold the
-// tick's dedup keys, and clearing them would make the next tick
-// re-materialize the rule's whole past as active overdue tasks (ADR 0051
-// documents the scoping). The verdict states Tick=false: no rule data
-// changed, the tick is a no-op by construction.
+// …/tasks/completed, resolution #497): every completed task of the property
+// is removed forever — the deleted-rule journal and the live rules' rows
+// alike (ADR 0051 as amended 2026-10-01). Rules and active tasks are
+// untouched; each live rule losing rows gets its history horizon raised to
+// max(deleted due)+1, so the tick never resurrects the cleared past as
+// overdue debt. The verdict states Tick=false: nothing is left to
+// materialize — the horizon suppresses creation passively.
 func (s *TaskService) ClearCompletedJournal(
 	ctx context.Context, actor, propertyID uuid.UUID,
 ) (int64, error) {
 	conveyor := s.conveyor()
 	cleared, err := runMutation(conveyor, ctx, actor, propertyID, uuid.Nil, s.writeGate,
 		func(
-			ctx context.Context, stores *txStores, scope uuid.UUID, _ domain.TaskRule, _ time.Time,
+			ctx context.Context, stores *txStores, scope uuid.UUID, _ domain.TaskRule, today time.Time,
 		) (mutationOutcome[int64], error) {
-			cleared, err := stores.tasks.DeleteCompletedJournal(ctx, scope, propertyID)
+			cleared, err := stores.tasks.DeleteCompletedJournal(ctx, scope, propertyID, today)
 			if err != nil {
 				return mutationOutcome[int64]{}, fmt.Errorf("clear completed journal: %w", err)
 			}
@@ -217,24 +217,24 @@ func (s *TaskService) ClearCompletedJournal(
 
 // ClearCompletedJournalOwnerBook implements «Удалить все выполненные» on the
 // global «Задачи» screen (DELETE /tasks/completed, ticket #536): the
-// book-wide twin of ClearCompletedJournal. The completed tasks of the
-// actor's deleted rules are removed forever across their own book — the
-// bound rows and the property-less ones (ADR 0052) in the same store query;
+// book-wide twin of ClearCompletedJournal. Every completed task of the
+// actor's book is removed forever — the bound rows and the property-less
+// ones (ADR 0052) in the same store call, the deleted-rule journals and the
+// live rules' rows alike with the horizons raised (ADR 0051 as amended);
 // the shared-to properties' journals are other owners' books (owner-scope,
-// ADR 0028) and the archived ones stay frozen (ADR 0025). The same live-rule
-// protection as the property-scoped clear (ADR 0051). The journal follows
+// ADR 0028) and the archived ones stay frozen (ADR 0025). The journal follows
 // the bulk canon (ADR 0061 §3): one row per touched object with its removed
 // count, the property-less legs anchor none. Serialized on the owner's users
-// row — the book-level anchor (ADR 0052); the verdict states Tick=false: no
-// rule data changed, the tick is a no-op by construction.
+// row — the book-level anchor (ADR 0052); the verdict states Tick=false:
+// nothing is left to materialize.
 func (s *TaskService) ClearCompletedJournalOwnerBook(
 	ctx context.Context, actor uuid.UUID,
 ) (int64, error) {
 	return runOwnerMutation(s.conveyor(), ctx, actor, uuid.Nil,
 		func(
-			ctx context.Context, stores *txStores, scope uuid.UUID, _ domain.TaskRule, _ time.Time,
+			ctx context.Context, stores *txStores, scope uuid.UUID, _ domain.TaskRule, today time.Time,
 		) (mutationOutcome[int64], error) {
-			removed, err := stores.tasks.DeleteCompletedJournalOwnerBook(ctx, scope)
+			removed, err := stores.tasks.DeleteCompletedJournalOwnerBook(ctx, scope, today)
 			if err != nil {
 				return mutationOutcome[int64]{}, fmt.Errorf("clear completed journal of owner book: %w", err)
 			}

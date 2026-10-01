@@ -194,7 +194,7 @@ func (q *Queries) ListTickTaskKeys(ctx context.Context, dollar_1 []pgtype.UUID) 
 }
 
 const listTickTaskRulesByOwner = `-- name: ListTickTaskRulesByOwner :many
-SELECT r.id, r.owner_id, r.property_id, r.title, r.comment, r.due_date, r.due_time, r.repeat
+SELECT r.id, r.owner_id, r.property_id, r.title, r.comment, r.due_date, r.due_time, r.repeat, r.history_before
 FROM task_rules r
 LEFT JOIN properties pr ON pr.id = r.property_id
 WHERE r.owner_id = $1
@@ -202,19 +202,21 @@ WHERE r.owner_id = $1
 `
 
 type ListTickTaskRulesByOwnerRow struct {
-	ID         pgtype.UUID `json:"id"`
-	OwnerID    pgtype.UUID `json:"owner_id"`
-	PropertyID pgtype.UUID `json:"property_id"`
-	Title      string      `json:"title"`
-	Comment    pgtype.Text `json:"comment"`
-	DueDate    pgtype.Date `json:"due_date"`
-	DueTime    pgtype.Time `json:"due_time"`
-	Repeat     string      `json:"repeat"`
+	ID            pgtype.UUID `json:"id"`
+	OwnerID       pgtype.UUID `json:"owner_id"`
+	PropertyID    pgtype.UUID `json:"property_id"`
+	Title         string      `json:"title"`
+	Comment       pgtype.Text `json:"comment"`
+	DueDate       pgtype.Date `json:"due_date"`
+	DueTime       pgtype.Time `json:"due_time"`
+	Repeat        string      `json:"repeat"`
+	HistoryBefore pgtype.Date `json:"history_before"`
 }
 
 // The owner's tick read side: rules without a property plus rules on
 // non-archived properties (ADR 0052). The LEFT JOIN keeps the property-less
-// cut while the status predicate still skips archived ones.
+// cut while the status predicate still skips archived ones. history_before
+// rides along — the tick's creation horizon (ADR 0051 as amended).
 func (q *Queries) ListTickTaskRulesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListTickTaskRulesByOwnerRow, error) {
 	rows, err := q.db.Query(ctx, listTickTaskRulesByOwner, ownerID)
 	if err != nil {
@@ -233,6 +235,7 @@ func (q *Queries) ListTickTaskRulesByOwner(ctx context.Context, ownerID pgtype.U
 			&i.DueDate,
 			&i.DueTime,
 			&i.Repeat,
+			&i.HistoryBefore,
 		); err != nil {
 			return nil, err
 		}

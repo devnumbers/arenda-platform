@@ -64,16 +64,17 @@ func (s *RuleStore) Get(
 		return domain.TaskRule{}, fmt.Errorf("get task rule %s: %w", id, err)
 	}
 	return mapRuleRow(taskRuleFields{
-		ID:         pgconv.UUIDFromPgtype(row.ID),
-		OwnerID:    pgconv.UUIDFromPgtype(row.OwnerID),
-		PropertyID: row.PropertyID,
-		Title:      row.Title,
-		Comment:    row.Comment,
-		DueDate:    row.DueDate,
-		DueTime:    row.DueTime,
-		Repeat:     row.Repeat,
-		CreatedAt:  row.CreatedAt,
-		UpdatedAt:  row.UpdatedAt,
+		ID:            pgconv.UUIDFromPgtype(row.ID),
+		OwnerID:       pgconv.UUIDFromPgtype(row.OwnerID),
+		PropertyID:    row.PropertyID,
+		Title:         row.Title,
+		Comment:       row.Comment,
+		DueDate:       row.DueDate,
+		DueTime:       row.DueTime,
+		Repeat:        row.Repeat,
+		HistoryBefore: row.HistoryBefore,
+		CreatedAt:     row.CreatedAt,
+		UpdatedAt:     row.UpdatedAt,
 	}), nil
 }
 
@@ -94,16 +95,17 @@ func (s *RuleStore) GetWithoutProperty(
 		return domain.TaskRule{}, fmt.Errorf("get task rule %s without property: %w", id, err)
 	}
 	return mapRuleRow(taskRuleFields{
-		ID:         pgconv.UUIDFromPgtype(row.ID),
-		OwnerID:    pgconv.UUIDFromPgtype(row.OwnerID),
-		PropertyID: row.PropertyID,
-		Title:      row.Title,
-		Comment:    row.Comment,
-		DueDate:    row.DueDate,
-		DueTime:    row.DueTime,
-		Repeat:     row.Repeat,
-		CreatedAt:  row.CreatedAt,
-		UpdatedAt:  row.UpdatedAt,
+		ID:            pgconv.UUIDFromPgtype(row.ID),
+		OwnerID:       pgconv.UUIDFromPgtype(row.OwnerID),
+		PropertyID:    row.PropertyID,
+		Title:         row.Title,
+		Comment:       row.Comment,
+		DueDate:       row.DueDate,
+		DueTime:       row.DueTime,
+		Repeat:        row.Repeat,
+		HistoryBefore: row.HistoryBefore,
+		CreatedAt:     row.CreatedAt,
+		UpdatedAt:     row.UpdatedAt,
 	}), nil
 }
 
@@ -126,16 +128,19 @@ func (s *RuleStore) Create(ctx context.Context, rule domain.TaskRule) error {
 }
 
 // Update writes the editable fields of the rule (the anchor included — the
-// edit invalidation and the in-transaction tick resolve the task side).
+// edit invalidation and the in-transaction tick resolve the task side) and
+// the history horizon the rule carries: a dated edit keeps it, an undated
+// one passes NULL (the application resets the dormancy marker before this).
 func (s *RuleStore) Update(ctx context.Context, rule domain.TaskRule) error {
 	if err := s.q().UpdateTaskRule(ctx, postgres.UpdateTaskRuleParams{
-		ID:      pgconv.UUIDToPgtype(rule.ID),
-		Title:   rule.Title,
-		Comment: pgconv.StringPtrToPgtype(rule.Comment),
-		DueDate: pgconv.DatePtrToPgtype(rule.DueDate),
-		DueTime: timeOfDayToPgtype(rule.DueTime),
-		Repeat:  string(rule.Repeat),
-		OwnerID: pgconv.UUIDToPgtype(rule.OwnerID),
+		ID:            pgconv.UUIDToPgtype(rule.ID),
+		Title:         rule.Title,
+		Comment:       pgconv.StringPtrToPgtype(rule.Comment),
+		DueDate:       pgconv.DatePtrToPgtype(rule.DueDate),
+		DueTime:       timeOfDayToPgtype(rule.DueTime),
+		Repeat:        string(rule.Repeat),
+		HistoryBefore: pgconv.DatePtrToPgtype(rule.HistoryBefore),
+		OwnerID:       pgconv.UUIDToPgtype(rule.OwnerID),
 	}); err != nil {
 		return fmt.Errorf("update task rule %s: %w", rule.ID, err)
 	}

@@ -23,8 +23,11 @@ type taskRuleFields struct {
 	DueDate    pgtype.Date
 	DueTime    pgtype.Time
 	Repeat     string
-	CreatedAt  pgtype.Timestamptz
-	UpdatedAt  pgtype.Timestamptz
+	// HistoryBefore is the rule's history horizon (ADR 0051 as amended);
+	// NULL = never raised.
+	HistoryBefore pgtype.Date
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
 }
 
 // taskFields is the same for every task reader.
@@ -51,16 +54,17 @@ type taskFields struct {
 // constraint of migration 000118 is the durable guard).
 func mapRuleRow(f taskRuleFields) domain.TaskRule {
 	return domain.TaskRule{
-		ID:         f.ID,
-		OwnerID:    f.OwnerID,
-		PropertyID: pgconv.UUIDFromPgtypePtr(f.PropertyID),
-		Title:      f.Title,
-		Comment:    pgconv.TextToPtrString(f.Comment),
-		DueDate:    pgconv.DatePtrFromPgtype(f.DueDate),
-		DueTime:    timeOfDayFromPgtype(f.DueTime),
-		Repeat:     domain.RepeatKind(f.Repeat),
-		CreatedAt:  pgconv.TimestamptzToTime(f.CreatedAt),
-		UpdatedAt:  pgconv.TimestamptzToTime(f.UpdatedAt),
+		ID:            f.ID,
+		OwnerID:       f.OwnerID,
+		PropertyID:    pgconv.UUIDFromPgtypePtr(f.PropertyID),
+		Title:         f.Title,
+		Comment:       pgconv.TextToPtrString(f.Comment),
+		DueDate:       pgconv.DatePtrFromPgtype(f.DueDate),
+		DueTime:       timeOfDayFromPgtype(f.DueTime),
+		Repeat:        domain.RepeatKind(f.Repeat),
+		HistoryBefore: pgconv.DatePtrFromPgtype(f.HistoryBefore),
+		CreatedAt:     pgconv.TimestamptzToTime(f.CreatedAt),
+		UpdatedAt:     pgconv.TimestamptzToTime(f.UpdatedAt),
 	}
 }
 

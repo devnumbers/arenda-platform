@@ -462,9 +462,22 @@ func (s *TaskStore) Uncomplete(ctx context.Context, id, scope uuid.UUID) error {
 	return nil
 }
 
-// DeleteCompletedJournal removes the property's completed tasks of deleted
-// rules and reports the count.
-func (s *TaskStore) DeleteCompletedJournal(ctx context.Context, scope, propertyID uuid.UUID) (int64, error) {
+// DeleteCompletedJournal clears the property's completed tasks — the
+// deleted-rule journal and the live rules' rows alike — and reports the
+// count. The horizon leg runs first: every live rule losing rows gets its
+// history horizon raised to max(deleted due)+1 (the undated dormancy marker
+// stamped with the owner's today) so the tick never resurrects the cleared
+// past (ADR 0051 as amended).
+func (s *TaskStore) DeleteCompletedJournal(
+	ctx context.Context, scope, propertyID uuid.UUID, today time.Time,
+) (int64, error) {
+	if err := s.q().RaiseTaskHistoryHorizons(ctx, postgres.RaiseTaskHistoryHorizonsParams{
+		OwnerID:    pgconv.UUIDToPgtype(scope),
+		PropertyID: pgconv.UUIDToPgtype(propertyID),
+		Today:      pgconv.DateToPgtype(today),
+	}); err != nil {
+		return 0, fmt.Errorf("raise history horizons of property %s: %w", propertyID, err)
+	}
 	cleared, err := s.q().DeleteCompletedJournal(ctx, postgres.DeleteCompletedJournalParams{
 		OwnerID:    pgconv.UUIDToPgtype(scope),
 		PropertyID: pgconv.UUIDToPgtype(propertyID),
@@ -475,11 +488,21 @@ func (s *TaskStore) DeleteCompletedJournal(ctx context.Context, scope, propertyI
 	return cleared, nil
 }
 
-// DeleteCompletedJournalOwnerBook removes the owner book's completed tasks
-// of deleted rules across both slices in one query and returns the removed
-// rows' property anchors — one per removed row, uuid.Nil for the
-// property-less ones (ticket #536, ADR 0052).
-func (s *TaskStore) DeleteCompletedJournalOwnerBook(ctx context.Context, scope uuid.UUID) ([]uuid.UUID, error) {
+// DeleteCompletedJournalOwnerBook clears the owner book's completed tasks
+// across both slices in one query — the deleted-rule journals and the live
+// rules' rows alike, the horizons raised first (the property-less and
+// non-archived cuts of ADR 0052; archived properties stay frozen, ADR 0025)
+// — and returns the removed rows' property anchors: one per removed row,
+// uuid.Nil for the property-less ones (ticket #536).
+func (s *TaskStore) DeleteCompletedJournalOwnerBook(
+	ctx context.Context, scope uuid.UUID, today time.Time,
+) ([]uuid.UUID, error) {
+	if err := s.q().RaiseTaskHistoryHorizonsOwnerBook(ctx, postgres.RaiseTaskHistoryHorizonsOwnerBookParams{
+		OwnerID: pgconv.UUIDToPgtype(scope),
+		Today:   pgconv.DateToPgtype(today),
+	}); err != nil {
+		return nil, fmt.Errorf("raise history horizons of owner %s book: %w", scope, err)
+	}
 	removed, err := s.q().DeleteCompletedJournalOwnerBook(ctx, pgconv.UUIDToPgtype(scope))
 	if err != nil {
 		return nil, fmt.Errorf("delete completed journal of owner %s: %w", scope, err)

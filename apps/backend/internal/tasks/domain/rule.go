@@ -65,6 +65,14 @@ type TaskRule struct {
 	// only. Requires DueDate.
 	DueTime *TimeOfDay
 	Repeat  RepeatKind
+	// HistoryBefore is the rule's history horizon (the «Удалить все
+	// выполненные» mark, ADR 0051): occurrences earlier than this date were
+	// cleared by the owner forever and the tick must not create them again.
+	// It suppresses creation only — existing rows stand. For an undated rule
+	// the date part is meaningless: any non-nil value is a dormancy marker
+	// (the cleared task must not respawn); a rule edit resets it. Nil = the
+	// horizon was never raised.
+	HistoryBefore *time.Time
 	// CreatedAt/UpdatedAt are the rule row's timestamps (updated_at is
 	// trigger-maintained on write); the tick never reads them.
 	CreatedAt time.Time
@@ -73,3 +81,18 @@ type TaskRule struct {
 
 // Undated reports whether the rule produces a dateless task («Без срока»).
 func (r TaskRule) Undated() bool { return r.DueDate == nil }
+
+// HorizonAfterEdit folds the edit's horizon rule (ADR 0051 §3 as amended):
+// a rule that was undated carries the horizon only as the cleared-task
+// dormancy marker — the edit resets it, the user touching the rule
+// re-engages it. A dated rule keeps its horizon (the cleared history stays
+// deleted across edits) — unless the edit itself removes the anchor: the
+// re-engaged undated rule materializes its fresh task. Call with the rule's
+// Undated() state before the edit's diff was folded in; assign the result
+// back to HistoryBefore.
+func (r TaskRule) HorizonAfterEdit(wasUndated bool) *time.Time {
+	if wasUndated || r.Undated() {
+		return nil
+	}
+	return r.HistoryBefore
+}

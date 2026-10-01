@@ -147,23 +147,24 @@ type TaskStore interface {
 	// Uncomplete clears the completion fact; rows affected = 0 surfaces as
 	// ErrNotCompleted.
 	Uncomplete(ctx context.Context, id, scope uuid.UUID) error
-	// DeleteCompletedJournal removes the property's completed tasks whose
-	// rule is deleted (rule_id IS NULL) — the «Удалить все выполненные»
-	// operation (resolution #497). It returns the number of removed rows.
-	// The completed tasks of live rules stay: they hold the tick's dedup
-	// keys, and clearing them would re-materialize the rule's whole past
-	// (ADR 0051).
-	DeleteCompletedJournal(ctx context.Context, scope, propertyID uuid.UUID) (int64, error)
+	// DeleteCompletedJournal removes every completed task of the property —
+	// the deleted-rule journal and the live rules' rows alike — the «Удалить
+	// все выполненные» operation (resolution #497, ADR 0051 as amended
+	// 2026-10-01). The horizon leg runs first: each live rule losing rows
+	// gets its history horizon raised to max(deleted due)+1 (today stamps
+	// the undated dormancy marker), so the cleared dates never materialize
+	// again. It returns the number of removed rows.
+	DeleteCompletedJournal(ctx context.Context, scope, propertyID uuid.UUID, today time.Time) (int64, error)
 	// DeleteCompletedJournalOwnerBook is the book-wide twin (ticket #536):
-	// the completed tasks of the owner's deleted rules across both slices in
-	// one query — the bound rows on non-archived properties and the
-	// property-less ones (ADR 0052); the archived properties' journals stay
-	// frozen (ADR 0025) and other owners' books are untouched (owner-scope,
-	// ADR 0028). The same live-rule protection as the property-scoped
-	// variant. It returns the removed rows' property anchors — one per
-	// removed row, uuid.Nil for the property-less ones — for the use case to
-	// group the per-object journal counts (ADR 0061 §3).
-	DeleteCompletedJournalOwnerBook(ctx context.Context, scope uuid.UUID) ([]uuid.UUID, error)
+	// every completed task of the owner's book across both slices in one
+	// query — the bound rows on non-archived properties and the property-less
+	// ones (ADR 0052); the archived properties' journals stay frozen (ADR
+	// 0025) and other owners' books are untouched (owner-scope, ADR 0028).
+	// The same horizon leg as the property-scoped variant. It returns the
+	// removed rows' property anchors — one per removed row, uuid.Nil for the
+	// property-less ones — for the use case to group the per-object journal
+	// counts (ADR 0061 §3).
+	DeleteCompletedJournalOwnerBook(ctx context.Context, scope uuid.UUID, today time.Time) ([]uuid.UUID, error)
 	// ListUncompletedTaskIDs returns the rule's standing uncompleted tasks'
 	// ids — the scheduling seam's in-transaction handover (issue #775):
 	// read after the materialization tick has settled the rule's rows, so

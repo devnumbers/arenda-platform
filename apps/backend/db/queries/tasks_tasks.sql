@@ -214,30 +214,82 @@ UPDATE tasks
 SET completed_date = NULL
 WHERE id = $1 AND owner_id = $2 AND completed_date IS NOT NULL;
 
+-- name: RaiseTaskHistoryHorizons :exec
+-- The horizon leg of «Удалить все выполненные» (ADR 0051 as amended
+-- 2026-10-01): every live rule of the property with completed rows about to
+-- be cleared gets its history horizon raised to max(deleted due)+1 — the
+-- cleared occurrences never materialize again. For an undated rule MAX(due)
+-- is NULL: the CASE stamps the dormancy marker (the owner's today) whose
+-- date part is meaningless. GREATEST keeps an earlier-raised horizon — the
+-- deletion is forever. Runs inside the clear's transaction, before
+-- DeleteCompletedJournal.
+UPDATE task_rules r
+SET history_before = CASE
+      WHEN x.horizon IS NULL THEN COALESCE(r.history_before, sqlc.arg('today')::date)
+      ELSE GREATEST(COALESCE(r.history_before, x.horizon), x.horizon)
+    END
+FROM (
+  SELECT t.rule_id, MAX(t.due_date) + 1 AS horizon
+  FROM tasks t
+  WHERE t.owner_id = sqlc.arg('owner_id') AND t.property_id = sqlc.arg('property_id')
+    AND t.completed_date IS NOT NULL
+    AND t.rule_id IS NOT NULL
+  GROUP BY t.rule_id
+) x
+WHERE r.id = x.rule_id AND r.owner_id = sqlc.arg('owner_id');
+
 -- name: DeleteCompletedJournal :execrows
--- «Удалить все выполненные» (resolution #497): the completed tasks of the
--- property's deleted rules (rule_id IS NULL) are removed forever. The
--- completed tasks of live rules stay — they hold the tick's dedup keys, and
--- clearing them would re-materialize the rule's whole past (ADR 0051).
+-- «Удалить все выполненные» (resolution #497, ADR 0051 as amended
+-- 2026-10-01): every completed task of the property is removed forever — the
+-- deleted-rule journal and the live rules' rows alike. The live rules'
+-- horizons were raised by RaiseTaskHistoryHorizons in the same transaction:
+-- the cleared dates never materialize again, the standing rows stand.
 DELETE FROM tasks
 WHERE owner_id = $1 AND property_id = $2
-  AND completed_date IS NOT NULL
-  AND rule_id IS NULL;
+  AND completed_date IS NOT NULL;
+
+-- name: RaiseTaskHistoryHorizonsOwnerBook :exec
+-- The book-wide horizon leg: the owner's live rules with completed rows
+-- about to be cleared — on non-archived properties and without one (ADR
+-- 0052). The same max(deleted due)+1 raise; archived properties' rules stay
+-- outside (their rows are not cleared — ADR 0025).
+UPDATE task_rules r
+SET history_before = CASE
+      WHEN x.horizon IS NULL THEN COALESCE(r.history_before, sqlc.arg('today')::date)
+      ELSE GREATEST(COALESCE(r.history_before, x.horizon), x.horizon)
+    END
+FROM (
+  SELECT t.rule_id, MAX(t.due_date) + 1 AS horizon
+  FROM tasks t
+  WHERE t.owner_id = sqlc.arg('owner_id')
+    AND t.completed_date IS NOT NULL
+    AND t.rule_id IS NOT NULL
+    AND (t.property_id IS NULL OR EXISTS (
+          SELECT 1 FROM properties p
+          WHERE p.id = t.property_id AND p.status != 'archived'
+        ))
+  GROUP BY t.rule_id
+) x
+WHERE r.id = x.rule_id AND r.owner_id = sqlc.arg('owner_id')
+  AND (r.property_id IS NULL OR EXISTS (
+        SELECT 1 FROM properties p
+        WHERE p.id = r.property_id AND p.status != 'archived'
+      ));
 
 -- name: DeleteCompletedJournalOwnerBook :many
 -- «Удалить все выполненные» across the owner's whole book (ticket #536):
--- the completed tasks of the deleted rules (rule_id IS NULL) in one query —
--- the bound rows and the property-less ones (nullable property_id, ADR 0052).
--- Archived properties stay frozen (ADR 0025) and the shared-to properties'
--- journals are other owners' books (owner-scope, ADR 0028). The completed
--- tasks of live rules stay — the tick's dedup keys (ADR 0051). Returns the
--- removed rows' property anchors, one per removed row (NULL is the
--- property-less leg) — the use case groups them into the per-object
+-- every completed task of the book in one query — the bound rows and the
+-- property-less ones (nullable property_id, ADR 0052), the deleted-rule
+-- journals and the live rules' rows alike (the horizons were raised by
+-- RaiseTaskHistoryHorizonsOwnerBook in the same transaction, ADR 0051 as
+-- amended). Archived properties stay frozen (ADR 0025) and the shared-to
+-- properties' journals are other owners' books (owner-scope, ADR 0028).
+-- Returns the removed rows' property anchors, one per removed row (NULL is
+-- the property-less leg) — the use case groups them into the per-object
 -- journal rows (ADR 0061 §3).
 DELETE FROM tasks t
 WHERE t.owner_id = $1
   AND t.completed_date IS NOT NULL
-  AND t.rule_id IS NULL
   AND (t.property_id IS NULL OR EXISTS (
         SELECT 1 FROM properties p
         WHERE p.id = t.property_id AND p.status != 'archived'

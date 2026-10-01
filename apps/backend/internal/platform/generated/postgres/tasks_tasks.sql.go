@@ -157,7 +157,6 @@ const deleteCompletedJournal = `-- name: DeleteCompletedJournal :execrows
 DELETE FROM tasks
 WHERE owner_id = $1 AND property_id = $2
   AND completed_date IS NOT NULL
-  AND rule_id IS NULL
 `
 
 type DeleteCompletedJournalParams struct {
@@ -165,10 +164,11 @@ type DeleteCompletedJournalParams struct {
 	PropertyID pgtype.UUID `json:"property_id"`
 }
 
-// «Удалить все выполненные» (resolution #497): the completed tasks of the
-// property's deleted rules (rule_id IS NULL) are removed forever. The
-// completed tasks of live rules stay — they hold the tick's dedup keys, and
-// clearing them would re-materialize the rule's whole past (ADR 0051).
+// «Удалить все выполненные» (resolution #497, ADR 0051 as amended
+// 2026-10-01): every completed task of the property is removed forever — the
+// deleted-rule journal and the live rules' rows alike. The live rules'
+// horizons were raised by RaiseTaskHistoryHorizons in the same transaction:
+// the cleared dates never materialize again, the standing rows stand.
 func (q *Queries) DeleteCompletedJournal(ctx context.Context, arg DeleteCompletedJournalParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteCompletedJournal, arg.OwnerID, arg.PropertyID)
 	if err != nil {
@@ -181,7 +181,6 @@ const deleteCompletedJournalOwnerBook = `-- name: DeleteCompletedJournalOwnerBoo
 DELETE FROM tasks t
 WHERE t.owner_id = $1
   AND t.completed_date IS NOT NULL
-  AND t.rule_id IS NULL
   AND (t.property_id IS NULL OR EXISTS (
         SELECT 1 FROM properties p
         WHERE p.id = t.property_id AND p.status != 'archived'
@@ -190,13 +189,14 @@ RETURNING t.property_id
 `
 
 // «Удалить все выполненные» across the owner's whole book (ticket #536):
-// the completed tasks of the deleted rules (rule_id IS NULL) in one query —
-// the bound rows and the property-less ones (nullable property_id, ADR 0052).
-// Archived properties stay frozen (ADR 0025) and the shared-to properties'
-// journals are other owners' books (owner-scope, ADR 0028). The completed
-// tasks of live rules stay — the tick's dedup keys (ADR 0051). Returns the
-// removed rows' property anchors, one per removed row (NULL is the
-// property-less leg) — the use case groups them into the per-object
+// every completed task of the book in one query — the bound rows and the
+// property-less ones (nullable property_id, ADR 0052), the deleted-rule
+// journals and the live rules' rows alike (the horizons were raised by
+// RaiseTaskHistoryHorizonsOwnerBook in the same transaction, ADR 0051 as
+// amended). Archived properties stay frozen (ADR 0025) and the shared-to
+// properties' journals are other owners' books (owner-scope, ADR 0028).
+// Returns the removed rows' property anchors, one per removed row (NULL is
+// the property-less leg) — the use case groups them into the per-object
 // journal rows (ADR 0061 §3).
 func (q *Queries) DeleteCompletedJournalOwnerBook(ctx context.Context, ownerID pgtype.UUID) ([]pgtype.UUID, error) {
 	rows, err := q.db.Query(ctx, deleteCompletedJournalOwnerBook, ownerID)
@@ -950,6 +950,81 @@ func (q *Queries) ListRuleUncompletedTaskIDs(ctx context.Context, ruleID pgtype.
 		return nil, err
 	}
 	return items, nil
+}
+
+const raiseTaskHistoryHorizons = `-- name: RaiseTaskHistoryHorizons :exec
+UPDATE task_rules r
+SET history_before = CASE
+      WHEN x.horizon IS NULL THEN COALESCE(r.history_before, $1::date)
+      ELSE GREATEST(COALESCE(r.history_before, x.horizon), x.horizon)
+    END
+FROM (
+  SELECT t.rule_id, MAX(t.due_date) + 1 AS horizon
+  FROM tasks t
+  WHERE t.owner_id = $2 AND t.property_id = $3
+    AND t.completed_date IS NOT NULL
+    AND t.rule_id IS NOT NULL
+  GROUP BY t.rule_id
+) x
+WHERE r.id = x.rule_id AND r.owner_id = $2
+`
+
+type RaiseTaskHistoryHorizonsParams struct {
+	Today      pgtype.Date `json:"today"`
+	OwnerID    pgtype.UUID `json:"owner_id"`
+	PropertyID pgtype.UUID `json:"property_id"`
+}
+
+// The horizon leg of «Удалить все выполненные» (ADR 0051 as amended
+// 2026-10-01): every live rule of the property with completed rows about to
+// be cleared gets its history horizon raised to max(deleted due)+1 — the
+// cleared occurrences never materialize again. For an undated rule MAX(due)
+// is NULL: the CASE stamps the dormancy marker (the owner's today) whose
+// date part is meaningless. GREATEST keeps an earlier-raised horizon — the
+// deletion is forever. Runs inside the clear's transaction, before
+// DeleteCompletedJournal.
+func (q *Queries) RaiseTaskHistoryHorizons(ctx context.Context, arg RaiseTaskHistoryHorizonsParams) error {
+	_, err := q.db.Exec(ctx, raiseTaskHistoryHorizons, arg.Today, arg.OwnerID, arg.PropertyID)
+	return err
+}
+
+const raiseTaskHistoryHorizonsOwnerBook = `-- name: RaiseTaskHistoryHorizonsOwnerBook :exec
+UPDATE task_rules r
+SET history_before = CASE
+      WHEN x.horizon IS NULL THEN COALESCE(r.history_before, $1::date)
+      ELSE GREATEST(COALESCE(r.history_before, x.horizon), x.horizon)
+    END
+FROM (
+  SELECT t.rule_id, MAX(t.due_date) + 1 AS horizon
+  FROM tasks t
+  WHERE t.owner_id = $2
+    AND t.completed_date IS NOT NULL
+    AND t.rule_id IS NOT NULL
+    AND (t.property_id IS NULL OR EXISTS (
+          SELECT 1 FROM properties p
+          WHERE p.id = t.property_id AND p.status != 'archived'
+        ))
+  GROUP BY t.rule_id
+) x
+WHERE r.id = x.rule_id AND r.owner_id = $2
+  AND (r.property_id IS NULL OR EXISTS (
+        SELECT 1 FROM properties p
+        WHERE p.id = r.property_id AND p.status != 'archived'
+      ))
+`
+
+type RaiseTaskHistoryHorizonsOwnerBookParams struct {
+	Today   pgtype.Date `json:"today"`
+	OwnerID pgtype.UUID `json:"owner_id"`
+}
+
+// The book-wide horizon leg: the owner's live rules with completed rows
+// about to be cleared — on non-archived properties and without one (ADR
+// 0052). The same max(deleted due)+1 raise; archived properties' rules stay
+// outside (their rows are not cleared — ADR 0025).
+func (q *Queries) RaiseTaskHistoryHorizonsOwnerBook(ctx context.Context, arg RaiseTaskHistoryHorizonsOwnerBookParams) error {
+	_, err := q.db.Exec(ctx, raiseTaskHistoryHorizonsOwnerBook, arg.Today, arg.OwnerID)
+	return err
 }
 
 const uncompleteTask = `-- name: UncompleteTask :execrows
