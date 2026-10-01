@@ -16,8 +16,8 @@ export function Hero() {
   // Медиа-ветки <picture> считаем через getImageProps, чтобы планшетный и
   // мобильный кропы шли через /_next/image-оптимизатор (AVIF q90 из
   // next.config), а не сырым webp; в <source> передаём только srcSet/sizes.
-  const mobileBg = getImageProps({ src: heroBgMobile, alt: "", fill: true, sizes: "100vw", quality: 90 });
-  const tabletBg = getImageProps({ src: heroBgTablet, alt: "", fill: true, sizes: "100vw", quality: 90 });
+  const mobileBg = getImageProps({ src: heroBgMobile, alt: "", fill: true, sizes: "100vw", quality: 95 });
+  const tabletBg = getImageProps({ src: heroBgTablet, alt: "", fill: true, sizes: "100vw", quality: 95 });
   return (
     <section id="hero" className="px-2 pt-2">
       <div className="relative flex h-[788px] flex-col justify-start overflow-hidden rounded-[32px] p-8 pt-12 tab:h-[936px] tab:px-12 tab:pt-16 tab:pb-12 desk:h-[607px] desk:justify-end desk:rounded-[40px] desk:p-10">

@@ -20,7 +20,7 @@ export function Showcase() {
     src: screensSub,
     alt: "",
     sizes: "(max-width: 480px) 503px, 1106px",
-    quality: 90,
+    quality: 95,
   });
   return (
     <section id="showcase" className="mt-24 scroll-mt-[88px] desk:mt-[156px] desk:scroll-mt-[104px]">
