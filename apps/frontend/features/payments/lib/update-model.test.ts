@@ -48,16 +48,16 @@ describe('buildPaymentUpdateCommand', () => {
     expect(command).toEqual({ amountKopecks: 400_000 });
   });
 
-  it('изменённые тип, форма оплаты и название идут одним PATCH', () => {
+  it('изменённые тип и название идут одним PATCH; формы оплаты в команде нет (#1008)', () => {
     const command = buildPaymentUpdateCommand(
       basePayment(),
       baseForm({ type: 'income', paymentForm: 'transfer', title: '  Страхование квартиры  ' }),
     );
     expect(command).toEqual({
       type: 'income',
-      paymentForm: 'transfer',
       title: 'Страхование квартиры',
     });
+    expect(command !== undefined && Object.hasOwn(command, 'paymentForm')).toBe(false);
   });
 
   it('изменённая регулярность сравнивается по содержимому', () => {

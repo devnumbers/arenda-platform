@@ -32,7 +32,6 @@ export {
   WIZARD_TOTAL_STEPS,
   branchKind,
   buildPaymentCreateCommand,
-  effectivePaymentForm,
   effectivePaymentType,
   periodicityReady,
   pickPeriodicityKind,

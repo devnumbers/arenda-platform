@@ -123,9 +123,8 @@ export function buildPaymentUpdateCommand(
     command.recurrence = form.recurrence;
   }
 
-  if (form.paymentForm !== payment.paymentForm) {
-    command.paymentForm = form.paymentForm;
-  }
+  // Формы оплаты в команде нет (#1008): поле снесено из контракта; форма
+  // правки ещё несёт его для чипа экрана — чип уходит в #1009.
 
   if (form.categorySlug !== undefined && form.categorySlug !== payment.category.slug) {
     command.categorySlug = form.categorySlug;

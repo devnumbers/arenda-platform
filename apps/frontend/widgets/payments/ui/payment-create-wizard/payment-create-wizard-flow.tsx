@@ -279,10 +279,6 @@ export function PaymentCreateWizardFlow({
               }
               type={draft.type}
               onTypeChange={(type) => setDraft((prev) => ({ ...prev, type }))}
-              paymentForm={draft.paymentForm}
-              onPaymentFormChange={(paymentForm) =>
-                setDraft((prev) => ({ ...prev, paymentForm }))
-              }
             />
             <StickyBottomBar>
               <WizardBottomBar>

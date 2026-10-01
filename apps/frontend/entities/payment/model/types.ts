@@ -113,14 +113,14 @@ export type PaymentOperation = {
 
 /**
  * Создание платежа: контракт camelCase, тело запроса совпадает с командой
- * один в один (сервер ставит `since`, клиент её не передаёт).
+ * один в один (сервер ставит `since`, клиент её не передаёт). Формы оплаты
+ * в контракте нет — поле снесено (карта #1005, #1008).
  */
 export type PaymentCreateCommand = {
   readonly type: PaymentType;
   readonly title: string;
   readonly amountKopecks: number;
   readonly recurrence: Recurrence;
-  readonly paymentForm: PaymentForm;
   readonly categorySlug: string;
   readonly endDate?: IsoDate;
   /** Напоминание «за N дней»; не выбрано — поле не передаётся (карта #822). */
