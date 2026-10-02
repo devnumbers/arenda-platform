@@ -1,6 +1,9 @@
 import type { ReactElement, ReactNode } from 'react';
 import { describe, expect, it } from 'vitest';
-import { OperationsPeriodChip } from './operations-filter-chips';
+import {
+  OperationsFilterChips,
+  OperationsPeriodChip,
+} from './operations-filter-chips';
 
 /** Чип периода без рендера: канон тестов фронта — node без DOM, компонент
  * без хуков вызывается как функция и инспектируется (идиома button.test.ts). */
@@ -43,5 +46,29 @@ describe('OperationsPeriodChip (дуальный режим, решение вл
     expect(String(applied.props.className)).toContain('bg-primary');
     const def = chipElement({ period: null });
     expect(String(def.props.className)).toContain('bg-surface-muted');
+  });
+});
+
+describe('OperationsFilterChips (скрытая полоса скролла, #1076)', () => {
+  function containerElement(
+    props: Parameters<typeof OperationsFilterChips>[0],
+  ): ReactElement<InspectableProps> {
+    return OperationsFilterChips(props) as ReactElement<InspectableProps>;
+  }
+
+  it('контейнер: свайп остаётся (overflow-x-auto), полоса скрыта каноном #578', () => {
+    const container = containerElement({
+      periodLabel: 'Период',
+      periodActive: false,
+      categoriesLabel: 'Все категории',
+      categoriesActive: false,
+      onOpenPeriod: () => {},
+      onOpenCategories: () => {},
+    });
+    expect(container.type).toBe('div');
+    const className = String(container.props.className);
+    expect(className).toContain('overflow-x-auto');
+    expect(className).toContain('[scrollbar-width:none]');
+    expect(className).toContain('[&::-webkit-scrollbar]:hidden');
   });
 });

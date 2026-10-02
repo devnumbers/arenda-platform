@@ -60,7 +60,14 @@ export function OperationsFilterChips({
   className,
 }: OperationsFilterChipsProps): JSX.Element {
   return (
-    <div className={clsx("flex gap-1.5 overflow-x-auto", className)}>
+    <div
+      className={clsx(
+        // Полоса горизонтального скролла скрыта каноном #578 — свайп/драг
+        // остаётся (#1076, решение владельца: убрать только визуальную часть).
+        "flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+        className,
+      )}
+    >
       <ChipButton
         selected={periodActive}
         trailingIcon={<SmallArrowDown />}

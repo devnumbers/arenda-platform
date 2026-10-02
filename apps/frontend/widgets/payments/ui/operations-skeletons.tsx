@@ -152,7 +152,7 @@ export function SearchResultsSkeleton({
     <div aria-hidden className="flex flex-col gap-6 pt-4">
       <section aria-hidden className="flex flex-col">
         <Skeleton className="ml-6 h-6 w-40" />
-        <div className="flex gap-1.5 px-6 pt-2">
+        <div className="flex flex-wrap gap-1.5 px-6 pt-2">
           <Skeleton className="h-11 w-28 rounded-full" />
           <Skeleton className="h-11 w-36 rounded-full" />
         </div>
