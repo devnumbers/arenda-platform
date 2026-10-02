@@ -5,8 +5,8 @@ package application_test
 // The integration harness of the contacts context: the contact use case
 // service over the real stores, the real membership policy (ADR 0028) and
 // the real audit recorder, against testcontainers PostgreSQL — the role
-// matrix, the book scopes, the search and the property-detach lifecycle of
-// ADR 0054 (ticket #506).
+// matrix, the book scopes, the search and the property-deletion lifecycle
+// of ADR 0054 (ticket #506; §2 reversal — ticket #1049).
 
 import (
 	"errors"
@@ -193,6 +193,42 @@ func createCmd() contactsapp.CreateContactCommand {
 	}
 }
 
+// seedTenantRental inserts a running rental on the property naming the
+// contact as its tenant; the payment row the rentals FK requires is a
+// throwaway, the same direct-seed trick the rentals harness uses (the
+// contacts context has no rental use cases of its own).
+func (h *contactsHarness) seedTenantRental(property, contact uuid.UUID) uuid.UUID {
+	h.t.Helper()
+	rentalID, err := uuid.NewV7()
+	if err != nil {
+		h.t.Fatalf("new uuid: %v", err)
+	}
+	paymentID, err := uuid.NewV7()
+	if err != nil {
+		h.t.Fatalf("new uuid: %v", err)
+	}
+	start := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	if _, err := h.pool.Exec(h.t.Context(),
+		`INSERT INTO payments (id, owner_id, property_id, type, title, amount_kopecks,
+		                      recurrence, since, end_date, auto_pay, category_slug)
+		 VALUES ($1, $2, $3, 'income', 'Арендная плата', 5000000,
+		         '{"kind":"monthly","daysOfMonth":[15]}'::jsonb, $4, $5, false, 'rent')`,
+		paymentID, h.owner, property, start, time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC),
+	); err != nil {
+		h.t.Fatalf("seed rental payment: %v", err)
+	}
+	if _, err := h.pool.Exec(h.t.Context(),
+		`INSERT INTO rentals (id, owner_id, property_id, payment_id, contact_id,
+		                      start_date, planned_end_date, utilities)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, 'included')`,
+		rentalID, h.owner, property, paymentID, contact, start,
+		time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC),
+	); err != nil {
+		h.t.Fatalf("seed rental: %v", err)
+	}
+	return rentalID
+}
+
 // create creates a contact as the owner, failing the test on any error.
 func (h *contactsHarness) create(cmd contactsapp.CreateContactCommand) domain.Contact {
 	h.t.Helper()
@@ -336,38 +372,70 @@ func TestContactsIntegration_SearchAndScopes(t *testing.T) {
 	}
 }
 
-func TestContactsIntegration_PropertyDeleteDetaches(t *testing.T) {
+// TestContactsIntegration_PropertyDeleteDeletesBoundContacts: the §2
+// reversal of ADR 0054 (карта #1047, тикет #1049) — deleting the property
+// takes its bound contacts with it (FK CASCADE, migration 000148); the
+// owner's unbound cards are nobody's children and survive untouched.
+func TestContactsIntegration_PropertyDeleteDeletesBoundContacts(t *testing.T) {
 	t.Parallel()
 
 	h := newContactsHarness(t)
 	h.owner = h.seedUser()
 	h.property = h.seedProperty(h.owner)
 	propID := h.property
-	created := h.create(contactsapp.CreateContactCommand{
+	bound := h.create(contactsapp.CreateContactCommand{
 		FirstName: contactFirstName, Role: plumberRole, PropertyID: &propID,
 	})
+	unbound := h.create(createCmd())
 
 	if _, err := h.pool.Exec(t.Context(), `DELETE FROM properties WHERE id = $1`, h.property); err != nil {
 		t.Fatalf("delete property: %v", err)
 	}
 
-	got, err := h.svc.GetContact(t.Context(), h.owner, created.ID)
-	if err != nil {
-		t.Fatalf("get after property delete: %v", err)
-	}
-	if got.PropertyID != nil {
-		t.Fatalf("property: want detached (nil), got %s", *got.PropertyID)
+	if _, err := h.svc.GetContact(t.Context(), h.owner, bound.ID); !errors.Is(err, contactsapp.ErrNotFound) {
+		t.Fatalf("bound contact after property delete: want ErrNotFound, got %v", err)
 	}
 
-	unboundPage, err := h.svc.ListContacts(t.Context(), h.owner, contactsapp.ListQuery{
-		Scope: contactsapp.ListScopeWithoutProperty,
-	})
+	survivor, err := h.svc.GetContact(t.Context(), h.owner, unbound.ID)
 	if err != nil {
-		t.Fatalf("list unbound: %v", err)
+		t.Fatalf("unbound contact after property delete: %v", err)
 	}
-	unbound := unboundPage.Items
-	mustEqual(t, "unbound contacts", len(unbound), 1)
-	mustEqual(t, "detached contact", unbound[0].Contact.ID, created.ID)
+	if survivor.PropertyID != nil {
+		t.Fatalf("survivor property: want nil, got %s", *survivor.PropertyID)
+	}
+}
+
+// TestContactsIntegration_PropertyDeleteNullsRentalOfOtherProperty: a rental
+// of another property may name the doomed contact as its tenant. The contact
+// row's cascade (000148) fires the rentals.contact_id ON DELETE SET NULL
+// (000120) — the reference nulls and the rental itself survives.
+func TestContactsIntegration_PropertyDeleteNullsRentalOfOtherProperty(t *testing.T) {
+	t.Parallel()
+
+	h := newContactsHarness(t)
+	h.owner = h.seedUser()
+	h.property = h.seedProperty(h.owner)
+	h.otherProp = h.seedProperty(h.owner)
+	propID := h.property
+	contact := h.create(contactsapp.CreateContactCommand{
+		FirstName: contactFirstName, Role: plumberRole, PropertyID: &propID,
+	})
+	rentalID := h.seedTenantRental(h.otherProp, contact.ID)
+
+	if _, err := h.pool.Exec(t.Context(), `DELETE FROM properties WHERE id = $1`, h.property); err != nil {
+		t.Fatalf("delete property: %v", err)
+	}
+
+	if _, err := h.svc.GetContact(t.Context(), h.owner, contact.ID); !errors.Is(err, contactsapp.ErrNotFound) {
+		t.Fatalf("doomed contact after property delete: want ErrNotFound, got %v", err)
+	}
+	var surviving int
+	if err := h.pool.QueryRow(t.Context(),
+		`SELECT count(*) FROM rentals WHERE id = $1 AND contact_id IS NULL`, rentalID,
+	).Scan(&surviving); err != nil {
+		t.Fatalf("rental after property delete: %v", err)
+	}
+	mustEqual(t, "rental survives with its tenant reference nulled", surviving, 1)
 }
 
 // TestContactsIntegration_RoleMatrix exercises the shared-access enforcement
