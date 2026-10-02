@@ -8,8 +8,10 @@ import {
   effectivePaymentType,
   periodicityReady,
   pickPeriodicityKind,
+  resumePaymentWizardStep,
   togglePaymentType,
   toggleWeekday,
+  wizardDraftAfterStep,
   wizardStepReady,
   yearlyAnchorDate,
 } from './wizard-model';
@@ -263,5 +265,43 @@ describe('buildPaymentCreateCommand — сериализация чернови�
     expect(withReminder?.reminderOffsetDays).toBe(3);
     const without = buildPaymentCreateCommand(draft({}), {});
     expect(without !== undefined && Object.hasOwn(without, 'reminderOffsetDays')).toBe(false);
+  });
+});
+
+describe('resumePaymentWizardStep — сохранённый шаг сильнее пересчёта (#1055)', () => {
+  it('валидный сохранённый шаг открывается, даже если пересчёт дал бы другой', () => {
+    // Шаг 1 и 3 готовы — пересчёт дал бы 5, но пользователь стоял на 2.
+    expect(resumePaymentWizardStep(draft({ step: 2 }))).toBe(2);
+    // Опциональный шаг 4: пересчёт перепрыгнул бы на 5.
+    expect(resumePaymentWizardStep(draft({ step: 4 }))).toBe(4);
+  });
+
+  it('нет штампа — пересчёт из заполненности (старые черновики совместимы)', () => {
+    expect(resumePaymentWizardStep(draft({ step: undefined }))).toBe(5);
+    // Периодичность не выбрана — первый незавершённый это шаг 3.
+    expect(resumePaymentWizardStep(draft({ step: undefined, recurrence: undefined }))).toBe(3);
+    expect(resumePaymentWizardStep(draft({ step: undefined, categorySlug: undefined, recurrence: undefined }))).toBe(1);
+  });
+
+  it('мусорный штамп — пересчёт (валидатор обычно отбрасывает поле, resume подстраховывает)', () => {
+    expect(resumePaymentWizardStep(draft({ step: 7 }))).toBe(5);
+    expect(resumePaymentWizardStep(draft({ step: 0 }))).toBe(5);
+  });
+
+  it('пустой черновик — шаг 1', () => {
+    const empty: PaymentWizardDraft = {};
+    expect(resumePaymentWizardStep(empty)).toBe(1);
+  });
+});
+
+describe('wizardDraftAfterStep — штамп перехода пишется в пейлоад (#1055)', () => {
+  it('переход ставит step, остальные поля на месте', () => {
+    expect(wizardDraftAfterStep(draft({}), 2)).toStrictEqual(draft({ step: 2 }));
+  });
+
+  it('каждый переход перезаписывает прежний штамп', () => {
+    expect(wizardDraftAfterStep(draft({ step: 4 }), 5)).toStrictEqual(draft({ step: 5 }));
+    // «Назад» тоже штампует: возврат на шаг 1 запоминается как шаг 1.
+    expect(wizardDraftAfterStep(draft({ step: 2 }), 1)).toStrictEqual(draft({ step: 1 }));
   });
 });

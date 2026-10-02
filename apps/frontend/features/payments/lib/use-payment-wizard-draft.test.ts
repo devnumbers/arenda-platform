@@ -86,6 +86,17 @@ describe('validatePaymentWizardDraft', () => {
     expect(validatePaymentWizardDraft({ title: 'x', updatedAt: 10.5 })).toStrictEqual({ title: 'x' });
     expect(validatePaymentWizardDraft({ title: 'x', updatedAt: 'вчера' })).toStrictEqual({ title: 'x' });
   });
+
+  it('штамп шага проходит при валидности (1..5) и отбрасывается при мусоре (#1055)', () => {
+    expect(validatePaymentWizardDraft({ title: 'x', step: 2 })).toStrictEqual({ title: 'x', step: 2 });
+    expect(validatePaymentWizardDraft({ title: 'x', step: 5 })).toStrictEqual({ title: 'x', step: 5 });
+    // Мусорный шаг не роняет черновик — только само поле отбрасывается,
+    // resume уходит в пересчёт из заполненности.
+    expect(validatePaymentWizardDraft({ title: 'x', step: 0 })).toStrictEqual({ title: 'x' });
+    expect(validatePaymentWizardDraft({ title: 'x', step: 6 })).toStrictEqual({ title: 'x' });
+    expect(validatePaymentWizardDraft({ title: 'x', step: 2.5 })).toStrictEqual({ title: 'x' });
+    expect(validatePaymentWizardDraft({ title: 'x', step: 'третий' })).toStrictEqual({ title: 'x' });
+  });
 });
 
 describe('hasPaymentWizardDraftFields', () => {
@@ -102,6 +113,12 @@ describe('hasPaymentWizardDraftFields', () => {
 
   it('служебный updatedAt сам по себе черновиком не считается', () => {
     expect(hasPaymentWizardDraftFields({ updatedAt: 1756400000000 })).toBe(false);
+  });
+
+  it('служебный штамп шага сам по себе черновиком не считается (#1055)', () => {
+    // Модалка шита «Добавить» не обещает «продолжить черновик» из-за одного
+    // сохранённого шага — только из-за заполненных полей.
+    expect(hasPaymentWizardDraftFields({ step: 3 })).toBe(false);
   });
 });
 

@@ -158,6 +158,43 @@ export function wizardStepReady(step: WizardStep, draft: PaymentWizardDraft): bo
   }
 }
 
+/** Восстановление черновика без штампа шага: первый незавершённый шаг
+ * (опциональные 2 и 4 перепрыгиваются). */
+function initialStep(draft: PaymentWizardDraft): WizardStep {
+  if (!wizardStepReady(1, draft)) return 1;
+  if (!wizardStepReady(3, draft)) return 3;
+  return 5;
+}
+
+/** Неизвестное значение — номер шага визарда (целое 1..5): диапазонная
+ * проверка persisted штампа; гарду верит и валидатор черновика, и resume. */
+export function isWizardStep(value: unknown): value is WizardStep {
+  return (
+    typeof value === 'number'
+    && Number.isInteger(value)
+    && value >= 1
+    && value <= WIZARD_TOTAL_STEPS
+  );
+}
+
+/** Шаг при возобновлении черновика (#1055): валидный сохранённый штамп
+ * перехода сильнее пересчёта из заполненности — так resume возвращает на
+ * точный шаг, включая опциональные 2 и 4. Клэмпа «не выше первого
+ * незавершённого» нет: канон «шаг-подсказка» (карта #1052, спека #1054). */
+export function resumePaymentWizardStep(draft: PaymentWizardDraft): WizardStep {
+  return isWizardStep(draft.step) ? draft.step : initialStep(draft);
+}
+
+/** Черновик после перехода на шаг next («Назад» — тот же штамп): номер
+ * шага едет в persisted payload; полевые правки шаг не трогают (спред
+ * в потоке). */
+export function wizardDraftAfterStep(
+  draft: PaymentWizardDraft,
+  next: WizardStep,
+): PaymentWizardDraft {
+  return { ...draft, step: next };
+}
+
 /** Дефолт типа шага суммы: до явного выбора чип показывает «Доход»
  * (форма оплаты снесена — карта #1005, #1008). Живёт на слое отображения
  * и сборки команды — черновик хранит только явный выбор пользователя,
