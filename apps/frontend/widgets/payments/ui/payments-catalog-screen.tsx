@@ -27,6 +27,7 @@ import {
   TopNavTitle,
 } from '@/shared/ui/design';
 import { overduePaymentIdsOf, sortPaymentsByNextOccurrence } from '@/features/payments';
+import { catalogRules, type CatalogRulesVariant } from '../lib/payments-catalog-model';
 import {
   OverdueOperationRow,
   PaymentRow,
@@ -39,15 +40,16 @@ import {
  * Страницы секций «Платежей объекта» (Figma 1043:60174/1043:60502, решение
  * владельца): клик на заголовок секции главного экрана ведёт сюда, где виден
  * весь список. Одна форма на три среза: просроченные операции объекта
- * (строки с red-стилизацией, порции по 50 со скроллом), все платежи и
- * автоплатежи (правила в порядке ближайшего вхождения; паузные показываются
- * — «там уже всё видно», в отличие от главного экрана). Пустое состояние —
- * иллюстрация и пояснение по фреймам; кнопка «Добавить …» сверяется с
- * черновиком своего типа (#1066): есть — модалка черновика, нет — straight
- * в визард нужного типа; скрыта у смотрящего (история 47) и на архиве (#446).
+ * (строки с red-стилизацией, порции по 50 со скроллом), «Платежи» — только
+ * ручные правила, «Автоплатежи» — только автоплатежи (#1071; правила в
+ * порядке ближайшего вхождения; паузные показываются — «там уже всё видно»,
+ * в отличие от главного экрана). Пустое состояние — иллюстрация и пояснение
+ * по фреймам; кнопка «Добавить …» сверяется с черновиком своего типа
+ * (#1066): есть — модалка черновика, нет — straight в визард нужного типа;
+ * скрыта у смотрящего (история 47) и на архиве (#446).
  */
 
-export type PaymentsCatalogVariant = 'overdue' | 'payments' | 'auto';
+export type PaymentsCatalogVariant = 'overdue' | CatalogRulesVariant;
 
 const CATALOG: Record<
   PaymentsCatalogVariant,
@@ -211,7 +213,7 @@ function RulesList({
   meta,
 }: {
   readonly propertyId: string;
-  readonly variant: PaymentsCatalogVariant;
+  readonly variant: CatalogRulesVariant;
   readonly meta: { emptyTitle: string; emptyHint: string };
 }): JSX.Element {
   const router = useRouter();
@@ -240,9 +242,10 @@ function RulesList({
     );
   }
 
-  const rules = paymentsQuery.data
-    .filter((payment) => (variant === 'auto' ? payment.autoPay : true));
-  const sorted = sortPaymentsByNextOccurrence(rules, today);
+  const sorted = sortPaymentsByNextOccurrence(
+    catalogRules(paymentsQuery.data, variant),
+    today,
+  );
 
   if (sorted.length === 0) {
     return <CatalogEmpty meta={meta} variantForImage={variant} />;
