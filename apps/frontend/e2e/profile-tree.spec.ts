@@ -115,10 +115,11 @@ test.describe('дерево профиля — хром #566', () => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto('/profile');
 
-    // Хаб профиля (#592): крылья на мобайле, ведущего «Назад» нет.
+    // Хаб профиля: ниже ПК крыльев нет (решение владельца 02.10 —
+    // анатомия подэкрана без «Назад»), тайтл «Профиль» в баре.
     const header = screenHeader(page);
     await expect(header.getByRole('button', { name: 'Назад' })).toHaveCount(0);
-    await expect(header.getByRole('link', { name: 'Объекты' })).toBeVisible();
+    await expect(header.getByRole('link', { name: 'Объекты' })).toHaveCount(0);
     await expect(header.getByText('Профиль', { exact: true })).toBeVisible();
 
     // Вглубь дерева строкой «Аккаунт» (#593); «Назад» возвращается по истории.
@@ -187,7 +188,7 @@ test.describe('дерево профиля — хром #566', () => {
     }
   });
 
-  test('планшет 561: подэкран без крыльев, хаб с крыльями', async ({
+  test('планшет 561: у хабов профиля и уведомлений крыльев нет — как у подэкранов', async ({
     page,
     seededUser,
   }) => {
@@ -195,25 +196,29 @@ test.describe('дерево профиля — хром #566', () => {
     await page.setViewportSize({ width: 561, height: 900 });
     const header = screenHeader(page);
 
-    // Хаб профиля: крылья и на планшете (канон хаб-экранов), без «Назад».
+    // Хабы «Профиль» и «Уведомления» ниже ПК — анатомия подэкрана без
+    // «Назад» (решение владельца 02.10, образец — /profile/devices):
+    // тайтл в баре, крыльев нет.
     await page.goto('/profile');
-    await expect(header.getByRole('link', { name: 'Объекты' })).toBeVisible();
     await expect(header.getByRole('button', { name: 'Назад' })).toHaveCount(0);
+    await expect(header.getByRole('link', { name: 'Объекты' })).toHaveCount(0);
+    await expect(header.getByText('Профиль', { exact: true })).toBeVisible();
 
-    // «Настроить уведомления» (#746): саб-экран — «Назад» вместо крыльев
-    // и на планшете (канон подэкранов).
+    await page.goto('/notifications');
+    await expect(header.getByRole('link', { name: 'Объекты' })).toHaveCount(0);
+    await expect(header.getByText('Уведомления', { exact: true })).toBeVisible();
+    // Постоянный слот бара — у правого края (шестерёнка пустого состояния).
+    await expect(
+      header.getByRole('button', { name: /Действия с уведомлениями|Настроить уведомления/ }),
+    ).toBeVisible();
+
+    // Подэкран дерева — как был: «Назад», крыльев нет.
     await page.goto('/profile/notifications');
     await expect(header.getByRole('button', { name: 'Назад' })).toBeVisible();
     await expect(header.getByRole('link', { name: 'Объекты' })).toHaveCount(0);
-
-    // Крыло профиля на планшете — ссылка: клик с хаба «Уведомлений»
-    // ведёт на /profile (решение владельца 02.10, макет 2329-148674).
-    await page.goto('/notifications');
-    await header.getByRole('link', { name: USER_WING }).click();
-    await expect(page).toHaveURL(/\/profile$/);
   });
 
-  test('крыло профиля на мобайле — ссылка: клик ведёт на /profile', async ({
+  test('мобайл: у «Уведомлений» и «Профиля» крыльев нет, слот у края', async ({
     page,
     seededUser,
   }) => {
@@ -221,26 +226,20 @@ test.describe('дерево профиля — хром #566', () => {
     await page.goto('/notifications');
     const header = screenHeader(page);
 
-    // Слот barTrailing не наезжает на крыло: ниже ПК он живёт в одном
-    // ряду со ссылкой — правый край слота не заходит за левый край
-    // ссылки (ломка «Уведомлений» до фикса: константный клиренс 72 при
-    // раздувшемся крыле). Слот бывает двух видов: кебаб ленты с данными
-    // и шестерёнка пустого состояния — ловим оба.
-    const slot = header.getByRole('button', {
-      name: /Действия с уведомлениями|Настроить уведомления/,
-    });
-    await expect(slot).toBeVisible();
-    const slotBox = await slot.boundingBox();
-    const wingBox = await header.getByRole('link', { name: USER_WING }).boundingBox();
-    expect(slotBox).not.toBeNull();
-    expect(wingBox).not.toBeNull();
-    expect((slotBox?.x ?? 0) + (slotBox?.width ?? 0)).toBeLessThanOrEqual(wingBox?.x ?? 0);
+    // Крыльев ниже ПК нет (решение владельца 02.10); тайтл в баре на всех
+    // ярусах, постоянный слот — у правого края. Слот бывает двух видов:
+    // кебаб ленты с данными и шестерёнка пустого состояния — ловим оба.
+    await expect(header.getByRole('link', { name: 'Объекты' })).toHaveCount(0);
+    await expect(header.getByRole('link', { name: USER_WING })).toHaveCount(0);
+    await expect(header.getByText('Уведомления', { exact: true })).toBeVisible();
+    await expect(
+      header.getByRole('button', { name: /Действия с уведомлениями|Настроить уведомления/ }),
+    ).toBeVisible();
 
-    // Крыло ниже ПК — настоящий Link (решение владельца 02.10, макет
-    // 2329-148674): раньше полноширинный центральный слой бара глотал
-    // клики по краям — «иконка профиля не кликается».
-    await header.getByRole('link', { name: USER_WING }).click();
-    await expect(page).toHaveURL(/\/profile$/);
+    await page.goto('/profile');
+    await expect(header.getByRole('button', { name: 'Назад' })).toHaveCount(0);
+    await expect(header.getByRole('link', { name: 'Объекты' })).toHaveCount(0);
+    await expect(header.getByText('Профиль', { exact: true })).toBeVisible();
   });
 });
 
@@ -273,5 +272,23 @@ test.describe('дерево профиля — ПК ≥1024', () => {
     await header.getByRole('link', { name: USER_WING }).click();
     await expect(page).toHaveURL(/\/profile$/);
     await expect(header.getByText('Профиль', { exact: true })).toBeVisible();
+  });
+
+  test('ПК: у хабов «Профиль» и «Уведомлений» крылья на месте', async ({
+    page,
+    seededUser,
+  }) => {
+    await openCabinetWithSeededSession(page, seededUser);
+    const header = screenHeader(page);
+
+    // Крылья спрятаны ниже ПК (решение владельца 02.10); на ПК — всегда
+    // (макет 2329-148674: лого + имя + аватар у края вьюпорта).
+    await page.goto('/profile');
+    await expect(header.getByRole('link', { name: 'Объекты' })).toBeVisible();
+    await expect(header.getByRole('link', { name: /Иван|Профиль/ })).toBeVisible();
+
+    await page.goto('/notifications');
+    await expect(header.getByRole('link', { name: 'Объекты' })).toBeVisible();
+    await expect(header.getByRole('link', { name: /Иван|Профиль/ })).toBeVisible();
   });
 });

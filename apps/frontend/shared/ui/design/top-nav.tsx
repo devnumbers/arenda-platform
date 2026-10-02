@@ -88,6 +88,12 @@ export type TopNavProps = {
    * (Figma 1733-27411 — глобальная лента «Задачи» #523): хаб-экраны без
    * leading-кнопки открываются шапкой хаба. */
   readonly mobileWings?: boolean;
+  /** Крылья только на ПК — анатомия подэкрана без leading-кнопки: ниже ПК
+   * бар — тайтл по центру и слоты у краёв (как у /profile/devices),
+   * навигация за TabBar/пилюли. Для хабов «Профиль» и «Уведомления»
+   * (решение владельца 02.10): на планшете крылья с именем теснили бар,
+   * образец — шапки подэкранов. */
+  readonly hideWingsBelowDesktop?: boolean;
   /** Компакт-бар хаба: проявляется по прогрессу прокрутки хаб-шапки
    * (HubCollapseAnchor пишет `--hub-collapse`). */
   readonly collapse?: TopNavCollapse;
@@ -110,6 +116,7 @@ export function TopNav({
   className,
   variant = 'default',
   mobileWings = false,
+  hideWingsBelowDesktop = false,
   collapse,
   overlay = false,
 }: TopNavProps): JSX.Element {
@@ -135,7 +142,8 @@ export function TopNav({
   // поверхность — хром ПК не исчезает (решение 25.09, доработка #865).
   const hasLeading = Boolean(leading);
   const wingsMobileClass = !overlay && mobileWings ? 'flex' : 'hidden';
-  const wingsTierClass = hasLeading || overlay ? 'desktop:flex' : 'tablet:flex';
+  const wingsTierClass =
+    hasLeading || overlay || hideWingsBelowDesktop ? 'desktop:flex' : 'tablet:flex';
 
   return (
     <header

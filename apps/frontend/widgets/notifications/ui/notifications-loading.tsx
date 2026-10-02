@@ -3,15 +3,16 @@ import { Cancel, TrashBin } from '@/shared/assets/icons';
 import { IconButton, PageContent, TopNav, TopNavTitle } from '@/shared/ui/design';
 import { NotificationDetailSkeleton, NotificationsFeedSkeleton } from './notifications-states';
 
-/** Route-loading архетип зоны уведомлений (#609): хаб-шапка с заголовком
- * в баре только на ПК (тайтл ниже ПК убран из бара — решение владельца
- * 28.09, кадр совпадает с фазой загрузки экрана), контент — скелетон групп
- * ленты (§7). Используется как loading.tsx сегмента. */
+/** Route-loading архетип зоны уведомлений (#609): шапка — анатомия
+ * подэкрана без «Назад» (решение владельца 02.10): крылья только на ПК,
+ * тайтл в баре на всех ярусах, кадр совпадает с фазой загрузки экрана,
+ * контент — скелетон групп ленты (§7). Используется как loading.tsx
+ * сегмента. */
 export function NotificationsLoading(): JSX.Element {
   return (
     <>
-      <TopNav mobileWings>
-        <TopNavTitle title="Уведомления" className="hidden desktop:flex" />
+      <TopNav hideWingsBelowDesktop>
+        <TopNavTitle title="Уведомления" />
       </TopNav>
       <PageContent>
         <NotificationsFeedSkeleton />
