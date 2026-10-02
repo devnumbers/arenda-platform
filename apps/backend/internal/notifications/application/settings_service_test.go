@@ -58,13 +58,13 @@ func (r *fakePushSettings) GetByEndpoint(_ context.Context, _ uuid.UUID, endpoin
 }
 
 func (r *fakePushSettings) UpdatePreferences(
-	_ context.Context, _ uuid.UUID, endpoint string, enabled bool, prefs domain.CategoryPrefs,
+	_ context.Context, _ uuid.UUID, endpoint string, prefs domain.CategoryPrefs,
 ) (bool, error) {
 	sub, ok := r.subs[endpoint]
 	if !ok {
 		return false, nil
 	}
-	sub.Enabled, sub.Categories = enabled, prefs
+	sub.Categories = prefs
 	r.subs[endpoint] = sub
 	return true, nil
 }
@@ -111,13 +111,14 @@ func TestSettingsService_PushPreferencesNotFound(t *testing.T) {
 	require.ErrorIs(t, err, ErrNotFound)
 
 	err = svc.SetPushPreferences(context.Background(), uuid.Must(uuid.NewV7()), "https://push.example/unknown",
-		true, domain.DefaultCategoryPrefs())
+		domain.DefaultCategoryPrefs())
 	require.ErrorIs(t, err, ErrNotFound)
 }
 
-// The device's delivery state is an upsert: master-off keeps the subscription
-// and its category flags (решение #738 — no re-subscribe needed).
-func TestSettingsService_SetPushPreferencesUpsertsState(t *testing.T) {
+// PUT replaces the device's category flags and nothing else (спека #1028 §5:
+// строгий апдейт существующей подписки — мастер-состояние это само
+// существование строки, выключение выполняет DELETE).
+func TestSettingsService_SetPushPreferencesReplacesCategories(t *testing.T) {
 	t.Parallel()
 
 	svc, _, push := newSettingsTestService()
@@ -126,12 +127,12 @@ func TestSettingsService_SetPushPreferencesUpsertsState(t *testing.T) {
 	push.subs[endpoint] = domain.PushSubscription{UserID: user, Endpoint: endpoint, P256dh: "p", Auth: "a"}
 
 	want := domain.CategoryPrefs{Rental: true, PaymentsOperations: false, Tasks: true, SharedAccess: true}
-	require.NoError(t, svc.SetPushPreferences(context.Background(), user, endpoint, false, want))
+	require.NoError(t, svc.SetPushPreferences(context.Background(), user, endpoint, want))
 
 	sub, err := svc.PushPreferences(context.Background(), user, endpoint)
 	require.NoError(t, err)
-	assert.False(t, sub.Enabled, "master-off is a flag, the subscription stays")
-	assert.Equal(t, want, sub.Categories, "the category flags survive the master-off")
+	assert.Equal(t, want, sub.Categories, "PUT is a full replacement of the category flags")
+	assert.Equal(t, "p", sub.P256dh, "the subscription's keys stay")
 }
 
 func TestSettingsService_BlankEndpointInvalid(t *testing.T) {
@@ -143,6 +144,6 @@ func TestSettingsService_BlankEndpointInvalid(t *testing.T) {
 	_, err := svc.PushPreferences(context.Background(), user, "")
 	require.ErrorIs(t, err, ErrInvalidPushSubscription)
 
-	err = svc.SetPushPreferences(context.Background(), user, "", true, domain.DefaultCategoryPrefs())
+	err = svc.SetPushPreferences(context.Background(), user, "", domain.DefaultCategoryPrefs())
 	require.ErrorIs(t, err, ErrInvalidPushSubscription)
 }

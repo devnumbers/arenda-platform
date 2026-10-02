@@ -448,7 +448,6 @@ type PushSubscription struct {
 	ExpirationTime             pgtype.Timestamptz `json:"expiration_time"`
 	CreatedAt                  pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt                  pgtype.Timestamptz `json:"updated_at"`
-	Enabled                    bool               `json:"enabled"`
 	CategoryRental             bool               `json:"category_rental"`
 	CategoryPaymentsOperations bool               `json:"category_payments_operations"`
 	CategoryTasks              bool               `json:"category_tasks"`

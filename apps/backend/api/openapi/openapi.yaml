@@ -3065,13 +3065,14 @@ paths:
               $ref: '#/components/schemas/PushSubscriptionDeleteRequest'
       responses:
         '204':
-          description: Push subscription deleted
+          description: |
+            Подписка удалена. Идемпотентно (спека #1028 §5): 204 и при
+            отсутствии строки — интент «выключено» исполнен в обоих случаях,
+            404 фронту различать не требуется.
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
   /push/subscriptions/preferences:
     get:
       operationId: getPushSubscriptionPreferences
@@ -3107,10 +3108,11 @@ paths:
       operationId: putPushSubscriptionPreferences
       summary: Заменить настройки пушей устройства
       description: |
-        Upsert состояния устройства: мастер и категории двигаются, подписка и
-        её ключи остаются. Выключение мастера — флаг enabled=false: dispatch
-        пропускает устройство, повторное включение мгновенное, без
-        переподписки (решение #738).
+        Замена категорий устройства (спека #1028 §5): категорийные флаги
+        двигаются, подписка и её ключи остаются. Не upsert — неизвестный
+        устройству endpoint строгий 404 (в нормальном флоу недостижим:
+        мастер-состояние — само существование подписки, выключение
+        выполняет DELETE /push/subscriptions).
       security:
         - sessionCookie: []
       requestBody:
@@ -7756,10 +7758,6 @@ components:
           format: date-time
           nullable: true
           description: Optional subscription expiration instant reported by the browser (RFC 8030).
-        enabled:
-          type: boolean
-          description: |
-            The device's master push toggle; omitted = on (решение #738).
         categories:
           $ref: '#/components/schemas/NotificationCategoryPreferences'
 
@@ -7774,17 +7772,13 @@ components:
 
     PushSubscriptionResponse:
       type: object
-      required: [id, endpoint, created_at, updated_at, enabled, categories]
+      required: [id, endpoint, created_at, updated_at, categories]
       properties:
         id:
           type: string
           format: uuid
         endpoint:
           type: string
-        enabled:
-          type: boolean
-          description: |
-            Мастер-тумблер «Получать пуш-уведомления» устройства (решение #738).
         categories:
           $ref: '#/components/schemas/NotificationCategoryPreferences'
         created_at:
@@ -7796,25 +7790,25 @@ components:
 
     PushPreferencesRequest:
       type: object
-      required: [endpoint, enabled, categories]
+      required: [endpoint, categories]
       properties:
         endpoint:
           type: string
           description: Push endpoint URL устройства (тот же, что при подписке).
           maxLength: 2048
-        enabled:
-          type: boolean
         categories:
           $ref: '#/components/schemas/NotificationCategoryPreferences'
 
     PushPreferencesResponse:
       type: object
-      required: [endpoint, enabled, categories]
+      description: >-
+        Состояние устройства (спека #1028): категорийные флаги подписки;
+        сам факт 200 = подписка есть = мастер-тумблер устройства включён
+        («строка есть = включено»), 404 = выключено.
+      required: [endpoint, categories]
       properties:
         endpoint:
           type: string
-        enabled:
-          type: boolean
         categories:
           $ref: '#/components/schemas/NotificationCategoryPreferences'
 

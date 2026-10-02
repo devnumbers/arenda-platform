@@ -67,39 +67,36 @@ func TestPushSubscriptionRepository_SettingsRoundTrip(t *testing.T) {
 		Endpoint:   "https://push.example/settings",
 		P256dh:     "p256dh-settings",
 		Auth:       "auth-settings",
-		Enabled:    false,
 		Categories: categories,
 		CreatedAt:  time.Now(),
 		UpdatedAt:  time.Now(),
 	}
 	stored, err := repo.Upsert(ctx, sub)
 	require.NoError(t, err)
-	assert.False(t, stored.Enabled)
 	assert.Equal(t, categories, stored.Categories)
 
-	// Read back by endpoint; another user's endpoint is not found.
+	// Read back by endpoint; another user's endpoint is not found. The fact
+	// of a found row is the master-on state (спека #1028) — no flag involved.
 	got, err := repo.GetByEndpoint(ctx, userID, sub.Endpoint)
 	require.NoError(t, err)
-	assert.False(t, got.Enabled)
 	assert.Equal(t, categories, got.Categories)
 
 	_, err = repo.GetByEndpoint(ctx, uuid.Must(uuid.NewV7()), sub.Endpoint)
 	require.ErrorIs(t, err, notificationsapp.ErrNotFound, "another user's endpoint is not found")
 
-	// The preferences update moves the master and the flags, keeps the keys.
+	// The preferences update moves the flags, keeps the keys.
 	updated := domain.CategoryPrefs{Rental: false, PaymentsOperations: true, Tasks: true, SharedAccess: false}
-	ok, err := repo.UpdatePreferences(ctx, userID, sub.Endpoint, true, updated)
+	ok, err := repo.UpdatePreferences(ctx, userID, sub.Endpoint, updated)
 	require.NoError(t, err)
 	assert.True(t, ok)
 
 	got, err = repo.GetByEndpoint(ctx, userID, sub.Endpoint)
 	require.NoError(t, err)
-	assert.True(t, got.Enabled)
 	assert.Equal(t, updated, got.Categories)
 	assert.Equal(t, sub.P256dh, got.P256dh, "the subscription's keys stay")
 
 	// Unknown endpoint reports false.
-	ok, err = repo.UpdatePreferences(ctx, userID, "https://push.example/unknown", true, domain.DefaultCategoryPrefs())
+	ok, err = repo.UpdatePreferences(ctx, userID, "https://push.example/unknown", domain.DefaultCategoryPrefs())
 	require.NoError(t, err)
 	assert.False(t, ok)
 }

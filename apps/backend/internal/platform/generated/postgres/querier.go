@@ -263,8 +263,9 @@ type Querier interface {
 	DeletePropertyMember(ctx context.Context, arg DeletePropertyMemberParams) error
 	DeletePropertyMemberInvitation(ctx context.Context, arg DeletePropertyMemberInvitationParams) error
 	DeletePropertyPhoto(ctx context.Context, id pgtype.UUID) error
-	// Delete a push subscription by endpoint scoped to a user. Returns 0 rows when
-	// the subscription does not exist or belongs to another user (404 in the API).
+	// Delete a push subscription by endpoint scoped to a user. Idempotent
+	// (спека #1028 §5): 0 rows — подписки не было или она чужая, интент
+	// «выключено» исполнен в обоих случаях (API отвечает 204 без 404).
 	DeletePushSubscriptionByEndpointAndUser(ctx context.Context, arg DeletePushSubscriptionByEndpointAndUserParams) (int64, error)
 	// Hard delete of the rental row; it must run before the payment's own delete
 	// (the RESTRICT FK releases only after the rental row is gone, ADR 0053 §3).
@@ -1384,10 +1385,9 @@ type Querier interface {
 	UpdatePropertyMemberInvitationLastSentAt(ctx context.Context, arg UpdatePropertyMemberInvitationLastSentAtParams) error
 	UpdatePropertyMemberInvitationRole(ctx context.Context, arg UpdatePropertyMemberInvitationRoleParams) (PropertyMemberInvitation, error)
 	UpdatePropertyMemberRole(ctx context.Context, arg UpdatePropertyMemberRoleParams) (PropertyMember, error)
-	// PUT /push/subscriptions/preferences (решение #738): the upsert of the
-	// device's delivery state — master and the four category flags move, the
-	// subscription's keys stay. Rows affected = 0 means the subscription does
-	// not exist for this user (404).
+	// PUT /push/subscriptions/preferences (спека #1028 §5): замена категорийных
+	// флагов устройства, ключи подписки остаются. Не upsert: rows affected = 0 —
+	// endpoint не этого пользователя, строгий 404 (в нормальном флоу недостижим).
 	UpdatePushSubscriptionPreferences(ctx context.Context, arg UpdatePushSubscriptionPreferencesParams) (int64, error)
 	// Partial PATCH is resolved by the application layer; the statement always
 	// writes the full editable set. The start date is not editable (ADR 0053
@@ -1431,11 +1431,10 @@ type Querier interface {
 	// Insert a push subscription keyed by endpoint, or update its mutable fields
 	// (user_id, p256dh, auth, expiration_time) when the endpoint already exists.
 	// This makes re-subscribing on the same device idempotent and also re-binds an
-	// endpoint that moved between accounts (rare) to the latest user. The
-	// per-device settings (master enabled + the four category flags, решение
-	// #738) always travel with the request: the browser keeps the desired state
-	// locally and re-applies it on every subscribe, so the stored copy follows
-	// the body.
+	// endpoint that moved between accounts (rare) to the latest user. The four
+	// category flags always travel with the request (спека #1028 §5): POST несёт
+	// желаемое состояние явно, дефолт omitted-категорий — все ВКЛ. Мастер-состояние
+	// устройства — само существование строки: строка есть = включено.
 	UpsertPushSubscription(ctx context.Context, arg UpsertPushSubscriptionParams) (PushSubscription, error)
 }
 

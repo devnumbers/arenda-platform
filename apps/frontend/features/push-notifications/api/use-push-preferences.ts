@@ -35,7 +35,9 @@ export type PushDevicePreferences = {
 
 function mapPushPreferences(dto: PushPreferencesDto): PushDevicePreferences {
   return {
-    enabled: dto.enabled,
+    // Контракт #1028 §5: сам факт 200 = строка есть = мастер-тумблер
+    // устройства включён («строка есть = включено»), поля enabled в теле нет.
+    enabled: true,
     categories: mapCategoryPreferences(dto.categories),
   };
 }
@@ -81,8 +83,9 @@ export type UpdatePushDevicePreferencesVars = PushDevicePreferences & {
 /**
  * Замена настроек устройства (PUT /push/subscriptions/preferences, #743) —
  * оптимистично, как email-матрица (#746): тумблер двигается сразу, при
- * ошибке снимок восстанавливается. Выключение мастера — enabled=false:
- * dispatch пропускает устройство, повторное включение мгновенное.
+ * ошибке снимок восстанавливается. Контракт #1028 §5: тело несёт только
+ * категории — мастер-выключение это DELETE /push/subscriptions (жёсткая
+ * отписка), промежуточный слайс его ещё не исполняет (слайс 2, #1038).
  */
 export function useUpdatePushDevicePreferences(): UseMutationResult<
   PushDevicePreferences,
@@ -91,8 +94,8 @@ export function useUpdatePushDevicePreferences(): UseMutationResult<
 > {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ endpoint, enabled, categories }: UpdatePushDevicePreferencesVars) => {
-      const body: PushPreferencesRequestDto = { endpoint, enabled, categories };
+    mutationFn: async ({ endpoint, categories }: UpdatePushDevicePreferencesVars) => {
+      const body: PushPreferencesRequestDto = { endpoint, categories };
       const response = await apiClient<PushPreferencesDto>(
         '/push/subscriptions/preferences',
         { method: 'PUT', body: JSON.stringify(body) },

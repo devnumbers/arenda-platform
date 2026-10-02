@@ -73,7 +73,6 @@ func (h *PushSubscriptionHandlers) CreatePushSubscription(w http.ResponseWriter,
 		P256dh:         body.P256dh,
 		Auth:           body.Auth,
 		ExpirationTime: body.ExpirationTime,
-		Enabled:        body.Enabled,
 		Categories:     categoriesFromOpenAPIPtr(body.Categories),
 	})
 	if err != nil {
@@ -107,11 +106,10 @@ func (h *PushSubscriptionHandlers) DeletePushSubscription(w http.ResponseWriter,
 		return
 	}
 
+	// Idempotent per спека #1028 §5: the «выключено» intent is fulfilled
+	// whether the row existed or not — always 204, no 404 for the front to
+	// distinguish.
 	if err := h.svc.Delete(r.Context(), actor, body.Endpoint); err != nil {
-		if errors.Is(err, notificationsapp.ErrNotFound) {
-			httpsupport.WriteProblem(r.Context(), w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", "Push-подписка не найдена"))
-			return
-		}
 		if errors.Is(err, notificationsapp.ErrInvalidPushSubscription) {
 			httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
 				httpsupport.Problem(r.Context(), "Bad request", "Некорректная push-подписка"))
@@ -128,7 +126,6 @@ func pushSubscriptionResponse(sub notificationsdomain.PushSubscription) openapi.
 	return openapi.PushSubscriptionResponse{
 		Id:         sub.ID,
 		Endpoint:   sub.Endpoint,
-		Enabled:    sub.Enabled,
 		Categories: categoriesToOpenAPI(sub.Categories),
 		CreatedAt:  sub.CreatedAt,
 		UpdatedAt:  sub.UpdatedAt,

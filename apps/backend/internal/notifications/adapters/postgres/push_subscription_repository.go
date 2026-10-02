@@ -31,7 +31,8 @@ func (r *PushSubscriptionRepository) q() *postgres.Queries {
 
 // Upsert inserts a subscription keyed by endpoint, or updates its mutable
 // fields when the endpoint already exists (idempotent re-subscribe). The
-// per-device settings (master + category flags) travel with every call.
+// device's category flags travel with every call; the row's existence is
+// the master state (спека #1028: строка есть = включено).
 func (r *PushSubscriptionRepository) Upsert(ctx context.Context, sub domain.PushSubscription) (domain.PushSubscription, error) {
 	row, err := r.q().UpsertPushSubscription(ctx, postgres.UpsertPushSubscriptionParams{
 		ID:                         pgconv.UUIDToPgtype(sub.ID),
@@ -40,7 +41,6 @@ func (r *PushSubscriptionRepository) Upsert(ctx context.Context, sub domain.Push
 		P256dh:                     sub.P256dh,
 		Auth:                       sub.Auth,
 		ExpirationTime:             pgconv.TimePtrToPgtype(sub.ExpirationTime),
-		Enabled:                    sub.Enabled,
 		CategoryRental:             sub.Categories.Rental,
 		CategoryPaymentsOperations: sub.Categories.PaymentsOperations,
 		CategoryTasks:              sub.Categories.Tasks,
@@ -54,18 +54,15 @@ func (r *PushSubscriptionRepository) Upsert(ctx context.Context, sub domain.Push
 	return pushSubscriptionToDomain(row), nil
 }
 
-// Delete removes a subscription by endpoint scoped to a user. It returns
-// ErrNotFound when no row matched.
+// Delete removes a subscription by endpoint scoped to a user. Idempotent
+// (спека #1028 §5): no row matched is not an error — the «выключено» intent
+// is fulfilled either way.
 func (r *PushSubscriptionRepository) Delete(ctx context.Context, userID uuid.UUID, endpoint string) error {
-	rows, err := r.q().DeletePushSubscriptionByEndpointAndUser(ctx, postgres.DeletePushSubscriptionByEndpointAndUserParams{
+	if _, err := r.q().DeletePushSubscriptionByEndpointAndUser(ctx, postgres.DeletePushSubscriptionByEndpointAndUserParams{
 		Endpoint: endpoint,
 		UserID:   pgconv.UUIDToPgtype(userID),
-	})
-	if err != nil {
+	}); err != nil {
 		return fmt.Errorf("delete push subscription: %w", err)
-	}
-	if rows == 0 {
-		return application.ErrNotFound
 	}
 	return nil
 }
@@ -101,16 +98,15 @@ func (r *PushSubscriptionRepository) GetByEndpoint(
 	return pushSubscriptionToDomain(row), nil
 }
 
-// UpdatePreferences replaces the device's delivery state (master + category
-// flags), keeping the subscription's keys. False means the endpoint is not
-// this user's.
+// UpdatePreferences replaces the device's category flags, keeping the
+// subscription's keys. False means the endpoint is not this user's (strict
+// 404, спека #1028 §5).
 func (r *PushSubscriptionRepository) UpdatePreferences(
-	ctx context.Context, userID uuid.UUID, endpoint string, enabled bool, prefs domain.CategoryPrefs,
+	ctx context.Context, userID uuid.UUID, endpoint string, prefs domain.CategoryPrefs,
 ) (bool, error) {
 	rows, err := r.q().UpdatePushSubscriptionPreferences(ctx, postgres.UpdatePushSubscriptionPreferencesParams{
 		Endpoint:                   endpoint,
 		UserID:                     pgconv.UUIDToPgtype(userID),
-		Enabled:                    enabled,
 		CategoryRental:             prefs.Rental,
 		CategoryPaymentsOperations: prefs.PaymentsOperations,
 		CategoryTasks:              prefs.Tasks,
@@ -130,7 +126,6 @@ func pushSubscriptionToDomain(row postgres.PushSubscription) domain.PushSubscrip
 		P256dh:         row.P256dh,
 		Auth:           row.Auth,
 		ExpirationTime: pgconv.TimestamptzToPtrTime(row.ExpirationTime),
-		Enabled:        row.Enabled,
 		Categories: domain.CategoryPrefs{
 			Rental:             row.CategoryRental,
 			PaymentsOperations: row.CategoryPaymentsOperations,

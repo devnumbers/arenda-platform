@@ -21,8 +21,9 @@ const pushRateSnoozeStep = 30 * time.Second
 // committed feed row and fans the payload out over the recipient's current
 // subscriptions. Subscription resolution happens at delivery time — devices
 // subscribed after the enqueue still receive the push, dead ones are dropped,
-// and each device's own settings (master + category flags, решение #738)
-// gate its copy right here.
+// and each device's own category flags gate its copy right here (мастер —
+// само существование строки: подписанного устройства глушить нечем, спека
+// #1028).
 type DeliverPushWorker struct {
 	river.WorkerDefaults[DeliverPushArgs]
 	feed     application.NotificationRepository
