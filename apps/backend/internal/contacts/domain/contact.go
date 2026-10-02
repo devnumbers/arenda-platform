@@ -42,8 +42,10 @@ type Contact struct {
 	// 0028 scope). A shared member's create lands the card in the property
 	// owner's book, never the actor's own.
 	OwnerID uuid.UUID
-	// PropertyID is the optional property binding; nil survives the
-	// property's deletion (FK ON DELETE SET NULL, ADR 0054).
+	// PropertyID is the optional property binding. Deleting the property
+	// takes bound contacts with it (FK ON DELETE CASCADE, ADR 0054 §2 as
+	// amended 2026-10-02); nil — «без объекта» — survives in the owner's
+	// book.
 	PropertyID *uuid.UUID
 	FirstName  string
 	LastName   string

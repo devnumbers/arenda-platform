@@ -1038,9 +1038,10 @@ func (s *PropertyService) ArchiveProperty(ctx context.Context, actor, id uuid.UU
 }
 
 // DeleteProperty removes the property together with all its data: the FKs
-// cascade rentals, payments, operations, tasks and photos off the property
-// row, contacts unbind (ADR 0054). ADR 0049 closed the ADR 0025 detach
-// branch — deletion is total, there is no mode (issue #629).
+// cascade rentals, payments, operations, tasks, photos and bound contacts
+// off the property row (contacts: ADR 0054 §2 as amended 2026-10-02,
+// ticket #1049). ADR 0049 closed the ADR 0025 detach branch — deletion is
+// total, there is no mode (issue #629).
 func (s *PropertyService) DeleteProperty(
 	ctx context.Context,
 	actor, id uuid.UUID,

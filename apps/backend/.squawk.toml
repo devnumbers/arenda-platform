@@ -53,6 +53,7 @@ excluded_paths = [
   "*000121_tasks_without_property.up.sql",           # ban-drop-not-null: свой смысл миграции — property_id в tasks становится опциональным (ADR 0052, карта #518); объектный срез не меняется, NULL-строки порождает только новый безобъектный срез
   "*000132_notifications_feed.up.sql",               # ban-drop-table + require-enum-value-ordering: осознанный дроп user_notification_channel_preferences без переноса строк (решение #738, ADR 0058); 15 типов каталога #737 добавляются порядком каталога, не алфавитом
   "*000145_drop_payment_form.up.sql",                # ban-drop-column ×2: осознанный снос «Формы оплаты» — поле write-only, ценности не несёт (карта #1005, тикет #1006, ревизия решения №3 ADR 0047)
+  "*000148_contacts_property_delete_cascade.up.sql", # adding-foreign-key-constraint: смена referential action DROP+ADD без NOT VALID — файл гоняется одной транзакцией golang-migrate, отдельный VALIDATE невозможен; прецедент 000086 (карта #1047, тикет #1049, разворот ADR 0054 §2)
 ]
 
 excluded_rules = [

@@ -6419,7 +6419,9 @@ components:
       description: >-
         One card of the owner's contact book (ADR 0054): a person useful for
         a property — not a service user. propertyId null means «без
-        объекта»; the card survives the property's deletion.
+        объекта». Deleting the property deletes its bound cards (FK CASCADE,
+        ADR 0054 §2 as amended 2026-10-02); null-bound cards survive in the
+        owner's book.
       type: object
       required: [id, firstName, lastName, patronymic, role, phone, email, messengerName, messengerUsername, note, createdAt, updatedAt]
       properties:
