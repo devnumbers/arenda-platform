@@ -1,5 +1,4 @@
 import type { PropertyAttributes, PropertyType } from '@/entities/property';
-import { coerceAttributes } from '@/entities/property';
 import { propertyTypeOptions } from './property-types';
 
 /**
@@ -7,9 +6,9 @@ import { propertyTypeOptions } from './property-types';
  * 1 «Выбор категории» (Figma 1213-52111), 2 «Адрес» (#481, Figma
  * 1213-52017/52391, 1519-94336), 3 «Характеристики» (#482, Figma
  * 1218-54295). Экран успеха шагом не считается — он появляется после
- * успешного POST и черновика не хранит (#483, Figma 1425-55788).
- * Позиция шага в черновике не живёт — флоу выводит её из заполненных
- * полей (как в визарде платежей #464).
+ * успешного POST (#483, Figma 1425-55788). Состояние шагов — обычный
+ * useState потока (карта #1052, Q2=В: черновика у создания объекта нет —
+ * уход со страницы, перезагрузка и закрытие дают чистый лист).
  */
 
 export type PropertyCreateStep = 1 | 2 | 3;
@@ -19,8 +18,7 @@ export const PROPERTY_CREATE_TOTAL_STEPS = 3;
 export type PropertyCreateDraft = {
   /** Категория объекта (шаг 1). Тип apartments на шаге 1 не выбирается —
    * он появляется на шаге 3 как «Тип жилья» внутри категории «Квартира»
-   * (Figma 1218-54295), поэтому валидатор его пропускает, а чипы шага 1
-   * его не предлагают. */
+   * (Figma 1218-54295), поэтому чипы шага 1 его не предлагают. */
   readonly type?: PropertyType;
   /** Адрес объекта (шаг 2). */
   readonly address?: string;
@@ -31,10 +29,6 @@ export type PropertyCreateDraft = {
   /** Характеристики из каталога по типу (шаг 3; все необязательные). */
   readonly attributes?: PropertyAttributes;
 };
-
-export const PROPERTY_CREATE_DRAFT_STORAGE_KEY = 'property-create-draft';
-
-export const DEFAULT_PROPERTY_CREATE_DRAFT: PropertyCreateDraft = {};
 
 /** Чипы шага 1 (Figma 1213-52111): девять категорий макета — все типы
  * домена, кроме apartments (см. PropertyCreateDraft.type). Порядок и
@@ -77,47 +71,4 @@ export function propertyCreateStepReady(
     case 3:
       return true;
   }
-}
-
-/** Восстановление черновика: первый незавершённый шаг флоу. */
-export function initialPropertyCreateStep(draft: PropertyCreateDraft): PropertyCreateStep {
-  if (!propertyCreateStepReady(1, draft)) return 1;
-  if (!propertyCreateStepReady(2, draft)) return 2;
-  return 3;
-}
-
-function isFilledString(value: unknown): value is string {
-  return typeof value === 'string' && value.length > 0;
-}
-
-/** Форма-проверка persisted payload: неизвестный тип роняет весь черновик
- * (мусор из хранилища не всплывает в визарде), пустые строки и
- * нескалярные атрибуты отбрасываются. Поле step черновиков старого
- * визарда игнорируется — его поля продолжают жить в новом флоу, позицию
- * шага выводит initialPropertyCreateStep. */
-export function validatePropertyCreateDraft(parsed: unknown): PropertyCreateDraft {
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return DEFAULT_PROPERTY_CREATE_DRAFT;
-  }
-
-  const record = parsed as Record<string, unknown>;
-
-  const isValidType = (value: unknown): value is PropertyType =>
-    propertyTypeOptions.some((option) => option.value === value);
-  if ('type' in record && record.type !== undefined && !isValidType(record.type)) {
-    return DEFAULT_PROPERTY_CREATE_DRAFT;
-  }
-
-  const address = isFilledString(record.address) ? record.address : undefined;
-  const name = isFilledString(record.name) ? record.name : undefined;
-  const description = isFilledString(record.description) ? record.description : undefined;
-  const attributesPresent = 'attributes' in record && record.attributes !== undefined;
-
-  return {
-    ...(record.type !== undefined && { type: record.type as PropertyType }),
-    ...(address !== undefined && { address }),
-    ...(name !== undefined && { name }),
-    ...(description !== undefined && { description }),
-    ...(attributesPresent && { attributes: coerceAttributes(record.attributes) }),
-  };
 }

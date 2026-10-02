@@ -12,7 +12,6 @@ export {
   type PropertyBadgeTone,
 } from './lib/property-badges';
 export {
-  initialPropertyCreateStep,
   isApartmentCategory,
   propertyCategoryOptions,
   propertyCreateStepReady,
@@ -36,5 +35,4 @@ export {
 export { addressSuggestionRow } from './lib/address-suggestion';
 export { propertyCreateSuccessCopy } from './lib/property-create-success';
 export { propertyTypeIcons } from './lib/property-type-icons';
-export { usePropertyCreateDraft } from './lib/use-property-create-draft';
 export { PropertyStatusBadge } from './ui/PropertyStatusBadge';

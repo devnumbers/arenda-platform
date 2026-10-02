@@ -9,8 +9,9 @@ import {
 // Figma 1213-52111), шаг «Адрес» с подсказками (#481, Figma 1213-52017/
 // 52391, 1519-94336), шаг «Характеристики» (#482, Figma 1218-54295) и
 // экран успеха (#483, Figma 1425-55788). Один маршрут /properties/new,
-// шаги — клиентское состояние, черновик переживает перезагрузку
-// (sessionStorage). Успех шагом не считается; с ?returnTo= он пропускается.
+// шаги — клиентское состояние потока; черновика нет (карта #1052, Q2=В):
+// перезагрузка даёт чистый лист. Успех шагом не считается; с ?returnTo=
+// он пропускается.
 //
 // Живые подсказки проверяются только при настроенном стабе Dadata
 // (DADATA_BASE_URL локального прогона): в CI ключа нет, endpoint тихо
@@ -159,25 +160,29 @@ test('шаг 3: характеристики — поля каталога, ти
   await captureScreen(page, testInfo, '04-characteristics');
 });
 
-test('шаг 2: черновик переживает перезагрузку, очистка убирает «Продолжить»', async ({ page, seededUser }) => {
+test('шаг 2: очистка убирает «Продолжить»; перезагрузка даёт чистый лист', async ({ page, seededUser }) => {
   await openWizard(page, seededUser);
   await page.getByRole('group', { name: 'Категория объекта' }).getByRole('button', { name: 'Гараж' }).click();
   const address = page.getByRole('textbox', { name: 'Введите адрес' });
   await expect(address).toBeFocused();
 
+  // Очистка поля прячет «Продолжить» — готовность шага по непустому адресу.
+  await address.fill('Ленина, 1');
+  await page.getByRole('button', { name: 'Очистить поле' }).click();
+  await expect(address).toHaveValue('');
+  await expect(page.getByRole('button', { name: 'Продолжить' })).toBeHidden();
+
   await address.fill('Ленина, 1');
   await page.getByRole('button', { name: 'Продолжить' }).click();
   await expect(page.getByText('шаг 3 из 3')).toBeVisible();
 
-  // Перезагрузка восстанавливает первый незавершённый шаг (3 — без
-  // названия); назад — адрес на месте; очистка убирает «Продолжить».
+  // Черновика нет (карта #1052, Q2=В): перезагрузка — чистый лист, визард
+  // на шаге 1, категория не выбрана.
   await page.reload();
-  await expect(page.getByText('шаг 3 из 3')).toBeVisible();
-  await page.getByRole('button', { name: 'Назад' }).click();
-  await expect(address).toHaveValue('Ленина, 1');
-  await page.getByRole('button', { name: 'Очистить поле' }).click();
-  await expect(address).toHaveValue('');
-  await expect(page.getByRole('button', { name: 'Продолжить' })).toBeHidden();
+  await expect(page.getByText('шаг 1 из 3')).toBeVisible();
+  await expect(
+    page.getByRole('group', { name: 'Категория объекта' }).getByRole('button', { name: 'Гараж' }),
+  ).toHaveAttribute('aria-pressed', 'false');
 });
 
 test('полный флоу: создание без названия — автонейм из типа, «Открыть объект» — на карточку', async ({ page, seededUser }, testInfo) => {

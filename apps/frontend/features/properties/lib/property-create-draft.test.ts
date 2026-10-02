@@ -1,65 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
-  initialPropertyCreateStep,
   isApartmentCategory,
   propertyCategoryOptions,
   propertyCreateStepReady,
   propertyHousingTypeOptions,
-  validatePropertyCreateDraft,
-  type PropertyCreateDraft,
 } from './property-create-draft';
-
-describe('validatePropertyCreateDraft', () => {
-  it('мусор вместо черновика даёт пустой дефолт', () => {
-    expect(validatePropertyCreateDraft(null)).toStrictEqual({});
-    expect(validatePropertyCreateDraft('червь')).toStrictEqual({});
-    expect(validatePropertyCreateDraft(42)).toStrictEqual({});
-    expect(validatePropertyCreateDraft([1, 2])).toStrictEqual({});
-  });
-
-  it('валидные поля сохраняются', () => {
-    const draft: PropertyCreateDraft = {
-      type: 'apartment',
-      address: 'Ленина, 1',
-      name: 'Моя квартира',
-      description: 'Уютная',
-    };
-    expect(validatePropertyCreateDraft(draft)).toStrictEqual(draft);
-  });
-
-  it('пустые строки отбрасываются — мусор из хранилища не всплывает', () => {
-    expect(
-      validatePropertyCreateDraft({ type: 'room', address: '', name: '', description: '' }),
-    ).toStrictEqual({ type: 'room' });
-  });
-
-  it('неизвестный тип роняет весь черновик', () => {
-    expect(validatePropertyCreateDraft({ type: 'castle', address: 'Ленина, 1' })).toStrictEqual({});
-  });
-
-  it('все известные типы проходят, включая apartments и studio', () => {
-    for (const { value } of propertyCategoryOptions) {
-      expect(validatePropertyCreateDraft({ type: value })).toStrictEqual({ type: value });
-    }
-    expect(validatePropertyCreateDraft({ type: 'apartments' })).toStrictEqual({ type: 'apartments' });
-    expect(validatePropertyCreateDraft({ type: 'studio' })).toStrictEqual({ type: 'studio' });
-  });
-
-  it('атрибуты проходят через coerce: скаляры остаются, остальное сбрасывается', () => {
-    expect(
-      validatePropertyCreateDraft({
-        type: 'apartment',
-        attributes: { rooms: '3', total_area: 56.5, junk: null, nested: { a: 1 } },
-      }),
-    ).toStrictEqual({ type: 'apartment', attributes: { rooms: '3', total_area: 56.5 } });
-  });
-
-  it('поле step старого черновика игнорируется — позицию шага выводит флоу', () => {
-    expect(
-      validatePropertyCreateDraft({ step: 4, type: 'apartment', address: 'Ленина, 1' }),
-    ).toStrictEqual({ type: 'apartment', address: 'Ленина, 1' });
-  });
-});
 
 describe('propertyCreateStepReady', () => {
   it('шаг 1 готов, когда выбрана категория', () => {
@@ -81,17 +26,6 @@ describe('propertyCreateStepReady', () => {
     expect(
       propertyCreateStepReady(3, { type: 'apartment', address: 'Ленина, 1', name: 'Моя квартира' }),
     ).toBe(true);
-  });
-});
-
-describe('initialPropertyCreateStep', () => {
-  it('восстанавливает первый незавершённый шаг', () => {
-    expect(initialPropertyCreateStep({})).toBe(1);
-    expect(initialPropertyCreateStep({ type: 'apartment' })).toBe(2);
-    expect(initialPropertyCreateStep({ type: 'apartment', address: 'Ленина, 1' })).toBe(3);
-    expect(
-      initialPropertyCreateStep({ type: 'apartment', address: 'Ленина, 1', name: 'Моя квартира' }),
-    ).toBe(3);
   });
 });
 
