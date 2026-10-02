@@ -3,6 +3,7 @@ import type { NotificationCategory } from './types';
 import {
   NOTIFICATION_SETTINGS_CATEGORIES,
   type NotificationCategoryPreferences,
+  allCategoriesDisabled,
   allCategoriesEnabled,
 } from './settings-catalog';
 
@@ -43,5 +44,25 @@ describe('allCategoriesEnabled', () => {
       shared_access: true,
     };
     expect(allCategoriesEnabled()).toEqual(expected);
+  });
+});
+
+describe('allCategoriesDisabled', () => {
+  it('даёт статичное «всё выключено» пуш-колонки без подписки (спека #1028 §1, #1039)', () => {
+    const expected: NotificationCategoryPreferences = {
+      rental: false,
+      payments_operations: false,
+      tasks: false,
+      shared_access: false,
+    };
+    expect(allCategoriesDisabled()).toEqual(expected);
+  });
+
+  it('зеркальна allCategoriesEnabled по каталогу', () => {
+    const enabled = allCategoriesEnabled();
+    const disabled = allCategoriesDisabled();
+    for (const category of NOTIFICATION_SETTINGS_CATEGORIES) {
+      expect(disabled[category]).toBe(!enabled[category]);
+    }
   });
 });

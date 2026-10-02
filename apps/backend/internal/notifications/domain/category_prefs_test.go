@@ -35,26 +35,3 @@ func TestCategoryPrefs_Allows(t *testing.T) {
 	assert.True(t, off.Allows(CategoryTariff))
 	assert.True(t, off.Allows(CategorySystem))
 }
-
-// Accepts is the push subscription's delivery verdict: the master toggle
-// gates everything, the category flag gates its own category.
-func TestPushSubscription_Accepts(t *testing.T) {
-	t.Parallel()
-
-	on := PushSubscription{Enabled: true, Categories: DefaultCategoryPrefs()}
-	assert.True(t, on.Accepts(CategoryTasks))
-	assert.True(t, on.Accepts(CategoryTariff), "service category answers to the master only")
-
-	categoryOff := PushSubscription{
-		Enabled:    true,
-		Categories: CategoryPrefs{Rental: true, PaymentsOperations: true, Tasks: false, SharedAccess: true},
-	}
-	assert.False(t, categoryOff.Accepts(CategoryTasks))
-	assert.True(t, categoryOff.Accepts(CategoryRental))
-	assert.True(t, categoryOff.Accepts(CategoryTariff))
-
-	// Master-off mutes every category, service ones included (2333-180696).
-	masterOff := PushSubscription{Enabled: false, Categories: DefaultCategoryPrefs()}
-	assert.False(t, masterOff.Accepts(CategoryRental))
-	assert.False(t, masterOff.Accepts(CategoryTariff))
-}

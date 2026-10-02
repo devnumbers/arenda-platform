@@ -14,6 +14,7 @@ export type {
 } from './model/types';
 export { notificationCategoryLabel } from './model/category-labels';
 export {
+  allCategoriesDisabled,
   allCategoriesEnabled,
   NOTIFICATION_SETTINGS_CATEGORIES,
 } from './model/settings-catalog';

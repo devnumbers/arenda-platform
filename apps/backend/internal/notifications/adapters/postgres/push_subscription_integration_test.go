@@ -3,7 +3,6 @@ package postgres
 import (
 	"context"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -11,7 +10,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database"
 	genpostgres "github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
@@ -199,9 +197,10 @@ func TestPushSubscriptionRepository_Delete(t *testing.T) {
 		t.Errorf("expected 0 subscriptions after delete, got %d", len(subs))
 	}
 
-	// Deleting again returns ErrNotFound (404 in the API).
-	if err := repo.Delete(ctx, userID, endpoint); !errors.Is(err, application.ErrNotFound) {
-		t.Fatalf("expected ErrNotFound on second delete, got %v", err)
+	// Deleting again is a no-op: DELETE идемпотентен (спека #1028 §5) —
+	// интент «выключено» исполнен, ошибки нет.
+	if err := repo.Delete(ctx, userID, endpoint); err != nil {
+		t.Fatalf("expected idempotent no-op on second delete, got %v", err)
 	}
 }
 
@@ -226,9 +225,10 @@ func TestPushSubscriptionRepository_DeleteScopedByUser(t *testing.T) {
 		t.Fatalf("upsert A: %v", err)
 	}
 
-	// Owner B cannot delete it (scoped query returns 0 rows -> ErrNotFound).
-	if err := repo.Delete(ctx, ownerB, endpoint); !errors.Is(err, application.ErrNotFound) {
-		t.Fatalf("expected ErrNotFound when other user deletes, got %v", err)
+	// Owner B's delete matches 0 rows (scoped query) — и это не ошибка:
+	// чужая подписка чужим DELETE не удаляется, строка остаётся на месте.
+	if err := repo.Delete(ctx, ownerB, endpoint); err != nil {
+		t.Fatalf("expected silent no-op when other user deletes, got %v", err)
 	}
 
 	// It still exists for owner A.

@@ -89,7 +89,6 @@ func (h *NotificationPreferencesHandlers) GetPushSubscriptionPreferences(
 	}
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.PushPreferencesResponse{
 		Endpoint:   sub.Endpoint,
-		Enabled:    sub.Enabled,
 		Categories: categoriesToOpenAPI(sub.Categories),
 	})
 }
@@ -113,13 +112,12 @@ func (h *NotificationPreferencesHandlers) PutPushSubscriptionPreferences(w http.
 	}
 
 	prefs := categoriesFromOpenAPI(body.Categories)
-	if err := h.settings.SetPushPreferences(r.Context(), user, body.Endpoint, body.Enabled, prefs); err != nil {
+	if err := h.settings.SetPushPreferences(r.Context(), user, body.Endpoint, prefs); err != nil {
 		h.writeError(r, w, err)
 		return
 	}
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.PushPreferencesResponse{
 		Endpoint:   body.Endpoint,
-		Enabled:    body.Enabled,
 		Categories: categoriesToOpenAPI(prefs),
 	})
 }

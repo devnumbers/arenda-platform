@@ -1493,10 +1493,11 @@ export interface paths {
         get: operations["getPushSubscriptionPreferences"];
         /**
          * Заменить настройки пушей устройства
-         * @description Upsert состояния устройства: мастер и категории двигаются, подписка и
-         *     её ключи остаются. Выключение мастера — флаг enabled=false: dispatch
-         *     пропускает устройство, повторное включение мгновенное, без
-         *     переподписки (решение #738).
+         * @description Замена категорий устройства (спека #1028 §5): категорийные флаги
+         *     двигаются, подписка и её ключи остаются. Не upsert — неизвестный
+         *     устройству endpoint строгий 404 (в нормальном флоу недостижим:
+         *     мастер-состояние — само существование подписки, выключение
+         *     выполняет DELETE /push/subscriptions).
          */
         put: operations["putPushSubscriptionPreferences"];
         post?: never;
@@ -3476,8 +3477,6 @@ export interface components {
              * @description Optional subscription expiration instant reported by the browser (RFC 8030).
              */
             expiration_time?: string | null;
-            /** @description The device's master push toggle; omitted = on (решение #738). */
-            enabled?: boolean;
             categories?: components["schemas"]["NotificationCategoryPreferences"];
         };
         PushSubscriptionDeleteRequest: {
@@ -3488,8 +3487,6 @@ export interface components {
             /** Format: uuid */
             id: string;
             endpoint: string;
-            /** @description Мастер-тумблер «Получать пуш-уведомления» устройства (решение #738). */
-            enabled: boolean;
             categories: components["schemas"]["NotificationCategoryPreferences"];
             /** Format: date-time */
             created_at: string;
@@ -3499,12 +3496,11 @@ export interface components {
         PushPreferencesRequest: {
             /** @description Push endpoint URL устройства (тот же, что при подписке). */
             endpoint: string;
-            enabled: boolean;
             categories: components["schemas"]["NotificationCategoryPreferences"];
         };
+        /** @description Состояние устройства (спека #1028): категорийные флаги подписки; сам факт 200 = подписка есть = мастер-тумблер устройства включён («строка есть = включено»), 404 = выключено. */
         PushPreferencesResponse: {
             endpoint: string;
-            enabled: boolean;
             categories: components["schemas"]["NotificationCategoryPreferences"];
         };
         /** @description Флаги четырёх настраиваемых категорий одного канала (решение #738) — email держит копию на аккаунте, push — на устройстве. Тариф и Системные всегда включены и здесь не хранятся. */
@@ -6804,7 +6800,11 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Push subscription deleted */
+            /**
+             * @description Подписка удалена. Идемпотентно (спека #1028 §5): 204 и при
+             *     отсутствии строки — интент «выключено» исполнен в обоих случаях,
+             *     404 фронту различать не требуется.
+             */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -6813,7 +6813,6 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
         };
     };
     getPushSubscriptionPreferences: {

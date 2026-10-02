@@ -4,10 +4,10 @@
  * разрешение читаются синхронно: их вердикт известен сразу после
  * гидратации — useSyncExternalStore закрывает расхождение сервер/клиент
  * пере-рендером без ошибки гидратации. Экран настроек до этого момента
- * держит архетип загрузки: поздняя вставка карточки «Разрешите пуши»
- * между секциями сдвигала бы их (аудит #877 — CLS 0.15 на холодном
- * входе). Асинхронной остаётся только подписка (endpoint) — она меняет
- * тумблеры 1:1, каркас не двигает.
+ * держит архетип загрузки: поздняя вставка пуш-состава (мастер, тумблеры,
+ * красный слот — спека #1028 §1) между секциями сдвигала бы их (аудит
+ * #877 — CLS 0.15 на холодном входе). Асинхронной остаётся только
+ * подписка (endpoint) — она меняет тумблеры 1:1, каркас не двигает.
  *
  * Все исходы — синглтоны: `useSyncExternalStore` сравнивает снапшоты через
  * Object.is, новый объект на каждый вызов getSnapshot зациклил бы рендер.
@@ -92,4 +92,32 @@ export function resolveInitialPushStatus(input: {
   return input.permission === 'denied'
     ? PERMISSION_DENIED_PUSH_STATUS
     : PERMISSION_DEFAULT_PUSH_STATUS;
+}
+
+/**
+ * Слияние двух половин пробы: синхронный вердикт (поддержка + разрешение) и
+ * асинхронный endpoint подписки. Не-выданное разрешение — окончательный
+ * вердикт без подписочной половины; `granted` ждёт endpoint: undefined —
+ * проба в воздухе (архетип загрузки), null — подписки нет (№5), строка —
+ * норма «вкл» (№6, спека #1028 §1).
+ */
+export function mergePushStatus(
+  sync: PushSubscriptionStatus,
+  endpoint: string | null | undefined,
+): PushSubscriptionStatus {
+  if (!sync.isPending) {
+    return sync;
+  }
+  if (endpoint === undefined) {
+    return PENDING_PUSH_STATUS;
+  }
+  return {
+    isUnsupported: false,
+    needsPermission: false,
+    permissionDenied: false,
+    needsSubscription: endpoint === null,
+    isReady: endpoint !== null,
+    isPending: false,
+    endpoint,
+  };
 }

@@ -33,7 +33,10 @@ notifications map (#734) changed the landscape twice over:
    master «Получать пуш-уведомления» toggle and the four category toggles
    belong to each push subscription (master-off = `enabled=false` on the
    subscription, no re-subscribe needed), while email is one configuration per
-   account.
+   account. *(Аменд 2026-10-02, карта #1024 — спека #1028, слово владельца:
+   выключение мастера = жёсткая отписка, вариант Б — строка есть = включено,
+   строки нет = выключено; вырожденный флаг `enabled` снесён вместе с
+   миграцией `000147`, повторное включение = новая подписка с чистого листа.)*
 
 With the taxonomy collapsed to six categories, keeping the dead
 per-event-type table alive would preserve a model nothing reads anymore.
@@ -54,6 +57,9 @@ per-event-type table alive would preserve a model nothing reads anymore.
   push per device — master `enabled` flag plus category flags on the push
   subscription. The old per-event-type `GET/PUT /notification-preferences`
   contract is removed; front and back move together in the map branch.
+  *(Аменд 2026-10-02, #1028: пуш-контракт без `enabled` — `DELETE
+  /push/subscriptions` идемпотентный 204, `PUT preferences` строгий 404,
+  тело POST/PUT несёт только категории.)*
 - **Reset, not migrate**: the old table and its rows are dropped (migration
   `000132`); stored grace opt-outs are not honoured. The grace sender
   (`DirectNotificationService`) delivers both channels unconditionally — the
@@ -78,7 +84,11 @@ The settings contract and the feed's REST surface landed with #743
 = all-on), the device matrix lives on the push subscription itself (master
 `enabled` plus the four category flags). The email delivery job reads the
 recipient's matrix at delivery time (`DeliverySettings`); the push job
-filters each subscription by its own state (`Accepts`). The feed's REST
+filters each subscription by its own category flag (`Categories.Allows`).
+*(Аменд 2026-10-02,
+#1028: master-флага на подписке больше нет — колонка снесена миграцией
+`000147`, мастером служит само существование строки; вердикт доставки —
+только категорийный флаг `Categories.Allows`, враппер `Accepts` снесён.)* The feed's REST
 surface (#743): keyset page, unread count, read/delete one and all, and the
 notification detail whose action buttons are computed at read time from the
 entities' live state and the reader's role (decision #737).

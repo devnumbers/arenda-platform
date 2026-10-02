@@ -75,20 +75,23 @@ type EmailPreferencesRepository interface {
 type PushSubscriptionRepository interface {
 	// Upsert inserts a subscription keyed by endpoint, or updates its mutable
 	// fields when the endpoint already exists (idempotent re-subscribe). The
-	// per-device settings (master + category flags) travel with every call.
+	// device's category flags travel with every call; the row's existence is
+	// the master state (спека #1028: строка есть = включено).
 	Upsert(ctx context.Context, sub domain.PushSubscription) (domain.PushSubscription, error)
-	// Delete removes a subscription by endpoint scoped to a user. It returns
-	// ErrNotFound when no row matched.
+	// Delete removes a subscription by endpoint scoped to a user. Idempotent
+	// (спека #1028 §5): removing an absent subscription is fine — the
+	// «выключено» intent is fulfilled either way, so there is no not-found
+	// outcome.
 	Delete(ctx context.Context, userID uuid.UUID, endpoint string) error
 	// ListByUser returns all stored subscriptions for a user.
 	ListByUser(ctx context.Context, userID uuid.UUID) ([]domain.PushSubscription, error)
 	// GetByEndpoint returns the user's subscription with its settings state;
 	// ErrNotFound when the endpoint is not this user's.
 	GetByEndpoint(ctx context.Context, userID uuid.UUID, endpoint string) (domain.PushSubscription, error)
-	// UpdatePreferences replaces the device's delivery state (master +
-	// category flags, решение #738), keeping the subscription's keys. It
-	// reports false when the endpoint is not this user's.
-	UpdatePreferences(ctx context.Context, userID uuid.UUID, endpoint string, enabled bool, prefs domain.CategoryPrefs) (bool, error)
+	// UpdatePreferences replaces the device's category flags, keeping the
+	// subscription's keys. It reports false when the endpoint is not this
+	// user's (strict 404, спека #1028 §5).
+	UpdatePreferences(ctx context.Context, userID uuid.UUID, endpoint string, prefs domain.CategoryPrefs) (bool, error)
 }
 
 // TemplateEmailSender renders a named template and sends one email through

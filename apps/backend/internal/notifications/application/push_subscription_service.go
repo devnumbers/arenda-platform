@@ -26,15 +26,14 @@ func NewPushSubscriptionService(repo PushSubscriptionRepository, clk clock.Clock
 }
 
 // UpsertPushSubscriptionInput is the user-supplied data for registering a push
-// subscription. The per-device settings are optional: a nil pointer keeps the
-// all-on default (решение #738) — the browser applies its locally held desired
-// state on every subscribe.
+// subscription. Categories are optional: a nil pointer keeps the all-on
+// default (решение #738; спека #1028 §5 — POST несёт категории явно, дефолт
+// для чужих клиентов — все ВКЛ).
 type UpsertPushSubscriptionInput struct {
 	Endpoint       string
 	P256dh         string
 	Auth           string
 	ExpirationTime *time.Time
-	Enabled        *bool
 	Categories     *domain.CategoryPrefs
 }
 
@@ -51,10 +50,6 @@ func (s *PushSubscriptionService) Upsert(
 		return domain.PushSubscription{}, fmt.Errorf("%w: %w", ErrInvalidPushSubscription, err)
 	}
 
-	enabled := true
-	if in.Enabled != nil {
-		enabled = *in.Enabled
-	}
 	categories := domain.DefaultCategoryPrefs()
 	if in.Categories != nil {
 		categories = *in.Categories
@@ -72,7 +67,6 @@ func (s *PushSubscriptionService) Upsert(
 		P256dh:         in.P256dh,
 		Auth:           in.Auth,
 		ExpirationTime: in.ExpirationTime,
-		Enabled:        enabled,
 		Categories:     categories,
 		CreatedAt:      now,
 		UpdatedAt:      now,
@@ -85,8 +79,9 @@ func (s *PushSubscriptionService) Upsert(
 	return stored, nil
 }
 
-// Delete removes the subscription with the given endpoint for the user. It
-// returns ErrNotFound when no subscription matched.
+// Delete removes the subscription with the given endpoint for the user.
+// Idempotent (спека #1028 §5): the «выключено» intent is fulfilled whether
+// the row existed or not — there is no not-found outcome.
 func (s *PushSubscriptionService) Delete(ctx context.Context, userID uuid.UUID, endpoint string) error {
 	if endpoint == "" {
 		return errors.Join(ErrInvalidPushSubscription, errors.New("endpoint is required"))

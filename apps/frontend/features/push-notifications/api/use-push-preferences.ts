@@ -20,22 +20,21 @@ import type { components } from '@/shared/api/dto';
 type PushPreferencesDto = components['schemas']['PushPreferencesResponse'];
 type PushPreferencesRequestDto = components['schemas']['PushPreferencesRequest'];
 
-/** Дефолт устройства (решение #738): мастер включён, все категории включены. */
+/** Категорийный дефолт устройства: «всё включено» (решение #738). Мастера в
+ * модели нет (спека #1028 §0): строка есть = устройство включено, строки
+ * нет = выключено — на этот тип мастеровое состояние не выражается. */
 export function defaultPushDevicePreferences(): PushDevicePreferences {
-  return { enabled: true, categories: allCategoriesEnabled() };
+  return { categories: allCategoriesEnabled() };
 }
 
-/** Состояние пуш-канала устройства (решение #738, ADR 0058): мастер-тумблер
- * «Получать пуш-уведомления» и флаги четырёх категорий — на подписке
- * браузера, ключ устройства — endpoint URL (контракт #743). */
+/** Категорийные флаги пуш-канала устройства (решение #738, ADR 0058,
+ * спека #1028): ключ устройства — endpoint URL (контракт #743). */
 export type PushDevicePreferences = {
-  readonly enabled: boolean;
   readonly categories: NotificationCategoryPreferences;
 };
 
 function mapPushPreferences(dto: PushPreferencesDto): PushDevicePreferences {
   return {
-    enabled: dto.enabled,
     categories: mapCategoryPreferences(dto.categories),
   };
 }
@@ -43,9 +42,10 @@ function mapPushPreferences(dto: PushPreferencesDto): PushDevicePreferences {
 /**
  * Настройки пушей этого устройства (GET /push/subscriptions/preferences,
  * #743). Запрос в воздух не уходит: endpoint появляется, когда в браузере
- * есть живая подписка. Неизвестный бэку endpoint (запись потеряна) —
- * дефолт «всё включено»: запись пересоздаст фоновый гейт подписки, PUT
- * сохранит состояние.
+ * есть живая подписка. Неизвестный бэку endpoint (запись потеряна,
+ * аномалия №7 до heal-отписки стартового гейта) — преходящее состояние:
+ * категории показываем дефолтные «всё включено», мастеровое состояние
+ * рисует сам факт живой подписки.
  */
 export function usePushDevicePreferences(
   endpoint: string | undefined,
@@ -73,7 +73,8 @@ export function usePushDevicePreferences(
   });
 }
 
-/** Переменные PUT: состояние целиком + ключ устройства. */
+/** Переменные PUT: категории целиком + ключ устройства. Мастер-выключение
+ * телом PUT не выражается — это DELETE /push/subscriptions. */
 export type UpdatePushDevicePreferencesVars = PushDevicePreferences & {
   readonly endpoint: string;
 };
@@ -81,8 +82,9 @@ export type UpdatePushDevicePreferencesVars = PushDevicePreferences & {
 /**
  * Замена настроек устройства (PUT /push/subscriptions/preferences, #743) —
  * оптимистично, как email-матрица (#746): тумблер двигается сразу, при
- * ошибке снимок восстанавливается. Выключение мастера — enabled=false:
- * dispatch пропускает устройство, повторное включение мгновенное.
+ * ошибке снимок восстанавливается. Тело несёт только категории (спека
+ * #1028 §5); мастер-выключение — жёсткая отписка DELETE (см.
+ * useDeletePushSubscription).
  */
 export function useUpdatePushDevicePreferences(): UseMutationResult<
   PushDevicePreferences,
@@ -91,19 +93,19 @@ export function useUpdatePushDevicePreferences(): UseMutationResult<
 > {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ endpoint, enabled, categories }: UpdatePushDevicePreferencesVars) => {
-      const body: PushPreferencesRequestDto = { endpoint, enabled, categories };
+    mutationFn: async ({ endpoint, categories }: UpdatePushDevicePreferencesVars) => {
+      const body: PushPreferencesRequestDto = { endpoint, categories };
       const response = await apiClient<PushPreferencesDto>(
         '/push/subscriptions/preferences',
         { method: 'PUT', body: JSON.stringify(body) },
       );
       return mapPushPreferences(response);
     },
-    onMutate: async ({ endpoint, enabled, categories }) => {
+    onMutate: async ({ endpoint, categories }) => {
       const queryKey = notificationKeys.pushPreferences(endpoint);
       await queryClient.cancelQueries({ queryKey });
       const previous = queryClient.getQueryData<PushDevicePreferences>(queryKey);
-      queryClient.setQueryData(queryKey, { enabled, categories });
+      queryClient.setQueryData(queryKey, { categories });
       return { previous, queryKey };
     },
     onError: (_error, _vars, context) => {

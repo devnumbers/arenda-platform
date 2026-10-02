@@ -153,16 +153,9 @@ const profile = {
   pushEnabled: ((options?) =>
     notify.success('Пуши включены', options)) satisfies ScenarioFn,
   pushEnableError: errorScenario('Не удалось включить пуши'),
-  pushPermissionDenied: ((options?) =>
-    notify.info(
-      'Уведомления отключены в браузере. Включить можно в настройках сайта.',
-      options,
-    )) satisfies ScenarioFn,
-  pushIosNeedsInstall: ((options?) =>
-    notify.info(
-      'На iPhone для пушей добавьте приложение на экран «Домой» через Поделиться в Safari.',
-      options,
-    )) satisfies ScenarioFn,
+  // Тосты denied/iOS-не-установлен снесены (спека #1028 §1, слайс 3
+  // #1039): их заменил единый красный текст-слот на экране настроек —
+  // только по клику, без тостов.
 } as const;
 
 const tariff = {

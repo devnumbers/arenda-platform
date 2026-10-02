@@ -65,13 +65,13 @@ func (r *fakePrefsPush) GetByEndpoint(_ context.Context, userID uuid.UUID, endpo
 }
 
 func (r *fakePrefsPush) UpdatePreferences(
-	_ context.Context, userID uuid.UUID, endpoint string, enabled bool, prefs domain.CategoryPrefs,
+	_ context.Context, userID uuid.UUID, endpoint string, prefs domain.CategoryPrefs,
 ) (bool, error) {
 	sub, ok := r.subs[endpoint]
 	if !ok || sub.UserID != userID {
 		return false, nil
 	}
-	sub.Enabled, sub.Categories = enabled, prefs
+	sub.Categories = prefs
 	r.subs[endpoint] = sub
 	return true, nil
 }
@@ -87,7 +87,9 @@ func newPrefsTestHandlers() (*NotificationPreferencesHandlers, *fakePrefsPush) {
 // JSON keys of the device settings payload, repeated across the tests.
 const (
 	prefsKeyEndpoint           = "endpoint"
-	prefsKeyEnabled            = "enabled"
+	prefsKeyP256dh             = "p256dh"
+	prefsKeyAuth               = "auth"
+	prefsAuthValue             = "auth-value"
 	prefsKeyCategories         = "categories"
 	prefsKeyRental             = "rental"
 	prefsKeyPaymentsOperations = "payments_operations"
@@ -161,7 +163,6 @@ func TestNotificationPreferencesHandlers_PushPreferences(t *testing.T) {
 	push.subs[endpoint] = domain.PushSubscription{
 		UserID:     user,
 		Endpoint:   endpoint,
-		Enabled:    true,
 		Categories: domain.DefaultCategoryPrefs(),
 		CreatedAt:  time.Now(),
 		UpdatedAt:  time.Now(),
@@ -172,16 +173,17 @@ func TestNotificationPreferencesHandlers_PushPreferences(t *testing.T) {
 		"/push/subscriptions/preferences?endpoint="+endpoint, nil),
 		openapi.GetPushSubscriptionPreferencesParams{Endpoint: endpoint})
 	require.Equal(t, http.StatusOK, w.Code)
-	assert.JSONEq(t, `{"endpoint":"`+endpoint+`","enabled":true,`+
+	// The fact of 200 = the row exists = the master is on (спека #1028);
+	// the body carries only the category flags.
+	assert.JSONEq(t, `{"endpoint":"`+endpoint+`",`+
 		`"categories":{"rental":true,"payments_operations":true,"tasks":true,"shared_access":true}}`,
 		w.Body.String())
 
-	// The PUT moves the master and the flags in one replacement.
+	// The PUT replaces the flags; the subscription's keys stay.
 	w = httptest.NewRecorder()
 	h.PutPushSubscriptionPreferences(w, prefsRequest(t, user, http.MethodPut,
 		"/push/subscriptions/preferences", map[string]any{
 			prefsKeyEndpoint: endpoint,
-			prefsKeyEnabled:  false,
 			prefsKeyCategories: map[string]any{
 				prefsKeyRental: false, prefsKeyPaymentsOperations: true, prefsKeyTasks: true, prefsKeySharedAccess: true,
 			},
@@ -190,23 +192,36 @@ func TestNotificationPreferencesHandlers_PushPreferences(t *testing.T) {
 
 	sub, err := h.settings.PushPreferences(context.Background(), user, endpoint)
 	require.NoError(t, err)
-	assert.False(t, sub.Enabled)
 	assert.False(t, sub.Categories.Rental)
 	assert.True(t, sub.Categories.PaymentsOperations, "the flags travel with the same PUT")
+
+	// The lying field is gone from the wire: an unknown key is rejected.
+	w = httptest.NewRecorder()
+	h.PutPushSubscriptionPreferences(w, prefsRequest(t, user, http.MethodPut,
+		"/push/subscriptions/preferences", map[string]any{
+			prefsKeyEndpoint: endpoint,
+			"enabled":        false,
+			prefsKeyCategories: map[string]any{
+				prefsKeyRental: true, prefsKeyPaymentsOperations: true, prefsKeyTasks: true, prefsKeySharedAccess: true,
+			},
+		}))
+	assert.Equal(t, http.StatusBadRequest, w.Code, "enabled is no longer part of the contract")
 
 	// Another user's endpoint stays invisible.
 	stranger := uuid.Must(uuid.NewV7())
 	w = httptest.NewRecorder()
 	h.PutPushSubscriptionPreferences(w, prefsRequest(t, stranger, http.MethodPut,
 		"/push/subscriptions/preferences", map[string]any{
-			prefsKeyEndpoint: endpoint, prefsKeyEnabled: true, prefsKeyCategories: map[string]any{
+			prefsKeyEndpoint: endpoint, prefsKeyCategories: map[string]any{
 				prefsKeyRental: true, prefsKeyPaymentsOperations: true, prefsKeyTasks: true, prefsKeySharedAccess: true,
 			},
 		}))
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
-// The subscription response carries the device's settings state.
+// The subscription response carries the device's category flags; enabled is
+// no longer part of the contract (спека #1028 §5 — the row's existence is
+// the master state, POSTing with enabled is a 400).
 func TestPushSubscriptionResponse_IncludesSettings(t *testing.T) {
 	t.Parallel()
 
@@ -214,10 +229,9 @@ func TestPushSubscriptionResponse_IncludesSettings(t *testing.T) {
 	user := uuid.Must(uuid.NewV7())
 
 	r := newPushJSONRequest(t, http.MethodPost, "/push/subscriptions", &user, map[string]any{
-		"endpoint": "https://push.example/with-settings",
-		"p256dh":   testP256dh,
-		"auth":     "auth-value",
-		"enabled":  false,
+		prefsKeyEndpoint: "https://push.example/with-settings",
+		prefsKeyP256dh:   testP256dh,
+		prefsKeyAuth:     prefsAuthValue,
 		"categories": map[string]any{
 			"rental": false, "payments_operations": true, prefsKeyTasks: true, prefsKeySharedAccess: true,
 		},
@@ -227,36 +241,43 @@ func TestPushSubscriptionResponse_IncludesSettings(t *testing.T) {
 	require.Equal(t, http.StatusCreated, w.Code)
 
 	var resp struct {
-		Enabled    bool `json:"enabled"`
 		Categories struct {
 			Rental             bool `json:"rental"`
 			PaymentsOperations bool `json:"payments_operations"`
 		} `json:"categories"`
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	assert.False(t, resp.Enabled)
 	assert.False(t, resp.Categories.Rental)
 	assert.True(t, resp.Categories.PaymentsOperations)
 
-	// Omitted settings read as all-on.
+	// Omitted categories read as all-on (дефолт для чужих клиентов).
 	r = newPushJSONRequest(t, http.MethodPost, "/push/subscriptions", &user, map[string]any{
-		"endpoint": "https://push.example/plain",
-		"p256dh":   testP256dh,
-		"auth":     "auth-value",
+		prefsKeyEndpoint: "https://push.example/plain",
+		prefsKeyP256dh:   testP256dh,
+		prefsKeyAuth:     prefsAuthValue,
 	})
 	w = httptest.NewRecorder()
 	h.CreatePushSubscription(w, r)
 	require.Equal(t, http.StatusCreated, w.Code)
 
 	var plain struct {
-		Enabled    bool `json:"enabled"`
 		Categories struct {
 			Rental bool `json:"rental"`
 		} `json:"categories"`
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &plain))
-	assert.True(t, plain.Enabled, "omitted enabled reads as on")
 	assert.True(t, plain.Categories.Rental, "omitted categories read as all-on")
+
+	// The lying field is rejected on create too.
+	r = newPushJSONRequest(t, http.MethodPost, "/push/subscriptions", &user, map[string]any{
+		prefsKeyEndpoint: "https://push.example/enabled",
+		prefsKeyP256dh:   testP256dh,
+		prefsKeyAuth:     prefsAuthValue,
+		"enabled":        false,
+	})
+	w = httptest.NewRecorder()
+	h.CreatePushSubscription(w, r)
+	assert.Equal(t, http.StatusBadRequest, w.Code, "enabled is no longer part of the contract")
 
 	assert.Len(t, repo.subs, 2)
 }

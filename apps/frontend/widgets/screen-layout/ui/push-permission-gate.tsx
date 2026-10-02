@@ -1,64 +1,21 @@
 'use client';
 
-import { useEffect, type JSX } from 'react';
-import { reportClientError } from '@/shared/lib/error-reporting/report-client-error';
-import {
-  ensureActiveSubscription,
-  useEnsureSubscriptionTools,
-} from '@/features/push-notifications';
-import { readNotificationPermission } from '@/features/push-notifications';
+import { type JSX } from 'react';
+import { usePushStartup } from '@/features/push-notifications';
 
 /**
- * Invisible side-effect component: keeps the push subscription alive.
+ * Невидимый стартовый гейт пушей (маунтится в ScreenLayout, слайс 2 #1038,
+ * спека #1028 §3–§4). Всю работу делает {@link usePushStartup}:
  *
- * Mounted once in the screen layout (ScreenLayout, ex-cabinet since #568).
- * On every app load, if permission is already granted, it runs
- * {@link ensureActiveSubscription} in the background. The system permission
- * prompt is NEVER triggered from here — only from explicit user actions in
- * the onboarding modal — so the gate cannot resurrect a prompt the user
- * dismissed.
+ * 1. heal — браузерная подписка без строки в БД молча отписывается;
+ * 2. авто-промпт новому юзеру — системное окно разрешения без жеста, ровно
+ *    один раз на браузер; grant → тихая подписка + POST + тост.
  *
- * The old per-account preference check (`anyPushAllowed`, ADR 0030) is gone
- * with its contract (решение #738, ADR 0058): the subscription stays alive
- * whenever the browser permission is granted — the per-device master flag
- * gates at delivery time (ADR 0058), not at subscription.
- *
- * Any failure is reported via `reportClientError` and swallowed; push is a
- * best-effort channel and the email path is unaffected.
+ * Фонового ресабскрайба больше нет (ensureActiveSubscription снесён):
+ * подписка возникает только из явного действия. Ожидаемые состояния
+ * (unsupported, нет разрешения, сетевые сбои) молчаливы.
  */
 export function PushPermissionGate(): JSX.Element | null {
-  const { vapidKey, postSubscription } = useEnsureSubscriptionTools();
-
-  useEffect(() => {
-    if (readNotificationPermission() !== 'granted') return;
-
-    let cancelled = false;
-    ensureActiveSubscription(vapidKey, postSubscription)
-      .then((result) => {
-        if (cancelled) return;
-        if (result.outcome === 'reason') {
-          // unsupported / no-permission / no-vapid-key are expected runtime
-          // states and not worth reporting; network-error and missing-keys
-          // are surfaced for observability.
-          if (result.reason === 'network-error' || result.reason === 'missing-keys') {
-            reportClientError(
-              `push subscription sync failed: ${result.reason}`,
-            );
-          }
-        }
-      })
-      .catch((error: unknown) => {
-        if (cancelled) return;
-        reportClientError(
-          'push subscription sync threw',
-          error instanceof Error ? error.stack : undefined,
-        );
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [vapidKey, postSubscription]);
-
+  usePushStartup();
   return null;
 }

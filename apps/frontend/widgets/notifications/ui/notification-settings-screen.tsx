@@ -8,10 +8,13 @@ import {
 } from '@/entities/notification';
 import {
   defaultPushDevicePreferences,
+  requiresInstallOnIos,
+  useDeletePushSubscription,
   usePushDevicePreferences,
   usePushSubscriptionStatus,
   useSubscribePush,
   useUpdatePushDevicePreferences,
+  unsubscribeBrowserSubscription,
   type PushDevicePreferences,
 } from '@/features/push-notifications';
 import {
@@ -21,14 +24,15 @@ import {
 import { notify } from '@/shared/lib/notifications';
 import { Button, Skeleton, Switch } from '@/shared/ui/design';
 import {
-  applyPushChange,
+  PUSH_SLOT_MESSAGES,
+  applyCategoryChange,
+  categoryEnableCategories,
+  masterEnableCategories,
   resolvePushDisplay,
-  resolvePushState,
+  slotStateHolds,
   verdictFromOutcome,
-  type PushChange,
+  type PushSlotReason,
 } from '../lib/notification-settings';
-import { PushPermissionCard } from './settings-permission-card';
-import { NotificationPermissionSheet } from './settings-permission-sheet';
 import { NotificationSettingsContentSkeleton } from './notification-settings-skeleton';
 
 /** Описания групп — с макета 1789-100250 (карта #734, #746). */
@@ -40,65 +44,64 @@ const GROUP_DESCRIPTIONS: Record<NotificationSettingsCategory, string> = {
 };
 
 /**
- * Экран «Настроить уведомления» (карта #734, тикет #746): мастер-тумблер
- * «Получать пуш-уведомления» per-device (решение #738) и матрица 4 группы ×
+ * Экран «Настроить уведомления» (карта #734, тикет #746): матрица 4 группы ×
  * (Электронная почта, Пуш-уведомления); Тариф и Системные всегда включены и
  * в экране отсутствуют. Email-матрица — на аккаунте
- * (GET/PUT /notification-preferences), пуш-колонка — на подписке браузера
+ * (GET/PUT /notification-preferences), пуш-колонка — на устройстве
  * (GET/PUT /push/subscriptions/preferences); оба PUT оптимистичны с откатом.
  *
- * Пуш-флоу «Разрешите пуши»: включение пуш-тумблера без разрешения браузера
- * открывает шит (2329-151632), мастер включён без разрешения — inline-карту
- * под мастером (2329-150165); после разрешения пуш включён (2329-151164).
- * Мастер выключен глушит только доставку: тумблеры категорий кликабельны
- * и хранят значения — макет 2333-180696 показывает включённый пуш-тумблер
- * под выключенным мастером (сверка #827). Браузер без Web Push —
- * пуш-колонка не рендерится.
+ * Пуш-колонка по матрице состояний (спека #1028 §1, слайс 3 #1039): видна
+ * всегда, тумблеры всегда кликабельны — дизейблов нет. Обратная связь
+ * «включить нельзя» (unsupported / iOS-не-установлен / denied) — единый
+ * красный текст-слот под мастер-тумблером: только по клику, без тостов,
+ * висит, пока заблокированное состояние держится. Мастерового флага нет —
+ * строка подписки есть = включено; выключение — жёсткая отписка
+ * pushManager.unsubscribe() + идемпотентный DELETE /push/subscriptions.
+ * Включение без подписки — флоу разрешения: системное окно при `default`
+ * (in-app шит снесён), тихая подписка при выданном; первый POST несёт
+ * желаемое состояние — мастер все категории ВКЛ, категория одну кликнутую
+ * ВКЛ.
  */
 export function NotificationSettingsScreen(): JSX.Element {
   const { refresh, ...pushStatus } = usePushSubscriptionStatus();
   const probeSettled = !pushStatus.isPending;
-  const supported = !pushStatus.isUnsupported;
-  const permissionGranted = probeSettled && !pushStatus.needsPermission;
   const endpoint = pushStatus.endpoint;
 
   const pushPrefsQuery = usePushDevicePreferences(endpoint ?? undefined);
   const emailQuery = useEmailNotificationPreferences();
 
   const updatePush = useUpdatePushDevicePreferences();
+  const deleteSubscription = useDeletePushSubscription();
   const updateEmail = useUpdateEmailPreferences();
-  const { subscribe, isPending: flowPending } = useSubscribePush();
+  const { subscribe } = useSubscribePush();
 
-  // Локальное состояние пуш-колонки до первой подписки: выключатели здесь
-  // нечему хранить на сервере, флоу разрешения сохранит их первым PUT.
-  const [localPush, setLocalPush] = useState<PushDevicePreferences | null>(null);
-  // Изменение, ждущее разрешения (шит открыт); карточка идёт без изменения —
-  // сохраняет текущее состояние как есть.
-  const [pendingChange, setPendingChange] = useState<PushChange | null>(null);
-  const [sheetOpen, setSheetOpen] = useState(false);
+  // Красный слот: причина последнего клика, попавшего в заблокированное
+  // состояние. Показ — пока состояние держится (slotStateHolds): поздний
+  // оптин из Site Settings гасит слот без перезагрузки (проба разрешения
+  // живая, спека #1028 §6); после перезагрузки слота нет — снова по клику.
+  const [slotReason, setSlotReason] = useState<PushSlotReason | null>(null);
 
-  const display = resolvePushDisplay({
-    probeSettled,
-    supported,
-    permissionGranted,
-    endpoint,
-    server: pushPrefsQuery.data,
-    local: localPush,
-  });
-  // Пуш-состав (мастер, карточка «Разрешите пуши», тумблеры) известен только
-  // после гидратации: до оседания пробы экран целиком держит контентный
-  // скелетон (шелл — на странице, §7 — шапка скелетоном не подменяется);
-  // поздняя вставка карточки между секциями сдвигала бы их (аудит #877,
-  // CLS 0.15).
+  const display = resolvePushDisplay({ endpoint, server: pushPrefsQuery.data });
+  const shownSlot =
+    slotReason !== null &&
+    slotStateHolds(slotReason, {
+      supported: !pushStatus.isUnsupported,
+      iosNeedsInstall: requiresInstallOnIos(),
+      permissionDenied: pushStatus.permissionDenied,
+    })
+      ? slotReason
+      : null;
+
+  // Пуш-состав (мастер, тумблеры) известен только после гидратации: до
+  // оседания пробы экран целиком держит контентный скелетон (шелл — на
+  // странице, §7 — шапка скелетоном не подменяется); поздняя вставка пуш-
+  // состава между секциями сдвигала бы их (аудит #877, CLS 0.15).
   if (!probeSettled) {
     return <NotificationSettingsContentSkeleton />;
   }
   // Пуш-тумблеры рисуем скелетоном, пока неясно состояние (GET устройства
   // при живой подписке).
   const pushLoading = endpoint !== null && pushPrefsQuery.isPending;
-
-  const currentPushState = (): PushDevicePreferences =>
-    resolvePushState(endpoint, pushPrefsQuery.data, localPush);
 
   const savePush = (next: PushDevicePreferences, saveEndpoint: string): void => {
     updatePush.mutate(
@@ -108,6 +111,20 @@ export function NotificationSettingsScreen(): JSX.Element {
           notify.scenarios.profile.notificationPreferencesSaveError(error),
       },
     );
+  };
+
+  /** Мастер-выключение (№6 → №5): жёсткая отписка — браузерная подписка +
+   * строка БД (спека #1028 §2). DELETE идемпотентный (204 и без строки);
+   * пробу подписки и кэш настроек обновляет мутация — UI видит «выключено»
+   * сразу. */
+  const turnPushOff = (probeEndpoint: string): void => {
+    void (async () => {
+      const liveEndpoint = await unsubscribeBrowserSubscription();
+      deleteSubscription.mutate(liveEndpoint ?? probeEndpoint, {
+        onError: (error) =>
+          notify.scenarios.profile.notificationPreferencesSaveError(error),
+      });
+    })();
   };
 
   const toggleEmail = (category: NotificationSettingsCategory, value: boolean): void => {
@@ -122,125 +139,95 @@ export function NotificationSettingsScreen(): JSX.Element {
     );
   };
 
-  /** Флоу разрешения: системный промпт (если нужно) → подписка → первый PUT
-   * желаемого состояния (локальные выключатели + ожидающее изменение).
-   * Исходы, кроме подписки, тумблер не двигают — только тост. */
-  const runPermissionFlow = async (change: PushChange | null): Promise<void> => {
-    const outcome = await subscribe();
+  /** Флоу включения (спека #1028 §2): системное окно при `default`, тихая
+   * подписка при выданном разрешении, POST желаемого состояния. Созданная
+   * подписка — тост «Пуши включены» (POST уже посадил endpoint в пробу);
+   * уже-живая подписка браузера — PUT желаемого состояния на её endpoint и
+   * перезвон пробы; блокировка — красный слот; ошибка — тост. */
+  const runEnableFlow = async (desired: PushDevicePreferences): Promise<void> => {
+    const outcome = await subscribe(desired.categories);
     const verdict = verdictFromOutcome(outcome);
 
     switch (verdict.kind) {
       case 'subscribe-success': {
-        notify.scenarios.profile.pushEnabled();
-        const desired = change
-          ? applyPushChange(currentPushState(), change)
-          : currentPushState();
-        savePush(desired, verdict.endpoint);
-        refresh();
+        if (verdict.created) {
+          notify.scenarios.profile.pushEnabled();
+        } else {
+          savePush(desired, verdict.endpoint);
+          refresh();
+        }
         break;
       }
-      case 'denied':
-        notify.scenarios.profile.pushPermissionDenied();
-        break;
-      case 'ios-needs-install':
-        notify.scenarios.profile.pushIosNeedsInstall();
+      case 'blocked':
+        // Окно, закрытое без ответа (разрешение осталось `default`), слот
+        // не рисует: slotStateHolds держит denied-слот только при настоящем
+        // denied — по спеке §2 «иной исход/таймаут» остаётся в №3.
+        setSlotReason(verdict.reason);
         break;
       case 'flow-error':
         notify.scenarios.profile.pushEnableError(
           new Error('push permission flow failed'),
         );
         break;
-      case 'noop':
-        break;
     }
-
-    setPendingChange(null);
-    setSheetOpen(false);
   };
 
   const toggleMaster = (value: boolean): void => {
     if (!value) {
-      // Выключение в разрешении не нуждается: с подпиской — PUT, без — локально.
-      if (endpoint !== null) {
-        savePush(
-          applyPushChange(currentPushState(), { kind: 'master', value: false }),
-          endpoint,
-        );
-      } else {
-        setLocalPush((prev) =>
-          applyPushChange(prev ?? defaultPushDevicePreferences(), {
-            kind: 'master',
-            value: false,
-          }),
-        );
-      }
+      // Выключение = жёсткая отписка (строки нет = выключено); без подписки
+      // выключать нечего — и так выключено.
+      if (endpoint !== null) turnPushOff(endpoint);
       return;
     }
-    if (endpoint !== null && permissionGranted) {
-      savePush(
-        applyPushChange(currentPushState(), { kind: 'master', value: true }),
-        endpoint,
-      );
-      return;
-    }
-    if (permissionGranted) {
-      // Разрешение есть, подписки нет — тихая подписка без промпта.
-      void runPermissionFlow({ kind: 'master', value: true });
-      return;
-    }
-    setPendingChange({ kind: 'master', value: true });
-    setSheetOpen(true);
+    // Строка есть = уже включено; включение без подписки — флоу разрешения.
+    // Категории первого POST — все ВКЛ: включение мастера с чистого листа
+    // (спека #1028 §2).
+    if (endpoint !== null) return;
+    void runEnableFlow({ categories: masterEnableCategories() });
   };
 
   const togglePushCategory = (
     category: NotificationSettingsCategory,
     value: boolean,
   ): void => {
-    if (value && !permissionGranted) {
-      setPendingChange({ kind: 'category', category, value: true });
-      setSheetOpen(true);
-      return;
-    }
-    if (value && endpoint === null) {
-      void runPermissionFlow({ kind: 'category', category, value: true });
-      return;
-    }
     if (endpoint !== null) {
+      // В подписке — PUT желаемого состояния целиком, оптимистично с
+      // откатом (спека #1028 §2).
       savePush(
-        applyPushChange(currentPushState(), { kind: 'category', category, value }),
-        endpoint,
-      );
-    } else {
-      setLocalPush((prev) =>
-        applyPushChange(prev ?? defaultPushDevicePreferences(), {
-          kind: 'category',
+        applyCategoryChange(
+          pushPrefsQuery.data ?? defaultPushDevicePreferences(),
           category,
           value,
-        }),
+        ),
+        endpoint,
       );
+      return;
     }
+    // Без подписки категории статично ВЫКЛ — выключать нечего; включение
+    // исполняет тот же флоу, POST несёт одну кликнутую категорию ВКЛ
+    // (вариант А: клик честен).
+    if (!value) return;
+    void runEnableFlow({ categories: categoryEnableCategories(category) });
   };
 
   return (
     <div className="flex flex-col pb-6 pt-1">
-      {display.visible && (
-        <>
-          <div className="flex items-center justify-between py-3">
-            <span className="text-base text-content">Получать пуш-уведомления</span>
-            {pushLoading ? (
-              <Skeleton className="h-7 w-16 rounded-pill" />
-            ) : (
-              <Switch
-                checked={display.masterOn}
-                onCheckedChange={toggleMaster}
-                aria-label="Получать пуш-уведомления на этом устройстве"
-              />
-            )}
-          </div>
-          {display.needsPermission && (
-            <PushPermissionCard onAllow={() => void runPermissionFlow(null)} />
-          )}
-        </>
+      <div className="flex items-center justify-between py-3">
+        <span className="text-base text-content">Получать пуш-уведомления</span>
+        {pushLoading ? (
+          <Skeleton className="h-7 w-16 rounded-pill" />
+        ) : (
+          <Switch
+            checked={display.masterOn}
+            onCheckedChange={toggleMaster}
+            aria-label="Получать пуш-уведомления на этом устройстве"
+          />
+        )}
+      </div>
+      {shownSlot !== null && (
+        <p role="alert" className="m-0 text-sm leading-[18px] text-error">
+          {PUSH_SLOT_MESSAGES[shownSlot]}
+        </p>
       )}
 
       {emailQuery.isError ? (
@@ -276,33 +263,21 @@ export function NotificationSettingsScreen(): JSX.Element {
               )}
             </div>
 
-            {display.visible && (
-              <div className="flex items-center justify-between py-3">
-                <span className="text-base text-content">Пуш-уведомления</span>
-                {pushLoading ? (
-                  <Skeleton className="h-7 w-16 rounded-pill" />
-                ) : (
-                  <Switch
-                    checked={display.categories[category]}
-                    onCheckedChange={(value) => togglePushCategory(category, value)}
-                    aria-label={`Пуш-уведомления — ${notificationCategoryLabel(category)}`}
-                  />
-                )}
-              </div>
-            )}
+            <div className="flex items-center justify-between py-3">
+              <span className="text-base text-content">Пуш-уведомления</span>
+              {pushLoading ? (
+                <Skeleton className="h-7 w-16 rounded-pill" />
+              ) : (
+                <Switch
+                  checked={display.categories[category]}
+                  onCheckedChange={(value) => togglePushCategory(category, value)}
+                  aria-label={`Пуш-уведомления — ${notificationCategoryLabel(category)}`}
+                />
+              )}
+            </div>
           </section>
         ))
       )}
-
-      <NotificationPermissionSheet
-        open={sheetOpen}
-        pending={flowPending}
-        onAllow={() => void runPermissionFlow(pendingChange)}
-        onDecline={() => {
-          setPendingChange(null);
-          setSheetOpen(false);
-        }}
-      />
     </div>
   );
 }

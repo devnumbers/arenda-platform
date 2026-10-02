@@ -43,8 +43,9 @@ func (s *SettingsService) SetEmailPreferences(ctx context.Context, userID uuid.U
 	return nil
 }
 
-// PushPreferences returns the device's stored settings state (master +
-// category flags). ErrNotFound when the endpoint is not this user's.
+// PushPreferences returns the device's stored state (category flags; the
+// row's existence is the master state — спека #1028). ErrNotFound when the
+// endpoint is not this user's.
 func (s *SettingsService) PushPreferences(ctx context.Context, userID uuid.UUID, endpoint string) (domain.PushSubscription, error) {
 	if endpoint == "" {
 		return domain.PushSubscription{}, errors.Join(ErrInvalidPushSubscription, errors.New("endpoint is required"))
@@ -56,16 +57,16 @@ func (s *SettingsService) PushPreferences(ctx context.Context, userID uuid.UUID,
 	return sub, nil
 }
 
-// SetPushPreferences replaces the device's delivery state (the upsert of
-// решение #738: выключение — флаг, подписка и категории сохраняются).
-// ErrNotFound when the endpoint is not this user's.
+// SetPushPreferences replaces the device's category flags (спека #1028 §5:
+// PUT строгий — 404, когда endpoint не этого пользователя; в нормальном флоу
+// недостижим). ErrNotFound when the endpoint is not this user's.
 func (s *SettingsService) SetPushPreferences(
-	ctx context.Context, userID uuid.UUID, endpoint string, enabled bool, prefs domain.CategoryPrefs,
+	ctx context.Context, userID uuid.UUID, endpoint string, prefs domain.CategoryPrefs,
 ) error {
 	if endpoint == "" {
 		return errors.Join(ErrInvalidPushSubscription, errors.New("endpoint is required"))
 	}
-	ok, err := s.push.UpdatePreferences(ctx, userID, endpoint, enabled, prefs)
+	ok, err := s.push.UpdatePreferences(ctx, userID, endpoint, prefs)
 	if err != nil {
 		return fmt.Errorf("set push preferences: %w", err)
 	}

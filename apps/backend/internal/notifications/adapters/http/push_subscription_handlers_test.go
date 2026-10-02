@@ -42,6 +42,8 @@ func (r *fakePushRepo) Upsert(_ context.Context, sub domain.PushSubscription) (d
 	return sub, nil
 }
 
+// Delete mirrors the DELETE query's execrows semantics (спека #1028 §5):
+// removing an absent subscription is fine — no not-found outcome.
 func (r *fakePushRepo) Delete(_ context.Context, userID uuid.UUID, endpoint string) error {
 	for i, s := range r.subs {
 		if s.Endpoint == endpoint && s.UserID == userID {
@@ -49,7 +51,7 @@ func (r *fakePushRepo) Delete(_ context.Context, userID uuid.UUID, endpoint stri
 			return nil
 		}
 	}
-	return notificationsapp.ErrNotFound
+	return nil
 }
 
 func (r *fakePushRepo) ListByUser(_ context.Context, userID uuid.UUID) ([]domain.PushSubscription, error) {
@@ -72,11 +74,10 @@ func (r *fakePushRepo) GetByEndpoint(_ context.Context, userID uuid.UUID, endpoi
 }
 
 func (r *fakePushRepo) UpdatePreferences(
-	_ context.Context, userID uuid.UUID, endpoint string, enabled bool, prefs domain.CategoryPrefs,
+	_ context.Context, userID uuid.UUID, endpoint string, prefs domain.CategoryPrefs,
 ) (bool, error) {
 	for i, s := range r.subs {
 		if s.Endpoint == endpoint && s.UserID == userID {
-			r.subs[i].Enabled = enabled
 			r.subs[i].Categories = prefs
 			return true, nil
 		}
@@ -220,18 +221,24 @@ func TestDeletePushSubscription_Returns204(t *testing.T) {
 	require.Empty(t, repo.subs)
 }
 
-func TestDeletePushSubscription_MissingReturns404(t *testing.T) {
+// DELETE is idempotent (спека #1028 §5): the «выключено» intent is fulfilled
+// whether the row existed or not — 204 in both cases, no 404 for the front
+// to distinguish.
+func TestDeletePushSubscription_MissingIsIdempotent204(t *testing.T) {
 	t.Parallel()
 
 	h, _ := newPushTestHandlers("BPubKeyXXX")
 	uid := uuid.Must(uuid.NewV7())
-	body := openapi.PushSubscriptionDeleteRequest{Endpoint: "https://fcm.googleapis.com/fcm/send/missing"}
+	endpoint := "https://fcm.googleapis.com/fcm/send/missing"
+	body := openapi.PushSubscriptionDeleteRequest{Endpoint: endpoint}
 
-	w := httptest.NewRecorder()
-	r := newPushJSONRequest(t, http.MethodDelete, "/push/subscriptions", &uid, body)
+	w1 := httptest.NewRecorder()
+	h.DeletePushSubscription(w1, newPushJSONRequest(t, http.MethodDelete, "/push/subscriptions", &uid, body))
+	assert.Equal(t, http.StatusNoContent, w1.Code, "absent subscription: still 204")
 
-	h.DeletePushSubscription(w, r)
-	assert.Equal(t, http.StatusNotFound, w.Code)
+	w2 := httptest.NewRecorder()
+	h.DeletePushSubscription(w2, newPushJSONRequest(t, http.MethodDelete, "/push/subscriptions", &uid, body))
+	assert.Equal(t, http.StatusNoContent, w2.Code, "repeat delete: still 204")
 }
 
 func TestCreatePushSubscription_Unauthorized(t *testing.T) {

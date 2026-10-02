@@ -21,8 +21,9 @@ const pushRateSnoozeStep = 30 * time.Second
 // committed feed row and fans the payload out over the recipient's current
 // subscriptions. Subscription resolution happens at delivery time — devices
 // subscribed after the enqueue still receive the push, dead ones are dropped,
-// and each device's own settings (master + category flags, решение #738)
-// gate its copy right here.
+// and each device's own category flags gate its copy right here (мастер —
+// само существование строки: подписанного устройства глушить нечем, спека
+// #1028).
 type DeliverPushWorker struct {
 	river.WorkerDefaults[DeliverPushArgs]
 	feed     application.NotificationRepository
@@ -80,7 +81,10 @@ func (w *DeliverPushWorker) Work(ctx context.Context, job *river.Job[DeliverPush
 	// A dead enum value has no category; the empty one reads as always-on.
 	category, _ := n.EventType.FeedCategory()
 	for _, sub := range subs {
-		if !sub.Accepts(category) {
+		// Категорийный флаг устройства — вердикт доставки; служебные категории
+		// всегда отвечают «да» (Allows). Мастера-флага нет: подписки
+		// выключенного устройства просто нет в списке (спека #1028).
+		if !sub.Categories.Allows(category) {
 			w.log.InfoContext(ctx, "push skipped by device settings",
 				slog.String("notification_id", n.ID.String()),
 				slog.String("recipient_id", n.UserID.String()),
