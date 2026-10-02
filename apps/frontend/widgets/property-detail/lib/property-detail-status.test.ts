@@ -181,6 +181,19 @@ describe('buildPropertyManageActions (секция «Управление»)', (
     expect(keys).not.toContain('start-maintenance');
   });
 
+  it('на ремонте: арендной строки нет вовсе (#1050, решение владельца 2Б)', () => {
+    const keys = buildPropertyManageActions({ ...baseManage, status: 'maintenance' }).map(
+      (item) => item.key,
+    );
+    // Ни «Начать аренду» (создание запрещено беком — 409
+    // property_maintenance), ни строк спасательной незавершённой
+    // (прямой API) — их кнопки были бы мёртвыми; люк — «Завершить ремонт».
+    expect(keys).not.toContain('start-rental');
+    expect(keys).not.toContain('delete-rental');
+    expect(keys).not.toContain('complete-rental');
+    expect(keys).toContain('finish-maintenance');
+  });
+
   it('архивный: вернуть из архива, доступ, удаление; правок нет', () => {
     const items = buildPropertyManageActions({ ...baseManage, status: 'archived' });
     expect(items.map((item) => item.key)).toEqual(['unarchive', 'access', 'delete']);

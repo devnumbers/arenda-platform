@@ -334,6 +334,7 @@ func TestErrorMapping(t *testing.T) {
 		{"forbidden", rentalsapp.ErrForbidden, http.StatusForbidden},
 		{"archived property", rentalsapp.ErrArchivedProperty, http.StatusConflict},
 		{"occupied property", rentalsapp.ErrPropertyOccupied, http.StatusConflict},
+		{"maintenance property", rentalsapp.ErrPropertyMaintenance, http.StatusConflict},
 		{"completed rental", rentalsapp.ErrRentalCompleted, http.StatusConflict},
 		{"started rental", rentalsapp.ErrRentalStarted, http.StatusConflict},
 		{"invalid input", rentalsapp.ErrInvalidInput, http.StatusBadRequest},
@@ -359,6 +360,31 @@ func TestErrorMapping(t *testing.T) {
 			}
 		})
 	}
+}
+
+// The maintenance guard is the context's only coded conflict (ticket #1050):
+// the machine-readable code rides the problem body — the shape the client
+// distinguishes the guard by, canon `membership_suspended`/`property_occupied`.
+func TestErrorMapping_MaintenanceCarriesCode(t *testing.T) {
+	t.Parallel()
+	svc := &fakeRentalManager{create: func(
+		_ context.Context, _, _ uuid.UUID, _ rentalsapp.CreateRentalCommand,
+	) (rentalsapp.RentalView, error) {
+		return rentalsapp.RentalView{}, rentalsapp.ErrPropertyMaintenance
+	}}
+	h := NewRentalHandlers(svc, nil)
+	id := uuid.Must(uuid.NewV7())
+	req := rentalRequest(t, http.MethodPost, id, "/",
+		`{"amountKopecks": 5000000, "paymentDay": 15, "startDate": "2026-09-04",
+		  "utilities": "included", "autoPay": false}`)
+	rec := httptest.NewRecorder()
+
+	h.CreateRental(rec, req, id)
+
+	require.Equal(t, http.StatusConflict, rec.Code)
+	body := rec.Body.String()
+	assert.Contains(t, body, `"code":"property_maintenance"`)
+	assert.Contains(t, body, "Объект на ремонте — аренда недоступна")
 }
 
 func TestUpdateRental_TriState(t *testing.T) {

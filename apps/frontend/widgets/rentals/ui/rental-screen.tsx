@@ -24,7 +24,8 @@ import { RentalDetailSkeleton } from './rental-skeletons';
  * Экран «Аренда» (#531, Figma 1425:55656/1232:61259): маршрут
  * /properties/[id]/rentals. Без незавершённой аренды — пустое состояние
  * с кнопкой «Добавить аренду» в нижней панели (кнопка скрыта у смотрящего —
- * создание только Full Access, ADR 0053 §3) и, если завершённые есть,
+ * создание только Full Access, ADR 0053 §3; у объекта на ремонте не
+ * рисуется вовсе — #1050) и, если завершённые есть,
  * входом в «Прошлые аренды» (#535); с незавершённой — детализация первой
  * аренды. Карандаш в шапке — быстрый вход в правку условий (1550:93664,
  * решение #802 23.09), только у того, кто может править. Жизненные
@@ -40,6 +41,9 @@ export function RentalScreen({ propertyId }: { readonly propertyId: string }): J
   const failed = propertyQuery.isError || rentalsQuery.isError;
   const property = propertyQuery.isSuccess ? propertyQuery.data : undefined;
   const canMutate = propertyPermissions(property).canEdit;
+  // Создание аренды доступно мутатору на не-ремонте (#1050): на ремонте
+  // бек отвечает 409 property_maintenance — кнопки создания не рисуется.
+  const canAddRental = canMutate && property?.status !== 'maintenance';
 
   // Незавершённая аренда всегда первая (ADR 0053 §4); завершённые —
   // материал «Прошлых аренд» (#535), экраном текущей не являются.
@@ -109,9 +113,13 @@ export function RentalScreen({ propertyId }: { readonly propertyId: string }): J
               description="Добавьте аренду и отслеживайте оплату"
             />
           </PageContent>
-          {(canMutate || hasCompletedRentals) && (
+          {/* Объект на ремонте — пустое состояние без кнопки (карта #1047,
+           * тикет #1050, решение владельца 2Б): создание аренды запрещено
+           * беком (409 property_maintenance), кнопка была бы мёртвой;
+           * завершённые аренды (история) на ремонте доступны как раньше. */}
+          {(canAddRental || hasCompletedRentals) && (
             <StickyBottomBar>
-              {canMutate && (
+              {canAddRental && (
                 <Button
                   className="w-full"
                   onClick={() => router.push(ROUTES.propertyRentalNew(propertyId))}

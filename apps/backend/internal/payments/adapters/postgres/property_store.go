@@ -71,10 +71,13 @@ func (s *PropertyStore) GetForUpdate(ctx context.Context, propertyID uuid.UUID) 
 
 // propertyRefFromRow maps a property row onto the payments reference. The
 // archived status is the financial read-only state (ticket #446); every other
-// status serves payments alike.
+// status serves payments alike. The maintenance status rides along only for
+// the rentals guard (ticket #1050) — payments mutations stay open on a
+// maintenance property.
 func propertyRefFromRow(ownerID pgtype.UUID, status string) application.PropertyRef {
 	return application.PropertyRef{
-		OwnerID:  pgconv.UUIDFromPgtype(ownerID),
-		Archived: status == "archived",
+		OwnerID:     pgconv.UUIDFromPgtype(ownerID),
+		Archived:    status == "archived",
+		Maintenance: status == "maintenance",
 	}
 }

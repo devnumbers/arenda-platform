@@ -640,40 +640,49 @@ export function PropertyDetailPage(): JSX.Element {
                             )}
                         </PropertyMediaBlock>
 
-                        <PropertySectionCard
-                            title="Аренда"
-                            href={ROUTES.propertyRental(id)}
-                            className="mt-20"
-                        >
-                            {rentalsQuery.isPending ? (
-                                <PropertySectionEmptySkeleton/>
-                            ) : currentRental !== undefined ? (
-                                <PropertyRentalBlock
-                                    rental={currentRental}
-                                    onExtend={() => router.push(ROUTES.propertyRentalExtend(id))}
-                                    // Смотрящему — старый путь в мастер с его
-                                    // честным отказом (writeGate ADR 0053 §3):
-                                    // шит с последующим 403 смотрителю не даёт
-                                    // ничего (решение ревью #627).
-                                    onComplete={
-                                        permissions.canManageMembers
-                                            ? () => setCompleteSheetOpen(true)
-                                            : () => router.push(ROUTES.propertyRentalComplete(id))
-                                    }
-                                />
-                            ) : (
-                                <PropertySectionEmpty
-                                    imageSrc={propertySectionImages.rental}
-                                    copy={resolvePropertySectionEmpty('rental', emptySet, property.status)}
-                                    onCta={sectionCta.visible ? sectionCTAs.rental : undefined}
-                                    ctaDisabled={sectionCta.disabled}
-                                />
-                            )}
-                        </PropertySectionCard>
+                        {/* Ремонт срезает секцию целиком (карта #1047, тикет
+                         * #1050, решение владельца 2Б): на ремонте мутации
+                         * незавершённой аренды запрещены (бек — 409
+                         * property_maintenance), ни блока, ни пустого
+                         * состояния с CTA не рисуется. Отклонение от Figma
+                         * 1581:53679 (там CTA показана) — осознанное. */}
+                        {property.status !== 'maintenance' && (
+                            <PropertySectionCard
+                                title="Аренда"
+                                href={ROUTES.propertyRental(id)}
+                                className="mt-20"
+                            >
+                                {rentalsQuery.isPending ? (
+                                    <PropertySectionEmptySkeleton/>
+                                ) : currentRental !== undefined ? (
+                                    <PropertyRentalBlock
+                                        rental={currentRental}
+                                        onExtend={() => router.push(ROUTES.propertyRentalExtend(id))}
+                                        // Смотрящему — старый путь в мастер с его
+                                        // честным отказом (writeGate ADR 0053 §3):
+                                        // шит с последующим 403 смотрителю не даёт
+                                        // ничего (решение ревью #627).
+                                        onComplete={
+                                            permissions.canManageMembers
+                                                ? () => setCompleteSheetOpen(true)
+                                                : () => router.push(ROUTES.propertyRentalComplete(id))
+                                        }
+                                    />
+                                ) : (
+                                    <PropertySectionEmpty
+                                        imageSrc={propertySectionImages.rental}
+                                        copy={resolvePropertySectionEmpty('rental', emptySet, property.status)}
+                                        onCta={sectionCta.visible ? sectionCTAs.rental : undefined}
+                                        ctaDisabled={sectionCta.disabled}
+                                    />
+                                )}
+                            </PropertySectionCard>
+                        )}
 
                         <PropertySectionCard
                             title="Регулярные платежи"
                             href={ROUTES.propertyPayments(id)}
+                            className={property.status === 'maintenance' ? 'mt-20' : undefined}
                         >
                             {paymentsQuery.isPending ? (
                                 <PropertyPaymentsStripSkeleton/>

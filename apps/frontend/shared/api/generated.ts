@@ -7975,7 +7975,15 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
+            /** @description Conflict: the property already has an unfinished rental, is archived, or is under maintenance. The maintenance guard answers code `property_maintenance` (ticket #1050) — every rental mutation of an unfinished rental stays blocked until the maintenance ends («Завершить ремонт» is the way back); the reads stay open. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     getRental: {
@@ -8025,7 +8033,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description The rental has already started — finish it instead */
+            /** @description The rental has already started — finish it instead. On a property under maintenance the guard answers code `property_maintenance` (ticket #1050) for an unfinished rental's deletion; a completed rental (the history) deletes as before. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -8065,7 +8073,15 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
+            /** @description Conflict: the rental is completed, the property is archived, or the property is under maintenance — the maintenance guard answers code `property_maintenance` (ticket #1050) for every mutation of an unfinished rental, terms edits included (продление rides the same PATCH). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     completeRental: {
@@ -8105,7 +8121,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description The rental is already completed */
+            /** @description The rental is already completed. On a property under maintenance the guard answers code `property_maintenance` (ticket #1050) — completing an unfinished rental is a mutation of it. */
             409: {
                 headers: {
                     [name: string]: unknown;

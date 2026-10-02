@@ -225,8 +225,15 @@ export function buildPropertyManageActions(
         : action('pin', 'Сделать основным', false),
     );
   }
+  // Ремонт срезает арендную строку (карта #1047, тикет #1050, решение
+  // владельца 2Б): на ремонте мутации незавершённой аренды запрещены
+  // (бек — 409 property_maintenance), «Начать аренду» не рисуется вовсе,
+  // у спасательной незавершённой (прямой API) строки «Завершить/Удалить
+  // аренду» были бы мёртвые кнопки. Люк — «Завершить ремонт» ниже.
+  if (status !== 'maintenance') {
+    items.push(rentalAction(rentalState));
+  }
   items.push(
-    rentalAction(rentalState),
     status === 'maintenance'
       ? action('finish-maintenance', 'Завершить ремонт', false)
       : action('start-maintenance', 'Объект на ремонте', false),

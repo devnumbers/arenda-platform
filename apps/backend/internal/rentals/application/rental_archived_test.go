@@ -23,10 +23,30 @@ func newArchivedHarness(t *testing.T) *harness {
 func TestArchivedProperty_RejectsEveryMutation(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name   string
-		mutate func(t *testing.T, h *harness) error
-	}{
+	for _, tt := range lifecycleGuardMutations() {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			h := newArchivedHarness(t)
+
+			require.ErrorIs(t, tt.mutate(t, h), ErrArchivedProperty)
+			assert.Empty(t, h.journal.events, "the 409 fires before any write")
+		})
+	}
+}
+
+// guardMutationCase is one row of the lifecycle guards' shared matrix: a
+// named mutation over an unfinished rental and how to fire it on a harness.
+type guardMutationCase struct {
+	name   string
+	mutate func(t *testing.T, h *harness) error
+}
+
+// lifecycleGuardMutations is the mutation matrix the conveyor's lifecycle
+// guards pin, one row per use case: create, update, complete, delete. The
+// archived audit (#618) and the maintenance guard (#1050) reject the same
+// world — the guards differ, the matrix is shared.
+func lifecycleGuardMutations() []guardMutationCase {
+	return []guardMutationCase{
 		{"create", func(t *testing.T, h *harness) error {
 			t.Helper()
 			_, err := h.svc.CreateRental(t.Context(), h.owner, h.property, createCmd())
@@ -49,15 +69,6 @@ func TestArchivedProperty_RejectsEveryMutation(t *testing.T) {
 			t.Helper()
 			return h.svc.DeleteRental(t.Context(), h.owner, h.property, h.seedRental(nil))
 		}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			h := newArchivedHarness(t)
-
-			require.ErrorIs(t, tt.mutate(t, h), ErrArchivedProperty)
-			assert.Empty(t, h.journal.events, "the 409 fires before any write")
-		})
 	}
 }
 

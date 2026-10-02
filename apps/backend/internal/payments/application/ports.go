@@ -52,11 +52,15 @@ var (
 
 // PropertyRef is the payments view of the property a use case targets: the
 // data owner (the SQL scope, ADR 0028) and the archived flag (the financial
-// read-only state, ticket #446). The properties context owns the entity;
-// payments never needs its rest.
+// read-only state, ticket #446). The Maintenance flag rides along for the
+// rentals guard (ticket #1050): rentals reject the mutations of an
+// unfinished rental on a maintenance property, payments itself stays open
+// on it. The properties context owns the entity; the consumers never need
+// more of it than these flags.
 type PropertyRef struct {
-	OwnerID  uuid.UUID
-	Archived bool
+	OwnerID     uuid.UUID
+	Archived    bool
+	Maintenance bool
 }
 
 // PropertyStore resolves the property a payments use case targets. The

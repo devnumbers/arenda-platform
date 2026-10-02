@@ -478,3 +478,40 @@ func (h *rentalsHarness) rentalActions(entityID uuid.UUID) []string {
 	require.NoError(t, rows.Err())
 	return actions
 }
+
+// setMaintenance flips the seeded property into the maintenance state: the
+// guard's subject property (ticket #1050).
+func (h *rentalsHarness) setMaintenance() {
+	t := h.t
+	t.Helper()
+	_, err := h.pool.Exec(context.Background(),
+		`UPDATE properties SET status = 'maintenance' WHERE id = $1`, h.propID)
+	require.NoError(t, err)
+}
+
+// The maintenance guard (ticket #1050, карта #1047) against real SQL: the
+// conveyor's lock carries the property's status, every mutation of an
+// unfinished rental on a maintenance property is ErrPropertyMaintenance with
+// nothing written — and the completed history (the deletion included) stays
+// open, «Завершить ремонт» being the rescue hatch back to active.
+func TestRentalsIntegration_MaintenanceGuard(t *testing.T) {
+	t.Parallel()
+	h := newRentalsHarness(t)
+	h.seedOwner()
+	h.setMaintenance()
+
+	_, err := h.svc.CreateRental(context.Background(), h.owner, h.propID, h.createCmd())
+	require.ErrorIs(t, err, rentalsapp.ErrPropertyMaintenance)
+
+	var count int
+	require.NoError(t, h.pool.QueryRow(context.Background(),
+		`SELECT count(*) FROM rentals WHERE property_id = $1`, h.propID).Scan(&count))
+	assert.Equal(t, 0, count, "the 409 leaves nothing behind")
+	assert.Empty(t, h.gateway.created, "the managed payment was never seeded")
+
+	// The history escapes the guard: a completed rental on a maintenance
+	// property deletes as before (решение владельца 02.10).
+	completedID := h.seedCompletedRental(mustIntDate("2026-01-01"), mustIntDate("2026-08-01"))
+	require.NoError(t, h.svc.DeleteRental(context.Background(), h.owner, h.propID, completedID))
+	assert.Equal(t, []string{"rental.deleted"}, h.rentalActions(completedID))
+}
