@@ -165,6 +165,14 @@ test.describe('сквозная жизнь платежа', () => {
     await expect(
       page.getByRole('button', { name: 'Убрать из избранного' }),
     ).toHaveAttribute('aria-pressed', 'true');
+    // Тост добавления (top-center на мобайле) висит поверх звезды в шапке
+    // и перехватывает клик, автоухол ставится на паузу без фокуса окна —
+    // закрываем его кнопкой (канон contacts-спек), иначе клик звезды не
+    // проходит вовсе (гонка прогона).
+    await page
+      .locator('.Toastify__toast', { hasText: 'Платеж добавлен в избранное' })
+      .getByRole('button', { name: 'Закрыть' })
+      .click();
     await page.getByRole('button', { name: 'Убрать из избранного' }).click();
     await expect(page.getByText('Платеж больше не в избранном')).toBeVisible();
 
@@ -196,11 +204,12 @@ test.describe('сквозная жизнь платежа', () => {
     // на странице платежа кнопка остаётся активной ──
     await page.goto(paymentUrl);
     await page.getByRole('button', { name: 'Оплатить' }).click();
-    await expect(page).toHaveURL(new RegExp(`/properties/${PROPERTY}/operations/[0-9a-f-]+$`));
+    await expect(page).toHaveURL(new RegExp(`/properties/${PROPERTY}/operations/[0-9a-f-]+(\\?.*)?$`));
     await page.getByRole('button', { name: 'Отметить оплаченной' }).click();
     await expect(page.getByText('Платеж оплачен')).toBeVisible();
     await page.getByRole('button', { name: 'Хорошо', exact: true }).click();
-    await expect(page.getByText('Выполнена')).toBeVisible();
+    // Закрытие success возвращает на страницу, с которой платили (#1072).
+    await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+$`));
     await page.goto(paymentUrl);
     await expect(page.getByRole('button', { name: 'Оплатить' })).toBeEnabled();
 
@@ -239,11 +248,12 @@ test.describe('сквозная жизнь платежа', () => {
 
     await page.goto(paymentUrl);
     await page.getByRole('button', { name: 'Оплатить' }).click();
-    await expect(page).toHaveURL(new RegExp(`/properties/${PROPERTY}/operations/[0-9a-f-]+$`));
+    await expect(page).toHaveURL(new RegExp(`/properties/${PROPERTY}/operations/[0-9a-f-]+(\\?.*)?$`));
     await page.getByRole('button', { name: 'Отметить оплаченной' }).click();
     await expect(page.getByText('Платеж оплачен')).toBeVisible();
     await page.getByRole('button', { name: 'Хорошо', exact: true }).click();
-    await expect(page.getByText('Выполнена')).toBeVisible();
+    // Закрытие success возвращает на страницу, с которой платили (#1072).
+    await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+$`));
     await page.goto(paymentUrl);
     await expect(page.getByText('У вас нет просроченных операций')).toBeVisible();
 

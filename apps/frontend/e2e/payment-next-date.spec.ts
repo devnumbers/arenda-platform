@@ -111,11 +111,13 @@ test.describe('следующая дата оплаты из серверног�
     await rowDate(page, beforeLabel).click();
     await expect(page).toHaveURL(new RegExp(`/properties/${PROPERTY}/payments/${created.id}$`));
     await page.getByRole('button', { name: 'Оплатить' }).click();
-    await expect(page).toHaveURL(new RegExp(`/properties/${PROPERTY}/operations/[0-9a-f-]+$`));
+    await expect(page).toHaveURL(new RegExp(`/properties/${PROPERTY}/operations/[0-9a-f-]+(\\?.*)?$`));
     await page.getByRole('button', { name: 'Отметить оплаченной' }).click();
     await expect(page.getByText('Платеж оплачен')).toBeVisible();
     await page.getByRole('button', { name: 'Хорошо', exact: true }).click();
-    await expect(page.getByText('Выполнена')).toBeVisible();
+    // Вход был строкой ближайшего (без ?returnTo=) — фолбэк #1072 ведёт
+    // на страницу правила, контекст операции.
+    await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+$`));
 
     // Новое ближайшее F' — серверная истина после предоплаты: тик
     // переставил плановую строго вперёд от оплаченной.

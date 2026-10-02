@@ -155,7 +155,7 @@ test.describe('страница платежа', () => {
 
     await page.goBack();
     await page.getByRole('button', { name: 'Оплатить' }).click();
-    await expect(page).toHaveURL(new RegExp(`/properties/${PROPERTY}/operations/[0-9a-f-]+$`));
+    await expect(page).toHaveURL(new RegExp(`/properties/${PROPERTY}/operations/[0-9a-f-]+(\\?.*)?$`));
     await page.getByRole('button', { name: 'Отметить оплаченной' }).click();
 
     // Экран успеха (1444:65733); «Посмотреть платеж» ведёт на страницу

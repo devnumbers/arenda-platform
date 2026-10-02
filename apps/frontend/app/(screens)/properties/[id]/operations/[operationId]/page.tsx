@@ -1,6 +1,8 @@
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import type { QueryClient } from '@tanstack/react-query';
+import { sanitizeReturnTo } from '@/shared/lib/navigation';
+import { parseStringParam } from '@/shared/lib/parse-string-param';
 import { OperationDetailLoading, OperationDetailScreen } from '@/widgets/payments';
 import {
   paymentOperationQueryOptions,
@@ -16,6 +18,8 @@ import { serverApiClient } from '@/shared/api/server-client';
  * Страница операции: вхождение правила с «Отметить оплаченной» (и экраном
  * успеха «Платеж оплачен») по макетам 1386:67731 / 1419:25859 /
  * 1419:25645 / 1444:65733. Оболочка новых экранов — из layout группы (screens).
+ * ?returnTo= (#1072, контракт возврата после оплаты): sanitized внутренний
+ * путь страницы, с которой перешли к оплате; закрытие success уводит туда.
  */
 
 export const metadata: Metadata = {
@@ -50,13 +54,18 @@ async function prefetchOperationScreen(
   void queryClient.prefetchQuery(planned);
 }
 
-export default async function OperationRoutePage({ params }: PageProps<'/properties/[id]/operations/[operationId]'>) {
+export default async function OperationRoutePage({
+  params,
+  searchParams,
+}: PageProps<'/properties/[id]/operations/[operationId]'>) {
   const { id, operationId } = await params;
+  const { returnTo } = await searchParams;
+  const sanitizedReturnTo = sanitizeReturnTo(parseStringParam(returnTo));
 
   return (
     <Suspense fallback={<OperationDetailLoading propertyId={id} />}>
       <ServerPrefetchBoundary prefetch={(queryClient) => prefetchOperationScreen(queryClient, id, operationId)}>
-        <OperationDetailScreen propertyId={id} operationId={operationId} />
+        <OperationDetailScreen propertyId={id} operationId={operationId} returnTo={sanitizedReturnTo} />
       </ServerPrefetchBoundary>
     </Suspense>
   );

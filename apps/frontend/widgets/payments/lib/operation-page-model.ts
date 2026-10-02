@@ -1,5 +1,6 @@
 import type { IsoDate, PaymentOperation } from '@/entities/payment';
 import { formatDayMonthWithYear, formatOverdueDays } from '@/entities/payment';
+import { ROUTES } from '@/shared/config/routes';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import { daysOverdue } from './overdue-days';
 
@@ -136,4 +137,24 @@ export function operationHeroAmount(operation: PaymentOperation): OperationHeroA
       : { text: money, tone: 'default' };
   }
   return { text: `−${money}`, tone: 'default' };
+}
+
+/** Куда уводит закрытие success «Платеж оплачен» («Хорошо»/крестик,
+ * решение #1072): страница, С КОТОРОЙ перешли к оплате — её sanitized
+ * ?returnTo= прокидывают точки входа (страница платежа «Оплатить»,
+ * «Оплатить платеж» аренды). Без returnTo (deep link, лента, поиск) —
+ * страница правила-платежа: контекст операции. Функция тотальна — у
+ * manual-операции правила нет (success там недостижим), фолбэк — список
+ * операций объекта, как у goBack этой страницы. */
+export function paidSuccessReturnPath(
+  returnTo: string | undefined,
+  propertyId: string,
+  paymentId: string | null,
+): string {
+  if (returnTo !== undefined) {
+    return returnTo;
+  }
+  return paymentId !== null
+    ? ROUTES.propertyPayment(propertyId, paymentId)
+    : ROUTES.propertyPayments(propertyId);
 }

@@ -7,7 +7,7 @@ import { Calendar, Check, Edit, Key, TrashBin } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { formatDayMonth } from '@/shared/lib/date-format';
 import { formatPhoneDisplay } from '@/shared/lib/phone';
-import { goBack } from '@/shared/lib/navigation';
+import { buildReturnUrl, goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
 import {
   hasProgressCard,
@@ -38,7 +38,8 @@ import { TenantRow } from './tenant-row';
  * блоком под «Управлением» (1550:93664, решение #802 23.09). «Оплатить
  * платеж» ведёт на страницу операции (решение владельца 2026-09-07) —
  * оплата каноническим «Отметить оплаченной» там же, как со страницы
- * платежа. Секция «Арендатор» выводится только с арендатором. Действия
+ * платежа, с ?returnTo= этой страницы (#1072: закрытие success вернёт
+ * на аренду). Секция «Арендатор» выводится только с арендатором. Действия
  * «Редактировать» (#532), «Продлить» (#533), «Завершить» (#534) и круглые
  * «Завершить/Продлить/Оплатить» (тройка 1550:93664, решение #802: у
  * upcoming «Завершить» скрыта) живут своими экранами.
@@ -171,7 +172,14 @@ export function RentalDetailBody({
                   icon={<Check />}
                   caption={<>Оплатить<br />платеж</>}
                   onClick={() =>
-                    router.push(ROUTES.propertyOperation(propertyId, nextPayment.operationId))
+                    // С собой — ?returnTo= этой страницы (#1072): закрытие
+                    // success операции вернёт на аренду, не на правило.
+                    router.push(
+                      buildReturnUrl(
+                        ROUTES.propertyOperation(propertyId, nextPayment.operationId),
+                        { returnTo: ROUTES.propertyRental(propertyId) },
+                      ),
+                    )
                   }
                 />
               )}

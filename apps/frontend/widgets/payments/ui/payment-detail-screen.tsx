@@ -16,7 +16,7 @@ import {
 } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
-import { goBack } from '@/shared/lib/navigation';
+import { buildReturnUrl, goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
 import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
@@ -78,7 +78,8 @@ import { PaymentDetailSkeleton } from './payments-skeletons';
  * нет; архив финансово read-only (#446). Завершённое правило (endDate в
  * прошлом) — без паузы. «Оплатить» больше не гасит вхождение сама: она
  * ведёт на страницу операции (той же цели — старейшее неоплаченное
- * вхождение, просрочки в приоритете), оплата — кнопкой «Отметить
+ * вхождение, просрочки в приоритете) с ?returnTo= этой страницы (#1072:
+ * закрытие success вернёт сюда), оплата — кнопкой «Отметить
  * оплаченной» оттуда. Работает и на паузе (история 25 спеки #453).
  */
 
@@ -409,7 +410,13 @@ function PaymentActionsRow({
             disabled={payable == null}
             onClick={() => {
               if (payable != null) {
-                router.push(ROUTES.propertyOperation(propertyId, payable.id));
+                // С собой — ?returnTo= этой страницы (#1072): закрытие
+                // success операции вернёт сюда.
+                router.push(
+                  buildReturnUrl(ROUTES.propertyOperation(propertyId, payable.id), {
+                    returnTo: ROUTES.propertyPayment(propertyId, payment.id),
+                  }),
+                );
               }
             }}
           />
