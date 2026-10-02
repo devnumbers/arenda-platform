@@ -56,9 +56,10 @@ const INFO_ROUTES: ReadonlyArray<readonly [string, (page: Page) => Locator]> = [
 ];
 
 const BOTTOM_NAV = 'nav[aria-label="Нижняя навигация"]';
-// Сид-юзер «Иван Иванов» — имя в крыле после загрузки useMe; в pending
-// кнопка — скелетон с aria-label «Профиль» (аудит #876), «Пользователь» —
-// текстовый плейсхолдер вне провайдера.
+// Сид-юзер «Иван Иванов» — имя в крыле после загрузки useMe на всех
+// ярусах (решение владельца 02.10); в pending ссылка — скелетон с
+// aria-label «Профиль» (аудит #876), «Пользователь» — текстовый
+// плейсхолдер вне провайдера.
 const USER_WING = /Пользователь|Иван|Профиль/;
 
 test.describe('дерево профиля — хром #566', () => {
@@ -114,10 +115,11 @@ test.describe('дерево профиля — хром #566', () => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto('/profile');
 
-    // Хаб профиля (#592): крылья на мобайле, ведущего «Назад» нет.
+    // Хаб профиля: ниже ПК крыльев нет (решение владельца 02.10 —
+    // анатомия подэкрана без «Назад»), тайтл «Профиль» в баре.
     const header = screenHeader(page);
     await expect(header.getByRole('button', { name: 'Назад' })).toHaveCount(0);
-    await expect(header.getByRole('link', { name: 'Объекты' })).toBeVisible();
+    await expect(header.getByRole('link', { name: 'Объекты' })).toHaveCount(0);
     await expect(header.getByText('Профиль', { exact: true })).toBeVisible();
 
     // Вглубь дерева строкой «Аккаунт» (#593); «Назад» возвращается по истории.
@@ -186,7 +188,7 @@ test.describe('дерево профиля — хром #566', () => {
     }
   });
 
-  test('планшет 561: подэкран без крыльев, хаб с крыльями', async ({
+  test('планшет 561: у хабов профиля и уведомлений крыльев нет — как у подэкранов', async ({
     page,
     seededUser,
   }) => {
@@ -194,16 +196,50 @@ test.describe('дерево профиля — хром #566', () => {
     await page.setViewportSize({ width: 561, height: 900 });
     const header = screenHeader(page);
 
-    // Хаб профиля: крылья и на планшете (канон хаб-экранов), без «Назад».
+    // Хабы «Профиль» и «Уведомления» ниже ПК — анатомия подэкрана без
+    // «Назад» (решение владельца 02.10, образец — /profile/devices):
+    // тайтл в баре, крыльев нет.
     await page.goto('/profile');
-    await expect(header.getByRole('link', { name: 'Объекты' })).toBeVisible();
     await expect(header.getByRole('button', { name: 'Назад' })).toHaveCount(0);
+    await expect(header.getByRole('link', { name: 'Объекты' })).toHaveCount(0);
+    await expect(header.getByText('Профиль', { exact: true })).toBeVisible();
 
-    // «Настроить уведомления» (#746): саб-экран — «Назад» вместо крыльев
-    // и на планшете (канон подэкранов).
+    await page.goto('/notifications');
+    await expect(header.getByRole('link', { name: 'Объекты' })).toHaveCount(0);
+    await expect(header.getByText('Уведомления', { exact: true })).toBeVisible();
+    // Постоянный слот бара — у правого края (шестерёнка пустого состояния).
+    await expect(
+      header.getByRole('button', { name: /Действия с уведомлениями|Настроить уведомления/ }),
+    ).toBeVisible();
+
+    // Подэкран дерева — как был: «Назад», крыльев нет.
     await page.goto('/profile/notifications');
     await expect(header.getByRole('button', { name: 'Назад' })).toBeVisible();
     await expect(header.getByRole('link', { name: 'Объекты' })).toHaveCount(0);
+  });
+
+  test('мобайл: у «Уведомлений» и «Профиля» крыльев нет, слот у края', async ({
+    page,
+    seededUser,
+  }) => {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto('/notifications');
+    const header = screenHeader(page);
+
+    // Крыльев ниже ПК нет (решение владельца 02.10); тайтл в баре на всех
+    // ярусах, постоянный слот — у правого края. Слот бывает двух видов:
+    // кебаб ленты с данными и шестерёнка пустого состояния — ловим оба.
+    await expect(header.getByRole('link', { name: 'Объекты' })).toHaveCount(0);
+    await expect(header.getByRole('link', { name: USER_WING })).toHaveCount(0);
+    await expect(header.getByText('Уведомления', { exact: true })).toBeVisible();
+    await expect(
+      header.getByRole('button', { name: /Действия с уведомлениями|Настроить уведомления/ }),
+    ).toBeVisible();
+
+    await page.goto('/profile');
+    await expect(header.getByRole('button', { name: 'Назад' })).toHaveCount(0);
+    await expect(header.getByRole('link', { name: 'Объекты' })).toHaveCount(0);
+    await expect(header.getByText('Профиль', { exact: true })).toBeVisible();
   });
 });
 
@@ -227,14 +263,32 @@ test.describe('дерево профиля — ПК ≥1024', () => {
     await expect(page.locator(BOTTOM_NAV)).toBeHidden();
   });
 
-  test('вход в дерево по кнопке юзера в хедере', async ({ page, seededUser }) => {
+  test('вход в дерево по ссылке юзера в хедере', async ({ page, seededUser }) => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto('/properties');
     const header = screenHeader(page);
 
-    // «Крыло» UserButton ведёт на /profile.
-    await header.getByRole('button', { name: USER_WING }).click();
+    // «Крыло» UserButton — настоящий Link — ведёт на /profile.
+    await header.getByRole('link', { name: USER_WING }).click();
     await expect(page).toHaveURL(/\/profile$/);
     await expect(header.getByText('Профиль', { exact: true })).toBeVisible();
+  });
+
+  test('ПК: у хабов «Профиль» и «Уведомлений» крылья на месте', async ({
+    page,
+    seededUser,
+  }) => {
+    await openCabinetWithSeededSession(page, seededUser);
+    const header = screenHeader(page);
+
+    // Крылья спрятаны ниже ПК (решение владельца 02.10); на ПК — всегда
+    // (макет 2329-148674: лого + имя + аватар у края вьюпорта).
+    await page.goto('/profile');
+    await expect(header.getByRole('link', { name: 'Объекты' })).toBeVisible();
+    await expect(header.getByRole('link', { name: /Иван|Профиль/ })).toBeVisible();
+
+    await page.goto('/notifications');
+    await expect(header.getByRole('link', { name: 'Объекты' })).toBeVisible();
+    await expect(header.getByRole('link', { name: /Иван|Профиль/ })).toBeVisible();
   });
 });

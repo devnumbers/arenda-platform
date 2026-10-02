@@ -65,18 +65,17 @@ export function UserButtonSection(): JSX.Element {
         <div className={styles.group}>
             <h3 className={styles.groupTitle}>UserButton</h3>
             <p className={styles.groupTitle}>
-                Слева направо: имя + аватар; disabled; pending — useMe в полёте,
-                вместо имени скелетон h-4 w-10 (доступное имя «Профиль» даёт
-                сам компонент); hideNameBelowDesktop — имя только на ПК
-                (крыло хаба аватар-only ниже ПК — ширина стабильна, аудит #876),
-                доступное имя «Профиль: Даниил». Вживую оба состояния живут в
-                крыльях TopNav (shared/ui/design/top-nav.tsx).
+                Слева направо: имя + аватар; pending — useMe в полёте, вместо
+                имени скелетон h-4 w-10 (доступное имя «Профиль» даёт сам
+                компонент). Компонент — настоящий Link на /profile: имя видно
+                на всех ярусах, переход работает и средней кнопкой (решение
+                владельца 02.10, макет 2329-148674 — отмена аватар-only
+                аудита #876). Вживую ссылка живёт в крыльях TopNav
+                (shared/ui/design/top-nav.tsx).
             </p>
             <div className={styles.links}>
                 <UserButton name="Даниил" />
-                <UserButton name="Профиль" disabled />
                 <UserButton pending />
-                <UserButton name="Даниил" hideNameBelowDesktop />
             </div>
         </div>
     );

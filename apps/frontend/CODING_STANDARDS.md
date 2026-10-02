@@ -73,7 +73,7 @@ Column width rule (решение владельца 26.09, аудит #870): th
 Unit tests are pure-logic only — vitest runs in a node environment with no DOM, no testing-library, no msw. This is the standard, not a gap:
 
 - Colocated `*.test.ts` next to the module. Priority targets: wire serializers and DTO→entity mappers (shape assertions with `toStrictEqual`), pure `lib/` and `shared/lib` modules (navigation, pwa, formatting).
-- Components and API calls are not unit-tested; UI behavior is covered by Playwright e2e. Narrow exception (2026-09-30, `shared/ui/design/button.test.ts`): a stateless component may be called as a function and its React element tree inspected — no render, no DOM, no testing-library, same node-env canon.
+- Components and API calls are not unit-tested; UI behavior is covered by Playwright e2e. Narrow exception (2026-09-30, `shared/ui/design/button.test.ts`; 02.10 — also `shared/ui/design/user-button.test.ts`): a stateless component may be called as a function and its React element tree inspected — no render, no DOM, no testing-library, same node-env canon.
 
 ## Quality bar
 

@@ -89,16 +89,19 @@ async function createMonthlyPaymentToday(
   // снесено из продукта (карта #1005, тикеты #1008/#1009).
   await expect(page.getByRole('button', { name: 'Создать платеж' })).toBeDisabled();
   await page.getByRole('textbox', { name: 'Сумма' }).fill('1990');
-  await page.getByRole('button', { name: 'Тип платежа' }).click(); // Доход → Расход
+  await page.getByRole('radio', { name: 'Расход' }).click(); // Доход → Расход: шаг 5 — радиогруппа «Направление платежа» (0105cee5, канон шага платежа один-в-один с операцией)
   await page.getByRole('button', { name: 'Создать платеж' }).click();
 
-  // Экран успеха с первым вхождением из серверного ответа; закрытие — на список.
+  // Экран успеха с первым вхождением из серверного ответа; закрытие — на
+  // список. Канон успеха (1858:105544/105549): описание и сумма —
+  // отдельные узлы, сумма со знаком (правка 6, a41617f9).
   await expect(page.getByRole('heading', { name: /Вы создали платеж/ })).toContainText(
     `«${title}»`,
   );
   await expect(
-    page.getByText(new RegExp(day === '31' ? 'Первый платеж .* на 1\\u00A0990 ₽, далее последний день каждого месяца' : `Первый платеж .* на 1\\u00A0990 ₽, далее каждый месяц ${day} числа`)),
+    page.getByText(new RegExp(day === '31' ? 'Первый платеж .*, далее последний день каждого месяца' : `Первый платеж .*, далее каждый месяц ${day} числа`)),
   ).toBeVisible();
+  await expect(page.getByText(`-1\u00A0990 ₽`)).toBeVisible();
   await page.getByRole('button', { name: 'Хорошо, закрыть' }).click();
   await expect(page).toHaveURL(new RegExp(`${PAYMENTS_URL}$`));
 
