@@ -55,8 +55,8 @@ func TestCreateProperty_AutoNameFromEmptyInput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateProperty: %v", err)
 	}
-	if created.Name != "Моя квартира 1" {
-		t.Fatalf("auto name = %q, want %q", created.Name, "Моя квартира 1")
+	if created.Name != "Моя квартира" {
+		t.Fatalf("auto name = %q, want %q", created.Name, "Моя квартира")
 	}
 }
 
@@ -126,7 +126,8 @@ func TestUpdateProperty_EmptyNameRegenerates(t *testing.T) {
 	svc := newAutonameTestService(repo)
 
 	// Сам объект считается в серийнике: единственная квартира, очищенная
-	// при правке, становится «Моя квартира 2» (она уже вторая созданная).
+	// при правке, становится «Моя квартира» — первый объект типа без
+	// цифры (карта #1077, тикет #1078; до него — «Моя квартира 2»).
 	empty := ""
 	updated, err := svc.UpdateProperty(ctx, owner, propertyID, UpdatePropertyCommand{
 		Name: &empty,
@@ -134,8 +135,8 @@ func TestUpdateProperty_EmptyNameRegenerates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpdateProperty: %v", err)
 	}
-	if updated.Name != "Моя квартира 2" {
-		t.Fatalf("regenerated name = %q, want %q", updated.Name, "Моя квартира 2")
+	if updated.Name != "Моя квартира" {
+		t.Fatalf("regenerated name = %q, want %q", updated.Name, "Моя квартира")
 	}
 }
 

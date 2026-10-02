@@ -2724,7 +2724,7 @@ export interface components {
             [key: string]: unknown;
         };
         PropertyCreateRequest: {
-            /** @description Optional. Omit (or send empty) to let the server generate the name from the property type — «Моя квартира 1», «Мой гараж 1» (ticket #1001). The serial is the owner's property count of the type (archived included, deleted gone) plus one. */
+            /** @description Optional. Omit (or send empty) to let the server generate the name from the property type — «Моя квартира», «Мой гараж 2» (ticket #1001). The serial is the object's position among the owner's properties of the type (archived included, deleted gone); the first property of the type carries no serial (ticket #1078). */
             name?: string;
             type: components["schemas"]["PropertyType"];
             address: string;
@@ -2732,7 +2732,7 @@ export interface components {
             attributes?: components["schemas"]["PropertyAttributes"];
         };
         PropertyUpdateRequest: {
-            /** @description Omit to leave the name unchanged. An empty string clears the name and regenerates it from the property type — «Моя квартира 1» (ticket #1001). */
+            /** @description Omit to leave the name unchanged. An empty string clears the name and regenerates it from the property type — «Моя квартира» (ticket #1001): the first property of the type carries no serial, from the second the serial is appended (ticket #1078). */
             name?: string;
             type?: components["schemas"]["PropertyType"];
             address?: string;

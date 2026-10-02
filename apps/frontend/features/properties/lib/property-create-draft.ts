@@ -58,7 +58,7 @@ export function isApartmentCategory(type: PropertyType): boolean {
 /** Готовность шага: категория выбрана / адрес непустой / шаг 3 достигнут.
  * Характеристики, описание и название на готовность шага 3 не влияют —
  * они необязательные: пустое название регенерирует бэк из типа
- * («Моя квартира 1», #1001). */
+ * («Моя квартира» — первый объект типа без серийника, #1001/#1078). */
 export function propertyCreateStepReady(
   step: PropertyCreateStep,
   draft: PropertyCreateDraft,
