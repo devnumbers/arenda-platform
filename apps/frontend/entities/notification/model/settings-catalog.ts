@@ -32,3 +32,15 @@ export function allCategoriesEnabled(): NotificationCategoryPreferences {
     shared_access: true,
   };
 }
+
+/** Статичное «всё выключено» пуш-колонки без подписки (спека #1028 §1,
+ * #1039): в состояниях №1–№5 тумблеры категорий рисуются выключенными —
+ * локальных желаний нет, включение исполняет флоу разрешения. */
+export function allCategoriesDisabled(): NotificationCategoryPreferences {
+  return {
+    rental: false,
+    payments_operations: false,
+    tasks: false,
+    shared_access: false,
+  };
+}
