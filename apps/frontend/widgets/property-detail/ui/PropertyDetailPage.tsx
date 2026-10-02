@@ -44,6 +44,7 @@ import {
   buildPropertyStatusSheetItems,
   deleteBlockedByRental,
   guardedStatusAction,
+  isRentalSectionVisible,
   propertyStatusSubtitle,
   type GuardedStatusAction,
   type PropertyDetailActionKey,
@@ -246,6 +247,15 @@ export function PropertyDetailPage(): JSX.Element {
         ? rentalActionState(rentalsQuery.data)
         : { kind: 'none' };
     const currentRental = rentalState.kind === 'none' ? undefined : rentalState.rental;
+    // Секция «Аренда» — доработка #1050: на ремонте жива как путь к
+    // завершённой истории (без CTA, ссылка — в «Прошлые аренды»); правило
+    // видимости — доменное, в property-detail-status.
+    const hasCompletedRentals = (rentalsQuery.data ?? []).some(
+        (rental) => rental.status === 'completed',
+    );
+    const rentalSectionVisible = property
+        ? isRentalSectionVisible(property.status, rentalState, hasCompletedRentals)
+        : true;
     // Один сентинел и для хука, и для гарда мутации (#627): id пуст до
     // загрузки аренд — сам хук безобиден, вызов мутации гардится в
     // handleCompleteRental / handleDeleteRental.
@@ -640,16 +650,24 @@ export function PropertyDetailPage(): JSX.Element {
                             )}
                         </PropertyMediaBlock>
 
-                        {/* Ремонт срезает секцию целиком (карта #1047, тикет
-                         * #1050, решение владельца 2Б): на ремонте мутации
-                         * незавершённой аренды запрещены (бек — 409
-                         * property_maintenance), ни блока, ни пустого
-                         * состояния с CTA не рисуется. Отклонение от Figma
-                         * 1581:53679 (там CTA показана) — осознанное. */}
-                        {property.status !== 'maintenance' && (
+                        {/* Секция «Аренда» (доработка #1050 по слову владельца):
+                         * на ремонте жива как путь к завершённой истории —
+                         * стандартная, без CTA (создание запрещено беком —
+                         * 409 property_maintenance), ссылка секции — в
+                         * «Прошлые аренды»; без завершённых (и у
+                         * спасательной незавершённой, прямой API) секции
+                         * нет — люк «Завершить ремонт». Видимость —
+                         * доменное правило isRentalSectionVisible.
+                         * Отклонение от Figma 1581:53679 (там CTA) —
+                         * осознанное, решение владельца 02.10. */}
+                        {rentalSectionVisible && (
                             <PropertySectionCard
                                 title="Аренда"
-                                href={ROUTES.propertyRental(id)}
+                                href={
+                                    property.status === 'maintenance'
+                                        ? ROUTES.propertyRentalPast(id)
+                                        : ROUTES.propertyRental(id)
+                                }
                                 className="mt-20"
                             >
                                 {rentalsQuery.isPending ? (
@@ -672,7 +690,14 @@ export function PropertyDetailPage(): JSX.Element {
                                     <PropertySectionEmpty
                                         imageSrc={propertySectionImages.rental}
                                         copy={resolvePropertySectionEmpty('rental', emptySet, property.status)}
-                                        onCta={sectionCta.visible ? sectionCTAs.rental : undefined}
+                                        // На ремонте CTA нет вовсе: создание
+                                        // запрещено беком (409) — кнопка была
+                                        // бы мёртвой (#1050).
+                                        onCta={
+                                            property.status !== 'maintenance' && sectionCta.visible
+                                                ? sectionCTAs.rental
+                                                : undefined
+                                        }
                                         ctaDisabled={sectionCta.disabled}
                                     />
                                 )}
@@ -682,7 +707,7 @@ export function PropertyDetailPage(): JSX.Element {
                         <PropertySectionCard
                             title="Регулярные платежи"
                             href={ROUTES.propertyPayments(id)}
-                            className={property.status === 'maintenance' ? 'mt-20' : undefined}
+                            className={!rentalSectionVisible ? 'mt-20' : undefined}
                         >
                             {paymentsQuery.isPending ? (
                                 <PropertyPaymentsStripSkeleton/>

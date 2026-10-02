@@ -7,6 +7,7 @@ import {
   buildPropertyStatusSheetItems,
   deleteBlockedByRental,
   guardedStatusAction,
+  isRentalSectionVisible,
   propertyStatusSubtitle,
   type PropertyDetailActionKey,
 } from './property-detail-status';
@@ -358,4 +359,25 @@ describe('deleteBlockedByRental (гард удаления, #632)', () => {
       expect(deleteBlockedByRental(key, state)).toBe(blocked);
     },
   );
+});
+
+describe('isRentalSectionVisible (видимость секции «Аренда» на детали, #1050 доработка)', () => {
+  it('вне ремонта секция всегда рисуется (архив несёт глухую CTA, канон #589)', () => {
+    expect(isRentalSectionVisible('active', NONE, false)).toBe(true);
+    expect(isRentalSectionVisible('active', ACTIVE, false)).toBe(true);
+    expect(isRentalSectionVisible('archived', NONE, false)).toBe(true);
+  });
+
+  it('на ремонте с завершённой историей и без текущей — секция видна (путь к «Прошлым арендам»)', () => {
+    expect(isRentalSectionVisible('maintenance', NONE, true)).toBe(true);
+  });
+
+  it('на ремонте без аренд вовсе — секции нет (слово владельца)', () => {
+    expect(isRentalSectionVisible('maintenance', NONE, false)).toBe(false);
+  });
+
+  it('на ремонте с незавершённой (спасательный люк, прямой API) — секции нет, поверхности сходятся с «Управлением»', () => {
+    expect(isRentalSectionVisible('maintenance', ACTIVE, true)).toBe(false);
+    expect(isRentalSectionVisible('maintenance', UPCOMING, false)).toBe(false);
+  });
 });
