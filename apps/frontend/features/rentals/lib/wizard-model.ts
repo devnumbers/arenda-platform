@@ -5,7 +5,6 @@ import type {
   RentalPaymentDay,
   RentalUtilities,
 } from '@/entities/rental';
-import type { RentalWizardDraft } from './use-rental-wizard-draft';
 
 /**
  * Чистая логика визарда создания аренды (#530, Figma 1270:46904/37343/46821/
@@ -13,6 +12,33 @@ import type { RentalWizardDraft } from './use-rental-wizard-draft';
  * сериализация черновика в команду POST создания. Шаги UI и хранение
  * черновика — в слое экрана; здесь только правила.
  */
+
+/** Черновик шагов визарда (носитель сессии — rental-wizard-session, карта
+ * #1052 D3): покрывает поля всех четырёх шагов; готовность шагов — здесь,
+ * шаги UI — слой экрана. */
+export type RentalWizardDraft = {
+  /** Арендная плата в копейках, целая положительная (шаг 1). */
+  readonly amountKopecks?: number;
+  /** День оплаты: число месяца 1–31 или «последний день» (шаг 1). */
+  readonly paymentDay?: RentalPaymentDay;
+  /** Автоплатёж Платежа арендной платы (шаг 3; отсутствие = выключен). */
+  readonly autoPay?: boolean;
+  /** Лид-тайм напоминания о платеже (шаг 3, карта #822; отсутствие —
+   * дефолт «За 1 день» применяется при сборке команды). */
+  readonly reminderOffsetDays?: PaymentReminderOffset;
+  /** Начало аренды — сегодня или позже (шаг 2). */
+  readonly startDate?: IsoDate;
+  /** Плановое окончание; отсутствие — бессрочная аренда (шаг 2). */
+  readonly plannedEndDate?: IsoDate;
+  /** Коммунальные платежи (шаг 2). */
+  readonly utilities?: RentalUtilities;
+  /** Залог в копейках (шаг 2; отсутствие — не задан). */
+  readonly depositKopecks?: number;
+  /** Комиссия в копейках (шаг 2; отсутствие — не задана). */
+  readonly commissionKopecks?: number;
+  /** Арендатор — контакт из книги объекта (шаг 4; отсутствие — не выбран). */
+  readonly contactId?: string;
+};
 
 export const WIZARD_TOTAL_STEPS = 4;
 

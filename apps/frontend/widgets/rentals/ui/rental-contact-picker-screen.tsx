@@ -13,7 +13,7 @@ import {
   ContactsNoResults,
   useContacts,
 } from '@/features/contacts';
-import { useRentalWizardDraft } from '@/features/rentals';
+import { setRentalWizardSessionDraft } from '@/features/rentals';
 import {
   IconButton,
   InfiniteQueryTail,
@@ -30,10 +30,10 @@ import {
  * («←» возвращает на шаг, поле «Найти контакт» в фокусе), ниже — плоский
  * белый список книги объекта без групп: свежие контакты сверху —
  * серверная ось sort=created (#847), подзаголовок — роль. Тап по строке
- * выбирает арендатора в черновик визарда (тот же хук черновика, что у
- * ветки создания #509) и возвращает на шаг goBack'ом. Поиск — серверный
- * ?search= с keepPreviousData (канон поиска книги). Экран — ветвь визарда:
- * футер глушится, как на его шагах.
+ * выбирает арендатора гостевой записью в носитель сессии визарда (та же
+ * запись у ветки создания #509) и возвращает на шаг goBack'ом. Поиск —
+ * серверный ?search= с keepPreviousData (канон поиска книги). Экран —
+ * ветвь визарда: футер глушится, как на его шагах.
  */
 export function RentalContactPickerScreen({
   propertyId,
@@ -65,7 +65,6 @@ export function RentalContactPickerScreen({
     sort: 'created',
     order: 'desc',
   });
-  const rentalDraft = useRentalWizardDraft(propertyId);
 
   const contacts = contactsQuery.data ?? [];
 
@@ -124,10 +123,10 @@ export function RentalContactPickerScreen({
     </>
   );
 
-  /** Выбор арендатора: id едет в общем черновике визарда (переживёт
-   * goBack), запись истории экрана выбора выталкивается. */
+  /** Выбор арендатора: id едет гостевой записью в носитель сессии визарда
+   * (переживёт goBack), запись истории экрана выбора выталкивается. */
   function pick(contactId: string): void {
-    rentalDraft.setDraft((prev) => ({ ...prev, contactId }));
+    setRentalWizardSessionDraft(propertyId, (prev) => ({ ...prev, contactId }));
     goBack(router, ROUTES.propertyRentalNew(propertyId));
   }
 }

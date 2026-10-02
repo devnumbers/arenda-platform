@@ -7,7 +7,7 @@ import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { useProperty } from '@/features/properties';
 import { propertyPermissions } from '@/entities/property';
-import { useRentalWizardDraft, WIZARD_TOTAL_STEPS } from '@/features/rentals';
+import { WIZARD_TOTAL_STEPS } from '@/features/rentals';
 import { Button, IconButton, PageContent, StepsChip, TopNav } from '@/shared/ui/design';
 import { RentalAmountDayStepSkeleton } from './rental-skeletons';
 import { WizardHeading } from './wizard-chrome';
@@ -15,9 +15,11 @@ import { RentalCreateWizardFlow } from './rental-create-wizard-flow';
 
 /**
  * Экран визарда создания аренды (#530): маршрут /properties/[id]/rentals/new.
- * Черновик монтируется только после гидрации хранилища — до этого скелет;
- * мутационный вход закрыт для смотрящего и архива (создание — Full Access,
- * ADR 0053 §3; предикат общий с платежами и контактами).
+ * Поток монтируется после загрузки объекта — до этого скелет; состояние
+ * шагов живёт в носителе сессии (rental-wizard-session), он синхронен и
+ * гидрации не требует. Мутационный вход закрыт для смотрящего и архива
+ * (создание — Full Access, ADR 0053 §3; предикат общий с платежами и
+ * контактами).
  *
  * Загрузка (#607, паритет §7): холодный вход открывает шаг 1 «Цена и число
  * оплаты» — хром шага (крестик, чип шага) и заголовок рендерятся сразу,
@@ -34,9 +36,8 @@ export function RentalCreateWizardScreen({
 }: RentalCreateWizardScreenProps): JSX.Element {
   const router = useRouter();
   const propertyQuery = useProperty(propertyId);
-  const draftState = useRentalWizardDraft(propertyId);
 
-  const loading = !draftState.isLoaded || propertyQuery.isPending;
+  const loading = propertyQuery.isPending;
   const property = propertyQuery.isSuccess ? propertyQuery.data : undefined;
   const canMutate = property !== undefined && propertyPermissions(property).canEdit;
 

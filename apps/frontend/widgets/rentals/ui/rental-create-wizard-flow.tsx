@@ -12,7 +12,7 @@ import { type IsoDate, type PaymentReminderOffset } from '@/entities/payment';
 import type { Rental } from '@/entities/rental';
 import {
   useCreateRental,
-  useRentalWizardDraft,
+  useRentalWizardSession,
   wizardStepReady,
   draftAfterStartChange,
   WIZARD_TOTAL_STEPS,
@@ -39,11 +39,13 @@ import { WizardBottomBar } from './wizard-chrome';
 
 /**
  * Поток шагов визарда создания аренды (#530, клиентское состояние на одном
- * маршруте): монтируется после гидрации черновика и загрузки объекта,
- * восстанавливается на первый незавершённый шаг; черновик живёт в
- * localStorage per объект — переживает уход в ветви шага контакта: экран
- * выбора арендатора (#807) и создание контакта (#509) патчат тот же
- * черновик тем же хуком, возврат — goBack.
+ * маршруте): монтируется после загрузки объекта, восстанавливается на первый
+ * незавершённый шаг. Состояние шагов живёт в носителе сессии per объект
+ * (rental-wizard-session, карта #1052 D3): уход в ветви шага контакта —
+ * экран выбора арендатора (#807) и создание контакта (#509) — помечает
+ * сессию живой до push, и круговой маршрут возвращает на тот же шаг с теми
+ * же полями; любой другой уход из визарда, перезагрузка и закрытие дают
+ * чистый лист.
  */
 
 export type RentalCreateWizardFlowProps = {
@@ -55,7 +57,9 @@ export function RentalCreateWizardFlow({
 }: RentalCreateWizardFlowProps): JSX.Element {
   const router = useRouter();
   const createRental = useCreateRental(propertyId);
-  const { draft, setDraft, clearDraft } = useRentalWizardDraft(propertyId);
+  // Владелец сессии: хук ведёт жизненный цикл носителя — открытие гасит
+  // keep-alive, закрытие без флага чистит носитель.
+  const { draft, setDraft, clearDraft, keepAlive } = useRentalWizardSession(propertyId);
   // Визард — экран создания: футер глушится на всех шагах.
   useTabBarSuppression();
   const [created, setCreated] = useState<Rental | null>(null);
@@ -84,7 +88,8 @@ export function RentalCreateWizardFlow({
       {/* Хром шагов по макету (TopNav 1270:46906/46823): шаг 1 — крестик
           «Закрыть» слева (назад внутри визарда нет); шаги 2–4 — стрелка
           «Назад» слева и крестик «Закрыть» справа — выход из визарда
-          целиком с любого шага (черновик сохраняется). */}
+          целиком с любого шага (носитель сессии чистится — следующий вход
+          откроет чистый визард). */}
       <TopNav
         leading={
           step === 1 ? (
@@ -182,6 +187,7 @@ export function RentalCreateWizardFlow({
               propertyId={propertyId}
               contactId={draft.contactId}
               onContactChange={(contactId) => setDraft((prev) => ({ ...prev, contactId }))}
+              onSubRouteOpen={keepAlive}
             />
             {/* Шаг всегда готов (арендатор необязателен) — кнопка видна
                 всегда; валидность целиком проверяет сабмит. */}
@@ -204,7 +210,7 @@ export function RentalCreateWizardFlow({
 
   /** Выход из визарда (крестик на любом шаге, «Хорошо» на экране успеха):
    * история назад, при пустой истории — фолбэк goBack'а на объект,
-   * черновик остаётся в localStorage. */
+   * носитель сессии чистится при размонтировании. */
   function closeWizard(): void {
     goBack(router, ROUTES.property(propertyId));
   }

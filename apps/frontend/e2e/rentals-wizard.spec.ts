@@ -13,7 +13,9 @@ import {
 // выбора, «Создать контакт» — ветвь #509), экран выбора с серверным поиском
 // и сортировкой «по недавним», меню из четырёх пунктов, свап кнопок экрана
 // успеха («Хорошо» primary сверху) и server-truth `rentals.contact_id`.
-// Черновик визарда живёт в localStorage — между маршрутами едет сам.
+// Состояние шагов едет между маршрутами в носителе сессии (карта #1052 D3:
+// keep-alive на ветвях шага 4); уход из флоу («Изменить», «Открыть»),
+// перезагрузка и финал — чистый лист.
 //
 // Имена контактов уникальны за попытку (суффикс — номер retry), остатки
 // сценария тест убирает в finally: контакты — DELETE по имени; аренда
@@ -222,7 +224,7 @@ test.describe('визард создания аренды — шаг «Конт�
     }
   });
 
-  test('меню контакта: «Изменить» открывает форму, «Удалить» отвязывает и деградирует шаг к двум действиям', async ({
+  test('меню контакта: «Изменить» уводит из флоу — возврат на чистый шаг 1; «Удалить» отвязывает и деградирует шаг к двум действиям', async ({
     page,
     seededUser,
   }, testInfo) => {
@@ -239,16 +241,28 @@ test.describe('визард создания аренды — шаг «Конт�
       await page.getByText(contactName, { exact: true }).click();
       await expect(page.getByRole('heading', { name: 'Добавьте контакт арендатора' })).toBeVisible();
 
+      // «Изменить» уводит за пределы флоу (канон Q2=В: уход = потеря) —
+      // возврат из формы правки открывает чистый визард на шаге 1
+      // с пустыми полями.
       await page.getByRole('button', { name: 'Меню контакта' }).click();
       await page.getByRole('menuitem', { name: 'Изменить' }).click();
       await expect(page).toHaveURL(/\/contacts\/[0-9a-f-]{36}\/edit$/);
       await page.goBack();
+      await expect(page.getByRole('heading', { name: 'Цена и число оплаты' })).toBeVisible();
       await expect(
-        page.getByRole('heading', { name: 'Добавьте контакт арендатора' }),
-      ).toBeVisible();
+        page.getByRole('textbox', { name: 'Арендная плата, рублей' }),
+      ).toHaveValue('');
+      await captureScreen(page, testInfo, 'rentals-wizard-edit-exit-clean-step1');
 
-      // Удаление: шит подтверждения (шит 1419:27158), после — контакт
+      // Удаление: свежий проход до шага (шаги 1–3 и выбор в носителе
+      // сессии), шит подтверждения (шит 1419:27158), после — контакт
       // стёрт из книги, шаг вернулся к двум действиям.
+      await passAmountDay(page, '56 000');
+      await passConditions(page);
+      await page.getByRole('button', { name: 'Выбрать контакт' }).click();
+      await page.getByText(contactName, { exact: true }).click();
+      await expect(page.getByRole('heading', { name: 'Добавьте контакт арендатора' })).toBeVisible();
+
       await page.getByRole('button', { name: 'Меню контакта' }).click();
       await page.getByRole('menuitem', { name: 'Удалить' }).click();
       await expect(page.getByText('Удалить контакт?')).toBeVisible();
