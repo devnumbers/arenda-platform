@@ -18,9 +18,25 @@ import s from "./showcase.module.css";
 // бесконечная прокрутка, Shift+Scroll, drag мышью, клик по боковой
 // картинке или плашке приводит её к центру, плашка к центру
 // увеличивается, боковые уменьшены до 80% (мобила = планшет × 0.6).
-// Механика: фотолента — нативный горизонтальный скроллер со snap
-// (бесконечность — 3 копии набора с тихой пересадкой на среднюю),
-// плашки — синхронный ряд, морфинг размеров через CSS --k.
+//
+// Механика движения — по замерам лент Яндекса (Swiper speed 360 на
+// pay.yandex.ru/business, октябрь 2026): единственная непрерывная позиция
+// p (та же терминология, что был scrollLeft у нативного скроллера),
+// все программные переходы — 360мс ease-out cubic-bezier(0,0,0.58,1),
+// посадка точно в позицию покоя — без инерции, перелётов и «магнитных»
+// доводок. Нативного скролла нет вовсе: фотолента — overflow:hidden,
+// p кладётся в translate3d дорожки; плашки — синхронный ряд, который
+// центруется по той же p. Drag (мышь и тач) — 1:1 за пальцем, отпуск —
+// докат 360мс к ближайшей карточке; быстрый бросок добавляет одну
+// карточку по направлению (порог по скорости, как у Swiper). Клик по
+// боковой карточке/плашке ведёт её в центр одним переходом независимо
+// от дистанции; клик и wheel во время анимации игнорируются, drag
+// перехватывает движение. Shift+Scroll и горизонтальный трекпад — шаг
+// ровно на одну карточку, вертикальное колесо скроллит страницу.
+// Бесконечность — 3 копии набора с тихой пересадкой в среднюю на покое.
+// Морфинг размеров — CSS --k (0 бок / 1 центр); высоты обоих рядов
+// зафиксированы (var(--h) / var(--plate-h)), поэтому контент под
+// каруселью не двигается ни при каком движении.
 
 type Spec = readonly [label: string, value: string];
 
@@ -113,33 +129,38 @@ const CARDS: readonly Card[] = [
 
 const N = CARDS.length;
 const COPIES = 3;
+const G = N * COPIES; // узлов в ленте
 const INITIAL = N + 2; // «2-комнатная на Ленина»: средняя копия (слайды N..2N−1), карта 2
+const STEP_MS = 360; // длительность любого перехода — как у Яндекса (замер)
+
 // Ширины состояний [боковая, центральная] для JS-математики — зеркало
-// CSS-переменных showcase.module.css; D — дистанция морфинга k (шаг до
-// соседней карточки).
+// CSS-переменных showcase.module.css; D — дистанция морфинга k, равна
+// шагу до соседней карточки (cardSide+gap) на всех ярусах: морфинг
+// завершается точно в момент прибытия (как у Яндекса), на покое k
+// строго 0/1 — бок ровно 80%, центр ровно по центру вьюпорта.
 const METRICS = {
-  desk: { cardSide: 800, card: 1000, gap: 20, plateSide: 360, plate: 450, plateGap: 16, D: 920 },
+  desk: { cardSide: 800, card: 1000, gap: 20, plateSide: 360, plate: 450, plateGap: 16, D: 820 },
   tab: { cardSide: 500, card: 500, gap: 12, plateSide: 345, plate: 400, plateGap: 12, D: 512 },
   mob: { cardSide: 300, card: 300, gap: 12, plateSide: 207, plate: 240, plateGap: 8, D: 312 },
 } as const;
 type Tier = keyof typeof METRICS;
 
 /* Точная модель позиций покоя. В состоянии покоя активная карточка —
-   центральная ширина, остальные — боковые, поэтому позиция скролла,
+   центральная ширина, остальные — боковые, поэтому позиция p,
    центрирующая слайд g (копия c = floor(g/N), карта i = g mod N):
    S(g) = c×copyPlain + i×(sideW+gap) + centerW/2 − viewportW/2,
    copyPlain = N×(sideW+gap). Сдвиг на copyPlain переводит S(g)↔S(g±N)
    точно (соседние копии визуально идентичны) — на нём держится
    бесконечность. Все целевые позиции считаются из модели, не из живого
-   лэйаута: ширины карточек меняются при морфинге, живые offsetLeft в
-   момент старта анимации дают ошибку на (centerW−sideW)/2. */
+   лэйаута: ширины карточек меняются при морфинге, живые смещения в
+   момент старта анимации врали бы на (centerW−sideW)/2. */
 function snapModel(tier: Tier, viewportW: number) {
   const m = METRICS[tier];
   const step = m.cardSide + m.gap;
   const copyPlain = N * step;
   const snap = (g: number) =>
     Math.floor(g / N) * copyPlain + (g % N) * step + m.card / 2 - viewportW / 2;
-  const snapArr = Array.from({ length: N * COPIES }, (_, g) => snap(g));
+  const snapArr = Array.from({ length: G }, (_, g) => snap(g));
   return { m, step, copyPlain, snapArr };
 }
 
@@ -153,252 +174,377 @@ function tierOf(): Tier {
 
 const lerp = (side: number, center: number, k: number) => side + (center - side) * k;
 
+// Узел ленты, ближайший к позиции p, — по позициям покоя модели.
+function nearestIndex(p: number, snapArr: readonly number[]): number {
+  let best = 0;
+  let bestDist = Math.abs((snapArr[0] ?? 0) - p);
+  for (let g = 1; g < snapArr.length; g += 1) {
+    const d = Math.abs((snapArr[g] ?? 0) - p);
+    if (d < bestDist) {
+      bestDist = d;
+      best = g;
+    }
+  }
+  return best;
+}
+
+// CSS ease-out cubic-bezier(0, 0, 0.58, 1) — кривая переходов Яндекса
+// (совпадение с замером в пределах ~2%): решаем параметр кривой Ньютоном.
+function easeOut(t: number): number {
+  if (t <= 0) return 0;
+  if (t >= 1) return 1;
+  const x2 = 0.58;
+  const px = (s: number) => 3 * s * s * (1 - s) * x2 + s * s * s;
+  const dx = (s: number) => 6 * s * (1 - s) * x2 + 3 * s * s;
+  const py = (s: number) => 3 * s * s * (1 - s) + s * s * s;
+  let curve = t;
+  for (let i = 0; i < 8; i += 1) {
+    const err = px(curve) - t;
+    const slope = dx(curve);
+    if (Math.abs(err) < 1e-6 || Math.abs(slope) < 1e-6) break;
+    curve -= err / slope;
+  }
+  return py(clamp(curve, 0, 1));
+}
+
 // Мутабельное состояние ленты — создается в mount-эффекте и меняется
 // только в обработчиках (канон refs лендинга: никакого доступа в рендере)
-type CarouselState = {
+type EngineState = {
+  p: number;
   k: number[];
+  anim: { from: number; to: number; t0: number; dur: number } | null;
+  raf: number;
   dragging: boolean;
   dragMoved: boolean;
+  pointerId: number | null;
   dragStartX: number;
-  dragStartScroll: number;
+  dragStartP: number;
   dragSamples: Array<{ t: number; x: number }>;
 };
 
 export function Showcase() {
   const [mounted, setMounted] = useState(false);
-  const scrollerRef = useRef<HTMLDivElement>(null);
-  const stripRef = useRef<HTMLDivElement>(null);
-  const zoneRef = useRef<HTMLDivElement>(null);
-  const stateRef = useRef<CarouselState | null>(null);
+  const zoneRef = useRef<HTMLDivElement>(null); // колонка карусели (плашки + фото)
+  const viewportRef = useRef<HTMLDivElement>(null); // окно фотоленты (full-bleed 100vw)
+  const photoTrackRef = useRef<HTMLDivElement>(null); // дорожка фото, translate3d(−p)
+  const stripRef = useRef<HTMLDivElement>(null); // дорожка плашек, центруется по p
+  const slideNodes = useRef<Array<HTMLElement | null>>([]);
+  const plateNodes = useRef<Array<HTMLElement | null>>([]);
+  const stateRef = useRef<EngineState | null>(null);
+  const reducedRef = useRef(false);
 
-  const applyFrame = useCallback(() => {
-    const scroller = scrollerRef.current;
+  const reduced = useCallback(() => reducedRef.current, []);
+
+  // Один проход отрисовки: k по дистанции до позиций покоя, транслейт
+  // фотодорожки, центровка ряда плашек. Источник истины — st.p.
+  const render = useCallback(() => {
+    const viewport = viewportRef.current;
+    const photoTrack = photoTrackRef.current;
     const strip = stripRef.current;
     const zone = zoneRef.current;
-    const state = stateRef.current;
-    if (!scroller || !strip || !zone || !state) return;
-    const { m, snapArr } = snapModel(tierOf(), scroller.clientWidth);
-    const scroll = scroller.scrollLeft;
-    const k = state.k;
+    const st = stateRef.current;
+    if (!viewport || !photoTrack || !strip || !zone || !st) return;
+    const { m, snapArr } = snapModel(tierOf(), viewport.clientWidth);
+    const p = st.p;
+    const k = st.k;
     let dirty = false;
-    for (let g = 0; g < N * COPIES; g++) {
-      const nk = clamp(1 - Math.abs(scroll - (snapArr[g] ?? 0)) / m.D, 0, 1);
+    for (let g = 0; g < G; g += 1) {
+      const nk = clamp(1 - Math.abs(p - (snapArr[g] ?? 0)) / m.D, 0, 1);
       if (Math.abs(nk - (k[g] ?? 0)) > 0.002) {
         k[g] = nk;
         dirty = true;
       }
     }
     if (dirty) {
-      for (let g = 0; g < N * COPIES; g++) {
+      for (let g = 0; g < G; g += 1) {
         const kk = (k[g] ?? 0).toFixed(3);
-        scroller.children[g]?.setAttribute("style", `--k:${kk}`);
-        strip.children[g]?.setAttribute("style", `--k:${kk}`);
+        slideNodes.current[g]?.setAttribute("style", `--k:${kk}`);
+        plateNodes.current[g]?.setAttribute("style", `--k:${kk}`);
       }
     }
+    photoTrack.style.transform = `translate3d(${(-p).toFixed(2)}px,0,0)`;
     // Плашки: транслируем ряд так, чтобы активная (непрерывный индекс)
     // сидела по центру зоны; ширины плашек берём из тех же k.
-    const pillW = (i: number) => lerp(m.plateSide, m.plate, k[Math.min(i, N * COPIES - 1)] ?? 0);
+    const pillW = (i: number) => lerp(m.plateSide, m.plate, k[Math.min(i, G - 1)] ?? 0);
     let gLo = 0;
-    while (gLo < N * COPIES - 1 && (snapArr[gLo + 1] ?? 0) <= scroll) gLo++;
-    const next = snapArr[Math.min(gLo + 1, N * COPIES - 1)] ?? 0;
+    while (gLo < G - 1 && (snapArr[gLo + 1] ?? 0) <= p) gLo += 1;
+    const next = snapArr[Math.min(gLo + 1, G - 1)] ?? 0;
     const span = Math.max(next - (snapArr[gLo] ?? 0), 1);
-    const frac = clamp((scroll - (snapArr[gLo] ?? 0)) / span, 0, 1);
+    const frac = clamp((p - (snapArr[gLo] ?? 0)) / span, 0, 1);
     const activeFloat = gLo + frac;
     let centerOffset = 0;
-    for (let j = 0; j < Math.floor(activeFloat); j++) centerOffset += pillW(j) + m.plateGap;
-    centerOffset += (activeFloat - Math.floor(activeFloat)) * (pillW(Math.min(Math.floor(activeFloat) + 1, N * COPIES - 1)) + m.plateGap);
+    for (let j = 0; j < Math.floor(activeFloat); j += 1) centerOffset += pillW(j) + m.plateGap;
+    centerOffset +=
+      (activeFloat - Math.floor(activeFloat)) *
+      (pillW(Math.min(Math.floor(activeFloat) + 1, G - 1)) + m.plateGap);
     centerOffset += pillW(Math.floor(activeFloat)) / 2;
     const tx = zone.clientWidth / 2 - centerOffset;
     strip.style.transform = `translateX(${tx.toFixed(1)}px)`;
-  }, [stateRef]);
+  }, []);
 
-  const settle = useCallback(() => {
-    const scroller = scrollerRef.current;
-    const zone = zoneRef.current;
-    const state = stateRef.current;
-    if (!scroller || !zone || !state || state.dragging) return;
-    const { snapArr, copyPlain } = snapModel(tierOf(), scroller.clientWidth);
-    let best = 0;
-    let bestDist = Math.abs((snapArr[0] ?? 0) - scroller.scrollLeft);
-    for (let g = 1; g < N * COPIES; g++) {
-      const d = Math.abs((snapArr[g] ?? 0) - scroller.scrollLeft);
-      if (d < bestDist) {
-        bestDist = d;
-        best = g;
-      }
-    }
-    // нормализация копии: активный слайд держим в средней копии
+  // Тихая пересадка в среднюю копию — только на покое (позиции покоя
+  // соседних копий совпадают точно, сдвиг невидим).
+  const renormalize = useCallback(() => {
+    const viewport = viewportRef.current;
+    const st = stateRef.current;
+    if (!viewport || !st) return;
+    const { snapArr, copyPlain } = snapModel(tierOf(), viewport.clientWidth);
+    let best = nearestIndex(st.p, snapArr);
+    let shifted = false;
     while (best < 2) {
       best += N;
-      scroller.scrollLeft += copyPlain;
+      st.p += copyPlain;
+      shifted = true;
     }
-    while (best > N * COPIES - 3) {
+    while (best > G - 3) {
       best -= N;
-      scroller.scrollLeft -= copyPlain;
+      st.p -= copyPlain;
+      shifted = true;
     }
-    // магнит: доводка до точной позиции покоя (морфинг сместил живые
-    // оффсеты, snap оставил ≤ пары сотен пикселей)
-    scroller.scrollLeft = snapArr[best] ?? 0;
-    applyFrame();
-  }, [applyFrame, stateRef]);
+    if (shifted) render();
+  }, [render]);
 
-  // Короткий шаг ленты от текущего положения: steps = ±1/±2/0. Клик по
-  // боковой карточке/плашке знает направление геометрически (левее/правее
-  // центра) — на границе набора это даёт правильную сторону обхода
-  // бесконечной ленты, nearest-copy логика тут уезжает назад.
-  const stepCarousel = useCallback(
-    (steps: number, smooth = true) => {
-      const scroller = scrollerRef.current;
-      if (!scroller || steps === 0) return;
-      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      const { snapArr } = snapModel(tierOf(), scroller.clientWidth);
-      let cur = 0;
-      let curDist = Math.abs((snapArr[0] ?? 0) - scroller.scrollLeft);
-      for (let g = 1; g < N * COPIES; g++) {
-        const d = Math.abs((snapArr[g] ?? 0) - scroller.scrollLeft);
-        if (d < curDist) {
-          curDist = d;
-          cur = g;
-        }
+  const frameLoop = useCallback(() => {
+    const st = stateRef.current;
+    if (!st) return;
+    const step = function stepFn(t: number) {
+      const a = st.anim;
+      if (!a) return;
+      const x = a.dur <= 0 ? 1 : clamp((t - a.t0) / a.dur, 0, 1);
+      st.p = a.from + (a.to - a.from) * easeOut(x);
+      render();
+      if (x < 1) {
+        st.raf = requestAnimationFrame(stepFn);
+      } else {
+        st.anim = null;
+        renormalize();
       }
-      const g = clamp(cur + steps, 2, N * COPIES - 3);
-      scroller.scrollTo({
-        left: snapArr[g] ?? 0,
-        behavior: smooth && !reduced ? "smooth" : "auto",
-      });
+    };
+    st.raf = requestAnimationFrame(step);
+  }, [render, renormalize]);
+
+  // Единственная анимация движения: фиксированные 360мс ease-out до
+  // точной позиции покоя, независимо от дистанции.
+  const animateTo = useCallback(
+    (to: number) => {
+      const st = stateRef.current;
+      if (!st) return;
+      if (Math.abs(st.p - to) < 0.5) {
+        st.anim = null;
+        st.p = to;
+        render();
+        renormalize();
+        return;
+      }
+      st.anim = { from: st.p, to, t0: performance.now(), dur: reduced() ? 0 : STEP_MS };
+      cancelAnimationFrame(st.raf);
+      frameLoop();
     },
-    [],
+    [frameLoop, reduced, render, renormalize],
   );
 
-  // Стартовая центровка и пересборка базы на смену яруса
+  // Выбор карточки по индексу узла ленты: кликнутая едет в центр одним
+  // переходом, сколько бы шагов ни было (кратчайший обход кольца копий).
+  // Клик во время анимации или drag игнорируется — как у Яндекса.
+  const selectNode = useCallback(
+    (g: number) => {
+      const viewport = viewportRef.current;
+      const st = stateRef.current;
+      if (!viewport || !st || st.anim || st.dragging) return;
+      const { snapArr } = snapModel(tierOf(), viewport.clientWidth);
+      const cur = nearestIndex(st.p, snapArr);
+      let delta = g - cur;
+      if (delta > G / 2) delta -= G;
+      if (delta < -G / 2) delta += G;
+      const target = clamp(cur + delta, 0, G - 1);
+      animateTo(snapArr[target] ?? st.p);
+    },
+    [animateTo],
+  );
+
   useEffect(() => {
-    const scroller = scrollerRef.current;
-    if (!scroller) return;
+    const rm = window.matchMedia("(prefers-reduced-motion: reduce)");
+    reducedRef.current = rm.matches;
+    const onRmChange = () => {
+      reducedRef.current = rm.matches;
+    };
+    rm.addEventListener("change", onRmChange);
+    return () => rm.removeEventListener("change", onRmChange);
+  }, []);
+
+  // Стартовая центровка и пересборка базы на смену яруса.
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
     stateRef.current ??= {
-      k: new Array<number>(N * COPIES).fill(0),
+      p: 0,
+      k: new Array<number>(G).fill(0),
+      anim: null,
+      raf: 0,
       dragging: false,
       dragMoved: false,
+      pointerId: null,
       dragStartX: 0,
-      dragStartScroll: 0,
+      dragStartP: 0,
       dragSamples: [],
     };
     const measure = () => {
       const st0 = stateRef.current;
       if (!st0) return;
-      scroller.scrollLeft = snapModel(tierOf(), scroller.clientWidth).snapArr[INITIAL] ?? 0;
-      applyFrame();
+      st0.anim = null;
+      st0.p = snapModel(tierOf(), viewport.clientWidth).snapArr[INITIAL] ?? 0;
+      st0.k.fill(0);
+      render();
     };
     measure();
     setMounted(true);
-    let mqDesk = window.matchMedia("(min-width: 1200px)");
-    let mqTab = window.matchMedia("(min-width: 481px)");
-    const onTierChange = () => {
-      const wasDesk = mqDesk.matches;
-      const wasWide = mqTab.matches;
-      mqDesk = window.matchMedia("(min-width: 1200px)");
-      mqTab = window.matchMedia("(min-width: 481px)");
-      if (mqDesk.matches !== wasDesk || mqTab.matches !== wasWide) {
-        measure();
-        settle();
+    // Ресайз окна и смены яруса: позиция покоя пересчитывается под новую
+    // геометрию (ближайшая карточка встаёт ровно в центр). Слушатель один
+    // — matchMedia-сравнения тут не работают: к моменту события change
+    // MediaQueryList.matches уже возвращает новое значение.
+    let resizeRaf = 0;
+    const onViewportChange = () => {
+      cancelAnimationFrame(resizeRaf);
+      resizeRaf = requestAnimationFrame(() => {
+        const st0 = stateRef.current;
+        if (!st0 || st0.dragging) return;
+        const { snapArr, copyPlain } = snapModel(tierOf(), viewport.clientWidth);
+        let best = nearestIndex(st0.p, snapArr);
+        let p = snapArr[best] ?? st0.p;
+        while (best < 2) {
+          best += N;
+          p += copyPlain;
+        }
+        while (best > G - 3) {
+          best -= N;
+          p -= copyPlain;
+        }
+        st0.anim = null;
+        cancelAnimationFrame(st0.raf);
+        st0.p = p;
+        st0.k.fill(0);
+        render();
+      });
+    };
+    window.addEventListener("resize", onViewportChange);
+    return () => {
+      window.removeEventListener("resize", onViewportChange);
+      cancelAnimationFrame(resizeRaf);
+      const st = stateRef.current;
+      if (st) {
+        cancelAnimationFrame(st.raf);
+        st.anim = null;
       }
     };
-    mqDesk.addEventListener("change", onTierChange);
-    mqTab.addEventListener("change", onTierChange);
-    return () => {
-      mqDesk.removeEventListener("change", onTierChange);
-      mqTab.removeEventListener("change", onTierChange);
-    };
-  }, [applyFrame, settle, stateRef]);
+  }, [render]);
 
+  // Drag мышью и тачем — 1:1 за пальцем, без инерции; отпуск — докат
+  // 360мс к ближайшей карточке, быстрый бросок добавляет одну по
+  // направлению. Указатель каптурится окном ленты, клик разрешается
+  // хит-тестом (цель после капчера — окно, не карточка).
   useEffect(() => {
-    const scroller = scrollerRef.current;
-    if (!scroller) return;
-    let raf = 0;
-    const onScroll = () => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(applyFrame);
-    };
-    const onEnd = () => settle();
-    scroller.addEventListener("scroll", onScroll, { passive: true });
-    scroller.addEventListener("scrollend", onEnd);
-    return () => {
-      scroller.removeEventListener("scroll", onScroll);
-      scroller.removeEventListener("scrollend", onEnd);
-      cancelAnimationFrame(raf);
-    };
-  }, [applyFrame, settle]);
-
-  // Drag мышью; тач и тачпад скроллят нативно
-  useEffect(() => {
-    const scroller = scrollerRef.current;
-    if (!scroller) return;
+    const viewport = viewportRef.current;
+    if (!viewport) return;
     const st = () => stateRef.current;
 
     const onPointerDown = (e: PointerEvent) => {
-      if (e.pointerType !== "mouse" || e.button !== 0) return;
+      if (e.pointerType === "mouse" && e.button !== 0) return;
       const s0 = st();
       if (!s0) return;
       s0.dragging = true;
       s0.dragMoved = false;
+      s0.pointerId = e.pointerId;
       s0.dragStartX = e.clientX;
-      s0.dragStartScroll = scroller.scrollLeft;
+      s0.dragStartP = s0.p;
       s0.dragSamples = [{ t: performance.now(), x: e.clientX }];
-      scroller.classList.add(s.dragging ?? "");
+      s0.anim = null; // drag перехватывает движение
+      cancelAnimationFrame(s0.raf);
+      viewport.classList.add(s.dragging ?? "");
+      viewport.setPointerCapture(e.pointerId);
     };
+
     const onPointerMove = (e: PointerEvent) => {
       const s1 = st();
-      if (!s1 || !s1.dragging) return;
+      if (!s1 || !s1.dragging || e.pointerId !== s1.pointerId) return;
       const dx = e.clientX - s1.dragStartX;
       if (Math.abs(dx) > 5) s1.dragMoved = true;
-      scroller.scrollLeft = s1.dragStartScroll - dx;
+      const { snapArr } = snapModel(tierOf(), viewport.clientWidth);
+      s1.p = clamp(s1.dragStartP - dx, snapArr[1] ?? 0, snapArr[G - 2] ?? 0);
+      render();
       s1.dragSamples.push({ t: performance.now(), x: e.clientX });
       if (s1.dragSamples.length > 6) s1.dragSamples.shift();
     };
-    const onPointerUp = (e: PointerEvent) => {
+
+    const release = (e: PointerEvent, flick: boolean) => {
       const s2 = st();
-      if (!s2 || !s2.dragging) return;
+      if (!s2 || !s2.dragging || e.pointerId !== s2.pointerId) return;
       s2.dragging = false;
-      scroller.classList.remove(s.dragging ?? "");
+      s2.pointerId = null;
+      viewport.classList.remove(s.dragging ?? "");
       if (!s2.dragMoved) {
-        // клик: pointer capture меняет цель click, хит-тестим вручную
+        // клик: цель — кликнутая карточка (data-slide-idx = индекс узла)
         const el = document.elementFromPoint(e.clientX, e.clientY);
-        const host = el?.closest<HTMLElement>("[data-card-idx]");
-        if (host) {
-          const r = host.getBoundingClientRect();
-          const off = r.left + r.width / 2 - window.innerWidth / 2;
-          stepCarousel(Math.abs(off) < r.width / 4 ? 0 : Math.sign(off));
-        }
+        const host = el?.closest<HTMLElement>("[data-slide-idx]");
+        if (host) selectNode(Number(host.dataset.slideIdx));
         return;
       }
-      // инерция: проецируем скорость мыши на соседний слайд
-      const last = s2.dragSamples.at(-1);
-      if (!last) return;
-      const dt = Math.max(performance.now() - last.t, 1);
-      const vx = (e.clientX - last.x) / dt; // px/ms, минус — тянем влево
-      const { snapArr } = snapModel(tierOf(), scroller.clientWidth);
-      const projected = scroller.scrollLeft - vx * 110;
-      let best = 0;
-      let bestDist = Math.abs((snapArr[0] ?? 0) - projected);
-      for (let g = 1; g < N * COPIES; g++) {
-        const d = Math.abs((snapArr[g] ?? 0) - projected);
-        if (d < bestDist) {
-          bestDist = d;
-          best = g;
+      const { snapArr } = snapModel(tierOf(), viewport.clientWidth);
+      let best = nearestIndex(s2.p, snapArr);
+      if (flick) {
+        // скорость по окну ~100мс: последний сэмпл к моменту up почти
+        // всегда стоит на месте (движения склеиваются в кадр), оконная
+        // скорость ловит бросок даже при остановившемся указателе
+        const now = performance.now();
+        const windowStart = now - 100;
+        const last = s2.dragSamples.at(-1);
+        const ref = s2.dragSamples.find((smp) => smp.t >= windowStart);
+        if (last && ref && last.t - ref.t >= 0 && last.t >= windowStart) {
+          const dt = Math.max(now - ref.t, 1);
+          const vP = -(e.clientX - ref.x) / dt; // скорость p, px/мс
+          // бросок двигает ленту на одну карточку, только если тягой
+          // порог половины шага не взят (иначе ближайшая уже следующая)
+          if (Math.abs(vP) > 0.5 && best === nearestIndex(s2.dragStartP, snapArr)) {
+            best = clamp(best + Math.sign(vP), 1, G - 2);
+          }
         }
       }
-      const cur = snapArr.reduce((a, x, gi) => (Math.abs(x - scroller.scrollLeft) < Math.abs((snapArr[a] ?? 0) - scroller.scrollLeft) ? gi : a), 0);
-      const chosen = clamp(best, cur - 1, cur + 1);
-      scroller.scrollTo({ left: snapArr[chosen] ?? 0, behavior: "smooth" });
+      animateTo(snapArr[best] ?? s2.p);
     };
-    scroller.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp);
+
+    const onPointerUp = (e: PointerEvent) => release(e, true);
+    const onPointerCancel = (e: PointerEvent) => release(e, false);
+
+    viewport.addEventListener("pointerdown", onPointerDown);
+    viewport.addEventListener("pointermove", onPointerMove);
+    viewport.addEventListener("pointerup", onPointerUp);
+    viewport.addEventListener("pointercancel", onPointerCancel);
     return () => {
-      scroller.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
+      viewport.removeEventListener("pointerdown", onPointerDown);
+      viewport.removeEventListener("pointermove", onPointerMove);
+      viewport.removeEventListener("pointerup", onPointerUp);
+      viewport.removeEventListener("pointercancel", onPointerCancel);
     };
-  }, [stepCarousel, stateRef]);
+  }, [animateTo, render, selectNode]);
+
+  // Shift+Scroll и горизонтальный трекпад — шаг ровно на одну карточку;
+  // события во время анимации глотаются (накопления нет). Вертикальное
+  // колесо не наша ось — скроллит страницу.
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const onWheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+      e.preventDefault();
+      const st = stateRef.current;
+      if (!st || st.anim || st.dragging) return;
+      const { snapArr } = snapModel(tierOf(), viewport.clientWidth);
+      const cur = nearestIndex(st.p, snapArr);
+      const g = clamp(cur + (e.deltaX > 0 ? 1 : -1), 1, G - 2);
+      animateTo(snapArr[g] ?? st.p);
+    };
+    viewport.addEventListener("wheel", onWheel, { passive: false });
+    return () => viewport.removeEventListener("wheel", onWheel);
+  }, [animateTo]);
 
   return (
     <section id="showcase" className="mt-24 scroll-mt-[88px] desk:mt-[156px] desk:scroll-mt-[104px]">
@@ -427,17 +573,14 @@ export function Showcase() {
                     return (
                       <button
                         key={`${c}-${card.key}`}
+                        ref={(el) => {
+                          plateNodes.current[g] = el;
+                        }}
                         type="button"
-                        data-card-idx={i}
                         aria-label={`Показать: ${card.name}`}
                         className={s.plate}
                         style={{ "--k": g === INITIAL ? 1 : 0 } as CSSProperties}
-                        onClick={(e) => {
-                          if (stateRef.current?.dragMoved) return;
-                          const r = e.currentTarget.getBoundingClientRect();
-                          const off = r.left + r.width / 2 - window.innerWidth / 2;
-                          stepCarousel(Math.abs(off) < r.width / 4 ? 0 : Math.sign(off));
-                        }}
+                        onClick={() => selectNode(g)}
                       >
                         <Image src={card.avatar} alt="" className={s.plateIcon} sizes="52px" />
                         <span className={s.plateText}>
@@ -454,61 +597,58 @@ export function Showcase() {
               <div className={s.fadeStripRight} />
             </div>
             <div className={s.viewport}>
-              <div ref={scrollerRef} className={s.scroller}>
-                {Array.from({ length: COPIES }, (_, c) =>
-                  CARDS.map((card, i) => {
-                    const g = c * N + i;
-                    const near = c === 1;
-                    return (
-                      <div
-                        key={`${c}-${card.key}`}
-                        data-card-idx={i}
-                        role="button"
-                        tabIndex={near ? 0 : -1}
-                        aria-label={`Показать: ${card.name}`}
-                        className={s.slide}
-                        style={{ "--k": g === INITIAL ? 1 : 0 } as CSSProperties}
-                        onClick={(e) => {
-                          if (stateRef.current?.dragMoved) return;
-                          const r = e.currentTarget.getBoundingClientRect();
-                          const off = r.left + r.width / 2 - window.innerWidth / 2;
-                          stepCarousel(Math.abs(off) < r.width / 4 ? 0 : Math.sign(off));
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            const r = e.currentTarget.getBoundingClientRect();
-                            const off = r.left + r.width / 2 - window.innerWidth / 2;
-                            stepCarousel(Math.abs(off) < r.width / 4 ? 0 : Math.sign(off));
-                          }
-                        }}
-                      >
-                        <Image
-                          src={card.photo}
-                          alt=""
-                          fill
-                          draggable={false}
-                          loading={near ? "eager" : "lazy"}
-                          sizes="(min-width: 1200px) 1000px, (min-width: 481px) 500px, 300px"
-                          className={s.slidePhoto}
-                        />
-                        <div className={s.card}>
-                          <div className={s.cardGlass} />
-                          <div className={s.cardName}>{card.name}</div>
-                          <div className={s.cardRows}>
-                            {card.specs.map(([label, value]) => (
-                              <div key={label} className={s.cardRow}>
-                                <span className={s.cardLabel}>{label}</span>
-                                <span className={s.cardValue}>{value}</span>
-                              </div>
-                            ))}
+              <div ref={viewportRef} className={s.scroller}>
+                <div ref={photoTrackRef} className={s.track}>
+                  {Array.from({ length: COPIES }, (_, c) =>
+                    CARDS.map((card, i) => {
+                      const g = c * N + i;
+                      const near = c === 1;
+                      return (
+                        <div
+                          key={`${c}-${card.key}`}
+                          ref={(el) => {
+                            slideNodes.current[g] = el;
+                          }}
+                          data-slide-idx={g}
+                          role="button"
+                          tabIndex={near ? 0 : -1}
+                          aria-label={`Показать: ${card.name}`}
+                          className={s.slide}
+                          style={{ "--k": g === INITIAL ? 1 : 0 } as CSSProperties}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              selectNode(g);
+                            }
+                          }}
+                        >
+                          <Image
+                            src={card.photo}
+                            alt=""
+                            fill
+                            draggable={false}
+                            loading={near ? "eager" : "lazy"}
+                            sizes="(min-width: 1200px) 1000px, (min-width: 481px) 500px, 300px"
+                            className={s.slidePhoto}
+                          />
+                          <div className={s.card}>
+                            <div className={s.cardGlass} />
+                            <div className={s.cardName}>{card.name}</div>
+                            <div className={s.cardRows}>
+                              {card.specs.map(([label, value]) => (
+                                <div key={label} className={s.cardRow}>
+                                  <span className={s.cardLabel}>{label}</span>
+                                  <span className={s.cardValue}>{value}</span>
+                                </div>
+                              ))}
+                            </div>
+                            <div className={s.cardRing} />
                           </div>
-                          <div className={s.cardRing} />
                         </div>
-                      </div>
-                    );
-                  }),
-                )}
+                      );
+                    }),
+                  )}
+                </div>
               </div>
               <div className={s.fadePhotoLeft} />
               <div className={s.fadePhotoRight} />

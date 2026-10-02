@@ -254,31 +254,35 @@
   transform: translateX(-50%);
 }
 
+/* Окно ленты: высота зафиксирована по центральной карточке — морфинг
+   боковых размеров не двигает контент под каруселью (фикс прыжка
+   кнопки «Попробовать»). Нативного скролла нет: позицию кладёт
+   translate3d дорожки (движок в showcase.tsx). touch-action: pan-y —
+   вертикальный жест на таче остаётся скроллом страницы. */
 .scroller {
+  height: var(--h);
+  overflow: hidden;
+  cursor: grab;
+  touch-action: pan-y;
+}
+
+.track {
   display: flex;
   align-items: center;
   gap: var(--gap);
-  overflow-x: auto;
-  overflow-y: hidden;
-  scroll-snap-type: x mandatory;
-  scrollbar-width: none;
-  cursor: grab;
-}
-
-.scroller::-webkit-scrollbar {
-  display: none;
+  height: 100%;
+  width: max-content;
+  will-change: transform;
 }
 
 .dragging {
   cursor: grabbing;
-  scroll-snap-type: none;
   user-select: none;
 }
 
 .slide {
   position: relative;
   flex-shrink: 0;
-  scroll-snap-align: center;
   display: flex;
   align-items: center;
   justify-content: center;
