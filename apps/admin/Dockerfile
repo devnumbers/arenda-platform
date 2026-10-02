@@ -22,7 +22,13 @@ FROM nginxinc/nginx-unprivileged:1.29.4-alpine@sha256:a6c4f61f456b85b8fdf7ec7ab2
 
 USER root
 
-RUN apk update \
+# Bump APK_REFRESH to re-pull security fixes from the alpine repo: the value
+# is referenced in the layer below, so a change invalidates the build cache —
+# otherwise the layer stays cached with the packages frozen at the old date.
+ARG APK_REFRESH=2026-10-02
+
+RUN echo "apk refresh: ${APK_REFRESH}" \
+    && apk update \
     && apk upgrade --no-cache \
     && rm -rf /var/cache/apk/*
 
