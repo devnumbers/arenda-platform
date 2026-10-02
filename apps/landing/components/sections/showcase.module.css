@@ -327,8 +327,11 @@
   position: absolute;
   inset: 0;
   background: rgba(0, 0, 0, 0.24);
-  backdrop-filter: blur(calc(var(--blur-side) + (var(--blur) - var(--blur-side)) * var(--k)));
+  /* Порядок важен: Lightning CSS при минификации оставляет из пары
+     алиасов последнюю декларацию — стандартный backdrop-filter должен
+     быть последним, иначе из бандла уезжает и блюр пропадает */
   -webkit-backdrop-filter: blur(calc(var(--blur-side) + (var(--blur) - var(--blur-side)) * var(--k)));
+  backdrop-filter: blur(calc(var(--blur-side) + (var(--blur) - var(--blur-side)) * var(--k)));
   border-radius: inherit;
 }
 
