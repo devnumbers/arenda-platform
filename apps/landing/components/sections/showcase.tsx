@@ -172,8 +172,6 @@ function tierOf(): Tier {
   return "mob";
 }
 
-const lerp = (side: number, center: number, k: number) => side + (center - side) * k;
-
 // Узел ленты, ближайший к позиции p, — по позициям покоя модели.
 function nearestIndex(p: number, snapArr: readonly number[]): number {
   let best = 0;
@@ -220,7 +218,15 @@ type EngineState = {
   dragStartX: number;
   dragStartP: number;
   dragSamples: Array<{ t: number; x: number }>;
+  lastWheelT: number;
 };
+
+// Разрыв между горизонтальными wheel-событиями, после которого поток
+// считается новым жестом. Моментум трекпада живёт заметно дольше 360мс
+// анимации (замер: 24 события за ~850мс проматывали 4 карточки) —
+// глотания на время анимации недостаточно, хвост того же жеста
+// отсекается окном тишины (решение владельца 02.10).
+const WHEEL_GESTURE_GAP_MS = 300;
 
 export function Showcase() {
   const [mounted, setMounted] = useState(false);
@@ -263,22 +269,18 @@ export function Showcase() {
       }
     }
     photoTrack.style.transform = `translate3d(${(-p).toFixed(2)}px,0,0)`;
-    // Плашки: транслируем ряд так, чтобы активная (непрерывный индекс)
-    // сидела по центру зоны; ширины плашек берём из тех же k.
-    const pillW = (i: number) => lerp(m.plateSide, m.plate, k[Math.min(i, G - 1)] ?? 0);
+    // Плашки: транслейт линейно по p между позициями покоя — плашечный
+    // ряд скользит с той же кривой, что и фото (frac линеен по p), и
+    // прибывает ровно в центр. Формула через накопление текущих ширин
+    // здесь не годится: при смене активного индекса она даёт скачок
+    // (centerW−sideW)/2 — найдено замером (44.7px на прибытии).
+    const pitch = m.plateSide + m.plateGap;
     let gLo = 0;
     while (gLo < G - 1 && (snapArr[gLo + 1] ?? 0) <= p) gLo += 1;
     const next = snapArr[Math.min(gLo + 1, G - 1)] ?? 0;
     const span = Math.max(next - (snapArr[gLo] ?? 0), 1);
     const frac = clamp((p - (snapArr[gLo] ?? 0)) / span, 0, 1);
-    const activeFloat = gLo + frac;
-    let centerOffset = 0;
-    for (let j = 0; j < Math.floor(activeFloat); j += 1) centerOffset += pillW(j) + m.plateGap;
-    centerOffset +=
-      (activeFloat - Math.floor(activeFloat)) *
-      (pillW(Math.min(Math.floor(activeFloat) + 1, G - 1)) + m.plateGap);
-    centerOffset += pillW(Math.floor(activeFloat)) / 2;
-    const tx = zone.clientWidth / 2 - centerOffset;
+    const tx = zone.clientWidth / 2 - (gLo * pitch + m.plate / 2) - frac * pitch;
     strip.style.transform = `translateX(${tx.toFixed(1)}px)`;
   }, []);
 
@@ -387,6 +389,7 @@ export function Showcase() {
       dragStartX: 0,
       dragStartP: 0,
       dragSamples: [],
+      lastWheelT: 0,
     };
     const measure = () => {
       const st0 = stateRef.current;
@@ -526,8 +529,9 @@ export function Showcase() {
     };
   }, [animateTo, render, selectNode]);
 
-  // Shift+Scroll и горизонтальный трекпад — шаг ровно на одну карточку;
-  // события во время анимации глотаются (накопления нет). Вертикальное
+  // Shift+Scroll и горизонтальный трекпад — шаг ровно на одну карточку
+  // РАЗ В ЖЕСТ: первое событие после паузы длиннее окна тишины шагает,
+  // весь хвост моментума (события короче окна) игнорируется. Вертикальное
   // колесо не наша ось — скроллит страницу.
   useEffect(() => {
     const viewport = viewportRef.current;
@@ -536,7 +540,11 @@ export function Showcase() {
       if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
       e.preventDefault();
       const st = stateRef.current;
-      if (!st || st.anim || st.dragging) return;
+      if (!st) return;
+      const now = performance.now();
+      const newGesture = now - st.lastWheelT > WHEEL_GESTURE_GAP_MS;
+      st.lastWheelT = now;
+      if (!newGesture || st.anim || st.dragging) return;
       const { snapArr } = snapModel(tierOf(), viewport.clientWidth);
       const cur = nearestIndex(st.p, snapArr);
       const g = clamp(cur + (e.deltaX > 0 ? 1 : -1), 1, G - 2);
