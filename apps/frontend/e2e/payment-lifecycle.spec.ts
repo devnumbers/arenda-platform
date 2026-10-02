@@ -189,8 +189,14 @@ test.describe('сквозная жизнь платежа', () => {
     await expect(page.getByText('Платеж больше не в избранном')).toBeVisible();
 
     // «Ближайший» на графике — материализованная операция с сервера;
-    // «Следующие» — клиентская проекция (#466).
-    await page.getByRole('button', { name: 'График платежей', exact: true }).click();
+    // «Следующие» — клиентская проекция (#466). Вход — строкой ближайшего
+    // (плитки подэкранов снесены, #1073).
+    await page
+      .locator('section')
+      .filter({ has: page.getByRole('heading', { name: 'Ближайший платеж' }) })
+      .getByRole('button')
+      .first()
+      .click();
     await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+/schedule$`));
     await expect(page.getByText('Ближайший').first()).toBeVisible();
     await expect(page.getByText('Следующие').first()).toBeVisible();
@@ -226,7 +232,7 @@ test.describe('сквозная жизнь платежа', () => {
     await expect(page.getByRole('button', { name: 'Оплатить' })).toBeEnabled();
 
     // ── История: запись «Сегодня» с минусом у расхода ──
-    await page.getByRole('button', { name: 'История операций', exact: true }).click();
+    await page.getByRole('button', { name: 'Открыть историю операций' }).click();
     await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+/history$`));
     await expect(page.getByText('Сегодня', { exact: true })).toBeVisible();
     await expect(page.getByText('-1 990 ₽').first()).toBeVisible();

@@ -63,14 +63,20 @@ async function expectMoreAfterScroll(
 test.describe('подэкран «График платежей»', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test('вход по плитке; «Ближайший» из операций и проекция «Следующих»; скриншот', async ({
+  test('вход строкой ближайшего; «Ближайший» из операций и проекция «Следующих»; скриншот', async ({
     page,
     seededUser,
   }, testInfo) => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto(PAYMENT_URLS.rent);
 
-    await page.getByRole('button', { name: 'График платежей', exact: true }).click();
+    // Вход — строкой ближайшего (плитки подэкранов снесены, #1073).
+    await page
+      .locator('section')
+      .filter({ has: page.getByRole('heading', { name: 'Ближайший платеж' }) })
+      .getByRole('button')
+      .first()
+      .click();
     await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+/schedule$`));
     await expect(page.getByText('График платежей').first()).toBeVisible();
 
@@ -91,9 +97,8 @@ test.describe('подэкран «График платежей»', () => {
 
   test('скролл-догрузка проекции: 50 → больше 50', async ({ page, seededUser }) => {
     await openCabinetWithSeededSession(page, seededUser);
-    await page.goto(PAYMENT_URLS.parking);
+    await page.goto(`${PAYMENT_URLS.parking}/schedule`);
 
-    await page.getByRole('button', { name: 'График платежей', exact: true }).click();
     const parkingRows = page.getByText('Парковка');
     await expectFirstPage(parkingRows);
     await expectMoreAfterScroll(page, parkingRows, 51);
@@ -123,7 +128,7 @@ test.describe('подэкран «История платежей»', () => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto(PAYMENT_URLS.internet);
 
-    await page.getByRole('button', { name: 'История операций', exact: true }).click();
+    await page.getByRole('button', { name: 'Открыть историю операций' }).click();
     await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+/history$`));
 
     await expect(page.getByText('Сегодня', { exact: true })).toBeVisible();

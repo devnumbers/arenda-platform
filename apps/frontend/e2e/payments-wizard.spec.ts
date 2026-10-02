@@ -679,7 +679,9 @@ test.describe('визард создания платежа', () => {
     await expect(page.getByText('Платеж завершен')).toBeVisible();
 
     // И в графике — то же завершённое состояние вместо «ближайших» дат.
-    await page.getByRole('button', { name: 'График платежей', exact: true }).click();
+    // Плиток больше нет (#1073), у завершённого нет и строки ближайшего —
+    // вход по прямому URL подэкрана.
+    await page.goto(`${page.url()}/schedule`);
     await expect(page.getByText('Платеж завершен')).toBeVisible();
     await expect(page.getByText('Следующие')).toHaveCount(0);
   });
