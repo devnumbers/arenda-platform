@@ -60,11 +60,6 @@ export function clearPaymentWizardDraft(propertyId: string, type: PaymentDraftTy
   clearDraftStorage(paymentDraftStorageKey(propertyId, type), 'local');
 }
 
-export function clearPaymentWizardDrafts(propertyId: string): void {
-  clearPaymentWizardDraft(propertyId, 'payment');
-  clearPaymentWizardDraft(propertyId, 'autopayment');
-}
-
 export function usePaymentWizardDraft(
   propertyId: string,
   type: PaymentDraftType,

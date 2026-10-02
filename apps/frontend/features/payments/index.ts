@@ -1,6 +1,5 @@
 export {
   clearPaymentWizardDraft,
-  clearPaymentWizardDrafts,
   latestPaymentDraftType,
   paymentDraftStorageKey,
   usePaymentWizardDraft,
@@ -40,6 +39,11 @@ export {
   type WizardStep,
 } from './lib/wizard-model';
 export { successScreenCopy, type SuccessScreenCopyInput } from './lib/success-copy';
+export {
+  paymentAddSheetState,
+  type PaymentAddSheetState,
+} from './lib/payment-add-sheet-model';
+export { PaymentsAddSheet } from './ui/payments-add-sheet';
 export {
   isOperationPayable,
   isPaymentCompleted,

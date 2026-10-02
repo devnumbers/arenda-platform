@@ -1,3 +1,4 @@
+import type { Locator, Page } from '@playwright/test';
 import { paymentDraftStorageKey } from '@/features/payments';
 import {
   captureScreen,
@@ -224,6 +225,135 @@ test.describe('экран «Платежи объекта»', () => {
     await page.getByRole('button', { name: PAYMENT_CARD }).click();
     await expect(page).toHaveURL(`${APARTMENT_PAYMENTS_URL}/new?type=payment`);
     await expect(page.getByRole('heading', { name: 'Категория платежа' })).toBeVisible();
+  });
+});
+
+test.describe('входы в создание с проверкой черновика (#1066)', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  const GARAGE_PROPERTY_URL = `/properties/${SEEDED_GARAGE_PROPERTY_ID}`;
+  const GARAGE_DRAFT_KEY = paymentDraftStorageKey(SEEDED_GARAGE_PROPERTY_ID, 'payment');
+  const APARTMENT_AUTO_DRAFT_KEY = paymentDraftStorageKey(SEEDED_APARTMENT_PROPERTY_ID, 'autopayment');
+
+  /** CTA «Добавить» пустой секции «Регулярные платежи» на странице объекта:
+   * у гаража пустых секций несколько — якорим к заголовку пустой платежной. */
+  const paymentsSectionCta = (page: Page): Locator =>
+    page
+      .locator('section')
+      .filter({ hasText: 'Платежи не добавлены' })
+      .getByRole('button', { name: 'Добавить' });
+
+  /** Посеять валидный черновик платежа гаража до загрузки экрана. */
+  const seedGarageDraft = async (page: Page): Promise<void> => {
+    await page.addInitScript(
+      ([key, value]) => {
+        window.localStorage.setItem(key ?? '', value ?? '');
+      },
+      [
+        GARAGE_DRAFT_KEY,
+        JSON.stringify({ categorySlug: 'rent', title: 'Аренда гаража', updatedAt: 1756400000000 }),
+      ],
+    );
+  };
+
+  test('страница объекта, пустая секция: с черновиком — «У вас есть черновик», «Продолжить» resume-ит', async ({
+    page,
+    seededUser,
+  }) => {
+    await openCabinetWithSeededSession(page, seededUser);
+    await seedGarageDraft(page);
+    await page.goto(GARAGE_PROPERTY_URL);
+
+    // Раньше CTA кидал straight в визард, молча возобновляя черновик (#1066).
+    await paymentsSectionCta(page).click();
+    await expect(page.getByRole('heading', { name: 'У вас есть черновик' })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Продолжить черновик' }).click();
+    await expect(page).toHaveURL(`${GARAGE_PROPERTY_URL}/payments/new?type=payment`);
+    // Категория и название в черновике — resume на шаге периодичности.
+    await expect(page.getByRole('heading', { name: 'Периодичность платежа' })).toBeVisible();
+  });
+
+  test('страница объекта, пустая секция: без черновика — выбор типа, как на странице платежей', async ({
+    page,
+    seededUser,
+  }) => {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto(GARAGE_PROPERTY_URL);
+
+    await paymentsSectionCta(page).click();
+    await expect(page.getByRole('heading', { name: 'Выберите тип платежа' })).toBeVisible();
+    await expect(page.getByRole('button', { name: PAYMENT_CARD })).toBeVisible();
+    await expect(page.getByRole('button', { name: AUTOPAYMENT_CARD })).toBeVisible();
+
+    await page.getByRole('button', { name: PAYMENT_CARD }).click();
+    await expect(page).toHaveURL(`${GARAGE_PROPERTY_URL}/payments/new?type=payment`);
+    await expect(page.getByRole('heading', { name: 'Категория платежа' })).toBeVisible();
+  });
+
+  test('каталог «Все платежи»: с черновиком «Создать новый» ведёт в чистый визард своего типа', async ({
+    page,
+    seededUser,
+  }) => {
+    await openCabinetWithSeededSession(page, seededUser);
+    const draftKey = paymentDraftStorageKey(SEEDED_APARTMENT_PROPERTY_ID, 'payment');
+    await page.addInitScript(
+      ([key, value]) => {
+        window.localStorage.setItem(key ?? '', value ?? '');
+      },
+      [draftKey, JSON.stringify({ categorySlug: 'rent', title: 'Арендная плата', updatedAt: 1756400000000 })],
+    );
+    await page.goto(`${APARTMENT_PAYMENTS_URL}/all`);
+
+    await page.getByRole('button', { name: 'Добавить платеж' }).click();
+    await expect(page.getByRole('heading', { name: 'У вас есть черновик' })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Создать новый' }).click();
+    await expect(page).toHaveURL(`${APARTMENT_PAYMENTS_URL}/new?type=payment`);
+    // Фиксированный тип: фазы выбора нет — сразу чистый визард шага 1.
+    await expect(page.getByRole('heading', { name: 'Категория платежа' })).toBeVisible();
+    const storedAfterDiscard = await page.evaluate(
+      (key) => window.localStorage.getItem(key),
+      draftKey,
+    );
+    expect(storedAfterDiscard).toBeNull();
+  });
+
+  test('каталог «Все платежи»: без черновика — прежний прямой вход в визард', async ({
+    page,
+    seededUser,
+  }) => {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto(`${APARTMENT_PAYMENTS_URL}/all`);
+
+    await page.getByRole('button', { name: 'Добавить платеж' }).click();
+    await expect(page).toHaveURL(`${APARTMENT_PAYMENTS_URL}/new?type=payment`);
+    await expect(page.getByRole('heading', { name: 'У вас есть черновик' })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Категория платежа' })).toBeVisible();
+  });
+
+  test('каталог «Автоплатежи»: черновик автоплатежа — модалка, «Продолжить» resume-ит автоплатеж', async ({
+    page,
+    seededUser,
+  }) => {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.addInitScript(
+      ([key, value]) => {
+        window.localStorage.setItem(key ?? '', value ?? '');
+      },
+      [
+        APARTMENT_AUTO_DRAFT_KEY,
+        JSON.stringify({ categorySlug: 'rent', title: 'Автоплатёж аренды', updatedAt: 1756400000000 }),
+      ],
+    );
+    await page.goto(`${APARTMENT_PAYMENTS_URL}/auto`);
+
+    await page.getByRole('button', { name: 'Добавить автоплатеж' }).click();
+    await expect(page.getByRole('heading', { name: 'У вас есть черновик' })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Продолжить черновик' }).click();
+    await expect(page).toHaveURL(`${APARTMENT_PAYMENTS_URL}/new?type=autopayment`);
+    await expect(page.getByRole('heading', { name: 'Периодичность платежа' })).toBeVisible();
   });
 });
 

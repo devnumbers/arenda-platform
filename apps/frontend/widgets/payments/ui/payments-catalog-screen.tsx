@@ -1,15 +1,19 @@
 'use client';
 
-import { type JSX } from 'react';
+import { useState } from 'react';
+import type { JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
+  PaymentsAddSheet,
   usePayments,
+  usePaymentWizardDraft,
   usePropertyOperationsPaged,
   usePropertyOverdueOperations,
+  type PaymentDraftType,
 } from '@/features/payments';
 import { useProperty } from '@/features/properties';
 import { propertyPermissions } from '@/entities/property';
@@ -38,8 +42,9 @@ import {
  * (строки с red-стилизацией, порции по 50 со скроллом), все платежи и
  * автоплатежи (правила в порядке ближайшего вхождения; паузные показываются
  * — «там уже всё видно», в отличие от главного экрана). Пустое состояние —
- * иллюстрация и пояснение по фреймам; кнопка «Добавить …» ведёт прямо в
- * визард нужного типа и скрыта у смотрящего (история 47) и на архиве (#446).
+ * иллюстрация и пояснение по фреймам; кнопка «Добавить …» сверяется с
+ * черновиком своего типа (#1066): есть — модалка черновика, нет — straight
+ * в визард нужного типа; скрыта у смотрящего (история 47) и на архиве (#446).
  */
 
 export type PaymentsCatalogVariant = 'overdue' | 'payments' | 'auto';
@@ -87,6 +92,16 @@ export function PaymentsCatalogScreen({
   const property = propertyQuery.isSuccess ? propertyQuery.data : undefined;
   const canMutate = propertyPermissions(property).canEdit;
 
+  // Вход с известным типом (#1066): черновик своего типа есть — модалка
+  // «У вас есть черновик», нет — прежний прямой вход в визард. Черновик
+  // читается синхронно на клиенте, гонки на клик нет.
+  const draftType: PaymentDraftType = variant === 'payments' ? 'payment' : 'autopayment';
+  const draft = usePaymentWizardDraft(propertyId, draftType);
+  const [draftSheetOpen, setDraftSheetOpen] = useState(false);
+
+  const goWizard = (): void =>
+    router.push(ROUTES.propertyPaymentNew(propertyId, draftType));
+
   return (
     <>
       <TopNav
@@ -110,12 +125,18 @@ export function PaymentsCatalogScreen({
       </PageContent>
 
       {canMutate && variant !== 'overdue' && (
-        <StickyAddButton
-          label={variant === 'payments' ? 'Добавить платеж' : 'Добавить автоплатеж'}
-          onClick={() =>
-            router.push(ROUTES.propertyPaymentNew(propertyId, variant === 'payments' ? 'payment' : 'autopayment'))
-          }
-        />
+        <>
+          <StickyAddButton
+            label={variant === 'payments' ? 'Добавить платеж' : 'Добавить автоплатеж'}
+            onClick={() => (draft.hasDraft ? setDraftSheetOpen(true) : goWizard())}
+          />
+          <PaymentsAddSheet
+            propertyId={propertyId}
+            open={draftSheetOpen}
+            onOpenChange={setDraftSheetOpen}
+            fixedType={draftType}
+          />
+        </>
       )}
     </>
   );
@@ -260,7 +281,8 @@ function CatalogEmpty({
   );
 }
 
-/** Закреплённая кнопка добавления — вход сразу в визард нужного типа. */
+/** Закреплённая кнопка добавления: черновик своего типа есть — модалка
+ * черновика (#1066), нет — вход сразу в визард нужного типа. */
 function StickyAddButton({
   label,
   onClick,

@@ -29,8 +29,11 @@ import {
 import { dateToIsoLocal } from '@/shared/lib/calendar';
 import type { Payment } from '@/entities/payment';
 import { daysOverdue } from '../lib/overdue-days';
-import { overduePaymentIdsOf, sortPaymentsByNextOccurrence } from '@/features/payments';
-import { PaymentsAddSheet } from './payments-add-sheet';
+import {
+  overduePaymentIdsOf,
+  PaymentsAddSheet,
+  sortPaymentsByNextOccurrence,
+} from '@/features/payments';
 import {
   PaymentRow,
   PaymentsSection,

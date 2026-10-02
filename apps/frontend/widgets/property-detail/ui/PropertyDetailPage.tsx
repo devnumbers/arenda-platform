@@ -24,6 +24,7 @@ import {
   operationsMonthOf,
   operationsMonthRange,
   overduePaymentIdsOf,
+  PaymentsAddSheet,
   usePayments,
   usePropertyOperationsSummary,
   usePropertyOverdueOperations,
@@ -230,6 +231,10 @@ export function PropertyDetailPage(): JSX.Element {
     const [pinSheetOpen, setPinSheetOpen] = React.useState(false);
     const [archiveOpen, setArchiveOpen] = React.useState(false);
     const [deleteOpen, setDeleteOpen] = React.useState(false);
+    // Канонный шит «Добавить платёж» пустой секции «Регулярные платежи»
+    // (#1066): проверка черновика и выбор типа — как на странице платежей
+    // объекта.
+    const [paymentsSheetOpen, setPaymentsSheetOpen] = React.useState(false);
     // Шит выхода участника (#703, макет 2235-100370): «Управление» →
     // «Покинуть объект» — канон-подтверждение #701 и возврат к объектам.
     const [leaveOpen, setLeaveOpen] = React.useState(false);
@@ -569,7 +574,10 @@ export function PropertyDetailPage(): JSX.Element {
 
     const sectionCTAs: Record<PropertyDetailSectionKey, (() => void) | undefined> = {
         rental: () => router.push(ROUTES.propertyRentalNew(id)),
-        payments: () => router.push(ROUTES.propertyPaymentNew(id, 'payment')),
+        // Вход в создание платежа — через канонный шит с проверкой
+        // черновика (#1066): раньше секция кидала straight в визард,
+        // молча возобновляя черновик.
+        payments: () => setPaymentsSheetOpen(true),
         operations: undefined,
         contacts: () => router.push(ROUTES.propertyContactNew(id)),
         tasks: () => router.push(ROUTES.propertyTaskCreate(id)),
@@ -1013,6 +1021,15 @@ export function PropertyDetailPage(): JSX.Element {
                     Будут удалены данные аренд объекта, все операции объекта, платежи, контакты и задачи, связанные с объектом. Это действие нельзя отменить
                 </p>
             </ConfirmDialog>
+
+            {/* Шит «Добавить платёж» CTA пустой секции «Регулярные платежи»
+             * (#1066): тот же канонный вход с проверкой черновика, что и
+             * кнопка «Добавить» на странице платежей объекта. */}
+            <PaymentsAddSheet
+                propertyId={id}
+                open={paymentsSheetOpen}
+                onOpenChange={setPaymentsSheetOpen}
+            />
         </>
     );
 }

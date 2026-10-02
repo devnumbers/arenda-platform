@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { JSX } from "react";
 import { useRouter } from "next/navigation";
 import NextLink from "next/link";
@@ -8,8 +9,10 @@ import { ROUTES } from "@/shared/config/routes";
 import { propertyPermissions } from "@/entities/property";
 import { useProperties } from "@/features/properties";
 import {
+  PaymentsAddSheet,
   useGlobalPaymentObjects,
   useGlobalPayments,
+  usePaymentWizardDraft,
 } from "@/features/payments";
 import { CategoryIcon } from "@/features/payment-categories";
 import type {
@@ -126,16 +129,10 @@ export function PaymentsObjectsScreen(): JSX.Element {
       <PageContent>
         {showEmptyState && (
           <PaymentsObjectsEmpty
+            propertyId={singleObject.propertyId}
             /* Чистому зрителю CTA не рисуется (#703): единственный объект
              * чужой, визард упёрся бы в отказ сервера. */
-            onAddPayment={
-              canAddOnSingleObject
-                ? () =>
-                    router.push(
-                      ROUTES.propertyPaymentNew(singleObject.propertyId, "payment"),
-                    )
-                : undefined
-            }
+            canAdd={canAddOnSingleObject}
           />
         )}
 
@@ -206,13 +203,27 @@ export function PaymentsObjectsScreen(): JSX.Element {
  * 1041-51460 / 1036-37530, схема глобальных платежей): иллюстрация с
  * текстами прижаты к верху — канон EmptyState; CTA «Добавить платёж»
  * раздвоена по ярусам: на ПК (≥1024) — под текстом, на планшете и мобилке
- * — прижата к низу; ведёт в визард платежа этого объекта; у чистого
+ * — прижата к низу; сверяется с черновиком платежа объекта (#1066):
+ * есть — модалка «У вас есть черновик», нет — straight в визард; у чистого
  * зрителя CTA нет вовсе (#703). Списка и кнопки архива нет. */
 function PaymentsObjectsEmpty({
-  onAddPayment,
+  propertyId,
+  canAdd,
 }: {
-  readonly onAddPayment?: () => void;
+  readonly propertyId: string;
+  readonly canAdd: boolean;
 }): JSX.Element {
+  const router = useRouter();
+  const draft = usePaymentWizardDraft(propertyId, "payment");
+  const [sheetOpen, setSheetOpen] = useState(false);
+
+  const onAddPayment = canAdd
+    ? () =>
+        draft.hasDraft
+          ? setSheetOpen(true)
+          : router.push(ROUTES.propertyPaymentNew(propertyId, "payment"))
+    : undefined;
+
   return (
     <div
       data-testid="payments-objects-empty"
@@ -239,6 +250,14 @@ function PaymentsObjectsEmpty({
         <Button onClick={onAddPayment} className="mt-auto lg:hidden">
           Добавить платёж
         </Button>
+      )}
+      {canAdd && (
+        <PaymentsAddSheet
+          propertyId={propertyId}
+          open={sheetOpen}
+          onOpenChange={setSheetOpen}
+          fixedType="payment"
+        />
       )}
     </div>
   );

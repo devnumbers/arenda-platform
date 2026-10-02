@@ -7,21 +7,29 @@ import { useRouter } from 'next/navigation';
 import { Add, Edit } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import {
-  clearPaymentWizardDrafts,
   latestPaymentDraftType,
   usePaymentWizardDraft,
   type PaymentDraftType,
-} from '@/features/payments';
+} from '../lib/use-payment-wizard-draft';
+import { paymentAddSheetState } from '../lib/payment-add-sheet-model';
 import { Button, Modal, ModalContent } from '@/shared/ui/design';
 
 /**
- * Вход в создание платежа (спека #453, история 13): клик «Добавить»
- * проверяет черновик визарда. Есть черновик — Figma 1134:40451:
- * заголовок «У вас есть черновик» и две кнопки — «Продолжить черновик»
- * (визард того же типа восстанавливается на первый незавершённый шаг)
- * и «Создать новый» (черновики объекта стираются, Figma 837:21376),
- * после которой в той же модалке показывается выбор типа — ровно как
- * без черновика (Figma 847:11688). Черновика нет — выбор типа сразу.
+ * Единый вход в создание платежа (спека #453, история 13): клик «Добавить»
+ * проверяет черновик визарда — на какой бы поверхности ни жил вход (#1066:
+ * страница платежей объекта, страница объекта, каталог секций, глобальные
+ * «Объекты»). Есть черновик — Figma 1134:40451: заголовок «У вас есть
+ * черновик» и две кнопки — «Продолжить черновик» (визард того же типа
+ * восстанавливается на сохранённом шаге) и «Создать новый» (черновики
+ * объекта стираются, Figma 837:21376), после которой в той же модалке
+ * показывается выбор типа — ровно как без черновика (Figma 847:11688).
+ * Черновика нет — выбор типа сразу.
+ *
+ * Режимы: без `fixedType` — шит сам разбирает черновики обоих типов
+ * (состояние — paymentAddSheetState); с `fixedType` (кнопки с заранее
+ * известным типом: «Добавить платеж» каталога, «Добавить платёж» пустых
+ * «Объектов») — модалка черновика своего типа; черновика нет — шит не
+ * открывают вовсе, потребитель ведёт straight в визард (UX прежний).
  * Черновики — usePaymentWizardDraft (localStorage per объект+тип),
  * свежесть — updatedAt в payload: показывается последний тронутый.
  */
@@ -55,12 +63,17 @@ export type PaymentsAddSheetProps = {
   readonly propertyId: string;
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
+  /** Заранее известный тип создания: модалка черновика только этого типа,
+   * фазы выбора нет (её роль играет сам прямой вход при отсутствии
+   * черновика — решение владельца #1066). */
+  readonly fixedType?: PaymentDraftType;
 };
 
 export function PaymentsAddSheet({
   propertyId,
   open,
   onOpenChange,
+  fixedType,
 }: PaymentsAddSheetProps): JSX.Element {
   const router = useRouter();
   // «Создать новый» меняет контент шита на выбор типа, не закрывая
@@ -75,6 +88,7 @@ export function PaymentsAddSheet({
   const latest: PaymentDraftType | undefined = loaded
     ? latestPaymentDraftType(paymentDraft, autopaymentDraft)
     : undefined;
+  const state = paymentAddSheetState(loaded, latest, fixedType);
 
   const goWizard = (type: PaymentDraftType): void => {
     router.push(ROUTES.propertyPaymentNew(propertyId, type));
@@ -89,8 +103,8 @@ export function PaymentsAddSheet({
 
   let title: string;
   let content: JSX.Element | null;
-  if (latest !== undefined && phase === 'draft') {
-    const draftType = latest;
+  if (state.kind === 'draft' && phase === 'draft') {
+    const draftType = state.draftType;
     title = 'У вас есть черновик';
     content = (
       <div className="flex flex-col gap-4">
@@ -106,7 +120,18 @@ export function PaymentsAddSheet({
           className="w-full"
           trailingIcon={<Add />}
           onClick={() => {
-            clearPaymentWizardDrafts(propertyId);
+            // Оба черновика объекта стираются (Figma 837:21376); через
+            // clearDraft хуков, а не storage-хелпер: тот чистит хранилище,
+            // не двигая смонтированные снапшоты, и шит остался бы в
+            // черновик-состоянии.
+            paymentDraft.clearDraft();
+            autopaymentDraft.clearDraft();
+            if (fixedType !== undefined) {
+              // Кнопка с известным типом: выбор-фазы нет — «Создать новый»
+              // сразу ведёт в чистый визард этого типа.
+              goWizard(fixedType);
+              return;
+            }
             setPhase('choice');
           }}
         >
@@ -114,22 +139,29 @@ export function PaymentsAddSheet({
         </Button>
       </div>
     );
-  } else {
+  } else if (state.kind === 'choice') {
     title = 'Выберите тип платежа';
-    content = loaded ? (
+    content = (
       <div className="grid grid-cols-2 gap-2">
         {(Object.keys(TYPE_META) as PaymentDraftType[]).map((type) => (
           <ChoiceCard key={type} type={type} onSelect={() => goWizard(type)} />
         ))}
       </div>
-    ) : null;
+    );
+  } else {
+    // loading: контент не выбираем, чтобы выбор типа не мелькнул перед
+    // черновик-состоянием.
+    title = '';
+    content = null;
   }
 
   return (
     <Modal open={open} onOpenChange={handleOpenChange}>
-      <ModalContent title={title} showClose>
-        {content}
-      </ModalContent>
+      {content !== null && (
+        <ModalContent title={title} showClose>
+          {content}
+        </ModalContent>
+      )}
     </Modal>
   );
 }
