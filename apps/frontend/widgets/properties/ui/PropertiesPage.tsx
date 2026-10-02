@@ -50,7 +50,8 @@ export type PropertiesPageProps = {
  * Экран-хаб «Объекты» (карта #583, тикет #586; Figma 1603:89079 — ПК,
  * 1603:88972 — планшет, 1590:88756 — мобайл, 1603:90604 — пустое): заголовок
  * хаба, поисковая пилюля с «+» создания, ряд сортировки (чип PickerMenu +
- * ссылка «Архив» → экран архива #587; пустой список прячет ряд — DESIGN.md
+ * ссылка «Архив» → экран архива #587; на подтверждённой пустоте ряд
+ * остаётся — «Архив» на обычном месте, чип прячется, #1051 — DESIGN.md
  * §7), список карточек, блюр-карточки подвесших общих объектов (#702),
  * «+ Создать объект» под списком. Компакт-бар — канон хаба: лупа на поиск,
  * заголовок, «+».
@@ -117,8 +118,11 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
   const isEmpty = !isLoading && !isError && visible.length === 0;
   // Ряд сортировки — тулбар хаба: рендерится вне фазы загрузки и не
   // подменяется скелетоном (§7, паритет #604; прецедент хаба «Задачи»
-  // #605), скрывается только на подтверждённой пустоте (§7).
-  const showSortRow = !isEmpty;
+  // #605) и остаётся на подтверждённой пустоте (#1051, решение владельца
+  // 02.10.2026 — вариант 1А «на обычном месте»): когда все объекты в
+  // архиве, хаб без ряда запирал вход в архив. Чип сортировки на пустоте
+  // прячется — канон §7 «пустой список прячет служебные чипы»; «Архив»
+  // остаётся на обычном месте справа.
   // Список и «+ Создать объект» — контент данных, живут только вместе.
   const showList = !isLoading && !isError && !isEmpty;
 
@@ -161,7 +165,12 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
         />
       )}
 
-      {showSortRow && <PropertiesSortRow sort={sort} onChange={changeSort}/>}
+      <PropertiesSortRow
+        sort={sort}
+        onChange={changeSort}
+        showChip={!isEmpty}
+        onOpenArchive={() => router.push(ROUTES.propertyArchive)}
+      />
 
       {isLoading && <PropertiesLoading/>}
 
@@ -282,23 +291,33 @@ function PropertiesSearchPill({
 }
 
 /** Ряд сортировки (1590:88756): чип PickerMenu слева и «Архив» справа
- * (ведёт на экран архива, #587). */
-function PropertiesSortRow({
+ * (ведёт на экран архива, #587). На подтверждённой пустоте чип скрыт
+ * (#1051, канон §7 — сортировать нечего), «Архив» остаётся на обычном
+ * месте справа. Без хуков — вызывается как функция в юнит-тесте
+ * (properties-sort-row.test.ts); роутер живёт на странице. Экспорт —
+ * для юнит-теста, внутрь слайса наружу ряд не уходит. */
+export function PropertiesSortRow({
   sort,
   onChange,
+  showChip,
+  onOpenArchive,
 }: {
   readonly sort: PropertySort;
   readonly onChange: (sort: PropertySort) => void;
+  readonly showChip: boolean;
+  readonly onOpenArchive: () => void;
 }): JSX.Element {
-  const router = useRouter();
   return (
-    <div className="flex items-center justify-between" data-testid="properties-sort-row">
-      <PropertiesSortMenu sort={sort} onChange={onChange}/>
+    <div
+      className={`flex items-center ${showChip ? 'justify-between' : 'justify-end'}`}
+      data-testid="properties-sort-row"
+    >
+      {showChip && <PropertiesSortMenu sort={sort} onChange={onChange}/>}
       <Button
         variant="clear"
         size="small"
         leadingIcon={<Archive/>}
-        onClick={() => router.push(ROUTES.propertyArchive)}
+        onClick={onOpenArchive}
       >
         Архив
       </Button>
@@ -308,8 +327,8 @@ function PropertiesSortRow({
 
 /** Чип сортировки + пикер (меню на 561+ / шит на мобайле — канон
  * PickerMenu): поле и направление — два «радио», выбор применяется сразу
- * (1603:93153 / 1603:91341). */
-function PropertiesSortMenu({
+ * (1603:93153 / 1603:91341). Экспорт — для юнит-теста ряда. */
+export function PropertiesSortMenu({
   sort,
   onChange,
 }: {
