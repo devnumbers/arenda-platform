@@ -118,9 +118,10 @@ test('ПК: пикер периода не накрывает сайдбар, к
   });
   expect(chrome.logoX).toBe(0);
   expect(chrome.pills).toBe(2);
-  // Правое крыло — кнопка профиля в шапке поверхности, у правого края
-  // вьюпорта (паддинг даёт сама кнопка).
-  const profile = surface.locator('header').getByRole('button', { name: /Иван/ });
+  // Правое крыло — ссылка профиля в шапке поверхности, у правого края
+  // вьюпорта (паддинг даёт сама ссылка; решение владельца 02.10 —
+  // UserButton настоящий Link, имя на всех ярусах).
+  const profile = surface.locator('header').getByRole('link', { name: /Иван/ });
   await expect(profile).toBeVisible();
   const profileBox = await profile.boundingBox();
   expect(profileBox).not.toBeNull();

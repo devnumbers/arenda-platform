@@ -56,9 +56,10 @@ const INFO_ROUTES: ReadonlyArray<readonly [string, (page: Page) => Locator]> = [
 ];
 
 const BOTTOM_NAV = 'nav[aria-label="Нижняя навигация"]';
-// Сид-юзер «Иван Иванов» — имя в крыле после загрузки useMe; в pending
-// кнопка — скелетон с aria-label «Профиль» (аудит #876), «Пользователь» —
-// текстовый плейсхолдер вне провайдера.
+// Сид-юзер «Иван Иванов» — имя в крыле после загрузки useMe на всех
+// ярусах (решение владельца 02.10); в pending ссылка — скелетон с
+// aria-label «Профиль» (аудит #876), «Пользователь» — текстовый
+// плейсхолдер вне провайдера.
 const USER_WING = /Пользователь|Иван|Профиль/;
 
 test.describe('дерево профиля — хром #566', () => {
@@ -204,6 +205,42 @@ test.describe('дерево профиля — хром #566', () => {
     await page.goto('/profile/notifications');
     await expect(header.getByRole('button', { name: 'Назад' })).toBeVisible();
     await expect(header.getByRole('link', { name: 'Объекты' })).toHaveCount(0);
+
+    // Крыло профиля на планшете — ссылка: клик с хаба «Уведомлений»
+    // ведёт на /profile (решение владельца 02.10, макет 2329-148674).
+    await page.goto('/notifications');
+    await header.getByRole('link', { name: USER_WING }).click();
+    await expect(page).toHaveURL(/\/profile$/);
+  });
+
+  test('крыло профиля на мобайле — ссылка: клик ведёт на /profile', async ({
+    page,
+    seededUser,
+  }) => {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto('/notifications');
+    const header = screenHeader(page);
+
+    // Слот barTrailing не наезжает на крыло: ниже ПК он живёт в одном
+    // ряду со ссылкой — правый край слота не заходит за левый край
+    // ссылки (ломка «Уведомлений» до фикса: константный клиренс 72 при
+    // раздувшемся крыле). Слот бывает двух видов: кебаб ленты с данными
+    // и шестерёнка пустого состояния — ловим оба.
+    const slot = header.getByRole('button', {
+      name: /Действия с уведомлениями|Настроить уведомления/,
+    });
+    await expect(slot).toBeVisible();
+    const slotBox = await slot.boundingBox();
+    const wingBox = await header.getByRole('link', { name: USER_WING }).boundingBox();
+    expect(slotBox).not.toBeNull();
+    expect(wingBox).not.toBeNull();
+    expect((slotBox?.x ?? 0) + (slotBox?.width ?? 0)).toBeLessThanOrEqual(wingBox?.x ?? 0);
+
+    // Крыло ниже ПК — настоящий Link (решение владельца 02.10, макет
+    // 2329-148674): раньше полноширинный центральный слой бара глотал
+    // клики по краям — «иконка профиля не кликается».
+    await header.getByRole('link', { name: USER_WING }).click();
+    await expect(page).toHaveURL(/\/profile$/);
   });
 });
 
@@ -227,13 +264,13 @@ test.describe('дерево профиля — ПК ≥1024', () => {
     await expect(page.locator(BOTTOM_NAV)).toBeHidden();
   });
 
-  test('вход в дерево по кнопке юзера в хедере', async ({ page, seededUser }) => {
+  test('вход в дерево по ссылке юзера в хедере', async ({ page, seededUser }) => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto('/properties');
     const header = screenHeader(page);
 
-    // «Крыло» UserButton ведёт на /profile.
-    await header.getByRole('button', { name: USER_WING }).click();
+    // «Крыло» UserButton — настоящий Link — ведёт на /profile.
+    await header.getByRole('link', { name: USER_WING }).click();
     await expect(page).toHaveURL(/\/profile$/);
     await expect(header.getByText('Профиль', { exact: true })).toBeVisible();
   });

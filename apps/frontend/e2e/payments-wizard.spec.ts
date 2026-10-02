@@ -191,11 +191,15 @@ test.describe('визард создания платежа', () => {
     await captureScreen(page, testInfo, 'wizard-step5-amount-mobile');
     await page.getByRole('button', { name: 'Создать платеж' }).click();
 
-    // Экран успеха с первым вхождением из серверного ответа.
+    // Экран успеха с первым вхождением из серверного ответа. Канон успеха
+    // (1858:105544/105549): описание и сумма — отдельные узлы, сумма со
+    // знаком (правка 6, a41617f9).
     await expect(page.getByRole('heading', { name: /Вы создали платеж/ })).toContainText(
       `«${title}»`,
     );
-    await expect(page.getByText(/Первый платеж .* на 2\u00A0500 ₽, далее каждый месяц 10 и 15 числа/)).toBeVisible();
+    await expect(page.getByText(/Первый платеж .*, далее каждый месяц 10 и 15 числа/)).toBeVisible();
+    // «Страхование» — расход: канон знака направления «-2 500 ₽».
+    await expect(page.getByText(`-2\u00A0500 ₽`)).toBeVisible();
     // Кнопка из фрейма 835:19893 — ведёт на страницу платежа.
     await expect(page.getByRole('button', { name: 'Посмотреть платеж' })).toBeVisible();
     await captureScreen(page, testInfo, 'wizard-success-mobile');
@@ -584,7 +588,8 @@ test.describe('визард создания платежа', () => {
     await page.getByRole('button', { name: 'Создать платеж' }).click();
 
     await expect(page.getByRole('heading', { name: 'Вы создали платеж' })).toBeVisible();
-    await expect(page.getByText(/Первый платеж .* на 900 ₽/)).toBeVisible();
+    await expect(page.getByText(/Первый платеж .*, далее каждый понедельник/)).toBeVisible();
+    await expect(page.getByText('+900 ₽')).toBeVisible();
 
     await page.getByRole('button', { name: 'Посмотреть платеж' }).click();
     await expect(page).toHaveURL(new RegExp(`/payments/[^/]+$`));
