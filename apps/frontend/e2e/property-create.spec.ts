@@ -118,6 +118,8 @@ test('шаг 3: характеристики — поля каталога, ти
   await expect(page.getByRole('heading', { name: 'Характеристики' })).toBeVisible();
   await expect(page.getByText('Вы можете создать объект, а характеристики заполнить позже')).toBeVisible();
   const housing = page.getByRole('group', { name: 'Тип жилья' });
+  // Порядок чипов по кадру 1218-54295 (#1081).
+  await expect(housing.getByRole('button')).toHaveText(['Квартира', 'Студия', 'Апартаменты']);
   await expect(housing.getByRole('button', { name: 'Квартира' })).toHaveAttribute('aria-pressed', 'true');
   await expect(housing.getByRole('button', { name: 'Апартаменты' })).toHaveAttribute('aria-pressed', 'false');
   await expect(housing.getByRole('button', { name: 'Студия' })).toHaveAttribute('aria-pressed', 'false');
