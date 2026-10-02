@@ -10,7 +10,7 @@ import {
   utilitiesLabel,
   wizardStepReady,
 } from './wizard-model';
-import type { RentalWizardDraft } from './use-rental-wizard-draft';
+import type { RentalWizardDraft } from './wizard-model';
 
 const TODAY = '2026-09-05';
 

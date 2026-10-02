@@ -48,12 +48,18 @@ export type ContactStepProps = {
   /** Выбранный арендатор; undefined — не выбран. */
   readonly contactId: string | undefined;
   readonly onContactChange: (contactId: string | undefined) => void;
+  /** Уход в под-маршрут визарда («Выбрать контакт», «Создать контакт»):
+   * носитель сессии помечается живым до push, состояние шагов 1–3
+   * переживает круговой маршрут. Уходы вне флоу («Открыть», «Изменить»)
+   * флаг не ставят — возврат на чистый визард (канон Q2=В). */
+  readonly onSubRouteOpen: () => void;
 };
 
 export function ContactStep({
   propertyId,
   contactId,
   onContactChange,
+  onSubRouteOpen,
 }: ContactStepProps): JSX.Element {
   const router = useRouter();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -79,10 +85,12 @@ export function ContactStep({
     !contactsQuery.isPending && !contactsQuery.isError && contactsQuery.data.length > 0;
 
   const openPicker = (): void => {
+    onSubRouteOpen();
     router.push(ROUTES.propertyRentalNewContact(propertyId));
   };
 
   const openCreateBranch = (): void => {
+    onSubRouteOpen();
     router.push(
       `${ROUTES.propertyContactNew(propertyId)}?role=${encodeURIComponent('Арендатор')}&pick=rental`,
     );

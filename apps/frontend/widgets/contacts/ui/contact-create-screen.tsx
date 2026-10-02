@@ -16,7 +16,7 @@ import {
   useCreateContact,
   type ContactFormFields,
 } from '@/features/contacts';
-import { useRentalWizardDraft } from '@/features/rentals';
+import { setRentalWizardSessionDraft } from '@/features/rentals';
 import {
   Button,
   IconButton,
@@ -74,12 +74,6 @@ export function ContactCreateScreen({
   const contextPropertyQuery = useProperty(propertyId ?? '');
   const gate = contactCreateGate(contextPropertyQuery);
   const backHref = propertyId !== undefined ? ROUTES.propertyContacts(propertyId) : ROUTES.contacts;
-  // Ветвь визарда аренды (#530): черновик аренды патчится тем же хуком
-  // (экземпляр на маунт, хранилище общее через localStorage) — возврат
-  // goBack без URL-параметров, идентификатор едет в черновике. Хук требует
-  // строку-ключ: вне объекта (глобальная книга) ветка визарда недостижима,
-  // фолбэк-ключ никогда не читается.
-  const rentalDraft = useRentalWizardDraft(propertyId ?? '');
   // Ветвь визарда аренды глушит футер, как его шаги (#807, P3): вне ветви
   // (книга, страница объекта) TabBar остаётся.
   useTabBarSuppression(returnToRentalWizard);
@@ -129,9 +123,10 @@ export function ContactCreateScreen({
       notify.scenarios.propertyContacts.created();
       if (returnToRentalWizard && propertyId !== undefined) {
         // Возврат в визард аренды (#530): контакт выбирается арендатором
-        // через общий черновик (переживёт goBack), запись истории создания
-        // выталкивается — Back из визарда не приводит обратно в форму.
-        rentalDraft.setDraft((prev) => ({ ...prev, contactId: created.id }));
+        // гостевой записью в носитель сессии (переживёт goBack), запись
+        // истории создания выталкивается — Back из визарда не приводит
+        // обратно в форму.
+        setRentalWizardSessionDraft(propertyId, (prev) => ({ ...prev, contactId: created.id }));
         goBack(router, ROUTES.propertyRentalNew(propertyId));
         return;
       }

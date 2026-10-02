@@ -23,7 +23,7 @@ export {
   wizardStepReady,
   WIZARD_TOTAL_STEPS,
 } from './lib/wizard-model';
-export type { RentalWizardStep } from './lib/wizard-model';
+export type { RentalWizardDraft, RentalWizardStep } from './lib/wizard-model';
 export { rentalActionState } from './lib/rental-actions';
 export type { RentalActionState } from './lib/rental-actions';
 export {
@@ -39,8 +39,10 @@ export {
   rentalDurationLine,
 } from './lib/complete-model';
 export type { RentalCompleteDraft } from './lib/complete-model';
-export { useRentalWizardDraft } from './lib/use-rental-wizard-draft';
-export type { RentalWizardDraft } from './lib/use-rental-wizard-draft';
+export {
+  setRentalWizardSessionDraft,
+  useRentalWizardSession,
+} from './lib/rental-wizard-session';
 export {
   rentalCompletedTitle,
   rentalExtendSuccessCopy,
