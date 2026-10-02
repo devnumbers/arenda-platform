@@ -7,7 +7,7 @@ import { PaymentOverdueScreen } from '@/widgets/payments';
  */
 
 export const metadata: Metadata = {
-  title: 'Просроченные операции — Рентли',
+  title: 'Просроченные платежи — Рентли',
 };
 
 export default async function PaymentOverdueRoutePage({ params }: PageProps<'/properties/[id]/payments/[paymentId]/overdue'>) {

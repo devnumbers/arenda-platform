@@ -108,7 +108,7 @@ test.describe('экран правки платежа', () => {
     await expect(page.getByText('Каждый месяц 20 числа')).toBeVisible();
 
     // Прошлое не тронуто: просрочка осталась на странице платежа.
-    await expect(page.getByText('Просроченные операции')).toBeVisible();
+    await expect(page.getByText('Просроченные платежи')).toBeVisible();
     await expect(page.getByText(/\d+ (день|дня|дней)/).first()).toBeVisible();
 
     await captureScreen(page, testInfo, 'payment-edited-detail-mobile');

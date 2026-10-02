@@ -209,13 +209,13 @@ test.describe('полный список просроченных', () => {
     await expectMoreAfterScroll(page, overdueTitles, 51);
   });
 
-  test('без просрочек — иллюстрированное «Нет просроченных операций»', async ({ page, seededUser }) => {
+  test('без просрочек — иллюстрированное «Нет просроченных платежей»', async ({ page, seededUser }) => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto(
       `/properties/${PROPERTY}/payments/55555555-5555-4555-8555-555555555553/overdue`,
     );
 
-    await expect(page.getByText('Нет просроченных операций')).toBeVisible();
+    await expect(page.getByText('Нет просроченных платежей')).toBeVisible();
     await expect(page.getByText('Когда платеж просрочится, он будет здесь')).toBeVisible();
   });
 });

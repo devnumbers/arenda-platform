@@ -1,10 +1,12 @@
 import {
   captureScreen,
+  execE2eSql,
   expect,
   openCabinetWithSeededSession,
   SEEDED_APARTMENT_PROPERTY_ID,
   test,
 } from './fixtures';
+import { formatDayMonth } from '@/shared/lib/date-format';
 
 // Страница платежа (#465): карточка правила (иконка/цвет категории,
 // повторяемость, бейдж паузы), круглые кнопки «На паузу» (confirm-шторка)
@@ -59,14 +61,18 @@ test.describe('страница платежа', () => {
     await expect(page.getByRole('button', { name: 'Оплатить' })).toBeEnabled();
 
     // Секции: ближайший плановый день месяца («1 сентября»), одна
-    // просрочка красным.
-    await expect(page.getByText('Ближайшая операция')).toBeVisible();
+    // просрочка красным. У секции ближайшего стрелки нет (#1073) —
+    // заголовок некликабелен, клик по строке ведёт на график.
+    await expect(page.getByText('Ближайший платеж')).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: 'Открыть график платежей' }),
+    ).toHaveCount(0);
     await expect(
       page.getByText(
         /\d{1,2} (января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)/,
       ).first(),
     ).toBeVisible();
-    await expect(page.getByText('Просроченные операции')).toBeVisible();
+    await expect(page.getByText('Просроченные платежи')).toBeVisible();
     await expect(page.getByText(/\d+ (день|дня|дней)/).first()).toBeVisible();
 
     // Плитки подэкранов.
@@ -74,6 +80,75 @@ test.describe('страница платежа', () => {
     await expect(page.getByText('История операций')).toBeVisible();
 
     await captureScreen(page, testInfo, 'payment-detail-filled-mobile');
+  });
+
+  test('клик по строке ближайшего ведёт на график — проекция и материализованная', async ({
+    page,
+    seededUser,
+  }) => {
+    // Секция ближайшего (#1073): строка кликабельна при обоих видах
+    // ближайшего и всегда открывает график — не страницу операции.
+    const nearestRow = page
+      .locator('section')
+      .filter({ has: page.getByRole('heading', { name: 'Ближайший платеж' }) })
+      .getByRole('button')
+      .first();
+
+    await openCabinetWithSeededSession(page, seededUser);
+
+    // Проекция: у «Страхования» материализованные плановые в прошлом
+    // (просрочка), будущих нет — ближайшее рисует клиентский порт.
+    await page.goto(PAYMENT_URLS.insurance);
+    await expect(nearestRow).toBeVisible();
+    await nearestRow.click();
+    await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+/schedule$`));
+
+    // Материализованная плановая: SQL-вставка будущего вхождения —
+    // ближайшее становится операцией, клик по-прежнему ведёт на график.
+    expect(
+      await execE2eSql(`
+        INSERT INTO operations (id, owner_id, property_id, payment_id, origin, date,
+                                paid_date, status, type, title, amount_kopecks,
+                                category_label, category_slug)
+        VALUES ('77777777-7777-4777-8777-777777777799',
+                '11111111-1111-4111-8111-111111111111',
+                '33333333-3333-4333-8333-333333333333',
+                '55555555-5555-4555-8555-555555555552',
+                'payment', CURRENT_DATE + 1, NULL, 'planned', 'expense',
+                'Страхование', 320000, 'Страхование', 'insurance')
+        ON CONFLICT (id) DO NOTHING
+      `),
+      // Ровно одна вставленная строка: «INSERT 0 0» — молчаливый пропуск
+      // конфликта id (остаток прошлого прогона), дальше проверять нечего.
+    ).toBe('INSERT 0 1');
+    try {
+      // Убеждаемся по API, что ближайшее — вставленная операция, и сверяем
+      // её дату с подзаголовком строки (секция переехала с проекции).
+      // expect.poll резолвится в void — значение выносим замыканием.
+      const plannedUrl =
+        `/api/properties/${PROPERTY}/payments/` +
+        `55555555-5555-4555-8555-555555555552/operations?status=planned&order=asc`;
+      let materializedDate = '';
+      await expect.poll(async () => {
+        const response = await page.request.get(plannedUrl);
+        const { items } = (await response.json()) as {
+          items: ReadonlyArray<{ readonly date: string }>;
+        };
+        materializedDate = items[0]?.date ?? '';
+        return materializedDate;
+      }).not.toBe('');
+
+      await page.goto(PAYMENT_URLS.insurance);
+      await expect(
+        nearestRow.getByText(formatDayMonth(materializedDate), { exact: true }),
+      ).toBeVisible();
+      await nearestRow.click();
+      await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+/schedule$`));
+    } finally {
+      await execE2eSql(
+        `DELETE FROM operations WHERE id = '77777777-7777-4777-8777-777777777799'`,
+      );
+    }
   });
 
   test('отмена в шторке паузы ничего не меняет', async ({ page, seededUser }) => {
@@ -164,7 +239,7 @@ test.describe('страница платежа', () => {
     await expect(page.getByText('Платеж оплачен')).toBeVisible();
     await page.getByRole('button', { name: 'Посмотреть платеж' }).click();
     await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+$`));
-    await expect(page.getByText('У вас нет просроченных операций')).toBeVisible();
+    await expect(page.getByText('У вас нет просроченных платежей')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Оплатить' })).toBeEnabled();
 
     // Назад по истории — операция в состоянии «Выполнена», кнопки нет.
@@ -227,7 +302,7 @@ test.describe('страница платежа', () => {
     await expect(page.getByRole('button', { name: 'Возобновить' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Оплатить' })).toBeDisabled();
     await expect(page.getByText('Платеж завершен')).toBeVisible();
-    await expect(page.getByText('У вас нет просроченных операций')).toBeVisible();
+    await expect(page.getByText('У вас нет просроченных платежей')).toBeVisible();
 
     await captureScreen(page, testInfo, 'payment-detail-completed-mobile');
   });

@@ -155,7 +155,19 @@ test.describe('сквозная жизнь платежа', () => {
           : `Каждый месяц ${day} числа`,
       ),
     ).toBeVisible();
-    await expect(page.getByText('Ближайшая операция')).toBeVisible();
+    await expect(page.getByText('Ближайший платеж')).toBeVisible();
+
+    // Клик по строке ближайшего ведёт на график (#1073) — плановая
+    // материализована тиком создания, страница операции не открывается.
+    await page
+      .locator('section')
+      .filter({ has: page.getByRole('heading', { name: 'Ближайший платеж' }) })
+      .getByRole('button')
+      .first()
+      .click();
+    await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+/schedule$`));
+    await page.goBack();
+    await expect(page.getByText('Ближайший платеж')).toBeVisible();
 
     // Избранное: звезда переключается с тостом (путь страницы #465).
     const star = page.getByRole('button', { name: 'Добавить в избранное' });
@@ -237,7 +249,7 @@ test.describe('сквозная жизнь платежа', () => {
     // ── Просрочка (сид прошлого через SQL) → гашение из просроченных ──
     expect(await execE2eSql(induceOverdue(id1, 7))).toBe('UPDATE 1');
     await page.goto(paymentUrl);
-    await expect(page.getByText('Просроченные операции')).toBeVisible();
+    await expect(page.getByText('Просроченные платежи')).toBeVisible();
     await expect(page.getByText(/\d+ (день|дня|дней)/).first()).toBeVisible();
 
     // Полный список просроченных открывается стрелкой секции (#466).
@@ -255,7 +267,7 @@ test.describe('сквозная жизнь платежа', () => {
     // Закрытие success возвращает на страницу, с которой платили (#1072).
     await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+$`));
     await page.goto(paymentUrl);
-    await expect(page.getByText('У вас нет просроченных операций')).toBeVisible();
+    await expect(page.getByText('У вас нет просроченных платежей')).toBeVisible();
 
     // ── Удаление операции: новая просрочка стирается корзиной, тик не
     // воскресает её (надгробие cancelled) ──
@@ -268,7 +280,7 @@ test.describe('сквозная жизнь платежа', () => {
     await page.getByRole('button', { name: 'Удалить', exact: true }).click();
     await expect(page.getByText('Операция удалена')).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+$`));
-    await expect(page.getByText('У вас нет просроченных операций')).toBeVisible();
+    await expect(page.getByText('У вас нет просроченных платежей')).toBeVisible();
 
     // ── Правка: сумма меняется, прошлое не тронуто ──
     await page.getByRole('button', { name: 'Изменить' }).click();

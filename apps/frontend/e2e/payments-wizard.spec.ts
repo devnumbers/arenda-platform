@@ -679,7 +679,7 @@ test.describe('визард создания платежа', () => {
     await expect(page.getByText('Платеж завершен')).toBeVisible();
 
     // И в графике — то же завершённое состояние вместо «ближайших» дат.
-    await page.getByRole('button', { name: 'Открыть график платежей' }).click();
+    await page.getByRole('button', { name: 'График платежей', exact: true }).click();
     await expect(page.getByText('Платеж завершен')).toBeVisible();
     await expect(page.getByText('Следующие')).toHaveCount(0);
   });
