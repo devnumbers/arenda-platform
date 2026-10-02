@@ -31,8 +31,11 @@ import s from "./showcase.module.css";
 // карточку по направлению (порог по скорости, как у Swiper). Клик по
 // боковой карточке/плашке ведёт её в центр одним переходом независимо
 // от дистанции; клик и wheel во время анимации игнорируются, drag
-// перехватывает движение. Shift+Scroll и горизонтальный трекпад — шаг
-// ровно на одну карточку, вертикальное колесо скроллит страницу.
+// перехватывает движение. Shift+Scroll и горизонтальный трекпад —
+// скролл по расстоянию пальца: каждые ~220px накопленного пальцевого
+// пути = одна карточка, моментум (затухающие дельты) не летает, свайп
+// всегда даёт карточку (механика и константы — в блоке WHEEL ниже),
+// вертикальное колесо скроллит страницу.
 // Бесконечность — 3 копии набора с тихой пересадкой в среднюю на покое.
 // Морфинг размеров — CSS --k (0 бок / 1 центр); высоты обоих рядов
 // зафиксированы (var(--h) / var(--plate-h)), поэтому контент под
@@ -218,15 +221,43 @@ type EngineState = {
   dragStartX: number;
   dragStartP: number;
   dragSamples: Array<{ t: number; x: number }>;
+  // wheel-аккумулятор пальцевого расстояния и буфер формы дельт
+  wheelAcc: number;
+  wheelSign: number;
+  wheelBuf: Array<{ t: number; d: number }>;
   lastWheelT: number;
+  lastWheelD: number;
 };
 
-// Разрыв между горизонтальными wheel-событиями, после которого поток
-// считается новым жестом. Моментум трекпада живёт заметно дольше 360мс
-// анимации (замер: 24 события за ~850мс проматывали 4 карточки) —
-// глотания на время анимации недостаточно, хвост того же жеста
-// отсекается окном тишины (решение владельца 02.10).
-const WHEEL_GESTURE_GAP_MS = 300;
+// ── Wheel: расстояние пальца + фильтр моментума ──────────────────────
+// Web-API не отличает моментум трекпада от нового жеста пальцем
+// (w3c/pointerevents#596), поэтому классифицируем по форме дельт —
+// механика fullPage.js (среднее последних событий ≥ среднего окна =
+// палец) + всплеск из wheel-gestures (дельта > 2× прошлой = новый
+// свайп поверх инерции). Пальцевое расстояние копится в аккумулятор:
+// каждые WHEEL_STEP_PX = +1 карточка (решение владельца 02.10 — скролл
+// по расстоянию). Моментум расстояние не копит; если палец успел
+// набрать меньше карточки — свайп доводится одной карточкой на первом
+// моментум-событии. Решение владельца Q1: сильный свайп может нести
+// больше одной — пропорционально реально пройденному пальцем.
+const WHEEL_STEP_PX = 220; // пальцевого пути на одну карточку
+const WHEEL_COMMIT_MIN_PX = 60; // меньше этого за свайп — не считаем жестом
+const WHEEL_QUIET_MS = 200; // тишина = новый жест, буфер формы сбрасывается
+const WHEEL_JITTER_PX = 2; // суб-пиксельный шум колеса
+const WHEEL_BUF_MAX = 80; // глубина буфера формы дельт
+
+// Палец или моментум? Мало данных (начало жеста) — палец; дельта ровно
+// растёт или стоит — палец; монотонно затухает — моментум.
+function wheelIsFinger(buf: Array<{ t: number; d: number }>, d: number, prevD: number): boolean {
+  if (buf.length === 0) return true; // первое событие после тишины
+  if (d > 2 * prevD && d > 24) return true; // всплеск = новый свайп
+  if (buf.length < 5) return true; // формы ещё нет — считаем пальцем
+  const endCount = Math.min(6, Math.floor(buf.length / 2));
+  const end = buf.slice(buf.length - endCount);
+  const win = buf.slice(Math.max(0, buf.length - 36));
+  const avg = (xs: Array<{ d: number }>) => xs.reduce((s, x) => s + x.d, 0) / xs.length;
+  return avg(end) >= avg(win); // затухающий хвост даёт end < win
+}
 
 export function Showcase() {
   const [mounted, setMounted] = useState(false);
@@ -306,6 +337,11 @@ export function Showcase() {
     if (shifted) render();
   }, [render]);
 
+  // wheelStep ↔ animateTo ↔ frameLoop образуют цикл (докатка серии после
+  // анимации → шаг → запуск анимации) — разводим последними ссылками.
+  const animateToRef = useRef<(to: number) => void>(() => {});
+  const wheelStepRef = useRef<(dir: number) => void>(() => {});
+
   const frameLoop = useCallback(() => {
     const st = stateRef.current;
     if (!st) return;
@@ -320,6 +356,12 @@ export function Showcase() {
       } else {
         st.anim = null;
         renormalize();
+        // Непрерывный скролл: расстояние, набранное пальцем во время
+        // анимации, продолжает серию — лок на время перехода, не тишина.
+        if (st.wheelAcc >= WHEEL_STEP_PX && st.wheelSign !== 0) {
+          st.wheelAcc -= WHEEL_STEP_PX;
+          wheelStepRef.current(st.wheelSign);
+        }
       }
     };
     st.raf = requestAnimationFrame(step);
@@ -344,6 +386,23 @@ export function Showcase() {
     },
     [frameLoop, reduced, render, renormalize],
   );
+
+  // Один wheel-шаг в направлении dir: сосед от ближайшей позиции покоя.
+  const wheelStep = useCallback((dir: number) => {
+    const viewport = viewportRef.current;
+    const st = stateRef.current;
+    if (!viewport || !st) return;
+    const { snapArr } = snapModel(tierOf(), viewport.clientWidth);
+    const cur = nearestIndex(st.p, snapArr);
+    const g = clamp(cur + dir, 1, G - 2);
+    st.wheelSign = dir;
+    animateToRef.current(snapArr[g] ?? st.p);
+  }, []);
+
+  useEffect(() => {
+    animateToRef.current = animateTo;
+    wheelStepRef.current = wheelStep;
+  }, [animateTo, wheelStep]);
 
   // Выбор карточки по индексу узла ленты: кликнутая едет в центр одним
   // переходом, сколько бы шагов ни было (кратчайший обход кольца копий).
@@ -389,7 +448,11 @@ export function Showcase() {
       dragStartX: 0,
       dragStartP: 0,
       dragSamples: [],
+      wheelAcc: 0,
+      wheelSign: 0,
+      wheelBuf: [],
       lastWheelT: 0,
+      lastWheelD: 0,
     };
     const measure = () => {
       const st0 = stateRef.current;
@@ -529,10 +592,11 @@ export function Showcase() {
     };
   }, [animateTo, render, selectNode]);
 
-  // Shift+Scroll и горизонтальный трекпад — шаг ровно на одну карточку
-  // РАЗ В ЖЕСТ: первое событие после паузы длиннее окна тишины шагает,
-  // весь хвост моментума (события короче окна) игнорируется. Вертикальное
-  // колесо не наша ось — скроллит страницу.
+  // Shift+Scroll и горизонтальный трекпад — по расстоянию пальца:
+  // каждые WHEEL_STEP_PX накопленного пальцевого пути = одна карточка
+  // (см. блок констант выше). Моментум (затухающие дельты) расстояние
+  // не копит и сам не шагает, но недобранную за свайп карточку доводит
+  // ровно одной. Вертикальное колесо не наша ось — скроллит страницу.
   useEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport) return;
@@ -541,18 +605,40 @@ export function Showcase() {
       e.preventDefault();
       const st = stateRef.current;
       if (!st) return;
+      const d = Math.abs(e.deltaX);
       const now = performance.now();
-      const newGesture = now - st.lastWheelT > WHEEL_GESTURE_GAP_MS;
+      if (now - st.lastWheelT > WHEEL_QUIET_MS) st.wheelBuf.length = 0; // тишина = новый жест
       st.lastWheelT = now;
-      if (!newGesture || st.anim || st.dragging) return;
-      const { snapArr } = snapModel(tierOf(), viewport.clientWidth);
-      const cur = nearestIndex(st.p, snapArr);
-      const g = clamp(cur + (e.deltaX > 0 ? 1 : -1), 1, G - 2);
-      animateTo(snapArr[g] ?? st.p);
+      if (d < WHEEL_JITTER_PX) return;
+      const finger = wheelIsFinger(st.wheelBuf, d, st.lastWheelD);
+      st.lastWheelD = d;
+      st.wheelBuf.push({ t: now, d });
+      if (st.wheelBuf.length > WHEEL_BUF_MAX) st.wheelBuf.shift();
+      const dir = e.deltaX > 0 ? 1 : -1;
+      if (!finger) {
+        // моментум: недобранная за свайп карточка доводится ровно одной
+        if (!st.anim && !st.dragging && st.wheelAcc >= WHEEL_COMMIT_MIN_PX) {
+          st.wheelAcc = 0;
+          wheelStepRef.current(dir);
+        }
+        return;
+      }
+      // палец: расстояние копится и в полёте — с потолком в одну
+      // карточку, серию после посадки продолжает пост-анимационная
+      // проверка в frameLoop
+      if (st.anim || st.dragging) {
+        st.wheelAcc = Math.min(st.wheelAcc + d, WHEEL_STEP_PX);
+        return;
+      }
+      st.wheelAcc += d;
+      if (st.wheelAcc >= WHEEL_STEP_PX) {
+        st.wheelAcc -= WHEEL_STEP_PX;
+        wheelStepRef.current(dir);
+      }
     };
     viewport.addEventListener("wheel", onWheel, { passive: false });
     return () => viewport.removeEventListener("wheel", onWheel);
-  }, [animateTo]);
+  }, []);
 
   return (
     <section id="showcase" className="mt-24 scroll-mt-[88px] desk:mt-[156px] desk:scroll-mt-[104px]">
