@@ -97,6 +97,18 @@ var staticRentalProblems = []httpsupport.ErrorProblem{
 // detail. The bool verdict lets each handler turn anything unrecognized into
 // its own opaque 500.
 func writeRentalsError(ctx context.Context, w http.ResponseWriter, err error) bool {
+	// The coded maintenance 409 first (ticket #1050): the flat table cannot
+	// carry the extension code — the same shape as the properties adapter's
+	// coded occupied/suspended mappings. The client needs the code to
+	// distinguish the guard from the other conflicts.
+	if errors.Is(err, rentalsapp.ErrPropertyMaintenance) {
+		httpsupport.WriteProblem(ctx, w, http.StatusConflict,
+			httpsupport.ProblemWithCode(ctx,
+				httpsupport.ProblemTitleConflict,
+				"Объект на ремонте — аренда недоступна",
+				"property_maintenance"))
+		return true
+	}
 	if httpsupport.WriteErrorProblem(ctx, w, err, staticRentalProblems) {
 		return true
 	}

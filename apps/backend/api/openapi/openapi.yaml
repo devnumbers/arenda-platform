@@ -4459,7 +4459,16 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          $ref: '#/components/responses/Conflict'
+          description: >-
+            Conflict: the property already has an unfinished rental, is
+            archived, or is under maintenance. The maintenance guard answers
+            code `property_maintenance` (ticket #1050) — every rental mutation
+            of an unfinished rental stays blocked until the maintenance ends
+            («Завершить ремонт» is the way back); the reads stay open.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
     get:
       operationId: listRentals
       security:
@@ -4536,7 +4545,16 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          $ref: '#/components/responses/Conflict'
+          description: >-
+            Conflict: the rental is completed, the property is archived, or
+            the property is under maintenance — the maintenance guard answers
+            code `property_maintenance` (ticket #1050) for every mutation of
+            an unfinished rental, terms edits included (продление rides the
+            same PATCH).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
     delete:
       operationId: deleteRental
       security:
@@ -4566,7 +4584,11 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: The rental has already started — finish it instead
+          description: >-
+            The rental has already started — finish it instead. On a property
+            under maintenance the guard answers code `property_maintenance`
+            (ticket #1050) for an unfinished rental's deletion; a completed
+            rental (the history) deletes as before.
           content:
             application/json:
               schema:
@@ -4619,7 +4641,10 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: The rental is already completed
+          description: >-
+            The rental is already completed. On a property under maintenance
+            the guard answers code `property_maintenance` (ticket #1050) —
+            completing an unfinished rental is a mutation of it.
           content:
             application/json:
               schema:

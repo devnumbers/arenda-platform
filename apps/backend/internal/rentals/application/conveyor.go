@@ -88,9 +88,11 @@ type mutationGates struct {
 // runRentalMutation is the mutation conveyor shared by every use case of this
 // context. It runs, in one transaction and in this order: the role gate, the
 // property serialization lock (FOR UPDATE — ADR 0053 §3), the owner's today,
-// the load of the target rental (skipped for a zero rentalID), the change
-// step, its audit entry and its action journal row (ADR 0061) in the same
-// transaction, and the payments tick when the step changed the payment.
+// the load of the target rental (skipped for a zero rentalID), the maintenance
+// guard on the unfinished rental (ticket #1050 — the completed history stays
+// mutable-deletable on a maintenance property), the change step, its audit
+// entry and its action journal row (ADR 0061) in the same transaction, and
+// the payments tick when the step changed the payment.
 // After commit it dispatches the step's realtime frames (ADR 0062 §3,
 // best-effort) and returns the changed rental's id for the re-read.
 func runRentalMutation(
@@ -117,6 +119,14 @@ func runRentalMutation(
 			if err != nil {
 				return err
 			}
+		}
+		// The maintenance guard sits after the rental load on purpose: a
+		// zero rental (creation) and a loaded unfinished one are the blocked
+		// world, a completed rental is the history that still deletes (the
+		// lifecycles' ordering mirrors the archived guard — the property
+		// state outranks the rental's).
+		if prop.Maintenance && rental.CompletedDate == nil {
+			return ErrPropertyMaintenance
 		}
 		out, err = change(ctx, stores, scope, rental, today)
 		if err != nil {

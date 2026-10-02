@@ -4,6 +4,7 @@ import {
   execE2eSql,
   openCabinetWithSeededSession,
   test,
+  todayIso,
 } from './fixtures';
 
 // Машина «Действий аренды» на странице объекта (#986, карта #984):
@@ -14,6 +15,13 @@ import {
 // 30.09: завершение будущей аренды не существует); гард удаления #632
 // ведёт в шит той же машины. Правки аренды на объекте нет — только со
 // страницы аренды (#987).
+//
+// Объект на ремонте арендную машину срезает (#1050, карта #1047): секция
+// «Аренда» на детали не рисуется вовсе, в «Управлении» нет арендной
+// строки, хаб — пустое состояние без кнопки (решение владельца 2Б,
+// отклонение от Figma 1581:53679 осознанное); прямое API — 409
+// property_maintenance, завершённая история (её удаление) не задета,
+// люк — «Завершить ремонт».
 //
 // Объект сценария — отдельная строка в properties (сид-квартира занята
 // ассертами «Аренда не добавлена» в property-viewer-mode): арендные пары
@@ -31,12 +39,12 @@ test.describe('машина «Действий аренды» на страни�
 
   /** Чистый объект сценария: снос прошлых прогонов и создание строки.
    * rentals сносятся до объекта (RESTRICT от payments по каскаду). */
-  async function seedProperty(): Promise<void> {
+  async function seedProperty(status: 'active' | 'maintenance' = 'active'): Promise<void> {
     await execE2eSql(`DELETE FROM rentals WHERE property_id = '${PROPERTY_ID}'`);
     await execE2eSql(`DELETE FROM properties WHERE id = '${PROPERTY_ID}'`);
     await execE2eSql(
       `INSERT INTO properties (id, owner_id, name, type, address, status)
-       VALUES ('${PROPERTY_ID}', ${OWNER_SQL}, 'Дом арендных состояний', 'house', 'ул. Состояний, 9', 'active')`,
+       VALUES ('${PROPERTY_ID}', ${OWNER_SQL}, 'Дом арендных состояний', 'house', 'ул. Состояний, 9', '${status}')`,
     );
   }
 
@@ -150,10 +158,15 @@ test.describe('машина «Действий аренды» на страни�
     await guard.getByRole('button', { name: 'Удалить аренду', exact: true }).click();
 
     // Композит исполнен: аренда снесена (204), статус применён — шапка
-    // «На ремонте», блок «Аренда» перетекает в пустое состояние.
+    // «На ремонте», секция «Аренда» срезана целиком (#1050): ни блока,
+    // ни пустого состояния, в «Управлении» нет «Начать аренду» — люк,
+    // «Завершить ремонт», на месте.
     await expect(page.getByText('На ремонте')).toBeVisible();
-    await expect(page.getByText('Аренда не добавлена')).toBeVisible();
+    await expect(page.getByText('Аренда не добавлена')).toHaveCount(0);
     await expect(page.getByTestId('property-rental-block')).toHaveCount(0);
+    const manageAfter = page.getByTestId('property-manage-list');
+    await expect(manageAfter.getByRole('button', { name: 'Начать аренду' })).toHaveCount(0);
+    await expect(manageAfter.getByRole('button', { name: 'Завершить ремонт' })).toBeVisible();
 
     // Server-truth (#860): rentals 0, объект maintenance.
     const rentalsCount = await execE2eSql(
@@ -164,6 +177,126 @@ test.describe('машина «Действий аренды» на страни�
     expect(status).toBe('maintenance');
 
     await captureScreen(page, testInfo, 'rental-actions-upcoming-guard');
+  });
+
+  test('на ремонте: секции/строки/кнопки нет, история доступна, прямое API — 409 (#1050)', async ({
+    page,
+    seededUser,
+  }, testInfo) => {
+    await seedProperty('maintenance');
+    // Завершённая история на ремонте живёт как раньше: смотрим её в хабе
+    // и удаляем прямым API — гвард её не задевает.
+    await execE2eSql(
+      `INSERT INTO payments (id, owner_id, property_id, type, title, amount_kopecks,
+                             recurrence, since, end_date, auto_pay, category_slug)
+       VALUES ('98600000-9860-4000-8000-000000000989', ${OWNER_SQL}, '${PROPERTY_ID}',
+               'income', 'Арендная плата', ${RENT_AMOUNT_KOPECKS},
+               '{"kind":"monthly","daysOfMonth":[15]}'::jsonb,
+               current_date - 300, current_date - 40, false, 'rent')`,
+    );
+    await execE2eSql(
+      `INSERT INTO rentals (id, owner_id, property_id, payment_id, start_date,
+                            planned_end_date, completed_date, utilities)
+       VALUES ('98600000-9860-4000-8000-000000000990', ${OWNER_SQL}, '${PROPERTY_ID}',
+               '98600000-9860-4000-8000-000000000989',
+               current_date - 300, current_date - 40, current_date - 40, 'included')`,
+    );
+
+    await openDetail(page, seededUser);
+
+    // Доработка #1050: с завершённой историей секция «Аренда» на ремонте
+    // видна — стандартная, без CTA, ссылкой в «Прошлые аренды»; в
+    // «Управлении» арендной строки по-прежнему нет, люк «Завершить
+    // ремонт» на обычном месте.
+    await expect(page.getByText('На ремонте')).toBeVisible();
+    const rentCard = page.locator('section').filter({
+      has: page.getByText('Аренда не добавлена'),
+    });
+    await expect(rentCard).toHaveCount(1);
+    await expect(rentCard.getByRole('button', { name: 'Добавить' })).toHaveCount(0);
+    await expect(page.getByTestId('property-rental-block')).toHaveCount(0);
+    const manage = page.getByTestId('property-manage-list');
+    await expect(manage.getByRole('button', { name: 'Начать аренду' })).toHaveCount(0);
+    await expect(manage.getByRole('button', { name: 'Завершить аренду' })).toHaveCount(0);
+    await expect(manage.getByRole('button', { name: 'Удалить аренду' })).toHaveCount(0);
+    await expect(manage.getByRole('button', { name: 'Завершить ремонт' })).toBeVisible();
+
+    // Ссылка секции ведёт прямо в «Прошлые аренды» (слово владельца).
+    await rentCard.click();
+    await expect(page).toHaveURL(new RegExp(`/properties/${PROPERTY_ID}/rentals/past`));
+    await expect(page.getByText('8 месяцев')).toBeVisible();
+
+    // Хаб аренд: пустое состояние без кнопки, история входом «Прошлые
+    // аренды» доступна.
+    await page.goto(`/properties/${PROPERTY_ID}/rentals`);
+    await expect(page.getByText('Аренда не создана')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Добавить аренду' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Прошлые аренды' })).toBeVisible();
+
+    // Прямое API: создание на ремонте — 409 property_maintenance.
+    const created = await page.request.post(`/api/properties/${PROPERTY_ID}/rentals`, {
+      data: {
+        amountKopecks: 4_731_000,
+        paymentDay: 15,
+        startDate: todayIso(),
+        plannedEndDate: null,
+        utilities: 'included',
+        autoPay: false,
+      },
+    });
+    expect(created.status()).toBe(409);
+    const problem = (await created.json()) as { code?: string; detail?: string };
+    expect(problem.code).toBe('property_maintenance');
+    expect(problem.detail).toContain('Объект на ремонте');
+
+    // История удаляется как раньше: DELETE завершённой — 204, и секция
+    // без аренд исчезает (второе правило владельца).
+    const del = await page.request.delete(
+      `/api/properties/${PROPERTY_ID}/rentals/98600000-9860-4000-8000-000000000990`,
+    );
+    expect(del.status()).toBe(204);
+    expect(await execE2eSql(
+      `SELECT count(*) FROM rentals WHERE property_id = '${PROPERTY_ID}'`,
+    )).toBe('0');
+    await page.goto(`/properties/${PROPERTY_ID}`);
+    await expect(page.getByText('На ремонте')).toBeVisible();
+    await expect(page.getByText('Аренда не добавлена')).toHaveCount(0);
+
+    await captureScreen(page, testInfo, 'rental-actions-maintenance-cut');
+  });
+
+  test('на ремонте люк: «Завершить ремонт» возвращает арендную машину (#1050)', async ({
+    page,
+    seededUser,
+  }, testInfo) => {
+    await seedProperty('maintenance');
+    // Незавершённая аренда, оставшаяся на ремонте прямым API-вызовом:
+    // секции нет вовсе (решение А: поверхности сходятся, люк разматывает).
+    await seedRental(-60, 305); // старт 60 дней назад — active
+
+    await openDetail(page, seededUser);
+    await expect(page.getByText('На ремонте')).toBeVisible();
+    await expect(page.getByTestId('property-rental-block')).toHaveCount(0);
+    await expect(page.getByText('Аренда не добавлена')).toHaveCount(0);
+    const manage = page.getByTestId('property-manage-list');
+    await expect(manage.getByRole('button', { name: 'Завершить аренду' })).toHaveCount(0);
+    await expect(manage.getByRole('button', { name: 'Завершить ремонт' })).toBeVisible();
+
+    // Люк: ремонт завершён — объект снова active, аренда жива и её
+    // действия доступны. exact: у active в «Управлении» снова стоит
+    // строка «Объект на ремонте» — подстрочный локатор поймал бы её.
+    await manage.getByRole('button', { name: 'Завершить ремонт' }).click();
+    await expect(page.getByText('На ремонте', { exact: true })).toHaveCount(0);
+    await expect(page.getByTestId('property-rental-block')).toBeVisible();
+    await expect(manage.getByRole('button', { name: 'Завершить аренду' })).toBeVisible();
+
+    const status = await execE2eSql(`SELECT status FROM properties WHERE id = '${PROPERTY_ID}'`);
+    expect(status).toBe('active');
+    expect(await execE2eSql(
+      `SELECT count(*) FROM rentals WHERE property_id = '${PROPERTY_ID}' AND completed_date IS NULL`,
+    )).toBe('1');
+
+    await captureScreen(page, testInfo, 'rental-actions-maintenance-hatch');
   });
 
   test('«Ожидает начала»: гард удаления #632 ведёт в шит «Удалить аренду?»', async ({

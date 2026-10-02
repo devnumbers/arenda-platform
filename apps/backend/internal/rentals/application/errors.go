@@ -19,6 +19,12 @@ var (
 	// ErrArchivedProperty marks a mutation on an archived property — the
 	// financial read-only state.
 	ErrArchivedProperty = errors.New("rentals: property is archived")
+	// ErrPropertyMaintenance marks a mutation of an unfinished rental on a
+	// property under maintenance (ticket #1050): the front hides the rental
+	// CTAs, the conveyor is the backstop for the direct API call. The reads
+	// and the completed history (its deletion included) stay open; «Завершить
+	// ремонт» is the rescue hatch that makes every mutation reachable again.
+	ErrPropertyMaintenance = errors.New("rentals: property is under maintenance")
 	// ErrPropertyOccupied marks the creation of a second unfinished rental on
 	// the property (durable invariant №12): the honest 409 under the
 	// property lock; the partial unique index backstops the race.

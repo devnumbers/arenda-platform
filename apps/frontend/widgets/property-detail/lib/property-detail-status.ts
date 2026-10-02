@@ -150,6 +150,26 @@ export function deleteBlockedByRental(
   return key === 'delete' && rentalState.kind !== 'none';
 }
 
+/**
+ * Видимость секции «Аренда» на детали (доработка #1050 по слову владельца
+ * 02.10). На ремонте секция — путь к завершённой истории: рисуется, только
+ * когда текущей аренды нет, а завершённые есть — стандартная, без CTA
+ * (создание запрещено беком, 409 property_maintenance), ссылка секции
+ * ведёт в «Прошлые аренды». Без аренд вовсе секции нет; незавершённой на
+ * ремонте через UI не бывает (гард #628 завершает/удаляет её до перевода),
+ * прямой-API случай живёт на люке «Завершить ремонт» — секция не рисуется,
+ * поверхности (секция и «Управление») расходиться не должны. Вне ремонта —
+ * как всегда (архив несёт секцию с глухой CTA, канон #589).
+ */
+export function isRentalSectionVisible(
+  status: PropertyStatus,
+  rentalState: RentalActionState,
+  hasCompletedRentals: boolean,
+): boolean {
+  if (status !== 'maintenance') return true;
+  return rentalState.kind === 'none' && hasCompletedRentals;
+}
+
 export type PropertyManageInput = {
   readonly status: PropertyStatus;
   /** Состояние «Действий аренды» (#986): none → Начать, upcoming →
@@ -225,8 +245,15 @@ export function buildPropertyManageActions(
         : action('pin', 'Сделать основным', false),
     );
   }
+  // Ремонт срезает арендную строку (карта #1047, тикет #1050, решение
+  // владельца 2Б): на ремонте мутации незавершённой аренды запрещены
+  // (бек — 409 property_maintenance), «Начать аренду» не рисуется вовсе,
+  // у спасательной незавершённой (прямой API) строки «Завершить/Удалить
+  // аренду» были бы мёртвые кнопки. Люк — «Завершить ремонт» ниже.
+  if (status !== 'maintenance') {
+    items.push(rentalAction(rentalState));
+  }
   items.push(
-    rentalAction(rentalState),
     status === 'maintenance'
       ? action('finish-maintenance', 'Завершить ремонт', false)
       : action('start-maintenance', 'Объект на ремонте', false),

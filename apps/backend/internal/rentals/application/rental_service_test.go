@@ -71,16 +71,17 @@ type fakeCalendar struct{}
 func (fakeCalendar) Today(context.Context, uuid.UUID) (time.Time, error) { return today, nil }
 
 type fakePropertyStore struct {
-	owner    uuid.UUID
-	archived bool
+	owner       uuid.UUID
+	archived    bool
+	maintenance bool
 }
 
 func (s fakePropertyStore) Get(context.Context, uuid.UUID) (paymentsapp.PropertyRef, error) {
-	return paymentsapp.PropertyRef{OwnerID: s.owner, Archived: s.archived}, nil
+	return paymentsapp.PropertyRef{OwnerID: s.owner, Archived: s.archived, Maintenance: s.maintenance}, nil
 }
 
 func (s fakePropertyStore) GetForUpdate(context.Context, uuid.UUID) (paymentsapp.PropertyRef, error) {
-	return paymentsapp.PropertyRef{OwnerID: s.owner, Archived: s.archived}, nil
+	return paymentsapp.PropertyRef{OwnerID: s.owner, Archived: s.archived, Maintenance: s.maintenance}, nil
 }
 
 func (s fakePropertyStore) WithTx(transaction.Tx) (paymentsapp.PropertyStore, error) {
@@ -338,10 +339,16 @@ func newHarness(t *testing.T) *harness {
 	return newHarnessWithArchivedProperty(t, false)
 }
 
-// newHarnessWithArchivedProperty is the harness core with the property
-// store's archived flag fixed at construction: the fake is copied into the
-// factory by value, so a post-construction mutation would not reach it.
+// newHarnessWithArchivedProperty is newHarness over an archived property.
 func newHarnessWithArchivedProperty(t *testing.T, archived bool) *harness {
+	t.Helper()
+	return newHarnessWithPropertyFlags(t, archived, false)
+}
+
+// newHarnessWithPropertyFlags is the harness core with the property store's
+// lifecycle flags fixed at construction: the fake is copied into the factory
+// by value, so a post-construction mutation would not reach it.
+func newHarnessWithPropertyFlags(t *testing.T, archived, maintenance bool) *harness {
 	t.Helper()
 	j := &journal{}
 	owner, property := mustID(t), mustID(t)
@@ -352,7 +359,7 @@ func newHarnessWithArchivedProperty(t *testing.T, archived bool) *harness {
 		paid:    3,
 	}
 	audit := &fakeAudit{journal: j}
-	propStore := fakePropertyStore{owner: owner, archived: archived}
+	propStore := fakePropertyStore{owner: owner, archived: archived, maintenance: maintenance}
 	history := journalingHistory(j)
 	factory := NewTxStoreFactory(store, propStore, gateway, fakeTenantReader{exists: true}, audit, history, fakeUoW{})
 	svc := NewRentalService(factory, fakeCalendar{}, fakePolicy{role: sharedpolicy.RoleOwner})
