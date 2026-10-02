@@ -61,7 +61,7 @@ test.describe('следующая дата оплаты из серверног�
     await page.goto(PAYMENTS_URL);
     await expect(page.getByRole('button', { name: 'Добавить' })).toBeVisible();
     await page.getByRole('button', { name: 'Добавить' }).click();
-    await page.getByRole('button', { name: /Платеж Напомним, когда нужно/ }).click();
+    await page.getByRole('button', { name: /Платеж Отмечайте оплату/ }).click();
     await expect(page.getByRole('heading', { name: 'Категория платежа' })).toBeVisible();
     await page.getByRole('button', { name: 'Интернет', exact: true }).click();
     await page.getByRole('button', { name: 'Продолжить' }).click();

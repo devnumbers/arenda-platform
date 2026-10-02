@@ -40,7 +40,8 @@ export type PaymentCategorySlug =
   | "damage-compensation"
   | "penalty"
   | "late-fees"
-  | "fines";
+  | "fines"
+  | "other";
 
 export type PaymentCategoryEntry = {
   readonly slug: PaymentCategorySlug;
@@ -90,6 +91,7 @@ export const paymentCategories: readonly PaymentCategoryEntry[] = [
   { slug: "penalty", label: "Неустойка", icon: "bold-coins", color: "#FB2C36" },
   { slug: "late-fees", label: "Пени", icon: "bold-clock", color: "#FB2C36" },
   { slug: "fines", label: "Штрафы", icon: "bold-warning", color: "#FB2C36" },
+  { slug: "other", label: "Другое", icon: "bold-other", color: "#ABAB9C" },
 ] as const;
 
 // Дефолтный внешний вид пользовательской категории: одна иконка на серой

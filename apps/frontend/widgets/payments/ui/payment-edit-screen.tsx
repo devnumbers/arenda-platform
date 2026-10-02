@@ -469,6 +469,7 @@ function PaymentEditForm({
     return (
       <>
         <TopNav
+          variant={categorySearchOpen ? 'search' : 'default'}
           leading={
             <IconButton icon={<ArrowLeft />} label="Назад" onClick={closeCategoryPage} />
           }

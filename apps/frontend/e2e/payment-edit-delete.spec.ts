@@ -176,6 +176,24 @@ test.describe('экран правки платежа', () => {
     await page.getByRole('button', { name: 'Поиск по категориям' }).click();
     await page.getByRole('searchbox', { name: 'Поиск по названиям категорий' }).fill('страх');
     await expect(page.getByRole('button', { name: 'Страхование', exact: true })).toBeVisible();
+
+    // Поисковая шапка — канон TopNav variant="search": поле тянется ОТ
+    // стрелки «Назад», а не под ней (баг приёмки #1069: без варианта
+    // дефолтная шапка клала поле в центральный слой на всю ширину, стрелка
+    // рисовалась поверх плейсхолдера). Замер по boundingBox: левый край
+    // поля не левее правого края стрелки.
+    const arrowBox = await page.getByRole('button', { name: 'Назад' }).boundingBox();
+    const fieldBox = await page
+      .getByRole('searchbox', { name: 'Поиск по названиям категорий' })
+      .boundingBox();
+    if (arrowBox === null || fieldBox === null) {
+      throw new Error('шапка поиска не нашлась для замера');
+    }
+    expect(fieldBox.x).toBeGreaterThanOrEqual(arrowBox.x + arrowBox.width);
+
+    // Клик по «Назад» при открытом поиске закрывает пикер категории.
+    await page.getByRole('button', { name: 'Назад' }).click();
+    await expect(page.getByRole('button', { name: 'Категория' })).toBeVisible();
   });
 
   test('окончание платежа — страница с календарём открыта сразу', async ({

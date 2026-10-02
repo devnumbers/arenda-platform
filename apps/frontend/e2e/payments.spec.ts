@@ -20,8 +20,8 @@ const GARAGE_PAYMENTS_URL = `/properties/${SEEDED_GARAGE_PROPERTY_ID}/payments`;
 
 // Доступное имя карточки выбора — весь её текст; якорим к описанию, чтобы не
 // путать с «Автоплатеж» (подстрока) и строкой черновика «Платеж Черновик…».
-const PAYMENT_CARD = /Платеж Напомним, когда нужно/;
-const AUTOPAYMENT_CARD = /Автоплатеж Предупредим о платеже/;
+const PAYMENT_CARD = /Платеж Отмечайте оплату/;
+const AUTOPAYMENT_CARD = /Автоплатеж Отмечается автоматически/;
 
 test.describe('экран «Платежи объекта»', () => {
   test.use({ viewport: { width: 390, height: 844 } });
