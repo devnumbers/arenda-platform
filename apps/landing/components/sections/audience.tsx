@@ -7,6 +7,7 @@ import {
   GLASS_INSET_SHADOW,
 } from "@/components/glass";
 import { Reveal } from "@/components/reveal";
+import { TabletStrip } from "@/components/tablet-strip";
 import iconBriefcase01 from "@/assets/icons/icon-briefcase-01.svg";
 import iconBuilding05 from "@/assets/icons/icon-building-05.svg";
 import iconUser02 from "@/assets/icons/icon-user-02.svg";
@@ -65,14 +66,17 @@ export function Audience() {
         </Reveal>
       </div>
       {/* Планшет: полоса во всю ширину окна — поведение CardTrio
-          («Организуйте дела»): нативный тач-моментум, скрытый скроллбар,
-          overscroll-x-contain, отступ 24px до первой и после последней,
-          без снапа, докатки и точек — свайп замирает там, где его
-          отпустили. Классы полосы — tab:hide-scrollbar (@utility в
-          app/globals.css). Когда три карточки влезают (1032–1199), max-w-full
-          сжимает полосу до контента и mx-auto ставит по центру — на стыке
-          с десктопным рядом скачка геометрии нет. */}
-      <div className="mt-8 flex w-full flex-col gap-3 px-6 tab:mx-auto tab:w-fit tab:max-w-full tab:flex-row tab:hide-scrollbar desk:mt-16 desk:gap-5 desk:px-0">
+          («Организуйте дела»), движок «Управляйте арендой» (TabletStrip:
+          drag 1:1 без инерции, снап, бросок, Shift+Scroll — шаг;
+          решение владельца 02.10 «как у аренды» — замена нативного
+          моментума от 28.09). Когда три карточки влезают (1032–1199),
+          полоса центрируется — на стыке с десктопным рядом скачка
+          геометрии нет. */}
+      <TabletStrip
+        className="mt-8 w-full desk:mt-16"
+        nativeClassName="flex flex-col gap-3 px-6 tab:mx-auto tab:w-fit tab:max-w-full tab:flex-row tab:hide-scrollbar desk:gap-5 desk:px-0"
+        centerWhenFit
+      >
         {CARDS.map((card, index) => (
           <Reveal
             key={card.title}
@@ -112,7 +116,7 @@ export function Audience() {
             </article>
           </Reveal>
         ))}
-      </div>
+      </TabletStrip>
     </section>
   );
 }
