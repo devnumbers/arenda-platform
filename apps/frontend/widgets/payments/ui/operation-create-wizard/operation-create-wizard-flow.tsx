@@ -21,10 +21,9 @@ import type { PaymentOperation, PaymentType } from '@/entities/payment';
 import {
   buildOperationCreateCommand,
   effectiveOperationType,
-  initialOperationWizardStep,
   operationWizardStepReady,
   useCreateOperation,
-  useOperationWizardDraft,
+  type OperationWizardDraft,
   type OperationWizardMode,
   type OperationWizardStep,
 } from '@/features/payments';
@@ -41,11 +40,12 @@ import { OperationSuccess } from './operation-success';
  * Поток шагов визарда создания операции (#570; Figma 1858:104557/105397,
  * 1863:67296, 1858:105011, 1858:105544): сумма и направление → название →
  * категория → объект (только глобальный вход — аннотация фрейма выбора) →
- * успех. Клиентское состояние на одном маршруте; черновик переживает
- * закрытие и перезагрузку (решение владельца 08.09), восстанавливается
- * на первый незавершённый шаг. Шаги без чипа — шапка несёт названия
- * шагов из макета; на последнем шаге кнопка сабмита «Добавить операцию»
- * (аннотация фрейма названия: у входа с объекта она живёт на категории).
+ * успех. Клиентское состояние на одном маршруте, старт всегда с шага
+ * суммы: черновика у операции нет (карта #1052, Q2=В) — уход со страницы,
+ * перезагрузка и закрытие дают чистый лист. Шаги без чипа — шапка несёт
+ * названия шагов из макета; на последнем шаге кнопка сабмита «Добавить
+ * операцию» (аннотация фрейма названия: у входа с объекта она живёт
+ * на категории).
  */
 
 export type OperationCreateWizardFlowProps = {
@@ -66,12 +66,11 @@ export function OperationCreateWizardFlow({
 }: OperationCreateWizardFlowProps): JSX.Element {
   const router = useRouter();
   const createOperation = useCreateOperation();
-  const { draft, setDraft, clearDraft } = useOperationWizardDraft();
+  // Состояние шагов живёт только пока смонтирован поток (канон — в модели).
+  const [draft, setDraft] = useState<OperationWizardDraft>({});
   // Визард — экран создания: футер глушится на всех шагах (как у платежей).
   useTabBarSuppression();
-  const [step, setStep] = useState<OperationWizardStep>(() =>
-    initialOperationWizardStep(draft, mode),
-  );
+  const [step, setStep] = useState<OperationWizardStep>(1);
   const [created, setCreated] = useState<PaymentOperation | null>(null);
   // Поиск категорий живёт в хедере шага категории (как в визарде платежа):
   // лупа меняет название шага на поле, «Назад» возвращает название и
@@ -331,7 +330,6 @@ export function OperationCreateWizardFlow({
     }
     try {
       const operation = await createOperation.mutateAsync({ propertyId: resolvedPropertyId, command });
-      clearDraft();
       notify.scenarios.payments.operationCreated();
       setCreated(operation);
     } catch (error) {

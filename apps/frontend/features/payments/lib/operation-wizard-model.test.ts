@@ -2,11 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   buildOperationCreateCommand,
   effectiveOperationType,
-  initialOperationWizardStep,
   operationPresetFromQueryParam,
   operationWizardStepReady,
+  type OperationWizardDraft,
 } from './operation-wizard-model';
-import type { OperationWizardDraft } from './use-operation-wizard-draft';
 
 describe('operationPresetFromQueryParam', () => {
   it('пресет от точки входа: Доходы→Доход, иначе Расход', () => {
@@ -57,34 +56,6 @@ describe('operationWizardStepReady', () => {
   it('шаг объекта готов после выбора объекта', () => {
     expect(operationWizardStepReady(4, {})).toBe(false);
     expect(operationWizardStepReady(4, { propertyId: 'p1' })).toBe(true);
-  });
-});
-
-describe('initialOperationWizardStep', () => {
-  it('пустой черновик открывает шаг суммы', () => {
-    expect(initialOperationWizardStep({}, 'global')).toBe(1);
-    expect(initialOperationWizardStep({}, 'property')).toBe(1);
-  });
-
-  it('без категории — шаг категории', () => {
-    expect(initialOperationWizardStep({ amountKopecks: 100 }, 'global')).toBe(3);
-  });
-
-  it('глобальный вход с полным черновиком, кроме объекта — шаг объекта', () => {
-    expect(
-      initialOperationWizardStep(
-        { amountKopecks: 100, categorySlug: 'rent' },
-        'global',
-      ),
-    ).toBe(4);
-  });
-
-  it('глобальный вход с полным черновиком — шаг объекта (сабмит)', () => {
-    expect(initialOperationWizardStep(FULL_DRAFT, 'global')).toBe(4);
-  });
-
-  it('вход с объекта с полным черновиком — шаг категории (сабмит)', () => {
-    expect(initialOperationWizardStep(FULL_DRAFT, 'property')).toBe(3);
   });
 });
 
