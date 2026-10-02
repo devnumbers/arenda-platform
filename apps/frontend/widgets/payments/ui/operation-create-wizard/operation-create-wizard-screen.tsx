@@ -7,10 +7,7 @@ import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { useProperty } from '@/features/properties';
 import { propertyPermissions } from '@/entities/property';
-import {
-  useOperationWizardDraft,
-  type OperationWizardMode,
-} from '@/features/payments';
+import type { OperationWizardMode } from '@/features/payments';
 import type { PaymentType } from '@/entities/payment';
 import {
   Button,
@@ -32,15 +29,16 @@ import { OperationCreateWizardFlow } from './operation-create-wizard-flow';
  * Экран визарда создания одиночной операции (#570): маршруты
  * /operations/new (глобальный, с шагом «Выбрать объект») и
  * /properties/[id]/operations/new (с объекта, объектного шага нет).
- * Направление приходит пресетом точки входа (?type=). Черновик
- * монтируется только после гидрации хранилища; у входа с объекта
- * мутационный вход закрыт для смотрящего и архива (read-only, как у
- * визарда платежа).
+ * Направление приходит пресетом точки входа (?type=). Состояние шагов —
+ * useState потока (черновика нет — канон в модели визарда), гидрации
+ * хранилища нет; у входа с объекта мутационный вход закрыт для смотрящего
+ * и архива (read-only, как у визарда платежа).
  *
- * Загрузка (#607, паритет §7): холодный вход открывает шаг «Добавить
- * операцию» — хром шага («Закрыть», название) и нижняя панель
- * «Продолжить» рендерятся сразу, скелетон закрывает только поле суммы
- * с сегментом направления.
+ * Загрузка (#607, паритет §7): у входа с объекта, пока объект читается,
+ * холодный вход открывает шаг «Добавить операцию» — хром шага («Закрыть»,
+ * название) и нижняя панель «Продолжить» рендерятся сразу, скелетон
+ * закрывает только поле суммы с сегментом направления. Глобальный вход
+ * рендерит поток сразу (данные списков — серверный префетч #887).
  */
 
 export type OperationCreateWizardScreenProps = {
@@ -57,16 +55,14 @@ export function OperationCreateWizardScreen({
   const router = useRouter();
   // У глобального входа объект не читается: пустой id глушит запрос.
   const propertyQuery = useProperty(propertyId ?? '');
-  const draftState = useOperationWizardDraft();
 
-  const loading =
-    !draftState.isLoaded || (mode === 'property' && propertyQuery.isPending);
+  const loading = mode === 'property' && propertyQuery.isPending;
   const property = propertyQuery.isSuccess ? propertyQuery.data : undefined;
   // Глобальный вход мутирует книгу читателя в целом; объектный — по
   // центральным правам объекта (#703).
   const canMutate = mode === 'global' || propertyPermissions(property).canEdit;
 
-  // Выход с шага 1 — куда ведет «Закрыть» потока (шаг восстановится сам).
+  // Выход с шага 1 — куда ведет «Закрыть» потока.
   const closeDestination =
     mode === 'property' && propertyId !== undefined
       ? ROUTES.propertyOperations(propertyId)

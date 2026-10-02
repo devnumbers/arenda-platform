@@ -1,25 +1,35 @@
 import type { OperationCreateCommand, PaymentType } from '@/entities/payment';
-import type { OperationWizardDraft } from './use-operation-wizard-draft';
 
 /**
  * Чистая логика визарда создания одиночной операции (#570): готовность
- * шагов, восстановление черновика на первый незавершённый шаг и
- * сериализация в команду POST создания (#569). Поток: сумма → название →
- * категория → (объект — только глобальный вход) → успех. Дата и статус
- * рождается серверными (paid, сегодня владельца) — в команде их нет.
- * Шаги UI и хранение черновика — в слое экрана.
+ * шагов и сериализация в команду POST создания (#569). Поток: сумма →
+ * название → категория → (объект — только глобальный вход) → успех. Дата
+ * и статус рождается серверными (paid, сегодня владельца) — в команде их
+ * нет. Состояние шагов — обычный useState потока (карта #1052, Q2=В:
+ * черновика у операции нет — уход со страницы, перезагрузка и закрытие
+ * дают чистый лист; он остался только у платежа). Шаги UI — в слое экрана.
  */
+
+/** Форма состояния шагов визарда; живёт, пока смонтирован поток. */
+export type OperationWizardDraft = {
+  /** Доход/расход — сегмент шага суммы; до явного выбора действует
+   * пресет точки входа. */
+  readonly type?: PaymentType;
+  /** Название операции (шаг 2). */
+  readonly title?: string;
+  /** Слаг дефолтного каталога (шаг 3). */
+  readonly categorySlug?: string;
+  /** Сумма в копейках, целая положительная (шаг 1). */
+  readonly amountKopecks?: number;
+  /** Объект шага «Выбрать объект» (глобальный вход, шаг 4). */
+  readonly propertyId?: string;
+};
 
 /** Шаги визарда: 4 существует только у глобального входа («Выбрать объект»). */
 export type OperationWizardStep = 1 | 2 | 3 | 4;
 
 /** Точка входа: с объекта (объект известен из маршрута) или глобальная. */
 export type OperationWizardMode = 'global' | 'property';
-
-/** Последний шаг потока: на нём живёт сабмит «Добавить операцию». */
-function lastStep(mode: OperationWizardMode): OperationWizardStep {
-  return mode === 'global' ? 4 : 3;
-}
 
 /** Пресет направления от точки входа (маршрутный ?type=): Расходы→Расход,
  * Доходы→Доход, иначе (нет/нераспознано) — Расход. */
@@ -54,19 +64,6 @@ export function operationWizardStepReady(
   }
 }
 
-/** Восстановление черновика: первый незавершённый шаг, иначе последний
- * шаг потока — на нём живёт сабмит «Добавить операцию». */
-export function initialOperationWizardStep(
-  draft: OperationWizardDraft,
-  mode: OperationWizardMode,
-): OperationWizardStep {
-  const last = lastStep(mode);
-  for (let step = 1 as OperationWizardStep; step < last; step = (step + 1) as OperationWizardStep) {
-    if (!operationWizardStepReady(step, draft)) return step;
-  }
-  return last;
-}
-
 type OperationCreateCommandOptions = {
   /** Объект создания: выбор шага 4 (глобальный вход) или маршрут (с объекта). */
   readonly propertyId: string;
@@ -79,7 +76,7 @@ type OperationCreateCommandOptions = {
   readonly resolveTitle?: (categorySlug: string) => string | undefined;
 };
 
-/** Команда создания из завершённого черновика; undefined — черновик неполон. */
+/** Команда создания из заполненного состояния шагов; undefined — состояние неполно. */
 export function buildOperationCreateCommand(
   draft: OperationWizardDraft,
   options: OperationCreateCommandOptions,
