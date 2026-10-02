@@ -81,7 +81,10 @@ func (w *DeliverPushWorker) Work(ctx context.Context, job *river.Job[DeliverPush
 	// A dead enum value has no category; the empty one reads as always-on.
 	category, _ := n.EventType.FeedCategory()
 	for _, sub := range subs {
-		if !sub.Accepts(category) {
+		// Категорийный флаг устройства — вердикт доставки; служебные категории
+		// всегда отвечают «да» (Allows). Мастера-флага нет: подписки
+		// выключенного устройства просто нет в списке (спека #1028).
+		if !sub.Categories.Allows(category) {
 			w.log.InfoContext(ctx, "push skipped by device settings",
 				slog.String("notification_id", n.ID.String()),
 				slog.String("recipient_id", n.UserID.String()),

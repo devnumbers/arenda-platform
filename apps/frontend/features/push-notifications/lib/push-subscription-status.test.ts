@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   PENDING_PUSH_STATUS,
   UNSUPPORTED_PUSH_STATUS,
+  mergePushStatus,
   resolveInitialPushStatus,
 } from './push-subscription-status';
 
@@ -43,5 +44,33 @@ describe('resolveInitialPushStatus', () => {
     expect(resolveInitialPushStatus({ supported: false, permission: 'granted' })).toBe(
       resolveInitialPushStatus({ supported: false, permission: 'unsupported' }),
     );
+  });
+});
+
+describe('mergePushStatus — слияние синхронного вердикта и пробы подписки', () => {
+  it('разрешение не выдано — синхронный вердикт окончателен, подписку не ждём', () => {
+    const denied = resolveInitialPushStatus({ supported: true, permission: 'denied' });
+    expect(mergePushStatus(denied, 'https://push.example/e1')).toBe(denied);
+    expect(mergePushStatus(denied, undefined)).toBe(denied);
+  });
+
+  it('granted, проба в воздухе — экран держит архетип загрузки', () => {
+    expect(mergePushStatus(PENDING_PUSH_STATUS, undefined)).toBe(PENDING_PUSH_STATUS);
+  });
+
+  it('granted, подписки нет — needsSubscription (состояние №5)', () => {
+    const status = mergePushStatus(PENDING_PUSH_STATUS, null);
+    expect(status.isPending).toBe(false);
+    expect(status.needsSubscription).toBe(true);
+    expect(status.isReady).toBe(false);
+    expect(status.endpoint).toBeNull();
+  });
+
+  it('granted, подписка есть — isReady с endpoint (состояние №6)', () => {
+    const status = mergePushStatus(PENDING_PUSH_STATUS, 'https://push.example/e2');
+    expect(status.isPending).toBe(false);
+    expect(status.isReady).toBe(true);
+    expect(status.needsSubscription).toBe(false);
+    expect(status.endpoint).toBe('https://push.example/e2');
   });
 });

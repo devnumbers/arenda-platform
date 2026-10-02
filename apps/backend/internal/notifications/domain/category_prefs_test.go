@@ -35,22 +35,3 @@ func TestCategoryPrefs_Allows(t *testing.T) {
 	assert.True(t, off.Allows(CategoryTariff))
 	assert.True(t, off.Allows(CategorySystem))
 }
-
-// Accepts is the push subscription's delivery verdict: the category flag
-// gates its own category, the always-on service categories answer to nothing
-// (спека #1028 — поле enabled снесено, мастер — само существование строки:
-// подписки у выключенного устройства нет, проверять нечего).
-func TestPushSubscription_Accepts(t *testing.T) {
-	t.Parallel()
-
-	sub := PushSubscription{Categories: DefaultCategoryPrefs()}
-	assert.True(t, sub.Accepts(CategoryTasks))
-	assert.True(t, sub.Accepts(CategoryTariff), "service category is always on")
-
-	categoryOff := PushSubscription{
-		Categories: CategoryPrefs{Rental: true, PaymentsOperations: true, Tasks: false, SharedAccess: true},
-	}
-	assert.False(t, categoryOff.Accepts(CategoryTasks))
-	assert.True(t, categoryOff.Accepts(CategoryRental))
-	assert.True(t, categoryOff.Accepts(CategoryTariff))
-}

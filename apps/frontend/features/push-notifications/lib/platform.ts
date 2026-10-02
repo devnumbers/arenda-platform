@@ -72,3 +72,52 @@ export function readNotificationPermission(): NotificationPermissionState {
     }
     return Notification.permission;
 }
+
+/** Отписка от событий пробы (для useSyncExternalStore-cleanup). */
+export type PermissionChangesUnsubscribe = () => void;
+
+/**
+ * Live permission updates (спека #1028 §6, слайс 2 #1038): the browser emits
+ * no event for `Notification.permission` itself, but
+ * `permissions.query({name:'notifications'})` returns a PermissionStatus
+ * whose `change` event fires when the permission is granted/revoked outside
+ * the page (late opt-in from Site Settings, Chrome auto-revoke). The
+ * subscription wires that event; without the Permissions API (Safari < 16,
+ * SSR) it degrades to a no-op and the probe simply never updates live.
+ *
+ * The wiring itself is async (the query resolves in a promise): a change
+ * landing in the same tick as the subscribe call can be missed — the store
+ * re-reads the permission on every change anyway, and permission flips in
+ * that window are not a real scenario.
+ */
+export function subscribeToPermissionChanges(
+    onChange: () => void,
+): PermissionChangesUnsubscribe {
+    // permissions может отсутствовать в рантайме (старый Safari), хотя
+    // lib.dom считает его обязательным — проверяем через локальный срез.
+    type NavigatorWithOptionalPermissions = Omit<Navigator, 'permissions'> & {
+        readonly permissions?: Permissions;
+    };
+    if (
+        typeof window === 'undefined' ||
+        typeof navigator === 'undefined'
+    ) {
+        return () => {};
+    }
+    const permissions = (navigator as NavigatorWithOptionalPermissions).permissions;
+    if (permissions?.query === undefined) {
+        return () => {};
+    }
+    let removeListener: () => void = () => {};
+    permissions
+        .query({ name: 'notifications' })
+        .then((status) => {
+            status.addEventListener('change', onChange);
+            removeListener = () => status.removeEventListener('change', onChange);
+        })
+        .catch(() => {
+            // Permissions API rejects for 'notifications' on browsers without
+            // live updates — the synchronous probe still works.
+        });
+    return () => removeListener();
+}

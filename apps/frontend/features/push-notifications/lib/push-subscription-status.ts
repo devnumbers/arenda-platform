@@ -93,3 +93,31 @@ export function resolveInitialPushStatus(input: {
     ? PERMISSION_DENIED_PUSH_STATUS
     : PERMISSION_DEFAULT_PUSH_STATUS;
 }
+
+/**
+ * Слияние двух половин пробы: синхронный вердикт (поддержка + разрешение) и
+ * асинхронный endpoint подписки. Не-выданное разрешение — окончательный
+ * вердикт без подписочной половины; `granted` ждёт endpoint: undefined —
+ * проба в воздухе (архетип загрузки), null — подписки нет (№5), строка —
+ * норма «вкл» (№6, спека #1028 §1).
+ */
+export function mergePushStatus(
+  sync: PushSubscriptionStatus,
+  endpoint: string | null | undefined,
+): PushSubscriptionStatus {
+  if (!sync.isPending) {
+    return sync;
+  }
+  if (endpoint === undefined) {
+    return PENDING_PUSH_STATUS;
+  }
+  return {
+    isUnsupported: false,
+    needsPermission: false,
+    permissionDenied: false,
+    needsSubscription: endpoint === null,
+    isReady: endpoint !== null,
+    isPending: false,
+    endpoint,
+  };
+}

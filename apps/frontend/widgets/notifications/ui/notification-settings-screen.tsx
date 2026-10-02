@@ -8,10 +8,12 @@ import {
 } from '@/entities/notification';
 import {
   defaultPushDevicePreferences,
+  useDeletePushSubscription,
   usePushDevicePreferences,
   usePushSubscriptionStatus,
   useSubscribePush,
   useUpdatePushDevicePreferences,
+  unsubscribeBrowserSubscription,
   type PushDevicePreferences,
 } from '@/features/push-notifications';
 import {
@@ -47,13 +49,13 @@ const GROUP_DESCRIPTIONS: Record<NotificationSettingsCategory, string> = {
  * (GET/PUT /notification-preferences), пуш-колонка — на подписке браузера
  * (GET/PUT /push/subscriptions/preferences); оба PUT оптимистичны с откатом.
  *
- * Пуш-флоу «Разрешите пуши»: включение пуш-тумблера без разрешения браузера
- * открывает шит (2329-151632), мастер включён без разрешения — inline-карту
- * под мастером (2329-150165); после разрешения пуш включён (2329-151164).
- * Мастер выключен глушит только доставку: тумблеры категорий кликабельны
- * и хранят значения — макет 2333-180696 показывает включённый пуш-тумблер
- * под выключенным мастером (сверка #827). Браузер без Web Push —
- * пуш-колонка не рендерится.
+ * Мастерового флага нет (спека #1028 §0, слайс 2 #1038): строка подписки
+ * есть = устройство включено (мастер по факту живой подписки), выключение —
+ * жёсткая отписка pushManager.unsubscribe() + идемпотентный
+ * DELETE /push/subscriptions; включение без подписки — флоу разрешения
+ * (шит при не-выданном разрешении 2329-151632, inline-карточка 2329-150165),
+ * тихая подписка при выданном. Матрица состояний с единым красным слотом —
+ * слайс 3 (#1039).
  */
 export function NotificationSettingsScreen(): JSX.Element {
   const { refresh, ...pushStatus } = usePushSubscriptionStatus();
@@ -66,11 +68,13 @@ export function NotificationSettingsScreen(): JSX.Element {
   const emailQuery = useEmailNotificationPreferences();
 
   const updatePush = useUpdatePushDevicePreferences();
+  const deleteSubscription = useDeletePushSubscription();
   const updateEmail = useUpdateEmailPreferences();
   const { subscribe, isPending: flowPending } = useSubscribePush();
 
   // Локальное состояние пуш-колонки до первой подписки: выключатели здесь
   // нечему хранить на сервере, флоу разрешения сохранит их первым PUT.
+  // Мастера в состоянии нет — мастер рисует факт подписки.
   const [localPush, setLocalPush] = useState<PushDevicePreferences | null>(null);
   // Изменение, ждущее разрешения (шит открыт); карточка идёт без изменения —
   // сохраняет текущее состояние как есть.
@@ -108,6 +112,20 @@ export function NotificationSettingsScreen(): JSX.Element {
           notify.scenarios.profile.notificationPreferencesSaveError(error),
       },
     );
+  };
+
+  /** Мастер-выключение (№6 → №5): жёсткая отписка — браузерная подписка +
+   * строка БД (спека #1028 §2). DELETE идемпотентный (204 и без строки);
+   * проба подписки и кэш настроек обновляет мутация — UI видит «выключено»
+   * сразу. */
+  const turnPushOff = (probeEndpoint: string): void => {
+    void (async () => {
+      const liveEndpoint = await unsubscribeBrowserSubscription();
+      deleteSubscription.mutate(liveEndpoint ?? probeEndpoint, {
+        onError: (error) =>
+          notify.scenarios.profile.notificationPreferencesSaveError(error),
+      });
+    })();
   };
 
   const toggleEmail = (category: NotificationSettingsCategory, value: boolean): void => {
@@ -160,29 +178,13 @@ export function NotificationSettingsScreen(): JSX.Element {
 
   const toggleMaster = (value: boolean): void => {
     if (!value) {
-      // Выключение в разрешении не нуждается: с подпиской — PUT, без — локально.
-      if (endpoint !== null) {
-        savePush(
-          applyPushChange(currentPushState(), { kind: 'master', value: false }),
-          endpoint,
-        );
-      } else {
-        setLocalPush((prev) =>
-          applyPushChange(prev ?? defaultPushDevicePreferences(), {
-            kind: 'master',
-            value: false,
-          }),
-        );
-      }
+      // Выключение = жёсткая отписка (строки нет = выключено); без подписки
+      // выключать нечего — и так выключено.
+      if (endpoint !== null) turnPushOff(endpoint);
       return;
     }
-    if (endpoint !== null && permissionGranted) {
-      savePush(
-        applyPushChange(currentPushState(), { kind: 'master', value: true }),
-        endpoint,
-      );
-      return;
-    }
+    // Строка есть = уже включено; включение без подписки — флоу разрешения.
+    if (endpoint !== null) return;
     if (permissionGranted) {
       // Разрешение есть, подписки нет — тихая подписка без промпта.
       void runPermissionFlow({ kind: 'master', value: true });

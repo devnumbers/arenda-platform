@@ -1,8 +1,14 @@
 /**
- * Модель экрана «Настроить уведомления» (#746, карта #734, решение #738):
- * источник состояния пуш-колонки и вердикты флоу «Разрешите пуши».
- * Чистые функции — экран только связывает их с хуками; проверяются
- * модульными тестами рядом.
+ * Модель экрана «Настроить уведомления» (#746, карта #734, решение #738;
+ * контракт переписан спекой #1028 — слайс 2 #1038): источник состояния
+ * пуш-колонки и вердикты флоу «Разрешите пуши». Чистые функции — экран
+ * только связывает их с хуками; проверяются модульными тестами рядом.
+ *
+ * Мастерового флага в модели больше нет (спека #1028 §0): строка подписки
+ * есть = устройство включено, строки нет = выключено. Экран показывает
+ * мастер по факту живой подписки (endpoint из пробы), а переключение
+ * мастера — это действия подписки/отписки, не правка данных: POST создаёт
+ * строку, unsubscribe + DELETE сносит.
  */
 
 import type { NotificationCategoryPreferences, NotificationSettingsCategory } from '@/entities/notification';
@@ -11,7 +17,9 @@ import type { PushDevicePreferences } from '@/features/push-notifications';
 import { defaultPushDevicePreferences } from '@/features/push-notifications';
 import type { RequestPushPermissionOutcome } from '@/features/push-notifications';
 
-/** Желаемое изменение пуш-канала: мастер или одна категория. */
+/** Желаемое изменение пуш-канала. Мастер в тело PUT не выражается: его клик
+ * исполняется подпиской/отпиской, а изменение остаётся в типе ради
+ * ожидающего разрешения флоу (шит держит намерение до исхода окна). */
 export type PushChange =
   | { readonly kind: 'master'; readonly value: boolean }
   | {
@@ -20,13 +28,14 @@ export type PushChange =
       readonly value: boolean;
     };
 
-/** Применяет изменение к состоянию устройства, не мутируя вход. */
+/** Применяет изменение к состоянию устройства, не мутируя вход. Мастер
+ * возвращает состояние без изменений — телом PUT он не выражается. */
 export function applyPushChange(
   current: PushDevicePreferences,
   change: PushChange,
 ): PushDevicePreferences {
   if (change.kind === 'master') {
-    return { ...current, enabled: change.value };
+    return current;
   }
   return {
     ...current,
@@ -42,8 +51,8 @@ export type PushDisplay = {
   readonly visible: boolean;
   readonly masterOn: boolean;
   readonly categories: NotificationCategoryPreferences;
-  /** Карточка «Разрешите пуши» под мастером (2329-150165): мастер включён,
-   * проба браузера осела, разрешение не выдано. */
+  /** Карточка «Разрешите пуши» под мастером (2329-150165): подписки нет и
+   * разрешение не выдано — включению нужен флоу разрешения. */
   readonly needsPermission: boolean;
 };
 
@@ -52,17 +61,17 @@ export type PushDisplayInput = {
   readonly probeSettled: boolean;
   readonly supported: boolean;
   readonly permissionGranted: boolean;
-  /** Endpoint живой подписки браузера; null — подписки нет. */
+  /** Endpoint живой подписки браузера; null — подписки нет (мастер ВЫКЛ). */
   readonly endpoint: string | null;
-  /** Состояние устройства с бэка; undefined — GET ещё в воздухе. */
+  /** Категории устройства с бэка; undefined — GET ещё в воздухе. */
   readonly server: PushDevicePreferences | undefined;
-  /** Локальное состояние без подписки; null — дефолт «всё включено»
+  /** Локальные категории без подписки; null — дефолт «всё включено»
    * (решение #738). Хранит выключатели, сделанные до первой подписки, —
    * флоу разрешения сохранит их первым PUT. */
   readonly local: PushDevicePreferences | null;
 };
 
-/** Единый источник состояния пуш-колонки: с подпиской — сервер (до ответа
+/** Единый источник категорий пуш-колонки: с подпиской — сервер (до ответа
  * GET — дефолт), без — локальное состояние с тем же дефолтом. */
 export function resolvePushState(
   endpoint: string | null,
@@ -86,15 +95,16 @@ export function resolvePushDisplay(input: PushDisplayInput): PushDisplay {
 
   const state = resolvePushState(input.endpoint, input.server, input.local);
 
-  // Мастер выключен только глушит доставку: тумблеры категорий остаются
-  // кликабельными и хранят значения (сверка с макетом #827 — 2333-180696
-  // показывает включённый пуш-тумблер под выключенным мастером).
+  // Мастер — факт живой подписки (строка есть = включено, спека #1028 §0):
+  // выключенные категории до подписки мастер не включают.
   return {
     visible: true,
-    masterOn: state.enabled,
+    masterOn: input.endpoint !== null,
     categories: state.categories,
     needsPermission:
-      state.enabled && input.probeSettled && !input.permissionGranted,
+      input.endpoint === null &&
+      input.probeSettled &&
+      !input.permissionGranted,
   };
 }
 

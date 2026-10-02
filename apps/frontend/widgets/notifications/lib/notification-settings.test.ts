@@ -4,12 +4,12 @@ import type { RequestPushPermissionOutcome } from '@/features/push-notifications
 import {
   applyPushChange,
   resolvePushDisplay,
+  resolvePushState,
   verdictFromOutcome,
   type PushChange,
 } from './notification-settings';
 
 const ALL_ON: PushDevicePreferences = {
-  enabled: true,
   categories: { rental: true, payments_operations: true, tasks: true, shared_access: true },
 };
 
@@ -23,31 +23,32 @@ const settledInput = {
 };
 
 describe('resolvePushDisplay — источник состояния', () => {
-  it('с подпиской состояние приходит с сервера', () => {
+  it('с подпиской категории приходят с сервера, мастер — факт подписки', () => {
     const display = resolvePushDisplay({
       ...settledInput,
-      server: { enabled: false, categories: { ...ALL_ON.categories, rental: false } },
+      server: { categories: { ...ALL_ON.categories, rental: false } },
     });
-    expect(display.masterOn).toBe(false);
+    expect(display.masterOn).toBe(true);
     expect(display.categories.rental).toBe(false);
     // пока GET в воздухе — дефолт «всё включено»
     expect(
-      resolvePushDisplay({ ...settledInput, server: undefined }).masterOn,
-    ).toBe(true);
+      resolvePushDisplay({ ...settledInput, server: undefined }).categories,
+    ).toStrictEqual(ALL_ON.categories);
   });
 
-  it('без подписки состояние локальное с дефолтом «всё включено» (решение #738)', () => {
+  it('без подписки мастер выключен (строки нет = выключено, спека #1028 §0)', () => {
     const display = resolvePushDisplay({ ...settledInput, endpoint: null, local: null });
-    expect(display.masterOn).toBe(true);
+    expect(display.masterOn).toBe(false);
     expect(display.categories).toStrictEqual(ALL_ON.categories);
 
-    const turnedOff = resolvePushDisplay({
+    // локальные выключатели хранятся до первой подписки, мастер они не включают
+    const turnedOffCategory = resolvePushDisplay({
       ...settledInput,
       endpoint: null,
-      local: { enabled: false, categories: { ...ALL_ON.categories, tasks: false } },
+      local: { categories: { ...ALL_ON.categories, tasks: false } },
     });
-    expect(turnedOff.masterOn).toBe(false);
-    expect(turnedOff.categories.tasks).toBe(false);
+    expect(turnedOffCategory.masterOn).toBe(false);
+    expect(turnedOffCategory.categories.tasks).toBe(false);
   });
 
   it('браузер без пуша — колонка не рендерится вовсе', () => {
@@ -56,42 +57,46 @@ describe('resolvePushDisplay — источник состояния', () => {
   });
 });
 
-describe('resolvePushDisplay — мастер и разрешения', () => {
-  it('мастер выключен — тумблеры категорий кликабельны, значения хранятся (2333-180696: включённый пуш под выключенным мастером)', () => {
-    const display = resolvePushDisplay({
-      ...settledInput,
-      server: { enabled: false, categories: { ...ALL_ON.categories, rental: true } },
-    });
-    // gating-флага в модели нет: экран не затемняет и не disables категории
-    expect('categoriesInteractive' in display).toBe(false);
-    expect(display.categories.rental).toBe(true);
+describe('resolvePushState — источник категорий', () => {
+  it('с подпиской — сервер, без — локальное состояние, дефолт один', () => {
+    const server: PushDevicePreferences = {
+      categories: { rental: false, payments_operations: true, tasks: true, shared_access: true },
+    };
+    const local: PushDevicePreferences = {
+      categories: { rental: true, payments_operations: false, tasks: true, shared_access: true },
+    };
+    expect(resolvePushState('https://push.example/e1', server, local)).toBe(server);
+    expect(resolvePushState(null, server, local)).toBe(local);
+    expect(resolvePushState(null, undefined, null)).toStrictEqual(ALL_ON);
   });
+});
 
-  it('карточка «Разрешите пуши» — мастер включён и разрешение не выдано (2329-150165)', () => {
+describe('resolvePushDisplay — мастер и разрешения', () => {
+  it('карточка «Разрешите пуши» — подписки нет и разрешение не выдано (2329-150165)', () => {
+    expect(
+      resolvePushDisplay({ ...settledInput, permissionGranted: false, endpoint: null })
+        .needsPermission,
+    ).toBe(true);
+    // подписка есть — включать нечего, карточка не нужна
     expect(
       resolvePushDisplay({ ...settledInput, permissionGranted: false }).needsPermission,
-    ).toBe(true);
-    // мастер выключен — карточка не нужна
+    ).toBe(false);
+    // проба браузера не осела — состояние неясно, карточку не показываем
     expect(
       resolvePushDisplay({
         ...settledInput,
         permissionGranted: false,
-        server: { ...ALL_ON, enabled: false },
+        endpoint: null,
+        probeSettled: false,
       }).needsPermission,
-    ).toBe(false);
-    // проба браузера не осела — состояние неясно, карточку не показываем
-    expect(
-      resolvePushDisplay({ ...settledInput, permissionGranted: false, probeSettled: false })
-        .needsPermission,
     ).toBe(false);
   });
 });
 
 describe('applyPushChange', () => {
-  it('двигает мастер, не трогая категории', () => {
-    const next = applyPushChange(ALL_ON, { kind: 'master', value: false });
-    expect(next.enabled).toBe(false);
-    expect(next.categories).toStrictEqual(ALL_ON.categories);
+  it('мастер в тело PUT не выражается — состояние без изменений', () => {
+    expect(applyPushChange(ALL_ON, { kind: 'master', value: false })).toBe(ALL_ON);
+    expect(applyPushChange(ALL_ON, { kind: 'master', value: true })).toBe(ALL_ON);
   });
 
   it('двигает одну категорию', () => {
@@ -100,9 +105,9 @@ describe('applyPushChange', () => {
       category: 'tasks',
       value: false,
     });
-    expect(next.enabled).toBe(true);
     expect(next.categories.tasks).toBe(false);
     expect(next.categories.rental).toBe(true);
+    expect(ALL_ON.categories.tasks).toBe(true);
   });
 });
 

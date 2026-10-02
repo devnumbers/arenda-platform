@@ -2,23 +2,23 @@
 
 import { useCallback, useState } from 'react';
 import { requestPushPermissionAndSubscribe, type RequestPushPermissionOutcome } from '../lib/request-push';
-import { useEnsureSubscriptionTools } from '../lib/subscription-sync';
+import { usePushSubscriptionTools } from '../lib/push-tools';
 
 /**
  * High-level hook that drives the explicit push-enablement flow named in
  * spec #183 (`useSubscribePush`). Returns a trigger (call it from a click
  * handler) and the latest outcome so the caller can show the right copy.
  *
- * Internally composed of {@link useEnsureSubscriptionTools} (VAPID key + POST)
- * and {@link requestPushPermissionAndSubscribe} (permission + subscribe). The
- * split lets `PushPermissionGate` reuse the same tools for the background
- * re-subscribe path without re-triggering the system prompt.
+ * Internally composed of {@link usePushSubscriptionTools} (VAPID key + POST)
+ * and {@link requestPushPermissionAndSubscribe} (permission + subscribe).
+ * Подписка возникает только из явного действия (спека #1028 §4) — фоновых
+ * вызовов у хука нет.
  */
 export function useSubscribePush(): {
   readonly subscribe: () => Promise<RequestPushPermissionOutcome>;
   readonly isPending: boolean;
 } {
-  const { vapidKey, postSubscription } = useEnsureSubscriptionTools();
+  const { vapidKey, postSubscription } = usePushSubscriptionTools();
   const [isPending, setIsPending] = useState(false);
 
   const subscribe = useCallback(async (): Promise<RequestPushPermissionOutcome> => {

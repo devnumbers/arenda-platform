@@ -84,10 +84,11 @@ The settings contract and the feed's REST surface landed with #743
 = all-on), the device matrix lives on the push subscription itself (master
 `enabled` plus the four category flags). The email delivery job reads the
 recipient's matrix at delivery time (`DeliverySettings`); the push job
-filters each subscription by its own state (`Accepts`). *(Аменд 2026-10-02,
+filters each subscription by its own category flag (`Categories.Allows`).
+*(Аменд 2026-10-02,
 #1028: master-флага на подписке больше нет — колонка снесена миграцией
-`000147`, мастером служит само существование строки; `Accepts` отвечает
-только категорийным флагом.)* The feed's REST
+`000147`, мастером служит само существование строки; вердикт доставки —
+только категорийный флаг `Categories.Allows`, враппер `Accepts` снесён.)* The feed's REST
 surface (#743): keyset page, unread count, read/delete one and all, and the
 notification detail whose action buttons are computed at read time from the
 entities' live state and the reader's role (decision #737).

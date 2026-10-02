@@ -7,6 +7,9 @@ export {
   type PushDevicePreferences,
   type UpdatePushDevicePreferencesVars,
 } from './api/use-push-preferences';
-export { isPushSupported, readNotificationPermission } from './lib/platform';
-export { ensureActiveSubscription, useEnsureSubscriptionTools } from './lib/subscription-sync';
+export { useDeletePushSubscription } from './api/hooks';
+export { usePushStartup } from './api/use-push-startup';
+export {
+  unsubscribeBrowserSubscription,
+} from './lib/browser-subscription';
 export type { RequestPushPermissionOutcome } from './lib/request-push';

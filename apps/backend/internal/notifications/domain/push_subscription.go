@@ -46,14 +46,6 @@ type PushSubscription struct {
 	UpdatedAt  time.Time
 }
 
-// Accepts is the device's delivery verdict for one category: the category
-// flag gates its own category, the always-on service categories answer to
-// nothing (спека #1028 — поле enabled вырождено и снесено: мастером служит
-// само существование строки, выключенное устройство строки не имеет).
-func (s PushSubscription) Accepts(c Category) bool {
-	return s.Categories.Allows(c)
-}
-
 // ValidatePushSubscription checks the invariants of a stored subscription's
 // mutable fields: a non-empty https (or http for local dev) endpoint URL and
 // non-empty, length-bounded p256dh/auth secrets. It does not decode the
