@@ -56,7 +56,7 @@ No form library and no schema validator — this is deliberate, not a gap:
 
 - Completing or cancelling a flow that returns to its source page (saving an edit form, "Cancel", "Add later" on a wizard success step, deleting an entity) — `goBack(router, fallbackHref)` from `shared/lib/navigation`: the form pops out of history and the source page below opens; with empty history it degrades to `router.replace(fallbackHref)`.
 - Completing a flow that navigates to a new page (created entity, another section) — `router.replace`: the target replaces the transient history entry.
-- `router.replace` back to the source page is banned: it duplicates the source page in history and the first Back press returns to the same URL (a "dead" back).
+- `router.replace` back to the source page is banned: it duplicates the source page in history and the first Back press returns to the same URL (a "dead" back). Exception (#1079, owner 02.10): the rental-create wizard's success exits («Хорошо», header cross) use `router.replace(ROUTES.property(propertyId))` — the success landing must be the property card regardless of the entry, and one real entry keeps the property-creation wizard (`/properties/new`) in history under the wizard, where `goBack` reopened that finished creation form instead of the card. The dead back and the leftover `/properties/new` under the card are the accepted price; the steps' chrome (crosses, step-1 Back) keeps `goBack`.
 - Entering a flow ("Create" buttons, `handleEdit`) and ordinary content navigation — `router.push`.
 - The Back button walks history (`goBack`), so completed flow pages must not remain in it — otherwise Back returns the user to an already-finished form.
 

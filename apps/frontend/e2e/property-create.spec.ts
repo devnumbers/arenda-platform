@@ -191,13 +191,14 @@ test('полный флоу: создание без названия — авт
   await page.getByRole('textbox', { name: 'Введите адрес' }).fill('Ленина, 2');
   await page.getByRole('button', { name: 'Продолжить' }).click();
   // Название оставляем пустым: бэк генерирует из типа (#1001) — у сидового
-  // пользователя домов нет, первое создание даёт «Мой дом 1».
+  // пользователя домов нет, первое создание даёт «Мой дом» (первый объект
+  // типа без цифры — #1078).
   await page.getByRole('button', { name: 'Создать объект' }).click();
 
   // Успех (Figma 1425-55788): заголовок со сгенерированным названием,
   // подзаголовок макета, пара кнопок (override владельца); хедер без чипа
   // шага — только крестик.
-  await expect(page.getByRole('heading', { name: 'Объект «Мой дом 1» создан' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Объект «Мой дом» создан' })).toBeVisible();
   await expect(page.getByText('Вы создали объект, теперь можете добавить аренду')).toBeVisible();
   await expect(page.getByText(/шаг \d из/)).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Добавить аренду' })).toBeVisible();

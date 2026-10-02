@@ -71,12 +71,12 @@ export function RentalCreateWizardFlow({
       <>
         <TopNav
           leading={
-            <IconButton icon={<Cancel />} label="Закрыть" onClick={closeWizard} />
+            <IconButton icon={<Cancel />} label="Закрыть" onClick={closeCreated} />
           }
         />
         <PageContent>
           <div className="pt-16">
-            <RentalWizardSuccess created={created} onClose={closeWizard} />
+            <RentalWizardSuccess created={created} onClose={closeCreated} />
           </div>
         </PageContent>
       </>
@@ -208,9 +208,19 @@ export function RentalCreateWizardFlow({
     </>
   );
 
-  /** Выход из визарда (крестик на любом шаге, «Хорошо» на экране успеха):
-   * история назад, при пустой истории — фолбэк goBack'а на объект,
-   * носитель сессии чистится при размонтировании. */
+  /** Выход с экрана успеха («Хорошо», крестик шапки): явная карточка
+   * объекта (#1079), не история назад — при входе из экрана успеха
+   * создания объекта («Добавить аренду») под визардом в истории лежит
+   * /properties/new, и goBack возвращал бы на создание объекта. Носитель
+   * сессии чистится при размонтировании. */
+  function closeCreated(): void {
+    router.replace(ROUTES.property(propertyId));
+  }
+
+  /** Выход из визарда крестиком с шагов (решение владельца: бросил
+   * визард — вернулся откуда зашёл): история назад, при пустой истории —
+   * фолбэк goBack'а на объект, носитель сессии чистится при
+   * размонтировании. */
   function closeWizard(): void {
     goBack(router, ROUTES.property(propertyId));
   }

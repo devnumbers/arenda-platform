@@ -354,4 +354,54 @@ test.describe('визард создания аренды — шаг «Конт�
       await cleanupRental(propertyId, rubles);
     }
   });
+
+  test('вход из экрана успеха создания объекта («Добавить аренду»): «Хорошо» — карточка объекта, не история (#1079)', async ({
+    page,
+    seededUser,
+  }, testInfo) => {
+    const contactName = `Тамара Тест ${testInfo.retry}`;
+    const propertyId = SEEDED_GARAGE_PROPERTY_ID;
+    const rubles = '53 000';
+    try {
+      await openCabinetWithSeededSession(page, seededUser);
+      // История воспроизведения #1079: страница объекта → визард создания
+      // объекта → «Добавить аренду» → визард аренды. Объект заново не
+      // создаём — бюджет pro-сида (лимит 5) исчерпан флоу
+      // property-create.spec, а наблюдаемое поведение задаёт только форма
+      // истории: под визардом лежит /properties/new. goto кладёт запись так
+      // же, как push «Добавить аренду»; экран успеха — состояние того же
+      // маршрута /properties/new, назад оттуда визард создания монтируется
+      // заново шагом 1.
+      await page.goto(GARAGE_URL);
+      await page.goto('/properties/new');
+      await page.goto(GARAGE_WIZARD_URL);
+      await expect(page.getByRole('heading', { name: 'Цена и число оплаты' })).toBeVisible();
+
+      // Шаги 1–3, затем создание арендатора (ветвь #509): пустая книга
+      // гаража — только «Создать контакт», роль подставлена; возврат из
+      // формы выталкивает свою запись истории.
+      await passAmountDay(page, rubles);
+      await passConditions(page);
+      await page.getByRole('button', { name: 'Создать контакт' }).click();
+      await expect(page.getByRole('textbox', { name: 'Роль' })).toHaveValue('Арендатор');
+      await page.getByRole('textbox', { name: 'Имя', exact: true }).fill(contactName);
+      await page.getByRole('button', { name: 'Создать контакт' }).last().click();
+      await expect(page.getByText(contactName, { exact: true })).toBeVisible();
+
+      await page.getByRole('button', { name: 'Создать аренду' }).click();
+      await expect(page.getByRole('heading', { name: 'Вы создали аренду' })).toBeVisible();
+      await captureScreen(page, testInfo, 'rentals-wizard-success-from-property-wizard');
+
+      // «Хорошо» — явная карточка объекта, а не назад по истории: назад
+      // под визардом лежит /properties/new (визард создания объекта).
+      await page.getByRole('button', { name: 'Хорошо' }).click();
+      await expect(page).toHaveURL(new RegExp(`/properties/${propertyId}$`));
+    } finally {
+      await cleanupRental(propertyId, rubles);
+      await execE2eSql(
+        `DELETE FROM contacts WHERE property_id = '${propertyId}'
+         AND first_name = '${contactName}'`,
+      );
+    }
+  });
 });
