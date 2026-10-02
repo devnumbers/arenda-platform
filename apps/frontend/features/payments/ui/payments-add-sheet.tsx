@@ -180,7 +180,9 @@ function ChoiceCard({
     >
       {/* priority — как в EmptyState: иллюстрация внутри открывающегося
           шита, ленивую загрузку наблюдатель вьюпорта может пропустить.
-          sizes+quality — канон иллюстраций (DESIGN.md: слот 64px, q90). */}
+          sizes+quality — канон иллюстраций (DESIGN.md: слот 64px), quality
+          100 — решение владельца #1070 «фото лучшего качества»: исходники
+          q100 без ресайза, перекодировка выдачи тоже без потерь. */}
       <Image
         src={meta.image}
         alt=""
@@ -188,7 +190,7 @@ function ChoiceCard({
         height={64}
         priority
         sizes="64px"
-        quality={90}
+        quality={100}
         className="h-16 w-16"
       />
       <span className="flex flex-col gap-2">
