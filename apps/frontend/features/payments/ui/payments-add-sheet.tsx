@@ -34,28 +34,26 @@ import { Button, Modal, ModalContent } from '@/shared/ui/design';
  * свежесть — updatedAt в payload: показывается последний тронутый.
  */
 
-/** Копирайт карточек — дословно из фреймов 1134:40415 / 1134:39570
- * (включая «Платеж» без «ё»). */
+/** Копирайт карточек — дословно из фрейма 3065:71128 (включая «Платеж»
+ * без «ё»): label + синий action, длинные description прежних фреймов
+ * (1134:40415 / 1134:39570) в новом макете не видны — снесены. */
 const TYPE_META: Record<
   PaymentDraftType,
   {
     readonly label: string;
-    readonly description: string;
     readonly action: string;
     readonly image: string;
   }
 > = {
   payment: {
     label: 'Платеж',
-    description: 'Напомним, когда нужно будет отметить оплату',
     action: 'Отмечайте оплату\nвручную',
-    image: '/images/payments/sheet-choice-payment.png',
+    image: '/images/payments/sheet-choice-payment.webp',
   },
   autopayment: {
     label: 'Автоплатеж',
-    description: 'Предупредим о платеже, потом отметим оплату',
     action: 'Отмечается автоматически',
-    image: '/images/payments/sheet-choice-autopayment.png',
+    image: '/images/payments/sheet-choice-autopayment.webp',
   },
 };
 
@@ -181,12 +179,21 @@ function ChoiceCard({
       className="flex cursor-pointer flex-col gap-4 rounded-card bg-surface-muted p-4 text-left outline-none transition-all focus-visible:ring-4 focus-visible:ring-primary hover:opacity-80 active:opacity-80"
     >
       {/* priority — как в EmptyState: иллюстрация внутри открывающегося
-          шита, ленивую загрузку наблюдатель вьюпорта может пропустить. */}
-      <Image src={meta.image} alt="" width={52} height={52} priority className="h-[52px] w-[52px]" />
-      <span className="flex flex-col gap-1">
-        <span className="text-base font-medium text-content">{meta.label}</span>
-        <span className="text-[13px] leading-[15px] text-content-secondary">{meta.description}</span>
-        <span className="whitespace-pre-line text-[13px] leading-[15px] text-primary">{meta.action}</span>
+          шита, ленивую загрузку наблюдатель вьюпорта может пропустить.
+          sizes+quality — канон иллюстраций (DESIGN.md: слот 64px, q90). */}
+      <Image
+        src={meta.image}
+        alt=""
+        width={64}
+        height={64}
+        priority
+        sizes="64px"
+        quality={90}
+        className="h-16 w-16"
+      />
+      <span className="flex flex-col gap-2">
+        <span className="text-base font-medium leading-[18px] text-content">{meta.label}</span>
+        <span className="whitespace-pre-line text-sm font-medium leading-4 text-primary">{meta.action}</span>
       </span>
     </button>
   );

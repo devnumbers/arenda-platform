@@ -57,7 +57,7 @@ async function createMonthlyPaymentToday(
   await page.goto(PAYMENTS_URL);
   await expect(page.getByRole('button', { name: 'Добавить' })).toBeVisible();
   await page.getByRole('button', { name: 'Добавить' }).click();
-  await page.getByRole('button', { name: /Платеж Напомним, когда нужно/ }).click();
+  await page.getByRole('button', { name: /Платеж Отмечайте оплату/ }).click();
   await expect(page.getByRole('heading', { name: 'Категория платежа' })).toBeVisible();
 
   // Шаг 1 — категория, шаг 2 — название.
