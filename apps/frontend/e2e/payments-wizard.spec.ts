@@ -91,6 +91,7 @@ type PaymentFromApi = {
   endDate?: string | null;
   reminderOffsetDays?: number | null;
   recurrence: { kind: string; weekdays?: number[]; daysOfMonth?: number[]; lastDay?: boolean; month?: number; day?: number };
+  category?: { source: string; slug?: string | null; label: string };
 };
 
 /** Прочитать список платежей объекта из API тем же сеансом (куки контекста). */
@@ -133,6 +134,47 @@ test.describe('визард создания платежа', () => {
     await page.mouse.click(195, 400);
     await expect(page.getByRole('heading', { name: 'Категория платежа' })).toBeVisible();
     await expect(page.getByRole('searchbox')).toHaveCount(0);
+  });
+
+  test('категория «Другое» замыкает пикер и проходит сквозь визард (#1069)', async ({
+    page,
+    seededUser,
+  }) => {
+    const title = 'E2E прочие расходы по дому';
+    await openWizard(page, seededUser);
+
+    // Шаг 1 — «Другое» — последняя строка списка каталога (1049:34832),
+    // выбирается как любая категория.
+    const rows = page.locator('div.flex.flex-col.pt-6').getByRole('button');
+    await expect(rows.last()).toHaveAccessibleName('Другое');
+    await rows.last().click();
+    await page.getByRole('button', { name: 'Продолжить' }).click();
+    await expect(page.getByRole('heading', { name: 'Назовите платеж' })).toBeVisible();
+
+    // Шаг 2–4 — имя, месяц 10-го, настройки по умолчанию.
+    await page.getByRole('textbox').fill(title);
+    await page.getByRole('button', { name: 'Продолжить' }).click();
+    await page.getByRole('button', { name: 'Каждый месяц' }).click();
+    await expect(page.getByRole('heading', { name: 'Выберите день', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: '10', exact: true }).first().click();
+    await page.getByRole('button', { name: 'Продолжить' }).click();
+    await expect(page.getByRole('heading', { name: 'Настройте платеж' })).toBeVisible();
+    await page.getByRole('button', { name: 'Далее' }).click();
+
+    // Шаг 5 — сумма; категория нейтральна к направлению, берём расход.
+    await page.getByRole('textbox', { name: 'Сумма' }).fill('1500');
+    await page.getByRole('radio', { name: 'Расход' }).click();
+    await page.getByRole('button', { name: 'Создать платеж' }).click();
+    await expect(page.getByRole('heading', { name: /Вы создали платеж/ })).toContainText(`«${title}»`);
+
+    // Контракт: слаг other доходит до API и возвращается в CategoryView —
+    // метку рисует снапшот, иконку+цвет — каталог фронта.
+    const items = await fetchPayments(page);
+    const created = items.find((payment) => payment.title === title);
+    expect(created).toBeDefined();
+    expect(created?.category?.source).toBe('default');
+    expect(created?.category?.slug).toBe('other');
+    expect(created?.category?.label).toBe('Другое');
   });
 
   test('полный путь платежа: ежемесячное 10-го; платёж в API и списке объекта', async ({
