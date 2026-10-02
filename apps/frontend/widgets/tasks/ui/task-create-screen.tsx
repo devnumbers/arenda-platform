@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type JSX, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { Cancel, SmallArrowDown } from '@/shared/assets/icons';
+import { ArrowLeft, Cancel, SmallArrowDown } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
@@ -50,8 +50,11 @@ const COMMENT_MAX_LENGTH = 1000;
  * всегда на этом объекте); шаг 2 — комментарий, дата/время («Выбрать» →
  * пикеры) и чипы «Повторять каждый» + «Создать» — страница шага
  * необязательна для заполнения, кнопка активна сразу (подсказка
- * владельца). Закрытие — ✕ в шапке (галочки в шапке нет — решение #497);
- * кнопка шага — справа в нижней панели. Дата без срока не нужна — «Без
+ * владельца). Шапка — по канону операции-визарда (#1065, карта #1052 D5):
+ * с шага 1 ведущая кнопка «Закрыть» (✕, галочки в шапке нет — решение
+ * #497), с шага 2 — «Назад» (ArrowLeft) на шаг 1, данные шагов в
+ * useState и не теряются; кнопка шага — справа в нижней панели. Дата без
+ * срока не нужна — «Без
  * срока» остаётся; время и повтор требуют дату (контракт: дизейбл без
  * даты). «Сегодня» пикеров — серверное today из среза входа (ADR 0048):
  * объектного листинга или, без объекта, глобального (#521). После создания
@@ -169,7 +172,13 @@ export function TaskCreateScreen({
   return (
     <>
       <TopNav
-        leading={<IconButton icon={<Cancel />} label="Закрыть" onClick={close} />}
+        leading={
+          <IconButton
+            icon={step === 1 ? <Cancel /> : <ArrowLeft />}
+            label={step === 1 ? 'Закрыть' : 'Назад'}
+            onClick={step === 1 ? close : () => setStep(1)}
+          />
+        }
       >
         <TopNavTitle title="Создать задачу" />
       </TopNav>
