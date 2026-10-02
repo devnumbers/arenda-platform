@@ -157,6 +157,19 @@ test('шаг 3: характеристики — поля каталога, ти
   await expect(submit).toBeEnabled();
   await name.fill('Квартира на Ленина');
   await expect(page.getByText('18/64')).toBeVisible();
+
+  // «Описание» — статичный бокс на 8 строк (решение владельца 02.10,
+  // кадр 1218-54295, #1080): высота задана сразу, без autoGrow; текст
+  // сверх восьми строк скроллится внутри бокса, поле не растёт.
+  const description = page.getByRole('textbox', { name: 'Описание' });
+  await expect(description).toHaveAttribute('rows', '8');
+  const descBox = await description.boundingBox();
+  expect(descBox?.height ?? 0).toBeCloseTo(144, 1); // 8 строк × 18px
+  await description.fill(Array.from({ length: 12 }, (_, i) => `Строка ${i + 1}`).join('\n'));
+  const descFilledBox = await description.boundingBox();
+  expect(descFilledBox?.height ?? 0).toBeCloseTo(144, 1); // не растёт
+  expect(await description.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+
   await captureScreen(page, testInfo, '04-characteristics');
 });
 

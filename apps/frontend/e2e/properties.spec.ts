@@ -90,6 +90,24 @@ test('секции детали: тап по контенту карточки �
   await expect(page).toHaveURL(new RegExp(`/properties/${SEEDED_APARTMENT_PROPERTY_ID}/tasks$`));
 });
 
+test('правка объекта: «Описание» — статичный бокс на 8 строк, скролл внутри (#1080)', async ({ page, seededUser }) => {
+  // Решение владельца 02.10 (кадр 1218-54295): бокс описания сразу 8 строк,
+  // без autoGrow; текст сверх восьми строк скроллится внутри бокса. Тот же
+  // TextField в визаре создания покрывает property-create.spec (шаг 3).
+  await openCabinetWithSeededSession(page, seededUser);
+  await page.goto(`/properties/${SEEDED_APARTMENT_PROPERTY_ID}/edit`);
+
+  const description = page.getByRole('textbox', { name: 'Описание' });
+  await expect(description).toBeVisible();
+  await expect(description).toHaveAttribute('rows', '8');
+  const descBox = await description.boundingBox();
+  expect(descBox?.height ?? 0).toBeCloseTo(144, 1); // 8 строк × 18px
+  await description.fill(Array.from({ length: 12 }, (_, i) => `Строка ${i + 1}`).join('\n'));
+  const descFilledBox = await description.boundingBox();
+  expect(descFilledBox?.height ?? 0).toBeCloseTo(144, 1); // не растёт
+  expect(await description.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+});
+
 test('без подписки (404 /subscription): кнопки создания живые, ведут на смену тарифа #768', async ({ page, seededUser }) => {
   // Состояние сид-Марии из обхода #760 воспроизводим перехватом: до фикса
   // 404 держал react-query в вечном pending, и кнопки создания хаба были
