@@ -665,6 +665,36 @@ test.describe('визард создания платежа', () => {
     await expect(page.getByRole('radio', { name: 'Расход' })).toBeChecked();
   });
 
+  test('назад со шага 3 на шаг 2: перезагрузка возвращает на шаг 2, без перескока (#1055)', async ({
+    page,
+    seededUser,
+  }) => {
+    const title = 'E2E назад на шаг названия';
+    await openWizard(page, seededUser);
+    await selectCategory(page);
+    await passTitleStep(page, title);
+    // Шаги 1 и 3 заполнены: без штампа пересчёт перепрыгнул бы оба
+    // опциональных шага (2 и 4) сразу на шаг 5.
+    await page.getByRole('button', { name: 'Каждую неделю' }).click();
+    await page.getByRole('button', { name: 'Понедельник', exact: true }).click();
+
+    // «Назад» на шаг названия — тоже переход: штамп шага 2 едет в черновик
+    // наравне с переходами вперёд. Первый клик закрывает ветку дней
+    // (осознанный квирк шага 3), второй уводит на шаг 2.
+    await page.getByRole('button', { name: 'Назад' }).click();
+    await expect(page.getByRole('heading', { name: 'Периодичность платежа' })).toBeVisible();
+    await page.getByRole('button', { name: 'Назад' }).click();
+    await expect(page.getByRole('heading', { name: 'Назовите платеж' })).toBeVisible();
+
+    // Перезагрузка: точный сохранённый шаг 2 с названием, а не пересчёт
+    // из заполненности (даёт шаг 5) и не шаг 3.
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'Назовите платеж' })).toBeVisible();
+    await expect(page.getByRole('textbox')).toHaveValue(title);
+    await expect(page.getByRole('heading', { name: 'Периодичность платежа' })).toHaveCount(0);
+    await expect(page.getByRole('textbox', { name: 'Сумма' })).toHaveCount(0);
+  });
+
   test('напоминание: «За 3 дня» переживает перезагрузку и попадает в контракт', async ({
     page,
     seededUser,
@@ -689,9 +719,12 @@ test.describe('визард создания платежа', () => {
     await captureScreen(page, testInfo, 'wizard-step4-reminder-manual-mobile');
     await page.getByRole('button', { name: 'За 3 дня' }).click();
 
-    // Черновик с напоминанием переживает перезагрузку: восстановление на
-    // шаге 5 (обязательные шаги полны), значение доезжает до контракта.
+    // Черновик с напоминанием переживает перезагрузку: resume на точном
+    // шаге 4 (штамп перехода, #1055; раньше пересчёт перепрыгивал опциональный
+    // шаг на шаг 5), значение доезжает до контракта.
     await page.reload();
+    await expect(page.getByRole('heading', { name: 'Настройте платеж' })).toBeVisible();
+    await page.getByRole('button', { name: 'Далее' }).click();
     await expect(page.getByRole('textbox', { name: 'Сумма' })).toBeVisible();
     await page.getByRole('textbox', { name: 'Сумма' }).fill('1500');
     await page.getByRole('button', { name: 'Создать платеж' }).click();

@@ -24,12 +24,13 @@ import {
   branchKind,
   buildPaymentCreateCommand,
   periodicityReady,
+  resumePaymentWizardStep,
   useCreatePayment,
   usePaymentWizardDraft,
   WIZARD_TOTAL_STEPS,
+  wizardDraftAfterStep,
   wizardStepReady,
   type PaymentDraftType,
-  type PaymentWizardDraft,
   type PeriodicityBranch,
   type WizardStep,
 } from '@/features/payments';
@@ -45,8 +46,9 @@ import { WizardSuccess } from './wizard-success';
 /**
  * Поток шагов визарда (клиентское состояние на одном маршруте #464):
  * монтируется после гидрации черновика и загрузки объекта родителем,
- * восстанавливается на первый незавершённый шаг; черновик живёт в
- * localStorage per объект+тип (история 10 спеки #453).
+ * возобновляется на сохранённом штампом шаге (#1055), а без штампа —
+ * на первом незавершённом; черновик живёт в localStorage per объект+тип
+ * (история 10 спеки #453).
  */
 
 export type PaymentCreateWizardFlowProps = {
@@ -72,7 +74,9 @@ export function PaymentCreateWizardFlow({
     payment: Payment;
     hasTypedTitle: boolean;
   } | null>(null);
-  const [step, setStep] = useState<WizardStep>(() => initialStep(draft));
+  // Возобновление: сохранённый штампом шаг перехода, без штампа — первый
+  // незавершённый (#1055).
+  const [step, setStep] = useState<WizardStep>(() => resumePaymentWizardStep(draft));
   const [openBranch, setOpenBranch] = useState<PeriodicityBranch | null>(null);
   // Поиск категорий живёт в хедере шага 1 (Figma 781:12299): лупа меняет
   // чип «Шаг N из 5» на поле, «Назад» возвращает чип и сбрасывает запрос.
@@ -313,7 +317,10 @@ export function PaymentCreateWizardFlow({
       return;
     }
     if (step > 1) {
-      setStep((prev) => ((prev - 1) as WizardStep));
+      const prev = (step - 1) as WizardStep;
+      setStep(prev);
+      // «Назад» — тоже переход: штамп шага едет в черновик (#1055).
+      setDraft((prevDraft) => wizardDraftAfterStep(prevDraft, prev));
       return;
     }
     goBack(router, ROUTES.propertyPayments(propertyId));
@@ -321,6 +328,8 @@ export function PaymentCreateWizardFlow({
 
   function goToStep(next: WizardStep): void {
     setStep(next);
+    // Штамп шага в пейлоаде: перезагрузка возвращает на этот же шаг (#1055).
+    setDraft((prev) => wizardDraftAfterStep(prev, next));
     if (next !== 3) {
       setOpenBranch(null);
     }
@@ -347,11 +356,4 @@ export function PaymentCreateWizardFlow({
       notify.scenarios.payments.createError(error);
     }
   }
-}
-
-/** Восстановление черновика: первый незавершённый шаг (2 и 4 необязательны). */
-function initialStep(draft: PaymentWizardDraft): WizardStep {
-  if (!wizardStepReady(1, draft)) return 1;
-  if (!wizardStepReady(3, draft)) return 3;
-  return 5;
 }

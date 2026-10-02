@@ -3,6 +3,7 @@
 import type { Dispatch, SetStateAction } from 'react';
 import { clearDraftStorage, useDraftStore } from '@/shared/lib/hooks/useDraftStore';
 import { PAYMENT_REMINDER_OPTIONS } from '@/entities/payment';
+import { isWizardStep } from './wizard-model';
 import type {
   IsoDate,
   PaymentReminderOffset,
@@ -15,8 +16,9 @@ import type {
  * перезагрузку страницы и закрытие визарда — хранится в localStorage
  * (`storage: 'local'`), ключ per объект+тип выбора из шита («Платёж /
  * Автоплатёж»). Обёртка владеет только ключом, дефолтом и проверкой формы —
- * сам цикл хранения живёт в useDraftStore. Форма черновика покрывает шаги
- * визарда; шаги UI (номер шага и переходы) — слайс визарда, следующего тикета.
+ * сам цикл хранения живёт в useDraftStore. Форма черновика покрывает поля
+ * шагов визарда и служебный штамп последнего шага — resume открывает
+ * сохранённый шаг, а не пересчёт из заполненности (#1055).
  */
 
 /** Тип создаваемого из шита: обычный платёж или автоплатёж (флаг autoPay). */
@@ -37,6 +39,11 @@ export type PaymentWizardDraft = {
   readonly reminderOffsetDays?: PaymentReminderOffset;
   /** Сумма в копейках, целая положительная (шаг 5). */
   readonly amountKopecks?: number;
+  /** Последний шаг, на котором был пользователь — штамп каждого перехода
+   * (вперёд и «Назад», #1055): resume открывает сохранённый шаг, а не
+   * пересчёт из заполненности. Служебное поле: само по себе черновиком
+   * не считается — hasPaymentWizardDraftFields смотрит только поля шагов. */
+  readonly step?: number;
   /** Момент последней правки (Date.now()) — шит «Добавить» показывает
    * последний тронутый черновик, когда их два. Служебное поле: само по
    * себе черновиком не считается. */
@@ -209,6 +216,11 @@ export function validatePaymentWizardDraft(parsed: unknown): PaymentWizardDraft 
   // не роняет.
   const updatedAt = isPositiveInt(record.updatedAt) ? record.updatedAt : undefined;
 
+  // Служебный штамп шага (#1055): мусорное или вне 1..5 значение
+  // отбрасывается, черновик не роняет — resume уходит в пересчёт
+  // из заполненности.
+  const step = isWizardStep(record.step) ? record.step : undefined;
+
   return {
     ...(type !== undefined && { type }),
     ...(categorySlug !== undefined && { categorySlug }),
@@ -217,6 +229,7 @@ export function validatePaymentWizardDraft(parsed: unknown): PaymentWizardDraft 
     ...(endDate !== undefined && { endDate }),
     ...(reminderOffsetDays !== undefined && { reminderOffsetDays }),
     ...(amountKopecks !== undefined && { amountKopecks }),
+    ...(step !== undefined && { step }),
     ...(updatedAt !== undefined && { updatedAt }),
   };
 }
