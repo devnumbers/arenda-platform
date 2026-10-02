@@ -8,11 +8,10 @@ import { ROUTES } from '@/shared/config/routes';
 import { buildReturnUrl, goBack } from '@/shared/lib/navigation';
 import {
   buildPropertyCreateCommand,
-  initialPropertyCreateStep,
   propertyCreateStepReady,
   PROPERTY_CREATE_TOTAL_STEPS,
   useCreateProperty,
-  usePropertyCreateDraft,
+  type PropertyCreateDraft,
   type PropertyCreateStep,
 } from '@/features/properties';
 import { attributeCatalog } from '../property-fields/attribute-catalog';
@@ -34,13 +33,14 @@ import { WizardSuccess } from './wizard-success';
 
 /**
  * Поток шагов визарда создания объекта (#480): клиентское состояние на
- * одном маршруте /properties/new, восстанавливается на первый
- * незавершённый шаг черновика. Хедер шагов (Figma 1213-52111 /
- * 1213-52017): шаг 1 — крестик слева; шаги 2–3 — «назад» слева и крестик
- * справа; в центре чип «шаг N из 3». Шаг 3 «Характеристики» (#482) —
- * экран рендерится по каталогу и сабмитит POST /properties; после
- * успешного POST показывается экран успеха (#483, Figma 1425-55788) —
- * он шагом не считается и черновик к тому моменту очищен. Хедер успеха —
+ * одном маршруте /properties/new, старт всегда с шага категории:
+ * черновика у создания объекта нет (карта #1052, Q2=В) — уход со
+ * страницы, перезагрузка и закрытие дают чистый лист. Хедер шагов
+ * (Figma 1213-52111 / 1213-52017): шаг 1 — крестик слева; шаги 2–3 —
+ * «назад» слева и крестик справа; в центре чип «шаг N из 3». Шаг 3
+ * «Характеристики» (#482) — экран рендерится по каталогу и сабмитит
+ * POST /properties; после успешного POST показывается экран успеха
+ * (#483, Figma 1425-55788) — он шагом не считается. Хедер успеха —
  * только крестик слева (без чипа), он ведёт на карточку созданного
  * объекта; туда же ведёт кнопка «Открыть объект». Кнопка «Добавить
  * аренду» открывает визард создания аренды созданного объекта (карта
@@ -63,11 +63,12 @@ export type PropertyCreateWizardFlowProps = {
 export function PropertyCreateWizardFlow({ returnTo }: PropertyCreateWizardFlowProps): JSX.Element {
   const router = useRouter();
   const createProperty = useCreateProperty();
-  const { draft, setDraft, clearDraft } = usePropertyCreateDraft();
+  // Состояние шагов живёт только пока смонтирован поток (канон — в модели).
+  const [draft, setDraft] = useState<PropertyCreateDraft>({});
   // Визард — экран создания: футер глушится на всех шагах, включая те,
   // где нижняя панель ещё не смонтирована (аналог визарда платежей #464).
   useTabBarSuppression();
-  const [step, setStep] = useState<PropertyCreateStep>(() => initialPropertyCreateStep(draft));
+  const [step, setStep] = useState<PropertyCreateStep>(1);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [created, setCreated] = useState<Property | null>(null);
 
@@ -226,7 +227,6 @@ export function PropertyCreateWizardFlow({ returnTo }: PropertyCreateWizardFlowP
     }
     try {
       const property = await createProperty.mutateAsync(command);
-      clearDraft();
       // Возврат в вызывающий флоу (например, будущего визарда операции):
       // успех пропускается, объект передаётся параметром propertyId.
       if (returnTo !== undefined) {
