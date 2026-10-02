@@ -137,14 +137,16 @@ const INITIAL = N + 2; // «2-комнатная на Ленина»: средн
 const STEP_MS = 360; // длительность любого перехода — как у Яндекса (замер)
 
 // Ширины состояний [боковая, центральная] для JS-математики — зеркало
-// CSS-переменных showcase.module.css; D — дистанция морфинга k, равна
+// CSS-переменных showcase.module.css. На ПК боковая растёт с шириной
+// экрана (clamp зеркалит --side-w в CSS): внешний край боковой карточки
+// всегда уходит за границу экрана. D — дистанция морфинга k, равна
 // шагу до соседней карточки (cardSide+gap) на всех ярусах: морфинг
 // завершается точно в момент прибытия (как у Яндекса), на покое k
 // строго 0/1 — бок ровно 80%, центр ровно по центру вьюпорта.
 const METRICS = {
-  desk: { cardSide: 800, card: 1000, gap: 20, plateSide: 360, plate: 450, plateGap: 16, D: 820 },
-  tab: { cardSide: 500, card: 500, gap: 12, plateSide: 345, plate: 400, plateGap: 12, D: 512 },
-  mob: { cardSide: 300, card: 300, gap: 12, plateSide: 207, plate: 240, plateGap: 8, D: 312 },
+  desk: { cardSide: 800, card: 1000, gap: 20, plateSide: 360, plate: 450, plateGap: 16 },
+  tab: { cardSide: 500, card: 500, gap: 12, plateSide: 345, plate: 400, plateGap: 12 },
+  mob: { cardSide: 300, card: 300, gap: 12, plateSide: 207, plate: 240, plateGap: 8 },
 } as const;
 type Tier = keyof typeof METRICS;
 
@@ -159,12 +161,17 @@ type Tier = keyof typeof METRICS;
    момент старта анимации врали бы на (centerW−sideW)/2. */
 function snapModel(tier: Tier, viewportW: number) {
   const m = METRICS[tier];
-  const step = m.cardSide + m.gap;
+  // На ПК боковая растёт с экраном — зеркало --side-w в CSS
+  // (clamp(800px, 100vw − 1640px, 960px)): внешний край боковой
+  // всегда за границей экрана до вьюпорта ~2920px
+  const cardSide =
+    tier === 'desk' ? clamp(viewportW - 1640, m.cardSide, 960) : m.cardSide;
+  const step = cardSide + m.gap;
   const copyPlain = N * step;
   const snap = (g: number) =>
     Math.floor(g / N) * copyPlain + (g % N) * step + m.card / 2 - viewportW / 2;
   const snapArr = Array.from({ length: G }, (_, g) => snap(g));
-  return { m, step, copyPlain, snapArr };
+  return { m, cardSide, step, copyPlain, snapArr };
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -281,12 +288,12 @@ export function Showcase() {
     const zone = zoneRef.current;
     const st = stateRef.current;
     if (!viewport || !photoTrack || !strip || !zone || !st) return;
-    const { m, snapArr } = snapModel(tierOf(), viewport.clientWidth);
+    const { m, step, snapArr } = snapModel(tierOf(), viewport.clientWidth);
     const p = st.p;
     const k = st.k;
     let dirty = false;
     for (let g = 0; g < G; g += 1) {
-      const nk = clamp(1 - Math.abs(p - (snapArr[g] ?? 0)) / m.D, 0, 1);
+      const nk = clamp(1 - Math.abs(p - (snapArr[g] ?? 0)) / step, 0, 1);
       if (Math.abs(nk - (k[g] ?? 0)) > 0.002) {
         k[g] = nk;
         dirty = true;
