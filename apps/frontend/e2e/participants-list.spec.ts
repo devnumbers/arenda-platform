@@ -118,6 +118,45 @@ test('кебаб: трио пунктов по макету 2008-47514, «Ист
   await page.waitForURL('**/history');
 });
 
+test('безымянный участник: полный телефон в титуле ряда, почта подзаголовком (карта #1105); сид восстанавливается', async ({ page, seededUser }, testInfo) => {
+  // Зарегистрированный юзер без имени: display_name собирает бекенд по
+  // канону карты #1105 — полный телефон вместо маски «+7***» (#1106).
+  // Телефон сидится плейнтекстом при phone_encrypted = false —
+  // decryptPhone читает как есть, шифрование нужно только логину.
+  const NAMELESS_ID = '16111111-1111-4111-8111-111111111161';
+  const NAMELESS_MEMBER_ID = '99999999-9999-4999-8999-999999999961';
+  const NAMELESS_PHONE = '+79137654321';
+  const NAMELESS_EMAIL = 'e2e-nameless-list@example.com';
+  await execE2eSql(
+    `INSERT INTO users (id, phone, role, name, surname, email, phone_encrypted, timezone) ` +
+      `VALUES ('${NAMELESS_ID}', '${NAMELESS_PHONE}', 'owner', NULL, NULL, '${NAMELESS_EMAIL}', FALSE, 'UTC') ` +
+      `ON CONFLICT (id) DO NOTHING; ` +
+      `INSERT INTO property_members (id, property_id, user_id, role, granted_by) ` +
+      `VALUES ('${NAMELESS_MEMBER_ID}', '33333333-3333-4333-8333-333333333333', '${NAMELESS_ID}', 'viewer', '11111111-1111-4111-8111-111111111111') ` +
+      `ON CONFLICT (property_id, user_id) WHERE status = 'active' DO NOTHING`,
+  );
+  try {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto('/participants/list');
+
+    // Титул ряда — полный телефон, почта — подзаголовком под ним.
+    // Доступное имя ряда — титул + подзаголовок разом, матч регуляркой;
+    // ведущий «+» в регэксп не нужен (в регэкспе это квантификатор).
+    const namelessRow = page.getByRole('button', { name: new RegExp(NAMELESS_PHONE.slice(1)) });
+    await expect(namelessRow).toBeVisible();
+    await expect(namelessRow.getByText(NAMELESS_EMAIL)).toBeVisible();
+    // Маски в списке нет ни в каком виде.
+    await expect(page.getByText(/\*{3}/)).toHaveCount(0);
+
+    await captureScreen(page, testInfo, 'participants-list-nameless');
+  } finally {
+    await execE2eSql(
+      `DELETE FROM property_members WHERE id = '${NAMELESS_MEMBER_ID}'; ` +
+        `DELETE FROM users WHERE id = '${NAMELESS_ID}'`,
+    );
+  }
+});
+
 test('кебаб: «Отозвать доступ всем» открывает подтверждение, «Отмена» ничего не делает', async ({ page, seededUser }) => {
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto('/participants/list');

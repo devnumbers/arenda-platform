@@ -54,6 +54,44 @@ test('страница участника: шапка, чип агрегата, 
   await captureScreen(page, testInfo, 'participant-page');
 });
 
+test('безымянный участник: телефон — заголовок шапки, почта подзаголовком (карта #1105); сид восстанавливается', async ({ page, seededUser }, testInfo) => {
+  // Тот же канон карты #1105, что и в ряду списка: display_name
+  // безымянного собирает бекенд (#1106) — полный телефон. Телефон
+  // сидится плейнтекстом при phone_encrypted = false. Идентификаторы
+  // свои (не из participants-list.spec.ts): утечка строки одного теста
+  // не должна подменять данные другого (ON CONFLICT (id) DO NOTHING).
+  const NAMELESS_ID = '16111111-1111-4111-8111-111111111162';
+  const NAMELESS_MEMBER_ID = '99999999-9999-4999-8999-999999999962';
+  const NAMELESS_PHONE = '+79137654322';
+  const NAMELESS_EMAIL = 'e2e-nameless-page@example.com';
+  await execE2eSql(
+    `INSERT INTO users (id, phone, role, name, surname, email, phone_encrypted, timezone) ` +
+      `VALUES ('${NAMELESS_ID}', '${NAMELESS_PHONE}', 'owner', NULL, NULL, '${NAMELESS_EMAIL}', FALSE, 'UTC') ` +
+      `ON CONFLICT (id) DO NOTHING; ` +
+      `INSERT INTO property_members (id, property_id, user_id, role, granted_by) ` +
+      `VALUES ('${NAMELESS_MEMBER_ID}', '${APARTMENT_ID}', '${NAMELESS_ID}', 'viewer', '11111111-1111-4111-8111-111111111111') ` +
+      `ON CONFLICT (property_id, user_id) WHERE status = 'active' DO NOTHING`,
+  );
+  try {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto(`/participants/${NAMELESS_ID}`);
+
+    // Шапка (2008-81468): имени нет — телефон H1, почта подзаголовком
+    // (не прячется), чип агрегата — «Доступно 1 объект» (активна 1 из 3).
+    await expect(page.getByRole('heading', { name: NAMELESS_PHONE })).toBeVisible();
+    await expect(page.getByText(NAMELESS_EMAIL)).toBeVisible();
+    await expect(page.getByText('Доступно 1 объект')).toBeVisible();
+    await expect(page.getByText(/\*{3}/)).toHaveCount(0);
+
+    await captureScreen(page, testInfo, 'participant-page-nameless');
+  } finally {
+    await execE2eSql(
+      `DELETE FROM property_members WHERE id = '${NAMELESS_MEMBER_ID}'; ` +
+        `DELETE FROM users WHERE id = '${NAMELESS_ID}'`,
+    );
+  }
+});
+
 test('deep-link на отозванного/чужого участника — «Участник не найден»', async ({ page, seededUser }) => {
   await openCabinetWithSeededSession(page, seededUser);
   // Существующий пользователь, но вне сцопа читающего — приватный 404.

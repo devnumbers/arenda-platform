@@ -20,6 +20,9 @@ function participant(id: string, displayName: string | undefined, email: string 
 const maria = participant('id-maria', 'Мария Петрова', 'maria@example.com');
 const sergey = participant('id-sergey', 'Сергей Сидоров', 'sergey@mail.ru');
 const pending = participant('invitee@example.com', undefined, 'invitee@example.com');
+// Зарегистрированный без имени: display_name = полный телефон (канон
+// #1105, собирает бекенд #1106).
+const nameless = participant('id-nameless', '+79131234567', 'nameless@example.com');
 
 describe('sortParticipantsByName — чип-сортировка «Имя»', () => {
   it('asc — русская коллация по титулу строки (у pending — почта)', () => {
@@ -42,6 +45,14 @@ describe('sortParticipantsByName — чип-сортировка «Имя»', ()
 
     expect(sorted[0]?.id).toBe('id-anna');
   });
+
+  it('телефон-титул безымянного сортируется по общей коллации (канон #1105)', () => {
+    // Цифры в русской коллации раньше букв — безымянные идут первыми,
+    // ряд не ломает сортировку и не мутирует источник.
+    const sorted = sortParticipantsByName([maria, nameless], 'asc');
+
+    expect(sorted.map((p) => p.id)).toEqual(['id-nameless', 'id-maria']);
+  });
 });
 
 describe('filterParticipantsByQuery — клиентский поиск (иконка в шапке, объём мал)', () => {
@@ -60,6 +71,11 @@ describe('filterParticipantsByQuery — клиентский поиск (ико�
   it('ищет по почте — у зарегистрированных и у pending-строк', () => {
     expect(filterParticipantsByQuery([maria, sergey, pending], 'mail.ru')).toEqual([sergey]);
     expect(filterParticipantsByQuery([maria, sergey, pending], 'invitee@')).toEqual([pending]);
+  });
+
+  it('ищет по телефону безымянного — он титул строки (канон #1105)', () => {
+    expect(filterParticipantsByQuery([maria, nameless], '913')).toEqual([nameless]);
+    expect(filterParticipantsByQuery([maria, nameless], '+7913')).toEqual([nameless]);
   });
 
   it('без совпадений — пустой список', () => {
