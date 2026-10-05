@@ -13,6 +13,7 @@ export {
 } from './lib/property-badges';
 export {
   isApartmentCategory,
+  propertyCategoryOf,
   propertyCategoryOptions,
   propertyCreateStepReady,
   propertyHousingTypeOptions,

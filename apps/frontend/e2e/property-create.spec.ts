@@ -118,6 +118,8 @@ test('шаг 3: характеристики — поля каталога, ти
   await expect(page.getByRole('heading', { name: 'Характеристики' })).toBeVisible();
   await expect(page.getByText('Вы можете создать объект, а характеристики заполнить позже')).toBeVisible();
   const housing = page.getByRole('group', { name: 'Тип жилья' });
+  // Порядок чипов по кадру 1218-54295 (#1081).
+  await expect(housing.getByRole('button')).toHaveText(['Квартира', 'Студия', 'Апартаменты']);
   await expect(housing.getByRole('button', { name: 'Квартира' })).toHaveAttribute('aria-pressed', 'true');
   await expect(housing.getByRole('button', { name: 'Апартаменты' })).toHaveAttribute('aria-pressed', 'false');
   await expect(housing.getByRole('button', { name: 'Студия' })).toHaveAttribute('aria-pressed', 'false');
@@ -157,6 +159,19 @@ test('шаг 3: характеристики — поля каталога, ти
   await expect(submit).toBeEnabled();
   await name.fill('Квартира на Ленина');
   await expect(page.getByText('18/64')).toBeVisible();
+
+  // «Описание» — статичный бокс на 8 строк (решение владельца 02.10,
+  // кадр 1218-54295, #1080): высота задана сразу, без autoGrow; текст
+  // сверх восьми строк скроллится внутри бокса, поле не растёт.
+  const description = page.getByRole('textbox', { name: 'Описание' });
+  await expect(description).toHaveAttribute('rows', '8');
+  const descBox = await description.boundingBox();
+  expect(descBox?.height ?? 0).toBeCloseTo(144, 1); // 8 строк × 18px
+  await description.fill(Array.from({ length: 12 }, (_, i) => `Строка ${i + 1}`).join('\n'));
+  const descFilledBox = await description.boundingBox();
+  expect(descFilledBox?.height ?? 0).toBeCloseTo(144, 1); // не растёт
+  expect(await description.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+
   await captureScreen(page, testInfo, '04-characteristics');
 });
 
@@ -191,13 +206,14 @@ test('полный флоу: создание без названия — авт
   await page.getByRole('textbox', { name: 'Введите адрес' }).fill('Ленина, 2');
   await page.getByRole('button', { name: 'Продолжить' }).click();
   // Название оставляем пустым: бэк генерирует из типа (#1001) — у сидового
-  // пользователя домов нет, первое создание даёт «Мой дом 1».
+  // пользователя домов нет, первое создание даёт «Мой дом» (первый объект
+  // типа без цифры — #1078).
   await page.getByRole('button', { name: 'Создать объект' }).click();
 
   // Успех (Figma 1425-55788): заголовок со сгенерированным названием,
   // подзаголовок макета, пара кнопок (override владельца); хедер без чипа
   // шага — только крестик.
-  await expect(page.getByRole('heading', { name: 'Объект «Мой дом 1» создан' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Объект «Мой дом» создан' })).toBeVisible();
   await expect(page.getByText('Вы создали объект, теперь можете добавить аренду')).toBeVisible();
   await expect(page.getByText(/шаг \d из/)).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Добавить аренду' })).toBeVisible();

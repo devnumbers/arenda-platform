@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   isApartmentCategory,
+  propertyCategoryOf,
   propertyCategoryOptions,
   propertyCreateStepReady,
   propertyHousingTypeOptions,
@@ -52,21 +53,35 @@ describe('propertyCategoryOptions', () => {
 });
 
 describe('propertyHousingTypeOptions', () => {
-  it('три чипа «Тип жилья»: квартира → апартаменты → студия (#1003)', () => {
+  it('три чипа «Тип жилья» в порядке кадра: квартира → студия → апартаменты (#1003, #1081)', () => {
     expect(propertyHousingTypeOptions.map((option) => option.value)).toStrictEqual([
       'apartment',
-      'apartments',
       'studio',
+      'apartments',
     ]);
     expect(propertyHousingTypeOptions.map((option) => option.label)).toStrictEqual([
       'Квартира',
-      'Апартаменты',
       'Студия',
+      'Апартаменты',
     ]);
   });
 
   it('студия внутри категории «Квартира»', () => {
     expect(isApartmentCategory('studio')).toBe(true);
     expect(isApartmentCategory('house')).toBe(false);
+  });
+});
+
+describe('propertyCategoryOf', () => {
+  it('типы жилья показывает категория «Квартира» — уточнение живёт в «Типе жилья» (#1081)', () => {
+    expect(propertyCategoryOf('apartment')).toBe('apartment');
+    expect(propertyCategoryOf('apartments')).toBe('apartment');
+    expect(propertyCategoryOf('studio')).toBe('apartment');
+  });
+
+  it('остальные категории неизменны', () => {
+    expect(propertyCategoryOf('garage')).toBe('garage');
+    expect(propertyCategoryOf('land')).toBe('land');
+    expect(propertyCategoryOf('room')).toBe('room');
   });
 });

@@ -303,7 +303,7 @@ func (s *PropertyService) CreateProperty(ctx context.Context, actor uuid.UUID, c
 	// серийника без какого-либо вреда.
 	name := cmd.Name
 	if strings.TrimSpace(name) == "" {
-		if name, err = autoName(ctx, s.repo, actor, propertyType); err != nil {
+		if name, err = autoName(ctx, s.repo, actor, propertyType, false); err != nil {
 			return domain.Property{}, err
 		}
 	}
@@ -867,17 +867,30 @@ func (s *PropertyService) resolveEditableProperty(ctx context.Context, actor, id
 	return role, nil
 }
 
-// autoName composes the generated property name (#1001): the serial — the
-// owner's property count of the type (active and archived alike, deleted
-// rows gone) plus one, the owner's count-based rule — over the domain
-// phrase map. The repo handle is the caller's store: the plain repo on the
-// create path, the transactional store inside applyPropertyUpdate.
-func autoName(ctx context.Context, repo PropertyRepository, scope uuid.UUID, propertyType domain.PropertyType) (string, error) {
+// autoName composes the generated property name (#1001, #1078): the serial —
+// the object's position among the owner's properties of the type (active and
+// archived alike, deleted rows gone) — over the domain phrase map; the first
+// property of the type carries no serial. The selfCounted flag tells whether
+// the repo count already includes the object itself: the create path counts
+// before the insert, and the update path counts DB rows that still carry the
+// old type — so it is true only when the PATCH leaves the type unchanged.
+// The repo handle is the caller's store: the plain repo on the create path,
+// the transactional store inside applyPropertyUpdate.
+func autoName(
+	ctx context.Context,
+	repo PropertyRepository,
+	scope uuid.UUID,
+	propertyType domain.PropertyType,
+	selfCounted bool,
+) (string, error) {
 	count, err := repo.CountByOwnerAndType(ctx, scope, propertyType)
 	if err != nil {
 		return "", fmt.Errorf("count properties for auto name: %w", err)
 	}
-	return domain.AutoPropertyName(propertyType, count+1), nil
+	if !selfCounted {
+		count++
+	}
+	return domain.AutoPropertyName(propertyType, count), nil
 }
 
 // lockEditableProperty loads the property row for update inside a write
@@ -911,10 +924,13 @@ func applyPropertyUpdate(ctx context.Context, stores *txStores, property *domain
 	}
 	if cmd.Name != nil {
 		if strings.TrimSpace(*cmd.Name) == "" {
-			// Очистка названия при правке (#1001): регенерация из типа —
-			// тот же серийник, что и при создании; сам объект в счёт
-			// входит.
-			name, err := autoName(ctx, stores.repo, property.OwnerID, property.Type)
+			// Очистка названия при правке (#1001, #1078): регенерация из
+			// типа. Пока строка в БД не перезаписана, счёт включает сам
+			// объект только при неизменном типе (строка уже нового типа
+			// не станет до UPDATE) — серийник и есть позиция среди
+			// однотипных; при смене типа тем же PATCH сам объект в счёт
+			// нового типа не попадает.
+			name, err := autoName(ctx, stores.repo, property.OwnerID, property.Type, cmd.Type == nil)
 			if err != nil {
 				return err
 			}

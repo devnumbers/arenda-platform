@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import type { JSX } from 'react';
 import type { PropertyType } from '@/entities/property';
-import { propertyTypeOptions } from '@/features/properties';
+import { propertyCategoryOf, propertyCategoryOptions } from '@/features/properties';
 import { SmallArrowDown } from '@/shared/assets/icons';
 import { cn } from '@/shared/lib/cn';
 import { ChipButton, Modal, ModalContent } from '@/shared/ui/design';
@@ -12,8 +12,11 @@ import { ChipButton, Modal, ModalContent } from '@/shared/ui/design';
  * Поле «Тип объекта» формы правки (карта #583, тикет #590; триггер —
  * анатомия PickerField, Figma 1550:95852, шит — 1554:97471): закрытый
  * бокс поля 56px со значением и шевроном; список открывается в
- * адаптивном Modal, в шите — чипы-пилюли всех 11 типов каталога
- * (ChipButton), без поиска. Выбор закрывает шит.
+ * адаптивном Modal, в шите — чипы-пилюли тех же 9 категорий, что на
+ * шаге 1 создания (канон владельца #1081, кадры 1213-52111 + 1218-54295):
+ * апартаменты и студия чипом не выбираются — уточнение
+ * квартира/апартаменты/студия живёт в поле «Тип жилья» формы. Выбор
+ * закрывает шит.
  */
 export type PropertyTypePickerProps = {
   readonly title?: string;
@@ -31,7 +34,11 @@ export function PropertyTypePicker({
   onValueChange,
 }: PropertyTypePickerProps): JSX.Element {
   const [open, setOpen] = useState(false);
-  const selected = propertyTypeOptions.find((option) => option.value === value);
+  // Двухуровневая модель: типы жилья (квартира/апартаменты/студия)
+  // показывает категория «Квартира» — и в закрытом боксе, и отметкой
+  // чипа в шите; сам тип остаётся в значении поля (меняет «Тип жилья»).
+  const selectedCategory = value === undefined ? undefined : propertyCategoryOf(value);
+  const selected = propertyCategoryOptions.find((option) => option.value === selectedCategory);
   const sheetTitle = title ?? placeholder ?? '';
 
   const handleSelect = (next: PropertyType): void => {
@@ -80,10 +87,10 @@ export function PropertyTypePicker({
           titleClassName="text-base font-medium text-content-tertiary"
         >
           <div role="group" aria-label={sheetTitle} className="flex flex-wrap gap-2">
-            {propertyTypeOptions.map((option) => (
+            {propertyCategoryOptions.map((option) => (
               <ChipButton
                 key={option.value}
-                selected={option.value === value}
+                selected={option.value === selectedCategory}
                 onClick={() => handleSelect(option.value)}
               >
                 {option.label}

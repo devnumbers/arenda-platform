@@ -27,7 +27,10 @@ import { IconButton } from './icon-button';
  * с multiline не сочетается — плавающий лейбл рассчитан на одну строку.
  * autoGrow — опциональное авторасширение: поле тянется по контенту от 3
  * строк до 200px, дальше скролл внутри (комментарий задачи, решение
- * владельца 2026-09-03); без него textarea фиксированная на 3 строки. */
+ * владельца 2026-09-03); без него textarea фиксированная — высота в
+ * строках задаётся пропом rows (3 по умолчанию; статичные 8 строк
+ * описания объекта — решение владельца 2026-10-02, кадр 1218:54295),
+ * текст сверх — скроллится внутри (нативное поведение textarea). */
 
 export type TextFieldVariant = 'titleOut' | 'titleIn';
 
@@ -49,6 +52,10 @@ type TextFieldBaseProps = {
   /** Декоративная головка бокса (единица измерения слева, до ввода),
    * aria-hidden. */
   readonly prefix?: ReactNode;
+  /** Только с multiline: статичная высота поля в строках (3 по умолчанию);
+   * текст сверх — скролл внутри, поле не растёт (описание объекта — 8
+   * строк, решение владельца 2026-10-02, кадр 1218:54295). */
+  readonly rows?: number;
   /** Только с multiline: поле растёт по контенту от 3 строк до ~10
    * (200px), дальше — скролл внутри; при очистке сжимается обратно. */
   readonly autoGrow?: boolean;
@@ -59,7 +66,7 @@ type TextFieldBaseProps = {
 export type TextFieldProps = TextFieldBaseProps &
   (
     | ({ readonly multiline?: false } & Omit<ComponentProps<'input'>, 'size' | 'maxLength'>)
-    | ({ readonly multiline: true } & Omit<ComponentProps<'textarea'>, 'maxLength' | 'ref'>)
+    | ({ readonly multiline: true } & Omit<ComponentProps<'textarea'>, 'maxLength' | 'ref' | 'rows'>)
   );
 
 /** Показатели счётчика и ошибок — кегль Figma Mobile/Text/S (13/15). */
@@ -77,6 +84,7 @@ export function TextField({
   prefix,
   multiline = false,
   autoGrow = false,
+  rows: rowsCount = 3,
   value,
   disabled,
   placeholder,
@@ -178,7 +186,7 @@ export function TextField({
                 value={value}
                 placeholder={placeholder}
                 maxLength={maxLength}
-                rows={3}
+                rows={rowsCount}
                 {...(props as ComponentProps<'textarea'>)}
               />
             ) : (

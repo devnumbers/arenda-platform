@@ -42,12 +42,20 @@ export const propertyCategoryOptions: readonly { value: PropertyType; label: str
 /** Чип-группа «Тип жилья» шага 3 (Figma 1218-54295; студия добавлена по
  * решению владельца 30.09, тикет #1003): закрывают типы внутри категории
  * «Квартира» — все три делят один каталог характеристик (студия — клон
- * набора квартиры), поэтому смена между ними не меняет набор полей. */
+ * набора квартиры), поэтому смена между ними не меняет набор полей.
+ * Порядок по кадру — Квартира, Студия, Апартаменты (тикет #1081). */
 export const propertyHousingTypeOptions: readonly { value: PropertyType; label: string }[] = [
   { value: 'apartment', label: 'Квартира' },
-  { value: 'apartments', label: 'Апартаменты' },
   { value: 'studio', label: 'Студия' },
+  { value: 'apartments', label: 'Апартаменты' },
 ];
+
+/** Категория двухуровневой модели, представляющая тип в чип-пикерах
+ * (шаг 1 создания, «Тип объекта» правки): все три типа жилья показываются
+ * чипом «Квартира» — уточнение живёт в «Типе жилья» (#1003, #1081). */
+export function propertyCategoryOf(type: PropertyType): PropertyType {
+  return isApartmentCategory(type) ? 'apartment' : type;
+}
 
 /** Категория «Квартира» шага 1 (апартаменты и студия появляются только
  * здесь, на шаге «Тип жилья»). */
@@ -58,7 +66,7 @@ export function isApartmentCategory(type: PropertyType): boolean {
 /** Готовность шага: категория выбрана / адрес непустой / шаг 3 достигнут.
  * Характеристики, описание и название на готовность шага 3 не влияют —
  * они необязательные: пустое название регенерирует бэк из типа
- * («Моя квартира 1», #1001). */
+ * («Моя квартира» — первый объект типа без серийника, #1001/#1078). */
 export function propertyCreateStepReady(
   step: PropertyCreateStep,
   draft: PropertyCreateDraft,

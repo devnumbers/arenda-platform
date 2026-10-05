@@ -22,14 +22,20 @@ var propertyNamePhrases = map[PropertyType]string{
 
 // AutoPropertyName builds the generated property name (properties/CONTEXT.md
 // «Автогенерация названия», ticket #1001): the possessive type phrase plus
-// the serial number. The serial comes from the application layer — the
-// owner's property count of this type (active and archived alike, deleted
-// rows are gone) plus one, the owner's count-based rule: gaps after renames
-// are expected, duplicate names are acceptable (names carry no uniqueness).
+// the serial number. The first property of the type carries no serial —
+// «Моя квартира», from the second the serial is appended — «Моя квартира 2»
+// (ticket #1078, owner 02.10). The serial comes from the application layer —
+// the owner's property count of this type (active and archived alike,
+// deleted rows are gone) plus one, the owner's count-based rule: gaps after
+// renames are expected, duplicate names are acceptable (names carry no
+// uniqueness).
 func AutoPropertyName(t PropertyType, serial int) string {
 	phrase, ok := propertyNamePhrases[t]
 	if !ok {
 		phrase = "Мой объект"
+	}
+	if serial <= 1 {
+		return phrase
 	}
 	return fmt.Sprintf("%s %d", phrase, serial)
 }

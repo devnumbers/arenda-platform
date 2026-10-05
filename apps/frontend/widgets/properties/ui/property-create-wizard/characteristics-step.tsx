@@ -84,6 +84,9 @@ export function CharacteristicsStep({
       <TextField
         title="Описание"
         multiline
+        // Статичный бокс на 8 строк (кадр 1218-54295, #1080): без
+        // autoGrow, текст сверх восьми строк скроллится внутри.
+        rows={8}
         maxLength={DESCRIPTION_MAX_LENGTH}
         value={description}
         onChange={(event) => onDescriptionChange(event.currentTarget.value)}

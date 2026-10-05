@@ -90,6 +90,55 @@ test('секции детали: тап по контенту карточки �
   await expect(page).toHaveURL(new RegExp(`/properties/${SEEDED_APARTMENT_PROPERTY_ID}/tasks$`));
 });
 
+test('правка объекта: «Описание» — статичный бокс на 8 строк, скролл внутри (#1080)', async ({ page, seededUser }) => {
+  // Решение владельца 02.10 (кадр 1218-54295): бокс описания сразу 8 строк,
+  // без autoGrow; текст сверх восьми строк скроллится внутри бокса. Тот же
+  // TextField в визаре создания покрывает property-create.spec (шаг 3).
+  await openCabinetWithSeededSession(page, seededUser);
+  await page.goto(`/properties/${SEEDED_APARTMENT_PROPERTY_ID}/edit`);
+
+  const description = page.getByRole('textbox', { name: 'Описание' });
+  await expect(description).toBeVisible();
+  await expect(description).toHaveAttribute('rows', '8');
+  const descBox = await description.boundingBox();
+  expect(descBox?.height ?? 0).toBeCloseTo(144, 1); // 8 строк × 18px
+  await description.fill(Array.from({ length: 12 }, (_, i) => `Строка ${i + 1}`).join('\n'));
+  const descFilledBox = await description.boundingBox();
+  expect(descFilledBox?.height ?? 0).toBeCloseTo(144, 1); // не растёт
+  expect(await description.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+});
+
+test('правка объекта: пикер «Тип объекта» — 9 категорий, жильё через «Тип жилья» (#1081)', async ({ page, seededUser }) => {
+  // Канон владельца (кадры 1213-52111 + 1218-54295, «тут всё как надо»):
+  // апартаменты и студия не выбираются чипом «Тип объекта» — уточнение
+  // квартира/апартаменты/студия живёт в отдельном поле «Тип жилья»
+  // (двухуровневая модель #1003). Смена уточнения меняет плейсхолдер
+  // названия по типу, категория в закрытом боксе остаётся «Квартира».
+  await openCabinetWithSeededSession(page, seededUser);
+  await page.goto(`/properties/${SEEDED_APARTMENT_PROPERTY_ID}/edit`);
+
+  // Шит пикера: те же 9 категорий, что на шаге 1 создания; чип выбранной
+  // категории отмечен. Пикер на форме один — триггер уникален.
+  const pickerTrigger = page.locator('button[aria-haspopup="dialog"]');
+  await expect(pickerTrigger).toHaveText('Квартира');
+  await pickerTrigger.click();
+  const sheet = page.getByRole('dialog', { name: 'Тип объекта' });
+  const chips = sheet.getByRole('group', { name: 'Тип объекта' });
+  await expect(chips.getByRole('button')).toHaveCount(9);
+  await expect(chips.getByRole('button', { name: 'Апартаменты' })).toHaveCount(0);
+  await expect(chips.getByRole('button', { name: 'Студия' })).toHaveCount(0);
+  await expect(chips.getByRole('button', { name: 'Квартира' })).toHaveAttribute('aria-pressed', 'true');
+  await page.keyboard.press('Escape');
+
+  // «Тип жилья» — отдельное поле, порядок кадра 1218-54295.
+  const housing = page.getByRole('group', { name: 'Тип жилья' });
+  await expect(housing.getByRole('button')).toHaveText(['Квартира', 'Студия', 'Апартаменты']);
+  await housing.getByRole('button', { name: 'Студия' }).click();
+  await expect(housing.getByRole('button', { name: 'Студия' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByPlaceholder('Моя студия')).toBeVisible();
+  await expect(pickerTrigger).toHaveText('Квартира');
+});
+
 test('без подписки (404 /subscription): кнопки создания живые, ведут на смену тарифа #768', async ({ page, seededUser }) => {
   // Состояние сид-Марии из обхода #760 воспроизводим перехватом: до фикса
   // 404 держал react-query в вечном pending, и кнопки создания хаба были
