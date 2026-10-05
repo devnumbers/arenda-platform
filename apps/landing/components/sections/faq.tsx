@@ -1,6 +1,6 @@
-import { LandingLink } from "@/components/button";
 import { Reveal } from "@/components/reveal";
 import { FaqList } from "@/components/sections/faq-list";
+import { FeedbackModal } from "@/components/feedback-modal";
 import { FAQ } from "@/lib/content";
 
 // «Ответы на вопросы» — макеты 2967-76035 (десктоп: категория 36/40 Medium
@@ -34,17 +34,12 @@ export function Faq() {
           <FaqList groups={FAQ} />
         </div>
         <Reveal delay={150} className="w-full">
-          {/* Хэндл Telegram-канала — плейсхолдер t.me/rentlee до финального от владельца. */}
           <div className="mt-24 flex flex-col items-center gap-8 text-center desk:mt-14 desk:ml-[264px] desk:items-start desk:text-left">
             <p className="text-h4 text-balance">Не нашли ответ на свой вопрос?</p>
-            <LandingLink
-              size="sm"
-              href="https://t.me/rentlee"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Задать вопрос
-            </LandingLink>
+            {/* Кнопка открывает модалку «Задать вопрос» (форма уходит письмом
+                через /api/feedback → бекенд); размер sm — инстанс LandingButton
+                177×56 из кадра 2967-76035. */}
+            <FeedbackModal label="Задать вопрос" size="sm" />
           </div>
         </Reveal>
       </div>

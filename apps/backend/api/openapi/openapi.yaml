@@ -4392,6 +4392,34 @@ paths:
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
+  /feedback:
+    post:
+      operationId: sendFeedback
+      description: >
+        Public landing feedback form (карта #1010): a question from the
+        «Задать вопрос» modal forwarded by the landing's server-side proxy.
+        Rate limited per IP; the message is emailed to the configured
+        FEEDBACK_EMAIL recipient.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedbackRequest'
+      responses:
+        '204':
+          description: Feedback accepted and queued for delivery
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          description: Feedback is not configured (no recipient email)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
   /webhooks/payment/{provider}:
     post:
       operationId: handlePaymentWebhook
@@ -8202,6 +8230,19 @@ components:
           type: string
           maxLength: 500
           description: Page URL where the error occurred
+
+    FeedbackRequest:
+      type: object
+      required: [email, message]
+      properties:
+        email:
+          type: string
+          maxLength: 254
+          description: Reply address of the sender
+        message:
+          type: string
+          maxLength: 1000
+          description: Feedback question text
 
     RentalPaymentDay:
       description: >-
