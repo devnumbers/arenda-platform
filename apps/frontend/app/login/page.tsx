@@ -1,7 +1,6 @@
 "use client";
 
 import {type JSX, useRef, useState} from "react";
-import {useRouter} from "next/navigation";
 import {notify} from "@/shared/lib/notifications";
 import {type ApiError} from "@/shared/api/errors";
 import {CodeStep, EmailStep, LoginShell, PhoneStep, deviceTimezone, useSendCode, useVerifyCode} from "@/features/auth";
@@ -12,10 +11,9 @@ import {useSendCooldown} from "@/features/auth";
 import {useLoginDraft} from "@/features/auth";
 import {RESEND_TIMEOUT} from "@/features/auth";
 import {useStandalone} from "@/shared/lib/hooks/useStandalone";
-import {goBack, hardReplace} from "@/shared/lib/navigation";
+import {hardReplace} from "@/shared/lib/navigation";
 
 export default function LoginPage(): JSX.Element {
-    const router = useRouter();
     const isStandalone = useStandalone();
     const {draft, setDraft, clearDraft} = useLoginDraft();
     const {remainingSeconds: resendTimer, recordSendWithRemainingSeconds} = useSendCooldown();
@@ -196,8 +194,14 @@ export default function LoginPage(): JSX.Element {
         );
     };
 
+    // Крестик — выход на лендинг (#1103, слово владельца): сайт всегда
+    // заменяет адрес на «/» без учёта истории — goBack вернул бы гостя на
+    // кабинетный маршрут (например ?from=/properties), где proxy.ts снова
+    // редиректит на /login?from…: крестик закрывал бы форму и тут же
+    // открывал её заново. В standalone PWA крестика нет вовсе (hideClose).
+    // Жёсткая навигация auth-границы — канон Navigation (#1098).
     const handleClose = () => {
-        goBack(router, "/");
+        hardReplace("/");
     };
 
     // Шаги телефона и почты — редизайн по макетам Рентли (карта #761,

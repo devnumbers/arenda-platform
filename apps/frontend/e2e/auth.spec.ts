@@ -506,3 +506,81 @@ test('выход: Clear-Site-Data, перезагрузка на /login, «На�
   await page.waitForURL(/\/login/);
   await expect(page.getByRole('heading', { name: 'Введите номер телефона' })).toBeVisible();
 });
+
+// Крестик логина (#1103, решение владельца): сайт всегда заменяет адрес на
+// лендинг «/» — история не учитывается, ?from из глубины кабинета
+// игнорируется. goBack возвращал бы гостя на кабинетный маршрут, а proxy.ts
+// снова редиректит его на /login?from… — «крестик» закрывал бы форму и тут
+// же открывал её заново. Жёсткая навигация auth-границы — канон #1098. В
+// standalone PWA крестика нет вовсе (hideClose по useStandalone) — закрывать
+// некуда.
+//
+// Навигация на «/» изолирована документной заглушкой: на e2e-стеке «/»
+// отдаёт фронт кабинета (redirect → /properties), в проде на «/» стоит
+// лендинг (ADR 0063) — стеку нечего показать, ассертится сам факт замены
+// адреса. Service workers блокируются: sw.js перехватывает навигации на
+// «/» и уводил бы запрос мимо route-мока (запросы SW Playwright-роутинг не
+// видит).
+test.describe('крестик логина (#1103)', () => {
+  test.use({ serviceWorkers: 'block' });
+
+  test('сайт — всегда лендинг replace-ом, даже при ?from', async ({ page }) => {
+    await page.route(`${BASE_URL}/`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'text/html; charset=utf-8',
+        body: '<!doctype html><html lang="ru"><body><p>СТАБ-ЛЕНДИНГ-1103</p></body></html>',
+      }),
+    );
+
+    // Глубина истории: две записи — после replace «Назад» обязан вести на
+    // первый /login; push вернул бы на /login?from (форму снова открыли).
+    await page.goto('/login');
+    await page.goto('/login?from=/properties');
+    await expect(page.getByRole('heading', { name: 'Введите номер телефона' })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Закрыть' }).click();
+
+    // Адрес заменён на лендинг: ?from проигнорирован, контент — новый
+    // документ (клиентский router.replace отрисовал бы кабинетный маршрут:
+    // «/» стека редиректит на /properties).
+    await page.waitForURL(`${BASE_URL}/`);
+    await expect(page.getByText('СТАБ-ЛЕНДИНГ-1103')).toBeVisible();
+
+    // Replace, не push: запись /login?from заменена — «Назад» ведёт на
+    // /login без ?from.
+    await page.goBack();
+    await page.waitForURL(`${BASE_URL}/login`);
+  });
+
+  test('standalone PWA — крестика нет (matchMedia-мок)', async ({ page }) => {
+    // Headless Chromium не умеет display-mode: standalone — PWA-ветка
+    // эмулируется подменой matchMedia: матчится только standalone-запрос,
+    // остальное делегируется нативной реализации.
+    await page.addInitScript(() => {
+      const native = window.matchMedia.bind(window);
+      window.matchMedia = (query: string): MediaQueryList => {
+        if (query === '(display-mode: standalone)') {
+          const mql = native(query);
+          return {
+            matches: true,
+            media: mql.media,
+            onchange: null,
+            addEventListener: () => {},
+            removeEventListener: () => {},
+            addListener: () => {},
+            removeListener: () => {},
+            dispatchEvent: () => false,
+          } as MediaQueryList;
+        }
+        return native(query);
+      };
+    });
+
+    await page.goto('/login');
+    await expect(page.getByRole('heading', { name: 'Введите номер телефона' })).toBeVisible();
+    // Крестика нет (hideClose): на шаге телефона бара нет вовсе —
+    // единственная кнопка «Закрыть» на странице исчезает.
+    await expect(page.getByRole('button', { name: 'Закрыть' })).toHaveCount(0);
+  });
+});
