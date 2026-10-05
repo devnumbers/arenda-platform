@@ -1,7 +1,7 @@
 "use client";
 
 import Image, { type StaticImageData } from "next/image";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import reviewAvatar1 from "@/assets/sections/review-avatar-1.webp";
 import reviewAvatar2 from "@/assets/sections/review-avatar-2.webp";
 import reviewAvatar3 from "@/assets/sections/review-avatar-3.webp";
@@ -22,9 +22,9 @@ import slide5 from "@/assets/sections/slide-5.webp";
 //   текст») — поле quoteShort;
 // — десктоп (TestimonialsDesktop) — кадр 2967:75932: слева отзыв активной
 //   карточки (колонка 472px: цитата 36/40 + аватар 64 + имя 20/24 +
-//   подпись 18/22), справа лента голых фото до края окна: активная
-//   338×450 (растёт вправо от левой линии — origin-left), соседние
-//   300×400 (зазор 20, r40), лента обрезана краем окна.
+//   подпись 18/22), справа лента голых фото в контейнере с жёстким
+//   обрезом под 3 слота (978px): активная 338×450 (растёт вправо от
+//   левой линии — origin-left), соседние 300×400 (зазор 20, r40).
 //
 // Механика — точная копия секции «Опыт наших партнёров»
 // pay.yandex.ru/business (решение владельца): управление ТОЛЬКО кликом по
@@ -32,7 +32,8 @@ import slide5 from "@/assets/sections/slide-5.webp";
 // ленту); клик по соседней сдвигает на 1, клик через одну и дальше —
 // прыжок сразу на цель одной анимацией; переход 360ms ease-out: входящая
 // едет на место активной, дорастая и проявляясь 0.4→1, бывшая активная
-// растворяется на месте (сжатие до 0.6, прозрачность в ноль), соседние
+// растворяется на месте (сжатие до 0.6, прозрачность в ноль — у Яндекса
+// её translateX равен 0 на каждом кадре при любом прыжке), соседние
 // приглушены до 0.4; лента бесконечная (после последней снова первая),
 // текст левой колонки меняется мгновенно, автоплея/стрелок/точек нет.
 //
@@ -119,16 +120,53 @@ const IDLE_OPACITY = 0.4;
 // Хук клик-карусели: активный индекс + кольцевая позиция каждого слайда
 // и флаг прыжка (выход из стопки в очередь). Предыдущий активный хранится
 // рядом с текущим (одним state) — прыжок считается на рендере без ref-ов.
+// frozen — индекс бывшей активной карточки при прыжке дальше соседней:
+// она растворяется НА МЕСТЕ (у Яндекса translateX бывшей активной равен 0
+// на каждом кадре, двигаются только scale и opacity), а по завершении
+// перехода невидимо переставляется за обрез; таймер хранится в ref —
+// мутации только в обработчике клика, не на рендере.
 function useClickCarousel(count: number) {
   const [active, setActiveState] = useState({ current: 0, previous: 0 });
+  const [frozen, setFrozen] = useState<number | null>(null);
+  // Слайд, только что вышедший из заморозки: его перестановка на конечную
+  // позицию (за обрез) обязана быть мгновенной — с обычным transition он
+  // уползает через видимую зону с растущей прозрачностью (поймано
+  // приёмкой прыжка «через одну»).
+  const [thawed, setThawed] = useState<number | null>(null);
+  const frozenTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (frozenTimer.current) {
+        clearTimeout(frozenTimer.current);
+      }
+    },
+    [],
+  );
+
   const setActive = (index: number) => {
+    const k = (index - active.current + count) % count;
+    if (k >= 2) {
+      setFrozen(active.current);
+      setThawed(null);
+      if (frozenTimer.current) {
+        clearTimeout(frozenTimer.current);
+      }
+      frozenTimer.current = setTimeout(() => {
+        setFrozen(null);
+        setThawed(active.current);
+      }, 400);
+    } else {
+      setFrozen(null);
+      setThawed(null);
+    }
     setActiveState((prev) => ({ current: index, previous: prev.current }));
   };
 
   const relOf = (index: number, of: number) => (index - of + count) % count;
   const stateOf = (index: number) => ({
     rel: relOf(index, active.current),
-    jumping: relOf(index, active.previous) === count - 1,
+    jumping: relOf(index, active.previous) === count - 1 || index === thawed,
+    frozen: index === frozen,
   });
 
   return { active: active.current, setActive, stateOf };
@@ -139,7 +177,18 @@ function slideStyle(
   step: number,
   extra: number,
   activeScale: string,
+  frozen: boolean,
 ): React.CSSProperties {
+  // Растворение бывшей активной на месте: позиция покоя заморожена,
+  // сжатие и гашение анимируются обычным transition (translateX не
+  // меняется — карточка не перелетает, см. useClickCarousel).
+  if (frozen) {
+    return {
+      transform: `translateX(0px) scale(${RECESSED_SCALE})`,
+      opacity: 0,
+      zIndex: -1,
+    };
+  }
   if (rel === 0) {
     return { transform: `translateX(0px) scale(${activeScale})`, opacity: 1, zIndex: 5 };
   }
@@ -180,14 +229,17 @@ export function TestimonialsCarousel() {
   return (
     <div className="relative mx-6 h-[500px]">
       {REVIEWS.map((review, index) => {
-        const { rel, jumping } = stateOf(index);
+        const { rel, jumping, frozen } = stateOf(index);
         // Прыжок актуален только очередным слайдам (см. useClickCarousel).
         const transition = jumping
           ? "slide-jump"
           : `${SLIDE_TRANSITION_CLASS} motion-reduce:transition-none`;
-        const className = `absolute left-0 top-0 h-[500px] w-[320px] overflow-hidden rounded-[32px] ${transition} will-change-[transform,opacity]`;
-        const style = slideStyle(rel, 332, 0, "1");
-        const interactive = rel !== 0 && rel !== COUNT - 1;
+        const className = `absolute left-0 top-0 h-[500px] w-[320px] overflow-hidden rounded-[32px] ${transition} will-change-[transform,opacity] motion-reduce:transition-none`;
+        const style = slideStyle(rel, 332, 0, "1", frozen);
+        // Кликабельны только видимые позиции: очередь №1 и №2 (№3 и дальше
+        // за обрезом/краем окна — клик по невидимой карточке запускал
+        // растворение видимой, поймано приёмкой).
+        const interactive = (rel === 1 || rel === 2) && !frozen;
         const slide = (
           <>
             <Image
@@ -235,7 +287,7 @@ export function TestimonialsCarousel() {
           </>
         );
 
-        if (rel === COUNT - 1) {
+        if (rel === COUNT - 1 || frozen) {
           return (
             <div
               key={review.name}
@@ -315,20 +367,26 @@ export function TestimonialsDesktop() {
           </div>
         </div>
       </div>
-      {/* Лента уезжает вправо за колонку до края окна. Высота 450 — высота
-          ряда по макету: активное фото в полный рост 450, соседние 400 по
-          центру (top 25 = половина разницы). overflow-clip, не hidden:
-          hidden делает ленту скролл-контейнером — программный
+      {/* Лента — контейнер с жёстким обрезом ровно под 3 слота (активная
+          338 + зазор 20 + две по 300 + зазоры 20 = 978), как у Яндекса
+          (их .swiper-container overflow:hidden шириной 760 при любой
+          ширине окна): видно всегда максимум 3 карточки, правее — пустота
+          до края окна; на узких окнах раньше режет край окна. Высота 450 —
+          высота ряда по макету: активное фото в полный рост 450, соседние
+          400 по центру (top 25 = половина разницы). overflow-clip, не
+          hidden: hidden делает ленту скролл-контейнером — программный
           scrollIntoView (клик по обрезанной карточке) сдвигает ряд. */}
-      <div className="desk:-mr-[calc((100vw_-_1000px)/2)] relative h-[450px] min-w-0 flex-1 overflow-clip">
+      <div className="relative h-[450px] w-[978px] shrink-0 overflow-clip">
         {REVIEWS.map((item, index) => {
-          const { rel, jumping } = stateOf(index);
+          const { rel, jumping, frozen } = stateOf(index);
           const transition = jumping
             ? "slide-jump"
             : `${SLIDE_TRANSITION_CLASS} motion-reduce:transition-none`;
-          const className = `absolute left-0 top-[25px] h-[400px] w-[300px] origin-left overflow-hidden rounded-[40px] ${transition} will-change-[transform,opacity]`;
-          const style = slideStyle(rel, DESK_STEP, DESK_EXTRA, ACTIVE_SCALE);
-          const interactive = rel !== 0 && rel !== COUNT - 1;
+          const className = `absolute left-0 top-[25px] h-[400px] w-[300px] origin-left overflow-hidden rounded-[40px] ${transition} will-change-[transform,opacity] motion-reduce:transition-none`;
+          const style = slideStyle(rel, DESK_STEP, DESK_EXTRA, ACTIVE_SCALE, frozen);
+          // Кликабельны только видимые позиции — очередь №1 и №2 (№3 за
+          // обрезом; у Яндекса за срезом тоже никто не кликает).
+          const interactive = (rel === 1 || rel === 2) && !frozen;
           const photo = (
             <Image
               src={item.photo}
@@ -339,7 +397,7 @@ export function TestimonialsDesktop() {
             />
           );
 
-          if (rel === COUNT - 1) {
+          if (rel === COUNT - 1 || frozen) {
             return (
               <div
                 key={item.name}
