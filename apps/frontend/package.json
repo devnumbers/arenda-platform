@@ -51,7 +51,7 @@
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.3.7",
-    "eslint-import-resolver-typescript": "^3.10.1",
+    "eslint-import-resolver-typescript": "^4.4.5",
     "eslint-plugin-boundaries": "^7.2.0",
     "openapi-typescript": "^7.4.0",
     "pixelmatch": "^7.2.0",
