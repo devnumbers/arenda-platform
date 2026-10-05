@@ -207,9 +207,11 @@ export function TariffCards({
           Тарифы
         </h2>
         {/* Переключатель периода — группа честных кнопок без панельной
-            семантики (tabpanel нет), выбранное состояние — aria-pressed. */}
+            семантики (tabpanel нет), выбранное состояние — aria-pressed.
+            overflow-clip = «Clip content» кадра Figma 2967-75975: тень
+            пилюли не выходит за капсулу (клип чтёт радиус 16px). */}
         <div
-          className="relative flex h-14 w-64 items-center gap-0.5 rounded-[16px] bg-surface p-0.5"
+          className="relative flex h-14 w-64 items-center gap-0.5 overflow-clip rounded-[16px] bg-surface p-0.5"
           role="group"
           aria-label="Период оплаты"
         >
