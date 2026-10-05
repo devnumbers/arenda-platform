@@ -293,24 +293,34 @@ function TestimonialsStripCard({ review }: { review: Review }) {
 }
 
 // ≤480 и SSR-снапшот: лента по образцу мобильной версии блока «Опыт
-// наших партнёров» pay.yandex.ru/business (пересъёмка живыми жестами:
-// allowTouchMove true, speed 600, effect coverflow). Активная карточка
-// по центру окна (scale 1); соседние полосками выглядывают С ОБЕИХ
-// сторон (scale 0.98) — прошедшая стоит вплотную слева и на широких
-// окнах видна растущей полосой (у Яндекса 75px на 480, 185px на 700 —
-// замер по всем мобильным ширинам; никаких захардкоженных «за краем»),
-// приглушения нет — на мобиле Яндекса все видимые непрозрачны.
-// Управление: свайп 1:1 за пальцем (старт жеста после
-// 5px), отпускание — снап на ближайшую 600ms ease; флик по скорости —
-// шаг; медленный драг ≥50% слайда — шаг; горизонтальное колесо/трекпад —
-// шаг (серия тиков во время анимации глотается); тап по выглядывающей
-// переключает, по активной — ничего (ссылок нет); лента бесконечная
-// (loop — краёв и резинки нет). Слайды, чей путь при переходе проходит
-// сквозь видимую зону с невидимых краёв, переставляются мгновенно
-// (slide-jump) — иначе пролетали бы экран. Мышь ленту не тянет — единый
-// канон с полосами; вертикальный тач остаётся скроллом страницы
-// (touch-action: pan-y).
-const MOB_STEP = 332;
+// наших партнёров» pay.yandex.ru/business (вторая пересъёмка живыми
+// жестами 390 с покадровыми трассами). Геометрия: активная карточка ПО
+// ЦЕНТРУ (scale 1), полосы прошедшей и следующей вплотную с заметным
+// контрастом — у Яндекса активная 330×540 против соседа 299×488 (0.906),
+// у нас сосед scale 0.905; дальние лесенкой за краями (±2 шага, scale
+// 0.81), зеркало симметрично; приглушения нет — все видимые непрозрачны.
+// Ряд живёт в НЕПРЕРЫВНОЙ перспективе: во время свайпа каждая карточка
+// сама едет и масштабируется по своему дробному прогрессу q (позиция
+// q·шаг, масштаб 1 − 0.095·|q|) — активная сжимается по ходу жеста,
+// полоса растёт к единице уже под пальцем, у Яндекса так же (дальние у
+// них едут медленнее ближних — на наших ширинах ≤480 глубже полос не
+// видно, параллакс не воспроизводим). Отпускание — CSS-переход 600ms
+// ease (их доезд ~600ms ease-out), позиции и масштабы доезжают вместе.
+// Кольцо: мгновенная перестановка — ТОЛЬКО между «за краями» позициями
+// ±2 (обе невидимы на любой ширине ≤480); все видимые пути анимируются:
+// полоса уезжает за край, новая выезжает из-за края (баг «картинка слева
+// просто пропадает» был от того, что обе дальние стояли справа и левая
+// полоса телепортировалась прыжком). Управление: свайп 1:1 за пальцем
+// (старт после 5px), снап по порогу 160px или флику 0.5px/ms; медленный
+// недотянутый свайп — отскок (у Яндекса так же); горизонтальное
+// колесо/трекпад — шаг (нативный addEventListener passive:false — React
+// onWheel пассивен, preventDefault кидал ошибку консоли); тап по
+// полоске — шаг (левая назад, правая вперёд); вертикальный тач остаётся
+// скроллом страницы (touch-action: pan-y); лента бесконечная.
+// Шаг ленты подобран под полоску соседа Яндекса (30px на 390): при
+// scale 0.905 видимая полуширина карточки 144.8, край активной на
+// +160 — шаг 310 = 160 + 144.8 + 5.2 зазора даёт ту же 30px полосу.
+const MOB_STEP = 310;
 const MOB_MS = 600;
 const MOB_DRAG_ACTIVATE_PX = 5;
 // Порог долгого свайпа — половина слайда (longSwipes Яндекса).
@@ -318,41 +328,37 @@ const MOB_LONG_SWIPE_PX = 160;
 // Порог флика по скорости пальца (shortSwipes).
 const MOB_FLICK_V = 0.5;
 
-// Позиция слайда по кольцевой позиции относительно активного —
-// ЗЕРКАЛЬНАЯ модель Яндекса (замер на 480/600/700): предыдущая стоит
-// вплотную слева от активной (translate −шаг, scale 0.98) и на широких
-// окнах видна растущей полосой (у них 75px на 480, 185px на 700),
-// дальние лесенкой уходят за края. Никаких захардкоженных «за левым
-// краем»: позиция не зависит от ширины окна.
-function mobPosOf(rel: number): number {
-  if (rel === 0) {
-    return 0;
+// Непрерывный кольцевой прогресс слайда index при позиции ленты g:
+// g — активный индекс в покое, дробный во время свайпа (active −
+// dx/шаг). q: 0 — центр, +1 — правая полоса, −1 — левая, ±2 — дальние;
+// период COUNT, диапазон [−COUNT/2, COUNT/2). Функции на уровне модуля:
+// вызовы в рендере — реак-хук react-hooks/refs консервативно запрещает
+// вызовы компонентных функций с ref-доступом.
+function mobQOf(index: number, g: number): number {
+  let q = (((index - g) % COUNT) + COUNT) % COUNT;
+  if (q > COUNT / 2) {
+    q -= COUNT;
   }
-  if (rel === 1) {
-    return MOB_STEP;
-  }
-  if (rel === COUNT - 1) {
-    return -MOB_STEP;
-  }
-  return MOB_STEP * 2;
+  return q;
 }
 
-// Кольцевая позиция и флаг мгновенного прыжка. Единственный невидимый
-// перелёт в кольце из 5 — «за левым дальним ↔ за правым дальним»
-// (дистанция 2 шага, оба конца за краями): переставляется без анимации,
-// иначе пролетает экран. Функции на уровне модуля: вызов в рендере —
-// реак-хук react-hooks/refs консервативно запрещает вызовы компонентных
-// функций с ref-доступом.
-function mobRelOf(index: number, of: number): number {
-  return (index - of + COUNT) % COUNT;
+// Масштаб по прогрессу: сосед 0.905 — замер Яндекса (контраст активной
+// и полосы виден глазом), дальние 0.81.
+function mobScaleOf(q: number): number {
+  return 1 - 0.095 * Math.min(Math.abs(q), 2);
 }
 
+const mobTransformOf = (q: number): string =>
+  `translateX(${q * MOB_STEP}px) scale(${mobScaleOf(q)})`;
+
+// Позиция и флаг мгновенной перестановки. Прыжок — только «за левым
+// дальним ↔ за правым дальним» (Δq 4, обе позиции за краями): иначе
+// слайд перелетал бы видимый центр. Всё видимое анимируется.
 function mobStateOf(index: number, activeIndex: number, previous: number) {
-  const rel = mobRelOf(index, activeIndex);
-  const oldPos = mobPosOf(mobRelOf(index, previous));
-  const newPos = mobPosOf(rel);
-  const jumping = Math.abs(newPos - oldPos) > MOB_STEP * 1.5;
-  return { rel, jumping };
+  const q = mobQOf(index, activeIndex);
+  const oldQ = mobQOf(index, previous);
+  const jumping = Math.abs(q - oldQ) > 1.5;
+  return { q, jumping };
 }
 
 function TestimonialsMobileCarousel() {
@@ -363,7 +369,6 @@ function TestimonialsMobileCarousel() {
   const activeRef = useRef(0);
   const animatingRef = useRef(false);
   const rootRef = useRef<HTMLDivElement>(null);
-  const stageRef = useRef<HTMLDivElement>(null);
   const animTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const drag = useRef<{
     id: number;
@@ -428,6 +433,25 @@ function TestimonialsMobileCarousel() {
     };
   }, []);
 
+  // Непрерывная перспектива свайпа: каждая карточка получает transform по
+  // своему дробному прогрессу, инлайново мимо React — рендеров во время
+  // жеста нет, а конечные значения приходят с goTo-рендером (новые props
+  // перезаписывают инлайновые мутации). frozen гасит CSS-переход, иначе
+  // инлайновые обновления отставали бы на 600ms ease.
+  const applyG = (g: number, frozen: boolean) => {
+    const root = rootRef.current;
+    if (!root) {
+      return;
+    }
+    for (const el of root.querySelectorAll<HTMLElement>("[data-mob-slide]")) {
+      const q = mobQOf(Number(el.dataset.mobSlide), g);
+      if (frozen) {
+        el.style.transition = "none";
+      }
+      el.style.transform = mobTransformOf(q);
+    }
+  };
+
   const onPointerDown = (event: React.PointerEvent) => {
     if (animating || event.pointerType === "mouse") {
       return;
@@ -458,9 +482,24 @@ function TestimonialsMobileCarousel() {
     d.v = (event.clientX - d.lastX) / Math.max(1, event.timeStamp - d.lastT);
     d.lastX = event.clientX;
     d.lastT = event.timeStamp;
-    const stage = stageRef.current;
-    if (stage) {
-      stage.style.transform = `translate3d(${dx}px, 0, 0)`;
+    // Палец вправо — лента к предыдущей (g убывает), влево — к следующей.
+    applyG(activeRef.current - dx / MOB_STEP, true);
+  };
+
+  // Возврат к покою: инлайновый transition:none снимается (возвращается
+  // класс slide-mob), конечные transform'ы ставит goTo-рендер, при
+  // отскоке — здесь (рендера не будет, инлайновые драг-мутации иначе
+  // остались бы).
+  const settle = () => {
+    const root = rootRef.current;
+    if (!root) {
+      return;
+    }
+    for (const el of root.querySelectorAll<HTMLElement>("[data-mob-slide]")) {
+      el.style.transition = "";
+      el.style.transform = mobTransformOf(
+        mobQOf(Number(el.dataset.mobSlide), activeRef.current),
+      );
     }
   };
 
@@ -470,8 +509,7 @@ function TestimonialsMobileCarousel() {
       return;
     }
     drag.current = null;
-    const stage = stageRef.current;
-    if (!stage || !d.moved) {
+    if (!d.moved) {
       return;
     }
     const delta = event.clientX - d.startX;
@@ -481,25 +519,12 @@ function TestimonialsMobileCarousel() {
     } else if (delta >= MOB_LONG_SWIPE_PX || d.v >= MOB_FLICK_V) {
       target = active.index - 1;
     }
-    // Снап контейнера к нулю той же кривой и длительности, что у
-    // карточек: суммарное движение (перестановка rel + затухание дельты)
-    // остаётся непрерывным (см. свайп-модель в шапке файла).
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    stage.style.transition = reduced ? "none" : `transform ${MOB_MS}ms ease`;
-    stage.style.transform = "translate3d(0, 0, 0)";
-    setTimeout(
-      () => {
-        stage.style.transition = "";
-        stage.style.transform = "";
-      },
-      reduced ? 0 : MOB_MS + 40,
-    );
+    settle();
     if (target !== active.index) {
       goTo(target);
     }
   };
 
-  // Кольцевая позиция и мгновенный прыжок считаются mobStateOf (модуль).
   return (
     <div
       ref={rootRef}
@@ -509,9 +534,7 @@ function TestimonialsMobileCarousel() {
       onPointerCancel={endDrag}
       className="relative h-[500px] w-full touch-pan-y select-none"
     >
-      <div ref={stageRef} className="relative h-full w-full will-change-transform">
-        <MobileSlides activeIndex={active.index} previous={active.previous} goTo={goTo} />
-      </div>
+      <MobileSlides activeIndex={active.index} previous={active.previous} goTo={goTo} />
     </div>
   );
 }
@@ -529,14 +552,12 @@ function MobileSlides({
   goTo: (index: number) => void;
 }) {
   return REVIEWS.map((review, index) => {
-    const { rel, jumping } = mobStateOf(index, activeIndex, previous);
+    const { q, jumping } = mobStateOf(index, activeIndex, previous);
     const transition = jumping ? "slide-jump" : "slide-mob motion-reduce:transition-none";
     const className = `absolute left-1/2 top-0 -ml-[160px] h-[500px] w-[320px] overflow-hidden rounded-[32px] ${transition} will-change-[transform] motion-reduce:transition-none`;
-    const x = mobPosOf(rel);
-    const scale = Math.abs(rel) === 1 ? 0.98 : "1";
     const style: React.CSSProperties = {
-      transform: `translateX(${x}px) scale(${scale})`,
-      zIndex: rel === 0 ? 2 : Math.abs(rel) === 1 ? 1 : 0,
+      transform: mobTransformOf(q),
+      zIndex: q === 0 ? 2 : Math.abs(q) === 1 ? 1 : 0,
     };
     const slide = (
       <>
@@ -553,11 +574,12 @@ function MobileSlides({
 
     // Тапабельны обе видимые полоски (у Яндекса slideToClickedSlide по
     // любому видимому слайду): правая — вперёд, левая — назад.
-    if (rel !== 1 && rel !== COUNT - 1) {
+    if (Math.abs(q) !== 1) {
       return (
         <div
           key={review.name}
-          aria-hidden={rel !== 0}
+          data-mob-slide={index}
+          aria-hidden={q !== 0}
           className={className}
           style={style}
         >
@@ -568,6 +590,7 @@ function MobileSlides({
     return (
       <div
         key={review.name}
+        data-mob-slide={index}
         role="button"
         tabIndex={0}
         onClick={() => goTo(index)}
