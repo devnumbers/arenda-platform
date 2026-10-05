@@ -161,9 +161,12 @@ export function ModalContent({
           className={cn(
             "fixed inset-0 z-50 bg-overlay",
             // Вход/выход — классами по фазе closing, не по data-state:
-            // см. комментарий к closing в ModalContentProps.
+            // см. комментарий к closing в ModalContentProps. forwards в
+            // выходных — держит последний кадр (opacity 0) до размонтирования:
+            // без него анимация, доиграв раньше таймера unmount, отдаёт
+            // базовые стили и панель/фон вспыхивают на полную яркость.
             closing
-              ? "animate-[modal-overlay-out_250ms_var(--dl-ease)]"
+              ? "animate-[modal-overlay-out_250ms_var(--dl-ease)_forwards]"
               : "animate-[modal-overlay-in_350ms_var(--dl-ease)]",
           )}
         />
@@ -177,7 +180,7 @@ export function ModalContent({
               // отдаёт приоритет последнему).
               "relative flex max-h-[92dvh] w-full max-w-[520px] flex-col rounded-sheet bg-white font-sans outline-none",
               closing
-                ? "animate-[modal-card-out_220ms_var(--dl-ease)]"
+                ? "animate-[modal-card-out_220ms_var(--dl-ease)_forwards]"
                 : "animate-[modal-card-in_400ms_var(--dl-ease)]",
               className,
             )}

@@ -160,10 +160,14 @@ export function FeedbackModal({
       >
         {label}
       </LandingButton>
+      {/* Ширина (решение владельца): ≥1200 — карточка 400px; на планшете и
+          мобайле ограничение снято — max-w-none перебивает базовые 520 шелла
+          (className потребителя приходит последним в tailwind-merge), шит и
+          карточка тянутся во всю ширину. */}
       <ModalContent
         title="Задать вопрос"
         titleSrOnly
-        className="max-w-[400px]"
+        className="max-w-none min-[1200px]:max-w-[400px]"
         closing={isDesktop && closing}
         onCloseAutoFocus={(e) => {
           // Radix при unmount тянет фокус в «элемент до диалога» (на маке —
