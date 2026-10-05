@@ -1,7 +1,7 @@
 "use client";
 
 import Image, { type StaticImageData } from "next/image";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { TabletStrip } from "@/components/tablet-strip";
 import reviewAvatar1 from "@/assets/sections/review-avatar-1.webp";
 import reviewAvatar2 from "@/assets/sections/review-avatar-2.webp";
@@ -109,9 +109,6 @@ const REVIEWS: Review[] = [
 
 const COUNT = REVIEWS.length;
 
-// Переход 360ms ease-out — скорость и кривая карусели Яндекса (speed 360).
-const SLIDE_TRANSITION_CLASS =
-  "transition-[transform,opacity] duration-[360ms] ease-out";
 // Десктоп плавнее тача (решение владельца): 440ms и мягкий вход/выход —
 // утилиты в globals.css (reduce внутри них, тайминг-функция в arbitrary
 // классах ненадёжна — Tailwind съедает часть значения).
@@ -119,7 +116,6 @@ const DESK_TRANSITION_CLASS = "slide-desk";
 const DESK_JUMP_TRANSITION_CLASS = "slide-jump-desk";
 // Заморозка растворения держится чуть дольше перехода (растворение должно
 // доиграть до конца, невидимая перестановка — после).
-const TOUCH_FREEZE_MS = 400;
 const DESK_FREEZE_MS = 480;
 // Растворение уходящей карточки: сжатие до 0.6 в ноль (у Яндекса ушедший
 // слайд оседает на 0.6 под наезжающим активным).
@@ -136,7 +132,7 @@ const IDLE_OPACITY = 0.4;
 // перехода невидимо переставляется за обрез; таймер хранится в ref —
 // мутации только в обработчике клика, не на рендере.
 function useClickCarousel(count: number, freezeMs: number) {
-  const [active, setActiveState] = useState({ current: 0, previous: 0 });
+  const [active, setActiveState] = useState({ index: 0, previous: 0 });
   const [frozen, setFrozen] = useState<number | null>(null);
   // Слайд, только что вышедший из заморозки: его перестановка на конечную
   // позицию (за обрез) обязана быть мгновенной — с обычным transition он
@@ -154,32 +150,32 @@ function useClickCarousel(count: number, freezeMs: number) {
   );
 
   const setActive = (index: number) => {
-    const k = (index - active.current + count) % count;
+    const k = (index - active.index + count) % count;
     if (k >= 2) {
-      setFrozen(active.current);
+      setFrozen(active.index);
       setThawed(null);
       if (frozenTimer.current) {
         clearTimeout(frozenTimer.current);
       }
       frozenTimer.current = setTimeout(() => {
         setFrozen(null);
-        setThawed(active.current);
+        setThawed(active.index);
       }, freezeMs);
     } else {
       setFrozen(null);
       setThawed(null);
     }
-    setActiveState((prev) => ({ current: index, previous: prev.current }));
+    setActiveState((prev) => ({ index, previous: prev.index }));
   };
 
   const relOf = (index: number, of: number) => (index - of + count) % count;
   const stateOf = (index: number) => ({
-    rel: relOf(index, active.current),
+    rel: relOf(index, active.index),
     jumping: relOf(index, active.previous) === count - 1 || index === thawed,
     frozen: index === frozen,
   });
 
-  return { active: active.current, setActive, stateOf };
+  return { active: active.index, setActive, stateOf };
 }
 
 function slideStyle(
@@ -296,90 +292,301 @@ function TestimonialsStripCard({ review }: { review: Review }) {
   );
 }
 
-// ≤480 и SSR-снапшот: клик-карусель Яндекса (тап по выглядывающей,
-// растворение, loop) — планшету не принадлежит, см. TestimonialsCarousel.
-function TestimonialsClickCarousel() {
-  const { setActive, stateOf } = useClickCarousel(COUNT, TOUCH_FREEZE_MS);
+// ≤480 и SSR-снапшот: лента по образцу мобильной версии блока «Опыт
+// наших партнёров» pay.yandex.ru/business (пересъёмка живыми жестами:
+// allowTouchMove true, speed 600, effect coverflow). Активная карточка
+// по центру окна (scale 1), следующая выглядывает справа (scale 0.98),
+// приглушения нет — у Яндекса на мобиле все видимые непрозрачны; слева
+// от активной пусто. Управление: свайп 1:1 за пальцем (старт жеста после
+// 5px), отпускание — снап на ближайшую 600ms ease; флик по скорости —
+// шаг; медленный драг ≥50% слайда — шаг; горизонтальное колесо/трекпад —
+// шаг (серия тиков во время анимации глотается); тап по выглядывающей
+// переключает, по активной — ничего (ссылок нет); лента бесконечная
+// (loop — краёв и резинки нет). Слайды, чей путь при переходе проходит
+// сквозь видимую зону с невидимых краёв, переставляются мгновенно
+// (slide-jump) — иначе пролетали бы экран. Мышь ленту не тянет — единый
+// канон с полосами; вертикальный тач остаётся скроллом страницы
+// (touch-action: pan-y).
+const MOB_STEP = 332;
+const MOB_MS = 600;
+const MOB_DRAG_ACTIVATE_PX = 5;
+// Порог долгого свайпа — половина слайда (longSwipes Яндекса).
+const MOB_LONG_SWIPE_PX = 160;
+// Порог флика по скорости пальца (shortSwipes).
+const MOB_FLICK_V = 0.5;
 
+// Позиция слайда по кольцевой позиции относительно активного: центр →
+// справа → за правым краем; всё «позади» — за левым краем (у Яндекса
+// слева от активной пусто).
+function mobPosOf(rel: number): number {
+  if (rel === 0) {
+    return 0;
+  }
+  if (rel === 1) {
+    return MOB_STEP;
+  }
+  if (rel === 2) {
+    return MOB_STEP * 2;
+  }
+  return -360;
+}
+
+// Кольцевая позиция и флаг мгновенного прыжка: слайды между невидимыми
+// краями (за левым ← → за правым) переставляются без анимации. Функции
+// на уровне модуля: вызов в рендере — реак-хук react-hooks/refs
+// консервативно запрещает вызовы компонентных функций с ref-доступом.
+function mobRelOf(index: number, of: number): number {
+  return (index - of + COUNT) % COUNT;
+}
+
+function mobStateOf(index: number, activeIndex: number, previous: number) {
+  const rel = mobRelOf(index, activeIndex);
+  const oldPos = mobPosOf(mobRelOf(index, previous));
+  const newPos = mobPosOf(rel);
+  const jumping =
+    (oldPos <= -10 && newPos >= 10) || (oldPos >= 10 && newPos <= -10);
+  return { rel, jumping };
+}
+
+function TestimonialsMobileCarousel() {
+  const [active, setActiveState] = useState({ index: 0, previous: 0 });
+  const [animating, setAnimating] = useState(false);
+  // Мосты для нативного wheel-листенера (React вешает wheel пассивным —
+  // preventDefault внутри onWheel JSX невозможен и кидает ошибку консоли).
+  const activeRef = useRef(0);
+  const animatingRef = useRef(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const animTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const drag = useRef<{
+    id: number;
+    startX: number;
+    lastX: number;
+    lastT: number;
+    v: number;
+    moved: boolean;
+  } | null>(null);
+
+  useEffect(
+    () => () => {
+      if (animTimer.current) {
+        clearTimeout(animTimer.current);
+      }
+    },
+    [],
+  );
+  useEffect(() => {
+    activeRef.current = active.index;
+  }, [active.index]);
+  useEffect(() => {
+    animatingRef.current = animating;
+  }, [animating]);
+
+  const goTo = useCallback(
+    (index: number) => {
+    if (animating) {
+      return;
+    }
+    const next = ((index % COUNT) + COUNT) % COUNT;
+    setAnimating(true);
+    setActiveState((prev) => ({ index: next, previous: prev.index }));
+    if (animTimer.current) {
+      clearTimeout(animTimer.current);
+    }
+    animTimer.current = setTimeout(() => setAnimating(false), MOB_MS);
+    },
+    [animating],
+  );
+  const goToRef = useRef<(index: number) => void>(() => {});
+  useEffect(() => {
+    goToRef.current = goTo;
+  }, [goTo, animating, active.index]);
+  // Трекпад/горизонтальное колесо — шаг (пассивный React-листенер не
+  // может preventDefault: гориз. свайп трекпада уводил бы в историю).
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) {
+      return;
+    }
+    const onWheel = (event: WheelEvent) => {
+      if (Math.abs(event.deltaX) < 40 || animatingRef.current) {
+        return;
+      }
+      event.preventDefault();
+      goToRef.current(activeRef.current + (event.deltaX > 0 ? 1 : -1));
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      el.removeEventListener("wheel", onWheel);
+    };
+  }, []);
+
+  const onPointerDown = (event: React.PointerEvent) => {
+    if (animating || event.pointerType === "mouse") {
+      return;
+    }
+    drag.current = {
+      id: event.pointerId,
+      startX: event.clientX,
+      lastX: event.clientX,
+      lastT: event.timeStamp,
+      v: 0,
+      moved: false,
+    };
+  };
+
+  const onPointerMove = (event: React.PointerEvent) => {
+    const d = drag.current;
+    if (!d || event.pointerId !== d.id) {
+      return;
+    }
+    const dx = event.clientX - d.startX;
+    if (!d.moved) {
+      if (Math.abs(dx) < MOB_DRAG_ACTIVATE_PX) {
+        return;
+      }
+      d.moved = true;
+      rootRef.current?.setPointerCapture(event.pointerId);
+    }
+    d.v = (event.clientX - d.lastX) / Math.max(1, event.timeStamp - d.lastT);
+    d.lastX = event.clientX;
+    d.lastT = event.timeStamp;
+    const stage = stageRef.current;
+    if (stage) {
+      stage.style.transform = `translate3d(${dx}px, 0, 0)`;
+    }
+  };
+
+  const endDrag = (event: React.PointerEvent) => {
+    const d = drag.current;
+    if (!d || event.pointerId !== d.id) {
+      return;
+    }
+    drag.current = null;
+    const stage = stageRef.current;
+    if (!stage || !d.moved) {
+      return;
+    }
+    const delta = event.clientX - d.startX;
+    let target = active.index;
+    if (delta <= -MOB_LONG_SWIPE_PX || d.v <= -MOB_FLICK_V) {
+      target = active.index + 1;
+    } else if (delta >= MOB_LONG_SWIPE_PX || d.v >= MOB_FLICK_V) {
+      target = active.index - 1;
+    }
+    // Снап контейнера к нулю той же кривой и длительности, что у
+    // карточек: суммарное движение (перестановка rel + затухание дельты)
+    // остаётся непрерывным (см. свайп-модель в шапке файла).
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    stage.style.transition = reduced ? "none" : `transform ${MOB_MS}ms ease`;
+    stage.style.transform = "translate3d(0, 0, 0)";
+    setTimeout(
+      () => {
+        stage.style.transition = "";
+        stage.style.transform = "";
+      },
+      reduced ? 0 : MOB_MS + 40,
+    );
+    if (target !== active.index) {
+      goTo(target);
+    }
+  };
+
+  // Кольцевая позиция и мгновенный прыжок считаются mobStateOf (модуль).
   return (
-    <div className="relative mx-6 h-[500px]">
-      {REVIEWS.map((review, index) => {
-        const { rel, jumping, frozen } = stateOf(index);
-        // Прыжок актуален только очередным слайдам (см. useClickCarousel).
-        const transition = jumping
-          ? "slide-jump"
-          : `${SLIDE_TRANSITION_CLASS} motion-reduce:transition-none`;
-        const className = `absolute left-0 top-0 h-[500px] w-[320px] overflow-hidden rounded-[32px] ${transition} will-change-[transform,opacity] motion-reduce:transition-none`;
-        const style = slideStyle(rel, 332, 0, "1", frozen);
-        // Кликабельны только видимые позиции: очередь №1 и №2 (№3 и дальше
-        // за обрезом/краем окна — клик по невидимой карточке запускал
-        // растворение видимой, поймано приёмкой).
-        const interactive = (rel === 1 || rel === 2) && !frozen;
-        const slide = (
-          <>
-            <Image
-              src={review.photo}
-              alt={rel === COUNT - 1 ? "" : review.alt}
-              fill
-              sizes="320px"
-              className="object-cover"
-            />
-            <ReviewPlate review={review} />
-          </>
-        );
-
-        if (rel === COUNT - 1 || frozen) {
-          return (
-            <div
-              key={review.name}
-              aria-hidden
-              className={`${className} pointer-events-none`}
-              style={style}
-            >
-              {slide}
-            </div>
-          );
-        }
-        if (interactive) {
-          return (
-            <div
-              key={review.name}
-              role="button"
-              tabIndex={0}
-              onClick={() => setActive(index)}
-              onKeyDown={onSlideKeydown(setActive, index)}
-              aria-label={`Показать отзыв — ${review.name}`}
-              className={`${className} cursor-pointer`}
-              style={style}
-            >
-              {slide}
-            </div>
-          );
-        }
-        return (
-          <div key={review.name} className={className} style={style}>
-            {slide}
-          </div>
-        );
-      })}
+    <div
+      ref={rootRef}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+      className="relative h-[500px] w-full touch-pan-y select-none"
+    >
+      <div ref={stageRef} className="relative h-full w-full will-change-transform">
+        <MobileSlides activeIndex={active.index} previous={active.previous} goTo={goTo} />
+      </div>
     </div>
   );
+}
+
+// Рендер слайдов мобильной ленты — отдельный компонент без ref-доступов:
+// react-hooks/refs консервативно запрещает вызовы компонентных функций
+// из рендер-выражений (goTo тянет animTimer.current).
+function MobileSlides({
+  activeIndex,
+  previous,
+  goTo,
+}: {
+  activeIndex: number;
+  previous: number;
+  goTo: (index: number) => void;
+}) {
+  return REVIEWS.map((review, index) => {
+    const { rel, jumping } = mobStateOf(index, activeIndex, previous);
+    const transition = jumping ? "slide-jump" : "slide-mob motion-reduce:transition-none";
+    const className = `absolute left-1/2 top-0 -ml-[160px] h-[500px] w-[320px] overflow-hidden rounded-[32px] ${transition} will-change-[transform] motion-reduce:transition-none`;
+    const x = mobPosOf(rel);
+    const scale = rel === 1 ? 0.98 : "1";
+    const style: React.CSSProperties = {
+      transform: `translateX(${x}px) scale(${scale})`,
+      zIndex: rel === 0 ? 2 : rel === 1 ? 1 : 0,
+    };
+    const slide = (
+      <>
+        <Image
+          src={review.photo}
+          alt={review.alt}
+          fill
+          sizes="320px"
+          className="object-cover"
+        />
+        <ReviewPlate review={review} />
+      </>
+    );
+
+    if (rel !== 1) {
+      return (
+        <div
+          key={review.name}
+          aria-hidden={rel !== 0}
+          className={className}
+          style={style}
+        >
+          {slide}
+        </div>
+      );
+    }
+    return (
+      <div
+        key={review.name}
+        role="button"
+        tabIndex={0}
+        onClick={() => goTo(index)}
+        onKeyDown={onSlideKeydown(() => goTo(index), index)}
+        aria-label={`Показать отзыв — ${review.name}`}
+        className={`${className} cursor-pointer`}
+        style={style}
+      >
+        {slide}
+      </div>
+    );
+  });
 }
 
 export function TestimonialsCarousel() {
   return (
     // Полоса планшета во всю ширину окна: карточки — прямые дети дорожки
     // (движок меряет шаг 332 и стрип по ним), поле 24px и зазор 12 даёт
-    // tablet-strip.module.css; мобилке достаётся прежний корень — поля
-    // (mx-6) живут в самой клик-карусели, обёртке они не нужны (иначе
-    // на мобилке поле удваивается).
+    // tablet-strip.module.css; мобилке достаётся своя лента — поля у неё
+    // нет (активная центрируется), обёртке они не нужны (иначе на
+    // мобилке поле удваивается).
     <TabletStrip
       stripWidth={1648}
       activeChildren={REVIEWS.map((review) => (
         <TestimonialsStripCard key={review.name} review={review} />
       ))}
     >
-      <TestimonialsClickCarousel />
+      <TestimonialsMobileCarousel />
     </TabletStrip>
   );
 }
