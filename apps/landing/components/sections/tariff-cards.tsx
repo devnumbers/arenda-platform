@@ -8,7 +8,7 @@ import {
   GLASS_FILL_LIGHT,
   GLASS_FILL_PRIMARY,
   GLASS_GRADIENT,
-  GLASS_INSET_SHADOW,
+  GLASS_SKIN,
 } from "@/components/glass";
 import { Reveal } from "@/components/reveal";
 import { TabletStrip } from "@/components/tablet-strip";
@@ -20,18 +20,21 @@ import type { Tariff, TariffFeature } from "@/lib/content";
 
 // «Тарифы» — макеты 2846-153711 (десктоп: 3×320×550, r40, p-40),
 // 2859-4349 (планшет: ряд 3×320×453, r32, p-32), 2859-2231 (мобайл:
-// стопка по контенту, r32, p-32). Заливки по макету: «Базовый» —
-// светлая #F3F4F6 со стеклянным оверлеем, «Про» — тёмный градиент
-// (100→30), «Бизнес» — синий (136,183,255→43,127,255); стеклянные
-// карточки с белым инсет-светом и конической градиентной обводкой
-// (.glass-ring); константы стекла — общие с «Для кого сервис»
-// (components/glass.ts), заголовки фич — Landing/M (Medium 500).
-// Переключатель 256×56: активный сегмент — белая пилюля, переезжающая
-// между Год/Месяц за 300мс (iOS-сегментконтрол); бейдж «−25%» живёт
-// в сегменте «Год» всегда. Цена при переключении меняется в хореографии
-// steps (180мс уход → 280мс въезд, токен --animate-tariff-price-in);
-// prefers-reduced-motion глушит и пилюлю, и смену цены. Кнопка «Ваш
-// тариф» — White Disabled (серый текст).
+// стопка по контенту, r32, p-32). Шкурки по новым кадрам карточек
+// 2967:75983/75995/76015 разошлись: «Базовый» — плоская #F3F4F6,
+// обводка/стекло/блики/блюр сняты; «Про» и «Бизнес» остаются
+// стеклянными (коническое кольцо .glass-ring, стеклянный градиент,
+// белые inset-блики, blur 10), градиенты заливок новые: тёмный
+// 50,50,50→30,30,30, синий 63,147,255→43,127,255. Константы стекла —
+// общие с «Для кого сервис» (components/glass.ts), заголовки фич —
+// Landing/M (Medium 500). Цена — 32/36 SemiBold на всех ярусах
+// (новые кадры тарифных карточек). Переключатель 256×56: активный
+// сегмент — белая пилюля, переезжающая между Год/Месяц за 300мс
+// (iOS-сегментконтрол); бейдж «−25%» живёт в сегменте «Год» всегда.
+// Цена при переключении меняется в хореографии steps (180мс уход →
+// 280мс въезд, токен --animate-tariff-price-in); prefers-reduced-motion
+// глушит и пилюлю, и смену цены. Кнопка «Ваш тариф» — White Disabled
+// (серый текст).
 const PRICE_OUT_MS = 180;
 
 const FEATURE_ICONS: Record<TariffFeature["icon"], { src: string; alt: string }> = {
@@ -42,8 +45,9 @@ const FEATURE_ICONS: Record<TariffFeature["icon"], { src: string; alt: string }>
 
 const CARD_THEMES = {
   basic: {
-    backgroundImage: GLASS_GRADIENT,
+    backgroundImage: undefined,
     backgroundColor: GLASS_FILL_LIGHT,
+    glass: false,
     text: "text-ink",
     sub: "text-gray-2",
     featureSub: "text-gray-2",
@@ -51,6 +55,7 @@ const CARD_THEMES = {
   pro: {
     backgroundImage: `${GLASS_GRADIENT}, ${GLASS_FILL_INK}`,
     backgroundColor: "transparent",
+    glass: true,
     text: "text-white",
     sub: "text-white/80",
     featureSub: "text-white/80",
@@ -58,6 +63,7 @@ const CARD_THEMES = {
   business: {
     backgroundImage: `${GLASS_GRADIENT}, ${GLASS_FILL_PRIMARY}`,
     backgroundColor: "transparent",
+    glass: true,
     text: "text-white",
     sub: "text-white/80",
     featureSub: "text-white/80",
@@ -118,7 +124,7 @@ export function TariffCards({
             backgroundImage: theme.backgroundImage,
             backgroundColor: theme.backgroundColor,
           }}
-          className={`glass-ring relative flex h-auto w-full flex-col justify-between gap-8 overflow-clip rounded-[32px] p-8 backdrop-blur-[10px] tab:h-[453px] tab:w-[320px] desk:h-[550px] desk:gap-12 desk:rounded-[40px] desk:p-10 ${theme.text} ${GLASS_INSET_SHADOW}`}
+          className={`${theme.glass ? GLASS_SKIN : ""} relative flex h-auto w-full flex-col justify-between gap-8 overflow-clip rounded-[32px] p-8 tab:h-[453px] tab:w-[320px] desk:h-[550px] desk:gap-12 desk:rounded-[40px] desk:p-10 ${theme.text}`}
         >
           <div className="flex flex-col gap-[15px]">
             <h3 className="text-s leading-5 desk:text-r desk:leading-[22px]">
@@ -135,7 +141,7 @@ export function TariffCards({
                     : ""
               }`}
             >
-              <p className="text-[28px] font-semibold leading-8">{price}</p>
+              <p className="text-[32px] font-semibold leading-9">{price}</p>
               {/* Строка года резервируется и в «Месяце» (invisible):
                   без неё justify-between карточки сдвигает блок фич
                   на 16px при каждом переключении. */}
