@@ -62,4 +62,9 @@ describe('Button при loading (решение владельца 30.09: без
     expect(button.props.disabled).toBeFalsy();
     expect(button.props['data-loading']).toBeUndefined();
   });
+
+  it('инвариант #1119: loading глушит и при явном disabled=false (disabled || loading)', () => {
+    const button = Button({ children: 'Сохранить', loading: true, disabled: false });
+    expect(button.props.disabled).toBe(true);
+  });
 });

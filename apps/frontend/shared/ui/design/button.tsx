@@ -19,7 +19,10 @@ import { cn } from '@/shared/lib/cn';
  * белого смещения (State/Focus), только с клавиатуры. loading — кнопка
  * дизейблится и приглушается (disabled:opacity-50), контент остаётся
  * видимым; иконки загрузки нет (решение владельца 30.09, красная
- * Sync-заглушка снята вместе с маркерами замен).
+ * Sync-заглушка снята вместе с маркерами замен). Явный disabled причин
+ * гашения только добавляет (disabled || loading, #1119): в полёте
+ * кнопка глухнет всегда — канон ADR 0050 исполняется машинно, а не
+ * дисциплиной вызывающих.
  */
 
 /** Заливка Primary — базовый вариант и выбранное состояние пилюли (Figma
@@ -100,7 +103,7 @@ export function Button({
       data-loading={loading ? 'true' : undefined}
       aria-busy={loading || undefined}
       className={cn(buttonVariants({ variant, size, radius, selected }), className)}
-      disabled={asChild ? undefined : (disabled ?? loading)}
+      disabled={asChild ? undefined : (disabled === true || loading)}
       {...props}
     >
       {leadingIcon !== undefined && (
