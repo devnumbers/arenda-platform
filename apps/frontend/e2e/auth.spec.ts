@@ -2,6 +2,7 @@ import {
   BASE_URL,
   execE2eSql,
   expect,
+  extractCodeSentTo,
   extractLoginCode,
   loginViaUi,
   openCabinetWithSessionToken,
@@ -179,6 +180,188 @@ test('двойной клик «Войти» с новым номером вед
 
   await expect(page.getByRole('heading', {name: 'Введите почту'})).toBeVisible();
   expect(sendCalls).toBe(1);
+});
+
+// Стрелка ← на шаге почты (#1101): канон владельца — почта ведёт назад на
+// телефон (в макетах 2349:67698/67820 стрелки нет, добавлена словом
+// владельца). Черновик почты при уходе сохраняется: возврат — чаще всего
+// правка телефона, стирать набранную почту — сюрприз; чужой
+// зарегистрированный номер смывает почту сам (sent:true-ветка
+// handleSendPhone). Отправки — route-моком (канон #1099): бюджет burst 3
+// бэка не тратится.
+test('стрелка назад со шага почты ведёт на телефон, черновик почты сохранён (#1101)', async ({page}) => {
+  await page.route('**/api/auth/send', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({sent: false}),
+    }),
+  );
+
+  await page.goto('/login');
+  await page.getByRole('textbox', {name: 'Телефон'}).fill('9261112233');
+  await page.getByRole('button', {name: 'Войти'}).click();
+  await expect(page.getByRole('heading', {name: 'Введите почту'})).toBeVisible();
+
+  await page.getByRole('textbox', {name: 'Электронная почта'}).fill('new-user@example.com');
+  await page.getByRole('button', {name: 'Назад'}).click();
+  await expect(page.getByRole('heading', {name: 'Введите номер телефона'})).toBeVisible();
+
+  // Тот же номер снова — шаг почты открывается с сохранённой почтой.
+  await page.getByRole('textbox', {name: 'Телефон'}).fill('9261112233');
+  await page.getByRole('button', {name: 'Войти'}).click();
+  await expect(page.getByRole('heading', {name: 'Введите почту'})).toBeVisible();
+  await expect(page.getByRole('textbox', {name: 'Электронная почта'})).toHaveValue('new-user@example.com');
+});
+
+// Уход со шага почты закрыт, пока отправка в полёте (#1101): onSuccess
+// ведёт на шаг кода — «Назад» посреди полёта не должен оставлять
+// пользователя на телефоне в момент, когда ответ переводит шаг на код
+// (канон гарда шага кода #765).
+test('стрелка назад со шага почты не срабатывает, пока отправка в полёте (#1101)', async ({page}) => {
+  await page.route('**/api/auth/send', async (route) => {
+    const body = route.request().postDataJSON() as {email?: string};
+    if (body.email === undefined) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({sent: false}),
+      });
+    }
+    // Окно полёта: клик «Назад» обязан попасть внутрь него.
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({sent: true, retryAfter: 60}),
+    });
+  });
+
+  await page.goto('/login');
+  await page.getByRole('textbox', {name: 'Телефон'}).fill('9261112233');
+  await page.getByRole('button', {name: 'Войти'}).click();
+  await expect(page.getByRole('heading', {name: 'Введите почту'})).toBeVisible();
+
+  await page.getByRole('textbox', {name: 'Электронная почта'}).fill('new-user@example.com');
+  await page.getByRole('button', {name: 'Получить код'}).click();
+  await page.getByRole('button', {name: 'Назад'}).click();
+  await expect(page.getByRole('heading', {name: 'Введите почту'})).toBeVisible();
+
+  // Ответ дошёл — шаг кода, с телефона его не утащили.
+  await expect(page.getByRole('heading', {name: 'Введите код'})).toBeVisible();
+});
+
+// Повторная отправка после возврата (#1101): после отправки кода на почту
+// стрелка кода (#765) возвращает на шаг почты, и кулдаун resend-канона
+// (#733) честно живёт и на нём — «Запросить код можно через ММ:СС» и
+// погашенная «Получить код» вместо заведомого 429 (окно minSendInterval
+// бэка по тройке телефон+почта); лишних запросов возврат не рождает.
+// (Дальше к телефону шаг почты ведёт своей стрелкой #1101 — кейс A1.)
+test('возврат с кода на почту — кулдаун resend-канона на шаге почты (#1101)', async ({page}) => {
+  let sendCalls = 0;
+  await page.route('**/api/auth/send', async (route) => {
+    sendCalls += 1;
+    const body = route.request().postDataJSON() as {email?: string};
+    if (body.email === undefined) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({sent: false}),
+      });
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({sent: true, retryAfter: 60}),
+    });
+  });
+
+  await page.goto('/login');
+  await page.getByRole('textbox', {name: 'Телефон'}).fill('9261112233');
+  await page.getByRole('button', {name: 'Войти'}).click();
+  await expect(page.getByRole('heading', {name: 'Введите почту'})).toBeVisible();
+
+  await page.getByRole('textbox', {name: 'Электронная почта'}).fill('new-user@example.com');
+  await page.getByRole('button', {name: 'Получить код'}).click();
+  await expect(page.getByRole('heading', {name: 'Введите код'})).toBeVisible();
+
+  await page.getByRole('button', {name: 'Назад'}).click();
+  await expect(page.getByRole('heading', {name: 'Введите почту'})).toBeVisible();
+  await expect(page.getByRole('textbox', {name: 'Электронная почта'})).toHaveValue('new-user@example.com');
+
+  // Кулдаун от первой отправки: кнопка погашена, подпись канона видна.
+  await expect(page.getByRole('button', {name: 'Получить код'})).toBeDisabled();
+  await expect(page.getByText(/Запросить код можно через/)).toBeVisible();
+  // Возврат — чистая навигация по черновику, запросов не добавил.
+  expect(sendCalls).toBe(2);
+});
+
+// Повторная отправка после истечения кулдауна (#1101): resend-плитка шага
+// кода шлёт код повторно С ПОЧТОЙ в теле — потеря почты уводила бы ответ в
+// sent:false и возвращала шаг на почту; шаг кода держится, поле очищено
+// под новый код. Малый retryAfter мока делает кулдаун конечным в тесте.
+test('повторная отправка кода после кулдауна едет с почтой (#1101)', async ({page}) => {
+  const sendBodies: Array<{email?: string}> = [];
+  await page.route('**/api/auth/send', async (route) => {
+    const body = route.request().postDataJSON() as {email?: string};
+    sendBodies.push(body);
+    if (body.email === undefined) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({sent: false}),
+      });
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({sent: true, retryAfter: 2}),
+    });
+  });
+
+  await page.goto('/login');
+  await page.getByRole('textbox', {name: 'Телефон'}).fill('9261112233');
+  await page.getByRole('button', {name: 'Войти'}).click();
+  await expect(page.getByRole('heading', {name: 'Введите почту'})).toBeVisible();
+
+  await page.getByRole('textbox', {name: 'Электронная почта'}).fill('new-user@example.com');
+  await page.getByRole('button', {name: 'Получить код'}).click();
+  await expect(page.getByRole('heading', {name: 'Введите код'})).toBeVisible();
+
+  const resend = page.getByRole('button', {name: 'Отправить новый код'});
+  await expect(resend).toBeDisabled();
+  await expect(resend).toBeEnabled({timeout: 5000});
+  await resend.click();
+
+  await expect(page.getByRole('heading', {name: 'Введите код'})).toBeVisible();
+  await expect(page.getByRole('textbox', {name: 'Код'})).toHaveValue('');
+  expect(sendBodies).toHaveLength(3);
+  expect(sendBodies[2]).toEqual({phone: '+79261112233', email: 'new-user@example.com'});
+});
+
+// Полный вход нового пользователя через почту (#1101) на настоящем бекенде:
+// телефон без аккаунта (sent:false) → шаг почты → код уходит на введённую
+// почту (fake-сендер пишет в лог) → верификация создаёт аккаунт и сессию —
+// кабинет открывается, в БД живёт пользователь с этой почтой.
+test('вход через почту создаёт аккаунт и открывает кабинет (#1101)', async ({page, seededUser}) => {
+  await page.goto('/login');
+  await page.getByRole('textbox', {name: 'Телефон'}).fill('9260000099');
+  await page.getByRole('button', {name: 'Войти'}).click();
+  await expect(page.getByRole('heading', {name: 'Введите почту'})).toBeVisible();
+
+  await page.getByRole('textbox', {name: 'Электронная почта'}).fill('e2e-new-user@example.com');
+  await page.getByRole('button', {name: 'Получить код'}).click();
+  await expect(page.getByRole('heading', {name: 'Введите код'})).toBeVisible();
+
+  const code = await extractCodeSentTo(seededUser, 'e2e-new-user@example.com');
+  await page.getByRole('textbox', {name: 'Код'}).fill(code);
+  await page.waitForURL('**/properties');
+  await expect(page.getByRole('heading', {name: 'Объекты'})).toBeVisible();
+
+  const created = await execE2eSql(
+    `SELECT count(*) FROM users WHERE email = 'e2e-new-user@example.com'`,
+  );
+  expect(created).toBe('1');
 });
 
 // Жёсткий выход (#1098): кабинет уходит полной перезагрузкой на /login (не

@@ -158,6 +158,20 @@ export default function LoginPage(): JSX.Element {
         setDraft((prev) => ({...prev, step: prev.email.trim() ? "email" : "phone"}));
     };
 
+    // Стрелка ← шага почты — на телефон (канон владельца #1101; в макетах
+    // почты 2349:67698/67820 стрелки нет — добавлена словом владельца).
+    // Черновик почты сохраняется: возврат — чаще всего правка телефона,
+    // стирать набранную почту — сюрприз; чужой зарегистрированный номер
+    // смывает её сам (sent:true-ветка handleSendPhone). Пока отправка в
+    // полёте, уход закрыт — иначе её onSuccess утащил бы пользователя на
+    // шаг кода уже с телефона (тот же гард, что у шага кода).
+    const handleEmailBack = () => {
+        if (sendCode.isPending) {
+            return;
+        }
+        setDraft((prev) => ({...prev, step: "phone"}));
+    };
+
     const handleResend = () => {
         const trimmedEmail = draft.email.trim();
         if (!isPhoneValid(draft.phone) || verifyCode.isPending) {
@@ -204,7 +218,7 @@ export default function LoginPage(): JSX.Element {
 
     if (draft.step === "email") {
         return (
-            <LoginShell onClose={handleClose} hideClose={isStandalone}>
+            <LoginShell onClose={handleClose} onBack={handleEmailBack} hideClose={isStandalone}>
                 <EmailStep
                     email={draft.email}
                     onEmailChange={(email) => setDraft((prev) => ({...prev, email}))}
