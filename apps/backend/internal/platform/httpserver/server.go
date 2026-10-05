@@ -25,6 +25,7 @@ import (
 	paymentshttp "github.com/nambers/arenda-planform/apps/backend/internal/payments/adapters/http"
 	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/idempotency"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/sse"
 	popupshttp "github.com/nambers/arenda-planform/apps/backend/internal/popups/adapters/http"
@@ -121,6 +122,10 @@ type Deps struct {
 	DBPoolStats              func() httpsupport.DBPoolSnapshot
 	TrustedProxies           []string
 	AppVersion               string
+	// Idempotency (тикет Т3 карты #1112): серверное хранилище
+	// Idempotency-Key на creation-роутах; nil = семантика выключена
+	// (роуты живут как сгенерированы).
+	Idempotency *idempotency.Service
 }
 
 const slowRequestThreshold = 500 * time.Millisecond
@@ -305,6 +310,20 @@ func New(deps Deps) http.Handler {
 	r.With(paidSections).Post("/properties/{propertyId}/access/members", wrapper.CreatePropertyAccessMember)
 	r.With(paidSections).Delete("/properties/{propertyId}/access/members/{memberId}", wrapper.DeletePropertyAccessMember)
 	r.With(paidSections).Patch("/properties/{propertyId}/access/members/{memberId}", wrapper.UpdatePropertyAccessMember)
+
+	// Idempotency-Key на creation-роутах (тикет Т3 карты #1112): тот же
+	// override-приём, что AdminOnly/paidSections выше — повтор с тем же
+	// ключом возвращает сохранённый результат, гонка и чужое тело дают 409.
+	// Это единственные мутирующие без-дедупа эндпоинты (перечень вреда
+	// ресерча #1113); ключ опционален — без заголовка поведение как раньше.
+	if deps.Idempotency != nil {
+		idempotent := idempotency.Middleware(deps.Idempotency, deps.Logger)
+		r.With(idempotent).Post("/properties", wrapper.CreateProperty)
+		r.With(idempotent).Post("/properties/{propertyId}/payments", wrapper.CreatePayment)
+		r.With(idempotent).Post("/properties/{propertyId}/operations", wrapper.CreateOperation)
+		r.With(idempotent).Post("/properties/{propertyId}/tasks/rules", wrapper.CreateTaskRule)
+		r.With(idempotent).Post("/tasks/rules", wrapper.CreateTaskRuleWithoutProperty)
+	}
 
 	// Screen 2 (#999): the global «Участники» section — no exceptions, every
 	// consumer of the group lives inside the gated section; the self-leave

@@ -261,6 +261,13 @@ linters:
         - (*strings.Builder).WriteString
         - (*strings.Builder).WriteByte
         - (*strings.Builder).WriteRune
+        # bytes.Buffer: «err is always nil» (документация bytes.Write) — то же
+        # семейство документированных always-nil писателей; нужен буферу
+        # capture-ответов идемпотентности (тикет #1121).
+        - (*bytes.Buffer).Write
+        # httptest.ResponseRecorder: Write всегда успешен, тело пишется в
+        # память рекордера — юнит-тесты мидлвари (#1121).
+        - (*httptest.ResponseRecorder).Write
       # Флип волны errcheck (волны #353–#359, сетка #325): глобальный счётчик
       # доведён до 0 — строгость этапа 2 перенесена в действующий конфиг.
       check-blank: true
@@ -401,6 +408,8 @@ linters:
         - name: unhandled-error
           arguments:
             - strings\.Builder\.Write(String|Byte|Rune)
+            - bytes\.Buffer\.Write
+            - httptest\.ResponseRecorder\.Write
     godot:
       # Волна механики закрыта (сетка #325, флип тикета #367): strict-режим.
       scope: all

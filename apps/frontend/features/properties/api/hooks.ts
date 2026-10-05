@@ -163,6 +163,9 @@ export function useCreateProperty(): UseMutationResult<
     mutationFn: async (data: PropertyCreateRequest) => {
       const response = await apiClient<PropertyResponse>('/properties', {
         method: 'POST',
+        // Идемпотентный ключ (Т3 #1121): один ключ на логическую попытку
+        // создания; повтор с ним вернёт первый результат, не второй объект.
+        headers: { 'Idempotency-Key': crypto.randomUUID() },
         body: JSON.stringify(data),
       });
       return mapPropertyResponse(response);

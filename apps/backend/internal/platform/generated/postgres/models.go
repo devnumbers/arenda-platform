@@ -280,6 +280,17 @@ type EmailChangeGrant struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
+type IdempotencyKey struct {
+	OwnerID     pgtype.UUID        `json:"owner_id"`
+	Key         string             `json:"key"`
+	Endpoint    string             `json:"endpoint"`
+	RequestHash string             `json:"request_hash"`
+	ContentType pgtype.Text        `json:"content_type"`
+	StatusCode  pgtype.Int4        `json:"status_code"`
+	Response    []byte             `json:"response"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
 type LoginAttempt struct {
 	ID             pgtype.UUID        `json:"id"`
 	Phone          string             `json:"phone"`

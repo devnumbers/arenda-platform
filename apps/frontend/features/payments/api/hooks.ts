@@ -137,7 +137,12 @@ export function useCreatePayment(
     mutationFn: async (command: PaymentCreateCommand) => {
       const response = await apiClient<PaymentResponseDto>(
         `/properties/${encodeURIComponent(propertyId)}/payments`,
-        { method: 'POST', body: JSON.stringify(command) },
+        // Идемпотентный ключ (Т3 #1121): см. useCreateProperty.
+        {
+          method: 'POST',
+          headers: { 'Idempotency-Key': crypto.randomUUID() },
+          body: JSON.stringify(command),
+        },
       );
       return mapPayment(response);
     },
@@ -166,7 +171,12 @@ export function useCreateOperation(): UseMutationResult<
     mutationFn: async ({ propertyId, command }) => {
       const response = await apiClient<OperationResponseDto>(
         `/properties/${encodeURIComponent(propertyId)}/operations`,
-        { method: 'POST', body: JSON.stringify(command) },
+        // Идемпотентный ключ (Т3 #1121): см. useCreateProperty.
+        {
+          method: 'POST',
+          headers: { 'Idempotency-Key': crypto.randomUUID() },
+          body: JSON.stringify(command),
+        },
       );
       return mapPaymentOperation(response);
     },

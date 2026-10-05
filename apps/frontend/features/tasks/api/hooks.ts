@@ -183,6 +183,8 @@ export function useCreateTaskRule(): UseMutationResult<void, ApiError, TaskCreat
       }
       await apiClient<unknown>(taskRuleCreatePath(draft.propertyId), {
         method: 'POST',
+        // Идемпотентный ключ (Т3 #1121): см. useCreateProperty.
+        headers: { 'Idempotency-Key': crypto.randomUUID() },
         body: JSON.stringify(request),
       });
     },
