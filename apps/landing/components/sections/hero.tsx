@@ -14,7 +14,7 @@ import heroBgMobile from "@/assets/sections/hero-bg-mobile.webp";
 // байты заливок, пережаты в webp q100), поэтому <picture> с media-источниками.
 export function Hero() {
   // Медиа-ветки <picture> считаем через getImageProps, чтобы планшетный и
-  // мобильный кропы шли через /_next/image-оптимизатор (AVIF q90 из
+  // мобильный кропы шли через /_next/image-оптимизатор (AVIF q95 из
   // next.config), а не сырым webp; в <source> передаём только srcSet/sizes.
   const mobileBg = getImageProps({ src: heroBgMobile, alt: "", fill: true, sizes: "100vw", quality: 95 });
   const tabletBg = getImageProps({ src: heroBgTablet, alt: "", fill: true, sizes: "100vw", quality: 95 });
