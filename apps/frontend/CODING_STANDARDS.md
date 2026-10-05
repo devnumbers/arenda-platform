@@ -59,6 +59,7 @@ No form library and no schema validator — this is deliberate, not a gap:
 - `router.replace` back to the source page is banned: it duplicates the source page in history and the first Back press returns to the same URL (a "dead" back).
 - Entering a flow ("Create" buttons, `handleEdit`) and ordinary content navigation — `router.push`.
 - The Back button walks history (`goBack`), so completed flow pages must not remain in it — otherwise Back returns the user to an already-finished form.
+- Exception — the auth boundary (#1098): logout success and login verify success use `hardReplace(href)` from `shared/lib/navigation` (a full `window.location.replace`), not `router.replace`. Client-side navigation renders the target inside the same JS tree and keeps the previous document's RSC cache and react-query heap in the tab — after logout Back would return the cabinet without a network request, and after login guest RSC leftovers would ride into the cabinet. A new document drops the heap entirely; `replace` keeps the transient entry out of history. The bfcache counterpart of the same boundary is the root-layout `BfcacheGuard`.
 
 ## Screen shell
 

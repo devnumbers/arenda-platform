@@ -12,7 +12,7 @@ import {useSendCooldown} from "@/features/auth";
 import {useLoginDraft} from "@/features/auth";
 import {RESEND_TIMEOUT} from "@/features/auth";
 import {useStandalone} from "@/shared/lib/hooks/useStandalone";
-import {goBack} from "@/shared/lib/navigation";
+import {goBack, hardReplace} from "@/shared/lib/navigation";
 
 export default function LoginPage(): JSX.Element {
     const router = useRouter();
@@ -98,8 +98,11 @@ export default function LoginPage(): JSX.Element {
             {
                 onSuccess: () => {
                     const target = safeInternalPath(new URLSearchParams(window.location.search).get("from")) ?? "/properties";
-                    router.push(target);
                     clearDraft();
+                    // Жёсткая навигация auth-границы (#1098, канон Navigation):
+                    // сносит гостевые RSC-остатки и react-query предыдущего
+                    // документа вместо перевозки их в кабинет.
+                    hardReplace(target);
                 },
                 onError: (error) => {
                     // Неверный код (401) — инлайн в поле по макету 2349:67624

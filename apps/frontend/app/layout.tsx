@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import type { JSX, ReactNode } from 'react';
+import { BfcacheGuard } from '@/shared/lib/bfcache/BfcacheGuard';
 import { ErrorReporter } from '@/shared/lib/error-reporting/ErrorReporter';
 import { ScrollToTop } from '@/shared/lib/scroll/ScrollToTop';
 import { I18nProvider } from '@/shared/providers/i18n-provider';
@@ -84,6 +85,7 @@ export default function RootLayout({
                 ))}
                 <ErrorReporter />
                 <ScrollToTop />
+                <BfcacheGuard />
                 <I18nProvider locale="ru-RU">
                     <QueryProvider>
                         {children}

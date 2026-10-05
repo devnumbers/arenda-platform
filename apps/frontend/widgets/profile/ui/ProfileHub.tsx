@@ -20,6 +20,7 @@ import {
 } from '@/shared/ui/design';
 import { useLogout, useMe } from '@/features/auth';
 import { ROUTES } from '@/shared/config/routes';
+import { hardReplace } from '@/shared/lib/navigation';
 import { cn } from '@/shared/lib/cn';
 import { useKeyboardActivation } from '@/shared/lib/hooks/useKeyboardActivation';
 import { formatPhoneDisplay } from '@/shared/lib/phone';
@@ -138,7 +139,9 @@ export function ProfileHub(): JSX.Element {
     logout.mutate(undefined, {
       onSuccess: () => {
         setLogoutOpen(false);
-        router.push(ROUTES.login);
+        // Жёсткая навигация auth-границы (#1098, канон Navigation): router.push
+        // вёз бы RSC-кэш кабинета в JS-heap той же вкладки.
+        hardReplace(ROUTES.login);
       },
       onError: (error) => {
         notify.scenarios.profile.logoutError(error);

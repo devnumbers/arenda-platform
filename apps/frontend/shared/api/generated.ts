@@ -4174,6 +4174,8 @@ export interface operations {
             204: {
                 headers: {
                     "Set-Cookie"?: string;
+                    /** @description Instructs the browser to drop the origin's HTTP cache at the logout moment. Exactly "cache": "storage" would unregister the service worker and wipe IndexedDB (offline ADR 0031/0032, pushes #1024); "cookies" is redundant next to the explicit session-cookie clear. */
+                    "Clear-Site-Data"?: "\"cache\"";
                     [name: string]: unknown;
                 };
                 content?: never;

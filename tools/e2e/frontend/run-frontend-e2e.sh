@@ -270,6 +270,9 @@ log "Running Playwright"
 status=0
 (
   cd "$FRONTEND_DIR"
+  # E2E_ENCRYPTION_KEY is the test-only key (see the header comment): specs
+  # seed mid-test rows mirroring the seed crypto (e.g. #1098 hashes a
+  # throwaway session token).
   E2E_BASE_URL="$FRONTEND_URL" \
   E2E_SESSION_TOKEN="$E2E_SESSION_TOKEN" \
   E2E_MEMBER_SESSION_TOKEN="$E2E_MEMBER_SESSION_TOKEN" \
@@ -278,6 +281,7 @@ status=0
   E2E_USER_EMAIL="$USER_EMAIL" \
   E2E_BACKEND_LOG="$BACKEND_LOG" \
   E2E_PG_CONTAINER="$PG_CONTAINER" \
+  E2E_ENCRYPTION_KEY="$E2E_ENCRYPTION_KEY" \
   npx playwright test "$@"
 ) || status=$?
 

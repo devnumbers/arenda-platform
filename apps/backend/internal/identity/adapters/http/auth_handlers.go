@@ -308,6 +308,14 @@ func (h *AuthHandlers) Logout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpsupport.ClearSessionCookie(w, h.cookieSecure)
+	// #1098: ask the browser to drop the origin's HTTP cache at the logout
+	// moment. Exactly "cache": "storage" would unregister the service worker
+	// and wipe IndexedDB (offline ADR 0031/0032, pushes #1024), "cookies" is
+	// redundant next to the explicit session-cookie clear above. Both 204
+	// paths carry the header (the idempotent ErrNotFound falls through here);
+	// the 401 no-cookie and 500 paths above stay header-free — the browser
+	// must not drop anything when the logout did not succeed.
+	w.Header().Set("Clear-Site-Data", `"cache"`)
 	w.WriteHeader(http.StatusNoContent)
 }
 

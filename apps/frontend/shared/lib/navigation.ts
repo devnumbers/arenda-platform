@@ -35,3 +35,17 @@ export function goBack(router: AppRouter, fallbackHref: string): void {
         router.replace(fallbackHref);
     }
 }
+
+/**
+ * Полная перезагрузка с заменой текущего entry истории (канон auth-границы,
+ * #1098; исключение из router.replace зарегистрировано в CODING_STANDARDS
+ * «Navigation and browser history»). Клиентская навигация рендерит цель в
+ * том же JS-дереве и везёт RSC-кэш и react-query heap предыдущего документа
+ * в новую страницу — после выхода «Назад» возвращал бы кабинет без сетевого
+ * запроса, после входа в кабинет уезжали бы гостевые RSC-остатки. Новый
+ * документ сносит heap целиком; replace не оставляет предыдущий документ в
+ * history. Bfcache-ближний этого рубежа — корневой BfcacheGuard.
+ */
+export function hardReplace(href: string): void {
+    window.location.replace(href);
+}
