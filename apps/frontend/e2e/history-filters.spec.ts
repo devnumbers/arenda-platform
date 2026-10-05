@@ -304,6 +304,58 @@ test('участники: своя строка «Иван (Вы)» с замк�
   await expect(memberRow.getByRole('img', { name: 'Роль: Владелец' })).toHaveCount(0);
 });
 
+test('безымянный участник в чипах: полный телефон титулом, почта подзаголовком (карта #1105)', async ({ page, seededUser }) => {
+  // Зарегистрированный юзер без имени: канон карты #1105 собирает бекенд
+  // одним швом display_name (#1106), чипы фильтров резолвятся при чтении
+  // (FilterParticipants → DisplayNameOf). Телефон сидится плейнтекстом
+  // при phone_encrypted = false — decryptPhone читает как есть, шифрование
+  // нужно только логину. Ноги участника на объекте не даём — в опции
+  // шита исторический актёр журнала попадает по UNION-ноге SQL.
+  const NAMELESS_ID = '16111111-1111-4111-8111-111111111172';
+  const NAMELESS_PHONE = '+79137654328';
+  const NAMELESS_EMAIL = 'e2e-nameless-hfilters@example.com';
+  await execE2eSql(
+    `INSERT INTO users (id, phone, role, name, surname, email, phone_encrypted, timezone) ` +
+      `VALUES ('${NAMELESS_ID}', '${NAMELESS_PHONE}', 'owner', NULL, NULL, '${NAMELESS_EMAIL}', FALSE, 'UTC') ` +
+      `ON CONFLICT (id) DO NOTHING`,
+  );
+  try {
+    await seedHistory(seededUser);
+    await seedJournalEntry(
+      memberTaskEntry('b0000000-0000-4000-8000-000000000009', 0, {
+        actorIdSql: `(SELECT id FROM users WHERE email = '${NAMELESS_EMAIL}')`,
+        actorName: NAMELESS_PHONE,
+        text: 'Задача выполнена: Заменить замок',
+      }),
+      seededUser,
+    );
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto('/history');
+    await expect(page.getByText('Задача выполнена: Заменить замок')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Настройки' }).click();
+    const dialog = sheet(page);
+    await dialog.getByRole('button', { name: 'Участники' }).click();
+
+    // Титул строки — полный телефон (не маска), доступное имя чекбокса —
+    // титул (row.label); почта — подзаголовком под телефоном.
+    const namelessRow = page
+      .locator('.min-h-14')
+      .filter({ has: page.getByRole('checkbox', { name: NAMELESS_PHONE }) });
+    await expect(namelessRow).toHaveCount(1);
+    await expect(namelessRow.getByText(NAMELESS_EMAIL)).toBeVisible();
+    // Масок на шите нет ни в каком виде; суффикса «(Вы)» у чужой строки
+    // нет (свою — именованную — строку пиннит тест выше).
+    await expect(dialog.getByText(/\*{3}/)).toHaveCount(0);
+    await expect(dialog.getByText(`${NAMELESS_PHONE} (Вы)`)).toHaveCount(0);
+  } finally {
+    await execE2eSql(
+      `DELETE FROM action_journal WHERE actor_id = '${NAMELESS_ID}'; ` +
+        `DELETE FROM users WHERE id = '${NAMELESS_ID}'`,
+    );
+  }
+});
+
 test('прямая ссылка с фильтром (?kinds=task) открывает отфильтрованную ленту', async ({ page, seededUser }) => {
   await seedHistory(seededUser);
   await openCabinetWithSeededSession(page, seededUser);

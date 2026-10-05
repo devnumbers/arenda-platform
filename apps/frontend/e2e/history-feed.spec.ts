@@ -407,3 +407,66 @@ test('свой актор подписан «(Вы)»: в ленте и на п�
   await expect(page.getByRole('heading', { name: 'Иван Иванов', exact: true }).first()).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Иван Иванов (Вы)' })).toHaveCount(0);
 });
+
+test('безымянный актёр: полный телефон в шапке группы (карта #1105); старый снимок с маской не перезаписывается (Q6=А)', async ({ page, seededUser }) => {
+  await execE2eSql('DELETE FROM action_journal;');
+
+  // Зарегистрированный юзер без имени: канон карты #1105 («Имя Фамилия»,
+  // иначе полный телефон) собирает бекенд одним швом display_name (#1106).
+  // Телефон сидится плейнтекстом при phone_encrypted = false —
+  // decryptPhone читает как есть, шифрование нужно только логину.
+  const NAMELESS_ID = '16111111-1111-4111-8111-111111111171';
+  const NAMELESS_PHONE = '+79137654327';
+  const NAMELESS_EMAIL = 'e2e-nameless-history@example.com';
+  await execE2eSql(
+    `INSERT INTO users (id, phone, role, name, surname, email, phone_encrypted, timezone) ` +
+      `VALUES ('${NAMELESS_ID}', '${NAMELESS_PHONE}', 'owner', NULL, NULL, '${NAMELESS_EMAIL}', FALSE, 'UTC') ` +
+      `ON CONFLICT (id) DO NOTHING`,
+  );
+  try {
+    // Две строки журнала безымянного вокруг строки владельца — две серии
+    // (вернувшийся актёр открывает новую серию, шапка несёт имя первой
+    // строки серии): СТАРЫЙ снимок с маской maskPhone (как писалось до
+    // #1106) и НОВЫЙ — полный телефон (как пишет рекордер после #1106).
+    // Старые снимки журнал не перезаписывает (решение Q6=А, 2026-10-05):
+    // лента отображает снимок строки как есть.
+    await seedJournalEntry(
+      memberTaskEntry('a0000000-0000-4000-8000-000000000041', 9, {
+        actorIdSql: `(SELECT id FROM users WHERE email = '${NAMELESS_EMAIL}')`,
+        actorName: '+7********27',
+      }),
+      seededUser,
+    );
+    await seedJournalEntry(paymentCreatedEntry('a0000000-0000-4000-8000-000000000042', 6, 'Аренда за сентябрь'), seededUser);
+    await seedJournalEntry(
+      memberTaskEntry('a0000000-0000-4000-8000-000000000043', 1, {
+        actorIdSql: `(SELECT id FROM users WHERE email = '${NAMELESS_EMAIL}')`,
+        actorName: NAMELESS_PHONE,
+      }),
+      seededUser,
+    );
+
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto('/history');
+
+    // Старый снимок — маска как есть (журнал историчен), новый — полный
+    // телефон; шапка безымянного без суффикса «(Вы)» (актёр чужой).
+    await expect(page.getByRole('heading', { name: '+7********27', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: NAMELESS_PHONE, exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: `${NAMELESS_PHONE} (Вы)` })).toHaveCount(0);
+    // Шапка с actor_id кликабельна в «Действия участника» (#712) —
+    // телефон-титул ничего не ломает.
+    await expect(page.getByRole('link', { name: NAMELESS_PHONE }).first()).toHaveAttribute(
+      'href',
+      new RegExp(`/history/participants/${NAMELESS_ID}`),
+    );
+    // Маска на ленте ровно одна — в шапке старой серии: лента не
+    // пере-маскирует новые снимки и не переписывает старые (Q6=А).
+    await expect(page.getByText(/\*{3}/)).toHaveCount(1);
+  } finally {
+    await execE2eSql(
+      `DELETE FROM action_journal WHERE actor_id = '${NAMELESS_ID}'; ` +
+        `DELETE FROM users WHERE id = '${NAMELESS_ID}'`,
+    );
+  }
+});
