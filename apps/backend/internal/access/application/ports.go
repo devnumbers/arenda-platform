@@ -71,10 +71,11 @@ type PropertyOwnerResolver interface {
 	GetOwnerID(ctx context.Context, propertyID uuid.UUID) (uuid.UUID, error)
 }
 
-// MemberUser describes a user for member display purposes. Only non-PII
-// display fields are exposed; phones are never placed in audit context
-// (ADR 0020). Member emails for the participants list are resolved through
-// the narrow UserEmailResolver port.
+// MemberUser describes a user for member display purposes. The display name
+// composes from these fields («Name Surname», иначе «Пользователь» — карта
+// #1105, аменд #1123); phones never go into audit context (ADR 0020). Member emails for
+// the participants list are resolved through the narrow UserEmailResolver
+// port.
 type MemberUser struct {
 	ID      uuid.UUID
 	Name    *string

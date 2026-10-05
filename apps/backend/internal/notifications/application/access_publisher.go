@@ -19,8 +19,9 @@ type AccessPropertyView struct {
 }
 
 // AccessUserProfile is the display snapshot of a user an access event names:
-// the display name (the access canon — the name, or the masked phone when the
-// profile has none) and the email the actor card shows (#745).
+// the display name (the access canon — the name, or the anonymous label
+// «Пользователь» when the profile has none; карта #1105, аменд #1123) and
+// the email the actor card shows (#745).
 type AccessUserProfile struct {
 	DisplayName string
 	Email       string

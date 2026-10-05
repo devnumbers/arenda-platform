@@ -34,8 +34,9 @@ export type Participant = {
   /** Почта pending-приглашения; у зарегистрированного — почта для показа
    * (когда у юзера она есть). */
   readonly email: string | undefined;
-  /** Имя для показа (имя и фамилия или маскированный телефон); undefined —
-   * pending-строка (лейбл строки — почта). */
+  /** Имя для показа (имя и фамилия или «Пользователь» — канон #1105,
+   * аменд #1123: телефон больше не фолбэк);
+   * undefined — pending-строка (лейбл строки — почта). */
   readonly displayName: string | undefined;
   readonly aggregateStatus: ParticipantAggregateStatus;
   /** Число объектов с активным доступом. */

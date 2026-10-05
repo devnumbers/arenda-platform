@@ -28,9 +28,9 @@ const (
 )
 
 // userLabel resolves the row-text label of a participant: the display name
-// (the audit's masking canon — «Name Surname», иначе замаскированный телефон,
-// никогда email или сырой телефон). Loud on failure: a broken lookup is a
-// database trouble, not a missing label.
+// (the display canon — «Name Surname», иначе «Пользователь», никогда телефон
+// и email; карта #1105, аменд #1123). Loud on failure: a broken
+// lookup is a database trouble, not a missing label.
 func userLabel(ctx context.Context, users UserLookup, userID uuid.UUID) (string, error) {
 	return lookupLabel(ctx, users, userID, "resolve history member label")
 }
@@ -835,15 +835,16 @@ func toSharedRole(r domain.Role) sharedpolicy.Role {
 }
 
 // DisplayName resolves the public display name of a user (issue T11): "Name
-// Surname" when present, otherwise a masked phone — never an email or a raw
-// phone. Used cross-context (the properties sharing banner) via the
+// Surname" when present, otherwise the anonymous label «Пользователь» (карта
+// #1105, аменд #1123: телефон больше не фолбэк) — never a phone, never an
+// email. Used cross-context (the properties sharing banner) via the
 // OwnerDisplayNameResolver port.
 func (s *AccessService) DisplayName(ctx context.Context, userID uuid.UUID) (string, error) {
 	return lookupLabel(ctx, s.users, userID, "lookup user")
 }
 
 // lookupLabel resolves the user and projects the row-text label through the
-// masking canon — the shared lookup plumbing of userLabel and DisplayName.
+// display canon — the shared lookup plumbing of userLabel and DisplayName.
 // Loud on failure: a broken lookup is a database trouble, wrapped with
 // wrapText.
 func lookupLabel(ctx context.Context, users UserLookup, userID uuid.UUID, wrapText string) (string, error) {
@@ -853,6 +854,11 @@ func lookupLabel(ctx context.Context, users UserLookup, userID uuid.UUID, wrapTe
 	}
 	return displayName(u), nil
 }
+
+// anonymousDisplayName is the display-canon fallback for a user with no
+// name (карта #1105, аменд #1123): the anonymous label «Пользователь» —
+// never a phone, never an email.
+const anonymousDisplayName = "Пользователь"
 
 func displayName(u MemberUser) string {
 	parts := make([]string, 0, 2)
@@ -865,24 +871,16 @@ func displayName(u MemberUser) string {
 	if name := strings.Join(parts, " "); name != "" {
 		return name
 	}
-	// Fall back to a masked phone; never the raw phone or email.
-	return maskPhone(u.Phone)
+	return anonymousDisplayName
 }
 
 // DisplayNameOf composes the public display name from user fields ("Name
-// Surname" when present, otherwise a masked phone — never an email or a raw
-// phone). The exported seam for the context's read adapters implementing
+// Surname" when present, otherwise the anonymous label «Пользователь» — never
+// a phone, never an email; карта #1105, аменд #1123). The exported seam for
+// the context's read adapters implementing
 // cross-context ports (ticket #702: the list cards' member names and the
-// suspended placeholders' owner row): the masking rules live in one place.
+// suspended placeholders' owner row): the display-name rules live in one
+// place.
 func DisplayNameOf(u MemberUser) string {
 	return displayName(u)
-}
-
-// maskPhone masks all but the country code and last two digits of a phone, so a
-// display name never reveals the full phone or any email (PII).
-func maskPhone(phone string) string {
-	if len(phone) <= 4 {
-		return phone
-	}
-	return phone[:2] + strings.Repeat("*", len(phone)-4) + phone[len(phone)-2:]
 }

@@ -118,6 +118,54 @@ test('блюр-карточка подвесшего объекта и шит п
   }
 });
 
+test('блюр-карточка и шит причины безымянного владельца: «Пользователь» (карта #1105, аменд #1123, #1109)', async ({ page, seededUser }, testInfo) => {
+  // Owner-строка suspended-плейсхолдера собирается shared_list_enricher'ом
+  // через DisplayNameOf — канон карты #1105: «Имя Фамилия», иначе
+  // «Пользователь» (#1106, аменд #1123); почта в шите — сознательная
+  // экспозиция. Сид
+  // инлайновый (workers=1) со своими id — утечка строки не подменяет данные
+  // теста Марии выше.
+  const NAMELESS_OWNER_ID = '15111111-1111-4111-8111-111111111153';
+  const NAMELESS_PROPERTY_ID = '34444444-4444-4444-8444-444444444451';
+  const NAMELESS_MEMBERSHIP_ID = '99999999-9999-4999-8999-999999999953';
+  const NAMELESS_PHONE = '+79137654326';
+  const NAMELESS_EMAIL = 'e2e-nameless-suspended@example.com';
+  await execE2eSql(
+    `INSERT INTO users (id, phone, role, name, surname, email, phone_encrypted, timezone) ` +
+      `VALUES ('${NAMELESS_OWNER_ID}', '${NAMELESS_PHONE}', 'owner', NULL, NULL, '${NAMELESS_EMAIL}', FALSE, 'UTC') ` +
+      `ON CONFLICT (id) DO NOTHING; ` +
+      `INSERT INTO properties (id, owner_id, name, type, address, description, attributes, status) VALUES ` +
+      `('${NAMELESS_PROPERTY_ID}', '${NAMELESS_OWNER_ID}', 'Дача без имени', 'house', 'Москва, ул. Анонимная, 8', '', '{}', 'active') ` +
+      `ON CONFLICT (id) DO NOTHING; ` +
+      `INSERT INTO property_members (id, property_id, user_id, role, granted_by, status, suspended_at) VALUES ` +
+      `('${NAMELESS_MEMBERSHIP_ID}', '${NAMELESS_PROPERTY_ID}', '${OWNER_ID}', 'viewer', '${NAMELESS_OWNER_ID}', 'suspended', now()) ` +
+      `ON CONFLICT (id) DO NOTHING`,
+  );
+  try {
+    await openHub(page, seededUser);
+
+    const blurCard = page.getByTestId('suspended-property-card');
+    await expect(blurCard.getByTestId('property-owner').getByText('Пользователь')).toBeVisible();
+
+    await blurCard.click();
+    const sheet = page.getByTestId('suspended-reason-sheet');
+    await expect(sheet.getByText('Пользователь')).toBeVisible();
+    await expect(sheet.getByText(NAMELESS_EMAIL)).toBeVisible();
+    // Телефона ни в карточке, ни в шите нет (аменд #1123).
+    await expect(sheet.getByText(NAMELESS_PHONE)).toHaveCount(0);
+    // Масок нет нигде — ни в карточке, ни в шите.
+    await expect(page.getByText(/\*{3}/)).toHaveCount(0);
+
+    await captureScreen(page, testInfo, '1109-suspended-nameless-owner');
+  } finally {
+    await execE2eSql(
+      `DELETE FROM property_members WHERE id = '${NAMELESS_MEMBERSHIP_ID}'; ` +
+        `DELETE FROM properties WHERE id = '${NAMELESS_PROPERTY_ID}'; ` +
+        `DELETE FROM users WHERE id = '${NAMELESS_OWNER_ID}'`,
+    );
+  }
+});
+
 test('«Покинуть объект» из шита: suspended-доступ снят (серверная правда)', async ({ page, seededUser }) => {
   await grantSuspendedAccess();
   try {

@@ -48,6 +48,16 @@ describe('participantRowTitle / participantRowSubtitle', () => {
     expect(participantRowSubtitle(p)).toBeUndefined();
   });
 
+  it('у зарегистрированного без имени титул — «Пользователь», почта подзаголовком (канон #1105, аменд #1123)', () => {
+    // display_name безымянного собирает бекенд (#1106, аменд #1123):
+    // «Имя Фамилия», иначе «Пользователь» — телефон и маски на
+    // поверхности не бывают.
+    const p = participant({ displayName: 'Пользователь' });
+
+    expect(participantRowTitle(p)).toBe('Пользователь');
+    expect(participantRowSubtitle(p)).toBe('maria@example.com');
+  });
+
   it('pending-строка: почта — титул, подзаголовка нет (макет дважды почту не повторяет)', () => {
     const p = participant({
       id: 'invitee@example.com',

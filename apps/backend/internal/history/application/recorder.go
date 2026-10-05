@@ -22,7 +22,8 @@ type EntryWriter interface {
 // ActorSnapshotSource resolves the actor's display name and email at action
 // time (ADR 0061 §3: the name/email snapshots never re-resolve afterwards).
 // The display name follows the access context's canon: "Name Surname" when
-// present, otherwise a masked phone — never a raw phone.
+// present, otherwise the anonymous label «Пользователь» (карта #1105, аменд
+// #1123) — never a phone, never an email.
 type ActorSnapshotSource interface {
 	Snapshot(ctx context.Context, userID uuid.UUID) (domain.ActorSnapshot, error)
 	WithTx(tx transaction.Tx) ActorSnapshotSource

@@ -108,8 +108,9 @@ func (s *ActorStore) WithTx(tx transaction.Tx) application.ActorSnapshotSource {
 
 // Snapshot resolves the actor's display name and email at action time. The
 // display name follows the access context's canon in one place
-// (access.DisplayNameOf): "Name Surname" when present, otherwise a masked
-// phone — never a raw phone.
+// (access.DisplayNameOf): "Name Surname" when present, otherwise the full
+// phone (карта #1105) — never an email. Old snapshot rows stay as written:
+// the journal is historical (Q6 of the map).
 func (s *ActorStore) Snapshot(ctx context.Context, userID uuid.UUID) (domain.ActorSnapshot, error) {
 	if s.err != nil {
 		return domain.ActorSnapshot{}, s.err

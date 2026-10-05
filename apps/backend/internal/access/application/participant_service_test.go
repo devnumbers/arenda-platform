@@ -116,7 +116,7 @@ func newParticipantFixture(t *testing.T) *participantFixture {
 	}
 	name := "Иван"
 	surname := "Иванов"
-	phone := "+79991234567" // Masks to «+7*******67» in the display name.
+	phone := "+79991234567" // The phone-only user's display name is «Пользователь» (карта #1105, аменд #1123).
 	f.svc = NewParticipantService(
 		f.read,
 		&fakeParticipantUsers{users: map[uuid.UUID]MemberUser{
@@ -242,12 +242,13 @@ func TestListParticipants_SortedByDisplayName(t *testing.T) {
 		t.Fatalf("expected 3 participants, got %d", len(got))
 	}
 	// Byte-wise display-name order (the client re-sorts for its «Имя» chip):
-	// the masked-phone row first, then the named user, pending emails last.
-	if got[0].DisplayName != "+7********67" {
-		t.Errorf("first row = %q, want the masked-phone user", got[0].DisplayName)
+	// the named user first («И» < «П»), then the nameless «Пользователь» row
+	// (аменд #1123 — телефон больше не фолбэк), pending emails last.
+	if got[0].UserID != f.u1 || got[0].DisplayName != "Иван Иванов" {
+		t.Errorf("first row = %q/%q, want the named user", got[0].DisplayName, got[0].Email)
 	}
-	if got[1].UserID != f.u1 || got[1].DisplayName != "Иван Иванов" {
-		t.Errorf("second row = %q/%q, want the named user", got[1].DisplayName, got[1].Email)
+	if got[1].DisplayName != "Пользователь" {
+		t.Errorf("second row = %q, want the nameless user", got[1].DisplayName)
 	}
 	if got[2].Email != testPendingEmail || got[2].DisplayName != "" {
 		t.Errorf("last row = %q/%q, want the pending email", got[2].DisplayName, got[2].Email)

@@ -151,15 +151,17 @@ func TestNotifyInvitationActivatedActive(t *testing.T) {
 // TestNotifyInvitationActivatedSuspended checks the no-slot activation: the
 // invitee gets the system «Доступ приостановлен» row instead of the
 // invitation one (the «Теперь объект доступен вам совместно» copy would be
-// false), the inviter still learns the invitation was accepted, and the
-// paused row's dedup key carries the activation instant.
+// false), the inviter still learns the invitation was accepted — the copy
+// names the no-name invitee by the anonymous label «Пользователь» (карта
+// #1105, аменд #1123: телефон больше не фолбэк) — and the paused row's
+// dedup key carries the activation instant.
 func TestNotifyInvitationActivatedSuspended(t *testing.T) {
 	t.Parallel()
 	h := newAccessPublisherHarness()
 	ids := newAccessIDs()
 	h.plantProperty(ids.property, "Квартира на Невском", "Невский проспект, 5")
 	h.plantUser(ids.owner, "Пётр Петров", "inviter@example.com")
-	h.plantUser(ids.member, "915***01", "invitee@example.com")
+	h.plantUser(ids.member, "Пользователь", "invitee@example.com")
 
 	byEvent := h.notifyActivated(t, ids, true)
 
@@ -169,7 +171,7 @@ func TestNotifyInvitationActivatedSuspended(t *testing.T) {
 	accepted := byEvent[domain.EventInvitationAccepted]
 	require.NotZero(t, accepted.ID, "the inviter still learns about the acceptance")
 	assert.Equal(t, ids.owner, accepted.UserID)
-	assert.Equal(t, "915***01 принял приглашение в объект «Квартира на Невском»", accepted.Body)
+	assert.Equal(t, "Пользователь принял приглашение в объект «Квартира на Невском»", accepted.Body)
 
 	paused := byEvent[domain.EventAccessPaused]
 	require.NotZero(t, paused.ID, "the invitee learns the access waits for a slot")

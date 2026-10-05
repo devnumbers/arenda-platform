@@ -20,6 +20,9 @@ function participant(id: string, displayName: string | undefined, email: string 
 const maria = participant('id-maria', 'Мария Петрова', 'maria@example.com');
 const sergey = participant('id-sergey', 'Сергей Сидоров', 'sergey@mail.ru');
 const pending = participant('invitee@example.com', undefined, 'invitee@example.com');
+// Зарегистрированный без имени: display_name = «Пользователь» (канон
+// #1105, аменд #1123 — телефон больше не фолбэк; собирает бекенд #1106).
+const nameless = participant('id-nameless', 'Пользователь', 'nameless@example.com');
 
 describe('sortParticipantsByName — чип-сортировка «Имя»', () => {
   it('asc — русская коллация по титулу строки (у pending — почта)', () => {
@@ -42,6 +45,14 @@ describe('sortParticipantsByName — чип-сортировка «Имя»', ()
 
     expect(sorted[0]?.id).toBe('id-anna');
   });
+
+  it('титул безымянного сортируется по общей коллации (канон #1105, аменд #1123)', () => {
+    // «Пользователь» — обычная строка: «М» < «П» — идёт после «Мария
+    // Петрова», ряд не ломает сортировку и не мутирует источник.
+    const sorted = sortParticipantsByName([maria, nameless], 'asc');
+
+    expect(sorted.map((p) => p.id)).toEqual(['id-maria', 'id-nameless']);
+  });
 });
 
 describe('filterParticipantsByQuery — клиентский поиск (иконка в шапке, объём мал)', () => {
@@ -60,6 +71,11 @@ describe('filterParticipantsByQuery — клиентский поиск (ико�
   it('ищет по почте — у зарегистрированных и у pending-строк', () => {
     expect(filterParticipantsByQuery([maria, sergey, pending], 'mail.ru')).toEqual([sergey]);
     expect(filterParticipantsByQuery([maria, sergey, pending], 'invitee@')).toEqual([pending]);
+  });
+
+  it('ищет по титулу безымянного («Пользователь»); телефон его больше не находит (аменд #1123)', () => {
+    expect(filterParticipantsByQuery([maria, nameless], 'польз')).toEqual([nameless]);
+    expect(filterParticipantsByQuery([maria, nameless], '913')).toEqual([]);
   });
 
   it('без совпадений — пустой список', () => {

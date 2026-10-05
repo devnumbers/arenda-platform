@@ -85,26 +85,32 @@ func (s *AccessViewStore) PropertyView(ctx context.Context, propertyID uuid.UUID
 }
 
 // UserProfileView returns the user's display snapshot: the display name (the
-// access display-name canon — the profile's name, or the masked phone when
-// the profile has none; the raw phone and the email are never a display name)
-// and the email the actor card shows. The copy is this context's own
-// rendering of the shared rule (per-context canon, as the scan publishers'
-// date rendering) — the access context keeps its own.
+// access display-name canon — the profile's name, or the anonymous label
+// «Пользователь» when the profile has none; карта #1105, аменд #1123: the
+// phone is no longer a fallback; the email is never a display name) and the
+// email the actor card shows. The copy is this
+// context's own rendering of the shared rule (per-context canon, as the scan
+// publishers' date rendering) — the access context keeps its own.
 func (s *AccessViewStore) UserProfileView(ctx context.Context, userID uuid.UUID) (application.AccessUserProfile, error) {
 	u, err := s.users.GetByID(ctx, userID)
 	if err != nil {
 		return application.AccessUserProfile{}, fmt.Errorf("get user profile %s: %w", userID, err)
 	}
 	return application.AccessUserProfile{
-		DisplayName: accessEventDisplayName(u.Name, u.Surname, u.Phone),
+		DisplayName: accessEventDisplayName(u.Name, u.Surname),
 		Email:       u.Email,
 	}, nil
 }
 
+// accessEventAnonymousLabel is this context's copy of the display-canon
+// fallback (карта #1105, аменд #1123): the anonymous label «Пользователь» —
+// never a phone, never an email.
+const accessEventAnonymousLabel = "Пользователь"
+
 // accessEventDisplayName joins the profile name ("Name Surname") with the
-// masked-phone fallback — a display name never reveals a full phone or an
-// email.
-func accessEventDisplayName(name, surname *string, phone string) string {
+// anonymous-label fallback (карта #1105, аменд #1123) — a
+// display name never shows a phone or an email.
+func accessEventDisplayName(name, surname *string) string {
 	parts := make([]string, 0, 2)
 	if name != nil && *name != "" {
 		parts = append(parts, *name)
@@ -115,14 +121,5 @@ func accessEventDisplayName(name, surname *string, phone string) string {
 	if joined := strings.Join(parts, " "); joined != "" {
 		return joined
 	}
-	return accessEventMaskPhone(phone)
-}
-
-// accessEventMaskPhone masks all but the country code and the last two digits
-// of the phone.
-func accessEventMaskPhone(phone string) string {
-	if len(phone) <= 4 {
-		return phone
-	}
-	return phone[:2] + strings.Repeat("*", len(phone)-4) + phone[len(phone)-2:]
+	return accessEventAnonymousLabel
 }

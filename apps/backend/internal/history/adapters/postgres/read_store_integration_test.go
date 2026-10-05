@@ -824,8 +824,8 @@ func TestReadStore_FilterOptionsParticipants(t *testing.T) {
 // конкретном: приглашённый, владеющий вторым объектом той же области
 // чтения, помечен is_owner; приглашённый без своих объектов — нет.
 // Замок у того, кто пригласил (#711, макет 2067-163528). First_name —
-// имя без фамилии; у пользователя без имени — пусто (name — маскированный
-// телефон).
+// имя без фамилии; у пользователя без имени — пусто (name — полный
+// телефон, #1105).
 func TestReadStore_FilterOptionsParticipantOwnerFlag(t *testing.T) {
 	t.Parallel()
 	pool := testdb.Setup(t)
@@ -859,7 +859,7 @@ func TestReadStore_FilterOptionsParticipantOwnerFlag(t *testing.T) {
 	}
 	// Замок по любому объекту скоупа: Пётр на первом объекте участник, но
 	// владелец второго. First_name — имя без фамилии; у пользователя без
-	// имени — пусто и name замаскирован.
+	// имени — пусто, name — «Пользователь» (#1105, аменд #1123).
 	tests := []struct {
 		name      string
 		p         domain.FilterParticipant
@@ -886,8 +886,8 @@ func TestReadStore_FilterOptionsParticipantOwnerFlag(t *testing.T) {
 			}
 		})
 	}
-	if name := byID[nameless].Name; name == "" || name == namelessPhone {
-		t.Errorf("nameless name: want masked phone, got %q", name)
+	if name := byID[nameless].Name; name != "Пользователь" {
+		t.Errorf("nameless name: want the anonymous label (аменд #1123), got %q", name)
 	}
 
 	// Скоуп по property_ids: единственный участник — владелец суженной

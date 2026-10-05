@@ -201,8 +201,8 @@ export function historyPeriodChipLabel(period: IsoRange | null): string {
 
 /** Заголовок строки участника шита: чужой — канон отображаемого имени,
  * себе — только имя без фамилии (макет 2067-163528: «Даниил (Вы)»;
- * суффикс «(Вы)» серым рисует сам шит); имени нет — канон (маскированный
- * телефон). */
+ * суффикс «(Вы)» серым рисует сам шит); имени нет — канон
+ * («Пользователь», #1105, аменд #1123). */
 export function historyParticipantTitle(
   participant: Pick<HistoryParticipantOption, 'name' | 'firstName'>,
   isMe: boolean,
