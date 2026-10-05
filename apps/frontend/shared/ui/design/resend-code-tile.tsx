@@ -39,7 +39,10 @@ export function ResendCodeTile({
         variant="secondary"
         className="w-full"
         loading={loading}
-        disabled={isWaiting}
+        // loading дублируется в disabled: Button резолвит disabled ?? loading,
+        // и явный disabled без || не даёт loading диспейблить кнопку —
+        // «на время отправки» оставался активной (#1099).
+        disabled={isWaiting || loading}
         onClick={onResend}
       >
         Отправить новый код

@@ -84,6 +84,84 @@ test('стрелка назад ведёт на предыдущий шаг', as
   await expect(page.getByRole('heading', { name: 'Введите номер телефона' })).toBeVisible();
 });
 
+// Двойной клик «Войти» (#1099): до фикса второй клик, пришедший раньше
+// перерисовки (реальный мир — джанк главного потока: input-событие приоритетнее
+// рендер-таска react-query), уходил вторым POST /auth/send и ловил 429
+// троттлинга бэка (minSendInterval 60с) — тост «Не удалось войти» рисовался
+// поверх уже сменившегося шага. Воспроизведение детерминирует худший случай:
+// два клика одним JS-таском, перерисовка между ними невозможна в принципе.
+// Гард отправки обязан держать ровно один запрос и вести на следующий шаг:
+// код для существующего номера, почта — для нового. /auth/send перехвачен
+// route-моком (канон phone-change.spec): ответы детерминированы, бюджет
+// burst 3 бэка не тратится.
+test('двойной клик «Войти» шлёт один код и ведёт на шаг кода (#1099)', async ({page}) => {
+  let sendCalls = 0;
+  await page.route('**/api/auth/send', async (route) => {
+    sendCalls += 1;
+    if (sendCalls === 1) {
+      // Задержанный ответ: окно, в котором кнопка обязана быть disabled
+      // на время отправки (решение владельца #1099) — без этого второй
+      // клик реального пользователя уходит вторым POST-ом.
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({sent: true, retryAfter: 60}),
+      });
+    }
+    // Второй запрос — 429 троттлинга, как у бэка: до фикса он рисовал
+    // тост ошибки поверх шага кода и вешал лишний кулдаун.
+    return route.fulfill({
+      status: 429,
+      contentType: 'application/problem+json',
+      headers: {'Retry-After': '60'},
+      body: JSON.stringify({code: 'code_sent_too_recently', detail: 'Код уже отправлен'}),
+    });
+  });
+
+  await page.goto('/login');
+  await page.getByRole('textbox', {name: 'Телефон'}).fill('9261112233');
+  const loginButton = page.getByRole('button', {name: 'Войти'});
+  await loginButton
+    .evaluate((button: HTMLElement) => {
+      button.click();
+      button.click();
+    });
+  // Ответ ещё в полёте — кнопка погашена на время отправки.
+  await expect(loginButton).toBeDisabled();
+
+  await expect(page.getByRole('heading', {name: 'Введите код'})).toBeVisible();
+  expect(sendCalls).toBe(1);
+  // Тост ошибки поверх ушедшего шага — регрессия двойной отправки (#1099).
+  await expect(page.getByText('Не удалось войти')).toHaveCount(0);
+});
+
+// Та же гонка на ветке нового номера (sent:false): двойной клик ведёт на
+// шаг почты ровно одним запросом.
+test('двойной клик «Войти» с новым номером ведёт на шаг почты (#1099)', async ({page}) => {
+  let sendCalls = 0;
+  await page.route('**/api/auth/send', (route) => {
+    sendCalls += 1;
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({sent: false}),
+    });
+  });
+
+  await page.goto('/login');
+  await page.getByRole('textbox', {name: 'Телефон'}).fill('9261112233');
+  await page
+    .getByRole('button', {name: 'Войти'})
+    .evaluate((button: HTMLElement) => {
+      button.click();
+      button.click();
+    });
+
+  await expect(page.getByRole('heading', {name: 'Введите почту'})).toBeVisible();
+  expect(sendCalls).toBe(1);
+});
+
 // Жёсткий выход (#1098): кабинет уходит полной перезагрузкой на /login (не
 // router.push), и «Назад»/«Вперёд» не возвращают ЛК — без сессии proxy.ts
 // отвечает редиректом на /login?from=…, а возврат из bfcache перехватывает

@@ -27,8 +27,9 @@ export type EmailStepProps = {
  * погашена + подпись resend-канона (#733) «Запросить код можно через
  * ММ:СС» (моно 14/16, tertiary). Шаг видят только новые пользователи
  * (sent:false из POST /auth/send, ADR 0015) — код уходит на введённую
- * почту. «Написать в поддержку» открывает модалку «Связаться с нами»
- * (#766). */
+ * почту. Кнопка погашена и на время отправки (решение владельца #1099) —
+ * как на шаге телефона. «Написать в поддержку» открывает модалку
+ * «Связаться с нами» (#766). */
 export function EmailStep({
     email,
     onEmailChange,
@@ -64,10 +65,12 @@ export function EmailStep({
                     onClear={() => onEmailChange("")}
                 />
 
+                {/* isLoading дублируется в disabled — канал тот же, что на
+                    шаге телефона (#1099): Button резолвит disabled ?? loading. */}
                 <Button
                     type="submit"
                     loading={isLoading}
-                    disabled={!isEmailValid(email.trim()) || isWaiting}
+                    disabled={!isEmailValid(email.trim()) || isWaiting || isLoading}
                 >
                     Получить код
                 </Button>

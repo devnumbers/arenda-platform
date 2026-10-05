@@ -1,6 +1,6 @@
 "use client";
 
-import {type JSX, useState} from "react";
+import {type JSX, useRef, useState} from "react";
 import {useRouter} from "next/navigation";
 import {notify} from "@/shared/lib/notifications";
 import {type ApiError} from "@/shared/api/errors";
@@ -23,6 +23,32 @@ export default function LoginPage(): JSX.Element {
     const sendCode = useSendCode();
     const verifyCode = useVerifyCode();
 
+    // Двойной клик по кнопке отправки (#1099): кнопка диспейблится isPending-ем
+    // только после перерисовки, а второй клик может прийти раньше рендера
+    // (джанк главного потока отдаёт input-событие раньше рендер-таска) — без
+    // синхронного рефа обе отправки уходят POST-ами, и вторая ловит 429
+    // троттлинга бэка (minSendInterval 60с) тостом поверх ушедшего шага.
+    const sendInFlightRef = useRef(false);
+
+    // Единственное горло всех отправок кода (#1099): реф режет второй клик из
+    // окна до перерисовки, isPending догашивает окно между settled и самой
+    // перерисовкой; жизненный цикл рефа (set до mutate, сброс в onSettled)
+    // живёт здесь в одном месте. Один реф на все три обработчика: шаги
+    // телефона/почты и resend не пересекаются — это разные шаги черновика.
+    const startSendOnce = (...[variables, callbacks]: Parameters<typeof sendCode.mutate>): void => {
+        if (sendInFlightRef.current || sendCode.isPending) {
+            return;
+        }
+
+        sendInFlightRef.current = true;
+        sendCode.mutate(variables, {
+            ...callbacks,
+            onSettled: () => {
+                sendInFlightRef.current = false;
+            },
+        });
+    };
+
     const handleSendCodeError = (error: ApiError) => {
         if (error.status === 429 && typeof error.retryAfter === 'number') {
             recordSendWithRemainingSeconds(error.retryAfter);
@@ -35,20 +61,17 @@ export default function LoginPage(): JSX.Element {
             return;
         }
 
-        sendCode.mutate(
-            {phone: normalizePhone(formattedPhone)},
-            {
-                onSuccess: (data) => {
-                    if (data.sent) {
-                        recordSendWithRemainingSeconds(data.retryAfter ?? RESEND_TIMEOUT);
-                        setDraft((prev) => ({...prev, phone: formattedPhone, email: "", step: "code"}));
-                    } else {
-                        setDraft((prev) => ({...prev, phone: formattedPhone, step: "email"}));
-                    }
-                },
-                onError: handleSendCodeError,
+        startSendOnce({phone: normalizePhone(formattedPhone)}, {
+            onSuccess: (data) => {
+                if (data.sent) {
+                    recordSendWithRemainingSeconds(data.retryAfter ?? RESEND_TIMEOUT);
+                    setDraft((prev) => ({...prev, phone: formattedPhone, email: "", step: "code"}));
+                } else {
+                    setDraft((prev) => ({...prev, phone: formattedPhone, step: "email"}));
+                }
             },
-        );
+            onError: handleSendCodeError,
+        });
     };
 
     const handleSendEmail = () => {
@@ -57,20 +80,17 @@ export default function LoginPage(): JSX.Element {
             return;
         }
 
-        sendCode.mutate(
-            {phone: normalizePhone(draft.phone), email: trimmedEmail},
-            {
-                onSuccess: (data) => {
-                    if (!data.sent) {
-                        setDraft((prev) => ({...prev, step: "email"}));
-                        return;
-                    }
-                    recordSendWithRemainingSeconds(data.retryAfter ?? RESEND_TIMEOUT);
-                    setDraft((prev) => ({...prev, step: "code"}));
-                },
-                onError: handleSendCodeError,
+        startSendOnce({phone: normalizePhone(draft.phone), email: trimmedEmail}, {
+            onSuccess: (data) => {
+                if (!data.sent) {
+                    setDraft((prev) => ({...prev, step: "email"}));
+                    return;
+                }
+                recordSendWithRemainingSeconds(data.retryAfter ?? RESEND_TIMEOUT);
+                setDraft((prev) => ({...prev, step: "code"}));
             },
-        );
+            onError: handleSendCodeError,
+        });
     };
 
     const [code, setCode] = useState("");
@@ -144,7 +164,7 @@ export default function LoginPage(): JSX.Element {
             return;
         }
 
-        sendCode.mutate(
+        startSendOnce(
             trimmedEmail
                 ? {phone: normalizePhone(draft.phone), email: trimmedEmail}
                 : {phone: normalizePhone(draft.phone)},
