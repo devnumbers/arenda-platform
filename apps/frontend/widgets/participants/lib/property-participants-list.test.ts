@@ -75,6 +75,35 @@ describe('propertyParticipantRows — VM ряда «Участники объе�
     expect(rows[1]?.subtitle).toBeUndefined();
   });
 
+  it('безымянный зарегистрированный: полный телефон в титуле, почта подзаголовком (канон карты #1105)', () => {
+    // display_name безымянного юзера — полный телефон (шов displayName
+    // бекенда, #1106): маски «+7***» на поверхности больше не бывает.
+    const rows = propertyParticipantRows(
+      [member({ id: 'm-nameless', email: 'nameless@example.com', displayName: '+79131234567' })],
+      OWNER_ID,
+    );
+
+    expect(rows[0]?.title).toBe('+79131234567');
+    expect(rows[0]?.subtitle).toBe('nameless@example.com');
+  });
+
+  it('своя безымянная строка: «(Вы)» прицепляется к телефону как к любому титулу', () => {
+    const MY_NAMELESS_ID = '16111111-1111-4111-8111-111111111161';
+    const rows = propertyParticipantRows(
+      [
+        member({
+          id: 'm-me-nameless',
+          userId: MY_NAMELESS_ID,
+          email: 'nameless@example.com',
+          displayName: '+79131234567',
+        }),
+      ],
+      MY_NAMELESS_ID,
+    );
+
+    expect(rows[0]?.title).toBe('+79131234567 (Вы)');
+  });
+
   it('иконка у почты: владелец — замок, full_access — перо, viewer — глаз', () => {
     const rows = propertyParticipantRows(
       [

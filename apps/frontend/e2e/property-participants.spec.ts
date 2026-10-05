@@ -190,6 +190,43 @@ test('suspended-участник: warning-чип в ряду; сид восст�
   }
 });
 
+test('безымянный участник: полный телефон в титуле ряда, почта подзаголовком (карта #1105); сид восстанавливается', async ({ page, seededUser }) => {
+  // Зарегистрированный юзер без имени: display_name собирает бекенд по
+  // канону карты #1105 — полный телефон вместо маски «+7***» (#1106).
+  // Телефон сидится плейнтекстом при phone_encrypted = false —
+  // decryptPhone читает как есть, шифрование нужно только логину.
+  const NAMELESS_ID = '15111111-1111-4111-8111-111111111151';
+  const NAMELESS_MEMBER_ID = '99999999-9999-4999-8999-999999999951';
+  const NAMELESS_PHONE = '+79131234567';
+  const NAMELESS_EMAIL = 'e2e-nameless@example.com';
+  await execE2eSql(
+    `INSERT INTO users (id, phone, role, name, surname, email, phone_encrypted, timezone) ` +
+      `VALUES ('${NAMELESS_ID}', '${NAMELESS_PHONE}', 'owner', NULL, NULL, '${NAMELESS_EMAIL}', FALSE, 'UTC') ` +
+      `ON CONFLICT (id) DO NOTHING; ` +
+      `INSERT INTO property_members (id, property_id, user_id, role, granted_by) ` +
+      `VALUES ('${NAMELESS_MEMBER_ID}', '${APARTMENT_ID}', '${NAMELESS_ID}', 'viewer', '11111111-1111-4111-8111-111111111111') ` +
+      `ON CONFLICT (property_id, user_id) WHERE status = 'active' DO NOTHING`,
+  );
+  try {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto(`/properties/${APARTMENT_ID}/participants`);
+
+    // Титул ряда — полный телефон, почта — подзаголовком под ним.
+    // Доступное имя ряда — титул + подзаголовок разом, матч регуляркой;
+    // ведущий «+» в регэксп не нужен (в регэкспе это квантификатор).
+    const namelessRow = page.getByRole('button', { name: new RegExp(NAMELESS_PHONE.slice(1)) });
+    await expect(namelessRow).toBeVisible();
+    await expect(namelessRow.getByText(NAMELESS_EMAIL)).toBeVisible();
+    // Маски в ряду нет ни в каком виде.
+    await expect(page.getByText(/\*{3}/)).toHaveCount(0);
+  } finally {
+    await execE2eSql(
+      `DELETE FROM property_members WHERE id = '${NAMELESS_MEMBER_ID}'; ` +
+        `DELETE FROM users WHERE id = '${NAMELESS_ID}'`,
+    );
+  }
+});
+
 test('кебаб «Отозвать доступ всем»: подтверждение, попап, владелец остаётся; сид восстанавливается', async ({ page, seededUser }) => {
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto(`/properties/${APARTMENT_ID}/participants`);
