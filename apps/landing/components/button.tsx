@@ -26,6 +26,10 @@ const VARIANTS = {
 const SIZES = {
   // Мобильный макет — кнопки 56px/16px (Small), десктоп — 64px/18px (Default).
   lg: "h-14 px-8 text-s desk:h-16 desk:text-r",
+  // Small без десктопного до-роста: инстанс 177×56 (16/20) на всех ярусах —
+  // так во всех трёх новых кадрах FAQ (2967-76035 / 3005-78296 / 3009-79890),
+  // прежний макет CTA 2814-1131 рисовал Default 191×64.
+  sm: "h-14 px-8 text-s",
   md: "h-11 rounded-xl px-5 text-xs",
 } as const;
 
