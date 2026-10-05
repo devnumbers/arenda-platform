@@ -176,6 +176,23 @@
   }
 }
 
+/* Лок скролла Radix/vaul-оверлеев (react-remove-scroll-bar) ставит body
+   overflow:hidden !important и компенсирует «исчезающий» скроллбар margin'ом
+   и паддингами. На лендинге скроллер — html (overflow-x: clip выше), его
+   скроллбар не исчезает: компенсация только сдвигает страницу. Хуже того,
+   body под hidden становится scroll-контейнером, и sticky-хедер прилипает к
+   верху документа — при открытии модалки из низа страницы он уезжает за
+   верх вьюпорта. clip режет так же, но scroll-контейнера не создаёт (канон
+   #709); колесо/тап фоном по-прежнему гасит сам react-remove-scroll. Вне
+   @layer: important вне слоёв сильнее important внутри слоёв, а специфичный
+   селектор с html побеждает библиотечный независимо от порядка стилей
+   (канон #925 фронта). */
+html body[data-scroll-locked] {
+  overflow: clip !important;
+  margin-right: 0 !important;
+  padding-right: 0 !important;
+}
+
 @layer components {
   /* Конический градиент-обвод стеклянных тарифных карточек (узел Figma
      2846-153711, stroke fill_f0f18fa9): border-image не умеет скруглённые

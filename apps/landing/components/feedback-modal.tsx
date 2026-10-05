@@ -81,10 +81,20 @@ export function FeedbackModal({
   // сам доигрывает slideToBottom + fadeOut.
   const close = useCallback(() => {
     if (isDesktop) {
+      // Идемпотентность: Radix бьёт onOpenChange(false) дважды на один клик
+      // по фону (pointer-down-outside + focus-outside — фаза closing держит
+      // слой смонтированным), повторный вход не перезаводит таймер.
+      if (closeTimerRef.current) {
+        return;
+      }
       setClosing(true);
       closeTimerRef.current = setTimeout(() => {
+        closeTimerRef.current = null;
+        // closing не сбрасываем: сброс в этом же коммите возвращает классам
+        // панели входную анимацию, Presence Radix доигрывает её на ещё живом
+        // оверлее — фон вспыхивает затемнением второй раз после того, как
+        // модалка уже погасла. Сброс делает openModal перед открытием.
         setOpen(false);
-        setClosing(false);
       }, 250);
       return;
     }
