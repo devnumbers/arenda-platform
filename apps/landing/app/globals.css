@@ -183,3 +183,28 @@
     display: none;
   }
 }
+
+/* Нативная полоса четырёх секций (CardTrio, Audience, тарифы) — живёт
+   только до перехвата движком TabletStrip. Отдельная утилита (а не
+   hide-scrollbar): на десктопе (≥1200) ряд статичен, а overflow-x:auto
+   вычисляет overflow-y:auto (CSS Overflow 3: visible при не-visible
+   соседе) — на загрузке полоса ловит 24px от Reveal-трансформа карточек
+   (трансформированные потомки входят в scrollable overflow) и становится
+   вертикальным скролл-контейнером: свайп уводит секцию, а не страницу
+   (поймано приёмкой 05.10 на «Для кого сервис»). На ≥1200 overflow
+   сбрасывается — ряд влезает, контейнер не нужен вовсе. */
+@utility strip-scroll {
+  @media (min-width: 481px) and (max-width: 1199px) {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+
+  @media (min-width: 1200px) {
+    overflow: visible;
+  }
+}

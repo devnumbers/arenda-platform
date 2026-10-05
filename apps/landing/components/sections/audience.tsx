@@ -74,7 +74,7 @@ export function Audience() {
           геометрии нет. */}
       <TabletStrip
         className="mt-8 w-full desk:mt-16"
-        nativeClassName="flex flex-col gap-3 px-6 tab:mx-auto tab:w-fit tab:max-w-full tab:flex-row tab:hide-scrollbar desk:gap-5 desk:px-0"
+        nativeClassName="strip-scroll flex flex-col gap-3 px-6 tab:mx-auto tab:w-fit tab:max-w-full tab:flex-row desk:gap-5 desk:px-0"
         centerWhenFit
       >
         {CARDS.map((card, index) => (

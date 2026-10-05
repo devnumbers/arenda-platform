@@ -255,7 +255,7 @@ export function TariffCards({
           движке отложен до первых 5px протяжки. */}
       <TabletStrip
         className="mt-8 desk:mt-14"
-        nativeClassName="flex justify-start tab:-mx-6 tab:w-[calc(100%_+_3rem)] tab:px-6 tab:hide-scrollbar desk:mx-0 desk:w-auto desk:px-0"
+        nativeClassName="strip-scroll flex justify-start tab:-mx-6 tab:w-[calc(100%_+_3rem)] tab:px-6 desk:mx-0 desk:w-auto desk:px-0"
         viewportClassName="tab:-mx-6 tab:w-[calc(100%_+_3rem)]"
         activeChildren={cards}
       >
