@@ -16,7 +16,8 @@ import { IconButton } from '@/shared/ui/design';
  *
  * Мобайл 320–560 — белая страница, контент сверху (pt-72 под верхний бар).
  * Планшет 561–1023 — градиент на всю страницу, 3D-домик 700×700 по центру,
- * белая карточка radius 32 padding 32 (max-w-720).
+ * белая карточка radius 32 padding 32 (max-w-600 — поля по 84 на канве
+ * 768; было 720, тикет #1100).
  * ПК ≥1024 — белый лист, две панели 50/50 с зазором и отступом 24:
  * слева градиент radius 32 с домиком 360 по центру, справа — контент
  * колонкой max-w-400 по центру. Крестик × — выход на лендинг (`onClose`),
@@ -61,7 +62,7 @@ export function LoginShell({ onClose, onBack, hideClose = false, children }: Log
                 {/* Правая половина (ПК) / вся страница (мобайл, планшет). */}
                 <div className="flex w-full flex-1 items-center justify-center">
                     {/* Планшет: белая карточка radius 32 padding 32. */}
-                    <div className="w-full max-w-[400px] tablet:max-w-[720px] tablet:rounded-[32px] tablet:bg-surface tablet:p-8">
+                    <div className="w-full max-w-[400px] tablet:max-w-[600px] tablet:rounded-[32px] tablet:bg-surface tablet:p-8">
                         <div className="mx-auto w-full desktop:max-w-[400px]">{children}</div>
                     </div>
                 </div>

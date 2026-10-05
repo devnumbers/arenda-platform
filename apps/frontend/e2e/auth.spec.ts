@@ -84,6 +84,25 @@ test('стрелка назад ведёт на предыдущий шаг', as
   await expect(page.getByRole('heading', { name: 'Введите номер телефона' })).toBeVisible();
 });
 
+// Планшетная карточка входа — 600 по макету (#1100, Figma 2343:67107):
+// при 768 карточка встаёт с полями по 84 (проверено по кадру пиксельным
+// замером), бокс поля — 84 + padding 32 = 116, инпут внутри бокса —
+// +18 (pl) = 134, ширина инпута — 536 (600 − паддинги 32×2) − pr 8 =
+// 510. До фикса карточка была 720 (только 24px внешнего паддинга) —
+// инпут стоял на 74 шириной 630.
+test('планшетная карточка входа — 600 по макету (#1100)', async ({page}) => {
+  await page.setViewportSize({width: 768, height: 1024});
+  await page.goto('/login');
+  const field = page.getByRole('textbox', {name: 'Телефон'});
+  await expect(field).toBeVisible();
+  const box = await field.boundingBox();
+  expect(box).not.toBeNull();
+  expect(box?.x ?? 0).toBeGreaterThanOrEqual(133);
+  expect(box?.x ?? 0).toBeLessThanOrEqual(135);
+  expect(box?.width ?? 0).toBeGreaterThanOrEqual(509);
+  expect(box?.width ?? 0).toBeLessThanOrEqual(511);
+});
+
 // Двойной клик «Войти» (#1099): до фикса второй клик, пришедший раньше
 // перерисовки (реальный мир — джанк главного потока: input-событие приоритетнее
 // рендер-таска react-query), уходил вторым POST /auth/send и ловил 429
