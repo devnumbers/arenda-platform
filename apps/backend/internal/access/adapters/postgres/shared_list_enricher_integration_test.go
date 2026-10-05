@@ -145,11 +145,7 @@ func TestSharedListEnricher_SuspendedWithPhoneOnlyOwner(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("SuspendedWith = %d cards, want 1", len(got))
 	}
-	ownerRow, err := f.q.GetUserByID(f.bg(), pgUUID(owner))
-	if err != nil {
-		t.Fatalf("read owner: %v", err)
-	}
-	if got[0].OwnerName != ownerRow.Phone {
-		t.Errorf("phone-only owner OwnerName = %q, want full phone %q", got[0].OwnerName, ownerRow.Phone)
+	if got[0].OwnerName != "Пользователь" {
+		t.Errorf("phone-only owner OwnerName = %q, want the anonymous label (аменд #1123)", got[0].OwnerName)
 	}
 }

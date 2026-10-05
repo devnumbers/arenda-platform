@@ -91,11 +91,11 @@ test('секции детали: тап по контенту карточки �
   await expect(page).toHaveURL(new RegExp(`/properties/${SEEDED_APARTMENT_PROPERTY_ID}/tasks$`));
 });
 
-test('чужие карточки: ряд владельца — имя, у безымянного полный телефон (карта #1105, #1109)', async ({ page, seededUser }, testInfo) => {
+test('чужие карточки: ряд владельца — имя, у безымянного «Пользователь» (карта #1105, аменд #1123, #1109)', async ({ page, seededUser }, testInfo) => {
   // Ряд «чей объект» на чужих карточках с активным доступом строит бекенд
-  // по канону карты #1105 — «Имя Фамилия», иначе полный телефон (#1106,
-  // OwnerDisplayNameResolver → access.DisplayNameOf); фронт строку
-  // не пере-маскирует. Сид инлайновый (workers=1), восстанавливается.
+  // по канону карты #1105 — «Имя Фамилия», иначе «Пользователь» (#1106,
+  // аменд #1123, OwnerDisplayNameResolver → access.DisplayNameOf); фронт
+  // строку не пере-маскирует. Сид инлайновый (workers=1), восстанавливается.
   const MARIA_PROPERTY_ID = '35555555-5555-4555-8555-555555555551';
   const NAMELESS_PROPERTY_ID = '35555555-5555-4555-8555-555555555552';
   const NAMELESS_ID = '15111111-1111-4111-8111-111111111152';
@@ -129,7 +129,9 @@ test('чужие карточки: ряд владельца — имя, у бе
     const namelessCard = page
       .locator('li')
       .filter({ has: page.getByRole('heading', { name: 'Хата без имени' }) });
-    await expect(namelessCard.getByTestId('property-owner').getByText(NAMELESS_PHONE)).toBeVisible();
+    await expect(namelessCard.getByTestId('property-owner').getByText('Пользователь')).toBeVisible();
+    // Телефона в ряду владельца нет (аменд #1123).
+    await expect(namelessCard.getByTestId('property-owner').getByText(NAMELESS_PHONE)).toHaveCount(0);
 
     // Масок нет ни на одной карточке хаба.
     await expect(page.getByText(/\*{3}/)).toHaveCount(0);

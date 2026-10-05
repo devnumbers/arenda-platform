@@ -304,9 +304,10 @@ test('участники: своя строка «Иван (Вы)» с замк�
   await expect(memberRow.getByRole('img', { name: 'Роль: Владелец' })).toHaveCount(0);
 });
 
-test('безымянный участник в чипах: полный телефон титулом, почта подзаголовком (карта #1105)', async ({ page, seededUser }) => {
+test('безымянный участник в чипах: «Пользователь» титулом, почта подзаголовком (карта #1105, аменд #1123)', async ({ page, seededUser }) => {
   // Зарегистрированный юзер без имени: канон карты #1105 собирает бекенд
-  // одним швом display_name (#1106), чипы фильтров резолвятся при чтении
+  // одним швом display_name (#1106, аменд #1123 — телефон больше не
+  // фолбэк), чипы фильтров резолвятся при чтении
   // (FilterParticipants → DisplayNameOf). Телефон сидится плейнтекстом
   // при phone_encrypted = false — decryptPhone читает как есть, шифрование
   // нужно только логину. Ноги участника на объекте не даём — в опции
@@ -337,17 +338,18 @@ test('безымянный участник в чипах: полный теле
     const dialog = sheet(page);
     await dialog.getByRole('button', { name: 'Участники' }).click();
 
-    // Титул строки — полный телефон (не маска), доступное имя чекбокса —
-    // титул (row.label); почта — подзаголовком под телефоном.
+    // Титул строки — «Пользователь» (живой резолв, снимку строки значения
+    // не имеет), доступное имя чекбокса — титул (row.label); почта —
+    // подзаголовком под ним.
     const namelessRow = page
       .locator('.min-h-14')
-      .filter({ has: page.getByRole('checkbox', { name: NAMELESS_PHONE }) });
+      .filter({ has: page.getByRole('checkbox', { name: 'Пользователь' }) });
     await expect(namelessRow).toHaveCount(1);
     await expect(namelessRow.getByText(NAMELESS_EMAIL)).toBeVisible();
     // Масок на шите нет ни в каком виде; суффикса «(Вы)» у чужой строки
     // нет (свою — именованную — строку пиннит тест выше).
     await expect(dialog.getByText(/\*{3}/)).toHaveCount(0);
-    await expect(dialog.getByText(`${NAMELESS_PHONE} (Вы)`)).toHaveCount(0);
+    await expect(dialog.getByText('Пользователь (Вы)')).toHaveCount(0);
   } finally {
     await execE2eSql(
       `DELETE FROM action_journal WHERE actor_id = '${NAMELESS_ID}'; ` +

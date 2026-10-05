@@ -859,7 +859,7 @@ func TestReadStore_FilterOptionsParticipantOwnerFlag(t *testing.T) {
 	}
 	// Замок по любому объекту скоупа: Пётр на первом объекте участник, но
 	// владелец второго. First_name — имя без фамилии; у пользователя без
-	// имени — пусто, name — полный телефон (#1105).
+	// имени — пусто, name — «Пользователь» (#1105, аменд #1123).
 	tests := []struct {
 		name      string
 		p         domain.FilterParticipant
@@ -886,8 +886,8 @@ func TestReadStore_FilterOptionsParticipantOwnerFlag(t *testing.T) {
 			}
 		})
 	}
-	if name := byID[nameless].Name; name != namelessPhone {
-		t.Errorf("nameless name: want the full phone, got %q", name)
+	if name := byID[nameless].Name; name != "Пользователь" {
+		t.Errorf("nameless name: want the anonymous label (аменд #1123), got %q", name)
 	}
 
 	// Скоуп по property_ids: единственный участник — владелец суженной

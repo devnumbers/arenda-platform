@@ -72,8 +72,8 @@ type PropertyOwnerResolver interface {
 }
 
 // MemberUser describes a user for member display purposes. The display name
-// composes from these fields («Name Surname», иначе полный телефон — карта
-// #1105); phones never go into audit context (ADR 0020). Member emails for
+// composes from these fields («Name Surname», иначе «Пользователь» — карта
+// #1105, аменд #1123); phones never go into audit context (ADR 0020). Member emails for
 // the participants list are resolved through the narrow UserEmailResolver
 // port.
 type MemberUser struct {

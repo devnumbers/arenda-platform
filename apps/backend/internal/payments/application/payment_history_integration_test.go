@@ -132,13 +132,14 @@ func TestHistory_ManualOperationCarriesSnapshots(t *testing.T) {
 	).Scan(&searchable, &contextJSON); err != nil {
 		t.Fatalf("read journal row: %v", err)
 	}
-	// The harness owner has no name: the snapshot degrades to the full
-	// phone — the access canon (карта #1105: nothing masked).
+	// The harness owner has no name: the snapshot degrades to the anonymous
+	// label «Пользователь» — the access canon (карта #1105, аменд #1123:
+	// the phone is no longer a display fallback).
 	if !strings.Contains(searchable, "Химчистка") {
 		t.Errorf("searchable = %q, want the title", searchable)
 	}
-	if !strings.Contains(searchable, "+7999") {
-		t.Errorf("searchable = %q, want the full actor phone", searchable)
+	if !strings.Contains(searchable, "Пользователь") {
+		t.Errorf("searchable = %q, want the anonymous actor label", searchable)
 	}
 	if strings.Contains(searchable, "*") {
 		t.Errorf("searchable = %q, want nothing masked (карта #1105)", searchable)

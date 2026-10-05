@@ -34,7 +34,8 @@ export type Participant = {
   /** Почта pending-приглашения; у зарегистрированного — почта для показа
    * (когда у юзера она есть). */
   readonly email: string | undefined;
-  /** Имя для показа (имя и фамилия или полный телефон — канон #1105);
+  /** Имя для показа (имя и фамилия или «Пользователь» — канон #1105,
+   * аменд #1123: телефон больше не фолбэк);
    * undefined — pending-строка (лейбл строки — почта). */
   readonly displayName: string | undefined;
   readonly aggregateStatus: ParticipantAggregateStatus;

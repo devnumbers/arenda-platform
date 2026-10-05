@@ -309,9 +309,9 @@ describe('historyParticipantTitle', () => {
     expect(historyParticipantTitle(participant, true)).toBe('Даниил');
   });
 
-  it('себе без имени — канон (полный телефон, карта #1105)', () => {
-    expect(historyParticipantTitle({ name: '+79990000034', firstName: '' }, true)).toBe(
-      '+79990000034',
+  it('себе без имени — канон («Пользователь», карта #1105, аменд #1123)', () => {
+    expect(historyParticipantTitle({ name: 'Пользователь', firstName: '' }, true)).toBe(
+      'Пользователь',
     );
   });
 });

@@ -6235,8 +6235,8 @@ components:
         owner_name:
           type: string
           description: >
-            Owner display name ("Name Surname" or the full phone, never
-            email).
+            Owner display name ("Name Surname" or «Пользователь», never a
+            phone or an email — карта #1105, аменд #1123).
             Present when the actor is not the owner: in the detail response
             and on the list rows (main and archive) — the shared card shows
             whose object it is. Own rows carry none.
@@ -7407,8 +7407,9 @@ components:
         display_name:
           type: string
           description: >
-            Participant display name (name and surname, or the full phone).
-            Never an email.
+            Participant display name (name and surname, or the anonymous
+            label «Пользователь» — карта #1105, аменд #1123). Never a phone,
+            never an email.
         status:
           type: string
           enum: [active, suspended, pending]
@@ -7500,7 +7501,8 @@ components:
           type: string
           nullable: true
           description: >
-            The person's display name (name and surname, or the full phone);
+            The person's display name (name and surname, or the anonymous
+            label «Пользователь» — карта #1105, аменд #1123);
             null for a pending row (the email is the label).
         aggregate_status:
           type: string
@@ -7699,8 +7701,8 @@ components:
         owner_name:
           type: string
           description: >
-            The owner's public display name («Имя Фамилия» or the full
-            phone).
+            The owner's public display name («Имя Фамилия» or the anonymous
+            label «Пользователь» — карта #1105, аменд #1123).
         owner_email:
           type: string
           description: >
@@ -8139,7 +8141,7 @@ components:
       type: object
       description: |
         Участник-вариант фильтра. name — канон отображаемого имени платформы
-        («Имя Фамилия», иначе полный телефон — карта #1105); email — текущая
+        («Имя Фамилия», иначе «Пользователь» — карта #1105, аменд #1123); email — текущая
         почта пользователя; first_name — имя без фамилии для строки «(Вы)»;
         is_owner — замок владельца объектов (макет 2067-163528); role —
         иконка роли строки (макет 2184-94261): максимальный доступ в области,
@@ -8156,7 +8158,7 @@ components:
           description: Текущая почта; '' — почты нет.
         first_name:
           type: string
-          description: Имя без фамилии; '' — имени нет (тогда name — полный телефон).
+          description: Имя без фамилии; '' — имени нет (тогда name — «Пользователь»).
         is_owner:
           type: boolean
           description: Пользователь владеет хотя бы одним объектом области чтения.

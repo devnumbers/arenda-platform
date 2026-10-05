@@ -54,10 +54,11 @@ test('страница участника: шапка, чип агрегата, 
   await captureScreen(page, testInfo, 'participant-page');
 });
 
-test('безымянный участник: телефон — заголовок шапки, почта подзаголовком (карта #1105); сид восстанавливается', async ({ page, seededUser }, testInfo) => {
+test('безымянный участник: «Пользователь» — заголовок шапки, почта подзаголовком (карта #1105, аменд #1123); сид восстанавливается', async ({ page, seededUser }, testInfo) => {
   // Тот же канон карты #1105, что и в ряду списка: display_name
-  // безымянного собирает бекенд (#1106) — полный телефон. Телефон
-  // сидится плейнтекстом при phone_encrypted = false. Идентификаторы
+  // безымянного собирает бекенд (#1106) — «Пользователь» (аменд #1123:
+  // телефон больше не фолбэк). Телефон сидится плейнтекстом при
+  // phone_encrypted = false. Идентификаторы
   // свои (не из participants-list.spec.ts): утечка строки одного теста
   // не должна подменять данные другого (ON CONFLICT (id) DO NOTHING).
   const NAMELESS_ID = '16111111-1111-4111-8111-111111111162';
@@ -76,11 +77,13 @@ test('безымянный участник: телефон — заголово
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto(`/participants/${NAMELESS_ID}`);
 
-    // Шапка (2008-81468): имени нет — телефон H1, почта подзаголовком
-    // (не прячется), чип агрегата — «Доступно 1 объект» (активна 1 из 3).
-    await expect(page.getByRole('heading', { name: NAMELESS_PHONE })).toBeVisible();
+    // Шапка (2008-81468): имени нет — «Пользователь» H1, почта
+    // подзаголовком (не прячется), чип агрегата — «Доступно 1 объект»
+    // (активна 1 из 3).
+    await expect(page.getByRole('heading', { name: 'Пользователь' })).toBeVisible();
     await expect(page.getByText(NAMELESS_EMAIL)).toBeVisible();
     await expect(page.getByText('Доступно 1 объект')).toBeVisible();
+    await expect(page.getByText(NAMELESS_PHONE)).toHaveCount(0);
     await expect(page.getByText(/\*{3}/)).toHaveCount(0);
 
     await captureScreen(page, testInfo, 'participant-page-nameless');

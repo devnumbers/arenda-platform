@@ -37,8 +37,8 @@ type FeedEntry struct {
 // exited actors stay filterable because their rows survive. The chip shows
 // the live display name and email: UI metadata, not a row fact. FirstName
 // is the name without the surname (the «(Вы)» row, макет 2067-163528) and
-// stays empty when the user has no name — Name is the full phone then
-// (карта #1105);
+// stays empty when the user has no name — Name is the anonymous label
+// «Пользователь» then (карта #1105, аменд #1123);
 // IsOwner marks the owner of at least one object of the scope — the
 // owner-lock icon. Role is the widest access in the scope ('owner' /
 // 'full_access' / 'viewer', the row role icon, макет 2184-94261): the live

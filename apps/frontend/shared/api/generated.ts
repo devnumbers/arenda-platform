@@ -2747,7 +2747,7 @@ export interface components {
              * @enum {string}
              */
             role: "owner" | "full_access" | "viewer";
-            /** @description Owner display name ("Name Surname" or the full phone, never email). Present when the actor is not the owner: in the detail response and on the list rows (main and archive) — the shared card shows whose object it is. Own rows carry none. */
+            /** @description Owner display name ("Name Surname" or «Пользователь», never a phone or an email — карта #1105, аменд #1123). Present when the actor is not the owner: in the detail response and on the list rows (main and archive) — the shared card shows whose object it is. Own rows carry none. */
             owner_name?: string;
             /** @description Owner's account email for the detail's owner contact row — a deliberate exposure on this surface (Figma 2200-97365), the same posture as SuspendedShared.owner_email. Present in the detail response only when the actor is not the owner; empty when the owner has no email or the resolution failed. */
             owner_email?: string;
@@ -3283,7 +3283,7 @@ export interface components {
             email?: string | null;
             role: components["schemas"]["PropertyAccessMemberRole"];
             is_owner: boolean;
-            /** @description Participant display name (name and surname, or the full phone). Never an email. */
+            /** @description Participant display name (name and surname, or the anonymous label «Пользователь» — карта #1105, аменд #1123). Never a phone, never an email. */
             display_name?: string;
             /**
              * @description Membership lifecycle status. "suspended" means the recipient's tariff slot was exceeded, so the object is hidden from the recipient's list and grants no access until a slot frees up. "pending" is an email invitation waiting for the invitee to register.
@@ -3338,7 +3338,7 @@ export interface components {
              * @description The invitee email of a pending row; for a registered user, their email resolved for display (null when the user has none).
              */
             email?: string | null;
-            /** @description The person's display name (name and surname, or the full phone); null for a pending row (the email is the label). */
+            /** @description The person's display name (name and surname, or the anonymous label «Пользователь» — карта #1105, аменд #1123); null for a pending row (the email is the label). */
             display_name?: string | null;
             /**
              * @description The aggregate badge (issue #693): "all_properties" — active access to every property in the reading scope; "partial" — active access to accessible_properties_count of them; "limit_exceeded" — at least one suspended membership (the recipient's tariff limit was hit). Display copy: «Доступ ко всем объектам» / «Доступно N объектов» / «Превышен лимит объектов».
@@ -3435,7 +3435,7 @@ export interface components {
             name: string;
             /** @description The object's address — the blurred card renders it. */
             address: string;
-            /** @description The owner's public display name («Имя Фамилия» or the full phone). */
+            /** @description The owner's public display name («Имя Фамилия» or the anonymous label «Пользователь» — карта #1105, аменд #1123). */
             owner_name: string;
             /** @description The owner's account email for the reason sheet's contact row — a deliberate exposure for this surface (Figma 2229-100002): the recipient needs the contact to resolve the suspension with the owner. Empty when the owner has no email. */
             owner_email: string;
@@ -3697,7 +3697,7 @@ export interface components {
         };
         /**
          * @description Участник-вариант фильтра. name — канон отображаемого имени платформы
-         *     («Имя Фамилия», иначе полный телефон — карта #1105); email — текущая
+         *     («Имя Фамилия», иначе «Пользователь» — карта #1105, аменд #1123); email — текущая
          *     почта пользователя; first_name — имя без фамилии для строки «(Вы)»;
          *     is_owner — замок владельца объектов (макет 2067-163528); role —
          *     иконка роли строки (макет 2184-94261): максимальный доступ в области,
@@ -3709,7 +3709,7 @@ export interface components {
             name: string;
             /** @description Текущая почта; '' — почты нет. */
             email: string;
-            /** @description Имя без фамилии; '' — имени нет (тогда name — полный телефон). */
+            /** @description Имя без фамилии; '' — имени нет (тогда name — «Пользователь»). */
             first_name: string;
             /** @description Пользователь владеет хотя бы одним объектом области чтения. */
             is_owner: boolean;

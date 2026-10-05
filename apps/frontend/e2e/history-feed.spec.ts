@@ -408,11 +408,12 @@ test('свой актор подписан «(Вы)»: в ленте и на п�
   await expect(page.getByRole('heading', { name: 'Иван Иванов (Вы)' })).toHaveCount(0);
 });
 
-test('безымянный актёр: полный телефон в шапке группы (карта #1105); старый снимок с маской не перезаписывается (Q6=А)', async ({ page, seededUser }) => {
+test('безымянный актёр: «Пользователь» в шапке группы (карта #1105, аменд #1123); старый снимок с маской не перезаписывается (Q6=А)', async ({ page, seededUser }) => {
   await execE2eSql('DELETE FROM action_journal;');
 
   // Зарегистрированный юзер без имени: канон карты #1105 («Имя Фамилия»,
-  // иначе полный телефон) собирает бекенд одним швом display_name (#1106).
+  // иначе «Пользователь» — аменд #1123, телефон больше не фолбэк)
+  // собирает бекенд одним швом display_name (#1106).
   // Телефон сидится плейнтекстом при phone_encrypted = false —
   // decryptPhone читает как есть, шифрование нужно только логину.
   const NAMELESS_ID = '16111111-1111-4111-8111-111111111171';
@@ -427,7 +428,7 @@ test('безымянный актёр: полный телефон в шапке
     // Две строки журнала безымянного вокруг строки владельца — две серии
     // (вернувшийся актёр открывает новую серию, шапка несёт имя первой
     // строки серии): СТАРЫЙ снимок с маской maskPhone (как писалось до
-    // #1106) и НОВЫЙ — полный телефон (как пишет рекордер после #1106).
+    // #1106) и НОВЫЙ — «Пользователь» (как пишет рекордер после #1123).
     // Старые снимки журнал не перезаписывает (решение Q6=А, 2026-10-05):
     // лента отображает снимок строки как есть.
     await seedJournalEntry(
@@ -441,7 +442,7 @@ test('безымянный актёр: полный телефон в шапке
     await seedJournalEntry(
       memberTaskEntry('a0000000-0000-4000-8000-000000000043', 1, {
         actorIdSql: `(SELECT id FROM users WHERE email = '${NAMELESS_EMAIL}')`,
-        actorName: NAMELESS_PHONE,
+        actorName: 'Пользователь',
       }),
       seededUser,
     );
@@ -449,14 +450,14 @@ test('безымянный актёр: полный телефон в шапке
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto('/history');
 
-    // Старый снимок — маска как есть (журнал историчен), новый — полный
-    // телефон; шапка безымянного без суффикса «(Вы)» (актёр чужой).
+    // Старый снимок — маска как есть (журнал историчен), новый —
+    // «Пользователь»; шапка безымянного без суффикса «(Вы)» (актёр чужой).
     await expect(page.getByRole('heading', { name: '+7********27', exact: true })).toBeVisible();
-    await expect(page.getByRole('heading', { name: NAMELESS_PHONE, exact: true })).toBeVisible();
-    await expect(page.getByRole('heading', { name: `${NAMELESS_PHONE} (Вы)` })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Пользователь', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Пользователь (Вы)' })).toHaveCount(0);
     // Шапка с actor_id кликабельна в «Действия участника» (#712) —
-    // телефон-титул ничего не ломает.
-    await expect(page.getByRole('link', { name: NAMELESS_PHONE }).first()).toHaveAttribute(
+    // безымянный титул ничего не ломает.
+    await expect(page.getByRole('link', { name: 'Пользователь' }).first()).toHaveAttribute(
       'href',
       new RegExp(`/history/participants/${NAMELESS_ID}`),
     );

@@ -118,11 +118,12 @@ test('кебаб: трио пунктов по макету 2008-47514, «Ист
   await page.waitForURL('**/history');
 });
 
-test('безымянный участник: полный телефон в титуле ряда, почта подзаголовком (карта #1105); сид восстанавливается', async ({ page, seededUser }, testInfo) => {
+test('безымянный участник: «Пользователь» в титуле ряда, почта подзаголовком (карта #1105, аменд #1123); сид восстанавливается', async ({ page, seededUser }, testInfo) => {
   // Зарегистрированный юзер без имени: display_name собирает бекенд по
-  // канону карты #1105 — полный телефон вместо маски «+7***» (#1106).
-  // Телефон сидится плейнтекстом при phone_encrypted = false —
-  // decryptPhone читает как есть, шифрование нужно только логину.
+  // канону карты #1105 — «Пользователь» вместо маски «+7***» (#1106);
+  // аменд #1123: телефон больше не фолбэк. Телефон сидится плейнтекстом
+  // при phone_encrypted = false — decryptPhone читает как есть,
+  // шифрование нужно только логину.
   const NAMELESS_ID = '16111111-1111-4111-8111-111111111161';
   const NAMELESS_MEMBER_ID = '99999999-9999-4999-8999-999999999961';
   const NAMELESS_PHONE = '+79137654321';
@@ -139,13 +140,13 @@ test('безымянный участник: полный телефон в ти
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto('/participants/list');
 
-    // Титул ряда — полный телефон, почта — подзаголовком под ним.
-    // Доступное имя ряда — титул + подзаголовок разом, матч регуляркой;
-    // ведущий «+» в регэксп не нужен (в регэкспе это квантификатор).
-    const namelessRow = page.getByRole('button', { name: new RegExp(NAMELESS_PHONE.slice(1)) });
+    // Титул ряда — «Пользователь», почта — подзаголовком под ним; безымянный
+    // в списке один — ряд уникален по титулу.
+    const namelessRow = page.getByRole('button', { name: 'Пользователь' });
     await expect(namelessRow).toBeVisible();
     await expect(namelessRow.getByText(NAMELESS_EMAIL)).toBeVisible();
-    // Маски в списке нет ни в каком виде.
+    // Телефона в ряду нет (аменд #1123), маски в списке нет ни в каком виде.
+    await expect(namelessRow.getByText(NAMELESS_PHONE)).toHaveCount(0);
     await expect(page.getByText(/\*{3}/)).toHaveCount(0);
 
     await captureScreen(page, testInfo, 'participants-list-nameless');

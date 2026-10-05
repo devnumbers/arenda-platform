@@ -48,12 +48,13 @@ describe('participantRowTitle / participantRowSubtitle', () => {
     expect(participantRowSubtitle(p)).toBeUndefined();
   });
 
-  it('у зарегистрированного без имени титул — полный телефон, почта подзаголовком (канон #1105)', () => {
-    // display_name безымянного собирает бекенд (#1106): «Имя Фамилия»,
-    // иначе полный телефон — маски на поверхности больше не бывает.
-    const p = participant({ displayName: '+79131234567' });
+  it('у зарегистрированного без имени титул — «Пользователь», почта подзаголовком (канон #1105, аменд #1123)', () => {
+    // display_name безымянного собирает бекенд (#1106, аменд #1123):
+    // «Имя Фамилия», иначе «Пользователь» — телефон и маски на
+    // поверхности не бывают.
+    const p = participant({ displayName: 'Пользователь' });
 
-    expect(participantRowTitle(p)).toBe('+79131234567');
+    expect(participantRowTitle(p)).toBe('Пользователь');
     expect(participantRowSubtitle(p)).toBe('maria@example.com');
   });
 

@@ -118,10 +118,11 @@ test('блюр-карточка подвесшего объекта и шит п
   }
 });
 
-test('блюр-карточка и шит причины безымянного владельца: полный телефон (карта #1105, #1109)', async ({ page, seededUser }, testInfo) => {
+test('блюр-карточка и шит причины безымянного владельца: «Пользователь» (карта #1105, аменд #1123, #1109)', async ({ page, seededUser }, testInfo) => {
   // Owner-строка suspended-плейсхолдера собирается shared_list_enricher'ом
-  // через DisplayNameOf — канон карты #1105: «Имя Фамилия», иначе полный
-  // телефон (#1106); почта в шите — сознательная экспозиция. Сид
+  // через DisplayNameOf — канон карты #1105: «Имя Фамилия», иначе
+  // «Пользователь» (#1106, аменд #1123); почта в шите — сознательная
+  // экспозиция. Сид
   // инлайновый (workers=1) со своими id — утечка строки не подменяет данные
   // теста Марии выше.
   const NAMELESS_OWNER_ID = '15111111-1111-4111-8111-111111111153';
@@ -144,12 +145,14 @@ test('блюр-карточка и шит причины безымянного 
     await openHub(page, seededUser);
 
     const blurCard = page.getByTestId('suspended-property-card');
-    await expect(blurCard.getByTestId('property-owner').getByText(NAMELESS_PHONE)).toBeVisible();
+    await expect(blurCard.getByTestId('property-owner').getByText('Пользователь')).toBeVisible();
 
     await blurCard.click();
     const sheet = page.getByTestId('suspended-reason-sheet');
-    await expect(sheet.getByText(NAMELESS_PHONE)).toBeVisible();
+    await expect(sheet.getByText('Пользователь')).toBeVisible();
     await expect(sheet.getByText(NAMELESS_EMAIL)).toBeVisible();
+    // Телефона ни в карточке, ни в шите нет (аменд #1123).
+    await expect(sheet.getByText(NAMELESS_PHONE)).toHaveCount(0);
     // Масок нет нигде — ни в карточке, ни в шите.
     await expect(page.getByText(/\*{3}/)).toHaveCount(0);
 

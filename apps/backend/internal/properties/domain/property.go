@@ -156,7 +156,8 @@ type Property struct {
 	// by the list reads alongside Occupancy; false when not computed.
 	HasOverdueOperations bool
 	// OwnerName is the public display name of the property owner ("Name
-	// Surname" or the full phone, never an email — карта #1105), filled when
+	// Surname" or «Пользователь», never a phone or an email — карта #1105,
+	// аменд #1123), filled when
 	// the actor is not the owner: by the detail read (issue T11) and by the
 	// list reads for shared rows (owner decision on the #756 walkthrough
 	// fixes); empty otherwise.

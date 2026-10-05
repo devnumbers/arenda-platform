@@ -190,11 +190,12 @@ test('suspended-участник: warning-чип в ряду; сид восст�
   }
 });
 
-test('безымянный участник: полный телефон в титуле ряда, почта подзаголовком (карта #1105); сид восстанавливается', async ({ page, seededUser }) => {
+test('безымянный участник: «Пользователь» в титуле ряда, почта подзаголовком (карта #1105, аменд #1123); сид восстанавливается', async ({ page, seededUser }) => {
   // Зарегистрированный юзер без имени: display_name собирает бекенд по
-  // канону карты #1105 — полный телефон вместо маски «+7***» (#1106).
-  // Телефон сидится плейнтекстом при phone_encrypted = false —
-  // decryptPhone читает как есть, шифрование нужно только логину.
+  // канону карты #1105 — «Пользователь» вместо маски «+7***» (#1106);
+  // аменд #1123: телефон больше не фолбэк. Телефон сидится плейнтекстом
+  // при phone_encrypted = false — decryptPhone читает как есть,
+  // шифрование нужно только логину.
   const NAMELESS_ID = '15111111-1111-4111-8111-111111111151';
   const NAMELESS_MEMBER_ID = '99999999-9999-4999-8999-999999999951';
   const NAMELESS_PHONE = '+79131234567';
@@ -211,13 +212,13 @@ test('безымянный участник: полный телефон в ти
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto(`/properties/${APARTMENT_ID}/participants`);
 
-    // Титул ряда — полный телефон, почта — подзаголовком под ним.
-    // Доступное имя ряда — титул + подзаголовок разом, матч регуляркой;
-    // ведущий «+» в регэксп не нужен (в регэкспе это квантификатор).
-    const namelessRow = page.getByRole('button', { name: new RegExp(NAMELESS_PHONE.slice(1)) });
+    // Титул ряда — «Пользователь», почта — подзаголовком под ним; безымянный
+    // в списке один — ряд уникален по титулу.
+    const namelessRow = page.getByRole('button', { name: 'Пользователь' });
     await expect(namelessRow).toBeVisible();
     await expect(namelessRow.getByText(NAMELESS_EMAIL)).toBeVisible();
-    // Маски в ряду нет ни в каком виде.
+    // Телефона в ряду нет (аменд #1123), маски в ряду нет ни в каком виде.
+    await expect(namelessRow.getByText(NAMELESS_PHONE)).toHaveCount(0);
     await expect(page.getByText(/\*{3}/)).toHaveCount(0);
   } finally {
     await execE2eSql(

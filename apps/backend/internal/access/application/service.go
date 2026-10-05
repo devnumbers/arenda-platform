@@ -28,8 +28,8 @@ const (
 )
 
 // userLabel resolves the row-text label of a participant: the display name
-// (the display canon — «Name Surname», иначе полный телефон, никогда email;
-// карта #1105: ничего не прячем звёздочками). Loud on failure: a broken
+// (the display canon — «Name Surname», иначе «Пользователь», никогда телефон
+// и email; карта #1105, аменд #1123). Loud on failure: a broken
 // lookup is a database trouble, not a missing label.
 func userLabel(ctx context.Context, users UserLookup, userID uuid.UUID) (string, error) {
 	return lookupLabel(ctx, users, userID, "resolve history member label")
@@ -835,9 +835,10 @@ func toSharedRole(r domain.Role) sharedpolicy.Role {
 }
 
 // DisplayName resolves the public display name of a user (issue T11): "Name
-// Surname" when present, otherwise the full phone (карта #1105: ничего не
-// прячем звёздочками) — never an email. Used cross-context (the properties
-// sharing banner) via the OwnerDisplayNameResolver port.
+// Surname" when present, otherwise the anonymous label «Пользователь» (карта
+// #1105, аменд #1123: телефон больше не фолбэк) — never a phone, never an
+// email. Used cross-context (the properties sharing banner) via the
+// OwnerDisplayNameResolver port.
 func (s *AccessService) DisplayName(ctx context.Context, userID uuid.UUID) (string, error) {
 	return lookupLabel(ctx, s.users, userID, "lookup user")
 }
@@ -854,6 +855,11 @@ func lookupLabel(ctx context.Context, users UserLookup, userID uuid.UUID, wrapTe
 	return displayName(u), nil
 }
 
+// anonymousDisplayName is the display-canon fallback for a user with no
+// name (карта #1105, аменд #1123): the anonymous label «Пользователь» —
+// never a phone, never an email.
+const anonymousDisplayName = "Пользователь"
+
 func displayName(u MemberUser) string {
 	parts := make([]string, 0, 2)
 	if u.Name != nil && *u.Name != "" {
@@ -865,13 +871,13 @@ func displayName(u MemberUser) string {
 	if name := strings.Join(parts, " "); name != "" {
 		return name
 	}
-	// Fall back to the full phone (карта #1105); never an email.
-	return u.Phone
+	return anonymousDisplayName
 }
 
 // DisplayNameOf composes the public display name from user fields ("Name
-// Surname" when present, otherwise the full phone — never an email; карта
-// #1105). The exported seam for the context's read adapters implementing
+// Surname" when present, otherwise the anonymous label «Пользователь» — never
+// a phone, never an email; карта #1105, аменд #1123). The exported seam for
+// the context's read adapters implementing
 // cross-context ports (ticket #702: the list cards' member names and the
 // suspended placeholders' owner row): the display-name rules live in one
 // place.
