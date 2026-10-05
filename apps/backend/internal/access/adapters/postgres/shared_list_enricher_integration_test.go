@@ -122,3 +122,34 @@ func TestSharedListEnricher_SuspendedWith(t *testing.T) {
 		t.Errorf("SuspendedWith = %v, want %v", got, want)
 	}
 }
+
+// TestSharedListEnricher_SuspendedWithPhoneOnlyOwner pins the owner row's
+// display canon on the blur cards (карта #1105, тикет #1109): an owner
+// without a name projects the FULL phone through DisplayNameOf — the same
+// canon the sharing banner rides via OwnerDisplayNameResolver.
+func TestSharedListEnricher_SuspendedWithPhoneOnlyOwner(t *testing.T) {
+	t.Parallel()
+	f := newAccessLifecycleFixture(t)
+
+	recipient := createAccessTestUser(t, f.bg(), f.q)
+	owner := createAccessTestUser(t, f.bg(), f.q)
+
+	prop := f.addProperty(t, owner, "Хата без имени")
+	f.addMember(t, prop, recipient, "viewer", "suspended")
+
+	enricher := NewSharedListEnricher(f.tx, f.userRepo)
+	got, err := enricher.SuspendedWith(f.bg(), recipient)
+	if err != nil {
+		t.Fatalf("SuspendedWith: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("SuspendedWith = %d cards, want 1", len(got))
+	}
+	ownerRow, err := f.q.GetUserByID(f.bg(), pgUUID(owner))
+	if err != nil {
+		t.Fatalf("read owner: %v", err)
+	}
+	if got[0].OwnerName != ownerRow.Phone {
+		t.Errorf("phone-only owner OwnerName = %q, want full phone %q", got[0].OwnerName, ownerRow.Phone)
+	}
+}

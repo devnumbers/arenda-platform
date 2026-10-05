@@ -28,6 +28,16 @@ describe('cardOwnerName', () => {
     expect(cardOwnerName(property)).toBe('Иван Иванов');
   });
 
+  it('владелец безымянный — полный телефон проходит как есть (карта #1105, #1109)', () => {
+    // Канон строит бекенд (Имя Фамилия, иначе полный телефон); фронт не
+    // пере-маскирует — ряд карточки несёт строку шва как есть.
+    const property: Property = {
+      ...base,
+      access: { role: 'viewer', ownerName: '+79131234567' },
+    };
+    expect(cardOwnerName(property)).toBe('+79131234567');
+  });
+
   it('чужой объект без обогащения — ряда нет', () => {
     const property: Property = {
       ...base,

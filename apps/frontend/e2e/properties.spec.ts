@@ -1,5 +1,6 @@
 import {
   captureScreen,
+  execE2eSql,
   expect,
   openCabinetWithSeededSession,
   SEEDED_APARTMENT_PROPERTY_ID,
@@ -88,6 +89,59 @@ test('секции детали: тап по контенту карточки �
   await expect(tasksSection).toBeVisible();
   await tasksSection.getByText('Задачи', { exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/properties/${SEEDED_APARTMENT_PROPERTY_ID}/tasks$`));
+});
+
+test('чужие карточки: ряд владельца — имя, у безымянного полный телефон (карта #1105, #1109)', async ({ page, seededUser }, testInfo) => {
+  // Ряд «чей объект» на чужих карточках с активным доступом строит бекенд
+  // по канону карты #1105 — «Имя Фамилия», иначе полный телефон (#1106,
+  // OwnerDisplayNameResolver → access.DisplayNameOf); фронт строку
+  // не пере-маскирует. Сид инлайновый (workers=1), восстанавливается.
+  const MARIA_PROPERTY_ID = '35555555-5555-4555-8555-555555555551';
+  const NAMELESS_PROPERTY_ID = '35555555-5555-4555-8555-555555555552';
+  const NAMELESS_ID = '15111111-1111-4111-8111-111111111152';
+  const NAMELESS_PHONE = '+79137654325';
+  const MARIA_MEMBER_ID = '99999999-9999-4999-8999-999999999971';
+  const NAMELESS_MEMBER_ID = '99999999-9999-4999-8999-999999999972';
+  await execE2eSql(
+    // Телефон безымянного сидится плейнтекстом при phone_encrypted = false
+    // (паттерн #1107): decryptPhone читает как есть.
+    `INSERT INTO users (id, phone, role, name, surname, email, phone_encrypted, timezone) ` +
+      `VALUES ('${NAMELESS_ID}', '${NAMELESS_PHONE}', 'owner', NULL, NULL, 'e2e-nameless-cards@example.com', FALSE, 'UTC') ` +
+      `ON CONFLICT (id) DO NOTHING; ` +
+      `INSERT INTO properties (id, owner_id, name, type, address, status) VALUES ` +
+      `('${MARIA_PROPERTY_ID}', '12111111-1111-4111-8111-111111111121', 'Офис у Марии', 'office', 'Москва, ул. Обручева, 9', 'active'), ` +
+      `('${NAMELESS_PROPERTY_ID}', '${NAMELESS_ID}', 'Хата без имени', 'house', 'Москва, ул. Анонимная, 8', 'active') ` +
+      `ON CONFLICT (id) DO NOTHING; ` +
+      `INSERT INTO property_members (id, property_id, user_id, role, granted_by) VALUES ` +
+      `('${MARIA_MEMBER_ID}', '${MARIA_PROPERTY_ID}', '11111111-1111-4111-8111-111111111111', 'viewer', '12111111-1111-4111-8111-111111111121'), ` +
+      `('${NAMELESS_MEMBER_ID}', '${NAMELESS_PROPERTY_ID}', '11111111-1111-4111-8111-111111111111', 'full_access', '${NAMELESS_ID}') ` +
+      `ON CONFLICT (property_id, user_id) WHERE status = 'active' DO NOTHING`,
+  );
+  try {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto('/properties');
+
+    const officeCard = page
+      .locator('li')
+      .filter({ has: page.getByRole('heading', { name: 'Офис у Марии' }) });
+    await expect(officeCard.getByTestId('property-owner').getByText('Мария Петрова')).toBeVisible();
+
+    const namelessCard = page
+      .locator('li')
+      .filter({ has: page.getByRole('heading', { name: 'Хата без имени' }) });
+    await expect(namelessCard.getByTestId('property-owner').getByText(NAMELESS_PHONE)).toBeVisible();
+
+    // Масок нет ни на одной карточке хаба.
+    await expect(page.getByText(/\*{3}/)).toHaveCount(0);
+
+    await captureScreen(page, testInfo, '1109-foreign-cards-owner-row');
+  } finally {
+    await execE2eSql(
+      `DELETE FROM property_members WHERE id IN ('${MARIA_MEMBER_ID}', '${NAMELESS_MEMBER_ID}'); ` +
+        `DELETE FROM properties WHERE id IN ('${MARIA_PROPERTY_ID}', '${NAMELESS_PROPERTY_ID}'); ` +
+        `DELETE FROM users WHERE id = '${NAMELESS_ID}'`,
+    );
+  }
 });
 
 test('без подписки (404 /subscription): кнопки создания живые, ведут на смену тарифа #768', async ({ page, seededUser }) => {
