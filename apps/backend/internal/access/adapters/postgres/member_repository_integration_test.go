@@ -192,6 +192,12 @@ func TestMembershipRepository_DuplicateUnique(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected duplicate (property, user) violation, got nil")
 	}
+	// Гонка exists-check/insert двух параллельных грантов (#1122): raw
+	// unique-нарушение должно приходить доменным сентинелом, иначе
+	// batch-грант отвечает 500 вместо skipped_duplicate.
+	if !errors.Is(err, domain.ErrMemberAlreadyExists) {
+		t.Fatalf("duplicate Create: expected ErrMemberAlreadyExists, got %v", err)
+	}
 }
 
 func TestMembershipRepository_UpdateRoleAndDelete(t *testing.T) {
