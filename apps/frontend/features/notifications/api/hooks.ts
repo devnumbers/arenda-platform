@@ -3,13 +3,13 @@
 import {
   keepPreviousData,
   useInfiniteQuery,
-  useMutation,
   useQuery,
   useQueryClient,
   type UseInfiniteQueryResult,
   type UseMutationResult,
   type UseQueryResult,
 } from '@tanstack/react-query';
+import { useGuardedMutation } from '@/shared/lib/hooks/use-guarded-mutation';
 import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
 import {
@@ -78,7 +78,7 @@ export function useNotificationDetail(id: string): UseQueryResult<NotificationDe
  * идемпотентно, #743): глушит точку строки и снижает счётчик. */
 export function useMarkNotificationRead(): UseMutationResult<void, ApiError, string> {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (id: string) => {
       await apiClient<void>(`/notifications/${id}/read`, { method: 'POST' });
     },
@@ -93,7 +93,7 @@ export function useMarkNotificationRead(): UseMutationResult<void, ApiError, str
  * (2329-148575). */
 export function useMarkAllNotificationsRead(): UseMutationResult<void, ApiError, void> {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async () => {
       await apiClient<void>('/notifications/read-all', { method: 'POST' });
     },
@@ -106,7 +106,7 @@ export function useMarkAllNotificationsRead(): UseMutationResult<void, ApiError,
 /** Удаление одного уведомления (DELETE /notifications/{id}, мягкое, #743). */
 export function useDeleteNotification(): UseMutationResult<void, ApiError, string> {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (id: string) => {
       await apiClient<void>(`/notifications/${id}`, { method: 'DELETE' });
     },
@@ -120,7 +120,7 @@ export function useDeleteNotification(): UseMutationResult<void, ApiError, strin
  * ленту читателя; подтверждение — на экране (шит 2329-152107). */
 export function useDeleteAllNotifications(): UseMutationResult<void, ApiError, void> {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async () => {
       await apiClient<void>('/notifications', { method: 'DELETE' });
     },
@@ -161,7 +161,7 @@ export function useUpdateEmailPreferences(): UseMutationResult<
 > {
   const queryClient = useQueryClient();
   const queryKey = notificationKeys.emailPreferences();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (email: NotificationCategoryPreferences) => {
       const body: PreferencesRequestDto = { email };
       const response = await apiClient<PreferencesDto>('/notification-preferences', {

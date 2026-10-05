@@ -1,13 +1,13 @@
 'use client';
 
 import {
-    useMutation,
     useQuery,
     useQueryClient,
     type QueryClient,
     type UseMutationResult,
     type UseQueryResult,
 } from '@tanstack/react-query';
+import { useGuardedMutation } from '@/shared/lib/hooks/use-guarded-mutation';
 import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
 import { mapPropertyAccessMemberResponse } from '@/entities/access';
@@ -64,7 +64,7 @@ export function useUpdatePropertyAccessInvitation(
     { invitationId: string } & ChangeMemberRoleInput
 > {
     const queryClient = useQueryClient();
-    return useMutation({
+    return useGuardedMutation({
         mutationFn: async (data) => {
             const body: PropertyAccessMemberUpdateRequest = { role: data.role };
             const response = await apiClient<PropertyAccessMemberResponse>(
@@ -81,7 +81,7 @@ export function useCancelPropertyAccessInvitation(
     propertyId: string,
 ): UseMutationResult<void, ApiError, string> {
     const queryClient = useQueryClient();
-    return useMutation({
+    return useGuardedMutation({
         mutationFn: async (invitationId: string) => {
             await apiClient<void>(
                 `/properties/${propertyId}/access/invitations/${invitationId}`,
@@ -100,7 +100,7 @@ export function useUpdatePropertyAccessMember(
     { memberId: string } & ChangeMemberRoleInput
 > {
     const queryClient = useQueryClient();
-    return useMutation({
+    return useGuardedMutation({
         mutationFn: async (data) => {
             const body: PropertyAccessMemberUpdateRequest = { role: data.role };
             const response = await apiClient<PropertyAccessMemberResponse>(
@@ -117,7 +117,7 @@ export function useDeletePropertyAccessMember(
     propertyId: string,
 ): UseMutationResult<void, ApiError, string> {
     const queryClient = useQueryClient();
-    return useMutation({
+    return useGuardedMutation({
         mutationFn: async (memberId: string) => {
             await apiClient<void>(
                 `/properties/${propertyId}/access/members/${memberId}`,
@@ -158,7 +158,7 @@ export function useRevokeAllPropertyAccessMembers(
     ReadonlyArray<PropertyAccessMemberRef>
 > {
     const queryClient = useQueryClient();
-    return useMutation({
+    return useGuardedMutation({
         mutationFn: async (members) => {
             const results = await Promise.allSettled(
                 members.map((member) =>

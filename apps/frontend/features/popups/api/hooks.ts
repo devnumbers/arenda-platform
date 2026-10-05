@@ -1,12 +1,12 @@
 'use client';
 
 import {
-  useMutation,
   useQuery,
   useQueryClient,
   type UseMutationResult,
   type UseQueryResult,
 } from '@tanstack/react-query';
+import { useGuardedMutation } from '@/shared/lib/hooks/use-guarded-mutation';
 import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
 import type { components } from '@/shared/api/dto';
@@ -37,7 +37,7 @@ export function usePendingPopups(): UseQueryResult<PopupKey[], ApiError> {
 
 export function useMarkPopupSeen(): UseMutationResult<void, ApiError, PopupKey> {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: (popupKey) =>
       apiClient<void>(`/popups/${popupKey}/seen`, { method: 'POST' }),
     onSuccess: (_, popupKey) => {

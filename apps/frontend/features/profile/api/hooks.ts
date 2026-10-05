@@ -1,12 +1,12 @@
 'use client';
 
 import {
-  useMutation,
   useQuery,
   useQueryClient,
   type UseMutationResult,
   type UseQueryResult,
 } from '@tanstack/react-query';
+import { useGuardedMutation } from '@/shared/lib/hooks/use-guarded-mutation';
 import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
 import { authKeys } from '@/shared/api/query-keys';
@@ -43,7 +43,7 @@ export function useSessions(): UseQueryResult<ActiveSession[], ApiError> {
  * текущая завершается выходом на хабе, не ревокацией. */
 export function useRevokeSession(): UseMutationResult<void, ApiError, string> {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (sessionId: string) => {
       await apiClient<void>(`/me/sessions/${sessionId}`, { method: 'DELETE' });
     },
@@ -57,7 +57,7 @@ export function useRevokeSession(): UseMutationResult<void, ApiError, string> {
  * текущая сессия остаётся живой. */
 export function useLogoutOtherSessions(): UseMutationResult<void, ApiError, void> {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async () => {
       await apiClient<void>('/me/sessions/logout-others', { method: 'POST' });
     },
@@ -73,7 +73,7 @@ export function useUpdateMe(): UseMutationResult<
   UserUpdateCommand
 > {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (data: UserUpdateCommand) => {
       const res = await apiClient<Parameters<typeof mapMeResponse>[0]>('/me', {
         method: 'PATCH',
@@ -93,7 +93,7 @@ export function useChangePhoneSendCode(): UseMutationResult<
   ApiError,
   SendPhoneChangeCodeCommand
 > {
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async ({ phone }: SendPhoneChangeCodeCommand) => {
       await apiClient<void>('/me/phone/send-code', {
         method: 'POST',
@@ -109,7 +109,7 @@ export function useChangePhone(): UseMutationResult<
   ChangePhoneCommand
 > {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async ({ phone, code }: ChangePhoneCommand) => {
       const res = await apiClient<Parameters<typeof mapMeResponse>[0]>(
         '/me/phone/change',
@@ -133,7 +133,7 @@ export function useEmailChangeSendCode(): UseMutationResult<
   ApiError,
   void
 > {
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async () => {
       await apiClient<void>('/me/email/send-code', { method: 'POST' });
     },
@@ -147,7 +147,7 @@ export function useConfirmCurrentEmail(): UseMutationResult<
   ApiError,
   ConfirmCurrentEmailCommand
 > {
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async ({ newEmail, code }: ConfirmCurrentEmailCommand) => {
       const res = await apiClient<{ grant: string }>('/me/email/confirm-current', {
         method: 'POST',
@@ -166,7 +166,7 @@ export function useChangeEmail(): UseMutationResult<
   ChangeEmailCommand
 > {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async ({ grant, code }: ChangeEmailCommand) => {
       const res = await apiClient<Parameters<typeof mapMeResponse>[0]>(
         '/me/email/change',
@@ -191,7 +191,7 @@ export function useResendEmailCode(): UseMutationResult<
   ApiError,
   ResendEmailCodeCommand
 > {
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async ({ grant }: ResendEmailCodeCommand) => {
       await apiClient<void>('/me/email/resend-code', {
         method: 'POST',

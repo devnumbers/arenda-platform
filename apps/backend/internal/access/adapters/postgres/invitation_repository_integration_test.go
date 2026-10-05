@@ -139,6 +139,11 @@ func TestInvitationRepository_UniquePropertyEmail(t *testing.T) {
 		LastSentAt: time.Now().UTC(),
 	}); err == nil {
 		t.Error("duplicate (property, lower(email)) insert must fail")
+	} else if !errors.Is(err, domain.ErrInvitationAlreadyExists) {
+		// Гонка exists-check/insert двух параллельных инвайтов (#1122):
+		// без маппинга unique-нарушения домен получает сырую pg-ошибку,
+		// HTTP-слой — 500 вместо skipped_duplicate.
+		t.Errorf("duplicate insert: expected ErrInvitationAlreadyExists, got %v", err)
 	}
 }
 

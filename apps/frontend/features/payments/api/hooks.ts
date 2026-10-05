@@ -3,13 +3,13 @@
 import {
   keepPreviousData,
   useInfiniteQuery,
-  useMutation,
   useQuery,
   useQueryClient,
   type UseInfiniteQueryResult,
   type UseMutationResult,
   type UseQueryResult,
 } from '@tanstack/react-query';
+import { useGuardedMutation } from '@/shared/lib/hooks/use-guarded-mutation';
 import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
 import { mapGlobalPaymentSearch, mapPayment, mapPaymentOperation } from '@/entities/payment';
@@ -133,11 +133,16 @@ export function useCreatePayment(
   propertyId: string,
 ): UseMutationResult<Payment, ApiError, PaymentCreateCommand> {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (command: PaymentCreateCommand) => {
       const response = await apiClient<PaymentResponseDto>(
         `/properties/${encodeURIComponent(propertyId)}/payments`,
-        { method: 'POST', body: JSON.stringify(command) },
+        // Идемпотентный ключ (Т3 #1121): см. useCreateProperty.
+        {
+          method: 'POST',
+          headers: { 'Idempotency-Key': crypto.randomUUID() },
+          body: JSON.stringify(command),
+        },
       );
       return mapPayment(response);
     },
@@ -162,11 +167,16 @@ export function useCreateOperation(): UseMutationResult<
   { readonly propertyId: string; readonly command: OperationCreateCommand }
 > {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async ({ propertyId, command }) => {
       const response = await apiClient<OperationResponseDto>(
         `/properties/${encodeURIComponent(propertyId)}/operations`,
-        { method: 'POST', body: JSON.stringify(command) },
+        // Идемпотентный ключ (Т3 #1121): см. useCreateProperty.
+        {
+          method: 'POST',
+          headers: { 'Idempotency-Key': crypto.randomUUID() },
+          body: JSON.stringify(command),
+        },
       );
       return mapPaymentOperation(response);
     },
@@ -188,7 +198,7 @@ export function useUpdatePayment(
   paymentId: string,
 ): UseMutationResult<Payment, ApiError, PaymentUpdateCommand> {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (command: PaymentUpdateCommand) => {
       const response = await apiClient<PaymentResponseDto>(
         `/properties/${encodeURIComponent(propertyId)}/payments/${encodeURIComponent(paymentId)}`,
@@ -215,7 +225,7 @@ export function useDeletePayment(
   paymentId: string,
 ): UseMutationResult<void, ApiError, boolean> {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (keepOverdue: boolean) => {
       await apiClient<void>(
         `/properties/${encodeURIComponent(propertyId)}/payments/${encodeURIComponent(paymentId)}`
@@ -401,7 +411,7 @@ export function useSaveFavoritesOrder(): UseMutationResult<
   readonly string[]
 > {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (paymentIds: readonly string[]) => {
       await apiClient<void>('/payments/favorites/order', {
         method: 'PUT',
@@ -444,7 +454,7 @@ export function useGlobalOperationsSummary(
   propertyId: string,
 ): UseMutationResult<void, ApiError, string> {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (operationId: string) => {
       await apiClient<void>(
         `/properties/${encodeURIComponent(propertyId)}`
@@ -469,7 +479,7 @@ export function usePausePayment(
   paymentId: string,
 ): UseMutationResult<Payment, ApiError, void> {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async () => {
       const response = await apiClient<PaymentResponseDto>(
         `/properties/${encodeURIComponent(propertyId)}/payments/${encodeURIComponent(paymentId)}/pause`,
@@ -490,7 +500,7 @@ export function useResumePayment(
   paymentId: string,
 ): UseMutationResult<Payment, ApiError, void> {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async () => {
       const response = await apiClient<PaymentResponseDto>(
         `/properties/${encodeURIComponent(propertyId)}/payments/${encodeURIComponent(paymentId)}/resume`,
@@ -517,7 +527,7 @@ export function useSetPaymentFavorite(): UseMutationResult<
   { readonly propertyId: string; readonly paymentId: string; readonly favorite: boolean }
 > {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async ({ propertyId, paymentId, favorite }) => {
       const response = await apiClient<PaymentResponseDto>(
         `/properties/${encodeURIComponent(propertyId)}/payments/${encodeURIComponent(paymentId)}/favorite`,
@@ -562,7 +572,7 @@ export function usePayOperation(
   propertyId: string,
 ): UseMutationResult<PaymentOperation, ApiError, string> {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (operationId: string) => {
       const response = await apiClient<components['schemas']['OperationResponse']>(
         `/properties/${encodeURIComponent(propertyId)}`

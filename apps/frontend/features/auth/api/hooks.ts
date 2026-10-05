@@ -1,12 +1,12 @@
 'use client';
 
 import {
-  useMutation,
   useQuery,
   useQueryClient,
   type UseMutationResult,
   type UseQueryResult,
 } from '@tanstack/react-query';
+import { useGuardedMutation } from '@/shared/lib/hooks/use-guarded-mutation';
 import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
 import { authKeys } from '@/shared/api/query-keys';
@@ -30,7 +30,7 @@ export function useSendCode(): UseMutationResult<
   ApiError,
   SendCodeRequest
 > {
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: (data: SendCodeRequest) =>
       apiClient<SendCodeResponse>('/auth/send', {
         method: 'POST',
@@ -45,7 +45,7 @@ export function useVerifyCode(): UseMutationResult<
   VerifyCodeRequest
 > {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: (data: VerifyCodeRequest) =>
       apiClient<MeResponse>('/auth/verify', {
         method: 'POST',
@@ -59,7 +59,7 @@ export function useVerifyCode(): UseMutationResult<
 
 export function useLogout(): UseMutationResult<void, ApiError, void> {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: () => apiClient<void>('/auth/logout', { method: 'POST' }),
     onSuccess: () => {
       // Drop the whole cache so the next user in this browser session never

@@ -8,7 +8,8 @@ import { cn } from '@/shared/lib/cn';
  * Onest M/500 13/15 под ним; кликабельна вся колонка. Secondary — серый
  * круг #F3F4F6 («На паузу», «Возобновить», «Изменить»), Primary — синий
  * #2B7FFF с белой иконкой («Оплатить»). Focus-visible — как у Button,
- * только с клавиатуры.
+ * только с клавиатуры. loading глушит кнопку при любом явном disabled
+ * (disabled || loading, #1119) — канон ADR 0050 машинно.
  */
 
 const roundCircleVariants = cva(
@@ -52,7 +53,7 @@ export function RoundActionButton({
     <button
       type={type}
       aria-busy={loading || undefined}
-      disabled={disabled ?? loading}
+      disabled={disabled === true || loading}
       className={cn(
         'group/round inline-flex cursor-pointer flex-col items-center gap-2 outline-none',
         'focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface',

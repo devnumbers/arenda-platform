@@ -13,6 +13,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/pgerr"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -39,6 +40,18 @@ func (r *MembershipRepository) WithTx(tx transaction.Tx) application.MembershipR
 	return NewMembershipRepository(dbtx)
 }
 
+// mapMembershipUnique translates the partial unique index
+// property_members_active_property_user_uniq (active rows only) into the
+// domain sentinel: the exists-check in the application core races with a
+// parallel grant, so the violation must surface as ErrMemberAlreadyExists —
+// the batch grant answers skipped_duplicate, not a 500 (issue #1122).
+func mapMembershipUnique(err error) error {
+	if pgerr.IsUniqueViolationOnConstraint(err, "property_members_active_property_user_uniq") {
+		return domain.ErrMemberAlreadyExists
+	}
+	return err
+}
+
 // Create inserts a membership record and returns the created membership. The
 // row is created with the default 'active' status.
 func (r *MembershipRepository) Create(ctx context.Context, m domain.Membership) (domain.Membership, error) {
@@ -50,7 +63,7 @@ func (r *MembershipRepository) Create(ctx context.Context, m domain.Membership) 
 		GrantedBy:  pgconv.UUIDToPgtype(m.GrantedBy),
 	})
 	if err != nil {
-		return domain.Membership{}, err
+		return domain.Membership{}, mapMembershipUnique(err)
 	}
 	return membershipFromRow(row), nil
 }
@@ -71,7 +84,7 @@ func (r *MembershipRepository) CreateWithStatus(ctx context.Context, m domain.Me
 		Status:     status.String(),
 	})
 	if err != nil {
-		return domain.Membership{}, err
+		return domain.Membership{}, mapMembershipUnique(err)
 	}
 	return membershipFromRow(row), nil
 }

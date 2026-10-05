@@ -27,6 +27,7 @@ import (
 	platformgenerated "github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpserver"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/idempotency"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/sse"
 	realtimepg "github.com/nambers/arenda-planform/apps/backend/internal/realtime/adapters/postgres"
@@ -304,6 +305,10 @@ func run() error {
 
 	poolStats := newPoolStats(p.Cfg, p.Pool)
 
+	// 13a. Idempotency-Key storage на creation-роутах (тикет Т3 карты
+	//      #1112): последняя линия защиты POST-созданий от дублей.
+	idempotencyService := idempotency.NewService(p.Pool)
+
 	// 14. HTTP handler + server.
 	handler := httpserver.New(httpserver.Deps{
 		Auth:                     identityMod.Authentication,
@@ -362,6 +367,7 @@ func run() error {
 		PhoneChangeVerifyLimiter: limiters.PhoneChangeVerifyLimiter,
 		ClientErrorsLimiter:      limiters.ClientErrorsLimiter,
 		DBPoolStats:              poolStats,
+		Idempotency:              idempotencyService,
 		TrustedProxies:           p.Cfg.TrustedProxies,
 		AppVersion:               p.Cfg.AppVersion,
 	})

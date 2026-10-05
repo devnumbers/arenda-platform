@@ -1,12 +1,12 @@
 'use client';
 
 import {
-  useMutation,
   useQuery,
   useQueryClient,
   type UseMutationResult,
   type UseQueryResult,
 } from '@tanstack/react-query';
+import { useGuardedMutation } from '@/shared/lib/hooks/use-guarded-mutation';
 import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
 import { notificationKeys } from '@/shared/api/query-keys';
@@ -90,7 +90,7 @@ export function useCreatePushSubscription(): UseMutationResult<
   CreatePushSubscriptionVars
 > {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async ({ categories, ...payload }: CreatePushSubscriptionVars) => {
       const body: PushSubscriptionCreateRequest = {
         endpoint: payload.endpoint,
@@ -117,7 +117,7 @@ export function useDeletePushSubscription(): UseMutationResult<
   string
 > {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (endpoint: string) => {
       const body: PushSubscriptionDeleteRequest = { endpoint };
       await apiClient<void>('/push/subscriptions', {

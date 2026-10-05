@@ -2,12 +2,12 @@
 
 import {
   keepPreviousData,
-  useMutation,
   useQuery,
   useQueryClient,
   type UseMutationResult,
   type UseQueryResult,
 } from '@tanstack/react-query';
+import { useGuardedMutation } from '@/shared/lib/hooks/use-guarded-mutation';
 import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
 import { mapTask, mapTaskRule, mapTasksPage } from '@/entities/task';
@@ -70,7 +70,7 @@ export function useCompleteTask(
   propertyId: string,
 ): UseMutationResult<Task, ApiError, string> {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (taskId: string) => {
       const response = await apiClient<TaskResponseDto>(
         `/properties/${encodeURIComponent(propertyId)}`
@@ -93,7 +93,7 @@ export function useUncompleteTask(
   propertyId: string,
 ): UseMutationResult<Task, ApiError, string> {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (taskId: string) => {
       const response = await apiClient<TaskResponseDto>(
         `/properties/${encodeURIComponent(propertyId)}`
@@ -120,7 +120,7 @@ export function useCompleteAllTasks(
   propertyId: string,
 ): UseMutationResult<void, ApiError, readonly string[]> {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (taskIds: readonly string[]) => {
       await Promise.allSettled(
         taskIds.map((taskId) =>
@@ -149,7 +149,7 @@ export function useDeleteCompletedTasks(
   propertyId: string,
 ): UseMutationResult<void, ApiError, void> {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async () => {
       await apiClient<void>(
         `/properties/${encodeURIComponent(propertyId)}/tasks/completed`,
@@ -174,7 +174,7 @@ export function useDeleteCompletedTasks(
  */
 export function useCreateTaskRule(): UseMutationResult<void, ApiError, TaskCreateDraft> {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (draft: TaskCreateDraft) => {
       const request = buildTaskRuleCreateRequest(draft);
       if (request === null) {
@@ -183,6 +183,8 @@ export function useCreateTaskRule(): UseMutationResult<void, ApiError, TaskCreat
       }
       await apiClient<unknown>(taskRuleCreatePath(draft.propertyId), {
         method: 'POST',
+        // Идемпотентный ключ (Т3 #1121): см. useCreateProperty.
+        headers: { 'Idempotency-Key': crypto.randomUUID() },
         body: JSON.stringify(request),
       });
     },
@@ -295,7 +297,7 @@ export function useCompleteGlobalTask(
   action: 'complete' | 'uncomplete',
 ): UseMutationResult<Task, ApiError, Task> {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (task: Task) => {
       const response = await apiClient<TaskResponseDto>(
         taskCompletionPath(task, action),
@@ -324,7 +326,7 @@ export function useCompleteAllGlobalTasks(): UseMutationResult<
   readonly Task[]
 > {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (tasks: readonly Task[]) => {
       for (const task of tasks) {
         try {
@@ -355,7 +357,7 @@ export function useDeleteCompletedGlobalTasks(): UseMutationResult<
   void
 > {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async () => {
       await apiClient<void>('/tasks/completed', { method: 'DELETE' });
     },
@@ -377,7 +379,7 @@ export function useUpdateTaskRule(
   ruleId: string,
 ): UseMutationResult<void, ApiError, TaskRuleUpdateCommand> {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (command: TaskRuleUpdateCommand) => {
       await apiClient<unknown>(
         `/properties/${encodeURIComponent(propertyId)}/tasks/rules/${encodeURIComponent(ruleId)}`,
@@ -401,7 +403,7 @@ export function useUpdatePropertylessTaskRule(
   ruleId: string,
 ): UseMutationResult<void, ApiError, TaskRuleUpdateCommand> {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (command: TaskRuleUpdateCommand) => {
       await apiClient<unknown>(
         `/tasks/rules/${encodeURIComponent(ruleId)}`,

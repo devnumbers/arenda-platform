@@ -3,7 +3,6 @@
 import {
   keepPreviousData,
   useInfiniteQuery,
-  useMutation,
   useQuery,
   useQueryClient,
   type InfiniteData,
@@ -11,6 +10,7 @@ import {
   type UseMutationResult,
   type UseQueryResult,
 } from '@tanstack/react-query';
+import { useGuardedMutation } from '@/shared/lib/hooks/use-guarded-mutation';
 import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
 import { mapContact } from '@/entities/contact';
@@ -110,7 +110,7 @@ export function useCreateContact(): UseMutationResult<
   ContactCreateCommand
 > {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (command: ContactCreateCommand) => {
       const response = await apiClient<ContactResponse>('/contacts', {
         method: 'POST',
@@ -145,7 +145,7 @@ export function useUpdateContact(
   contactId: string,
 ): UseMutationResult<Contact, ApiError, ContactUpdateCommand> {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (command: ContactUpdateCommand) => {
       const response = await apiClient<ContactResponse>(
         `/contacts/${encodeURIComponent(contactId)}`,
@@ -169,7 +169,7 @@ export function useDeleteContact(
   contactId: string,
 ): UseMutationResult<void, ApiError, void> {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async () => {
       await apiClient<void>(`/contacts/${encodeURIComponent(contactId)}`, {
         method: 'DELETE',

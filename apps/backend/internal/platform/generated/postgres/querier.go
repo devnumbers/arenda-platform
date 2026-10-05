@@ -27,6 +27,7 @@ type Querier interface {
 	// прочие строки (включая уже отменённые) не трогаются — use case рапортует
 	// not-found: отменённая операция для всех чтений больше не существует.
 	CancelOperationByID(ctx context.Context, arg CancelOperationByIDParams) (int64, error)
+	CleanupExpiredIdempotencyKeys(ctx context.Context) (int64, error)
 	// The favorites order save's full-replacement pass (ticket #576): the
 	// visible favorites OUTSIDE the submitted list lose their positions —
 	// they fall to the end of the reading order («новое избранное — в конец»),
@@ -36,6 +37,7 @@ type Querier interface {
 	// Resume: close the open interval with today's date (the resume day is
 	// already outside the pause, [from, to)).
 	CloseActivePaymentPause(ctx context.Context, arg CloseActivePaymentPauseParams) (int64, error)
+	CompleteIdempotencyKey(ctx context.Context, arg CompleteIdempotencyKeyParams) error
 	// Завершение: the completion date and the optional deposit return land in
 	// one UPDATE. The one-unfinished-per-property index releases here; the
 	// caller has proven the rental unfinished inside the same transaction.
@@ -336,6 +338,7 @@ type Querier interface {
 	// configurable categories. A missing row is the all-on default — the caller
 	// falls back without inserting.
 	GetEmailPreferences(ctx context.Context, userID pgtype.UUID) (GetEmailPreferencesRow, error)
+	GetIdempotencyKey(ctx context.Context, arg GetIdempotencyKeyParams) (IdempotencyKey, error)
 	// GetLatestLoginCodeByPhoneAndEmailAndPurpose reads the newest non-expired unused
 	// login code for a (phone, email, purpose) tuple. It is served by the partial unique
 	// index idx_login_codes_unique_unused (phone, COALESCE(email, empty-string), purpose)
@@ -1260,6 +1263,10 @@ type Querier interface {
 	// outside (their rows are not cleared — ADR 0025).
 	RaiseTaskHistoryHorizonsOwnerBook(ctx context.Context, arg RaiseTaskHistoryHorizonsOwnerBookParams) error
 	ReactivatePropertyMember(ctx context.Context, arg ReactivatePropertyMemberParams) (PropertyMember, error)
+	// Идемпотентные ключи creations (тикет Т3 карты #1112): бронь ключа до
+	// исполнения хендлера закрывает гонку двух параллельных POST с одним
+	// ключом — второй получает сохранённый ответ или 409, но не второй 201.
+	ReserveIdempotencyKey(ctx context.Context, arg ReserveIdempotencyKeyParams) (IdempotencyKey, error)
 	// ResetLoginAttempt writes the absolute attempt-window state, used when the
 	// window is new or has expired (TTL reset) and the failure counter must be set
 	// to an absolute value rather than incremented.

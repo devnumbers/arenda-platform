@@ -13,6 +13,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/pgerr"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -40,7 +41,11 @@ func (r *InvitationRepository) WithTx(tx transaction.Tx) application.InvitationR
 	return NewInvitationRepository(dbtx)
 }
 
-// Create inserts a pending invitation and returns it.
+// Create inserts a pending invitation and returns it. The unique index on
+// (property_id, lower(email)) is the DB-level duplicate guard: the
+// exists-check in the application core races with a parallel invite, so the
+// violation maps to the domain sentinel here — the HTTP layer answers
+// skipped_duplicate, not a 500 (issue #1122).
 func (r *InvitationRepository) Create(ctx context.Context, inv domain.Invitation) (domain.Invitation, error) {
 	row, err := r.q().CreatePropertyMemberInvitation(ctx, postgres.CreatePropertyMemberInvitationParams{
 		ID:         pgconv.UUIDToPgtype(inv.ID),
@@ -51,6 +56,9 @@ func (r *InvitationRepository) Create(ctx context.Context, inv domain.Invitation
 		LastSentAt: pgtype.Timestamptz{Time: inv.LastSentAt.UTC(), Valid: true},
 	})
 	if err != nil {
+		if pgerr.IsUniqueViolationOnConstraint(err, "idx_property_member_invitations_property_email") {
+			return domain.Invitation{}, domain.ErrInvitationAlreadyExists
+		}
 		return domain.Invitation{}, err
 	}
 	return invitationFromRow(row), nil

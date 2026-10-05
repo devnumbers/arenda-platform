@@ -2,11 +2,11 @@
 
 import {
   useQuery,
-  useMutation,
   useQueryClient,
   type UseQueryResult,
   type UseMutationResult,
 } from '@tanstack/react-query';
+import { useGuardedMutation } from '@/shared/lib/hooks/use-guarded-mutation';
 import { apiClient } from '@/shared/api/client';
 import { nullOn404 } from '@/shared/api/null-on-404';
 import type { ApiError } from '@/shared/api/errors';
@@ -84,7 +84,7 @@ export function useToggleAutoRenew(): UseMutationResult<
 > {
   const queryClient = useQueryClient();
 
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async ({ enabled }: AutoRenewRequest) => {
       await apiClient<void>('/subscription/auto-renew', {
         method: 'PATCH',
@@ -104,7 +104,7 @@ export function useCancelSubscription(): UseMutationResult<
 > {
   const queryClient = useQueryClient();
 
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (request?: CancelSubscriptionRequest | void) => {
       await apiClient<void>('/subscription/cancel', {
         method: 'POST',
@@ -120,7 +120,7 @@ export function useCancelSubscription(): UseMutationResult<
 export function useResumeSubscription(): UseMutationResult<void, ApiError, void> {
   const queryClient = useQueryClient();
 
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async () => {
       await apiClient<void>('/subscription/resume', { method: 'POST' });
     },
@@ -137,7 +137,7 @@ export function useChangeTariff(): UseMutationResult<
 > {
   const queryClient = useQueryClient();
 
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async ({ tariffName, period }: ChangeTariffRequest) => {
       const response = await apiClient<components['schemas']['ChangeTariffResponse']>(
         '/subscription/change',
@@ -170,7 +170,7 @@ export function useAddPaymentMethod(): UseMutationResult<
 > {
   const queryClient = useQueryClient();
 
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (body: AddPaymentMethodRequest) => {
       const response = await apiClient<components['schemas']['AddPaymentMethodResponse']>(
         '/subscription/payment-methods',
@@ -194,7 +194,7 @@ export function useActivatePaymentMethod(): UseMutationResult<
 > {
   const queryClient = useQueryClient();
 
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (id: string) => {
       await apiClient<void>(
         `/subscription/payment-methods/${encodeURIComponent(id)}/activate`,
@@ -215,7 +215,7 @@ export function useSyncPaymentMethods(): UseMutationResult<
 > {
   const queryClient = useQueryClient();
 
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: () =>
       apiClient<components['schemas']['PaymentMethodsResponse']>(
         '/subscription/payment-methods/sync',
@@ -235,7 +235,7 @@ export function useDeletePaymentMethod(): UseMutationResult<
 > {
   const queryClient = useQueryClient();
 
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (id: string) => {
       await apiClient<void>(
         `/subscription/payment-methods/${encodeURIComponent(id)}`,

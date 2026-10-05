@@ -3,7 +3,6 @@
 import {
   keepPreviousData,
   useInfiniteQuery,
-  useMutation,
   useQuery,
   useQueryClient,
   type InfiniteData,
@@ -11,6 +10,7 @@ import {
   type UseMutationResult,
   type UseQueryResult,
 } from '@tanstack/react-query';
+import { useGuardedMutation } from '@/shared/lib/hooks/use-guarded-mutation';
 import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
 import { mapPropertyPhoto, mapPropertyResponse } from '@/entities/property';
@@ -159,10 +159,13 @@ export function useCreateProperty(): UseMutationResult<
   PropertyCreateRequest
 > {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (data: PropertyCreateRequest) => {
       const response = await apiClient<PropertyResponse>('/properties', {
         method: 'POST',
+        // Идемпотентный ключ (Т3 #1121): один ключ на логическую попытку
+        // создания; повтор с ним вернёт первый результат, не второй объект.
+        headers: { 'Idempotency-Key': crypto.randomUUID() },
         body: JSON.stringify(data),
       });
       return mapPropertyResponse(response);
@@ -179,7 +182,7 @@ export function useUpdateProperty(): UseMutationResult<
   { id: string; data: PropertyUpdateRequest }
 > {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async ({ id, data }) =>
       mapPropertyResponse(
         await apiClient<PropertyResponse>(`/properties/${id}`, {
@@ -200,7 +203,7 @@ export function useArchiveProperty(): UseMutationResult<
   string
 > {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (id) =>
       mapPropertyResponse(
         await apiClient<PropertyResponse>(`/properties/${id}/archive`, {
@@ -220,7 +223,7 @@ export function useUnarchiveProperty(): UseMutationResult<
   string
 > {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (id) =>
       mapPropertyResponse(
         await apiClient<PropertyResponse>(`/properties/${id}/unarchive`, {
@@ -245,7 +248,7 @@ export function useSetPropertyPin(): UseMutationResult<
   { id: string; pinned: boolean }
 > {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async ({ id, pinned }) =>
       mapPropertyResponse(
         await apiClient<PropertyResponse>(`/properties/${id}/pin`, {
@@ -281,7 +284,7 @@ export function useUploadPropertyPhoto(): UseMutationResult<
   ApiError,
   { propertyId: string; file: File }
 > {
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async ({ propertyId, file }) => {
       const formData = new FormData();
       formData.append('file', file);
@@ -301,7 +304,7 @@ export function useDeletePropertyPhoto(): UseMutationResult<
   { propertyId: string; photoId: string }
 > {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: ({ propertyId, photoId }) =>
       apiClient<void>(`/properties/${propertyId}/photos/${photoId}`, {
         method: 'DELETE',
@@ -315,7 +318,7 @@ export function useDeletePropertyPhoto(): UseMutationResult<
 
 export function useDeleteProperty(): UseMutationResult<void, ApiError, { id: string }> {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     // Deletion is total (ADR 0049): the property and all its data go together.
     mutationFn: ({ id }) =>
       apiClient<void>(`/properties/${id}`, {
