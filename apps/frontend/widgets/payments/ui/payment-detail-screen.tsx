@@ -1,10 +1,9 @@
 'use client';
 
-import { useState, type JSX, type ReactNode } from 'react';
+import { useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft,
-  Calendar,
   Check,
   Edit,
   Pause,
@@ -12,11 +11,11 @@ import {
   Repeat,
   StarOff,
   StarOutline,
-  TimeHistory,
 } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
+import { OPERATIONS_FEED_SORT } from '@/shared/api/query-keys';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
-import { goBack } from '@/shared/lib/navigation';
+import { buildReturnUrl, goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
 import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
@@ -42,6 +41,7 @@ import {
   paymentTypeLabel,
   usePausePayment,
   usePaymentOperationsByStatus,
+  usePaymentOperationsPaged,
   usePayment,
   useResumePayment,
   useSetPaymentFavorite,
@@ -65,20 +65,29 @@ import { paymentDetailActions } from '../lib/payment-detail-actions-model';
 import { PaymentDetailSkeleton } from './payments-skeletons';
 
 /**
- * Страница платежа (#465, Figma 671:5889 / 850:15410): шапка со звездой
- * избранного, карточка правила (цвет и иконка категории #447, повторяемость;
- * на паузе — opacity 50% и тип « • На паузе»), круглые кнопки «На паузу»
- * (confirm-шторка) ↔ «Возобновить» (без подтверждения), «Изменить», 
- * «Оплатить», секции «Ближайший платеж» и «Просроченные» (максимум 3),
- * плитки подэкранов. Дата ближайшего вхождения — клиентская проекция порта
- * вхождений (entities/payment/lib/occurrences); просрочки приходят с
- * сервера — статус overdue считает он по TZ собственника (ADR 0048).
+ * Страница платежа (#465, макет 1096:37792/37793): шапка со звездой
+ * избранного, карточка правила (цвет и иконка категории #447,
+ * повторяемость; на паузе — opacity 50% и тип « • На паузе»), круглые
+ * кнопки «На паузу» (confirm-шторка) ↔ «Возобновить» (без подтверждения),
+ * «Изменить», «Оплатить» и три секции: «Ближайший платеж» (строка ведёт
+ * на график — решение владельца #1073, у паузы тоже), «Просроченные
+ * платежи» (максимум 3) и «История операций» с превью оплаченных
+ * (стрелка — подэкран истории; плиток подэкранов на макете нет —
+ * решение владельца #1073). Дата ближайшего вхождения — клиентская
+ * проекция порта вхождений (entities/payment/lib/occurrences);
+ * просрочки приходят с сервера — статус overdue считает он по TZ
+ * собственника (ADR 0048).
+ *
+ * Копии секций — решение владельца #1073: будущие вхождения правила на
+ * этой странице называются «платеж» (UI-copy exception — фиксируется в
+ * payments/CONTEXT.md), «История операций» остаётся операциями.
  *
  * Доступ (ADR 0028): смотрящий — чтение, звезда неактивна, круглых кнопок
  * нет; архив финансово read-only (#446). Завершённое правило (endDate в
  * прошлом) — без паузы. «Оплатить» больше не гасит вхождение сама: она
  * ведёт на страницу операции (той же цели — старейшее неоплаченное
- * вхождение, просрочки в приоритете), оплата — кнопкой «Отметить
+ * вхождение, просрочки в приоритете) с ?returnTo= этой страницы (#1072:
+ * закрытие success вернёт сюда), оплата — кнопкой «Отметить
  * оплаченной» оттуда. Работает и на паузе (история 25 спеки #453).
  */
 
@@ -252,12 +261,12 @@ function PaymentDetailBody({
           />
         ) : (
           <PaymentsGroup
-            title="Просроченные операции"
+            title="Просроченные платежи"
             open={{
               label: 'Открыть полный список просроченных',
               onOpen: () => router.push(ROUTES.propertyPaymentOverdue(propertyId, payment.id)),
             }}
-            emptyHint={overduePreview.length > 0 ? undefined : 'У вас нет просроченных операций'}
+            emptyHint={overduePreview.length > 0 ? undefined : 'У вас нет просроченных платежей'}
           >
             {overduePreview.length > 0
               ? overduePreview.map((operation) => (
@@ -272,9 +281,7 @@ function PaymentDetailBody({
           </PaymentsGroup>
         )}
 
-        <div className="px-6">
-          <SubScreenTiles propertyId={propertyId} paymentId={payment.id} />
-        </div>
+        <HistorySection propertyId={propertyId} paymentId={payment.id} />
       </div>
     </>
   );
@@ -409,7 +416,13 @@ function PaymentActionsRow({
             disabled={payable == null}
             onClick={() => {
               if (payable != null) {
-                router.push(ROUTES.propertyOperation(propertyId, payable.id));
+                // С собой — ?returnTo= этой страницы (#1072): закрытие
+                // success операции вернёт сюда.
+                router.push(
+                  buildReturnUrl(ROUTES.propertyOperation(propertyId, payable.id), {
+                    returnTo: ROUTES.propertyPayment(propertyId, payment.id),
+                  }),
+                );
               }
             }}
           />
@@ -442,10 +455,13 @@ function PaymentActionsRow({
   );
 }
 
-/** Секция «Ближайшая операция» (1096:37792 — заголовок без стрелки в макете;
- * по решению владельца стрелка на «График» сохранена): одна плановая дата по
- * клиентской проекции или «На паузе»; у завершённого правила вхождений
- * больше нет — пустое состояние (история 43). */
+/** Секция «Ближайший платеж» (1096:37792; копии секций — решение владельца
+ * #1073, заголовок без стрелки — и по макету, и по решению «стрелку
+ * снести»): одна плановая дата по клиентской проекции или «На паузе»; у
+ * завершённого правила вхождений больше нет — пустое состояние (история
+ * 43). Клик по строке всегда открывает график — и для материализованной
+ * плановой, и для проекции (решение владельца #1073): секция — вид правилу,
+ * не отдельной операции. */
 function NextPaymentSection({
   propertyId,
   payment,
@@ -476,13 +492,7 @@ function NextPaymentSection({
       : nearestOccurrence(payment, plannedOperations, today);
 
   return (
-    <PaymentsGroup
-      title="Ближайшая операция"
-      open={{
-        label: 'Открыть график платежей',
-        onOpen: () => router.push(ROUTES.propertyPaymentSchedule(propertyId, payment.id)),
-      }}
-    >
+    <PaymentsGroup title="Ближайший платеж">
       {nearest === undefined ? (
         // Авторский текст: состояния завершённого правила во Figma этой
         // страницы нет («Платежей еще не было» — история, не график).
@@ -493,6 +503,10 @@ function NextPaymentSection({
           title={payment.title}
           subtitle="На паузе"
           amountKopecks={payment.amountKopecks}
+          // Клик по ближайшему ведёт на график всегда (#1073, решение
+          // владельца): и у паузной строки — график паузного правила
+          // показывает «На паузе», путь к подэкрану не рвётся.
+          onSelect={() => router.push(ROUTES.propertyPaymentSchedule(propertyId, payment.id))}
         />
       ) : (
         <NextPaymentRow
@@ -504,13 +518,10 @@ function NextPaymentSection({
           amountKopecks={
             nearest.kind === 'operation' ? nearest.operation.amountKopecks : payment.amountKopecks
           }
-          // Материализованная плановая — настоящая операция со своей
-          // страницей; проекция — ещё не операция, строка не кликабельна.
-          onSelect={
-            nearest.kind === 'operation'
-              ? () => router.push(ROUTES.propertyOperation(propertyId, nearest.operation.id))
-              : undefined
-          }
+          // Оба вида ближайшего (#1073) — клик открывает график; плановая
+          // операция остаётся доступной со своих поверхностей (строки
+          // просрочек, график, история).
+          onSelect={() => router.push(ROUTES.propertyPaymentSchedule(propertyId, payment.id))}
         />
       )}
     </PaymentsGroup>
@@ -545,53 +556,103 @@ function NextPaymentRow({
   );
 }
 
-/** Плитки подэкранов «График / История» (Figma 693:5245) — входы на
- * подэкраны #466. */
-function SubScreenTiles({
+/** Предел превью секции «История операций»; полный список — подэкран
+ * (#466). */
+const HISTORY_PREVIEW_LIMIT = 3;
+
+/** Секция «История операций» (макет 1096:37793, решение владельца #1073 —
+ * плитки подэкранов снесены): стрелка ведёт в подэкран истории (#466),
+ * под ней — превью оплаченных операций, новейшие сверху (порция desc по
+ * фактической дате, канон истории #994). У строки — дата факта и знаковая
+ * сумма (расход с минусом — канон 1302:52209), клик — страница операции.
+ * Пустая история секции не имеет: без paid-операций секция не рисуется
+ * (решение владельца #1073) — подэкран остаётся доступен по прямому URL,
+ * путь к графику при этом держит клик по строке ближайшего. */
+function HistorySection({
   propertyId,
   paymentId,
 }: {
   readonly propertyId: string;
   readonly paymentId: string;
-}): JSX.Element {
+}): JSX.Element | null {
   const router = useRouter();
+  // Порция desc — первые HISTORY_PREVIEW_LIMIT и есть новейшие; тот же
+  // сорт, что у подэкрана (фактическая дата, OPERATIONS_FEED_SORT).
+  const historyQuery = usePaymentOperationsPaged(propertyId, paymentId, {
+    status: 'paid',
+    order: 'desc',
+    sort: OPERATIONS_FEED_SORT,
+  });
+
+  if (historyQuery.isPending || historyQuery.isError) {
+    // Секция появляется после загрузки; при ошибке истории страница не
+    // должна пустовать целиком — карточка состояния как у просроченных.
+    return historyQuery.isError ? (
+      <PaymentsStateCard
+        title="Не удалось загрузить историю"
+        hint="Проверьте подключение и попробуйте снова"
+        action={
+          <Button
+            variant="secondary"
+            size="small"
+            onClick={() => void historyQuery.refetch()}
+          >
+            Повторить
+          </Button>
+        }
+      />
+    ) : null;
+  }
+
+  const preview = historyQuery.data.slice(0, HISTORY_PREVIEW_LIMIT);
+  if (preview.length === 0) {
+    return null;
+  }
 
   return (
-    <div className="flex gap-2">
-      <PaymentsTile
-        icon={<Calendar className="h-10 w-10 text-content" aria-hidden />}
-        label="График платежей"
-        onSelect={() => router.push(ROUTES.propertyPaymentSchedule(propertyId, paymentId))}
-      />
-      <PaymentsTile
-        icon={<TimeHistory className="h-10 w-10 text-content" aria-hidden />}
-        label="История операций"
-        onSelect={() => router.push(ROUTES.propertyPaymentHistory(propertyId, paymentId))}
-      />
-    </div>
+    <PaymentsGroup
+      title="История операций"
+      open={{
+        label: 'Открыть историю операций',
+        onOpen: () => router.push(ROUTES.propertyPaymentHistory(propertyId, paymentId)),
+      }}
+    >
+      {preview.map((operation) => (
+        <HistoryPreviewRow
+          key={operation.id}
+          operation={operation}
+          onSelect={() => router.push(ROUTES.propertyOperation(propertyId, operation.id))}
+        />
+      ))}
+    </PaymentsGroup>
   );
 }
 
-function PaymentsTile({
-  icon,
-  label,
+/** Строка превью истории: название, дата факта в подзаголовке (в подэкране
+ * дату несёт групповой заголовок — здесь групп нет), сумма справа
+ * знаковая (1302:52209). */
+function HistoryPreviewRow({
+  operation,
   onSelect,
 }: {
-  readonly icon: ReactNode;
-  readonly label: string;
-  readonly onSelect: () => void;
+  readonly operation: PaymentOperation;
+  readonly onSelect?: () => void;
 }): JSX.Element {
-  // Имя — из видимого текста: без aria-лейбла, чтобы не расходиться с
-  // надписью и не дублировать стрелку секции «Ближайший платеж».
+  const style = categoryStyle('default', operation.categorySlug);
+
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className="flex min-h-[168.5px] flex-1 cursor-pointer flex-col justify-between rounded-card bg-surface-muted p-6 text-left outline-none transition-opacity hover:opacity-80 active:opacity-80 focus-visible:ring-4 focus-visible:ring-primary"
-    >
-      {icon}
-      <span className="text-base leading-[18px] font-medium text-content">{label}</span>
-    </button>
+    <PaymentRowButton
+      variant="gray"
+      className="px-3 pb-2"
+      categoryIcon={<CategoryIcon icon={style.icon} color={style.color} surface="muted" />}
+      title={operation.title}
+      subtitle={formatDayMonth(operation.paidDate ?? operation.date)}
+      amountKopecks={
+        operation.type === 'expense' ? -operation.amountKopecks : operation.amountKopecks
+      }
+      signedAmount
+      onSelect={onSelect}
+    />
   );
 }
 

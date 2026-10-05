@@ -109,7 +109,7 @@ test.describe('операционные ленты по факту оплаты'
     // ── Предоплата ближайшего вхождения: факт оплаты = сегодня ──
     await page.goto(`/properties/${PROPERTY}/payments/${created.id}`);
     await page.getByRole('button', { name: 'Оплатить' }).click();
-    await expect(page).toHaveURL(new RegExp(`/properties/${PROPERTY}/operations/[0-9a-f-]+$`));
+    await expect(page).toHaveURL(new RegExp(`/properties/${PROPERTY}/operations/[0-9a-f-]+(\\?.*)?$`));
     await page.getByRole('button', { name: 'Отметить оплаченной' }).click();
     await expect(page.getByText('Платеж оплачен')).toBeVisible();
     await page.getByRole('button', { name: 'Хорошо', exact: true }).click();

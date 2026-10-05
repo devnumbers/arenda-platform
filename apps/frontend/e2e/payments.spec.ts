@@ -145,6 +145,24 @@ test.describe('экран «Платежи объекта»', () => {
     await expect(page.getByText('Нет просроченных операций')).toBeVisible();
   });
 
+  // Якоря — сидовые правила, которые сценарные спеки не мутируют:
+  // «Электроэнергия» …553 (автоплатёж) и «Домофон» …554 (ручной, на паузе);
+  // «Арендную плату» трогает арендная фикстура (платёж аренды — автоплатёж).
+  test('автоплатёж не в списке «Платежи», в списке «Автоплатежи» (#1071)', async ({
+    page,
+    seededUser,
+  }) => {
+    await openCabinetWithSeededSession(page, seededUser);
+
+    await page.goto(`${APARTMENT_PAYMENTS_URL}/all`);
+    await expect(page.getByText('Электроэнергия')).toHaveCount(0);
+    await expect(page.getByText('Домофон').first()).toBeVisible();
+
+    await page.goto(`${APARTMENT_PAYMENTS_URL}/auto`);
+    await expect(page.getByText('Электроэнергия').first()).toBeVisible();
+    await expect(page.getByText('Домофон')).toHaveCount(0);
+  });
+
   test('шит выбора «Платёж / Автоплатёж»; скриншот', async ({
     page,
     seededUser,

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ROUTES } from '@/shared/config/routes';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import type { PaymentOperation } from '@/entities/payment';
 import {
@@ -6,6 +7,7 @@ import {
   operationDetailRows,
   operationHeroAmount,
   operationSubtitle,
+  paidSuccessReturnPath,
 } from './operation-page-model';
 
 /**
@@ -179,5 +181,25 @@ describe('operationDetailRows', () => {
       { label: 'Задержана на', text: '3 дня' },
       { label: 'Статус', text: 'Просрочена', danger: true },
     ]);
+  });
+});
+
+describe('paidSuccessReturnPath', () => {
+  it('returnTo страницы, с которой перешли к оплате, имеет приоритет (#1072)', () => {
+    expect(paidSuccessReturnPath('/properties/prop-1/rentals', 'prop-1', 'pay-1')).toBe(
+      '/properties/prop-1/rentals',
+    );
+  });
+
+  it('без returnTo — страница правила-платежа, контекст операции', () => {
+    expect(paidSuccessReturnPath(undefined, 'prop-1', 'pay-1')).toBe(
+      ROUTES.propertyPayment('prop-1', 'pay-1'),
+    );
+  });
+
+  it('без правила функция тотальна — список операций объекта (у manual success не бывает)', () => {
+    expect(paidSuccessReturnPath(undefined, 'prop-1', null)).toBe(
+      ROUTES.propertyPayments('prop-1'),
+    );
   });
 });

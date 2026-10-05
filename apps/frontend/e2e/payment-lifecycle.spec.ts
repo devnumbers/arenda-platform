@@ -155,7 +155,19 @@ test.describe('сквозная жизнь платежа', () => {
           : `Каждый месяц ${day} числа`,
       ),
     ).toBeVisible();
-    await expect(page.getByText('Ближайшая операция')).toBeVisible();
+    await expect(page.getByText('Ближайший платеж')).toBeVisible();
+
+    // Клик по строке ближайшего ведёт на график (#1073) — плановая
+    // материализована тиком создания, страница операции не открывается.
+    await page
+      .locator('section')
+      .filter({ has: page.getByRole('heading', { name: 'Ближайший платеж' }) })
+      .getByRole('button')
+      .first()
+      .click();
+    await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+/schedule$`));
+    await page.goBack();
+    await expect(page.getByText('Ближайший платеж')).toBeVisible();
 
     // Избранное: звезда переключается с тостом (путь страницы #465).
     const star = page.getByRole('button', { name: 'Добавить в избранное' });
@@ -165,12 +177,26 @@ test.describe('сквозная жизнь платежа', () => {
     await expect(
       page.getByRole('button', { name: 'Убрать из избранного' }),
     ).toHaveAttribute('aria-pressed', 'true');
+    // Тост добавления (top-center на мобайле) висит поверх звезды в шапке
+    // и перехватывает клик, автоухол ставится на паузу без фокуса окна —
+    // закрываем его кнопкой (канон contacts-спек), иначе клик звезды не
+    // проходит вовсе (гонка прогона).
+    await page
+      .locator('.Toastify__toast', { hasText: 'Платеж добавлен в избранное' })
+      .getByRole('button', { name: 'Закрыть' })
+      .click();
     await page.getByRole('button', { name: 'Убрать из избранного' }).click();
     await expect(page.getByText('Платеж больше не в избранном')).toBeVisible();
 
     // «Ближайший» на графике — материализованная операция с сервера;
-    // «Следующие» — клиентская проекция (#466).
-    await page.getByRole('button', { name: 'График платежей', exact: true }).click();
+    // «Следующие» — клиентская проекция (#466). Вход — строкой ближайшего
+    // (плитки подэкранов снесены, #1073).
+    await page
+      .locator('section')
+      .filter({ has: page.getByRole('heading', { name: 'Ближайший платеж' }) })
+      .getByRole('button')
+      .first()
+      .click();
     await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+/schedule$`));
     await expect(page.getByText('Ближайший').first()).toBeVisible();
     await expect(page.getByText('Следующие').first()).toBeVisible();
@@ -196,16 +222,17 @@ test.describe('сквозная жизнь платежа', () => {
     // на странице платежа кнопка остаётся активной ──
     await page.goto(paymentUrl);
     await page.getByRole('button', { name: 'Оплатить' }).click();
-    await expect(page).toHaveURL(new RegExp(`/properties/${PROPERTY}/operations/[0-9a-f-]+$`));
+    await expect(page).toHaveURL(new RegExp(`/properties/${PROPERTY}/operations/[0-9a-f-]+(\\?.*)?$`));
     await page.getByRole('button', { name: 'Отметить оплаченной' }).click();
     await expect(page.getByText('Платеж оплачен')).toBeVisible();
     await page.getByRole('button', { name: 'Хорошо', exact: true }).click();
-    await expect(page.getByText('Выполнена')).toBeVisible();
+    // Закрытие success возвращает на страницу, с которой платили (#1072).
+    await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+$`));
     await page.goto(paymentUrl);
     await expect(page.getByRole('button', { name: 'Оплатить' })).toBeEnabled();
 
     // ── История: запись «Сегодня» с минусом у расхода ──
-    await page.getByRole('button', { name: 'История операций', exact: true }).click();
+    await page.getByRole('button', { name: 'Открыть историю операций' }).click();
     await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+/history$`));
     await expect(page.getByText('Сегодня', { exact: true })).toBeVisible();
     await expect(page.getByText('-1 990 ₽').first()).toBeVisible();
@@ -228,7 +255,7 @@ test.describe('сквозная жизнь платежа', () => {
     // ── Просрочка (сид прошлого через SQL) → гашение из просроченных ──
     expect(await execE2eSql(induceOverdue(id1, 7))).toBe('UPDATE 1');
     await page.goto(paymentUrl);
-    await expect(page.getByText('Просроченные операции')).toBeVisible();
+    await expect(page.getByText('Просроченные платежи')).toBeVisible();
     await expect(page.getByText(/\d+ (день|дня|дней)/).first()).toBeVisible();
 
     // Полный список просроченных открывается стрелкой секции (#466).
@@ -239,13 +266,14 @@ test.describe('сквозная жизнь платежа', () => {
 
     await page.goto(paymentUrl);
     await page.getByRole('button', { name: 'Оплатить' }).click();
-    await expect(page).toHaveURL(new RegExp(`/properties/${PROPERTY}/operations/[0-9a-f-]+$`));
+    await expect(page).toHaveURL(new RegExp(`/properties/${PROPERTY}/operations/[0-9a-f-]+(\\?.*)?$`));
     await page.getByRole('button', { name: 'Отметить оплаченной' }).click();
     await expect(page.getByText('Платеж оплачен')).toBeVisible();
     await page.getByRole('button', { name: 'Хорошо', exact: true }).click();
-    await expect(page.getByText('Выполнена')).toBeVisible();
+    // Закрытие success возвращает на страницу, с которой платили (#1072).
+    await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+$`));
     await page.goto(paymentUrl);
-    await expect(page.getByText('У вас нет просроченных операций')).toBeVisible();
+    await expect(page.getByText('У вас нет просроченных платежей')).toBeVisible();
 
     // ── Удаление операции: новая просрочка стирается корзиной, тик не
     // воскресает её (надгробие cancelled) ──
@@ -258,7 +286,7 @@ test.describe('сквозная жизнь платежа', () => {
     await page.getByRole('button', { name: 'Удалить', exact: true }).click();
     await expect(page.getByText('Операция удалена')).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+$`));
-    await expect(page.getByText('У вас нет просроченных операций')).toBeVisible();
+    await expect(page.getByText('У вас нет просроченных платежей')).toBeVisible();
 
     // ── Правка: сумма меняется, прошлое не тронуто ──
     await page.getByRole('button', { name: 'Изменить' }).click();

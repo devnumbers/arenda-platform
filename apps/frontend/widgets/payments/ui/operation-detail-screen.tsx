@@ -45,6 +45,7 @@ import {
   operationDetailRows,
   operationHeroAmount,
   operationSubtitle,
+  paidSuccessReturnPath,
 } from '../lib/operation-page-model';
 
 /**
@@ -54,8 +55,10 @@ import {
  * той операции, которую гасит «Оплатить» страницы платежа (та же
  * oldestUnpaidOperation — решение владельца). Оплата ставит paid_date =
  * сегодня сервера (ADR 0048) и показывает экран успеха «Платеж оплачен»
- * (1444:65733): «Хорошо» возвращает на страницу операции — теперь
- * «Выполнена», «Посмотреть платеж» ведёт на правило. Смотрящий и архив
+ * (1444:65733): закрытие («Хорошо»/крестик, #1072) уводит на страницу, С
+ * КОТОРОЙ перешли к оплате — sanitized ?returnTo= от точки входа
+ * (страница платежа, аренда); без него — на страницу правила, контекст
+ * операции. «Посмотреть платеж» ведёт на правило. Смотрящий и архив
  * читают без кнопок. Корзина в шапке (1386:67731) удаляет оплаченные и
  * просроченные операции через шторку 1510:77505 — tombstone cancelled
  * стирает факт и долг; плановые и проекции не удаляются.
@@ -69,9 +72,13 @@ import {
 export function OperationDetailScreen({
   propertyId,
   operationId,
+  returnTo,
 }: {
   readonly propertyId: string;
   readonly operationId: string;
+  /** Sanitized ?returnTo= маршрута — страница, с которой перешли к
+   * оплате (#1072); закрытие success уводит туда. */
+  readonly returnTo?: string;
 }): JSX.Element {
   const router = useRouter();
   const operationQuery = useOperation(propertyId, operationId);
@@ -124,7 +131,15 @@ export function OperationDetailScreen({
         propertyId={propertyId}
         paid={paidResult}
         propertyTitle={property?.name ?? ''}
-        onClose={() => setPaidResult(null)}
+        onClose={() => {
+          setPaidResult(null);
+          // Возврат решает модель (#1072): страница, с которой перешли к
+          // оплате, а без неё — страница правила. Канон Navigation —
+          // goBack: history.back() раскрывает исходную страницу (replace
+          // на неё запрещён — «мёртвый Back»), при глубокой ссылке
+          // деградирует к replace фолбэка.
+          goBack(router, paidSuccessReturnPath(returnTo, propertyId, paidResult.paymentId));
+        }}
       />
     );
   }
@@ -482,8 +497,9 @@ function DetailRow({
 
 /** Экран успеха «Платеж оплачен» (1444:65733): иконка категории с зелёной
  * галочкой, подпись «название / сумма за дату / по объекту», кнопки
- * «Хорошо» (страница операции — теперь «Выполнена») и «Посмотреть платеж»
- * (страница правила; у ручных фактов правила нет — кнопки тоже). */
+ * «Хорошо» (закрытие — возврат по решению #1072, onClose решает модель)
+ * и «Посмотреть платеж» (страница правила; у ручных фактов правила
+ * нет — кнопки тоже). */
 function OperationPaidSuccess({
   propertyId,
   paid,

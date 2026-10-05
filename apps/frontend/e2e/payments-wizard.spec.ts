@@ -667,19 +667,21 @@ test.describe('визард создания платежа', () => {
     const pay = page.getByRole('button', { name: 'Оплатить' });
     await expect(pay).toBeEnabled();
     await pay.click();
-    await expect(page).toHaveURL(new RegExp(`/operations/[0-9a-f-]+$`));
+    await expect(page).toHaveURL(new RegExp(`/operations/[0-9a-f-]+(\\?.*)?$`));
     await page.getByRole('button', { name: 'Отметить оплаченной' }).click();
     await expect(page.getByText('Платеж оплачен')).toBeVisible();
     await page.getByRole('button', { name: 'Хорошо', exact: true }).click();
-    await expect(page.getByText('Выполнена')).toBeVisible();
-    // goBack возвращает по кэшу (staleTime 30с, прогрев #626) — платёж ещё
-    // старый; перезагрузка читает с сервера завершённое состояние.
-    await page.goBack();
+    // Закрытие success возвращает на страницу платежа (#1072).
+    await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+$`));
+    // Данные страницы могут быть stale (staleTime 30с, прогрев #626) —
+    // перезагрузка читает с сервера завершённое состояние.
     await page.reload();
     await expect(page.getByText('Платеж завершен')).toBeVisible();
 
     // И в графике — то же завершённое состояние вместо «ближайших» дат.
-    await page.getByRole('button', { name: 'Открыть график платежей' }).click();
+    // Плиток больше нет (#1073), у завершённого нет и строки ближайшего —
+    // вход по прямому URL подэкрана.
+    await page.goto(`${page.url()}/schedule`);
     await expect(page.getByText('Платеж завершен')).toBeVisible();
     await expect(page.getByText('Следующие')).toHaveCount(0);
   });
