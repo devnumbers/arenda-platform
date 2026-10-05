@@ -16,7 +16,8 @@ import { IconButton } from '@/shared/ui/design';
  *
  * Мобайл 320–560 — белая страница, контент сверху (pt-72 под верхний бар).
  * Планшет 561–1023 — градиент на всю страницу, 3D-домик 700×700 по центру,
- * белая карточка radius 32 padding 32 (max-w-720).
+ * белая карточка radius 32 padding 32 (max-w-600 — поля по 84 на канве
+ * 768; было 720, тикет #1100).
  * ПК ≥1024 — белый лист, две панели 50/50 с зазором и отступом 24:
  * слева градиент radius 32 с домиком 360 по центру, справа — контент
  * колонкой max-w-400 по центру. Крестик × — выход на лендинг (`onClose`),
@@ -25,7 +26,9 @@ import { IconButton } from '@/shared/ui/design';
  * поведение). Опциональная стрелка ← (`onBack`) — в том же баре слева
  * (макеты шага кода #765: 2349:67383/67411; на планшете 2349:67396 не
  * нарисована — рисуется для единообразия; приёмка 19.09 приняла): шаг кода
- * ведёт на предыдущий шаг — почта, если была, иначе телефон. Бар по канве
+ * ведёт на предыдущий шаг — почта, если была, иначе телефон (#765); шаг
+ * почты — на телефон (#1101, канон владельца: в макетах почты стрелки
+ * нет). Бар по канве
  * Top Navigation: мобайл/планшет — на всю ширину с иконками в 24px от
  * краёв (слоты 72×72, кнопка 44 в центре), ПК ≥1024 — внутри правой
  * колонки (от сплита 50%+12px до правого поля 24, верх 24) — иначе
@@ -34,7 +37,8 @@ import { IconButton } from '@/shared/ui/design';
 
 export type LoginShellProps = {
     readonly onClose: () => void;
-    /** Стрелка ← в баре слева: назад на предыдущий шаг (шаг кода #765). */
+    /** Стрелка ← в баре слева: назад на предыдущий шаг (шаги кода #765
+     * и почты #1101). */
     readonly onBack?: () => void;
     readonly hideClose?: boolean;
     readonly children: ReactNode;
@@ -61,7 +65,7 @@ export function LoginShell({ onClose, onBack, hideClose = false, children }: Log
                 {/* Правая половина (ПК) / вся страница (мобайл, планшет). */}
                 <div className="flex w-full flex-1 items-center justify-center">
                     {/* Планшет: белая карточка radius 32 padding 32. */}
-                    <div className="w-full max-w-[400px] tablet:max-w-[720px] tablet:rounded-[32px] tablet:bg-surface tablet:p-8">
+                    <div className="w-full max-w-[400px] tablet:max-w-[600px] tablet:rounded-[32px] tablet:bg-surface tablet:p-8">
                         <div className="mx-auto w-full desktop:max-w-[400px]">{children}</div>
                     </div>
                 </div>

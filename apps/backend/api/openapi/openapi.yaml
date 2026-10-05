@@ -71,6 +71,17 @@ paths:
             Set-Cookie:
               schema:
                 type: string
+            # Ticket #1098: hard logout asks the browser to drop its cache.
+            Clear-Site-Data:
+              description: >-
+                Instructs the browser to drop the origin's HTTP cache at the
+                logout moment. Exactly "cache": "storage" would unregister the
+                service worker and wipe IndexedDB (offline ADR 0031/0032,
+                pushes #1024); "cookies" is redundant next to the explicit
+                session-cookie clear.
+              schema:
+                type: string
+                enum: ['"cache"']
         '401':
           $ref: '#/components/responses/Unauthorized'
   /me:

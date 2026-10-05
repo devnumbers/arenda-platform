@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { createHmac } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -318,7 +319,7 @@ export async function execE2eSql(sql: string): Promise<string> {
 
 /** Session cookie of the non-secure local backend (httpsupport.SessionCookieName). */
 const SESSION_COOKIE_NAME = 'session_id';
-const BASE_URL = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:3010';
+export const BASE_URL = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:3010';
 
 /**
  * Opens the cabinet without touching the login screen: the browser gets the
@@ -474,8 +475,15 @@ export async function pickCalendarDay(page: Page, date: Date): Promise<void> {
  * Full login through the real UI: phone step → code step (the code comes
  * from the backend log) → redirect into the cabinet. Ends on /properties
  * with the list heading visible.
+ *
+ * `beforeVerify` runs after the code step renders and before the code is
+ * typed in (auth.spec #1098 plants its live-document marker there).
  */
-export async function loginViaUi(page: Page, user: SeededUser): Promise<void> {
+export async function loginViaUi(
+  page: Page,
+  user: SeededUser,
+  beforeVerify?: () => Promise<void>,
+): Promise<void> {
   await page.goto('/login');
   // The design-layer TextField (titleIn) exposes the floating label as the
   // accessible name, so locators go by role+name.
@@ -483,10 +491,28 @@ export async function loginViaUi(page: Page, user: SeededUser): Promise<void> {
   await page.getByRole('button', { name: 'Войти' }).click();
 
   await expect(page.getByRole('heading', { name: 'Введите код' })).toBeVisible();
+  if (beforeVerify) {
+    await beforeVerify();
+  }
   const code = await extractLoginCode(user);
   // The code field auto-verifies as soon as all six digits are in.
   await page.getByRole('textbox', { name: 'Код' }).fill(code);
 
   await page.waitForURL('**/properties');
   await expect(page.getByRole('heading', { name: 'Объекты' })).toBeVisible();
+}
+
+/**
+ * sessions.token_hash of a raw token — the same HMAC-SHA256 the orchestrator
+ * uses to seed sessions (tools/e2e/frontend/e2e-crypto.mjs `hash-token`,
+ * keyed by E2E_ENCRYPTION_KEY). Lets a spec plant throwaway session rows
+ * mid-test (#1098): the seeded E2E_SESSION_TOKEN stays intact for parallel
+ * workers, and the /auth/send burst budget is not consumed.
+ */
+export function seededSessionTokenHash(rawToken: string): string {
+  const keyHex = process.env.E2E_ENCRYPTION_KEY;
+  if (!keyHex) {
+    throw new Error('E2E_ENCRYPTION_KEY is not set — run the suite via make frontend-e2e');
+  }
+  return createHmac('sha256', Buffer.from(keyHex, 'hex')).update(rawToken).digest('hex');
 }

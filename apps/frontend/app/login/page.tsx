@@ -1,7 +1,6 @@
 "use client";
 
-import {type JSX, useState} from "react";
-import {useRouter} from "next/navigation";
+import {type JSX, useRef, useState} from "react";
 import {notify} from "@/shared/lib/notifications";
 import {type ApiError} from "@/shared/api/errors";
 import {CodeStep, EmailStep, LoginShell, PhoneStep, deviceTimezone, useSendCode, useVerifyCode} from "@/features/auth";
@@ -12,16 +11,41 @@ import {useSendCooldown} from "@/features/auth";
 import {useLoginDraft} from "@/features/auth";
 import {RESEND_TIMEOUT} from "@/features/auth";
 import {useStandalone} from "@/shared/lib/hooks/useStandalone";
-import {goBack} from "@/shared/lib/navigation";
+import {hardReplace} from "@/shared/lib/navigation";
 
 export default function LoginPage(): JSX.Element {
-    const router = useRouter();
     const isStandalone = useStandalone();
     const {draft, setDraft, clearDraft} = useLoginDraft();
     const {remainingSeconds: resendTimer, recordSendWithRemainingSeconds} = useSendCooldown();
 
     const sendCode = useSendCode();
     const verifyCode = useVerifyCode();
+
+    // Двойной клик по кнопке отправки (#1099): кнопка диспейблится isPending-ем
+    // только после перерисовки, а второй клик может прийти раньше рендера
+    // (джанк главного потока отдаёт input-событие раньше рендер-таска) — без
+    // синхронного рефа обе отправки уходят POST-ами, и вторая ловит 429
+    // троттлинга бэка (minSendInterval 60с) тостом поверх ушедшего шага.
+    const sendInFlightRef = useRef(false);
+
+    // Единственное горло всех отправок кода (#1099): реф режет второй клик из
+    // окна до перерисовки, isPending догашивает окно между settled и самой
+    // перерисовкой; жизненный цикл рефа (set до mutate, сброс в onSettled)
+    // живёт здесь в одном месте. Один реф на все три обработчика: шаги
+    // телефона/почты и resend не пересекаются — это разные шаги черновика.
+    const startSendOnce = (...[variables, callbacks]: Parameters<typeof sendCode.mutate>): void => {
+        if (sendInFlightRef.current || sendCode.isPending) {
+            return;
+        }
+
+        sendInFlightRef.current = true;
+        sendCode.mutate(variables, {
+            ...callbacks,
+            onSettled: () => {
+                sendInFlightRef.current = false;
+            },
+        });
+    };
 
     const handleSendCodeError = (error: ApiError) => {
         if (error.status === 429 && typeof error.retryAfter === 'number') {
@@ -35,20 +59,17 @@ export default function LoginPage(): JSX.Element {
             return;
         }
 
-        sendCode.mutate(
-            {phone: normalizePhone(formattedPhone)},
-            {
-                onSuccess: (data) => {
-                    if (data.sent) {
-                        recordSendWithRemainingSeconds(data.retryAfter ?? RESEND_TIMEOUT);
-                        setDraft((prev) => ({...prev, phone: formattedPhone, email: "", step: "code"}));
-                    } else {
-                        setDraft((prev) => ({...prev, phone: formattedPhone, step: "email"}));
-                    }
-                },
-                onError: handleSendCodeError,
+        startSendOnce({phone: normalizePhone(formattedPhone)}, {
+            onSuccess: (data) => {
+                if (data.sent) {
+                    recordSendWithRemainingSeconds(data.retryAfter ?? RESEND_TIMEOUT);
+                    setDraft((prev) => ({...prev, phone: formattedPhone, email: "", step: "code"}));
+                } else {
+                    setDraft((prev) => ({...prev, phone: formattedPhone, step: "email"}));
+                }
             },
-        );
+            onError: handleSendCodeError,
+        });
     };
 
     const handleSendEmail = () => {
@@ -57,20 +78,17 @@ export default function LoginPage(): JSX.Element {
             return;
         }
 
-        sendCode.mutate(
-            {phone: normalizePhone(draft.phone), email: trimmedEmail},
-            {
-                onSuccess: (data) => {
-                    if (!data.sent) {
-                        setDraft((prev) => ({...prev, step: "email"}));
-                        return;
-                    }
-                    recordSendWithRemainingSeconds(data.retryAfter ?? RESEND_TIMEOUT);
-                    setDraft((prev) => ({...prev, step: "code"}));
-                },
-                onError: handleSendCodeError,
+        startSendOnce({phone: normalizePhone(draft.phone), email: trimmedEmail}, {
+            onSuccess: (data) => {
+                if (!data.sent) {
+                    setDraft((prev) => ({...prev, step: "email"}));
+                    return;
+                }
+                recordSendWithRemainingSeconds(data.retryAfter ?? RESEND_TIMEOUT);
+                setDraft((prev) => ({...prev, step: "code"}));
             },
-        );
+            onError: handleSendCodeError,
+        });
     };
 
     const [code, setCode] = useState("");
@@ -98,8 +116,11 @@ export default function LoginPage(): JSX.Element {
             {
                 onSuccess: () => {
                     const target = safeInternalPath(new URLSearchParams(window.location.search).get("from")) ?? "/properties";
-                    router.push(target);
                     clearDraft();
+                    // Жёсткая навигация auth-границы (#1098, канон Navigation):
+                    // сносит гостевые RSC-остатки и react-query предыдущего
+                    // документа вместо перевозки их в кабинет.
+                    hardReplace(target);
                 },
                 onError: (error) => {
                     // Неверный код (401) — инлайн в поле по макету 2349:67624
@@ -135,13 +156,27 @@ export default function LoginPage(): JSX.Element {
         setDraft((prev) => ({...prev, step: prev.email.trim() ? "email" : "phone"}));
     };
 
+    // Стрелка ← шага почты — на телефон (канон владельца #1101; в макетах
+    // почты 2349:67698/67820 стрелки нет — добавлена словом владельца).
+    // Черновик почты сохраняется: возврат — чаще всего правка телефона,
+    // стирать набранную почту — сюрприз; чужой зарегистрированный номер
+    // смывает её сам (sent:true-ветка handleSendPhone). Пока отправка в
+    // полёте, уход закрыт — иначе её onSuccess утащил бы пользователя на
+    // шаг кода уже с телефона (тот же гард, что у шага кода).
+    const handleEmailBack = () => {
+        if (sendCode.isPending) {
+            return;
+        }
+        setDraft((prev) => ({...prev, step: "phone"}));
+    };
+
     const handleResend = () => {
         const trimmedEmail = draft.email.trim();
         if (!isPhoneValid(draft.phone) || verifyCode.isPending) {
             return;
         }
 
-        sendCode.mutate(
+        startSendOnce(
             trimmedEmail
                 ? {phone: normalizePhone(draft.phone), email: trimmedEmail}
                 : {phone: normalizePhone(draft.phone)},
@@ -159,8 +194,14 @@ export default function LoginPage(): JSX.Element {
         );
     };
 
+    // Крестик — выход на лендинг (#1103, слово владельца): сайт всегда
+    // заменяет адрес на «/» без учёта истории — goBack вернул бы гостя на
+    // кабинетный маршрут (например ?from=/properties), где proxy.ts снова
+    // редиректит на /login?from…: крестик закрывал бы форму и тут же
+    // открывал её заново. В standalone PWA крестика нет вовсе (hideClose).
+    // Жёсткая навигация auth-границы — канон Navigation (#1098).
     const handleClose = () => {
-        goBack(router, "/");
+        hardReplace("/");
     };
 
     // Шаги телефона и почты — редизайн по макетам Рентли (карта #761,
@@ -181,7 +222,7 @@ export default function LoginPage(): JSX.Element {
 
     if (draft.step === "email") {
         return (
-            <LoginShell onClose={handleClose} hideClose={isStandalone}>
+            <LoginShell onClose={handleClose} onBack={handleEmailBack} hideClose={isStandalone}>
                 <EmailStep
                     email={draft.email}
                     onEmailChange={(email) => setDraft((prev) => ({...prev, email}))}

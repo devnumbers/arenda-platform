@@ -27,7 +27,9 @@ export type PhoneStepProps = {
  * (#733) «Запросить код можно через ММ:СС» (моно 14/16, tertiary). Юрссылки
  * ведут на лендинг (/privacy, /terms) в новой вкладке — самих страниц пока
  * нет, 404 лендинга не блокирует (решение владельца 18.09). «Написать в
- * поддержку» открывает модалку «Связаться с нами» (#766). */
+ * поддержку» открывает модалку «Связаться с нами» (#766). Кнопка погашена
+ * и на время отправки кода (решение владельца #1099) — без двойного
+ * POST-а и ловящего 429 второго клика. */
 export function PhoneStep({
     phone,
     onPhoneChange,
@@ -66,7 +68,15 @@ export function PhoneStep({
                     onClear={() => onPhoneChange("")}
                 />
 
-                <Button type="submit" loading={isLoading} disabled={!isPhoneValid(phone) || isWaiting}>
+                {/* isLoading дублируется в disabled: Button резолвит
+                    disabled ?? loading, и явный disabled без || не даёт
+                    loading диспейблить кнопку — на время отправки она
+                    оставалась активной (#1099). */}
+                <Button
+                    type="submit"
+                    loading={isLoading}
+                    disabled={!isPhoneValid(phone) || isWaiting || isLoading}
+                >
                     Войти
                 </Button>
 

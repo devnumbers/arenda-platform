@@ -225,6 +225,11 @@ func TestLogout_SuccessDeletesAndClearsCookie(t *testing.T) {
 	if cookie := rr.Header().Get("Set-Cookie"); !strings.Contains(cookie, "session_id=") || !strings.Contains(cookie, "Max-Age=0") {
 		t.Fatalf("Set-Cookie = %q, want session cleared", cookie)
 	}
+	// #1098: the logout response carries Clear-Site-Data: "cache" — see the
+	// handler comment for why no other directive may join it.
+	if got := rr.Header().Get("Clear-Site-Data"); got != `"cache"` {
+		t.Fatalf("Clear-Site-Data = %q, want %q", got, `"cache"`)
+	}
 }
 
 func TestLogout_NotFoundIsIdempotent(t *testing.T) {
@@ -241,6 +246,10 @@ func TestLogout_NotFoundIsIdempotent(t *testing.T) {
 	// ErrNotFound is treated as idempotent success (204).
 	if rr.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want 204 (idempotent)", rr.Code)
+	}
+	// The idempotent path shares the success write, header included (#1098).
+	if got := rr.Header().Get("Clear-Site-Data"); got != `"cache"` {
+		t.Fatalf("Clear-Site-Data = %q, want %q", got, `"cache"`)
 	}
 }
 
