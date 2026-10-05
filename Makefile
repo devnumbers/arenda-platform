@@ -627,13 +627,16 @@ squawk-install:
 # npm audit (--audit-level=high) across the repo's lockfile packages
 # (tools/screenshots, a local playwright utility, stays out of the gate).
 # Every package runs even after a failure, so one red report doesn't hide the
-# rest.
-npm-audit: ## Run npm audit (high+) across all lockfile packages; 3 попытки на каталог — bulk-endpoint реестра моргает ETIMEDOUT'ом
+# rest. Gate verdicts are made by tools/npm-audit-gate.mjs: high/critical with
+# an available fix fail as before; unfixed advisories (fixAvailable === false)
+# are tolerated — the trivy-fs ignore-unfixed policy (GHSA-vfj7-8cjw-p6xm hit
+# the pre-push hook on a braces advisory upstream never patched).
+npm-audit: ## Run npm audit (high+ across all lockfile packages; unfixed advisories tolerated); 3 попытки на каталог — bulk-endpoint реестра моргает ETIMEDOUT'ом
 	@set -e; status=0; for dir in $(NPM_AUDIT_DIRS); do \
 		echo "==> npm audit $$dir"; \
 		ok=0; \
 		for attempt in 1 2 3; do \
-			if (cd $$dir && npm audit --audit-level=high); then ok=1; break; fi; \
+			if (cd $$dir && npm audit --json | node $(CURDIR)/tools/npm-audit-gate.mjs); then ok=1; break; fi; \
 			echo "==> npm audit $$dir failed (attempt $$attempt/3)"; \
 			sleep 3; \
 		done; \
