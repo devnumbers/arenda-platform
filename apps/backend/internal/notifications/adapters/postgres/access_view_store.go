@@ -85,11 +85,11 @@ func (s *AccessViewStore) PropertyView(ctx context.Context, propertyID uuid.UUID
 }
 
 // UserProfileView returns the user's display snapshot: the display name (the
-// access display-name canon — the profile's name, or the masked phone when
-// the profile has none; the raw phone and the email are never a display name)
-// and the email the actor card shows. The copy is this context's own
-// rendering of the shared rule (per-context canon, as the scan publishers'
-// date rendering) — the access context keeps its own.
+// access display-name canon — the profile's name, or the full phone when the
+// profile has none; карта #1105: ничего не прячем звёздочками; the email is
+// never a display name) and the email the actor card shows. The copy is this
+// context's own rendering of the shared rule (per-context canon, as the scan
+// publishers' date rendering) — the access context keeps its own.
 func (s *AccessViewStore) UserProfileView(ctx context.Context, userID uuid.UUID) (application.AccessUserProfile, error) {
 	u, err := s.users.GetByID(ctx, userID)
 	if err != nil {
@@ -102,8 +102,7 @@ func (s *AccessViewStore) UserProfileView(ctx context.Context, userID uuid.UUID)
 }
 
 // accessEventDisplayName joins the profile name ("Name Surname") with the
-// masked-phone fallback — a display name never reveals a full phone or an
-// email.
+// full-phone fallback (карта #1105) — a display name never shows an email.
 func accessEventDisplayName(name, surname *string, phone string) string {
 	parts := make([]string, 0, 2)
 	if name != nil && *name != "" {
@@ -115,14 +114,5 @@ func accessEventDisplayName(name, surname *string, phone string) string {
 	if joined := strings.Join(parts, " "); joined != "" {
 		return joined
 	}
-	return accessEventMaskPhone(phone)
-}
-
-// accessEventMaskPhone masks all but the country code and the last two digits
-// of the phone.
-func accessEventMaskPhone(phone string) string {
-	if len(phone) <= 4 {
-		return phone
-	}
-	return phone[:2] + strings.Repeat("*", len(phone)-4) + phone[len(phone)-2:]
+	return phone
 }

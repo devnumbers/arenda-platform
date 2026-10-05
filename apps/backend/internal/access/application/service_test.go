@@ -108,8 +108,9 @@ func (f fakeUserLookup) GetByEmail(_ context.Context, _ string) (MemberUser, err
 var _ UserLookup = fakeUserLookup{}
 
 // TestAccessService_DisplayName verifies the public display name used by the
-// sharing banner (issue T11): "Name Surname" when present, otherwise a masked
-// phone — never an email or a raw phone. Lookup failures propagate.
+// sharing banner (issue T11): "Name Surname" when present, otherwise the full
+// phone (карта #1105: ничего не прячем звёздочками) — never an email. Lookup
+// failures propagate.
 func TestAccessService_DisplayName(t *testing.T) {
 	t.Parallel()
 	namedID := uuid.Must(uuid.NewV7())
@@ -127,8 +128,8 @@ func TestAccessService_DisplayName(t *testing.T) {
 	if got, err := svc.DisplayName(t.Context(), namedID); err != nil || got != "Ivan Petrov" {
 		t.Errorf("named user: got %q, %v; want %q, nil", got, err, "Ivan Petrov")
 	}
-	if got, err := svc.DisplayName(t.Context(), phoneOnlyID); err != nil || got != "+7********89" {
-		t.Errorf("phone-only user: got %q, %v; want %q, nil", got, err, "+7********89")
+	if got, err := svc.DisplayName(t.Context(), phoneOnlyID); err != nil || got != "+79123456789" {
+		t.Errorf("phone-only user: got %q, %v; want %q, nil", got, err, "+79123456789")
 	}
 	if _, err := svc.DisplayName(t.Context(), missingID); err == nil {
 		t.Errorf("missing user: expected an error, got nil")

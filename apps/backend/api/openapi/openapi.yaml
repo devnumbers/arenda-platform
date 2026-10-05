@@ -6235,7 +6235,8 @@ components:
         owner_name:
           type: string
           description: >
-            Owner display name ("Name Surname" or masked phone, never email).
+            Owner display name ("Name Surname" or the full phone, never
+            email).
             Present when the actor is not the owner: in the detail response
             and on the list rows (main and archive) — the shared card shows
             whose object it is. Own rows carry none.
@@ -7406,8 +7407,8 @@ components:
         display_name:
           type: string
           description: >
-            Participant display name (name and surname, or a masked phone).
-            Never the raw phone or email.
+            Participant display name (name and surname, or the full phone).
+            Never an email.
         status:
           type: string
           enum: [active, suspended, pending]
@@ -7499,7 +7500,7 @@ components:
           type: string
           nullable: true
           description: >
-            The person's display name (name and surname, or a masked phone);
+            The person's display name (name and surname, or the full phone);
             null for a pending row (the email is the label).
         aggregate_status:
           type: string
@@ -7698,7 +7699,7 @@ components:
         owner_name:
           type: string
           description: >
-            The owner's public display name («Имя Фамилия» or a masked
+            The owner's public display name («Имя Фамилия» or the full
             phone).
         owner_email:
           type: string
@@ -8123,7 +8124,7 @@ components:
           description: |
             Владелец и текущие участники области ∪ все актёры журнала области
             (отозванные остаются фильтруемыми). Именованные пользователи — по
-            алфавиту имени, затем фамилии; безымянные (name — маскированный
+            алфавиту имени, затем фамилии; безымянные (name — полный
             телефон) — в конце списка: сортировка по исходным колонкам, а не
             по отображаемому имени.
           items:
@@ -8138,8 +8139,8 @@ components:
       type: object
       description: |
         Участник-вариант фильтра. name — канон отображаемого имени платформы
-        («Имя Фамилия», иначе маскированный телефон); email — текущая почта
-        пользователя; first_name — имя без фамилии для строки «(Вы)»;
+        («Имя Фамилия», иначе полный телефон — карта #1105); email — текущая
+        почта пользователя; first_name — имя без фамилии для строки «(Вы)»;
         is_owner — замок владельца объектов (макет 2067-163528); role —
         иконка роли строки (макет 2184-94261): максимальный доступ в области,
         живое членство сильнее снимка журнала отозванного участника.
@@ -8155,7 +8156,7 @@ components:
           description: Текущая почта; '' — почты нет.
         first_name:
           type: string
-          description: Имя без фамилии; '' — имени нет (тогда name — маскированный телефон).
+          description: Имя без фамилии; '' — имени нет (тогда name — полный телефон).
         is_owner:
           type: boolean
           description: Пользователь владеет хотя бы одним объектом области чтения.

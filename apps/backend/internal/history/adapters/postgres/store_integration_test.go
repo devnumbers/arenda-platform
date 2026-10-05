@@ -233,21 +233,18 @@ func TestStore_SurvivesMemberRevokeAndLeave(t *testing.T) {
 	}
 }
 
-func TestStore_ActorSnapshotMaskedPhoneFallback(t *testing.T) {
+func TestStore_ActorSnapshotFullPhoneFallback(t *testing.T) {
 	t.Parallel()
 	pool := testdb.Setup(t)
-	// A user without name/surname: the display name degrades to the masked
-	// phone — never the raw phone (the access canon, one place).
+	// A user without name/surname: the display name degrades to the full
+	// phone (the access canon, one place — карта #1105).
 	anon := seedUser(t, pool, "", "", "+79991234567", "")
 	snap, err := historypg.NewActorStore(pool).Snapshot(context.Background(), anon)
 	if err != nil {
 		t.Fatalf("Snapshot: %v", err)
 	}
-	if snap.Name == "+79991234567" || snap.Name == "" {
-		t.Errorf("Name = %q, want the masked phone", snap.Name)
-	}
-	if len(snap.Name) != len("+79991234567") {
-		t.Errorf("Name = %q, want the same length as the phone", snap.Name)
+	if snap.Name != "+79991234567" {
+		t.Errorf("Name = %q, want the full phone", snap.Name)
 	}
 	if snap.Email != "" {
 		t.Errorf("Email = %q, want empty", snap.Email)

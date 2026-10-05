@@ -5,8 +5,8 @@ package postgres
 // predicate lives in the SQL (actor_can_read_property, 000142) — rows outside
 // the reader's scope never leave the database; this adapter only marshals
 // the jsonb columns back and composes the participants' display names by the
-// access canon (DisplayNameOf: «Имя Фамилия», иначе маскированный телефон —
-// никогда сырой телефон или email в имени).
+// access canon (DisplayNameOf: «Имя Фамилия», иначе полный телефон — карта
+// #1105; email в имени никогда).
 
 import (
 	"context"

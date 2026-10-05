@@ -116,7 +116,7 @@ func newParticipantFixture(t *testing.T) *participantFixture {
 	}
 	name := "Иван"
 	surname := "Иванов"
-	phone := "+79991234567" // Masks to «+7*******67» in the display name.
+	phone := "+79991234567" // The phone-only user's display name is the full phone (карта #1105).
 	f.svc = NewParticipantService(
 		f.read,
 		&fakeParticipantUsers{users: map[uuid.UUID]MemberUser{
@@ -242,9 +242,9 @@ func TestListParticipants_SortedByDisplayName(t *testing.T) {
 		t.Fatalf("expected 3 participants, got %d", len(got))
 	}
 	// Byte-wise display-name order (the client re-sorts for its «Имя» chip):
-	// the masked-phone row first, then the named user, pending emails last.
-	if got[0].DisplayName != "+7********67" {
-		t.Errorf("first row = %q, want the masked-phone user", got[0].DisplayName)
+	// the phone-only row first, then the named user, pending emails last.
+	if got[0].DisplayName != "+79991234567" {
+		t.Errorf("first row = %q, want the phone-only user", got[0].DisplayName)
 	}
 	if got[1].UserID != f.u1 || got[1].DisplayName != "Иван Иванов" {
 		t.Errorf("second row = %q/%q, want the named user", got[1].DisplayName, got[1].Email)

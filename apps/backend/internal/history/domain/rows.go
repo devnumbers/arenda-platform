@@ -585,8 +585,8 @@ func MemberInvited(email string) Entry {
 }
 
 // MemberAdded builds the membership row for a registered participant; the
-// label is the display-name snapshot with a fallback to the masked phone —
-// never the email (the access canon: userLabel).
+// label is the display-name snapshot with a fallback to the full phone —
+// never the email (the access canon: userLabel; карта #1105).
 func MemberAdded(userID uuid.UUID, label string) Entry {
 	return Entry{
 		Kind:       KindMember,
