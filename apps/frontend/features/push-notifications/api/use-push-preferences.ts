@@ -1,12 +1,12 @@
 'use client';
 
 import {
-  useMutation,
   useQuery,
   useQueryClient,
   type UseMutationResult,
   type UseQueryResult,
 } from '@tanstack/react-query';
+import { useGuardedMutation } from '@/shared/lib/hooks/use-guarded-mutation';
 import { apiClient } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
 import {
@@ -92,7 +92,7 @@ export function useUpdatePushDevicePreferences(): UseMutationResult<
   UpdatePushDevicePreferencesVars
 > {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async ({ endpoint, categories }: UpdatePushDevicePreferencesVars) => {
       const body: PushPreferencesRequestDto = { endpoint, categories };
       const response = await apiClient<PushPreferencesDto>(

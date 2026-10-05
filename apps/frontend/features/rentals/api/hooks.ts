@@ -1,6 +1,7 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient, type UseMutationResult, type UseQueryResult } from '@tanstack/react-query';
+import { useQuery, useQueryClient, type UseMutationResult, type UseQueryResult } from '@tanstack/react-query';
+import { useGuardedMutation } from '@/shared/lib/hooks/use-guarded-mutation';
 import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
 import { mapRental, mapRentalSummary } from '@/entities/rental';
@@ -30,7 +31,7 @@ export function useCreateRental(
   propertyId: string,
 ): UseMutationResult<Rental, ApiError, RentalCreateCommand> {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (command: RentalCreateCommand) => {
       const response = await apiClient<RentalResponseDto>(
         `/properties/${encodeURIComponent(propertyId)}/rentals`,
@@ -74,7 +75,7 @@ export function useUpdateRental(
   rentalId: string,
 ): UseMutationResult<Rental, ApiError, RentalUpdateCommand> {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (command: RentalUpdateCommand) => {
       const response = await apiClient<RentalResponseDto>(
         `/properties/${encodeURIComponent(propertyId)}/rentals/${encodeURIComponent(rentalId)}`,
@@ -101,7 +102,7 @@ export function useCompleteRental(
   rentalId: string,
 ): UseMutationResult<Rental, ApiError, RentalCompleteCommand> {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (command: RentalCompleteCommand) => {
       const response = await apiClient<RentalResponseDto>(
         `/properties/${encodeURIComponent(propertyId)}/rentals/${encodeURIComponent(rentalId)}/complete`,
@@ -156,7 +157,7 @@ export function useDeleteRental(
   paymentId: string,
 ): UseMutationResult<void, ApiError, void> {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async () => {
       await apiClient<void>(
         `/properties/${encodeURIComponent(propertyId)}/rentals/${encodeURIComponent(rentalId)}`,

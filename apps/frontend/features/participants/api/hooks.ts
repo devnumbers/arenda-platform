@@ -1,6 +1,7 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient, type UseMutationResult, type UseQueryResult } from '@tanstack/react-query';
+import { useQuery, useQueryClient, type UseMutationResult, type UseQueryResult } from '@tanstack/react-query';
+import { useGuardedMutation } from '@/shared/lib/hooks/use-guarded-mutation';
 import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
 import type { components } from '@/shared/api/dto';
@@ -71,7 +72,7 @@ export function useRevokeAllParticipants(): UseMutationResult<
   readonly string[]
 > {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (participantIds) => {
       const { done, failed } = await deleteBatchCounting(
         participantIds.map((id) => `/participants/${encodeURIComponent(id)}`),
@@ -102,7 +103,7 @@ export function useParticipant(
  * успеха, и при сбое: список/счётчики/агрегат перечитываются. */
 export function useRevokeParticipant(): UseMutationResult<void, ApiError, string> {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (participantId: string) => {
       await apiClient<void>(`/participants/${encodeURIComponent(participantId)}`, {
         method: 'DELETE',
@@ -154,7 +155,7 @@ function invalidateLeaveProjections(queryClient: QueryClient): void {
  * Инвалидация в onSettled — канон participants-мутаций. */
 export function useLeaveProperty(): UseMutationResult<void, ApiError, string> {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (propertyId: string) => {
       await apiClient<void>(
         `/properties/${encodeURIComponent(propertyId)}/access/members/self`,
@@ -176,7 +177,7 @@ export function useLeaveAllProperties(): UseMutationResult<
   readonly string[]
 > {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: (propertyIds) =>
       deleteBatchCounting(
         propertyIds.map(
@@ -209,7 +210,7 @@ export function useAddParticipantProperties(
   AddParticipantPropertiesCommand
 > {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (command) => {
       const response = await apiClient<components['schemas']['ParticipantGrantResultsResponse']>(
         `/participants/${encodeURIComponent(participantId)}/properties`,
@@ -245,7 +246,7 @@ export function useInviteParticipant(): UseMutationResult<
   InviteParticipantCommand
 > {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (command) => {
       const response = await apiClient<components['schemas']['ParticipantGrantResultsResponse']>(
         '/participants/invite',
