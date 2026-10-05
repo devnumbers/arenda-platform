@@ -2,6 +2,7 @@
 
 import Image, { type StaticImageData } from "next/image";
 import { useEffect, useRef, useState } from "react";
+import { TabletStrip } from "@/components/tablet-strip";
 import reviewAvatar1 from "@/assets/sections/review-avatar-1.webp";
 import reviewAvatar2 from "@/assets/sections/review-avatar-2.webp";
 import reviewAvatar3 from "@/assets/sections/review-avatar-3.webp";
@@ -230,9 +231,74 @@ function onSlideKeydown(
   };
 }
 
-// ---- Планшет/мобайл: отзыв-карточки ----
+// ---- Планшет/мобайл: разводка ярусов ----
 
-export function TestimonialsCarousel() {
+// Стеклянная плашка отзыва — общая для обоих тач-ярусов. Разводка цитат
+// внутри: на мобилке (≤480) активна короткая (tab:hidden), на планшете —
+// полная (tab:block).
+function ReviewPlate({ review }: { review: Review }) {
+  return (
+    <div className="absolute inset-x-2 bottom-2 flex flex-col gap-4 rounded-[24px] bg-black/[0.24] p-6 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.32)] backdrop-blur-[16px]">
+      {review.quoteShort ? (
+        <>
+          <blockquote className="hidden text-m font-medium leading-6 text-white tab:block">
+            {review.quote}
+          </blockquote>
+          <blockquote className="text-m font-medium leading-6 text-white tab:hidden">
+            {review.quoteShort}
+          </blockquote>
+        </>
+      ) : (
+        <blockquote className="text-m font-medium leading-6 text-white">
+          {review.quote}
+        </blockquote>
+      )}
+      <div className="flex items-center gap-3">
+        {/* eager: нативный lazy Chromium не стартует на паре аватаров
+            очереди/стопки (поймано приёмкой) — вес после оптимизатора
+            ~1-2KB на голову, нечего ленить */}
+        <Image
+          src={review.avatar}
+          alt={review.name}
+          width={44}
+          height={44}
+          loading="eager"
+          className="size-11 rounded-full object-cover"
+        />
+        <div className="flex flex-col gap-0.5">
+          <p className="text-s leading-5 text-white">{review.name}</p>
+          <p className="max-w-[180px] text-xs leading-[18px] text-white/70">
+            {review.sub}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Планшет (481–1199): полоса на движке лент — логика «Для кого сервис» /
+// «Организуйте дела» (решение владельца): полные равные карточки без
+// «активной» и приглушения, движение — drag 1:1 пальцем и
+// трекпад/Shift+Scroll (шаг), мышь не тянет, снап, флик, резинка; тап по
+// карточке ничего не делает.
+function TestimonialsStripCard({ review }: { review: Review }) {
+  return (
+    <figure className="relative h-[500px] w-[320px] shrink-0 overflow-hidden rounded-[32px]">
+      <Image
+        src={review.photo}
+        alt={review.alt}
+        fill
+        sizes="320px"
+        className="object-cover"
+      />
+      <ReviewPlate review={review} />
+    </figure>
+  );
+}
+
+// ≤480 и SSR-снапшот: клик-карусель Яндекса (тап по выглядывающей,
+// растворение, loop) — планшету не принадлежит, см. TestimonialsCarousel.
+function TestimonialsClickCarousel() {
   const { setActive, stateOf } = useClickCarousel(COUNT, TOUCH_FREEZE_MS);
 
   return (
@@ -258,41 +324,7 @@ export function TestimonialsCarousel() {
               sizes="320px"
               className="object-cover"
             />
-            <div className="absolute inset-x-2 bottom-2 flex flex-col gap-4 rounded-[24px] bg-black/[0.24] p-6 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.32)] backdrop-blur-[16px]">
-              {review.quoteShort ? (
-                <>
-                  <blockquote className="hidden text-m font-medium leading-6 text-white tab:block">
-                    {review.quote}
-                  </blockquote>
-                  <blockquote className="text-m font-medium leading-6 text-white tab:hidden">
-                    {review.quoteShort}
-                  </blockquote>
-                </>
-              ) : (
-                <blockquote className="text-m font-medium leading-6 text-white">
-                  {review.quote}
-                </blockquote>
-              )}
-              <div className="flex items-center gap-3">
-                {/* eager: нативный lazy Chromium не стартует на паре аватаров
-                    очереди/стопки (поймано приёмкой) — вес после оптимизатора
-                    ~1-2KB на голову, нечего ленить */}
-                <Image
-                  src={review.avatar}
-                  alt={review.name}
-                  width={44}
-                  height={44}
-                  loading="eager"
-                  className="size-11 rounded-full object-cover"
-                />
-                <div className="flex flex-col gap-0.5">
-                  <p className="text-s leading-5 text-white">{review.name}</p>
-                  <p className="max-w-[180px] text-xs leading-[18px] text-white/70">
-                    {review.sub}
-                  </p>
-                </div>
-              </div>
-            </div>
+            <ReviewPlate review={review} />
           </>
         );
 
@@ -331,6 +363,24 @@ export function TestimonialsCarousel() {
         );
       })}
     </div>
+  );
+}
+
+export function TestimonialsCarousel() {
+  return (
+    // Полоса планшета во всю ширину окна: карточки — прямые дети дорожки
+    // (движок меряет шаг 332 и стрип по ним), поле 24px и зазор 12 даёт
+    // tablet-strip.module.css; мобилке достаётся прежний корень — поля
+    // (mx-6) живут в самой клик-карусели, обёртке они не нужны (иначе
+    // на мобилке поле удваивается).
+    <TabletStrip
+      stripWidth={1648}
+      activeChildren={REVIEWS.map((review) => (
+        <TestimonialsStripCard key={review.name} review={review} />
+      ))}
+    >
+      <TestimonialsClickCarousel />
+    </TabletStrip>
   );
 }
 
