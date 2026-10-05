@@ -208,3 +208,16 @@
     overflow: visible;
   }
 }
+
+/* Прыжок loop-перестановки в карусели отзывов (testimonials-carousel):
+   слайд, выходящий из «стопки» растворённых в очередь, переезжает без
+   анимации transform — иначе перелетает весь экран на виду; проявление
+   0→0.4 остаётся плавным. Отдельная утилита: arbitrary-класс Tailwind
+   съедает 0ms-длительность transform. */
+@utility slide-jump {
+  transition: transform 0ms linear, opacity 360ms ease-out;
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+}
