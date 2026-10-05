@@ -221,3 +221,29 @@
     transition: none;
   }
 }
+
+/* Десктопный переход карусели отзывов — плавнее тачевого (решение
+   владельца «чуток плавнее на ПК», канон 1:1 с Яндексом остался на
+   тачах): дольше (440 против 360ms) и с мягким входом и выходом
+   (cubic-bezier(0.45,0,0.2,1)) — у яндексовского ease-out резкий разгон
+   первых ~15% пути читался как рывок на въезде карточки. Утилитой, не
+   arbitrary-классом (см. slide-jump); reduce — внутри утилиты, чтобы не
+   бороться с motion-reduce:transition-none за порядок каскада. */
+@utility slide-desk {
+  transition:
+    transform 440ms cubic-bezier(0.45, 0, 0.2, 1),
+    opacity 440ms cubic-bezier(0.45, 0, 0.2, 1);
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+}
+
+@utility slide-jump-desk {
+  transition: transform 0ms linear, opacity 440ms
+    cubic-bezier(0.45, 0, 0.2, 1);
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+}

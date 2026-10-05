@@ -111,6 +111,15 @@ const COUNT = REVIEWS.length;
 // Переход 360ms ease-out — скорость и кривая карусели Яндекса (speed 360).
 const SLIDE_TRANSITION_CLASS =
   "transition-[transform,opacity] duration-[360ms] ease-out";
+// Десктоп плавнее тача (решение владельца): 440ms и мягкий вход/выход —
+// утилиты в globals.css (reduce внутри них, тайминг-функция в arbitrary
+// классах ненадёжна — Tailwind съедает часть значения).
+const DESK_TRANSITION_CLASS = "slide-desk";
+const DESK_JUMP_TRANSITION_CLASS = "slide-jump-desk";
+// Заморозка растворения держится чуть дольше перехода (растворение должно
+// доиграть до конца, невидимая перестановка — после).
+const TOUCH_FREEZE_MS = 400;
+const DESK_FREEZE_MS = 480;
 // Растворение уходящей карточки: сжатие до 0.6 в ноль (у Яндекса ушедший
 // слайд оседает на 0.6 под наезжающим активным).
 const RECESSED_SCALE = 0.6;
@@ -125,7 +134,7 @@ const IDLE_OPACITY = 0.4;
 // на каждом кадре, двигаются только scale и opacity), а по завершении
 // перехода невидимо переставляется за обрез; таймер хранится в ref —
 // мутации только в обработчике клика, не на рендере.
-function useClickCarousel(count: number) {
+function useClickCarousel(count: number, freezeMs: number) {
   const [active, setActiveState] = useState({ current: 0, previous: 0 });
   const [frozen, setFrozen] = useState<number | null>(null);
   // Слайд, только что вышедший из заморозки: его перестановка на конечную
@@ -154,7 +163,7 @@ function useClickCarousel(count: number) {
       frozenTimer.current = setTimeout(() => {
         setFrozen(null);
         setThawed(active.current);
-      }, 400);
+      }, freezeMs);
     } else {
       setFrozen(null);
       setThawed(null);
@@ -224,7 +233,7 @@ function onSlideKeydown(
 // ---- Планшет/мобайл: отзыв-карточки ----
 
 export function TestimonialsCarousel() {
-  const { setActive, stateOf } = useClickCarousel(COUNT);
+  const { setActive, stateOf } = useClickCarousel(COUNT, TOUCH_FREEZE_MS);
 
   return (
     <div className="relative mx-6 h-[500px]">
@@ -339,7 +348,7 @@ const DESK_STEP = 320;
 const DESK_EXTRA = 38;
 
 export function TestimonialsDesktop() {
-  const { active, setActive, stateOf } = useClickCarousel(COUNT);
+  const { active, setActive, stateOf } = useClickCarousel(COUNT, DESK_FREEZE_MS);
   const review = REVIEWS[active];
   if (!review) {
     return null;
@@ -380,8 +389,8 @@ export function TestimonialsDesktop() {
         {REVIEWS.map((item, index) => {
           const { rel, jumping, frozen } = stateOf(index);
           const transition = jumping
-            ? "slide-jump"
-            : `${SLIDE_TRANSITION_CLASS} motion-reduce:transition-none`;
+            ? DESK_JUMP_TRANSITION_CLASS
+            : DESK_TRANSITION_CLASS;
           const className = `absolute left-0 top-[25px] h-[400px] w-[300px] origin-left overflow-hidden rounded-[40px] ${transition} will-change-[transform,opacity] motion-reduce:transition-none`;
           const style = slideStyle(rel, DESK_STEP, DESK_EXTRA, ACTIVE_SCALE, frozen);
           // Кликабельны только видимые позиции — очередь №1 и №2 (№3 за
