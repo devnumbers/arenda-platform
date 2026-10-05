@@ -203,7 +203,7 @@ export function TariffCards({
       {/* Заголовок и переключатель: на планшете/мобайле — столбиком по центру,
           на десктопе — в одну строку от левого края (макет 2846-153712). */}
       <div className="flex flex-col items-center gap-6 desk:flex-row desk:items-center desk:self-stretch desk:gap-8">
-        <h2 className="text-center text-[28px] font-semibold leading-8 desk:text-h2 desk:leading-[60px]">
+        <h2 className="text-center text-[28px] font-semibold leading-8 tab:text-[32px] tab:leading-9 desk:text-h2 desk:leading-[60px]">
           Тарифы
         </h2>
         {/* Переключатель периода — группа честных кнопок без панельной

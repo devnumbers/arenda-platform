@@ -52,7 +52,7 @@ export function Steps() {
           <div className="relative flex w-full flex-col items-center justify-end overflow-hidden rounded-[32px] bg-[linear-gradient(180deg,rgba(43,127,255,0)_0%,rgba(43,127,255,0.1)_100%)] px-8 desk:px-10">
             <Reveal className="w-full">
               <div className="flex w-full flex-col items-center gap-6 desk:gap-8">
-                <h2 className="text-center text-[28px] font-semibold leading-8 desk:text-h2 desk:leading-[60px]">
+                <h2 className="text-center text-[28px] font-semibold leading-8 tab:text-[32px] tab:leading-9 desk:text-h2 desk:leading-[60px]">
                   Как начать пользоваться
                 </h2>
                 {/* Группа кнопок-переключателей шагов: панельной семантики

@@ -22,7 +22,7 @@ export function Sharing() {
       <div className="mx-auto w-full max-w-[1048px] px-6 desk:max-w-[1000px] desk:px-0">
         <Reveal>
           <div className="flex flex-col items-center gap-3 text-center">
-            <h2 className="text-[28px] font-semibold leading-8 desk:text-h2 desk:leading-[60px]">
+            <h2 className="text-[28px] font-semibold leading-8 tab:text-[32px] tab:leading-9 desk:text-h2 desk:leading-[60px]">
               Делитесь объектом
             </h2>
             <p className="text-s leading-5 text-gray-2 [text-shadow:0_8px_24px_rgba(0,0,0,0.12)] desk:text-[28px] desk:leading-8">

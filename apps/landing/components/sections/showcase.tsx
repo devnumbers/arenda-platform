@@ -634,7 +634,7 @@ export function Showcase() {
       <div className="mx-auto flex max-w-[1048px] flex-col items-center gap-8 px-10 desk:max-w-[1000px] desk:gap-14 desk:px-0">
         <Reveal className="w-full">
           <div className="flex w-full flex-col items-center gap-3 text-center desk:gap-6">
-            <h2 className="text-balance text-[28px] font-semibold leading-8 desk:text-h2 desk:leading-[60px]">
+            <h2 className="text-balance text-[28px] font-semibold leading-8 tab:text-[32px] tab:leading-9 desk:text-h2 desk:leading-[60px]">
               Создайте карточку своей недвижимости
             </h2>
             <p className="text-balance text-s leading-5 text-gray-2 desk:text-[28px] desk:leading-8 desk:font-medium">
