@@ -5,17 +5,19 @@ import heroBg from "@/assets/sections/hero-bg.webp";
 import heroBgTablet from "@/assets/sections/hero-bg-tablet.webp";
 import heroBgMobile from "@/assets/sections/hero-bg-mobile.webp";
 
-// Хиро — макеты 2814-731 (десктоп: панель 607, r40, контент внизу слева,
-// H1 72/76), 2859-3457 (планшет: 936, r32, контент сверху по центру,
-// H1 36/40 Medium), 2826-151757 (мобайл: 788, r32, H1 28/32 SemiBold,
-// подзаголовок 16/20). У планшета и мобайла свои кропы фонового фото —
-// imageRef-заливки узлов Figma, поэтому <picture> с media-источниками.
+// Хиро — макеты 2967-75647 (десктоп: панель 607, r40, контент внизу слева,
+// H1 72/76, тень текста 0 8px 32px rgba(0,0,0,0.24)), 3005-78026 (планшет:
+// 936, r32, контент сверху по центру, H1 36/40 Medium), 3008-79108 (мобайл:
+// 788, r32, H1 28/32 SemiBold, подзаголовок 16/20); на планшете/мобайле
+// тень прежняя 0 8px 24px rgba(0,0,0,0.12). У планшета и мобайла свои кропы
+// фонового фото — imageRef-заливки узлов Figma (исходники — оригинальные
+// байты заливок, пережаты в webp q100), поэтому <picture> с media-источниками.
 export function Hero() {
   // Медиа-ветки <picture> считаем через getImageProps, чтобы планшетный и
-  // мобильный кропы шли через /_next/image-оптимизатор (AVIF q90 из
+  // мобильный кропы шли через /_next/image-оптимизатор (AVIF q95 из
   // next.config), а не сырым webp; в <source> передаём только srcSet/sizes.
-  const mobileBg = getImageProps({ src: heroBgMobile, alt: "", fill: true, sizes: "100vw", quality: 90 });
-  const tabletBg = getImageProps({ src: heroBgTablet, alt: "", fill: true, sizes: "100vw", quality: 90 });
+  const mobileBg = getImageProps({ src: heroBgMobile, alt: "", fill: true, sizes: "100vw", quality: 95 });
+  const tabletBg = getImageProps({ src: heroBgTablet, alt: "", fill: true, sizes: "100vw", quality: 95 });
   return (
     <section id="hero" className="px-2 pt-2">
       <div className="relative flex h-[788px] flex-col justify-start overflow-hidden rounded-[32px] p-8 pt-12 tab:h-[936px] tab:px-12 tab:pt-16 tab:pb-12 desk:h-[607px] desk:justify-end desk:rounded-[40px] desk:p-10">
@@ -28,7 +30,7 @@ export function Hero() {
           />
           <Image
             src={heroBg}
-            alt="Интерфейс Рентли на экране телефона на фоне квартиры"
+            alt="Телефон с интерфейсом Рентли на фоне синего кожаного дивана"
             fill
             // LCP-фон первого экрана грузим сразу, но без priority: тот
             // эмитит <link rel=preload> по десктопному srcSet, холостому
@@ -40,10 +42,19 @@ export function Hero() {
           />
         </picture>
         <Reveal>
-          <div className="relative flex max-w-[855px] flex-col items-center gap-6 text-center desk:gap-8 desk:items-start desk:text-left">
-            <div className="flex flex-col gap-4 [text-shadow:0_8px_24px_rgba(0,0,0,0.12)] desk:gap-6">
+          {/* mx-auto центрирует обёртку на мобиле/планшете: при ширине панели
+              больше 855px без него обёртка прилипает влево (нашлось на
+              901–1199 планшетного яруса); на десктопе контент по макету
+              прижат влево — desk:mx-0. */}
+          <div className="relative mx-auto flex max-w-[855px] flex-col items-center gap-8 text-center desk:mx-0 desk:items-start desk:text-left">
+            <div className="flex flex-col gap-4 [text-shadow:0_8px_24px_rgba(0,0,0,0.12)] desk:gap-6 desk:[text-shadow:0_8px_32px_rgba(0,0,0,0.24)]">
+              {/* Перенос после «управления» — как в планшетном макете
+                  (3005-78026): на ярусе 481–1199 заголовок влезает в одну
+                  строку до ~1199 и balance не срабатывает, поэтому перенос
+                  явный; на мобиле (3 строки) и десктопе — естественный. */}
               <h1 className="text-balance text-[28px] font-semibold leading-8 text-white tab:text-[36px] tab:font-medium tab:leading-10 desk:text-h1 desk:font-semibold desk:leading-[76px]">
-                Сервис управления арендой недвижимости
+                Сервис управления
+                <br className="hidden tab:block desk:hidden" /> арендой недвижимости
               </h1>
               <p className="text-balance text-s font-normal leading-5 text-white/70 tab:text-m tab:font-medium tab:leading-6 desk:text-h4 desk:font-medium desk:leading-8 desk:text-white">
                 Управляйте сдачей жилья без таблиц и заметок

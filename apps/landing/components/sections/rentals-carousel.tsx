@@ -1,38 +1,31 @@
 "use client";
 
 import Image, { type StaticImageData } from "next/image";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { CarouselDots } from "@/components/carousel-dots";
-import {
-  createSpring,
-  nearestCardIndex,
-  type Spring,
-} from "@/components/carousel-spring";
+import { useEffect, useRef } from "react";
+import { createStripEngine } from "@/components/strip-engine";
 import rentalCalendar from "@/assets/sections/rental-calendar.webp";
 import rentalContacts from "@/assets/sections/rental-contacts.webp";
 import rentalContract from "@/assets/sections/rental-contract.webp";
 import rentalHistory from "@/assets/sections/rental-history.webp";
 import rentalOverdue from "@/assets/sections/rental-overdue.webp";
 import rentalReport from "@/assets/sections/rental-report.webp";
+import s from "./rentals-carousel.module.css";
 
-// Карусель «Управляйте арендой» — макеты 2814-884/885/888 (десктоп) и
-// 2859-3475 (планшет/мобайл): 6 карточек 380×550 (r40, px-40 py-52) на
-// десктопе и 320×500 (r32, p-48/24) на планшете-мобайле; иллюстрации
-// прижаты к низу по макету каждой карточки.
+// Карусель «Управляйте арендой» — макеты 2967-75818 (ПК), 3005-78042
+// (планшет), 3008-79124 (мобила): 6 карточек 380×550 (r40) на десктопе
+// и 320×500 (r32) на планшете-мобиле; иллюстрации прижаты к низу по
+// макету каждой карточки. Лента стартует от левого края контентной
+// колонки (на ПК 1000px, на планшете-мобиле поле 24px) и течёт за её
+// правый край до обреза вьюпортом. Точек и «полки» нет — карточки
+// равные, без масштаба и приглушения.
 //
-// Десктоп — «полка» в стиле Apple: активная карточка стоит по центру окна,
-// по краям призрачное место (крайние карточки тоже встают по центру);
-// клик по точке и докатка после свайпа — пружинка с лёгким перелётом цели
-// и упругим возвратом (общая для лент — components/carousel-spring.ts;
-// CSS-снап выключен везде, докатку ведём сами по простою скролла),
-// соседние карточки чуть меньше и приглушены — по
-// дистанции до центра в rAF, без внешних зависимостей. 6 точек-кнопок
-// снизу по макету 2814-885 — на всех брейкпоинтах.
-// Планшет/мобайл — та же логика (макет 2859-3475): карточки 320 с зазором
-// 12, отступ 24px до первой и после последней (хвостовой спейсер даёт
-// последней встать на ту же линию), тач-моментум нативный, докатка — наша
-// пружинка; overscroll-x contain не даёт краевому свайпу дёргать навигацию.
-// prefers-reduced-motion — без пружинки и «полки», скролл мгновенный.
+// Движок — общий модуль лент лендинга (components/strip-engine.ts),
+// канон 1:1 с каруселью pay.yandex.ru/business/acquiring (замер 02.10):
+// drag 1:1 за указателем без инерции со снапом и броском, Shift+Scroll —
+// шаг на событие, резиновый край, 360мс ease-out (460мс <720). Ярусы
+// геометрии — зеркало CSS-модуля: ПК — колонка 1000px, планшет-мобайл —
+// колонка «ширина окна − 48» (поле 24px). Ширины карточек движку не
+// нужны — шаг и длина стрипа измеряются по живым детям дорожки.
 type Card = {
   title: string;
   text: string;
@@ -104,212 +97,35 @@ const CARDS: Card[] = [
   },
 ];
 
-const DESK_QUERY = "(min-width: 1200px)";
-
-// Отступ первой/последней карточки на планшете-мобайле (макет 2859-3475):
-// линия покоя карточки = её offsetLeft минус этот паддинг скроллера.
-const TOUCH_INSET = 24;
-
-// «Полка»: масштаб и приглушение карточки на краю окна (у активной — 1).
-const SHELF_SCALE_FAR = 0.93;
-const SHELF_OPACITY_FAR = 0.6;
-
 export function RentalsCarousel() {
-  // relative на скроллере делает offsetLeft карточек координатами скролла —
-  // на них построены и глайд, и «полка».
-  const scroller = useRef<HTMLDivElement>(null);
-  const cards = useRef<Array<HTMLElement | null>>([]);
-  const frame = useRef(0);
-  const reduced = useRef(false);
-  const [desk, setDesk] = useState(false);
-  const [active, setActive] = useState(0);
-  const activeRef = useRef(0);
-  // Глайд и докатка — общая пружинка лент (components/carousel-spring.ts).
-  // Собирается в эффекте: её доступители читают ref-ы ленты, а трогать
-  // ref-ы при рендере нельзя; скролл-события раньше эффектов не бывают.
-  const springRef = useRef<Spring | null>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    springRef.current = createSpring({
-      scroller: () => scroller.current,
-      reduced: () => reduced.current,
+    const vp = viewportRef.current;
+    const track = trackRef.current;
+    if (!vp || !track) {
+      return;
+    }
+    const engine = createStripEngine(vp, track, {
+      tier: () =>
+        window.matchMedia("(min-width: 1200px)").matches
+          ? { gap: 20, column: () => 1000 }
+          : { gap: 12, column: (w) => w - 48 },
+      draggingClass: s.dragging,
     });
     return () => {
-      springRef.current?.destroy();
-      springRef.current = null;
+      engine.destroy();
     };
   }, []);
-
-  useEffect(() => {
-    const rm = window.matchMedia("(prefers-reduced-motion: reduce)");
-    reduced.current = rm.matches;
-    // Настройка может поменяться на лету — держим ref актуальным.
-    const onRmChange = () => {
-      reduced.current = rm.matches;
-    };
-    rm.addEventListener("change", onRmChange);
-    const mq = window.matchMedia(DESK_QUERY);
-    const update = () => setDesk(mq.matches);
-    update();
-    mq.addEventListener("change", update);
-    return () => {
-      rm.removeEventListener("change", onRmChange);
-      mq.removeEventListener("change", update);
-    };
-  }, []);
-
-  // Один проход на кадр: читаем геометрию стрипа, ведём активную точку, на
-  // десктопе рисуем «полку» (масштаб и прозрачность по дистанции до центра).
-  const sync = useCallback(() => {
-    const el = scroller.current;
-    const nodes = cards.current;
-    if (!el || nodes.length === 0) {
-      return;
-    }
-    const target =
-      el.scrollLeft +
-      (desk ? el.clientWidth / 2 : (nodes[0]?.offsetWidth ?? 0) / 2);
-    // Активная карточка — ближайшая к целевой точке; поиск общий с докаткой
-    // (nearestCardIndex), поверх здесь идёт отрисовка «полки» по дистанции.
-    const best = nearestCardIndex(nodes, target);
-    if (best < 0) {
-      return;
-    }
-    for (let i = 0; i < nodes.length; i += 1) {
-      const card = nodes[i];
-      if (!card) {
-        continue;
-      }
-      const dist = Math.abs(card.offsetLeft + card.offsetWidth / 2 - target);
-      if (desk && !reduced.current) {
-        const p = Math.max(0, 1 - dist / (el.clientWidth / 2));
-        card.style.transform = `scale(${(
-          SHELF_SCALE_FAR +
-          (1 - SHELF_SCALE_FAR) * p
-        ).toFixed(4)})`;
-        card.style.opacity = (
-          SHELF_OPACITY_FAR +
-          (1 - SHELF_OPACITY_FAR) * p
-        ).toFixed(3);
-      } else {
-        // Карусель или reduced-motion: инлайн-стили «полки» не нужны.
-        card.style.transform = "";
-        card.style.opacity = "";
-      }
-    }
-    if (activeRef.current !== best) {
-      activeRef.current = best;
-      setActive(best);
-    }
-  }, [desk]);
-
-  // Активная точка и «полка» до первого скролла и при смене брейкпоинта.
-  useEffect(() => {
-    sync();
-  }, [sync]);
-
-  useEffect(() => {
-    const onResize = () => {
-      cancelAnimationFrame(frame.current);
-      frame.current = requestAnimationFrame(sync);
-    };
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [sync]);
-
-  useEffect(
-    () => () => {
-      cancelAnimationFrame(frame.current);
-    },
-    [],
-  );
-
-  // Ближайшая к целевой точке карточка: её позиция скролла (центр/левый край).
-  const nearestCardLeft = useCallback(() => {
-    const el = scroller.current;
-    const nodes = cards.current;
-    if (!el || nodes.length === 0) {
-      return null;
-    }
-    const target =
-      el.scrollLeft +
-      (desk ? el.clientWidth / 2 : (nodes[0]?.offsetWidth ?? 0) / 2);
-    const card = nodes[nearestCardIndex(nodes, target)];
-    if (!card) {
-      return null;
-    }
-    return desk
-      ? card.offsetLeft + card.offsetWidth / 2 - el.clientWidth / 2
-      : card.offsetLeft - TOUCH_INSET;
-  }, [desk]);
-
-  // Докатка после свайпа: скролл затих — сами тянем полосу к ближайшей
-  // карточке пружинкой (CSS-снап ради этого выключен на всех брейкпоинтах).
-  const settle = useCallback(() => {
-    const el = scroller.current;
-    if (!el || springRef.current?.isGliding()) {
-      return;
-    }
-    // Резинка на краях (iOS): пока полоса за границами — не докатываем,
-    // отскок пришлёт новые скролл-события и таймер перезапустится.
-    if (
-      el.scrollLeft < 0 ||
-      el.scrollLeft > el.scrollWidth - el.clientWidth
-    ) {
-      return;
-    }
-    const left = nearestCardLeft();
-    if (left === null || Math.abs(left - el.scrollLeft) < 2) {
-      return;
-    }
-    springRef.current?.glideTo(left);
-  }, [nearestCardLeft]);
-
-  const onScroll = useCallback(() => {
-    cancelAnimationFrame(frame.current);
-    frame.current = requestAnimationFrame(sync);
-    springRef.current?.scheduleSettle(settle);
-  }, [sync, settle]);
-
-  const goTo = useCallback(
-    (index: number) => {
-      const el = scroller.current;
-      const card = cards.current[index];
-      if (!el || !card) {
-        return;
-      }
-      springRef.current?.glideTo(
-        desk
-          ? card.offsetLeft + card.offsetWidth / 2 - el.clientWidth / 2
-          : card.offsetLeft - TOUCH_INSET,
-      );
-    },
-    [desk],
-  );
 
   return (
-    <div className="flex flex-col">
-      <div className="order-2 mt-6 flex items-center justify-center gap-4 desk:mt-12">
-        <CarouselDots
-          count={CARDS.length}
-          active={active}
-          onSelect={goTo}
-          labelFor={(i) => CARDS[i]?.title ?? ""}
-        />
-      </div>
-      <div
-        ref={scroller}
-        onScroll={onScroll}
-        onPointerDown={() => springRef.current?.stopGlide()}
-        onWheel={() => springRef.current?.stopGlide()}
-        className="relative order-1 flex gap-3 hide-scrollbar px-6 pb-2 desk:gap-5 desk:px-[calc((100%_-_380px)/2)]"
-      >
-        {CARDS.map((card, i) => (
+    <div ref={viewportRef} className={s.viewport}>
+      <div ref={trackRef} className={s.track}>
+        {CARDS.map((card) => (
           <article
             key={card.title}
-            ref={(el) => {
-              cards.current[i] = el;
-            }}
-            className="relative h-[500px] w-[320px] shrink-0 overflow-clip rounded-[32px] bg-surface px-6 pt-12 desk:h-[550px] desk:w-[380px] desk:rounded-[40px] desk:px-10 desk:pt-[52px] desk:will-change-transform"
+            className="relative h-[500px] w-[320px] shrink-0 overflow-clip rounded-[32px] bg-surface px-6 pt-12 desk:h-[550px] desk:w-[380px] desk:rounded-[40px] desk:px-10 desk:pt-[52px]"
           >
             <div className="mx-auto flex w-full max-w-[220px] flex-col items-center gap-2 text-center desk:gap-3 desk:max-w-[300px]">
               <h3 className="text-[22px] font-medium leading-[26px] desk:text-[28px] desk:leading-8">
@@ -331,6 +147,7 @@ export function RentalsCarousel() {
               width={card.imgWidth}
               height={card.imgWidth}
               sizes="(min-width: 1200px) 380px, 320px"
+              draggable={false}
               className={`absolute bottom-0 left-1/2 h-auto -translate-x-1/2 ${
                 card.imgBottomSub ? "mb-[50px] desk:mb-[70px]" : "mb-0"
               }`}
@@ -338,13 +155,6 @@ export function RentalsCarousel() {
             />
           </article>
         ))}
-        {/* Хвостовой отступ 24px: последняя карточка встаёт на ту же линию,
-            что и первая (100% здесь — контент-бокс без паддингов; 12px
-            съедает flex-gap перед спейсером). */}
-        <div
-          aria-hidden
-          className="w-[calc(100%_-_332px)] shrink-0 desk:hidden"
-        />
       </div>
     </div>
   );

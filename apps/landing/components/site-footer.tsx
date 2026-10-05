@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { LandingLink } from "./button";
+import { FeedbackModal } from "./feedback-modal";
 import { Logo } from "./logo";
 
 // Футер — макеты 2814-1150 (десктоп: колонка max-w-1000 с шагом 64px,
@@ -32,12 +33,9 @@ export function SiteFooter() {
           <LandingLink variant="gray" href="mailto:hello@rentlee.ru">
             hello@rentlee.ru
           </LandingLink>
-          <LandingLink
-            variant="gray"
-            href="mailto:hello@rentlee.ru?subject=Вопрос%20по%20Рентли"
-          >
-            Задать вопрос
-          </LandingLink>
+          {/* Открывает модалку «Задать вопрос» (та же, что под вопросами
+              FAQ; форма уходит письмом через /api/feedback → бекенд). */}
+          <FeedbackModal label="Задать вопрос" variant="gray" />
         </div>
         <div className="flex flex-col gap-3.5 text-s desk:flex-row desk:flex-wrap desk:items-center desk:gap-6 desk:text-r">
           {/* Политики — доска 2865-5440: hover #2b7fff, active #176beb,

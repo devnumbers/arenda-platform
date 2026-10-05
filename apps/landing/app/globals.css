@@ -121,7 +121,47 @@
      @keyframes, что у текста steps: уход вверх-фейд 180мс, подмена,
      въезд снизу 280мс. */
   --animate-tariff-price-in: steps-text-in 280ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Утилиты дизайн-слоя фронта (apps/frontend shared/styles/tokens.css) —
+     перенесены под ui-компоненты модалки «Задать вопрос» (карта #1010);
+     имена не пересекаются с лендинговой шкалой (content/surface-muted/
+     overlay/error — фронта, surface — лендинга, значения совпадают). */
+  --color-overlay: var(--dl-overlay);
+  --color-content: #171a1c;
+  --color-content-secondary: #6f787c;
+  --color-content-tertiary: #9fa8ac;
+  --color-surface-muted: #f3f4f6;
+  --color-surface-muted-hover: #e9eaec;
+  --color-surface-muted-active: #dfe0e2;
+  --color-surface-danger: #ffe2e2;
+  --color-danger: #fb2c36;
+  --color-error: #ff383c;
+  --color-input-border: #d3d7d9;
+  --radius-button: 16px;
+  --radius-pill: 100px;
+  --radius-card: 24px;
+  --radius-sheet: 40px;
 }
+
+/* Кривая и длительности модалок фронта (резолюция #449, «плавность как у
+   Apple» / HIG Motion) — читаются произвольными animate-[...] и hover-тенью
+   полей из перенесённых ui-компонентов. */
+:root {
+  --dl-ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --dl-duration-fast: 250ms;
+  --dl-duration-move: 350ms;
+  --dl-input-border: #d3d7d9;
+  --dl-overlay: rgba(23, 26, 28, 0.5);
+}
+
+/* Хореография модалок фронта: вход дольше выхода, unmount ждёт animationend
+   (Radix Presence / vaul сами держат компонент смонтированным). */
+@keyframes modal-overlay-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes modal-sheet-in   { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes modal-card-in    { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+@keyframes modal-overlay-out{ from { opacity: 1; } to { opacity: 0; } }
+@keyframes modal-sheet-out  { from { transform: translateY(0); } to { transform: translateY(100%); } }
+@keyframes modal-card-out   { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.95); } }
 
 @layer base {
   /* Стрипы-«вылезайки» (showcase) не должны расширять канву; clip, не hidden —
@@ -134,6 +174,23 @@
   body {
     @apply bg-white font-sans text-ink antialiased;
   }
+}
+
+/* Лок скролла Radix/vaul-оверлеев (react-remove-scroll-bar) ставит body
+   overflow:hidden !important и компенсирует «исчезающий» скроллбар margin'ом
+   и паддингами. На лендинге скроллер — html (overflow-x: clip выше), его
+   скроллбар не исчезает: компенсация только сдвигает страницу. Хуже того,
+   body под hidden становится scroll-контейнером, и sticky-хедер прилипает к
+   верху документа — при открытии модалки из низа страницы он уезжает за
+   верх вьюпорта. clip режет так же, но scroll-контейнера не создаёт (канон
+   #709); колесо/тап фоном по-прежнему гасит сам react-remove-scroll. Вне
+   @layer: important вне слоёв сильнее important внутри слоёв, а специфичный
+   селектор с html побеждает библиотечный независимо от порядка стилей
+   (канон #925 фронта). */
+html body[data-scroll-locked] {
+  overflow: clip !important;
+  margin-right: 0 !important;
+  padding-right: 0 !important;
 }
 
 @layer components {
@@ -181,5 +238,80 @@
 
   &::-webkit-scrollbar {
     display: none;
+  }
+}
+
+/* Нативная полоса четырёх секций (CardTrio, Audience, тарифы) — живёт
+   только до перехвата движком TabletStrip. Отдельная утилита (а не
+   hide-scrollbar): на десктопе (≥1200) ряд статичен, а overflow-x:auto
+   вычисляет overflow-y:auto (CSS Overflow 3: visible при не-visible
+   соседе) — на загрузке полоса ловит 24px от Reveal-трансформа карточек
+   (трансформированные потомки входят в scrollable overflow) и становится
+   вертикальным скролл-контейнером: свайп уводит секцию, а не страницу
+   (поймано приёмкой 05.10 на «Для кого сервис»). На ≥1200 overflow
+   сбрасывается — ряд влезает, контейнер не нужен вовсе. */
+@utility strip-scroll {
+  @media (min-width: 481px) and (max-width: 1199px) {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+
+  @media (min-width: 1200px) {
+    overflow: visible;
+  }
+}
+
+/* Прыжок loop-перестановки в карусели отзывов (testimonials-carousel):
+   слайд, выходящий из «стопки» растворённых в очередь, переезжает без
+   анимации transform — иначе перелетает весь экран на виду; проявление
+   0→0.4 остаётся плавным. Отдельная утилита: arbitrary-класс Tailwind
+   съедает 0ms-длительность transform. */
+@utility slide-jump {
+  transition: transform 0ms linear, opacity 360ms ease-out;
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+}
+
+/* Десктопный переход карусели отзывов — плавнее тачевого (решение
+   владельца «чуток плавнее на ПК», канон 1:1 с Яндексом остался на
+   тачах): дольше (440 против 360ms) и с мягким входом и выходом
+   (cubic-bezier(0.45,0,0.2,1)) — у яндексовского ease-out резкий разгон
+   первых ~15% пути читался как рывок на въезде карточки. Утилитой, не
+   arbitrary-классом (см. slide-jump); reduce — внутри утилиты, чтобы не
+   бороться с motion-reduce:transition-none за порядок каскада. */
+@utility slide-desk {
+  transition:
+    transform 440ms cubic-bezier(0.45, 0, 0.2, 1),
+    opacity 440ms cubic-bezier(0.45, 0, 0.2, 1);
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+}
+
+@utility slide-jump-desk {
+  transition: transform 0ms linear, opacity 440ms
+    cubic-bezier(0.45, 0, 0.2, 1);
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+}
+
+/* Мобильный переход карусели отзывов (≤480) — скорость Яндекса
+   (speed 600 их мобильного инстанса «Опыт наших партнёров», easing
+   Swiper = ease). Утилитой по тем же причинам, что slide-jump. */
+@utility slide-mob {
+  transition: transform 600ms ease, opacity 600ms ease;
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
   }
 }

@@ -2109,6 +2109,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Public landing feedback form (карта #1010): a question from the «Задать вопрос» modal forwarded by the landing's server-side proxy. Rate limited per IP; the message is emailed to the configured FEEDBACK_EMAIL recipient. */
+        post: operations["sendFeedback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/webhooks/payment/{provider}": {
         parameters: {
             query?: never;
@@ -3747,6 +3764,12 @@ export interface components {
             stack?: string;
             /** @description Page URL where the error occurred */
             url?: string;
+        };
+        FeedbackRequest: {
+            /** @description Reply address of the sender */
+            email: string;
+            /** @description Feedback question text */
+            message: string;
         };
         /** @description День оплаты аренды: число месяца 1–31 или строка "last" — «последний день месяца». «31-е число» и "last" — одно поведение: в коротком месяце прижимается к последнему дню (ADR 0053 §4). */
         RentalPaymentDay: number | "last";
@@ -7891,6 +7914,39 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             429: components["responses"]["TooManyRequests"];
+        };
+    };
+    sendFeedback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeedbackRequest"];
+            };
+        };
+        responses: {
+            /** @description Feedback accepted and queued for delivery */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            429: components["responses"]["TooManyRequests"];
+            /** @description Feedback is not configured (no recipient email) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     handlePaymentWebhook: {

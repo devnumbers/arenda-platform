@@ -17,6 +17,7 @@ type RateLimiters struct {
 	PhoneChangeVerifyLimiter *httpsupport.RateLimiter
 	EmailChangeSendLimiter   *httpsupport.RateLimiter
 	ClientErrorsLimiter      *httpsupport.RateLimiter
+	FeedbackLimiter          *httpsupport.RateLimiter
 }
 
 // WireRateLimiters constructs the six HTTP rate limiters from the config. The
@@ -46,6 +47,11 @@ func WireRateLimiters(cfg *config.Config) *RateLimiters {
 
 	clientErrorsLimiter := httpsupport.NewRateLimiter(rate.Every(2*time.Second), 10, time.Minute)
 
+	// The feedback form (карта #1010) emails a personal mailbox from a public
+	// unauthenticated endpoint: a tight per-IP budget — three quick attempts,
+	// then one per 30 seconds.
+	feedbackLimiter := httpsupport.NewRateLimiter(rate.Every(30*time.Second), 3, time.Hour)
+
 	return &RateLimiters{
 		IPRateLimiter:            ipLimiter,
 		EmailSendLimiter:         emailSendLimiter,
@@ -54,6 +60,7 @@ func WireRateLimiters(cfg *config.Config) *RateLimiters {
 		PhoneChangeVerifyLimiter: phoneChangeVerifyLimiter,
 		EmailChangeSendLimiter:   emailChangeSendLimiter,
 		ClientErrorsLimiter:      clientErrorsLimiter,
+		FeedbackLimiter:          feedbackLimiter,
 	}
 }
 
@@ -66,4 +73,5 @@ func (r *RateLimiters) Stop() {
 	r.PhoneChangeVerifyLimiter.Stop()
 	r.EmailChangeSendLimiter.Stop()
 	r.ClientErrorsLimiter.Stop()
+	r.FeedbackLimiter.Stop()
 }

@@ -5,9 +5,9 @@ import contactIphone from "@/assets/sections/contact-iphone.webp";
 
 // PWA-блок — макеты 2814-1135 (десктоп: карточка 406, r40, p-52, текст
 // 36/40 Medium + подпись 18/22 с шагом 156, айфон 406 у верха справа),
-// 2859:3803 (планшет: 500, r40, p-52, текст 28/32 SemiBold + 16/20 с
-// шагом 12, айфон 458 у правого края) и 2826:151647 (мобайл: 550, r32,
-// p-32, айфон 302 снизу справа).
+// 3005:78366 (планшет: 500, r40, p-52, заголовок 32/36 SemiBold в
+// колонке 342 + 16/20 с шагом 12, айфон 458 у правого края) и
+// 2826:151647 (мобайл: 550, r32, p-32, айфон 302 снизу справа).
 export function Contact() {
   return (
     <section id="contact" className="mt-24 scroll-mt-[88px] desk:mt-[156px] desk:scroll-mt-[104px]">
@@ -24,13 +24,23 @@ export function Contact() {
                 className="object-cover"
               />
             </div>
-            <div className="relative flex w-full max-w-[260px] flex-col gap-3 desk:max-w-[290px] desk:gap-[156px]">
-              <p className="text-[28px] font-semibold leading-8 desk:text-h3 desk:font-medium desk:leading-10">
-                Установите сайт как приложение
+            <div className="relative flex w-full max-w-[260px] flex-col gap-3 tab:max-w-[342px] desk:max-w-[290px] desk:gap-[156px]">
+              {/* Переносы явные только на планшете: браузерный Onest уже
+                  фиргинского — «Установите сайт как» (321px) влезает в
+                  колонку 342 и «Google Chrome,» (316px) влезает в строку,
+                  а в макете 3005:78366 строки рвутся раньше («Установите
+                  сайт» 259 / «Доступно для браузеров Google» 249); на
+                  мобиле и десктопе — естественный (паттерн hero.tsx). */}
+              <p className="text-[28px] font-semibold leading-8 tab:text-[32px] tab:leading-9 desk:text-h3 desk:font-medium desk:leading-10">
+                Установите сайт
+                <br className="hidden tab:block desk:hidden" /> как приложение
               </p>
               <p className="text-s leading-5 text-ink opacity-60 desk:text-r desk:leading-[22px]">
-                Доступно для браузеров Google Chrome, Яндекс Бразера, Safari,
-                для компьютеров и телефонов
+                Доступно для браузеров Google
+                <br className="hidden tab:block desk:hidden" /> Chrome, Яндекс
+                Бразера, Safari,
+                <br className="hidden tab:block desk:hidden" /> для компьютеров
+                и телефонов
               </p>
             </div>
             <Image

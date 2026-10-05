@@ -114,10 +114,14 @@ type Config struct {
 	SMTPFrom                            string
 	SMTPFromName                        string
 	SMTPTimeout                         time.Duration
-	OTelServiceName                     string
-	OTelEnabled                         bool
-	OTelTraceSampler                    float64
-	OTelOTLPEndpoint                    string
+	// FeedbackEmail is the mailbox for the public landing feedback form
+	// (POST /feedback, карта #1010). Optional: when unset, the endpoint
+	// answers 503 and the rest of the product keeps working.
+	FeedbackEmail    string
+	OTelServiceName  string
+	OTelEnabled      bool
+	OTelTraceSampler float64
+	OTelOTLPEndpoint string
 	// GeoIPDBPath points at the offline DB-IP City Lite database baked into
 	// the Docker image (issue #728). Optional: when unset, cities are not
 	// resolved and sessions store no city — the product keeps working.
@@ -195,6 +199,7 @@ func Load() (Config, error) {
 		SMTPPass:          os.Getenv("SMTP_PASS"),
 		SMTPFrom:          os.Getenv("SMTP_FROM"),
 		SMTPFromName:      os.Getenv("SMTP_FROM_NAME"),
+		FeedbackEmail:     os.Getenv("FEEDBACK_EMAIL"),
 		PaymentProvider:   os.Getenv("PAYMENT_PROVIDER"),
 		SMTPTimeout:       10 * time.Second,
 		AppBaseURL:        os.Getenv("APP_BASE_URL"),

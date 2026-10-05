@@ -26,6 +26,7 @@ import (
 	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/idempotency"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/sse"
 	popupshttp "github.com/nambers/arenda-planform/apps/backend/internal/popups/adapters/http"
@@ -119,13 +120,19 @@ type Deps struct {
 	PhoneChangeSendLimiter   *httpsupport.RateLimiter
 	PhoneChangeVerifyLimiter *httpsupport.RateLimiter
 	ClientErrorsLimiter      *httpsupport.RateLimiter
-	DBPoolStats              func() httpsupport.DBPoolSnapshot
-	TrustedProxies           []string
-	AppVersion               string
+	FeedbackLimiter          *httpsupport.RateLimiter
+	// FeedbackMailer sends the public landing feedback emails (карта #1010);
+	// the same smtp/fake sender the identity codes use.
+	FeedbackMailer mailer.Sender
+	// FeedbackEmail is the recipient mailbox; empty answers 503 (not set up).
+	FeedbackEmail string
 	// Idempotency (тикет Т3 карты #1112): серверное хранилище
 	// Idempotency-Key на creation-роутах; nil = семантика выключена
 	// (роуты живут как сгенерированы).
-	Idempotency *idempotency.Service
+	Idempotency    *idempotency.Service
+	DBPoolStats    func() httpsupport.DBPoolSnapshot
+	TrustedProxies []string
+	AppVersion     string
 }
 
 const slowRequestThreshold = 500 * time.Millisecond
@@ -154,6 +161,10 @@ func crossOriginProtection() func(http.Handler) http.Handler {
 	protection := http.NewCrossOriginProtection()
 	protection.AddInsecureBypassPattern("POST /webhooks/")
 	protection.AddInsecureBypassPattern("/internal/perf/")
+	// POST /feedback (карта #1010) is called server-to-server by the
+	// landing's proxy — no browser Fetch-Metadata headers; it carries no
+	// cookie auth and is rate limited per IP.
+	protection.AddInsecureBypassPattern("POST /feedback")
 	protection.SetDenyHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		httpsupport.WriteProblem(r.Context(), w, http.StatusForbidden,
 			httpsupport.Problem(r.Context(), "Forbidden", "Запрос отклонён: кросс-сайтовый запрос"))
@@ -232,6 +243,7 @@ func New(deps Deps) http.Handler {
 	taskHandlers := taskshttp.NewTaskHandlers(deps.PropertyTasks, deps.Logger)
 	adminHandlers := adminhttp.NewAdminHandlers(deps.Admin, deps.Logger)
 	clientErrorsHandlers := httpsupport.NewClientErrorsHandlers(deps.ClientErrorsLimiter)
+	feedbackHandlers := httpsupport.NewFeedbackHandlers(deps.FeedbackMailer, deps.FeedbackEmail, deps.FeedbackLimiter)
 
 	handler := &composedHandler{
 		AuthHandlers:                    authHandlers,
@@ -256,6 +268,7 @@ func New(deps Deps) http.Handler {
 		TaskHandlers:                    taskHandlers,
 		AdminHandlers:                   adminHandlers,
 		ClientErrorsHandlers:            clientErrorsHandlers,
+		FeedbackHandlers:                feedbackHandlers,
 	}
 
 	// The generated OpenAPI router has no per-route middleware support, so we
@@ -435,4 +448,5 @@ type composedHandler struct {
 	*taskshttp.TaskHandlers
 	*adminhttp.AdminHandlers
 	*httpsupport.ClientErrorsHandlers
+	*httpsupport.FeedbackHandlers
 }
