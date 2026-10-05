@@ -10,8 +10,19 @@
      сам, а явная 100% перебивала бы утилиты секций (full-bleed полосы
      тарифов tab:w-[calc(100%+3rem)]) — порядок каскада модулей выше. */
   overflow: hidden;
-  cursor: grab;
   touch-action: pan-y;
+}
+
+/* Курсор-рука только там, где ленту реально можно потянуть пальцем;
+   на ПК (мышь/трекпад) полоса неподвижна — курсор обычный. */
+@media (pointer: coarse) {
+  .viewport {
+    cursor: grab;
+  }
+
+  .dragging {
+    cursor: grabbing;
+  }
 }
 
 .track {

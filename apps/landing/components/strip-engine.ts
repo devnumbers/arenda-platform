@@ -56,6 +56,11 @@ type StripEngineConfig = {
   // Класс на окне ленты во время drag (курсор/запрет выделения) —
   // зеркалится в CSS-модуле владельца ленты.
   draggingClass?: string;
+  // Движение только с тача (ручка/палец): мышь не активирует drag, а
+  // горизонтальное колесо/трекпад глотается без шага — полоса неподвижна
+  // на ПК при любой ширине окна (решение владельца 02.10 для планшетных
+  // полос секций; карусель аренды живёт с мышью, как принято).
+  touchOnly?: boolean;
 };
 
 // Мутабельное состояние ленты — живёт в замыкании движка, меняется
@@ -205,6 +210,9 @@ export function createStripEngine(
   };
 
   const onPointerDown = (e: PointerEvent) => {
+    if (config.touchOnly && e.pointerType === "mouse") {
+      return; // полоса неподвижна для мыши (тач/перо проходят)
+    }
     if (e.pointerType === "mouse" && e.button !== 0) {
       return;
     }
@@ -313,7 +321,10 @@ export function createStripEngine(
       return;
     }
     e.preventDefault();
-    if (st.anim || st.dragging) {
+    // touchOnly: шага нет (полоса для мыши неподвижна), но горизонтальное
+    // колесо глотается — иначе нативный горизонтальный свайп трекпада над
+    // статичной полосой на macOS Chrome превращается в жест «назад/вперёд»
+    if (config.touchOnly || st.anim || st.dragging) {
       return;
     }
     stepBy(e.deltaX > 0 ? 1 : -1);
