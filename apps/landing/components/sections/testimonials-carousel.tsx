@@ -295,9 +295,12 @@ function TestimonialsStripCard({ review }: { review: Review }) {
 // ≤480 и SSR-снапшот: лента по образцу мобильной версии блока «Опыт
 // наших партнёров» pay.yandex.ru/business (пересъёмка живыми жестами:
 // allowTouchMove true, speed 600, effect coverflow). Активная карточка
-// по центру окна (scale 1), следующая выглядывает справа (scale 0.98),
-// приглушения нет — у Яндекса на мобиле все видимые непрозрачны; слева
-// от активной пусто. Управление: свайп 1:1 за пальцем (старт жеста после
+// по центру окна (scale 1); соседние полосками выглядывают С ОБЕИХ
+// сторон (scale 0.98) — прошедшая стоит вплотную слева и на широких
+// окнах видна растущей полосой (у Яндекса 75px на 480, 185px на 700 —
+// замер по всем мобильным ширинам; никаких захардкоженных «за краем»),
+// приглушения нет — на мобиле Яндекса все видимые непрозрачны.
+// Управление: свайп 1:1 за пальцем (старт жеста после
 // 5px), отпускание — снап на ближайшую 600ms ease; флик по скорости —
 // шаг; медленный драг ≥50% слайда — шаг; горизонтальное колесо/трекпад —
 // шаг (серия тиков во время анимации глотается); тап по выглядывающей
@@ -315,9 +318,12 @@ const MOB_LONG_SWIPE_PX = 160;
 // Порог флика по скорости пальца (shortSwipes).
 const MOB_FLICK_V = 0.5;
 
-// Позиция слайда по кольцевой позиции относительно активного: центр →
-// справа → за правым краем; всё «позади» — за левым краем (у Яндекса
-// слева от активной пусто).
+// Позиция слайда по кольцевой позиции относительно активного —
+// ЗЕРКАЛЬНАЯ модель Яндекса (замер на 480/600/700): предыдущая стоит
+// вплотную слева от активной (translate −шаг, scale 0.98) и на широких
+// окнах видна растущей полосой (у них 75px на 480, 185px на 700),
+// дальние лесенкой уходят за края. Никаких захардкоженных «за левым
+// краем»: позиция не зависит от ширины окна.
 function mobPosOf(rel: number): number {
   if (rel === 0) {
     return 0;
@@ -325,16 +331,18 @@ function mobPosOf(rel: number): number {
   if (rel === 1) {
     return MOB_STEP;
   }
-  if (rel === 2) {
-    return MOB_STEP * 2;
+  if (rel === COUNT - 1) {
+    return -MOB_STEP;
   }
-  return -360;
+  return MOB_STEP * 2;
 }
 
-// Кольцевая позиция и флаг мгновенного прыжка: слайды между невидимыми
-// краями (за левым ← → за правым) переставляются без анимации. Функции
-// на уровне модуля: вызов в рендере — реак-хук react-hooks/refs
-// консервативно запрещает вызовы компонентных функций с ref-доступом.
+// Кольцевая позиция и флаг мгновенного прыжка. Единственный невидимый
+// перелёт в кольце из 5 — «за левым дальним ↔ за правым дальним»
+// (дистанция 2 шага, оба конца за краями): переставляется без анимации,
+// иначе пролетает экран. Функции на уровне модуля: вызов в рендере —
+// реак-хук react-hooks/refs консервативно запрещает вызовы компонентных
+// функций с ref-доступом.
 function mobRelOf(index: number, of: number): number {
   return (index - of + COUNT) % COUNT;
 }
@@ -343,8 +351,7 @@ function mobStateOf(index: number, activeIndex: number, previous: number) {
   const rel = mobRelOf(index, activeIndex);
   const oldPos = mobPosOf(mobRelOf(index, previous));
   const newPos = mobPosOf(rel);
-  const jumping =
-    (oldPos <= -10 && newPos >= 10) || (oldPos >= 10 && newPos <= -10);
+  const jumping = Math.abs(newPos - oldPos) > MOB_STEP * 1.5;
   return { rel, jumping };
 }
 
@@ -526,10 +533,10 @@ function MobileSlides({
     const transition = jumping ? "slide-jump" : "slide-mob motion-reduce:transition-none";
     const className = `absolute left-1/2 top-0 -ml-[160px] h-[500px] w-[320px] overflow-hidden rounded-[32px] ${transition} will-change-[transform] motion-reduce:transition-none`;
     const x = mobPosOf(rel);
-    const scale = rel === 1 ? 0.98 : "1";
+    const scale = Math.abs(rel) === 1 ? 0.98 : "1";
     const style: React.CSSProperties = {
       transform: `translateX(${x}px) scale(${scale})`,
-      zIndex: rel === 0 ? 2 : rel === 1 ? 1 : 0,
+      zIndex: rel === 0 ? 2 : Math.abs(rel) === 1 ? 1 : 0,
     };
     const slide = (
       <>
@@ -544,7 +551,9 @@ function MobileSlides({
       </>
     );
 
-    if (rel !== 1) {
+    // Тапабельны обе видимые полоски (у Яндекса slideToClickedSlide по
+    // любому видимому слайду): правая — вперёд, левая — назад.
+    if (rel !== 1 && rel !== COUNT - 1) {
       return (
         <div
           key={review.name}
