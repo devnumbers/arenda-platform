@@ -57,6 +57,24 @@ test('неверный код — инлайн в поле, крестик сб�
   await page.getByRole('textbox', { name: 'Код' }).fill('000000');
   await expect(page.getByText('Неверный код')).toBeVisible();
 
+  // Макет ошибки (Т5 #1102, Figma 2349:67624 — компонент InputField
+  // Title In + Error 948:46954): текст ошибки стоит в слоте лейбла бокса —
+  // над значением, внутри 56px бокса; строкой под полем он не рисуется.
+  const errorBox = await page.getByText('Неверный код').boundingBox();
+  const fieldBox = await page.getByRole('textbox', { name: 'Код' }).boundingBox();
+  expect(errorBox).not.toBeNull();
+  expect(fieldBox).not.toBeNull();
+  expect(errorBox?.y ?? 0).toBeGreaterThanOrEqual(fieldBox?.y ?? 0);
+  expect((errorBox?.y ?? 0) + (errorBox?.height ?? 0)).toBeLessThanOrEqual(
+    (fieldBox?.y ?? 0) + (fieldBox?.height ?? 0) + 1,
+  );
+
+  // Курсор в макетах полей — синий (Cursor 2px, Color/Blue #2b7fff,
+  // 948:46869): цвет каретки — часть канона поля, не системный чёрный.
+  expect(
+    await page.getByRole('textbox', { name: 'Код' }).evaluate((el) => getComputedStyle(el).caretColor),
+  ).toBe('rgb(43, 127, 255)');
+
   await page.getByRole('button', { name: 'Очистить поле' }).click();
   await expect(page.getByText('Неверный код')).toBeHidden();
   await expect(page.getByRole('textbox', { name: 'Код' })).toHaveValue('');
@@ -80,6 +98,27 @@ test('стрелка назад ведёт на предыдущий шаг', as
   await expect(page.getByRole('button', { name: 'Отправить новый код' })).toBeDisabled();
   await expect(page.getByText(/Запросить новый код можно через/)).toBeVisible();
   await expect(page.getByText(/\d\/6/)).toHaveCount(0);
+
+  // Геометрия шага кода по логин-макетам (Т5 #1102, Figma 2349:67411/67396/
+  // 67383): зазор поле — плитка ресенда 32 на всех трёх ярусах (в каноне
+  // #733 смена телефона/почты держит 24 — здесь кадры дают 32), подпись
+  // кулдауна — две строки (перенос после «можно», высота слоя 32).
+  const codeBox = await page.getByRole('textbox', { name: 'Код' }).boundingBox();
+  const tileBox = await page.getByRole('button', { name: 'Отправить новый код' }).boundingBox();
+  const noteBox = await page.getByText(/Запросить новый код можно через/).boundingBox();
+  expect((tileBox?.y ?? 0) - (codeBox?.y ?? 0) - (codeBox?.height ?? 0)).toBe(32);
+  expect(noteBox?.height ?? 0).toBe(32);
+
+  // Тот же шаг на мобайле (кадр 2349:67383): геометрия та же — 32/32.
+  // Новая отправка не нужна: шаг открыт, кулдаун живёт, вьюпорт меняется
+  // на месте.
+  await page.setViewportSize({width: 375, height: 812});
+  await expect(page.getByRole('textbox', { name: 'Код' })).toBeVisible();
+  const codeBoxM = await page.getByRole('textbox', { name: 'Код' }).boundingBox();
+  const tileBoxM = await page.getByRole('button', { name: 'Отправить новый код' }).boundingBox();
+  const noteBoxM = await page.getByText(/Запросить новый код можно через/).boundingBox();
+  expect((tileBoxM?.y ?? 0) - (codeBoxM?.y ?? 0) - (codeBoxM?.height ?? 0)).toBe(32);
+  expect(noteBoxM?.height ?? 0).toBe(32);
 
   await page.getByRole('button', { name: 'Назад' }).click();
   await expect(page.getByRole('heading', { name: 'Введите номер телефона' })).toBeVisible();

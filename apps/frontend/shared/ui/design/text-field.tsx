@@ -14,7 +14,9 @@ import { IconButton } from './icon-button';
  * 27..45 (Typing: 10 + лейбл 15 + 2 + значение 18).
  * Обязательное поле — красная звёздочка сразу после заголовка в обоих
  * вариантах (проп required; решение владельца 2026-09-05, визард аренды).
- * Состояния: Error (красный бокс + текст ошибки), Limited (счётчик красным),
+ * Состояния: Error (красный бокс; Title In — текст ошибки в слоте лейбла
+ * красным 13/15 над значением, 948:46954; Title Out — строкой под боксом),
+ * Limited (счётчик красным),
  * Disabled (opacity 0.5), Hover (inset-обводка 2px) — фокус-кольца у поля
  * нет намеренно (решение владельца 2026-08-26): видимый признак фокуса —
  * каретка. Кнопка очистки появляется при непустом значении и переданном
@@ -109,7 +111,14 @@ export function TextField({
       ? `${value.length}/${maxLength}`
       : undefined;
   const counterDanger = maxLength !== undefined && typeof value === 'string' && value.length >= maxLength;
-  const bottomLeft = error ?? description;
+  // Title In + Error (макет 948:46954, сверка экрана кода Т5 #1102): текст
+  // ошибки занимает слот лейбла — красный 13/15 над значением внутри бокса;
+  // строкой под полем он не рисуется (это стейт Title Out). Ошибка возможна
+  // только после попытки — поле «в typing», верхнее положение фиксированное.
+  // Слот лейбла есть только при переданном title: без него ошибка уходит
+  // в нижнюю строку, как у Title Out (иначе терялась бы вовсе).
+  const errorInLabel = variant === 'titleIn' && !multiline && title !== undefined && error !== undefined;
+  const bottomLeft = errorInLabel ? description : (error ?? description);
 
   const box = cn(
     'flex w-full items-center rounded-button bg-surface-muted pl-[18px] pr-2 transition-shadow',
@@ -119,6 +128,10 @@ export function TextField({
   );
   const input = cn(
     'w-full min-w-0 border-none bg-transparent text-base leading-[18px] text-content outline-none placeholder:text-content-secondary',
+    // Каретка — часть канона поля: в макетах Cursor рисуется синим 2px
+    // (Color/Blue #2b7fff, 948:46869), не системным чёрным (сверка экрана
+    // кода, Т5 #1102).
+    'caret-primary',
     multiline ? 'resize-none' : 'h-full',
   );
 
@@ -142,24 +155,37 @@ export function TextField({
                 роль играет лейбл. */}
             <input
               id={inputId}
-              className="peer h-full w-full border-none bg-transparent pb-[11px] pt-[27px] text-base leading-[18px] text-content outline-none placeholder:text-transparent"
+              className="peer h-full w-full border-none bg-transparent pb-[11px] pt-[27px] text-base leading-[18px] text-content caret-primary outline-none placeholder:text-transparent"
               disabled={disabled}
               value={value}
               placeholder={title}
               maxLength={maxLength}
+              // Лейбл при ошибке заменён текстом ошибки — доступное имя
+              // держит aria-label, а ошибка связана с полем через
+              // aria-describedby + aria-invalid (иначе скринридер узнаёт
+              // о красной строке только фактом её в дереве).
+              aria-invalid={error !== undefined ? true : undefined}
+              aria-label={errorInLabel ? title : undefined}
+              aria-describedby={errorInLabel ? `${inputId}-error` : undefined}
               {...(props as ComponentProps<'input'>)}
             />
-            <label
-              htmlFor={inputId}
-              className={cn(
-                'pointer-events-none absolute left-0 text-content-secondary transition-all duration-300',
-                'top-[19px] text-base leading-[18px]',
-                'peer-focus:top-[10px] peer-focus:text-[13px] peer-focus:leading-[15px]',
-                'peer-[:not(:placeholder-shown)]:top-[10px] peer-[:not(:placeholder-shown)]:text-[13px] peer-[:not(:placeholder-shown)]:leading-[15px]',
-              )}
-            >
-              {titleNode}
-            </label>
+            {errorInLabel ? (
+              <span id={`${inputId}-error`} className="pointer-events-none absolute left-0 top-[10px] text-[13px] leading-[15px] text-error">
+                {error}
+              </span>
+            ) : (
+              <label
+                htmlFor={inputId}
+                className={cn(
+                  'pointer-events-none absolute left-0 text-content-secondary transition-all duration-300',
+                  'top-[19px] text-base leading-[18px]',
+                  'peer-focus:top-[10px] peer-focus:text-[13px] peer-focus:leading-[15px]',
+                  'peer-[:not(:placeholder-shown)]:top-[10px] peer-[:not(:placeholder-shown)]:text-[13px] peer-[:not(:placeholder-shown)]:leading-[15px]',
+                )}
+              >
+                {titleNode}
+              </label>
+            )}
           </div>
         )}
         {(variant === 'titleOut' || title === undefined || multiline) && (
@@ -212,7 +238,10 @@ export function TextField({
       {(bottomLeft !== undefined || counter !== undefined) && (
         <div className="flex items-center justify-between gap-2 text-[13px] leading-[15px]">
           {bottomLeft !== undefined && (
-            <span className={cn(error !== undefined ? 'text-error' : 'text-content-tertiary')}>
+            // Красит фактическое содержимое: при ошибке в слоте лейбла здесь
+            // живёт description (hint) и остаётся серым — красным может быть
+            // только ошибка.
+            <span className={cn(!errorInLabel && error !== undefined && bottomLeft === error ? 'text-error' : 'text-content-tertiary')}>
               {bottomLeft}
             </span>
           )}
