@@ -117,6 +117,72 @@ func TestOccurrencesBetween_MonthlyLastDayClampsInShortMonths(t *testing.T) {
 	assert.Equal(t, []string{"2026-02-28", "2026-03-30", "2026-03-31", "2026-04-30"}, got)
 }
 
+func TestFirstOccurrence(t *testing.T) {
+	t.Parallel()
+
+	firstOf := func(t *testing.T, p Payment) string {
+		t.Helper()
+		got, ok := FirstOccurrence(p)
+		require.True(t, ok, "the schedule must fire within the 5-year horizon")
+		return got.Format(time.DateOnly)
+	}
+
+	t.Run("daily fires on since", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, dayT0, firstOf(t, rule(t, NewDailyRecurrence(), dayT0, nil)))
+	})
+
+	t.Run("weekly jumps to the first selected weekday", func(t *testing.T) {
+		t.Parallel()
+		// 2026-10-07 is the Wednesday: the first Friday of the schedule is
+		// the 9th, not since itself.
+		p := rule(t, mustWeekly(t, time.Friday), "2026-10-07", nil)
+		assert.Equal(t, "2026-10-09", firstOf(t, p))
+	})
+
+	t.Run("monthly clamps the anchor in a short month", func(t *testing.T) {
+		t.Parallel()
+		// The «31-го» spelling is the last-day marker: chosen from a February
+		// since it fires on the 28th.
+		p := rule(t, mustMonthlyLastDay(t), "2026-02-10", nil)
+		assert.Equal(t, "2026-02-28", firstOf(t, p))
+	})
+
+	t.Run("yearly fires on the clamped anchor of the next year", func(t *testing.T) {
+		t.Parallel()
+		// Feb 29 chosen after this February has passed: the next year's
+		// clamped anchor (2027 is not a leap year) is the first occurrence.
+		p := rule(t, mustYearly(t, time.February, 29), "2026-03-01", nil)
+		assert.Equal(t, "2027-02-28", firstOf(t, p))
+	})
+
+	t.Run("standing endDate does not cut the answer", func(t *testing.T) {
+		t.Parallel()
+		// The window validator asks where the schedule would start whatever
+		// end stands — the bugged rule (end before the first occurrence)
+		// still has an answer (ticket #1150 research, the front-mirror trap).
+		p := rule(t, mustWeekly(t, time.Friday), "2026-10-07", new("2026-10-08"))
+		assert.Equal(t, "2026-10-09", firstOf(t, p))
+	})
+
+	t.Run("a pause over the anchor moves the answer past it", func(t *testing.T) {
+		t.Parallel()
+		// [from, to) cuts the paused days: the first live day is the resume
+		// day.
+		pauses := []PauseInterval{{From: d(dayT0), To: dp(dayNext)}}
+		p := rule(t, NewDailyRecurrence(), dayT0, nil, pauses...)
+		assert.Equal(t, dayNext, firstOf(t, p))
+	})
+
+	t.Run("an open pause over everything has no first occurrence", func(t *testing.T) {
+		t.Parallel()
+		pauses := []PauseInterval{{From: d(dayT0), To: nil}}
+		p := rule(t, NewDailyRecurrence(), dayT0, nil, pauses...)
+		_, ok := FirstOccurrence(p)
+		assert.False(t, ok, "nothing fires inside an open-ended pause")
+	})
+}
+
 func TestRecurrenceJSON_MonthlyLegacyDayOfMonth(t *testing.T) {
 	t.Parallel()
 	// Stored rows of the pre-multi-day shape keep reading: a plain day maps

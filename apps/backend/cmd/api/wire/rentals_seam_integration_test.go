@@ -236,6 +236,78 @@ func TestSeam_ClearingThePlannedEndMakesThePaymentOpenEnded(t *testing.T) {
 	assert.Nil(t, updated.Progress.TotalMonths, "an open-ended rental has no total")
 }
 
+// The schedule window rides the real wiring too (ticket #1154): the create
+// rejects a planned end before the rent schedule's first payment-day
+// occurrence, the inclusive boundary gives exactly one payment.
+func TestSeam_CreateRejectsPlannedEndBeforeTheFirstOccurrence(t *testing.T) {
+	t.Parallel()
+	h := newSeamHarness(t)
+	h.seedOwner()
+
+	// Старт 10-го, день оплаты 25-е, конец 20-го — ноль платежей.
+	start := mustSeamDate("2026-09-10")
+	short := mustSeamDate("2026-09-20")
+	_, err := h.svc.CreateRental(context.Background(), h.owner, h.propID,
+		rentalsapp.CreateRentalCommand{
+			AmountKopecks:  5_000_000,
+			PaymentDay:     rentalsdomain.MustPaymentDay(25),
+			StartDate:      start,
+			PlannedEndDate: &short,
+			Utilities:      rentalsdomain.UtilitiesIncluded,
+		})
+	require.ErrorIs(t, err, rentalsapp.ErrInvalidInput)
+
+	// Конец на первом вхождении — ровно один платёж, создаётся.
+	first := mustSeamDate("2026-09-25")
+	view, err := h.svc.CreateRental(context.Background(), h.owner, h.propID,
+		rentalsapp.CreateRentalCommand{
+			AmountKopecks:  5_000_000,
+			PaymentDay:     rentalsdomain.MustPaymentDay(25),
+			StartDate:      start,
+			PlannedEndDate: &first,
+			Utilities:      rentalsdomain.UtilitiesIncluded,
+		})
+	require.NoError(t, err)
+	require.NotNil(t, view.NextPayment)
+	assert.Equal(t, first, view.NextPayment.Date)
+
+	// Отклонённое создание не пишет ничего: на объекте одна аренда.
+	var rentals int
+	require.NoError(t, h.pool.QueryRow(context.Background(),
+		`SELECT COUNT(*) FROM rentals WHERE property_id = $1`, h.propID).Scan(&rentals))
+	assert.Equal(t, 1, rentals, "only the valid create is written")
+}
+
+// The terms edit validates the merged (payment day, planned end) pair over
+// the real wiring (ticket #1154): the end change reads the stored day, the
+// day change re-checks the standing end — the extension hole gets the same
+// rejection.
+func TestSeam_TermsEditValidatesTheMergedWindow(t *testing.T) {
+	t.Parallel()
+	h := newSeamHarness(t)
+	h.seedOwner()
+	view := h.createRental() // Старт 04-09, день 15-е, бессрочная.
+
+	// Укорочивание конца внутрь окна: первое вхождение 15-09, конец 10-09.
+	short := mustSeamDate("2026-09-10")
+	_, err := h.svc.UpdateRental(context.Background(), h.owner, h.propID, view.Rental.ID,
+		rentalsapp.UpdateRentalCommand{PlannedEndDate: &rentalsapp.DateUpdate{Value: &short}})
+	require.ErrorIs(t, err, rentalsapp.ErrInvalidInput)
+
+	// Конец на первом вхождении — валиден.
+	first := mustSeamDate("2026-09-15")
+	_, err = h.svc.UpdateRental(context.Background(), h.owner, h.propID, view.Rental.ID,
+		rentalsapp.UpdateRentalCommand{PlannedEndDate: &rentalsapp.DateUpdate{Value: &first}})
+	require.NoError(t, err)
+
+	// Смена дня на 25-е при стоящем конце 15-09: слитая пара невалидна —
+	// первое вхождение уходит за конец.
+	day25 := rentalsdomain.MustPaymentDay(25)
+	_, err = h.svc.UpdateRental(context.Background(), h.owner, h.propID, view.Rental.ID,
+		rentalsapp.UpdateRentalCommand{PaymentDay: &day25})
+	require.ErrorIs(t, err, rentalsapp.ErrInvalidInput)
+}
+
 // backdateRentalToMay moves the started pair into the past — the direct SQL
 // of a seeding scenario: the rental began in May. The caller runs the owner
 // tick to materialize the due months.

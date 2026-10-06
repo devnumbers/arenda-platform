@@ -26,6 +26,12 @@ var (
 	// contract (empty title, amount out of bounds, unknown category slug,
 	// recurrence zero value, endDate before since).
 	ErrInvalidInput = errors.New("payments: invalid input")
+	// ErrEndDateBeforeFirstOccurrence marks a rule whose end date stands
+	// before the schedule's first occurrence (ticket #1154): the rule would
+	// materialize zero operations. It is its own sentinel — not wrapped into
+	// ErrInvalidInput — so the wire answers with the specific user-facing
+	// detail instead of the generic «Некорректные данные платежа».
+	ErrEndDateBeforeFirstOccurrence = errors.New("payments: end date before first occurrence")
 	// ErrForbidden marks an actor whose role grants the view capability but
 	// not the one the use case needs (viewer on mutations, non-owner on
 	// deletion — the ADR 0028 matrix).

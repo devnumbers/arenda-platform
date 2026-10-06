@@ -14,6 +14,7 @@ import {
   useCreateRental,
   useRentalWizardSession,
   wizardStepReady,
+  draftAfterPaymentDayChange,
   draftAfterStartChange,
   WIZARD_TOTAL_STEPS,
   RENTAL_REMINDER_DEFAULT,
@@ -113,7 +114,8 @@ export function RentalCreateWizardFlow({
               amountKopecks={draft.amountKopecks}
               onAmountChange={(amountKopecks) => setDraft((prev) => ({ ...prev, amountKopecks }))}
               paymentDay={draft.paymentDay}
-              onPaymentDayChange={(paymentDay) => setDraft((prev) => ({ ...prev, paymentDay }))}
+              onPaymentDayChange={(paymentDay) =>
+                setDraft((prev) => draftAfterPaymentDayChange(prev, paymentDay))}
             />
             {/* Кнопка продолжения скрыта, пока шаг не готов (решение
                 владельца 2026-09-05: скрытие вместо дизейбла); на планшете
@@ -134,6 +136,7 @@ export function RentalCreateWizardFlow({
             <ConditionsStep
               startDate={draft.startDate}
               onStartDateChange={(startDate) => setDraft((prev) => draftAfterStartChange(prev, startDate))}
+              paymentDay={draft.paymentDay}
               plannedEndDate={draft.plannedEndDate}
               onPlannedEndDateChange={(plannedEndDate) =>
                 setDraft((prev) => ({ ...prev, plannedEndDate }))

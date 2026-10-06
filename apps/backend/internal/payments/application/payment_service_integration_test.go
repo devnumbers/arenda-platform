@@ -159,6 +159,133 @@ func TestCreatePayment_RejectsEndDateBeforeToday(t *testing.T) {
 	}
 }
 
+// The schedule window's conveyor sentinels (ticket #1154): create rejects an
+// end date before the first occurrence with its own sentinel; endDate on the
+// first occurrence itself stays valid (the UNTIL semantics).
+func TestCreatePayment_RejectsEndDateBeforeFirstOccurrence(t *testing.T) {
+	t.Parallel()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+
+	// The owner's today is Tuesday 2026-08-25: the weekly Friday rule's
+	// first occurrence is 2026-08-28, so the Thursday end leaves the rule
+	// zero occurrences.
+	friday, err := domain.NewWeeklyRecurrence([]time.Weekday{time.Friday})
+	if err != nil {
+		t.Fatalf("fixture recurrence: %v", err)
+	}
+	cmd := h.createCmd()
+	cmd.Recurrence = friday
+	thursday := time.Date(2026, 8, 27, 0, 0, 0, 0, time.UTC)
+	cmd.EndDate = &thursday
+	if _, err := h.svc.CreatePayment(h.ctx(), h.owner, h.propID, cmd); !errors.Is(err, paymentsapp.ErrEndDateBeforeFirstOccurrence) {
+		t.Fatalf("create with a hole = %v, want ErrEndDateBeforeFirstOccurrence", err)
+	}
+
+	firstFriday := time.Date(2026, 8, 28, 0, 0, 0, 0, time.UTC)
+	cmd.EndDate = &firstFriday
+	if _, err := h.svc.CreatePayment(h.ctx(), h.owner, h.propID, cmd); err != nil {
+		t.Fatalf("create with endDate on the first occurrence: %v", err)
+	}
+}
+
+// The update path validates the merged rule (ticket #1154): a recurrence
+// change re-checks the standing end date, the frontend's silent reset (the
+// end-date clear riding the same patch) is accepted, and a legacy rule with
+// a hole accepts unrelated edits — the narrow trigger keeps the off-topic
+// 400 away from title-only patches.
+func TestUpdatePayment_WindowGuardsTheMergedRule(t *testing.T) {
+	t.Parallel()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+
+	friday, err := domain.NewWeeklyRecurrence([]time.Weekday{time.Friday})
+	if err != nil {
+		t.Fatalf("fixture recurrence: %v", err)
+	}
+	monday, err := domain.NewWeeklyRecurrence([]time.Weekday{time.Monday})
+	if err != nil {
+		t.Fatalf("fixture recurrence: %v", err)
+	}
+	sunday, err := domain.NewWeeklyRecurrence([]time.Weekday{time.Sunday})
+	if err != nil {
+		t.Fatalf("fixture recurrence: %v", err)
+	}
+
+	// A valid rule: weekly Friday ending on its own first occurrence.
+	cmd := h.createCmd()
+	cmd.Recurrence = friday
+	firstFriday := time.Date(2026, 8, 28, 0, 0, 0, 0, time.UTC)
+	cmd.EndDate = &firstFriday
+	created, err := h.svc.CreatePayment(h.ctx(), h.owner, h.propID, cmd)
+	if err != nil {
+		t.Fatalf("create payment: %v", err)
+	}
+
+	// A title-only patch on the valid rule is accepted (research case 10).
+	validTitle := "Аренда (пт)"
+	if _, err := h.svc.UpdatePayment(h.ctx(), h.owner, h.propID, created.ID, paymentsapp.UpdatePaymentCommand{
+		Title: &validTitle,
+	}); err != nil {
+		t.Fatalf("title-only patch on a valid rule: %v", err)
+	}
+
+	// PATCH recurrence → Monday: the merged rule's first occurrence (Monday
+	// 2026-08-31) moves past the standing end — rejected.
+	if _, err := h.svc.UpdatePayment(h.ctx(), h.owner, h.propID, created.ID, paymentsapp.UpdatePaymentCommand{
+		Recurrence: &monday,
+	}); !errors.Is(err, paymentsapp.ErrEndDateBeforeFirstOccurrence) {
+		t.Fatalf("recurrence-only patch making a hole = %v, want ErrEndDateBeforeFirstOccurrence", err)
+	}
+
+	// The same recurrence change plus the end-date clear — the frontend's
+	// silent reset — is accepted and turns the rule open-ended.
+	updated, err := h.svc.UpdatePayment(h.ctx(), h.owner, h.propID, created.ID, paymentsapp.UpdatePaymentCommand{
+		Recurrence: &monday,
+		EndDate:    &paymentsapp.EndDateUpdate{},
+	})
+	if err != nil {
+		t.Fatalf("update with the end-date clear: %v", err)
+	}
+	if updated.EndDate != nil {
+		t.Fatalf("end date = %v, want cleared", updated.EndDate)
+	}
+
+	// The legacy rule with a hole cannot be created through the API
+	// anymore — the end date is drilled back by direct SQL (the pre-fix
+	// rows the migration never heals).
+	legacyCmd := h.createCmd()
+	legacyCmd.Recurrence = monday
+	firstMonday := time.Date(2026, 8, 31, 0, 0, 0, 0, time.UTC)
+	legacyCmd.EndDate = &firstMonday
+	legacy, err := h.svc.CreatePayment(h.ctx(), h.owner, h.propID, legacyCmd)
+	if err != nil {
+		t.Fatalf("create legacy payment: %v", err)
+	}
+	hole := time.Date(2026, 8, 28, 0, 0, 0, 0, time.UTC)
+	if _, err := h.pool.Exec(h.ctx(), `UPDATE payments SET end_date = $1 WHERE id = $2`, hole, legacy.ID); err != nil {
+		t.Fatalf("drill the legacy hole: %v", err)
+	}
+
+	// A recurrence-only patch over the hole re-validates the merged rule:
+	// the first Sunday (2026-08-30) still stands past the end — rejected.
+	if _, err := h.svc.UpdatePayment(h.ctx(), h.owner, h.propID, legacy.ID, paymentsapp.UpdatePaymentCommand{
+		Recurrence: &sunday,
+	}); !errors.Is(err, paymentsapp.ErrEndDateBeforeFirstOccurrence) {
+		t.Fatalf("recurrence patch over a legacy hole = %v, want ErrEndDateBeforeFirstOccurrence", err)
+	}
+
+	// A title-only patch on the same legacy rule is accepted.
+	newTitle := "Аренда (правка)"
+	titleUpdated, err := h.svc.UpdatePayment(h.ctx(), h.owner, h.propID, legacy.ID, paymentsapp.UpdatePaymentCommand{
+		Title: &newTitle,
+	})
+	if err != nil {
+		t.Fatalf("title-only patch on a legacy rule: %v", err)
+	}
+	if titleUpdated.Title != newTitle {
+		t.Fatalf("title = %q, want %q", titleUpdated.Title, newTitle)
+	}
+}
+
 // The rule-level validation table lives at the validator's own fast seam
 // (payment_rule_test.go, TestValidateRule); these are the conveyor
 // sentinels — the create and update paths really reject an invalid rule

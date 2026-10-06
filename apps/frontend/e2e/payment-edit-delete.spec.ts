@@ -1,6 +1,7 @@
 import {
   captureScreen,
   expect,
+  monthlyDayOnOrAfter,
   openCabinetWithSessionToken,
   openCabinetWithSeededSession,
   seededMemberSessionToken,
@@ -8,7 +9,10 @@ import {
   SEEDED_APARTMENT_PROPERTY_ID,
   SEEDED_STUDIO_PROPERTY_ID,
   test,
+  todayIso,
 } from './fixtures';
+import { addDays } from '@/shared/lib/calendar';
+import { formatDayMonthWithYear } from '@/shared/lib/date-format';
 
 // Экран правки и модалка удаления (#467): форма, не визард — все поля
 // предзаполнены правилом, сохранение — частичный PATCH (меняет только
@@ -137,6 +141,59 @@ test.describe('экран правки платежа', () => {
     await expect(page.getByRole('button', { name: 'Сохранить изменения' })).toBeDisabled();
   });
 
+  test('периодичность как в создании: день применяется сразу, год — «Продолжить» календаря', async ({
+    page,
+    seededUser,
+  }) => {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto(URLS.insuranceEdit);
+
+    // «Каждый день»: ветки нет — выбор пункта меню сразу применяет правило
+    // и закрывает страницу, как в создании (решение #995, правка #1153).
+    await page.getByRole('button', { name: 'Регулярность платежа' }).click();
+    await expect(page.getByText('Выбор периодичности')).toBeVisible();
+    await page.getByRole('button', { name: 'Каждый день' }).click();
+    await expect(page.getByText('Выбор периодичности')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Регулярность платежа' })).toHaveText(
+      /Ежедневно/,
+    );
+
+    // Правка не сохранена: после перезагрузки прежнее правило на месте.
+    await page.reload();
+    await expect(page.getByRole('button', { name: 'Регулярность платежа' })).not.toHaveText(
+      /Ежедневно/,
+    );
+
+    // «Каждый год»: ветка — календарь с кнопкой «Продолжить» (не «Выбрать»);
+    // подтверждение применяет правило и закрывает страницу сразу.
+    await page.getByRole('button', { name: 'Регулярность платежа' }).click();
+    await page.getByRole('button', { name: 'Каждый год' }).click();
+    const calendar = page.getByRole('dialog', { name: 'Выбрать дату' });
+    await expect(calendar).toBeVisible();
+    // Черновик предвыбран сегодняшним днём (маркер aria-current), «Продолжить»
+    // коммитит без действий; день читается из маркера, месяц — из UTC-часов
+    // раннера: экран и браузер e2e (timezoneId UTC) живут в одних сутках.
+    const todayCell = calendar.locator('button[aria-current="date"]');
+    const todayLabel = ((await todayCell.textContent()) ?? '').trim();
+    await expect(calendar.getByRole('button', { name: 'Продолжить' })).toBeVisible();
+    await calendar.getByRole('button', { name: 'Продолжить' }).click();
+    await expect(calendar).toHaveCount(0);
+    await expect(page.getByText('Выбор периодичности')).toHaveCount(0);
+    const monthGen = [
+      'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+      'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
+    ][new Date().getUTCMonth()];
+    await expect(page.getByRole('button', { name: 'Регулярность платежа' })).toHaveText(
+      new RegExp(`Каждое ${todayLabel} ${monthGen}`),
+    );
+
+    // Правка не сохранена: после перезагрузки прежнее правило на месте.
+    await page.reload();
+    await expect(page.getByRole('button', { name: 'Регулярность платежа' })).not.toHaveText(
+      /Каждое /,
+    );
+  });
+
   test('тип меняется простым нажатием, без пикера', async ({ page, seededUser }) => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto(URLS.insuranceEdit);
@@ -219,7 +276,7 @@ test.describe('экран правки платежа', () => {
     await expect(page.getByRole('button', { name: 'Категория' })).toBeVisible();
   });
 
-  test('окончание платежа — страница с календарём открыта сразу', async ({
+  test('окончание платежа: пикер не даёт день раньше первого вхождения', async ({
     page,
     seededUser,
   }) => {
@@ -227,27 +284,69 @@ test.describe('экран правки платежа', () => {
     await page.goto(URLS.insuranceEdit);
 
     await page.getByRole('button', { name: 'Окончание платежа' }).click();
-    // Канон (04.09): бесконечный календарь поверх формы; черновик при
-    // открытии — сегодня (день читаем из маркера aria-current), коммит —
-    // «Выбрать» (тап по выбранному дню снял бы черновик).
-    const calendar = page.getByRole('dialog', { name: 'Выбрать дату' });
+    // Канон (04.09): бесконечный календарь поверх формы, заголовок —
+    // название поля (#1155). Минимум пикера — первое вхождение действующего
+    // monthly-20 правила (сид: since = сегодня+5), оно всегда в будущем:
+    // сегодня погашено, черновик прижат к первому доступному дню, «Выбрать»
+    // коммитит его без действий (прецедент продления #802).
+    const firstOccurrence = monthlyDayOnOrAfter(20, addDays(todayIso(), 5));
+    const calendar = page.getByRole('dialog', { name: 'Окончание платежа' });
     await expect(calendar).toBeVisible();
-    const todayCell = calendar.locator('button[aria-current="date"]');
-    const todayLabel = ((await todayCell.textContent()) ?? '').trim();
+    await expect(calendar.locator('button[aria-current="date"]')).toBeDisabled();
     await calendar.getByRole('button', { name: 'Выбрать', exact: true }).click();
     await expect(calendar).toHaveCount(0);
-    // Дата применена к форме (правка не сохранена — после перезагрузки
-    // снова «Бессрочно»); дата текущего года — без года, месяц родительный.
-    const monthGen = [
-      'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
-      'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
-    ][new Date().getMonth()];
+    // Первое вхождение применено к форме (правка не сохранена — после
+    // перезагрузки снова «Бессрочно»).
     await expect(page.getByRole('button', { name: 'Окончание платежа' })).toHaveText(
-      new RegExp(`${todayLabel} ${monthGen}`),
+      formatDayMonthWithYear(firstOccurrence, todayIso()),
     );
     await expect(page.getByRole('button', { name: 'Сохранить изменения' })).toBeEnabled();
     await page.reload();
     await expect(page.getByRole('button', { name: 'Окончание платежа' })).toHaveText(/Бессрочно/);
+  });
+
+  test('смена периодичности сбрасывает невалидное окончание молча, без подсказки (#1155)', async ({
+    page,
+    seededUser,
+  }) => {
+    // К этому тесту сид-платёж уже переведён на monthly-20 (тест выше
+    // сохраняет PATCH); правки здесь не сохраняются — порядок файла важен.
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto(URLS.insuranceEdit);
+
+    // Стоящее окончание = первое вхождение monthly-20 (минимум пикера,
+    // коммит без действий).
+    await page.getByRole('button', { name: 'Окончание платежа' }).click();
+    const calendar = page.getByRole('dialog', { name: 'Окончание платежа' });
+    await expect(calendar).toBeVisible();
+    await calendar.getByRole('button', { name: 'Выбрать', exact: true }).click();
+    await expect(calendar).toHaveCount(0);
+
+    // Смена периодичности на годовую: первое вхождение уезжает на год
+    // вперёд (год подтверждается «Продолжить» календаря, #1153) — стоящее
+    // окончание становится невалидным.
+    await page.getByRole('button', { name: 'Регулярность платежа' }).click();
+    await page.getByRole('button', { name: 'Каждый год' }).click();
+    const yearly = page.getByRole('dialog', { name: 'Выбрать дату' });
+    await expect(yearly).toBeVisible();
+    await yearly.getByRole('button', { name: 'Продолжить' }).click();
+    await expect(yearly).toHaveCount(0);
+    await expect(page.getByText('Выбор периодичности')).toHaveCount(0);
+
+    // Решение владельца 2026-10-06: сброс молча, без подсказки —
+    // «Бессрочно», сохранение доступно (уходит tri-state endDate: null).
+    await expect(page.getByRole('button', { name: 'Окончание платежа' })).toHaveText(
+      /Бессрочно/,
+    );
+    await expect(page.getByRole('button', { name: 'Сохранить изменения' })).toBeEnabled();
+
+    // Правка не сохранена: после перезагрузки сид-правило на месте,
+    // окончание бессрочное.
+    await page.reload();
+    await expect(page.getByRole('button', { name: 'Окончание платежа' })).toHaveText(/Бессрочно/);
+    await expect(page.getByRole('button', { name: 'Регулярность платежа' })).toHaveText(
+      /Каждый месяц 20 числа/,
+    );
   });
 
   test('отмена крестом возвращает на страницу платежа без изменений', async ({

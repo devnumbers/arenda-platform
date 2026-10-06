@@ -14,6 +14,13 @@ import { WizardAmountField, WizardDirectionSegment } from './wizard-chrome';
  * выбора сегмент подсвечивает эффективный «Доход», клик по пилюле —
  * явный выбор (в черновик пишется только явный). Деньги считаются только
  * через форматтеры копеек.
+ *
+ * Шаг появляется кликом «Далее» шага 4 — маунт в задаче жеста, поэтому
+ * флаг focusOnMount (решение владельца 2026-10-06: автоподъём клавиатуры
+ * обязателен, #1151; механика — research #1148 §A, аменд канона autoFocus
+ * в CODING_STANDARDS.md) поднимает клавиатуру сама. Маунты вне жеста
+ * (возобновление черновика сразу на шаге 5, прямой роут) флаг не получают:
+ * iOS клавиатуру вне жеста не поднимает.
  */
 
 export type AmountStepProps = {
@@ -22,6 +29,8 @@ export type AmountStepProps = {
   readonly onAmountChange: (amountKopecks: number | undefined) => void;
   readonly type: PaymentType | undefined;
   readonly onTypeChange: (type: PaymentType) => void;
+  /** Фокус суммы при маунте шага — только для маунтов внутри жеста (#1151). */
+  readonly focusOnMount?: boolean;
 };
 
 export function AmountStep({
@@ -29,6 +38,7 @@ export function AmountStep({
   onAmountChange,
   type,
   onTypeChange,
+  focusOnMount,
 }: AmountStepProps): JSX.Element {
   return (
     // Ярусы шага суммы операции: дисплейный — py-64/gap-32, ПК — pt-24/
@@ -38,6 +48,7 @@ export function AmountStep({
         label="Сумма"
         kopecks={amountKopecks}
         onKopecksChange={onAmountChange}
+        focusOnMount={focusOnMount}
       />
       <WizardDirectionSegment
         type={effectivePaymentType(type)}

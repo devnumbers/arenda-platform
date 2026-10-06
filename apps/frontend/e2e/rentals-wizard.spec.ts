@@ -2,11 +2,15 @@ import {
   captureScreen,
   expect,
   execE2eSql,
+  monthlyDayOnOrAfter,
   openCabinetWithSeededSession,
   SEEDED_APARTMENT_PROPERTY_ID,
   SEEDED_GARAGE_PROPERTY_ID,
   test,
+  todayIso,
 } from './fixtures';
+import { addDays } from '@/shared/lib/calendar';
+import { formatDayMonthWithYear } from '@/shared/lib/date-format';
 
 // Визард создания аренды (#530) и шаг «Контакт арендатора» по серии 1855
 // (#807): заголовок + два действия («Выбрать контакт» — отдельный экран
@@ -350,6 +354,69 @@ test.describe('визард создания аренды — шаг «Конт�
         `SELECT count(*) FROM rentals WHERE property_id = '${propertyId}' AND contact_id IS NOT NULL`,
       );
       expect(linkedCount).toBe('0');
+    } finally {
+      await cleanupRental(propertyId, rubles);
+    }
+  });
+
+  test('условия: окончание до первой оплаты отклонено — пикер прижат к первому вхождению дня оплаты (#1156)', async ({
+    page,
+    seededUser,
+  }) => {
+    const propertyId = SEEDED_APARTMENT_PROPERTY_ID;
+    const rubles = '59 000';
+    try {
+      await openWizard(page, seededUser, APARTMENT_WIZARD_URL, APARTMENT_URL);
+      // Шаг 1: день оплаты 25-е — первое вхождение заведомо позже начала
+      // (research-кейс #1150: старт 10-го, день 25-е, конец 20-е = 0 платежей).
+      await page.getByRole('textbox', { name: 'Арендная плата, рублей' }).fill(rubles);
+      await page.getByRole('button', { name: 'День оплаты: Выбрать день' }).click();
+      const dayPicker = page.getByRole('dialog', { name: 'Выбор дня оплаты' });
+      await dayPicker.getByRole('button', { name: '25', exact: true }).click();
+      await dayPicker.getByRole('button', { name: 'Выбрать', exact: true }).click();
+      await page.getByRole('button', { name: 'Продолжить' }).click();
+      await expect(page.getByRole('heading', { name: 'Условия аренды' })).toBeVisible();
+
+      // Шаг 2: начало — сегодня (черновик канона), затем пикер окончания.
+      const today = todayIso();
+      await page.getByRole('button', { name: 'Начало аренды: Выбрать дату' }).click();
+      await page
+        .getByRole('dialog', { name: 'Начало аренды' })
+        .getByRole('button', { name: 'Выбрать', exact: true })
+        .click();
+
+      await page.getByRole('button', { name: 'Окончание аренды: Выбрать дату' }).click();
+      const endCalendar = page.getByRole('dialog', { name: 'Окончание аренды' });
+      await expect(endCalendar).toBeVisible();
+
+      // Минимум пикера — первое вхождение дня оплаты, когда оно позже дня
+      // после начала; день старта (сегодня) погашен в любом случае —
+      // окончание строго позже начала. Дни до первой оплаты отклонены.
+      const firstOccurrence = monthlyDayOnOrAfter(25, today);
+      const minEnd = firstOccurrence > addDays(today, 1) ? firstOccurrence : addDays(today, 1);
+      await expect(endCalendar.locator('button[aria-current="date"]')).toBeDisabled();
+
+      // Черновик прижат к минимуму — «Выбрать» коммитит его без действий.
+      await endCalendar.getByRole('button', { name: 'Выбрать', exact: true }).click();
+      await expect(endCalendar).toHaveCount(0);
+      await expect(
+        page.getByRole('button', { name: formatDayMonthWithYear(minEnd, today) }),
+      ).toBeVisible();
+
+      // Пара «окончание == первое вхождение» проходит окно графика на
+      // сервере (#1154): ровно один платёж в терминированной аренде.
+      await page.getByRole('button', { name: 'Далее' }).click();
+      await page.getByRole('button', { name: 'Продолжить' }).click();
+      await page.getByRole('button', { name: 'Создать аренду' }).click();
+      await expect(page.getByRole('heading', { name: 'Вы создали аренду' })).toBeVisible();
+
+      const createdEnd = await execE2eSql(
+        `SELECT r.planned_end_date::text FROM rentals r
+         JOIN payments p ON p.id = r.payment_id
+         WHERE r.property_id = '${propertyId}' AND p.amount_kopecks = '${rubles.replace(/\s/g, '')}00'
+         LIMIT 1`,
+      );
+      expect(createdEnd).toBe(minEnd);
     } finally {
       await cleanupRental(propertyId, rubles);
     }

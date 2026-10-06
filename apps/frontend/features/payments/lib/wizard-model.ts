@@ -4,7 +4,8 @@ import type {
   PaymentType,
   Recurrence,
 } from '@/entities/payment';
-import { dateInMonth, isoYear } from '@/shared/lib/calendar';
+import { firstOccurrence } from '@/entities/payment';
+import { cmp, dateInMonth, isoYear } from '@/shared/lib/calendar';
 import type { PaymentWizardDraft } from './use-payment-wizard-draft';
 
 /**
@@ -193,6 +194,31 @@ export function wizardDraftAfterStep(
   next: WizardStep,
 ): PaymentWizardDraft {
   return { ...draft, step: next };
+}
+
+/** Черновик после смены периодичности (#1155, решение владельца
+ * 2026-10-06): стоящее окончание, оказавшееся раньше первого вхождения
+ * нового расписания, сбрасывается молча — дата, которую пикер больше не
+ * даёт выбрать, в черновике не хранится (иначе сабмит ловил бы 400
+ * «окно графика»). undefined — прежняя готовая ветка сброшена
+ * (дефект А #948): расписание неизвестно, окончание переоценит следующее
+ * применение. Расписание строится от «сегодня» владельца: при создании
+ * сервер ставит since сам (ADR 0048), пауз у нового правила нет. */
+export function draftAfterRecurrenceChange(
+  draft: PaymentWizardDraft,
+  recurrence: Recurrence | undefined,
+  today: IsoDate,
+): PaymentWizardDraft {
+  if (recurrence === undefined) {
+    return { ...draft, recurrence: undefined };
+  }
+  if (draft.endDate === undefined) {
+    return { ...draft, recurrence };
+  }
+  const first = firstOccurrence({ recurrence, since: today, endDate: undefined, pauses: [] });
+  return first !== null && cmp(first, draft.endDate) > 0
+    ? { ...draft, recurrence, endDate: undefined }
+    : { ...draft, recurrence };
 }
 
 /** Дефолт типа шага суммы: до явного выбора чип показывает «Доход»

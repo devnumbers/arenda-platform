@@ -173,6 +173,11 @@ func (s *PaymentService) CreatePayment(
 			if err := validateRule(draft); err != nil {
 				return mutationOutcome[domain.Payment]{}, err
 			}
+			// The schedule window is a create-time invariant: a brand-new
+			// rule may never open with an end before its first occurrence.
+			if err := validateRuleWindow(draft); err != nil {
+				return mutationOutcome[domain.Payment]{}, err
+			}
 			id, err := uuid.NewV7()
 			if err != nil {
 				return mutationOutcome[domain.Payment]{}, fmt.Errorf("mint payment id: %w", err)
@@ -283,6 +288,17 @@ func (s *PaymentService) UpdatePayment(
 			applyUpdate(&rule, cmd)
 			if err := validateRule(rule); err != nil {
 				return mutationOutcome[domain.Payment]{}, err
+			}
+			// The window re-check runs only when the command touches the
+			// schedule or the end: «сломанные» legacy rules (created before
+			// the fix) with a hole must not block unrelated edits — a
+			// title-only PATCH would surface an off-topic message (ticket
+			// #1154 research). The merged rule is validated: a recurrence
+			// change re-checks the standing end date.
+			if cmd.Recurrence != nil || cmd.EndDate != nil {
+				if err := validateRuleWindow(rule); err != nil {
+					return mutationOutcome[domain.Payment]{}, err
+				}
 			}
 			if err := stores.payments.Update(ctx, rule); err != nil {
 				return mutationOutcome[domain.Payment]{}, fmt.Errorf("update payment: %w", err)
@@ -486,6 +502,24 @@ func validateRule(rule domain.Payment) error {
 	}
 	if !isValidReminderOffset(rule.ReminderOffsetDays) {
 		return ErrInvalidInput
+	}
+	return nil
+}
+
+// validateRuleWindow enforces the schedule window (ticket #1154): the end
+// date never stands before the schedule's first occurrence — such a rule
+// would materialize zero operations. The first occurrence is computed with
+// the end date ignored (domain.FirstOccurrence), and endDate == the first
+// occurrence stays valid: OccurrencesBetween's UNTIL semantics include the
+// end date's own day. Its own sentinel keeps the wire's specific message
+// apart from the generic invalid-input detail.
+func validateRuleWindow(rule domain.Payment) error {
+	if rule.EndDate == nil {
+		return nil
+	}
+	first, ok := domain.FirstOccurrence(rule)
+	if ok && rule.EndDate.Before(first) {
+		return ErrEndDateBeforeFirstOccurrence
 	}
 	return nil
 }

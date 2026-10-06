@@ -218,6 +218,24 @@ func CountPaymentDays(start, end time.Time, day PaymentDay) int {
 	return count
 }
 
+// FirstPaymentDate returns the first payment-day date on or after start:
+// 1..30 keep their day (clamped to the month's length), 31 and «последний
+// день» give the month's actual last day. It is the schedule window's lower
+// bound (ticket #1154): a planned end before it would leave the rent zero
+// payments. The same no-drift month arithmetic CountPaymentDays follows —
+// every month is rebuilt from the payment day, never shifted.
+func (d PaymentDay) FirstPaymentDate(start time.Time) time.Time {
+	first := dayInMonth(start.Year(), start.Month(), d)
+	if first.Before(start) {
+		if start.Month() == time.December {
+			first = dayInMonth(start.Year()+1, time.January, d)
+		} else {
+			first = dayInMonth(start.Year(), start.Month()+1, d)
+		}
+	}
+	return first
+}
+
 // dayInMonth rebuilds the month's occurrence date for the payment day: the
 // selected day clamped to the month's length, or the month's actual last day
 // for the marker. Month arithmetic by number, not AddDate — the same

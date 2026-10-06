@@ -22,6 +22,7 @@ import { notify } from '@/shared/lib/notifications';
 import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
   formatDayMonthWithYear,
+  firstOccurrence,
   recurrenceLabel,
   type IsoDate,
   type Payment,
@@ -35,6 +36,7 @@ import {
   buildPaymentUpdateCommand,
   branchKind,
   editFormReady,
+  formAfterRecurrenceChange,
   periodicityReady,
   recurrencesEqual,
   togglePaymentType,
@@ -88,12 +90,20 @@ import { CategorySearchHint, WizardHeading } from './payment-create-wizard/wizar
  * выбора категории при создании и правке); уход со страницы не теряет
  * несохранённые правки формы. Периодичность — отдельная страница как шаг 3
  * визарда, хедер «Выбор периодичности», в ветке — название периода
- * (решение владельца 2026-08-31); правка живёт в черновике страницы и
- * применяется только кнопкой «Выбрать» — «Назад» её отбрасывает
- * (багфикс: незавершённый период не оставался в форме). Окончание —
+ * (решение владельца 2026-08-31); поведение выровнено с созданием
+ * (#1153): «Каждый день» и «Каждый год» («Продолжить» календаря)
+ * применяются сразу и закрывают страницу, ветки недели и месяца живут в
+ * черновике страницы и применяются кнопкой «Выбрать» — «Назад» черновик
+ * отбрасывает (багфикс: незавершённый период не оставался в форме).
+ * Окончание —
  * канонический бесконечный календарь поверх формы (решение владельца
  * 2026-09-04; раньше — страница с календарём, открытым сразу,
- * решение 2026-08-31). Регулярность —
+ * решение 2026-08-31), заголовок пикера — название поля (канон аренды):
+ * дни раньше первого вхождения действующего расписания недоступны
+ * (инвариант «окна графика» #1150), а смена периодичности, сделавшая
+ * стоящее окончание невалидным, сбрасывает его молча (решение владельца
+ * 2026-10-06, #1155) — сохранение уходит с tri-state endDate: null.
+ * Регулярность —
  * без «Один раз» (решение #449) с ветками дат; `since` и напоминания
  * отсутствуют (не редактируются, истории 31 спеки #453).
  * Сохранение — частичный PATCH: команда — дифф формы (update-model),
@@ -334,9 +344,10 @@ function PaymentEditForm({
   const [endDateOpen, setEndDateOpen] = useState(false);
   const [openBranch, setOpenBranch] = useState<PeriodicityBranch | null>(null);
   // Периодичность — отдельная страница на том же маршруте (как шаг 3
-  // визарда); правка живёт в черновике страницы и попадает в форму только
-  // по кнопке «Выбрать» — иначе незавершённый период («Каждую неделю в —»)
-  // оставался бы в форме при выходе назад.
+  // визарда). Ветки недели и месяца живут в черновике страницы и попадают
+  // в форму только по кнопке «Выбрать» — иначе незавершённый период
+  // («Каждую неделю в —») оставался бы в форме при выходе назад. «Каждый
+  // день» и «Каждый год» применяются сразу, как в создании (#1153).
   const [periodicityOpen, setPeriodicityOpen] = useState(false);
   const [periodicityDraft, setPeriodicityDraft] = useState<Recurrence | undefined>(
     undefined,
@@ -429,18 +440,30 @@ function PaymentEditForm({
   };
 
   const closePeriodicityPage = (): void => {
-    // Черновик отбрасывается: период меняется только кнопкой «Выбрать».
+    // Черновик отбрасывается: ветки недели/месяца меняются только кнопкой
+    // «Выбрать».
     setPeriodicityOpen(false);
     setOpenBranch(null);
     setPeriodicityDraft(undefined);
+  };
+
+  // Мгновенное применение (выровнено с созданием, #1153): «Каждый день»
+  // готов сразу, годовое правило приходит подтверждением календаря
+  // («Продолжить») — значение передаётся аргументом, черновик страницы к
+  // моменту колбэка ещё не обновлён. Применение чистит стоящее окончание,
+  // ставшее раньше первого вхождения нового расписания (#1155, решение
+  // владельца 2026-10-06: сброс молча, без подсказки; сохранение уйдёт
+  // с tri-state endDate: null).
+  const applyRecurrenceNow = (recurrence: Recurrence): void => {
+    setForm((prev) => formAfterRecurrenceChange(prev, recurrence, payment));
+    closePeriodicityPage();
   };
 
   const applyPeriodicity = (): void => {
     if (periodicityDraft === undefined) {
       return;
     }
-    update('recurrence', periodicityDraft);
-    closePeriodicityPage();
+    applyRecurrenceNow(periodicityDraft);
   };
 
   const periodicityBack = (): void => {
@@ -455,7 +478,10 @@ function PaymentEditForm({
   // (как выбор даты в задачах; решение владельца 2026-09-04, раньше была
   // страница с календарём, открытым сразу): «Выбрать» применяет дату,
   // снятая (null) — бессрочно (в команде PATCH — tri-state endDate: null).
-  // Прошлое закрыто, задним числом дата не назначается.
+  // Прошлое закрыто, задним числом дата не назначается. Минимум пикера —
+  // первое вхождение действующего расписания (endDate в расчёт не берётся):
+  // инвариант «окна графика» #1150, заголовок — название поля, канон
+  // аренды (#1155).
 
   const closeCategoryPage = (): void => {
     setCategoryOpen(false);
@@ -535,8 +561,9 @@ function PaymentEditForm({
   }
 
   // Страница периодичности — как шаг 3 визарда (Figma 1049:48174): в ветке
-  // хедер показывает название периода, «Назад» закрывает ветку; правка — в
-  // черновике, «Выбрать» применяется когда периодичность готова, ветка
+  // хедер показывает название периода, «Назад» закрывает ветку. День и год
+  // применяются сразу (#1153, как в создании #995); ветки недели/месяца —
+  // в черновике, «Выбрать» применяется когда периодичность готова, ветка
   // закрыта или совпадает с ней и значение изменилось.
   if (periodicityOpen) {
     const draftChanged =
@@ -560,7 +587,8 @@ function PaymentEditForm({
           openBranch={openBranch}
           onOpenBranch={setOpenBranch}
           onRecurrenceChange={setPeriodicityDraft}
-          onDailyPick={() => setPeriodicityDraft({ kind: 'daily' })}
+          onDailyPick={() => applyRecurrenceNow({ kind: 'daily' })}
+          onYearlyConfirm={applyRecurrenceNow}
           today={today}
           withHeading={false}
         />
@@ -721,8 +749,17 @@ function PaymentEditForm({
           живут, пока пикер смонтирован (конвенция канона). */}
       {endDateOpen && (
         <CalendarDatePicker
+          title="Окончание платежа"
           today={today}
           value={form.endDate ?? null}
+          minDate={
+            firstOccurrence({
+              recurrence: form.recurrence,
+              since: payment.since,
+              endDate: undefined,
+              pauses: payment.pauses,
+            }) ?? undefined
+          }
           onClose={() => setEndDateOpen(false)}
           onConfirm={(date) => {
             update('endDate', date ?? undefined);

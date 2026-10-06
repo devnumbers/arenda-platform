@@ -6658,6 +6658,11 @@ components:
           type: string
           format: date
           nullable: true
+          description: >
+            Окончание правила. Не раньше первого вхождения графика
+            (recurrence от since): иначе правило не создало бы ни одной
+            операции — 400 «Дата окончания не может быть раньше первого
+            платежа» (тикет #1154). Конец на самом первом вхождении валиден.
         autoPay:
           type: boolean
           default: false
@@ -6699,7 +6704,12 @@ components:
           nullable: true
           description: >
             Tri-state: omitted keeps the value, null clears it (open-ended),
-            a date sets it.
+            a date sets it. Окно графика (тикет #1154): слитое правило —
+            после применения патча — не может остаться с концом раньше
+            первого вхождения (смена recurrence при стоящей дате
+            перепроверяет её): 400 «Дата окончания не может быть раньше
+            первого платежа». Правки, не трогающие расписание и конец,
+            окно не перепроверяют.
         autoPay:
           type: boolean
         reminderOffsetDays:
@@ -8302,7 +8312,10 @@ components:
           type: string
           format: date
           nullable: true
-          description: Null/omitted — бессрочная аренда.
+          description: >
+            Null/omitted — бессрочная аренда. Не раньше первого вхождения
+            платежа аренды (monthly по дню оплаты от старта, тикет #1154):
+            такой срок держал бы ноль платежей.
         utilities:
           type: string
           enum: [included, meters_only, full_receipt]
@@ -8360,7 +8373,12 @@ components:
           type: string
           format: date
           nullable: true
-          description: Явный null — аренда становится бессрочной; не в прошлое (≥ today, > начала).
+          description: >
+            Явный null — аренда становится бессрочной; не в прошлое
+            (≥ today, > начала). Окно графика (тикет #1154): слитая пара
+            «день оплаты + плановое окончание» целиком — смена дня
+            перепроверяет стоящее окончание, смена окончания сверяется с
+            хранящимся днём; раньше первого вхождения дня оплаты — 400.
         utilities:
           type: string
           enum: [included, meters_only, full_receipt]

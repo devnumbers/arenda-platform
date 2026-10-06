@@ -15,6 +15,9 @@ const (
 	dayJan1    = "2026-01-01"
 	dayJan15   = "2026-01-15"
 	dayMar2    = "2026-03-02"
+	dayFeb10   = "2026-02-10"
+	dayFeb28   = "2026-02-28"
+	dayOct10   = "2026-10-10"
 )
 
 // date is the UTC-midnight calendar date convention of the module (ADR 0048).
@@ -209,12 +212,12 @@ func TestFullMonthsBetween(t *testing.T) {
 		to   string
 		want int
 	}{
-		{name: "exactly one month", from: dayStart, to: "2026-02-10", want: 1},
+		{name: "exactly one month", from: dayStart, to: dayFeb10, want: 1},
 		{name: "a day short of the month", from: dayStart, to: "2026-02-09", want: 0},
 		{name: "a year", from: dayStart, to: "2027-01-10", want: 12},
 		{name: "same day", from: dayStart, to: dayStart, want: 0},
 		{name: "to before from", from: "2026-03-10", to: dayStart, want: 0},
-		{name: "short month boundary", from: "2026-01-31", to: "2026-02-28", want: 0},
+		{name: "short month boundary", from: "2026-01-31", to: dayFeb28, want: 0},
 		{name: "short month boundary reached", from: "2026-01-31", to: dayMidTerm, want: 1},
 	}
 	for _, tt := range tests {
@@ -265,6 +268,87 @@ func TestPaymentDay(t *testing.T) {
 			t.Fatalf("last day became %+v", d)
 		}
 	})
+}
+
+// TestPaymentDayFirstPaymentDate pins the schedule window's lower bound
+// (ticket #1154): the first payment-day date on or after the rental start —
+// the planned end before it would leave the rent zero payments.
+func TestPaymentDayFirstPaymentDate(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name  string
+		day   int // 0 = the last-day marker.
+		start string
+		want  string
+	}{
+		{
+			// The research case: старт 10-го, день оплаты 25-е → 25-е.
+			name:  "keeps its day later in the start month",
+			day:   25,
+			start: dayOct10,
+			want:  "2026-10-25",
+		},
+		{
+			name:  "the passed day jumps to the next month",
+			day:   5,
+			start: dayOct10,
+			want:  "2026-11-05",
+		},
+		{
+			name:  "the last-day marker fires on the month's end",
+			day:   0,
+			start: dayOct10,
+			want:  "2026-10-31",
+		},
+		{
+			// 31 normalizes to the marker (одно поведение, №5): a short
+			// month clamps to its actual last day.
+			name:  "day 31 from november clamps to the 30th",
+			day:   31,
+			start: "2026-11-10",
+			want:  "2026-11-30",
+		},
+		{
+			name:  "day 31 from february clamps to the 28th",
+			day:   31,
+			start: dayFeb10,
+			want:  dayFeb28,
+		},
+		{
+			name:  "day 30 from february clamps to the 28th",
+			day:   30,
+			start: dayFeb10,
+			want:  dayFeb28,
+		},
+		{
+			// The occurrence on the start day itself counts: the rent is due
+			// from the first day on.
+			name:  "the start day itself is the first occurrence",
+			day:   10,
+			start: dayOct10,
+			want:  dayOct10,
+		},
+		{
+			// December rolls into the next year.
+			name:  "december start rolls to january",
+			day:   5,
+			start: "2026-12-10",
+			want:  "2027-01-05",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			day := domain.NewLastPaymentDay()
+			if tt.day != 0 {
+				day = domain.MustPaymentDay(tt.day)
+			}
+			got := day.FirstPaymentDate(date(tt.start))
+			if got.Format(time.DateOnly) != tt.want {
+				t.Fatalf("FirstPaymentDate = %s, want %s", got.Format(time.DateOnly), tt.want)
+			}
+		})
+	}
 }
 
 func TestUtilitiesValid(t *testing.T) {

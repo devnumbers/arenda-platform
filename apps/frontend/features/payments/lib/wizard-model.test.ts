@@ -11,6 +11,7 @@ import {
   resumePaymentWizardStep,
   togglePaymentType,
   toggleWeekday,
+  draftAfterRecurrenceChange,
   wizardDraftAfterStep,
   wizardStepReady,
   yearlyAnchorDate,
@@ -132,6 +133,97 @@ describe('yearlyAnchorDate — ближайшее будущее вхожден�
     // ближайшее будущее вхождение от 01.03.2026 — 28.02.2027, не високосный
     // 2028-й; пользователь может отскроллить и выбрать 29.02.2028 заново.
     expect(yearlyAnchorDate({ month: 2, day: 29 }, '2026-03-01')).toBe('2027-02-28');
+  });
+});
+
+describe('draftAfterRecurrenceChange — молчаливый сброс endDate (#1155)', () => {
+  const fridays = { kind: 'weekly', weekdays: [5] } as const;
+
+  it('окончание между today и первым вхождением нового правила сбрасывается', () => {
+    // weekly «пт», today = ср 07.10: первое вхождение 09.10, окончание 08.10
+    // — то самое окно без единого платежа (#1150); в черновике endDate нет.
+    const next = draftAfterRecurrenceChange(
+      draft({ endDate: '2026-10-08' }),
+      fridays,
+      '2026-10-07',
+    );
+    expect(next.recurrence).toStrictEqual(fridays);
+    expect(next.endDate).toBeUndefined();
+    // Прочие поля шагов на месте.
+    expect(next.title).toBe('Арендная плата');
+    expect(next.amountKopecks).toBe(250_000);
+  });
+
+  it('окончание в день первого вхождения валидно — сохраняется', () => {
+    const next = draftAfterRecurrenceChange(
+      draft({ endDate: '2026-10-09' }),
+      fridays,
+      '2026-10-07',
+    );
+    expect(next.endDate).toBe('2026-10-09');
+  });
+
+  it('окончание позже первого вхождения сохраняется', () => {
+    const next = draftAfterRecurrenceChange(
+      draft({ endDate: '2026-12-31' }),
+      fridays,
+      '2026-10-07',
+    );
+    expect(next.endDate).toBe('2026-12-31');
+  });
+
+  it('без окончания сбросить нечего — правило просто пишется', () => {
+    const next = draftAfterRecurrenceChange(draft({}), fridays, '2026-10-07');
+    expect(next.recurrence).toStrictEqual(fridays);
+    expect(next.endDate).toBeUndefined();
+  });
+
+  it('daily: первое вхождение = today, окончание-сегодня сохраняется', () => {
+    const next = draftAfterRecurrenceChange(
+      draft({ endDate: '2026-10-07' }),
+      { kind: 'daily' },
+      '2026-10-07',
+    );
+    expect(next.endDate).toBe('2026-10-07');
+  });
+
+  it('monthly 31-е: первое вхождение прижимается к длине месяца', () => {
+    // today = 10.11: первое вхождение 30.11; окончание 28.11 — дыра, сброс.
+    const monthly31 = { kind: 'monthly', daysOfMonth: [31], lastDay: false } as const;
+    expect(
+      draftAfterRecurrenceChange(
+        draft({ endDate: '2026-11-28' }),
+        monthly31,
+        '2026-11-10',
+      ).endDate,
+    ).toBeUndefined();
+    expect(
+      draftAfterRecurrenceChange(
+        draft({ endDate: '2026-11-30' }),
+        monthly31,
+        '2026-11-10',
+      ).endDate,
+    ).toBe('2026-11-30');
+  });
+
+  it('yearly: далёкое первое вхождение сбрасывает близкое окончание', () => {
+    const next = draftAfterRecurrenceChange(
+      draft({ endDate: '2026-12-31' }),
+      { kind: 'yearly', month: 2, day: 29 },
+      '2026-10-07',
+    );
+    // Первое вхождение 29.02.2028 — окончание-2026 раньше него.
+    expect(next.endDate).toBeUndefined();
+  });
+
+  it('сброс ветки года (recurrence undefined) endDate не трогает', () => {
+    const next = draftAfterRecurrenceChange(
+      draft({ endDate: '2026-10-08', recurrence: fridays }),
+      undefined,
+      '2026-10-07',
+    );
+    expect(next.recurrence).toBeUndefined();
+    expect(next.endDate).toBe('2026-10-08');
   });
 });
 

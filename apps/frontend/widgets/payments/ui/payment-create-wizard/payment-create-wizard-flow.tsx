@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { JSX } from 'react';
+import { flushSync } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Cancel, Search } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
@@ -23,6 +24,7 @@ import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
   branchKind,
   buildPaymentCreateCommand,
+  draftAfterRecurrenceChange,
   periodicityReady,
   resumePaymentWizardStep,
   useCreatePayment,
@@ -77,6 +79,12 @@ export function PaymentCreateWizardFlow({
   // Возобновление: сохранённый штампом шаг перехода, без штампа — первый
   // незавершённый (#1055).
   const [step, setStep] = useState<WizardStep>(() => resumePaymentWizardStep(draft));
+  // Автоподъём клавиатуры на шаге суммы (#1151, research #1148 §A): флаг
+  // ставит только переход-жест («Далее» шага 4 → goToStep(5)); маунты вне
+  // жеста — возобновление черновика сразу на шаге 5, прямой роут — без
+  // флага: iOS клавиатуру вне жеста не поднимает (WebKit bug 195884),
+  // а предфокус без клавиатуры делал бы мёртвым тап по дисплею вне цифр.
+  const [amountFocusOnMount, setAmountFocusOnMount] = useState(false);
   const [openBranch, setOpenBranch] = useState<PeriodicityBranch | null>(null);
   // Поиск категорий живёт в хедере шага 1 (Figma 781:12299): лупа меняет
   // чип «Шаг N из 5» на поле, «Назад» возвращает чип и сбрасывает запрос.
@@ -237,7 +245,10 @@ export function PaymentCreateWizardFlow({
               openBranch={openBranch}
               onOpenBranch={setOpenBranch}
               onRecurrenceChange={(recurrence) =>
-                setDraft((prev) => ({ ...prev, recurrence }))
+                // Смена периодичности чистит стоящее окончание, ставшее
+                // раньше первого вхождения нового расписания (#1155,
+                // решение владельца 2026-10-06 — как в правке).
+                setDraft((prev) => draftAfterRecurrenceChange(prev, recurrence, today))
               }
               onDailyPick={() => goToStep(4)}
               onYearlyConfirm={() => goToStep(4)}
@@ -271,6 +282,7 @@ export function PaymentCreateWizardFlow({
               }
               endDate={draft.endDate}
               onEndDateChange={(endDate) => setDraft((prev) => ({ ...prev, endDate }))}
+              recurrence={draft.recurrence}
               today={today}
             />
             <StickyBottomBar>
@@ -285,6 +297,7 @@ export function PaymentCreateWizardFlow({
         {step === 5 && (
           <>
             <AmountStep
+              focusOnMount={amountFocusOnMount}
               amountKopecks={draft.amountKopecks}
               onAmountChange={(amountKopecks) =>
                 setDraft((prev) => ({ ...prev, amountKopecks }))
@@ -327,6 +340,9 @@ export function PaymentCreateWizardFlow({
     if (step > 1) {
       const prev = (step - 1) as WizardStep;
       setStep(prev);
+      // Уход с шага 5 гасит маунт-фокус: следующий вход на шаг —
+      // только новым жестом (#1151).
+      setAmountFocusOnMount(false);
       // «Назад» — тоже переход: штамп шага едет в черновик (#1055).
       setDraft((prevDraft) => wizardDraftAfterStep(prevDraft, prev));
       return;
@@ -335,12 +351,29 @@ export function PaymentCreateWizardFlow({
   }
 
   function goToStep(next: WizardStep): void {
-    setStep(next);
-    // Штамп шага в пейлоаде: перезагрузка возвращает на этот же шаг (#1055).
-    setDraft((prev) => wizardDraftAfterStep(prev, next));
-    if (next !== 3) {
-      setOpenBranch(null);
+    // Общая семантика перехода: шаг + штамп в черновике (#1055); ветка
+    // периодичности гасится вне шага 3.
+    const commit = (): void => {
+      setStep(next);
+      // Штамп шага в пейлоаде: перезагрузка возвращает на этот же шаг (#1055).
+      setDraft((prev) => wizardDraftAfterStep(prev, next));
+      if (next !== 3) {
+        setOpenBranch(null);
+      }
+      if (next === 5) {
+        setAmountFocusOnMount(true);
+      }
+    };
+    if (next === 5) {
+      // Синхронный коммит внутри жеста «Далее» (research #1148 §A): шаг
+      // суммы монтируется и его маунт-фокус (callback-ref инпута) срабатывает
+      // в той же задаче event loop, что и клик, — только тогда iOS поднимает
+      // клавиатуру. flushSync в обработчике события — документированно-
+      // безопасное место (react.dev/flushSync).
+      flushSync(commit);
+      return;
     }
+    commit();
   }
 
 

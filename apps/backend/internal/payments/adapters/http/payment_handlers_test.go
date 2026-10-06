@@ -774,6 +774,12 @@ func TestPaymentHandlers_ErrorMapping(t *testing.T) {
 		{"already paused", application.ErrAlreadyPaused, http.StatusConflict, "Платёж уже на паузе"},
 		{"not paused", application.ErrNotPaused, http.StatusConflict, "Платёж не на паузе"},
 		{"rental-managed", application.ErrRentManagedPayment, http.StatusConflict, "Платёж управляется арендой"},
+		// The schedule window's specific detail answers before the shared
+		// invalid-input table (ticket #1154).
+		{
+			"end date before first occurrence", application.ErrEndDateBeforeFirstOccurrence,
+			http.StatusBadRequest, "Дата окончания не может быть раньше первого платежа",
+		},
 		{"invalid input", application.ErrInvalidInput, http.StatusBadRequest, "Некорректные данные платежа"},
 		{"wrapped not found", wrapped(application.ErrNotFound), http.StatusNotFound, testDetailNotFmt},
 		{"internal", errors.New("boom"), http.StatusInternalServerError, ""},

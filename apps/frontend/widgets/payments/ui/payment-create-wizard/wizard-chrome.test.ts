@@ -20,6 +20,7 @@ type InspectableProps = {
   onClick?: () => void;
   type?: unknown;
   ariaLabel?: string;
+  focusOnMount?: boolean;
 };
 
 function flatten(
@@ -190,5 +191,30 @@ describe('шаг суммы визарда операции — общий се�
     expect(segment).toBeDefined();
     expect(segment?.props.type).toBe('expense');
     expect(segment?.props.ariaLabel).toBe('Направление операции');
+  });
+});
+
+describe('автоподъём клавиатуры — флаг focusOnMount через шаг суммы (#1151)', () => {
+  it('AmountStep: флаг доезжает до WizardAmountField (переход «Далее» шага 4 — жест)', () => {
+    const step = AmountStep({
+      amountKopecks: undefined,
+      onAmountChange: NOOP,
+      type: undefined,
+      onTypeChange: NOOP,
+      focusOnMount: true,
+    });
+    const field = tree(step).find((el) => el.type === WizardAmountField);
+    expect(field?.props.focusOnMount).toBe(true);
+  });
+
+  it('AmountStep: без флага focusOnMount не навешивается (черновик и роут — маунты вне жеста)', () => {
+    const step = AmountStep({
+      amountKopecks: undefined,
+      onAmountChange: NOOP,
+      type: undefined,
+      onTypeChange: NOOP,
+    });
+    const field = tree(step).find((el) => el.type === WizardAmountField);
+    expect(field?.props.focusOnMount).toBeUndefined();
   });
 });
