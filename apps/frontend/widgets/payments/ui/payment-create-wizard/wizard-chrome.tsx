@@ -82,16 +82,21 @@ export function WizardBottomBar({ children }: { readonly children: ReactNode }):
  * и нормализация после blur («25,5» → «25,50» — правило экрана). Подгонка
  * состояния при рендере — официальный паттерн React (тот же, что в
  * AmountField). Ярусы разводятся display:none — вне дерева доступности
- * остаётся один input «Сумма». */
+ * остаётся один input «Сумма». Проп focusOnMount — подъём клавиатуры
+ * маунтом в задаче жеста (#1151): доезжает только до дисплейного яруса
+ * <1024, ПК-бокс не фокусируется никогда (п.4 #1151 — ПК не трогаем). */
 export function WizardAmountField({
   label,
   kopecks,
   onKopecksChange,
+  focusOnMount,
 }: {
   readonly label: string;
   /** Копейки; undefined — ещё не задана. */
   readonly kopecks: number | undefined;
   readonly onKopecksChange: (kopecks: number | undefined) => void;
+  /** Фокус дисплея при маунте — только для маунтов внутри жеста (#1151). */
+  readonly focusOnMount?: boolean;
 }): JSX.Element {
   const kopecksToRaw = (): string =>
     kopecks === undefined ? '' : kopecksToAmountInputString(kopecks);
@@ -131,7 +136,13 @@ export function WizardAmountField({
           }}
         />
       </div>
-      <AmountField className="desktop:hidden" value={buffer} onChange={change} label={label} />
+      <AmountField
+        className="desktop:hidden"
+        value={buffer}
+        onChange={change}
+        label={label}
+        focusOnMount={focusOnMount}
+      />
     </>
   );
 }

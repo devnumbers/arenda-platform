@@ -2,6 +2,7 @@
 
 import type { JSX, ReactNode } from 'react';
 import { cn } from '@/shared/lib/cn';
+import { useVisualKeyboardInset } from '@/shared/lib/hooks/useVisualKeyboardInset';
 import { SheetDragHandle } from './sheet-drag-handle';
 import { useTabBarSuppression } from './tab-bar';
 
@@ -15,7 +16,16 @@ import { useTabBarSuppression } from './tab-bar';
  * и визардов аренды снесён). Низ уважает safe-area (home indicator).
  * PageContent даёт снизу 136px, чтобы контент не уходил под панель. Пока
  * панель смонтирована, глушит TabBar: экран с нижней кнопкой действия футера
- * не имеет (мобайл и планшет; на ПК TabBar скрыт всегда). */
+ * не имеет (мобайл и планшет; на ПК TabBar скрыт всегда).
+ *
+ * Кнопка над клавиатурой (#1151, research #1148 §B) — двухслойно: на
+ * Android мета interactive-widget=resizes-content (app/layout.tsx) сжимает
+ * layout viewport, и fixed-панель поднимается сама; iOS Safari мету
+ * игнорирует — там useVisualKeyboardInset сдвигает панель трансформом в
+ * координаты visual viewport (композитный сдвиг, без re-layout). Трансформ
+ * на самой панели не делает её containing block для fixed потомков —
+ * запрет «поверхность — не containing block» (DESIGN.md §1) про предков.
+ * На ПК хук бездействует (слушатели не вешаются). */
 export type StickyBottomBarProps = {
   readonly children: ReactNode;
   readonly dragHandle?: boolean;
@@ -28,9 +38,11 @@ export function StickyBottomBar({
   className,
 }: StickyBottomBarProps): JSX.Element {
   useTabBarSuppression();
+  const keyboardInset = useVisualKeyboardInset();
 
   return (
     <div
+      style={keyboardInset > 0 ? { transform: `translateY(-${keyboardInset}px)` } : undefined}
       className={cn(
         'fixed inset-x-0 bottom-0 z-40 rounded-t-sheet bg-surface font-sans',
         // «Хром ПК постоянен» (решение владельца 25.09, правка канона

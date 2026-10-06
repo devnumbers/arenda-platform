@@ -262,6 +262,10 @@ export function StickyBottomBarSection(): JSX.Element {
             <h3 className={styles.groupTitle}>StickyBottomBar</h3>
             <p className={styles.groupTitle}>
                 Живой образец закреплён внизу окна — вариант из визарда (кнопка «Далее»).
+                На мобайле/планшете кнопка ездит над клавиатурой (#1151): Android — мета
+                interactive-widget=resizes-content (app/layout.tsx), iOS Safari — инсет
+                visual viewport и translateY на панели (useVisualKeyboardInset); на ПК
+                хук бездействует.
             </p>
         </div>
     );
