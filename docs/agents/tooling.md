@@ -62,10 +62,8 @@ Utilities:
 - `handoff` — compact the conversation into a handoff document for another agent.
 - `teach` — teach the user a new skill or concept in this workspace.
 - `wait-what` — stop and re-pitch a message that didn't land.
-- `resolving-merge-conflicts` — resolve in-progress merge/rebase conflicts.
 - `wizard` — interactive bash wizard for human-only steps (credentials, dashboards).
 - `writing-for-agents` — writing/editing skills, AGENTS.md, CLAUDE.md.
-- `writing-great-skills` — reference for writing predictable skills.
 - `setup-matt-pocock-skills` — one-time repo setup: tracker, triage labels, domain doc layout.
 
 ## Quality gates
