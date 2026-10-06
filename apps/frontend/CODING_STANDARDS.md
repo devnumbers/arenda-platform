@@ -9,6 +9,8 @@ Not duplicated here — single sources of truth elsewhere:
 - Invariants and commands: `AGENTS.md` (same directory). Domain language: per-context `CONTEXT.md` (index in `CONTEXT-MAP.md`). Decisions: `docs/adr/`.
 - New UI (payments design layer onward) is built on shadcn/ui over Radix primitives, styled with Tailwind utilities on top of our tokens (ADR 0050). Легаси HeroUI снесён целиком (аменд ADR 0050 2026-09-26, тикет #901) — нового HeroUI-кода не бывает, его MCP-доки сняты.
 
+Отступление от канона этого файла оформляется амендом соответствующей секции в том же коммите, со ссылкой на тикет (прецедент #1079 к разделу Navigation).
+
 ## FSD slice anatomy
 
 Layers live at the app root (`app/`, `widgets/`, `features/`, `entities/`, `shared/`; alias `@/*`). What belongs where:
@@ -32,6 +34,14 @@ Adding a new slice: user scenario → feature; domain model shared across scenar
 - Cache keys live in the single registry `shared/api/query-keys.ts` — one `xxxKeys` factory per feature: `all: ['domain'] as const` plus parameterized keys composed from `all` (`detail(id)`, `byProperty(propertyId)`). The registry is shared because cross-feature invalidation must bypass the cross-slice import ban.
 - Mutations invalidate in `onSuccess` through the registry (`void invalidateQueries({ queryKey: xxxKeys.all })` — the fire-and-forget spelling, see the `no-floating-promises` gate); the profile pattern is `setQueryData` for the optimistic value plus `invalidateQueries`; deletes use `removeQueries`, which is synchronous in v5 and stays bare.
 - `QueryClient` is configured once in `shared/providers/query-provider.tsx` (`staleTime: 30_000`, `refetchOnWindowFocus: false`) — don't override per-query without a stated reason.
+
+## Mutations and buttons
+
+- Все мутации — через `useGuardedMutation` (`features/<name>/api/hooks.ts`): синхронный лок закрывает окно до перерисовки; `mutate` дропает вызов в полёте, `mutateAsync` — join. Прямой `useMutation` вне features-хууков не встречается и не заводится (#1120).
+- Кнопка глохнет на всё время мутации: инвариант канон-кнопок `disabled === true || loading` (ADR 0050 «loading дизейблит»); явный `disabled` только добавляет причину гашения, но не отменяет loading — антипаттерн `disabled ?? loading` запрещён (#1119, #1099). Для `asChild`-ссылок гашение невозможно — осознанная граница канона.
+- В проп `loading` подставляется только `isPending` мутации; `isFetching` и фоновые рефетчи кнопки не гасят (#1114).
+- Creation-мутации шлют `Idempotency-Key` (UUID на логическую попытку); бекенд бронирует ключ — реплей и ретрай дают тот же результат (#1121, #1122).
+- e2e на мутирующих поверхностях: два `click()` одним evaluate-таском + счётчик запросов (route-мок) + SQL-правда «ровно одна строка» (#1113). Канон-спека: `e2e/double-submit-guard.spec.ts`.
 
 ## Forms
 
@@ -134,3 +144,21 @@ Judgement calls for the Standards axis, not violations. Read each as *what it is
 - **Hand-rolled formatting** — `/100` money math or ad-hoc date strings. → `formatMoneyKopecks`, `@react-aria/i18n` (ru-RU) helpers.
 - **Floating promise in a handler** — an async event handler with no error path. → `catch` → toast via `shared/lib/toast` / `ApiError`. (The rubric covers what the `no-floating-promises` `void` escape hatch cannot judge — whether the discard is justified — and the same judgement backs `no-misused-promises`' void-wrappers: the wrapped handler must be full try/catch or a never-rejecting `refetch`.)
 - **Synchronous `searchParams`** — reading the Next 16 promise directly. → `await` it in the server page and pass parsed initial props into the client widget.
+- **Скелетон не паритетен контенту** — скелетон обязан зеркалить финальный лейаут блок-в-блок (высоты, бейджи, ряды действий) по DESIGN.md §7; в скелетонах не ветвиться по состоянию, недоступному при загрузке (роль/права) (#604, #607, #871, #875). → приёмка парой кадров loading→loaded без сдвига (CLS).
+- **EmptyState на isPending** — пустое состояние и скрытие служебных чипов — только по подтверждённой пустоте; шапки, тулбары и хром рендерятся вне фазы загрузки (#605, #872). → различать isPending и пустоту.
+- **Скелетон на in-place обновлении** — поиск/фильтры/табы держат прежнюю выдачу (`keepPreviousData`); скелетон — только холодный вход (#876). → удалить скелетон из переходов фильтров.
+- **Оверлей-контейнер глотает клики** — fixed/absolute обёртки получают `pointer-events-none`, интерактивные дети — `pointer-events-auto` («пилюли не глушатся никогда», DESIGN.md §14) (#876). → pointer-events на обёртку/детей.
+- **Асинхронная проба сдвигает макет** — браузерные пробы (push-статус) читаются через `useSyncExternalStore` со скелетоном до probeSettled; гидрация без CLS (#877). → useSyncExternalStore + скелетон слота.
+- **Запись параметра затирает чужие** — URL-состояние (фильтры, поиск, сортировка) пишется только поверх текущих адресов (`useUrlParams`, свои ключи); дефолтные значения в URL не пишутся, возврат к дефолту удаляет параметр (set-or-delete); сборка адреса — через канон `buildUrlWithParams` («пустой query — голый pathname»), чистое ядро в shared/lib без next/navigation (#541, #785, #792). → писать только свои ключи поверх текущих.
+- **Рукописные params-типы страницы** — серверные страницы типируются генерируемым `PageProps<'route'>` (тип и есть тест) (#786, #793). → заменить рукописный тип на генерируемый.
+- **Кнопка-сабмит внутри формы** — канон-кнопки внутри `<form>` несут явный `type`; не-сабмитные — `type="button"` (клик по чипу отправлял форму) (#590). → проставить type.
+- **useSearchParams без Suspense** — роняет prerender `next build`; канон — обёртка как в payments/search; `next build` — обязательный гейт перед сдачей (#587, #609). → обернуть в Suspense-границу.
+- **`<br/>` склеивает текст** — перед `<br/>` в текстовых узлах явный `{' '}`, иначе textContent получает «можночерез» — ломает локаторы и скринридеры (#1102). → `{' '}` + проверка textContent.
+- **Снесённый маршрут = 404** — удалённый маршрут держит постоянный 308-редирект в proxy: закладки, PWA-иконки и `?from`-хвосты не попадают в 404 (#975). → 308 в proxy.ts.
+- **Мёртвая ссылка/тупик** — действие без экрана не выпускается: элемент скрыт или видимо неактивен (#465); тупиковое состояние («нельзя, потому что связь») заменяется переходом к источнику ограничения (кнопка «Условия аренды»), а не объясняющим тупиком (#988). → скрыть/заглушка/переход.
+- **Действие, которое сервер отвергнет** — не рендерится; гейт по зеркалу серверной политики (`canLifecycle`); deep-link к закрытой форме гардится каноном #607 до рендера (#757, #758). → гейт до рендера.
+- **page-wide `getByText` на уникальность** — ловит скрытое поддерево при двойном DOM; локаторы — `getByRole`/в пределах секции; строковые локаторы — через хелперы `e2e/fixtures.ts` (#860, #925). → role-локаторы + хелперы.
+- **`test.fixme`-спеки** — не остаются в дереве: сносятся после grep-проверки «мёртвости» (#491). → снести или реализовать.
+- **Копипаста фикстур** — фикстуры сущностей — общие билдеры `entities/<ctx>/model/testing.ts` (#849). → билдер с overrides.
+- **Чистые хендлеры в ui/** — стрим/сетевые хендлеры живут в `api/` слайса и не импортируют `ui/`; UI-эффекты (тост) инъектируются колбэком (#883). → перенести в api/, инъекция колбэка.
+- **Док-рот** — докстринги-инварианты, CONTEXT.md, DESIGN.md, ADR-упоминания, `docs/agents/tooling.md` синхронизируются с фактическим поведением ветки в том же изменении; «инвариантные» формулировки («only X», «единственный источник») лгут первыми (#857, #832). Расхождение доки коду — жёсткая находка, не косметика (#723, #149). → догнать доки тем же коммитом.

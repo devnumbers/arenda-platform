@@ -44,6 +44,29 @@ Adding a new bounded context — checklist:
 - Error text is a lowercase, unpunctuated continuation of the context (`staticcheck` ST1005 enforces form; the policy here is content: what failed + the identifying value).
 - **Handle an error once.** One error, one handler: log it, map it to a response, or wrap-and-return it — never two on the same path. A returned error is the caller's to handle; logging it locally and returning it too produces double reporting and log spam (`revive unhandled-error` catches the statement-position calls; the "once" discipline above it is review's to check). The sanctioned discards are explicit: `_, _ = fmt.Fprintf(os.Stderr, ...)` in test teardown and `hash.Hash.Write` (documented never-fail) — an intentional discard says so with a comment.
 
+## HTTP and contract conventions
+
+- **PATCH-семантика**: null/отсутствие поля = «не менять»; очистка значения — пустая строка (#593). Nullable-опциональные поля, которые можно выключить, — tri-state: omitted = не менять, null = сбросить, значение = установить (канон endDate) (#824).
+- **Тела декодируются строго** (`DisallowUnknownFields`): снос поля контракта — временный shim на переходный период, снимается тикетами клиентов, иначе старые клиенты получают 400 (#1006).
+- **Суммы на проводе всегда положительные** (копейки); знак, метка и цвет — UI-конвенция поверх статуса, не поле контракта (#614). Денежные поля — `format: int64`; усекающие `int(...)` конверсии копеек запрещены (#425).
+- **Приватность: нет доступа = 404** — неотличимо от несуществующего (правило GitHub для приватных репозиториев); отдельный код только для явно оговорённых состояний (suspended → 403) (#152). Скоуп-авторизация зашивается в SQL-запросы, не фильтруется постфактум (#693).
+- **Один доменный инвариант = один 409-код и одна копия текста** во всех контекстах; архивные сущности read-only: мутация → 409, чтение разрешено (#618, #89).
+- **Гейты fail-closed**: сбой хранилища подписки/прав — 500, не пропуск запроса (#998). Гейтуемая поверхность = парное изменение: паттерн в `shared/lib/paid-sections.ts` + оверрайды серверных роутов + тест парности.
+- **Глобальные ленты и поиск — keyset-курсор** (opaque, стабильный ORDER BY с уникальным тай-брейком id); offset для лент не используется (ADR 0061/0062, #597). Сортировка/фильтрация пагинированных списков — серверная ось в openapi.yaml; клиентская сортировка — только задокументированная деградация (#847).
+- **Идемпотентные creation-эндпоинты** принимают опциональный `Idempotency-Key` (бронь ключа до исполнения, TTL 24ч, request_hash); в доках честно: стандарта на заголовок нет, паттерн Stripe (#1121).
+- Имена аудит-событий — `<module>.<verb>` по образцу существующих (`auth.phone_changed`), не буква тикета (#721).
+
+## Migrations
+
+- Каждая up-миграция начинается с `SET lock_timeout = '1s'` и `SET statement_timeout` (дефолт 5s, выше — комментарий-обоснование); down зеркален; конвенция — с cutoff 000108 (#324, реестр: `docs/agents/tooling.md`).
+- Новая миграция проходит up→down→up цикл (`TestMigrationsUpDownUpCycle`, #316).
+- Destructive-схемные изменения — expand→contract (ADR 0024): авто-откат деплоя БД не откатывает; DROP старой SQL-функции в релизе переименования запрещён — старое имя живёт до contract-релиза с пин-тестом окна (#280, #897).
+- Номер миграции сверяется с активными ветками/ворктри до создания; migrations-lint дублей версий не ловит — при коллизии перенумеровывается своя ветка (#1049, #734).
+- Мёртвые значения PG-enum не удаляются и не переиспользуются (#728).
+- CHECK-констрейнты — для инвариантов данных (неотрицательность, порядок); формат (phone/email/RRULE) валидирует только домен (#225, #277).
+- Бизнес-триггеры БД не вводятся, пока писатель один; гварды статусов — в application-слое внутри транзакции с `FOR UPDATE` строки-агрегата (#1048).
+- `AT TIME ZONE` в Postgres-запросах не используется: граница суток считается в Go (timeutil-хелперы, пояс владельца) и приходит параметром (#445, #112). «Сегодня» и все календарные вычисления отдаёт сервер (ADR 0053) — клиент TZ-слеп (#528, #586).
+
 ## Process lifetime
 
 - **The exit policy: the process exits only in `cmd/`.** `os.Exit`/`log.Fatal*` live in the composition root (startup failures, signal-driven shutdown); everything under `internal/` returns errors upward so deferred cleanup and graceful shutdown stay possible (enforced by forbidigo in `.golangci.yml`). The one adjacent idiom: `TestMain` relies on the Go 1.15+ test wrapper exiting with `m.Run`'s result — use `defer` for teardown, not `os.Exit(code)`.
@@ -59,6 +82,13 @@ Adding a new bounded context — checklist:
 - Periodic work lives in `platform/scheduler` workers; contexts do not hand-roll their own tick loops.
 - Prefer ownership and channels over shared memory; a mutex is fine for a cache, not fine around an I/O call (see rubric).
 - `make test`'s `-race` integration runs are the backstop, not the design argument.
+
+## Side effects: publication and delivery
+
+- **Публикация — строго после коммита.** Доменные события, кадры realtime и задачи очереди публикуются только после успешного коммита транзакции — при откате публикация структурно недостижима (#284, #829). Джобы несут только идентификаторы; контент читается из закоммиченной строки (#740). Публикация best-effort: её падение логируется и не откатывает мутацию; дедуп-ключ и actor-skip (издатель не получает своё событие) — по словарю CONTEXT.md.
+- **Аудит — противоположность публикации**: запись аудита в той же транзакции, что и операция, fail-loud (ADR 0020); контекст содержит имена полей и идентификаторы, PII не пишутся (#89, #156, #694).
+- **Одно событие — один канал доставки.** При вводе общего пайплайна (уведомления, письма) прямые пути сносятся — дубль доставки недопустим (#751). Транзакционные письма шлются после коммита, fire-and-forget с логированием; ошибка доставки не ломает операцию (#162).
+- **Ретраи провайдеров**: только идемпотентные чтения на 5xx (backoff+jitter); 4xx не ретраются никогда; ретрай мутации — отдельный конфиг-флаг с документированным риском (#423).
 
 ## Tests
 
@@ -80,3 +110,10 @@ Judgement calls for the Standards axis (source: distilled from [100go.co](https:
 - **Lock across I/O** — a mutex held across a network/DB call. → shrink the critical section to memory, or redesign ownership.
 - **`time.After` in a tick loop** — a timer allocated per iteration. → `time.Ticker`, stopped with `defer Stop()`.
 - **Boundary without timeout** — an outbound HTTP/provider call on the request's bare ctx. → derive a scoped ctx with timeout at the use-case boundary; cancellation belongs to the owner of the work.
+- **Молчаливый фолбэк/нормализация** — некорректный ввод даёт явную доменную ошибку (`ErrInvalidPeriod`), не дефолт; валидная строка хранится и возвращается ровно как прислана (#283, #278). → вернуть ошибку домена, не чинить ввод молча.
+- **Вторая копия канона** — повторяющийся маппинг/паттерн (ErrNoRows-маппинг, unique-violation, ILIKE-эскейп, row-mapper) живёт одним хелпером; divergent локальные копии сносятся (#217, #852). → поднять в один канонический хелпер.
+- **N+1 в списке** — агрегаты и обогащение списка читаются одним батч-запросом, не per-row gateway-вызовом (#845, #585). → батч-SQL на весь список.
+- **Дедлок лечится порядком, не ретраем** — ретрай 40P01 не применяется; первым локом транзакции берётся lock в каноническом порядке (#546). → исправить порядок блокировок.
+- **Поиск не по канону** — подстрочный поиск — trgm; FTS добавляется ровно там, где trgm слеп; always-OR предикат (prefix-FTS OR ILIKE-trgm) без mode-переключателей и предсказания интента (#705, #839). → маршрут по форме запроса.
+- **Env-ручка без потребности** — доменная константа (каденс тика) живёт в конфиге кода; env — только операционные параметры окружения (#458). → константа в коде, env-переменную убрать.
+- **Док-рот** — докстринги-инварианты, CONTEXT.md, ADR-упоминания, `docs/agents/tooling.md` синхронизируются с фактическим поведением ветки в том же изменении; «инвариантные» формулировки («only X», «единственный источник») лгут первыми (#857, #832). Расхождение доки коду — жёсткая находка, не косметика (#723, #149). → догнать доки тем же коммитом.
