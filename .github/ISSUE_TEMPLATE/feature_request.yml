@@ -1,0 +1,33 @@
+name: "✨ Доработка"
+description: "Новая функция или улучшение существующего поведения"
+labels: ["needs-triage"]
+type: "Feature"
+body:
+  - type: textarea
+    id: want
+    attributes:
+      label: "Что хочется"
+      description: "Что должно появиться или измениться — по-пользовательски, без технических деталей"
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: "Зачем / какая проблема"
+      description: "Какую задачу пользователя это решает или какую боль убирает"
+    validations:
+      required: true
+  - type: textarea
+    id: how
+    attributes:
+      label: "Как это должно работать"
+      description: "Ожидаемое поведение, крайние случаи, на что похоже в других сервисах — если есть соображения"
+    validations:
+      required: false
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: "Скриншоты / макеты"
+      description: "Можно перетащить файл прямо в поле"
+    validations:
+      required: false
