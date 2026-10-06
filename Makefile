@@ -137,7 +137,7 @@ DEFAULT_GOAL := help
 help: ## List available targets grouped by section
 	@awk 'BEGIN {FS = ":.*## "} \
 		/^##@/ {printf "\n\033[1m%s\033[0m\n", substr($$0, 5)} \
-		/^[a-zA-Z_-]+:.*## / {printf "  \033[36m%-28s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+		/^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-28s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 ##@ Infrastructure
 local-infra-up: ## Start the local dev infrastructure (compose, detached)
@@ -391,12 +391,14 @@ frontend-test: ## Run the frontend test suite (vitest)
 # slots: docs/agents/parallel-dev.md.
 SOURCE_ROOT_ENV := set -a; [ -f .env ] && . ./.env; set +a;
 
+# Both e2e targets forward TESTS to the runner (extra args to `npx playwright
+# test`): a Playwright filter, e.g. make frontend-e2e TESTS="-g платежи", or a
+# spec path.
 frontend-e2e: ## Run frontend Playwright e2e (dedicated stack; Docker required)
-	$(SOURCE_ROOT_ENV) ./tools/e2e/frontend/run-frontend-e2e.sh
+	$(SOURCE_ROOT_ENV) ./tools/e2e/frontend/run-frontend-e2e.sh $(TESTS)
 
 # frontend-e2e-headed replays the specs in visible Chromium windows: the same
-# disposable stack, the same fixtures — the runner just shows its work. Pass a
-# Playwright filter through TESTS, e.g. make frontend-e2e-headed TESTS="-g платежи".
+# disposable stack, the same fixtures — the runner just shows its work.
 frontend-e2e-headed: ## Run frontend Playwright e2e with visible browser windows (Docker required)
 	$(SOURCE_ROOT_ENV) ./tools/e2e/frontend/run-frontend-e2e.sh --headed $(TESTS)
 
