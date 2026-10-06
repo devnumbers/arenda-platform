@@ -13,9 +13,11 @@ export {
 export { completedRentalOperationsScope } from './lib/completed-operations';
 export {
   buildRentalCreateCommand,
+  draftAfterPaymentDayChange,
   draftAfterStartChange,
   paymentDayFromPicker,
   paymentDayLabel,
+  plannedEndDateMinDate,
   RENTAL_REMINDER_DEFAULT,
   rentalPlannedEndDateError,
   rentalStartDateError,
@@ -29,6 +31,7 @@ export { rentalActionState } from './lib/rental-actions';
 export type { RentalActionState } from './lib/rental-actions';
 export {
   buildRentalUpdateCommand,
+  formAfterPaymentDayChange,
   rentalEditFormFromRental,
   rentalPlannedEndDateEditError,
   RENTAL_COMMENT_MAX,

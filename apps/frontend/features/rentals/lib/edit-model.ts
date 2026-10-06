@@ -5,7 +5,7 @@ import type {
   RentalUpdateCommand,
   RentalUtilities,
 } from '@/entities/rental';
-import { RENTAL_AMOUNT_MAX_KOPECKS } from './wizard-model';
+import { endCoversSchedule, RENTAL_AMOUNT_MAX_KOPECKS } from './wizard-model';
 
 /**
  * Чистая логика правки условий аренды (#532, Figma 1302:53055): форма,
@@ -61,6 +61,23 @@ export function rentalPlannedEndDateEditError(
     return 'Окончание должно быть позже начала';
   }
   return plannedEndDate < today ? 'Окончание не может быть в прошлом' : undefined;
+}
+
+/** Форма после смены дня оплаты (#1156, канон молчаливого сброса): стоящее
+ * окончание, оказавшееся раньше первого вхождения нового дня, очищается
+ * в бессрочную — дата, которую пикер окончания больше не даёт выбрать,
+ * в форме не хранится (иначе сохранение ловило бы 400 «окна графика»,
+ * #1154; тот же паттерн, что в визарде и в правке платежа #1155). */
+export function formAfterPaymentDayChange(
+  rental: Rental,
+  form: RentalEditForm,
+  paymentDay: RentalPaymentDay,
+): RentalEditForm {
+  const next = { ...form, paymentDay };
+  if (next.plannedEndDate === null || endCoversSchedule(next.plannedEndDate, rental.startDate, paymentDay)) {
+    return next;
+  }
+  return { ...next, plannedEndDate: null };
 }
 
 /** Дифф формы с арендой → команда PATCH; пустой дифф или невалидное

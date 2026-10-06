@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Rental } from '@/entities/rental';
 import {
   buildRentalUpdateCommand,
+  formAfterPaymentDayChange,
   rentalEditFormFromRental,
   rentalPlannedEndDateEditError,
   RENTAL_COMMENT_MAX,
@@ -216,5 +217,36 @@ describe('buildRentalUpdateCommand', () => {
     expect(
       buildRentalUpdateCommand(RENTAL, { ...base, comment: 'а'.repeat(2000) })?.comment,
     ).toBe('а'.repeat(2000));
+  });
+});
+
+describe('formAfterPaymentDayChange', () => {
+  it('день оплаты, сдвинувший первое вхождение за стоящее окончание, очищает его в бессрочную (#1156)', () => {
+    // Аренда с 10-го, день 10-е, окончание 20-го — валидно; смена дня
+    // на 25-е делает пару невалидной: первое вхождение 25-го позже конца.
+    const form = rentalEditFormFromRental(RENTAL);
+    const next = formAfterPaymentDayChange(
+      { ...RENTAL, startDate: '2026-10-10', plannedEndDate: '2026-10-20' },
+      { ...form, plannedEndDate: '2026-10-20' },
+      25,
+    );
+    expect(next.paymentDay).toBe(25);
+    expect(next.plannedEndDate).toBeNull();
+  });
+
+  it('окончание, покрывающее новое первое вхождение, остаётся', () => {
+    const form = rentalEditFormFromRental(RENTAL);
+    const next = formAfterPaymentDayChange(
+      { ...RENTAL, startDate: '2026-10-10', plannedEndDate: '2026-11-20' },
+      { ...form, plannedEndDate: '2026-11-20' },
+      25,
+    );
+    expect(next.plannedEndDate).toBe('2026-11-20');
+  });
+
+  it('бессрочная (null) остаётся бессрочной при любом дне', () => {
+    const form = rentalEditFormFromRental(RENTAL);
+    const next = formAfterPaymentDayChange(RENTAL, { ...form, plannedEndDate: null }, 25);
+    expect(next.plannedEndDate).toBeNull();
   });
 });

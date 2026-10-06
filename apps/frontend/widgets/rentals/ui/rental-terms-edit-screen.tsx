@@ -7,13 +7,15 @@ import { Calendar, Cancel, Check } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
-import { addDays, type IsoDate } from '@/shared/lib/calendar';
+import { type IsoDate } from '@/shared/lib/calendar';
 import { formatDayMonthWithYear } from '@/shared/lib/date-format';
 import { kopecksToAmountInputString, parseRublesToKopecks } from '@/shared/lib/format-money';
 import {
   buildRentalUpdateCommand,
   currentRentalOf,
+  formAfterPaymentDayChange,
   paymentDayLabel,
+  plannedEndDateMinDate,
   rentalEditFormFromRental,
   rentalPlannedEndDateEditError,
   RENTAL_COMMENT_MAX,
@@ -56,10 +58,13 @@ import { RentalTermsEditFormSkeleton } from './rental-skeletons';
  * напоминать», тумблеры email-уведомлений макета и арендатор вырезаны
  * (тело #532; в контракте аренды их нет). Окончание — канонический
  * бесконечный календарь: снятая дата — бессрочная (tri-state null),
- * будущие дни открыты, дни ≤ начала погашены (minDate). Сумма, день
- * оплаты, автоплатёж и окончание сервер синхронно переносит на Платёж
- * арендной платы — фронт шлёт дифф формы (edit-model) одним PATCH.
- * Сохранение — тост и возврат на «Условия аренды».
+ * будущие дни открыты, дни ≤ начала и дни до первого вхождения дня оплаты
+ * погашены (minDate, #1156 — валидатор слитой пары на сервере, #1154);
+ * смена дня оплаты молча чистит окончание, переставшее покрывать новое
+ * первое вхождение. Сумма, день оплаты, автоплатёж и окончание сервер
+ * синхронно переносит на Платёж арендной платы — фронт шлёт дифф формы
+ * (edit-model) одним PATCH. Сохранение — тост и возврат на «Условия
+ * аренды».
  */
 export function RentalTermsEditScreen({
   propertyId,
@@ -171,6 +176,9 @@ function RentalTermsEditForm({
 
   const command = buildRentalUpdateCommand(rental, form);
   const canSave = command !== undefined;
+  // Эффективный день оплаты (#1156): выбранный в форме, иначе день платежа
+  // аренды — от него считается минимум пикера окончания и сброс.
+  const effectiveDay = form.paymentDay ?? rental.rentPayment.paymentDay;
   // Ошибка видна только у изменённого значения: предзаполненное окончание
   // «needs_attention»-аренды может быть в прошлом — сервер его принял, и
   // правка прочих полей не обязана чинить дату (ADR 0053 §3).
@@ -335,7 +343,10 @@ function RentalTermsEditForm({
           onClose={() => setDayPickerOpen(false)}
           onConfirm={(day) => {
             if (day !== undefined) {
-              update('paymentDay', day);
+              // Смена дня молча чистит окончание, переставшее покрывать
+              // первое вхождение (#1156) — валидатор слитой пары на
+              // сервере иначе отклонил бы PATCH.
+              setForm((prev) => formAfterPaymentDayChange(rental, prev, day));
             }
             setDayPickerOpen(false);
           }}
@@ -346,7 +357,7 @@ function RentalTermsEditForm({
           title="Окончание аренды"
           today={today}
           value={form.plannedEndDate}
-          minDate={addDays(rental.startDate, 1)}
+          minDate={plannedEndDateMinDate(rental.startDate, effectiveDay)}
           onClose={() => setEndPickerOpen(false)}
           onConfirm={(date) => {
             update('plannedEndDate', date);

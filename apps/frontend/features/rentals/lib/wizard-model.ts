@@ -1,4 +1,4 @@
-import { cmp, type IsoDate } from '@/shared/lib/calendar';
+import { addDays, cmp, dateInMonth, type IsoDate, isoMonthNumber, isoYear } from '@/shared/lib/calendar';
 import type { PaymentReminderOffset } from '@/entities/payment';
 import type {
   RentalCreateCommand,
@@ -113,6 +113,55 @@ export function rentalPlannedEndDateError(
     : 'Окончание должно быть позже начала';
 }
 
+/** Первая дата дня оплаты на или после старта: 1..30 — свой день (прижатый
+ * к длине месяца), «последний день» — фактический последний день месяца.
+ * Зеркало backend PaymentDay.FirstPaymentDate (#1154): та же арифметика
+ * без дрейфа — месяц строится от числа заново, декабрь перекатывается
+ * в январь. Нижняя граница «окна графика» (#1150): окончание раньше неё
+ * оставило бы аренду без единого платежа. */
+export function firstPaymentDate(startDate: IsoDate, paymentDay: RentalPaymentDay): IsoDate {
+  const month0 = isoMonthNumber(startDate) - 1;
+  const day = paymentDay === 'last' ? 31 : paymentDay;
+  const first = dateInMonth(isoYear(startDate), month0, day);
+  return cmp(first, startDate) >= 0
+    ? first
+    : dateInMonth(isoYear(startDate), month0 + 1, day);
+}
+
+/** Минимум пикера планового окончания (#1156): строго позже начала и, в
+ * дополнение, не раньше первого вхождения дня оплаты — дата до первой
+ * оплаты оставила бы аренду без платежей (инвариант «окна графика»,
+ * #1150/#1154). Без дня оплаты работает прежняя граница. */
+export function plannedEndDateMinDate(
+  startDate: IsoDate,
+  paymentDay: RentalPaymentDay | undefined,
+): IsoDate {
+  const dayAfterStart = addDays(startDate, 1);
+  if (paymentDay === undefined) {
+    return dayAfterStart;
+  }
+  const first = firstPaymentDate(startDate, paymentDay);
+  return cmp(first, dayAfterStart) > 0 ? first : dayAfterStart;
+}
+
+/** Окончание стоит в «окне графика»: строго позже начала и не раньше
+ * первого вхождения дня оплаты; без начала или дня правила не вычислить —
+ * проверяется только известная часть. Один инвариант для сброса в визарде
+ * и в правке условий (#1156). */
+export function endCoversSchedule(
+  plannedEndDate: IsoDate,
+  startDate: IsoDate | undefined,
+  paymentDay: RentalPaymentDay | undefined,
+): boolean {
+  if (startDate === undefined || cmp(plannedEndDate, startDate) <= 0) {
+    return false;
+  }
+  return (
+    paymentDay === undefined
+    || cmp(plannedEndDate, firstPaymentDate(startDate, paymentDay)) >= 0
+  );
+}
+
 /** Готовность шага к продолжению (обязательные поля заполнены). После
  * обмена шагов (решение владельца 2026-09-05): шаг 2 — условия, шаг 3 —
  * настройки — всегда (тумблер с дефолтом); шаг 4 — всегда (арендатор
@@ -142,7 +191,9 @@ export function wizardStepReady(
 
 /** Черновик после смены начала аренды (решение владельца 2026-09-05):
  * окончание, переставшее быть позже начала, очищается автоматически —
- * погашенные дни в пикере не оставляют невалидного значения в поле. */
+ * погашенные дни в пикере не оставляют невалидного значения в поле.
+ * #1156: окончание, переставшее покрывать первое вхождение дня оплаты
+ * (черновик шага 1 его уже знает), очищается так же молча. */
 export function draftAfterStartChange(
   draft: RentalWizardDraft,
   startDate: IsoDate | undefined,
@@ -150,10 +201,32 @@ export function draftAfterStartChange(
   const { plannedEndDate, ...rest } = draft;
   const keepEnd =
     plannedEndDate !== undefined
-    && (startDate === undefined || cmp(plannedEndDate, startDate) > 0);
+    && (startDate === undefined
+      || endCoversSchedule(plannedEndDate, startDate, draft.paymentDay));
   return {
     ...rest,
     ...(startDate !== undefined && { startDate }),
+    ...(keepEnd && { plannedEndDate }),
+  };
+}
+
+/** Черновик после смены дня оплаты (#1156, канон молчаливого сброса):
+ * стоящее окончание, оказавшееся раньше первого вхождения нового дня,
+ * очищается — дата, которую пикер окончания больше не даёт выбрать,
+ * в черновике не хранится (иначе сабмит ловил бы 400 «окно графика»).
+ * Без начала правило не вычислить — окончание переоценит смена начала. */
+export function draftAfterPaymentDayChange(
+  draft: RentalWizardDraft,
+  paymentDay: RentalPaymentDay | undefined,
+): RentalWizardDraft {
+  const { plannedEndDate, ...rest } = draft;
+  const keepEnd =
+    plannedEndDate === undefined
+    || draft.startDate === undefined
+    || endCoversSchedule(plannedEndDate, draft.startDate, paymentDay);
+  return {
+    ...rest,
+    ...(paymentDay !== undefined && { paymentDay }),
     ...(keepEnd && { plannedEndDate }),
   };
 }

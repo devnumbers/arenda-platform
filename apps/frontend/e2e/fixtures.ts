@@ -198,9 +198,9 @@ export function todayIso(): string {
 }
 
 /** Первое N-е число месяца на или после fromIso ('YYYY-MM-DD') — зеркало
- * первого вхождения monthly-N правила (#1155): ожидания пикера endDate
- * (minDate = первое вхождение) считаются в тех же UTC-сутках, что экран
- * и сиды (canon #796). */
+ * первого вхождения monthly-N правила (#1155) и первого вхождения дня
+ * оплаты аренды (#1156): ожидания пикера endDate (minDate = первое
+ * вхождение) считаются в тех же UTC-сутках, что экран и сиды (canon #796). */
 export function monthlyDayOnOrAfter(day: number, fromIso: string): string {
   const from = new Date(`${fromIso}T00:00:00Z`);
   const year = from.getUTCFullYear();

@@ -3,11 +3,12 @@
 import { useState } from 'react';
 import type { JSX } from 'react';
 import { Calendar } from '@/shared/assets/icons';
-import { addDays, type IsoDate } from '@/shared/lib/calendar';
+import { type IsoDate } from '@/shared/lib/calendar';
 import { formatDayMonthWithYear } from '@/shared/lib/date-format';
 import { kopecksToAmountInputString, parseRublesToKopecks } from '@/shared/lib/format-money';
-import type { RentalUtilities } from '@/entities/rental';
+import type { RentalPaymentDay, RentalUtilities } from '@/entities/rental';
 import {
+  plannedEndDateMinDate,
   rentalPlannedEndDateError,
   rentalStartDateError,
 } from '@/features/rentals';
@@ -24,15 +25,19 @@ import {
  * начало* и опциональное окончание открывают канонический бесконечный
  * календарь CalendarDatePicker — окончание позже начала: дни ≤ начала в
  * его пикере погашены (minDate, решение владельца 2026-09-05, ADR 0053),
- * коммунальные платежи — PickerMenu
- * (радио-меню макета 1296:48965: «Включены в стоимость» / «Только
- * счетчики» / «Вся квитанция»), залог и комиссия — необязательные денежные
- * поля. Дата в поле — канонический формат «10 мая, 2027».
+ * и не раньше первого вхождения дня оплаты (#1156): дата до первой
+ * оплаты оставила бы аренду без платежей — минимум пикера ведёт первое
+ * вхождение, когда оно позже дня после начала. Коммунальные платежи —
+ * PickerMenu (радио-меню макета 1296:48965: «Включены в стоимость» /
+ * «Только счетчики» / «Вся квитанция»), залог и комиссия — необязательные
+ * денежные поля. Дата в поле — канонический формат «10 мая, 2027».
  */
 
 export type ConditionsStepProps = {
   readonly startDate: IsoDate | undefined;
   readonly onStartDateChange: (startDate: IsoDate | undefined) => void;
+  /** День оплаты шага 1 — известен к моменту выбора окончания (#1156). */
+  readonly paymentDay: RentalPaymentDay | undefined;
   readonly plannedEndDate: IsoDate | undefined;
   readonly onPlannedEndDateChange: (plannedEndDate: IsoDate | undefined) => void;
   readonly utilities: RentalUtilities | undefined;
@@ -48,6 +53,7 @@ export type ConditionsStepProps = {
 export function ConditionsStep({
   startDate,
   onStartDateChange,
+  paymentDay,
   plannedEndDate,
   onPlannedEndDateChange,
   utilities,
@@ -150,7 +156,7 @@ export function ConditionsStep({
           title="Окончание аренды"
           today={today}
           value={plannedEndDate ?? null}
-          minDate={startDate !== undefined ? addDays(startDate, 1) : undefined}
+          minDate={startDate !== undefined ? plannedEndDateMinDate(startDate, paymentDay) : undefined}
           onClose={() => setEndPickerOpen(false)}
           onConfirm={(date) => {
             onPlannedEndDateChange(date ?? undefined);
