@@ -393,6 +393,9 @@ func (s *RentalService) updatedRentalOutcome(
 	if err != nil {
 		return mutationOutcome{}, err
 	}
+	if err := s.validateTermsWindow(ctx, stores, scope, propertyID, cmd, rental); err != nil {
+		return mutationOutcome{}, err
+	}
 	applyRentalUpdate(&rental, cmd)
 	if err := validateRentalRow(rental); err != nil {
 		return mutationOutcome{}, err
@@ -739,6 +742,14 @@ func validateCreate(cmd CreateRentalCommand, today time.Time) error {
 	if cmd.PlannedEndDate != nil && !cmd.PlannedEndDate.After(cmd.StartDate) {
 		return ErrInvalidInput
 	}
+	// The schedule window (ticket #1154): the planned end never stands
+	// before the rent schedule's first payment-day occurrence — such a term
+	// holds zero payments.
+	if cmd.PlannedEndDate != nil {
+		if err := validatePlannedEndWindow(*cmd.PlannedEndDate, cmd.StartDate, cmd.PaymentDay); err != nil {
+			return err
+		}
+	}
 	if err := validateOptionalAmount(cmd.DepositKopecks); err != nil {
 		return err
 	}
@@ -798,6 +809,55 @@ func validatePlannedEnd(plannedEnd, start, today time.Time) error {
 		return ErrInvalidInput
 	}
 	return nil
+}
+
+// validatePlannedEndWindow enforces the schedule window (ticket #1154): the
+// planned end never stands before the rent schedule's first payment-day
+// occurrence. The create guard validates the command's own pair through it;
+// the edit guard validates the merged (effective day, merged end) pair.
+func validatePlannedEndWindow(plannedEnd, start time.Time, day domain.PaymentDay) error {
+	if plannedEnd.Before(day.FirstPaymentDate(start)) {
+		return ErrInvalidInput
+	}
+	return nil
+}
+
+// validateTermsWindow guards the terms edit's schedule window (ticket
+// #1154): the merged pair of the effective payment day and the merged
+// planned end is validated as a whole, so a day change re-checks the
+// standing end the same way an end change re-checks against the effective
+// day. The trigger is narrow — only a command touching the day or setting an
+// end date runs it: a stored pair with a hole (a legacy row created before
+// the fix) must not block unrelated edits. The stored day rides one
+// in-transaction State read, only when the command changes the end without
+// carrying the day; the schema CHECK keeps a payment link on every
+// unfinished rental, so the read's payment id is safe to dereference.
+func (s *RentalService) validateTermsWindow(
+	ctx context.Context, stores *txStores, scope, propertyID uuid.UUID,
+	cmd UpdateRentalCommand, rental domain.Rental,
+) error {
+	setsEnd := cmd.PlannedEndDate != nil && cmd.PlannedEndDate.Value != nil
+	if cmd.PaymentDay == nil && !setsEnd {
+		return nil
+	}
+	end := rental.PlannedEndDate
+	if cmd.PlannedEndDate != nil {
+		end = cmd.PlannedEndDate.Value
+	}
+	if end == nil {
+		return nil // Open-ended: nothing to cut short.
+	}
+	var day domain.PaymentDay
+	if cmd.PaymentDay != nil {
+		day = *cmd.PaymentDay
+	} else {
+		terms, err := stores.pay.State(ctx, scope, propertyID, *rental.PaymentID)
+		if err != nil {
+			return fmt.Errorf("read rent payment terms: %w", err)
+		}
+		day = terms.PaymentDay
+	}
+	return validatePlannedEndWindow(*end, rental.StartDate, day)
 }
 
 // validateCompletedDate enforces the completion window (решение №8): the

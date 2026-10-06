@@ -140,6 +140,20 @@ func yearlyBetween(p Payment, start, hardEnd time.Time) []time.Time {
 	return out
 }
 
+// FirstOccurrence returns the rule's earliest schedule occurrence at or
+// after Since; EndDate is ignored (the window validator asks where the
+// schedule would start, whatever end stands), pauses cut. False — the
+// schedule never fires (an open pause over everything).
+func FirstOccurrence(p Payment) (time.Time, bool) {
+	probe := p
+	probe.EndDate = nil
+	ds := OccurrencesBetween(probe, p.Since, addYearsClamped(p.Since, 5))
+	if len(ds) == 0 {
+		return time.Time{}, false
+	}
+	return ds[0], true
+}
+
 // NextOccurrenceAfter returns the first occurrence strictly after date (and
 // at or before EndDate when set); the boolean is false when the rule has no
 // more occurrences.

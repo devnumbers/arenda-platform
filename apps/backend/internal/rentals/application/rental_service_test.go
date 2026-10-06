@@ -713,6 +713,216 @@ func TestUpdateRental_PlannedEndRules(t *testing.T) {
 	}
 }
 
+// The schedule window of the create contract (ticket #1154): a planned end
+// before the rent schedule's first payment-day occurrence leaves the rent
+// zero payments — rejected like any other invalid create.
+func TestCreateRental_PlannedEndCoversTheFirstPayment(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		mut     func(*CreateRentalCommand)
+		wantErr bool
+	}{
+		{
+			// The research case: старт 10-го, день оплаты 25-е, конец 20-го.
+			name: "planned end before the first occurrence",
+			mut: func(c *CreateRentalCommand) {
+				c.StartDate = mustDate("2026-09-10")
+				c.PaymentDay = domain.MustPaymentDay(25)
+				c.PlannedEndDate = new(mustDate("2026-09-20"))
+			},
+			wantErr: true,
+		},
+		{
+			// The end on the first occurrence itself gives exactly one
+			// payment — the inclusive boundary.
+			name: "planned end on the first occurrence is valid",
+			mut: func(c *CreateRentalCommand) {
+				c.StartDate = mustDate("2026-09-10")
+				c.PaymentDay = domain.MustPaymentDay(25)
+				c.PlannedEndDate = new(mustDate("2026-09-25"))
+			},
+		},
+		{
+			name: "the last-day marker needs the month's actual end",
+			mut: func(c *CreateRentalCommand) {
+				c.StartDate = mustDate("2026-09-10")
+				c.PaymentDay = domain.NewLastPaymentDay()
+				c.PlannedEndDate = new(mustDate("2026-09-29"))
+			},
+			wantErr: true,
+		},
+		{
+			name: "the last-day marker covered by the month's end",
+			mut: func(c *CreateRentalCommand) {
+				c.StartDate = mustDate("2026-09-10")
+				c.PaymentDay = domain.NewLastPaymentDay()
+				c.PlannedEndDate = new(mustDate("2026-09-30"))
+			},
+		},
+		{
+			// 31 normalizes to the last-day marker: September clamps to 30.
+			name: "day 31 from september clamps to the 30th",
+			mut: func(c *CreateRentalCommand) {
+				c.StartDate = mustDate("2026-09-10")
+				c.PaymentDay = domain.MustPaymentDay(31)
+				c.PlannedEndDate = new(mustDate("2026-09-29"))
+			},
+			wantErr: true,
+		},
+		{
+			// The research case 18 verbatim: the marker's month holds its own
+			// last day — the end on the 31st itself is the boundary.
+			name: "day 31 in a 31-day month reaches its own end",
+			mut: func(c *CreateRentalCommand) {
+				c.StartDate = mustDate("2027-01-10")
+				c.PaymentDay = domain.MustPaymentDay(31)
+				c.PlannedEndDate = new(mustDate("2027-01-31"))
+			},
+		},
+		{
+			name: "an open-ended rental has no window",
+			mut: func(c *CreateRentalCommand) {
+				c.StartDate = mustDate("2026-09-10")
+				c.PaymentDay = domain.MustPaymentDay(25)
+				c.PlannedEndDate = nil
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			h := newHarness(t)
+			cmd := createCmd()
+			tt.mut(&cmd)
+			_, err := h.svc.CreateRental(t.Context(), h.owner, h.property, cmd)
+			if tt.wantErr {
+				require.ErrorIs(t, err, ErrInvalidInput)
+				assert.Empty(t, h.journal.events, "an invalid command writes nothing")
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+// The terms edit validates the merged (payment day, planned end) pair
+// (ticket #1154): the day change re-checks the standing end, the end change
+// reads the stored day when the command carries none, and the extension of
+// an open rental — the same PATCH — is guarded the same way. Completion
+// stays outside the guard: it records a fact, not a plan.
+func TestUpdateRental_TermsWindowGuardsTheMergedPair(t *testing.T) {
+	t.Parallel()
+
+	t.Run("day change re-checks the standing end", func(t *testing.T) {
+		t.Parallel()
+
+		t.Run("the standing end covers the new schedule", func(t *testing.T) {
+			t.Parallel()
+			h := newHarness(t)
+			// Старт 08-15, конец 09-20; смена дня на 5-е → первое вхождение
+			// 09-05, всё ещё внутри срока.
+			rentalID := h.seedRental(func(r *domain.Rental) {
+				r.PlannedEndDate = new(mustDate("2026-09-20"))
+			})
+			day5 := domain.MustPaymentDay(5)
+			_, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID,
+				UpdateRentalCommand{PaymentDay: &day5})
+			require.NoError(t, err)
+		})
+
+		t.Run("the standing end is cut short by the day change", func(t *testing.T) {
+			t.Parallel()
+			h := newHarness(t)
+			// Старт 08-15, конец 09-04 (сегодня — легальная правка конца);
+			// смена дня на 5-е уводит первое вхождение за конец.
+			rentalID := h.seedRental(func(r *domain.Rental) {
+				r.PlannedEndDate = new(today)
+			})
+			day5 := domain.MustPaymentDay(5)
+			_, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID,
+				UpdateRentalCommand{PaymentDay: &day5})
+			require.ErrorIs(t, err, ErrInvalidInput)
+			assert.Empty(t, h.journal.events, "an invalid merged pair writes nothing")
+		})
+	})
+
+	t.Run("end change reads the stored day when the command carries none", func(t *testing.T) {
+		t.Parallel()
+		h := newHarness(t)
+		// Будущая аренда: старт 09-10, хранящийся день 25-е → первое
+		// вхождение 09-25.
+		h.gateway.terms = RentPaymentTerms{PaymentDay: domain.MustPaymentDay(25)}
+		rentalID := h.seedRental(func(r *domain.Rental) {
+			r.StartDate = mustDate("2026-09-10")
+			r.PlannedEndDate = new(mustDate("2026-09-30"))
+		})
+
+		// Укорачивание конца внутрь окна (продление с дырой — тот же PATCH).
+		_, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID,
+			UpdateRentalCommand{PlannedEndDate: &DateUpdate{Value: new(mustDate("2026-09-20"))}})
+		require.ErrorIs(t, err, ErrInvalidInput)
+		// Единственное обращение к хранилищам — чтение хранящегося дня
+		// внутри guard'а; ни одной записи.
+		assert.Equal(t, []string{"pay.State"}, h.journal.events,
+			"the guard reads the stored day, nothing writes")
+
+		// Конец на первом вхождении — валиден.
+		_, err = h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID,
+			UpdateRentalCommand{PlannedEndDate: &DateUpdate{Value: new(mustDate("2026-09-25"))}})
+		require.NoError(t, err)
+	})
+
+	t.Run("extension of an open rental is guarded the same way", func(t *testing.T) {
+		t.Parallel()
+		h := newHarness(t)
+		h.gateway.terms = RentPaymentTerms{PaymentDay: domain.MustPaymentDay(25)}
+		// Открытая незапущенная аренда: сегодня или старт+1 могут стоять
+		// раньше первого вхождения — конец-продление его закрывать обязан.
+		rentalID := h.seedRental(func(r *domain.Rental) {
+			r.StartDate = mustDate("2026-09-10")
+			r.PlannedEndDate = nil
+		})
+
+		_, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID,
+			UpdateRentalCommand{PlannedEndDate: &DateUpdate{Value: new(mustDate("2026-09-20"))}})
+		require.ErrorIs(t, err, ErrInvalidInput)
+	})
+
+	t.Run("unrelated edits skip the guard on a holed legacy rental", func(t *testing.T) {
+		t.Parallel()
+		h := newHarness(t)
+		h.gateway.terms = RentPaymentTerms{PaymentDay: domain.MustPaymentDay(25)}
+		// Хранимая пара с дырой (легаси до фикса): некомментные правки не
+		// обязаны её чинить и не блокируются ею.
+		rentalID := h.seedRental(func(r *domain.Rental) {
+			r.StartDate = mustDate("2026-09-10")
+			r.PlannedEndDate = new(mustDate("2026-09-20"))
+		})
+
+		_, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID,
+			UpdateRentalCommand{Comment: &StringUpdate{Value: new(" нюансы ")}})
+		require.NoError(t, err)
+	})
+}
+
+// Завершение раньше первого вхождения — легальный факт (research #1154,
+// раздел 3): ноль операций, платёж удаляется конвейером завершения
+// (keep_overdue, ревизия #1161) — guard завершение не блокирует.
+func TestCompleteRental_BeforeTheFirstOccurrenceIsLegal(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.gateway.terms = RentPaymentTerms{PaymentDay: domain.MustPaymentDay(25)}
+	// Старт 08-15, день оплаты 25-е → первое вхождение 08-25; завершение
+	// 08-20 раньше него.
+	rentalID := h.seedRental(nil)
+
+	_, err := h.svc.CompleteRental(t.Context(), h.owner, h.property, rentalID,
+		CompleteRentalCommand{CompletedDate: mustDate("2026-08-20")})
+	require.NoError(t, err)
+	require.True(t, h.gateway.deleted, "the payment dies with the completion")
+}
+
 func TestUpdateRental_CompletedIs409(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
