@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/payments/domain"
+	"github.com/stretchr/testify/require"
 )
 
 // validRule is the base fixture every case mutates: a minimal rule that
@@ -22,6 +23,124 @@ func validRule() domain.Payment {
 		Recurrence:    domain.NewDailyRecurrence(),
 		Since:         time.Date(2026, 8, 25, 0, 0, 0, 0, time.UTC),
 		Category:      domain.CategoryRef{Slug: &slug},
+	}
+}
+
+// windowRule is the base fixture of the window table: the same valid rule
+// whose since/recurrence/endDate each case re-points. 2026-10-07 is a
+// Wednesday.
+func windowRule() domain.Payment {
+	rule := validRule()
+	rule.Since = time.Date(2026, 10, 7, 0, 0, 0, 0, time.UTC)
+	return rule
+}
+
+// TestValidateRuleWindow enforces the schedule window (ticket #1154): the
+// end date never stands before the schedule's first occurrence (ignoring the
+// end date itself). An end on the first occurrence itself stays valid — the
+// RFC 5545 UNTIL semantics OccurrencesBetween follows.
+func TestValidateRuleWindow(t *testing.T) {
+	t.Parallel()
+
+	// The «31-го числа» spelling: the contract normalizes 31 onto the
+	// last-day marker (the only way the recurrence API spells it).
+	monthly31st, err := domain.NewMonthlyRecurrence(nil, true)
+	require.NoError(t, err)
+	yearlyFeb29, err := domain.NewYearlyRecurrence(time.February, 29)
+	require.NoError(t, err)
+	friday, err := domain.NewWeeklyRecurrence([]time.Weekday{time.Friday})
+	require.NoError(t, err)
+
+	oct9 := time.Date(2026, 10, 9, 0, 0, 0, 0, time.UTC)   // The Friday.
+	oct8 := time.Date(2026, 10, 8, 0, 0, 0, 0, time.UTC)   // The Thursday.
+	feb28 := time.Date(2026, 2, 28, 0, 0, 0, 0, time.UTC)  // The February clamp.
+	dec31 := time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC) // The first year's end.
+	leap29 := time.Date(2028, 2, 29, 0, 0, 0, 0, time.UTC) // The rule's own day.
+
+	cases := []struct {
+		name    string
+		mutate  func(rule *domain.Payment)
+		wantErr error
+	}{
+		{
+			// The bugged pair: weekly «пт» ending the Thursday before the
+			// first Friday — zero occurrences would materialize.
+			name: "weekly endDate before the first friday",
+			mutate: func(r *domain.Payment) {
+				r.Recurrence = friday
+				r.EndDate = &oct8
+			},
+			wantErr: ErrEndDateBeforeFirstOccurrence,
+		},
+		{
+			name: "weekly endDate on the first friday is valid",
+			mutate: func(r *domain.Payment) {
+				r.Recurrence = friday
+				r.EndDate = &oct9
+			},
+		},
+		{
+			// Daily's first occurrence is since itself: the window adds
+			// nothing to the existing endDate ≥ since check.
+			name: "daily endDate on since is valid",
+			mutate: func(r *domain.Payment) {
+				r.Recurrence = domain.NewDailyRecurrence()
+				r.EndDate = new(r.Since)
+			},
+		},
+		{
+			name: "weekly endDate on since is the bug",
+			mutate: func(r *domain.Payment) {
+				r.Recurrence = friday
+				r.EndDate = new(r.Since)
+			},
+			wantErr: ErrEndDateBeforeFirstOccurrence,
+		},
+		{
+			// The February clamp of the 31st keeps 31.01 the first occurrence.
+			name: "monthly 31st with a clamped february end",
+			mutate: func(r *domain.Payment) {
+				r.Recurrence = monthly31st
+				r.Since = time.Date(2026, 1, 31, 0, 0, 0, 0, time.UTC)
+				r.EndDate = &feb28
+			},
+		},
+		{
+			// The first occurrence of Feb-29 chosen after this February is
+			// the next year's clamped anchor (2027-02-28).
+			name: "yearly feb29 with an end inside the first year",
+			mutate: func(r *domain.Payment) {
+				r.Recurrence = yearlyFeb29
+				r.Since = time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+				r.EndDate = &dec31
+			},
+			wantErr: ErrEndDateBeforeFirstOccurrence,
+		},
+		{
+			name: "yearly feb29 covered by its second year",
+			mutate: func(r *domain.Payment) {
+				r.Recurrence = yearlyFeb29
+				r.Since = time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+				r.EndDate = &leap29
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			rule := windowRule()
+			tc.mutate(&rule)
+			err := validateRuleWindow(rule)
+			if tc.wantErr != nil {
+				if !errors.Is(err, tc.wantErr) {
+					t.Fatalf("validateRuleWindow = %v, want %v", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("validateRuleWindow = %v, want nil", err)
+			}
+		})
 	}
 }
 

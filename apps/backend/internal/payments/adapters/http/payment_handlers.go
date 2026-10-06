@@ -85,6 +85,15 @@ var staticPaymentProblems = []httpsupport.ErrorProblem{
 		Title: httpsupport.ProblemTitleConflict, Detail: "Операция уже оплачена",
 	},
 	{
+		// The schedule window's own message (ticket #1154): the sentinel is
+		// not wrapped into ErrInvalidInput, so this row answers before the
+		// shared «Некорректные данные платежа» table.
+		Err:    application.ErrEndDateBeforeFirstOccurrence,
+		Status: http.StatusBadRequest,
+		Title:  "Bad request",
+		Detail: "Дата окончания не может быть раньше первого платежа",
+	},
+	{
 		// The rent payment's rule mutations answer the domain's own words
 		// (ADR 0053, ticket #818): the rental owns the amount, the payment
 		// day, the auto-pay and the planned end.
