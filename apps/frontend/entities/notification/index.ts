@@ -14,6 +14,11 @@ export type {
 } from './model/types';
 export { notificationCategoryLabel } from './model/category-labels';
 export {
+  NOTIFICATION_WARNING_EVENT_TYPES,
+  notificationHasWarningBadge,
+  type NotificationWarningEventType,
+} from './model/event-badge';
+export {
   allCategoriesDisabled,
   allCategoriesEnabled,
   NOTIFICATION_SETTINGS_CATEGORIES,

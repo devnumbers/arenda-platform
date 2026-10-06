@@ -165,6 +165,7 @@ function NotificationDetailBody({
     <div className="flex flex-col gap-8 px-8">
       <NotificationCategoryIcon
         category={detail.category}
+        eventType={detail.eventType}
         unread={false}
         variant="page"
       />
