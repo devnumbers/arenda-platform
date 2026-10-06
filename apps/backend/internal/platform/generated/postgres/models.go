@@ -71,6 +71,7 @@ const (
 	NotificationEventTypePaymentDue                   NotificationEventType = "payment_due"
 	NotificationEventTypePaymentOverdue               NotificationEventType = "payment_overdue"
 	NotificationEventTypePaymentReminder              NotificationEventType = "payment_reminder"
+	NotificationEventTypePaymentAutoPaid              NotificationEventType = "payment_auto_paid"
 	NotificationEventTypeTaskOverdue                  NotificationEventType = "task_overdue"
 	NotificationEventTypePropertyInvitation           NotificationEventType = "property_invitation"
 	NotificationEventTypeInvitationAccepted           NotificationEventType = "invitation_accepted"
@@ -353,6 +354,7 @@ type Operation struct {
 	CategorySlug  pgtype.Text        `json:"category_slug"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	PaidSource    pgtype.Text        `json:"paid_source"`
 }
 
 type Payment struct {

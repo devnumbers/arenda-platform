@@ -15,10 +15,11 @@ import (
 // PaymentScheduleTarget is one upcoming boundary the payments scan books
 // (issue #776): the rule id, the operation date — the job args' identity —
 // and the boundary's instant in the owner's timezone, the job's ScheduledAt.
-// The due leg's instant is 00:00 of the operation date, the reminder leg's —
-// 00:00 of the operation date minus the rule's lead time (карта #822), the
-// overdue leg's — 00:00 of the day after (решение владельца 21.09.2026: все
-// уведомления — чётко по времени).
+// The due leg's instant is the wall clock 10:00 of the operation date, the
+// reminder leg's — 10:00 of the operation date minus the rule's lead time
+// (карта #822), the overdue leg's — 22:00 of the day after (#1168, решение
+// владельца 06.10.2026 по гриллингу #1167: платёжные уведомления приходят
+// чётко в 10:00/22:00 настенного времени пояса, не в полночь).
 type PaymentScheduleTarget struct {
 	PaymentID uuid.UUID
 	DueDate   time.Time
@@ -58,37 +59,63 @@ type PaymentScanSource interface {
 	// auto-pay mode — an auto-pay rule's due occurrence is extinguished by
 	// the tick the same day and never asks to be paid; if the auto charge
 	// did not happen, the occurrence becomes overdue and the overdue leg
-	// speaks instead.
-	ListDueTargets(ctx context.Context, zone string, today time.Time) ([]PaymentScanTarget, error)
+	// speaks instead. The instant gate (#1168) keeps the backstop sweep from
+	// publishing before the boundary's wall clock 10:00 — now is the sweep's
+	// instant the gate compares against.
+	ListDueTargets(ctx context.Context, zone string, today, now time.Time) ([]PaymentScanTarget, error)
 	// ListOverdueTargets lists the zone's planned operations dated strictly
 	// before the zone's today (решение #737, тип №3: 1-й день просрочки) —
 	// auto-pay rules included, the tick never backdates an auto charge
-	// (ADR 0049).
-	ListOverdueTargets(ctx context.Context, zone string, today time.Time) ([]PaymentScanTarget, error)
+	// (ADR 0049). The instant gate (#1168) holds yesterday's occurrences
+	// until their wall clock 22:00; a long-unpaid operation's boundary is
+	// long past and stays sweeping (the persistent leg's semantics).
+	ListOverdueTargets(ctx context.Context, zone string, today, now time.Time) ([]PaymentScanTarget, error)
 	// ListActiveRecipients lists the user ids of the property's active
 	// members — the recipients besides the owner, «Просмотр» included
 	// (решение #737: получатели объектных событий).
 	ListActiveRecipients(ctx context.Context, propertyID uuid.UUID) ([]uuid.UUID, error)
+	// ListAutoPaidTargets lists the zone's auto-pay-executed operations of
+	// the live day (#1169): occurrences the tick extinguished in their own
+	// day (the paid_source stamp) on non-archived properties — a manual
+	// payment is silent, the owner's decision by гриллинг #1167. The
+	// instant gate (#1168) keeps the sweep from publishing before the
+	// boundary's wall clock 10:00.
+	ListAutoPaidTargets(ctx context.Context, zone string, today, now time.Time) ([]PaymentScanTarget, error)
+	// ListScheduledAutoPaidTargets lists the upcoming planned occurrences of
+	// auto-pay rules whose boundary — the wall clock 10:00 of the operation
+	// date in the owner's timezone (#1169) — falls in the window
+	// (from, until]; the booking list of the auto-paid leg.
+	ListScheduledAutoPaidTargets(ctx context.Context, from, until time.Time) ([]PaymentScheduleTarget, error)
+	// GetScheduledAutoPaidPayment reloads one operation at its 10:00 wake-up
+	// (#1169): live only when the TICK extinguished it in its own day (the
+	// paid_source='auto_pay' stamp) on a non-archived property, and the
+	// operation date is still the zone's today — the live day only, no
+	// backfill (решение владельца, #1167).
+	GetScheduledAutoPaidPayment(ctx context.Context, paymentID uuid.UUID, date, now time.Time) (PaymentScanTarget, bool, error)
 	// ListScheduledDueTargets lists the upcoming operations whose due
-	// boundary — 00:00 of the operation date in the owner's timezone —
-	// falls in the window (from, until]; the booking list of the due leg
-	// (issue #776), auto-pay rules excluded like the sweep's due leg.
+	// boundary — the wall clock 10:00 of the operation date in the owner's
+	// timezone (#1168) — falls in the window (from, until]; the booking list
+	// of the due leg (issue #776), auto-pay rules excluded like the sweep's
+	// due leg.
 	ListScheduledDueTargets(ctx context.Context, from, until time.Time) ([]PaymentScheduleTarget, error)
 	// ListScheduledOverdueTargets lists the upcoming operations whose
-	// overdue boundary — 00:00 of the day after the operation date in the
-	// owner's timezone — falls in the window (from, until]; the booking list
-	// of the overdue leg (issue #776), auto-pay rules included.
+	// overdue boundary — the wall clock 22:00 of the day after the operation
+	// date in the owner's timezone (#1168) — falls in the window
+	// (from, until]; the booking list of the overdue leg (issue #776),
+	// auto-pay rules included.
 	ListScheduledOverdueTargets(ctx context.Context, from, until time.Time) ([]PaymentScheduleTarget, error)
 	// ListReminderTargets lists the zone's planned operations of rules with
 	// a reminder set whose reminder day — the operation date minus the
 	// rule's lead time (1/3/7) — is exactly the zone's today (карта #822,
 	// #824): auto-pay rules included, the reminder lives independently of
-	// auto_pay (решение владельца, #823).
-	ListReminderTargets(ctx context.Context, zone string, today time.Time) ([]PaymentScanTarget, error)
+	// auto_pay (решение владельца, #823). The instant gate (#1168) keeps
+	// the sweep from publishing before the boundary's wall clock 10:00.
+	ListReminderTargets(ctx context.Context, zone string, today, now time.Time) ([]PaymentScanTarget, error)
 	// ListScheduledReminderTargets lists the upcoming operations of rules
-	// with a reminder set whose reminder boundary — 00:00 of (operation
-	// date − lead time) in the owner's timezone — falls in the window
-	// (from, until]; the booking list of the reminder leg (карта #822).
+	// with a reminder set whose reminder boundary — the wall clock 10:00 of
+	// (operation date − lead time) in the owner's timezone (#1168) — falls
+	// in the window (from, until]; the booking list of the reminder leg
+	// (карта #822).
 	ListScheduledReminderTargets(ctx context.Context, from, until time.Time) ([]PaymentScheduleTarget, error)
 	// GetScheduledDuePayment reloads one operation at its due boundary —
 	// the due job's delivery-time resolution (issue #776). The live flag is
@@ -118,15 +145,21 @@ type PaymentScanSource interface {
 // asks freely.
 type PaymentBoundaryScheduler interface {
 	// SchedulePaymentDue books the «Оплатите платёж» job at the boundary's
-	// instant: 00:00 of the operation date in the owner's timezone.
+	// instant: the wall clock 10:00 of the operation date in the owner's
+	// timezone (#1168).
 	SchedulePaymentDue(ctx context.Context, paymentID uuid.UUID, date, fireAt time.Time) error
 	// SchedulePaymentOverdue books the «Платёж просрочен» job at the
-	// boundary's instant: 00:00 of the day after the operation date.
+	// boundary's instant: the wall clock 22:00 of the day after the
+	// operation date (#1168).
 	SchedulePaymentOverdue(ctx context.Context, paymentID uuid.UUID, date, fireAt time.Time) error
 	// SchedulePaymentReminder books the «Напоминание о платеже» job at the
-	// boundary's instant: 00:00 of (operation date − lead time) in the
-	// owner's timezone (карта #822).
+	// boundary's instant: the wall clock 10:00 of (operation date − lead
+	// time) in the owner's timezone (карта #822, #1168).
 	SchedulePaymentReminder(ctx context.Context, paymentID uuid.UUID, date, fireAt time.Time) error
+	// SchedulePaymentAutoPaid books the «Автоплатёж исполнен» job at the
+	// boundary's instant: the wall clock 10:00 of the operation date in the
+	// owner's timezone (#1169).
+	SchedulePaymentAutoPaid(ctx context.Context, paymentID uuid.UUID, date, fireAt time.Time) error
 }
 
 // PaymentBoundaryDeliverer is the boundary jobs' call into the publisher:
@@ -137,6 +170,10 @@ type PaymentBoundaryDeliverer interface {
 	DeliverPaymentDue(ctx context.Context, paymentID uuid.UUID, date, now time.Time) error
 	DeliverPaymentOverdue(ctx context.Context, paymentID uuid.UUID, date, now time.Time) error
 	DeliverPaymentReminder(ctx context.Context, paymentID uuid.UUID, date, now time.Time) error
+	// DeliverPaymentAutoPaid is the auto-paid boundary job's half (#1169):
+	// reload the operation as of the wake-up and publish if the TICK
+	// extinguished it in its own day — a manual payment is silent.
+	DeliverPaymentAutoPaid(ctx context.Context, paymentID uuid.UUID, date, now time.Time) error
 }
 
 // PaymentsPublisher is the payments events' publisher (issue #749) on the
@@ -148,12 +185,16 @@ type PaymentBoundaryDeliverer interface {
 // computes at read time from the live state (#743).
 //
 // The trigger has two mechanisms (issue #776, the tasks scan's canon of
-// #750): the hourly pass books the boundary jobs — the due leg's at 00:00 of
-// the operation date, the reminder leg's at 00:00 of the operation date
-// minus the rule's lead time (карта #822), the overdue leg's at 00:00 of the
-// day after, each in the owner's timezone — and the zone sweep stays the
+// #750): the hourly pass books the boundary jobs — the due leg's at the
+// wall clock 10:00 of the operation date, the reminder leg's at 10:00 of
+// the operation date minus the rule's lead time (карта #822), the overdue
+// leg's at 22:00 of the day after (#1168), each in the owner's timezone —
+// and the zone sweep stays the
 // backstop for everything the jobs missed (a pass delayed past a boundary, a
-// booking window not reached yet, the retrospective after a downtime). In
+// booking window not reached yet, the retrospective after a downtime). The
+// sweep's legs carry the instant gate (#1168): they hold their operations
+// until the boundary's wall clock — a backstop may catch up after the
+// boundary, never fire ahead of it. In
 // the norm the job wakes exactly at the boundary and the sweep's publication
 // is silent — the dedup key carries the idempotence, no sweep state does.
 //
@@ -209,6 +250,7 @@ func (p *PaymentsPublisher) scheduleBoundaries(ctx context.Context, now time.Tim
 	}{
 		{p.source.ListScheduledDueTargets, p.scheduler.SchedulePaymentDue, "due"},
 		{p.source.ListScheduledReminderTargets, p.scheduler.SchedulePaymentReminder, "reminder"},
+		{p.source.ListScheduledAutoPaidTargets, p.scheduler.SchedulePaymentAutoPaid, "auto paid"},
 		{p.source.ListScheduledOverdueTargets, p.scheduler.SchedulePaymentOverdue, "overdue"},
 	} {
 		targets, err := leg.list(ctx, now, now.Add(scheduledHorizon))
@@ -234,15 +276,16 @@ func (p *PaymentsPublisher) sweepZones(ctx context.Context, now time.Time) error
 		// A broken leg's list is isolated — the other legs still run.
 		var errs []error
 		for _, leg := range []struct {
-			list    func(context.Context, string, time.Time) ([]PaymentScanTarget, error)
+			list    func(context.Context, string, time.Time, time.Time) ([]PaymentScanTarget, error)
 			event   domain.EventType
 			diagnos string
 		}{
 			{p.source.ListDueTargets, domain.EventPaymentDue, "due"},
 			{p.source.ListReminderTargets, domain.EventPaymentReminder, "reminder"},
+			{p.source.ListAutoPaidTargets, domain.EventPaymentAutoPaid, "auto paid"},
 			{p.source.ListOverdueTargets, domain.EventPaymentOverdue, "overdue"},
 		} {
-			targets, err := leg.list(ctx, zone, today)
+			targets, err := leg.list(ctx, zone, today, now)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("list %s payments of zone %s: %w", leg.diagnos, zone, err))
 				continue
@@ -306,6 +349,24 @@ func (p *PaymentsPublisher) DeliverPaymentReminder(ctx context.Context, paymentI
 	return p.publish(ctx, domain.EventPaymentReminder, target)
 }
 
+// DeliverPaymentAutoPaid is the auto-paid boundary job's half (#1169,
+// карта #1162): reload the operation as of its 10:00 wake-up and publish if
+// the TICK extinguished it in its own day — the paid_source='auto_pay'
+// stamp is the live predicate (решение владельца по гриллингу #1167: a
+// manual payment of the same occurrence is silent, the owner knows). The
+// live day only: a job awake after the day rolled over — a downtime's
+// missed day — finishes without publishing (no backfill).
+func (p *PaymentsPublisher) DeliverPaymentAutoPaid(ctx context.Context, paymentID uuid.UUID, date, now time.Time) error {
+	target, live, err := p.source.GetScheduledAutoPaidPayment(ctx, paymentID, date, now)
+	if err != nil {
+		return fmt.Errorf("load auto-paid payment %s: %w", paymentID, err)
+	}
+	if !live {
+		return nil
+	}
+	return p.publish(ctx, domain.EventPaymentAutoPaid, target)
+}
+
 // publish fans one operation's event out to the owner and the active
 // members. The dedup key pins the rule and the operation date it fired for —
 // the repeat publication of the same rule and date inserts nothing. A system
@@ -339,23 +400,29 @@ func (p *PaymentsPublisher) publish(ctx context.Context, eventType domain.EventT
 }
 
 // paymentsTitles is the catalog's copy per event type (решение #737,
-// типы №2–№3; напоминание — карта #822): the titles verbatim.
+// типы №2–№3; напоминание — карта #822; автоплатёж — #1169): the titles
+// verbatim.
 var paymentsTitles = map[domain.EventType]string{
 	domain.EventPaymentDue:      "Оплатите платёж",
 	domain.EventPaymentOverdue:  "Платёж просрочен",
 	domain.EventPaymentReminder: "Напоминание о платеже",
+	domain.EventPaymentAutoPaid: "Автоплатёж исполнен",
 }
 
 // paymentsBody renders the catalog's body template (решение #737, verbatim):
 // the due and reminder legs ask for the payment ahead of its day, the
-// overdue one — the day after. The name is the rule's, the amount and the
-// date are the operation's.
+// overdue one — the day after, the auto-paid one — reports the tick's
+// execution (#1169). The name is the rule's, the amount and the date are the
+// operation's.
 func paymentsBody(eventType domain.EventType, target PaymentScanTarget) string {
 	name := fmt.Sprintf("Платёж «%s» по объекту «%s»", target.Title, target.PropertyName)
 	amount := formatAmountKopecks(target.AmountKopecks)
 	date := formatPaymentDueDate(target.DueDate)
 	if eventType == domain.EventPaymentOverdue {
 		return fmt.Sprintf("%s просрочен: %s. Срок оплаты был %s", name, amount, date)
+	}
+	if eventType == domain.EventPaymentAutoPaid {
+		return fmt.Sprintf("%s: %s, оплачен автоплатежём. Дата операции: %s", name, amount, date)
 	}
 	return fmt.Sprintf("%s: %s. Срок оплаты: %s", name, amount, date)
 }

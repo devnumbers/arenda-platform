@@ -33,17 +33,18 @@ WHERE op.id = $1 AND op.owner_id = $2 AND op.property_id = $3
 -- timezone). The planned guard is belt-and-suspenders over the application's
 -- loaded check: rows affected = 0 means already paid or gone.
 UPDATE operations
-SET status = 'paid', paid_date = $3
+SET status = 'paid', paid_date = $3, paid_source = 'manual'
 WHERE id = $1 AND owner_id = $2 AND status = 'planned';
 
 -- name: CancelOperationByID :execrows
 -- «Удалить операцию» (решение владельца): tombstone-статус cancelled —
 -- строка остаётся с ключом (payment_id, date) и не воскресает на тике,
--- paid_date очищается вместе с фактом оплаты. Только planned и paid;
+-- paid_date очищается вместе с фактом оплаты (штамп источника — вместе с
+-- ним, #1169). Только planned и paid;
 -- прочие строки (включая уже отменённые) не трогаются — use case рапортует
 -- not-found: отменённая операция для всех чтений больше не существует.
 UPDATE operations
-SET status = 'cancelled', paid_date = NULL
+SET status = 'cancelled', paid_date = NULL, paid_source = NULL
 WHERE id = $1 AND owner_id = $2 AND property_id = $3
   AND status IN ('planned', 'paid');
 
@@ -52,11 +53,13 @@ WHERE id = $1 AND owner_id = $2 AND property_id = $3
 -- владельца — приложение передаёт одну дату, обе колонки берут её. Правила
 -- за фактом нет: origin='manual', payment_id NULL (partial unique
 -- (payment_id, date) накрывает только платёжные строки и не применяется).
+-- Штамп источника — 'manual' (семантика колонки едина, #1169; событие
+-- «автоплатёж исполнен» платёжные факты без правила не читает).
 INSERT INTO operations (
-    id, owner_id, property_id, payment_id, origin, date, paid_date, status,
-    type, title, amount_kopecks, category_label, category_slug
+    id, owner_id, property_id, payment_id, origin, date, paid_date, paid_source,
+    status, type, title, amount_kopecks, category_label, category_slug
 )
-VALUES ($1, $2, $3, NULL, 'manual', $4, $4, 'paid', $5, $6, $7, $8, $9);
+VALUES ($1, $2, $3, NULL, 'manual', $4, $4, 'manual', 'paid', $5, $6, $7, $8, $9);
 
 -- name: ListOperations :many
 -- The operations of one scope with pagination (limit/offset), the view status

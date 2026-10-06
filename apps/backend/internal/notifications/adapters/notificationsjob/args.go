@@ -116,6 +116,20 @@ type PaymentReminderArgs struct {
 // Kind identifies the job kind to River.
 func (PaymentReminderArgs) Kind() string { return "notifications:payment_reminder" }
 
+// PaymentAutoPaidArgs publishes one operation's «Автоплатёж исполнен» at the
+// wall clock 10:00 of the operation date in the owner's timezone (#1169,
+// карта #1162). The args are the job's dedup key, the same (rule, date)
+// shape as the other payment legs; the worker re-checks the tick's
+// paid_source stamp at wake-up — a manual payment of the occurrence is
+// silent (решение владельца по гриллингу #1167).
+type PaymentAutoPaidArgs struct {
+	PaymentID uuid.UUID `json:"payment_id"`
+	DueDate   time.Time `json:"due_date"`
+}
+
+// Kind identifies the job kind to River.
+func (PaymentAutoPaidArgs) Kind() string { return "notifications:payment_auto_paid" }
+
 // RentalCompletedArgs publishes one rental's «Аренда завершена» at 00:00 of
 // the day after its planned end in the owner's timezone (issue #777). The
 // args are the job's dedup key — the publication key's (rental, planned end)

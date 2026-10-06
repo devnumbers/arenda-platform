@@ -43,3 +43,12 @@ func (d *DeferredPaymentBoundaryDeliverer) DeliverPaymentReminder(ctx context.Co
 	}
 	return inner.DeliverPaymentReminder(ctx, paymentID, date, now)
 }
+
+// DeliverPaymentAutoPaid delegates to the bound publisher.
+func (d *DeferredPaymentBoundaryDeliverer) DeliverPaymentAutoPaid(ctx context.Context, paymentID uuid.UUID, date, now time.Time) error {
+	inner, err := d.load()
+	if err != nil {
+		return err
+	}
+	return inner.DeliverPaymentAutoPaid(ctx, paymentID, date, now)
+}

@@ -20,10 +20,12 @@ import (
 // fakePaymentBoundaryDeliverer is the publisher stub: it records the (rule,
 // date, now) triples the workers hand over and can fail on demand.
 type fakePaymentBoundaryDeliverer struct {
-	due       []paymentBoundaryCall
-	overdue   []paymentBoundaryCall
-	reminder  []paymentBoundaryCall
-	errForDue error
+	due        []paymentBoundaryCall
+	overdue    []paymentBoundaryCall
+	reminder   []paymentBoundaryCall
+	autoPaid   []paymentBoundaryCall
+	errForDue  error
+	errForAuto error
 }
 
 type paymentBoundaryCall struct {
@@ -47,6 +49,14 @@ func (f *fakePaymentBoundaryDeliverer) DeliverPaymentOverdue(ctx context.Context
 
 func (f *fakePaymentBoundaryDeliverer) DeliverPaymentReminder(ctx context.Context, paymentID uuid.UUID, date, now time.Time) error {
 	f.reminder = append(f.reminder, paymentBoundaryCall{paymentID, date, now})
+	return nil
+}
+
+func (f *fakePaymentBoundaryDeliverer) DeliverPaymentAutoPaid(ctx context.Context, paymentID uuid.UUID, date, now time.Time) error {
+	if f.errForAuto != nil {
+		return f.errForAuto
+	}
+	f.autoPaid = append(f.autoPaid, paymentBoundaryCall{paymentID, date, now})
 	return nil
 }
 
@@ -86,6 +96,13 @@ func TestPaymentBoundaryWorkersWork(t *testing.T) {
 	assert.Equal(t, paymentID, deliverer.reminder[0].paymentID)
 	assert.Equal(t, now, deliverer.reminder[0].now)
 
+	// Автоплатёжная джоба (#1169): та же форма (правило, дата, мгновение).
+	autoJob := &river.Job[PaymentAutoPaidArgs]{Args: PaymentAutoPaidArgs{PaymentID: paymentID, DueDate: date}}
+	require.NoError(t, NewPaymentAutoPaidWorker(deliverer, stubClock{now}, nil).Work(ctx, autoJob))
+	require.Len(t, deliverer.autoPaid, 1)
+	assert.Equal(t, paymentID, deliverer.autoPaid[0].paymentID)
+	assert.Equal(t, now, deliverer.autoPaid[0].now)
+
 	broken := &fakePaymentBoundaryDeliverer{errForDue: errors.New("feed write failed")}
 	assert.Error(t, NewPaymentDueWorker(broken, stubClock{now}, nil).Work(ctx, dueJob))
 }
@@ -100,6 +117,7 @@ func TestDeferredPaymentBoundaryDelivererRequiresBinding(t *testing.T) {
 	require.Error(t, bridge.DeliverPaymentDue(ctx, uuid.Must(uuid.NewV7()), time.Now(), time.Now()))
 	require.Error(t, bridge.DeliverPaymentOverdue(ctx, uuid.Must(uuid.NewV7()), time.Now(), time.Now()))
 	require.Error(t, bridge.DeliverPaymentReminder(ctx, uuid.Must(uuid.NewV7()), time.Now(), time.Now()))
+	require.Error(t, bridge.DeliverPaymentAutoPaid(ctx, uuid.Must(uuid.NewV7()), time.Now(), time.Now()))
 
 	bridge.Bind(&fakePaymentBoundaryDeliverer{})
 	paymentID := uuid.Must(uuid.NewV7())
@@ -107,6 +125,7 @@ func TestDeferredPaymentBoundaryDelivererRequiresBinding(t *testing.T) {
 	assert.NoError(t, bridge.DeliverPaymentDue(ctx, paymentID, date, date))
 	assert.NoError(t, bridge.DeliverPaymentOverdue(ctx, paymentID, date, date))
 	assert.NoError(t, bridge.DeliverPaymentReminder(ctx, paymentID, date, date))
+	assert.NoError(t, bridge.DeliverPaymentAutoPaid(ctx, paymentID, date, date))
 }
 
 // The scheduler is the application port over the River client: a repeat ask
@@ -152,6 +171,8 @@ func TestPaymentBoundarySchedulerScheduleIsIdempotent(t *testing.T) {
 	require.NoError(t, scheduler.SchedulePaymentOverdue(ctx, paymentID, date, fireAt))
 	require.NoError(t, scheduler.SchedulePaymentReminder(ctx, paymentID, date, fireAt))
 	require.NoError(t, scheduler.SchedulePaymentReminder(ctx, paymentID, date, fireAt), "the repeat ask re-books nothing")
+	require.NoError(t, scheduler.SchedulePaymentAutoPaid(ctx, paymentID, date, fireAt))
+	require.NoError(t, scheduler.SchedulePaymentAutoPaid(ctx, paymentID, date, fireAt), "the repeat ask re-books nothing")
 
 	// One job per leg, each on the payments queue at its boundary instant.
 	due := listPaymentBoundaryJobs(t, pool, PaymentDueArgs{}.Kind(), paymentID)
@@ -166,6 +187,10 @@ func TestPaymentBoundarySchedulerScheduleIsIdempotent(t *testing.T) {
 	require.Len(t, reminder, 1)
 	assert.Equal(t, QueuePayments, reminder[0].queue)
 	assert.True(t, reminder[0].scheduledAt.Equal(fireAt))
+	autoPaid := listPaymentBoundaryJobs(t, pool, PaymentAutoPaidArgs{}.Kind(), paymentID)
+	require.Len(t, autoPaid, 1)
+	assert.Equal(t, QueuePayments, autoPaid[0].queue)
+	assert.True(t, autoPaid[0].scheduledAt.Equal(fireAt))
 
 	// A different operation date books its own jobs.
 	other := date.AddDate(0, 1, 0)
