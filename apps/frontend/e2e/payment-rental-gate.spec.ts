@@ -12,12 +12,13 @@ import {
 // Гейт мутаций Платежа арендной платы (#818): платёж, на который ссылается
 // аренда, создаётся, правится и удаляется только через аренду
 // (rentals/CONTEXT.md, ADR 0053). Экран платежа скрывает «На паузу» и
-// «Изменить» — «Оплатить» остаётся каноном отметки оплаты месяца;
-// экран правки деградирует к карточке недоступности; прямые API-мутации
-// правила отвечают 409 с доменной подсказкой. Звезда избранного и платёжные
-// факты гейту не подчиняются. Сид: аренды в seed.sql нет — фикстура создаёт
-// её API-постом (и переиспользует при retry, инвариант №12 — одна
-// незавершённая на объект).
+// «Изменить», у незавершённой аренды вместо них «Изменить аренду» (#1158) —
+// «Оплатить» остаётся каноном отметки оплаты месяца; экран правки
+// деградирует к карточке недоступности; прямые API-мутации правила отвечают
+// 409 с доменной подсказкой. Звезда избранного и платёжные факты гейту не
+// подчиняются. Сид: аренды в seed.sql нет — фикстура создаёт её API-постом
+// (и переиспользует при retry, инвариант №12 — одна незавершённая на
+// объект).
 //
 // Сид: «Страхование» …552 на квартире — обычное (неуправляемое) правило
 // для регрессии.
@@ -86,7 +87,7 @@ test.describe('гейт мутаций платежа аренды', () => {
     }
   });
 
-  test('флаг isRentalManaged в контракте; на экране платежа — только «Оплатить»', async ({
+  test('флаг isRentalManaged в контракте; на экране платежа — «Изменить аренду» + «Оплатить»', async ({
     page,
     seededUser,
   }, testInfo) => {
@@ -95,17 +96,26 @@ test.describe('гейт мутаций платежа аренды', () => {
 
     const response = await page.request.get(`/api/properties/${PROPERTY}/payments`);
     expect(response.ok()).toBe(true);
-    const { items } = (await response.json()) as {
-      items: ReadonlyArray<{ id: string; isRentalManaged: boolean }>;
+    const { items } = await response.json() as {
+      items: ReadonlyArray<{ id: string; isRentalManaged: boolean; isRentalCompleted: boolean }>;
     };
-    expect(items.find((payment) => payment.id === paymentId)?.isRentalManaged).toBe(true);
+    const rentPayment = items.find((payment) => payment.id === paymentId);
+    expect(rentPayment?.isRentalManaged).toBe(true);
+    // Аренда фикстуры незавершённая — условия правятся (#1158).
+    expect(rentPayment?.isRentalCompleted).toBe(false);
 
     await page.goto(`/properties/${PROPERTY}/payments/${paymentId}`);
     await expect(page.getByText('Арендная плата').first()).toBeVisible();
     await expect(page.getByRole('button', { name: 'Оплатить' })).toBeVisible();
+    // #1158: у незавершённой аренды вместо «Изменить» — «Изменить аренду»,
+    // ведёт на экран правки условий.
+    await expect(page.getByRole('button', { name: 'Изменить аренду' })).toBeVisible();
+    await page.getByRole('button', { name: 'Изменить аренду' }).click();
+    await expect(page).toHaveURL(new RegExp(`/properties/${PROPERTY}/rentals/terms/edit`));
+    await page.goBack();
     await expect(page.getByRole('button', { name: 'На паузу' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Возобновить' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Изменить' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Изменить', exact: true })).toHaveCount(0);
 
     await captureScreen(page, testInfo, 'rental-payment-gated-actions');
   });
@@ -242,7 +252,9 @@ test.describe('гейт мутаций платежа аренды', () => {
     await expect(page.getByRole('button', { name: 'Оплатить' })).toBeEnabled();
     await expect(page.getByRole('button', { name: 'На паузу' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Возобновить' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Изменить' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Изменить', exact: true })).toHaveCount(0);
+    // #1158: аренда завершена — правки условий нет, «Изменить аренду» ушла.
+    await expect(page.getByRole('button', { name: 'Изменить аренду' })).toHaveCount(0);
 
     // Гасим всё неоплаченное до стопа — серверный isCompleted становится
     // true («Завершённый платёж» вычисляемый, CONTEXT.md).
@@ -263,12 +275,11 @@ test.describe('гейт мутаций платежа аренды', () => {
     await page.goto(`/properties/${PROPERTY}/payments/${paymentId}`);
     // Deep-link даёт транзиентное двойное дерево гидрации (~100мс, грабля
     // #987): строгий локатор ловит обе копии — берём первую видимую.
-    await expect(
-      page.getByText('Платеж завершен').filter({ visible: true }).first(),
-    ).toBeVisible();
+    await expect(page.getByText('Платеж завершен').filter({ visible: true }).first()).toBeVisible();
     await expect(page.getByRole('button', { name: 'Оплатить' }).first()).toBeDisabled();
     await expect(page.getByRole('button', { name: 'На паузу' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Изменить' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Изменить', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Изменить аренду' })).toHaveCount(0);
 
     await captureScreen(page, testInfo, 'rental-payment-completed-after-rental');
   });

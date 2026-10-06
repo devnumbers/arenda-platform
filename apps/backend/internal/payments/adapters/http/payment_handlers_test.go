@@ -44,9 +44,11 @@ type fakePaymentManager struct {
 	update   func(
 		ctx context.Context, actor, propertyID, paymentID uuid.UUID, cmd application.UpdatePaymentCommand,
 	) (domain.Payment, error)
-	completedStatus     func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (bool, error)
-	paymentFlags        func(ctx context.Context, actor, propertyID uuid.UUID) (completed, managed map[uuid.UUID]bool, err error)
+	completedStatus func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (bool, error)
+	paymentFlags    func(ctx context.Context, actor, propertyID uuid.UUID) (
+		completed, managed, rentalCompleted map[uuid.UUID]bool, err error)
 	rentalManagedStatus func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (bool, error)
+	rentalCompleted     func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (bool, error)
 }
 
 // CompletedStatus defaults to false — the pre-completion behaviour the older
@@ -60,13 +62,13 @@ func (f *fakePaymentManager) CompletedStatus(
 	return f.completedStatus(ctx, actor, propertyID, paymentID)
 }
 
-// PaymentFlags defaults to two empty maps — no listed rule carries either
+// PaymentFlags defaults to three empty maps — no listed rule carries any
 // flag unless a test sets the hook.
 func (f *fakePaymentManager) PaymentFlags(
 	ctx context.Context, actor, propertyID uuid.UUID,
-) (completed, managed map[uuid.UUID]bool, err error) {
+) (completed, managed, rentalCompleted map[uuid.UUID]bool, err error) {
 	if f.paymentFlags == nil {
-		return map[uuid.UUID]bool{}, map[uuid.UUID]bool{}, nil
+		return map[uuid.UUID]bool{}, map[uuid.UUID]bool{}, map[uuid.UUID]bool{}, nil
 	}
 	return f.paymentFlags(ctx, actor, propertyID)
 }
@@ -80,6 +82,17 @@ func (f *fakePaymentManager) RentalManagedStatus(
 		return false, nil
 	}
 	return f.rentalManagedStatus(ctx, actor, propertyID, paymentID)
+}
+
+// RentalCompletedStatus defaults to false — the managing rental is
+// unfinished unless a test sets the hook.
+func (f *fakePaymentManager) RentalCompletedStatus(
+	ctx context.Context, actor, propertyID, paymentID uuid.UUID,
+) (bool, error) {
+	if f.rentalCompleted == nil {
+		return false, nil
+	}
+	return f.rentalCompleted(ctx, actor, propertyID, paymentID)
 }
 
 // The method set mirrors the port; the long signatures are the contract's.
@@ -715,6 +728,40 @@ func TestPaymentResponse_CarriesReminderOffset(t *testing.T) {
 	}
 	if resp.ReminderOffsetDays == nil || *resp.ReminderOffsetDays != 3 {
 		t.Fatalf("response reminderOffsetDays = %v, want 3", resp.ReminderOffsetDays)
+	}
+}
+
+// TestGetPayment_CarriesRentalCompleted (#1158): the single-rule read passes
+// the managing rental's «Завершена» state through next to the #818 gate
+// flag — the payment screen gates «Изменить аренду» on it.
+func TestGetPayment_CarriesRentalCompleted(t *testing.T) {
+	t.Parallel()
+	h := NewPaymentHandlers(&fakePaymentManager{
+		get: func(_ context.Context, _, _, _ uuid.UUID) (domain.Payment, error) {
+			return validFixturePayment(), nil
+		},
+		rentalManagedStatus: func(_ context.Context, _, _, _ uuid.UUID) (bool, error) {
+			return true, nil
+		},
+		rentalCompleted: func(_ context.Context, _, _, _ uuid.UUID) (bool, error) {
+			return true, nil
+		},
+	}, nil)
+	w := httptest.NewRecorder()
+	h.GetPayment(w, paymentRequest(t, http.MethodGet, uuid.Must(uuid.NewV7()), ""),
+		uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		IsRentalManaged   bool `json:"isRentalManaged"`
+		IsRentalCompleted bool `json:"isRentalCompleted"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !resp.IsRentalManaged || !resp.IsRentalCompleted {
+		t.Fatalf("flags = managed:%v rentalCompleted:%v, want both true", resp.IsRentalManaged, resp.IsRentalCompleted)
 	}
 }
 

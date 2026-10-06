@@ -149,3 +149,15 @@ SELECT payment_id
 FROM rentals
 WHERE owner_id = $1
   AND payment_id = ANY(@payment_ids::uuid[]);
+
+-- name: ListCompletedRentalPaymentIDs :many
+-- The subset of the given payment ids whose managing rental row is completed
+-- — the isRentalCompleted read flag (#1158): the payment screen's «Изменить
+-- аренду» lives only while the rental is unfinished («Действия аренды»:
+-- Завершена — финал, чтение и Итоги). The mutation gate query above stays
+-- state-blind on purpose. An empty id list never reaches the query.
+SELECT payment_id
+FROM rentals
+WHERE owner_id = $1
+  AND completed_date IS NOT NULL
+  AND payment_id = ANY(@payment_ids::uuid[]);

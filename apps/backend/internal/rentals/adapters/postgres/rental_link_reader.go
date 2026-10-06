@@ -3,7 +3,9 @@ package postgres
 // RentalLinkReader is the read-only rentals adapter behind the payments
 // mutation gate (ADR 0053, ticket #818): which payment rules a rental row
 // references — the rent payment is created, edited and deleted only through
-// the rental. It implements the payments application RentalManagedReader
+// the rental — and which of those rentals are completed, the read-side
+// isRentalCompleted flag (#1158). It implements the payments application
+// RentalManagedReader
 // port at the adapter level — the accepted cross-context shape (the
 // OccupancyReader precedent): the rentals context owns the rentals table and
 // exposes a read-only adapter, and the import of the payments application
@@ -65,4 +67,28 @@ func (r *RentalLinkReader) ManagedPaymentIDs(
 		managed[pgconv.UUIDFromPgtype(id)] = true
 	}
 	return managed, nil
+}
+
+// CompletedPaymentIDs returns the subset of the given rules whose managing
+// rental row is completed (completed_date is set) — the read-side state
+// behind the payment screen's «Изменить аренду» (#1158). An empty input
+// never reaches the query.
+func (r *RentalLinkReader) CompletedPaymentIDs(
+	ctx context.Context, scope uuid.UUID, paymentIDs []uuid.UUID,
+) (map[uuid.UUID]bool, error) {
+	completed := make(map[uuid.UUID]bool, len(paymentIDs))
+	if len(paymentIDs) == 0 {
+		return completed, nil
+	}
+	rows, err := postgres.New(r.db).ListCompletedRentalPaymentIDs(ctx, postgres.ListCompletedRentalPaymentIDsParams{
+		OwnerID:    pgconv.UUIDToPgtype(scope),
+		PaymentIds: pgconv.UUIDSliceToPgtype(paymentIDs),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list completed-rental payment ids: %w", err)
+	}
+	for _, id := range rows {
+		completed[pgconv.UUIDFromPgtype(id)] = true
+	}
+	return completed, nil
 }

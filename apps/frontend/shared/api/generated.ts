@@ -3006,6 +3006,8 @@ export interface components {
             nearestDate: string | null;
             /** @description The rule is the rental's managed rent payment (ADR 0053, ticket #818): a rental row references it, any rental state — a completed rental is final and its payment is final with it. The rental is the source of truth for the amount, the payment day, the auto-pay and the planned end, so the rule mutations (pause, resume, patch, delete) answer 409; the payment facts («Оплатить») and the favorite star stay open. The reads carry the flag so the client hides the mutation actions instead of learning the 409 live. */
             isRentalManaged: boolean;
+            /** @description The managing rental is completed («Завершена» — финал: чтение, Итоги, Удаление; ticket #1158). The payment screen's «Изменить аренду» lives only while the rental is unfinished — the read-side state of the #818 gate: the mutation gate stays state-blind (any rental row finalizes its payment), this flag carries the rental state machine onto the payment surfaces so every surface shows the same action set. */
+            isRentalCompleted: boolean;
             pauses: components["schemas"]["PauseIntervalView"][];
             /** Format: date-time */
             createdAt: string;

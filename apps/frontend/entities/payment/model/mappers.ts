@@ -61,6 +61,7 @@ export function mapPayment(dto: PaymentDto): Payment {
     // завершённый) часть семантики поля, см. доку на Payment.nearestDate.
     nearestDate: dto.nearestDate,
     isRentalManaged: dto.isRentalManaged,
+    isRentalCompleted: dto.isRentalCompleted,
     pauses: dto.pauses.map((pause) => ({
       from: pause.fromDate,
       to: pause.toDate ?? undefined,

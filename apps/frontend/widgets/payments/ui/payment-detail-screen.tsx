@@ -333,7 +333,8 @@ function PaymentHeroCard({
 /** Круглые кнопки мутаций (Figma 671:6261): пауза с confirm-шторкой ↔
  * возобновление, «Изменить», «Оплатить» — переход на страницу операции.
  * Состав держит paymentDetailActions (#818): у управляемого арендой
- * платежа остаётся только «Оплатить». */
+ * платежа вместо «Изменить» — «Изменить аренду» (#1158), у завершённой
+ * аренды остаётся только «Оплатить». */
 function PaymentActionsRow({
   propertyId,
   payment,
@@ -379,8 +380,9 @@ function PaymentActionsRow({
   return (
     <>
       {/* Равные колонки по видимому составу: три кнопки, две у завершённого
-       * правила (история 44), одна («Оплатить») у управляемого арендой
-       * платежа (#818). */}
+       * правила (история 44) и две у управляемого арендой платежа —
+       * «Изменить аренду» + «Оплатить» (#818, #1158), одна — у платежа
+       * завершённой аренды. */}
       <div className={ACTIONS_GRID[actions.length]}>
         {actions.includes('pause') && (
           <RoundActionButton
@@ -400,12 +402,22 @@ function PaymentActionsRow({
         )}
         {/* Экран правки (#467): смотрящий не входит — строка кнопок скрыта
          * целиком (canMutate), полный доступ правит без удаления; у
-         * управляемого платежа входа нет (#818). */}
+         * управляемого платежа входа нет (#818) — вместо него «Изменить
+         * аренду» (#1158), подпись в две строки, как у «Завершить аренду»
+         * (решение #802): условия правятся на экране аренды, пока аренда
+         * не завершена (состояние решает isRentalCompleted). */}
         {actions.includes('edit') && (
           <RoundActionButton
             icon={<Edit />}
             caption="Изменить"
             onClick={() => router.push(ROUTES.propertyPaymentEdit(propertyId, payment.id))}
+          />
+        )}
+        {actions.includes('editRental') && (
+          <RoundActionButton
+            icon={<Edit />}
+            caption={<>Изменить<br />аренду</>}
+            onClick={() => router.push(ROUTES.propertyRentalTermsEdit(propertyId))}
           />
         )}
         {actions.includes('pay') && (
