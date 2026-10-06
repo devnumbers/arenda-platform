@@ -3,6 +3,8 @@ import type {
   PaymentUpdateCommand,
   Recurrence,
 } from '@/entities/payment';
+import { firstOccurrence } from '@/entities/payment';
+import { cmp } from '@/shared/lib/calendar';
 import { periodicityReady } from './wizard-model';
 
 /**
@@ -48,6 +50,33 @@ export function recurrencesEqual(a: Recurrence, b: Recurrence): boolean {
     case 'yearly':
       return b.kind === 'yearly' && a.month === b.month && a.day === b.day;
   }
+}
+
+/** Форма после применения новой периодичности (#1155, решение владельца
+ * 2026-10-06): стоящая endDate, оказавшаяся раньше первого вхождения
+ * нового расписания, сбрасывается молча — без подсказки; сохранение уйдёт
+ * с tri-state endDate: null (открыть срок). Зеркалит бекенд-инвариант
+ * «окна графика» (#1150): вхождение в паузе по графику существует — паузы
+ * вырезаются так же, как в FirstOccurrence бекенда. Невалидное значение в
+ * форму не попадает, поэтому editFormReady не расширяется. */
+export function formAfterRecurrenceChange(
+  form: PaymentEditForm,
+  recurrence: Recurrence,
+  payment: Pick<Payment, 'since' | 'pauses'>,
+): PaymentEditForm {
+  const next = { ...form, recurrence };
+  if (next.endDate === undefined) {
+    return next;
+  }
+  const first = firstOccurrence({
+    recurrence,
+    since: payment.since,
+    endDate: undefined,
+    pauses: payment.pauses,
+  });
+  return first !== null && cmp(first, next.endDate) > 0
+    ? { ...next, endDate: undefined }
+    : next;
 }
 
 /**

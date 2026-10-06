@@ -3,6 +3,7 @@ import { makePayment, type Payment } from '@/entities/payment';
 import {
   buildPaymentUpdateCommand,
   editFormReady,
+  formAfterRecurrenceChange,
   type PaymentEditForm,
 } from './update-model';
 
@@ -192,5 +193,85 @@ describe('editFormReady', () => {
     expect(
       editFormReady(baseForm({ recurrence: { kind: 'weekly', weekdays: [] } }), 'insurance'),
     ).toBe(false);
+  });
+});
+
+describe('formAfterRecurrenceChange — молчаливый сброс endDate (#1155)', () => {
+  it('окончание раньше первого вхождения нового правила сбрасывается', () => {
+    // Правило monthly-15 (since 01.08), окончание 10.08; применили
+    // monthly-20 — первое вхождение нового графика 20.08 позже окончания:
+    // в форме endDate нет, сохранение уйдёт с tri-state endDate: null
+    // (открыть срок).
+    const next = formAfterRecurrenceChange(
+      baseForm({ endDate: '2026-08-10' }),
+      { kind: 'monthly', daysOfMonth: [20], lastDay: false },
+      basePayment(),
+    );
+    expect(next.recurrence).toStrictEqual({ kind: 'monthly', daysOfMonth: [20], lastDay: false });
+    expect(next.endDate).toBeUndefined();
+    // Остальные поля формы не тронуты.
+    expect(next.title).toBe('Страхование');
+    expect(next.amountKopecks).toBe(320_000);
+  });
+
+  it('сброс даёт команду PATCH с endDate: null вместе с новой регулярностью', () => {
+    const payment = basePayment({ endDate: '2026-08-10' });
+    const form = formAfterRecurrenceChange(
+      baseForm({ endDate: '2026-08-10' }),
+      { kind: 'monthly', daysOfMonth: [20], lastDay: false },
+      payment,
+    );
+    expect(buildPaymentUpdateCommand(payment, form)).toEqual({
+      recurrence: { kind: 'monthly', daysOfMonth: [20], lastDay: false },
+      endDate: null,
+    });
+  });
+
+  it('окончание в день первого вхождения валидно — сохраняется', () => {
+    const next = formAfterRecurrenceChange(
+      baseForm({ endDate: '2026-10-20' }),
+      { kind: 'monthly', daysOfMonth: [20], lastDay: false },
+      basePayment(),
+    );
+    expect(next.endDate).toBe('2026-10-20');
+  });
+
+  it('смена на более раннее правило окно не ломает — окончание остаётся', () => {
+    const next = formAfterRecurrenceChange(
+      baseForm({ endDate: '2026-10-20' }),
+      { kind: 'monthly', daysOfMonth: [10], lastDay: false },
+      basePayment(),
+    );
+    expect(next.endDate).toBe('2026-10-20');
+  });
+
+  it('daily: первое вхождение = since, стоящее окончание после него валидно', () => {
+    const next = formAfterRecurrenceChange(
+      baseForm({ endDate: '2026-08-01' }),
+      { kind: 'daily' },
+      basePayment({ since: '2026-08-01' }),
+    );
+    expect(next.endDate).toBe('2026-08-01');
+  });
+
+  it('пауза сдвигает первое вхождение — окончание внутри паузы сбрасывается', () => {
+    // Первое вхождение monthly-15 = 15.08, но пауза [15.08, 01.09) его
+    // вырезает: график начинается 15.09 — окончание 20.08 раньше него.
+    const payment = basePayment({ pauses: [{ from: '2026-08-15', to: '2026-09-01' }] });
+    const next = formAfterRecurrenceChange(
+      baseForm({ endDate: '2026-08-20' }),
+      { kind: 'monthly', daysOfMonth: [15], lastDay: false },
+      payment,
+    );
+    expect(next.endDate).toBeUndefined();
+  });
+
+  it('без окончания сбросить нечего — форма возвращается как есть', () => {
+    const next = formAfterRecurrenceChange(
+      baseForm(),
+      { kind: 'monthly', daysOfMonth: [20], lastDay: false },
+      basePayment(),
+    );
+    expect(next.endDate).toBeUndefined();
   });
 });

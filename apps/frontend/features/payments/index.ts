@@ -24,6 +24,7 @@ export {
   WIZARD_TOTAL_STEPS,
   branchKind,
   buildPaymentCreateCommand,
+  draftAfterRecurrenceChange,
   effectivePaymentType,
   periodicityReady,
   pickPeriodicityKind,
@@ -102,6 +103,7 @@ export { useGlobalOperationsFilters } from './lib/use-global-operations-filters'
 export {
   buildPaymentUpdateCommand,
   editFormReady,
+  formAfterRecurrenceChange,
   recurrencesEqual,
   type PaymentEditForm,
 } from './lib/update-model';

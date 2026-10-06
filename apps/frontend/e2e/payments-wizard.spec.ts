@@ -2,11 +2,14 @@ import {
   captureScreen,
   expect,
   mockEmailCategoryShortcut,
+  monthlyDayOnOrAfter,
   openCabinetWithSeededSession,
   pickCalendarDay,
   SEEDED_APARTMENT_PROPERTY_ID,
   test,
+  todayIso,
 } from './fixtures';
+import { formatDayMonthWithYear } from '@/shared/lib/date-format';
 
 // Визард создания платежа (#464): пять шагов на одном маршруте
 // /properties/[id]/payments/new, все ветки периодичности (без «Один раз»),
@@ -20,12 +23,6 @@ import {
 const APARTMENT_PAYMENTS_URL = `/properties/${SEEDED_APARTMENT_PROPERTY_ID}/payments`;
 const wizardUrl = (type: 'payment' | 'autopayment'): string =>
   `${APARTMENT_PAYMENTS_URL}/new?type=${type}`;
-
-/** Родительные падежи месяцев — ожидаемые подписи formatDayMonth. */
-const MONTH_GENITIVE = [
-  'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
-  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
-];
 
 /** Открыть визард под сеансом сидированного пользователя.
  * Перед визардом заходим на «Платежи объекта»: как в реальном потоке —
@@ -70,13 +67,15 @@ async function passTitleStep(page: Parameters<typeof openCabinetWithSeededSessio
  * (точка отличия от до-канонных поверхностей). В ветке года визарда
  * кнопка «Продолжить» (решение владельца 30.09, #995 — подтверждение
  * сразу ведёт на следующий шаг), в остальных пикерах — канонное
- * «Выбрать». */
+ * «Выбрать». Пикеры с канонным заголовком поля (окончание платежа,
+ * #1155) зовутся по нему, остальные — дефолтным «Выбрать дату». */
 async function confirmCalendar(
   page: Parameters<typeof openCabinetWithSeededSession>[0],
   button = 'Выбрать',
+  dialogName = 'Выбрать дату',
 ): Promise<void> {
   await page
-    .getByRole('dialog', { name: 'Выбрать дату' })
+    .getByRole('dialog', { name: dialogName })
     .getByRole('button', { name: button, exact: true })
     .click();
 }
@@ -552,7 +551,7 @@ test.describe('визард создания платежа', () => {
     expect(created?.recurrence.day).toBe(10);
   });
 
-  test('окончание платежа задается датой из календаря и попадает в контракт', async ({
+  test('окончание платежа: пикер не даёт день раньше первого вхождения, дата в контракте', async ({
     page,
     seededUser,
   }) => {
@@ -565,19 +564,32 @@ test.describe('визард создания платежа', () => {
     await page.getByRole('button', { name: '15', exact: true }).first().click();
     await page.getByRole('button', { name: 'Продолжить' }).click();
 
-    // Шаг 4: «Выбрать дату» открывает канонический бесконечный календарь;
-    // черновик при открытии — сегодня (первый доступный день), «Выбрать»
-    // его коммитит. Тап по выбранному дню снял бы выбор (канон снятия).
+    // Шаг 4: пикер окончания несёт канонный заголовок поля (#1155) и
+    // минимум по первому вхождению (since = сегодня сервера, #1150):
+    // черновик при открытии прижат к первому доступному дню, «Выбрать»
+    // его коммитит без действий.
     await page.getByRole('button', { name: 'Выбрать дату' }).click();
-    const dialog = page.getByRole('dialog');
+    const dialog = page.getByRole('dialog', { name: 'Окончание платежа' });
     await expect(dialog).toBeVisible();
-    await confirmCalendar(page);
-    // Модалка закрылась, дата вернулась на экран окончания; дата текущего
-    // года рендерится без года (formatDayMonthWithYear), месяц — родительный.
+
+    const today = todayIso();
+    const firstOccurrence = monthlyDayOnOrAfter(15, today);
+    // День раньше первого вхождения погашен; совпадение с первым
+    // вхождением — валидно (UNTIL-семантика RFC 5545, кейс 2 research).
+    const todayCell = dialog.locator('button[aria-current="date"]');
+    if (firstOccurrence > today) {
+      await expect(todayCell).toBeDisabled();
+    } else {
+      await expect(todayCell).toBeEnabled();
+    }
+
+    await confirmCalendar(page, 'Выбрать', 'Окончание платежа');
     await expect(dialog).toHaveCount(0);
-    const monthGenitive = MONTH_GENITIVE[new Date().getMonth()];
-    const dayExpected = String(new Date().getDate());
-    await expect(page.getByText(new RegExp(`^${dayExpected} ${monthGenitive}$`))).toBeVisible();
+    // Дата первого вхождения вернулась на экран окончания (формат
+    // formatDayMonthWithYear: год — только вне текущего).
+    await expect(
+      page.getByRole('button', { name: formatDayMonthWithYear(firstOccurrence, today) }),
+    ).toBeVisible();
 
     await page.getByRole('button', { name: 'Далее' }).click();
     await page.getByRole('textbox', { name: 'Сумма' }).fill('15000');
@@ -587,8 +599,7 @@ test.describe('визард создания платежа', () => {
 
     const items = await fetchPayments(page);
     const created = items.find((payment) => payment.title === title);
-    expect(created?.endDate).toBeDefined();
-    expect(typeof created?.endDate).toBe('string');
+    expect(created?.endDate).toBe(firstOccurrence);
   });
 
   test('ввод суммы: набранное не подменяется, «,00» не дописывается само', async ({
@@ -665,9 +676,9 @@ test.describe('визард создания платежа', () => {
     // — сегодняшнее. Черновик канона при открытии уже сегодня, «Выбрать»
     // коммитит его; тап по выбранному дню снял бы выбор (канон снятия).
     await page.getByRole('button', { name: 'Выбрать дату' }).click();
-    const dialog = page.getByRole('dialog');
+    const dialog = page.getByRole('dialog', { name: 'Окончание платежа' });
     await expect(dialog).toBeVisible();
-    await confirmCalendar(page);
+    await confirmCalendar(page, 'Выбрать', 'Окончание платежа');
     await expect(dialog).toHaveCount(0);
     await page.getByRole('button', { name: 'Далее' }).click();
     await page.getByRole('textbox', { name: 'Сумма' }).fill('600');

@@ -3,15 +3,19 @@
 import { useState } from 'react';
 import type { JSX } from 'react';
 import { SmallArrowRight } from '@/shared/assets/icons';
-import type { IsoDate, PaymentReminderOffset } from '@/entities/payment';
+import type { IsoDate, PaymentReminderOffset, Recurrence } from '@/entities/payment';
 import { formatDayMonthWithYear, PaymentReminderPicker } from '@/entities/payment';
 import { useMe } from '@/features/auth';
 import {
   emailReminderCaption,
   EmailNotificationsRow,
 } from '@/features/notifications';
-import type { PaymentDraftType } from '@/features/payments';
+import {
+  periodicityReady,
+  type PaymentDraftType,
+} from '@/features/payments';
 import { CalendarDatePicker, ListRow } from '@/shared/ui/design';
+import { firstOccurrencePreview } from '../../lib/first-occurrence';
 import { WizardHeading } from './wizard-chrome';
 
 /**
@@ -29,6 +33,14 @@ import { WizardHeading } from './wizard-chrome';
  * Тумблер «Уведомления на почту» — общий EmailNotificationsRow (шоткат
  * глобальной email-настройки категории «Платежи и операции», канон
  * #746); опечатки подписей макетов не воспроизводятся (канон AutoPayRow).
+ *
+ * Окончание (#1155): в пикере endDate дни раньше первого вхождения
+ * расписания (since = «сегодня» владельца — сервер ставит его сам,
+ * ADR 0048) недоступны — бекенд-инвариант «окна графика» (#1150)
+ * профилактируется на фронте; заголовок пикера — название поля, канон
+ * аренды («Окончание аренды»). Стоящее окончание при смене периодичности
+ * чистит черновик визарда (draftAfterRecurrenceChange, решение владельца
+ * 2026-10-06).
  */
 
 export type PaymentSettingsStepProps = {
@@ -37,6 +49,7 @@ export type PaymentSettingsStepProps = {
   readonly onReminderOffsetDaysChange: (offset: PaymentReminderOffset) => void;
   readonly endDate: IsoDate | undefined;
   readonly onEndDateChange: (endDate: IsoDate | undefined) => void;
+  readonly recurrence: Recurrence | undefined;
   readonly today: IsoDate;
 };
 
@@ -46,12 +59,19 @@ export function PaymentSettingsStep({
   onReminderOffsetDaysChange,
   endDate,
   onEndDateChange,
+  recurrence,
   today,
 }: PaymentSettingsStepProps): JSX.Element {
   const [pickerOpen, setPickerOpen] = useState(false);
   const meQuery = useMe();
   const email = meQuery.data?.email ?? null;
   const emailCaption = emailReminderCaption('о платеже', email);
+  // Минимум пикера окончания — первое вхождение готового расписания
+  // (окончание в расчёт не берётся, иначе наивное окно «съедает» всё).
+  const endDateMinDate =
+    recurrence !== undefined && periodicityReady(recurrence)
+      ? firstOccurrencePreview(recurrence, today) ?? undefined
+      : undefined;
 
   return (
     <>
@@ -104,8 +124,10 @@ export function PaymentSettingsStep({
           живут, пока пикер смонтирован (конвенция канона). */}
       {pickerOpen && (
         <CalendarDatePicker
+          title="Окончание платежа"
           today={today}
           value={endDate ?? null}
+          minDate={endDateMinDate}
           onClose={() => setPickerOpen(false)}
           onConfirm={(date) => {
             onEndDateChange(date ?? undefined);

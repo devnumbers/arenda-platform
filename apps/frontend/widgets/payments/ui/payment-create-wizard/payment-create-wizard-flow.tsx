@@ -24,6 +24,7 @@ import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
   branchKind,
   buildPaymentCreateCommand,
+  draftAfterRecurrenceChange,
   periodicityReady,
   resumePaymentWizardStep,
   useCreatePayment,
@@ -244,7 +245,10 @@ export function PaymentCreateWizardFlow({
               openBranch={openBranch}
               onOpenBranch={setOpenBranch}
               onRecurrenceChange={(recurrence) =>
-                setDraft((prev) => ({ ...prev, recurrence }))
+                // Смена периодичности чистит стоящее окончание, ставшее
+                // раньше первого вхождения нового расписания (#1155,
+                // решение владельца 2026-10-06 — как в правке).
+                setDraft((prev) => draftAfterRecurrenceChange(prev, recurrence, today))
               }
               onDailyPick={() => goToStep(4)}
               onYearlyConfirm={() => goToStep(4)}
@@ -278,6 +282,7 @@ export function PaymentCreateWizardFlow({
               }
               endDate={draft.endDate}
               onEndDateChange={(endDate) => setDraft((prev) => ({ ...prev, endDate }))}
+              recurrence={draft.recurrence}
               today={today}
             />
             <StickyBottomBar>

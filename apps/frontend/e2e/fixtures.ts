@@ -197,6 +197,21 @@ export function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/** Первое N-е число месяца на или после fromIso ('YYYY-MM-DD') — зеркало
+ * первого вхождения monthly-N правила (#1155): ожидания пикера endDate
+ * (minDate = первое вхождение) считаются в тех же UTC-сутках, что экран
+ * и сиды (canon #796). */
+export function monthlyDayOnOrAfter(day: number, fromIso: string): string {
+  const from = new Date(`${fromIso}T00:00:00Z`);
+  const year = from.getUTCFullYear();
+  const month = from.getUTCMonth();
+  const candidate = new Date(Date.UTC(year, month, day));
+  const first = candidate < from
+    ? new Date(Date.UTC(year, month + 1, day))
+    : candidate;
+  return first.toISOString().slice(0, 10);
+}
+
 /** Типовые записи дневной серии: сиды history-спек собраны из трёх
  * канонных строк, спека передаёт свой префикс id, минуты от 9:00 и
  * вариации (propertyId, segments со ссылками, другой текст). */
