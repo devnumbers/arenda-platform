@@ -188,7 +188,7 @@ test.describe('дерево профиля — хром #566', () => {
     }
   });
 
-  test('планшет 561: у хабов профиля и уведомлений крыльев нет — как у подэкранов', async ({
+  test('планшет 561: «Уведомления» — хаб с крыльями, «Профиль» — как подэкран', async ({
     page,
     seededUser,
   }) => {
@@ -196,20 +196,28 @@ test.describe('дерево профиля — хром #566', () => {
     await page.setViewportSize({ width: 561, height: 900 });
     const header = screenHeader(page);
 
-    // Хабы «Профиль» и «Уведомления» ниже ПК — анатомия подэкрана без
-    // «Назад» (решение владельца 02.10, образец — /profile/devices):
-    // тайтл в баре, крыльев нет.
+    // Профиль ниже ПК — анатомия подэкрана без «Назад» (решение
+    // владельца 02.10, образец — /profile/devices): тайтл в баре, крыльев нет.
     await page.goto('/profile');
     await expect(header.getByRole('button', { name: 'Назад' })).toHaveCount(0);
     await expect(header.getByRole('link', { name: 'Объекты' })).toHaveCount(0);
     await expect(header.getByText('Профиль', { exact: true })).toBeVisible();
 
+    // Лента уведомлений — полная хаб-анатомия по макетам 3178 (#1170,
+    // карта #1162): крылья и ниже ПК, HubTitle в контенте, кебаб/шестерёнка
+    // в строке заголовка (решение владельца 02.10 о подэкранной анатомии
+    // заменено макетами 3178).
     await page.goto('/notifications');
-    await expect(header.getByRole('link', { name: 'Объекты' })).toHaveCount(0);
-    await expect(header.getByText('Уведомления', { exact: true })).toBeVisible();
-    // Постоянный слот бара — у правого края (шестерёнка пустого состояния).
+    await expect(header.getByRole('link', { name: 'Объекты' })).toBeVisible();
     await expect(
-      header.getByRole('button', { name: /Действия с уведомлениями|Настроить уведомления/ }),
+      page.getByRole('heading', { level: 1, name: 'Уведомления', exact: true }),
+    ).toBeVisible();
+    // Кебаб ленты или шестерёнка пустого состояния — в строке HubTitle и в
+    // компакт-баре (два экземпляра, видим актуальный).
+    await expect(
+      page
+        .getByRole('button', { name: /Действия с уведомлениями|Настроить уведомления/ })
+        .first(),
     ).toBeVisible();
 
     // Подэкран дерева — как был: «Назад», крыльев нет.
@@ -218,7 +226,7 @@ test.describe('дерево профиля — хром #566', () => {
     await expect(header.getByRole('link', { name: 'Объекты' })).toHaveCount(0);
   });
 
-  test('мобайл: у «Уведомлений» и «Профиля» крыльев нет, слот у края', async ({
+  test('мобайл: у «Уведомлений» крылья как у хабов, у «Профиля» их нет', async ({
     page,
     seededUser,
   }) => {
@@ -226,14 +234,18 @@ test.describe('дерево профиля — хром #566', () => {
     await page.goto('/notifications');
     const header = screenHeader(page);
 
-    // Крыльев ниже ПК нет (решение владельца 02.10); тайтл в баре на всех
-    // ярусах, постоянный слот — у правого края. Слот бывает двух видов:
-    // кебаб ленты с данными и шестерёнка пустого состояния — ловим оба.
-    await expect(header.getByRole('link', { name: 'Объекты' })).toHaveCount(0);
-    await expect(header.getByRole('link', { name: USER_WING })).toHaveCount(0);
-    await expect(header.getByText('Уведомления', { exact: true })).toBeVisible();
+    // Лента — хаб по макетам 3178 (#1170): крылья (лого + юзер) и на
+    // мобайле, HubTitle в контенте. Слот действий бывает двух видов:
+    // кебаб ленты с данными и шестерёнка пустого состояния.
+    await expect(header.getByRole('link', { name: 'Объекты' })).toBeVisible();
+    await expect(header.getByRole('link', { name: USER_WING })).toBeVisible();
     await expect(
-      header.getByRole('button', { name: /Действия с уведомлениями|Настроить уведомления/ }),
+      page.getByRole('heading', { level: 1, name: 'Уведомления', exact: true }),
+    ).toBeVisible();
+    await expect(
+      page
+        .getByRole('button', { name: /Действия с уведомлениями|Настроить уведомления/ })
+        .first(),
     ).toBeVisible();
 
     await page.goto('/profile');

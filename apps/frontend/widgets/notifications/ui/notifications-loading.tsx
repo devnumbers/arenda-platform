@@ -1,20 +1,29 @@
 import type { JSX } from 'react';
 import { Cancel, TrashBin } from '@/shared/assets/icons';
-import { IconButton, PageContent, TopNav, TopNavTitle } from '@/shared/ui/design';
+import {
+  HubCollapseAnchor,
+  HubTitle,
+  IconButton,
+  PageContent,
+  TopNav,
+} from '@/shared/ui/design';
 import { NotificationDetailSkeleton, NotificationsFeedSkeleton } from './notifications-states';
 
-/** Route-loading архетип зоны уведомлений (#609): шапка — анатомия
- * подэкрана без «Назад» (решение владельца 02.10): крылья только на ПК,
- * тайтл в баре на всех ярусах, кадр совпадает с фазой загрузки экрана,
- * контент — скелетон групп ленты (§7). Используется как loading.tsx
+/** Route-loading архетип зоны уведомлений (#609): шапка — канон хаба по
+ * макетам 3178 (#1170, карта #1162): крылья и на мобайле, HubTitle
+ * в контенте без слота действий (кебаб зависит от данных — §7, без
+ * мельканья), контент — скелетон групп ленты. Используется как loading.tsx
  * сегмента. */
 export function NotificationsLoading(): JSX.Element {
   return (
     <>
-      <TopNav hideWingsBelowDesktop>
-        <TopNavTitle title="Уведомления" />
-      </TopNav>
+      <TopNav mobileWings collapse={{ title: 'Уведомления' }} />
       <PageContent>
+        <HubCollapseAnchor>
+          <div className="flex h-8 items-center pr-3.5">
+            <HubTitle>Уведомления</HubTitle>
+          </div>
+        </HubCollapseAnchor>
         <NotificationsFeedSkeleton />
       </PageContent>
     </>

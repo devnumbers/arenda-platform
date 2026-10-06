@@ -2,7 +2,7 @@
 
 import { useState, type JSX } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { Setting, TrashBin, VerticalMenu } from '@/shared/assets/icons';
+import { Readed, Setting, TrashBin, VerticalMenu } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { notify } from '@/shared/lib/notifications';
 import {
@@ -17,6 +17,8 @@ import {
   ChipButton,
   ConfirmDialog,
   EmptyState,
+  HubCollapseAnchor,
+  HubTitle,
   IconButton,
   InfiniteQueryTail,
   Menu,
@@ -26,28 +28,29 @@ import {
   PageContent,
   SuccessPopup,
   TopNav,
-  TopNavTitle,
 } from '@/shared/ui/design';
 import { NotificationRow } from './notification-row';
 import { NotificationsErrorCard, NotificationsFeedSkeleton } from './notifications-states';
 import { dateToIsoLocal } from '@/shared/lib/calendar';
 
 /**
- * Экран «Уведомления» — центр уведомлений (карта #734, тикет #744, макеты
- * 2329-148674 / 2328-147401 / 2329-148700): хаб-анатомия профиля (#592) —
- * тайтл 16/18 в баре только на ПК (решение владельца 28.09 — ниже ПК он
- * упирался в лого-крыло, раздел подписывает вкладка TabBar); HubTitle в
- * контенте нет, хром с «крыльями» и на мобайле. Чип «Непрочитанные N» —
- * фильтр ленты (выбор в query строки
- * ?unread=1, канон страницы «Контакты»), «Прочитать все» видна при
- * непрочитанных (макет 2333-159051 — при нуле скрыта); кебаб — «Настроить
- * уведомления» и «Удалить все» (подтверждение 2329-152107, успех 2329-
- * 152324); «Прочитать все» подтверждения не требует — успех-попап «Все
- * уведомления прочитаны» (2329-148575). Кебаб заменяется шестерёнкой,
- * когда удалять нечего — лента пуста (2329-152324). Группировка
- * «Сегодня / Вчера / даты» — клиентский день смотрящего; у групп старше
- * вчера время в строках скрыто (решение владельца #744). Тап строки —
- * страница уведомления /notifications/{id} (#745), прочтение — на ней.
+ * Экран «Уведомления» — центр уведомлений (карта #734; редизайн по макетам
+ * 3178-79262 / 3178-85751, #1170, карта #1162): канон хабов — «крылья»
+ * (лого + профиль) и на мобайле, HubTitle в контенте со сворачиванием при
+ * скролле (компакт — центрированный тайтл + кебаб в баре, чипы уезжают,
+ * канон PropertiesPage). Решение владельца 02.10 (тайтл в баре ниже ПК,
+ * без крыльев) заменено макетами 3178 — лента стала полным хабом. Чипы
+ * «Все» / «Непрочитанные N» — фильтр ленты (выбор в query строки
+ * ?unread=1, канон страницы «Контакты»); «Прочитать все» — пункт кебаба
+ * (макет 3183-86541, #1171), подтверждения не требует — успех-попап
+ * «Все уведомления прочитаны» (2329-148575); кебаб — «Настроить
+ * уведомления» и красное «Удалить все уведомления» (подтверждение
+ * 2329-152107, успех 2329-152324). Кебаб заменяется
+ * шестерёнкой, когда удалять нечего — лента пуста (2329-152324).
+ * Группировка «Сегодня / Вчера / даты» — клиентский день смотрящего;
+ * у групп старше вчера время в строках скрыто (решение владельца #744).
+ * Тап строки — страница уведомления /notifications/{id} (#745),
+ * прочтение — на ней.
  */
 export function NotificationsFeedScreen({
   initialUnreadOnly = false,
@@ -73,8 +76,7 @@ export function NotificationsFeedScreen({
 
   // Смена фильтра синхронно переписывает query строки (дефолт не пишется —
   // конвенция «Состояние страницы в адресе», DESIGN.md §3).
-  const toggleUnreadOnly = (): void => {
-    const next = !unreadOnly;
+  const setUnreadFilter = (next: boolean): void => {
     setUnreadOnly(next);
     router.replace(next ? `${pathname}?unread=1` : pathname, { scroll: false });
   };
@@ -100,13 +102,14 @@ export function NotificationsFeedScreen({
     router.push(ROUTES.notification(notification.id));
   };
 
-  // Пустая лента без фильтра — «Уведомлений нет» (макет 2329-152324):
-  // служебный чип прячется вместе со списком, кебаб нечего касаться —
-  // вместо него шестерёнка настроек. При фильтре чип остаётся (фильтр
-  // можно выключить), кебаб — тоже (макет 2333-159051). В pending
-  // чип-ряд и кебаб не рисуются: трейлинг зависит от данных (§7,
-  // прецедент «Ваших участников» #697 — иначе иконка мелькает до
-  // ответа), кадр совпадает с loading-архетипом без trailing.
+  // Пустая лента без фильтра — «Нет уведомлений» (макет 3178-86086,
+  // текст по макету #1172): служебные чипы прячутся вместе со списком,
+  // кебаб нечего касаться — вместо него шестерёнка настроек в хедере.
+  // При фильтре чипы остаются (фильтр можно выключить), кебаб — тоже
+  // (макет 3187-88176). В pending чип-ряд и кебаб не рисуются: трейлинг
+  // зависит от данных (§7, прецедент «Ваших участников» #697 — иначе
+  // иконка мелькает до ответа), кадр совпадает с loading-архетипом
+  // без trailing.
   const feedEmpty = feedQuery.isSuccess && notifications.length === 0;
   const feedPending = feedQuery.isPending;
   const showEmptyAll = feedEmpty && !unreadOnly;
@@ -119,13 +122,26 @@ export function NotificationsFeedScreen({
         <IconButton icon={<VerticalMenu />} label="Действия с уведомлениями" />
       </MenuTrigger>
       <MenuContent>
+        {/* Макет 3183-86541 (#1171): «Прочитать все» — первым пунктом;
+          * пейндинг мутации гасит пункт (канон двойного сабмита #1114). */}
+        <MenuItem
+          icon={<Readed />}
+          disabled={markAll.isPending}
+          onSelect={markAllRead}
+        >
+          Прочитать все
+        </MenuItem>
         <MenuItem
           icon={<Setting />}
           onSelect={() => router.push(ROUTES.profileNotifications)}
         >
           Настроить уведомления
         </MenuItem>
-        <MenuItem icon={<TrashBin />} onSelect={() => setDeleteOpen(true)}>
+        <MenuItem
+          icon={<TrashBin />}
+          className="text-danger"
+          onSelect={() => setDeleteOpen(true)}
+        >
           Удалить все уведомления
         </MenuItem>
       </MenuContent>
@@ -148,34 +164,29 @@ export function NotificationsFeedScreen({
 
   return (
     <>
-      {/* Анатомия подэкрана без «Назад» (решение владельца 02.10, образец —
-       * шапки /profile/devices и /properties/[id]): крылья только на ПК,
-       * тайтл в баре на всех ярусах (28.09 тайтл из бара убирался — упирался
-       * в лого-крыло; после скрытия крыльев ниже ПК место освободилось).
-       * Компакт при скролле не подключается — сворачивать нечего. Кебаб/
-       * шестерёнка — постоянный правый слот бара (barTrailing, аудит #876):
-       * на ПК — правый край колонки 560, ниже ПК — у правого края вьюпорта
-       * (крыльев на этих ярусах нет). */}
-      <TopNav hideWingsBelowDesktop barTrailing={trailing}>
-        <TopNavTitle title="Уведомления" />
-      </TopNav>
+      {/* Хаб-шапка по макетам 3178 (#1170): «крылья» и на мобайле, кебаб —
+       * в строке HubTitle и в компакт-баре при сворачивании (канон хабов —
+       * PropertiesPage/participants-hub). Шестерёнка пустого состояния
+       * занимает тот же слот. */}
+      <TopNav mobileWings collapse={{ title: 'Уведомления', trailing }} />
 
       <PageContent>
+        <HubCollapseAnchor>
+          <div className="flex h-8 items-center justify-between pr-3.5">
+            <HubTitle>Уведомления</HubTitle>
+            {/* В pending trailing undefined (§7, без мельканья). */}
+            {trailing}
+          </div>
+        </HubCollapseAnchor>
+
         {showToolbar && (
           <div className="mb-2 mt-3 flex items-center gap-1 px-6">
-            <ChipButton selected={unreadOnly} onClick={toggleUnreadOnly}>
+            <ChipButton selected={!unreadOnly} onClick={() => setUnreadFilter(false)}>
+              Все
+            </ChipButton>
+            <ChipButton selected={unreadOnly} onClick={() => setUnreadFilter(true)}>
               Непрочитанные{unreadCount > 0 ? ` ${unreadCount}` : ''}
             </ChipButton>
-            {unreadCount > 0 && (
-              <button
-                type="button"
-                onClick={markAllRead}
-                disabled={markAll.isPending}
-                className="inline-flex h-11 shrink-0 cursor-pointer items-center justify-center rounded-pill px-5 text-sm font-medium text-content outline-none transition-colors hover:bg-surface-muted focus-visible:ring-4 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-50"
-              >
-                Прочитать все
-              </button>
-            )}
           </div>
         )}
 
@@ -187,7 +198,7 @@ export function NotificationsFeedScreen({
           ) : showEmptyAll ? (
             <EmptyState
               imageSrc="/images/notifications/empty-bell.png"
-              title="Уведомлений нет"
+              title="Нет уведомлений"
             />
           ) : showEmptyUnread ? (
             <EmptyState

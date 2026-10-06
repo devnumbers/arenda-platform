@@ -147,6 +147,11 @@ export { default as ClockSmall } from './clock-small.svg';
 // использует TrashBin из блока «Направление сортировки» выше.
 export { default as Checkmark } from './checkmark.svg';
 
+// Меню кебаба ленты уведомлений (#1171, Figma 3183-86541): «Прочитать все»
+// — Icon/R/Readed 3185:87668 — currentColor (запечённый #171A1C экспорта
+// перекрашен по канону §10).
+export { default as Readed } from './readed.svg';
+
 // Иконки страницы «Выбрать объект» (#509, Figma 1539:83846): аватары строк —
 // Icon/Bold/Objects 208:2994 («Общий контакт») и Icon/Bold/Home 189:931
 // (объекты; в наборе это BoldHome).
