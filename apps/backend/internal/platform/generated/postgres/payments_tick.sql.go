@@ -321,7 +321,7 @@ func (q *Queries) LockOwnerTickProperties(ctx context.Context, ownerID pgtype.UU
 
 const payOperationDueToday = `-- name: PayOperationDueToday :execrows
 UPDATE operations
-SET status = 'paid', paid_date = $2
+SET status = 'paid', paid_date = $2, paid_source = 'auto_pay'
 WHERE payment_id = $1 AND status = 'planned' AND date = $2
 `
 
@@ -333,7 +333,9 @@ type PayOperationDueTodayParams struct {
 // The auto-pay day payment (ADR 0049 §2): planned with date = today becomes
 // paid, paid_date = today. Strictly today — never backdated; the active
 // pause is excluded by the caller (the domain plan), and occurrences inside
-// a pause are not generated at all.
+// a pause are not generated at all. The auto-pay stamp (#1169, решение по
+// гриллингу #1167): «автоплатёж исполнен» смотрит только на тиковые
+// гашения — ручная оплата молчит.
 func (q *Queries) PayOperationDueToday(ctx context.Context, arg PayOperationDueTodayParams) (int64, error) {
 	result, err := q.db.Exec(ctx, payOperationDueToday, arg.PaymentID, arg.PaidDate)
 	if err != nil {

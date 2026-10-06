@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { BoldKey, NotificationDot, StatusIconDanger } from '@/shared/assets/icons';
 import { cn } from '@/shared/lib/cn';
 import { circleIconRing } from '@/shared/ui/design';
+import { notificationHasWarningBadge } from '../model/event-badge';
 import type { NotificationCategory } from '../model/types';
 
 /**
@@ -17,7 +18,7 @@ import type { NotificationCategory } from '../model/types';
  * в левом-верхнем углу (как у PropertyAvatar), только у строки.
  *
  * Вариант row: круг 44, 3D 28 / BoldKey 24 (пропорции макета строки),
- * бейдж Тарифа 24 (Figma 2329:149016, Icon/Color/DangerWhite). Вариант
+ * Warning-бейдж 24 (Figma 2329:149016, Icon/Color/DangerWhite). Вариант
  * page: круг 96, 3D 61 / BoldKey 52 (те же пропорции на круге 96),
  * бейдж 32, точка непрочитанного не рисуется — страница сама читает
  * уведомление. Белый кант бейджа красится через text-surface
@@ -50,7 +51,6 @@ const CATEGORY_VISUALS: Record<NotificationCategory, CategoryVisual> = {
   system: { kind: 'image', src: '/images/notifications/category-system.png', className: 'bg-surface-muted' },
 };
 
-const BADGE_CATEGORIES: ReadonlySet<NotificationCategory> = new Set(['tariff']);
 
 /** Пропорции окружности варианта: круг, 3D-иллюстрация, BoldKey, бейдж
  * (3D 0.64 круга, bold 0.55 — как в макете строки #744). */
@@ -61,16 +61,22 @@ const ICON_SIZES = {
 
 export function NotificationCategoryIcon({
   category,
+  eventType,
   unread,
   variant = 'row',
   badge = true,
 }: {
   readonly category: NotificationCategory;
+  /** Тип события модели: бейдж ключится по нему (#1164) — «Оплата прошла»
+   * и другие хорошие тарифные новости без бейджа. Кадр SSE его не несёт —
+   * тост передаёт только badge=false. */
+  readonly eventType?: string;
   readonly unread: boolean;
   /** row — строка ленты (#744), page — страница уведомления (#745). */
   readonly variant?: 'row' | 'page';
-  /** Тарифный бейдж (только Тариф): в ленте и на странице рисуется,
-   * в тосте нового уведомления (#747) макет даёт Badge=None — off. */
+  /** Warning-бейдж («что-то не так», матрица event-badge): в ленте и на
+   * странице рисуется, в тосте нового уведомления (#747) макет даёт
+   * Badge=None — off. */
   readonly badge?: boolean;
 }): JSX.Element {
   const visual = CATEGORY_VISUALS[category];
@@ -93,7 +99,7 @@ export function NotificationCategoryIcon({
         )}
       </div>
       {variant === 'row' && unread && <NotificationDot className="absolute left-0 top-0 h-3.5 w-3.5" />}
-      {badge && BADGE_CATEGORIES.has(category) && (
+      {badge && eventType !== undefined && notificationHasWarningBadge(eventType) && (
         // Кант бейджа — stroke="currentColor" в самом SVG, красится под
         // поверхность ленты (прецедент features/payment-categories
         // category-icon): белая лента → text-surface.

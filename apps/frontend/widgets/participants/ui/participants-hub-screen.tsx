@@ -63,7 +63,7 @@ export function ParticipantsHubScreen(): JSX.Element {
         collapse={{ title: 'Совместный доступ', trailing: inviteButton }}
       />
 
-      <PageContent>
+      <PageContent aboveTabBarFooter>
         <HubCollapseAnchor>
           <div className="flex h-8 items-center justify-between pr-3.5">
             <HubTitle>Совместный доступ</HubTitle>
@@ -103,7 +103,9 @@ export function ParticipantsHubScreen(): JSX.Element {
         )}
       </PageContent>
 
-      <StickyBottomBar>
+      {/* CTA над видимым нижним меню (решение владельца 06.10.2026,
+        * #1166): раздел участников — не глушим TabBar. */}
+      <StickyBottomBar aboveTabBar>
         <Button className="w-full" onClick={() => router.push(ROUTES.participantsInvite)}>
           Пригласить участника
         </Button>

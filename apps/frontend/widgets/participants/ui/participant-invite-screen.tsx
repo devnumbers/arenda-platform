@@ -175,11 +175,13 @@ export function ParticipantInviteScreen({
 
       {/* Ряды макета edge-to-edge живут в центральной колонке канона —
        * на мобайле это совпадает с макетом, на планшете/ПК ряды не
-       * разъезжаются из-под шапки (канон PageContent 948:47567). */}
-      <PageContent className="pt-4">{content}</PageContent>
+       * разъезжаются из-под шапки (канон PageContent 948:47567). Клиренс
+       * футера — паттерн «CTA над TabBar» (#1166). */}
+      <PageContent className="pt-4" aboveTabBarFooter>{content}</PageContent>
 
       {options.length > 0 && (
-        <StickyBottomBar>
+        // CTA над видимым нижним меню (решение владельца 06.10.2026, #1166).
+        <StickyBottomBar aboveTabBar>
           <Button
             className="w-full"
             disabled={selected.size === 0}

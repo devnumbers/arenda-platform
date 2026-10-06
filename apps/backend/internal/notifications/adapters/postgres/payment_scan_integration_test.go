@@ -154,11 +154,21 @@ func TestPaymentScanStore_ListDueTargets(t *testing.T) {
 	archiveProperty(t, pool, msk, archivedProp)
 
 	store := NewPaymentScanStore(pool)
-	targets, err := store.ListDueTargets(ctx, "Europe/Moscow", time.Date(2026, 9, 19, 0, 0, 0, 0, time.UTC))
+	// The instant gate (#1168): before the boundary's wall clock 10:00 —
+	// 08:00 Moscow — the due leg holds the operation back.
+	early := time.Date(2026, 9, 19, 5, 0, 0, 0, time.UTC)
+	targets, err := store.ListDueTargets(ctx, "Europe/Moscow", time.Date(2026, 9, 19, 0, 0, 0, 0, time.UTC), early)
+	require.NoError(t, err)
+	got := paymentTargetsOfProps(targets, prop, autoProp, archivedProp)
+	require.Empty(t, got, "the sweep must not publish ahead of the 10:00 boundary")
+
+	// At the boundary — Moscow's 10:00 — the leg speaks.
+	now := time.Date(2026, 9, 19, 7, 0, 0, 0, time.UTC)
+	targets, err = store.ListDueTargets(ctx, "Europe/Moscow", time.Date(2026, 9, 19, 0, 0, 0, 0, time.UTC), now)
 	require.NoError(t, err)
 	// The shared test database's parallel fixtures' rows may appear in the
 	// same zone's sweep — filter to the properties this test created.
-	got := paymentTargetsOfProps(targets, prop, autoProp, archivedProp)
+	got = paymentTargetsOfProps(targets, prop, autoProp, archivedProp)
 	require.Len(t, got, 1)
 
 	target := got[0]
@@ -209,19 +219,40 @@ func TestPaymentScanStore_ListOverdueTargets(t *testing.T) {
 	insertScanOperation(t, pool, msk, archivedProp, archivedRule, "2026-09-02", "planned")
 	archiveProperty(t, pool, msk, archivedProp)
 
+	// Yesterday's occurrence: its 22:00 boundary (#1168) is Moscow's today
+	// evening — the leg holds it until then even though the date says
+	// overdue since the zone's midnight.
+	freshProp := createLiveProperty(t, pool, msk)
+	freshRule := insertScanPayment(t, pool, msk, freshProp, false)
+	insertScanOperation(t, pool, msk, freshProp, freshRule, "2026-09-18", "planned")
+
 	store := NewPaymentScanStore(pool)
-	targets, err := store.ListOverdueTargets(ctx, "Europe/Moscow", time.Date(2026, 9, 19, 0, 0, 0, 0, time.UTC))
+	// The instant gate (#1168): 08:00 Moscow — yesterday's occurrence is
+	// overdue by date but its 22:00 has not come; the long-past ones speak.
+	early := time.Date(2026, 9, 19, 5, 0, 0, 0, time.UTC)
+	targets, err := store.ListOverdueTargets(ctx, "Europe/Moscow", time.Date(2026, 9, 19, 0, 0, 0, 0, time.UTC), early)
 	require.NoError(t, err)
 	// Filter to the properties this test created (shared test database).
-	got := paymentTargetsOfProps(targets, prop, autoProp, archivedProp)
-	require.Len(t, got, 2)
-
+	got := paymentTargetsOfProps(targets, prop, autoProp, archivedProp, freshProp)
+	require.Len(t, got, 2, "yesterday's occurrence waits for its 22:00")
 	dates := map[uuid.UUID]time.Time{}
 	for _, target := range got {
 		dates[target.PaymentID] = target.DueDate
 	}
 	assert.Equal(t, time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC), dates[rule])
 	assert.Equal(t, time.Date(2026, 9, 15, 0, 0, 0, 0, time.UTC), dates[autoRule])
+
+	// At the boundary — Moscow's 22:00 — yesterday's occurrence joins.
+	now := time.Date(2026, 9, 19, 19, 0, 0, 0, time.UTC)
+	targets, err = store.ListOverdueTargets(ctx, "Europe/Moscow", time.Date(2026, 9, 19, 0, 0, 0, 0, time.UTC), now)
+	require.NoError(t, err)
+	got = paymentTargetsOfProps(targets, prop, autoProp, archivedProp, freshProp)
+	require.Len(t, got, 3)
+	dates = map[uuid.UUID]time.Time{}
+	for _, target := range got {
+		dates[target.PaymentID] = target.DueDate
+	}
+	assert.Equal(t, time.Date(2026, 9, 18, 0, 0, 0, 0, time.UTC), dates[freshRule])
 }
 
 // paymentTargetsOfProps filters the sweep's targets to the given properties —
@@ -242,9 +273,10 @@ func paymentTargetsOfProps(targets []application.PaymentScanTarget, props ...uui
 }
 
 // The booking window of the due leg (issue #776): planned operations whose
-// due boundary — 00:00 of the operation date in the owner's timezone —
-// falls into (from, until], auto-pay rules excluded. Moscow's midnight of
-// the 20th is 2026-09-19T21:00Z; the boundary carries the zone's shift.
+// due boundary — the wall clock 10:00 of the operation date in the owner's
+// timezone (#1168) — falls into (from, until], auto-pay rules excluded.
+// Moscow's 10:00 of the 20th is 2026-09-20T07:00Z; the boundary carries the
+// zone's shift.
 func TestPaymentScanStore_ListScheduledDueTargets(t *testing.T) {
 	t.Parallel()
 
@@ -254,7 +286,7 @@ func TestPaymentScanStore_ListScheduledDueTargets(t *testing.T) {
 	msk := createUserInZone(t, pool, "Europe/Moscow")
 	prop := createLiveProperty(t, pool, msk)
 	rule := insertScanPayment(t, pool, msk, prop, false)
-	// The in-window occurrence: due boundary 2026-09-19T21:00Z.
+	// The in-window occurrence: due boundary 2026-09-20T07:00Z.
 	insertScanOperation(t, pool, msk, prop, rule, "2026-09-20", "planned")
 
 	// A settled, a cancelled, an auto-pay and an out-of-window occurrence —
@@ -274,21 +306,22 @@ func TestPaymentScanStore_ListScheduledDueTargets(t *testing.T) {
 
 	store := NewPaymentScanStore(pool)
 	targets, err := store.ListScheduledDueTargets(ctx,
-		time.Date(2026, 9, 19, 0, 0, 0, 0, time.UTC),
-		time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC))
+		time.Date(2026, 9, 19, 6, 0, 0, 0, time.UTC),
+		time.Date(2026, 9, 20, 8, 0, 0, 0, time.UTC))
 	require.NoError(t, err)
 
 	got := scheduleTargetsOfProps(targets, rule, autoRule, archivedRule)
 	require.Len(t, got, 1)
 	assert.Equal(t, rule, got[0].PaymentID)
 	assert.Equal(t, time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC), got[0].DueDate)
-	assert.True(t, got[0].FireAt.Equal(time.Date(2026, 9, 19, 21, 0, 0, 0, time.UTC)),
-		"the job wakes at 00:00 of the operation date in the owner's zone")
+	assert.True(t, got[0].FireAt.Equal(time.Date(2026, 9, 20, 7, 0, 0, 0, time.UTC)),
+		"the job wakes at the wall clock 10:00 of the operation date in the owner's zone")
 }
 
 // The booking window of the overdue leg (issue #776): planned operations
-// whose overdue boundary — 00:00 of the day after the operation date in the
-// owner's timezone — falls into (from, until], auto-pay rules included (the
+// whose overdue boundary — the wall clock 22:00 of the day after the
+// operation date in the owner's timezone (#1168) — falls into
+// (from, until], auto-pay rules included (the
 // tick never backdates an auto charge, ADR 0049).
 func TestPaymentScanStore_ListScheduledOverdueTargets(t *testing.T) {
 	t.Parallel()
@@ -299,8 +332,8 @@ func TestPaymentScanStore_ListScheduledOverdueTargets(t *testing.T) {
 	msk := createUserInZone(t, pool, "Europe/Moscow")
 	prop := createLiveProperty(t, pool, msk)
 	rule := insertScanPayment(t, pool, msk, prop, false)
-	// The in-window occurrence: overdue boundary 2026-09-19T21:00Z —
-	// Moscow's midnight of the 20th, the day after the operation date.
+	// The in-window occurrence: overdue boundary 2026-09-20T19:00Z —
+	// Moscow's 22:00 of the 20th, the day after the operation date.
 	insertScanOperation(t, pool, msk, prop, rule, "2026-09-19", "planned")
 
 	// The auto-pay mode does not excuse the overdue leg's booking.
@@ -321,8 +354,8 @@ func TestPaymentScanStore_ListScheduledOverdueTargets(t *testing.T) {
 
 	store := NewPaymentScanStore(pool)
 	targets, err := store.ListScheduledOverdueTargets(ctx,
-		time.Date(2026, 9, 19, 0, 0, 0, 0, time.UTC),
-		time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC))
+		time.Date(2026, 9, 19, 12, 0, 0, 0, time.UTC),
+		time.Date(2026, 9, 20, 20, 0, 0, 0, time.UTC))
 	require.NoError(t, err)
 
 	got := scheduleTargetsOfProps(targets, rule, autoRule, archivedRule)
@@ -333,10 +366,10 @@ func TestPaymentScanStore_ListScheduledOverdueTargets(t *testing.T) {
 		fire[target.PaymentID] = target.FireAt
 		dates[target.PaymentID] = target.DueDate
 	}
-	assert.True(t, fire[rule].Equal(time.Date(2026, 9, 19, 21, 0, 0, 0, time.UTC)),
-		"the job wakes at 00:00 of the day after the operation date in the owner's zone")
+	assert.True(t, fire[rule].Equal(time.Date(2026, 9, 20, 19, 0, 0, 0, time.UTC)),
+		"the job wakes at the wall clock 22:00 of the day after the operation date in the owner's zone")
 	assert.Equal(t, time.Date(2026, 9, 19, 0, 0, 0, 0, time.UTC), dates[rule])
-	assert.True(t, fire[autoRule].Equal(time.Date(2026, 9, 19, 21, 0, 0, 0, time.UTC)))
+	assert.True(t, fire[autoRule].Equal(time.Date(2026, 9, 20, 19, 0, 0, 0, time.UTC)))
 }
 
 // The due boundary job's delivery-time resolution (issue #776): a planned
@@ -532,9 +565,18 @@ func TestPaymentScanStore_ListReminderTargets(t *testing.T) {
 	archiveProperty(t, pool, msk, archivedProp)
 
 	store := NewPaymentScanStore(pool)
-	targets, err := store.ListReminderTargets(ctx, "Europe/Moscow", time.Date(2026, 9, 19, 0, 0, 0, 0, time.UTC))
+	// The instant gate (#1168): до 10:00 дня напоминания нога молчит.
+	early := time.Date(2026, 9, 19, 5, 0, 0, 0, time.UTC)
+	targets, err := store.ListReminderTargets(ctx, "Europe/Moscow", time.Date(2026, 9, 19, 0, 0, 0, 0, time.UTC), early)
 	require.NoError(t, err)
 	got := paymentTargetsOfProps(targets, prop, autoProp, offProp, paidProp, noneProp, archivedProp)
+	require.Empty(t, got, "the sweep must not publish ahead of the 10:00 boundary")
+
+	// На границе — 10:00 Москвы — нога говорит.
+	now := time.Date(2026, 9, 19, 7, 0, 0, 0, time.UTC)
+	targets, err = store.ListReminderTargets(ctx, "Europe/Moscow", time.Date(2026, 9, 19, 0, 0, 0, 0, time.UTC), now)
+	require.NoError(t, err)
+	got = paymentTargetsOfProps(targets, prop, autoProp, offProp, paidProp, noneProp, archivedProp)
 	require.Len(t, got, 2)
 
 	dates := map[uuid.UUID]time.Time{}
@@ -545,8 +587,8 @@ func TestPaymentScanStore_ListReminderTargets(t *testing.T) {
 	assert.Equal(t, time.Date(2026, 9, 26, 0, 0, 0, 0, time.UTC), dates[autoRule])
 }
 
-// Букинг ноги напоминания: граница — полночь «дата − оффсет» по поясу
-// (Московская полночь 19-го = 2026-09-18T21:00Z), окно (from, until].
+// Букинг ноги напоминания: граница — 10:00 «дата − оффсет» по поясу
+// (Московские 10:00 19-го = 2026-09-19T07:00Z, #1168), окно (from, until].
 func TestPaymentScanStore_ListScheduledReminderTargets(t *testing.T) {
 	t.Parallel()
 
@@ -556,16 +598,16 @@ func TestPaymentScanStore_ListScheduledReminderTargets(t *testing.T) {
 	msk := createUserInZone(t, pool, "Europe/Moscow")
 	prop := createLiveProperty(t, pool, msk)
 	rule := insertScanReminderPayment(t, pool, msk, prop, false, 3)
-	insertScanOperation(t, pool, msk, prop, rule, "2026-09-22", "planned") // Boundary 2026-09-18T21:00Z.
+	insertScanOperation(t, pool, msk, prop, rule, "2026-09-22", "planned") // Boundary 2026-09-19T07:00Z.
 
 	// Автоплатёжное — включено; другой оффсет — граница вне окна; без
 	// напоминания — мимо.
 	autoProp := createLiveProperty(t, pool, msk)
 	autoRule := insertScanReminderPayment(t, pool, msk, autoProp, true, 1)
-	insertScanOperation(t, pool, msk, autoProp, autoRule, "2026-09-21", "planned") // Boundary 2026-09-19T21:00Z.
+	insertScanOperation(t, pool, msk, autoProp, autoRule, "2026-09-21", "planned") // Boundary 2026-09-20T07:00Z.
 	offProp := createLiveProperty(t, pool, msk)
 	offRule := insertScanReminderPayment(t, pool, msk, offProp, false, 7)
-	insertScanOperation(t, pool, msk, offProp, offRule, "2026-09-22", "planned") // Boundary 2026-09-15T21:00Z.
+	insertScanOperation(t, pool, msk, offProp, offRule, "2026-09-22", "planned") // Boundary 2026-09-15T07:00Z.
 	noneProp := createLiveProperty(t, pool, msk)
 	noneRule := insertScanPayment(t, pool, msk, noneProp, false)
 	insertScanOperation(t, pool, msk, noneProp, noneRule, "2026-09-22", "planned")
@@ -573,7 +615,7 @@ func TestPaymentScanStore_ListScheduledReminderTargets(t *testing.T) {
 	store := NewPaymentScanStore(pool)
 	targets, err := store.ListScheduledReminderTargets(ctx,
 		time.Date(2026, 9, 18, 20, 0, 0, 0, time.UTC),
-		time.Date(2026, 9, 19, 21, 0, 0, 0, time.UTC))
+		time.Date(2026, 9, 20, 8, 0, 0, 0, time.UTC))
 	require.NoError(t, err)
 
 	got := scheduleTargetsOfProps(targets, rule, autoRule, offRule, noneRule)
@@ -584,10 +626,10 @@ func TestPaymentScanStore_ListScheduledReminderTargets(t *testing.T) {
 		fire[target.PaymentID] = target.FireAt
 		dates[target.PaymentID] = target.DueDate
 	}
-	assert.True(t, fire[rule].Equal(time.Date(2026, 9, 18, 21, 0, 0, 0, time.UTC)),
-		"the job wakes at 00:00 of (operation date − 3) in the owner's zone")
+	assert.True(t, fire[rule].Equal(time.Date(2026, 9, 19, 7, 0, 0, 0, time.UTC)),
+		"the job wakes at the wall clock 10:00 of (operation date − 3) in the owner's zone")
 	assert.Equal(t, time.Date(2026, 9, 22, 0, 0, 0, 0, time.UTC), dates[rule])
-	assert.True(t, fire[autoRule].Equal(time.Date(2026, 9, 19, 21, 0, 0, 0, time.UTC)))
+	assert.True(t, fire[autoRule].Equal(time.Date(2026, 9, 20, 7, 0, 0, 0, time.UTC)))
 }
 
 // Разрешение в момент доставки (карта #822): planned-вхождение правила с
@@ -651,4 +693,168 @@ func TestPaymentScanStore_GetScheduledReminderPayment(t *testing.T) {
 		time.Date(2026, 9, 19, 21, 0, 30, 0, time.UTC))
 	require.NoError(t, err)
 	assert.False(t, live, "the job woke after the reminder day rolled over")
+}
+
+// stampPaid sets the rule's occurrence's payment fact with its source
+// (#1169): 'auto_pay' — the state PayOperationDueToday leaves, 'manual' —
+// «Оплатить сейчас».
+func stampPaid(t *testing.T, pool *pgxpool.Pool, ruleID uuid.UUID, date, source string) {
+	t.Helper()
+	_, err := pool.Exec(context.Background(), `
+		UPDATE operations SET status = 'paid', paid_date = $2, paid_source = $3
+		WHERE payment_id = $1 AND date = $2`, ruleID, date, source)
+	require.NoError(t, err)
+}
+
+// Нога «Автоплатёж исполнен» (#1169, решение владельца по гриллингу #1167):
+// тиковое гашение своего дня — цель ноги; ручная оплата того же вхождения,
+// неисполненное planned, не-автоплатёжное правило, чужой день (бэкфилла
+// нет), до 10:00 и архив — мимо.
+func TestPaymentScanStore_ListAutoPaidTargets(t *testing.T) {
+	t.Parallel()
+
+	pool := setupPushDB(t)
+	ctx := context.Background()
+
+	msk := createUserInZone(t, pool, "Europe/Moscow")
+	prop := createLiveProperty(t, pool, msk)
+	rule := insertScanPayment(t, pool, msk, prop, true)
+	insertScanOperation(t, pool, msk, prop, rule, "2026-09-19", "planned")
+	stampPaid(t, pool, rule, "2026-09-19", "auto_pay")
+
+	// Ручная оплата того же дня — молчок (штампа нет).
+	manualProp := createLiveProperty(t, pool, msk)
+	manualRule := insertScanPayment(t, pool, msk, manualProp, true)
+	insertScanOperation(t, pool, msk, manualProp, manualRule, "2026-09-19", "planned")
+	stampPaid(t, pool, manualRule, "2026-09-19", "manual")
+
+	// Неисполненное planned (тик ещё не дошёл) и не-автоплатёжное правило —
+	// мимо; вчерашнее тиковое гашение — мимо (живой день, без бэкфилла).
+	pendingProp := createLiveProperty(t, pool, msk)
+	pendingRule := insertScanPayment(t, pool, msk, pendingProp, true)
+	insertScanOperation(t, pool, msk, pendingProp, pendingRule, "2026-09-19", "planned")
+	manualRuleProp := createLiveProperty(t, pool, msk)
+	manualOnlyRule := insertScanPayment(t, pool, msk, manualRuleProp, false)
+	insertScanOperation(t, pool, msk, manualRuleProp, manualOnlyRule, "2026-09-19", "planned")
+	stampPaid(t, pool, manualOnlyRule, "2026-09-19", "auto_pay") // Невозможное состояние: non-auto rule — фильтр auto_pay гонит.
+	oldProp := createLiveProperty(t, pool, msk)
+	oldRule := insertScanPayment(t, pool, msk, oldProp, true)
+	insertScanOperation(t, pool, msk, oldProp, oldRule, "2026-09-18", "planned")
+	stampPaid(t, pool, oldRule, "2026-09-18", "auto_pay")
+
+	// Архив — мимо (канон тиков).
+	archivedProp := createLiveProperty(t, pool, msk)
+	archivedRule := insertScanPayment(t, pool, msk, archivedProp, true)
+	insertScanOperation(t, pool, msk, archivedProp, archivedRule, "2026-09-19", "planned")
+	stampPaid(t, pool, archivedRule, "2026-09-19", "auto_pay")
+	archiveProperty(t, pool, msk, archivedProp)
+
+	store := NewPaymentScanStore(pool)
+	today := time.Date(2026, 9, 19, 0, 0, 0, 0, time.UTC)
+
+	// Instant-гейт (#1168): до 10:00 Москвы нога молчит.
+	early := time.Date(2026, 9, 19, 5, 0, 0, 0, time.UTC)
+	targets, err := store.ListAutoPaidTargets(ctx, "Europe/Moscow", today, early)
+	require.NoError(t, err)
+	assert.Empty(t, paymentTargetsOfProps(targets, prop, manualProp, pendingProp, oldProp, archivedProp))
+
+	// На границе — 10:00 Москвы — только тиковое гашение правила автоплатежа.
+	now := time.Date(2026, 9, 19, 7, 0, 0, 0, time.UTC)
+	targets, err = store.ListAutoPaidTargets(ctx, "Europe/Moscow", today, now)
+	require.NoError(t, err)
+	got := paymentTargetsOfProps(targets, prop, manualProp, pendingProp, manualRuleProp, oldProp, archivedProp)
+	require.Len(t, got, 1)
+	assert.Equal(t, rule, got[0].PaymentID)
+	assert.Equal(t, today, got[0].DueDate)
+	assert.Equal(t, "Обслуживание", got[0].Title)
+}
+
+// Букинг ноги автоплатежа (#1169): planned-вхождения auto_pay-правил,
+// граница — 10:00 дня операции по поясу (#1168); не-автоплатёжные, гашеные
+// и вне окна — мимо.
+func TestPaymentScanStore_ListScheduledAutoPaidTargets(t *testing.T) {
+	t.Parallel()
+
+	pool := setupPushDB(t)
+	ctx := context.Background()
+
+	msk := createUserInZone(t, pool, "Europe/Moscow")
+	prop := createLiveProperty(t, pool, msk)
+	rule := insertScanPayment(t, pool, msk, prop, true)
+	// The in-window occurrence: boundary 2026-09-21T07:00Z (10:00 MSK).
+	insertScanOperation(t, pool, msk, prop, rule, "2026-09-21", "planned")
+
+	// Не-автоплатёжное правило и вне окна — мимо.
+	manualProp := createLiveProperty(t, pool, msk)
+	manualRule := insertScanPayment(t, pool, msk, manualProp, false)
+	insertScanOperation(t, pool, msk, manualProp, manualRule, "2026-09-21", "planned")
+	insertScanOperation(t, pool, msk, prop, rule, "2026-10-21", "planned")
+
+	store := NewPaymentScanStore(pool)
+	targets, err := store.ListScheduledAutoPaidTargets(ctx,
+		time.Date(2026, 9, 20, 6, 0, 0, 0, time.UTC),
+		time.Date(2026, 9, 21, 8, 0, 0, 0, time.UTC))
+	require.NoError(t, err)
+
+	got := scheduleTargetsOfProps(targets, rule, manualRule)
+	require.Len(t, got, 1)
+	assert.Equal(t, rule, got[0].PaymentID)
+	assert.Equal(t, time.Date(2026, 9, 21, 0, 0, 0, 0, time.UTC), got[0].DueDate)
+	assert.True(t, got[0].FireAt.Equal(time.Date(2026, 9, 21, 7, 0, 0, 0, time.UTC)),
+		"the job wakes at the wall clock 10:00 of the operation date in the owner's zone")
+}
+
+// Разрешение в момент доставки (#1169, решение владельца по гриллингу
+// #1167): жив ответ только тикового гашения своего дня; ручная оплата,
+// неисполненное planned и ролловер — молчок.
+func TestPaymentScanStore_GetScheduledAutoPaidPayment(t *testing.T) {
+	t.Parallel()
+
+	pool := setupPushDB(t)
+	ctx := context.Background()
+
+	msk := createUserInZone(t, pool, "Europe/Moscow")
+	prop := createLiveProperty(t, pool, msk)
+	rule := insertScanPayment(t, pool, msk, prop, true)
+	insertScanOperation(t, pool, msk, prop, rule, "2026-09-20", "planned")
+	stampPaid(t, pool, rule, "2026-09-20", "auto_pay")
+
+	manualProp := createLiveProperty(t, pool, msk)
+	manualRule := insertScanPayment(t, pool, msk, manualProp, true)
+	insertScanOperation(t, pool, msk, manualProp, manualRule, "2026-09-20", "planned")
+	stampPaid(t, pool, manualRule, "2026-09-20", "manual")
+
+	pendingProp := createLiveProperty(t, pool, msk)
+	pendingRule := insertScanPayment(t, pool, msk, pendingProp, true)
+	insertScanOperation(t, pool, msk, pendingProp, pendingRule, "2026-09-20", "planned")
+
+	store := NewPaymentScanStore(pool)
+	// Пробуждение 10:00:30 Москвы своего дня.
+	now := time.Date(2026, 9, 20, 7, 0, 30, 0, time.UTC)
+	opDate := time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC)
+
+	target, live, err := store.GetScheduledAutoPaidPayment(ctx, rule, opDate, now)
+	require.NoError(t, err)
+	require.True(t, live, "the tick's own-day execution is the live case")
+	assert.Equal(t, rule, target.PaymentID)
+	assert.Equal(t, opDate, target.DueDate)
+	assert.Equal(t, "Обслуживание", target.Title)
+	assert.Equal(t, int64(250000), target.AmountKopecks)
+	assert.Equal(t, prop, target.PropertyID)
+	assert.Equal(t, msk, target.OwnerID)
+
+	_, live, err = store.GetScheduledAutoPaidPayment(ctx, manualRule, opDate, now)
+	require.NoError(t, err)
+	assert.False(t, live, "a manual payment is silent — the owner's decision")
+
+	_, live, err = store.GetScheduledAutoPaidPayment(ctx, pendingRule, opDate, now)
+	require.NoError(t, err)
+	assert.False(t, live, "the tick has not run yet")
+
+	// Ролловер: джоба проснулась на следующий день — живой день прошёл,
+	// бэкфилла нет (решение владельца, #1167).
+	_, live, err = store.GetScheduledAutoPaidPayment(ctx, rule, opDate,
+		time.Date(2026, 9, 21, 7, 0, 30, 0, time.UTC))
+	require.NoError(t, err)
+	assert.False(t, live, "the job woke after the live day rolled over — no backfill")
 }

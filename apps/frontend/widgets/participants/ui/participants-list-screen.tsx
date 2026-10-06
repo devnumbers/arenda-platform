@@ -251,7 +251,7 @@ export function ParticipantsListScreen({
         </TopNav>
       )}
 
-      <PageContent>
+      <PageContent aboveTabBarFooter>
         {participantsQuery.isPending ? (
           <>
             {/* Чип сортировки реальный — вне фазы загрузки (§7, прецедент
@@ -287,7 +287,9 @@ export function ParticipantsListScreen({
         )}
       </PageContent>
 
-      <StickyBottomBar>
+      {/* CTA над видимым нижним меню (решение владельца 06.10.2026,
+        * #1166): раздел участников — не глушим TabBar. */}
+      <StickyBottomBar aboveTabBar>
         <Button className="w-full" onClick={() => router.push(ROUTES.participantsInvite)}>
           Пригласить участника
         </Button>

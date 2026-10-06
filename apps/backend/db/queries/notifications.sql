@@ -254,7 +254,11 @@ ORDER BY u.timezone;
 -- charge did not happen, the operation becomes overdue and the overdue leg
 -- speaks. The rule's title travels (not the operation's snapshot): the
 -- notification's link lands on the payment's page, the copy names what the
--- reader sees there.
+-- reader sees there. The instant gate (#1168, решение владельца 06.10 по
+-- гриллингу #1167): the leg's boundary is the wall clock 10:00 of the
+-- operation date in the owner's timezone — the hourly backstop sweep must
+-- not publish ahead of it, the same instant predicate the booking leg and
+-- the tasks scan use.
 SELECT pay.id AS payment_id,
        o.date,
        pay.title,
@@ -272,6 +276,7 @@ WHERE u.timezone = $1
   AND o.status = 'planned'
   AND pay.auto_pay = false
   AND p.status IN ('active', 'maintenance')
+  AND ((o.date::timestamp + time '10:00') AT TIME ZONE u.timezone) <= $3::timestamptz
 ORDER BY o.id;
 
 -- name: ListPaymentOverdueTargets :many
@@ -279,7 +284,12 @@ ORDER BY o.id;
 -- №3: 1-й день просрочки): planned, dated strictly before today — auto-pay
 -- rules included, the tick never backdates an auto charge (ADR 0049). The
 -- dedup key (rule, operation date) keeps a long-unpaid operation single —
--- the sweep lists it daily, the publication inserts nothing.
+-- the sweep lists it daily, the publication inserts nothing. The instant
+-- gate (#1168): the leg's boundary is the wall clock 22:00 of the day after
+-- the operation date in the owner's timezone — yesterday's occurrence waits
+-- for its 22:00 even though the date says overdue since the zone's midnight;
+-- a long-unpaid operation's boundary is long past and the gate keeps it
+-- sweeping (the persistent leg's semantics).
 SELECT pay.id AS payment_id,
        o.date,
        pay.title,
@@ -296,19 +306,22 @@ WHERE u.timezone = $1
   AND o.date < $2::date
   AND o.status = 'planned'
   AND p.status IN ('active', 'maintenance')
+  AND (((o.date + 1)::timestamp + time '22:00') AT TIME ZONE u.timezone) <= $3::timestamptz
 ORDER BY o.id;
 
 -- name: ListPaymentScheduledDueTargets :many
 -- The payments scan's booking list of the due leg (issue #776): the planned
--- operations whose due boundary — 00:00 of the operation date read in the
--- owner's timezone — falls in the window (from, until]. Auto-pay rules
+-- operations whose due boundary — the wall clock 10:00 of the operation
+-- date read in the owner's timezone (#1168, решение по гриллингу #1167:
+-- «Оплатите платёж» больше не будит в полночь) — falls in the window
+-- (from, until]. Auto-pay rules
 -- excluded like the sweep's due leg (an auto-pay rule's due occurrence is
 -- extinguished by the tick the same day, ADR 0049); manual facts and
 -- cancelled tombstones stay out (status='planned' + the join to payments);
 -- non-archived property only (the ticks' canon).
 SELECT pay.id AS payment_id,
        o.date,
-       CAST((o.date::timestamp AT TIME ZONE u.timezone) AS timestamptz) AS fire_at
+       CAST((o.date::timestamp + time '10:00') AT TIME ZONE u.timezone AS timestamptz) AS fire_at
 FROM operations o
 JOIN payments pay ON pay.id = o.payment_id
 JOIN properties p ON p.id = o.property_id
@@ -322,14 +335,15 @@ ORDER BY o.id;
 
 -- name: ListPaymentScheduledOverdueTargets :many
 -- The payments scan's booking list of the overdue leg (issue #776): the
--- planned operations whose overdue boundary — 00:00 of the day after the
--- operation date read in the owner's timezone — falls in the window
--- (from, until]. Auto-pay rules included (the tick never backdates an auto
--- charge, ADR 0049); the wall-clock midnight of the next calendar date is
+-- planned operations whose overdue boundary — the wall clock 22:00 of the
+-- day after the operation date read in the owner's timezone (#1168, по
+-- гриллингу #1167: просрочка приходит вечером, не в полночь) — falls in the
+-- window (from, until]. Auto-pay rules included (the tick never backdates an auto
+-- charge, ADR 0049); the wall clock 22:00 is
 -- the boundary, a DST day rolls it with the wall clock.
 SELECT pay.id AS payment_id,
        o.date,
-       CAST(((o.date + 1)::timestamp AT TIME ZONE u.timezone) AS timestamptz) AS fire_at
+       CAST(((o.date + 1)::timestamp + time '22:00') AT TIME ZONE u.timezone AS timestamptz) AS fire_at
 FROM operations o
 JOIN payments pay ON pay.id = o.payment_id
 JOIN properties p ON p.id = o.property_id
@@ -342,12 +356,15 @@ ORDER BY o.id;
 
 -- name: GetScheduledDuePayment :one
 -- The due boundary job's delivery-time resolution (issue #776): the
--- operation as it stands at its due midnight. The leg's conditions are
+-- operation as it stands at its due boundary — the wall clock 10:00 of the
+-- operation date in the owner's timezone (#1168). The leg's conditions are
 -- re-checked as of the wake-up instant ($3): a paid, cancelled, auto-pay
 -- operation, a deleted rule's orphan, an archived property — and an
 -- operation whose date is no longer the zone's today (the job woke after
 -- the day had rolled over) — answers no row, the job finishes without
--- publishing.
+-- publishing. The date-against-today predicate holds at any hour of the
+-- boundary day — the wake-up instant itself needs no gate, the job books
+-- at its own 10:00.
 SELECT pay.id AS payment_id,
        o.date,
        pay.title,
@@ -369,10 +386,11 @@ WHERE pay.id = $1::uuid
 
 -- name: GetScheduledOverduePayment :one
 -- The overdue boundary job's delivery-time resolution (issue #776): the
--- operation as it stands at its overdue midnight. The overdue leg's
--- conditions are re-checked as of the wake-up instant ($3): planned,
--- non-archived property, the date strictly before the zone's today —
--- auto-pay rules included, the sweep's overdue leg's shape.
+-- operation as it stands at its overdue boundary — the wall clock 22:00 of
+-- the day after the operation date in the owner's timezone (#1168). The
+-- overdue leg's conditions are re-checked as of the wake-up instant ($3):
+-- planned, non-archived property, the date strictly before the zone's
+-- today — auto-pay rules included, the sweep's overdue leg's shape.
 SELECT pay.id AS payment_id,
        o.date,
        pay.title,
@@ -391,13 +409,102 @@ WHERE pay.id = $1::uuid
   AND p.status IN ('active', 'maintenance')
   AND o.date < ($3::timestamptz AT TIME ZONE u.timezone)::date;
 
+-- name: ListPaymentAutoPaidTargets :many
+-- One zone's auto-pay-executed operations as of the zone's today (#1169,
+-- карта #1162; решение владельца по гриллингу #1167): planned occurrences
+-- of auto-pay rules that the TICK extinguished in their own day —
+-- status='paid', paid_source='auto_pay', paid_date = the operation date —
+-- on non-archived properties. A manual «Оплатить сейчас» is silent: the
+-- stamp is the tick's alone (the owner's decision — the event is about the
+-- auto charge, not about any payment). Only the live day: the leg lists
+-- date = today — a downtime's missed days are not backfilled (решение
+-- владельца, #1167; the overdue leg speaks for the unpaid past instead).
+-- The instant gate (#1168): the boundary is the wall clock 10:00 of the
+-- operation date — the sweep must not publish ahead of it.
+SELECT pay.id AS payment_id,
+       o.date,
+       pay.title,
+       o.amount_kopecks,
+       p.id AS property_id,
+       p.name AS property_name,
+       p.address AS property_address,
+       o.owner_id
+FROM operations o
+JOIN payments pay ON pay.id = o.payment_id
+JOIN properties p ON p.id = o.property_id
+JOIN users u ON u.id = o.owner_id
+WHERE u.timezone = $1
+  AND o.date = $2::date
+  AND o.status = 'paid'
+  AND o.paid_source = 'auto_pay'
+  AND o.paid_date = o.date
+  AND pay.auto_pay = true
+  AND p.status IN ('active', 'maintenance')
+  AND ((o.date::timestamp + time '10:00') AT TIME ZONE u.timezone) <= $3::timestamptz
+ORDER BY o.id;
+
+-- name: ListPaymentScheduledAutoPaidTargets :many
+-- The payments scan's booking list of the auto-paid leg (#1169): the
+-- planned occurrences of auto-pay rules on non-archived properties whose
+-- boundary — the wall clock 10:00 of the operation date in the owner's
+-- timezone — falls in the window (from, until]. The occurrence is planned
+-- at booking time; whether the tick (or a manual payment) extinguished it
+-- by the wake-up is the delivery-time resolution's call.
+SELECT pay.id AS payment_id,
+       o.date,
+       CAST((o.date::timestamp + time '10:00') AT TIME ZONE u.timezone AS timestamptz) AS fire_at
+FROM operations o
+JOIN payments pay ON pay.id = o.payment_id
+JOIN properties p ON p.id = o.property_id
+JOIN users u ON u.id = o.owner_id
+WHERE o.status = 'planned'
+  AND pay.auto_pay = true
+  AND p.status IN ('active', 'maintenance')
+  AND ((o.date::timestamp + time '10:00') AT TIME ZONE u.timezone) > $1::timestamptz
+  AND ((o.date::timestamp + time '10:00') AT TIME ZONE u.timezone) <= $2::timestamptz
+ORDER BY o.id;
+
+-- name: GetScheduledAutoPaidPayment :one
+-- The auto-paid boundary job's delivery-time resolution (#1169): the
+-- operation as it stands at its 10:00 wake-up. The owner's decision
+-- (гриллинг #1167): the event is about the AUTO charge — the tick's stamp
+-- (status='paid', paid_source='auto_pay', paid_date = the operation date)
+-- is the live predicate; a manual payment of the same occurrence is
+-- silent (the owner knows — they paid it). The live day only: an
+-- operation whose date is no longer the zone's today (a job awake after
+-- the day rolled over) answers no row — a downtime's missed days are not
+-- backfilled, the 22:00 overdue leg speaks for the unpaid past; an
+-- archived property answers no row.
+SELECT pay.id AS payment_id,
+       o.date,
+       pay.title,
+       o.amount_kopecks,
+       p.id AS property_id,
+       p.name AS property_name,
+       p.address AS property_address,
+       o.owner_id
+FROM operations o
+JOIN payments pay ON pay.id = o.payment_id
+JOIN properties p ON p.id = o.property_id
+JOIN users u ON u.id = o.owner_id
+WHERE pay.id = $1::uuid
+  AND o.date = $2::date
+  AND o.status = 'paid'
+  AND o.paid_source = 'auto_pay'
+  AND o.paid_date = o.date
+  AND p.status IN ('active', 'maintenance')
+  AND o.date = ($3::timestamptz AT TIME ZONE u.timezone)::date;
+
 -- name: ListPaymentReminderTargets :many
 -- One zone's reminder-day operations as of the zone's today (карта #822,
 -- #824): planned, on rules with a reminder set, whose reminder day — the
 -- operation date minus the rule's lead time (1/3/7) — is exactly today.
 -- Auto-pay rules included: напоминание живёт независимо от auto_pay
 -- (решение владельца, #823). The dedup key (rule, operation date) keeps
--- the occurrence single even if the lead time changes after firing.
+-- the occurrence single even if the lead time changes after firing. The
+-- instant gate (#1168): the leg's boundary is the wall clock 10:00 of the
+-- reminder day in the owner's timezone — the sweep must not publish ahead
+-- of it.
 SELECT pay.id AS payment_id,
        o.date,
        pay.title,
@@ -415,18 +522,20 @@ WHERE u.timezone = $1
   AND (o.date - pay.reminder_offset_days) = $2::date
   AND o.status = 'planned'
   AND p.status IN ('active', 'maintenance')
+  AND (((o.date - pay.reminder_offset_days)::timestamp + time '10:00') AT TIME ZONE u.timezone) <= $3::timestamptz
 ORDER BY o.id;
 
 -- name: ListPaymentScheduledReminderTargets :many
 -- The payments scan's booking list of the reminder leg (карта #822, #824):
 -- the planned operations of rules with a reminder set whose reminder
--- boundary — 00:00 of (operation date − lead time) read in the owner's
--- timezone — falls in the window (from, until]. Auto-pay rules included
--- (the reminder is independent of auto_pay); the wall-clock midnight is
+-- boundary — the wall clock 10:00 of (operation date − lead time) read in
+-- the owner's timezone (#1168, по гриллингу #1167) — falls in the window
+-- (from, until]. Auto-pay rules included
+-- (the reminder is independent of auto_pay); the wall clock 10:00 is
 -- the boundary, a DST day rolls it with the wall clock.
 SELECT pay.id AS payment_id,
        o.date,
-       CAST(((o.date - pay.reminder_offset_days)::timestamp AT TIME ZONE u.timezone) AS timestamptz) AS fire_at
+       CAST(((o.date - pay.reminder_offset_days)::timestamp + time '10:00') AT TIME ZONE u.timezone AS timestamptz) AS fire_at
 FROM operations o
 JOIN payments pay ON pay.id = o.payment_id
 JOIN properties p ON p.id = o.property_id
@@ -440,7 +549,8 @@ ORDER BY o.id;
 
 -- name: GetScheduledReminderPayment :one
 -- The reminder boundary job's delivery-time resolution (карта #822, #824):
--- the operation as it stands at its reminder midnight. Planned, on a
+-- the operation as it stands at its reminder boundary — the wall clock
+-- 10:00 of the reminder day (#1168). Planned, on a
 -- non-archived property, and the rule's CURRENT lead time still landing the
 -- reminder day on the zone's today ($3) — a lead time changed after the
 -- booking (or a job awake after the day rolled over) answers no row, the

@@ -75,14 +75,42 @@ test('цели карточек хаба — живые маршруты-кар�
   ).toBeVisible();
 });
 
-test('вход из профиля: строка «Участники» ведёт на хаб', async ({ page, seededUser }) => {
+// Строка «Участники» снята с профиля (#1165, карта #1162): хаб «Совместный
+// доступ» входит только из навигации — сайдбар ПК и шит «Еще» ниже ПК.
+test('вход в «Совместный доступ» с ПК — сайдбар; в профиле строки нет', async ({
+  page,
+  seededUser,
+}) => {
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto('/profile');
+  await expect(page.getByRole('button', { name: 'Участники' })).toHaveCount(0);
 
-  await page.getByRole('button', { name: 'Участники' }).click();
+  const sidebar = page.getByRole('navigation', { name: 'Основная навигация' });
+  await sidebar.getByRole('link', { name: 'Участники' }).click();
   await page.waitForURL('**/participants');
   await expect(
     page.getByRole('heading', { level: 1, name: 'Совместный доступ' }),
   ).toBeVisible();
+});
+
+test.describe('мобайл', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test('вход в «Совместный доступ» с мобайла — шит «Еще»; в профиле строки нет', async ({
+    page,
+    seededUser,
+  }) => {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto('/profile');
+    await expect(page.getByRole('button', { name: 'Участники' })).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Еще' }).click();
+    const moreSheet = page.getByRole('dialog', { name: 'Еще' });
+    await moreSheet.getByRole('link', { name: 'Участники' }).click();
+    await page.waitForURL('**/participants');
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Совместный доступ' }),
+    ).toBeVisible();
+  });
 });
 

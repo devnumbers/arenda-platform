@@ -45,13 +45,16 @@ func (s *PaymentScanStore) ListScanZones(ctx context.Context) ([]application.Sca
 }
 
 // ListDueTargets lists the zone's planned operations dated exactly the
-// zone's today (решение #737, тип №2), auto-pay rules excluded.
+// zone's today (решение #737, тип №2), auto-pay rules excluded. The
+// instant gate (#1168): now — the sweep's instant the 10:00 boundary is
+// compared against.
 func (s *PaymentScanStore) ListDueTargets(
-	ctx context.Context, zone string, today time.Time,
+	ctx context.Context, zone string, today, now time.Time,
 ) ([]application.PaymentScanTarget, error) {
 	rows, err := postgres.New(s.db).ListPaymentDueTargets(ctx, postgres.ListPaymentDueTargetsParams{
 		Timezone: zone,
 		Column2:  pgconv.DateToPgtype(today),
+		Column3:  pgconv.TimePtrToPgtype(&now),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list due payments of zone %s: %w", zone, err)
@@ -67,12 +70,15 @@ func (s *PaymentScanStore) ListDueTargets(
 
 // ListOverdueTargets lists the zone's planned operations dated strictly
 // before the zone's today (решение #737, тип №3), auto-pay rules included.
+// The instant gate (#1168): now — the sweep's instant the 22:00 boundary is
+// compared against.
 func (s *PaymentScanStore) ListOverdueTargets(
-	ctx context.Context, zone string, today time.Time,
+	ctx context.Context, zone string, today, now time.Time,
 ) ([]application.PaymentScanTarget, error) {
 	rows, err := postgres.New(s.db).ListPaymentOverdueTargets(ctx, postgres.ListPaymentOverdueTargetsParams{
 		Timezone: zone,
 		Column2:  pgconv.DateToPgtype(today),
+		Column3:  pgconv.TimePtrToPgtype(&now),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list overdue payments of zone %s: %w", zone, err)
@@ -84,6 +90,80 @@ func (s *PaymentScanStore) ListOverdueTargets(
 			row.PropertyID, row.PropertyName, row.PropertyAddress, row.OwnerID))
 	}
 	return targets, nil
+}
+
+// ListAutoPaidTargets lists the zone's auto-pay-executed operations of the
+// live day (#1169): occurrences the tick extinguished in their own day (the
+// paid_source stamp), a manual payment is silent. The instant gate (#1168):
+// now — the sweep's instant the 10:00 boundary is compared against.
+func (s *PaymentScanStore) ListAutoPaidTargets(
+	ctx context.Context, zone string, today, now time.Time,
+) ([]application.PaymentScanTarget, error) {
+	rows, err := postgres.New(s.db).ListPaymentAutoPaidTargets(ctx, postgres.ListPaymentAutoPaidTargetsParams{
+		Timezone: zone,
+		Column2:  pgconv.DateToPgtype(today),
+		Column3:  pgconv.TimePtrToPgtype(&now),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list auto-paid payments of zone %s: %w", zone, err)
+	}
+	targets := make([]application.PaymentScanTarget, 0, len(rows))
+	for _, row := range rows {
+		targets = append(targets, paymentScanTarget(
+			row.PaymentID, row.Date, row.Title, row.AmountKopecks,
+			row.PropertyID, row.PropertyName, row.PropertyAddress, row.OwnerID))
+	}
+	return targets, nil
+}
+
+// ListScheduledAutoPaidTargets lists the upcoming planned occurrences of
+// auto-pay rules whose boundary — the wall clock 10:00 of the operation date
+// in the owner's timezone (#1169) — falls in the window (from, until]; the
+// auto-paid leg's booking list.
+func (s *PaymentScanStore) ListScheduledAutoPaidTargets(
+	ctx context.Context, from, until time.Time,
+) ([]application.PaymentScheduleTarget, error) {
+	rows, err := postgres.New(s.db).ListPaymentScheduledAutoPaidTargets(ctx, postgres.ListPaymentScheduledAutoPaidTargetsParams{
+		Column1: pgconv.TimePtrToPgtype(&from),
+		Column2: pgconv.TimePtrToPgtype(&until),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list scheduled auto-paid payments: %w", err)
+	}
+	targets := make([]application.PaymentScheduleTarget, 0, len(rows))
+	for _, row := range rows {
+		targets = append(targets, application.PaymentScheduleTarget{
+			PaymentID: pgconv.UUIDFromPgtype(row.PaymentID),
+			DueDate:   pgconv.DateFromPgtype(row.Date),
+			FireAt:    pgconv.TimestamptzToTime(row.FireAt),
+		})
+	}
+	return targets, nil
+}
+
+// GetScheduledAutoPaidPayment reloads one operation at its 10:00 wake-up
+// (#1169): live only when the tick extinguished it in its own day (the
+// paid_source='auto_pay' stamp) on a non-archived property and the operation
+// date is still the zone's today. A manual payment, a planned (unexecuted)
+// occurrence, an archived property and a rolled-over day are pgx.ErrNoRows
+// here and answer live=false: the job finishes without publishing.
+func (s *PaymentScanStore) GetScheduledAutoPaidPayment(
+	ctx context.Context, paymentID uuid.UUID, date, now time.Time,
+) (application.PaymentScanTarget, bool, error) {
+	row, err := postgres.New(s.db).GetScheduledAutoPaidPayment(ctx, postgres.GetScheduledAutoPaidPaymentParams{
+		Column1: pgconv.UUIDToPgtype(paymentID),
+		Column2: pgconv.DateToPgtype(date),
+		Column3: pgconv.TimePtrToPgtype(&now),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return application.PaymentScanTarget{}, false, nil
+		}
+		return application.PaymentScanTarget{}, false, fmt.Errorf("load scheduled auto-paid payment %s: %w", paymentID, err)
+	}
+	return paymentScanTarget(
+		row.PaymentID, row.Date, row.Title, row.AmountKopecks,
+		row.PropertyID, row.PropertyName, row.PropertyAddress, row.OwnerID), true, nil
 }
 
 // ListScheduledDueTargets lists the operations whose due boundary — 00:00
@@ -186,13 +266,16 @@ func (s *PaymentScanStore) GetScheduledOverduePayment(
 // ListReminderTargets lists the zone's planned operations of rules with a
 // reminder set whose reminder day — the operation date minus the rule's lead
 // time — is exactly the zone's today (карта #822, #824), auto-pay rules
-// included (решение #823: напоминание независимо от auto_pay).
+// included (решение #823: напоминание независимо от auto_pay). The instant
+// gate (#1168): now — the sweep's instant the 10:00 boundary is compared
+// against.
 func (s *PaymentScanStore) ListReminderTargets(
-	ctx context.Context, zone string, today time.Time,
+	ctx context.Context, zone string, today, now time.Time,
 ) ([]application.PaymentScanTarget, error) {
 	rows, err := postgres.New(s.db).ListPaymentReminderTargets(ctx, postgres.ListPaymentReminderTargetsParams{
 		Timezone: zone,
 		Column2:  pgconv.DateToPgtype(today),
+		Column3:  pgconv.TimePtrToPgtype(&now),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list reminder payments of zone %s: %w", zone, err)

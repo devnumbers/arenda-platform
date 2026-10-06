@@ -40,15 +40,29 @@ func NewPaymentOverdueWorker(
 }
 
 // NewPaymentReminderWorker builds the reminder boundary worker (карта #822,
-// #824): the worker wakes at one operation's reminder midnight — 00:00 of
-// (operation date − lead time) in the owner's timezone — and hands the
-// (rule, date) and the wake-up instant to the publisher's delivery-time
-// resolution; a lead time changed after the booking is the resolution's
-// no-op case.
+// #824): the worker wakes at one operation's reminder boundary — the wall
+// clock 10:00 of (operation date − lead time) in the owner's timezone — and
+// hands the (rule, date) and the wake-up instant to the publisher's
+// delivery-time resolution; a lead time changed after the booking is the
+// resolution's no-op case.
 func NewPaymentReminderWorker(
 	publisher application.PaymentBoundaryDeliverer, clk clock.Clock, log *slog.Logger,
 ) *boundaryWorker[PaymentReminderArgs] {
 	return newBoundaryWorker("payment reminder", func(ctx context.Context, args PaymentReminderArgs) error {
 		return publisher.DeliverPaymentReminder(ctx, args.PaymentID, args.DueDate, clk.Now())
+	}, log)
+}
+
+// NewPaymentAutoPaidWorker builds the auto-paid boundary worker (#1169,
+// карта #1162): the worker wakes at one operation's 10:00 — the wall clock
+// of the operation date in the owner's timezone — and hands the (rule, date)
+// and the wake-up instant to the publisher's delivery-time resolution: the
+// live predicate is the tick's paid_source stamp, a manual payment and a
+// rolled-over day finish the job without publishing.
+func NewPaymentAutoPaidWorker(
+	publisher application.PaymentBoundaryDeliverer, clk clock.Clock, log *slog.Logger,
+) *boundaryWorker[PaymentAutoPaidArgs] {
+	return newBoundaryWorker("payment auto paid", func(ctx context.Context, args PaymentAutoPaidArgs) error {
+		return publisher.DeliverPaymentAutoPaid(ctx, args.PaymentID, args.DueDate, clk.Now())
 	}, log)
 }

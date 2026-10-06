@@ -356,7 +356,7 @@ export function PropertyParticipantsScreen({
         </TopNav>
       )}
 
-      <PageContent>
+      <PageContent aboveTabBarFooter>
         {membersQuery.isPending ? (
           <>
             {/* Чипы реальные — вне фазы загрузки (§7): контент встаёт на
@@ -397,7 +397,8 @@ export function PropertyParticipantsScreen({
       </PageContent>
 
       {canManage && !isArchived && (
-        <StickyBottomBar>
+        // CTA над видимым нижним меню (решение владельца 06.10.2026, #1166).
+        <StickyBottomBar aboveTabBar>
           <Button
             className="w-full"
             onClick={() => router.push(ROUTES.propertyParticipantsInvite(propertyId))}

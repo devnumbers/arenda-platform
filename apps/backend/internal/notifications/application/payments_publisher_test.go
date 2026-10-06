@@ -33,6 +33,8 @@ type fakePaymentSource struct {
 	overdue map[string][]PaymentScanTarget
 	// Reminder holds the reminder leg's sweep targets per zone (карта #822).
 	reminder map[string][]PaymentScanTarget
+	// AutoPaid holds the auto-paid leg's sweep targets per zone (#1169).
+	autoPaid map[string][]PaymentScanTarget
 	asked    []string
 	recips   map[uuid.UUID][]uuid.UUID
 	recErr   map[uuid.UUID]error
@@ -43,23 +45,41 @@ type fakePaymentSource struct {
 	schedDue      []PaymentScheduleTarget
 	schedOverdue  []PaymentScheduleTarget
 	schedReminder []PaymentScheduleTarget
+	schedAutoPaid []PaymentScheduleTarget
 	schedAsked    []string
 	live          map[string]PaymentScanTarget
 }
 
-func (f *fakePaymentSource) ListDueTargets(ctx context.Context, zone string, today time.Time) ([]PaymentScanTarget, error) {
+func (f *fakePaymentSource) ListDueTargets(ctx context.Context, zone string, today, now time.Time) ([]PaymentScanTarget, error) {
 	f.asked = append(f.asked, "due|"+zone+"|"+today.Format("2006-01-02"))
 	return f.due[zone], nil
 }
 
-func (f *fakePaymentSource) ListOverdueTargets(ctx context.Context, zone string, today time.Time) ([]PaymentScanTarget, error) {
+func (f *fakePaymentSource) ListOverdueTargets(ctx context.Context, zone string, today, now time.Time) ([]PaymentScanTarget, error) {
 	f.asked = append(f.asked, "overdue|"+zone+"|"+today.Format("2006-01-02"))
 	return f.overdue[zone], nil
 }
 
-func (f *fakePaymentSource) ListReminderTargets(ctx context.Context, zone string, today time.Time) ([]PaymentScanTarget, error) {
+func (f *fakePaymentSource) ListReminderTargets(ctx context.Context, zone string, today, now time.Time) ([]PaymentScanTarget, error) {
 	f.asked = append(f.asked, "reminder|"+zone+"|"+today.Format("2006-01-02"))
 	return f.reminder[zone], nil
+}
+
+func (f *fakePaymentSource) ListAutoPaidTargets(ctx context.Context, zone string, today, now time.Time) ([]PaymentScanTarget, error) {
+	f.asked = append(f.asked, "auto paid|"+zone+"|"+today.Format("2006-01-02"))
+	return f.autoPaid[zone], nil
+}
+
+func (f *fakePaymentSource) ListScheduledAutoPaidTargets(ctx context.Context, from, until time.Time) ([]PaymentScheduleTarget, error) {
+	f.schedAsked = append(f.schedAsked, "auto paid|"+from.Format(time.RFC3339)+"|"+until.Format(time.RFC3339))
+	return f.schedAutoPaid, nil
+}
+
+func (f *fakePaymentSource) GetScheduledAutoPaidPayment(
+	ctx context.Context, paymentID uuid.UUID, date, now time.Time,
+) (PaymentScanTarget, bool, error) {
+	target, ok := f.live["auto paid|"+paymentID.String()+"|"+date.Format("2006-01-02")]
+	return target, ok, nil
 }
 
 func (f *fakePaymentSource) ListScheduledDueTargets(ctx context.Context, from, until time.Time) ([]PaymentScheduleTarget, error) {
@@ -122,6 +142,10 @@ func (f *fakePaymentScheduler) SchedulePaymentReminder(ctx context.Context, paym
 	return f.book("reminder", paymentID, date, fireAt)
 }
 
+func (f *fakePaymentScheduler) SchedulePaymentAutoPaid(ctx context.Context, paymentID uuid.UUID, date, fireAt time.Time) error {
+	return f.book("auto paid", paymentID, date, fireAt)
+}
+
 func (f *fakePaymentScheduler) book(leg string, paymentID uuid.UUID, date, fireAt time.Time) error {
 	if err := f.errFor[paymentID]; err != nil {
 		return err
@@ -166,6 +190,7 @@ func newPaymentScanHarness(zones []ScanZone) *paymentScanHarness {
 			due:      map[string][]PaymentScanTarget{},
 			overdue:  map[string][]PaymentScanTarget{},
 			reminder: map[string][]PaymentScanTarget{},
+			autoPaid: map[string][]PaymentScanTarget{},
 			live:     map[string]PaymentScanTarget{},
 			recips:   map[uuid.UUID][]uuid.UUID{},
 			recErr:   map[uuid.UUID]error{},
@@ -337,15 +362,17 @@ func TestPaymentsPublisher_EachZoneSweptWithItsOwnToday(t *testing.T) {
 	p := NewPaymentsPublisher(h.pipeline, h.zones, h.source, h.scheduler)
 	require.NoError(t, p.RunZoneScans(context.Background(), scanNow))
 
-	// All three legs ask per zone; Moscow's local calendar has already rolled
+	// All four legs ask per zone; Moscow's local calendar has already rolled
 	// to the 20th, Kaliningrad's has not — the sweep must not share one today
 	// across zones.
 	assert.ElementsMatch(t, []string{
 		"due|Europe/Moscow|2026-09-20",
 		"reminder|Europe/Moscow|2026-09-20",
+		"auto paid|Europe/Moscow|2026-09-20",
 		"overdue|Europe/Moscow|2026-09-20",
 		"due|Europe/Kaliningrad|2026-09-19",
 		"reminder|Europe/Kaliningrad|2026-09-19",
+		"auto paid|Europe/Kaliningrad|2026-09-19",
 		"overdue|Europe/Kaliningrad|2026-09-19",
 	}, h.source.asked)
 }
@@ -401,9 +428,10 @@ func TestPaymentsPublisher_NilZoneDirectory(t *testing.T) {
 
 // The boundary booking (issue #776, решение владельца 21.09.2026: все
 // уведомления — чётко по времени): the hourly pass books the upcoming
-// boundary jobs before the zone sweep — the due leg's job wakes at 00:00 of
-// the operation date in the owner's zone, the overdue leg's — at 00:00 of
-// the day after. Both windows are asked for the same two-day horizon; the
+// boundary jobs before the zone sweep — the due leg's job wakes at the wall
+// clock 10:00 of the operation date in the owner's zone (#1168), the
+// overdue leg's — at 22:00 of the day after. All windows are asked for the
+// same two-day horizon; the
 // sweep itself goes on as the backstop.
 func TestPaymentsPublisher_SchedulesUpcomingBoundaries(t *testing.T) {
 	t.Parallel()
@@ -411,34 +439,44 @@ func TestPaymentsPublisher_SchedulesUpcomingBoundaries(t *testing.T) {
 	h := newPaymentScanHarness([]ScanZone{{Timezone: zoneMSK}})
 	dueRule := uuid.Must(uuid.NewV7())
 	overdueRule := uuid.Must(uuid.NewV7())
+	autoPaidRule := uuid.Must(uuid.NewV7())
 	h.source.schedDue = []PaymentScheduleTarget{
 		{
 			PaymentID: dueRule, DueDate: time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC),
-			FireAt: time.Date(2026, 9, 19, 21, 0, 0, 0, time.UTC),
+			FireAt: time.Date(2026, 9, 20, 7, 0, 0, 0, time.UTC),
 		},
 	}
 	h.source.schedOverdue = []PaymentScheduleTarget{
 		{
 			PaymentID: overdueRule, DueDate: time.Date(2026, 9, 19, 0, 0, 0, 0, time.UTC),
-			FireAt: time.Date(2026, 9, 19, 21, 0, 0, 0, time.UTC),
+			FireAt: time.Date(2026, 9, 20, 19, 0, 0, 0, time.UTC),
+		},
+	}
+	h.source.schedAutoPaid = []PaymentScheduleTarget{
+		{
+			PaymentID: autoPaidRule, DueDate: time.Date(2026, 9, 21, 0, 0, 0, 0, time.UTC),
+			FireAt: time.Date(2026, 9, 21, 7, 0, 0, 0, time.UTC),
 		},
 	}
 
 	p := NewPaymentsPublisher(h.pipeline, h.zones, h.source, h.scheduler)
 	require.NoError(t, p.RunZoneScans(context.Background(), scanNow))
 
-	// Both legs asked for the same window: (now, now+48h].
+	// All four legs asked for the same window: (now, now+48h].
 	assert.ElementsMatch(t, []string{
 		"due|" + scanNow.Format(time.RFC3339) + "|" + scanNow.Add(scheduledHorizon).Format(time.RFC3339),
 		"reminder|" + scanNow.Format(time.RFC3339) + "|" + scanNow.Add(scheduledHorizon).Format(time.RFC3339),
+		"auto paid|" + scanNow.Format(time.RFC3339) + "|" + scanNow.Add(scheduledHorizon).Format(time.RFC3339),
 		"overdue|" + scanNow.Format(time.RFC3339) + "|" + scanNow.Add(scheduledHorizon).Format(time.RFC3339),
 	}, h.source.schedAsked)
 	// Each leg books its own kind at the boundary instant it was given.
-	assert.Equal(t, time.Date(2026, 9, 19, 21, 0, 0, 0, time.UTC),
+	assert.Equal(t, time.Date(2026, 9, 20, 7, 0, 0, 0, time.UTC),
 		h.scheduler.booked[paymentBookingKey("due", dueRule, time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC))])
-	assert.Equal(t, time.Date(2026, 9, 19, 21, 0, 0, 0, time.UTC),
+	assert.Equal(t, time.Date(2026, 9, 20, 19, 0, 0, 0, time.UTC),
 		h.scheduler.booked[paymentBookingKey("overdue", overdueRule, time.Date(2026, 9, 19, 0, 0, 0, 0, time.UTC))])
-	assert.Len(t, h.scheduler.booked, 2)
+	assert.Equal(t, time.Date(2026, 9, 21, 7, 0, 0, 0, time.UTC),
+		h.scheduler.booked[paymentBookingKey("auto paid", autoPaidRule, time.Date(2026, 9, 21, 0, 0, 0, 0, time.UTC))])
+	assert.Len(t, h.scheduler.booked, 3)
 }
 
 // A broken booking does not take the pass down: the other leg books on and
@@ -589,8 +627,23 @@ func TestPaymentsPublisher_PublishesReminderPayment(t *testing.T) {
 	assert.Len(t, h.queue.pushes, 2)
 }
 
-// Букинг ноги напоминания: тот же горизонт, своя граница (полночь «дата − N»
-// — инстант считает SQL-нога), повторный запрос возвращает стоящую джобу.
+// assertBookingPass runs one hourly pass and asserts the leg asked its
+// boundary window and booked its (rule, date) job at the given instant — the
+// shape the per-leg booking tests share.
+func assertBookingPass(
+	t *testing.T, h *paymentScanHarness, leg string, rule uuid.UUID, dueDate, fireAt time.Time,
+) {
+	t.Helper()
+	p := NewPaymentsPublisher(h.pipeline, h.zones, h.source, h.scheduler)
+	require.NoError(t, p.RunZoneScans(context.Background(), scanNow))
+	assert.Contains(t, h.source.schedAsked,
+		leg+"|"+scanNow.Format(time.RFC3339)+"|"+scanNow.Add(scheduledHorizon).Format(time.RFC3339))
+	assert.Equal(t, fireAt, h.scheduler.booked[paymentBookingKey(leg, rule, dueDate)])
+}
+
+// Букинг ноги напоминания: тот же горизонт, своя граница (10:00 «дата − N»
+// (#1168) — инстант считает SQL-нога), повторный запрос возвращает стоящую
+// джобу.
 func TestPaymentsPublisher_SchedulesReminderBoundaries(t *testing.T) {
 	t.Parallel()
 
@@ -599,18 +652,12 @@ func TestPaymentsPublisher_SchedulesReminderBoundaries(t *testing.T) {
 	h.source.schedReminder = []PaymentScheduleTarget{
 		{
 			PaymentID: rule, DueDate: time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC),
-			FireAt: time.Date(2026, 9, 17, 21, 0, 0, 0, time.UTC),
+			FireAt: time.Date(2026, 9, 19, 7, 0, 0, 0, time.UTC),
 		},
 	}
 
-	p := NewPaymentsPublisher(h.pipeline, h.zones, h.source, h.scheduler)
-	require.NoError(t, p.RunZoneScans(context.Background(), scanNow))
-
-	// Все три ноги спрашивают одно окно (now, now+48h].
-	assert.Contains(t, h.source.schedAsked,
-		"reminder|"+scanNow.Format(time.RFC3339)+"|"+scanNow.Add(scheduledHorizon).Format(time.RFC3339))
-	assert.Equal(t, time.Date(2026, 9, 17, 21, 0, 0, 0, time.UTC),
-		h.scheduler.booked[paymentBookingKey("reminder", rule, time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC))])
+	assertBookingPass(t, h, "reminder", rule,
+		time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC), time.Date(2026, 9, 19, 7, 0, 0, 0, time.UTC))
 }
 
 // Пробуждение reminder-джобы: живое planned-вхождение с напоминанием
@@ -644,6 +691,98 @@ func TestPaymentsPublisher_DeliverPaymentReminderNoOpWhenDead(t *testing.T) {
 		time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC), scanNow))
 	assert.Empty(t, h.feed.inserted)
 	assert.Empty(t, h.queue.emails)
+}
+
+// Нога «Автоплатёж исполнен» (#1169): тиковое гашение своего дня публикует
+// строку владелец + активные участники с дедупом (правило, дата); копия —
+// решение #737-стиля с фактом автоплатежа.
+func TestPaymentsPublisher_PublishesAutoPaidPayment(t *testing.T) {
+	t.Parallel()
+
+	h := newPaymentScanHarness([]ScanZone{{Timezone: zoneMSK}})
+	rule := uuid.Must(uuid.NewV7())
+	target := PaymentScanTarget{
+		PaymentID:       rule,
+		DueDate:         time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC),
+		Title:           scanRentTitle,
+		AmountKopecks:   250000,
+		PropertyID:      uuid.Must(uuid.NewV7()),
+		PropertyName:    scanPropertyName,
+		PropertyAddress: scanPropertyAddress,
+		OwnerID:         uuid.Must(uuid.NewV7()),
+	}
+	h.source.autoPaid[zoneMSK] = []PaymentScanTarget{target}
+	member := uuid.Must(uuid.NewV7())
+	h.source.recips[target.PropertyID] = []uuid.UUID{member}
+
+	p := NewPaymentsPublisher(h.pipeline, h.zones, h.source, h.scheduler)
+	require.NoError(t, p.RunZoneScans(context.Background(), scanNow))
+
+	require.Len(t, h.feed.inserted, 2)
+	recipients := []uuid.UUID{h.feed.inserted[0].UserID, h.feed.inserted[1].UserID}
+	assert.ElementsMatch(t, []uuid.UUID{target.OwnerID, member}, recipients)
+	for _, n := range h.feed.inserted {
+		assert.Equal(t, domain.EventPaymentAutoPaid, n.EventType)
+		assert.Equal(t, domain.CategoryPaymentsOperations, n.Category)
+		assert.Equal(t, "Автоплатёж исполнен", n.Title)
+		assert.Contains(t, n.Body, "оплачен автоплатежём")
+		assert.Equal(t, "Квартира на Ленина", n.ContextLabel)
+		// Дедуп — (правило, дата операции): одно событие на вхождение.
+		assert.Equal(t, domain.DedupKey("payment_auto_paid:"+rule.String()+":2026-09-20"), n.DedupKey)
+		require.NotNil(t, n.Payload.PaymentID)
+		assert.Equal(t, rule, *n.Payload.PaymentID)
+	}
+	assert.Len(t, h.queue.emails, 2)
+	assert.Len(t, h.queue.pushes, 2)
+}
+
+// Букинг ноги автоплатежа: тот же горизонт, граница — 10:00 дня операции
+// (инстант считает SQL-нога), повторный запрос возвращает стоящую джобу.
+func TestPaymentsPublisher_SchedulesAutoPaidBoundaries(t *testing.T) {
+	t.Parallel()
+
+	h := newPaymentScanHarness([]ScanZone{{Timezone: zoneMSK}})
+	rule := uuid.Must(uuid.NewV7())
+	h.source.schedAutoPaid = []PaymentScheduleTarget{
+		{
+			PaymentID: rule, DueDate: time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC),
+			FireAt: time.Date(2026, 9, 20, 7, 0, 0, 0, time.UTC),
+		},
+	}
+
+	assertBookingPass(t, h, "auto paid", rule,
+		time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC), time.Date(2026, 9, 20, 7, 0, 0, 0, time.UTC))
+}
+
+// Пробуждение auto-paid-джобы: тиковый штамп своего дня публикует;
+// ручная оплата того же вхождения и ролловер — молчок (решение владельца
+// по гриллингу #1167).
+func TestPaymentsPublisher_DeliverPaymentAutoPaid(t *testing.T) {
+	t.Parallel()
+
+	h := newPaymentScanHarness([]ScanZone{{Timezone: zoneMSK}})
+	rule := uuid.Must(uuid.NewV7())
+	target := dueTarget(rule, time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC), "Интернет")
+	h.source.live["auto paid|"+rule.String()+"|2026-09-20"] = target
+
+	p := NewPaymentsPublisher(h.pipeline, h.zones, h.source, h.scheduler)
+	require.NoError(t, p.DeliverPaymentAutoPaid(context.Background(), rule,
+		time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC), scanNow))
+
+	require.Len(t, h.feed.inserted, 1)
+	n := h.feed.inserted[0]
+	assert.Equal(t, domain.EventPaymentAutoPaid, n.EventType)
+	assert.Equal(t, "Автоплатёж исполнен", n.Title)
+	assert.Equal(t, domain.DedupKey("payment_auto_paid:"+rule.String()+":2026-09-20"), n.DedupKey)
+
+	// Мёртвые состояния — ручная оплата (штампа нет), не исполнено, день
+	// ролловер — фейк отвечает live=false, джоба молчит.
+	h2 := newPaymentScanHarness([]ScanZone{{Timezone: zoneMSK}})
+	p2 := NewPaymentsPublisher(h2.pipeline, h2.zones, h2.source, h2.scheduler)
+	require.NoError(t, p2.DeliverPaymentAutoPaid(context.Background(), uuid.Must(uuid.NewV7()),
+		time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC), scanNow))
+	assert.Empty(t, h2.feed.inserted)
+	assert.Empty(t, h2.queue.emails)
 }
 
 func TestFormatAmountKopecks(t *testing.T) {

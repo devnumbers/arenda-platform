@@ -194,11 +194,14 @@ export function ParticipantsInviteScreen(): JSX.Element {
       <TopNav leading={<TopNavBackButton fallbackHref={ROUTES.participants} />} />
 
       {/* Боковой отступ 24px по макету (контентный фрейм x=24, ширина
-       * 345 из 393) — на все состояния, включая скелетон. */}
-      <PageContent className="px-6">{content}</PageContent>
+       * 345 из 393) — на все состояния, включая скелетон. Клиренс футера —
+       * паттерн «CTA над TabBar» (#1166). */}
+      <PageContent className="px-6" aboveTabBarFooter>{content}</PageContent>
 
       {options.length > 0 && (
-        <StickyBottomBar>
+        // CTA над видимым нижним меню (решение владельца 06.10.2026, #1166);
+        // пикер объектов ниже — фуллскрин-поверхность, там бар каноничен.
+        <StickyBottomBar aboveTabBar>
           <Button
             className="w-full"
             disabled={!canSubmit}

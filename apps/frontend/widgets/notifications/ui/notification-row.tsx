@@ -33,7 +33,11 @@ export function NotificationRow({
         unread ? '' : 'opacity-60'
       }`}
     >
-      <NotificationCategoryIcon category={notification.category} unread={unread} />
+      <NotificationCategoryIcon
+        category={notification.category}
+        eventType={notification.eventType}
+        unread={unread}
+      />
       <div className="flex min-w-0 flex-1 flex-col gap-2">
         <div className="flex flex-col gap-1.5">
           <div className="flex items-start gap-2 whitespace-nowrap text-sm leading-4 text-content">

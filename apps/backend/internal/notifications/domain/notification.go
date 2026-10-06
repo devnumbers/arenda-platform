@@ -23,10 +23,14 @@ type EventType string
 // FeedCategory mapping — Аренда; Платежи и операции; Задачи; Совместный
 // доступ; Тариф; Системные.
 const (
-	EventRentalCompleted    EventType = "rental_completed"
-	EventPaymentDue         EventType = "payment_due"
-	EventPaymentOverdue     EventType = "payment_overdue"
-	EventPaymentReminder    EventType = "payment_reminder"
+	EventRentalCompleted EventType = "rental_completed"
+	EventPaymentDue      EventType = "payment_due"
+	EventPaymentOverdue  EventType = "payment_overdue"
+	EventPaymentReminder EventType = "payment_reminder"
+	// EventPaymentAutoPaid is the auto-pay execution notice (#1169, карта
+	// #1162; решение владельца по гриллингу #1167): the tick extinguished
+	// the occurrence in its own day — a manual payment is silent.
+	EventPaymentAutoPaid    EventType = "payment_auto_paid"
 	EventTaskOverdue        EventType = "task_overdue"
 	EventPropertyInvitation EventType = "property_invitation"
 	EventInvitationAccepted EventType = "invitation_accepted"
@@ -60,6 +64,9 @@ var feedCatalog = map[EventType]struct {
 	EventPaymentOverdue:  {CategoryPaymentsOperations, []ActionKind{ActionOpenPayment}},
 	// «Напоминание о платеже» (карта #822, #824): та же категория и кнопка,
 	// что у платёжной пары решения #737 — переход на страницу правила.
+	// «Автоплатёж исполнен» (#1169): та же категория и та же кнопка —
+	// переход на страницу правила.
+	EventPaymentAutoPaid:              {CategoryPaymentsOperations, []ActionKind{ActionOpenPayment}},
 	EventPaymentReminder:              {CategoryPaymentsOperations, []ActionKind{ActionOpenPayment}},
 	EventTaskOverdue:                  {CategoryTasks, []ActionKind{ActionOpenTask}},
 	EventPropertyInvitation:           {CategorySharedAccess, []ActionKind{ActionOpenProperty}},

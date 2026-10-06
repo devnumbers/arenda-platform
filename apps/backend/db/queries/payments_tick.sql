@@ -69,9 +69,11 @@ ON CONFLICT (payment_id, date) WHERE payment_id IS NOT NULL DO NOTHING;
 -- The auto-pay day payment (ADR 0049 §2): planned with date = today becomes
 -- paid, paid_date = today. Strictly today — never backdated; the active
 -- pause is excluded by the caller (the domain plan), and occurrences inside
--- a pause are not generated at all.
+-- a pause are not generated at all. The auto-pay stamp (#1169, решение по
+-- гриллингу #1167): «автоплатёж исполнен» смотрит только на тиковые
+-- гашения — ручная оплата молчит.
 UPDATE operations
-SET status = 'paid', paid_date = $2
+SET status = 'paid', paid_date = $2, paid_source = 'auto_pay'
 WHERE payment_id = $1 AND status = 'planned' AND date = $2;
 
 -- name: DeleteFuturePlannedExcept :execrows

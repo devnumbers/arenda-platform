@@ -83,3 +83,19 @@ func (s *PaymentBoundaryScheduler) SchedulePaymentReminder(ctx context.Context, 
 	}
 	return nil
 }
+
+// SchedulePaymentAutoPaid books the operation's «Автоплатёж исполнен» job at
+// the given boundary instant (#1169): the wall clock 10:00 of the operation
+// date in the owner's timezone.
+func (s *PaymentBoundaryScheduler) SchedulePaymentAutoPaid(ctx context.Context, paymentID uuid.UUID, date, fireAt time.Time) error {
+	_, err := s.client.Insert(ctx, PaymentAutoPaidArgs{PaymentID: paymentID, DueDate: date}, &river.InsertOpts{
+		Queue:       QueuePayments,
+		ScheduledAt: fireAt,
+		MaxAttempts: boundaryJobMaxAttempts,
+		UniqueOpts:  jobUniqueOpts,
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
