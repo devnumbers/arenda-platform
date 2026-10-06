@@ -9,6 +9,10 @@
 //   id-column-default — id columns get no DEFAULT: ids are UUIDv7 generated
 //     by the application, not the database (ADR 0019; a genuine non-money
 //     decimal column or an id default would need a recorded exclusion here).
+//   migration-timeouts — every up migration from 000108 on opens with
+//     `SET lock_timeout = '1s';` then `SET statement_timeout = '5s';`
+//     (convention #324, ticket #1146); a statement_timeout value other than
+//     '5s' requires a same-line justification comment (`-- ...`).
 //
 // Statement-aware parsing: comments, string literals and dollar-quoted bodies
 // are respected — a plain grep was rejected by the research
@@ -27,6 +31,12 @@ import { readFileSync } from "node:fs";
 
 const RULE_MONEY = "money-float-type";
 const RULE_ID = "id-column-default";
+const RULE_TIMEOUTS = "migration-timeouts";
+
+// Up migrations from this version on must open with the timeout header
+// (convention #324: the cutoff predates the lint, and older files are history,
+// not a baseline to chase — same philosophy as HISTORICAL_EXEMPT below).
+const TIMEOUTS_CUTOFF = 108;
 
 // Historical migrations applied before the rules existed; each entry keeps its
 // reason so the list stays a set of deliberate exclusions, not a baseline.
@@ -300,10 +310,58 @@ function checkIdDefault(masked, sql, stmtStart) {
   return findings;
 }
 
+// migration-timeouts: the first two statements of an up migration >= 000108
+// are `SET lock_timeout = '1s'` (exact canonical spelling) and
+// `SET statement_timeout = '...'` — a value other than '5s' must carry a
+// same-line justification comment, which stripComments removes from the
+// statement text, so the comment is checked against the raw source line.
+function checkTimeouts(sql, name, stmts) {
+  const version = name.match(/^(\d+)_/);
+  if (version === null || parseInt(version[1], 10) < TIMEOUTS_CUTOFF) return [];
+
+  const findings = [];
+  const norm = (text) => text.replace(/\s+/g, " ").trim().toLowerCase();
+  const lock = stmts[0];
+  const stmtTimeout = stmts[1];
+
+  if (lock === undefined || norm(lock.text) !== "set lock_timeout = '1s'") {
+    findings.push(
+      finding(
+        RULE_TIMEOUTS,
+        lock === undefined ? 1 : lineAt(sql, lock.start),
+        "up migration must open with `SET lock_timeout = '1s';` as the first statement (convention #324, docs/agents/tooling.md)",
+      ),
+    );
+  }
+  const timeoutMatch = stmtTimeout === undefined ? null : norm(stmtTimeout.text).match(/^set statement_timeout = '([^']*)'$/);
+  if (timeoutMatch === null) {
+    findings.push(
+      finding(
+        RULE_TIMEOUTS,
+        stmtTimeout === undefined ? 1 : lineAt(sql, stmtTimeout.start),
+        "up migration must open with `SET statement_timeout = '5s';` as the second statement (convention #324, docs/agents/tooling.md)",
+      ),
+    );
+  } else if (timeoutMatch[1] !== "5s") {
+    const rawLine = sql.split("\n")[lineAt(sql, stmtTimeout.start) - 1];
+    if (!/--\s*\S/.test(rawLine)) {
+      findings.push(
+        finding(
+          RULE_TIMEOUTS,
+          lineAt(sql, stmtTimeout.start),
+          "a statement_timeout value other than '5s' needs a same-line justification comment (`-- reason`)",
+        ),
+      );
+    }
+  }
+  return findings;
+}
+
 function lintFile(file) {
   const sql = readFileSync(file, "utf8");
-  const findings = [];
-  for (const stmt of splitStatements(stripComments(sql))) {
+  const stmts = splitStatements(stripComments(sql));
+  const findings = [...checkTimeouts(sql, file.split("/").pop(), stmts)];
+  for (const stmt of stmts) {
     const masked = maskLiterals(stmt.text);
     findings.push(...checkMoney(masked, sql, stmt.start));
     findings.push(...checkIdDefault(masked, sql, stmt.start));

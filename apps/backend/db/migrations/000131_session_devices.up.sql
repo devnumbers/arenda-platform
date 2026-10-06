@@ -1,3 +1,6 @@
+SET lock_timeout = '1s';
+SET statement_timeout = '5s';
+
 -- Devices on sessions (map #724, ticket #728): every session carries the
 -- client description captured once at creation (raw User-Agent, parsed device
 -- type, browser + major, OS), the most recent client IP and its GeoIP city,

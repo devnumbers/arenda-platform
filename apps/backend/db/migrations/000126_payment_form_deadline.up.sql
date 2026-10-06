@@ -1,3 +1,6 @@
+SET lock_timeout = '1s';
+SET statement_timeout = '5s';
+
 -- Pending-payment form TTL (issue #616): the absolute instant a
 -- customer-initiated payment's payer form closes — the module's PaymentFormTTL
 -- computed at initiation and passed to the provider as the same RedirectDueDate.

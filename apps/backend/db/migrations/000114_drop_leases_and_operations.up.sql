@@ -1,3 +1,6 @@
+SET lock_timeout = '1s';
+SET statement_timeout = '5s';
+
 -- Drops the leases context data and schema entirely (issue #438, spec #434):
 -- reminders with their send-audit tables first (FK), then operations,
 -- recurring operations and categories, then leases and tenant contacts.

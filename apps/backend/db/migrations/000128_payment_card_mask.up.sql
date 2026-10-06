@@ -1,3 +1,6 @@
+SET lock_timeout = '1s';
+SET statement_timeout = '5s';
+
 -- Card snapshot of a subscription payment (issue #619): the masked card
 -- number the payment was charged with, taken at creation (the
 -- merchant-initiated method being charged) or at finalization (the card the

@@ -1,3 +1,6 @@
+SET lock_timeout = '1s';
+SET statement_timeout = '5s';
+
 -- One pending payment form per user (issue #690, the #681 backstop): at most
 -- one pending payment with a payer form per user, whatever the tariff and
 -- period — the durable schema truth behind the application-level

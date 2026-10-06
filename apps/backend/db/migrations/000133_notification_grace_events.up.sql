@@ -1,3 +1,6 @@
+SET lock_timeout = '1s';
+SET statement_timeout = '5s';
+
 -- 000133: grace-события в ленте (карта #734, #741).
 -- Перевод grace-уведомлений billing (#253) с прямого канала на пайплайн
 -- лента + очередь: событиям нужны значения notification_event_type.

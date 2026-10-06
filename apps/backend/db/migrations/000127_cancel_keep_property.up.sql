@@ -1,3 +1,6 @@
+SET lock_timeout = '1s';
+SET statement_timeout = '5s';
+
 -- Cancel keep choice (issue #617): the property the owner chose to keep when
 -- cancelling — the expiry worker keeps it alive when the cancelled
 -- subscription falls to the basic tariff and archives the excess ones. Nil

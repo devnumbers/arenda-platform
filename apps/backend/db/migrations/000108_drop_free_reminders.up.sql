@@ -1,3 +1,6 @@
+SET lock_timeout = '1s';
+SET statement_timeout = '5s';
+
 -- Contract phase of the FreeReminder removal (spec #380; decisions #268 —
 -- no data migration, #277 — this exact drop list). The code contract
 -- (#381/#382) is already deployed: nothing reads or writes free reminders

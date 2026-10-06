@@ -58,7 +58,7 @@ Adding a new bounded context — checklist:
 
 ## Migrations
 
-- Каждая up-миграция начинается с `SET lock_timeout = '1s'` и `SET statement_timeout` (дефолт 5s, выше — комментарий-обоснование); down зеркален; конвенция — с cutoff 000108 (#324, реестр: `docs/agents/tooling.md`).
+- Каждая up-миграция начинается с `SET lock_timeout = '1s'` и `SET statement_timeout` (дефолт 5s; отличное от 5s значение — с комментарием-обоснованием в той же строке); down зеркален; конвенция — с cutoff 000108 (#324; гейт `migration-timeouts` в `make migrations-lint`, реестр: `docs/agents/tooling.md`).
 - Новая миграция проходит up→down→up цикл (`TestMigrationsUpDownUpCycle`, #316).
 - Destructive-схемные изменения — expand→contract (ADR 0024): авто-откат деплоя БД не откатывает; DROP старой SQL-функции в релизе переименования запрещён — старое имя живёт до contract-релиза с пин-тестом окна (#280, #897).
 - Номер миграции сверяется с активными ветками/ворктри до создания; migrations-lint дублей версий не ловит — при коллизии перенумеровывается своя ветка (#1049, #734).
