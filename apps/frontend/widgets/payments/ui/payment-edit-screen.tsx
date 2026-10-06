@@ -500,17 +500,26 @@ function PaymentEditForm({
         </TopNav>
         {/* КатегорияStep и подсказка поиска приносят свои отступы (шаг визарда
          * рассчитан на полноширинный контент) — обёртке паддинг не нужен.
-         * Заголовок и список — один блок: родительский gap-8 не должен
-         * разносить их. */}
-        {categorySearchOpen && categoryQuery === '' ? (
-          <CategorySearchHint text="Начните искать категорию" />
+         * Заголовок — только при закрытом поиске (макет 1049:46418,
+         * решение владельца 06.10): открытый поиск показывает подсказку
+         * или отфильтрованный список без заголовка. Заголовок и список —
+         * один блок: родительский gap-8 не должен разносить их. */}
+        {categorySearchOpen ? (
+          categoryQuery === '' ? (
+            <CategorySearchHint text="Начните искать категорию" />
+          ) : (
+            <CategoryStep
+              selectedSlug={selectedSlug}
+              onSelect={(slug) => update('categorySlug', slug)}
+              query={categoryQuery}
+            />
+          )
         ) : (
           <div>
             <WizardHeading title="Выберите категорию платежа" variant="h1" />
             <CategoryStep
               selectedSlug={selectedSlug}
               onSelect={(slug) => update('categorySlug', slug)}
-              query={categorySearchOpen ? categoryQuery : ''}
             />
           </div>
         )}

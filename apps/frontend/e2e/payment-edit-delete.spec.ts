@@ -179,6 +179,26 @@ test.describe('экран правки платежа', () => {
     await page.getByRole('button', { name: 'Поиск по категориям' }).click();
     await page.getByRole('searchbox', { name: 'Поиск по названиям категорий' }).fill('страх');
     await expect(page.getByRole('button', { name: 'Страхование', exact: true })).toBeVisible();
+    // В режиме поиска заголовка нет — как на шаге 1 визарда (макет
+    // 1049:46418, решение владельца 06.10).
+    await expect(
+      page.getByRole('heading', { name: 'Выберите категорию платежа' }),
+    ).toHaveCount(0);
+    // Пустой результат — тоже без заголовка.
+    await page.getByRole('searchbox', { name: 'Поиск по названиям категорий' }).fill('йцукен');
+    await expect(page.getByText('Ничего не нашлось')).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: 'Выберите категорию платежа' }),
+    ).toHaveCount(0);
+    // Крестик возвращает шаг — заголовок на месте.
+    await page.getByRole('button', { name: 'Очистить поиск' }).click();
+    await expect(
+      page.getByRole('heading', { name: 'Выберите категорию платежа' }),
+    ).toBeVisible();
+    // Вернуть поиск для замера шапки ниже.
+    await page.getByRole('button', { name: 'Поиск по категориям' }).click();
+    await page.getByRole('searchbox', { name: 'Поиск по названиям категорий' }).fill('страх');
+    await expect(page.getByRole('button', { name: 'Страхование', exact: true })).toBeVisible();
 
     // Поисковая шапка — канон TopNav variant="search": поле тянется ОТ
     // стрелки «Назад», а не под ней (баг приёмки #1069: без варианта
