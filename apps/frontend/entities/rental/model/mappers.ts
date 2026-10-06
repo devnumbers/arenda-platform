@@ -73,8 +73,11 @@ function mapRentPayment(dto: components['schemas']['RentalPaymentView']): Rental
   };
 }
 
-function mapNextPayment(dto: NextPaymentDto | undefined): RentalNextPayment | null {
-  return dto === undefined
+function mapNextPayment(dto: NextPaymentDto | null | undefined): RentalNextPayment | null {
+  // null — настоящий проводной null (нет будущего вхождения; ревизия #1161 —
+  // всегда null у завершённой): generated-тип несёт nullable через $ref
+  // потерянным, поэтому гасим и его.
+  return dto === null || dto === undefined
     ? null
     : {
         operationId: dto.operationId,

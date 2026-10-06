@@ -321,9 +321,11 @@ func (s *PaymentService) DeletePayment(
 		func(
 			ctx context.Context, stores *txStores, scope uuid.UUID, rule domain.Payment, today time.Time,
 		) (mutationOutcome[domain.Payment], error) {
-			// The rentals RESTRICT FK forbids the direct delete for any
-			// rental state — the gate states the same in the domain's own
-			// words (ticket #818): delete the rental, the payment follows.
+			// The rentals RESTRICT FK forbids the direct delete while a
+			// rental references the rule — the gate states the same in the
+			// domain's own words (ticket #818): delete the rental first, the
+			// payment follows. A completed rental holds no link since the
+			// revision #1161 — its payment is already gone.
 			if err := ensureNotRentalManaged(ctx, stores, scope, rule.ID); err != nil {
 				return mutationOutcome[domain.Payment]{}, err
 			}

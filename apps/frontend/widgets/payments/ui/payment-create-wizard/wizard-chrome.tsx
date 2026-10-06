@@ -17,22 +17,35 @@ import {
 
 /**
  * Общий хром шагов визарда создания платежа (#464): заголовок шага
- * (Figma Heading 699:8717 — H3 20/24 + подзаголовок 14/16), нижняя
- * панель действия над StickyBottomBar, подсказка открытого поиска
- * (Figma 1049:46256 — иллюстрация 128 + текст 16/18) и денежное поле
- * шага суммы (карта #1005) — компонентами делится визард операции.
+ * (Figma Heading 699:8717 — H3 20/24 + подзаголовок; вариант 'h1' —
+ * обновлённый хедер H1/600 Onest SemiBold 28/32 без подзаголовка, только
+ * у платёжных поверхностей выбора категории — спека research #1149,
+ * Figma 1049:34768, тикет #1152; у операции откатен к H3, решение
+ * владельца 06.10), нижняя панель действия над StickyBottomBar, подсказка
+ * открытого поиска (Figma 1049:46256 — иллюстрация 128 + текст 16/18) и
+ * денежное поле шага суммы (карта #1005) — компонентами делится визард
+ * операции.
  */
 
 export function WizardHeading({
   title,
   subtitle,
+  variant = 'h3',
 }: {
   readonly title: string;
   readonly subtitle?: string;
+  /** 'h1' — обновлённый хедер платёжных страниц выбора категории:
+   * Service/Heading/H1/600 28/32 (text-2xl в этом проекте = 28/32,
+   * app/globals.css); дефолт 'h3' — прежние заголовки шагов 20/24. */
+  readonly variant?: 'h1' | 'h3';
 }): JSX.Element {
+  const headingClass =
+    variant === 'h1'
+      ? 'text-2xl font-semibold leading-8 text-content'
+      : 'text-xl font-semibold leading-6 text-content';
   return (
     <div className="flex flex-col gap-2 px-6 pt-6">
-      <h1 className="m-0 text-xl font-semibold leading-6 text-content">{title}</h1>
+      <h1 className={'m-0 ' + headingClass}>{title}</h1>
       {subtitle !== undefined && (
         <p className="text-sm leading-4 text-content-secondary">{subtitle}</p>
       )}

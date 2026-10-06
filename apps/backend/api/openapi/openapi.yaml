@@ -8474,14 +8474,19 @@ components:
         Состояние Платежа арендной платы: рендер читается из платежа — дня
         оплаты на аренде нет (решение №5). paymentId — переход на экран
         платежа с детализации аренды (#531): платеж не ищется слагом
-        категории, на объекте бывают и другие платежи rent.
+        категории, на объекте бывают и другие платежи rent. Ревизия #1161:
+        у завершённой аренды платёж удалён — paymentId null, а сумма и день
+        оплаты приходят из Архива условий на аренде; nextPayment всегда null.
       type: object
       required: [paymentId, amountKopecks, paymentDay, autoPay]
       properties:
         paymentId:
           type: string
           format: uuid
-          description: Управляемый арендой Платёж — связь 1:1 (ADR 0053 §1).
+          nullable: true
+          description: >-
+            Управляемый арендой Платёж — связь 1:1 (ADR 0053 §1); null у
+            завершённой аренды — платёж удалён при Завершении (ревизия #1161).
         amountKopecks:
           type: integer
           format: int64

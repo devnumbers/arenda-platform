@@ -181,17 +181,25 @@ export function PaymentCreateWizardFlow({
         {step === 1 && (
           <>
             {/* Открытый поиск меняет контент (Figma 1049:46256/46418):
-                пустой запрос — иллюстрация-подсказка вместо списка и
-                заголовка; с запросом — отфильтрованный список. */}
-            {categorySearchOpen && categoryQuery === '' ? (
-              <CategorySearchHint text="Начните искать категорию" />
-            ) : (
-              <>
-                <WizardHeading title="Категория платежа" subtitle="Выберите категорию" />
+                заголовок — только при закрытом поиске; с открытым — пустой
+                запрос даёт иллюстрацию-подсказку, запрос — отфильтрованный
+                список без заголовка (решение владельца 06.10, #1152). */}
+            {categorySearchOpen ? (
+              categoryQuery === '' ? (
+                <CategorySearchHint text="Начните искать категорию" />
+              ) : (
                 <CategoryStep
                   selectedSlug={draft.categorySlug}
                   onSelect={(slug) => setDraft((prev) => ({ ...prev, categorySlug: slug }))}
-                  query={categorySearchOpen ? categoryQuery : ''}
+                  query={categoryQuery}
+                />
+              )
+            ) : (
+              <>
+                <WizardHeading title="Выберите категорию платежа" variant="h1" />
+                <CategoryStep
+                  selectedSlug={draft.categorySlug}
+                  onSelect={(slug) => setDraft((prev) => ({ ...prev, categorySlug: slug }))}
                 />
               </>
             )}

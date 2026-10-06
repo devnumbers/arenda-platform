@@ -1,7 +1,6 @@
 import { fullMonthsBetween, type IsoDate } from '@/shared/lib/calendar';
 import { formatDayMonthWithYear } from '@/shared/lib/date-format';
 import { monthsWord } from '@/shared/lib/months-word';
-import type { PaymentOperationOrder } from '@/shared/api/query-keys';
 import type { Rental } from '@/entities/rental';
 import { rentAmountPerMonth, type RentalTermsRow } from './rental-view';
 
@@ -75,21 +74,4 @@ export function pastRentalRows(rental: Rental): ReadonlyArray<RentalTermsRow> {
       value: pastRentalEndDate(rental),
     },
   ];
-}
-
-/** Порядковый номер платежа в истории (#535, «24-й платеж»): нумерация
- * по дате вхождения, сначала старые; итог оплаченных — progress.paidMonths
- * аренды, при рассинхроне номер не опускается ниже единицы. */
-export function paidPaymentNumber(
-  index: number,
-  paidTotal: number,
-  order: PaymentOperationOrder,
-): number {
-  const number = order === 'asc' ? index + 1 : paidTotal - index;
-  return Math.max(1, number);
-}
-
-/** Подпись строки истории: «24-й платеж» — цифровое порядковое, «-й» для всех. */
-export function paymentOrdinalLabel(number: number): string {
-  return `${number}-й платеж`;
 }

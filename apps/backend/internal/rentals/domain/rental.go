@@ -36,14 +36,21 @@ func (u Utilities) Valid() bool {
 
 // Rental is the period of a property's occupancy with its terms (CONTEXT.md
 // «Аренда»). The stored status is the completion fact only (решение №1);
-// the other three are computed by StatusOf. The payment day lives in the
-// managed rent payment's recurrence (решение №5) — the rental carries no
-// copy; the rent payment's id is the 1:1 link (NOT NULL, UNIQUE).
+// the other three are computed by StatusOf. While the rental runs, the
+// payment day lives in the managed rent payment's recurrence (решение №5) —
+// the rental carries no copy; the rent payment's id is the 1:1 link.
 type Rental struct {
-	ID         uuid.UUID
-	OwnerID    uuid.UUID
+	ID      uuid.UUID
+	OwnerID uuid.UUID
+	// PropertyID is the rental's property (the denormalized OwnerID rides
+	// beside it, ADR 0028).
 	PropertyID uuid.UUID
-	PaymentID  uuid.UUID
+	// PaymentID is the 1:1 link to the managed rent payment; nil once the
+	// completion deleted the payment (ревизия ADR 0053 #1161: Завершение
+	// снимает ссылку в той же транзакции; RESTRICT FK держит платёж, пока
+	// ссылка жива). The schema CHECK keeps the link present exactly on an
+	// unfinished rental.
+	PaymentID *uuid.UUID
 	// ContactID is the optional tenant reference; after the contact's
 	// deletion the link is NULL and the tenant is simply absent (решение
 	// #528).
@@ -63,6 +70,12 @@ type Rental struct {
 	// only (the schema CHECKs keep that); a zero sum is valid («не вернул»).
 	DepositReturnKopecks *int64
 	DepositReturnComment *string
+	// TermsArchive is the completion's snapshot of the deleted rent payment's
+	// terms («Архив условий», ревизия #1161): the completed rental's only
+	// source for «Арендная плата», «День оплаты» and the term math; nil while
+	// the rental runs and the live payment carries the terms. The schema
+	// CHECK keeps the archive present exactly on a completed rental.
+	TermsArchive *TermsArchive
 	// Comment is the free-text terms note, at most 2000 characters.
 	Comment string
 	// Tenant is the embedded tenant view, resolved by the persistence
@@ -74,6 +87,17 @@ type Rental struct {
 	// trigger-maintained on write).
 	CreatedAt time.Time
 	UpdatedAt time.Time
+}
+
+// TermsArchive is the completion's snapshot of the managed payment's terms
+// («Архив условий» словаря, ревизия ADR 0053 #1161): the amount, the payment
+// day and the auto-pay as the payment carried them when the completion
+// deleted it. The payment day keeps the 1..31 contract spelling — 31 is the
+// «последний день месяца» marker, the same behaviour (решение №5).
+type TermsArchive struct {
+	AmountKopecks int64
+	PaymentDay    PaymentDay
+	AutoPay       bool
 }
 
 // TenantContact is the embedded tenant view (ADR 0053 §4): the referenced

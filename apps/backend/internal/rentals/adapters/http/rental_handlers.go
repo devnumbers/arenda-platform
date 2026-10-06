@@ -593,8 +593,15 @@ func rentalResponse(view rentalsapp.RentalView) (openapi.RentalResponse, error) 
 	if err != nil {
 		return openapi.RentalResponse{}, err
 	}
+	// Ревизия #1161: у завершённой аренды платёж удалён — идентификатора
+	// нет (wire null), а условия рендерятся из Архива условий; uuid.Nil —
+	// маркер отсутствия живой ссылки.
+	var paymentID *openapi_types.UUID
+	if view.Payment.PaymentID != uuid.Nil {
+		paymentID = &view.Payment.PaymentID
+	}
 	response.RentPayment = openapi.RentalPaymentView{
-		PaymentId:     view.Payment.PaymentID,
+		PaymentId:     paymentID,
 		AmountKopecks: view.Payment.AmountKopecks,
 		PaymentDay:    paymentDay,
 		AutoPay:       view.Payment.AutoPay,

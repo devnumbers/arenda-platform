@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
 	realtimeapp "github.com/nambers/arenda-planform/apps/backend/internal/realtime/application"
@@ -252,7 +253,7 @@ func (s *RentalService) CreateRental(
 				ID:                rentalID,
 				OwnerID:           scope,
 				PropertyID:        propertyID,
-				PaymentID:         paymentID,
+				PaymentID:         &paymentID,
 				ContactID:         cmd.ContactID,
 				StartDate:         cmd.StartDate,
 				PlannedEndDate:    cmd.PlannedEndDate,
@@ -321,7 +322,11 @@ func (s *RentalService) ListRentals(
 	}
 	paymentIDs := make([]uuid.UUID, 0, len(rentals))
 	for _, r := range rentals {
-		paymentIDs = append(paymentIDs, r.PaymentID)
+		// A completed rental's payment is deleted (ревизия #1161) — the nil
+		// link contributes no id; its view assembles from the terms archive.
+		if r.PaymentID != nil {
+			paymentIDs = append(paymentIDs, *r.PaymentID)
+		}
 	}
 	// A payment with no operations is absent from the batch — the lookup
 	// below defaults its zeros; the empty list never reaches the query.
@@ -334,7 +339,11 @@ func (s *RentalService) ListRentals(
 	}
 	views := make([]RentalView, 0, len(rentals))
 	for _, r := range rentals {
-		view, err := s.assembleView(ctx, scope, propertyID, r, today, counts[r.PaymentID])
+		var paid ProgressCounts
+		if r.PaymentID != nil {
+			paid = counts[*r.PaymentID]
+		}
+		view, err := s.assembleView(ctx, scope, propertyID, r, today, paid)
 		if err != nil {
 			return nil, err
 		}
@@ -397,7 +406,7 @@ func (s *RentalService) updatedRentalOutcome(
 		}
 	}
 	if paymentChanged {
-		if err := stores.pay.Update(ctx, scope, propertyID, rental.PaymentID, change, today); err != nil {
+		if err := stores.pay.Update(ctx, scope, propertyID, *rental.PaymentID, change, today); err != nil {
 			return mutationOutcome{}, fmt.Errorf("sync rent payment: %w", err)
 		}
 	}
@@ -427,12 +436,17 @@ func (s *RentalService) updatedRentalOutcome(
 	}, nil
 }
 
-// CompleteRental records the completion (решение №8): the factual date within
-// [start, today], the optional deposit return, and the managed payment
-// stopped at the completion date — end_date moves there, the
-// strictly-after-completion planned goes, the already due stays with the
-// owner. The change step resolves the payment's plan itself; no tick runs. A
-// second completion is ErrRentalCompleted (the 409).
+// CompleteRental records the completion (решение №8, ревизия ADR 0053
+// #1161): the factual date within [start, today], the optional deposit
+// return, and the managed payment deleted in the same transaction with the
+// keep_overdue semantics — the planned from the owner's today goes, the
+// overdue survives the payment as the property's debt, the paid operations
+// stay in the property's history. The payment's terms are archived on the
+// rental (the terms archive) and the payment link is released before the
+// payment row goes (the RESTRICT FK). The change step resolves the payment's
+// plan itself; no tick runs. A second completion is ErrRentalCompleted (the
+// 409). The compound mutation journals both rows: rental.completed and
+// payment.deleted.
 func (s *RentalService) CompleteRental(
 	ctx context.Context, actor, propertyID, rentalID uuid.UUID, cmd CompleteRentalCommand,
 ) (RentalView, error) {
@@ -443,17 +457,33 @@ func (s *RentalService) CompleteRental(
 			if rental.CompletedDate != nil {
 				return mutationOutcome{}, ErrRentalCompleted
 			}
+			if rental.PaymentID == nil {
+				// The schema CHECK keeps a payment link on every unfinished
+				// rental; reaching this line means the durable invariant and
+				// the app disagree — refuse rather than dereference.
+				return mutationOutcome{}, errors.New("complete rental: unfinished rental without managed payment")
+			}
 			if err := validateCompletedDate(cmd.CompletedDate, rental.StartDate, today); err != nil {
 				return mutationOutcome{}, err
 			}
 			if err := validateDepositReturn(cmd.DepositReturn); err != nil {
 				return mutationOutcome{}, err
 			}
-			if err := stores.pay.Stop(ctx, scope, propertyID, rental.PaymentID, cmd.CompletedDate); err != nil {
-				return mutationOutcome{}, fmt.Errorf("stop rent payment: %w", err)
+			paymentID := *rental.PaymentID
+			terms, err := stores.pay.State(ctx, scope, propertyID, paymentID)
+			if err != nil {
+				return mutationOutcome{}, fmt.Errorf("read rent payment terms: %w", err)
 			}
-			if err := stores.rentals.Complete(ctx, rental.ID, scope, cmd.CompletedDate, cmd.DepositReturn); err != nil {
+			if err := stores.rentals.Complete(ctx, rental.ID, scope, cmd.CompletedDate,
+				cmd.DepositReturn, domain.TermsArchive{
+					AmountKopecks: terms.AmountKopecks,
+					PaymentDay:    terms.PaymentDay,
+					AutoPay:       terms.AutoPay,
+				}); err != nil {
 				return mutationOutcome{}, fmt.Errorf("complete rental: %w", err)
+			}
+			if err := stores.pay.Delete(ctx, scope, paymentID, today); err != nil {
+				return mutationOutcome{}, fmt.Errorf("delete rent payment: %w", err)
 			}
 			tenantName, err := s.tenantName(ctx, scope, rental.ContactID)
 			if err != nil {
@@ -463,11 +493,23 @@ func (s *RentalService) CompleteRental(
 				RentalID: rental.ID,
 				Audit:    auditActionRentalCompleted,
 				History:  new(historydomain.RentalCompleted(rental.ID, tenantName)),
+				// The compound mutation's payment half (ревизия #1161): the
+				// same keep_overdue verdict the payments deletion audits.
+				ExtraAudit: []auditdomain.Entry{{
+					Action:     auditdomain.ActionPaymentDeleted,
+					EntityType: auditdomain.EntityPayment,
+					EntityID:   &paymentID,
+					Context:    map[string]any{"keep_overdue": true},
+				}},
+				ExtraHistory: []*historydomain.Entry{
+					new(historydomain.PaymentDeleted(paymentID, terms.Title)),
+				},
 				Changed: []realtimedom.Change{
 					realtimedom.On(realtimedom.EntityRentals, propertyID),
-					realtimedom.On(realtimedom.EntityPayments, propertyID), // The managed payment stopped at the completion date.
+					realtimedom.On(realtimedom.EntityPayments, propertyID), // The managed payment died with the completion.
+					realtimedom.On(realtimedom.EntityOperations, propertyID),
 				},
-				Tick: false,
+				Tick: false, // The change step resolved the plan itself.
 			}
 			if cmd.DepositReturn != nil {
 				out.AuditCtx = map[string]any{"fields": []string{"deposit_return"}}
@@ -484,13 +526,15 @@ func (s *RentalService) CompleteRental(
 	return s.loadView(ctx, scope, propertyID, rentalID)
 }
 
-// DeleteRental hard-deletes the rental together with its managed payment
-// (решение №10, ADR 0053 §3) — only for a completed rental or a not-yet-
-// started one (start_date > today: передумал до старта, все planned будущие
-// и сносятся чисто). A started unfinished rental can only go through the
-// completion (ErrRentalStarted, the 409). The rentals row goes first (the
-// RESTRICT FK releases the payment only afterwards); the overdue planned
-// stays as debt (the keep_overdue=true semantics). Deletion is Owner-only.
+// DeleteRental hard-deletes the rental (решение №10, ADR 0053 §3; уточнено
+// ревизией #1161) — only for a completed rental or a not-yet-started one
+// (start_date > today: передумал до старта, все planned будущие и сносятся
+// чисто). A started unfinished rental can only go through the completion
+// (ErrRentalStarted, the 409). The not-yet-started rental's managed payment
+// goes with it: the rentals row goes first (the RESTRICT FK releases the
+// payment only afterwards), the overdue planned stays as debt (the
+// keep_overdue=true semantics). A completed rental's payment died with the
+// completion — the link is nil and only the row goes. Deletion is Owner-only.
 func (s *RentalService) DeleteRental(
 	ctx context.Context, actor, propertyID, rentalID uuid.UUID,
 ) error {
@@ -504,8 +548,14 @@ func (s *RentalService) DeleteRental(
 			if err := stores.rentals.Delete(ctx, rental.ID, scope); err != nil {
 				return mutationOutcome{}, fmt.Errorf("delete rental: %w", err)
 			}
-			if err := stores.pay.Delete(ctx, scope, rental.PaymentID, today); err != nil {
-				return mutationOutcome{}, fmt.Errorf("delete rent payment: %w", err)
+			// The completed rental's payment died with the completion
+			// (ревизия #1161) — the link is nil and there is nothing left to
+			// delete; the not-yet-started rental's payment goes with it (the
+			// rentals row has already released the RESTRICT FK).
+			if rental.PaymentID != nil {
+				if err := stores.pay.Delete(ctx, scope, *rental.PaymentID, today); err != nil {
+					return mutationOutcome{}, fmt.Errorf("delete rent payment: %w", err)
+				}
 			}
 			tenantName, err := s.tenantName(ctx, scope, rental.ContactID)
 			if err != nil {
@@ -572,7 +622,9 @@ func (s *RentalService) RentalSummary(
 
 // loadView re-reads the stored rental after commit and assembles the view.
 // The single view reads its progress counters per-rental — the batched
-// read (#845) carries only the list's.
+// read (#845) carries only the list's. A completed rental without a payment
+// (ревизия #1161) skips the payment-scoped counters: its paid months died
+// with the payment, its overdue is nobody's red line — the zeros pass.
 func (s *RentalService) loadView(
 	ctx context.Context, scope, propertyID, rentalID uuid.UUID,
 ) (RentalView, error) {
@@ -584,18 +636,19 @@ func (s *RentalService) loadView(
 	if err != nil {
 		return RentalView{}, err
 	}
-	paid, err := s.gateway.CountPaidOperations(ctx, scope, propertyID, rental.PaymentID)
-	if err != nil {
-		return RentalView{}, fmt.Errorf("count paid operations: %w", err)
+	counts := ProgressCounts{}
+	if rental.PaymentID != nil {
+		paid, err := s.gateway.CountPaidOperations(ctx, scope, propertyID, *rental.PaymentID)
+		if err != nil {
+			return RentalView{}, fmt.Errorf("count paid operations: %w", err)
+		}
+		overdue, err := s.gateway.CountOverdueOccurrences(ctx, scope, propertyID, *rental.PaymentID, today)
+		if err != nil {
+			return RentalView{}, fmt.Errorf("count overdue occurrences: %w", err)
+		}
+		counts = ProgressCounts{PaidCount: paid, OverdueCount: overdue}
 	}
-	overdue, err := s.gateway.CountOverdueOccurrences(ctx, scope, propertyID, rental.PaymentID, today)
-	if err != nil {
-		return RentalView{}, fmt.Errorf("count overdue occurrences: %w", err)
-	}
-	return s.assembleView(ctx, scope, propertyID, rental, today, ProgressCounts{
-		PaidCount:    paid,
-		OverdueCount: overdue,
-	})
+	return s.assembleView(ctx, scope, propertyID, rental, today, counts)
 }
 
 // assembleView computes everything the TZ-blind client renders (ADR 0053
@@ -603,21 +656,43 @@ func (s *RentalService) loadView(
 // operation, the «N из M» progress. The state and next-planned reads stay
 // per-rental; the progress counters arrive pre-read — the list carries them
 // in one batched GROUP BY over its payments (ticket #845), the single view
-// in its own per-rental pair.
+// in its own per-rental pair. A completed rental without a payment
+// (ревизия #1161) assembles from the terms archive: the render state and
+// the term math read the archived terms, there is no next payment and
+// PaymentID stays zero — the wire's null.
 func (s *RentalService) assembleView(
 	ctx context.Context, scope, propertyID uuid.UUID, rental domain.Rental, today time.Time,
 	counts ProgressCounts,
 ) (RentalView, error) {
-	state, err := s.gateway.RentPaymentState(ctx, scope, propertyID, rental.PaymentID)
-	if err != nil {
-		return RentalView{}, fmt.Errorf("rent payment state: %w", err)
+	var state RentPaymentState
+	if rental.PaymentID != nil {
+		var err error
+		state, err = s.gateway.RentPaymentState(ctx, scope, propertyID, *rental.PaymentID)
+		if err != nil {
+			return RentalView{}, fmt.Errorf("rent payment state: %w", err)
+		}
+		// Идентификатор управляемого платежа знает аренда (связь 1:1) —
+		// состояние рендера его только носит.
+		state.PaymentID = *rental.PaymentID
+	} else {
+		// Завершённая без платежа: условия — только Архив (схема держит его
+		// рядом с фактом завершения); платёжного идентификатора нет.
+		if rental.TermsArchive == nil {
+			return RentalView{}, errors.New("rent payment state: completed rental without terms archive")
+		}
+		state = RentPaymentState{
+			AmountKopecks: rental.TermsArchive.AmountKopecks,
+			PaymentDay:    rental.TermsArchive.PaymentDay,
+			AutoPay:       rental.TermsArchive.AutoPay,
+		}
 	}
-	// Идентификатор управляемого платежа знает аренда (связь 1:1) —
-	// состояние рендера его только носит.
-	state.PaymentID = rental.PaymentID
-	next, err := s.gateway.NextPlannedOccurrence(ctx, scope, propertyID, rental.PaymentID, today)
-	if err != nil {
-		return RentalView{}, fmt.Errorf("next planned occurrence: %w", err)
+	var next *PlannedOccurrence
+	if rental.PaymentID != nil {
+		var err error
+		next, err = s.gateway.NextPlannedOccurrence(ctx, scope, propertyID, *rental.PaymentID, today)
+		if err != nil {
+			return RentalView{}, fmt.Errorf("next planned occurrence: %w", err)
+		}
 	}
 	// Серверная просрочка (#817, ADR 0053 §2 — всё считает сервер): счётчик
 	// planned-вхождений раньше «сегодня» собственника; ноль — null.

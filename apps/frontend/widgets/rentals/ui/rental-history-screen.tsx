@@ -5,18 +5,18 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
-import { dateToIsoLocal } from '@/shared/lib/calendar';
+import { dateToIsoLocal, type IsoDate } from '@/shared/lib/calendar';
+import { formatDayMonthWithYear } from '@/shared/lib/date-format';
 import {
   PaymentRowButton,
   type PaymentOperation,
 } from '@/entities/payment';
-import { paidPaymentNumber, paymentOrdinalLabel, useRentals } from '@/features/rentals';
+import { completedRentalOperationsScope, useRentals } from '@/features/rentals';
 import { CategoryIcon, categoryStyle } from '@/features/payment-categories';
-import { OPERATIONS_FEED_SORT } from '@/shared/api/query-keys';
 import {
   groupPaidOperations,
   useHistoryOrder,
-  usePaymentOperationsPaged,
+  usePropertyOperationsScopedPaged,
   HistoryOrderChip,
   type HistoryOrder,
 } from '@/features/payments';
@@ -32,16 +32,17 @@ import {
 import { RentalHistoryFeedSkeleton } from './rental-skeletons';
 
 /**
- * «История операций» завершённой аренды (#535, Figma 1302:52209):
- * paid-вхождения Платежа арендной платы, группы по дате оплаты (сорт
- * сервера sort=paid_date — решение владельца 30.09, дополнение #994,
- * как в истории платежа #466), чип «Сначала новые» переключает
- * сортировку (серверная — порядок закреплён за API, порции по 50 с
- * бесконечным скроллом — канон #452); направление живёт в адресе
+ * «История операций» завершённой аренды (#535, Figma 1302:52209; ревизия
+ * #1161): Платёж арендной платы удалён Завершением, источником служат
+ * операции объекта за период аренды [начало, дата завершения] — тот же
+ * источник, что у «Итогов аренды» (период фильтруется серверно по дате
+ * вхождения). Группы по дате оплаты строки, чип «Сначала новые»
+ * переключает сортировку (серверная — порядок закреплён за API, порции по
+ * 50 с бесконечным скроллом — канон #452); направление живёт в адресе
  * (?order=asc, дефолт не пишется, #785) — переживает перезагрузку.
- * Подзаголовок строки — порядковый номер платежа: нумерация следует
- * порядку оплат на экране (решение владельца, дополнение #994 — без
- * плановой раскладки), итог оплаченных — progress.paidMonths аренды.
+ * Подзаголовок строки — дата оплаты: в списке соседствуют операции любых
+ * платежей и ручные, порядковая нумерация «N-й платеж» чужие строки
+ * метила бы неверно.
  */
 export function RentalHistoryScreen({
   propertyId,
@@ -58,19 +59,17 @@ export function RentalHistoryScreen({
   const { order, toggleOrder } = useHistoryOrder(initialOrder);
   const rentalsQuery = useRentals(propertyId);
   const rental = rentalsQuery.data?.find((item) => item.id === rentalId);
-  const historyQuery = usePaymentOperationsPaged(
+  // Запрос глушится, пока аренда не найдена: без её дат период не собрать.
+  const historyQuery = usePropertyOperationsScopedPaged(
     propertyId,
-    rental?.rentPayment.paymentId ?? '',
-    { status: 'paid', order, sort: OPERATIONS_FEED_SORT },
+    // Скоуп собирается только при найденной аренде: без её дат период не
+    // собрать — запрос глушится enabled'ом ниже.
+    completedRentalOperationsScope(rental, order),
+    { enabled: rental !== undefined },
   );
 
   const operations = historyQuery.data ?? [];
   const groups = groupPaidOperations(operations, dateToIsoLocal(new Date()));
-  // Итог оплаченных сервер считает по TZ собственника; рассинхрон с длиной
-  // списка гасится в paidPaymentNumber.
-  const paidTotal = Math.max(rental?.progress.paidMonths ?? 0, operations.length);
-  // Позиция вхождения в общем desc/asc-списке — для порядкового номера.
-  const positionById = new Map(operations.map((operation, index) => [operation.id, index]));
 
   const back = (): void =>
     goBack(
@@ -161,11 +160,7 @@ export function RentalHistoryScreen({
                         <HistoryRow
                           key={operation.id}
                           operation={operation}
-                          ordinal={paidPaymentNumber(
-                            positionById.get(operation.id) ?? 0,
-                            paidTotal,
-                            order,
-                          )}
+                          today={dateToIsoLocal(new Date())}
                           onSelect={() =>
                             router.push(ROUTES.propertyOperation(propertyId, operation.id))
                           }
@@ -192,15 +187,15 @@ function GroupHeading({ children }: { readonly children: ReactNode }): JSX.Eleme
 }
 
 /** Строка истории аренды (1302:52209): иконка категории с белым кантом,
- * название, порядковый номер платежа; сумма знаковая — доход зелёным
- * с плюсом. Тап — страница операции. */
+ * название, дата оплаты строки (фактическая, с плановой в запасе);
+ * сумма знаковая — доход зелёным с плюсом. Тап — страница операции. */
 function HistoryRow({
   operation,
-  ordinal,
+  today,
   onSelect,
 }: {
   readonly operation: PaymentOperation;
-  readonly ordinal: number;
+  readonly today: IsoDate;
   readonly onSelect?: () => void;
 }): JSX.Element {
   const style = categoryStyle('default', operation.categorySlug);
@@ -209,7 +204,7 @@ function HistoryRow({
       className="px-3 py-3"
       categoryIcon={<CategoryIcon icon={style.icon} color={style.color} surface="white" />}
       title={operation.title}
-      subtitle={paymentOrdinalLabel(ordinal)}
+      subtitle={formatDayMonthWithYear(operation.paidDate ?? operation.date, today)}
       amountKopecks={
         operation.type === 'expense' ? -operation.amountKopecks : operation.amountKopecks
       }

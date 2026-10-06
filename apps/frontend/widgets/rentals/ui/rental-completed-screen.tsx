@@ -4,13 +4,13 @@ import { useEffect, useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { ArrowLeft, Key, TrashBin } from '@/shared/assets/icons';
-import { OPERATIONS_FEED_SORT } from '@/shared/api/query-keys';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { formatDayMonthWithYear } from '@/shared/lib/date-format';
 import type { IsoDate } from '@/shared/lib/calendar';
 import { notify } from '@/shared/lib/notifications';
 import {
+  completedRentalOperationsScope,
   pastRentalCardTitle,
   pastRentalTitle,
   rentalTeaserRows,
@@ -18,7 +18,7 @@ import {
   useDeleteRental,
   useRentals,
 } from '@/features/rentals';
-import { usePaymentOperationsPaged } from '@/features/payments';
+import { usePropertyOperationsScopedPaged } from '@/features/payments';
 import { useProperty } from '@/features/properties';
 import { propertyPermissions } from '@/entities/property';
 import { CategoryIcon, categoryStyle } from '@/features/payment-categories';
@@ -137,17 +137,17 @@ function RentalCompletedBody({
   const canMutate = propertyPermissions(
     propertyQuery.isSuccess ? propertyQuery.data : undefined,
   ).canEdit;
-  const deleteRental = useDeleteRental(propertyId, rental.id, rental.rentPayment.paymentId);
+  const deleteRental = useDeleteRental(propertyId, rental.id);
 
-  // История карточки — платёжные факты платежа аренды: сорт и даты строк
-  // по факту оплаты (sort=paid_date, решение владельца 30.09, дополнение
-  // #994 — та же семантика, что у полной истории #535); сначала новые;
-  // полной ленты здесь не нужно — первые порции.
-  const operationsQuery = usePaymentOperationsPaged(propertyId, rental.rentPayment.paymentId, {
-    status: 'paid',
-    order: 'desc',
-    sort: OPERATIONS_FEED_SORT,
-  });
+  // История карточки (ревизия #1161) — платёж удалён Завершением, источником
+  // служат операции объекта за период аренды, тот же источник, что у «Итогов
+  // аренды»: paid-факты с датой вхождения в [начало, дата завершения],
+  // период фильтруется серверно; сначала новые; полной ленты здесь не
+  // нужно — первые порции.
+  const operationsQuery = usePropertyOperationsScopedPaged(
+    propertyId,
+    completedRentalOperationsScope(rental, 'desc'),
+  );
 
   const operations = operationsQuery.data ?? [];
   const tenant = rental.tenant;
@@ -283,7 +283,9 @@ function RentalCompletedBody({
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
         title="Удалить аренду?"
-        description="Аренда и её платеж будут удалены. Операции останутся в истории объекта."
+        // Ревизия #1161: платёж завершённой уже удалён Завершением — сносится
+        // только аренда, операции остаются в истории объекта.
+        description="Аренда будет удалена. Операции останутся в истории объекта."
         confirmLabel="Удалить"
         cancelLabel="Отмена"
         confirmVariant="danger"

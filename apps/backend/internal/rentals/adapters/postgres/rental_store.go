@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/rentals/application"
@@ -63,7 +64,11 @@ func (s *RentalStore) Get(ctx context.Context, id, scope, propertyID uuid.UUID) 
 		}
 		return domain.Rental{}, fmt.Errorf("get rental %s: %w", id, err)
 	}
-	return mapRentalRow(rentalFieldsFromGet(row)), nil
+	rental, err := mapRentalRow(rentalFieldsFromGet(row))
+	if err != nil {
+		return domain.Rental{}, fmt.Errorf("map rental %s: %w", id, err)
+	}
+	return rental, nil
 }
 
 // ListByProperty returns the property's rentals: unfinished first (newest
@@ -80,7 +85,11 @@ func (s *RentalStore) ListByProperty(
 	}
 	rentals := make([]domain.Rental, 0, len(rows))
 	for _, row := range rows {
-		rentals = append(rentals, mapRentalRow(rentalFieldsFromList(row)))
+		rental, err := mapRentalRow(rentalFieldsFromList(row))
+		if err != nil {
+			return nil, fmt.Errorf("map rental of property %s: %w", propertyID, err)
+		}
+		rentals = append(rentals, rental)
 	}
 	return rentals, nil
 }
@@ -91,7 +100,7 @@ func (s *RentalStore) Create(ctx context.Context, r domain.Rental) error {
 		ID:                pgconv.UUIDToPgtype(r.ID),
 		OwnerID:           pgconv.UUIDToPgtype(r.OwnerID),
 		PropertyID:        pgconv.UUIDToPgtype(r.PropertyID),
-		PaymentID:         pgconv.UUIDToPgtype(r.PaymentID),
+		PaymentID:         pgconv.UUIDToPgtypePtr(r.PaymentID),
 		ContactID:         pgconv.UUIDToPgtypePtr(r.ContactID),
 		StartDate:         pgconv.DateToPgtype(r.StartDate),
 		PlannedEndDate:    pgconv.DatePtrToPgtype(r.PlannedEndDate),
@@ -125,10 +134,13 @@ func (s *RentalStore) Update(ctx context.Context, r domain.Rental) error {
 	return nil
 }
 
-// Complete writes the completion fact and the optional deposit return in one
-// UPDATE; rows affected is not checked for the same reason as Update.
+// Complete writes the completion fact, the optional deposit return and the
+// terms archive in one UPDATE and releases the payment link (the payment
+// dies in the same transaction, ревизия #1161); rows affected is not checked
+// for the same reason as Update.
 func (s *RentalStore) Complete(
-	ctx context.Context, id, scope uuid.UUID, completedDate time.Time, depositReturn *application.DepositReturn,
+	ctx context.Context, id, scope uuid.UUID, completedDate time.Time,
+	depositReturn *application.DepositReturn, archived domain.TermsArchive,
 ) error {
 	var amount *int64
 	var comment *string
@@ -136,16 +148,53 @@ func (s *RentalStore) Complete(
 		amount = &depositReturn.AmountKopecks
 		comment = depositReturn.Comment
 	}
+	day := paymentDayCode(archived.PaymentDay)
 	if _, err := s.q().CompleteRental(ctx, postgres.CompleteRentalParams{
 		ID:                   pgconv.UUIDToPgtype(id),
 		OwnerID:              pgconv.UUIDToPgtype(scope),
 		CompletedDate:        pgconv.DateToPgtype(completedDate),
 		DepositReturnKopecks: pgconv.Int8PtrToPgtype(amount),
 		DepositReturnComment: pgconv.StringPtrToPgtype(comment),
+		RentAmountKopecks:    pgconv.Int8PtrToPgtype(&archived.AmountKopecks),
+		RentPaymentDay:       pgconv.Int4PtrToPgtype(&day),
+		RentAutoPay:          pgtype.Bool{Bool: archived.AutoPay, Valid: true},
 	}); err != nil {
 		return fmt.Errorf("complete rental %s: %w", id, err)
 	}
 	return nil
+}
+
+// paymentDayCode encodes the domain payment day onto the archive column's
+// 1..31 spelling: the last-day marker stores as 31 — the two spellings are
+// one behaviour (решение №5).
+func paymentDayCode(d domain.PaymentDay) int {
+	if d.IsLast() {
+		return 31
+	}
+	return d.Day()
+}
+
+// termsArchivePresent reports the row carries the completion's archive: the
+// schema CHECK keeps the three columns present exactly together on a
+// completed rental, and a missing part (corrupt data the CHECK should have
+// caught) reads as no archive — the view layer fails loudly on it.
+func termsArchivePresent(amount pgtype.Int8, day pgtype.Int4, autoPay pgtype.Bool) bool {
+	return amount.Valid && day.Valid && autoPay.Valid
+}
+
+// termsArchiveFromRow decodes the archive columns onto the domain snapshot.
+// An out-of-range payment day is the durable invariant and the data
+// disagreeing — the read fails loudly, with the cause.
+func termsArchiveFromRow(amount pgtype.Int8, day pgtype.Int4, autoPay pgtype.Bool) (*domain.TermsArchive, error) {
+	paymentDay, err := domain.NewPaymentDay(int(day.Int32))
+	if err != nil {
+		return nil, fmt.Errorf("decode terms archive payment day %d: %w", day.Int32, err)
+	}
+	return &domain.TermsArchive{
+		AmountKopecks: amount.Int64,
+		PaymentDay:    paymentDay,
+		AutoPay:       autoPay.Bool,
+	}, nil
 }
 
 // Delete removes the rental row; it must run before the managed payment's own
@@ -183,13 +232,23 @@ func stringPtr(s string) *string {
 }
 
 // mapRentalRow projects a query row onto the domain rental, the tenant view
-// included.
-func mapRentalRow(row rentalRowFields) domain.Rental {
+// included. The error is the terms archive's payment-day decode: the column
+// is CHECK-constrained to 1..31, so a failure here means the durable
+// invariant and the data disagree — the read fails loudly with the cause.
+func mapRentalRow(row rentalRowFields) (domain.Rental, error) {
+	var archive *domain.TermsArchive
+	if termsArchivePresent(row.RentAmountKopecks, row.RentPaymentDay, row.RentAutoPay) {
+		var err error
+		archive, err = termsArchiveFromRow(row.RentAmountKopecks, row.RentPaymentDay, row.RentAutoPay)
+		if err != nil {
+			return domain.Rental{}, err
+		}
+	}
 	return domain.Rental{
 		ID:                   pgconv.UUIDFromPgtype(row.ID),
 		OwnerID:              pgconv.UUIDFromPgtype(row.OwnerID),
 		PropertyID:           pgconv.UUIDFromPgtype(row.PropertyID),
-		PaymentID:            pgconv.UUIDFromPgtype(row.PaymentID),
+		PaymentID:            pgconv.UUIDFromPgtypePtr(row.PaymentID),
 		ContactID:            pgconv.UUIDFromPgtypePtr(row.ContactID),
 		StartDate:            pgconv.DateFromPgtype(row.StartDate),
 		PlannedEndDate:       pgconv.DatePtrFromPgtype(row.PlannedEndDate),
@@ -199,11 +258,12 @@ func mapRentalRow(row rentalRowFields) domain.Rental {
 		CommissionKopecks:    pgconv.Int8ToPtr(row.CommissionKopecks),
 		DepositReturnKopecks: pgconv.Int8ToPtr(row.DepositReturnKopecks),
 		DepositReturnComment: pgconv.TextToPtrString(row.DepositReturnComment),
+		TermsArchive:         archive,
 		Comment:              pgconv.TextToString(row.Comment),
 		Tenant:               tenantFromRow(row),
 		CreatedAt:            pgconv.TimestamptzToTime(row.CreatedAt),
 		UpdatedAt:            pgconv.TimestamptzToTime(row.UpdatedAt),
-	}
+	}, nil
 }
 
 // tenantFromRow assembles the embedded tenant from the joined contact

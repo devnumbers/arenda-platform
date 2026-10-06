@@ -25,6 +25,9 @@ type rentalRowFields struct {
 	CommissionKopecks    pgtype.Int8
 	DepositReturnKopecks pgtype.Int8
 	DepositReturnComment pgtype.Text
+	RentAmountKopecks    pgtype.Int8
+	RentPaymentDay       pgtype.Int4
+	RentAutoPay          pgtype.Bool
 	Comment              pgtype.Text
 	CreatedAt            pgtype.Timestamptz
 	UpdatedAt            pgtype.Timestamptz
@@ -43,7 +46,9 @@ func rentalFieldsFromGet(row postgres.GetRentalByIDRow) rentalRowFields {
 		DepositKopecks: row.DepositKopecks, CommissionKopecks: row.CommissionKopecks,
 		DepositReturnKopecks: row.DepositReturnKopecks,
 		DepositReturnComment: row.DepositReturnComment,
-		Comment:              row.Comment, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
+		RentAmountKopecks:    row.RentAmountKopecks, RentPaymentDay: row.RentPaymentDay,
+		RentAutoPay: row.RentAutoPay,
+		Comment:     row.Comment, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
 		TenantFirstName: row.TenantFirstName, TenantLastName: row.TenantLastName,
 		TenantPhone: row.TenantPhone,
 	}
@@ -59,7 +64,9 @@ func rentalFieldsFromList(row postgres.ListRentalsByPropertyRow) rentalRowFields
 		DepositKopecks: row.DepositKopecks, CommissionKopecks: row.CommissionKopecks,
 		DepositReturnKopecks: row.DepositReturnKopecks,
 		DepositReturnComment: row.DepositReturnComment,
-		Comment:              row.Comment, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
+		RentAmountKopecks:    row.RentAmountKopecks, RentPaymentDay: row.RentPaymentDay,
+		RentAutoPay: row.RentAutoPay,
+		Comment:     row.Comment, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
 		TenantFirstName: row.TenantFirstName, TenantLastName: row.TenantLastName,
 		TenantPhone: row.TenantPhone,
 	}

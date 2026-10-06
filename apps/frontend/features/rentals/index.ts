@@ -10,6 +10,7 @@ export {
   useRentals,
   useUpdateRental,
 } from './api/hooks';
+export { completedRentalOperationsScope } from './lib/completed-operations';
 export {
   buildRentalCreateCommand,
   draftAfterStartChange,
@@ -68,9 +69,7 @@ export type { RentalTermsRow } from './lib/rental-view';
 export {
   completedRentalMonths,
   completedRentalsOf,
-  paidPaymentNumber,
   pastRentalCardTitle,
   pastRentalRows,
   pastRentalTitle,
-  paymentOrdinalLabel,
 } from './lib/past-model';

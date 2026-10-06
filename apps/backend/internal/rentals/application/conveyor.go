@@ -56,10 +56,19 @@ type mutationOutcome struct {
 	// derivation from the response.
 	Audit    auditdomain.Action
 	AuditCtx map[string]any
+	// ExtraAudit lists the additional audit rows of a compound mutation (the
+	// completion also records the managed payment's deletion, ревизия #1161):
+	// the step provides the action, the entity, the id and the context; the
+	// conveyor fills the actor and the role like the primary row.
+	ExtraAudit []auditdomain.Entry
 	// History is the action journal row of the mutation (ADR 0061), built by
 	// the step from the row-text catalog and recorded inside the same
 	// transaction (fail-safe like the audit).
 	History *historydomain.Entry
+	// ExtraHistory lists the additional journal rows of a compound mutation
+	// (the payment-deletion row beside the completion's), recorded with the
+	// same actor scoping as History.
+	ExtraHistory []*historydomain.Entry
 	// Tick runs the payments materialization tick for the owner after the
 	// change; only a step that changed the managed payment sets it (ADR 0053
 	// §3). Completion and deletion resolve the plan themselves and set false.
@@ -135,11 +144,8 @@ func runRentalMutation(
 		if err := recordAudit(ctx, stores, actor, role, out.Audit, out.RentalID, out.AuditCtx); err != nil {
 			return err
 		}
-		if out.History != nil {
-			if err := historyapp.RecordScoped(ctx, stores.history, propertyID, actor,
-				sharedpolicy.HistoryActorRole(role), *out.History); err != nil {
-				return err
-			}
+		if err := recordJournal(ctx, stores, propertyID, actor, role, out); err != nil {
+			return err
 		}
 		if !out.Tick {
 			return nil
@@ -151,6 +157,36 @@ func runRentalMutation(
 	}
 	realtimeapp.Dispatch(ctx, g.realtime, actor, out.Changed, historyAnchor(out, propertyID)...)
 	return out.RentalID, nil
+}
+
+// recordJournal records the mutation's audit trail inside the transaction:
+// the primary audit row, the compound mutation's additional audit rows (the
+// completion's payment deletion, ревизия #1161 — their actor fields fill
+// from the same gate resolution as the primary row; action/entity/id/context
+// travel from the step), then the action journal: the primary row and the
+// compound mutation's additional rows, equally scoped.
+func recordJournal(
+	ctx context.Context, stores *txStores, propertyID, actor uuid.UUID, role sharedpolicy.Role,
+	out mutationOutcome,
+) error {
+	for _, entry := range out.ExtraAudit {
+		entry.ActorID = &actor
+		entry.ActorRole = sharedpolicy.AuditActorRole(role)
+		if err := stores.audit.Record(ctx, entry); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+	}
+	entries := out.ExtraHistory
+	if out.History != nil {
+		entries = append([]*historydomain.Entry{out.History}, entries...)
+	}
+	for _, entry := range entries {
+		if err := historyapp.RecordScoped(ctx, stores.history, propertyID, actor,
+			sharedpolicy.HistoryActorRole(role), *entry); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // historyAnchor is the journal anchor of the transaction's realtime dispatch:

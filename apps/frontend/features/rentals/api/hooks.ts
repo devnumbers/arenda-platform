@@ -144,17 +144,16 @@ export function useRentalSummary(
 /**
  * Удаление аренды (#535): DELETE …/rentals/{rentalId} — разрешён только
  * не начавшейся или завершённой (начавшаяся незавершённая — 409, ADR 0053).
- * Сервер в транзакции удаляет управляемый Платёж: будущие плановые
- * вхождения сносятся, просроченные остаются долгом, оплаченные — факты
- * истории с платежом «удалён» (семантика payments, тикет #446).
- * Кэш операций удалённого платежа снимается синхронно (removeQueries —
- * конвенция удалений), срезы платежей и операций объекта инвалидируются —
- * оплаченные переживают удаление на экранах операций.
+ * Ревизия #1161: у не начавшей сервер в транзакции удаляет управляемый
+ * Платёж (будущие плановые сносятся чисто); у завершённой платёж уже удалён
+ * Завершением — сносится только строка. Просрочка переживает платёж долгом
+ * объекта, оплаченные операции остаются в истории. Срезы платежей и
+ * операций объекта инвалидируются — пережитые операции перечитываются на
+ * экранах операций.
  */
 export function useDeleteRental(
   propertyId: string,
   rentalId: string,
-  paymentId: string,
 ): UseMutationResult<void, ApiError, void> {
   const queryClient = useQueryClient();
   return useGuardedMutation({
@@ -165,12 +164,6 @@ export function useDeleteRental(
       );
     },
     onSuccess: () => {
-      queryClient.removeQueries({
-        queryKey: paymentOperationKeys.byPaymentPrefix(propertyId, paymentId),
-      });
-      queryClient.removeQueries({
-        queryKey: paymentOperationKeys.byPaymentPagedPrefix(propertyId, paymentId),
-      });
       void queryClient.invalidateQueries({ queryKey: rentalKeys.all });
       void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
       void queryClient.invalidateQueries({ queryKey: paymentOperationKeys.all });

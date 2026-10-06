@@ -242,7 +242,7 @@ test.describe('экран «Платежи объекта»', () => {
     // Дальше — как без черновика: карточка ведёт в визард с нуля (шаг 1).
     await page.getByRole('button', { name: PAYMENT_CARD }).click();
     await expect(page).toHaveURL(`${APARTMENT_PAYMENTS_URL}/new?type=payment`);
-    await expect(page.getByRole('heading', { name: 'Категория платежа' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Выберите категорию платежа' })).toBeVisible();
   });
 });
 
@@ -306,7 +306,7 @@ test.describe('входы в создание с проверкой чернов
 
     await page.getByRole('button', { name: PAYMENT_CARD }).click();
     await expect(page).toHaveURL(`${GARAGE_PROPERTY_URL}/payments/new?type=payment`);
-    await expect(page.getByRole('heading', { name: 'Категория платежа' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Выберите категорию платежа' })).toBeVisible();
   });
 
   test('каталог «Все платежи»: с черновиком «Создать новый» ведёт в чистый визард своего типа', async ({
@@ -329,7 +329,7 @@ test.describe('входы в создание с проверкой чернов
     await page.getByRole('button', { name: 'Создать новый' }).click();
     await expect(page).toHaveURL(`${APARTMENT_PAYMENTS_URL}/new?type=payment`);
     // Фиксированный тип: фазы выбора нет — сразу чистый визард шага 1.
-    await expect(page.getByRole('heading', { name: 'Категория платежа' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Выберите категорию платежа' })).toBeVisible();
     const storedAfterDiscard = await page.evaluate(
       (key) => window.localStorage.getItem(key),
       draftKey,
@@ -347,7 +347,7 @@ test.describe('входы в создание с проверкой чернов
     await page.getByRole('button', { name: 'Добавить платеж' }).click();
     await expect(page).toHaveURL(`${APARTMENT_PAYMENTS_URL}/new?type=payment`);
     await expect(page.getByRole('heading', { name: 'У вас есть черновик' })).toHaveCount(0);
-    await expect(page.getByRole('heading', { name: 'Категория платежа' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Выберите категорию платежа' })).toBeVisible();
   });
 
   test('каталог «Автоплатежи»: черновик автоплатежа — модалка, «Продолжить» resume-ит автоплатеж', async ({

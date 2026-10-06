@@ -43,7 +43,7 @@ async function openWizard(
   await expect(
     page
       .getByRole('heading', { name: 'Периодичность платежа' })
-      .or(page.getByRole('heading', { name: 'Категория платежа' })),
+      .or(page.getByRole('heading', { name: 'Выберите категорию платежа' })),
   ).toBeVisible();
 }
 
@@ -117,22 +117,36 @@ test.describe('визард создания платежа', () => {
     await page.getByRole('button', { name: 'Поиск по категориям' }).click();
     await expect(page.getByText('Начните искать категорию')).toBeVisible();
     await expect(page.getByRole('searchbox')).toBeFocused();
+    // Заголовка в режиме поиска нет (Figma 1049:46418, решение владельца 06.10).
+    await expect(
+      page.getByRole('heading', { name: 'Выберите категорию платежа' }),
+    ).toHaveCount(0);
 
-    // С запросом — отфильтрованный список, подсказка исчезает.
+    // С запросом — отфильтрованный список без заголовка, подсказка исчезает.
     await page.getByRole('searchbox').fill('страхов');
     await expect(page.getByRole('button', { name: 'Страхование' })).toBeVisible();
     await expect(page.getByText('Начните искать категорию')).toHaveCount(0);
+    await expect(
+      page.getByRole('heading', { name: 'Выберите категорию платежа' }),
+    ).toHaveCount(0);
 
-    // Крестик очищает и закрывает поиск.
+    // Пустой результат — «Ничего не нашлось», тоже без заголовка.
+    await page.getByRole('searchbox').fill('йцукен');
+    await expect(page.getByText('Ничего не нашлось')).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: 'Выберите категорию платежа' }),
+    ).toHaveCount(0);
+
+    // Крестик очищает и закрывает поиск — заголовок возвращается.
     await page.getByRole('button', { name: 'Очистить поиск' }).click();
-    await expect(page.getByRole('heading', { name: 'Категория платежа' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Выберите категорию платежа' })).toBeVisible();
     await expect(page.getByRole('searchbox')).toHaveCount(0);
 
     // Клик вне хедера при пустом запросе тоже закрывает.
     await page.getByRole('button', { name: 'Поиск по категориям' }).click();
     await expect(page.getByText('Начните искать категорию')).toBeVisible();
     await page.mouse.click(195, 400);
-    await expect(page.getByRole('heading', { name: 'Категория платежа' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Выберите категорию платежа' })).toBeVisible();
     await expect(page.getByRole('searchbox')).toHaveCount(0);
   });
 

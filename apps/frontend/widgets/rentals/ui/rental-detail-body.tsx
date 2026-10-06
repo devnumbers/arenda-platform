@@ -94,7 +94,13 @@ export function RentalDetailBody({
           : null,
       );
   const tenant = rental.tenant;
-  const openPayment = () => router.push(ROUTES.propertyPayment(propertyId, rentPaymentId));
+  // Ревизия #1161: идущая аренда всегда со ссылкой на живой платёж;
+  // тип несёт null ради завершённых — их детализацией правит другой экран,
+  // так что здесь null лишь сминает тип.
+  const openPayment =
+    rentPaymentId === null
+      ? undefined
+      : () => router.push(ROUTES.propertyPayment(propertyId, rentPaymentId));
 
   // Круглая тройка макета (1550:93664, решение #802 23.09): «Завершить» —
   // только у «идёт» (машина #987: у upcoming завершения не существует,
@@ -112,7 +118,7 @@ export function RentalDetailBody({
   // (канон #986), страница уходит на объект: аренды нет — блок «Аренда»
   // перетекает в пустое, «Управление» показывает «Начать аренду». Отказ —
   // тост канона аренды, шит остаётся открытым.
-  const deleteRental = useDeleteRental(propertyId, rental.id, rentPaymentId);
+  const deleteRental = useDeleteRental(propertyId, rental.id);
 
   return (
     <PageContent>

@@ -35,12 +35,15 @@ async function prefetchRentalScreen(
   ]);
   const rentals = queryClient.getQueryData<Rental[]>(rentalKeys.list(propertyId));
   const rental = rentals?.find((item) => item.id === rentalId);
-  if (rental === undefined) {
+  // Ревизия #1161: у завершённой аренды платёж удалён — порций его операций
+  // не существует, прогревать нечего.
+  if (rental === undefined || rental.rentPayment.paymentId === null) {
     return;
   }
+  const paymentId = rental.rentPayment.paymentId;
   void queryClient.prefetchInfiniteQuery(paymentOperationsPagedQueryOptions({
     propertyId,
-    paymentId: rental.rentPayment.paymentId,
+    paymentId,
     status: 'paid',
     order: 'desc',
     sort: OPERATIONS_FEED_SORT,

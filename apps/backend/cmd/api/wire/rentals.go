@@ -182,26 +182,27 @@ func (t *rentPaymentGatewayTx) Update(
 	return nil
 }
 
-// Stop ends the payment at the completion date: end_date moves there and the
-// strictly-after-completion planned goes (DeletePlannedFrom is date >= from —
-// the day after the completion is the first strictly future date). The
-// already-due planned stays with the owner.
-func (t *rentPaymentGatewayTx) Stop(
-	ctx context.Context, scope, propertyID, paymentID uuid.UUID, completedDate time.Time,
-) error {
+// State reads the managed payment's current terms inside the caller's
+// transaction — the completion's archive source (the snapshot lands on the
+// rental, ревизия ADR 0053 #1161) and the payment-deletion journal row's
+// title.
+func (t *rentPaymentGatewayTx) State(
+	ctx context.Context, scope, propertyID, paymentID uuid.UUID,
+) (rentalsapp.RentPaymentTerms, error) {
 	payment, err := t.payments.Get(ctx, paymentID, scope, propertyID)
 	if err != nil {
-		return fmt.Errorf("load rent payment: %w", err)
+		return rentalsapp.RentPaymentTerms{}, fmt.Errorf("load rent payment: %w", err)
 	}
-	end := completedDate
-	payment.EndDate = &end
-	if err := t.payments.Update(ctx, payment); err != nil {
-		return fmt.Errorf("update rent payment: %w", err)
+	day, err := paymentDayFromRecurrence(payment.Recurrence)
+	if err != nil {
+		return rentalsapp.RentPaymentTerms{}, fmt.Errorf("read rent payment day: %w", err)
 	}
-	if err := t.payments.DeletePlannedFrom(ctx, paymentID, completedDate.AddDate(0, 0, 1)); err != nil {
-		return fmt.Errorf("drop planned after completion: %w", err)
-	}
-	return nil
+	return rentalsapp.RentPaymentTerms{
+		AmountKopecks: payment.AmountKopecks,
+		PaymentDay:    day,
+		AutoPay:       payment.AutoPay,
+		Title:         payment.Title,
+	}, nil
 }
 
 // Delete removes the payment with the keep_overdue=true semantics: the

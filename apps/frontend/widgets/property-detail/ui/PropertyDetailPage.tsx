@@ -266,11 +266,7 @@ export function PropertyDetailPage(): JSX.Element {
     // handleCompleteRental / handleDeleteRental.
     const currentRentalId = currentRental?.id ?? null;
     const completeRental = useCompleteRental(id, currentRentalId ?? '');
-    const deleteRental = useDeleteRental(
-        id,
-        currentRentalId ?? '',
-        currentRental?.rentPayment.paymentId ?? '',
-    );
+    const deleteRental = useDeleteRental(id, currentRentalId ?? '');
 
     const payments = paymentsQuery.data ?? [];
     // Платежи с накопленной просрочкой — красная точка на иконке

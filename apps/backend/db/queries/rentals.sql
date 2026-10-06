@@ -21,6 +21,9 @@ SELECT r.id,
        r.commission_kopecks,
        r.deposit_return_kopecks,
        r.deposit_return_comment,
+       r.rent_amount_kopecks,
+       r.rent_payment_day,
+       r.rent_auto_pay,
        r.comment,
        r.created_at,
        r.updated_at,
@@ -47,6 +50,9 @@ SELECT r.id,
        r.commission_kopecks,
        r.deposit_return_kopecks,
        r.deposit_return_comment,
+       r.rent_amount_kopecks,
+       r.rent_payment_day,
+       r.rent_auto_pay,
        r.comment,
        r.created_at,
        r.updated_at,
@@ -85,13 +91,19 @@ SET contact_id = $3,
 WHERE id = $1 AND owner_id = $2;
 
 -- name: CompleteRental :execrows
--- Завершение: the completion date and the optional deposit return land in
--- one UPDATE. The one-unfinished-per-property index releases here; the
+-- Завершение (ревизия ADR 0053 #1161): дата завершения, возврат залога и
+-- Архив условий удалённого Платежа — один UPDATE; ссылка payment_id
+-- снимается (RESTRICT отпускает платёж, удаляемый следом в той же
+-- транзакции). The one-unfinished-per-property index releases here; the
 -- caller has proven the rental unfinished inside the same transaction.
 UPDATE rentals
 SET completed_date = $3,
     deposit_return_kopecks = $4,
-    deposit_return_comment = $5
+    deposit_return_comment = $5,
+    payment_id = NULL,
+    rent_amount_kopecks = $6,
+    rent_payment_day = $7,
+    rent_auto_pay = $8
 WHERE id = $1 AND owner_id = $2;
 
 -- name: DeleteRental :execrows

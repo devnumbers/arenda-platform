@@ -5,10 +5,11 @@ package postgres_test
 // Интеграционное семейство гарда удаления (тикет #632): проверка
 // незавершённой аренды и упорядоченный снос строк аренд до строки объекта.
 // Порядок каскадов (аренды против платежей) при удалении строки объекта
-// Postgres не гарантирует, а завершённая аренда тоже ссылается на свой
-// платёж RESTRICT-ом rentals.payment_id — поэтому снос аренд делается
-// явным, до строки объекта (ADR 0025 §2), и каскад проходит чисто при
-// любом порядке триггеров сервера.
+// Postgres не гарантирует, а незавершённая аренда ссылается на свой платёж
+// RESTRICT-ом rentals.payment_id — поэтому снос аренд делается явным, до
+// строки объекта (ADR 0025 §2), и каскад проходит чисто при любом порядке
+// триггеров сервера. Завершённая аренда ссылки не несёт (ревизия #1161:
+// платёж удалён Завершением) и каскаду не мешает.
 
 import (
 	"context"
@@ -55,7 +56,10 @@ func TestDeletionGuard_HasUnfinishedTracksCompletion(t *testing.T) {
 
 	completed := mustOccDate("2026-09-01")
 	_, err = tx.Exec(ctx,
-		`UPDATE rentals SET completed_date = $1 WHERE property_id = $2`,
+		`UPDATE rentals SET completed_date = $1, payment_id = NULL,
+		                       rent_amount_kopecks = 5000000, rent_payment_day = 15,
+		                       rent_auto_pay = false
+		 WHERE property_id = $2`,
 		completed, propID)
 	require.NoError(t, err)
 

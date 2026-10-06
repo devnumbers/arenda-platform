@@ -36,9 +36,11 @@ export type RentalNextPayment = {
 };
 
 /** Состояние Платежа арендной платы в ответе аренды: paymentId — переход на
- * экран платежа (#531); платеж не ищется слагом категории (ADR 0053 §4). */
+ * экран платежа (#531); платеж не ищется слагом категории (ADR 0053 §4).
+ * Ревизия #1161: у завершённой аренды платёж удалён — paymentId null, а
+ * сумма и день оплаты приходят из Архива условий на аренде. */
 export type RentalPaymentView = {
-  readonly paymentId: string;
+  readonly paymentId: string | null;
   readonly amountKopecks: number;
   readonly paymentDay: RentalPaymentDay;
   readonly autoPay: boolean;

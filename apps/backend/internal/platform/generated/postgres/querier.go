@@ -38,8 +38,10 @@ type Querier interface {
 	// already outside the pause, [from, to)).
 	CloseActivePaymentPause(ctx context.Context, arg CloseActivePaymentPauseParams) (int64, error)
 	CompleteIdempotencyKey(ctx context.Context, arg CompleteIdempotencyKeyParams) error
-	// Завершение: the completion date and the optional deposit return land in
-	// one UPDATE. The one-unfinished-per-property index releases here; the
+	// Завершение (ревизия ADR 0053 #1161): дата завершения, возврат залога и
+	// Архив условий удалённого Платежа — один UPDATE; ссылка payment_id
+	// снимается (RESTRICT отпускает платёж, удаляемый следом в той же
+	// транзакции). The one-unfinished-per-property index releases here; the
 	// caller has proven the rental unfinished inside the same transaction.
 	CompleteRental(ctx context.Context, arg CompleteRentalParams) (int64, error)
 	// «Выполнить»: the completion fact stamped on the still-active task; rows

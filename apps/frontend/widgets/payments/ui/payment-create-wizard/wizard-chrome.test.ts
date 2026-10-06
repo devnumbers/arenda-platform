@@ -4,6 +4,7 @@ import { AmountStep } from './amount-step';
 import {
   WizardAmountField,
   WizardDirectionSegment,
+  WizardHeading,
 } from './wizard-chrome';
 import { OperationAmountStep } from '../operation-create-wizard/operation-amount-step';
 
@@ -51,6 +52,43 @@ function tree(node: ReactNode): ReactElement<InspectableProps>[] {
 }
 
 const NOOP = (): void => undefined;
+
+describe('WizardHeading — вариант H1/600 хедера выбора категории (#1152)', () => {
+  it('дефолт — прежний H3 20/24 (text-xl leading-6), подзаголовок на месте', () => {
+    const heading = WizardHeading({ title: 'Назовите платеж', subtitle: 'Подсказка' });
+    const h1 = tree(heading).find((el) => el.type === 'h1');
+    expect(String(h1?.props.className)).toContain('text-xl');
+    expect(String(h1?.props.className)).toContain('leading-6');
+    expect(tree(heading).some((el) => el.type === 'p')).toBe(true);
+  });
+
+  it('variant h1 — 28/32 H1/600 (text-2xl leading-8), тот же вес и токен текста', () => {
+    const heading = WizardHeading({
+      title: 'Выберите категорию платежа',
+      variant: 'h1',
+    });
+    const h1 = tree(heading).find((el) => el.type === 'h1');
+    expect(String(h1?.props.className)).toContain('text-2xl');
+    expect(String(h1?.props.className)).toContain('leading-8');
+    expect(String(h1?.props.className)).toContain('font-semibold');
+    expect(String(h1?.props.className)).toContain('text-content');
+  });
+
+  it('variant h1 без subtitle — подзаголовка нет («Без описания», спека #1149)', () => {
+    const heading = WizardHeading({
+      title: 'Выберите категорию платежа',
+      variant: 'h1',
+    });
+    expect(tree(heading).some((el) => el.type === 'p')).toBe(false);
+  });
+
+  it('отступы блока не менялись: 24 по бокам и сверху, заголовок — один h1', () => {
+    const heading = WizardHeading({ title: 'Категория', variant: 'h1' });
+    expect(String(heading.props.className)).toContain('px-6');
+    expect(String(heading.props.className)).toContain('pt-6');
+    expect(tree(heading).filter((el) => el.type === 'h1')).toHaveLength(1);
+  });
+});
 
 describe('WizardDirectionSegment — общий сегмент «Расход/Доход» шагов суммы', () => {
   it('группа из двух радио в порядке Расход → Доход, aria-label насквозь', () => {

@@ -72,7 +72,7 @@ import {
   BRANCH_PERIOD_LABELS,
   PeriodicityStep,
 } from './payment-create-wizard/periodicity-step';
-import { CategorySearchHint } from './payment-create-wizard/wizard-chrome';
+import { CategorySearchHint, WizardHeading } from './payment-create-wizard/wizard-chrome';
 
 /**
  * Экран правки платежа (Figma 705:10034; ранее 1127:33146, #467): форма,
@@ -83,13 +83,17 @@ import { CategorySearchHint } from './payment-create-wizard/wizard-chrome';
  * поле снесено из контракта и продукта (карта #1005, тикеты #1006–#1009).
  * Категория — отдельная страница на том же маршруте, как шаг 1 визарда
  * (Figma 781:12299, без карандаша: свои категории — следующий срез);
- * заголовок хедера — «Выбор категории», заголовок страницы без подписи
- * (решение владельца 2026-08-31); уход со страницы не теряет
+ * заголовок — тот же H1/600 «Выберите категорию платежа», что на шаге 1
+ * визарда, вместо TopNavTitle «Выбор категории» (#1152: единый хедер
+ * выбора категории при создании и правке); уход со страницы не теряет
  * несохранённые правки формы. Периодичность — отдельная страница как шаг 3
  * визарда, хедер «Выбор периодичности», в ветке — название периода
- * (решение владельца 2026-08-31); правка живёт в черновике страницы и
- * применяется только кнопкой «Выбрать» — «Назад» её отбрасывает
- * (багфикс: незавершённый период не оставался в форме). Окончание —
+ * (решение владельца 2026-08-31); поведение выровнено с созданием
+ * (#1153): «Каждый день» и «Каждый год» («Продолжить» календаря)
+ * применяются сразу и закрывают страницу, ветки недели и месяца живут в
+ * черновике страницы и применяются кнопкой «Выбрать» — «Назад» черновик
+ * отбрасывает (багфикс: незавершённый период не оставался в форме).
+ * Окончание —
  * канонический бесконечный календарь поверх формы (решение владельца
  * 2026-09-04; раньше — страница с календарём, открытым сразу,
  * решение 2026-08-31). Регулярность —
@@ -333,9 +337,10 @@ function PaymentEditForm({
   const [endDateOpen, setEndDateOpen] = useState(false);
   const [openBranch, setOpenBranch] = useState<PeriodicityBranch | null>(null);
   // Периодичность — отдельная страница на том же маршруте (как шаг 3
-  // визарда); правка живёт в черновике страницы и попадает в форму только
-  // по кнопке «Выбрать» — иначе незавершённый период («Каждую неделю в —»)
-  // оставался бы в форме при выходе назад.
+  // визарда). Ветки недели и месяца живут в черновике страницы и попадают
+  // в форму только по кнопке «Выбрать» — иначе незавершённый период
+  // («Каждую неделю в —») оставался бы в форме при выходе назад. «Каждый
+  // день» и «Каждый год» применяются сразу, как в создании (#1153).
   const [periodicityOpen, setPeriodicityOpen] = useState(false);
   const [periodicityDraft, setPeriodicityDraft] = useState<Recurrence | undefined>(
     undefined,
@@ -428,7 +433,8 @@ function PaymentEditForm({
   };
 
   const closePeriodicityPage = (): void => {
-    // Черновик отбрасывается: период меняется только кнопкой «Выбрать».
+    // Черновик отбрасывается: ветки недели/месяца меняются только кнопкой
+    // «Выбрать».
     setPeriodicityOpen(false);
     setOpenBranch(null);
     setPeriodicityDraft(undefined);
@@ -439,6 +445,15 @@ function PaymentEditForm({
       return;
     }
     update('recurrence', periodicityDraft);
+    closePeriodicityPage();
+  };
+
+  // Мгновенное применение (выровнено с созданием, #1153): «Каждый день»
+  // готов сразу, годовое правило приходит подтверждением календаря
+  // («Продолжить») — значение передаётся аргументом, черновик страницы к
+  // моменту колбэка ещё не обновлён.
+  const applyRecurrenceNow = (recurrence: Recurrence): void => {
+    update('recurrence', recurrence);
     closePeriodicityPage();
   };
 
@@ -495,20 +510,32 @@ function PaymentEditForm({
               placeholder="Найти категорию"
               aria-label="Поиск по названиям категорий"
             />
-          ) : (
-            <TopNavTitle title="Выбор категории" />
-          )}
+          ) : undefined}
         </TopNav>
         {/* КатегорияStep и подсказка поиска приносят свои отступы (шаг визарда
-         * рассчитан на полноширинный контент) — обёртке паддинг не нужен. */}
-        {categorySearchOpen && categoryQuery === '' ? (
-          <CategorySearchHint text="Начните искать категорию" />
+         * рассчитан на полноширинный контент) — обёртке паддинг не нужен.
+         * Заголовок — только при закрытом поиске (макет 1049:46418,
+         * решение владельца 06.10): открытый поиск показывает подсказку
+         * или отфильтрованный список без заголовка. Заголовок и список —
+         * один блок: родительский gap-8 не должен разносить их. */}
+        {categorySearchOpen ? (
+          categoryQuery === '' ? (
+            <CategorySearchHint text="Начните искать категорию" />
+          ) : (
+            <CategoryStep
+              selectedSlug={selectedSlug}
+              onSelect={(slug) => update('categorySlug', slug)}
+              query={categoryQuery}
+            />
+          )
         ) : (
-          <CategoryStep
-            selectedSlug={selectedSlug}
-            onSelect={(slug) => update('categorySlug', slug)}
-            query={categorySearchOpen ? categoryQuery : ''}
-          />
+          <div>
+            <WizardHeading title="Выберите категорию платежа" variant="h1" />
+            <CategoryStep
+              selectedSlug={selectedSlug}
+              onSelect={(slug) => update('categorySlug', slug)}
+            />
+          </div>
         )}
         {categoryChanged && (
           <StickyBottomBar>
@@ -522,8 +549,9 @@ function PaymentEditForm({
   }
 
   // Страница периодичности — как шаг 3 визарда (Figma 1049:48174): в ветке
-  // хедер показывает название периода, «Назад» закрывает ветку; правка — в
-  // черновике, «Выбрать» применяется когда периодичность готова, ветка
+  // хедер показывает название периода, «Назад» закрывает ветку. День и год
+  // применяются сразу (#1153, как в создании #995); ветки недели/месяца —
+  // в черновике, «Выбрать» применяется когда периодичность готова, ветка
   // закрыта или совпадает с ней и значение изменилось.
   if (periodicityOpen) {
     const draftChanged =
@@ -547,7 +575,8 @@ function PaymentEditForm({
           openBranch={openBranch}
           onOpenBranch={setOpenBranch}
           onRecurrenceChange={setPeriodicityDraft}
-          onDailyPick={() => setPeriodicityDraft({ kind: 'daily' })}
+          onDailyPick={() => applyRecurrenceNow({ kind: 'daily' })}
+          onYearlyConfirm={applyRecurrenceNow}
           today={today}
           withHeading={false}
         />

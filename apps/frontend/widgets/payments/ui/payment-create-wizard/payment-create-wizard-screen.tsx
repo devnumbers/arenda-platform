@@ -75,7 +75,7 @@ export function PaymentCreateWizardScreen({
             <StepsChip step={1} total={WIZARD_TOTAL_STEPS} size="m" />
           </TopNav>
           <PageContent className="pt-0">
-            <WizardHeading title="Категория платежа" subtitle="Выберите категорию" />
+            <WizardHeading title="Выберите категорию платежа" variant="h1" />
             <CategoryRowsSkeleton />
           </PageContent>
         </>
