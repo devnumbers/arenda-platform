@@ -61,7 +61,8 @@ export function PropertyParticipantsInviteScreen(): JSX.Element {
       {/* Боковой отступ 24px по макету (урок приёмки #699) — на все
        * состояния. Данные не грузятся (объект фиксирован) — скелетона и
        * error-состояния загрузки нет; ошибка мутации живёт под полем. */}
-      <PageContent className="px-6">
+      {/* Клиренс футера — паттерн «CTA над TabBar» (#1166). */}
+      <PageContent className="px-6" aboveTabBarFooter>
         <div className="flex flex-col pt-4">
           <Image
             src="/images/tariff/tariff-about-sharing.png"
@@ -101,7 +102,8 @@ export function PropertyParticipantsInviteScreen(): JSX.Element {
         </div>
       </PageContent>
 
-      <StickyBottomBar>
+      {/* CTA над видимым нижним меню (решение владельца 06.10.2026, #1166). */}
+      <StickyBottomBar aboveTabBar>
         <Button
           className="w-full"
           disabled={!canSubmit}

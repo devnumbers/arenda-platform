@@ -33,7 +33,6 @@ import {
   TopNav,
   TopNavBackButton,
   TopNavTitle,
-  useTabBarSuppression,
 } from '@/shared/ui/design';
 import { ROUTES } from '@/shared/config/routes';
 import { HistoryRow } from './history-row';
@@ -284,9 +283,10 @@ export function HistoryFeedScreen({
   // шита фильтров (#710); серый суффикс «(Вы)» у своей шапки.
   const meQuery = useMe();
   const meId = meQuery.data?.id;
-  // Экран с плавающей нижней кнопкой — TabBar глушится (канон
-  // StickyBottomBar, без белого шита: макет оставляет контент видимым).
-  useTabBarSuppression();
+  // Экран истории — паттерн «CTA над TabBar» (решение владельца
+  // 06.10.2026, #1166): нижнее меню остаётся видимым, плавающая кнопка
+  // «Настройки» и чип «Есть новые» поднимаются над ним (офсеты ниже).
+  // Это осознанное отклонение от канона «панель глушит TabBar».
 
   const entries = feedQuery.data ?? [];
   // Якорь низа — строго по факту рендера ленты: keepPreviousData
@@ -492,7 +492,10 @@ export function HistoryFeedScreen({
         * контента ScreenLayout (уже flex-1 от min-h-screen), точный низ
         * на всех ярусах без констант; пустые состояния (ниже) — не
         * сообщения, без якоря. */}
-      <PageContent className={feedRendered ? 'flex-1 justify-end px-4' : 'px-4'}>
+      <PageContent
+        className={feedRendered ? 'flex-1 justify-end px-4' : 'px-4'}
+        aboveTabBarFooter
+      >
         {scope === null ? (
           /* Фильтры выбраны «в ноль» — результат пуст по семантике
             * (запроса нет, #711). */
@@ -601,9 +604,11 @@ export function HistoryFeedScreen({
         * подъехали свежие записи — чип в стиле плашек дней этого же макета
         * висит над кнопкой «Настройки» (кнопка 56 + зазор 12); клик —
         * плавный ход к низу, ручной доскролл гасит его тоже. Обёртка без
-        * pointer-events — строки ленты под зазорами кликабельны. */}
+        * pointer-events — строки ленты под зазорами кликабельны.
+        * Ниже ПК (паттерн «CTA над TabBar» #1166) чип живёт над кнопкой,
+        * а кнопка — над видимым футером (72 + паддинг + зазор 12). */}
       {hasNewBelow && feedRendered && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-[calc(max(1.5rem,env(safe-area-inset-bottom))_+_68px)] z-40 flex justify-center">
+        <div className="pointer-events-none fixed inset-x-0 bottom-[calc(max(1.5rem,env(safe-area-inset-bottom))_+_68px)] max-desktop:bottom-[calc(72px_+_max(12px,env(safe-area-inset-bottom))_+_80px)] z-40 flex justify-center">
           <button
             type="button"
             onClick={scrollToFresh}
@@ -619,8 +624,10 @@ export function HistoryFeedScreen({
         * макет 2184-94734), по центру колонки. Контейнер — прозрачная
         * полоса на весь вьюпорт: pointer-events-none, чтобы она не глушила
         * клики нижнего хрома по краям (пилюли ПК #876), кликабельна только
-        * сама кнопка. */}
-      <div className="pointer-events-none fixed inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom))] z-40 flex justify-center">
+        * сама кнопка. Ниже ПК кнопка плавает над видимым TabBar (паттерн
+        * «CTA над TabBar», решение владельца 06.10.2026 #1166): футер 72 +
+        * паддинг + зазор 12; на ПК TabBar нет — у нижнего края. */}
+      <div className="pointer-events-none fixed inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom))] max-desktop:bottom-[calc(72px_+_max(12px,env(safe-area-inset-bottom))_+_12px)] z-40 flex justify-center">
         <div className="pointer-events-auto mx-auto flex w-full max-w-column justify-center">
           <Button type="button" onClick={() => setFiltersOpen(true)}>
             Настройки

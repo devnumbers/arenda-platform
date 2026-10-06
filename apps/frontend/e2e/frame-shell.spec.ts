@@ -267,6 +267,55 @@ test('мобайл: хедер в потоке, TabBar на хабе и глуш
   await expect(page.locator('nav[aria-label="Нижняя навигация"]')).toHaveCount(0);
 });
 
+// Паттерн «CTA над TabBar» (решение владельца 06.10.2026, #1166) — рядом
+// с канон-тестами выше: на разделе совместного доступа футер НЕ глушится,
+// кнопка плавает над ним; внутри канона (операции, редактирование объекта)
+// подавление работает как раньше — проверено тестами выше и ниже.
+test('CTA совместного доступа — над видимым TabBar (мобайл и планшет)', async ({ page, seededUser }) => {
+  await openCabinetWithSeededSession(page, seededUser);
+
+  const assertCtaAboveTabBar = async (): Promise<void> => {
+    const tabbar = page.locator('nav[aria-label="Нижняя навигация"]');
+    await expect(tabbar).toBeVisible();
+    // div — сам бар панели (nav TabBar матчится теми же классами и
+    // сузило бы выборку до двух элементов).
+    const barBox = await page.locator('div.fixed.inset-x-0.bottom-0').boundingBox();
+    const tabBox = await tabbar.boundingBox();
+    expect(barBox).not.toBeNull();
+    expect(tabBox).not.toBeNull();
+    // Кнопка/панель целиком над футером: низ панели не ниже верха TabBar
+    // (стык вплотную — допуск на субпиксели).
+    expect((barBox?.y ?? 0) + (barBox?.height ?? 0)).toBeLessThanOrEqual((tabBox?.y ?? 0) + 2);
+  };
+
+  for (const viewport of [MOBILE, TABLET]) {
+    await page.setViewportSize(viewport);
+
+    await page.goto('/participants');
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Совместный доступ' }),
+    ).toBeVisible();
+    await assertCtaAboveTabBar();
+
+    // История: плавающая «Настройки» — над тем же футером.
+    await page.goto('/history');
+    const tabbar = page.locator('nav[aria-label="Нижняя навигация"]');
+    await expect(tabbar).toBeVisible();
+    const settings = page.getByRole('button', { name: 'Настройки' });
+    await expect(settings).toBeVisible();
+    const settingsBox = await settings.boundingBox();
+    const tabBox = await tabbar.boundingBox();
+    expect((settingsBox?.y ?? 0) + (settingsBox?.height ?? 0)).toBeLessThanOrEqual((tabBox?.y ?? 0) + 2);
+  }
+
+  // На ПК футера нет — панель у нижнего края (канон), как и раньше.
+  // TabBar на ПК не размонтируется, а скрывается CSS (desktop:hidden).
+  await page.setViewportSize(PC);
+  await page.goto('/participants');
+  await expect(page.locator('nav[aria-label="Нижняя навигация"]')).toBeHidden();
+  await expect(bottomBarButton(page, /Пригласить участника/)).toBeVisible();
+});
+
 test('легаси /dashboard редиректит на /properties — слово владельца #975', async ({ page, seededUser }) => {
   await openCabinetWithSeededSession(page, seededUser);
   const response = await page.goto('/dashboard');
