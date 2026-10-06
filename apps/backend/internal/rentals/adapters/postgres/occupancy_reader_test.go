@@ -73,7 +73,10 @@ func (f *occupancyFixture) seedOwnerWithProperty(ctx context.Context, t *testing
 }
 
 // seedRental inserts the property's rental with its managed payment row —
-// the RESTRICT FK of the seam (ADR 0053 §3) demands the pair.
+// the RESTRICT FK of the seam (ADR 0053 §3) demands the pair while the
+// rental runs. A completed rental mirrors the post-completion state
+// (ревизия #1161): no payment link, the terms archive beside the completion
+// fact, the payment row itself gone.
 func (f *occupancyFixture) seedRental(
 	ctx context.Context, t *testing.T, propID uuid.UUID, start time.Time, plannedEnd, completed *time.Time,
 ) {
@@ -81,6 +84,18 @@ func (f *occupancyFixture) seedRental(
 	var ownerID uuid.UUID
 	require.NoError(t, f.pool.QueryRow(ctx,
 		`SELECT owner_id FROM properties WHERE id = $1`, propID).Scan(&ownerID))
+	rentalID, err := uuid.NewV7()
+	require.NoError(t, err)
+	if completed != nil {
+		_, err = f.pool.Exec(ctx,
+			`INSERT INTO rentals (id, owner_id, property_id, payment_id, start_date,
+			       planned_end_date, completed_date, utilities,
+			       rent_amount_kopecks, rent_payment_day, rent_auto_pay)
+			 VALUES ($1, $2, $3, NULL, $4, $5, $6, 'included', 5000000, 15, false)`,
+			rentalID, ownerID, propID, start, datePtrArg(plannedEnd), *completed)
+		require.NoError(t, err)
+		return
+	}
 	paymentID, err := uuid.NewV7()
 	require.NoError(t, err)
 	_, err = f.pool.Exec(ctx,
@@ -89,8 +104,6 @@ func (f *occupancyFixture) seedRental(
 		 VALUES ($1, $2, $3, 'income', 'Аренда', 5000000,
 		         '{"kind":"monthly","daysOfMonth":[15]}'::jsonb, $4, false, 'rent')`,
 		paymentID, ownerID, propID, start)
-	require.NoError(t, err)
-	rentalID, err := uuid.NewV7()
 	require.NoError(t, err)
 	_, err = f.pool.Exec(ctx,
 		`INSERT INTO rentals (id, owner_id, property_id, payment_id, start_date,

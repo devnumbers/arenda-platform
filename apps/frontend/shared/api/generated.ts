@@ -3871,13 +3871,13 @@ export interface components {
             monthsRemaining: number | null;
             overdueMonths: number | null;
         };
-        /** @description Состояние Платежа арендной платы: рендер читается из платежа — дня оплаты на аренде нет (решение №5). paymentId — переход на экран платежа с детализации аренды (#531): платеж не ищется слагом категории, на объекте бывают и другие платежи rent. */
+        /** @description Состояние Платежа арендной платы: рендер читается из платежа — дня оплаты на аренде нет (решение №5). paymentId — переход на экран платежа с детализации аренды (#531): платеж не ищется слагом категории, на объекте бывают и другие платежи rent. Ревизия #1161: у завершённой аренды платёж удалён — paymentId null, а сумма и день оплаты приходят из Архива условий на аренде; nextPayment всегда null. */
         RentalPaymentView: {
             /**
              * Format: uuid
-             * @description Управляемый арендой Платёж — связь 1:1 (ADR 0053 §1).
+             * @description Управляемый арендой Платёж — связь 1:1 (ADR 0053 §1); null у завершённой аренды — платёж удалён при Завершении (ревизия #1161).
              */
-            paymentId: string;
+            paymentId: string | null;
             /** Format: int64 */
             amountKopecks: number;
             paymentDay: components["schemas"]["RentalPaymentDay"];

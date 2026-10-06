@@ -135,7 +135,7 @@ func viewFixture(t *testing.T) rentalsapp.RentalView {
 			ID:         uuid.Must(uuid.NewV7()),
 			OwnerID:    uuid.Must(uuid.NewV7()),
 			PropertyID: uuid.Must(uuid.NewV7()),
-			PaymentID:  paymentID,
+			PaymentID:  &paymentID,
 			StartDate:  wireDate("2026-09-01").Time,
 			PlannedEndDate: func() *time.Time {
 				d := wireDate("2027-09-01").Time
@@ -524,6 +524,52 @@ func TestDeleteRental_NoContent(t *testing.T) {
 
 	assert.Equal(t, http.StatusNoContent, rec.Code)
 	assert.Equal(t, view.Rental.ID, deleted)
+}
+
+// Ревизия #1161: у завершённой аренды платёж удалён — paymentId уходит в
+// wire как null, условия рендерятся из Архива условий.
+func TestListRentals_CompletedCarriesNullPaymentId(t *testing.T) {
+	t.Parallel()
+	view := viewFixture(t)
+	view.Status = rentalsdomain.StatusCompleted
+	view.Rental.CompletedDate = &view.Today
+	view.Rental.PaymentID = nil
+	view.Rental.TermsArchive = &rentalsdomain.TermsArchive{
+		AmountKopecks: 5_000_000,
+		PaymentDay:    rentalsdomain.MustPaymentDay(15),
+		AutoPay:       true,
+	}
+	view.Payment = rentalsapp.RentPaymentState{
+		AmountKopecks: 5_000_000,
+		PaymentDay:    rentalsdomain.MustPaymentDay(15),
+		AutoPay:       true,
+	}
+	view.NextPayment = nil
+	svc := &fakeRentalManager{list: func(
+		_ context.Context, _, _ uuid.UUID,
+	) ([]rentalsapp.RentalView, error) {
+		return []rentalsapp.RentalView{view}, nil
+	}}
+	h := NewRentalHandlers(svc, nil)
+
+	req := rentalRequest(t, http.MethodGet, view.Rental.OwnerID,
+		fmt.Sprintf("/properties/%s/rentals", view.Rental.PropertyID), "")
+	rec := httptest.NewRecorder()
+	h.ListRentals(rec, req, view.Rental.PropertyID)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	raw := rec.Body.String()
+	var response openapi.RentalsResponse
+	require.NoError(t, json.NewDecoder(strings.NewReader(raw)).Decode(&response))
+	require.Len(t, response.Items, 1)
+	require.Nil(t, response.Items[0].RentPayment.PaymentId,
+		"the deleted payment's id is the wire's null")
+	assert.Equal(t, int64(5_000_000), response.Items[0].RentPayment.AmountKopecks,
+		"the archived amount")
+	assert.Nil(t, response.Items[0].RentPayment.NextPayment)
+
+	// И сам JSON несёт явный null — поле required (не omit).
+	assert.Contains(t, raw, `"paymentId":null`)
 }
 
 func TestListRentals_Items(t *testing.T) {

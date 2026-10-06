@@ -482,6 +482,9 @@ type Rental struct {
 	Comment              pgtype.Text        `json:"comment"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	RentAmountKopecks    pgtype.Int8        `json:"rent_amount_kopecks"`
+	RentPaymentDay       pgtype.Int4        `json:"rent_payment_day"`
+	RentAutoPay          pgtype.Bool        `json:"rent_auto_pay"`
 }
 
 type Session struct {
@@ -575,6 +578,10 @@ type TaskRule struct {
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 	HistoryBefore pgtype.Date        `json:"history_before"`
+}
+
+type TmpCompletedRentalPayment struct {
+	PaymentID pgtype.UUID `json:"payment_id"`
 }
 
 type User struct {

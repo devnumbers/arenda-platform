@@ -4,16 +4,15 @@ import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import {
   completedRentalMonths,
   completedRentalsOf,
-  paidPaymentNumber,
   pastRentalCardTitle,
   pastRentalRows,
   pastRentalTitle,
-  paymentOrdinalLabel,
 } from './past-model';
 
 /** Фикстура завершённой аренды из макета #535 (1302:52462): 56 000 ₽,
  * 10.05.2026 → 10.05.2028 (24 месяца), завершена 10.05.2028, арендатор.
- * Остальное — канон makeRental. */
+ * Ревизия #1161: платёж удалён Завершением — paymentId null, сумма и день
+ * оплаты читаются из Архива условий. Остальное — канон makeRental. */
 function completedFixture(overrides: Partial<Rental> = {}): Rental {
   return makeRental({
     id: '0198f6a1-7c1a-7d0f-9f4f-6f3c1e2b4a55',
@@ -34,7 +33,7 @@ function completedFixture(overrides: Partial<Rental> = {}): Rental {
     },
     comment: '',
     rentPayment: {
-      paymentId: '0198f6a1-7c1a-7d0f-9f4f-6f3c1e2b4a88',
+      paymentId: null,
       amountKopecks: 5_600_000,
       paymentDay: 10,
       autoPay: false,
@@ -156,32 +155,5 @@ describe('pastRentalRows', () => {
       completedFixture({ completedDate: null, plannedEndDate: null }),
     );
     expect(none[2]).toEqual({ label: 'Окончание аренды', value: 'Не указано' });
-  });
-});
-
-describe('paidPaymentNumber', () => {
-  const total = 24;
-  it('сначала новые: первый в списке — последний платёж', () => {
-    expect(paidPaymentNumber(0, total, 'desc')).toBe(24);
-    expect(paidPaymentNumber(23, total, 'desc')).toBe(1);
-  });
-
-  it('сначала старые: первый в списке — первый платёж', () => {
-    expect(paidPaymentNumber(0, total, 'asc')).toBe(1);
-    expect(paidPaymentNumber(23, total, 'asc')).toBe(24);
-  });
-
-  it('рассинхрон итога со списком не даёт номера меньше единицы', () => {
-    expect(paidPaymentNumber(5, 3, 'desc')).toBe(1);
-  });
-});
-
-describe('paymentOrdinalLabel', () => {
-  it('«N-й платеж» для любого числа', () => {
-    expect(paymentOrdinalLabel(24)).toBe('24-й платеж');
-    expect(paymentOrdinalLabel(1)).toBe('1-й платеж');
-    expect(paymentOrdinalLabel(11)).toBe('11-й платеж');
-    expect(paymentOrdinalLabel(21)).toBe('21-й платеж');
-    expect(paymentOrdinalLabel(22)).toBe('22-й платеж');
   });
 });

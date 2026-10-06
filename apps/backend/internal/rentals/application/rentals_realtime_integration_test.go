@@ -90,6 +90,7 @@ func TestCompleteRentalPublishesRentalAndPaymentFrames(t *testing.T) {
 
 	pairs := h.realtime.Pairs()
 	assert.Contains(t, pairs, "rentals:"+h.propID.String())
-	assert.Contains(t, pairs, "payments:"+h.propID.String(), "the managed payment stopped at the completion date")
+	assert.Contains(t, pairs, "payments:"+h.propID.String(), "the managed payment died with the completion")
+	assert.Contains(t, pairs, "operations:"+h.propID.String(), "the keep_overdue teardown touched the operations")
 	assert.Contains(t, pairs, "history:"+h.propID.String())
 }

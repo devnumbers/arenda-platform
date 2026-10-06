@@ -12,6 +12,7 @@ package application_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"testing"
@@ -66,12 +67,13 @@ func (p intPolicy) RoleForProperty(context.Context, uuid.UUID, uuid.UUID) (share
 
 // fakeSeamGateway is the RentPaymentGateway double for the pipeline tests.
 // It inserts a minimal real payments row on Create — the rentals FK is real,
-// so even the double must keep the pair consistent — and drops it on Delete.
+// so even the double must keep the pair consistent — reads the row's terms
+// on State and drops it on Delete.
 type fakeSeamGateway struct {
 	pool      *pgxpool.Pool
 	created   []rentalsapp.RentPaymentSeed
 	updates   []uuid.UUID
-	stopped   []uuid.UUID
+	stated    []uuid.UUID
 	deleted   []uuid.UUID
 	ticked    int
 	nextID    uuid.UUID
@@ -166,11 +168,44 @@ func (g *fakeSeamTx) Update(
 	return nil
 }
 
-func (g *fakeSeamTx) Stop(
-	_ context.Context, _, _, paymentID uuid.UUID, _ time.Time,
-) error {
-	g.gateway.stopped = append(g.gateway.stopped, paymentID)
-	return nil
+// State reads the real payments row's terms — the completion's archive
+// source (ревизия #1161): the amount, the payment day out of the monthly
+// recurrence (31 = the last-day marker) and the auto-pay.
+func (g *fakeSeamTx) State(
+	ctx context.Context, _, _, paymentID uuid.UUID,
+) (rentalsapp.RentPaymentTerms, error) {
+	g.gateway.stated = append(g.gateway.stated, paymentID)
+	var title string
+	var amount int64
+	var recurrence string
+	var autoPay bool
+	if err := g.dbtx.QueryRow(ctx,
+		`SELECT title, amount_kopecks, recurrence::text, auto_pay FROM payments WHERE id = $1`,
+		paymentID,
+	).Scan(&title, &amount, &recurrence, &autoPay); err != nil {
+		return rentalsapp.RentPaymentTerms{}, fmt.Errorf("read rent payment terms: %w", err)
+	}
+	var raw struct {
+		DaysOfMonth []int `json:"daysOfMonth"`
+		LastDay     bool  `json:"lastDay"`
+	}
+	if err := json.Unmarshal([]byte(recurrence), &raw); err != nil {
+		return rentalsapp.RentPaymentTerms{}, fmt.Errorf("read rent recurrence: %w", err)
+	}
+	day := rentalsdomain.MustPaymentDay(31)
+	if !raw.LastDay {
+		if len(raw.DaysOfMonth) != 1 {
+			return rentalsapp.RentPaymentTerms{}, fmt.Errorf(
+				"rent recurrence must carry one day of month, got %v", raw.DaysOfMonth)
+		}
+		day = rentalsdomain.MustPaymentDay(raw.DaysOfMonth[0])
+	}
+	return rentalsapp.RentPaymentTerms{
+		AmountKopecks: amount,
+		PaymentDay:    day,
+		AutoPay:       autoPay,
+		Title:         title,
+	}, nil
 }
 
 func (g *fakeSeamTx) Delete(ctx context.Context, _, paymentID uuid.UUID, _ time.Time) error {
@@ -376,6 +411,7 @@ func TestRentalsIntegration_CompleteLifecycle(t *testing.T) {
 	h := newRentalsHarness(t)
 	h.seedOwner()
 	view := h.createRental()
+	paymentID := *view.Rental.PaymentID
 	deposit := int64(10_000_000)
 
 	completedAt := intToday
@@ -392,6 +428,20 @@ func TestRentalsIntegration_CompleteLifecycle(t *testing.T) {
 	assert.Equal(t, deposit, *completed.Rental.DepositReturnKopecks)
 	assert.Equal(t, rentalsdomain.StatusCompleted, completed.Status)
 
+	// Ревизия #1161: платёж удалён Завершением, ссылка снята, архив условий
+	// записан рядом с фактом завершения.
+	assert.Empty(t, completed.Rental.PaymentID)
+	require.NotNil(t, completed.Rental.TermsArchive)
+	assert.Equal(t, int64(5_000_000), completed.Rental.TermsArchive.AmountKopecks)
+	assert.Equal(t, 15, completed.Rental.TermsArchive.PaymentDay.Day())
+	assert.True(t, completed.Rental.TermsArchive.AutoPay)
+	require.Contains(t, h.gateway.stated, paymentID, "the completion reads the terms")
+	require.Contains(t, h.gateway.deleted, paymentID, "the payment dies with the completion")
+	var rows int
+	require.NoError(t, h.pool.QueryRow(context.Background(),
+		`SELECT count(*) FROM payments WHERE id = $1`, paymentID).Scan(&rows))
+	assert.Zero(t, rows, "the payment row is gone")
+
 	// The completion ends the unfinished-only invariant: a new rental fits.
 	next := h.createRental()
 	assert.NotEqual(t, completed.Rental.ID, next.Rental.ID)
@@ -401,7 +451,8 @@ func TestRentalsIntegration_CompleteLifecycle(t *testing.T) {
 		rentalsapp.UpdateRentalCommand{})
 	require.ErrorIs(t, err, rentalsapp.ErrRentalCompleted)
 
-	// The completed rental deletes together with its history entry.
+	// The completed rental deletes together with its history entry; its
+	// payment is already gone — only the row goes.
 	require.NoError(t, h.svc.DeleteRental(context.Background(), h.owner, h.propID, completed.Rental.ID))
 	_, err = h.svc.GetRental(context.Background(), h.owner, h.propID, completed.Rental.ID)
 	assert.ErrorIs(t, err, rentalsapp.ErrNotFound)
@@ -435,27 +486,20 @@ func TestRentalsIntegration_SummaryDefaults(t *testing.T) {
 	assert.Equal(t, int64(10_000_000), summary.ProfitKopecks)
 }
 
-// seedCompletedRental inserts a completed rental pair directly (the payment
-// link is a throwaway id — the gateway is a double in this family).
+// seedCompletedRental inserts a completed rental directly: the pair mirrors
+// the post-completion state (ревизия #1161) — no payment link, the terms
+// archive beside the completion fact, the payment row itself gone.
 func (h *rentalsHarness) seedCompletedRental(start, completedAt time.Time) uuid.UUID {
 	t := h.t
 	t.Helper()
 	id, err := uuid.NewV7()
 	require.NoError(t, err)
-	paymentID, err := uuid.NewV7()
-	require.NoError(t, err)
-	_, err = h.pool.Exec(context.Background(),
-		`INSERT INTO payments (id, owner_id, property_id, type, title, amount_kopecks,
-		                      recurrence, since, end_date, auto_pay, category_slug)
-		 VALUES ($1, $2, $3, 'income', 'Арендная плата', 5000000,
-		         '{"kind":"monthly","daysOfMonth":[15]}'::jsonb, $4, $5, false, 'rent')`,
-		paymentID, h.owner, h.propID, start, mustIntDate("2027-01-01"))
-	require.NoError(t, err)
 	_, err = h.pool.Exec(context.Background(),
 		`INSERT INTO rentals (id, owner_id, property_id, payment_id, start_date,
-		                      planned_end_date, completed_date, utilities)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, 'included')`,
-		id, h.owner, h.propID, paymentID, start, mustIntDate("2027-01-01"), completedAt)
+		                      planned_end_date, completed_date, utilities,
+		                      rent_amount_kopecks, rent_payment_day, rent_auto_pay)
+		 VALUES ($1, $2, $3, NULL, $4, $5, $6, 'included', 5000000, 15, false)`,
+		id, h.owner, h.propID, start, mustIntDate("2027-01-01"), completedAt)
 	require.NoError(t, err)
 	return id
 }

@@ -135,3 +135,30 @@ describe('mapRentalSummary', () => {
     ).toBe(-800_00);
   });
 });
+
+describe('mapRental', () => {
+  it('ревизия #1161: завершённая с удалённым платежом — paymentId null, условия из архива', () => {
+    // nextPayment: null — так платёж уходит в проводе (nullable через $ref
+    // сгенерировался опциональным, маппер гасит отсутствующее в null).
+    const dto = {
+      ...DTO,
+      status: 'completed' as const,
+      completedDate: '2028-05-10',
+      rentPayment: {
+        paymentId: null,
+        amountKopecks: 5600000,
+        paymentDay: 10,
+        autoPay: false,
+        nextPayment: null,
+      },
+      progress: { paidMonths: 0, totalMonths: 24, monthsRemaining: 0, overdueMonths: null },
+    } as unknown as RentalResponseDto;
+    expect(mapRental(dto).rentPayment).toEqual({
+      paymentId: null,
+      amountKopecks: 5600000,
+      paymentDay: 10,
+      autoPay: false,
+      nextPayment: null,
+    });
+  });
+});

@@ -185,21 +185,17 @@ test.describe('машина «Действий аренды» на страни�
   }, testInfo) => {
     await seedProperty('maintenance');
     // Завершённая история на ремонте живёт как раньше: смотрим её в хабе
-    // и удаляем прямым API — гвард её не задевает.
-    await execE2eSql(
-      `INSERT INTO payments (id, owner_id, property_id, type, title, amount_kopecks,
-                             recurrence, since, end_date, auto_pay, category_slug)
-       VALUES ('98600000-9860-4000-8000-000000000989', ${OWNER_SQL}, '${PROPERTY_ID}',
-               'income', 'Арендная плата', ${RENT_AMOUNT_KOPECKS},
-               '{"kind":"monthly","daysOfMonth":[15]}'::jsonb,
-               current_date - 300, current_date - 40, false, 'rent')`,
-    );
+    // и удаляем прямым API — гвард её не задевает. Ревизия #1161: платёж
+    // удалён Завершением — сид завершённой это зеркалит (без ссылки, с
+    // архивом условий).
     await execE2eSql(
       `INSERT INTO rentals (id, owner_id, property_id, payment_id, start_date,
-                            planned_end_date, completed_date, utilities)
+                            planned_end_date, completed_date, utilities,
+                            rent_amount_kopecks, rent_payment_day, rent_auto_pay)
        VALUES ('98600000-9860-4000-8000-000000000990', ${OWNER_SQL}, '${PROPERTY_ID}',
-               '98600000-9860-4000-8000-000000000989',
-               current_date - 300, current_date - 40, current_date - 40, 'included')`,
+               NULL,
+               current_date - 300, current_date - 40, current_date - 40, 'included',
+               ${RENT_AMOUNT_KOPECKS}, 15, false)`,
     );
 
     await openDetail(page, seededUser);

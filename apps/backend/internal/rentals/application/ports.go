@@ -32,11 +32,13 @@ type RentalStore interface {
 	// among them, and completion belongs to Complete.
 	Update(ctx context.Context, r domain.Rental) error
 	// Complete writes the completion fact and the optional deposit return in
-	// one UPDATE; rows affected = 0 is not an error — the use case has
-	// already proven existence inside the same transaction and lock.
+	// one UPDATE, releases the payment link (the payment dies in the same
+	// transaction, ревизия #1161) and lands the terms archive: rows affected
+	// = 0 is not an error — the use case has already proven existence inside
+	// the same transaction and lock.
 	Complete(
 		ctx context.Context, id, scope uuid.UUID, completedDate time.Time,
-		depositReturn *DepositReturn,
+		depositReturn *DepositReturn, archived domain.TermsArchive,
 	) error
 	// Delete removes the rental row; it must run before the managed
 	// payment's own delete (the RESTRICT FK releases only afterwards).
@@ -90,6 +92,17 @@ type RentPaymentState struct {
 	ReminderOffsetDays *int
 }
 
+// RentPaymentTerms is the managed payment's current terms read inside the
+// caller's transaction — the completion's archive source (ревизия ADR 0053
+// #1161): the snapshot lands on the rental and the title names the
+// payment-deletion journal row.
+type RentPaymentTerms struct {
+	AmountKopecks int64
+	PaymentDay    domain.PaymentDay
+	AutoPay       bool
+	Title         string
+}
+
 // PlannedOccurrence is the payment's single future planned operation
 // (payments keep exactly one): the «Оплатить платёж» target and the
 // nextPayment view.
@@ -129,15 +142,15 @@ type RentPaymentGatewayTx interface {
 		ctx context.Context, scope, propertyID, paymentID uuid.UUID,
 		change RentPaymentChange, today time.Time,
 	) error
-	// Stop ends the payment at the completion date: end_date = completed,
-	// the strictly-after-completion planned goes, the already due stays.
-	Stop(
-		ctx context.Context, scope, propertyID, paymentID uuid.UUID, completedDate time.Time,
-	) error
+	// State reads the managed payment's current terms inside the caller's
+	// transaction — the completion's archive source and the journal row's
+	// title (ревизия #1161).
+	State(ctx context.Context, scope, propertyID, paymentID uuid.UUID) (RentPaymentTerms, error)
 	// Delete removes the payment with the keep_overdue=true semantics: the
 	// planned from today on goes, the overdue stays as debt (payment_id set
-	// to NULL by the FK, origin unchanged). The caller deletes the rentals
-	// row first.
+	// to NULL by the FK, origin unchanged). The completion releases the
+	// rental's link (and lands the terms archive) before this call; the
+	// unfinished rental's deletion removes the rentals row first.
 	Delete(ctx context.Context, scope, paymentID uuid.UUID, today time.Time) error
 	// RunTick runs the payments materialization tick for the owner inside
 	// the same transaction (the in-mutation rerun, ADR 0049 §3).

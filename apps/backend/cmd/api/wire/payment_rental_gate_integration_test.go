@@ -104,7 +104,7 @@ func TestGate_RentalManagedPaymentRejectsRuleMutations(t *testing.T) {
 	t.Parallel()
 	h := newSeamHarness(t)
 	h.seedOwner()
-	paymentID := h.createGateRental().Rental.PaymentID
+	paymentID := *h.createGateRental().Rental.PaymentID
 	ctx := context.Background()
 
 	// The domain rule precedes the rule's own state: resume of a rule that
@@ -128,7 +128,7 @@ func TestGate_UpcomingRentalKeepsThePaymentGated(t *testing.T) {
 	h := newSeamHarness(t)
 	h.seedOwner()
 	view := h.createUpcomingGateRental()
-	paymentID := view.Rental.PaymentID
+	paymentID := *view.Rental.PaymentID
 	ctx := context.Background()
 
 	// The state is really «Ожидает начала»: nothing due, no operations.
@@ -152,7 +152,7 @@ func TestGate_ManagedPaymentKeepsFactsAndFavorite(t *testing.T) {
 	t.Parallel()
 	h := newSeamHarness(t)
 	h.seedOwner()
-	paymentID := h.createGateRental().Rental.PaymentID
+	paymentID := *h.createGateRental().Rental.PaymentID
 	ctx := context.Background()
 
 	// «Оплатить» — канон отметки оплаты месяца аренды: платёжный факт
@@ -175,34 +175,41 @@ func TestGate_ManagedPaymentKeepsFactsAndFavorite(t *testing.T) {
 	assert.Equal(t, map[uuid.UUID]bool{paymentID: true}, statuses)
 }
 
-func TestGate_CompletedRentalKeepsThePaymentGated(t *testing.T) {
+// Ревизия #1161: Завершение удаляет Платёж той же транзакцией — гейтить у
+// завершённой аренды больше нечего. Ссылка снята, правила нет, оплаченные
+// операции переживают платёж в истории объекта; удаление самой аренды
+// платёжных write'ов не трогает вовсе.
+func TestGate_CompletedRentalHasNoPaymentLeftToGate(t *testing.T) {
 	t.Parallel()
 	h := newSeamHarness(t)
 	h.seedOwner()
 	view := h.createGateRental()
-	paymentID := view.Rental.PaymentID
+	paymentID := *view.Rental.PaymentID
 	ctx := context.Background()
 
-	// Completion is the rental pipeline's own legal sync — it lands past
-	// the gate (Stop writes through the gateway).
+	// Completion is the rental pipeline's own legal teardown — it lands past
+	// the gate and deletes the rule.
 	_, err := h.svc.CompleteRental(ctx, h.owner, h.propID, view.Rental.ID,
 		rentalsapp.CompleteRentalCommand{CompletedDate: seamToday})
 	require.NoError(t, err)
 
-	// The rental is final — and with it its payment: no edit path exists
-	// anywhere, so the rule mutations stay rejected (the honest 409 the
-	// RESTRICT FK always implied for deletion).
-	h.requireRuleMutationsGated(ctx, paymentID)
-
-	managed, err := h.paySvc.RentalManagedStatus(ctx, h.owner, h.propID, paymentID)
-	require.NoError(t, err)
-	assert.True(t, managed, "a completed rental still owns its payment's fate")
-
-	// The legal deletion path: delete the rental — the payment goes with it
-	// (keep_overdue semantics), the gate never saw it.
-	require.NoError(t, h.svc.DeleteRental(ctx, h.owner, h.propID, view.Rental.ID))
 	_, err = h.paySvc.GetPayment(ctx, h.owner, h.propID, paymentID)
-	require.ErrorIs(t, err, paymentsapp.ErrNotFound)
+	require.ErrorIs(t, err, paymentsapp.ErrNotFound, "the completion deleted the payment")
+	var links int
+	require.NoError(t, h.pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM rentals WHERE payment_id = $1`, paymentID).Scan(&links))
+	assert.Zero(t, links, "the link is released — no rental references the dead rule")
+
+	// The paid facts survive in the property's history («платёж удалён»).
+	var paid int
+	require.NoError(t, h.pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM operations
+		 WHERE property_id = $1 AND origin = 'payment' AND payment_id IS NULL AND status = 'paid'`,
+		h.propID).Scan(&paid))
+	assert.Positive(t, paid)
+
+	// The rental itself deletes cleanly — nothing payment-shaped is left.
+	require.NoError(t, h.svc.DeleteRental(ctx, h.owner, h.propID, view.Rental.ID))
 }
 
 func TestGate_OrdinaryPaymentStaysMutable(t *testing.T) {

@@ -15,7 +15,11 @@ const completeRental = `-- name: CompleteRental :execrows
 UPDATE rentals
 SET completed_date = $3,
     deposit_return_kopecks = $4,
-    deposit_return_comment = $5
+    deposit_return_comment = $5,
+    payment_id = NULL,
+    rent_amount_kopecks = $6,
+    rent_payment_day = $7,
+    rent_auto_pay = $8
 WHERE id = $1 AND owner_id = $2
 `
 
@@ -25,10 +29,15 @@ type CompleteRentalParams struct {
 	CompletedDate        pgtype.Date `json:"completed_date"`
 	DepositReturnKopecks pgtype.Int8 `json:"deposit_return_kopecks"`
 	DepositReturnComment pgtype.Text `json:"deposit_return_comment"`
+	RentAmountKopecks    pgtype.Int8 `json:"rent_amount_kopecks"`
+	RentPaymentDay       pgtype.Int4 `json:"rent_payment_day"`
+	RentAutoPay          pgtype.Bool `json:"rent_auto_pay"`
 }
 
-// Завершение: the completion date and the optional deposit return land in
-// one UPDATE. The one-unfinished-per-property index releases here; the
+// Завершение (ревизия ADR 0053 #1161): дата завершения, возврат залога и
+// Архив условий удалённого Платежа — один UPDATE; ссылка payment_id
+// снимается (RESTRICT отпускает платёж, удаляемый следом в той же
+// транзакции). The one-unfinished-per-property index releases here; the
 // caller has proven the rental unfinished inside the same transaction.
 func (q *Queries) CompleteRental(ctx context.Context, arg CompleteRentalParams) (int64, error) {
 	result, err := q.db.Exec(ctx, completeRental,
@@ -37,6 +46,9 @@ func (q *Queries) CompleteRental(ctx context.Context, arg CompleteRentalParams) 
 		arg.CompletedDate,
 		arg.DepositReturnKopecks,
 		arg.DepositReturnComment,
+		arg.RentAmountKopecks,
+		arg.RentPaymentDay,
+		arg.RentAutoPay,
 	)
 	if err != nil {
 		return 0, err
@@ -122,6 +134,9 @@ SELECT r.id,
        r.commission_kopecks,
        r.deposit_return_kopecks,
        r.deposit_return_comment,
+       r.rent_amount_kopecks,
+       r.rent_payment_day,
+       r.rent_auto_pay,
        r.comment,
        r.created_at,
        r.updated_at,
@@ -153,6 +168,9 @@ type GetRentalByIDRow struct {
 	CommissionKopecks    pgtype.Int8        `json:"commission_kopecks"`
 	DepositReturnKopecks pgtype.Int8        `json:"deposit_return_kopecks"`
 	DepositReturnComment pgtype.Text        `json:"deposit_return_comment"`
+	RentAmountKopecks    pgtype.Int8        `json:"rent_amount_kopecks"`
+	RentPaymentDay       pgtype.Int4        `json:"rent_payment_day"`
+	RentAutoPay          pgtype.Bool        `json:"rent_auto_pay"`
 	Comment              pgtype.Text        `json:"comment"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
@@ -186,6 +204,9 @@ func (q *Queries) GetRentalByID(ctx context.Context, arg GetRentalByIDParams) (G
 		&i.CommissionKopecks,
 		&i.DepositReturnKopecks,
 		&i.DepositReturnComment,
+		&i.RentAmountKopecks,
+		&i.RentPaymentDay,
+		&i.RentAutoPay,
 		&i.Comment,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -288,6 +309,9 @@ SELECT r.id,
        r.commission_kopecks,
        r.deposit_return_kopecks,
        r.deposit_return_comment,
+       r.rent_amount_kopecks,
+       r.rent_payment_day,
+       r.rent_auto_pay,
        r.comment,
        r.created_at,
        r.updated_at,
@@ -322,6 +346,9 @@ type ListRentalsByPropertyRow struct {
 	CommissionKopecks    pgtype.Int8        `json:"commission_kopecks"`
 	DepositReturnKopecks pgtype.Int8        `json:"deposit_return_kopecks"`
 	DepositReturnComment pgtype.Text        `json:"deposit_return_comment"`
+	RentAmountKopecks    pgtype.Int8        `json:"rent_amount_kopecks"`
+	RentPaymentDay       pgtype.Int4        `json:"rent_payment_day"`
+	RentAutoPay          pgtype.Bool        `json:"rent_auto_pay"`
 	Comment              pgtype.Text        `json:"comment"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
@@ -355,6 +382,9 @@ func (q *Queries) ListRentalsByProperty(ctx context.Context, arg ListRentalsByPr
 			&i.CommissionKopecks,
 			&i.DepositReturnKopecks,
 			&i.DepositReturnComment,
+			&i.RentAmountKopecks,
+			&i.RentPaymentDay,
+			&i.RentAutoPay,
 			&i.Comment,
 			&i.CreatedAt,
 			&i.UpdatedAt,
