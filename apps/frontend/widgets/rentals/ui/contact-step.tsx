@@ -48,10 +48,10 @@ export type ContactStepProps = {
   /** Выбранный арендатор; undefined — не выбран. */
   readonly contactId: string | undefined;
   readonly onContactChange: (contactId: string | undefined) => void;
-  /** Уход в под-маршрут визарда («Выбрать контакт», «Создать контакт»):
+  /** Уход в под-маршрут визарда («Выбрать контакт», «Создать контакт»,
+   * карточка контакта — тап по строке или «Открыть», «Изменить»):
    * носитель сессии помечается живым до push, состояние шагов 1–3
-   * переживает круговой маршрут. Уходы вне флоу («Открыть», «Изменить»)
-   * флаг не ставят — возврат на чистый визард (канон Q2=В). */
+   * переживает круговой маршрут (решение владельца 2026-10-06, #1159). */
   readonly onSubRouteOpen: () => void;
 };
 
@@ -97,7 +97,13 @@ export function ContactStep({
   };
 
   const openContactCard = (contactId: string): void => {
+    onSubRouteOpen();
     router.push(ROUTES.propertyContact(propertyId, contactId));
+  };
+
+  const openContactEdit = (contactId: string): void => {
+    onSubRouteOpen();
+    router.push(ROUTES.propertyContactEdit(propertyId, contactId));
   };
 
   const handleDelete = (): void => {
@@ -149,7 +155,7 @@ export function ContactStep({
                 </MenuItem>
                 <MenuItem
                   icon={<Edit className="h-6 w-6" />}
-                  onSelect={() => router.push(ROUTES.propertyContactEdit(propertyId, selectedTenant.id))}
+                  onSelect={() => openContactEdit(selectedTenant.id)}
                 >
                   Изменить
                 </MenuItem>
