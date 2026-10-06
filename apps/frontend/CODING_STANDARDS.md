@@ -6,7 +6,7 @@ Not duplicated here — single sources of truth elsewhere:
 
 - Import boundaries and the DTO isolation gates are enforced by `eslint.config.mjs` (`boundaries/dependencies`, `no-restricted-imports`); review does not re-report what lint blocks.
 - The security lint gates are enforced by `eslint.config.mjs` (see the Security contour section below).
-- Invariants and commands: `AGENTS.md` (same directory). Domain language: per-context `CONTEXT.md` (index in `CONTEXT-MAP.md`). Decisions: `docs/adr/`.
+- Invariants and commands: `AGENTS.md` (same directory). Domain language: per-context `GLOSSARY.md` (index in `GLOSSARY-MAP.md`). Decisions: `docs/adr/`.
 - New UI (payments design layer onward) is built on shadcn/ui over Radix primitives, styled with Tailwind utilities on top of our tokens (ADR 0050). Легаси HeroUI снесён целиком (аменд ADR 0050 2026-09-26, тикет #901) — нового HeroUI-кода не бывает, его MCP-доки сняты.
 
 Отступление от канона этого файла оформляется амендом соответствующей секции в том же коммите, со ссылкой на тикет (прецедент #1079 к разделу Navigation).
@@ -161,4 +161,4 @@ Judgement calls for the Standards axis, not violations. Read each as *what it is
 - **`test.fixme`-спеки** — не остаются в дереве: сносятся после grep-проверки «мёртвости» (#491). → снести или реализовать.
 - **Копипаста фикстур** — фикстуры сущностей — общие билдеры `entities/<ctx>/model/testing.ts` (#849). → билдер с overrides.
 - **Чистые хендлеры в ui/** — стрим/сетевые хендлеры живут в `api/` слайса и не импортируют `ui/`; UI-эффекты (тост) инъектируются колбэком (#883). → перенести в api/, инъекция колбэка.
-- **Док-рот** — докстринги-инварианты, CONTEXT.md, DESIGN.md, ADR-упоминания, `docs/agents/tooling.md` синхронизируются с фактическим поведением ветки в том же изменении; «инвариантные» формулировки («only X», «единственный источник») лгут первыми (#857, #832). Расхождение доки коду — жёсткая находка, не косметика (#723, #149). → догнать доки тем же коммитом.
+- **Док-рот** — докстринги-инварианты, GLOSSARY.md, DESIGN.md, ADR-упоминания, `docs/agents/tooling.md` синхронизируются с фактическим поведением ветки в том же изменении; «инвариантные» формулировки («only X», «единственный источник») лгут первыми (#857, #832). Расхождение доки коду — жёсткая находка, не косметика (#723, #149). → догнать доки тем же коммитом.

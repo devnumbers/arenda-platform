@@ -77,7 +77,7 @@ The actor/scope split applies to property-scoped data contexts: properties,
 leases, notifications (reminders, free reminders). Billing (subscriptions,
 payments, payment methods) and popups remain keyed by `userID` — they are
 personal account data, never delegated via property membership (per
-CONTEXT.md: a shared object consumes the recipient's own tariff slot;
+GLOSSARY.md: a shared object consumes the recipient's own tariff slot;
 subscription/payment data is never shared).
 
 ## Consequences
@@ -107,6 +107,6 @@ subscription/payment data is never shared).
   the T2 ticket that introduced the policy port and the actor/scope split.
 - Issue [`#153`](https://github.com/devnumbers/arenda-platform/issues/153) —
   PRD: Property Sharing (the feature this seam prepares for).
-- `CONTEXT.md` entries: "Совместный доступ к объекту", "Участник объекта",
+- `GLOSSARY.md` entries: "Совместный доступ к объекту", "Участник объекта",
   "Полный доступ", "Просмотр" — the sharing roles the policy port will resolve
   in T3.

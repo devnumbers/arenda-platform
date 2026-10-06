@@ -25,7 +25,7 @@ The actual need is narrow. A fact-finding pass over the three callers of `httpsu
 
 Two of three callers need nothing but the role; the third legitimately fetches the full profile from the identity service. `ParseOptionalEmail` and `ErrTooManyAttempts` are consumed only by identity's own auth handlers, not by platform code generally. The platform does not need the `identity.User` aggregate (with Phone, Timezone, Email, names) — it needs the **actor identity**: who is acting, and with which role.
 
-`internal/shared` already exists as the shared kernel home (`clock`, `policy`, `sanitize`, `tzresolver`, …) and is imported by all nine contexts. `CONTEXT-MAP.md` already documents role vocabulary in its shared-kernel section.
+`internal/shared` already exists as the shared kernel home (`clock`, `policy`, `sanitize`, `tzresolver`, …) and is imported by all nine contexts. `GLOSSARY-MAP.md` already documents role vocabulary in its shared-kernel section.
 
 ## Decision
 
@@ -74,7 +74,7 @@ A new `depguard` rule `platform-clean` denies `internal/platform/**` from import
 - (+) The request context carries exactly what platform middleware needs (actor identity), not an aggregate it has no business holding.
 - (-) `GetMe` always hits `Profile.Me` instead of a context cache. This is one extra read per `/me` request; acceptable for an endpoint that returns the profile anyway, and it removes a stale-cache risk.
 - (-) `identity/domain` gains a dependency on `shared/actor` for the role type (or a re-export). This is the intended direction (context → shared kernel).
-- `CONTEXT-MAP.md` shared-kernel section is updated to point at `internal/shared/actor` as the canonical role home.
+- `GLOSSARY-MAP.md` shared-kernel section is updated to point at `internal/shared/actor` as the canonical role home.
 
 ## See also
 

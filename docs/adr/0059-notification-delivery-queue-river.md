@@ -123,7 +123,7 @@ our code.
   the HTTP server drains — inside the documented 5–15s deploy gap, worth
   watching.
 - = Delivery semantics change from best-effort single-attempt to
-  at-least-once; recorded here and in the context `CONTEXT.md` so the
+  at-least-once; recorded here and in the context `GLOSSARY.md` so the
   documented guarantees do not drift.
 
 ## See also

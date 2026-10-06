@@ -134,5 +134,5 @@ map #714 all need a push channel. The facts that shaped the decision:
 
 - `docs/research/2026-09-17-notifications-sse.md` — full research #736
   (spec links, Caddy/Next specifics, timeout analysis, front-end provider).
-- `apps/backend/internal/notifications/CONTEXT.md` — the stream vocabulary
+- `apps/backend/internal/notifications/GLOSSARY.md` — the stream vocabulary
   (Хаб, Envelope, event names, limits).

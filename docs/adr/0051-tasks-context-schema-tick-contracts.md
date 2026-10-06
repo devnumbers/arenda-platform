@@ -70,4 +70,4 @@ Accepted (аменде 2026-10-01: «Удалить все выполненны�
 
 - Карта wayfinder #493; тикеты #494 (словарь), #495 (research), #496 (схема и тик), #497 (экранная карта), #498 (реализация).
 - ADR 0047/0048/0049 (Payments: словарь, драйверы тика и TZ, схема и контракты — образец), ADR 0025/0049 (жизненный цикл объекта), ADR 0028 (actor/scope), ADR 0033 (UoW), ADR 0020 (аудит; расширенный гэп), ADR 0002 (contract-first OpenAPI), ADR 0003/0019 (pgx+sqlc / UUIDv7).
-- `apps/backend/internal/tasks/CONTEXT.md` — словарь контекста; `CONTEXT-MAP.md` — связи Properties → Tasks.
+- `apps/backend/internal/tasks/GLOSSARY.md` — словарь контекста; `GLOSSARY-MAP.md` — связи Properties → Tasks.

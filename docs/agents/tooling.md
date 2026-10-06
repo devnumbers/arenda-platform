@@ -49,7 +49,7 @@ On-ramps:
 
 Reference layer:
 
-- `domain-modeling` — domain terminology, CONTEXT.md glossaries, ADR discipline.
+- `domain-modeling` — domain terminology, GLOSSARY.md glossaries, ADR discipline.
 - `codebase-design` — shared vocabulary for designing deep modules.
 
 Utilities:
@@ -145,7 +145,7 @@ Evaluated and ruled out on the map — recorded so the question stays closed:
 - pre-commit framework, husky — new runtimes / root `package.json` (see lefthook decision).
 - `PostToolUse` lint hooks — friction without a win (see harness hooks).
 - Calendar rituals (e.g. dependency-hygiene cadence) — trigger-based review instead.
-- Cross-session memory branch — status quo stands: `handoff` skill + lean-ctx session functions + ADR/CONTEXT discipline (map out-of-scope).
+- Cross-session memory branch — status quo stands: `handoff` skill + lean-ctx session functions + ADR/GLOSSARY discipline (map out-of-scope).
 - Paid/cloud tools — charting constraint: free and local only.
 
 ## Standing patterns

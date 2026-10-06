@@ -15,11 +15,11 @@ ADR 0001 провозглашает DDD modular monolith с изолирован
 
 ## Decision
 
-Документировать (properties, leases, notifications) как один супер-контекст "rental" в `CONTEXT-MAP.md` и в per-context `CONTEXT.md` — до тех пор, пока циклы не будут разорваны через ports (interfaces в consuming-контексте, реализация в source-контексте). Разрыв отложен как задача для `/improve-codebase-architecture`.
+Документировать (properties, leases, notifications) как один супер-контекст "rental" в `GLOSSARY-MAP.md` и в per-context `GLOSSARY.md` — до тех пор, пока циклы не будут разорваны через ports (interfaces в consuming-контексте, реализация в source-контексте). Разрыв отложен как задача для `/improve-codebase-architecture`.
 
 ## Consequences
 
-- Per-context CONTEXT.md для этого кластера — один файл, не три.
+- Per-context GLOSSARY.md для этого кластера — один файл, не три.
 - Разрыв циклов через ports — будущая deepening opportunity (кандидат на `/improve-codebase-architecture`).
-- Контексты `identity`, `billing`, `audit`, `popups`, `access` — действительно изолированы и описываются отдельными per-context CONTEXT.md.
+- Контексты `identity`, `billing`, `audit`, `popups`, `access` — действительно изолированы и описываются отдельными per-context GLOSSARY.md.
 - ADR 0001 остаётся в силе как цель; этот ADR фиксирует временное отклонение.

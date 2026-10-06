@@ -4,7 +4,7 @@ order: 1
 ---
 
 > **Это продуктовые описания сущностей для людей.** Canonical доменная терминология
-> для кода и агентов живёт в `CONTEXT-MAP.md` и per-context `CONTEXT.md`. При
+> для кода и агентов живёт в `GLOSSARY-MAP.md` и per-context `GLOSSARY.md`. При
 > конфликте прав canonical-глоссарий, не этот раздел.
 
 ## [Пользователь](./polzovatel)

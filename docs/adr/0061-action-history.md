@@ -129,7 +129,7 @@ Entries live while the property lives; the only deletion channel is the property
 - (−) One more write per mutation with GIN overhead (+8–70% on batch inserts — microseconds at a human pace, inside an already-open transaction).
 - (−) The feed cannot explain limit-driven access disappearances (system rows excluded) — accepted for MVP.
 - (−) Row copy lives in Go templates; wording changes are code changes.
-- (~) `audit_log`, its Recorder, and its glossary entry stay as-is; the Audit context `CONTEXT.md` _Avoid_ list no longer bans «история действий».
+- (~) `audit_log`, its Recorder, and its glossary entry stay as-is; the Audit context `GLOSSARY.md` _Avoid_ list no longer bans «история действий».
 
 ## Rejected alternatives
 

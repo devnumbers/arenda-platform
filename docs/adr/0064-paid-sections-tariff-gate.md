@@ -36,4 +36,4 @@
 
 - [`docs/adr/0035-consumer-side-interfaces.md`](./0035-consumer-side-interfaces.md) — правило размещения порта у потребителя.
 - [`docs/adr/0008-subscription-lifecycle.md`](./0008-subscription-lifecycle.md) — статусы подписки, grace/cancelled.
-- [billing `CONTEXT.md`](../../apps/backend/internal/billing/CONTEXT.md) — «Платный тариф», канонический термин платности.
+- [billing `GLOSSARY.md`](../../apps/backend/internal/billing/GLOSSARY.md) — «Платный тариф», канонический термин платности.

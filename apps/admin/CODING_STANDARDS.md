@@ -74,4 +74,4 @@ Judgement calls for the Standards axis, not violations. Read each as *what it is
 - **Ad-hoc `sx` duplicating `fields.tsx`** — money, names, chips, links hand-rolled inline. → reuse the field/helper.
 - **Write path added quietly** — a mutation outside `tariffs` without the read-only decision recorded. → flag it; read-only is the default.
 - **Missing Russian label** — a catalog entry with an empty or English label. → fill the label; UI language is Russian.
-- **Док-рот** — докстринги, CONTEXT.md, ADR-упоминания и реестры (`docs/agents/tooling.md`) синхронизируются с фактическим поведением ветки в том же изменении; «инвариантные» формулировки («only X», «единственный источник») лгут первыми; расхождение доки коду — жёсткая находка, не косметика (#723, #828, #857). → догнать доки тем же коммитом.
+- **Док-рот** — докстринги, GLOSSARY.md, ADR-упоминания и реестры (`docs/agents/tooling.md`) синхронизируются с фактическим поведением ветки в том же изменении; «инвариантные» формулировки («only X», «единственный источник») лгут первыми; расхождение доки коду — жёсткая находка, не косметика (#723, #828, #857). → догнать доки тем же коммитом.

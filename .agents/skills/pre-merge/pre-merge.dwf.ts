@@ -21,7 +21,7 @@ const AREAS: AreaDef[] = [
   //   id: "backend-access",
   //   title: "Бэкенд: access-агрегат и SQL",
   //   paths: ["apps/backend/internal/access", "apps/backend/db"],
-  //   standards: "apps/backend/AGENTS.md, apps/backend/internal/access/CONTEXT.md, CONTEXT-MAP.md; деньги — BIGINT копейки, docs/adr/0036.",
+  //   standards: "apps/backend/AGENTS.md, apps/backend/internal/access/GLOSSARY.md, GLOSSARY-MAP.md; деньги — BIGINT копейки, docs/adr/0036.",
   //   focus: "Что именно проверить в этой ветке: ключевые коммиты, швы, риски области.",
   // },
 ];
@@ -50,7 +50,7 @@ interface AreaDef {
   title: string;
   /** Префиксы путей области от корня репозитория ("." — весь репозиторий). */
   paths: string[];
-  /** Файлы стандартов и канонов области (AGENTS.md, CONTEXT.md, DESIGN.md, ADR). */
+  /** Файлы стандартов и канонов области (AGENTS.md, GLOSSARY.md, DESIGN.md, ADR). */
   standards: string;
   /** Что именно проверить в этой ветке: швы, коммиты, риски. */
   focus: string;
@@ -294,10 +294,10 @@ function deriveRule(p: string): [string, string, string] {
 
 function deriveAreas(files: string[]): AreaDef[] {
   const std = (id: string): string => {
-    if (id.startsWith("be-")) return "apps/backend/AGENTS.md, CONTEXT-MAP.md, per-context CONTEXT.md, docs/adr/; деньги — BIGINT копейки, docs/adr/0036.";
+    if (id.startsWith("be-")) return "apps/backend/AGENTS.md, GLOSSARY-MAP.md, per-context GLOSSARY.md, docs/adr/; деньги — BIGINT копейки, docs/adr/0036.";
     if (id.startsWith("fe-") || id === "e2e-docs") return "apps/frontend/AGENTS.md, apps/frontend/DESIGN.md, docs/testing-strategy.md.";
     if (id === "admin") return "apps/admin/AGENTS.md.";
-    return "корневой AGENTS.md, CONTEXT-MAP.md.";
+    return "корневой AGENTS.md, GLOSSARY-MAP.md.";
   };
   const groups = new Map<string, string[]>();
   for (const f of files) {
@@ -373,7 +373,7 @@ if (devSha === basePre) {
         "1. Увидь состояние: git -C " + WT + " status, список конфликтных файлов.",
         "2. Найди первоисточники каждой стороны: git log обоих родителей конфликтного куска, при необходимости тикеты (gh issue view — читающе).",
         "3. Разрули каждый ханк, сохраняя НАМЕРЕНИЯ ОБОИХ сторон; где несовместимо — выбирай по цели merge (интеграция dev в фичу) и фиксируй развязку в summary. Новое поведение не изобретай, git merge --abort никогда.",
-        "4. Известный класс коллизий: номера миграций и ADR, разошедшиеся между веткой и dev — перенумеруй СТОРОНУ ВЕТКИ на следующие свободные номера и поправь все ссылки (включая .squawk.toml, sqlc/openapi-регенераты, CONTEXT-MAP.md).",
+        "4. Известный класс коллизий: номера миграций и ADR, разошедшиеся между веткой и dev — перенумеруй СТОРОНУ ВЕТКИ на следующие свободные номера и поправь все ссылки (включая .squawk.toml, sqlc/openapi-регенераты, GLOSSARY-MAP.md).",
         "5. Заверши: git add разрешённых путей и git commit, закрывающий merge. Пуш не делай.",
         "",
         "Верни summary (каждый конфликт и его развязка) и changedFiles.",
@@ -429,7 +429,7 @@ if (uncovered.length > 0) {
     id: "leftovers",
     title: "Файлы вне областей",
     paths: Array.from(new Set(uncovered.map((f) => f.split("/").slice(0, 2).join("/")))),
-    standards: "корневой AGENTS.md, CONTEXT-MAP.md.",
+    standards: "корневой AGENTS.md, GLOSSARY-MAP.md.",
     focus: "Файлы, не попавшие в области раскладки: ревьюй по смыслу. Файлы: " + uncovered.join(", "),
   });
   log("Файлов вне областей: " + uncovered.length + " — выделены в отдельную область");
@@ -532,8 +532,8 @@ for (let round = 1; round <= SWEEP_ROUNDS; round++) {
       "ФОКУС: " + a.focus,
       "",
       "Что искать, две оси:",
-      "1. ДЕФЕКТЫ и нарушения документированных стандартов (kind=\"defect\"): по AGENTS.md/CONTEXT.md/DESIGN.md/ADR области + smell-бейзлайн Фаулера (Mysterious Name, Duplicated Code, Feature Envy, Data Clumps, Primitive Obsession, Repeated Switches, Shotgun Surgery, Divergent Change, Speculative Generality, Message Chains, Middle Man, Refused Bequest — всегда judgement call, документированный стандарт старше). Обязательно свип doc-рот по всем файлам области: комментарии и докстринги, описывающие поведение, которое ветка удалила или заменила.",
-      "2. АРХИТЕКТУРА (kind=\"architecture\"), методика improve-codebase-architecture, сужено на дифф: мелкие модули (интерфейс почти как реализация), дубли форм между тикетами, чистые функции без локальности, пропущенный словарь CONTEXT.md; к подозрительным применяй deletion test. В fixHint — форма углубления. Кандидат за пределами диффа ветки — тоже отмечай: его диспозируют как issue, а не чинят.",
+      "1. ДЕФЕКТЫ и нарушения документированных стандартов (kind=\"defect\"): по AGENTS.md/GLOSSARY.md/DESIGN.md/ADR области + smell-бейзлайн Фаулера (Mysterious Name, Duplicated Code, Feature Envy, Data Clumps, Primitive Obsession, Repeated Switches, Shotgun Surgery, Divergent Change, Speculative Generality, Message Chains, Middle Man, Refused Bequest — всегда judgement call, документированный стандарт старше). Обязательно свип doc-рот по всем файлам области: комментарии и докстринги, описывающие поведение, которое ветка удалила или заменила.",
+      "2. АРХИТЕКТУРА (kind=\"architecture\"), методика improve-codebase-architecture, сужено на дифф: мелкие модули (интерфейс почти как реализация), дубли форм между тикетами, чистые функции без локальности, пропущенный словарь GLOSSARY.md; к подозрительным применяй deletion test. В fixHint — форма углубления. Кандидат за пределами диффа ветки — тоже отмечай: его диспозируют как issue, а не чинят.",
       "",
       "ДИСПОЗИЦИИ ПРОШЛЫХ РАУНДОВ И ПИНЫ (это НЕ находки, не переоткрывай):",
       dispoText,

@@ -2,7 +2,7 @@
 
 ## Scope
 
-Rules for the Go backend in `apps/backend`. Also follow the root `AGENTS.md`, the relevant per-context `CONTEXT.md` (index in `CONTEXT-MAP.md`), relevant product docs, and ADRs.
+Rules for the Go backend in `apps/backend`. Also follow the root `AGENTS.md`, the relevant per-context `GLOSSARY.md` (index in `GLOSSARY-MAP.md`), relevant product docs, and ADRs.
 
 ## Mandatory Backend Tools
 
@@ -35,7 +35,7 @@ Before implementing or reviewing backend code, read `CODING_STANDARDS.md` (same 
 ## Architecture Rules
 
 - Use DDD, Clean Architecture, layered architecture, clean code, and idiomatic Go. Keep the backend a DDD modular monolith until an ADR records a real reason to split services.
-- Bounded contexts live in `internal/<context>/`, each with its own `CONTEXT.md`; the live index is `CONTEXT-MAP.md`. Add new contexts per the checklist in `CODING_STANDARDS.md`.
+- Bounded contexts live in `internal/<context>/`, each with its own `GLOSSARY.md`; the live index is `GLOSSARY-MAP.md`. Add new contexts per the checklist in `CODING_STANDARDS.md`.
 - Layer direction is inward only: transport/adapters → application → domain. Domain packages contain business language and rules only — no HTTP, OpenAPI generated types, `pgx`, `sqlc`, `database/sql`, config, or adapters (depguard `domain-clean` in `.golangci.yml`). Application packages own use cases, ports, orchestration, transaction boundaries (depguard `application-clean`); adapter/platform packages own HTTP, persistence, config, logging, external services, and generated code.
 - Keep packages small, names explicit, errors intentional, and dependencies boring. Prefer simple Go over clever abstractions.
 

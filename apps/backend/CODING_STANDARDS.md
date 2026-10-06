@@ -5,7 +5,7 @@ How Go code in this backend is written and reviewed. Read before implementing or
 Not duplicated here — single sources of truth elsewhere:
 
 - Tool-enforced invariants (money kopecks, UUIDv7, layer imports, no ORM, no stdlib log): `AGENTS.md` (same directory) + `.golangci.yml` + `make migrations-lint`. If lint catches it, review does not re-report it.
-- Domain language: per-context `CONTEXT.md` (index in `CONTEXT-MAP.md`). Decisions: `docs/adr/`.
+- Domain language: per-context `GLOSSARY.md` (index in `GLOSSARY-MAP.md`). Decisions: `docs/adr/`.
 - Logging, tracing, span, and PII conventions: `docs/backend-observability.md` (slog `*Context` variants are enforced by `sloglint`).
 
 ## Architecture inside a bounded context
@@ -25,7 +25,7 @@ Rules that no linter can check:
 
 Adding a new bounded context — checklist:
 
-1. `internal/<context>/{domain,application,adapters}` + `CONTEXT.md` (via `/domain-modeling`).
+1. `internal/<context>/{domain,application,adapters}` + `GLOSSARY.md` (via `/domain-modeling`).
 2. The clean-architecture depguards (`domain-clean`, `application-clean`) key on file globs (`**/internal/**/domain|application/*.go`), so the base denies — `database/sql`, `net/http`, `pgx`, `aws-sdk-go-v2`, `internal/platform`, `platform/config`, `platform/openapi` — cover a new context automatically. The adapters ban is not automatic: both rules run `list-mode: lax` over explicit per-context deny entries, so a new context's domain/application can import `adapters/` (its own or another context's) without lint failing. Add `internal/<context>/adapters` to the deny list of **both** rules in `.golangci.yml`:
 
    ```yaml
@@ -85,7 +85,7 @@ Adding a new bounded context — checklist:
 
 ## Side effects: publication and delivery
 
-- **Публикация — строго после коммита.** Доменные события, кадры realtime и задачи очереди публикуются только после успешного коммита транзакции — при откате публикация структурно недостижима (#284, #829). Джобы несут только идентификаторы; контент читается из закоммиченной строки (#740). Публикация best-effort: её падение логируется и не откатывает мутацию; дедуп-ключ и actor-skip (издатель не получает своё событие) — по словарю CONTEXT.md.
+- **Публикация — строго после коммита.** Доменные события, кадры realtime и задачи очереди публикуются только после успешного коммита транзакции — при откате публикация структурно недостижима (#284, #829). Джобы несут только идентификаторы; контент читается из закоммиченной строки (#740). Публикация best-effort: её падение логируется и не откатывает мутацию; дедуп-ключ и actor-skip (издатель не получает своё событие) — по словарю GLOSSARY.md.
 - **Аудит — противоположность публикации**: запись аудита в той же транзакции, что и операция, fail-loud (ADR 0020); контекст содержит имена полей и идентификаторы, PII не пишутся (#89, #156, #694).
 - **Одно событие — один канал доставки.** При вводе общего пайплайна (уведомления, письма) прямые пути сносятся — дубль доставки недопустим (#751). Транзакционные письма шлются после коммита, fire-and-forget с логированием; ошибка доставки не ломает операцию (#162).
 - **Ретраи провайдеров**: только идемпотентные чтения на 5xx (backoff+jitter); 4xx не ретраются никогда; ретрай мутации — отдельный конфиг-флаг с документированным риском (#423).
@@ -116,4 +116,4 @@ Judgement calls for the Standards axis (source: distilled from [100go.co](https:
 - **Дедлок лечится порядком, не ретраем** — ретрай 40P01 не применяется; первым локом транзакции берётся lock в каноническом порядке (#546). → исправить порядок блокировок.
 - **Поиск не по канону** — подстрочный поиск — trgm; FTS добавляется ровно там, где trgm слеп; always-OR предикат (prefix-FTS OR ILIKE-trgm) без mode-переключателей и предсказания интента (#705, #839). → маршрут по форме запроса.
 - **Env-ручка без потребности** — доменная константа (каденс тика) живёт в конфиге кода; env — только операционные параметры окружения (#458). → константа в коде, env-переменную убрать.
-- **Док-рот** — докстринги-инварианты, CONTEXT.md, ADR-упоминания, `docs/agents/tooling.md` синхронизируются с фактическим поведением ветки в том же изменении; «инвариантные» формулировки («only X», «единственный источник») лгут первыми (#857, #832). Расхождение доки коду — жёсткая находка, не косметика (#723, #149). → догнать доки тем же коммитом.
+- **Док-рот** — докстринги-инварианты, GLOSSARY.md, ADR-упоминания, `docs/agents/tooling.md` синхронизируются с фактическим поведением ветки в том же изменении; «инвариантные» формулировки («only X», «единственный источник») лгут первыми (#857, #832). Расхождение доки коду — жёсткая находка, не косметика (#723, #149). → догнать доки тем же коммитом.

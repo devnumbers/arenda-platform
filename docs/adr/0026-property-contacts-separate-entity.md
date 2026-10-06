@@ -74,7 +74,7 @@ silently be both.
   a new read model or via data migration — the separate-entity model makes
   "merge later" non-trivial.
 - Canonical domain term: «Контакт объекта» / Property Contact; the glossary
-  collision with «контакт» (= tenant contact) is resolved in `CONTEXT.md`.
+  collision with «контакт» (= tenant contact) is resolved in `GLOSSARY.md`.
 
 ## See also
 

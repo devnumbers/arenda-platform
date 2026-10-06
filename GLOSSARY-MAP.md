@@ -6,19 +6,19 @@ DDD modular monolith (Go, `apps/backend/internal/`). Domain glossary is split by
 
 ## Contexts
 
-- [Identity](./apps/backend/internal/identity/CONTEXT.md) — accounts, sessions (pure sliding with 14-day token rotation and the devices list, ADR 0056) and user roles (Owner, Admin).
-- [Properties](./apps/backend/internal/properties/CONTEXT.md) — property cards only: photos, attributes, archive. The leases/operations domain was removed for a full rewrite (ADR 0046).
-- [Rentals](./apps/backend/internal/rentals/CONTEXT.md) — rental tenancy of a property: period, terms, payment day, utilities, deposit (the clean-slate successor of the removed leases domain, ADR 0046). Each rental manages exactly one rent payment in the Payments context.
-- [Contacts](./apps/backend/internal/contacts/CONTEXT.md) — the owner's contact book: cards of people for a property (plumber, management company, concierge); the property link is optional (ADR 0054).
-- [Payments](./apps/backend/internal/payments/CONTEXT.md) — payment rules and operation occurrences per property: income/expense record-keeping, auto pay, overdue debt, pauses (ADR 0047).
-- [Tasks](./apps/backend/internal/tasks/CONTEXT.md) — task rules and task occurrences, on a property or created without one: manual to-do tracking; overdue and «undated» are computed states, the completed journal survives rule deletion (ADR 0051); propertyless tasks live in the owner's book (ADR 0052).
-- [Notifications](./apps/backend/internal/notifications/CONTEXT.md) — the stored notification feed (categories, event types, dedup, unread counter), delivery channels (email, Web Push) over the River delivery pipeline (ADR 0059), push subscriptions, and the direct `subscription_grace` send (ADR 0058).
-- [Billing](./apps/backend/internal/billing/CONTEXT.md) — tariffs, subscriptions, payment methods, T-Kassa integration.
-- [Access](./apps/backend/internal/access/CONTEXT.md) — property sharing, member roles, derived object access.
-- [Audit](./apps/backend/internal/audit/CONTEXT.md) — audit log of user/admin/system actions (append-only; records about the removed leases/operations domain are kept as history).
-- [История](./apps/backend/internal/history/CONTEXT.md) — the product «История действий» feed over properties: manual user actions with human-readable label snapshots, server-built row text and hybrid search (ADR 0061).
-- [Realtime](./apps/backend/internal/realtime/CONTEXT.md) — the live invalidation stream for open clients: coarse `entity.changed` frames over the shared SSE transport (ADR 0060), the entity dictionary and the post-commit carrier publication port (ADR 0062).
-- [Popups](./apps/backend/internal/popups/CONTEXT.md) — onboarding popups, popup views.
+- [Identity](./apps/backend/internal/identity/GLOSSARY.md) — accounts, sessions (pure sliding with 14-day token rotation and the devices list, ADR 0056) and user roles (Owner, Admin).
+- [Properties](./apps/backend/internal/properties/GLOSSARY.md) — property cards only: photos, attributes, archive. The leases/operations domain was removed for a full rewrite (ADR 0046).
+- [Rentals](./apps/backend/internal/rentals/GLOSSARY.md) — rental tenancy of a property: period, terms, payment day, utilities, deposit (the clean-slate successor of the removed leases domain, ADR 0046). Each rental manages exactly one rent payment in the Payments context.
+- [Contacts](./apps/backend/internal/contacts/GLOSSARY.md) — the owner's contact book: cards of people for a property (plumber, management company, concierge); the property link is optional (ADR 0054).
+- [Payments](./apps/backend/internal/payments/GLOSSARY.md) — payment rules and operation occurrences per property: income/expense record-keeping, auto pay, overdue debt, pauses (ADR 0047).
+- [Tasks](./apps/backend/internal/tasks/GLOSSARY.md) — task rules and task occurrences, on a property or created without one: manual to-do tracking; overdue and «undated» are computed states, the completed journal survives rule deletion (ADR 0051); propertyless tasks live in the owner's book (ADR 0052).
+- [Notifications](./apps/backend/internal/notifications/GLOSSARY.md) — the stored notification feed (categories, event types, dedup, unread counter), delivery channels (email, Web Push) over the River delivery pipeline (ADR 0059), push subscriptions, and the direct `subscription_grace` send (ADR 0058).
+- [Billing](./apps/backend/internal/billing/GLOSSARY.md) — tariffs, subscriptions, payment methods, T-Kassa integration.
+- [Access](./apps/backend/internal/access/GLOSSARY.md) — property sharing, member roles, derived object access.
+- [Audit](./apps/backend/internal/audit/GLOSSARY.md) — audit log of user/admin/system actions (append-only; records about the removed leases/operations domain are kept as history).
+- [История](./apps/backend/internal/history/GLOSSARY.md) — the product «История действий» feed over properties: manual user actions with human-readable label snapshots, server-built row text and hybrid search (ADR 0061).
+- [Realtime](./apps/backend/internal/realtime/GLOSSARY.md) — the live invalidation stream for open clients: coarse `entity.changed` frames over the shared SSE transport (ADR 0060), the entity dictionary and the post-commit carrier publication port (ADR 0062).
+- [Popups](./apps/backend/internal/popups/GLOSSARY.md) — onboarding popups, popup views.
 
 ## Relationships
 
