@@ -137,6 +137,59 @@ test.describe('экран правки платежа', () => {
     await expect(page.getByRole('button', { name: 'Сохранить изменения' })).toBeDisabled();
   });
 
+  test('периодичность как в создании: день применяется сразу, год — «Продолжить» календаря', async ({
+    page,
+    seededUser,
+  }) => {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto(URLS.insuranceEdit);
+
+    // «Каждый день»: ветки нет — выбор пункта меню сразу применяет правило
+    // и закрывает страницу, как в создании (решение #995, правка #1153).
+    await page.getByRole('button', { name: 'Регулярность платежа' }).click();
+    await expect(page.getByText('Выбор периодичности')).toBeVisible();
+    await page.getByRole('button', { name: 'Каждый день' }).click();
+    await expect(page.getByText('Выбор периодичности')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Регулярность платежа' })).toHaveText(
+      /Ежедневно/,
+    );
+
+    // Правка не сохранена: после перезагрузки прежнее правило на месте.
+    await page.reload();
+    await expect(page.getByRole('button', { name: 'Регулярность платежа' })).not.toHaveText(
+      /Ежедневно/,
+    );
+
+    // «Каждый год»: ветка — календарь с кнопкой «Продолжить» (не «Выбрать»);
+    // подтверждение применяет правило и закрывает страницу сразу.
+    await page.getByRole('button', { name: 'Регулярность платежа' }).click();
+    await page.getByRole('button', { name: 'Каждый год' }).click();
+    const calendar = page.getByRole('dialog', { name: 'Выбрать дату' });
+    await expect(calendar).toBeVisible();
+    // Черновик предвыбран сегодняшним днём (маркер aria-current), «Продолжить»
+    // коммитит без действий; день читается из маркера, месяц — из UTC-часов
+    // раннера: экран и браузер e2e (timezoneId UTC) живут в одних сутках.
+    const todayCell = calendar.locator('button[aria-current="date"]');
+    const todayLabel = ((await todayCell.textContent()) ?? '').trim();
+    await expect(calendar.getByRole('button', { name: 'Продолжить' })).toBeVisible();
+    await calendar.getByRole('button', { name: 'Продолжить' }).click();
+    await expect(calendar).toHaveCount(0);
+    await expect(page.getByText('Выбор периодичности')).toHaveCount(0);
+    const monthGen = [
+      'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+      'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
+    ][new Date().getUTCMonth()];
+    await expect(page.getByRole('button', { name: 'Регулярность платежа' })).toHaveText(
+      new RegExp(`Каждое ${todayLabel} ${monthGen}`),
+    );
+
+    // Правка не сохранена: после перезагрузки прежнее правило на месте.
+    await page.reload();
+    await expect(page.getByRole('button', { name: 'Регулярность платежа' })).not.toHaveText(
+      /Каждое /,
+    );
+  });
+
   test('тип меняется простым нажатием, без пикера', async ({ page, seededUser }) => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto(URLS.insuranceEdit);
