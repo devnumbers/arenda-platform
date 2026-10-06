@@ -39,14 +39,14 @@ LABEL org.opencontainers.image.source="https://github.com/devnumbers/arenda-plat
       org.opencontainers.image.revision="$VCS_REF"
 
 # ca-certificates/curl не пинятся: версии меняются при обновлении пакетов
-# в базовом образе, и жёсткий пин ломал бы rebuild.
-# hadolint ignore=DL3008
+# в базовом образе, и жёсткий пин ломал бы rebuild; upgrade догоняет security-
+# патчи базы (perl CVE 2026-10) — по канону admin (APK_REFRESH, bd36dec05).
 # Bump APT_REFRESH to re-pull security fixes from the Debian repos: the value
 # is echoed into the layer below, so a change invalidates the build cache —
-# otherwise the layer stays cached with packages frozen at the old build
-# date (perl CVEs 2026-10, same drift as the admin image's APK_REFRESH).
+# otherwise the layer stays cached with packages frozen at the old build date.
 ARG APT_REFRESH=2026-10-06
 
+# hadolint ignore=DL3008,DL3005
 RUN echo "apt refresh: ${APT_REFRESH}" \
     && apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl \
