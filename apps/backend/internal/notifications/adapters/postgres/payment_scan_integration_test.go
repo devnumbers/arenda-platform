@@ -695,23 +695,14 @@ func TestPaymentScanStore_GetScheduledReminderPayment(t *testing.T) {
 	assert.False(t, live, "the job woke after the reminder day rolled over")
 }
 
-// stampAutoPaid puts the tick's paid_source stamp on the rule's occurrence
-// of the given date (#1169) — the state PayOperationDueToday leaves.
-func stampAutoPaid(t *testing.T, pool *pgxpool.Pool, ruleID uuid.UUID, date string) {
+// stampPaid sets the rule's occurrence's payment fact with its source
+// (#1169): 'auto_pay' — the state PayOperationDueToday leaves, 'manual' —
+// «Оплатить сейчас».
+func stampPaid(t *testing.T, pool *pgxpool.Pool, ruleID uuid.UUID, date, source string) {
 	t.Helper()
 	_, err := pool.Exec(context.Background(), `
-		UPDATE operations SET status = 'paid', paid_date = $2, paid_source = 'auto_pay'
-		WHERE payment_id = $1 AND date = $2`, ruleID, date)
-	require.NoError(t, err)
-}
-
-// stampManualPaid marks the rule's occurrence paid manually — «Оплатить
-// сейчас» leaves no auto-pay stamp (#1169).
-func stampManualPaid(t *testing.T, pool *pgxpool.Pool, ruleID uuid.UUID, date string) {
-	t.Helper()
-	_, err := pool.Exec(context.Background(), `
-		UPDATE operations SET status = 'paid', paid_date = $2, paid_source = 'manual'
-		WHERE payment_id = $1 AND date = $2`, ruleID, date)
+		UPDATE operations SET status = 'paid', paid_date = $2, paid_source = $3
+		WHERE payment_id = $1 AND date = $2`, ruleID, date, source)
 	require.NoError(t, err)
 }
 
@@ -729,13 +720,13 @@ func TestPaymentScanStore_ListAutoPaidTargets(t *testing.T) {
 	prop := createLiveProperty(t, pool, msk)
 	rule := insertScanPayment(t, pool, msk, prop, true)
 	insertScanOperation(t, pool, msk, prop, rule, "2026-09-19", "planned")
-	stampAutoPaid(t, pool, rule, "2026-09-19")
+	stampPaid(t, pool, rule, "2026-09-19", "auto_pay")
 
 	// Ручная оплата того же дня — молчок (штампа нет).
 	manualProp := createLiveProperty(t, pool, msk)
 	manualRule := insertScanPayment(t, pool, msk, manualProp, true)
 	insertScanOperation(t, pool, msk, manualProp, manualRule, "2026-09-19", "planned")
-	stampManualPaid(t, pool, manualRule, "2026-09-19")
+	stampPaid(t, pool, manualRule, "2026-09-19", "manual")
 
 	// Неисполненное planned (тик ещё не дошёл) и не-автоплатёжное правило —
 	// мимо; вчерашнее тиковое гашение — мимо (живой день, без бэкфилла).
@@ -745,17 +736,17 @@ func TestPaymentScanStore_ListAutoPaidTargets(t *testing.T) {
 	manualRuleProp := createLiveProperty(t, pool, msk)
 	manualOnlyRule := insertScanPayment(t, pool, msk, manualRuleProp, false)
 	insertScanOperation(t, pool, msk, manualRuleProp, manualOnlyRule, "2026-09-19", "planned")
-	stampAutoPaid(t, pool, manualOnlyRule, "2026-09-19") // Невозможное состояние: non-auto rule — фильтр auto_pay гонит.
+	stampPaid(t, pool, manualOnlyRule, "2026-09-19", "auto_pay") // Невозможное состояние: non-auto rule — фильтр auto_pay гонит.
 	oldProp := createLiveProperty(t, pool, msk)
 	oldRule := insertScanPayment(t, pool, msk, oldProp, true)
 	insertScanOperation(t, pool, msk, oldProp, oldRule, "2026-09-18", "planned")
-	stampAutoPaid(t, pool, oldRule, "2026-09-18")
+	stampPaid(t, pool, oldRule, "2026-09-18", "auto_pay")
 
 	// Архив — мимо (канон тиков).
 	archivedProp := createLiveProperty(t, pool, msk)
 	archivedRule := insertScanPayment(t, pool, msk, archivedProp, true)
 	insertScanOperation(t, pool, msk, archivedProp, archivedRule, "2026-09-19", "planned")
-	stampAutoPaid(t, pool, archivedRule, "2026-09-19")
+	stampPaid(t, pool, archivedRule, "2026-09-19", "auto_pay")
 	archiveProperty(t, pool, msk, archivedProp)
 
 	store := NewPaymentScanStore(pool)
@@ -826,12 +817,12 @@ func TestPaymentScanStore_GetScheduledAutoPaidPayment(t *testing.T) {
 	prop := createLiveProperty(t, pool, msk)
 	rule := insertScanPayment(t, pool, msk, prop, true)
 	insertScanOperation(t, pool, msk, prop, rule, "2026-09-20", "planned")
-	stampAutoPaid(t, pool, rule, "2026-09-20")
+	stampPaid(t, pool, rule, "2026-09-20", "auto_pay")
 
 	manualProp := createLiveProperty(t, pool, msk)
 	manualRule := insertScanPayment(t, pool, msk, manualProp, true)
 	insertScanOperation(t, pool, msk, manualProp, manualRule, "2026-09-20", "planned")
-	stampManualPaid(t, pool, manualRule, "2026-09-20")
+	stampPaid(t, pool, manualRule, "2026-09-20", "manual")
 
 	pendingProp := createLiveProperty(t, pool, msk)
 	pendingRule := insertScanPayment(t, pool, msk, pendingProp, true)
