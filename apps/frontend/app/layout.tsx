@@ -57,13 +57,6 @@ export const viewport: Viewport = {
     // below, which makes iOS pick dark status-bar text on the light background.
     themeColor: '#ffffff',
     viewportFit: 'cover',
-    // Клавиатура уменьшает и layout viewport (клавиатура — «resizes-content»):
-    // fixed-панель StickyBottomBar поднимается над клавиатурой сама на
-    // Android Chrome 108+ / Firefox Android 133+ (#1151, research #1148 §B).
-    // iOS Safari мету игнорирует — там панель поднимает VisualViewport-хук
-    // (useVisualKeyboardInset в sticky-bottom-bar.tsx). Десктопным браузерам
-    // мета безразлична, vh/vw под клавиатурой в размерах панели не используются.
-    interactiveWidget: 'resizes-content',
     // Светлая схема сайта: мета в SSR-разметке парсится до первого кадра и
     // действует, даже если CSS ещё не загрузился (color-scheme — свойство
     // документа, а не стилей); далее дублируется color-scheme: light в
