@@ -259,6 +259,44 @@ func (q *Queries) InsertRental(ctx context.Context, arg InsertRentalParams) erro
 	return err
 }
 
+const listCompletedRentalPaymentIDs = `-- name: ListCompletedRentalPaymentIDs :many
+SELECT payment_id
+FROM rentals
+WHERE owner_id = $1
+  AND completed_date IS NOT NULL
+  AND payment_id = ANY($2::uuid[])
+`
+
+type ListCompletedRentalPaymentIDsParams struct {
+	OwnerID    pgtype.UUID   `json:"owner_id"`
+	PaymentIds []pgtype.UUID `json:"payment_ids"`
+}
+
+// The subset of the given payment ids whose managing rental row is completed
+// — the isRentalCompleted read flag (#1158): the payment screen's «Изменить
+// аренду» lives only while the rental is unfinished («Действия аренды»:
+// Завершена — финал, чтение и Итоги). The mutation gate query above stays
+// state-blind on purpose. An empty id list never reaches the query.
+func (q *Queries) ListCompletedRentalPaymentIDs(ctx context.Context, arg ListCompletedRentalPaymentIDsParams) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listCompletedRentalPaymentIDs, arg.OwnerID, arg.PaymentIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var payment_id pgtype.UUID
+		if err := rows.Scan(&payment_id); err != nil {
+			return nil, err
+		}
+		items = append(items, payment_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRentalManagedPaymentIDs = `-- name: ListRentalManagedPaymentIDs :many
 SELECT payment_id
 FROM rentals

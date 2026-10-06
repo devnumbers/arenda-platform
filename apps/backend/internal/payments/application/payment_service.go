@@ -621,32 +621,33 @@ func (s *PaymentService) CompletedStatus(
 	return s.ruleCompleted(ctx, scope, payment)
 }
 
-// PaymentFlags computes both list-response flags in a single pass over the
+// PaymentFlags computes the list-response flags in a single pass over the
 // property's rule list (#815, #818, ADR 0053): one ListByProperty read fills
-// isCompleted per rule (the settlement view) and isRentalManaged (the rental
-// gate's read flag) — the list rows themselves hold no operation data to
+// isCompleted per rule (the settlement view), isRentalManaged (the rental
+// gate's read flag) and isRentalCompleted — whether the managing rental is
+// completed (#1158). The list rows themselves hold no operation data to
 // derive the flags client-side, and the unmanaged rules travel out as false.
 func (s *PaymentService) PaymentFlags(
 	ctx context.Context, actor, propertyID uuid.UUID,
-) (completed, managed map[uuid.UUID]bool, err error) {
+) (completed, managed, rentalCompleted map[uuid.UUID]bool, err error) {
 	scope, err := s.readScope(ctx, actor, propertyID)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	payments, err := s.payments.ListByProperty(ctx, scope, propertyID, "")
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	today, err := ownerToday(s.calendar, ctx, scope)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	ids := make([]uuid.UUID, 0, len(payments))
 	completed = make(map[uuid.UUID]bool, len(payments))
 	for _, payment := range payments {
 		flag, err := s.ruleCompletedToday(ctx, scope, today, payment)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		completed[payment.ID] = flag
 		ids = append(ids, payment.ID)
@@ -655,13 +656,21 @@ func (s *PaymentService) PaymentFlags(
 	// of this read, the unmanaged ones as false.
 	managedSub, err := s.rentalManaged.ManagedPaymentIDs(ctx, scope, ids)
 	if err != nil {
-		return nil, nil, fmt.Errorf("rental-managed statuses: %w", err)
+		return nil, nil, nil, fmt.Errorf("rental-managed statuses: %w", err)
 	}
 	managed = make(map[uuid.UUID]bool, len(ids))
 	for _, id := range ids {
 		managed[id] = managedSub[id]
 	}
-	return completed, managed, nil
+	completedSub, err := s.rentalManaged.CompletedPaymentIDs(ctx, scope, ids)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("rental-completed statuses: %w", err)
+	}
+	rentalCompleted = make(map[uuid.UUID]bool, len(ids))
+	for _, id := range ids {
+		rentalCompleted[id] = completedSub[id]
+	}
+	return completed, managed, rentalCompleted, nil
 }
 
 // RentalManagedStatus reports whether the rule is managed by a rental
@@ -682,6 +691,27 @@ func (s *PaymentService) RentalManagedStatus(
 		return false, fmt.Errorf("rental-managed status: %w", err)
 	}
 	return managed[paymentID], nil
+}
+
+// RentalCompletedStatus reports whether the rule's managing rental is
+// completed («Завершена» — финал, rentals GLOSSARY): the payment screen's
+// «Изменить аренду» lives only while the rental is unfinished (#1158).
+// Reads never tick.
+func (s *PaymentService) RentalCompletedStatus(
+	ctx context.Context, actor, propertyID, paymentID uuid.UUID,
+) (bool, error) {
+	scope, err := s.readScope(ctx, actor, propertyID)
+	if err != nil {
+		return false, err
+	}
+	if _, err := s.payments.Get(ctx, paymentID, scope, propertyID); err != nil {
+		return false, err
+	}
+	completed, err := s.rentalManaged.CompletedPaymentIDs(ctx, scope, []uuid.UUID{paymentID})
+	if err != nil {
+		return false, fmt.Errorf("rental-completed status: %w", err)
+	}
+	return completed[paymentID], nil
 }
 
 // ruleCompleted resolves the data owner's today and computes the flag for a

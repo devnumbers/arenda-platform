@@ -99,6 +99,12 @@ type RentalManagedReader interface {
 	// it. Ids absent from the result are simply unmanaged; an empty input
 	// never reaches the query.
 	ManagedPaymentIDs(ctx context.Context, scope uuid.UUID, paymentIDs []uuid.UUID) (map[uuid.UUID]bool, error)
+	// CompletedPaymentIDs returns the subset of the given rules whose managing
+	// rental row is completed — the read-side state «Завершена» (rentals
+	// GLOSSARY): the payment screen's «Изменить аренду» lives only while the
+	// rental is unfinished (#1158). The mutation gate above stays state-blind
+	// by design — any rental row, finished or not, finalizes its payment.
+	CompletedPaymentIDs(ctx context.Context, scope uuid.UUID, paymentIDs []uuid.UUID) (map[uuid.UUID]bool, error)
 	WithTx(tx transaction.Tx) (RentalManagedReader, error)
 }
 

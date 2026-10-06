@@ -703,6 +703,12 @@ type Querier interface {
 	ListAllTariffs(ctx context.Context) ([]Tariff, error)
 	ListArchivedPropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListArchivedPropertiesByOwnerRow, error)
 	ListAuditLogsAdmin(ctx context.Context, arg ListAuditLogsAdminParams) ([]AuditLog, error)
+	// The subset of the given payment ids whose managing rental row is completed
+	// — the isRentalCompleted read flag (#1158): the payment screen's «Изменить
+	// аренду» lives only while the rental is unfinished («Действия аренды»:
+	// Завершена — финал, чтение и Итоги). The mutation gate query above stays
+	// state-blind on purpose. An empty id list never reaches the query.
+	ListCompletedRentalPaymentIDs(ctx context.Context, arg ListCompletedRentalPaymentIDsParams) ([]pgtype.UUID, error)
 	// The completed journal of the property, newest completions first.
 	ListCompletedTasksByProperty(ctx context.Context, arg ListCompletedTasksByPropertyParams) ([]ListCompletedTasksByPropertyRow, error)
 	// The completed journal of the actor's visible merged feed, newest

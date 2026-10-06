@@ -18,8 +18,9 @@ import { formatDayMonthWithYear } from '@/shared/lib/date-format';
 // и сортировкой «по недавним», меню из четырёх пунктов, свап кнопок экрана
 // успеха («Хорошо» primary сверху) и server-truth `rentals.contact_id`.
 // Состояние шагов едет между маршрутами в носителе сессии (карта #1052 D3:
-// keep-alive на ветвях шага 4); уход из флоу («Изменить», «Открыть»),
-// перезагрузка и финал — чистый лист.
+// keep-alive на всех уходах шага 4 — пикер, создание контакта, карточка
+// и правка контакта #1159); выход из визарда («Закрыть»), перезагрузка
+// и финал — чистый лист.
 //
 // Имена контактов уникальны за попытку (суффикс — номер retry), остатки
 // сценария тест убирает в finally: контакты — DELETE по имени; аренда
@@ -228,7 +229,7 @@ test.describe('визард создания аренды — шаг «Конт�
     }
   });
 
-  test('меню контакта: «Изменить» уводит из флоу — возврат на чистый шаг 1; «Удалить» отвязывает и деградирует шаг к двум действиям', async ({
+  test('меню контакта: «Изменить» и карточка (тап по строке) переживают черновик, «Закрыть» — по-прежнему чистый лист; «Удалить» отвязывает и деградирует шаг', async ({
     page,
     seededUser,
   }, testInfo) => {
@@ -245,22 +246,45 @@ test.describe('визард создания аренды — шаг «Конт�
       await page.getByText(contactName, { exact: true }).click();
       await expect(page.getByRole('heading', { name: 'Добавьте контакт арендатора' })).toBeVisible();
 
-      // «Изменить» уводит за пределы флоу (канон Q2=В: уход = потеря) —
-      // возврат из формы правки открывает чистый визард на шаге 1
-      // с пустыми полями.
+      // «Изменить» — ветвь шага с keep-alive (#1159): возврат из формы
+      // правки открывает визард на шаге 4 с выбранным арендатором.
       await page.getByRole('button', { name: 'Меню контакта' }).click();
       await page.getByRole('menuitem', { name: 'Изменить' }).click();
       await expect(page).toHaveURL(/\/contacts\/[0-9a-f-]{36}\/edit$/);
       await page.goBack();
+      await expect(page.getByRole('heading', { name: 'Добавьте контакт арендатора' })).toBeVisible();
+      await expect(page.getByText(contactName, { exact: true })).toBeVisible();
+      await captureScreen(page, testInfo, 'rentals-wizard-edit-exit-kept-step4');
+
+      // Тап по выбранной строке («Открыть») — та же ветвь с keep-alive.
+      await page.getByRole('button', { name: contactName }).click();
+      await expect(page).toHaveURL(
+        new RegExp(`/properties/${propertyId}/contacts/[0-9a-f-]{36}$`),
+      );
+      await page.goBack();
+      await expect(page.getByRole('heading', { name: 'Добавьте контакт арендатора' })).toBeVisible();
+
+      // Черновик пережил уходы целиком: назад до шага 1 — сумма на месте.
+      await page.getByRole('button', { name: 'Назад' }).click();
+      await page.getByRole('button', { name: 'Назад' }).click();
+      await page.getByRole('button', { name: 'Назад' }).click();
+      await expect(page.getByRole('heading', { name: 'Цена и число оплаты' })).toBeVisible();
+      await expect(
+        page.getByRole('textbox', { name: 'Арендная плата, рублей' }),
+      ).toHaveValue(/56\s000/);
+
+      // Канон #1052 D3 сохранён: «Закрыть» — выход из визарда, следующий
+      // вход открывает чистый шаг 1.
+      await page.getByRole('button', { name: 'Закрыть' }).click();
+      await expect(page).toHaveURL(new RegExp(`/properties/${propertyId}$`));
+      await page.goto(APARTMENT_WIZARD_URL);
       await expect(page.getByRole('heading', { name: 'Цена и число оплаты' })).toBeVisible();
       await expect(
         page.getByRole('textbox', { name: 'Арендная плата, рублей' }),
       ).toHaveValue('');
-      await captureScreen(page, testInfo, 'rentals-wizard-edit-exit-clean-step1');
 
-      // Удаление: свежий проход до шага (шаги 1–3 и выбор в носителе
-      // сессии), шит подтверждения (шит 1419:27158), после — контакт
-      // стёрт из книги, шаг вернулся к двум действиям.
+      // Удаление: свежий проход до шага, шит подтверждения (шит 1419:27158),
+      // после — контакт стёрт из книги, шаг вернулся к двум действиям.
       await passAmountDay(page, '56 000');
       await passConditions(page);
       await page.getByRole('button', { name: 'Выбрать контакт' }).click();

@@ -6756,7 +6756,7 @@ components:
 
     PaymentResponse:
       type: object
-      required: [id, propertyId, type, title, amountKopecks, recurrence, since, autoPay, category, isFavorite, isCompleted, nearestDate, isRentalManaged, pauses, createdAt, updatedAt]
+      required: [id, propertyId, type, title, amountKopecks, recurrence, since, autoPay, category, isFavorite, isCompleted, nearestDate, isRentalManaged, isRentalCompleted, pauses, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -6826,6 +6826,16 @@ components:
             and the favorite star stay open. The reads carry the flag so the
             client hides the mutation actions instead of learning the 409
             live.
+        isRentalCompleted:
+          type: boolean
+          description: >-
+            The managing rental is completed («Завершена» — финал: чтение,
+            Итоги, Удаление; ticket #1158). The payment screen's «Изменить
+            аренду» lives only while the rental is unfinished — the read-side
+            state of the #818 gate: the mutation gate stays state-blind (any
+            rental row finalizes its payment), this flag carries the rental
+            state machine onto the payment surfaces so every surface shows
+            the same action set.
         pauses:
           type: array
           items:

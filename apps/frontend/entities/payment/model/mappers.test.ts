@@ -19,6 +19,7 @@ const paymentDto: PaymentDto = {
   isFavorite: false,
   isCompleted: false,
   isRentalManaged: false,
+  isRentalCompleted: false,
   nearestDate: '2026-09-01',
   pauses: [
     { fromDate: '2026-03-01', toDate: '2026-04-01' },
@@ -54,6 +55,12 @@ describe('mapPayment — DTO → entity', () => {
     expect(payment.isRentalManaged).toBe(false);
     const managed = mapPayment({ ...paymentDto, isRentalManaged: true });
     expect(managed.isRentalManaged).toBe(true);
+  });
+
+  it('isRentalCompleted переносится как есть — состояние аренды для «Изменить аренду» (#1158)', () => {
+    expect(payment.isRentalCompleted).toBe(false);
+    const completedRental = mapPayment({ ...paymentDto, isRentalCompleted: true });
+    expect(completedRental.isRentalCompleted).toBe(true);
   });
 
   it('nearestDate переносится как есть — «Следующая дата оплаты» сервера (#993)', () => {

@@ -169,10 +169,13 @@ func TestGate_ManagedPaymentKeepsFactsAndFavorite(t *testing.T) {
 	_, err = h.paySvc.SetPaymentFavorite(ctx, h.owner, h.propID, paymentID, true)
 	require.NoError(t, err)
 
-	// The list read carries the flag per rule.
-	_, statuses, err := h.paySvc.PaymentFlags(ctx, h.owner, h.propID)
+	// The list read carries the flag per rule — and the managing rental's
+	// unfinished state next to it (#1158): the gate stays state-blind, the
+	// read flag does not.
+	_, statuses, rentalCompleted, err := h.paySvc.PaymentFlags(ctx, h.owner, h.propID)
 	require.NoError(t, err)
 	assert.Equal(t, map[uuid.UUID]bool{paymentID: true}, statuses)
+	assert.Equal(t, map[uuid.UUID]bool{paymentID: false}, rentalCompleted)
 }
 
 // Ревизия #1161: Завершение удаляет Платёж той же транзакцией — гейтить у
@@ -193,6 +196,9 @@ func TestGate_CompletedRentalHasNoPaymentLeftToGate(t *testing.T) {
 		rentalsapp.CompleteRentalCommand{CompletedDate: seamToday})
 	require.NoError(t, err)
 
+	// #1158 asserted the pre-#1161 world here — a completed rental keeping
+	// its payment gated. Revision #1161 deletes the payment on completion:
+	// there is no rule left to gate, so those assertions belong to history.
 	_, err = h.paySvc.GetPayment(ctx, h.owner, h.propID, paymentID)
 	require.ErrorIs(t, err, paymentsapp.ErrNotFound, "the completion deleted the payment")
 	var links int
@@ -230,9 +236,10 @@ func TestGate_OrdinaryPaymentStaysMutable(t *testing.T) {
 	require.NoError(t, err)
 
 	// The flag read names the ordinary rule false.
-	_, statuses, err := h.paySvc.PaymentFlags(ctx, h.owner, h.propID)
+	_, statuses, rentalCompleted, err := h.paySvc.PaymentFlags(ctx, h.owner, h.propID)
 	require.NoError(t, err)
 	assert.Equal(t, map[uuid.UUID]bool{created.ID: false}, statuses)
+	assert.Equal(t, map[uuid.UUID]bool{created.ID: false}, rentalCompleted)
 
 	require.NoError(t, h.paySvc.DeletePayment(ctx, h.owner, h.propID, created.ID, true))
 }

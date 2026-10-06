@@ -190,6 +190,12 @@ func (noopRentalManaged) ManagedPaymentIDs(
 	return map[uuid.UUID]bool{}, nil
 }
 
+func (noopRentalManaged) CompletedPaymentIDs(
+	context.Context, uuid.UUID, []uuid.UUID,
+) (map[uuid.UUID]bool, error) {
+	return map[uuid.UUID]bool{}, nil
+}
+
 func (noopRentalManaged) WithTx(tx transaction.Tx) (RentalManagedReader, error) {
 	return noopRentalManaged{}, nil
 }

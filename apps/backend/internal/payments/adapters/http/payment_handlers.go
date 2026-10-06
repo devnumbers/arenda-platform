@@ -37,8 +37,9 @@ type PaymentManager interface {
 	ResumePayment(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error)
 	SetPaymentFavorite(ctx context.Context, actor, propertyID, paymentID uuid.UUID, favorite bool) (domain.Payment, error)
 	CompletedStatus(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (bool, error)
-	PaymentFlags(ctx context.Context, actor, propertyID uuid.UUID) (completed, managed map[uuid.UUID]bool, err error)
+	PaymentFlags(ctx context.Context, actor, propertyID uuid.UUID) (completed, managed, rentalCompleted map[uuid.UUID]bool, err error)
 	RentalManagedStatus(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (bool, error)
+	RentalCompletedStatus(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (bool, error)
 }
 
 // PaymentHandlers implements the generated payment endpoints.
@@ -181,7 +182,7 @@ func (h *PaymentHandlers) ListPayments(
 		h.handlePaymentError(w, r, err)
 		return
 	}
-	completed, managed, err := h.svc.PaymentFlags(r.Context(), actor, propertyID)
+	completed, managed, rentalCompleted, err := h.svc.PaymentFlags(r.Context(), actor, propertyID)
 	if err != nil {
 		h.writeInternal(w, r, err)
 		return
@@ -189,7 +190,7 @@ func (h *PaymentHandlers) ListPayments(
 
 	items := make([]openapi.PaymentResponse, 0, len(payments))
 	for _, item := range payments {
-		resp, err := paymentResponse(item.Payment, completed[item.Payment.ID], managed[item.Payment.ID])
+		resp, err := paymentResponse(item.Payment, completed[item.Payment.ID], managed[item.Payment.ID], rentalCompleted[item.Payment.ID])
 		if err != nil {
 			h.writeInternal(w, r, err)
 			return
@@ -571,10 +572,11 @@ func datePtrFromWire(d *openapi_types.Date) *time.Time {
 // paymentResponse maps the domain rule onto the wire response: the category
 // reference is resolved (CategoryView with the «Прочее» fallback), the
 // recurrence goes back through its per-kind shape and the pauses travel as
-// intervals. The isCompleted flag is the server-computed settlement view and
-// isRentalManaged the rental gate's read flag (#818) — both the use case
+// intervals. The isCompleted flag is the server-computed settlement view,
+// isRentalManaged the rental gate's read flag (#818) and isRentalCompleted
+// the managing rental's «Завершена» state (#1158) — all three the use case
 // passes in, the mapping itself stays pure.
-func paymentResponse(p domain.Payment, isCompleted, isRentalManaged bool) (openapi.PaymentResponse, error) {
+func paymentResponse(p domain.Payment, isCompleted, isRentalManaged, isRentalCompleted bool) (openapi.PaymentResponse, error) {
 	recurrence, err := recurrenceResponse(p.Recurrence)
 	if err != nil {
 		return openapi.PaymentResponse{}, err
@@ -601,6 +603,7 @@ func paymentResponse(p domain.Payment, isCompleted, isRentalManaged bool) (opena
 		IsFavorite:         p.IsFavorite,
 		IsCompleted:        isCompleted,
 		IsRentalManaged:    isRentalManaged,
+		IsRentalCompleted:  isRentalCompleted,
 		Pauses:             pauses,
 		CreatedAt:          p.CreatedAt,
 		UpdatedAt:          p.UpdatedAt,
@@ -689,7 +692,12 @@ func (h *PaymentHandlers) respondWithPayment(
 		h.writeInternal(w, r, err)
 		return
 	}
-	resp, err := paymentResponse(payment, completed, managed)
+	rentalCompleted, err := h.svc.RentalCompletedStatus(r.Context(), actor, propertyID, payment.ID)
+	if err != nil {
+		h.writeInternal(w, r, err)
+		return
+	}
+	resp, err := paymentResponse(payment, completed, managed, rentalCompleted)
 	if err != nil {
 		h.writeInternal(w, r, err)
 		return
