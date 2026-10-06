@@ -37,7 +37,7 @@ Adding a new slice: user scenario → feature; domain model shared across scenar
 
 ## Mutations and buttons
 
-- Все мутации — через `useGuardedMutation` (`features/<name>/api/hooks.ts`): синхронный лок закрывает окно до перерисовки; `mutate` дропает вызов в полёте, `mutateAsync` — join. Прямой `useMutation` вне features-хууков не встречается и не заводится (#1120).
+- Все мутации — через `useGuardedMutation` (`features/<name>/api/hooks.ts`): синхронный лок закрывает окно до перерисовки; `mutate` дропает вызов в полёте, `mutateAsync` — join. Прямой `useMutation` вне features-хууков и реализации `useGuardedMutation` запрещён гейтом `no-restricted-imports` (#1120; гейт #1146, реестр: `docs/agents/tooling.md`).
 - Кнопка глохнет на всё время мутации: инвариант канон-кнопок `disabled === true || loading` (ADR 0050 «loading дизейблит»); явный `disabled` только добавляет причину гашения, но не отменяет loading — антипаттерн `disabled ?? loading` запрещён (#1119, #1099). Для `asChild`-ссылок гашение невозможно — осознанная граница канона.
 - В проп `loading` подставляется только `isPending` мутации; `isFetching` и фоновые рефетчи кнопки не гасят (#1114).
 - Creation-мутации шлют `Idempotency-Key` (UUID на логическую попытку); бекенд бронирует ключ — реплей и ретрай дают тот же результат (#1121, #1122).

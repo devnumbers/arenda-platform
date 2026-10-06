@@ -93,6 +93,24 @@ const REHYPE_RAW_PATTERN = {
 const WEB_STORAGE_MESSAGE =
   "Web storage is owned by features/auth/lib and the shared draft store (shared/lib/hooks/useDraftStore) — tokens live in httpOnly cookies and must not spread into localStorage/sessionStorage (decision #331).";
 
+// Мутации идут через useGuardedMutation в features/*/api/hooks.ts (карта
+// #1112): guarded-хук владеет синхронным локом на всё время полёта мутации.
+// Голый useMutation вне канон-хууков и его единственной реализации запрещён
+// (#1120, гейт #1146). Restated в обоих no-restricted-imports блоках ниже по
+// той же причине, что и rehype-raw: files-scoped блок заменяет (не мерджит)
+// базовое правило, а allowlist-файлы обязаны остаться под базовым блоком.
+const USE_MUTATION_HOOK_FILES = [
+  "features/**/api/hooks.ts",
+  "shared/lib/hooks/use-guarded-mutation.ts",
+];
+
+const USE_MUTATION_RESTRICTION = {
+  name: "@tanstack/react-query",
+  importNames: ["useMutation"],
+  message:
+    "Мутации идут через useGuardedMutation в features/*/api/hooks.ts (карта #1112) — guarded-хук владеет локом на время полёта; голый useMutation вне канон-хууков запрещён (#1146, docs/agents/tooling.md).",
+};
+
 // XSS-class browser APIs banned outright (quality bar wave A, bar #330):
 // HTML injection sinks and dynamic code evaluation. Zero usages today — the
 // gate exists so a future regression is a lint error, not a review call.
@@ -355,6 +373,30 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  // Мутационный гейт useMutation (#1146): базовый скоуп — всё, кроме
+  // shared/api и allowlist-файлов (канон-хууки и реализация guarded-хука,
+  // которые остаются под блоком выше). Паттерны rehype-raw/generated
+  // ре-декларированы: этот блок заменяет базовый no-restricted-imports.
+  {
+    files: ["**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}"],
+    ignores: ["shared/api/**", ...USE_MUTATION_HOOK_FILES],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            REHYPE_RAW_PATTERN,
+            {
+              group: ["@/shared/api/generated", "@/shared/api/generated.*", "**/shared/api/generated*"],
+              message:
+                "The generated API client is imported only inside shared/api — import DTO types from @/shared/api/dto instead.",
+            },
+          ],
+          paths: [USE_MUTATION_RESTRICTION],
+        },
+      ],
+    },
+  },
 // Виджеты и страницы не знают о DTO: данные приходят им маплеными в
 // entity-модели из entities/features. Files-scoped правило перекрывает
 // базовое no-restricted-imports для этих слоёв, поэтому паттерны
@@ -379,8 +421,19 @@ const eslintConfig = defineConfig([
                 "The generated API client is imported only inside shared/api — import DTO types from @/shared/api/dto instead.",
             },
           ],
+          paths: [USE_MUTATION_RESTRICTION],
         },
       ],
+    },
+  },
+  // shared/api не выпадает из мутационного гейта: базовый блок игнорирует эту
+  // зону (там живёт generated-клиент, и паттернов no-restricted-imports у неё
+  // не было), поэтому paths объявлены отдельным блоком (находка /code-review
+  // #1146 — реестр обещает «только» два allowlist-файла).
+  {
+    files: ["shared/api/**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}"],
+    rules: {
+      "no-restricted-imports": ["error", { paths: [USE_MUTATION_RESTRICTION] }],
     },
   },
   // Security contour (decision #331, ticket #387) + dangerous-browser-API bans
