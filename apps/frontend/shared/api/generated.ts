@@ -2926,7 +2926,10 @@ export interface components {
             recurrence: components["schemas"]["Recurrence"];
             /** @description Slug of the default category catalog (user categories arrive in a later slice). */
             categorySlug: string;
-            /** Format: date */
+            /**
+             * Format: date
+             * @description Окончание правила. Не раньше первого вхождения графика (recurrence от since): иначе правило не создало бы ни одной операции — 400 «Дата окончания не может быть раньше первого платежа» (тикет #1154). Конец на самом первом вхождении валиден.
+             */
             endDate?: string | null;
             /** @default false */
             autoPay: boolean;
@@ -2947,7 +2950,7 @@ export interface components {
             categorySlug?: string;
             /**
              * Format: date
-             * @description Tri-state: omitted keeps the value, null clears it (open-ended), a date sets it.
+             * @description Tri-state: omitted keeps the value, null clears it (open-ended), a date sets it. Окно графика (тикет #1154): слитое правило — после применения патча — не может остаться с концом раньше первого вхождения (смена recurrence при стоящей дате перепроверяет её): 400 «Дата окончания не может быть раньше первого платежа». Правки, не трогающие расписание и конец, окно не перепроверяют.
              */
             endDate?: string | null;
             autoPay?: boolean;
@@ -3784,7 +3787,7 @@ export interface components {
             startDate: string;
             /**
              * Format: date
-             * @description Null/omitted — бессрочная аренда.
+             * @description Null/omitted — бессрочная аренда. Не раньше первого вхождения платежа аренды (monthly по дню оплаты от старта, тикет #1154): такой срок держал бы ноль платежей.
              */
             plannedEndDate?: string | null;
             /** @enum {string} */
@@ -3814,7 +3817,7 @@ export interface components {
             autoPay?: boolean;
             /**
              * Format: date
-             * @description Явный null — аренда становится бессрочной; не в прошлое (≥ today, > начала).
+             * @description Явный null — аренда становится бессрочной; не в прошлое (≥ today, > начала). Окно графика (тикет #1154): слитая пара «день оплаты + плановое окончание» целиком — смена дня перепроверяет стоящее окончание, смена окончания сверяется с хранящимся днём; раньше первого вхождения дня оплаты — 400.
              */
             plannedEndDate?: string | null;
             /** @enum {string} */
