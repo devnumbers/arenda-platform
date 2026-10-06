@@ -41,8 +41,16 @@ LABEL org.opencontainers.image.source="https://github.com/devnumbers/arenda-plat
 # ca-certificates/curl не пинятся: версии меняются при обновлении пакетов
 # в базовом образе, и жёсткий пин ломал бы rebuild.
 # hadolint ignore=DL3008
-RUN apt-get update \
+# Bump APT_REFRESH to re-pull security fixes from the Debian repos: the value
+# is echoed into the layer below, so a change invalidates the build cache —
+# otherwise the layer stays cached with packages frozen at the old build
+# date (perl CVEs 2026-10, same drift as the admin image's APK_REFRESH).
+ARG APT_REFRESH=2026-10-06
+
+RUN echo "apt refresh: ${APT_REFRESH}" \
+    && apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl \
+    && apt-get upgrade -y \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system --gid 10001 arenda \
     && useradd --system --uid 10001 --gid arenda --home-dir /app --shell /usr/sbin/nologin arenda
