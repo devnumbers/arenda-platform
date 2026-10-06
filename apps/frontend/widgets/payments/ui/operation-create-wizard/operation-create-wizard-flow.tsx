@@ -220,7 +220,7 @@ export function OperationCreateWizardFlow({
               <CategorySearchHint text="Начните искать категорию" />
             ) : (
               <>
-                <WizardHeading title="Категория операции" subtitle="Выберите категорию" />
+                <WizardHeading title="Выберите категорию операции" variant="h1" />
                 <CategoryStep
                   selectedSlug={draft.categorySlug}
                   onSelect={(slug) => setDraft((prev) => ({ ...prev, categorySlug: slug }))}

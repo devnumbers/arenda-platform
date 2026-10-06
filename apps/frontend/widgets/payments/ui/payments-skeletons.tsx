@@ -199,9 +199,10 @@ export function PaymentGroupedListSkeleton({
  * контент.
  */
 
-/** Скелетон шага «Категория платежа» (#607): каркас списка CategoryStep —
- * строки ListRow (иконка 44, название, кружок выбора) с вставкой строк
- * py-1.5 и зазором 4. Число строк — типовой экран Cold entry (8). */
+/** Скелетон шага «Выберите категорию платежа» (#607): каркас списка
+ * CategoryStep — строки ListRow (иконка 44, название, кружок выбора) с
+ * вставкой строк py-1.5 и зазором 4. Число строк — типовой экран Cold
+ * entry (8). */
 export function CategoryRowsSkeleton({ rows = 8 }: { readonly rows?: number }): JSX.Element {
   const widths = skeletonRowWidths(rows);
   return (

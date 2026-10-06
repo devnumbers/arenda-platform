@@ -180,7 +180,7 @@ export function PaymentCreateWizardFlow({
               <CategorySearchHint text="Начните искать категорию" />
             ) : (
               <>
-                <WizardHeading title="Категория платежа" subtitle="Выберите категорию" />
+                <WizardHeading title="Выберите категорию платежа" variant="h1" />
                 <CategoryStep
                   selectedSlug={draft.categorySlug}
                   onSelect={(slug) => setDraft((prev) => ({ ...prev, categorySlug: slug }))}

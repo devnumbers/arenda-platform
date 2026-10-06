@@ -43,7 +43,7 @@ async function openWizard(
   await expect(
     page
       .getByRole('heading', { name: 'Периодичность платежа' })
-      .or(page.getByRole('heading', { name: 'Категория платежа' })),
+      .or(page.getByRole('heading', { name: 'Выберите категорию платежа' })),
   ).toBeVisible();
 }
 
@@ -125,14 +125,14 @@ test.describe('визард создания платежа', () => {
 
     // Крестик очищает и закрывает поиск.
     await page.getByRole('button', { name: 'Очистить поиск' }).click();
-    await expect(page.getByRole('heading', { name: 'Категория платежа' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Выберите категорию платежа' })).toBeVisible();
     await expect(page.getByRole('searchbox')).toHaveCount(0);
 
     // Клик вне хедера при пустом запросе тоже закрывает.
     await page.getByRole('button', { name: 'Поиск по категориям' }).click();
     await expect(page.getByText('Начните искать категорию')).toBeVisible();
     await page.mouse.click(195, 400);
-    await expect(page.getByRole('heading', { name: 'Категория платежа' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Выберите категорию платежа' })).toBeVisible();
     await expect(page.getByRole('searchbox')).toHaveCount(0);
   });
 

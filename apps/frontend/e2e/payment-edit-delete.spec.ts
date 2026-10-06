@@ -159,7 +159,10 @@ test.describe('экран правки платежа', () => {
     await page.goto(URLS.insuranceEdit);
 
     await page.getByRole('button', { name: 'Категория' }).click();
-    await expect(page.getByText('Выбор категории')).toBeVisible();
+    // Хедер страницы категории — тот же H1, что на шаге 1 визарда (#1152).
+    await expect(
+      page.getByRole('heading', { name: 'Выберите категорию платежа' }),
+    ).toBeVisible();
     // «Готово» появляется только после смены категории.
     await expect(page.getByRole('button', { name: 'Готово' })).toHaveCount(0);
     await page.getByRole('button', { name: 'Интернет', exact: true }).click();

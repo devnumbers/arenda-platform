@@ -2,6 +2,7 @@ import {
   captureScreen,
   expect,
   openCabinetWithSeededSession,
+  SEEDED_APARTMENT_PROPERTY_ID,
   test,
 } from './fixtures';
 
@@ -13,7 +14,8 @@ import {
 // «Расход/Доход» 232px на дисплейном ярусе и во всю колонку на ПК. До
 // сабмита визард ничего не пишет на сервер, состояние шагов —
 // клиентский useState (черновика у операции нет, карта #1052 Q2=В) —
-// спека данных не создаёт.
+// спека данных не создаёт. Шаг 3 «Категория» — хедер H1/600 по спеке
+// research #1149 (Figma 1049:34768, тикет #1152).
 
 /** Глобальный вход в визард (шаг «Выбрать объект» — четвёртый, шаг 1
  * суммы доступен сразу). */
@@ -111,5 +113,83 @@ test.describe('визард операции — шаг суммы', () => {
     const tabletBox = await segment.boundingBox();
     expect(tabletBox?.width).toBeCloseTo(232);
     await captureScreen(page, testInfo, 'operation-wizard-step1-amount-tablet');
+  });
+});
+
+test.describe('визард операции — шаг категории (#1152)', () => {
+  test('хедер H1 «Выберите категорию операции», поиск в шапке, кнопка после выбора', async ({
+    page,
+    seededUser,
+  }, testInfo) => {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto(WIZARD_URL);
+    await expect(page.getByText('Добавить операцию')).toBeVisible();
+
+    // Шаги 1–2: сумма (гейт кнопки) и название (необязательно — «Продолжить»
+    // доступно сразу).
+    await page.getByRole('textbox', { name: 'Сумма' }).fill('2500');
+    await page.getByRole('button', { name: 'Продолжить' }).click();
+    await expect(page.getByRole('heading', { name: 'Что хотите добавить?' })).toBeVisible();
+    await page.getByRole('button', { name: 'Продолжить' }).click();
+
+    // Хедер шага категории — H1/600 без подзаголовка («Без описания»,
+    // спека research #1149); в шапке — название шага «Категория».
+    await expect(
+      page.getByRole('heading', { name: 'Выберите категорию операции' }),
+    ).toBeVisible();
+    await expect(page.getByText('Категория', { exact: true })).toBeVisible();
+
+    // Кнопки шага до выбора категории нет (канон шага платежа) — панель
+    // скрыта целиком.
+    await expect(page.getByRole('button', { name: 'Продолжить' })).toHaveCount(0);
+
+    // Лупа меняет название шага на поле поиска; пустой запрос — подсказка
+    // вместо списка (Figma 1049:46256).
+    await page.getByRole('button', { name: 'Поиск по категориям' }).click();
+    const search = page.getByRole('searchbox', { name: 'Поиск по названиям категорий' });
+    await expect(search).toBeVisible();
+    await expect(page.getByText('Начните искать категорию')).toBeVisible();
+
+    // С запросом — отфильтрованный список; крестик возвращает шаг.
+    await search.fill('интер');
+    await expect(page.getByRole('button', { name: 'Интернет', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Очистить поиск' }).click();
+    await expect(page.getByRole('searchbox')).toHaveCount(0);
+    await expect(
+      page.getByRole('heading', { name: 'Выберите категорию операции' }),
+    ).toBeVisible();
+
+    // Выбор категории открывает кнопку; у глобального входа она ведёт
+    // на шаг выбора объекта. Дальше сабмита нет — сервер ничего не пишет.
+    await page.getByRole('button', { name: 'Интернет', exact: true }).click();
+    await page.getByRole('button', { name: 'Продолжить' }).click();
+    await expect(page.getByText('Выбрать объект', { exact: true })).toBeVisible();
+
+    await captureScreen(page, testInfo, 'operation-wizard-step3-category');
+  });
+
+  test('вход с объекта — тот же хедер H1 шага категории, сабмит-кнопка после выбора', async ({
+    page,
+    seededUser,
+  }) => {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto(`/properties/${SEEDED_APARTMENT_PROPERTY_ID}/operations/new`);
+    await expect(page.getByText('Добавить операцию')).toBeVisible();
+
+    // Шаги 1–2 до категории.
+    await page.getByRole('textbox', { name: 'Сумма' }).fill('1200');
+    await page.getByRole('button', { name: 'Продолжить' }).click();
+    await page.getByRole('button', { name: 'Продолжить' }).click();
+
+    // Компонент шага общий — заголовок одинаков у обоих входов (#1152).
+    await expect(
+      page.getByRole('heading', { name: 'Выберите категорию операции' }),
+    ).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Добавить операцию' })).toHaveCount(0);
+
+    // Категория — последний шаг входа с объекта: сабмит-кнопка появляется,
+    // но не нажимается — сервер ничего не пишет.
+    await page.getByRole('button', { name: 'Интернет', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Добавить операцию' })).toBeVisible();
   });
 });

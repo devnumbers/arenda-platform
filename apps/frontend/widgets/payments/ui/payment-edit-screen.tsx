@@ -72,7 +72,7 @@ import {
   BRANCH_PERIOD_LABELS,
   PeriodicityStep,
 } from './payment-create-wizard/periodicity-step';
-import { CategorySearchHint } from './payment-create-wizard/wizard-chrome';
+import { CategorySearchHint, WizardHeading } from './payment-create-wizard/wizard-chrome';
 
 /**
  * Экран правки платежа (Figma 705:10034; ранее 1127:33146, #467): форма,
@@ -83,8 +83,9 @@ import { CategorySearchHint } from './payment-create-wizard/wizard-chrome';
  * поле снесено из контракта и продукта (карта #1005, тикеты #1006–#1009).
  * Категория — отдельная страница на том же маршруте, как шаг 1 визарда
  * (Figma 781:12299, без карандаша: свои категории — следующий срез);
- * заголовок хедера — «Выбор категории», заголовок страницы без подписи
- * (решение владельца 2026-08-31); уход со страницы не теряет
+ * заголовок — тот же H1/600 «Выберите категорию платежа», что на шаге 1
+ * визарда, вместо TopNavTitle «Выбор категории» (#1152: единый хедер
+ * выбора категории при создании и правке); уход со страницы не теряет
  * несохранённые правки формы. Периодичность — отдельная страница как шаг 3
  * визарда, хедер «Выбор периодичности», в ветке — название периода
  * (решение владельца 2026-08-31); правка живёт в черновике страницы и
@@ -495,20 +496,23 @@ function PaymentEditForm({
               placeholder="Найти категорию"
               aria-label="Поиск по названиям категорий"
             />
-          ) : (
-            <TopNavTitle title="Выбор категории" />
-          )}
+          ) : undefined}
         </TopNav>
         {/* КатегорияStep и подсказка поиска приносят свои отступы (шаг визарда
-         * рассчитан на полноширинный контент) — обёртке паддинг не нужен. */}
+         * рассчитан на полноширинный контент) — обёртке паддинг не нужен.
+         * Заголовок и список — один блок: родительский gap-8 не должен
+         * разносить их. */}
         {categorySearchOpen && categoryQuery === '' ? (
           <CategorySearchHint text="Начните искать категорию" />
         ) : (
-          <CategoryStep
-            selectedSlug={selectedSlug}
-            onSelect={(slug) => update('categorySlug', slug)}
-            query={categorySearchOpen ? categoryQuery : ''}
-          />
+          <div>
+            <WizardHeading title="Выберите категорию платежа" variant="h1" />
+            <CategoryStep
+              selectedSlug={selectedSlug}
+              onSelect={(slug) => update('categorySlug', slug)}
+              query={categorySearchOpen ? categoryQuery : ''}
+            />
+          </div>
         )}
         {categoryChanged && (
           <StickyBottomBar>
