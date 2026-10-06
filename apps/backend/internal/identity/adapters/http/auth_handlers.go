@@ -308,14 +308,16 @@ func (h *AuthHandlers) Logout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpsupport.ClearSessionCookie(w, h.cookieSecure)
-	// #1098: ask the browser to drop the origin's HTTP cache at the logout
-	// moment. Exactly "cache": "storage" would unregister the service worker
-	// and wipe IndexedDB (offline ADR 0031/0032, pushes #1024), "cookies" is
-	// redundant next to the explicit session-cookie clear above. Both 204
-	// paths carry the header (the idempotent ErrNotFound falls through here);
-	// the 401 no-cookie and 500 paths above stay header-free — the browser
-	// must not drop anything when the logout did not succeed.
-	w.Header().Set("Clear-Site-Data", `"cache"`)
+	// No Clear-Site-Data here, deliberately (#1098 added "cache", the
+	// 2026-10-06 slow-logout diagnosis removed it): Chrome blocks delivering
+	// the 204 until the origin HTTP-cache purge finishes — 11–14 s on real
+	// profiles (Caddy logged the POST at 6–7 ms while the client-side fetch
+	// stayed pending the whole purge; POST duration grows with cache entries:
+	// 0 → 15–26 ms, 2000 → 1.1 s, 5000 → 2.8 s). The purge protected nothing:
+	// API responses carry no Cache-Control/validators so the browser never
+	// reuses them from cache, and static assets are immutable and public.
+	// The auth boundary stays on the frontend hard navigation (#1098), the
+	// bfcache guard, the session deletion above and the proxy /me gate.
 	w.WriteHeader(http.StatusNoContent)
 }
 

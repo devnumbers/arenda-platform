@@ -66,22 +66,15 @@ paths:
         - sessionCookie: []
       responses:
         '204':
-          description: Logged out
+          description: >-
+            Logged out. Deliberately without Clear-Site-Data: Chrome blocks
+            delivering the response until the origin HTTP-cache purge
+            finishes (11–14 s on real profiles, slow-logout diagnosis
+            2026-10-06), and the HTTP cache holds no user data anyway.
           headers:
             Set-Cookie:
               schema:
                 type: string
-            # Ticket #1098: hard logout asks the browser to drop its cache.
-            Clear-Site-Data:
-              description: >-
-                Instructs the browser to drop the origin's HTTP cache at the
-                logout moment. Exactly "cache": "storage" would unregister the
-                service worker and wipe IndexedDB (offline ADR 0031/0032,
-                pushes #1024); "cookies" is redundant next to the explicit
-                session-cookie clear.
-              schema:
-                type: string
-                enum: ['"cache"']
         '401':
           $ref: '#/components/responses/Unauthorized'
   /me:

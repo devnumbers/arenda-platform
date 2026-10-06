@@ -225,10 +225,14 @@ func TestLogout_SuccessDeletesAndClearsCookie(t *testing.T) {
 	if cookie := rr.Header().Get("Set-Cookie"); !strings.Contains(cookie, "session_id=") || !strings.Contains(cookie, "Max-Age=0") {
 		t.Fatalf("Set-Cookie = %q, want session cleared", cookie)
 	}
-	// #1098: the logout response carries Clear-Site-Data: "cache" — see the
-	// handler comment for why no other directive may join it.
-	if got := rr.Header().Get("Clear-Site-Data"); got != `"cache"` {
-		t.Fatalf("Clear-Site-Data = %q, want %q", got, `"cache"`)
+	// Regression lock (slow logout, 2026-10-06): Clear-Site-Data must NOT come
+	// back on the logout response. Chrome blocks delivering the 204 until the
+	// origin HTTP-cache purge finishes — 11–14 s on real profiles (Caddy saw
+	// 6 ms server-side, the onSuccess navigation fired only after the purge).
+	// The HTTP cache holds no user data (API responses carry no validators,
+	// static assets are immutable and public), so the purge protected nothing.
+	if got := rr.Header().Get("Clear-Site-Data"); got != "" {
+		t.Fatalf("Clear-Site-Data = %q, want none", got)
 	}
 }
 
@@ -247,9 +251,10 @@ func TestLogout_NotFoundIsIdempotent(t *testing.T) {
 	if rr.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want 204 (idempotent)", rr.Code)
 	}
-	// The idempotent path shares the success write, header included (#1098).
-	if got := rr.Header().Get("Clear-Site-Data"); got != `"cache"` {
-		t.Fatalf("Clear-Site-Data = %q, want %q", got, `"cache"`)
+	// The idempotent path shares the success write — and the same regression
+	// lock: no Clear-Site-Data here either (slow logout, 2026-10-06).
+	if got := rr.Header().Get("Clear-Site-Data"); got != "" {
+		t.Fatalf("Clear-Site-Data = %q, want none", got)
 	}
 }
 

@@ -411,11 +411,22 @@ test('вход через почту создаёт аккаунт и откры
 // Лог-out угасает сессии, посеянные прямо в БД (seededSessionTokenHash):
 // сид-сессия E2E_SESSION_TOKEN нужна параллельным воркерам (канон
 // profile-tree), а бюджет /auth/send (burst 3 на телефон) не тратится вовсе.
+//
+// Clear-Site-Data (#1098 добавил, диагностика медленного выхода 06.10.2026
+// убрала): Chrome не доставляет 204, пока не дочистит HTTP-кэш origin — на
+// реальных профилях 11–14 с (Caddy: 6–7 мс на сервере, onSuccess у клиента
+// только после чистки). Проба 1 держит контракт: заголовка на logout-ответе
+// нет. Проба 2 (консольное самоотчётство Chrome) снята вместе с заголовком.
 const LOGOUT_SESSION_TOKEN = 'e2e-t1098-logout-session-token';
 const LOGOUT_SESSION_ID = '22222222-2222-4222-8222-222222222298';
 const HEADER_PROBE_SESSION_TOKEN = 'e2e-t1098-header-probe-session-token';
 const HEADER_PROBE_SESSION_ID = '22222222-2222-4222-8222-222222222299';
 const SEEDED_OWNER_USER_ID = '11111111-1111-4111-8111-111111111111';
+
+// Заголовок проверяется нод-стороной (request-фикстура, мимо браузерного
+// стека): POST /api/auth/logout через прокси НЕ несёт Clear-Site-Data —
+// регрессионный лок против возврата чистки кэша на критический путь выхода
+// (диагностика медленного выхода 06.10.2026).
 
 // Заголовок Clear-Site-Data проверяется двумя независимыми пробами:
 //  1. node-сторона (request-фикстура, мимо браузерного стека): POST /api/auth/logout
@@ -423,7 +434,7 @@ const SEEDED_OWNER_USER_ID = '11111111-1111-4111-8111-111111111111';
 //  2. браузер: Chrome самоотчитывается в консоль («Cleared data types:
 //     "cache"») — сам заголовок он из ответа снимает после обработки, поэтому
 //     браузерный headers() его не показывает (находка отладки #1098).
-test('выход: Clear-Site-Data, перезагрузка на /login, «Назад» не возвращает ЛК (#1098)', async ({
+test('выход: без Clear-Site-Data, перезагрузка на /login, «Назад» не возвращает ЛК (#1098, медленный выход 06.10.2026)', async ({
   page,
   request,
 }) => {
@@ -440,20 +451,16 @@ test('выход: Clear-Site-Data, перезагрузка на /login, «На�
     SET token_hash = EXCLUDED.token_hash, expires_at = EXCLUDED.expires_at
   `);
 
-  // Проба 1: заголовок на уровне контракта — бекенд и прокси (без браузера).
+  // Проба 1: контракт — бекенд и прокси отдают logout без Clear-Site-Data
+  // (Chrome блокирует доставку 204 на время чистки кэша: 11–14 с на
+  // реальных профилях; диагностика 06.10.2026).
   const probe = await request.post(`${BASE_URL}/api/auth/logout`, {
     headers: { cookie: `session_id=${HEADER_PROBE_SESSION_TOKEN}` },
   });
   expect(probe.status()).toBe(204);
-  expect(probe.headers()['clear-site-data']).toContain('"cache"');
+  expect(probe.headers()['clear-site-data']).toBeUndefined();
 
-  // Проба 2: браузерная — жёсткая навигация + подтверждение Chrome в консоли.
-  const clearSiteDataConfirmations: string[] = [];
-  page.on('console', (message) => {
-    if (message.type() === 'info' && /Clear-Site-Data/.test(message.text())) {
-      clearSiteDataConfirmations.push(message.text());
-    }
-  });
+  // Проба 2: браузерная — жёсткая навигация без консольного ожидания чистки.
 
   await openCabinetWithSessionToken(page, LOGOUT_SESSION_TOKEN);
   // Первым экраном /properties: после замены /profile → /login у истории
@@ -471,16 +478,6 @@ test('выход: Clear-Site-Data, перезагрузка на /login, «На�
   await dialog.getByRole('button', { name: 'Выйти' }).click();
 
   await logoutResponsePromise;
-  // Консольное подтверждение Chrome может прийти на тик позже ответа —
-  // ожидание с ретраем.
-  await expect
-    .poll(
-      () => clearSiteDataConfirmations.some((text) => text.includes('"cache"')),
-      {
-        message: `Chrome did not confirm Clear-Site-Data "cache"; got: ${JSON.stringify(clearSiteDataConfirmations)}`,
-      },
-    )
-    .toBe(true);
 
   await page.waitForURL('**/login');
   await expect(page.getByRole('heading', { name: 'Введите номер телефона' })).toBeVisible();
