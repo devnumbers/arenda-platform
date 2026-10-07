@@ -107,11 +107,20 @@ type Payment struct {
 	// EndDate optionally stops generation; nil means open-ended.
 	EndDate *time.Time
 	AutoPay bool
+	// NotifyAutoPaid is the per-payment gate of the «Автоплатёж исполнен»
+	// event (#1189): false — an auto-pay rule's execution is silent. New
+	// rules default to false (макет 3214-72739), the migration stamped the
+	// existing auto-pay rules true — no behavioural regression (решение
+	// владельца по гриллингу #1186). The notifications publisher reads it;
+	// the mode switches never rewrite the flag.
+	NotifyAutoPaid bool
 	// ReminderOffsetDays is how many days ahead of an occurrence the
 	// «Напоминание о платеже» fires: 1, 3 or 7; nil means no reminders. The
 	// notification lives independently of AutoPay — an auto-pay rule with a
 	// reminder still warns (решение владельца, карта #822); the reminders
-	// publisher reads it (notifications/CONTEXT.md).
+	// publisher reads it (notifications/CONTEXT.md). At create time an
+	// auto-pay rule's incoming offset is forced to nil (решение #1186:
+	// автоплатёжная форма reminder-пикер не показывает).
 	ReminderOffsetDays *int
 	Category           CategoryRef
 	// TitleIsManual is the durable «название когда-либо задано вручную»

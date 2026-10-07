@@ -14,13 +14,35 @@ import (
 
 // insertScanPayment adds a payment rule row with an explicit auto-pay mode —
 // the scan's due leg sweeps the manual-mode rules only, the overdue leg both.
+// An auto-pay rule travels with notify_auto_paid = true — the post-migration
+// world (#1186: существующим автоплатежам флаг проставлен); the flag's own
+// gate inserts its silent rules explicitly.
 func insertScanPayment(t *testing.T, pool *pgxpool.Pool, ownerID, propertyID uuid.UUID, autoPay bool) uuid.UUID {
+	t.Helper()
+	return insertScanPaymentWithNotify(t, pool, ownerID, propertyID, autoPay, autoPay)
+}
+
+// insertScanSilentAutoPaidPayment adds an auto-pay rule with the «Не
+// уведомлять» flag (#1189) — the auto-paid leg's SQL gate keeps it silent
+// even with the tick's own-day stamp in place.
+func insertScanSilentAutoPaidPayment(t *testing.T, pool *pgxpool.Pool, ownerID, propertyID uuid.UUID) uuid.UUID {
+	t.Helper()
+	return insertScanPaymentWithNotify(t, pool, ownerID, propertyID, true, false)
+}
+
+// insertScanPaymentWithNotify is the shared payment-rule fixture with both
+// mode flags spelled out (auto_pay, notify_auto_paid).
+func insertScanPaymentWithNotify(
+	t *testing.T, pool *pgxpool.Pool, ownerID, propertyID uuid.UUID, autoPay, notifyAutoPaid bool,
+) uuid.UUID {
 	t.Helper()
 	id := uuid.Must(uuid.NewV7())
 	_, err := pool.Exec(context.Background(), `
-		INSERT INTO payments (id, owner_id, property_id, type, title, amount_kopecks, recurrence, since, auto_pay, category_slug)
-		VALUES ($1, $2, $3, 'expense', 'Обслуживание', 250000, '{"kind": "monthly"}', '2026-08-01', $4, 'maintenance')`,
-		id, ownerID, propertyID, autoPay)
+		INSERT INTO payments (id, owner_id, property_id, type, title, amount_kopecks, recurrence,
+			since, auto_pay, notify_auto_paid, category_slug)
+		VALUES ($1, $2, $3, 'expense', 'Обслуживание', 250000, '{"kind": "monthly"}',
+			'2026-08-01', $4, $5, 'maintenance')`,
+		id, ownerID, propertyID, autoPay, notifyAutoPaid)
 	require.NoError(t, err)
 	return id
 }
@@ -742,6 +764,13 @@ func TestPaymentScanStore_ListAutoPaidTargets(t *testing.T) {
 	insertScanOperation(t, pool, msk, oldProp, oldRule, "2026-09-18", "planned")
 	stampPaid(t, pool, oldRule, "2026-09-18", "auto_pay")
 
+	// Молчащее правило (#1189): тиковый штамп своего дня есть, флаг «Не
+	// уведомлять» — нога молчит.
+	silentProp := createLiveProperty(t, pool, msk)
+	silentRule := insertScanSilentAutoPaidPayment(t, pool, msk, silentProp)
+	insertScanOperation(t, pool, msk, silentProp, silentRule, "2026-09-19", "planned")
+	stampPaid(t, pool, silentRule, "2026-09-19", "auto_pay")
+
 	// Архив — мимо (канон тиков).
 	archivedProp := createLiveProperty(t, pool, msk)
 	archivedRule := insertScanPayment(t, pool, msk, archivedProp, true)
@@ -756,13 +785,14 @@ func TestPaymentScanStore_ListAutoPaidTargets(t *testing.T) {
 	early := time.Date(2026, 9, 19, 5, 0, 0, 0, time.UTC)
 	targets, err := store.ListAutoPaidTargets(ctx, "Europe/Moscow", today, early)
 	require.NoError(t, err)
-	assert.Empty(t, paymentTargetsOfProps(targets, prop, manualProp, pendingProp, oldProp, archivedProp))
+	assert.Empty(t, paymentTargetsOfProps(targets, prop, manualProp, pendingProp, oldProp, archivedProp, silentProp))
 
-	// На границе — 10:00 Москвы — только тиковое гашение правила автоплатежа.
+	// На границе — 10:00 Москвы — только тиковое гашение правила автоплатежа;
+	// молчащее правило (#1189) и с штампом мимо.
 	now := time.Date(2026, 9, 19, 7, 0, 0, 0, time.UTC)
 	targets, err = store.ListAutoPaidTargets(ctx, "Europe/Moscow", today, now)
 	require.NoError(t, err)
-	got := paymentTargetsOfProps(targets, prop, manualProp, pendingProp, manualRuleProp, oldProp, archivedProp)
+	got := paymentTargetsOfProps(targets, prop, manualProp, pendingProp, manualRuleProp, oldProp, archivedProp, silentProp)
 	require.Len(t, got, 1)
 	assert.Equal(t, rule, got[0].PaymentID)
 	assert.Equal(t, today, got[0].DueDate)
@@ -784,10 +814,13 @@ func TestPaymentScanStore_ListScheduledAutoPaidTargets(t *testing.T) {
 	// The in-window occurrence: boundary 2026-09-21T07:00Z (10:00 MSK).
 	insertScanOperation(t, pool, msk, prop, rule, "2026-09-21", "planned")
 
-	// Не-автоплатёжное правило и вне окна — мимо.
+	// Не-автоплатёжное правило, молчащее (#1189) и вне окна — мимо.
 	manualProp := createLiveProperty(t, pool, msk)
 	manualRule := insertScanPayment(t, pool, msk, manualProp, false)
 	insertScanOperation(t, pool, msk, manualProp, manualRule, "2026-09-21", "planned")
+	silentProp := createLiveProperty(t, pool, msk)
+	silentRule := insertScanSilentAutoPaidPayment(t, pool, msk, silentProp)
+	insertScanOperation(t, pool, msk, silentProp, silentRule, "2026-09-21", "planned")
 	insertScanOperation(t, pool, msk, prop, rule, "2026-10-21", "planned")
 
 	store := NewPaymentScanStore(pool)
@@ -796,7 +829,7 @@ func TestPaymentScanStore_ListScheduledAutoPaidTargets(t *testing.T) {
 		time.Date(2026, 9, 21, 8, 0, 0, 0, time.UTC))
 	require.NoError(t, err)
 
-	got := scheduleTargetsOfProps(targets, rule, manualRule)
+	got := scheduleTargetsOfProps(targets, rule, manualRule, silentRule)
 	require.Len(t, got, 1)
 	assert.Equal(t, rule, got[0].PaymentID)
 	assert.Equal(t, time.Date(2026, 9, 21, 0, 0, 0, 0, time.UTC), got[0].DueDate)
@@ -828,6 +861,13 @@ func TestPaymentScanStore_GetScheduledAutoPaidPayment(t *testing.T) {
 	pendingRule := insertScanPayment(t, pool, msk, pendingProp, true)
 	insertScanOperation(t, pool, msk, pendingProp, pendingRule, "2026-09-20", "planned")
 
+	// Молчащее правило (#1189): штамп тика своего дня есть, флаг «Не
+	// уведомлять» — разрешение отвечает не-живым даже с бронью.
+	silentProp := createLiveProperty(t, pool, msk)
+	silentRule := insertScanSilentAutoPaidPayment(t, pool, msk, silentProp)
+	insertScanOperation(t, pool, msk, silentProp, silentRule, "2026-09-20", "planned")
+	stampPaid(t, pool, silentRule, "2026-09-20", "auto_pay")
+
 	store := NewPaymentScanStore(pool)
 	// Пробуждение 10:00:30 Москвы своего дня.
 	now := time.Date(2026, 9, 20, 7, 0, 30, 0, time.UTC)
@@ -850,6 +890,10 @@ func TestPaymentScanStore_GetScheduledAutoPaidPayment(t *testing.T) {
 	_, live, err = store.GetScheduledAutoPaidPayment(ctx, pendingRule, opDate, now)
 	require.NoError(t, err)
 	assert.False(t, live, "the tick has not run yet")
+
+	_, live, err = store.GetScheduledAutoPaidPayment(ctx, silentRule, opDate, now)
+	require.NoError(t, err)
+	assert.False(t, live, "the «Не уведомлять» flag keeps the stamped rule silent (#1189)")
 
 	// Ролловер: джоба проснулась на следующий день — живой день прошёл,
 	// бэкфилла нет (решение владельца, #1167).

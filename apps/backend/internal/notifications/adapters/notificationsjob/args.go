@@ -74,8 +74,9 @@ type TaskOverdueArgs struct {
 // Kind identifies the job kind to River.
 func (TaskOverdueArgs) Kind() string { return "notifications:task_overdue" }
 
-// PaymentDueArgs publishes one operation's «Оплатите платёж» at 00:00 of the
-// operation date in the owner's timezone (issue #776). The args are the
+// PaymentDueArgs publishes one operation's «Оплатите платёж» at the wall
+// clock 10:00 of the operation date in the owner's timezone (issues #776,
+// #1168). The args are the
 // job's dedup key — the publication key's (rule, date) pair —: one
 // operation has at most one due job in flight, the hourly scan re-asks
 // freely and River answers the standing job. DueDate is the module's
@@ -89,8 +90,10 @@ type PaymentDueArgs struct {
 // Kind identifies the job kind to River.
 func (PaymentDueArgs) Kind() string { return "notifications:payment_due" }
 
-// PaymentOverdueArgs publishes one operation's «Платёж просрочен» at 00:00
-// of the day after the operation date in the owner's timezone (issue #776).
+// PaymentOverdueArgs publishes one operation's «Платёж просрочен» at the
+// wall clock 22:00
+// of the day after the operation date in the owner's timezone (issues #776,
+// #1168).
 // The args are the job's dedup key, the same shape as PaymentDueArgs; the
 // two legs are different kinds, so one operation's due and overdue jobs
 // coexist.
@@ -103,8 +106,9 @@ type PaymentOverdueArgs struct {
 func (PaymentOverdueArgs) Kind() string { return "notifications:payment_overdue" }
 
 // PaymentReminderArgs publishes one operation's «Напоминание о платеже» at
-// 00:00 of (operation date − lead time) in the owner's timezone (карта
-// #822, #824). The args are the job's dedup key, the same (rule, date) shape
+// the wall clock 10:00 of (operation date − lead time) in the owner's
+// timezone (карта
+// #822, #824; #1168). The args are the job's dedup key, the same (rule, date) shape
 // as the other payment legs; a lead time changed after the booking sends the
 // stale job away quietly — the worker re-checks the rule's current lead time
 // at wake-up.

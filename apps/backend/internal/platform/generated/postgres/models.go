@@ -376,6 +376,7 @@ type Payment struct {
 	FavoriteOrder      pgtype.Int8        `json:"favorite_order"`
 	ReminderOffsetDays pgtype.Int4        `json:"reminder_offset_days"`
 	TitleIsManual      bool               `json:"title_is_manual"`
+	NotifyAutoPaid     bool               `json:"notify_auto_paid"`
 }
 
 type PaymentCategory struct {

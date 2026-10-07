@@ -115,6 +115,7 @@ func (s *PaymentStore) Create(ctx context.Context, p domain.Payment) error {
 		Since:              pgconv.DateToPgtype(p.Since),
 		EndDate:            pgconv.DatePtrToPgtype(p.EndDate),
 		AutoPay:            p.AutoPay,
+		NotifyAutoPaid:     p.NotifyAutoPaid,
 		ReminderOffsetDays: pgconv.Int4PtrToPgtype(p.ReminderOffsetDays),
 		CategorySlug:       pgconv.StringPtrToPgtype(p.Category.Slug),
 	}); err != nil {
@@ -138,6 +139,7 @@ func (s *PaymentStore) Update(ctx context.Context, p domain.Payment) error {
 		Recurrence:         recurrence,
 		EndDate:            pgconv.DatePtrToPgtype(p.EndDate),
 		AutoPay:            p.AutoPay,
+		NotifyAutoPaid:     p.NotifyAutoPaid,
 		ReminderOffsetDays: pgconv.Int4PtrToPgtype(p.ReminderOffsetDays),
 		CategorySlug:       pgconv.StringPtrToPgtype(p.Category.Slug),
 		TitleIsManual:      p.TitleIsManual,
