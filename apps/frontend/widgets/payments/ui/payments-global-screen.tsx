@@ -1,9 +1,10 @@
 "use client";
 
-import type { JSX, ReactNode } from "react";
+import { useState, type JSX, type ReactNode } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
+  Add,
   BoldHome,
   BoldObjects,
   BoldStar,
@@ -15,7 +16,10 @@ import {
   CategoryIcon,
   categoryStyle,
 } from "@/features/payment-categories";
+import { propertyPermissions } from "@/entities/property";
+import { useProperties } from "@/features/properties";
 import {
+  PaymentsAddSheet,
   useGlobalPaymentObjects,
   useGlobalPayments,
 } from "@/features/payments";
@@ -26,6 +30,7 @@ import {
   EmptyState,
   HubCollapseAnchor,
   HubTitle,
+  IconButton,
   PageContent,
   SearchPill,
   Skeleton,
@@ -38,6 +43,7 @@ import {
   nearestDateLine,
   overdueDaysLine,
   overdueOperationsCountLabel,
+  paymentHubAddTarget,
   paymentsCountLabel,
 } from "../lib/payments-global-model";
 import {
@@ -54,23 +60,35 @@ const SECTION_CARDS_LIMIT = 4;
 /**
  * Экран «Платежи» — глобальная страница платежей (карта #573, тикет #578;
  * состав — решения владельца #574, макеты 879:9679/880:17866, пустое
- * состояние — 1041-51463/1041-51460/1036-37530).
- * Три секции: «Избранные», «Просроченные», «Платежи объектов» (секции «На
- * оплату» в срезе нет); заголовок с шевроном открывает страницу категории,
- * замыкающая карточка «Все …» ведёт туда же. Карточки платежей — канон
- * PaymentCardButton (168.5, горизонтальная лента): иконка категории, сумма,
- * дата-«Ближайший» (просто дата графика, без статуса; у просроченных — «N
- * дней» красным и красный (!) на иконке). Пустая секция — карточка-
- * плейсхолдер с 3D-иллюстрацией из Figma. Совсем без объектов — глобальное
- * пустое состояние с CTA «Добавить объект». Поиск — пилюля «Найти платёж»
- * на страницу поиска (#581); иконка-слайдеры справа — декор макета, не
- * кликается. Один объект в книге — тап по его карточке ведёт сразу на
- * платежи объекта, без страницы «Объекты».
+ * состояние — 1041-51463/1041-51460/1036-37530; новый первый блок — макет
+ * 3226-75059, хедер 3229-94522, тикет #1235).
+ * Секции (порядок макета): «Избранные», «Просроченные», «Платежи объектов»;
+ * четвёртая секция макета «На оплату» — новая функциональность (выборки
+ * «к оплате» ни в контракте фида #575, ни страницы-приёмника шеврона нет) —
+ * вынесена отдельным тикетом #1251, здесь не реализуется. Заголовок
+ * с шевроном открывает страницу категории, замыкающая карточка «Все …»
+ * ведёт туда же. Карточки платежей — канон PaymentCardButton (168.5,
+ * горизонтальная лента): иконка категории, сумма, дата-«Ближайший» (просто
+ * дата графика, без статуса; у просроченных — «N дней» красным и красный
+ * (!) на иконке). Пустая секция — карточка-плейсхолдер с 3D-иллюстрацией
+ * из Figma. Совсем без объектов — глобальное пустое состояние с CTA
+ * «Добавить объект». Поиск — пилюля «Найти платёж» на страницу поиска
+ * (#581); иконка-слайдеры справа — декор макета, не кликается.
+ * «+» создания (макет 3226-75059) — в ряду заголовка и в правом слоте
+ * компакт-бара; видна, когда в книге есть хоть один объект с правом правки
+ * (#703), на глобальной пустоте скрыта — действие там CTA состояния.
+ * Ведёт через существующие поверхности (новых роутов создания нет): у
+ * единственного редактируемого объекта — шит единого входа #453 (черновик →
+ * выбор типа → визард его объекта), у нескольких — страница «Объекты»
+ * (#582: карточка → платежи объекта → «Добавить»). Один объект в книге —
+ * тап по его карточке ведёт сразу на платежи объекта, без страницы
+ * «Объекты».
  */
 export function PaymentsGlobalScreen(): JSX.Element {
   const router = useRouter();
   const feedQuery = useGlobalPayments();
   const objectsQuery = useGlobalPaymentObjects();
+  const propertiesQuery = useProperties();
 
   // Скелетон — пока данных нет вовсе (первая загрузка); ошибка без данных
   // показывает карточку повтора, не скелетон (канон состояний).
@@ -85,6 +103,33 @@ export function PaymentsGlobalScreen(): JSX.Element {
   // жить; разделы-плейсхолдеры при этом не показываются.
   const globalEmpty = !pending && !error && objects.length === 0;
 
+  // «+» создания: справочник объектов не загружен, упал или редактируемых
+  // нет — консервативно скрыта (canon #703, как у «Операций»); на
+  // глобальной пустоте скрыта — создание объекта там CTA состояния.
+  const editableIds = (propertiesQuery.data ?? [])
+    .filter((property) => propertyPermissions(property).canEdit)
+    .map((property) => property.id);
+  const addTarget = paymentHubAddTarget(editableIds);
+  const showAdd = !globalEmpty && addTarget !== null;
+
+  // Шит единого входа помнит свой объект: цель может смениться на
+  // «Объекты» после перечитывания справочника — открытая модалка не должна
+  // перемонтироваться.
+  const [addSheetOpen, setAddSheetOpen] = useState(false);
+  const [addSheetPropertyId, setAddSheetPropertyId] = useState<string | null>(
+    null,
+  );
+
+  const openAdd = (): void => {
+    if (addTarget === null) return;
+    if (addTarget.kind === "objects") {
+      router.push(ROUTES.paymentsObjects);
+      return;
+    }
+    setAddSheetPropertyId(addTarget.propertyId);
+    setAddSheetOpen(true);
+  };
+
   const retry = (): void => {
     void feedQuery.refetch();
     void objectsQuery.refetch();
@@ -93,21 +138,49 @@ export function PaymentsGlobalScreen(): JSX.Element {
   const openPayment = (payment: GlobalPayment): void =>
     router.push(ROUTES.propertyPayment(payment.propertyId, payment.id));
 
+  // Два экземпляра узла: у ряда заголовка свой testid — слоты TopNav
+  // рендерят свой узел в трёх местах (крыло, инлайн-компакт, мобайл-клон),
+  // общий testid давал бы строгую неоднозначность в e2e.
+  const addButton = (
+    <IconButton
+      icon={<Add />}
+      label="Создать платёж"
+      data-testid="payments-create"
+      onClick={openAdd}
+    />
+  );
+  const addButtonCompact = (
+    <IconButton
+      icon={<Add />}
+      label="Создать платёж"
+      data-testid="payments-create-compact"
+      onClick={openAdd}
+    />
+  );
+
   return (
     <>
       {/* Хаб-шапка: «крылья» (лого + профиль) и на мобайле; в компакт-баре
-       * при сворачивании — лупа на поиск платежей (канон «Операций» #543). */}
+       * при сворачивании — лупа на поиск платежей (канон «Операций» #543)
+       * и «+» справа (макет 3229-94522, канон сворачивания). */}
       <TopNav
         mobileWings
         collapse={{
           title: "Платежи",
           search: { href: ROUTES.paymentsSearch, label: "Найти платёж" },
+          trailing: showAdd ? addButtonCompact : undefined,
         }}
       />
 
       <PageContent>
         <HubCollapseAnchor>
-          <HubTitle>Платежи</HubTitle>
+          {/* Строка заголовка h-8 с «+» (макет 3226-75059, паттерн хаба
+           * «Объектов» #1234): кнопка 44 переполняет строку симметрично —
+           * центрирована против линии заголовка. */}
+          <div className="flex h-8 items-center justify-between pr-3.5">
+            <HubTitle>Платежи</HubTitle>
+            {showAdd && addButton}
+          </div>
         </HubCollapseAnchor>
 
         {globalEmpty ? (
@@ -211,6 +284,17 @@ export function PaymentsGlobalScreen(): JSX.Element {
           </div>
         )}
       </PageContent>
+
+      {/* Единый вход в создание платежа (#453) для единственного
+       * редактируемого объекта: черновик → выбор типа → визард его
+       * объекта. Без fixedType — шит сам разбирает черновики обоих типов. */}
+      {addSheetPropertyId !== null && (
+        <PaymentsAddSheet
+          propertyId={addSheetPropertyId}
+          open={addSheetOpen}
+          onOpenChange={setAddSheetOpen}
+        />
+      )}
     </>
   );
 }
