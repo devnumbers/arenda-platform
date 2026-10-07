@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	identityriverqueue "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/riverqueue"
 	notificationspg "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/config"
@@ -47,8 +48,9 @@ func TestWireRiverQueueBuildsBundle(t *testing.T) {
 	taskStore := notificationspg.NewTaskScanStore(nil)
 	paymentStore := notificationspg.NewPaymentScanStore(nil)
 	rentalStore := notificationspg.NewRentalScanStore(nil)
+	var contactWorker *identityriverqueue.ContactChangedWorker // nil: the bundle shape, not the runtime
 	riverMod, err := WireRiverQueue(context.Background(), p, notificationsMod,
-		fakeContactResolver{}, fakeEmailSender{}, pushSender, taskStore, paymentStore, rentalStore)
+		fakeContactResolver{}, fakeEmailSender{}, pushSender, taskStore, paymentStore, rentalStore, contactWorker)
 	require.NoError(t, err)
 	defer riverMod.ProviderLimiter.Stop()
 

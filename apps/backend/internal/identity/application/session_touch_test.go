@@ -146,7 +146,7 @@ func seededSession(now time.Time) domain.Session {
 func newTouchService(repo *touchRepo, geo *countingGeo) SessionService {
 	factory := NewTxStoreFactory(
 		newFakeUserRepo(), newFakeCodeRepo(), newFakeAttemptRepo(),
-		repo, newFakeGrantRepo(), nil, &fakeUoW{beginner: &fakeBeginner{}},
+		repo, newFakeGrantRepo(), nil, nil, &fakeUoW{beginner: &fakeBeginner{}},
 	)
 	return NewSessionService(factory, SessionServiceConfig{Hasher: fakeHasher{}, Geo: geo})
 }
@@ -348,7 +348,7 @@ func TestSessionServiceIssue_CapturesDeviceOnce(t *testing.T) {
 
 	factory := NewTxStoreFactory(
 		newFakeUserRepo(), newFakeCodeRepo(), newFakeAttemptRepo(),
-		repo, newFakeGrantRepo(), nil, &fakeUoW{beginner: &fakeBeginner{}},
+		repo, newFakeGrantRepo(), nil, nil, &fakeUoW{beginner: &fakeBeginner{}},
 	)
 	svc := NewSessionService(factory, SessionServiceConfig{Hasher: fakeHasher{}, Parser: parser, Geo: geo})
 

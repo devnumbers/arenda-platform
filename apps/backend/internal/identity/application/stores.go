@@ -20,6 +20,9 @@ type txStores struct {
 	sessions SessionRepository
 	grants   EmailChangeGrantRepository
 	audit    auditapp.Recorder
+	// Notifier schedules the contact-change security letter inside this same
+	// transaction (решение #1207): the job commits together with the change.
+	notifier TransactionalContactChangeNotifier
 }
 
 // txStoreFactory holds the non-transactional identity repositories and audit
@@ -38,15 +41,20 @@ type txStoreFactory struct {
 	sessions SessionRepository
 	grants   EmailChangeGrantRepository
 	audit    auditapp.Recorder
-	uow      transaction.UoW
+	// ContactNotifier is the change-letter queue seam; the River adapter binds
+	// its client late (identity builds before the delivery queue — the
+	// grace-events canon), the per-transaction binding happens in runInTx.
+	contactNotifier ContactChangeNotifier
+	uow             transaction.UoW
 }
 
 // NewTxStoreFactory bundles the four identity repositories, the audit recorder,
-// and the Unit-of-Work into the single txStoreFactory every identity service
-// embeds (ADR 0033 γ-factory). A nil audit defaults to a Noop recorder so a
-// caller that does not care about audit still gets a safe factory. The type
-// stays unexported; callers use := to hold it (standard Go pattern for a factory
-// returning an unexported type).
+// the change-letter queue seam, and the Unit-of-Work into the single
+// txStoreFactory every identity service embeds (ADR 0033 γ-factory). A nil
+// audit defaults to a Noop recorder and a nil contactNotifier to
+// ContactChangeNoop, so a caller that does not care about either still gets a
+// safe factory. The type stays unexported; callers use := to hold it (standard
+// Go pattern for a factory returning an unexported type).
 func NewTxStoreFactory(
 	users UserRepository,
 	codes LoginCodeRepository,
@@ -54,19 +62,24 @@ func NewTxStoreFactory(
 	sessions SessionRepository,
 	grants EmailChangeGrantRepository,
 	audit auditapp.Recorder,
+	contactNotifier ContactChangeNotifier,
 	uow transaction.UoW,
 ) txStoreFactory {
 	if audit == nil {
 		audit = auditapp.Noop{}
 	}
+	if contactNotifier == nil {
+		contactNotifier = ContactChangeNoop{}
+	}
 	return txStoreFactory{
-		users:    users,
-		codes:    codes,
-		attempts: attempts,
-		sessions: sessions,
-		grants:   grants,
-		audit:    audit,
-		uow:      uow,
+		users:           users,
+		codes:           codes,
+		attempts:        attempts,
+		sessions:        sessions,
+		grants:          grants,
+		audit:           audit,
+		contactNotifier: contactNotifier,
+		uow:             uow,
 	}
 }
 
@@ -114,6 +127,7 @@ func (f *txStoreFactory) runInTx(ctx context.Context, work func(*txStores) error
 			sessions: sessions,
 			grants:   grants,
 			audit:    f.audit.WithTx(tx),
+			notifier: f.contactNotifier.WithTx(tx),
 		}
 		return work(stores)
 	})

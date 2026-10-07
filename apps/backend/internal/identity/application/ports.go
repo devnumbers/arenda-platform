@@ -160,3 +160,56 @@ type EmailChangeGrantRepository interface {
 	DeleteByUserID(ctx context.Context, userID uuid.UUID) error
 	WithTx(tx transaction.Tx) (EmailChangeGrantRepository, error)
 }
+
+// ContactChangeKind names the contact a change-notification letter announces
+// (решение #1207). The kind selects the letter's template and subject —
+// the same operation-naming rule the code letters follow (issue #1204) —
+// and pins the recipient: an email change announces itself to the OLD
+// address, a phone change to the current email (the only delivery channel).
+type ContactChangeKind string
+
+const (
+	ContactChangedEmail ContactChangeKind = "email_changed"
+	ContactChangedPhone ContactChangeKind = "phone_changed"
+)
+
+// ContactChangedEvent is the fact a change-notification letter announces:
+// which contact changed, for whom, where the letter goes, and when the
+// change committed. The recipient is captured at change time — for an email
+// change it is the old address, which the user row no longer carries once
+// the change commits — and the new address never enters the letter (research
+// #1201 §5).
+type ContactChangedEvent struct {
+	Kind      ContactChangeKind
+	UserID    uuid.UUID
+	Recipient domain.Email
+	ChangedAt time.Time
+}
+
+// TransactionalContactChangeNotifier schedules the change letter inside one
+// already-bound transaction.
+type TransactionalContactChangeNotifier interface {
+	ScheduleChanged(ctx context.Context, event ContactChangedEvent) error
+}
+
+// ContactChangeNotifier binds change-letter scheduling to a transaction. The
+// change services call it through txStores inside runInTx, so the letter job
+// commits together with the change or not at all (решение #1207) — a lost
+// SMTP attempt costs a River retry, a lost enqueue would cost the only
+// signal a hijacked account gets.
+type ContactChangeNotifier interface {
+	WithTx(tx transaction.Tx) TransactionalContactChangeNotifier
+}
+
+// ContactChangeNoop drops the letter — the safe default a factory without a
+// queue substitutes, mirroring auditapp.Noop. Tests assert the real
+// scheduling through a recording fake, not through this.
+type ContactChangeNoop struct{}
+
+func (ContactChangeNoop) WithTx(transaction.Tx) TransactionalContactChangeNotifier {
+	return contactChangeNoopTx{}
+}
+
+type contactChangeNoopTx struct{}
+
+func (contactChangeNoopTx) ScheduleChanged(context.Context, ContactChangedEvent) error { return nil }

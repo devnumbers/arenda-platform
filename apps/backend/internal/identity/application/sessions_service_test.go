@@ -24,7 +24,7 @@ func newSessionsHarness() *sessionsHarness {
 	beginner := &fakeBeginner{}
 	factory := NewTxStoreFactory(
 		newFakeUserRepo(), newFakeCodeRepo(), newFakeAttemptRepo(), repo,
-		newFakeGrantRepo(), audit, &fakeUoW{beginner: beginner},
+		newFakeGrantRepo(), audit, nil, &fakeUoW{beginner: beginner},
 	)
 	return &sessionsHarness{
 		repo:    repo,

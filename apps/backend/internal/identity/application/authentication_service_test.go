@@ -994,7 +994,7 @@ func TestAuthenticationService_SendCode_GetByPhoneError(t *testing.T) {
 
 	factory := NewTxStoreFactory(
 		&errorUserRepo{err: dbErr}, stores.codes, stores.attempts, stores.sessions,
-		newFakeGrantRepo(), auditapp.Noop{}, &fakeUoW{beginner: stores.beginner},
+		newFakeGrantRepo(), auditapp.Noop{}, nil, &fakeUoW{beginner: stores.beginner},
 	)
 	loginCodes := NewLoginCodeService(factory, LoginCodeServiceConfig{
 		CodeSender: sender, Clock: &fakeClock{now: testNow},
@@ -1034,7 +1034,7 @@ func TestAuthenticationService_SendCode_GetByEmailError(t *testing.T) {
 	users := &errorOnGetByEmailRepo{fakeUserRepo: newFakeUserRepo(), err: dbErr}
 	factory := NewTxStoreFactory(
 		users, stores.codes, stores.attempts, stores.sessions,
-		newFakeGrantRepo(), auditapp.Noop{}, &fakeUoW{beginner: stores.beginner},
+		newFakeGrantRepo(), auditapp.Noop{}, nil, &fakeUoW{beginner: stores.beginner},
 	)
 	loginCodes := NewLoginCodeService(factory, LoginCodeServiceConfig{
 		CodeSender: sender, Clock: &fakeClock{now: testNow},
@@ -1070,7 +1070,7 @@ func TestAuthenticationService_SendCodeByPhone_GetByPhoneError(t *testing.T) {
 
 	factory := NewTxStoreFactory(
 		&errorUserRepo{err: dbErr}, stores.codes, stores.attempts, stores.sessions,
-		newFakeGrantRepo(), auditapp.Noop{}, &fakeUoW{beginner: stores.beginner},
+		newFakeGrantRepo(), auditapp.Noop{}, nil, &fakeUoW{beginner: stores.beginner},
 	)
 	svc := NewAuthenticationService(factory, AuthenticationServiceConfig{
 		LoginCodes: NewLoginCodeService(factory, LoginCodeServiceConfig{

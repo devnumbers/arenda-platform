@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	identityriverqueue "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/riverqueue"
 	notificationsjob "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/notificationsjob"
 	notificationspg "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/postgres"
 	notificationsstream "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/stream"
@@ -79,20 +80,26 @@ const (
 	notificationsTaskMaxWorkers    = 2
 	notificationsPaymentMaxWorkers = 2
 	notificationsRentalMaxWorkers  = 2
+	// IdentityContactMaxWorkers serves the contact-change letters (решение
+	// #1207): rare one-send jobs — one worker is plenty.
+	identityContactMaxWorkers = 1
 )
 
 // WireRiverQueue builds the River client with the two delivery queues, the
 // tasks boundary queue, the payment boundary queue, the rental boundary
-// queue and the email/push/task/payment/rental workers, plus the publisher
-// over the transactional enqueuer and the event stream hub behind it (#742,
-// ADR 0060). The tasks (#750), payments (#776) and rentals (#777) scan
-// publishers wire here too: their booking legs schedule the boundary jobs
-// through the same client, so they bind the workers' deferred deliverers —
-// the composition root passes them to the scan group. The client is not
-// started here: NewWorkers runs it in the workers phase and Workers.Wait
-// waits for its full stop. Push jobs are enqueued only when a push sender
-// could be built (VAPID keys configured); without them the pipeline runs in
-// the email-only local mode.
+// queue, the identity contact-change queue, and the email/push/task/payment/
+// rental/contact workers, plus the publisher over the transactional enqueuer
+// and the event stream hub behind it (#742, ADR 0060). The tasks (#750),
+// payments (#776) and rentals (#777) scan publishers wire here too: their
+// booking legs schedule the boundary jobs through the same client, so they
+// bind the workers' deferred deliverers — the composition root passes them to
+// the scan group. The contact-change letters (решение #1207) ride the same
+// client: their worker registers here and their queue seam binds to the
+// client in main.go (identity builds earlier than the delivery queue). The
+// client is not started here: NewWorkers runs it in the workers phase and
+// Workers.Wait waits for its full stop. Push jobs are enqueued only when a
+// push sender could be built (VAPID keys configured); without them the
+// pipeline runs in the email-only local mode.
 func WireRiverQueue(
 	ctx context.Context,
 	p platformDeps,
@@ -103,6 +110,7 @@ func WireRiverQueue(
 	taskStore *notificationspg.TaskScanStore,
 	paymentStore *notificationspg.PaymentScanStore,
 	rentalStore *notificationspg.RentalScanStore,
+	contactWorker *identityriverqueue.ContactChangedWorker,
 ) (*RiverQueue, error) {
 	cfg := p.Cfg
 
@@ -151,14 +159,18 @@ func WireRiverQueue(
 	river.AddWorker(workers, notificationsjob.NewPaymentAutoPaidWorker(paymentDeliverer, p.Clock, p.Logger))
 	rentalDeliverer := &notificationsjob.DeferredRentalBoundaryDeliverer{}
 	river.AddWorker(workers, notificationsjob.NewRentalCompletedWorker(rentalDeliverer, p.Clock, p.Logger))
+	// The identity contact-change letters (решение #1207) ride the same
+	// client; a single worker — the letters are rare and light.
+	river.AddWorker(workers, contactWorker)
 
 	client, err := river.NewClient(riverpgxv5.New(p.Pool), &river.Config{
 		Queues: map[string]river.QueueConfig{
-			notificationsjob.QueueEmail:    {MaxWorkers: cfg.NotificationsEmailMaxWorkers},
-			notificationsjob.QueuePush:     {MaxWorkers: cfg.NotificationsPushMaxWorkers},
-			notificationsjob.QueueTasks:    {MaxWorkers: notificationsTaskMaxWorkers},
-			notificationsjob.QueuePayments: {MaxWorkers: notificationsPaymentMaxWorkers},
-			notificationsjob.QueueRentals:  {MaxWorkers: notificationsRentalMaxWorkers},
+			notificationsjob.QueueEmail:            {MaxWorkers: cfg.NotificationsEmailMaxWorkers},
+			notificationsjob.QueuePush:             {MaxWorkers: cfg.NotificationsPushMaxWorkers},
+			notificationsjob.QueueTasks:            {MaxWorkers: notificationsTaskMaxWorkers},
+			notificationsjob.QueuePayments:         {MaxWorkers: notificationsPaymentMaxWorkers},
+			notificationsjob.QueueRentals:          {MaxWorkers: notificationsRentalMaxWorkers},
+			identityriverqueue.QueueContactChanged: {MaxWorkers: identityContactMaxWorkers},
 		},
 		Workers:         workers,
 		Logger:          p.Logger,

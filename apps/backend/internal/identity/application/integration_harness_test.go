@@ -87,6 +87,28 @@ func (p *capturePublisher) PublishUserRegistered(_ context.Context, event identi
 	return nil
 }
 
+// captureContactNotifier records every scheduled change-letter event so the
+// integration tests can assert the letter commits with the change — same
+// kind, recipient, user, and instant (решение #1207).
+type captureContactNotifier struct {
+	scheduled []identityapp.ContactChangedEvent
+}
+
+func newCaptureContactNotifier() *captureContactNotifier { return &captureContactNotifier{} }
+
+func (c *captureContactNotifier) WithTx(transaction.Tx) identityapp.TransactionalContactChangeNotifier {
+	return &captureContactNotifierTx{notifier: c}
+}
+
+type captureContactNotifierTx struct {
+	notifier *captureContactNotifier
+}
+
+func (c *captureContactNotifierTx) ScheduleChanged(_ context.Context, event identityapp.ContactChangedEvent) error {
+	c.notifier.scheduled = append(c.notifier.scheduled, event)
+	return nil
+}
+
 // integrationHarness wires every identity service to real PostgreSQL
 // repositories through a postgres-backed Unit-of-Work, sharing one fake clock,
 // one noop encryptor, and capture fakes for the email sender, event publisher,
@@ -114,6 +136,7 @@ type integrationHarness struct {
 	profile    *identityapp.ProfileService
 	logout     *identityapp.LogoutService
 	sessionsvc identityapp.SessionService
+	notifier   *captureContactNotifier
 }
 
 // newIntegrationHarness builds a fresh harness over a clean database. The
@@ -141,7 +164,8 @@ func newIntegrationHarness(t *testing.T) *integrationHarness {
 	auditWriter := auditpg.NewWriter(pool)
 	audit := auditapp.NewService(auditWriter, clk)
 
-	factory := identityapp.NewTxStoreFactory(users, codes, attempts, sessions, grants, audit, uow)
+	notifier := newCaptureContactNotifier()
+	factory := identityapp.NewTxStoreFactory(users, codes, attempts, sessions, grants, audit, notifier, uow)
 
 	loginCodes := identityapp.NewLoginCodeService(factory, identityapp.LoginCodeServiceConfig{
 		CodeSender: sender,
@@ -160,6 +184,7 @@ func newIntegrationHarness(t *testing.T) *integrationHarness {
 		clock:     clk,
 		sender:    sender,
 		publisher: publisher,
+		notifier:  notifier,
 		users:     users,
 		codes:     codes,
 		attempts:  attempts,
