@@ -35,10 +35,10 @@ function flatten(
   const element = node as ReactElement<InspectableProps>;
   elements.push(element);
   flatten(element.props.children, elements, strings);
-  // Chип сортировки (PropertiesSortMenu) досматриваем только как элемент:
+  // Чип сортировки (PropertiesSortMenu) досматриваем только как элемент:
   // внутрь он уводит в PickerMenu с хуками — вне React-рендера его не
   // вызвать, да и не нужно (факт присутствия/отсутствия чипа — и есть
-  // поведение #1051).
+  // поведение §7).
 }
 
 function collect(node: ReactNode): {
@@ -51,12 +51,13 @@ function collect(node: ReactNode): {
   return {elements, strings};
 }
 
-describe('PropertiesSortRow — «Архив» на пустом хабе (#1051, решение владельца 02.10.2026)', () => {
-  it('на подтверждённой пустоте чип сортировки скрыт, «Архив» остаётся справа', () => {
+describe('PropertiesSortRow — гейт «Архива» по archived_count (#1233, макеты 3229-94647/3235-74057)', () => {
+  it('архивные есть, объектов нет: чип скрыт, «Архив» справа (3229-94647)', () => {
     const row = PropertiesSortRow({
       sort: DEFAULT_PROPERTY_SORT,
       onChange: () => {},
       showChip: false,
+      showArchive: true,
       onOpenArchive: () => {},
     });
     const {elements, strings} = collect(row);
@@ -71,11 +72,12 @@ describe('PropertiesSortRow — «Архив» на пустом хабе (#1051
     expect(elements.length).toBeGreaterThan(0);
   });
 
-  it('на хабе с объектами чип сортировки на месте, ряд между собой', () => {
+  it('на хабе с объектами и архивом чип слева, «Архив» справа', () => {
     const row = PropertiesSortRow({
       sort: DEFAULT_PROPERTY_SORT,
       onChange: () => {},
       showChip: true,
+      showArchive: true,
       onOpenArchive: () => {},
     });
     const {elements, strings} = collect(row);
@@ -85,12 +87,42 @@ describe('PropertiesSortRow — «Архив» на пустом хабе (#1051
     expect(row.props.className).toContain('justify-between');
   });
 
+  it('архивных нет — кнопки «Архив» нет (правило владельца, #1233)', () => {
+    const withChip = PropertiesSortRow({
+      sort: DEFAULT_PROPERTY_SORT,
+      onChange: () => {},
+      showChip: true,
+      showArchive: false,
+      onOpenArchive: () => {},
+    });
+    const {elements, strings} = collect(withChip);
+
+    // Хаб с объектами без архива: чип на месте, «Архива» нет.
+    expect(elements.some((element) => element.type === PropertiesSortMenu)).toBe(true);
+    expect(strings).not.toContain('Архив');
+
+    const empty = PropertiesSortRow({
+      sort: DEFAULT_PROPERTY_SORT,
+      onChange: () => {},
+      showChip: false,
+      showArchive: false,
+      onOpenArchive: () => {},
+    });
+    const emptyCollected = collect(empty);
+
+    // Пустой хаб без архива: ряд не рисует ничего — страница его вовсе
+    // не рендерит (макет 3235-74057), компонент на всякий случай пуст.
+    expect(emptyCollected.strings).not.toContain('Архив');
+    expect(emptyCollected.elements.some((element) => element.type === PropertiesSortMenu)).toBe(false);
+  });
+
   it('колбэк страницы передан в кнопку «Архив»', () => {
     const openArchive = (): void => {};
     const row = PropertiesSortRow({
       sort: DEFAULT_PROPERTY_SORT,
       onChange: () => {},
       showChip: false,
+      showArchive: true,
       onOpenArchive: openArchive,
     });
     const {elements, strings} = collect(row);

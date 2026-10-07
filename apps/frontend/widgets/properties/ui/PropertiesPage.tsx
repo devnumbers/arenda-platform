@@ -8,8 +8,7 @@ import {
   type SuspendedSharedProperty,
 } from '@/features/properties';
 import {useSubscription} from '@/features/subscription';
-import {Add, Archive, Search, SmallArrowDown, SortingBigSmall, SortingSmallBig} from '@/shared/assets/icons';
-import {useKeyboardActivation} from '@/shared/lib/hooks/useKeyboardActivation';
+import {Add, Archive, SmallArrowDown, SortingBigSmall, SortingSmallBig} from '@/shared/assets/icons';
 import {useUrlParams} from '@/shared/lib/hooks/use-url-params';
 import {
   Button,
@@ -19,6 +18,7 @@ import {
   PageContent,
   PickerMenu,
   type PickerMenuGroup,
+  SearchPill,
   TopNav,
 } from '@/shared/ui/design';
 import {ROUTES} from '@/shared/config/routes';
@@ -47,14 +47,14 @@ export type PropertiesPageProps = {
 };
 
 /**
- * Экран-хаб «Объекты» (карта #583, тикет #586; Figma 1603:89079 — ПК,
- * 1603:88972 — планшет, 1590:88756 — мобайл, 1603:90604 — пустое): заголовок
- * хаба, поисковая пилюля с «+» создания, ряд сортировки (чип PickerMenu +
- * ссылка «Архив» → экран архива #587; на подтверждённой пустоте ряд
- * остаётся — «Архив» на обычном месте, чип прячется, #1051 — DESIGN.md
- * §7), список карточек, блюр-карточки подвесших общих объектов (#702),
- * «+ Создать объект» под списком. Компакт-бар — канон хаба: лупа на поиск,
- * заголовок, «+».
+ * Экран-хаб «Объекты» (карта #583; новый первый блок — Figma 3225-77232,
+ * хедер 3229-94554, пустые 3229-94647 / 3235-74057): заголовок хаба с «+»
+ * создания справа, поисковая пилюля (канон, без «+» — создание в шапке),
+ * ряд сортировки (чип PickerMenu + «Архив» → экран архива #587, гейт —
+ * archived_count контракта #1233: архивных нет — кнопки нет), список
+ * карточек, блюр-карточки подвесших общих объектов (#702). Кнопки создания
+ * под списком больше нет (макет 3225-77232): «+» шапки и CTA пустоты.
+ * Компакт-бар — канон хаба: лупа на поиск, заголовок, «+».
  * Сортировки — резолюция #584 (4 поля × возрастание/убывание, основной
  * всегда первый), персистентность в URL (?sort=&order=). Фильтров по
  * типу/статусу в хабе нет; поиск объектов — серверный на отдельной
@@ -116,14 +116,18 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
   };
 
   const isEmpty = !isLoading && !isError && visible.length === 0;
+  // Гейт кнопки «Архив» (макет 3229-94647 vs 3235-74057, правило владельца
+  // «архивных нет — кнопки нет»): счётчик архивных едет в том же ответе
+  // /properties (контракт #1233); до доставки и на ошибке счётчик 0 —
+  // кнопки нет.
+  const showArchive = (metaQuery.data?.archivedCount ?? 0) > 0;
   // Ряд сортировки — тулбар хаба: рендерится вне фазы загрузки и не
-  // подменяется скелетоном (§7, паритет #604; прецедент хаба «Задачи»
-  // #605) и остаётся на подтверждённой пустоте (#1051, решение владельца
-  // 02.10.2026 — вариант 1А «на обычном месте»): когда все объекты в
-  // архиве, хаб без ряда запирал вход в архив. Чип сортировки на пустоте
-  // прячется — канон §7 «пустой список прячет служебные чипы»; «Архив»
-  // остаётся на обычном месте справа.
-  // Список и «+ Создать объект» — контент данных, живут только вместе.
+  // подменяется скелетоном (§7, паритет #604). На пустоте живёт только
+  // ради «Архива» (замена решения #1051 «вариант 1А»: счётчик #1233 даёт
+  // точный гейт, запирать вход в архив без архивных больше не нужно) —
+  // без архивных ряда нет вовсе (макет 3235-74057).
+  const showSortRow = !isEmpty || showArchive;
+  // Список — контент данных, живёт вне фаз загрузки и ошибки.
   const showList = !isLoading && !isError && !isEmpty;
 
   // 404 подписки хук отдаёт null (#768) — это не pending и не ошибка:
@@ -146,31 +150,54 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
     ? 'Создать объект'
     : 'Достигнут лимит объектов по тарифу — сменить тариф';
 
-  // «+» создания: в хаб-шапке нового макета его нет — в хвосте поисковой
-  // пилюли (1590:88756) и в правом слоте компакт-бара (канон сворачивания).
+  // «+» создания: в ряду заголовка хаба (макет 3225-77232) и в правом
+  // слоте компакт-бара (канон сворачивания). На пустоте скрыта —
+  // действие там CTA пустого состояния (макеты 3229-94647/3235-74057).
+  // Два экземпляра узла: у ряда заголовка свой testid — слоты TopNav
+  // рендерят свой узел в трёх местах (крыло, инлайн-компакт, мобайл-клон),
+  // общий testid давал бы строгую неоднозначность в e2e.
   const createButton = (
-    <IconButton icon={<Add/>} label={createLabel} disabled={isActionLoading} onClick={openCreate}/>
+    <IconButton
+      icon={<Add/>}
+      label={createLabel}
+      data-testid="properties-create"
+      disabled={isActionLoading}
+      onClick={openCreate}
+    />
+  );
+  const createButtonCompact = (
+    <IconButton
+      icon={<Add/>}
+      label={createLabel}
+      data-testid="properties-create-compact"
+      disabled={isActionLoading}
+      onClick={openCreate}
+    />
   );
 
   const content = (
     <div className="flex flex-col gap-4 px-6 pt-6">
-      {/* Пилюля поиска — на подтверждённой пустоте спрятана (#1004):
-       * искать нечего, создание остаётся в CTA пустого состояния; вне
-       * фазы загрузки и на ошибке видна (§7). */}
+      {/* Пилюля поиска — канон SearchPill, «+» в хвосте больше нет
+       * (макет 3225-77232: создание в шапке); на подтверждённой пустоте
+       * спрятана (#1004): искать нечего, создание остаётся в CTA пустого
+       * состояния; вне фазы загрузки и на ошибке видна (§7). */}
       {!isEmpty && (
-        <PropertiesSearchPill
-          onCreate={openCreate}
-          createLabel={createLabel}
-          createDisabled={isActionLoading}
+        <SearchPill
+          testId="properties-search-pill"
+          label="Найти объект"
+          onOpenSearch={() => router.push(ROUTES.propertySearch)}
         />
       )}
 
-      <PropertiesSortRow
-        sort={sort}
-        onChange={changeSort}
-        showChip={!isEmpty}
-        onOpenArchive={() => router.push(ROUTES.propertyArchive)}
-      />
+      {showSortRow && (
+        <PropertiesSortRow
+          sort={sort}
+          onChange={changeSort}
+          showChip={!isEmpty}
+          showArchive={showArchive}
+          onOpenArchive={() => router.push(ROUTES.propertyArchive)}
+        />
+      )}
 
       {isLoading && <PropertiesLoading/>}
 
@@ -209,38 +236,32 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
           ))}
         </ul>
       )}
-
-      {showList && (
-        <Button
-          variant="white"
-          size="small"
-          leadingIcon={<Add/>}
-          className="w-full"
-          onClick={openCreate}
-          disabled={isActionLoading}
-        >
-          Создать объект
-        </Button>
-      )}
     </div>
   );
 
   return (
     <>
       {/* Хаб-шапка: «крылья» (лого + профиль) и на мобайле; компакт-бар —
-       * лупа на поиск, «+» справа (канон сворачивания хаба). */}
+       * лупа на поиск, «+» справа (канон сворачивания). На пустоте «+»
+       * скрыта в обоих местах. */}
       <TopNav
         mobileWings
         collapse={{
           title: 'Объекты',
           search: {href: ROUTES.propertySearch, label: 'Найти объект'},
-          trailing: createButton,
+          trailing: isEmpty ? undefined : createButtonCompact,
         }}
       />
 
       <PageContent>
         <HubCollapseAnchor>
-          <HubTitle>Объекты</HubTitle>
+          {/* Строка заголовка h-8 (тикет #865): топ заголовка — ровно 24
+              от хедера (96), как у хабов без кнопки; кнопка 44 переполняет
+              строку симметрично — центрирована против линии заголовка. */}
+          <div className="flex h-8 items-center justify-between pr-3.5">
+            <HubTitle>Объекты</HubTitle>
+            {!isEmpty && createButton}
+          </div>
         </HubCollapseAnchor>
 
         {content}
@@ -251,60 +272,25 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
   );
 }
 
-/** Поисковая пилюля хаба (Figma 1031:20955 в 1590:88756): лупа, «Найти
- * объект», в хвосте — «+» создания (кнопка внутри пилюли). Тап по пилюле
- * открывает страницу серверного поиска (#601, канон поисковых хабов). */
-function PropertiesSearchPill({
-  onCreate,
-  createLabel,
-  createDisabled,
-}: {
-  readonly onCreate: () => void;
-  readonly createLabel: string;
-  readonly createDisabled: boolean;
-}): JSX.Element {
-  const router = useRouter();
-  const openSearch = () => router.push(ROUTES.propertySearch);
-  const activatorProps = useKeyboardActivation({onSelect: openSearch});
-
-  return (
-    <div
-      {...activatorProps}
-      data-testid="properties-search-pill"
-      className="flex h-14 w-full cursor-pointer items-center rounded-pill bg-surface-muted pr-1.5 pl-4 text-left outline-none transition-opacity hover:opacity-90 focus-visible:ring-4 focus-visible:ring-primary active:opacity-90"
-    >
-      <Search className="h-6 w-6 shrink-0 text-content" aria-hidden/>
-      <span className="min-w-0 flex-1 truncate px-2 text-base font-medium text-content">
-        Найти объект
-      </span>
-      <IconButton
-        icon={<Add/>}
-        label={createLabel}
-        disabled={createDisabled}
-        onClick={(event) => {
-          event.stopPropagation();
-          onCreate();
-        }}
-      />
-    </div>
-  );
-}
-
-/** Ряд сортировки (1590:88756): чип PickerMenu слева и «Архив» справа
- * (ведёт на экран архива, #587). На подтверждённой пустоте чип скрыт
- * (#1051, канон §7 — сортировать нечего), «Архив» остаётся на обычном
- * месте справа. Без хуков — вызывается как функция в юнит-тесте
+/** Ряд сортировки (3225-77232): чип PickerMenu слева и «Архив» справа
+ * (ведёт на экран архива, #587). «Архив» — гейт archived_count (#1233):
+ * архивных нет — кнопки нет, ряд без неё живёт чипом слева. На
+ * подтверждённой пустоте чип скрыт (канон §7 — сортировать нечего), ряд
+ * остаётся только ради «Архива» и выровнен вправо; без архивных ряда нет
+ * вовсе (3235-74057). Без хуков — вызывается как функция в юнит-тесте
  * (properties-sort-row.test.ts); роутер живёт на странице. Экспорт —
  * для юнит-теста, внутрь слайса наружу ряд не уходит. */
 export function PropertiesSortRow({
   sort,
   onChange,
   showChip,
+  showArchive,
   onOpenArchive,
 }: {
   readonly sort: PropertySort;
   readonly onChange: (sort: PropertySort) => void;
   readonly showChip: boolean;
+  readonly showArchive: boolean;
   readonly onOpenArchive: () => void;
 }): JSX.Element {
   return (
@@ -313,14 +299,16 @@ export function PropertiesSortRow({
       data-testid="properties-sort-row"
     >
       {showChip && <PropertiesSortMenu sort={sort} onChange={onChange}/>}
-      <Button
-        variant="clear"
-        size="small"
-        leadingIcon={<Archive/>}
-        onClick={onOpenArchive}
-      >
-        Архив
-      </Button>
+      {showArchive && (
+        <Button
+          variant="clear"
+          size="small"
+          leadingIcon={<Archive/>}
+          onClick={onOpenArchive}
+        >
+          Архив
+        </Button>
+      )}
     </div>
   );
 }
