@@ -40,6 +40,7 @@ type PaymentManager interface {
 	PaymentFlags(ctx context.Context, actor, propertyID uuid.UUID) (completed, managed, rentalCompleted map[uuid.UUID]bool, err error)
 	RentalManagedStatus(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (bool, error)
 	RentalCompletedStatus(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (bool, error)
+	PaymentChanges(ctx context.Context, actor, propertyID, paymentID uuid.UUID, q application.ChangesQuery) (application.ChangeLogPage, error)
 }
 
 // PaymentHandlers implements the generated payment endpoints.
@@ -331,6 +332,95 @@ func (h *PaymentHandlers) SetPaymentFavorite(w http.ResponseWriter, r *http.Requ
 	}
 
 	h.respondWithPayment(w, r, actor, propertyID, payment, http.StatusOK)
+}
+
+// ListPaymentChanges implements GET /properties/{propertyId}/payments/{paymentId}/changes
+// (ADR 0065 §6): the bidirectional keyset page of the rule's change log; the
+// chip screen renders the structure, the server only orders it.
+func (h *PaymentHandlers) ListPaymentChanges(
+	w http.ResponseWriter, r *http.Request, propertyID, paymentID openapi_types.UUID,
+	params openapi.ListPaymentChangesParams,
+) {
+	actor, ok := httpsupport.RequireUser(w, r)
+	if !ok {
+		return
+	}
+
+	q := application.ChangesQuery{}
+	if params.BeforeCursor != nil {
+		q.BeforeCursor = *params.BeforeCursor
+	}
+	if params.AfterCursor != nil {
+		q.AfterCursor = *params.AfterCursor
+	}
+	if params.Limit != nil {
+		q.Limit = *params.Limit
+	}
+
+	page, err := h.svc.PaymentChanges(r.Context(), actor, propertyID, paymentID, q)
+	if err != nil {
+		h.handlePaymentError(w, r, err)
+		return
+	}
+	resp, err := paymentChangesResponse(page)
+	if err != nil {
+		h.writeInternal(w, r, err)
+		return
+	}
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, resp)
+}
+
+// paymentChangesResponse folds the application page onto the wire: the typed
+// jsonb values decode back into their any-shaped wire values verbatim. A
+// malformed stored blob is a data-integrity failure, not a wire value — it
+// surfaces as the 500, like at the store read.
+func paymentChangesResponse(page application.ChangeLogPage) (openapi.PaymentChangesResponse, error) {
+	items := make([]openapi.PaymentChangeItem, len(page.Items))
+	for i, entry := range page.Items {
+		changes := make([]openapi.PaymentFieldChange, len(entry.Changes))
+		for j, change := range entry.Changes {
+			old, err := decodeChangeValue(change.Old)
+			if err != nil {
+				return openapi.PaymentChangesResponse{}, err
+			}
+			newValue, err := decodeChangeValue(change.New)
+			if err != nil {
+				return openapi.PaymentChangesResponse{}, err
+			}
+			changes[j] = openapi.PaymentFieldChange{
+				Field: openapi.PaymentChangeField(change.Field),
+				Old:   old,
+				New:   newValue,
+			}
+		}
+		items[i] = openapi.PaymentChangeItem{
+			Id:        entry.ID,
+			ActorId:   entry.ActorID,
+			Action:    openapi.PaymentChangeAction(entry.Action),
+			Changes:   changes,
+			CreatedAt: entry.CreatedAt,
+		}
+	}
+	resp := openapi.PaymentChangesResponse{Items: items}
+	if page.NextCursor != "" {
+		resp.NextCursor = &page.NextCursor
+	}
+	if page.PrevCursor != "" {
+		resp.PrevCursor = &page.PrevCursor
+	}
+	return resp, nil
+}
+
+// decodeChangeValue unmarshals one stored typed value into the wire's
+// any-shape. The stored blob was written by this same domain (typed JSON,
+// never formatted strings) and its outer array is unmarshaled at the store
+// read — so a failure here is a data-integrity error, not a wire value.
+func decodeChangeValue(raw json.RawMessage) (any, error) {
+	var value any
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return nil, fmt.Errorf("decode stored change value %s: %w", raw, err)
+	}
+	return value, nil
 }
 
 // decodeFavoriteBody reads the favorite toggle body strictly. A required bool

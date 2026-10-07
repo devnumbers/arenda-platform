@@ -138,8 +138,10 @@ type RentPaymentGatewayTx interface {
 	// Update syncs the terms edit into the payment: the editable fields,
 	// then the strictly future planned is dropped — the caller's tick
 	// verdict stands the single future planned again with fresh snapshots.
+	// The actor travels for the payment change log (ADR 0065): the terms
+	// edit's diff lands in the managed payment's history from this seam too.
 	Update(
-		ctx context.Context, scope, propertyID, paymentID uuid.UUID,
+		ctx context.Context, scope, propertyID, paymentID, actorID uuid.UUID,
 		change RentPaymentChange, today time.Time,
 	) error
 	// State reads the managed payment's current terms inside the caller's

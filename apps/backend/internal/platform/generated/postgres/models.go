@@ -375,6 +375,7 @@ type Payment struct {
 	IsFavorite         bool               `json:"is_favorite"`
 	FavoriteOrder      pgtype.Int8        `json:"favorite_order"`
 	ReminderOffsetDays pgtype.Int4        `json:"reminder_offset_days"`
+	TitleIsManual      bool               `json:"title_is_manual"`
 }
 
 type PaymentCategory struct {
@@ -383,6 +384,17 @@ type PaymentCategory struct {
 	Name      string             `json:"name"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+type PaymentChangeLog struct {
+	ID         pgtype.UUID        `json:"id"`
+	PaymentID  pgtype.UUID        `json:"payment_id"`
+	OwnerID    pgtype.UUID        `json:"owner_id"`
+	PropertyID pgtype.UUID        `json:"property_id"`
+	ActorID    pgtype.UUID        `json:"actor_id"`
+	Action     string             `json:"action"`
+	Changes    []byte             `json:"changes"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 }
 
 type PaymentMethod struct {

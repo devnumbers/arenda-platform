@@ -26,11 +26,19 @@ type ruleCursorPayload struct {
 // operationCursorPayload is the operations cursor's decoded form: the last
 // page's operation date (the domain date, no clock time), the sort key the
 // cursor was issued under (” = the planned-date default — the pre-#992
-// cursors) and id — the feed's (sort key, id) order.
+// cursors) and id — the feed's (sort key, date, id) order.
 type operationCursorPayload struct {
 	Date string    `json:"date"`
 	ID   uuid.UUID `json:"id"`
 	Key  string    `json:"key,omitempty"`
+}
+
+// changeLogCursorPayload is the payment change log cursor's decoded form: the
+// last page's row moment and id — the log's (created_at, id) order (ADR 0065
+// §6), the same one-key shape the action journal's feed cursor carries.
+type changeLogCursorPayload struct {
+	CreatedAt time.Time `json:"at"`
+	ID        uuid.UUID `json:"id"`
 }
 
 const operationCursorDateFormat = "2006-01-02"
@@ -93,4 +101,22 @@ func decodeOperationCursor(blob string) (decodedOperationCursor, error) {
 		return decodedOperationCursor{},
 			fmt.Errorf("operation cursor key %q: %w", payload.Key, ErrInvalidInput)
 	}
+}
+
+// encodeChangeLogCursor turns the changes page's last (or first) row into the
+// page's continuation cursor — next (older) from the last row, prev (newer)
+// from the first; the walk direction the client chooses via the query.
+func encodeChangeLogCursor(key ChangeLogKey) string {
+	return cursor.Encode(changeLogCursorPayload(key))
+}
+
+// decodeChangeLogCursor parses a client-echoed changes cursor; anything
+// malformed is ErrInvalidInput — a blob this service never issued must not
+// silently degrade onto the first page.
+func decodeChangeLogCursor(blob string) (ChangeLogKey, error) {
+	var payload changeLogCursorPayload
+	if err := cursor.Decode(blob, &payload); err != nil {
+		return ChangeLogKey{}, fmt.Errorf("payment change cursor: %w: %w", ErrInvalidInput, err)
+	}
+	return ChangeLogKey(payload), nil
 }

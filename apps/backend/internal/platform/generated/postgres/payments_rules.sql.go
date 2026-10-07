@@ -130,6 +130,7 @@ SELECT pay.id,
        pay.category_slug,
        pay.user_category_id,
        pay.is_favorite,
+       pay.title_is_manual,
        pay.created_at,
        pay.updated_at,
        pc.name AS user_category_name
@@ -159,6 +160,7 @@ type GetPaymentByIDRow struct {
 	CategorySlug       pgtype.Text        `json:"category_slug"`
 	UserCategoryID     pgtype.UUID        `json:"user_category_id"`
 	IsFavorite         bool               `json:"is_favorite"`
+	TitleIsManual      bool               `json:"title_is_manual"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 	UserCategoryName   pgtype.Text        `json:"user_category_name"`
@@ -190,6 +192,7 @@ func (q *Queries) GetPaymentByID(ctx context.Context, arg GetPaymentByIDParams) 
 		&i.CategorySlug,
 		&i.UserCategoryID,
 		&i.IsFavorite,
+		&i.TitleIsManual,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.UserCategoryName,
@@ -315,6 +318,7 @@ SELECT pay.id,
        pay.category_slug,
        pay.user_category_id,
        pay.is_favorite,
+       pay.title_is_manual,
        pay.created_at,
        pay.updated_at,
        pc.name AS user_category_name
@@ -347,6 +351,7 @@ type ListPaymentsByPropertyRow struct {
 	CategorySlug       pgtype.Text        `json:"category_slug"`
 	UserCategoryID     pgtype.UUID        `json:"user_category_id"`
 	IsFavorite         bool               `json:"is_favorite"`
+	TitleIsManual      bool               `json:"title_is_manual"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 	UserCategoryName   pgtype.Text        `json:"user_category_name"`
@@ -379,6 +384,7 @@ func (q *Queries) ListPaymentsByProperty(ctx context.Context, arg ListPaymentsBy
 			&i.CategorySlug,
 			&i.UserCategoryID,
 			&i.IsFavorite,
+			&i.TitleIsManual,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.UserCategoryName,
@@ -427,7 +433,8 @@ SET type = $3,
     end_date = $7,
     auto_pay = $8,
     reminder_offset_days = $9,
-    category_slug = $10
+    category_slug = $10,
+    title_is_manual = $11
 WHERE id = $1 AND owner_id = $2
 `
 
@@ -442,6 +449,7 @@ type UpdatePaymentParams struct {
 	AutoPay            bool        `json:"auto_pay"`
 	ReminderOffsetDays pgtype.Int4 `json:"reminder_offset_days"`
 	CategorySlug       pgtype.Text `json:"category_slug"`
+	TitleIsManual      bool        `json:"title_is_manual"`
 }
 
 // Partial PATCH is resolved by the application layer; the statement always
@@ -459,6 +467,7 @@ func (q *Queries) UpdatePayment(ctx context.Context, arg UpdatePaymentParams) er
 		arg.AutoPay,
 		arg.ReminderOffsetDays,
 		arg.CategorySlug,
+		arg.TitleIsManual,
 	)
 	return err
 }

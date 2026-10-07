@@ -619,6 +619,15 @@ type Querier interface {
 	// this slice (user_category_id stays NULL). reminder_offset_days is the
 	// nullable reminder lead time (карта #822; NULL = напоминаний нет).
 	InsertPayment(ctx context.Context, arg InsertPaymentParams) error
+	// The payment change log queries (ADR 0065, ticket #1188): the append-only
+	// story of one rule's user edits. The insert runs inside the mutation
+	// conveyor's transaction; the reads serve the payment screen's «изменения»
+	// page — the bidirectional keyset over (created_at, id) DESC, scoped by the
+	// data owner and the payment→property path (ADR 0028).
+	// One append-only row: the id is minted app-side (UUIDv7, ADR 0019),
+	// created_at is the database's. Empty changes (pause/resume) travel as the
+	// literal [] — the application layer normalizes nil.
+	InsertPaymentChangeLog(ctx context.Context, arg InsertPaymentChangeLogParams) error
 	// The open-ended pause [from, ∞): exactly one may exist per rule — the
 	// partial unique index (to_date IS NULL) makes a double pause a constraint
 	// violation even past the application check.
@@ -955,6 +964,17 @@ type Querier interface {
 	// The instant gate (#1168): the boundary is the wall clock 10:00 of the
 	// operation date — the sweep must not publish ahead of it.
 	ListPaymentAutoPaidTargets(ctx context.Context, arg ListPaymentAutoPaidTargetsParams) ([]ListPaymentAutoPaidTargetsRow, error)
+	// The first page, no cursor: newest first — the feed's one order.
+	ListPaymentChanges(ctx context.Context, arg ListPaymentChangesParams) ([]ListPaymentChangesRow, error)
+	// The after-leg of the bidirectional keyset (the prepend of newer rows): an
+	// ASC walk strictly after the anchor, so a burst wider than the page is
+	// carried from the anchor toward the fresh edge without holes; the adapter
+	// restores the feed's DESC order.
+	ListPaymentChangesAfter(ctx context.Context, arg ListPaymentChangesAfterParams) ([]ListPaymentChangesAfterRow, error)
+	// The next-older page: rows strictly before the (created_at, id) key, newest
+	// first — the keyset continuation the index
+	// (payment_id, created_at DESC, id DESC) serves.
+	ListPaymentChangesBefore(ctx context.Context, arg ListPaymentChangesBeforeParams) ([]ListPaymentChangesBeforeRow, error)
 	// One zone's due-day operations as of the zone's today (решение #737, тип
 	// №2: в день срока): planned, dated exactly today, on rules without the
 	// auto-pay mode — an auto-pay rule's due occurrence is extinguished by the

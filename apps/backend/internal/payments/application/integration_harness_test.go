@@ -110,7 +110,8 @@ func newPaymentsHarnessWithPolicy(t *testing.T, policy sharedpolicy.Policy) *pay
 	zones := paymentspg.NewTickZoneDirectory(pool)
 	factory := paymentsapp.NewTxStoreFactory(
 		tickStore, paymentStore, operationStore, propertyStore, favoriteOrders,
-		rentalspg.NewRentalLinkReader(pool), audit, historypg.NewRecorder(pool), uow,
+		rentalspg.NewRentalLinkReader(pool), paymentspg.NewPaymentChangeLogStore(pool),
+		audit, historypg.NewRecorder(pool), uow,
 	)
 
 	realtime := &realtimetest.RecordingPublisher{}
@@ -154,6 +155,7 @@ func newPaymentsHarnessWithRealPolicy(t *testing.T) *paymentsHarness {
 		paymentspg.NewPropertyStore(h.pool),
 		paymentspg.NewGlobalPaymentStore(h.pool),
 		rentalspg.NewRentalLinkReader(h.pool),
+		paymentspg.NewPaymentChangeLogStore(h.pool),
 		auditapp.NewService(auditpg.NewWriter(h.pool), clk),
 		historypg.NewRecorder(h.pool),
 		pgdb.NewUoW(h.pool, logger),

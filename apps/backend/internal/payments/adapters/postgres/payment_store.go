@@ -140,6 +140,7 @@ func (s *PaymentStore) Update(ctx context.Context, p domain.Payment) error {
 		AutoPay:            p.AutoPay,
 		ReminderOffsetDays: pgconv.Int4PtrToPgtype(p.ReminderOffsetDays),
 		CategorySlug:       pgconv.StringPtrToPgtype(p.Category.Slug),
+		TitleIsManual:      p.TitleIsManual,
 	}); err != nil {
 		return fmt.Errorf("update payment %s: %w", p.ID, err)
 	}

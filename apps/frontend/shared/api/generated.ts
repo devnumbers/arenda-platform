@@ -489,6 +489,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/properties/{propertyId}/payments/{paymentId}/changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Страница истории изменений платежа (двусторонний keyset, канон #597)
+         * @description Журнал правок правила (ADR 0065, тикет #1188) — экран «История
+         *     платежа», режим «изменения»: одна строка на действие пользователя.
+         *     Правка условий — строка action=updated с дифом полей старое→новое
+         *     (словарь мутационного аудита, порядок строк словарный); пауза и
+         *     возобновление — строки paused/resumed с пустым changes. Создание и
+         *     удаление строк не пишут (удаление каскадит журнал за правилом);
+         *     записей об оплатах и раннем/позднем попадании нет — факт виден на
+         *     странице операции. Арендный шов пишет в тот же журнал: правка
+         *     условий аренды (сумма, день оплаты, автоплатёж, окончание) отражается
+         *     в истории управляемого платежа.
+         *
+         *     Значения дифа типизированы и никогда не строки-с-форматированием:
+         *     копейки — число; регулярность — канонический JSON-объект Recurrence
+         *     (множественная месячная форма «каждый месяц, 1, 10, 15 числа» едет
+         *     структурой {kind: monthly, daysOfMonth: [1, 10, 15]}); даты —
+         *     «YYYY-MM-DD» или null; направление и название — строки; автоплатёж —
+         *     булево; напоминание — 1/3/7 или null; категория — ссылка со снапшотом
+         *     лейбла на момент правки ({slug, label} или {userCategoryId, label}) —
+         *     чип читаем после переименования или удаления пользовательской
+         *     категории. Текст чипов собирает фронт (recurrenceLabel,
+         *     formatMoneyKopecks, каталог категорий).
+         *
+         *     Курсор двусторонний: before_cursor продолжает журнал в старую сторону,
+         *     after_cursor запрашивает записи моложе уже загруженных (prepend
+         *     новых); передавать оба сразу — 400. Строки страницы всегда идут по
+         *     (created_at, id) DESC; появившиеся между загрузками записи не
+         *     дублируются и не теряются. Доступ производный (ADR 0028): чужое,
+         *     приостановленное или невидимое — приватный 404, неизвестный платёж —
+         *     тоже.
+         */
+        get: operations["listPaymentChanges"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/properties/{propertyId}/pin": {
         parameters: {
             query?: never;
@@ -3020,6 +3068,74 @@ export interface components {
         PaymentsResponse: {
             items: components["schemas"]["PaymentResponse"][];
         };
+        /** @description Страница истории изменений платежа (двусторонний keyset, ADR 0065). */
+        PaymentChangesResponse: {
+            items: components["schemas"]["PaymentChangeItem"][];
+            /**
+             * @description Непрозрачный курсор страницы СТАРШЕ (в before_cursor следующего
+             *     запроса): продолжение журнала в прошлое. Отсутствует на пустой
+             *     или неполной странице — дальше старше ничего нет.
+             */
+            next_cursor?: string;
+            /**
+             * @description Непрозрачный курсор страницы МОЛОЖЕ (в after_cursor следующего
+             *     запроса): prepend записей, появившихся после загрузки видимых.
+             *     Отсутствует только на пустой странице.
+             */
+            prev_cursor?: string;
+        };
+        /**
+         * @description Одна строка журнала — снимок действия при записи (ADR 0065): кто и
+         *     какое действие совершил над правилом и какие поля двинулись. Чип
+         *     экрана строится из action и changes; переименования и удаления
+         *     пользовательской категории строку не меняют — лейбл-снапшот уже в
+         *     значении.
+         */
+        PaymentChangeItem: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: uuid
+             * @description Кто совершил действие (пишут только пользователи).
+             */
+            actor_id: string;
+            action: components["schemas"]["PaymentChangeAction"];
+            /**
+             * @description Диф полей старое→новое в словарном порядке; у paused/resumed —
+             *     пустой массив (состояние и есть содержимое строки).
+             */
+            changes: components["schemas"]["PaymentFieldChange"][];
+            /** Format: date-time */
+            created_at: string;
+        };
+        /**
+         * @description Род действия строки журнала (ADR 0065 §4).
+         * @enum {string}
+         */
+        PaymentChangeAction: "updated" | "paused" | "resumed";
+        /**
+         * @description Один уехавший поле дифа: старое→новое значение. Значения типизированы
+         *     по словарю поля (ADR 0065 §2) — никогда строки-с-форматированием:
+         *     amount_kopecks — число копеек; recurrence — канонический JSON-объект
+         *     Recurrence (как в payments.recurrence); end_date — «YYYY-MM-DD» или
+         *     null; type/title — строки; auto_pay — булево; reminder_offset_days —
+         *     1/3/7 или null; category_slug — {slug, label} или {userCategoryId,
+         *     label} — ссылка со снапшотом лейбла на момент правки (канон
+         *     category_label операций, ADR 0049 §1).
+         */
+        PaymentFieldChange: {
+            field: components["schemas"]["PaymentChangeField"];
+            /** @description Прежнее значение поля — типизировано по словарю (см. описание схемы). */
+            old: unknown;
+            /** @description Новое значение поля — типизировано по словарю (см. описание схемы). */
+            new: unknown;
+        };
+        /**
+         * @description Словарь полей дифа — тот же словарь, что у мутационного аудита
+         *     контекста; порядок строк дифа в ответе — словарный.
+         * @enum {string}
+         */
+        PaymentChangeField: "type" | "title" | "amount_kopecks" | "recurrence" | "category_slug" | "end_date" | "auto_pay" | "reminder_offset_days";
         /** @description One payment rule of the actor's visible merged feed (ticket #575) — the global «Платежи» card's data: the rule, its property label, the nearest schedule date and the overdue aggregates. */
         PaymentGlobalItem: {
             /** Format: uuid */
@@ -4076,6 +4192,12 @@ export interface components {
         HistoryBeforeCursor: string;
         /** @description Непрозрачный курсор страницы МОЛОЖЕ ключа (prepend новых записей, канон InfiniteQueryTail): берётся из prev_cursor страницы с самими свежими из уже загруженных записей. Порядок строк страницы — по-прежнему (created_at, id) DESC. Пустой ответ — новых записей нет. Вместе с before_cursor передавать нельзя — 400. */
         HistoryAfterCursor: string;
+        /** @description Непрозрачный курсор страницы СТАРШЕ ключа (продолжение журнала в прошлое): берётся из next_cursor предыдущей страницы. Ключ keyset — (created_at, id); страница возобновляется строго после него. Отсутствие — журнал читается с самых свежих записей. Некорректный blob — 400; вместе с after_cursor передавать нельзя — 400. */
+        PaymentChangesBeforeCursor: string;
+        /** @description Непрозрачный курсор страницы МОЛОЖЕ ключа (prepend новых записей, канон InfiniteQueryTail): берётся из prev_cursor страницы с самими свежими из уже загруженных записей. Порядок строк страницы — по-прежнему (created_at, id) DESC. Пустой ответ — новых записей нет. Вместе с before_cursor передавать нельзя — 400. */
+        PaymentChangesAfterCursor: string;
+        /** @description Размер страницы (канон #597): 1..100, по умолчанию 50. */
+        PaymentChangesLimit: number;
         /** @description Размер страницы (канон #597: 50 по умолчанию, 100 потолок). */
         HistoryLimit: number;
         /** @description Включительная нижняя граница периода по created_at — календарная дата в 00:00:00 UTC (канон фильтра периода админ-аудита). */
@@ -5206,6 +5328,39 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    listPaymentChanges: {
+        parameters: {
+            query?: {
+                /** @description Непрозрачный курсор страницы СТАРШЕ ключа (продолжение журнала в прошлое): берётся из next_cursor предыдущей страницы. Ключ keyset — (created_at, id); страница возобновляется строго после него. Отсутствие — журнал читается с самых свежих записей. Некорректный blob — 400; вместе с after_cursor передавать нельзя — 400. */
+                before_cursor?: components["parameters"]["PaymentChangesBeforeCursor"];
+                /** @description Непрозрачный курсор страницы МОЛОЖЕ ключа (prepend новых записей, канон InfiniteQueryTail): берётся из prev_cursor страницы с самими свежими из уже загруженных записей. Порядок строк страницы — по-прежнему (created_at, id) DESC. Пустой ответ — новых записей нет. Вместе с before_cursor передавать нельзя — 400. */
+                after_cursor?: components["parameters"]["PaymentChangesAfterCursor"];
+                /** @description Размер страницы (канон #597): 1..100, по умолчанию 50. */
+                limit?: components["parameters"]["PaymentChangesLimit"];
+            };
+            header?: never;
+            path: {
+                propertyId: string;
+                paymentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Страница истории изменений платежа */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentChangesResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     setPropertyPin: {

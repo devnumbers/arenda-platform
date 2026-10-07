@@ -215,7 +215,7 @@ func (t *fakeGatewayTx) Create(_ context.Context, seed RentPaymentSeed) (uuid.UU
 }
 
 func (t *fakeGatewayTx) Update(
-	_ context.Context, _, _, _ uuid.UUID, change RentPaymentChange, _ time.Time,
+	_ context.Context, _, _, _, _ uuid.UUID, change RentPaymentChange, _ time.Time,
 ) error {
 	t.journal.add("pay.Update")
 	t.gateway.changes = append(t.gateway.changes, change)

@@ -22,6 +22,7 @@ SELECT pay.id,
        pay.category_slug,
        pay.user_category_id,
        pay.is_favorite,
+       pay.title_is_manual,
        pay.created_at,
        pay.updated_at,
        pc.name AS user_category_name
@@ -47,6 +48,7 @@ SELECT pay.id,
        pay.category_slug,
        pay.user_category_id,
        pay.is_favorite,
+       pay.title_is_manual,
        pay.created_at,
        pay.updated_at,
        pc.name AS user_category_name
@@ -80,7 +82,8 @@ SET type = $3,
     end_date = $7,
     auto_pay = $8,
     reminder_offset_days = $9,
-    category_slug = $10
+    category_slug = $10,
+    title_is_manual = $11
 WHERE id = $1 AND owner_id = $2;
 
 -- name: DeletePayment :execrows

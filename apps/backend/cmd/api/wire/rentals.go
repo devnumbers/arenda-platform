@@ -45,7 +45,8 @@ func WireRentals(p platformDeps) (*Rentals, error) {
 	contactStore := contactspg.NewContactStore(p.DB)
 	calendar := paymentspg.NewOwnerCalendar(p.DB, p.Clock)
 
-	gateway := NewRentPaymentGateway(paymentStore, tickStore, operationStore)
+	changeLogStore := paymentspg.NewPaymentChangeLogStore(p.DB)
+	gateway := NewRentPaymentGateway(paymentStore, tickStore, operationStore, changeLogStore)
 	factory := rentalsapp.NewTxStoreFactory(
 		rentalStore,
 		propertyStore,
@@ -69,18 +70,22 @@ func WireRentals(p platformDeps) (*Rentals, error) {
 // composite factory binds to the caller's transaction, with no second
 // property lock and no second conveyor. The rent payment is built here as the
 // ordinary payments rule it is: income, «Арендная плата», transfer form, the
-// rent category.
+// rent category. The change log store rides along: the terms edit's diff
+// lands in the managed payment's history from this seam too (ADR 0065 §4,
+// решение владельца 07.10).
 type rentPaymentGateway struct {
 	payments   paymentsapp.PaymentStore
 	tick       paymentsapp.TickStore
 	operations paymentsapp.OperationStore
+	changeLog  paymentsapp.PaymentChangeLogStore
 }
 
 // NewRentPaymentGateway builds the seam adapter over the payments stores.
 func NewRentPaymentGateway(
 	payments paymentsapp.PaymentStore, tick paymentsapp.TickStore, operations paymentsapp.OperationStore,
+	changeLog paymentsapp.PaymentChangeLogStore,
 ) rentalsapp.RentPaymentGateway {
-	return &rentPaymentGateway{payments: payments, tick: tick, operations: operations}
+	return &rentPaymentGateway{payments: payments, tick: tick, operations: operations, changeLog: changeLog}
 }
 
 // WithTx binds the gateway to the caller's transaction: the payments stores
@@ -95,13 +100,18 @@ func (g *rentPaymentGateway) WithTx(tx transaction.Tx) (rentalsapp.RentPaymentGa
 	if err != nil {
 		return nil, fmt.Errorf("bind tick store to the rentals tx: %w", err)
 	}
-	return &rentPaymentGatewayTx{payments: payments, tick: tick}, nil
+	changeLog, err := g.changeLog.WithTx(tx)
+	if err != nil {
+		return nil, fmt.Errorf("bind change log store to the rentals tx: %w", err)
+	}
+	return &rentPaymentGatewayTx{payments: payments, tick: tick, changeLog: changeLog}, nil
 }
 
 // rentPaymentGatewayTx is the transaction-bound half of the seam.
 type rentPaymentGatewayTx struct {
-	payments paymentsapp.PaymentStore
-	tick     paymentsapp.TickStore
+	payments  paymentsapp.PaymentStore
+	tick      paymentsapp.TickStore
+	changeLog paymentsapp.PaymentChangeLogStore
 }
 
 // rentPaymentTitle and rentCategorySlug are the managed payment's fixed
@@ -148,15 +158,23 @@ func (t *rentPaymentGatewayTx) Create(
 
 // Update syncs the terms edit into the payment and drops its strictly future
 // planned — the caller's in-transaction tick stands the single future planned
-// again with fresh snapshots (the ordinary payment edit mechanics).
+// again with fresh snapshots (the ordinary payment edit mechanics). The
+// edit's diff lands in the managed payment's change log from this seam — the
+// second write point of ADR 0065 §4 (решение владельца 07.10): the same
+// dictionary, the same domain diff; a terms edit that moves nothing writes no
+// row.
 func (t *rentPaymentGatewayTx) Update(
-	ctx context.Context, scope, propertyID, paymentID uuid.UUID,
+	ctx context.Context, scope, propertyID, paymentID, actorID uuid.UUID,
 	change rentalsapp.RentPaymentChange, today time.Time,
 ) error {
 	payment, err := t.payments.Get(ctx, paymentID, scope, propertyID)
 	if err != nil {
 		return fmt.Errorf("load rent payment: %w", err)
 	}
+	// The diff's before side is the loaded rule: the merge below replaces
+	// fields and pointers wholesale, so the shallow copy is a faithful
+	// snapshot — the same shape the PaymentService's own edit runs.
+	before := payment
 	if change.AmountKopecks != nil {
 		payment.AmountKopecks = *change.AmountKopecks
 	}
@@ -173,11 +191,23 @@ func (t *rentPaymentGatewayTx) Update(
 	if change.PlannedEndDate != nil {
 		payment.EndDate = change.PlannedEndDate.Value
 	}
+	changes := paymentsdomain.DiffPaymentChanges(before, payment)
 	if err := t.payments.Update(ctx, payment); err != nil {
 		return fmt.Errorf("update rent payment: %w", err)
 	}
 	if err := t.payments.DeleteFuturePlanned(ctx, paymentID, today); err != nil {
 		return fmt.Errorf("drop future planned of rent payment: %w", err)
+	}
+	// The rental pipeline never edits the title, so a diff here never flips
+	// the manual-title marker (ADR 0065 §3) — nothing extra to write back.
+	if len(changes) > 0 {
+		if err := t.changeLog.Record(ctx, scope, propertyID, actorID, paymentsapp.ChangeLogWrite{
+			PaymentID: paymentID,
+			Action:    paymentsdomain.ChangeUpdated,
+			Changes:   changes,
+		}); err != nil {
+			return fmt.Errorf("record rent payment change log: %w", err)
+		}
 	}
 	return nil
 }

@@ -366,7 +366,7 @@ func (s *RentalService) UpdateRental(
 		func(
 			ctx context.Context, stores *txStores, scope uuid.UUID, rental domain.Rental, today time.Time,
 		) (mutationOutcome, error) {
-			return s.updatedRentalOutcome(ctx, stores, scope, propertyID, rental, today, cmd)
+			return s.updatedRentalOutcome(ctx, stores, scope, propertyID, rental, today, cmd, actor)
 		})
 	if err != nil {
 		return RentalView{}, err
@@ -384,7 +384,7 @@ func (s *RentalService) UpdateRental(
 // on.
 func (s *RentalService) updatedRentalOutcome(
 	ctx context.Context, stores *txStores, scope, propertyID uuid.UUID, rental domain.Rental, today time.Time,
-	cmd UpdateRentalCommand,
+	cmd UpdateRentalCommand, actor uuid.UUID,
 ) (mutationOutcome, error) {
 	if rental.CompletedDate != nil {
 		return mutationOutcome{}, ErrRentalCompleted
@@ -409,7 +409,7 @@ func (s *RentalService) updatedRentalOutcome(
 		}
 	}
 	if paymentChanged {
-		if err := stores.pay.Update(ctx, scope, propertyID, *rental.PaymentID, change, today); err != nil {
+		if err := stores.pay.Update(ctx, scope, propertyID, *rental.PaymentID, actor, change, today); err != nil {
 			return mutationOutcome{}, fmt.Errorf("sync rent payment: %w", err)
 		}
 	}

@@ -114,6 +114,13 @@ type Payment struct {
 	// publisher reads it (notifications/CONTEXT.md).
 	ReminderOffsetDays *int
 	Category           CategoryRef
+	// TitleIsManual is the durable «название когда-либо задано вручную»
+	// marker (ADR 0065 §3): a rule edit that carries a title flips it on and
+	// nothing ever flips it off — creation leaves it false (the first title
+	// is not an edit). Today's chip rule holds by the PATCH diff structure;
+	// the marker pins the state for any future auto-edits of the title,
+	// which must bypass the diff while it stands false.
+	TitleIsManual bool
 	// IsFavorite is the rule's favorite star (ticket #461): a pure read-side
 	// flag — it never changes generation, pauses or the tick's behaviour.
 	IsFavorite bool

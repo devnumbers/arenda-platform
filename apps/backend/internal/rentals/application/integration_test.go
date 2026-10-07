@@ -162,7 +162,7 @@ func (g *fakeSeamTx) Create(ctx context.Context, seed rentalsapp.RentPaymentSeed
 }
 
 func (g *fakeSeamTx) Update(
-	_ context.Context, _, _, paymentID uuid.UUID, _ rentalsapp.RentPaymentChange, _ time.Time,
+	_ context.Context, _, _, _, paymentID uuid.UUID, _ rentalsapp.RentPaymentChange, _ time.Time,
 ) error {
 	g.gateway.updates = append(g.gateway.updates, paymentID)
 	return nil

@@ -48,11 +48,12 @@ const (
 // FieldChange is one field's old→new pair. Both values are typed JSON, never
 // strings-with-formatting: kopecks travel as numbers, the recurrence as its
 // canonical JSON object, dates as "2006-01-02" or null — the frontend owns
-// the human text (recurrenceLabel, formatMoneyKopecks).
+// the human text (recurrenceLabel, formatMoneyKopecks). The tags are the
+// stored and wire form of the changes jsonb column: [{field, old, new}].
 type FieldChange struct {
-	Field ChangeField
-	Old   json.RawMessage
-	New   json.RawMessage
+	Field ChangeField     `json:"field"`
+	Old   json.RawMessage `json:"old"`
+	New   json.RawMessage `json:"new"`
 }
 
 // ChangeEntry is one stored row of the log: who edited the rule, what kind of

@@ -147,6 +147,64 @@ type PaymentStore interface {
 	WithTx(tx transaction.Tx) (PaymentStore, error)
 }
 
+// ChangeLogWrite is the change-log verdict of a mutation step (ADR 0065):
+// what only the step knows — the target rule, the action kind and the field
+// diff. The conveyor fills the actor, the owner scope and the property from
+// its own context and records the row inside the same transaction; an empty
+// Changes is the pause/resume shape (the state flip is the content). A nil
+// verdict (creation, deletion, the favorite star) writes no row.
+type ChangeLogWrite struct {
+	PaymentID uuid.UUID
+	Action    domain.ChangeAction
+	Changes   []domain.FieldChange
+}
+
+// ChangeLogKey is the change-log cursor's keyset key: the row's (created_at,
+// id) — the log's one ordering, read by ADR 0065 §6 over the single index.
+type ChangeLogKey struct {
+	CreatedAt time.Time
+	ID        uuid.UUID
+}
+
+// PaymentChangeLogStore is the append-only log's persistence port (ADR 0065).
+// Writes run inside the caller's transaction (the mutation conveyor's, or the
+// rentals seam's); reads are scoped by the data owner and the payment→property
+// path lives in the queries themselves.
+type PaymentChangeLogStore interface {
+	// Record appends one entry; the id is minted here (UUIDv7, ADR 0019),
+	// created_at is the database's. The actor travels separately from the
+	// scope: the log rows attribute the action, they never scope it.
+	Record(ctx context.Context, scope, propertyID, actorID uuid.UUID, write ChangeLogWrite) error
+	// ListByPayment returns one bidirectional keyset page of the payment's
+	// log, newest first. Before resumes strictly before its (created_at, id)
+	// key; After walks strictly after it — the prepend leg. At most one of
+	// the two stands; limit arrives 1..ChangesMaxLimit from the service.
+	ListByPayment(
+		ctx context.Context, scope, propertyID, paymentID uuid.UUID,
+		before, after *ChangeLogKey, limit int,
+	) ([]domain.ChangeEntry, error)
+	WithTx(tx transaction.Tx) (PaymentChangeLogStore, error)
+}
+
+// NoopChangeLogStore is the change log store that records and reads nothing —
+// the safe default a factory falls back to when no store is wired (the audit
+// and history Noops' canon).
+type NoopChangeLogStore struct{}
+
+func (NoopChangeLogStore) Record(
+	_ context.Context, _, _, _ uuid.UUID, _ ChangeLogWrite,
+) error {
+	return nil
+}
+
+func (NoopChangeLogStore) ListByPayment(
+	_ context.Context, _, _, _ uuid.UUID, _, _ *ChangeLogKey, _ int,
+) ([]domain.ChangeEntry, error) {
+	return nil, nil
+}
+
+func (s NoopChangeLogStore) WithTx(transaction.Tx) (PaymentChangeLogStore, error) { return s, nil }
+
 // PaidOverdueCount is one payment's two progress counters (ticket #845):
 // the paid facts and the overdue planned rows of one rule — the read the
 // Rentals list progress consumes through the RentPaymentGateway. A rule

@@ -67,6 +67,20 @@ func TestDecodeOperationCursorRoundTrip(t *testing.T) {
 	}
 }
 
+func TestChangeLogCursorRoundTrip(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC)
+	id := uuid.Must(uuid.NewV7())
+
+	decoded, err := decodeChangeLogCursor(encodeChangeLogCursor(ChangeLogKey{CreatedAt: at, ID: id}))
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !decoded.CreatedAt.Equal(at) || decoded.ID != id {
+		t.Fatalf("decoded = %+v, want (%s, %s)", decoded, at, id)
+	}
+}
+
 func TestDecodeCursorsRejectMalformed(t *testing.T) {
 	t.Parallel()
 	id := uuid.Must(uuid.NewV7())
@@ -89,6 +103,9 @@ func TestDecodeCursorsRejectMalformed(t *testing.T) {
 		{"broken uuid", func() error { _, _, err := decodeRuleCursor(badUUID); return err }},
 		{"broken date", func() error { _, err := decodeOperationCursor(badDate); return err }},
 		{"unknown sort key", func() error { _, err := decodeOperationCursor(badKey); return err }},
+		{"empty change cursor", func() error { _, err := decodeChangeLogCursor(""); return err }},
+		{"garbage change cursor", func() error { _, err := decodeChangeLogCursor("!!!"); return err }},
+		{"broken change uuid", func() error { _, err := decodeChangeLogCursor(badUUID); return err }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
