@@ -2,7 +2,7 @@
 
 import { useState, type JSX } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { BoldArchive, BoldHome, BoldObjects, Cancel, Check } from '@/shared/assets/icons';
+import { BoldArchive, BoldObjects, Cancel, Check } from '@/shared/assets/icons';
 import { buildReturnUrl, goBack } from '@/shared/lib/navigation';
 import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
@@ -11,6 +11,7 @@ import {
   resolveGlobalFilterReturnPath,
 } from '@/features/payments';
 import { useProperties } from '@/features/properties';
+import { propertyTypeIcons } from '@/entities/property';
 import {
   Button,
   Checkbox,
@@ -142,28 +143,32 @@ export function OperationsObjectsSelectScreen(): JSX.Element {
           {(properties.length > 0) && (
             <div aria-hidden className="mx-6 h-px bg-surface-muted" />
           )}
-          {properties.map((property) => (
-            <ListRow
-              key={property.id}
-              leading={
-                <SelectAvatar
-                  photoUrl={property.photos?.[0]?.url}
-                  fallback={<BoldHome className="h-6 w-6 text-[#D3D7D9]" />}
-                />
-              }
-              title={property.name}
-              subtitle={property.address}
-              trailing={
-                <Checkbox
-                  aria-label={`Объект ${property.name}`}
-                  checked={draft.includes(property.id)}
-                  onCheckedChange={() => toggleProperty(property.id)}
-                  onClick={(event) => event.stopPropagation()}
-                />
-              }
-              onSelect={() => toggleProperty(property.id)}
-            />
-          ))}
+          {properties.map((property) => {
+            // Выборка из статичного реестра, не вызов: react-hooks/static-components.
+            const Glyph = propertyTypeIcons[property.type];
+            return (
+              <ListRow
+                key={property.id}
+                leading={
+                  <SelectAvatar
+                    photoUrl={property.photos?.[0]?.url}
+                    fallback={<Glyph className="h-6 w-6 text-[#D3D7D9]" />}
+                  />
+                }
+                title={property.name}
+                subtitle={property.address}
+                trailing={
+                  <Checkbox
+                    aria-label={`Объект ${property.name}`}
+                    checked={draft.includes(property.id)}
+                    onCheckedChange={() => toggleProperty(property.id)}
+                    onClick={(event) => event.stopPropagation()}
+                  />
+                }
+                onSelect={() => toggleProperty(property.id)}
+              />
+            );
+          })}
           {/* Опция архива (#549, Figma 1733-26805): за разделителем, после
            * объектов — включение добавляет их операции к текущему выбору. */}
           <div aria-hidden className="mx-6 mt-1 h-px bg-surface-muted" />
@@ -200,7 +205,7 @@ export function OperationsObjectsSelectScreen(): JSX.Element {
 
 /** Аватар строки выбора (паттерн contact-object-select): круг 44px
  * #F3F4F6 с белым кольцом 2.5px; фото объекта или иконка-плейсхолдер —
- * дом (BoldHome) у объектов, BoldObjects (Figma 208:2994) у «Все объекты»,
+ * глиф типа объекта (Category Icon, карта #1217), BoldObjects (Figma 208:2994) у «Все объекты»,
  * BoldArchive у опции архива (#549). Цвет плейсхолдеров — #D3D7D9 по макету
  * (1733-26805/26831, пиксельная сверка 07.09), не text-content-tertiary.
  * Экспорт для route-loading (#609). */

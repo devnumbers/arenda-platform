@@ -35,5 +35,7 @@ export {
 } from './lib/property-edit';
 export { addressSuggestionRow } from './lib/address-suggestion';
 export { propertyCreateSuccessCopy } from './lib/property-create-success';
-export { propertyTypeIcons } from './lib/property-type-icons';
+// Реестр живёт на слое entities (нужен PropertyAvatar), тут — обратная
+// совместимость для консюмеров фичи.
+export { propertyTypeIcons } from '@/entities/property';
 export { PropertyStatusBadge } from './ui/PropertyStatusBadge';

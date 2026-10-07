@@ -69,6 +69,7 @@ export function PropertyCard({ property, today, variant = 'list', nonInteractive
       <div className={styles.body}>
         <PropertyAvatar
           photoUrl={property.photos?.[0]?.url ?? null}
+          type={property.type}
           withAttentionDot={!isArchived && hasPropertyAttentionDot(property)}
         />
         <div className={styles.info}>

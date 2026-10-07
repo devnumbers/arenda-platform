@@ -71,6 +71,12 @@
 | `BoldInternet` | `bold-internet.svg` | `Bold/Internet` | 766:10510 | совпадала |
 | `BoldFence` | `bold-fence.svg` | `Bold/Fence` | 782:12789 | заменена |
 | `BoldHome` | `bold-home.svg` | `Bold/Home` | 189:931 | заменена |
+| `BoldHouse` | `bold-house.svg` | `Bold/House` | 3099:151301 | новая (07.10.2026, глиф «Дом» Category Icon, карта #1217) |
+| `BoldLongSofa` | `bold-long-sofa.svg` | `Bold/LongSofa` | 3094:151204 | новая (07.10.2026, глиф «Апартаменты» Category Icon, карта #1217) |
+| `BoldDoor` | `bold-door.svg` | `Bold/Door` | 3097:151233 | новая (07.10.2026, глиф «Комната» Category Icon, карта #1217) |
+| `BoldOfficeChair` | `bold-office-chair.svg` | `Bold/OfficeChair` | 3099:151353 | новая (07.10.2026, глиф «Офис» Category Icon, карта #1217) |
+| `BoldGarage` | `bold-garage.svg` | `Bold/Garage` | 3086:151160 | новая (07.10.2026, глиф «Гараж» Category Icon, карта #1217) |
+| `BoldParking` | `bold-parking.svg` | `Bold/Parking` | 3099:151370 | новая (07.10.2026, глиф «Машиноместо» Category Icon, карта #1217) |
 | `BoldTv` | `bold-tv.svg` | `Bold/Tv` | 776:12075 | совпадала |
 | `BoldBell` | `bold-bell.svg` | `Bold/Bell` | 779:12175 | совпадала |
 | `BoldCredit` | `bold-credit.svg` | `Bold/Credit` | 773:12012 | совпадала |

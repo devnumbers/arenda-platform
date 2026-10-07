@@ -637,7 +637,7 @@ export function PropertyDetailPage(): JSX.Element {
 
                 {!isLoading && !propertyQuery.isError && property && (
                     <>
-                        <PropertyMediaBlock name={property.name} address={property.address}>
+                        <PropertyMediaBlock name={property.name} address={property.address} type={property.type}>
                             {/* Пилюли шапки (#773): «В архиве» и/или роль
                              * доступа — ряд под адресом, канон 2200-97365
                              * и 1603-92103. */}

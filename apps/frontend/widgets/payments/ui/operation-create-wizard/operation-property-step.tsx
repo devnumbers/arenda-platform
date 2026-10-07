@@ -4,7 +4,7 @@ import type { JSX } from 'react';
 import { BoldHome, RadioFalse, RadioTrue } from '@/shared/assets/icons';
 import { Button, CircleIcon, Skeleton } from '@/shared/ui/design';
 import { useProperties } from '@/features/properties';
-import { filterEditableProperties } from '@/entities/property';
+import { filterEditableProperties, propertyTypeIcons, type PropertyType } from '@/entities/property';
 
 /**
  * Шаг «Выбрать объект» визарда операции (#570, Figma 1858:105011) — только
@@ -38,6 +38,7 @@ export function OperationPropertyStep({
             title={property.name}
             subtitle={property.address}
             photoUrl={property.photos?.[0]?.url}
+            type={property.type}
             checked={selectedPropertyId === property.id}
             onCheck={() => onSelect(property.id)}
           />
@@ -48,20 +49,25 @@ export function OperationPropertyStep({
 
 /** Строка-радио выбора объекта (компонент Figma «Row Button», каркас
  * «Выбрать объект» задач #525): аватар Category Icon 44px с фото или
- * серым домом, заголовок 16/500, подпись 14, кружок выбора справа. */
+ * глифом типа (Category Icon, карта #1217), заголовок 16/500, подпись 14,
+ * кружок выбора справа. */
 function ObjectRowButton({
   title,
   subtitle,
   photoUrl,
+  type,
   checked,
   onCheck,
 }: {
   readonly title: string;
   readonly subtitle: string;
   readonly photoUrl?: string;
+  readonly type?: PropertyType;
   readonly checked: boolean;
   readonly onCheck: () => void;
 }): JSX.Element {
+  // Выборка из статичного реестра, не вызов: react-hooks/static-components.
+  const Glyph = type !== undefined ? propertyTypeIcons[type] : undefined;
   return (
     <button
       type="button"
@@ -73,6 +79,8 @@ function ObjectRowButton({
       <CircleIcon variant="white" aria-hidden className="relative overflow-hidden rounded-full">
         {photoUrl !== undefined ? (
           <img src={photoUrl} alt="" className="h-full w-full object-cover" />
+        ) : Glyph !== undefined ? (
+          <Glyph className="h-6 w-6 text-content-tertiary" />
         ) : (
           <BoldHome className="h-6 w-6 text-content-tertiary" />
         )}

@@ -4,7 +4,6 @@ import { useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft,
-  BoldHome,
   BoldUser,
   Check,
   Copy,
@@ -15,9 +14,9 @@ import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
 import { contactFullName, type Contact } from '@/entities/contact';
 import type { Property } from '@/entities/property';
+import { propertyPermissions, propertyTypeIcons } from '@/entities/property';
 import { useContact, useDeleteContact } from '@/features/contacts';
 import { useProperty } from '@/features/properties';
-import { propertyPermissions } from '@/entities/property';
 import { useCopiedHint } from '@/shared/lib/hooks/use-copied-hint';
 import { ConfirmDialog, IconButton, PageContent, TopNav, TopNavTitle } from '@/shared/ui/design';
 import { contactValueRows } from '../lib/contact-detail-model';
@@ -152,6 +151,8 @@ function ContactCardBody({
   const router = useRouter();
   const rows = contactValueRows(contact);
   const boundPropertyId = contact.propertyId;
+  // Выборка из статичного реестра, не вызов: react-hooks/static-components.
+  const BoundPropertyGlyph = boundProperty !== undefined ? propertyTypeIcons[boundProperty.type] : undefined;
 
   return (
     <div className="flex flex-col gap-6 px-6 pb-8 pt-2">
@@ -218,9 +219,9 @@ function ContactCardBody({
                     alt=""
                     className="h-full w-full object-cover"
                   />
-                ) : (
-                  <BoldHome className="h-6 w-6 text-content-tertiary" />
-                )}
+                ) : BoundPropertyGlyph !== undefined ? (
+                  <BoundPropertyGlyph className="h-6 w-6 text-content-tertiary" />
+                ) : null}
               </span>
               <span className="flex min-w-0 flex-col gap-1">
                 <span className="truncate text-base font-medium leading-[18px] text-content">

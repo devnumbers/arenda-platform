@@ -189,9 +189,10 @@ export function PropertyEditScreen({ propertyId }: PropertyEditScreenProps): JSX
         >
           {/* Заглушка фото (Figma 1550:95852): логики фото у объекта нет —
               круг декоративный, без кнопки и загрузки (решение владельца
-              11.09); поверхность hero канона PropertyAvatar. */}
+              11.09); поверхность hero канона PropertyAvatar, глиф — по
+              типу черновика. */}
           <div className="flex justify-center" aria-hidden>
-            <PropertyAvatar surface="hero" />
+            <PropertyAvatar surface="hero" type={draft.type} />
           </div>
           <PropertyTypePicker
             title="Тип объекта"

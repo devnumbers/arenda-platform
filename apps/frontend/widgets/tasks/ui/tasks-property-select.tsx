@@ -1,10 +1,11 @@
 'use client';
 
 import type { JSX } from 'react';
-import { BoldHome, BoldObjects, Cancel, Check, CheckBoxFalse, CheckBoxTrue } from '@/shared/assets/icons';
+import { BoldObjects, Cancel, Check, CheckBoxFalse, CheckBoxTrue } from '@/shared/assets/icons';
 import { Button, CircleIcon, IconButton, PageContent, Skeleton, StickyBottomBar, TopNav, TopNavTitle } from '@/shared/ui/design';
 import { EMPTY_TASKS_FEED_FILTER, type TasksFeedFilter } from '@/features/tasks';
 import { useProperties } from '@/features/properties';
+import { propertyTypeIcons, type PropertyType } from '@/entities/property';
 
 /** Черновик фильтра ленты — структурно тот же срез, что и разобранный
  * URL-фильтр (TasksFeedFilter): «Общие задачи» + объекты, оба пустые —
@@ -90,6 +91,7 @@ export function TasksPropertySelectPage({
               title={property.name}
               subtitle={property.address}
               photoUrl={property.photos?.[0]?.url}
+              type={property.type}
               checked={draft.propertyIds.includes(property.id)}
               onCheck={() => toggle(property.id)}
             />
@@ -108,14 +110,16 @@ export function TasksPropertySelectPage({
 
 /** Строка-чекбокс страницы «Выбрать объект» (компонент Figma «Row Button»,
  * 936:39347): аватар Category Icon 44px (#F3F4F6 + белое кольцо 2.5px) с
- * иконкой 24 — Icon/Bold/Objects у «Все задачи»/«Общие задачи», Icon/Bold/
- * Home (BoldHome) у объектов, или фото; заголовок 16/500, опциональная
- * подпись 14 #6F787C, чекбокс Selection Button справа (Figma 1031:21053,
- * Variant=Checkbox; у «Все задачи» подписи нет — макет 1726:88886). */
+ * иконкой 24 — Icon/Bold/Objects у «Все задачи»/«Общие задачи», глиф типа
+ * объекта (Category Icon, карта #1217) у объектов, или фото; заголовок
+ * 16/500, опциональная подпись 14 #6F787C, чекбокс Selection Button
+ * справа (Figma 1031:21053, Variant=Checkbox; у «Все задачи» подписи
+ * нет — макет 1726:88886). */
 function ObjectRowButton({
   title,
   subtitle,
   photoUrl,
+  type,
   isAll = false,
   checked,
   onCheck,
@@ -123,10 +127,13 @@ function ObjectRowButton({
   readonly title: string;
   readonly subtitle?: string;
   readonly photoUrl?: string;
+  readonly type?: PropertyType;
   readonly isAll?: boolean;
   readonly checked: boolean;
   readonly onCheck: () => void;
 }): JSX.Element {
+  // Выборка из статичного реестра, не вызов: react-hooks/static-components.
+  const Glyph = type !== undefined ? propertyTypeIcons[type] : BoldObjects;
   return (
     <button
       type="button"
@@ -141,7 +148,7 @@ function ObjectRowButton({
         ) : isAll ? (
           <BoldObjects className="h-6 w-6 text-content-tertiary" />
         ) : (
-          <BoldHome className="h-6 w-6 text-content-tertiary" />
+          <Glyph className="h-6 w-6 text-content-tertiary" />
         )}
       </CircleIcon>
       <span className="flex min-w-0 flex-1 flex-col gap-1">

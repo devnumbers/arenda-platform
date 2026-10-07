@@ -4,6 +4,8 @@ import type { JSX } from 'react';
 import { BoldHome, BoldObjects, CheckBoxFalse, CheckBoxTrue, Minus } from '@/shared/assets/icons';
 import NextLink from 'next/link';
 import { ROUTES } from '@/shared/config/routes';
+import { type PropertyType } from '@/entities/property';
+import { propertyTypeIcons } from '@/entities/property';
 import { buttonVariants, CircleIcon, EmptyState } from '@/shared/ui/design';
 
 /** Базовый класс кликабельного ряда списков участника (Row Button
@@ -12,16 +14,21 @@ import { buttonVariants, CircleIcon, EmptyState } from '@/shared/ui/design';
 export const PARTICIPANT_ROW_BASE_CLASS =
   'flex w-full cursor-pointer items-center gap-3 py-3 text-left outline-none transition-opacity hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:opacity-80';
 
-/** Круглый аватар объекта 44px (Category Icon из Figma): фото или канонная
- * иконка — Bold/Objects у агрегатной строки «Все объекты», Bold/Home у
- * конкретных объектов; белое кольцо 2.5px по компоненту (2008-81468). */
+/** Круглый аватар объекта 44px (Category Icon из Figma): фото или глиф —
+ * Bold/Objects у агрегатной строки «Все объекты», глиф типа объекта
+ * (Category Icon, карта #1217; без типа — Bold/Home) у конкретных
+ * объектов; белое кольцо 2.5px по компоненту (2008-81468). */
 export function ObjectAvatarGlyph({
   photoUrl,
+  type,
   isAll = false,
 }: {
   readonly photoUrl: string | undefined;
+  readonly type?: PropertyType;
   readonly isAll?: boolean;
 }): JSX.Element {
+  // Выборка из статичного реестра, не вызов: react-hooks/static-components.
+  const Glyph = type !== undefined ? propertyTypeIcons[type] : BoldHome;
   return (
     <CircleIcon variant="white" aria-hidden className="relative overflow-hidden rounded-full">
       {photoUrl !== undefined ? (
@@ -29,7 +36,7 @@ export function ObjectAvatarGlyph({
       ) : isAll ? (
         <BoldObjects className="h-6 w-6 text-content-tertiary" />
       ) : (
-        <BoldHome className="h-6 w-6 text-content-tertiary" />
+        <Glyph className="h-6 w-6 text-content-tertiary" />
       )}
     </CircleIcon>
   );

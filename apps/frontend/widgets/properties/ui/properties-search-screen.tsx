@@ -109,6 +109,7 @@ export function PropertiesSearchScreen(): JSX.Element {
                     <PropertyAvatar
                       surface="row"
                       photoUrl={property.photos?.[0]?.url ?? null}
+                      type={property.type}
                     />
                   </span>
                 }
