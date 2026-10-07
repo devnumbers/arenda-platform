@@ -1,9 +1,12 @@
 package application
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"strings"
 
 	"github.com/google/uuid"
@@ -13,7 +16,9 @@ import (
 	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	realtimeapp "github.com/nambers/arenda-planform/apps/backend/internal/realtime/application"
 	realtimedom "github.com/nambers/arenda-planform/apps/backend/internal/realtime/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/photo"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
+	storageshared "github.com/nambers/arenda-planform/apps/backend/internal/shared/storage"
 )
 
 // CreateContactCommand is the create payload of a contact card. Every text
@@ -69,6 +74,12 @@ type UpdateContactCommand struct {
 type ContactService struct {
 	txStoreFactory
 	policy sharedpolicy.Policy
+	// The photos port streams the card photo (ADR 0065): the upload lands in the
+	// private storage under a fresh UUID key, the serving endpoints open it
+	// back — no public URL ever exists.
+	photos storageshared.PhotoStorage
+	// The logger reports the best-effort orphan cleanups.
+	logger *slog.Logger
 	// Realtime is the late-bound carrier the mutations' frames dispatch
 	// through after the commit (карта #714, #716; ADR 0062); nil keeps the
 	// pre-#716 silence.
@@ -139,8 +150,9 @@ func (s *ContactService) publishMoved(
 // property store is a wiring mistake: every property-scoped use case fails
 // loudly on first use rather than silently narrowing the ADR 0028 matrix to
 // owner-only.
-func NewContactService(factory txStoreFactory, policy sharedpolicy.Policy) *ContactService {
-	return &ContactService{txStoreFactory: factory, policy: policy}
+func NewContactService(factory txStoreFactory, policy sharedpolicy.Policy, photos storageshared.PhotoStorage) *ContactService {
+	logger := slog.Default()
+	return &ContactService{txStoreFactory: factory, policy: policy, photos: photos, logger: logger}
 }
 
 // CreateContact creates a card. A card with a property lands in the property
@@ -698,4 +710,174 @@ func recordContactAudit(
 		return fmt.Errorf("record audit: %w", err)
 	}
 	return nil
+}
+
+// ErrPhotoNotFound marks a photo request for an entity that has no photo —
+// the privacy-preserving 404 of the serving endpoints (ADR 0065). The
+// contacts context keeps its own sentinel so the transport maps it beside
+// the context's own 404 vocabulary.
+var ErrPhotoNotFound = errors.New("contacts: photo not found")
+
+// PhotoDescriptor resolves the card photo's identity for the serving
+// endpoint (ADR 0065): the key powers the ETag — a replacement mints a new
+// UUID key, so a 304 never lies about the bytes. Access follows ADR 0054:
+// a bound card is readable by the property's viewers, an unbound one by the
+// book owner only; anyone else gets the privacy 404.
+func (s *ContactService) PhotoDescriptor(ctx context.Context, actor, contactID uuid.UUID) (key, contentType string, err error) {
+	contact, err := s.contacts.GetByID(ctx, contactID)
+	if err != nil {
+		return "", "", err
+	}
+	if _, err := s.authorize(ctx, actor, contact, sharedpolicy.CanView); err != nil {
+		return "", "", err
+	}
+	if contact.PhotoKey == nil {
+		return "", "", ErrPhotoNotFound
+	}
+	return *contact.PhotoKey, derefContactString(contact.PhotoContentType), nil
+}
+
+// OpenContactPhoto opens the card photo (ADR 0065): the body, its byte
+// size, the stored content type and the key (the ETag source). A column key
+// without an object is an orphan — the honest ErrPhotoNotFound.
+func (s *ContactService) OpenContactPhoto(
+	ctx context.Context, actor, contactID uuid.UUID,
+) (body io.ReadCloser, size int64, contentType, key string, err error) {
+	if _, _, err := s.PhotoDescriptor(ctx, actor, contactID); err != nil {
+		return nil, 0, "", "", err
+	}
+	contact, err := s.contacts.GetByID(ctx, contactID)
+	if err != nil {
+		return nil, 0, "", "", err
+	}
+	body, size, contentType, err = s.photos.Open(ctx, *contact.PhotoKey)
+	if err != nil {
+		if errors.Is(err, storageshared.ErrNotFound) {
+			return nil, 0, "", "", ErrPhotoNotFound
+		}
+		return nil, 0, "", "", fmt.Errorf("open contact photo: %w", err)
+	}
+	return body, size, contentType, *contact.PhotoKey, nil
+}
+
+// SetContactPhoto replaces the card photo (ADR 0065, one image per card):
+// the processed upload lands under a fresh UUID key, the columns flip in
+// the same transaction, and the previous object is removed best-effort
+// after the commit. Mutations need the ADR 0028 edit capability on the
+// bound property (or the own book).
+func (s *ContactService) SetContactPhoto(
+	ctx context.Context, actor, contactID uuid.UUID, processed photo.Processed,
+) (domain.Contact, error) {
+	key, err := photo.NewKey(processed.ContentType)
+	if err != nil {
+		return domain.Contact{}, err
+	}
+
+	contact, err := s.contacts.GetByID(ctx, contactID)
+	if err != nil {
+		return domain.Contact{}, err
+	}
+	role, err := s.authorize(ctx, actor, contact, sharedpolicy.CanEdit)
+	if err != nil {
+		return domain.Contact{}, err
+	}
+
+	var (
+		updated domain.Contact
+		oldKey  *string
+	)
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		oldKey = contact.PhotoKey
+
+		if err := s.photos.Put(ctx, key, bytes.NewReader(processed.Data), processed.ContentType, processed.Size); err != nil {
+			return fmt.Errorf("put contact photo: %w", err)
+		}
+
+		updated, err = stores.contacts.SetPhoto(ctx, contact.ID, contact.OwnerID, &key, &processed.ContentType)
+		if err != nil {
+			return fmt.Errorf("set contact photo: %w", err)
+		}
+
+		auditCtx := map[string]any{}
+		if contact.PropertyID != nil {
+			auditCtx["property_id"] = *contact.PropertyID
+		}
+		if err := recordContactAudit(ctx, stores, actor, role, auditdomain.ActionContactPhotoAdded, contact.ID, auditCtx); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		// The new object may have landed before a later step failed: it is
+		// unreferenced — remove it the same best-effort way as the replaced
+		// one.
+		s.cleanupPhoto(ctx, key)
+		return domain.Contact{}, err
+	}
+	if oldKey != nil {
+		s.cleanupPhoto(ctx, *oldKey)
+	}
+	s.publishChanged(ctx, actor, contact.PropertyID, false)
+
+	return updated, nil
+}
+
+// DeleteContactPhoto clears the photo columns; clearing an absent photo is
+// ErrPhotoNotFound — the transport's 404. The object removal stays
+// best-effort after the commit.
+func (s *ContactService) DeleteContactPhoto(ctx context.Context, actor, contactID uuid.UUID) (domain.Contact, error) {
+	contact, err := s.contacts.GetByID(ctx, contactID)
+	if err != nil {
+		return domain.Contact{}, err
+	}
+	role, err := s.authorize(ctx, actor, contact, sharedpolicy.CanEdit)
+	if err != nil {
+		return domain.Contact{}, err
+	}
+	if contact.PhotoKey == nil {
+		return domain.Contact{}, ErrPhotoNotFound
+	}
+
+	var updated domain.Contact
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		var err error
+		updated, err = stores.contacts.SetPhoto(ctx, contact.ID, contact.OwnerID, nil, nil)
+		if err != nil {
+			return fmt.Errorf("set contact photo: %w", err)
+		}
+
+		auditCtx := map[string]any{}
+		if contact.PropertyID != nil {
+			auditCtx["property_id"] = *contact.PropertyID
+		}
+		if err := recordContactAudit(ctx, stores, actor, role, auditdomain.ActionContactPhotoDeleted, contact.ID, auditCtx); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return domain.Contact{}, err
+	}
+	s.cleanupPhoto(ctx, *contact.PhotoKey)
+	s.publishChanged(ctx, actor, contact.PropertyID, false)
+
+	return updated, nil
+}
+
+// cleanupPhoto removes an object best-effort: a failure is logged as an
+// orphan — it never fails the mutation that already committed.
+func (s *ContactService) cleanupPhoto(ctx context.Context, key string) {
+	if err := s.photos.Delete(ctx, key); err != nil {
+		s.logger.WarnContext(ctx, "failed to delete contact photo from storage",
+			slog.String("key", key),
+			slog.String("error", err.Error()),
+		)
+	}
+}
+
+func derefContactString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }

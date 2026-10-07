@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/contacts/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/photo"
 )
 
 // fakeContactManager is the func-backed ContactManager double: every use case
@@ -22,11 +24,15 @@ import (
 // succeeding (ADR 0035 test doubles). The func fields back the port's
 // methods one to one; the field order is alphabetical, unlike the port.
 type fakeContactManager struct {
-	create func(ctx context.Context, actor uuid.UUID, cmd application.CreateContactCommand) (domain.Contact, error)
-	del    func(ctx context.Context, actor, id uuid.UUID) error
-	get    func(ctx context.Context, actor, id uuid.UUID) (domain.Contact, error)
-	list   func(ctx context.Context, actor uuid.UUID, q application.ListQuery) (application.ContactBookPage, error)
-	update func(ctx context.Context, actor, id uuid.UUID, cmd application.UpdateContactCommand) (domain.Contact, error)
+	create          func(ctx context.Context, actor uuid.UUID, cmd application.CreateContactCommand) (domain.Contact, error)
+	del             func(ctx context.Context, actor, id uuid.UUID) error
+	get             func(ctx context.Context, actor, id uuid.UUID) (domain.Contact, error)
+	list            func(ctx context.Context, actor uuid.UUID, q application.ListQuery) (application.ContactBookPage, error)
+	update          func(ctx context.Context, actor, id uuid.UUID, cmd application.UpdateContactCommand) (domain.Contact, error)
+	photoDescriptor func(ctx context.Context, actor, id uuid.UUID) (string, string, error)
+	openPhoto       func(ctx context.Context, actor, id uuid.UUID) (io.ReadCloser, int64, string, string, error)
+	setPhoto        func(ctx context.Context, actor, id uuid.UUID, processed photo.Processed) (domain.Contact, error)
+	deletePhoto     func(ctx context.Context, actor, id uuid.UUID) (domain.Contact, error)
 }
 
 func (f *fakeContactManager) CreateContact(
@@ -68,6 +74,42 @@ func (f *fakeContactManager) DeleteContact(ctx context.Context, actor, id uuid.U
 		return errors.New("unexpected DeleteContact call")
 	}
 	return f.del(ctx, actor, id)
+}
+
+func (f *fakeContactManager) PhotoDescriptor(
+	ctx context.Context, actor, id uuid.UUID,
+) (key, contentType string, err error) {
+	if f.photoDescriptor == nil {
+		return "", "", errors.New("unexpected PhotoDescriptor call")
+	}
+	return f.photoDescriptor(ctx, actor, id)
+}
+
+func (f *fakeContactManager) OpenContactPhoto(
+	ctx context.Context, actor, id uuid.UUID,
+) (body io.ReadCloser, size int64, contentType, key string, err error) {
+	if f.openPhoto == nil {
+		return nil, 0, "", "", errors.New("unexpected OpenContactPhoto call")
+	}
+	return f.openPhoto(ctx, actor, id)
+}
+
+func (f *fakeContactManager) SetContactPhoto(
+	ctx context.Context, actor, id uuid.UUID, processed photo.Processed,
+) (domain.Contact, error) {
+	if f.setPhoto == nil {
+		return domain.Contact{}, errors.New("unexpected SetContactPhoto call")
+	}
+	return f.setPhoto(ctx, actor, id, processed)
+}
+
+func (f *fakeContactManager) DeleteContactPhoto(
+	ctx context.Context, actor, id uuid.UUID,
+) (domain.Contact, error) {
+	if f.deletePhoto == nil {
+		return domain.Contact{}, errors.New("unexpected DeleteContactPhoto call")
+	}
+	return f.deletePhoto(ctx, actor, id)
 }
 
 // testFirstName is the given name the wire fixtures assert on.

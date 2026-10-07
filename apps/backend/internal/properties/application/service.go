@@ -3,13 +3,12 @@
 package application
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
-	"net/url"
-	"path"
 	"reflect"
 	"slices"
 	"sort"
@@ -27,24 +26,12 @@ import (
 	realtimeapp "github.com/nambers/arenda-planform/apps/backend/internal/realtime/application"
 	realtimedom "github.com/nambers/arenda-planform/apps/backend/internal/realtime/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/photo"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
+	storageshared "github.com/nambers/arenda-planform/apps/backend/internal/shared/storage"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
-
-const (
-	maxPhotoCount = 10
-	// MaxPhotoSize caps a single property photo upload; the HTTP adapter
-	// enforces the same bound while buffering a streamed multipart upload.
-	MaxPhotoSize   = 5 * 1024 * 1024 // 5 MiB.
-	photoKeyPrefix = "properties"
-)
-
-var allowedPhotoContentTypes = map[string]string{
-	"image/jpeg": ".jpg",
-	"image/png":  ".png",
-	"image/webp": ".webp",
-}
 
 type CreatePropertyCommand struct {
 	Name        string
@@ -65,9 +52,11 @@ type UpdatePropertyCommand struct {
 
 type PropertyService struct {
 	txStoreFactory
-	repo               PropertyRepository
-	photoRepo          PropertyPhotoRepository
-	photoStorage       PhotoStorage
+	repo PropertyRepository
+	// The storage port streams the object photo (ADR 0065): the upload lands in
+	// the private storage under a fresh UUID key, the serving endpoints open
+	// it back — no public URL ever exists.
+	photoStorage       storageshared.PhotoStorage
 	audit              auditapp.Recorder
 	clock              clock.Clock
 	policy             sharedpolicy.Policy
@@ -260,13 +249,13 @@ func (s *PropertyService) enrichListProjections(ctx context.Context, properties 
 
 // NewPropertyService creates a PropertyService. Persistence, the audit
 // recorder and the Unit-of-Work of every mutating use case arrive through the
-// embedded factory (ADR 0033 γ-factory); repo and photoRepo additionally
-// serve the non-transactional reads and the externally-owned transaction of
-// ArchiveExcessProperties.
+// embedded factory (ADR 0033 γ-factory); repo additionally serves the
+// non-transactional reads and the externally-owned transaction of
+// ArchiveExcessProperties. The photos port streams the object photo
+// (ADR 0065).
 func NewPropertyService(
 	repo PropertyRepository,
-	photoRepo PropertyPhotoRepository,
-	photoStorage PhotoStorage,
+	photoStorage storageshared.PhotoStorage,
 	factory txStoreFactory,
 	clk clock.Clock,
 	policy sharedpolicy.Policy,
@@ -278,7 +267,6 @@ func NewPropertyService(
 	return &PropertyService{
 		txStoreFactory: factory,
 		repo:           repo,
-		photoRepo:      photoRepo,
 		photoStorage:   photoStorage,
 		audit:          factory.audit,
 		clock:          clk,
@@ -359,7 +347,6 @@ func (s *PropertyService) CreateProperty(ctx context.Context, actor uuid.UUID, c
 	}
 	s.publishChanged(ctx, actor, created.ID, true)
 
-	created.Photos = []domain.Photo{}
 	created.AccessRole = sharedpolicy.RoleOwner
 	return created, nil
 }
@@ -400,10 +387,7 @@ func (s *PropertyService) ListProperties(ctx context.Context, actor uuid.UUID) (
 		return PropertiesPage{}, err
 	}
 
-	items, err := s.withPhotos(ctx, s.pinnedFirst(properties)...)
-	if err != nil {
-		return PropertiesPage{}, err
-	}
+	items := s.pinnedFirst(properties)
 	return PropertiesPage{Items: items, Today: today, SuspendedShared: suspended}, nil
 }
 
@@ -562,10 +546,7 @@ func (s *PropertyService) ListArchivedProperties(ctx context.Context, actor uuid
 		return PropertiesPage{}, err
 	}
 
-	items, err := s.withPhotos(ctx, properties...)
-	if err != nil {
-		return PropertiesPage{}, err
-	}
+	items := s.pinnedFirst(properties)
 	return PropertiesPage{Items: items, Today: today}, nil
 }
 
@@ -642,10 +623,6 @@ func (s *PropertyService) SearchProperties(
 	if err != nil {
 		return nil, "", fmt.Errorf("search visible properties: %w", err)
 	}
-	properties, err = s.withPhotos(ctx, properties...)
-	if err != nil {
-		return nil, "", err
-	}
 	// A full page answers with the last row's continuation; a short one has
 	// walked the matches to the end — the empty cursor stops the scroll.
 	nextCursor := ""
@@ -709,11 +686,7 @@ func (s *PropertyService) GetProperty(ctx context.Context, actor, id uuid.UUID) 
 		}
 	}
 
-	properties, err := s.withPhotos(ctx, property)
-	if err != nil {
-		return domain.Property{}, err
-	}
-	return properties[0], nil
+	return property, nil
 }
 
 func (s *PropertyService) UpdateProperty(ctx context.Context, actor, id uuid.UUID, cmd UpdatePropertyCommand) (domain.Property, error) {
@@ -769,12 +742,8 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, actor, id uuid.UUI
 	}
 	s.publishChanged(ctx, actor, id, journaled)
 
-	properties, err := s.withPhotos(ctx, updated)
-	if err != nil {
-		return domain.Property{}, err
-	}
-	properties[0].AccessRole = role
-	return properties[0], nil
+	updated.AccessRole = role
+	return updated, nil
 }
 
 // SetPropertyPin writes the global pin atomically (PUT pin, ticket #577, the
@@ -841,12 +810,8 @@ func (s *PropertyService) SetPropertyPin(ctx context.Context, actor, id uuid.UUI
 	}
 	s.publishChanged(ctx, actor, id, journaled)
 
-	properties, err := s.withPhotos(ctx, updated)
-	if err != nil {
-		return domain.Property{}, err
-	}
-	properties[0].AccessRole = role
-	return properties[0], nil
+	updated.AccessRole = role
+	return updated, nil
 }
 
 // resolveEditableProperty authorizes a property write (UpdateProperty,
@@ -1045,12 +1010,8 @@ func (s *PropertyService) ArchiveProperty(ctx context.Context, actor, id uuid.UU
 	s.publishChanged(ctx, actor, id, true)
 	s.publishSlotAccess(ctx, actor, recovered)
 
-	properties, err := s.withPhotos(ctx, archived)
-	if err != nil {
-		return domain.Property{}, err
-	}
-	properties[0].AccessRole = role
-	return properties[0], nil
+	archived.AccessRole = role
+	return archived, nil
 }
 
 // DeleteProperty removes the property together with all its data: the FKs
@@ -1066,11 +1027,12 @@ func (s *PropertyService) DeleteProperty(
 		return err
 	}
 
-	// The deleted property's name, photos, former members' emails and the slot
-	// recovery's legs escape the work closure for the post-commit cleanup.
+	// The deleted property's name, photo key, former members' emails and the
+	// slot recovery's legs escape the work closure for the post-commit
+	// cleanup.
 	var (
 		property           domain.Property
-		photos             []domain.Photo
+		photoKey           *string
 		formerMemberEmails []string
 		recovered          []accessdomain.Membership
 	)
@@ -1080,6 +1042,7 @@ func (s *PropertyService) DeleteProperty(
 		if err != nil {
 			return err
 		}
+		photoKey = property.PhotoKey
 
 		formerMemberEmails, err = s.collectFormerMemberEmails(ctx, stores, id)
 		if err != nil {
@@ -1106,11 +1069,6 @@ func (s *PropertyService) DeleteProperty(
 			}
 		}
 
-		photos, err = stores.photos.GetByPropertyID(ctx, id)
-		if err != nil {
-			return fmt.Errorf("list photos: %w", err)
-		}
-
 		recovered, err = s.recoverSlotsAfterDelete(ctx, stores, actor, id)
 		if err != nil {
 			return err
@@ -1135,8 +1093,11 @@ func (s *PropertyService) DeleteProperty(
 		return err
 	}
 
-	// Post-commit cleanup never fails the delete itself.
-	s.cleanupPropertyPhotos(ctx, id, photos)
+	// Post-commit cleanup never fails the delete itself; the property row is
+	// already locked here, so its photo key was read in the same closure.
+	if photoKey != nil {
+		s.cleanupPropertyPhoto(ctx, *photoKey)
+	}
 	s.notifyPropertyDeleted(ctx, id, property.Name, formerMemberEmails)
 	// The deleted object's own row dispatches nothing by construction — the
 	// derived access resolves to nobody — but the recovery's reactivated legs
@@ -1238,24 +1199,14 @@ func (s *PropertyService) recoverSlotsAfterDelete(
 	return recovered, nil
 }
 
-// cleanupPropertyPhotos removes the deleted property's photo objects from
-// storage after the commit; failures are logged, never propagated.
-func (s *PropertyService) cleanupPropertyPhotos(ctx context.Context, id uuid.UUID, photos []domain.Photo) {
-	for _, photo := range photos {
-		key, err := photoStorageKey(id, photo.ID, photo.URL)
-		if err != nil {
-			s.logger.WarnContext(ctx, "failed to derive storage key for photo cleanup",
-				slog.String("photo_id", photo.ID.String()),
-				slog.String("error", sanitizeError(err)),
-			)
-			continue
-		}
-		if err := s.photoStorage.Delete(ctx, key); err != nil {
-			s.logger.ErrorContext(ctx, "failed to delete property photo from storage",
-				slog.String("photo_id", photo.ID.String()),
-				slog.String("error", sanitizeError(err)),
-			)
-		}
+// cleanupPropertyPhoto removes the property's photo object from storage
+// after the commit; failures are logged as orphans, never propagated.
+func (s *PropertyService) cleanupPropertyPhoto(ctx context.Context, key string) {
+	if err := s.photoStorage.Delete(ctx, key); err != nil {
+		s.logger.ErrorContext(ctx, "failed to delete property photo from storage",
+			slog.String("key", key),
+			slog.String("error", sanitizeError(err)),
+		)
 	}
 }
 
@@ -1554,12 +1505,8 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, actor, id uuid.
 	s.publishChanged(ctx, actor, id, true)
 	s.publishSlotAccess(ctx, actor, suspended)
 
-	properties, err := s.withPhotos(ctx, unarchived)
-	if err != nil {
-		return domain.Property{}, err
-	}
-	properties[0].AccessRole = role
-	return properties[0], nil
+	unarchived.AccessRole = role
+	return unarchived, nil
 }
 
 // ensurePropertyArchived loads the property row for update inside the
@@ -1598,18 +1545,67 @@ func ensureActivePropertySlot(ctx context.Context, stores *txStores, owner uuid.
 	return nil
 }
 
-// NewPhotoTooLargeError reports a photo upload whose byte size exceeds
-// MaxPhotoSize. The service size validation and the HTTP adapter's streaming
-// bound share it so the message is identical wherever the check fires.
-func NewPhotoTooLargeError(size int64) error {
-	return fmt.Errorf("%w: file size %d exceeds %d bytes", ErrInvalidInput, size, MaxPhotoSize)
+// PhotoDescriptor resolves the object photo's identity for the serving
+// endpoint (ADR 0065): the key powers the ETag — a replacement mints a new
+// UUID key, so a 304 never lies about the bytes. Access follows ADR 0028:
+// every role that can view the object can view its photo.
+func (s *PropertyService) PhotoDescriptor(ctx context.Context, actor, id uuid.UUID) (key, contentType string, err error) {
+	role, err := s.policy.RoleForProperty(ctx, actor, id)
+	if err != nil {
+		return "", "", fmt.Errorf("resolve role: %w", err)
+	}
+	switch sharedpolicy.GateFor(role, sharedpolicy.CanView) {
+	case sharedpolicy.GateAllow:
+	case sharedpolicy.GateForbidden:
+		return "", "", ErrForbidden
+	default: // GateNone, GateSuspended.
+		return "", "", s.accessFailure(role)
+	}
+
+	property, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return "", "", err
+	}
+	if property.PhotoKey == nil {
+		return "", "", ErrPhotoNotFound
+	}
+	return *property.PhotoKey, derefString(property.PhotoContentType), nil
 }
 
-// AddPropertyPhoto validates and uploads a photo for the given property.
-func (s *PropertyService) AddPropertyPhoto(
-	ctx context.Context, actor, propertyID uuid.UUID, file io.Reader, filename, contentType string, size int64,
+// OpenPropertyPhoto opens the object photo (ADR 0065): the body, its byte
+// size, the stored content type and the key (the ETag source). A column key
+// without an object is an orphan — the honest ErrPhotoNotFound.
+func (s *PropertyService) OpenPropertyPhoto(
+	ctx context.Context, actor, id uuid.UUID,
+) (body io.ReadCloser, size int64, contentType, key string, err error) {
+	if _, _, err := s.PhotoDescriptor(ctx, actor, id); err != nil {
+		return nil, 0, "", "", err
+	}
+	property, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return nil, 0, "", "", err
+	}
+	body, size, contentType, err = s.photoStorage.Open(ctx, *property.PhotoKey)
+	if err != nil {
+		if errors.Is(err, storageshared.ErrNotFound) {
+			return nil, 0, "", "", ErrPhotoNotFound
+		}
+		return nil, 0, "", "", fmt.Errorf("open property photo: %w", err)
+	}
+	return body, size, contentType, *property.PhotoKey, nil
+}
+
+// SetPropertyPhoto replaces the object photo (ADR 0065, one image per
+// entity): the processed upload lands under a fresh UUID key, the columns
+// flip in the same transaction, and the previous object is removed
+// best-effort after the commit. Edits are gated by the ADR 0028 edit
+// capability; an archived object accepts no photo changes, its photo stays
+// readable.
+func (s *PropertyService) SetPropertyPhoto(
+	ctx context.Context, actor, propertyID uuid.UUID, processed photo.Processed,
 ) (domain.Property, error) {
-	if err := validatePhotoUpload(contentType, size); err != nil {
+	key, err := photo.NewKey(processed.ContentType)
+	if err != nil {
 		return domain.Property{}, err
 	}
 
@@ -1618,21 +1614,25 @@ func (s *PropertyService) AddPropertyPhoto(
 		return domain.Property{}, err
 	}
 
-	var property domain.Property
+	var (
+		property domain.Property
+		oldKey   *string
+	)
 	err = s.runInTx(ctx, func(stores *txStores) error {
 		var err error
 		property, err = lockEditableProperty(ctx, stores.repo, propertyID)
 		if err != nil {
 			return err
 		}
+		oldKey = property.PhotoKey
 
-		if err := ensurePhotoSlotAvailable(ctx, stores, propertyID); err != nil {
-			return err
+		if err := s.photoStorage.Put(ctx, key, bytes.NewReader(processed.Data), processed.ContentType, processed.Size); err != nil {
+			return fmt.Errorf("put property photo: %w", err)
 		}
 
-		photoID, err := s.storePropertyPhoto(ctx, stores, propertyID, file, contentType, size)
+		property, err = stores.repo.SetPropertyPhoto(ctx, propertyID, property.OwnerID, &key, &processed.ContentType)
 		if err != nil {
-			return err
+			return fmt.Errorf("set property photo: %w", err)
 		}
 
 		if err := stores.audit.Record(ctx, auditdomain.Entry{
@@ -1640,7 +1640,7 @@ func (s *PropertyService) AddPropertyPhoto(
 			ActorRole:  sharedpolicy.AuditActorRole(role),
 			Action:     auditdomain.ActionPropertyPhotoAdded,
 			EntityType: auditdomain.EntityPropertyPhoto,
-			EntityID:   &photoID,
+			EntityID:   &propertyID,
 			Context:    map[string]any{"property_id": propertyID},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
@@ -1652,87 +1652,42 @@ func (s *PropertyService) AddPropertyPhoto(
 		return nil
 	})
 	if err != nil {
+		// The new object may have landed before a later step failed: it is
+		// unreferenced — remove it the same best-effort way as the replaced
+		// one.
+		s.cleanupPropertyPhoto(ctx, key)
 		return domain.Property{}, err
 	}
-	s.publishChanged(ctx, actor, propertyID, true)
-
-	photos, err := s.photoRepo.GetByPropertyID(ctx, propertyID)
-	if err != nil {
-		return domain.Property{}, fmt.Errorf("load photos: %w", err)
+	if oldKey != nil {
+		s.cleanupPropertyPhoto(ctx, *oldKey)
 	}
-	property.Photos = photos
+	s.publishChanged(ctx, actor, propertyID, true)
 
 	return property, nil
 }
 
-// validatePhotoUpload checks the upload's content type and byte size against
-// the photo constraints before any authorization or transaction work.
-func validatePhotoUpload(contentType string, size int64) error {
-	if _, ok := allowedPhotoContentTypes[contentType]; !ok {
-		return fmt.Errorf("%w: unsupported content type %q", ErrInvalidInput, contentType)
-	}
-	if size > MaxPhotoSize {
-		return NewPhotoTooLargeError(size)
-	}
-	return nil
-}
-
-// ensurePhotoSlotAvailable enforces the per-property photo limit.
-func ensurePhotoSlotAvailable(ctx context.Context, stores *txStores, propertyID uuid.UUID) error {
-	count, err := stores.photos.CountByPropertyID(ctx, propertyID)
-	if err != nil {
-		return fmt.Errorf("count photos: %w", err)
-	}
-	if count >= maxPhotoCount {
-		return ErrPhotoLimitReached
-	}
-	return nil
-}
-
-// storePropertyPhoto uploads the photo bytes to storage and persists the photo
-// row, returning the new photo id. The storage key is derived from the id and
-// the content-type extension, never from the client-supplied filename.
-func (s *PropertyService) storePropertyPhoto(
-	ctx context.Context, stores *txStores, propertyID uuid.UUID,
-	file io.Reader, contentType string, size int64,
-) (uuid.UUID, error) {
-	photoID, err := uuid.NewV7()
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("generate photo id: %w", err)
-	}
-
-	ext := allowedPhotoContentTypes[contentType]
-	key := fmt.Sprintf("%s/%s/%s%s", photoKeyPrefix, propertyID.String(), photoID.String(), ext)
-	photoURL, err := s.photoStorage.Upload(ctx, key, contentType, size, file)
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("upload photo: %w", err)
-	}
-
-	if _, err := stores.photos.Create(ctx, photoID, propertyID, photoURL); err != nil {
-		return uuid.Nil, fmt.Errorf("create photo record: %w", err)
-	}
-	return photoID, nil
-}
-
-// DeletePropertyPhoto removes a photo record from the database and then deletes
-// the file from storage on a best-effort basis. The DB record is the source of
-// truth; if storage cleanup fails, the operation still succeeds and the orphan
-// object is logged for later cleanup.
-func (s *PropertyService) DeletePropertyPhoto(ctx context.Context, actor, propertyID, photoID uuid.UUID) error {
+// DeletePropertyPhoto clears the photo columns; clearing an absent photo is
+// ErrPhotoNotFound — the transport's 404. The object removal stays
+// best-effort after the commit.
+func (s *PropertyService) DeletePropertyPhoto(ctx context.Context, actor, propertyID uuid.UUID) (domain.Property, error) {
 	role, err := s.policy.RoleForProperty(ctx, actor, propertyID)
 	if err != nil {
-		return fmt.Errorf("resolve role: %w", err)
+		return domain.Property{}, fmt.Errorf("resolve role: %w", err)
 	}
 	if role == sharedpolicy.RoleNone {
-		return ErrNotFound
+		return domain.Property{}, ErrNotFound
 	}
 	if !sharedpolicy.CanEdit(role) {
-		return ErrForbidden
+		return domain.Property{}, ErrForbidden
 	}
 
-	var photo domain.Photo
+	var (
+		property domain.Property
+		oldKey   *string
+	)
 	err = s.runInTx(ctx, func(stores *txStores) error {
-		property, err := stores.repo.GetByIDForUpdate(ctx, propertyID)
+		var err error
+		property, err = stores.repo.GetByIDForUpdate(ctx, propertyID)
 		if err != nil {
 			if errors.Is(err, ErrNotFound) {
 				return ErrNotFound
@@ -1744,16 +1699,14 @@ func (s *PropertyService) DeletePropertyPhoto(ctx context.Context, actor, proper
 			return ErrArchivedProperty
 		}
 
-		photo, err = stores.photos.GetByIDAndPropertyID(ctx, photoID, propertyID)
-		if err != nil {
-			if errors.Is(err, ErrNotFound) {
-				return ErrNotFound
-			}
-			return fmt.Errorf("get photo: %w", err)
+		if property.PhotoKey == nil {
+			return ErrPhotoNotFound
 		}
+		oldKey = property.PhotoKey
 
-		if err := stores.photos.Delete(ctx, photoID); err != nil {
-			return fmt.Errorf("delete photo record: %w", err)
+		property, err = stores.repo.SetPropertyPhoto(ctx, propertyID, property.OwnerID, nil, nil)
+		if err != nil {
+			return fmt.Errorf("set property photo: %w", err)
 		}
 
 		if err := stores.audit.Record(ctx, auditdomain.Entry{
@@ -1761,7 +1714,7 @@ func (s *PropertyService) DeletePropertyPhoto(ctx context.Context, actor, proper
 			ActorRole:  sharedpolicy.AuditActorRole(role),
 			Action:     auditdomain.ActionPropertyPhotoDeleted,
 			EntityType: auditdomain.EntityPropertyPhoto,
-			EntityID:   &photoID,
+			EntityID:   &propertyID,
 			Context:    map[string]any{"property_id": propertyID},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
@@ -1773,28 +1726,31 @@ func (s *PropertyService) DeletePropertyPhoto(ctx context.Context, actor, proper
 		return nil
 	})
 	if err != nil {
-		return err
+		return domain.Property{}, err
+	}
+	if oldKey != nil {
+		s.cleanupPropertyPhoto(ctx, *oldKey)
 	}
 	s.publishChanged(ctx, actor, propertyID, true)
 
-	key, err := photoStorageKey(propertyID, photoID, photo.URL)
-	if err != nil {
-		s.logger.WarnContext(ctx, "failed to derive storage key for photo cleanup",
-			"property_id", propertyID.String(),
-			"photo_id", photoID.String(),
-			"error", err.Error())
-		return nil
-	}
+	return property, nil
+}
 
-	if err := s.photoStorage.Delete(ctx, key); err != nil {
-		s.logger.WarnContext(ctx, "failed to delete photo from storage, record already removed",
-			"property_id", propertyID.String(),
-			"photo_id", photoID.String(),
-			"key", key,
-			"error", err.Error())
+func derefString(s *string) string {
+	if s == nil {
+		return ""
 	}
+	return *s
+}
 
-	return nil
+// accessFailure maps a resolved role without the capability onto the error
+// vocabulary: the suspended membership is the one distinguishable signal,
+// everything else stays the privacy 404.
+func (s *PropertyService) accessFailure(role sharedpolicy.Role) error {
+	if role == sharedpolicy.RoleSuspended {
+		return ErrAccessSuspended
+	}
+	return ErrNotFound
 }
 
 // auditFieldsKey is the audit context key listing the mutated fields.
@@ -1802,40 +1758,6 @@ const auditFieldsKey = "fields"
 
 func sanitizeError(err error) string {
 	return sanitize.Error(err)
-}
-
-func photoStorageKey(propertyID, photoID uuid.UUID, photoURL string) (string, error) {
-	parsed, err := url.Parse(photoURL)
-	if err != nil {
-		return "", fmt.Errorf("parse photo url: %w", err)
-	}
-	ext := path.Ext(parsed.Path)
-	if ext == "" {
-		return "", errors.New("could not determine extension from photo url path")
-	}
-	return fmt.Sprintf("%s/%s/%s%s", photoKeyPrefix, propertyID.String(), photoID.String(), ext), nil
-}
-
-// withPhotos loads and attaches photos to the given properties.
-func (s *PropertyService) withPhotos(ctx context.Context, properties ...domain.Property) ([]domain.Property, error) {
-	if len(properties) == 0 {
-		return properties, nil
-	}
-
-	ids := make([]uuid.UUID, len(properties))
-	for i, p := range properties {
-		ids[i] = p.ID
-	}
-
-	photosByProperty, err := s.photoRepo.GetByPropertyIDs(ctx, ids)
-	if err != nil {
-		return nil, fmt.Errorf("load photos: %w", err)
-	}
-
-	for i := range properties {
-		properties[i].Photos = photosByProperty[properties[i].ID]
-	}
-	return properties, nil
 }
 
 func isUpdatableStatusTransition(from, to domain.PropertyStatus) bool {

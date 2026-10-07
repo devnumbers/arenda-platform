@@ -101,8 +101,6 @@ type Config struct {
 	PhotoStorageBucket                  string
 	PhotoStorageAccessKey               string
 	PhotoStorageSecretKey               string
-	PhotoStoragePublicBaseURL           string
-	PhotoStoragePathStyle               bool
 	PhotoStorageProvider                string
 	PhotoStorageS3Enabled               bool
 	EmailSender                         string
@@ -943,24 +941,16 @@ func (c *Config) loadPhotoStorage() error {
 	c.PhotoStorageBucket = os.Getenv("REGRU_S3_BUCKET")
 	c.PhotoStorageAccessKey = os.Getenv("REGRU_S3_ACCESS_KEY")
 	c.PhotoStorageSecretKey = os.Getenv("REGRU_S3_SECRET_KEY")
-	c.PhotoStoragePublicBaseURL = os.Getenv("REGRU_S3_PUBLIC_BASE_URL")
 	c.PhotoStorageProvider = strings.ToLower(strings.TrimSpace(os.Getenv("PHOTO_STORAGE_PROVIDER")))
 
-	c.PhotoStoragePathStyle = true
-	if v := os.Getenv("REGRU_S3_PATH_STYLE"); v != "" {
-		b, err := strconv.ParseBool(v)
-		if err != nil {
-			return fmt.Errorf("invalid REGRU_S3_PATH_STYLE %q: %w", v, err)
-		}
-		c.PhotoStoragePathStyle = b
-	}
-
+	// ADR 0065: no public base URL — the photos stream through the backend;
+	// path-style addressing is mandatory on Рег.ру and hardcoded in the
+	// adapter (research #1218).
 	s3Fields := []string{
 		c.PhotoStorageEndpoint,
 		c.PhotoStorageBucket,
 		c.PhotoStorageAccessKey,
 		c.PhotoStorageSecretKey,
-		c.PhotoStoragePublicBaseURL,
 	}
 	s3Complete := !slices.Contains(s3Fields, "")
 	if c.PhotoStorageProvider == "" {
@@ -973,12 +963,11 @@ func (c *Config) loadPhotoStorage() error {
 	switch c.PhotoStorageProvider {
 	case providerFake:
 		c.PhotoStorageS3Enabled = false
-		c.PhotoStoragePublicBaseURL = strings.TrimRight(c.AppBaseURL, "/") + "/uploads"
 	case "s3":
 		if !s3Complete {
 			return fmt.Errorf(
-				"REGRU_S3_ENDPOINT, REGRU_S3_BUCKET, REGRU_S3_ACCESS_KEY, REGRU_S3_SECRET_KEY "+
-					"and REGRU_S3_PUBLIC_BASE_URL are required for PHOTO_STORAGE_PROVIDER=s3 "+
+				"REGRU_S3_ENDPOINT, REGRU_S3_BUCKET, REGRU_S3_ACCESS_KEY and REGRU_S3_SECRET_KEY "+
+					"are required for PHOTO_STORAGE_PROVIDER=s3 "+
 					"and APP_ENV=%s; set PHOTO_STORAGE_PROVIDER=fake only for temporary "+
 					"launches without photo uploads", c.AppEnv)
 		}

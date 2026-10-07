@@ -27,10 +27,12 @@ var (
 
 	ErrAddressSuggestFailed = errors.New("address suggestion request failed")
 
-	ErrArchivedProperty  = errors.New("cannot modify an archived property")
-	ErrAlreadyArchived   = errors.New("property is already archived")
-	ErrNotArchived       = errors.New("property is not archived")
-	ErrPhotoLimitReached = errors.New("property photo limit reached")
+	ErrArchivedProperty = errors.New("cannot modify an archived property")
+	ErrAlreadyArchived  = errors.New("property is already archived")
+	ErrNotArchived      = errors.New("property is not archived")
+	// ErrPhotoNotFound marks a photo request for an object that has no
+	// photo (ADR 0065) — the privacy-preserving 404 of the serving endpoint.
+	ErrPhotoNotFound = errors.New("property: photo not found")
 	// ErrPropertyOccupied is returned when the owner deletes a property that
 	// still has an unfinished rental (issue #632, wire code
 	// property_occupied): the rental must be completed first — the path the

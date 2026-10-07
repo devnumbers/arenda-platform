@@ -358,15 +358,10 @@ const listHistoryFilterObjects = `-- name: ListHistoryFilterObjects :many
 SELECT p.id,
        p.name,
        p.address,
-       COALESCE(ph.url, '') AS photo_url
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     END, '')::text AS photo_url
 FROM properties p
-LEFT JOIN LATERAL (
-    SELECT pp.url
-    FROM property_photos pp
-    WHERE pp.property_id = p.id
-    ORDER BY pp.created_at, pp.id
-    LIMIT 1
-) ph ON true
 WHERE actor_can_read_property(p.id, $1::uuid)
   AND ($2::text = ''
        OR p.id = ANY(string_to_array($2::text, ',')::uuid[]))
@@ -386,9 +381,11 @@ type ListHistoryFilterObjectsRow struct {
 }
 
 // Объекты области для шита фильтров: те же свойства, что отдаёт лента,
-// плюс фото-аватар карточки — первое по времени фото (канон #582);
-// ” = фото нет (COALESCE: sqlc верит NOT NULL колонке, а lateral LEFT
-// JOIN промахивается в NULL). Сужение property_ids — тот же фильтр ленты.
+// плюс фото-аватар карточки (канон #582). С приватными фото (ADR 0065,
+// #1227) аватар один на объект и живёт в properties.photo_key; наружу —
+// относительный same-origin путь стриминга через бэкенд.
+// ” = фото нет (COALESCE: sqlc верит NOT NULL колонке, а CASE по NULL-ключу
+// промахивается в NULL). Сужение property_ids — тот же фильтр ленты.
 func (q *Queries) ListHistoryFilterObjects(ctx context.Context, arg ListHistoryFilterObjectsParams) ([]ListHistoryFilterObjectsRow, error) {
 	rows, err := q.db.Query(ctx, listHistoryFilterObjects, arg.Actor, arg.PropertyIds)
 	if err != nil {

@@ -55,6 +55,10 @@ const (
 	// attempt, mirroring ActionAuthPhoneChangeFailed (issue #721).
 	ActionAuthEmailChangeFailed Action = "auth.email_change_failed"
 	ActionProfileUpdated        Action = "profile.updated"
+	// ActionProfilePhotoAdded/Deleted record the profile photo writes
+	// (ADR 0065, ticket #1227): in-tx fail-safe, ids only.
+	ActionProfilePhotoAdded   Action = "profile.photo_added"
+	ActionProfilePhotoDeleted Action = "profile.photo_deleted"
 
 	ActionPropertyCreated        Action = "property.created"
 	ActionPropertyUpdated        Action = "property.updated"
@@ -168,6 +172,10 @@ const (
 	ActionContactCreated Action = "contact.created"
 	ActionContactUpdated Action = "contact.updated"
 	ActionContactDeleted Action = "contact.deleted"
+	// ActionContactPhotoAdded/Deleted record the card photo writes (ADR
+	// 0065, ticket #1227): in-tx fail-safe, ids only.
+	ActionContactPhotoAdded   Action = "contact.photo_added"
+	ActionContactPhotoDeleted Action = "contact.photo_deleted"
 
 	// ActionRentalCreated and its neighbours record the Rentals context user
 	// mutations (ADR 0053 §3, ticket #529): in-tx fail-safe. There is no
@@ -216,9 +224,13 @@ const (
 type EntityType string
 
 const (
-	EntityUser            EntityType = "user"
-	EntityProperty        EntityType = "property"
-	EntityPropertyPhoto   EntityType = "property_photo"
+	EntityUser          EntityType = "user"
+	EntityProperty      EntityType = "property"
+	EntityPropertyPhoto EntityType = "property_photo"
+	// EntityProfilePhoto and EntityContactPhoto are the single-photo slots
+	// of the profile and the contact card (ADR 0065, ticket #1227).
+	EntityProfilePhoto    EntityType = "profile_photo"
+	EntityContactPhoto    EntityType = "contact_photo"
 	EntityPropertyContact EntityType = "property_contact"
 	EntityPropertyMember  EntityType = "property_member"
 	// EntityPropertyMemberInvitation is a pending email invitation to shared

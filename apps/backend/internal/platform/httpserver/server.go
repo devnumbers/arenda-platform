@@ -48,6 +48,7 @@ type Deps struct {
 	PhoneChange          identityhttp.PhoneChanger
 	EmailChange          identityhttp.EmailChanger
 	Profile              identityhttp.Profiler
+	ProfilePhotos        identityhttp.ProfilePhotos
 	Logout               identityhttp.Logout
 	Sessions             identityhttp.SessionLister
 	SessionLoader        httpsupport.SessionLoader
@@ -202,6 +203,7 @@ func New(deps Deps) http.Handler {
 		deps.PhoneChange,
 		deps.EmailChange,
 		deps.Profile,
+		deps.ProfilePhotos,
 		deps.Logout,
 		deps.Sessions,
 		deps.CookieSecure,

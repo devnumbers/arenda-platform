@@ -129,9 +129,15 @@ type Property struct {
 	Description string
 	Attributes  Attributes
 	Status      PropertyStatus
-	Photos      []Photo
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	// PhotoKey is the storage key of the object photo (ADR 0065): nil — no
+	// photo, a key — the private object streamed by
+	// GET /api/v1/properties/{id}/photo. The content type travels alongside
+	// (PhotoContentType) — the sniffed value of the upload, not a client
+	// header.
+	PhotoKey         *string
+	PhotoContentType *string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 	// MembersCount is the shared-access participant count: membership rows
 	// (any status; the owner is never a membership row) plus pending email
 	// invitations (issue #163). Filled by the read queries that carry the
@@ -168,12 +174,6 @@ type Property struct {
 	// as SharedSuspendedMembership.OwnerEmail (#702); empty otherwise (the
 	// owner, a resolver failure, an owner without an email).
 	OwnerEmail string
-}
-
-// Photo is a photo attached to a property.
-type Photo struct {
-	ID  uuid.UUID
-	URL string
 }
 
 var (

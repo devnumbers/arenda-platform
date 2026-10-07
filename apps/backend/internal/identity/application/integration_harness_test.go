@@ -19,6 +19,7 @@ import (
 	pgdb "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/testdb"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/objectstorage"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -177,7 +178,7 @@ func newIntegrationHarness(t *testing.T) *integrationHarness {
 			Hasher:     enc,
 			Logger:     logger,
 		}),
-		profile: identityapp.NewProfileService(factory),
+		profile: identityapp.NewProfileService(factory, objectstorage.NewFakeStorage(), slog.New(slog.DiscardHandler)),
 		logout: identityapp.NewLogoutService(factory, identityapp.LogoutServiceConfig{
 			Hasher: enc,
 			Logger: slog.New(slog.DiscardHandler),

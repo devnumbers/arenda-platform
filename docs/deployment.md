@@ -178,10 +178,9 @@ Push в GHCR из workflow идёт под встроенным `GITHUB_TOKEN` (
   Для `AddCard` redirect-поля находятся вне официальной схемы API и исключены из
   подписи токена (prod-инцидент, error 204). Документированный fallback —
   настройка Success/Fail Add Card URL в параметрах терминала.
-- Если `REGRU_S3_PUBLIC_BASE_URL` указывает на `https://cdn.rentlee.ru`
-  (актуально только при `PHOTO_STORAGE_PROVIDER=s3`), этот DNS/публичный URL
-  должен быть настроен до запуска backend; иначе указать рабочий публичный URL
-  REG.RU S3.
+- Приватные фото (ADR 0065) стримят через backend: публичный URL бакета и
+  CDN не нужны, бакет остаётся закрытым по умолчанию. Бакет и ключи Рег.ру —
+  тикет #1222.
 - `PHOTO_STORAGE_PROVIDER=s3` включает REG.RU S3 и требует заполненные
   `REGRU_S3_*` значения. `REGRU_S3_*` также используются пайплайном для
   off-site копии дампов БД (endpoint/bucket/access/secret key).

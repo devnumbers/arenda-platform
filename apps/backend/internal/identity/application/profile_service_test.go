@@ -3,12 +3,14 @@ package application
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"testing"
 
 	"github.com/google/uuid"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/objectstorage"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -42,7 +44,7 @@ func newProfileHarness(t *testing.T) *profileHarness {
 	t.Helper()
 	stores := newFakeStores()
 	audit := &recordingRecorder{}
-	svc := NewProfileService(stores.factory(audit))
+	svc := NewProfileService(stores.factory(audit), objectstorage.NewFakeStorage(), slog.New(slog.DiscardHandler))
 	return &profileHarness{fakeStores: stores, svc: svc, audit: audit}
 }
 
@@ -196,7 +198,7 @@ func TestProfileService_UsesRunInTx(t *testing.T) {
 	sessions := newFakeSessionRepo()
 	beginner := &fakeBeginner{}
 	factory := NewTxStoreFactory(users, codes, attempts, sessions, newFakeGrantRepo(), &recordingRecorder{}, &fakeUoW{beginner: beginner})
-	svc := NewProfileService(factory)
+	svc := NewProfileService(factory, objectstorage.NewFakeStorage(), slog.New(slog.DiscardHandler))
 	seedProfileUser(t, users.fakeUserRepo)
 
 	if _, err := svc.UpdateProfile(context.Background(),

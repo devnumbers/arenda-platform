@@ -1,20 +1,20 @@
 -- name: GetUserByID :one
-SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone FROM users WHERE id = $1;
+SELECT * FROM users WHERE id = $1;
 
 -- name: GetUserByIDForUpdate :one
-SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone FROM users WHERE id = $1 FOR UPDATE;
+SELECT * FROM users WHERE id = $1 FOR UPDATE;
 
 -- name: GetUserByPhone :one
-SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone FROM users WHERE phone = $1;
+SELECT * FROM users WHERE phone = $1;
 
 -- name: GetUserByPhoneForUpdate :one
-SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone FROM users WHERE phone = $1 FOR UPDATE;
+SELECT * FROM users WHERE phone = $1 FOR UPDATE;
 
 -- name: GetUserByEmail :one
-SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone FROM users WHERE LOWER(email) = LOWER($1::text);
+SELECT * FROM users WHERE LOWER(email) = LOWER($1::text);
 
 -- name: GetUserByEmailForUpdate :one
-SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone FROM users WHERE LOWER(email) = LOWER($1::text) FOR UPDATE;
+SELECT * FROM users WHERE LOWER(email) = LOWER($1::text) FOR UPDATE;
 
 -- name: CreateUser :one
 INSERT INTO users (id, phone, role, phone_encrypted, email, email_verified_at)
@@ -203,7 +203,7 @@ SET name = $2,
     timezone = $7,
     updated_at = now()
 WHERE id = $1
-RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone;
+RETURNING *;
 
 -- name: UpdateUserPhone :one
 UPDATE users
@@ -211,7 +211,7 @@ SET phone = $2,
     phone_encrypted = $3,
     updated_at = now()
 WHERE id = $1
-RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone;
+RETURNING *;
 
 -- name: UpdateUserEmailVerified :one
 UPDATE users
@@ -219,14 +219,14 @@ SET email = $2,
     email_verified_at = $3,
     updated_at = now()
 WHERE id = $1
-RETURNING id, phone, role, name, surname, patronymic, email, email_verified_at, created_at, updated_at, phone_encrypted, timezone;
+RETURNING *;
 
 -- name: UpdateUserEmailVerifiedAt :one
 UPDATE users
 SET email_verified_at = $2,
     updated_at = now()
 WHERE id = $1
-RETURNING id, phone, role, name, surname, patronymic, email, email_verified_at, created_at, updated_at, phone_encrypted, timezone;
+RETURNING *;
 
 -- name: InsertEmailChangeGrant :exec
 INSERT INTO email_change_grants (id, user_id, email, token_hash, expires_at, created_at)
@@ -281,3 +281,14 @@ SELECT id, phone, phone_encrypted, name, surname, created_at
 FROM users
 ORDER BY created_at DESC, id DESC
 LIMIT 5;
+
+-- name: SetUserPhoto :one
+-- The profile photo write (ADR 0065, ticket #1227): the key and the sniffed
+-- content type move together; a NULL key clears the photo. Existence and the
+-- self-only access are proven by the caller under the row lock.
+UPDATE users
+SET photo_key = $2,
+    photo_content_type = $3,
+    updated_at = now()
+WHERE id = $1
+RETURNING *;

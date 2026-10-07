@@ -2,7 +2,6 @@ package application
 
 import (
 	"context"
-	"io"
 	"time"
 
 	"github.com/google/uuid"
@@ -227,6 +226,10 @@ type PropertyRepository interface {
 	// then. The scope is the property's owner — the edit capability (Owner,
 	// Full Access) is resolved by the service's policy before the call.
 	SetPin(ctx context.Context, id, scope uuid.UUID, pinnedAt *time.Time) (domain.Property, error)
+	// SetPropertyPhoto writes the photo columns in one atomic UPDATE (ADR
+	// 0065): nil clears the photo. The scope is the property's owner — the
+	// edit capability is resolved by the service's policy before the call.
+	SetPropertyPhoto(ctx context.Context, id, scope uuid.UUID, key, contentType *string) (domain.Property, error)
 	Archive(ctx context.Context, id, scope uuid.UUID) error
 	Unarchive(ctx context.Context, id, scope uuid.UUID) error
 	CountActiveByOwner(ctx context.Context, scope uuid.UUID) (int, error)
@@ -236,23 +239,4 @@ type PropertyRepository interface {
 	CountByOwnerAndType(ctx context.Context, scope uuid.UUID, propertyType domain.PropertyType) (int, error)
 	Delete(ctx context.Context, id, scope uuid.UUID) error
 	WithTx(tx transaction.Tx) PropertyRepository
-}
-
-// PhotoStorage persists uploaded property photos and returns their public URL.
-type PhotoStorage interface {
-	Upload(ctx context.Context, key, contentType string, size int64, data io.Reader) (string, error)
-	Delete(ctx context.Context, key string) error
-	HeadBucket(ctx context.Context) error
-}
-
-// PropertyPhotoRepository persists photo metadata for properties.
-type PropertyPhotoRepository interface {
-	Create(ctx context.Context, photoID, propertyID uuid.UUID, url string) (domain.Photo, error)
-	GetByID(ctx context.Context, photoID uuid.UUID) (domain.Photo, error)
-	GetByIDAndPropertyID(ctx context.Context, photoID, propertyID uuid.UUID) (domain.Photo, error)
-	GetByPropertyID(ctx context.Context, propertyID uuid.UUID) ([]domain.Photo, error)
-	GetByPropertyIDs(ctx context.Context, propertyIDs []uuid.UUID) (map[uuid.UUID][]domain.Photo, error)
-	CountByPropertyID(ctx context.Context, propertyID uuid.UUID) (int, error)
-	Delete(ctx context.Context, photoID uuid.UUID) error
-	WithTx(tx transaction.Tx) PropertyPhotoRepository
 }

@@ -3,6 +3,7 @@ package wire
 import (
 	contactspg "github.com/nambers/arenda-planform/apps/backend/internal/contacts/adapters/postgres"
 	contactsapp "github.com/nambers/arenda-planform/apps/backend/internal/contacts/application"
+	storageshared "github.com/nambers/arenda-planform/apps/backend/internal/shared/storage"
 )
 
 // Contacts holds the contacts module's service wired by WireContacts; the
@@ -18,7 +19,7 @@ type Contacts struct {
 // (ADR 0033 γ-factory) and the use case service. The policy comes from the
 // access module — contacts is wired after it, so the membership-aware policy
 // is already resolved.
-func WireContacts(p platformDeps) (*Contacts, error) {
+func WireContacts(p platformDeps, photoStorage storageshared.PhotoStorage) (*Contacts, error) {
 	contactStore := contactspg.NewContactStore(p.DB)
 	propertyStore := contactspg.NewPropertyStore(p.DB)
 
@@ -31,6 +32,6 @@ func WireContacts(p platformDeps) (*Contacts, error) {
 	)
 
 	return &Contacts{
-		ContactService: contactsapp.NewContactService(factory, p.Policy),
+		ContactService: contactsapp.NewContactService(factory, p.Policy, photoStorage),
 	}, nil
 }

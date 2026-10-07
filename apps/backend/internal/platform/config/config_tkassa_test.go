@@ -23,7 +23,6 @@ func setRequiredLocalEnv(t *testing.T) {
 	t.Setenv("REGRU_S3_BUCKET", "test-bucket")
 	t.Setenv("REGRU_S3_ACCESS_KEY", "access")
 	t.Setenv("REGRU_S3_SECRET_KEY", "secret")
-	t.Setenv("REGRU_S3_PUBLIC_BASE_URL", "https://cdn.example.com")
 }
 
 func TestTKassaTimeoutDefault(t *testing.T) {

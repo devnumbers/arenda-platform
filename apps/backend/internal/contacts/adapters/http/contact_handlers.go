@@ -18,6 +18,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/contacts/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/photo"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
@@ -30,6 +31,10 @@ type ContactManager interface {
 	GetContact(ctx context.Context, actor, id uuid.UUID) (domain.Contact, error)
 	UpdateContact(ctx context.Context, actor, id uuid.UUID, cmd application.UpdateContactCommand) (domain.Contact, error)
 	DeleteContact(ctx context.Context, actor, id uuid.UUID) error
+	PhotoDescriptor(ctx context.Context, actor, id uuid.UUID) (key, contentType string, err error)
+	OpenContactPhoto(ctx context.Context, actor, id uuid.UUID) (body io.ReadCloser, size int64, contentType, key string, err error)
+	SetContactPhoto(ctx context.Context, actor, id uuid.UUID, processed photo.Processed) (domain.Contact, error)
+	DeleteContactPhoto(ctx context.Context, actor, id uuid.UUID) (domain.Contact, error)
 }
 
 // ContactHandlers implements the generated contact endpoints.
@@ -326,9 +331,21 @@ func contactResponse(c domain.Contact) openapi.ContactResponse {
 		MessengerName:     c.MessengerName,
 		MessengerUsername: c.MessengerUsername,
 		Note:              c.Note,
+		PhotoUrl:          contactPhotoURL(c),
 		CreatedAt:         c.CreatedAt,
 		UpdatedAt:         c.UpdatedAt,
 	}
+}
+
+// contactPhotoURL is the card photo's same-origin streaming path (ADR 0065):
+// nil without a photo. The path is contract-fixed; the photo bytes are
+// served by GET /api/v1/contacts/{id}/photo.
+func contactPhotoURL(c domain.Contact) *string {
+	if c.PhotoKey == nil {
+		return nil
+	}
+	path := fmt.Sprintf("/api/v1/contacts/%s/photo", c.ID)
+	return &path
 }
 
 // listContactResponse maps the list projection onto the wire response: the

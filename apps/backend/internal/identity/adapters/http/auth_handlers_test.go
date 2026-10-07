@@ -54,7 +54,7 @@ func (f *fakeAuthenticator) VerifyCode(
 }
 
 func newTestAuthHandlers(auth Authenticator) *AuthHandlers {
-	return NewAuthHandlers(auth, nil, nil, nil, nil, nil, false, slog.New(slog.DiscardHandler), AuthRateLimits{}, nil)
+	return NewAuthHandlers(auth, nil, nil, nil, nil, nil, nil, false, slog.New(slog.DiscardHandler), AuthRateLimits{}, nil)
 }
 
 func doJSON(t *testing.T, handler http.HandlerFunc, path, body string) *httptest.ResponseRecorder {

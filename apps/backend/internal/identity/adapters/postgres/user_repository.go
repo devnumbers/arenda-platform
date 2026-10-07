@@ -223,7 +223,24 @@ func (r *UserRepository) UpdateEmailVerified(
 		}
 		return domain.User{}, fmt.Errorf("update user email verified: %w", err)
 	}
-	return mapUser(ctx, r.enc, userSourceFromUpdateEmailVerified(row).toUserRow())
+	return mapUser(ctx, r.enc, userSourceFromUser(row).toUserRow())
+}
+
+// SetPhoto writes the profile photo columns (ADR 0065): the key and the
+// sniffed content type move together, nils clear the photo.
+func (r *UserRepository) SetPhoto(ctx context.Context, id uuid.UUID, key, contentType *string) (domain.User, error) {
+	row, err := r.q().SetUserPhoto(ctx, pgen.SetUserPhotoParams{
+		ID:               pgconv.UUIDToPgtype(id),
+		PhotoKey:         pgconv.StringPtrToPgtype(key),
+		PhotoContentType: pgconv.StringPtrToPgtype(contentType),
+	})
+	if err != nil {
+		if notFound(err) {
+			return domain.User{}, application.ErrNotFound
+		}
+		return domain.User{}, fmt.Errorf("set user photo: %w", err)
+	}
+	return mapUser(ctx, r.enc, userSourceFromUser(row).toUserRow())
 }
 
 func (r *UserRepository) MarkEmailVerified(
@@ -241,7 +258,7 @@ func (r *UserRepository) MarkEmailVerified(
 		}
 		return domain.User{}, fmt.Errorf("mark user email verified: %w", err)
 	}
-	return mapUser(ctx, r.enc, userSourceFromUpdateEmailVerifiedAt(row).toUserRow())
+	return mapUser(ctx, r.enc, userSourceFromUser(row).toUserRow())
 }
 
 func mapUser(ctx context.Context, enc encryption.Encryptor, row userRow) (domain.User, error) {
@@ -269,15 +286,17 @@ func mapUser(ctx context.Context, enc encryption.Encryptor, row userRow) (domain
 		return domain.User{}, fmt.Errorf("invalid timezone from DB: %w", err)
 	}
 	return domain.User{
-		ID:              pgconv.UUIDFromPgtype(row.ID),
-		Phone:           phone,
-		Role:            role,
-		Name:            pgconv.TextToPtrString(row.Name),
-		Surname:         pgconv.TextToPtrString(row.Surname),
-		Patronymic:      pgconv.TextToPtrString(row.Patronymic),
-		Email:           email,
-		EmailVerifiedAt: pgconv.TimestamptzToPtrTime(row.EmailVerifiedAt),
-		Timezone:        tz,
+		ID:               pgconv.UUIDFromPgtype(row.ID),
+		Phone:            phone,
+		Role:             role,
+		Name:             pgconv.TextToPtrString(row.Name),
+		Surname:          pgconv.TextToPtrString(row.Surname),
+		Patronymic:       pgconv.TextToPtrString(row.Patronymic),
+		Email:            email,
+		EmailVerifiedAt:  pgconv.TimestamptzToPtrTime(row.EmailVerifiedAt),
+		Timezone:         tz,
+		PhotoKey:         pgconv.TextToPtrString(row.PhotoKey),
+		PhotoContentType: pgconv.TextToPtrString(row.PhotoContentType),
 	}, nil
 }
 

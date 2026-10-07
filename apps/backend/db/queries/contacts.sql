@@ -200,3 +200,15 @@ SELECT id, owner_id FROM properties WHERE id = $1;
 -- name: CountContactsAdmin :one
 SELECT COUNT(*) FROM contacts
 WHERE property_id = $1;
+
+-- name: SetContactPhoto :one
+-- The card photo write (ADR 0065, ticket #1227): the key and the sniffed
+-- content type move together; a NULL key clears the photo. The full-row
+-- rewrite of the editable fields is untouched — the photo is not an
+-- UpdateContact field. Existence and the edit capability are proven by the
+-- caller; the scope is the book owner (ADR 0028).
+UPDATE contacts
+SET photo_key = $3,
+    photo_content_type = $4
+WHERE id = $1 AND owner_id = $2
+RETURNING *;

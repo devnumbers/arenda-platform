@@ -43,7 +43,7 @@ func (q *Queries) DeleteContact(ctx context.Context, arg DeleteContactParams) (i
 
 const getContactByID = `-- name: GetContactByID :one
 
-SELECT id, owner_id, property_id, first_name, last_name, patronymic, role, phone, email, messenger_name, messenger_username, note, created_at, updated_at FROM contacts
+SELECT id, owner_id, property_id, first_name, last_name, patronymic, role, phone, email, messenger_name, messenger_username, note, created_at, updated_at, photo_key, photo_content_type FROM contacts
 WHERE id = $1
 `
 
@@ -71,6 +71,8 @@ func (q *Queries) GetContactByID(ctx context.Context, id pgtype.UUID) (Contact, 
 		&i.Note,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PhotoKey,
+		&i.PhotoContentType,
 	)
 	return i, err
 }
@@ -97,7 +99,7 @@ const insertContact = `-- name: InsertContact :one
 INSERT INTO contacts (id, owner_id, property_id, first_name, last_name, patronymic,
                       role, phone, email, messenger_name, messenger_username, note)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-RETURNING id, owner_id, property_id, first_name, last_name, patronymic, role, phone, email, messenger_name, messenger_username, note, created_at, updated_at
+RETURNING id, owner_id, property_id, first_name, last_name, patronymic, role, phone, email, messenger_name, messenger_username, note, created_at, updated_at, photo_key, photo_content_type
 `
 
 type InsertContactParams struct {
@@ -146,12 +148,14 @@ func (q *Queries) InsertContact(ctx context.Context, arg InsertContactParams) (C
 		&i.Note,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PhotoKey,
+		&i.PhotoContentType,
 	)
 	return i, err
 }
 
 const listContacts = `-- name: ListContacts :many
-SELECT c.id, c.owner_id, c.property_id, c.first_name, c.last_name, c.patronymic, c.role, c.phone, c.email, c.messenger_name, c.messenger_username, c.note, c.created_at, c.updated_at, p.name AS property_name
+SELECT c.id, c.owner_id, c.property_id, c.first_name, c.last_name, c.patronymic, c.role, c.phone, c.email, c.messenger_name, c.messenger_username, c.note, c.created_at, c.updated_at, c.photo_key, c.photo_content_type, p.name AS property_name
 FROM contacts c
 LEFT JOIN properties p ON p.id = c.property_id
 WHERE (
@@ -293,6 +297,8 @@ type ListContactsRow struct {
 	Note              pgtype.Text        `json:"note"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	PhotoKey          pgtype.Text        `json:"photo_key"`
+	PhotoContentType  pgtype.Text        `json:"photo_content_type"`
 	PropertyName      pgtype.Text        `json:"property_name"`
 }
 
@@ -367,6 +373,8 @@ func (q *Queries) ListContacts(ctx context.Context, arg ListContactsParams) ([]L
 			&i.Note,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.PhotoKey,
+			&i.PhotoContentType,
 			&i.PropertyName,
 		); err != nil {
 			return nil, err
@@ -380,7 +388,7 @@ func (q *Queries) ListContacts(ctx context.Context, arg ListContactsParams) ([]L
 }
 
 const listContactsAdmin = `-- name: ListContactsAdmin :many
-SELECT id, owner_id, property_id, first_name, last_name, patronymic, role, phone, email, messenger_name, messenger_username, note, created_at, updated_at
+SELECT id, owner_id, property_id, first_name, last_name, patronymic, role, phone, email, messenger_name, messenger_username, note, created_at, updated_at, photo_key, photo_content_type
 FROM contacts
 WHERE property_id = $1
 ORDER BY created_at ASC, id ASC
@@ -419,6 +427,8 @@ func (q *Queries) ListContactsAdmin(ctx context.Context, arg ListContactsAdminPa
 			&i.Note,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.PhotoKey,
+			&i.PhotoContentType,
 		); err != nil {
 			return nil, err
 		}
@@ -428,6 +438,55 @@ func (q *Queries) ListContactsAdmin(ctx context.Context, arg ListContactsAdminPa
 		return nil, err
 	}
 	return items, nil
+}
+
+const setContactPhoto = `-- name: SetContactPhoto :one
+UPDATE contacts
+SET photo_key = $3,
+    photo_content_type = $4
+WHERE id = $1 AND owner_id = $2
+RETURNING id, owner_id, property_id, first_name, last_name, patronymic, role, phone, email, messenger_name, messenger_username, note, created_at, updated_at, photo_key, photo_content_type
+`
+
+type SetContactPhotoParams struct {
+	ID               pgtype.UUID `json:"id"`
+	OwnerID          pgtype.UUID `json:"owner_id"`
+	PhotoKey         pgtype.Text `json:"photo_key"`
+	PhotoContentType pgtype.Text `json:"photo_content_type"`
+}
+
+// The card photo write (ADR 0065, ticket #1227): the key and the sniffed
+// content type move together; a NULL key clears the photo. The full-row
+// rewrite of the editable fields is untouched — the photo is not an
+// UpdateContact field. Existence and the edit capability are proven by the
+// caller; the scope is the book owner (ADR 0028).
+func (q *Queries) SetContactPhoto(ctx context.Context, arg SetContactPhotoParams) (Contact, error) {
+	row := q.db.QueryRow(ctx, setContactPhoto,
+		arg.ID,
+		arg.OwnerID,
+		arg.PhotoKey,
+		arg.PhotoContentType,
+	)
+	var i Contact
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.PropertyID,
+		&i.FirstName,
+		&i.LastName,
+		&i.Patronymic,
+		&i.Role,
+		&i.Phone,
+		&i.Email,
+		&i.MessengerName,
+		&i.MessengerUsername,
+		&i.Note,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PhotoKey,
+		&i.PhotoContentType,
+	)
+	return i, err
 }
 
 const updateContact = `-- name: UpdateContact :one
@@ -443,7 +502,7 @@ UPDATE contacts SET
     messenger_username = $11,
     note = $12
 WHERE id = $1 AND owner_id = $2
-RETURNING id, owner_id, property_id, first_name, last_name, patronymic, role, phone, email, messenger_name, messenger_username, note, created_at, updated_at
+RETURNING id, owner_id, property_id, first_name, last_name, patronymic, role, phone, email, messenger_name, messenger_username, note, created_at, updated_at, photo_key, photo_content_type
 `
 
 type UpdateContactParams struct {
@@ -495,6 +554,8 @@ func (q *Queries) UpdateContact(ctx context.Context, arg UpdateContactParams) (C
 		&i.Note,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PhotoKey,
+		&i.PhotoContentType,
 	)
 	return i, err
 }

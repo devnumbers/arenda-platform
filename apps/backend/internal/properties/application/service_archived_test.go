@@ -33,9 +33,8 @@ func TestPropertyService_UpdateProperty_ArchivedConflict(t *testing.T) {
 	repo := newLockingFakePropertyRepo(property)
 	svc := NewPropertyService(
 		repo,
-		fakePropertyPhotoRepo{},
-		fakePropertyPhotoStorage{},
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil),
+		newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(repo, nil),
 		fakePropertyClock{now: time.Now()},
 		testOwnerPolicy{},
 		nil,

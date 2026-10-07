@@ -5,312 +5,332 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
-	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/photo"
+	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
 
-type fakePhotoStorage struct {
-	uploadURL    string
-	uploadErr    error
-	uploadedSize int64
-}
+// The property photo use cases under the single-photo contract (ADR 0065,
+// ticket #1227): one image per object, validated by the shared upload seam
+// before these use cases ever see the bytes, streamed back through the
+// service. The TDD seams pre-agreed in the ticket — the storage port and
+// the validation — live in shared/storage and shared/photo; these tests pin
+// the service orchestration around them.
 
-func (s *fakePhotoStorage) Upload(_ context.Context, _, _ string, size int64, _ io.Reader) (string, error) {
-	s.uploadedSize = size
-	if s.uploadErr != nil {
-		return "", s.uploadErr
-	}
-	return s.uploadURL, nil
-}
-
-func (s *fakePhotoStorage) Delete(_ context.Context, _ string) error {
-	return nil
-}
-
-func (s *fakePhotoStorage) HeadBucket(_ context.Context) error {
-	return nil
-}
-
-type fakePhotoRepo struct {
-	photos      map[uuid.UUID][]domain.Photo
-	createErr   error
-	count       int
-	countErr    error
-	getErr      error
-	getByIDsErr error
-}
-
-func (r *fakePhotoRepo) Create(_ context.Context, _, propertyID uuid.UUID, url string) (domain.Photo, error) {
-	if r.createErr != nil {
-		return domain.Photo{}, r.createErr
-	}
-	photo := domain.Photo{ID: uuid.MustParse("11111111-1111-1111-1111-111111111111"), URL: url}
-	r.photos[propertyID] = append(r.photos[propertyID], photo)
-	return photo, nil
-}
-
-func (r *fakePhotoRepo) GetByPropertyID(_ context.Context, propertyID uuid.UUID) ([]domain.Photo, error) {
-	if r.getErr != nil {
-		return nil, r.getErr
-	}
-	return r.photos[propertyID], nil
-}
-
-func (r *fakePhotoRepo) GetByPropertyIDs(_ context.Context, propertyIDs []uuid.UUID) (map[uuid.UUID][]domain.Photo, error) {
-	if r.getByIDsErr != nil {
-		return nil, r.getByIDsErr
-	}
-	result := make(map[uuid.UUID][]domain.Photo, len(propertyIDs))
-	for _, id := range propertyIDs {
-		result[id] = r.photos[id]
-	}
-	return result, nil
-}
-
-func (r *fakePhotoRepo) CountByPropertyID(_ context.Context, _ uuid.UUID) (int, error) {
-	if r.countErr != nil {
-		return 0, r.countErr
-	}
-	return r.count, nil
-}
-
-func (r *fakePhotoRepo) GetByID(_ context.Context, _ uuid.UUID) (domain.Photo, error) {
-	return domain.Photo{}, nil
-}
-
-func (r *fakePhotoRepo) GetByIDAndPropertyID(_ context.Context, _, _ uuid.UUID) (domain.Photo, error) {
-	return domain.Photo{}, nil
-}
-
-func (r *fakePhotoRepo) Delete(_ context.Context, _ uuid.UUID) error {
-	return nil
-}
-
-func (r *fakePhotoRepo) WithTx(_ transaction.Tx) PropertyPhotoRepository {
-	return r
-}
-
-func newPhotoService(t *testing.T, repo PropertyRepository, photoRepo PropertyPhotoRepository, storage PhotoStorage) *PropertyService {
+// smallJPEG mints a minimal processed upload: Process has already run by
+// the time a use case is called, so the bytes only need to travel.
+func smallJPEG(t *testing.T) photo.Processed {
 	t.Helper()
-	return NewPropertyService(
+	return photo.Processed{Data: []byte("jpeg-bytes"), ContentType: photo.ContentTypeJPEG, Size: 10}
+}
+
+func photoTestProperty(ownerID uuid.UUID) domain.Property {
+	return domain.Property{
+		ID:      uuid.MustParse("22222222-2222-2222-2222-222222222222"),
+		OwnerID: ownerID,
+		Name:    testPropertyName,
+		Address: testPropertyAddress,
+		Type:    domain.PropertyTypeApartment,
+		Status:  domain.PropertyStatusActive,
+	}
+}
+
+func TestPropertyService_SetPropertyPhoto_StoresUnderUUIDKey(t *testing.T) {
+	t.Parallel()
+
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	property := photoTestProperty(ownerID)
+	repo := newLockingFakePropertyRepo(property)
+	storage := newFakePropertyPhotoStorage()
+	svc := NewPropertyService(
 		repo,
-		photoRepo,
 		storage,
-		newPropertyTestFactory(repo, photoRepo, fakeSubscriptionLimiter{limit: 10}),
+		newPropertyTestFactory(repo, nil),
 		fakePropertyClock{now: time.Now()},
 		testOwnerPolicy{},
 		nil,
 	)
-}
 
-func TestAddPropertyPhoto_InvalidContentType(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
-
-	repo := newLockingFakePropertyRepo(domain.Property{ID: propertyID, OwnerID: ownerID})
-	svc := newPhotoService(t, repo, &fakePhotoRepo{}, &fakePhotoStorage{})
-
-	_, err := svc.AddPropertyPhoto(ctx, ownerID, propertyID, bytes.NewReader([]byte("x")), "file.gif", "image/gif", 100)
-	if !errors.Is(err, ErrInvalidInput) {
-		t.Fatalf("expected ErrInvalidInput, got %v", err)
-	}
-}
-
-func TestAddPropertyPhoto_FileTooLarge(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
-
-	repo := newLockingFakePropertyRepo(domain.Property{ID: propertyID, OwnerID: ownerID})
-	svc := newPhotoService(t, repo, &fakePhotoRepo{}, &fakePhotoStorage{})
-
-	_, err := svc.AddPropertyPhoto(ctx, ownerID, propertyID, bytes.NewReader([]byte("x")), "file.jpg", "image/jpeg", MaxPhotoSize+1)
-	if !errors.Is(err, ErrInvalidInput) {
-		t.Fatalf("expected ErrInvalidInput, got %v", err)
-	}
-}
-
-func TestAddPropertyPhoto_PropertyNotFound(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
-
-	repo := newLockingFakePropertyRepo(domain.Property{})
-	svc := newPhotoService(t, repo, &fakePhotoRepo{}, &fakePhotoStorage{})
-
-	_, err := svc.AddPropertyPhoto(ctx, ownerID, propertyID, bytes.NewReader([]byte("x")), "file.jpg", "image/jpeg", 100)
-	if !errors.Is(err, ErrNotFound) {
-		t.Fatalf("expected ErrNotFound, got %v", err)
-	}
-}
-
-func TestAddPropertyPhoto_PhotoLimitReached(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
-
-	repo := newLockingFakePropertyRepo(domain.Property{ID: propertyID, OwnerID: ownerID})
-	photoRepo := &fakePhotoRepo{count: maxPhotoCount, photos: map[uuid.UUID][]domain.Photo{}}
-	svc := newPhotoService(t, repo, photoRepo, &fakePhotoStorage{})
-
-	_, err := svc.AddPropertyPhoto(ctx, ownerID, propertyID, bytes.NewReader([]byte("x")), "file.jpg", "image/jpeg", 100)
-	if !errors.Is(err, ErrPhotoLimitReached) {
-		t.Fatalf("expected ErrPhotoLimitReached, got %v", err)
-	}
-}
-
-func TestAddPropertyPhoto_Success(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
-
-	repo := newLockingFakePropertyRepo(domain.Property{ID: propertyID, OwnerID: ownerID})
-	photoRepo := &fakePhotoRepo{count: 0, photos: map[uuid.UUID][]domain.Photo{}}
-	storage := &fakePhotoStorage{uploadURL: "https://cdn.example.com/properties/22222222-2222-2222-2222-222222222222/photo.jpg"}
-	svc := newPhotoService(t, repo, photoRepo, storage)
-
-	property, err := svc.AddPropertyPhoto(ctx, ownerID, propertyID, bytes.NewReader([]byte("image-data")), "file.jpg", "image/jpeg", 100)
+	updated, err := svc.SetPropertyPhoto(context.Background(), ownerID, property.ID, smallJPEG(t))
 	if err != nil {
-		t.Fatalf("upload failed: %v", err)
+		t.Fatalf("set photo: %v", err)
 	}
 
-	if len(property.Photos) != 1 {
-		t.Fatalf("expected 1 photo, got %d", len(property.Photos))
+	if updated.PhotoKey == nil || !strings.HasPrefix(*updated.PhotoKey, "photos/") {
+		t.Fatalf("photo key = %v, want a photos/<uuid> key", updated.PhotoKey)
 	}
-	if property.Photos[0].URL != storage.uploadURL {
-		t.Errorf("photo url = %q, want %q", property.Photos[0].URL, storage.uploadURL)
+	if updated.PhotoContentType == nil || *updated.PhotoContentType != photo.ContentTypeJPEG {
+		t.Fatalf("content type = %v, want image/jpeg", updated.PhotoContentType)
 	}
-	if property.Photos[0].ID == uuid.Nil {
-		t.Error("expected non-nil photo id")
+	if len(storage.puts) != 1 || storage.puts[0] != *updated.PhotoKey {
+		t.Fatalf("storage puts = %v, want exactly the property's key", storage.puts)
+	}
+	if string(storage.objects[*updated.PhotoKey]) != "jpeg-bytes" {
+		t.Errorf("stored bytes = %q, want jpeg-bytes", storage.objects[*updated.PhotoKey])
 	}
 }
 
-func TestAddPropertyPhoto_PassesSizeToStorage(t *testing.T) {
+func TestPropertyService_SetPropertyPhoto_ReplacesOldObject(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	property := photoTestProperty(ownerID)
+	repo := newLockingFakePropertyRepo(property)
+	storage := newFakePropertyPhotoStorage()
+	svc := NewPropertyService(
+		repo,
+		storage,
+		newPropertyTestFactory(repo, nil),
+		fakePropertyClock{now: time.Now()},
+		testOwnerPolicy{},
+		nil,
+	)
 
-	repo := newLockingFakePropertyRepo(domain.Property{ID: propertyID, OwnerID: ownerID})
-	photoRepo := &fakePhotoRepo{count: 0, photos: map[uuid.UUID][]domain.Photo{}}
-	storage := &fakePhotoStorage{uploadURL: "https://cdn.example.com/properties/22222222-2222-2222-2222-222222222222/photo.jpg"}
-	svc := newPhotoService(t, repo, photoRepo, storage)
+	if _, err := svc.SetPropertyPhoto(context.Background(), ownerID, property.ID, smallJPEG(t)); err != nil {
+		t.Fatalf("set first photo: %v", err)
+	}
+	first := repo.data[property.ID].PhotoKey
+	if first == nil {
+		t.Fatal("first photo key missing")
+	}
 
-	wantSize := int64(12345)
-	_, err := svc.AddPropertyPhoto(ctx, ownerID, propertyID, bytes.NewReader([]byte("image-data")), "file.jpg", "image/jpeg", wantSize)
+	second := photo.Processed{Data: []byte("second"), ContentType: photo.ContentTypePNG, Size: 6}
+	updated, err := svc.SetPropertyPhoto(context.Background(), ownerID, property.ID, second)
 	if err != nil {
-		t.Fatalf("upload failed: %v", err)
+		t.Fatalf("set second photo: %v", err)
 	}
 
-	if storage.uploadedSize != wantSize {
-		t.Errorf("uploaded size = %d, want %d", storage.uploadedSize, wantSize)
+	if updated.PhotoKey == nil || *updated.PhotoKey == *first {
+		t.Fatalf("replacement must mint a new key, got %v", updated.PhotoKey)
+	}
+	deleted := false
+	for _, key := range storage.deletes {
+		if key == *first {
+			deleted = true
+		}
+	}
+	if !deleted {
+		t.Errorf("replaced object %s was not removed best-effort, deletes = %v", *first, storage.deletes)
 	}
 }
 
-func TestAddPropertyPhoto_UploadError(t *testing.T) {
+func TestPropertyService_SetPropertyPhoto_ViewerForbidden(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	property := photoTestProperty(ownerID)
+	repo := newLockingFakePropertyRepo(property)
+	svc := NewPropertyService(
+		repo,
+		newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(repo, nil),
+		fakePropertyClock{now: time.Now()},
+		staticRolePolicy{role: sharedpolicy.RoleViewer},
+		nil,
+	)
 
-	repo := newLockingFakePropertyRepo(domain.Property{ID: propertyID, OwnerID: ownerID})
-	storage := &fakePhotoStorage{uploadErr: errors.New("upload failed")}
-	svc := newPhotoService(t, repo, &fakePhotoRepo{photos: map[uuid.UUID][]domain.Photo{}}, storage)
+	_, err := svc.SetPropertyPhoto(context.Background(), ownerID, property.ID, smallJPEG(t))
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("err = %v, want ErrForbidden (a viewer cannot edit)", err)
+	}
+}
 
-	_, err := svc.AddPropertyPhoto(ctx, ownerID, propertyID, bytes.NewReader([]byte("x")), "file.jpg", "image/jpeg", 100)
+func TestPropertyService_SetPropertyPhoto_ArchivedRejected(t *testing.T) {
+	t.Parallel()
+
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	property := photoTestProperty(ownerID)
+	property.Status = domain.PropertyStatusArchived
+	repo := newLockingFakePropertyRepo(property)
+	storage := newFakePropertyPhotoStorage()
+	svc := NewPropertyService(
+		repo,
+		storage,
+		newPropertyTestFactory(repo, nil),
+		fakePropertyClock{now: time.Now()},
+		testOwnerPolicy{},
+		nil,
+	)
+
+	_, err := svc.SetPropertyPhoto(context.Background(), ownerID, property.ID, smallJPEG(t))
+	if !errors.Is(err, ErrArchivedProperty) {
+		t.Fatalf("err = %v, want ErrArchivedProperty", err)
+	}
+	if len(storage.puts) != 0 {
+		t.Errorf("storage puts = %v, want none (the archived guard runs before any write)", storage.puts)
+	}
+}
+
+func TestPropertyService_SetPropertyPhoto_StorageFailureKeepsRowClean(t *testing.T) {
+	t.Parallel()
+
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	property := photoTestProperty(ownerID)
+	repo := newLockingFakePropertyRepo(property)
+	storage := newFakePropertyPhotoStorage()
+	storage.putErr = errors.New("s3 down")
+	svc := NewPropertyService(
+		repo,
+		storage,
+		newPropertyTestFactory(repo, nil),
+		fakePropertyClock{now: time.Now()},
+		testOwnerPolicy{},
+		nil,
+	)
+
+	_, err := svc.SetPropertyPhoto(context.Background(), ownerID, property.ID, smallJPEG(t))
 	if err == nil {
-		t.Fatal("expected error")
+		t.Fatal("expected the storage failure to abort the mutation")
+	}
+	if repo.data[property.ID].PhotoKey != nil {
+		t.Errorf("photo key = %v, want nil (nothing persisted on a failed put)", repo.data[property.ID].PhotoKey)
 	}
 }
 
-func TestWithPhotos_AttachesPhotos(t *testing.T) {
+func TestPropertyService_PhotoDescriptor_404WithoutPhoto(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
-	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
-	photo := domain.Photo{ID: uuid.MustParse("33333333-3333-3333-3333-333333333333"), URL: "https://cdn.example.com/photo.jpg"}
-
-	repo := newLockingFakePropertyRepo(domain.Property{ID: propertyID})
-	photoRepo := &fakePhotoRepo{photos: map[uuid.UUID][]domain.Photo{propertyID: {photo}}}
-	svc := newPhotoService(t, repo, photoRepo, &fakePhotoStorage{})
-
-	properties, err := svc.withPhotos(ctx, domain.Property{ID: propertyID})
-	if err != nil {
-		t.Fatalf("withPhotos failed: %v", err)
-	}
-
-	if len(properties) != 1 {
-		t.Fatalf("expected 1 property, got %d", len(properties))
-	}
-	if len(properties[0].Photos) != 1 {
-		t.Fatalf("expected 1 photo, got %d", len(properties[0].Photos))
-	}
-	if properties[0].Photos[0].URL != photo.URL {
-		t.Errorf("photo url = %q, want %q", properties[0].Photos[0].URL, photo.URL)
-	}
-}
-
-func TestWithPhotos_Empty(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	svc := newPhotoService(t, newLockingFakePropertyRepo(domain.Property{}), &fakePhotoRepo{}, &fakePhotoStorage{})
-
-	properties, err := svc.withPhotos(ctx)
-	if err != nil {
-		t.Fatalf("withPhotos failed: %v", err)
-	}
-	if len(properties) != 0 {
-		t.Errorf("expected 0 properties, got %d", len(properties))
-	}
-}
-
-func TestAddPropertyPhoto_ArchivedProperty(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	property := photoTestProperty(ownerID)
+	repo := newLockingFakePropertyRepo(property)
+	svc := NewPropertyService(
+		repo,
+		newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(repo, nil),
+		fakePropertyClock{now: time.Now()},
+		testOwnerPolicy{},
+		nil,
+	)
 
-	repo := newLockingFakePropertyRepo(domain.Property{ID: propertyID, OwnerID: ownerID, Status: domain.PropertyStatusArchived})
-	svc := newPhotoService(t, repo, &fakePhotoRepo{photos: map[uuid.UUID][]domain.Photo{}}, &fakePhotoStorage{})
-
-	_, err := svc.AddPropertyPhoto(ctx, ownerID, propertyID, bytes.NewReader([]byte("x")), "file.jpg", "image/jpeg", 100)
-	if !errors.Is(err, ErrArchivedProperty) {
-		t.Fatalf("expected ErrArchivedProperty, got %v", err)
+	if _, _, err := svc.PhotoDescriptor(context.Background(), ownerID, property.ID); !errors.Is(err, ErrPhotoNotFound) {
+		t.Fatalf("err = %v, want ErrPhotoNotFound", err)
 	}
 }
 
-func TestDeletePropertyPhoto_ArchivedProperty(t *testing.T) {
+func TestPropertyService_OpenPropertyPhoto_Roundtrip(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
-	photoID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	property := photoTestProperty(ownerID)
+	repo := newLockingFakePropertyRepo(property)
+	storage := newFakePropertyPhotoStorage()
+	svc := NewPropertyService(
+		repo,
+		storage,
+		newPropertyTestFactory(repo, nil),
+		fakePropertyClock{now: time.Now()},
+		testOwnerPolicy{},
+		nil,
+	)
 
-	repo := newLockingFakePropertyRepo(domain.Property{ID: propertyID, OwnerID: ownerID, Status: domain.PropertyStatusArchived})
-	svc := newPhotoService(t, repo, &fakePhotoRepo{photos: map[uuid.UUID][]domain.Photo{}}, &fakePhotoStorage{})
+	if _, err := svc.SetPropertyPhoto(context.Background(), ownerID, property.ID, smallJPEG(t)); err != nil {
+		t.Fatalf("set photo: %v", err)
+	}
 
-	err := svc.DeletePropertyPhoto(ctx, ownerID, propertyID, photoID)
-	if !errors.Is(err, ErrArchivedProperty) {
-		t.Fatalf("expected ErrArchivedProperty, got %v", err)
+	body, size, contentType, key, err := svc.OpenPropertyPhoto(context.Background(), ownerID, property.ID)
+	if err != nil {
+		t.Fatalf("open photo: %v", err)
+	}
+	defer func() {
+		if closeErr := body.Close(); closeErr != nil {
+			t.Errorf("close body: %v", closeErr)
+		}
+	}()
+	data, err := io.ReadAll(body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if !bytes.Equal(data, []byte("jpeg-bytes")) || size != 10 || contentType != photo.ContentTypeJPEG {
+		t.Errorf("body=%q size=%d ct=%q, want jpeg-bytes/10/image/jpeg", data, size, contentType)
+	}
+	if repo.data[property.ID].PhotoKey == nil || key != *repo.data[property.ID].PhotoKey {
+		t.Errorf("key = %q, want the stored property key", key)
+	}
+}
+
+func TestPropertyService_DeletePropertyPhoto_ClearsAndCleans(t *testing.T) {
+	t.Parallel()
+
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	property := photoTestProperty(ownerID)
+	repo := newLockingFakePropertyRepo(property)
+	storage := newFakePropertyPhotoStorage()
+	svc := NewPropertyService(
+		repo,
+		storage,
+		newPropertyTestFactory(repo, nil),
+		fakePropertyClock{now: time.Now()},
+		testOwnerPolicy{},
+		nil,
+	)
+	if _, err := svc.SetPropertyPhoto(context.Background(), ownerID, property.ID, smallJPEG(t)); err != nil {
+		t.Fatalf("set photo: %v", err)
+	}
+	key := *repo.data[property.ID].PhotoKey
+
+	updated, err := svc.DeletePropertyPhoto(context.Background(), ownerID, property.ID)
+	if err != nil {
+		t.Fatalf("delete photo: %v", err)
+	}
+	if updated.PhotoKey != nil {
+		t.Errorf("photo key = %v, want nil after the delete", updated.PhotoKey)
+	}
+	removed := false
+	for _, k := range storage.deletes {
+		if k == key {
+			removed = true
+		}
+	}
+	if !removed {
+		t.Errorf("object %s was not removed best-effort, deletes = %v", key, storage.deletes)
+	}
+
+	if _, _, err := svc.PhotoDescriptor(context.Background(), ownerID, property.ID); !errors.Is(err, ErrPhotoNotFound) {
+		t.Fatalf("descriptor after delete = %v, want ErrPhotoNotFound", err)
+	}
+}
+
+func TestPropertyService_DeletePropertyPhoto_404WithoutPhoto(t *testing.T) {
+	t.Parallel()
+
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	property := photoTestProperty(ownerID)
+	repo := newLockingFakePropertyRepo(property)
+	svc := NewPropertyService(
+		repo,
+		newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(repo, nil),
+		fakePropertyClock{now: time.Now()},
+		testOwnerPolicy{},
+		nil,
+	)
+
+	if _, err := svc.DeletePropertyPhoto(context.Background(), ownerID, property.ID); !errors.Is(err, ErrPhotoNotFound) {
+		t.Fatalf("err = %v, want ErrPhotoNotFound", err)
+	}
+}
+
+func TestPropertyService_PhotoDescriptor_SuspendedIsDistinguishable(t *testing.T) {
+	t.Parallel()
+
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	property := photoTestProperty(ownerID)
+	repo := newLockingFakePropertyRepo(property)
+	svc := NewPropertyService(
+		repo,
+		newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(repo, nil),
+		fakePropertyClock{now: time.Now()},
+		staticRolePolicy{role: sharedpolicy.RoleSuspended},
+		nil,
+	)
+
+	if _, _, err := svc.PhotoDescriptor(context.Background(), ownerID, property.ID); !errors.Is(err, ErrAccessSuspended) {
+		t.Fatalf("err = %v, want ErrAccessSuspended (the one distinguishable signal)", err)
 	}
 }

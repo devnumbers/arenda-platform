@@ -46,9 +46,11 @@ type AdminPropertyView struct {
 	Description *string
 	Attributes  propertiesdomain.Attributes
 	Status      propertiesdomain.PropertyStatus
-	Photos      []propertiesdomain.Photo
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	// PhotoURL is the property photo's same-origin streaming path (ADR
+	// 0065); empty without a photo. The key itself never leaves the backend.
+	PhotoURL  string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // AdminContactView is the admin read model of one contact card bound

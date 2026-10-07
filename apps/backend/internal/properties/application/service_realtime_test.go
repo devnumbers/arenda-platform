@@ -39,9 +39,8 @@ func TestCreatePropertyPublishesPropertyAndHistoryFrames(t *testing.T) {
 	repo := newFakePropertyRepo()
 	svc := NewPropertyService(
 		repo,
-		fakePropertyPhotoRepo{},
-		fakePropertyPhotoStorage{},
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, fakeSubscriptionLimiter{limit: 100}),
+		newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(repo, fakeSubscriptionLimiter{limit: 100}),
 		fakePropertyClock{now: time.Now()},
 		testOwnerPolicy{},
 		nil,
@@ -80,9 +79,8 @@ func TestUpdatePropertyPublishesFrames(t *testing.T) {
 	repo := newLockingFakePropertyRepo(property)
 	svc := NewPropertyService(
 		repo,
-		fakePropertyPhotoRepo{},
-		fakePropertyPhotoStorage{},
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil),
+		newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(repo, nil),
 		fakePropertyClock{now: time.Now()},
 		testOwnerPolicy{},
 		nil,
@@ -115,9 +113,8 @@ func TestArchivedMutationPublishesNothing(t *testing.T) {
 	repo := newLockingFakePropertyRepo(property)
 	svc := NewPropertyService(
 		repo,
-		fakePropertyPhotoRepo{},
-		fakePropertyPhotoStorage{},
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil),
+		newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(repo, nil),
 		fakePropertyClock{now: time.Now()},
 		testOwnerPolicy{},
 		nil,
@@ -216,9 +213,8 @@ func TestUnarchivePropertyPublishesFrames(t *testing.T) {
 	repo := newFakePropertyRepo()
 	svc := NewPropertyService(
 		repo,
-		fakePropertyPhotoRepo{},
-		fakePropertyPhotoStorage{},
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, fakeSubscriptionLimiter{limit: 100}),
+		newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(repo, fakeSubscriptionLimiter{limit: 100}),
 		fakePropertyClock{now: time.Now()},
 		testOwnerPolicy{},
 		nil,
@@ -279,9 +275,8 @@ func TestArchivePropertyPublishesRecoveryAccessPairs(t *testing.T) {
 	})
 	svc := NewPropertyService(
 		repo,
-		fakePropertyPhotoRepo{},
-		fakePropertyPhotoStorage{},
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil),
+		newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(repo, nil),
 		fakePropertyClock{now: time.Now()},
 		testOwnerPolicy{},
 		nil,
@@ -327,9 +322,8 @@ func TestDeletePropertyPublishesRecoveryAccessPairs(t *testing.T) {
 	})
 	svc := NewPropertyService(
 		repo,
-		fakePropertyPhotoRepo{},
-		fakePropertyPhotoStorage{},
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil),
+		newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(repo, nil),
 		fakePropertyClock{now: time.Now()},
 		testOwnerPolicy{},
 		nil,
@@ -382,9 +376,8 @@ func TestArchiveExcessPropertiesPublishesRecoveryAccessPairs(t *testing.T) {
 	)
 	svc := NewPropertyService(
 		repo,
-		fakePropertyPhotoRepo{},
-		fakePropertyPhotoStorage{},
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil),
+		newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(repo, nil),
 		fakePropertyClock{now: time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC)},
 		testOwnerPolicy{},
 		nil,

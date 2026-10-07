@@ -12,6 +12,7 @@ import (
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/contacts/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/history/historytest"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/objectstorage"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
@@ -112,6 +113,17 @@ func (s *fakeContactStore) Delete(_ context.Context, id, ownerID uuid.UUID) erro
 	delete(s.byID, id)
 	s.deleted = append(s.deleted, id)
 	return nil
+}
+
+func (s *fakeContactStore) SetPhoto(_ context.Context, id, ownerID uuid.UUID, key, contentType *string) (domain.Contact, error) {
+	c, ok := s.byID[id]
+	if !ok || c.OwnerID != ownerID {
+		return domain.Contact{}, ErrNotFound
+	}
+	c.PhotoKey = key
+	c.PhotoContentType = contentType
+	s.byID[id] = c
+	return c, nil
 }
 
 func (s *fakeContactStore) WithTx(transaction.Tx) (ContactStore, error) { return s, nil }
@@ -215,7 +227,7 @@ func newServiceHarnessWithPolicy(
 		h.history,
 		fakeUoW{},
 	)
-	h.svc = NewContactService(factory, build(h))
+	h.svc = NewContactService(factory, build(h), objectstorage.NewFakeStorage())
 	return h
 }
 

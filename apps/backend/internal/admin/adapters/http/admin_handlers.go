@@ -322,12 +322,8 @@ func adminPropertyResponse(view adminapp.AdminPropertyView) openapi.AdminPropert
 	if view.Description != nil {
 		resp.Description = view.Description
 	}
-	if len(view.Photos) > 0 {
-		photos := make([]openapi.PropertyPhoto, 0, len(view.Photos))
-		for _, p := range view.Photos {
-			photos = append(photos, openapi.PropertyPhoto{Id: p.ID, Url: p.URL})
-		}
-		resp.Photos = &photos
+	if view.PhotoURL != "" {
+		resp.PhotoUrl = &view.PhotoURL
 	}
 	return resp
 }

@@ -21,9 +21,8 @@ const (
 func newAutonameTestService(repo *lockingFakePropertyRepo) *PropertyService {
 	return NewPropertyService(
 		repo,
-		fakePropertyPhotoRepo{},
-		fakePropertyPhotoStorage{},
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, fakeSubscriptionLimiter{limit: 10}),
+		newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(repo, fakeSubscriptionLimiter{limit: 10}),
 		fakePropertyClock{now: time.Now()},
 		testOwnerPolicy{},
 		nil,

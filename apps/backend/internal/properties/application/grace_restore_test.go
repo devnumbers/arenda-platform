@@ -19,9 +19,8 @@ func newBridgeTestService(t *testing.T, repo *fakePropertyRepo, slots *recording
 	t.Helper()
 	svc := NewPropertyService(
 		repo,
-		fakePropertyPhotoRepo{},
-		fakePropertyPhotoStorage{},
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil),
+		newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(repo, nil),
 		fakePropertyClock{now: time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC)},
 		testOwnerPolicy{},
 		nil,

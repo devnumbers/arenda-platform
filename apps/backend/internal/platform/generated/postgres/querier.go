@@ -105,7 +105,6 @@ type Querier interface {
 	// The auto-name serial (ticket #1001): the owner's properties of this type
 	// in every status — archived count too, deleted rows are gone (hard delete).
 	CountPropertiesByOwnerAndType(ctx context.Context, arg CountPropertiesByOwnerAndTypeParams) (int64, error)
-	CountPropertyPhotosByPropertyID(ctx context.Context, propertyID pgtype.UUID) (int64, error)
 	CountSubscriptionPaymentsAdmin(ctx context.Context, arg CountSubscriptionPaymentsAdminParams) (int64, error)
 	// The count twin of ListSubscriptionPaymentsBySelection for the stuck-payment
 	// gauges (ticket #433): the WHERE clause mirrors the list query's one — keep
@@ -177,7 +176,6 @@ type Querier interface {
 	// degrade the ordering to updated_at DESC (issue #767). The active insert
 	// keeps it NULL, matching the column default.
 	CreatePropertyMemberWithStatus(ctx context.Context, arg CreatePropertyMemberWithStatusParams) (PropertyMember, error)
-	CreatePropertyPhoto(ctx context.Context, arg CreatePropertyPhotoParams) (PropertyPhoto, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (CreateSessionRow, error)
 	CreateSubscription(ctx context.Context, arg CreateSubscriptionParams) (UserSubscription, error)
 	// Subscription payments (issue #250). Two partial unique indexes are the
@@ -269,7 +267,6 @@ type Querier interface {
 	DeleteProperty(ctx context.Context, arg DeletePropertyParams) error
 	DeletePropertyMember(ctx context.Context, arg DeletePropertyMemberParams) error
 	DeletePropertyMemberInvitation(ctx context.Context, arg DeletePropertyMemberInvitationParams) error
-	DeletePropertyPhoto(ctx context.Context, id pgtype.UUID) error
 	// Delete a push subscription by endpoint scoped to a user. Idempotent
 	// (спека #1028 §5): 0 rows — подписки не было или она чужая, интент
 	// «выключено» исполнен в обоих случаях (API отвечает 204 без 404).
@@ -445,8 +442,6 @@ type Querier interface {
 	// recipient indistinguishable from a non-member for authorization purposes
 	// (issue #158, T4). The UI distinguishes suspended via a dedicated screen (T9).
 	GetPropertyMemberRole(ctx context.Context, arg GetPropertyMemberRoleParams) (string, error)
-	GetPropertyPhotoByID(ctx context.Context, id pgtype.UUID) (PropertyPhoto, error)
-	GetPropertyPhotoByIDAndPropertyID(ctx context.Context, arg GetPropertyPhotoByIDAndPropertyIDParams) (PropertyPhoto, error)
 	GetPropertyStatusByOwner(ctx context.Context, arg GetPropertyStatusByOwnerParams) (string, error)
 	// The device's stored settings state (GET /push/subscriptions/preferences):
 	// scoped to the user — another user's endpoint is not found.
@@ -773,8 +768,9 @@ type Querier interface {
 	// filters the objects, never their stacks. The order is the global pin's
 	// (ticket #577): the pinned first — among themselves by the pin time —
 	// then the rest by name. pinned_at travels to the cards for the pin mark,
-	// photo_url is the card avatar's photo — the object's first (oldest) one
-	// or NULL without photos (ticket #582).
+	// photo_url is the card avatar (ticket #582): with the private photos
+	// (ADR 0065, #1227) one image per object, streamed by the backend — the
+	// same-origin path, or NULL without a photo.
 	ListGlobalPaymentObjects(ctx context.Context, arg ListGlobalPaymentObjectsParams) ([]ListGlobalPaymentObjectsRow, error)
 	// Payments context queries: the global surface of the payment rules
 	// (tickets #575, #576) — the merged «Платежи» feed, the search with its
@@ -826,9 +822,11 @@ type Querier interface {
 	// travel together; NULL (no cursor) reads from the beginning.
 	ListGlobalPaymentRules(ctx context.Context, arg ListGlobalPaymentRulesParams) ([]ListGlobalPaymentRulesRow, error)
 	// Объекты области для шита фильтров: те же свойства, что отдаёт лента,
-	// плюс фото-аватар карточки — первое по времени фото (канон #582);
-	// '' = фото нет (COALESCE: sqlc верит NOT NULL колонке, а lateral LEFT
-	// JOIN промахивается в NULL). Сужение property_ids — тот же фильтр ленты.
+	// плюс фото-аватар карточки (канон #582). С приватными фото (ADR 0065,
+	// #1227) аватар один на объект и живёт в properties.photo_key; наружу —
+	// относительный same-origin путь стриминга через бэкенд.
+	// '' = фото нет (COALESCE: sqlc верит NOT NULL колонке, а CASE по NULL-ключу
+	// промахивается в NULL). Сужение property_ids — тот же фильтр ленты.
 	//
 	ListHistoryFilterObjects(ctx context.Context, arg ListHistoryFilterObjectsParams) ([]ListHistoryFilterObjectsRow, error)
 	// Опции фильтров ленты (ADR 0061 §7, тикет #708): участники области =
@@ -1053,8 +1051,6 @@ type Querier interface {
 	ListPropertyMemberInvitations(ctx context.Context, propertyID pgtype.UUID) ([]PropertyMemberInvitation, error)
 	ListPropertyMembers(ctx context.Context, propertyID pgtype.UUID) ([]PropertyMember, error)
 	ListPropertyMembersByUser(ctx context.Context, userID pgtype.UUID) ([]ListPropertyMembersByUserRow, error)
-	ListPropertyPhotosByPropertyID(ctx context.Context, propertyID pgtype.UUID) ([]PropertyPhoto, error)
-	ListPropertyPhotosByPropertyIDs(ctx context.Context, dollar_1 []pgtype.UUID) ([]PropertyPhoto, error)
 	ListPushSubscriptionsByUser(ctx context.Context, userID pgtype.UUID) ([]PushSubscription, error)
 	// The frame audience of one object (карта #714, тикет #716; ADR 0062 §4):
 	// the derived read access (ADR 0028) resolved at the moment of publication.
@@ -1360,6 +1356,12 @@ type Querier interface {
 	// LEFT JOIN row is unique per (property, user) and carries the role only;
 	// the visibility verdict is the function call in the WHERE.
 	SearchVisibleProperties(ctx context.Context, arg SearchVisiblePropertiesParams) ([]SearchVisiblePropertiesRow, error)
+	// The card photo write (ADR 0065, ticket #1227): the key and the sniffed
+	// content type move together; a NULL key clears the photo. The full-row
+	// rewrite of the editable fields is untouched — the photo is not an
+	// UpdateContact field. Existence and the edit capability are proven by the
+	// caller; the scope is the book owner (ADR 0028).
+	SetContactPhoto(ctx context.Context, arg SetContactPhotoParams) (Contact, error)
 	// Atomic PUT favorite (no read-modify-write): the flag is set in one UPDATE.
 	// Existence is already proven inside the same transaction under the property
 	// lock; :execrows keeps the store honest independently of that ordering.
@@ -1371,6 +1373,13 @@ type Querier interface {
 	// the guard — the lock pass has already proven existence and visibility in
 	// the same transaction. :execrows keeps that ordering honest.
 	SetPaymentFavoriteOrder(ctx context.Context, arg SetPaymentFavoriteOrderParams) (int64, error)
+	// The object photo write (ADR 0065, ticket #1227): the key and the sniffed
+	// content type move together; a NULL key clears the photo — one image per
+	// entity, no gallery. The scope is the property's owner (ADR 0028): the
+	// actor may be the full-access member; existence and the edit capability
+	// (plus the archived-object guard) are proven by the caller under the row
+	// lock.
+	SetPropertyPhoto(ctx context.Context, arg SetPropertyPhotoParams) (Property, error)
 	// Atomic PUT pin (ticket #577, the PUT favorite's canon #461: no
 	// read-modify-write). The value — a moment or NULL — is resolved by the
 	// application under the row lock (a re-pin keeps the original pin time);
@@ -1378,6 +1387,10 @@ type Querier interface {
 	// property's owner: the actor may be the full-access member. The updated
 	// row travels back for the response.
 	SetPropertyPin(ctx context.Context, arg SetPropertyPinParams) (Property, error)
+	// The profile photo write (ADR 0065, ticket #1227): the key and the sniffed
+	// content type move together; a NULL key clears the photo. Existence and the
+	// self-only access are proven by the caller under the row lock.
+	SetUserPhoto(ctx context.Context, arg SetUserPhotoParams) (User, error)
 	// The other half of the coherent subscription time shift (issue #665): the
 	// dunning retry predicate counts payments created at or after the grace entry
 	// anchor, so the payments must travel by the same delta to keep the relative
@@ -1478,8 +1491,8 @@ type Querier interface {
 	// rule before this runs); id/owner_id/property_id never move.
 	UpdateTaskRule(ctx context.Context, arg UpdateTaskRuleParams) error
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
-	UpdateUserEmailVerified(ctx context.Context, arg UpdateUserEmailVerifiedParams) (UpdateUserEmailVerifiedRow, error)
-	UpdateUserEmailVerifiedAt(ctx context.Context, arg UpdateUserEmailVerifiedAtParams) (UpdateUserEmailVerifiedAtRow, error)
+	UpdateUserEmailVerified(ctx context.Context, arg UpdateUserEmailVerifiedParams) (User, error)
+	UpdateUserEmailVerifiedAt(ctx context.Context, arg UpdateUserEmailVerifiedAtParams) (User, error)
 	UpdateUserPhone(ctx context.Context, arg UpdateUserPhoneParams) (User, error)
 	// PUT /notification-preferences is a full replacement of the four flags
 	// (канон #738).

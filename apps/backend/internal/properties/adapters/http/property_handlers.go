@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"math"
 	"net/http"
+	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
@@ -17,6 +18,8 @@ import (
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/photo"
+	storageshared "github.com/nambers/arenda-planform/apps/backend/internal/shared/storage"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
@@ -81,8 +84,8 @@ var staticPropertyProblems = []httpsupport.ErrorProblem{
 		Title: httpsupport.ProblemTitleConflict, Detail: "Объект не в архиве",
 	},
 	{
-		Err: propertiesapp.ErrPhotoLimitReached, Status: http.StatusConflict,
-		Title: httpsupport.ProblemTitleConflict, Detail: "Достигнут лимит фотографий объекта",
+		Err: propertiesapp.ErrPhotoNotFound, Status: http.StatusNotFound,
+		Title: httpsupport.ProblemTitleNotFound, Detail: "У объекта нет фото",
 	},
 }
 
@@ -491,7 +494,47 @@ func decodePinBody(w http.ResponseWriter, r *http.Request) (openapi.PinnedUpdate
 	return body, nil
 }
 
-// UploadPropertyPhoto implements POST /properties/{propertyId}/photos.
+// GetPropertyPhoto implements GET /api/v1/properties/{propertyId}/photo.
+func (h *PropertyHandlers) GetPropertyPhoto(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID) {
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
+	if !ok {
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	// The descriptor first: the ETag is the storage key's hash, so a matching
+	// If-None-Match answers 304 without opening the object (ADR 0065).
+	key, _, err := h.svc.PhotoDescriptor(r.Context(), actor, propertyID)
+	if err != nil {
+		h.handlePropertyError(w, r, err)
+		return
+	}
+	// The validator and the cache policy travel with every answer — the 200
+	// carries them so the client can revalidate, the 304 so the cached copy
+	// stays honest.
+	etag := storageshared.ETagOf(key)
+	w.Header().Set("ETag", etag)
+	w.Header().Set("Cache-Control", "private, max-age=300")
+	if httpsupport.ETagMatches(r.Header.Get("If-None-Match"), etag) {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+
+	body, size, contentType, _, err := h.svc.OpenPropertyPhoto(r.Context(), actor, propertyID)
+	if err != nil {
+		h.handlePropertyError(w, r, err)
+		return
+	}
+	defer h.closePhotoBody(r, body)
+
+	h.writePhotoBytes(w, r, contentType, size, body)
+}
+
+// UploadPropertyPhoto implements POST /api/v1/properties/{propertyId}/photo
+// (ADR 0065): multipart through the backend, validated before any storage
+// write — the size cap, the magic-byte sniff and the EXIF/GPS strip all run
+// on the shared upload seam.
 func (h *PropertyHandlers) UploadPropertyPhoto(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
@@ -500,90 +543,28 @@ func (h *PropertyHandlers) UploadPropertyPhoto(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	filename, contentType, data, err := readPhotoUpload(r)
+	data, err := photo.ReadMultipartUpload(r)
 	if err != nil {
-		h.rejectPhotoUpload(w, r, err)
+		h.writePhotoReadError(w, r, err)
+		return
+	}
+	processed, err := photo.Process(data)
+	if err != nil {
+		h.writePhotoProcessError(w, r, err)
 		return
 	}
 
-	property, err := h.svc.AddPropertyPhoto(r.Context(), actor, propertyID, bytes.NewReader(data), filename, contentType, int64(len(data)))
+	property, err := h.svc.SetPropertyPhoto(r.Context(), actor, propertyID, processed)
 	if err != nil {
 		h.handlePropertyError(w, r, err)
 		return
 	}
 
-	if len(property.Photos) == 0 {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError,
-			httpsupport.InternalError(r.Context(), errors.New("uploaded photo not found")))
-		return
-	}
-
-	uploaded := property.Photos[len(property.Photos)-1]
-	httpsupport.WriteJSON(r.Context(), w, http.StatusCreated, openapi.PropertyPhoto{Id: uploaded.ID, Url: uploaded.URL})
+	h.respondWithProperty(w, r, property, http.StatusOK)
 }
 
-// rejectPhotoUpload maps readPhotoUpload failures onto the same wire contract
-// the previous ParseMultipartForm/FormFile parsing produced.
-func (h *PropertyHandlers) rejectPhotoUpload(w http.ResponseWriter, r *http.Request, err error) {
-	switch {
-	case errors.Is(err, propertiesapp.ErrInvalidInput):
-		// An oversized file takes the service's own invalid-input mapping so
-		// the response body is identical wherever the size check fires.
-		h.handlePropertyError(w, r, err)
-	case errors.Is(err, errPhotoUploadMissing):
-		h.logger.ErrorContext(r.Context(), "failed to get file from form", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Требуется файл"))
-	default:
-		h.logger.ErrorContext(r.Context(), "failed to parse multipart form", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
-			httpsupport.Problem(r.Context(), "Bad request", "Некорректная форма загрузки файла"))
-	}
-}
-
-var (
-	// Marks a body that is not a well-formed multipart form: wrong content
-	// type, broken framing or an aborted read.
-	errPhotoUploadForm = errors.New("malformed photo upload form")
-	// Marks a multipart form without a "file" part.
-	errPhotoUploadMissing = errors.New("photo upload form has no file field")
-)
-
-// photoUploadFieldName is the multipart form field carrying the photo bytes.
-const photoUploadFieldName = "file"
-
-// readPhotoUpload streams the "file" part of a multipart/form-data body into
-// memory, bounded by the application's photo size limit. MultipartReader is
-// used instead of ParseMultipartForm (gosec G120): the memory bound stays
-// explicit and nothing ever spills to temporary files.
-func readPhotoUpload(r *http.Request) (filename, contentType string, data []byte, err error) {
-	reader, err := r.MultipartReader()
-	if err != nil {
-		return "", "", nil, fmt.Errorf("%w: %w", errPhotoUploadForm, err)
-	}
-	for {
-		part, err := reader.NextPart()
-		if errors.Is(err, io.EOF) {
-			return "", "", nil, errPhotoUploadMissing
-		}
-		if err != nil {
-			return "", "", nil, fmt.Errorf("%w: %w", errPhotoUploadForm, err)
-		}
-		if part.FormName() != photoUploadFieldName {
-			continue
-		}
-		data, readErr := io.ReadAll(io.LimitReader(part, propertiesapp.MaxPhotoSize+1))
-		if readErr != nil {
-			return "", "", nil, fmt.Errorf("%w: %w", errPhotoUploadForm, readErr)
-		}
-		if int64(len(data)) > propertiesapp.MaxPhotoSize {
-			return "", "", nil, propertiesapp.NewPhotoTooLargeError(int64(len(data)))
-		}
-		return part.FileName(), part.Header.Get("Content-Type"), data, nil
-	}
-}
-
-// DeletePropertyPhoto implements DELETE /properties/{propertyId}/photos/{photoId}.
-func (h *PropertyHandlers) DeletePropertyPhoto(w http.ResponseWriter, r *http.Request, propertyID, photoID uuid.UUID) {
+// DeletePropertyPhoto implements DELETE /api/v1/properties/{propertyId}/photo.
+func (h *PropertyHandlers) DeletePropertyPhoto(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
@@ -591,12 +572,68 @@ func (h *PropertyHandlers) DeletePropertyPhoto(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	if err := h.svc.DeletePropertyPhoto(r.Context(), actor, propertyID, photoID); err != nil {
+	if _, err := h.svc.DeletePropertyPhoto(r.Context(), actor, propertyID); err != nil {
 		h.handlePropertyError(w, r, err)
 		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// writePhotoReadError maps the multipart read failures: a malformed form and
+// a missing file are the client's 400s.
+func (h *PropertyHandlers) writePhotoReadError(w http.ResponseWriter, r *http.Request, err error) {
+	h.logger.ErrorContext(r.Context(), "failed to parse multipart form", slog.String("error", httpsupport.SanitizeError(err)))
+	switch {
+	case errors.Is(err, photo.ErrTooLarge):
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Файл больше 5 МиБ"))
+	case errors.Is(err, photo.ErrUploadMissing):
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Требуется файл"))
+	default: // The remaining multipart-form errors.
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Некорректная форма загрузки файла"))
+	}
+}
+
+// writePhotoProcessError maps the upload-seam rejections (ADR 0065): the
+// size cap, the format allowlist (SVG included) and the pixel bomb are the
+// client's 400s.
+func (h *PropertyHandlers) writePhotoProcessError(w http.ResponseWriter, r *http.Request, err error) {
+	switch {
+	case errors.Is(err, photo.ErrTooLarge):
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Файл больше 5 МиБ"))
+	case errors.Is(err, photo.ErrTooManyPixels):
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Изображение слишком большого разрешения"))
+	default: // The format allowlist rejection.
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Поддерживаются только изображения JPEG, PNG и WebP"))
+	}
+}
+
+// closePhotoBody closes the streamed object best-effort: a close failure
+// cannot unserve the bytes, it only breaks connection reuse.
+func (h *PropertyHandlers) closePhotoBody(r *http.Request, body io.Closer) {
+	if err := body.Close(); err != nil {
+		h.logger.WarnContext(r.Context(), "failed to close photo body", slog.String("error", httpsupport.SanitizeError(err)))
+	}
+}
+
+// writePhotoBytes sets the serving headers and streams the object: the
+// content type is the stored sniffed value, the length is the object's, the
+// cache policy is private (cookie-authed bytes never enter shared caches).
+// A copy failure mid-stream is unrecoverable for the client anyway — the
+// status line is long gone — so it only feeds the log.
+func (h *PropertyHandlers) writePhotoBytes(w http.ResponseWriter, r *http.Request, contentType string, size int64, body io.Reader) {
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
+	w.Header().Set("Cache-Control", "private, max-age=300")
+	if _, err := io.Copy(w, body); err != nil {
+		h.logger.WarnContext(r.Context(), "failed to stream photo body", slog.String("error", httpsupport.SanitizeError(err)))
+	}
 }
 
 // GetAddressSuggestions implements GET /dadata/suggestions/address.
@@ -676,14 +713,19 @@ func (h *PropertyHandlers) propertyResponse(property domain.Property) openapi.Pr
 	if property.Description != "" {
 		resp.Description = &property.Description
 	}
-	if len(property.Photos) > 0 {
-		photos := make([]openapi.PropertyPhoto, 0, len(property.Photos))
-		for _, p := range property.Photos {
-			photos = append(photos, openapi.PropertyPhoto{Id: p.ID, Url: p.URL})
-		}
-		resp.Photos = &photos
-	}
+	resp.PhotoUrl = propertyPhotoURL(property)
 	return resp
+}
+
+// propertyPhotoURL is the object photo's same-origin streaming path
+// (ADR 0065): nil without a photo. The path is contract-fixed; the photo
+// bytes themselves are served by GET /api/v1/properties/{id}/photo.
+func propertyPhotoURL(property domain.Property) *string {
+	if property.PhotoKey == nil {
+		return nil
+	}
+	path := fmt.Sprintf("/api/v1/properties/%s/photo", property.ID)
+	return &path
 }
 
 // respondWithProperty maps the property through the presenter and writes the

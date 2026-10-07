@@ -80,9 +80,8 @@ func TestPropertyService_DeleteProperty_NotifiesFormerSharedMembers(t *testing.T
 	shared := &fakeSharedDeleteFlow{emails: []string{"a@example.com", "b@example.com"}}
 	svc := NewPropertyService(
 		repo,
-		fakePropertyPhotoRepo{},
-		fakePropertyPhotoStorage{},
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil),
+		newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(repo, nil),
 		fakePropertyClock{now: time.Now()},
 		testOwnerPolicy{},
 		nil,

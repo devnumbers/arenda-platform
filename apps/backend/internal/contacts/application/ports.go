@@ -134,6 +134,11 @@ type ContactStore interface {
 	// Delete removes the card keyed by (id, owner_id); zero rows deleted is
 	// ErrNotFound for the same reason.
 	Delete(ctx context.Context, id, ownerID uuid.UUID) error
+	// SetPhoto writes the card's photo columns in one UPDATE (ADR 0065):
+	// a key and the sniffed content type, or nils to clear. The scope is
+	// the book owner; existence and the edit capability are proven by the
+	// caller.
+	SetPhoto(ctx context.Context, id, ownerID uuid.UUID, key, contentType *string) (domain.Contact, error)
 	WithTx(tx transaction.Tx) (ContactStore, error)
 }
 

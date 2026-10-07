@@ -66,6 +66,13 @@ type Contact struct {
 	// trigger-maintained on write).
 	CreatedAt time.Time
 	UpdatedAt time.Time
+	// PhotoKey is the storage key of the card photo (ADR 0065): nil — no
+	// photo, a key — the private object streamed by
+	// GET /api/v1/contacts/{id}/photo. The content type travels alongside
+	// (PhotoContentType) — the sniffed value of the upload, not a client
+	// header.
+	PhotoKey         *string
+	PhotoContentType *string
 }
 
 // FullName returns the contact's name joined from the non-empty parts —

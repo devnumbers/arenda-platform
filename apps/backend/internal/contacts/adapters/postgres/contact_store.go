@@ -164,6 +164,25 @@ func (s *ContactStore) Delete(ctx context.Context, id, ownerID uuid.UUID) error 
 	return nil
 }
 
+// SetPhoto writes the card's photo columns (ADR 0065): the key and the
+// sniffed content type move together, nils clear the photo. Zero rows means
+// the card is gone between the service's read and this write.
+func (s *ContactStore) SetPhoto(ctx context.Context, id, ownerID uuid.UUID, key, contentType *string) (domain.Contact, error) {
+	row, err := s.q().SetContactPhoto(ctx, postgres.SetContactPhotoParams{
+		ID:               pgconv.UUIDToPgtype(id),
+		OwnerID:          pgconv.UUIDToPgtype(ownerID),
+		PhotoKey:         pgconv.StringPtrToPgtype(key),
+		PhotoContentType: pgconv.StringPtrToPgtype(contentType),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Contact{}, application.ErrNotFound
+		}
+		return domain.Contact{}, fmt.Errorf("set contact photo %s: %w", id, err)
+	}
+	return contactFromRow(row), nil
+}
+
 // PropertyStore is the postgres adapter of the property reference port: just
 // the owner whose book the property-bound cards land in.
 type PropertyStore struct {
@@ -194,6 +213,8 @@ func (s *PropertyStore) Get(ctx context.Context, propertyID uuid.UUID) (applicat
 
 // contactFromRow maps the generated row onto the domain card: NULL folds to
 // "" (the domain's «not set»).
+//
+//nolint:dupl // contactFromListRow повторяет модель колонка в колонку: sqlc-типы не конвертируемы (теги json у модели)
 func contactFromRow(row postgres.Contact) domain.Contact {
 	return domain.Contact{
 		ID:                pgconv.UUIDFromPgtype(row.ID),
@@ -210,11 +231,17 @@ func contactFromRow(row postgres.Contact) domain.Contact {
 		Note:              pgconv.TextToString(row.Note),
 		CreatedAt:         pgconv.TimestamptzToTime(row.CreatedAt),
 		UpdatedAt:         pgconv.TimestamptzToTime(row.UpdatedAt),
+		PhotoKey:          pgconv.TextToPtrString(row.PhotoKey),
+		PhotoContentType:  pgconv.TextToPtrString(row.PhotoContentType),
 	}
 }
 
-// contactFromListRow maps the listing row (the card's columns plus the
-// bound property's display name from the LEFT JOIN) onto the domain card.
+// contactFromListRow maps the listing row onto the domain card. The list
+// row repeats the model's columns field by field (plus the joined property
+// name), but the sqlc types are not convertible (the model carries json
+// tags, the row does not) — the field-by-field copy is forced.
+//
+//nolint:dupl // the sqlc list-row type mirrors the model; types are not convertible
 func contactFromListRow(row postgres.ListContactsRow) domain.Contact {
 	return domain.Contact{
 		ID:                pgconv.UUIDFromPgtype(row.ID),
@@ -231,6 +258,8 @@ func contactFromListRow(row postgres.ListContactsRow) domain.Contact {
 		Note:              pgconv.TextToString(row.Note),
 		CreatedAt:         pgconv.TimestamptzToTime(row.CreatedAt),
 		UpdatedAt:         pgconv.TimestamptzToTime(row.UpdatedAt),
+		PhotoKey:          pgconv.TextToPtrString(row.PhotoKey),
+		PhotoContentType:  pgconv.TextToPtrString(row.PhotoContentType),
 	}
 }
 

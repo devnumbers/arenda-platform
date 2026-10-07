@@ -42,6 +42,10 @@ type UserRepository interface {
 	// touching the address itself (email-change step 1: a delivered code
 	// confirms the current address, #721).
 	MarkEmailVerified(ctx context.Context, id uuid.UUID, verifiedAt time.Time) (domain.User, error)
+	// SetPhoto writes the profile photo columns in one UPDATE (ADR 0065): a
+	// key and the sniffed content type, or nils to clear. Existence and the
+	// self-only access are proven by the caller under the row lock.
+	SetPhoto(ctx context.Context, id uuid.UUID, key, contentType *string) (domain.User, error)
 	WithTx(tx transaction.Tx) (UserRepository, error)
 }
 

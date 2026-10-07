@@ -1,6 +1,7 @@
 package application
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 	accessdomain "github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
+	storageshared "github.com/nambers/arenda-planform/apps/backend/internal/shared/storage"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -66,6 +68,17 @@ func newLockingFakePropertyRepo(properties ...domain.Property) *lockingFakePrope
 		lock: &sync.Mutex{},
 		data: data,
 	}
+}
+
+func (r *lockingFakePropertyRepo) SetPropertyPhoto(_ context.Context, id, _ uuid.UUID, key, contentType *string) (domain.Property, error) {
+	p, ok := r.data[id]
+	if !ok {
+		return domain.Property{}, ErrNotFound
+	}
+	p.PhotoKey = key
+	p.PhotoContentType = contentType
+	r.data[id] = p
+	return p, nil
 }
 
 func (r *lockingFakePropertyRepo) Create(_ context.Context, _ uuid.UUID, property domain.Property) (domain.Property, error) {
@@ -222,11 +235,8 @@ func TestUpdateProperty_ConcurrentUpdatesDoNotOverwrite(t *testing.T) {
 	repo := newLockingFakePropertyRepo(property)
 	svc := NewPropertyService(
 		repo,
-		fakePropertyPhotoRepo{},
-		fakePropertyPhotoStorage{},
-		newPropertyTestFactory(repo,
-			fakePropertyPhotoRepo{},
-			nil),
+		newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(repo, nil),
 		fakePropertyClock{now: time.Now()},
 		testOwnerPolicy{},
 		nil,
@@ -309,10 +319,8 @@ func TestArchiveProperty_ConcurrentArchivesDoNotDoubleArchive(t *testing.T) {
 	repo := newLockingFakePropertyRepo(property)
 	svc := NewPropertyService(
 		repo,
-		fakePropertyPhotoRepo{},
-		fakePropertyPhotoStorage{},
+		newFakePropertyPhotoStorage(),
 		newPropertyTestFactory(repo,
-			fakePropertyPhotoRepo{},
 			fakeSubscriptionLimiter{limit: 10}),
 		fakePropertyClock{now: time.Now()},
 		testOwnerPolicy{},
@@ -388,10 +396,8 @@ func TestUnarchiveProperty_ConcurrentUnarchivesRespectLimit(t *testing.T) {
 	// Limit of one active property means only one unarchive can succeed.
 	svc := NewPropertyService(
 		repo,
-		fakePropertyPhotoRepo{},
-		fakePropertyPhotoStorage{},
+		newFakePropertyPhotoStorage(),
 		newPropertyTestFactory(repo,
-			fakePropertyPhotoRepo{},
 			fakeSubscriptionLimiter{limit: 1}),
 		fakePropertyClock{now: time.Now()},
 		testOwnerPolicy{},
@@ -449,58 +455,58 @@ func TestUnarchiveProperty_ConcurrentUnarchivesRespectLimit(t *testing.T) {
 
 var _ SubscriptionLimiter = fakeSubscriptionLimiter{}
 
-type fakePropertyPhotoRepo struct{}
-
-func (fakePropertyPhotoRepo) Create(_ context.Context, _, _ uuid.UUID, _ string) (domain.Photo, error) {
-	return domain.Photo{}, nil
+// fakePropertyPhotoStorage is the in-memory fake of the private-photos
+// storage port (ADR 0065): it records the puts and deletes so the photo use
+// cases' behavior tests can assert on the storage traffic.
+type fakePropertyPhotoStorage struct {
+	mu      sync.Mutex
+	objects map[string][]byte
+	puts    []string
+	deletes []string
+	putErr  error
 }
 
-func (fakePropertyPhotoRepo) GetByPropertyID(_ context.Context, _ uuid.UUID) ([]domain.Photo, error) {
-	return nil, nil
+func newFakePropertyPhotoStorage() *fakePropertyPhotoStorage {
+	return &fakePropertyPhotoStorage{objects: make(map[string][]byte)}
 }
 
-func (fakePropertyPhotoRepo) GetByPropertyIDs(_ context.Context, _ []uuid.UUID) (map[uuid.UUID][]domain.Photo, error) {
-	return map[uuid.UUID][]domain.Photo{}, nil
-}
-
-func (fakePropertyPhotoRepo) CountByPropertyID(_ context.Context, _ uuid.UUID) (int, error) {
-	return 0, nil
-}
-
-func (fakePropertyPhotoRepo) GetByID(_ context.Context, _ uuid.UUID) (domain.Photo, error) {
-	return domain.Photo{}, nil
-}
-
-func (fakePropertyPhotoRepo) GetByIDAndPropertyID(_ context.Context, _, _ uuid.UUID) (domain.Photo, error) {
-	return domain.Photo{}, nil
-}
-
-func (fakePropertyPhotoRepo) Delete(_ context.Context, _ uuid.UUID) error {
+func (s *fakePropertyPhotoStorage) Put(_ context.Context, key string, data io.Reader, _ string, _ int64) error {
+	if s.putErr != nil {
+		return s.putErr
+	}
+	b, err := io.ReadAll(data)
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.objects == nil {
+		s.objects = make(map[string][]byte)
+	}
+	s.objects[key] = b
+	s.puts = append(s.puts, key)
 	return nil
 }
 
-func (fakePropertyPhotoRepo) WithTx(_ transaction.Tx) PropertyPhotoRepository {
-	return fakePropertyPhotoRepo{}
+func (s *fakePropertyPhotoStorage) Open(_ context.Context, key string) (body io.ReadCloser, size int64, contentType string, err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	b, ok := s.objects[key]
+	if !ok {
+		return nil, 0, "", storageshared.ErrNotFound
+	}
+	return io.NopCloser(bytes.NewReader(b)), int64(len(b)), "image/jpeg", nil
 }
 
-type fakePropertyPhotoStorage struct{}
-
-func (fakePropertyPhotoStorage) Upload(_ context.Context, _, _ string, _ int64, _ io.Reader) (string, error) {
-	return "", nil
-}
-
-func (fakePropertyPhotoStorage) Delete(_ context.Context, _ string) error {
+func (s *fakePropertyPhotoStorage) Delete(_ context.Context, key string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.objects, key)
+	s.deletes = append(s.deletes, key)
 	return nil
 }
 
-func (fakePropertyPhotoStorage) HeadBucket(_ context.Context) error {
-	return nil
-}
-
-var (
-	_ PropertyPhotoRepository = fakePropertyPhotoRepo{}
-	_ PhotoStorage            = fakePropertyPhotoStorage{}
-)
+var _ storageshared.PhotoStorage = (*fakePropertyPhotoStorage)(nil)
 
 func TestPropertyService_ListArchivedProperties(t *testing.T) {
 	t.Parallel()
@@ -521,11 +527,8 @@ func TestPropertyService_ListArchivedProperties(t *testing.T) {
 
 	svc := NewPropertyService(
 		repo,
-		fakePropertyPhotoRepo{},
-		fakePropertyPhotoStorage{},
-		newPropertyTestFactory(repo,
-			fakePropertyPhotoRepo{},
-			nil),
+		newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(repo, nil),
 		fakePropertyClock{now: time.Now()},
 		testOwnerPolicy{},
 		nil,
@@ -640,6 +643,17 @@ func (r *fakePropertyRepo) SetPin(_ context.Context, id, _ uuid.UUID, pinnedAt *
 	return p, nil
 }
 
+func (r *fakePropertyRepo) SetPropertyPhoto(_ context.Context, id, _ uuid.UUID, key, contentType *string) (domain.Property, error) {
+	p, ok := r.data[id]
+	if !ok {
+		return domain.Property{}, ErrNotFound
+	}
+	p.PhotoKey = key
+	p.PhotoContentType = contentType
+	r.data[id] = p
+	return p, nil
+}
+
 func (r *fakePropertyRepo) Archive(_ context.Context, id, _ uuid.UUID) error {
 	p, ok := r.data[id]
 	if !ok {
@@ -719,11 +733,8 @@ func TestPropertyService_ArchiveExcessProperties_ArchivesExcess(t *testing.T) {
 	)
 	svc := NewPropertyService(
 		repo,
-		fakePropertyPhotoRepo{},
-		fakePropertyPhotoStorage{},
-		newPropertyTestFactory(repo,
-			fakePropertyPhotoRepo{},
-			nil),
+		newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(repo, nil),
 		fakePropertyClock{now: time.Date(2026,
 			6,
 			10,
@@ -778,11 +789,8 @@ func TestPropertyService_ArchiveExcessProperties_WithinLimitDoesNothing(t *testi
 	)
 	svc := NewPropertyService(
 		repo,
-		fakePropertyPhotoRepo{},
-		fakePropertyPhotoStorage{},
-		newPropertyTestFactory(repo,
-			fakePropertyPhotoRepo{},
-			nil),
+		newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(repo, nil),
 		fakePropertyClock{now: time.Now()},
 		testOwnerPolicy{},
 		nil,
@@ -838,11 +846,8 @@ func TestGetProperty_AccessOutcomes(t *testing.T) {
 			)
 			svc := NewPropertyService(
 				repo,
-				fakePropertyPhotoRepo{},
-				fakePropertyPhotoStorage{},
-				newPropertyTestFactory(repo,
-					fakePropertyPhotoRepo{},
-					nil),
+				newFakePropertyPhotoStorage(),
+				newPropertyTestFactory(repo, nil),
 				fakePropertyClock{now: time.Now()},
 				staticRolePolicy{role: tt.role},
 				nil,
@@ -929,11 +934,8 @@ func TestPropertyService_ArchiveExcessProperties_RecoversSuspendedMembers(t *tes
 	slots := &recordingSlotPolicy{}
 	svc := NewPropertyService(
 		repo,
-		fakePropertyPhotoRepo{},
-		fakePropertyPhotoStorage{},
-		newPropertyTestFactory(repo,
-			fakePropertyPhotoRepo{},
-			nil),
+		newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(repo, nil),
 		fakePropertyClock{now: time.Date(2026,
 			6,
 			10,
@@ -1032,11 +1034,8 @@ func TestListProperties_AccessRoles(t *testing.T) {
 	)}
 	svc := NewPropertyService(
 		repo,
-		fakePropertyPhotoRepo{},
-		fakePropertyPhotoStorage{},
-		newPropertyTestFactory(repo,
-			fakePropertyPhotoRepo{},
-			nil),
+		newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(repo, nil),
 		fakePropertyClock{now: time.Now()},
 		testOwnerPolicy{},
 		nil,
@@ -1103,11 +1102,8 @@ func TestListArchivedProperties_AccessRoles(t *testing.T) {
 	)}
 	svc := NewPropertyService(
 		repo,
-		fakePropertyPhotoRepo{},
-		fakePropertyPhotoStorage{},
-		newPropertyTestFactory(repo,
-			fakePropertyPhotoRepo{},
-			nil),
+		newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(repo, nil),
 		fakePropertyClock{now: time.Now()},
 		testOwnerPolicy{},
 		nil,
@@ -1175,9 +1171,8 @@ func TestListProperties_SharedRowOwnerName(t *testing.T) {
 		)}
 		svc := NewPropertyService(
 			repo,
-			fakePropertyPhotoRepo{},
-			fakePropertyPhotoStorage{},
-			newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil),
+			newFakePropertyPhotoStorage(),
+			newPropertyTestFactory(repo, nil),
 			fakePropertyClock{now: time.Now()},
 			testOwnerPolicy{},
 			nil,
@@ -1247,9 +1242,8 @@ func TestListArchivedProperties_SharedRowOwnerName(t *testing.T) {
 	)}
 	svc := NewPropertyService(
 		repo,
-		fakePropertyPhotoRepo{},
-		fakePropertyPhotoStorage{},
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil),
+		newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(repo, nil),
 		fakePropertyClock{now: time.Now()},
 		testOwnerPolicy{},
 		nil,
@@ -1306,9 +1300,8 @@ func TestListProperties_SuspendedShared(t *testing.T) {
 		)}
 		return NewPropertyService(
 			repo,
-			fakePropertyPhotoRepo{},
-			fakePropertyPhotoStorage{},
-			newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil),
+			newFakePropertyPhotoStorage(),
+			newPropertyTestFactory(repo, nil),
 			fakePropertyClock{now: time.Now()},
 			testOwnerPolicy{},
 			nil,
@@ -1384,11 +1377,8 @@ func TestGetProperty_AccessContext(t *testing.T) {
 		repo := newFakePropertyRepo(property)
 		svc := NewPropertyService(
 			repo,
-			fakePropertyPhotoRepo{},
-			fakePropertyPhotoStorage{},
-			newPropertyTestFactory(repo,
-				fakePropertyPhotoRepo{},
-				nil),
+			newFakePropertyPhotoStorage(),
+			newPropertyTestFactory(repo, nil),
 			fakePropertyClock{now: time.Now()},
 			staticRolePolicy{role: role},
 			nil,
@@ -1481,11 +1471,8 @@ func TestGetProperty_OwnerEmail(t *testing.T) {
 		repo := newFakePropertyRepo(property)
 		svc := NewPropertyService(
 			repo,
-			fakePropertyPhotoRepo{},
-			fakePropertyPhotoStorage{},
-			newPropertyTestFactory(repo,
-				fakePropertyPhotoRepo{},
-				nil),
+			newFakePropertyPhotoStorage(),
+			newPropertyTestFactory(repo, nil),
 			fakePropertyClock{now: time.Now()},
 			staticRolePolicy{role: role},
 			nil,
@@ -1572,11 +1559,8 @@ func TestPropertyService_ArchiveProperty_RecoversSuspendedForOwnerRecipient(t *t
 	slots := &recordingSlotPolicy{}
 	svc := NewPropertyService(
 		repo,
-		fakePropertyPhotoRepo{},
-		fakePropertyPhotoStorage{},
-		newPropertyTestFactory(repo,
-			fakePropertyPhotoRepo{},
-			nil),
+		newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(repo, nil),
 		fakePropertyClock{now: time.Date(2026,
 			6,
 			10,
@@ -1625,11 +1609,8 @@ func TestPropertyService_DeleteProperty_RecoversSuspendedForOwnerRecipient(t *te
 	slots := &recordingSlotPolicy{}
 	svc := NewPropertyService(
 		repo,
-		fakePropertyPhotoRepo{},
-		fakePropertyPhotoStorage{},
-		newPropertyTestFactory(repo,
-			fakePropertyPhotoRepo{},
-			nil),
+		newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(repo, nil),
 		fakePropertyClock{now: time.Date(2026,
 			6,
 			10,

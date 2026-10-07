@@ -106,17 +106,19 @@ func (r *PropertyRepository) GetByIDAndOwner(ctx context.Context, id, scope uuid
 		return domain.Property{}, err
 	}
 	return propertyFromCountsRow(postgres.Property{
-		ID:          row.ID,
-		OwnerID:     row.OwnerID,
-		Name:        row.Name,
-		Type:        row.Type,
-		Address:     row.Address,
-		Description: row.Description,
-		Attributes:  row.Attributes,
-		Status:      row.Status,
-		CreatedAt:   row.CreatedAt,
-		UpdatedAt:   row.UpdatedAt,
-		PinnedAt:    row.PinnedAt,
+		ID:               row.ID,
+		OwnerID:          row.OwnerID,
+		Name:             row.Name,
+		Type:             row.Type,
+		Address:          row.Address,
+		Description:      row.Description,
+		Attributes:       row.Attributes,
+		Status:           row.Status,
+		PhotoKey:         row.PhotoKey,
+		PhotoContentType: row.PhotoContentType,
+		CreatedAt:        row.CreatedAt,
+		UpdatedAt:        row.UpdatedAt,
+		PinnedAt:         row.PinnedAt,
 	}, row.MembersCount), nil
 }
 
@@ -145,17 +147,19 @@ func (r *PropertyRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.
 		return domain.Property{}, err
 	}
 	return propertyFromCountsRow(postgres.Property{
-		ID:          row.ID,
-		OwnerID:     row.OwnerID,
-		Name:        row.Name,
-		Type:        row.Type,
-		Address:     row.Address,
-		Description: row.Description,
-		Attributes:  row.Attributes,
-		Status:      row.Status,
-		CreatedAt:   row.CreatedAt,
-		UpdatedAt:   row.UpdatedAt,
-		PinnedAt:    row.PinnedAt,
+		ID:               row.ID,
+		OwnerID:          row.OwnerID,
+		Name:             row.Name,
+		Type:             row.Type,
+		Address:          row.Address,
+		Description:      row.Description,
+		Attributes:       row.Attributes,
+		Status:           row.Status,
+		PhotoKey:         row.PhotoKey,
+		PhotoContentType: row.PhotoContentType,
+		CreatedAt:        row.CreatedAt,
+		UpdatedAt:        row.UpdatedAt,
+		PinnedAt:         row.PinnedAt,
 	}, row.MembersCount), nil
 }
 
@@ -171,6 +175,7 @@ func (r *PropertyRepository) GetByIDForUpdate(ctx context.Context, id uuid.UUID)
 	return propertyFromRow(row), nil
 }
 
+//nolint:dupl // the two owner list queries return field-identical sqlc rows of distinct, non-convertible types — the copy is forced
 func (r *PropertyRepository) ListActiveByOwner(ctx context.Context, scope uuid.UUID) ([]domain.Property, error) {
 	rows, err := r.q().ListActivePropertiesByOwner(ctx, pgconv.UUIDToPgtype(scope))
 	if err != nil {
@@ -179,22 +184,25 @@ func (r *PropertyRepository) ListActiveByOwner(ctx context.Context, scope uuid.U
 	properties := make([]domain.Property, 0, len(rows))
 	for _, row := range rows {
 		properties = append(properties, propertyFromCountsRow(postgres.Property{
-			ID:          row.ID,
-			OwnerID:     row.OwnerID,
-			Name:        row.Name,
-			Type:        row.Type,
-			Address:     row.Address,
-			Description: row.Description,
-			Attributes:  row.Attributes,
-			Status:      row.Status,
-			CreatedAt:   row.CreatedAt,
-			UpdatedAt:   row.UpdatedAt,
-			PinnedAt:    row.PinnedAt,
+			ID:               row.ID,
+			OwnerID:          row.OwnerID,
+			Name:             row.Name,
+			Type:             row.Type,
+			Address:          row.Address,
+			Description:      row.Description,
+			Attributes:       row.Attributes,
+			Status:           row.Status,
+			PhotoKey:         row.PhotoKey,
+			PhotoContentType: row.PhotoContentType,
+			CreatedAt:        row.CreatedAt,
+			UpdatedAt:        row.UpdatedAt,
+			PinnedAt:         row.PinnedAt,
 		}, row.MembersCount))
 	}
 	return properties, nil
 }
 
+//nolint:dupl // см. ListActiveByOwner: дублирование форсировано парой sqlc-типов строк
 func (r *PropertyRepository) ListArchivedByOwner(ctx context.Context, scope uuid.UUID) ([]domain.Property, error) {
 	rows, err := r.q().ListArchivedPropertiesByOwner(ctx, pgconv.UUIDToPgtype(scope))
 	if err != nil {
@@ -203,17 +211,19 @@ func (r *PropertyRepository) ListArchivedByOwner(ctx context.Context, scope uuid
 	properties := make([]domain.Property, 0, len(rows))
 	for _, row := range rows {
 		properties = append(properties, propertyFromCountsRow(postgres.Property{
-			ID:          row.ID,
-			OwnerID:     row.OwnerID,
-			Name:        row.Name,
-			Type:        row.Type,
-			Address:     row.Address,
-			Description: row.Description,
-			Attributes:  row.Attributes,
-			Status:      row.Status,
-			CreatedAt:   row.CreatedAt,
-			UpdatedAt:   row.UpdatedAt,
-			PinnedAt:    row.PinnedAt,
+			ID:               row.ID,
+			OwnerID:          row.OwnerID,
+			Name:             row.Name,
+			Type:             row.Type,
+			Address:          row.Address,
+			Description:      row.Description,
+			Attributes:       row.Attributes,
+			Status:           row.Status,
+			PhotoKey:         row.PhotoKey,
+			PhotoContentType: row.PhotoContentType,
+			CreatedAt:        row.CreatedAt,
+			UpdatedAt:        row.UpdatedAt,
+			PinnedAt:         row.PinnedAt,
 		}, row.MembersCount))
 	}
 	return properties, nil
@@ -248,17 +258,19 @@ func (r *PropertyRepository) SearchVisible(
 	properties := make([]domain.Property, 0, len(rows))
 	for _, row := range rows {
 		p := propertyFromCountsRow(postgres.Property{
-			ID:          row.ID,
-			OwnerID:     row.OwnerID,
-			Name:        row.Name,
-			Type:        row.Type,
-			Address:     row.Address,
-			Description: row.Description,
-			Attributes:  row.Attributes,
-			Status:      row.Status,
-			CreatedAt:   row.CreatedAt,
-			UpdatedAt:   row.UpdatedAt,
-			PinnedAt:    row.PinnedAt,
+			ID:               row.ID,
+			OwnerID:          row.OwnerID,
+			Name:             row.Name,
+			Type:             row.Type,
+			Address:          row.Address,
+			Description:      row.Description,
+			Attributes:       row.Attributes,
+			Status:           row.Status,
+			PhotoKey:         row.PhotoKey,
+			PhotoContentType: row.PhotoContentType,
+			CreatedAt:        row.CreatedAt,
+			UpdatedAt:        row.UpdatedAt,
+			PinnedAt:         row.PinnedAt,
 		}, row.MembersCount)
 		p.AccessRole = sharedpolicy.Role(row.AccessRole)
 		properties = append(properties, p)
@@ -298,6 +310,27 @@ func (r *PropertyRepository) SetPin(ctx context.Context, id, scope uuid.UUID, pi
 		PinnedAt: pgconv.TimePtrToPgtype(pinnedAt),
 		ID:       pgconv.UUIDToPgtype(id),
 		OwnerID:  pgconv.UUIDToPgtype(scope),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Property{}, application.ErrNotFound
+		}
+		return domain.Property{}, err
+	}
+	return propertyFromRow(row), nil
+}
+
+// SetPropertyPhoto writes the photo columns in one UPDATE (ADR 0065): the
+// key and the sniffed content type move together, nils clear the photo —
+// one image per entity, no gallery. Existence and the edit capability are
+// proven by the application under the row lock; the scope is the property's
+// owner.
+func (r *PropertyRepository) SetPropertyPhoto(ctx context.Context, id, scope uuid.UUID, key, contentType *string) (domain.Property, error) {
+	row, err := r.q().SetPropertyPhoto(ctx, postgres.SetPropertyPhotoParams{
+		ID:               pgconv.UUIDToPgtype(id),
+		OwnerID:          pgconv.UUIDToPgtype(scope),
+		PhotoKey:         pgconv.StringPtrToPgtype(key),
+		PhotoContentType: pgconv.StringPtrToPgtype(contentType),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -369,17 +402,19 @@ func propertyFromRow(row postgres.Property) domain.Property {
 		attrs = domain.Attributes{}
 	}
 	return domain.Property{
-		ID:          pgconv.UUIDFromPgtype(row.ID),
-		OwnerID:     pgconv.UUIDFromPgtype(row.OwnerID),
-		Name:        row.Name,
-		Type:        domain.PropertyType(row.Type),
-		Address:     row.Address,
-		Description: pgconv.TextToString(row.Description),
-		Attributes:  attrs,
-		Status:      domain.PropertyStatus(row.Status),
-		CreatedAt:   row.CreatedAt.Time,
-		UpdatedAt:   row.UpdatedAt.Time,
-		PinnedAt:    pgconv.TimestamptzToPtrTime(row.PinnedAt),
+		ID:               pgconv.UUIDFromPgtype(row.ID),
+		OwnerID:          pgconv.UUIDFromPgtype(row.OwnerID),
+		Name:             row.Name,
+		Type:             domain.PropertyType(row.Type),
+		Address:          row.Address,
+		Description:      pgconv.TextToString(row.Description),
+		Attributes:       attrs,
+		Status:           domain.PropertyStatus(row.Status),
+		PhotoKey:         pgconv.TextToPtrString(row.PhotoKey),
+		PhotoContentType: pgconv.TextToPtrString(row.PhotoContentType),
+		CreatedAt:        row.CreatedAt.Time,
+		UpdatedAt:        row.UpdatedAt.Time,
+		PinnedAt:         pgconv.TimestamptzToPtrTime(row.PinnedAt),
 	}
 }
 

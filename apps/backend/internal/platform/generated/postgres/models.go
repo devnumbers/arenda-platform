@@ -270,6 +270,8 @@ type Contact struct {
 	Note              pgtype.Text        `json:"note"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	PhotoKey          pgtype.Text        `json:"photo_key"`
+	PhotoContentType  pgtype.Text        `json:"photo_content_type"`
 }
 
 type EmailChangeGrant struct {
@@ -409,17 +411,19 @@ type PaymentPause struct {
 }
 
 type Property struct {
-	ID          pgtype.UUID        `json:"id"`
-	OwnerID     pgtype.UUID        `json:"owner_id"`
-	Name        string             `json:"name"`
-	Type        string             `json:"type"`
-	Address     string             `json:"address"`
-	Description pgtype.Text        `json:"description"`
-	Status      string             `json:"status"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
-	Attributes  []byte             `json:"attributes"`
-	PinnedAt    pgtype.Timestamptz `json:"pinned_at"`
+	ID               pgtype.UUID        `json:"id"`
+	OwnerID          pgtype.UUID        `json:"owner_id"`
+	Name             string             `json:"name"`
+	Type             string             `json:"type"`
+	Address          string             `json:"address"`
+	Description      pgtype.Text        `json:"description"`
+	Status           string             `json:"status"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	Attributes       []byte             `json:"attributes"`
+	PinnedAt         pgtype.Timestamptz `json:"pinned_at"`
+	PhotoKey         pgtype.Text        `json:"photo_key"`
+	PhotoContentType pgtype.Text        `json:"photo_content_type"`
 }
 
 type PropertyMember struct {
@@ -443,13 +447,6 @@ type PropertyMemberInvitation struct {
 	LastSentAt pgtype.Timestamptz `json:"last_sent_at"`
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
-}
-
-type PropertyPhoto struct {
-	ID         pgtype.UUID        `json:"id"`
-	PropertyID pgtype.UUID        `json:"property_id"`
-	Url        string             `json:"url"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 }
 
 type PushSubscription struct {
@@ -587,18 +584,20 @@ type TmpCompletedRentalPayment struct {
 }
 
 type User struct {
-	ID              pgtype.UUID        `json:"id"`
-	Phone           string             `json:"phone"`
-	Role            string             `json:"role"`
-	Name            pgtype.Text        `json:"name"`
-	Surname         pgtype.Text        `json:"surname"`
-	Patronymic      pgtype.Text        `json:"patronymic"`
-	Email           pgtype.Text        `json:"email"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
-	PhoneEncrypted  bool               `json:"phone_encrypted"`
-	EmailVerifiedAt pgtype.Timestamptz `json:"email_verified_at"`
-	Timezone        string             `json:"timezone"`
+	ID               pgtype.UUID        `json:"id"`
+	Phone            string             `json:"phone"`
+	Role             string             `json:"role"`
+	Name             pgtype.Text        `json:"name"`
+	Surname          pgtype.Text        `json:"surname"`
+	Patronymic       pgtype.Text        `json:"patronymic"`
+	Email            pgtype.Text        `json:"email"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	PhoneEncrypted   bool               `json:"phone_encrypted"`
+	EmailVerifiedAt  pgtype.Timestamptz `json:"email_verified_at"`
+	Timezone         string             `json:"timezone"`
+	PhotoKey         pgtype.Text        `json:"photo_key"`
+	PhotoContentType pgtype.Text        `json:"photo_content_type"`
 }
 
 type UserPopupView struct {

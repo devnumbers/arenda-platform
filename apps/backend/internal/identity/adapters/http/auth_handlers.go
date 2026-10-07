@@ -5,6 +5,7 @@ package http
 import (
 	"context"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/requestctx"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/photo"
 )
 
 // MeEnricher augments a MeResponse with cross-cutting data (for example, the
@@ -127,6 +129,17 @@ type Profiler interface {
 	UpdateProfile(ctx context.Context, userID uuid.UUID, cmd application.UpdateProfileCommand) (domain.User, error)
 }
 
+// ProfilePhotos serves the profile photo flows (ADR 0065): one image per
+// profile, uploaded and streamed through the backend, readable by the owner
+// only. The descriptor powers the serving ETag (the storage key hash) so a
+// 304 is answered without a storage read.
+type ProfilePhotos interface {
+	PhotoDescriptor(ctx context.Context, userID uuid.UUID) (key, contentType string, err error)
+	OpenPhoto(ctx context.Context, userID uuid.UUID) (body io.ReadCloser, size int64, contentType, key string, err error)
+	SetProfilePhoto(ctx context.Context, userID uuid.UUID, processed photo.Processed) (domain.User, error)
+	DeleteProfilePhoto(ctx context.Context, userID uuid.UUID) (domain.User, error)
+}
+
 // Logout terminates the current session.
 type Logout interface {
 	Logout(ctx context.Context, rawToken string, actor auditdomain.Actor) error
@@ -138,6 +151,7 @@ type AuthHandlers struct {
 	phoneChange  PhoneChanger
 	emailChange  EmailChanger
 	profile      Profiler
+	profilePhoto ProfilePhotos
 	logout       Logout
 	sessions     SessionLister
 	cookieSecure bool
@@ -152,6 +166,7 @@ func NewAuthHandlers(
 	phoneChange PhoneChanger,
 	emailChange EmailChanger,
 	profile Profiler,
+	profilePhoto ProfilePhotos,
 	logout Logout,
 	sessions SessionLister,
 	cookieSecure bool,
@@ -164,6 +179,7 @@ func NewAuthHandlers(
 		phoneChange:  phoneChange,
 		emailChange:  emailChange,
 		profile:      profile,
+		profilePhoto: profilePhoto,
 		logout:       logout,
 		sessions:     sessions,
 		cookieSecure: cookieSecure,
@@ -729,7 +745,19 @@ func meResponse(user domain.User) openapi.MeResponse {
 		Patronymic: user.Patronymic,
 		Email:      email,
 		Timezone:   timezonePtrFromUser(user.Timezone),
+		PhotoUrl:   mePhotoURL(user),
 	}
+}
+
+// mePhotoURL is the profile photo's same-origin streaming path (ADR 0065):
+// nil without a photo. The self path is constant — /me is always the
+// session's own profile.
+func mePhotoURL(user domain.User) *string {
+	if user.PhotoKey == nil {
+		return nil
+	}
+	path := "/api/v1/me/photo"
+	return &path
 }
 
 func timezonePtrFromUser(tz domain.Timezone) *string {
