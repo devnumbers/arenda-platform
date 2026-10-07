@@ -528,6 +528,11 @@ jobs:
       # наряд 30.09: первая загрузка stage + 502 на finance-regular-*).
       # Прогреваем всё, что просит страница, до смоука: HTML главной →
       # уникальные URL оптимизатора → GET с тем же Accept, что у браузера.
+      # Деплои 06–07.10.2026: compose пересоздаёт контейнеры каждым деплоем,
+      # кэш стартует холодным каждый раз; 6 воркеров дважды уронили прогрев
+      # целиком (131/131 × 502 за секунды → автооткат релиза), а зелёный
+      # прогон 06.10 шёл на грани ~7 минут. Воркеров двое, ретраев больше:
+      # шторм превращается в ручеём, который контейнер переживает.
       - name: Warm image optimizer
         env:
           BASE_URL: ${{ inputs.base_url }}
@@ -560,7 +565,7 @@ jobs:
           warm_one() {
             if curl -fsS -o /dev/null --max-time 90 \
                 -H 'Accept: image/avif,image/webp,image/*,*/*;q=0.8' \
-                --retry 3 --retry-delay 2 --retry-all-errors \
+                --retry 6 --retry-delay 4 --retry-all-errors \
                 "${BASE_URL}$1"; then
               return 0
             fi
@@ -568,9 +573,11 @@ jobs:
             echo "WARN: warm failed: $1" >&2
           }
           export -f warm_one
-          # Шесть воркеров: на холодном деплое это сотни энкодов, sequentially
-          # шаг упирался бы в таймаут; порядок прогрева значения не имеет.
-          xargs -P 6 -I '{}' bash -c 'warm_one "$@"' _ '{}' < "${urls_file}" || true
+          # Двое воркеров (было шесть): холодный шторм AVIF-энкодов выронил
+          # прогрев целиком на деплоях 06–07.10.2026 — 131/131 × 502 и
+          # автооткат релиза; двое проминают кэш ручьём. Порядок прогрева
+          # значения не имеет.
+          xargs -P 2 -I '{}' bash -c 'warm_one "$@"' _ '{}' < "${urls_file}" || true
           failed="$(wc -l < "${warn_file}" | tr -d ' ')"
           if [ "${failed}" -ne 0 ]; then
             echo "${failed}/${total} optimizer URLs failed to warm" >&2
