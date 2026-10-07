@@ -132,6 +132,12 @@ RETURNING *;
 SELECT COUNT(*) FROM properties
 WHERE owner_id = $1 AND status IN ('active', 'maintenance');
 
+-- name: CountArchivedPropertiesByOwner :one
+-- The «Архив» button gate (issue #1233): the owner's archived rows only —
+-- shared properties contribute nothing, the archive is owner-only.
+SELECT COUNT(*) FROM properties
+WHERE owner_id = $1 AND status = 'archived';
+
 -- name: CountPropertiesByOwnerAndType :one
 -- The auto-name serial (ticket #1001): the owner's properties of this type
 -- in every status — archived count too, deleted rows are gone (hard delete).

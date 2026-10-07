@@ -3441,6 +3441,8 @@ export interface components {
              * @description The reading actor's calendar date (ADR 0048) — the «today» the client counts the «Осталось N месяцев» rental badge against (ticket #586; the tasks feed's today rule, #521).
              */
             today: string;
+            /** @description The data owner's archived property count (issue #1233): the properties hub gates the «Архив» entry on it — no archived rows, no button. The actor's own archived rows only; shared properties contribute nothing. */
+            archived_count: number;
             /** @description The reading actor's suspended shared memberships, FIFO order (ticket #702): shared objects hidden from them by a tariff slot shortage, returned as blur-card placeholders («Объект недоступен») instead of the hidden_shared_count footnote they replace. Empty for owners and recipients within their limit. */
             suspended_shared?: components["schemas"]["SuspendedSharedProperty"][];
         };

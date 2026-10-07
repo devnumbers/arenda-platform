@@ -396,6 +396,72 @@ func TestPropertyRepository_CountByOwnerAndType(t *testing.T) {
 	}
 }
 
+// TestPropertyRepository_CountArchivedByOwner verifies the «Архив» button
+// gate's count (issue #1233): only the owner's archived rows count — active
+// and maintenance stay out, another owner's archived row never leaks in, and
+// an owner without archived rows reads 0.
+func TestPropertyRepository_CountArchivedByOwner(t *testing.T) {
+	t.Parallel()
+
+	pool := setupPropertiesIntegrationDB(t)
+	ctx := t.Context()
+	repo := NewPropertyRepository(pool)
+	ownerID := createTestOwner(t, pool)
+	otherOwner := createTestOwner(t, pool)
+	emptyOwner := createTestOwner(t, pool)
+
+	active := sampleProperty(ownerID, nil)
+	if _, err := repo.Create(ctx, ownerID, active); err != nil {
+		t.Fatalf("create active: %v", err)
+	}
+	maintenance := sampleProperty(ownerID, nil)
+	if _, err := repo.Create(ctx, ownerID, maintenance); err != nil {
+		t.Fatalf("create maintenance candidate: %v", err)
+	}
+	maintenance.Status = domain.PropertyStatusMaintenance
+	if _, err := repo.Update(ctx, ownerID, maintenance); err != nil {
+		t.Fatalf("update to maintenance: %v", err)
+	}
+	archived := sampleProperty(ownerID, nil)
+	if _, err := repo.Create(ctx, ownerID, archived); err != nil {
+		t.Fatalf("create archived candidate: %v", err)
+	}
+	if err := repo.Archive(ctx, archived.ID, ownerID); err != nil {
+		t.Fatalf("archive: %v", err)
+	}
+	foreign := sampleProperty(otherOwner, nil)
+	if _, err := repo.Create(ctx, otherOwner, foreign); err != nil {
+		t.Fatalf("create foreign: %v", err)
+	}
+	if err := repo.Archive(ctx, foreign.ID, otherOwner); err != nil {
+		t.Fatalf("archive foreign: %v", err)
+	}
+
+	count, err := repo.CountArchivedByOwner(ctx, ownerID)
+	if err != nil {
+		t.Fatalf("count archived: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("archived count = %d, want 1 (active and maintenance stay out, the foreign archived row never leaks in)", count)
+	}
+
+	count, err = repo.CountArchivedByOwner(ctx, otherOwner)
+	if err != nil {
+		t.Fatalf("count archived (other owner): %v", err)
+	}
+	if count != 1 {
+		t.Errorf("other owner's archived count = %d, want 1", count)
+	}
+
+	count, err = repo.CountArchivedByOwner(ctx, emptyOwner)
+	if err != nil {
+		t.Fatalf("count archived (empty): %v", err)
+	}
+	if count != 0 {
+		t.Errorf("empty owner's archived count = %d, want 0", count)
+	}
+}
+
 func TestPropertyRepository_StudioTypeAccepted(t *testing.T) {
 	t.Parallel()
 

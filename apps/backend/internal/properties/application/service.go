@@ -375,6 +375,13 @@ func (s *PropertyService) ListProperties(ctx context.Context, actor uuid.UUID) (
 		return PropertiesPage{}, fmt.Errorf("list properties: %w", err)
 	}
 
+	// The «Архив» gate rides the list read (issue #1233): the owner's own
+	// archived rows only — shared properties contribute nothing.
+	archivedCount, err := s.repo.CountArchivedByOwner(ctx, actor)
+	if err != nil {
+		return PropertiesPage{}, fmt.Errorf("count archived properties: %w", err)
+	}
+
 	// Own properties are read with the owner role (issue T11).
 	for i := range properties {
 		properties[i].AccessRole = sharedpolicy.RoleOwner
@@ -404,7 +411,7 @@ func (s *PropertyService) ListProperties(ctx context.Context, actor uuid.UUID) (
 	if err != nil {
 		return PropertiesPage{}, err
 	}
-	return PropertiesPage{Items: items, Today: today, SuspendedShared: suspended}, nil
+	return PropertiesPage{Items: items, Today: today, ArchivedCount: archivedCount, SuspendedShared: suspended}, nil
 }
 
 // enrichSharedOwnerNames fills the owner display name of the shared list
@@ -566,7 +573,9 @@ func (s *PropertyService) ListArchivedProperties(ctx context.Context, actor uuid
 	if err != nil {
 		return PropertiesPage{}, err
 	}
-	return PropertiesPage{Items: items, Today: today}, nil
+	// The archived list is the archived count: unpaginated, the listed rows
+	// are the owner's archived set (issue #1233) — no second COUNT query.
+	return PropertiesPage{Items: items, Today: today, ArchivedCount: len(items)}, nil
 }
 
 // listToday resolves the reading actor's calendar date (ADR 0048) for the

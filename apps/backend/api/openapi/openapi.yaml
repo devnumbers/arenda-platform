@@ -7704,7 +7704,7 @@ components:
 
     PropertiesResponse:
       type: object
-      required: [items, today]
+      required: [items, today, archived_count]
       properties:
         items:
           type: array
@@ -7717,6 +7717,14 @@ components:
             The reading actor's calendar date (ADR 0048) — the «today» the
             client counts the «Осталось N месяцев» rental badge against
             (ticket #586; the tasks feed's today rule, #521).
+        archived_count:
+          type: integer
+          minimum: 0
+          description: >
+            The data owner's archived property count (issue #1233): the
+            properties hub gates the «Архив» entry on it — no archived rows,
+            no button. The actor's own archived rows only; shared properties
+            contribute nothing.
         suspended_shared:
           type: array
           description: >

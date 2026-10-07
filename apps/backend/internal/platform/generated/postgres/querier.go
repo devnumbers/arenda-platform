@@ -57,6 +57,9 @@ type Querier interface {
 	// Admin dashboard stats. These queries are consumed by the admin context's
 	// repository, not by the billing module itself.
 	CountActiveSubscriptionsAdmin(ctx context.Context) (int64, error)
+	// The «Архив» button gate (issue #1233): the owner's archived rows only —
+	// shared properties contribute nothing, the archive is owner-only.
+	CountArchivedPropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) (int64, error)
 	CountArchivedPropertiesByOwnerAdmin(ctx context.Context, ownerID pgtype.UUID) (int64, error)
 	CountAuditLogsAdmin(ctx context.Context, arg CountAuditLogsAdminParams) (int64, error)
 	// Every started session counts, whatever its later outcome (ticket #427).
