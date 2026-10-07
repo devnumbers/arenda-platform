@@ -712,12 +712,6 @@ func recordContactAudit(
 	return nil
 }
 
-// ErrPhotoNotFound marks a photo request for an entity that has no photo —
-// the privacy-preserving 404 of the serving endpoints (ADR 0065). The
-// contacts context keeps its own sentinel so the transport maps it beside
-// the context's own 404 vocabulary.
-var ErrPhotoNotFound = errors.New("contacts: photo not found")
-
 // PhotoDescriptor resolves the card photo's identity for the serving
 // endpoint (ADR 0065): the key powers the ETag — a replacement mints a new
 // UUID key, so a 304 never lies about the bytes. Access follows ADR 0054:
@@ -743,12 +737,17 @@ func (s *ContactService) PhotoDescriptor(ctx context.Context, actor, contactID u
 func (s *ContactService) OpenContactPhoto(
 	ctx context.Context, actor, contactID uuid.UUID,
 ) (body io.ReadCloser, size int64, contentType, key string, err error) {
-	if _, _, err := s.PhotoDescriptor(ctx, actor, contactID); err != nil {
-		return nil, 0, "", "", err
-	}
+	// One authorization and one row read end to end (the descriptor path
+	// already gated the actor; this repeat covers the 200 path).
 	contact, err := s.contacts.GetByID(ctx, contactID)
 	if err != nil {
 		return nil, 0, "", "", err
+	}
+	if _, err := s.authorize(ctx, actor, contact, sharedpolicy.CanView); err != nil {
+		return nil, 0, "", "", err
+	}
+	if contact.PhotoKey == nil {
+		return nil, 0, "", "", ErrPhotoNotFound
 	}
 	body, size, contentType, err = s.photos.Open(ctx, *contact.PhotoKey)
 	if err != nil {
@@ -783,11 +782,19 @@ func (s *ContactService) SetContactPhoto(
 	}
 
 	var (
-		updated domain.Contact
-		oldKey  *string
+		updated   domain.Contact
+		oldKey    *string
+		journaled bool
 	)
 	err = s.runInTx(ctx, func(stores *txStores) error {
-		oldKey = contact.PhotoKey
+		// The previous photo key is captured under the row lock: two
+		// concurrent replacements must not both see the same old key — one
+		// of them would orphan its object silently.
+		locked, err := stores.contacts.GetByIDForUpdate(ctx, contact.ID)
+		if err != nil {
+			return fmt.Errorf("lock contact: %w", err)
+		}
+		oldKey = locked.PhotoKey
 
 		if err := s.photos.Put(ctx, key, bytes.NewReader(processed.Data), processed.ContentType, processed.Size); err != nil {
 			return fmt.Errorf("put contact photo: %w", err)
@@ -805,6 +812,14 @@ func (s *ContactService) SetContactPhoto(
 		if err := recordContactAudit(ctx, stores, actor, role, auditdomain.ActionContactPhotoAdded, contact.ID, auditCtx); err != nil {
 			return err
 		}
+		if contact.PropertyID != nil {
+			if err := historyapp.RecordScoped(ctx, stores.history, *contact.PropertyID, actor,
+				sharedpolicy.HistoryActorRole(role),
+				historydomain.ContactPhotoAdded(contact.ID, locked.FullName())); err != nil {
+				return err
+			}
+			journaled = true
+		}
 		return nil
 	})
 	if err != nil {
@@ -817,7 +832,7 @@ func (s *ContactService) SetContactPhoto(
 	if oldKey != nil {
 		s.cleanupPhoto(ctx, *oldKey)
 	}
-	s.publishChanged(ctx, actor, contact.PropertyID, false)
+	s.publishChanged(ctx, actor, contact.PropertyID, journaled)
 
 	return updated, nil
 }
@@ -834,13 +849,22 @@ func (s *ContactService) DeleteContactPhoto(ctx context.Context, actor, contactI
 	if err != nil {
 		return domain.Contact{}, err
 	}
-	if contact.PhotoKey == nil {
-		return domain.Contact{}, ErrPhotoNotFound
-	}
 
-	var updated domain.Contact
+	var (
+		updated   domain.Contact
+		oldKey    *string
+		journaled bool
+	)
 	err = s.runInTx(ctx, func(stores *txStores) error {
-		var err error
+		locked, err := stores.contacts.GetByIDForUpdate(ctx, contact.ID)
+		if err != nil {
+			return fmt.Errorf("lock contact: %w", err)
+		}
+		if locked.PhotoKey == nil {
+			return ErrPhotoNotFound
+		}
+		oldKey = locked.PhotoKey
+
 		updated, err = stores.contacts.SetPhoto(ctx, contact.ID, contact.OwnerID, nil, nil)
 		if err != nil {
 			return fmt.Errorf("set contact photo: %w", err)
@@ -853,13 +877,21 @@ func (s *ContactService) DeleteContactPhoto(ctx context.Context, actor, contactI
 		if err := recordContactAudit(ctx, stores, actor, role, auditdomain.ActionContactPhotoDeleted, contact.ID, auditCtx); err != nil {
 			return err
 		}
+		if contact.PropertyID != nil {
+			if err := historyapp.RecordScoped(ctx, stores.history, *contact.PropertyID, actor,
+				sharedpolicy.HistoryActorRole(role),
+				historydomain.ContactPhotoDeleted(contact.ID, locked.FullName())); err != nil {
+				return err
+			}
+			journaled = true
+		}
 		return nil
 	})
 	if err != nil {
 		return domain.Contact{}, err
 	}
-	s.cleanupPhoto(ctx, *contact.PhotoKey)
-	s.publishChanged(ctx, actor, contact.PropertyID, false)
+	s.cleanupPhoto(ctx, *oldKey)
+	s.publishChanged(ctx, actor, contact.PropertyID, journaled)
 
 	return updated, nil
 }

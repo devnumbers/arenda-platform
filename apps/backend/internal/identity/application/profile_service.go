@@ -15,10 +15,6 @@ import (
 	storageshared "github.com/nambers/arenda-planform/apps/backend/internal/shared/storage"
 )
 
-// ErrPhotoNotFound marks a photo request for an entity that has no photo —
-// the privacy-preserving 404 of the serving endpoints (ADR 0065).
-var ErrPhotoNotFound = errors.New("identity: photo not found")
-
 // ProfileService provides read and update operations for the user's own profile.
 //
 // It embeds the identity txStoreFactory so UpdateProfile runs through runInTx

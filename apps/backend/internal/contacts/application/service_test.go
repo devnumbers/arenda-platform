@@ -115,6 +115,10 @@ func (s *fakeContactStore) Delete(_ context.Context, id, ownerID uuid.UUID) erro
 	return nil
 }
 
+func (s *fakeContactStore) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.Contact, error) {
+	return s.GetByID(ctx, id)
+}
+
 func (s *fakeContactStore) SetPhoto(_ context.Context, id, ownerID uuid.UUID, key, contentType *string) (domain.Contact, error) {
 	c, ok := s.byID[id]
 	if !ok || c.OwnerID != ownerID {

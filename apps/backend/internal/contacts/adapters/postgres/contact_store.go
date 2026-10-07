@@ -61,6 +61,19 @@ func (s *ContactStore) GetByID(ctx context.Context, id uuid.UUID) (domain.Contac
 	return contactFromRow(row), nil
 }
 
+// GetByIDForUpdate is the row-locked variant of GetByID (ADR 0065 photo
+// mutations).
+func (s *ContactStore) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.Contact, error) {
+	row, err := s.q().GetContactByIDForUpdate(ctx, pgconv.UUIDToPgtype(id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Contact{}, application.ErrNotFound
+		}
+		return domain.Contact{}, fmt.Errorf("get contact %s for update: %w", id, err)
+	}
+	return contactFromRow(row), nil
+}
+
 // List returns the actor's visible contacts per the query scope, search and
 // sort (” search = no filter, ” sort/order = the defaults), each with the
 // display name of its bound property. The page walks the listing's own order

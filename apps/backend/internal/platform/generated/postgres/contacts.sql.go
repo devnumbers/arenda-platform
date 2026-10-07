@@ -77,6 +77,39 @@ func (q *Queries) GetContactByID(ctx context.Context, id pgtype.UUID) (Contact, 
 	return i, err
 }
 
+const getContactByIDForUpdate = `-- name: GetContactByIDForUpdate :one
+SELECT id, owner_id, property_id, first_name, last_name, patronymic, role, phone, email, messenger_name, messenger_username, note, created_at, updated_at, photo_key, photo_content_type FROM contacts
+WHERE id = $1
+FOR UPDATE
+`
+
+// The row-locked variant for the photo mutations (ADR 0065): the old photo
+// key must be read under the lock, or two concurrent replacements both see
+// the same previous key and one of them orphans its object silently.
+func (q *Queries) GetContactByIDForUpdate(ctx context.Context, id pgtype.UUID) (Contact, error) {
+	row := q.db.QueryRow(ctx, getContactByIDForUpdate, id)
+	var i Contact
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.PropertyID,
+		&i.FirstName,
+		&i.LastName,
+		&i.Patronymic,
+		&i.Role,
+		&i.Phone,
+		&i.Email,
+		&i.MessengerName,
+		&i.MessengerUsername,
+		&i.Note,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PhotoKey,
+		&i.PhotoContentType,
+	)
+	return i, err
+}
+
 const getContactPropertyRef = `-- name: GetContactPropertyRef :one
 SELECT id, owner_id FROM properties WHERE id = $1
 `

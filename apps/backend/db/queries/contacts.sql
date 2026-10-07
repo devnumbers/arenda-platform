@@ -9,6 +9,14 @@
 SELECT * FROM contacts
 WHERE id = $1;
 
+-- name: GetContactByIDForUpdate :one
+-- The row-locked variant for the photo mutations (ADR 0065): the old photo
+-- key must be read under the lock, or two concurrent replacements both see
+-- the same previous key and one of them orphans its object silently.
+SELECT * FROM contacts
+WHERE id = $1
+FOR UPDATE;
+
 -- name: ListContacts :many
 -- The actor's visible slice per the query scope (ADR 0054, ADR 0028):
 -- 'all' — the flat book: the actor's own cards plus the cards bound to

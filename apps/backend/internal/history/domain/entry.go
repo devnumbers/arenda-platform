@@ -100,6 +100,11 @@ const (
 	ActionContactCreated Action = "contact.created"
 	ActionContactUpdated Action = "contact.updated"
 	ActionContactDeleted Action = "contact.deleted"
+	// ActionContactPhotoAdded/Deleted record the card photo writes (ADR
+	// 0065, ticket #1227): property-bound cards only — the journal is
+	// property-scoped.
+	ActionContactPhotoAdded   Action = "contact.photo_added"
+	ActionContactPhotoDeleted Action = "contact.photo_deleted"
 	// ActionContactMoved records the cross-property move (тикет #856): the
 	// rebind writes a pair of rows — one on the source object, one on the
 	// destination (ADR 0061 §4, the per-leg pattern of §3).

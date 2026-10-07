@@ -332,6 +332,10 @@ type Querier interface {
 	// binding the authorization gates on, so the service loads first and
 	// authorizes before anything travels out.
 	GetContactByID(ctx context.Context, id pgtype.UUID) (Contact, error)
+	// The row-locked variant for the photo mutations (ADR 0065): the old photo
+	// key must be read under the lock, or two concurrent replacements both see
+	// the same previous key and one of them orphans its object silently.
+	GetContactByIDForUpdate(ctx context.Context, id pgtype.UUID) (Contact, error)
 	// The contacts view of the property a use case targets: just the data owner
 	// whose book the property-bound cards belong to (ADR 0028).
 	GetContactPropertyRef(ctx context.Context, id pgtype.UUID) (GetContactPropertyRefRow, error)

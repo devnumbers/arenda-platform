@@ -1578,12 +1578,26 @@ func (s *PropertyService) PhotoDescriptor(ctx context.Context, actor, id uuid.UU
 func (s *PropertyService) OpenPropertyPhoto(
 	ctx context.Context, actor, id uuid.UUID,
 ) (body io.ReadCloser, size int64, contentType, key string, err error) {
-	if _, _, err := s.PhotoDescriptor(ctx, actor, id); err != nil {
-		return nil, 0, "", "", err
+	// One policy resolution and one row read: the descriptor path already
+	// gated the actor, this repeat covers the 200 path end to end.
+	role, err := s.policy.RoleForProperty(ctx, actor, id)
+	if err != nil {
+		return nil, 0, "", "", fmt.Errorf("resolve role: %w", err)
 	}
+	switch sharedpolicy.GateFor(role, sharedpolicy.CanView) {
+	case sharedpolicy.GateAllow:
+	case sharedpolicy.GateForbidden:
+		return nil, 0, "", "", ErrForbidden
+	default: // GateNone, GateSuspended.
+		return nil, 0, "", "", s.accessFailure(role)
+	}
+
 	property, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return nil, 0, "", "", err
+	}
+	if property.PhotoKey == nil {
+		return nil, 0, "", "", ErrPhotoNotFound
 	}
 	body, size, contentType, err = s.photoStorage.Open(ctx, *property.PhotoKey)
 	if err != nil {

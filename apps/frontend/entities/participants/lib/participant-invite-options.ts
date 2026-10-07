@@ -14,17 +14,17 @@ export type InvitePropertySource = {
   readonly id: string;
   readonly name: string;
   readonly address: string;
-  readonly photos?: ReadonlyArray<{ url: string }>;
+  readonly photoUrl?: string | null;
 };
 
-/** Свойство читающего → опция мультичека (фото — первое, как в карточке
- * объекта #586). */
+/** Свойство читающего → опция мультичека (фото — аватар объекта, ADR 0065:
+ * одна приватная картинка на сущность). */
 export function toInvitePropertyOption(property: InvitePropertySource): InvitePropertyOption {
   return {
     id: property.id,
     name: property.name,
     address: property.address,
-    photoUrl: property.photos?.[0]?.url,
+    photoUrl: property.photoUrl ?? undefined,
   };
 }
 
