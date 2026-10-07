@@ -38,7 +38,7 @@ describe('userPropertyRows', () => {
         id: 'p1',
         name: 'Кофейня',
         address: 'ул. Мира, 15',
-        photos: [{ id: 'ph', url: '/photo.jpg' }],
+        photoUrl: '/photo.jpg',
         access: { role: 'full_access' },
       }),
     ]);

@@ -37,7 +37,7 @@ export function OperationPropertyStep({
             key={property.id}
             title={property.name}
             subtitle={property.address}
-            photoUrl={property.photos?.[0]?.url}
+            photoUrl={property.photoUrl ?? undefined}
             type={property.type}
             checked={selectedPropertyId === property.id}
             onCheck={() => onSelect(property.id)}

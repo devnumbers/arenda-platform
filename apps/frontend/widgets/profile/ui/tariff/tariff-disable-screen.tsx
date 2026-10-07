@@ -192,7 +192,7 @@ function PropertyPickRow({
 }: {
   readonly property: Property;
 }): JSX.Element {
-  const photoUrl = property.photos?.[0]?.url;
+  const photoUrl = property.photoUrl ?? undefined;
   // Выборка из статичного реестра, не вызов: react-hooks/static-components.
   const Glyph = propertyTypeIcons[property.type];
 

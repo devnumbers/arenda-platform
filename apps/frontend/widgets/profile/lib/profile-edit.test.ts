@@ -11,6 +11,7 @@ const me: User = {
   patronymic: null,
   email: 'daniil@yandex.ru',
   timezone: 'Europe/Moscow',
+  photoUrl: null,
   subscription: null,
 };
 

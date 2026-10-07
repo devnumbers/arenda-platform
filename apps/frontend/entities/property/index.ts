@@ -5,7 +5,7 @@ export {
   type PropertyPermissions,
 } from './model/property-permissions';
 export { comparePrimaryProperty } from './model/primary-property';
-export { mapPropertyPhoto, mapPropertyResponse } from './model/mappers';
+export { mapPropertyResponse } from './model/mappers';
 export { propertyTypeIcons } from './lib/property-type-icons';
-export type { Property, PropertyAccess, PropertyAttributes, PropertyPhoto, PropertyStatus, PropertyType } from './model/types';
+export type { Property, PropertyAccess, PropertyAttributes, PropertyStatus, PropertyType } from './model/types';
 export { PropertyAvatar } from './ui/PropertyAvatar';

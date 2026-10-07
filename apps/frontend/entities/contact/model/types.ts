@@ -10,6 +10,9 @@ export type Contact = {
   /** Имя привязанного объекта — проекция плоского списка книги (глобальная
    * страница контактов); на карточке и в списке объекта не приходит. */
   readonly propertyName?: string | undefined;
+  /** Путь приватного фото карточки (ADR 0065): same-origin стриминг через
+   * бэкенд; undefined — фото нет. */
+  readonly photoUrl?: string | undefined;
   readonly firstName: string;
   readonly lastName: string;
   readonly patronymic: string;

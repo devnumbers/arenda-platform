@@ -13,8 +13,8 @@ import {
 import { useGuardedMutation } from '@/shared/lib/hooks/use-guarded-mutation';
 import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
-import { mapPropertyPhoto, mapPropertyResponse } from '@/entities/property';
-import type { Property, PropertyPhoto } from '@/entities/property';
+import { mapPropertyResponse } from '@/entities/property';
+import type { Property } from '@/entities/property';
 import { propertyKeys } from '@/shared/api/query-keys';
 import { keysetNextPageParam, type KeysetPage } from '@/shared/lib/keyset';
 import { resolvePropertiesNavItem, type PropertiesNavItem } from '../lib/properties-nav-item';
@@ -37,7 +37,6 @@ export type {
 type PropertiesSearchResponse = components['schemas']['PropertiesSearchResponse'];
 type PropertyCreateRequest = components['schemas']['PropertyCreateRequest'];
 type PropertyUpdateRequest = components['schemas']['PropertyUpdateRequest'];
-type PropertyPhotoDto = components['schemas']['PropertyPhoto'];
 type AddressSuggestionsResponse =
   components['schemas']['AddressSuggestionsResponse'];
 type AddressSuggestion = components['schemas']['AddressSuggestion'];
@@ -276,43 +275,6 @@ export function useAddressSuggestions(
     },
     enabled: query.trim().length >= 3,
     staleTime: 30 * 1000,
-  });
-}
-
-export function useUploadPropertyPhoto(): UseMutationResult<
-  PropertyPhoto,
-  ApiError,
-  { propertyId: string; file: File }
-> {
-  return useGuardedMutation({
-    mutationFn: async ({ propertyId, file }) => {
-      const formData = new FormData();
-      formData.append('file', file);
-      return mapPropertyPhoto(
-        await apiClient<PropertyPhotoDto>(`/properties/${propertyId}/photos`, {
-          method: 'POST',
-          body: formData,
-        }),
-      );
-    },
-  });
-}
-
-export function useDeletePropertyPhoto(): UseMutationResult<
-  void,
-  ApiError,
-  { propertyId: string; photoId: string }
-> {
-  const queryClient = useQueryClient();
-  return useGuardedMutation({
-    mutationFn: ({ propertyId, photoId }) =>
-      apiClient<void>(`/properties/${propertyId}/photos/${photoId}`, {
-        method: 'DELETE',
-      }),
-    onSuccess: (_, { propertyId }) => {
-      void queryClient.invalidateQueries({ queryKey: propertyKeys.list });
-      void queryClient.invalidateQueries({ queryKey: propertyKeys.detail(propertyId) });
-    },
   });
 }
 

@@ -68,6 +68,22 @@ export interface paths {
         patch: operations["updateMe"];
         trace?: never;
     };
+    "/me/photo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getMePhoto"];
+        put?: never;
+        post: operations["uploadMePhoto"];
+        delete: operations["deleteMePhoto"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/phone/send-code": {
         parameters: {
             query?: never;
@@ -329,32 +345,16 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/properties/{propertyId}/photos": {
+    "/properties/{propertyId}/photo": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        get: operations["getPropertyPhoto"];
         put?: never;
         post: operations["uploadPropertyPhoto"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/properties/{propertyId}/photos/{photoId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
         delete: operations["deletePropertyPhoto"];
         options?: never;
         head?: never;
@@ -372,6 +372,22 @@ export interface paths {
         put?: never;
         post: operations["createContact"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/contacts/{contactId}/photo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getContactPhoto"];
+        put?: never;
+        post: operations["uploadContactPhoto"];
+        delete: operations["deleteContactPhoto"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2241,6 +2257,8 @@ export interface components {
             email?: string | null;
             /** @description IANA timezone identifier, e.g. Europe/Moscow. */
             timezone?: string | null;
+            /** @description The profile photo's same-origin streaming path (ADR 0065): /api/v1/me/photo, served with the session cookie; null when the profile has no photo. Only the owner reads it. */
+            photoUrl?: string | null;
             subscription?: components["schemas"]["Subscription"];
         };
         SessionListResponse: {
@@ -2623,7 +2641,8 @@ export interface components {
             description?: string | null;
             attributes: components["schemas"]["PropertyAttributes"];
             status: components["schemas"]["PropertyStatus"];
-            photos?: components["schemas"]["PropertyPhoto"][] | null;
+            /** @description The property photo's same-origin streaming path (ADR 0065): /api/v1/properties/{id}/photo; null when the object has no photo. */
+            photoUrl?: string | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -2779,7 +2798,8 @@ export interface components {
             attributes: components["schemas"]["PropertyAttributes"];
             status: components["schemas"]["PropertyStatus"];
             access?: components["schemas"]["PropertyAccessContext"];
-            photos?: components["schemas"]["PropertyPhoto"][];
+            /** @description The property photo's same-origin streaming path (ADR 0065): /api/v1/properties/{id}/photo, served with the session cookie; null when the object has no photo. */
+            photo_url?: string | null;
             /** @description Shared-access participants of the property: membership rows (any status, owner excluded — the owner is never a membership row) plus pending email invitations. */
             members_count: number;
             /** Format: date-time */
@@ -2812,15 +2832,6 @@ export interface components {
              * @description The unfinished rental's planned end date («Осталось N месяцев» — the client counts the full months from today); null for an open-ended rental or without one.
              */
             planned_end_date?: string | null;
-        };
-        PropertyPhoto: {
-            /** Format: uuid */
-            id: string;
-            /** Format: uri */
-            url: string;
-        };
-        PropertyPhotosResponse: {
-            items: components["schemas"]["PropertyPhoto"][];
         };
         /** @description The create payload of a contact card (ADR 0054). Only the first name is required; the phone travels in any accepted Russian spelling and is stored normalized to +7XXXXXXXXXX. A card with a propertyId lands in the property owner's book (the edit gate applies); without one it is created «без объекта» in the actor's own book. */
         ContactCreateRequest: {
@@ -2860,6 +2871,8 @@ export interface components {
             propertyId?: string | null;
             /** @description The display name of the bound property; null for an unbound card. A list projection only — the card read resolves the property by its id. */
             propertyName?: string | null;
+            /** @description The card photo's same-origin streaming path (ADR 0065): /api/v1/contacts/{id}/photo, served with the session cookie; null when the card has no photo. */
+            photoUrl?: string | null;
             firstName: string;
             lastName: string;
             patronymic: string;
@@ -3101,7 +3114,7 @@ export interface components {
              * @description The object's global pin (ticket #577): null — not pinned, a moment — pinned since then. The cards order the pinned first.
              */
             pinnedAt: string | null;
-            /** @description The card avatar's photo — the object's first (oldest) photo (ticket #582); null when the object has no photos. */
+            /** @description The card avatar's photo — the object's first (oldest) photo (ticket #582); with the private photos (ADR 0065) one image per object, streamed by the backend; null when the object has no photo. */
             photoUrl: string | null;
             /** @description The «Автоплатежи» group — the object's auto-pay rules. */
             autoPayRules: components["schemas"]["PaymentObjectKey"][];
@@ -4259,6 +4272,88 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
+    getMePhoto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The profile photo bytes, streamed by the backend (ADR 0065): cookie-auth, Cache-Control private, ETag is the key hash — a matching If-None-Match answers 304 without a storage read. Only the owner reads it; showing the avatar to other users is a separate decision outside this contract. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                    "image/png": string;
+                    "image/webp": string;
+                };
+            };
+            /** @description The client's ETag still matches the current photo. */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    uploadMePhoto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The photo replaced (one image per profile, ADR 0065): the previous object is removed best-effort, the response carries the updated profile with the new photoUrl. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteMePhoto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Photo deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     sendPhoneChangeCode: {
         parameters: {
             query?: never;
@@ -4740,6 +4835,39 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    getPropertyPhoto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The property photo bytes, streamed by the backend (ADR 0065): cookie-auth, Cache-Control private, ETag is the key hash — a matching If-None-Match answers 304 without a storage read. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                    "image/png": string;
+                    "image/webp": string;
+                };
+            };
+            /** @description The client's ETag still matches the current photo. */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     uploadPropertyPhoto: {
         parameters: {
             query?: never;
@@ -4758,17 +4886,18 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Photo uploaded */
-            201: {
+            /** @description The photo replaced (one image per entity, ADR 0065): the previous object is removed best-effort, the response carries the updated property with the new photo_url. */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PropertyPhoto"];
+                    "application/json": components["schemas"]["PropertyResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
         };
@@ -4779,7 +4908,6 @@ export interface operations {
             header?: never;
             path: {
                 propertyId: string;
-                photoId: string;
             };
             cookie?: never;
         };
@@ -4794,6 +4922,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };
@@ -4854,6 +4983,96 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ContactResponse"];
                 };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getContactPhoto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contactId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The contact card photo bytes, streamed by the backend (ADR 0065): cookie-auth, Cache-Control private, ETag is the key hash — a matching If-None-Match answers 304 without a storage read. Access follows the card (ADR 0054): a bound card is readable by the property's viewers, an unbound one by the book owner only. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                    "image/png": string;
+                    "image/webp": string;
+                };
+            };
+            /** @description The client's ETag still matches the current photo. */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    uploadContactPhoto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contactId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The photo replaced (one image per card, ADR 0065): the previous object is removed best-effort, the response carries the updated card with the new photoUrl. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteContactPhoto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contactId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Photo deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];

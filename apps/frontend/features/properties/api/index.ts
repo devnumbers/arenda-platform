@@ -11,8 +11,6 @@ export {
   useUnarchiveProperty,
   useSetPropertyPin,
   useAddressSuggestions,
-  useUploadPropertyPhoto,
-  useDeletePropertyPhoto,
   useDeleteProperty,
 } from './hooks';
 export type { PropertiesSearchPageData } from './hooks';

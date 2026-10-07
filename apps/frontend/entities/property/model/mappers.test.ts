@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { components } from '@/shared/api/dto';
-import { mapPropertyPhoto, mapPropertyResponse } from './mappers';
+import { mapPropertyResponse } from './mappers';
 
 function makeDto(
   overrides: Partial<components['schemas']['PropertyResponse']> = {},
@@ -20,17 +20,19 @@ function makeDto(
   };
 }
 
-describe('mapPropertyPhoto', () => {
-  it('maps id and url as-is (wire already canonical, entity boundary)', () => {
-    const photo = mapPropertyPhoto({
-      id: '0198b6a7-1000-7000-8000-00000000ph01',
-      url: 'https://cdn.example.com/property-1/photo.jpg',
-    });
+describe('mapPropertyResponse photoUrl', () => {
+  it('maps photo_url onto the entity (the same-origin streaming path, ADR 0065)', () => {
+    const property = mapPropertyResponse(
+      makeDto({ photo_url: '/api/v1/properties/property-1/photo' }),
+    );
 
-    expect(photo).toEqual({
-      id: '0198b6a7-1000-7000-8000-00000000ph01',
-      url: 'https://cdn.example.com/property-1/photo.jpg',
-    });
+    expect(property.photoUrl).toBe('/api/v1/properties/property-1/photo');
+  });
+
+  it('null without a photo', () => {
+    const property = mapPropertyResponse(makeDto({ photo_url: null }));
+
+    expect(property.photoUrl).toBeNull();
   });
 });
 

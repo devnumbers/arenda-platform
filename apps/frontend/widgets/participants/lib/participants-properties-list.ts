@@ -74,7 +74,7 @@ export function userPropertyRows(properties: ReadonlyArray<Property>): UserPrope
     id: property.id,
     title: property.name,
     address: property.address,
-    photoUrl: property.photos?.[0]?.url,
+    photoUrl: property.photoUrl ?? undefined,
     role: property.access.role,
     badge: participantLegBadge({
       propertyId: property.id,

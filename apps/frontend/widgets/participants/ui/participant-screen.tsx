@@ -157,7 +157,7 @@ export function ParticipantScreen({
                   key={leg.propertyId}
                   leg={leg}
                   subtitle={propertyById.get(leg.propertyId)?.address}
-                  photoUrl={propertyById.get(leg.propertyId)?.photos?.[0]?.url}
+                  photoUrl={propertyById.get(leg.propertyId)?.photoUrl ?? undefined}
                   onSelect={() =>
                     router.push(
                       ROUTES.participantRights(participantId, leg.propertyId),

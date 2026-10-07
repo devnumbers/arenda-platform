@@ -151,7 +151,7 @@ export function OperationsObjectsSelectScreen(): JSX.Element {
                 key={property.id}
                 leading={
                   <SelectAvatar
-                    photoUrl={property.photos?.[0]?.url}
+                    photoUrl={property.photoUrl ?? undefined}
                     fallback={<Glyph className="h-6 w-6 text-[#D3D7D9]" />}
                   />
                 }

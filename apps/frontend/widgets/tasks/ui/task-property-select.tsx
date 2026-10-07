@@ -61,7 +61,7 @@ export function TaskPropertySelectPage({
               key={property.id}
               title={property.name}
               subtitle={property.address}
-              photoUrl={property.photos?.[0]?.url}
+              photoUrl={property.photoUrl ?? undefined}
               type={property.type}
               checked={draft === property.id}
               onCheck={() => onDraftChange(property.id)}

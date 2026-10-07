@@ -213,9 +213,9 @@ function ContactCardBody({
                 aria-hidden
                 className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white"
               >
-                {boundProperty.photos?.[0]?.url !== undefined ? (
+                {boundProperty.photoUrl ? (
                   <img
-                    src={boundProperty.photos[0].url}
+                    src={boundProperty.photoUrl}
                     alt=""
                     className="h-full w-full object-cover"
                   />
