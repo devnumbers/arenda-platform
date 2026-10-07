@@ -902,3 +902,59 @@ func TestPaymentScanStore_GetScheduledAutoPaidPayment(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, live, "the job woke after the live day rolled over — no backfill")
 }
+
+// Гонка тика и 10:00-джобы автоплатежа на границе (#1191): джоба проснулась
+// в 10:00, а тик ещё не погасил вхождение (внизтайм, лаг воркера) — джоба
+// молчит (штампа нет, разрешение не-живо); тик догнал позже в тот же живой
+// день — скан-подстраховка с instant-гейтом находит гашение и доставляет
+// позже 10:00, в тот же день; на следующий день бэкфилла нет. Нормальный
+// порядок (тик после полуночи, джоба в 10:00 видит штамп) — в
+// TestPaymentScanStore_GetScheduledAutoPaidPayment.
+func TestPaymentScanStore_AutoPaidTenOclockBoundaryTickVsJob(t *testing.T) {
+	t.Parallel()
+
+	pool := setupPushDB(t)
+	ctx := context.Background()
+
+	msk := createUserInZone(t, pool, "Europe/Moscow")
+	prop := createLiveProperty(t, pool, msk)
+	rule := insertScanPayment(t, pool, msk, prop, true)
+	insertScanOperation(t, pool, msk, prop, rule, "2026-09-19", "planned")
+
+	store := NewPaymentScanStore(pool)
+	today := time.Date(2026, 9, 19, 0, 0, 0, 0, time.UTC)
+	// Пробуждение 10:00:30 Москвы: тик ещё не дошёл.
+	boundary := time.Date(2026, 9, 19, 7, 0, 30, 0, time.UTC)
+
+	// Джоба 10:00 проснулась раньше тика — разрешение не-живо, джоба
+	// молча завершается; скан на границе тоже мимо (вхождение planned).
+	_, live, err := store.GetScheduledAutoPaidPayment(ctx, rule, today, boundary)
+	require.NoError(t, err)
+	assert.False(t, live, "the job woke before the tick — silent finish")
+	targets, err := store.ListAutoPaidTargets(ctx, "Europe/Moscow", today, boundary)
+	require.NoError(t, err)
+	assert.Empty(t, paymentTargetsOfProps(targets, prop))
+
+	// Тик догнал позже в тот же живой день (14:00 Москвы): штамп есть —
+	// скан-подстраховка находит гашение и доставляет позже 10:00, в тот же
+	// день; разбуженная сейчас джоба тоже жива.
+	stampPaid(t, pool, rule, "2026-09-19", "auto_pay")
+	late := time.Date(2026, 9, 19, 11, 0, 0, 0, time.UTC)
+	targets, err = store.ListAutoPaidTargets(ctx, "Europe/Moscow", today, late)
+	require.NoError(t, err)
+	got := paymentTargetsOfProps(targets, prop)
+	require.Len(t, got, 1, "the backstop sweep delivers later the same live day")
+	assert.Equal(t, rule, got[0].PaymentID)
+	_, live, err = store.GetScheduledAutoPaidPayment(ctx, rule, today, late)
+	require.NoError(t, err)
+	assert.True(t, live, "a job waking after the tick delivers")
+
+	// Следующий день: бэкфилла нет (решение владельца, #1167) — вчерашнее
+	// тиковое гашение мимо, за непогашенный прошлый день говорит 22:00-нога
+	// просрочки.
+	tomorrow := time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC)
+	targets, err = store.ListAutoPaidTargets(ctx, "Europe/Moscow", tomorrow,
+		time.Date(2026, 9, 20, 7, 0, 30, 0, time.UTC))
+	require.NoError(t, err)
+	assert.Empty(t, paymentTargetsOfProps(targets, prop), "no backfill of yesterday's charge")
+}
