@@ -374,33 +374,45 @@ export async function extractLoginCode(user: SeededUser): Promise<string> {
   return extractCodeSentTo(user, user.email);
 }
 
-function codePatternFor(email: string): RegExp {
-  return new RegExp(`${email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^\\n]*?Код подтверждения: (\\d{6})`, 'g');
+/**
+ * Log-line pattern: the seeded address somewhere on the JSON line, then the
+ * shared «Код подтверждения: NNNNNN» anchor. The per-case letters (#1204)
+ * differ by subject on the same line, so an optional subject picks one
+ * operation's letter — a login code to the same address must not be
+ * mistaken for a phone-change code.
+ */
+function codePatternFor(email: string, subject?: string): RegExp {
+  const escape = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const subjectGuard = subject === undefined ? '' : `(?=[^\\n]*${escape(subject)})`;
+  return new RegExp(`${escape(email)}${subjectGuard}[^\\n]*?Код подтверждения: (\\d{6})`, 'g');
 }
 
 /**
- * Counts the codes already logged for the address. Serves as the baseline
- * for extractCodeSentTo: an earlier send to the same address (login spec,
- * the previous leg of the email-change flow) must not be mistaken for the
- * code that has not been logged yet.
+ * Counts the codes already logged for the address (same subject filter as
+ * extractCodeSentTo). Serves as the baseline for extractCodeSentTo: an
+ * earlier send to the same address (login spec, the previous leg of the
+ * email-change flow) must not be mistaken for the code that has not been
+ * logged yet.
  */
-export async function countCodesSentTo(user: SeededUser, email: string): Promise<number> {
+export async function countCodesSentTo(user: SeededUser, email: string, subject?: string): Promise<number> {
   const log = await readFile(user.backendLogPath, 'utf8');
-  return [...log.matchAll(codePatternFor(email))].length;
+  return [...log.matchAll(codePatternFor(email, subject))].length;
 }
 
 /**
  * Extracts the last code emailed to the given address, but only once at
  * least minCount + 1 sends are in the log — the caller snapshots the count
  * before triggering the send. All identity codes (login, phone change,
- * email change #722) share the fake sender and the log format.
+ * email change #722) share the fake sender and the log format; the optional
+ * subject narrows the match to one operation's letter (#1204).
  */
 export async function extractCodeSentTo(
   user: SeededUser,
   email: string,
   minCount = 0,
+  subject?: string,
 ): Promise<string> {
-  const codePattern = codePatternFor(email);
+  const codePattern = codePatternFor(email, subject);
   const deadline = Date.now() + 15_000;
   while (Date.now() < deadline) {
     try {
@@ -415,7 +427,8 @@ export async function extractCodeSentTo(
     }
     await sleep(250);
   }
-  throw new Error(`code for ${email} not found in backend log (${user.backendLogPath})`);
+  const withSubject = subject === undefined ? '' : ` with subject «${subject}»`;
+  throw new Error(`code for ${email}${withSubject} not found in backend log (${user.backendLogPath})`);
 }
 
 /**
