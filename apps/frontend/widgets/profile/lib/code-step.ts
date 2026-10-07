@@ -11,8 +11,7 @@ export const RESEND_COOLDOWN_MS = 60_000;
 /** Куда идёт ошибка verify-мутации шага кода (change-phone / change-email):
  * неверный код (401) — inline в error-проп поля кода (макет 2343-51004,
  * текст — detail бэка «Неверный код»); остальные API-ошибки (429, 409,
- * блокировка) — null, их ведут тосты сценариев профиля. 401 confirm-current
- * (проверка кода шага 1 email-флоу) сюда не доходит — там тост сценария. */
+ * блокировка) — null, их ведут тосты сценариев профиля. */
 export function invalidCodeDetail(error: ApiError): string | null {
   return error.status === 401 ? error.detail : null;
 }

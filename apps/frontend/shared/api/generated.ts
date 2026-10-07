@@ -116,7 +116,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/me/email/confirm-current": {
+    "/me/email/verify-current": {
         parameters: {
             query?: never;
             header?: never;
@@ -125,7 +125,23 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["confirmCurrentEmail"];
+        post: operations["verifyCurrentEmail"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/email/request-new-email-code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["requestNewEmailCode"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2288,21 +2304,25 @@ export interface components {
             /** @example 123456 */
             code: string;
         };
-        ConfirmCurrentEmailRequest: {
+        VerifyCurrentEmailRequest: {
             /**
              * @description The code sent to the current email.
              * @example 123456
              */
             code: string;
+        };
+        RequestNewEmailCodeRequest: {
+            /** @description The still-live grant token returned by /me/email/verify-current; the address binds to it and the code is issued for the new address. */
+            grant: string;
             /** @description The new address; stored in lowercase. */
             newEmail: string;
         };
         EmailChangeGrantResponse: {
-            /** @description One-time grant token binding the confirmed new email to the user. Present it at /me/email/change together with the code delivered to the new address; it expires in about 10 minutes. */
+            /** @description One-time grant token proving the current email was verified by code. Present it at /me/email/request-new-email-code to bind the new address, then at /me/email/change together with the code delivered to it; it expires in about 10 minutes. */
             grant: string;
         };
         ResendEmailCodeRequest: {
-            /** @description The still-live grant token returned by /me/email/confirm-current; the code is re-issued for the address it binds. */
+            /** @description The still-live grant token bound to the pending new email; the code is re-issued for the address it binds. */
             grant: string;
         };
         ChangeEmailRequest: {
@@ -2311,7 +2331,7 @@ export interface components {
              * @example 123456
              */
             code: string;
-            /** @description The grant token returned by /me/email/confirm-current. */
+            /** @description The grant token returned by /me/email/verify-current. */
             grant: string;
         };
         Tariff: {
@@ -4338,7 +4358,7 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
-    confirmCurrentEmail: {
+    verifyCurrentEmail: {
         parameters: {
             query?: never;
             header?: never;
@@ -4347,11 +4367,11 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ConfirmCurrentEmailRequest"];
+                "application/json": components["schemas"]["VerifyCurrentEmailRequest"];
             };
         };
         responses: {
-            /** @description Current email confirmed; a one-time grant and a code for the new email */
+            /** @description Current email verified; the one-time grant is issued with no address bound yet */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4359,6 +4379,32 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["EmailChangeGrantResponse"];
                 };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    requestNewEmailCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RequestNewEmailCodeRequest"];
+            };
+        };
+        responses: {
+            /** @description The new email is bound to the grant; the code is sent to it */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];

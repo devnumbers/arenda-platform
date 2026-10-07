@@ -275,7 +275,7 @@ type Contact struct {
 type EmailChangeGrant struct {
 	ID        pgtype.UUID        `json:"id"`
 	UserID    pgtype.UUID        `json:"user_id"`
-	Email     string             `json:"email"`
+	Email     pgtype.Text        `json:"email"`
 	TokenHash string             `json:"token_hash"`
 	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`

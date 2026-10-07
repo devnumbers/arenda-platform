@@ -232,6 +232,9 @@ RETURNING id, phone, role, name, surname, patronymic, email, email_verified_at, 
 INSERT INTO email_change_grants (id, user_id, email, token_hash, expires_at, created_at)
 VALUES ($1, $2, $3, $4, $5, $6);
 
+-- name: UpdateEmailChangeGrantEmail :exec
+UPDATE email_change_grants SET email = $2 WHERE id = $1;
+
 -- name: GetEmailChangeGrantByUserIDForUpdate :one
 SELECT id, user_id, email, token_hash, expires_at, created_at FROM email_change_grants WHERE user_id = $1 FOR UPDATE;
 

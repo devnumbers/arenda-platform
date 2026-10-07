@@ -18,7 +18,8 @@ import type {
   UserUpdateCommand,
   SendPhoneChangeCodeCommand,
   ChangePhoneCommand,
-  ConfirmCurrentEmailCommand,
+  VerifyCurrentEmailCommand,
+  RequestNewEmailCodeCommand,
   ChangeEmailCommand,
   ResendEmailCodeCommand,
 } from '@/entities/user';
@@ -140,26 +141,44 @@ export function useEmailChangeSendCode(): UseMutationResult<
   });
 }
 
-/** Шаг 2: код с текущего адреса + новый адрес одним запросом (#721) —
- * в ответ одноразовый грант (≈10 мин), бэк отправляет код на новый адрес. */
-export function useConfirmCurrentEmail(): UseMutationResult<
+/** Шаг 2 флоу смены email (#721/#722, протокол #1202): код с текущего
+ * адреса — сервер проверяет его, сжигает и выпускает одноразовый грант
+ * (≈10 мин), адреса в запросе ещё нет. 401 неверного кода — inline на шаге. */
+export function useVerifyCurrentEmail(): UseMutationResult<
   { grant: string },
   ApiError,
-  ConfirmCurrentEmailCommand
+  VerifyCurrentEmailCommand
 > {
   return useGuardedMutation({
-    mutationFn: async ({ newEmail, code }: ConfirmCurrentEmailCommand) => {
-      const res = await apiClient<{ grant: string }>('/me/email/confirm-current', {
+    mutationFn: async ({ code }: VerifyCurrentEmailCommand) => {
+      const res = await apiClient<{ grant: string }>('/me/email/verify-current', {
         method: 'POST',
-        body: JSON.stringify({ newEmail, code }),
+        body: JSON.stringify({ code }),
       });
       return res;
     },
   });
 }
 
-/** Шаг 3: код с нового адреса + грант — почта меняется, ответ MeResponse
- * обновляет кэш профиля. */
+/** Шаг 3 флоу смены почты (протокол #1202): новый адрес привязывается
+ * к живому гранту из шага 2, бэк отправляет код на новый адрес (204). */
+export function useRequestNewEmailCode(): UseMutationResult<
+  void,
+  ApiError,
+  RequestNewEmailCodeCommand
+> {
+  return useGuardedMutation({
+    mutationFn: async ({ grant, newEmail }: RequestNewEmailCodeCommand) => {
+      await apiClient<void>('/me/email/request-new-email-code', {
+        method: 'POST',
+        body: JSON.stringify({ grant, newEmail }),
+      });
+    },
+  });
+}
+
+/** Финальный шаг флоу смены email: код с нового адреса + грант — почта
+ * меняется, ответ MeResponse обновляет кэш профиля. */
 export function useChangeEmail(): UseMutationResult<
   User,
   ApiError,

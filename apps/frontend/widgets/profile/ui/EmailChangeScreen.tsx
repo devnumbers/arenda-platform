@@ -19,7 +19,8 @@ import { MeFlowScreen, MeFlowSuccessScreen, type MeFlowProps } from './MeFlowScr
 import { useCodeStep } from '../lib/use-code-step';
 import {
   useChangeEmail,
-  useConfirmCurrentEmail,
+  useVerifyCurrentEmail,
+  useRequestNewEmailCode,
   useEmailChangeSendCode,
   useResendEmailCode,
 } from '@/features/profile';
@@ -38,29 +39,32 @@ type Step = 'code-current' | 'new-email' | 'code-new' | 'success';
  * ввод новой пустой/заполненный, 2235-105106 код новой, 2343-51004
  * ошибка кода/истёкший таймер, 105223 успех). Канон — PhoneChangeScreen,
  * состояния /me и успех — общий MeFlowScreen. Четыре шага одного маршрута
- * /profile/account/email:
+ * /profile/account/email, протокол #1202 (серверная проверка шага 1):
  *  - «code-current» — код на текущий адрес отправляется автоматически при
  *    входе на экран (шаг «Подтвердите текущую почту» в макете — первый);
- *    ошибка отправки — тост, поле остаётся. Resend — плитка с таймером
- *    60 с (повторный useEmailChangeSendCode). «Назад» и крест закрывают
- *    экран.
+ *    «Продолжить» уходит в verify-current: шаг переходит дальше только по
+ *    200 (локальная проверка формата — UX-фильтр, не граница), 401
+ *    неверного кода — inline в поле, как на канонном шаге кода. Resend —
+ *    плитка с таймером 60 с (повторный useEmailChangeSendCode). «Назад»
+ *    и крест закрывают экран.
  *  - «new-email» — «Введите новую почту», поле с крестом-очисткой;
  *    «Продолжить» disabled до валидного адреса; same-as-current —
- *    клиентская ошибка. Здесь же уходит confirm-current (код + адрес одним
- *    запросом, #721): неверный/использованный адрес — тост из detail.
+ *    клиентская ошибка. Здесь же уходит request-new-email-code (грант
+ *    из шага 1 + адрес, #1202): адрес привязывается к гранту, код уходит
+ *    на новый адрес; ошибки — тост из detail бэка.
  *  - «code-new» — «Подтвердите новую почту» с новым адресом в подзаголовке;
  *    resend — плитка с таймером, повторная доставка по живому гранту
- *    (`useResendEmailCode`, бэк #732): код шага 1 confirm-current сжигает,
+ *    (`useResendEmailCode`, бэк #732): код шага 1 verify-current сжигает,
  *    прежний обход «Назад → Продолжить» серверно сломан.
  *  - «success» — «Новая электронная почта <адрес>» (макет 105223),
  *    шит «Хорошо» на аккаунт.
  * Шапка «Смена почты» на всех шагах. Поле шага получает программный фокус
- * на монтировании и смене шага. Ошибки: неверный код (401 verify-мутации
- * changeEmail шага «code-new») — inline в error-проп поля (макет
- * 2343-51004), ввод сбрасывает; 401 confirm-current (неверный код шага 1
- * на шаге «new-email») и остальные API-ошибки — тосты сценариев профиля,
- * текст из detail бэка. Дедлайны resend-таймеров — на уровне флоу,
- * переживают «Назад»-переключения.
+ * на монтировании и смене шага. Ошибки: 401 verify-мутаций (verify-current
+ * шага «code-current», changeEmail шага «code-new») — inline в error-проп
+ * поля (макет 2343-51004), ввод сбрасывает; 401 request-new-email-code
+ * (истёкший грант) и остальные API-ошибки — тосты сценариев профиля, текст
+ * из detail бэка. Дедлайны resend-таймеров — на уровне флоу, переживают
+ * «Назад»-переключения.
  */
 export function EmailChangeScreen(): JSX.Element {
   return <MeFlowScreen title="Смена почты" Flow={EmailChangeFlow} />;
@@ -68,7 +72,8 @@ export function EmailChangeScreen(): JSX.Element {
 
 function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
   const sendCode = useEmailChangeSendCode();
-  const confirmCurrent = useConfirmCurrentEmail();
+  const verifyCurrent = useVerifyCurrentEmail();
+  const requestNewEmailCode = useRequestNewEmailCode();
   const changeEmail = useChangeEmail();
   const resendEmailCode = useResendEmailCode();
 
@@ -130,8 +135,9 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
       ? 'Новый адрес совпадает с текущим'
       : undefined;
 
-  /** Шаг 1 → 2 локальный: код проверяется формой, серверу он понадобится на
-   * шаге «new-email» (confirm-current несёт код и адрес одним запросом). */
+  /** Шаг 1 → 2 через сервер (протокол #1202): код проверяется
+   * verify-current — только 200 открывает шаг адреса; 401 неверного
+   * кода остаётся inline в поле, как на канонном шаге кода. */
   const handleCurrentCodeSubmit = (event: SubmitEvent<HTMLFormElement>): void => {
     event.preventDefault();
     setIsSubmitAttempted(true);
@@ -140,8 +146,18 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
       return;
     }
 
-    setIsSubmitAttempted(false);
-    setStep('new-email');
+    verifyCurrent.mutate(
+      { code: currentCodeStep.value },
+      {
+        onSuccess: ({ grant: newGrant }) => {
+          setIsSubmitAttempted(false);
+          setGrant(newGrant);
+          setStep('new-email');
+        },
+        onError: (error) =>
+          currentCodeStep.routeVerifyError(error, notify.scenarios.profile.emailChangeError),
+      },
+    );
   };
 
   const handleNewEmailChange = (event: ChangeEvent<HTMLInputElement>): void => {
@@ -161,11 +177,13 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
       return;
     }
 
-    confirmCurrent.mutate(
-      { newEmail: normalizedNewEmail, code: currentCodeStep.value },
+    // Шаг 3 (протокол #1202): адрес привязывается к гранту из шага 1,
+    // код уходит на новый адрес — 204 без тела.
+    requestNewEmailCode.mutate(
+      { grant, newEmail: normalizedNewEmail },
       {
-        onSuccess: ({ grant: newGrant }) => {
-          setGrant(newGrant);
+        onSuccess: () => {
+          setIsSubmitAttempted(false);
           newCodeStep.rearm();
           setStep('code-new');
         },
@@ -216,16 +234,18 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
   };
 
   /** «Назад» — на шаг раньше: черновик уходящего шага и его мутация
-   * сбрасываются. Повторная отправка кода на НОВЫЙ адрес — resend-плитка
-   * шага «code-new»: confirm-current сжигает код шага 1, повторное
-   * «Продолжить» с шага адреса даёт 401. Код на ТЕКУЩИЙ адрес повторно
-   * уходит плиткой шага 1 (или при повторном входе на экран): троттлинг
-   * бэка 429 при живом коде — форма остаётся. */
+   * сбрасываются. С шага адреса назад код шага 1 уже сожжён сервером
+   * (verify-current): повторное «Продолжить» с тем же кодом даст 401 —
+   * свежий код берётся resend-плиткой шага 1, повторная проверка
+   * перевыпускает грант (протокол #1202; оставлять ли «Назад» — решает
+   * прототип экрана, #1206). Повторная отправка кода на ТЕКУЩИЙ адрес —
+   * плитка шага 1 (или при повторном входе на экран): троттлинг бэка 429
+   * при живом коде — форма остаётся. */
   const backToPreviousStep = (): void => {
     setIsSubmitAttempted(false);
     if (step === 'new-email') {
       setStep('code-current');
-      confirmCurrent.reset();
+      verifyCurrent.reset();
     } else if (step === 'code-new') {
       newCodeStep.clear();
       setStep('new-email');
@@ -369,6 +389,7 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
             type="submit"
             form={formId}
             className="w-full"
+            loading={verifyCurrent.isPending}
             disabled={!isValidLoginCode(currentCodeStep.value)}
           >
             Продолжить
@@ -379,7 +400,7 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
             type="submit"
             form={formId}
             className="w-full"
-            loading={confirmCurrent.isPending}
+            loading={requestNewEmailCode.isPending}
             disabled={!isEmailValid(normalizedNewEmail) || isSameEmail}
           >
             Продолжить

@@ -186,6 +186,16 @@ func (r *fakeGrantRepo) Save(_ context.Context, grant domain.EmailChangeGrant) e
 	return nil
 }
 
+func (r *fakeGrantRepo) UpdateEmail(_ context.Context, id uuid.UUID, email domain.Email) error {
+	for userID, g := range r.grants {
+		if g.ID == id {
+			g.Email = &email
+			r.grants[userID] = g
+		}
+	}
+	return nil
+}
+
 func (r *fakeGrantRepo) GetByUserIDForUpdate(_ context.Context, userID uuid.UUID) (domain.EmailChangeGrant, error) {
 	g, ok := r.grants[userID]
 	if !ok {

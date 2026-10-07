@@ -11,8 +11,9 @@ import {
 
 // The email-change flow (map #723, ticket #722) on /profile/account/email:
 // the entry row on the account screen, the double confirmation (a code to
-// the current address, then the new address — one grant in between), and
-// the success sheet. The codes travel through the fake email sender into
+// the current address — verified server-side by verify-current, which issues
+// the grant; then the new address bound to the grant receives its own code),
+// and the success sheet. The codes travel through the fake email sender into
 // the backend log, same channel as the login spec. The address is swapped
 // and swapped back in one test: the suite shares one seeded user, and the
 // other specs expect its original email.
@@ -24,7 +25,8 @@ import {
 // process memory. That is safe only because the e2e harness starts a fresh
 // backend per run; a long-lived backend process would 429 the next runs.
 // The resend-tile test below is fully route-mocked (send-code,
-// confirm-current, resend-code) and spends none of that budget.
+// verify-current, request-new-email-code, resend-code) and spends none of
+// that budget.
 const NEW_EMAIL = 'e2e-email-change@example.com';
 
 const CODE_FIELD = { name: 'Код', exact: true };
@@ -140,12 +142,14 @@ test('смена почты двойным кодом и возврат адре
 test('resend-плитка шага новой почты: таймер, разблокировка, очистка поля', async ({ page, seededUser }) => {
   let resendCalls = 0;
   await page.route('**/api/me/email/send-code', (route) => route.fulfill({ status: 204 }));
-  await page.route('**/api/me/email/confirm-current', (route) =>
+  await page.route('**/api/me/email/verify-current', (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({ grant: 'e2e-grant-token' }),
     }));
+  await page.route('**/api/me/email/request-new-email-code', (route) =>
+    route.fulfill({ status: 204 }));
   await page.route('**/api/me/email/resend-code', (route) => {
     resendCalls += 1;
     return route.fulfill({ status: 204 });

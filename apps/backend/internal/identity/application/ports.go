@@ -133,13 +133,17 @@ type SessionRepository interface {
 	WithTx(tx transaction.Tx) (SessionRepository, error)
 }
 
-// EmailChangeGrantRepository stores the one grant binding a confirmed new
-// email to a user between email-change steps 2 and 3 (issue #721). The grant
-// is server-side state: the client only sees the plaintext token once, the
-// store keeps the hash. A user holds at most one grant — issuing a new one
-// replaces the previous (DeleteByUserID + Save in the issuing transaction).
+// EmailChangeGrantRepository stores the one grant proving the user's current
+// email was verified by code between the email-change steps (issue #721,
+// protocol #1202). The grant is born on the current-address code check and
+// binds the new address at the next step; the client only sees the plaintext
+// token once, the store keeps the hash. A user holds at most one grant —
+// issuing a new one replaces the previous (DeleteByUserID + Save in the
+// issuing transaction).
 type EmailChangeGrantRepository interface {
 	Save(ctx context.Context, grant domain.EmailChangeGrant) error
+	// UpdateEmail binds (or re-binds) the new address to the live grant.
+	UpdateEmail(ctx context.Context, id uuid.UUID, email domain.Email) error
 	// GetByUserIDForUpdate acquires a row-level pessimistic lock and must only be called inside a transaction.
 	GetByUserIDForUpdate(ctx context.Context, userID uuid.UUID) (domain.EmailChangeGrant, error)
 	DeleteByID(ctx context.Context, id uuid.UUID) error

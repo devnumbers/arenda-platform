@@ -1,7 +1,8 @@
 export {
   useChangePhone,
   useChangePhoneSendCode,
-  useConfirmCurrentEmail,
+  useVerifyCurrentEmail,
+  useRequestNewEmailCode,
   useChangeEmail,
   useEmailChangeSendCode,
   useResendEmailCode,
