@@ -71,6 +71,10 @@ export type PeriodicityStepProps = {
   readonly onYearlyConfirm: (recurrence: Recurrence) => void;
   /** «Сегодня» клиентской проекции — якорь предвыбора годового правила. */
   readonly today: IsoDate;
+  /** Заголовки шага (H1-канон #1152) рисует компонент; хост правки их
+   * глушит — там контентных заголовков нет (решение владельца 07.10,
+   * #1192). */
+  readonly withHeading?: boolean;
 };
 
 export function PeriodicityStep({
@@ -81,10 +85,10 @@ export function PeriodicityStep({
   onDailyPick,
   onYearlyConfirm,
   today,
+  withHeading = true,
 }: PeriodicityStepProps): JSX.Element {
-  const heading = (title: string, subtitle?: string): JSX.Element => (
-    <WizardHeading title={title} subtitle={subtitle} variant="h1" />
-  );
+  const heading = (title: string, subtitle?: string): JSX.Element | null =>
+    withHeading ? <WizardHeading title={title} subtitle={subtitle} variant="h1" /> : null;
 
   const pickKind = (kind: PeriodicityKind): void => {
     const pick = pickPeriodicityKind(kind, recurrence);
