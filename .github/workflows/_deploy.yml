@@ -580,10 +580,16 @@ jobs:
           xargs -P 2 -I '{}' bash -c 'warm_one "$@"' _ '{}' < "${urls_file}" || true
           failed="$(wc -l < "${warn_file}" | tr -d ' ')"
           if [ "${failed}" -ne 0 ]; then
-            echo "${failed}/${total} optimizer URLs failed to warm" >&2
-            exit 1
+            # Некритично: прогрев — UX-оптимизация, не корректность; корректность
+            # гейтит внешний смоук ниже. 07.10.2026: на деградировавшем хосте
+            # одиночный энкод не влезает в таймаут Caddy — 131/131 × 502 валили
+            # деплой с автооткатом трижды подряд (-P 6 и -P 2), релиз физически
+            # не мог уехать. Холодный кэш прогреется органическим трафиком
+            # (цена — возможные 502 на первых загрузках, режим карта #888).
+            echo "WARN: ${failed}/${total} optimizer URLs failed to warm — shipping with partially cold cache (host encodes slower than the Caddy timeout; context in the step comment above)" >&2
+          else
+            echo "All ${total} optimizer URLs warm"
           fi
-          echo "All ${total} optimizer URLs warm"
 
       - name: Smoke test (external)
         env:
