@@ -39,24 +39,29 @@ func createLiveProperty(t *testing.T, pool *pgxpool.Pool, ownerID uuid.UUID) uui
 }
 
 // insertRental adds the referenced payment row plus the rental with the
-// given dates.
+// given dates. A completed rental carries migration 000150's dural
+// invariant instead: the payment link is gone (the rule was deleted at
+// completion) and the rental terms (amount, payment day, auto-pay) stand.
 func insertRental(t *testing.T, pool *pgxpool.Pool, ownerID, propertyID uuid.UUID, start, plannedEnd, completed *time.Time) uuid.UUID {
 	t.Helper()
-	paymentID := insertPayment(t, pool, ownerID, propertyID)
 	id := uuid.Must(uuid.NewV7())
 	var err error
 	switch {
 	case plannedEnd != nil && completed != nil:
 		_, err = pool.Exec(context.Background(), `
-			INSERT INTO rentals (id, owner_id, property_id, payment_id, start_date, planned_end_date, completed_date, utilities)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, 'included')`,
-			id, ownerID, propertyID, paymentID, start, plannedEnd, completed)
+			INSERT INTO rentals (id, owner_id, property_id, payment_id, start_date,
+			                     planned_end_date, completed_date, utilities,
+			                     rent_amount_kopecks, rent_payment_day, rent_auto_pay)
+			VALUES ($1, $2, $3, NULL, $4, $5, $6, 'included', 5000000, 15, false)`,
+			id, ownerID, propertyID, start, plannedEnd, completed)
 	case plannedEnd != nil:
+		paymentID := insertPayment(t, pool, ownerID, propertyID)
 		_, err = pool.Exec(context.Background(), `
 			INSERT INTO rentals (id, owner_id, property_id, payment_id, start_date, planned_end_date, utilities)
 			VALUES ($1, $2, $3, $4, $5, $6, 'included')`,
 			id, ownerID, propertyID, paymentID, start, plannedEnd)
 	default:
+		paymentID := insertPayment(t, pool, ownerID, propertyID)
 		_, err = pool.Exec(context.Background(), `
 			INSERT INTO rentals (id, owner_id, property_id, payment_id, start_date, utilities)
 			VALUES ($1, $2, $3, $4, $5, 'included')`,
