@@ -92,7 +92,12 @@ test.describe('экран правки платежа', () => {
     // Регулярность: страница «Выбор периодичности» → «Каждый месяц» → день 20.
     await page.getByRole('button', { name: 'Регулярность платежа' }).click();
     await expect(page.getByText('Выбор периодичности')).toBeVisible();
+    // Страница периодичности — тот же шаг, что и в создании (#1192):
+    // H1-заголовок списка, в ветке — «Выберите день» с подзаголовком.
+    await expect(page.getByRole('heading', { name: 'Периодичность платежа' })).toBeVisible();
     await page.getByRole('button', { name: 'Каждый месяц' }).click();
+    await expect(page.getByRole('heading', { name: 'Выберите день', exact: true })).toBeVisible();
+    await expect(page.getByText('Можно выбрать несколько дней')).toBeVisible();
     // Мультивыбор: у сид-платежа день 15 — снимаем его и ставим 20.
     await page.getByRole('button', { name: '15', exact: true }).click();
     await page.getByRole('button', { name: '20', exact: true }).click();

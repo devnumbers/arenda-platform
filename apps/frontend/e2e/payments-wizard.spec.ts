@@ -215,6 +215,8 @@ test.describe('визард создания платежа', () => {
     await captureScreen(page, testInfo, 'wizard-step3-periodicity-mobile');
     await page.getByRole('button', { name: 'Каждый месяц' }).click();
     await expect(page.getByRole('heading', { name: 'Выберите день', exact: true })).toBeVisible();
+    // Ветка месяца — H1 «Выберите день» + подзаголовок (макет 3213:71350).
+    await expect(page.getByText('Можно выбрать несколько дней')).toBeVisible();
     await page.getByRole('button', { name: '10', exact: true }).first().click();
     await page.getByRole('button', { name: '15', exact: true }).first().click();
     // Канонный грид MonthDaysGrid (#809): выбранная клетка несёт

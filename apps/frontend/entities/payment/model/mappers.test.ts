@@ -15,6 +15,7 @@ const paymentDto: PaymentDto = {
   since: '2026-01-31',
   endDate: null,
   autoPay: false,
+  notifyAutoPaid: false,
   category: { source: 'default', slug: 'rent', label: 'Арендная плата' },
   isFavorite: false,
   isCompleted: false,
