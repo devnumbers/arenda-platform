@@ -32,6 +32,10 @@ func TestEmailChangeIntegration_HappyPath(t *testing.T) {
 		t.Fatalf("step 1: %v", err)
 	}
 	currentCode := h.sender.lastCode(t)
+	// The step-1 letter is the current-address one (issue #1204).
+	if last := h.sender.codes[len(h.sender.codes)-1]; last.step != domain.LoginCodeStepCurrentEmail {
+		t.Fatalf("step 1 letter step = %s, want current_email", last.step)
+	}
 
 	// Step 2: verify the current address, get the addressless grant.
 	grantToken, err := h.email.VerifyCurrentEmail(ctx, user.ID, currentCode)
@@ -49,6 +53,10 @@ func TestEmailChangeIntegration_HappyPath(t *testing.T) {
 	newCode := h.sender.lastCode(t)
 	if newCode == currentCode {
 		t.Fatal("step 3 delivered no new code (same plaintext as step 1)")
+	}
+	// The step-3 letter is the new-address one (issue #1204).
+	if last := h.sender.codes[len(h.sender.codes)-1]; last.step != domain.LoginCodeStepNewEmail || last.email != newEmail {
+		t.Fatalf("step 3 letter = %s to %s, want new_email to %s", last.step, last.email, newEmail)
 	}
 
 	// Final step: change.

@@ -47,13 +47,22 @@ type captureSender struct {
 }
 
 type sentLoginCode struct {
-	phone domain.Phone
-	email domain.Email
-	code  string
+	phone   domain.Phone
+	email   domain.Email
+	code    string
+	purpose domain.LoginCodePurpose
+	step    domain.LoginCodeStep
 }
 
-func (s *captureSender) Send(_ context.Context, phone domain.Phone, email domain.Email, code string) error {
-	s.codes = append(s.codes, sentLoginCode{phone: phone, email: email, code: code})
+func (s *captureSender) Send(
+	_ context.Context,
+	phone domain.Phone,
+	email domain.Email,
+	code string,
+	purpose domain.LoginCodePurpose,
+	step domain.LoginCodeStep,
+) error {
+	s.codes = append(s.codes, sentLoginCode{phone: phone, email: email, code: code, purpose: purpose, step: step})
 	return nil
 }
 

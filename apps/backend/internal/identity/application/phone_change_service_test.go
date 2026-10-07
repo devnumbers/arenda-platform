@@ -105,6 +105,10 @@ func sendChangeCodeHappyPath(t *testing.T) {
 	if sent.email != email {
 		t.Fatalf("sent email = %s, want %s (current email)", sent.email, email)
 	}
+	// The letter is the phone-change one on the current email (issue #1204).
+	if sent.purpose != domain.LoginCodePurposePhoneChange || sent.step != domain.LoginCodeStepCurrentEmail {
+		t.Fatalf("sent letter = %s/%s, want phone_change/current_email", sent.purpose, sent.step)
+	}
 	// The code is persisted with purpose = phone_change.
 	if len(h.codes.codes) != 1 {
 		t.Fatalf("codes persisted = %d, want 1", len(h.codes.codes))

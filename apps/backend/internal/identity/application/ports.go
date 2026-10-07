@@ -19,9 +19,19 @@ type TokenHasher interface {
 
 // LoginCodeSender delivers a login code by email. Phone is part of the
 // binding triple (the code is hashed together with phone+email via
-// LoginCodeService.hashCode); this channel only uses email and code.
+// LoginCodeService.hashCode); this channel only uses email and code. The
+// purpose+step pair selects the letter — the unique template and subject the
+// delivery renders (issue #1204): login, phone change, and the two
+// email-change letters (current address, new address) each carry their own.
 type LoginCodeSender interface {
-	Send(ctx context.Context, phone domain.Phone, email domain.Email, code string) error
+	Send(
+		ctx context.Context,
+		phone domain.Phone,
+		email domain.Email,
+		code string,
+		purpose domain.LoginCodePurpose,
+		step domain.LoginCodeStep,
+	) error
 }
 
 type UserRepository interface {

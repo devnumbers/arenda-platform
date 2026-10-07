@@ -433,9 +433,11 @@ func (r *fakeSessionRepo) WithTx(transaction.Tx) (SessionRepository, error) { re
 // Sender and publisher fakes.
 
 type sentCode struct {
-	phone domain.Phone
-	email domain.Email
-	code  string
+	phone   domain.Phone
+	email   domain.Email
+	code    string
+	purpose domain.LoginCodePurpose
+	step    domain.LoginCodeStep
 }
 
 type fakeCodeSender struct {
@@ -443,11 +445,18 @@ type fakeCodeSender struct {
 	err  error
 }
 
-func (s *fakeCodeSender) Send(_ context.Context, phone domain.Phone, email domain.Email, code string) error {
+func (s *fakeCodeSender) Send(
+	_ context.Context,
+	phone domain.Phone,
+	email domain.Email,
+	code string,
+	purpose domain.LoginCodePurpose,
+	step domain.LoginCodeStep,
+) error {
 	if s.err != nil {
 		return s.err
 	}
-	s.sent = append(s.sent, sentCode{phone: phone, email: email, code: code})
+	s.sent = append(s.sent, sentCode{phone: phone, email: email, code: code, purpose: purpose, step: step})
 	return nil
 }
 
@@ -844,6 +853,10 @@ func TestAuthenticationService_SendCode_NewPhoneEmailPrecheck(t *testing.T) {
 		}
 		if h.sender.sent[0].email != email {
 			t.Fatalf("sender email = %s, want %s", h.sender.sent[0].email, email)
+		}
+		// The letter is the login one on the (to-be) current email (issue #1204).
+		if h.sender.sent[0].purpose != domain.LoginCodePurposeLogin || h.sender.sent[0].step != domain.LoginCodeStepCurrentEmail {
+			t.Fatalf("sent letter = %s/%s, want login/current_email", h.sender.sent[0].purpose, h.sender.sent[0].step)
 		}
 		if len(h.codes.codes) != 1 {
 			t.Fatalf("codes saved = %d, want 1", len(h.codes.codes))

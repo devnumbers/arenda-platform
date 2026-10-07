@@ -54,7 +54,7 @@ func TestLoginCodeService_Send_IssuesPersistsAndDelivers(t *testing.T) {
 	phone := mustPhone(t, "+79150000001")
 	email := mustEmail(t, "owner@example.com")
 
-	if err := h.svc.Send(t.Context(), phone, email, domain.LoginCodePurposeLogin, nil); err != nil {
+	if err := h.svc.Send(t.Context(), phone, email, domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail, nil); err != nil {
 		t.Fatalf("Send error = %v", err)
 	}
 	if len(h.codes.codes) != 1 {
@@ -66,6 +66,14 @@ func TestLoginCodeService_Send_IssuesPersistsAndDelivers(t *testing.T) {
 	if h.sender.sent[0].email != email {
 		t.Fatalf("sender email = %s, want %s", h.sender.sent[0].email, email)
 	}
+	// The letter selection pair reaches the sender untouched: it decides the
+	// template and subject (issue #1204).
+	if h.sender.sent[0].purpose != domain.LoginCodePurposeLogin {
+		t.Fatalf("sender purpose = %s, want login", h.sender.sent[0].purpose)
+	}
+	if h.sender.sent[0].step != domain.LoginCodeStepCurrentEmail {
+		t.Fatalf("sender step = %s, want current_email", h.sender.sent[0].step)
+	}
 }
 
 func TestLoginCodeService_Send_ThrottlesWithinMinInterval(t *testing.T) {
@@ -74,11 +82,11 @@ func TestLoginCodeService_Send_ThrottlesWithinMinInterval(t *testing.T) {
 	phone := mustPhone(t, "+79150000002")
 	email := mustEmail(t, "owner@example.com")
 
-	if err := h.svc.Send(t.Context(), phone, email, domain.LoginCodePurposeLogin, nil); err != nil {
+	if err := h.svc.Send(t.Context(), phone, email, domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail, nil); err != nil {
 		t.Fatalf("first Send error = %v", err)
 	}
 	// A second send at the same clock time is throttled.
-	err := h.svc.Send(t.Context(), phone, email, domain.LoginCodePurposeLogin, nil)
+	err := h.svc.Send(t.Context(), phone, email, domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail, nil)
 	if !errors.Is(err, ErrCodeSentTooRecently) {
 		t.Fatalf("second Send error = %v, want ErrCodeSentTooRecently", err)
 	}
@@ -102,7 +110,7 @@ func TestLoginCodeService_Send_RejectsWhenBlocked(t *testing.T) {
 	}
 	h.attempts.windows[phone.String()] = window
 
-	err := h.svc.Send(t.Context(), phone, email, domain.LoginCodePurposeLogin, nil)
+	err := h.svc.Send(t.Context(), phone, email, domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail, nil)
 	if !errors.Is(err, ErrUserBlocked) {
 		t.Fatalf("Send error = %v, want ErrUserBlocked", err)
 	}
@@ -118,7 +126,7 @@ func TestLoginCodeService_Verify_AcceptsValidCode(t *testing.T) {
 	email := mustEmail(t, "owner@example.com")
 	ctx := t.Context()
 
-	if err := h.svc.Send(ctx, phone, email, domain.LoginCodePurposeLogin, nil); err != nil {
+	if err := h.svc.Send(ctx, phone, email, domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail, nil); err != nil {
 		t.Fatalf("Send error = %v", err)
 	}
 	plaintext := h.sender.sent[0].code
@@ -143,7 +151,7 @@ func TestLoginCodeService_Verify_RejectsInvalidCode(t *testing.T) {
 	email := mustEmail(t, "owner@example.com")
 	ctx := t.Context()
 
-	if err := h.svc.Send(ctx, phone, email, domain.LoginCodePurposeLogin, nil); err != nil {
+	if err := h.svc.Send(ctx, phone, email, domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail, nil); err != nil {
 		t.Fatalf("Send error = %v", err)
 	}
 
@@ -186,7 +194,7 @@ func TestLoginCodeService_Verify_RejectsWhenBlocked(t *testing.T) {
 	email := mustEmail(t, "owner@example.com")
 	ctx := t.Context()
 
-	if err := h.svc.Send(ctx, phone, email, domain.LoginCodePurposeLogin, nil); err != nil {
+	if err := h.svc.Send(ctx, phone, email, domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail, nil); err != nil {
 		t.Fatalf("Send error = %v", err)
 	}
 	plaintext := h.sender.sent[0].code

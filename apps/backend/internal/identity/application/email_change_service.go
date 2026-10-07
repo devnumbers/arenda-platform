@@ -124,7 +124,9 @@ func (s *EmailChangeService) SendCurrentEmailCode(ctx context.Context, userID uu
 		return err
 	}
 
-	if err := s.loginCodes.Send(ctx, user.Phone, email, domain.LoginCodePurposeEmailChange, &user.ID); err != nil {
+	if err := s.loginCodes.Send(
+		ctx, user.Phone, email, domain.LoginCodePurposeEmailChange, domain.LoginCodeStepCurrentEmail, &user.ID,
+	); err != nil {
 		return err
 	}
 
@@ -267,7 +269,7 @@ func (s *EmailChangeService) RequestNewEmailCode(
 		return err
 	}
 
-	return s.loginCodes.Deliver(ctx, phone, newEmail, domain.LoginCodePurposeEmailChange, issued, plaintextCode)
+	return s.loginCodes.Deliver(ctx, phone, newEmail, domain.LoginCodePurposeEmailChange, domain.LoginCodeStepNewEmail, issued, plaintextCode)
 }
 
 // ChangeEmail implements the final step: verify the code sent to the new
@@ -398,7 +400,9 @@ func (s *EmailChangeService) ResendNewEmailCode(ctx context.Context, userID uuid
 		return err
 	}
 
-	return s.loginCodes.Deliver(ctx, phone, issued.Email, domain.LoginCodePurposeEmailChange, issued, plaintextCode)
+	return s.loginCodes.Deliver(
+		ctx, phone, issued.Email, domain.LoginCodePurposeEmailChange, domain.LoginCodeStepNewEmail, issued, plaintextCode,
+	)
 }
 
 // checkNewEmailFree guards the address switch: the new email must differ from

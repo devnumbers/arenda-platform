@@ -94,14 +94,16 @@ func (s *LoginCodeService) hashCode(purpose domain.LoginCodePurpose, phone domai
 }
 
 // Send issues a login code for the phone+email+purpose triple, persists it, and
-// delivers it after the transaction commits. It enforces the not-blocked check,
-// purges expired and unused prior codes, and throttles re-issuance within
+// delivers it after the transaction commits. The purpose+step pair selects the
+// letter the delivery renders. It enforces the not-blocked check, purges
+// expired and unused prior codes, and throttles re-issuance within
 // minSendInterval of a live code.
 func (s *LoginCodeService) Send(
 	ctx context.Context,
 	phone domain.Phone,
 	email domain.Email,
 	purpose domain.LoginCodePurpose,
+	step domain.LoginCodeStep,
 	userID *uuid.UUID,
 ) error {
 	var loginCode domain.LoginCode
@@ -116,7 +118,7 @@ func (s *LoginCodeService) Send(
 		return err
 	}
 
-	return s.Deliver(ctx, phone, email, purpose, loginCode, plaintextCode)
+	return s.Deliver(ctx, phone, email, purpose, step, loginCode, plaintextCode)
 }
 
 // IssueInTx is the transactional half of Send: it guards the phone against
@@ -213,20 +215,25 @@ func (s *LoginCodeService) persistNewCode(
 }
 
 // Deliver sends the plaintext after the issuing transaction has committed.
-// Delivery runs post-commit: the code is already persisted, so a delivery
-// failure cleans up the unsent row rather than leaving a code the user never
-// received. Send calls it itself; an orchestrator that issued through IssueInTx
-// inside its own transaction calls it after that transaction commits.
+// The purpose+step pair selects the letter — template and subject — the
+// sender renders. Delivery runs post-commit: the code is already persisted,
+// so a delivery failure cleans up the unsent row rather than leaving a code
+// the user never received. Send calls it itself; an orchestrator that issued
+// through IssueInTx inside its own transaction calls it after that
+// transaction commits.
 func (s *LoginCodeService) Deliver(
 	ctx context.Context,
 	phone domain.Phone,
 	email domain.Email,
 	purpose domain.LoginCodePurpose,
+	step domain.LoginCodeStep,
 	loginCode domain.LoginCode,
 	plaintextCode string,
 ) error {
-	s.logger.InfoContext(ctx, "sending login code", slog.String("purpose", purpose.String()))
-	if err := s.sender.Send(ctx, phone, email, plaintextCode); err != nil {
+	s.logger.InfoContext(ctx, "sending login code",
+		slog.String("purpose", purpose.String()),
+		slog.String("step", step.String()))
+	if err := s.sender.Send(ctx, phone, email, plaintextCode, purpose, step); err != nil {
 		s.logger.ErrorContext(ctx, "failed to send login code", slog.String("error", sanitize.Error(err)))
 		if delErr := s.codes.DeleteByID(ctx, loginCode.ID); delErr != nil {
 			s.logger.ErrorContext(ctx, "failed to delete unsent login code", slog.String("error", sanitize.Error(delErr)))
@@ -234,7 +241,9 @@ func (s *LoginCodeService) Deliver(
 		return fmt.Errorf("send code: %w", err)
 	}
 
-	s.logger.InfoContext(ctx, "login code sent", slog.String("purpose", purpose.String()))
+	s.logger.InfoContext(ctx, "login code sent",
+		slog.String("purpose", purpose.String()),
+		slog.String("step", step.String()))
 	return nil
 }
 

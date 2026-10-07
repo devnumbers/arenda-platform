@@ -366,15 +366,16 @@ export function screenHeader(page: Page): Locator {
 
 /**
  * Extracts the last login code emailed for the seeded user. The fake email
- * sender logs the message body ("Код для входа в Рентли: NNNNNN"); polling
- * covers the send→log latency.
+ * sender logs the message text, whose shared line is
+ * «Код подтверждения: NNNNNN» (the subjects differ per letter, #1204);
+ * polling covers the send→log latency.
  */
 export async function extractLoginCode(user: SeededUser): Promise<string> {
   return extractCodeSentTo(user, user.email);
 }
 
 function codePatternFor(email: string): RegExp {
-  return new RegExp(`${email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^\\n]*?Рентли: (\\d{6})`, 'g');
+  return new RegExp(`${email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^\\n]*?Код подтверждения: (\\d{6})`, 'g');
 }
 
 /**

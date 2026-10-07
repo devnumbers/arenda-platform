@@ -186,6 +186,10 @@ func stepOneHappyPath(t *testing.T) {
 	if sent.phone != phone {
 		t.Fatalf("sent phone = %s, want %s", sent.phone, phone)
 	}
+	// The letter is the "confirm it is you" one on the current address (issue #1204).
+	if sent.purpose != domain.LoginCodePurposeEmailChange || sent.step != domain.LoginCodeStepCurrentEmail {
+		t.Fatalf("sent letter = %s/%s, want email_change/current_email", sent.purpose, sent.step)
+	}
 	if len(h.codes.codes) != 1 {
 		t.Fatalf("codes persisted = %d, want 1", len(h.codes.codes))
 	}
@@ -522,6 +526,14 @@ func requestHappyPath(t *testing.T) {
 	}
 	if h.sender.sent[1].email != newEmail {
 		t.Fatalf("second delivery email = %s, want %s (new address)", h.sender.sent[1].email, newEmail)
+	}
+	// The second letter is the "confirm ownership of the address" one on the
+	// new address; the first stays the current-address letter (issue #1204).
+	if h.sender.sent[1].purpose != domain.LoginCodePurposeEmailChange || h.sender.sent[1].step != domain.LoginCodeStepNewEmail {
+		t.Fatalf("second letter = %s/%s, want email_change/new_email", h.sender.sent[1].purpose, h.sender.sent[1].step)
+	}
+	if h.sender.sent[0].step != domain.LoginCodeStepCurrentEmail {
+		t.Fatalf("first letter step = %s, want current_email", h.sender.sent[0].step)
 	}
 
 	// The address is bound to the SAME grant the client already holds.
@@ -928,6 +940,10 @@ func resendHappyPath(t *testing.T) {
 	}
 	if h.sender.sent[2].email != newEmail {
 		t.Fatalf("resend delivery email = %s, want %s", h.sender.sent[2].email, newEmail)
+	}
+	// The resend repeats the new-address letter (issue #1204).
+	if h.sender.sent[2].purpose != domain.LoginCodePurposeEmailChange || h.sender.sent[2].step != domain.LoginCodeStepNewEmail {
+		t.Fatalf("resend letter = %s/%s, want email_change/new_email", h.sender.sent[2].purpose, h.sender.sent[2].step)
 	}
 	assertStoredGrant(t, h, user.ID, newEmail, grantToken)
 	if len(h.audit.entries) != 0 {

@@ -86,7 +86,7 @@ func (s *PhoneChangeService) SendChangeCode(ctx context.Context, userID uuid.UUI
 		return err
 	}
 
-	return s.loginCodes.Send(ctx, newPhone, email, domain.LoginCodePurposePhoneChange, &user.ID)
+	return s.loginCodes.Send(ctx, newPhone, email, domain.LoginCodePurposePhoneChange, domain.LoginCodeStepCurrentEmail, &user.ID)
 }
 
 // ChangePhone verifies the code and updates the user's phone number.
