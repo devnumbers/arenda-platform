@@ -1,16 +1,13 @@
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import {
-  ArrayField,
   Datagrid,
   DateField,
-  ImageField,
   List,
   ReferenceManyField,
   SelectField,
   SelectInput,
   Show,
-  SingleFieldList,
   Tab,
   TabbedShowLayout,
   TextField,
@@ -125,11 +122,6 @@ export const PropertyShow = () => (
         <SelectField source="status" choices={propertyStatusChoices} />
         <TextField source="address" />
         <TextField source="description" />
-        <ArrayField source="photos">
-          <SingleFieldList linkType={false}>
-            <ImageField source="url" />
-          </SingleFieldList>
-        </ArrayField>
         <PropertyAttributesBlock />
         <DateField source="createdAt" showTime />
         <DateField source="updatedAt" showTime />
