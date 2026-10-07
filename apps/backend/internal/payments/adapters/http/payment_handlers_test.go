@@ -731,6 +731,127 @@ func TestPaymentResponse_CarriesReminderOffset(t *testing.T) {
 	}
 }
 
+// TestCreatePayment_MapsNotifyAutoPaid (#1189): the create payload's
+// notifyAutoPaid folds into the command — absent/false decode to false («Не
+// уведомлять», макет 3214-72739), an explicit true asks for the
+// «Автоплатёж исполнен» event.
+func TestCreatePayment_MapsNotifyAutoPaid(t *testing.T) {
+	t.Parallel()
+	actor := uuid.Must(uuid.NewV7())
+	propertyID := uuid.Must(uuid.NewV7())
+
+	notifyCreateBody := func(flag string) string {
+		return `{"type":"expense","title":"Аренда","amountKopecks":5000000,` +
+			`"recurrence":{"kind":"daily"},"categorySlug":"rent",` +
+			`"notifyAutoPaid":` + flag + `}`
+	}
+
+	cases := []struct {
+		name string
+		body string
+		want bool
+	}{
+		{"absent — silent", validCreateBody, false},
+		{"explicit false", notifyCreateBody("false"), false},
+		{"explicit true", notifyCreateBody("true"), true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var gotCmd application.CreatePaymentCommand
+			h := NewPaymentHandlers(&fakePaymentManager{
+				create: func(_ context.Context, _, _ uuid.UUID, cmd application.CreatePaymentCommand) (domain.Payment, error) {
+					gotCmd = cmd
+					return validFixturePayment(), nil
+				},
+			}, nil)
+			w := httptest.NewRecorder()
+			h.CreatePayment(w, paymentRequest(t, http.MethodPost, actor, tc.body), propertyID)
+			if w.Code != http.StatusCreated {
+				t.Fatalf("status = %d, want 201; body: %s", w.Code, w.Body.String())
+			}
+			if gotCmd.NotifyAutoPaid != tc.want {
+				t.Fatalf("command NotifyAutoPaid = %v, want %v", gotCmd.NotifyAutoPaid, tc.want)
+			}
+		})
+	}
+}
+
+// TestUpdatePayment_NotifyAutoPaidTriState (#1189): the flag resolves like
+// the reminder tri-state — omitted keeps, null clears (false), a boolean
+// sets.
+func TestUpdatePayment_NotifyAutoPaidTriState(t *testing.T) {
+	t.Parallel()
+	actor := uuid.Must(uuid.NewV7())
+	propertyID := uuid.Must(uuid.NewV7())
+	paymentID := uuid.Must(uuid.NewV7())
+
+	cases := []struct {
+		name     string
+		body     string
+		wantSet  bool
+		wantFlag bool
+	}{
+		{"omit keeps flag", `{"title": "Только название"}`, false, false},
+		{"null clears flag", `{"notifyAutoPaid": null}`, true, false},
+		{"false sets flag", `{"notifyAutoPaid": false}`, true, false},
+		{"true sets flag", `{"notifyAutoPaid": true}`, true, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var gotCmd application.UpdatePaymentCommand
+			h := NewPaymentHandlers(&fakePaymentManager{
+				update: func(_ context.Context, _, _, _ uuid.UUID, cmd application.UpdatePaymentCommand) (domain.Payment, error) {
+					gotCmd = cmd
+					return validFixturePayment(), nil
+				},
+			}, nil)
+			w := httptest.NewRecorder()
+			h.UpdatePayment(w, paymentRequest(t, http.MethodPatch, actor, tc.body),
+				propertyID, paymentID)
+			if w.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+			}
+			if present := gotCmd.NotifyAutoPaid != nil; present != tc.wantSet {
+				t.Fatalf("command NotifyAutoPaid update present = %v, want %v", present, tc.wantSet)
+			}
+			if tc.wantSet && *gotCmd.NotifyAutoPaid != tc.wantFlag {
+				t.Fatalf("command NotifyAutoPaid = %v, want %v", *gotCmd.NotifyAutoPaid, tc.wantFlag)
+			}
+		})
+	}
+}
+
+// TestPaymentResponse_CarriesNotifyAutoPaid (#1189): the read side exposes
+// the per-payment gate of the «Автоплатёж исполнен» event.
+func TestPaymentResponse_CarriesNotifyAutoPaid(t *testing.T) {
+	t.Parallel()
+	respond := validFixturePayment()
+	respond.NotifyAutoPaid = true
+
+	h := NewPaymentHandlers(&fakePaymentManager{
+		get: func(_ context.Context, _, _, _ uuid.UUID) (domain.Payment, error) {
+			return respond, nil
+		},
+	}, nil)
+	w := httptest.NewRecorder()
+	h.GetPayment(w, paymentRequest(t, http.MethodGet, uuid.Must(uuid.NewV7()), ""),
+		uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		NotifyAutoPaid *bool `json:"notifyAutoPaid"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.NotifyAutoPaid == nil || !*resp.NotifyAutoPaid {
+		t.Fatalf("response notifyAutoPaid = %v, want true", resp.NotifyAutoPaid)
+	}
+}
+
 // TestGetPayment_CarriesRentalCompleted (#1158): the single-rule read passes
 // the managing rental's «Завершена» state through next to the #818 gate
 // flag — the payment screen gates «Изменить аренду» on it.

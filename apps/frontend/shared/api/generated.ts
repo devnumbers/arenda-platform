@@ -2934,7 +2934,12 @@ export interface components {
             /** @default false */
             autoPay: boolean;
             /**
-             * @description За сколько дней предупреждать о вхождении («Напоминание о платеже», карта #822): 1, 3 или 7. Null/omitted — напоминаний нет (выбор опционален). Напоминание живёт независимо от autoPay.
+             * @description Присылать ли событие «Автоплатёж исполнен» по правилу (#1189). Дефолт для новых — false («Не уведомлять», макет 3214-72739); явный null равен false.
+             * @default false
+             */
+            notifyAutoPaid: boolean | null;
+            /**
+             * @description За сколько дней предупреждать о вхождении («Напоминание о платеже», карта #822): 1, 3 или 7. Null/omitted — напоминаний нет (выбор опционален). Напоминание живёт независимо от autoPay. У правила с autoPay=true присланный оффсет при создании форсируется в null (решение владельца по гриллингу #1186: автоплатёжная форма reminder-пикер не показывает).
              * @enum {integer|null}
              */
             reminderOffsetDays?: 1 | 3 | 7 | null;
@@ -2954,6 +2959,8 @@ export interface components {
              */
             endDate?: string | null;
             autoPay?: boolean;
+            /** @description Tri-state флаг «уведомлять об автоплатеже» (#1189): omitted keeps the current value, null turns the «Автоплатёж исполнен» event off, true/false sets it. */
+            notifyAutoPaid?: boolean | null;
             /**
              * @description Tri-state lead time of the payment reminder («Напоминание о платеже»): omitted keeps the current value, null turns reminders off, 1/3/7 sets the lead time.
              * @enum {integer|null}
@@ -2992,6 +2999,8 @@ export interface components {
             /** Format: date */
             endDate?: string | null;
             autoPay: boolean;
+            /** @description The per-payment gate of the «Автоплатёж исполнен» event (#1189): false — правило автоплатежа гасится молча. Дефолт новых правил — false (макет 3214-72739); существующим автоплатежам проставлен true миграцией (без поведенческого регресса, #1186). */
+            notifyAutoPaid: boolean;
             category: components["schemas"]["CategoryView"];
             /**
              * @description The payment reminder's lead time in days (карта #822); null — напоминаний нет. Живёт независимо от autoPay.

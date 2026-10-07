@@ -33,6 +33,7 @@ type paymentRowFields struct {
 	Since            pgtype.Date
 	EndDate          pgtype.Date
 	AutoPay          bool
+	NotifyAutoPaid   bool
 	ReminderOffset   pgtype.Int4
 	CategorySlug     pgtype.Text
 	UserCategoryID   pgtype.UUID
@@ -61,6 +62,7 @@ func paymentFieldsFromGetRow(row postgres.GetPaymentByIDRow) paymentRowFields {
 		ID: row.ID, OwnerID: row.OwnerID, PropertyID: row.PropertyID, Type: row.Type,
 		Title: row.Title, AmountKopecks: row.AmountKopecks, Recurrence: row.Recurrence,
 		Since: row.Since, EndDate: row.EndDate, AutoPay: row.AutoPay,
+		NotifyAutoPaid:   row.NotifyAutoPaid,
 		ReminderOffset:   row.ReminderOffsetDays,
 		CategorySlug:     row.CategorySlug,
 		UserCategoryID:   row.UserCategoryID,
@@ -77,6 +79,7 @@ func paymentFieldsFromListRow(row postgres.ListPaymentsByPropertyRow) paymentRow
 		ID: row.ID, OwnerID: row.OwnerID, PropertyID: row.PropertyID, Type: row.Type,
 		Title: row.Title, AmountKopecks: row.AmountKopecks, Recurrence: row.Recurrence,
 		Since: row.Since, EndDate: row.EndDate, AutoPay: row.AutoPay,
+		NotifyAutoPaid:   row.NotifyAutoPaid,
 		ReminderOffset:   row.ReminderOffsetDays,
 		CategorySlug:     row.CategorySlug,
 		UserCategoryID:   row.UserCategoryID,
@@ -96,16 +99,17 @@ func mapPaymentRow(row paymentRowFields) (domain.Payment, error) {
 		return domain.Payment{}, fmt.Errorf("parse recurrence of payment %s: %w", pgconv.UUIDFromPgtype(row.ID), err)
 	}
 	return domain.Payment{
-		ID:            pgconv.UUIDFromPgtype(row.ID),
-		OwnerID:       pgconv.UUIDFromPgtype(row.OwnerID),
-		PropertyID:    pgconv.UUIDFromPgtype(row.PropertyID),
-		Type:          domain.PaymentType(row.Type),
-		Title:         row.Title,
-		AmountKopecks: row.AmountKopecks,
-		Recurrence:    recurrence,
-		Since:         pgconv.DateFromPgtype(row.Since),
-		EndDate:       pgconv.DatePtrFromPgtype(row.EndDate),
-		AutoPay:       row.AutoPay,
+		ID:             pgconv.UUIDFromPgtype(row.ID),
+		OwnerID:        pgconv.UUIDFromPgtype(row.OwnerID),
+		PropertyID:     pgconv.UUIDFromPgtype(row.PropertyID),
+		Type:           domain.PaymentType(row.Type),
+		Title:          row.Title,
+		AmountKopecks:  row.AmountKopecks,
+		Recurrence:     recurrence,
+		Since:          pgconv.DateFromPgtype(row.Since),
+		EndDate:        pgconv.DatePtrFromPgtype(row.EndDate),
+		AutoPay:        row.AutoPay,
+		NotifyAutoPaid: row.NotifyAutoPaid,
 		// The reminder lead time: a NULL column is no reminders (nil). The
 		// tick's rows do not select the column — the tick never reads it.
 		ReminderOffsetDays: pgconv.Int4ToPtr(row.ReminderOffset),

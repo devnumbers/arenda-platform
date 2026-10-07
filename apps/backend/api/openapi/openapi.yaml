@@ -6666,6 +6666,14 @@ components:
         autoPay:
           type: boolean
           default: false
+        notifyAutoPaid:
+          type: boolean
+          nullable: true
+          default: false
+          description: >-
+            Присылать ли событие «Автоплатёж исполнен» по правилу (#1189).
+            Дефолт для новых — false («Не уведомлять», макет 3214-72739);
+            явный null равен false.
         reminderOffsetDays:
           type: integer
           nullable: true
@@ -6674,6 +6682,9 @@ components:
             За сколько дней предупреждать о вхождении («Напоминание о
             платеже», карта #822): 1, 3 или 7. Null/omitted — напоминаний нет
             (выбор опционален). Напоминание живёт независимо от autoPay.
+            У правила с autoPay=true присланный оффсет при создании
+            форсируется в null (решение владельца по гриллингу #1186:
+            автоплатёжная форма reminder-пикер не показывает).
 
     PaymentUpdateRequest:
       description: >-
@@ -6712,6 +6723,13 @@ components:
             окно не перепроверяют.
         autoPay:
           type: boolean
+        notifyAutoPaid:
+          type: boolean
+          nullable: true
+          description: >
+            Tri-state флаг «уведомлять об автоплатеже» (#1189): omitted keeps
+            the current value, null turns the «Автоплатёж исполнен» event off,
+            true/false sets it.
         reminderOffsetDays:
           type: integer
           nullable: true
@@ -6756,7 +6774,7 @@ components:
 
     PaymentResponse:
       type: object
-      required: [id, propertyId, type, title, amountKopecks, recurrence, since, autoPay, category, isFavorite, isCompleted, nearestDate, isRentalManaged, isRentalCompleted, pauses, createdAt, updatedAt]
+      required: [id, propertyId, type, title, amountKopecks, recurrence, since, autoPay, notifyAutoPaid, category, isFavorite, isCompleted, nearestDate, isRentalManaged, isRentalCompleted, pauses, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -6783,6 +6801,13 @@ components:
           nullable: true
         autoPay:
           type: boolean
+        notifyAutoPaid:
+          type: boolean
+          description: >-
+            The per-payment gate of the «Автоплатёж исполнен» event (#1189):
+            false — правило автоплатежа гасится молча. Дефолт новых правил —
+            false (макет 3214-72739); существующим автоплатежам проставлен
+            true миграцией (без поведенческого регресса, #1186).
         category:
           $ref: '#/components/schemas/CategoryView'
         reminderOffsetDays:

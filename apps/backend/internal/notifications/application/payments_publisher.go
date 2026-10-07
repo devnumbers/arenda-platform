@@ -78,17 +78,22 @@ type PaymentScanSource interface {
 	// the live day (#1169): occurrences the tick extinguished in their own
 	// day (the paid_source stamp) on non-archived properties — a manual
 	// payment is silent, the owner's decision by гриллинг #1167. The
-	// instant gate (#1168) keeps the sweep from publishing before the
-	// boundary's wall clock 10:00.
+	// per-payment flag gates the leg (#1189): rules with notify_auto_paid
+	// = false — the «Не уведомлять» default of the new rules (макет
+	// 3214-72739) — never speak. The instant gate (#1168) keeps the sweep
+	// from publishing before the boundary's wall clock 10:00.
 	ListAutoPaidTargets(ctx context.Context, zone string, today, now time.Time) ([]PaymentScanTarget, error)
 	// ListScheduledAutoPaidTargets lists the upcoming planned occurrences of
-	// auto-pay rules whose boundary — the wall clock 10:00 of the operation
-	// date in the owner's timezone (#1169) — falls in the window
-	// (from, until]; the booking list of the auto-paid leg.
+	// notify_auto_paid auto-pay rules (#1189) whose boundary — the wall
+	// clock 10:00 of the operation date in the owner's timezone (#1169) —
+	// falls in the window (from, until]; the booking list of the auto-paid
+	// leg.
 	ListScheduledAutoPaidTargets(ctx context.Context, from, until time.Time) ([]PaymentScheduleTarget, error)
 	// GetScheduledAutoPaidPayment reloads one operation at its 10:00 wake-up
 	// (#1169): live only when the TICK extinguished it in its own day (the
-	// paid_source='auto_pay' stamp) on a non-archived property, and the
+	// paid_source='auto_pay' stamp) on a non-archived property the rule
+	// still asks to be notified on (notify_auto_paid, #1189 — a flag
+	// flipped after the booking silences the standing job), and the
 	// operation date is still the zone's today — the live day only, no
 	// backfill (решение владельца, #1167).
 	GetScheduledAutoPaidPayment(ctx context.Context, paymentID uuid.UUID, date, now time.Time) (PaymentScanTarget, bool, error)
@@ -172,7 +177,8 @@ type PaymentBoundaryDeliverer interface {
 	DeliverPaymentReminder(ctx context.Context, paymentID uuid.UUID, date, now time.Time) error
 	// DeliverPaymentAutoPaid is the auto-paid boundary job's half (#1169):
 	// reload the operation as of the wake-up and publish if the TICK
-	// extinguished it in its own day — a manual payment is silent.
+	// extinguished it in its own day — a manual payment is silent, and a
+	// notify_auto_paid = false rule never speaks (#1189).
 	DeliverPaymentAutoPaid(ctx context.Context, paymentID uuid.UUID, date, now time.Time) error
 }
 
@@ -220,7 +226,8 @@ func NewPaymentsPublisher(
 }
 
 // RunZoneScans is the hourly sweep: book the upcoming boundaries' jobs
-// first — every hour counts down to their midnight — then sweep the zones,
+// first — every hour counts down to their 10:00/22:00 (#1168) — then sweep
+// the zones,
 // publishing the zone's due, reminder and overdue targets. Failures are
 // isolated — a broken booking, zone or operation does not stop the rest;
 // the joined error reports everything that failed.
@@ -237,9 +244,9 @@ func (p *PaymentsPublisher) RunZoneScans(ctx context.Context, now time.Time) err
 
 // scheduleBoundaries books the boundary jobs of the operations whose
 // boundaries fall into the horizon window — the due leg's ahead of the
-// operation date's midnight, the reminder leg's ahead of the operation date
+// operation date's 10:00, the reminder leg's ahead of the operation date
 // minus the rule's lead time (карта #822), the overdue leg's ahead of the
-// day after's.
+// day after's 22:00 (#1168).
 // A broken booking is isolated — the rest of the window books on.
 func (p *PaymentsPublisher) scheduleBoundaries(ctx context.Context, now time.Time) []error {
 	var errs []error
@@ -353,9 +360,11 @@ func (p *PaymentsPublisher) DeliverPaymentReminder(ctx context.Context, paymentI
 // карта #1162): reload the operation as of its 10:00 wake-up and publish if
 // the TICK extinguished it in its own day — the paid_source='auto_pay'
 // stamp is the live predicate (решение владельца по гриллингу #1167: a
-// manual payment of the same occurrence is silent, the owner knows). The
-// live day only: a job awake after the day rolled over — a downtime's
-// missed day — finishes without publishing (no backfill).
+// manual payment of the same occurrence is silent, the owner knows), and
+// the rule's notify_auto_paid flag holds (#1189 — a rule flipped to «Не
+// уведомлять» finishes the standing job silently). The live day only: a job
+// awake after the day rolled over — a downtime's missed day — finishes
+// without publishing (no backfill).
 func (p *PaymentsPublisher) DeliverPaymentAutoPaid(ctx context.Context, paymentID uuid.UUID, date, now time.Time) error {
 	target, live, err := p.source.GetScheduledAutoPaidPayment(ctx, paymentID, date, now)
 	if err != nil {

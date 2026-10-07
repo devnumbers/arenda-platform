@@ -54,13 +54,17 @@ func IsValidReminderOffset(offset *int) bool {
 // The since date is not part of it: the server sets it to the owner's today
 // (ADR 0048), and it never changes afterwards.
 type CreatePaymentCommand struct {
-	Type               domain.PaymentType
-	Title              string
-	AmountKopecks      int64
-	Recurrence         domain.Recurrence
-	CategorySlug       string
-	EndDate            *time.Time
-	AutoPay            bool
+	Type          domain.PaymentType
+	Title         string
+	AmountKopecks int64
+	Recurrence    domain.Recurrence
+	CategorySlug  string
+	EndDate       *time.Time
+	AutoPay       bool
+	// NotifyAutoPaid is the per-payment gate of the «Автоплатёж исполнен»
+	// event (#1189); absent on the wire means false («Не уведомлять»,
+	// макет 3214-72739).
+	NotifyAutoPaid     bool
 	ReminderOffsetDays *int
 }
 
@@ -82,6 +86,10 @@ type UpdatePaymentCommand struct {
 	// non-nil one applies the EndDateUpdate (set or clear).
 	EndDate *EndDateUpdate
 	AutoPay *bool
+	// NotifyAutoPaid is tri-state: a nil command field keeps the current
+	// value; a set value applies it (#1189). An explicit null on the wire
+	// resolves to false at the transport.
+	NotifyAutoPaid *bool
 	// ReminderOffsetDays is tri-state the same way: omit keeps, a set value
 	// applies (1/3/7), a clear turns reminders off.
 	ReminderOffsetDays *ReminderOffsetUpdate
@@ -167,8 +175,17 @@ func (s *PaymentService) CreatePayment(
 				Since:              today,
 				EndDate:            cmd.EndDate,
 				AutoPay:            cmd.AutoPay,
+				NotifyAutoPaid:     cmd.NotifyAutoPaid,
 				ReminderOffsetDays: cmd.ReminderOffsetDays,
 				Category:           domain.CategoryRef{Slug: &cmd.CategorySlug},
+			}
+			// Создание автоплатёжного правила напоминаний не получает:
+			// автоплатёжная форма заменяет пикер оффсета тумблером «Уведомлять
+			// об оплате», присланный оффсет форсится в NULL (решение владельца
+			// по гриллингу #1186, макет 3214-72739). Обычные правила не
+			// трогаются; правка freedom оффсета при автоплатеже не режется.
+			if draft.AutoPay {
+				draft.ReminderOffsetDays = nil
 			}
 			if err := validateRule(draft); err != nil {
 				return mutationOutcome[domain.Payment]{}, err
@@ -566,6 +583,9 @@ func applyUpdate(payment *domain.Payment, cmd UpdatePaymentCommand) {
 	if cmd.AutoPay != nil {
 		payment.AutoPay = *cmd.AutoPay
 	}
+	if cmd.NotifyAutoPaid != nil {
+		payment.NotifyAutoPaid = *cmd.NotifyAutoPaid
+	}
 	if cmd.ReminderOffsetDays != nil {
 		payment.ReminderOffsetDays = cmd.ReminderOffsetDays.Value
 	}
@@ -595,6 +615,9 @@ func updatedFields(cmd UpdatePaymentCommand) []string {
 	}
 	if cmd.AutoPay != nil {
 		fields = append(fields, "auto_pay")
+	}
+	if cmd.NotifyAutoPaid != nil {
+		fields = append(fields, "notify_auto_paid")
 	}
 	if cmd.ReminderOffsetDays != nil {
 		fields = append(fields, "reminder_offset_days")

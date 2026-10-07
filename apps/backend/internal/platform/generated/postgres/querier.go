@@ -476,7 +476,9 @@ type Querier interface {
 	// operation whose date is no longer the zone's today (a job awake after
 	// the day rolled over) answers no row — a downtime's missed days are not
 	// backfilled, the 22:00 overdue leg speaks for the unpaid past; an
-	// archived property answers no row.
+	// archived property answers no row. The per-payment flag (#1189): a rule
+	// with notify_auto_paid = false answers no row — the flag flipped after
+	// the booking silences the standing job.
 	GetScheduledAutoPaidPayment(ctx context.Context, arg GetScheduledAutoPaidPaymentParams) (GetScheduledAutoPaidPaymentRow, error)
 	// The completed boundary job's delivery-time resolution (issue #777): the
 	// rental as it stands at its boundary midnight. The needs_attention
@@ -617,7 +619,9 @@ type Querier interface {
 	// ids and since are app-side (UUIDv7, the owner's today); recurrence is the
 	// domain-validated jsonb; the category arrives as a default-catalog slug in
 	// this slice (user_category_id stays NULL). reminder_offset_days is the
-	// nullable reminder lead time (карта #822; NULL = напоминаний нет).
+	// nullable reminder lead time (карта #822; NULL = напоминаний нет);
+	// notify_auto_paid — гейт события «Автоплатёж исполнен» (#1189, дефолт новых
+	// false, макет 3214-72739).
 	InsertPayment(ctx context.Context, arg InsertPaymentParams) error
 	// The open-ended pause [from, ∞): exactly one may exist per rule — the
 	// partial unique index (to_date IS NULL) makes a double pause a constraint
@@ -953,7 +957,9 @@ type Querier interface {
 	// date = today — a downtime's missed days are not backfilled (решение
 	// владельца, #1167; the overdue leg speaks for the unpaid past instead).
 	// The instant gate (#1168): the boundary is the wall clock 10:00 of the
-	// operation date — the sweep must not publish ahead of it.
+	// operation date — the sweep must not publish ahead of it. The per-payment
+	// flag (гейты #1189): молчащие правила (notify_auto_paid = false) мимо —
+	// событие «Автоплатёж исполнен» приходит только по разрешившим уведомление.
 	ListPaymentAutoPaidTargets(ctx context.Context, arg ListPaymentAutoPaidTargetsParams) ([]ListPaymentAutoPaidTargetsRow, error)
 	// One zone's due-day operations as of the zone's today (решение #737, тип
 	// №2: в день срока): planned, dated exactly today, on rules without the
@@ -1002,7 +1008,8 @@ type Querier interface {
 	// boundary — the wall clock 10:00 of the operation date in the owner's
 	// timezone — falls in the window (from, until]. The occurrence is planned
 	// at booking time; whether the tick (or a manual payment) extinguished it
-	// by the wake-up is the delivery-time resolution's call.
+	// by the wake-up is the delivery-time resolution's call. Only
+	// notify_auto_paid-правила бронят (#1189) — молчащие не зовут событие.
 	ListPaymentScheduledAutoPaidTargets(ctx context.Context, arg ListPaymentScheduledAutoPaidTargetsParams) ([]ListPaymentScheduledAutoPaidTargetsRow, error)
 	// The payments scan's booking list of the due leg (issue #776): the planned
 	// operations whose due boundary — the wall clock 10:00 of the operation
