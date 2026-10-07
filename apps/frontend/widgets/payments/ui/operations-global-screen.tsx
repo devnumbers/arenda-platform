@@ -174,7 +174,9 @@ export function OperationsGlobalScreen(): JSX.Element {
             }
           />
         ) : (
-          <div className="mt-4 flex flex-col gap-6">
+          /* От пилюли до чипов 24 (макет 3226-74599: пилюля 72–128, чипы
+           * со 152) — дальше ритм gap-6 до конца первого блока. */
+          <div className="mt-6 flex flex-col gap-6">
             <OperationsFilterChips
               className="px-6"
               periodLabel={operationsPeriodChipLabel(filters.period)}
