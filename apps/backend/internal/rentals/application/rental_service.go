@@ -240,6 +240,7 @@ func (s *RentalService) CreateRental(
 				StartDate:          cmd.StartDate,
 				PlannedEndDate:     cmd.PlannedEndDate,
 				AutoPay:            cmd.AutoPay,
+				NotifyAutoPaid:     true,
 				ReminderOffsetDays: cmd.ReminderOffsetDays,
 			})
 			if err != nil {

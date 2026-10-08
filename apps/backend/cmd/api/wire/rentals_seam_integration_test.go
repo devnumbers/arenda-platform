@@ -179,6 +179,9 @@ func TestSeam_CreateBuildsTheManagedPaymentAndMaterializes(t *testing.T) {
 	assert.Equal(t, seamToday, payment.Since)
 	assert.True(t, payment.AutoPay)
 	assert.Equal(t, 1, *payment.ReminderOffsetDays)
+	// The auto-paid notification gate rides the seed as true (#1198): the
+	// rent pipeline always wants the notification, по подписи макета 1428.
+	assert.True(t, payment.NotifyAutoPaid)
 
 	// The in-transaction tick stood the single future planned at the payment
 	// day of the start month (start == today, day 15 ahead).

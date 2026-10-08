@@ -285,7 +285,7 @@ describe('buildRentalCreateCommand', () => {
     });
   });
 
-  it('незаданные необязательные поля уходят null; напоминание — дефолт «За 1 день» (решение #823)', () => {
+  it('незаданные необязательные поля уходят null; напоминание без явного выбора — null «Не напоминать» (#1198)', () => {
     expect(
       buildRentalCreateCommand(
         { amountKopecks: 5600000, paymentDay: 'last', startDate: TODAY },
@@ -301,7 +301,7 @@ describe('buildRentalCreateCommand', () => {
       commissionKopecks: null,
       contactId: null,
       autoPay: false,
-      reminderOffsetDays: 1,
+      reminderOffsetDays: null,
     });
   });
 

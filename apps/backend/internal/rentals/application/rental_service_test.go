@@ -422,6 +422,10 @@ func TestCreateRental_HappyPath(t *testing.T) {
 	assert.Equal(t, today, seed.StartDate, "since = start_date, not the wire today")
 	assert.Equal(t, mustDate("2027-09-01"), *seed.PlannedEndDate)
 	assert.False(t, seed.AutoPay)
+	// The rent pipeline always wants the auto-paid notification (#1198): по
+	// подписи макета 1428 — with the toggle off too, so an auto-pay turned
+	// on later by the terms edit notifies as well.
+	assert.True(t, seed.NotifyAutoPaid)
 
 	require.Len(t, h.audit.entries, 1)
 	entry := h.audit.entries[0]

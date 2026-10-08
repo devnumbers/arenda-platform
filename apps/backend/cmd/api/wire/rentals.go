@@ -148,6 +148,7 @@ func (t *rentPaymentGatewayTx) Create(
 		Since:              seed.StartDate,
 		EndDate:            seed.PlannedEndDate,
 		AutoPay:            seed.AutoPay,
+		NotifyAutoPaid:     seed.NotifyAutoPaid,
 		ReminderOffsetDays: seed.ReminderOffsetDays,
 		Category:           paymentsdomain.CategoryRef{Slug: &category},
 	}); err != nil {

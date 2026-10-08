@@ -23,8 +23,8 @@ export type RentalWizardDraft = {
   readonly paymentDay?: RentalPaymentDay;
   /** Автоплатёж Платежа арендной платы (шаг 3; отсутствие = выключен). */
   readonly autoPay?: boolean;
-  /** Лид-тайм напоминания о платеже (шаг 3, карта #822; отсутствие —
-   * дефолт «За 1 день» применяется при сборке команды). */
+  /** Лид-тайм напоминания о платеже (шаг 3, карта #822; #1198: отсутствие —
+   * «Не напоминать», дефолт шага; в команду уходит явный null). */
   readonly reminderOffsetDays?: PaymentReminderOffset;
   /** Начало аренды — сегодня или позже (шаг 2). */
   readonly startDate?: IsoDate;
@@ -43,11 +43,6 @@ export type RentalWizardDraft = {
 export const WIZARD_TOTAL_STEPS = 4;
 
 export type RentalWizardStep = 1 | 2 | 3 | 4;
-
-/** Дефолт лид-тайма напоминания аренды — «За 1 день» (макет 1428-58757,
- * решение #823): селект предвыбран всегда, пустого состояния нет; один
- * владелец дефолта и для экрана, и для сборки команды. */
-export const RENTAL_REMINDER_DEFAULT: PaymentReminderOffset = 1;
 
 /** Верхняя граница сумм контракта (копейки): 1…10⁹ для платы, 0…10⁹ для
  * залога и комиссии. Ввод сверху срезает маска суммы (9 999 999,99 ₽). */
@@ -260,9 +255,10 @@ export function buildRentalCreateCommand(
     commissionKopecks: clampAmount(draft.commissionKopecks),
     contactId: draft.contactId ?? null,
     autoPay: draft.autoPay ?? false,
-    // Дефолт «За 1 день» (RENTAL_REMINDER_DEFAULT): у аренды напоминание
-    // предвыбрано всегда, протекает в Платёж 1:1.
-    reminderOffsetDays: draft.reminderOffsetDays ?? RENTAL_REMINDER_DEFAULT,
+    // Дефолт «Не напоминать» (#1198): выбор «за N дней» протекает 1:1,
+    // отсутствие выбора едет явным null — дефолт не протекает в команду
+    // молча.
+    reminderOffsetDays: draft.reminderOffsetDays ?? null,
   };
 }
 

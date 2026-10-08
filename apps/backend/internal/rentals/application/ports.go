@@ -61,6 +61,11 @@ type RentPaymentSeed struct {
 	StartDate      time.Time
 	PlannedEndDate *time.Time
 	AutoPay        bool
+	// NotifyAutoPaid is the managed payment's gate of the «Автоплатёж
+	// исполнен» event (payments #1189): the rent pipeline stamps it true
+	// unconditionally (#1198, по подписи макета 1428) — an auto-pay turned
+	// on later by the terms edit notifies too.
+	NotifyAutoPaid bool
 	// ReminderOffsetDays is the managed payment's reminder lead time
 	// (карта #822): 1/3/7, nil = без напоминаний. Аренда ставит его вместе
 	// с автоплатежом (решение #823).
