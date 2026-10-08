@@ -1,7 +1,7 @@
 'use client';
 
 import type { JSX } from 'react';
-import { ArrowLeft, Cancel } from '@/shared/assets/icons';
+import { Add, ArrowLeft, Cancel } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import {
   HubCollapseAnchor,
@@ -26,7 +26,9 @@ import { BookSearchPill, BookSortChip } from './contact-book-screen';
  * fallback Suspense-границы и как loading.tsx сегмента.
  */
 
-/** Книга контактов: хаб-шапка, пилюля, чип сортировки, скелетон книги. */
+/** Книга контактов: хаб-шапка, строка заголовка с «+» (в покое — книга
+ * в pending не подтверждённая пустота, #1004), пилюля, чип сортировки,
+ * скелетон книги. */
 export function ContactBookLoading(): JSX.Element {
   return (
     <>
@@ -35,18 +37,23 @@ export function ContactBookLoading(): JSX.Element {
         collapse={{
           title: 'Контакты',
           search: { href: ROUTES.contactSearch, label: 'Найти контакт' },
+          trailing: <IconButton icon={<Add />} label="Добавить контакт" />,
         }}
       />
 
       <PageContent>
         <HubCollapseAnchor>
-          <HubTitle>Контакты</HubTitle>
+          <div className="flex h-8 items-center justify-between pr-3.5">
+            <HubTitle>Контакты</HubTitle>
+            <IconButton icon={<Add />} label="Добавить контакт" />
+          </div>
+
           <div className="mt-4 mb-6 px-6">
-            <BookSearchPill onOpenSearch={() => {}} onCreate={() => {}} />
+            <BookSearchPill onOpenSearch={() => {}} />
           </div>
         </HubCollapseAnchor>
 
-        <div className="mb-4 px-6">
+        <div className="mb-6 px-6">
           <BookSortChip field="name" order="asc" />
         </div>
 
