@@ -4,44 +4,29 @@ import { useRef, useState, type ChangeEvent, type JSX } from 'react';
 import { notify } from '@/shared/lib/notifications';
 import {
   PHOTO_FILE_TOO_LARGE_MESSAGE,
-  photoDisplayUrl,
+  type PropertyPhotoStage,
   photoFileTooLarge,
-  useDeletePropertyPhoto,
+  propertyPhotoDisplay,
   usePropertyPhotoBuster,
-  useUploadPropertyPhoto,
 } from '@/features/properties';
 import { PropertyAvatar, type PropertyType } from '@/entities/property';
 import { Button, circleIconRing, ConfirmDialog, PhotoRemoveBadge } from '@/shared/ui/design';
 
 /**
  * Слот фото объекта на правке (тикет #1228; ADR 0065): круг-плейсхолдер
- * по типу (поверхность hero канона PropertyAvatar) либо загруженное фото.
- * Канон правки/удаления — макет 1299:51572/73 (правка фото контакта,
- * эталон карты #1217): бейдж-корзина в выемке правого-верхнего края круга
- * (PhotoRemoveBadge; круг под ним — с кольцом цвета подложки
- * circleIconRing) и одна ссылка «Обновить фото» под кругом — канон Clear
- * (M/500 14, Figma 1134:55051); без фото бейджа нет, ссылка — «Добавить
- * фото». Удаление — через ConfirmDialog: однотапный бейдж не должен
- * молча стирать фото (решение владельца 08.10). На время запроса круг
- * остаётся ровно тем же, что был (прежнее фото либо глиф), ссылка
- * исчезает целиком, сохраняя свой слот — без полупрозрачного призрака
- * надписи и без сдвига формы (решение владельца 08.10; скрытие с
- * сохранением места = ноль layout shift); бейдж остаётся на месте и
- * гаснет по канону дизейблов — тонкий сигнал полёта. Сам круг в режиме
- * правки тоже кликабелен (решение владельца 08.10): без фото открывает
- * пикер, с фото — замену; это настоящая кнопка с aria-label (клавиатура
- * и скринридер), в полёте глушится без затемнения (круг «как был»).
- * Бейдж удаления в DOM — сосед кнопки круга, не её потомок: клик по
- * бейджу не открывает пикер. Фото живёт мимо
- * черновика формы — загрузка/удаление применяются сразу отдельными
- * эндпоинтами (`/properties/{id}/photo`, multipart POST и DELETE),
- * кнопки «Сохранить» не касаются. Ошибки — mutateAsync + catch с тостом
- * (канон форм; пер-колбэки mutate не используются).
- *
- * Байты выдачи кэшируются браузером (private, max-age=300) при неизменном
- * пути — URL для <img> собирается с бастером `?v=N` (photoDisplayUrl);
- * счётчик N живёт в react-query кэше (usePropertyPhotoBuster, пишут
- * мутации), поэтому переживает перемонтирования экрана.
+ * по типу (поверхность hero канона PropertyAvatar) либо фото. Управляемый
+ * и без сети: изменение фото живёт в черновике формы (stage,
+ * PropertyPhotoStage — решение владельца 08.10), что показывать, решает
+ * propertyPhotoDisplay (staged-превью → серверное фото с бастером →
+ * глиф), а применяют изменение кнопки сохранения экрана — onFileChosen и
+ * onRemove только переставляют stage, увлечение без сохранения сервер не
+ * трогает. Круг — настоящая кнопка (aria-label, клавиатура; решение
+ * владельца 08.10): без фото открывает пикер, с фото — замену. Бейдж-
+ * корзина — сосед круга в DOM, не потомок: клик по нему открывает
+ * ConfirmDialog («удаление применится при сохранении»), а не пикер.
+ * На время фото-мутаций (busy) круг и бейдж глушатся, ссылка прячется с
+ * сохранением слота — ноль layout shift; бейдж гаснет по канону
+ * дизейблов.
  */
 
 const PHOTO_INPUT_ACCEPT = 'image/jpeg,image/png,image/webp';
@@ -55,28 +40,33 @@ export type PropertyPhotoSlotProps = {
   readonly propertyId: string;
   /** same-origin стриминговый путь выдачи (ADR 0065), null — фото нет. */
   readonly photoUrl?: string | null;
+  /** Незавершённое изменение фото из черновика экрана (см. выше). */
+  readonly stage: PropertyPhotoStage | null;
+  /** Фото-мутация сохранения в полёте — управление слота глушится. */
+  readonly busy: boolean;
   /** Тип объекта — выбирает глиф-плейсхолдер, следует за черновиком формы. */
   readonly type?: PropertyType;
+  /** Файл выбран (кап уже проверен) — экран кладёт его в stage. */
+  readonly onFileChosen: (file: File) => void;
+  /** Удаление подтверждено — экран ставит stage remove. */
+  readonly onRemove: () => void;
 };
 
 export function PropertyPhotoSlot({
   propertyId,
   photoUrl,
+  stage,
+  busy,
   type,
+  onFileChosen,
+  onRemove,
 }: PropertyPhotoSlotProps): JSX.Element {
-  const uploadPhoto = useUploadPropertyPhoto();
-  const deletePhoto = useDeletePropertyPhoto();
   const photoBuster = usePropertyPhotoBuster(propertyId);
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const displayUrl = photoUrl !== null && photoUrl !== undefined
-    ? photoDisplayUrl(photoUrl, photoBuster)
-    : null;
+  const displayUrl = propertyPhotoDisplay(photoUrl ?? null, photoBuster, stage);
   const hasPhoto = displayUrl !== null;
-  // В полёте глушим оба управления: одновременные загрузка и удаление
-  // гоняются за один photo_key.
-  const busy = uploadPhoto.isPending || deletePhoto.isPending;
 
   const openPicker = (): void => {
     fileInputRef.current?.click();
@@ -90,21 +80,13 @@ export function PropertyPhotoSlot({
       return;
     }
     // Пречек капа до сети; формат (магические байты) и пиксельный лимит
-    // решает бэкенд, его problem+json текст виден в тосте отказа.
+    // решает бэкенд при сохранении, его problem+json текст виден в тосте
+    // отказа.
     if (photoFileTooLarge(file.size)) {
       notify.error(PHOTO_FILE_TOO_LARGE_MESSAGE);
       return;
     }
-    void uploadPhoto
-      .mutateAsync({ id: propertyId, file })
-      .catch((error: unknown) => notify.scenarios.property.photoUpdateError(error));
-  };
-
-  const handleDeleteConfirm = (): void => {
-    setDeleteConfirmOpen(false);
-    void deletePhoto
-      .mutateAsync({ id: propertyId })
-      .catch((error: unknown) => notify.scenarios.property.photoDeleteError(error));
+    onFileChosen(file);
   };
 
   const avatarButton = (
@@ -129,7 +111,7 @@ export function PropertyPhotoSlot({
       {hasPhoto ? (
         <div className="relative">
           {avatarButton}
-          <PhotoRemoveBadge disabled={busy} onClick={() => setDeleteConfirmOpen(true)} />
+          <PhotoRemoveBadge disabled={busy} onClick={() => setRemoveConfirmOpen(true)} />
         </div>
       ) : (
         avatarButton
@@ -151,14 +133,16 @@ export function PropertyPhotoSlot({
         {hasPhoto ? 'Обновить фото' : 'Добавить фото'}
       </Button>
       <ConfirmDialog
-        open={deleteConfirmOpen}
-        onOpenChange={setDeleteConfirmOpen}
+        open={removeConfirmOpen}
+        onOpenChange={setRemoveConfirmOpen}
         title="Удалить фото?"
-        description="Фото объекта будет удалено"
+        description="Фото объекта будет удалено при сохранении"
         confirmLabel="Удалить"
         confirmVariant="danger"
-        pending={deletePhoto.isPending}
-        onConfirm={handleDeleteConfirm}
+        onConfirm={() => {
+          setRemoveConfirmOpen(false);
+          onRemove();
+        }}
       />
     </div>
   );
