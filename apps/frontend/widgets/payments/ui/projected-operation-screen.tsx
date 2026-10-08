@@ -103,6 +103,7 @@ export function ProjectedOperationScreen({
             <OperationView
               propertyId={propertyId}
               operation={operation}
+              livePayment={payment}
               propertyTitle={property?.name ?? ''}
               today={today}
             />

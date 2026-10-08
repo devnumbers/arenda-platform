@@ -596,7 +596,6 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Operation details for the operation page. For an operation born of a payment rule the title, categoryLabel and categorySlug are the rule's live values — the page always shows the actual icon/name/category (решение владельца, #1190); a manual operation returns its own data and the listings keep the materialization snapshots. */
         get: operations["getOperation"];
         put?: never;
         post?: never;
@@ -3277,13 +3276,12 @@ export interface components {
             status: "planned" | "paid" | "overdue";
             /** @enum {string} */
             type: "income" | "expense";
-            /** @description The operation's title. On the detail endpoint a rule-born operation carries the rule's live title (решение владельца, #1190); the listings return the snapshot frozen at materialization. */
             title: string;
             /** Format: int64 */
             amountKopecks: number;
-            /** @description Category label. On the detail endpoint a rule-born operation carries the rule's live category resolution — the user category's current name or the default-catalog label (решение владельца, #1190); the listings return the snapshot frozen at materialization time. */
+            /** @description Category label snapshot frozen at materialization time. */
             categoryLabel: string;
-            /** @description Default-catalog slug for icon rendering; null when absent (a user category). On the detail endpoint a rule-born operation carries the rule's live slug (решение владельца, #1190); the listings return the snapshot frozen at materialization time. */
+            /** @description Default-catalog slug snapshot for icon rendering; null when absent. */
             categorySlug: string | null;
             /**
              * Format: date-time

@@ -13,6 +13,7 @@ import {
   formatDayMonthWithYear,
   PaymentRowButton,
   type IsoDate,
+  type Payment,
   type PaymentOperation,
 } from '@/entities/payment';
 import {
@@ -26,6 +27,7 @@ import {
   useDeleteOperation,
   useOperation,
   usePayOperation,
+  usePayment,
   usePaymentOperationsByStatus,
 } from '@/features/payments';
 import {
@@ -69,12 +71,13 @@ import {
  * и статус без строк сравнения с правилом; корзина работает как у
  * оплаченных (удаляет факт целиком).
  *
- * Живое представление (решение владельца, #1190/#1196): деталь операции
- * отдаёт актуальные название/категорию/иконку правила вместо снимка
- * материализации — страница рисует их, экран успеха «Платеж оплачен» берёт
- * те же живые поля (эхо оплаты несёт снимок). Ручные операции — свои
- * данные; расхождение плановой и фактической дат («Задержана на»/
- * «Заранее на») считается по датам операции и живыми полями не тронуто.
+ * Представление (решение владельца — поправка 08.10 к #1190, #1196):
+ * страница показывает снимок операции — название, категорию и иконку, с
+ * которыми операция материализовалась (ручная — как ввели); живое правило
+ * представлено только плашкой «Платеж» в «Данных операции» — её название
+ * и картинка берутся из живой детали платежа (livePayment). Расхождение
+ * плановой и фактической дат («Задержана на»/«Заранее на») считается по
+ * датам операции и от правила не зависит.
  */
 export function OperationDetailScreen({
   propertyId,
@@ -137,8 +140,6 @@ export function OperationDetailScreen({
       <OperationPaidSuccess
         propertyId={propertyId}
         paid={paidResult}
-        liveTitle={operation.title}
-        liveCategorySlug={operation.categorySlug}
         propertyTitle={property?.name ?? ''}
         onClose={() => {
           setPaidResult(null);
@@ -264,6 +265,9 @@ function OperationDetailBody({
   // оплачиваются из этой страницы — кнопки у них и так не будет, списки
   // запроса не нужны.
   const paymentId = operation.paymentId ?? null;
+  // Живая деталь правила для плашки «Платеж» (решение владельца — поправка
+  // 08.10 к #1190, #1196): у ручной операции правила нет — запрос спит.
+  const paymentQuery = usePayment(propertyId, paymentId ?? '');
   const overdueQuery = usePaymentOperationsByStatus(
     propertyId, paymentId ?? '', 'overdue', { enabled: paymentId !== null },
   );
@@ -289,6 +293,7 @@ function OperationDetailBody({
     <OperationView
       propertyId={propertyId}
       operation={operation}
+      livePayment={paymentQuery.data}
       propertyTitle={propertyTitle}
       today={dateToIsoLocal(new Date())}
       payBar={canMutate && payable
@@ -307,17 +312,21 @@ function OperationDetailBody({
  * Общий вид операции (1386:67731 / 1419:25859 / 1419:25645): hero,
  * «Данные операции» со ссылками и «Подробнее». Служит и странице
  * операции, и проекционному просмотру (без payBar — у проекции кнопки
- * нет: платится только материализованная операция).
+ * нет: платится только материализованная операция). Данные операции —
+ * её снимок; плашка «Платеж» — живое правило (livePayment, поправка
+ * 08.10 к #1190), пока та не догрузилась — снимок операции.
  */
 export function OperationView({
   propertyId,
   operation,
+  livePayment,
   propertyTitle,
   today,
   payBar,
 }: {
   readonly propertyId: string;
   readonly operation: PaymentOperation;
+  readonly livePayment?: Payment;
   readonly propertyTitle: string;
   readonly today: IsoDate;
   readonly payBar?: { readonly onPay: () => void; readonly pending: boolean };
@@ -327,6 +336,10 @@ export function OperationView({
   const amount = operationHeroAmount(operation);
   const details = operationDetailRows(operation, today);
   const category = categoryStyle('default', operation.categorySlug);
+  const liveCategory = livePayment !== undefined
+    ? categoryStyle(livePayment.category.source, livePayment.category.slug)
+    : category;
+  const liveTitle = livePayment?.title ?? operation.title;
   const amountTone =
     amount.tone === 'success'
       ? 'text-success'
@@ -341,14 +354,16 @@ export function OperationView({
       {/* Данные операции (1386:67731): строки — Row Button Variant=White на
        * белом фоне, контент с отступом 24, без шеврона; клик ведёт на
        * правило и объект. У операции без правила (ручной факт, платёж
-       * удалён) строки «Платеж» нет (решение владельца). */}
+       * удалён) строки «Платеж» нет (решение владельца). Плашка «Платеж»
+       * показывает живое правило — актуальные название и картинку
+       * (поправка 08.10 к #1190), остальное — снимок операции. */}
       <OperationSection title="Данные операции">
         {operation.paymentId !== null && (
           <PaymentRowButton
             variant="white"
             className="px-6 py-3 [&>span]:px-0"
-            categoryIcon={<CategoryGlyph icon={category.icon} color={category.color} circleClass="h-11 w-11" glyphClass="h-6 w-6" />}
-            title={operation.title}
+            categoryIcon={<CategoryGlyph icon={liveCategory.icon} color={liveCategory.color} circleClass="h-11 w-11" glyphClass="h-6 w-6" />}
+            title={liveTitle}
             subtitle="Платеж"
             onSelect={() => router.push(ROUTES.propertyPayment(propertyId, operation.paymentId as string))}
           />
@@ -508,24 +523,18 @@ function DetailRow({
  * галочкой, подпись «название / сумма за дату / по объекту», кнопки
  * «Хорошо» (закрытие — возврат по решению #1072, onClose решает модель)
  * и «Посмотреть платеж» (страница правила; у ручных фактов правила
- * нет — кнопки тоже). Название и категория — живые поля детали операции
- * (#1196): эхо pay-мутации несёт снимок материализации, а правило могло
- * быть переименовано после создания операции — экран успеха показывает то
- * же живое представление, что и страница под ним; `paid` поставляет
- * свежий факт (paidDate, сумма, правило для «Посмотреть платеж»).
+ * нет — кнопки тоже). Название — самой оплаченной операции (решение
+ * владельца — поправка 08.10 к #1190, #1196): эхо оплаты несёт её
+ * снимок, как и деталь после отката живой перезаписи.
  */
 function OperationPaidSuccess({
   propertyId,
   paid,
-  liveTitle,
-  liveCategorySlug,
   propertyTitle,
   onClose,
 }: {
   readonly propertyId: string;
   readonly paid: PaymentOperation;
-  readonly liveTitle: string;
-  readonly liveCategorySlug?: string;
   readonly propertyTitle: string;
   readonly onClose: () => void;
 }): JSX.Element {
@@ -533,7 +542,7 @@ function OperationPaidSuccess({
   const today = dateToIsoLocal(new Date());
   const paidDate: IsoDate = paid.paidDate ?? today;
   const paymentId = paid.paymentId;
-  const style = categoryStyle('default', liveCategorySlug);
+  const style = categoryStyle('default', paid.categorySlug);
   const Icon = categoryIconComponents[style.icon];
 
   return (
@@ -559,7 +568,7 @@ function OperationPaidSuccess({
               Платеж оплачен
             </h1>
             <p className="text-center text-base leading-[18px] whitespace-pre-line text-content-secondary">
-              {`«${liveTitle}»\n${formatMoneyKopecks(paid.amountKopecks)} за ${formatDayMonthWithYear(paidDate, today)}\nпо объекту «${propertyTitle !== '' ? propertyTitle : '—'}»`}
+              {`«${paid.title}»\n${formatMoneyKopecks(paid.amountKopecks)} за ${formatDayMonthWithYear(paidDate, today)}\nпо объекту «${propertyTitle !== '' ? propertyTitle : '—'}»`}
             </p>
           </div>
         </div>

@@ -2,12 +2,13 @@
 
 package application_test
 
-// The operation page's live-presentation tests (ticket #1190, решение
-// владельца): the detail read returns the payment rule's current title and
-// category for rule-born operations — the page always shows the actual
-// icon/name/category — while the listings keep the snapshots frozen at
-// materialization (the «История платежа» rows stay honest) and a manual or
-// orphaned operation keeps its own.
+// The operation page's presentation tests (решение владельца — поправка
+// 08.10 к #1190, #1196): the detail read returns the operation's own
+// materialization snapshots everywhere — the page shows the operation as it
+// was named, and the rule's live title and category belong only to the
+// «Платеж» row, which the frontend feeds from the rule's own detail read.
+// A manual or orphaned row keeps its own the same way; the listings are the
+// same snapshots.
 
 import (
 	"testing"
@@ -33,7 +34,10 @@ func driftRulePresentation(t *testing.T, h *paymentsHarness, pay uuid.UUID) {
 	}
 }
 
-func TestGetOperation_PaymentOperationReadsLiveRulePresentation(t *testing.T) {
+// The detail returns the operation's own snapshots even after the rule has
+// drifted: the page shows the operation as it was named, the schedule math
+// untouched.
+func TestGetOperation_KeepsFrozenSnapshotsAfterRuleDrift(t *testing.T) {
 	t.Parallel()
 	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
 	pay := h.seedPayment(day22, `{"kind": "monthly", "dayOfMonth": 15}`, false)
@@ -45,23 +49,22 @@ func TestGetOperation_PaymentOperationReadsLiveRulePresentation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get operation: %v", err)
 	}
-	if detail.Operation.Title != "Аренда квартиры" {
-		t.Fatalf("detail title = %q, want the rule's live title", detail.Operation.Title)
+	if detail.Operation.Title != seededRuleTitle {
+		t.Fatalf("detail title = %q, want the operation's own snapshot", detail.Operation.Title)
 	}
-	if detail.Operation.CategoryLabel != "Арендная плата" {
-		t.Fatalf("detail category label = %q, want the live catalog label", detail.Operation.CategoryLabel)
+	if detail.Operation.CategoryLabel != testIntegrationLabelUtilities {
+		t.Fatalf("detail category label = %q, want the snapshot label", detail.Operation.CategoryLabel)
 	}
-	if detail.Operation.CategorySlug == nil || *detail.Operation.CategorySlug != testIntegrationSlugRent {
-		t.Fatalf("detail category slug = %v, want the live rent slug", detail.Operation.CategorySlug)
+	if detail.Operation.CategorySlug == nil || *detail.Operation.CategorySlug != testIntegrationSlugUtilities {
+		t.Fatalf("detail category slug = %v, want the snapshot slug", detail.Operation.CategorySlug)
 	}
 	if detail.ViewStatus != domain.ViewStatusPaid {
-		t.Fatalf("view status = %s, want paid — the live presentation never touches the schedule math",
-			detail.ViewStatus)
+		t.Fatalf("view status = %s, want paid", detail.ViewStatus)
 	}
 }
 
-// The listings stay on the materialization snapshots (решение владельца
-// #1190): only the operation page reads live.
+// The listings share the same snapshots — nothing to drift on either side of
+// the read.
 func TestListOperations_KeepFrozenSnapshots(t *testing.T) {
 	t.Parallel()
 	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
@@ -88,7 +91,10 @@ func TestListOperations_KeepFrozenSnapshots(t *testing.T) {
 	}
 }
 
-func TestGetOperation_UserCategoryReadsLiveName(t *testing.T) {
+// A rule rebinding to a user category (and the category renaming after that)
+// leaves the operation's snapshot untouched: the «Платеж» row reads the live
+// rule from its own endpoint, never from the operation row.
+func TestGetOperation_KeepsSnapshotWhenRuleRebindsToUserCategory(t *testing.T) {
 	t.Parallel()
 	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
 	pay := h.seedPayment(day22, `{"kind": "monthly", "dayOfMonth": 15}`, false)
@@ -109,30 +115,22 @@ func TestGetOperation_UserCategoryReadsLiveName(t *testing.T) {
 	); err != nil {
 		t.Fatalf("rebind rule category: %v", err)
 	}
-
-	detail, err := h.ops.GetOperation(h.ctx(), h.owner, h.propID, opID)
-	if err != nil {
-		t.Fatalf("get operation: %v", err)
-	}
-	if detail.Operation.CategoryLabel != "Моя категория" {
-		t.Fatalf("detail category label = %q, want the user category's live name", detail.Operation.CategoryLabel)
-	}
-	if detail.Operation.CategorySlug != nil {
-		t.Fatalf("detail category slug = %v, want nil for a user category", detail.Operation.CategorySlug)
-	}
-
-	// The category renames — the next detail read follows it.
 	if _, err := h.pool.Exec(h.ctx(),
 		`UPDATE payment_categories SET name = 'Категория №2' WHERE id = $1`, catID,
 	); err != nil {
 		t.Fatalf("rename user category: %v", err)
 	}
-	renamed, err := h.ops.GetOperation(h.ctx(), h.owner, h.propID, opID)
+
+	detail, err := h.ops.GetOperation(h.ctx(), h.owner, h.propID, opID)
 	if err != nil {
-		t.Fatalf("get operation after rename: %v", err)
+		t.Fatalf("get operation: %v", err)
 	}
-	if renamed.Operation.CategoryLabel != "Категория №2" {
-		t.Fatalf("detail category label = %q, want the renamed user category", renamed.Operation.CategoryLabel)
+	if detail.Operation.CategoryLabel != testIntegrationLabelUtilities {
+		t.Fatalf("detail category label = %q, want the snapshot label despite the rule's user category",
+			detail.Operation.CategoryLabel)
+	}
+	if detail.Operation.CategorySlug == nil || *detail.Operation.CategorySlug != testIntegrationSlugUtilities {
+		t.Fatalf("detail category slug = %v, want the snapshot slug", detail.Operation.CategorySlug)
 	}
 }
 

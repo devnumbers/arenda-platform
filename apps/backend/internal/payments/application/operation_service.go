@@ -2,7 +2,6 @@ package application
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -391,15 +390,11 @@ func (s *OperationService) DeleteOperation(
 // like the listings, an unknown or foreign row is the privacy ErrNotFound,
 // and overdue is derived against the owner's today (CONTEXT.md «Просрочка»).
 //
-// The presentation is live for rule-born operations (решение владельца,
-// #1190): the page always shows the rule's current title and category, so
-// this read overrides the materialization snapshots with the loaded rule's
-// title and category resolution. A manual operation and a «платёж удалён»
-// row (payment_id nulled) have no rule to read and keep their own snapshots;
-// a rule that vanishes mid-read falls back to them the same way instead of
-// failing the read. The listings stay on the snapshots — only the detail
-// endpoint reads live; the «История платежа» rows keep showing how the
-// operation was named.
+// The read returns the operation's own materialization snapshots (решение
+// владельца — поправка 08.10 к #1190, #1196): the page shows the operation
+// as it was named, and the rule's live title and category belong only to the
+// «Платеж» row, which the frontend feeds from the rule's own detail read.
+// Manual and «платёж удалён» rows keep their snapshots the same way.
 func (s *OperationService) GetOperation(
 	ctx context.Context, actor, propertyID, operationID uuid.UUID,
 ) (OperationListItem, error) {
@@ -410,19 +405,6 @@ func (s *OperationService) GetOperation(
 	op, err := s.operations.Get(ctx, operationID, scope, propertyID)
 	if err != nil {
 		return OperationListItem{}, err
-	}
-	if op.PaymentID != nil {
-		p, err := s.payments.Get(ctx, *op.PaymentID, scope, propertyID)
-		switch {
-		case err == nil:
-			op.Title = p.Title
-			op.CategoryLabel = p.Category.SnapshotLabel()
-			op.CategorySlug = p.Category.Slug
-		case errors.Is(err, ErrNotFound):
-			// The rule is gone mid-read: the frozen snapshots stand.
-		default:
-			return OperationListItem{}, err
-		}
 	}
 	today, err := ownerToday(s.calendar, ctx, scope)
 	if err != nil {

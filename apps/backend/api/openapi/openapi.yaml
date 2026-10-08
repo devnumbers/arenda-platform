@@ -1348,12 +1348,6 @@ paths:
   /properties/{propertyId}/operations/{operationId}:
     get:
       operationId: getOperation
-      description: >-
-        Operation details for the operation page. For an operation born of a
-        payment rule the title, categoryLabel and categorySlug are the rule's
-        live values — the page always shows the actual icon/name/category
-        (решение владельца, #1190); a manual operation returns its own data
-        and the listings keep the materialization snapshots.
       security:
         - sessionCookie: []
       parameters:
@@ -7381,30 +7375,16 @@ components:
           enum: [income, expense]
         title:
           type: string
-          description: >-
-            The operation's title. On the detail endpoint a rule-born
-            operation carries the rule's live title (решение владельца,
-            #1190); the listings return the snapshot frozen at
-            materialization.
         amountKopecks:
           type: integer
           format: int64
         categoryLabel:
           type: string
-          description: >-
-            Category label. On the detail endpoint a rule-born operation
-            carries the rule's live category resolution — the user category's
-            current name or the default-catalog label (решение владельца,
-            #1190); the listings return the snapshot frozen at
-            materialization time.
+          description: Category label snapshot frozen at materialization time.
         categorySlug:
           type: string
           nullable: true
-          description: >-
-            Default-catalog slug for icon rendering; null when absent (a user
-            category). On the detail endpoint a rule-born operation carries
-            the rule's live slug (решение владельца, #1190); the listings
-            return the snapshot frozen at materialization time.
+          description: Default-catalog slug snapshot for icon rendering; null when absent.
         updatedAt:
           type: string
           format: date-time

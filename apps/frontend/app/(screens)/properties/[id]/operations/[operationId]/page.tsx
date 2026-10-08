@@ -5,6 +5,7 @@ import { sanitizeReturnTo } from '@/shared/lib/navigation';
 import { parseStringParam } from '@/shared/lib/parse-string-param';
 import { OperationDetailLoading, OperationDetailScreen } from '@/widgets/payments';
 import {
+  paymentDetailQueryOptions,
   paymentOperationQueryOptions,
   paymentOperationsGateQueryOptions,
 } from '@/features/payments';
@@ -28,7 +29,8 @@ export const metadata: Metadata = {
 
 /**
  * Серверная раскладка первого кадра (#887): деталь объекта и деталь
- * операции — параллельный первый кадр; статусные списки операций правила
+ * операции — параллельный первый кадр; живая деталь правила (плашка
+ * «Платеж», поправка 08.10 к #1190) и статусные списки операций правила
  * (кнопка «Оплатить») — после успеха операции, только если у неё есть
  * правило (enabled по paymentId у экрана).
  */
@@ -47,6 +49,9 @@ async function prefetchOperationScreen(
   if (operation === undefined || operation.paymentId === null) {
     return;
   }
+  void queryClient.prefetchQuery(
+    paymentDetailQueryOptions({ propertyId, paymentId: operation.paymentId, transport: serverApiClient }),
+  );
   const [overdue, planned] = paymentOperationsGateQueryOptions({
     propertyId, paymentId: operation.paymentId, transport: serverApiClient,
   });

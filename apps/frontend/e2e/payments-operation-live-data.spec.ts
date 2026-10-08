@@ -7,14 +7,14 @@ import {
 } from './fixtures';
 import type { Page } from '@playwright/test';
 
-// Живые данные платежа на странице операции (#1196, решение владельца):
-// детальный эндпоинт отдаёт актуальные название/категорию/иконку правила
-// (#1190) — страница потребляет их вместо снимков материализации, поэтому
-// правка правила (название, категория) видна операции сразу, а экран успеха
-// «Платеж оплачен» показывает то же живое название, что и страница под ним
-// (эхо pay-мутации несёт снимок — живые поля для успеха берутся из детали).
-// Ручная операция — свои данные (строки «Платеж» нет), сравнение плановой и
-// фактической дат («Задержана на») на месте.
+// Данные операции на странице операции (#1196, решение владельца — поправка
+// 08.10 к #1190): страница показывает снимок операции — название, категорию
+// и иконку, с которыми операция материализовалась; правка правила её не
+// меняет. Живое правило представлено только плашкой «Платеж» в «Данных
+// операции» — актуальные название и картинка из живой детали платежа.
+// Экран успеха «Платеж оплачен» показывает название самой операции (снимок).
+// Ручная операция — свои данные (строки «Платеж» нет); сравнение плановой и
+// фактической дат («Задержана на») считается по датам операции.
 //
 // Правило создаётся визардом «на сегодня» — первое вхождение материализуется
 // тиком (канон payment-lifecycle); названия уникальны за попытку (суффикс —
@@ -84,17 +84,17 @@ async function createMonthlyPaymentToday(
   return created.id;
 }
 
-test.describe('живые данные платежа на странице операции (#1196)', () => {
+test.describe('данные операции на странице операции (#1196)', () => {
   test.use({ viewport: { width: 390, height: 844 } });
   test.setTimeout(240_000);
 
-  test('правка правила видна операции сразу, успех оплаты — живое название, «Задержана на» на месте', async ({
+  test('операция держит снимок после правки правила; плашка «Платеж» живая; успех — снимок; «Задержана на» на месте', async ({
     page,
     seededUser,
   }, testInfo) => {
     const run = String(testInfo.retry);
-    const oldTitle = `E2E живая операция было ${run}`;
-    const newTitle = `E2E живая операция стало ${run}`;
+    const oldTitle = `E2E снимок операции было ${run}`;
+    const newTitle = `E2E снимок операции стало ${run}`;
     const induceOverdue = (paymentId: string, daysAgo: number): string =>
       `UPDATE operations SET date = CURRENT_DATE - ${daysAgo} WHERE id = (`
       + `SELECT id FROM operations WHERE payment_id = '${paymentId}' `
@@ -119,22 +119,22 @@ test.describe('живые данные платежа на странице оп
     await expect(page.getByText('Изменения сохранены')).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`${paymentUrl}$`));
 
-    // ── Страница операции: живые название и категория, старый снимок
-    // материализации нигде не утекает ──
+    // ── Страница операции: снимок операции (старые название и категория),
+    // живое правило — только в плашке «Платеж» ──
     await page.goto(paymentUrl);
     await page.getByRole('button', { name: 'Оплатить' }).click();
     await expect(page).toHaveURL(new RegExp(`/properties/${PROPERTY}/operations/[0-9a-f-]+(\\?.*)?$`));
-    await expect(page.getByText(newTitle).first()).toBeVisible();
-    await expect(page.getByText('Страхование', { exact: true })).toBeVisible();
-    await expect(page.getByText(oldTitle)).toHaveCount(0);
-    await expect(page.getByText('Интернет', { exact: true })).toHaveCount(0);
+    await expect(page.getByText(oldTitle, { exact: true })).toHaveCount(1); // hero — снимок
+    await expect(page.getByText('Интернет', { exact: true })).toBeVisible(); // чип-снимок
+    await expect(page.getByRole('button', { name: `${newTitle} Платеж` })).toBeVisible(); // живая плашка
+    await expect(page.getByText(newTitle, { exact: true })).toHaveCount(1);
+    await expect(page.getByText('Страхование')).toHaveCount(0); // живая категория не утекает
     await expect(page.getByText('Запланирована', { exact: true })).toBeVisible();
 
-    // ── Оплата: экран успеха показывает то же живое название (эхо
-    // pay-мутации несёт снимок — живое берётся из детали) ──
+    // ── Оплата: экран успеха показывает название самой операции (снимок) ──
     await page.getByRole('button', { name: 'Отметить оплаченной' }).click();
     await expect(page.getByText('Платеж оплачен')).toBeVisible();
-    await expect(page.getByText(`«${newTitle}»`)).toBeVisible();
+    await expect(page.getByText(`«${oldTitle}»`)).toBeVisible();
     await page.getByRole('button', { name: 'Хорошо', exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+$`));
 
