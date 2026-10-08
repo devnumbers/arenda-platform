@@ -12,10 +12,10 @@ import { dateToIsoLocal } from '@/shared/lib/calendar';
 // Страница платежа (#465): карточка правила (иконка/цвет категории,
 // повторяемость, бейдж паузы), круглые кнопки «На паузу» (confirm-шторка)
 // ↔ «Возобновить», «Изменить», «Оплатить» — гасит старейшее неоплаченное
-// вхождение, звезда избранного в шапке, секции «Ближайший платеж» и
-// «Просроченные», секция истории с превью (#1073). Скриншоты — материал
-// для сверки
-// с Figma (671:5889 активный, 850:15410 на паузе).
+// вхождение, звезда избранного в шапке, секции «Ближайшая операция»,
+// «Просроченные платежи» и «История платежа» (макет 3214:76417, #1194).
+// Скриншоты — материал для сверки с Figma (3214:76417 активный,
+// 850:15410 на паузе).
 //
 // Сид (#465): …551 аренда с одной просрочкой (-5 дней), …553 автоплатёж,
 // …554 «Домофон» на активной бессрочной паузе, …555 завершённое правило
@@ -64,12 +64,13 @@ test.describe('страница платежа', () => {
     await expect(page.getByRole('button', { name: 'Оплатить' })).toBeEnabled();
 
     // Секции: ближайший плановый день месяца («1 сентября»), одна
-    // просрочка красным. У секции ближайшего стрелки нет (#1073) —
-    // заголовок некликабелен, клик по строке ведёт на график.
-    await expect(page.getByText('Ближайший платеж')).toBeVisible();
+    // просрочка красным. Заголовок ближайшего — кнопка со стрелкой на
+    // график (макет 3214:76417, #1194), клик по строке — тоже график
+    // (решение #1073).
+    await expect(page.getByText('Ближайшая операция')).toBeVisible();
     await expect(
       page.getByRole('button', { name: 'Открыть график платежей' }),
-    ).toHaveCount(0);
+    ).toBeVisible();
     await expect(
       page.getByText(
         /\d{1,2} (января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)/,
@@ -78,12 +79,12 @@ test.describe('страница платежа', () => {
     await expect(page.getByText('Просроченные платежи')).toBeVisible();
     await expect(page.getByText(/\d+ (день|дня|дней)/).first()).toBeVisible();
 
-    // Плиток подэкранов нет (решение владельца #1073): вход на график —
-    // строка ближайшего, вход в историю — секция. У свежесидовой аренды
+    // Плиток подэкранов нет: вход на график — заголовок и строка
+    // ближайшего, вход в историю — стрелка секции. У свежесидовой аренды
     // paid-операций нет — секция истории скрыта, «Графика платежей» на
     // странице не существует вовсе.
     await expect(page.getByText('График платежей')).toHaveCount(0);
-    await expect(page.getByText('История операций')).toHaveCount(0);
+    await expect(page.getByText('История платежа')).toHaveCount(0);
 
     await captureScreen(page, testInfo, 'payment-detail-filled-mobile');
   });
@@ -98,7 +99,7 @@ test.describe('страница платежа', () => {
     await page.goto(PAYMENT_URLS.internet);
 
     const historySection = page.locator('section').filter({
-      has: page.getByRole('heading', { name: 'История операций' }),
+      has: page.getByRole('heading', { name: 'История платежа' }),
     });
     await expect(historySection).toBeVisible();
 
@@ -121,7 +122,7 @@ test.describe('страница платежа', () => {
 
     // Стрелка секции — подэкран истории.
     await page.goBack();
-    await page.getByRole('button', { name: 'Открыть историю операций' }).click();
+    await page.getByRole('button', { name: 'Открыть историю платежа' }).click();
     await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+/history$`));
   });
 
@@ -129,13 +130,18 @@ test.describe('страница платежа', () => {
     page,
     seededUser,
   }) => {
-    // Секция ближайшего (#1073): строка кликабельна при обоих видах
-    // ближайшего и всегда открывает график — не страницу операции.
-    const nearestRow = page
+    // Секция ближайшего (#1073, макет 3214:76417): строка кликабельна при
+    // обоих видах ближайшего и всегда открывает график — не страницу
+    // операции; заголовок-стрелка (#1194) ведёт туда же. Строки секции —
+    // div role="button", заголовок — нативный button: фильтр по role-селектору
+    // отделяет строки от кнопки заголовка.
+    const nearestSection = page
       .locator('section')
-      .filter({ has: page.getByRole('heading', { name: 'Ближайший платеж' }) })
-      .getByRole('button')
-      .first();
+      .filter({ has: page.getByRole('heading', { name: 'Ближайшая операция' }) });
+    const nearestRow = nearestSection.locator('[role="button"]');
+    const nearestHeader = nearestSection.getByRole('button', {
+      name: 'Открыть график платежей',
+    });
 
     await openCabinetWithSeededSession(page, seededUser);
 
@@ -144,6 +150,11 @@ test.describe('страница платежа', () => {
     await page.goto(PAYMENT_URLS.insurance);
     await expect(nearestRow).toBeVisible();
     await nearestRow.click();
+    await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+/schedule$`));
+
+    // Заголовок секции со стрелкой — тот же график (#1194).
+    await page.goBack();
+    await nearestHeader.click();
     await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+/schedule$`));
 
     // Материализованная плановая: SQL-вставка будущего вхождения —
@@ -300,7 +311,7 @@ test.describe('страница платежа', () => {
     // Удаление оплаченной операции (1510:77505): факт стирается, история
     // пустеет, правило живёт дальше.
     await page.goto(PAYMENT_URLS.rent);
-    await page.getByRole('button', { name: 'Открыть историю операций' }).click();
+    await page.getByRole('button', { name: 'Открыть историю платежа' }).click();
     await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+/history$`));
     await page.getByRole('button', { name: /Арендная плата/ }).first().click();
     await expect(page).toHaveURL(new RegExp(`/operations/[0-9a-f-]+$`));
@@ -338,6 +349,34 @@ test.describe('страница платежа', () => {
 
     await page.getByRole('button', { name: 'Убрать из избранного' }).click();
     await expect(page.getByText('Платеж больше не в избранном')).toBeVisible();
+  });
+
+  test('регулярность в hero — множественная форма дней месяца', async ({
+    page,
+    seededUser,
+  }) => {
+    // Строка повторяемости hero (3214:76429, #1194): месячное правило с
+    // несколькими днями рендерит форму «Каждый месяц 1, 10 и 15 числа».
+    // Сидовое «Интернет» …556 — одиночное «15 числа»: переводим правило
+    // SQL-ом на три дня и возвращаем точный сидовый литерал в finally.
+    await openCabinetWithSeededSession(page, seededUser);
+    expect(
+      await execE2eSql(`
+        UPDATE payments
+        SET recurrence = '{"kind": "monthly", "daysOfMonth": [1, 10, 15]}'::jsonb
+        WHERE id = '55555555-5555-4555-8555-555555555556'
+      `),
+    ).toBe('UPDATE 1');
+    try {
+      await page.goto(PAYMENT_URLS.internet);
+      await expect(page.getByText('Каждый месяц 1, 10 и 15 числа')).toBeVisible();
+    } finally {
+      await execE2eSql(`
+        UPDATE payments
+        SET recurrence = '{"kind": "monthly", "dayOfMonth": 15}'::jsonb
+        WHERE id = '55555555-5555-4555-8555-555555555556'
+      `);
+    }
   });
 
   test('завершённое правило: без паузы, «Оплатить» отключена; скриншот', async ({

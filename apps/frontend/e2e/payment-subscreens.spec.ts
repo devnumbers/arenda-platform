@@ -70,11 +70,13 @@ test.describe('подэкран «График платежей»', () => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto(PAYMENT_URLS.rent);
 
-    // Вход — строкой ближайшего (плитки подэкранов снесены, #1073).
+    // Вход — строкой ближайшего (заголовок секции — отдельная кнопка на
+    // график, #1194; строки секции — div role="button" без aria-label,
+    // фильтр по role-селектору отделяет их от кнопки заголовка).
     await page
       .locator('section')
-      .filter({ has: page.getByRole('heading', { name: 'Ближайший платеж' }) })
-      .getByRole('button')
+      .filter({ has: page.getByRole('heading', { name: 'Ближайшая операция' }) })
+      .locator('[role="button"]')
       .first()
       .click();
     await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+/schedule$`));
@@ -128,7 +130,7 @@ test.describe('подэкран «История платежей»', () => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto(PAYMENT_URLS.internet);
 
-    await page.getByRole('button', { name: 'Открыть историю операций' }).click();
+    await page.getByRole('button', { name: 'Открыть историю платежа' }).click();
     await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+/history$`));
 
     await expect(page.getByText('Сегодня', { exact: true })).toBeVisible();

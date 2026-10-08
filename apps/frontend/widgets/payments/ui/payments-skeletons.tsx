@@ -48,25 +48,13 @@ function SkeletonOperationSection({ children }: { readonly children: ReactNode }
   );
 }
 
-/** Плитка подэкранов-заглушка: каркас PaymentsTile — серая карточка
- * min-h 168.5 (p-6), иконка 40 сверху, подпись снизу. */
-function SkeletonTile(): JSX.Element {
-  return (
-    <span
-      aria-hidden
-      className="flex min-h-[168.5px] flex-1 flex-col justify-between rounded-card bg-surface-muted p-6"
-    >
-      <Skeleton className={`h-10 w-10 ${MUTED}`} />
-      <Skeleton className={`h-[18px] w-3/5 ${MUTED}`} />
-    </span>
-  );
-}
-
 /**
  * Скелетон страницы платежа (#606): hero-карточка правила, три круглые
- * кнопки (полный доступ), секции «Ближайший платеж» (строка со суммой)
- * и «Просроченные платежи» (строки со суммой и сроком); секция истории
- * условна (не у правила есть paid-операции) — скелетоном не рисуется.
+ * кнопки (полный доступ), секции «Ближайшая операция» (строка со суммой)
+ * и «Просроченные платежи» (строки со суммой и сроком), зазор секций 16px
+ * (3214:76434, #1194 — как у контента); плиток подэкранов нет (снесены
+ * #1073), секция истории условна (не у правила есть paid-операции) —
+ * скелетоном не рисуется.
  */
 export function PaymentDetailSkeleton(): JSX.Element {
   const overdueWidths = skeletonRowWidths(1);
@@ -94,7 +82,7 @@ export function PaymentDetailSkeleton(): JSX.Element {
         </div>
       </div>
 
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4">
         <SkeletonPaymentsGroup>
           <SkeletonListRow value tone="muted" className="px-3" />
         </SkeletonPaymentsGroup>
@@ -111,13 +99,6 @@ export function PaymentDetailSkeleton(): JSX.Element {
             />
           ))}
         </SkeletonPaymentsGroup>
-
-        <div className="px-6" aria-hidden>
-          <div className="flex gap-2">
-            <SkeletonTile />
-            <SkeletonTile />
-          </div>
-        </div>
       </div>
     </>
   );
