@@ -19,13 +19,7 @@ import { DesktopMenuButton } from './desktop-menu-button';
  * .desktop-chrome — хук для globals.css: при открытой полноэкранной
  * поверхности меню поднимается над ней (z-60) и остаётся кликабельным
  * (решение владельца 25.09, доработка #865). */
-export function DesktopSidebar({
-  propertiesHref,
-  propertiesLabel,
-}: {
-  readonly propertiesHref?: string;
-  readonly propertiesLabel?: string;
-} = {}): JSX.Element {
+export function DesktopSidebar(): JSX.Element {
   const pathname = usePathname();
   const activeSectionId = getActiveNavItem(pathname, mainNavSections)?.id;
 
@@ -39,8 +33,6 @@ export function DesktopSidebar({
           <DesktopMenuButton
             key={section.id}
             section={section}
-            href={section.id === 'properties' && propertiesHref !== undefined ? propertiesHref : undefined}
-            label={section.id === 'properties' && propertiesLabel !== undefined ? propertiesLabel : undefined}
             active={activeSectionId === section.id}
           />
         ))}

@@ -61,8 +61,7 @@ import {propertySectionCta} from '../lib/property-section-cta';
 import {operationsSectionTitle} from '../lib/operations-section';
 import {propertyDetailTasks} from '../lib/detail-tasks';
 import {propertyApartmentSummaryRows} from '../lib/apartment-summary';
-import {TopNav, TopNavBackButton, TopNavTitle, IconButton, PageContent, ConfirmDialog} from '@/shared/ui/design';
-import {StarOutline} from '@/shared/assets/icons';
+import {TopNav, TopNavBackButton, TopNavTitle, PageContent, ConfirmDialog} from '@/shared/ui/design';
 import {PropertyMediaBlock} from './PropertyMediaBlock';
 import {
   PropertyRentalBlock,
@@ -97,8 +96,9 @@ function showMutationError(error: ApiError): void {
 /**
  * Детализация объекта — новый каркас карты #583 (тикет #588; Figma
  * 1554:98469 — приветственные пустые, 1554:100751 — обычные, 1186:44996 —
- * ПК, 1186:44992 — планшет): шапка «Объект» со звездой базового тарифа
- * или «Назад», кебаб справа (1186:44996); медиа-блок (плейсхолдер-круг —
+ * ПК, 1186:44992 — планшет): шапка «Объект» со стрелкой назад (у любого
+ * тарифа, решение владельца #1240 — звезда-апселл снесена; макет
+ * 3225-77427), кебаб справа (1186:44996); медиа-блок (плейсхолдер-круг —
  * рендер фото решается на приёмке); секции-карточки с пустыми
  * состояниями — наполнение в #589; «Управление» — контекстные действия;
  * шиты смены статуса и подтверждение архивации (1581:55389); тосты
@@ -307,8 +307,8 @@ export function PropertyDetailPage(): JSX.Element {
         propertyQuery.isSuccess ? property : undefined,
     );
     const sectionCta = propertySectionCta(permissions);
-    // «Основной объект» — платная возможность: базовому тарифу в шапке
-    // звезда апселла, строк пина в «Управлении» нет.
+    // «Основной объект» — платная возможность: строк пина в «Управлении»
+    // у базового тарифа нет (звезда-апселл в шапке снесена, #1240).
     const isPaid = subscriptionQuery.data
         ? isPaidTariff(subscriptionQuery.data.tariff.name)
         : true;
@@ -582,22 +582,12 @@ export function PropertyDetailPage(): JSX.Element {
 
     return (
         <>
-            {/* Особая анатомия шапки (DESIGN.md §2): слот ведущей кнопки
-             * зависит от тарифа — звезда апселла у базового (тап → смена
-             * тарифа), «Назад» у платных, включая режим «деталь = лендинг
-             * таба» (решение владельца 10.09). Кебаб — в trailing. */}
+            {/* Анатомия шапки (DESIGN.md §2): «Назад» в leading у любого
+             * тарифа (решение владельца #1240 — звезда-апселл снесена,
+             * макет 3225-77427; прямых заходов режим «деталь = лендинг
+             * таба» больше не создаёт). Кебаб — в trailing. */}
             <TopNav
-                leading={
-                    isPaid ? (
-                        <TopNavBackButton fallbackHref={ROUTES.properties}/>
-                    ) : (
-                        <IconButton
-                            icon={<StarOutline className="h-6 w-6"/>}
-                            label="Сменить тариф"
-                            onClick={() => router.push(ROUTES.profileTariffChange)}
-                        />
-                    )
-                }
+                leading={<TopNavBackButton fallbackHref={ROUTES.properties}/>}
                 trailing={
                     status !== undefined && propertyErrorKind === null ? (
                         <PropertyDetailKebab
