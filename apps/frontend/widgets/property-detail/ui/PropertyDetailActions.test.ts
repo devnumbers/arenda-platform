@@ -65,7 +65,7 @@ function renderSheet(onClose: () => void): ReturnType<typeof collect> {
 }
 
 describe('PropertyStatusSheet — «Отменить» в контейнере пунктов (#1241)', () => {
-  it('«Отменить» той же формы, что пункты: контейнер h-14 rounded-button bg-surface-muted', () => {
+  it('«Отменить» — контейнер формы пунктов, но белый (макет 1554-100758), отклик по канону secondary', () => {
     let closed = false;
     const { elements, strings } = renderSheet(() => {
       closed = true;
@@ -79,15 +79,20 @@ describe('PropertyStatusSheet — «Отменить» в контейнере �
     );
     expect(cancelButton).toBeDefined();
 
-    // Контейнер как у пунктов меню — решение владельца #1241 (на макете
-    // «Отменить» плоская, правится на форму контейнера): высота ряда,
-    // скругление кнопок и фон surface-muted, во всю ширину.
-    const classes = String(cancelButton?.props.className ?? '');
-    expect(classes).toContain('h-14');
-    expect(classes).toContain('w-full');
-    expect(classes).toContain('rounded-button');
-    expect(classes).toContain('bg-surface-muted');
-    expect(classes).not.toContain('rounded-pill');
+    // Контейнер как у пунктов, но белый (решение владельца #1241: макеты
+    // 1554-100758/1581-53679 — фон «Отменить» var(--white) при серых
+    // пунктах; в покое контейнер читается геометрией, не цветом).
+    const classList = String(cancelButton?.props.className ?? '').split(' ');
+    expect(classList).toContain('h-14');
+    expect(classList).toContain('w-full');
+    expect(classList).toContain('rounded-button');
+    expect(classList).toContain('bg-surface');
+    // Отклик — по канону Button secondary (решение владельца 08.10).
+    expect(classList).toContain('hover:bg-surface-muted-hover');
+    expect(classList).toContain('active:bg-surface-muted-active');
+    // Не серый пункт и не прежняя плоская пилюля.
+    expect(classList).not.toContain('bg-surface-muted');
+    expect(classList).not.toContain('rounded-pill');
 
     // Тап «Отменить» только закрывает шит — действие пунктов не триггерит.
     cancelButton?.props.onClick?.();
