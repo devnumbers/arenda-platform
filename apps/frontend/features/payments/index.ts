@@ -68,7 +68,6 @@ export {
 } from './lib/operations-history';
 export { useHistoryOrder } from './lib/use-history-order';
 export { HistoryOrderChip } from './ui/history-order-chip';
-export { paymentChangeChips } from './lib/payment-change-chips';
 export {
   buildPaymentHistoryTimeline,
   type PaymentHistoryTimelineGroup,

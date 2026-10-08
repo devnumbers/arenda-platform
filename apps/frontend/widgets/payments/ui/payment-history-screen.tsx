@@ -228,7 +228,7 @@ export function PaymentHistoryScreen({
 
                   <FeedTail
                     operationsQuery={operationsQuery}
-                    changesQuery={changesQuery}
+                    changesQuery={changesMode ? changesQuery : null}
                   />
                 </>
               )}
@@ -262,25 +262,26 @@ function ChangeChipsBlock({ chips }: { readonly chips: ReadonlyArray<string> }):
 
 /** Хвост бесконечной ленты (канон #633): в режиме изменений sentinel
  * дозагружает оба источника, пока у каждого есть продолжение; в дефолтном
- * режиме журнал заглушён (enabled: false) — хвост ведёт только операции. */
+ * режиме журнал не подмешивается (changesQuery = null) — хвост ведёт
+ * только операции, закэшированные страницы журнала не тянутся. */
 function FeedTail({
   operationsQuery,
   changesQuery,
 }: {
   readonly operationsQuery: ReturnType<typeof usePaymentOperationsPaged>;
-  readonly changesQuery: ReturnType<typeof usePaymentChangesPaged>;
+  readonly changesQuery: ReturnType<typeof usePaymentChangesPaged> | null;
 }): JSX.Element | null {
   return (
     <InfiniteQueryTail
       query={{
         hasNextPage:
-          operationsQuery.hasNextPage === true || changesQuery.hasNextPage === true,
+          operationsQuery.hasNextPage === true || changesQuery?.hasNextPage === true,
         isFetchingNextPage:
-          operationsQuery.isFetchingNextPage || changesQuery.isFetchingNextPage,
+          operationsQuery.isFetchingNextPage || (changesQuery?.isFetchingNextPage ?? false),
         fetchNextPage: () =>
           Promise.all([
             operationsQuery.hasNextPage ? operationsQuery.fetchNextPage() : Promise.resolve(),
-            changesQuery.hasNextPage ? changesQuery.fetchNextPage() : Promise.resolve(),
+            changesQuery?.hasNextPage ? changesQuery.fetchNextPage() : Promise.resolve(),
           ]),
       }}
     />

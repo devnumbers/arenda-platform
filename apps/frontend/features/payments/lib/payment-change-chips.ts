@@ -1,7 +1,9 @@
 import type {
+  IsoDate,
   PaymentChangeCategoryRef,
   PaymentChangeEntry,
   PaymentReminderOffset,
+  PaymentType,
 } from '@/entities/payment';
 import { paymentReminderOptionLabel, recurrenceLabel } from '@/entities/payment';
 import { formatDayMonthYear } from '@/shared/lib/date-format';
@@ -60,7 +62,7 @@ function categoryLabel(ref: PaymentChangeCategoryRef | null): string {
   return ref?.label ?? '';
 }
 
-function endDateChip(old: string | null, next: string | null): string {
+function endDateChip(old: IsoDate | null, next: IsoDate | null): string {
   if (next === null) {
     return 'Окончание платежа изменено: Бессрочно';
   }
@@ -70,7 +72,7 @@ function endDateChip(old: string | null, next: string | null): string {
   return `Окончание платежа изменено: ${formatDayMonthYear(next)}`;
 }
 
-function typeChip(next: string | null): string {
+function typeChip(next: PaymentType | null): string {
   if (next === 'expense') {
     return 'Доход изменен на расход';
   }

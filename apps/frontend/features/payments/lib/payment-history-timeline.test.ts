@@ -90,7 +90,7 @@ describe('buildPaymentHistoryTimeline — группы по датам (маке
 
   it('день правки — локальная дата created_at, не UTC-дата', () => {
     // Полдень 1 сентября локально — UTC-момент, чей UTC-дата в поясах
-    // восточнее UTC+12 уже 2-е: фикстура через localNoonIso держит дату
+    // восточнее UTC+12 уже 2-е: фикстура через localMomentIso держит дату
     // стабильной, проверяем что ключ — локальный день.
     const groups = buildPaymentHistoryTimeline(
       [],
@@ -100,6 +100,26 @@ describe('buildPaymentHistoryTimeline — группы по датам (маке
 
     expect(groups).toHaveLength(1);
     expect(groups[0]?.date).toBe('2026-09-01');
+  });
+
+  it('правка первых часов локального дня не ломает монотонность групп (край суток)', () => {
+    // Момент 21:00Z: по UTC это день 1-го, в поясах UTC+3 и восточнее —
+    // уже день 2-го. Ключ сортировки в шкале дня группы держит группы
+    // строго убывающими без дублей («Сегодня» не может отрендериться
+    // дважды) в любой TZ машины.
+    const groups = buildPaymentHistoryTimeline(
+      [operation({ paidDate: '2026-09-01' }), operation({ paidDate: '2026-09-02' })],
+      [change('ch-night', '2026-09-01T21:00:00Z')],
+      today,
+    );
+
+    const dates = groups.map((group) => group.date);
+    expect(dates).toEqual([...dates].sort().reverse());
+    expect(new Set(dates).size).toBe(dates.length);
+    // Правка внутри своего дня — под операцией этого дня (канон порядка
+    // внутри дня), над операцией предыдущего.
+    const firstDay = groups[0];
+    expect(firstDay?.items[0]?.kind).toBe('operation');
   });
 });
 

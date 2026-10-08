@@ -3,7 +3,7 @@ import type {
   PaymentChangeEntry,
   PaymentOperation,
 } from '@/entities/payment';
-import { dateToIsoLocal } from '@/shared/lib/calendar';
+import { addDays, dateToIso, dateToIsoLocal, fromIso } from '@/shared/lib/calendar';
 import { formatDayMonthWithYear } from '@/shared/lib/date-format';
 import { paymentChangeChips } from './payment-change-chips';
 
@@ -57,9 +57,9 @@ export function buildPaymentHistoryTimeline(
     const date = operation.paidDate ?? operation.date;
     entries.push({
       date,
-      // Дата-строка без зоны читается как UTC-полночь; конец дня — «операция
-      // случилась в этот день», ниже любых правок этого дня.
-      sortMs: Date.parse(`${date}T00:00:00Z`) + DAY_END_MS,
+      // Конец дня в UTC-шкале канона (fromIso): «операция случилась в этот
+      // день» — ниже любых правок своего дня, выше правок предыдущего.
+      sortMs: fromIso(date).getTime() + DAY_END_MS,
       item: { kind: 'operation', operation },
     });
   }
@@ -72,9 +72,16 @@ export function buildPaymentHistoryTimeline(
       continue;
     }
     const moment = Date.parse(entry.createdAt);
+    const date = dateToIsoLocal(new Date(moment));
     entries.push({
-      date: dateToIsoLocal(new Date(moment)),
-      sortMs: moment,
+      date,
+      // Ключ — в шкале дня группы: время суток момента (смещение от
+      // полуночи его UTC-дня) поверх полуночи локального дня. Сырой момент
+      // ломал бы grouping на краю суток: правка первых часов локального дня
+      // (00:00–03:00 МСК — UTC-момент предыдущего дня) сортировалась бы
+      // ниже операций предыдущего дня, и дни шли бы D, D−1, D — «Сегодня»
+      // дважды и дубли ключей секций.
+      sortMs: fromIso(date).getTime() + (moment - fromIso(dateToIso(new Date(moment))).getTime()),
       item: { kind: 'changes', entry, chips },
     });
   }
@@ -116,9 +123,7 @@ function timelineGroupLabel(date: IsoDate, today: IsoDate): string {
   if (date === today) {
     return 'Сегодня';
   }
-  const yesterdayDate = new Date(`${today}T00:00:00Z`);
-  yesterdayDate.setUTCDate(yesterdayDate.getUTCDate() - 1);
-  if (date === dateToIsoLocal(yesterdayDate)) {
+  if (date === addDays(today, -1)) {
     return 'Вчера';
   }
   return formatDayMonthWithYear(date, today);
