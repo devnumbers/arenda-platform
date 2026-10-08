@@ -68,6 +68,13 @@ import {
  * оплаты нет (факт рождается оплаченным), в «Подробнее» — «Дата операции»
  * и статус без строк сравнения с правилом; корзина работает как у
  * оплаченных (удаляет факт целиком).
+ *
+ * Живое представление (решение владельца, #1190/#1196): деталь операции
+ * отдаёт актуальные название/категорию/иконку правила вместо снимка
+ * материализации — страница рисует их, экран успеха «Платеж оплачен» берёт
+ * те же живые поля (эхо оплаты несёт снимок). Ручные операции — свои
+ * данные; расхождение плановой и фактической дат («Задержана на»/
+ * «Заранее на») считается по датам операции и живыми полями не тронуто.
  */
 export function OperationDetailScreen({
   propertyId,
@@ -130,6 +137,8 @@ export function OperationDetailScreen({
       <OperationPaidSuccess
         propertyId={propertyId}
         paid={paidResult}
+        liveTitle={operation.title}
+        liveCategorySlug={operation.categorySlug}
         propertyTitle={property?.name ?? ''}
         onClose={() => {
           setPaidResult(null);
@@ -499,15 +508,24 @@ function DetailRow({
  * галочкой, подпись «название / сумма за дату / по объекту», кнопки
  * «Хорошо» (закрытие — возврат по решению #1072, onClose решает модель)
  * и «Посмотреть платеж» (страница правила; у ручных фактов правила
- * нет — кнопки тоже). */
+ * нет — кнопки тоже). Название и категория — живые поля детали операции
+ * (#1196): эхо pay-мутации несёт снимок материализации, а правило могло
+ * быть переименовано после создания операции — экран успеха показывает то
+ * же живое представление, что и страница под ним; `paid` поставляет
+ * свежий факт (paidDate, сумма, правило для «Посмотреть платеж»).
+ */
 function OperationPaidSuccess({
   propertyId,
   paid,
+  liveTitle,
+  liveCategorySlug,
   propertyTitle,
   onClose,
 }: {
   readonly propertyId: string;
   readonly paid: PaymentOperation;
+  readonly liveTitle: string;
+  readonly liveCategorySlug?: string;
   readonly propertyTitle: string;
   readonly onClose: () => void;
 }): JSX.Element {
@@ -515,7 +533,7 @@ function OperationPaidSuccess({
   const today = dateToIsoLocal(new Date());
   const paidDate: IsoDate = paid.paidDate ?? today;
   const paymentId = paid.paymentId;
-  const style = categoryStyle('default', paid.categorySlug);
+  const style = categoryStyle('default', liveCategorySlug);
   const Icon = categoryIconComponents[style.icon];
 
   return (
@@ -541,7 +559,7 @@ function OperationPaidSuccess({
               Платеж оплачен
             </h1>
             <p className="text-center text-base leading-[18px] whitespace-pre-line text-content-secondary">
-              {`«${paid.title}»\n${formatMoneyKopecks(paid.amountKopecks)} за ${formatDayMonthWithYear(paidDate, today)}\nпо объекту «${propertyTitle !== '' ? propertyTitle : '—'}»`}
+              {`«${liveTitle}»\n${formatMoneyKopecks(paid.amountKopecks)} за ${formatDayMonthWithYear(paidDate, today)}\nпо объекту «${propertyTitle !== '' ? propertyTitle : '—'}»`}
             </p>
           </div>
         </div>
