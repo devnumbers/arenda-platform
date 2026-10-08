@@ -22,7 +22,12 @@ import { Button, circleIconRing, ConfirmDialog, PhotoRemoveBadge } from '@/share
  * circleIconRing) и одна ссылка «Обновить фото» под кругом — канон Clear
  * (M/500 14, Figma 1134:55051); без фото бейджа нет, ссылка — «Добавить
  * фото». Удаление — через ConfirmDialog: однотапный бейдж не должен
- * молча стирать фото (решение владельца 08.10). Фото живёт мимо
+ * молча стирать фото (решение владельца 08.10). На время запроса круг
+ * остаётся ровно тем же, что был (прежнее фото либо глиф), ссылка
+ * исчезает целиком, сохраняя свой слот — без полупрозрачного призрака
+ * надписи и без сдвига формы (решение владельца 08.10; скрытие с
+ * сохранением места = ноль layout shift); бейдж остаётся на месте и
+ * гаснет по канону дизейблов — тонкий сигнал полёта. Фото живёт мимо
  * черновика формы — загрузка/удаление применяются сразу отдельными
  * эндпоинтами (`/properties/{id}/photo`, multipart POST и DELETE),
  * кнопки «Сохранить» не касаются. Ошибки — mutateAsync + catch с тостом
@@ -117,8 +122,8 @@ export function PropertyPhotoSlot({
       <Button
         type="button"
         variant="clear"
-        loading={uploadPhoto.isPending}
-        disabled={deletePhoto.isPending}
+        disabled={busy}
+        className={busy ? 'invisible' : undefined}
         onClick={openPicker}
       >
         {hasPhoto ? 'Обновить фото' : 'Добавить фото'}
