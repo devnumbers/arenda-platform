@@ -11,6 +11,12 @@ import { cn } from '@/shared/lib/cn';
  * и содержимое приносят свои отступы. Хвостовой паддинг карточки и зазор
  * заголовок → содержимое — по макету: «Платеж» 12/8, «Условия аренды»
  * 24/16 (1232:61281), «Арендатор» 16/8 (1232:61565).
+ *
+ * Кликабельна вся линия заголовка (правило владельца 08.10, #1242 —
+ * «область нажатия на блоках должна занимать весь блок»): кнопке заголовка
+ * w-full в обоих режимах — и при стрелке у текста (визуал канона #531 не
+ * меняется, кликабельным и ховер-зоной становится хвост линии правее
+ * стрелки), и в edge.
  */
 
 const headingClass = 'text-xl font-semibold leading-6 text-content';
@@ -45,8 +51,8 @@ export function RentalGroup({
             onClick={onOpen}
             aria-label={openLabel ?? title}
             className={cn(
-              'flex cursor-pointer items-center gap-3 rounded-pill outline-none transition-opacity hover:opacity-80 active:opacity-80 focus-visible:ring-4 focus-visible:ring-primary',
-              arrowPosition === 'edge' ? 'w-full justify-between' : undefined,
+              'flex w-full cursor-pointer items-center gap-3 rounded-pill outline-none transition-opacity hover:opacity-80 active:opacity-80 focus-visible:ring-4 focus-visible:ring-primary',
+              arrowPosition === 'edge' ? 'justify-between' : undefined,
             )}
           >
             <h2 className={headingClass}>{title}</h2>
