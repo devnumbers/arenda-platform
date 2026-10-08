@@ -146,6 +146,12 @@ E2E_DADATA_API_KEY="${DADATA_API_KEY:-e2e-dadata-dummy}"
 # одним IP — дефолт 20 rps/burst 40 пробивается 429 на мутациях (#688).
 E2E_RATE_LIMIT_IP_RPS=200
 E2E_RATE_LIMIT_IP_BURST=400
+# Анти-флуд лимиты отправки кодов (#1210) ослаблены: живые ноги сюита
+# (вход + смена email + смена телефона) легитимно доставляют сид-ящику больше
+# 5 кодов в час — продовые дефолты 5/10 429-или бы живые ноги; свежий бэк на
+# прогон и так держит бюджеты в чистой памяти.
+E2E_RATE_LIMIT_CODE_SEND_PER_RECIPIENT_PER_HOUR=500
+E2E_RATE_LIMIT_CODE_SEND_PER_INITIATOR_PER_HOUR=500
 (
   cd "$PROJECT_ROOT"
   APP_ENV=local \
@@ -161,6 +167,8 @@ E2E_RATE_LIMIT_IP_BURST=400
   DADATA_API_KEY="$E2E_DADATA_API_KEY" \
   RATE_LIMIT_IP_RPS="$E2E_RATE_LIMIT_IP_RPS" \
   RATE_LIMIT_IP_BURST="$E2E_RATE_LIMIT_IP_BURST" \
+  RATE_LIMIT_CODE_SEND_PER_RECIPIENT_PER_HOUR="$E2E_RATE_LIMIT_CODE_SEND_PER_RECIPIENT_PER_HOUR" \
+  RATE_LIMIT_CODE_SEND_PER_INITIATOR_PER_HOUR="$E2E_RATE_LIMIT_CODE_SEND_PER_INITIATOR_PER_HOUR" \
   LOG_FORMAT=json \
   LOG_LEVEL=info \
   LOG_SUCCESSFUL_REQUESTS=false \

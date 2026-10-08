@@ -51,13 +51,15 @@ func TestWireIdentityAssembly(t *testing.T) {
 	cfg := &config.Config{
 		EmailSender: providerFake,
 		RateLimit: config.RateLimit{
-			IPRPS:                     20,
-			IPBurst:                   40,
-			EmailSendPerHour:          60,
-			EmailVerifyPer15Min:       30,
-			PhoneChangeSendPerHour:    5,
-			PhoneChangeVerifyPer15Min: 10,
-			EmailChangeSendPerHour:    5,
+			IPRPS:                       20,
+			IPBurst:                     40,
+			EmailSendPerHour:            60,
+			EmailVerifyPer15Min:         30,
+			PhoneChangeSendPerHour:      5,
+			PhoneChangeVerifyPer15Min:   10,
+			EmailChangeSendPerHour:      5,
+			CodeSendPerRecipientPerHour: 5,
+			CodeSendPerInitiatorPerHour: 10,
 		},
 	}
 	limits := WireRateLimiters(cfg)
@@ -127,13 +129,15 @@ func TestWireIdentityContactQueueBindsAndEnqueuesAtomically(t *testing.T) {
 	cfg := &config.Config{
 		EmailSender: providerFake,
 		RateLimit: config.RateLimit{
-			IPRPS:                     20,
-			IPBurst:                   40,
-			EmailSendPerHour:          60,
-			EmailVerifyPer15Min:       30,
-			PhoneChangeSendPerHour:    5,
-			PhoneChangeVerifyPer15Min: 10,
-			EmailChangeSendPerHour:    5,
+			IPRPS:                       20,
+			IPBurst:                     40,
+			EmailSendPerHour:            60,
+			EmailVerifyPer15Min:         30,
+			PhoneChangeSendPerHour:      5,
+			PhoneChangeVerifyPer15Min:   10,
+			EmailChangeSendPerHour:      5,
+			CodeSendPerRecipientPerHour: 5,
+			CodeSendPerInitiatorPerHour: 10,
 		},
 		// The delivery-queue settings WireRiverQueue reads (positive values
 		// keep the provider-rate division alive; the test never starts the

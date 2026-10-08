@@ -1129,6 +1129,38 @@ func TestResendEmailCode_BudgetExhaustedReturns429(t *testing.T) {
 	}
 }
 
+// TestResendEmailCode_SendLimitsReturn429 proves the anti-flood send limits
+// (#1210) surface through the shared identity switch as 429 with the generic
+// throttle text — one UX for every send refusal, and no address- or
+// account-specific wording on a pre-auth-reachable path.
+func TestResendEmailCode_SendLimitsReturn429(t *testing.T) {
+	t.Parallel()
+	for name, limitErr := range map[string]error{
+		"recipient limit": application.ErrRecipientSendLimitExceeded,
+		"initiator limit": application.ErrInitiatorSendLimitExceeded,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			emailChange := &fakeEmailChanger{
+				resendNewEmailCode: func(context.Context, uuid.UUID, string) error {
+					return limitErr
+				},
+			}
+			h := newHandlersWithEmailChange(emailChange, nil, nil, nil)
+
+			r := authedRequest(t, http.MethodPost, "/me/email/resend-code", `{"grant":"grant-token"}`, uuid.Must(uuid.NewV7()))
+			rr := doHandler(t, h.ResendEmailCode, r)
+
+			if rr.Code != http.StatusTooManyRequests {
+				t.Fatalf("status = %d, want 429", rr.Code)
+			}
+			if !strings.Contains(rr.Body.String(), "Превышен лимит запросов") {
+				t.Fatalf("body = %s, want the generic throttle text", rr.Body.String())
+			}
+		})
+	}
+}
+
 // TestResendEmailCode_UserWithoutEmailReturns409 proves the no-email case
 // (#720 Q9) keeps its pinned text on the resend endpoint. The mapping is
 // defensive: a user without an email never holds a live grant (the grant

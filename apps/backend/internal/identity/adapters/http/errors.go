@@ -17,7 +17,8 @@ import (
 // ErrEmailAlreadyTaken ×3, ErrCodeSentTooRecently ×3, ErrEmailDoesNotMatch ×2)
 // that previously appeared in every auth handler (issue #222, grilling E2):
 //
-//   - ErrUserBlocked / domain.ErrTooManyAttempts / ErrCodeSentTooRecently → 429
+//   - ErrUserBlocked / domain.ErrTooManyAttempts / ErrCodeSentTooRecently /
+//     ErrRecipientSendLimitExceeded / ErrInitiatorSendLimitExceeded → 429
 //   - ErrEmailAlreadyTaken / ErrEmailDoesNotMatch → 409
 //   - ErrNotFound → 401
 //
@@ -25,12 +26,17 @@ import (
 // owns its detail text, so notFoundDetail is threaded in rather than fixed
 // here. Handler-specific errors (ErrInvalidEmail, ErrLoginCodeInvalid,
 // ErrPhoneUnchanged, ErrPhoneAlreadyTaken, …) stay in each handler's local
-// switch so the set of errors a handler can return stays readable.
+// switch so the set of errors a handler can return stays readable. The
+// anti-flood send limits (#1210) ride the 429 arm with the generic default
+// text: one UX for every send refusal, and no address- or account-specific
+// wording on a pre-auth-reachable path.
 func writeSharedIdentityError(w http.ResponseWriter, r *http.Request, err error, notFoundDetail string) bool {
 	switch {
 	case errors.Is(err, application.ErrUserBlocked),
 		errors.Is(err, domain.ErrTooManyAttempts),
-		errors.Is(err, application.ErrCodeSentTooRecently):
+		errors.Is(err, application.ErrCodeSentTooRecently),
+		errors.Is(err, application.ErrRecipientSendLimitExceeded),
+		errors.Is(err, application.ErrInitiatorSendLimitExceeded):
 		httpsupport.WriteTooManyRequests(w, r, userFacingDetailOrDefault(err, "Превышен лимит запросов"))
 		return true
 	case errors.Is(err, application.ErrEmailAlreadyTaken),

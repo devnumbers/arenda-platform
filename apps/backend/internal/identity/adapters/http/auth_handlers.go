@@ -582,10 +582,11 @@ func (h *AuthHandlers) SendEmailChangeCode(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// No send budget here: step 1 mails the user's current address. The
-	// per-user 5/hour budget (#720-3) guards sends to NEW addresses — step 3
-	// (request-new-email-code) and resend; this request is covered by the
-	// domain's 1-minute throttle and the global IP limiter.
+	// No per-endpoint budget here: step 1 mails the user's current address.
+	// The per-user 5/hour budget (#720-3) guards sends to NEW addresses —
+	// step 3 (request-new-email-code) and resend. This request is covered by
+	// the domain's 1-minute throttle and, since #1210, the per-recipient and
+	// per-initiator send limits enforced inside LoginCodeService.
 	if err := h.emailChange.SendCurrentEmailCode(r.Context(), userID); err != nil {
 		if writeEmailChangeError(w, r, err) {
 			return

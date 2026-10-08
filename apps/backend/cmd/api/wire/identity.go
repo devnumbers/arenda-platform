@@ -13,6 +13,7 @@ import (
 	identityriverqueue "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/riverqueue"
 	identityuaparse "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/uaparse"
 	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
+	identitydomain "github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/events"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer"
@@ -129,7 +130,10 @@ func WireIdentity(
 	contactWorker := identityriverqueue.NewContactChangedWorker(userRepo, emailMailer, p.Renderer, p.Logger)
 
 	// Login-code issuance/verification is a deep module shared by
-	// AuthenticationService and PhoneChangeService (ADR 0033, step 4).
+	// AuthenticationService and PhoneChangeService (ADR 0033, step 4). The
+	// anti-flood send limits (#1210) live with the transport limiters
+	// (wire/ratelimits.go) and are consulted by the service on each actual
+	// issuance: per recipient email, per authenticated initiator.
 	loginCodeService := identityapp.NewLoginCodeService(
 		factory,
 		identityapp.LoginCodeServiceConfig{
@@ -137,6 +141,12 @@ func WireIdentity(
 			Clock:      p.Clock,
 			Hasher:     p.Encryptor,
 			Logger:     p.Logger,
+			AllowRecipientSend: func(email identitydomain.Email) bool {
+				return rateLimits.RecipientSendLimiter.Allow(email.String())
+			},
+			AllowInitiatorSend: func(userID uuid.UUID) bool {
+				return rateLimits.InitiatorSendLimiter.Allow(userID.String())
+			},
 		},
 	)
 

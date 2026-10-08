@@ -15,6 +15,14 @@ var (
 	// ErrEmailChangeBudgetExhausted reports the per-user hourly budget on code
 	// sends to NEW addresses is spent (decision #720-3).
 	ErrEmailChangeBudgetExhausted = errors.New("email change send budget is exhausted")
+	// ErrRecipientSendLimitExceeded reports the hourly cap on code sends
+	// delivered to one email address is spent, across all flows and
+	// initiators (#1210, OWASP per-account anti-flood).
+	ErrRecipientSendLimitExceeded = errors.New("recipient code send limit is exhausted")
+	// ErrInitiatorSendLimitExceeded reports the authenticated user's hourly
+	// cap on code sends they initiate — phone and email change — is
+	// spent (#1210).
+	ErrInitiatorSendLimitExceeded = errors.New("initiator code send limit is exhausted")
 	// ErrCurrentSession reports the requested session revocation targets the
 	// caller's own live session; the devices list ends it through logout
 	// instead (issue #728).

@@ -8,7 +8,9 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// RateLimiters holds the six HTTP rate limiters wired by WireRateLimiters.
+// RateLimiters holds the rate limiters wired by WireRateLimiters: the
+// per-endpoint HTTP limiters plus the anti-flood send limits (#1210)
+// consulted inside LoginCodeService.
 type RateLimiters struct {
 	IPRateLimiter            *httpsupport.RateLimiter
 	EmailSendLimiter         *httpsupport.RateLimiter
@@ -16,11 +18,18 @@ type RateLimiters struct {
 	PhoneChangeSendLimiter   *httpsupport.RateLimiter
 	PhoneChangeVerifyLimiter *httpsupport.RateLimiter
 	EmailChangeSendLimiter   *httpsupport.RateLimiter
-	ClientErrorsLimiter      *httpsupport.RateLimiter
-	FeedbackLimiter          *httpsupport.RateLimiter
+	// RecipientSendLimiter and InitiatorSendLimiter are the anti-flood send
+	// limits (#1210) consulted inside LoginCodeService on each actual code
+	// issuance: per recipient email and per authenticated initiator, across
+	// all flows. Same in-memory token-bucket class as every limiter here —
+	// the restart resets the windows, which the e2e harness relies on.
+	RecipientSendLimiter *httpsupport.RateLimiter
+	InitiatorSendLimiter *httpsupport.RateLimiter
+	ClientErrorsLimiter  *httpsupport.RateLimiter
+	FeedbackLimiter      *httpsupport.RateLimiter
 }
 
-// WireRateLimiters constructs the six HTTP rate limiters from the config. The
+// WireRateLimiters constructs the rate limiters from the config. The
 // returned Stop() helper stops every limiter and must be deferred by the caller.
 func WireRateLimiters(cfg *config.Config) *RateLimiters {
 	ipLimiter := httpsupport.NewRateLimiter(rate.Limit(cfg.RateLimit.IPRPS), cfg.RateLimit.IPBurst, 1*time.Hour)
@@ -45,6 +54,17 @@ func WireRateLimiters(cfg *config.Config) *RateLimiters {
 	emailChangeSendLimiter := httpsupport.NewRateLimiter(
 		rate.Every(time.Hour/time.Duration(cfg.RateLimit.EmailChangeSendPerHour)), emailChangeSendBurst, 1*time.Hour)
 
+	// The anti-flood send limits (#1210), consumed inside LoginCodeService on
+	// each actual issuance: 5 codes per hour to one recipient address, 10 per
+	// hour per authenticated initiator — the triple throttle alone leaves a
+	// drip of 60 letters an hour into a victim's mailbox.
+	recipientSendLimiter := httpsupport.NewRateLimiter(
+		rate.Every(time.Hour/time.Duration(cfg.RateLimit.CodeSendPerRecipientPerHour)),
+		min(3, cfg.RateLimit.CodeSendPerRecipientPerHour), 1*time.Hour)
+	initiatorSendLimiter := httpsupport.NewRateLimiter(
+		rate.Every(time.Hour/time.Duration(cfg.RateLimit.CodeSendPerInitiatorPerHour)),
+		min(3, cfg.RateLimit.CodeSendPerInitiatorPerHour), 1*time.Hour)
+
 	clientErrorsLimiter := httpsupport.NewRateLimiter(rate.Every(2*time.Second), 10, time.Minute)
 
 	// The feedback form (карта #1010) emails a personal mailbox from a public
@@ -59,6 +79,8 @@ func WireRateLimiters(cfg *config.Config) *RateLimiters {
 		PhoneChangeSendLimiter:   phoneChangeSendLimiter,
 		PhoneChangeVerifyLimiter: phoneChangeVerifyLimiter,
 		EmailChangeSendLimiter:   emailChangeSendLimiter,
+		RecipientSendLimiter:     recipientSendLimiter,
+		InitiatorSendLimiter:     initiatorSendLimiter,
 		ClientErrorsLimiter:      clientErrorsLimiter,
 		FeedbackLimiter:          feedbackLimiter,
 	}
@@ -72,6 +94,8 @@ func (r *RateLimiters) Stop() {
 	r.PhoneChangeSendLimiter.Stop()
 	r.PhoneChangeVerifyLimiter.Stop()
 	r.EmailChangeSendLimiter.Stop()
+	r.RecipientSendLimiter.Stop()
+	r.InitiatorSendLimiter.Stop()
 	r.ClientErrorsLimiter.Stop()
 	r.FeedbackLimiter.Stop()
 }
