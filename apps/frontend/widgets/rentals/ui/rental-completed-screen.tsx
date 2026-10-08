@@ -205,7 +205,6 @@ function RentalCompletedBody({
           <RentalGroup
             title="Условия аренды"
             contentGap="gap-4"
-            arrowPosition="edge"
             onOpen={() => router.push(ROUTES.propertyRentalCompletedTerms(propertyId, rental.id))}
             openLabel="Открыть условия аренды"
           >
@@ -214,7 +213,6 @@ function RentalCompletedBody({
 
           <RentalGroup
             title="История операций"
-            arrowPosition="edge"
             className="pb-3"
             onOpen={
               operations.length > 0
@@ -250,7 +248,6 @@ function RentalCompletedBody({
 
           <RentalGroup
             title="Арендатор"
-            arrowPosition="edge"
             className="pb-4"
             onOpen={openContact}
             openLabel="Открыть карточку арендатора"
