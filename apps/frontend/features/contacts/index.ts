@@ -2,9 +2,7 @@ export {
   contactBookQuery,
   contactDetailQueryOptions,
   contactsListQuery,
-  deleteContactPhoto,
   fetchContact,
-  uploadContactPhoto,
 } from './api/queries';
 export {
   useContacts,

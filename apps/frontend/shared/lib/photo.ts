@@ -28,3 +28,19 @@ export function photoFileTooLarge(size: number): boolean {
 export function photoDisplayUrl(photoUrl: string, version: number): string {
   return version > 0 ? `${photoUrl}?v=${version}` : photoUrl;
 }
+
+/**
+ * Файл → data URL для превью staged-замены (CSP `img-src 'self' data:`,
+ * ADR 0065 покрывает его без расширений). Promise-обёртка FileReader:
+ * не-строковый результат (ArrayBuffer/null) схлопывается в null —
+ * сузили для тайпчекера.
+ */
+export function readPhotoDataUrl(file: File): Promise<string | null> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (): void => {
+      resolve(typeof reader.result === 'string' ? reader.result : null);
+    };
+    reader.readAsDataURL(file);
+  });
+}

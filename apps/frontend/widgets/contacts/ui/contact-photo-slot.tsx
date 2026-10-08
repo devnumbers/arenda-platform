@@ -82,7 +82,7 @@ export function ContactPhotoSlot({
     onFileChosen(file);
   };
 
-  const avatarButton = (
+  const photoCircleButton = (
     <button
       type="button"
       aria-label={hasPhoto ? 'Обновить фото' : 'Добавить фото'}
@@ -111,11 +111,11 @@ export function ContactPhotoSlot({
     <div className="flex flex-col items-center gap-2">
       {hasPhoto ? (
         <div className="relative">
-          {avatarButton}
+          {photoCircleButton}
           <PhotoRemoveBadge disabled={busy} onClick={() => setRemoveConfirmOpen(true)} />
         </div>
       ) : (
-        avatarButton
+        photoCircleButton
       )}
       <input
         ref={fileInputRef}

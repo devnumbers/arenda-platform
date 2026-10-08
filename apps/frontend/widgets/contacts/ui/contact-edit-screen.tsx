@@ -7,6 +7,7 @@ import { ROUTES } from '@/shared/config/routes';
 import { ApiError } from '@/shared/api/errors';
 import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
+import { readPhotoDataUrl } from '@/shared/lib/photo';
 import { formatPhoneDisplay } from '@/shared/lib/phone';
 import {
   buildContactUpdateCommand,
@@ -215,17 +216,11 @@ function ContactEditForm({
   const [photoStage, setPhotoStage] = useState<ContactPhotoStage | null>(null);
 
   const handlePhotoFile = (file: File): void => {
-    const reader = new FileReader();
-    reader.onload = (): void => {
-      // readAsDataURL даёт строку data URL; не-строка (ArrayBuffer/null)
-      // сюда не приходит — сузили для тайпчекера.
-      const { result } = reader;
-      if (typeof result !== 'string') {
-        return;
+    void readPhotoDataUrl(file).then((previewUrl) => {
+      if (previewUrl !== null) {
+        setPhotoStage({ kind: 'file', file, previewUrl });
       }
-      setPhotoStage({ kind: 'file', file, previewUrl: result });
-    };
-    reader.readAsDataURL(file);
+    });
   };
 
   const handlePhotoRemove = (): void => {
@@ -299,7 +294,7 @@ function ContactEditForm({
               )
           : null;
 
-    const [fieldsSaved = true, photoSaved = true] = await Promise.all([
+    const [fieldsSaved, photoSaved] = await Promise.all([
       fieldsWork,
       photoWork ?? Promise.resolve(true),
     ]);

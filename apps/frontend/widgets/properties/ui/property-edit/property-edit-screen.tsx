@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { notify } from '@/shared/lib/notifications';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
+import { readPhotoDataUrl } from '@/shared/lib/photo';
 import type { AttrErrors, AttrKey } from '@/features/property-attributes';
 import {
   buildPropertyEditCommand,
@@ -99,17 +100,11 @@ export function PropertyEditScreen({ propertyId }: PropertyEditScreenProps): JSX
   const [photoStage, setPhotoStage] = useState<PropertyPhotoStage | null>(null);
 
   const handlePhotoFile = (file: File): void => {
-    const reader = new FileReader();
-    reader.onload = (): void => {
-      // readAsDataURL даёт строку data URL; не-строка (ArrayBuffer/null)
-      // сюда не приходит — сузили для тайпчекера.
-      const { result } = reader;
-      if (typeof result !== 'string') {
-        return;
+    void readPhotoDataUrl(file).then((previewUrl) => {
+      if (previewUrl !== null) {
+        setPhotoStage({ kind: 'file', file, previewUrl });
       }
-      setPhotoStage({ kind: 'file', file, previewUrl: result });
-    };
-    reader.readAsDataURL(file);
+    });
   };
 
   const handlePhotoRemove = (): void => {
