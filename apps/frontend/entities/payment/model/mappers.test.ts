@@ -77,6 +77,11 @@ describe('mapPayment — DTO → entity', () => {
     expect(mapPayment({ ...paymentDto, reminderOffsetDays: 3 }).reminderOffsetDays).toBe(3);
   });
 
+  it('notifyAutoPaid переносится как есть — гейт события «Автоплатёж исполнен» (#1189)', () => {
+    expect(payment.notifyAutoPaid).toBe(false);
+    expect(mapPayment({ ...paymentDto, notifyAutoPaid: true }).notifyAutoPaid).toBe(true);
+  });
+
   it('интервалы пауз переименовываются в [from, to), открытая бессрочная без to', () => {
     expect(payment.pauses).toStrictEqual([
       { from: '2026-03-01', to: '2026-04-01' },

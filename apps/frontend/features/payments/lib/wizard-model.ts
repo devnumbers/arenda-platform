@@ -289,5 +289,10 @@ export function buildPaymentCreateCommand(
     ...(draft.reminderOffsetDays !== undefined && {
       reminderOffsetDays: draft.reminderOffsetDays,
     }),
+    // Уведомление об автоплатеже — только у автоплатежа и только явное
+    // «Да, уведомлять» (макет 3214-72739): опущенное поле = «Не
+    // уведомлять», сервер ставит false (#1189).
+    ...(options.autoPay === true
+      && draft.notifyAutoPaid === true && { notifyAutoPaid: true }),
   };
 }

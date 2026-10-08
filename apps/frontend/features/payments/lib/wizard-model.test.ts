@@ -358,6 +358,23 @@ describe('buildPaymentCreateCommand — сериализация чернови�
     const without = buildPaymentCreateCommand(draft({}), {});
     expect(without !== undefined && Object.hasOwn(without, 'reminderOffsetDays')).toBe(false);
   });
+
+  it('уведомление об автоплатеже едет в команду только у автоплатежа и только явное «да» (#1193)', () => {
+    // «Да, уведомлять» у автоплатежа — флаг в контракте.
+    const notified = buildPaymentCreateCommand(draft({ notifyAutoPaid: true }), {
+      autoPay: true,
+    });
+    expect(notified?.notifyAutoPaid).toBe(true);
+    // «Не уведомлять» (дефолт, макет 3214-72739) — поле опускается,
+    // сервер ставит false (#1189).
+    const silent = buildPaymentCreateCommand(draft({}), { autoPay: true });
+    expect(silent !== undefined && Object.hasOwn(silent, 'notifyAutoPaid')).toBe(false);
+    // У обычного платежа радио нет — черновик-мусор не протекает.
+    const regular = buildPaymentCreateCommand(draft({ notifyAutoPaid: true }), {
+      autoPay: false,
+    });
+    expect(regular !== undefined && Object.hasOwn(regular, 'notifyAutoPaid')).toBe(false);
+  });
 });
 
 describe('resumePaymentWizardStep — сохранённый шаг сильнее пересчёта (#1055)', () => {

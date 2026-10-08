@@ -62,6 +62,9 @@ export type Payment = {
   /** Напоминание «за N дней»; не задано — напоминаний нет (карта #822). */
   readonly reminderOffsetDays?: PaymentReminderOffset;
   readonly autoPay: boolean;
+  /** Гейт события «Автоплатёж исполнен» (#1189): false — молчащее правило
+   * не шлёт уведомление об автоплатеже. Значим только у autoPay-правил. */
+  readonly notifyAutoPaid: boolean;
   readonly category: PaymentCategoryView;
   readonly isFavorite: boolean;
   /** Завершённый платёж (CONTEXT.md): неоплаченных вхождений больше нет.
@@ -127,6 +130,10 @@ export type PaymentCreateCommand = {
   /** Напоминание «за N дней»; не выбрано — поле не передаётся (карта #822). */
   readonly reminderOffsetDays?: PaymentReminderOffset;
   readonly autoPay?: boolean;
+  /** «Уведомлять об автоплатеже» (#1193, макет 3214-72739): только
+   * автоплатёжная ветка и только явное «Да, уведомлять» — иначе поле
+   * опускается, сервер ставит false (#1189). */
+  readonly notifyAutoPaid?: boolean;
 };
 
 /**

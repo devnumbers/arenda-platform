@@ -80,7 +80,7 @@ async function createMonthlyPaymentToday(
   await page.getByRole('button', { name: 'Продолжить' }).click();
 
   // Шаг 4 — напоминание и настройки не задаём.
-  await expect(page.getByRole('heading', { name: 'Настройте платеж' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'За сколько напомнить об оплате' })).toBeVisible();
   await page.getByRole('button', { name: 'Далее' }).click();
 
   // Шаг 5 — сумма и направление. Чип-переключатель (макеты суммы карты

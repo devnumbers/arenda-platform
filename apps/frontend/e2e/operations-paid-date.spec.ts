@@ -77,7 +77,7 @@ test.describe('операционные ленты по факту оплаты'
     await expect(page.getByRole('heading', { name: 'Выберите день', exact: true })).toBeVisible();
     await page.getByRole('button', { name: '1', exact: true }).first().click();
     await page.getByRole('button', { name: 'Продолжить' }).click();
-    await expect(page.getByRole('heading', { name: 'Настройте платеж' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'За сколько напомнить об оплате' })).toBeVisible();
     await page.getByRole('button', { name: 'Далее' }).click();
     await expect(page.getByRole('button', { name: 'Создать платеж' })).toBeDisabled();
     await page.getByRole('textbox', { name: 'Сумма' }).fill('1990');

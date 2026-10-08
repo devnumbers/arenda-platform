@@ -17,8 +17,8 @@ import { formatDayMonthWithYear } from '@/shared/lib/date-format';
 // первого вхождения. Шаг 5 — по макетам суммы карты #1005 (тикет #1008:
 // 1858:104557/105397 мобилка, 2913:69551 широкий, чип формы оплаты
 // снесён). Скриншоты — материал для сверки с Figma-фреймами #449
-// (823:4243, 830:16721, 823:11219 + ветки дат, 843:8345, шаг 4:
-// 1084-24863, 1056-54338).
+// (823:4243, 830:16721, 823:11219 + ветки дат, 843:8345; шаг 4 по
+// макетам #1193: 3214-72559/72379 ручной, 3214-72739 автоплатёж).
 
 const APARTMENT_PAYMENTS_URL = `/properties/${SEEDED_APARTMENT_PROPERTY_ID}/payments`;
 const wizardUrl = (type: 'payment' | 'autopayment'): string =>
@@ -86,6 +86,7 @@ type PaymentFromApi = {
   amountKopecks: number;
   type: string;
   autoPay: boolean;
+  notifyAutoPaid?: boolean;
   since: string;
   endDate?: string | null;
   reminderOffsetDays?: number | null;
@@ -171,7 +172,7 @@ test.describe('визард создания платежа', () => {
     await expect(page.getByRole('heading', { name: 'Выберите день', exact: true })).toBeVisible();
     await page.getByRole('button', { name: '10', exact: true }).first().click();
     await page.getByRole('button', { name: 'Продолжить' }).click();
-    await expect(page.getByRole('heading', { name: 'Настройте платеж' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'За сколько напомнить об оплате' })).toBeVisible();
     await page.getByRole('button', { name: 'Далее' }).click();
 
     // Шаг 5 — сумма; категория нейтральна к направлению, берём расход.
@@ -233,7 +234,7 @@ test.describe('визард создания платежа', () => {
 
     // Шаг 4 — напоминание и настройки необязательны: пропускаем.
     await page.getByRole('button', { name: 'Продолжить' }).click();
-    await expect(page.getByRole('heading', { name: 'Настройте платеж' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'За сколько напомнить об оплате' })).toBeVisible();
     await page.getByRole('button', { name: 'Далее' }).click();
 
     // Шаг 5 — сумма и тип; кнопка заблокирована, пока сумма пуста.
@@ -269,6 +270,9 @@ test.describe('визард создания платежа', () => {
     expect(created?.amountKopecks).toBe(250000);
     expect(created?.type).toBe('expense');
     expect(created?.autoPay).toBe(false);
+    // Флаг «уведомлять об автоплатеже» у обычного платежа не выбирается —
+    // серверный дефолт false (#1189).
+    expect(created?.notifyAutoPaid).toBe(false);
     expect(created?.since).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(created?.endDate ?? null).toBeNull();
     // Напоминание опционально: без выбора в контракте напоминаний нет (#822).
@@ -304,7 +308,7 @@ test.describe('визард создания платежа', () => {
     await page.getByRole('button', { name: 'Пятница', exact: true }).click();
     await page.getByRole('button', { name: 'Продолжить' }).click();
 
-    await expect(page.getByRole('heading', { name: 'Настройте платеж' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'За сколько напомнить об оплате' })).toBeVisible();
     await page.getByRole('button', { name: 'Далее' }).click();
     await page.getByRole('textbox', { name: 'Сумма' }).fill('800');
     await page.getByRole('radio', { name: 'Расход' }).click();
@@ -329,7 +333,7 @@ test.describe('визард создания платежа', () => {
     await page.getByRole('button', { name: 'Последний день месяца' }).click();
     await page.getByRole('button', { name: 'Продолжить' }).click();
 
-    await expect(page.getByRole('heading', { name: 'Настройте платеж' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'За сколько напомнить об оплате' })).toBeVisible();
     await page.getByRole('button', { name: 'Далее' }).click();
     await page.getByRole('textbox', { name: 'Сумма' }).fill('40000');
     await page.getByRole('radio', { name: 'Расход' }).click();
@@ -353,8 +357,8 @@ test.describe('визард создания платежа', () => {
     await passTitleStep(page, title);
 
     await page.getByRole('button', { name: 'Каждый день' }).click();
-    // Ветка не открылась — сразу шаг «Настройте платеж».
-    await expect(page.getByRole('heading', { name: 'Настройте платеж' })).toBeVisible();
+    // Ветка не открылась — сразу шаг «За сколько напомнить об оплате».
+    await expect(page.getByRole('heading', { name: 'За сколько напомнить об оплате' })).toBeVisible();
     await page.getByRole('button', { name: 'Далее' }).click();
 
     await page.getByRole('textbox', { name: 'Сумма' }).fill('200');
@@ -388,7 +392,7 @@ test.describe('визард создания платежа', () => {
 
     // Подтверждение сразу ведёт на шаг настроек — меню периодичности
     // пропускается (решение владельца 30.09, #995).
-    await expect(page.getByRole('heading', { name: 'Настройте платеж' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'За сколько напомнить об оплате' })).toBeVisible();
     await page.getByRole('button', { name: 'Далее' }).click();
     await page.getByRole('textbox', { name: 'Сумма' }).fill('5000');
     await page.getByRole('radio', { name: 'Расход' }).click();
@@ -440,7 +444,7 @@ test.describe('визард создания платежа', () => {
     const target = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
     await pickCalendarDay(page, target);
     await confirmCalendar(page, 'Продолжить');
-    await expect(page.getByRole('heading', { name: 'Настройте платеж' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'За сколько напомнить об оплате' })).toBeVisible();
 
     await page.getByRole('button', { name: 'Далее' }).click();
     await page.getByRole('textbox', { name: 'Сумма' }).fill('1200');
@@ -479,7 +483,7 @@ test.describe('визард создания платежа', () => {
     const target = new Date(year + 1, new Date().getMonth(), 10);
     await pickCalendarDay(page, target);
     await confirmCalendar(page, 'Продолжить');
-    await expect(page.getByRole('heading', { name: 'Настройте платеж' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'За сколько напомнить об оплате' })).toBeVisible();
     await page.getByRole('button', { name: 'Далее' }).click();
     await page.getByRole('textbox', { name: 'Сумма' }).fill('2400');
     await page.getByRole('button', { name: 'Создать платеж' }).click();
@@ -539,7 +543,7 @@ test.describe('визард создания платежа', () => {
     // именно этого месяца: в ленте остаются и прошлые месяцы с тем же днём.
     await pickCalendarDay(page, new Date(jumpedYear, 11, 10));
     await confirmCalendar(page, 'Продолжить');
-    await expect(page.getByRole('heading', { name: 'Настройте платеж' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'За сколько напомнить об оплате' })).toBeVisible();
     await page.getByRole('button', { name: 'Далее' }).click();
     await page.getByRole('textbox', { name: 'Сумма' }).fill('7000');
     await page.getByRole('radio', { name: 'Расход' }).click();
@@ -566,10 +570,12 @@ test.describe('визард создания платежа', () => {
     await page.getByRole('button', { name: '15', exact: true }).first().click();
     await page.getByRole('button', { name: 'Продолжить' }).click();
 
-    // Шаг 4: пикер окончания несёт канонный заголовок поля (#1155) и
-    // минимум по первому вхождению (since = сегодня сервера, #1150):
-    // черновик при открытии прижат к первому доступному дню, «Выбрать»
-    // его коммитит без действий.
+    // Шаг 4: тумблер «Окончание платежа» раскрывает строку даты (макет
+    // 3214:72379); пикер несёт канонный заголовок поля (#1155) и минимум
+    // по первому вхождению (since = сегодня сервера, #1150): черновик при
+    // открытии прижат к первому доступному дню, «Выбрать» его коммитит
+    // без действий.
+    await page.getByRole('switch', { name: 'Окончание платежа' }).click();
     await page.getByRole('button', { name: 'Выбрать дату' }).click();
     const dialog = page.getByRole('dialog', { name: 'Окончание платежа' });
     await expect(dialog).toBeVisible();
@@ -673,10 +679,12 @@ test.describe('визард создания платежа', () => {
     await passTitleStep(page, 'E2E правило одним днём');
 
     await page.getByRole('button', { name: 'Каждый день' }).click();
-    await expect(page.getByRole('heading', { name: 'Настройте платеж' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'За сколько напомнить об оплате' })).toBeVisible();
     // Окончание = сегодня: правило стартует сегодня, единственное вхождение
-    // — сегодняшнее. Черновик канона при открытии уже сегодня, «Выбрать»
-    // коммитит его; тап по выбранному дню снял бы выбор (канон снятия).
+    // — сегодняшнее. Тумблер раскрывает строку даты (макет 3214:72379);
+    // черновик канона при открытии уже сегодня, «Выбрать» коммитит его;
+    // тап по выбранному дню снял бы выбор (канон снятия).
+    await page.getByRole('switch', { name: 'Окончание платежа' }).click();
     await page.getByRole('button', { name: 'Выбрать дату' }).click();
     const dialog = page.getByRole('dialog', { name: 'Окончание платежа' });
     await expect(dialog).toBeVisible();
@@ -784,14 +792,18 @@ test.describe('визард создания платежа', () => {
     await page.getByRole('button', { name: '15', exact: true }).first().click();
     await page.getByRole('button', { name: 'Продолжить' }).click();
 
-    // Шаг 4, ручная ветка: радио «за N дней», ниже — «Настройки платежа»
-    // с окончанием и почтой (Figma 1084-24863).
-    await expect(page.getByRole('heading', { name: 'Настройте платеж' })).toBeVisible();
+    // Шаг 4, ручная ветка (макеты 3214-72559/72379): H1 «За сколько
+    // напомнить об оплате», первый пункт радио — «Не напоминать» (#1193),
+    // ниже — секция «Настройки» с тумблерами почты и окончания; строка
+    // даты скрыта, пока тумблер окончания выключен.
+    await expect(page.getByRole('heading', { name: 'За сколько напомнить об оплате' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Не напоминать' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'За 1 день' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'За 3 дня' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'За 7 дней' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Настройки платежа' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Выбрать дату' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Настройки' })).toBeVisible();
+    await expect(page.getByRole('switch', { name: 'Окончание платежа' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Выбрать дату' })).toHaveCount(0);
     await captureScreen(page, testInfo, 'wizard-step4-reminder-manual-mobile');
     await page.getByRole('button', { name: 'За 3 дня' }).click();
 
@@ -799,7 +811,7 @@ test.describe('визард создания платежа', () => {
     // шаге 4 (штамп перехода, #1055; раньше пересчёт перепрыгивал опциональный
     // шаг на шаг 5), значение доезжает до контракта.
     await page.reload();
-    await expect(page.getByRole('heading', { name: 'Настройте платеж' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'За сколько напомнить об оплате' })).toBeVisible();
     await page.getByRole('button', { name: 'Далее' }).click();
     await expect(page.getByRole('textbox', { name: 'Сумма' })).toBeVisible();
     await page.getByRole('textbox', { name: 'Сумма' }).fill('1500');
@@ -809,6 +821,72 @@ test.describe('визард создания платежа', () => {
     const items = await fetchPayments(page);
     const created = items.find((payment) => payment.title === title);
     expect(created?.reminderOffsetDays).toBe(3);
+  });
+
+  test('«Не напоминать» возвращает к отсутствию напоминаний после выбора «за N дней» (#1193)', async ({
+    page,
+    seededUser,
+  }) => {
+    await openWizard(page, seededUser);
+    await selectCategory(page);
+    await passTitleStep(page, 'E2E не напоминать');
+
+    await page.getByRole('button', { name: 'Каждый день' }).click();
+    await expect(page.getByRole('heading', { name: 'За сколько напомнить об оплате' })).toBeVisible();
+    await page.getByRole('button', { name: 'За 3 дня' }).click();
+    // «Не напоминать» — такой же пункт радио: снимает «за N дней», в
+    // команде поле опускается (в контракте — напоминаний нет).
+    await page.getByRole('button', { name: 'Не напоминать' }).click();
+    await page.getByRole('button', { name: 'Далее' }).click();
+    await page.getByRole('textbox', { name: 'Сумма' }).fill('700');
+    await page.getByRole('button', { name: 'Создать платеж' }).click();
+    await expect(page.getByRole('heading', { name: /Вы создали платеж/ })).toBeVisible();
+
+    const items = await fetchPayments(page);
+    const created = items.find((payment) => payment.title === 'E2E не напоминать');
+    expect(created?.reminderOffsetDays ?? null).toBeNull();
+  });
+
+  test('тумблер «Окончание платежа»: раскрывает «Выбрать дату», выключение чистит дату (#1193)', async ({
+    page,
+    seededUser,
+  }) => {
+    const title = 'E2E окончание по тумблеру';
+    await openWizard(page, seededUser);
+    await selectCategory(page);
+    await passTitleStep(page, title);
+
+    await page.getByRole('button', { name: 'Каждый день' }).click();
+    await expect(page.getByRole('heading', { name: 'За сколько напомнить об оплате' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Выбрать дату' })).toHaveCount(0);
+
+    // Включение открывает строку даты; «Выбрать» коммитит предвыбранный
+    // день (daily: первое вхождение — сегодня).
+    await page.getByRole('switch', { name: 'Окончание платежа' }).click();
+    await page.getByRole('button', { name: 'Выбрать дату' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Окончание платежа' });
+    await expect(dialog).toBeVisible();
+    await confirmCalendar(page, 'Выбрать', 'Окончание платежа');
+    await expect(dialog).toHaveCount(0);
+    const today = todayIso();
+    await expect(
+      page.getByRole('button', { name: formatDayMonthWithYear(today, today) }),
+    ).toBeVisible();
+
+    // Выключение чистит дату и прячет строку; включение даёт чистую
+    // «Выбрать дату» — в команде платёж уходит бессрочным.
+    await page.getByRole('switch', { name: 'Окончание платежа' }).click();
+    await expect(page.getByRole('button', { name: 'Выбрать дату' })).toHaveCount(0);
+    await page.getByRole('switch', { name: 'Окончание платежа' }).click();
+    await expect(page.getByRole('button', { name: 'Выбрать дату' })).toBeVisible();
+    await page.getByRole('button', { name: 'Далее' }).click();
+    await page.getByRole('textbox', { name: 'Сумма' }).fill('650');
+    await page.getByRole('button', { name: 'Создать платеж' }).click();
+    await expect(page.getByRole('heading', { name: /Вы создали платеж/ })).toBeVisible();
+
+    const items = await fetchPayments(page);
+    const created = items.find((payment) => payment.title === title);
+    expect(created?.endDate ?? null).toBeNull();
   });
 
   test('тумблер «Уведомления на почту» — шоткат глобальной настройки категории «Платежи и операции»', async ({
@@ -825,7 +903,7 @@ test.describe('визард создания платежа', () => {
     await passTitleStep(page, 'E2E шоткат почты');
     // Ежедневная ветка завершает шаг 3 сама — клик ведёт сразу на шаг 4.
     await page.getByRole('button', { name: 'Каждый день' }).click();
-    await expect(page.getByRole('heading', { name: 'Настройте платеж' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'За сколько напомнить об оплате' })).toBeVisible();
 
     const toggle = page.getByRole('switch', { name: 'Уведомления на почту' });
     await expect(toggle).toHaveAttribute('aria-checked', 'true');
@@ -850,12 +928,18 @@ test.describe('визард создания платежа', () => {
     await page.getByRole('button', { name: '5', exact: true }).first().click();
     await page.getByRole('button', { name: 'Продолжить' }).click();
 
-    // Шаг 4, ветка автоплатежа: карточка «Уведомления об оплате» вместо
-    // радио, «Окончание платежа» и тумблер почты (Figma 1056-54338).
-    await expect(page.getByRole('heading', { name: 'Уведомления об оплате' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Окончание платежа' })).toBeVisible();
+    // Шаг 4, ветка автоплатежа (макет 3214-72739): «Уведомлять об оплате»
+    // с радио «Не уведомлять»/«Да, уведомлять» (пер-платёжный флаг
+    // notifyAutoPaid, #1189), ниже — та же секция «Настройки»; радио
+    // напоминаний нет (#822, форс null #1186).
+    await expect(page.getByRole('heading', { name: 'Уведомлять об оплате' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Не уведомлять' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Да, уведомлять' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'За 1 день' })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Настройки' })).toBeVisible();
+    await expect(page.getByRole('switch', { name: 'Окончание платежа' })).toBeVisible();
     await captureScreen(page, testInfo, 'wizard-step4-autopayment-mobile');
+    await page.getByRole('button', { name: 'Да, уведомлять' }).click();
     await page.getByRole('button', { name: 'Далее' }).click();
 
     await page.getByRole('textbox', { name: 'Сумма' }).fill('3300');
@@ -868,8 +952,10 @@ test.describe('визард создания платежа', () => {
     const items = await fetchPayments(page);
     const created = items.find((payment) => payment.title === title);
     expect(created?.autoPay).toBe(true);
+    // «Да, уведомлять» доезжает до контракта флагом notifyAutoPaid (#1189).
+    expect(created?.notifyAutoPaid).toBe(true);
     expect(created?.recurrence.daysOfMonth).toStrictEqual([5]);
-    // Радио в ветке автоплатежа нет — напоминание не выбирается (#822).
+    // Радио напоминаний в ветке автоплатежа нет — напоминание не выбирается (#822).
     expect(created?.reminderOffsetDays ?? null).toBeNull();
   });
 });
@@ -891,7 +977,7 @@ test.describe('визард создания платежа — десктоп',
     await captureScreen(page, testInfo, 'wizard-desktop-weekdays');
     await page.getByRole('button', { name: 'Понедельник', exact: true }).click();
     await page.getByRole('button', { name: 'Продолжить' }).click();
-    await expect(page.getByRole('heading', { name: 'Настройте платеж' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'За сколько напомнить об оплате' })).toBeVisible();
   });
 
   // Шаг 5 на ПК ≥1024 (тикет #1008, макет 2913:69551): бокс «Сумма» 56px
@@ -907,7 +993,7 @@ test.describe('визард создания платежа — десктоп',
     await page.getByRole('button', { name: 'Каждую неделю' }).click();
     await page.getByRole('button', { name: 'Понедельник', exact: true }).click();
     await page.getByRole('button', { name: 'Продолжить' }).click();
-    await expect(page.getByRole('heading', { name: 'Настройте платеж' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'За сколько напомнить об оплате' })).toBeVisible();
     await page.getByRole('button', { name: 'Далее' }).click();
 
     // Один input «Сумма» в дереве доступности: бокс яруса ПК виден,
