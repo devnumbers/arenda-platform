@@ -237,9 +237,13 @@ export function TasksFeedScreen({
             {kebabVisible && (
               <Menu>
                 <MenuTrigger asChild>
-                  <IconButton icon={<VerticalMenu />} label="Действия со списком" />
+                  <IconButton icon={<VerticalMenu />} label="Действия со списком" variant="muted" />
                 </MenuTrigger>
-                <MenuContent>
+                {/* Кебаб в ряду чипов у левого края — меню вправо от
+                 * кнопки, прижато левым краем (карта #1232, правка
+                 * владельца 08.10); дефолт 'end' — под кебаб у правого
+                 * края, так он уезжает влево от кнопки. */}
+                <MenuContent align="start">
                   {mutableActive.length > 0 && (
                     <MenuItem
                       icon={<Checkmark />}
