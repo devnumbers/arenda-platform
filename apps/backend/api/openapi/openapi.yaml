@@ -8179,6 +8179,14 @@ components:
           type: string
           format: date-time
           nullable: true
+        payload:
+          type: object
+          description: |
+            Тот же free-form payload, что несёт NotificationDetailResponse
+            (решение #737, контракт #743): ленте он нужен ради снимков
+            карточек без хода на страницу — фото и глиф объекта в строке
+            ленты берутся из payload.property (#1275). Отсутствует у строк
+            без payload-снимков.
 
     NotificationDetailResponse:
       type: object

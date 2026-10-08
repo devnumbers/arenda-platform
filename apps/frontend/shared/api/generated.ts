@@ -3577,6 +3577,14 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             read_at?: string | null;
+            /**
+             * @description Тот же free-form payload, что несёт NotificationDetailResponse
+             *     (решение #737, контракт #743): ленте он нужен ради снимков
+             *     карточек без хода на страницу — фото и глиф объекта в строке
+             *     ленты берутся из payload.property (#1275). Отсутствует у строк
+             *     без payload-снимков.
+             */
+            payload?: Record<string, never>;
         };
         NotificationDetailResponse: {
             /** Format: uuid */

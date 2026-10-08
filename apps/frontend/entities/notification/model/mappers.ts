@@ -40,7 +40,7 @@ function toCategory(value: string): NotificationCategory {
 }
 
 export function mapNotification(dto: NotificationItemDto): Notification {
-  return {
+  return withoutUndefinedSlots({
     id: dto.id,
     eventType: dto.event_type,
     category: toCategory(dto.category),
@@ -49,7 +49,11 @@ export function mapNotification(dto: NotificationItemDto): Notification {
     contextLabel: dto.context_label ?? null,
     createdAt: dto.created_at,
     readAt: dto.read_at ?? null,
-  };
+    // Payload в списке с #1275 — лента читает фото/глиф объекта из снимка;
+    // строки без payload-снимков остаются без ключа (факт отсутствия).
+    payload:
+      dto.payload !== undefined ? toPayload(dto.payload as Record<string, unknown>) : undefined,
+  });
 }
 
 /** Payload путешествует free-form объектом (контракт #743) — урезаем до
@@ -57,7 +61,7 @@ export function mapNotification(dto: NotificationItemDto): Notification {
  * структуры не проходят. */
 function toEntityRef(value: unknown): NotificationEntityRef | undefined {
   if (typeof value !== 'object' || value === null) return undefined;
-  const { id, name, address, email, type } = value as Record<string, unknown>;
+  const { id, name, address, email, type, photo } = value as Record<string, unknown>;
   if (typeof id !== 'string' || typeof name !== 'string') return undefined;
   return withoutUndefinedSlots({
     id,
@@ -65,6 +69,7 @@ function toEntityRef(value: unknown): NotificationEntityRef | undefined {
     address: typeof address === 'string' ? address : undefined,
     email: typeof email === 'string' ? email : undefined,
     type: typeof type === 'string' ? type : undefined,
+    photo: typeof photo === 'string' ? photo : undefined,
   });
 }
 

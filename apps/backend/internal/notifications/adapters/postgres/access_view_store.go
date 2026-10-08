@@ -81,7 +81,7 @@ func (s *AccessViewStore) PropertyView(ctx context.Context, propertyID uuid.UUID
 		}
 		return application.AccessPropertyView{}, fmt.Errorf("get property view %s: %w", propertyID, err)
 	}
-	return application.AccessPropertyView{Name: row.Name, Address: row.Address, Type: row.Type}, nil
+	return application.AccessPropertyView{Name: row.Name, Address: row.Address, Type: row.Type, Photo: row.PropertyPhoto}, nil
 }
 
 // UserProfileView returns the user's display snapshot: the display name (the

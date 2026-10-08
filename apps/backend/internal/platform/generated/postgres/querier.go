@@ -320,7 +320,8 @@ type Querier interface {
 	ExistsUnfinishedRental(ctx context.Context, arg ExistsUnfinishedRentalParams) (bool, error)
 	// The access events' property snapshot (#751): the display name and the
 	// address line the feed rows' property card carries (EntityRef, #745); the
-	// type picks the card avatar's placeholder glyph (карта #1217, #1244). A
+	// type picks the card avatar's placeholder glyph (карта #1217, #1244), the
+	// photo path streams the card's picture when the object has one (#1275). A
 	// missing property is a no-row error — the access transitions never fire on
 	// a deleted object, a miss is abnormal and fails the publication.
 	GetAccessEventPropertyView(ctx context.Context, id pgtype.UUID) (GetAccessEventPropertyViewRow, error)

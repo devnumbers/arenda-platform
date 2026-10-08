@@ -76,7 +76,7 @@ func newAccessIDs() accessIDs {
 }
 
 func (h *accessPublisherHarness) plantProperty(id uuid.UUID, name, address string) {
-	h.views.props[id] = AccessPropertyView{Name: name, Address: address, Type: scanPropertyType}
+	h.views.props[id] = AccessPropertyView{Name: name, Address: address, Type: scanPropertyType, Photo: scanPropertyPhoto}
 }
 
 func (h *accessPublisherHarness) plantUser(id uuid.UUID, name, email string) {
@@ -129,6 +129,7 @@ func TestNotifyInvitationActivatedActive(t *testing.T) {
 	assert.Equal(t, "Дом на Рублёвке", invite.Payload.Property.Name)
 	assert.Equal(t, "ул. Рублёвское шоссе, 1", invite.Payload.Property.Address)
 	assert.Equal(t, scanPropertyType, invite.Payload.Property.Type, "the card's glyph type snapshot (#1244)")
+	assert.Equal(t, scanPropertyPhoto, invite.Payload.Property.Photo, "the card's photo snapshot (#1275)")
 	require.NotNil(t, invite.Payload.Actor)
 	assert.Equal(t, ids.owner, invite.Payload.Actor.ID)
 	assert.Equal(t, "Пётр Петров", invite.Payload.Actor.Name)

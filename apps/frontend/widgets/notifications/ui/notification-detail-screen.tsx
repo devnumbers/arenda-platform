@@ -184,7 +184,12 @@ function NotificationDetailBody({
         // проверяет реестр, неизвестное/старое (до #1244) — дом-фолбэк.
         <NotificationEntityLink
           href={ROUTES.property(detail.payload.property.id)}
-          icon={<PropertyGlyph type={detail.payload.property.type} />}
+          icon={
+            <PropertyCardAvatar
+              photo={detail.payload.property.photo}
+              type={detail.payload.property.type}
+            />
+          }
           name={detail.payload.property.name}
           detail={detail.payload.property.address}
         />
@@ -243,7 +248,11 @@ function NotificationEntityCardBody({
 }): JSX.Element {
   return (
     <>
-      <CircleIcon variant="white">{icon}</CircleIcon>
+      {/* overflow-hidden: фото-аватар (#1275) заполняет круг целиком, клип
+       * нужен по скруглению; глифам он безразличен — они меньше круга. */}
+      <CircleIcon variant="white" className="relative overflow-hidden">
+        {icon}
+      </CircleIcon>
       <div className="min-w-0 flex-1">
         <p className="truncate text-base font-medium leading-[18px] text-content">{name}</p>
         {detail && (
@@ -302,4 +311,22 @@ function NotificationEntityLink({
 function PropertyGlyph({ type }: { readonly type: string | undefined }): JSX.Element {
   const Glyph = type !== undefined && type in propertyTypeIcons ? propertyTypeIcons[type as PropertyType] : BoldHome;
   return <Glyph className="h-6 w-6 text-[#d3d7d9]" />;
+}
+
+/** Аватар объекта на карточке payload-снимка (#1275): фото из снимка
+ * заполняет круг; битое (фото или объект удалили после публикации — 404
+ * стрима) откатывается к глифу типа. */
+function PropertyCardAvatar({ photo, type }: { readonly photo?: string; readonly type?: string }): JSX.Element {
+  const [photoBroken, setPhotoBroken] = useState(false);
+  if (photo !== undefined && !photoBroken) {
+    return (
+      <img
+        src={photo}
+        alt=""
+        className="h-full w-full object-cover"
+        onError={() => setPhotoBroken(true)}
+      />
+    );
+  }
+  return <PropertyGlyph type={type} />;
 }

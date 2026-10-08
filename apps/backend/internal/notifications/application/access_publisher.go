@@ -17,6 +17,9 @@ type AccessPropertyView struct {
 	Name    string
 	Address string
 	Type    string
+	// Photo is the snapshot's same-origin streaming path, '' when the
+	// object has no photo (#1275).
+	Photo string
 }
 
 // AccessUserProfile is the display snapshot of a user an access event names:
@@ -397,6 +400,7 @@ func accessPayload(
 			Name:    property.Name,
 			Address: property.Address,
 			Type:    property.Type,
+			Photo:   property.Photo,
 		},
 		MembershipID: &membershipID,
 	}

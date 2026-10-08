@@ -167,6 +167,9 @@ SELECT r.id AS rental_id,
        p.name AS property_name,
        p.address AS property_address,
        p.type AS property_type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo,
        p.owner_id
 FROM rentals r
 JOIN properties p ON p.id = r.property_id
@@ -213,6 +216,9 @@ SELECT r.id AS rental_id,
        p.name AS property_name,
        p.address AS property_address,
        p.type AS property_type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo,
        p.owner_id
 FROM rentals r
 JOIN properties p ON p.id = r.property_id
@@ -269,6 +275,9 @@ SELECT pay.id AS payment_id,
        p.name AS property_name,
        p.address AS property_address,
        p.type AS property_type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo,
        o.owner_id
 FROM operations o
 JOIN payments pay ON pay.id = o.payment_id
@@ -301,6 +310,9 @@ SELECT pay.id AS payment_id,
        p.name AS property_name,
        p.address AS property_address,
        p.type AS property_type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo,
        o.owner_id
 FROM operations o
 JOIN payments pay ON pay.id = o.payment_id
@@ -377,6 +389,9 @@ SELECT pay.id AS payment_id,
        p.name AS property_name,
        p.address AS property_address,
        p.type AS property_type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo,
        o.owner_id
 FROM operations o
 JOIN payments pay ON pay.id = o.payment_id
@@ -404,6 +419,9 @@ SELECT pay.id AS payment_id,
        p.name AS property_name,
        p.address AS property_address,
        p.type AS property_type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo,
        o.owner_id
 FROM operations o
 JOIN payments pay ON pay.id = o.payment_id
@@ -435,6 +453,9 @@ SELECT pay.id AS payment_id,
        p.name AS property_name,
        p.address AS property_address,
        p.type AS property_type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo,
        o.owner_id
 FROM operations o
 JOIN payments pay ON pay.id = o.payment_id
@@ -490,6 +511,9 @@ SELECT pay.id AS payment_id,
        p.name AS property_name,
        p.address AS property_address,
        p.type AS property_type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo,
        o.owner_id
 FROM operations o
 JOIN payments pay ON pay.id = o.payment_id
@@ -521,6 +545,9 @@ SELECT pay.id AS payment_id,
        p.name AS property_name,
        p.address AS property_address,
        p.type AS property_type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo,
        o.owner_id
 FROM operations o
 JOIN payments pay ON pay.id = o.payment_id
@@ -572,6 +599,9 @@ SELECT pay.id AS payment_id,
        p.name AS property_name,
        p.address AS property_address,
        p.type AS property_type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo,
        o.owner_id
 FROM operations o
 JOIN payments pay ON pay.id = o.payment_id
@@ -635,6 +665,9 @@ SELECT t.id AS task_id,
        p.name AS property_name,
        p.address AS property_address,
        p.type AS property_type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo,
        t.rule_id,
        t.owner_id
 FROM tasks t
@@ -668,6 +701,9 @@ SELECT t.id AS task_id,
        p.name AS property_name,
        p.address AS property_address,
        p.type AS property_type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo,
        t.rule_id,
        t.owner_id,
        CAST(((t.due_date + COALESCE(t.due_time, '24:00'::time)) AT TIME ZONE u.timezone) AS timestamptz) AS due_at
@@ -683,10 +719,14 @@ WHERE t.id = $1
 -- name: GetAccessEventPropertyView :one
 -- The access events' property snapshot (#751): the display name and the
 -- address line the feed rows' property card carries (EntityRef, #745); the
--- type picks the card avatar's placeholder glyph (карта #1217, #1244). A
+-- type picks the card avatar's placeholder glyph (карта #1217, #1244), the
+-- photo path streams the card's picture when the object has one (#1275). A
 -- missing property is a no-row error — the access transitions never fire on
 -- a deleted object, a miss is abnormal and fails the publication.
-SELECT p.name, p.address, p.type
+SELECT p.name, p.address, p.type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo
 FROM properties p
 WHERE p.id = $1;
 

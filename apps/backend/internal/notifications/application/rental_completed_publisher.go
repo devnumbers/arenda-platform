@@ -35,7 +35,10 @@ type RentalCompletedTarget struct {
 	PropertyName    string
 	PropertyAddress string
 	PropertyType    string
-	OwnerID         uuid.UUID
+	// PropertyPhoto is the snapshot's same-origin streaming path, '' when
+	// the object has no photo (#1275).
+	PropertyPhoto string
+	OwnerID       uuid.UUID
 }
 
 // RentalCompletedSource is the scan's window into the rentals context: the
@@ -220,6 +223,7 @@ func (p *RentalCompletedPublisher) publish(ctx context.Context, target RentalCom
 				Name:    target.PropertyName,
 				Address: target.PropertyAddress,
 				Type:    target.PropertyType,
+				Photo:   target.PropertyPhoto,
 			},
 			RentalID: &rentalID,
 		},

@@ -146,13 +146,17 @@ func ActionsForEvent(e EventType) []ActionKind {
 // their email; both are snapshots of the publication moment, optional, and
 // the card simply skips a line the snapshot does not hold. The property
 // carries its type too (карта #1217, #1244) — the card avatar's placeholder
-// glyph's key, the same snapshot semantics.
+// glyph's key — and its photo path (#1275): the same-origin streaming URL at
+// publication time, empty when the object had no photo; the stream serves the
+// photo the property has now, a gone photo answers 404 and the card falls
+// back to the glyph.
 type EntityRef struct {
 	ID      uuid.UUID `json:"id"`
 	Name    string    `json:"name"`
 	Address string    `json:"address,omitempty"`
 	Email   string    `json:"email,omitempty"`
 	Type    string    `json:"type,omitempty"`
+	Photo   string    `json:"photo,omitempty"`
 }
 
 // TariffRef is the tariff snapshot of the billing events (слаг, период,

@@ -38,6 +38,10 @@ export type Notification = {
   readonly createdAt: string;
   /** UTC-момент прочтения; null — непрочитано (красная точка строки). */
   readonly readAt: string | null;
+  /** Payload-снимки строки ленты (#737, контракт #743; в списке с #1275):
+   * фото и глиф объекта в строке ленты читаются из payload.property без
+   * хода на страницу. Нет в строке — уведомление без payload-снимков. */
+  readonly payload?: NotificationPayload;
 };
 
 /** Непрочитанное уведомление — точка на иконке и полная насыщенность. */
@@ -80,6 +84,10 @@ export type NotificationEntityRef = {
   readonly address?: string;
   readonly email?: string;
   readonly type?: string;
+  /** Снимок пути приватного фото (same-origin стриминг, ADR 0065, #1275):
+   * строка — путь на момент публикации; стриминг отдаёт текущее фото, 404
+   * после удаления — карточка деградирует в глиф по onError. */
+  readonly photo?: string;
 };
 
 /** Тарифный снимок биллинг-событий (TariffRef); сумма — BIGINT копейки. */

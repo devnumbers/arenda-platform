@@ -5,7 +5,10 @@ import { mapCategoryPreferences, mapNotification, mapNotificationDetail } from '
 type NotificationItemDto = components['schemas']['NotificationItem'];
 type NotificationDetailDto = components['schemas']['NotificationDetailResponse'];
 
-function itemDto(overrides: Partial<NotificationItemDto>): NotificationItemDto {
+function itemDto(
+  overrides: Omit<Partial<NotificationItemDto>, 'payload'> & { payload?: Record<string, unknown> },
+): NotificationItemDto {
+  const { payload, ...rest } = overrides;
   return {
     id: '0194a3f8-7c1b-7d21-9a4e-3f2b8c5d6e70',
     event_type: 'rental_completed',
@@ -13,7 +16,10 @@ function itemDto(overrides: Partial<NotificationItemDto>): NotificationItemDto {
     title: 'Аренда завершена',
     body: 'Договор аренды по объекту «2-комнатная на Ленина» завершён.',
     created_at: '2026-09-17T14:40:00Z',
-    ...overrides,
+    ...rest,
+    // Payload путешествует free-form объектом (контраст сгенерированному
+    // Record<string, never>) — тест кормит сырьё, как его отдаёт бэк.
+    payload: payload as NotificationItemDto['payload'],
   };
 }
 
@@ -157,6 +163,58 @@ describe('mapNotificationDetail', () => {
       id: '0194a3f8-0000-7000-8000-000000000001',
       name: 'Объект',
     });
+  });
+
+  it('photo объекта — снимок пути приватного фото (#1275): строка проходит, не-строка нет', () => {
+    const mapped = mapNotificationDetail(
+      detailDto({
+        payload: {
+          property: {
+            id: '0194a3f8-0000-7000-8000-000000000001',
+            name: 'Гараж',
+            type: 'garage',
+            photo: '/api/v1/properties/0194a3f8-0000-7000-8000-000000000001/photo',
+          },
+        },
+      }),
+    );
+    expect(mapped.payload.property?.photo).toBe(
+      '/api/v1/properties/0194a3f8-0000-7000-8000-000000000001/photo',
+    );
+
+    const mappedGarbage = mapNotificationDetail(
+      detailDto({
+        payload: {
+          property: { id: '0194a3f8-0000-7000-8000-000000000001', name: 'Объект', photo: 42 },
+        },
+      }),
+    );
+    expect(mappedGarbage.payload.property).toStrictEqual({
+      id: '0194a3f8-0000-7000-8000-000000000001',
+      name: 'Объект',
+    });
+  });
+
+  it('строка ленты несёт payload-снимки (#1275) — лента читает фото объекта без хода на страницу', () => {
+    const mapped = mapNotification(
+      itemDto({
+        payload: {
+          property: {
+            id: '0194a3f8-0000-7000-8000-000000000001',
+            name: 'Гараж',
+            photo: '/api/v1/properties/0194a3f8-0000-7000-8000-000000000001/photo',
+          },
+        },
+      }),
+    );
+    expect(mapped.payload?.property?.photo).toBe(
+      '/api/v1/properties/0194a3f8-0000-7000-8000-000000000001/photo',
+    );
+  });
+
+  it('строка ленты без payload остаётся без ключа — факт отсутствия, не пустой объект', () => {
+    const mapped = mapNotification(itemDto({}));
+    expect('payload' in mapped).toBe(false);
   });
 
   it('урезает payload до известного словаря — мусор не проходит', () => {

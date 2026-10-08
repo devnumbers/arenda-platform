@@ -69,26 +69,36 @@ func (q *Queries) DeleteNotification(ctx context.Context, arg DeleteNotification
 }
 
 const getAccessEventPropertyView = `-- name: GetAccessEventPropertyView :one
-SELECT p.name, p.address, p.type
+SELECT p.name, p.address, p.type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo
 FROM properties p
 WHERE p.id = $1
 `
 
 type GetAccessEventPropertyViewRow struct {
-	Name    string `json:"name"`
-	Address string `json:"address"`
-	Type    string `json:"type"`
+	Name          string `json:"name"`
+	Address       string `json:"address"`
+	Type          string `json:"type"`
+	PropertyPhoto string `json:"property_photo"`
 }
 
 // The access events' property snapshot (#751): the display name and the
 // address line the feed rows' property card carries (EntityRef, #745); the
-// type picks the card avatar's placeholder glyph (карта #1217, #1244). A
+// type picks the card avatar's placeholder glyph (карта #1217, #1244), the
+// photo path streams the card's picture when the object has one (#1275). A
 // missing property is a no-row error — the access transitions never fire on
 // a deleted object, a miss is abnormal and fails the publication.
 func (q *Queries) GetAccessEventPropertyView(ctx context.Context, id pgtype.UUID) (GetAccessEventPropertyViewRow, error) {
 	row := q.db.QueryRow(ctx, getAccessEventPropertyView, id)
 	var i GetAccessEventPropertyViewRow
-	err := row.Scan(&i.Name, &i.Address, &i.Type)
+	err := row.Scan(
+		&i.Name,
+		&i.Address,
+		&i.Type,
+		&i.PropertyPhoto,
+	)
 	return i, err
 }
 
@@ -250,6 +260,9 @@ SELECT pay.id AS payment_id,
        p.name AS property_name,
        p.address AS property_address,
        p.type AS property_type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo,
        o.owner_id
 FROM operations o
 JOIN payments pay ON pay.id = o.payment_id
@@ -279,6 +292,7 @@ type GetScheduledAutoPaidPaymentRow struct {
 	PropertyName    string      `json:"property_name"`
 	PropertyAddress string      `json:"property_address"`
 	PropertyType    string      `json:"property_type"`
+	PropertyPhoto   string      `json:"property_photo"`
 	OwnerID         pgtype.UUID `json:"owner_id"`
 }
 
@@ -304,6 +318,7 @@ func (q *Queries) GetScheduledAutoPaidPayment(ctx context.Context, arg GetSchedu
 		&i.PropertyName,
 		&i.PropertyAddress,
 		&i.PropertyType,
+		&i.PropertyPhoto,
 		&i.OwnerID,
 	)
 	return i, err
@@ -316,6 +331,9 @@ SELECT r.id AS rental_id,
        p.name AS property_name,
        p.address AS property_address,
        p.type AS property_type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo,
        p.owner_id
 FROM rentals r
 JOIN properties p ON p.id = r.property_id
@@ -340,6 +358,7 @@ type GetScheduledCompletedRentalRow struct {
 	PropertyName    string      `json:"property_name"`
 	PropertyAddress string      `json:"property_address"`
 	PropertyType    string      `json:"property_type"`
+	PropertyPhoto   string      `json:"property_photo"`
 	OwnerID         pgtype.UUID `json:"owner_id"`
 }
 
@@ -361,6 +380,7 @@ func (q *Queries) GetScheduledCompletedRental(ctx context.Context, arg GetSchedu
 		&i.PropertyName,
 		&i.PropertyAddress,
 		&i.PropertyType,
+		&i.PropertyPhoto,
 		&i.OwnerID,
 	)
 	return i, err
@@ -375,6 +395,9 @@ SELECT pay.id AS payment_id,
        p.name AS property_name,
        p.address AS property_address,
        p.type AS property_type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo,
        o.owner_id
 FROM operations o
 JOIN payments pay ON pay.id = o.payment_id
@@ -403,6 +426,7 @@ type GetScheduledDuePaymentRow struct {
 	PropertyName    string      `json:"property_name"`
 	PropertyAddress string      `json:"property_address"`
 	PropertyType    string      `json:"property_type"`
+	PropertyPhoto   string      `json:"property_photo"`
 	OwnerID         pgtype.UUID `json:"owner_id"`
 }
 
@@ -428,6 +452,7 @@ func (q *Queries) GetScheduledDuePayment(ctx context.Context, arg GetScheduledDu
 		&i.PropertyName,
 		&i.PropertyAddress,
 		&i.PropertyType,
+		&i.PropertyPhoto,
 		&i.OwnerID,
 	)
 	return i, err
@@ -442,6 +467,9 @@ SELECT pay.id AS payment_id,
        p.name AS property_name,
        p.address AS property_address,
        p.type AS property_type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo,
        o.owner_id
 FROM operations o
 JOIN payments pay ON pay.id = o.payment_id
@@ -469,6 +497,7 @@ type GetScheduledOverduePaymentRow struct {
 	PropertyName    string      `json:"property_name"`
 	PropertyAddress string      `json:"property_address"`
 	PropertyType    string      `json:"property_type"`
+	PropertyPhoto   string      `json:"property_photo"`
 	OwnerID         pgtype.UUID `json:"owner_id"`
 }
 
@@ -490,6 +519,7 @@ func (q *Queries) GetScheduledOverduePayment(ctx context.Context, arg GetSchedul
 		&i.PropertyName,
 		&i.PropertyAddress,
 		&i.PropertyType,
+		&i.PropertyPhoto,
 		&i.OwnerID,
 	)
 	return i, err
@@ -504,6 +534,9 @@ SELECT t.id AS task_id,
        p.name AS property_name,
        p.address AS property_address,
        p.type AS property_type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo,
        t.rule_id,
        t.owner_id,
        CAST(((t.due_date + COALESCE(t.due_time, '24:00'::time)) AT TIME ZONE u.timezone) AS timestamptz) AS due_at
@@ -525,6 +558,7 @@ type GetScheduledOverdueTaskRow struct {
 	PropertyName    pgtype.Text        `json:"property_name"`
 	PropertyAddress pgtype.Text        `json:"property_address"`
 	PropertyType    pgtype.Text        `json:"property_type"`
+	PropertyPhoto   string             `json:"property_photo"`
 	RuleID          pgtype.UUID        `json:"rule_id"`
 	OwnerID         pgtype.UUID        `json:"owner_id"`
 	DueAt           pgtype.Timestamptz `json:"due_at"`
@@ -551,6 +585,7 @@ func (q *Queries) GetScheduledOverdueTask(ctx context.Context, id pgtype.UUID) (
 		&i.PropertyName,
 		&i.PropertyAddress,
 		&i.PropertyType,
+		&i.PropertyPhoto,
 		&i.RuleID,
 		&i.OwnerID,
 		&i.DueAt,
@@ -567,6 +602,9 @@ SELECT pay.id AS payment_id,
        p.name AS property_name,
        p.address AS property_address,
        p.type AS property_type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo,
        o.owner_id
 FROM operations o
 JOIN payments pay ON pay.id = o.payment_id
@@ -595,6 +633,7 @@ type GetScheduledReminderPaymentRow struct {
 	PropertyName    string      `json:"property_name"`
 	PropertyAddress string      `json:"property_address"`
 	PropertyType    string      `json:"property_type"`
+	PropertyPhoto   string      `json:"property_photo"`
 	OwnerID         pgtype.UUID `json:"owner_id"`
 }
 
@@ -617,6 +656,7 @@ func (q *Queries) GetScheduledReminderPayment(ctx context.Context, arg GetSchedu
 		&i.PropertyName,
 		&i.PropertyAddress,
 		&i.PropertyType,
+		&i.PropertyPhoto,
 		&i.OwnerID,
 	)
 	return i, err
@@ -773,6 +813,9 @@ SELECT pay.id AS payment_id,
        p.name AS property_name,
        p.address AS property_address,
        p.type AS property_type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo,
        o.owner_id
 FROM operations o
 JOIN payments pay ON pay.id = o.payment_id
@@ -804,6 +847,7 @@ type ListPaymentAutoPaidTargetsRow struct {
 	PropertyName    string      `json:"property_name"`
 	PropertyAddress string      `json:"property_address"`
 	PropertyType    string      `json:"property_type"`
+	PropertyPhoto   string      `json:"property_photo"`
 	OwnerID         pgtype.UUID `json:"owner_id"`
 }
 
@@ -836,6 +880,7 @@ func (q *Queries) ListPaymentAutoPaidTargets(ctx context.Context, arg ListPaymen
 			&i.PropertyName,
 			&i.PropertyAddress,
 			&i.PropertyType,
+			&i.PropertyPhoto,
 			&i.OwnerID,
 		); err != nil {
 			return nil, err
@@ -857,6 +902,9 @@ SELECT pay.id AS payment_id,
        p.name AS property_name,
        p.address AS property_address,
        p.type AS property_type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo,
        o.owner_id
 FROM operations o
 JOIN payments pay ON pay.id = o.payment_id
@@ -886,6 +934,7 @@ type ListPaymentDueTargetsRow struct {
 	PropertyName    string      `json:"property_name"`
 	PropertyAddress string      `json:"property_address"`
 	PropertyType    string      `json:"property_type"`
+	PropertyPhoto   string      `json:"property_photo"`
 	OwnerID         pgtype.UUID `json:"owner_id"`
 }
 
@@ -919,6 +968,7 @@ func (q *Queries) ListPaymentDueTargets(ctx context.Context, arg ListPaymentDueT
 			&i.PropertyName,
 			&i.PropertyAddress,
 			&i.PropertyType,
+			&i.PropertyPhoto,
 			&i.OwnerID,
 		); err != nil {
 			return nil, err
@@ -940,6 +990,9 @@ SELECT pay.id AS payment_id,
        p.name AS property_name,
        p.address AS property_address,
        p.type AS property_type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo,
        o.owner_id
 FROM operations o
 JOIN payments pay ON pay.id = o.payment_id
@@ -968,6 +1021,7 @@ type ListPaymentOverdueTargetsRow struct {
 	PropertyName    string      `json:"property_name"`
 	PropertyAddress string      `json:"property_address"`
 	PropertyType    string      `json:"property_type"`
+	PropertyPhoto   string      `json:"property_photo"`
 	OwnerID         pgtype.UUID `json:"owner_id"`
 }
 
@@ -999,6 +1053,7 @@ func (q *Queries) ListPaymentOverdueTargets(ctx context.Context, arg ListPayment
 			&i.PropertyName,
 			&i.PropertyAddress,
 			&i.PropertyType,
+			&i.PropertyPhoto,
 			&i.OwnerID,
 		); err != nil {
 			return nil, err
@@ -1020,6 +1075,9 @@ SELECT pay.id AS payment_id,
        p.name AS property_name,
        p.address AS property_address,
        p.type AS property_type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo,
        o.owner_id
 FROM operations o
 JOIN payments pay ON pay.id = o.payment_id
@@ -1049,6 +1107,7 @@ type ListPaymentReminderTargetsRow struct {
 	PropertyName    string      `json:"property_name"`
 	PropertyAddress string      `json:"property_address"`
 	PropertyType    string      `json:"property_type"`
+	PropertyPhoto   string      `json:"property_photo"`
 	OwnerID         pgtype.UUID `json:"owner_id"`
 }
 
@@ -1079,6 +1138,7 @@ func (q *Queries) ListPaymentReminderTargets(ctx context.Context, arg ListPaymen
 			&i.PropertyName,
 			&i.PropertyAddress,
 			&i.PropertyType,
+			&i.PropertyPhoto,
 			&i.OwnerID,
 		); err != nil {
 			return nil, err
@@ -1418,6 +1478,9 @@ SELECT r.id AS rental_id,
        p.name AS property_name,
        p.address AS property_address,
        p.type AS property_type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo,
        p.owner_id
 FROM rentals r
 JOIN properties p ON p.id = r.property_id
@@ -1442,6 +1505,7 @@ type ListRentalCompletedTargetsRow struct {
 	PropertyName    string      `json:"property_name"`
 	PropertyAddress string      `json:"property_address"`
 	PropertyType    string      `json:"property_type"`
+	PropertyPhoto   string      `json:"property_photo"`
 	OwnerID         pgtype.UUID `json:"owner_id"`
 }
 
@@ -1466,6 +1530,7 @@ func (q *Queries) ListRentalCompletedTargets(ctx context.Context, arg ListRental
 			&i.PropertyName,
 			&i.PropertyAddress,
 			&i.PropertyType,
+			&i.PropertyPhoto,
 			&i.OwnerID,
 		); err != nil {
 			return nil, err
@@ -1539,6 +1604,9 @@ SELECT t.id AS task_id,
        p.name AS property_name,
        p.address AS property_address,
        p.type AS property_type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo,
        t.rule_id,
        t.owner_id
 FROM tasks t
@@ -1570,6 +1638,7 @@ type ListTaskOverdueTargetsRow struct {
 	PropertyName    pgtype.Text `json:"property_name"`
 	PropertyAddress pgtype.Text `json:"property_address"`
 	PropertyType    pgtype.Text `json:"property_type"`
+	PropertyPhoto   string      `json:"property_photo"`
 	RuleID          pgtype.UUID `json:"rule_id"`
 	OwnerID         pgtype.UUID `json:"owner_id"`
 }
@@ -1599,6 +1668,7 @@ func (q *Queries) ListTaskOverdueTargets(ctx context.Context, arg ListTaskOverdu
 			&i.PropertyName,
 			&i.PropertyAddress,
 			&i.PropertyType,
+			&i.PropertyPhoto,
 			&i.RuleID,
 			&i.OwnerID,
 		); err != nil {

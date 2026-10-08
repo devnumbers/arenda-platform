@@ -184,7 +184,34 @@ func notificationItem(n notificationsdomain.Notification) openapi.NotificationIt
 	if n.ContextLabel != "" {
 		item.ContextLabel = &n.ContextLabel
 	}
+	// The feed row carries the same free-form payload as the detail (#737,
+	// контракт #743): the row's property photo and glyph are read from the
+	// snapshot without a detail round-trip (#1275). Rows without payload
+	// snapshots omit the field — nil, not an empty object.
+	item.Payload = payloadSnapshot(n.Payload)
 	return item
+}
+
+// payloadSnapshot converts the stored typed payload into the wire's
+// free-form object. The round-trip through json.Marshal of the same struct
+// it was unmarshaled from cannot fail short of a programmer error; on such
+// an error the snapshot is dropped (nil) rather than served corrupt — the
+// card vocabulary simply skips a snapshot it does not hold. A payload with
+// no snapshot lines answers nil: the contract promises the field's absence
+// for rows without payload snapshots (#1275), not an empty object.
+func payloadSnapshot(p notificationsdomain.Payload) *map[string]any {
+	raw, err := json.Marshal(p)
+	if err != nil {
+		return nil
+	}
+	out := map[string]any{}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return &out
 }
 
 // notificationDetail converts the stored row plus its live actions into the
@@ -204,11 +231,12 @@ func notificationDetail(d notificationsapp.NotificationDetail) openapi.Notificat
 	if n.ContextLabel != "" {
 		resp.ContextLabel = &n.ContextLabel
 	}
-	if payload, err := json.Marshal(n.Payload); err == nil {
-		var raw map[string]any
-		if json.Unmarshal(payload, &raw) == nil {
-			resp.Payload = raw
-		}
+	// The detail's payload field is required by the contract — an empty
+	// snapshot answers an empty object, never nil.
+	if snapshot := payloadSnapshot(n.Payload); snapshot != nil {
+		resp.Payload = *snapshot
+	} else {
+		resp.Payload = map[string]any{}
 	}
 	actions := make([]openapi.NotificationAction, len(d.Actions))
 	for i, a := range d.Actions {

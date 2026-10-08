@@ -5,6 +5,10 @@ import type { PropertyType } from '@/entities/property';
 export type PropertyMediaBlockProps = {
   readonly name: string;
   readonly address: string;
+  /** Приватное фото объекта (ADR 0065): заполняет hero-круг; нет — глиф
+   * типа (канон PropertyAvatar). Рендер реального фото — решение владельца
+   * в баге «фото на странице объекта» (намерение #588). */
+  readonly photoUrl?: string | null;
   /** Тип объекта — глиф-плейсхолдер hero-круга (Category Icon). */
   readonly type?: PropertyType;
   /** Пилюли шапки propertyHeaderPills (#773) под адресом: «В архиве» —
@@ -12,23 +16,28 @@ export type PropertyMediaBlockProps = {
   readonly children?: ReactNode;
 };
 
-/** Медиа-блок детали объекта (Figma 1186:44997, решение владельца
- * 11.09): фото-круг 96 — пока только плейсхолдер (серый круг с глифом
- * типа; рендер реального фото решается на приёмке #588; поверхность hero
- * канона PropertyAvatar), имя 28/32 SemiBold и адрес 14/16 серым, между
- * ними 12px. m-0 обязателен: легаси-маргин h1 (0.67em) иначе добавляет
- * ~19px сверху и снизу (урок HubTitle, DESIGN.md §2). Внутренний py-48:
- * pt-6 поверх pt-6 PageContent даёт 48 до круга. */
+/** Медиа-блок детали объекта (Figma 1186:44997): фото-круг 96 (или глиф
+ * типа без фото — поверхность hero канона PropertyAvatar), имя 28/32
+ * SemiBold и адрес 14/16 серым, между ними 12px. m-0 обязателен: легаси-
+ * маргин h1 (0.67em) иначе добавляет ~19px сверху и снизу (урок HubTitle,
+ * DESIGN.md §2). Внутренний py-48: pt-6 поверх pt-6 PageContent даёт 48
+ * до круга. */
 export function PropertyMediaBlock({
   name,
   address,
+  photoUrl,
   type,
   children,
 }: PropertyMediaBlockProps): JSX.Element {
   return (
     <section className="flex flex-col items-center px-0 pt-6 text-center">
       <div aria-hidden>
-        <PropertyAvatar surface="hero" type={type} data-testid="property-hero-avatar" />
+        <PropertyAvatar
+          surface="hero"
+          photoUrl={photoUrl}
+          type={type}
+          data-testid="property-hero-avatar"
+        />
       </div>
       <h1 className="m-0 mt-6 max-w-[345px] text-2xl font-semibold leading-8 text-content">
         {name}
