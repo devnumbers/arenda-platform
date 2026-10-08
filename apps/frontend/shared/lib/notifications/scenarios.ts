@@ -162,6 +162,12 @@ const profile = {
    * 18.09.2026). */
   sessionRevokeError: errorScenario('Не удалось завершить сеанс'),
   logoutOthersError: errorScenario('Не удалось завершить другие сеансы'),
+  /** Фото профиля (ADR 0065, тикет #1230): успех виден по самому слоту —
+   * тосты только на ошибки; текст отказа приходит из problem+json бэка
+   * («Файл больше 5 МиБ», «Поддерживаются только изображения JPEG, PNG и
+   * WebP»). */
+  photoUpdateError: errorScenario('Не удалось загрузить фото'),
+  photoDeleteError: errorScenario('Не удалось удалить фото'),
   pushEnabled: ((options?) =>
     notify.success('Пуши включены', options)) satisfies ScenarioFn,
   pushEnableError: errorScenario('Не удалось включить пуши'),

@@ -5,7 +5,14 @@ import NextLink from 'next/link';
 import { SmallArrowDown, SmallArrowRight } from '@/shared/assets/icons';
 import { Button, Skeleton, TextField } from '@/shared/ui/design';
 import { useMe } from '@/features/auth';
-import { useUpdateMe } from '@/features/profile';
+import {
+  type MePhotoStage,
+  mePhotoStageAfterRemove,
+  useDeleteMePhoto,
+  useUpdateMe,
+  useUploadMePhoto,
+} from '@/features/profile';
+import { readPhotoDataUrl } from '@/shared/lib/photo';
 import type { User } from '@/entities/user';
 import { ROUTES } from '@/shared/config/routes';
 import { cn } from '@/shared/lib/cn';
@@ -13,7 +20,7 @@ import { formatPhoneDisplay } from '@/shared/lib/phone';
 import { notify } from '@/shared/lib/notifications';
 import { formatTimezoneLabel } from '../lib/timezone';
 import { profileFieldPatch, type ProfileTextField } from '../lib/profile-edit';
-import { AvatarPlaceholder } from './AvatarPlaceholder';
+import { ProfilePhotoSlot } from './profile-photo-slot';
 
 /** Серый бокс поля (как у канонных TextField/PickerField): строка-поле
  * «Телефон», «Электронная почта» и «Часовой пояс» экрана (Figma 1789-99036 —
@@ -150,27 +157,73 @@ type AccountScreenViewProps = {
 
 function AccountScreenView({ me }: AccountScreenViewProps): JSX.Element {
   const updateMe = useUpdateMe();
+  const uploadPhoto = useUploadMePhoto();
+  const deletePhoto = useDeleteMePhoto();
   const [name, setName] = useState(me.name ?? '');
   const [surname, setSurname] = useState(me.surname ?? '');
   const [patronymic, setPatronymic] = useState(me.patronymic ?? '');
+  // Изменение фото — часть черновика экрана (решение владельца 08.10 с
+  // #1228): stage применяется коммитом формы, уход без коммита его просто
+  // умирает. Превью staged-замены — data URL (CSP img-src 'self' data:,
+  // ADR 0065): обычная строка в состоянии, никакой дополнительной механики
+  // освобождения.
+  const [photoStage, setPhotoStage] = useState<MePhotoStage | null>(null);
+  // Фото-мутация коммита в полёте — управление слота глушится (одна
+  // картинка на профиль, параллельные загрузка и удаление недопустимы).
+  const photoBusy = uploadPhoto.isPending || deletePhoto.isPending;
+
+  const handlePhotoFile = (file: File): void => {
+    void readPhotoDataUrl(file).then((previewUrl) => {
+      if (previewUrl !== null) {
+        setPhotoStage({ kind: 'file', file, previewUrl });
+      }
+    });
+  };
+
+  const handlePhotoRemove = (): void => {
+    setPhotoStage(mePhotoStageAfterRemove(me.photoUrl));
+  };
+
+  /** Момент коммита формы применяется и к фото: staged-изменение уходит
+   * своей мутацией параллельно с патчем поля (решения владельца 08.10 —
+   * перенос канона #1228 в #1230), каждый сбой — свой тост сценария,
+   * применённое гасит свою грязь. До коммита (уход, переход на строку-
+   * ссылку) сеть не трогается. */
+  const flushPhotoStage = useCallback(() => {
+    if (photoStage === null || photoBusy) {
+      return;
+    }
+    if (photoStage.kind === 'file') {
+      uploadPhoto.mutate(photoStage.file, {
+        onSuccess: () => setPhotoStage(null),
+        onError: (error) => notify.scenarios.profile.photoUpdateError(error),
+      });
+    } else {
+      deletePhoto.mutate(undefined, {
+        onSuccess: () => setPhotoStage(null),
+        onError: (error) => notify.scenarios.profile.photoDeleteError(error),
+      });
+    }
+  }, [photoStage, photoBusy, uploadPhoto, deletePhoto]);
 
   /** Тихое автосохранение (макет без кнопки «Сохранить»): поле коммитится
    * на blur и крестиком очистки — патч только этого поля; пустая строка
-   * очищает значение (контракт бэка: null = «не менять»). Почта здесь не
-   * правится (#722) — только через флоу смены на
+   * очищает значение (контракт бэка: null = «не менять»). Коммит поля —
+   * и момент фото: staged-изменение уходит параллельно с патчем. Почта
+   * здесь не правится (#722) — только через флоу смены на
    * /profile/account/email. */
   const commitField = useCallback(
     (field: ProfileTextField, rawValue: string) => {
       const patch = profileFieldPatch(me, field, rawValue);
-      if (patch === null) {
-        return;
+      if (patch !== null) {
+        updateMe.mutate(patch, {
+          onSuccess: () => notify.scenarios.profile.personalDataSaved(),
+          onError: (error) => notify.scenarios.profile.personalDataSaveError(error),
+        });
       }
-      updateMe.mutate(patch, {
-        onSuccess: () => notify.scenarios.profile.personalDataSaved(),
-        onError: (error) => notify.scenarios.profile.personalDataSaveError(error),
-      });
+      flushPhotoStage();
     },
-    [me, updateMe],
+    [me, updateMe, flushPhotoStage],
   );
 
   const commitName = useCallback(
@@ -189,7 +242,13 @@ function AccountScreenView({ me }: AccountScreenViewProps): JSX.Element {
   return (
     <div className="flex flex-col gap-6 pb-6">
       <div className="flex justify-center">
-        <AvatarPlaceholder />
+        <ProfilePhotoSlot
+          photoUrl={me.photoUrl}
+          stage={photoStage}
+          busy={photoBusy}
+          onFileChosen={handlePhotoFile}
+          onRemove={handlePhotoRemove}
+        />
       </div>
       <div className="flex flex-col gap-8">
         <section aria-label="Данные" className="flex flex-col gap-2">
@@ -245,7 +304,10 @@ function AccountScreenView({ me }: AccountScreenViewProps): JSX.Element {
 }
 
 /** Экран «Аккаунт» в новом дизайне (тикет #593, карта #591; Figma
- * 1789-99036): аватар-плейсхолдер 96 без «Добавить фото» (аватар отложен),
+ * 1789-99036): фото-слот 96 (фото либо BoldUser; загрузка/замена/удаление
+ * — POST|DELETE /me/photo, ADR 0065, тикет #1230 — изменение стадируется
+ * и применяется коммитом формы: у автосейв-экрана без кнопки «Сохранить»
+ * это blur/очистка любого поля, staged-фото уходит параллельно с патчем),
  * поля имени (titleIn) с автосохранением PATCH /me по blur/очистке —
  * макет без кнопки «Сохранить», телефон строкой на /profile/account/phone,
  * почта строкой на флоу смены /profile/account/email (#722 — инлайн-правка
