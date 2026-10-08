@@ -27,7 +27,12 @@ import { Button, circleIconRing, ConfirmDialog, PhotoRemoveBadge } from '@/share
  * исчезает целиком, сохраняя свой слот — без полупрозрачного призрака
  * надписи и без сдвига формы (решение владельца 08.10; скрытие с
  * сохранением места = ноль layout shift); бейдж остаётся на месте и
- * гаснет по канону дизейблов — тонкий сигнал полёта. Фото живёт мимо
+ * гаснет по канону дизейблов — тонкий сигнал полёта. Сам круг в режиме
+ * правки тоже кликабелен (решение владельца 08.10): без фото открывает
+ * пикер, с фото — замену; это настоящая кнопка с aria-label (клавиатура
+ * и скринридер), в полёте глушится без затемнения (круг «как был»).
+ * Бейдж удаления в DOM — сосед кнопки круга, не её потомок: клик по
+ * бейджу не открывает пикер. Фото живёт мимо
  * черновика формы — загрузка/удаление применяются сразу отдельными
  * эндпоинтами (`/properties/{id}/photo`, multipart POST и DELETE),
  * кнопки «Сохранить» не касаются. Ошибки — mutateAsync + catch с тостом
@@ -40,6 +45,11 @@ import { Button, circleIconRing, ConfirmDialog, PhotoRemoveBadge } from '@/share
  */
 
 const PHOTO_INPUT_ACCEPT = 'image/jpeg,image/png,image/webp';
+
+/** Кнопка-круг (клик по фото открывает пикер): фокус-ринг по канону
+ * IconButton, в полёте глушится без затемнения — круг «как был». */
+const PHOTO_BUTTON_CLASS =
+  'flex cursor-pointer rounded-full outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none';
 
 export type PropertyPhotoSlotProps = {
   readonly propertyId: string;
@@ -97,20 +107,32 @@ export function PropertyPhotoSlot({
       .catch((error: unknown) => notify.scenarios.property.photoDeleteError(error));
   };
 
+  const avatarButton = (
+    <button
+      type="button"
+      aria-label={hasPhoto ? 'Обновить фото' : 'Добавить фото'}
+      disabled={busy}
+      className={PHOTO_BUTTON_CLASS}
+      onClick={openPicker}
+    >
+      <PropertyAvatar
+        surface="hero"
+        type={type}
+        photoUrl={displayUrl}
+        className={hasPhoto ? circleIconRing.white : undefined}
+      />
+    </button>
+  );
+
   return (
     <div className="flex flex-col items-center gap-2">
       {hasPhoto ? (
         <div className="relative">
-          <PropertyAvatar
-            surface="hero"
-            type={type}
-            photoUrl={displayUrl}
-            className={circleIconRing.white}
-          />
+          {avatarButton}
           <PhotoRemoveBadge disabled={busy} onClick={() => setDeleteConfirmOpen(true)} />
         </div>
       ) : (
-        <PropertyAvatar surface="hero" type={type} />
+        avatarButton
       )}
       <input
         ref={fileInputRef}
