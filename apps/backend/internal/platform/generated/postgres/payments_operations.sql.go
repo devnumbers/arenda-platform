@@ -284,7 +284,8 @@ SELECT op.id,
        op.title,
        op.amount_kopecks,
        op.category_label,
-       op.category_slug
+       op.category_slug,
+       op.updated_at
 FROM operations op
 WHERE op.id = $1 AND op.owner_id = $2 AND op.property_id = $3
   -- Отменённая операция исчезает для всех чтений (решение владельца):
@@ -299,19 +300,20 @@ type GetOperationByIDParams struct {
 }
 
 type GetOperationByIDRow struct {
-	ID            pgtype.UUID `json:"id"`
-	OwnerID       pgtype.UUID `json:"owner_id"`
-	PropertyID    pgtype.UUID `json:"property_id"`
-	PaymentID     pgtype.UUID `json:"payment_id"`
-	Origin        string      `json:"origin"`
-	Date          pgtype.Date `json:"date"`
-	PaidDate      pgtype.Date `json:"paid_date"`
-	Status        string      `json:"status"`
-	Type          string      `json:"type"`
-	Title         string      `json:"title"`
-	AmountKopecks int64       `json:"amount_kopecks"`
-	CategoryLabel string      `json:"category_label"`
-	CategorySlug  pgtype.Text `json:"category_slug"`
+	ID            pgtype.UUID        `json:"id"`
+	OwnerID       pgtype.UUID        `json:"owner_id"`
+	PropertyID    pgtype.UUID        `json:"property_id"`
+	PaymentID     pgtype.UUID        `json:"payment_id"`
+	Origin        string             `json:"origin"`
+	Date          pgtype.Date        `json:"date"`
+	PaidDate      pgtype.Date        `json:"paid_date"`
+	Status        string             `json:"status"`
+	Type          string             `json:"type"`
+	Title         string             `json:"title"`
+	AmountKopecks int64              `json:"amount_kopecks"`
+	CategoryLabel string             `json:"category_label"`
+	CategorySlug  pgtype.Text        `json:"category_slug"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
 // Payments context queries: operations and favorites-facing operation reads
@@ -340,6 +342,7 @@ func (q *Queries) GetOperationByID(ctx context.Context, arg GetOperationByIDPara
 		&i.AmountKopecks,
 		&i.CategoryLabel,
 		&i.CategorySlug,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -357,7 +360,8 @@ SELECT op.id,
        op.title,
        op.amount_kopecks,
        op.category_label,
-       op.category_slug
+       op.category_slug,
+       op.updated_at
 FROM operations op
 WHERE op.owner_id = $1
   AND op.property_id = $2
@@ -392,6 +396,14 @@ ORDER BY
         AND $13::text = 'asc' THEN op.paid_date END ASC NULLS LAST,
   CASE WHEN $7::text = 'paid_date'
         AND $13::text = 'desc' THEN op.paid_date END DESC NULLS LAST,
+  -- Внутри одного дня факта — момент оплаты (#1195): updated_at платёжной
+  -- строки двигает только сама оплата (после оплаты строка не меняется),
+  -- так что tiebreak читает порядок оплат, а не порядок создания строк —
+  -- синтетические и заранее материализованные тиком id его не хранят.
+  CASE WHEN $7::text = 'paid_date'
+        AND $13::text = 'asc' THEN op.updated_at END ASC NULLS LAST,
+  CASE WHEN $7::text = 'paid_date'
+        AND $13::text = 'desc' THEN op.updated_at END DESC NULLS LAST,
   CASE WHEN $7::text <> 'paid_date'
         AND $13::text = 'asc' THEN op.date END ASC,
   CASE WHEN $7::text <> 'paid_date'
@@ -419,19 +431,20 @@ type ListOperationsParams struct {
 }
 
 type ListOperationsRow struct {
-	ID            pgtype.UUID `json:"id"`
-	OwnerID       pgtype.UUID `json:"owner_id"`
-	PropertyID    pgtype.UUID `json:"property_id"`
-	PaymentID     pgtype.UUID `json:"payment_id"`
-	Origin        string      `json:"origin"`
-	Date          pgtype.Date `json:"date"`
-	PaidDate      pgtype.Date `json:"paid_date"`
-	Status        string      `json:"status"`
-	Type          string      `json:"type"`
-	Title         string      `json:"title"`
-	AmountKopecks int64       `json:"amount_kopecks"`
-	CategoryLabel string      `json:"category_label"`
-	CategorySlug  pgtype.Text `json:"category_slug"`
+	ID            pgtype.UUID        `json:"id"`
+	OwnerID       pgtype.UUID        `json:"owner_id"`
+	PropertyID    pgtype.UUID        `json:"property_id"`
+	PaymentID     pgtype.UUID        `json:"payment_id"`
+	Origin        string             `json:"origin"`
+	Date          pgtype.Date        `json:"date"`
+	PaidDate      pgtype.Date        `json:"paid_date"`
+	Status        string             `json:"status"`
+	Type          string             `json:"type"`
+	Title         string             `json:"title"`
+	AmountKopecks int64              `json:"amount_kopecks"`
+	CategoryLabel string             `json:"category_label"`
+	CategorySlug  pgtype.Text        `json:"category_slug"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
 // The operations of one scope with pagination (limit/offset), the view status
@@ -492,6 +505,7 @@ func (q *Queries) ListOperations(ctx context.Context, arg ListOperationsParams) 
 			&i.AmountKopecks,
 			&i.CategoryLabel,
 			&i.CategorySlug,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -518,6 +532,7 @@ SELECT op.id,
        op.amount_kopecks,
        op.category_label,
        op.category_slug,
+       op.updated_at,
        p.name AS property_name
 FROM operations op
 JOIN properties p ON p.id = op.property_id
@@ -599,20 +614,21 @@ type ListPaidOperationsGlobalParams struct {
 }
 
 type ListPaidOperationsGlobalRow struct {
-	ID            pgtype.UUID `json:"id"`
-	OwnerID       pgtype.UUID `json:"owner_id"`
-	PropertyID    pgtype.UUID `json:"property_id"`
-	PaymentID     pgtype.UUID `json:"payment_id"`
-	Origin        string      `json:"origin"`
-	Date          pgtype.Date `json:"date"`
-	PaidDate      pgtype.Date `json:"paid_date"`
-	Status        string      `json:"status"`
-	Type          string      `json:"type"`
-	Title         string      `json:"title"`
-	AmountKopecks int64       `json:"amount_kopecks"`
-	CategoryLabel string      `json:"category_label"`
-	CategorySlug  pgtype.Text `json:"category_slug"`
-	PropertyName  string      `json:"property_name"`
+	ID            pgtype.UUID        `json:"id"`
+	OwnerID       pgtype.UUID        `json:"owner_id"`
+	PropertyID    pgtype.UUID        `json:"property_id"`
+	PaymentID     pgtype.UUID        `json:"payment_id"`
+	Origin        string             `json:"origin"`
+	Date          pgtype.Date        `json:"date"`
+	PaidDate      pgtype.Date        `json:"paid_date"`
+	Status        string             `json:"status"`
+	Type          string             `json:"type"`
+	Title         string             `json:"title"`
+	AmountKopecks int64              `json:"amount_kopecks"`
+	CategoryLabel string             `json:"category_label"`
+	CategorySlug  pgtype.Text        `json:"category_slug"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	PropertyName  string             `json:"property_name"`
 }
 
 // The global read side (ticket #540): the actor-scoped cross-property read
@@ -683,6 +699,7 @@ func (q *Queries) ListPaidOperationsGlobal(ctx context.Context, arg ListPaidOper
 			&i.AmountKopecks,
 			&i.CategoryLabel,
 			&i.CategorySlug,
+			&i.UpdatedAt,
 			&i.PropertyName,
 		); err != nil {
 			return nil, err

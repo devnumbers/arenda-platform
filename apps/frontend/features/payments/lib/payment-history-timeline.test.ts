@@ -27,6 +27,7 @@ function operation(overrides: Partial<PaymentOperation> = {}): PaymentOperation 
     title: 'Юрист',
     amountKopecks: 250_000,
     categoryLabel: 'Юридические услуги',
+    updatedAt: '2026-09-01T12:00:00Z',
     ...overrides,
   };
 }
@@ -78,7 +79,7 @@ describe('buildPaymentHistoryTimeline — группы по датам (маке
     ]);
   });
 
-  it('ключ операции — факт оплаты; плановой строки в paid-скоупе нет', () => {
+  it('ключ операции — факт оплаты (день реальной оплаты, решение владельца #1195); плановой строки в paid-скоупе нет', () => {
     const groups = buildPaymentHistoryTimeline(
       [operation({ date: '2026-09-05', paidDate: '2026-09-01' })],
       [],
@@ -104,11 +105,14 @@ describe('buildPaymentHistoryTimeline — группы по датам (маке
 
   it('правка первых часов локального дня не ломает монотонность групп (край суток)', () => {
     // Момент 21:00Z: по UTC это день 1-го, в поясах UTC+3 и восточнее —
-    // уже день 2-го. Ключ сортировки в шкале дня группы держит группы
-    // строго убывающими без дублей («Сегодня» не может отрендериться
-    // дважды) в любой TZ машины.
+    // уже день 2-го. День группы и момент — независимые ключи (дни
+    // сравниваются сами по себе), так что группы строго убывают и
+    // уникальны в любой TZ машины: «Сегодня» не может отрендериться дважды.
     const groups = buildPaymentHistoryTimeline(
-      [operation({ paidDate: '2026-09-01' }), operation({ paidDate: '2026-09-02' })],
+      [
+        operation({ paidDate: '2026-09-01', updatedAt: '2026-09-01T12:00:00Z' }),
+        operation({ paidDate: '2026-09-02', updatedAt: '2026-09-02T12:00:00Z' }),
+      ],
       [change('ch-night', '2026-09-01T21:00:00Z')],
       today,
     );
@@ -116,34 +120,76 @@ describe('buildPaymentHistoryTimeline — группы по датам (маке
     const dates = groups.map((group) => group.date);
     expect(dates).toEqual([...dates].sort().reverse());
     expect(new Set(dates).size).toBe(dates.length);
-    // Правка внутри своего дня — под операцией этого дня (канон порядка
-    // внутри дня), над операцией предыдущего.
-    const firstDay = groups[0];
-    expect(firstDay?.items[0]?.kind).toBe('operation');
   });
 });
 
-describe('buildPaymentHistoryTimeline — порядок внутри дня', () => {
+describe('buildPaymentHistoryTimeline — внутри дня строго по времени (#1195)', () => {
   const today: IsoDate = '2026-09-10';
 
-  it('операции дня выше правок дня: строка операции остаётся на месте дефолтного режима', () => {
+  it('правки и операция вперемешку по реальным моментам: чипы и выше, и ниже оплаты (макет «1 сентября»)', () => {
     const groups = buildPaymentHistoryTimeline(
-      [operation({ paidDate: '2026-09-01' })],
+      [operation({ paidDate: '2026-09-01', updatedAt: '2026-09-01T11:00:00Z' })],
       [
-        change('ch-morning', localMomentIso(2026, 9, 1, 9)),
-        change('ch-evening', localMomentIso(2026, 9, 1, 18)),
+        change('ch-morning', '2026-09-01T08:00:00Z'),
+        change('ch-evening', '2026-09-01T18:00:00Z'),
       ],
       today,
     );
 
-    const items = groups[0]?.items ?? [];
-    expect(items).toHaveLength(3);
-    expect(items[0]?.kind).toBe('operation');
-    // Правки дня — по убыванию created_at под операцией.
-    expect(items[1]?.kind).toBe('changes');
-    expect(items[1] && items[1].kind === 'changes' && items[1].entry.id).toBe('ch-evening');
-    expect(items[2]?.kind).toBe('changes');
-    expect(items[2] && items[2].kind === 'changes' && items[2].entry.id).toBe('ch-morning');
+    const kinds = (groups[0]?.items ?? []).map((item) => item.kind);
+    expect(kinds).toEqual(['changes', 'operation', 'changes']);
+  });
+
+  it('последняя оплаченная операция открывает свой день (баг владельца #1195)', () => {
+    const groups = buildPaymentHistoryTimeline(
+      [
+        operation({ id: 'op-first-pay', paidDate: '2026-09-01', updatedAt: '2026-09-01T09:00:00Z' }),
+        operation({ id: 'op-last-pay', paidDate: '2026-09-01', updatedAt: '2026-09-01T16:00:00Z' }),
+      ],
+      [],
+      today,
+    );
+
+    const ids = (groups[0]?.items ?? []).map((item) =>
+      item.kind === 'operation' ? item.operation.id : '',
+    );
+    expect(ids).toEqual(['op-last-pay', 'op-first-pay']);
+  });
+
+  it('день группы — дата факта, момент внутри дня — время оплаты: оплата старого дня не уезжает наверх ленты', () => {
+    // Аномалия данных (в проде оплата штампует paid_date днём оплаты),
+    // модель обязана держать группы по датам монотонными.
+    const groups = buildPaymentHistoryTimeline(
+      [
+        operation({ paidDate: '2026-09-01', updatedAt: '2026-09-09T12:00:00Z' }),
+        operation({ paidDate: '2026-09-08', updatedAt: '2026-09-08T12:00:00Z' }),
+      ],
+      [],
+      today,
+    );
+
+    expect(groups.map((group) => group.date)).toEqual(['2026-09-08', '2026-09-01']);
+  });
+
+  it('момент оплаты берётся из updatedAt строки, а не из конца дня', () => {
+    const groups = buildPaymentHistoryTimeline(
+      [operation({ paidDate: '2026-09-01', updatedAt: '2026-09-01T15:00:00Z' })],
+      [change('ch-after-pay', '2026-09-01T18:00:00Z')],
+      today,
+    );
+
+    // Правка позже оплаты — выше неё, хоть у операции и «вся дата».
+    expect(groups[0]?.items[0]?.kind).toBe('changes');
+  });
+
+  it('без updatedAt (старый ответ) операция садится на начало своего дня: правки дня выше', () => {
+    const groups = buildPaymentHistoryTimeline(
+      [operation({ paidDate: '2026-09-01', updatedAt: '' })],
+      [change('ch-day', '2026-09-01T10:00:00Z')],
+      today,
+    );
+
+    expect(groups[0]?.items[0]?.kind).toBe('changes');
   });
 
   it('чипы правки предрасчитаны моделью чипов и едут в элементе', () => {

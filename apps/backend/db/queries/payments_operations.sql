@@ -21,7 +21,8 @@ SELECT op.id,
        op.title,
        op.amount_kopecks,
        op.category_label,
-       op.category_slug
+       op.category_slug,
+       op.updated_at
 FROM operations op
 WHERE op.id = $1 AND op.owner_id = $2 AND op.property_id = $3
   -- Отменённая операция исчезает для всех чтений (решение владельца):
@@ -93,7 +94,8 @@ SELECT op.id,
        op.title,
        op.amount_kopecks,
        op.category_label,
-       op.category_slug
+       op.category_slug,
+       op.updated_at
 FROM operations op
 WHERE op.owner_id = sqlc.arg('owner')
   AND op.property_id = sqlc.arg('property')
@@ -128,6 +130,14 @@ ORDER BY
         AND sqlc.arg('order')::text = 'asc' THEN op.paid_date END ASC NULLS LAST,
   CASE WHEN sqlc.arg('sort')::text = 'paid_date'
         AND sqlc.arg('order')::text = 'desc' THEN op.paid_date END DESC NULLS LAST,
+  -- Внутри одного дня факта — момент оплаты (#1195): updated_at платёжной
+  -- строки двигает только сама оплата (после оплаты строка не меняется),
+  -- так что tiebreak читает порядок оплат, а не порядок создания строк —
+  -- синтетические и заранее материализованные тиком id его не хранят.
+  CASE WHEN sqlc.arg('sort')::text = 'paid_date'
+        AND sqlc.arg('order')::text = 'asc' THEN op.updated_at END ASC NULLS LAST,
+  CASE WHEN sqlc.arg('sort')::text = 'paid_date'
+        AND sqlc.arg('order')::text = 'desc' THEN op.updated_at END DESC NULLS LAST,
   CASE WHEN sqlc.arg('sort')::text <> 'paid_date'
         AND sqlc.arg('order')::text = 'asc' THEN op.date END ASC,
   CASE WHEN sqlc.arg('sort')::text <> 'paid_date'
@@ -309,6 +319,7 @@ SELECT op.id,
        op.amount_kopecks,
        op.category_label,
        op.category_slug,
+       op.updated_at,
        p.name AS property_name
 FROM operations op
 JOIN properties p ON p.id = op.property_id

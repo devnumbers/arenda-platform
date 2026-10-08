@@ -239,6 +239,9 @@ func (s *OperationService) PayOperation(
 			op.Status = domain.StatusPaid
 			paidDate := today
 			op.PaidDate = &paidDate
+			// The in-memory echo of the just-paid row: the UPDATE's trigger
+			// stamped the row's updated_at with the same moment.
+			op.UpdatedAt = time.Now()
 			history := historydomain.OperationPaid(op.ID, op.Title, op.Date)
 			history.Context[historydomain.CtxKeyAmountKopecks] = op.AmountKopecks
 			outcome := mutationOutcome[domain.Operation]{
@@ -308,6 +311,9 @@ func (s *OperationService) CreateOperation(
 				return mutationOutcome[domain.Operation]{}, fmt.Errorf("mint operation id: %w", err)
 			}
 			draft.ID = id
+			// The in-memory echo of the just-inserted row: the INSERT's
+			// clock default is the same moment.
+			draft.UpdatedAt = time.Now()
 			if err := stores.operations.Create(ctx, draft); err != nil {
 				return mutationOutcome[domain.Operation]{}, fmt.Errorf("create manual operation: %w", err)
 			}

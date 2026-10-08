@@ -3285,6 +3285,11 @@ export interface components {
             categoryLabel: string;
             /** @description Default-catalog slug for icon rendering; null when absent (a user category). On the detail endpoint a rule-born operation carries the rule's live slug (решение владельца, #1190); the listings return the snapshot frozen at materialization time. */
             categorySlug: string | null;
+            /**
+             * Format: date-time
+             * @description Момент последнего касания строки. Оплаченная строка после оплаты не меняется, так что у факта это момент оплаты: история платежа ставит его в ленту по реальному времени и читает порядок оплат внутри одного дня (#1195). В ответах создания и оплаты — момент самого действия.
+             */
+            updatedAt: string;
         };
         OperationsResponse: {
             items: components["schemas"]["OperationResponse"][];

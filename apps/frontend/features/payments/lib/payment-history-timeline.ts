@@ -3,19 +3,21 @@ import type {
   PaymentChangeEntry,
   PaymentOperation,
 } from '@/entities/payment';
-import { addDays, dateToIso, dateToIsoLocal, fromIso } from '@/shared/lib/calendar';
+import { addDays, cmp, dateToIsoLocal, fromIso } from '@/shared/lib/calendar';
 import { formatDayMonthWithYear } from '@/shared/lib/date-format';
 import { paymentChangeChips } from './payment-change-chips';
 
 /**
- * Лента «История платежа» в режиме изменений (макеты 3214-73216/73857,
- * тикет #1195): чипы правок вперемешку с операциями, группы по дням —
- * «Сегодня»/«Вчера»/дата (год вне текущего). День строки журнала —
- * локальная дата created_at; день операции — факт оплаты (канон историй,
- * #994). Внутри дня операции выше правок: строка операции остаётся на
- * месте дефолтного режима, правки дня (со временем) встают под неё;
- * порядок правок между собой — по (created_at, id) DESC, ключ keyset
- * сервера (канон #597, UUIDv7).
+ * Лента «История платежа» (макеты 3214-73216/73857, тикет #1195): чипы
+ * правок вперемешку с операциями строго по реальному времени, группы по
+ * дням — «Сегодня»/«Вчера»/дата (год вне текущего). День группы — день
+ * факта оплаты (paid_date, #994) у операции и локальная дата created_at у
+ * правки. Внутри дня каждая строка стоит на своём моменте: у операции это
+ * updatedAt — момент UPDATE оплаты (оплаченная строка после оплаты не
+ * меняется, #1195), у правки — created_at; поэтому правки встают и выше, и
+ * ниже оплаты своего дня (макет «1 сентября»), а последняя оплата открывает
+ * день. Порядок правок между собой при равных моментах — по id DESC
+ * (UUIDv7 монотонен, канон #597).
  */
 
 /** Элемент группы дня: строка операции или блок чипов одной строки
@@ -35,31 +37,31 @@ export type PaymentHistoryTimelineGroup = {
   readonly items: ReadonlyArray<PaymentHistoryTimelineItem>;
 };
 
-/** Число миллисекунд от начала суток — операция не несёт времени, ключ
- * сортировки считает её концом дня: в обратной хронологии день операции
- * открывается строкой операции, правки этого дня идут под ней. */
-const DAY_END_MS = 24 * 60 * 60 * 1000 - 1;
+/** Ключ сортировки строки ленты: день группы (лексикографическое сравнение
+ * ISO-дат) и момент внутри дня (абсолютное время — у обоих видов строк
+ * одинаковая шкала, никакой подгонки «конца дня» — именно она ставила
+ * правки после оплаты под оплатой, #1195). */
+type TimelineEntry = {
+  readonly date: IsoDate;
+  readonly moment: number;
+  readonly item: PaymentHistoryTimelineItem;
+};
 
 export function buildPaymentHistoryTimeline(
   operations: ReadonlyArray<PaymentOperation>,
   changes: ReadonlyArray<PaymentChangeEntry>,
   today: IsoDate,
 ): ReadonlyArray<PaymentHistoryTimelineGroup> {
-  type TimelineEntry = {
-    readonly date: IsoDate;
-    readonly sortMs: number;
-    readonly item: PaymentHistoryTimelineItem;
-  };
-
   const entries: TimelineEntry[] = [];
 
   for (const operation of operations) {
     const date = operation.paidDate ?? operation.date;
+    const paid = Date.parse(operation.updatedAt ?? '');
     entries.push({
       date,
-      // Конец дня в UTC-шкале канона (fromIso): «операция случилась в этот
-      // день» — ниже любых правок своего дня, выше правок предыдущего.
-      sortMs: fromIso(date).getTime() + DAY_END_MS,
+      // Строка без времени (старый ответ) садится на начало своего дня —
+      // правки дня закономерно оказываются выше.
+      moment: Number.isNaN(paid) ? fromIso(date).getTime() : paid,
       item: { kind: 'operation', operation },
     });
   }
@@ -72,26 +74,23 @@ export function buildPaymentHistoryTimeline(
       continue;
     }
     const moment = Date.parse(entry.createdAt);
-    const date = dateToIsoLocal(new Date(moment));
     entries.push({
-      date,
-      // Ключ — в шкале дня группы: время суток момента (смещение от
-      // полуночи его UTC-дня) поверх полуночи локального дня. Сырой момент
-      // ломал бы grouping на краю суток: правка первых часов локального дня
-      // (00:00–03:00 МСК — UTC-момент предыдущего дня) сортировалась бы
-      // ниже операций предыдущего дня, и дни шли бы D, D−1, D — «Сегодня»
-      // дважды и дубли ключей секций.
-      sortMs: fromIso(date).getTime() + (moment - fromIso(dateToIso(new Date(moment))).getTime()),
+      date: dateToIsoLocal(new Date(moment)),
+      moment,
       item: { kind: 'changes', entry, chips },
     });
   }
 
   entries.sort((a, b) => {
-    if (a.sortMs !== b.sortMs) {
-      return b.sortMs - a.sortMs;
+    if (a.date !== b.date) {
+      // Обратная хронология дней; сами дни не зависят от моментов, поэтому
+      // группы убывают строго (дублей «Сегодня» не бывает на краю суток).
+      return cmp(b.date, a.date);
     }
-    // Равные моменты: операции дня выше уже покрыты концом дня; для строк
-    // журнала — tie по id (UUIDv7 монотонен, канон #597).
+    if (a.moment !== b.moment) {
+      return b.moment - a.moment;
+    }
+    // Равные моменты: строки журнала — tie по id (канон #597).
     if (a.item.kind === 'changes' && b.item.kind === 'changes') {
       const aId = a.item.entry.id;
       const bId = b.item.entry.id;

@@ -101,6 +101,7 @@ export function mapPaymentOperation(dto: OperationDto): PaymentOperation {
     categoryLabel: dto.categoryLabel,
     categorySlug: dto.categorySlug ?? undefined,
     propertyName: dto.propertyName ?? undefined,
+    updatedAt: dto.updatedAt,
   };
 }
 

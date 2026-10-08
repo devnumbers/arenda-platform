@@ -658,6 +658,7 @@ func operationResponse(item application.OperationListItem) openapi.OperationResp
 		AmountKopecks: op.AmountKopecks,
 		CategoryLabel: op.CategoryLabel,
 		CategorySlug:  copyStringPtr(op.CategorySlug),
+		UpdatedAt:     op.UpdatedAt,
 	}
 }
 

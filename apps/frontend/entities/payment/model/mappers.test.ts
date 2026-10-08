@@ -114,6 +114,7 @@ const operationDto: OperationDto = {
   amountKopecks: 320_000,
   categoryLabel: 'Коммунальные услуги',
   categorySlug: null,
+  updatedAt: '2026-08-27T10:00:00Z',
 };
 
 describe('mapPaymentOperation — DTO → entity', () => {

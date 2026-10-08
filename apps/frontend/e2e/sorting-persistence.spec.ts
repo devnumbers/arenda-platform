@@ -11,7 +11,8 @@ import {
  * страницы (?sort=&order= — конвенция состояния в адресе) и переживает
  * перезагрузку. Покрыты четыре поверхности с сидовыми/создаваемыми API
  * данными; у истории платежа вместо направления сортировки — режим
- * изменений (?changes=1, #1195), «История операций» аренды держит прежний
+ * изменений (дефолт смешанный, ?changes=0 скрывает, #1195), «История
+ * операций» аренды держит прежний
  * переключатель (unit-покрытие parseHistoryOrderParams), сидовой
  * завершённой аренды у стенда нет.
  */
@@ -87,25 +88,27 @@ test.describe('сортировки переживают перезагрузк�
 
     try {
       await page.goto(`/properties/${APARTMENT}/payments/${payment.id}/history`);
-      // Дефолт — операции: чипов правок нет.
-      await expect(page.getByText('Сумма изменена')).toHaveCount(0);
-
-      // Меню «⋮» → «Показать изменения»: адрес получил ?changes=1.
-      await page.getByRole('button', { name: 'Действия с историей' }).click();
-      await page.getByRole('menuitem', { name: 'Показать изменения' }).click();
-      await expect(page).toHaveURL(/changes=1/);
+      // Дефолт — история с изменениями: чип правки виден, адрес чист
+      // (дефолт в адресе не пишется).
       await expect(page.getByText('Сумма изменена').first()).toBeVisible();
+      await expect(page).not.toHaveURL(/changes=/);
 
-      // Перезагрузка: режим восстановлен из адреса (#785).
-      await page.reload();
-      await expect(page).toHaveURL(/changes=1/);
-      await expect(page.getByText('Сумма изменена').first()).toBeVisible();
-
-      // «Скрыть изменения» снимает параметр (дефолт в адресе не пишется).
+      // Меню «⋮» → «Скрыть изменения»: адрес получил ?changes=0.
       await page.getByRole('button', { name: 'Действия с историей' }).click();
       await page.getByRole('menuitem', { name: 'Скрыть изменения' }).click();
-      await expect(page).not.toHaveURL(/changes=1/);
+      await expect(page).toHaveURL(/changes=0/);
       await expect(page.getByText('Сумма изменена')).toHaveCount(0);
+
+      // Перезагрузка: скрытый режим восстановлен из адреса (#785).
+      await page.reload();
+      await expect(page).toHaveURL(/changes=0/);
+      await expect(page.getByText('Сумма изменена')).toHaveCount(0);
+
+      // «Показать изменения» снимает параметр — снова смешанный дефолт.
+      await page.getByRole('button', { name: 'Действия с историей' }).click();
+      await page.getByRole('menuitem', { name: 'Показать изменения' }).click();
+      await expect(page).not.toHaveURL(/changes=/);
+      await expect(page.getByText('Сумма изменена').first()).toBeVisible();
     } finally {
       await page.request.delete(
         `/api/properties/${APARTMENT}/payments/${payment.id}?keep_overdue=true`,

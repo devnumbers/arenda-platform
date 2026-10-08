@@ -182,6 +182,7 @@ type operationRowFields struct {
 	AmountKopecks int64
 	CategoryLabel string
 	CategorySlug  pgtype.Text
+	UpdatedAt     pgtype.Timestamptz
 }
 
 func operationRowFieldsFromGet(row postgres.GetOperationByIDRow) operationRowFields {
@@ -192,6 +193,7 @@ func operationRowFieldsFromGet(row postgres.GetOperationByIDRow) operationRowFie
 		Title: row.Title, AmountKopecks: row.AmountKopecks,
 		CategoryLabel: row.CategoryLabel,
 		CategorySlug:  row.CategorySlug,
+		UpdatedAt:     row.UpdatedAt,
 	}
 }
 
@@ -211,5 +213,6 @@ func mapOperationRow(row operationRowFields) domain.Operation {
 		AmountKopecks: row.AmountKopecks,
 		CategoryLabel: row.CategoryLabel,
 		CategorySlug:  pgconv.TextToPtrString(row.CategorySlug),
+		UpdatedAt:     pgconv.TimestamptzToTime(row.UpdatedAt),
 	}
 }

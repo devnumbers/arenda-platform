@@ -23,6 +23,12 @@ type Operation struct {
 	AmountKopecks int64
 	CategoryLabel string  // Snapshot.
 	CategorySlug  *string // Snapshot for default-category rendering.
+	// UpdatedAt is the row's last touch. A paid operation is never edited
+	// afterwards (cancellation leaves every read), so on the wire it is the
+	// pay's moment — the payment history interleaves same-day facts with the
+	// edit journal by it (ticket #1195). Zero on synthesized in-memory
+	// responses; the application layer stamps those with the action's time.
+	UpdatedAt time.Time
 }
 
 // NewMaterializedOperation builds the planned occurrence of the payment rule
