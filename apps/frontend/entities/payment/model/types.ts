@@ -144,9 +144,16 @@ export type PaymentCreateCommand = {
 /**
  * Частичная правка: опущенное поле остаётся без изменений; `endDate`
  * трисостоянен — опущен (сохранить), null (открыть срок), дата (назначить).
+ * Напоминание и флаг «уведомлять об автоплатеже» тоже трисостоянны
+ * (#1197, #1189): опущено (сохранить), null (снять), значение (назначить) —
+ * форма правки знает действующее значение и шлёт его только при смене.
  */
-export type PaymentUpdateCommand = Partial<Omit<PaymentCreateCommand, 'endDate'>> & {
+export type PaymentUpdateCommand = Partial<
+  Omit<PaymentCreateCommand, 'endDate' | 'reminderOffsetDays' | 'notifyAutoPaid'>
+> & {
   readonly endDate?: IsoDate | null;
+  readonly reminderOffsetDays?: PaymentReminderOffset | null;
+  readonly notifyAutoPaid?: boolean | null;
 };
 
 /**

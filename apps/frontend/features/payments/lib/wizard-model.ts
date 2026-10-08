@@ -234,11 +234,6 @@ export function effectivePaymentType(type: PaymentType | undefined): PaymentType
   return type ?? AMOUNT_STEP_DEFAULTS.type;
 }
 
-/** Клик по чипу-переключателю меняет значение на альтернативное. */
-export function togglePaymentType(type: PaymentType): PaymentType {
-  return type === 'income' ? 'expense' : 'income';
-}
-
 /** Мультивыбор дней недели: сортированный набор без дубликатов. */
 export function toggleWeekday(
   weekdays: ReadonlyArray<number>,

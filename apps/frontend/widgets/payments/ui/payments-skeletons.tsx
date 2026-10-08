@@ -203,26 +203,42 @@ export function CategoryRowsSkeleton({ rows = 8 }: { readonly rows?: number }): 
 
 /**
  * Скелетон формы правки платежа (#607, паритет — §7 DESIGN.md): каркас
- * PaymentEditForm — «Сумма», «Название платежа» (с нижней строкой
- * счётчика 13/15, как у TextField с maxLength), четыре поля-кнопки
- * (категория, тип, регулярность, окончание) и danger-кнопка
- * удаления. Роль в загрузке неизвестна — строка удаления рисуется
- * всегда: владелец (сценарий по умолчанию) получает точный паритет, а
- * смотрящему форму всё равно замещает карточка «Правка недоступна».
- * Sticky-панель «Сохранить» и хедер вне потока — не зеркалятся.
+ * PaymentEditForm по макету 1127-32083 (#1197) — «Сумма» с сегментом
+ * направления, «Название платежа» (с нижней строкой счётчика 13/15, как
+ * у TextField с maxLength), поля-кнопки (категория, регулярность,
+ * окончание с подсказкой, напоминание/уведомление), ряд email-уведомлений
+ * и danger-кнопка удаления. Роль в загрузке неизвестна — строка удаления
+ * рисуется всегда: владелец (сценарий по умолчанию) получает точный
+ * паритет, а смотрящему форму всё равно замещает карточка «Правка
+ * недоступна». Sticky-панель «Сохранить» и хедер вне потока — не зеркалятся.
  */
 export function PaymentEditFormSkeleton(): JSX.Element {
   return (
     <div aria-hidden className="flex flex-col gap-8 px-6">
-      <SkeletonFormField labelWidth="w-16" />
+      <span className="flex flex-col gap-2">
+        <SkeletonFormField labelWidth="w-16" />
+        <Skeleton className="h-11 w-full rounded-2xl" />
+      </span>
       <span className="flex flex-col gap-2">
         <SkeletonFormField labelWidth="w-36" />
-        <Skeleton className="h-[15px] w-12" />
+        <Skeleton className="h-[15px] w-28" />
       </span>
       <SkeletonFormField labelWidth="w-24" />
-      <SkeletonFormField labelWidth="w-32" />
       <SkeletonFormField labelWidth="w-44" />
-      <SkeletonFormField labelWidth="w-36" />
+      <span className="flex flex-col gap-2">
+        <SkeletonFormField labelWidth="w-40" />
+        <Skeleton className="h-[15px] w-32" />
+      </span>
+      <SkeletonFormField labelWidth="w-44" />
+      {/* Ряд email-уведомлений (EmailNotificationsRow): заголовок + подпись
+          слева, тумблер справа. */}
+      <span className="flex items-center justify-between gap-4 py-3">
+        <span className="flex min-w-0 flex-col gap-1">
+          <Skeleton className="h-[18px] w-48" />
+          <Skeleton className="h-4 w-64 max-w-full" />
+        </span>
+        <Skeleton className="h-7 w-12 rounded-pill" />
+      </span>
       <Skeleton className="h-14 w-full rounded-button" />
     </div>
   );

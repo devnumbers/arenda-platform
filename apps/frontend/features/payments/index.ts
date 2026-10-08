@@ -29,7 +29,6 @@ export {
   periodicityReady,
   pickPeriodicityKind,
   resumePaymentWizardStep,
-  togglePaymentType,
   toggleWeekday,
   wizardDraftAfterStep,
   wizardStepReady,

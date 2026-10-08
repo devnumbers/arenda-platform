@@ -3,6 +3,7 @@ import {
   expect,
   openCabinetWithSeededSession,
   SEEDED_APARTMENT_PROPERTY_ID,
+  stickySaveButton,
   test,
 } from './fixtures';
 import type { Page } from '@playwright/test';
@@ -292,7 +293,7 @@ test.describe('сквозная жизнь платежа', () => {
     await page.getByRole('button', { name: 'Изменить' }).click();
     await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+/edit$`));
     await page.getByRole('textbox', { name: 'Сумма' }).fill('2500');
-    await page.getByRole('button', { name: 'Сохранить изменения' }).click();
+    await stickySaveButton(page).click();
     await expect(page.getByText('Изменения сохранены')).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+$`));
     await expect(page.getByText('2 500 ₽').first()).toBeVisible();

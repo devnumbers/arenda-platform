@@ -3,6 +3,7 @@ import {
   expect,
   openCabinetWithSeededSession,
   SEEDED_APARTMENT_PROPERTY_ID,
+  stickySaveButton,
   test,
 } from './fixtures';
 import type { Page } from '@playwright/test';
@@ -115,7 +116,7 @@ test.describe('данные операции на странице операц�
     await page.getByRole('button', { name: 'Страхование', exact: true }).click();
     await page.getByRole('button', { name: 'Готово' }).click();
     await expect(page.getByRole('button', { name: 'Категория' })).toHaveText(/Страхование/);
-    await page.getByRole('button', { name: 'Сохранить изменения' }).click();
+    await stickySaveButton(page).click();
     await expect(page.getByText('Изменения сохранены')).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`${paymentUrl}$`));
 

@@ -364,6 +364,13 @@ export function screenHeader(page: Page): Locator {
   return page.locator('header[aria-label="Навигация экрана"]');
 }
 
+/** Sticky-кнопка «Сохранить» полноэкранных форм (правка платежа #1197):
+ * имя совпадает с aria-label клавиши Check в шапке — берём последнюю
+ * в DOM (панель ниже контента). Тот же канон «правка в одном месте». */
+export function stickySaveButton(page: Page): Locator {
+  return page.getByRole('button', { name: 'Сохранить', exact: true }).last();
+}
+
 /**
  * Extracts the last login code emailed for the seeded user. The fake email
  * sender logs the message body ("Код для входа в Рентли: NNNNNN"); polling

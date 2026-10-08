@@ -169,22 +169,28 @@ const SEGMENT_ORDER = ['expense', 'income'] as const;
  * колонку на ПК (2913:69741); выбранный — белая пилюля с тенью. Подписи —
  * TYPE_LABELS («Расход»/«Доход»), направление выбрано явно подсветкой;
  * видимое значение (пресет входа или дефолт «Доход») вычисляет вызывающий
- * шаг и отдаёт готовым type. */
+ * шаг и отдаёт готовым type. fullWidth — во всю колонку формы правки
+ * платежа (макет 1127:32742, #1197), без 232px яруса шага суммы. */
 export function WizardDirectionSegment({
   type,
   onTypeChange,
   ariaLabel,
+  fullWidth = false,
 }: {
   /** Направление, видимое на сегменте (явный выбор или пресет/дефолт). */
   readonly type: PaymentType;
   readonly onTypeChange: (type: PaymentType) => void;
   readonly ariaLabel: string;
+  readonly fullWidth?: boolean;
 }): JSX.Element {
   return (
     <div
       role="radiogroup"
       aria-label={ariaLabel}
-      className="flex w-full max-w-[232px] rounded-2xl bg-surface-muted p-[2px] desktop:max-w-none"
+      className={
+        'flex w-full rounded-2xl bg-surface-muted p-[2px] '
+        + (fullWidth ? '' : 'max-w-[232px] desktop:max-w-none')
+      }
     >
       {SEGMENT_ORDER.map((option) => {
         const selected = type === option;

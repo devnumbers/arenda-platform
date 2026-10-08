@@ -9,7 +9,6 @@ import {
   periodicityReady,
   pickPeriodicityKind,
   resumePaymentWizardStep,
-  togglePaymentType,
   toggleWeekday,
   draftAfterRecurrenceChange,
   wizardDraftAfterStep,
@@ -81,10 +80,6 @@ describe('дефолты и переключатели шага суммы', () 
     expect(effectivePaymentType('expense')).toBe('expense');
   });
 
-  it('клик по чипу меняет значение на альтернативное', () => {
-    expect(togglePaymentType('income')).toBe('expense');
-    expect(togglePaymentType('expense')).toBe('income');
-  });
 });
 
 describe('periodicityReady / branchKind', () => {
