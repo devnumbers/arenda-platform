@@ -485,6 +485,28 @@ func TestGetContact_NotFound(t *testing.T) {
 	}
 }
 
+// GetContactPhoto answers 404 (privacy-preserving, like properties and
+// identity) when the card has no photo — not the opaque 500 (#1229 found
+// it: the edit screen's parallel invalidations briefly render the img with
+// a fresh buster over the deleted photo).
+func TestGetContactPhoto_NoPhoto(t *testing.T) {
+	t.Parallel()
+	svc := &fakeContactManager{
+		photoDescriptor: func(_ context.Context, _, _ uuid.UUID) (string, string, error) {
+			return "", "", application.ErrPhotoNotFound
+		},
+	}
+	h := NewContactHandlers(svc, nil)
+	actor := uuid.Must(uuid.NewV7())
+
+	w := httptest.NewRecorder()
+	h.GetContactPhoto(w, contactRequest(t, http.MethodGet, actor, ""), uuid.Must(uuid.NewV7()))
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestUpdateContact_PropertyTriState(t *testing.T) {
 	t.Parallel()
 

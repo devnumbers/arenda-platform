@@ -61,6 +61,13 @@ var staticContactProblems = []httpsupport.ErrorProblem{
 		Title: httpsupport.ProblemTitleNotFound, Detail: "Не найдено",
 	},
 	{
+		// A photo request for a card without a photo (tickets #1227/#1229):
+		// the privacy-preserving 404 like properties and identity — not the
+		// opaque 500 the missing row used to answer with.
+		Err: application.ErrPhotoNotFound, Status: http.StatusNotFound,
+		Title: httpsupport.ProblemTitleNotFound, Detail: "Не найдено",
+	},
+	{
 		Err: application.ErrForbidden, Status: http.StatusForbidden,
 		Title: httpsupport.ProblemTitleForbidden, Detail: "Недостаточно прав для этого действия",
 	},
