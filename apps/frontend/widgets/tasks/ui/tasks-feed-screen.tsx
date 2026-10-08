@@ -227,26 +227,13 @@ export function TasksFeedScreen({
           </div>
 
           {!showEmpty && (
-          <div className="mt-4 flex items-center justify-between pr-3.5 pl-6">
-            <div className="flex items-center gap-2">
-              <PickerMenu title="Сортировать" groups={sortPickerGroups(sort, changeSort)}>
-                <SortChip sort={sort} data-testid="tasks-sort-chip" />
-              </PickerMenu>
-              {/* Фильтр (#524/#547, «Общие задачи» — решение владельца
-               * 2026-09-07): при любом непустом фильтре чип активный
-               * (синий, макет 1726-86913), подпись всегда «Объект» —
-               * названия чип не показывает (правка владельца 2026-09-05). */}
-              <ChipButton
-                selected={filter.propertyIds.length > 0 || filter.withoutProperty}
-                trailingIcon={<SmallArrowDown />}
-                onClick={() => {
-                  setFilterDraft(filter);
-                  setSelectOpen(true);
-                }}
-              >
-                Объект
-              </ChipButton>
-            </div>
+          /* Ряд чипов — по макету карты #1232 (3226-74077): «⋮» слева,
+           * за ним сортировка и «Объект»; зазоры 6 — те же, что в чипах
+           * «Операций» (принято #1236), ряд в 24 под строкой заголовка
+           * (в Heading Block макета слот чипов на y=80 — 24 после
+           * H1-строки). Гейт кебаба — решение #536, как гейт «+» правом
+           * правки в принятом #1235. */
+          <div className="mt-6 flex items-center gap-1.5 pl-6">
             {kebabVisible && (
               <Menu>
                 <MenuTrigger asChild>
@@ -270,6 +257,23 @@ export function TasksFeedScreen({
                 </MenuContent>
               </Menu>
             )}
+            <PickerMenu title="Сортировать" groups={sortPickerGroups(sort, changeSort)}>
+              <SortChip sort={sort} data-testid="tasks-sort-chip" />
+            </PickerMenu>
+            {/* Фильтр (#524/#547, «Общие задачи» — решение владельца
+             * 2026-09-07): при любом непустом фильтре чип активный
+             * (синий, макет 1726-86913), подпись всегда «Объект» —
+             * названия чип не показывает (правка владельца 2026-09-05). */}
+            <ChipButton
+              selected={filter.propertyIds.length > 0 || filter.withoutProperty}
+              trailingIcon={<SmallArrowDown />}
+              onClick={() => {
+                setFilterDraft(filter);
+                setSelectOpen(true);
+              }}
+            >
+              Объект
+            </ChipButton>
           </div>
         )}
         </HubCollapseAnchor>
