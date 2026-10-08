@@ -197,5 +197,6 @@ func WireIdentity(
 		Logout:         logoutService,
 		Sessions:       sessionsService,
 		EmailMailer:    emailMailer,
+		PhotoStorage:   photoStorage,
 	}, nil
 }

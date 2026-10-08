@@ -112,3 +112,28 @@ export function propertyDetailQueryOptions({
     queryFn: () => fetchProperty(id, transport),
   });
 }
+
+/** Загрузка/замена фото объекта — POST /properties/{id}/photo multipart-
+ * формой с полем `file` (ADR 0065); ответ — обновлённый объект с новым
+ * photoUrl, валидация и EXIF-стриж на бэкенде. */
+export async function uploadPropertyPhoto(
+  { id, file }: { readonly id: string; readonly file: File },
+  transport: ApiTransport = apiClient,
+): Promise<Property> {
+  const body = new FormData();
+  body.append('file', file);
+  const response = await transport<PropertyResponse>(`/properties/${id}/photo`, {
+    method: 'POST',
+    body,
+  });
+  return mapPropertyResponse(response);
+}
+
+/** Удаление фото объекта — DELETE /properties/{id}/photo (204 без тела,
+ * ADR 0065). */
+export async function deletePropertyPhoto(
+  { id }: { readonly id: string },
+  transport: ApiTransport = apiClient,
+): Promise<void> {
+  await transport<void>(`/properties/${id}/photo`, { method: 'DELETE' });
+}

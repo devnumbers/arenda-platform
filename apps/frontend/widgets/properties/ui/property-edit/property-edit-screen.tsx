@@ -17,7 +17,7 @@ import {
   type PropertyEditDraft,
 } from '@/features/properties';
 import { attributeCatalog } from '../property-fields/attribute-catalog';
-import { PropertyAvatar, propertyPermissions, type PropertyType } from '@/entities/property';
+import { propertyPermissions, type PropertyType } from '@/entities/property';
 import { ApiError } from '@/shared/api/errors';
 import {
   Button,
@@ -34,6 +34,7 @@ import { Cancel, Check } from '@/shared/assets/icons';
 import { PropertyCatalogFields } from '../property-fields/property-catalog-fields';
 import { PropertyHousingTypeChips } from '../property-fields/property-housing-type-chips';
 import { PropertyAddressSearch } from './property-address-search';
+import { PropertyPhotoSlot } from './property-photo-slot';
 import { PropertyTypePicker } from './property-type-picker';
 
 /**
@@ -41,8 +42,10 @@ import { PropertyTypePicker } from './property-type-picker';
  * 1550:95852) — страница-маршрут /properties/[id]/edit, замена старой
  * формы на едином хроме подэкрана. Хедер: крестик слева (закрыть),
  * заголовок по центру, галочка справа (сохранить — тот же сабмит, что и
- * StickyBottomBar «Сохранить изменения»). Поля: фото (декоративная
- * заглушка-круг, без кнопки — решение владельца 11.09), тип (PickerField
+ * StickyBottomBar «Сохранить изменения»). Поля: фото-слот (глиф по типу
+ * либо загруженное фото; загрузка/замена/удаление применяются сразу
+ * мимо сохранения — фото-эндпоинты отдельные, ADR 0065, тикет #1228),
+ * тип (PickerField
  * с шитом чипов 1554:97471), адрес
  * (тап — полноэкранный поиск адреса с подсказками DaData, 1518:93118/
  * 93341), название 0/64, «Тип жилья» и поля каталога — общая часть с
@@ -187,13 +190,16 @@ export function PropertyEditScreen({ propertyId }: PropertyEditScreenProps): JSX
             void handleSubmit();
           }}
         >
-          {/* Заглушка фото (Figma 1550:95852): логики фото у объекта нет —
-              круг декоративный, без кнопки и загрузки (решение владельца
-              11.09); поверхность hero канона PropertyAvatar, глиф — по
-              типу черновика. */}
-          <div className="flex justify-center" aria-hidden>
-            <PropertyAvatar surface="hero" type={draft.type} />
-          </div>
+          {/* Фото-слот (Figma 1550:95852, тикет #1228, ADR 0065): глиф
+              по типу черновика либо загруженное фото; загрузка/замена/
+              удаление применяются сразу, мимо кнопок сохранения (фото-
+              эндпоинты отдельные). Декоративный круг без кнопки —
+              прежнее решение владельца 11.09, заменено картой #1217. */}
+          <PropertyPhotoSlot
+            propertyId={propertyId}
+            photoUrl={property.photoUrl}
+            type={draft.type}
+          />
           <PropertyTypePicker
             title="Тип объекта"
             placeholder="Выберите тип"

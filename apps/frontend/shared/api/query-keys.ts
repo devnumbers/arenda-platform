@@ -73,6 +73,11 @@ export const propertyKeys = {
   search: (query: string) => [...propertyKeys.all, 'search', query] as const,
   addressSuggestions: (query: string) =>
     [...propertyKeys.all, 'address-suggestions', query] as const,
+  /** Счётчик фото-мутаций объекта (тикет #1228, ADR 0065) — бастер кэша
+   * выдачи для <img>: сеть не ходит (пишется и читается только из кэша),
+   * переживает перемонтирования экранов, сбрасывается перезагрузкой
+   * страницы (окно протухания кэша выдачи — 5 минут, ADR 0065). */
+  photoBuster: (id: string) => [...propertyKeys.all, 'photo-buster', id] as const,
 };
 
 /** Статусный фильтр операций, проходящий в query параметром `status`. */

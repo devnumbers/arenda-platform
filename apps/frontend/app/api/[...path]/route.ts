@@ -16,7 +16,13 @@ async function handler(
     return NextResponse.json({ error: 'Некорректный запрос' }, { status: 400 });
   }
 
-  const targetPath = `/${path.join('/')}`;
+  // Канонический публичный путь контракта — /api/v1/... (OpenAPI; в DTO он
+  // приезжает значением photoUrl, ADR 0065). Бэкенд регистрирует маршруты
+  // корнево-относительно, поэтому прокси срезает не только /api, но и
+  // следующий сегмент v1 — обе формы (/api/... и /api/v1/...) доходят до
+  // одного и того же рантайма; своих маршрутов с началом v1 у бэка нет.
+  const segments = path[0] === 'v1' ? path.slice(1) : path;
+  const targetPath = `/${segments.join('/')}`;
   const search = request.nextUrl.searchParams.toString();
   const targetUrl = `${BACKEND_URL}${targetPath}${search ? `?${search}` : ''}`;
 

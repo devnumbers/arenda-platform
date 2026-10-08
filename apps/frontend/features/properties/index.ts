@@ -34,6 +34,11 @@ export {
   type PropertyEditDraft,
 } from './lib/property-edit';
 export { addressSuggestionRow } from './lib/address-suggestion';
+export {
+  PHOTO_FILE_TOO_LARGE_MESSAGE,
+  photoDisplayUrl,
+  photoFileTooLarge,
+} from './lib/photo';
 export { propertyCreateSuccessCopy } from './lib/property-create-success';
 // Реестр живёт на слое entities (нужен PropertyAvatar), тут — обратная
 // совместимость для консюмеров фичи.
