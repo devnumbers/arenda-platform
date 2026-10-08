@@ -11,26 +11,27 @@ import {
   useUploadPropertyPhoto,
 } from '@/features/properties';
 import { PropertyAvatar, type PropertyType } from '@/entities/property';
-import { Button, ConfirmDialog } from '@/shared/ui/design';
+import { Button, circleIconRing, ConfirmDialog, PhotoRemoveBadge } from '@/shared/ui/design';
 
 /**
- * Слот фото объекта на правке (Figma 1550:95852, тикет #1228; ADR 0065):
- * круг-плейсхолдер по типу (поверхность hero канона PropertyAvatar) либо
- * загруженное фото, под ним кнопки «Добавить фото»/«Заменить фото» и
- * «Удалить фото». Фото живёт мимо черновика формы — загрузка/удаление
- * применяются сразу отдельными эндпоинтами (`/properties/{id}/photo`,
- * multipart POST и DELETE), кнопки «Сохранить» не касаются. Ошибки —
- * mutateAsync + catch с тостом (канон форм; пер-колбэки mutate не
- * используются).
+ * Слот фото объекта на правке (тикет #1228; ADR 0065): круг-плейсхолдер
+ * по типу (поверхность hero канона PropertyAvatar) либо загруженное фото.
+ * Канон правки/удаления — макет 1299:51572/73 (правка фото контакта,
+ * эталон карты #1217): бейдж-корзина в выемке правого-верхнего края круга
+ * (PhotoRemoveBadge; круг под ним — с кольцом цвета подложки
+ * circleIconRing) и одна ссылка «Обновить фото» под кругом — канон Clear
+ * (M/500 14, Figma 1134:55051); без фото бейджа нет, ссылка — «Добавить
+ * фото». Удаление — через ConfirmDialog: однотапный бейдж не должен
+ * молча стирать фото (решение владельца 08.10). Фото живёт мимо
+ * черновика формы — загрузка/удаление применяются сразу отдельными
+ * эндпоинтами (`/properties/{id}/photo`, multipart POST и DELETE),
+ * кнопки «Сохранить» не касаются. Ошибки — mutateAsync + catch с тостом
+ * (канон форм; пер-колбэки mutate не используются).
  *
  * Байты выдачи кэшируются браузером (private, max-age=300) при неизменном
  * пути — URL для <img> собирается с бастером `?v=N` (photoDisplayUrl);
  * счётчик N живёт в react-query кэше (usePropertyPhotoBuster, пишут
  * мутации), поэтому переживает перемонтирования экрана.
- *
- * Кегль кнопок — R/500 16 по макету слота (Figma 1550:95895), поверх
- * канона Clear (кегль M в обоих размерах, Figma 1134:55051) — решение
- * экрана, не снос канона.
  */
 
 const PHOTO_INPUT_ACCEPT = 'image/jpeg,image/png,image/webp';
@@ -58,6 +59,9 @@ export function PropertyPhotoSlot({
     ? photoDisplayUrl(photoUrl, photoBuster)
     : null;
   const hasPhoto = displayUrl !== null;
+  // В полёте глушим оба управления: одновременные загрузка и удаление
+  // гоняются за один photo_key.
+  const busy = uploadPhoto.isPending || deletePhoto.isPending;
 
   const openPicker = (): void => {
     fileInputRef.current?.click();
@@ -90,7 +94,19 @@ export function PropertyPhotoSlot({
 
   return (
     <div className="flex flex-col items-center gap-2">
-      <PropertyAvatar surface="hero" type={type} photoUrl={displayUrl} />
+      {hasPhoto ? (
+        <div className="relative">
+          <PropertyAvatar
+            surface="hero"
+            type={type}
+            photoUrl={displayUrl}
+            className={circleIconRing.white}
+          />
+          <PhotoRemoveBadge disabled={busy} onClick={() => setDeleteConfirmOpen(true)} />
+        </div>
+      ) : (
+        <PropertyAvatar surface="hero" type={type} />
+      )}
       <input
         ref={fileInputRef}
         type="file"
@@ -98,38 +114,15 @@ export function PropertyPhotoSlot({
         className="hidden"
         onChange={handleFileChange}
       />
-      {hasPhoto ? (
-        <>
-          <Button
-            type="button"
-            variant="clear"
-            className="text-base"
-            loading={uploadPhoto.isPending}
-            onClick={openPicker}
-          >
-            Заменить фото
-          </Button>
-          <Button
-            type="button"
-            variant="clear"
-            className="text-base"
-            loading={deletePhoto.isPending}
-            onClick={() => setDeleteConfirmOpen(true)}
-          >
-            Удалить фото
-          </Button>
-        </>
-      ) : (
-        <Button
-          type="button"
-          variant="clear"
-          className="text-base"
-          loading={uploadPhoto.isPending}
-          onClick={openPicker}
-        >
-          Добавить фото
-        </Button>
-      )}
+      <Button
+        type="button"
+        variant="clear"
+        loading={uploadPhoto.isPending}
+        disabled={deletePhoto.isPending}
+        onClick={openPicker}
+      >
+        {hasPhoto ? 'Обновить фото' : 'Добавить фото'}
+      </Button>
       <ConfirmDialog
         open={deleteConfirmOpen}
         onOpenChange={setDeleteConfirmOpen}

@@ -8,6 +8,7 @@
  */
 export { Button, type ButtonProps, buttonVariants } from './button';
 export { IconButton, type IconButtonProps } from './icon-button';
+export { PhotoRemoveBadge, type PhotoRemoveBadgeProps } from './photo-remove-badge';
 export { UserButton, type UserButtonProps } from './user-button';
 export { TextField, type TextFieldProps, type TextFieldVariant } from './text-field';
 export { Textarea, type TextareaProps } from './text-area';
