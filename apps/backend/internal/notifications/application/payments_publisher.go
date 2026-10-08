@@ -46,7 +46,10 @@ type PaymentScanTarget struct {
 	PropertyID      uuid.UUID
 	PropertyName    string
 	PropertyAddress string
-	OwnerID         uuid.UUID
+	// PropertyType is the snapshot's glyph key (карта #1217, #1244) — the
+	// payload card avatar's placeholder.
+	PropertyType string
+	OwnerID      uuid.UUID
 }
 
 // PaymentScanSource is the payments scan's window into the payments context:
@@ -391,6 +394,7 @@ func (p *PaymentsPublisher) publish(ctx context.Context, eventType domain.EventT
 				ID:      target.PropertyID,
 				Name:    target.PropertyName,
 				Address: target.PropertyAddress,
+				Type:    target.PropertyType,
 			},
 			PaymentID:   &target.PaymentID,
 			PaymentDate: &dueDate,

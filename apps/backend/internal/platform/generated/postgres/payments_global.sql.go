@@ -140,6 +140,7 @@ const listGlobalPaymentObjects = `-- name: ListGlobalPaymentObjects :many
 SELECT p.id,
        p.name,
        p.address,
+       p.type,
        p.pinned_at,
        -- COALESCE, not the bare column: sqlc trusts the column's NOT NULL
        -- and emits a string, while the CASE on a NULL key misses into NULL —
@@ -165,6 +166,7 @@ type ListGlobalPaymentObjectsRow struct {
 	ID       pgtype.UUID        `json:"id"`
 	Name     string             `json:"name"`
 	Address  string             `json:"address"`
+	Type     string             `json:"type"`
 	PinnedAt pgtype.Timestamptz `json:"pinned_at"`
 	PhotoUrl string             `json:"photo_url"`
 }
@@ -178,7 +180,8 @@ type ListGlobalPaymentObjectsRow struct {
 // then the rest by name. pinned_at travels to the cards for the pin mark,
 // photo_url is the card avatar (ticket #582): with the private photos
 // (ADR 0065, #1227) one image per object, streamed by the backend — the
-// same-origin path, or NULL without a photo.
+// same-origin path, or NULL without a photo; type picks the avatar's
+// placeholder glyph (карта #1217, #1244).
 func (q *Queries) ListGlobalPaymentObjects(ctx context.Context, arg ListGlobalPaymentObjectsParams) ([]ListGlobalPaymentObjectsRow, error) {
 	rows, err := q.db.Query(ctx, listGlobalPaymentObjects, arg.Actor, arg.Search)
 	if err != nil {
@@ -192,6 +195,7 @@ func (q *Queries) ListGlobalPaymentObjects(ctx context.Context, arg ListGlobalPa
 			&i.ID,
 			&i.Name,
 			&i.Address,
+			&i.Type,
 			&i.PinnedAt,
 			&i.PhotoUrl,
 		); err != nil {

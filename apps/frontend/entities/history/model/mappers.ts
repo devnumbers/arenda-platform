@@ -57,6 +57,7 @@ export function mapHistoryFilterOptions(dto: HistoryFiltersDto): HistoryFilterOp
       name: object_.name,
       address: object_.address,
       photoUrl: object_.photo_url,
+      type: object_.type,
     })),
   };
 }

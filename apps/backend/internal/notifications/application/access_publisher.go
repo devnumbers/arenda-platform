@@ -12,10 +12,11 @@ import (
 
 // AccessPropertyView is the display snapshot of the property an access event
 // happened on: the shared cards' name and address line (решение владельца
-// 19.09.2026, #745).
+// 19.09.2026, #745); the type is the card glyph's key (карта #1217, #1244).
 type AccessPropertyView struct {
 	Name    string
 	Address string
+	Type    string
 }
 
 // AccessUserProfile is the display snapshot of a user an access event names:
@@ -395,6 +396,7 @@ func accessPayload(
 			ID:      propertyID,
 			Name:    property.Name,
 			Address: property.Address,
+			Type:    property.Type,
 		},
 		MembershipID: &membershipID,
 	}

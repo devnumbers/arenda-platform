@@ -406,11 +406,13 @@ type GlobalPaymentCounters struct {
 // the property's global pin (ticket #577): nil — not pinned, a moment —
 // pinned since then; the SQL order carries the pinned first. PhotoURL is the
 // card avatar's photo — the object's first (oldest) one (ticket #582); nil
-// when the object has no photos.
+// when the object has no photos. Type is the property's type — the avatar
+// placeholder glyph's key on the cards (карта #1217, #1244).
 type GlobalPaymentObject struct {
 	PropertyID uuid.UUID
 	Name       string
 	Address    string
+	Type       string
 	PinnedAt   *time.Time
 	PhotoURL   *string
 }

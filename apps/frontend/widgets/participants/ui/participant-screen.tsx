@@ -14,6 +14,7 @@ import {
 } from '@/entities/participants';
 import { useParticipant, useRevokeParticipant } from '@/features/participants';
 import { useProperties } from '@/features/properties';
+import type { PropertyType } from '@/entities/property';
 import {
   ConfirmDialog,
   ErrorCard,
@@ -158,6 +159,7 @@ export function ParticipantScreen({
                   leg={leg}
                   subtitle={propertyById.get(leg.propertyId)?.address}
                   photoUrl={propertyById.get(leg.propertyId)?.photoUrl ?? undefined}
+                  type={propertyById.get(leg.propertyId)?.type}
                   onSelect={() =>
                     router.push(
                       ROUTES.participantRights(participantId, leg.propertyId),
@@ -264,17 +266,19 @@ function ParticipantLimitNotice(): JSX.Element {
 }
 
 /** Ряд «Доступных объектов» (макет 2008-81468, Row Button 936:39347):
- * фото или серый дом 44, титул, адрес, бейдж роли/состояния ноги, чеврон.
+ * фото или глиф типа 44, титул, адрес, бейдж роли/состояния ноги, чеврон.
  * Тап — экран «Права участника» (#698, 2177-59620). */
 function ParticipantPropertyRowButton({
   leg,
   subtitle,
   photoUrl,
+  type,
   onSelect,
 }: {
   readonly leg: ParticipantPropertyLeg;
   readonly subtitle: string | undefined;
   readonly photoUrl: string | undefined;
+  readonly type: PropertyType | undefined;
   readonly onSelect: () => void;
 }): JSX.Element {
   return (
@@ -283,7 +287,7 @@ function ParticipantPropertyRowButton({
       onClick={onSelect}
       className={PARTICIPANT_ROW_BASE_CLASS}
     >
-      <ObjectAvatarGlyph photoUrl={photoUrl} />
+      <ObjectAvatarGlyph photoUrl={photoUrl} type={type} />
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="truncate text-base font-medium leading-[18px] text-content">
           {leg.title}

@@ -6,8 +6,9 @@ import {
   formatOverdueDays,
   PaymentRowButton,
 } from '@/entities/payment';
-import { CircleIcon, circleIconRing, EmptyState, Skeleton, SkeletonListRow, skeletonRowWidths } from '@/shared/ui/design';
 import type { GlobalPayment, IsoDate, Payment, PaymentOperation } from '@/entities/payment';
+import { propertyTypeIcons, type PropertyType } from '@/entities/property';
+import { CircleIcon, circleIconRing, EmptyState, Skeleton, SkeletonListRow, skeletonRowWidths } from '@/shared/ui/design';
 import { CategoryIcon, categoryStyle, type CategoryIconSurface } from '@/features/payment-categories';
 import { daysOverdue } from '../lib/overdue-days';
 import { paymentRowSubtitle } from '../lib/payment-row-subtitle';
@@ -86,18 +87,23 @@ export function GlobalCardIcon({
 }
 
 /**
- * Аватар объекта в глобальных платежах (#582): фото в круге 44 или дом-
- * плейсхолдер #D3D7D9. Поверхность card — на серой карточке «Объектов»
- * (белый круг, кант серого — 890:29696); row — на белой странице поиска
- * (серый круг #F3F4F6, кант белого — 888:19370, паттерн SelectAvatar).
+ * Аватар объекта в глобальных платежах (#582): фото в круге 44 или глиф
+ * типа объекта (Category Icon, карта #1217; без типа — Bold/Home).
+ * Поверхность card — на серой карточке «Объектов» (белый круг, кант
+ * серого — 890:29696); row — на белой странице поиска (серый круг #F3F4F6,
+ * кант белого — 888:19370, паттерн SelectAvatar).
  */
 export function PaymentObjectAvatar({
   photoUrl,
+  type,
   surface,
 }: {
   readonly photoUrl: string | null;
+  readonly type?: PropertyType;
   readonly surface: 'card' | 'row';
 }): JSX.Element {
+  // Выборка из статичного реестра, не вызов: react-hooks/static-components.
+  const Glyph = type !== undefined ? propertyTypeIcons[type] : BoldHome;
   return (
     <CircleIcon
       variant={surface === 'card' ? 'muted' : 'white'}
@@ -107,7 +113,7 @@ export function PaymentObjectAvatar({
       {photoUrl !== null ? (
         <img src={photoUrl} alt="" className="h-full w-full object-cover" />
       ) : (
-        <BoldHome className="h-6 w-6 text-[#D3D7D9]" />
+        <Glyph className="h-6 w-6 text-[#D3D7D9]" />
       )}
     </CircleIcon>
   );

@@ -24,6 +24,7 @@ import {
   RENTAL_COMMENT_MAX,
 } from '@/features/rentals';
 import type { Rental } from '@/entities/rental';
+import type { PropertyType } from '@/entities/property';
 import {
   Button,
   CalendarDatePicker,
@@ -72,12 +73,16 @@ const STAGE_NUMBERS: Record<Exclude<CompleteStage, 'confirm'>, number> = {
 export type RentalCompleteFlowProps = {
   readonly rental: Rental;
   readonly propertyName: string;
+  /** Тип объекта строки «Объект» итогов — глиф-плейсхолдер (карта #1217,
+   * #1244). */
+  readonly propertyType?: PropertyType;
   readonly onClose: () => void;
 };
 
 export function RentalCompleteFlow({
   rental,
   propertyName,
+  propertyType,
   onClose,
 }: RentalCompleteFlowProps): JSX.Element {
   const router = useRouter();
@@ -369,6 +374,7 @@ export function RentalCompleteFlow({
                   summary={summaryQuery.data}
                   endDate={completedDate}
                   propertyName={propertyName}
+                  propertyType={propertyType}
                   depositReturnKopecks={depositAmount ?? 0}
                   depositReturnComment={comment.trim()}
                 />

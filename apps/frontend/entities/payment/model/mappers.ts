@@ -152,6 +152,7 @@ export function mapGlobalPaymentObject(dto: GlobalPaymentObjectDto): GlobalPayme
     propertyId: dto.propertyId,
     name: dto.name,
     address: dto.address,
+    type: dto.type,
     pinnedAt: dto.pinnedAt,
     photoUrl: dto.photoUrl,
     autoPayRules: dto.autoPayRules.map(toKey),

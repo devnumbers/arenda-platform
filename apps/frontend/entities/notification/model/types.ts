@@ -69,12 +69,17 @@ export type NotificationActionKind = (typeof NOTIFICATION_ACTION_KINDS)[number];
  * перехода, имя для карточки — переживает переименование и удаление
  * сущности. Строки карточек сверх имени — тоже снимки момента публикации
  * (решение владельца 19.09.2026, #745): объект несёт адрес, приглашающий —
- * email; строки, которых в снимке нет, карточка не рисует. */
+ * email; строки, которых в снимке нет, карточка не рисует. type объекта —
+ * тот же снимок (карта #1217, #1244): ключ глифа-плейсхолдера аватара;
+ * payload путешествует free-form, словарь значения проверяет потребитель
+ * (реестр глифов слоя entities/property), неизвестное значение карточка
+ * рисует дом-фолбэком. */
 export type NotificationEntityRef = {
   readonly id: string;
   readonly name: string;
   readonly address?: string;
   readonly email?: string;
+  readonly type?: string;
 };
 
 /** Тарифный снимок биллинг-событий (TariffRef); сумма — BIGINT копейки. */

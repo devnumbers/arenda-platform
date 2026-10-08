@@ -63,7 +63,7 @@ func (s *PaymentScanStore) ListDueTargets(
 	for _, row := range rows {
 		targets = append(targets, paymentScanTarget(
 			row.PaymentID, row.Date, row.Title, row.AmountKopecks,
-			row.PropertyID, row.PropertyName, row.PropertyAddress, row.OwnerID))
+			row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.OwnerID))
 	}
 	return targets, nil
 }
@@ -87,7 +87,7 @@ func (s *PaymentScanStore) ListOverdueTargets(
 	for _, row := range rows {
 		targets = append(targets, paymentScanTarget(
 			row.PaymentID, row.Date, row.Title, row.AmountKopecks,
-			row.PropertyID, row.PropertyName, row.PropertyAddress, row.OwnerID))
+			row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.OwnerID))
 	}
 	return targets, nil
 }
@@ -111,7 +111,7 @@ func (s *PaymentScanStore) ListAutoPaidTargets(
 	for _, row := range rows {
 		targets = append(targets, paymentScanTarget(
 			row.PaymentID, row.Date, row.Title, row.AmountKopecks,
-			row.PropertyID, row.PropertyName, row.PropertyAddress, row.OwnerID))
+			row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.OwnerID))
 	}
 	return targets, nil
 }
@@ -163,7 +163,7 @@ func (s *PaymentScanStore) GetScheduledAutoPaidPayment(
 	}
 	return paymentScanTarget(
 		row.PaymentID, row.Date, row.Title, row.AmountKopecks,
-		row.PropertyID, row.PropertyName, row.PropertyAddress, row.OwnerID), true, nil
+		row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.OwnerID), true, nil
 }
 
 // ListScheduledDueTargets lists the operations whose due boundary — 00:00
@@ -237,7 +237,7 @@ func (s *PaymentScanStore) GetScheduledDuePayment(
 	}
 	return paymentScanTarget(
 		row.PaymentID, row.Date, row.Title, row.AmountKopecks,
-		row.PropertyID, row.PropertyName, row.PropertyAddress, row.OwnerID), true, nil
+		row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.OwnerID), true, nil
 }
 
 // GetScheduledOverduePayment reloads one operation at its overdue boundary
@@ -260,7 +260,7 @@ func (s *PaymentScanStore) GetScheduledOverduePayment(
 	}
 	return paymentScanTarget(
 		row.PaymentID, row.Date, row.Title, row.AmountKopecks,
-		row.PropertyID, row.PropertyName, row.PropertyAddress, row.OwnerID), true, nil
+		row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.OwnerID), true, nil
 }
 
 // ListReminderTargets lists the zone's planned operations of rules with a
@@ -284,7 +284,7 @@ func (s *PaymentScanStore) ListReminderTargets(
 	for _, row := range rows {
 		targets = append(targets, paymentScanTarget(
 			row.PaymentID, row.Date, row.Title, row.AmountKopecks,
-			row.PropertyID, row.PropertyName, row.PropertyAddress, row.OwnerID))
+			row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.OwnerID))
 	}
 	return targets, nil
 }
@@ -336,7 +336,7 @@ func (s *PaymentScanStore) GetScheduledReminderPayment(
 	}
 	return paymentScanTarget(
 		row.PaymentID, row.Date, row.Title, row.AmountKopecks,
-		row.PropertyID, row.PropertyName, row.PropertyAddress, row.OwnerID), true, nil
+		row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.OwnerID), true, nil
 }
 
 // paymentScanTarget maps one scan row's fields to the application target.
@@ -344,7 +344,7 @@ func (s *PaymentScanStore) GetScheduledReminderPayment(
 // not the generated row type, so the mapping travels by value.
 func paymentScanTarget(
 	paymentID pgtype.UUID, date pgtype.Date, title string, amountKopecks int64,
-	propertyID pgtype.UUID, propertyName, propertyAddress string, ownerID pgtype.UUID,
+	propertyID pgtype.UUID, propertyName, propertyAddress, propertyType string, ownerID pgtype.UUID,
 ) application.PaymentScanTarget {
 	return application.PaymentScanTarget{
 		PaymentID:       pgconv.UUIDFromPgtype(paymentID),
@@ -354,6 +354,7 @@ func paymentScanTarget(
 		PropertyID:      pgconv.UUIDFromPgtype(propertyID),
 		PropertyName:    propertyName,
 		PropertyAddress: propertyAddress,
+		PropertyType:    propertyType,
 		OwnerID:         pgconv.UUIDFromPgtype(ownerID),
 	}
 }

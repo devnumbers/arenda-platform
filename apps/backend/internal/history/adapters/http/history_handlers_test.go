@@ -38,7 +38,7 @@ func (f *historyReaderFake) FilterParticipants(_ context.Context, _ uuid.UUID, i
 }
 
 func (f *historyReaderFake) FilterObjects(_ context.Context, _ uuid.UUID, _ []uuid.UUID) ([]domain.FilterObject, error) {
-	return []domain.FilterObject{{ID: uuid.Must(uuid.NewV7()), Name: "Гараж", Address: "Москва", PhotoURL: ""}}, nil
+	return []domain.FilterObject{{ID: uuid.Must(uuid.NewV7()), Name: "Гараж", Address: "Москва", PhotoURL: "", Type: "garage"}}, nil
 }
 
 // historyPolicyAllow grants the owner role everywhere — the privacy-404
@@ -206,6 +206,7 @@ func TestHistoryHandlers_GetHistoryFilters(t *testing.T) {
 			ID       string `json:"id"`
 			Name     string `json:"name"`
 			PhotoURL string `json:"photo_url"`
+			Type     string `json:"type"`
 		} `json:"objects"`
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
@@ -213,4 +214,5 @@ func TestHistoryHandlers_GetHistoryFilters(t *testing.T) {
 	assert.Equal(t, "Иван Иванов", body.Participants[0].Name)
 	require.Len(t, body.Objects, 1)
 	assert.Equal(t, "Гараж", body.Objects[0].Name)
+	assert.Equal(t, "garage", body.Objects[0].Type, "the filter row's glyph type (#1244)")
 }

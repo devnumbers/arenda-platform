@@ -32,6 +32,7 @@ import {
   type UserPropertyBadge,
   type UserPropertyRow,
 } from '../lib/participants-properties-list';
+import type { PropertyType } from '@/entities/property';
 import { ObjectAvatarGlyph } from './participant-fragments';
 import { ParticipantsListSkeleton } from './participants-list-skeletons';
 import { ParticipantSuccessPopup } from './participant-success-popup';
@@ -244,6 +245,7 @@ export function ParticipantsPropertiesScreen({
               <div className="flex flex-col gap-6">
                 <ObjectCard
                   photoUrl={sheetRow.photoUrl}
+                  type={sheetRow.type}
                   title={sheetRow.title}
                   subtitle={sheetRow.address}
                   badge={sheetRow.badge}
@@ -363,7 +365,7 @@ function UserPropertyRowItem({
 }): JSX.Element {
   return (
     <div className="flex w-full items-center gap-3 py-3">
-      <ObjectAvatarGlyph photoUrl={row.photoUrl} />
+      <ObjectAvatarGlyph photoUrl={row.photoUrl} type={row.type} />
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="truncate text-base font-medium leading-[18px] text-content">
           {row.title}
@@ -388,12 +390,14 @@ function UserPropertyRowItem({
  * анатомия «аватар — титул — подзаголовок — бейдж», без кебаба. */
 function ObjectCard({
   photoUrl,
+  type,
   glyph,
   title,
   subtitle,
   badge,
 }: {
   readonly photoUrl?: string;
+  readonly type?: PropertyType;
   readonly glyph?: JSX.Element;
   readonly title: string;
   readonly subtitle?: string;
@@ -409,7 +413,7 @@ function ObjectCard({
           {glyph}
         </span>
       ) : (
-        <ObjectAvatarGlyph photoUrl={photoUrl} />
+        <ObjectAvatarGlyph photoUrl={photoUrl} type={type} />
       )}
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="truncate text-base font-medium leading-[18px] text-content">

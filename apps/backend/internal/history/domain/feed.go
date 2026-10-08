@@ -59,4 +59,7 @@ type FilterObject struct {
 	Name     string
 	Address  string
 	PhotoURL string
+	// Type is the property's type — the filter row's avatar placeholder
+	// glyph's key (карта #1217, #1244).
+	Type string
 }

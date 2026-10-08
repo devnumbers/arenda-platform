@@ -144,12 +144,15 @@ func ActionsForEvent(e EventType) []ActionKind {
 // or gone. Card lines beyond the name are the card's vocabulary (решение
 // владельца 19.09.2026, #745): the property carries its address, the actor —
 // their email; both are snapshots of the publication moment, optional, and
-// the card simply skips a line the snapshot does not hold.
+// the card simply skips a line the snapshot does not hold. The property
+// carries its type too (карта #1217, #1244) — the card avatar's placeholder
+// glyph's key, the same snapshot semantics.
 type EntityRef struct {
 	ID      uuid.UUID `json:"id"`
 	Name    string    `json:"name"`
 	Address string    `json:"address,omitempty"`
 	Email   string    `json:"email,omitempty"`
+	Type    string    `json:"type,omitempty"`
 }
 
 // TariffRef is the tariff snapshot of the billing events (слаг, период,

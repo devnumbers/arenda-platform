@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { components } from '@/shared/api/dto';
-import { mapGlobalPaymentSearch, mapPayment, mapPaymentOperation } from './mappers';
+import { mapGlobalPaymentObject, mapGlobalPaymentSearch, mapPayment, mapPaymentOperation } from './mappers';
 
 type PaymentDto = components['schemas']['PaymentResponse'];
 type OperationDto = components['schemas']['OperationResponse'];
@@ -198,5 +198,30 @@ describe('mapGlobalPaymentSearch — DTO → entity (поиск #575, чипы #
   it('nextCursor проходит opaque-строкой, null — исчерпано (#597)', () => {
     expect(search.nextCursor).toBe('cursor-of-page-two');
     expect(mapGlobalPaymentSearch({ ...searchDto, nextCursor: null }).nextCursor).toBeNull();
+  });
+});
+
+describe('mapGlobalPaymentObject — DTO → entity (карточка «Объектов» #575)', () => {
+  it('переносит стопки, пин, фото и тип — ключ глифа аватара (#1244)', () => {
+    const dto: components['schemas']['PaymentObjectItem'] = {
+      propertyId: '0194a3f8-0000-7000-8000-000000000001',
+      name: 'Гараж на Садовой',
+      address: 'ул. Садовая, 5',
+      type: 'garage',
+      pinnedAt: '2026-09-01T10:00:00Z',
+      photoUrl: '/api/v1/properties/0194a3f8-0000-7000-8000-000000000001/photo',
+      autoPayRules: [{ paymentId: '0194a3f8-0000-7000-8000-000000000002', hasOverdue: true }],
+      otherRules: [],
+    };
+    expect(mapGlobalPaymentObject(dto)).toStrictEqual({
+      propertyId: dto.propertyId,
+      name: dto.name,
+      address: dto.address,
+      type: 'garage',
+      pinnedAt: dto.pinnedAt,
+      photoUrl: dto.photoUrl,
+      autoPayRules: [{ paymentId: dto.autoPayRules[0]?.paymentId, hasOverdue: true }],
+      otherRules: [],
+    });
   });
 });

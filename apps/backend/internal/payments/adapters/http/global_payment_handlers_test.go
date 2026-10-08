@@ -357,6 +357,7 @@ func TestListGlobalPaymentObjects_WireStacks(t *testing.T) {
 				PropertyID:  propertyID,
 				Name:        wirePropertyName,
 				Address:     "Тверская 1",
+				Type:        "apartment",
 				PhotoURL:    &photo,
 				AutoPayKeys: []application.GlobalPaymentObjectKey{{PaymentID: autoRule, HasOverdue: true}},
 				OtherKeys:   []application.GlobalPaymentObjectKey{{PaymentID: plainRule, HasOverdue: false}},
@@ -383,18 +384,28 @@ func TestListGlobalPaymentObjects_WireStacks(t *testing.T) {
 	if len(body.Items) != 1 {
 		t.Fatalf("cards = %d, want 1", len(body.Items))
 	}
-	card := body.Items[0]
+	assertGlobalObjectCard(t, body.Items[0], propertyID, autoRule, plainRule)
+}
+
+// assertGlobalObjectCard checks one card's wire mapping: the property lines
+// (id, name, address), both stacks, the avatar photo and the type (#1244).
+func assertGlobalObjectCard(t *testing.T, card openapi.PaymentObjectItem, propertyID, autoRule, plainRule uuid.UUID) {
+	t.Helper()
+
 	if card.PropertyId != propertyID || card.Name != "Моя квартира" || card.Address != "Тверская 1" {
 		t.Errorf("card = %+v, want the property card", card)
 	}
 	if len(card.AutoPayRules) != 1 || !card.AutoPayRules[0].HasOverdue || card.AutoPayRules[0].PaymentId != autoRule {
 		t.Errorf("auto-pay keys = %+v, want the overdue key", card.AutoPayRules)
 	}
-	if len(card.OtherRules) != 1 || card.OtherRules[0].HasOverdue {
+	if len(card.OtherRules) != 1 || card.OtherRules[0].HasOverdue || card.OtherRules[0].PaymentId != plainRule {
 		t.Errorf("other keys = %+v, want the clean key", card.OtherRules)
 	}
 	if card.PhotoUrl == nil || *card.PhotoUrl != "/uploads/first.jpg" {
 		t.Errorf("photoUrl = %v, want the card's avatar photo", card.PhotoUrl)
+	}
+	if card.Type != "apartment" {
+		t.Errorf("type = %q, want the object's type on the wire (#1244)", card.Type)
 	}
 }
 

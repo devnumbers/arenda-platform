@@ -35,7 +35,7 @@ import {
   type HistoryKind,
   type HistoryParticipantOption,
 } from '@/entities/history';
-import { PropertyAvatar } from '@/entities/property';
+import { PropertyAvatar, type PropertyType } from '@/entities/property';
 import { useMe } from '@/features/auth';
 import {
   DEFAULT_HISTORY_FILTERS,
@@ -125,6 +125,9 @@ type HistoryFilterOptionRow = {
   readonly leadingSize: 'icon' | 'participant' | 'object';
   /** Фото объекта для ведущего аватара (leadingSize 'object'). */
   readonly photoUrl?: string;
+  /** Тип объекта — глиф-плейсхолдер аватара (leadingSize 'object',
+   * карта #1217, #1244). */
+  readonly type?: PropertyType;
   readonly isMe?: boolean;
   readonly roleIcon?: HistoryParticipantOption['role'];
 };
@@ -265,6 +268,7 @@ export function HistoryFiltersSheet({
     subtitle: object_.address,
     leadingSize: 'object',
     photoUrl: object_.photoUrl,
+    type: object_.type,
   }));
 
   // Строки «Объектов»: в общей ленте — все опции; на «Истории объекта»
@@ -586,7 +590,7 @@ function FilterOptionRow({
       )}
       {row.leadingSize === 'object' && (
         <span className="ml-4 shrink-0">
-          <PropertyAvatar photoUrl={row.photoUrl} surface="filter" />
+          <PropertyAvatar photoUrl={row.photoUrl} type={row.type} surface="filter" />
         </span>
       )}
       <span

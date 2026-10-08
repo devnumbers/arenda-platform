@@ -6,6 +6,7 @@ import { formatDayMonthWithYear } from '@/shared/lib/date-format';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import { rentalDurationLine, rentalTenantTitle } from '@/features/rentals';
 import { CategoryIcon, categoryStyle } from '@/features/payment-categories';
+import { propertyTypeIcons, type PropertyType } from '@/entities/property';
 import type { IsoDate } from '@/shared/lib/calendar';
 import type { Rental, RentalSummary } from '@/entities/rental';
 import { PaymentRowButton } from '@/entities/payment';
@@ -27,6 +28,9 @@ export type RentalSummaryContentProps = {
   /** Дата окончания периода итогов: выбранная в мастере либо завершения. */
   readonly endDate: IsoDate;
   readonly propertyName: string;
+  /** Тип объекта строки «Объект» — глиф-плейсхолдер (карта #1217, #1244);
+   * не передан — дом-фолбэк. */
+  readonly propertyType?: PropertyType;
   /** Записанный возврат залога — сумма из черновика мастера (копейки). */
   readonly depositReturnKopecks: number;
   /** Комментарий возврата из черновика мастера. */
@@ -38,11 +42,14 @@ export function RentalSummaryContent({
   summary,
   endDate,
   propertyName,
+  propertyType,
   depositReturnKopecks,
   depositReturnComment,
 }: RentalSummaryContentProps): JSX.Element {
   const tenant = rental.tenant;
   const rentStyle = categoryStyle('default', 'rent');
+  // Выборка из статичного реестра, не вызов: react-hooks/static-components.
+  const PropertyGlyph = propertyType !== undefined ? propertyTypeIcons[propertyType] : BoldHome;
 
   return (
     <div className="pb-6">
@@ -104,7 +111,7 @@ export function RentalSummaryContent({
                 aria-hidden
                 className="flex h-11 w-11 items-center justify-center rounded-pill bg-surface-muted"
               >
-                <BoldHome className="h-6 w-6 text-content" />
+                <PropertyGlyph className="h-6 w-6 text-content" />
               </span>
             }
             title={propertyName}

@@ -301,7 +301,7 @@ function PaymentObjectCard({
       className="flex cursor-pointer flex-col gap-3 rounded-card bg-surface-muted p-6 text-left outline-none transition-opacity hover:opacity-90 active:opacity-90 focus-visible:ring-4 focus-visible:ring-primary"
     >
       <div className="flex items-center gap-3">
-        <PaymentObjectAvatar photoUrl={object.photoUrl} surface="card" />
+        <PaymentObjectAvatar photoUrl={object.photoUrl} type={object.type} surface="card" />
         <span className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="truncate text-base font-medium leading-[18px] text-content">
             {object.name}

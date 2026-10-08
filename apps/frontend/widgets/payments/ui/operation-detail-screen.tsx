@@ -20,7 +20,7 @@ import {
   categoryStyle,
 } from '@/features/payment-categories';
 import { useProperty } from '@/features/properties';
-import { propertyPermissions } from '@/entities/property';
+import { propertyPermissions, propertyTypeIcons, type PropertyType } from '@/entities/property';
 import {
   isOperationPayable,
   useDeleteOperation,
@@ -196,6 +196,7 @@ export function OperationDetailScreen({
             <OperationDetailBody
               propertyId={propertyId}
               propertyTitle={property?.name ?? ''}
+              propertyType={property?.type}
               operation={operation}
               canMutate={canMutate}
               onPaid={setPaidResult}
@@ -239,12 +240,14 @@ export function OperationDetailScreen({
 function OperationDetailBody({
   propertyId,
   propertyTitle,
+  propertyType,
   operation,
   canMutate,
   onPaid,
 }: {
   readonly propertyId: string;
   readonly propertyTitle: string;
+  readonly propertyType: PropertyType | undefined;
   readonly operation: PaymentOperation;
   readonly canMutate: boolean;
   readonly onPaid: (paid: PaymentOperation) => void;
@@ -281,6 +284,7 @@ function OperationDetailBody({
       propertyId={propertyId}
       operation={operation}
       propertyTitle={propertyTitle}
+      propertyType={propertyType}
       today={dateToIsoLocal(new Date())}
       payBar={canMutate && payable
         ? {
@@ -304,12 +308,16 @@ export function OperationView({
   propertyId,
   operation,
   propertyTitle,
+  propertyType,
   today,
   payBar,
 }: {
   readonly propertyId: string;
   readonly operation: PaymentOperation;
   readonly propertyTitle: string;
+  /** Тип объекта строки «Объект» — глиф-плейсхолдер (карта #1217, #1244);
+   * не передан (проекция без загрузки объекта) — дом-фолбэк. */
+  readonly propertyType?: PropertyType;
   readonly today: IsoDate;
   readonly payBar?: { readonly onPay: () => void; readonly pending: boolean };
 }): JSX.Element {
@@ -318,6 +326,9 @@ export function OperationView({
   const amount = operationHeroAmount(operation);
   const details = operationDetailRows(operation, today);
   const category = categoryStyle('default', operation.categorySlug);
+  // Глиф строки «Объект» по типу (карта #1217, #1244); выборка из
+  // статичного реестра, не вызов: react-hooks/static-components.
+  const PropertyGlyph = propertyType !== undefined ? propertyTypeIcons[propertyType] : BoldHome;
   const amountTone =
     amount.tone === 'success'
       ? 'text-success'
@@ -349,7 +360,7 @@ export function OperationView({
           className="px-6 py-3 [&>span]:px-0"
           categoryIcon={
             <span className="flex h-11 w-11 items-center justify-center rounded-pill bg-surface-muted">
-              <BoldHome className="h-6 w-6 text-content-tertiary" aria-hidden />
+              <PropertyGlyph className="h-6 w-6 text-content-tertiary" aria-hidden />
             </span>
           }
           title={propertyTitle !== '' ? propertyTitle : 'Объект'}

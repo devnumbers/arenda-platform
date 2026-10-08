@@ -358,6 +358,7 @@ const listHistoryFilterObjects = `-- name: ListHistoryFilterObjects :many
 SELECT p.id,
        p.name,
        p.address,
+       p.type,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/v1/properties/' || p.id::text || '/photo'
                      END, '')::text AS photo_url
@@ -377,6 +378,7 @@ type ListHistoryFilterObjectsRow struct {
 	ID       pgtype.UUID `json:"id"`
 	Name     string      `json:"name"`
 	Address  string      `json:"address"`
+	Type     string      `json:"type"`
 	PhotoUrl string      `json:"photo_url"`
 }
 
@@ -399,6 +401,7 @@ func (q *Queries) ListHistoryFilterObjects(ctx context.Context, arg ListHistoryF
 			&i.ID,
 			&i.Name,
 			&i.Address,
+			&i.Type,
 			&i.PhotoUrl,
 		); err != nil {
 			return nil, err

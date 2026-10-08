@@ -24,7 +24,8 @@ type RentalScheduleTarget struct {
 // RentalCompletedTarget is one rental the scan fires for: a live rental in
 // the needs_attention state (ADR 0053) with the property snapshot the
 // publication carries (решение владельца 19.09.2026, #745 — the address line
-// travels in the snapshot).
+// travels in the snapshot; the type — the card glyph's key, карта #1217,
+// #1244).
 type RentalCompletedTarget struct {
 	RentalID uuid.UUID
 	// PlannedEndDate is the rental's planned end as a calendar date — the
@@ -33,6 +34,7 @@ type RentalCompletedTarget struct {
 	PropertyID      uuid.UUID
 	PropertyName    string
 	PropertyAddress string
+	PropertyType    string
 	OwnerID         uuid.UUID
 }
 
@@ -217,6 +219,7 @@ func (p *RentalCompletedPublisher) publish(ctx context.Context, target RentalCom
 				ID:      target.PropertyID,
 				Name:    target.PropertyName,
 				Address: target.PropertyAddress,
+				Type:    target.PropertyType,
 			},
 			RentalID: &rentalID,
 		},

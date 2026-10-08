@@ -5,6 +5,8 @@
  * mappers.ts.
  */
 
+import type { components } from '@/shared/api/dto';
+
 /** Роль актёра на объекте в момент действия (снимок, ADR 0061 §4). */
 export type HistoryActorRole = 'owner' | 'full_access' | 'viewer';
 
@@ -69,12 +71,15 @@ export type HistoryParticipantOption = {
   readonly role: 'owner' | 'full_access' | 'viewer';
 };
 
-/** Объект-вариант шита фильтров с фото-аватаром ('' — фото нет). */
+/** Объект-вариант шита фильтров с фото-аватаром ('' — фото нет). type —
+ * ключ глифа-плейсхолдера аватара (карта #1217, #1244; словарь DTO —
+ * структурно тот же PropertyType слоя entities/property). */
 export type HistoryObjectOption = {
   readonly id: string;
   readonly name: string;
   readonly address: string;
   readonly photoUrl: string;
+  readonly type: components['schemas']['PropertyType'];
 };
 
 /** Опции шита фильтров области чтения (GET /history/filters, #708). */

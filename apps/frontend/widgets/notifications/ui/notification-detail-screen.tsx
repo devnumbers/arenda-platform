@@ -19,6 +19,7 @@ import { ROUTES } from '@/shared/config/routes';
 import { formatDayMonthTime } from '@/shared/lib/date-format';
 import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
+import { propertyTypeIcons, type PropertyType } from '@/entities/property';
 import {
   Button,
   CircleIcon,
@@ -178,10 +179,12 @@ function NotificationDetailBody({
       {detail.payload.property && (
         // Карточка объекта — ссылка на объект (решение владельца 19.09.2026,
         // #745): имя и адрес — снимки payload, у снесённого объекта остаётся
-        // снимок, ссылка уводит на 404 объектного экрана.
+        // снимок, ссылка уводит на 404 объектного экрана. Глиф — по типу из
+        // снимка (карта #1217, #1244); payload free-form — словарь значения
+        // проверяет реестр, неизвестное/старое (до #1244) — дом-фолбэк.
         <NotificationEntityLink
           href={ROUTES.property(detail.payload.property.id)}
-          icon={<BoldHome className="h-6 w-6 text-[#d3d7d9]" />}
+          icon={<PropertyGlyph type={detail.payload.property.type} />}
           name={detail.payload.property.name}
           detail={detail.payload.property.address}
         />
@@ -289,4 +292,14 @@ function NotificationEntityLink({
       <NotificationEntityCardBody icon={icon} name={name} detail={detail} />
     </Link>
   );
+}
+
+/** Глиф аватара объекта на карточке payload-снимка: по типу из снимка
+ * (карта #1217, #1244). Payload путешествует free-form — словарь значения
+ * проверяет реестр; снимки до #1244 и неизвестные значения рисует
+ * дом-фолбэком. Выборка из статичного реестра, не вызов:
+ * react-hooks/static-components. */
+function PropertyGlyph({ type }: { readonly type: string | undefined }): JSX.Element {
+  const Glyph = type !== undefined && type in propertyTypeIcons ? propertyTypeIcons[type as PropertyType] : BoldHome;
+  return <Glyph className="h-6 w-6 text-[#d3d7d9]" />;
 }

@@ -3109,6 +3109,7 @@ export interface components {
             propertyId: string;
             name: string;
             address: string;
+            type: components["schemas"]["PropertyType"];
             /**
              * Format: date-time
              * @description The object's global pin (ticket #577): null — not pinned, a moment — pinned since then. The cards order the pinned first.
@@ -3762,6 +3763,7 @@ export interface components {
             address: string;
             /** @description URL первого по времени фото; '' — фото нет. */
             photo_url: string;
+            type: components["schemas"]["PropertyType"];
         };
         UnreadCountResponse: {
             /** Format: int64 */

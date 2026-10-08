@@ -218,6 +218,7 @@ func (s *GlobalPaymentStore) ListGlobalPaymentObjects(
 			PropertyID: pgconv.UUIDFromPgtype(row.ID),
 			Name:       row.Name,
 			Address:    row.Address,
+			Type:       row.Type,
 			PinnedAt:   pgconv.TimestamptzToPtrTime(row.PinnedAt),
 			PhotoURL:   photoURL,
 		})

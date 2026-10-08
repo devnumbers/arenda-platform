@@ -6,7 +6,7 @@ import { ArrowDown, ArrowLeft, BoldUser, Search } from '@/shared/assets/icons';
 import { type HistoryFilterOptions, type HistoryObjectOption } from '@/entities/history';
 import type { HistoryActorGroup } from '@/features/history';
 import { useMe } from '@/features/auth';
-import { PropertyAvatar } from '@/entities/property';
+import { PropertyAvatar, type PropertyType } from '@/entities/property';
 import {
   acknowledgeFreshFeedEntryIds,
   groupHistoryByDay,
@@ -586,6 +586,7 @@ export function HistoryFeedScreen({
                           <PropertyHeaderContent
                             name={object_.propertyName}
                             photoUrl={objectOptions?.photoUrl ?? ''}
+                            type={objectOptions?.type}
                             address={objectOptions?.address}
                           />
                         </Link>
@@ -724,7 +725,7 @@ function PinnedPropertyHeader({
 }): JSX.Element {
   return (
     <div className="mb-3 flex min-w-0 items-center gap-2">
-      <PropertyHeaderContent name={object_.name} photoUrl={object_.photoUrl} address={object_.address} />
+      <PropertyHeaderContent name={object_.name} photoUrl={object_.photoUrl} type={object_.type} address={object_.address} />
     </div>
   );
 }
@@ -734,15 +735,17 @@ function PinnedPropertyHeader({
 function PropertyHeaderContent({
   name,
   photoUrl,
+  type,
   address,
 }: {
   readonly name: string;
   readonly photoUrl: string;
+  readonly type?: PropertyType;
   readonly address?: string;
 }): JSX.Element {
   return (
     <>
-      <PropertyAvatar photoUrl={photoUrl} surface="feed" />
+      <PropertyAvatar photoUrl={photoUrl} type={type} surface="feed" />
       <span className="min-w-0">
         <h2 className="truncate text-xs font-medium leading-[15px] text-content">{name}</h2>
         {address && (
@@ -785,13 +788,14 @@ function ActorHeader({
   );
 }
 
-/** Опции объектов области: id → фото и адрес шапки группы ('' — плейсхолдер). */
+/** Опции объектов области: id → фото, тип и адрес шапки группы ('' —
+ * плейсхолдер). */
 function propertyOptions(
   options: HistoryFilterOptions | undefined,
-): Map<string, { photoUrl: string; address: string }> {
-  const map = new Map<string, { photoUrl: string; address: string }>();
+): Map<string, { photoUrl: string; type: PropertyType; address: string }> {
+  const map = new Map<string, { photoUrl: string; type: PropertyType; address: string }>();
   for (const object_ of options?.objects ?? []) {
-    map.set(object_.id, { photoUrl: object_.photoUrl, address: object_.address });
+    map.set(object_.id, { photoUrl: object_.photoUrl, type: object_.type, address: object_.address });
   }
   return map;
 }

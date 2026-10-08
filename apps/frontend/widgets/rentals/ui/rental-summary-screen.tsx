@@ -119,6 +119,7 @@ export function RentalSummaryScreen({
               summary={summaryQuery.data}
               endDate={completedDate}
               propertyName={propertyQuery.data.name}
+              propertyType={propertyQuery.data.type}
               depositReturnKopecks={rental.depositReturnKopecks ?? 0}
               depositReturnComment={rental.depositReturnComment ?? ''}
             />

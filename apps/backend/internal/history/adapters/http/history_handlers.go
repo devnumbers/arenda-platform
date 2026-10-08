@@ -120,7 +120,7 @@ func (h *HistoryHandlers) GetHistoryFilters(w http.ResponseWriter, r *http.Reque
 	}
 	objects := make([]openapi.HistoryObject, len(options.Objects))
 	for i, o := range options.Objects {
-		objects[i] = openapi.HistoryObject{Id: o.ID, Name: o.Name, Address: o.Address, PhotoUrl: o.PhotoURL}
+		objects[i] = openapi.HistoryObject{Id: o.ID, Name: o.Name, Address: o.Address, PhotoUrl: o.PhotoURL, Type: openapi.PropertyType(o.Type)}
 	}
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.HistoryFiltersResponse{
 		Participants: participants,

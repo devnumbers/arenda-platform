@@ -4,7 +4,6 @@ import type { JSX, ReactNode } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
-  BoldHome,
   BoldObjects,
   BoldStar,
   BoldWarning,
@@ -20,6 +19,8 @@ import {
   useGlobalPayments,
 } from "@/features/payments";
 import type { GlobalPayment } from "@/entities/payment";
+import type { PropertyType } from "@/entities/property";
+import { propertyTypeIcons } from "@/entities/property";
 import { PaymentCardButton } from "@/entities/payment";
 import {
   Button,
@@ -195,6 +196,7 @@ export function PaymentsGlobalScreen(): JSX.Element {
                           .map((object) => ({
                             propertyId: object.propertyId,
                             name: object.name,
+                            type: object.type,
                             hasOverdue: globalPaymentObjectHasOverdue(object),
                           }))
                           .slice(0, SECTION_CARDS_LIMIT)}
@@ -403,7 +405,7 @@ function OverdueSectionBody({
 }
 
 /** Тело секции «Платежи объектов» (879:9711): карточки объектов (белый
- * круг с домом, красная точка при просрочке в стопках) и замыкающая
+ * круг с глифом типа, красная точка при просрочке в стопках) и замыкающая
  * «Показать все» на страницу «Объекты» (#582) — больше одного объекта;
  * единственный объект ведёт сразу на свои платежи без страницы-списка. */
 function ObjectsSectionBody({
@@ -412,26 +414,30 @@ function ObjectsSectionBody({
   onOpenAll,
 }: {
   readonly objects: ReadonlyArray<
-    Readonly<{ propertyId: string; name: string; hasOverdue: boolean }>
+    Readonly<{ propertyId: string; name: string; type: PropertyType; hasOverdue: boolean }>
   >;
   readonly onSelectObject: (propertyId: string) => void;
   readonly onOpenAll: () => void;
 }): JSX.Element {
   return (
     <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      {objects.map((object) => (
-        <PaymentCardButton
-          key={object.propertyId}
-          className="snap-start"
-          leading={
-            <GlobalCardIcon variant="white" hasNotification={object.hasOverdue}>
-              <BoldHome />
-            </GlobalCardIcon>
-          }
-          title={object.name}
-          onSelect={() => onSelectObject(object.propertyId)}
-        />
-      ))}
+      {objects.map((object) => {
+        // Выборка из статичного реестра, не вызов: react-hooks/static-components.
+        const Glyph = propertyTypeIcons[object.type];
+        return (
+          <PaymentCardButton
+            key={object.propertyId}
+            className="snap-start"
+            leading={
+              <GlobalCardIcon variant="white" hasNotification={object.hasOverdue}>
+                <Glyph />
+              </GlobalCardIcon>
+            }
+            title={object.name}
+            onSelect={() => onSelectObject(object.propertyId)}
+          />
+        );
+      })}
       {objects.length > 1 && (
         <PaymentCardButton
           className="snap-start"

@@ -1,5 +1,5 @@
 import { participantLegBadge, sortByRuText } from '@/entities/participants';
-import type { Property } from '@/entities/property';
+import type { Property, PropertyType } from '@/entities/property';
 import type { SharedAccessRole } from '@/shared/model/access';
 import { parseEnumParam } from '@/shared/lib/parse-enum-param';
 
@@ -44,6 +44,8 @@ export type UserPropertyRow = {
   readonly title: string;
   readonly address: string;
   readonly photoUrl: string | undefined;
+  /** Тип объекта — глиф-плейсхолдер аватара (карта #1217, #1244). */
+  readonly type: PropertyType;
   /** Роль доступа — статус-строке шита действий («Вам доступно
    * редактирование» / «Вам доступен просмотр»). */
   readonly role: SharedAccessRole;
@@ -75,6 +77,7 @@ export function userPropertyRows(properties: ReadonlyArray<Property>): UserPrope
     title: property.name,
     address: property.address,
     photoUrl: property.photoUrl ?? undefined,
+    type: property.type,
     role: property.access.role,
     badge: participantLegBadge({
       propertyId: property.id,

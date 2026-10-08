@@ -64,7 +64,10 @@ type TaskOverdueTarget struct {
 	PropertyID      *uuid.UUID
 	PropertyName    string
 	PropertyAddress string
-	OwnerID         uuid.UUID
+	// PropertyType is the snapshot's glyph key (карта #1217, #1244) — the
+	// payload card avatar's placeholder.
+	PropertyType string
+	OwnerID      uuid.UUID
 	// DueAt is the task's boundary instant in the owner's timezone — the
 	// term's minute for a timed task, 00:00 of the day after the due date
 	// for a date-only one (issue #777) — the booked job's ScheduledAt. Only
@@ -273,6 +276,7 @@ func (p *TasksPublisher) publish(ctx context.Context, target TaskOverdueTarget) 
 			ID:      *target.PropertyID,
 			Name:    target.PropertyName,
 			Address: target.PropertyAddress,
+			Type:    target.PropertyType,
 		}
 	}
 

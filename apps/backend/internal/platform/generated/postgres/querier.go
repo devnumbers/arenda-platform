@@ -319,7 +319,8 @@ type Querier interface {
 	// unique index backstops the race.
 	ExistsUnfinishedRental(ctx context.Context, arg ExistsUnfinishedRentalParams) (bool, error)
 	// The access events' property snapshot (#751): the display name and the
-	// address line the feed rows' property card carries (EntityRef, #745). A
+	// address line the feed rows' property card carries (EntityRef, #745); the
+	// type picks the card avatar's placeholder glyph (карта #1217, #1244). A
 	// missing property is a no-row error — the access transitions never fire on
 	// a deleted object, a miss is abnormal and fails the publication.
 	GetAccessEventPropertyView(ctx context.Context, id pgtype.UUID) (GetAccessEventPropertyViewRow, error)
@@ -774,7 +775,8 @@ type Querier interface {
 	// then the rest by name. pinned_at travels to the cards for the pin mark,
 	// photo_url is the card avatar (ticket #582): with the private photos
 	// (ADR 0065, #1227) one image per object, streamed by the backend — the
-	// same-origin path, or NULL without a photo.
+	// same-origin path, or NULL without a photo; type picks the avatar's
+	// placeholder glyph (карта #1217, #1244).
 	ListGlobalPaymentObjects(ctx context.Context, arg ListGlobalPaymentObjectsParams) ([]ListGlobalPaymentObjectsRow, error)
 	// Payments context queries: the global surface of the payment rules
 	// (tickets #575, #576) — the merged «Платежи» feed, the search with its

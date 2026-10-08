@@ -124,6 +124,41 @@ describe('mapNotificationDetail', () => {
     expect(mapped.payload.actor).toStrictEqual({ id: '0194a3f8-0000-7000-8000-000000000002', name: 'Иван Петров' });
   });
 
+  it('type объекта — тот же снимок payload (карта #1217, #1244): строка проходит, не-строка нет', () => {
+    const mapped = mapNotificationDetail(
+      detailDto({
+        payload: {
+          property: {
+            id: '0194a3f8-0000-7000-8000-000000000001',
+            name: 'Гараж',
+            type: 'garage',
+          },
+        },
+      }),
+    );
+    expect(mapped.payload.property).toStrictEqual({
+      id: '0194a3f8-0000-7000-8000-000000000001',
+      name: 'Гараж',
+      type: 'garage',
+    });
+
+    const mappedGarbage = mapNotificationDetail(
+      detailDto({
+        payload: {
+          property: {
+            id: '0194a3f8-0000-7000-8000-000000000001',
+            name: 'Объект',
+            type: 42,
+          },
+        },
+      }),
+    );
+    expect(mappedGarbage.payload.property).toStrictEqual({
+      id: '0194a3f8-0000-7000-8000-000000000001',
+      name: 'Объект',
+    });
+  });
+
   it('урезает payload до известного словаря — мусор не проходит', () => {
     const mapped = mapNotificationDetail(
       detailDto({

@@ -79,8 +79,8 @@ describe('mapHistoryFilterOptions', () => {
         },
       ],
       objects: [
-        { id: 'property-1', name: 'Моя квартира', address: 'Ленина 1', photo_url: 'https://cdn/x.jpg' },
-        { id: 'property-2', name: 'Гараж', address: '', photo_url: '' },
+        { id: 'property-1', name: 'Моя квартира', address: 'Ленина 1', photo_url: 'https://cdn/x.jpg', type: 'apartment' },
+        { id: 'property-2', name: 'Гараж', address: '', photo_url: '', type: 'garage' },
       ],
     } satisfies HistoryFiltersDto);
     expect(options.participants).toEqual([
@@ -102,8 +102,8 @@ describe('mapHistoryFilterOptions', () => {
       },
     ]);
     expect(options.objects).toEqual([
-      { id: 'property-1', name: 'Моя квартира', address: 'Ленина 1', photoUrl: 'https://cdn/x.jpg' },
-      { id: 'property-2', name: 'Гараж', address: '', photoUrl: '' },
+      { id: 'property-1', name: 'Моя квартира', address: 'Ленина 1', photoUrl: 'https://cdn/x.jpg', type: 'apartment' },
+      { id: 'property-2', name: 'Гараж', address: '', photoUrl: '', type: 'garage' },
     ]);
   });
 });

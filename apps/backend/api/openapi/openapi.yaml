@@ -7235,7 +7235,7 @@ components:
         One visible property with its payment stacks (ticket #575): the keys
         grouped into the auto-pay group and the rest.
       type: object
-      required: [propertyId, name, address, autoPayRules, otherRules, pinnedAt, photoUrl]
+      required: [propertyId, name, address, autoPayRules, otherRules, pinnedAt, photoUrl, type]
       properties:
         propertyId:
           type: string
@@ -7244,6 +7244,8 @@ components:
           type: string
         address:
           type: string
+        type:
+          $ref: '#/components/schemas/PropertyType'
         pinnedAt:
           type: string
           format: date-time
@@ -8437,7 +8439,7 @@ components:
     HistoryObject:
       type: object
       description: "Объект-вариант фильтра с фото-аватаром карточки (первое по времени фото, #582)."
-      required: [id, name, address, photo_url]
+      required: [id, name, address, photo_url, type]
       properties:
         id:
           type: string
@@ -8449,6 +8451,8 @@ components:
         photo_url:
           type: string
           description: URL первого по времени фото; '' — фото нет.
+        type:
+          $ref: '#/components/schemas/PropertyType'
 
     UnreadCountResponse:
       type: object

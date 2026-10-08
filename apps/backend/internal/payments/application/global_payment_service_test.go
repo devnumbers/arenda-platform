@@ -421,7 +421,7 @@ func TestListGlobalPaymentObjectsGroupsStacks(t *testing.T) {
 			{ID: uuid.Must(uuid.NewV7()), PropertyID: otherProperty, Today: today},
 		},
 		objects: []GlobalPaymentObject{
-			{PropertyID: property, Name: "Моя квартира", Address: "Тверская 1"},
+			{PropertyID: property, Name: "Моя квартира", Address: "Тверская 1", Type: "apartment"},
 		},
 	}
 	service := NewGlobalPaymentService(reader, fakeGlobalCalendar{todays: map[uuid.UUID]time.Time{owner: today}}, txStoreFactory{})
@@ -436,6 +436,9 @@ func TestListGlobalPaymentObjectsGroupsStacks(t *testing.T) {
 	card := cards[0]
 	if card.Name != "Моя квартира" || card.Address != "Тверская 1" {
 		t.Errorf("card = (%s, %s), want the searched object", card.Name, card.Address)
+	}
+	if card.Type != "apartment" {
+		t.Errorf("type = %q, want the object's type for the avatar glyph (#1244)", card.Type)
 	}
 	if len(card.AutoPayKeys) != 1 || card.AutoPayKeys[0].PaymentID != overdueRule || !card.AutoPayKeys[0].HasOverdue {
 		t.Errorf("auto-pay keys = %+v, want the overdue rule with the dot", card.AutoPayKeys)

@@ -104,6 +104,7 @@ export function ProjectedOperationScreen({
               propertyId={propertyId}
               operation={operation}
               propertyTitle={property?.name ?? ''}
+              propertyType={property?.type}
               today={today}
             />
           )}

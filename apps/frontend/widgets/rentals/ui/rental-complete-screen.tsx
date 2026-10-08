@@ -127,6 +127,7 @@ export function RentalCompleteScreen({
             key={effectiveRental.id}
             rental={effectiveRental}
             propertyName={property.name}
+            propertyType={property.type}
             onClose={close}
           />
         )}

@@ -209,6 +209,7 @@ ORDER BY u.name ASC NULLS LAST, u.surname ASC NULLS LAST, u.id ASC;
 SELECT p.id,
        p.name,
        p.address,
+       p.type,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/v1/properties/' || p.id::text || '/photo'
                      END, '')::text AS photo_url

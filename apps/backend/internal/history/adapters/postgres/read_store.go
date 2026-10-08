@@ -190,6 +190,7 @@ func (s *ReadStore) FilterObjects(ctx context.Context, actor uuid.UUID, property
 			Name:     row.Name,
 			Address:  row.Address,
 			PhotoURL: row.PhotoUrl,
+			Type:     row.Type,
 		}
 	}
 	return out, nil

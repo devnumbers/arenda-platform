@@ -61,6 +61,7 @@ func (s *RentalScanStore) ListCompletedTargets(
 			PropertyID:      pgconv.UUIDFromPgtype(row.PropertyID),
 			PropertyName:    row.PropertyName,
 			PropertyAddress: row.PropertyAddress,
+			PropertyType:    row.PropertyType,
 			OwnerID:         pgconv.UUIDFromPgtype(row.OwnerID),
 		})
 	}
@@ -117,6 +118,7 @@ func (s *RentalScanStore) GetScheduledCompletedRental(
 		PropertyID:      pgconv.UUIDFromPgtype(row.PropertyID),
 		PropertyName:    row.PropertyName,
 		PropertyAddress: row.PropertyAddress,
+		PropertyType:    row.PropertyType,
 		OwnerID:         pgconv.UUIDFromPgtype(row.OwnerID),
 	}, true, nil
 }

@@ -1,3 +1,4 @@
+import type { components } from '@/shared/api/dto';
 import type { Participant, ParticipantPropertyLeg } from '../model/types';
 
 /** Минимальный обрезок объекта читающего, достаточный ряду мультичека. */
@@ -6,6 +7,9 @@ export type InvitePropertyOption = {
   readonly name: string;
   readonly address: string;
   readonly photoUrl: string | undefined;
+  /** Тип объекта — глиф-плейсхолдер аватара (карта #1217, #1244; словарь
+   * DTO — структурно тот же PropertyType слоя entities/property). */
+  readonly type: components['schemas']['PropertyType'];
 };
 
 /** Вход `availableInviteProperties`: Property из кэша /properties
@@ -15,6 +19,7 @@ export type InvitePropertySource = {
   readonly name: string;
   readonly address: string;
   readonly photoUrl?: string | null;
+  readonly type: components['schemas']['PropertyType'];
 };
 
 /** Свойство читающего → опция мультичека (фото — аватар объекта, ADR 0065:
@@ -25,6 +30,7 @@ export function toInvitePropertyOption(property: InvitePropertySource): InvitePr
     name: property.name,
     address: property.address,
     photoUrl: property.photoUrl ?? undefined,
+    type: property.type,
   };
 }
 
