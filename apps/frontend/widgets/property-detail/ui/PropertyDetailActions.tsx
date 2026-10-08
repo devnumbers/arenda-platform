@@ -98,8 +98,15 @@ type PropertyStatusSheetProps = {
   readonly onAction: (key: PropertyDetailActionKey) => void;
 };
 
+/** Общая форма ряда шита — контейнер пунктов; «Отменить» держит ту же
+ * форму (решение владельца 07.10, #1241: на макете 1581:53682 она
+ * плоская пилюля) и расходится только содержимым ряда. */
+const sheetRowClass =
+  'flex h-14 w-full cursor-pointer items-center justify-center rounded-button bg-surface-muted outline-none transition-colors focus-visible:ring-4 focus-visible:ring-primary hover:bg-surface-muted-hover active:bg-surface-muted-hover';
+
 /** Шит смены статуса (Figma 1554:100371 — без аренды, 1581:53679 — на
- * ремонте): строки-пилюли 56 с иконкой и подписью, под ними «Отменить».
+ * ремонте): строки-контейнеры 56 с иконкой и подписью, под ними
+ * «Отменить» в том же контейнере — решение владельца 07.10 (#1241).
  * Канон Modal — на ≥768 карточка. Заголовок sr-only: a11y-имя диалога. */
 export function PropertyStatusSheet({
   open,
@@ -120,7 +127,7 @@ export function PropertyStatusSheet({
                 onOpenChange(false);
                 onAction(item.key);
               }}
-              className="flex h-14 w-full cursor-pointer items-center justify-center gap-3 rounded-button bg-surface-muted text-left outline-none transition-colors focus-visible:ring-4 focus-visible:ring-primary hover:bg-surface-muted-hover active:bg-surface-muted-hover"
+              className={`${sheetRowClass} gap-3 text-left`}
             >
               <span className="flex h-6 w-6 shrink-0 items-center justify-center" aria-hidden>
                 {propertyActionIcon(item.key)}
@@ -129,15 +136,13 @@ export function PropertyStatusSheet({
             </button>
           ))}
         </div>
-        <div className="mt-2 flex justify-center">
-          <button
-            type="button"
-            onClick={() => onOpenChange(false)}
-            className="flex h-11 cursor-pointer items-center rounded-pill px-5 text-base font-medium text-content outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary hover:bg-surface-muted active:bg-surface-muted"
-          >
-            Отменить
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => onOpenChange(false)}
+          className={`${sheetRowClass} mt-2 text-base font-medium text-content`}
+        >
+          Отменить
+        </button>
       </ModalContent>
     </Modal>
   );
