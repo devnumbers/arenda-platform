@@ -11,8 +11,8 @@ import type { Locator, Page } from '@playwright/test';
 // Подэкраны страницы платежа (#466): «График платежей» (материализованное
 // ближайшее + клиентская проекция, порции по 50, пустые состояния «На
 // паузе»/«Платеж завершен»), «История платежей» (paid, группы «Сегодня»/
-// «Вчера»/дата с годом, чип «Сначала новые», серверная пагинация 50 +
-// скролл-догрузка) и
+// «Вчера»/дата, режим изменений с чипами правок (#1195), серверная
+// пагинация 50 + скролл-догрузка) и
 // полный список просроченных (red-стилизация, пагинация 50). Скриншоты —
 // материал для сверки с Figma (671:7358 график, 1302:52209 история — канон
 // #802; полный
@@ -35,11 +35,29 @@ const PAYMENT_URLS = {
 };
 const STUDIO_RENT = `/properties/${SEEDED_STUDIO_PROPERTY_ID}/payments/55555555-5555-4555-8555-555555555558`;
 
-/** Год даты, отстоящей на `monthsAhead` месяцев от «сейчас» браузера —
- * подписи дальних строк проекции и старых групп истории содержат год. */
-function yearShiftedBy(monthsAhead: number): number {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth() + monthsAhead, 1).getFullYear();
+/** Свежее правило API-вызовом от сидовой сессии (сид не мутируем —
+ * прецедент createTaskRule sorting-persistence): канал дешевле UI-обхода.
+ * Правка суммы после создания пишет одну строку журнала изменений
+ * (ADR 0065: создание строк не пишет). */
+async function createPaymentWithEdit(page: Page, title: string): Promise<string> {
+  const created = await page.request.post(`/api/properties/${PROPERTY}/payments`, {
+    data: {
+      type: 'expense',
+      title,
+      amountKopecks: 100_000,
+      recurrence: { kind: 'monthly', daysOfMonth: [1], lastDay: false },
+      categorySlug: 'other',
+      autoPay: false,
+    },
+  });
+  expect(created.ok(), `создание правила «${title}»`).toBe(true);
+  const payment = (await created.json()) as { id: string };
+  const patched = await page.request.patch(
+    `/api/properties/${PROPERTY}/payments/${payment.id}`,
+    { data: { amountKopecks: 200_000 } },
+  );
+  expect(patched.ok(), 'правка суммы').toBe(true);
+  return payment.id;
 }
 
 /** Первая порция списка — ровно 50 (правило платформы). */
@@ -158,29 +176,67 @@ test.describe('подэкран «История платежей»', () => {
     await expectMoreAfterScroll(page, internetRows, 55);
   });
 
-  test('чип «Сначала новые» переключает сортировку на «сначала старые»', async ({
+  test('режим изменений: чип правки вперемешку с операциями дня; скриншот', async ({
     page,
     seededUser,
-  }) => {
+  }, testInfo) => {
     await openCabinetWithSeededSession(page, seededUser);
-    await page.goto(`${PAYMENT_URLS.internet}/history`);
+    const suffix = `${testInfo.retry}`;
+    const paymentId = await createPaymentWithEdit(page, `E2E правки ${suffix}`);
+    const historyUrl = `/properties/${PROPERTY}/payments/${paymentId}/history`;
+    try {
+      // Оплата планового вхождения API-вызовом: факт сегодня — операция и
+      // правка попадают в одну группу «Сегодня» (mixed-вид макета 73216).
+      const planned = await page.request.get(
+        `/api/properties/${PROPERTY}/payments/${paymentId}/operations?status=planned&order=asc`,
+      );
+      expect(planned.ok(), 'плановые операции правила').toBe(true);
+      const operations = (await planned.json()) as { items: Array<{ id: string }> };
+      expect(operations.items.length, 'плановое вхождение есть').toBeGreaterThan(0);
+      const paid = await page.request.post(
+        `/api/properties/${PROPERTY}/operations/${operations.items[0]?.id}/pay`,
+      );
+      expect(paid.ok(), 'оплата планового вхождения').toBe(true);
 
-    const chip = page.getByRole('button', {
-      name: 'Сортировка: сначала новые — переключить на «сначала старые»',
-    });
-    await expect(chip).toHaveText('Сначала новые');
-    await expect(page.getByText('Сегодня', { exact: true })).toBeVisible();
+      await page.goto(historyUrl);
+      // Дефолтный режим — только операции, чипов правок нет.
+      await expect(page.getByText('Сегодня', { exact: true })).toBeVisible();
+      await expect(page.getByText(`E2E правки ${suffix}`).first()).toBeVisible();
+      await expect(page.getByText('Сумма изменена')).toHaveCount(0);
 
-    await chip.click();
-    const oldestYear = String(yearShiftedBy(-53));
-    const oldestChip = page.getByRole('button', {
-      name: 'Сортировка: сначала старые — переключить на «сначала новые»',
-    });
-    await expect(oldestChip).toHaveText('Сначала старые');
-    // Первая группа — самая старая дата (53 месяца назад, год в подписи);
-    // «Сегодня» уходит за пределы первой порции.
-    await expect(page.getByText(new RegExp(`, ${oldestYear}$`)).first()).toBeVisible();
-    await expect(page.getByText('Сегодня', { exact: true })).toHaveCount(0);
+      // Меню «⋮» шапки — «Показать изменения» (макет 3214-76403).
+      await page.getByRole('button', { name: 'Действия с историей' }).click();
+      await page.getByRole('menuitem', { name: 'Показать изменения' }).click();
+      await expect(page).toHaveURL(/changes=1/);
+      await expect(page.getByText('Сумма изменена').first()).toBeVisible();
+      await expect(page.getByText(`E2E правки ${suffix}`).first()).toBeVisible();
+
+      await captureScreen(page, testInfo, 'payment-history-changes-mobile');
+    } finally {
+      await page.request.delete(
+        `/api/properties/${PROPERTY}/payments/${paymentId}?keep_overdue=true`,
+      );
+    }
+  });
+
+  test('меню «⋮»: «Изменить платеж» ведёт на экран правки', async ({
+    page,
+    seededUser,
+  }, testInfo) => {
+    await openCabinetWithSeededSession(page, seededUser);
+    const suffix = `${testInfo.retry}`;
+    const paymentId = await createPaymentWithEdit(page, `E2E меню правки ${suffix}`);
+    try {
+      await page.goto(`/properties/${PROPERTY}/payments/${paymentId}/history`);
+
+      await page.getByRole('button', { name: 'Действия с историей' }).click();
+      await page.getByRole('menuitem', { name: 'Изменить платеж' }).click();
+      await expect(page).toHaveURL(new RegExp(`/payments/${paymentId}/edit$`));
+    } finally {
+      await page.request.delete(
+        `/api/properties/${PROPERTY}/payments/${paymentId}?keep_overdue=true`,
+      );
+    }
   });
 });
 

@@ -123,6 +123,10 @@ export const paymentKeys = {
     [...paymentKeys.all, 'list', propertyId, search] as const,
   detail: (propertyId: string, paymentId: string) =>
     [...paymentKeys.all, 'detail', propertyId, paymentId] as const,
+  /** Порции журнала изменений платежа (ADR 0065, подэкран «История
+   * платежа» #1195): keyset (created_at, id) DESC, курсор в queryFn. */
+  changesPaged: (propertyId: string, paymentId: string) =>
+    [...paymentKeys.all, 'changes-paged', propertyId, paymentId] as const,
 };
 
 export const paymentOperationKeys = {

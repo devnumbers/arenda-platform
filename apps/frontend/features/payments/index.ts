@@ -68,6 +68,12 @@ export {
 } from './lib/operations-history';
 export { useHistoryOrder } from './lib/use-history-order';
 export { HistoryOrderChip } from './ui/history-order-chip';
+export { paymentChangeChips } from './lib/payment-change-chips';
+export {
+  buildPaymentHistoryTimeline,
+  type PaymentHistoryTimelineGroup,
+  type PaymentHistoryTimelineItem,
+} from './lib/payment-history-timeline';
 export {
   operationsMonthOf,
   operationsMonthRange,
@@ -114,6 +120,7 @@ export {
   fetchGlobalPaymentsFeed,
   fetchOperation,
   fetchPayment,
+  fetchPaymentChangesPage,
   fetchPaymentOperationsByStatus,
   fetchPaymentOperationsPagedPage,
   fetchPaymentsOfProperty,
@@ -123,6 +130,7 @@ export {
   globalOperationsSummaryQueryOptions,
   globalPaymentObjectsQueryOptions,
   globalPaymentsFeedQueryOptions,
+  paymentChangesPagedQueryOptions,
   paymentDetailQueryOptions,
   paymentListQueryOptions,
   paymentOperationQueryOptions,
@@ -144,6 +152,7 @@ export {
   useGlobalPaymentSearchCategories,
   useGlobalPayments,
   usePayment,
+  usePaymentChangesPaged,
   usePaymentOperationsByStatus,
   usePaymentOperationsPaged,
   useOperation,

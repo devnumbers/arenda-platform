@@ -1,17 +1,14 @@
 import type { Metadata } from 'next';
-import { parseHistoryOrderParams } from '@/features/payments';
 import { PaymentHistoryScreen } from '@/widgets/payments';
 
 /**
- * Подэкран «История платежей» (#466): paid-вхождения, группы по датам,
- * чип сортировки «Сначала новые», порции по 50 с бесконечным скроллом.
- * Направление
- * живёт в адресе (?order=asc, #785) — стартовое значение парсится здесь,
- * на сервере.
+ * Подэкран «История платежа» (#466, режимы — #1195): дефолт — операции
+ * по дням; ?changes=1 включает режим изменений (журнал правок, ADR 0065).
+ * Режим живёт в адресе — стартовое значение парсится здесь, на сервере.
  */
 
 export const metadata: Metadata = {
-  title: 'История операций — Рентли',
+  title: 'История платежа — Рентли',
 };
 
 export default async function PaymentHistoryRoutePage({
@@ -20,7 +17,13 @@ export default async function PaymentHistoryRoutePage({
 }: PageProps<'/properties/[id]/payments/[paymentId]/history'>) {
   const { id, paymentId } = await params;
   const resolved = await searchParams;
-  const initialOrder = parseHistoryOrderParams(resolved.order);
+  const initialChangesMode = resolved.changes === '1';
 
-  return <PaymentHistoryScreen propertyId={id} paymentId={paymentId} initialOrder={initialOrder} />;
+  return (
+    <PaymentHistoryScreen
+      propertyId={id}
+      paymentId={paymentId}
+      initialChangesMode={initialChangesMode}
+    />
+  );
 }

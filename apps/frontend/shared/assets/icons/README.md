@@ -88,6 +88,8 @@
 | `Block` | `block.svg` | `R/Block` | 1804:108181 | новая |
 | `Undo` | `undo.svg` | `R/Undo` | 1883:71902 | новая |
 | `Readed` | `readed.svg` | `R/Readed` | 3185:87668 | новая (06.10.2026, меню ленты уведомлений #1171; запечённый цвет экспорта перекрашен в currentColor) |
+| `Show` | `show.svg` | `R/Show` | 3214:76404 | новая (08.10.2026, меню «⋮» истории платежа #1195; запечённый цвет экспорта перекрашен в currentColor) |
+| `Hide` | `hide.svg` | `R/Hide` | 3214:74178 | новая (08.10.2026, меню «⋮» истории платежа #1195; запечённый цвет экспорта перекрашен в currentColor) |
 | `SortingSmallBig` | `sorting-small-big.svg` | `R/SortingSmallBig` | 418:4608 | новая |
 | `Checkmark` | `checkmark.svg` | `R/Checkmark` | 1535:77389 | новая |
 | `ChangeVertical` | `change-vertical.svg` | `R/ChangeVertical` | 858:20998 | новая |

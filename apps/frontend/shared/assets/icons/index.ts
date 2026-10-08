@@ -142,6 +142,13 @@ export { default as SmallArrowUp } from './small-arrow-up.svg';
 export { default as VerticalMenu } from './vertical-menu.svg';
 export { default as ClockSmall } from './clock-small.svg';
 
+// Меню «⋮» экрана «История платежа» (#1195, макеты 3214-76403/74177):
+// «Показать изменения» — Icon/R/Show (нода 3214:76404), «Скрыть изменения» —
+// Icon/R/Hide (нода 3214:74178); запечённый цвет экспорта перекрашен в
+// currentColor.
+export { default as Show } from './show.svg';
+export { default as Hide } from './hide.svg';
+
 // Меню кебаба списка задач (#499, Figma 1535-77633): «Отметить все задачи»
 // (Checkmark 1535:77389) — currentColor. «Удалить выполненные задачи»
 // использует TrashBin из блока «Направление сортировки» выше.

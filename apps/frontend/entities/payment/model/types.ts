@@ -252,3 +252,55 @@ export type GlobalPaymentObject = {
   readonly autoPayRules: ReadonlyArray<GlobalPaymentObjectKey>;
   readonly otherRules: ReadonlyArray<GlobalPaymentObjectKey>;
 };
+
+/**
+ * Журнал изменений платежа (ADR 0065, карта #1183): одна строка на действие
+ * пользователя — правка с дифом полей, пауза/возобновление с пустым дифом.
+ * Значения дифа типизированы по словарю поля, никогда не строки-с-
+ * форматированием — тексты чипов экрана «История платежа» собирает фронт.
+ */
+
+/** Род строки журнала: правка условий, пауза, возобновление. Создание и
+ * удаление строк не пишут (ADR 0065 §4). */
+export type PaymentChangeAction = 'updated' | 'paused' | 'resumed';
+
+/** Ссылка на категорию в дифе — снапшот лейбла на момент правки (канон
+ * category_label операций, ADR 0049 §1): чип читаем после переименования
+ * или удаления пользовательской категории. */
+export type PaymentChangeCategoryRef = {
+  /** Слаг дефолтного каталога; у пользовательской категории его нет. */
+  readonly slug?: string;
+  /** Идентификатор пользовательской категории. */
+  readonly userCategoryId?: string;
+  readonly label: string;
+};
+
+/** Один уехавший поле дифа: старое→новое значение, типизировано по словарю
+ * поля (ADR 0065 §2). Порядок строк дифа в ответе — словарный. */
+export type PaymentFieldChange =
+  | { readonly field: 'type'; readonly old: PaymentType | null; readonly new: PaymentType | null }
+  | { readonly field: 'title'; readonly old: string | null; readonly new: string | null }
+  | { readonly field: 'amount_kopecks'; readonly old: number | null; readonly new: number | null }
+  | { readonly field: 'recurrence'; readonly old: Recurrence | null; readonly new: Recurrence | null }
+  | {
+      readonly field: 'category_slug';
+      readonly old: PaymentChangeCategoryRef | null;
+      readonly new: PaymentChangeCategoryRef | null;
+    }
+  | { readonly field: 'end_date'; readonly old: IsoDate | null; readonly new: IsoDate | null }
+  | { readonly field: 'auto_pay'; readonly old: boolean | null; readonly new: boolean | null }
+  | {
+      readonly field: 'reminder_offset_days';
+      readonly old: PaymentReminderOffset | null;
+      readonly new: PaymentReminderOffset | null;
+    };
+
+/** Строка журнала изменений (ADR 0065): кто и какое действие совершил
+ * (actor остаётся на DTO — экран актора не показывает) и какие поля
+ * двинулись. createdAt — полный момент действия, ISO date-time. */
+export type PaymentChangeEntry = {
+  readonly id: string;
+  readonly action: PaymentChangeAction;
+  readonly changes: ReadonlyArray<PaymentFieldChange>;
+  readonly createdAt: string;
+};
