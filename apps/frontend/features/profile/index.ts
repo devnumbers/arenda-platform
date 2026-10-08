@@ -16,5 +16,4 @@ export {
 export {
   type MePhotoStage,
   mePhotoDisplay,
-  mePhotoStageAfterRemove,
 } from './lib/photo';

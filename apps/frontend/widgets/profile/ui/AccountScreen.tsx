@@ -7,7 +7,6 @@ import { Button, Skeleton, TextField } from '@/shared/ui/design';
 import { useMe } from '@/features/auth';
 import {
   type MePhotoStage,
-  mePhotoStageAfterRemove,
   useDeleteMePhoto,
   useUpdateMe,
   useUploadMePhoto,
@@ -162,68 +161,57 @@ function AccountScreenView({ me }: AccountScreenViewProps): JSX.Element {
   const [name, setName] = useState(me.name ?? '');
   const [surname, setSurname] = useState(me.surname ?? '');
   const [patronymic, setPatronymic] = useState(me.patronymic ?? '');
-  // Изменение фото — часть черновика экрана (решение владельца 08.10 с
-  // #1228): stage применяется коммитом формы, уход без коммита его просто
-  // умирает. Превью staged-замены — data URL (CSP img-src 'self' data:,
-  // ADR 0065): обычная строка в состоянии, никакой дополнительной механики
-  // освобождения.
+  // Фото применяется сразу (решение владельца: экран автосейв-формы,
+  // «при изменении фото оно сразу должно меняться» — пересмотр
+  // стейдж-канона #1228 для этого экрана). Stage — только превью летящей
+  // загрузки (data URL, CSP img-src 'self' data:, ADR 0065): ответ гасит
+  // его, отказ возвращает круг к серверному состоянию с тостом (ретрай —
+  // повторный выбор).
   const [photoStage, setPhotoStage] = useState<MePhotoStage | null>(null);
-  // Фото-мутация коммита в полёте — управление слота глушится (одна
-  // картинка на профиль, параллельные загрузка и удаление недопустимы).
+  // Фото-мутация в полёте — управление слота глушится (одна картинка на
+  // профиль, параллельные загрузка и удаление недопустимы).
   const photoBusy = uploadPhoto.isPending || deletePhoto.isPending;
 
   const handlePhotoFile = (file: File): void => {
     void readPhotoDataUrl(file).then((previewUrl) => {
+      // Превью садится до запуска мутации: круг меняется сразу и не
+      // может перезаписать ответ, пришедший раньше чтения файла.
       if (previewUrl !== null) {
         setPhotoStage({ kind: 'file', file, previewUrl });
       }
+      uploadPhoto.mutate(file, {
+        onSuccess: () => setPhotoStage(null),
+        onError: (error) => {
+          setPhotoStage(null);
+          notify.scenarios.profile.photoUpdateError(error);
+        },
+      });
     });
   };
 
   const handlePhotoRemove = (): void => {
-    setPhotoStage(mePhotoStageAfterRemove(me.photoUrl));
+    deletePhoto.mutate(undefined, {
+      onError: (error) => notify.scenarios.profile.photoDeleteError(error),
+    });
   };
-
-  /** Момент коммита формы применяется и к фото: staged-изменение уходит
-   * своей мутацией параллельно с патчем поля (решения владельца 08.10 —
-   * перенос канона #1228 в #1230), каждый сбой — свой тост сценария,
-   * применённое гасит свою грязь. До коммита (уход, переход на строку-
-   * ссылку) сеть не трогается. */
-  const flushPhotoStage = useCallback(() => {
-    if (photoStage === null || photoBusy) {
-      return;
-    }
-    if (photoStage.kind === 'file') {
-      uploadPhoto.mutate(photoStage.file, {
-        onSuccess: () => setPhotoStage(null),
-        onError: (error) => notify.scenarios.profile.photoUpdateError(error),
-      });
-    } else {
-      deletePhoto.mutate(undefined, {
-        onSuccess: () => setPhotoStage(null),
-        onError: (error) => notify.scenarios.profile.photoDeleteError(error),
-      });
-    }
-  }, [photoStage, photoBusy, uploadPhoto, deletePhoto]);
 
   /** Тихое автосохранение (макет без кнопки «Сохранить»): поле коммитится
    * на blur и крестиком очистки — патч только этого поля; пустая строка
-   * очищает значение (контракт бэка: null = «не менять»). Коммит поля —
-   * и момент фото: staged-изменение уходит параллельно с патчем. Почта
-   * здесь не правится (#722) — только через флоу смены на
+   * очищает значение (контракт бэка: null = «не менять»). Почта здесь не
+   * правится (#722) — только через флоу смены на
    * /profile/account/email. */
   const commitField = useCallback(
     (field: ProfileTextField, rawValue: string) => {
       const patch = profileFieldPatch(me, field, rawValue);
-      if (patch !== null) {
-        updateMe.mutate(patch, {
-          onSuccess: () => notify.scenarios.profile.personalDataSaved(),
-          onError: (error) => notify.scenarios.profile.personalDataSaveError(error),
-        });
+      if (patch === null) {
+        return;
       }
-      flushPhotoStage();
+      updateMe.mutate(patch, {
+        onSuccess: () => notify.scenarios.profile.personalDataSaved(),
+        onError: (error) => notify.scenarios.profile.personalDataSaveError(error),
+      });
     },
-    [me, updateMe, flushPhotoStage],
+    [me, updateMe],
   );
 
   const commitName = useCallback(
@@ -305,9 +293,9 @@ function AccountScreenView({ me }: AccountScreenViewProps): JSX.Element {
 
 /** Экран «Аккаунт» в новом дизайне (тикет #593, карта #591; Figma
  * 1789-99036): фото-слот 96 (фото либо BoldUser; загрузка/замена/удаление
- * — POST|DELETE /me/photo, ADR 0065, тикет #1230 — изменение стадируется
- * и применяется коммитом формы: у автосейв-экрана без кнопки «Сохранить»
- * это blur/очистка любого поля, staged-фото уходит параллельно с патчем),
+ * — POST|DELETE /me/photo, ADR 0065, тикет #1230 — применяются сразу:
+ * экран автосейв-формы, решение владельца «при изменении фото оно сразу
+ * должно меняться»; превью — только на время полёта),
  * поля имени (titleIn) с автосохранением PATCH /me по blur/очистке —
  * макет без кнопки «Сохранить», телефон строкой на /profile/account/phone,
  * почта строкой на флоу смены /profile/account/email (#722 — инлайн-правка
