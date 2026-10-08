@@ -180,7 +180,12 @@ export function NotificationsFeedScreen({
         </HubCollapseAnchor>
 
         {showToolbar && (
-          <div className="mb-2 mt-3 flex items-center gap-1 px-6">
+          /* Ряд чипов — слот чипов Heading Block макета 3178-79262: в 24
+           * после H1-строки (чипы на y=80 при тайтле 24..56) и в 24 до
+           * ленты (лента на y=148 при чипах 80..124) — ритм gap-6 до конца
+           * первого блока, как в принятых #1236/#1237/#1238; зазор чипов 4
+           * — по макету (у «Задач» 6 — по их макету). */
+          <div className="mb-6 mt-6 flex items-center gap-1 px-6">
             <ChipButton selected={!unreadOnly} onClick={() => setUnreadFilter(false)}>
               Все
             </ChipButton>
