@@ -47,6 +47,12 @@ export const contactKeys = {
   ) => [...contactKeys.all, 'list', propertyId, search, sort, order] as const,
   /** Карточка контакта (экран #510). */
   detail: (contactId: string) => [...contactKeys.all, 'detail', contactId] as const,
+  /** Счётчик фото-мутаций карточки (тикет #1229, ADR 0065) — бастер кэша
+   * выдачи для <img>: сеть не ходит (пишется и читается только из кэша),
+   * переживает перемонтирования экранов, сбрасывается перезагрузкой
+   * страницы (окно протухания кэша выдачи — 5 минут, ADR 0065). */
+  photoBuster: (contactId: string) =>
+    [...contactKeys.all, 'photo-buster', contactId] as const,
 };
 
 // features/participants — «Совместный доступ» (карта #692)

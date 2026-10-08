@@ -1,11 +1,13 @@
 'use client';
 
 import type { JSX, SubmitEvent } from 'react';
-import { BoldUser, SmallArrowDown } from '@/shared/assets/icons';
+import { SmallArrowDown } from '@/shared/assets/icons';
 import { formatPhoneInput } from '@/shared/lib/phone';
 import { useProperties } from '@/features/properties';
+import { type ContactPhotoStage } from '@/features/contacts';
 import { TextField, Textarea } from '@/shared/ui/design';
 import type { ContactFormFields } from '@/features/contacts';
+import { ContactPhotoSlot } from './contact-photo-slot';
 
 /** Лимиты ввода (молчаливая обрезка сверх — как нативный maxLength, но без
  * счётчика: по макетам #509 у полей нет нижней строки). Именные поля —
@@ -16,21 +18,41 @@ const NOTE_MAX = 1024;
 
 /**
  * Поля формы контакта — общие для «Создать контакт» (#509) и «Изменить
- * контакт» (#510): серый круг-аватар (кнопка «Добавить фото» убрана —
- * решение владельца 2026-09-03, фото в контракте #507 нет) и группы полей
- * по макету: «Личные данные» (titleIn), «Роль», «Телефон и почта»,
- * «Мессенджер», «Привязанный объект» (titleOut, ведёт на страницу выбора),
- * «Заметка». Телефон набирается в маске, обязательность и форматы
- * считаются на экране (contactFormErrors/Ready).
+ * контакт» (#510): фото-слот (круг с BoldUser либо фото; тикет #1229 —
+ * решение владельца 2026-09-03 «фото в контракте #507 нет» снято ADR
+ * 0065, карта #1217) и группы полей по макету: «Личные данные» (titleIn),
+ * «Роль», «Телефон и почта», «Мессенджер», «Привязанный объект» (titleOut,
+ * ведёт на страницу выбора), «Заметка». Телефон набирается в маске,
+ * обязательность и форматы считаются на экране (contactFormErrors/Ready).
+ * Изменение фото живёт в черновике экрана (stage) и применяется кнопками
+ * сохранения — форма только показывает слот и гонит выбор вверх.
  */
 export function ContactForm({
   form,
+  contactId,
+  photoUrl,
+  photoStage,
+  photoBusy,
+  onPhotoFile,
+  onPhotoRemove,
   errorOf,
   onFieldChange,
   onOpenObjectSelect,
   onSubmit,
 }: {
   readonly form: ContactFormFields;
+  /** uuid карточки — на создании ещё нет (бастер слота тогда не нужен). */
+  readonly contactId?: string;
+  /** Серверное фото карточки; на создании карточки нет — null. */
+  readonly photoUrl?: string | null;
+  /** Незавершённое изменение фото из черновика экрана (ContactPhotoStage). */
+  readonly photoStage: ContactPhotoStage | null;
+  /** Фото-мутация сохранения в полёте — управление слота глушится. */
+  readonly photoBusy: boolean;
+  /** Файл выбран (кап уже проверен слотом) — экран кладёт его в stage. */
+  readonly onPhotoFile: (file: File) => void;
+  /** Удаление фото подтверждено — экран переставляет stage. */
+  readonly onPhotoRemove: () => void;
   readonly errorOf: (field: keyof ContactFormFields) => string | undefined;
   readonly onFieldChange: {
     (key: 'propertyId', value: string | null): void;
@@ -55,12 +77,17 @@ export function ContactForm({
         onSubmit?.(event);
       }}
     >
-      {/* Круг-аватар (1281:48439); кнопка «Добавить фото» убрана —
-       * решение владельца 2026-09-03 (фото в контракте #507 нет). */}
+      {/* Фото-слот (1281:48439, 1302:58933, тикет #1229): круг с BoldUser
+       * либо фото; бейдж-корзина и ссылка по канону 1299:51572/73. */}
       <div className="flex justify-center">
-        <div aria-hidden className="flex h-24 w-24 items-center justify-center rounded-full bg-surface-muted">
-          <BoldUser className="h-13 w-13 text-content-tertiary" />
-        </div>
+        <ContactPhotoSlot
+          contactId={contactId}
+          photoUrl={photoUrl}
+          stage={photoStage}
+          busy={photoBusy}
+          onFileChosen={onPhotoFile}
+          onRemove={onPhotoRemove}
+        />
       </div>
 
       <section className="flex flex-col gap-2">

@@ -15,9 +15,14 @@ import { notify } from '@/shared/lib/notifications';
 import { contactFullName, type Contact } from '@/entities/contact';
 import type { Property } from '@/entities/property';
 import { propertyPermissions, propertyTypeIcons } from '@/entities/property';
-import { useContact, useDeleteContact } from '@/features/contacts';
+import {
+  useContact,
+  useContactPhotoBuster,
+  useDeleteContact,
+} from '@/features/contacts';
 import { useProperty } from '@/features/properties';
 import { useCopiedHint } from '@/shared/lib/hooks/use-copied-hint';
+import { photoDisplayUrl } from '@/shared/lib/photo';
 import { ConfirmDialog, IconButton, PageContent, TopNav, TopNavTitle } from '@/shared/ui/design';
 import { contactValueRows } from '../lib/contact-detail-model';
 import { ContactKebabMenu } from './contact-kebab-menu';
@@ -153,12 +158,32 @@ function ContactCardBody({
   const boundPropertyId = contact.propertyId;
   // Выборка из статичного реестра, не вызов: react-hooks/static-components.
   const BoundPropertyGlyph = boundProperty !== undefined ? propertyTypeIcons[boundProperty.type] : undefined;
+  // Бастер кэша выдачи (тикет #1229, ADR 0065): правка фото возвращает
+  // на карточку с тем же путём выдачи — без ?v=N <img> показал бы прежние
+  // байты из кэша браузера до 5 минут.
+  const photoBuster = useContactPhotoBuster(contact.id);
+  const photoUrl =
+    contact.photoUrl !== undefined
+      ? photoDisplayUrl(contact.photoUrl, photoBuster)
+      : null;
 
   return (
     <div className="flex flex-col gap-6 px-6 pb-8 pt-2">
       <div className="flex justify-center">
-        <div aria-hidden className="flex h-24 w-24 items-center justify-center rounded-full bg-surface-muted">
-          <BoldUser className="h-13 w-13 text-content-tertiary" />
+        <div
+          aria-hidden
+          className={[
+            'flex h-24 w-24 items-center justify-center rounded-full bg-surface-muted',
+            photoUrl !== null ? 'overflow-hidden' : undefined,
+          ]
+            .filter(Boolean)
+            .join(' ')}
+        >
+          {photoUrl !== null ? (
+            <img src={photoUrl} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <BoldUser className="h-13 w-13 text-content-tertiary" />
+          )}
         </div>
       </div>
 

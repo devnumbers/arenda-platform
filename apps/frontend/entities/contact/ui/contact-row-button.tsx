@@ -27,7 +27,10 @@ export type ContactRowButtonProps = {
 
 /**
  * Строка контакта (компонент Figma «Row Button», 936:39348): аватар-круг 44
- * с BoldUser, заголовок — полное имя, подзаголовок — роль; телефона в строке
+ * с BoldUser либо фото карточки (тикет #1229 — фото стримится с
+ * `private, max-age=300`, строки книг перечитываются после фото-мутаций,
+ * бастер здесь не нужен), заголовок — полное имя, подзаголовок — роль;
+ * телефона в строке
  * нет (макет 1527:74139, решение владельца). Hover/press приглушают строку.
  * Каноническая строка списков контактов (DESIGN.md, «Строки списков»):
  * живёт в срезе сущности — нужна и книге объекта (#508), и шагу «Контакт
@@ -54,8 +57,16 @@ export function ContactRowButton({
         className,
       )}
     >
-      <CircleIcon variant={surface} aria-hidden>
-        <BoldUser className="h-6 w-6" />
+      <CircleIcon
+        variant={surface}
+        aria-hidden
+        className={contact.photoUrl !== undefined ? 'overflow-hidden' : undefined}
+      >
+        {contact.photoUrl !== undefined ? (
+          <img src={contact.photoUrl} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <BoldUser className="h-6 w-6" />
+        )}
       </CircleIcon>
       <span className="flex min-w-0 flex-1 flex-col justify-center gap-1">
         <span className="truncate text-base font-medium text-content">{contactFullName(contact)}</span>

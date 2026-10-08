@@ -2,33 +2,25 @@
 
 import { useRef, useState, type ChangeEvent, type JSX } from 'react';
 import { notify } from '@/shared/lib/notifications';
-import {
-  PHOTO_FILE_TOO_LARGE_MESSAGE,
-  photoFileTooLarge,
-} from '@/shared/lib/photo';
-import {
-  type PropertyPhotoStage,
-  propertyPhotoDisplay,
-  usePropertyPhotoBuster,
-} from '@/features/properties';
-import { PropertyAvatar, type PropertyType } from '@/entities/property';
+import { BoldUser } from '@/shared/assets/icons';
+import { PHOTO_FILE_TOO_LARGE_MESSAGE, photoFileTooLarge } from '@/shared/lib/photo';
+import { type ContactPhotoStage, contactPhotoDisplay, useContactPhotoBuster } from '@/features/contacts';
 import { Button, circleIconRing, ConfirmDialog, PhotoRemoveBadge } from '@/shared/ui/design';
 
 /**
- * Слот фото объекта на правке (тикет #1228; ADR 0065): круг-плейсхолдер
- * по типу (поверхность hero канона PropertyAvatar) либо фото. Управляемый
- * и без сети: изменение фото живёт в черновике формы (stage,
- * PropertyPhotoStage — решение владельца 08.10), что показывать, решает
- * propertyPhotoDisplay (staged-превью → серверное фото с бастером →
- * глиф), а применяют изменение кнопки сохранения экрана — onFileChosen и
- * onRemove только переставляют stage, увлечение без сохранения сервер не
- * трогает. Круг — настоящая кнопка (aria-label, клавиатура; решение
- * владельца 08.10): без фото открывает пикер, с фото — замену. Бейдж-
- * корзина — сосед круга в DOM, не потомок: клик по нему открывает
- * ConfirmDialog («удаление применится при сохранении»), а не пикер.
- * На время фото-мутаций (busy) круг и бейдж глушатся, ссылка прячется с
- * сохранением слота — ноль layout shift; бейдж гаснет по канону
- * дизейблов.
+ * Слот фото контакта в форме (тикет #1229; макеты 1281:48439 /
+ * 1302:58933, канон правки 1299:51572/73; ADR 0065): круг-плейсхолдер с
+ * BoldUser либо фото. Управляемый и без сети: изменение фото живёт в
+ * черновике формы (stage, ContactPhotoStage — решения владельца 08.10 с
+ * #1228), что показывать, решает contactPhotoDisplay (staged-превью →
+ * серверное фото с бастером → глиф), а применяют изменение кнопки
+ * сохранения экрана — onFileChosen и onRemove только переставляют stage,
+ * уход без сохранения сервер не трогает. Круг — настоящая кнопка
+ * (aria-label, клавиатура): без фото открывает пикер, с фото — замену.
+ * Бейдж-корзина — сосед круга в DOM, не потомок: клик по нему открывает
+ * ConfirmDialog, а не пикер. На время фото-мутаций (busy) круг и бейдж
+ * глушатся, ссылка прячется с сохранением слота — ноль layout shift;
+ * бейдж гаснет по канону дизейблов.
  */
 
 const PHOTO_INPUT_ACCEPT = 'image/jpeg,image/png,image/webp';
@@ -38,36 +30,35 @@ const PHOTO_INPUT_ACCEPT = 'image/jpeg,image/png,image/webp';
 const PHOTO_BUTTON_CLASS =
   'flex cursor-pointer rounded-full outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none';
 
-export type PropertyPhotoSlotProps = {
-  readonly propertyId: string;
-  /** same-origin стриминговый путь выдачи (ADR 0065), null — фото нет. */
+export type ContactPhotoSlotProps = {
+  /** uuid карточки; на создании карточки ещё нет — бастер читается по
+   * пустому ключу (никогда не инкрементится, превью живёт в stage). */
+  readonly contactId?: string;
+  /** same-origin стриминговый путь выдачи (ADR 0065), null/undefined — фото нет. */
   readonly photoUrl?: string | null;
   /** Незавершённое изменение фото из черновика экрана (см. выше). */
-  readonly stage: PropertyPhotoStage | null;
+  readonly stage: ContactPhotoStage | null;
   /** Фото-мутация сохранения в полёте — управление слота глушится. */
   readonly busy: boolean;
-  /** Тип объекта — выбирает глиф-плейсхолдер, следует за черновиком формы. */
-  readonly type?: PropertyType;
   /** Файл выбран (кап уже проверен) — экран кладёт его в stage. */
   readonly onFileChosen: (file: File) => void;
-  /** Удаление подтверждено — экран ставит stage remove. */
+  /** Удаление подтверждено — экран решает stage по наличию серверного фото. */
   readonly onRemove: () => void;
 };
 
-export function PropertyPhotoSlot({
-  propertyId,
+export function ContactPhotoSlot({
+  contactId = '',
   photoUrl,
   stage,
   busy,
-  type,
   onFileChosen,
   onRemove,
-}: PropertyPhotoSlotProps): JSX.Element {
-  const photoBuster = usePropertyPhotoBuster(propertyId);
+}: ContactPhotoSlotProps): JSX.Element {
+  const photoBuster = useContactPhotoBuster(contactId);
   const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const displayUrl = propertyPhotoDisplay(photoUrl ?? null, photoBuster, stage);
+  const displayUrl = contactPhotoDisplay(photoUrl ?? null, photoBuster, stage);
   const hasPhoto = displayUrl !== null;
 
   const openPicker = (): void => {
@@ -99,12 +90,20 @@ export function PropertyPhotoSlot({
       className={PHOTO_BUTTON_CLASS}
       onClick={openPicker}
     >
-      <PropertyAvatar
-        surface="hero"
-        type={type}
-        photoUrl={displayUrl}
-        className={hasPhoto ? circleIconRing.white : undefined}
-      />
+      <span
+        className={[
+          'flex h-24 w-24 items-center justify-center rounded-full bg-surface-muted',
+          hasPhoto ? `overflow-hidden ${circleIconRing.white}` : undefined,
+        ]
+          .filter(Boolean)
+          .join(' ')}
+      >
+        {hasPhoto ? (
+          <img src={displayUrl} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <BoldUser className="h-13 w-13 text-content-tertiary" aria-hidden />
+        )}
+      </span>
     </button>
   );
 
@@ -138,7 +137,11 @@ export function PropertyPhotoSlot({
         open={removeConfirmOpen}
         onOpenChange={setRemoveConfirmOpen}
         title="Удалить фото?"
-        description="Фото объекта будет удалено при сохранении"
+        description={
+          photoUrl
+            ? 'Фото контакта будет удалено при сохранении'
+            : 'Выбранное фото не сохранится'
+        }
         confirmLabel="Удалить"
         confirmVariant="danger"
         onConfirm={() => {

@@ -68,6 +68,12 @@ const propertyContacts = {
   deleted: ((options?) =>
     notify.success('Контакт удалён', options)) satisfies ScenarioFn,
   deleteError: errorScenario('Не удалось удалить контакт'),
+  /** Фото контакта (ADR 0065, тикет #1229): успех виден по самому слоту —
+   * тосты только на ошибки; текст отказа приходит из problem+json бэка
+   * («Файл больше 5 МиБ», «Поддерживаются только изображения JPEG, PNG и
+   * WebP»). */
+  photoUpdateError: errorScenario('Не удалось загрузить фото'),
+  photoDeleteError: errorScenario('Не удалось удалить фото'),
 } as const;
 
 const access = {

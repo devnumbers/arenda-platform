@@ -35,10 +35,7 @@ export {
 } from './lib/property-edit';
 export { addressSuggestionRow } from './lib/address-suggestion';
 export {
-  PHOTO_FILE_TOO_LARGE_MESSAGE,
   type PropertyPhotoStage,
-  photoDisplayUrl,
-  photoFileTooLarge,
   propertyPhotoDisplay,
 } from './lib/photo';
 export { propertyCreateSuccessCopy } from './lib/property-create-success';

@@ -151,3 +151,30 @@ export function contactDetailQueryOptions({
     queryFn: () => fetchContact(contactId, transport),
   });
 }
+
+/** Загрузка/замена фото карточки — POST /contacts/{id}/photo multipart-
+ * формой с полем `file` (ADR 0065); ответ — обновлённая карточка с новым
+ * photoUrl, валидация и EXIF-стриж на бэкенде. */
+export async function uploadContactPhoto(
+  { id, file }: { readonly id: string; readonly file: File },
+  transport: ApiTransport = apiClient,
+): Promise<Contact> {
+  const body = new FormData();
+  body.append('file', file);
+  const response = await transport<ContactResponse>(
+    `/contacts/${encodeURIComponent(id)}/photo`,
+    { method: 'POST', body },
+  );
+  return mapContact(response);
+}
+
+/** Удаление фото карточки — DELETE /contacts/{id}/photo (204 без тела,
+ * ADR 0065). */
+export async function deleteContactPhoto(
+  { id }: { readonly id: string },
+  transport: ApiTransport = apiClient,
+): Promise<void> {
+  await transport<void>(`/contacts/${encodeURIComponent(id)}/photo`, {
+    method: 'DELETE',
+  });
+}
