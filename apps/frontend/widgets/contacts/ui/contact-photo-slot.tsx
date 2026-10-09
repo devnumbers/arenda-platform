@@ -54,6 +54,9 @@ export function ContactPhotoSlot({
   onFileChosen,
   onRemove,
 }: ContactPhotoSlotProps): JSX.Element {
+  // Битое фото (выдача answering 404 после чужого удаления) откатывается к
+  // заглушке — канон #1275 (#1286).
+  const [photoBroken, setPhotoBroken] = useState(false);
   const photoBuster = useContactPhotoBuster(contactId);
   const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -93,13 +96,18 @@ export function ContactPhotoSlot({
       <span
         className={[
           'flex h-24 w-24 items-center justify-center rounded-full bg-surface-muted',
-          hasPhoto ? `overflow-hidden ${circleIconRing.white}` : undefined,
+          hasPhoto && !photoBroken ? `overflow-hidden ${circleIconRing.white}` : undefined,
         ]
           .filter(Boolean)
           .join(' ')}
       >
-        {hasPhoto ? (
-          <img src={displayUrl} alt="" className="h-full w-full object-cover" />
+        {hasPhoto && !photoBroken ? (
+          <img
+            src={displayUrl}
+            alt=""
+            className="h-full w-full object-cover"
+            onError={() => setPhotoBroken(true)}
+          />
         ) : (
           <BoldUser className="h-13 w-13 text-content-tertiary" aria-hidden />
         )}

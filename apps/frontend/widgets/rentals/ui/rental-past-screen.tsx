@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import type { JSX } from 'react';
-import { ArrowLeft, BoldUser } from '@/shared/assets/icons';
+import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import {
@@ -12,9 +12,10 @@ import {
   rentalTenantTitle,
   useRentals,
 } from '@/features/rentals';
+import { useContact } from '@/features/contacts';
 import type { Rental } from '@/entities/rental';
 import { PaymentRowButton } from '@/entities/payment';
-import { Button, CircleIcon, EmptyState, IconButton, PageContent, TopNav, TopNavTitle } from '@/shared/ui/design';
+import { Button, EmptyState, IconButton, PageContent, TopNav, TopNavTitle, UserAvatar } from '@/shared/ui/design';
 import { RentalGroup } from './rental-group';
 import { RentalPastListSkeleton } from './rental-skeletons';
 import { TermRows } from './term-row';
@@ -94,6 +95,9 @@ function PastRentalCard({
   readonly onOpen: () => void;
 }): JSX.Element {
   const tenant = rental.tenant;
+  // Фото арендатора — из его карточки контакта (ADR 0065, решение #1286);
+  // без арендатора запрос спит (enabled: Boolean(contactId)).
+  const tenantContactQuery = useContact(tenant?.contactId ?? '');
   return (
     <RentalGroup
       title={pastRentalCardTitle(rental)}
@@ -104,23 +108,30 @@ function PastRentalCard({
       contentGap="gap-4"
     >
       <TermRows rows={pastRentalRows(rental)} />
-      {tenant !== null && <PastTenantRow name={rentalTenantTitle(tenant)} />}
+      {tenant !== null && (
+        <PastTenantRow
+          name={rentalTenantTitle(tenant)}
+          photoUrl={tenantContactQuery.data?.photoUrl}
+        />
+      )}
     </RentalGroup>
   );
 }
 
 /** Строка арендатора карточки (1302:52462): белый круг с человеком, имя,
  * подзаголовок-роль «Арендатор»; внутри карточки — без собственного тапа. */
-function PastTenantRow({ name }: { readonly name: string }): JSX.Element {
+function PastTenantRow({
+  name,
+  photoUrl,
+}: {
+  readonly name: string;
+  readonly photoUrl?: string | null;
+}): JSX.Element {
   return (
     <PaymentRowButton
       variant="gray"
       className="pointer-events-none px-3 py-2"
-      categoryIcon={
-        <CircleIcon variant="muted" aria-hidden>
-          <BoldUser className="h-6 w-6 text-content" />
-        </CircleIcon>
-      }
+      categoryIcon={<UserAvatar variant="muted" photoUrl={photoUrl} />}
       title={name}
       subtitle="Арендатор"
     />
