@@ -23,6 +23,7 @@ import {
   type RentalActionState,
 } from '@/features/rentals';
 import { CategoryIcon, categoryStyle } from '@/features/payment-categories';
+import { useContact } from '@/features/contacts';
 import type { Rental } from '@/entities/rental';
 import { PaymentRowButton } from '@/entities/payment';
 import { ListRow, PageContent, RoundActionButton, ConfirmDialog } from '@/shared/ui/design';
@@ -94,6 +95,9 @@ export function RentalDetailBody({
           : null,
       );
   const tenant = rental.tenant;
+  // Фото арендатора — из его карточки контакта (ADR 0065, решение #1286);
+  // без арендатора запрос спит (enabled: Boolean(contactId)).
+  const tenantContactQuery = useContact(tenant?.contactId ?? '');
   // Ревизия #1161: идущая аренда всегда со ссылкой на живой платёж;
   // тип несёт null ради завершённых — их детализацией правит другой экран,
   // так что здесь null лишь сминает тип.
@@ -266,6 +270,7 @@ export function RentalDetailBody({
               <TenantRow
                 tenantName={rentalTenantTitle(tenant)}
                 phone={formatPhoneDisplay(tenant.phone)}
+                photoUrl={tenantContactQuery.data?.photoUrl}
                 onSelect={() => router.push(ROUTES.propertyContact(propertyId, tenant.contactId))}
               />
             </RentalGroup>

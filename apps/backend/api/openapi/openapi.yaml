@@ -6545,6 +6545,15 @@ components:
             posture as SuspendedShared.owner_email. Present in the detail
             response only when the actor is not the owner; empty when the
             owner has no email or the resolution failed.
+        owner_photo_url:
+          type: string
+          nullable: true
+          description: >
+            The owner's profile photo same-origin streaming path (ADR 0065,
+            решение #1286): /api/v1/users/{userId}/photo — readable while the
+            reader shares a readable property with the owner. Null when the
+            owner has no photo or the resolution failed; present in the
+            detail response and on the shared list rows.
 
     PropertyResponse:
       type: object

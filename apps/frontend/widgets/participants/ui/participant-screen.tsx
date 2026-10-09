@@ -2,7 +2,7 @@
 
 import { useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
-import { Add, Block, BoldUser, Info, Kebab, SmallArrowRight, TimeHistory } from '@/shared/assets/icons';
+import { Add, Block, Info, Kebab, SmallArrowRight, TimeHistory } from '@/shared/assets/icons';
 import { goBack } from '@/shared/lib/navigation';
 import { ROUTES } from '@/shared/config/routes';
 import {
@@ -24,6 +24,7 @@ import {
   MenuItem,
   MenuTrigger,
   SubScreenShell,
+  UserAvatar,
 } from '@/shared/ui/design';
 import {
   ObjectAvatarGlyph,
@@ -158,8 +159,8 @@ export function ParticipantScreen({
                   key={leg.propertyId}
                   leg={leg}
                   subtitle={propertyById.get(leg.propertyId)?.address}
-                  photoUrl={propertyById.get(leg.propertyId)?.photoUrl ?? undefined}
-                  type={propertyById.get(leg.propertyId)?.type}
+                  photoUrl={leg.photoUrl ?? undefined}
+                  type={leg.type}
                   onSelect={() =>
                     router.push(
                       ROUTES.participantRights(participantId, leg.propertyId),
@@ -212,8 +213,9 @@ export function ParticipantScreen({
   );
 }
 
-/** Блок «аватар — имя — почта — чип» (макет 2008-81468): аватар-плейсхолдер
- * 96 (BoldUser, запечённый серый), имя H1 28/32 SemiBold, почта 14/16 —
+/** Блок «аватар — имя — почта — чип» (макет 2008-81468): аватар 96 — фото
+ * профиля или заглушка BoldUser (UserAvatar hero), имя H1 28/32 SemiBold,
+ * почта 14/16 —
  * всё по центру; у pending-участника имени нет — почта уже титул. */
 function ParticipantHeader({ participant }: { readonly participant: Participant }): JSX.Element {
   const title = participant.displayName ?? participant.email ?? '';
@@ -222,12 +224,7 @@ function ParticipantHeader({ participant }: { readonly participant: Participant 
 
   return (
     <div className="flex flex-col items-center gap-2">
-      <span
-        aria-hidden
-        className="flex h-24 w-24 items-center justify-center rounded-pill bg-surface-muted"
-      >
-        <BoldUser className="h-[52px] w-[52px]" />
-      </span>
+      <UserAvatar size="hero" photoUrl={participant.photoUrl} />
       <h1 className="text-center text-[28px] font-semibold leading-8 text-content">
         {title}
       </h1>

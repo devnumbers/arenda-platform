@@ -174,6 +174,10 @@ type Property struct {
 	// as SharedSuspendedMembership.OwnerEmail (#702); empty otherwise (the
 	// owner, a resolver failure, an owner without an email).
 	OwnerEmail string
+	// OwnerPhotoURL is the owner's profile photo streaming path (ADR 0065,
+	// решение #1286), filled like OwnerName — by the detail read and the
+	// shared list rows; empty otherwise (no photo, resolver failure).
+	OwnerPhotoURL string
 }
 
 var (

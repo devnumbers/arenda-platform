@@ -837,6 +837,7 @@ export function PropertyDetailPage(): JSX.Element {
                             <PropertyOwnerSection
                                 ownerName={property.access.ownerName}
                                 ownerEmail={property.access.ownerEmail}
+                                ownerPhotoUrl={property.access.ownerPhotoUrl}
                             />
                         )}
 

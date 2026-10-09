@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type JSX, type ReactNode } from 'react';
 import Link from 'next/link';
 import { ArrowDown, ArrowLeft, BoldUser, Search } from '@/shared/assets/icons';
+import { cn } from '@/shared/lib/cn';
 import { type HistoryFilterOptions, type HistoryObjectOption } from '@/entities/history';
 import type { HistoryActorGroup } from '@/features/history';
 import { useMe } from '@/features/auth';
@@ -706,7 +707,7 @@ function ActorCard({
 }): JSX.Element {
   return (
     <div className="flex flex-col gap-2 rounded-m bg-surface-muted p-3">
-      <ActorHeader name={actor.name} isSelf={isSelf} href={headerHref} />
+      <ActorHeader name={actor.name} photoUrl={actor.photoUrl} isSelf={isSelf} href={headerHref} />
       <div className="flex flex-col gap-2">
         {actor.entries.map((entry) => (
           <HistoryRow key={entry.id} entry={entry} fresh={freshIds.has(entry.id)} />
@@ -759,20 +760,47 @@ function PropertyHeaderContent({
 /** Шапка актёра в карточке: белый кружок-плейсхолдер + имя; с href —
  * ссылка на страницу участника, без — статичная шапка. Свой актёр
  * подписан серым суффиксом «(Вы)» — канон шита фильтров (#710). */
+/** Аватар актёра в шапке группы ленты (решение #1286): фото профиля 24,
+ * иначе — и при битом фото (404 стрима) — заглушка BoldUser. */
+function ActorFeedAvatar({ photoUrl }: { readonly photoUrl: string | null }): JSX.Element {
+  const [photoBroken, setPhotoBroken] = useState(false);
+  const showPhoto = photoUrl !== null && !photoBroken;
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        'flex h-6 w-6 shrink-0 items-center justify-center rounded-pill bg-white',
+        showPhoto && 'overflow-hidden',
+      )}
+    >
+      {showPhoto ? (
+        <img
+          src={photoUrl}
+          alt=""
+          className="h-full w-full object-cover"
+          onError={() => setPhotoBroken(true)}
+        />
+      ) : (
+        <BoldUser className="h-3.5 w-3.5" aria-hidden />
+      )}
+    </span>
+  );
+}
+
 function ActorHeader({
   name,
+  photoUrl,
   isSelf,
   href,
 }: {
   readonly name: string;
+  readonly photoUrl: string | null;
   readonly isSelf: boolean;
   readonly href: string | null;
 }): JSX.Element {
   const content: ReactNode = (
     <>
-      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-pill bg-white">
-        <BoldUser className="h-3.5 w-3.5" aria-hidden />
-      </span>
+      <ActorFeedAvatar photoUrl={photoUrl} />
       <h3 className="min-w-0 truncate text-xs font-medium leading-[15px] text-content">
         {name}
         {isSelf && <span className="text-content-tertiary"> (Вы)</span>}

@@ -22,6 +22,7 @@ import { usePropertyOperationsScopedPaged } from '@/features/payments';
 import { useProperty } from '@/features/properties';
 import { propertyPermissions } from '@/entities/property';
 import { CategoryIcon, categoryStyle } from '@/features/payment-categories';
+import { useContact } from '@/features/contacts';
 import type { Rental } from '@/entities/rental';
 import { PaymentRowButton, type PaymentOperation } from '@/entities/payment';
 import {
@@ -151,6 +152,9 @@ function RentalCompletedBody({
 
   const operations = operationsQuery.data ?? [];
   const tenant = rental.tenant;
+  // Фото арендатора — из его карточки контакта (ADR 0065, решение #1286);
+  // без арендатора запрос спит (enabled: Boolean(contactId)).
+  const tenantContactQuery = useContact(tenant?.contactId ?? '');
   const openContact =
     tenant === null
       ? undefined
@@ -259,6 +263,7 @@ function RentalCompletedBody({
               <TenantRow
                 tenantName={rentalTenantTitle(tenant)}
                 phone={tenant.phone}
+                photoUrl={tenantContactQuery.data?.photoUrl}
                 onSelect={openContact}
               />
             ) : (

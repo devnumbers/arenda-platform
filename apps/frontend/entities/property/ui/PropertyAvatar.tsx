@@ -1,4 +1,6 @@
-import type { ComponentProps, JSX } from 'react';
+'use client';
+
+import { useState, type ComponentProps, type JSX } from 'react';
 import { cn } from '@/shared/lib/cn';
 import { BoldHome, NotificationDot } from '@/shared/assets/icons';
 import { circleIconPair } from '@/shared/ui/design';
@@ -80,6 +82,11 @@ export function PropertyAvatar({
 }: PropertyAvatarProps): JSX.Element {
   // Выборка из статичного реестра, не вызов: react-hooks/static-components.
   const Glyph = type !== undefined ? propertyTypeIcons[type] : BoldHome;
+  // Битое фото (объект или фото удалили после рендера строки — 404 стрима)
+  // откатывается к глифу типа: канон фолбэка #1275, поднятый из
+  // notification-компонентов (решение #1286). Флаг живёт до размонтирования
+  // или смены photoUrl (списки кейуются по id — перемонтирование).
+  const [photoBroken, setPhotoBroken] = useState(false);
 
   return (
     <span
@@ -92,8 +99,13 @@ export function PropertyAvatar({
           SURFACE_CIRCLE[surface],
         )}
       >
-        {photoUrl ? (
-          <img src={photoUrl} alt="" className="h-full w-full object-cover" />
+        {photoUrl && !photoBroken ? (
+          <img
+            src={photoUrl}
+            alt=""
+            className="h-full w-full object-cover"
+            onError={() => setPhotoBroken(true)}
+          />
         ) : (
           <Glyph className={cn('text-[#D3D7D9]', SURFACE_ICON[surface])} aria-hidden />
         )}

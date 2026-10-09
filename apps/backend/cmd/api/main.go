@@ -436,6 +436,7 @@ func injectPropertyServiceAccess(propertiesMod *wire.Properties, accessMod *wire
 	propertiesMod.PropertyService.SetSharedMemberships(accessMod.SharedProperties)
 	propertiesMod.PropertyService.SetOwnerDisplayNameResolver(accessMod.AccessService)
 	propertiesMod.PropertyService.SetOwnerEmailResolver(accessMod.UserEmailResolver)
+	propertiesMod.PropertyService.SetOwnerPhotoResolver(accessMod.UserEmailResolver)
 	propertiesMod.PropertyService.SetRecipientSlotPolicy(accessMod.SlotCoordinator)
 	propertiesMod.PropertyService.SetSharedMembersDeleteMailer(accessMod.PropertyDeleteMailer)
 	propertiesMod.PropertyService.SetSuspendedSharedMemberships(accessMod.SharedListEnricher)

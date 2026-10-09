@@ -195,12 +195,19 @@ function PropertyPickRow({
   const photoUrl = property.photoUrl ?? undefined;
   // Выборка из статичного реестра, не вызов: react-hooks/static-components.
   const Glyph = propertyTypeIcons[property.type];
+  // Битое фото (404 стрима) откатывается к глифу — канон #1275 (#1286).
+  const [photoBroken, setPhotoBroken] = useState(false);
 
   return (
     <label className="flex cursor-pointer items-center gap-3 py-3">
       <CircleIcon variant="muted" aria-hidden className="relative overflow-hidden rounded-full">
-        {photoUrl !== undefined ? (
-          <img src={photoUrl} alt="" className="h-full w-full object-cover" />
+        {photoUrl !== undefined && !photoBroken ? (
+          <img
+            src={photoUrl}
+            alt=""
+            className="h-full w-full object-cover"
+            onError={() => setPhotoBroken(true)}
+          />
         ) : (
           <Glyph className="h-6 w-6 text-[#D3D7D9]" />
         )}

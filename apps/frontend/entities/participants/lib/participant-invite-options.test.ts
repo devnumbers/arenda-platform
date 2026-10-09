@@ -17,13 +17,14 @@ function participant(properties: ReadonlyArray<ParticipantPropertyLeg>): Partici
     email: 'maria@example.com',
     displayName: 'Мария Петрова',
     aggregateStatus: 'partial',
+    photoUrl: null,
     accessiblePropertiesCount: properties.length,
     properties,
   };
 }
 
 function leg(propertyId: string, overrides: Partial<ParticipantPropertyLeg> = {}): ParticipantPropertyLeg {
-  return { propertyId, title: 'Объект', role: 'viewer', status: 'active', ...overrides };
+  return { propertyId, title: 'Объект', role: 'viewer', status: 'active', type: 'apartment', photoUrl: null, ...overrides };
 }
 
 describe('availableInviteProperties — объекты для «Пригласить в объект» (макет 2010-131329)', () => {

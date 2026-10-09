@@ -4,7 +4,6 @@ import { useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft,
-  BoldUser,
   Check,
   Copy,
   SmallArrowRight,
@@ -23,7 +22,7 @@ import {
 import { useProperty } from '@/features/properties';
 import { useCopiedHint } from '@/shared/lib/hooks/use-copied-hint';
 import { photoDisplayUrl } from '@/shared/lib/photo';
-import { ConfirmDialog, IconButton, PageContent, TopNav, TopNavTitle } from '@/shared/ui/design';
+import { ConfirmDialog, IconButton, PageContent, TopNav, TopNavTitle, UserAvatar } from '@/shared/ui/design';
 import { contactValueRows } from '../lib/contact-detail-model';
 import { ContactKebabMenu } from './contact-kebab-menu';
 import { ContactDetailSkeleton, ContactsErrorCard } from './contacts-states';
@@ -170,21 +169,7 @@ function ContactCardBody({
   return (
     <div className="flex flex-col gap-6 px-6 pb-8 pt-2">
       <div className="flex justify-center">
-        <div
-          aria-hidden
-          className={[
-            'flex h-24 w-24 items-center justify-center rounded-full bg-surface-muted',
-            photoUrl !== null ? 'overflow-hidden' : undefined,
-          ]
-            .filter(Boolean)
-            .join(' ')}
-        >
-          {photoUrl !== null ? (
-            <img src={photoUrl} alt="" className="h-full w-full object-cover" />
-          ) : (
-            <BoldUser className="h-13 w-13 text-content-tertiary" />
-          )}
-        </div>
+        <UserAvatar size="hero" photoUrl={photoUrl} />
       </div>
 
       <section className="rounded-card bg-surface-muted px-6 py-4">

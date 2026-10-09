@@ -19,6 +19,7 @@ export function mapPropertyResponse(
           role: dto.access.role,
           ownerName: dto.access.owner_name,
           ownerEmail: dto.access.owner_email,
+          ownerPhotoUrl: dto.access.owner_photo_url ?? null,
         }
       : undefined,
     members_count: dto.members_count,

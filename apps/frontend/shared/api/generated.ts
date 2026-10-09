@@ -84,6 +84,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/users/{userId}/photo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getUserPhoto"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/phone/send-code": {
         parameters: {
             query?: never;
@@ -2787,6 +2803,8 @@ export interface components {
             owner_name?: string;
             /** @description Owner's account email for the detail's owner contact row — a deliberate exposure on this surface (Figma 2200-97365), the same posture as SuspendedShared.owner_email. Present in the detail response only when the actor is not the owner; empty when the owner has no email or the resolution failed. */
             owner_email?: string;
+            /** @description The owner's profile photo same-origin streaming path (ADR 0065, решение #1286): /api/v1/users/{userId}/photo — readable while the reader shares a readable property with the owner. Null when the owner has no photo or the resolution failed; present in the detail response and on the shared list rows. */
+            owner_photo_url?: string | null;
         };
         PropertyResponse: {
             /** Format: uuid */
@@ -3321,6 +3339,8 @@ export interface components {
             is_owner: boolean;
             /** @description Participant display name (name and surname, or the anonymous label «Пользователь» — карта #1105, аменд #1123). Never a phone, never an email. */
             display_name?: string;
+            /** @description The participant's profile photo same-origin streaming path (ADR 0065, решение #1286): /api/v1/users/{userId}/photo — every reader of the list shares this property with every listed participant. Null for a pending row, the synthesized owner without a photo, or a user without a photo; a suspended member's path answers 404 (suspended access sees nothing) and the client falls back to the placeholder. */
+            photo_url?: string | null;
             /**
              * @description Membership lifecycle status. "suspended" means the recipient's tariff slot was exceeded, so the object is hidden from the recipient's list and grants no access until a slot frees up. "pending" is an email invitation waiting for the invitee to register.
              * @enum {string}
@@ -3376,6 +3396,8 @@ export interface components {
             email?: string | null;
             /** @description The person's display name (name and surname, or the anonymous label «Пользователь» — карта #1105, аменд #1123); null for a pending row (the email is the label). */
             display_name?: string | null;
+            /** @description The registered user's profile photo same-origin streaming path (ADR 0065; решение владельца #1286): /api/v1/users/{userId}/photo, readable while the reader shares a readable property with the user; a revoked access answers 404 and the client falls back to the placeholder. Null for a pending row or a user without a photo. */
+            photo_url?: string | null;
             /**
              * @description The aggregate badge (issue #693): "all_properties" — active access to every property in the reading scope; "partial" — active access to accessible_properties_count of them; "limit_exceeded" — at least one suspended membership (the recipient's tariff limit was hit). Display copy: «Доступ ко всем объектам» / «Доступно N объектов» / «Превышен лимит объектов».
              * @enum {string}
@@ -3397,6 +3419,9 @@ export interface components {
              * @enum {string}
              */
             status: "active" | "suspended" | "pending";
+            type: components["schemas"]["PropertyType"];
+            /** @description The property photo's same-origin streaming path (ADR 0065), live at read; null when the property has no photo. The leg row is self-sufficient — the client needs no /properties join for the avatar (остаток #1244 п.3, решение #1286). */
+            photo_url: string | null;
         };
         ParticipantsSummaryResponse: {
             /** @description The reading actor's participants across their scope. */
@@ -3667,6 +3692,8 @@ export interface components {
             actor_name: string;
             /** @description Снимок почты актёра (видна всем участникам, решение 2026-09-20); '' — почты не было. */
             actor_email: string;
+            /** @description Аватар актёра — same-origin путь стриминга фото профиля (ADR 0065, решение #1286), живой на чтение; null — у актёра нет фото или запись обезличена. Чтение эндпоинта регулируется связью по общему объекту: у отозванного участника путь отвечает 404, строка откатывается на заглушку. */
+            actor_photo_url: string | null;
             /**
              * @description Роль актёра на объекте в момент действия (снимок, ADR 0061 §4).
              * @enum {string}
@@ -3757,6 +3784,8 @@ export interface components {
             first_name: string;
             /** @description Пользователь владеет хотя бы одним объектом области чтения. */
             is_owner: boolean;
+            /** @description Аватар участника — same-origin путь стриминга фото профиля (ADR 0065, решение #1286), живой на чтение; null — фото нет. Отозванный участник остаётся опцией фильтра: его путь отвечает 404, строка откатывается на заглушку. */
+            photo_url: string | null;
             /**
              * @description Максимальная роль в области чтения (owner совпадает с is_owner по построению).
              * @enum {string}
@@ -4360,6 +4389,39 @@ export interface operations {
                 content?: never;
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getUserPhoto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The profile photo bytes, streamed by the backend (ADR 0065; решение владельца #1286 — то самое «показ участникам» из ADR 0065): читает сам пользователь и каждый, с кем их связывает хотя бы один объект, читаемый обеими сторонами (ADR 0028, derived read, симметрично). Нет связи или нет фото — один и тот же 404: существование фото не раскрывается. Cookie-auth, Cache-Control private, ETag — хеш ключа: совпавший If-None-Match отвечает 304 без чтения хранилища. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                    "image/png": string;
+                    "image/webp": string;
+                };
+            };
+            /** @description The client's ETag still matches the current photo. */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
         };

@@ -42,13 +42,17 @@ describe('mapPropertyResponse access', () => {
       makeDto({ access: { role: 'viewer', owner_name: 'Иван Петров' } }),
     );
 
-    expect(property.access).toEqual({ role: 'viewer', ownerName: 'Иван Петров' });
+    expect(property.access).toEqual({
+      role: 'viewer',
+      ownerName: 'Иван Петров',
+      ownerPhotoUrl: null,
+    });
   });
 
   it('maps access without owner_name', () => {
     const property = mapPropertyResponse(makeDto({ access: { role: 'owner' } }));
 
-    expect(property.access).toEqual({ role: 'owner', ownerName: undefined });
+    expect(property.access).toEqual({ role: 'owner', ownerName: undefined, ownerPhotoUrl: null });
   });
 
   it('leaves access undefined when the DTO has no access', () => {

@@ -14,6 +14,7 @@ export function mapPropertyAccessMemberResponse(
         role: dto.role,
         isOwner: dto.is_owner,
         displayName: dto.display_name ?? '',
+        photoUrl: dto.photo_url ?? null,
         status: dto.status,
         suspendedAt: dto.suspended_at ?? null,
         lastSentAt: dto.last_sent_at ?? null,

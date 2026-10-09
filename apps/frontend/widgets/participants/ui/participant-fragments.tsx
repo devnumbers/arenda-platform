@@ -1,6 +1,6 @@
 'use client';
 
-import type { JSX } from 'react';
+import { useState, type JSX } from 'react';
 import { BoldHome, BoldObjects, CheckBoxFalse, CheckBoxTrue, Minus } from '@/shared/assets/icons';
 import NextLink from 'next/link';
 import { ROUTES } from '@/shared/config/routes';
@@ -29,10 +29,17 @@ export function ObjectAvatarGlyph({
 }): JSX.Element {
   // Выборка из статичного реестра, не вызов: react-hooks/static-components.
   const Glyph = type !== undefined ? propertyTypeIcons[type] : BoldHome;
+  // Битое фото (404 стрима) откатывается к глифу — канон #1275 (#1286).
+  const [photoBroken, setPhotoBroken] = useState(false);
   return (
     <CircleIcon variant="white" aria-hidden className="relative overflow-hidden rounded-full">
-      {photoUrl !== undefined ? (
-        <img src={photoUrl} alt="" className="h-full w-full object-cover" />
+      {photoUrl !== undefined && !photoBroken ? (
+        <img
+          src={photoUrl}
+          alt=""
+          className="h-full w-full object-cover"
+          onError={() => setPhotoBroken(true)}
+        />
       ) : isAll ? (
         <BoldObjects className="h-6 w-6 text-content-tertiary" />
       ) : (

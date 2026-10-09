@@ -16,6 +16,7 @@ import {
   TopNavTitle,
 } from '@/shared/ui/design';
 import { RentalSummaryContent } from './rental-summary-content';
+import { useContact } from '@/features/contacts';
 import { RentalSummarySkeleton } from './rental-skeletons';
 
 /**
@@ -37,6 +38,9 @@ export function RentalSummaryScreen({
   const propertyQuery = useProperty(propertyId);
   const rentalsQuery = useRentals(propertyId);
   const rental = rentalsQuery.data?.find((item) => item.id === rentalId);
+  // Фото арендатора — из его карточки контакта (ADR 0065, решение #1286);
+  // без арендатора запрос спит (enabled: Boolean(contactId)).
+  const tenantContactQuery = useContact(rental?.tenant?.contactId ?? '');
   const completedDate = rental?.completedDate ?? null;
   const summaryQuery = useRentalSummary(
     propertyId,
@@ -120,6 +124,8 @@ export function RentalSummaryScreen({
               endDate={completedDate}
               propertyName={propertyQuery.data.name}
               propertyType={propertyQuery.data.type}
+              propertyPhotoUrl={propertyQuery.data.photoUrl}
+              tenantPhotoUrl={tenantContactQuery.data?.photoUrl}
               depositReturnKopecks={rental.depositReturnKopecks ?? 0}
               depositReturnComment={rental.depositReturnComment ?? ''}
             />

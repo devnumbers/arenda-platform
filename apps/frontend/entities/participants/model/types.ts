@@ -1,3 +1,5 @@
+import type { components } from '@/shared/api/dto';
+
 /** Агрегат-статус участника (issue #693): «доступ ко всем объектам» /
  * «доступно N объектов» / «превышен лимит объектов» (хоть один suspended). */
 export type ParticipantAggregateStatus =
@@ -13,12 +15,16 @@ export type ParticipantAccessRole = 'full_access' | 'viewer';
 export type ParticipantAccessStatus = 'active' | 'suspended' | 'pending';
 
 /** Одна нога доступа участника — объект сцопа читающего с per-object
- * ролью и статусом (контракт #693). */
+ * ролью и статусом (контракт #693). type и photoUrl делают ногу
+ * самодостаточной для аватара (решение #1286, остаток #1244 п.3): глиф
+ * плейсхолдера и путь приватного фото без джойна /properties. */
 export type ParticipantPropertyLeg = {
   readonly propertyId: string;
   readonly title: string;
   readonly role: ParticipantAccessRole;
   readonly status: ParticipantAccessStatus;
+  readonly type: components['schemas']['PropertyType'];
+  readonly photoUrl: string | null;
 };
 
 /**
@@ -39,6 +45,10 @@ export type Participant = {
    * undefined — pending-строка (лейбл строки — почта). */
   readonly displayName: string | undefined;
   readonly aggregateStatus: ParticipantAggregateStatus;
+  /** Путь стриминга фото профиля (ADR 0065, решение #1286):
+   * /api/v1/users/{userId}/photo; null — pending-строка или у юзера нет
+   * фото. Отозванный доступ отвечает 404 — onError деградирует в заглушку. */
+  readonly photoUrl: string | null;
   /** Число объектов с активным доступом. */
   readonly accessiblePropertiesCount: number;
   /** Ноги доступа на объектах сцопа читающего. */

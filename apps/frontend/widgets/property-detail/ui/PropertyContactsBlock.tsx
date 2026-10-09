@@ -1,13 +1,12 @@
 'use client';
 
 import type { JSX } from 'react';
-import { BoldUser } from '@/shared/assets/icons';
 import { ContactRowButton } from '@/entities/contact';
 import type { Contact } from '@/entities/contact';
 import type { RentalTenant } from '@/entities/rental';
 import { rentalTenantTitle } from '@/features/rentals';
 import { useKeyboardActivation } from '@/shared/lib/hooks/useKeyboardActivation';
-import { CircleIcon } from '@/shared/ui/design';
+import { UserAvatar } from '@/shared/ui/design';
 
 type PropertyContactsBlockProps = {
   /** Арендатор текущей аренды (бейдж-подпись роли «Арендатор»). */
@@ -16,16 +15,21 @@ type PropertyContactsBlockProps = {
   readonly onOpenContact: (contactId: string) => void;
 };
 
-/** Строка арендатора — та же анатомия, что ContactRowButton (круг 44
- * с BoldUser, имя 16/18, подпись роли 14/16 серым), но данные приходят
- * из аренды, а не из книги контактов (тикет #589, Figma 1185:40820:
- * «Максим — Арендатор»). div с role=button, как канонные строки:
- * клавиатурную активацию несёт общий хук. */
+/** Строка арендатора — та же анатомия, что ContactRowButton (круг 44 —
+ * фото контакта из книги или BoldUser, имя 16/18, подпись роли 14/16
+ * серым), но данные приходят из аренды, а не из книги контактов
+ * (тикет #589, Figma 1185:40820: «Максим — Арендатор»). div с
+ * role=button, как канонные строки: клавиатурную активацию несёт общий
+ * хук. */
 function TenantRowButton({
   tenant,
+  photoUrl,
   onSelect,
 }: {
   readonly tenant: RentalTenant;
+  /** Фото контакта-арендатора из книги (ADR 0065, решение #1286);
+   * undefined — контакта нет в книге или у него нет фото. */
+  readonly photoUrl: string | undefined;
   readonly onSelect: () => void;
 }): JSX.Element {
   const activatorProps = useKeyboardActivation({ onSelect });
@@ -35,9 +39,7 @@ function TenantRowButton({
       className="flex w-full cursor-pointer items-center gap-2 py-2 text-left outline-none transition-opacity hover:opacity-80 active:opacity-80 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--dl-surface-muted)]"
       data-testid="property-tenant-row"
     >
-      <CircleIcon variant="muted" aria-hidden>
-        <BoldUser className="h-6 w-6" />
-      </CircleIcon>
+      <UserAvatar variant="muted" photoUrl={photoUrl} />
       <span className="flex min-w-0 flex-1 flex-col justify-center gap-1">
         <span className="truncate text-base font-medium text-content">
           {rentalTenantTitle(tenant)}
@@ -64,6 +66,7 @@ export function PropertyContactsBlock({
       {tenant !== null && (
         <TenantRowButton
           tenant={tenant}
+          photoUrl={contacts.find((contact) => contact.id === tenant.contactId)?.photoUrl}
           onSelect={() => onOpenContact(tenant.contactId)}
         />
       )}

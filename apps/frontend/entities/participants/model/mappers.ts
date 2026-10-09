@@ -14,6 +14,8 @@ function mapLeg(dto: ParticipantPropertyDto): ParticipantPropertyLeg {
     title: dto.title,
     role: dto.role,
     status: dto.status,
+    type: dto.type,
+    photoUrl: dto.photo_url ?? null,
   };
 }
 
@@ -24,6 +26,7 @@ export function mapParticipant(dto: ParticipantDto): Participant {
     userId: dto.user_id ?? undefined,
     email: dto.email ?? undefined,
     displayName: dto.display_name ?? undefined,
+    photoUrl: dto.photo_url ?? null,
     aggregateStatus: dto.aggregate_status,
     accessiblePropertiesCount: dto.accessible_properties_count,
     properties: dto.properties.map(mapLeg),

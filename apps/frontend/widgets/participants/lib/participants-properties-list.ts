@@ -79,12 +79,7 @@ export function userPropertyRows(properties: ReadonlyArray<Property>): UserPrope
     photoUrl: property.photoUrl ?? undefined,
     type: property.type,
     role: property.access.role,
-    badge: participantLegBadge({
-      propertyId: property.id,
-      title: property.name,
-      role: property.access.role,
-      status: 'active',
-    }),
+    badge: participantLegBadge({ role: property.access.role, status: 'active' }),
   }));
 }
 

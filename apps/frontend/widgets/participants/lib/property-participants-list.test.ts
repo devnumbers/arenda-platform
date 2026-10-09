@@ -21,6 +21,7 @@ function member(overrides: Partial<PropertyAccessMember>): PropertyAccessMember 
     role: 'viewer',
     isOwner: false,
     displayName: 'Мария Петрова',
+    photoUrl: null,
     status: 'active',
     ...overrides,
   };

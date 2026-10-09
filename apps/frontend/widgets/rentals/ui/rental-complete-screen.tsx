@@ -128,6 +128,7 @@ export function RentalCompleteScreen({
             rental={effectiveRental}
             propertyName={property.name}
             propertyType={property.type}
+            propertyPhotoUrl={property.photoUrl}
             onClose={close}
           />
         )}

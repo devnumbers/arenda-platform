@@ -196,7 +196,7 @@ function NotificationDetailBody({
       )}
       {detail.payload.actor && (
         <NotificationEntityCard
-          icon={<BoldUser className="h-6 w-6 text-[#d3d7d9]" />}
+          icon={<ActorAvatar photo={detail.payload.actor.photo} />}
           name={detail.payload.actor.name}
           detail={detail.payload.actor.email}
         />
@@ -261,6 +261,24 @@ function NotificationEntityCardBody({
       </div>
     </>
   );
+}
+
+/** Аватар актёра на карточке payload-снимка (решение #1286): фото профиля
+ * из снимка публикации; битое (фото удалили, доступ отозван — 404 стрима)
+ * или отсутствующее — заглушка BoldUser, канон фолбэка #1275. */
+function ActorAvatar({ photo }: { readonly photo?: string }): JSX.Element {
+  const [photoBroken, setPhotoBroken] = useState(false);
+  if (photo !== undefined && photo !== '' && !photoBroken) {
+    return (
+      <img
+        src={photo}
+        alt=""
+        className="h-full w-full object-cover"
+        onError={() => setPhotoBroken(true)}
+      />
+    );
+  }
+  return <BoldUser className="h-6 w-6 text-[#d3d7d9]" />;
 }
 
 /** Карточка приглашающего — не ссылка. */

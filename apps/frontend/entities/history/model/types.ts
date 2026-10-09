@@ -48,6 +48,9 @@ export type HistoryEntry = {
   /** null — пользователь удалён, запись обезличена (снимки остаются). */
   readonly actorId: string | null;
   readonly actorName: string;
+  /** Путь стриминга фото профиля актёра (ADR 0065, решение #1286), живой
+   * на чтение; null — у актёра нет фото или запись обезличена. */
+  readonly actorPhotoUrl: string | null;
   readonly actorRole: HistoryActorRole;
   readonly baseAction: HistoryBaseAction;
   /** Стабильный точечный id действия, например operation.paid. */
@@ -67,6 +70,9 @@ export type HistoryParticipantOption = {
   readonly name: string;
   readonly email: string;
   readonly firstName: string;
+  /** Путь стриминга фото профиля (ADR 0065, решение #1286); null — фото
+   * нет. Отозванный участник остаётся опцией: его путь отвечает 404. */
+  readonly photoUrl: string | null;
   readonly isOwner: boolean;
   readonly role: 'owner' | 'full_access' | 'viewer';
 };

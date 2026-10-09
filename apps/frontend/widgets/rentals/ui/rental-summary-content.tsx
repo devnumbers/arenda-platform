@@ -1,15 +1,15 @@
 'use client';
 
 import type { JSX, ReactNode } from 'react';
-import { BoldHome, BoldUser } from '@/shared/assets/icons';
 import { formatDayMonthWithYear } from '@/shared/lib/date-format';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import { rentalDurationLine, rentalTenantTitle } from '@/features/rentals';
 import { CategoryIcon, categoryStyle } from '@/features/payment-categories';
-import { propertyTypeIcons, type PropertyType } from '@/entities/property';
+import { PropertyAvatar, type PropertyType } from '@/entities/property';
 import type { IsoDate } from '@/shared/lib/calendar';
 import type { Rental, RentalSummary } from '@/entities/rental';
 import { PaymentRowButton } from '@/entities/payment';
+import { UserAvatar } from '@/shared/ui/design';
 
 /**
  * Содержание экрана «Подведем итоги аренды» (#534, Figma 1433:61927 —
@@ -31,6 +31,12 @@ export type RentalSummaryContentProps = {
   /** Тип объекта строки «Объект» — глиф-плейсхолдер (карта #1217, #1244);
    * не передан — дом-фолбэк. */
   readonly propertyType?: PropertyType;
+  /** Фото объекта строки «Объект» (ADR 0065, решение #1286); null — фото
+   * нет. */
+  readonly propertyPhotoUrl?: string | null;
+  /** Фото контакта-арендатора из книги (ADR 0065, решение #1286);
+   * undefined — контакта нет в книге или у него нет фото. */
+  readonly tenantPhotoUrl?: string | undefined;
   /** Записанный возврат залога — сумма из черновика мастера (копейки). */
   readonly depositReturnKopecks: number;
   /** Комментарий возврата из черновика мастера. */
@@ -43,13 +49,13 @@ export function RentalSummaryContent({
   endDate,
   propertyName,
   propertyType,
+  propertyPhotoUrl,
+  tenantPhotoUrl,
   depositReturnKopecks,
   depositReturnComment,
 }: RentalSummaryContentProps): JSX.Element {
   const tenant = rental.tenant;
   const rentStyle = categoryStyle('default', 'rent');
-  // Выборка из статичного реестра, не вызов: react-hooks/static-components.
-  const PropertyGlyph = propertyType !== undefined ? propertyTypeIcons[propertyType] : BoldHome;
 
   return (
     <div className="pb-6">
@@ -93,26 +99,14 @@ export function RentalSummaryContent({
           />
           {tenant !== null && (
             <DataRow
-              categoryIcon={
-                <span
-                  aria-hidden
-                  className="flex h-11 w-11 items-center justify-center rounded-pill bg-surface-muted"
-                >
-                  <BoldUser className="h-6 w-6 text-content" />
-                </span>
-              }
+              categoryIcon={<UserAvatar variant="muted" photoUrl={tenantPhotoUrl} />}
               title={rentalTenantTitle(tenant)}
               subtitle="Арендатор"
             />
           )}
           <DataRow
             categoryIcon={
-              <span
-                aria-hidden
-                className="flex h-11 w-11 items-center justify-center rounded-pill bg-surface-muted"
-              >
-                <PropertyGlyph className="h-6 w-6 text-content" />
-              </span>
+              <PropertyAvatar surface="row" photoUrl={propertyPhotoUrl ?? null} type={propertyType} />
             }
             title={propertyName}
             subtitle="Объект"

@@ -1,4 +1,4 @@
-import type { JSX, ReactNode } from 'react';
+import { useState, type JSX, type ReactNode } from 'react';
 import { BoldHome, SmallArrowDown, Star } from '@/shared/assets/icons';
 import { cn } from '@/shared/lib/cn';
 import {
@@ -104,14 +104,21 @@ export function PaymentObjectAvatar({
 }): JSX.Element {
   // Выборка из статичного реестра, не вызов: react-hooks/static-components.
   const Glyph = type !== undefined ? propertyTypeIcons[type] : BoldHome;
+  // Битое фото (404 стрима) откатывается к глифу — канон #1275 (#1286).
+  const [photoBroken, setPhotoBroken] = useState(false);
   return (
     <CircleIcon
       variant={surface === 'card' ? 'muted' : 'white'}
       aria-hidden
       className="relative overflow-hidden rounded-full"
     >
-      {photoUrl !== null ? (
-        <img src={photoUrl} alt="" className="h-full w-full object-cover" />
+      {photoUrl !== null && !photoBroken ? (
+        <img
+          src={photoUrl}
+          alt=""
+          className="h-full w-full object-cover"
+          onError={() => setPhotoBroken(true)}
+        />
       ) : (
         <Glyph className="h-6 w-6 text-[#D3D7D9]" />
       )}

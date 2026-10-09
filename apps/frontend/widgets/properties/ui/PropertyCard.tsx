@@ -1,6 +1,6 @@
 'use client';
 
-import type { JSX } from 'react';
+import { useState, type JSX } from 'react';
 import NextLink from 'next/link';
 import { ROUTES } from '@/shared/config/routes';
 import { BoldUser, PinSmall, SmallArrowRight } from '@/shared/assets/icons';
@@ -88,9 +88,7 @@ export function PropertyCard({ property, today, variant = 'list', nonInteractive
           {ownerName !== null && (
             <ul className={styles.participants} data-testid="property-owner">
               <li className={styles.participant}>
-                <span className={styles.participantAvatar} aria-hidden>
-                  <BoldUser className={styles.participantGlyph} />
-                </span>
+                <OwnerChipAvatar photoUrl={property.access?.ownerPhotoUrl} />
                 <span className={styles.participantName}>{ownerName}</span>
               </li>
             </ul>
@@ -99,5 +97,26 @@ export function PropertyCard({ property, today, variant = 'list', nonInteractive
       </div>
       <SmallArrowRight className={styles.chevron} aria-hidden />
     </article>
+  );
+}
+
+/** Аватар владельца в чипе карточки (решение #1286): фото профиля 24,
+ * иначе — и при битом фото (404 стрима) — заглушка BoldUser. */
+function OwnerChipAvatar({ photoUrl }: { readonly photoUrl?: string | null }): JSX.Element {
+  const [photoBroken, setPhotoBroken] = useState(false);
+  const showPhoto = photoUrl != null && photoUrl !== '' && !photoBroken;
+  return (
+    <span className={styles.participantAvatar} aria-hidden>
+      {showPhoto ? (
+        <img
+          src={photoUrl}
+          alt=""
+          className={styles.participantAvatarImg}
+          onError={() => setPhotoBroken(true)}
+        />
+      ) : (
+        <BoldUser className={styles.participantGlyph} />
+      )}
+    </span>
   );
 }

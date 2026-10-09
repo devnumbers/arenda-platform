@@ -1,6 +1,6 @@
 "use client";
 
-import type { JSX, ReactNode } from "react";
+import { useState, type JSX, type ReactNode } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
@@ -197,6 +197,7 @@ export function PaymentsGlobalScreen(): JSX.Element {
                             propertyId: object.propertyId,
                             name: object.name,
                             type: object.type,
+                            photoUrl: object.photoUrl,
                             hasOverdue: globalPaymentObjectHasOverdue(object),
                           }))
                           .slice(0, SECTION_CARDS_LIMIT)}
@@ -405,16 +406,47 @@ function OverdueSectionBody({
 }
 
 /** Тело секции «Платежи объектов» (879:9711): карточки объектов (белый
- * круг с глифом типа, красная точка при просрочке в стопках) и замыкающая
+ * круг с фото, иначе глиф типа; красная точка при просрочке в стопках) и замыкающая
  * «Показать все» на страницу «Объекты» (#582) — больше одного объекта;
  * единственный объект ведёт сразу на свои платежи без страницы-списка. */
+/** Содержимое круга карточки объекта хаба (решение #1286): фото из DTO
+ * GlobalPaymentObject.photoUrl (#582) — тот же поток данных, что у страницы
+ * «Объектов», иначе глиф типа; битое фото (фото или объект удалили — 404
+ * стрима) откатывается к глифу, канон #1275. */
+function ObjectCardAvatar({
+  photoUrl,
+  glyph,
+}: {
+  readonly photoUrl: string | null;
+  readonly glyph: ReactNode;
+}): JSX.Element {
+  const [photoBroken, setPhotoBroken] = useState(false);
+  if (photoUrl !== null && !photoBroken) {
+    return (
+      <img
+        src={photoUrl}
+        alt=""
+        className="h-full w-full object-cover"
+        onError={() => setPhotoBroken(true)}
+      />
+    );
+  }
+  return <>{glyph}</>;
+}
+
 function ObjectsSectionBody({
   objects,
   onSelectObject,
   onOpenAll,
 }: {
   readonly objects: ReadonlyArray<
-    Readonly<{ propertyId: string; name: string; type: PropertyType; hasOverdue: boolean }>
+    Readonly<{
+      propertyId: string;
+      name: string;
+      type: PropertyType;
+      photoUrl: string | null;
+      hasOverdue: boolean;
+    }>
   >;
   readonly onSelectObject: (propertyId: string) => void;
   readonly onOpenAll: () => void;
@@ -430,7 +462,7 @@ function ObjectsSectionBody({
             className="snap-start"
             leading={
               <GlobalCardIcon variant="white" hasNotification={object.hasOverdue}>
-                <Glyph />
+                <ObjectCardAvatar photoUrl={object.photoUrl} glyph={<Glyph />} />
               </GlobalCardIcon>
             }
             title={object.name}

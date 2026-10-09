@@ -213,10 +213,17 @@ export function SelectAvatar({ photoUrl, fallback }: {
   readonly photoUrl?: string;
   readonly fallback: JSX.Element;
 }): JSX.Element {
+  // Битое фото (404 стрима) откатывается к фолбэку — канон #1275 (#1286).
+  const [photoBroken, setPhotoBroken] = useState(false);
   return (
     <CircleIcon variant="white" aria-hidden className="relative overflow-hidden rounded-full">
-      {photoUrl !== undefined ? (
-        <img src={photoUrl} alt="" className="h-full w-full object-cover" />
+      {photoUrl !== undefined && !photoBroken ? (
+        <img
+          src={photoUrl}
+          alt=""
+          className="h-full w-full object-cover"
+          onError={() => setPhotoBroken(true)}
+        />
       ) : (
         fallback
       )}

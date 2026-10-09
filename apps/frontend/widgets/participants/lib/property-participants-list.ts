@@ -76,6 +76,9 @@ export type PropertyParticipantRow = {
   /** Стабильный ключ: id строки доступа, fallback — userId/email. */
   readonly key: string;
   readonly title: string;
+  /** Путь стриминга фото профиля участника (ADR 0065, решение #1286);
+   * undefined — pending или у юзера нет фото. */
+  readonly photoUrl: string | undefined;
   /** Почта; у pending-строки почта уже титул — дважды не повторяется. */
   readonly subtitle: string | undefined;
   readonly emailIcon: PropertyParticipantEmailIcon;
@@ -121,6 +124,7 @@ function toPropertyParticipantRow(currentUserId: string | undefined) {
     return {
       key: member.id ?? member.userId ?? (email !== '' ? email : 'unknown'),
       title,
+      photoUrl: member.photoUrl ?? undefined,
       subtitle: displayName !== undefined && email !== '' ? email : undefined,
       emailIcon: member.isOwner ? 'owner' : member.role === 'full_access' ? 'edit' : 'eye',
       suspended: member.status === 'suspended',

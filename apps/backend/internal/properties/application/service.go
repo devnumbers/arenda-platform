@@ -63,6 +63,7 @@ type PropertyService struct {
 	sharedMemberships  SharedMemberships
 	ownerNames         OwnerDisplayNameResolver
 	ownerEmails        OwnerEmailResolver
+	ownerPhotos        OwnerPhotoResolver
 	suspendedShared    SuspendedSharedMemberships
 	slots              RecipientSlotPolicy
 	sharedDeleteMailer SharedMembersDeleteMailer
@@ -150,6 +151,13 @@ func (s *PropertyService) SetOwnerDisplayNameResolver(resolver OwnerDisplayNameR
 // responses carry no owner email.
 func (s *PropertyService) SetOwnerEmailResolver(resolver OwnerEmailResolver) {
 	s.ownerEmails = resolver
+}
+
+// SetOwnerPhotoResolver injects the adapter that resolves a property
+// owner's profile photo path (ADR 0065, решение #1286). Optional: when not
+// set, responses carry no owner photo.
+func (s *PropertyService) SetOwnerPhotoResolver(resolver OwnerPhotoResolver) {
+	s.ownerPhotos = resolver
 }
 
 // SetSuspendedSharedMemberships injects the access-context adapter that
@@ -401,25 +409,40 @@ func (s *PropertyService) enrichSharedOwnerNames(ctx context.Context, properties
 	if s.ownerNames == nil {
 		return
 	}
-	resolved := make(map[uuid.UUID]string)
+	type ownerContact struct {
+		name     string
+		photoURL string
+	}
+	resolved := make(map[uuid.UUID]ownerContact)
 	for i := range properties {
 		if properties[i].AccessRole == sharedpolicy.RoleOwner {
 			continue
 		}
 		ownerID := properties[i].OwnerID
-		name, ok := resolved[ownerID]
+		contact, ok := resolved[ownerID]
 		if !ok {
-			var err error
-			name, err = s.ownerNames.DisplayName(ctx, ownerID)
+			name, err := s.ownerNames.DisplayName(ctx, ownerID)
 			if err != nil {
 				s.logger.WarnContext(ctx, "failed to resolve owner display name",
 					slog.String("owner_id", ownerID.String()),
 					slog.String("error", sanitizeError(err)),
 				)
 			}
-			resolved[ownerID] = name
+			contact = ownerContact{name: name}
+			if s.ownerPhotos != nil {
+				photoURL, photoErr := s.ownerPhotos.GetPhotoURL(ctx, ownerID)
+				if photoErr != nil {
+					s.logger.WarnContext(ctx, "failed to resolve owner photo",
+						slog.String("owner_id", ownerID.String()),
+						slog.String("error", sanitizeError(photoErr)),
+					)
+				}
+				contact.photoURL = photoURL
+			}
+			resolved[ownerID] = contact
 		}
-		properties[i].OwnerName = name
+		properties[i].OwnerName = contact.name
+		properties[i].OwnerPhotoURL = contact.photoURL
 	}
 }
 
@@ -683,6 +706,19 @@ func (s *PropertyService) GetProperty(ctx context.Context, actor, id uuid.UUID) 
 			)
 		} else {
 			property.OwnerEmail = email
+		}
+	}
+	// The owner's photo path (ADR 0065, решение #1286): recipients only,
+	// degrading to empty like the name.
+	if role != sharedpolicy.RoleOwner && s.ownerPhotos != nil {
+		photoURL, err := s.ownerPhotos.GetPhotoURL(ctx, property.OwnerID)
+		if err != nil {
+			s.logger.WarnContext(ctx, "failed to resolve owner photo",
+				slog.String("property_id", property.ID.String()),
+				slog.String("error", sanitizeError(err)),
+			)
+		} else {
+			property.OwnerPhotoURL = photoURL
 		}
 	}
 

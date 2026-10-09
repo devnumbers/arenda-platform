@@ -51,6 +51,13 @@ type OwnerEmailResolver interface {
 	GetEmail(ctx context.Context, userID uuid.UUID) (string, error)
 }
 
+// OwnerPhotoResolver resolves a property owner's profile photo streaming
+// path (ADR 0065, решение #1286) for the owner avatar on the detail and the
+// shared list rows. Optional.
+type OwnerPhotoResolver interface {
+	GetPhotoURL(ctx context.Context, userID uuid.UUID) (string, error)
+}
+
 // SharedSuspendedMembership is one suspended shared membership of the reading
 // actor (ticket #702): the blur-card shown in the property list while the
 // object is temporarily unavailable because the actor's tariff limit is
