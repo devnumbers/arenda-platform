@@ -99,7 +99,6 @@ function PastRentalCard({
       title={pastRentalCardTitle(rental)}
       onOpen={onOpen}
       openLabel={`Открыть аренду от ${rental.startDate}`}
-      arrowPosition="edge"
       className="pb-4"
       contentGap="gap-4"
     >

@@ -36,8 +36,9 @@ function SkeletonGroupHeader({ titleWidth, arrow = true }: {
   );
 }
 
-/** Заголовок серой группы у края карточки (#535): текст слева, стрелка
- * прижата к правому краю (RentalGroup, arrowPosition="edge"). */
+/** Заголовок серой группы (#535): текст слева, стрелка прижата к правому
+ * краю — единственный каркас заголовка RentalGroup (решение владельца
+ * 08.10, #1242: стрелка у края во всех группах аренды). */
 function SkeletonGroupHeaderEdge({ titleWidth }: { readonly titleWidth: string }): JSX.Element {
   return (
     <span className="flex w-full items-center justify-between">

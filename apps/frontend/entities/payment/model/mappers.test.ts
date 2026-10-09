@@ -15,6 +15,8 @@ const paymentDto: PaymentDto = {
   since: '2026-01-31',
   endDate: null,
   autoPay: false,
+  // Контракт ответа с #1189; сущность Payment флаг не несёт — им живёт
+  // only-уведомительный путь, маппер его не переносит.
   notifyAutoPaid: false,
   category: { source: 'default', slug: 'rent', label: 'Арендная плата' },
   isFavorite: false,
