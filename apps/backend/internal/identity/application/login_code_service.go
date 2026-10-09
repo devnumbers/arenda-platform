@@ -51,6 +51,10 @@ type LoginCodeService struct {
 	clock  clock.Clock
 	hasher TokenHasher
 	logger *slog.Logger
+	// The anti-flood guards (#1210). Nil keeps them open — every test harness
+	// runs without them.
+	allowRecipientSend func(email domain.Email) bool
+	allowInitiatorSend func(userID uuid.UUID) bool
 }
 
 // LoginCodeServiceConfig carries the non-transactional dependencies for
@@ -61,6 +65,23 @@ type LoginCodeServiceConfig struct {
 	Clock      clock.Clock
 	Hasher     TokenHasher
 	Logger     *slog.Logger
+	// AllowRecipientSend guards the per-recipient hourly cap on code sends:
+	// one email address must not receive more than a bounded number of codes
+	// per window, whatever the flows or initiators behind them (#1210) — the
+	// triple throttle alone lets a phone-knowledge outsider drip 60 letters
+	// an hour into a victim's mailbox. Consulted once per actual issuance,
+	// after the triple throttle has passed, so throttled requests spend
+	// nothing. Nil means allow (tests).
+	AllowRecipientSend func(email domain.Email) bool
+	// AllowInitiatorSend guards the per-initiator hourly cap on code sends an
+	// authenticated user triggers across phone- and email-change flows
+	// (#1210) — obsessive initiation is capped at the domain level, not only
+	// per endpoint. Login codes never consult it: their user is the code's
+	// subject, not the initiator — the flow is unauthenticated, and counting
+	// login sends would let whoever knows the phone spend the account's own
+	// budget (an OWASP account-lockout DoS). Consulted under the same rules
+	// as AllowRecipientSend. Nil means allow (tests).
+	AllowInitiatorSend func(userID uuid.UUID) bool
 }
 
 // NewLoginCodeService creates a LoginCodeService. It embeds the shared identity
@@ -78,11 +99,13 @@ func NewLoginCodeService(
 		logger = slog.Default()
 	}
 	return &LoginCodeService{
-		txStoreFactory: factory,
-		sender:         cfg.CodeSender,
-		clock:          cfg.Clock,
-		hasher:         cfg.Hasher,
-		logger:         logger,
+		txStoreFactory:     factory,
+		sender:             cfg.CodeSender,
+		clock:              cfg.Clock,
+		hasher:             cfg.Hasher,
+		logger:             logger,
+		allowRecipientSend: cfg.AllowRecipientSend,
+		allowInitiatorSend: cfg.AllowInitiatorSend,
 	}
 }
 
@@ -94,14 +117,16 @@ func (s *LoginCodeService) hashCode(purpose domain.LoginCodePurpose, phone domai
 }
 
 // Send issues a login code for the phone+email+purpose triple, persists it, and
-// delivers it after the transaction commits. It enforces the not-blocked check,
-// purges expired and unused prior codes, and throttles re-issuance within
+// delivers it after the transaction commits. The purpose+step pair selects the
+// letter the delivery renders. It enforces the not-blocked check, purges
+// expired and unused prior codes, and throttles re-issuance within
 // minSendInterval of a live code.
 func (s *LoginCodeService) Send(
 	ctx context.Context,
 	phone domain.Phone,
 	email domain.Email,
 	purpose domain.LoginCodePurpose,
+	step domain.LoginCodeStep,
 	userID *uuid.UUID,
 ) error {
 	var loginCode domain.LoginCode
@@ -116,7 +141,7 @@ func (s *LoginCodeService) Send(
 		return err
 	}
 
-	return s.Deliver(ctx, phone, email, purpose, loginCode, plaintextCode)
+	return s.Deliver(ctx, phone, email, purpose, step, loginCode, plaintextCode)
 }
 
 // IssueInTx is the transactional half of Send: it guards the phone against
@@ -136,7 +161,7 @@ func (s *LoginCodeService) IssueInTx(
 ) (domain.LoginCode, string, error) {
 	now := s.clock.Now()
 
-	if err := s.purgeAndThrottle(ctx, stores, phone, email, purpose, now); err != nil {
+	if err := s.purgeAndThrottle(ctx, stores, phone, email, purpose, userID, now); err != nil {
 		return domain.LoginCode{}, "", err
 	}
 	return s.persistNewCode(ctx, stores, phone, email, purpose, userID, now)
@@ -145,15 +170,18 @@ func (s *LoginCodeService) IssueInTx(
 // purgeAndThrottle clears the way for a new code inside the caller's
 // transaction: a blocked phone is refused outright, expired codes are purged
 // first, the send throttle then rejects a live code issued within
-// minSendInterval, and only then are the remaining unused codes deleted. The
-// order matters: the latest code must still be readable when the throttle is
-// checked (CONTEXT.md, "Throttle отправки").
+// minSendInterval, the send limits price the issuance (#1210), and only then
+// are the remaining unused codes deleted. The order matters: the latest code
+// must still be readable when the throttle is checked (CONTEXT.md, "Throttle
+// отправки"), and a limit refusal must leave the in-flight code alive — the
+// same contract the throttle holds — so the limits run before the cleanup.
 func (s *LoginCodeService) purgeAndThrottle(
 	ctx context.Context,
 	stores *txStores,
 	phone domain.Phone,
 	email domain.Email,
 	purpose domain.LoginCodePurpose,
+	userID *uuid.UUID,
 	now time.Time,
 ) error {
 	if err := checkNotBlocked(ctx, stores.attempts, s.clock, phone); err != nil {
@@ -172,8 +200,29 @@ func (s *LoginCodeService) purgeAndThrottle(
 		return ErrCodeSentTooRecently
 	}
 
+	if err := s.checkSendLimits(purpose, email, userID); err != nil {
+		return err
+	}
+
 	if err := stores.codes.DeleteUnusedByPhoneAndEmail(ctx, phone, email, purpose); err != nil {
 		return fmt.Errorf("delete unused login codes: %w", err)
+	}
+	return nil
+}
+
+// checkSendLimits consults the anti-flood guards (#1210) at the one point
+// every code issuance flows through, once the triple throttle has passed: the
+// per-recipient hourly cap first, then the per-initiator one for the flows
+// with an authenticated actor (phone/email change — never the unauthenticated
+// login, whose user is the code's subject). A refusal here happens before the
+// unused-code cleanup, so the in-flight code survives, and before any counter
+// is spent on a request that will not issue.
+func (s *LoginCodeService) checkSendLimits(purpose domain.LoginCodePurpose, email domain.Email, userID *uuid.UUID) error {
+	if s.allowRecipientSend != nil && !s.allowRecipientSend(email) {
+		return ErrRecipientSendLimitExceeded
+	}
+	if purpose != domain.LoginCodePurposeLogin && userID != nil && s.allowInitiatorSend != nil && !s.allowInitiatorSend(*userID) {
+		return ErrInitiatorSendLimitExceeded
 	}
 	return nil
 }
@@ -213,20 +262,25 @@ func (s *LoginCodeService) persistNewCode(
 }
 
 // Deliver sends the plaintext after the issuing transaction has committed.
-// Delivery runs post-commit: the code is already persisted, so a delivery
-// failure cleans up the unsent row rather than leaving a code the user never
-// received. Send calls it itself; an orchestrator that issued through IssueInTx
-// inside its own transaction calls it after that transaction commits.
+// The purpose+step pair selects the letter — template and subject — the
+// sender renders. Delivery runs post-commit: the code is already persisted,
+// so a delivery failure cleans up the unsent row rather than leaving a code
+// the user never received. Send calls it itself; an orchestrator that issued
+// through IssueInTx inside its own transaction calls it after that
+// transaction commits.
 func (s *LoginCodeService) Deliver(
 	ctx context.Context,
 	phone domain.Phone,
 	email domain.Email,
 	purpose domain.LoginCodePurpose,
+	step domain.LoginCodeStep,
 	loginCode domain.LoginCode,
 	plaintextCode string,
 ) error {
-	s.logger.InfoContext(ctx, "sending login code", slog.String("purpose", purpose.String()))
-	if err := s.sender.Send(ctx, phone, email, plaintextCode); err != nil {
+	s.logger.InfoContext(ctx, "sending login code",
+		slog.String("purpose", purpose.String()),
+		slog.String("step", step.String()))
+	if err := s.sender.Send(ctx, phone, email, plaintextCode, purpose, step); err != nil {
 		s.logger.ErrorContext(ctx, "failed to send login code", slog.String("error", sanitize.Error(err)))
 		if delErr := s.codes.DeleteByID(ctx, loginCode.ID); delErr != nil {
 			s.logger.ErrorContext(ctx, "failed to delete unsent login code", slog.String("error", sanitize.Error(delErr)))
@@ -234,7 +288,9 @@ func (s *LoginCodeService) Deliver(
 		return fmt.Errorf("send code: %w", err)
 	}
 
-	s.logger.InfoContext(ctx, "login code sent", slog.String("purpose", purpose.String()))
+	s.logger.InfoContext(ctx, "login code sent",
+		slog.String("purpose", purpose.String()),
+		slog.String("step", step.String()))
 	return nil
 }
 

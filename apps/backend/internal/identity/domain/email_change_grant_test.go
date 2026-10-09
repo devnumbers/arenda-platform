@@ -7,16 +7,12 @@ import (
 	"github.com/google/uuid"
 )
 
-func TestEmailChangeGrant_NewSetsTTLAndBinding(t *testing.T) {
+func TestEmailChangeGrant_NewSetsTTLOnly(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)
 	userID := uuid.Must(uuid.NewV7())
-	email, err := NewEmail("new@example.com")
-	if err != nil {
-		t.Fatalf("parse email: %v", err)
-	}
 
-	grant := NewEmailChangeGrant(userID, email, "token-hash", now)
+	grant := NewEmailChangeGrant(userID, "token-hash", now)
 
 	if grant.ID == uuid.Nil {
 		t.Fatal("grant ID is nil, want an app-generated UUIDv7")
@@ -24,8 +20,11 @@ func TestEmailChangeGrant_NewSetsTTLAndBinding(t *testing.T) {
 	if grant.UserID != userID {
 		t.Fatalf("grant UserID = %s, want %s", grant.UserID, userID)
 	}
-	if grant.Email != email {
-		t.Fatalf("grant Email = %s, want %s", grant.Email, email)
+	// The grant is born on the current-address code check, before any new
+	// address is named: it must carry no email until the next step binds one
+	// (protocol #1202).
+	if grant.Email != nil {
+		t.Fatalf("grant Email = %s, want nil (the address binds later)", grant.Email)
 	}
 	if grant.TokenHash != "token-hash" {
 		t.Fatalf("grant TokenHash = %q, want %q", grant.TokenHash, "token-hash")
@@ -41,11 +40,7 @@ func TestEmailChangeGrant_NewSetsTTLAndBinding(t *testing.T) {
 func TestEmailChangeGrant_Expired(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)
-	newEmail, err := NewEmail("new@example.com")
-	if err != nil {
-		t.Fatalf("parse email: %v", err)
-	}
-	grant := NewEmailChangeGrant(uuid.Must(uuid.NewV7()), newEmail, "h", now)
+	grant := NewEmailChangeGrant(uuid.Must(uuid.NewV7()), "h", now)
 
 	tests := []struct {
 		name    string

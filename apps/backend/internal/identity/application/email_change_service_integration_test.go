@@ -13,11 +13,11 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 )
 
-// TestEmailChangeIntegration_HappyPath proves the full three-step flow against
-// real PostgreSQL: the code on the current email marks it verified, the grant
-// binds the new address, and step 3 applies the change in one commit — new
-// address stored with a fresh verified stamp, grant consumed, sessions and the
-// audit entry in place.
+// TestEmailChangeIntegration_HappyPath proves the full flow against real
+// PostgreSQL: the code on the current email marks it verified, verify-current
+// issues the grant, the new address binds to it and receives the code, and the
+// final step applies the change in one commit — new address stored with a
+// fresh verified stamp, grant consumed, sessions and the audit entry in place.
 func TestEmailChangeIntegration_HappyPath(t *testing.T) {
 	t.Parallel()
 	h := newIntegrationHarness(t)
@@ -32,24 +32,37 @@ func TestEmailChangeIntegration_HappyPath(t *testing.T) {
 		t.Fatalf("step 1: %v", err)
 	}
 	currentCode := h.sender.lastCode(t)
+	// The step-1 letter is the current-address one (issue #1204).
+	if last := h.sender.codes[len(h.sender.codes)-1]; last.step != domain.LoginCodeStepCurrentEmail {
+		t.Fatalf("step 1 letter step = %s, want current_email", last.step)
+	}
 
-	// Step 2: confirm the current address, get the grant and the new code.
-	grantToken, err := h.email.ConfirmCurrentEmail(ctx, user.ID, currentCode, newEmail)
+	// Step 2: verify the current address, get the addressless grant.
+	grantToken, err := h.email.VerifyCurrentEmail(ctx, user.ID, currentCode)
 	if err != nil {
 		t.Fatalf("step 2: %v", err)
 	}
 	if grantToken == "" {
 		t.Fatal("step 2 returned an empty grant token")
 	}
+
+	// Step 3: bind the new address to the grant, receive the code on it.
+	if err := h.email.RequestNewEmailCode(ctx, user.ID, grantToken, newEmail); err != nil {
+		t.Fatalf("step 3: %v", err)
+	}
 	newCode := h.sender.lastCode(t)
 	if newCode == currentCode {
-		t.Fatal("step 2 delivered no new code (same plaintext as step 1)")
+		t.Fatal("step 3 delivered no new code (same plaintext as step 1)")
+	}
+	// The step-3 letter is the new-address one (issue #1204).
+	if last := h.sender.codes[len(h.sender.codes)-1]; last.step != domain.LoginCodeStepNewEmail || last.email != newEmail {
+		t.Fatalf("step 3 letter = %s to %s, want new_email to %s", last.step, last.email, newEmail)
 	}
 
-	// Step 3: change.
-	updated, err := h.email.ChangeEmail(ctx, user.ID, newCode, grantToken)
+	// Final step: change.
+	updated, err := h.email.ChangeEmail(ctx, user.ID, newCode, grantToken, token)
 	if err != nil {
-		t.Fatalf("step 3: %v", err)
+		t.Fatalf("final step: %v", err)
 	}
 	if updated.Email == nil || updated.Email.String() != newEmail.String() {
 		t.Fatalf("updated email = %v, want %s", updated.Email, newEmail)
@@ -60,7 +73,8 @@ func TestEmailChangeIntegration_HappyPath(t *testing.T) {
 
 	assertPersistedEmailChange(t, h, user.ID, newEmail)
 
-	// Sessions are untouched: the email is a channel, not the login.
+	// The session that made the change survives (решение #1207); every other
+	// session would be revoked — covered by the dedicated test below.
 	if _, _, err := h.sessionsvc.Load(ctx, token, h.clock.Now()); err != nil {
 		t.Fatalf("session did not survive the email change: %v", err)
 	}
@@ -126,7 +140,7 @@ func TestEmailChangeIntegration_StepOneVerifiesCurrentAddress(t *testing.T) {
 }
 
 // TestEmailChangeIntegration_GrantLifecycle proves the grant against real
-// PostgreSQL: expiry forces a restart, a wrong step-3 code keeps the grant and
+// PostgreSQL: expiry forces a restart, a wrong final code keeps the grant and
 // records the phone-window failure, and a consumed grant cannot be replayed.
 func TestEmailChangeIntegration_GrantLifecycle(t *testing.T) {
 	t.Parallel()
@@ -140,25 +154,29 @@ func TestEmailChangeIntegration_GrantLifecycle(t *testing.T) {
 	if err := h.email.SendCurrentEmailCode(ctx, user.ID); err != nil {
 		t.Fatalf("step 1: %v", err)
 	}
-	grantToken, err := h.email.ConfirmCurrentEmail(ctx, user.ID, h.sender.lastCode(t), newEmail)
+	grantToken, err := h.email.VerifyCurrentEmail(ctx, user.ID, h.sender.lastCode(t))
 	if err != nil {
 		t.Fatalf("step 2: %v", err)
 	}
+	if err := h.email.RequestNewEmailCode(ctx, user.ID, grantToken, newEmail); err != nil {
+		t.Fatalf("step 3: %v", err)
+	}
 	newCode := h.sender.lastCode(t)
 
-	// A wrong step-3 code fails, records the window failure, and keeps the grant.
-	if _, err := h.email.ChangeEmail(ctx, user.ID, "000000", grantToken); !errors.Is(err, domain.ErrLoginCodeInvalid) {
+	// A wrong final code fails, records the window failure, and keeps the grant.
+	if _, err := h.email.ChangeEmail(ctx, user.ID, "000000", grantToken, "current-session"); !errors.Is(err, domain.ErrLoginCodeInvalid) {
 		t.Fatalf("wrong code error = %v, want ErrLoginCodeInvalid", err)
 	}
 	if n := h.countFailedAttempts(t, phone); n != 1 {
 		t.Fatalf("failed attempts = %d, want 1", n)
 	}
-	if _, err := h.email.ChangeEmail(ctx, user.ID, newCode, grantToken); err != nil {
+	if _, err := h.email.ChangeEmail(ctx, user.ID, newCode, grantToken, "current-session"); err != nil {
 		t.Fatalf("retry with the right code: %v", err)
 	}
 
 	// The consumed grant is gone: replaying step 3 fails.
-	if _, err := h.email.ChangeEmail(ctx, user.ID, newCode, grantToken); !errors.Is(err, application.ErrEmailChangeGrantInvalid) {
+	_, err = h.email.ChangeEmail(ctx, user.ID, newCode, grantToken, "current-session")
+	if !errors.Is(err, application.ErrEmailChangeGrantInvalid) {
 		t.Fatalf("replay error = %v, want ErrEmailChangeGrantInvalid", err)
 	}
 
@@ -169,20 +187,24 @@ func TestEmailChangeIntegration_GrantLifecycle(t *testing.T) {
 	}
 	// The user's email is already the new one; restart with a further address.
 	thirdEmail := mustEmail(t, "third@example.com")
-	secondGrant, err := h.email.ConfirmCurrentEmail(ctx, user.ID, h.sender.lastCode(t), thirdEmail)
+	secondGrant, err := h.email.VerifyCurrentEmail(ctx, user.ID, h.sender.lastCode(t))
 	if err != nil {
 		t.Fatalf("step 2 (second round): %v", err)
 	}
+	if err := h.email.RequestNewEmailCode(ctx, user.ID, secondGrant, thirdEmail); err != nil {
+		t.Fatalf("step 3 (second round): %v", err)
+	}
 	secondCode := h.sender.lastCode(t)
 	h.clock.advance(domain.EmailChangeGrantTTL + time.Minute)
-	if _, err := h.email.ChangeEmail(ctx, user.ID, secondCode, secondGrant); !errors.Is(err, application.ErrEmailChangeGrantInvalid) {
+	_, err = h.email.ChangeEmail(ctx, user.ID, secondCode, secondGrant, "current-session")
+	if !errors.Is(err, application.ErrEmailChangeGrantInvalid) {
 		t.Fatalf("expired grant error = %v, want ErrEmailChangeGrantInvalid", err)
 	}
 }
 
 // TestEmailChangeIntegration_ResendNewEmailCode proves the resend (#732)
 // against real PostgreSQL: past the send throttle a fresh code is issued for
-// the grant's address, the stale step-2 code stops verifying, and the fresh
+// the grant's address, the stale code stops verifying, and the fresh
 // code with the same grant completes the change.
 func TestEmailChangeIntegration_ResendNewEmailCode(t *testing.T) {
 	t.Parallel()
@@ -196,9 +218,12 @@ func TestEmailChangeIntegration_ResendNewEmailCode(t *testing.T) {
 	if err := h.email.SendCurrentEmailCode(ctx, user.ID); err != nil {
 		t.Fatalf("step 1: %v", err)
 	}
-	grantToken, err := h.email.ConfirmCurrentEmail(ctx, user.ID, h.sender.lastCode(t), newEmail)
+	grantToken, err := h.email.VerifyCurrentEmail(ctx, user.ID, h.sender.lastCode(t))
 	if err != nil {
 		t.Fatalf("step 2: %v", err)
+	}
+	if err := h.email.RequestNewEmailCode(ctx, user.ID, grantToken, newEmail); err != nil {
+		t.Fatalf("step 3: %v", err)
 	}
 	staleCode := h.sender.lastCode(t)
 
@@ -217,16 +242,16 @@ func TestEmailChangeIntegration_ResendNewEmailCode(t *testing.T) {
 	}
 	freshCode := h.sender.lastCode(t)
 	if freshCode == staleCode {
-		t.Fatal("resend delivered no fresh code (same plaintext as step 2)")
+		t.Fatal("resend delivered no fresh code (same plaintext as step 3)")
 	}
 
 	// The stale code no longer verifies; the fresh one completes the change.
-	if _, err := h.email.ChangeEmail(ctx, user.ID, staleCode, grantToken); !errors.Is(err, domain.ErrLoginCodeInvalid) {
+	if _, err := h.email.ChangeEmail(ctx, user.ID, staleCode, grantToken, "current-session"); !errors.Is(err, domain.ErrLoginCodeInvalid) {
 		t.Fatalf("stale code error = %v, want ErrLoginCodeInvalid", err)
 	}
-	updated, err := h.email.ChangeEmail(ctx, user.ID, freshCode, grantToken)
+	updated, err := h.email.ChangeEmail(ctx, user.ID, freshCode, grantToken, "current-session")
 	if err != nil {
-		t.Fatalf("step 3 with resent code: %v", err)
+		t.Fatalf("final step with resent code: %v", err)
 	}
 	if updated.Email == nil || updated.Email.String() != newEmail.String() {
 		t.Fatalf("updated email = %v, want %s", updated.Email, newEmail)
@@ -249,16 +274,19 @@ func TestEmailChangeIntegration_TakenBetweenSteps(t *testing.T) {
 	if err := h.email.SendCurrentEmailCode(ctx, user.ID); err != nil {
 		t.Fatalf("step 1: %v", err)
 	}
-	grantToken, err := h.email.ConfirmCurrentEmail(ctx, user.ID, h.sender.lastCode(t), newEmail)
+	grantToken, err := h.email.VerifyCurrentEmail(ctx, user.ID, h.sender.lastCode(t))
 	if err != nil {
 		t.Fatalf("step 2: %v", err)
+	}
+	if err := h.email.RequestNewEmailCode(ctx, user.ID, grantToken, newEmail); err != nil {
+		t.Fatalf("step 3: %v", err)
 	}
 	newCode := h.sender.lastCode(t)
 
 	// Another user takes the address between the steps.
 	h.seedVerifiedUser(t, mustPhone(t, "+79160000504"), newEmail)
 
-	if _, err := h.email.ChangeEmail(ctx, user.ID, newCode, grantToken); !errors.Is(err, application.ErrEmailAlreadyTaken) {
+	if _, err := h.email.ChangeEmail(ctx, user.ID, newCode, grantToken, "current-session"); !errors.Is(err, application.ErrEmailAlreadyTaken) {
 		t.Fatalf("error = %v, want ErrEmailAlreadyTaken", err)
 	}
 	reloaded, err := h.users.GetByID(ctx, user.ID)
@@ -267,5 +295,193 @@ func TestEmailChangeIntegration_TakenBetweenSteps(t *testing.T) {
 	}
 	if reloaded.Email == nil || reloaded.Email.String() != currentEmail.String() {
 		t.Fatalf("email = %v, want unchanged %s", reloaded.Email, currentEmail)
+	}
+}
+
+// TestEmailChangeIntegration_AddresslessGrant proves the new grant lifecycle
+// against real PostgreSQL (#1202): a wrong verify-current code records the
+// phone-window failure, the grant is born with a NULL email, refuses the
+// resend and the change until an address binds to it, and the binding itself
+// is visible in the persisted row.
+func TestEmailChangeIntegration_AddresslessGrant(t *testing.T) {
+	t.Parallel()
+	h := newIntegrationHarness(t)
+	phone := mustPhone(t, "+79160000506")
+	currentEmail := mustEmail(t, "addressless@example.com")
+	newEmail := mustEmail(t, "addressless-new@example.com")
+	_, user := h.registerAndLogin(t, phone, currentEmail)
+	ctx := h.ctx()
+
+	// A wrong step-2 code records the window failure — the verification
+	// behavior moved to verify-current intact.
+	if err := h.email.SendCurrentEmailCode(ctx, user.ID); err != nil {
+		t.Fatalf("step 1: %v", err)
+	}
+	if _, err := h.email.VerifyCurrentEmail(ctx, user.ID, "000000"); !errors.Is(err, domain.ErrLoginCodeInvalid) {
+		t.Fatalf("wrong code error = %v, want ErrLoginCodeInvalid", err)
+	}
+	if n := h.countFailedAttempts(t, phone); n != 1 {
+		t.Fatalf("failed attempts = %d, want 1", n)
+	}
+
+	// The fresh code verifies; the grant is born without an address.
+	grantToken, err := h.email.VerifyCurrentEmail(ctx, user.ID, h.sender.lastCode(t))
+	if err != nil {
+		t.Fatalf("step 2: %v", err)
+	}
+	stored, err := h.grants.GetByUserIDForUpdate(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("grant lookup: %v", err)
+	}
+	if stored.Email != nil {
+		t.Fatalf("grant email = %s, want NULL before step 3", stored.Email)
+	}
+
+	// The addressless grant cannot anchor the resend or the change; the
+	// change refuses before any code check, so the window stays at 1.
+	if err := h.email.ResendNewEmailCode(ctx, user.ID, grantToken); !errors.Is(err, application.ErrEmailChangeGrantInvalid) {
+		t.Fatalf("addressless resend error = %v, want ErrEmailChangeGrantInvalid", err)
+	}
+	_, err = h.email.ChangeEmail(ctx, user.ID, "123456", grantToken, "current-session")
+	if !errors.Is(err, application.ErrEmailChangeGrantInvalid) {
+		t.Fatalf("addressless change error = %v, want ErrEmailChangeGrantInvalid", err)
+	}
+	if n := h.countFailedAttempts(t, phone); n != 1 {
+		t.Fatalf("failed attempts = %d, want 1 (no code check ran)", n)
+	}
+
+	// Step 3 binds the address; the same token then completes the flow.
+	if err := h.email.RequestNewEmailCode(ctx, user.ID, grantToken, newEmail); err != nil {
+		t.Fatalf("step 3: %v", err)
+	}
+	stored, err = h.grants.GetByUserIDForUpdate(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("grant lookup: %v", err)
+	}
+	if stored.Email == nil || stored.Email.String() != newEmail.String() {
+		t.Fatalf("grant email = %v, want bound %s", stored.Email, newEmail)
+	}
+	if _, err := h.email.ChangeEmail(ctx, user.ID, h.sender.lastCode(t), grantToken, "current-session"); err != nil {
+		t.Fatalf("final step: %v", err)
+	}
+}
+
+// TestEmailChangeIntegration_RevokesOtherSessionsAndSchedulesLetter proves the
+// решение #1207 side effects against real PostgreSQL: the change keeps the
+// session that made it and deletes the rest, and the change letter commits
+// with the change — addressed to the OLD address, which the user row no
+// longer carries once the change commits.
+func TestEmailChangeIntegration_RevokesOtherSessionsAndSchedulesLetter(t *testing.T) {
+	t.Parallel()
+	h := newIntegrationHarness(t)
+	phone := mustPhone(t, "+79160000510")
+	currentEmail := mustEmail(t, "old@example.com")
+	newEmail := mustEmail(t, "fresh@example.com")
+	token, user := h.registerAndLogin(t, phone, currentEmail)
+	ctx := h.ctx()
+
+	// Issue a second session so we can prove ChangeEmail deletes the others.
+	if err := h.auth.SendCode(ctx, phone, currentEmail, domain.LoginCodePurposeLogin); err != nil {
+		t.Fatalf("SendCode for second session: %v", err)
+	}
+	if _, _, err := h.auth.VerifyCode(ctx, phone, &currentEmail, h.sender.lastCode(t), nil, application.DeviceContext{}); err != nil {
+		t.Fatalf("VerifyCode for second session: %v", err)
+	}
+	if n := h.countSessionsForUser(t, user.ID); n != 2 {
+		t.Fatalf("sessions before change = %d, want 2", n)
+	}
+
+	// Drive the change using the first session's token as the current one.
+	if err := h.email.SendCurrentEmailCode(ctx, user.ID); err != nil {
+		t.Fatalf("step 1: %v", err)
+	}
+	grantToken, err := h.email.VerifyCurrentEmail(ctx, user.ID, h.sender.lastCode(t))
+	if err != nil {
+		t.Fatalf("step 2: %v", err)
+	}
+	if err := h.email.RequestNewEmailCode(ctx, user.ID, grantToken, newEmail); err != nil {
+		t.Fatalf("step 3: %v", err)
+	}
+
+	updated, err := h.email.ChangeEmail(ctx, user.ID, h.sender.lastCode(t), grantToken, token)
+	if err != nil {
+		t.Fatalf("ChangeEmail: %v", err)
+	}
+	if updated.Email == nil || updated.Email.String() != newEmail.String() {
+		t.Fatalf("updated email = %v, want %s", updated.Email, newEmail)
+	}
+
+	// Only the current session survives.
+	if n := h.countSessionsForUser(t, user.ID); n != 1 {
+		t.Fatalf("sessions after change = %d, want 1 (current only)", n)
+	}
+	if _, _, err := h.sessionsvc.Load(ctx, token, h.clock.Now()); err != nil {
+		t.Fatalf("current session token did not survive: %v", err)
+	}
+
+	// The change letter: exactly one, to the OLD address — captured in the
+	// transaction, because the user row no longer carries it.
+	assertIntegrationLetter(t, h.notifier.scheduled, 1,
+		application.ContactChangedEmail, currentEmail, user.ID, h.clock.Now())
+}
+
+// assertIntegrationLetter pins the change-letter contract for the
+// integration suite: count events so far, the last one's kind, recipient,
+// user, and instant (решение #1207).
+func assertIntegrationLetter(
+	t *testing.T,
+	scheduled []application.ContactChangedEvent,
+	wantCount int,
+	wantKind application.ContactChangeKind,
+	wantRecipient domain.Email,
+	wantUser uuid.UUID,
+	wantAt time.Time,
+) {
+	t.Helper()
+	if len(scheduled) != wantCount {
+		t.Fatalf("scheduled letters = %d, want %d", len(scheduled), wantCount)
+	}
+	event := scheduled[wantCount-1]
+	if event.Kind != wantKind {
+		t.Fatalf("letter kind = %q, want %q", event.Kind, wantKind)
+	}
+	if event.Recipient != wantRecipient {
+		t.Fatalf("letter recipient = %s, want %s", event.Recipient, wantRecipient)
+	}
+	if event.UserID != wantUser {
+		t.Fatalf("letter user = %s, want %s", event.UserID, wantUser)
+	}
+	if !event.ChangedAt.Equal(wantAt) {
+		t.Fatalf("letter changed-at = %s, want %s", event.ChangedAt, wantAt)
+	}
+}
+
+// TestEmailChangeIntegration_TakenEmailSchedulesNoLetter proves a rollback
+// leaves the letter queue untouched: the enqueue rides the change's
+// transaction, so a rejected change schedules nothing (решение #1207).
+func TestEmailChangeIntegration_TakenEmailSchedulesNoLetter(t *testing.T) {
+	t.Parallel()
+	h := newIntegrationHarness(t)
+	phone := mustPhone(t, "+79160000511")
+	currentEmail := mustEmail(t, "roller@example.com")
+	h.seedVerifiedUser(t, mustPhone(t, "+79160000512"), mustEmail(t, "taken@example.com"))
+	// The address is owned by the other user, seeded just above.
+	newEmail := mustEmail(t, "taken@example.com")
+	_, user := h.registerAndLogin(t, phone, currentEmail)
+	ctx := h.ctx()
+
+	if err := h.email.SendCurrentEmailCode(ctx, user.ID); err != nil {
+		t.Fatalf("step 1: %v", err)
+	}
+	grantToken, err := h.email.VerifyCurrentEmail(ctx, user.ID, h.sender.lastCode(t))
+	if err != nil {
+		t.Fatalf("step 2: %v", err)
+	}
+	// Step 3 fails on the taken address — the flow never reaches the change.
+	if err := h.email.RequestNewEmailCode(ctx, user.ID, grantToken, newEmail); !errors.Is(err, application.ErrEmailAlreadyTaken) {
+		t.Fatalf("step 3 error = %v, want ErrEmailAlreadyTaken", err)
+	}
+	if len(h.notifier.scheduled) != 0 {
+		t.Fatalf("scheduled letters = %d, want 0 on a rejected flow", len(h.notifier.scheduled))
 	}
 }

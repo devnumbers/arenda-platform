@@ -113,13 +113,17 @@ type PhoneChanger interface {
 }
 
 // EmailChanger handles confirmed email change for authenticated users
-// (issue #721): a code to the current address, then — against the grant — a
-// code to the new one, a resend of that code (#732), and the change itself.
+// (issue #721, protocol #1202): a code to the current address, its server
+// verification issuing the one-time grant, the new address bound to that
+// grant with a code sent to it, a resend of that code (#732), and the change
+// itself — which revokes every session except the current one (решение
+// #1207), so the change carries the current session's raw token.
 type EmailChanger interface {
 	SendCurrentEmailCode(ctx context.Context, userID uuid.UUID) error
-	ConfirmCurrentEmail(ctx context.Context, userID uuid.UUID, code string, newEmail domain.Email) (string, error)
+	VerifyCurrentEmail(ctx context.Context, userID uuid.UUID, code string) (string, error)
+	RequestNewEmailCode(ctx context.Context, userID uuid.UUID, grant string, newEmail domain.Email) error
 	ResendNewEmailCode(ctx context.Context, userID uuid.UUID, grant string) error
-	ChangeEmail(ctx context.Context, userID uuid.UUID, code, grant string) (domain.User, error)
+	ChangeEmail(ctx context.Context, userID uuid.UUID, code, grant, currentToken string) (domain.User, error)
 }
 
 // Profiler provides the current user's profile and updates it.
@@ -594,10 +598,11 @@ func (h *AuthHandlers) SendEmailChangeCode(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// No send budget here: step 1 mails the user's current address. The
-	// per-user 5/hour budget (#720-3) guards sends to NEW addresses — step 2;
-	// this request is covered by the domain's 1-minute throttle and the global
-	// IP limiter.
+	// No per-endpoint budget here: step 1 mails the user's current address.
+	// The per-user 5/hour budget (#720-3) guards sends to NEW addresses —
+	// step 3 (request-new-email-code) and resend. This request is covered by
+	// the domain's 1-minute throttle and, since #1210, the per-recipient and
+	// per-initiator send limits enforced inside LoginCodeService.
 	if err := h.emailChange.SendCurrentEmailCode(r.Context(), userID); err != nil {
 		if writeEmailChangeError(w, r, err) {
 			return
@@ -612,11 +617,11 @@ func (h *AuthHandlers) SendEmailChangeCode(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ConfirmCurrentEmail implements POST /me/email/confirm-current — step 2:
-// verify the code from the current email, get the one-time grant and the code
-// for the new address. The per-user 5/hour budget (#720-3) is spent inside the
-// service, on the actual send to the new address.
-func (h *AuthHandlers) ConfirmCurrentEmail(w http.ResponseWriter, r *http.Request) {
+// VerifyCurrentEmail implements POST /me/email/verify-current — step 2:
+// verify the code from the current email, get the one-time grant. The only
+// refusals are the code itself (401, with its attempt window) and the
+// 15-failure window block (429) — no 409 family, no send budget (#1202).
+func (h *AuthHandlers) VerifyCurrentEmail(w http.ResponseWriter, r *http.Request) {
 	userID, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
@@ -624,7 +629,42 @@ func (h *AuthHandlers) ConfirmCurrentEmail(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	var body openapi.ConfirmCurrentEmailRequest
+	var body openapi.VerifyCurrentEmailRequest
+	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
+		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		return
+	}
+
+	grant, err := h.emailChange.VerifyCurrentEmail(r.Context(), userID, body.Code)
+	if err != nil {
+		if writeEmailChangeError(w, r, err) {
+			return
+		}
+		if writeSharedIdentityError(w, r, err, "") {
+			return
+		}
+		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+		return
+	}
+
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.EmailChangeGrantResponse{Grant: grant})
+}
+
+// RequestNewEmailCode implements POST /me/email/request-new-email-code —
+// step 3: bind the new address to the live grant and deliver the code to it.
+// The per-user 5/hour budget (#720-3) is spent inside the service, on the
+// actual send; a denial leaves the grant and its binding alive.
+func (h *AuthHandlers) RequestNewEmailCode(w http.ResponseWriter, r *http.Request) {
+	userID, ok := httpsupport.UserIDFromContext(r.Context())
+	if !ok {
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	var body openapi.RequestNewEmailCodeRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", httpsupport.SanitizeError(err)))
 		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
@@ -640,8 +680,7 @@ func (h *AuthHandlers) ConfirmCurrentEmail(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	grant, err := h.emailChange.ConfirmCurrentEmail(r.Context(), userID, body.Code, newEmail)
-	if err != nil {
+	if err := h.emailChange.RequestNewEmailCode(r.Context(), userID, body.Grant, newEmail); err != nil {
 		if writeEmailChangeError(w, r, err) {
 			return
 		}
@@ -652,14 +691,14 @@ func (h *AuthHandlers) ConfirmCurrentEmail(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.EmailChangeGrantResponse{Grant: grant})
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // ResendEmailCode implements POST /me/email/resend-code — a fresh code for the
-// pending new address, anchored on the still-live grant (#732): the step-1
-// code is burned by ConfirmCurrentEmail, so the resend cannot re-run step 2
-// and must ride the grant instead. The budget (#720-3) and the send throttle
-// are spent inside the service, on the actual re-issuance.
+// pending new address, anchored on the still-live grant bound to it (#732):
+// the step-1 code is burned by verify-current, so the resend cannot re-run
+// step 2 and must ride the grant instead. The budget (#720-3) and the send
+// throttle are spent inside the service, on the actual re-issuance.
 func (h *AuthHandlers) ResendEmailCode(w http.ResponseWriter, r *http.Request) {
 	userID, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
@@ -690,11 +729,21 @@ func (h *AuthHandlers) ResendEmailCode(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ChangeEmail implements POST /me/email/change — step 3: verify the code from
-// the new email against the grant and apply the change.
+// ChangeEmail implements POST /me/email/change — the final step: verify the
+// code from the new email against the grant and apply the change. The change
+// revokes every session except the current one (решение #1207), so the raw
+// session token rides the request like on the phone change: no cookie, no
+// change.
 func (h *AuthHandlers) ChangeEmail(w http.ResponseWriter, r *http.Request) {
 	userID, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	token := httpsupport.SessionTokenFromRequest(r, h.cookieSecure)
+	if token == "" {
 		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
 			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
@@ -708,7 +757,7 @@ func (h *AuthHandlers) ChangeEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.emailChange.ChangeEmail(r.Context(), userID, body.Code, body.Grant)
+	user, err := h.emailChange.ChangeEmail(r.Context(), userID, body.Code, body.Grant, token)
 	if err != nil {
 		if writeEmailChangeError(w, r, err) {
 			return

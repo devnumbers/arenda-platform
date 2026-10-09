@@ -115,6 +115,7 @@ func newSessionSvcForLoader(t *testing.T, sessions *fakeSessionRepoForLoader) id
 		sessions,
 		stubGrantsRepo{},
 		nil, // Audit — Noop by default.
+		nil, // Contact-change letters — Noop by default.
 		stubUoW{},
 	)
 	return identityapp.NewSessionService(factory, identityapp.SessionServiceConfig{

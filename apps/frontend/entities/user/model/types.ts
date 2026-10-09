@@ -33,22 +33,28 @@ export type ChangePhoneCommand = {
   code: string;
 };
 
-/** Шаг 2 флоу смены почты (#721/#722): подтверждение кода с текущего
- * адреса + сам новый адрес одним запросом — в ответ приходит одноразовый
- * грант и код уходит на новый адрес. */
-export type ConfirmCurrentEmailCommand = {
-  newEmail: string;
+/** Шаг 2 флоу смены email (#721/#722, протокол #1202): код с текущего
+ * адреса — сервер проверяет его, сжигает и выпускает одноразовый грант;
+ * нового адреса в запросе ещё нет. */
+export type VerifyCurrentEmailCommand = {
   code: string;
 };
 
-/** Шаг 3 флоу смены почты: код с нового адреса + грант из шага 2. */
+/** Шаг 3 флоу смены email (протокол #1202): новый адрес привязывается
+ * к живому гранту, код уходит на новый адрес (204). */
+export type RequestNewEmailCodeCommand = {
+  grant: string;
+  newEmail: string;
+};
+
+/** Финальный шаг флоу смены почты: код с нового адреса + грант. */
 export type ChangeEmailCommand = {
   grant: string;
   code: string;
 };
 
 /** Повторная отправка кода на новый адрес по живому гранту (#732/#733):
- * код шага 1 уже сожжён confirm-current, resend-плитка — единственный
+ * код шага 1 уже сожжён verify-current, resend-плитка — единственный
  * путь повторной доставки. */
 export type ResendEmailCodeCommand = {
   grant: string;

@@ -99,7 +99,7 @@ func (s *AuthenticationService) SendCode(
 		userID = &user.ID
 	}
 
-	return s.loginCodes.Send(ctx, phone, email, purpose, userID)
+	return s.loginCodes.Send(ctx, phone, email, purpose, domain.LoginCodeStepCurrentEmail, userID)
 }
 
 // SendCodeByPhone sends a login code to the email stored for the given

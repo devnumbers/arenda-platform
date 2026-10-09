@@ -201,7 +201,7 @@ func TestProfileService_UsesRunInTx(t *testing.T) {
 	attempts := newFakeAttemptRepo()
 	sessions := newFakeSessionRepo()
 	beginner := &fakeBeginner{}
-	factory := NewTxStoreFactory(users, codes, attempts, sessions, newFakeGrantRepo(), &recordingRecorder{}, &fakeUoW{beginner: beginner})
+	factory := NewTxStoreFactory(users, codes, attempts, sessions, newFakeGrantRepo(), &recordingRecorder{}, nil, &fakeUoW{beginner: beginner})
 	svc := NewProfileService(factory, objectstorage.NewFakeStorage(), &fakeSharedChecker{}, slog.New(slog.DiscardHandler))
 	seedProfileUser(t, users.fakeUserRepo)
 

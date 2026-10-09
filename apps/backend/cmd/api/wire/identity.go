@@ -10,8 +10,10 @@ import (
 	identitygeoip "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/geoip"
 	identityhttp "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/http"
 	identitypg "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/postgres"
+	identityriverqueue "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/riverqueue"
 	identityuaparse "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/uaparse"
 	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
+	identitydomain "github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/events"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer"
@@ -43,6 +45,13 @@ type Identity struct {
 	Logout         *identityapp.LogoutService
 	// Sessions serves the devices list (list/revoke/revoke-others, #728).
 	Sessions *identityapp.SessionsService
+	// ContactQueue schedules the contact-change security letters (решение
+	// #1207) through the shared River client; the client binds late in
+	// main.go, after WireRiverQueue (the grace-events canon).
+	ContactQueue *identityriverqueue.Queue
+	// ContactWorker delivers the contact-change letters — registered on the
+	// shared River client inside WireRiverQueue.
+	ContactWorker *identityriverqueue.ContactChangedWorker
 	// EmailMailer is the configured mailer.Sender (smtp or fake). It is exposed
 	// because other modules reuse it: the access email sender (invite and
 	// sharing lifecycle emails) and the notifications email notifier (grace
@@ -75,13 +84,21 @@ func WireIdentity(
 	sessionRepo := identitypg.NewSessionRepository(p.DB, p.Encryptor)
 	emailChangeGrantRepo := identitypg.NewEmailChangeGrantRepository(p.DB)
 
+	// The contact-change security letters (решение #1207): the queue seam the
+	// change services enqueue through inside their transactions. The queue's
+	// client binds in main.go after WireRiverQueue — identity builds earlier
+	// than the delivery queue. The delivery worker builds after the mailer
+	// switch below and registers on the same shared River client.
+	contactQueue := identityriverqueue.NewQueue()
+
 	// The single canonical txStoreFactory bundles the four identity
 	// repositories, the audit recorder, and the UoW (ADR 0033 γ-factory). It is
 	// passed to every identity service so adding an Nth repository is a change
 	// here, not in six constructors.
 	factory := identityapp.NewTxStoreFactory(
 		userRepo, codeRepo, attemptRepo, sessionRepo, emailChangeGrantRepo,
-		p.AuditRecorder, p.UoW,
+		p.AuditRecorder, contactQueue,
+		p.UoW,
 	)
 
 	// Device enrichment for sessions: the User-Agent parser runs once per
@@ -119,8 +136,16 @@ func WireIdentity(
 
 	emailSender := identityemail.NewSender(emailMailer, p.Renderer)
 
+	// The change-letter delivery worker rides the shared River client: it
+	// reloads the user for the timezone and sends through the same mailer the
+	// code letters use (решение #1207).
+	contactWorker := identityriverqueue.NewContactChangedWorker(userRepo, emailMailer, p.Renderer, p.Logger)
+
 	// Login-code issuance/verification is a deep module shared by
-	// AuthenticationService and PhoneChangeService (ADR 0033, step 4).
+	// AuthenticationService and PhoneChangeService (ADR 0033, step 4). The
+	// anti-flood send limits (#1210) live with the transport limiters
+	// (wire/ratelimits.go) and are consulted by the service on each actual
+	// issuance: per recipient email, per authenticated initiator.
 	loginCodeService := identityapp.NewLoginCodeService(
 		factory,
 		identityapp.LoginCodeServiceConfig{
@@ -128,6 +153,12 @@ func WireIdentity(
 			Clock:      p.Clock,
 			Hasher:     p.Encryptor,
 			Logger:     p.Logger,
+			AllowRecipientSend: func(email identitydomain.Email) bool {
+				return rateLimits.RecipientSendLimiter.Allow(email.String())
+			},
+			AllowInitiatorSend: func(userID uuid.UUID) bool {
+				return rateLimits.InitiatorSendLimiter.Allow(userID.String())
+			},
 		},
 	)
 
@@ -199,6 +230,8 @@ func WireIdentity(
 		Profile:        profileService,
 		Logout:         logoutService,
 		Sessions:       sessionsService,
+		ContactQueue:   contactQueue,
+		ContactWorker:  contactWorker,
 		EmailMailer:    emailMailer,
 		PhotoStorage:   photoStorage,
 	}, nil

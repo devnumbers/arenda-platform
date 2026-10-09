@@ -197,6 +197,16 @@ func (r *fakeGrantRepo) Save(_ context.Context, grant domain.EmailChangeGrant) e
 	return nil
 }
 
+func (r *fakeGrantRepo) UpdateEmail(_ context.Context, id uuid.UUID, email domain.Email) error {
+	for userID, g := range r.grants {
+		if g.ID == id {
+			g.Email = &email
+			r.grants[userID] = g
+		}
+	}
+	return nil
+}
+
 func (r *fakeGrantRepo) GetByUserIDForUpdate(_ context.Context, userID uuid.UUID) (domain.EmailChangeGrant, error) {
 	g, ok := r.grants[userID]
 	if !ok {
@@ -434,9 +444,11 @@ func (r *fakeSessionRepo) WithTx(transaction.Tx) (SessionRepository, error) { re
 // Sender and publisher fakes.
 
 type sentCode struct {
-	phone domain.Phone
-	email domain.Email
-	code  string
+	phone   domain.Phone
+	email   domain.Email
+	code    string
+	purpose domain.LoginCodePurpose
+	step    domain.LoginCodeStep
 }
 
 type fakeCodeSender struct {
@@ -444,11 +456,18 @@ type fakeCodeSender struct {
 	err  error
 }
 
-func (s *fakeCodeSender) Send(_ context.Context, phone domain.Phone, email domain.Email, code string) error {
+func (s *fakeCodeSender) Send(
+	_ context.Context,
+	phone domain.Phone,
+	email domain.Email,
+	code string,
+	purpose domain.LoginCodePurpose,
+	step domain.LoginCodeStep,
+) error {
 	if s.err != nil {
 		return s.err
 	}
-	s.sent = append(s.sent, sentCode{phone: phone, email: email, code: code})
+	s.sent = append(s.sent, sentCode{phone: phone, email: email, code: code, purpose: purpose, step: step})
 	return nil
 }
 
@@ -846,6 +865,10 @@ func TestAuthenticationService_SendCode_NewPhoneEmailPrecheck(t *testing.T) {
 		if h.sender.sent[0].email != email {
 			t.Fatalf("sender email = %s, want %s", h.sender.sent[0].email, email)
 		}
+		// The letter is the login one on the (to-be) current email (issue #1204).
+		if h.sender.sent[0].purpose != domain.LoginCodePurposeLogin || h.sender.sent[0].step != domain.LoginCodeStepCurrentEmail {
+			t.Fatalf("sent letter = %s/%s, want login/current_email", h.sender.sent[0].purpose, h.sender.sent[0].step)
+		}
 		if len(h.codes.codes) != 1 {
 			t.Fatalf("codes saved = %d, want 1", len(h.codes.codes))
 		}
@@ -982,7 +1005,7 @@ func TestAuthenticationService_SendCode_GetByPhoneError(t *testing.T) {
 
 	factory := NewTxStoreFactory(
 		&errorUserRepo{err: dbErr}, stores.codes, stores.attempts, stores.sessions,
-		newFakeGrantRepo(), auditapp.Noop{}, &fakeUoW{beginner: stores.beginner},
+		newFakeGrantRepo(), auditapp.Noop{}, nil, &fakeUoW{beginner: stores.beginner},
 	)
 	loginCodes := NewLoginCodeService(factory, LoginCodeServiceConfig{
 		CodeSender: sender, Clock: &fakeClock{now: testNow},
@@ -1022,7 +1045,7 @@ func TestAuthenticationService_SendCode_GetByEmailError(t *testing.T) {
 	users := &errorOnGetByEmailRepo{fakeUserRepo: newFakeUserRepo(), err: dbErr}
 	factory := NewTxStoreFactory(
 		users, stores.codes, stores.attempts, stores.sessions,
-		newFakeGrantRepo(), auditapp.Noop{}, &fakeUoW{beginner: stores.beginner},
+		newFakeGrantRepo(), auditapp.Noop{}, nil, &fakeUoW{beginner: stores.beginner},
 	)
 	loginCodes := NewLoginCodeService(factory, LoginCodeServiceConfig{
 		CodeSender: sender, Clock: &fakeClock{now: testNow},
@@ -1058,7 +1081,7 @@ func TestAuthenticationService_SendCodeByPhone_GetByPhoneError(t *testing.T) {
 
 	factory := NewTxStoreFactory(
 		&errorUserRepo{err: dbErr}, stores.codes, stores.attempts, stores.sessions,
-		newFakeGrantRepo(), auditapp.Noop{}, &fakeUoW{beginner: stores.beginner},
+		newFakeGrantRepo(), auditapp.Noop{}, nil, &fakeUoW{beginner: stores.beginner},
 	)
 	svc := NewAuthenticationService(factory, AuthenticationServiceConfig{
 		LoginCodes: NewLoginCodeService(factory, LoginCodeServiceConfig{

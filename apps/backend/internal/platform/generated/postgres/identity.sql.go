@@ -868,7 +868,7 @@ VALUES ($1, $2, $3, $4, $5, $6)
 type InsertEmailChangeGrantParams struct {
 	ID        pgtype.UUID        `json:"id"`
 	UserID    pgtype.UUID        `json:"user_id"`
-	Email     string             `json:"email"`
+	Email     pgtype.Text        `json:"email"`
 	TokenHash string             `json:"token_hash"`
 	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
@@ -1240,6 +1240,20 @@ func (q *Queries) TouchSession(ctx context.Context, arg TouchSessionParams) erro
 		arg.City,
 		arg.TokenHash,
 	)
+	return err
+}
+
+const updateEmailChangeGrantEmail = `-- name: UpdateEmailChangeGrantEmail :exec
+UPDATE email_change_grants SET email = $2 WHERE id = $1
+`
+
+type UpdateEmailChangeGrantEmailParams struct {
+	ID    pgtype.UUID `json:"id"`
+	Email pgtype.Text `json:"email"`
+}
+
+func (q *Queries) UpdateEmailChangeGrantEmail(ctx context.Context, arg UpdateEmailChangeGrantEmailParams) error {
+	_, err := q.db.Exec(ctx, updateEmailChangeGrantEmail, arg.ID, arg.Email)
 	return err
 }
 

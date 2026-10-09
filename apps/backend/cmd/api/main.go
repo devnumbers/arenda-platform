@@ -198,12 +198,20 @@ func run() error {
 	paymentScanStore := notificationspg.NewPaymentScanStore(p.DB)
 	rentalScanStore := notificationspg.NewRentalScanStore(p.DB)
 	riverMod, err := wire.WireRiverQueue(ctx, p, notificationsMod,
-		delivery.resolver, delivery.emailer, pushSender, taskScanStore, paymentScanStore, rentalScanStore)
+		delivery.resolver, delivery.emailer, pushSender, taskScanStore, paymentScanStore, rentalScanStore,
+		identityMod.ContactWorker)
 	if err != nil {
 		return err
 	}
 	defer riverMod.ProviderLimiter.Stop()
 	notificationsStream := riverMod.Stream
+
+	// 11.5.0 The identity contact-change letters (решение #1207): the queue
+	//     seam the change services enqueue through inside their transactions
+	//     binds the shared client here — identity builds earlier than the
+	//     delivery queue (the grace-events canon), and the bind must land
+	//     before the workers phase starts.
+	identityMod.ContactQueue.Bind(riverMod.Client)
 
 	// 11.5.1 The realtime carrier (карта #714, #716; ADR 0062): the port the
 	//     mutation pipelines publish their entity.changed frames through —

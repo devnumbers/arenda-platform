@@ -19,9 +19,19 @@ type TokenHasher interface {
 
 // LoginCodeSender delivers a login code by email. Phone is part of the
 // binding triple (the code is hashed together with phone+email via
-// LoginCodeService.hashCode); this channel only uses email and code.
+// LoginCodeService.hashCode); this channel only uses email and code. The
+// purpose+step pair selects the letter — the unique template and subject the
+// delivery renders (issue #1204): login, phone change, and the two
+// email-change letters (current address, new address) each carry their own.
 type LoginCodeSender interface {
-	Send(ctx context.Context, phone domain.Phone, email domain.Email, code string) error
+	Send(
+		ctx context.Context,
+		phone domain.Phone,
+		email domain.Email,
+		code string,
+		purpose domain.LoginCodePurpose,
+		step domain.LoginCodeStep,
+	) error
 }
 
 type UserRepository interface {
@@ -137,16 +147,73 @@ type SessionRepository interface {
 	WithTx(tx transaction.Tx) (SessionRepository, error)
 }
 
-// EmailChangeGrantRepository stores the one grant binding a confirmed new
-// email to a user between email-change steps 2 and 3 (issue #721). The grant
-// is server-side state: the client only sees the plaintext token once, the
-// store keeps the hash. A user holds at most one grant — issuing a new one
-// replaces the previous (DeleteByUserID + Save in the issuing transaction).
+// EmailChangeGrantRepository stores the one grant proving the user's current
+// email was verified by code between the email-change steps (issue #721,
+// protocol #1202). The grant is born on the current-address code check and
+// binds the new address at the next step; the client only sees the plaintext
+// token once, the store keeps the hash. A user holds at most one grant —
+// issuing a new one replaces the previous (DeleteByUserID + Save in the
+// issuing transaction).
 type EmailChangeGrantRepository interface {
 	Save(ctx context.Context, grant domain.EmailChangeGrant) error
+	// UpdateEmail binds (or re-binds) the new address to the live grant.
+	UpdateEmail(ctx context.Context, id uuid.UUID, email domain.Email) error
 	// GetByUserIDForUpdate acquires a row-level pessimistic lock and must only be called inside a transaction.
 	GetByUserIDForUpdate(ctx context.Context, userID uuid.UUID) (domain.EmailChangeGrant, error)
 	DeleteByID(ctx context.Context, id uuid.UUID) error
 	DeleteByUserID(ctx context.Context, userID uuid.UUID) error
 	WithTx(tx transaction.Tx) (EmailChangeGrantRepository, error)
 }
+
+// ContactChangeKind names the contact a change-notification letter announces
+// (решение #1207). The kind selects the letter's template and subject —
+// the same operation-naming rule the code letters follow (issue #1204) —
+// and pins the recipient: an email change announces itself to the OLD
+// address, a phone change to the current email (the only delivery channel).
+type ContactChangeKind string
+
+const (
+	ContactChangedEmail ContactChangeKind = "email_changed"
+	ContactChangedPhone ContactChangeKind = "phone_changed"
+)
+
+// ContactChangedEvent is the fact a change-notification letter announces:
+// which contact changed, for whom, where the letter goes, and when the
+// change committed. The recipient is captured at change time — for an email
+// change it is the old address, which the user row no longer carries once
+// the change commits — and the new address never enters the letter (research
+// #1201 §5).
+type ContactChangedEvent struct {
+	Kind      ContactChangeKind
+	UserID    uuid.UUID
+	Recipient domain.Email
+	ChangedAt time.Time
+}
+
+// TransactionalContactChangeNotifier schedules the change letter inside one
+// already-bound transaction.
+type TransactionalContactChangeNotifier interface {
+	ScheduleChanged(ctx context.Context, event ContactChangedEvent) error
+}
+
+// ContactChangeNotifier binds change-letter scheduling to a transaction. The
+// change services call it through txStores inside runInTx, so the letter job
+// commits together with the change or not at all (решение #1207) — a lost
+// SMTP attempt costs a River retry, a lost enqueue would cost the only
+// signal a hijacked account gets.
+type ContactChangeNotifier interface {
+	WithTx(tx transaction.Tx) TransactionalContactChangeNotifier
+}
+
+// ContactChangeNoop drops the letter — the safe default a factory without a
+// queue substitutes, mirroring auditapp.Noop. Tests assert the real
+// scheduling through a recording fake, not through this.
+type ContactChangeNoop struct{}
+
+func (ContactChangeNoop) WithTx(transaction.Tx) TransactionalContactChangeNotifier {
+	return contactChangeNoopTx{}
+}
+
+type contactChangeNoopTx struct{}
+
+func (contactChangeNoopTx) ScheduleChanged(context.Context, ContactChangedEvent) error { return nil }

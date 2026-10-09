@@ -306,9 +306,9 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
         '500':
           $ref: '#/components/responses/InternalServerError'
-  /me/email/confirm-current:
+  /me/email/verify-current:
     post:
-      operationId: confirmCurrentEmail
+      operationId: verifyCurrentEmail
       security:
         - sessionCookie: []
       requestBody:
@@ -316,14 +316,36 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ConfirmCurrentEmailRequest'
+              $ref: '#/components/schemas/VerifyCurrentEmailRequest'
       responses:
         '200':
-          description: Current email confirmed; a one-time grant and a code for the new email
+          description: Current email verified; the one-time grant is issued with no address bound yet
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/EmailChangeGrantResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /me/email/request-new-email-code:
+    post:
+      operationId: requestNewEmailCode
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestNewEmailCodeRequest'
+      responses:
+        '204':
+          description: The new email is bound to the grant; the code is sent to it
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -5676,9 +5698,9 @@ components:
           pattern: '^\d{6}$'
           example: '123456'
 
-    ConfirmCurrentEmailRequest:
+    VerifyCurrentEmailRequest:
       type: object
-      required: [code, newEmail]
+      required: [code]
       properties:
         code:
           type: string
@@ -5687,6 +5709,16 @@ components:
           pattern: '^\d{6}$'
           description: The code sent to the current email.
           example: '123456'
+
+    RequestNewEmailCodeRequest:
+      type: object
+      required: [grant, newEmail]
+      properties:
+        grant:
+          type: string
+          description: >-
+            The still-live grant token returned by /me/email/verify-current;
+            the address binds to it and the code is issued for the new address.
         newEmail:
           type: string
           maxLength: 255
@@ -5699,9 +5731,10 @@ components:
         grant:
           type: string
           description: >-
-            One-time grant token binding the confirmed new email to the user.
-            Present it at /me/email/change together with the code delivered to
-            the new address; it expires in about 10 minutes.
+            One-time grant token proving the current email was verified by
+            code. Present it at /me/email/request-new-email-code to bind the
+            new address, then at /me/email/change together with the code
+            delivered to it; it expires in about 10 minutes.
 
     ResendEmailCodeRequest:
       type: object
@@ -5710,8 +5743,8 @@ components:
         grant:
           type: string
           description: >-
-            The still-live grant token returned by /me/email/confirm-current;
-            the code is re-issued for the address it binds.
+            The still-live grant token bound to the pending new email; the
+            code is re-issued for the address it binds.
 
     ChangeEmailRequest:
       type: object
@@ -5726,7 +5759,7 @@ components:
           example: '123456'
         grant:
           type: string
-          description: The grant token returned by /me/email/confirm-current.
+          description: The grant token returned by /me/email/verify-current.
 
     Tariff:
       type: object

@@ -81,6 +81,34 @@ func TestPhoneChangeIntegration_HappyPath(t *testing.T) {
 	if !h.auditActionExists(t, string(auditdomain.ActionAuthPhoneChanged)) {
 		t.Fatal("audit_log missing auth.phone_changed entry")
 	}
+
+	// The change letter committed with the change (решение #1207): exactly
+	// one, to the current email — the new number never appears in it.
+	assertIntegrationLetter(t, h.notifier.scheduled, 1,
+		application.ContactChangedPhone, email, user.ID, h.clock.Now())
+}
+
+// TestPhoneChangeIntegration_ConflictSchedulesNoLetter proves a rejected
+// change leaves the letter queue untouched: only completed changes are
+// announced (решение #1207).
+func TestPhoneChangeIntegration_ConflictSchedulesNoLetter(t *testing.T) {
+	t.Parallel()
+	h := newIntegrationHarness(t)
+	email := mustEmail(t, "conflict2@example.com")
+	takenPhone := mustPhone(t, "+79160000205")
+	h.seedVerifiedUser(t, takenPhone, email)
+
+	ownerPhone := mustPhone(t, "+79160000206")
+	ownerEmail := mustEmail(t, "owner3@example.com")
+	_, owner := h.registerAndLogin(t, ownerPhone, ownerEmail)
+	ctx := h.ctx()
+
+	if err := h.phone.SendChangeCode(ctx, owner.ID, takenPhone); !errors.Is(err, application.ErrPhoneAlreadyTaken) {
+		t.Fatalf("SendChangeCode conflict error = %v, want ErrPhoneAlreadyTaken", err)
+	}
+	if len(h.notifier.scheduled) != 0 {
+		t.Fatalf("scheduled letters = %d, want 0 on a rejected change", len(h.notifier.scheduled))
+	}
 }
 
 // TestPhoneChangeIntegration_ConflictRejected proves a phone already owned by

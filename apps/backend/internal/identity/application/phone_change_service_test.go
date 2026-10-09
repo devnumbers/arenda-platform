@@ -14,11 +14,12 @@ import (
 // can be exercised end-to-end through fake repositories.
 type phoneChangeHarness struct {
 	*fakeStores
-	svc    *PhoneChangeService
-	sender *fakeCodeSender
-	audit  *recordingRecorder
-	clock  *fakeClock
-	hasher fakeHasher
+	svc      *PhoneChangeService
+	sender   *fakeCodeSender
+	audit    *recordingRecorder
+	clock    *fakeClock
+	hasher   fakeHasher
+	notifier *fakeContactNotifier
 }
 
 func newPhoneChangeHarness() *phoneChangeHarness {
@@ -26,6 +27,8 @@ func newPhoneChangeHarness() *phoneChangeHarness {
 	audit := &recordingRecorder{}
 	sender := &fakeCodeSender{}
 	clock := &fakeClock{now: testNow}
+	notifier := newFakeContactNotifier()
+	stores.contactNotifier = notifier
 	factory := stores.factory(audit)
 	loginCodes := NewLoginCodeService(factory, LoginCodeServiceConfig{
 		CodeSender: sender,
@@ -46,6 +49,7 @@ func newPhoneChangeHarness() *phoneChangeHarness {
 		audit:      audit,
 		clock:      clock,
 		hasher:     fakeHasher{},
+		notifier:   notifier,
 	}
 }
 
@@ -104,6 +108,10 @@ func sendChangeCodeHappyPath(t *testing.T) {
 	}
 	if sent.email != email {
 		t.Fatalf("sent email = %s, want %s (current email)", sent.email, email)
+	}
+	// The letter is the phone-change one on the current email (issue #1204).
+	if sent.purpose != domain.LoginCodePurposePhoneChange || sent.step != domain.LoginCodeStepCurrentEmail {
+		t.Fatalf("sent letter = %s/%s, want phone_change/current_email", sent.purpose, sent.step)
 	}
 	// The code is persisted with purpose = phone_change.
 	if len(h.codes.codes) != 1 {
@@ -323,6 +331,11 @@ func assertChangePhoneCleanup(t *testing.T, sc changePhoneScenario) {
 	if h.audit.entries[0].Action != auditdomain.ActionAuthPhoneChanged {
 		t.Fatalf("audit action = %s, want %s", h.audit.entries[0].Action, auditdomain.ActionAuthPhoneChanged)
 	}
+
+	// The change letter: exactly one, to the current email, announcing the
+	// phone change at the change instant (решение #1207). The new number
+	// never appears in the letter — only its announcement does.
+	assertChangeLetter(t, h.notifier.scheduled, 1, ContactChangedPhone, "change@example.com", sc.user.ID, h.clock.now)
 }
 
 // changePhoneInvalidCodeRecordsAttempt proves that a wrong code leaves the phone
@@ -360,6 +373,10 @@ func changePhoneInvalidCodeRecordsAttempt(t *testing.T) {
 	}
 	if got.Phone != oldPhone {
 		t.Fatalf("phone = %s, want unchanged %s", got.Phone, oldPhone)
+	}
+	// A failed change never schedules the letter (решение #1207).
+	if len(h.notifier.scheduled) != 0 {
+		t.Fatalf("scheduled letters = %d, want 0 on a failed change", len(h.notifier.scheduled))
 	}
 }
 

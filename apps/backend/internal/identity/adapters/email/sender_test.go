@@ -3,6 +3,7 @@ package email
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -87,22 +88,12 @@ func mustEmail(t *testing.T, raw string) domain.Email {
 	return email
 }
 
-func TestSender_Send_RendersAndSends(t *testing.T) {
-	t.Parallel()
-	phone := mustPhone(t, "+79160005000")
-	emailAddr := mustEmail(t, "owner@example.com")
-
-	renderer := &fakeRenderer{plain: "Your code: 123456", html: "<p>123456</p>"}
-	sender := &fakeMailerSender{}
-	s := NewSender(sender, renderer)
-
-	if err := s.Send(t.Context(), phone, emailAddr, "123456"); err != nil {
-		t.Fatalf("Send error = %v", err)
-	}
-
-	// The login_code template was rendered with Code and TTL in the data.
-	if renderer.gotName != "login_code" {
-		t.Fatalf("render template name = %q, want login_code", renderer.gotName)
+// assertLetterRender checks the template was rendered by name with the code
+// and the domain TTL in the data.
+func assertLetterRender(t *testing.T, renderer *fakeRenderer, wantTemplate string) {
+	t.Helper()
+	if renderer.gotName != wantTemplate {
+		t.Fatalf("render template name = %q, want %q", renderer.gotName, wantTemplate)
 	}
 	data, ok := renderer.gotData.(map[string]any)
 	if !ok {
@@ -111,39 +102,221 @@ func TestSender_Send_RendersAndSends(t *testing.T) {
 	if data["Code"] != "123456" {
 		t.Fatalf("render data Code = %v, want 123456", data["Code"])
 	}
-	ttl, ok := data["TTL"].(string)
-	if !ok {
-		t.Fatalf("render data TTL type = %T, want string", data["TTL"])
+	if ttl, ok := data["TTL"].(string); !ok || ttl != ttlFiveMinutes {
+		t.Fatalf("render data TTL = %v, want %q", data["TTL"], ttlFiveMinutes)
 	}
-	if ttl != ttlFiveMinutes {
-		t.Fatalf("render data TTL = %q, want %s", ttl, ttlFiveMinutes)
+}
+
+// assertLetterMessage checks the rendered message went to the address with the
+// operation-naming subject that never carries the code.
+func assertLetterMessage(t *testing.T, msg mailer.Message, wantTo, wantSubject string) {
+	t.Helper()
+	if len(msg.To) != 1 || msg.To[0] != wantTo {
+		t.Fatalf("message To = %v, want [%s]", msg.To, wantTo)
+	}
+	if msg.Subject != wantSubject {
+		t.Fatalf("message Subject = %q, want %q", msg.Subject, wantSubject)
+	}
+	if strings.Contains(msg.Subject, "123456") {
+		t.Fatalf("message Subject %q carries the code", msg.Subject)
+	}
+}
+
+// purpose+step pair renders its own template and sends its own operation-naming
+// subject (issue #1204) that never carries the code (research #1201).
+func TestSender_Send_LetterForPurposeAndStep(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name         string
+		purpose      domain.LoginCodePurpose
+		step         domain.LoginCodeStep
+		wantTemplate string
+		wantSubject  string
+	}{
+		{
+			name:         "login code to the current email",
+			purpose:      domain.LoginCodePurposeLogin,
+			step:         domain.LoginCodeStepCurrentEmail,
+			wantTemplate: "login_code",
+			wantSubject:  "Код для входа в Рентли",
+		},
+		{
+			name:         "phone change code to the current email",
+			purpose:      domain.LoginCodePurposePhoneChange,
+			step:         domain.LoginCodeStepCurrentEmail,
+			wantTemplate: "phone_change_code",
+			wantSubject:  "Код для смены телефона в Рентли",
+		},
+		{
+			name:         "email change code to the current address",
+			purpose:      domain.LoginCodePurposeEmailChange,
+			step:         domain.LoginCodeStepCurrentEmail,
+			wantTemplate: "email_change_current_code",
+			wantSubject:  "Код для подтверждения смены email в Рентли",
+		},
+		{
+			name:         "email change code to the new address",
+			purpose:      domain.LoginCodePurposeEmailChange,
+			step:         domain.LoginCodeStepNewEmail,
+			wantTemplate: "email_change_new_code",
+			wantSubject:  "Код для подтверждения нового email в Рентли",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			phone := mustPhone(t, "+79160005000")
+			emailAddr := mustEmail(t, "owner@example.com")
+			renderer := &fakeRenderer{plain: "plain body 123456", html: "<p>html body 123456</p>"}
+			sender := &fakeMailerSender{}
+			s := NewSender(sender, renderer)
+
+			if err := s.Send(t.Context(), phone, emailAddr, "123456", tc.purpose, tc.step); err != nil {
+				t.Fatalf("Send error = %v", err)
+			}
+
+			assertLetterRender(t, renderer, tc.wantTemplate)
+			assertLetterMessage(t, sender.gotMsg, "owner@example.com", tc.wantSubject)
+
+			if sender.gotMsg.TextBody != "plain body 123456" {
+				t.Fatalf("message TextBody = %q, want rendered plain", sender.gotMsg.TextBody)
+			}
+			if sender.gotMsg.HTMLBody != "<p>html body 123456</p>" {
+				t.Fatalf("message HTMLBody = %q, want rendered html", sender.gotMsg.HTMLBody)
+			}
+		})
+	}
+}
+
+// TestSender_Send_UnknownPurposeStepPairFails pins the total mapping: a pair
+// without a letter is a programming error that fails the delivery before any
+// render or send happens.
+func TestSender_Send_UnknownPurposeStepPairFails(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		purpose domain.LoginCodePurpose
+		step    domain.LoginCodeStep
+	}{
+		{name: "login to the new address", purpose: domain.LoginCodePurposeLogin, step: domain.LoginCodeStepNewEmail},
+		{name: "phone change to the new address", purpose: domain.LoginCodePurposePhoneChange, step: domain.LoginCodeStepNewEmail},
+		{name: "empty step", purpose: domain.LoginCodePurposeLogin, step: ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			phone := mustPhone(t, "+79160005001")
+			emailAddr := mustEmail(t, "owner@example.com")
+			renderer := &fakeRenderer{plain: "plain", html: "html"}
+			sender := &fakeMailerSender{}
+			s := NewSender(sender, renderer)
+
+			err := s.Send(t.Context(), phone, emailAddr, "123456", tc.purpose, tc.step)
+			if err == nil {
+				t.Fatal("Send error = nil, want unknown-pair failure")
+			}
+			if renderer.gotName != "" {
+				t.Fatalf("template %q was rendered for an unknown pair", renderer.gotName)
+			}
+			if sender.gotMsg.Subject != "" {
+				t.Fatalf("message %q was sent for an unknown pair", sender.gotMsg.Subject)
+			}
+		})
+	}
+}
+
+// TestSender_Send_RealTemplates_CarryRequiredBlocks pins the copy contract of
+// the four letters against the real template files (issue #1204, requirements
+// from research #1201): the operation line unique to the letter, the code, the
+// TTL, the do-not-share warning, the ignore line — and the shared text anchor
+// «Код подтверждения: NNNNNN» the e2e fixture parses codes from.
+func TestSender_Send_RealTemplates_CarryRequiredBlocks(t *testing.T) {
+	t.Parallel()
+	renderer, err := mailer.NewRenderer("../../../../templates/email")
+	if err != nil {
+		t.Fatalf("new renderer: %v", err)
 	}
 
-	// The message was sent to the email with the rendered bodies and subject.
-	if len(sender.gotMsg.To) != 1 || sender.gotMsg.To[0] != "owner@example.com" {
-		t.Fatalf("message To = %v, want [owner@example.com]", sender.gotMsg.To)
+	tests := []struct {
+		name          string
+		purpose       domain.LoginCodePurpose
+		step          domain.LoginCodeStep
+		wantOperation string
+	}{
+		{
+			name:          "login code",
+			purpose:       domain.LoginCodePurposeLogin,
+			step:          domain.LoginCodeStepCurrentEmail,
+			wantOperation: "Вы запросили код для входа в Рентли",
+		},
+		{
+			name:          "phone change code",
+			purpose:       domain.LoginCodePurposePhoneChange,
+			step:          domain.LoginCodeStepCurrentEmail,
+			wantOperation: "Вы запросили смену телефона в Рентли",
+		},
+		{
+			name:          "email change code to the current address",
+			purpose:       domain.LoginCodePurposeEmailChange,
+			step:          domain.LoginCodeStepCurrentEmail,
+			wantOperation: "Вы запросили смену email в Рентли",
+		},
+		{
+			name:          "email change code to the new address",
+			purpose:       domain.LoginCodePurposeEmailChange,
+			step:          domain.LoginCodeStepNewEmail,
+			wantOperation: "Вы запросили смену email в Рентли",
+		},
 	}
-	if sender.gotMsg.Subject != loginCodeSubject {
-		t.Fatalf("message Subject = %q, want %q", sender.gotMsg.Subject, loginCodeSubject)
-	}
-	if sender.gotMsg.TextBody != "Your code: 123456" {
-		t.Fatalf("message TextBody = %q, want rendered plain", sender.gotMsg.TextBody)
-	}
-	if sender.gotMsg.HTMLBody != "<p>123456</p>" {
-		t.Fatalf("message HTMLBody = %q, want rendered html", sender.gotMsg.HTMLBody)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			phone := mustPhone(t, "+79160005002")
+			emailAddr := mustEmail(t, "letters@example.com")
+			sender := &fakeMailerSender{}
+			s := NewSender(sender, renderer)
+
+			if err := s.Send(t.Context(), phone, emailAddr, "123456", tc.purpose, tc.step); err != nil {
+				t.Fatalf("Send error = %v", err)
+			}
+
+			plain, html := sender.gotMsg.TextBody, sender.gotMsg.HTMLBody
+			if plain == "" || html == "" {
+				t.Fatalf("empty body: plain=%d bytes, html=%d bytes", len(plain), len(html))
+			}
+			// A slice, not a map: the missing-fragment report is deterministic.
+			fragments := []struct {
+				text  string
+				where string
+			}{
+				{tc.wantOperation, "operation line"},
+				{"Код подтверждения: 123456", "e2e code anchor"},
+				{"Код действует " + ttlFiveMinutes, "TTL line"},
+				{"Никому не сообщайте этот код", "do-not-share warning"},
+				{"Если вы не запрашивали код", "ignore line"},
+			}
+			for _, fragment := range fragments {
+				if !strings.Contains(plain, fragment.text) {
+					t.Fatalf("text body misses the %s (%q):\n%s", fragment.where, fragment.text, plain)
+				}
+			}
+			if !strings.Contains(html, "123456") {
+				t.Fatalf("html body misses the code:\n%s", html)
+			}
+		})
 	}
 }
 
 func TestSender_Send_RenderErrorIsWrapped(t *testing.T) {
 	t.Parallel()
-	phone := mustPhone(t, "+79160005001")
+	phone := mustPhone(t, "+79160005003")
 	emailAddr := mustEmail(t, "owner@example.com")
 
 	renderErr := errors.New("template not found")
 	renderer := &fakeRenderer{err: renderErr}
 	s := NewSender(&fakeMailerSender{}, renderer)
 
-	err := s.Send(t.Context(), phone, emailAddr, "123456")
+	err := s.Send(t.Context(), phone, emailAddr, "123456", domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail)
 	if !errors.Is(err, renderErr) {
 		t.Fatalf("Send error = %v, want wrap of renderErr", err)
 	}
@@ -151,7 +324,7 @@ func TestSender_Send_RenderErrorIsWrapped(t *testing.T) {
 
 func TestSender_Send_SenderErrorIsWrapped(t *testing.T) {
 	t.Parallel()
-	phone := mustPhone(t, "+79160005002")
+	phone := mustPhone(t, "+79160005004")
 	emailAddr := mustEmail(t, "owner@example.com")
 
 	sendErr := errors.New("smtp refused")
@@ -159,7 +332,7 @@ func TestSender_Send_SenderErrorIsWrapped(t *testing.T) {
 	sender := &fakeMailerSender{err: sendErr}
 	s := NewSender(sender, renderer)
 
-	err := s.Send(t.Context(), phone, emailAddr, "123456")
+	err := s.Send(t.Context(), phone, emailAddr, "123456", domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail)
 	if !errors.Is(err, sendErr) {
 		t.Fatalf("Send error = %v, want wrap of sendErr", err)
 	}

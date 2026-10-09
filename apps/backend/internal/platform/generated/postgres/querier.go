@@ -1502,6 +1502,7 @@ type Querier interface {
 	// the card is gone between the service's read and this write (mapped to
 	// ErrNotFound, taking the audit entry down with it).
 	UpdateContact(ctx context.Context, arg UpdateContactParams) (Contact, error)
+	UpdateEmailChangeGrantEmail(ctx context.Context, arg UpdateEmailChangeGrantEmailParams) error
 	// Partial PATCH is resolved by the application layer; the statement always
 	// writes the full editable set (since is never among it — server-set,
 	// prototype decision №17). The favorite star has its own atomic UPDATE.

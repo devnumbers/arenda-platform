@@ -152,7 +152,8 @@ func newCountingFactory(t *testing.T) countingFactory {
 	}
 	cf.f = &txStoreFactory{
 		users: cf.users, codes: cf.codes, attempts: cf.attempts,
-		sessions: cf.sessions, grants: cf.grants, audit: cf.audit, uow: &fakeUoW{beginner: cf.b},
+		sessions: cf.sessions, grants: cf.grants, audit: cf.audit,
+		contactNotifier: ContactChangeNoop{}, uow: &fakeUoW{beginner: cf.b},
 	}
 	return cf
 }
@@ -168,6 +169,9 @@ type fakeStores struct {
 	sessions *fakeSessionRepo
 	grants   *fakeGrantRepo
 	beginner *fakeBeginner
+	// ContactNotifier is the change-letter seam a test installs to assert
+	// scheduling; nil keeps the factory's Noop default.
+	contactNotifier *fakeContactNotifier
 }
 
 // newFakeStores builds a fresh set of shared identity fakes plus a fakeBeginner.
@@ -186,7 +190,33 @@ func newFakeStores() *fakeStores {
 // to nil (NewTxStoreFactory substitutes Noop); pass a non-nil recorder (e.g.
 // *recordingRecorder) when the test checks audit output.
 func (s *fakeStores) factory(audit auditapp.Recorder) txStoreFactory {
-	return NewTxStoreFactory(s.users, s.codes, s.attempts, s.sessions, s.grants, audit, &fakeUoW{beginner: s.beginner})
+	var notifier ContactChangeNotifier
+	if s.contactNotifier != nil {
+		notifier = s.contactNotifier
+	}
+	return NewTxStoreFactory(s.users, s.codes, s.attempts, s.sessions, s.grants, audit, notifier, &fakeUoW{beginner: s.beginner})
+}
+
+// fakeContactNotifier records every scheduled change-letter event, so the
+// change-flow tests can assert the letter commits with the change — same
+// kind, recipient, user, and instant (решение #1207).
+type fakeContactNotifier struct {
+	scheduled []ContactChangedEvent
+}
+
+func newFakeContactNotifier() *fakeContactNotifier { return &fakeContactNotifier{} }
+
+func (f *fakeContactNotifier) WithTx(transaction.Tx) TransactionalContactChangeNotifier {
+	return &fakeContactNotifierTx{notifier: f}
+}
+
+type fakeContactNotifierTx struct {
+	notifier *fakeContactNotifier
+}
+
+func (f *fakeContactNotifierTx) ScheduleChanged(_ context.Context, event ContactChangedEvent) error {
+	f.notifier.scheduled = append(f.notifier.scheduled, event)
+	return nil
 }
 
 // TestRunInTx_BuildsStoresFromTxAndCommits proves runInTx binds every

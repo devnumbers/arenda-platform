@@ -48,13 +48,22 @@ type captureSender struct {
 }
 
 type sentLoginCode struct {
-	phone domain.Phone
-	email domain.Email
-	code  string
+	phone   domain.Phone
+	email   domain.Email
+	code    string
+	purpose domain.LoginCodePurpose
+	step    domain.LoginCodeStep
 }
 
-func (s *captureSender) Send(_ context.Context, phone domain.Phone, email domain.Email, code string) error {
-	s.codes = append(s.codes, sentLoginCode{phone: phone, email: email, code: code})
+func (s *captureSender) Send(
+	_ context.Context,
+	phone domain.Phone,
+	email domain.Email,
+	code string,
+	purpose domain.LoginCodePurpose,
+	step domain.LoginCodeStep,
+) error {
+	s.codes = append(s.codes, sentLoginCode{phone: phone, email: email, code: code, purpose: purpose, step: step})
 	return nil
 }
 
@@ -76,6 +85,28 @@ type capturePublisher struct {
 
 func (p *capturePublisher) PublishUserRegistered(_ context.Context, event identityapp.UserRegistered) error {
 	p.registered = append(p.registered, event)
+	return nil
+}
+
+// captureContactNotifier records every scheduled change-letter event so the
+// integration tests can assert the letter commits with the change — same
+// kind, recipient, user, and instant (решение #1207).
+type captureContactNotifier struct {
+	scheduled []identityapp.ContactChangedEvent
+}
+
+func newCaptureContactNotifier() *captureContactNotifier { return &captureContactNotifier{} }
+
+func (c *captureContactNotifier) WithTx(transaction.Tx) identityapp.TransactionalContactChangeNotifier {
+	return &captureContactNotifierTx{notifier: c}
+}
+
+type captureContactNotifierTx struct {
+	notifier *captureContactNotifier
+}
+
+func (c *captureContactNotifierTx) ScheduleChanged(_ context.Context, event identityapp.ContactChangedEvent) error {
+	c.notifier.scheduled = append(c.notifier.scheduled, event)
 	return nil
 }
 
@@ -106,6 +137,7 @@ type integrationHarness struct {
 	profile    *identityapp.ProfileService
 	logout     *identityapp.LogoutService
 	sessionsvc identityapp.SessionService
+	notifier   *captureContactNotifier
 }
 
 // newIntegrationHarness builds a fresh harness over a clean database. The
@@ -133,7 +165,8 @@ func newIntegrationHarness(t *testing.T) *integrationHarness {
 	auditWriter := auditpg.NewWriter(pool)
 	audit := auditapp.NewService(auditWriter, clk)
 
-	factory := identityapp.NewTxStoreFactory(users, codes, attempts, sessions, grants, audit, uow)
+	notifier := newCaptureContactNotifier()
+	factory := identityapp.NewTxStoreFactory(users, codes, attempts, sessions, grants, audit, notifier, uow)
 
 	loginCodes := identityapp.NewLoginCodeService(factory, identityapp.LoginCodeServiceConfig{
 		CodeSender: sender,
@@ -152,6 +185,7 @@ func newIntegrationHarness(t *testing.T) *integrationHarness {
 		clock:     clk,
 		sender:    sender,
 		publisher: publisher,
+		notifier:  notifier,
 		users:     users,
 		codes:     codes,
 		attempts:  attempts,

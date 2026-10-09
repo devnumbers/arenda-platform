@@ -86,7 +86,7 @@ func (s *PhoneChangeService) SendChangeCode(ctx context.Context, userID uuid.UUI
 		return err
 	}
 
-	return s.loginCodes.Send(ctx, newPhone, email, domain.LoginCodePurposePhoneChange, &user.ID)
+	return s.loginCodes.Send(ctx, newPhone, email, domain.LoginCodePurposePhoneChange, domain.LoginCodeStepCurrentEmail, &user.ID)
 }
 
 // ChangePhone verifies the code and updates the user's phone number.
@@ -194,6 +194,20 @@ func (s *PhoneChangeService) changePhoneInTx(
 		EntityID:   &userID,
 	}); err != nil {
 		return domain.User{}, fmt.Errorf("record audit: %w", err)
+	}
+
+	// The change letter commits with the change (решение #1207): announced to
+	// the current email — the only channel the account has, and the one place
+	// a hijack victim still looks. The new number never enters the event. The
+	// order mirrors the email change: audit stamps, then the letter
+	// schedules.
+	if err := stores.notifier.ScheduleChanged(ctx, ContactChangedEvent{
+		Kind:      ContactChangedPhone,
+		UserID:    userID,
+		Recipient: email,
+		ChangedAt: s.clock.Now(),
+	}); err != nil {
+		return domain.User{}, fmt.Errorf("schedule change letter: %w", err)
 	}
 	return updated, nil
 }
