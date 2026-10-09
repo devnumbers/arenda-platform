@@ -11,6 +11,65 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const actorPin = `-- name: ActorPin :one
+SELECT pinned_at FROM user_property_pins
+WHERE user_id = $1::uuid AND property_id = $2::uuid
+`
+
+type ActorPinParams struct {
+	Actor pgtype.UUID `json:"actor"`
+	ID    pgtype.UUID `json:"id"`
+}
+
+// The actor's personal pin on the property (the cutover #1307, D11): no row
+// — not pinned, the row's pinned_at — pinned since then. The view
+// capability is resolved by the application before the call.
+func (q *Queries) ActorPin(ctx context.Context, arg ActorPinParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, actorPin, arg.Actor, arg.ID)
+	var pinned_at pgtype.Timestamptz
+	err := row.Scan(&pinned_at)
+	return pinned_at, err
+}
+
+const actorPins = `-- name: ActorPins :many
+SELECT property_id, pinned_at FROM user_property_pins
+WHERE user_id = $1::uuid
+  AND property_id = ANY($2::uuid[])
+`
+
+type ActorPinsParams struct {
+	Actor       pgtype.UUID   `json:"actor"`
+	PropertyIds []pgtype.UUID `json:"property_ids"`
+}
+
+type ActorPinsRow struct {
+	PropertyID pgtype.UUID        `json:"property_id"`
+	PinnedAt   pgtype.Timestamptz `json:"pinned_at"`
+}
+
+// The actor's personal pins for the listed properties — the list overlay's
+// batch (the main list and the search carry pinnedAt of the actor over own
+// and shared rows alike).
+func (q *Queries) ActorPins(ctx context.Context, arg ActorPinsParams) ([]ActorPinsRow, error) {
+	rows, err := q.db.Query(ctx, actorPins, arg.Actor, arg.PropertyIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ActorPinsRow{}
+	for rows.Next() {
+		var i ActorPinsRow
+		if err := rows.Scan(&i.PropertyID, &i.PinnedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const archiveProperty = `-- name: ArchiveProperty :one
 UPDATE properties SET status = 'archived', pinned_at = NULL
 WHERE id = $1 AND owner_id = $2
@@ -22,9 +81,14 @@ type ArchivePropertyParams struct {
 	OwnerID pgtype.UUID `json:"owner_id"`
 }
 
-// Archiving clears the pin in the same UPDATE: the schema CHECK
-// (properties_pinned_at_check) demands it, and an unarchived object returns
-// unpinned (ticket #577).
+// The pin write here is dead scaffolding, not state: the personal-pin
+// cutover (#1307) reads and writes pins only in user_property_pins, and the
+// frozen properties.pinned_at column answers nothing. The write survives
+// only because the schema CHECK (properties_pinned_at_check) still forbids
+// a pinned archived row; the contract migration (#1311) drops the CHECK
+// together with the column and this write goes with them. Personal pin rows
+// are never touched here (D16): unarchiving returns the property with the
+// participants' pins.
 func (q *Queries) ArchiveProperty(ctx context.Context, arg ArchivePropertyParams) (Property, error) {
 	row := q.db.QueryRow(ctx, archiveProperty, arg.ID, arg.OwnerID)
 	var i Property
@@ -180,6 +244,23 @@ func (q *Queries) CreateProperty(ctx context.Context, arg CreatePropertyParams) 
 		&i.PhotoContentType,
 	)
 	return i, err
+}
+
+const deleteActorPin = `-- name: DeleteActorPin :exec
+DELETE FROM user_property_pins
+WHERE user_id = $1::uuid AND property_id = $2::uuid
+`
+
+type DeleteActorPinParams struct {
+	Actor pgtype.UUID `json:"actor"`
+	ID    pgtype.UUID `json:"id"`
+}
+
+// The unpin: the personal row goes; unpinning an unpinned property deletes
+// nothing and succeeds (the PUT's idempotency).
+func (q *Queries) DeleteActorPin(ctx context.Context, arg DeleteActorPinParams) error {
+	_, err := q.db.Exec(ctx, deleteActorPin, arg.Actor, arg.ID)
+	return err
 }
 
 const deleteProperty = `-- name: DeleteProperty :exec
@@ -450,6 +531,34 @@ func (q *Queries) GetPropertyStatusByOwner(ctx context.Context, arg GetPropertyS
 	return status, err
 }
 
+const insertActorPin = `-- name: InsertActorPin :one
+INSERT INTO user_property_pins (user_id, property_id, pinned_at)
+VALUES ($1::uuid, $2::uuid, $3::timestamptz)
+ON CONFLICT (user_id, property_id)
+DO UPDATE SET pinned_at = user_property_pins.pinned_at
+RETURNING pinned_at
+`
+
+type InsertActorPinParams struct {
+	Actor    pgtype.UUID        `json:"actor"`
+	ID       pgtype.UUID        `json:"id"`
+	PinnedAt pgtype.Timestamptz `json:"pinned_at"`
+}
+
+// The pin's «строка есть = состояние» write (the cutover #1307, the model
+// #1299): one atomic statement — a re-pin keeps the original pin time (the
+// PUT's idempotency, the order among the pinned never shifts), a fresh pin
+// takes the moment from the application's clock. The conflicting row's time
+// stands: DO UPDATE writes the same value back purely so RETURNING delivers
+// the effective pinned_at (DO NOTHING would return no row) — the stored
+// value never changes.
+func (q *Queries) InsertActorPin(ctx context.Context, arg InsertActorPinParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, insertActorPin, arg.Actor, arg.ID, arg.PinnedAt)
+	var pinned_at pgtype.Timestamptz
+	err := row.Scan(&pinned_at)
+	return pinned_at, err
+}
+
 const listActivePropertiesByOwner = `-- name: ListActivePropertiesByOwner :many
 SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at, properties.attributes, properties.pinned_at, properties.photo_key, properties.photo_content_type,
        ((SELECT COUNT(*) FROM property_members pm
@@ -458,7 +567,7 @@ SELECT properties.id, properties.owner_id, properties.name, properties.type, pro
          WHERE pmi.property_id = properties.id))::bigint AS members_count
 FROM properties
 WHERE properties.owner_id = $1 AND properties.status IN ('active', 'maintenance')
-ORDER BY properties.pinned_at, properties.updated_at DESC
+ORDER BY properties.updated_at DESC
 `
 
 type ListActivePropertiesByOwnerRow struct {
@@ -466,11 +575,11 @@ type ListActivePropertiesByOwnerRow struct {
 	MembersCount int64    `json:"members_count"`
 }
 
-// The main list's order (ticket #577): the pinned first — among themselves
-// by the pin time (the first pin stays on top, a re-pin never shifts the
-// order), then the unpinned by updated_at DESC. The application re-applies
-// the same rule over the merged list (shared properties arrive appended),
-// so keep the two passes in sync (PropertyService.pinnedFirst).
+// The main list's base order (ticket #577, the personal-pin cutover #1307):
+// the unpinned incoming order is updated_at DESC. The pinned-first rule is
+// per-actor since the cutover — the application overlays the actor's
+// personal pins (user_property_pins) over the merged list and re-sorts
+// (PropertyService.pinnedFirst), so the SQL pass stays out of pin ordering.
 func (q *Queries) ListActivePropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListActivePropertiesByOwnerRow, error) {
 	rows, err := q.db.Query(ctx, listActivePropertiesByOwner, ownerID)
 	if err != nil {
@@ -790,46 +899,6 @@ func (q *Queries) SetPropertyPhoto(ctx context.Context, arg SetPropertyPhotoPara
 		arg.PhotoKey,
 		arg.PhotoContentType,
 	)
-	var i Property
-	err := row.Scan(
-		&i.ID,
-		&i.OwnerID,
-		&i.Name,
-		&i.Type,
-		&i.Address,
-		&i.Description,
-		&i.Status,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.Attributes,
-		&i.PinnedAt,
-		&i.PhotoKey,
-		&i.PhotoContentType,
-	)
-	return i, err
-}
-
-const setPropertyPin = `-- name: SetPropertyPin :one
-UPDATE properties
-SET pinned_at = $1::timestamptz
-WHERE id = $2::uuid AND owner_id = $3::uuid
-RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at, attributes, pinned_at, photo_key, photo_content_type
-`
-
-type SetPropertyPinParams struct {
-	PinnedAt pgtype.Timestamptz `json:"pinned_at"`
-	ID       pgtype.UUID        `json:"id"`
-	OwnerID  pgtype.UUID        `json:"owner_id"`
-}
-
-// Atomic PUT pin (ticket #577, the PUT favorite's canon #461: no
-// read-modify-write). The value — a moment or NULL — is resolved by the
-// application under the row lock (a re-pin keeps the original pin time);
-// existence and the edit capability are proven there too. The scope is the
-// property's owner: the actor may be the full-access member. The updated
-// row travels back for the response.
-func (q *Queries) SetPropertyPin(ctx context.Context, arg SetPropertyPinParams) (Property, error) {
-	row := q.db.QueryRow(ctx, setPropertyPin, arg.PinnedAt, arg.ID, arg.OwnerID)
 	var i Property
 	err := row.Scan(
 		&i.ID,

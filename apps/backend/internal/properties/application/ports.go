@@ -242,11 +242,24 @@ type PropertyRepository interface {
 	// shared ones.
 	SearchVisible(ctx context.Context, actor uuid.UUID, q PropertySearchQuery) ([]domain.Property, error)
 	Update(ctx context.Context, scope uuid.UUID, property domain.Property) (domain.Property, error)
-	// SetPin writes the global pin in one atomic UPDATE (ticket #577, the
-	// PUT favorite's canon): nil clears it, a moment pins the property since
-	// then. The scope is the property's owner — the edit capability (Owner,
-	// Full Access) is resolved by the service's policy before the call.
-	SetPin(ctx context.Context, id, scope uuid.UUID, pinnedAt *time.Time) (domain.Property, error)
+	// ActorPin reads the actor's personal pin on the property (the cutover
+	// #1307, D11): nil — not pinned by this actor, a moment — pinned since
+	// then. A personal state: the value is scoped to the reader, never to
+	// the property.
+	ActorPin(ctx context.Context, actor, propertyID uuid.UUID) (*time.Time, error)
+	// InsertActorPin pins the property for the actor at the given moment and
+	// returns the effective pin time: one atomic statement — a re-pin keeps
+	// the original time (the PUT's idempotency), a fresh pin takes the
+	// moment it was given. The view capability is resolved by the service's
+	// policy before the call.
+	InsertActorPin(ctx context.Context, actor, propertyID uuid.UUID, pinnedAt time.Time) (time.Time, error)
+	// DeleteActorPin unpins the property for the actor: the row goes;
+	// unpinning an unpinned property is a no-op.
+	DeleteActorPin(ctx context.Context, actor, propertyID uuid.UUID) error
+	// ActorPins reads the actor's personal pins for the listed properties —
+	// the batch overlay behind the list reads (the lists carry pinnedAt of
+	// the actor, own and shared rows alike).
+	ActorPins(ctx context.Context, actor uuid.UUID, propertyIDs []uuid.UUID) (map[uuid.UUID]time.Time, error)
 	// SetPropertyPhoto writes the photo columns in one atomic UPDATE (ADR
 	// 0065): nil clears the photo. The scope is the property's owner — the
 	// edit capability is resolved by the service's policy before the call.

@@ -148,9 +148,12 @@ type Property struct {
 	// shared ones. Empty when not populated (internal use). Filled by the
 	// read/write service paths that resolve the actor's role.
 	AccessRole sharedpolicy.Role
-	// PinnedAt is the global pin (ticket #577): nil — not pinned, a moment —
+	// PinnedAt is the actor's personal pin (ticket #577; the personal
+	// cutover #1307, D11): nil — the actor has not pinned it, a moment —
 	// pinned since then. The lists order the pinned first, among themselves
-	// by this time; archiving clears it.
+	// by this time — the actor's order, never another participant's; the
+	// state lives in the actor's user_property_pins row and survives the
+	// archive (D16).
 	PinnedAt *time.Time
 	// Occupancy is the «Занятость» projection of the list reads (ticket
 	// #585, резолюция #584): nil when not computed — the write paths and an

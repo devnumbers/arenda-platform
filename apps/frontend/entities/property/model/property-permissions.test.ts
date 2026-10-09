@@ -20,6 +20,7 @@ describe('propertyPermissions — центральные права из propert
   it('нет объекта (загрузка/ошибка) — все права закрыты', () => {
     expect(propertyPermissions(undefined)).toEqual({
       canEdit: false,
+      canView: false,
       canMutate: false,
       canManageMembers: false,
       canLeave: false,
@@ -31,6 +32,7 @@ describe('propertyPermissions — центральные права из propert
     const noAccess: Property = { ...property({ id: 'p1' }), access: undefined };
     expect(propertyPermissions(noAccess)).toEqual({
       canEdit: false,
+      canView: false,
       canMutate: false,
       canManageMembers: false,
       canLeave: false,
@@ -38,10 +40,11 @@ describe('propertyPermissions — центральные права из propert
     });
   });
 
-  it('владелец живого объекта — правит, мутации, управляет участниками и жизненным циклом, не покидает свой объект', () => {
+  it('владелец живого объекта — читает, правит, мутации, управляет участниками и жизненным циклом, не покидает свой объект', () => {
     const own = property({ id: 'p1', access: { role: 'owner' } });
     expect(propertyPermissions(own)).toEqual({
       canEdit: true,
+      canView: true,
       canMutate: true,
       canManageMembers: true,
       canLeave: false,
@@ -49,10 +52,11 @@ describe('propertyPermissions — центральные права из propert
     });
   });
 
-  it('полный доступ — правит и мутации, но участниками управляет только собственник (D8 #1304); покинуть может; жизненный цикл владельческий (#757)', () => {
+  it('полный доступ — читает и правит, но участниками управляет только собственник (D8 #1304); покинуть может; жизненный цикл владельческий (#757)', () => {
     const editor = property({ id: 'p1', access: { role: 'full_access', ownerName: 'Иван Иванов' } });
     expect(propertyPermissions(editor)).toEqual({
       canEdit: true,
+      canView: true,
       canMutate: true,
       canManageMembers: false,
       canLeave: true,
@@ -64,6 +68,7 @@ describe('propertyPermissions — центральные права из propert
     const watcher = property({ id: 'p1', access: { role: 'viewer', ownerName: 'Иван Иванов' } });
     expect(propertyPermissions(watcher)).toEqual({
       canEdit: false,
+      canView: true,
       canMutate: false,
       canManageMembers: false,
       canLeave: true,
@@ -75,6 +80,7 @@ describe('propertyPermissions — центральные права из propert
     const archivedOwner = property({ id: 'p1', access: { role: 'owner' }, status: 'archived' });
     expect(propertyPermissions(archivedOwner)).toEqual({
       canEdit: false,
+      canView: true,
       canMutate: true,
       canManageMembers: true,
       canLeave: false,
@@ -88,6 +94,7 @@ describe('propertyPermissions — центральные права из propert
     });
     expect(propertyPermissions(archivedEditor)).toEqual({
       canEdit: false,
+      canView: true,
       canMutate: true,
       canManageMembers: false,
       canLeave: true,

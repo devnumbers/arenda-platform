@@ -1472,6 +1472,14 @@ paths:
   /properties/{propertyId}/pin:
     put:
       operationId: setPropertyPin
+      description: >
+        Sets or clears the actor's personal pin on the property (ticket
+        #577, the personal cutover #1307): «строка есть = состояние» — a
+        re-pin keeps the original pin time, an unpin deletes the row. Any
+        reader may pin (the view right); no access and a suspended
+        membership are the privacy 404, an archived property is the 409.
+        The personal state writes no history row and publishes no realtime
+        frame.
       security:
         - sessionCookie: []
       parameters:
@@ -6742,9 +6750,12 @@ components:
           format: date-time
           nullable: true
           description: >
-            The global pin (ticket #577): null — not pinned, a moment — pinned
-            since then. The lists order the pinned first, among themselves by
-            this time. Archiving clears the pin. The domain language calls the
+            The actor's personal pin (ticket #577, the personal cutover
+            #1307): null — not pinned by this actor, a moment — pinned since
+            then. The lists order the pinned first, among themselves by
+            this time — the actor's own order, never another participant's.
+            The pin is a personal state: any reader may pin (the view right),
+            and it survives archiving. The domain language calls the
             concept «основной объект / primary property» (резолюция #584);
             the contract keeps the pin name.
         occupancy:
@@ -7562,8 +7573,10 @@ components:
           format: date-time
           nullable: true
           description: >
-            The object's global pin (ticket #577): null — not pinned, a
-            moment — pinned since then. The cards order the pinned first.
+            The actor's personal pin (ticket #577, the personal cutover
+            #1307): null — not pinned by this actor, a moment — pinned since
+            then. The cards order the pinned first — the actor's own order,
+            never another participant's.
         photoUrl:
           type: string
           nullable: true

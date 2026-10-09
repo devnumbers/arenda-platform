@@ -593,6 +593,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
+        /** @description Sets or clears the actor's personal pin on the property (ticket #577, the personal cutover #1307): «строка есть = состояние» — a re-pin keeps the original pin time, an unpin deletes the row. Any reader may pin (the view right); no access and a suspended membership are the privacy 404, an archived property is the 409. The personal state writes no history row and publishes no realtime frame. */
         put: operations["setPropertyPin"];
         post?: never;
         delete?: never;
@@ -1309,14 +1310,19 @@ export interface paths {
         };
         /**
          * Опции шита фильтров «Истории действий»
-         * @description Опции фильтров ленты в области чтения читателя (ADR 0061 §7): те же
-         *     правила доступа, что у GET /history. «Участники» — владелец и
-         *     участники области сейчас ∪ все актёры, встречающиеся в журнале
-         *     области (отозванные и вышедшие остаются фильтруемыми — их записи
-         *     переживают отзыв). «Объекты» — объекты области с названием, адресом
-         *     и фото-аватаром (первое по времени фото, #582). property_ids сужает
-         *     область (история одного объекта); та же дисциплина privacy-404, что
-         *     у ленты: один невидимый или неизвестный id — 404 всего запроса.
+         * @description Опции фильтров ленты (ADR 0061 §7). Область «Участников» двух родов
+         *     (изоляция D14, спека #1302, тикет #1305): без property_ids
+         *     (глобальная лента) — только участники МОИХ объектов читателя,
+         *     включая его архивные (владельческая нога канона 000142); получателю
+         *     shared-доступа владелец и соучастники чужого объекта в глобальном
+         *     фильтре не раскрыты. С property_ids (история одного объекта) —
+         *     собственник и участники запрошенной области ∪ все актёры,
+         *     встречающиеся в её журнале (отозванные и вышедшие остаются
+         *     фильтруемыми — их записи переживают отзыв; D6 — без изменений).
+         *     «Объекты» — объекты области чтения с названием, адресом
+         *     и фото-аватаром (первое по времени фото, #582); та же дисциплина
+         *     privacy-404, что у ленты: один невидимый или неизвестный id —
+         *     404 всего запроса.
          *     Счётчики N/M групп чекбоксов клиент считает сам; сами группы
          *     (4 основных действия, 7 видов) — статический словарь экрана
          *     (ADR 0061 §4).
@@ -2894,7 +2900,7 @@ export interface components {
             updated_at: string;
             /**
              * Format: date-time
-             * @description The global pin (ticket #577): null — not pinned, a moment — pinned since then. The lists order the pinned first, among themselves by this time. Archiving clears the pin. The domain language calls the concept «основной объект / primary property» (резолюция #584); the contract keeps the pin name.
+             * @description The actor's personal pin (ticket #577, the personal cutover #1307): null — not pinned by this actor, a moment — pinned since then. The lists order the pinned first, among themselves by this time — the actor's own order, never another participant's. The pin is a personal state: any reader may pin (the view right), and it survives archiving. The domain language calls the concept «основной объект / primary property» (резолюция #584); the contract keeps the pin name.
              */
             pinned_at: string | null;
             occupancy?: components["schemas"]["PropertyOccupancy"];
@@ -3275,7 +3281,7 @@ export interface components {
             type: components["schemas"]["PropertyType"];
             /**
              * Format: date-time
-             * @description The object's global pin (ticket #577): null — not pinned, a moment — pinned since then. The cards order the pinned first.
+             * @description The actor's personal pin (ticket #577, the personal cutover #1307): null — not pinned by this actor, a moment — pinned since then. The cards order the pinned first — the actor's own order, never another participant's.
              */
             pinnedAt: string | null;
             /** @description The card avatar's photo — the object's first (oldest) photo (ticket #582); with the private photos (ADR 0065) one image per object, streamed by the backend; null when the object has no photo. */

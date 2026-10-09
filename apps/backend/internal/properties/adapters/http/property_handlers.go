@@ -439,9 +439,10 @@ func (h *PropertyHandlers) UnarchiveProperty(w http.ResponseWriter, r *http.Requ
 	h.respondWithProperty(w, r, property, http.StatusOK)
 }
 
-// SetPropertyPin implements PUT /properties/{propertyId}/pin (ticket #577):
-// the atomic global pin write, the PUT favorite's canon (ticket #461); the
-// updated property travels back.
+// SetPropertyPin implements PUT /properties/{propertyId}/pin (ticket #577;
+// the personal cutover #1307): the actor's personal pin write, the PUT
+// favorite's canon (ticket #461); the updated property travels back with
+// the actor's pinnedAt.
 func (h *PropertyHandlers) SetPropertyPin(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {

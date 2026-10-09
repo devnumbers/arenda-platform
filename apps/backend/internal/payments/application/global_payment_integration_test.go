@@ -452,9 +452,9 @@ func TestListGlobalPaymentObjects(t *testing.T) {
 	}
 }
 
-// The global pin orders the «Объекты» cards (ticket #577): the pinned first
-// — among themselves by the pin time — then the rest by name; the pin time
-// travels onto the card.
+// The actor's personal pin orders the «Объекты» cards (ticket #577; the
+// cutover #1307): the pinned first — among themselves by the pin time —
+// then the rest by name; the pin time travels onto the card.
 func TestListGlobalPaymentObjects_PinOrder(t *testing.T) {
 	t.Parallel()
 	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
@@ -465,18 +465,22 @@ func TestListGlobalPaymentObjects_PinOrder(t *testing.T) {
 	pinnedEarly := h.seedGlobalProperty(h.owner, "Бекон", "active")
 
 	// Direct seed: the properties context owns the pin writes; this read
-	// only consumes the column.
+	// only consumes the actor's personal rows (user_property_pins).
 	pinA := time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC)
 	pinB := time.Date(2026, 9, 2, 8, 0, 0, 0, time.UTC)
-	if _, err := h.pool.Exec(h.ctx(),
-		`UPDATE properties SET pinned_at = $1 WHERE id = $2`, pinB, pinnedLate,
-	); err != nil {
-		t.Fatalf("seed pin B: %v", err)
-	}
-	if _, err := h.pool.Exec(h.ctx(),
-		`UPDATE properties SET pinned_at = $1 WHERE id = $2`, pinA, pinnedEarly,
-	); err != nil {
-		t.Fatalf("seed pin A: %v", err)
+	for _, tc := range []struct {
+		at time.Time
+		id uuid.UUID
+	}{
+		{pinB, pinnedLate},
+		{pinA, pinnedEarly},
+	} {
+		if _, err := h.pool.Exec(h.ctx(),
+			`INSERT INTO user_property_pins (user_id, property_id, pinned_at)
+			 VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`, h.owner, tc.id, tc.at,
+		); err != nil {
+			t.Fatalf("seed pin %s: %v", tc.id, err)
+		}
 	}
 
 	cards, err := svc.ListGlobalPaymentObjects(h.ctx(), h.owner, "")

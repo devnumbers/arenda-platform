@@ -473,6 +473,25 @@ linters:
       - linters: [nilnil]
         path: ^internal/rentals/application/integration_test\.go$
         text: 'return both a `nil` error and an invalid value'
+      # Личный пин объекта (cutover #1307, D11): порт
+      # PropertyRepository.ActorPin отвечает (nil, nil), когда актёр объект
+      # не закрепил — «строки нет = не закреплено» это документированное
+      # значение чтения (не «нет pin-строки» как ошибка); сентинел заставил
+      # бы каждый оверлей списка различать отсутствие пина как ошибку.
+      # Точки — реализация в postgres-адаптере и тест-фейки (application,
+      # http); новые появляются через nilnil-файлы гейта #344, не молча.
+      - linters: [nilnil]
+        path: ^internal/properties/adapters/postgres/repository\.go$
+        text: 'return both a `nil` error and an invalid value'
+      - linters: [nilnil]
+        path: ^internal/properties/application/service_test\.go$
+        text: 'return both a `nil` error and an invalid value'
+      - linters: [nilnil]
+        path: ^internal/properties/adapters/http/property_photo_upload_test\.go$
+        text: 'return both a `nil` error and an invalid value'
+      - linters: [nilnil]
+        path: ^internal/properties/adapters/http/property_search_test\.go$
+        text: 'return both a `nil` error and an invalid value'
       # paralleltest: тесты с глобальным состоянием процесса, параллельность
       # им противопоказана по природе фикстуры — t.Setenv паникует в
       # параллельном тесте (конфиг-фикстура setRequiredLocalEnv выставляет

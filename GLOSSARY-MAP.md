@@ -56,6 +56,10 @@ Terms shared across contexts, documented once here:
 - **Viewer / Просмотр** — member role: read-only access to all property data.
 - **Suspended Access / Приостановленный доступ** — shared access hidden due to recipient tariff limit exhaustion.
 
+**Personal states** (личные связи читателя с сущностью, спека #1302; строка есть = состояние — право просмотра, не мутация):
+
+- **Основной объект / Primary Property** — личный пин объекта пользователем (`user_property_pins`, cutover #1307, D11): порядок «наверху списков» — читательский, чужой пин мой экран не меняет. Архивация личные строки не трогает (D16); в «Историю действий» личное состояние не пишется (D17) и realtime-фреймом не публикуется (D18, ADR 0062). Канонический дом: `internal/properties/GLOSSARY.md`; контракт остаётся `pinned_at` / `PUT /properties/{id}/pin`. (Дополнение «избранный платёж» приходит с cutover избранного #1308.)
+
 **Money vocabularies** (ADR 0036, updated by ADR 0046 and ADR 0047) — never mix them:
 
 - **Record-keeping (Payments)**: Платёж (правило), Операция (вхождение), Доход/Расход, Автоплатёж, Просрочка, Долг, Пауза, Категория — the world defined by the Payments context (ADR 0047). «Платёж» returned to the active language as the rule; «транзакция» stays banned here. «Форма оплаты» (перевод/наличные, `paymentForm`) left the language — removed entirely as a write-only field on 2026-10-01 (map #1005, ticket #1006; ADR 0047 revision of decision №3).

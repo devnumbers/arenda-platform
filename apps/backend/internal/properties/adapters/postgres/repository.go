@@ -277,22 +277,63 @@ func (r *PropertyRepository) Update(ctx context.Context, scope uuid.UUID, proper
 	return propertyFromRow(row), nil
 }
 
-// SetPin writes the global pin in one atomic UPDATE (ticket #577); the value
-// — a moment or NULL — arrives resolved from the application layer, which has
-// proven existence and the edit capability under the row lock.
-func (r *PropertyRepository) SetPin(ctx context.Context, id, scope uuid.UUID, pinnedAt *time.Time) (domain.Property, error) {
-	row, err := r.q().SetPropertyPin(ctx, postgres.SetPropertyPinParams{
-		PinnedAt: pgconv.TimePtrToPgtype(pinnedAt),
-		ID:       pgconv.UUIDToPgtype(id),
-		OwnerID:  pgconv.UUIDToPgtype(scope),
+// ActorPin reads the actor's personal pin row (the cutover #1307, D11):
+// no row — not pinned, the row's moment — pinned since then.
+func (r *PropertyRepository) ActorPin(ctx context.Context, actor, propertyID uuid.UUID) (*time.Time, error) {
+	at, err := r.q().ActorPin(ctx, postgres.ActorPinParams{
+		Actor: pgconv.UUIDToPgtype(actor),
+		ID:    pgconv.UUIDToPgtype(propertyID),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return domain.Property{}, application.ErrNotFound
+			return nil, nil
 		}
-		return domain.Property{}, err
+		return nil, err
 	}
-	return propertyFromRow(row), nil
+	return pgconv.TimestamptzToPtrTime(at), nil
+}
+
+// InsertActorPin pins the property for the actor: one atomic INSERT — a
+// re-pin keeps the original pin time (the PUT's idempotency), a fresh pin
+// takes the moment resolved from the application's clock; the effective
+// time travels back for the response.
+func (r *PropertyRepository) InsertActorPin(ctx context.Context, actor, propertyID uuid.UUID, pinnedAt time.Time) (time.Time, error) {
+	at, err := r.q().InsertActorPin(ctx, postgres.InsertActorPinParams{
+		Actor:    pgconv.UUIDToPgtype(actor),
+		ID:       pgconv.UUIDToPgtype(propertyID),
+		PinnedAt: pgconv.TimePtrToPgtype(&pinnedAt),
+	})
+	if err != nil {
+		return time.Time{}, err
+	}
+	// The column is NOT NULL — the row is the pin.
+	return at.Time, nil
+}
+
+// DeleteActorPin unpins: the personal row goes, an absent row deletes
+// nothing and succeeds.
+func (r *PropertyRepository) DeleteActorPin(ctx context.Context, actor, propertyID uuid.UUID) error {
+	return r.q().DeleteActorPin(ctx, postgres.DeleteActorPinParams{
+		Actor: pgconv.UUIDToPgtype(actor),
+		ID:    pgconv.UUIDToPgtype(propertyID),
+	})
+}
+
+// ActorPins reads the actor's personal pins for the listed properties — the
+// list overlay's batch.
+func (r *PropertyRepository) ActorPins(ctx context.Context, actor uuid.UUID, propertyIDs []uuid.UUID) (map[uuid.UUID]time.Time, error) {
+	rows, err := r.q().ActorPins(ctx, postgres.ActorPinsParams{
+		Actor:       pgconv.UUIDToPgtype(actor),
+		PropertyIds: pgconv.UUIDSliceToPgtype(propertyIDs),
+	})
+	if err != nil {
+		return nil, err
+	}
+	pins := make(map[uuid.UUID]time.Time, len(rows))
+	for _, row := range rows {
+		pins[pgconv.UUIDFromPgtype(row.PropertyID)] = row.PinnedAt.Time
+	}
+	return pins, nil
 }
 
 // SetPropertyPhoto writes the photo columns in one UPDATE (ADR 0065): the
@@ -399,7 +440,11 @@ func propertyFromRow(row postgres.Property) domain.Property {
 		PhotoContentType: pgconv.TextToPtrString(row.PhotoContentType),
 		CreatedAt:        row.CreatedAt.Time,
 		UpdatedAt:        row.UpdatedAt.Time,
-		PinnedAt:         pgconv.TimestamptzToPtrTime(row.PinnedAt),
+		// PinnedAt is not mapped here: properties.pinned_at is the frozen
+		// global column of the pre-cutover world (#1307) — no read answers
+		// from it. The actor's pin arrives through the ActorPin/ActorPins
+		// overlay (user_property_pins); the contract migration #1311 drops
+		// the column with its CHECK.
 	}
 }
 

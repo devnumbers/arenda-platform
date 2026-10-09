@@ -47,6 +47,8 @@ async function seedHistory(user: SeededUser): Promise<void> {
     user,
   );
   await seedJournalEntry(memberTaskEntry('b0000000-0000-4000-8000-000000000003', 2), user);
+  // Легаси-строка property.pinned (тип снесён #1307, D17; строки остаются
+  // в журнале и рендерятся из сохранённых сегментов).
   await seedJournalEntry(
     {
       id: 'b0000000-0000-4000-8000-000000000004',

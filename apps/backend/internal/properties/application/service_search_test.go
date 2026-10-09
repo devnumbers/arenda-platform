@@ -29,6 +29,12 @@ func (r *searchRecordingRepo) SearchVisible(
 	return r.page, nil
 }
 
+// newSearchRecordingRepo builds the recording repo with its embedded map
+// fake initialized (the pin overlay reads through it).
+func newSearchRecordingRepo(page []domain.Property) *searchRecordingRepo {
+	return &searchRecordingRepo{fakePropertyRepo: newFakePropertyRepo(), page: page}
+}
+
 func newSearchService(t *testing.T, repo PropertyRepository) *PropertyService {
 	t.Helper()
 	return NewPropertyService(
@@ -60,7 +66,7 @@ var searchActor = uuid.MustParse("11111111-1111-1111-1111-111111111111")
 func TestSearchProperties_NormalizesPage(t *testing.T) {
 	t.Parallel()
 
-	repo := &searchRecordingRepo{page: []domain.Property{}}
+	repo := newSearchRecordingRepo([]domain.Property{})
 	svc := newSearchService(t, repo)
 
 	if _, _, err := svc.SearchProperties(context.Background(), searchActor, searchQuery, SearchPropertiesPage{}); err != nil {
@@ -82,7 +88,7 @@ func TestSearchProperties_NormalizesPage(t *testing.T) {
 func TestSearchProperties_DecodesCursor(t *testing.T) {
 	t.Parallel()
 
-	repo := &searchRecordingRepo{page: []domain.Property{}}
+	repo := newSearchRecordingRepo([]domain.Property{})
 	svc := newSearchService(t, repo)
 
 	afterID := uuid.MustParse("01933e2f-7b1a-7000-8000-00000000000a")
@@ -118,7 +124,7 @@ func TestSearchProperties_NextCursorFollowsPageFullness(t *testing.T) {
 	}
 	last := full[len(full)-1]
 
-	repo := &searchRecordingRepo{page: full}
+	repo := newSearchRecordingRepo(full)
 	svc := newSearchService(t, repo)
 	props, nextCursor, err := svc.SearchProperties(
 		context.Background(), searchActor, searchQuery, SearchPropertiesPage{Limit: DefaultPropertySearchPageSize},
@@ -137,7 +143,7 @@ func TestSearchProperties_NextCursorFollowsPageFullness(t *testing.T) {
 		t.Errorf("expected cursor of the last row (%s, %s), got (%s, %s)", last.Name, last.ID, gotName, gotID)
 	}
 
-	repo = &searchRecordingRepo{page: full[:2]}
+	repo = newSearchRecordingRepo(full[:2])
 	svc = newSearchService(t, repo)
 	_, nextCursor, err = svc.SearchProperties(
 		context.Background(), searchActor, searchQuery, SearchPropertiesPage{Limit: DefaultPropertySearchPageSize},
@@ -157,10 +163,10 @@ func TestSearchProperties_PhotoRidesTheRow(t *testing.T) {
 
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 	key := "photos/01987654-3210-7abc-9def-0123456789ab.jpg"
-	repo := &searchRecordingRepo{page: []domain.Property{{
+	repo := newSearchRecordingRepo([]domain.Property{{
 		ID: propertyID, OwnerID: searchActor, Name: searchName, Status: domain.PropertyStatusActive,
 		PhotoKey: &key,
-	}}}
+	}})
 
 	svc := newSearchPhotoService(t, repo)
 
@@ -173,12 +179,53 @@ func TestSearchProperties_PhotoRidesTheRow(t *testing.T) {
 	}
 }
 
+// The search rows carry the actor's personal pin (the cutover #1307): the
+// card renders the same pin mark the hub list does. The frozen
+// properties.pinned_at column answers nothing — the overlay reads the
+// actor's user_property_pins rows.
+func TestSearchProperties_RowsCarryActorPin(t *testing.T) {
+	t.Parallel()
+
+	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	pinnedAt := time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC)
+	repo := newSearchRecordingRepo([]domain.Property{{
+		ID: propertyID, OwnerID: searchActor, Name: searchName, Status: domain.PropertyStatusActive,
+	}})
+	repo.seedPin(searchActor, propertyID, pinnedAt)
+
+	svc := newSearchService(t, repo)
+
+	props, _, err := svc.SearchProperties(context.Background(), searchActor, searchQuery, SearchPropertiesPage{})
+	if err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	if len(props) != 1 || props[0].PinnedAt == nil || !props[0].PinnedAt.Equal(pinnedAt) {
+		t.Fatalf("expected the actor's pin on the search row, got %+v", props)
+	}
+
+	// Another actor reads the same row unpinned — a personal state. (The
+	// canned page slice is shared, so the second read gets its own repo —
+	// production rows are fresh per SQL read and the overlay never carries
+	// a previous reader's value.)
+	other := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+	otherRepo := newSearchRecordingRepo([]domain.Property{{
+		ID: propertyID, OwnerID: searchActor, Name: searchName, Status: domain.PropertyStatusActive,
+	}})
+	props, _, err = newSearchService(t, otherRepo).SearchProperties(context.Background(), other, searchQuery, SearchPropertiesPage{})
+	if err != nil {
+		t.Fatalf("search as other actor: %v", err)
+	}
+	if len(props) != 1 || props[0].PinnedAt != nil {
+		t.Fatalf("expected no pin for a reader without one, got %+v", props)
+	}
+}
+
 // The contract's 400 modes: a blank search, an out-of-range page and a
 // malformed cursor.
 func TestSearchProperties_RejectsInvalidInput(t *testing.T) {
 	t.Parallel()
 
-	svc := newSearchService(t, &searchRecordingRepo{})
+	svc := newSearchService(t, newSearchRecordingRepo(nil))
 	oversized := strings.Repeat("а", maxSearchQueryLength+1)
 
 	cases := []struct {
@@ -209,7 +256,7 @@ func TestSearchProperties_RejectsInvalidInput(t *testing.T) {
 func TestSearchProperties_LengthCountsCharacters(t *testing.T) {
 	t.Parallel()
 
-	repo := &searchRecordingRepo{page: []domain.Property{}}
+	repo := newSearchRecordingRepo([]domain.Property{})
 	svc := newSearchService(t, repo)
 
 	atBoundary := strings.Repeat("а", maxSearchQueryLength)

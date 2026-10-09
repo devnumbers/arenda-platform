@@ -238,64 +238,12 @@ func TestPropertyRepository_Attributes_NilAttributesStoredAsEmpty(t *testing.T) 
 	}
 }
 
-// Pin tests (ticket #577): the pinned rise above the unpinned — among
-// themselves by the pin time; archiving clears the pin (the schema CHECK
-// keeps the invariant).
+// Personal pin tests (ticket #577; the cutover #1307, D11): the pin is the
+// actor's user_property_pins row — «строка есть = состояние», a re-pin
+// keeps the original time, unpinning deletes the row; one actor's pins are
+// invisible to another, and archiving keeps the rows (D16).
 
-func TestPropertyRepository_Pin_OrderAndClear(t *testing.T) {
-	t.Parallel()
-
-	pool := setupPropertiesIntegrationDB(t)
-	ctx := t.Context()
-	repo := NewPropertyRepository(pool)
-	ownerID := createTestOwner(t, pool)
-
-	pinnedFirst := sampleProperty(ownerID, nil)
-	pinnedSecond := sampleProperty(ownerID, nil)
-	unpinned := sampleProperty(ownerID, nil)
-	for _, p := range []domain.Property{pinnedFirst, pinnedSecond, unpinned} {
-		if _, err := repo.Create(ctx, ownerID, p); err != nil {
-			t.Fatalf("create property: %v", err)
-		}
-	}
-
-	pinA := time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC)
-	pinB := time.Date(2026, 9, 2, 8, 0, 0, 0, time.UTC)
-	if _, err := repo.SetPin(ctx, pinnedSecond.ID, ownerID, &pinB); err != nil {
-		t.Fatalf("set pin B: %v", err)
-	}
-	if _, err := repo.SetPin(ctx, pinnedFirst.ID, ownerID, &pinA); err != nil {
-		t.Fatalf("set pin A: %v", err)
-	}
-
-	list, err := repo.ListActiveByOwner(ctx, ownerID)
-	if err != nil {
-		t.Fatalf("list: %v", err)
-	}
-	want := []uuid.UUID{pinnedFirst.ID, pinnedSecond.ID, unpinned.ID}
-	if len(list) != len(want) {
-		t.Fatalf("list len = %d, want %d", len(list), len(want))
-	}
-	for i, id := range want {
-		if list[i].ID != id {
-			t.Errorf("list[%d] = %s, want %s", i, list[i].ID, id)
-		}
-	}
-
-	// Unpinning returns the property to the unpinned tail (updated_at DESC).
-	if _, err := repo.SetPin(ctx, pinnedFirst.ID, ownerID, nil); err != nil {
-		t.Fatalf("clear pin: %v", err)
-	}
-	got, err := repo.GetByIDAndOwner(ctx, pinnedFirst.ID, ownerID)
-	if err != nil {
-		t.Fatalf("reload: %v", err)
-	}
-	if got.PinnedAt != nil {
-		t.Errorf("pinnedAt after clear = %v, want nil", got.PinnedAt)
-	}
-}
-
-func TestPropertyRepository_ArchiveClearsPin(t *testing.T) {
+func TestPropertyRepository_ActorPin_RoundTrip(t *testing.T) {
 	t.Parallel()
 
 	pool := setupPropertiesIntegrationDB(t)
@@ -307,23 +255,180 @@ func TestPropertyRepository_ArchiveClearsPin(t *testing.T) {
 	if _, err := repo.Create(ctx, ownerID, property); err != nil {
 		t.Fatalf("create property: %v", err)
 	}
-	pin := time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC)
-	if _, err := repo.SetPin(ctx, property.ID, ownerID, &pin); err != nil {
-		t.Fatalf("set pin: %v", err)
+
+	pin, err := repo.ActorPin(ctx, ownerID, property.ID)
+	if err != nil {
+		t.Fatalf("read pin without a row: %v", err)
+	}
+	if pin != nil {
+		t.Fatalf("pin without a row = %v, want nil", pin)
+	}
+
+	first := time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC)
+	returned, err := repo.InsertActorPin(ctx, ownerID, property.ID, first)
+	if err != nil {
+		t.Fatalf("insert pin: %v", err)
+	}
+	if !returned.Equal(first) {
+		t.Fatalf("insert returned %v, want the fresh pin %v", returned, first)
+	}
+	pin, err = repo.ActorPin(ctx, ownerID, property.ID)
+	if err != nil {
+		t.Fatalf("read pin: %v", err)
+	}
+	if pin == nil || !pin.Equal(first) {
+		t.Fatalf("pin = %v, want %v", pin, first)
+	}
+}
+
+func TestPropertyRepository_ActorPin_RepinKeepsTimeAndUnpinDeletes(t *testing.T) {
+	t.Parallel()
+
+	pool := setupPropertiesIntegrationDB(t)
+	ctx := t.Context()
+	repo := NewPropertyRepository(pool)
+	ownerID := createTestOwner(t, pool)
+
+	property := sampleProperty(ownerID, nil)
+	if _, err := repo.Create(ctx, ownerID, property); err != nil {
+		t.Fatalf("create property: %v", err)
+	}
+	first := time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC)
+	returned, err := repo.InsertActorPin(ctx, ownerID, property.ID, first)
+	if err != nil {
+		t.Fatalf("insert pin: %v", err)
+	}
+	if !returned.Equal(first) {
+		t.Fatalf("insert returned %v, want the fresh pin %v", returned, first)
+	}
+
+	// The idempotent re-pin: the conflicting row keeps the original
+	// pin time — the order among the pinned never shifts.
+	second := time.Date(2026, 9, 2, 8, 0, 0, 0, time.UTC)
+	returned, err = repo.InsertActorPin(ctx, ownerID, property.ID, second)
+	if err != nil {
+		t.Fatalf("re-pin: %v", err)
+	}
+	if !returned.Equal(first) {
+		t.Fatalf("re-pin returned %v, want the untouched original %v", returned, first)
+	}
+	pin, err := repo.ActorPin(ctx, ownerID, property.ID)
+	if err != nil {
+		t.Fatalf("read pin after re-pin: %v", err)
+	}
+	if pin == nil || !pin.Equal(first) {
+		t.Fatalf("pin after re-pin = %v, want the untouched %v", pin, first)
+	}
+
+	// Unpinning deletes the row; deleting again is a no-op.
+	if err := repo.DeleteActorPin(ctx, ownerID, property.ID); err != nil {
+		t.Fatalf("delete pin: %v", err)
+	}
+	if err := repo.DeleteActorPin(ctx, ownerID, property.ID); err != nil {
+		t.Fatalf("delete pin again: %v", err)
+	}
+	pin, err = repo.ActorPin(ctx, ownerID, property.ID)
+	if err != nil {
+		t.Fatalf("read pin after delete: %v", err)
+	}
+	if pin != nil {
+		t.Fatalf("pin after delete = %v, want nil", pin)
+	}
+}
+
+func TestPropertyRepository_ActorPins_BatchAndIsolation(t *testing.T) {
+	t.Parallel()
+
+	pool := setupPropertiesIntegrationDB(t)
+	ctx := t.Context()
+	repo := NewPropertyRepository(pool)
+	ownerID := createTestOwner(t, pool)
+	memberID := createTestOwner(t, pool)
+
+	first := sampleProperty(ownerID, nil)
+	second := sampleProperty(ownerID, nil)
+	for _, p := range []domain.Property{first, second} {
+		if _, err := repo.Create(ctx, ownerID, p); err != nil {
+			t.Fatalf("create property: %v", err)
+		}
+	}
+
+	pinA := time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC)
+	pinB := time.Date(2026, 9, 2, 8, 0, 0, 0, time.UTC)
+	if _, err := repo.InsertActorPin(ctx, ownerID, first.ID, pinA); err != nil {
+		t.Fatalf("owner pin first: %v", err)
+	}
+	if _, err := repo.InsertActorPin(ctx, ownerID, second.ID, pinB); err != nil {
+		t.Fatalf("owner pin second: %v", err)
+	}
+	if _, err := repo.InsertActorPin(ctx, memberID, second.ID, pinB); err != nil {
+		t.Fatalf("member pin second: %v", err)
+	}
+
+	ownerPins, err := repo.ActorPins(ctx, ownerID, []uuid.UUID{first.ID, second.ID})
+	if err != nil {
+		t.Fatalf("owner pins: %v", err)
+	}
+	if len(ownerPins) != 2 || !ownerPins[first.ID].Equal(pinA) || !ownerPins[second.ID].Equal(pinB) {
+		t.Fatalf("owner pins = %v, want both rows", ownerPins)
+	}
+
+	// A personal state: the member sees only their own row (D11).
+	memberPins, err := repo.ActorPins(ctx, memberID, []uuid.UUID{first.ID, second.ID})
+	if err != nil {
+		t.Fatalf("member pins: %v", err)
+	}
+	if len(memberPins) != 1 || !memberPins[second.ID].Equal(pinB) {
+		t.Fatalf("member pins = %v, want only the member's own row", memberPins)
+	}
+}
+
+func TestPropertyRepository_ArchiveKeepsPersonalPin(t *testing.T) {
+	t.Parallel()
+
+	// D16: the archive transaction touches no personal rows — unarchiving
+	// returns the property with the participants' pins.
+	pool := setupPropertiesIntegrationDB(t)
+	ctx := t.Context()
+	repo := NewPropertyRepository(pool)
+	ownerID := createTestOwner(t, pool)
+	memberID := createTestOwner(t, pool)
+
+	property := sampleProperty(ownerID, nil)
+	if _, err := repo.Create(ctx, ownerID, property); err != nil {
+		t.Fatalf("create property: %v", err)
+	}
+	ownerPin := time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC)
+	memberPin := time.Date(2026, 9, 2, 8, 0, 0, 0, time.UTC)
+	if _, err := repo.InsertActorPin(ctx, ownerID, property.ID, ownerPin); err != nil {
+		t.Fatalf("owner pin: %v", err)
+	}
+	if _, err := repo.InsertActorPin(ctx, memberID, property.ID, memberPin); err != nil {
+		t.Fatalf("member pin: %v", err)
 	}
 
 	if err := repo.Archive(ctx, property.ID, ownerID); err != nil {
 		t.Fatalf("archive: %v", err)
 	}
-	got, err := repo.GetByIDAndOwner(ctx, property.ID, ownerID)
-	if err != nil {
-		t.Fatalf("reload: %v", err)
+	if err := repo.Unarchive(ctx, property.ID, ownerID); err != nil {
+		t.Fatalf("unarchive: %v", err)
 	}
-	if got.Status != domain.PropertyStatusArchived {
-		t.Errorf("status = %q, want archived", got.Status)
-	}
-	if got.PinnedAt != nil {
-		t.Errorf("pinnedAt after archive = %v, want nil (the schema CHECK invariant)", got.PinnedAt)
+
+	for _, tc := range []struct {
+		name  string
+		actor uuid.UUID
+		want  time.Time
+	}{
+		{"owner", ownerID, ownerPin},
+		{"member", memberID, memberPin},
+	} {
+		pin, err := repo.ActorPin(ctx, tc.actor, property.ID)
+		if err != nil {
+			t.Fatalf("%s pin after archive cycle: %v", tc.name, err)
+		}
+		if pin == nil || !pin.Equal(tc.want) {
+			t.Errorf("%s pin after archive cycle = %v, want the untouched %v (D16)", tc.name, pin, tc.want)
+		}
 	}
 }
 

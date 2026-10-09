@@ -77,10 +77,14 @@ const (
 
 	ActionPropertyPhotoAdded   Action = "property.photo_added"
 	ActionPropertyPhotoDeleted Action = "property.photo_deleted"
-	ActionPropertyPinned       Action = "property.pinned"
-	ActionPropertyUnpinned     Action = "property.unpinned"
-	ActionPropertyArchived     Action = "property.archived"
-	ActionPropertyUnarchived   Action = "property.unarchived"
+	// ActionPropertyArchived and ActionPropertyUnarchived close the
+	// property's lifecycle ids. The pin actions (property.pinned/unpinned)
+	// are gone since the personal pin cutover (#1307, D17): the pin is a
+	// personal state, the shared feed tells nothing about it. Rows of the
+	// removed types written before the cutover stay in the journal and
+	// render their stored segments.
+	ActionPropertyArchived   Action = "property.archived"
+	ActionPropertyUnarchived Action = "property.unarchived"
 
 	ActionRentalCreated   Action = "rental.created"
 	ActionRentalUpdated   Action = "rental.updated"

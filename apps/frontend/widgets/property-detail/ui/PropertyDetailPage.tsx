@@ -322,7 +322,10 @@ export function PropertyDetailPage(): JSX.Element {
             rentalState,
             isPinned,
             canMutate: permissions.canMutate,
-            canPin: isPaid && permissions.canMutate,
+            // Пин — личное состояние по праву просмотра (D11 #1307):
+            // зритель закрепляет объект в своём порядке наравне с другими
+            // ролями, тариф гасит по-прежнему.
+            canPin: isPaid && permissions.canView,
             canLeave: permissions.canLeave,
             canLifecycle: permissions.canLifecycle,
         })

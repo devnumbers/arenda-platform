@@ -56,6 +56,7 @@ func (fakePropertyTxBeginner) Begin(_ context.Context) (transaction.Tx, error) {
 type lockingFakePropertyRepo struct {
 	lock *sync.Mutex
 	data map[uuid.UUID]domain.Property
+	pins map[actorPinKey]time.Time
 	tx   *fakePropertyTx
 }
 
@@ -67,6 +68,7 @@ func newLockingFakePropertyRepo(properties ...domain.Property) *lockingFakePrope
 	return &lockingFakePropertyRepo{
 		lock: &sync.Mutex{},
 		data: data,
+		pins: make(map[actorPinKey]time.Time),
 	}
 }
 
@@ -147,15 +149,37 @@ func (r *lockingFakePropertyRepo) Update(_ context.Context, _ uuid.UUID, propert
 	return property, nil
 }
 
-func (r *lockingFakePropertyRepo) SetPin(_ context.Context, id, _ uuid.UUID, pinnedAt *time.Time) (domain.Property, error) {
-	// The caller already holds the lock via GetByIDForUpdate.
-	p, ok := r.data[id]
-	if !ok {
-		return domain.Property{}, ErrNotFound
+func (r *lockingFakePropertyRepo) ActorPin(_ context.Context, actor, propertyID uuid.UUID) (*time.Time, error) {
+	if at, ok := r.pins[actorPinKey{actor: actor, property: propertyID}]; ok {
+		at := at
+		return &at, nil
 	}
-	p.PinnedAt = pinnedAt
-	r.data[id] = p
-	return p, nil
+	return nil, nil
+}
+
+func (r *lockingFakePropertyRepo) InsertActorPin(_ context.Context, actor, propertyID uuid.UUID, pinnedAt time.Time) (time.Time, error) {
+	key := actorPinKey{actor: actor, property: propertyID}
+	if existing, ok := r.pins[key]; ok {
+		// The conflict keeps the original pin time (the PUT's idempotency).
+		return existing, nil
+	}
+	r.pins[key] = pinnedAt
+	return pinnedAt, nil
+}
+
+func (r *lockingFakePropertyRepo) DeleteActorPin(_ context.Context, actor, propertyID uuid.UUID) error {
+	delete(r.pins, actorPinKey{actor: actor, property: propertyID})
+	return nil
+}
+
+func (r *lockingFakePropertyRepo) ActorPins(_ context.Context, actor uuid.UUID, propertyIDs []uuid.UUID) (map[uuid.UUID]time.Time, error) {
+	out := make(map[uuid.UUID]time.Time, len(propertyIDs))
+	for _, id := range propertyIDs {
+		if at, ok := r.pins[actorPinKey{actor: actor, property: id}]; ok {
+			out[id] = at
+		}
+	}
+	return out, nil
 }
 
 func (r *lockingFakePropertyRepo) Archive(_ context.Context, id, _ uuid.UUID) error {
@@ -222,6 +246,7 @@ func (r *lockingFakePropertyRepo) WithTx(tx transaction.Tx) PropertyRepository {
 	return &lockingFakePropertyRepo{
 		lock: r.lock,
 		data: r.data,
+		pins: r.pins,
 		tx:   ftx,
 	}
 }
@@ -563,6 +588,14 @@ func TestPropertyService_ListArchivedProperties(t *testing.T) {
 // that do not exercise concurrency.
 type fakePropertyRepo struct {
 	data map[uuid.UUID]domain.Property
+	pins map[actorPinKey]time.Time
+}
+
+// actorPinKey is the personal pin's identity (the cutover #1307): the pair
+// (actor, property) — a personal state, never a property flag.
+type actorPinKey struct {
+	actor    uuid.UUID
+	property uuid.UUID
 }
 
 func newFakePropertyRepo(properties ...domain.Property) *fakePropertyRepo {
@@ -570,7 +603,13 @@ func newFakePropertyRepo(properties ...domain.Property) *fakePropertyRepo {
 	for _, p := range properties {
 		data[p.ID] = p
 	}
-	return &fakePropertyRepo{data: data}
+	return &fakePropertyRepo{data: data, pins: make(map[actorPinKey]time.Time)}
+}
+
+// seedPin plants the actor's personal pin row directly (the re-pin and
+// list-overlay tests read the row without passing through the service).
+func (r *fakePropertyRepo) seedPin(actor, propertyID uuid.UUID, at time.Time) {
+	r.pins[actorPinKey{actor: actor, property: propertyID}] = at
 }
 
 func (r *fakePropertyRepo) Create(_ context.Context, _ uuid.UUID, property domain.Property) (domain.Property, error) {
@@ -643,14 +682,37 @@ func (r *fakePropertyRepo) Update(_ context.Context, _ uuid.UUID, property domai
 	return property, nil
 }
 
-func (r *fakePropertyRepo) SetPin(_ context.Context, id, _ uuid.UUID, pinnedAt *time.Time) (domain.Property, error) {
-	p, ok := r.data[id]
-	if !ok {
-		return domain.Property{}, ErrNotFound
+func (r *fakePropertyRepo) ActorPin(_ context.Context, actor, propertyID uuid.UUID) (*time.Time, error) {
+	if at, ok := r.pins[actorPinKey{actor: actor, property: propertyID}]; ok {
+		at := at
+		return &at, nil
 	}
-	p.PinnedAt = pinnedAt
-	r.data[id] = p
-	return p, nil
+	return nil, nil
+}
+
+func (r *fakePropertyRepo) InsertActorPin(_ context.Context, actor, propertyID uuid.UUID, pinnedAt time.Time) (time.Time, error) {
+	key := actorPinKey{actor: actor, property: propertyID}
+	if existing, ok := r.pins[key]; ok {
+		// The conflict keeps the original pin time (the PUT's idempotency).
+		return existing, nil
+	}
+	r.pins[key] = pinnedAt
+	return pinnedAt, nil
+}
+
+func (r *fakePropertyRepo) DeleteActorPin(_ context.Context, actor, propertyID uuid.UUID) error {
+	delete(r.pins, actorPinKey{actor: actor, property: propertyID})
+	return nil
+}
+
+func (r *fakePropertyRepo) ActorPins(_ context.Context, actor uuid.UUID, propertyIDs []uuid.UUID) (map[uuid.UUID]time.Time, error) {
+	out := make(map[uuid.UUID]time.Time, len(propertyIDs))
+	for _, id := range propertyIDs {
+		if at, ok := r.pins[actorPinKey{actor: actor, property: id}]; ok {
+			out[id] = at
+		}
+	}
+	return out, nil
 }
 
 func (r *fakePropertyRepo) SetPropertyPhoto(_ context.Context, id, _ uuid.UUID, key, contentType *string) (domain.Property, error) {

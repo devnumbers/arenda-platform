@@ -200,18 +200,19 @@ ORDER BY COUNT(*) DESC, pay.category_slug NULLS LAST, pc.name NULLS LAST;
 -- stacks (ticket #575); the rules of each stack arrive on the feed query's
 -- rows and the application layer groups them. The search ('' = no filter)
 -- is a case-insensitive substring over the name and the address — it
--- filters the objects, never their stacks. The order is the global pin's
--- (ticket #577): the pinned first — among themselves by the pin time —
--- then the rest by name. pinned_at travels to the cards for the pin mark,
--- photo_url is the card avatar (ticket #582): with the private photos
--- (ADR 0065, #1227) one image per object, streamed by the backend — the
--- same-origin path, or NULL without a photo; type picks the avatar's
--- placeholder glyph (карта #1217, #1244).
+-- filters the objects, never their stacks. The order is the actor's
+-- personal pin's (ticket #577, the cutover #1307): the pinned first — among
+-- themselves by the pin time — then the rest by name. pinned_at travels
+-- from the actor's row in user_property_pins (the LEFT JOIN) to the cards
+-- for the pin mark, photo_url is the card avatar (ticket #582): with the
+-- private photos (ADR 0065, #1227) one image per object, streamed by the
+-- backend — the same-origin path, or NULL without a photo; type picks the
+-- avatar's placeholder glyph (карта #1217, #1244).
 SELECT p.id,
        p.name,
        p.address,
        p.type,
-       p.pinned_at,
+       up.pinned_at,
        -- COALESCE, not the bare column: sqlc trusts the column's NOT NULL
        -- and emits a string, while the CASE on a NULL key misses into NULL —
        -- an object without a photo would fail the scan. '' = no photo.
@@ -219,12 +220,15 @@ SELECT p.id,
                      THEN '/api/v1/properties/' || p.id::text || '/photo'
                      END, '')::text AS photo_url
 FROM properties p
+LEFT JOIN user_property_pins up
+       ON up.property_id = p.id
+      AND up.user_id = sqlc.arg('actor')::uuid
 WHERE actor_can_read_property(p.id, sqlc.arg('actor')::uuid)
   AND p.status != 'archived'
   AND (sqlc.arg('search')::text = ''
        OR p.name ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
        OR p.address ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\')
-ORDER BY p.pinned_at, p.name, p.id;
+ORDER BY up.pinned_at, p.name, p.id;
 
 -- name: LastOperationDatesOfPayments :many
 -- The newest materialized date across planned and paid per listed rule —

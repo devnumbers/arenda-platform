@@ -11,15 +11,28 @@ import (
 )
 
 type Querier interface {
+	// The actor's personal pin on the property (the cutover #1307, D11): no row
+	// — not pinned, the row's pinned_at — pinned since then. The view
+	// capability is resolved by the application before the call.
+	ActorPin(ctx context.Context, arg ActorPinParams) (pgtype.Timestamptz, error)
+	// The actor's personal pins for the listed properties — the list overlay's
+	// batch (the main list and the search carry pinnedAt of the actor over own
+	// and shared rows alike).
+	ActorPins(ctx context.Context, arg ActorPinsParams) ([]ActorPinsRow, error)
 	// The transition log is append-only (enforced by trigger, ADR 0037); the first
 	// transition of a subscription has no prior status or tariff.
 	AppendSubscriptionTransition(ctx context.Context, arg AppendSubscriptionTransitionParams) error
 	// The time-travel twin of AppendSubscriptionTransition: identical columns plus
 	// the shifted created_at (the plain append always stamps now()).
 	AppendSubscriptionTransitionWithCreatedAt(ctx context.Context, arg AppendSubscriptionTransitionWithCreatedAtParams) error
-	// Archiving clears the pin in the same UPDATE: the schema CHECK
-	// (properties_pinned_at_check) demands it, and an unarchived object returns
-	// unpinned (ticket #577).
+	// The pin write here is dead scaffolding, not state: the personal-pin
+	// cutover (#1307) reads and writes pins only in user_property_pins, and the
+	// frozen properties.pinned_at column answers nothing. The write survives
+	// only because the schema CHECK (properties_pinned_at_check) still forbids
+	// a pinned archived row; the contract migration (#1311) drops the CHECK
+	// together with the column and this write goes with them. Personal pin rows
+	// are never touched here (D16): unarchiving returns the property with the
+	// participants' pins.
 	ArchiveProperty(ctx context.Context, arg ArchivePropertyParams) (Property, error)
 	// «Удалить операцию» (решение владельца): tombstone-статус cancelled —
 	// строка остаётся с ключом (payment_id, date) и не воскресает на тике,
@@ -198,6 +211,9 @@ type Querier interface {
 	CreateTaskRule(ctx context.Context, arg CreateTaskRuleParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	DeactivateAllPaymentMethodsForUser(ctx context.Context, userID pgtype.UUID) error
+	// The unpin: the personal row goes; unpinning an unpinned property deletes
+	// nothing and succeeds (the PUT's idempotency).
+	DeleteActorPin(ctx context.Context, arg DeleteActorPinParams) error
 	// «Удалить все» (решение #737): soft-deletes every feed row of the user in
 	// one statement; the result is the number of rows hidden.
 	DeleteAllNotifications(ctx context.Context, userID pgtype.UUID) (int64, error)
@@ -599,6 +615,14 @@ type Querier interface {
 	// untouched on the conflict branch because the window is not being reset.
 	IncrementLoginAttempt(ctx context.Context, arg IncrementLoginAttemptParams) error
 	InsertActionJournal(ctx context.Context, arg InsertActionJournalParams) (pgtype.UUID, error)
+	// The pin's «строка есть = состояние» write (the cutover #1307, the model
+	// #1299): one atomic statement — a re-pin keeps the original pin time (the
+	// PUT's idempotency, the order among the pinned never shifts), a fresh pin
+	// takes the moment from the application's clock. The conflicting row's time
+	// stands: DO UPDATE writes the same value back purely so RETURNING delivers
+	// the effective pinned_at (DO NOTHING would return no row) — the stored
+	// value never changes.
+	InsertActorPin(ctx context.Context, arg InsertActorPinParams) (pgtype.Timestamptz, error)
 	InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) (pgtype.UUID, error)
 	InsertContact(ctx context.Context, arg InsertContactParams) (Contact, error)
 	InsertEmailChangeGrant(ctx context.Context, arg InsertEmailChangeGrantParams) error
@@ -693,11 +717,11 @@ type Querier interface {
 	// archived properties are excluded: an archived object does not occupy a
 	// recipient slot (issue #163).
 	ListActiveMembersByUser(ctx context.Context, userID pgtype.UUID) ([]PropertyMember, error)
-	// The main list's order (ticket #577): the pinned first — among themselves
-	// by the pin time (the first pin stays on top, a re-pin never shifts the
-	// order), then the unpinned by updated_at DESC. The application re-applies
-	// the same rule over the merged list (shared properties arrive appended),
-	// so keep the two passes in sync (PropertyService.pinnedFirst).
+	// The main list's base order (ticket #577, the personal-pin cutover #1307):
+	// the unpinned incoming order is updated_at DESC. The pinned-first rule is
+	// per-actor since the cutover — the application overlays the actor's
+	// personal pins (user_property_pins) over the merged list and re-sorts
+	// (PropertyService.pinnedFirst), so the SQL pass stays out of pin ordering.
 	ListActivePropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListActivePropertiesByOwnerRow, error)
 	// The active tasks (uncompleted) of the property: the screen's main
 	// sections. Due order with the undated last — the client buckets sections
@@ -787,13 +811,14 @@ type Querier interface {
 	// stacks (ticket #575); the rules of each stack arrive on the feed query's
 	// rows and the application layer groups them. The search ('' = no filter)
 	// is a case-insensitive substring over the name and the address — it
-	// filters the objects, never their stacks. The order is the global pin's
-	// (ticket #577): the pinned first — among themselves by the pin time —
-	// then the rest by name. pinned_at travels to the cards for the pin mark,
-	// photo_url is the card avatar (ticket #582): with the private photos
-	// (ADR 0065, #1227) one image per object, streamed by the backend — the
-	// same-origin path, or NULL without a photo; type picks the avatar's
-	// placeholder glyph (карта #1217, #1244).
+	// filters the objects, never their stacks. The order is the actor's
+	// personal pin's (ticket #577, the cutover #1307): the pinned first — among
+	// themselves by the pin time — then the rest by name. pinned_at travels
+	// from the actor's row in user_property_pins (the LEFT JOIN) to the cards
+	// for the pin mark, photo_url is the card avatar (ticket #582): with the
+	// private photos (ADR 0065, #1227) one image per object, streamed by the
+	// backend — the same-origin path, or NULL without a photo; type picks the
+	// avatar's placeholder glyph (карта #1217, #1244).
 	ListGlobalPaymentObjects(ctx context.Context, arg ListGlobalPaymentObjectsParams) ([]ListGlobalPaymentObjectsRow, error)
 	// Payments context queries: the global surface of the payment rules
 	// (tickets #575, #576) — the merged «Платежи» feed, the search with its
@@ -1435,13 +1460,6 @@ type Querier interface {
 	// (plus the archived-object guard) are proven by the caller under the row
 	// lock.
 	SetPropertyPhoto(ctx context.Context, arg SetPropertyPhotoParams) (Property, error)
-	// Atomic PUT pin (ticket #577, the PUT favorite's canon #461: no
-	// read-modify-write). The value — a moment or NULL — is resolved by the
-	// application under the row lock (a re-pin keeps the original pin time);
-	// existence and the edit capability are proven there too. The scope is the
-	// property's owner: the actor may be the full-access member. The updated
-	// row travels back for the response.
-	SetPropertyPin(ctx context.Context, arg SetPropertyPinParams) (Property, error)
 	// The profile photo write (ADR 0065, ticket #1227): the key and the sniffed
 	// content type move together; a NULL key clears the photo. Existence and the
 	// self-only access are proven by the caller under the row lock.

@@ -200,18 +200,47 @@ describe('buildPropertyManageActions (секция «Управление»)', (
     expect(items.map((item) => item.key)).toEqual(['unarchive', 'access', 'delete']);
   });
 
-  it('смотрящий: об объекте, совместный доступ, покинуть объект (#703)', () => {
-    const items = buildPropertyManageActions({ ...baseManage, canMutate: false, canLeave: true });
-    expect(items.map((item) => item.key)).toEqual(['about', 'access', 'leave']);
+  it('смотрящий: об объекте, пин, совместный доступ, покинуть объект (D11 #1307)', () => {
+    const items = buildPropertyManageActions({
+      ...baseManage,
+      canMutate: false,
+      canLeave: true,
+    });
+    expect(items.map((item) => item.key)).toEqual(['about', 'pin', 'access', 'leave']);
     expect(items.find((item) => item.key === 'leave')?.danger).toBe(true);
   });
 
-  it('смотрящий без контекста доступа: без строки выхода (страховка)', () => {
-    const items = buildPropertyManageActions({ ...baseManage, canMutate: false, canLeave: false });
-    expect(items.map((item) => item.key)).toEqual(['about', 'access']);
+  it('смотрящий закрепил: «Убрать из основных» вместо «Сделать основным»', () => {
+    const keys = buildPropertyManageActions({
+      ...baseManage,
+      isPinned: true,
+      canMutate: false,
+      canLeave: true,
+    }).map((item) => item.key);
+    expect(keys).toContain('unpin');
+    expect(keys).not.toContain('pin');
   });
 
-  it('архивный смотрящий: тот же набор — выход из архива не гасит (#703)', () => {
+  it('смотрящий без права пина (базовый тариф): строки пина нет', () => {
+    const keys = buildPropertyManageActions({
+      ...baseManage,
+      canMutate: false,
+      canPin: false,
+      canLeave: true,
+    }).map((item) => item.key);
+    expect(keys).toEqual(['about', 'access', 'leave']);
+  });
+
+  it('смотрящий без контекста доступа: без строки выхода (страховка)', () => {
+    const items = buildPropertyManageActions({
+      ...baseManage,
+      canMutate: false,
+      canLeave: false,
+    });
+    expect(items.map((item) => item.key)).toEqual(['about', 'pin', 'access']);
+  });
+
+  it('архивный смотрящий: пина нет (архивный объект не закрепляется), выход не гаснет (#703)', () => {
     const items = buildPropertyManageActions({
       ...baseManage,
       status: 'archived',

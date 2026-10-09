@@ -13,6 +13,11 @@ export type PropertyPermissions = {
    * канон #589/#773), глухота — здесь (#774, шов propertySectionCta;
    * D8 #1304 отвязал CTA от canManageMembers — тот стал owner-only). */
   readonly canEdit: boolean;
+  /** Чтение объекта (зеркало sharedpolicy.CanView): любая известная роль —
+   * владелец, полный доступ, зритель. Гейтит личные действия по праву
+   * просмотра — «Основной объект» (D11 #1307): пин — личное состояние
+   * читателя, не мутация чужого объекта. */
+  readonly canView: boolean;
   /** Ролевой мутационный доступ: роль сильнее зрителя, архив не гасит —
    * билдеры «Управления»/кебаба ветвят архив сами (#703). Наследник
    * прежнего смысла canManageMembers: до D8 тот был «роль сильнее
@@ -34,6 +39,7 @@ export type PropertyPermissions = {
 
 const DENIED: PropertyPermissions = {
   canEdit: false,
+  canView: false,
   canMutate: false,
   canManageMembers: false,
   canLeave: false,
@@ -60,6 +66,7 @@ export function propertyPermissions(
   }
   return {
     canEdit: role !== 'viewer' && property.status !== 'archived',
+    canView: true,
     canMutate: role !== 'viewer',
     canManageMembers: role === 'owner',
     canLeave: role !== 'owner',
