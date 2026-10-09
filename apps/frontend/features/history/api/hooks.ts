@@ -236,11 +236,17 @@ function useLiveFeedFrames(
 
 /**
  * Опции шита фильтров (GET /history/filters, #708): ленте нужны фото
- * объектов для шапок групп — item фото не несёт (ADR 0061 §7). Опции
- * всегда всей области чтения: «Действия участника» (#712) прибивает
- * человека скоупом ленты, а не опций — объектные шапки и фильтр «Объекты»
- * работают по всей области.
+ * объектов для шапок групп — item фото не несёт (ADR 0061 §7). Без
+ * propertyIds — опции всей области чтения: «Действия участника» (#712)
+ * прибивает человека скоупом ленты, а не опций, объектные шапки и фильтр
+ * «Объекты» работают по всей области. С propertyIds — суженная область
+ * прибитой объектом страницы («История объекта» #840, страница пары #841):
+ * участники — собственник и соучастники объекта (D6), глобальная же
+ * область с D14 (#1305) несёт только участников моих объектов — без
+ * сужения получатель shared-доступа не увидел бы в шите чужого владельца.
  */
-export function useHistoryFilters(): UseQueryResult<HistoryFilterOptions, ApiError> {
-  return useQuery(historyFiltersQueryOptions());
+export function useHistoryFilters(
+  propertyIds?: ReadonlyArray<string>,
+): UseQueryResult<HistoryFilterOptions, ApiError> {
+  return useQuery(historyFiltersQueryOptions({ propertyIds }));
 }

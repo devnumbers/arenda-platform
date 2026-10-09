@@ -54,3 +54,14 @@ export function historyFeedUrl(
   }
   return `/history?${query.toString()}`;
 }
+
+/** URL опций шита фильтров GET /history/filters (#708). property_ids
+ * сужает область (прибитые объектом страницы #840/#841: участники —
+ * собственник и соучастники объекта, D6); без него — глобальная область
+ * читателя (участники только моих объектов, изоляция D14 #1305). */
+export function historyFiltersUrl(propertyIds?: ReadonlyArray<string>): string {
+  if (propertyIds === undefined || propertyIds.length === 0) {
+    return '/history/filters';
+  }
+  return `/history/filters?property_ids=${propertyIds.join(',')}`;
+}

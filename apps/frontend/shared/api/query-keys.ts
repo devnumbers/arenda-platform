@@ -416,8 +416,12 @@ export const historyKeys = {
       scope.propertyIds?.join(',') ?? '',
       scope.q ?? '',
     ] as const,
-  /** Опции шита фильтров GET /history/filters (#708, экран #711). */
-  filters: () => [...historyKeys.all, 'filters'] as const,
+  /** Опции шита фильтров GET /history/filters (#708, экран #711): без
+   * property_ids — глобальная область (участники только моих объектов,
+   * D14 #1305), с property_ids — суженная область прибитой объектом
+   * страницы (#840/#841); сужение — часть ключа. */
+  filters: (propertyIds?: ReadonlyArray<string>) =>
+    [...historyKeys.all, 'filters', propertyIds?.join(',') ?? ''] as const,
 };
 
 // features/subscription

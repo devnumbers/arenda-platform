@@ -90,6 +90,28 @@ personal account data, never delegated via property membership (per
 GLOSSARY.md: a shared object consumes the recipient's own tariff slot;
 subscription/payment data is never shared).
 
+### 6. Derived-read canon and the recipient's archive list (ревизия 2026-10-09, D14)
+
+The derived-read canon — «the property's owner OR an active member of a
+non-archived property» — lives in one SQL predicate, `actor_can_read_property`
+(migration 000142, ticket #884; the journal's earlier twin `actor_can_read_history`
+of 000137), and carries the action journal, the global payment and tasks feeds,
+and the global properties listing, each with its own archive slice. The canon
+denies archived properties to members: the feeds hide them, the journal reads
+them for the owner only.
+
+**Ревизия 2026-10-09** (решение D14 спеки «Совместный доступ» #1302, аудит
+#1298, тикет #1305): список архива получателя — сознательный расход с каноном.
+`ListArchivedProperties` подшивает к своему архиву читателя и поделённые с ним
+АРХИВНЫЕ объекты (`appendSharedProperties` по активным членствам,
+`internal/properties/application/service.go`): объект поделили сознательно, его
+присутствие в архиве получателя — не утечка, а продолжение читаемого скоупа.
+Канон фидов при этом не смягчается: ленты, журнал и поиск отдают архивное
+только владельцу, suspended-доступ не читает ничего. Смежная изоляция того же
+решения D14 — глобальный фильтр «Участники» ленты истории: без сужения он
+перечисляет только участников МОИХ объектов читателя (ADR 0061 §7, ревизия
+от того же дня).
+
 ## Consequences
 
 - (+) Single point of authorization: the policy port is the only seam T3 needs
