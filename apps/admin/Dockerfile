@@ -25,7 +25,7 @@ USER root
 # Bump APK_REFRESH to re-pull security fixes from the alpine repo: the value
 # is referenced in the layer below, so a change invalidates the build cache —
 # otherwise the layer stays cached with the packages frozen at the old date.
-ARG APK_REFRESH=2026-10-02
+ARG APK_REFRESH=2026-10-09
 
 RUN echo "apk refresh: ${APK_REFRESH}" \
     && apk update \
