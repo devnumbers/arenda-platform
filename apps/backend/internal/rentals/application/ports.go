@@ -72,13 +72,23 @@ type RentPaymentSeed struct {
 	ReminderOffsetDays *int
 }
 
+// ReminderOffsetUpdate is the tri-state resolution of the reminder patch
+// (#1208): Value nil turns the managed payment's reminders off («Не
+// напоминать»), 1/3/7 sets the lead time; a nil command field keeps the
+// current value. The 1/3/7-or-nil contract itself is the payments'
+// vocabulary — validated against paymentsapp.IsValidReminderOffset.
+type ReminderOffsetUpdate struct {
+	Value *int
+}
+
 // RentPaymentChange is the partial sync payload of the terms edit: a nil
 // field leaves the payment unchanged.
 type RentPaymentChange struct {
-	AmountKopecks  *int64
-	PaymentDay     *domain.PaymentDay
-	AutoPay        *bool
-	PlannedEndDate *DateUpdate
+	AmountKopecks      *int64
+	PaymentDay         *domain.PaymentDay
+	AutoPay            *bool
+	PlannedEndDate     *DateUpdate
+	ReminderOffsetDays *ReminderOffsetUpdate
 }
 
 // RentPaymentState is the payment's render state (ADR 0053 §2): the day of

@@ -255,4 +255,85 @@ test.describe.serial('настройки аренды: «За сколько н�
       .poll(() => savedCategories()?.payments_operations, { timeout: 5_000 })
       .toBe(false);
   });
+
+  test('правка условий меняет напоминание: 3 → 7 → «Не напоминать» (#1208)', async ({
+    page,
+    seededUser,
+  }) => {
+    // Аренда с «За 3 дня», затем правка через экран «Изменить условия»:
+    // селект предзаполнен из read-back аренды, смена доезжает до платежа
+    // (API + SQL) и пишет чип reminder_offset_days в журнал изменений
+    // платежа; «Не напоминать» чистит оффсет явным null (tri-state).
+    await passToSettings(page, seededUser, SEEDED_STUDIO_PROPERTY_ID);
+    await page.getByRole('button', { name: 'За сколько напоминать: Не напоминать' }).click();
+    await page
+      .getByRole('radiogroup', { name: 'За сколько напоминать' })
+      .getByRole('radio', { name: 'За 3 дня' })
+      .click();
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Продолжить' }).click();
+    await page.getByRole('button', { name: 'Создать аренду' }).click();
+    await expect(page.getByRole('heading', { name: 'Вы создали аренду' })).toBeVisible();
+
+    const rentals = await fetchRentals(page, SEEDED_STUDIO_PROPERTY_ID);
+    const rental = rentals[0];
+    expect(rental).toBeDefined();
+    if (rental === undefined) return;
+    expect(rental.rentPayment.reminderOffsetDays).toBe(3);
+
+    const paymentId = rental.rentPayment.paymentId;
+    const chipCount = (from: string, to: string): string =>
+      `SELECT count(*) FROM payment_change_log WHERE payment_id = '${paymentId}' ` +
+      `AND changes @> '[{"field":"reminder_offset_days","old":${from},"new":${to}}]'::jsonb`;
+
+    // Правка 3 → 7: селект предзаполнен «За 3 дня» (read-back #1208).
+    await page.goto(`/properties/${SEEDED_STUDIO_PROPERTY_ID}/rentals/terms/edit`);
+    await expect(page.getByRole('button', { name: 'За сколько напоминать: За 3 дня' })).toBeVisible();
+    await page.getByRole('button', { name: 'За сколько напоминать: За 3 дня' }).click();
+    await page
+      .getByRole('radiogroup', { name: 'За сколько напоминать' })
+      .getByRole('radio', { name: 'За 7 дней' })
+      .click();
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Сохранить изменения' }).click();
+    // goBack — history.back(): после goto теста возврат уходит не на
+    // «Условия аренды», ждём закрытия экрана правки, правду читаем по API.
+    await page.waitForURL((url) => !url.pathname.endsWith('/rentals/terms/edit'));
+
+    const afterSeven = await fetchRentals(page, SEEDED_STUDIO_PROPERTY_ID);
+    expect(afterSeven[0]?.rentPayment.reminderOffsetDays).toBe(7);
+    await expect
+      .poll(() =>
+        execE2eSql(`SELECT reminder_offset_days FROM payments WHERE id = '${paymentId}'`),
+      )
+      .toBe('7');
+    await expect.poll(() => execE2eSql(chipCount('3', '7'))).toBe('1');
+
+    // Правка 7 → «Не напоминать»: явный null чистит оффсет, чип несёт
+    // old 7 → new null.
+    await page.goto(`/properties/${SEEDED_STUDIO_PROPERTY_ID}/rentals/terms/edit`);
+    await expect(page.getByRole('button', { name: 'За сколько напоминать: За 7 дней' })).toBeVisible();
+    await page.getByRole('button', { name: 'За сколько напоминать: За 7 дней' }).click();
+    await page
+      .getByRole('radiogroup', { name: 'За сколько напоминать' })
+      .getByRole('radio', { name: 'Не напоминать' })
+      .click();
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Сохранить изменения' }).click();
+    await page.waitForURL((url) => !url.pathname.endsWith('/rentals/terms/edit'));
+
+    const afterNone = await fetchRentals(page, SEEDED_STUDIO_PROPERTY_ID);
+    expect(afterNone[0]?.rentPayment.reminderOffsetDays ?? null).toBeNull();
+    await expect
+      .poll(() =>
+        execE2eSql(`SELECT reminder_offset_days FROM payments WHERE id = '${paymentId}'`),
+      )
+      .toBe('');
+    await expect.poll(() => execE2eSql(chipCount('7', 'null'))).toBe('1');
+
+    const cleanup = await page.request.delete(
+      `/api/properties/${SEEDED_STUDIO_PROPERTY_ID}/rentals/${rental.id}`,
+    );
+    expect(cleanup.ok()).toBe(true);
+  });
 });

@@ -3939,12 +3939,17 @@ export interface components {
              */
             reminderOffsetDays?: 1 | 3 | 7 | null;
         };
-        /** @description Частичная правка условий аренды. Начало не правится. Nullable-поля (plannedEndDate, depositKopecks, commissionKopecks, contactId, comment) — tri-state: omitted оставляет значение, явный null очищает. Сумма, день оплаты, автоплатёж и плановое окончание синхронно правят Платёж арендной платы. Завершённая аренда — 409. */
+        /** @description Частичная правка условий аренды. Начало не правится. Nullable-поля (plannedEndDate, depositKopecks, commissionKopecks, contactId, comment, reminderOffsetDays) — tri-state: omitted оставляет значение, явный null очищает. Сумма, день оплаты, автоплатёж, напоминание и плановое окончание синхронно правят Платёж арендной платы. Завершённая аренда — 409. */
         RentalUpdateRequest: {
             /** Format: int64 */
             amountKopecks?: number;
             paymentDay?: components["schemas"]["RentalPaymentDay"];
             autoPay?: boolean;
+            /**
+             * @description Tri-state лид-тайм напоминания о платеже арендной платы («Напоминание о платеже», карта #822): omitted keeps the current value, null turns reminders off («Не напоминать»), 1/3/7 sets the lead time. Синхронно правит Платёж арендной платы; смена пишется и в его журнал изменений (#1208).
+             * @enum {integer|null}
+             */
+            reminderOffsetDays?: 1 | 3 | 7 | null;
             /**
              * Format: date
              * @description Явный null — аренда становится бессрочной; не в прошлое (≥ today, > начала). Окно графика (тикет #1154): слитая пара «день оплаты + плановое окончание» целиком — смена дня перепроверяет стоящее окончание, смена окончания сверяется с хранящимся днём; раньше первого вхождения дня оплаты — 400.

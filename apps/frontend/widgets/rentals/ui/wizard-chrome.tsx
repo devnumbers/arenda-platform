@@ -2,6 +2,11 @@ import { useState } from 'react';
 import type { ComponentPropsWithRef, JSX, ReactNode } from 'react';
 import { ArrowLeft, Cancel, SmallArrowDown } from '@/shared/assets/icons';
 import type { RentalPaymentDay, RentalUtilities } from '@/entities/rental';
+import type { PaymentReminderOffset } from '@/entities/payment';
+import {
+  PAYMENT_REMINDER_OPTIONS,
+  paymentReminderOptionLabel,
+} from '@/entities/payment';
 import { cn } from '@/shared/lib/cn';
 import {
   Button,
@@ -312,6 +317,44 @@ export function UtilitiesPickerField({
             selected: value === option.value,
             onSelect: () => onChange(option.value),
           })),
+        },
+      ]}
+    />
+  );
+}
+
+/** Поле «За сколько напоминать» — общее для шага настроек (#826) и правки
+ * условий (#1208): опции «Не напоминать / За 1 / 3 / 7 дней» (#1198),
+ * undefined — «Не напоминать» (в правке уходит в команду явным null).
+ * Словарь опций — слайс платежа; оффсет протекает в Платёж арендной
+ * платы 1:1. */
+export function ReminderPickerField({
+  value,
+  onChange,
+}: {
+  readonly value: PaymentReminderOffset | undefined;
+  readonly onChange: (offset: PaymentReminderOffset | undefined) => void;
+}): JSX.Element {
+  return (
+    <PickerSelectField
+      title="За сколько напоминать"
+      valueLabel={
+        value === undefined ? 'Не напоминать' : paymentReminderOptionLabel(value)
+      }
+      groups={[
+        {
+          options: [
+            {
+              label: 'Не напоминать',
+              selected: value === undefined,
+              onSelect: () => onChange(undefined),
+            },
+            ...PAYMENT_REMINDER_OPTIONS.map((option) => ({
+              label: option.label,
+              selected: value === option.offset,
+              onSelect: () => onChange(option.offset),
+            })),
+          ],
         },
       ]}
     />

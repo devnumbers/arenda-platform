@@ -319,6 +319,7 @@ func (h *RentalHandlers) GetRentalSummary(
 // the tri-state «явный null = очистить» of the PATCH contract (ADR 0053 §4).
 type updateClears struct {
 	PlannedEndDate bool
+	ReminderOffset bool
 	DepositKopecks bool
 	Commission     bool
 	ContactID      bool
@@ -350,6 +351,7 @@ func (h *RentalHandlers) decodeUpdateBody(
 	}
 	var shadow struct {
 		PlannedEndDate    json.RawMessage `json:"plannedEndDate"`
+		ReminderOffset    json.RawMessage `json:"reminderOffsetDays"`
 		DepositKopecks    json.RawMessage `json:"depositKopecks"`
 		CommissionKopecks json.RawMessage `json:"commissionKopecks"`
 		ContactID         json.RawMessage `json:"contactId"`
@@ -364,6 +366,7 @@ func (h *RentalHandlers) decodeUpdateBody(
 	}
 	return updateClears{
 		PlannedEndDate: isNullJSON(shadow.PlannedEndDate),
+		ReminderOffset: isNullJSON(shadow.ReminderOffset),
 		DepositKopecks: isNullJSON(shadow.DepositKopecks),
 		Commission:     isNullJSON(shadow.CommissionKopecks),
 		ContactID:      isNullJSON(shadow.ContactID),
@@ -440,6 +443,12 @@ func paymentTermsFromUpdate(
 		cmd.PlannedEndDate = &rentalsapp.DateUpdate{Value: datePtrFromWire(body.PlannedEndDate)}
 	} else if clears.PlannedEndDate {
 		cmd.PlannedEndDate = &rentalsapp.DateUpdate{}
+	}
+	if body.ReminderOffsetDays != nil {
+		offset := int(*body.ReminderOffsetDays)
+		cmd.ReminderOffsetDays = &rentalsapp.ReminderOffsetUpdate{Value: &offset}
+	} else if clears.ReminderOffset {
+		cmd.ReminderOffsetDays = &rentalsapp.ReminderOffsetUpdate{}
 	}
 	return cmd, nil
 }

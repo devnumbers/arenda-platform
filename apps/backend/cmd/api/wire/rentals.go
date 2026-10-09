@@ -192,6 +192,9 @@ func (t *rentPaymentGatewayTx) Update(
 	if change.PlannedEndDate != nil {
 		payment.EndDate = change.PlannedEndDate.Value
 	}
+	if change.ReminderOffsetDays != nil {
+		payment.ReminderOffsetDays = change.ReminderOffsetDays.Value
+	}
 	changes := paymentsdomain.DiffPaymentChanges(before, payment)
 	if err := t.payments.Update(ctx, payment); err != nil {
 		return fmt.Errorf("update rent payment: %w", err)

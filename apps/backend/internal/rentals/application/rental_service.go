@@ -77,17 +77,18 @@ type CreateRentalCommand struct {
 // UpdateRentalCommand is the partial-update payload: a nil field leaves the
 // term unchanged (omit = no change). The start date is not editable at all
 // (ADR 0053 §3); the nullable terms — planned end, deposit, commission,
-// tenant, comment — are tri-state (явный null = очистить).
+// tenant, comment, reminder offset — are tri-state (явный null = очистить).
 type UpdateRentalCommand struct {
-	AmountKopecks     *int64
-	PaymentDay        *domain.PaymentDay
-	AutoPay           *bool
-	PlannedEndDate    *DateUpdate
-	Utilities         *domain.Utilities
-	DepositKopecks    *AmountUpdate
-	CommissionKopecks *AmountUpdate
-	ContactID         *ContactUpdate
-	Comment           *StringUpdate
+	AmountKopecks      *int64
+	PaymentDay         *domain.PaymentDay
+	AutoPay            *bool
+	PlannedEndDate     *DateUpdate
+	ReminderOffsetDays *ReminderOffsetUpdate
+	Utilities          *domain.Utilities
+	DepositKopecks     *AmountUpdate
+	CommissionKopecks  *AmountUpdate
+	ContactID          *ContactUpdate
+	Comment            *StringUpdate
 }
 
 // DepositReturn is the optional deposit-return record of the completion: how
@@ -799,6 +800,16 @@ func paymentSyncFromUpdate(
 		change.PlannedEndDate = cmd.PlannedEndDate
 		paymentChanged = true
 	}
+	if cmd.ReminderOffsetDays != nil {
+		// The reminder contract (1/3/7, nil = «Не напоминать») is the
+		// payments' vocabulary; the clear leg travels as the nil Value
+		// (#1208, как PaymentUpdateRequest.reminderOffsetDays).
+		if !paymentsapp.IsValidReminderOffset(cmd.ReminderOffsetDays.Value) {
+			return change, false, ErrInvalidInput
+		}
+		change.ReminderOffsetDays = cmd.ReminderOffsetDays
+		paymentChanged = true
+	}
 	return change, paymentChanged, nil
 }
 
@@ -949,7 +960,7 @@ func validateRentalRow(rental domain.Rental) error {
 // updatedRentalFields lists the field names a command changes; the audit
 // context carries names only, never values (the comment is user data).
 func updatedRentalFields(cmd UpdateRentalCommand) []string {
-	fields := make([]string, 0, 9)
+	fields := make([]string, 0, 10)
 	if cmd.AmountKopecks != nil {
 		fields = append(fields, "amount_kopecks")
 	}
@@ -961,6 +972,9 @@ func updatedRentalFields(cmd UpdateRentalCommand) []string {
 	}
 	if cmd.PlannedEndDate != nil {
 		fields = append(fields, "planned_end_date")
+	}
+	if cmd.ReminderOffsetDays != nil {
+		fields = append(fields, "reminder_offset_days")
 	}
 	if cmd.Utilities != nil {
 		fields = append(fields, "utilities")

@@ -1,17 +1,13 @@
 'use client';
 
 import type { JSX } from 'react';
-import {
-  PAYMENT_REMINDER_OPTIONS,
-  paymentReminderOptionLabel,
-  type PaymentReminderOffset,
-} from '@/entities/payment';
+import type { PaymentReminderOffset } from '@/entities/payment';
 import { useMe } from '@/features/auth';
 import {
   emailReminderCaption,
   EmailNotificationsRow,
 } from '@/features/notifications';
-import { AutoPayRow, PickerSelectField, WizardHeading } from './wizard-chrome';
+import { AutoPayRow, ReminderPickerField, WizardHeading } from './wizard-chrome';
 
 /**
  * Шаг «Настройки аренды» (карта #822, тикет #826; Figma 1428-58757):
@@ -52,30 +48,7 @@ export function SettingsStep({
       <WizardHeading title="Настройки аренды" />
       <div className="flex flex-col gap-8 px-6 pt-6">
         <AutoPayRow checked={autoPay} onCheckedChange={onAutoPayChange} />
-        <PickerSelectField
-          title="За сколько напоминать"
-          valueLabel={
-            reminderOffsetDays === undefined
-              ? 'Не напоминать'
-              : paymentReminderOptionLabel(reminderOffsetDays)
-          }
-          groups={[
-            {
-              options: [
-                {
-                  label: 'Не напоминать',
-                  selected: reminderOffsetDays === undefined,
-                  onSelect: () => onReminderOffsetChange(undefined),
-                },
-                ...PAYMENT_REMINDER_OPTIONS.map((option) => ({
-                  label: option.label,
-                  selected: reminderOffsetDays === option.offset,
-                  onSelect: () => onReminderOffsetChange(option.offset),
-                })),
-              ],
-            },
-          ]}
-        />
+        <ReminderPickerField value={reminderOffsetDays} onChange={onReminderOffsetChange} />
       </div>
       {/* py-3 строки + pt-5 — те же 32px до тумблера почты, что между
           блоками в колонке (макет 1428-58757). */}

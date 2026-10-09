@@ -1,4 +1,5 @@
 import { cmp, type IsoDate } from '@/shared/lib/calendar';
+import type { PaymentReminderOffset } from '@/entities/payment';
 import type {
   Rental,
   RentalPaymentDay,
@@ -11,8 +12,8 @@ import { endCoversSchedule, RENTAL_AMOUNT_MAX_KOPECKS } from './wizard-model';
  * Чистая логика правки условий аренды (#532, Figma 1302:53055): форма,
  * предзаполненная арендой, валидация окончания и дифф в частичный PATCH
  * (прецедент правки платежа #467). Начало не правится (ADR 0053 §3) —
- * на экране read-only; сумма, день оплаты, автоплатёж и окончание сервер
- * синхронно переносит на Платёж арендной платы.
+ * на экране read-only; сумма, день оплаты, автоплатёж, напоминание и
+ * окончание сервер синхронно переносит на Платёж арендной платы (#1208).
  */
 
 /** Лимит комментария контракта (ADR 0053 §4) — и в поле, и в проверке. */
@@ -25,6 +26,9 @@ export type RentalEditForm = {
   readonly amountKopecks: number | undefined;
   readonly paymentDay: RentalPaymentDay | undefined;
   readonly autoPay: boolean;
+  /** Выбранный оффсет; undefined — «Не напоминать» (канон update-model
+   * платежа #1197): в команду уходит явный null (#1208). */
+  readonly reminderOffsetDays: PaymentReminderOffset | undefined;
   readonly plannedEndDate: IsoDate | null;
   readonly utilities: RentalUtilities;
   readonly depositKopecks: number | null;
@@ -38,6 +42,7 @@ export function rentalEditFormFromRental(rental: Rental): RentalEditForm {
     amountKopecks: rental.rentPayment.amountKopecks,
     paymentDay: rental.rentPayment.paymentDay,
     autoPay: rental.rentPayment.autoPay,
+    reminderOffsetDays: rental.rentPayment.reminderOffsetDays ?? undefined,
     plannedEndDate: rental.plannedEndDate,
     utilities: rental.utilities,
     depositKopecks: rental.depositKopecks,
@@ -122,6 +127,12 @@ export function buildRentalUpdateCommand(
   }
   if (form.autoPay !== rental.rentPayment.autoPay) {
     patch.autoPay = form.autoPay;
+  }
+  // Напоминание: undefined формы — «Не напоминать», в команде явный null
+  // (tri-state контракта #1208); аренда хранит null — нормализуем к
+  // undefined формы для сравнения.
+  if (form.reminderOffsetDays !== (rental.rentPayment.reminderOffsetDays ?? undefined)) {
+    patch.reminderOffsetDays = form.reminderOffsetDays ?? null;
   }
   if (form.plannedEndDate !== rental.plannedEndDate) {
     patch.plannedEndDate = form.plannedEndDate;

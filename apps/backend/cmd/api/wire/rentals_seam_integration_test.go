@@ -294,6 +294,88 @@ func TestSeam_TermsEditWritesThePaymentChangeLog(t *testing.T) {
 	assert.Equal(t, paymentsdomain.ChangeUpdated, page.Items[0].Action)
 }
 
+// The reminder edit rides the same seam (#1208): the rental pipeline syncs
+// reminderOffsetDays into the managed payment — set, and clear to «Не
+// напоминать» — and the diff lands in the payment change log as the
+// reminder_offset_days chip, same dictionary as the payment's own PATCH.
+func TestSeam_TermsEditSyncsTheReminderAndLogsTheChip(t *testing.T) {
+	t.Parallel()
+	h := newSeamHarness(t)
+	h.seedOwner()
+	created := 3
+	view := h.createRentalWithReminderOffset(&created)
+
+	// 3 → 7.
+	seven := 7
+	_, err := h.svc.UpdateRental(context.Background(), h.owner, h.propID, view.Rental.ID,
+		rentalsapp.UpdateRentalCommand{
+			ReminderOffsetDays: &rentalsapp.ReminderOffsetUpdate{Value: &seven},
+		})
+	require.NoError(t, err)
+	payment, err := h.paySvc.GetPayment(context.Background(), h.owner, h.propID, *view.Rental.PaymentID)
+	require.NoError(t, err)
+	require.NotNil(t, payment.ReminderOffsetDays)
+	assert.Equal(t, 7, *payment.ReminderOffsetDays)
+
+	type chip struct {
+		Field paymentsdomain.ChangeField
+		Old   *int
+		New   *int
+	}
+	readChips := func(t *testing.T, wantRows int) []chip {
+		t.Helper()
+		rows, err := h.pool.Query(context.Background(),
+			`SELECT changes FROM payment_change_log WHERE payment_id = $1
+			 ORDER BY created_at DESC, id DESC LIMIT $2`, *view.Rental.PaymentID, wantRows)
+		require.NoError(t, err)
+		defer rows.Close()
+		var got []chip
+		for rows.Next() {
+			var blob []byte
+			require.NoError(t, rows.Scan(&blob))
+			var changes []paymentsdomain.FieldChange
+			require.NoError(t, json.Unmarshal(blob, &changes))
+			for _, change := range changes {
+				if change.Field != paymentsdomain.ChangeFieldReminderOffset {
+					continue
+				}
+				var c chip
+				require.NoError(t, json.Unmarshal(change.Old, &c.Old))
+				require.NoError(t, json.Unmarshal(change.New, &c.New))
+				got = append(got, c)
+			}
+		}
+		require.NoError(t, rows.Err())
+		return got
+	}
+
+	chips := readChips(t, 1)
+	require.Len(t, chips, 1, "the reminder edit writes its own chip")
+	require.NotNil(t, chips[0].Old)
+	assert.Equal(t, 3, *chips[0].Old)
+	require.NotNil(t, chips[0].New)
+	assert.Equal(t, 7, *chips[0].New)
+
+	// 7 → null («Не напоминать»).
+	_, err = h.svc.UpdateRental(context.Background(), h.owner, h.propID, view.Rental.ID,
+		rentalsapp.UpdateRentalCommand{ReminderOffsetDays: &rentalsapp.ReminderOffsetUpdate{}})
+	require.NoError(t, err)
+	payment, err = h.paySvc.GetPayment(context.Background(), h.owner, h.propID, *view.Rental.PaymentID)
+	require.NoError(t, err)
+	assert.Nil(t, payment.ReminderOffsetDays, "the explicit null turns the reminders off")
+
+	chips = readChips(t, 2)
+	require.Len(t, chips, 2, "the clear writes its own chip on the second row")
+	require.NotNil(t, chips[0].Old)
+	assert.Equal(t, 7, *chips[0].Old)
+	assert.Nil(t, chips[0].New, "the chip carries the cleared side as null")
+
+	// The reminder read-back rides the view too.
+	updated, err := h.svc.GetRental(context.Background(), h.owner, h.propID, view.Rental.ID)
+	require.NoError(t, err)
+	assert.Nil(t, updated.Payment.ReminderOffsetDays)
+}
+
 func TestSeam_ClearingThePlannedEndMakesThePaymentOpenEnded(t *testing.T) {
 	t.Parallel()
 	h := newSeamHarness(t)

@@ -37,6 +37,7 @@ function completedFixture(overrides: Partial<Rental> = {}): Rental {
       amountKopecks: 5_600_000,
       paymentDay: 10,
       autoPay: false,
+      reminderOffsetDays: null,
       nextPayment: null,
     },
     progress: { paidMonths: 24, totalMonths: 24, monthsRemaining: 0, overdueMonths: null },

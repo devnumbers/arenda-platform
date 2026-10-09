@@ -8596,10 +8596,11 @@ components:
     RentalUpdateRequest:
       description: >-
         Частичная правка условий аренды. Начало не правится. Nullable-поля
-        (plannedEndDate, depositKopecks, commissionKopecks, contactId, comment)
-        — tri-state: omitted оставляет значение, явный null очищает. Сумма,
-        день оплаты, автоплатёж и плановое окончание синхронно правят Платёж
-        арендной платы. Завершённая аренда — 409.
+        (plannedEndDate, depositKopecks, commissionKopecks, contactId, comment,
+        reminderOffsetDays) — tri-state: omitted оставляет значение, явный
+        null очищает. Сумма, день оплаты, автоплатёж, напоминание и плановое
+        окончание синхронно правят Платёж арендной платы. Завершённая аренда
+        — 409.
       type: object
       properties:
         amountKopecks:
@@ -8611,6 +8612,16 @@ components:
           $ref: '#/components/schemas/RentalPaymentDay'
         autoPay:
           type: boolean
+        reminderOffsetDays:
+          type: integer
+          nullable: true
+          enum: [1, 3, 7]
+          description: >-
+            Tri-state лид-тайм напоминания о платеже арендной платы
+            («Напоминание о платеже», карта #822): omitted keeps the current
+            value, null turns reminders off («Не напоминать»), 1/3/7 sets the
+            lead time. Синхронно правит Платёж арендной платы; смена пишется
+            и в его журнал изменений (#1208).
         plannedEndDate:
           type: string
           format: date
