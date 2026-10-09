@@ -2,14 +2,13 @@ package wire
 
 import (
 	"context"
-	"fmt"
 
 	billingpg "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/postgres"
 	paymentspg "github.com/nambers/arenda-planform/apps/backend/internal/payments/adapters/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/dadata"
 	propertiespg "github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/postgres"
-	"github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/storage"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
+	storageshared "github.com/nambers/arenda-planform/apps/backend/internal/shared/storage"
 )
 
 // Properties holds the properties module's service and the dadata address
@@ -20,44 +19,18 @@ type Properties struct {
 }
 
 // WireProperties constructs the properties repositories, the subscription
-// limiter (billing-backed), the photo storage (S3 or fake based on config),
-// the property service and the dadata address suggester. It takes the billing
-// subscription limiter deps.
+// limiter (billing-backed), the property service and the dadata address
+// suggester. It takes the billing subscription limiter deps and the shared
+// private-photo storage (ADR 0065, built once in the composition root).
 func WireProperties(
 	ctx context.Context,
 	p platformDeps,
 	billing *Billing,
+	photoStorage storageshared.PhotoStorage,
 ) (*Properties, error) {
 	propertyRepo := propertiespg.NewPropertyRepository(p.DB)
-	propertyPhotoRepo := propertiespg.NewPropertyPhotoRepository(p.DB)
 	propertyLimiter := billing.Services.Limiter
 	limiter := billingpg.NewSubscriptionLimiter(propertyLimiter)
-
-	var photoStorage propertiesapp.PhotoStorage
-	if p.Cfg.PhotoStorageS3Enabled {
-		var err error
-		photoStorage, err = storage.NewS3Storage(
-			ctx,
-			p.Cfg.PhotoStorageEndpoint,
-			p.Cfg.PhotoStorageRegion,
-			p.Cfg.PhotoStorageBucket,
-			p.Cfg.PhotoStorageAccessKey,
-			p.Cfg.PhotoStorageSecretKey,
-			p.Cfg.PhotoStoragePublicBaseURL,
-			p.Cfg.PhotoStoragePathStyle,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("photo storage: %w", err)
-		}
-		if err := photoStorage.HeadBucket(ctx); err != nil {
-			return nil, fmt.Errorf("photo storage: head bucket %q: %w", p.Cfg.PhotoStorageBucket, err)
-		}
-		p.Logger.InfoContext(ctx, "photo storage initialized",
-			"provider", "s3", "bucket", p.Cfg.PhotoStorageBucket, "endpoint", p.Cfg.PhotoStorageEndpoint)
-	} else {
-		photoStorage = storage.NewFakeStorage(p.Cfg.PhotoStoragePublicBaseURL)
-		p.Logger.InfoContext(ctx, "photo storage initialized", "provider", "fake")
-	}
 
 	// The single canonical txStoreFactory bundles the properties
 	// repositories, the cross-context ports, the audit and history recorders,
@@ -65,7 +38,6 @@ func WireProperties(
 	// here, not in several constructors.
 	factory := propertiesapp.NewTxStoreFactory(
 		propertyRepo,
-		propertyPhotoRepo,
 		limiter,
 		p.AuditRecorder,
 		p.HistoryRecorder,
@@ -74,7 +46,6 @@ func WireProperties(
 
 	propertyService := propertiesapp.NewPropertyService(
 		propertyRepo,
-		propertyPhotoRepo,
 		photoStorage,
 		factory,
 		p.Clock,

@@ -175,7 +175,7 @@ func newHandlersWithLimits(
 	phoneChange PhoneChanger,
 	limits AuthRateLimits,
 ) *AuthHandlers {
-	return NewAuthHandlers(nil, phoneChange, emailChange, profile, logout, nil, false, slog.New(slog.DiscardHandler), limits, nil)
+	return NewAuthHandlers(nil, phoneChange, emailChange, profile, nil, logout, nil, false, slog.New(slog.DiscardHandler), limits, nil)
 }
 
 func mustPhoneHandler(t *testing.T, raw string) domain.Phone {
@@ -373,7 +373,7 @@ func TestGetMe_EnricherSuccess(t *testing.T) {
 		resp.Name = &sub
 		return nil
 	}
-	h := NewAuthHandlers(nil, nil, nil, profile, nil, nil, false, slog.New(slog.DiscardHandler), AuthRateLimits{}, enricher)
+	h := NewAuthHandlers(nil, nil, nil, profile, nil, nil, nil, false, slog.New(slog.DiscardHandler), AuthRateLimits{}, enricher)
 
 	r := authedRequest(t, http.MethodGet, "/me", "", userID)
 	rr := doHandler(t, h.GetMe, r)
@@ -395,7 +395,7 @@ func TestGetMe_EnricherErrorReturns500(t *testing.T) {
 	enricher := func(context.Context, uuid.UUID, *openapi.MeResponse) error {
 		return errors.New("billing unavailable")
 	}
-	h := NewAuthHandlers(nil, nil, nil, profile, nil, nil, false, slog.New(slog.DiscardHandler), AuthRateLimits{}, enricher)
+	h := NewAuthHandlers(nil, nil, nil, profile, nil, nil, nil, false, slog.New(slog.DiscardHandler), AuthRateLimits{}, enricher)
 
 	r := authedRequest(t, http.MethodGet, "/me", "", userID)
 	rr := doHandler(t, h.GetMe, r)

@@ -16,7 +16,12 @@ export type ParticipantLegBadge = ParticipantRowBadge;
  * (макет 2036-84861, правка приёмки #756), а не бейджем ноги.
  * pending — «Приглашён» без иконки (роли у приглашения ещё нет).
  */
-export function participantLegBadge(leg: ParticipantPropertyLeg): ParticipantLegBadge {
+/** Вход бейджа — используемая часть ноги: статус и роль (тип/фото аватара
+ * бейдж не читают). */
+export function participantLegBadge(leg: {
+  readonly status: ParticipantPropertyLeg['status'];
+  readonly role: ParticipantPropertyLeg['role'];
+}): ParticipantLegBadge {
   if (leg.status === 'pending') {
     return { tone: 'neutral', label: 'Приглашён', icon: undefined };
   }

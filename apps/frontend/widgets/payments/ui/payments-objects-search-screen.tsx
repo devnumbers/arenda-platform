@@ -136,6 +136,7 @@ export function PaymentsObjectsSearchScreen(): JSX.Element {
                   leading={
                     <PaymentObjectAvatar
                       photoUrl={object.photoUrl}
+                      type={object.type}
                       surface="row"
                     />
                   }

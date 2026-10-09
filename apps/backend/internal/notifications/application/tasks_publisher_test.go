@@ -128,6 +128,8 @@ func overdueTaskTarget(taskID uuid.UUID, title string, dueDate time.Time, dueTim
 		PropertyID:      &[]uuid.UUID{uuid.Must(uuid.NewV7())}[0],
 		PropertyName:    scanPropertyName,
 		PropertyAddress: scanPropertyAddress,
+		PropertyType:    scanPropertyType,
+		PropertyPhoto:   scanPropertyPhoto,
 		OwnerID:         uuid.Must(uuid.NewV7()),
 	}
 }
@@ -177,6 +179,8 @@ func TestTasksPublisher_PublishesOverdueTimedTask(t *testing.T) {
 		assert.Equal(t, *target.PropertyID, n.Payload.Property.ID)
 		assert.Equal(t, scanPropertyName, n.Payload.Property.Name)
 		assert.Equal(t, scanPropertyAddress, n.Payload.Property.Address)
+		assert.Equal(t, scanPropertyType, n.Payload.Property.Type, "the card's glyph type snapshot (#1244)")
+		assert.Equal(t, scanPropertyPhoto, n.Payload.Property.Photo, "the card's photo snapshot (#1275)")
 		require.NotNil(t, n.Payload.TaskID)
 		assert.Equal(t, task, *n.Payload.TaskID)
 		// The action's screen is the rule's: the rule id travels alongside

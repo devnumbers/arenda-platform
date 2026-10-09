@@ -59,7 +59,7 @@ export function InvitePropertiesRows({
           onClick={() => onToggle(option.id)}
           className={PARTICIPANT_ROW_BASE_CLASS}
         >
-          <ObjectAvatarGlyph photoUrl={option.photoUrl} />
+          <ObjectAvatarGlyph photoUrl={option.photoUrl} type={option.type} />
           <span className="flex min-w-0 flex-1 flex-col gap-1">
             <span className="truncate text-base font-medium leading-[18px] text-content">
               {option.name}

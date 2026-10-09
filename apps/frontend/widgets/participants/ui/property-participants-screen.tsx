@@ -6,7 +6,6 @@ import {
   ArrowDown,
   ArrowLeft,
   Block,
-  BoldUser,
   Cancel,
   EditSmall,
   EyeSmall,
@@ -43,11 +42,11 @@ import {
   MenuTrigger,
   Modal,
   ModalContent,
-  CircleIcon,
   PageContent,
   PickerMenu,
   SearchField,
   Skeleton,
+  UserAvatar,
   skeletonRowWidths,
   StickyBottomBar,
   StatusIcon,
@@ -453,7 +452,8 @@ export function PropertyParticipantsScreen({
   );
 }
 
-/** Ряд списка (макет 1980-107096, Row Button): аватар 44 с BoldUser,
+/** Ряд списка (макет 1980-107096, Row Button): аватар 44 — фото профиля
+ * участника или заглушка BoldUser (UserAvatar, решение #1286),
  * титул (у владельца — «(Вы)» из VM), почта с иконкой роли, чип
  * приостановленного слота; шеврон — только у кликабельных рядов. */
 function PropertyParticipantRowView({
@@ -477,9 +477,7 @@ function PropertyParticipantRowView({
           : 'cursor-default',
       )}
     >
-      <CircleIcon variant="white" aria-hidden>
-        <BoldUser className="h-6 w-6" />
-      </CircleIcon>
+      <UserAvatar photoUrl={row.photoUrl} />
       <span className="flex min-w-0 flex-1 flex-col justify-center gap-1">
         <span className="truncate text-base font-medium text-content">{row.title}</span>
         {/* Иконка роли — постоянная часть второй строки (макет ставит её

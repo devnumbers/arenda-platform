@@ -206,7 +206,7 @@ export function ParticipantRightsScreen({
     content = (
       <div className="flex flex-col gap-6">
         <section className={cn(PARTICIPANT_ROW_BASE_CLASS, 'cursor-default')}>
-          <ObjectAvatarGlyph photoUrl={property?.photos?.[0]?.url} />
+          <ObjectAvatarGlyph photoUrl={leg?.photoUrl ?? property?.photoUrl ?? undefined} type={leg?.type ?? property?.type} />
           <span className="flex min-w-0 flex-1 flex-col gap-1">
             <span className="truncate text-base font-medium leading-[18px] text-content">
               {leg?.title ?? property?.name ?? ''}

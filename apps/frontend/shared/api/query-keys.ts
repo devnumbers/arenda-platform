@@ -19,6 +19,12 @@ export const authKeys = {
   /** Активные сессии GET /me/sessions (#728) — экран «Устройства» (#730);
    * ревокации и «все другие» инвалидируют этот ключ. */
   sessions: ['auth', 'sessions'] as const,
+  /** Счётчик фото-мутаций профиля (тикет #1230, ADR 0065) — бастер кэша
+   * выдачи для <img>: сеть не ходит (пишется и читается только из кэша),
+   * переживает перемонтирования экранов, сбрасывается перезагрузкой
+   * страницы (окно протухания кэша выдачи — 5 минут, ADR 0065). Профиль
+   * один — ключ без id, зеркально propertyKeys.photoBuster. */
+  photoBuster: () => [...authKeys.all, 'photo-buster'] as const,
 };
 
 // features/billing
@@ -47,6 +53,12 @@ export const contactKeys = {
   ) => [...contactKeys.all, 'list', propertyId, search, sort, order] as const,
   /** Карточка контакта (экран #510). */
   detail: (contactId: string) => [...contactKeys.all, 'detail', contactId] as const,
+  /** Счётчик фото-мутаций карточки (тикет #1229, ADR 0065) — бастер кэша
+   * выдачи для <img>: сеть не ходит (пишется и читается только из кэша),
+   * переживает перемонтирования экранов, сбрасывается перезагрузкой
+   * страницы (окно протухания кэша выдачи — 5 минут, ADR 0065). */
+  photoBuster: (contactId: string) =>
+    [...contactKeys.all, 'photo-buster', contactId] as const,
 };
 
 // features/participants — «Совместный доступ» (карта #692)
@@ -73,6 +85,11 @@ export const propertyKeys = {
   search: (query: string) => [...propertyKeys.all, 'search', query] as const,
   addressSuggestions: (query: string) =>
     [...propertyKeys.all, 'address-suggestions', query] as const,
+  /** Счётчик фото-мутаций объекта (тикет #1228, ADR 0065) — бастер кэша
+   * выдачи для <img>: сеть не ходит (пишется и читается только из кэша),
+   * переживает перемонтирования экранов, сбрасывается перезагрузкой
+   * страницы (окно протухания кэша выдачи — 5 минут, ADR 0065). */
+  photoBuster: (id: string) => [...propertyKeys.all, 'photo-buster', id] as const,
 };
 
 /** Статусный фильтр операций, проходящий в query параметром `status`. */

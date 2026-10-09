@@ -166,6 +166,7 @@ func (s *ReadStore) FilterParticipants(ctx context.Context, actor uuid.UUID, pro
 			}),
 			Email:     pgconv.TextToString(row.Email),
 			FirstName: row.FirstName,
+			PhotoURL:  row.PhotoPath,
 			IsOwner:   row.IsOwner,
 			Role:      row.Role,
 		}
@@ -190,6 +191,7 @@ func (s *ReadStore) FilterObjects(ctx context.Context, actor uuid.UUID, property
 			Name:     row.Name,
 			Address:  row.Address,
 			PhotoURL: row.PhotoUrl,
+			Type:     row.Type,
 		}
 	}
 	return out, nil
@@ -213,19 +215,20 @@ func feedEntryOf(row postgres.ListActionJournalRow) (domain.FeedEntry, error) {
 		actorID = &id
 	}
 	return domain.FeedEntry{
-		ID:           pgconv.UUIDFromPgtype(row.ID),
-		PropertyID:   pgconv.UUIDFromPgtype(row.PropertyID),
-		PropertyName: row.PropertyName,
-		ActorID:      actorID,
-		ActorName:    row.ActorName,
-		ActorEmail:   row.ActorEmail,
-		ActorRole:    domain.ActorRole(row.ActorRole),
-		Kind:         domain.Kind(row.Kind),
-		Action:       domain.Action(row.Action),
-		BaseAction:   domain.BaseAction(row.BaseAction),
-		Segments:     segments,
-		Context:      contextMap,
-		CreatedAt:    row.CreatedAt.Time,
+		ID:            pgconv.UUIDFromPgtype(row.ID),
+		PropertyID:    pgconv.UUIDFromPgtype(row.PropertyID),
+		PropertyName:  row.PropertyName,
+		ActorID:       actorID,
+		ActorName:     row.ActorName,
+		ActorEmail:    row.ActorEmail,
+		ActorPhotoURL: row.ActorPhotoUrl,
+		ActorRole:     domain.ActorRole(row.ActorRole),
+		Kind:          domain.Kind(row.Kind),
+		Action:        domain.Action(row.Action),
+		BaseAction:    domain.BaseAction(row.BaseAction),
+		Segments:      segments,
+		Context:       contextMap,
+		CreatedAt:     row.CreatedAt.Time,
 	}, nil
 }
 

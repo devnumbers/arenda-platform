@@ -5,7 +5,6 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   Add,
-  BoldHome,
   BoldObjects,
   BoldStar,
   BoldWarning,
@@ -24,6 +23,7 @@ import {
   useGlobalPayments,
 } from "@/features/payments";
 import type { GlobalPayment } from "@/entities/payment";
+import type { PropertyType } from "@/entities/property";
 import { PaymentCardButton } from "@/entities/payment";
 import {
   Button,
@@ -49,6 +49,7 @@ import {
 import {
   GlobalCardIcon,
   GlobalPaymentRuleIcon,
+  PaymentObjectAvatar,
   PaymentsStateCard,
 } from "./payments-sections";
 
@@ -268,6 +269,8 @@ export function PaymentsGlobalScreen(): JSX.Element {
                           .map((object) => ({
                             propertyId: object.propertyId,
                             name: object.name,
+                            type: object.type,
+                            photoUrl: object.photoUrl,
                             hasOverdue: globalPaymentObjectHasOverdue(object),
                           }))
                           .slice(0, SECTION_CARDS_LIMIT)}
@@ -487,7 +490,7 @@ function OverdueSectionBody({
 }
 
 /** Тело секции «Платежи объектов» (879:9711): карточки объектов (белый
- * круг с домом, красная точка при просрочке в стопках) и замыкающая
+ * круг с фото, иначе глиф типа; красная точка при просрочке в стопках) и замыкающая
  * «Показать все» на страницу «Объекты» (#582) — больше одного объекта;
  * единственный объект ведёт сразу на свои платежи без страницы-списка. */
 function ObjectsSectionBody({
@@ -496,7 +499,13 @@ function ObjectsSectionBody({
   onOpenAll,
 }: {
   readonly objects: ReadonlyArray<
-    Readonly<{ propertyId: string; name: string; hasOverdue: boolean }>
+    Readonly<{
+      propertyId: string;
+      name: string;
+      type: PropertyType;
+      photoUrl: string | null;
+      hasOverdue: boolean;
+    }>
   >;
   readonly onSelectObject: (propertyId: string) => void;
   readonly onOpenAll: () => void;
@@ -508,9 +517,16 @@ function ObjectsSectionBody({
           key={object.propertyId}
           className="snap-start"
           leading={
-            <GlobalCardIcon variant="white" hasNotification={object.hasOverdue}>
-              <BoldHome />
-            </GlobalCardIcon>
+            // Канонный аватар «глобальных платежей» (решение #1286): фото
+            // из DTO GlobalPaymentObject.photoUrl (#582) во весь круг 44 —
+            // глиф типа; битое фото (фото или объект удалили — 404 стрима)
+            // откатывается к глифу, канон #1275. Точка просрочки — у аватара.
+            <PaymentObjectAvatar
+              photoUrl={object.photoUrl}
+              type={object.type}
+              surface="card"
+              hasNotification={object.hasOverdue}
+            />
           }
           title={object.name}
           onSelect={() => onSelectObject(object.propertyId)}

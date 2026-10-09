@@ -19,6 +19,7 @@ function entry(overrides: {
     propertyName: 'Моя квартира',
     actorId: 'user-1',
     actorName: 'Иван Иванов',
+    actorPhotoUrl: null,
     actorRole: 'owner',
     baseAction: 'added',
     action: 'payment.created',

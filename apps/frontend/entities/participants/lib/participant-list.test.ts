@@ -12,6 +12,7 @@ function participant(id: string, displayName: string | undefined, email: string 
     email,
     displayName,
     aggregateStatus: 'all_properties',
+    photoUrl: null,
     accessiblePropertiesCount: 1,
     properties: [],
   };

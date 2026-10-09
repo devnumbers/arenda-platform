@@ -24,6 +24,7 @@ import {
   RENTAL_COMMENT_MAX,
 } from '@/features/rentals';
 import type { Rental } from '@/entities/rental';
+import type { PropertyType } from '@/entities/property';
 import {
   Button,
   CalendarDatePicker,
@@ -38,6 +39,7 @@ import {
 } from '@/shared/ui/design';
 import { MoneyField, PickerTriggerBox, WizardBottomBar } from './wizard-chrome';
 import { RentalSummaryContent } from './rental-summary-content';
+import { useContact } from '@/features/contacts';
 import { RentalSummarySkeleton } from './rental-skeletons';
 
 /**
@@ -72,16 +74,27 @@ const STAGE_NUMBERS: Record<Exclude<CompleteStage, 'confirm'>, number> = {
 export type RentalCompleteFlowProps = {
   readonly rental: Rental;
   readonly propertyName: string;
+  /** Тип объекта строки «Объект» итогов — глиф-плейсхолдер (карта #1217,
+   * #1244). */
+  readonly propertyType?: PropertyType;
+  /** Фото объекта строки «Объект» (ADR 0065, решение #1286); null — фото
+   * нет. */
+  readonly propertyPhotoUrl?: string | null;
   readonly onClose: () => void;
 };
 
 export function RentalCompleteFlow({
   rental,
   propertyName,
+  propertyType,
+  propertyPhotoUrl,
   onClose,
 }: RentalCompleteFlowProps): JSX.Element {
   const router = useRouter();
   const completeRental = useCompleteRental(rental.propertyId, rental.id);
+  // Фото арендатора — из его карточки контакта (ADR 0065, решение #1286);
+  // без арендатора запрос спит (enabled: Boolean(contactId)).
+  const tenantContactQuery = useContact(rental.tenant?.contactId ?? '');
   // Мастер — экран-поток: футер глушится на всех шагах.
   useTabBarSuppression();
 
@@ -369,6 +382,9 @@ export function RentalCompleteFlow({
                   summary={summaryQuery.data}
                   endDate={completedDate}
                   propertyName={propertyName}
+                  propertyType={propertyType}
+                  propertyPhotoUrl={propertyPhotoUrl}
+                  tenantPhotoUrl={tenantContactQuery.data?.photoUrl}
                   depositReturnKopecks={depositAmount ?? 0}
                   depositReturnComment={comment.trim()}
                 />

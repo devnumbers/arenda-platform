@@ -7,7 +7,7 @@ const GARAGE = '44444444-4444-4444-8444-444444444444';
 const STUDIO = '46464646-4646-4646-8646-464646464646';
 
 function property(id: string, name: string) {
-  return { id, name, address: 'Адрес' };
+  return { id, name, address: 'Адрес', type: 'apartment' as const };
 }
 
 function participant(properties: ReadonlyArray<ParticipantPropertyLeg>): Participant {
@@ -17,13 +17,14 @@ function participant(properties: ReadonlyArray<ParticipantPropertyLeg>): Partici
     email: 'maria@example.com',
     displayName: 'Мария Петрова',
     aggregateStatus: 'partial',
+    photoUrl: null,
     accessiblePropertiesCount: properties.length,
     properties,
   };
 }
 
 function leg(propertyId: string, overrides: Partial<ParticipantPropertyLeg> = {}): ParticipantPropertyLeg {
-  return { propertyId, title: 'Объект', role: 'viewer', status: 'active', ...overrides };
+  return { propertyId, title: 'Объект', role: 'viewer', status: 'active', type: 'apartment', photoUrl: null, ...overrides };
 }
 
 describe('availableInviteProperties — объекты для «Пригласить в объект» (макет 2010-131329)', () => {
@@ -34,6 +35,8 @@ describe('availableInviteProperties — объекты для «Пригласи
     );
 
     expect(result.map((p) => p.id)).toEqual([GARAGE]);
+    // Тип travels в опцию — ключ глифа-плейсхолдера аватара (#1244).
+    expect(result[0]?.type).toBe('apartment');
   });
 
   it('pending-нога тоже исключает объект — повторное приглашение даёт skipped_duplicate', () => {

@@ -1,6 +1,6 @@
 'use client';
 
-import type { JSX } from 'react';
+import { useState, type JSX } from 'react';
 import Image from 'next/image';
 import { BoldKey, NotificationDot, StatusIconDanger } from '@/shared/assets/icons';
 import { cn } from '@/shared/lib/cn';
@@ -63,6 +63,7 @@ export function NotificationCategoryIcon({
   category,
   eventType,
   unread,
+  photoUrl,
   variant = 'row',
   badge = true,
 }: {
@@ -72,6 +73,10 @@ export function NotificationCategoryIcon({
    * тост передаёт только badge=false. */
   readonly eventType?: string;
   readonly unread: boolean;
+  /** Снимок фото объекта из payload (#1275): есть — фото в круге вместо
+   * 3D-иллюстрации категории; битое (фото/объект удалили после публикации)
+   * — откат к иллюстрации категории по onError. */
+  readonly photoUrl?: string;
   /** row — строка ленты (#744), page — страница уведомления (#745). */
   readonly variant?: 'row' | 'page';
   /** Warning-бейдж («что-то не так», матрица event-badge): в ленте и на
@@ -81,18 +86,31 @@ export function NotificationCategoryIcon({
 }): JSX.Element {
   const visual = CATEGORY_VISUALS[category];
   const sizes = ICON_SIZES[variant];
+  // Битое фото (404 стрима после удаления) — откат к 3D-иллюстрации
+  // категории: строка ленты не остаётся с пустым кругом (#1275).
+  const [photoBroken, setPhotoBroken] = useState(false);
+  const showPhoto = photoUrl !== undefined && !photoBroken;
   // Размер живёт на внешнем wrapper: точка и бейдж якорятся к кругу, а сам
   // wrapper не растягивается флекс-родителем (страница #745 — колонка).
   return (
     <div className={cn('relative shrink-0', sizes.circle)} aria-hidden>
       <div
         className={cn(
-          'flex h-full w-full items-center justify-center rounded-pill',
+          'flex h-full w-full items-center justify-center overflow-hidden rounded-pill',
           circleIconRing.white,
-          visual.className,
+          showPhoto ? 'bg-surface-muted' : visual.className,
         )}
       >
-        {visual.kind === 'image' ? (
+        {showPhoto ? (
+          // <img>, не next/image: путь same-origin стриминга бэка
+          // (ADR 0065), оптимизатору не передаётся — канон PropertyAvatar.
+          <img
+            src={photoUrl}
+            alt=""
+            className="h-full w-full object-cover"
+            onError={() => setPhotoBroken(true)}
+          />
+        ) : visual.kind === 'image' ? (
           <Image src={visual.src} alt="" width={112} height={112} className={sizes.image} unoptimized />
         ) : (
           <BoldKey className={cn(sizes.boldKey, 'text-white')} />

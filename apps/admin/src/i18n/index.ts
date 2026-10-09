@@ -63,7 +63,6 @@ const customMessages = {
         status: 'Статус',
         address: 'Адрес',
         description: 'Описание',
-        photos: 'Фотографии',
         q: 'Поиск',
         createdAt: 'Создан',
         updatedAt: 'Обновлён',

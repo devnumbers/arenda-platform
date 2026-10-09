@@ -125,12 +125,18 @@ func participantResponse(p accessapp.Participant) openapi.ParticipantResponse {
 		displayName := p.DisplayName
 		resp.DisplayName = &displayName
 	}
+	if p.PhotoURL != "" {
+		photoURL := p.PhotoURL
+		resp.PhotoUrl = &photoURL
+	}
 	for _, leg := range p.Properties {
 		resp.Properties = append(resp.Properties, openapi.ParticipantPropertyResponse{
 			PropertyId: leg.PropertyID,
 			Title:      leg.Title,
 			Role:       openapi.ParticipantPropertyResponseRole(leg.Role.String()),
 			Status:     openapi.ParticipantPropertyResponseStatus(leg.Status.String()),
+			Type:       openapi.PropertyType(leg.Type),
+			PhotoUrl:   new(leg.PhotoURL),
 		})
 	}
 	return resp

@@ -35,7 +35,7 @@ import {
   type HistoryKind,
   type HistoryParticipantOption,
 } from '@/entities/history';
-import { PropertyAvatar } from '@/entities/property';
+import { PropertyAvatar, type PropertyType } from '@/entities/property';
 import { useMe } from '@/features/auth';
 import {
   DEFAULT_HISTORY_FILTERS,
@@ -123,8 +123,14 @@ type HistoryFilterOptionRow = {
   readonly subtitle?: string;
   readonly leading?: ReactNode;
   readonly leadingSize: 'icon' | 'participant' | 'object';
+  /** Фото профиля участника для ведущего аватара (leadingSize
+   * 'participant', решение #1286). */
+  readonly participantPhotoUrl?: string | null;
   /** Фото объекта для ведущего аватара (leadingSize 'object'). */
   readonly photoUrl?: string;
+  /** Тип объекта — глиф-плейсхолдер аватара (leadingSize 'object',
+   * карта #1217, #1244). */
+  readonly type?: PropertyType;
   readonly isMe?: boolean;
   readonly roleIcon?: HistoryParticipantOption['role'];
 };
@@ -182,6 +188,34 @@ export type HistoryFiltersSheetProps = {
    * объект, серым и незабираемым; не часть черновика. */
   readonly pinnedPropertyId?: string;
 };
+
+/** Аватар участника в строке шита фильтров (решение #1286): фото профиля
+ * 36, иначе — и при битом фото (404 стрима, отозванный доступ) — заглушка
+ * BoldUser. */
+function ParticipantFilterAvatar({ photoUrl }: { readonly photoUrl?: string | null }): JSX.Element {
+  const [photoBroken, setPhotoBroken] = useState(false);
+  const showPhoto = photoUrl != null && photoUrl !== '' && !photoBroken;
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        'ml-4 flex h-9 w-9 shrink-0 items-center justify-center rounded-pill bg-white',
+        showPhoto && 'overflow-hidden',
+      )}
+    >
+      {showPhoto ? (
+        <img
+          src={photoUrl}
+          alt=""
+          className="h-full w-full object-cover"
+          onError={() => setPhotoBroken(true)}
+        />
+      ) : (
+        <BoldUser className="h-4 w-4" aria-hidden />
+      )}
+    </span>
+  );
+}
 
 export function HistoryFiltersSheet({
   applied,
@@ -252,6 +286,7 @@ export function HistoryFiltersSheet({
       label: historyParticipantTitle(participant, participant.id === meId),
       subtitle: participant.email,
       leadingSize: 'participant',
+      participantPhotoUrl: participant.photoUrl,
       isMe: participant.id === meId,
       roleIcon: participant.isOwner ? 'owner' : participant.role,
     }),
@@ -265,6 +300,7 @@ export function HistoryFiltersSheet({
     subtitle: object_.address,
     leadingSize: 'object',
     photoUrl: object_.photoUrl,
+    type: object_.type,
   }));
 
   // Строки «Объектов»: в общей ленте — все опции; на «Истории объекта»
@@ -580,13 +616,11 @@ function FilterOptionRow({
         </span>
       )}
       {row.leadingSize === 'participant' && (
-        <span className="ml-4 flex h-9 w-9 shrink-0 items-center justify-center rounded-pill bg-white">
-          <BoldUser className="h-4 w-4" aria-hidden />
-        </span>
+        <ParticipantFilterAvatar photoUrl={row.participantPhotoUrl} />
       )}
       {row.leadingSize === 'object' && (
         <span className="ml-4 shrink-0">
-          <PropertyAvatar photoUrl={row.photoUrl} surface="filter" />
+          <PropertyAvatar photoUrl={row.photoUrl} type={row.type} surface="filter" />
         </span>
       )}
       <span

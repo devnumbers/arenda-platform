@@ -6,18 +6,22 @@ import { useRouter } from 'next/navigation';
 import { notify } from '@/shared/lib/notifications';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
+import { readPhotoDataUrl } from '@/shared/lib/photo';
 import type { AttrErrors, AttrKey } from '@/features/property-attributes';
 import {
   buildPropertyEditCommand,
   initialPropertyEditDraft,
   propertyAutonamePhrase,
   propertyEditDirty,
+  type PropertyEditDraft,
+  type PropertyPhotoStage,
+  useDeletePropertyPhoto,
   useProperty,
   useUpdateProperty,
-  type PropertyEditDraft,
+  useUploadPropertyPhoto,
 } from '@/features/properties';
 import { attributeCatalog } from '../property-fields/attribute-catalog';
-import { PropertyAvatar, propertyPermissions, type PropertyType } from '@/entities/property';
+import { propertyPermissions, type PropertyType } from '@/entities/property';
 import { ApiError } from '@/shared/api/errors';
 import {
   Button,
@@ -34,6 +38,7 @@ import { Cancel, Check } from '@/shared/assets/icons';
 import { PropertyCatalogFields } from '../property-fields/property-catalog-fields';
 import { PropertyHousingTypeChips } from '../property-fields/property-housing-type-chips';
 import { PropertyAddressSearch } from './property-address-search';
+import { PropertyPhotoSlot } from './property-photo-slot';
 import { PropertyTypePicker } from './property-type-picker';
 
 /**
@@ -41,8 +46,13 @@ import { PropertyTypePicker } from './property-type-picker';
  * 1550:95852) — страница-маршрут /properties/[id]/edit, замена старой
  * формы на едином хроме подэкрана. Хедер: крестик слева (закрыть),
  * заголовок по центру, галочка справа (сохранить — тот же сабмит, что и
- * StickyBottomBar «Сохранить изменения»). Поля: фото (декоративная
- * заглушка-круг, без кнопки — решение владельца 11.09), тип (PickerField
+ * StickyBottomBar «Сохранить изменения»). Поля: фото-слот (глиф по типу
+ * либо загруженное фото; изменение фото — часть черновика: stage
+ * (PropertyPhotoStage) применяется кнопками сохранения вместе с полями —
+ * PATCH свойств и фото-эндпоинты (ADR 0065, тикет #1228) уходят
+ * параллельно, уход без сохранения сервер не трогает; решение владельца
+ * 08.10),
+ * тип (PickerField
  * с шитом чипов 1554:97471), адрес
  * (тап — полноэкранный поиск адреса с подсказками DaData, 1518:93118/
  * 93341), название 0/64, «Тип жилья» и поля каталога — общая часть с
@@ -51,7 +61,8 @@ import { PropertyTypePicker } from './property-type-picker';
  * Смена типа lossless (как в визарде): чужие ключи прежнего типа
  * хранятся в черновике, в payload идут только ключи каталога нового
  * типа. Готовность — обязательные поля + валидный каталог; кнопки
- * сохранения погашены, пока правки нет (propertyEditDirty).
+ * сохранения погашены, пока правки нет — полей (propertyEditDirty) или
+ * фото (photoStage).
  */
 
 const NAME_MAX_LENGTH = 64;
@@ -67,6 +78,8 @@ export function PropertyEditScreen({ propertyId }: PropertyEditScreenProps): JSX
   const router = useRouter();
   const propertyQuery = useProperty(propertyId);
   const updateProperty = useUpdateProperty();
+  const uploadPhoto = useUploadPropertyPhoto();
+  const deletePhoto = useDeletePropertyPhoto();
   // Экран правки — полный экран формы: TabBar глушится, пока внизу
   // смонтирован StickyBottomBar; само подавление делает его монтаж.
   useTabBarSuppression();
@@ -80,6 +93,23 @@ export function PropertyEditScreen({ propertyId }: PropertyEditScreenProps): JSX
   const [serverAttrErrors, setServerAttrErrors] = useState<AttrErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [addressSearchOpen, setAddressSearchOpen] = useState(false);
+  // Изменение фото — часть черновика (решение владельца 08.10): stage
+  // применяется сабмитом, уход без сохранения его просто умирает. Превью
+  // staged-замены — data URL (CSP img-src 'self' data:, ADR 0065): обычная
+  // строка в состоянии, никакой дополнительной механики освобождения.
+  const [photoStage, setPhotoStage] = useState<PropertyPhotoStage | null>(null);
+
+  const handlePhotoFile = (file: File): void => {
+    void readPhotoDataUrl(file).then((previewUrl) => {
+      if (previewUrl !== null) {
+        setPhotoStage({ kind: 'file', file, previewUrl });
+      }
+    });
+  };
+
+  const handlePhotoRemove = (): void => {
+    setPhotoStage({ kind: 'remove' });
+  };
 
   // Черновик инициализируется один раз от загруженного объекта — правки
   // не затираются фоновым рефетчем (паттерн прежней формы).
@@ -90,6 +120,9 @@ export function PropertyEditScreen({ propertyId }: PropertyEditScreenProps): JSX
   }
 
   const isSubmitting = updateProperty.isPending;
+  // Фото-мутации сабмита в полёте — сохранение глушится целиком (один
+  // photo_key у объекта, параллельные загрузка и удаление недопустимы).
+  const photoBusy = uploadPhoto.isPending || deletePhoto.isPending;
 
   // Название необязательно (#1001): очищенное при сохранении
   // регенерирует бэк из типа.
@@ -98,12 +131,15 @@ export function PropertyEditScreen({ propertyId }: PropertyEditScreenProps): JSX
     && draft.type !== undefined
     && draft.address.trim().length > 0;
 
-  const dirty =
+  // Правка — полей или фото: и то и другое применяется кнопками
+  // сохранения (решение владельца 08.10).
+  const fieldsDirty =
     property !== undefined && draft !== null
       ? propertyEditDirty(draft, property, attributeCatalog)
       : false;
+  const dirty = fieldsDirty || photoStage !== null;
 
-  const canSubmit = ready && dirty && !isSubmitting;
+  const canSubmit = ready && dirty && !isSubmitting && !photoBusy;
 
   const updateDraft = (patch: Partial<PropertyEditDraft>): void => {
     setDraft((prev) => (prev === null ? prev : { ...prev, ...patch }));
@@ -187,12 +223,20 @@ export function PropertyEditScreen({ propertyId }: PropertyEditScreenProps): JSX
             void handleSubmit();
           }}
         >
-          {/* Заглушка фото (Figma 1550:95852): логики фото у объекта нет —
-              круг декоративный, без кнопки и загрузки (решение владельца
-              11.09); поверхность hero канона PropertyAvatar. */}
-          <div className="flex justify-center" aria-hidden>
-            <PropertyAvatar surface="hero" />
-          </div>
+          {/* Фото-слот (Figma 1550:95852, тикет #1228, ADR 0065): глиф
+              по типу черновика либо фото. Изменение фото — часть
+              черновика (stage), применяется кнопками сохранения вместе
+              с полями; уход без сохранения сервер не трогает
+              (решение владельца 08.10). */}
+          <PropertyPhotoSlot
+            propertyId={propertyId}
+            photoUrl={property.photoUrl}
+            stage={photoStage}
+            busy={photoBusy}
+            type={draft.type}
+            onFileChosen={handlePhotoFile}
+            onRemove={handlePhotoRemove}
+          />
           <PropertyTypePicker
             title="Тип объекта"
             placeholder="Выберите тип"
@@ -289,19 +333,62 @@ export function PropertyEditScreen({ propertyId }: PropertyEditScreenProps): JSX
       return;
     }
     setSubmitError(null);
-    try {
-      await updateProperty.mutateAsync({ id: propertyId, data: command });
+    // Поля и фото уходят параллельно, каждый частью своей правки: не-dirty
+    // часть сети не касается. Каждый сбой — свой сигнал (поля — ошибки
+    // атрибутов и плашка, фото — тост сценария), применённая часть гасит
+    // свою грязь; назад уходим, только когда сохранено всё.
+    const fieldsWork: Promise<boolean> | null = propertyEditDirty(draft, property, attributeCatalog)
+      ? updateProperty
+          .mutateAsync({ id: propertyId, data: command })
+          .then(
+            () => true,
+            (error: unknown) => {
+              if (error instanceof ApiError && error.fieldErrors !== undefined && error.fieldErrors.length > 0) {
+                const mapped: AttrErrors = {};
+                for (const fe of error.fieldErrors) {
+                  mapped[fe.field as AttrKey] = fe.detail;
+                }
+                setServerAttrErrors(mapped);
+              }
+              setSubmitError(SUBMIT_ERROR_MESSAGE);
+              return false;
+            },
+          )
+      : null;
+    const photoWork: Promise<boolean> | null =
+      photoStage?.kind === 'file'
+        ? uploadPhoto
+            .mutateAsync({ id: propertyId, file: photoStage.file })
+            .then(
+              () => true,
+              (error: unknown) => {
+                notify.scenarios.property.photoUpdateError(error);
+                return false;
+              },
+            )
+        : photoStage?.kind === 'remove'
+          ? deletePhoto
+              .mutateAsync({ id: propertyId })
+              .then(
+                () => true,
+                (error: unknown) => {
+                  notify.scenarios.property.photoDeleteError(error);
+                  return false;
+                },
+              )
+          : null;
+
+    const [fieldsSaved = true, photoSaved = true] = await Promise.all([
+      fieldsWork ?? Promise.resolve(true),
+      photoWork ?? Promise.resolve(true),
+    ]);
+
+    if (photoSaved && photoStage !== null) {
+      setPhotoStage(null);
+    }
+    if (fieldsSaved && photoSaved) {
       notify.scenarios.property.updated();
       goBack(router, ROUTES.property(propertyId));
-    } catch (error: unknown) {
-      if (error instanceof ApiError && error.fieldErrors !== undefined && error.fieldErrors.length > 0) {
-        const mapped: AttrErrors = {};
-        for (const fe of error.fieldErrors) {
-          mapped[fe.field as AttrKey] = fe.detail;
-        }
-        setServerAttrErrors(mapped);
-      }
-      setSubmitError(SUBMIT_ERROR_MESSAGE);
     }
   }
 }

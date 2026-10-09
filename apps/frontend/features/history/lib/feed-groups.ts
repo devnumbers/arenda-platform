@@ -26,6 +26,9 @@ export type HistoryActorGroup = {
   /** actor_id, обезличенным записям — ключ по снимку имени. */
   readonly key: string;
   readonly name: string;
+  /** Фото актёра (ADR 0065, решение #1286) — путь стриминга из первой
+   * записи группы; null — фото нет или запись обезличена. */
+  readonly photoUrl: string | null;
   readonly entries: readonly HistoryEntry[];
 };
 
@@ -46,6 +49,7 @@ type MutableActorGroup = {
   actorId: string | null;
   key: string;
   name: string;
+  photoUrl: string | null;
   entries: HistoryEntry[];
 };
 type MutableObjectGroup = {
@@ -90,6 +94,7 @@ export function groupHistoryByDay(
         actorId: entry.actorId,
         key: actorKey,
         name: entry.actorName,
+        photoUrl: entry.actorPhotoUrl,
         entries: [],
       };
       object_.actors.push(actor);

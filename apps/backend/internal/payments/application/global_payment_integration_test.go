@@ -574,18 +574,14 @@ func TestListGlobalPaymentObjects_PhotoURL(t *testing.T) {
 
 	withPhoto := h.seedGlobalProperty(h.owner, "С фото", "active")
 	h.seedGlobalProperty(h.owner, "Без фото", "active")
-	seedObjectPhoto := func(propertyID uuid.UUID, url string, at time.Time) {
-		t.Helper()
-		if _, err := h.pool.Exec(h.ctx(),
-			// The app-side v7 default (000079) owns new ids — the seed carries one.
-			`INSERT INTO property_photos (id, property_id, url, created_at) VALUES ($1, $2, $3, $4)`,
-			uuid.Must(uuid.NewV7()), propertyID, url, at,
-		); err != nil {
-			t.Fatalf("seed photo %s: %v", url, err)
-		}
+	// С приватными фото (ADR 0065) аватар один на объект и живёт в
+	// properties.photo_key; наружу — same-origin путь стриминга.
+	if _, err := h.pool.Exec(h.ctx(),
+		`UPDATE properties SET photo_key = $2, photo_content_type = 'image/jpeg' WHERE id = $1`,
+		withPhoto, "photos/01987654-3210-7abc-9def-0123456789ab.jpg",
+	); err != nil {
+		t.Fatalf("seed photo: %v", err)
 	}
-	seedObjectPhoto(withPhoto, "/uploads/newer.jpg", time.Date(2026, 9, 2, 8, 0, 0, 0, time.UTC))
-	seedObjectPhoto(withPhoto, "/uploads/older.jpg", time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC))
 
 	cards, err := svc.ListGlobalPaymentObjects(h.ctx(), h.owner, "")
 	if err != nil {
@@ -595,9 +591,10 @@ func TestListGlobalPaymentObjects_PhotoURL(t *testing.T) {
 	for _, card := range cards {
 		byName[card.Name] = card
 	}
-	older := byName["С фото"]
-	if older.PhotoURL == nil || *older.PhotoURL != "/uploads/older.jpg" {
-		t.Errorf("С фото PhotoURL = %v, want the oldest photo", older.PhotoURL)
+	want := "/api/v1/properties/" + withPhoto.String() + "/photo"
+	withCard := byName["С фото"]
+	if withCard.PhotoURL == nil || *withCard.PhotoURL != want {
+		t.Errorf("С фото PhotoURL = %v, want the streaming path", withCard.PhotoURL)
 	}
 	if got := byName["Без фото"].PhotoURL; got != nil {
 		t.Errorf("Без фото PhotoURL = %v, want nil", got)
@@ -607,8 +604,8 @@ func TestListGlobalPaymentObjects_PhotoURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("objects search: %v", err)
 	}
-	if len(found) != 1 || found[0].PhotoURL == nil || *found[0].PhotoURL != "/uploads/older.jpg" {
-		t.Errorf("searched photo = %+v, want the oldest photo under the query", found)
+	if len(found) != 1 || found[0].PhotoURL == nil || *found[0].PhotoURL != want {
+		t.Errorf("searched photo = %+v, want the streaming path under the query", found)
 	}
 }
 

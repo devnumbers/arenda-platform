@@ -21,11 +21,16 @@ type FeedEntry struct {
 	ActorID    *uuid.UUID
 	ActorName  string
 	ActorEmail string
-	ActorRole  ActorRole
-	Kind       Kind
-	Action     Action
-	BaseAction BaseAction
-	Segments   Segments
+	// ActorPhotoURL is the actor's profile photo streaming path (ADR 0065,
+	// решение #1286), live at read; empty when the actor has no photo or the
+	// row is anonymized. A revoked actor's path answers 404 and the client
+	// falls back to the placeholder.
+	ActorPhotoURL string
+	ActorRole     ActorRole
+	Kind          Kind
+	Action        Action
+	BaseAction    BaseAction
+	Segments      Segments
 	// Context carries the structured extras (amounts in kopecks, dates,
 	// old/new values); never rendered as the row text, never searched.
 	Context   map[string]any
@@ -48,8 +53,11 @@ type FilterParticipant struct {
 	Name      string
 	Email     string
 	FirstName string
-	IsOwner   bool
-	Role      string
+	// PhotoURL is the profile photo's streaming path (ADR 0065, решение
+	// #1286), live at read; '' when the user has no photo.
+	PhotoURL string
+	IsOwner  bool
+	Role     string
 }
 
 // FilterObject is one «Объекты» option of the filter sheet: the object with
@@ -59,4 +67,7 @@ type FilterObject struct {
 	Name     string
 	Address  string
 	PhotoURL string
+	// Type is the property's type — the filter row's avatar placeholder
+	// glyph's key (карта #1217, #1244).
+	Type string
 }

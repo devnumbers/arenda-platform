@@ -7,6 +7,9 @@ export type User = {
   readonly patronymic: string | null;
   readonly email: string | null;
   readonly timezone: string | null;
+  /** Путь приватного фото профиля (ADR 0065): same-origin стриминг через
+   * бэкенд; null — фото нет. */
+  readonly photoUrl: string | null;
   readonly subscription: {
     readonly tariff: {
       readonly name: string;

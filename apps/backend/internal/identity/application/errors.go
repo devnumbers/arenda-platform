@@ -20,3 +20,7 @@ var (
 	// instead (issue #728).
 	ErrCurrentSession = errors.New("cannot revoke the current session")
 )
+
+// ErrPhotoNotFound marks a photo request for an entity that has no photo —
+// the privacy-preserving 404 of the photo serving endpoints (ADR 0065).
+var ErrPhotoNotFound = errors.New("identity: photo not found")

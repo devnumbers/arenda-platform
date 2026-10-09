@@ -15,6 +15,7 @@ import (
 	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	realtimeapp "github.com/nambers/arenda-planform/apps/backend/internal/realtime/application"
 	realtimedom "github.com/nambers/arenda-planform/apps/backend/internal/realtime/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/photo"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
 
@@ -48,6 +49,10 @@ type Member struct {
 	Role        sharedpolicy.Role // Owner | full_access | viewer.
 	IsOwner     bool
 	DisplayName string
+	// PhotoURL is the profile photo's streaming path (ADR 0065, решение
+	// #1286): every reader of the list shares the property with every
+	// listed participant; empty — no photo or a pending row.
+	PhotoURL    string
 	Status      domain.MemberStatus // Active | suspended (always active for the owner; meaningless when Pending).
 	SuspendedAt *time.Time          // When the membership was suspended; nil when active.
 	// Pending marks a pending email invitation row: the invitee is not
@@ -743,6 +748,7 @@ func (s *AccessService) ListMembers(ctx context.Context, actor, propertyID uuid.
 		Role:        sharedpolicy.RoleOwner,
 		IsOwner:     true,
 		DisplayName: displayName(ownerUser),
+		PhotoURL:    photo.UserPhotoPath(owner, ownerUser.PhotoKey),
 		Status:      domain.MemberStatusActive,
 	})
 
@@ -764,6 +770,7 @@ func (s *AccessService) ListMembers(ctx context.Context, actor, propertyID uuid.
 			Role:        toSharedRole(m.Role),
 			IsOwner:     false,
 			DisplayName: displayName(u),
+			PhotoURL:    photo.UserPhotoPath(m.UserID, u.PhotoKey),
 			Status:      m.Status,
 			SuspendedAt: m.SuspendedAt,
 		})

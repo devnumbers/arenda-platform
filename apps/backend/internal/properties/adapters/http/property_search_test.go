@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/objectstorage"
 	openapi "github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
@@ -94,41 +95,11 @@ func (r *searchWireRepo) CountByOwnerAndType(_ context.Context, _ uuid.UUID, _ d
 
 func (r *searchWireRepo) Delete(_ context.Context, _, _ uuid.UUID) error { return nil }
 
+func (r *searchWireRepo) SetPropertyPhoto(_ context.Context, id, _ uuid.UUID, key, contentType *string) (domain.Property, error) {
+	return domain.Property{}, nil
+}
+
 func (r *searchWireRepo) WithTx(_ transaction.Tx) propertiesapp.PropertyRepository { return r }
-
-// searchWirePhotos satisfies the photo port with no photos — the search
-// screen's rows render without them (the wire shape is what's under test).
-type searchWirePhotos struct{}
-
-func (searchWirePhotos) Create(_ context.Context, _, _ uuid.UUID, _ string) (domain.Photo, error) {
-	return domain.Photo{}, nil
-}
-
-func (searchWirePhotos) GetByID(_ context.Context, _ uuid.UUID) (domain.Photo, error) {
-	return domain.Photo{}, nil
-}
-
-func (searchWirePhotos) GetByIDAndPropertyID(_ context.Context, _, _ uuid.UUID) (domain.Photo, error) {
-	return domain.Photo{}, nil
-}
-
-func (searchWirePhotos) GetByPropertyID(_ context.Context, _ uuid.UUID) ([]domain.Photo, error) {
-	return nil, nil
-}
-
-func (searchWirePhotos) GetByPropertyIDs(_ context.Context, ids []uuid.UUID) (map[uuid.UUID][]domain.Photo, error) {
-	return map[uuid.UUID][]domain.Photo{}, nil
-}
-
-func (searchWirePhotos) CountByPropertyID(_ context.Context, _ uuid.UUID) (int, error) {
-	return 0, nil
-}
-
-func (searchWirePhotos) Delete(_ context.Context, _ uuid.UUID) error { return nil }
-
-func (searchWirePhotos) WithTx(_ transaction.Tx) propertiesapp.PropertyPhotoRepository {
-	return searchWirePhotos{}
-}
 
 const wireSearch = "кварт"
 
@@ -139,8 +110,8 @@ func searchWireHandler(t *testing.T, repo *searchWireRepo) *PropertyHandlers {
 	// bundle. The real clock serves the list reads' «today» fallback (the
 	// list wire tests ride this harness too, issue #1233).
 	svc := propertiesapp.NewPropertyService(
-		repo, searchWirePhotos{}, nil,
-		propertiesapp.NewTxStoreFactory(repo, searchWirePhotos{}, nil, nil, nil, nil),
+		repo, objectstorage.NewFakeStorage(),
+		propertiesapp.NewTxStoreFactory(repo, nil, nil, nil, nil),
 		clock.Real{}, nil, slog.New(slog.DiscardHandler),
 	)
 	return NewPropertyHandlers(svc, nil, slog.New(slog.DiscardHandler), nil)

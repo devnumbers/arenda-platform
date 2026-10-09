@@ -5,7 +5,13 @@ import NextLink from 'next/link';
 import { SmallArrowDown, SmallArrowRight } from '@/shared/assets/icons';
 import { Button, Skeleton, TextField } from '@/shared/ui/design';
 import { useMe } from '@/features/auth';
-import { useUpdateMe } from '@/features/profile';
+import {
+  type MePhotoStage,
+  useDeleteMePhoto,
+  useUpdateMe,
+  useUploadMePhoto,
+} from '@/features/profile';
+import { readPhotoDataUrl } from '@/shared/lib/photo';
 import type { User } from '@/entities/user';
 import { ROUTES } from '@/shared/config/routes';
 import { cn } from '@/shared/lib/cn';
@@ -13,7 +19,7 @@ import { formatPhoneDisplay } from '@/shared/lib/phone';
 import { notify } from '@/shared/lib/notifications';
 import { formatTimezoneLabel } from '../lib/timezone';
 import { profileFieldPatch, type ProfileTextField } from '../lib/profile-edit';
-import { AvatarPlaceholder } from './AvatarPlaceholder';
+import { ProfilePhotoSlot } from './profile-photo-slot';
 
 /** Серый бокс поля (как у канонных TextField/PickerField): строка-поле
  * «Телефон», «Электронная почта» и «Часовой пояс» экрана (Figma 1789-99036 —
@@ -150,9 +156,44 @@ type AccountScreenViewProps = {
 
 function AccountScreenView({ me }: AccountScreenViewProps): JSX.Element {
   const updateMe = useUpdateMe();
+  const uploadPhoto = useUploadMePhoto();
+  const deletePhoto = useDeleteMePhoto();
   const [name, setName] = useState(me.name ?? '');
   const [surname, setSurname] = useState(me.surname ?? '');
   const [patronymic, setPatronymic] = useState(me.patronymic ?? '');
+  // Фото применяется сразу (решение владельца: экран автосейв-формы,
+  // «при изменении фото оно сразу должно меняться» — пересмотр
+  // стейдж-канона #1228 для этого экрана). Stage — только превью летящей
+  // загрузки (data URL, CSP img-src 'self' data:, ADR 0065): ответ гасит
+  // его, отказ возвращает круг к серверному состоянию с тостом (ретрай —
+  // повторный выбор).
+  const [photoStage, setPhotoStage] = useState<MePhotoStage | null>(null);
+  // Фото-мутация в полёте — управление слота глушится (одна картинка на
+  // профиль, параллельные загрузка и удаление недопустимы).
+  const photoBusy = uploadPhoto.isPending || deletePhoto.isPending;
+
+  const handlePhotoFile = (file: File): void => {
+    void readPhotoDataUrl(file).then((previewUrl) => {
+      // Превью садится до запуска мутации: круг меняется сразу и не
+      // может перезаписать ответ, пришедший раньше чтения файла.
+      if (previewUrl !== null) {
+        setPhotoStage({ kind: 'file', file, previewUrl });
+      }
+      uploadPhoto.mutate(file, {
+        onSuccess: () => setPhotoStage(null),
+        onError: (error) => {
+          setPhotoStage(null);
+          notify.scenarios.profile.photoUpdateError(error);
+        },
+      });
+    });
+  };
+
+  const handlePhotoRemove = (): void => {
+    deletePhoto.mutate(undefined, {
+      onError: (error) => notify.scenarios.profile.photoDeleteError(error),
+    });
+  };
 
   /** Тихое автосохранение (макет без кнопки «Сохранить»): поле коммитится
    * на blur и крестиком очистки — патч только этого поля; пустая строка
@@ -189,7 +230,13 @@ function AccountScreenView({ me }: AccountScreenViewProps): JSX.Element {
   return (
     <div className="flex flex-col gap-6 pb-6">
       <div className="flex justify-center">
-        <AvatarPlaceholder />
+        <ProfilePhotoSlot
+          photoUrl={me.photoUrl}
+          stage={photoStage}
+          busy={photoBusy}
+          onFileChosen={handlePhotoFile}
+          onRemove={handlePhotoRemove}
+        />
       </div>
       <div className="flex flex-col gap-8">
         <section aria-label="Данные" className="flex flex-col gap-2">
@@ -245,7 +292,10 @@ function AccountScreenView({ me }: AccountScreenViewProps): JSX.Element {
 }
 
 /** Экран «Аккаунт» в новом дизайне (тикет #593, карта #591; Figma
- * 1789-99036): аватар-плейсхолдер 96 без «Добавить фото» (аватар отложен),
+ * 1789-99036): фото-слот 96 (фото либо BoldUser; загрузка/замена/удаление
+ * — POST|DELETE /me/photo, ADR 0065, тикет #1230 — применяются сразу:
+ * экран автосейв-формы, решение владельца «при изменении фото оно сразу
+ * должно меняться»; превью — только на время полёта),
  * поля имени (titleIn) с автосохранением PATCH /me по blur/очистке —
  * макет без кнопки «Сохранить», телефон строкой на /profile/account/phone,
  * почта строкой на флоу смены /profile/account/email (#722 — инлайн-правка

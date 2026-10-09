@@ -75,16 +75,18 @@ func assertTxDB(tx transaction.Tx) (pgen.DBTX, error) {
 // userRow is the canonical shape of the user columns consumed by mapUser. It is
 // the single mapping target for every sqlc row that carries user data.
 type userRow struct {
-	ID              pgtype.UUID
-	Phone           string
-	Role            string
-	Name            pgtype.Text
-	Surname         pgtype.Text
-	Patronymic      pgtype.Text
-	Email           pgtype.Text
-	EmailVerifiedAt pgtype.Timestamptz
-	Timezone        string
-	PhoneEncrypted  bool
+	ID               pgtype.UUID
+	Phone            string
+	Role             string
+	Name             pgtype.Text
+	Surname          pgtype.Text
+	Patronymic       pgtype.Text
+	Email            pgtype.Text
+	EmailVerifiedAt  pgtype.Timestamptz
+	Timezone         string
+	PhoneEncrypted   bool
+	PhotoKey         pgtype.Text
+	PhotoContentType pgtype.Text
 }
 
 // userSourceFromUser adapts a pgen.User model row.
@@ -92,16 +94,18 @@ type userSourceFromUser pgen.User
 
 func (s userSourceFromUser) toUserRow() userRow {
 	return userRow{
-		ID:              s.ID,
-		Phone:           s.Phone,
-		Role:            s.Role,
-		Name:            s.Name,
-		Surname:         s.Surname,
-		Patronymic:      s.Patronymic,
-		Email:           s.Email,
-		EmailVerifiedAt: s.EmailVerifiedAt,
-		Timezone:        s.Timezone,
-		PhoneEncrypted:  s.PhoneEncrypted,
+		ID:               s.ID,
+		Phone:            s.Phone,
+		Role:             s.Role,
+		Name:             s.Name,
+		Surname:          s.Surname,
+		Patronymic:       s.Patronymic,
+		Email:            s.Email,
+		EmailVerifiedAt:  s.EmailVerifiedAt,
+		Timezone:         s.Timezone,
+		PhoneEncrypted:   s.PhoneEncrypted,
+		PhotoKey:         s.PhotoKey,
+		PhotoContentType: s.PhotoContentType,
 	}
 }
 
@@ -109,44 +113,6 @@ func (s userSourceFromUser) toUserRow() userRow {
 type userSourceFromCreateUser pgen.CreateUserRow
 
 func (s userSourceFromCreateUser) toUserRow() userRow {
-	return userRow{
-		ID:              s.ID,
-		Phone:           s.Phone,
-		Role:            s.Role,
-		Name:            s.Name,
-		Surname:         s.Surname,
-		Patronymic:      s.Patronymic,
-		Email:           s.Email,
-		EmailVerifiedAt: s.EmailVerifiedAt,
-		Timezone:        s.Timezone,
-		PhoneEncrypted:  s.PhoneEncrypted,
-	}
-}
-
-// userSourceFromUpdateEmailVerified adapts an UpdateUserEmailVerified query row.
-type userSourceFromUpdateEmailVerified pgen.UpdateUserEmailVerifiedRow
-
-func (s userSourceFromUpdateEmailVerified) toUserRow() userRow {
-	return userRow{
-		ID:              s.ID,
-		Phone:           s.Phone,
-		Role:            s.Role,
-		Name:            s.Name,
-		Surname:         s.Surname,
-		Patronymic:      s.Patronymic,
-		Email:           s.Email,
-		EmailVerifiedAt: s.EmailVerifiedAt,
-		Timezone:        s.Timezone,
-		PhoneEncrypted:  s.PhoneEncrypted,
-	}
-}
-
-// userSourceFromUpdateEmailVerifiedAt adapts an UpdateUserEmailVerifiedAt query
-// row (the MarkEmailVerified write: the address is untouched, only the
-// verified-at stamp moves).
-type userSourceFromUpdateEmailVerifiedAt pgen.UpdateUserEmailVerifiedAtRow
-
-func (s userSourceFromUpdateEmailVerifiedAt) toUserRow() userRow {
 	return userRow{
 		ID:              s.ID,
 		Phone:           s.Phone,

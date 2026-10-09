@@ -15,6 +15,7 @@ function participant(
     email: 'maria@example.com',
     displayName: 'Мария Петрова',
     aggregateStatus: 'all_properties',
+    photoUrl: null,
     accessiblePropertiesCount: 3,
     properties: [],
     ...overrides,
@@ -29,6 +30,8 @@ function leg(
     title: 'Квартира на Ленина',
     role: 'viewer',
     status: 'pending',
+    type: 'apartment',
+    photoUrl: null,
     ...overrides,
   };
 }

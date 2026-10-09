@@ -40,9 +40,8 @@ func newHistoryTestService(t *testing.T, history *historytest.CapturingRecorder)
 	repo := newLockingFakePropertyRepo(property)
 	svc := NewPropertyService(
 		repo,
-		fakePropertyPhotoRepo{},
-		fakePropertyPhotoStorage{},
-		NewTxStoreFactory(repo, fakePropertyPhotoRepo{}, fakeSubscriptionLimiter{limit: 10},
+		newFakePropertyPhotoStorage(),
+		NewTxStoreFactory(repo, fakeSubscriptionLimiter{limit: 10},
 			nil, history, fakeUoW{beginner: fakePropertyTxBeginner{}}),
 		fakePropertyClock{now: time.Now()},
 		testOwnerPolicy{},

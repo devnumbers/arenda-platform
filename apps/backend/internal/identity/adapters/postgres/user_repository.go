@@ -38,6 +38,9 @@ func (r *UserRepository) WithTx(tx transaction.Tx) (application.UserRepository, 
 	return NewUserRepository(dbtx, r.enc), nil
 }
 
+// The adapter satisfies the consumer-declared port (CODING_STANDARDS).
+var _ application.SharedPropertyChecker = (*UserRepository)(nil)
+
 func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.User, error) {
 	row, err := r.q().GetUserByID(ctx, pgconv.UUIDToPgtype(id))
 	if err != nil {
@@ -58,6 +61,23 @@ func (r *UserRepository) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (do
 		return domain.User{}, fmt.Errorf("get user by id for update: %w", err)
 	}
 	return mapUser(ctx, r.enc, userSourceFromUser(row).toUserRow())
+}
+
+// ShareReadableProperty answers whether the two users are connected through
+// at least one property both sides can read (ADR 0028 derived read,
+// symmetric) — the gate of the foreign profile-photo reads (ADR 0065,
+// решение владельца #1286). Implements the application's
+// SharedPropertyChecker port; the verdict is one SQL query, no user rows
+// leave the database.
+func (r *UserRepository) ShareReadableProperty(ctx context.Context, viewerID, userID uuid.UUID) (bool, error) {
+	shared, err := r.q().UsersShareReadableProperty(ctx, pgen.UsersShareReadablePropertyParams{
+		ViewerID: pgconv.UUIDToPgtype(viewerID),
+		UserID:   pgconv.UUIDToPgtype(userID),
+	})
+	if err != nil {
+		return false, fmt.Errorf("check shared readable property: %w", err)
+	}
+	return shared, nil
 }
 
 func (r *UserRepository) GetByPhone(ctx context.Context, phone domain.Phone) (domain.User, error) {
@@ -223,7 +243,24 @@ func (r *UserRepository) UpdateEmailVerified(
 		}
 		return domain.User{}, fmt.Errorf("update user email verified: %w", err)
 	}
-	return mapUser(ctx, r.enc, userSourceFromUpdateEmailVerified(row).toUserRow())
+	return mapUser(ctx, r.enc, userSourceFromUser(row).toUserRow())
+}
+
+// SetPhoto writes the profile photo columns (ADR 0065): the key and the
+// sniffed content type move together, nils clear the photo.
+func (r *UserRepository) SetPhoto(ctx context.Context, id uuid.UUID, key, contentType *string) (domain.User, error) {
+	row, err := r.q().SetUserPhoto(ctx, pgen.SetUserPhotoParams{
+		ID:               pgconv.UUIDToPgtype(id),
+		PhotoKey:         pgconv.StringPtrToPgtype(key),
+		PhotoContentType: pgconv.StringPtrToPgtype(contentType),
+	})
+	if err != nil {
+		if notFound(err) {
+			return domain.User{}, application.ErrNotFound
+		}
+		return domain.User{}, fmt.Errorf("set user photo: %w", err)
+	}
+	return mapUser(ctx, r.enc, userSourceFromUser(row).toUserRow())
 }
 
 func (r *UserRepository) MarkEmailVerified(
@@ -241,7 +278,7 @@ func (r *UserRepository) MarkEmailVerified(
 		}
 		return domain.User{}, fmt.Errorf("mark user email verified: %w", err)
 	}
-	return mapUser(ctx, r.enc, userSourceFromUpdateEmailVerifiedAt(row).toUserRow())
+	return mapUser(ctx, r.enc, userSourceFromUser(row).toUserRow())
 }
 
 func mapUser(ctx context.Context, enc encryption.Encryptor, row userRow) (domain.User, error) {
@@ -269,15 +306,17 @@ func mapUser(ctx context.Context, enc encryption.Encryptor, row userRow) (domain
 		return domain.User{}, fmt.Errorf("invalid timezone from DB: %w", err)
 	}
 	return domain.User{
-		ID:              pgconv.UUIDFromPgtype(row.ID),
-		Phone:           phone,
-		Role:            role,
-		Name:            pgconv.TextToPtrString(row.Name),
-		Surname:         pgconv.TextToPtrString(row.Surname),
-		Patronymic:      pgconv.TextToPtrString(row.Patronymic),
-		Email:           email,
-		EmailVerifiedAt: pgconv.TimestamptzToPtrTime(row.EmailVerifiedAt),
-		Timezone:        tz,
+		ID:               pgconv.UUIDFromPgtype(row.ID),
+		Phone:            phone,
+		Role:             role,
+		Name:             pgconv.TextToPtrString(row.Name),
+		Surname:          pgconv.TextToPtrString(row.Surname),
+		Patronymic:       pgconv.TextToPtrString(row.Patronymic),
+		Email:            email,
+		EmailVerifiedAt:  pgconv.TimestamptzToPtrTime(row.EmailVerifiedAt),
+		Timezone:         tz,
+		PhotoKey:         pgconv.TextToPtrString(row.PhotoKey),
+		PhotoContentType: pgconv.TextToPtrString(row.PhotoContentType),
 	}, nil
 }
 

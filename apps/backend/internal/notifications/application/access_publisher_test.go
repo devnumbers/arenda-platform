@@ -76,7 +76,7 @@ func newAccessIDs() accessIDs {
 }
 
 func (h *accessPublisherHarness) plantProperty(id uuid.UUID, name, address string) {
-	h.views.props[id] = AccessPropertyView{Name: name, Address: address}
+	h.views.props[id] = AccessPropertyView{Name: name, Address: address, Type: scanPropertyType, Photo: scanPropertyPhoto}
 }
 
 func (h *accessPublisherHarness) plantUser(id uuid.UUID, name, email string) {
@@ -128,6 +128,8 @@ func TestNotifyInvitationActivatedActive(t *testing.T) {
 	assert.Equal(t, ids.property, invite.Payload.Property.ID)
 	assert.Equal(t, "Дом на Рублёвке", invite.Payload.Property.Name)
 	assert.Equal(t, "ул. Рублёвское шоссе, 1", invite.Payload.Property.Address)
+	assert.Equal(t, scanPropertyType, invite.Payload.Property.Type, "the card's glyph type snapshot (#1244)")
+	assert.Equal(t, scanPropertyPhoto, invite.Payload.Property.Photo, "the card's photo snapshot (#1275)")
 	require.NotNil(t, invite.Payload.Actor)
 	assert.Equal(t, ids.owner, invite.Payload.Actor.ID)
 	assert.Equal(t, "Пётр Петров", invite.Payload.Actor.Name)
@@ -516,3 +518,34 @@ func TestNotifyRoleChangedDedupPerChange(t *testing.T) {
 
 // UnixDedupStamp lives in access_publisher.go — the tests assert the exact
 // key shape with the same rendering the implementation commits to.
+
+// TestNotifyActorCarriesPhoto proves the actor card's photo path (ADR 0065,
+// решение #1286) travels into the payload's actor EntityRef: the feed row is
+// the publication-moment snapshot, the stream serves the photo the profile
+// has now, and an empty key stays empty.
+func TestNotifyActorCarriesPhoto(t *testing.T) {
+	t.Parallel()
+
+	h := newAccessPublisherHarness()
+	ids := newAccessIDs()
+	h.plantProperty(ids.property, "Дом на Рублёвке", "")
+	photoed := AccessUserProfile{DisplayName: "Пётр Петров", Email: "owner@example.com", Photo: "/api/v1/users/x/photo"}
+	h.views.users[ids.owner] = photoed
+	h.plantUser(ids.member, "Иван Иванов", "member@example.com")
+
+	require.NoError(t, h.pub.NotifyAccessRevoked(t.Context(),
+		ids.membership, ids.property, ids.member, ids.owner))
+	require.Len(t, h.feed.inserted, 1)
+	require.NotNil(t, h.feed.inserted[0].Payload.Actor)
+	assert.Equal(t, "/api/v1/users/x/photo", h.feed.inserted[0].Payload.Actor.Photo)
+
+	// A profile without a photo keeps the actor card photoless.
+	h2 := newAccessPublisherHarness()
+	h2.plantProperty(ids.property, "Дом на Рублёвке", "")
+	h2.plantUser(ids.owner, "Пётр Петров", "owner@example.com")
+	h2.plantUser(ids.member, "Иван Иванов", "member@example.com")
+	require.NoError(t, h2.pub.NotifyAccessRevoked(t.Context(),
+		ids.membership, ids.property, ids.member, ids.owner))
+	require.NotNil(t, h2.feed.inserted[0].Payload.Actor)
+	assert.Empty(t, h2.feed.inserted[0].Payload.Actor.Photo)
+}

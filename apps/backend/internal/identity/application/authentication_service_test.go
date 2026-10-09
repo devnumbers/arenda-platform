@@ -171,6 +171,17 @@ func (r *fakeUserRepo) MarkEmailVerified(
 	return u, nil
 }
 
+func (r *fakeUserRepo) SetPhoto(ctx context.Context, id uuid.UUID, key, contentType *string) (domain.User, error) {
+	u, err := r.GetByID(ctx, id)
+	if err != nil {
+		return domain.User{}, err
+	}
+	u.PhotoKey = key
+	u.PhotoContentType = contentType
+	r.byPhone[u.Phone.String()] = u
+	return u, nil
+}
+
 func (r *fakeUserRepo) WithTx(transaction.Tx) (UserRepository, error) { return r, nil }
 
 type fakeGrantRepo struct {
@@ -1114,6 +1125,11 @@ func (r *errorUserRepo) UpdateEmailVerified(context.Context, uuid.UUID, *domain.
 func (r *errorUserRepo) MarkEmailVerified(context.Context, uuid.UUID, time.Time) (domain.User, error) {
 	return domain.User{}, nil
 }
+
+func (r *errorUserRepo) SetPhoto(context.Context, uuid.UUID, *string, *string) (domain.User, error) {
+	return domain.User{}, nil
+}
+
 func (r *errorUserRepo) WithTx(transaction.Tx) (UserRepository, error) { return r, nil }
 
 // errorOnGetByEmailRepo returns ErrNotFound for GetByPhone but a custom error

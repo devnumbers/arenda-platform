@@ -41,6 +41,9 @@ SELECT aj.id,
        aj.actor_name,
        aj.actor_email,
        aj.actor_role,
+       COALESCE(CASE WHEN u.photo_key IS NOT NULL
+                     THEN '/api/v1/users/' || aj.actor_id::text || '/photo'
+                     END, '')::text AS actor_photo_url,
        aj.kind,
        aj.action,
        aj.base_action,
@@ -49,6 +52,7 @@ SELECT aj.id,
        aj.created_at
 FROM action_journal aj
 JOIN properties p ON p.id = aj.property_id
+LEFT JOIN users u ON u.id = aj.actor_id
 WHERE actor_can_read_property(aj.property_id, sqlc.arg('actor')::uuid)
   AND (sqlc.arg('property_ids')::text = ''
        OR aj.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[]))
@@ -104,6 +108,9 @@ SELECT aj.id,
        aj.actor_name,
        aj.actor_email,
        aj.actor_role,
+       COALESCE(CASE WHEN u.photo_key IS NOT NULL
+                     THEN '/api/v1/users/' || aj.actor_id::text || '/photo'
+                     END, '')::text AS actor_photo_url,
        aj.kind,
        aj.action,
        aj.base_action,
@@ -112,6 +119,7 @@ SELECT aj.id,
        aj.created_at
 FROM action_journal aj
 JOIN properties p ON p.id = aj.property_id
+LEFT JOIN users u ON u.id = aj.actor_id
 WHERE actor_can_read_property(aj.property_id, sqlc.arg('actor')::uuid)
   AND (sqlc.arg('property_ids')::text = ''
        OR aj.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[]))
@@ -188,6 +196,9 @@ WITH scope_participant(user_id, is_owner, role_rank) AS (
       AND aj.actor_id IS NOT NULL
 )
 SELECT u.id, u.name, u.surname, u.phone, u.email,
+       COALESCE(CASE WHEN u.photo_key IS NOT NULL
+                     THEN '/api/v1/users/' || u.id::text || '/photo'
+                     END, '')::text AS photo_path,
        COALESCE(u.name, '') AS first_name,
        bool_or(s.is_owner) AS is_owner,
        CASE WHEN bool_or(s.is_owner) THEN 'owner'
@@ -199,23 +210,21 @@ GROUP BY u.id
 ORDER BY u.name ASC NULLS LAST, u.surname ASC NULLS LAST, u.id ASC;
 
 -- Объекты области для шита фильтров: те же свойства, что отдаёт лента,
--- плюс фото-аватар карточки — первое по времени фото (канон #582);
--- '' = фото нет (COALESCE: sqlc верит NOT NULL колонке, а lateral LEFT
--- JOIN промахивается в NULL). Сужение property_ids — тот же фильтр ленты.
+-- плюс фото-аватар карточки (канон #582). С приватными фото (ADR 0065,
+-- #1227) аватар один на объект и живёт в properties.photo_key; наружу —
+-- относительный same-origin путь стриминга через бэкенд.
+-- '' = фото нет (COALESCE: sqlc верит NOT NULL колонке, а CASE по NULL-ключу
+-- промахивается в NULL). Сужение property_ids — тот же фильтр ленты.
 --
 -- name: ListHistoryFilterObjects :many
 SELECT p.id,
        p.name,
        p.address,
-       COALESCE(ph.url, '') AS photo_url
+       p.type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     END, '')::text AS photo_url
 FROM properties p
-LEFT JOIN LATERAL (
-    SELECT pp.url
-    FROM property_photos pp
-    WHERE pp.property_id = p.id
-    ORDER BY pp.created_at, pp.id
-    LIMIT 1
-) ph ON true
 WHERE actor_can_read_property(p.id, sqlc.arg('actor')::uuid)
   AND (sqlc.arg('property_ids')::text = ''
        OR p.id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[]))

@@ -17,6 +17,10 @@ import (
 const (
 	scanPropertyName    = "Квартира на Ленина"
 	scanPropertyAddress = "г. Москва, ул. Ленина, 1"
+	// The card snapshot's type — the payload glyph's key (#1244).
+	scanPropertyType = "apartment"
+	// The card snapshot's photo — the same-origin streaming path (#1275).
+	scanPropertyPhoto = "/api/v1/properties/0194a3f8-0000-7000-8000-0000000000ff/photo"
 	// The fixture rule title and the shared due/reminder body the due-leg
 	// and reminder-leg tests assert.
 	scanRentTitle        = "Аренда квартиры"
@@ -214,6 +218,8 @@ func dueTarget(paymentID uuid.UUID, date time.Time, title string) PaymentScanTar
 		PropertyID:      uuid.Must(uuid.NewV7()),
 		PropertyName:    scanPropertyName,
 		PropertyAddress: scanPropertyAddress,
+		PropertyType:    scanPropertyType,
+		PropertyPhoto:   scanPropertyPhoto,
 		OwnerID:         uuid.Must(uuid.NewV7()),
 	}
 }
@@ -237,6 +243,8 @@ func TestPaymentsPublisher_PublishesDuePayment(t *testing.T) {
 		PropertyID:      uuid.Must(uuid.NewV7()),
 		PropertyName:    scanPropertyName,
 		PropertyAddress: scanPropertyAddress,
+		PropertyType:    scanPropertyType,
+		PropertyPhoto:   scanPropertyPhoto,
 		OwnerID:         uuid.Must(uuid.NewV7()),
 	}
 	h.source.due[zoneMSK] = []PaymentScanTarget{target}
@@ -272,6 +280,8 @@ func TestPaymentsPublisher_PublishesDuePayment(t *testing.T) {
 		assert.Equal(t, target.PropertyID, n.Payload.Property.ID)
 		assert.Equal(t, "Квартира на Ленина", n.Payload.Property.Name)
 		assert.Equal(t, "г. Москва, ул. Ленина, 1", n.Payload.Property.Address)
+		assert.Equal(t, scanPropertyType, n.Payload.Property.Type, "the card's glyph type snapshot (#1244)")
+		assert.Equal(t, scanPropertyPhoto, n.Payload.Property.Photo, "the card's photo snapshot (#1275)")
 		require.NotNil(t, n.Payload.PaymentID)
 		assert.Equal(t, rule, *n.Payload.PaymentID)
 		require.NotNil(t, n.Payload.PaymentDate)
@@ -295,6 +305,8 @@ func TestPaymentsPublisher_PublishesOverduePayment(t *testing.T) {
 		PropertyID:      uuid.Must(uuid.NewV7()),
 		PropertyName:    scanPropertyName,
 		PropertyAddress: scanPropertyAddress,
+		PropertyType:    scanPropertyType,
+		PropertyPhoto:   scanPropertyPhoto,
 		OwnerID:         uuid.Must(uuid.NewV7()),
 	}
 	h.source.overdue[zoneMSK] = []PaymentScanTarget{target}
@@ -514,6 +526,8 @@ func TestPaymentsPublisher_DeliverPaymentDuePublishes(t *testing.T) {
 		PropertyID:      uuid.Must(uuid.NewV7()),
 		PropertyName:    scanPropertyName,
 		PropertyAddress: scanPropertyAddress,
+		PropertyType:    scanPropertyType,
+		PropertyPhoto:   scanPropertyPhoto,
 		OwnerID:         uuid.Must(uuid.NewV7()),
 	}
 	h.source.live["due|"+rule.String()+"|2026-09-20"] = target
@@ -597,6 +611,8 @@ func TestPaymentsPublisher_PublishesReminderPayment(t *testing.T) {
 		PropertyID:      uuid.Must(uuid.NewV7()),
 		PropertyName:    scanPropertyName,
 		PropertyAddress: scanPropertyAddress,
+		PropertyType:    scanPropertyType,
+		PropertyPhoto:   scanPropertyPhoto,
 		OwnerID:         uuid.Must(uuid.NewV7()),
 	}
 	h.source.reminder[zoneMSK] = []PaymentScanTarget{target}
@@ -709,6 +725,8 @@ func TestPaymentsPublisher_PublishesAutoPaidPayment(t *testing.T) {
 		PropertyID:      uuid.Must(uuid.NewV7()),
 		PropertyName:    scanPropertyName,
 		PropertyAddress: scanPropertyAddress,
+		PropertyType:    scanPropertyType,
+		PropertyPhoto:   scanPropertyPhoto,
 		OwnerID:         uuid.Must(uuid.NewV7()),
 	}
 	h.source.autoPaid[zoneMSK] = []PaymentScanTarget{target}

@@ -30,7 +30,6 @@ import (
 // passes stores.tx through when it calls either in its transaction.
 type txStores struct {
 	repo    PropertyRepository
-	photos  PropertyPhotoRepository
 	limiter SubscriptionLimiter
 	audit   auditapp.Recorder
 	history historyapp.Recorder
@@ -48,7 +47,6 @@ type txStores struct {
 // repository is a change to one constructor call, not several.
 type txStoreFactory struct {
 	repo    PropertyRepository
-	photos  PropertyPhotoRepository
 	limiter SubscriptionLimiter
 	audit   auditapp.Recorder
 	history historyapp.Recorder
@@ -64,7 +62,6 @@ type txStoreFactory struct {
 // (standard Go pattern for a factory returning an unexported type).
 func NewTxStoreFactory(
 	repo PropertyRepository,
-	photos PropertyPhotoRepository,
 	limiter SubscriptionLimiter,
 	audit auditapp.Recorder,
 	history historyapp.Recorder,
@@ -78,7 +75,6 @@ func NewTxStoreFactory(
 	}
 	return txStoreFactory{
 		repo:    repo,
-		photos:  photos,
 		limiter: limiter,
 		audit:   audit,
 		history: history,
@@ -110,9 +106,6 @@ func (f *txStoreFactory) runInTx(ctx context.Context, work func(*txStores) error
 			audit:   f.audit.WithTx(tx),
 			history: f.history.WithTx(tx),
 			tx:      tx,
-		}
-		if f.photos != nil {
-			stores.photos = f.photos.WithTx(tx)
 		}
 		var err error
 		if f.limiter != nil {

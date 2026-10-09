@@ -3,12 +3,14 @@ package application
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"testing"
 
 	"github.com/google/uuid"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/objectstorage"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -34,16 +36,20 @@ func (r *recordingRecorder) WithTx(transaction.Tx) auditapp.Recorder { return r 
 // fakes, returning every piece the tests need to assert behavior.
 type profileHarness struct {
 	*fakeStores
-	svc   *ProfileService
-	audit *recordingRecorder
+	svc     *ProfileService
+	audit   *recordingRecorder
+	photos  *objectstorage.FakeStorage
+	checker *fakeSharedChecker
 }
 
 func newProfileHarness(t *testing.T) *profileHarness {
 	t.Helper()
 	stores := newFakeStores()
 	audit := &recordingRecorder{}
-	svc := NewProfileService(stores.factory(audit))
-	return &profileHarness{fakeStores: stores, svc: svc, audit: audit}
+	photos := objectstorage.NewFakeStorage()
+	checker := &fakeSharedChecker{}
+	svc := NewProfileService(stores.factory(audit), photos, checker, slog.New(slog.DiscardHandler))
+	return &profileHarness{fakeStores: stores, svc: svc, audit: audit, photos: photos, checker: checker}
 }
 
 // seedProfileUser creates a verified owner in the fake user repo and returns it.
@@ -196,7 +202,7 @@ func TestProfileService_UsesRunInTx(t *testing.T) {
 	sessions := newFakeSessionRepo()
 	beginner := &fakeBeginner{}
 	factory := NewTxStoreFactory(users, codes, attempts, sessions, newFakeGrantRepo(), &recordingRecorder{}, &fakeUoW{beginner: beginner})
-	svc := NewProfileService(factory)
+	svc := NewProfileService(factory, objectstorage.NewFakeStorage(), &fakeSharedChecker{}, slog.New(slog.DiscardHandler))
 	seedProfileUser(t, users.fakeUserRepo)
 
 	if _, err := svc.UpdateProfile(context.Background(),

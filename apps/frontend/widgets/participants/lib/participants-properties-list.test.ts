@@ -32,13 +32,14 @@ describe('userPropertyRows', () => {
     expect(rows.map((row) => row.id)).toEqual(['shared-edit', 'shared-view']);
   });
 
-  it('ряд несёт титул, адрес, фото, роль и бейдж: full_access → «Редактирование»', () => {
+  it('ряд несёт титул, адрес, фото, тип, роль и бейдж: full_access → «Редактирование»', () => {
     const rows = userPropertyRows([
       makeProperty({
         id: 'p1',
         name: 'Кофейня',
         address: 'ул. Мира, 15',
-        photos: [{ id: 'ph', url: '/photo.jpg' }],
+        photoUrl: '/photo.jpg',
+        type: 'commercial',
         access: { role: 'full_access' },
       }),
     ]);
@@ -47,6 +48,8 @@ describe('userPropertyRows', () => {
       title: 'Кофейня',
       address: 'ул. Мира, 15',
       photoUrl: '/photo.jpg',
+      // Тип travels в ряд — ключ глифа-плейсхолдера аватара (#1244).
+      type: 'commercial',
       role: 'full_access',
       badge: { tone: 'neutral', label: 'Редактирование', icon: 'edit' },
     });
@@ -75,6 +78,7 @@ describe('sortUserPropertyRows', () => {
     title: name,
     address: '',
     photoUrl: undefined,
+    type: 'apartment' as const,
     role: 'viewer',
     badge: { tone: 'neutral', label: 'Просмотр', icon: 'eye' },
   }));

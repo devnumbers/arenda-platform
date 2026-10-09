@@ -2,183 +2,315 @@ package http
 
 import (
 	"bytes"
-	"encoding/json"
-	"errors"
-	"fmt"
+	"context"
+	"io"
+	"log/slog"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
-	"net/textproto"
 	"strings"
 	"testing"
+	"time"
 
-	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
+	"github.com/google/uuid"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
+	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/photo"
+	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
+	storageshared "github.com/nambers/arenda-planform/apps/backend/internal/shared/storage"
+	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
-// Builds a POST request with a multipart/form-data body: an optional leading
-// text field, then a "file" part carrying filename, content type and payload.
-// The contentType argument is empty for a part without one.
-func buildPhotoUploadRequest(t *testing.T, leadingTextField bool, filename, contentType string, payload []byte) *http.Request {
-	t.Helper()
-	var buf bytes.Buffer
-	mw := multipart.NewWriter(&buf)
-	if leadingTextField {
-		if err := mw.WriteField("caption", "ignored"); err != nil {
-			t.Fatalf("write text field: %v", err)
-		}
-	}
-	header := textproto.MIMEHeader{}
-	header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="file"; filename=%q`, filename))
-	if contentType != "" {
-		header.Set("Content-Type", contentType)
-	}
-	part, err := mw.CreatePart(header)
-	if err != nil {
-		t.Fatalf("create file part: %v", err)
-	}
-	if _, err := part.Write(payload); err != nil {
-		t.Fatalf("write file part: %v", err)
-	}
-	if err := mw.Close(); err != nil {
-		t.Fatalf("close multipart writer: %v", err)
-	}
+// The wire contract of the property photo endpoints (ADR 0065, ticket
+// #1227): the upload is multipart (field `file`) validated by the shared
+// upload seam before any storage write; the serving endpoint answers 304
+// from the key-hash ETag and streams the private bytes with a private
+// cache policy.
 
-	r := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/upload", &buf)
-	r.Header.Set("Content-Type", mw.FormDataContentType())
+func photoTestPropertyID() uuid.UUID {
+	return uuid.MustParse("22222222-2222-2222-2222-222222222222")
+}
+
+// photoWireRepo serves one property with the given photo key.
+type photoWireRepo struct {
+	property domain.Property
+}
+
+func (r *photoWireRepo) Create(_ context.Context, _ uuid.UUID, p domain.Property) (domain.Property, error) {
+	return p, nil
+}
+
+func (r *photoWireRepo) GetByIDAndOwner(_ context.Context, _, _ uuid.UUID) (domain.Property, error) {
+	return r.property, nil
+}
+
+func (r *photoWireRepo) GetByIDAndOwnerForUpdate(_ context.Context, _, _ uuid.UUID) (domain.Property, error) {
+	return r.property, nil
+}
+
+func (r *photoWireRepo) GetByID(_ context.Context, _ uuid.UUID) (domain.Property, error) {
+	return r.property, nil
+}
+
+func (r *photoWireRepo) GetByIDForUpdate(_ context.Context, _ uuid.UUID) (domain.Property, error) {
+	return r.property, nil
+}
+
+func (r *photoWireRepo) ListActiveByOwner(context.Context, uuid.UUID) ([]domain.Property, error) {
+	return nil, nil
+}
+
+func (r *photoWireRepo) ListArchivedByOwner(context.Context, uuid.UUID) ([]domain.Property, error) {
+	return nil, nil
+}
+
+func (r *photoWireRepo) SearchVisible(context.Context, uuid.UUID, propertiesapp.PropertySearchQuery) ([]domain.Property, error) {
+	return nil, nil
+}
+
+func (r *photoWireRepo) Update(_ context.Context, _ uuid.UUID, p domain.Property) (domain.Property, error) {
+	return p, nil
+}
+
+func (r *photoWireRepo) SetPin(_ context.Context, _, _ uuid.UUID, _ *time.Time) (domain.Property, error) {
+	return r.property, nil
+}
+
+func (r *photoWireRepo) SetPropertyPhoto(_ context.Context, id, _ uuid.UUID, key, contentType *string) (domain.Property, error) {
+	r.property.PhotoKey = key
+	r.property.PhotoContentType = contentType
+	return r.property, nil
+}
+
+func (r *photoWireRepo) Archive(context.Context, uuid.UUID, uuid.UUID) error   { return nil }
+func (r *photoWireRepo) Unarchive(context.Context, uuid.UUID, uuid.UUID) error { return nil }
+func (r *photoWireRepo) CountActiveByOwner(context.Context, uuid.UUID) (int, error) {
+	return 0, nil
+}
+
+func (r *photoWireRepo) CountArchivedByOwner(context.Context, uuid.UUID) (int, error) {
+	return 0, nil
+}
+
+func (r *photoWireRepo) CountByOwnerAndType(context.Context, uuid.UUID, domain.PropertyType) (int, error) {
+	return 0, nil
+}
+
+func (r *photoWireRepo) Delete(context.Context, uuid.UUID, uuid.UUID) error { return nil }
+
+func (r *photoWireRepo) WithTx(transaction.Tx) propertiesapp.PropertyRepository { return r }
+
+// photoWireStorage records the storage traffic of the wire tests.
+type photoWireStorage struct {
+	puts    []string
+	deletes []string
+}
+
+func (s *photoWireStorage) Put(_ context.Context, key string, data io.Reader, _ string, _ int64) error {
+	b, err := io.ReadAll(data)
+	if err != nil {
+		return err
+	}
+	s.puts = append(s.puts, key+":"+string(b))
+	return nil
+}
+
+func (s *photoWireStorage) Open(_ context.Context, key string) (body io.ReadCloser, size int64, contentType string, err error) {
+	if !strings.Contains(key, "with-photo") {
+		return nil, 0, "", storageshared.ErrNotFound
+	}
+	return io.NopCloser(strings.NewReader("jpeg-bytes")), 10, "image/jpeg", nil
+}
+
+func (s *photoWireStorage) Delete(_ context.Context, key string) error {
+	s.deletes = append(s.deletes, key)
+	return nil
+}
+
+// photoWirePolicy treats the actor as the owner: the wire tests exercise the
+// HTTP contract, not the access matrix (the service tests own that).
+type photoWirePolicy struct{}
+
+func (photoWirePolicy) Role(context.Context, uuid.UUID, uuid.UUID) (sharedpolicy.Role, error) {
+	return sharedpolicy.RoleOwner, nil
+}
+
+func (photoWirePolicy) RoleForProperty(context.Context, uuid.UUID, uuid.UUID) (sharedpolicy.Role, error) {
+	return sharedpolicy.RoleOwner, nil
+}
+
+func photoWireHandler(t *testing.T, repo *photoWireRepo, storage *photoWireStorage) *PropertyHandlers {
+	t.Helper()
+	svc := propertiesapp.NewPropertyService(
+		repo, storage,
+		propertiesapp.NewTxStoreFactory(repo, nil, nil, nil, nil),
+		nil, photoWirePolicy{}, discardLogger(),
+	)
+	return NewPropertyHandlers(svc, nil, discardLogger(), nil)
+}
+
+func discardLogger() *slog.Logger { return slog.New(slog.DiscardHandler) }
+
+func photoGetRequest(t *testing.T, target, ifNoneMatch string) *http.Request {
+	t.Helper()
+	ctx := httpsupport.WithUserID(context.Background(), uuid.Must(uuid.NewV7()))
+	r := httptest.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if ifNoneMatch != "" {
+		r.Header.Set("If-None-Match", ifNoneMatch)
+	}
 	return r
 }
 
-func TestReadPhotoUpload(t *testing.T) {
+func buildUploadBody(t *testing.T, fieldName, value string) (body *bytes.Buffer, contentType string) {
+	t.Helper()
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	if fieldName != "" {
+		fw, err := w.CreateFormFile("file", "photo.jpg")
+		if err != nil {
+			t.Fatalf("create form file: %v", err)
+		}
+		if _, err := fw.Write([]byte(value)); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+	} else if err := w.WriteField("caption", "no file here"); err != nil {
+		t.Fatalf("write field: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("close writer: %v", err)
+	}
+	return &buf, w.FormDataContentType()
+}
+
+func photoUploadRequest(t *testing.T, body *bytes.Buffer, contentType string) *http.Request {
+	t.Helper()
+	ctx := httpsupport.WithUserID(context.Background(), uuid.Must(uuid.NewV7()))
+	r := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/v1/properties/"+photoTestPropertyID().String()+"/photo", body)
+	r.Header.Set("Content-Type", contentType)
+	return r
+}
+
+func TestPropertyPhotoUpload_WireContract(t *testing.T) {
 	t.Parallel()
 
-	t.Run("returns the file part", func(t *testing.T) {
-		t.Parallel()
-		r := buildPhotoUploadRequest(t, false, "cottage.jpg", "image/jpeg", []byte("jpeg-bytes"))
+	handler := photoWireHandler(t, &photoWireRepo{}, &photoWireStorage{})
 
-		filename, contentType, data, err := readPhotoUpload(r)
-		if err != nil {
-			t.Fatalf("readPhotoUpload: %v", err)
-		}
-		if filename != "cottage.jpg" {
-			t.Errorf("filename = %q, want cottage.jpg", filename)
-		}
-		if contentType != "image/jpeg" {
-			t.Errorf("contentType = %q, want image/jpeg", contentType)
-		}
-		if !bytes.Equal(data, []byte("jpeg-bytes")) {
-			t.Errorf("data = %q, want jpeg-bytes", data)
+	t.Run("unsupported format is a 400", func(t *testing.T) {
+		t.Parallel()
+		body, ct := buildUploadBody(t, "file", "<svg xmlns=\"http://www.w3.org/2000/svg\"/>")
+		rr := httptest.NewRecorder()
+		handler.UploadPropertyPhoto(rr, photoUploadRequest(t, body, ct), photoTestPropertyID())
+
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400", rr.Code)
 		}
 	})
 
-	t.Run("skips a leading text field", func(t *testing.T) {
+	t.Run("missing file field is a 400", func(t *testing.T) {
 		t.Parallel()
-		r := buildPhotoUploadRequest(t, true, "cottage.png", "image/png", []byte("png-bytes"))
+		body, ct := buildUploadBody(t, "", "")
+		rr := httptest.NewRecorder()
+		handler.UploadPropertyPhoto(rr, photoUploadRequest(t, body, ct), photoTestPropertyID())
 
-		_, _, data, err := readPhotoUpload(r)
-		if err != nil {
-			t.Fatalf("readPhotoUpload: %v", err)
-		}
-		if !bytes.Equal(data, []byte("png-bytes")) {
-			t.Errorf("data = %q, want png-bytes", data)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400", rr.Code)
 		}
 	})
 
-	t.Run("accepts a file of exactly the size limit", func(t *testing.T) {
+	t.Run("oversized file is a 400", func(t *testing.T) {
 		t.Parallel()
-		r := buildPhotoUploadRequest(t, false, "edge.webp", "image/webp", bytes.Repeat([]byte{0xab}, propertiesapp.MaxPhotoSize))
+		big := strings.Repeat("x", photo.MaxSize+1)
+		body, ct := buildUploadBody(t, "file", big)
+		rr := httptest.NewRecorder()
+		handler.UploadPropertyPhoto(rr, photoUploadRequest(t, body, ct), photoTestPropertyID())
 
-		if _, _, _, err := readPhotoUpload(r); err != nil {
-			t.Fatalf("readPhotoUpload at the limit: %v", err)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400", rr.Code)
 		}
 	})
 
-	t.Run("rejects an oversized file as invalid input", func(t *testing.T) {
+	t.Run("not a multipart form is a 400", func(t *testing.T) {
 		t.Parallel()
-		r := buildPhotoUploadRequest(t, false, "huge.jpg", "image/jpeg", bytes.Repeat([]byte{0xcd}, propertiesapp.MaxPhotoSize+1))
-
-		_, _, _, err := readPhotoUpload(r)
-		if !errors.Is(err, propertiesapp.ErrInvalidInput) {
-			t.Fatalf("error = %v, want propertiesapp.ErrInvalidInput", err)
-		}
-	})
-
-	t.Run("missing file field", func(t *testing.T) {
-		t.Parallel()
-		var buf bytes.Buffer
-		mw := multipart.NewWriter(&buf)
-		if err := mw.WriteField("caption", "no file here"); err != nil {
-			t.Fatalf("write text field: %v", err)
-		}
-		if err := mw.Close(); err != nil {
-			t.Fatalf("close multipart writer: %v", err)
-		}
-		r := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/upload", &buf)
-		r.Header.Set("Content-Type", mw.FormDataContentType())
-
-		if _, _, _, err := readPhotoUpload(r); !errors.Is(err, errPhotoUploadMissing) {
-			t.Fatalf("error = %v, want errPhotoUploadMissing", err)
-		}
-	})
-
-	t.Run("non-multipart body", func(t *testing.T) {
-		t.Parallel()
-		r := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/upload", strings.NewReader("plain"))
+		ctx := httpsupport.WithUserID(context.Background(), uuid.Must(uuid.NewV7()))
+		r := httptest.NewRequestWithContext(ctx, http.MethodPost,
+			"/api/v1/properties/"+photoTestPropertyID().String()+"/photo", strings.NewReader("hello"))
 		r.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		handler.UploadPropertyPhoto(rr, r, photoTestPropertyID())
 
-		if _, _, _, err := readPhotoUpload(r); !errors.Is(err, errPhotoUploadForm) {
-			t.Fatalf("error = %v, want errPhotoUploadForm", err)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400", rr.Code)
 		}
 	})
 }
 
-// TestRejectPhotoUpload_WireContract pins the HTTP responses for each
-// readPhotoUpload failure so the streaming rewrite keeps the previous
-// ParseMultipartForm/FormFile contract.
-func TestRejectPhotoUpload_WireContract(t *testing.T) {
+func TestPropertyPhotoGet_ServesAndCaches(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name       string
-		err        error
-		wantDetail string
-	}{
-		{
-			name:       "oversized file maps like the service size check",
-			err:        propertiesapp.NewPhotoTooLargeError(propertiesapp.MaxPhotoSize + 1),
-			wantDetail: "Некорректные данные объекта",
-		},
-		{
-			name:       "missing file field",
-			err:        errPhotoUploadMissing,
-			wantDetail: "Требуется файл",
-		},
-		{
-			name:       "malformed form",
-			err:        errPhotoUploadForm,
-			wantDetail: "Некорректная форма загрузки файла",
-		},
+	key := "photos/01987654-3210-7abc-9def-0123456789ab-with-photo.jpg"
+	property := domain.Property{
+		ID:      photoTestPropertyID(),
+		Name:    "Test",
+		Address: "Test Address",
+		Type:    domain.PropertyTypeApartment,
+		Status:  domain.PropertyStatusActive,
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+	property.PhotoKey = &key
+	repo := &photoWireRepo{property: property}
+	storage := &photoWireStorage{}
+	handler := photoWireHandler(t, repo, storage)
 
-			h := newPropertyHandlersForMapping(t)
-			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/upload", nil)
-			rr := httptest.NewRecorder()
+	target := "/api/v1/properties/" + photoTestPropertyID().String() + "/photo"
 
-			h.rejectPhotoUpload(rr, req, tt.err)
+	t.Run("404 without a photo", func(t *testing.T) {
+		t.Parallel()
+		noPhoto := domain.Property{ID: property.ID, Name: property.Name, Address: property.Address, Type: property.Type}
+		noPhotoRepo := &photoWireRepo{property: noPhoto}
+		noPhotoHandler := photoWireHandler(t, noPhotoRepo, storage)
+		rr := httptest.NewRecorder()
+		noPhotoHandler.GetPropertyPhoto(rr, photoGetRequest(t, target, ""), photoTestPropertyID())
+		if rr.Code != http.StatusNotFound {
+			t.Fatalf("status = %d, want 404", rr.Code)
+		}
+	})
 
-			if rr.Code != http.StatusBadRequest {
-				t.Fatalf("status = %d, want %d: %s", rr.Code, http.StatusBadRequest, rr.Body.String())
-			}
-			var prob openapi.Problem
-			if err := json.Unmarshal(rr.Body.Bytes(), &prob); err != nil {
-				t.Fatalf("decode problem: %v\nbody: %s", err, rr.Body.String())
-			}
-			if prob.Detail == nil || *prob.Detail != tt.wantDetail {
-				t.Fatalf("Problem.Detail = %v, want %q", prob.Detail, tt.wantDetail)
-			}
-		})
-	}
+	t.Run("304 from the key-hash etag without a storage read", func(t *testing.T) {
+		t.Parallel()
+		etag := storageshared.ETagOf(key)
+		rr := httptest.NewRecorder()
+		handler.GetPropertyPhoto(rr, photoGetRequest(t, target, etag), photoTestPropertyID())
+		if rr.Code != http.StatusNotModified {
+			t.Fatalf("status = %d, want 304", rr.Code)
+		}
+		if got := rr.Header().Get("Cache-Control"); got != "private, max-age=300" {
+			t.Errorf("cache-control = %q, want private, max-age=300", got)
+		}
+	})
+
+	t.Run("200 streams the private bytes", func(t *testing.T) {
+		t.Parallel()
+		rr := httptest.NewRecorder()
+		handler.GetPropertyPhoto(rr, photoGetRequest(t, target, ""), photoTestPropertyID())
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200", rr.Code)
+		}
+		if got := rr.Header().Get("Content-Type"); got != "image/jpeg" {
+			t.Errorf("content-type = %q, want image/jpeg", got)
+		}
+		if got := rr.Header().Get("Cache-Control"); got != "private, max-age=300" {
+			t.Errorf("cache-control = %q, want private, max-age=300", got)
+		}
+		if got := rr.Header().Get("ETag"); got != storageshared.ETagOf(key) {
+			t.Errorf("etag = %q, want the key hash", got)
+		}
+		if !strings.Contains(rr.Body.String(), "jpeg-bytes") {
+			t.Errorf("body = %q, want the stored bytes", rr.Body.String())
+		}
+	})
 }
+
+var (
+	_ propertiesapp.PropertyRepository = (*photoWireRepo)(nil)
+	_ storageshared.PhotoStorage       = (*photoWireStorage)(nil)
+)

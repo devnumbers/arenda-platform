@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/photo"
 )
 
 // ParticipantScopeProperty is one property of the reading actor's participant
@@ -21,6 +22,11 @@ type ParticipantScopeProperty struct {
 	ID      uuid.UUID
 	OwnerID uuid.UUID
 	Title   string
+	// Type and PhotoPath feed the leg's self-sufficient avatar (остаток
+	// #1244 п.3, решение #1286): the placeholder glyph's key and the photo's
+	// same-origin streaming path (ADR 0065).
+	Type      string
+	PhotoPath string
 }
 
 // ParticipantMembershipRow is a raw membership row inside the scope.
@@ -61,12 +67,17 @@ type AccessiblePropertiesCounter interface {
 }
 
 // ParticipantProperty is one leg of a participant's access: the property with
-// its per-object role and lifecycle status (active/suspended/pending).
+// its per-object role and lifecycle status (active/suspended/pending). Type
+// and PhotoUrl make the leg self-sufficient for the avatar (решение #1286) —
+// the client needs no /properties join, and a cold cache still renders the
+// glyph and the photo.
 type ParticipantProperty struct {
 	PropertyID uuid.UUID
 	Title      string
 	Role       domain.Role
 	Status     domain.ParticipantEntryStatus
+	Type       string
+	PhotoURL   string
 }
 
 // Participant is the «Участник (владельца)» read model (issue #693): a person
@@ -84,6 +95,10 @@ type Participant struct {
 	// всем объектам» / «доступно N объектов» / «превышен лимит объектов»).
 	AggregateStatus domain.ParticipantAggregateStatus
 	AccessibleCount int
+	// PhotoUrl is the registered user's profile photo streaming path (ADR
+	// 0065, решение #1286); empty for a pending row or a user without a
+	// photo.
+	PhotoURL string
 	// Properties are the access legs sorted by title.
 	Properties []ParticipantProperty
 }
@@ -178,6 +193,15 @@ func (s *ParticipantService) Summary(ctx context.Context, actor uuid.UUID) (Part
 	return summary, nil
 }
 
+// scopeMeta is the scope properties' display data: the title every leg
+// carries plus the avatar pair (the type and the photo path) that keeps the
+// leg self-sufficient (решение #1286).
+type scopeMeta struct {
+	titles map[uuid.UUID]string
+	types  map[uuid.UUID]string
+	photos map[uuid.UUID]string
+}
+
 // participantBuilder accumulates one person's legs while the raw scope rows
 // are collated.
 type participantBuilder struct {
@@ -220,10 +244,16 @@ func (s *ParticipantService) buildParticipants(ctx context.Context, actor uuid.U
 		return nil, nil
 	}
 	ids := make([]uuid.UUID, 0, len(scope))
-	titles := make(map[uuid.UUID]string, len(scope))
+	meta := scopeMeta{
+		titles: make(map[uuid.UUID]string, len(scope)),
+		types:  make(map[uuid.UUID]string, len(scope)),
+		photos: make(map[uuid.UUID]string, len(scope)),
+	}
 	for _, p := range scope {
 		ids = append(ids, p.ID)
-		titles[p.ID] = p.Title
+		meta.titles[p.ID] = p.Title
+		meta.types[p.ID] = p.Type
+		meta.photos[p.ID] = p.PhotoPath
 	}
 
 	memberships, err := s.read.ListMembershipsByProperties(ctx, ids)
@@ -241,7 +271,7 @@ func (s *ParticipantService) buildParticipants(ctx context.Context, actor uuid.U
 	// list is not their own participant (issue #693).
 	delete(byUser, actor)
 	s.resolveDisplayData(ctx, byUser, byEmail)
-	return assembleParticipants(byUser, byEmail, titles, len(scope), match), nil
+	return assembleParticipants(byUser, byEmail, meta, len(scope), match), nil
 }
 
 // collateParticipants folds the raw membership and invitation rows into
@@ -315,6 +345,9 @@ func (s *ParticipantService) resolveDisplayData(
 			continue
 		}
 		b.participant.DisplayName = displayName(u)
+		// The photo path travels with the display data (ADR 0065, решение
+		// #1286): an empty string when the user has no photo.
+		b.participant.PhotoURL = photo.UserPhotoPath(id, u.PhotoKey)
 		if s.emails == nil {
 			continue
 		}
@@ -341,7 +374,7 @@ func (s *ParticipantService) resolveDisplayData(
 // emails last) — the client re-sorts for its «Имя» chip.
 func assembleParticipants(
 	byUser map[uuid.UUID]*participantBuilder, byEmail map[string]*participantBuilder,
-	titles map[uuid.UUID]string, scopePropertyCount int, match string,
+	meta scopeMeta, scopePropertyCount int, match string,
 ) []Participant {
 	matchSelect := func(p Participant) bool {
 		if match == "" {
@@ -355,12 +388,12 @@ func assembleParticipants(
 	out := make([]Participant, 0, len(byUser)+len(byEmail))
 	for _, b := range byUser {
 		if matchSelect(b.participant) {
-			out = append(out, b.finish(titles, scopePropertyCount))
+			out = append(out, b.finish(meta, scopePropertyCount))
 		}
 	}
 	for _, b := range byEmail {
 		if matchSelect(b.participant) {
-			out = append(out, b.finish(titles, scopePropertyCount))
+			out = append(out, b.finish(meta, scopePropertyCount))
 		}
 	}
 	slices.SortFunc(out, func(a, c Participant) int {
@@ -379,19 +412,21 @@ func assembleParticipants(
 
 // finish computes the aggregate badge and the title-annotated, title-ordered
 // property legs of one person's aggregate.
-func (b *participantBuilder) finish(titles map[uuid.UUID]string, scopePropertyCount int) Participant {
+func (b *participantBuilder) finish(meta scopeMeta, scopePropertyCount int) Participant {
 	b.participant.AggregateStatus, b.participant.AccessibleCount = domain.ComputeParticipantAggregate(b.legs, scopePropertyCount)
 	legs := slices.Clone(b.legs)
 	slices.SortFunc(legs, func(a, c domain.ParticipantEntry) int {
-		return strings.Compare(titles[a.PropertyID], titles[c.PropertyID])
+		return strings.Compare(meta.titles[a.PropertyID], meta.titles[c.PropertyID])
 	})
 	b.participant.Properties = make([]ParticipantProperty, 0, len(legs))
 	for _, leg := range legs {
 		b.participant.Properties = append(b.participant.Properties, ParticipantProperty{
 			PropertyID: leg.PropertyID,
-			Title:      titles[leg.PropertyID],
+			Title:      meta.titles[leg.PropertyID],
 			Role:       leg.Role,
 			Status:     leg.Status,
+			Type:       meta.types[leg.PropertyID],
+			PhotoURL:   meta.photos[leg.PropertyID],
 		})
 	}
 	return b.participant

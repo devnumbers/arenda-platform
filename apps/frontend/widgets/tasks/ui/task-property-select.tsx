@@ -1,10 +1,10 @@
 'use client';
 
-import type { JSX } from 'react';
-import { BoldHome, BoldObjects, Cancel, Check, RadioFalse, RadioTrue } from '@/shared/assets/icons';
+import { useState, type JSX } from 'react';
+import { BoldObjects, Cancel, Check, RadioFalse, RadioTrue } from '@/shared/assets/icons';
 import { Button, CircleIcon, IconButton, PageContent, StickyBottomBar, TopNav, TopNavTitle } from '@/shared/ui/design';
 import { useProperties } from '@/features/properties';
-import { filterEditableProperties } from '@/entities/property';
+import { filterEditableProperties, propertyTypeIcons, type PropertyType } from '@/entities/property';
 import { ObjectLoadErrorCard, ObjectRowsSkeleton } from './tasks-property-select';
 
 /**
@@ -61,7 +61,8 @@ export function TaskPropertySelectPage({
               key={property.id}
               title={property.name}
               subtitle={property.address}
-              photoUrl={property.photos?.[0]?.url}
+              photoUrl={property.photoUrl ?? undefined}
+              type={property.type}
               checked={draft === property.id}
               onCheck={() => onDraftChange(property.id)}
             />
@@ -80,13 +81,14 @@ export function TaskPropertySelectPage({
 
 /** Строка-радио страницы «Выбрать объект» (компонент Figma «Row Button»,
  * 936:39347): аватар Category Icon 44px (#F3F4F6 + белое кольцо 2.5px) с
- * иконкой 24 — Icon/Bold/Objects у «Общей задачи», Icon/Bold/Home
- * (BoldHome) у объектов, или фото; заголовок 16/500, подпись 14 #6F787C,
- * кружок выбора RadioFalse/RadioTrue справа. */
+ * иконкой 24 — Icon/Bold/Objects у «Общей задачи», глиф типа объекта
+ * (Category Icon, карта #1217) у объектов, или фото; заголовок 16/500,
+ * подпись 14 #6F787C, кружок выбора RadioFalse/RadioTrue справа. */
 function ObjectRowButton({
   title,
   subtitle,
   photoUrl,
+  type,
   isGeneral = false,
   checked,
   onCheck,
@@ -94,10 +96,16 @@ function ObjectRowButton({
   readonly title: string;
   readonly subtitle: string;
   readonly photoUrl?: string;
+  readonly type?: PropertyType;
   readonly isGeneral?: boolean;
   readonly checked: boolean;
   readonly onCheck: () => void;
 }): JSX.Element {
+  // Выборка из статичного реестра, не вызов: react-hooks/static-components.
+  // Битое фото (404 стрима) откатывается к глифу — канон #1275 (#1286).
+  const [photoBroken, setPhotoBroken] = useState(false);
+
+  const Glyph = type !== undefined ? propertyTypeIcons[type] : BoldObjects;
   return (
     <button
       type="button"
@@ -107,12 +115,17 @@ function ObjectRowButton({
       className="flex w-full cursor-pointer items-center gap-3 py-3 text-left outline-none transition-opacity hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:opacity-80"
     >
       <CircleIcon variant="white" aria-hidden className="relative overflow-hidden rounded-full">
-        {photoUrl !== undefined ? (
-          <img src={photoUrl} alt="" className="h-full w-full object-cover" />
+        {photoUrl !== undefined && !photoBroken ? (
+          <img
+              src={photoUrl}
+              alt=""
+              className="h-full w-full object-cover"
+              onError={() => setPhotoBroken(true)}
+            />
         ) : isGeneral ? (
           <BoldObjects className="h-6 w-6 text-content-tertiary" />
         ) : (
-          <BoldHome className="h-6 w-6 text-content-tertiary" />
+          <Glyph className="h-6 w-6 text-content-tertiary" />
         )}
       </CircleIcon>
       <span className="flex min-w-0 flex-1 flex-col gap-1">

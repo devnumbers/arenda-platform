@@ -20,9 +20,8 @@ func pinTestService(t *testing.T, repo PropertyRepository, policy sharedpolicy.P
 	t.Helper()
 	return NewPropertyService(
 		repo,
-		fakePropertyPhotoRepo{},
-		fakePropertyPhotoStorage{},
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil),
+		newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(repo, nil),
 		fakePropertyClock{now: time.Date(2026, 9, 8, 12, 0, 0, 0, time.UTC)},
 		policy,
 		nil,

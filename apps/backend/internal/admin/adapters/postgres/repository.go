@@ -254,9 +254,20 @@ func (r *AdminRepository) propertyViewFromRow(
 		Description: description,
 		Attributes:  attrs,
 		Status:      status,
+		PhotoURL:    adminPropertyPhotoURL(propertyID, row.PhotoKey),
 		CreatedAt:   row.CreatedAt.Time,
 		UpdatedAt:   row.UpdatedAt.Time,
 	}, nil
+}
+
+// adminPropertyPhotoURL is the property photo's same-origin streaming path
+// (ADR 0065); empty without a photo. The storage key never leaves the
+// backend — the admin sees the photo through the same streaming endpoint.
+func adminPropertyPhotoURL(propertyID uuid.UUID, key pgtype.Text) string {
+	if !key.Valid {
+		return ""
+	}
+	return "/api/v1/properties/" + propertyID.String() + "/photo"
 }
 
 // ListContacts implements ContactRepository.ListContacts: the property's

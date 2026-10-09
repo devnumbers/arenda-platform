@@ -116,6 +116,10 @@ type ContactStore interface {
 	// GetByID loads one card by id alone; ErrNotFound when unknown. The
 	// service gates the result before it travels anywhere.
 	GetByID(ctx context.Context, id uuid.UUID) (domain.Contact, error)
+	// GetByIDForUpdate is the row-locked variant for the photo mutations
+	// (ADR 0065): the previous photo key is captured under the lock inside
+	// the transaction.
+	GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.Contact, error)
 	// List returns the actor's visible contacts per the query's scope,
 	// search and sort (ADR 0054): the flat book scope reads the merged
 	// visibility — the actor's own cards plus the cards bound to properties
@@ -134,6 +138,11 @@ type ContactStore interface {
 	// Delete removes the card keyed by (id, owner_id); zero rows deleted is
 	// ErrNotFound for the same reason.
 	Delete(ctx context.Context, id, ownerID uuid.UUID) error
+	// SetPhoto writes the card's photo columns in one UPDATE (ADR 0065):
+	// a key and the sniffed content type, or nils to clear. The scope is
+	// the book owner; existence and the edit capability are proven by the
+	// caller.
+	SetPhoto(ctx context.Context, id, ownerID uuid.UUID, key, contentType *string) (domain.Contact, error)
 	WithTx(tx transaction.Tx) (ContactStore, error)
 }
 

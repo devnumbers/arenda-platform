@@ -15,6 +15,7 @@ function itemDto(overrides: Partial<HistoryItemDto> = {}): HistoryItemDto {
     actor_id: 'user-1',
     actor_name: 'Иван Иванов',
     actor_email: 'ivan@example.com',
+    actor_photo_url: null,
     actor_role: 'owner',
     kind: 'payment',
     action: 'payment.created',
@@ -51,6 +52,30 @@ describe('mapHistoryItem', () => {
     expect(entry.actorId).toBeNull();
   });
 
+  it('фото актёра и фото участника фильтров — same-origin путь в camelCase (решение #1286)', () => {
+    const entry = mapHistoryItem(
+      itemDto({ actor_photo_url: '/api/v1/users/user-1/photo' }),
+    );
+    expect(entry.actorPhotoUrl).toBe('/api/v1/users/user-1/photo');
+    expect(mapHistoryItem(itemDto({ actor_photo_url: null })).actorPhotoUrl).toBeNull();
+
+    const options = mapHistoryFilterOptions({
+      participants: [
+        {
+          id: 'user-1',
+          name: 'Иван Иванов',
+          email: 'ivan@example.com',
+          first_name: 'Иван',
+          photo_url: '/api/v1/users/user-1/photo',
+          is_owner: true,
+          role: 'owner',
+        },
+      ],
+      objects: [],
+    } satisfies HistoryFiltersDto);
+    expect(options.participants[0]?.photoUrl).toBe('/api/v1/users/user-1/photo');
+  });
+
   it('фрагмент без ссылки остаётся без ссылки', () => {
     const entry = mapHistoryItem(itemDto({ segments: [{ text: 'Описание обновлено' }] }));
     expect(entry.segments).toEqual([{ text: 'Описание обновлено' }]);
@@ -66,6 +91,7 @@ describe('mapHistoryFilterOptions', () => {
           name: 'Иван Иванов',
           email: 'ivan@example.com',
           first_name: 'Иван',
+          photo_url: null,
           is_owner: true,
           role: 'owner',
         },
@@ -74,13 +100,14 @@ describe('mapHistoryFilterOptions', () => {
           name: 'Анна Сидорова',
           email: 'anna@example.com',
           first_name: 'Анна',
+          photo_url: null,
           is_owner: false,
           role: 'viewer',
         },
       ],
       objects: [
-        { id: 'property-1', name: 'Моя квартира', address: 'Ленина 1', photo_url: 'https://cdn/x.jpg' },
-        { id: 'property-2', name: 'Гараж', address: '', photo_url: '' },
+        { id: 'property-1', name: 'Моя квартира', address: 'Ленина 1', photo_url: 'https://cdn/x.jpg', type: 'apartment' },
+        { id: 'property-2', name: 'Гараж', address: '', photo_url: '', type: 'garage' },
       ],
     } satisfies HistoryFiltersDto);
     expect(options.participants).toEqual([
@@ -89,6 +116,7 @@ describe('mapHistoryFilterOptions', () => {
         name: 'Иван Иванов',
         email: 'ivan@example.com',
         firstName: 'Иван',
+        photoUrl: null,
         isOwner: true,
         role: 'owner',
       },
@@ -97,13 +125,14 @@ describe('mapHistoryFilterOptions', () => {
         name: 'Анна Сидорова',
         email: 'anna@example.com',
         firstName: 'Анна',
+        photoUrl: null,
         isOwner: false,
         role: 'viewer',
       },
     ]);
     expect(options.objects).toEqual([
-      { id: 'property-1', name: 'Моя квартира', address: 'Ленина 1', photoUrl: 'https://cdn/x.jpg' },
-      { id: 'property-2', name: 'Гараж', address: '', photoUrl: '' },
+      { id: 'property-1', name: 'Моя квартира', address: 'Ленина 1', photoUrl: 'https://cdn/x.jpg', type: 'apartment' },
+      { id: 'property-2', name: 'Гараж', address: '', photoUrl: '', type: 'garage' },
     ]);
   });
 });

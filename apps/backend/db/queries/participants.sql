@@ -19,7 +19,15 @@
 -- function fails there instead of opening a silent privacy hole.
 
 -- name: ListParticipantScopeProperties :many
-SELECT p.id, p.owner_id, p.name AS title
+-- The scope rows carry the leg avatar pair (решение #1286, остаток #1244
+-- п.3): the property type — the placeholder glyph's key — and the photo's
+-- same-origin streaming path (ADR 0065), so the participant read model's
+-- legs are self-sufficient and the client needs no /properties join (a cold
+-- cache no longer renders BoldHome).
+SELECT p.id, p.owner_id, p.name AS title, p.type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     END, '')::text AS photo_path
 FROM properties p
 WHERE p.status <> 'archived'
   AND actor_can_manage(p.id, sqlc.arg('actor_id')::uuid)

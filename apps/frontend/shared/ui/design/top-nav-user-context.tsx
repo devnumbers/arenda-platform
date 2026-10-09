@@ -11,6 +11,9 @@ import { createContext, useContext, type JSX, type ReactNode } from 'react';
  * остаются на текстовом плейсхолдере. */
 export type TopNavUser = {
   readonly name?: string;
+  /** Путь стриминга фото профиля (ADR 0065, решение #1286): крыло несёт
+   * фото, пока оно есть; null — фото нет или юзер не прочитан. */
+  readonly photoUrl?: string | null;
   readonly pending?: boolean;
 };
 

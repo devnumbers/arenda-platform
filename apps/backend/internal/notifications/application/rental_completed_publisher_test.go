@@ -132,6 +132,8 @@ func scanTarget(rentalID uuid.UUID, plannedEnd time.Time, name string) RentalCom
 		PropertyID:      uuid.Must(uuid.NewV7()),
 		PropertyName:    name,
 		PropertyAddress: scanPropertyAddress,
+		PropertyType:    scanPropertyType,
+		PropertyPhoto:   scanPropertyPhoto,
 		OwnerID:         uuid.Must(uuid.NewV7()),
 	}
 }
@@ -174,6 +176,8 @@ func TestRentalCompletedPublisher_PublishesNeedsAttentionRental(t *testing.T) {
 		assert.Equal(t, target.PropertyID, n.Payload.Property.ID)
 		assert.Equal(t, "Квартира на Ленина", n.Payload.Property.Name)
 		assert.Equal(t, "г. Москва, ул. Ленина, 1", n.Payload.Property.Address)
+		assert.Equal(t, scanPropertyType, n.Payload.Property.Type, "the card's glyph type snapshot (#1244)")
+		assert.Equal(t, scanPropertyPhoto, n.Payload.Property.Photo, "the card's photo snapshot (#1275)")
 		require.NotNil(t, n.Payload.RentalID)
 		assert.Equal(t, rental, *n.Payload.RentalID)
 		assert.Nil(t, n.Payload.Actor, "a system scan has no initiator")

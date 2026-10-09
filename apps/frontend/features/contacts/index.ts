@@ -11,6 +11,9 @@ export {
   useContact,
   useUpdateContact,
   useDeleteContact,
+  useUploadContactPhoto,
+  useDeleteContactPhoto,
+  useContactPhotoBuster,
 } from './api/hooks';
 export type { ContactBookSort, ContactBookOrder } from './api/queries';
 export type { ContactsPageData } from './api/hooks';
@@ -23,6 +26,11 @@ export {
   isContactFormField,
 } from './lib/contact-form';
 export type { ContactFormFields } from './lib/contact-form';
+export {
+  type ContactPhotoStage,
+  contactPhotoDisplay,
+  contactPhotoStageAfterRemove,
+} from './lib/photo';
 export {
   CONTACTS_SEARCH_DEBOUNCE_MS,
   ContactsErrorCard,

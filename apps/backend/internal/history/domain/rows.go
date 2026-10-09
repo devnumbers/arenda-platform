@@ -455,6 +455,35 @@ func ContactDeleted(entityID uuid.UUID, fullName string) Entry {
 	}
 }
 
+// ContactPhotoAdded builds the card photo row (ADR 0065): the ФИО snapshot,
+// never the phone (ADR 0061 §5).
+func ContactPhotoAdded(entityID uuid.UUID, fullName string) Entry {
+	return Entry{
+		Kind:       KindContact,
+		Action:     ActionContactPhotoAdded,
+		BaseAction: BaseAdded,
+		Segments: Segments{
+			{Text: "Добавлено фото контакта: "},
+			{Text: fullName, Link: entityLink(KindContact, entityID)},
+		},
+		Context: map[string]any{ctxKeyName: fullName},
+	}
+}
+
+// ContactPhotoDeleted builds the card photo deletion row.
+func ContactPhotoDeleted(entityID uuid.UUID, fullName string) Entry {
+	return Entry{
+		Kind:       KindContact,
+		Action:     ActionContactPhotoDeleted,
+		BaseAction: BaseDeleted,
+		Segments: Segments{
+			{Text: "Удалено фото контакта: "},
+			{Text: fullName, Link: entityLink(KindContact, entityID)},
+		},
+		Context: map[string]any{ctxKeyName: fullName},
+	}
+}
+
 // ContactMovedFrom builds the source leg of the cross-property move row
 // (тикет #856): this object's feed lost the card to another one. The ФИО is
 // the action-time snapshot, the link points at the card's own page.

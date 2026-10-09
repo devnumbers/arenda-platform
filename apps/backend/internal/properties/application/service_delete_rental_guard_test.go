@@ -79,9 +79,8 @@ func deleteGuardFixture(
 	wrapped := journalingDeleteRepo{fakePropertyRepo: repo, journal: journal}
 	svc = NewPropertyService(
 		wrapped,
-		fakePropertyPhotoRepo{},
-		fakePropertyPhotoStorage{},
-		newPropertyTestFactory(wrapped, fakePropertyPhotoRepo{}, nil),
+		newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(wrapped, nil),
 		fakePropertyClock{now: time.Date(2026, 9, 12, 0, 0, 0, 0, time.UTC)},
 		testOwnerPolicy{},
 		nil,

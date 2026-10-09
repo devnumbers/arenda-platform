@@ -206,3 +206,16 @@ FROM properties;
 -- name: DeleteProperty :exec
 DELETE FROM properties
 WHERE id = $1 AND owner_id = $2;
+
+-- name: SetPropertyPhoto :one
+-- The object photo write (ADR 0065, ticket #1227): the key and the sniffed
+-- content type move together; a NULL key clears the photo — one image per
+-- entity, no gallery. The scope is the property's owner (ADR 0028): the
+-- actor may be the full-access member; existence and the edit capability
+-- (plus the archived-object guard) are proven by the caller under the row
+-- lock.
+UPDATE properties
+SET photo_key = $3,
+    photo_content_type = $4
+WHERE id = $1 AND owner_id = $2
+RETURNING *;

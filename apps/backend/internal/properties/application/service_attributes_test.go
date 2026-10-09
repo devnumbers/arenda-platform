@@ -22,11 +22,8 @@ func ptr[T any](v T) *T { return new(v) }
 func newAttrService(repo *lockingFakePropertyRepo) *PropertyService {
 	return NewPropertyService(
 		repo,
-		fakePropertyPhotoRepo{},
-		fakePropertyPhotoStorage{},
-		newPropertyTestFactory(repo,
-			fakePropertyPhotoRepo{},
-			nil),
+		newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(repo, nil),
 		fakePropertyClock{now: time.Now()},
 		testOwnerPolicy{},
 		nil,
@@ -39,10 +36,8 @@ func newAttrService(repo *lockingFakePropertyRepo) *PropertyService {
 func newAttrCreateService(repo *lockingFakePropertyRepo) *PropertyService {
 	return NewPropertyService(
 		repo,
-		fakePropertyPhotoRepo{},
-		fakePropertyPhotoStorage{},
+		newFakePropertyPhotoStorage(),
 		newPropertyTestFactory(repo,
-			fakePropertyPhotoRepo{},
 			fakeSubscriptionLimiter{limit: 100}),
 		fakePropertyClock{now: time.Now()},
 		testOwnerPolicy{},

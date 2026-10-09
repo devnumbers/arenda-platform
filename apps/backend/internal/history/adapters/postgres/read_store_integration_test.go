@@ -1025,20 +1025,13 @@ func TestReadStore_FilterOptionsObjects(t *testing.T) {
 	property := seedProperty(t, pool, owner)
 	seedProperty(t, pool, stranger)
 
-	// Фото-аватар: два фото, берётся первое по времени.
+	// Фото-аватар: с приватными фото (ADR 0065) он один на объект и живёт в
+	// properties.photo_key; наружу — same-origin путь стриминга.
 	if _, err := pool.Exec(t.Context(),
-		`INSERT INTO property_photos (id, property_id, url, created_at)
-		 VALUES ($1, $2, 'http://x/second.jpg', now() + interval '2 seconds')`,
-		uuid.Must(uuid.NewV7()), property,
+		`UPDATE properties SET photo_key = $2, photo_content_type = 'image/jpeg' WHERE id = $1`,
+		property, "photos/01987654-3210-7abc-9def-0123456789ab.jpg",
 	); err != nil {
-		t.Fatalf("seed photo 1: %v", err)
-	}
-	if _, err := pool.Exec(t.Context(),
-		`INSERT INTO property_photos (id, property_id, url, created_at)
-		 VALUES ($1, $2, 'http://x/first.jpg', now())`,
-		uuid.Must(uuid.NewV7()), property,
-	); err != nil {
-		t.Fatalf("seed photo 2: %v", err)
+		t.Fatalf("seed photo: %v", err)
 	}
 
 	svc := newReadStack(pool)
@@ -1050,8 +1043,8 @@ func TestReadStore_FilterOptionsObjects(t *testing.T) {
 	if len(opts.Objects) != 1 || opts.Objects[0].ID != property {
 		t.Fatalf("objects: want only the visible one, got %+v", opts.Objects)
 	}
-	if opts.Objects[0].PhotoURL != "http://x/first.jpg" {
-		t.Fatalf("photo avatar: want the oldest photo, got %q", opts.Objects[0].PhotoURL)
+	if opts.Objects[0].PhotoURL != "/api/v1/properties/"+property.String()+"/photo" {
+		t.Fatalf("photo avatar: want the streaming path, got %q", opts.Objects[0].PhotoURL)
 	}
 }
 

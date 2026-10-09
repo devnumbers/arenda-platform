@@ -7,14 +7,19 @@ import { ROUTES } from '@/shared/config/routes';
 import { ApiError } from '@/shared/api/errors';
 import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
+import { readPhotoDataUrl } from '@/shared/lib/photo';
 import { formatPhoneDisplay } from '@/shared/lib/phone';
 import {
   buildContactUpdateCommand,
   contactFormErrors,
   contactFormReady,
   contactServerFieldErrors,
+  type ContactPhotoStage,
+  contactPhotoStageAfterRemove,
   useContact,
+  useDeleteContactPhoto,
   useUpdateContact,
+  useUploadContactPhoto,
   type ContactFormFields,
 } from '@/features/contacts';
 import type { Contact } from '@/entities/contact';
@@ -42,7 +47,8 @@ import {
  * предзаполнены карточкой; телефон в маске. Шапка «✕ | Изменить контакт |
  * ✓» (✓ — быстрая отправка, как на создании), внизу — «Сохранить».
  * Сохранение — PATCH полной командой (пустая строка очищает поле,
- * propertyId: null снимает привязку), после — возврат на карточку с
+ * propertyId: null снимает привязку) и фото-мутации черновика (тикет
+ * #1229, ADR 0065) параллельно, после — возврат на карточку с
  * инвалидацией книги. Доступ: правит тот, кому можно мутировать (кебаб
  * карточки смотрящему не рисуется), сервер — последняя инстанция.
  *
@@ -180,7 +186,11 @@ function EditHeader({ onBack }: { readonly onBack: () => void }): JSX.Element {
 }
 
 /** Форма правки: рендерится, когда карточка загружена — предзаполнение
- * из неё (паттерн payment-edit-screen). */
+ * из неё (паттерн payment-edit-screen). Фото — часть черновика (stage,
+ * решение владельца 08.10 с #1228): применяются кнопками сохранения
+ * вместе с полями — PATCH карточки и фото-эндпоинты (ADR 0065, тикет
+ * #1229) уходят параллельно, у каждого сбоя свой сигнал, применённая
+ * часть гасит свою грязь; назад — только когда сохранено всё. */
 function ContactEditForm({
   backHref,
   contact,
@@ -190,6 +200,8 @@ function ContactEditForm({
 }): JSX.Element {
   const router = useRouter();
   const updateContact = useUpdateContact(contact.id);
+  const uploadPhoto = useUploadContactPhoto();
+  const deletePhoto = useDeleteContactPhoto();
 
   const [form, setForm] = useState<ContactFormFields>(() => formFromContact(contact));
   const [submitAttempted, setSubmitAttempted] = useState(false);
@@ -198,6 +210,24 @@ function ContactEditForm({
   >({});
   const [objectSelectOpen, setObjectSelectOpen] = useState(false);
   const [propertyIdDraft, setPropertyIdDraft] = useState<string | null>(null);
+  // Незавершённое изменение фото в черновике: уходит сабмитом, уход без
+  // сохранения сервер не трогает. Превью staged-замены — data URL (CSP
+  // img-src 'self' data:, ADR 0065).
+  const [photoStage, setPhotoStage] = useState<ContactPhotoStage | null>(null);
+
+  const handlePhotoFile = (file: File): void => {
+    void readPhotoDataUrl(file).then((previewUrl) => {
+      if (previewUrl !== null) {
+        setPhotoStage({ kind: 'file', file, previewUrl });
+      }
+    });
+  };
+
+  const handlePhotoRemove = (): void => {
+    // С живым серверным фото — запланированное удаление; без него
+    // (снятый staged-файл) сбрасывать нечего — stage обнуляется.
+    setPhotoStage(contactPhotoStageAfterRemove(contact.photoUrl ?? null));
+  };
 
   const ready = contactFormReady(form);
   const clientErrors = submitAttempted ? contactFormErrors(form) : {};
@@ -214,21 +244,67 @@ function ContactEditForm({
     );
   };
 
+  // Фото-мутации сабмита в полёте — сохранение глушится целиком (один
+  // photo_key у карточки, параллельные загрузка и удаление недопустимы).
+  const photoBusy = uploadPhoto.isPending || deletePhoto.isPending;
+  const submitting = updateContact.isPending || photoBusy;
+
   const submit = async (): Promise<void> => {
     setSubmitAttempted(true);
     const errors = contactFormErrors(form);
     if (!ready || Object.keys(errors).length > 0) {
       return;
     }
-    try {
-      await updateContact.mutateAsync(buildContactUpdateCommand(form));
+    // Поля и фото уходят параллельно, каждый частью своей правки: не-dirty
+    // часть сети не касается. Каждый сбой — свой сигнал (поля — ошибки
+    // полей и тост сценария, фото — свой тост), применённая часть гасит
+    // свою грязь; назад уходим, только когда сохранено всё.
+    const fieldsWork: Promise<boolean> = updateContact
+      .mutateAsync(buildContactUpdateCommand(form))
+      .then(
+        () => true,
+        (error: unknown) => {
+          if (error instanceof ApiError && error.fieldErrors !== undefined) {
+            setServerErrors(contactServerFieldErrors(error.fieldErrors));
+          }
+          notify.scenarios.propertyContacts.updateError(error);
+          return false;
+        },
+      );
+    const photoWork: Promise<boolean> | null =
+      photoStage?.kind === 'file'
+        ? uploadPhoto
+            .mutateAsync({ id: contact.id, file: photoStage.file })
+            .then(
+              () => true,
+              (error: unknown) => {
+                notify.scenarios.propertyContacts.photoUpdateError(error);
+                return false;
+              },
+            )
+        : photoStage?.kind === 'remove'
+          ? deletePhoto
+              .mutateAsync({ id: contact.id })
+              .then(
+                () => true,
+                (error: unknown) => {
+                  notify.scenarios.propertyContacts.photoDeleteError(error);
+                  return false;
+                },
+              )
+          : null;
+
+    const [fieldsSaved, photoSaved] = await Promise.all([
+      fieldsWork,
+      photoWork ?? Promise.resolve(true),
+    ]);
+
+    if (photoSaved && photoStage !== null) {
+      setPhotoStage(null);
+    }
+    if (fieldsSaved && photoSaved) {
       notify.scenarios.propertyContacts.updated();
       goBack(router, backHref);
-    } catch (error: unknown) {
-      if (error instanceof ApiError && error.fieldErrors !== undefined) {
-        setServerErrors(contactServerFieldErrors(error.fieldErrors));
-      }
-      notify.scenarios.propertyContacts.updateError(error);
     }
   };
 
@@ -267,7 +343,7 @@ function ContactEditForm({
           <IconButton
             icon={<Check />}
             label="Сохранить изменения"
-            disabled={!ready || updateContact.isPending}
+            disabled={!ready || submitting}
             onClick={() => void submit()}
           />
         }
@@ -278,6 +354,12 @@ function ContactEditForm({
       <PageContent>
         <ContactForm
           form={form}
+          contactId={contact.id}
+          photoUrl={contact.photoUrl}
+          photoStage={photoStage}
+          photoBusy={photoBusy}
+          onPhotoFile={handlePhotoFile}
+          onPhotoRemove={handlePhotoRemove}
           errorOf={errorOf}
           onFieldChange={update}
           onOpenObjectSelect={() => {
@@ -294,7 +376,8 @@ function ContactEditForm({
         <StickyBottomBar>
           <Button
             className="w-full"
-            loading={updateContact.isPending}
+            loading={submitting}
+            disabled={submitting}
             onClick={() => void submit()}
           >
             Сохранить

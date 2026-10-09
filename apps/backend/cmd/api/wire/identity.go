@@ -17,12 +17,16 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer"
 	mailerfake "github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer/fake"
 	mailersmtp "github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer/smtp"
+	storageshared "github.com/nambers/arenda-planform/apps/backend/internal/shared/storage"
 )
 
 // Identity holds the identity module's services and event publisher wired by
 // WireIdentity.
 type Identity struct {
-	UserRepo       *identitypg.UserRepository
+	UserRepo *identitypg.UserRepository
+	// PhotoStorage is the process-wide private-photos object storage (ADR
+	// 0065), shared with the properties and contacts services downstream.
+	PhotoStorage   storageshared.PhotoStorage
 	CodeRepo       *identitypg.LoginCodeRepository
 	AttemptRepo    *identitypg.AttemptRepository
 	SessionRepo    *identitypg.SessionRepository
@@ -57,6 +61,14 @@ func WireIdentity(
 	eventDispatcher *events.InProcessDispatcher,
 	rateLimits *RateLimiters,
 ) (*Identity, error) {
+	// The one private-photos object storage of the process (ADR 0065): the
+	// profile service is its first consumer, properties and contacts reuse
+	// the same instance through the Identity handle.
+	photoStorage, err := WirePhotoStorage(ctx, p)
+	if err != nil {
+		return nil, err
+	}
+
 	userRepo := identitypg.NewUserRepository(p.DB, p.Encryptor)
 	codeRepo := identitypg.NewLoginCodeRepository(p.DB, p.Encryptor)
 	attemptRepo := identitypg.NewAttemptRepository(p.DB, p.Encryptor)
@@ -155,7 +167,10 @@ func WireIdentity(
 		},
 	)
 
-	profileService := identityapp.NewProfileService(factory)
+	// The shared-property checker gates the foreign profile-photo reads
+	// (ADR 0065, решение #1286): the user repository answers the
+	// symmetric shared-readable-property query.
+	profileService := identityapp.NewProfileService(factory, photoStorage, userRepo, p.Logger)
 
 	logoutService := identityapp.NewLogoutService(
 		factory,
@@ -185,5 +200,6 @@ func WireIdentity(
 		Logout:         logoutService,
 		Sessions:       sessionsService,
 		EmailMailer:    emailMailer,
+		PhotoStorage:   photoStorage,
 	}, nil
 }

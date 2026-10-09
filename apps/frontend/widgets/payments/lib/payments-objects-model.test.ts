@@ -12,6 +12,7 @@ function makeObject(
     propertyId: 'property-1',
     name: 'Моя квартира',
     address: 'Новатаров, 8',
+    type: 'apartment',
     pinnedAt: null,
     photoUrl: null,
     autoPayRules: [],

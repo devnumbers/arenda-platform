@@ -14,7 +14,13 @@ export function TopNavUserProvider({ children }: { readonly children: ReactNode 
   const { data: user, isError } = useMe();
 
   return (
-    <TopNavUserContext.Provider value={{ name: user?.name ?? undefined, pending: !isError && user === undefined }}>
+    <TopNavUserContext.Provider
+      value={{
+        name: user?.name ?? undefined,
+        photoUrl: user?.photoUrl ?? null,
+        pending: !isError && user === undefined,
+      }}
+    >
       {children}
     </TopNavUserContext.Provider>
   );

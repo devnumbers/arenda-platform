@@ -4,8 +4,6 @@ import { useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft,
-  BoldHome,
-  BoldUser,
   Check,
   Copy,
   SmallArrowRight,
@@ -15,11 +13,16 @@ import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
 import { contactFullName, type Contact } from '@/entities/contact';
 import type { Property } from '@/entities/property';
-import { useContact, useDeleteContact } from '@/features/contacts';
+import { propertyPermissions, propertyTypeIcons } from '@/entities/property';
+import {
+  useContact,
+  useContactPhotoBuster,
+  useDeleteContact,
+} from '@/features/contacts';
 import { useProperty } from '@/features/properties';
-import { propertyPermissions } from '@/entities/property';
 import { useCopiedHint } from '@/shared/lib/hooks/use-copied-hint';
-import { ConfirmDialog, IconButton, PageContent, TopNav, TopNavTitle } from '@/shared/ui/design';
+import { photoDisplayUrl } from '@/shared/lib/photo';
+import { ConfirmDialog, IconButton, PageContent, TopNav, TopNavTitle, UserAvatar } from '@/shared/ui/design';
 import { contactValueRows } from '../lib/contact-detail-model';
 import { ContactKebabMenu } from './contact-kebab-menu';
 import { ContactDetailSkeleton, ContactsErrorCard } from './contacts-states';
@@ -152,13 +155,21 @@ function ContactCardBody({
   const router = useRouter();
   const rows = contactValueRows(contact);
   const boundPropertyId = contact.propertyId;
+  // Выборка из статичного реестра, не вызов: react-hooks/static-components.
+  const BoundPropertyGlyph = boundProperty !== undefined ? propertyTypeIcons[boundProperty.type] : undefined;
+  // Бастер кэша выдачи (тикет #1229, ADR 0065): правка фото возвращает
+  // на карточку с тем же путём выдачи — без ?v=N <img> показал бы прежние
+  // байты из кэша браузера до 5 минут.
+  const photoBuster = useContactPhotoBuster(contact.id);
+  const photoUrl =
+    contact.photoUrl !== undefined
+      ? photoDisplayUrl(contact.photoUrl, photoBuster)
+      : null;
 
   return (
     <div className="flex flex-col gap-6 px-6 pb-8 pt-2">
       <div className="flex justify-center">
-        <div aria-hidden className="flex h-24 w-24 items-center justify-center rounded-full bg-surface-muted">
-          <BoldUser className="h-13 w-13 text-content-tertiary" />
-        </div>
+        <UserAvatar size="hero" photoUrl={photoUrl} />
       </div>
 
       <section className="rounded-card bg-surface-muted px-6 py-4">
@@ -212,15 +223,15 @@ function ContactCardBody({
                 aria-hidden
                 className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white"
               >
-                {boundProperty.photos?.[0]?.url !== undefined ? (
+                {boundProperty.photoUrl ? (
                   <img
-                    src={boundProperty.photos[0].url}
+                    src={boundProperty.photoUrl}
                     alt=""
                     className="h-full w-full object-cover"
                   />
-                ) : (
-                  <BoldHome className="h-6 w-6 text-content-tertiary" />
-                )}
+                ) : BoundPropertyGlyph !== undefined ? (
+                  <BoundPropertyGlyph className="h-6 w-6 text-content-tertiary" />
+                ) : null}
               </span>
               <span className="flex min-w-0 flex-col gap-1">
                 <span className="truncate text-base font-medium leading-[18px] text-content">

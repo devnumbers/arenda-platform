@@ -191,7 +191,7 @@ export function TopNav({
         {collapse?.trailing !== undefined && mobileWings && (
           <div className="hub-compact flex items-center desktop:hidden">{collapse.trailing}</div>
         )}
-        <UserButton name={wingName} pending={pending} />
+        <UserButton name={wingName} photoUrl={user?.photoUrl ?? null} pending={pending} />
       </div>
       {variant === 'search' ? (
         /* Поисковая шапка: слоты и поле — во всю ширину вьюпорта на мобайле

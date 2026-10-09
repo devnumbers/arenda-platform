@@ -627,7 +627,7 @@ export function PropertyDetailPage(): JSX.Element {
 
                 {!isLoading && !propertyQuery.isError && property && (
                     <>
-                        <PropertyMediaBlock name={property.name} address={property.address}>
+                        <PropertyMediaBlock name={property.name} address={property.address} photoUrl={property.photoUrl} type={property.type}>
                             {/* Пилюли шапки (#773): «В архиве» и/или роль
                              * доступа — ряд под адресом, канон 2200-97365
                              * и 1603-92103. */}
@@ -827,6 +827,7 @@ export function PropertyDetailPage(): JSX.Element {
                             <PropertyOwnerSection
                                 ownerName={property.access.ownerName}
                                 ownerEmail={property.access.ownerEmail}
+                                ownerPhotoUrl={property.access.ownerPhotoUrl}
                             />
                         )}
 

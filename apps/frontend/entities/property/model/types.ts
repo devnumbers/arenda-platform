@@ -14,20 +14,17 @@ export type PropertyType =
   | 'parking'
   | 'land';
 
-export type PropertyPhoto = {
-  readonly id: string;
-  readonly url: string;
-};
-
 export type PropertyAttributes = Readonly<Record<string, string | number>>;
 
-/** Контекст доступа актора к объекту: роль, имя и почта владельца (имя —
- * для чужих объектов на списках и детали; почта — только в детали чужого
- * объекта, контактный ряд владельца, Figma 2200-97365). */
+/** Контекст доступа актора к объекту: роль, имя, почта и фото владельца
+ * (имя — для чужих объектов на списках и детали; почта — только в детали
+ * чужого объекта, контактный ряд владельца, Figma 2200-97365; фото — путь
+ * стриминга профиля владельца, ADR 0065, решение #1286). */
 export type PropertyAccess = {
   readonly role: AccessRole;
   readonly ownerName?: string;
   readonly ownerEmail?: string;
+  readonly ownerPhotoUrl?: string | null;
 };
 
 /**
@@ -58,7 +55,9 @@ export type Property = {
   readonly description?: string;
   readonly attributes: PropertyAttributes;
   readonly status: PropertyStatus;
-  readonly photos?: PropertyPhoto[];
+  /** Путь приватного фото объекта (ADR 0065): same-origin стриминг через
+   * бэкенд; null — фото нет. */
+  readonly photoUrl?: string | null;
   readonly access?: PropertyAccess;
   readonly members_count: number;
   /** Момент создания (ISO date-time) — сортировка «По дате создания» (#586). */

@@ -13,8 +13,8 @@ import {
 import { useGuardedMutation } from '@/shared/lib/hooks/use-guarded-mutation';
 import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
-import { mapPropertyPhoto, mapPropertyResponse } from '@/entities/property';
-import type { Property, PropertyPhoto } from '@/entities/property';
+import { mapPropertyResponse } from '@/entities/property';
+import type { Property } from '@/entities/property';
 import { propertyKeys } from '@/shared/api/query-keys';
 import { keysetNextPageParam, type KeysetPage } from '@/shared/lib/keyset';
 import type { components } from '@/shared/api/dto';
@@ -25,6 +25,8 @@ type PropertiesResponse = components['schemas']['PropertiesResponse'];
 import {
   propertiesListQueryOptions,
   propertyDetailQueryOptions,
+  deletePropertyPhoto,
+  uploadPropertyPhoto,
   type PropertiesListResult,
 } from './queries';
 
@@ -36,7 +38,6 @@ export type {
 type PropertiesSearchResponse = components['schemas']['PropertiesSearchResponse'];
 type PropertyCreateRequest = components['schemas']['PropertyCreateRequest'];
 type PropertyUpdateRequest = components['schemas']['PropertyUpdateRequest'];
-type PropertyPhotoDto = components['schemas']['PropertyPhoto'];
 type AddressSuggestionsResponse =
   components['schemas']['AddressSuggestionsResponse'];
 type AddressSuggestion = components['schemas']['AddressSuggestion'];
@@ -278,43 +279,6 @@ export function useAddressSuggestions(
   });
 }
 
-export function useUploadPropertyPhoto(): UseMutationResult<
-  PropertyPhoto,
-  ApiError,
-  { propertyId: string; file: File }
-> {
-  return useGuardedMutation({
-    mutationFn: async ({ propertyId, file }) => {
-      const formData = new FormData();
-      formData.append('file', file);
-      return mapPropertyPhoto(
-        await apiClient<PropertyPhotoDto>(`/properties/${propertyId}/photos`, {
-          method: 'POST',
-          body: formData,
-        }),
-      );
-    },
-  });
-}
-
-export function useDeletePropertyPhoto(): UseMutationResult<
-  void,
-  ApiError,
-  { propertyId: string; photoId: string }
-> {
-  const queryClient = useQueryClient();
-  return useGuardedMutation({
-    mutationFn: ({ propertyId, photoId }) =>
-      apiClient<void>(`/properties/${propertyId}/photos/${photoId}`, {
-        method: 'DELETE',
-      }),
-    onSuccess: (_, { propertyId }) => {
-      void queryClient.invalidateQueries({ queryKey: propertyKeys.list });
-      void queryClient.invalidateQueries({ queryKey: propertyKeys.detail(propertyId) });
-    },
-  });
-}
-
 export function useDeleteProperty(): UseMutationResult<void, ApiError, { id: string }> {
   const queryClient = useQueryClient();
   return useGuardedMutation({
@@ -328,4 +292,96 @@ export function useDeleteProperty(): UseMutationResult<void, ApiError, { id: str
       queryClient.removeQueries({ queryKey: propertyKeys.detail(id) });
     },
   });
+}
+
+/**
+ * Загрузка/замена фото объекта (ADR 0065, тикет #1228): ответ несёт
+ * обновлённый объект — он сразу становится детальным кэшем (фото видно
+ * без рефетча), список инвалидается как обычная мутация объекта. Бастер
+ * photoBuster инкрементится рядом: путь выдачи не меняется, без него
+ * <img> показал бы прежние байты из кэша браузера (private, max-age=300).
+ */
+export function useUploadPropertyPhoto(): UseMutationResult<
+  Property,
+  ApiError,
+  { id: string; file: File }
+> {
+  const queryClient = useQueryClient();
+  return useGuardedMutation({
+    mutationFn: ({ id, file }) => uploadPropertyPhoto({ id, file }),
+    onSuccess: (property, { id }) => {
+      queryClient.setQueryData(propertyKeys.detail(id), property);
+      bumpPhotoBuster(queryClient, id);
+      void queryClient.invalidateQueries({ queryKey: propertyKeys.list });
+    },
+  });
+}
+
+/**
+ * Удаление фото объекта (ADR 0065): 204 без тела — деталь патчится
+ * локально (photoUrl без фото) и инвалидается вместе со списком; бастер
+ * инкрементится, чтобы повторная загрузка в окно кэша выдачи перечитала
+ * байты.
+ */
+export function useDeletePropertyPhoto(): UseMutationResult<
+  void,
+  ApiError,
+  { id: string }
+> {
+  const queryClient = useQueryClient();
+  return useGuardedMutation({
+    mutationFn: ({ id }) => deletePropertyPhoto({ id }),
+    onSuccess: (_, { id }) => {
+      queryClient.setQueryData<Property>(propertyKeys.detail(id), (prev) =>
+        prev === undefined ? prev : { ...prev, photoUrl: null },
+      );
+      bumpPhotoBuster(queryClient, id);
+      void queryClient.invalidateQueries({ queryKey: propertyKeys.list });
+      void queryClient.invalidateQueries({ queryKey: propertyKeys.detail(id) });
+    },
+  });
+}
+
+/** Инкремент бастера кэша выдачи (см. propertyKeys.photoBuster) — общая
+ * точка фото-мутаций: одна запись, все читатели перерисовывают src. */
+function bumpPhotoBuster(queryClient: ReturnType<typeof useQueryClient>, id: string): void {
+  queryClient.setQueryData<number>(propertyKeys.photoBuster(id), (version = 0) => version + 1);
+}
+
+/**
+ * Текущий бастер кэша выдачи фото объекта (тикет #1228): чтение из кэша
+ * без сети — пишут только фото-мутации (bumpPhotoBuster), ноль до первой
+ * мутации сессии. Подписка реактивна: слот перерисовывает src вместе с
+ * любым инкрементом.
+ */
+export function usePropertyPhotoBuster(id: string): number {
+  const { data } = useQuery({
+    queryKey: propertyKeys.photoBuster(id),
+    queryFn: () => 0,
+    enabled: false,
+    initialData: 0,
+    staleTime: Infinity,
+  });
+  return data;
+}
+
+/**
+ * Пункт «Объекты» единого хрома — подпись и адрес (карта #984): у базового
+ * тарифа с ровно одним живым своим объектом и пустым архивом это «Объект»
+ * со ссылкой на его страницу, иначе всегда «Объекты» на список. Тариф
+ * приходит снаружи (ScreenLayout читает useMe — фича не может тянуть auth).
+ * Архив дозапрашивается только базовому (правило считает и его), платным
+ * тарифам он не нужен. Хромовые поверхности (ScreenLayout → TabBar/
+ * DesktopSidebar) держат кэш тёплым с коротким staleTime, чтобы пункт
+ * жил без шторма запросов; пока данные не загружены — «Объекты» на список.
+ */
+export function usePropertiesNavItem(
+  tariffName: string | null | undefined,
+): PropertiesNavItem {
+  const { data } = useProperties({ staleTime: 60_000 });
+  const { data: archived } = useArchivedProperties({
+    enabled: tariffName === 'basic',
+    staleTime: 60_000,
+  });
+  return resolvePropertiesNavItem(tariffName, data, archived);
 }

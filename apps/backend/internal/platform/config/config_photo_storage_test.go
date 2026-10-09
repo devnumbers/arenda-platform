@@ -26,7 +26,6 @@ func clearPhotoStorageEnv(t *testing.T) {
 	t.Setenv("REGRU_S3_BUCKET", "")
 	t.Setenv("REGRU_S3_ACCESS_KEY", "")
 	t.Setenv("REGRU_S3_SECRET_KEY", "")
-	t.Setenv("REGRU_S3_PUBLIC_BASE_URL", "")
 }
 
 func TestPhotoStorageProviderFakeAllowedInProduction(t *testing.T) {
@@ -43,9 +42,6 @@ func TestPhotoStorageProviderFakeAllowedInProduction(t *testing.T) {
 	}
 	if cfg.PhotoStorageS3Enabled {
 		t.Fatal("expected S3 photo storage to be disabled")
-	}
-	if cfg.PhotoStoragePublicBaseURL != "https://rentlee.ru/uploads" {
-		t.Fatalf("expected fake public base URL, got %q", cfg.PhotoStoragePublicBaseURL)
 	}
 }
 

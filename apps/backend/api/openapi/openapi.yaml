@@ -118,6 +118,124 @@ paths:
           $ref: '#/components/responses/Conflict'
         '500':
           $ref: '#/components/responses/InternalServerError'
+  /me/photo:
+    get:
+      operationId: getMePhoto
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: >
+            The profile photo bytes, streamed by the backend (ADR 0065):
+            cookie-auth, Cache-Control private, ETag is the key hash — a
+            matching If-None-Match answers 304 without a storage read. Only
+            the owner reads it; showing the avatar to other users is a
+            separate decision outside this contract.
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        '304':
+          description: The client's ETag still matches the current photo.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      operationId: uploadMePhoto
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: >
+            The photo replaced (one image per profile, ADR 0065): the
+            previous object is removed best-effort, the response carries the
+            updated profile with the new photoUrl.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteMePhoto
+      security:
+        - sessionCookie: []
+      responses:
+        '204':
+          description: Photo deleted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /users/{userId}/photo:
+    get:
+      operationId: getUserPhoto
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: >
+            The profile photo bytes, streamed by the backend (ADR 0065;
+            решение владельца #1286 — то самое «показ участникам» из ADR
+            0065): читает сам пользователь и каждый, с кем их связывает
+            хотя бы один объект, читаемый обеими сторонами (ADR 0028,
+            derived read, симметрично). Нет связи или нет фото — один и тот
+            же 404: существование фото не раскрывается. Cookie-auth,
+            Cache-Control private, ETag — хеш ключа: совпавший
+            If-None-Match отвечает 304 без чтения хранилища.
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        '304':
+          description: The client's ETag still matches the current photo.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /me/phone/send-code:
     post:
       operationId: sendPhoneChangeCode
@@ -565,7 +683,43 @@ paths:
           $ref: '#/components/responses/NotFound'
         '403':
           $ref: '#/components/responses/SubscriptionBlocked'
-  /properties/{propertyId}/photos:
+  /properties/{propertyId}/photo:
+    get:
+      operationId: getPropertyPhoto
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: >
+            The property photo bytes, streamed by the backend (ADR 0065):
+            cookie-auth, Cache-Control private, ETag is the key hash — a
+            matching If-None-Match answers 304 without a storage read.
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        '304':
+          description: The client's ETag still matches the current photo.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
     post:
       operationId: uploadPropertyPhoto
       security:
@@ -589,33 +743,31 @@ paths:
                   type: string
                   format: binary
       responses:
-        '201':
-          description: Photo uploaded
+        '200':
+          description: >
+            The photo replaced (one image per entity, ADR 0065): the previous
+            object is removed best-effort, the response carries the updated
+            property with the new photo_url.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PropertyPhoto'
+                $ref: '#/components/schemas/PropertyResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
-  /properties/{propertyId}/photos/{photoId}:
     delete:
       operationId: deletePropertyPhoto
       security:
         - sessionCookie: []
       parameters:
         - name: propertyId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: photoId
           in: path
           required: true
           schema:
@@ -628,6 +780,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
   /contacts:
@@ -730,6 +884,107 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ContactsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /contacts/{contactId}/photo:
+    get:
+      operationId: getContactPhoto
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: contactId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: >
+            The contact card photo bytes, streamed by the backend (ADR 0065):
+            cookie-auth, Cache-Control private, ETag is the key hash — a
+            matching If-None-Match answers 304 without a storage read. Access
+            follows the card (ADR 0054): a bound card is readable by the
+            property's viewers, an unbound one by the book owner only.
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        '304':
+          description: The client's ETag still matches the current photo.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      operationId: uploadContactPhoto
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: contactId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: >
+            The photo replaced (one image per card, ADR 0065): the previous
+            object is removed best-effort, the response carries the updated
+            card with the new photoUrl.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContactResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteContactPhoto
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: contactId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Photo deleted
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -5319,6 +5574,13 @@ components:
           type: string
           nullable: true
           description: IANA timezone identifier, e.g. Europe/Moscow.
+        photoUrl:
+          type: string
+          nullable: true
+          description: >
+            The profile photo's same-origin streaming path (ADR 0065):
+            /api/v1/me/photo, served with the session cookie; null when the
+            profile has no photo. Only the owner reads it.
         subscription:
           $ref: '#/components/schemas/Subscription'
           nullable: true
@@ -6053,11 +6315,12 @@ components:
           $ref: '#/components/schemas/PropertyAttributes'
         status:
           $ref: '#/components/schemas/PropertyStatus'
-        photos:
-          type: array
+        photoUrl:
+          type: string
           nullable: true
-          items:
-            $ref: '#/components/schemas/PropertyPhoto'
+          description: >
+            The property photo's same-origin streaming path (ADR 0065):
+            /api/v1/properties/{id}/photo; null when the object has no photo.
         createdAt:
           type: string
           format: date-time
@@ -6384,6 +6647,15 @@ components:
             posture as SuspendedShared.owner_email. Present in the detail
             response only when the actor is not the owner; empty when the
             owner has no email or the resolution failed.
+        owner_photo_url:
+          type: string
+          nullable: true
+          description: >
+            The owner's profile photo same-origin streaming path (ADR 0065,
+            решение #1286): /api/v1/users/{userId}/photo — readable while the
+            reader shares a readable property with the owner. Null when the
+            owner has no photo or the resolution failed; present in the
+            detail response and on the shared list rows.
 
     PropertyResponse:
       type: object
@@ -6407,10 +6679,13 @@ components:
         access:
           allOf:
             - $ref: '#/components/schemas/PropertyAccessContext'
-        photos:
-          type: array
-          items:
-            $ref: '#/components/schemas/PropertyPhoto'
+        photo_url:
+          type: string
+          nullable: true
+          description: >
+            The property photo's same-origin streaming path (ADR 0065):
+            /api/v1/properties/{id}/photo, served with the session cookie;
+            null when the object has no photo.
         members_count:
           type: integer
           minimum: 0
@@ -6485,26 +6760,6 @@ components:
             The unfinished rental's planned end date («Осталось N месяцев» —
             the client counts the full months from today); null for an
             open-ended rental or without one.
-
-    PropertyPhoto:
-      type: object
-      required: [id, url]
-      properties:
-        id:
-          type: string
-          format: uuid
-        url:
-          type: string
-          format: uri
-
-    PropertyPhotosResponse:
-      type: object
-      required: [items]
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/PropertyPhoto'
 
     ContactCreateRequest:
       description: >-
@@ -6603,6 +6858,13 @@ components:
             The display name of the bound property; null for an unbound card.
             A list projection only — the card read resolves the property by
             its id.
+        photoUrl:
+          type: string
+          nullable: true
+          description: >
+            The card photo's same-origin streaming path (ADR 0065):
+            /api/v1/contacts/{id}/photo, served with the session cookie;
+            null when the card has no photo.
         firstName:
           type: string
         lastName:
@@ -7246,7 +7508,7 @@ components:
         One visible property with its payment stacks (ticket #575): the keys
         grouped into the auto-pay group and the rest.
       type: object
-      required: [propertyId, name, address, autoPayRules, otherRules, pinnedAt, photoUrl]
+      required: [propertyId, name, address, autoPayRules, otherRules, pinnedAt, photoUrl, type]
       properties:
         propertyId:
           type: string
@@ -7255,6 +7517,8 @@ components:
           type: string
         address:
           type: string
+        type:
+          $ref: '#/components/schemas/PropertyType'
         pinnedAt:
           type: string
           format: date-time
@@ -7267,7 +7531,9 @@ components:
           nullable: true
           description: >
             The card avatar's photo — the object's first (oldest) photo
-            (ticket #582); null when the object has no photos.
+            (ticket #582); with the private photos (ADR 0065) one image per
+            object, streamed by the backend; null when the object has no
+            photo.
         autoPayRules:
           type: array
           description: The «Автоплатежи» group — the object's auto-pay rules.
@@ -7695,6 +7961,17 @@ components:
             Participant display name (name and surname, or the anonymous
             label «Пользователь» — карта #1105, аменд #1123). Never a phone,
             never an email.
+        photo_url:
+          type: string
+          nullable: true
+          description: >
+            The participant's profile photo same-origin streaming path (ADR
+            0065, решение #1286): /api/v1/users/{userId}/photo — every reader
+            of the list shares this property with every listed participant.
+            Null for a pending row, the synthesized owner without a photo,
+            or a user without a photo; a suspended member's path answers 404
+            (suspended access sees nothing) and the client falls back to the
+            placeholder.
         status:
           type: string
           enum: [active, suspended, pending]
@@ -7789,6 +8066,15 @@ components:
             The person's display name (name and surname, or the anonymous
             label «Пользователь» — карта #1105, аменд #1123);
             null for a pending row (the email is the label).
+        photo_url:
+          type: string
+          nullable: true
+          description: >
+            The registered user's profile photo same-origin streaming path
+            (ADR 0065; решение владельца #1286): /api/v1/users/{userId}/photo,
+            readable while the reader shares a readable property with the
+            user; a revoked access answers 404 and the client falls back to
+            the placeholder. Null for a pending row or a user without a photo.
         aggregate_status:
           type: string
           enum: [all_properties, partial, limit_exceeded]
@@ -7810,7 +8096,7 @@ components:
 
     ParticipantPropertyResponse:
       type: object
-      required: [property_id, title, role, status]
+      required: [property_id, title, role, status, type, photo_url]
       properties:
         property_id:
           type: string
@@ -7826,6 +8112,16 @@ components:
           description: >
             The access lifecycle on this property: "active"/"suspended"
             memberships, "pending" email invitation.
+        type:
+          $ref: '#/components/schemas/PropertyType'
+        photo_url:
+          type: string
+          nullable: true
+          description: >
+            The property photo's same-origin streaming path (ADR 0065),
+            live at read; null when the property has no photo. The leg row
+            is self-sufficient — the client needs no /properties join for
+            the avatar (остаток #1244 п.3, решение #1286).
 
     ParticipantsSummaryResponse:
       type: object
@@ -8203,6 +8499,14 @@ components:
           type: string
           format: date-time
           nullable: true
+        payload:
+          type: object
+          description: |
+            Тот же free-form payload, что несёт NotificationDetailResponse
+            (решение #737, контракт #743): ленте он нужен ради снимков
+            карточек без хода на страницу — фото и глиф объекта в строке
+            ленты берутся из payload.property (#1275). Отсутствует у строк
+            без payload-снимков.
 
     NotificationDetailResponse:
       type: object
@@ -8314,6 +8618,7 @@ components:
         - property_name
         - actor_name
         - actor_email
+        - actor_photo_url
         - actor_role
         - kind
         - action
@@ -8345,6 +8650,15 @@ components:
         actor_email:
           type: string
           description: Снимок почты актёра (видна всем участникам, решение 2026-09-20); '' — почты не было.
+        actor_photo_url:
+          type: string
+          nullable: true
+          description: >
+            Аватар актёра — same-origin путь стриминга фото профиля (ADR 0065,
+            решение #1286), живой на чтение; null — у актёра нет фото или
+            запись обезличена. Чтение эндпоинта регулируется связью по общему
+            объекту: у отозванного участника путь отвечает 404, строка
+            откатывается на заглушку.
         actor_role:
           type: string
           enum: [owner, full_access, viewer]
@@ -8439,7 +8753,7 @@ components:
         is_owner — замок владельца объектов (макет 2067-163528); role —
         иконка роли строки (макет 2184-94261): максимальный доступ в области,
         живое членство сильнее снимка журнала отозванного участника.
-      required: [id, name, email, first_name, is_owner, role]
+      required: [id, name, email, first_name, is_owner, photo_url, role]
       properties:
         id:
           type: string
@@ -8455,6 +8769,14 @@ components:
         is_owner:
           type: boolean
           description: Пользователь владеет хотя бы одним объектом области чтения.
+        photo_url:
+          type: string
+          nullable: true
+          description: >
+            Аватар участника — same-origin путь стриминга фото профиля
+            (ADR 0065, решение #1286), живой на чтение; null — фото нет.
+            Отозванный участник остаётся опцией фильтра: его путь отвечает
+            404, строка откатывается на заглушку.
         role:
           type: string
           enum: [owner, full_access, viewer]
@@ -8463,7 +8785,7 @@ components:
     HistoryObject:
       type: object
       description: "Объект-вариант фильтра с фото-аватаром карточки (первое по времени фото, #582)."
-      required: [id, name, address, photo_url]
+      required: [id, name, address, photo_url, type]
       properties:
         id:
           type: string
@@ -8475,6 +8797,8 @@ components:
         photo_url:
           type: string
           description: URL первого по времени фото; '' — фото нет.
+        type:
+          $ref: '#/components/schemas/PropertyType'
 
     UnreadCountResponse:
       type: object

@@ -75,12 +75,14 @@ type PropertyOwnerResolver interface {
 // composes from these fields («Name Surname», иначе «Пользователь» — карта
 // #1105, аменд #1123); phones never go into audit context (ADR 0020). Member emails for
 // the participants list are resolved through the narrow UserEmailResolver
-// port.
+// port. PhotoKey feeds the participant's photo path (ADR 0065, решение
+// владельца #1286); nil — фото нет.
 type MemberUser struct {
-	ID      uuid.UUID
-	Name    *string
-	Surname *string
-	Phone   string
+	ID       uuid.UUID
+	Name     *string
+	Surname  *string
+	Phone    string
+	PhotoKey *string
 }
 
 // UserLookup resolves registered users by id for member display.

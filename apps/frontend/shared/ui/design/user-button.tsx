@@ -1,9 +1,8 @@
 import type { ComponentProps, JSX } from 'react';
 import Link from 'next/link';
 import { ROUTES } from '@/shared/config/routes';
-import { BoldUser } from '@/shared/assets/icons';
 import { cn } from '@/shared/lib/cn';
-import { CircleIcon } from './circle-icon';
+import { UserAvatar } from './user-avatar';
 import { Skeleton } from './skeleton';
 
 /** Ссылка профиля дизайн-слоя (Figma 699:8867, «User Button»; решение
@@ -29,11 +28,15 @@ import { Skeleton } from './skeleton';
  * имя. */
 export type UserButtonProps = Omit<ComponentProps<'a'>, 'href'> & {
   readonly name?: string;
+  /** Путь стриминга фото профиля (ADR 0065, решение #1286): есть — круг
+   * несёт фото, нет — заглушка BoldUser. */
+  readonly photoUrl?: string | null;
   readonly pending?: boolean;
 };
 
 export function UserButton({
   name,
+  photoUrl,
   pending = false,
   className,
   ...props
@@ -58,9 +61,7 @@ export function UserButton({
       ) : (
         name !== undefined && <span>{name}</span>
       )}
-      <CircleIcon variant="white" aria-hidden>
-        <BoldUser className="h-6 w-6" />
-      </CircleIcon>
+      <UserAvatar photoUrl={pending ? null : photoUrl} aria-hidden />
     </Link>
   );
 }

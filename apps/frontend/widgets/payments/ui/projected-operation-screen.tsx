@@ -105,6 +105,7 @@ export function ProjectedOperationScreen({
               operation={operation}
               livePayment={payment}
               propertyTitle={property?.name ?? ''}
+              propertyType={property?.type}
               today={today}
             />
           )}

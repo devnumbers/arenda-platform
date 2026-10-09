@@ -2,7 +2,6 @@
 
 import { useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
-import { BoldHome } from '@/shared/assets/icons';
 import {
   Button,
   CircleIcon,
@@ -21,7 +20,7 @@ import {
   useSubscription,
 } from '@/features/billing';
 import { useProperties } from '@/features/properties';
-import type { Property } from '@/entities/property';
+import { propertyTypeIcons, type Property } from '@/entities/property';
 import type { Subscription } from '@/entities/billing';
 import {
   disableConfirmTitle,
@@ -182,7 +181,8 @@ function TariffDisableContent({
 }
 
 /** Ряд выбора сохраняемого объекта (макет 1929-76786): фото-аватар 44
- * (без фото — белая заглушка с BoldHome #D3D7D9, как в пикере объектов),
+ * (без фото — заглушка с глифом типа объекта #D3D7D9, Category Icon,
+ * карта #1217),
  * название 16/18 и адрес 14/16, каноновое радио справа; отмеченный ряд
  * задаёт value группы RadioGroup. Список — ответ GET /properties целиком:
  * он несёт active+maintenance, и оба статуса бэк принимает в keepPropertyId
@@ -192,15 +192,24 @@ function PropertyPickRow({
 }: {
   readonly property: Property;
 }): JSX.Element {
-  const photoUrl = property.photos?.[0]?.url;
+  const photoUrl = property.photoUrl ?? undefined;
+  // Выборка из статичного реестра, не вызов: react-hooks/static-components.
+  const Glyph = propertyTypeIcons[property.type];
+  // Битое фото (404 стрима) откатывается к глифу — канон #1275 (#1286).
+  const [photoBroken, setPhotoBroken] = useState(false);
 
   return (
     <label className="flex cursor-pointer items-center gap-3 py-3">
       <CircleIcon variant="muted" aria-hidden className="relative overflow-hidden rounded-full">
-        {photoUrl !== undefined ? (
-          <img src={photoUrl} alt="" className="h-full w-full object-cover" />
+        {photoUrl !== undefined && !photoBroken ? (
+          <img
+            src={photoUrl}
+            alt=""
+            className="h-full w-full object-cover"
+            onError={() => setPhotoBroken(true)}
+          />
         ) : (
-          <BoldHome className="h-6 w-6 text-[#D3D7D9]" />
+          <Glyph className="h-6 w-6 text-[#D3D7D9]" />
         )}
       </CircleIcon>
       <span className="flex min-w-0 flex-1 flex-col gap-1">

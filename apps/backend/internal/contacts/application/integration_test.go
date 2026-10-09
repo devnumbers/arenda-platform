@@ -29,6 +29,7 @@ import (
 	historypg "github.com/nambers/arenda-planform/apps/backend/internal/history/adapters/postgres"
 	pgdb "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/testdb"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/objectstorage"
 	realtimetest "github.com/nambers/arenda-planform/apps/backend/internal/realtime/realtimetest"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/actor"
 	sharedclock "github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
@@ -98,7 +99,7 @@ func newContactsHarness(t *testing.T) *contactsHarness {
 		uow,
 	)
 	realtime := &realtimetest.RecordingPublisher{}
-	svc := contactsapp.NewContactService(factory, policy)
+	svc := contactsapp.NewContactService(factory, policy, objectstorage.NewFakeStorage())
 	svc.SetRealtimePublisher(realtime)
 	return &contactsHarness{
 		t:        t,

@@ -8,6 +8,8 @@ function leg(overrides: Partial<ParticipantPropertyLeg> = {}): ParticipantProper
     title: 'Квартира на Ленина',
     role: 'full_access',
     status: 'active',
+    type: 'apartment',
+    photoUrl: null,
     ...overrides,
   };
 }

@@ -31,14 +31,18 @@ func (r *searchRecordingRepo) SearchVisible(
 
 func newSearchService(t *testing.T, repo PropertyRepository) *PropertyService {
 	t.Helper()
-	return newPhotoService(t, repo, &fakePhotoRepo{}, &fakePhotoStorage{})
+	return NewPropertyService(
+		repo, newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(repo, fakeSubscriptionLimiter{limit: 10}),
+		fakePropertyClock{now: time.Now()}, testOwnerPolicy{}, nil,
+	)
 }
 
-func newSearchPhotoService(t *testing.T, repo PropertyRepository, photoRepo *fakePhotoRepo) *PropertyService {
+func newSearchPhotoService(t *testing.T, repo PropertyRepository) *PropertyService {
 	t.Helper()
 	return NewPropertyService(
-		repo, photoRepo, &fakePhotoStorage{},
-		newPropertyTestFactory(repo, photoRepo, fakeSubscriptionLimiter{limit: 10}),
+		repo, newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(repo, fakeSubscriptionLimiter{limit: 10}),
 		fakePropertyClock{now: time.Now()}, testOwnerPolicy{}, nil,
 	)
 }
@@ -146,29 +150,26 @@ func TestSearchProperties_NextCursorFollowsPageFullness(t *testing.T) {
 	}
 }
 
-// Photos ride along with the search rows (the screen's avatar).
-func TestSearchProperties_AttachesPhotos(t *testing.T) {
+// The photo rides the search row (the screen's avatar): the row's
+// single-photo key travels through the read untouched (ADR 0065).
+func TestSearchProperties_PhotoRidesTheRow(t *testing.T) {
 	t.Parallel()
 
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	key := "photos/01987654-3210-7abc-9def-0123456789ab.jpg"
 	repo := &searchRecordingRepo{page: []domain.Property{{
 		ID: propertyID, OwnerID: searchActor, Name: searchName, Status: domain.PropertyStatusActive,
+		PhotoKey: &key,
 	}}}
 
-	photoRepo := &fakePhotoRepo{photos: map[uuid.UUID][]domain.Photo{
-		propertyID: {{ID: uuid.Must(uuid.NewV7()), URL: "https://cdn.example/p.jpg"}},
-	}}
-	svc := newSearchPhotoService(t, repo, photoRepo)
+	svc := newSearchPhotoService(t, repo)
 
 	props, _, err := svc.SearchProperties(context.Background(), searchActor, searchQuery, SearchPropertiesPage{})
 	if err != nil {
 		t.Fatalf("search: %v", err)
 	}
-	if len(props) != 1 || len(props[0].Photos) != 1 {
-		t.Fatalf("expected one property with one photo, got %+v", props)
-	}
-	if props[0].Photos[0].URL != "https://cdn.example/p.jpg" {
-		t.Errorf("unexpected photo url %q", props[0].Photos[0].URL)
+	if len(props) != 1 || props[0].PhotoKey == nil || *props[0].PhotoKey != key {
+		t.Fatalf("expected the photo key to ride the row, got %+v", props)
 	}
 }
 

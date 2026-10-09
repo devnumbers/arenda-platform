@@ -5,6 +5,8 @@
  * mappers.ts.
  */
 
+import type { components } from '@/shared/api/dto';
+
 /** Роль актёра на объекте в момент действия (снимок, ADR 0061 §4). */
 export type HistoryActorRole = 'owner' | 'full_access' | 'viewer';
 
@@ -46,6 +48,9 @@ export type HistoryEntry = {
   /** null — пользователь удалён, запись обезличена (снимки остаются). */
   readonly actorId: string | null;
   readonly actorName: string;
+  /** Путь стриминга фото профиля актёра (ADR 0065, решение #1286), живой
+   * на чтение; null — у актёра нет фото или запись обезличена. */
+  readonly actorPhotoUrl: string | null;
   readonly actorRole: HistoryActorRole;
   readonly baseAction: HistoryBaseAction;
   /** Стабильный точечный id действия, например operation.paid. */
@@ -65,16 +70,22 @@ export type HistoryParticipantOption = {
   readonly name: string;
   readonly email: string;
   readonly firstName: string;
+  /** Путь стриминга фото профиля (ADR 0065, решение #1286); null — фото
+   * нет. Отозванный участник остаётся опцией: его путь отвечает 404. */
+  readonly photoUrl: string | null;
   readonly isOwner: boolean;
   readonly role: 'owner' | 'full_access' | 'viewer';
 };
 
-/** Объект-вариант шита фильтров с фото-аватаром ('' — фото нет). */
+/** Объект-вариант шита фильтров с фото-аватаром ('' — фото нет). type —
+ * ключ глифа-плейсхолдера аватара (карта #1217, #1244; словарь DTO —
+ * структурно тот же PropertyType слоя entities/property). */
 export type HistoryObjectOption = {
   readonly id: string;
   readonly name: string;
   readonly address: string;
   readonly photoUrl: string;
+  readonly type: components['schemas']['PropertyType'];
 };
 
 /** Опции шита фильтров области чтения (GET /history/filters, #708). */

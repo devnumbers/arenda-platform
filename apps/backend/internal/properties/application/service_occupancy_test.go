@@ -49,9 +49,8 @@ func occupancyTestService(t *testing.T, repo PropertyRepository) *PropertyServic
 	t.Helper()
 	svc := NewPropertyService(
 		repo,
-		fakePropertyPhotoRepo{},
-		fakePropertyPhotoStorage{},
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil),
+		newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(repo, nil),
 		fakePropertyClock{now: time.Now()},
 		testOwnerPolicy{},
 		nil,

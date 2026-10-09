@@ -1,14 +1,6 @@
 import type { components } from '@/shared/api/dto';
-import type { Property, PropertyPhoto } from './types';
+import type { Property } from './types';
 import { coerceAttributes } from './attributes';
-
-/** Фото объекта (wire-схема уже канон): переносим один в один, чтобы
- * потребители зависели от entity, а не от сгенерированного DTO. */
-export function mapPropertyPhoto(
-  dto: components['schemas']['PropertyPhoto'],
-): PropertyPhoto {
-  return { id: dto.id, url: dto.url };
-}
 
 export function mapPropertyResponse(
   dto: components['schemas']['PropertyResponse'],
@@ -21,12 +13,13 @@ export function mapPropertyResponse(
     description: dto.description,
     attributes: coerceAttributes(dto.attributes),
     status: dto.status,
-    photos: dto.photos?.map(mapPropertyPhoto),
+    photoUrl: dto.photo_url ?? null,
     access: dto.access
       ? {
           role: dto.access.role,
           ownerName: dto.access.owner_name,
           ownerEmail: dto.access.owner_email,
+          ownerPhotoUrl: dto.access.owner_photo_url ?? null,
         }
       : undefined,
     members_count: dto.members_count,

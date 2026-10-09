@@ -2,7 +2,7 @@
 
 import { useState, type JSX, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, BoldHome, Cancel, TrashBin } from '@/shared/assets/icons';
+import { ArrowLeft, Cancel, TrashBin } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import { goBack } from '@/shared/lib/navigation';
@@ -21,7 +21,7 @@ import {
   categoryStyle,
 } from '@/features/payment-categories';
 import { useProperty } from '@/features/properties';
-import { propertyPermissions } from '@/entities/property';
+import { PropertyAvatar, propertyPermissions, type PropertyType } from '@/entities/property';
 import {
   isOperationPayable,
   useDeleteOperation,
@@ -206,6 +206,8 @@ export function OperationDetailScreen({
             <OperationDetailBody
               propertyId={propertyId}
               propertyTitle={property?.name ?? ''}
+              propertyType={property?.type}
+              propertyPhotoUrl={property?.photoUrl ?? null}
               operation={operation}
               canMutate={canMutate}
               onPaid={setPaidResult}
@@ -249,12 +251,16 @@ export function OperationDetailScreen({
 function OperationDetailBody({
   propertyId,
   propertyTitle,
+  propertyType,
+  propertyPhotoUrl,
   operation,
   canMutate,
   onPaid,
 }: {
   readonly propertyId: string;
   readonly propertyTitle: string;
+  readonly propertyType: PropertyType | undefined;
+  readonly propertyPhotoUrl: string | null;
   readonly operation: PaymentOperation;
   readonly canMutate: boolean;
   readonly onPaid: (paid: PaymentOperation) => void;
@@ -295,6 +301,8 @@ function OperationDetailBody({
       operation={operation}
       livePayment={paymentQuery.data}
       propertyTitle={propertyTitle}
+      propertyType={propertyType}
+      propertyPhotoUrl={propertyPhotoUrl}
       today={dateToIsoLocal(new Date())}
       payBar={canMutate && payable
         ? {
@@ -321,6 +329,8 @@ export function OperationView({
   operation,
   livePayment,
   propertyTitle,
+  propertyType,
+  propertyPhotoUrl,
   today,
   payBar,
 }: {
@@ -328,6 +338,12 @@ export function OperationView({
   readonly operation: PaymentOperation;
   readonly livePayment?: Payment;
   readonly propertyTitle: string;
+  /** Тип объекта строки «Объект» — глиф-плейсхолдер (карта #1217, #1244);
+   * не передан (проекция без загрузки объекта) — дом-фолбэк. */
+  readonly propertyType?: PropertyType;
+  /** Фото объекта строки «Объект» (ADR 0065, решение #1286); null — фото
+   * нет, проекция без загрузки объекта. */
+  readonly propertyPhotoUrl?: string | null;
   readonly today: IsoDate;
   readonly payBar?: { readonly onPay: () => void; readonly pending: boolean };
 }): JSX.Element {
@@ -372,9 +388,7 @@ export function OperationView({
           variant="white"
           className="px-6 py-3 [&>span]:px-0"
           categoryIcon={
-            <span className="flex h-11 w-11 items-center justify-center rounded-pill bg-surface-muted">
-              <BoldHome className="h-6 w-6 text-content-tertiary" aria-hidden />
-            </span>
+            <PropertyAvatar surface="row" photoUrl={propertyPhotoUrl ?? null} type={propertyType} />
           }
           title={propertyTitle !== '' ? propertyTitle : 'Объект'}
           subtitle="Объект"

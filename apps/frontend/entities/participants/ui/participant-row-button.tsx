@@ -1,8 +1,8 @@
 'use client';
 
 import type { JSX } from 'react';
-import { BoldUser, SmallArrowRight } from '@/shared/assets/icons';
-import { CircleIcon } from '@/shared/ui/design';
+import { SmallArrowRight } from '@/shared/assets/icons';
+import { UserAvatar } from '@/shared/ui/design';
 import { cn } from '@/shared/lib/cn';
 import { useKeyboardActivation } from '@/shared/lib/hooks/useKeyboardActivation';
 import type { Participant } from '../model/types';
@@ -15,7 +15,8 @@ import { ParticipantRowBadge } from './participant-row-badge';
 
 /**
  * Строка участника списка «Ваши участники» (#697; Figma 2036-82971,
- * компонент Row Button 936:39348 с бейджем): аватар-круг 44 с BoldUser,
+ * компонент Row Button 936:39348 с бейджем): аватар-круг 44 — фото профиля
+ * или заглушка BoldUser (UserAvatar, решение #1286),
  * титул (имя или почта pending), подзаголовок-почта 14/16, под ним чип
  * агрегат-статуса; ведомый шеврон. Паддинг строки 12px 0 (макет), тап —
  * страница участника (#698). Каноническая строка срезов сущностей
@@ -46,9 +47,7 @@ export function ParticipantRowButton({
         className,
       )}
     >
-      <CircleIcon variant="white" aria-hidden>
-        <BoldUser className="h-6 w-6" />
-      </CircleIcon>
+      <UserAvatar photoUrl={participant.photoUrl} />
       <span className="flex min-w-0 flex-1 flex-col justify-center gap-1">
         <span className="truncate text-base font-medium text-content">
           {participantRowTitle(participant)}

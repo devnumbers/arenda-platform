@@ -14,6 +14,7 @@ export function mapContact(dto: ContactDto): Contact {
     id: dto.id,
     propertyId: dto.propertyId ?? undefined,
     propertyName: dto.propertyName ?? undefined,
+    photoUrl: dto.photoUrl ?? undefined,
     firstName: dto.firstName,
     lastName: dto.lastName,
     patronymic: dto.patronymic,

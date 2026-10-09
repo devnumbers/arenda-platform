@@ -19,6 +19,7 @@ import { ROUTES } from '@/shared/config/routes';
 import { formatDayMonthTime } from '@/shared/lib/date-format';
 import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
+import { propertyTypeIcons, type PropertyType } from '@/entities/property';
 import {
   Button,
   CircleIcon,
@@ -178,17 +179,24 @@ function NotificationDetailBody({
       {detail.payload.property && (
         // Карточка объекта — ссылка на объект (решение владельца 19.09.2026,
         // #745): имя и адрес — снимки payload, у снесённого объекта остаётся
-        // снимок, ссылка уводит на 404 объектного экрана.
+        // снимок, ссылка уводит на 404 объектного экрана. Глиф — по типу из
+        // снимка (карта #1217, #1244); payload free-form — словарь значения
+        // проверяет реестр, неизвестное/старое (до #1244) — дом-фолбэк.
         <NotificationEntityLink
           href={ROUTES.property(detail.payload.property.id)}
-          icon={<BoldHome className="h-6 w-6 text-[#d3d7d9]" />}
+          icon={
+            <PropertyCardAvatar
+              photo={detail.payload.property.photo}
+              type={detail.payload.property.type}
+            />
+          }
           name={detail.payload.property.name}
           detail={detail.payload.property.address}
         />
       )}
       {detail.payload.actor && (
         <NotificationEntityCard
-          icon={<BoldUser className="h-6 w-6 text-[#d3d7d9]" />}
+          icon={<ActorAvatar photo={detail.payload.actor.photo} />}
           name={detail.payload.actor.name}
           detail={detail.payload.actor.email}
         />
@@ -240,7 +248,11 @@ function NotificationEntityCardBody({
 }): JSX.Element {
   return (
     <>
-      <CircleIcon variant="white">{icon}</CircleIcon>
+      {/* overflow-hidden: фото-аватар (#1275) заполняет круг целиком, клип
+       * нужен по скруглению; глифам он безразличен — они меньше круга. */}
+      <CircleIcon variant="white" className="relative overflow-hidden">
+        {icon}
+      </CircleIcon>
       <div className="min-w-0 flex-1">
         <p className="truncate text-base font-medium leading-[18px] text-content">{name}</p>
         {detail && (
@@ -249,6 +261,24 @@ function NotificationEntityCardBody({
       </div>
     </>
   );
+}
+
+/** Аватар актёра на карточке payload-снимка (решение #1286): фото профиля
+ * из снимка публикации; битое (фото удалили, доступ отозван — 404 стрима)
+ * или отсутствующее — заглушка BoldUser, канон фолбэка #1275. */
+function ActorAvatar({ photo }: { readonly photo?: string }): JSX.Element {
+  const [photoBroken, setPhotoBroken] = useState(false);
+  if (photo !== undefined && photo !== '' && !photoBroken) {
+    return (
+      <img
+        src={photo}
+        alt=""
+        className="h-full w-full object-cover"
+        onError={() => setPhotoBroken(true)}
+      />
+    );
+  }
+  return <BoldUser className="h-6 w-6 text-[#d3d7d9]" />;
 }
 
 /** Карточка приглашающего — не ссылка. */
@@ -289,4 +319,32 @@ function NotificationEntityLink({
       <NotificationEntityCardBody icon={icon} name={name} detail={detail} />
     </Link>
   );
+}
+
+/** Глиф аватара объекта на карточке payload-снимка: по типу из снимка
+ * (карта #1217, #1244). Payload путешествует free-form — словарь значения
+ * проверяет реестр; снимки до #1244 и неизвестные значения рисует
+ * дом-фолбэком. Выборка из статичного реестра, не вызов:
+ * react-hooks/static-components. */
+function PropertyGlyph({ type }: { readonly type: string | undefined }): JSX.Element {
+  const Glyph = type !== undefined && type in propertyTypeIcons ? propertyTypeIcons[type as PropertyType] : BoldHome;
+  return <Glyph className="h-6 w-6 text-[#d3d7d9]" />;
+}
+
+/** Аватар объекта на карточке payload-снимка (#1275): фото из снимка
+ * заполняет круг; битое (фото или объект удалили после публикации — 404
+ * стрима) откатывается к глифу типа. */
+function PropertyCardAvatar({ photo, type }: { readonly photo?: string; readonly type?: string }): JSX.Element {
+  const [photoBroken, setPhotoBroken] = useState(false);
+  if (photo !== undefined && !photoBroken) {
+    return (
+      <img
+        src={photo}
+        alt=""
+        className="h-full w-full object-cover"
+        onError={() => setPhotoBroken(true)}
+      />
+    );
+  }
+  return <PropertyGlyph type={type} />;
 }

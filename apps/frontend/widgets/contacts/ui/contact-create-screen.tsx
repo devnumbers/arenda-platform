@@ -7,6 +7,7 @@ import { ROUTES } from '@/shared/config/routes';
 import { ApiError } from '@/shared/api/errors';
 import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
+import { readPhotoDataUrl } from '@/shared/lib/photo';
 import { useProperty } from '@/features/properties';
 import {
   buildContactCreateCommand,
@@ -14,7 +15,9 @@ import {
   contactFormReady,
   contactServerFieldErrors,
   useCreateContact,
+  useUploadContactPhoto,
   type ContactFormFields,
+  type ContactPhotoStage,
 } from '@/features/contacts';
 import { setRentalWizardSessionDraft } from '@/features/rentals';
 import {
@@ -36,7 +39,11 @@ const SHORT_TEXT_MAX = 256;
 /**
  * Экран «Создать контакт» (#509, макеты 1281:48439 / 1282:49285): шапка
  * «Отменить | Создать контакт | ✓» (✓ — быстрая отправка, как на правке
- * платежа), поля формы — общий ContactForm (#509/#510). Обязательно только
+ * платежа), поля формы — общий ContactForm (#509/#510) с фото-слотом
+ * (тикет #1229): выбранное фото живёт в черновике (stage) и уходит
+ * загрузкой сразу после POST /contacts — прозрачно внутри одного сабмита;
+ * сбой загрузки свой сигнал сценария и не отменяет созданную карточку.
+ * Обязательно только
  * Имя; телефон набирается в маске и уходит нормализованным +7XXXXXXXXXX,
  * почта — по формату (те же правила, что в домене contacts; серверные
  * fieldErrors ложатся поверх). Роль — свободный текст: вход с будущей
@@ -67,6 +74,7 @@ export function ContactCreateScreen({
 }): JSX.Element {
   const router = useRouter();
   const createContact = useCreateContact();
+  const uploadPhoto = useUploadContactPhoto();
   // В объекте роль читателя решает, открывать ли форму вовсе: смотрящему
   // и архиву формы не показываем (обход #758, как в правке контакта) —
   // сервер всё равно ответил бы отказом. В книге (propertyId не задан)
@@ -96,6 +104,22 @@ export function ContactCreateScreen({
   >({});
   const [objectSelectOpen, setObjectSelectOpen] = useState(false);
   const [propertyIdDraft, setPropertyIdDraft] = useState<string | null>(null);
+  // Выбранное фото — часть черновика (решение владельца 08.10 с #1228):
+  // применяется сабмитом. На создании серверного фото нет, удаление
+  // подтверждением бейджа просто сбрасывает выбор — DELETE бэк не дергает.
+  const [photoStage, setPhotoStage] = useState<ContactPhotoStage | null>(null);
+
+  const handlePhotoFile = (file: File): void => {
+    void readPhotoDataUrl(file).then((previewUrl) => {
+      if (previewUrl !== null) {
+        setPhotoStage({ kind: 'file', file, previewUrl });
+      }
+    });
+  };
+
+  const handlePhotoRemove = (): void => {
+    setPhotoStage(null);
+  };
 
   const ready = contactFormReady(form);
   const clientErrors = submitAttempted ? contactFormErrors(form) : {};
@@ -121,6 +145,18 @@ export function ContactCreateScreen({
     try {
       const created = await createContact.mutateAsync(buildContactCreateCommand(form));
       notify.scenarios.propertyContacts.created();
+      // Фото уходит отдельным вызовом сразу после создания (тикет #1229):
+      // POST /contacts JSON-контракт файлов не несёт, фронт делает это
+      // прозрачно внутри одного сабмита. Сбой загрузки не отменяет уже
+      // созданную карточку — свой сигнал сценария, навигация продолжается:
+      // повторная отправка формы создала бы дубль.
+      if (photoStage?.kind === 'file') {
+        await uploadPhoto
+          .mutateAsync({ id: created.id, file: photoStage.file })
+          .catch((error: unknown) => {
+            notify.scenarios.propertyContacts.photoUpdateError(error);
+          });
+      }
       if (returnToRentalWizard && propertyId !== undefined) {
         // Возврат в визард аренды (#530): контакт выбирается арендатором
         // гостевой записью в носитель сессии (переживёт goBack), запись
@@ -235,7 +271,7 @@ export function ContactCreateScreen({
           <IconButton
             icon={<Check />}
             label="Создать контакт"
-            disabled={!ready || createContact.isPending}
+            disabled={!ready || createContact.isPending || uploadPhoto.isPending}
             onClick={() => void submit()}
           />
         }
@@ -246,6 +282,10 @@ export function ContactCreateScreen({
       <PageContent>
         <ContactForm
           form={form}
+          photoStage={photoStage}
+          photoBusy={uploadPhoto.isPending}
+          onPhotoFile={handlePhotoFile}
+          onPhotoRemove={handlePhotoRemove}
           errorOf={errorOf}
           onFieldChange={update}
           onOpenObjectSelect={() => {
@@ -263,7 +303,8 @@ export function ContactCreateScreen({
         <StickyBottomBar>
           <Button
             className="w-full"
-            loading={createContact.isPending}
+            loading={createContact.isPending || uploadPhoto.isPending}
+            disabled={createContact.isPending || uploadPhoto.isPending}
             onClick={() => void submit()}
           >
             Создать контакт

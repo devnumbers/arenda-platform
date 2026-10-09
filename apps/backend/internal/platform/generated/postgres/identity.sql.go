@@ -656,7 +656,7 @@ func (q *Queries) GetSessionByTokenHash(ctx context.Context, arg GetSessionByTok
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone FROM users WHERE LOWER(email) = LOWER($1::text)
+SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone, photo_key, photo_content_type FROM users WHERE LOWER(email) = LOWER($1::text)
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, dollar_1 string) (User, error) {
@@ -675,12 +675,14 @@ func (q *Queries) GetUserByEmail(ctx context.Context, dollar_1 string) (User, er
 		&i.PhoneEncrypted,
 		&i.EmailVerifiedAt,
 		&i.Timezone,
+		&i.PhotoKey,
+		&i.PhotoContentType,
 	)
 	return i, err
 }
 
 const getUserByEmailForUpdate = `-- name: GetUserByEmailForUpdate :one
-SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone FROM users WHERE LOWER(email) = LOWER($1::text) FOR UPDATE
+SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone, photo_key, photo_content_type FROM users WHERE LOWER(email) = LOWER($1::text) FOR UPDATE
 `
 
 func (q *Queries) GetUserByEmailForUpdate(ctx context.Context, dollar_1 string) (User, error) {
@@ -699,12 +701,14 @@ func (q *Queries) GetUserByEmailForUpdate(ctx context.Context, dollar_1 string) 
 		&i.PhoneEncrypted,
 		&i.EmailVerifiedAt,
 		&i.Timezone,
+		&i.PhotoKey,
+		&i.PhotoContentType,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone FROM users WHERE id = $1
+SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone, photo_key, photo_content_type FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error) {
@@ -723,12 +727,14 @@ func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 		&i.PhoneEncrypted,
 		&i.EmailVerifiedAt,
 		&i.Timezone,
+		&i.PhotoKey,
+		&i.PhotoContentType,
 	)
 	return i, err
 }
 
 const getUserByIDForUpdate = `-- name: GetUserByIDForUpdate :one
-SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone FROM users WHERE id = $1 FOR UPDATE
+SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone, photo_key, photo_content_type FROM users WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) GetUserByIDForUpdate(ctx context.Context, id pgtype.UUID) (User, error) {
@@ -747,12 +753,14 @@ func (q *Queries) GetUserByIDForUpdate(ctx context.Context, id pgtype.UUID) (Use
 		&i.PhoneEncrypted,
 		&i.EmailVerifiedAt,
 		&i.Timezone,
+		&i.PhotoKey,
+		&i.PhotoContentType,
 	)
 	return i, err
 }
 
 const getUserByPhone = `-- name: GetUserByPhone :one
-SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone FROM users WHERE phone = $1
+SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone, photo_key, photo_content_type FROM users WHERE phone = $1
 `
 
 func (q *Queries) GetUserByPhone(ctx context.Context, phone string) (User, error) {
@@ -771,12 +779,14 @@ func (q *Queries) GetUserByPhone(ctx context.Context, phone string) (User, error
 		&i.PhoneEncrypted,
 		&i.EmailVerifiedAt,
 		&i.Timezone,
+		&i.PhotoKey,
+		&i.PhotoContentType,
 	)
 	return i, err
 }
 
 const getUserByPhoneForUpdate = `-- name: GetUserByPhoneForUpdate :one
-SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone FROM users WHERE phone = $1 FOR UPDATE
+SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone, photo_key, photo_content_type FROM users WHERE phone = $1 FOR UPDATE
 `
 
 func (q *Queries) GetUserByPhoneForUpdate(ctx context.Context, phone string) (User, error) {
@@ -795,6 +805,8 @@ func (q *Queries) GetUserByPhoneForUpdate(ctx context.Context, phone string) (Us
 		&i.PhoneEncrypted,
 		&i.EmailVerifiedAt,
 		&i.Timezone,
+		&i.PhotoKey,
+		&i.PhotoContentType,
 	)
 	return i, err
 }
@@ -979,7 +991,7 @@ func (q *Queries) ListSessionsByUserID(ctx context.Context, arg ListSessionsByUs
 }
 
 const listUsersAdmin = `-- name: ListUsersAdmin :many
-SELECT u.id, u.phone, u.role, u.name, u.surname, u.patronymic, u.email, u.created_at, u.updated_at, u.phone_encrypted, u.email_verified_at, u.timezone, us.status AS subscription_status
+SELECT u.id, u.phone, u.role, u.name, u.surname, u.patronymic, u.email, u.created_at, u.updated_at, u.phone_encrypted, u.email_verified_at, u.timezone, u.photo_key, u.photo_content_type, us.status AS subscription_status
 FROM users u
 LEFT JOIN user_subscriptions us ON us.user_id = u.id
 WHERE ($1::text = '' OR u.phone = $2::text OR (u.phone = $1::text AND u.phone_encrypted = false))
@@ -1021,6 +1033,8 @@ type ListUsersAdminRow struct {
 	PhoneEncrypted     bool               `json:"phone_encrypted"`
 	EmailVerifiedAt    pgtype.Timestamptz `json:"email_verified_at"`
 	Timezone           string             `json:"timezone"`
+	PhotoKey           pgtype.Text        `json:"photo_key"`
+	PhotoContentType   pgtype.Text        `json:"photo_content_type"`
 	SubscriptionStatus pgtype.Text        `json:"subscription_status"`
 }
 
@@ -1056,6 +1070,8 @@ func (q *Queries) ListUsersAdmin(ctx context.Context, arg ListUsersAdminParams) 
 			&i.PhoneEncrypted,
 			&i.EmailVerifiedAt,
 			&i.Timezone,
+			&i.PhotoKey,
+			&i.PhotoContentType,
 			&i.SubscriptionStatus,
 		); err != nil {
 			return nil, err
@@ -1159,6 +1175,46 @@ func (q *Queries) RotateSessionToken(ctx context.Context, arg RotateSessionToken
 	return result.RowsAffected(), nil
 }
 
+const setUserPhoto = `-- name: SetUserPhoto :one
+UPDATE users
+SET photo_key = $2,
+    photo_content_type = $3,
+    updated_at = now()
+WHERE id = $1
+RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone, photo_key, photo_content_type
+`
+
+type SetUserPhotoParams struct {
+	ID               pgtype.UUID `json:"id"`
+	PhotoKey         pgtype.Text `json:"photo_key"`
+	PhotoContentType pgtype.Text `json:"photo_content_type"`
+}
+
+// The profile photo write (ADR 0065, ticket #1227): the key and the sniffed
+// content type move together; a NULL key clears the photo. Existence and the
+// self-only access are proven by the caller under the row lock.
+func (q *Queries) SetUserPhoto(ctx context.Context, arg SetUserPhotoParams) (User, error) {
+	row := q.db.QueryRow(ctx, setUserPhoto, arg.ID, arg.PhotoKey, arg.PhotoContentType)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Phone,
+		&i.Role,
+		&i.Name,
+		&i.Surname,
+		&i.Patronymic,
+		&i.Email,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PhoneEncrypted,
+		&i.EmailVerifiedAt,
+		&i.Timezone,
+		&i.PhotoKey,
+		&i.PhotoContentType,
+	)
+	return i, err
+}
+
 const touchSession = `-- name: TouchSession :exec
 UPDATE sessions SET expires_at = $1, last_used_at = $2, last_ip = $3, city = $4
 WHERE token_hash = $5::text
@@ -1197,7 +1253,7 @@ SET name = $2,
     timezone = $7,
     updated_at = now()
 WHERE id = $1
-RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone
+RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone, photo_key, photo_content_type
 `
 
 type UpdateUserParams struct {
@@ -1234,6 +1290,8 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		&i.PhoneEncrypted,
 		&i.EmailVerifiedAt,
 		&i.Timezone,
+		&i.PhotoKey,
+		&i.PhotoContentType,
 	)
 	return i, err
 }
@@ -1244,7 +1302,7 @@ SET email = $2,
     email_verified_at = $3,
     updated_at = now()
 WHERE id = $1
-RETURNING id, phone, role, name, surname, patronymic, email, email_verified_at, created_at, updated_at, phone_encrypted, timezone
+RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone, photo_key, photo_content_type
 `
 
 type UpdateUserEmailVerifiedParams struct {
@@ -1253,24 +1311,9 @@ type UpdateUserEmailVerifiedParams struct {
 	EmailVerifiedAt pgtype.Timestamptz `json:"email_verified_at"`
 }
 
-type UpdateUserEmailVerifiedRow struct {
-	ID              pgtype.UUID        `json:"id"`
-	Phone           string             `json:"phone"`
-	Role            string             `json:"role"`
-	Name            pgtype.Text        `json:"name"`
-	Surname         pgtype.Text        `json:"surname"`
-	Patronymic      pgtype.Text        `json:"patronymic"`
-	Email           pgtype.Text        `json:"email"`
-	EmailVerifiedAt pgtype.Timestamptz `json:"email_verified_at"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
-	PhoneEncrypted  bool               `json:"phone_encrypted"`
-	Timezone        string             `json:"timezone"`
-}
-
-func (q *Queries) UpdateUserEmailVerified(ctx context.Context, arg UpdateUserEmailVerifiedParams) (UpdateUserEmailVerifiedRow, error) {
+func (q *Queries) UpdateUserEmailVerified(ctx context.Context, arg UpdateUserEmailVerifiedParams) (User, error) {
 	row := q.db.QueryRow(ctx, updateUserEmailVerified, arg.ID, arg.Email, arg.EmailVerifiedAt)
-	var i UpdateUserEmailVerifiedRow
+	var i User
 	err := row.Scan(
 		&i.ID,
 		&i.Phone,
@@ -1279,11 +1322,13 @@ func (q *Queries) UpdateUserEmailVerified(ctx context.Context, arg UpdateUserEma
 		&i.Surname,
 		&i.Patronymic,
 		&i.Email,
-		&i.EmailVerifiedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.PhoneEncrypted,
+		&i.EmailVerifiedAt,
 		&i.Timezone,
+		&i.PhotoKey,
+		&i.PhotoContentType,
 	)
 	return i, err
 }
@@ -1293,7 +1338,7 @@ UPDATE users
 SET email_verified_at = $2,
     updated_at = now()
 WHERE id = $1
-RETURNING id, phone, role, name, surname, patronymic, email, email_verified_at, created_at, updated_at, phone_encrypted, timezone
+RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone, photo_key, photo_content_type
 `
 
 type UpdateUserEmailVerifiedAtParams struct {
@@ -1301,24 +1346,9 @@ type UpdateUserEmailVerifiedAtParams struct {
 	EmailVerifiedAt pgtype.Timestamptz `json:"email_verified_at"`
 }
 
-type UpdateUserEmailVerifiedAtRow struct {
-	ID              pgtype.UUID        `json:"id"`
-	Phone           string             `json:"phone"`
-	Role            string             `json:"role"`
-	Name            pgtype.Text        `json:"name"`
-	Surname         pgtype.Text        `json:"surname"`
-	Patronymic      pgtype.Text        `json:"patronymic"`
-	Email           pgtype.Text        `json:"email"`
-	EmailVerifiedAt pgtype.Timestamptz `json:"email_verified_at"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
-	PhoneEncrypted  bool               `json:"phone_encrypted"`
-	Timezone        string             `json:"timezone"`
-}
-
-func (q *Queries) UpdateUserEmailVerifiedAt(ctx context.Context, arg UpdateUserEmailVerifiedAtParams) (UpdateUserEmailVerifiedAtRow, error) {
+func (q *Queries) UpdateUserEmailVerifiedAt(ctx context.Context, arg UpdateUserEmailVerifiedAtParams) (User, error) {
 	row := q.db.QueryRow(ctx, updateUserEmailVerifiedAt, arg.ID, arg.EmailVerifiedAt)
-	var i UpdateUserEmailVerifiedAtRow
+	var i User
 	err := row.Scan(
 		&i.ID,
 		&i.Phone,
@@ -1327,11 +1357,13 @@ func (q *Queries) UpdateUserEmailVerifiedAt(ctx context.Context, arg UpdateUserE
 		&i.Surname,
 		&i.Patronymic,
 		&i.Email,
-		&i.EmailVerifiedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.PhoneEncrypted,
+		&i.EmailVerifiedAt,
 		&i.Timezone,
+		&i.PhotoKey,
+		&i.PhotoContentType,
 	)
 	return i, err
 }
@@ -1342,7 +1374,7 @@ SET phone = $2,
     phone_encrypted = $3,
     updated_at = now()
 WHERE id = $1
-RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone
+RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone, photo_key, photo_content_type
 `
 
 type UpdateUserPhoneParams struct {
@@ -1367,6 +1399,43 @@ func (q *Queries) UpdateUserPhone(ctx context.Context, arg UpdateUserPhoneParams
 		&i.PhoneEncrypted,
 		&i.EmailVerifiedAt,
 		&i.Timezone,
+		&i.PhotoKey,
+		&i.PhotoContentType,
 	)
 	return i, err
+}
+
+const usersShareReadableProperty = `-- name: UsersShareReadableProperty :one
+SELECT EXISTS (
+    SELECT 1
+    FROM properties p
+    WHERE (p.owner_id = $1::uuid
+           OR EXISTS (
+               SELECT 1 FROM property_members m
+               WHERE m.property_id = p.id
+                 AND m.user_id = $1::uuid
+                 AND m.status = 'active'))
+      AND actor_can_read_property(p.id, $2::uuid)
+) AS shared
+`
+
+type UsersShareReadablePropertyParams struct {
+	UserID   pgtype.UUID `json:"user_id"`
+	ViewerID pgtype.UUID `json:"viewer_id"`
+}
+
+// The gate of the foreign profile-photo read (ADR 0065, решение владельца
+// #1286 — «показ участникам»): the two users are connected when at least
+// one property is readable by both sides (ADR 0028 derived read,
+// symmetric). The candidate set is the target user's readable properties —
+// owned, or held as an active member (suspended/revoked answers «нет»
+// inside the canonical function); the viewer's side is the canonical SQL
+// function actor_can_read_property (000142, #884) — the derived-read
+// predicate is not re-encoded here, and EXISTS stops on the first shared
+// property.
+func (q *Queries) UsersShareReadableProperty(ctx context.Context, arg UsersShareReadablePropertyParams) (bool, error) {
+	row := q.db.QueryRow(ctx, usersShareReadableProperty, arg.UserID, arg.ViewerID)
+	var shared bool
+	err := row.Scan(&shared)
+	return shared, err
 }

@@ -19,6 +19,12 @@ type User struct {
 	Email           *Email
 	EmailVerifiedAt *time.Time
 	Timezone        Timezone
+	// PhotoKey is the storage key of the profile photo (ADR 0065): nil — no
+	// photo, a key — the private object streamed by GET /me/photo. The
+	// content type travels alongside (PhotoContentType) — the sniffed value
+	// of the upload, never a client header.
+	PhotoKey         *string
+	PhotoContentType *string
 }
 
 func NewOwner(phone Phone) (User, error) {

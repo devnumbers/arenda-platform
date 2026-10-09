@@ -84,7 +84,7 @@ func (s *TaskScanStore) ListOverdueTargets(
 	for _, row := range rows {
 		targets = append(targets, taskOverdueTargetFromRow(
 			row.TaskID, row.Title, row.DueDate, row.DueTime,
-			row.PropertyID, row.PropertyName, row.PropertyAddress, row.RuleID, row.OwnerID))
+			row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.PropertyPhoto, row.RuleID, row.OwnerID))
 	}
 	return targets, nil
 }
@@ -106,7 +106,7 @@ func (s *TaskScanStore) GetScheduledOverdueTask(ctx context.Context, taskID uuid
 	}
 	target := taskOverdueTargetFromRow(
 		row.TaskID, row.Title, row.DueDate, row.DueTime,
-		row.PropertyID, row.PropertyName, row.PropertyAddress, row.RuleID, row.OwnerID)
+		row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.PropertyPhoto, row.RuleID, row.OwnerID)
 	target.DueAt = pgconv.TimestamptzToTime(row.DueAt)
 	return target, true, nil
 }
@@ -116,7 +116,7 @@ func (s *TaskScanStore) GetScheduledOverdueTask(ctx context.Context, taskID uuid
 // property snapshot travels only when the task hangs on one.
 func taskOverdueTargetFromRow(
 	taskID pgtype.UUID, title string, dueDate pgtype.Date, dueTime pgtype.Time,
-	propertyID pgtype.UUID, propertyName, propertyAddress pgtype.Text, ruleID, ownerID pgtype.UUID,
+	propertyID pgtype.UUID, propertyName, propertyAddress, propertyType pgtype.Text, propertyPhoto string, ruleID, ownerID pgtype.UUID,
 ) application.TaskOverdueTarget {
 	target := application.TaskOverdueTarget{
 		TaskID:  pgconv.UUIDFromPgtype(taskID),
@@ -133,6 +133,8 @@ func taskOverdueTargetFromRow(
 		target.PropertyID = id
 		target.PropertyName = pgconv.TextToString(propertyName)
 		target.PropertyAddress = pgconv.TextToString(propertyAddress)
+		target.PropertyType = pgconv.TextToString(propertyType)
+		target.PropertyPhoto = propertyPhoto
 	}
 	return target
 }

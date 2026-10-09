@@ -75,7 +75,9 @@ func run() error {
 	defer limiters.Stop()
 
 	// 4. Identity: repos, session service, event publisher, email mailer
-	//    switch, auth/phone-change/email-change/profile/logout services.
+	//    switch, auth/phone-change/email-change/profile/logout services; the
+	//    shared private-photo storage (ADR 0065) is built here first and
+	//    reused by properties and contacts below.
 	identityMod, err := wire.WireIdentity(ctx, p, eventDispatcher, limiters)
 	if err != nil {
 		return err
@@ -117,9 +119,9 @@ func run() error {
 	//      it (the same reason as the notifications feed above).
 	historyReadMod := wire.WireHistoryRead(p)
 
-	// 7. Properties: repos, subscription limiter, photo storage, the property
-	//    service and the dadata suggester.
-	propertiesMod, err := wire.WireProperties(ctx, p, billingMod)
+	// 7. Properties: repos, subscription limiter, the property service and
+	//    the dadata suggester; the photo storage is the identity step's.
+	propertiesMod, err := wire.WireProperties(ctx, p, billingMod, identityMod.PhotoStorage)
 	if err != nil {
 		return err
 	}
@@ -147,7 +149,7 @@ func run() error {
 	// 7.7 Contacts (ADR 0054): the owner's contact book CRUD with the
 	//     property-scope role gates; wired after access so the
 	//     membership-aware policy resolves the actor/scope matrix (ADR 0028).
-	contactsMod, err := wire.WireContacts(p)
+	contactsMod, err := wire.WireContacts(p, identityMod.PhotoStorage)
 	if err != nil {
 		return err
 	}
@@ -315,6 +317,7 @@ func run() error {
 		PhoneChange:              identityMod.PhoneChange,
 		EmailChange:              identityMod.EmailChange,
 		Profile:                  identityMod.Profile,
+		ProfilePhotos:            identityMod.Profile,
 		Logout:                   identityMod.Logout,
 		Sessions:                 identityMod.Sessions,
 		SessionLoader:            identityMod.SessionLoader,
@@ -433,6 +436,7 @@ func injectPropertyServiceAccess(propertiesMod *wire.Properties, accessMod *wire
 	propertiesMod.PropertyService.SetSharedMemberships(accessMod.SharedProperties)
 	propertiesMod.PropertyService.SetOwnerDisplayNameResolver(accessMod.AccessService)
 	propertiesMod.PropertyService.SetOwnerEmailResolver(accessMod.UserEmailResolver)
+	propertiesMod.PropertyService.SetOwnerPhotoResolver(accessMod.UserEmailResolver)
 	propertiesMod.PropertyService.SetRecipientSlotPolicy(accessMod.SlotCoordinator)
 	propertiesMod.PropertyService.SetSharedMembersDeleteMailer(accessMod.PropertyDeleteMailer)
 	propertiesMod.PropertyService.SetSuspendedSharedMemberships(accessMod.SharedListEnricher)

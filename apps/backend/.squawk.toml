@@ -56,6 +56,7 @@ excluded_paths = [
   "*000147_push_enabled_drop.up.sql",                # ban-drop-column: осознанный снос вырожденного мастера enabled — строка есть = включено, выключение удаляет подписку (карта #1024, спека #1028 §5, решение владельца 01.10)
   "*000148_contacts_property_delete_cascade.up.sql", # adding-foreign-key-constraint: смена referential action DROP+ADD без NOT VALID — файл гоняется одной транзакцией golang-migrate, отдельный VALIDATE невозможен; прецедент 000086 (карта #1047, тикет #1049, разворот ADR 0054 §2)
   "*000150_rental_completion_payment_delete.up.sql", # ban-drop-not-null: свой смысл миграции — ссылка rentals.payment_id становится необязательной, Завершение аренды удаляет Платёж (ревизия ADR 0053 #1161); дюральный жизненный цикл ссылки держат новые CHECK'и того же файла; прецедент 000121
+  "*000152_entity_photo_columns.up.sql",             # ban-drop-table: осознанный снос property_photos вместе со старым контрактом до-10-фото — строк нет, данные не переносятся (ADR 0065, карта #1217, решение #1220; прецеденты 000119/000132)
 ]
 
 excluded_rules = [
