@@ -29,6 +29,7 @@ const RENTAL: Rental = {
     amountKopecks: 5600000,
     paymentDay: 10,
     autoPay: true,
+    reminderOffsetDays: 3,
     nextPayment: null,
   },
   progress: { paidMonths: 3, totalMonths: 24, monthsRemaining: 17, overdueMonths: null },
@@ -42,6 +43,7 @@ describe('rentalEditFormFromRental', () => {
       amountKopecks: 5600000,
       paymentDay: 10,
       autoPay: true,
+      reminderOffsetDays: 3,
       plannedEndDate: '2028-05-10',
       utilities: 'meters_only',
       depositKopecks: 5600000,
@@ -61,6 +63,7 @@ describe('rentalEditFormFromRental', () => {
       amountKopecks: 5600000,
       paymentDay: 10,
       autoPay: true,
+      reminderOffsetDays: 3,
       plannedEndDate: null,
       utilities: 'meters_only',
       depositKopecks: null,
@@ -142,6 +145,24 @@ describe('buildRentalUpdateCommand', () => {
     expect(buildRentalUpdateCommand(RENTAL, clearedComment)).toStrictEqual({
       comment: null,
     });
+  });
+
+  it('смена напоминания уходит значением, «Не напоминать» — явным null (#1208)', () => {
+    const base = rentalEditFormFromRental(RENTAL);
+    expect(buildRentalUpdateCommand(RENTAL, { ...base, reminderOffsetDays: 7 })).toStrictEqual({
+      reminderOffsetDays: 7,
+    });
+    expect(buildRentalUpdateCommand(RENTAL, { ...base, reminderOffsetDays: undefined })).toStrictEqual({
+      reminderOffsetDays: null,
+    });
+
+    // Аренда без напоминаний (null) → выбор оффсета едет значением.
+    const silent: Rental = { ...RENTAL, rentPayment: { ...RENTAL.rentPayment, reminderOffsetDays: null } };
+    const silentForm = rentalEditFormFromRental(silent);
+    expect(buildRentalUpdateCommand(silent, { ...silentForm, reminderOffsetDays: 1 })).toStrictEqual({
+      reminderOffsetDays: 1,
+    });
+    expect(buildRentalUpdateCommand(silent, silentForm)).toBeUndefined();
   });
 
   it('заполнение пустого поля уходит значением', () => {

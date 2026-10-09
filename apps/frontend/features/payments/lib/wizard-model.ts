@@ -234,11 +234,6 @@ export function effectivePaymentType(type: PaymentType | undefined): PaymentType
   return type ?? AMOUNT_STEP_DEFAULTS.type;
 }
 
-/** Клик по чипу-переключателю меняет значение на альтернативное. */
-export function togglePaymentType(type: PaymentType): PaymentType {
-  return type === 'income' ? 'expense' : 'income';
-}
-
 /** Мультивыбор дней недели: сортированный набор без дубликатов. */
 export function toggleWeekday(
   weekdays: ReadonlyArray<number>,
@@ -289,5 +284,10 @@ export function buildPaymentCreateCommand(
     ...(draft.reminderOffsetDays !== undefined && {
       reminderOffsetDays: draft.reminderOffsetDays,
     }),
+    // Уведомление об автоплатеже — только у автоплатежа и только явное
+    // «Да, уведомлять» (макет 3214-72739): опущенное поле = «Не
+    // уведомлять», сервер ставит false (#1189).
+    ...(options.autoPay === true
+      && draft.notifyAutoPaid === true && { notifyAutoPaid: true }),
   };
 }

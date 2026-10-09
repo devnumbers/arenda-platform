@@ -1,25 +1,23 @@
 'use client';
 
 import type { JSX } from 'react';
-import {
-  PAYMENT_REMINDER_OPTIONS,
-  paymentReminderOptionLabel,
-  type PaymentReminderOffset,
-} from '@/entities/payment';
+import type { PaymentReminderOffset } from '@/entities/payment';
 import { useMe } from '@/features/auth';
 import {
   emailReminderCaption,
   EmailNotificationsRow,
 } from '@/features/notifications';
-import { AutoPayRow, PickerSelectField, WizardHeading } from './wizard-chrome';
+import { AutoPayRow, ReminderPickerField, WizardHeading } from './wizard-chrome';
 
 /**
  * Шаг «Настройки аренды» (карта #822, тикет #826; Figma 1428-58757):
  * тумблер автоплатежа (канон AutoPayRow), селект «За сколько напоминать»
- * — предвыбран «За 1 день» (RENTAL_REMINDER_DEFAULT) и виден независимо
- * от тумблера (по макету оба блока на экране одновременно), и тумблер
- * «Включить уведомления об оплате на почту» — общий EmailNotificationsRow
- * (шоткат категории «Платежи и операции»). Выбранный оффсет протекает в
+ * и тумблер «Включить уведомления об оплате на почту» — общий
+ * EmailNotificationsRow (шоткат категории «Платежи и операции»). Селект
+ * виден независимо от тумблера (по макету оба блока на экране
+ * одновременно); #1198 (решение владельца 07.10): опции «Не напоминать /
+ * За 1 день / За 3 дня / За 7 дней», дефолт — «Не напоминать» (отсутствие
+ * выбора), в команду уходит явный null. Выбранный оффсет протекает в
  * создаваемый арендой Платёж 1:1 (buildRentalCreateCommand). Подпись почты
  * повторяет структуру канона шага 4 платежей (#825) с арендным предметом
  * («об оплате») — сломанную грамматику макета не воспроизводим. Ранее
@@ -30,8 +28,9 @@ import { AutoPayRow, PickerSelectField, WizardHeading } from './wizard-chrome';
 export type SettingsStepProps = {
   readonly autoPay: boolean;
   readonly onAutoPayChange: (autoPay: boolean) => void;
-  readonly reminderOffsetDays: PaymentReminderOffset;
-  readonly onReminderOffsetChange: (offset: PaymentReminderOffset) => void;
+  /** Выбранный оффсет; undefined — «Не напоминать» (дефолт шага, #1198). */
+  readonly reminderOffsetDays: PaymentReminderOffset | undefined;
+  readonly onReminderOffsetChange: (offset: PaymentReminderOffset | undefined) => void;
 };
 
 export function SettingsStep({
@@ -49,19 +48,7 @@ export function SettingsStep({
       <WizardHeading title="Настройки аренды" />
       <div className="flex flex-col gap-8 px-6 pt-6">
         <AutoPayRow checked={autoPay} onCheckedChange={onAutoPayChange} />
-        <PickerSelectField
-          title="За сколько напоминать"
-          valueLabel={paymentReminderOptionLabel(reminderOffsetDays)}
-          groups={[
-            {
-              options: PAYMENT_REMINDER_OPTIONS.map((option) => ({
-                label: option.label,
-                selected: reminderOffsetDays === option.offset,
-                onSelect: () => onReminderOffsetChange(option.offset),
-              })),
-            },
-          ]}
-        />
+        <ReminderPickerField value={reminderOffsetDays} onChange={onReminderOffsetChange} />
       </div>
       {/* py-3 строки + pt-5 — те же 32px до тумблера почты, что между
           блоками в колонке (макет 1428-58757). */}

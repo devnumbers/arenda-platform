@@ -28,6 +28,7 @@ const DTO: RentalResponseDto = {
     amountKopecks: 5600000,
     paymentDay: 10,
     autoPay: false,
+    reminderOffsetDays: 7,
     nextPayment: {
       operationId: '0198c7a2-0000-7000-8000-000000000004',
       date: '2026-09-10',
@@ -66,6 +67,7 @@ describe('mapRental', () => {
         amountKopecks: 5600000,
         paymentDay: 10,
         autoPay: false,
+        reminderOffsetDays: 7,
         nextPayment: {
           operationId: '0198c7a2-0000-7000-8000-000000000004',
           date: '2026-09-10',
@@ -84,12 +86,14 @@ describe('mapRental', () => {
       ...DTO,
       plannedEndDate: undefined,
       tenant: undefined,
-      rentPayment: { ...DTO.rentPayment, nextPayment: undefined },
+      rentPayment: { ...DTO.rentPayment, reminderOffsetDays: undefined, nextPayment: undefined },
     });
 
     expect(rental.plannedEndDate).toBeNull();
     expect(rental.tenant).toBeNull();
     expect(rental.rentPayment.nextPayment).toBeNull();
+    // Read-back напоминания (#1208): absent в проводе — «Не напоминать».
+    expect(rental.rentPayment.reminderOffsetDays).toBeNull();
   });
 
   it('читает день оплаты «последний день месяца» и бессрочную аренду', () => {
@@ -158,6 +162,7 @@ describe('mapRental', () => {
       amountKopecks: 5600000,
       paymentDay: 10,
       autoPay: false,
+      reminderOffsetDays: null,
       nextPayment: null,
     });
   });

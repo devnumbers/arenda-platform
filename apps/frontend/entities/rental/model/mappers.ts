@@ -69,6 +69,9 @@ function mapRentPayment(dto: components['schemas']['RentalPaymentView']): Rental
     amountKopecks: dto.amountKopecks,
     paymentDay: dto.paymentDay,
     autoPay: dto.autoPay,
+    // null — «Не напоминать» (#1208): absent в проводе нормализуется в null,
+    // как у остальных nullable-полей ответа.
+    reminderOffsetDays: dto.reminderOffsetDays ?? null,
     nextPayment: mapNextPayment(dto.nextPayment),
   };
 }

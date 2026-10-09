@@ -403,6 +403,64 @@ func assertPaidDateKeyOrder(
 	}
 }
 
+// seedPaidTouchedOperation inserts one paid row with an explicit updated_at —
+// the same-day pay order the payment history reads (#1195): for a paid,
+// never-again-touched row updated_at moves only on the pay UPDATE, so it is
+// the pay's moment, not the row's materialization moment.
+func (h *paymentsHarness) seedPaidTouchedOperation(
+	propertyID, ownerID uuid.UUID, paidDate, touchedAt, title string,
+) uuid.UUID {
+	h.t.Helper()
+	id, err := uuid.NewV7()
+	if err != nil {
+		h.t.Fatalf("new uuid: %v", err)
+	}
+	if _, err := h.pool.Exec(h.ctx(),
+		`INSERT INTO operations (id, owner_id, property_id, origin, date, paid_date,
+		                       status, type, title, amount_kopecks, category_label, category_slug,
+		                       created_at, updated_at)
+		 VALUES ($1, $2, $3, 'payment', $4::date, $4::date, 'paid', 'expense', $5, 100000,
+		         'Коммунальные услуги', $6, $7::timestamptz, $7::timestamptz)`,
+		id, ownerID, propertyID, paidDate, title, testIntegrationSlugUtilities, touchedAt,
+	); err != nil {
+		h.t.Fatalf("seed paid operation %s (touched %s): %v", paidDate, touchedAt, err)
+	}
+	return id
+}
+
+// The payment history's same-day order is the pay order (#1195): at equal
+// paid_date the later-touched row reads first — updated_at of a paid row
+// moves only on the pay UPDATE, so it is the fact's moment. The rows'
+// creation order is deliberately inverted: the id tiebreak reads the
+// materialization order, not the pays (synthetic seed ids break it loudly,
+// tick-materialized planned rows break it quietly).
+func TestListPropertyOperations_SamePaidDayPayOrder(t *testing.T) {
+	t.Parallel()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+	msk := time.FixedZone("MSK", 3*3600)
+	evening := time.Date(2026, 9, 20, 18, 0, 0, 0, msk)
+	morning := time.Date(2026, 9, 20, 9, 0, 0, 0, msk)
+	// «Вечер» paid last in reality, but inserted first — the id tiebreak
+	// alone would read «Утро» first.
+	h.seedPaidTouchedOperation(h.propID, h.owner, "2026-09-20", evening.Format("2006-01-02 15:04:05-07:00"), "Вечер")
+	h.seedPaidTouchedOperation(h.propID, h.owner, "2026-09-20", morning.Format("2006-01-02 15:04:05-07:00"), "Утро")
+	h.seedPaidTouchedOperation(h.propID, h.owner, "2026-09-10", evening.Add(-24*time.Hour).Format("2006-01-02 15:04:05-07:00"), "Прошлое")
+
+	rows, err := h.ops.ListPropertyOperations(h.ctx(), h.owner, h.propID,
+		paymentsapp.OperationsListQuery{Sort: paymentsapp.SortByPaidDate, Limit: 10})
+	if err != nil {
+		t.Fatalf("paid desc: %v", err)
+	}
+	if !titlesEqual(propertyTitles(rows), "Вечер", "Утро", "Прошлое") {
+		t.Fatalf("same-day order = %v, want the pay order (Вечер 18:00, Утро 09:00) with the older day last",
+			propertyTitles(rows))
+	}
+	if !rows[0].Operation.UpdatedAt.Equal(evening) || !rows[1].Operation.UpdatedAt.Equal(morning) {
+		t.Fatalf("updatedAt = %v, %v — want the rows' touch moments carried to the wire",
+			rows[0].Operation.UpdatedAt, rows[1].Operation.UpdatedAt)
+	}
+}
+
 // The domain view status is not the sort's business: the status filter keeps
 // its planning vocabulary (overdue splits on the plan) under paid_date too.
 func TestListPropertyOperations_PaidDateKeepsStatusVocabulary(t *testing.T) {

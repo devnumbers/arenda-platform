@@ -19,6 +19,7 @@ export function makePayment(overrides: Partial<Payment> = {}): Payment {
     recurrence: { kind: 'monthly', daysOfMonth: [1], lastDay: false },
     since: '2026-01-01',
     autoPay: false,
+    notifyAutoPaid: false,
     category: { source: 'default', slug: 'rent', label: 'Арендная плата' },
     isFavorite: false,
     isCompleted: false,

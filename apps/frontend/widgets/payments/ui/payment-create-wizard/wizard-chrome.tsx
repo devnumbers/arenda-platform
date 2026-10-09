@@ -18,9 +18,10 @@ import {
 /**
  * Общий хром шагов визарда создания платежа (#464): заголовок шага
  * (Figma Heading 699:8717 — H3 20/24 + подзаголовок; вариант 'h1' —
- * обновлённый хедер H1/600 Onest SemiBold 28/32 без подзаголовка, только
- * у платёжных поверхностей выбора категории — спека research #1149,
- * Figma 1049:34768, тикет #1152; у операции откатен к H3, решение
+ * обновлённый хедер H1/600 Onest SemiBold 28/32 платёжных поверхностей:
+ * выбор категории — спека research #1149, Figma 1049:34768, тикет #1152;
+ * шаг периодичности платежа и его ветки (с подзаголовком) — макеты
+ * 3213:71290/71312/71350, тикет #1192; у операции остался H3, решение
  * владельца 06.10), нижняя панель действия над StickyBottomBar, подсказка
  * открытого поиска (Figma 1049:46256 — иллюстрация 128 + текст 16/18) и
  * денежное поле шага суммы (карта #1005) — компонентами делится визард
@@ -34,9 +35,10 @@ export function WizardHeading({
 }: {
   readonly title: string;
   readonly subtitle?: string;
-  /** 'h1' — обновлённый хедер платёжных страниц выбора категории:
-   * Service/Heading/H1/600 28/32 (text-2xl в этом проекте = 28/32,
-   * app/globals.css); дефолт 'h3' — прежние заголовки шагов 20/24. */
+  /** 'h1' — обновлённый хедер платёжных страниц: Service/Heading/H1/600
+   * 28/32 (text-2xl в этом проекте = 28/32, app/globals.css); дефолт 'h3'
+   * — прежние заголовки шагов 20/24. Подзаголовок допустим у любого
+   * варианта (ветки периодичности 3213:71312/71350 несут его под H1). */
   readonly variant?: 'h1' | 'h3';
 }): JSX.Element {
   const headingClass =
@@ -167,22 +169,28 @@ const SEGMENT_ORDER = ['expense', 'income'] as const;
  * колонку на ПК (2913:69741); выбранный — белая пилюля с тенью. Подписи —
  * TYPE_LABELS («Расход»/«Доход»), направление выбрано явно подсветкой;
  * видимое значение (пресет входа или дефолт «Доход») вычисляет вызывающий
- * шаг и отдаёт готовым type. */
+ * шаг и отдаёт готовым type. fullWidth — во всю колонку формы правки
+ * платежа (макет 1127:32742, #1197), без 232px яруса шага суммы. */
 export function WizardDirectionSegment({
   type,
   onTypeChange,
   ariaLabel,
+  fullWidth = false,
 }: {
   /** Направление, видимое на сегменте (явный выбор или пресет/дефолт). */
   readonly type: PaymentType;
   readonly onTypeChange: (type: PaymentType) => void;
   readonly ariaLabel: string;
+  readonly fullWidth?: boolean;
 }): JSX.Element {
   return (
     <div
       role="radiogroup"
       aria-label={ariaLabel}
-      className="flex w-full max-w-[232px] rounded-2xl bg-surface-muted p-[2px] desktop:max-w-none"
+      className={
+        'flex w-full rounded-2xl bg-surface-muted p-[2px] '
+        + (fullWidth ? '' : 'max-w-[232px] desktop:max-w-none')
+      }
     >
       {SEGMENT_ORDER.map((option) => {
         const selected = type === option;

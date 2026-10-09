@@ -18,11 +18,11 @@ import { WizardHeading } from './wizard-chrome';
 
 /**
  * Шаг 3 визарда — периодичность без «Один раз» (решение #449, ошибка
- * дизайна Figma): меню день/неделя/месяц/год (Figma 1049:48174 — строки
- * с круглой стрелкой вправо) и ветки дат — дни недели списком с
- * чекбоксами (Figma 1056:52140/52895), мини-грид месяца — канонный
- * MonthDaysGrid с «последним днем месяца» (1056:53076/53077, тикет
- * #809), год — бесконечный календарь как в
+ * дизайна Figma): меню день/неделя/месяц/год (Figma 3213:71290 — H1-заголовок
+ * канона #1152, строки с шевронами, 16px от заголовка к списку) и ветки
+ * дат — дни недели списком с чекбоксами (Figma 3213:71312), мини-грид
+ * месяца — канонный MonthDaysGrid с «последним днем месяца» (3213:71350,
+ * тикет #809), год — бесконечный календарь как в
  * задачах (решение владельца 2026-09-04, раньше был грид месяца
  * 829:11606/1056:53547); подтверждение года — кнопкой «Продолжить»
  * календаря и сразу завершает шаг у любого хоста (решение владельца
@@ -31,7 +31,7 @@ import { WizardHeading } from './wizard-chrome';
  * форму. У ежедневного правила ветки нет — выбор сразу завершает шаг.
  */
 
-/** Подпись типа периода в хедере открытой ветки (Figma 1056:52895):
+/** Подпись типа периода в хедере открытой ветки (Figma 3213:71312):
  * названия совпадают с пунктами меню. Общая для визарда и страницы
  * периодичности экрана правки. */
 export const BRANCH_PERIOD_LABELS: Record<PeriodicityBranch, string> = {
@@ -71,7 +71,9 @@ export type PeriodicityStepProps = {
   readonly onYearlyConfirm: (recurrence: Recurrence) => void;
   /** «Сегодня» клиентской проекции — якорь предвыбора годового правила. */
   readonly today: IsoDate;
-  /** Заголовки шага рисует хост (шит правки #467 несёт их в ModalContent). */
+  /** Заголовки шага (H1-канон #1152) рисует компонент; хост правки их
+   * глушит — там контентных заголовков нет (решение владельца 07.10,
+   * #1192). */
   readonly withHeading?: boolean;
 };
 
@@ -86,7 +88,7 @@ export function PeriodicityStep({
   withHeading = true,
 }: PeriodicityStepProps): JSX.Element {
   const heading = (title: string, subtitle?: string): JSX.Element | null =>
-    withHeading ? <WizardHeading title={title} subtitle={subtitle} /> : null;
+    withHeading ? <WizardHeading title={title} subtitle={subtitle} variant="h1" /> : null;
 
   const pickKind = (kind: PeriodicityKind): void => {
     const pick = pickPeriodicityKind(kind, recurrence);
@@ -102,7 +104,8 @@ export function PeriodicityStep({
     return (
       <>
         {heading('Периодичность платежа')}
-        <div className="flex flex-col pt-6">
+        {/* 16px от заголовка к списку (кадр 3213:71292, gap 16). */}
+        <div className="flex flex-col pt-4">
           {PERIODICITY_OPTIONS.map((option) => (
             <ListRow
               key={option.kind}
@@ -125,7 +128,8 @@ export function PeriodicityStep({
       return (
         <>
           {heading('Выберите день', 'Можно выбрать несколько дней')}
-          <div className="flex flex-col pt-6">
+          {/* 16px от заголовка к списку (кадр 3213:71312). */}
+          <div className="flex flex-col pt-4">
             {WEEKDAY_BUTTONS.map((day) => (
               <ListRow
                 key={day.value}
@@ -170,7 +174,7 @@ export function PeriodicityStep({
         <>
           {heading('Выберите день', 'Можно выбрать несколько дней')}
           {/* Отступы по макету: 16px от заголовка к гриду, 8px от грида
-              к строке последнего дня (узлы 1056:53375/53081). */}
+              к строке последнего дня (кадр 3213:71350). */}
           <div className="pt-4">
             <MonthDaysGrid
               days={30}

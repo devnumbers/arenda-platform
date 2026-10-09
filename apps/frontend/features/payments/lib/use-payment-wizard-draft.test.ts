@@ -64,6 +64,21 @@ describe('validatePaymentWizardDraft', () => {
     expect(validatePaymentWizardDraft({ reminderOffsetDays: 'завтра' })).toStrictEqual({});
   });
 
+  it('флаг «уведомлять об автоплатеже»: true сохраняется, false и мусор отбрасываются (#1193)', () => {
+    // «Да, уведомлять» — единственное состояние, которое черновик хранит:
+    // «Не уведомлять» (дефолт) поля не пишет.
+    expect(validatePaymentWizardDraft({ title: 'x', notifyAutoPaid: true })).toStrictEqual({
+      title: 'x',
+      notifyAutoPaid: true,
+    });
+    // false = «Не уведомлять» — то же, что отсутствие поля.
+    expect(validatePaymentWizardDraft({ title: 'x', notifyAutoPaid: false })).toStrictEqual({
+      title: 'x',
+    });
+    // Небулево значение — мусор из хранилища, роняет черновик как чужой тип.
+    expect(validatePaymentWizardDraft({ notifyAutoPaid: 'да' })).toStrictEqual({});
+  });
+
   it('пустые строки и неположительные суммы отбрасываются', () => {
     expect(validatePaymentWizardDraft({ title: '' })).toStrictEqual({});
     expect(validatePaymentWizardDraft({ amountKopecks: 0 })).toStrictEqual({});
@@ -109,6 +124,7 @@ describe('hasPaymentWizardDraftFields', () => {
     expect(hasPaymentWizardDraftFields({ categorySlug: 'rent' })).toBe(true);
     expect(hasPaymentWizardDraftFields({ endDate: '2027-01-31' })).toBe(true);
     expect(hasPaymentWizardDraftFields({ reminderOffsetDays: 7 })).toBe(true);
+    expect(hasPaymentWizardDraftFields({ notifyAutoPaid: true })).toBe(true);
   });
 
   it('служебный updatedAt сам по себе черновиком не считается', () => {

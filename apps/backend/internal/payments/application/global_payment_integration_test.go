@@ -54,6 +54,7 @@ func (h *paymentsHarness) globalSvc() *paymentsapp.GlobalPaymentService {
 		paymentspg.NewPropertyStore(h.pool),
 		store,
 		rentalspg.NewRentalLinkReader(h.pool),
+		paymentspg.NewPaymentChangeLogStore(h.pool),
 		audit,
 		historypg.NewRecorder(h.pool),
 		pgdb.NewUoW(h.pool, slog.New(slog.DiscardHandler)),

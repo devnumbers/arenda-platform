@@ -10,16 +10,15 @@ import {
  * Персистентность сортировок (тикет #785): выбор чипа живёт в query строки
  * страницы (?sort=&order= — конвенция состояния в адресе) и переживает
  * перезагрузку. Покрыты четыре поверхности с сидовыми/создаваемыми API
- * данными; «История операций» аренды использует тот же парсинг и переключатель,
- * что и история платежа (unit-покрытие parseHistoryOrderParams), сидовой
+ * данными; у истории платежа вместо направления сортировки — режим
+ * изменений (дефолт смешанный, ?changes=0 скрывает, #1195), «История
+ * операций» аренды держит прежний
+ * переключатель (unit-покрытие parseHistoryOrderParams), сидовой
  * завершённой аренды у стенда нет.
  */
 
 /** Сидовая квартира с платежами и правилом «Интернет» (seed.sql). */
 const APARTMENT = SEEDED_APARTMENT_PROPERTY_ID;
-/** Сидовое правило «Интернет» с 55+ paid-вхождениями (seed.sql, #466). */
-const INTERNET_PAYMENT_ID = '55555555-5555-4555-8555-555555555556';
-
 /** Вертикальная координата строки по тексту — порядок строк внутри списка. */
 async function yOf(scope: Locator | Page, text: string): Promise<number> {
   const box = await scope.getByText(text).boundingBox();
@@ -60,36 +59,61 @@ async function createContact(page: Page, firstName: string): Promise<string> {
 }
 
 test.describe('сортировки переживают перезагрузку (#785)', () => {
-  test('история платежа: направление живёт в адресе и переживает перезагрузку', async ({
+  test('история платежа: режим изменений живёт в адресе и переживает перезагрузку', async ({
     page,
     seededUser,
-  }) => {
+  }, testInfo) => {
     await openCabinetWithSeededSession(page, seededUser);
-    await page.goto(`/properties/${APARTMENT}/payments/${INTERNET_PAYMENT_ID}/history`);
 
-    // Дефолт «сначала новые»: первая группа — свежая дата (датовые группы
-    // несут год, канон 1302:52209; «Сегодня/Вчера» — без).
-    const freshChip = await settle(
-      page.getByRole('button', { name: /Сортировка: сначала новые/ }),
+    // Свежее правило + правка суммы API-вызовом (сид не мутируем): создание
+    // строку журнала не пишет, правка пишет одну (ADR 0065).
+    const title = `E2E режим ${testInfo.retry}`;
+    const created = await page.request.post(`/api/properties/${APARTMENT}/payments`, {
+      data: {
+        type: 'expense',
+        title,
+        amountKopecks: 100_000,
+        recurrence: { kind: 'monthly', daysOfMonth: [1], lastDay: false },
+        categorySlug: 'other',
+        autoPay: false,
+      },
+    });
+    expect(created.ok(), `создание правила «${title}»`).toBe(true);
+    const payment = (await created.json()) as { id: string };
+    const patched = await page.request.patch(
+      `/api/properties/${APARTMENT}/payments/${payment.id}`,
+      { data: { amountKopecks: 200_000 } },
     );
-    await expect(freshChip).toBeVisible();
-    const newestFirstHeading = await page.getByRole('heading').first().textContent();
+    expect(patched.ok(), 'правка суммы').toBe(true);
 
-    // Переключение на «сначала старые»: адрес получил ?order=asc, первая
-    // группа — самая старая сидовая дата (55+ месяцев, год в подписи).
-    await freshChip.click();
-    await expect(page).toHaveURL(/order=asc/);
-    await expect(page.getByRole('button', { name: /Сортировка: сначала старые/ })).toBeVisible();
-    const oldestFirstHeading = await page.getByRole('heading').first().textContent();
-    expect(oldestFirstHeading, 'первая группа в asc — дата с годом')
-      .toMatch(/\d{4}/);
-    expect(oldestFirstHeading).not.toEqual(newestFirstHeading);
+    try {
+      await page.goto(`/properties/${APARTMENT}/payments/${payment.id}/history`);
+      // Дефолт — история с изменениями: чип правки виден, адрес чист
+      // (дефолт в адресе не пишется).
+      await expect(page.getByText('Сумма изменена').first()).toBeVisible();
+      await expect(page).not.toHaveURL(/changes=/);
 
-    // Перезагрузка: направление восстановлено из адреса (#785).
-    await page.reload();
-    await expect(page).toHaveURL(/order=asc/);
-    await expect(page.getByRole('button', { name: /Сортировка: сначала старые/ })).toBeVisible();
-    await expect(page.getByRole('heading').first()).toHaveText(oldestFirstHeading ?? '');
+      // Меню «⋮» → «Скрыть изменения»: адрес получил ?changes=0.
+      await page.getByRole('button', { name: 'Действия с историей' }).click();
+      await page.getByRole('menuitem', { name: 'Скрыть изменения' }).click();
+      await expect(page).toHaveURL(/changes=0/);
+      await expect(page.getByText('Сумма изменена')).toHaveCount(0);
+
+      // Перезагрузка: скрытый режим восстановлен из адреса (#785).
+      await page.reload();
+      await expect(page).toHaveURL(/changes=0/);
+      await expect(page.getByText('Сумма изменена')).toHaveCount(0);
+
+      // «Показать изменения» снимает параметр — снова смешанный дефолт.
+      await page.getByRole('button', { name: 'Действия с историей' }).click();
+      await page.getByRole('menuitem', { name: 'Показать изменения' }).click();
+      await expect(page).not.toHaveURL(/changes=/);
+      await expect(page.getByText('Сумма изменена').first()).toBeVisible();
+    } finally {
+      await page.request.delete(
+        `/api/properties/${APARTMENT}/payments/${payment.id}?keep_overdue=true`,
+      );
+    }
   });
 
   test('задачи объекта: сортировка живёт в адресе и переживает перезагрузку', async ({

@@ -40,6 +40,7 @@ type PaymentManager interface {
 	PaymentFlags(ctx context.Context, actor, propertyID uuid.UUID) (completed, managed, rentalCompleted map[uuid.UUID]bool, err error)
 	RentalManagedStatus(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (bool, error)
 	RentalCompletedStatus(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (bool, error)
+	PaymentChanges(ctx context.Context, actor, propertyID, paymentID uuid.UUID, q application.ChangesQuery) (application.ChangeLogPage, error)
 }
 
 // PaymentHandlers implements the generated payment endpoints.
@@ -227,7 +228,7 @@ func (h *PaymentHandlers) UpdatePayment(w http.ResponseWriter, r *http.Request, 
 	}
 
 	var body openapi.PaymentUpdateRequest
-	endDateRaw, reminderRaw, err := h.decodeUpdateBody(w, r, &body)
+	endDateRaw, reminderRaw, notifyRaw, err := h.decodeUpdateBody(w, r, &body)
 	if err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode update payment request",
 			slog.String("error", httpsupport.SanitizeError(err)))
@@ -236,7 +237,7 @@ func (h *PaymentHandlers) UpdatePayment(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	cmd, err := updateCommand(body, endDateRaw, reminderRaw)
+	cmd, err := updateCommand(body, endDateRaw, reminderRaw, notifyRaw)
 	if err != nil {
 		h.handlePaymentError(w, r, err)
 		return
@@ -333,6 +334,95 @@ func (h *PaymentHandlers) SetPaymentFavorite(w http.ResponseWriter, r *http.Requ
 	h.respondWithPayment(w, r, actor, propertyID, payment, http.StatusOK)
 }
 
+// ListPaymentChanges implements GET /properties/{propertyId}/payments/{paymentId}/changes
+// (ADR 0065 §6): the bidirectional keyset page of the rule's change log; the
+// chip screen renders the structure, the server only orders it.
+func (h *PaymentHandlers) ListPaymentChanges(
+	w http.ResponseWriter, r *http.Request, propertyID, paymentID openapi_types.UUID,
+	params openapi.ListPaymentChangesParams,
+) {
+	actor, ok := httpsupport.RequireUser(w, r)
+	if !ok {
+		return
+	}
+
+	q := application.ChangesQuery{}
+	if params.BeforeCursor != nil {
+		q.BeforeCursor = *params.BeforeCursor
+	}
+	if params.AfterCursor != nil {
+		q.AfterCursor = *params.AfterCursor
+	}
+	if params.Limit != nil {
+		q.Limit = *params.Limit
+	}
+
+	page, err := h.svc.PaymentChanges(r.Context(), actor, propertyID, paymentID, q)
+	if err != nil {
+		h.handlePaymentError(w, r, err)
+		return
+	}
+	resp, err := paymentChangesResponse(page)
+	if err != nil {
+		h.writeInternal(w, r, err)
+		return
+	}
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, resp)
+}
+
+// paymentChangesResponse folds the application page onto the wire: the typed
+// jsonb values decode back into their any-shaped wire values verbatim. A
+// malformed stored blob is a data-integrity failure, not a wire value — it
+// surfaces as the 500, like at the store read.
+func paymentChangesResponse(page application.ChangeLogPage) (openapi.PaymentChangesResponse, error) {
+	items := make([]openapi.PaymentChangeItem, len(page.Items))
+	for i, entry := range page.Items {
+		changes := make([]openapi.PaymentFieldChange, len(entry.Changes))
+		for j, change := range entry.Changes {
+			old, err := decodeChangeValue(change.Old)
+			if err != nil {
+				return openapi.PaymentChangesResponse{}, err
+			}
+			newValue, err := decodeChangeValue(change.New)
+			if err != nil {
+				return openapi.PaymentChangesResponse{}, err
+			}
+			changes[j] = openapi.PaymentFieldChange{
+				Field: openapi.PaymentChangeField(change.Field),
+				Old:   old,
+				New:   newValue,
+			}
+		}
+		items[i] = openapi.PaymentChangeItem{
+			Id:        entry.ID,
+			ActorId:   entry.ActorID,
+			Action:    openapi.PaymentChangeAction(entry.Action),
+			Changes:   changes,
+			CreatedAt: entry.CreatedAt,
+		}
+	}
+	resp := openapi.PaymentChangesResponse{Items: items}
+	if page.NextCursor != "" {
+		resp.NextCursor = &page.NextCursor
+	}
+	if page.PrevCursor != "" {
+		resp.PrevCursor = &page.PrevCursor
+	}
+	return resp, nil
+}
+
+// decodeChangeValue unmarshals one stored typed value into the wire's
+// any-shape. The stored blob was written by this same domain (typed JSON,
+// never formatted strings) and its outer array is unmarshaled at the store
+// read — so a failure here is a data-integrity error, not a wire value.
+func decodeChangeValue(raw json.RawMessage) (any, error) {
+	var value any
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return nil, fmt.Errorf("decode stored change value %s: %w", raw, err)
+	}
+	return value, nil
+}
+
 // decodeFavoriteBody reads the favorite toggle body strictly. A required bool
 // cannot express its own absence in the generated struct ({} and {"favorite":
 // false} both decode to false), so a pointer shadow enforces the required flag
@@ -375,6 +465,10 @@ func createCommand(body openapi.PaymentCreateRequest) (application.CreatePayment
 	if body.AutoPay != nil {
 		autoPay = *body.AutoPay
 	}
+	notifyAutoPaid := false
+	if body.NotifyAutoPaid != nil {
+		notifyAutoPaid = *body.NotifyAutoPaid
+	}
 	return application.CreatePaymentCommand{
 		Type:               domain.PaymentType(body.Type),
 		Title:              body.Title,
@@ -383,49 +477,53 @@ func createCommand(body openapi.PaymentCreateRequest) (application.CreatePayment
 		CategorySlug:       body.CategorySlug,
 		EndDate:            datePtrFromWire(body.EndDate),
 		AutoPay:            autoPay,
+		NotifyAutoPaid:     notifyAutoPaid,
 		ReminderOffsetDays: reminderOffsetFromWire(body.ReminderOffsetDays),
 	}, nil
 }
 
 // decodeUpdateBody reads the update body once and decodes it two ways: the
 // strict contract decode (bounded, unknown fields rejected) and a shadow pass
-// that preserves the tri-state endDate and reminderOffsetDays. The shadow
-// exists because encoding/json collapses absent and null onto the same nil
-// pointer for every optional field, while a non-pointer json.RawMessage
-// receives the raw "null" bytes — that distinction is exactly the PATCH
-// semantics of both fields (omit keeps, null clears, a value sets).
+// that preserves the tri-state endDate, reminderOffsetDays and notifyAutoPaid.
+// The shadow exists because encoding/json collapses absent and null onto the
+// same nil pointer for every optional field, while a non-pointer
+// json.RawMessage receives the raw "null" bytes — that distinction is exactly
+// the PATCH semantics of the fields (omit keeps, null clears, a value sets).
 func (h *PaymentHandlers) decodeUpdateBody(
 	w http.ResponseWriter, r *http.Request, body *openapi.PaymentUpdateRequest,
-) (endDateRaw, reminderRaw json.RawMessage, err error) {
+) (endDateRaw, reminderRaw, notifyRaw json.RawMessage, err error) {
 	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, httpsupport.MaxRequestBodySize))
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
 	var wire openapi.PaymentUpdateRequest
 	if err := dec.Decode(&wire); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	*body = wire
 	var shadow struct {
 		EndDate            json.RawMessage `json:"endDate"`
 		ReminderOffsetDays json.RawMessage `json:"reminderOffsetDays"`
+		NotifyAutoPaid     json.RawMessage `json:"notifyAutoPaid"`
 	}
 	if err := json.Unmarshal(raw, &shadow); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	// A nil raw message means omitted — no change; "null" and a value
 	// both arrive as bytes for their resolvers.
-	return shadow.EndDate, shadow.ReminderOffsetDays, nil
+	return shadow.EndDate, shadow.ReminderOffsetDays, shadow.NotifyAutoPaid, nil
 }
 
 // updateCommand folds the PATCH body into the application command and
-// resolves the tri-state endDate and reminderOffsetDays from their raw wire
-// bytes: omitted keeps (nil raw), null clears, a value sets. The contract
-// rules live in the payment rule module (validateRule); the transport only
-// builds.
-func updateCommand(body openapi.PaymentUpdateRequest, endDateRaw, reminderRaw json.RawMessage) (application.UpdatePaymentCommand, error) {
+// resolves the tri-state endDate, reminderOffsetDays and notifyAutoPaid from
+// their raw wire bytes: omitted keeps (nil raw), null clears, a value sets.
+// The contract rules live in the payment rule module (validateRule); the
+// transport only builds.
+func updateCommand(
+	body openapi.PaymentUpdateRequest, endDateRaw, reminderRaw, notifyRaw json.RawMessage,
+) (application.UpdatePaymentCommand, error) {
 	cmd := application.UpdatePaymentCommand{}
 	if len(endDateRaw) > 0 {
 		endDate, err := endDateUpdateFromWire(endDateRaw)
@@ -440,6 +538,13 @@ func updateCommand(body openapi.PaymentUpdateRequest, endDateRaw, reminderRaw js
 			return application.UpdatePaymentCommand{}, err
 		}
 		cmd.ReminderOffsetDays = reminder
+	}
+	if len(notifyRaw) > 0 {
+		notify, err := notifyAutoPaidUpdateFromWire(notifyRaw)
+		if err != nil {
+			return application.UpdatePaymentCommand{}, err
+		}
+		cmd.NotifyAutoPaid = notify
 	}
 	if body.Type != nil {
 		cmd.Type = new(domain.PaymentType(*body.Type))
@@ -516,14 +621,30 @@ func parseRecurrence(in openapi.Recurrence) (domain.Recurrence, error) {
 	}
 }
 
+// wireTriState splits a raw PATCH field into the omit/null/value shape the
+// tri-state resolvers share: present is false only for an empty message
+// (omitted — no change), isNull marks the explicit JSON null (clear), and
+// trimmed carries the value bytes otherwise. The callers only decode their
+// own value type.
+func wireTriState(raw json.RawMessage) (present, isNull bool, trimmed json.RawMessage) {
+	trimmed = bytes.TrimSpace(raw)
+	if len(trimmed) == 0 {
+		return false, false, nil
+	}
+	if bytes.Equal(trimmed, []byte("null")) {
+		return true, true, nil
+	}
+	return true, false, trimmed
+}
+
 // endDateUpdateFromWire resolves the tri-state endDate: the raw message is
 // either JSON null (clear the end date, open-ended) or a date string (set it).
 func endDateUpdateFromWire(raw json.RawMessage) (*application.EndDateUpdate, error) {
-	trimmed := bytes.TrimSpace(raw)
-	if len(trimmed) == 0 {
+	present, isNull, trimmed := wireTriState(raw)
+	if !present {
 		return nil, application.ErrInvalidInput
 	}
-	if bytes.Equal(trimmed, []byte("null")) {
+	if isNull {
 		return &application.EndDateUpdate{Value: nil}, nil
 	}
 	var date openapi_types.Date
@@ -537,11 +658,11 @@ func endDateUpdateFromWire(raw json.RawMessage) (*application.EndDateUpdate, err
 // JSON null clears the reminders, a number sets the lead time — its value is
 // re-checked by validateRule, a non-integer literal is invalid input.
 func reminderOffsetUpdateFromWire(raw json.RawMessage) (*application.ReminderOffsetUpdate, error) {
-	trimmed := bytes.TrimSpace(raw)
-	if len(trimmed) == 0 {
+	present, isNull, trimmed := wireTriState(raw)
+	if !present {
 		return nil, application.ErrInvalidInput
 	}
-	if bytes.Equal(trimmed, []byte("null")) {
+	if isNull {
 		return &application.ReminderOffsetUpdate{Value: nil}, nil
 	}
 	var value openapi.PaymentUpdateRequestReminderOffsetDays
@@ -550,6 +671,24 @@ func reminderOffsetUpdateFromWire(raw json.RawMessage) (*application.ReminderOff
 	}
 	offset := int(value)
 	return &application.ReminderOffsetUpdate{Value: &offset}, nil
+}
+
+// notifyAutoPaidUpdateFromWire resolves the tri-state notifyAutoPaid (#1189):
+// JSON null clears the «Автоплатёж исполнен» gate (false), a boolean sets it —
+// the same omit-keeps/null-clears/value-sets shape as the reminder tri-state.
+func notifyAutoPaidUpdateFromWire(raw json.RawMessage) (*bool, error) {
+	present, isNull, trimmed := wireTriState(raw)
+	if !present {
+		return nil, application.ErrInvalidInput
+	}
+	if isNull {
+		return new(false), nil
+	}
+	var value bool
+	if err := json.Unmarshal(trimmed, &value); err != nil {
+		return nil, application.ErrInvalidInput
+	}
+	return new(value), nil
 }
 
 // reminderOffsetFromWire converts the optional create enum into the command's
@@ -598,6 +737,7 @@ func paymentResponse(p domain.Payment, isCompleted, isRentalManaged, isRentalCom
 		Since:              openapi_types.Date{Time: p.Since},
 		EndDate:            httpsupport.DatePtrToOpenAPI(p.EndDate),
 		AutoPay:            p.AutoPay,
+		NotifyAutoPaid:     p.NotifyAutoPaid,
 		Category:           categoryView(p.Category),
 		ReminderOffsetDays: reminderOffsetResponse(p.ReminderOffsetDays),
 		IsFavorite:         p.IsFavorite,

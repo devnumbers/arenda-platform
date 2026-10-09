@@ -22,6 +22,7 @@ describe('buildPropertyRentalBlock — активная аренда', () => {
           amountKopecks: 5600000,
           paymentDay: 1,
           autoPay: false,
+          reminderOffsetDays: null,
           nextPayment: {
             operationId: 'operation-1',
             date: '2026-10-11',
@@ -43,6 +44,7 @@ describe('buildPropertyRentalBlock — активная аренда', () => {
           amountKopecks: 5600000,
           paymentDay: 1,
           autoPay: false,
+          reminderOffsetDays: null,
           nextPayment: {
             operationId: 'operation-1',
             date: '2026-09-11',
@@ -65,6 +67,7 @@ describe('buildPropertyRentalBlock — активная аренда', () => {
             amountKopecks: 5600000,
             paymentDay: 1,
             autoPay: false,
+            reminderOffsetDays: null,
             nextPayment: {
               operationId: 'operation-1',
               date: '2026-09-12',

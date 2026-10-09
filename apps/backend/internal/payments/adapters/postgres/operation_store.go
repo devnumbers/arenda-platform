@@ -295,6 +295,7 @@ func (s *OperationStore) ListGlobal(
 				Title: row.Title, AmountKopecks: row.AmountKopecks,
 				CategoryLabel: row.CategoryLabel,
 				CategorySlug:  row.CategorySlug,
+				UpdatedAt:     row.UpdatedAt,
 			}),
 			PropertyName: row.PropertyName,
 		})
@@ -497,6 +498,7 @@ func mapOperationRows(rows []postgres.ListOperationsRow) []domain.Operation {
 			Title: row.Title, AmountKopecks: row.AmountKopecks,
 			CategoryLabel: row.CategoryLabel,
 			CategorySlug:  row.CategorySlug,
+			UpdatedAt:     row.UpdatedAt,
 		}))
 	}
 	return out

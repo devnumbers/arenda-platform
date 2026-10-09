@@ -33,6 +33,8 @@ function baseForm(overrides: Partial<PaymentEditForm> = {}): PaymentEditForm {
     categorySlug: undefined,
     recurrence: { kind: 'monthly', daysOfMonth: [15], lastDay: false },
     endDate: undefined,
+    reminderOffsetDays: undefined,
+    notifyAutoPaid: false,
     ...overrides,
   };
 }
@@ -129,6 +131,85 @@ describe('buildPaymentUpdateCommand', () => {
         category: { source: 'custom', id: '019abcde-0000-7000-8000-000000000003', label: 'Моя' },
       });
       expect(buildPaymentUpdateCommand(payment, baseForm())).toBeUndefined();
+    });
+  });
+
+  describe('напоминание — tri-state (#1197, макет 1130-35022)', () => {
+    it('выбранный оффсет попадает в команду', () => {
+      const command = buildPaymentUpdateCommand(
+        basePayment(),
+        baseForm({ reminderOffsetDays: 3 }),
+      );
+      expect(command).toEqual({ reminderOffsetDays: 3 });
+    });
+
+    it('тот же оффсет — опущен', () => {
+      const payment = basePayment({ reminderOffsetDays: 3 });
+      expect(
+        buildPaymentUpdateCommand(payment, baseForm({ reminderOffsetDays: 3 })),
+      ).toBeUndefined();
+    });
+
+    it('смена оффсета 1 → 7 едет числом', () => {
+      const payment = basePayment({ reminderOffsetDays: 1 });
+      const command = buildPaymentUpdateCommand(
+        payment,
+        baseForm({ reminderOffsetDays: 7 }),
+      );
+      expect(command).toEqual({ reminderOffsetDays: 7 });
+    });
+
+    it('«Не напоминать» у правила с напоминанием — null снимает его', () => {
+      const payment = basePayment({ reminderOffsetDays: 7 });
+      const command = buildPaymentUpdateCommand(payment, baseForm());
+      expect(command).toEqual({ reminderOffsetDays: null });
+    });
+
+    it('«Не напоминать» у правила без напоминания — опущено', () => {
+      expect(buildPaymentUpdateCommand(basePayment(), baseForm())).toBeUndefined();
+    });
+
+    it('правка напоминания едет в одном PATCH с другими полями', () => {
+      const command = buildPaymentUpdateCommand(
+        basePayment(),
+        baseForm({ amountKopecks: 400_000, reminderOffsetDays: 1 }),
+      );
+      expect(command).toEqual({ amountKopecks: 400_000, reminderOffsetDays: 1 });
+    });
+  });
+
+  describe('флаг «уведомлять об автоплатеже» (#1189, #1197)', () => {
+    it('у автоплатёжного правила явное «да» едет true', () => {
+      const payment = basePayment({ autoPay: true, notifyAutoPaid: false });
+      const command = buildPaymentUpdateCommand(
+        payment,
+        baseForm({ notifyAutoPaid: true }),
+      );
+      expect(command).toEqual({ notifyAutoPaid: true });
+    });
+
+    it('у автоплатёжного правила «не уведомлять» едет false', () => {
+      const payment = basePayment({ autoPay: true, notifyAutoPaid: true });
+      const command = buildPaymentUpdateCommand(
+        payment,
+        baseForm({ notifyAutoPaid: false }),
+      );
+      expect(command).toEqual({ notifyAutoPaid: false });
+    });
+
+    it('то же значение — опущено', () => {
+      const payment = basePayment({ autoPay: true, notifyAutoPaid: true });
+      expect(
+        buildPaymentUpdateCommand(payment, baseForm({ notifyAutoPaid: true })),
+      ).toBeUndefined();
+    });
+
+    it('у ручного правила флаг не трогается никогда', () => {
+      const command = buildPaymentUpdateCommand(
+        basePayment({ autoPay: false, notifyAutoPaid: false }),
+        baseForm({ notifyAutoPaid: true }),
+      );
+      expect(command).toBeUndefined();
     });
   });
 

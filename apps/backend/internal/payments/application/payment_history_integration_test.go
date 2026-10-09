@@ -165,6 +165,7 @@ func TestHistory_FailingInsertRollsMutationBack(t *testing.T) {
 		paymentspg.NewPropertyStore(h.pool),
 		paymentspg.NewGlobalPaymentStore(h.pool),
 		rentalspg.NewRentalLinkReader(h.pool),
+		nil,
 		auditapp.NewService(auditpg.NewWriter(h.pool), clk),
 		&historytest.CapturingRecorder{Err: errHistoryDown},
 		pgdb.NewUoW(h.pool, logger),

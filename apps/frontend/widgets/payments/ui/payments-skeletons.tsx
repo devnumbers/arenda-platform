@@ -48,25 +48,13 @@ function SkeletonOperationSection({ children }: { readonly children: ReactNode }
   );
 }
 
-/** Плитка подэкранов-заглушка: каркас PaymentsTile — серая карточка
- * min-h 168.5 (p-6), иконка 40 сверху, подпись снизу. */
-function SkeletonTile(): JSX.Element {
-  return (
-    <span
-      aria-hidden
-      className="flex min-h-[168.5px] flex-1 flex-col justify-between rounded-card bg-surface-muted p-6"
-    >
-      <Skeleton className={`h-10 w-10 ${MUTED}`} />
-      <Skeleton className={`h-[18px] w-3/5 ${MUTED}`} />
-    </span>
-  );
-}
-
 /**
  * Скелетон страницы платежа (#606): hero-карточка правила, три круглые
- * кнопки (полный доступ), секции «Ближайший платеж» (строка со суммой)
- * и «Просроченные платежи» (строки со суммой и сроком); секция истории
- * условна (не у правила есть paid-операции) — скелетоном не рисуется.
+ * кнопки (полный доступ), секции «Ближайшая операция» (строка со суммой)
+ * и «Просроченные платежи» (строки со суммой и сроком), зазор секций 16px
+ * (3214:76434, #1194 — как у контента); плиток подэкранов нет (снесены
+ * #1073), секция истории условна (не у правила есть paid-операции) —
+ * скелетоном не рисуется.
  */
 export function PaymentDetailSkeleton(): JSX.Element {
   const overdueWidths = skeletonRowWidths(1);
@@ -94,7 +82,7 @@ export function PaymentDetailSkeleton(): JSX.Element {
         </div>
       </div>
 
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4">
         <SkeletonPaymentsGroup>
           <SkeletonListRow value tone="muted" className="px-3" />
         </SkeletonPaymentsGroup>
@@ -111,13 +99,6 @@ export function PaymentDetailSkeleton(): JSX.Element {
             />
           ))}
         </SkeletonPaymentsGroup>
-
-        <div className="px-6" aria-hidden>
-          <div className="flex gap-2">
-            <SkeletonTile />
-            <SkeletonTile />
-          </div>
-        </div>
       </div>
     </>
   );
@@ -222,26 +203,42 @@ export function CategoryRowsSkeleton({ rows = 8 }: { readonly rows?: number }): 
 
 /**
  * Скелетон формы правки платежа (#607, паритет — §7 DESIGN.md): каркас
- * PaymentEditForm — «Сумма», «Название платежа» (с нижней строкой
- * счётчика 13/15, как у TextField с maxLength), четыре поля-кнопки
- * (категория, тип, регулярность, окончание) и danger-кнопка
- * удаления. Роль в загрузке неизвестна — строка удаления рисуется
- * всегда: владелец (сценарий по умолчанию) получает точный паритет, а
- * смотрящему форму всё равно замещает карточка «Правка недоступна».
- * Sticky-панель «Сохранить» и хедер вне потока — не зеркалятся.
+ * PaymentEditForm по макету 1127-32083 (#1197) — «Сумма» с сегментом
+ * направления, «Название платежа» (с нижней строкой счётчика 13/15, как
+ * у TextField с maxLength), поля-кнопки (категория, регулярность,
+ * окончание с подсказкой, напоминание/уведомление), ряд email-уведомлений
+ * и danger-кнопка удаления. Роль в загрузке неизвестна — строка удаления
+ * рисуется всегда: владелец (сценарий по умолчанию) получает точный
+ * паритет, а смотрящему форму всё равно замещает карточка «Правка
+ * недоступна». Sticky-панель «Сохранить» и хедер вне потока — не зеркалятся.
  */
 export function PaymentEditFormSkeleton(): JSX.Element {
   return (
     <div aria-hidden className="flex flex-col gap-8 px-6">
-      <SkeletonFormField labelWidth="w-16" />
+      <span className="flex flex-col gap-2">
+        <SkeletonFormField labelWidth="w-16" />
+        <Skeleton className="h-11 w-full rounded-2xl" />
+      </span>
       <span className="flex flex-col gap-2">
         <SkeletonFormField labelWidth="w-36" />
-        <Skeleton className="h-[15px] w-12" />
+        <Skeleton className="h-[15px] w-28" />
       </span>
       <SkeletonFormField labelWidth="w-24" />
-      <SkeletonFormField labelWidth="w-32" />
       <SkeletonFormField labelWidth="w-44" />
-      <SkeletonFormField labelWidth="w-36" />
+      <span className="flex flex-col gap-2">
+        <SkeletonFormField labelWidth="w-40" />
+        <Skeleton className="h-[15px] w-32" />
+      </span>
+      <SkeletonFormField labelWidth="w-44" />
+      {/* Ряд email-уведомлений (EmailNotificationsRow): заголовок + подпись
+          слева, тумблер справа. */}
+      <span className="flex items-center justify-between gap-4 py-3">
+        <span className="flex min-w-0 flex-col gap-1">
+          <Skeleton className="h-[18px] w-48" />
+          <Skeleton className="h-4 w-64 max-w-full" />
+        </span>
+        <Skeleton className="h-7 w-12 rounded-pill" />
+      </span>
       <Skeleton className="h-14 w-full rounded-button" />
     </div>
   );

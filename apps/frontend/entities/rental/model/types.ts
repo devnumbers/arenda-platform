@@ -44,6 +44,13 @@ export type RentalPaymentView = {
   readonly amountKopecks: number;
   readonly paymentDay: RentalPaymentDay;
   readonly autoPay: boolean;
+  /** Лид-тайм напоминания о платеже арендной платы (карта #822), читается
+   * из Платежа: 1|3|7 дней, null — напоминаний нет («Не напоминать»).
+   * Правится через PATCH аренды (#1208), сервер синхронно переносит в
+   * Платёж. Литералы контракта — словарь опций живёт слайсом платежа
+   * (PAYMENT_REMINDER_OPTIONS), entity-слой соседних слайсов не
+   * импортирует. */
+  readonly reminderOffsetDays: 1 | 3 | 7 | null;
   readonly nextPayment: RentalNextPayment | null;
 };
 
@@ -99,8 +106,9 @@ export type RentalCreateCommand = {
   /** Лид-тайм напоминания о платеже арендной платы, протекает в её Платёж
    * 1:1 (карта #822): литералы контракта 1|3|7 — словарь опций живёт
    * слайсом платежа (PAYMENT_REMINDER_OPTIONS), entity-слой соседних
-   * слайсов не импортирует. */
-  readonly reminderOffsetDays: 1 | 3 | 7;
+   * слайсов не импортирует. Дефолт экрана — «Не напоминать»: null едет
+   * в команду явно, дефолт не протекает молча (#1198). */
+  readonly reminderOffsetDays: 1 | 3 | 7 | null;
 };
 
 /**
@@ -108,13 +116,16 @@ export type RentalCreateCommand = {
  * #532): частичное тело — включены только изменённые поля (дифф формы,
  * прецедент правки платежа #467). Nullable-поля — tri-state: опущенное
  * остаётся без изменений, явный null очищает (ADR 0053 §4). Начало не
- * правится; сумма, день оплаты, автоплатёж и окончание сервер синхронно
- * переносит на Платёж арендной платы.
+ * правится; сумма, день оплаты, автоплатёж, напоминание и окончание сервер
+ * синхронно переносит на Платёж арендной платы (#1208).
  */
 export type RentalUpdateCommand = {
   readonly amountKopecks?: number;
   readonly paymentDay?: RentalPaymentDay;
   readonly autoPay?: boolean;
+  /** Tri-state лид-тайм напоминания (#1208): опущенное остаётся, явный null
+   * выключает напоминания («Не напоминать»), 1|3|7 ставит. */
+  readonly reminderOffsetDays?: 1 | 3 | 7 | null;
   readonly plannedEndDate?: IsoDate | null;
   readonly utilities?: RentalUtilities;
   readonly depositKopecks?: number | null;

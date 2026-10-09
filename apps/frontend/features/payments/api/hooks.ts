@@ -21,6 +21,7 @@ import type {
   OperationsSummary,
   PaymentCategoryView,
   Payment,
+  PaymentChangeEntry,
   PaymentCreateCommand,
   PaymentOperation,
   PaymentUpdateCommand,
@@ -48,6 +49,7 @@ import {
   globalOperationsSummaryQueryOptions,
   globalPaymentObjectsQueryOptions,
   globalPaymentsFeedQueryOptions,
+  paymentChangesPagedQueryOptions,
   paymentDetailQueryOptions,
   paymentListQueryOptions,
   paymentOperationQueryOptions,
@@ -296,6 +298,25 @@ export function usePaymentOperationsPaged(
     ...paymentOperationsPagedQueryOptions({ propertyId, paymentId, status, order, sort }),
     select: (data) => data.pages.flat(),
     enabled: Boolean(propertyId) && Boolean(paymentId),
+  });
+}
+
+/**
+ * Порции журнала изменений платежа (ADR 0065, режим «изменения» экрана
+ * «История платежа» #1195): keyset-курсор (created_at, id) DESC, обратная
+ * хронология — канон #597. `options.enabled` глушит запрос: режим
+ * изменений грузит журнал только когда включён (дефолтный режим экрана
+ * операций его не трогает).
+ */
+export function usePaymentChangesPaged(
+  propertyId: string,
+  paymentId: string,
+  options: { readonly enabled?: boolean } = {},
+): UseInfiniteQueryResult<ReadonlyArray<PaymentChangeEntry>, ApiError> {
+  return useInfiniteQuery({
+    ...paymentChangesPagedQueryOptions({ propertyId, paymentId }),
+    select: (data) => data.pages.flatMap((page) => page.items),
+    enabled: Boolean(propertyId) && Boolean(paymentId) && (options.enabled ?? true),
   });
 }
 

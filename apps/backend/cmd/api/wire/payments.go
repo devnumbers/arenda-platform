@@ -38,6 +38,7 @@ func WirePayments(p platformDeps) (*Payments, error) {
 	calendar := paymentspg.NewOwnerCalendar(p.DB, p.Clock)
 	zones := paymentspg.NewTickZoneDirectory(p.DB)
 	globalPayments := paymentspg.NewGlobalPaymentStore(p.DB)
+	changeLogStore := paymentspg.NewPaymentChangeLogStore(p.DB)
 
 	factory := paymentsapp.NewTxStoreFactory(
 		tickStore,
@@ -49,6 +50,10 @@ func WirePayments(p platformDeps) (*Payments, error) {
 		// rentals table stays the rentals context's own — payments ask it
 		// through this consumer port.
 		rentalspg.NewRentalLinkReader(p.DB),
+		// The payment change log (ADR 0065): the conveyor records the rule's
+		// edit/pause/resume rows inside the same transaction; the same store
+		// also serves the rentals seam's write point and the read endpoint.
+		changeLogStore,
 		p.AuditRecorder,
 		p.HistoryRecorder,
 		p.UoW,

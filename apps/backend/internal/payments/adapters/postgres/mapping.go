@@ -33,6 +33,7 @@ type paymentRowFields struct {
 	Since            pgtype.Date
 	EndDate          pgtype.Date
 	AutoPay          bool
+	NotifyAutoPaid   bool
 	ReminderOffset   pgtype.Int4
 	CategorySlug     pgtype.Text
 	UserCategoryID   pgtype.UUID
@@ -40,6 +41,7 @@ type paymentRowFields struct {
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
 	IsFavorite       bool
+	TitleIsManual    bool
 }
 
 // paymentFieldsFromTickRow converts a tick listing row; the tick's rows carry
@@ -61,6 +63,7 @@ func paymentFieldsFromGetRow(row postgres.GetPaymentByIDRow) paymentRowFields {
 		ID: row.ID, OwnerID: row.OwnerID, PropertyID: row.PropertyID, Type: row.Type,
 		Title: row.Title, AmountKopecks: row.AmountKopecks, Recurrence: row.Recurrence,
 		Since: row.Since, EndDate: row.EndDate, AutoPay: row.AutoPay,
+		NotifyAutoPaid:   row.NotifyAutoPaid,
 		ReminderOffset:   row.ReminderOffsetDays,
 		CategorySlug:     row.CategorySlug,
 		UserCategoryID:   row.UserCategoryID,
@@ -68,6 +71,7 @@ func paymentFieldsFromGetRow(row postgres.GetPaymentByIDRow) paymentRowFields {
 		CreatedAt:        row.CreatedAt,
 		UpdatedAt:        row.UpdatedAt,
 		IsFavorite:       row.IsFavorite,
+		TitleIsManual:    row.TitleIsManual,
 	}
 }
 
@@ -77,6 +81,7 @@ func paymentFieldsFromListRow(row postgres.ListPaymentsByPropertyRow) paymentRow
 		ID: row.ID, OwnerID: row.OwnerID, PropertyID: row.PropertyID, Type: row.Type,
 		Title: row.Title, AmountKopecks: row.AmountKopecks, Recurrence: row.Recurrence,
 		Since: row.Since, EndDate: row.EndDate, AutoPay: row.AutoPay,
+		NotifyAutoPaid:   row.NotifyAutoPaid,
 		ReminderOffset:   row.ReminderOffsetDays,
 		CategorySlug:     row.CategorySlug,
 		UserCategoryID:   row.UserCategoryID,
@@ -84,6 +89,7 @@ func paymentFieldsFromListRow(row postgres.ListPaymentsByPropertyRow) paymentRow
 		CreatedAt:        row.CreatedAt,
 		UpdatedAt:        row.UpdatedAt,
 		IsFavorite:       row.IsFavorite,
+		TitleIsManual:    row.TitleIsManual,
 	}
 }
 
@@ -96,16 +102,17 @@ func mapPaymentRow(row paymentRowFields) (domain.Payment, error) {
 		return domain.Payment{}, fmt.Errorf("parse recurrence of payment %s: %w", pgconv.UUIDFromPgtype(row.ID), err)
 	}
 	return domain.Payment{
-		ID:            pgconv.UUIDFromPgtype(row.ID),
-		OwnerID:       pgconv.UUIDFromPgtype(row.OwnerID),
-		PropertyID:    pgconv.UUIDFromPgtype(row.PropertyID),
-		Type:          domain.PaymentType(row.Type),
-		Title:         row.Title,
-		AmountKopecks: row.AmountKopecks,
-		Recurrence:    recurrence,
-		Since:         pgconv.DateFromPgtype(row.Since),
-		EndDate:       pgconv.DatePtrFromPgtype(row.EndDate),
-		AutoPay:       row.AutoPay,
+		ID:             pgconv.UUIDFromPgtype(row.ID),
+		OwnerID:        pgconv.UUIDFromPgtype(row.OwnerID),
+		PropertyID:     pgconv.UUIDFromPgtype(row.PropertyID),
+		Type:           domain.PaymentType(row.Type),
+		Title:          row.Title,
+		AmountKopecks:  row.AmountKopecks,
+		Recurrence:     recurrence,
+		Since:          pgconv.DateFromPgtype(row.Since),
+		EndDate:        pgconv.DatePtrFromPgtype(row.EndDate),
+		AutoPay:        row.AutoPay,
+		NotifyAutoPaid: row.NotifyAutoPaid,
 		// The reminder lead time: a NULL column is no reminders (nil). The
 		// tick's rows do not select the column — the tick never reads it.
 		ReminderOffsetDays: pgconv.Int4ToPtr(row.ReminderOffset),
@@ -117,6 +124,10 @@ func mapPaymentRow(row paymentRowFields) (domain.Payment, error) {
 		CreatedAt:  pgconv.TimestamptzToTime(row.CreatedAt),
 		UpdatedAt:  pgconv.TimestamptzToTime(row.UpdatedAt),
 		IsFavorite: row.IsFavorite,
+
+		// The manual-title marker rides the CRUD reads; the tick's rows do
+		// not select it — the tick never reads (nor writes) it.
+		TitleIsManual: row.TitleIsManual,
 	}, nil
 }
 
@@ -171,6 +182,7 @@ type operationRowFields struct {
 	AmountKopecks int64
 	CategoryLabel string
 	CategorySlug  pgtype.Text
+	UpdatedAt     pgtype.Timestamptz
 }
 
 func operationRowFieldsFromGet(row postgres.GetOperationByIDRow) operationRowFields {
@@ -181,6 +193,7 @@ func operationRowFieldsFromGet(row postgres.GetOperationByIDRow) operationRowFie
 		Title: row.Title, AmountKopecks: row.AmountKopecks,
 		CategoryLabel: row.CategoryLabel,
 		CategorySlug:  row.CategorySlug,
+		UpdatedAt:     row.UpdatedAt,
 	}
 }
 
@@ -200,5 +213,6 @@ func mapOperationRow(row operationRowFields) domain.Operation {
 		AmountKopecks: row.AmountKopecks,
 		CategoryLabel: row.CategoryLabel,
 		CategorySlug:  pgconv.TextToPtrString(row.CategorySlug),
+		UpdatedAt:     pgconv.TimestamptzToTime(row.UpdatedAt),
 	}
 }

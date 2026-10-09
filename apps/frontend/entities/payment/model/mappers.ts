@@ -10,9 +10,16 @@ import type {
   GlobalPaymentFeed,
   GlobalPaymentObject,
   GlobalPaymentSearch,
+  IsoDate,
   OperationsSummary,
   Payment,
+  PaymentChangeCategoryRef,
+  PaymentChangeEntry,
+  PaymentFieldChange,
   PaymentOperation,
+  PaymentReminderOffset,
+  PaymentType,
+  Recurrence,
 } from './types';
 
 type PaymentDto = components['schemas']['PaymentResponse'];
@@ -22,6 +29,8 @@ type GlobalPaymentDto = components['schemas']['PaymentGlobalItem'];
 type GlobalPaymentFeedDto = components['schemas']['PaymentsGlobalResponse'];
 type GlobalPaymentObjectDto = components['schemas']['PaymentObjectItem'];
 type GlobalPaymentSearchDto = components['schemas']['PaymentsSearchGlobalResponse'];
+type PaymentChangeItemDto = components['schemas']['PaymentChangeItem'];
+type PaymentFieldChangeDto = components['schemas']['PaymentFieldChange'];
 
 /** DTO категории → доменная вью: nullables нормализуются к опциональности.
  * Один хелпер для строки правила и чипа поиска — чип та же CategoryView
@@ -35,6 +44,19 @@ function mapCategoryView(dto: components['schemas']['CategoryView']) {
   };
 }
 
+/** DTO регулярности → доменная форма: у monthly контракт допускает
+ * опциональные дни/lastDay, сервер всегда присылает — нормализуем к
+ * обязательности канона Recurrence. */
+function mapRecurrenceDto(dto: components['schemas']['Recurrence']): Recurrence {
+  return dto.kind === 'monthly'
+    ? {
+        kind: 'monthly',
+        daysOfMonth: dto.daysOfMonth ?? [],
+        lastDay: dto.lastDay ?? false,
+      }
+    : dto;
+}
+
 export function mapPayment(dto: PaymentDto): Payment {
   return {
     id: dto.id,
@@ -42,18 +64,12 @@ export function mapPayment(dto: PaymentDto): Payment {
     type: dto.type,
     title: dto.title,
     amountKopecks: dto.amountKopecks,
-    recurrence:
-      dto.recurrence.kind === 'monthly'
-        ? {
-            kind: 'monthly',
-            daysOfMonth: dto.recurrence.daysOfMonth ?? [],
-            lastDay: dto.recurrence.lastDay ?? false,
-          }
-        : dto.recurrence,
+    recurrence: mapRecurrenceDto(dto.recurrence),
     since: dto.since,
     endDate: dto.endDate ?? undefined,
     reminderOffsetDays: dto.reminderOffsetDays ?? undefined,
     autoPay: dto.autoPay,
+    notifyAutoPaid: dto.notifyAutoPaid,
     category: mapCategoryView(dto.category),
     isFavorite: dto.isFavorite,
     isCompleted: dto.isCompleted,
@@ -85,6 +101,7 @@ export function mapPaymentOperation(dto: OperationDto): PaymentOperation {
     categoryLabel: dto.categoryLabel,
     categorySlug: dto.categorySlug ?? undefined,
     propertyName: dto.propertyName ?? undefined,
+    updatedAt: dto.updatedAt,
   };
 }
 
@@ -156,5 +173,73 @@ export function mapGlobalPaymentObject(dto: GlobalPaymentObjectDto): GlobalPayme
     photoUrl: dto.photoUrl,
     autoPayRules: dto.autoPayRules.map(toKey),
     otherRules: dto.otherRules.map(toKey),
+  };
+}
+
+/** Значение дифа по словарю поля (ADR 0065 §2): схема несёт unknown, словарь
+ * гарантирует тип значения под своим ключом — сужаем без рантайм-проверок,
+ * контракт-first как весь слой мапперов. Отсутствие значения — null. */
+function castChangeValue<T>(value: unknown): T | null {
+  return (value ?? null) as T | null;
+}
+
+/** Строка дифа журнала изменений: old→new, типизировано ключом поля. */
+function mapFieldChange(dto: PaymentFieldChangeDto): PaymentFieldChange {
+  switch (dto.field) {
+    case 'type':
+      return {
+        field: 'type',
+        old: castChangeValue<PaymentType>(dto.old),
+        new: castChangeValue<PaymentType>(dto.new),
+      };
+    case 'title':
+      return { field: 'title', old: castChangeValue<string>(dto.old), new: castChangeValue<string>(dto.new) };
+    case 'amount_kopecks':
+      return {
+        field: 'amount_kopecks',
+        old: castChangeValue<number>(dto.old),
+        new: castChangeValue<number>(dto.new),
+      };
+    case 'recurrence':
+      return {
+        field: 'recurrence',
+        old: castChangeValue<Recurrence>(dto.old),
+        new: castChangeValue<Recurrence>(dto.new),
+      };
+    case 'category_slug':
+      return {
+        field: 'category_slug',
+        old: castChangeValue<PaymentChangeCategoryRef>(dto.old),
+        new: castChangeValue<PaymentChangeCategoryRef>(dto.new),
+      };
+    case 'end_date':
+      return {
+        field: 'end_date',
+        old: castChangeValue<IsoDate>(dto.old),
+        new: castChangeValue<IsoDate>(dto.new),
+      };
+    case 'auto_pay':
+      return {
+        field: 'auto_pay',
+        old: castChangeValue<boolean>(dto.old),
+        new: castChangeValue<boolean>(dto.new),
+      };
+    case 'reminder_offset_days':
+      return {
+        field: 'reminder_offset_days',
+        old: castChangeValue<PaymentReminderOffset>(dto.old),
+        new: castChangeValue<PaymentReminderOffset>(dto.new),
+      };
+  }
+}
+
+/** Строка журнала изменений платежа (ADR 0065, экран «История платежа»
+ * #1195): actor остаётся на DTO — экран актора не показывает. */
+export function mapPaymentChangeEntry(dto: PaymentChangeItemDto): PaymentChangeEntry {
+  return {
+    id: dto.id,
+    action: dto.action,
+    changes: dto.changes.map(mapFieldChange),
+    createdAt: dto.created_at,
   };
 }

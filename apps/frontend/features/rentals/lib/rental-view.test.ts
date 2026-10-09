@@ -38,6 +38,7 @@ function rentalFixture(overrides: Partial<Rental> = {}): Rental {
       amountKopecks: 5_600_000,
       paymentDay: 10,
       autoPay: false,
+      reminderOffsetDays: null,
       nextPayment: {
         operationId: '0198f6a1-7c1a-7d0f-9f4f-6f3c1e2b4a77',
         date: '2027-02-10',
@@ -188,6 +189,7 @@ describe('rentalTeaserRows', () => {
         amountKopecks: 5_600_000,
         paymentDay: 'last',
         autoPay: false,
+        reminderOffsetDays: null,
         nextPayment: null,
       },
     });

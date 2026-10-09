@@ -40,8 +40,10 @@ type RiverQueue struct {
 	TasksPublisher *notificationsapp.TasksPublisher
 	// PaymentsPublisher is the payments scan's publisher (issues #749,
 	// #776): the hourly sweep books the upcoming operations' boundary jobs
-	// — «Оплатите платёж» at 00:00 of the operation date, «Платёж
-	// просрочен» at 00:00 of the day after, each in the owner's timezone —
+	// — «Оплатите платёж» at the wall clock 10:00 of the operation date,
+	// «Платёж
+	// просрочен» at 22:00 of the day after, each in the owner's timezone
+	// (#1168) —
 	// and sweeps the zones as the backstop; the boundary workers publish
 	// through it (bound post-construction, see
 	// DeferredPaymentBoundaryDeliverer).

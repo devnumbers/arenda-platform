@@ -54,13 +54,17 @@ func IsValidReminderOffset(offset *int) bool {
 // The since date is not part of it: the server sets it to the owner's today
 // (ADR 0048), and it never changes afterwards.
 type CreatePaymentCommand struct {
-	Type               domain.PaymentType
-	Title              string
-	AmountKopecks      int64
-	Recurrence         domain.Recurrence
-	CategorySlug       string
-	EndDate            *time.Time
-	AutoPay            bool
+	Type          domain.PaymentType
+	Title         string
+	AmountKopecks int64
+	Recurrence    domain.Recurrence
+	CategorySlug  string
+	EndDate       *time.Time
+	AutoPay       bool
+	// NotifyAutoPaid is the per-payment gate of the «Автоплатёж исполнен»
+	// event (#1189); absent on the wire means false («Не уведомлять»,
+	// макет 3214-72739).
+	NotifyAutoPaid     bool
 	ReminderOffsetDays *int
 }
 
@@ -82,6 +86,10 @@ type UpdatePaymentCommand struct {
 	// non-nil one applies the EndDateUpdate (set or clear).
 	EndDate *EndDateUpdate
 	AutoPay *bool
+	// NotifyAutoPaid is tri-state: a nil command field keeps the current
+	// value; a set value applies it (#1189). An explicit null on the wire
+	// resolves to false at the transport.
+	NotifyAutoPaid *bool
 	// ReminderOffsetDays is tri-state the same way: omit keeps, a set value
 	// applies (1/3/7), a clear turns reminders off.
 	ReminderOffsetDays *ReminderOffsetUpdate
@@ -167,8 +175,17 @@ func (s *PaymentService) CreatePayment(
 				Since:              today,
 				EndDate:            cmd.EndDate,
 				AutoPay:            cmd.AutoPay,
+				NotifyAutoPaid:     cmd.NotifyAutoPaid,
 				ReminderOffsetDays: cmd.ReminderOffsetDays,
 				Category:           domain.CategoryRef{Slug: &cmd.CategorySlug},
+			}
+			// Создание автоплатёжного правила напоминаний не получает:
+			// автоплатёжная форма заменяет пикер оффсета тумблером «Уведомлять
+			// об оплате», присланный оффсет форсится в NULL (решение владельца
+			// по гриллингу #1186, макет 3214-72739). Обычные правила не
+			// трогаются; правка freedom оффсета при автоплатеже не режется.
+			if draft.AutoPay {
+				draft.ReminderOffsetDays = nil
 			}
 			if err := validateRule(draft); err != nil {
 				return mutationOutcome[domain.Payment]{}, err
@@ -285,6 +302,11 @@ func (s *PaymentService) UpdatePayment(
 			if err := ensureNotRentalManaged(ctx, stores, scope, rule.ID); err != nil {
 				return mutationOutcome[domain.Payment]{}, err
 			}
+			// The diff's before side is the loaded rule: applyUpdate replaces
+			// fields and pointers wholesale, so the shallow copy is a faithful
+			// snapshot (ADR 0065 §6 — the single content source of the
+			// «updated» entries).
+			before := rule
 			applyUpdate(&rule, cmd)
 			if err := validateRule(rule); err != nil {
 				return mutationOutcome[domain.Payment]{}, err
@@ -300,6 +322,13 @@ func (s *PaymentService) UpdatePayment(
 					return mutationOutcome[domain.Payment]{}, err
 				}
 			}
+			changes := domain.DiffPaymentChanges(before, rule)
+			// The manual-title marker: a title in the diff is always a user
+			// edit (the PATCH structure), so this is the marker's one flip —
+			// it never resets (ADR 0065 §3).
+			if domain.HasTitleChange(changes) {
+				rule.TitleIsManual = true
+			}
 			if err := stores.payments.Update(ctx, rule); err != nil {
 				return mutationOutcome[domain.Payment]{}, fmt.Errorf("update payment: %w", err)
 			}
@@ -308,12 +337,20 @@ func (s *PaymentService) UpdatePayment(
 			}
 			updated := historydomain.PaymentUpdated(rule.ID, rule.Title)
 			updated.Context[historydomain.CtxKeyAmountKopecks] = rule.AmountKopecks
+			// A patch that moves nothing (the client re-sent the same values)
+			// is not a terms edit: no empty-diff «updated» row (ADR 0065 §4 —
+			// a row's content is its diff or its state flip).
+			var changeLog *ChangeLogWrite
+			if len(changes) > 0 {
+				changeLog = &ChangeLogWrite{PaymentID: rule.ID, Action: domain.ChangeUpdated, Changes: changes}
+			}
 			return mutationOutcome[domain.Payment]{
 				Response:      rule,
 				Audit:         auditdomain.ActionPaymentUpdated,
 				AuditEntityID: &rule.ID,
 				AuditCtx:      map[string]any{auditFieldsKey: updatedFields(cmd)},
 				History:       new(updated),
+				ChangeLog:     changeLog,
 				Changed: []realtimedom.Change{
 					realtimedom.On(realtimedom.EntityPayments, propertyID),
 					realtimedom.On(realtimedom.EntityOperations, propertyID), // The tick stands the strictly future planned again in the same transaction.
@@ -400,6 +437,9 @@ func (s *PaymentService) PausePayment(
 				Audit:         auditdomain.ActionPaymentPaused,
 				AuditEntityID: &rule.ID,
 				History:       new(historydomain.PaymentPaused(rule.ID, rule.Title)),
+				// The pause's own log row: empty changes, the flip is the
+				// content (ADR 0065 §4).
+				ChangeLog: &ChangeLogWrite{PaymentID: rule.ID, Action: domain.ChangePaused},
 				Changed: []realtimedom.Change{
 					realtimedom.On(realtimedom.EntityPayments, propertyID),
 					realtimedom.On(realtimedom.EntityOperations, propertyID), // The tick removes the future planned in the same transaction.
@@ -435,6 +475,9 @@ func (s *PaymentService) ResumePayment(
 				Audit:         auditdomain.ActionPaymentResumed,
 				AuditEntityID: &rule.ID,
 				History:       new(historydomain.PaymentResumed(rule.ID, rule.Title)),
+				// The resume's own log row: empty changes, the flip is the
+				// content (ADR 0065 §4).
+				ChangeLog: &ChangeLogWrite{PaymentID: rule.ID, Action: domain.ChangeResumed},
 				Changed: []realtimedom.Change{
 					realtimedom.On(realtimedom.EntityPayments, propertyID),
 					realtimedom.On(realtimedom.EntityOperations, propertyID), // The tick stands the future planned back in the same transaction.
@@ -446,8 +489,8 @@ func (s *PaymentService) ResumePayment(
 }
 
 // SetPaymentFavorite writes the rule's favorite star atomically (PUT
-// favorite, ticket #461): one UPDATE inside the conveyor's transaction — never
-// a read-modify-write through the full PATCH. The star is a pure read-side
+// favorite, ticket #461): one UPDATE inside the conveyor's transaction —
+// never a read-modify-write through the full PATCH. The star is a pure read-side
 // flag: generation is unaffected, so the verdict states Tick=false explicitly
 // and asks for no re-read — the rule resolved under the property lock travels
 // out through Response. Full Access and Owner may favorite.
@@ -468,6 +511,105 @@ func (s *PaymentService) SetPaymentFavorite(
 				Changed:       []realtimedom.Change{realtimedom.On(realtimedom.EntityPayments, propertyID)},
 			}, nil
 		})
+}
+
+// The change log page bounds (канон #597/#633, as the action journal's): a
+// 50-row default, a 100 ceiling.
+const (
+	changesDefaultLimit = 50
+	// ChangesMaxLimit is the contract's page-size ceiling.
+	ChangesMaxLimit = 100
+)
+
+// ChangesQuery is the GET .../payments/{paymentId}/changes wire request
+// before validation: the raw cursors (” = no continuation) and the page size
+// (0 = the default).
+type ChangesQuery struct {
+	BeforeCursor string
+	AfterCursor  string
+	Limit        int
+}
+
+// ChangeLogPage is one keyset portion of the payment's change log, newest
+// first (ADR 0065 §6). The cursor is bidirectional: NextCursor continues
+// into the past (before_cursor), PrevCursor asks for rows newer than the
+// page's first (after_cursor). An empty page carries neither.
+type ChangeLogPage struct {
+	Items      []domain.ChangeEntry
+	NextCursor string
+	PrevCursor string
+}
+
+// PaymentChanges returns one page of the rule's change log — the «История
+// изменений» screen's read (ADR 0065 §6). Any actor with the view capability
+// may read; a stranger, a foreign property and an unknown or foreign payment
+// are the same privacy-preserving ErrNotFound. Reads never tick.
+func (s *PaymentService) PaymentChanges(
+	ctx context.Context, actor, propertyID, paymentID uuid.UUID, q ChangesQuery,
+) (ChangeLogPage, error) {
+	limit, err := foldChangesLimit(q.Limit)
+	if err != nil {
+		return ChangeLogPage{}, err
+	}
+	before, after, err := foldChangesCursors(q)
+	if err != nil {
+		return ChangeLogPage{}, err
+	}
+	scope, err := s.readScope(ctx, actor, propertyID)
+	if err != nil {
+		return ChangeLogPage{}, err
+	}
+	// The payment's existence is proven inside the reader's scope first: an
+	// unknown or foreign payment is the same privacy 404 as the property's.
+	if _, err := s.payments.Get(ctx, paymentID, scope, propertyID); err != nil {
+		return ChangeLogPage{}, err
+	}
+	rows, err := s.changeLog.ListByPayment(ctx, scope, propertyID, paymentID, before, after, limit)
+	if err != nil {
+		return ChangeLogPage{}, fmt.Errorf("list payment changes: %w", err)
+	}
+	page := ChangeLogPage{Items: rows}
+	if n := len(rows); n > 0 {
+		if n == limit {
+			page.NextCursor = encodeChangeLogCursor(ChangeLogKey{CreatedAt: rows[n-1].CreatedAt, ID: rows[n-1].ID})
+		}
+		page.PrevCursor = encodeChangeLogCursor(ChangeLogKey{CreatedAt: rows[0].CreatedAt, ID: rows[0].ID})
+	}
+	return page, nil
+}
+
+// foldChangesLimit applies the page-size default and ceiling (канон #597).
+func foldChangesLimit(limit int) (int, error) {
+	if limit == 0 {
+		return changesDefaultLimit, nil
+	}
+	if limit < 0 || limit > ChangesMaxLimit {
+		return 0, fmt.Errorf("limit %d: %w", limit, ErrInvalidInput)
+	}
+	return limit, nil
+}
+
+// foldChangesCursors decodes the wire cursors; the pair is mutually
+// exclusive and either malformed blob is the contract's 400.
+func foldChangesCursors(q ChangesQuery) (before, after *ChangeLogKey, err error) {
+	if q.BeforeCursor != "" && q.AfterCursor != "" {
+		return nil, nil, fmt.Errorf("before_cursor and after_cursor are mutually exclusive: %w", ErrInvalidInput)
+	}
+	if q.BeforeCursor != "" {
+		key, err := decodeChangeLogCursor(q.BeforeCursor)
+		if err != nil {
+			return nil, nil, err
+		}
+		before = &key
+	}
+	if q.AfterCursor != "" {
+		key, err := decodeChangeLogCursor(q.AfterCursor)
+		if err != nil {
+			return nil, nil, err
+		}
+		after = &key
+	}
+	return before, after, nil
 }
 
 // auditFieldsKey is the audit context key listing the mutated fields.
@@ -566,6 +708,9 @@ func applyUpdate(payment *domain.Payment, cmd UpdatePaymentCommand) {
 	if cmd.AutoPay != nil {
 		payment.AutoPay = *cmd.AutoPay
 	}
+	if cmd.NotifyAutoPaid != nil {
+		payment.NotifyAutoPaid = *cmd.NotifyAutoPaid
+	}
 	if cmd.ReminderOffsetDays != nil {
 		payment.ReminderOffsetDays = cmd.ReminderOffsetDays.Value
 	}
@@ -595,6 +740,9 @@ func updatedFields(cmd UpdatePaymentCommand) []string {
 	}
 	if cmd.AutoPay != nil {
 		fields = append(fields, "auto_pay")
+	}
+	if cmd.NotifyAutoPaid != nil {
+		fields = append(fields, "notify_auto_paid")
 	}
 	if cmd.ReminderOffsetDays != nil {
 		fields = append(fields, "reminder_offset_days")

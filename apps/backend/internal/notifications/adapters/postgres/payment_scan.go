@@ -166,8 +166,9 @@ func (s *PaymentScanStore) GetScheduledAutoPaidPayment(
 		row.PropertyID, row.PropertyName, row.PropertyAddress, row.OwnerID), true, nil
 }
 
-// ListScheduledDueTargets lists the operations whose due boundary — 00:00
-// of the operation date in the owner's timezone — falls in the window
+// ListScheduledDueTargets lists the operations whose due boundary — the
+// wall clock 10:00 of the operation date in the owner's timezone (#1168) —
+// falls in the window
 // (from, until]; the due leg's booking list (issue #776), auto-pay rules
 // excluded.
 func (s *PaymentScanStore) ListScheduledDueTargets(
@@ -192,7 +193,8 @@ func (s *PaymentScanStore) ListScheduledDueTargets(
 }
 
 // ListScheduledOverdueTargets lists the operations whose overdue boundary —
-// 00:00 of the day after the operation date in the owner's timezone — falls
+// the wall clock 22:00 of the day after the operation date in the owner's
+// timezone (#1168) — falls
 // in the window (from, until]; the overdue leg's booking list (issue #776),
 // auto-pay rules included.
 func (s *PaymentScanStore) ListScheduledOverdueTargets(
@@ -290,7 +292,8 @@ func (s *PaymentScanStore) ListReminderTargets(
 }
 
 // ListScheduledReminderTargets lists the operations whose reminder boundary
-// — 00:00 of (operation date − lead time) in the owner's timezone — falls in
+// — the wall clock 10:00 of (operation date − lead time) in the owner's
+// timezone (#1168) — falls in
 // the window (from, until]; the reminder leg's booking list (карта #822),
 // auto-pay rules included.
 func (s *PaymentScanStore) ListScheduledReminderTargets(

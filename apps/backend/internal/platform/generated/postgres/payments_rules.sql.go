@@ -126,10 +126,12 @@ SELECT pay.id,
        pay.since,
        pay.end_date,
        pay.auto_pay,
+       pay.notify_auto_paid,
        pay.reminder_offset_days,
        pay.category_slug,
        pay.user_category_id,
        pay.is_favorite,
+       pay.title_is_manual,
        pay.created_at,
        pay.updated_at,
        pc.name AS user_category_name
@@ -155,10 +157,12 @@ type GetPaymentByIDRow struct {
 	Since              pgtype.Date        `json:"since"`
 	EndDate            pgtype.Date        `json:"end_date"`
 	AutoPay            bool               `json:"auto_pay"`
+	NotifyAutoPaid     bool               `json:"notify_auto_paid"`
 	ReminderOffsetDays pgtype.Int4        `json:"reminder_offset_days"`
 	CategorySlug       pgtype.Text        `json:"category_slug"`
 	UserCategoryID     pgtype.UUID        `json:"user_category_id"`
 	IsFavorite         bool               `json:"is_favorite"`
+	TitleIsManual      bool               `json:"title_is_manual"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 	UserCategoryName   pgtype.Text        `json:"user_category_name"`
@@ -186,10 +190,12 @@ func (q *Queries) GetPaymentByID(ctx context.Context, arg GetPaymentByIDParams) 
 		&i.Since,
 		&i.EndDate,
 		&i.AutoPay,
+		&i.NotifyAutoPaid,
 		&i.ReminderOffsetDays,
 		&i.CategorySlug,
 		&i.UserCategoryID,
 		&i.IsFavorite,
+		&i.TitleIsManual,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.UserCategoryName,
@@ -239,9 +245,9 @@ func (q *Queries) GetPropertyForPaymentMutation(ctx context.Context, id pgtype.U
 const insertPayment = `-- name: InsertPayment :exec
 INSERT INTO payments (
     id, owner_id, property_id, type, title, amount_kopecks, recurrence,
-    since, end_date, auto_pay, reminder_offset_days, category_slug
+    since, end_date, auto_pay, notify_auto_paid, reminder_offset_days, category_slug
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 `
 
 type InsertPaymentParams struct {
@@ -255,6 +261,7 @@ type InsertPaymentParams struct {
 	Since              pgtype.Date `json:"since"`
 	EndDate            pgtype.Date `json:"end_date"`
 	AutoPay            bool        `json:"auto_pay"`
+	NotifyAutoPaid     bool        `json:"notify_auto_paid"`
 	ReminderOffsetDays pgtype.Int4 `json:"reminder_offset_days"`
 	CategorySlug       pgtype.Text `json:"category_slug"`
 }
@@ -262,7 +269,9 @@ type InsertPaymentParams struct {
 // ids and since are app-side (UUIDv7, the owner's today); recurrence is the
 // domain-validated jsonb; the category arrives as a default-catalog slug in
 // this slice (user_category_id stays NULL). reminder_offset_days is the
-// nullable reminder lead time (карта #822; NULL = напоминаний нет).
+// nullable reminder lead time (карта #822; NULL = напоминаний нет);
+// notify_auto_paid — гейт события «Автоплатёж исполнен» (#1189, дефолт новых
+// false, макет 3214-72739).
 func (q *Queries) InsertPayment(ctx context.Context, arg InsertPaymentParams) error {
 	_, err := q.db.Exec(ctx, insertPayment,
 		arg.ID,
@@ -275,6 +284,7 @@ func (q *Queries) InsertPayment(ctx context.Context, arg InsertPaymentParams) er
 		arg.Since,
 		arg.EndDate,
 		arg.AutoPay,
+		arg.NotifyAutoPaid,
 		arg.ReminderOffsetDays,
 		arg.CategorySlug,
 	)
@@ -311,10 +321,12 @@ SELECT pay.id,
        pay.since,
        pay.end_date,
        pay.auto_pay,
+       pay.notify_auto_paid,
        pay.reminder_offset_days,
        pay.category_slug,
        pay.user_category_id,
        pay.is_favorite,
+       pay.title_is_manual,
        pay.created_at,
        pay.updated_at,
        pc.name AS user_category_name
@@ -343,10 +355,12 @@ type ListPaymentsByPropertyRow struct {
 	Since              pgtype.Date        `json:"since"`
 	EndDate            pgtype.Date        `json:"end_date"`
 	AutoPay            bool               `json:"auto_pay"`
+	NotifyAutoPaid     bool               `json:"notify_auto_paid"`
 	ReminderOffsetDays pgtype.Int4        `json:"reminder_offset_days"`
 	CategorySlug       pgtype.Text        `json:"category_slug"`
 	UserCategoryID     pgtype.UUID        `json:"user_category_id"`
 	IsFavorite         bool               `json:"is_favorite"`
+	TitleIsManual      bool               `json:"title_is_manual"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 	UserCategoryName   pgtype.Text        `json:"user_category_name"`
@@ -375,10 +389,12 @@ func (q *Queries) ListPaymentsByProperty(ctx context.Context, arg ListPaymentsBy
 			&i.Since,
 			&i.EndDate,
 			&i.AutoPay,
+			&i.NotifyAutoPaid,
 			&i.ReminderOffsetDays,
 			&i.CategorySlug,
 			&i.UserCategoryID,
 			&i.IsFavorite,
+			&i.TitleIsManual,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.UserCategoryName,
@@ -426,8 +442,10 @@ SET type = $3,
     recurrence = $6,
     end_date = $7,
     auto_pay = $8,
-    reminder_offset_days = $9,
-    category_slug = $10
+    notify_auto_paid = $9,
+    reminder_offset_days = $10,
+    category_slug = $11,
+    title_is_manual = $12
 WHERE id = $1 AND owner_id = $2
 `
 
@@ -440,8 +458,10 @@ type UpdatePaymentParams struct {
 	Recurrence         []byte      `json:"recurrence"`
 	EndDate            pgtype.Date `json:"end_date"`
 	AutoPay            bool        `json:"auto_pay"`
+	NotifyAutoPaid     bool        `json:"notify_auto_paid"`
 	ReminderOffsetDays pgtype.Int4 `json:"reminder_offset_days"`
 	CategorySlug       pgtype.Text `json:"category_slug"`
+	TitleIsManual      bool        `json:"title_is_manual"`
 }
 
 // Partial PATCH is resolved by the application layer; the statement always
@@ -457,8 +477,10 @@ func (q *Queries) UpdatePayment(ctx context.Context, arg UpdatePaymentParams) er
 		arg.Recurrence,
 		arg.EndDate,
 		arg.AutoPay,
+		arg.NotifyAutoPaid,
 		arg.ReminderOffsetDays,
 		arg.CategorySlug,
+		arg.TitleIsManual,
 	)
 	return err
 }

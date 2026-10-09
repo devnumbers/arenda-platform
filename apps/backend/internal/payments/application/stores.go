@@ -22,6 +22,7 @@ type txStores struct {
 	properties     PropertyStore
 	favoriteOrders GlobalPaymentOrderStore
 	rentalManaged  RentalManagedReader
+	changeLog      PaymentChangeLogStore
 	audit          auditapp.Recorder
 	history        historyapp.Recorder
 }
@@ -39,6 +40,7 @@ type txStoreFactory struct {
 	properties     PropertyStore
 	favoriteOrders GlobalPaymentOrderStore
 	rentalManaged  RentalManagedReader
+	changeLog      PaymentChangeLogStore
 	audit          auditapp.Recorder
 	history        historyapp.Recorder
 	uow            transaction.UoW
@@ -47,20 +49,23 @@ type txStoreFactory struct {
 // NewTxStoreFactory bundles the payments repositories, the recorders and the
 // Unit-of-Work into the single txStoreFactory every payments service embeds.
 // A nil recorder defaults to a Noop so a caller that does not care about
-// audit or history still gets a safe factory. The type stays unexported;
-// callers use := to hold it (standard Go pattern for a factory returning an
-// unexported type).
+// audit, history or the change log still gets a safe factory. The type stays
+// unexported; callers use := to hold it (standard Go pattern for a factory
+// returning an unexported type).
 func NewTxStoreFactory(
 	tick TickStore, payments PaymentStore, operations OperationStore,
 	properties PropertyStore, favoriteOrders GlobalPaymentOrderStore,
-	rentalManaged RentalManagedReader, audit auditapp.Recorder,
-	history historyapp.Recorder, uow transaction.UoW,
+	rentalManaged RentalManagedReader, changeLog PaymentChangeLogStore,
+	audit auditapp.Recorder, history historyapp.Recorder, uow transaction.UoW,
 ) txStoreFactory {
 	if audit == nil {
 		audit = auditapp.Noop{}
 	}
 	if history == nil {
 		history = historyapp.Noop{}
+	}
+	if changeLog == nil {
+		changeLog = NoopChangeLogStore{}
 	}
 	return txStoreFactory{
 		tick:           tick,
@@ -69,6 +74,7 @@ func NewTxStoreFactory(
 		properties:     properties,
 		favoriteOrders: favoriteOrders,
 		rentalManaged:  rentalManaged,
+		changeLog:      changeLog,
 		audit:          audit,
 		history:        history,
 		uow:            uow,
@@ -108,6 +114,10 @@ func (f *txStoreFactory) runInTx(ctx context.Context, work func(*txStores) error
 		if err != nil {
 			return fmt.Errorf("bind rental-managed reader to tx: %w", err)
 		}
+		changeLog, err := f.changeLog.WithTx(tx)
+		if err != nil {
+			return fmt.Errorf("bind change log store to tx: %w", err)
+		}
 		return work(&txStores{
 			tick:           tick,
 			payments:       payments,
@@ -115,6 +125,7 @@ func (f *txStoreFactory) runInTx(ctx context.Context, work func(*txStores) error
 			properties:     properties,
 			favoriteOrders: favoriteOrders,
 			rentalManaged:  rentalManaged,
+			changeLog:      changeLog,
 			audit:          f.audit.WithTx(tx),
 			history:        f.history.WithTx(tx),
 		})

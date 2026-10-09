@@ -133,7 +133,7 @@ test.describe('гейт мутаций платежа аренды', () => {
       page.getByText('Платёж управляется арендой — изменить его можно только в аренде'),
     ).toBeVisible();
     await expect(page.getByRole('button', { name: 'Удалить платеж' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Сохранить изменения' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Сохранить', exact: true })).toHaveCount(0);
 
     await captureScreen(page, testInfo, 'rental-payment-gated-edit');
   });

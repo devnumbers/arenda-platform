@@ -1,15 +1,14 @@
 'use client';
 
-import { useEffect, useRef, useState, type JSX } from 'react';
+import { useEffect, useRef, useState, type ComponentProps, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft,
   Calendar,
   Cancel,
-  ChangeVertical,
   Check,
-  Filter,
   Search,
+  SmallArrowDown,
   TrashBin,
 } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
@@ -23,6 +22,8 @@ import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
   formatDayMonthWithYear,
   firstOccurrence,
+  paymentReminderOptionLabel,
+  PAYMENT_REMINDER_OPTIONS,
   recurrenceLabel,
   type IsoDate,
   type Payment,
@@ -30,8 +31,13 @@ import {
 } from '@/entities/payment';
 import { paymentCategoryBySlug } from '@/features/payment-categories';
 import { propertyPermissions } from '@/entities/property';
+import { useMe } from '@/features/auth';
 import { useProperty } from '@/features/properties';
 import { useRentals } from '@/features/rentals';
+import {
+  emailReminderCaption,
+  EmailNotificationsRow,
+} from '@/features/notifications';
 import {
   buildPaymentUpdateCommand,
   branchKind,
@@ -39,8 +45,6 @@ import {
   formAfterRecurrenceChange,
   periodicityReady,
   recurrencesEqual,
-  togglePaymentType,
-  TYPE_LABELS,
   useDeletePayment,
   usePayment,
   usePaymentOperationsByStatus,
@@ -57,6 +61,7 @@ import {
   Modal,
   ModalContent,
   PageContent,
+  PickerMenu,
   sanitizeAmountInput,
   SearchField,
   StickyBottomBar,
@@ -74,38 +79,48 @@ import {
   BRANCH_PERIOD_LABELS,
   PeriodicityStep,
 } from './payment-create-wizard/periodicity-step';
-import { CategorySearchHint, WizardHeading } from './payment-create-wizard/wizard-chrome';
+import { CategorySearchHint, WizardDirectionSegment, WizardHeading } from './payment-create-wizard/wizard-chrome';
 
 /**
- * Экран правки платежа (Figma 705:10034; ранее 1127:33146, #467): форма,
- * не визард — все поля на одной странице, значения предзаполнены правилом.
- * В хедере — только «Редактирование» (решение владельца 2026-08-31).
- * Тип («Доход или расход») — строка-поле, значение меняется простым
- * нажатием по строке, без пикеров. «Формы оплаты» на экране нет —
- * поле снесено из контракта и продукта (карта #1005, тикеты #1006–#1009).
- * Категория — отдельная страница на том же маршруте, как шаг 1 визарда
- * (Figma 781:12299, без карандаша: свои категории — следующий срез);
- * заголовок — тот же H1/600 «Выберите категорию платежа», что на шаге 1
- * визарда, вместо TopNavTitle «Выбор категории» (#1152: единый хедер
- * выбора категории при создании и правке); уход со страницы не теряет
- * несохранённые правки формы. Периодичность — отдельная страница как шаг 3
- * визарда, хедер «Выбор периодичности», в ветке — название периода
- * (решение владельца 2026-08-31); поведение выровнено с созданием
- * (#1153): «Каждый день» и «Каждый год» («Продолжить» календаря)
- * применяются сразу и закрывают страницу, ветки недели и месяца живут в
- * черновике страницы и применяются кнопкой «Выбрать» — «Назад» черновик
- * отбрасывает (багфикс: незавершённый период не оставался в форме).
- * Окончание —
- * канонический бесконечный календарь поверх формы (решение владельца
- * 2026-09-04; раньше — страница с календарём, открытым сразу,
- * решение 2026-08-31), заголовок пикера — название поля (канон аренды):
- * дни раньше первого вхождения действующего расписания недоступны
- * (инвариант «окна графика» #1150), а смена периодичности, сделавшая
- * стоящее окончание невалидным, сбрасывает его молча (решение владельца
- * 2026-10-06, #1155) — сохранение уходит с tri-state endDate: null.
- * Регулярность —
- * без «Один раз» (решение #449) с ветками дат; `since` и напоминания
- * отсутствуют (не редактируются, истории 31 спеки #453).
+ * Экран правки платежа по макетам 1127-32083 (форма) и 1130-35022 (шит
+ * «Напоминать о платеже», #1197; ранее 705:10034, #467): форма, не визард —
+ * все поля на одной странице, значения предзаполнены правилом. Хедер —
+ * «Платеж» с подписью «Редактирование» (макет 1127:32086). Направление —
+ * сегмент «Расход/Доход» под суммой (макет 1127:32742, во всю колонку);
+ * «Способ оплаты» из макета не рисуется — поле снесено из контракта и
+ * продукта (решение владельца 07.10: #1009 остаётся закрытым, ADR 0047
+ * рев. №3). Подписи полей — формулировки макета 1130 («Название платежа»,
+ * «Регулярность платежа», «Окончание платежа», «Напоминать о платеже»),
+ * согласованные с шагами создания. Категория — отдельная страница на том
+ * же маршруте, как шаг 1 визарда (заголовок — H1 «Выберите категорию
+ * платежа», #1152); уход со страницы не теряет несохранённые правки формы.
+ * Периодичность — отдельная страница как шаг 3 визарда без контентных
+ * заголовков (решение владельца 07.10, #1192); поведение выровнено
+ * с созданием (#1153): «Каждый день» и «Каждый год» («Продолжить»
+ * календаря) применяются сразу и закрывают страницу, ветки недели и
+ * месяца живут в черновике страницы и применяются кнопкой «Выбрать» —
+ * «Назад» черновик отбрасывает. Окончание — канонический бесконечный
+ * календарь поверх формы (решение владельца 2026-09-04), заголовок
+ * пикера — название поля: дни раньше первого вхождения действующего
+ * расписания недоступны (инвариант «окна графика» #1150), а смена
+ * периодичности, сделавшая стоящее окончание невалидным, сбрасывает его
+ * молча (решение владельца 2026-10-06, #1155) — сохранение уходит с
+ * tri-state endDate: null.
+ *
+ * Напоминание (#1197) — редактируемое: строка «Напоминать о платеже»
+ * открывает канонный PickerMenu (шит на мобиле, меню на ПК) с опциями
+ * «За 1 / 3 / 7 дней» по макету 1130-35022 и четвёртой «Не напоминать» —
+ * краевой случай правила без напоминания (NULL в контракте): она же
+ * снимает напоминание (tri-state reminderOffsetDays: null). У
+ * автоплатёжного правила вместо пикера оффсета — строка «Уведомлять
+ * об оплате» с радио «Не уведомлять»/«Да, уведомлять» — пер-платёжный
+ * флаг notifyAutoPaid (#1189), подписи шага 4 создания (#1193); радио
+ * напоминания у автоплатежа нет (как на шаге 4, решение гриллинга
+ * #1186). Регулярность — без «Один раз» (решение #449) с ветками дат;
+ * `since` не редактируется. Ряд «Уведомления на почту» — общий
+ * EmailNotificationsRow (шоткат глобальной email-настройки категории,
+ * канон #746, подпись — как на шаге 4 создания).
+ *
  * Сохранение — частичный PATCH: команда — дифф формы (update-model),
  * пересоздание планового вхождения делает сервер — правка меняет только
  * будущее. Внизу — danger-кнопка «Удалить платеж» с модалкой выбора судьбы
@@ -261,7 +276,7 @@ export function PaymentEditScreen({
       {loading && (
         <StickyBottomBar>
           <Button className="w-full" disabled>
-            Сохранить изменения
+            Сохранить
           </Button>
         </StickyBottomBar>
       )}
@@ -269,9 +284,10 @@ export function PaymentEditScreen({
   );
 }
 
-/** Шапка экрана правки (Figma 705:10034): Отмена | «Редактирование» |
- * Check — быстрая клавиша сохранения наравне со sticky-кнопкой. Общая
- * форме и фазе загрузки — хедер не меняется, когда данные пришли. */
+/** Шапка экрана правки (макет 1127:32086): Отмена | «Платеж» с подписью
+ * «Редактирование» | Check — быстрая клавиша сохранения наравне
+ * со sticky-кнопкой. Общая форме и фазе загрузки — хедер не меняется,
+ * когда данные пришли. */
 function EditingHeader({
   checkDisabled,
   onCancel,
@@ -295,13 +311,14 @@ function EditingHeader({
         />
       }
     >
-      <TopNavTitle title="Редактирование" />
+      <TopNavTitle title="Платеж" subtitle="Редактирование" />
     </TopNav>
   );
 }
 
 /** Заголовок формы: значение предзаполнено правилом, пустой ввод заменяет
- * лейбл категории при сохранении (правила визарда #464). */
+ * лейбл категории при сохранении (правила визарда #464). Напоминание
+ * и флаг автоплатежа едут в форму целиком — дифф считает update-model. */
 function formFromPayment(payment: Payment): PaymentEditForm {
   return {
     type: payment.type,
@@ -310,6 +327,8 @@ function formFromPayment(payment: Payment): PaymentEditForm {
     categorySlug: undefined,
     recurrence: payment.recurrence,
     endDate: payment.endDate,
+    reminderOffsetDays: payment.reminderOffsetDays,
+    notifyAutoPaid: payment.notifyAutoPaid,
   };
 }
 
@@ -333,6 +352,10 @@ function PaymentEditForm({
   const router = useRouter();
   const updatePayment = useUpdatePayment(propertyId, payment.id);
   const deletePayment = useDeletePayment(propertyId, payment.id);
+  // Ряд «Уведомления на почту» (макет 1127:32504) — общий EmailNotificationsRow:
+  // подпись с почтой пользователя, как на шаге 4 создания (#1193).
+  const meQuery = useMe();
+  const email = meQuery.data?.email ?? null;
 
   const today: IsoDate = dateToIsoLocal(new Date());
   const resolveTitle = (slug: string): string | undefined =>
@@ -560,11 +583,12 @@ function PaymentEditForm({
     );
   }
 
-  // Страница периодичности — как шаг 3 визарда (Figma 1049:48174): в ветке
-  // хедер показывает название периода, «Назад» закрывает ветку. День и год
-  // применяются сразу (#1153, как в создании #995); ветки недели/месяца —
-  // в черновике, «Выбрать» применяется когда периодичность готова, ветка
-  // закрыта или совпадает с ней и значение изменилось.
+  // Страница периодичности — как шаг 3 визарда (Figma 3213:71290), но без
+  // контентных заголовков: их нет и в макете правки, хедер ведёт названием
+  // периода/«Выбор периодичности» (решение владельца 07.10, #1192). День и
+  // год применяются сразу (#1153, как в создании #995); ветки
+  // недели/месяца — в черновике, «Выбрать» применяется когда периодичность
+  // готова, ветка закрыта или совпадает с ней и значение изменилось.
   if (periodicityOpen) {
     const draftChanged =
       periodicityDraft !== undefined
@@ -608,86 +632,165 @@ function PaymentEditForm({
 
   return (
     <>
-      {/* Шапка EditingHeader (Figma 705:10034): Отмена | «Редактирование»
-       * | Check — та же, что в фазе загрузки. */}
+      {/* Шапка EditingHeader (макет 1127:32086): Отмена | «Платеж /
+       * Редактирование» | Check — та же, что в фазе загрузки. */}
       <EditingHeader
         checkDisabled={!canSave || updatePayment.isPending}
         onCancel={() => goBack(router, ROUTES.propertyPayment(propertyId, payment.id))}
         onSave={() => void save()}
       />
-      {/* Горизонтальный отступ макета (705:10034, 24px) контент приносит сам —
-       * PageContent его не вкладывает, как и на экране карточки платежа. */}
-      <div className="flex flex-col gap-8 px-6">
-        <div className="flex flex-col gap-2">
-          <label htmlFor="payment-edit-amount" className="text-base font-medium leading-[18px] text-content">
-            Сумма
-          </label>
-          <AmountBoxInput
-            value={amountRaw}
-            onChange={(raw) => {
-              const sanitized = sanitizeAmountInput(raw);
-              setAmountRaw(sanitized);
-              update('amountKopecks', parseRublesToKopecks(sanitized));
-            }}
-            onClear={() => {
-              setAmountRaw('');
-              update('amountKopecks', undefined);
+      {/* Горизонтальный отступ макета (1127:32088, 24px) контент приносит
+       * сам; ряд email-уведомлений — full-bleed (px-6 внутри канонного
+       * ряда), удаление — в собственной обёртке. Группа «Сумма + сегмент»
+       * держит внутренний зазор 8px, между группами полей — 32px (gap-8). */}
+      <div className="flex flex-col gap-8">
+        <div className="flex flex-col gap-8 px-6">
+          <div className="flex flex-col gap-2">
+            <label htmlFor="payment-edit-amount" className="text-base font-medium leading-[18px] text-content">
+              Сумма
+            </label>
+            <AmountBoxInput
+              value={amountRaw}
+              onChange={(raw) => {
+                const sanitized = sanitizeAmountInput(raw);
+                setAmountRaw(sanitized);
+                update('amountKopecks', parseRublesToKopecks(sanitized));
+              }}
+              onClear={() => {
+                setAmountRaw('');
+                update('amountKopecks', undefined);
+              }}
+            />
+            {/* Направление — сегмент «Расход/Доход» под суммой (макет
+             * 1127:32742, во всю колонку) вместо строки-переключателя. */}
+            <WizardDirectionSegment
+              type={form.type}
+              onTypeChange={(type) => update('type', type)}
+              ariaLabel="Направление платежа"
+              fullWidth
+            />
+          </div>
+
+          <TextField
+            variant="titleOut"
+            title="Название платежа"
+            placeholder="Введите название"
+            description="Необязательно"
+            maxLength={255}
+            value={form.title}
+            onChange={(event) => update('title', event.target.value)}
+          />
+
+          {/* Категория — отдельная страница на том же маршруте (как шаг 1
+           * визарда); шеврон по макету 1127:32326. */}
+          <FieldButton
+            title="Категория"
+            value={categoryLabel}
+            icon={<SmallArrowDown className="h-6 w-6 text-content-secondary" aria-hidden />}
+            onClick={() => setCategoryOpen(true)}
+          />
+
+          <FieldButton
+            title="Регулярность платежа"
+            value={recurrenceLabel(form.recurrence)}
+            icon={<Calendar className="h-6 w-6 text-content-secondary" aria-hidden />}
+            onClick={() => {
+              setPeriodicityDraft(form.recurrence);
+              setPeriodicityOpen(true);
             }}
           />
+
+          <FieldButton
+            title="Окончание платежа"
+            value={form.endDate !== undefined ? formatDayMonthWithYear(form.endDate, today) : 'Бессрочно'}
+            icon={<Calendar className="h-6 w-6 text-content-secondary" aria-hidden />}
+            hint="Необязательно"
+            onClick={() => setEndDateOpen(true)}
+          />
+
+          {/* Напоминание (#1197): у ручного правила — пикер оффсета (шит
+           * 1130-35022: «За 1 / 3 / 7 дней» + четвёртой «Не напоминать»
+           * для правила без напоминания), у автоплатёжа — «Уведомлять
+           * об оплате» да/нет (#1189), подписи шага 4 создания. */}
+          {payment.autoPay ? (
+            <PickerMenu
+              title="Уведомлять об оплате"
+              groups={[
+                {
+                  options: [
+                    {
+                      label: 'Не уведомлять',
+                      selected: form.notifyAutoPaid !== true,
+                      onSelect: () => update('notifyAutoPaid', false),
+                    },
+                    {
+                      label: 'Да, уведомлять',
+                      selected: form.notifyAutoPaid === true,
+                      onSelect: () => update('notifyAutoPaid', true),
+                    },
+                  ],
+                },
+              ]}
+            >
+              <FieldButton
+                title="Уведомлять об оплате"
+                value={form.notifyAutoPaid ? 'Да, уведомлять' : 'Не уведомлять'}
+                icon={<SmallArrowDown className="h-6 w-6 text-content-secondary" aria-hidden />}
+                onClick={() => {}}
+              />
+            </PickerMenu>
+          ) : (
+            <PickerMenu
+              title="Напоминать о платеже"
+              groups={[
+                {
+                  options: [
+                    ...PAYMENT_REMINDER_OPTIONS.map((option) => ({
+                      label: option.label,
+                      selected: form.reminderOffsetDays === option.offset,
+                      onSelect: () => update('reminderOffsetDays', option.offset),
+                    })),
+                    {
+                      label: 'Не напоминать',
+                      selected: form.reminderOffsetDays === undefined,
+                      onSelect: () => update('reminderOffsetDays', undefined),
+                    },
+                  ],
+                },
+              ]}
+            >
+              <FieldButton
+                title="Напоминать о платеже"
+                value={
+                  form.reminderOffsetDays === undefined
+                    ? 'Не напоминать'
+                    : paymentReminderOptionLabel(form.reminderOffsetDays)
+                }
+                icon={<SmallArrowDown className="h-6 w-6 text-content-secondary" aria-hidden />}
+                onClick={() => {}}
+              />
+            </PickerMenu>
+          )}
         </div>
 
-        <TextField
-          variant="titleOut"
-          title="Название платежа"
-          placeholder="Введите название"
-          maxLength={255}
-          value={form.title}
-          onChange={(event) => update('title', event.target.value)}
-        />
-
-        <FieldButton
-          title="Категория"
-          value={categoryLabel}
-          icon={<Filter className="h-6 w-6 text-content-secondary" aria-hidden />}
-          onClick={() => setCategoryOpen(true)}
-        />
-
-        <FieldButton
-          title="Доход или расход"
-          ariaLabel={`Доход или расход: ${TYPE_LABELS[form.type]}, нажмите, чтобы сменить`}
-          value={TYPE_LABELS[form.type]}
-          icon={<ChangeVertical className="h-6 w-6 text-content-secondary" aria-hidden />}
-          onClick={() => update('type', togglePaymentType(form.type))}
-        />
-
-        <FieldButton
-          title="Регулярность платежа"
-          value={recurrenceLabel(form.recurrence)}
-          icon={<Calendar className="h-6 w-6 text-content-secondary" aria-hidden />}
-          onClick={() => {
-            setPeriodicityDraft(form.recurrence);
-            setPeriodicityOpen(true);
-          }}
-        />
-
-        <FieldButton
-          title="Окончание платежа"
-          value={form.endDate !== undefined ? formatDayMonthWithYear(form.endDate, today) : 'Бессрочно'}
-          icon={<Calendar className="h-6 w-6 text-content-secondary" aria-hidden />}
-          onClick={() => setEndDateOpen(true)}
+        <EmailNotificationsRow
+          title="Уведомления на почту"
+          caption={emailReminderCaption('о платеже', email)}
         />
 
         {canDelete && (
-          <Button
-            variant="danger"
-            className="h-14 w-full"
-            onClick={() => setDeleteOpen(true)}
-          >
-            <span className="flex items-center justify-center gap-2">
-              <TrashBin className="h-6 w-6" aria-hidden />
-              Удалить платеж
-            </span>
-          </Button>
+          <div className="px-6">
+            <Button
+              variant="danger"
+              className="h-14 w-full"
+              onClick={() => setDeleteOpen(true)}
+            >
+              <span className="flex items-center justify-center gap-2">
+                <TrashBin className="h-6 w-6" aria-hidden />
+                Удалить платеж
+              </span>
+            </Button>
+          </div>
         )}
       </div>
 
@@ -700,7 +803,7 @@ function PaymentEditForm({
           loading={updatePayment.isPending}
           onClick={() => void save()}
         >
-          Сохранить изменения
+          Сохранить
         </Button>
       </StickyBottomBar>
 
@@ -771,23 +874,28 @@ function PaymentEditForm({
   );
 }
 
-/** Поле-кнопка (Figma «Input Field» с иконкой): бокс 56px со значением и
- * иконкой справа; тап открывает пикер в шите либо (тип) переключает
- * значение на месте. У переключателя ariaLabel несёт текущее значение —
- * как у чипа шага суммы визарда. */
+/** Поле-кнопка (макет «Input Field» с иконкой): бокс 56px со значением и
+ * иконкой справа; опциональная строка-подсказка под боксом (13/15, макет
+ * 1127:32404 «Необязательно»). Тап открывает пикер в шите либо (тип)
+ * переключает значение на месте. Работает и триггером PickerMenu (asChild):
+ * остальные пропсы кнопки — aria/ref от Radix — прокидываются на
+ * <button> (канон PickerTriggerBox). */
 function FieldButton({
   title,
   value,
   icon,
   onClick,
   ariaLabel,
+  hint,
+  ...rest
 }: {
   readonly title: string;
   readonly value: string;
   readonly icon: JSX.Element;
   readonly onClick: () => void;
   readonly ariaLabel?: string;
-}): JSX.Element {
+  readonly hint?: string;
+} & Omit<ComponentProps<'button'>, 'title' | 'type' | 'onClick' | 'aria-label' | 'children'>): JSX.Element {
   return (
     <div className="flex flex-col gap-2">
       <span className="text-base font-medium leading-[18px] text-content">{title}</span>
@@ -795,6 +903,7 @@ function FieldButton({
         type="button"
         aria-label={ariaLabel ?? title}
         onClick={onClick}
+        {...rest}
         className="flex h-14 w-full cursor-pointer items-center rounded-button bg-surface-muted pr-2 pl-[18px] text-left transition-shadow outline-none hover:shadow-[inset_0_0_0_2px_var(--dl-input-border)] focus-visible:ring-2 focus-visible:ring-primary"
       >
         <span className="min-w-0 flex-1 truncate text-base leading-[18px] text-content">
@@ -804,14 +913,17 @@ function FieldButton({
           {icon}
         </span>
       </button>
+      {hint !== undefined && (
+        <span className="text-[13px] leading-[15px] text-content-tertiary">{hint}</span>
+      )}
     </div>
   );
 }
 
-/** Компактное поле суммы (Figma 1127:33146 «Сумма»): бокс 56px, группировка
- * разрядов, без символа рубля (правка владельца 2026-08-31, макет
- * 705:10034), кнопка
- * очистки — при непустом значении. */
+/** Компактное поле суммы (макет 1127:32741 «Сумма»): бокс 56px, группировка
+ * разрядов, суффикс «₽» (макет 1127-32083 вернул символ — ранее снят
+ * решением 2026-08-31 по макету 705:10034), кнопка очистки — при непустом
+ * значении. */
 function AmountBoxInput({
   value,
   onChange,
@@ -841,6 +953,9 @@ function AmountBoxInput({
         }}
         className="h-full min-w-0 flex-1 border-none bg-transparent text-base leading-[18px] text-content outline-none placeholder:text-content-secondary"
       />
+      <span className="pr-1 text-base leading-[18px] text-content" aria-hidden>
+        ₽
+      </span>
       {hasValue && (
         <IconButton icon={<Cancel />} label="Очистить сумму" variant="secondary" onClick={onClear} />
       )}

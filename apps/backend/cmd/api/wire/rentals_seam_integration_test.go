@@ -11,6 +11,7 @@ package wire
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"testing"
@@ -74,6 +75,7 @@ func newSeamHarness(t *testing.T) *seamHarness {
 		paymentspg.NewPaymentStore(pool),
 		paymentspg.NewTickStore(pool),
 		paymentspg.NewOperationStore(pool),
+		paymentspg.NewPaymentChangeLogStore(pool),
 	)
 	factory := rentalsapp.NewTxStoreFactory(
 		rentalspg.NewRentalStore(pool),
@@ -92,6 +94,7 @@ func newSeamHarness(t *testing.T) *seamHarness {
 		paymentspg.NewPropertyStore(pool),
 		paymentspg.NewGlobalPaymentStore(pool),
 		rentalspg.NewRentalLinkReader(pool),
+		paymentspg.NewPaymentChangeLogStore(pool),
 		audit,
 		historypg.NewRecorder(pool),
 		pgdb.NewUoW(pool, logger),
@@ -176,6 +179,9 @@ func TestSeam_CreateBuildsTheManagedPaymentAndMaterializes(t *testing.T) {
 	assert.Equal(t, seamToday, payment.Since)
 	assert.True(t, payment.AutoPay)
 	assert.Equal(t, 1, *payment.ReminderOffsetDays)
+	// The auto-paid notification gate rides the seed as true (#1198): the
+	// rent pipeline always wants the notification, по подписи макета 1428.
+	assert.True(t, payment.NotifyAutoPaid)
 
 	// The in-transaction tick stood the single future planned at the payment
 	// day of the start month (start == today, day 15 ahead).
@@ -218,6 +224,156 @@ func TestSeam_UpdateSyncsThePaymentAndRestandsThePlanned(t *testing.T) {
 	assert.Equal(t, mustSeamDate("2026-09-25"), updated.NextPayment.Date)
 	assert.Equal(t, int64(6_000_000), updated.NextPayment.AmountKopecks,
 		"the fresh snapshot carries the new amount")
+}
+
+// The rent seam is the change log's second write point (ADR 0065 §4,
+// решение владельца 07.10): the terms edit's diff lands in the managed
+// payment's history from the rental pipeline — the same dictionary, the same
+// domain diff, the editing owner as the actor.
+func TestSeam_TermsEditWritesThePaymentChangeLog(t *testing.T) {
+	t.Parallel()
+	h := newSeamHarness(t)
+	h.seedOwner()
+	view := h.createRental()
+
+	// Creation writes no row (не правка).
+	var count int
+	require.NoError(t, h.pool.QueryRow(context.Background(),
+		`SELECT count(*) FROM payment_change_log WHERE payment_id = $1`, *view.Rental.PaymentID).Scan(&count))
+	assert.Equal(t, 0, count)
+
+	newDay := rentalsdomain.MustPaymentDay(25)
+	_, err := h.svc.UpdateRental(context.Background(), h.owner, h.propID, view.Rental.ID,
+		rentalsapp.UpdateRentalCommand{
+			AmountKopecks: func() *int64 { v := int64(6_000_000); return &v }(),
+			PaymentDay:    &newDay,
+		})
+	require.NoError(t, err)
+
+	// The terms edit wrote one updated row with the dictionary-ordered diff.
+	rows, err := h.pool.Query(context.Background(),
+		`SELECT actor_id, action, changes FROM payment_change_log WHERE payment_id = $1
+		 ORDER BY created_at DESC, id DESC`, *view.Rental.PaymentID)
+	require.NoError(t, err)
+	defer rows.Close()
+	type logRow struct {
+		ActorID uuid.UUID
+		Action  string
+		Changes []paymentsdomain.FieldChange
+	}
+	var got []logRow
+	for rows.Next() {
+		var r logRow
+		var blob []byte
+		require.NoError(t, rows.Scan(&r.ActorID, &r.Action, &blob))
+		require.NoError(t, json.Unmarshal(blob, &r.Changes))
+		got = append(got, r)
+	}
+	require.NoError(t, rows.Err())
+	require.Len(t, got, 1)
+	assert.Equal(t, h.owner, got[0].ActorID)
+	assert.Equal(t, "updated", got[0].Action)
+	require.Len(t, got[0].Changes, 2)
+	assert.Equal(t, paymentsdomain.ChangeFieldAmount, got[0].Changes[0].Field)
+	assert.Equal(t, paymentsdomain.ChangeFieldRecurrence, got[0].Changes[1].Field)
+
+	// The rental pipeline never edits the title: no title row, the manual
+	// title marker stays down (ADR 0065 §3).
+	for _, change := range got[0].Changes {
+		assert.NotEqual(t, paymentsdomain.ChangeFieldTitle, change.Field)
+	}
+	payment, err := h.paySvc.GetPayment(context.Background(), h.owner, h.propID, *view.Rental.PaymentID)
+	require.NoError(t, err)
+	assert.False(t, payment.TitleIsManual)
+
+	// The read endpoint serves the seam-written rows like its own.
+	page, err := h.paySvc.PaymentChanges(context.Background(), h.owner, h.propID, *view.Rental.PaymentID,
+		paymentsapp.ChangesQuery{})
+	require.NoError(t, err)
+	require.Len(t, page.Items, 1)
+	assert.Equal(t, paymentsdomain.ChangeUpdated, page.Items[0].Action)
+}
+
+// The reminder edit rides the same seam (#1208): the rental pipeline syncs
+// reminderOffsetDays into the managed payment — set, and clear to «Не
+// напоминать» — and the diff lands in the payment change log as the
+// reminder_offset_days chip, same dictionary as the payment's own PATCH.
+func TestSeam_TermsEditSyncsTheReminderAndLogsTheChip(t *testing.T) {
+	t.Parallel()
+	h := newSeamHarness(t)
+	h.seedOwner()
+	created := 3
+	view := h.createRentalWithReminderOffset(&created)
+
+	// 3 → 7.
+	seven := 7
+	_, err := h.svc.UpdateRental(context.Background(), h.owner, h.propID, view.Rental.ID,
+		rentalsapp.UpdateRentalCommand{
+			ReminderOffsetDays: &rentalsapp.ReminderOffsetUpdate{Value: &seven},
+		})
+	require.NoError(t, err)
+	payment, err := h.paySvc.GetPayment(context.Background(), h.owner, h.propID, *view.Rental.PaymentID)
+	require.NoError(t, err)
+	require.NotNil(t, payment.ReminderOffsetDays)
+	assert.Equal(t, 7, *payment.ReminderOffsetDays)
+
+	type chip struct {
+		Field paymentsdomain.ChangeField
+		Old   *int
+		New   *int
+	}
+	readChips := func(t *testing.T, wantRows int) []chip {
+		t.Helper()
+		rows, err := h.pool.Query(context.Background(),
+			`SELECT changes FROM payment_change_log WHERE payment_id = $1
+			 ORDER BY created_at DESC, id DESC LIMIT $2`, *view.Rental.PaymentID, wantRows)
+		require.NoError(t, err)
+		defer rows.Close()
+		var got []chip
+		for rows.Next() {
+			var blob []byte
+			require.NoError(t, rows.Scan(&blob))
+			var changes []paymentsdomain.FieldChange
+			require.NoError(t, json.Unmarshal(blob, &changes))
+			for _, change := range changes {
+				if change.Field != paymentsdomain.ChangeFieldReminderOffset {
+					continue
+				}
+				var c chip
+				require.NoError(t, json.Unmarshal(change.Old, &c.Old))
+				require.NoError(t, json.Unmarshal(change.New, &c.New))
+				got = append(got, c)
+			}
+		}
+		require.NoError(t, rows.Err())
+		return got
+	}
+
+	chips := readChips(t, 1)
+	require.Len(t, chips, 1, "the reminder edit writes its own chip")
+	require.NotNil(t, chips[0].Old)
+	assert.Equal(t, 3, *chips[0].Old)
+	require.NotNil(t, chips[0].New)
+	assert.Equal(t, 7, *chips[0].New)
+
+	// 7 → null («Не напоминать»).
+	_, err = h.svc.UpdateRental(context.Background(), h.owner, h.propID, view.Rental.ID,
+		rentalsapp.UpdateRentalCommand{ReminderOffsetDays: &rentalsapp.ReminderOffsetUpdate{}})
+	require.NoError(t, err)
+	payment, err = h.paySvc.GetPayment(context.Background(), h.owner, h.propID, *view.Rental.PaymentID)
+	require.NoError(t, err)
+	assert.Nil(t, payment.ReminderOffsetDays, "the explicit null turns the reminders off")
+
+	chips = readChips(t, 2)
+	require.Len(t, chips, 2, "the clear writes its own chip on the second row")
+	require.NotNil(t, chips[0].Old)
+	assert.Equal(t, 7, *chips[0].Old)
+	assert.Nil(t, chips[0].New, "the chip carries the cleared side as null")
+
+	// The reminder read-back rides the view too.
+	updated, err := h.svc.GetRental(context.Background(), h.owner, h.propID, view.Rental.ID)
+	require.NoError(t, err)
+	assert.Nil(t, updated.Payment.ReminderOffsetDays)
 }
 
 func TestSeam_ClearingThePlannedEndMakesThePaymentOpenEnded(t *testing.T) {

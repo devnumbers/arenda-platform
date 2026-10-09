@@ -3,6 +3,7 @@ import {
   expect,
   openCabinetWithSeededSession,
   SEEDED_APARTMENT_PROPERTY_ID,
+  stickySaveButton,
   test,
 } from './fixtures';
 import type { Page } from '@playwright/test';
@@ -80,7 +81,7 @@ async function createMonthlyPaymentToday(
   await page.getByRole('button', { name: 'Продолжить' }).click();
 
   // Шаг 4 — напоминание и настройки не задаём.
-  await expect(page.getByRole('heading', { name: 'Настройте платеж' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'За сколько напомнить об оплате' })).toBeVisible();
   await page.getByRole('button', { name: 'Далее' }).click();
 
   // Шаг 5 — сумма и направление. Чип-переключатель (макеты суммы карты
@@ -155,19 +156,19 @@ test.describe('сквозная жизнь платежа', () => {
           : `Каждый месяц ${day} числа`,
       ),
     ).toBeVisible();
-    await expect(page.getByText('Ближайший платеж')).toBeVisible();
+    await expect(page.getByText('Ближайшая операция')).toBeVisible();
 
     // Клик по строке ближайшего ведёт на график (#1073) — плановая
     // материализована тиком создания, страница операции не открывается.
     await page
       .locator('section')
-      .filter({ has: page.getByRole('heading', { name: 'Ближайший платеж' }) })
-      .getByRole('button')
+      .filter({ has: page.getByRole('heading', { name: 'Ближайшая операция' }) })
+      .locator('[role="button"]')
       .first()
       .click();
     await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+/schedule$`));
     await page.goBack();
-    await expect(page.getByText('Ближайший платеж')).toBeVisible();
+    await expect(page.getByText('Ближайшая операция')).toBeVisible();
 
     // Избранное: звезда переключается с тостом (путь страницы #465).
     const star = page.getByRole('button', { name: 'Добавить в избранное' });
@@ -193,8 +194,8 @@ test.describe('сквозная жизнь платежа', () => {
     // (плитки подэкранов снесены, #1073).
     await page
       .locator('section')
-      .filter({ has: page.getByRole('heading', { name: 'Ближайший платеж' }) })
-      .getByRole('button')
+      .filter({ has: page.getByRole('heading', { name: 'Ближайшая операция' }) })
+      .locator('[role="button"]')
       .first()
       .click();
     await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+/schedule$`));
@@ -232,7 +233,7 @@ test.describe('сквозная жизнь платежа', () => {
     await expect(page.getByRole('button', { name: 'Оплатить' })).toBeEnabled();
 
     // ── История: запись «Сегодня» с минусом у расхода ──
-    await page.getByRole('button', { name: 'Открыть историю операций' }).click();
+    await page.getByRole('button', { name: 'Открыть историю платежа' }).click();
     await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+/history$`));
     await expect(page.getByText('Сегодня', { exact: true })).toBeVisible();
     await expect(page.getByText('-1 990 ₽').first()).toBeVisible();
@@ -292,7 +293,7 @@ test.describe('сквозная жизнь платежа', () => {
     await page.getByRole('button', { name: 'Изменить' }).click();
     await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+/edit$`));
     await page.getByRole('textbox', { name: 'Сумма' }).fill('2500');
-    await page.getByRole('button', { name: 'Сохранить изменения' }).click();
+    await stickySaveButton(page).click();
     await expect(page.getByText('Изменения сохранены')).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+$`));
     await expect(page.getByText('2 500 ₽').first()).toBeVisible();

@@ -37,6 +37,9 @@ export type PaymentWizardDraft = {
   readonly endDate?: IsoDate;
   /** Напоминание «за N дней» (шаг 4, ручная ветка; карта #822). */
   readonly reminderOffsetDays?: PaymentReminderOffset;
+  /** «Уведомлять об автоплатеже» (шаг 4, ветка автоплатежа, #1193): хранится
+   * только явное «Да, уведомлять» — «Не уведомлять» (дефолт) поля не пишет. */
+  readonly notifyAutoPaid?: boolean;
   /** Сумма в копейках, целая положительная (шаг 5). */
   readonly amountKopecks?: number;
   /** Последний шаг, на котором был пользователь — штамп каждого перехода
@@ -104,6 +107,7 @@ export function hasPaymentWizardDraftFields(draft: PaymentWizardDraft): boolean 
     || draft.recurrence !== undefined
     || draft.endDate !== undefined
     || draft.reminderOffsetDays !== undefined
+    || draft.notifyAutoPaid !== undefined
     || draft.amountKopecks !== undefined
   );
 }
@@ -204,6 +208,14 @@ export function validatePaymentWizardDraft(parsed: unknown): PaymentWizardDraft 
     ? record.reminderOffsetDays
     : undefined;
 
+  // Флаг «уведомлять об автоплатеже» (#1193): хранится только true — false
+  // («Не уведомлять», дефолт) и отсутствие поля равнозначны; небулево —
+  // мусор из хранилища, роняет черновик как чужой тип.
+  if (record.notifyAutoPaid !== undefined && typeof record.notifyAutoPaid !== 'boolean') {
+    return DEFAULT_DRAFT;
+  }
+  const notifyAutoPaid = record.notifyAutoPaid === true;
+
   const amountKopecks = isPositiveInt(record.amountKopecks) ? record.amountKopecks : undefined;
   if (record.amountKopecks !== undefined && amountKopecks === undefined) return DEFAULT_DRAFT;
 
@@ -223,6 +235,7 @@ export function validatePaymentWizardDraft(parsed: unknown): PaymentWizardDraft 
     ...(recurrence !== undefined && { recurrence }),
     ...(endDate !== undefined && { endDate }),
     ...(reminderOffsetDays !== undefined && { reminderOffsetDays }),
+    ...(notifyAutoPaid && { notifyAutoPaid }),
     ...(amountKopecks !== undefined && { amountKopecks }),
     ...(step !== undefined && { step }),
     ...(updatedAt !== undefined && { updatedAt }),

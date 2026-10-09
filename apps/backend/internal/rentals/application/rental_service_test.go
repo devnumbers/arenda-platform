@@ -60,6 +60,9 @@ func (fakeUoW) Do(ctx context.Context, work func(transaction.Tx) error) error {
 const (
 	eventAuditRecord   = "audit.Record"
 	eventHistoryRecord = "history.Record"
+	// Journal markers the terms-edit assertions share with the fakes.
+	eventRentalsUpdate = "rentals.Update"
+	eventPayRunTick    = "pay.RunTick"
 )
 
 // journal records the cross-fake call order.
@@ -165,7 +168,7 @@ func (s *fakeRentalStore) Create(_ context.Context, r domain.Rental) error {
 }
 
 func (s *fakeRentalStore) Update(_ context.Context, r domain.Rental) error {
-	s.journal.add("rentals.Update")
+	s.journal.add(eventRentalsUpdate)
 	s.rentals[r.ID] = r
 	return nil
 }
@@ -215,7 +218,7 @@ func (t *fakeGatewayTx) Create(_ context.Context, seed RentPaymentSeed) (uuid.UU
 }
 
 func (t *fakeGatewayTx) Update(
-	_ context.Context, _, _, _ uuid.UUID, change RentPaymentChange, _ time.Time,
+	_ context.Context, _, _, _, _ uuid.UUID, change RentPaymentChange, _ time.Time,
 ) error {
 	t.journal.add("pay.Update")
 	t.gateway.changes = append(t.gateway.changes, change)
@@ -238,7 +241,7 @@ func (t *fakeGatewayTx) Delete(_ context.Context, _, paymentID uuid.UUID, _ time
 }
 
 func (t *fakeGatewayTx) RunTick(_ context.Context, _ uuid.UUID, _ time.Time) error {
-	t.journal.add("pay.RunTick")
+	t.journal.add(eventPayRunTick)
 	return nil
 }
 
@@ -413,7 +416,7 @@ func TestCreateRental_HappyPath(t *testing.T) {
 		"rentals.Create",
 		eventAuditRecord,
 		eventHistoryRecord,
-		"pay.RunTick",
+		eventPayRunTick,
 	}, h.journal.events)
 
 	seed := h.gateway.createSeed
@@ -422,6 +425,10 @@ func TestCreateRental_HappyPath(t *testing.T) {
 	assert.Equal(t, today, seed.StartDate, "since = start_date, not the wire today")
 	assert.Equal(t, mustDate("2027-09-01"), *seed.PlannedEndDate)
 	assert.False(t, seed.AutoPay)
+	// The rent pipeline always wants the auto-paid notification (#1198): по
+	// подписи макета 1428 — with the toggle off too, so an auto-pay turned
+	// on later by the terms edit notifies as well.
+	assert.True(t, seed.NotifyAutoPaid)
 
 	require.Len(t, h.audit.entries, 1)
 	entry := h.audit.entries[0]
@@ -635,7 +642,7 @@ func TestCreateRental_UnknownTenantIsInvalid(t *testing.T) {
 	cmd.ContactID = &contact
 
 	_, err := svc.CreateRental(t.Context(), owner, property, cmd)
-	assert.ErrorIs(t, err, ErrInvalidInput)
+	require.ErrorIs(t, err, ErrInvalidInput)
 }
 
 func TestUpdateRental_PaymentTermsSyncAndTick(t *testing.T) {
@@ -654,7 +661,7 @@ func TestUpdateRental_PaymentTermsSyncAndTick(t *testing.T) {
 	view, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID, cmd)
 	require.NoError(t, err)
 
-	assert.Equal(t, []string{"pay.Update", "rentals.Update", eventAuditRecord, eventHistoryRecord, "pay.RunTick"}, h.journal.events)
+	assert.Equal(t, []string{"pay.Update", eventRentalsUpdate, eventAuditRecord, eventHistoryRecord, eventPayRunTick}, h.journal.events)
 	require.Len(t, h.gateway.changes, 1)
 	change := h.gateway.changes[0]
 	require.NotNil(t, change.AmountKopecks)
@@ -670,6 +677,74 @@ func TestUpdateRental_PaymentTermsSyncAndTick(t *testing.T) {
 	require.Contains(t, h.audit.entries[0].Context, "fields")
 }
 
+// The terms edit's reminder leg (#1208): the reminderOffsetDays patch rides
+// the seam into the managed payment like the amount or the auto-pay — the
+// tri-state resolution lives on the transport, the command carries the
+// ReminderOffsetUpdate verbatim, the tick re-runs (the payment changed).
+func TestUpdateRental_ReminderOffsetSyncs(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	rentalID := h.seedRental(nil)
+
+	cmd := UpdateRentalCommand{
+		ReminderOffsetDays: &ReminderOffsetUpdate{Value: new(7)},
+	}
+	_, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID, cmd)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"pay.Update", eventRentalsUpdate, eventAuditRecord, eventHistoryRecord, eventPayRunTick}, h.journal.events)
+	require.Len(t, h.gateway.changes, 1)
+	change := h.gateway.changes[0]
+	require.NotNil(t, change.ReminderOffsetDays)
+	require.NotNil(t, change.ReminderOffsetDays.Value)
+	assert.Equal(t, 7, *change.ReminderOffsetDays.Value)
+
+	// The audit names the moved field (values never travel, ADR 0061 §4).
+	fields, ok := h.audit.entries[0].Context["fields"].([]string)
+	require.True(t, ok)
+	assert.Contains(t, fields, "reminder_offset_days")
+}
+
+func TestUpdateRental_ReminderOffsetRules(t *testing.T) {
+	t.Parallel()
+	t.Run("value outside the 1/3/7 contract is invalid", func(t *testing.T) {
+		t.Parallel()
+		h := newHarness(t)
+		rentalID := h.seedRental(nil)
+
+		cmd := UpdateRentalCommand{
+			ReminderOffsetDays: &ReminderOffsetUpdate{Value: new(5)},
+		}
+		_, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID, cmd)
+		require.ErrorIs(t, err, ErrInvalidInput)
+		assert.NotContains(t, h.journal.events, "pay.Update",
+			"an invalid patch never reaches the seam")
+	})
+	t.Run("explicit null clears the reminders", func(t *testing.T) {
+		t.Parallel()
+		h := newHarness(t)
+		rentalID := h.seedRental(nil)
+
+		cmd := UpdateRentalCommand{ReminderOffsetDays: &ReminderOffsetUpdate{}}
+		_, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID, cmd)
+		require.NoError(t, err)
+		require.Len(t, h.gateway.changes, 1)
+		change := h.gateway.changes[0]
+		require.NotNil(t, change.ReminderOffsetDays, "the clear rides the seam")
+		assert.Nil(t, change.ReminderOffsetDays.Value, "the null turns the reminders off")
+	})
+	t.Run("omitted keeps and skips the seam", func(t *testing.T) {
+		t.Parallel()
+		h := newHarness(t)
+		rentalID := h.seedRental(nil)
+
+		_, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID, UpdateRentalCommand{})
+		require.NoError(t, err)
+		assert.Empty(t, h.gateway.changes, "a no-op patch syncs nothing")
+		assert.NotContains(t, h.journal.events, eventPayRunTick)
+	})
+}
+
 func TestUpdateRental_NonPaymentFieldsSkipTick(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -682,7 +757,7 @@ func TestUpdateRental_NonPaymentFieldsSkipTick(t *testing.T) {
 	_, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID, cmd)
 	require.NoError(t, err)
 
-	assert.Equal(t, []string{"rentals.Update", eventAuditRecord, eventHistoryRecord}, h.journal.events,
+	assert.Equal(t, []string{eventRentalsUpdate, eventAuditRecord, eventHistoryRecord}, h.journal.events,
 		"the tick runs only when the payment changed")
 }
 
@@ -1200,7 +1275,7 @@ func TestRentalSummary(t *testing.T) {
 		rentalID := sub.seedRental(nil)
 		early := today.AddDate(0, 0, -100)
 		_, err := sub.svc.RentalSummary(t.Context(), sub.owner, sub.property, rentalID, &early)
-		assert.ErrorIs(t, err, ErrInvalidInput)
+		require.ErrorIs(t, err, ErrInvalidInput)
 	})
 }
 

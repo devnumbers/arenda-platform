@@ -5,6 +5,7 @@ import {
   mapGlobalPaymentFeed,
   mapGlobalPaymentObject,
   mapPayment,
+  mapPaymentChangeEntry,
   mapPaymentOperation,
   mapOperationsSummary,
 } from '@/entities/payment';
@@ -13,6 +14,7 @@ import type {
   GlobalPaymentObject,
   OperationsSummary,
   Payment,
+  PaymentChangeEntry,
   PaymentOperation,
 } from '@/entities/payment';
 import {
@@ -43,6 +45,7 @@ type OperationsResponse = components['schemas']['OperationsResponse'];
 type OperationsSummaryResponse = components['schemas']['OperationsSummaryResponse'];
 type PaymentResponseDto = components['schemas']['PaymentResponse'];
 type OperationResponseDto = components['schemas']['OperationResponse'];
+type PaymentChangesResponseDto = components['schemas']['PaymentChangesResponse'];
 
 /** Двойной модуль API-слоя payments (без 'use client'): чистые fetch-функции
  * и queryOptions-фабрики канона #887 — общий источник ключ+fetch для
@@ -108,6 +111,70 @@ export function paymentDetailQueryOptions({
     queryKey: paymentKeys.detail(propertyId, paymentId),
     queryFn: () => fetchPayment(propertyId, paymentId, transport),
   });
+}
+
+/** Порция журнала изменений (ADR 0065, #1195): строки плюс keyset-
+ * продолжение — opaque-курсор старшей страницы, null = журнал исчерпан. */
+export type PaymentChangesPageData = KeysetPage<PaymentChangeEntry>;
+
+/** Размер порции журнала изменений — серверный дефолт контракта (канон
+ * «по 50», резолюция #452). */
+export const PAYMENT_CHANGES_PAGE_SIZE = 50;
+
+/** Чистый fetch порции журнала изменений платежа — общее горло хука.
+ * cursor — keyset-продолжение прошлого ответа (next_cursor → before_cursor,
+ * канон #597); undefined читает журнал с самых свежих строк. prev_cursor
+ * (prepend свежих, ADR 0065) экрану не нужен — лента растёт в старую
+ * сторону бесконечным скроллом. */
+export async function fetchPaymentChangesPage(
+  propertyId: string,
+  paymentId: string,
+  cursor?: string,
+  transport: ApiTransport = apiClient,
+): Promise<PaymentChangesPageData> {
+  const params = new URLSearchParams({ limit: String(PAYMENT_CHANGES_PAGE_SIZE) });
+  if (cursor) {
+    params.set('before_cursor', cursor);
+  }
+  const response = await transport<PaymentChangesResponseDto>(
+    `/properties/${encodeURIComponent(propertyId)}`
+      + `/payments/${encodeURIComponent(paymentId)}/changes?${params.toString()}`,
+  );
+  return {
+    items: response.items.map(mapPaymentChangeEntry),
+    nextCursor: response.next_cursor ?? null,
+  };
+}
+
+/**
+ * Конфиг keyset-обхода журнала изменений — возвращаемый тип фабрики
+ * paymentChangesPagedQueryOptions: экспорты features/ несут явные
+ * возвращаемые типы (apps/frontend/AGENTS.md), форма — общий
+ * KeysetPagedQueryConfig из shared/lib/keyset.
+ */
+export type PaymentChangesPagedQueryConfig = KeysetPagedQueryConfig<
+  ReturnType<typeof paymentKeys.changesPaged>,
+  PaymentChangesPageData
+>;
+
+/** Опции порций журнала изменений (канон #887): один источник ключ+fetch
+ * для хука и серверного префетча. */
+export function paymentChangesPagedQueryOptions({
+  propertyId,
+  paymentId,
+  transport = apiClient,
+}: {
+  readonly propertyId: string;
+  readonly paymentId: string;
+  readonly transport?: ApiTransport;
+}): PaymentChangesPagedQueryConfig {
+  return {
+    queryKey: paymentKeys.changesPaged(propertyId, paymentId),
+    queryFn: ({ pageParam }) =>
+      fetchPaymentChangesPage(propertyId, paymentId, pageParam, transport),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: keysetNextPageParam,
+  };
 }
 
 /** Чистый fetch просрочек объекта — общее горло хука и серверного

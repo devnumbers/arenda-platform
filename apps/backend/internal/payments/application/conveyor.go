@@ -54,6 +54,12 @@ type mutationOutcome[T any] struct {
 	// transaction (fail-safe like the audit). A nil entry writes no row — the
 	// noise actions (the favorite star) are excluded by the map charter.
 	History *historydomain.Entry
+	// ChangeLog is the payment change log row of the mutation (ADR 0065):
+	// one append-only entry per user action on the rule, recorded inside the
+	// same transaction next to the audit and the journal. A nil verdict
+	// writes no row — creation and deletion write none by decision, the
+	// favorite star is not a terms edit.
+	ChangeLog *ChangeLogWrite
 	// Tick runs the materialization tick for the owner after the change;
 	// every use case states its need explicitly (deletion sets false).
 	Tick bool
@@ -128,12 +134,10 @@ func runMutation[T any](
 		if err := recordAudit(ctx, stores, actor, role, out.Audit, entityType, entityID, out.AuditCtx); err != nil {
 			return err
 		}
-		// A nil entry (the excluded noise actions) writes no row.
-		if out.History != nil {
-			if err := historyapp.RecordScoped(ctx, stores.history, propertyID, actor,
-				sharedpolicy.HistoryActorRole(role), *out.History); err != nil {
-				return err
-			}
+		// A nil entry or verdict (the excluded noise actions, creation and
+		// deletion) writes no row of its kind.
+		if err := recordTrailEntries(ctx, stores, scope, role, propertyID, actor, out); err != nil {
+			return err
 		}
 		if !out.Tick {
 			return nil
@@ -148,6 +152,28 @@ func runMutation[T any](
 		return out.Response, nil
 	}
 	return rereadPayment[T](g, ctx, scope, propertyID, *out.RereadPaymentID)
+}
+
+// recordTrailEntries writes the outcome's action journal row (ADR 0061) and
+// its payment change log row (ADR 0065) inside the transaction — fail-safe
+// like the audit. The change log's pause/resume rows travel with an empty
+// changes array.
+func recordTrailEntries[T any](
+	ctx context.Context, stores *txStores, scope uuid.UUID, role sharedpolicy.Role,
+	propertyID, actor uuid.UUID, out mutationOutcome[T],
+) error {
+	if out.History != nil {
+		if err := historyapp.RecordScoped(ctx, stores.history, propertyID, actor,
+			sharedpolicy.HistoryActorRole(role), *out.History); err != nil {
+			return err
+		}
+	}
+	if out.ChangeLog != nil {
+		if err := stores.changeLog.Record(ctx, scope, propertyID, actor, *out.ChangeLog); err != nil {
+			return fmt.Errorf("record payment change log: %w", err)
+		}
+	}
+	return nil
 }
 
 // historyAnchors collects the journal anchors of the transaction's realtime

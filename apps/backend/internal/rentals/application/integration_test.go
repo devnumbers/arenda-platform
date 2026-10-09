@@ -162,7 +162,7 @@ func (g *fakeSeamTx) Create(ctx context.Context, seed rentalsapp.RentPaymentSeed
 }
 
 func (g *fakeSeamTx) Update(
-	_ context.Context, _, _, paymentID uuid.UUID, _ rentalsapp.RentPaymentChange, _ time.Time,
+	_ context.Context, _, _, _, paymentID uuid.UUID, _ rentalsapp.RentPaymentChange, _ time.Time,
 ) error {
 	g.gateway.updates = append(g.gateway.updates, paymentID)
 	return nil
@@ -326,7 +326,10 @@ func TestRentalsIntegration_CreatePersistsAndAudits(t *testing.T) {
 
 // TestRentalsIntegration_ReminderOffsetFlowsToSeed (карта #822, #824): the
 // reminder rides the create command into the managed payment's seed, and a
-// bad lead time is the shared invalid-input outcome.
+// bad lead time is the shared invalid-input outcome. The seed carries the
+// auto-paid notification gate set to true unconditionally (#1198): the rent
+// pipeline always wants the notification — по подписи макета 1428 — so an
+// auto-pay turned on later by the terms edit notifies too.
 func TestRentalsIntegration_ReminderOffsetFlowsToSeed(t *testing.T) {
 	t.Parallel()
 	h := newRentalsHarness(t)
@@ -343,6 +346,7 @@ func TestRentalsIntegration_ReminderOffsetFlowsToSeed(t *testing.T) {
 	seed := h.gateway.created[0]
 	require.NotNil(t, seed.ReminderOffsetDays)
 	assert.Equal(t, 1, *seed.ReminderOffsetDays)
+	assert.True(t, seed.NotifyAutoPaid)
 
 	// The fake seam answers no reminder — the view renders null.
 	assert.Nil(t, view.Payment.ReminderOffsetDays)

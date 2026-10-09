@@ -440,6 +440,46 @@ func TestUpdateRental_UnknownFieldIs400(t *testing.T) {
 		"the start date is not editable and must not sneak in as an unknown field")
 }
 
+// The reminder patch's tri-state (#1208): a value sets the lead time, an
+// explicit null turns the reminders off, an omitted field keeps — the same
+// resolution vocabulary as the payment's own PATCH (#1197).
+func TestUpdateRental_ReminderOffsetTriState(t *testing.T) {
+	t.Parallel()
+	view := viewFixture(t)
+	var gotCmds []rentalsapp.UpdateRentalCommand
+	svc := &fakeRentalManager{update: func(
+		_ context.Context, _, _, _ uuid.UUID, cmd rentalsapp.UpdateRentalCommand,
+	) (rentalsapp.RentalView, error) {
+		gotCmds = append(gotCmds, cmd)
+		return view, nil
+	}}
+	h := NewRentalHandlers(svc, nil)
+	target := fmt.Sprintf("/properties/%s/rentals/%s", view.Rental.PropertyID, view.Rental.ID)
+
+	patch := func(t *testing.T, body string) {
+		t.Helper()
+		req := rentalRequest(t, http.MethodPatch, view.Rental.OwnerID, target, body)
+		rec := httptest.NewRecorder()
+		h.UpdateRental(rec, req, view.Rental.PropertyID, view.Rental.ID)
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	}
+
+	patch(t, `{"reminderOffsetDays": 7}`)
+	require.Len(t, gotCmds, 1)
+	require.NotNil(t, gotCmds[0].ReminderOffsetDays, "a value is the set verdict")
+	require.NotNil(t, gotCmds[0].ReminderOffsetDays.Value)
+	assert.Equal(t, 7, *gotCmds[0].ReminderOffsetDays.Value)
+
+	patch(t, `{"reminderOffsetDays": null}`)
+	require.Len(t, gotCmds, 2)
+	require.NotNil(t, gotCmds[1].ReminderOffsetDays, "an explicit null is the clear verdict")
+	assert.Nil(t, gotCmds[1].ReminderOffsetDays.Value)
+
+	patch(t, `{"amountKopecks": 6000000}`)
+	require.Len(t, gotCmds, 3)
+	assert.Nil(t, gotCmds[2].ReminderOffsetDays, "omitted keeps")
+}
+
 func TestCompleteRental_DecodesDepositReturn(t *testing.T) {
 	t.Parallel()
 	view := viewFixture(t)

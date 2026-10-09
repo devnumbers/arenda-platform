@@ -10,7 +10,8 @@ import (
 
 // NewPaymentDueWorker builds the due boundary worker over the publisher and
 // the process clock (issue #776): the worker wakes at one operation's due
-// midnight — 00:00 of the operation date in the owner's timezone — and hands
+// boundary — the wall clock 10:00 of the operation date in the owner's
+// timezone (#1168) — and hands
 // the (rule, date) and the wake-up instant to the publisher's delivery-time
 // resolution: the operation is reloaded at wake-up — paid, cancelled, the
 // rule edited or deleted, the property archived, or the day already rolled
@@ -27,8 +28,10 @@ func NewPaymentDueWorker(
 
 // NewPaymentOverdueWorker builds the overdue boundary worker over the
 // publisher and the process clock (issue #776): the worker wakes at one
-// operation's overdue midnight — 00:00 of the day after the operation date
-// in the owner's timezone — and hands the (rule, date) and the wake-up
+// operation's overdue boundary — the wall clock 22:00 of the day after the
+// operation date
+// in the owner's timezone (#1168) — and hands the (rule, date) and the
+// wake-up
 // instant to the publisher's delivery-time resolution with the same shape
 // the due worker runs.
 func NewPaymentOverdueWorker(

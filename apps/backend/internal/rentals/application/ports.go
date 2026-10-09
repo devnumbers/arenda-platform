@@ -61,19 +61,34 @@ type RentPaymentSeed struct {
 	StartDate      time.Time
 	PlannedEndDate *time.Time
 	AutoPay        bool
+	// NotifyAutoPaid is the managed payment's gate of the «Автоплатёж
+	// исполнен» event (payments #1189): the rent pipeline stamps it true
+	// unconditionally (#1198, по подписи макета 1428) — an auto-pay turned
+	// on later by the terms edit notifies too.
+	NotifyAutoPaid bool
 	// ReminderOffsetDays is the managed payment's reminder lead time
 	// (карта #822): 1/3/7, nil = без напоминаний. Аренда ставит его вместе
 	// с автоплатежом (решение #823).
 	ReminderOffsetDays *int
 }
 
+// ReminderOffsetUpdate is the tri-state resolution of the reminder patch
+// (#1208): Value nil turns the managed payment's reminders off («Не
+// напоминать»), 1/3/7 sets the lead time; a nil command field keeps the
+// current value. The 1/3/7-or-nil contract itself is the payments'
+// vocabulary — validated against paymentsapp.IsValidReminderOffset.
+type ReminderOffsetUpdate struct {
+	Value *int
+}
+
 // RentPaymentChange is the partial sync payload of the terms edit: a nil
 // field leaves the payment unchanged.
 type RentPaymentChange struct {
-	AmountKopecks  *int64
-	PaymentDay     *domain.PaymentDay
-	AutoPay        *bool
-	PlannedEndDate *DateUpdate
+	AmountKopecks      *int64
+	PaymentDay         *domain.PaymentDay
+	AutoPay            *bool
+	PlannedEndDate     *DateUpdate
+	ReminderOffsetDays *ReminderOffsetUpdate
 }
 
 // RentPaymentState is the payment's render state (ADR 0053 §2): the day of
@@ -138,8 +153,10 @@ type RentPaymentGatewayTx interface {
 	// Update syncs the terms edit into the payment: the editable fields,
 	// then the strictly future planned is dropped — the caller's tick
 	// verdict stands the single future planned again with fresh snapshots.
+	// The actor travels for the payment change log (ADR 0065): the terms
+	// edit's diff lands in the managed payment's history from this seam too.
 	Update(
-		ctx context.Context, scope, propertyID, paymentID uuid.UUID,
+		ctx context.Context, scope, propertyID, paymentID, actorID uuid.UUID,
 		change RentPaymentChange, today time.Time,
 	) error
 	// State reads the managed payment's current terms inside the caller's

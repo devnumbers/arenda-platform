@@ -420,7 +420,9 @@ WHERE pay.id = $1::uuid
 -- date = today — a downtime's missed days are not backfilled (решение
 -- владельца, #1167; the overdue leg speaks for the unpaid past instead).
 -- The instant gate (#1168): the boundary is the wall clock 10:00 of the
--- operation date — the sweep must not publish ahead of it.
+-- operation date — the sweep must not publish ahead of it. The per-payment
+-- flag (гейты #1189): молчащие правила (notify_auto_paid = false) мимо —
+-- событие «Автоплатёж исполнен» приходит только по разрешившим уведомление.
 SELECT pay.id AS payment_id,
        o.date,
        pay.title,
@@ -439,6 +441,7 @@ WHERE u.timezone = $1
   AND o.paid_source = 'auto_pay'
   AND o.paid_date = o.date
   AND pay.auto_pay = true
+  AND pay.notify_auto_paid
   AND p.status IN ('active', 'maintenance')
   AND ((o.date::timestamp + time '10:00') AT TIME ZONE u.timezone) <= $3::timestamptz
 ORDER BY o.id;
@@ -449,7 +452,8 @@ ORDER BY o.id;
 -- boundary — the wall clock 10:00 of the operation date in the owner's
 -- timezone — falls in the window (from, until]. The occurrence is planned
 -- at booking time; whether the tick (or a manual payment) extinguished it
--- by the wake-up is the delivery-time resolution's call.
+-- by the wake-up is the delivery-time resolution's call. Only
+-- notify_auto_paid-правила бронят (#1189) — молчащие не зовут событие.
 SELECT pay.id AS payment_id,
        o.date,
        CAST((o.date::timestamp + time '10:00') AT TIME ZONE u.timezone AS timestamptz) AS fire_at
@@ -459,6 +463,7 @@ JOIN properties p ON p.id = o.property_id
 JOIN users u ON u.id = o.owner_id
 WHERE o.status = 'planned'
   AND pay.auto_pay = true
+  AND pay.notify_auto_paid
   AND p.status IN ('active', 'maintenance')
   AND ((o.date::timestamp + time '10:00') AT TIME ZONE u.timezone) > $1::timestamptz
   AND ((o.date::timestamp + time '10:00') AT TIME ZONE u.timezone) <= $2::timestamptz
@@ -474,7 +479,9 @@ ORDER BY o.id;
 -- operation whose date is no longer the zone's today (a job awake after
 -- the day rolled over) answers no row — a downtime's missed days are not
 -- backfilled, the 22:00 overdue leg speaks for the unpaid past; an
--- archived property answers no row.
+-- archived property answers no row. The per-payment flag (#1189): a rule
+-- with notify_auto_paid = false answers no row — the flag flipped after
+-- the booking silences the standing job.
 SELECT pay.id AS payment_id,
        o.date,
        pay.title,
@@ -492,6 +499,7 @@ WHERE pay.id = $1::uuid
   AND o.status = 'paid'
   AND o.paid_source = 'auto_pay'
   AND o.paid_date = o.date
+  AND pay.notify_auto_paid
   AND p.status IN ('active', 'maintenance')
   AND o.date = ($3::timestamptz AT TIME ZONE u.timezone)::date;
 

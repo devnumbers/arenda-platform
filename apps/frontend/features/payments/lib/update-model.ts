@@ -1,5 +1,6 @@
 import type {
   Payment,
+  PaymentReminderOffset,
   PaymentUpdateCommand,
   Recurrence,
 } from '@/entities/payment';
@@ -11,11 +12,14 @@ import { periodicityReady } from './wizard-model';
  * Модель правки платежа (#467): форма одного экрана → частичная команда
  * PATCH (контракт: опущенное поле остаётся без изменений, `since` серверный
  * и не правится). Правка меняет только будущее — пересоздание планового
- * вхождения делает сервер (истории 30–32 спеки #453).
+ * вхождения делает сервер (истории 30–32 спеки #453). Напоминание и флаг
+ * «уведомлять об автоплатеже» едут tri-state как endDate (#1197, #1189).
  */
 
 /** Значения формы правки; `categorySlug: undefined` — категория не менялась
- * (важно для платежа с пользовательской категорией: её слага в каталоге нет). */
+ * (важно для платежа с пользовательской категорией: её слага в каталоге нет).
+ * `reminderOffsetDays: undefined` — «Не напоминать»; `notifyAutoPaid`
+ * значим только у автоплатёжного правила (#1189). */
 export type PaymentEditForm = {
   readonly type: Payment['type'];
   readonly title: string;
@@ -24,6 +28,8 @@ export type PaymentEditForm = {
   readonly recurrence: Recurrence;
   /** Не задано — бессрочный; на сервер уходит tri-state.endDate (null — открыть срок). */
   readonly endDate: string | undefined;
+  readonly reminderOffsetDays: PaymentReminderOffset | undefined;
+  readonly notifyAutoPaid: boolean;
 };
 
 /** Содержательное сравнение регулярности (порядок дней недели не значим). */
@@ -163,6 +169,18 @@ export function buildPaymentUpdateCommand(
     }
   } else if (form.endDate !== payment.endDate) {
     command.endDate = form.endDate;
+  }
+
+  // Tri-state напоминания (#1197): «Не напоминать» у правила с напоминанием —
+  // null (снять), новый оффсет — числом, совпадение — поле опускается.
+  if (form.reminderOffsetDays !== payment.reminderOffsetDays) {
+    command.reminderOffsetDays = form.reminderOffsetDays ?? null;
+  }
+
+  // Флаг «уведомлять об автоплатеже» (#1189): значим только у autoPay-правила;
+  // форма знает действующее значение, поэтому едут true/false, не null.
+  if (payment.autoPay && form.notifyAutoPaid !== payment.notifyAutoPaid) {
+    command.notifyAutoPaid = form.notifyAutoPaid;
   }
 
   if (Object.keys(command).length === 0) {

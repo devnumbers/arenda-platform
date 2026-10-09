@@ -18,7 +18,6 @@ export {
   paymentDayFromPicker,
   paymentDayLabel,
   plannedEndDateMinDate,
-  RENTAL_REMINDER_DEFAULT,
   rentalPlannedEndDateError,
   rentalStartDateError,
   utilitiesLabel,

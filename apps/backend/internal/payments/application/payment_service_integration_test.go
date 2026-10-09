@@ -761,3 +761,87 @@ func TestCreatePayment_RejectsBadReminderOffset(t *testing.T) {
 		t.Fatalf("create with reminder offset 2 = %v, want ErrInvalidInput", err)
 	}
 }
+
+// TestNotifyAutoPaid_Lifecycle (#1189) goes the per-payment
+// «уведомлять об автоплатеже» flag through its contract: create defaults to
+// false («Не уведомлять», макет 3214-72739), an explicit true persists, the
+// patch resolves tri-state — omitted keeps, a value applies, null clears.
+// Creating an auto-pay rule forces the incoming reminder offset to NULL
+// (решение владельца по гриллингу #1186); a manual rule's reminder is
+// untouched.
+func TestNotifyAutoPaid_Lifecycle(t *testing.T) {
+	t.Parallel()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+
+	offset := 3
+	created, err := h.svc.CreatePayment(h.ctx(), h.owner, h.propID, func() paymentsapp.CreatePaymentCommand {
+		cmd := h.createCmd()
+		cmd.AutoPay = true
+		cmd.NotifyAutoPaid = true
+		cmd.ReminderOffsetDays = &offset // Форсится в NULL — форма пикер не показывает.
+		return cmd
+	}())
+	if err != nil {
+		t.Fatalf("create auto-pay payment: %v", err)
+	}
+	if created.ReminderOffsetDays != nil {
+		t.Fatalf("auto-pay create reminder offset = %v, want forced nil", created.ReminderOffsetDays)
+	}
+	if !created.NotifyAutoPaid {
+		t.Fatalf("created NotifyAutoPaid = false, want true")
+	}
+	if !created.AutoPay {
+		t.Fatalf("created AutoPay = false, want true")
+	}
+	assertNotifyReadBack(t, h, created.ID, true)
+	assertReminderReadBack(t, h, created.ID, nil)
+
+	// Для обычного правила ничего не меняется: присланное напоминание
+	// сохраняется, флаг молчит.
+	manual, err := h.svc.CreatePayment(h.ctx(), h.owner, h.propID, func() paymentsapp.CreatePaymentCommand {
+		cmd := h.createCmd()
+		cmd.ReminderOffsetDays = &offset
+		return cmd
+	}())
+	if err != nil {
+		t.Fatalf("create manual payment: %v", err)
+	}
+	if manual.ReminderOffsetDays == nil || *manual.ReminderOffsetDays != offset {
+		t.Fatalf("manual rule reminder offset = %v, want %d", manual.ReminderOffsetDays, offset)
+	}
+	if manual.NotifyAutoPaid {
+		t.Fatalf("manual rule NotifyAutoPaid = true, want the false default")
+	}
+
+	// Tri-state патч: omit хранит, значение применяет, null выключает.
+	if _, err := h.svc.UpdatePayment(h.ctx(), h.owner, h.propID, created.ID, paymentsapp.UpdatePaymentCommand{}); err != nil {
+		t.Fatalf("update without changes: %v", err)
+	}
+	assertNotifyReadBack(t, h, created.ID, true)
+	if _, err := h.svc.UpdatePayment(h.ctx(), h.owner, h.propID, created.ID, paymentsapp.UpdatePaymentCommand{
+		NotifyAutoPaid: new(false),
+	}); err != nil {
+		t.Fatalf("patch notify flag false: %v", err)
+	}
+	assertNotifyReadBack(t, h, created.ID, false)
+	if _, err := h.svc.UpdatePayment(h.ctx(), h.owner, h.propID, created.ID, paymentsapp.UpdatePaymentCommand{
+		NotifyAutoPaid: new(true),
+	}); err != nil {
+		t.Fatalf("patch notify flag true: %v", err)
+	}
+	assertNotifyReadBack(t, h, created.ID, true)
+}
+
+// assertNotifyReadBack fails unless the stored notify flag equals want (the
+// raw column read — the response mapping is the HTTP layer's).
+func assertNotifyReadBack(t *testing.T, h *paymentsHarness, paymentID uuid.UUID, want bool) {
+	t.Helper()
+	var got bool
+	if err := h.pool.QueryRow(h.ctx(),
+		`SELECT notify_auto_paid FROM payments WHERE id = $1`, paymentID).Scan(&got); err != nil {
+		t.Fatalf("read notify_auto_paid: %v", err)
+	}
+	if got != want {
+		t.Fatalf("notify_auto_paid = %v, want %v", got, want)
+	}
+}

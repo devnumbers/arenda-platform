@@ -8,6 +8,7 @@ import {
   seededViewerSessionToken,
   SEEDED_APARTMENT_PROPERTY_ID,
   SEEDED_STUDIO_PROPERTY_ID,
+  stickySaveButton,
   test,
   todayIso,
 } from './fixtures';
@@ -17,11 +18,14 @@ import { formatDayMonthWithYear } from '@/shared/lib/date-format';
 // Экран правки и модалка удаления (#467): форма, не визард — все поля
 // предзаполнены правилом, сохранение — частичный PATCH (меняет только
 // будущее, `since` недоступен), danger-кнопка «Удалить платеж» с модалкой
-// выбора судьбы просрочек (тексты — Figma 1127:33148). Форма — по макету
-// 705:10034: тип («Доход или расход») — строка, значение меняется простым
-// нажатием; «Формы оплаты» на экране нет — поле снесено (карта #1005,
-// тикеты #1006–#1009). Скриншоты — материал для сверки с Figma
-// (705:10034 правка + модалка, 1096:36680 десктоп).
+// выбора судьбы просрочек (тексты — Figma 1127:33148). Форма — по макетам
+// 1127-32083/1130-35022 (#1197): хедер «Платеж / Редактирование»,
+// направление — сегмент «Расход/Доход» под суммой (1127:32742),
+// редактируемое напоминание — шит с «За 1/3/7 дней» и «Не напоминать»
+// четвёртой (1130:35022), у автоплатёжа вместо него — «Уведомлять
+// об оплате» да/нет (#1189). «Способ оплаты» из макета не рисуется
+// (решение владельца 07.10, ADR 0047 рев. №3). Скриншоты — материал
+// для сверки с Figma.
 //
 // Сид: «Страхование» …552 на квартире — цель правки (сумма 320 000 кап,
 // день 15; одна просрочка остаётся прошлым); студия — «Консьерж-сервис»
@@ -35,6 +39,7 @@ const STUDIO = SEEDED_STUDIO_PROPERTY_ID;
 const URLS = {
   insuranceEdit: `/properties/${PROPERTY}/payments/55555555-5555-4555-8555-555555555552/edit`,
   insurance: `/properties/${PROPERTY}/payments/55555555-5555-4555-8555-555555555552`,
+  electricity: `/properties/${PROPERTY}/payments/55555555-5555-4555-8555-555555555553`,
   electricityEdit: `/properties/${PROPERTY}/payments/55555555-5555-4555-8555-555555555553/edit`,
   conciergeEdit: `/properties/${STUDIO}/payments/55555555-5555-4555-8555-555555555559/edit`,
   tvEdit: `/properties/${STUDIO}/payments/55555555-5555-4555-8555-55555555555a/edit`,
@@ -51,23 +56,32 @@ test.describe('экран правки платежа', () => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto(URLS.insuranceEdit);
 
-    // Шапка: только «Редактирование», отмена и сохранение.
+    // Шапка: «Платеж» с подписью «Редактирование» (макет 1127:32086),
+    // отмена и сохранение.
+    await expect(page.getByText('Платеж', { exact: true })).toBeVisible();
     await expect(page.getByText('Редактирование')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Отменить правку' })).toBeVisible();
-    // exact: «Сохранить» — клавиша Check в шапке, не sticky «Сохранить изменения».
-    const check = page.getByRole('button', { name: 'Сохранить', exact: true });
+    // Клавиша Check в шапке; sticky-кнопке ниже своё имя — то же слово.
+    const check = page.locator('header').getByRole('button', { name: 'Сохранить' });
     await expect(check).toBeDisabled();
 
-    // Поля предзаполнены: сумма, название, категория, тип, регулярность,
-    // бессрочное окончание.
+    // Поля предзаполнены: сумма, название, категория, направление — сегмент
+    // под суммой (макет 1127:32742), регулярность, бессрочное окончание;
+    // напоминание сида не задаёт — «Не напоминать».
     await expect(page.getByRole('textbox', { name: 'Сумма' })).toHaveValue(/3\s?200/);
     await expect(page.getByRole('textbox', { name: 'Название платежа' })).toHaveValue('Страхование');
     await expect(page.getByRole('button', { name: 'Категория' })).toHaveText(/Страхование/);
-    await expect(page.getByRole('button', { name: 'Доход или расход' })).toHaveText(/Расход/);
+    await expect(
+      page.getByRole('radiogroup', { name: 'Направление платежа' }).getByRole('radio', { name: 'Расход' }),
+    ).toBeChecked();
     await expect(page.getByRole('button', { name: 'Регулярность платежа' })).toHaveText(
       /Каждый месяц 15 числа/,
     );
     await expect(page.getByRole('button', { name: 'Окончание платежа' })).toHaveText(/Бессрочно/);
+    await expect(page.getByRole('button', { name: 'Напоминать о платеже' })).toHaveText(
+      /Не напоминать/,
+    );
+    await expect(page.getByText('Уведомления на почту')).toBeVisible();
 
     // `since` на форме нет, удаление доступно владельцу.
     await expect(page.getByText('Действует с')).toHaveCount(0);
@@ -92,7 +106,11 @@ test.describe('экран правки платежа', () => {
     // Регулярность: страница «Выбор периодичности» → «Каждый месяц» → день 20.
     await page.getByRole('button', { name: 'Регулярность платежа' }).click();
     await expect(page.getByText('Выбор периодичности')).toBeVisible();
+    // Контентных заголовков на странице правки нет — хедер ведёт тайтлом
+    // (решение владельца 07.10, #1192).
+    await expect(page.getByRole('heading', { name: 'Периодичность платежа' })).toHaveCount(0);
     await page.getByRole('button', { name: 'Каждый месяц' }).click();
+    await expect(page.getByRole('heading', { name: 'Выберите день', exact: true })).toHaveCount(0);
     // Мультивыбор: у сид-платежа день 15 — снимаем его и ставим 20.
     await page.getByRole('button', { name: '15', exact: true }).click();
     await page.getByRole('button', { name: '20', exact: true }).click();
@@ -102,8 +120,8 @@ test.describe('экран правки платежа', () => {
       page.getByRole('button', { name: 'Регулярность платежа' }),
     ).toHaveText(/Каждый месяц 20 числа/);
 
-    await expect(page.getByRole('button', { name: 'Сохранить изменения' })).toBeEnabled();
-    await page.getByRole('button', { name: 'Сохранить изменения' }).click();
+    await expect(stickySaveButton(page)).toBeEnabled();
+    await stickySaveButton(page).click();
 
     // Тост и возврат на страницу платежа с новыми значениями.
     await expect(page.getByText('Изменения сохранены')).toBeVisible();
@@ -138,7 +156,7 @@ test.describe('экран правки платежа', () => {
     await expect(page.getByRole('button', { name: 'Регулярность платежа' })).toHaveText(
       /Каждый месяц 20 числа/,
     );
-    await expect(page.getByRole('button', { name: 'Сохранить изменения' })).toBeDisabled();
+    await expect(stickySaveButton(page)).toBeDisabled();
   });
 
   test('периодичность как в создании: день применяется сразу, год — «Продолжить» календаря', async ({
@@ -194,18 +212,151 @@ test.describe('экран правки платежа', () => {
     );
   });
 
-  test('тип меняется простым нажатием, без пикера', async ({ page, seededUser }) => {
+  test('направление — сегмент под суммой, без пикера (макет 1127:32742)', async ({
+    page,
+    seededUser,
+  }) => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto(URLS.insuranceEdit);
 
-    // Нажатие по строке сразу переключает значение — ни пикера, ни шита.
-    await page.getByRole('button', { name: 'Доход или расход' }).click();
-    await expect(page.getByRole('button', { name: 'Доход или расход' })).toHaveText(/Доход/);
+    // Клик по пилюле сегмента сразу переключает значение — ни пикера, ни шита.
+    const segment = page.getByRole('radiogroup', { name: 'Направление платежа' });
+    await expect(segment.getByRole('radio', { name: 'Расход' })).toBeChecked();
+    await segment.getByRole('radio', { name: 'Доход' }).click();
+    await expect(segment.getByRole('radio', { name: 'Доход' })).toBeChecked();
     await expect(page.getByRole('dialog')).toHaveCount(0);
 
     // Правка не сохранена: после перезагрузки сидовые значения на месте.
     await page.reload();
-    await expect(page.getByRole('button', { name: 'Доход или расход' })).toHaveText(/Расход/);
+    await expect(
+      page
+        .getByRole('radiogroup', { name: 'Направление платежа' })
+        .getByRole('radio', { name: 'Расход' }),
+    ).toBeChecked();
+  });
+
+  test('напоминание: шит 1130-35022 с «Не напоминать» четвёртой, выбор едет в PATCH (#1197)', async ({
+    page,
+    seededUser,
+  }) => {
+    // Вход через «Изменить» со страницы платежа (как в тесте сохранения
+    // выше): goBack после сохранения возвращают по истории, тост живёт
+    // в корневом портале приложения.
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto(URLS.insurance);
+    await page.getByRole('button', { name: 'Изменить' }).click();
+    await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+/edit$`));
+
+    // Сид-платёж без напоминания: строка показывает «Не напоминать».
+    const reminderField = page.getByRole('button', { name: 'Напоминать о платеже' });
+    await expect(reminderField).toHaveText(/Не напоминать/);
+
+    // Шит: опции «За 1/3/7 дней» по макету и четвёртая «Не напоминать» —
+    // краевой случай правила без напоминания (NULL контракта); выбрана она.
+    await reminderField.click();
+    const group = page
+      .getByRole('dialog', { name: 'Напоминать о платеже' })
+      .getByRole('radiogroup', { name: 'Напоминать о платеже' });
+    await expect(group.getByRole('radio', { name: 'За 1 день' })).toBeVisible();
+    await expect(group.getByRole('radio', { name: 'За 3 дня' })).toBeVisible();
+    await expect(group.getByRole('radio', { name: 'За 7 дней' })).toBeVisible();
+    const none = group.getByRole('radio', { name: 'Не напоминать' });
+    await expect(none).toBeVisible();
+    await expect(none).toBeChecked();
+
+    // Выбор «За 3 дня» подсвечивает радио; шит остаётся до закрытия (канон).
+    await group.getByRole('radio', { name: 'За 3 дня' }).click();
+    await expect(group.getByRole('radio', { name: 'За 3 дня' })).toBeChecked();
+    await expect(none).not.toBeChecked();
+    await page.keyboard.press('Escape');
+
+    // Строка показывает выбор; сохранение уезжает tri-state числом.
+    await expect(reminderField).toHaveText(/За 3 дня/);
+    await expect(stickySaveButton(page)).toBeEnabled();
+    await stickySaveButton(page).click();
+    await expect(page.getByText('Изменения сохранены')).toBeVisible();
+    const read = await page.request.get(
+      `/api/properties/${PROPERTY}/payments/55555555-5555-4555-8555-555555555552`,
+    );
+    expect(read.ok(), 'чтение платежа после правки').toBe(true);
+    expect(((await read.json()) as { reminderOffsetDays?: number | null }).reminderOffsetDays).toBe(3);
+
+    // Обратный ход — отдельный тест ниже с собственной предустановкой.
+  });
+
+  test('напоминание снимается «Не напоминать» — tri-state null (#1197)', async ({
+    page,
+    seededUser,
+  }) => {
+    await openCabinetWithSeededSession(page, seededUser);
+    // Состояние «За 3 дня» — предустановка API-патчем (канон сидов мид-теста,
+    // прецедент payment-subscreens): тест живёт и при единичном retry, когда
+    // предыдущий тест уже снял напоминание.
+    const ensured = await page.request.patch(
+      `/api/properties/${PROPERTY}/payments/55555555-5555-4555-8555-555555555552`,
+      { data: { reminderOffsetDays: 3 } },
+    );
+    expect(ensured.ok(), 'предустановка напоминания').toBe(true);
+
+    await page.goto(URLS.insurance);
+    await page.getByRole('button', { name: 'Изменить' }).click();
+    await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+/edit$`));
+
+    const reminderField = page.getByRole('button', { name: 'Напоминать о платеже' });
+    await expect(reminderField).toHaveText(/За 3 дня/);
+    await reminderField.click();
+    const group = page
+      .getByRole('dialog', { name: 'Напоминать о платеже' })
+      .getByRole('radiogroup', { name: 'Напоминать о платеже' });
+    await expect(group.getByRole('radio', { name: 'За 3 дня' })).toBeChecked();
+    await group.getByRole('radio', { name: 'Не напоминать' }).click();
+    await page.keyboard.press('Escape');
+    await expect(stickySaveButton(page)).toBeEnabled();
+    await stickySaveButton(page).click();
+    await expect(page.getByText('Изменения сохранены')).toBeVisible();
+    const reread = await page.request.get(
+      `/api/properties/${PROPERTY}/payments/55555555-5555-4555-8555-555555555552`,
+    );
+    expect(
+      ((await reread.json()) as { reminderOffsetDays?: number | null }).reminderOffsetDays ?? null,
+    ).toBeNull();
+  });
+
+  test('автоплатёж: «Уведомлять об оплате» да/нет вместо пикера оффсета (#1189)', async ({
+    page,
+    seededUser,
+  }) => {
+    // Вход через «Изменить» (goBack после сохранения идёт по истории).
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto(URLS.electricity);
+    await page.getByRole('button', { name: 'Изменить' }).click();
+    await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+/edit$`));
+
+    // У автоплатёжного правила пикера напоминаний нет — строка флага
+    // (сида флаг не задаёт: колонка 000153 по умолчанию false).
+    await expect(page.getByRole('button', { name: 'Напоминать о платеже' })).toHaveCount(0);
+    const notifyField = page.getByRole('button', { name: 'Уведомлять об оплате' });
+    await expect(notifyField).toHaveText(/Не уведомлять/);
+
+    // Шит с двумя радио — подписи шага 4 создания (#1193).
+    await notifyField.click();
+    const group = page
+      .getByRole('dialog', { name: 'Уведомлять об оплате' })
+      .getByRole('radiogroup', { name: 'Уведомлять об оплате' });
+    await expect(group.getByRole('radio', { name: 'Не уведомлять' })).toBeChecked();
+    await group.getByRole('radio', { name: 'Да, уведомлять' }).click();
+    await expect(group.getByRole('radio', { name: 'Да, уведомлять' })).toBeChecked();
+    await page.keyboard.press('Escape');
+
+    await expect(notifyField).toHaveText(/Да, уведомлять/);
+    await expect(stickySaveButton(page)).toBeEnabled();
+    await stickySaveButton(page).click();
+    await expect(page.getByText('Изменения сохранены')).toBeVisible();
+    const read = await page.request.get(
+      `/api/properties/${PROPERTY}/payments/55555555-5555-4555-8555-555555555553`,
+    );
+    expect(read.ok(), 'чтение платежа после правки').toBe(true);
+    expect(((await read.json()) as { notifyAutoPaid: boolean }).notifyAutoPaid).toBe(true);
   });
 
   test('выбор категории — отдельная страница, как в визарде', async ({
@@ -227,7 +378,7 @@ test.describe('экран правки платежа', () => {
 
     // Форма показывает выбранное и готова к сохранению; правка не сохранена.
     await expect(page.getByRole('button', { name: 'Категория' })).toHaveText(/Интернет/);
-    await expect(page.getByRole('button', { name: 'Сохранить изменения' })).toBeEnabled();
+    await expect(stickySaveButton(page)).toBeEnabled();
     await page.reload();
     await expect(page.getByRole('button', { name: 'Категория' })).toHaveText(/Страхование/);
 
@@ -300,7 +451,7 @@ test.describe('экран правки платежа', () => {
     await expect(page.getByRole('button', { name: 'Окончание платежа' })).toHaveText(
       formatDayMonthWithYear(firstOccurrence, todayIso()),
     );
-    await expect(page.getByRole('button', { name: 'Сохранить изменения' })).toBeEnabled();
+    await expect(stickySaveButton(page)).toBeEnabled();
     await page.reload();
     await expect(page.getByRole('button', { name: 'Окончание платежа' })).toHaveText(/Бессрочно/);
   });
@@ -338,7 +489,7 @@ test.describe('экран правки платежа', () => {
     await expect(page.getByRole('button', { name: 'Окончание платежа' })).toHaveText(
       /Бессрочно/,
     );
-    await expect(page.getByRole('button', { name: 'Сохранить изменения' })).toBeEnabled();
+    await expect(stickySaveButton(page)).toBeEnabled();
 
     // Правка не сохранена: после перезагрузки сид-правило на месте,
     // окончание бессрочное.
@@ -501,12 +652,12 @@ test.describe('экран правки — роли', () => {
     // Сумма уже правлена мобильным тестом выше (файл идёт по порядку).
     await expect(page.getByRole('textbox', { name: 'Сумма' })).toHaveValue(/4\s?000/);
     await expect(page.getByRole('button', { name: 'Удалить платеж' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Сохранить изменения' })).toBeDisabled();
+    await expect(stickySaveButton(page)).toBeDisabled();
 
     // Сохранение доступно после правки и работает под полным доступом.
     await page.getByRole('textbox', { name: 'Название платежа' }).fill('Страхование квартиры');
-    await expect(page.getByRole('button', { name: 'Сохранить изменения' })).toBeEnabled();
-    await page.getByRole('button', { name: 'Сохранить изменения' }).click();
+    await expect(stickySaveButton(page)).toBeEnabled();
+    await stickySaveButton(page).click();
     await expect(page.getByText('Изменения сохранены')).toBeVisible();
     await expect(page.getByText('Страхование квартиры').first()).toBeVisible();
   });

@@ -280,6 +280,10 @@ export function PaymentCreateWizardFlow({
               onReminderOffsetDaysChange={(reminderOffsetDays) =>
                 setDraft((prev) => ({ ...prev, reminderOffsetDays }))
               }
+              notifyAutoPaid={draft.notifyAutoPaid}
+              onNotifyAutoPaidChange={(notifyAutoPaid) =>
+                setDraft((prev) => ({ ...prev, notifyAutoPaid }))
+              }
               endDate={draft.endDate}
               onEndDateChange={(endDate) => setDraft((prev) => ({ ...prev, endDate }))}
               recurrence={draft.recurrence}

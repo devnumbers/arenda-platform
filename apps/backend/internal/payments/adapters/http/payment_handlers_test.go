@@ -49,6 +49,9 @@ type fakePaymentManager struct {
 		completed, managed, rentalCompleted map[uuid.UUID]bool, err error)
 	rentalManagedStatus func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (bool, error)
 	rentalCompleted     func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (bool, error)
+	paymentChanges      func(
+		ctx context.Context, actor, propertyID, paymentID uuid.UUID, q application.ChangesQuery,
+	) (application.ChangeLogPage, error)
 }
 
 // CompletedStatus defaults to false — the pre-completion behaviour the older
@@ -93,6 +96,17 @@ func (f *fakePaymentManager) RentalCompletedStatus(
 		return false, nil
 	}
 	return f.rentalCompleted(ctx, actor, propertyID, paymentID)
+}
+
+// PaymentChanges defaults to an empty page — the change log read only runs
+// when a test sets the hook.
+func (f *fakePaymentManager) PaymentChanges(
+	ctx context.Context, actor, propertyID, paymentID uuid.UUID, q application.ChangesQuery,
+) (application.ChangeLogPage, error) {
+	if f.paymentChanges == nil {
+		return application.ChangeLogPage{Items: []domain.ChangeEntry{}}, nil
+	}
+	return f.paymentChanges(ctx, actor, propertyID, paymentID, q)
 }
 
 // The method set mirrors the port; the long signatures are the contract's.
@@ -220,6 +234,9 @@ func TestPaymentHandlers_RequireAuth(t *testing.T) {
 		}},
 		{"favorite", func(w http.ResponseWriter, r *http.Request) {
 			h.SetPaymentFavorite(w, r, propertyID, paymentID)
+		}},
+		{"changes", func(w http.ResponseWriter, r *http.Request) {
+			h.ListPaymentChanges(w, r, propertyID, paymentID, openapi.ListPaymentChangesParams{})
 		}},
 	}
 	for _, tc := range cases {
@@ -731,6 +748,127 @@ func TestPaymentResponse_CarriesReminderOffset(t *testing.T) {
 	}
 }
 
+// TestCreatePayment_MapsNotifyAutoPaid (#1189): the create payload's
+// notifyAutoPaid folds into the command — absent/false decode to false («Не
+// уведомлять», макет 3214-72739), an explicit true asks for the
+// «Автоплатёж исполнен» event.
+func TestCreatePayment_MapsNotifyAutoPaid(t *testing.T) {
+	t.Parallel()
+	actor := uuid.Must(uuid.NewV7())
+	propertyID := uuid.Must(uuid.NewV7())
+
+	notifyCreateBody := func(flag string) string {
+		return `{"type":"expense","title":"Аренда","amountKopecks":5000000,` +
+			`"recurrence":{"kind":"daily"},"categorySlug":"rent",` +
+			`"notifyAutoPaid":` + flag + `}`
+	}
+
+	cases := []struct {
+		name string
+		body string
+		want bool
+	}{
+		{"absent — silent", validCreateBody, false},
+		{"explicit false", notifyCreateBody("false"), false},
+		{"explicit true", notifyCreateBody("true"), true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var gotCmd application.CreatePaymentCommand
+			h := NewPaymentHandlers(&fakePaymentManager{
+				create: func(_ context.Context, _, _ uuid.UUID, cmd application.CreatePaymentCommand) (domain.Payment, error) {
+					gotCmd = cmd
+					return validFixturePayment(), nil
+				},
+			}, nil)
+			w := httptest.NewRecorder()
+			h.CreatePayment(w, paymentRequest(t, http.MethodPost, actor, tc.body), propertyID)
+			if w.Code != http.StatusCreated {
+				t.Fatalf("status = %d, want 201; body: %s", w.Code, w.Body.String())
+			}
+			if gotCmd.NotifyAutoPaid != tc.want {
+				t.Fatalf("command NotifyAutoPaid = %v, want %v", gotCmd.NotifyAutoPaid, tc.want)
+			}
+		})
+	}
+}
+
+// TestUpdatePayment_NotifyAutoPaidTriState (#1189): the flag resolves like
+// the reminder tri-state — omitted keeps, null clears (false), a boolean
+// sets.
+func TestUpdatePayment_NotifyAutoPaidTriState(t *testing.T) {
+	t.Parallel()
+	actor := uuid.Must(uuid.NewV7())
+	propertyID := uuid.Must(uuid.NewV7())
+	paymentID := uuid.Must(uuid.NewV7())
+
+	cases := []struct {
+		name     string
+		body     string
+		wantSet  bool
+		wantFlag bool
+	}{
+		{"omit keeps flag", `{"title": "Только название"}`, false, false},
+		{"null clears flag", `{"notifyAutoPaid": null}`, true, false},
+		{"false sets flag", `{"notifyAutoPaid": false}`, true, false},
+		{"true sets flag", `{"notifyAutoPaid": true}`, true, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var gotCmd application.UpdatePaymentCommand
+			h := NewPaymentHandlers(&fakePaymentManager{
+				update: func(_ context.Context, _, _, _ uuid.UUID, cmd application.UpdatePaymentCommand) (domain.Payment, error) {
+					gotCmd = cmd
+					return validFixturePayment(), nil
+				},
+			}, nil)
+			w := httptest.NewRecorder()
+			h.UpdatePayment(w, paymentRequest(t, http.MethodPatch, actor, tc.body),
+				propertyID, paymentID)
+			if w.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+			}
+			if present := gotCmd.NotifyAutoPaid != nil; present != tc.wantSet {
+				t.Fatalf("command NotifyAutoPaid update present = %v, want %v", present, tc.wantSet)
+			}
+			if tc.wantSet && *gotCmd.NotifyAutoPaid != tc.wantFlag {
+				t.Fatalf("command NotifyAutoPaid = %v, want %v", *gotCmd.NotifyAutoPaid, tc.wantFlag)
+			}
+		})
+	}
+}
+
+// TestPaymentResponse_CarriesNotifyAutoPaid (#1189): the read side exposes
+// the per-payment gate of the «Автоплатёж исполнен» event.
+func TestPaymentResponse_CarriesNotifyAutoPaid(t *testing.T) {
+	t.Parallel()
+	respond := validFixturePayment()
+	respond.NotifyAutoPaid = true
+
+	h := NewPaymentHandlers(&fakePaymentManager{
+		get: func(_ context.Context, _, _, _ uuid.UUID) (domain.Payment, error) {
+			return respond, nil
+		},
+	}, nil)
+	w := httptest.NewRecorder()
+	h.GetPayment(w, paymentRequest(t, http.MethodGet, uuid.Must(uuid.NewV7()), ""),
+		uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		NotifyAutoPaid *bool `json:"notifyAutoPaid"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.NotifyAutoPaid == nil || !*resp.NotifyAutoPaid {
+		t.Fatalf("response notifyAutoPaid = %v, want true", resp.NotifyAutoPaid)
+	}
+}
+
 // TestGetPayment_CarriesRentalCompleted (#1158): the single-rule read passes
 // the managing rental's «Завершена» state through next to the #818 gate
 // flag — the payment screen gates «Изменить аренду» on it.
@@ -918,4 +1056,160 @@ func mustWeekly(t *testing.T, weekdays ...int) domain.Recurrence {
 // wrapped wraps a sentinel the way the application layer wraps store errors.
 func wrapped(err error) error {
 	return fmt.Errorf("get payment: %w", err)
+}
+
+// TestListPaymentChanges pins the changes endpoint's wire shape (ADR 0065):
+// the typed diff values travel verbatim, the cursors surface as optionals,
+// and the contract errors map onto 400/404.
+func TestListPaymentChanges(t *testing.T) {
+	t.Parallel()
+	propertyID := uuid.Must(uuid.NewV7())
+	paymentID := uuid.Must(uuid.NewV7())
+	actorID := uuid.Must(uuid.NewV7())
+	entryID := uuid.Must(uuid.NewV7())
+	at := time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC)
+
+	h := NewPaymentHandlers(changesFake(t, paymentID, entryID, actorID, at), nil)
+	w := httptest.NewRecorder()
+	limit := 7
+	h.ListPaymentChanges(w, httptest.NewRequestWithContext(
+		httpsupport.WithUserID(t.Context(), actorID), http.MethodGet, "/", nil,
+	), propertyID, paymentID, openapi.ListPaymentChangesParams{Limit: &limit})
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s, want 200", w.Code, w.Body)
+	}
+
+	var body struct {
+		Items      []changeItemWire `json:"items"`
+		NextCursor *string          `json:"next_cursor"`
+		PrevCursor *string          `json:"prev_cursor"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(body.Items) != 1 {
+		t.Fatalf("items = %d, want 1", len(body.Items))
+	}
+	assertChangeItem(t, body.Items[0], entryID, actorID, at)
+	assertAmountChange(t, body.Items[0].Changes[0])
+	if body.NextCursor == nil || *body.NextCursor != "next-blob" ||
+		body.PrevCursor == nil || *body.PrevCursor != "prev-blob" {
+		t.Fatalf("cursors = %s", w.Body)
+	}
+}
+
+// TestListPaymentChanges_ErrorMapping pins the contract statuses: the
+// privacy 404 and the malformed-cursor 400.
+func TestListPaymentChanges_ErrorMapping(t *testing.T) {
+	t.Parallel()
+	propertyID := uuid.Must(uuid.NewV7())
+	paymentID := uuid.Must(uuid.NewV7())
+	actorID := uuid.Must(uuid.NewV7())
+
+	notFound := &fakePaymentManager{}
+	notFound.paymentChanges = func(
+		_ context.Context, _, _, _ uuid.UUID, _ application.ChangesQuery,
+	) (application.ChangeLogPage, error) {
+		return application.ChangeLogPage{}, application.ErrNotFound
+	}
+	badCursor := &fakePaymentManager{}
+	badCursor.paymentChanges = func(
+		_ context.Context, _, _, _ uuid.UUID, _ application.ChangesQuery,
+	) (application.ChangeLogPage, error) {
+		return application.ChangeLogPage{}, fmt.Errorf("payment change cursor: %w", application.ErrInvalidInput)
+	}
+
+	cases := []struct {
+		name  string
+		fake  *fakePaymentManager
+		wants int
+	}{
+		{"privacy 404", notFound, http.StatusNotFound},
+		{"cursor 400", badCursor, http.StatusBadRequest},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			w := httptest.NewRecorder()
+			NewPaymentHandlers(tc.fake, nil).ListPaymentChanges(w, httptest.NewRequestWithContext(
+				httpsupport.WithUserID(t.Context(), actorID), http.MethodGet, "/", nil,
+			), propertyID, paymentID, openapi.ListPaymentChangesParams{})
+			if w.Code != tc.wants {
+				t.Fatalf("status = %d, body = %s, want %d", w.Code, w.Body, tc.wants)
+			}
+		})
+	}
+}
+
+// changesFake is the one-page fixture fake: the seeded updated entry with an
+// amount and an end-date diff, both cursors set.
+func changesFake(
+	t *testing.T, paymentID, entryID, actorID uuid.UUID, at time.Time,
+) *fakePaymentManager {
+	t.Helper()
+	f := &fakePaymentManager{}
+	f.paymentChanges = func(
+		_ context.Context, _, _, gotPayment uuid.UUID, q application.ChangesQuery,
+	) (application.ChangeLogPage, error) {
+		if gotPayment != paymentID {
+			t.Fatalf("payment id = %s, want %s", gotPayment, paymentID)
+		}
+		if q.Limit != 7 {
+			t.Fatalf("limit = %d, want the wire's 7", q.Limit)
+		}
+		return application.ChangeLogPage{
+			Items: []domain.ChangeEntry{{
+				ID:      entryID,
+				ActorID: actorID,
+				Action:  domain.ChangeUpdated,
+				Changes: []domain.FieldChange{
+					{Field: domain.ChangeFieldAmount, Old: json.RawMessage("2500000"), New: json.RawMessage("5000000")},
+					{Field: domain.ChangeFieldEndDate, Old: json.RawMessage("null"), New: json.RawMessage(`"2027-01-31"`)},
+				},
+				CreatedAt: at,
+			}},
+			NextCursor: "next-blob",
+			PrevCursor: "prev-blob",
+		}, nil
+	}
+	return f
+}
+
+// changeItemWire is the decoded wire shape of one PaymentChangeItem.
+type changeItemWire struct {
+	ID        string            `json:"id"`
+	ActorID   string            `json:"actor_id"`
+	Action    string            `json:"action"`
+	CreatedAt time.Time         `json:"created_at"`
+	Changes   []json.RawMessage `json:"changes"`
+}
+
+// assertChangeItem checks the entry's snapshot fields on the wire.
+func assertChangeItem(t *testing.T, item changeItemWire, entryID, actorID uuid.UUID, at time.Time) {
+	t.Helper()
+	if item.ID != entryID.String() || item.ActorID != actorID.String() ||
+		item.Action != "updated" || !item.CreatedAt.Equal(at) {
+		t.Fatalf("item = %+v", item)
+	}
+	if len(item.Changes) != 2 {
+		t.Fatalf("changes = %s, want 2 fields", item.Changes)
+	}
+}
+
+// assertAmountChange checks the typed values travel verbatim: the kopecks as
+// JSON numbers, never strings-with-formatting.
+func assertAmountChange(t *testing.T, raw json.RawMessage) {
+	t.Helper()
+	var change struct {
+		Field string          `json:"field"`
+		Old   json.RawMessage `json:"old"`
+		New   json.RawMessage `json:"new"`
+	}
+	if err := json.Unmarshal(raw, &change); err != nil {
+		t.Fatalf("decode change: %v", err)
+	}
+	if change.Field != "amount_kopecks" ||
+		string(change.Old) != "2500000" || string(change.New) != "5000000" {
+		t.Fatalf("amount change = %s — the typed values must travel verbatim", raw)
+	}
 }

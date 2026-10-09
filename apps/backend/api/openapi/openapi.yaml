@@ -1127,6 +1127,71 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+  /properties/{propertyId}/payments/{paymentId}/changes:
+    get:
+      operationId: listPaymentChanges
+      summary: "Страница истории изменений платежа (двусторонний keyset, канон #597)"
+      description: |
+        Журнал правок правила (ADR 0065, тикет #1188) — экран «История
+        платежа», режим «изменения»: одна строка на действие пользователя.
+        Правка условий — строка action=updated с дифом полей старое→новое
+        (словарь мутационного аудита, порядок строк словарный); пауза и
+        возобновление — строки paused/resumed с пустым changes. Создание и
+        удаление строк не пишут (удаление каскадит журнал за правилом);
+        записей об оплатах и раннем/позднем попадании нет — факт виден на
+        странице операции. Арендный шов пишет в тот же журнал: правка
+        условий аренды (сумма, день оплаты, автоплатёж, окончание) отражается
+        в истории управляемого платежа.
+
+        Значения дифа типизированы и никогда не строки-с-форматированием:
+        копейки — число; регулярность — канонический JSON-объект Recurrence
+        (множественная месячная форма «каждый месяц, 1, 10, 15 числа» едет
+        структурой {kind: monthly, daysOfMonth: [1, 10, 15]}); даты —
+        «YYYY-MM-DD» или null; направление и название — строки; автоплатёж —
+        булево; напоминание — 1/3/7 или null; категория — ссылка со снапшотом
+        лейбла на момент правки ({slug, label} или {userCategoryId, label}) —
+        чип читаем после переименования или удаления пользовательской
+        категории. Текст чипов собирает фронт (recurrenceLabel,
+        formatMoneyKopecks, каталог категорий).
+
+        Курсор двусторонний: before_cursor продолжает журнал в старую сторону,
+        after_cursor запрашивает записи моложе уже загруженных (prepend
+        новых); передавать оба сразу — 400. Строки страницы всегда идут по
+        (created_at, id) DESC; появившиеся между загрузками записи не
+        дублируются и не теряются. Доступ производный (ADR 0028): чужое,
+        приостановленное или невидимое — приватный 404, неизвестный платёж —
+        тоже.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: paymentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/PaymentChangesBeforeCursor'
+        - $ref: '#/components/parameters/PaymentChangesAfterCursor'
+        - $ref: '#/components/parameters/PaymentChangesLimit'
+      responses:
+        '200':
+          description: Страница истории изменений платежа
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentChangesResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /properties/{propertyId}/pin:
     put:
       operationId: setPropertyPin
@@ -4851,6 +4916,43 @@ components:
         before_cursor передавать нельзя — 400.
       schema:
         type: string
+
+    PaymentChangesBeforeCursor:
+      name: before_cursor
+      in: query
+      required: false
+      description: >-
+        Непрозрачный курсор страницы СТАРШЕ ключа (продолжение журнала в
+        прошлое): берётся из next_cursor предыдущей страницы. Ключ keyset —
+        (created_at, id); страница возобновляется строго после него.
+        Отсутствие — журнал читается с самых свежих записей. Некорректный
+        blob — 400; вместе с after_cursor передавать нельзя — 400.
+      schema:
+        type: string
+    PaymentChangesAfterCursor:
+      name: after_cursor
+      in: query
+      required: false
+      description: >-
+        Непрозрачный курсор страницы МОЛОЖЕ ключа (prepend новых записей,
+        канон InfiniteQueryTail): берётся из prev_cursor страницы с самими
+        свежими из уже загруженных записей. Порядок строк страницы — по-прежнему
+        (created_at, id) DESC. Пустой ответ — новых записей нет. Вместе с
+        before_cursor передавать нельзя — 400.
+      schema:
+        type: string
+    PaymentChangesLimit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        default: 50
+        minimum: 1
+        maximum: 100
+      description: >-
+        Размер страницы (канон #597): 1..100, по умолчанию 50.
+
     HistoryLimit:
       name: limit
       in: query
@@ -6666,6 +6768,14 @@ components:
         autoPay:
           type: boolean
           default: false
+        notifyAutoPaid:
+          type: boolean
+          nullable: true
+          default: false
+          description: >-
+            Присылать ли событие «Автоплатёж исполнен» по правилу (#1189).
+            Дефолт для новых — false («Не уведомлять», макет 3214-72739);
+            явный null равен false.
         reminderOffsetDays:
           type: integer
           nullable: true
@@ -6674,6 +6784,9 @@ components:
             За сколько дней предупреждать о вхождении («Напоминание о
             платеже», карта #822): 1, 3 или 7. Null/omitted — напоминаний нет
             (выбор опционален). Напоминание живёт независимо от autoPay.
+            У правила с autoPay=true присланный оффсет при создании
+            форсируется в null (решение владельца по гриллингу #1186:
+            автоплатёжная форма reminder-пикер не показывает).
 
     PaymentUpdateRequest:
       description: >-
@@ -6712,6 +6825,13 @@ components:
             окно не перепроверяют.
         autoPay:
           type: boolean
+        notifyAutoPaid:
+          type: boolean
+          nullable: true
+          description: >
+            Tri-state флаг «уведомлять об автоплатеже» (#1189): omitted keeps
+            the current value, null turns the «Автоплатёж исполнен» event off,
+            true/false sets it.
         reminderOffsetDays:
           type: integer
           nullable: true
@@ -6756,7 +6876,7 @@ components:
 
     PaymentResponse:
       type: object
-      required: [id, propertyId, type, title, amountKopecks, recurrence, since, autoPay, category, isFavorite, isCompleted, nearestDate, isRentalManaged, isRentalCompleted, pauses, createdAt, updatedAt]
+      required: [id, propertyId, type, title, amountKopecks, recurrence, since, autoPay, notifyAutoPaid, category, isFavorite, isCompleted, nearestDate, isRentalManaged, isRentalCompleted, pauses, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -6783,6 +6903,13 @@ components:
           nullable: true
         autoPay:
           type: boolean
+        notifyAutoPaid:
+          type: boolean
+          description: >-
+            The per-payment gate of the «Автоплатёж исполнен» event (#1189):
+            false — правило автоплатежа гасится молча. Дефолт новых правил —
+            false (макет 3214-72739); существующим автоплатежам проставлен
+            true миграцией (без поведенческого регресса, #1186).
         category:
           $ref: '#/components/schemas/CategoryView'
         reminderOffsetDays:
@@ -6855,6 +6982,101 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PaymentResponse'
+
+    PaymentChangesResponse:
+      type: object
+      description: Страница истории изменений платежа (двусторонний keyset, ADR 0065).
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentChangeItem'
+        next_cursor:
+          type: string
+          description: |
+            Непрозрачный курсор страницы СТАРШЕ (в before_cursor следующего
+            запроса): продолжение журнала в прошлое. Отсутствует на пустой
+            или неполной странице — дальше старше ничего нет.
+        prev_cursor:
+          type: string
+          description: |
+            Непрозрачный курсор страницы МОЛОЖЕ (в after_cursor следующего
+            запроса): prepend записей, появившихся после загрузки видимых.
+            Отсутствует только на пустой странице.
+
+    PaymentChangeItem:
+      type: object
+      description: |
+        Одна строка журнала — снимок действия при записи (ADR 0065): кто и
+        какое действие совершил над правилом и какие поля двинулись. Чип
+        экрана строится из action и changes; переименования и удаления
+        пользовательской категории строку не меняют — лейбл-снапшот уже в
+        значении.
+      required: [id, actor_id, action, changes, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        actor_id:
+          type: string
+          format: uuid
+          description: Кто совершил действие (пишут только пользователи).
+        action:
+          $ref: '#/components/schemas/PaymentChangeAction'
+        changes:
+          type: array
+          description: |
+            Диф полей старое→новое в словарном порядке; у paused/resumed —
+            пустой массив (состояние и есть содержимое строки).
+          items:
+            $ref: '#/components/schemas/PaymentFieldChange'
+        created_at:
+          type: string
+          format: date-time
+
+    PaymentChangeAction:
+      type: string
+      description: Род действия строки журнала (ADR 0065 §4).
+      enum:
+        - updated
+        - paused
+        - resumed
+
+    PaymentFieldChange:
+      type: object
+      description: |
+        Один уехавший поле дифа: старое→новое значение. Значения типизированы
+        по словарю поля (ADR 0065 §2) — никогда строки-с-форматированием:
+        amount_kopecks — число копеек; recurrence — канонический JSON-объект
+        Recurrence (как в payments.recurrence); end_date — «YYYY-MM-DD» или
+        null; type/title — строки; auto_pay — булево; reminder_offset_days —
+        1/3/7 или null; category_slug — {slug, label} или {userCategoryId,
+        label} — ссылка со снапшотом лейбла на момент правки (канон
+        category_label операций, ADR 0049 §1).
+      required: [field, old, new]
+      properties:
+        field:
+          $ref: '#/components/schemas/PaymentChangeField'
+        old:
+          description: Прежнее значение поля — типизировано по словарю (см. описание схемы).
+        new:
+          description: Новое значение поля — типизировано по словарю (см. описание схемы).
+
+    PaymentChangeField:
+      type: string
+      description: |
+        Словарь полей дифа — тот же словарь, что у мутационного аудита
+        контекста; порядок строк дифа в ответе — словарный.
+      enum:
+        - type
+        - title
+        - amount_kopecks
+        - recurrence
+        - category_slug
+        - end_date
+        - auto_pay
+        - reminder_offset_days
 
     PaymentGlobalItem:
       description: >
@@ -7118,7 +7340,7 @@ components:
         manual fact. status carries overdue as a server-computed view status
         (planned with the date already past in the property owner's timezone).
       type: object
-      required: [id, propertyId, paymentId, date, paidDate, status, type, title, amountKopecks, categoryLabel, categorySlug]
+      required: [id, propertyId, paymentId, date, paidDate, status, type, title, amountKopecks, categoryLabel, categorySlug, updatedAt]
       properties:
         id:
           type: string
@@ -7163,6 +7385,15 @@ components:
           type: string
           nullable: true
           description: Default-catalog slug snapshot for icon rendering; null when absent.
+        updatedAt:
+          type: string
+          format: date-time
+          description: >-
+            Момент последнего касания строки. Оплаченная строка после оплаты
+            не меняется, так что у факта это момент оплаты: история платежа
+            ставит его в ленту по реальному времени и читает порядок оплат
+            внутри одного дня (#1195). В ответах создания и оплаты — момент
+            самого действия.
 
     OperationsResponse:
       type: object
@@ -8358,16 +8589,18 @@ components:
           description: >-
             За сколько дней предупреждать о платеже арендной платы
             («Напоминание о платеже», карта #822): 1, 3 или 7. Null/omitted —
-            напоминаний нет. Аренда ставит его вместе с автоплатежом; по
-            макетам дефолт выбора на экране — «За 1 день» (решение #823).
+            напоминаний нет. Аренда ставит его вместе с автоплатежом; дефолт
+            выбора на экране — «Не напоминать», null едет в команду явно
+            (#1198, решение владельца 07.10).
 
     RentalUpdateRequest:
       description: >-
         Частичная правка условий аренды. Начало не правится. Nullable-поля
-        (plannedEndDate, depositKopecks, commissionKopecks, contactId, comment)
-        — tri-state: omitted оставляет значение, явный null очищает. Сумма,
-        день оплаты, автоплатёж и плановое окончание синхронно правят Платёж
-        арендной платы. Завершённая аренда — 409.
+        (plannedEndDate, depositKopecks, commissionKopecks, contactId, comment,
+        reminderOffsetDays) — tri-state: omitted оставляет значение, явный
+        null очищает. Сумма, день оплаты, автоплатёж, напоминание и плановое
+        окончание синхронно правят Платёж арендной платы. Завершённая аренда
+        — 409.
       type: object
       properties:
         amountKopecks:
@@ -8379,6 +8612,16 @@ components:
           $ref: '#/components/schemas/RentalPaymentDay'
         autoPay:
           type: boolean
+        reminderOffsetDays:
+          type: integer
+          nullable: true
+          enum: [1, 3, 7]
+          description: >-
+            Tri-state лид-тайм напоминания о платеже арендной платы
+            («Напоминание о платеже», карта #822): omitted keeps the current
+            value, null turns reminders off («Не напоминать»), 1/3/7 sets the
+            lead time. Синхронно правит Платёж арендной платы; смена пишется
+            и в его журнал изменений (#1208).
         plannedEndDate:
           type: string
           format: date
