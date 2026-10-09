@@ -91,38 +91,55 @@ export function GlobalCardIcon({
  * типа объекта (Category Icon, карта #1217; без типа — Bold/Home).
  * Поверхность card — на серой карточке «Объектов» (белый круг, кант
  * серого — 890:29696); row — на белой странице поиска (серый круг #F3F4F6,
- * кант белого — 888:19370, паттерн SelectAvatar).
+ * кант белого — 888:19370, паттерн SelectAvatar). hasNotification —
+ * красная точка просрочки карточек объектов хаба «Платежей» (879:9712,
+ * как у CategoryIcon): точка лежит вне клипающего фото круга —
+ * overflow-hidden на CircleIcon срезал бы её кант.
  */
 export function PaymentObjectAvatar({
   photoUrl,
   type,
   surface,
+  hasNotification = false,
 }: {
   readonly photoUrl: string | null;
   readonly type?: PropertyType;
   readonly surface: 'card' | 'row';
+  /** Красная точка просрочки (карточки объектов хаба «Платежей», 879:9712). */
+  readonly hasNotification?: boolean;
 }): JSX.Element {
   // Выборка из статичного реестра, не вызов: react-hooks/static-components.
   const Glyph = type !== undefined ? propertyTypeIcons[type] : BoldHome;
   // Битое фото (404 стрима) откатывается к глифу — канон #1275 (#1286).
   const [photoBroken, setPhotoBroken] = useState(false);
   return (
-    <CircleIcon
-      variant={surface === 'card' ? 'muted' : 'white'}
-      aria-hidden
-      className="relative overflow-hidden rounded-full"
-    >
-      {photoUrl !== null && !photoBroken ? (
-        <img
-          src={photoUrl}
-          alt=""
-          className="h-full w-full object-cover"
-          onError={() => setPhotoBroken(true)}
+    <span className="relative flex h-11 w-11 shrink-0">
+      <CircleIcon
+        variant={surface === 'card' ? 'muted' : 'white'}
+        aria-hidden
+        className="overflow-hidden rounded-full"
+      >
+        {photoUrl !== null && !photoBroken ? (
+          <img
+            src={photoUrl}
+            alt=""
+            className="h-full w-full object-cover"
+            onError={() => setPhotoBroken(true)}
+          />
+        ) : (
+          <Glyph className="h-6 w-6 text-[#D3D7D9]" />
+        )}
+      </CircleIcon>
+      {hasNotification && (
+        <span
+          className={cn(
+            'absolute left-0 top-0 h-2.5 w-2.5 rounded-full bg-danger',
+            circleIconRing.muted,
+          )}
+          aria-hidden
         />
-      ) : (
-        <Glyph className="h-6 w-6 text-[#D3D7D9]" />
       )}
-    </CircleIcon>
+    </span>
   );
 }
 

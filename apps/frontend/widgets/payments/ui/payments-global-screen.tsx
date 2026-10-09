@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type JSX, type ReactNode } from "react";
+import { type JSX, type ReactNode } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
@@ -20,7 +20,6 @@ import {
 } from "@/features/payments";
 import type { GlobalPayment } from "@/entities/payment";
 import type { PropertyType } from "@/entities/property";
-import { propertyTypeIcons } from "@/entities/property";
 import { PaymentCardButton } from "@/entities/payment";
 import {
   Button,
@@ -44,6 +43,7 @@ import {
 import {
   GlobalCardIcon,
   GlobalPaymentRuleIcon,
+  PaymentObjectAvatar,
   PaymentsStateCard,
 } from "./payments-sections";
 
@@ -409,31 +409,6 @@ function OverdueSectionBody({
  * круг с фото, иначе глиф типа; красная точка при просрочке в стопках) и замыкающая
  * «Показать все» на страницу «Объекты» (#582) — больше одного объекта;
  * единственный объект ведёт сразу на свои платежи без страницы-списка. */
-/** Содержимое круга карточки объекта хаба (решение #1286): фото из DTO
- * GlobalPaymentObject.photoUrl (#582) — тот же поток данных, что у страницы
- * «Объектов», иначе глиф типа; битое фото (фото или объект удалили — 404
- * стрима) откатывается к глифу, канон #1275. */
-function ObjectCardAvatar({
-  photoUrl,
-  glyph,
-}: {
-  readonly photoUrl: string | null;
-  readonly glyph: ReactNode;
-}): JSX.Element {
-  const [photoBroken, setPhotoBroken] = useState(false);
-  if (photoUrl !== null && !photoBroken) {
-    return (
-      <img
-        src={photoUrl}
-        alt=""
-        className="h-full w-full object-cover"
-        onError={() => setPhotoBroken(true)}
-      />
-    );
-  }
-  return <>{glyph}</>;
-}
-
 function ObjectsSectionBody({
   objects,
   onSelectObject,
@@ -453,23 +428,26 @@ function ObjectsSectionBody({
 }): JSX.Element {
   return (
     <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      {objects.map((object) => {
-        // Выборка из статичного реестра, не вызов: react-hooks/static-components.
-        const Glyph = propertyTypeIcons[object.type];
-        return (
-          <PaymentCardButton
-            key={object.propertyId}
-            className="snap-start"
-            leading={
-              <GlobalCardIcon variant="white" hasNotification={object.hasOverdue}>
-                <ObjectCardAvatar photoUrl={object.photoUrl} glyph={<Glyph />} />
-              </GlobalCardIcon>
-            }
-            title={object.name}
-            onSelect={() => onSelectObject(object.propertyId)}
-          />
-        );
-      })}
+      {objects.map((object) => (
+        <PaymentCardButton
+          key={object.propertyId}
+          className="snap-start"
+          leading={
+            // Канонный аватар «глобальных платежей» (решение #1286): фото
+            // из DTO GlobalPaymentObject.photoUrl (#582) во весь круг 44 —
+            // глиф типа; битое фото (фото или объект удалили — 404 стрима)
+            // откатывается к глифу, канон #1275. Точка просрочки — у аватара.
+            <PaymentObjectAvatar
+              photoUrl={object.photoUrl}
+              type={object.type}
+              surface="card"
+              hasNotification={object.hasOverdue}
+            />
+          }
+          title={object.name}
+          onSelect={() => onSelectObject(object.propertyId)}
+        />
+      ))}
       {objects.length > 1 && (
         <PaymentCardButton
           className="snap-start"
