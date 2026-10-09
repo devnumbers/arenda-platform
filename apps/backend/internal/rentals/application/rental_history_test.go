@@ -31,12 +31,16 @@ func TestHistory_RentalCreatedCarriesTenantAndPeriod(t *testing.T) {
 	if e.Action != historydomain.ActionRentalCreated {
 		t.Fatalf("action = %s, want rental.created", e.Action)
 	}
-	// The label snapshot: the tenant display name (the contacts seam);
-	// the period lives in context only (аудит #876 — голые даты из строк
-	// убраны). The fixture plans 2026-09-04 (today) → 2027-09-01.
-	want := "Добавлена аренда: Иван Tenant"
+	// Новый шаблон (D3): заголовок читает срок — фикс plans 2026-09-04 →
+	// 2027-09-01, это 11 полных месяцев (до 04.08.27) и 29 дней остатка.
+	// Имя арендатора и период с годами — в деталях.
+	want := "Добавлена аренда: 11 месяцев 29 дней"
 	if e.Segments.PlainText() != want {
 		t.Errorf("row text = %q, want %q", e.Segments.PlainText(), want)
+	}
+	// Детали: арендатор и период с годами.
+	if len(e.Details) != 2 || e.Details[0] != `Арендатор: «Иван Tenant»` || e.Details[1] != "Период: с 4 сентября 2026 по 1 сентября 2027" {
+		t.Errorf("details = %q, want the tenant line plus the period line", e.Details)
 	}
 	// The context carries the period as the RFC3339 snapshot of the planned
 	// dates — the promise of the test's name beyond the label.

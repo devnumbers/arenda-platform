@@ -117,6 +117,7 @@ func (h *HistoryHandlers) GetHistoryFilters(w http.ResponseWriter, r *http.Reque
 			PhotoUrl:  new(p.PhotoURL),
 			IsOwner:   p.IsOwner,
 			Role:      openapi.HistoryParticipantRole(p.Role),
+			Status:    openapi.HistoryParticipantStatus(p.Status),
 		}
 	}
 	objects := make([]openapi.HistoryObject, len(options.Objects))
@@ -160,20 +161,29 @@ func historyPageResponse(page historyapp.FeedPage) openapi.HistoryPageResponse {
 			segments[j] = item
 		}
 		items[i] = openapi.HistoryItem{
-			Id:            entry.ID,
-			PropertyId:    entry.PropertyID,
-			PropertyName:  entry.PropertyName,
-			ActorId:       entry.ActorID,
-			ActorName:     entry.ActorName,
-			ActorEmail:    entry.ActorEmail,
-			ActorPhotoUrl: new(entry.ActorPhotoURL),
-			ActorRole:     openapi.HistoryItemActorRole(entry.ActorRole),
-			Kind:          openapi.HistoryItemKind(entry.Kind),
-			Action:        string(entry.Action),
-			BaseAction:    openapi.HistoryItemBaseAction(entry.BaseAction),
-			Segments:      segments,
-			Context:       entry.Context,
-			CreatedAt:     entry.CreatedAt,
+			Id:             entry.ID,
+			PropertyId:     entry.PropertyID,
+			PropertyName:   entry.PropertyName,
+			ActorId:        entry.ActorID,
+			ActorName:      entry.ActorName,
+			ActorEmail:     entry.ActorEmail,
+			ActorFirstName: entry.ActorFirstName,
+			ActorLastName:  entry.ActorLastName,
+			ActorPhotoUrl:  new(entry.ActorPhotoURL),
+			ActorRole:      openapi.HistoryItemActorRole(entry.ActorRole),
+			Kind:           openapi.HistoryItemKind(entry.Kind),
+			Action:         string(entry.Action),
+			BaseAction:     openapi.HistoryItemBaseAction(entry.BaseAction),
+			Segments:       segments,
+			Context:        entry.Context,
+			CreatedAt:      entry.CreatedAt,
+		}
+		// Легаси-строки (details NULL) уходят без поля — «не пишется», а не
+		// пустой массив (решение #1317 §2).
+		if len(entry.Details) > 0 {
+			details := make([]string, len(entry.Details))
+			copy(details, entry.Details)
+			items[i].Details = &details
 		}
 	}
 	resp := openapi.HistoryPageResponse{Items: items}

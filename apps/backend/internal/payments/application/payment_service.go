@@ -335,7 +335,7 @@ func (s *PaymentService) UpdatePayment(
 			if err := stores.payments.DeleteFuturePlanned(ctx, rule.ID, today); err != nil {
 				return mutationOutcome[domain.Payment]{}, err
 			}
-			updated := historydomain.PaymentUpdated(rule.ID, rule.Title)
+			updated := historydomain.PaymentUpdated(rule.ID, before.Title, rule.Title)
 			updated.Context[historydomain.CtxKeyAmountKopecks] = rule.AmountKopecks
 			// A patch that moves nothing (the client re-sent the same values)
 			// is not a terms edit: no empty-diff «updated» row (ADR 0065 §4 —

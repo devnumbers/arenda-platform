@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (grilling ticket [#706](https://github.com/devnumbers/arenda-platform/issues/706), map [#704](https://github.com/devnumbers/arenda-platform/issues/704), 2026-09-22)
+Accepted (grilling ticket [#706](https://github.com/devnumbers/arenda-platform/issues/706), map [#704](https://github.com/devnumbers/arenda-platform/issues/704), 2026-09-22); amended 2026-10-09 (карта [#1324](https://github.com/devnumbers/arenda-platform/issues/1324), решения #1315–#1317: флип active↔maintenance журналируется, новый шаблон строки с `details`, живые ноги актёра, статус «Текущие/Удалённые» — §3, §4, §6, §7)
 
 ## Context
 
@@ -60,7 +60,7 @@ CREATE INDEX ... ON action_journal USING gin (search_tsv);
 - Snapshots of human-readable labels are taken at action time and never re-resolved: the row survives renaming and deletion of the entity (a deleted entity leaves a row without a link).
 - **Only manual user actions are recorded in MVP.** System writes are NOT recorded — including the slot coordinator's suspend/reactivate and invitation activation on registration (owner decision 2026-09-22, against the agent's recommendation; accepted cost: the member feed does not explain limit-driven disappearances). Auto-ticks (auto-payments, auto-tasks) stay excluded per the map charter.
 - **Noise excluded**: payment favorite flag, favorite-order save, invitation resend. Photo add/delete and property pin are recorded. A no-op action writes no row: an idempotent re-pin of an already pinned object, and a completed-journal clear that removed nothing.
-- **The active↔maintenance flip is not recorded**: the manual maintenance-status change (PATCH /properties/{id}, `cmd.Status`) writes no row in MVP — a status-only edit is a silent no-op, a mixed PATCH records only the other changed groups. A dedicated `property.status_changed` action id was considered and declined — the dictionary keeps no id for the flip, and silent no-entry is the settled MVP behavior.
+- **The active↔maintenance flip is recorded** (amended 2026-10-09, карта #1324, протокол D2 — the original settled MVP behavior was silence): the manual maintenance-status change (PATCH /properties/{id}, `cmd.Status`) writes one row inside the same transaction — `property.maintenance_started` («Изменение») entering maintenance, `property.maintenance_finished` («Выполнение») leaving it. The write guard is the **factual** before≠after inequality: the transition validator admits from==to (the idempotent PUT), and a no-op action still writes no row. A mixed PATCH (fields + status) writes two rows — the per-leg precedent of the rental completion pair; the SSE feed publication follows the journal (`journaled`), a status-only edit dirties the feed exactly when it wrote a row (ADR 0062). A generic `property.status_changed` id was considered and declined — the two dedicated maintenance ids carry the semantics, and the archive keeps its own ids.
 - **One row per user action**: a PATCH touching several field groups at once gets one `property.updated` row naming the groups; single-group edits get their precise ids. Amounts travel in `context` on the money rows (created/updated rules and operations), in kopecks.
 - `property.deleted` is never recorded: rows cascade with the property in the same transaction, so the row would be dead-born.
 - Identity/profile/session changes, notifications, push subscriptions, popups are not property data — out of the journal.
@@ -72,15 +72,17 @@ Seven kinds (the mockup filter groups), stable `action` ids, base-action mapping
 | Kind | Action | Base | Row snapshot |
 |---|---|---|---|
 | Объект | property.created | added | название |
-| | property.renamed / address_changed / description_changed / attributes_changed | changed | old → new (name) / label + value |
+| | property.renamed / address_changed | changed | новое значение в заголовке; дифф old → new — в details (новый шаблон) |
+| | property.description_changed / attributes_changed | changed | — / по строке пояснения на характеристику (details) |
+| | property.maintenance_started / maintenance_finished (amended #1324) | changed / completed | — |
 | | property.updated (several field groups in one edit) | changed | the changed groups' labels |
 | | property.photo_added / photo_deleted | added / deleted | — |
 | | property.pinned / unpinned | changed | — |
 | | property.archived / unarchived | changed | — |
-| Аренда | rental.created / updated (incl. extension) | added / changed | имя арендатора (период — в context) |
+| Аренда | rental.created / updated (incl. extension) | added / changed | срок («11 месяцев») или дата начала («1 ноября») в заголовке; арендатор и период с годами — в details (D3) |
 | | rental.completed | completed | имя арендатора |
 | | rental.deleted | deleted | имя арендатора |
-| Платежи | payment.created / updated / deleted | added / changed / deleted | название |
+| Платежи | payment.created / updated / deleted | added / changed / deleted | название (updated: новое в заголовке, дифф — в details) |
 | | payment.paused / resumed | changed | название |
 | Операции | operation.created | added | название (дата — в context) |
 | | operation.paid | completed | название (срок — в context) |
@@ -99,7 +101,7 @@ Mapping rulings: archive/unarchive, pause/resume, task uncomplete, rental extens
 
 ### 5. Privacy and money
 
-- Recorded: entity label snapshots (names, titles, ФИО), participant names and **emails** (member emails are visible to all members since the 2026-09-20 decision, and research #705 designed email search in), attribute values, roles, periods.
+- Recorded: entity label snapshots (names, titles, ФИО), participant names and **emails** (member emails are visible to all members since the 2026-09-20 decision, and research #705 designed email search in), attribute values, roles, periods. Amended #1324: the details' catalog labels (`AttributeChange.Label`, the RU field label the properties service resolves) travel in `context` alongside the raw values — metadata of the detail lines, not a second copy of the values.
 - Never recorded: contact phone numbers; nothing secret per the ADR 0020 PII discipline (tokens, raw payloads).
 - Amounts: never in segments and therefore never searchable; stored in `context` jsonb as kopecks integers for future use. Display formatting stays frontend (`formatMoneyKopecks`).
 
@@ -107,13 +109,15 @@ Mapping rulings: archive/unarchive, pause/resume, task uncomplete, rental extens
 
 The server is the **single source of row text**: at write time the Recorder builds `segments` — an ordered array of `{text}` runs where a run may carry `link: {kind, id}` pointing at the target entity (the blue spans in the mockups). The frontend renders segments verbatim and wraps linked runs; at mapping time it strips the bare date tails (« (срок DD.MM.YYYY)» of operations and tasks, the rental period/date tails) the backend stopped writing in audit #876 — the strip cleans rows recorded before that (`entities/history/model/date-tails.ts`, `mappers.ts`). `searchable` is their plain-text concatenation (plus actor name/email). Frontend-owned templates were rejected: they would diverge from the searchable text («ищется не то, что показано») and duplicate the copy layer.
 
+**New template (amended 2026-10-09, карта #1324, протокол D1–D3)**: the first-wave actions read «действие: [сущность]» in the header — the link rides the header value — and the diffs moved into `details` (migration 000156, jsonb, NULL at legacy rows): ready gray lines built by the same catalog builders at write time (`[]string`, rendered verbatim, no links, no amounts — §5). The reading path carries no formatting catalog: what the builder assembled is what renders. Searchable folds the details in: **segments plain text + each detail line + actor name + actor email**; legacy rows keep the old formula byte-for-byte and are **not rebuilt** — «что видишь, то и ищешь» holds for both epochs (a legacy row renders the header alone, so its honest searchable is the header + actor; rebuilding would make old rows findable by text that is not on screen). The exact Russian copy of the extended catalog is approved at screen walkthroughs.
+
 The actor is never inside the row text: it is a payload field, grouped as a header by the frontend (date → object → actor; per-scope screens pin one group level).
 
 ### 7. Read API
 
 - `GET /history` — flat list, keyset `(created_at, id) DESC`, **bidirectional cursor** (`before_*` / `after_*` pairs, precedent `ListPaidOperationsGlobal`), `limit`; filters: `date_from/date_to`, `actions[]` (base), `kinds[]`, `actor_ids[]`, `property_ids[]`, `q` (search). The same endpoint serves all four screens: general feed, object history (`property_ids` = one), participant actions (`actor_ids` = one), participant actions within one object (`actor_ids` and `property_ids` = one each, AND-combined — ticket #841). Search is a single always-OR predicate — prefix-FTS (Russian morphology) OR ILIKE-trgm (substrings, emails) — evaluated on both legs of the same input (research #839; routing retired by #842: any routing is intent prediction). No «found N» counter. Grouping is frontend work.
 - **Day grouping vs period filter — two calendars, accepted**: the feed's day chips («Сегодня»/«Вчера») group by the **viewer's local calendar day** (frontend `dateToIsoLocal`, #624 canon), while the `date_from`/`date_to` period filter is matched by the server as **UTC days** — from at midnight UTC, to exclusive +24h (the admin-audit period-filter canon). The divergence is bounded to the edge hours of a day — a night entry sits under the «Сегодня» chip yet outside an applied «сегодня» period — and accepted, by the precedent of the client-side «сегодня» of the payments projection (#453, `shared/lib/calendar.ts`).
-- `GET /history/filters` — filter-sheet options: participants of the scope = **current members ∪ all actors present in the scope's journal** (revoked actors remain filterable), with names/emails/avatars; objects of the scope with name/address/photo. The N/M counters are computed client-side. (Deviation since #708: users carry no avatars in the platform yet — the participants options carry id, display name, email, first_name, is_owner and role; avatars join the contract when the platform grows them.)
+- `GET /history/filters` — filter-sheet options: participants of the scope = **current members ∪ all actors present in the scope's journal** (revoked actors remain filterable), with names/emails/avatars; objects of the scope with name/address/photo. The N/M counters are computed client-side. (Deviation since #708: users carry no avatars in the platform yet — the participants options carry id, display name, email, first_name, is_owner, role and status; avatars joined the contract in #1286, ADR 0065.) **Live actor legs (amended #1324, D5; the ADR 0065 pattern)**: `actor_first_name`/`actor_last_name` on feed items read through the users JOIN at feed time — the card shows today's profile; the display-name composition («Имя Фамилия» / «(Вы)» / «Пользователь», the snapshot fallback by `actor_id IS NULL`) is frontend work — the server ships the parts, never mixing the composed snapshot into a bare name. **Participant status (D6)**: `status` = `current | removed`, computed at read time by `bool_or(is_live)` over the scope CTE — owner and membership legs (suspended included) are live, journal-only actors are not; re-adding a participant revives them automatically; no new table, nothing materialized.
 - Authorization: property owner and members (viewer included — chart decision #9) via the derived-access rule (ADR 0028); suspended access — inaccessible; no access — private 404.
 - **No detail endpoint**: the row payload (segments, actor, property, entity ids, context) is complete; «detail pages» are the existing entity pages reached through segment links (ticket #713); a deleted entity leaves a linkless row.
 

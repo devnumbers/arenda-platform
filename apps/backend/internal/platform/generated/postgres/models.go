@@ -229,6 +229,7 @@ type ActionJournal struct {
 	SearchTsv  interface{}        `json:"search_tsv"`
 	Context    []byte             `json:"context"`
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	Details    []byte             `json:"details"`
 }
 
 type AuditLog struct {

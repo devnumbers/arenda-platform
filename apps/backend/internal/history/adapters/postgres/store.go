@@ -48,7 +48,9 @@ func (s *EntryStore) WithTx(tx transaction.Tx) application.EntryWriter {
 }
 
 // Insert writes one journal entry. The searchable column and the actor
-// snapshots arrive already materialized by the application service.
+// snapshots arrive already materialized by the application service. Details
+// marshal only when present — пустой Details кладёт SQL NULL, чтобы
+// легаси-семантика была именно NULL, а не jsonb-`null`.
 func (s *EntryStore) Insert(ctx context.Context, entry domain.Entry) error {
 	if s.err != nil {
 		return s.err
@@ -60,6 +62,17 @@ func (s *EntryStore) Insert(ctx context.Context, entry domain.Entry) error {
 	contextJSON, err := json.Marshal(entry.Context)
 	if err != nil {
 		return fmt.Errorf("marshal history context: %w", err)
+	}
+	var detailsJSON []byte
+	if len(entry.Details) > 0 {
+		// Маршал []string всегда успешен (errchkjson: error-free encoding),
+		// но единый контракт Insert — с ошибкой: гоняю через интерфейсное
+		// значение, как payment_store.marshalRecurrence.
+		var marshaler any = entry.Details
+		var err error
+		if detailsJSON, err = json.Marshal(marshaler); err != nil {
+			return fmt.Errorf("marshal history details: %w", err)
+		}
 	}
 	_, err = postgres.New(s.db).InsertActionJournal(ctx, postgres.InsertActionJournalParams{
 		ID:         pgconv.UUIDToPgtype(entry.ID),
@@ -74,6 +87,7 @@ func (s *EntryStore) Insert(ctx context.Context, entry domain.Entry) error {
 		Segments:   segmentsJSON,
 		Searchable: entry.Searchable,
 		Context:    contextJSON,
+		Details:    detailsJSON,
 		CreatedAt:  pgtype.Timestamptz{Time: entry.CreatedAt, Valid: true},
 	})
 	if err != nil {

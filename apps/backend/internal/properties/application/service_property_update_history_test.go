@@ -79,7 +79,7 @@ func TestPropertyUpdateHistoryEntry(t *testing.T) {
 			before: historyEntryProperty(func(p *domain.Property) { p.Attributes = domain.Attributes{attrBalcony: attrBalconyLoggia} }),
 			after:  historyEntryProperty(func(p *domain.Property) { p.Attributes = domain.Attributes{attrBalcony: attrBalconyNone} }),
 			wantOK: true, wantAction: historydomain.ActionPropertyAttributesChanged,
-			wantAttrs: []historydomain.AttributeChange{{Key: attrBalcony, Old: attrBalconyLoggia, New: attrBalconyNone}},
+			wantAttrs: []historydomain.AttributeChange{{Key: attrBalcony, Label: labelBalcony, Old: attrBalconyLoggia, New: attrBalconyNone}},
 		},
 		{
 			// The type is the only group without a dedicated row id: it still
@@ -204,58 +204,75 @@ func assertAttributeChangeList(t *testing.T, entry historydomain.Entry, wantAttr
 	}
 }
 
+// Метки каталога, повторяющиеся в ожиданиях таблиц (goconst).
+const (
+	labelBalcony   = "Балкон"
+	labelAreaTotal = "Общая площадь"
+)
+
 func TestAttributeChanges(t *testing.T) {
 	t.Parallel()
 
+	// The label comes from the generated catalog by the property's type;
+	// an apartment has no land_area, so that key's label falls back empty
+	// (the detail line then reads the raw key).
 	tests := []struct {
-		name   string
-		before domain.Attributes
-		after  domain.Attributes
-		want   []historydomain.AttributeChange
+		name     string
+		propType domain.PropertyType
+		before   domain.Attributes
+		after    domain.Attributes
+		want     []historydomain.AttributeChange
 	}{
 		{
 			// Changed and added keys in one edit; the result is sorted by the
 			// catalog key regardless of the map iteration order, and the
 			// unchanged key is dropped.
-			name:   "changed_and_added_keys_sorted_by_key",
-			before: domain.Attributes{attrFloor: float64(3), attrBalcony: attrBalconyLoggia, attrAreaTotal: float64(50)},
-			after:  domain.Attributes{attrFloor: float64(5), attrBalcony: attrBalconyLoggia, attrAreaTotal: float64(45), attrLandArea: float64(6)},
+			name:     "changed_and_added_keys_sorted_by_key",
+			propType: domain.PropertyTypeHouse,
+			before:   domain.Attributes{attrFloor: float64(3), attrBalcony: attrBalconyLoggia, attrAreaTotal: float64(50)},
+			after:    domain.Attributes{attrFloor: float64(5), attrBalcony: attrBalconyLoggia, attrAreaTotal: float64(45), attrLandArea: float64(6)},
 			want: []historydomain.AttributeChange{
-				{Key: attrAreaTotal, Old: float64(50), New: float64(45)},
-				{Key: attrFloor, Old: float64(3), New: float64(5)},
-				{Key: attrLandArea, Old: nil, New: float64(6)},
+				{Key: attrAreaTotal, Label: labelAreaTotal, Old: float64(50), New: float64(45)},
+				// У дома нет поля floor — метка пуста, деталь прочитает сырой
+				// ключ (фолбэк attributeLabel).
+				{Key: attrFloor, Label: "", Old: float64(3), New: float64(5)},
+				{Key: attrLandArea, Label: "Площадь участка", Old: nil, New: float64(6)},
 			},
 		},
 		{
-			name:   "removed_key_carries_only_the_old_value",
-			before: domain.Attributes{attrBalcony: attrBalconyLoggia},
-			after:  domain.Attributes{},
-			want:   []historydomain.AttributeChange{{Key: attrBalcony, Old: attrBalconyLoggia, New: nil}},
+			name:     "removed_key_carries_only_the_old_value",
+			propType: domain.PropertyTypeApartment,
+			before:   domain.Attributes{attrBalcony: attrBalconyLoggia},
+			after:    domain.Attributes{},
+			want:     []historydomain.AttributeChange{{Key: attrBalcony, Label: labelBalcony, Old: attrBalconyLoggia, New: nil}},
 		},
 		{
 			// A nil before-side folds to an empty map: the whole new set reads
 			// as additions.
-			name:   "nil_before_reads_every_key_as_added",
-			before: nil,
-			after:  domain.Attributes{attrAreaTotal: float64(50)},
-			want:   []historydomain.AttributeChange{{Key: attrAreaTotal, Old: nil, New: float64(50)}},
+			name:     "nil_before_reads_every_key_as_added",
+			propType: domain.PropertyTypeApartment,
+			before:   nil,
+			after:    domain.Attributes{attrAreaTotal: float64(50)},
+			want:     []historydomain.AttributeChange{{Key: attrAreaTotal, Label: labelAreaTotal, Old: nil, New: float64(50)}},
 		},
 		{
 			// A nil after-side folds the same way: the whole old set reads as
 			// removals (a cleared attribute set).
-			name:   "nil_after_reads_every_key_as_removed",
-			before: domain.Attributes{attrBalcony: attrBalconyLoggia, attrAreaTotal: float64(50)},
-			after:  nil,
+			name:     "nil_after_reads_every_key_as_removed",
+			propType: domain.PropertyTypeApartment,
+			before:   domain.Attributes{attrBalcony: attrBalconyLoggia, attrAreaTotal: float64(50)},
+			after:    nil,
 			want: []historydomain.AttributeChange{
-				{Key: attrAreaTotal, Old: float64(50), New: nil},
-				{Key: attrBalcony, Old: attrBalconyLoggia, New: nil},
+				{Key: attrAreaTotal, Label: labelAreaTotal, Old: float64(50), New: nil},
+				{Key: attrBalcony, Label: labelBalcony, Old: attrBalconyLoggia, New: nil},
 			},
 		},
 		{
-			name:   "equal_maps_diff_to_an_empty_change_list",
-			before: domain.Attributes{attrBalcony: attrBalconyLoggia, attrAreaTotal: float64(50)},
-			after:  domain.Attributes{attrAreaTotal: float64(50), attrBalcony: attrBalconyLoggia},
-			want:   []historydomain.AttributeChange{},
+			name:     "equal_maps_diff_to_an_empty_change_list",
+			propType: domain.PropertyTypeApartment,
+			before:   domain.Attributes{attrBalcony: attrBalconyLoggia, attrAreaTotal: float64(50)},
+			after:    domain.Attributes{attrAreaTotal: float64(50), attrBalcony: attrBalconyLoggia},
+			want:     []historydomain.AttributeChange{},
 		},
 	}
 
@@ -263,7 +280,7 @@ func TestAttributeChanges(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := attributeChanges(tt.before, tt.after)
+			got := attributeChanges(tt.before, tt.after, tt.propType)
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("attributeChanges = %v, want %v", got, tt.want)
 			}

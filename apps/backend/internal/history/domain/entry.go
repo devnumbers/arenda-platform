@@ -81,6 +81,11 @@ const (
 	ActionPropertyUnpinned     Action = "property.unpinned"
 	ActionPropertyArchived     Action = "property.archived"
 	ActionPropertyUnarchived   Action = "property.unarchived"
+	// ActionPropertyMaintenanceStarted/Finished record the active↔maintenance
+	// status flip (карта #1324, протокол D2 — решение отменяет прежний §3
+	// «silent no-op», ADR 0061): start → changed, finish → completed.
+	ActionPropertyMaintenanceStarted  Action = "property.maintenance_started"
+	ActionPropertyMaintenanceFinished Action = "property.maintenance_finished"
 
 	ActionRentalCreated   Action = "rental.created"
 	ActionRentalUpdated   Action = "rental.updated"
@@ -152,6 +157,13 @@ type Segment struct {
 	Link *Link  `json:"link,omitempty"`
 }
 
+// DetailLines is the new template's detail lines (карта #1324, протокол D1,
+// решение #1317 §2): the ready gray lines under the header, built by the row
+// builders at write time and rendered by the frontend verbatim — the reading
+// path carries no formatting catalog. Nil means the row has no details:
+// every action recorded before the template, and the actions without diffs.
+type DetailLines []string
+
 // Segments is the ordered row text.
 type Segments []Segment
 
@@ -181,8 +193,12 @@ type Entry struct {
 	Action     Action
 	BaseAction BaseAction
 	Segments   Segments
-	// Searchable is the row's plain text plus the actor name and email —
-	// computed by the recorder service, never handed in by callers.
+	// Details carries the new template's gray lines (DetailLines doc); the
+	// recorder folds them into the searchable text.
+	Details DetailLines
+	// Searchable is the row's plain text plus the detail lines and the actor
+	// name and email — computed by the recorder service, never handed in by
+	// callers.
 	Searchable string
 	// Context carries the structured extras (amounts in kopecks, dates,
 	// old/new values) for future use; never rendered as the row text.

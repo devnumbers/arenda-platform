@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -30,6 +31,7 @@ const (
 	ctxKeyName     = "name"
 	ctxKeyOldName  = "old_name"
 	ctxKeyNewName  = "new_name"
+	ctxKeyOldTitle = "old_title"
 	ctxKeyOldValue = "old_value"
 	ctxKeyNewValue = "new_value"
 	ctxKeyTitle    = "title"
@@ -53,24 +55,84 @@ func RoleLabel(r ActorRole) string {
 }
 
 // AttributeChange is one changed attribute of an object: the catalog key
-// plus the old and new values. The RU labels live in the generated property
-// catalog (not yet the compiled source), so the row text stays generic —
-// the values travel in the context for the future read model.
+// plus the old and new values. Label is the RU display label the calling
+// module fills from its attribute catalog (properties/domain owns the
+// catalog — history cannot import it); an empty label falls back to the raw
+// key in the detail line. The values travel raw in the context for the
+// future read model; enum display labels in the details are a walkthrough
+// point (карта #1324, «Not yet specified»).
 type AttributeChange struct {
-	Key string
-	Old any
-	New any
+	Key   string
+	Label string
+	Old   any
+	New   any
 }
 
-// PropertyAttributesChanged builds the attributes row: the values live in
-// the context only, the text stays a sentence.
+// PropertyAttributesChanged builds the attributes row: the header stays a
+// sentence, the diffs read as one gray line per attribute (новый шаблон,
+// решение #1317 §2).
 func PropertyAttributesChanged(entityID uuid.UUID, changes []AttributeChange) Entry {
+	details := make(DetailLines, 0, len(changes))
+	for _, c := range changes {
+		label := attributeLabel(c)
+		details = append(details, detailChange(label, c.Old, c.New, label+": удалено"))
+	}
 	return Entry{
 		Kind:       KindProperty,
 		Action:     ActionPropertyAttributesChanged,
 		BaseAction: BaseChanged,
 		Segments:   Segments{{Text: "Изменены характеристики объекта", Link: entityLink(KindProperty, entityID)}},
+		Details:    details,
 		Context:    map[string]any{"attributes": changes},
+	}
+}
+
+// attributeLabel picks the detail line's label: the calling module's RU
+// label, falling back to the raw catalog key.
+func attributeLabel(c AttributeChange) string {
+	if c.Label != "" {
+		return c.Label
+	}
+	return c.Key
+}
+
+// detailChange renders one gray diff line: «Название: «X» → «Y»» for the
+// replacement, «Название: «Y»» for the addition (no old value), the caller's
+// removal wording for the removal — род страдательного причастия знает
+// только вызывающий билдер («Адрес удалён», «Название удалено»). Values
+// read through detailValue.
+func detailChange(label string, old, newValue any, removed string) string {
+	switch {
+	case old == nil || detailValue(old) == "":
+		return label + ": «" + detailValue(newValue) + "»"
+	case newValue == nil || detailValue(newValue) == "":
+		return removed
+	default:
+		return label + ": «" + detailValue(old) + "» → «" + detailValue(newValue) + "»"
+	}
+}
+
+// detailValue formats a detail line's value: strings verbatim, numbers
+// without trailing zeros, booleans in Russian, nil as the empty string.
+// Суммы в детали не попадают никогда (ADR 0061 §5) — денежные значения
+// билдеры сюда не передают.
+func detailValue(v any) string {
+	switch val := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return val
+	case float64:
+		return strconv.FormatFloat(val, 'f', -1, 64)
+	case int:
+		return strconv.Itoa(val)
+	case bool:
+		if val {
+			return "да"
+		}
+		return "нет"
+	default:
+		return fmt.Sprint(val)
 	}
 }
 
@@ -98,7 +160,9 @@ func PropertyCreated(entityID uuid.UUID, name string) Entry {
 	}
 }
 
-// PropertyRenamed builds the rename row with the old → new name snapshot.
+// PropertyRenamed builds the rename row by the new template (решение #1317
+// §2): the header reads the action with the NEW name's link, the old → new
+// diff moved into the details.
 func PropertyRenamed(entityID uuid.UUID, oldName, newName string) Entry {
 	return Entry{
 		Kind:       KindProperty,
@@ -106,16 +170,17 @@ func PropertyRenamed(entityID uuid.UUID, oldName, newName string) Entry {
 		BaseAction: BaseChanged,
 		Segments: Segments{
 			{Text: "Название объекта изменено: "},
-			{Text: oldName},
-			{Text: arrow},
 			{Text: newName, Link: entityLink(KindProperty, entityID)},
 		},
+		Details: DetailLines{detailChange("Название", oldName, newName, "Название удалено")},
 		Context: map[string]any{ctxKeyOldName: oldName, ctxKeyNewName: newName},
 	}
 }
 
-// PropertyAddressChanged builds the address row; the address is optional, so
-// an addition and a removal get their own wording.
+// PropertyAddressChanged builds the address row by the new template: the
+// header keeps the per-branch wording with the new value's link, the diff
+// lives in the details; the address is optional, so an addition and a
+// removal keep their own wordings.
 func PropertyAddressChanged(entityID uuid.UUID, oldAddress, newAddress string) Entry {
 	e := Entry{
 		Kind:       KindProperty,
@@ -129,15 +194,16 @@ func PropertyAddressChanged(entityID uuid.UUID, oldAddress, newAddress string) E
 			{Text: "Добавлен адрес объекта: "},
 			{Text: newAddress, Link: entityLink(KindProperty, entityID)},
 		}
+		e.Details = DetailLines{detailChange("Адрес", nil, newAddress, "Адрес удалён")}
 	case newAddress == "":
 		e.Segments = Segments{{Text: "Удалён адрес объекта", Link: entityLink(KindProperty, entityID)}}
+		e.Details = DetailLines{detailChange("Адрес", oldAddress, nil, "Адрес удалён")}
 	default:
 		e.Segments = Segments{
 			{Text: "Адрес объекта изменён: "},
-			{Text: oldAddress},
-			{Text: arrow},
 			{Text: newAddress, Link: entityLink(KindProperty, entityID)},
 		}
+		e.Details = DetailLines{detailChange("Адрес", oldAddress, newAddress, "Адрес удалён")}
 	}
 	return e
 }
@@ -240,16 +306,45 @@ func PropertyUnarchived(entityID uuid.UUID) Entry {
 	}
 }
 
+// PropertyMaintenanceStarted builds the maintenance-start row (протокол D2,
+// карта #1324): «Объект на ремонте: [объект]», группа «Изменение». Без
+// деталей — диффа нет, статус сам себе заголовок.
+func PropertyMaintenanceStarted(entityID uuid.UUID) Entry {
+	return Entry{
+		Kind:       KindProperty,
+		Action:     ActionPropertyMaintenanceStarted,
+		BaseAction: BaseChanged,
+		Segments:   Segments{{Text: "Объект на ремонте", Link: entityLink(KindProperty, entityID)}},
+		Context:    map[string]any{},
+	}
+}
+
+// PropertyMaintenanceFinished builds the maintenance-finish row: «Ремонт
+// завершён: [объект]», группа «Выполнение».
+func PropertyMaintenanceFinished(entityID uuid.UUID) Entry {
+	return Entry{
+		Kind:       KindProperty,
+		Action:     ActionPropertyMaintenanceFinished,
+		BaseAction: BaseCompleted,
+		Segments:   Segments{{Text: "Ремонт завершён", Link: entityLink(KindProperty, entityID)}},
+		Context:    map[string]any{},
+	}
+}
+
 // Аренда.
 
-// RentalCreated builds the rental row: the tenant name (the period lives
-// in the context only).
+// RentalCreated builds the rental row by the new template (протокол D3,
+// решение #1317 §7): the header reads the term («11 месяцев») or, for an
+// open-ended rental, the start date («1 ноября»); the tenant and the period
+// with years moved into the details. The header value segment carries the
+// rental link — the header no longer depends on the tenant's name.
 func RentalCreated(entityID uuid.UUID, tenantName string, from, to time.Time) Entry {
 	return rentalRow(ActionRentalCreated, BaseAdded, "Добавлена аренда: ", entityID, tenantName, from, to)
 }
 
-// RentalUpdated builds the rental-terms row (the «продление» is a UI scenario
-// of the planned-end edit, ADR 0061 §4 → changed).
+// RentalUpdated builds the rental-terms row, symmetric to RentalCreated:
+// «Условия аренды изменены: 11 месяцев» (the «продление» is a UI scenario of
+// the planned-end edit, ADR 0061 §4 → changed).
 func RentalUpdated(entityID uuid.UUID, tenantName string, from, to time.Time) Entry {
 	return rentalRow(ActionRentalUpdated, BaseChanged, "Условия аренды изменены: ", entityID, tenantName, from, to)
 }
@@ -291,26 +386,46 @@ func RentalDeleted(entityID uuid.UUID, tenantName string) Entry {
 }
 
 func rentalRow(action Action, base BaseAction, prefix string, entityID uuid.UUID, tenantName string, from, to time.Time) Entry {
-	// An unnamed tenant (a rental without a contact) reads without the
-	// colon, and the row drops the link — nothing to attach it to.
-	// Период аренды в строку не пишется (аудит #876: голые подписи дат
-	// убраны из ленты) — живёт в context для деталей.
-	segments := make(Segments, 0, 2)
-	if tenantName == "" {
-		segments = append(segments, Segment{Text: strings.TrimSuffix(prefix, ": ")})
+	// Новый шаблон: заголовок = действие + срок («11 месяцев») или, для
+	// бессрочной, дата начала («1 ноября», без года); значение заголовка —
+	// единственный связанный сегмент (страница аренды). Имя арендатора и
+	// период с годами — серые строки-пояснения; структурный снимок периода
+	// остаётся в context (аудит #876).
+	var header string
+	switch {
+	case !to.IsZero():
+		header = formatTerm(from, to)
+	case !from.IsZero():
+		header = formatDayMonthGenitive(from)
+	}
+	segments := Segments{{Text: prefix}}
+	if header != "" {
+		segments = append(segments, Segment{Text: header, Link: entityLink(KindRental, entityID)})
 	} else {
-		segments = append(segments,
-			Segment{Text: prefix},
-			Segment{Text: tenantName, Link: entityLink(KindRental, entityID)},
-		)
+		segments[0].Text = strings.TrimSuffix(prefix, ": ")
 	}
 	return Entry{
 		Kind:       KindRental,
 		Action:     action,
 		BaseAction: base,
 		Segments:   segments,
+		Details:    rentalDetails(tenantName, from, to),
 		Context:    map[string]any{ctxKeyTenant: tenantName, "period_from": formatContextDate(from), "period_to": formatContextDate(to)},
 	}
+}
+
+// rentalDetails builds the rental rows' gray lines: the tenant line (only
+// with a name) and the period line with the years. Годы здесь есть — в
+// отличие от заголовка (D3).
+func rentalDetails(tenantName string, from, to time.Time) DetailLines {
+	var details DetailLines
+	if tenantName != "" {
+		details = append(details, detailChange("Арендатор", nil, tenantName, "Арендатор удалён"))
+	}
+	if !from.IsZero() {
+		details = append(details, "Период: "+formatPeriodLine(from, to))
+	}
+	return details
 }
 
 func formatContextDate(t time.Time) string {
@@ -327,10 +442,22 @@ func PaymentCreated(entityID uuid.UUID, title string) Entry {
 	return paymentRow(ActionPaymentCreated, BaseAdded, "Добавлен платёж: ", entityID, title)
 }
 
-// PaymentUpdated builds the rule-updated row; the title snapshot is the new
-// one — the row survives future renames.
-func PaymentUpdated(entityID uuid.UUID, title string) Entry {
-	return paymentRow(ActionPaymentUpdated, BaseChanged, "Платёж изменён: ", entityID, title)
+// PaymentUpdated builds the rule-updated row by the new template: the header
+// keeps the NEW title's snapshot with the link — the row survives future
+// renames; the old → new diff moved into the details (решение #1317 §2,
+// противоречие №4: старое название дотягивается до точки вызова).
+func PaymentUpdated(entityID uuid.UUID, oldTitle, title string) Entry {
+	return Entry{
+		Kind:       KindPayment,
+		Action:     ActionPaymentUpdated,
+		BaseAction: BaseChanged,
+		Segments: Segments{
+			{Text: "Платёж изменён: "},
+			{Text: title, Link: entityLink(KindPayment, entityID)},
+		},
+		Details: DetailLines{detailChange("Название", oldTitle, title, "Название удалено")},
+		Context: map[string]any{ctxKeyTitle: title, ctxKeyOldTitle: oldTitle},
+	}
 }
 
 // PaymentDeleted builds the rule-deletion row — no link.

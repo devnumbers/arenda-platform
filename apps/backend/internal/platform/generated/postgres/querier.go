@@ -675,6 +675,16 @@ type Querier interface {
 	// всегда дешевле неверного угадывания. Записи с обезличенным актёром
 	// (actor_id IS NULL) под фильтр actor_ids не попадают.
 	//
+	// Живые ноги актёра (карта #1324, протокол D5, решение #1317 §4): имя и
+	// фамилия читаются LEFT JOIN'ом users (как фото, #1286) — карточка актёра
+	// показывает живые данные, снимки actor_name/actor_email остаются строкой
+	// журнала. Фолбэк на снимок — по дискриминатору actor_id (FK ON DELETE SET
+	// NULL 000140: actor_id IS NULL ⟺ пользователь удалён), НЕ COALESCE'ом:
+	// снимок — составленное «Имя Фамилия» целиком, вмешивать его в «имя без
+	// фамилии» нельзя (ломает ФИО-канон D4). details — пояснения нового
+	// шаблона (D1); NULL у строк до D1. Состав колонок обязан совпадать с
+	// ListActionJournalAfter: адаптер конвертирует ряды общим feedEntryOf.
+	//
 	ListActionJournal(ctx context.Context, arg ListActionJournalParams) ([]ListActionJournalRow, error)
 	// After-нога двустороннего курсора (prepend новых, «новые снизу» ленты):
 	// тот же скоуп, фильтры и поиск, что у ListActionJournal, окно «строго
@@ -685,7 +695,9 @@ type Querier interface {
 	// не теряются») — DESC-порядок здесь взял бы из всплеска новейшие и отрезал
 	// старейший хвост. Один sqlc-запрос двух порядков не несёт; контрактный
 	// DESC страницы возвращает адаптер разворотом. Before-пару запрос не принимает:
-	// ноги курсора взаимоисключающие на сервисе.
+	// ноги курсора взаимоисключающие на сервисе. Живые ноги актёра и details —
+	// те же, что у основного запроса (состав колонок обязан совпадать: адаптер
+	// конвертирует ряды общим feedEntryOf).
 	//
 	ListActionJournalAfter(ctx context.Context, arg ListActionJournalAfterParams) ([]ListActionJournalAfterRow, error)
 	ListActiveMembersByPropertyOwner(ctx context.Context, ownerID pgtype.UUID) ([]PropertyMember, error)
@@ -871,6 +883,16 @@ type Querier interface {
 	// ранг строки members. role='owner' жёстко совпадает с is_owner: снимок
 	// 'owner' от бывшего владельца в журнале замка не даёт (фолбэк в
 	// full_access).
+	// status (#1324, протокол D6, решение #1317 §5): секции «Текущие»/«Удалён-
+	// ные» шита фильтров — computed на лету, без новой таблицы: bool_or(is_live)
+	// по ногам CTE. Живые ноги: владелец (owner_id NOT NULL) и членство
+	// property_members — включая suspended (suspend ставит status='suspended',
+	// строку не стирает — 000095; ревок/выход удаляет строку). Мёртвая нога —
+	// только журнал. Повторное добавление живит участника автоматически (новая
+	// членская строка); мульти-скоуп: жив хотя бы в одном объекте области
+	// (bool_or по всем кортежам), при сужении property_ids до одного объекта
+	// область — этот объект (та же семантика на узкой области). Обезличенные
+	// (actor_id IS NULL) в участники не попадают — как и раньше.
 	//
 	ListHistoryFilterParticipants(ctx context.Context, arg ListHistoryFilterParticipantsParams) ([]ListHistoryFilterParticipantsRow, error)
 	// The user's feed page, newest first, deleted rows never appear. The walk

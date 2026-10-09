@@ -169,6 +169,7 @@ func (s *ReadStore) FilterParticipants(ctx context.Context, actor uuid.UUID, pro
 			PhotoURL:  row.PhotoPath,
 			IsOwner:   row.IsOwner,
 			Role:      row.Role,
+			Status:    row.Status,
 		}
 	}
 	return out, nil
@@ -198,8 +199,8 @@ func (s *ReadStore) FilterObjects(ctx context.Context, actor uuid.UUID, property
 }
 
 // feedEntryOf unmarshals the row's jsonb columns back into the read
-// projection. A malformed segments/context blob is a data-integrity failure,
-// not a wire error — it surfaces as a 500 through the wrapped error.
+// projection. A malformed segments/context/details blob is a data-integrity
+// failure, not a wire error — it surfaces as a 500 through the wrapped error.
 func feedEntryOf(row postgres.ListActionJournalRow) (domain.FeedEntry, error) {
 	var segments domain.Segments
 	if err := json.Unmarshal(row.Segments, &segments); err != nil {
@@ -209,26 +210,35 @@ func feedEntryOf(row postgres.ListActionJournalRow) (domain.FeedEntry, error) {
 	if err := json.Unmarshal(row.Context, &contextMap); err != nil {
 		return domain.FeedEntry{}, fmt.Errorf("unmarshal history context %s: %w", pgconv.UUIDFromPgtype(row.ID), err)
 	}
+	var details domain.DetailLines
+	if row.Details != nil {
+		if err := json.Unmarshal(row.Details, &details); err != nil {
+			return domain.FeedEntry{}, fmt.Errorf("unmarshal history details %s: %w", pgconv.UUIDFromPgtype(row.ID), err)
+		}
+	}
 	var actorID *uuid.UUID
 	if row.ActorID.Valid {
 		id := pgconv.UUIDFromPgtype(row.ActorID)
 		actorID = &id
 	}
 	return domain.FeedEntry{
-		ID:            pgconv.UUIDFromPgtype(row.ID),
-		PropertyID:    pgconv.UUIDFromPgtype(row.PropertyID),
-		PropertyName:  row.PropertyName,
-		ActorID:       actorID,
-		ActorName:     row.ActorName,
-		ActorEmail:    row.ActorEmail,
-		ActorPhotoURL: row.ActorPhotoUrl,
-		ActorRole:     domain.ActorRole(row.ActorRole),
-		Kind:          domain.Kind(row.Kind),
-		Action:        domain.Action(row.Action),
-		BaseAction:    domain.BaseAction(row.BaseAction),
-		Segments:      segments,
-		Context:       contextMap,
-		CreatedAt:     row.CreatedAt.Time,
+		ID:             pgconv.UUIDFromPgtype(row.ID),
+		PropertyID:     pgconv.UUIDFromPgtype(row.PropertyID),
+		PropertyName:   row.PropertyName,
+		ActorID:        actorID,
+		ActorName:      row.ActorName,
+		ActorEmail:     row.ActorEmail,
+		ActorFirstName: row.ActorFirstName,
+		ActorLastName:  row.ActorLastName,
+		ActorPhotoURL:  row.ActorPhotoUrl,
+		ActorRole:      domain.ActorRole(row.ActorRole),
+		Kind:           domain.Kind(row.Kind),
+		Action:         domain.Action(row.Action),
+		BaseAction:     domain.BaseAction(row.BaseAction),
+		Segments:       segments,
+		Details:        details,
+		Context:        contextMap,
+		CreatedAt:      row.CreatedAt.Time,
 	}, nil
 }
 

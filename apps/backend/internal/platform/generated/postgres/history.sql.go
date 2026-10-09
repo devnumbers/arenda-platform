@@ -14,9 +14,9 @@ import (
 const insertActionJournal = `-- name: InsertActionJournal :one
 INSERT INTO action_journal (
     id, property_id, actor_id, actor_role, actor_name, actor_email,
-    kind, action, base_action, segments, searchable, context, created_at
+    kind, action, base_action, segments, searchable, context, details, created_at
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 RETURNING id
 `
 
@@ -33,6 +33,7 @@ type InsertActionJournalParams struct {
 	Segments   []byte             `json:"segments"`
 	Searchable string             `json:"searchable"`
 	Context    []byte             `json:"context"`
+	Details    []byte             `json:"details"`
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 }
 
@@ -50,6 +51,7 @@ func (q *Queries) InsertActionJournal(ctx context.Context, arg InsertActionJourn
 		arg.Segments,
 		arg.Searchable,
 		arg.Context,
+		arg.Details,
 		arg.CreatedAt,
 	)
 	var id pgtype.UUID
@@ -64,6 +66,8 @@ SELECT aj.id,
        aj.actor_id,
        aj.actor_name,
        aj.actor_email,
+       COALESCE(u.name, '')    AS actor_first_name,
+       COALESCE(u.surname, '') AS actor_last_name,
        aj.actor_role,
        COALESCE(CASE WHEN u.photo_key IS NOT NULL
                      THEN '/api/users/' || aj.actor_id::text || '/photo'
@@ -72,6 +76,7 @@ SELECT aj.id,
        aj.action,
        aj.base_action,
        aj.segments,
+       aj.details,
        aj.context,
        aj.created_at
 FROM action_journal aj
@@ -132,20 +137,23 @@ type ListActionJournalParams struct {
 }
 
 type ListActionJournalRow struct {
-	ID            pgtype.UUID        `json:"id"`
-	PropertyID    pgtype.UUID        `json:"property_id"`
-	PropertyName  string             `json:"property_name"`
-	ActorID       pgtype.UUID        `json:"actor_id"`
-	ActorName     string             `json:"actor_name"`
-	ActorEmail    string             `json:"actor_email"`
-	ActorRole     string             `json:"actor_role"`
-	ActorPhotoUrl string             `json:"actor_photo_url"`
-	Kind          string             `json:"kind"`
-	Action        string             `json:"action"`
-	BaseAction    string             `json:"base_action"`
-	Segments      []byte             `json:"segments"`
-	Context       []byte             `json:"context"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	ID             pgtype.UUID        `json:"id"`
+	PropertyID     pgtype.UUID        `json:"property_id"`
+	PropertyName   string             `json:"property_name"`
+	ActorID        pgtype.UUID        `json:"actor_id"`
+	ActorName      string             `json:"actor_name"`
+	ActorEmail     string             `json:"actor_email"`
+	ActorFirstName string             `json:"actor_first_name"`
+	ActorLastName  string             `json:"actor_last_name"`
+	ActorRole      string             `json:"actor_role"`
+	ActorPhotoUrl  string             `json:"actor_photo_url"`
+	Kind           string             `json:"kind"`
+	Action         string             `json:"action"`
+	BaseAction     string             `json:"base_action"`
+	Segments       []byte             `json:"segments"`
+	Details        []byte             `json:"details"`
+	Context        []byte             `json:"context"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
 // Чтение журнала (карта #704, тикет #708, ADR 0061 §7): страница ленты
@@ -174,6 +182,16 @@ type ListActionJournalRow struct {
 // маршрутизация — предсказание интента, обе ноги через GIN-индексы 000140
 // всегда дешевле неверного угадывания. Записи с обезличенным актёром
 // (actor_id IS NULL) под фильтр actor_ids не попадают.
+//
+// Живые ноги актёра (карта #1324, протокол D5, решение #1317 §4): имя и
+// фамилия читаются LEFT JOIN'ом users (как фото, #1286) — карточка актёра
+// показывает живые данные, снимки actor_name/actor_email остаются строкой
+// журнала. Фолбэк на снимок — по дискриминатору actor_id (FK ON DELETE SET
+// NULL 000140: actor_id IS NULL ⟺ пользователь удалён), НЕ COALESCE'ом:
+// снимок — составленное «Имя Фамилия» целиком, вмешивать его в «имя без
+// фамилии» нельзя (ломает ФИО-канон D4). details — пояснения нового
+// шаблона (D1); NULL у строк до D1. Состав колонок обязан совпадать с
+// ListActionJournalAfter: адаптер конвертирует ряды общим feedEntryOf.
 func (q *Queries) ListActionJournal(ctx context.Context, arg ListActionJournalParams) ([]ListActionJournalRow, error) {
 	rows, err := q.db.Query(ctx, listActionJournal,
 		arg.Actor,
@@ -205,12 +223,15 @@ func (q *Queries) ListActionJournal(ctx context.Context, arg ListActionJournalPa
 			&i.ActorID,
 			&i.ActorName,
 			&i.ActorEmail,
+			&i.ActorFirstName,
+			&i.ActorLastName,
 			&i.ActorRole,
 			&i.ActorPhotoUrl,
 			&i.Kind,
 			&i.Action,
 			&i.BaseAction,
 			&i.Segments,
+			&i.Details,
 			&i.Context,
 			&i.CreatedAt,
 		); err != nil {
@@ -231,6 +252,8 @@ SELECT aj.id,
        aj.actor_id,
        aj.actor_name,
        aj.actor_email,
+       COALESCE(u.name, '')    AS actor_first_name,
+       COALESCE(u.surname, '') AS actor_last_name,
        aj.actor_role,
        COALESCE(CASE WHEN u.photo_key IS NOT NULL
                      THEN '/api/users/' || aj.actor_id::text || '/photo'
@@ -239,6 +262,7 @@ SELECT aj.id,
        aj.action,
        aj.base_action,
        aj.segments,
+       aj.details,
        aj.context,
        aj.created_at
 FROM action_journal aj
@@ -292,20 +316,23 @@ type ListActionJournalAfterParams struct {
 }
 
 type ListActionJournalAfterRow struct {
-	ID            pgtype.UUID        `json:"id"`
-	PropertyID    pgtype.UUID        `json:"property_id"`
-	PropertyName  string             `json:"property_name"`
-	ActorID       pgtype.UUID        `json:"actor_id"`
-	ActorName     string             `json:"actor_name"`
-	ActorEmail    string             `json:"actor_email"`
-	ActorRole     string             `json:"actor_role"`
-	ActorPhotoUrl string             `json:"actor_photo_url"`
-	Kind          string             `json:"kind"`
-	Action        string             `json:"action"`
-	BaseAction    string             `json:"base_action"`
-	Segments      []byte             `json:"segments"`
-	Context       []byte             `json:"context"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	ID             pgtype.UUID        `json:"id"`
+	PropertyID     pgtype.UUID        `json:"property_id"`
+	PropertyName   string             `json:"property_name"`
+	ActorID        pgtype.UUID        `json:"actor_id"`
+	ActorName      string             `json:"actor_name"`
+	ActorEmail     string             `json:"actor_email"`
+	ActorFirstName string             `json:"actor_first_name"`
+	ActorLastName  string             `json:"actor_last_name"`
+	ActorRole      string             `json:"actor_role"`
+	ActorPhotoUrl  string             `json:"actor_photo_url"`
+	Kind           string             `json:"kind"`
+	Action         string             `json:"action"`
+	BaseAction     string             `json:"base_action"`
+	Segments       []byte             `json:"segments"`
+	Details        []byte             `json:"details"`
+	Context        []byte             `json:"context"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
 // After-нога двустороннего курсора (prepend новых, «новые снизу» ленты):
@@ -317,7 +344,9 @@ type ListActionJournalAfterRow struct {
 // не теряются») — DESC-порядок здесь взял бы из всплеска новейшие и отрезал
 // старейший хвост. Один sqlc-запрос двух порядков не несёт; контрактный
 // DESC страницы возвращает адаптер разворотом. Before-пару запрос не принимает:
-// ноги курсора взаимоисключающие на сервисе.
+// ноги курсора взаимоисключающие на сервисе. Живые ноги актёра и details —
+// те же, что у основного запроса (состав колонок обязан совпадать: адаптер
+// конвертирует ряды общим feedEntryOf).
 func (q *Queries) ListActionJournalAfter(ctx context.Context, arg ListActionJournalAfterParams) ([]ListActionJournalAfterRow, error) {
 	rows, err := q.db.Query(ctx, listActionJournalAfter,
 		arg.Actor,
@@ -347,12 +376,15 @@ func (q *Queries) ListActionJournalAfter(ctx context.Context, arg ListActionJour
 			&i.ActorID,
 			&i.ActorName,
 			&i.ActorEmail,
+			&i.ActorFirstName,
+			&i.ActorLastName,
 			&i.ActorRole,
 			&i.ActorPhotoUrl,
 			&i.Kind,
 			&i.Action,
 			&i.BaseAction,
 			&i.Segments,
+			&i.Details,
 			&i.Context,
 			&i.CreatedAt,
 		); err != nil {
@@ -427,14 +459,14 @@ func (q *Queries) ListHistoryFilterObjects(ctx context.Context, arg ListHistoryF
 }
 
 const listHistoryFilterParticipants = `-- name: ListHistoryFilterParticipants :many
-WITH scope_participant(user_id, is_owner, role_rank) AS (
-    SELECT p.owner_id, TRUE, 0
+WITH scope_participant(user_id, is_owner, role_rank, is_live) AS (
+    SELECT p.owner_id, TRUE, 0, TRUE
     FROM properties p
     WHERE actor_can_read_property(p.id, $1::uuid)
       AND ($2::text = ''
            OR p.id = ANY(string_to_array($2::text, ',')::uuid[]))
     UNION
-    SELECT m.user_id, FALSE, CASE WHEN m.role = 'full_access' THEN 1 ELSE 2 END
+    SELECT m.user_id, FALSE, CASE WHEN m.role = 'full_access' THEN 1 ELSE 2 END, TRUE
     FROM property_members m
     JOIN properties p ON p.id = m.property_id
     WHERE actor_can_read_property(m.property_id, $1::uuid)
@@ -442,7 +474,8 @@ WITH scope_participant(user_id, is_owner, role_rank) AS (
            OR m.property_id = ANY(string_to_array($2::text, ',')::uuid[]))
     UNION
     SELECT aj.actor_id, FALSE,
-           CASE aj.actor_role WHEN 'owner' THEN 0 WHEN 'full_access' THEN 1 ELSE 2 END
+           CASE aj.actor_role WHEN 'owner' THEN 0 WHEN 'full_access' THEN 1 ELSE 2 END,
+           FALSE
     FROM action_journal aj
     JOIN properties p ON p.id = aj.property_id
     WHERE actor_can_read_property(aj.property_id, $1::uuid)
@@ -458,7 +491,8 @@ SELECT u.id, u.name, u.surname, u.phone, u.email,
        bool_or(s.is_owner) AS is_owner,
        CASE WHEN bool_or(s.is_owner) THEN 'owner'
             WHEN MIN(s.role_rank) <= 1 THEN 'full_access'
-            ELSE 'viewer' END AS role
+            ELSE 'viewer' END AS role,
+       CASE WHEN bool_or(s.is_live) THEN 'current' ELSE 'removed' END AS status
 FROM scope_participant s
 JOIN users u ON u.id = s.user_id
 GROUP BY u.id
@@ -480,6 +514,7 @@ type ListHistoryFilterParticipantsRow struct {
 	FirstName string      `json:"first_name"`
 	IsOwner   bool        `json:"is_owner"`
 	Role      string      `json:"role"`
+	Status    string      `json:"status"`
 }
 
 // Опции фильтров ленты (ADR 0061 §7, тикет #708): участники области =
@@ -501,6 +536,16 @@ type ListHistoryFilterParticipantsRow struct {
 // ранг строки members. role='owner' жёстко совпадает с is_owner: снимок
 // 'owner' от бывшего владельца в журнале замка не даёт (фолбэк в
 // full_access).
+// status (#1324, протокол D6, решение #1317 §5): секции «Текущие»/«Удалён-
+// ные» шита фильтров — computed на лету, без новой таблицы: bool_or(is_live)
+// по ногам CTE. Живые ноги: владелец (owner_id NOT NULL) и членство
+// property_members — включая suspended (suspend ставит status='suspended',
+// строку не стирает — 000095; ревок/выход удаляет строку). Мёртвая нога —
+// только журнал. Повторное добавление живит участника автоматически (новая
+// членская строка); мульти-скоуп: жив хотя бы в одном объекте области
+// (bool_or по всем кортежам), при сужении property_ids до одного объекта
+// область — этот объект (та же семантика на узкой области). Обезличенные
+// (actor_id IS NULL) в участники не попадают — как и раньше.
 func (q *Queries) ListHistoryFilterParticipants(ctx context.Context, arg ListHistoryFilterParticipantsParams) ([]ListHistoryFilterParticipantsRow, error) {
 	rows, err := q.db.Query(ctx, listHistoryFilterParticipants, arg.Actor, arg.PropertyIds)
 	if err != nil {
@@ -520,6 +565,7 @@ func (q *Queries) ListHistoryFilterParticipants(ctx context.Context, arg ListHis
 			&i.FirstName,
 			&i.IsOwner,
 			&i.Role,
+			&i.Status,
 		); err != nil {
 			return nil, err
 		}

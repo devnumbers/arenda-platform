@@ -1,9 +1,9 @@
 -- name: InsertActionJournal :one
 INSERT INTO action_journal (
     id, property_id, actor_id, actor_role, actor_name, actor_email,
-    kind, action, base_action, segments, searchable, context, created_at
+    kind, action, base_action, segments, searchable, context, details, created_at
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 RETURNING id;
 
 -- Чтение журнала (карта #704, тикет #708, ADR 0061 §7): страница ленты
@@ -33,6 +33,16 @@ RETURNING id;
 -- всегда дешевле неверного угадывания. Записи с обезличенным актёром
 -- (actor_id IS NULL) под фильтр actor_ids не попадают.
 --
+-- Живые ноги актёра (карта #1324, протокол D5, решение #1317 §4): имя и
+-- фамилия читаются LEFT JOIN'ом users (как фото, #1286) — карточка актёра
+-- показывает живые данные, снимки actor_name/actor_email остаются строкой
+-- журнала. Фолбэк на снимок — по дискриминатору actor_id (FK ON DELETE SET
+-- NULL 000140: actor_id IS NULL ⟺ пользователь удалён), НЕ COALESCE'ом:
+-- снимок — составленное «Имя Фамилия» целиком, вмешивать его в «имя без
+-- фамилии» нельзя (ломает ФИО-канон D4). details — пояснения нового
+-- шаблона (D1); NULL у строк до D1. Состав колонок обязан совпадать с
+-- ListActionJournalAfter: адаптер конвертирует ряды общим feedEntryOf.
+--
 -- name: ListActionJournal :many
 SELECT aj.id,
        aj.property_id,
@@ -40,6 +50,8 @@ SELECT aj.id,
        aj.actor_id,
        aj.actor_name,
        aj.actor_email,
+       COALESCE(u.name, '')    AS actor_first_name,
+       COALESCE(u.surname, '') AS actor_last_name,
        aj.actor_role,
        COALESCE(CASE WHEN u.photo_key IS NOT NULL
                      THEN '/api/users/' || aj.actor_id::text || '/photo'
@@ -48,6 +60,7 @@ SELECT aj.id,
        aj.action,
        aj.base_action,
        aj.segments,
+       aj.details,
        aj.context,
        aj.created_at
 FROM action_journal aj
@@ -98,7 +111,9 @@ LIMIT sqlc.arg('page_limit')::int;
 -- не теряются») — DESC-порядок здесь взял бы из всплеска новейшие и отрезал
 -- старейший хвост. Один sqlc-запрос двух порядков не несёт; контрактный
 -- DESC страницы возвращает адаптер разворотом. Before-пару запрос не принимает:
--- ноги курсора взаимоисключающие на сервисе.
+-- ноги курсора взаимоисключающие на сервисе. Живые ноги актёра и details —
+-- те же, что у основного запроса (состав колонок обязан совпадать: адаптер
+-- конвертирует ряды общим feedEntryOf).
 --
 -- name: ListActionJournalAfter :many
 SELECT aj.id,
@@ -107,6 +122,8 @@ SELECT aj.id,
        aj.actor_id,
        aj.actor_name,
        aj.actor_email,
+       COALESCE(u.name, '')    AS actor_first_name,
+       COALESCE(u.surname, '') AS actor_last_name,
        aj.actor_role,
        COALESCE(CASE WHEN u.photo_key IS NOT NULL
                      THEN '/api/users/' || aj.actor_id::text || '/photo'
@@ -115,6 +132,7 @@ SELECT aj.id,
        aj.action,
        aj.base_action,
        aj.segments,
+       aj.details,
        aj.context,
        aj.created_at
 FROM action_journal aj
@@ -170,16 +188,26 @@ LIMIT sqlc.arg('page_limit')::int;
 -- ранг строки members. role='owner' жёстко совпадает с is_owner: снимок
 -- 'owner' от бывшего владельца в журнале замка не даёт (фолбэк в
 -- full_access).
+-- status (#1324, протокол D6, решение #1317 §5): секции «Текущие»/«Удалён-
+-- ные» шита фильтров — computed на лету, без новой таблицы: bool_or(is_live)
+-- по ногам CTE. Живые ноги: владелец (owner_id NOT NULL) и членство
+-- property_members — включая suspended (suspend ставит status='suspended',
+-- строку не стирает — 000095; ревок/выход удаляет строку). Мёртвая нога —
+-- только журнал. Повторное добавление живит участника автоматически (новая
+-- членская строка); мульти-скоуп: жив хотя бы в одном объекте области
+-- (bool_or по всем кортежам), при сужении property_ids до одного объекта
+-- область — этот объект (та же семантика на узкой области). Обезличенные
+-- (actor_id IS NULL) в участники не попадают — как и раньше.
 --
 -- name: ListHistoryFilterParticipants :many
-WITH scope_participant(user_id, is_owner, role_rank) AS (
-    SELECT p.owner_id, TRUE, 0
+WITH scope_participant(user_id, is_owner, role_rank, is_live) AS (
+    SELECT p.owner_id, TRUE, 0, TRUE
     FROM properties p
     WHERE actor_can_read_property(p.id, sqlc.arg('actor')::uuid)
       AND (sqlc.arg('property_ids')::text = ''
            OR p.id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[]))
     UNION
-    SELECT m.user_id, FALSE, CASE WHEN m.role = 'full_access' THEN 1 ELSE 2 END
+    SELECT m.user_id, FALSE, CASE WHEN m.role = 'full_access' THEN 1 ELSE 2 END, TRUE
     FROM property_members m
     JOIN properties p ON p.id = m.property_id
     WHERE actor_can_read_property(m.property_id, sqlc.arg('actor')::uuid)
@@ -187,7 +215,8 @@ WITH scope_participant(user_id, is_owner, role_rank) AS (
            OR m.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[]))
     UNION
     SELECT aj.actor_id, FALSE,
-           CASE aj.actor_role WHEN 'owner' THEN 0 WHEN 'full_access' THEN 1 ELSE 2 END
+           CASE aj.actor_role WHEN 'owner' THEN 0 WHEN 'full_access' THEN 1 ELSE 2 END,
+           FALSE
     FROM action_journal aj
     JOIN properties p ON p.id = aj.property_id
     WHERE actor_can_read_property(aj.property_id, sqlc.arg('actor')::uuid)
@@ -203,7 +232,8 @@ SELECT u.id, u.name, u.surname, u.phone, u.email,
        bool_or(s.is_owner) AS is_owner,
        CASE WHEN bool_or(s.is_owner) THEN 'owner'
             WHEN MIN(s.role_rank) <= 1 THEN 'full_access'
-            ELSE 'viewer' END AS role
+            ELSE 'viewer' END AS role,
+       CASE WHEN bool_or(s.is_live) THEN 'current' ELSE 'removed' END AS status
 FROM scope_participant s
 JOIN users u ON u.id = s.user_id
 GROUP BY u.id
