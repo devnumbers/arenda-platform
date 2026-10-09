@@ -495,7 +495,7 @@ func decodePinBody(w http.ResponseWriter, r *http.Request) (openapi.PinnedUpdate
 	return body, nil
 }
 
-// GetPropertyPhoto implements GET /api/v1/properties/{propertyId}/photo.
+// GetPropertyPhoto implements GET /api/properties/{propertyId}/photo.
 func (h *PropertyHandlers) GetPropertyPhoto(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
@@ -532,7 +532,7 @@ func (h *PropertyHandlers) GetPropertyPhoto(w http.ResponseWriter, r *http.Reque
 	httpsupport.WritePhotoBytes(w, r, contentType, size, body)
 }
 
-// UploadPropertyPhoto implements POST /api/v1/properties/{propertyId}/photo
+// UploadPropertyPhoto implements POST /api/properties/{propertyId}/photo
 // (ADR 0065): multipart through the backend, validated before any storage
 // write — the size cap, the magic-byte sniff and the EXIF/GPS strip all run
 // on the shared upload seam.
@@ -564,7 +564,7 @@ func (h *PropertyHandlers) UploadPropertyPhoto(w http.ResponseWriter, r *http.Re
 	h.respondWithProperty(w, r, property, http.StatusOK)
 }
 
-// DeletePropertyPhoto implements DELETE /api/v1/properties/{propertyId}/photo.
+// DeletePropertyPhoto implements DELETE /api/properties/{propertyId}/photo.
 func (h *PropertyHandlers) DeletePropertyPhoto(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
@@ -668,12 +668,12 @@ func (h *PropertyHandlers) propertyResponse(property domain.Property) openapi.Pr
 
 // propertyPhotoURL is the object photo's same-origin streaming path
 // (ADR 0065): nil without a photo. The path is contract-fixed; the photo
-// bytes themselves are served by GET /api/v1/properties/{id}/photo.
+// bytes themselves are served by GET /api/properties/{id}/photo.
 func propertyPhotoURL(property domain.Property) *string {
 	if property.PhotoKey == nil {
 		return nil
 	}
-	path := fmt.Sprintf("/api/v1/properties/%s/photo", property.ID)
+	path := fmt.Sprintf("/api/properties/%s/photo", property.ID)
 	return &path
 }
 

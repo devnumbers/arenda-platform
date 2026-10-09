@@ -71,7 +71,7 @@ func (q *Queries) DeleteNotification(ctx context.Context, arg DeleteNotification
 const getAccessEventPropertyView = `-- name: GetAccessEventPropertyView :one
 SELECT p.name, p.address, p.type,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
-                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     THEN '/api/properties/' || p.id::text || '/photo'
                      END, '')::text AS property_photo
 FROM properties p
 WHERE p.id = $1
@@ -261,7 +261,7 @@ SELECT pay.id AS payment_id,
        p.address AS property_address,
        p.type AS property_type,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
-                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     THEN '/api/properties/' || p.id::text || '/photo'
                      END, '')::text AS property_photo,
        o.owner_id
 FROM operations o
@@ -335,7 +335,7 @@ SELECT r.id AS rental_id,
        p.address AS property_address,
        p.type AS property_type,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
-                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     THEN '/api/properties/' || p.id::text || '/photo'
                      END, '')::text AS property_photo,
        p.owner_id
 FROM rentals r
@@ -399,7 +399,7 @@ SELECT pay.id AS payment_id,
        p.address AS property_address,
        p.type AS property_type,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
-                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     THEN '/api/properties/' || p.id::text || '/photo'
                      END, '')::text AS property_photo,
        o.owner_id
 FROM operations o
@@ -471,7 +471,7 @@ SELECT pay.id AS payment_id,
        p.address AS property_address,
        p.type AS property_type,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
-                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     THEN '/api/properties/' || p.id::text || '/photo'
                      END, '')::text AS property_photo,
        o.owner_id
 FROM operations o
@@ -538,7 +538,7 @@ SELECT t.id AS task_id,
        p.address AS property_address,
        p.type AS property_type,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
-                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     THEN '/api/properties/' || p.id::text || '/photo'
                      END, '')::text AS property_photo,
        t.rule_id,
        t.owner_id,
@@ -606,7 +606,7 @@ SELECT pay.id AS payment_id,
        p.address AS property_address,
        p.type AS property_type,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
-                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     THEN '/api/properties/' || p.id::text || '/photo'
                      END, '')::text AS property_photo,
        o.owner_id
 FROM operations o
@@ -817,7 +817,7 @@ SELECT pay.id AS payment_id,
        p.address AS property_address,
        p.type AS property_type,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
-                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     THEN '/api/properties/' || p.id::text || '/photo'
                      END, '')::text AS property_photo,
        o.owner_id
 FROM operations o
@@ -909,7 +909,7 @@ SELECT pay.id AS payment_id,
        p.address AS property_address,
        p.type AS property_type,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
-                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     THEN '/api/properties/' || p.id::text || '/photo'
                      END, '')::text AS property_photo,
        o.owner_id
 FROM operations o
@@ -997,7 +997,7 @@ SELECT pay.id AS payment_id,
        p.address AS property_address,
        p.type AS property_type,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
-                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     THEN '/api/properties/' || p.id::text || '/photo'
                      END, '')::text AS property_photo,
        o.owner_id
 FROM operations o
@@ -1082,7 +1082,7 @@ SELECT pay.id AS payment_id,
        p.address AS property_address,
        p.type AS property_type,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
-                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     THEN '/api/properties/' || p.id::text || '/photo'
                      END, '')::text AS property_photo,
        o.owner_id
 FROM operations o
@@ -1487,7 +1487,7 @@ SELECT r.id AS rental_id,
        p.address AS property_address,
        p.type AS property_type,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
-                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     THEN '/api/properties/' || p.id::text || '/photo'
                      END, '')::text AS property_photo,
        p.owner_id
 FROM rentals r
@@ -1613,7 +1613,7 @@ SELECT t.id AS task_id,
        p.address AS property_address,
        p.type AS property_type,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
-                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     THEN '/api/properties/' || p.id::text || '/photo'
                      END, '')::text AS property_photo,
        t.rule_id,
        t.owner_id

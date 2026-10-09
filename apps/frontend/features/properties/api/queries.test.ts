@@ -35,7 +35,7 @@ const file = new File(['bytes'], 'photo.jpg', { type: 'image/jpeg' });
 describe('uploadPropertyPhoto — POST /properties/{id}/photo (multipart, ADR 0065)', () => {
   beforeEach(() => {
     apiClientMock.mockReset();
-    apiClientMock.mockResolvedValue(makeDto({ photo_url: '/api/v1/properties/prop-1/photo' }));
+    apiClientMock.mockResolvedValue(makeDto({ photo_url: '/api/properties/prop-1/photo' }));
   });
 
   it('уходит multipart-формой с полем file на фото-путь объекта', async () => {
@@ -56,7 +56,7 @@ describe('uploadPropertyPhoto — POST /properties/{id}/photo (multipart, ADR 00
     const property = await uploadPropertyPhoto({ id: 'prop-1', file });
 
     expect(property.id).toBe('prop-1');
-    expect(property.photoUrl).toBe('/api/v1/properties/prop-1/photo');
+    expect(property.photoUrl).toBe('/api/properties/prop-1/photo');
   });
 });
 

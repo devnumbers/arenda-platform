@@ -805,7 +805,7 @@ func mePhotoURL(user domain.User) *string {
 	if user.PhotoKey == nil {
 		return nil
 	}
-	path := "/api/v1/me/photo"
+	path := "/api/me/photo"
 	return &path
 }
 

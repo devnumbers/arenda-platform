@@ -1043,7 +1043,7 @@ func TestReadStore_FilterOptionsObjects(t *testing.T) {
 	if len(opts.Objects) != 1 || opts.Objects[0].ID != property {
 		t.Fatalf("objects: want only the visible one, got %+v", opts.Objects)
 	}
-	if opts.Objects[0].PhotoURL != "/api/v1/properties/"+property.String()+"/photo" {
+	if opts.Objects[0].PhotoURL != "/api/properties/"+property.String()+"/photo" {
 		t.Fatalf("photo avatar: want the streaming path, got %q", opts.Objects[0].PhotoURL)
 	}
 }

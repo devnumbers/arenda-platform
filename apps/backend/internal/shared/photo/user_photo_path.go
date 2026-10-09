@@ -5,7 +5,7 @@ import (
 )
 
 // UserPhotoPath is the profile photo's same-origin streaming path (ADR 0065;
-// решение владельца #1286 — «показ участникам»): /api/v1/users/{id}/photo,
+// решение владельца #1286 — «показ участникам»): /api/users/{id}/photo,
 // читается самим пользователем и связанными с ним по общему читаемому
 // объекту. Пустая строка — фото нет (nil-ключ): поле контракта nullable, а
 // снапшоты payload'ов держат пустую строку. Стрим отдаёт фото, которое у
@@ -15,5 +15,5 @@ func UserPhotoPath(userID uuid.UUID, photoKey *string) string {
 	if photoKey == nil {
 		return ""
 	}
-	return "/api/v1/users/" + userID.String() + "/photo"
+	return "/api/users/" + userID.String() + "/photo"
 }

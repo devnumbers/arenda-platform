@@ -42,7 +42,7 @@ SELECT aj.id,
        aj.actor_email,
        aj.actor_role,
        COALESCE(CASE WHEN u.photo_key IS NOT NULL
-                     THEN '/api/v1/users/' || aj.actor_id::text || '/photo'
+                     THEN '/api/users/' || aj.actor_id::text || '/photo'
                      END, '')::text AS actor_photo_url,
        aj.kind,
        aj.action,
@@ -109,7 +109,7 @@ SELECT aj.id,
        aj.actor_email,
        aj.actor_role,
        COALESCE(CASE WHEN u.photo_key IS NOT NULL
-                     THEN '/api/v1/users/' || aj.actor_id::text || '/photo'
+                     THEN '/api/users/' || aj.actor_id::text || '/photo'
                      END, '')::text AS actor_photo_url,
        aj.kind,
        aj.action,
@@ -197,7 +197,7 @@ WITH scope_participant(user_id, is_owner, role_rank) AS (
 )
 SELECT u.id, u.name, u.surname, u.phone, u.email,
        COALESCE(CASE WHEN u.photo_key IS NOT NULL
-                     THEN '/api/v1/users/' || u.id::text || '/photo'
+                     THEN '/api/users/' || u.id::text || '/photo'
                      END, '')::text AS photo_path,
        COALESCE(u.name, '') AS first_name,
        bool_or(s.is_owner) AS is_owner,
@@ -222,7 +222,7 @@ SELECT p.id,
        p.address,
        p.type,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
-                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     THEN '/api/properties/' || p.id::text || '/photo'
                      END, '')::text AS photo_url
 FROM properties p
 WHERE actor_can_read_property(p.id, sqlc.arg('actor')::uuid)

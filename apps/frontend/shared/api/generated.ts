@@ -2337,7 +2337,7 @@ export interface components {
             email?: string | null;
             /** @description IANA timezone identifier, e.g. Europe/Moscow. */
             timezone?: string | null;
-            /** @description The profile photo's same-origin streaming path (ADR 0065): /api/v1/me/photo, served with the session cookie; null when the profile has no photo. Only the owner reads it. */
+            /** @description The profile photo's same-origin streaming path (ADR 0065): /api/me/photo, served with the session cookie; null when the profile has no photo. Only the owner reads it. */
             photoUrl?: string | null;
             subscription?: components["schemas"]["Subscription"];
         };
@@ -2725,7 +2725,7 @@ export interface components {
             description?: string | null;
             attributes: components["schemas"]["PropertyAttributes"];
             status: components["schemas"]["PropertyStatus"];
-            /** @description The property photo's same-origin streaming path (ADR 0065): /api/v1/properties/{id}/photo; null when the object has no photo. */
+            /** @description The property photo's same-origin streaming path (ADR 0065): /api/properties/{id}/photo; null when the object has no photo. */
             photoUrl?: string | null;
             /** Format: date-time */
             createdAt: string;
@@ -2871,7 +2871,7 @@ export interface components {
             owner_name?: string;
             /** @description Owner's account email for the detail's owner contact row — a deliberate exposure on this surface (Figma 2200-97365), the same posture as SuspendedShared.owner_email. Present in the detail response only when the actor is not the owner; empty when the owner has no email or the resolution failed. */
             owner_email?: string;
-            /** @description The owner's profile photo same-origin streaming path (ADR 0065, решение #1286): /api/v1/users/{userId}/photo — readable while the reader shares a readable property with the owner. Null when the owner has no photo or the resolution failed; present in the detail response and on the shared list rows. */
+            /** @description The owner's profile photo same-origin streaming path (ADR 0065, решение #1286): /api/users/{userId}/photo — readable while the reader shares a readable property with the owner. Null when the owner has no photo or the resolution failed; present in the detail response and on the shared list rows. */
             owner_photo_url?: string | null;
         };
         PropertyResponse: {
@@ -2884,7 +2884,7 @@ export interface components {
             attributes: components["schemas"]["PropertyAttributes"];
             status: components["schemas"]["PropertyStatus"];
             access?: components["schemas"]["PropertyAccessContext"];
-            /** @description The property photo's same-origin streaming path (ADR 0065): /api/v1/properties/{id}/photo, served with the session cookie; null when the object has no photo. */
+            /** @description The property photo's same-origin streaming path (ADR 0065): /api/properties/{id}/photo, served with the session cookie; null when the object has no photo. */
             photo_url?: string | null;
             /** @description Shared-access participants of the property: membership rows (any status, owner excluded — the owner is never a membership row) plus pending email invitations. */
             members_count: number;
@@ -2957,7 +2957,7 @@ export interface components {
             propertyId?: string | null;
             /** @description The display name of the bound property; null for an unbound card. A list projection only — the card read resolves the property by its id. */
             propertyName?: string | null;
-            /** @description The card photo's same-origin streaming path (ADR 0065): /api/v1/contacts/{id}/photo, served with the session cookie; null when the card has no photo. */
+            /** @description The card photo's same-origin streaming path (ADR 0065): /api/contacts/{id}/photo, served with the session cookie; null when the card has no photo. */
             photoUrl?: string | null;
             firstName: string;
             lastName: string;
@@ -3489,7 +3489,7 @@ export interface components {
             is_owner: boolean;
             /** @description Participant display name (name and surname, or the anonymous label «Пользователь» — карта #1105, аменд #1123). Never a phone, never an email. */
             display_name?: string;
-            /** @description The participant's profile photo same-origin streaming path (ADR 0065, решение #1286): /api/v1/users/{userId}/photo — every reader of the list shares this property with every listed participant. Null for a pending row, the synthesized owner without a photo, or a user without a photo; a suspended member's path answers 404 (suspended access sees nothing) and the client falls back to the placeholder. */
+            /** @description The participant's profile photo same-origin streaming path (ADR 0065, решение #1286): /api/users/{userId}/photo — every reader of the list shares this property with every listed participant. Null for a pending row, the synthesized owner without a photo, or a user without a photo; a suspended member's path answers 404 (suspended access sees nothing) and the client falls back to the placeholder. */
             photo_url?: string | null;
             /**
              * @description Membership lifecycle status. "suspended" means the recipient's tariff slot was exceeded, so the object is hidden from the recipient's list and grants no access until a slot frees up. "pending" is an email invitation waiting for the invitee to register.
@@ -3546,7 +3546,7 @@ export interface components {
             email?: string | null;
             /** @description The person's display name (name and surname, or the anonymous label «Пользователь» — карта #1105, аменд #1123); null for a pending row (the email is the label). */
             display_name?: string | null;
-            /** @description The registered user's profile photo same-origin streaming path (ADR 0065; решение владельца #1286): /api/v1/users/{userId}/photo, readable while the reader shares a readable property with the user; a revoked access answers 404 and the client falls back to the placeholder. Null for a pending row or a user without a photo. */
+            /** @description The registered user's profile photo same-origin streaming path (ADR 0065; решение владельца #1286): /api/users/{userId}/photo, readable while the reader shares a readable property with the user; a revoked access answers 404 and the client falls back to the placeholder. Null for a pending row or a user without a photo. */
             photo_url?: string | null;
             /**
              * @description The aggregate badge (issue #693): "all_properties" — active access to every property in the reading scope; "partial" — active access to accessible_properties_count of them; "limit_exceeded" — at least one suspended membership (the recipient's tariff limit was hit). Display copy: «Доступ ко всем объектам» / «Доступно N объектов» / «Превышен лимит объектов».

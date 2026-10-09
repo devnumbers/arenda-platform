@@ -591,7 +591,7 @@ func TestListGlobalPaymentObjects_PhotoURL(t *testing.T) {
 	for _, card := range cards {
 		byName[card.Name] = card
 	}
-	want := "/api/v1/properties/" + withPhoto.String() + "/photo"
+	want := "/api/properties/" + withPhoto.String() + "/photo"
 	withCard := byName["С фото"]
 	if withCard.PhotoURL == nil || *withCard.PhotoURL != want {
 		t.Errorf("С фото PhotoURL = %v, want the streaming path", withCard.PhotoURL)

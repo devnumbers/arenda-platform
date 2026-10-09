@@ -40,7 +40,7 @@ describe('uploadContactPhoto — POST /contacts/{id}/photo (multipart, ADR 0065)
   beforeEach(() => {
     apiClientMock.mockReset();
     apiClientMock.mockResolvedValue(
-      makeDto({ photoUrl: '/api/v1/contacts/contact-1/photo' }),
+      makeDto({ photoUrl: '/api/contacts/contact-1/photo' }),
     );
   });
 
@@ -62,7 +62,7 @@ describe('uploadContactPhoto — POST /contacts/{id}/photo (multipart, ADR 0065)
     const contact = await uploadContactPhoto({ id: 'contact-1', file });
 
     expect(contact.id).toBe('contact-1');
-    expect(contact.photoUrl).toBe('/api/v1/contacts/contact-1/photo');
+    expect(contact.photoUrl).toBe('/api/contacts/contact-1/photo');
   });
 });
 

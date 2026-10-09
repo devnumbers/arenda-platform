@@ -26,7 +26,7 @@
 -- cache no longer renders BoldHome).
 SELECT p.id, p.owner_id, p.name AS title, p.type,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
-                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     THEN '/api/properties/' || p.id::text || '/photo'
                      END, '')::text AS photo_path
 FROM properties p
 WHERE p.status <> 'archived'

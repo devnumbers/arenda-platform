@@ -186,7 +186,7 @@ func buildUploadBody(t *testing.T, fieldName, value string) (body *bytes.Buffer,
 func photoUploadRequest(t *testing.T, body *bytes.Buffer, contentType string) *http.Request {
 	t.Helper()
 	ctx := httpsupport.WithUserID(context.Background(), uuid.Must(uuid.NewV7()))
-	r := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/v1/properties/"+photoTestPropertyID().String()+"/photo", body)
+	r := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/properties/"+photoTestPropertyID().String()+"/photo", body)
 	r.Header.Set("Content-Type", contentType)
 	return r
 }
@@ -234,7 +234,7 @@ func TestPropertyPhotoUpload_WireContract(t *testing.T) {
 		t.Parallel()
 		ctx := httpsupport.WithUserID(context.Background(), uuid.Must(uuid.NewV7()))
 		r := httptest.NewRequestWithContext(ctx, http.MethodPost,
-			"/api/v1/properties/"+photoTestPropertyID().String()+"/photo", strings.NewReader("hello"))
+			"/api/properties/"+photoTestPropertyID().String()+"/photo", strings.NewReader("hello"))
 		r.Header.Set("Content-Type", "application/json")
 		rr := httptest.NewRecorder()
 		handler.UploadPropertyPhoto(rr, r, photoTestPropertyID())
@@ -261,7 +261,7 @@ func TestPropertyPhotoGet_ServesAndCaches(t *testing.T) {
 	storage := &photoWireStorage{}
 	handler := photoWireHandler(t, repo, storage)
 
-	target := "/api/v1/properties/" + photoTestPropertyID().String() + "/photo"
+	target := "/api/properties/" + photoTestPropertyID().String() + "/photo"
 
 	t.Run("404 without a photo", func(t *testing.T) {
 		t.Parallel()

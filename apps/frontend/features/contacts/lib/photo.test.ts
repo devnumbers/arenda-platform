@@ -6,7 +6,7 @@ import {
 } from './photo';
 
 describe('contactPhotoDisplay — правило показа фото с незавершённым стейджем (канон #1228)', () => {
-  const serverUrl = '/api/v1/contacts/c1/photo';
+  const serverUrl = '/api/contacts/c1/photo';
   const stagedFile: ContactPhotoStage = {
     kind: 'file',
     file: new File([], 'new.png', { type: 'image/png' }),
@@ -40,7 +40,7 @@ describe('contactPhotoDisplay — правило показа фото с нез
 
 describe('contactPhotoStageAfterRemove — stage после подтверждения удаления (бэк отвечает 404 на удаление несуществующего)', () => {
   it('серверное фото живо — запланировано удаление, применится сабмитом', () => {
-    expect(contactPhotoStageAfterRemove('/api/v1/contacts/c1/photo')).toEqual({
+    expect(contactPhotoStageAfterRemove('/api/contacts/c1/photo')).toEqual({
       kind: 'remove',
     });
   });

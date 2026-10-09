@@ -20,7 +20,7 @@ const (
 	// The card snapshot's type — the payload glyph's key (#1244).
 	scanPropertyType = "apartment"
 	// The card snapshot's photo — the same-origin streaming path (#1275).
-	scanPropertyPhoto = "/api/v1/properties/0194a3f8-0000-7000-8000-0000000000ff/photo"
+	scanPropertyPhoto = "/api/properties/0194a3f8-0000-7000-8000-0000000000ff/photo"
 	// The fixture rule title and the shared due/reminder body the due-leg
 	// and reminder-leg tests assert.
 	scanRentTitle        = "Аренда квартиры"

@@ -40,7 +40,7 @@ func TestParticipantService_ParticipantCarriesPhotoUrl(t *testing.T) {
 	if pending == nil {
 		t.Fatal("pending participant not found")
 	}
-	if !strings.HasSuffix(registered.PhotoURL, "/api/v1/users/"+f.u1.String()+"/photo") {
+	if !strings.HasSuffix(registered.PhotoURL, "/api/users/"+f.u1.String()+"/photo") {
 		t.Fatalf("registered photoUrl = %q, want the /users streaming path", registered.PhotoURL)
 	}
 	if pending.PhotoURL != "" {
@@ -74,7 +74,7 @@ func TestParticipantService_LegsCarryTypeAndPhoto(t *testing.T) {
 	t.Parallel()
 	f := newParticipantFixture(t)
 	f.scope[0].Type = "house"
-	f.scope[0].PhotoPath = "/api/v1/properties/" + f.p1.String() + "/photo"
+	f.scope[0].PhotoPath = "/api/properties/" + f.p1.String() + "/photo"
 	f.read.props = f.scope
 
 	participants, err := f.svc.ListParticipants(context.Background(), f.owner)
@@ -103,7 +103,7 @@ func TestParticipantService_LegsCarryTypeAndPhoto(t *testing.T) {
 	if p1Leg == nil || p2Leg == nil {
 		t.Fatalf("legs = %+v, want one per scoped property", u1.Properties)
 	}
-	if p1Leg.Type != "house" || p1Leg.PhotoURL != "/api/v1/properties/"+f.p1.String()+"/photo" {
+	if p1Leg.Type != "house" || p1Leg.PhotoURL != "/api/properties/"+f.p1.String()+"/photo" {
 		t.Fatalf("p1 leg = (type %q, photo %q), want (house, streaming path)", p1Leg.Type, p1Leg.PhotoURL)
 	}
 	if p2Leg.Type != "" || p2Leg.PhotoURL != "" {

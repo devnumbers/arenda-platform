@@ -218,7 +218,7 @@ describe('mapGlobalPaymentObject — DTO → entity (карточка «Объе
       address: 'ул. Садовая, 5',
       type: 'garage',
       pinnedAt: '2026-09-01T10:00:00Z',
-      photoUrl: '/api/v1/properties/0194a3f8-0000-7000-8000-000000000001/photo',
+      photoUrl: '/api/properties/0194a3f8-0000-7000-8000-000000000001/photo',
       autoPayRules: [{ paymentId: '0194a3f8-0000-7000-8000-000000000002', hasOverdue: true }],
       otherRules: [],
     };

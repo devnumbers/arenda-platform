@@ -346,12 +346,12 @@ func contactResponse(c domain.Contact) openapi.ContactResponse {
 
 // contactPhotoURL is the card photo's same-origin streaming path (ADR 0065):
 // nil without a photo. The path is contract-fixed; the photo bytes are
-// served by GET /api/v1/contacts/{id}/photo.
+// served by GET /api/contacts/{id}/photo.
 func contactPhotoURL(c domain.Contact) *string {
 	if c.PhotoKey == nil {
 		return nil
 	}
-	path := fmt.Sprintf("/api/v1/contacts/%s/photo", c.ID)
+	path := fmt.Sprintf("/api/contacts/%s/photo", c.ID)
 	return &path
 }
 
