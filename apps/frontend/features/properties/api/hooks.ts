@@ -364,24 +364,3 @@ export function usePropertyPhotoBuster(id: string): number {
   });
   return data;
 }
-
-/**
- * Пункт «Объекты» единого хрома — подпись и адрес (карта #984): у базового
- * тарифа с ровно одним живым своим объектом и пустым архивом это «Объект»
- * со ссылкой на его страницу, иначе всегда «Объекты» на список. Тариф
- * приходит снаружи (ScreenLayout читает useMe — фича не может тянуть auth).
- * Архив дозапрашивается только базовому (правило считает и его), платным
- * тарифам он не нужен. Хромовые поверхности (ScreenLayout → TabBar/
- * DesktopSidebar) держат кэш тёплым с коротким staleTime, чтобы пункт
- * жил без шторма запросов; пока данные не загружены — «Объекты» на список.
- */
-export function usePropertiesNavItem(
-  tariffName: string | null | undefined,
-): PropertiesNavItem {
-  const { data } = useProperties({ staleTime: 60_000 });
-  const { data: archived } = useArchivedProperties({
-    enabled: tariffName === 'basic',
-    staleTime: 60_000,
-  });
-  return resolvePropertiesNavItem(tariffName, data, archived);
-}
