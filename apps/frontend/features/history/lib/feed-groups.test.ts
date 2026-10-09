@@ -13,12 +13,16 @@ function entry(overrides: {
   propertyName?: string;
   actorId?: string | null;
   actorName?: string;
+  actorFirstName?: string;
+  actorLastName?: string;
 }): HistoryEntry {
   return {
     propertyId: 'property-1',
     propertyName: 'Моя квартира',
     actorId: 'user-1',
     actorName: 'Иван Иванов',
+    actorFirstName: 'Иван',
+    actorLastName: 'Иванов',
     actorPhotoUrl: null,
     actorRole: 'owner',
     baseAction: 'added',
@@ -75,6 +79,8 @@ describe('groupHistoryByDay', () => {
           propertyId: 'p1',
           actorId: 'user-2',
           actorName: 'Анна Сигрейва',
+          actorFirstName: 'Анна',
+          actorLastName: 'Сигрейва',
         }),
         entry({ id: 'c', createdAt: '2026-09-22T11:00:00Z', propertyId: 'p1' }),
         entry({ id: 'd', createdAt: '2026-09-22T12:00:00Z', propertyId: 'p2', propertyName: 'Гараж' }),
@@ -105,5 +111,45 @@ describe('groupHistoryByDay', () => {
       'Другой удалённый',
     ]);
     expect(days[0]?.objects[0]?.actors.map((actor) => actor.actorId)).toEqual([null, null]);
+  });
+
+  it('имя группы живое (D5): канон D4 из живых частей, снимок — не подмешивается', () => {
+    const days = groupHistoryByDay(
+      [
+        // Живой актёр: surname переименован между записью и чтением —
+        // шапка показывает сегодняшний профиль, снимок строки игнорируется.
+        entry({
+          id: 'a',
+          createdAt: '2026-09-22T09:00:00Z',
+          actorName: 'Иван Старый',
+          actorFirstName: 'Иван',
+          actorLastName: 'Новый',
+        }),
+        // Актёр без фамилии — одна часть; без имени — «Пользователь»,
+        // голая фамилия не показывается (D4).
+        entry({
+          id: 'b',
+          createdAt: '2026-09-22T10:00:00Z',
+          actorId: 'user-2',
+          actorName: 'Анна Сигрейва',
+          actorFirstName: 'Анна',
+          actorLastName: '',
+        }),
+        entry({
+          id: 'c',
+          createdAt: '2026-09-22T11:00:00Z',
+          actorId: 'user-3',
+          actorName: 'Сидор Сидоров',
+          actorFirstName: '',
+          actorLastName: 'Сидоров',
+        }),
+      ],
+      TODAY,
+    );
+    expect(days[0]?.objects[0]?.actors.map((actor) => actor.name)).toEqual([
+      'Иван Новый',
+      'Анна',
+      'Пользователь',
+    ]);
   });
 });

@@ -34,11 +34,17 @@ export function mapHistoryItem(dto: HistoryItemDto): HistoryEntry {
     propertyName: dto.property_name,
     actorId: dto.actor_id ?? null,
     actorName: dto.actor_name,
+    actorFirstName: dto.actor_first_name,
+    actorLastName: dto.actor_last_name,
     actorPhotoUrl: dto.actor_photo_url ?? null,
     actorRole: dto.actor_role,
     baseAction: dto.base_action,
     action: dto.action,
     segments: toSegments(dto.segments),
+    // Пояснения (D1) — опциональны без дефолта: у строк, записанных до
+    // ввода details, поле на проводе отсутствует, и легаси остаётся
+    // undefined (рендер одним заголовком), а не пустым массивом.
+    ...(dto.details !== undefined ? { details: dto.details } : {}),
     createdAt: dto.created_at,
   };
 }
@@ -53,6 +59,7 @@ export function mapHistoryFilterOptions(dto: HistoryFiltersDto): HistoryFilterOp
       photoUrl: participant.photo_url ?? null,
       isOwner: participant.is_owner,
       role: participant.role,
+      status: participant.status,
     })),
     objects: dto.objects.map((object_) => ({
       id: object_.id,

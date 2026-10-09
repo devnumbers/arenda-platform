@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type JSX, type ReactNode } from 'react';
 import Link from 'next/link';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { ArrowDown, ArrowLeft, BoldUser, Search } from '@/shared/assets/icons';
 import { cn } from '@/shared/lib/cn';
 import { type HistoryFilterOptions, type HistoryObjectOption } from '@/entities/history';
@@ -36,6 +37,8 @@ import {
   TopNavTitle,
 } from '@/shared/ui/design';
 import { ROUTES } from '@/shared/config/routes';
+import { saveReadingPosition, takeReadingPosition } from '@/shared/lib/scroll/reading-position';
+import { historyScreenBackHref, historyScreenTitle } from '../lib/screen-chrome';
 import { HistoryRow } from './history-row';
 import { FOLLOW_BOTTOM_PX, decideFeedScroll, distanceToBottom, type FeedEdges } from '../lib/feed-scroll';
 import {
@@ -51,6 +54,11 @@ const SEARCH_DEBOUNCE_MS = 300;
 /** Канонная пауза метки «новое» у читателя на дне (мс) — механика F демо
  * #879: строки видны сразу, метка гаснет сама (тикет #880). */
 const FRESH_VISIBLE_MS = 2600;
+
+/** Минимальная пауза между записями позиции чтения (мс) — реестр позиций
+ * не пишется на каждый кадр скролла, финальную позицию до-записывает
+ * сохранение при размонтировании (D8.2). */
+const READING_POSITION_SAVE_INTERVAL_MS = 400;
 
 /** Канон строки-ссылки (хаб «Совместный доступ»): подложка hover/active
  * не меняется, только прозрачность; фокус-ринг с клавиатуры. */
@@ -92,8 +100,19 @@ const HEADER_LINK =
  * записях PageContent несёт flex-1 + justify-end — узел контента
  * ScreenLayout уже flex-1 от min-h-screen оболочки, поэтому лента тянется
  * ровно до нижнего края на всех ярусах (высота шапки и safe-area
- * учитываются сами, без констант). Пустые состояния — не сообщения:
+ * учитываются сами, без констант); pending-кадр прижат так же — контент
+ * встаёт на место скелетона без сдвига (#1281, фолбэк Suspense-границы —
+ * HistoryFeedLoading с тем же хромом). Пустые состояния — не сообщения:
  * «Действий не было» и «Ничего не найдено» живут как раньше.
+ *
+ * Открытие «с конца» и позиция чтения (карта #1324, D8): якорь на самые
+ * свежие записи выполняется лейаут-эффектом до пэйнта; страницы истории
+ * исключены из глобального «всегда верх» (реестр якорёных роутов
+ * shared/lib/scroll/reading-position.ts — ScrollToTop их не скроллит,
+ * иначе он затирал бы якорь). Возврат «Назад» на ленту (popstate)
+ * восстанавливает позицию чтения вместо якоря — паттерн мессенджеров
+ * (D8.2); перечитанное окно (сдвиг обоих краёв, #718) по-прежнему
+ * реанкерует на дно.
  *
  * Поиск по истории (#710) — иконка в шапке ленты (макет 2157-56876),
  * шапка меняется на поисковую поверх того же экрана (прецедент «Ваших
@@ -209,18 +228,14 @@ export function HistoryFeedScreen({
   // объекта — объект, страница пары (#841) — обоих; заголовок, фолбэк
   // «Назад» и прибитые группы шита следуют за предметом; прибитые
   // группы в URL не живут.
-  // Личность экрана одним вычислением: заголовок живёт в TopNavTitle и
-  // в шите, прибитые группы и скоуп — в пинах страницы ниже.
+  // Личность экрана одним вычислением (widgets/history/lib/screen-chrome):
+  // заголовок — в TopNavTitle и в шите, фолбэк «Назад» — у кнопки; те же
+  // вычисления у фолбэка Suspense-границы (#1281) — одна точка на оба хрома.
   const isMemberPage = participantId !== undefined;
   const isPropertyPage = propertyId !== undefined;
   const isMemberPropertyPage = isMemberPage && isPropertyPage;
-  const pageTitle = isMemberPropertyPage
-    ? 'Действия участника в объекте'
-    : isMemberPage
-      ? 'Действия участника'
-      : isPropertyPage
-        ? 'История объекта'
-        : 'История действий';
+  const pageTitle = historyScreenTitle(participantId, propertyId);
+  const backHref = historyScreenBackHref(participantId, propertyId);
   const [searchMode, setSearchMode] = useState(false);
   const [search, setSearch] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -294,6 +309,9 @@ export function HistoryFeedScreen({
   // удерживает прежние entries под «в ноль»-фильтрами и ошибкой, а эти
   // ветки рисуют пустые состояния — без якоря (решение владельца 24.09).
   const feedRendered = scope !== null && feedQuery.isSuccess && entries.length > 0;
+  // Pending-кадр прижат к низу вместе с лентой — паритет композиций
+  // скелетона и контента (#1281): контент встаёт на место скелетона.
+  const isFeedPending = scope !== null && feedQuery.isPending;
   const today = dateToIsoLocal(new Date());
   const days = groupHistoryByDay(entries, today);
   const options = propertyOptions(filtersQuery.data);
@@ -334,6 +352,16 @@ export function HistoryFeedScreen({
       acknowledgeFresh();
     };
   }, [acknowledgeFresh]);
+
+  // Позиция чтения (карта #1324, D8.2): ключ — href из рендера экрана
+  // (фильтры/поиск меняют адрес — у каждой записи истории своя позиция);
+  // window.location в очисте доверять нельзя — Next пушит новый URL и
+  // скроллит верх синхронно с навигацией. Ключ живёт выше решателя
+  // прокрутки: реставрация сверяет его с пометкой popstate.
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const feedSearch = searchParams.toString();
+  const feedHref = feedSearch ? `${pathname}?${feedSearch}` : pathname;
 
   const [hasNewBelow, setHasNewBelow] = useState(false);
   const entryCount = entries.length;
@@ -395,7 +423,12 @@ export function HistoryFeedScreen({
       }
     }
     if (action.kind === 'anchor') {
-      window.scrollTo({ top: height });
+      // Реставрация позиции чтения (карта #1324, D8.2): возврат «Назад»
+      // на ленту помечен popstate-прослушкой ScrollToTop — вместо якоря
+      // встаём на сохранённый scrollTop. Пометки нет (открытие по ссылке,
+      // push-навигация, смена скоупа) — якорь на дно, «как в мессенджере».
+      const restored = takeReadingPosition(feedHref);
+      window.scrollTo({ top: restored ?? height });
       setHasNewBelow(false);
     } else if (action.kind === 'compensate' || action.kind === 'follow') {
       if (action.delta > 0) {
@@ -407,7 +440,7 @@ export function HistoryFeedScreen({
     } else if (action.kind === 'indicate') {
       setHasNewBelow(true);
     }
-  }, [entryCount, firstEntryId, lastEntryId, acknowledgeFresh]);
+  }, [entryCount, firstEntryId, lastEntryId, acknowledgeFresh, feedHref]);
 
   // Индикатор гаснет и от ручного доскролла до низа — читатель сам дошёл
   // до свежих записей, «есть новые» больше не новость; метки «новое»
@@ -425,6 +458,26 @@ export function HistoryFeedScreen({
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, [hasNewBelow, acknowledgeFresh]);
+
+  // Позиция чтения (карта #1324, D8.2): по ходу чтения пишем scrollTop с
+  // троттлингом, при уходе — синхронный очист дописывает финальную
+  // позицию (useLayoutEffect — до скролла Next, ключ из замыкания
+  // прошлого рендера).
+  useLayoutEffect(() => {
+    let lastSavedAt = 0;
+    const onScroll = (): void => {
+      const now = Date.now();
+      if (now - lastSavedAt >= READING_POSITION_SAVE_INTERVAL_MS) {
+        lastSavedAt = now;
+        saveReadingPosition(feedHref, window.scrollY);
+      }
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      saveReadingPosition(feedHref, window.scrollY);
+    };
+  }, [feedHref]);
 
   const scrollToFresh = (): void => {
     setHasNewBelow(false);
@@ -457,19 +510,7 @@ export function HistoryFeedScreen({
         </TopNav>
       ) : (
         <TopNav
-          leading={
-            <TopNavBackButton
-              fallbackHref={
-                isMemberPropertyPage
-                  ? ROUTES.participantRights(participantId, propertyId)
-                  : isMemberPage
-                    ? ROUTES.history
-                    : isPropertyPage
-                      ? ROUTES.propertyParticipants(propertyId)
-                      : ROUTES.participants
-              }
-            />
-          }
+          leading={<TopNavBackButton fallbackHref={backHref} />}
           // Лупа — только на загруженной непустой ленте: пустая книга
           // прячет иконки шапки (§7), pending/error — тоже (прецедент
           // «Ваших участников» #697), иначе иконка мелькает до ответа.
@@ -491,10 +532,11 @@ export function HistoryFeedScreen({
         * прижата к нижнему краю вьюпорта, пока не заполняет его, — как
         * свежее сообщение в мессенджере. Механизм — flex-1 от узла
         * контента ScreenLayout (уже flex-1 от min-h-screen), точный низ
-        * на всех ярусах без констант; пустые состояния (ниже) — не
-        * сообщения, без якоря. */}
+        * на всех ярусах без констант; pending-кадр прижат так же, чтобы
+        * пришедший контент встал на место скелетона без сдвига (#1281);
+        * пустые состояния (ниже) — не «сообщения», без якоря. */}
       <PageContent
-        className={feedRendered ? 'flex-1 justify-end px-4' : 'px-4'}
+        className={feedRendered || isFeedPending ? 'flex-1 justify-end px-4' : 'px-4'}
         aboveTabBarFooter
       >
         {scope === null ? (
@@ -505,8 +547,9 @@ export function HistoryFeedScreen({
           </p>
         ) : feedQuery.isPending ? (
           /* Скелетон — паритет композиции страницы (решение владельца
-            * 24.09): прибитым страницам — их короткий скелетон, общий
-            * двухгрупповый остаётся только общей ленте (§7). */
+            * 24.09; паритет pending/загруженного кадра — #1281): прибитым
+            * страницам — их короткий скелетон, общий двухгрупповый
+            * остаётся только общей ленте (§7). */
           isPropertyPage ? (
             <HistoryPropertyFeedSkeleton />
           ) : isMemberPage ? (

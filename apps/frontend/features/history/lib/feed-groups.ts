@@ -16,8 +16,18 @@
  */
 
 import type { HistoryEntry } from '@/entities/history';
+import { displayUserName } from '@/shared/lib/display-name';
 import { addDays, dateToIsoLocal, type IsoDate } from '@/shared/lib/calendar';
 import { formatDayMonthWithYear } from '@/shared/lib/date-format';
+
+/** Отображаемое имя актёра шапки группы (D5): у живого актёра (actor_id
+ * есть) — сегодняшний профиль, собранный каноном D4 из живых частей
+ * строки; обезличенная запись (пользователь удалён) — снимок actor_name. */
+function actorDisplayName(entry: HistoryEntry): string {
+  return entry.actorId !== null
+    ? displayUserName(entry.actorFirstName, entry.actorLastName)
+    : entry.actorName;
+}
 
 export type HistoryActorGroup = {
   /** actor_id снимка записи; null — пользователь удалён, запись
@@ -25,6 +35,8 @@ export type HistoryActorGroup = {
   readonly actorId: string | null;
   /** actor_id, обезличенным записям — ключ по снимку имени. */
   readonly key: string;
+  /** Отображаемое имя группы (D5): живое имя актёра по канону D4, у
+   * обезличенных записей — снимок actor_name. */
   readonly name: string;
   /** Фото актёра (ADR 0065, решение #1286) — путь стриминга из первой
    * записи группы; null — фото нет или запись обезличена. */
@@ -93,7 +105,7 @@ export function groupHistoryByDay(
       actor = {
         actorId: entry.actorId,
         key: actorKey,
-        name: entry.actorName,
+        name: actorDisplayName(entry),
         photoUrl: entry.actorPhotoUrl,
         entries: [],
       };

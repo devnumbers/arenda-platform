@@ -174,3 +174,29 @@ test('объект без действий — «Действий не было�
   await expect(page.getByText('Действий не было')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Поиск по истории' })).toHaveCount(0);
 });
+
+test('открытие «с конца»: последние записи объекта в вьюпорте (карта #1324, D8)', async ({ page, seededUser }) => {
+  test.setTimeout(60_000);
+  await execE2eSql('DELETE FROM action_journal;');
+  // Серия из 30 записей квартиры — лента прибитого скоупа заведомо выше
+  // вьюпорта; открытие строго на последних записях, без флэша верха.
+  for (let index = 0; index < 30; index += 1) {
+    await seedJournalEntry(
+      paymentCreatedEntry(
+        `e0000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+        60 - index,
+        `Заготовка ${index + 1}`,
+      ),
+      seededUser,
+    );
+  }
+  await openCabinetWithSeededSession(page, seededUser);
+
+  await page.goto(`/history/properties/${APARTMENT_ID}`);
+  await expect(page.getByText('Платёж создан: Заготовка 30', { exact: true })).toBeVisible();
+  const metrics = await page.evaluate(() => ({
+    distanceToBottom:
+      document.documentElement.scrollHeight - (window.scrollY + window.innerHeight),
+  }));
+  expect(metrics.distanceToBottom).toBeLessThan(120);
+});
