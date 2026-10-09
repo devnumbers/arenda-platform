@@ -31,7 +31,7 @@ LANDING_DIR := apps/landing
 # version here, never in a stamped file. GO_VERSION is a full patch version
 # so CI's setup-go (go-version-file: go.mod) and the prod image build on an
 # identical toolchain; NODE_VERSION stays major-only so LTS patches float.
-GO_VERSION := 1.26.6
+GO_VERSION := 1.26.9
 NODE_VERSION := 24
 MIGRATE_VERSION := v4.19.1
 
