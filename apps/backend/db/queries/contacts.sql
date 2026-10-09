@@ -52,7 +52,7 @@ FOR UPDATE;
 -- its sort/order: the application rejects a cursor echoed under another
 -- walk. All cursor args travel together; NULL (no cursor) reads from the
 -- beginning.
-SELECT c.*, p.name AS property_name
+SELECT sqlc.embed(c), p.name AS property_name
 FROM contacts c
 LEFT JOIN properties p ON p.id = c.property_id
 WHERE (

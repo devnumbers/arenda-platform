@@ -105,7 +105,7 @@ func (s *ContactStore) List(
 	contacts := make([]application.ListedContact, 0, len(rows))
 	for _, row := range rows {
 		contacts = append(contacts, application.ListedContact{
-			Contact:      contactFromListRow(row),
+			Contact:      contactFromRow(row.Contact),
 			PropertyName: pgconv.TextToString(row.PropertyName),
 		})
 	}
@@ -224,38 +224,11 @@ func (s *PropertyStore) Get(ctx context.Context, propertyID uuid.UUID) (applicat
 	return application.PropertyRef{OwnerID: pgconv.UUIDFromPgtype(row.OwnerID)}, nil
 }
 
-// contactFromRow maps the generated row onto the domain card: NULL folds to
-// "" (the domain's «not set»).
-//
-//nolint:dupl // contactFromListRow повторяет модель колонка в колонку: sqlc-типы не конвертируемы (теги json у модели)
+// contactFromRow maps the generated model row onto the domain card: NULL
+// folds to "" (the domain's «not set»). It serves every read path: the
+// single-row reads return the model directly, the list read embeds it via
+// sqlc.embed (ListContactsRow.Contact) — one mapper, no field-by-field copy.
 func contactFromRow(row postgres.Contact) domain.Contact {
-	return domain.Contact{
-		ID:                pgconv.UUIDFromPgtype(row.ID),
-		OwnerID:           pgconv.UUIDFromPgtype(row.OwnerID),
-		PropertyID:        pgconv.UUIDFromPgtypePtr(row.PropertyID),
-		FirstName:         row.FirstName,
-		LastName:          pgconv.TextToString(row.LastName),
-		Patronymic:        pgconv.TextToString(row.Patronymic),
-		Role:              pgconv.TextToString(row.Role),
-		Phone:             pgconv.TextToString(row.Phone),
-		Email:             pgconv.TextToString(row.Email),
-		MessengerName:     pgconv.TextToString(row.MessengerName),
-		MessengerUsername: pgconv.TextToString(row.MessengerUsername),
-		Note:              pgconv.TextToString(row.Note),
-		CreatedAt:         pgconv.TimestamptzToTime(row.CreatedAt),
-		UpdatedAt:         pgconv.TimestamptzToTime(row.UpdatedAt),
-		PhotoKey:          pgconv.TextToPtrString(row.PhotoKey),
-		PhotoContentType:  pgconv.TextToPtrString(row.PhotoContentType),
-	}
-}
-
-// contactFromListRow maps the listing row onto the domain card. The list
-// row repeats the model's columns field by field (plus the joined property
-// name), but the sqlc types are not convertible (the model carries json
-// tags, the row does not) — the field-by-field copy is forced.
-//
-//nolint:dupl // the sqlc list-row type mirrors the model; types are not convertible
-func contactFromListRow(row postgres.ListContactsRow) domain.Contact {
 	return domain.Contact{
 		ID:                pgconv.UUIDFromPgtype(row.ID),
 		OwnerID:           pgconv.UUIDFromPgtype(row.OwnerID),

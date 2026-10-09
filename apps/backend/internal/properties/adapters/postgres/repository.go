@@ -175,7 +175,11 @@ func (r *PropertyRepository) GetByIDForUpdate(ctx context.Context, id uuid.UUID)
 	return propertyFromRow(row), nil
 }
 
-//nolint:dupl // the two owner list queries return field-identical sqlc rows of distinct, non-convertible types — the copy is forced
+// The two owner list reads share one shape: sqlc.embed carries the model
+// row plus the members count, so both wrap propertyFromCountsRow — the
+// queries stay separate (their ORDER BY differs: pin-aware for the main
+// list, recency-only for the archive).
+
 func (r *PropertyRepository) ListActiveByOwner(ctx context.Context, scope uuid.UUID) ([]domain.Property, error) {
 	rows, err := r.q().ListActivePropertiesByOwner(ctx, pgconv.UUIDToPgtype(scope))
 	if err != nil {
@@ -183,26 +187,11 @@ func (r *PropertyRepository) ListActiveByOwner(ctx context.Context, scope uuid.U
 	}
 	properties := make([]domain.Property, 0, len(rows))
 	for _, row := range rows {
-		properties = append(properties, propertyFromCountsRow(postgres.Property{
-			ID:               row.ID,
-			OwnerID:          row.OwnerID,
-			Name:             row.Name,
-			Type:             row.Type,
-			Address:          row.Address,
-			Description:      row.Description,
-			Attributes:       row.Attributes,
-			Status:           row.Status,
-			PhotoKey:         row.PhotoKey,
-			PhotoContentType: row.PhotoContentType,
-			CreatedAt:        row.CreatedAt,
-			UpdatedAt:        row.UpdatedAt,
-			PinnedAt:         row.PinnedAt,
-		}, row.MembersCount))
+		properties = append(properties, propertyFromCountsRow(row.Property, row.MembersCount))
 	}
 	return properties, nil
 }
 
-//nolint:dupl // см. ListActiveByOwner: дублирование форсировано парой sqlc-типов строк
 func (r *PropertyRepository) ListArchivedByOwner(ctx context.Context, scope uuid.UUID) ([]domain.Property, error) {
 	rows, err := r.q().ListArchivedPropertiesByOwner(ctx, pgconv.UUIDToPgtype(scope))
 	if err != nil {
@@ -210,21 +199,7 @@ func (r *PropertyRepository) ListArchivedByOwner(ctx context.Context, scope uuid
 	}
 	properties := make([]domain.Property, 0, len(rows))
 	for _, row := range rows {
-		properties = append(properties, propertyFromCountsRow(postgres.Property{
-			ID:               row.ID,
-			OwnerID:          row.OwnerID,
-			Name:             row.Name,
-			Type:             row.Type,
-			Address:          row.Address,
-			Description:      row.Description,
-			Attributes:       row.Attributes,
-			Status:           row.Status,
-			PhotoKey:         row.PhotoKey,
-			PhotoContentType: row.PhotoContentType,
-			CreatedAt:        row.CreatedAt,
-			UpdatedAt:        row.UpdatedAt,
-			PinnedAt:         row.PinnedAt,
-		}, row.MembersCount))
+		properties = append(properties, propertyFromCountsRow(row.Property, row.MembersCount))
 	}
 	return properties, nil
 }

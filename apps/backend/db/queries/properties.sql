@@ -47,7 +47,7 @@ SELECT * FROM properties WHERE id = $1 FOR UPDATE;
 -- order), then the unpinned by updated_at DESC. The application re-applies
 -- the same rule over the merged list (shared properties arrive appended),
 -- so keep the two passes in sync (PropertyService.pinnedFirst).
-SELECT properties.*,
+SELECT sqlc.embed(properties),
        ((SELECT COUNT(*) FROM property_members pm
          WHERE pm.property_id = properties.id) +
        (SELECT COUNT(*) FROM property_member_invitations pmi
@@ -57,7 +57,7 @@ WHERE properties.owner_id = $1 AND properties.status IN ('active', 'maintenance'
 ORDER BY properties.pinned_at, properties.updated_at DESC;
 
 -- name: ListArchivedPropertiesByOwner :many
-SELECT properties.*,
+SELECT sqlc.embed(properties),
        ((SELECT COUNT(*) FROM property_members pm
          WHERE pm.property_id = properties.id) +
        (SELECT COUNT(*) FROM property_member_invitations pmi

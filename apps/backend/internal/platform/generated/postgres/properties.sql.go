@@ -462,20 +462,8 @@ ORDER BY properties.pinned_at, properties.updated_at DESC
 `
 
 type ListActivePropertiesByOwnerRow struct {
-	ID               pgtype.UUID        `json:"id"`
-	OwnerID          pgtype.UUID        `json:"owner_id"`
-	Name             string             `json:"name"`
-	Type             string             `json:"type"`
-	Address          string             `json:"address"`
-	Description      pgtype.Text        `json:"description"`
-	Status           string             `json:"status"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-	Attributes       []byte             `json:"attributes"`
-	PinnedAt         pgtype.Timestamptz `json:"pinned_at"`
-	PhotoKey         pgtype.Text        `json:"photo_key"`
-	PhotoContentType pgtype.Text        `json:"photo_content_type"`
-	MembersCount     int64              `json:"members_count"`
+	Property     Property `json:"property"`
+	MembersCount int64    `json:"members_count"`
 }
 
 // The main list's order (ticket #577): the pinned first — among themselves
@@ -493,19 +481,19 @@ func (q *Queries) ListActivePropertiesByOwner(ctx context.Context, ownerID pgtyp
 	for rows.Next() {
 		var i ListActivePropertiesByOwnerRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.OwnerID,
-			&i.Name,
-			&i.Type,
-			&i.Address,
-			&i.Description,
-			&i.Status,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.Attributes,
-			&i.PinnedAt,
-			&i.PhotoKey,
-			&i.PhotoContentType,
+			&i.Property.ID,
+			&i.Property.OwnerID,
+			&i.Property.Name,
+			&i.Property.Type,
+			&i.Property.Address,
+			&i.Property.Description,
+			&i.Property.Status,
+			&i.Property.CreatedAt,
+			&i.Property.UpdatedAt,
+			&i.Property.Attributes,
+			&i.Property.PinnedAt,
+			&i.Property.PhotoKey,
+			&i.Property.PhotoContentType,
 			&i.MembersCount,
 		); err != nil {
 			return nil, err
@@ -530,20 +518,8 @@ ORDER BY properties.updated_at DESC
 `
 
 type ListArchivedPropertiesByOwnerRow struct {
-	ID               pgtype.UUID        `json:"id"`
-	OwnerID          pgtype.UUID        `json:"owner_id"`
-	Name             string             `json:"name"`
-	Type             string             `json:"type"`
-	Address          string             `json:"address"`
-	Description      pgtype.Text        `json:"description"`
-	Status           string             `json:"status"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-	Attributes       []byte             `json:"attributes"`
-	PinnedAt         pgtype.Timestamptz `json:"pinned_at"`
-	PhotoKey         pgtype.Text        `json:"photo_key"`
-	PhotoContentType pgtype.Text        `json:"photo_content_type"`
-	MembersCount     int64              `json:"members_count"`
+	Property     Property `json:"property"`
+	MembersCount int64    `json:"members_count"`
 }
 
 func (q *Queries) ListArchivedPropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListArchivedPropertiesByOwnerRow, error) {
@@ -556,19 +532,19 @@ func (q *Queries) ListArchivedPropertiesByOwner(ctx context.Context, ownerID pgt
 	for rows.Next() {
 		var i ListArchivedPropertiesByOwnerRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.OwnerID,
-			&i.Name,
-			&i.Type,
-			&i.Address,
-			&i.Description,
-			&i.Status,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.Attributes,
-			&i.PinnedAt,
-			&i.PhotoKey,
-			&i.PhotoContentType,
+			&i.Property.ID,
+			&i.Property.OwnerID,
+			&i.Property.Name,
+			&i.Property.Type,
+			&i.Property.Address,
+			&i.Property.Description,
+			&i.Property.Status,
+			&i.Property.CreatedAt,
+			&i.Property.UpdatedAt,
+			&i.Property.Attributes,
+			&i.Property.PinnedAt,
+			&i.Property.PhotoKey,
+			&i.Property.PhotoContentType,
 			&i.MembersCount,
 		); err != nil {
 			return nil, err

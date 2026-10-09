@@ -316,23 +316,8 @@ type ListContactsParams struct {
 }
 
 type ListContactsRow struct {
-	ID                pgtype.UUID        `json:"id"`
-	OwnerID           pgtype.UUID        `json:"owner_id"`
-	PropertyID        pgtype.UUID        `json:"property_id"`
-	FirstName         string             `json:"first_name"`
-	LastName          pgtype.Text        `json:"last_name"`
-	Patronymic        pgtype.Text        `json:"patronymic"`
-	Role              pgtype.Text        `json:"role"`
-	Phone             pgtype.Text        `json:"phone"`
-	Email             pgtype.Text        `json:"email"`
-	MessengerName     pgtype.Text        `json:"messenger_name"`
-	MessengerUsername pgtype.Text        `json:"messenger_username"`
-	Note              pgtype.Text        `json:"note"`
-	CreatedAt         pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
-	PhotoKey          pgtype.Text        `json:"photo_key"`
-	PhotoContentType  pgtype.Text        `json:"photo_content_type"`
-	PropertyName      pgtype.Text        `json:"property_name"`
+	Contact      Contact     `json:"contact"`
+	PropertyName pgtype.Text `json:"property_name"`
 }
 
 // The actor's visible slice per the query scope (ADR 0054, ADR 0028):
@@ -392,22 +377,22 @@ func (q *Queries) ListContacts(ctx context.Context, arg ListContactsParams) ([]L
 	for rows.Next() {
 		var i ListContactsRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.OwnerID,
-			&i.PropertyID,
-			&i.FirstName,
-			&i.LastName,
-			&i.Patronymic,
-			&i.Role,
-			&i.Phone,
-			&i.Email,
-			&i.MessengerName,
-			&i.MessengerUsername,
-			&i.Note,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.PhotoKey,
-			&i.PhotoContentType,
+			&i.Contact.ID,
+			&i.Contact.OwnerID,
+			&i.Contact.PropertyID,
+			&i.Contact.FirstName,
+			&i.Contact.LastName,
+			&i.Contact.Patronymic,
+			&i.Contact.Role,
+			&i.Contact.Phone,
+			&i.Contact.Email,
+			&i.Contact.MessengerName,
+			&i.Contact.MessengerUsername,
+			&i.Contact.Note,
+			&i.Contact.CreatedAt,
+			&i.Contact.UpdatedAt,
+			&i.Contact.PhotoKey,
+			&i.Contact.PhotoContentType,
 			&i.PropertyName,
 		); err != nil {
 			return nil, err
