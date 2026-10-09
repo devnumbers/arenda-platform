@@ -86,12 +86,8 @@ export function TabBarVisibilityProvider({ children }: { readonly children: Reac
 }
 
 export function TabBar({
-  propertiesHref,
-  propertiesLabel,
   notificationsUnread = false,
 }: {
-  readonly propertiesHref?: string;
-  readonly propertiesLabel?: string;
   readonly notificationsUnread?: boolean;
 } = {}): JSX.Element | null {
   const { present, bars } = useContext(TabBarSuppressionContext);
@@ -119,8 +115,6 @@ export function TabBar({
           moreExpanded={moreOpen}
           onMoreSelect={() => setMoreOpen((open) => !open)}
           onNavigate={() => setMoreOpen(false)}
-          propertiesHref={propertiesHref}
-          propertiesLabel={propertiesLabel}
           notificationsUnread={notificationsUnread}
         />
       </nav>

@@ -1,6 +1,6 @@
 export * from './api';
 
-export { usePropertiesWithMeta, usePropertiesNavItem } from './api/hooks';
+export { usePropertiesWithMeta } from './api/hooks';
 export type { PropertiesListResult, SuspendedSharedProperty } from './api/hooks';
 export { propertyAutonamePhrase, propertyTypeLabels, propertyTypeOptions } from './lib/property-types';
 export {

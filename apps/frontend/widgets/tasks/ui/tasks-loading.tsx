@@ -1,7 +1,7 @@
 'use client';
 
 import type { JSX } from 'react';
-import { Add, Cancel, SmallArrowDown } from '@/shared/assets/icons';
+import { Add, Cancel, SmallArrowDown, VerticalMenu } from '@/shared/assets/icons';
 import { DEFAULT_TASKS_SORT } from '@/features/tasks';
 import {
   ChipButton,
@@ -47,11 +47,14 @@ export function TasksLoading(): JSX.Element {
             <IconButton icon={<Add />} label="Создать задачу" />
           </div>
 
-          <div className="mt-4 flex items-center justify-between pr-3.5 pl-6">
-            <div className="flex items-center gap-2">
-              <SortChip sort={DEFAULT_TASKS_SORT} />
-              <ChipButton trailingIcon={<SmallArrowDown />}>Объект</ChipButton>
-            </div>
+          {/* Ряд чипов — зеркало живого экрана (макет 3226-74077): «⋮»
+           * слева перед чипами, зазоры 6, ряд в 24 под заголовком. Кебаб
+           * в покое — в общем (владельческом) состоянии ленты он есть,
+           * и без него чипы при загрузке сдвигало бы влево. */}
+          <div className="mt-6 flex items-center gap-1.5 pl-6">
+            <IconButton icon={<VerticalMenu />} label="Действия со списком" variant="muted" />
+            <SortChip sort={DEFAULT_TASKS_SORT} />
+            <ChipButton trailingIcon={<SmallArrowDown />}>Объект</ChipButton>
           </div>
         </HubCollapseAnchor>
 

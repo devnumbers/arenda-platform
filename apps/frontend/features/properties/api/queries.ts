@@ -49,6 +49,9 @@ export type PropertiesListResult = {
   readonly suspendedShared: SuspendedSharedProperty[];
   /** «Сегодня владельца» (ADR 0048) — граница бейджа «Осталось N месяцев» (#586). */
   readonly today: IsoDate;
+  /** Сколько архивных объектов у владельца (#1233): гейт кнопки/чипа
+   * «Архив» на хабе — архивных нет, кнопки нет. */
+  readonly archivedCount: number;
 };
 
 /** Полный payload GET /properties — строки, suspended-плейсхолдеры (#702) и
@@ -66,6 +69,7 @@ export async function fetchProperties(
       ? mapSuspendedShared(response.suspended_shared)
       : [],
     today: response.today,
+    archivedCount: response.archived_count,
   };
 }
 

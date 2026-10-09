@@ -7,6 +7,7 @@ import {
   nearestDateLine,
   overdueDaysLine,
   overdueOperationsCountLabel,
+  paymentHubAddTarget,
   paymentsCountLabel,
 } from './payments-global-model';
 import { makeGlobalPayment as item } from './global-payment-fixtures';
@@ -115,5 +116,24 @@ describe('globalPaymentObjectHasOverdue', () => {
         object({ autoPayRules: [{ paymentId: 'p', hasOverdue: false }] }),
       ),
     ).toBe(false);
+  });
+});
+
+describe('paymentHubAddTarget — цель «+» создания платежа (макет 3226-75059)', () => {
+  it('нет редактируемых объектов — «+» не рисуется', () => {
+    expect(paymentHubAddTarget([])).toBeNull();
+  });
+
+  it('единственный редактируемый объект — шит единого входа его объекта', () => {
+    expect(paymentHubAddTarget(['p1'])).toStrictEqual({
+      kind: 'sheet',
+      propertyId: 'p1',
+    });
+  });
+
+  it('несколько редактируемых — страница «Объекты» (выбор объекта)', () => {
+    expect(paymentHubAddTarget(['p1', 'p2', 'p3'])).toStrictEqual({
+      kind: 'objects',
+    });
   });
 });

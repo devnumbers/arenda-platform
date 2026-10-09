@@ -98,8 +98,19 @@ type PropertyStatusSheetProps = {
   readonly onAction: (key: PropertyDetailActionKey) => void;
 };
 
-/** Шит смены статуса (Figma 1554:100371 — без аренды, 1581:53679 — на
- * ремонте): строки-пилюли 56 с иконкой и подписью, под ними «Отменить».
+/** Общая форма ряда шита — геометрия контейнера и фокус-ринг; фон и
+ * отклик у рядов свои (макеты 1554-100758 / 1581-53679). */
+const sheetRowClass =
+  'flex h-14 w-full cursor-pointer items-center justify-center rounded-button outline-none transition-colors focus-visible:ring-4 focus-visible:ring-primary';
+
+/** Пункты статусов — серые контейнеры (var(--light-gray)). */
+const sheetItemClass = `${sheetRowClass} bg-surface-muted hover:bg-surface-muted-hover active:bg-surface-muted-hover`;
+
+/** Шит смены статуса (Figma 1554:100371/100758 — без аренды,
+ * 1581:53679 — на ремонте): строки-контейнеры 56 с иконкой и подписью,
+ * под ними «Отменить» — тот же контейнер, но белый: в макетах её фон
+ * var(--white) при серых пунктах (решение владельца 07.10, #1241),
+ * отклик — по канону Button secondary (решение владельца 08.10).
  * Канон Modal — на ≥768 карточка. Заголовок sr-only: a11y-имя диалога. */
 export function PropertyStatusSheet({
   open,
@@ -120,7 +131,7 @@ export function PropertyStatusSheet({
                 onOpenChange(false);
                 onAction(item.key);
               }}
-              className="flex h-14 w-full cursor-pointer items-center justify-center gap-3 rounded-button bg-surface-muted text-left outline-none transition-colors focus-visible:ring-4 focus-visible:ring-primary hover:bg-surface-muted-hover active:bg-surface-muted-hover"
+              className={`${sheetItemClass} gap-3 text-left`}
             >
               <span className="flex h-6 w-6 shrink-0 items-center justify-center" aria-hidden>
                 {propertyActionIcon(item.key)}
@@ -129,15 +140,13 @@ export function PropertyStatusSheet({
             </button>
           ))}
         </div>
-        <div className="mt-2 flex justify-center">
-          <button
-            type="button"
-            onClick={() => onOpenChange(false)}
-            className="flex h-11 cursor-pointer items-center rounded-pill px-5 text-base font-medium text-content outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary hover:bg-surface-muted active:bg-surface-muted"
-          >
-            Отменить
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => onOpenChange(false)}
+          className={`${sheetRowClass} mt-2 bg-surface text-base font-medium text-content hover:bg-surface-muted-hover active:bg-surface-muted-active`}
+        >
+          Отменить
+        </button>
       </ModalContent>
     </Modal>
   );

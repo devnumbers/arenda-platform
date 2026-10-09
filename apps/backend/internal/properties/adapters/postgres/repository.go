@@ -338,6 +338,16 @@ func (r *PropertyRepository) CountActiveByOwner(ctx context.Context, scope uuid.
 	return int(count), nil
 }
 
+// CountArchivedByOwner counts the owner's archived rows — the «Архив»
+// button gate (issue #1233).
+func (r *PropertyRepository) CountArchivedByOwner(ctx context.Context, scope uuid.UUID) (int, error) {
+	count, err := r.q().CountArchivedPropertiesByOwner(ctx, pgconv.UUIDToPgtype(scope))
+	if err != nil {
+		return 0, err
+	}
+	return int(count), nil
+}
+
 // CountByOwnerAndType counts the owner's properties of the type in every
 // status (archived included, deleted gone) — the auto-name serial
 // (ticket #1001).

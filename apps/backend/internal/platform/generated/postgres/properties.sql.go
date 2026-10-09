@@ -68,6 +68,20 @@ func (q *Queries) CountActivePropertiesByOwnerAdmin(ctx context.Context, ownerID
 	return count, err
 }
 
+const countArchivedPropertiesByOwner = `-- name: CountArchivedPropertiesByOwner :one
+SELECT COUNT(*) FROM properties
+WHERE owner_id = $1 AND status = 'archived'
+`
+
+// The «Архив» button gate (issue #1233): the owner's archived rows only —
+// shared properties contribute nothing, the archive is owner-only.
+func (q *Queries) CountArchivedPropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countArchivedPropertiesByOwner, ownerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countArchivedPropertiesByOwnerAdmin = `-- name: CountArchivedPropertiesByOwnerAdmin :one
 SELECT COUNT(*) FROM properties
 WHERE owner_id = $1 AND status = 'archived'

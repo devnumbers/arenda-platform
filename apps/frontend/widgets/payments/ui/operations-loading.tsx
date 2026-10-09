@@ -83,7 +83,10 @@ export function OperationsLoading(): JSX.Element {
           </div>
         </HubCollapseAnchor>
 
-        <div className="mt-4 flex flex-col gap-6">
+        {/* Тот же ритм первого блока, что у живого экрана (макет
+         * 3226-74599): чипы в 24 под пилюлей — контент встаёт на место
+         * скелетона без сдвига. */}
+        <div className="mt-6 flex flex-col gap-6">
           <OperationsFilterChipsLoading />
 
           <OperationsSummarySkeleton cards={2} />

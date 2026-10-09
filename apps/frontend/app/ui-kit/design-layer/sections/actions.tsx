@@ -7,7 +7,7 @@ import { Button, ChipButton, IconButton } from '@/shared/ui/design';
 import styles from '../../page.module.css';
 
 const dlButtonVariants = ['primary', 'secondary', 'danger', 'clear', 'white'] as const;
-const dlIconVariants = ['primary', 'secondary', 'danger'] as const;
+const dlIconVariants = ['primary', 'secondary', 'danger', 'muted'] as const;
 
 export function ButtonSection(): JSX.Element {
     return (

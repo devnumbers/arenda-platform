@@ -14,6 +14,7 @@ import (
 	openapi "github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -27,6 +28,9 @@ import (
 type searchWireRepo struct {
 	page     []domain.Property
 	recorder func(propertiesapp.PropertySearchQuery)
+	// The archivedCount feeds CountArchivedByOwner for the list wire tests'
+	// «Архив» gate fixture (issue #1233); zero for the search tests.
+	archivedCount int
 }
 
 func (r *searchWireRepo) Create(_ context.Context, _ uuid.UUID, _ domain.Property) (domain.Property, error) {
@@ -80,6 +84,10 @@ func (r *searchWireRepo) CountActiveByOwner(_ context.Context, _ uuid.UUID) (int
 	return 0, nil
 }
 
+func (r *searchWireRepo) CountArchivedByOwner(_ context.Context, _ uuid.UUID) (int, error) {
+	return r.archivedCount, nil
+}
+
 func (r *searchWireRepo) CountByOwnerAndType(_ context.Context, _ uuid.UUID, _ domain.PropertyType) (int, error) {
 	return 0, nil
 }
@@ -128,11 +136,12 @@ func searchWireHandler(t *testing.T, repo *searchWireRepo) *PropertyHandlers {
 	t.Helper()
 	// The transactional collaborators stay nil: the search read walks the
 	// repository directly, the factory is only the service's constructor
-	// bundle.
+	// bundle. The real clock serves the list reads' «today» fallback (the
+	// list wire tests ride this harness too, issue #1233).
 	svc := propertiesapp.NewPropertyService(
 		repo, searchWirePhotos{}, nil,
 		propertiesapp.NewTxStoreFactory(repo, searchWirePhotos{}, nil, nil, nil, nil),
-		nil, nil, slog.New(slog.DiscardHandler),
+		clock.Real{}, nil, slog.New(slog.DiscardHandler),
 	)
 	return NewPropertyHandlers(svc, nil, slog.New(slog.DiscardHandler), nil)
 }

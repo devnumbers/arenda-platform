@@ -102,6 +102,11 @@ type OwnerCalendar interface {
 type PropertiesPage struct {
 	Items []domain.Property
 	Today time.Time
+	// ArchivedCount is the data owner's archived property count (issue
+	// #1233): the hub gates the «Архив» entry on it — no archived rows, no
+	// button. Own archived rows only: shared properties contribute nothing,
+	// the archive is owner-only.
+	ArchivedCount int
 	// SuspendedShared lists the actor's suspended shared memberships in FIFO
 	// order (ticket #702); empty when the port is unwired or the actor has
 	// none. Only the main list fills it — archived objects hide their
@@ -230,6 +235,9 @@ type PropertyRepository interface {
 	Archive(ctx context.Context, id, scope uuid.UUID) error
 	Unarchive(ctx context.Context, id, scope uuid.UUID) error
 	CountActiveByOwner(ctx context.Context, scope uuid.UUID) (int, error)
+	// CountArchivedByOwner counts the owner's archived rows (issue #1233) —
+	// the «Архив» button gate; shares the scoping rule with CountActiveByOwner.
+	CountArchivedByOwner(ctx context.Context, scope uuid.UUID) (int, error)
 	// CountByOwnerAndType counts the owner's properties of the given type in
 	// every status — archived count too, deleted rows are gone (hard
 	// delete). The auto-name serial source (ticket #1001).

@@ -29,7 +29,9 @@ import {
  * без сдвига.
  */
 
-/** Хаб «Платежи»: шапка с «крыльями», пилюля, три секции-заглушки. */
+/** Хаб «Платежи»: шапка с «крыльями», строка заголовка (паритет живого
+ * экрана #1235 — «+» ждёт справочника объектов и появляется после), пилюля,
+ * три секции-заглушки. */
 export function PaymentsLoading(): JSX.Element {
   return (
     <>
@@ -43,7 +45,9 @@ export function PaymentsLoading(): JSX.Element {
 
       <PageContent>
         <HubCollapseAnchor>
-          <HubTitle>Платежи</HubTitle>
+          <div className="flex h-8 items-center justify-between pr-3.5">
+            <HubTitle>Платежи</HubTitle>
+          </div>
         </HubCollapseAnchor>
 
         <div className="flex flex-col gap-6 px-6 pt-4">

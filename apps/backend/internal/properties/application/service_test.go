@@ -177,6 +177,16 @@ func (r *lockingFakePropertyRepo) CountActiveByOwner(_ context.Context, _ uuid.U
 	return count, nil
 }
 
+func (r *lockingFakePropertyRepo) CountArchivedByOwner(_ context.Context, _ uuid.UUID) (int, error) {
+	count := 0
+	for _, p := range r.data {
+		if p.Status == domain.PropertyStatusArchived {
+			count++
+		}
+	}
+	return count, nil
+}
+
 func (r *lockingFakePropertyRepo) CountByOwnerAndType(_ context.Context, scope uuid.UUID, propertyType domain.PropertyType) (int, error) {
 	count := 0
 	for _, p := range r.data {
@@ -670,6 +680,16 @@ func (r *fakePropertyRepo) CountActiveByOwner(_ context.Context, _ uuid.UUID) (i
 	return count, nil
 }
 
+func (r *fakePropertyRepo) CountArchivedByOwner(_ context.Context, _ uuid.UUID) (int, error) {
+	count := 0
+	for _, p := range r.data {
+		if p.Status == domain.PropertyStatusArchived {
+			count++
+		}
+	}
+	return count, nil
+}
+
 func (r *fakePropertyRepo) CountByOwnerAndType(_ context.Context, scope uuid.UUID, propertyType domain.PropertyType) (int, error) {
 	count := 0
 	for _, p := range r.data {
@@ -1072,6 +1092,145 @@ func TestListProperties_AccessRoles(t *testing.T) {
 	}
 	if got := byID[sharedID].OwnerName; got != "" {
 		t.Errorf("list path must not resolve the owner name, got %q", got)
+	}
+}
+
+// TestListProperties_ArchivedCount verifies the archived-count projection of
+// the main list (issue #1233): the hub gates the «Архив» button on the
+// owner's archived rows, so the count travels with the list read and covers
+// every lifecycle status around the active ones.
+func TestListProperties_ArchivedCount(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+
+	activeID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	maintenanceID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	archivedID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+	archivedID2 := uuid.MustParse("55555555-5555-5555-5555-555555555555")
+
+	mk := func(id uuid.UUID, status domain.PropertyStatus) domain.Property {
+		return domain.Property{
+			ID: id, OwnerID: ownerID, Name: testPropertyNameOwn, Address: testPropertyAddress,
+			Type: domain.PropertyTypeApartment, Status: status,
+		}
+	}
+	repo := newFakePropertyRepo(
+		mk(activeID, domain.PropertyStatusActive),
+		mk(maintenanceID, domain.PropertyStatusMaintenance),
+		mk(archivedID, domain.PropertyStatusArchived),
+		mk(archivedID2, domain.PropertyStatusArchived),
+	)
+	svc := NewPropertyService(
+		repo,
+		fakePropertyPhotoRepo{},
+		fakePropertyPhotoStorage{},
+		newPropertyTestFactory(repo,
+			fakePropertyPhotoRepo{},
+			nil),
+		fakePropertyClock{now: time.Now()},
+		testOwnerPolicy{},
+		nil,
+	)
+
+	result, err := svc.ListProperties(ctx, ownerID)
+	if err != nil {
+		t.Fatalf("ListProperties failed: %v", err)
+	}
+	if len(result.Items) != 2 {
+		t.Fatalf("expected 2 listed properties (active + maintenance), got %d", len(result.Items))
+	}
+	if result.ArchivedCount != 2 {
+		t.Errorf("ArchivedCount = %d, want 2", result.ArchivedCount)
+	}
+}
+
+// TestListProperties_ArchivedCountEmpty verifies the zero case the hub's
+// «Архив» button hides on (issue #1233): no archived rows — the count reads 0
+// while the list itself may stay non-empty.
+func TestListProperties_ArchivedCountEmpty(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+
+	repo := newFakePropertyRepo(domain.Property{
+		ID:      uuid.MustParse("22222222-2222-2222-2222-222222222222"),
+		OwnerID: ownerID,
+		Name:    testPropertyNameOwn,
+		Address: testPropertyAddress,
+		Type:    domain.PropertyTypeApartment,
+		Status:  domain.PropertyStatusActive,
+	})
+	svc := NewPropertyService(
+		repo,
+		fakePropertyPhotoRepo{},
+		fakePropertyPhotoStorage{},
+		newPropertyTestFactory(repo,
+			fakePropertyPhotoRepo{},
+			nil),
+		fakePropertyClock{now: time.Now()},
+		testOwnerPolicy{},
+		nil,
+	)
+
+	result, err := svc.ListProperties(ctx, ownerID)
+	if err != nil {
+		t.Fatalf("ListProperties failed: %v", err)
+	}
+	if len(result.Items) != 1 {
+		t.Fatalf("expected 1 listed property, got %d", len(result.Items))
+	}
+	if result.ArchivedCount != 0 {
+		t.Errorf("ArchivedCount = %d, want 0", result.ArchivedCount)
+	}
+}
+
+// TestListArchivedProperties_ArchivedCountMirrorsList verifies the archive
+// screen's count (issue #1233): the listing is unpaginated, so the archived
+// count is the listed rows themselves — the required response field stays
+// truthful without a second COUNT query.
+func TestListArchivedProperties_ArchivedCountMirrorsList(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+
+	archivedID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+	activeID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+
+	repo := newFakePropertyRepo(
+		domain.Property{
+			ID: archivedID, OwnerID: ownerID, Name: testPropertyNameOwn, Address: testPropertyAddress,
+			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusArchived,
+		},
+		domain.Property{
+			ID: activeID, OwnerID: ownerID, Name: testPropertyNameOwn, Address: testPropertyAddress,
+			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive,
+		},
+	)
+	svc := NewPropertyService(
+		repo,
+		fakePropertyPhotoRepo{},
+		fakePropertyPhotoStorage{},
+		newPropertyTestFactory(repo,
+			fakePropertyPhotoRepo{},
+			nil),
+		fakePropertyClock{now: time.Now()},
+		testOwnerPolicy{},
+		nil,
+	)
+
+	result, err := svc.ListArchivedProperties(ctx, ownerID)
+	if err != nil {
+		t.Fatalf("ListArchivedProperties failed: %v", err)
+	}
+	if len(result.Items) != 1 {
+		t.Fatalf("expected 1 archived row, got %d", len(result.Items))
+	}
+	if result.ArchivedCount != 1 {
+		t.Errorf("ArchivedCount = %d, want 1 (the listed archived rows)", result.ArchivedCount)
 	}
 }
 

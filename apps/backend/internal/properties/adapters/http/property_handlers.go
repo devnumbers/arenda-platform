@@ -231,8 +231,9 @@ func (h *PropertyHandlers) ListProperties(w http.ResponseWriter, r *http.Request
 	}
 
 	response := openapi.PropertiesResponse{
-		Items: items,
-		Today: openapi_types.Date{Time: page.Today},
+		Items:         items,
+		Today:         openapi_types.Date{Time: page.Today},
+		ArchivedCount: page.ArchivedCount,
 	}
 	if len(suspended) > 0 {
 		response.SuspendedShared = &suspended
@@ -275,8 +276,9 @@ func (h *PropertyHandlers) ListArchivedProperties(w http.ResponseWriter, r *http
 	}
 
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.PropertiesResponse{
-		Items: items,
-		Today: openapi_types.Date{Time: page.Today},
+		Items:         items,
+		Today:         openapi_types.Date{Time: page.Today},
+		ArchivedCount: page.ArchivedCount,
 	})
 }
 

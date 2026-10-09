@@ -32,12 +32,6 @@ export type TabBarRowProps = {
   readonly onMoreSelect: () => void;
   /** Тап по табу-ссылке; внутри шита закрывает его перед переходом. */
   readonly onNavigate?: () => void;
-  /** Адрес таба «Объекты» (карта #984): решает ScreenLayout
-   * (usePropertiesNavItem); undefined — href нав-модели (список). */
-  readonly propertiesHref?: string;
-  /** Подпись таба «Объекты» (карта #984): «Объект» у базового тарифа с
-   * единственным объектом; undefined — подпись нав-модели. */
-  readonly propertiesLabel?: string;
   /** Есть непрочитанные уведомления — точка на табе «Уведомления»
    * (Figma 1721:64793 Navigation Button, Show Notification: красная точка
    * 6px с белым кантом на правом-верхнем углу иконки). Число в таб не
@@ -62,8 +56,6 @@ export function TabBarRow({
   moreExpanded = false,
   onMoreSelect,
   onNavigate,
-  propertiesHref,
-  propertiesLabel,
   notificationsUnread = false,
 }: TabBarRowProps): JSX.Element {
   const pathname = usePathname();
@@ -75,8 +67,6 @@ export function TabBarRow({
         <TabNavLink
           key={section.id}
           section={section}
-          href={section.id === 'properties' && propertiesHref !== undefined ? propertiesHref : section.href}
-          label={section.id === 'properties' && propertiesLabel !== undefined ? propertiesLabel : undefined}
           active={activeTab === section.id}
           onClick={onNavigate}
           unreadDot={section.id === 'notifications' && notificationsUnread}
@@ -95,22 +85,16 @@ export function TabBarRow({
 }
 
 /** Пункт-ссылка навигации: таб TabBar и пункты шита «Еще» — одна анатомия
- * (MoreSheet рендерит те же 6 разделов нав-модели этим компонентом). */
+ * (MoreSheet рендерит те же 6 разделов нав-модели этим компонентом).
+ * Адрес и подпись — из нав-модели (решение владельца #1240: оверрайды
+ * пункта «Объекты» снесены вместе с правилом #984). */
 export function TabNavLink({
   section,
-  href,
-  label,
   active,
   onClick,
   unreadDot = false,
 }: {
   readonly section: NavSection;
-  /** Переопределение адреса (пункт «Объекты», карта #984); по умолчанию —
-   * нав-модель. */
-  readonly href?: string;
-  /** Переопределение подписи (пункт «Объекты», карта #984); по умолчанию —
-   * нав-модель. */
-  readonly label?: string;
   readonly active: boolean;
   readonly onClick?: () => void;
   /** Точка непрочитанных поверх иконки (только таб TabBar «Уведомления»,
@@ -118,7 +102,7 @@ export function TabNavLink({
   readonly unreadDot?: boolean;
 }): JSX.Element {
   const intent = useNavIntentLink();
-  const resolvedHref = href ?? section.href;
+  const resolvedHref = section.href;
   if (resolvedHref === undefined) {
     // Программная ошибка: пункты-действия без адреса («Поддержка», #766)
     // рендерятся TabNavAction, не ссылкой.
@@ -135,7 +119,7 @@ export function TabNavLink({
       onFocus={intent.onIntent}
       className={TAB_TRIGGER_CLASS}
     >
-      <TabLabel label={label ?? section.label} Icon={section.Icon} active={active} unreadDot={unreadDot} />
+      <TabLabel label={section.label} Icon={section.Icon} active={active} unreadDot={unreadDot} />
     </Link>
   );
 }

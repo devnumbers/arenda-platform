@@ -18,13 +18,17 @@ test('список объектов: карточки сид-объектов и
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto('/properties');
 
-  // Хаб нового хрома (карта #556, тикет #562): заголовок 28, «+» создания.
-  // Поверхностей создания в хабе три (#586); на десктопном ярусе кликабельна
-  // «+» пилюли — компакт-бар шапки скрыт до скролла, якоримся к пилюле.
+  // Первый блок нового макета (3225-77232, тикет #1234): заголовок 28 с «+»
+  // создания справа; пилюля поиска — канон без «+» (создание в шапке).
   await expect(page.getByRole('heading', { name: 'Объекты', exact: true })).toBeVisible();
+  await expect(page.getByTestId('properties-create')).toBeVisible();
   await expect(
-    page.getByTestId('properties-search-pill').getByRole('button', { name: 'Создать объект' }),
-  ).toBeVisible();
+    page.getByTestId('properties-search-pill').getByRole('button'),
+  ).toHaveCount(0);
+  // У сид-пользователя архива нет — гейт #1233 прячет кнопку «Архив».
+  const sortRow = page.getByTestId('properties-sort-row');
+  await expect(sortRow).toBeVisible();
+  await expect(sortRow.getByRole('button', { name: 'Архив' })).toHaveCount(0);
   for (const name of SEEDED_PROPERTIES) {
     await expect(page.getByText(name, { exact: true })).toBeVisible();
   }
@@ -209,18 +213,20 @@ test('без подписки (404 /subscription): кнопки создания
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto('/properties');
 
-  // Список рисуется, «+» пилюли не disabled и носит защитную подписку
+  // Список рисуется, «+» шапки не disabled и носит защитную подписку
   // (canAdd=false при «подписки нет» — тот же путь, что лимит тарифа).
   await expect(page.getByRole('heading', { name: 'Объекты', exact: true })).toBeVisible();
-  const pillAdd = page
-    .getByTestId('properties-search-pill')
-    .getByRole('button', { name: 'Достигнут лимит объектов по тарифу — сменить тариф' });
-  await expect(pillAdd).toBeVisible();
-  await expect(pillAdd).toBeEnabled();
+  const headerAdd = page.getByTestId('properties-create');
+  await expect(headerAdd).toBeVisible();
+  await expect(headerAdd).toBeEnabled();
+  await expect(headerAdd).toHaveAttribute(
+    'aria-label',
+    'Достигнут лимит объектов по тарифу — сменить тариф',
+  );
 
   // Защитный путь: тап ведёт на «Выбрать тариф», где пикер рисуется
   // (фолбэк «подписки нет ≡ базовый»), а не ошибка загрузки.
-  await pillAdd.click();
+  await headerAdd.click();
   await expect(page).toHaveURL(/\/profile\/tariff\/change$/);
   const tariffRadio = page.getByRole('radiogroup', { name: 'Тариф' });
   await expect(tariffRadio.getByText('Базовый', { exact: true })).toBeVisible();

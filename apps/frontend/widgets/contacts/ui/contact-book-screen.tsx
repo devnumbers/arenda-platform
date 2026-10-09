@@ -44,11 +44,14 @@ import {
 } from './contacts-states';
 
 /**
- * Экран «Контакты» — плоская книга владельца (глобальная страница контактов,
- * макеты 1726:65083/65136/85937): хаб-шапка нового хрома (#565), заголовок
- * раздела 28, поисковая пилюля с «+» (создание контакта книги), чип
- * сортировки и одна серая карточка с группами. Сортировка — серверная:
- * поле «Имя/Объект» × «Возрастание/Убывание» (меню/шит «Сортировать»,
+ * Экран «Контакты» — плоская книга владельца (глобальная страница контактов;
+ * первый блок — макеты карты #1232: экран 3226-74333, хедер 3229-94602,
+ * тикет #1238): хаб-шапка нового хрома (#565), строка заголовка 28 с «+»
+ * создания, поисковая пилюля — чистый канон, чип сортировки и одна серая
+ * карточка с группами. «+» — в ряду заголовка и в правом слоте
+ * компакт-бара; на подтверждённой пустоте книги скрыта — создание остаётся
+ * CTA пустого состояния (#1004). Сортировка — серверная: поле
+ * «Имя/Объект» × «Возрастание/Убывание» (меню/шит «Сортировать»,
  * 1726:65136) уходит в ?sort/order GET /contacts; выбор живёт в query
  * строки (?sort=&order=, конвенция состояния в адресе) — переживает
  * перезагрузку и назад/вперёд. При сортировке по объекту группы — «Общие
@@ -58,9 +61,10 @@ import {
  *
  * Поиск — не здесь: пилюля — кнопка, тап открывает отдельную поисковую
  * страницу /contacts/search с поисковой шапкой 1:1 как у книги объекта
- * (#508; решение владельца 2026-09-05). «+» в пилюле ведёт на создание.
- * Пустая книга (#1004) — EmptyState с CTA «Добавить контакт»; пилюля
- * поиска и служебный чип сортировки прячутся вместе со списком (§7).
+ * (#508; решение владельца 2026-09-05). Пустая книга (#1004) — EmptyState
+ * с CTA «Добавить контакт»; пилюля поиска, «+» и служебный чип сортировки
+ * прячутся вместе со списком (§7). Заголовок «Контакт» на макете —
+ * опечатка, единый термин «Контакты» (карта #1232).
  */
 
 export function ContactBookScreen({
@@ -99,35 +103,62 @@ export function ContactBookScreen({
     sortField === 'property' ? groupBookByProperty(contacts) : groupBookByLetter(contacts);
 
   // Подтверждённая пустота книги (#1004): вне фазы загрузки и без ошибки —
-  // пилюля поиска спрятана (искать нечего), создание — CTA пустого
+  // пилюля поиска и «+» спрятаны (искать нечего), создание — CTA пустого
   // состояния (решение владельца 30.09 меняет «пилюля видна всегда»,
   // 1726:65083; §7).
   const bookEmpty =
     !contactsQuery.isPending && !contactsQuery.isError && contacts.length === 0;
 
+  // Два экземпляра узла (паттерн хаба «Платежей» #1235): у ряда заголовка
+  // свой testid — слоты TopNav рендерят свой узел в трёх местах (крыло,
+  // инлайн-компакт, мобайл-клон), общий testid давал бы строгую
+  // неоднозначность в e2e.
+  const addButton = (
+    <IconButton
+      icon={<Add />}
+      label="Добавить контакт"
+      data-testid="contacts-create"
+      onClick={() => router.push(ROUTES.contactNew)}
+    />
+  );
+  const addButtonCompact = (
+    <IconButton
+      icon={<Add />}
+      label="Добавить контакт"
+      data-testid="contacts-create-compact"
+      onClick={() => router.push(ROUTES.contactNew)}
+    />
+  );
+
   return (
     <>
-      {/* Хаб-шапка: «крылья» (лого + профиль) и на мобайле, поведение
-       * стандартное — в потоке на мобайле, закреплена на планшете и ПК. */}
+      {/* Хаб-шапка: «крылья» (лого + профиль) и на мобайле; в компакт-баре
+       * при сворачивании — лупа и «+» справа (хедер 3229-94602, канон
+       * сворачивания). */}
       <TopNav
         mobileWings
         collapse={{
           title: 'Контакты',
           search: { href: ROUTES.contactSearch, label: 'Найти контакт' },
+          trailing: bookEmpty ? undefined : addButtonCompact,
         }}
       />
 
       <PageContent>
         <HubCollapseAnchor>
-          <HubTitle>Контакты</HubTitle>
+          {/* Строка заголовка h-8 с «+» (макет 3226-74333, паттерн хабов
+           * «Платежей» #1235/«Операций»): кнопка 44 переполняет строку
+           * симметрично — центрирована против линии заголовка. */}
+          <div className="flex h-8 items-center justify-between pr-3.5">
+            <HubTitle>Контакты</HubTitle>
+            {!bookEmpty && addButton}
+          </div>
+
           {!bookEmpty && (
             <div className="mt-4 mb-6 px-6">
-              {/* Пилюля поиска — в ней «+» создания (макет 1726:65083);
-               * на подтверждённой пустоте спрятана (#1004, §7). */}
-              <BookSearchPill
-                onOpenSearch={() => router.push(ROUTES.contactSearch)}
-                onCreate={() => router.push(ROUTES.contactNew)}
-              />
+              {/* Пилюля поиска — чистый канон (макет 3226-74333: без «+»,
+               * тикет #1238); на подтверждённой пустоте спрятана (#1004, §7). */}
+              <BookSearchPill onOpenSearch={() => router.push(ROUTES.contactSearch)} />
             </div>
           )}
         </HubCollapseAnchor>
@@ -137,7 +168,7 @@ export function ContactBookScreen({
             {/* Паритет §7: чип сортировки реальный — вне фазы загрузки
              * (переключение сортировки во время загрузки безвредно: запрос
              * уходит с новым ключом); прячется вместе с пустым списком. */}
-            <div className="mb-4 px-6">
+            <div className="mb-6 px-6">
               <PickerMenu
                 title="Сортировать"
                 groups={sortPickerGroups(sortField, sortOrder, changeSort)}
@@ -155,7 +186,7 @@ export function ContactBookScreen({
               <ContactsEmptyState onAdd={() => router.push(ROUTES.contactNew)} />
             ) : (
               <>
-                <div className="mb-4 px-6">
+                <div className="mb-6 px-6">
                   <PickerMenu
                     title="Сортировать"
                     groups={sortPickerGroups(sortField, sortOrder, changeSort)}
@@ -198,35 +229,16 @@ export function ContactBookScreen({
   );
 }
 
-/** Поисковая пилюля книги (макет 1726:65083, Search Button 1031:20955) —
+/** Поисковая пилюля книги (макет 3226-74333, Search Button 1031:20955) —
  * адаптер канона SearchPill с подписью «Найти контакт»; тап открывает
- * поисковую страницу, «+» справа — создание контакта (кнопка хвоста глушит
- * всплытие клика, активация строки — паттерн useKeyboardActivation,
- * DESIGN.md §6). Экспорт для route-loading (#609). */
+ * поисковую страницу. «+» создания из хвоста пилюли переехал в ряд
+ * заголовка и компакт-бар (тикет #1238). Экспорт для route-loading (#609). */
 export function BookSearchPill({
   onOpenSearch,
-  onCreate,
 }: {
   readonly onOpenSearch: () => void;
-  readonly onCreate: () => void;
 }): JSX.Element {
-  return (
-    <SearchPill
-      onOpenSearch={onOpenSearch}
-      label="Найти контакт"
-      className="pr-2"
-      trailing={
-        <IconButton
-          icon={<Add />}
-          label="Добавить контакт"
-          onClick={(event) => {
-            event.stopPropagation();
-            onCreate();
-          }}
-        />
-      }
-    />
-  );
+  return <SearchPill onOpenSearch={onOpenSearch} label="Найти контакт" />;
 }
 
 /** Чип сортировки книги (макеты 1726:65083/85937): подпись — текущее поле
