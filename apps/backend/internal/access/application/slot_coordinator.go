@@ -127,15 +127,45 @@ func (c *SlotCoordinator) EnforceRecipientLimit(ctx context.Context, tx transact
 	}
 
 	for recipientID := range recipients {
-		if err := c.enforceRecipient(ctx, tx, txMembers, txLimiter, recipientID, trigger); err != nil {
+		if _, err := c.enforceRecipient(ctx, tx, txMembers, txLimiter, recipientID, trigger); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// enforceRecipient rebuilds the full pool for one recipient and suspends excess
-// shared memberships.
+// EnforceRecipientPoolGrowth enforces the recipient tariff slot invariant after
+// the recipient's pool grew by one of their OWN objects re-entering it — the
+// unarchive of an own object (properties UnarchiveProperty) or the billing
+// grace restore (RestoreGraceArchivedProperties); the owner is never a
+// membership row of their own object, so the per-property entries never visit
+// them as a recipient. The full pool (own active properties + active shared
+// memberships across every owner) is recomputed and a pool strictly over the
+// limit is trimmed by the single eviction rule — the oldest shared memberships
+// are suspended, own candidates are never touched (unlike the billing
+// downgrade path there is no PropertyArchiver here, and the returning own
+// object is exactly what must stay). The suspended memberships are returned so
+// the caller can dispatch their realtime access pairs post-commit (the
+// unarchive path); the background grace restore deliberately drops them.
+// Already-suspended memberships sit outside the active pool, so a repeat call
+// is a no-op — and the fresh suspended_at of a newly suspended leg puts it at
+// the tail of the FIFO recovery queue (accepted side effect, D13: #1297,
+// #1300 Q1).
+func (c *SlotCoordinator) EnforceRecipientPoolGrowth(
+	ctx context.Context, tx transaction.Tx, recipientID uuid.UUID, trigger string,
+) ([]domain.Membership, error) {
+	txMembers := c.members.WithTx(tx)
+
+	txLimiter, err := c.limiter.WithTx(tx)
+	if err != nil {
+		return nil, fmt.Errorf("bind limiter tx: %w", err)
+	}
+	return c.enforceRecipient(ctx, tx, txMembers, txLimiter, recipientID, trigger)
+}
+
+// enforceRecipient rebuilds the full pool for one recipient, suspends the
+// excess shared memberships and returns them — the legs the caller dispatches
+// as realtime access pairs.
 func (c *SlotCoordinator) enforceRecipient(
 	ctx context.Context,
 	tx transaction.Tx,
@@ -143,21 +173,22 @@ func (c *SlotCoordinator) enforceRecipient(
 	txLimiter RecipientLimiter,
 	recipientID uuid.UUID,
 	trigger string,
-) error {
+) ([]domain.Membership, error) {
 	txOwned, err := c.ownedProps.WithTx(tx)
 	if err != nil {
-		return fmt.Errorf("bind owned-props tx: %w", err)
+		return nil, fmt.Errorf("bind owned-props tx: %w", err)
 	}
 	pool, err := c.buildRecipientPool(ctx, txOwned, txMembers, recipientID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	limit, err := txLimiter.ActivePropertyLimit(ctx, recipientID)
 	if err != nil {
-		return fmt.Errorf("recipient limit: %w", err)
+		return nil, fmt.Errorf("recipient limit: %w", err)
 	}
 
+	var suspended []domain.Membership
 	toEvict := SelectForEviction(pool, limit)
 	for _, cand := range toEvict {
 		// Own objects are auto-archived by PropertyArchiver in the same tx; the
@@ -166,8 +197,15 @@ func (c *SlotCoordinator) enforceRecipient(
 			continue
 		}
 		if err := txMembers.Suspend(ctx, cand.MemberID, cand.PropertyID); err != nil {
-			return fmt.Errorf("suspend membership %s: %w", cand.MemberID, err)
+			return nil, fmt.Errorf("suspend membership %s: %w", cand.MemberID, err)
 		}
+		// The reloaded row is the leg the caller dispatches: it carries the
+		// suspended status and the fresh suspended_at the FIFO queue orders by.
+		leg, err := txMembers.GetByID(ctx, cand.MemberID, cand.PropertyID)
+		if err != nil {
+			return nil, fmt.Errorf("reload suspended membership %s: %w", cand.MemberID, err)
+		}
+		suspended = append(suspended, leg)
 		propertyID := cand.PropertyID
 		if err := c.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 			ActorRole:  auditdomain.ActorRoleSystem,
@@ -180,7 +218,7 @@ func (c *SlotCoordinator) enforceRecipient(
 				auditKeyUserID:     recipientID,
 			},
 		}); err != nil {
-			return fmt.Errorf("record suspend audit: %w", err)
+			return nil, fmt.Errorf("record suspend audit: %w", err)
 		}
 		// The paused-access notification per suspended membership (карта #734,
 		// #751) — in-transaction, best-effort; the summary email this replaces
@@ -195,7 +233,7 @@ func (c *SlotCoordinator) enforceRecipient(
 			})
 		})
 	}
-	return nil
+	return suspended, nil
 }
 
 // EnforceOnActivation reports whether a new membership for recipientID must be
@@ -204,6 +242,26 @@ func (c *SlotCoordinator) enforceRecipient(
 // recipient's pool is already at or above the limit, so the new grant does not
 // displace an existing active object.
 func (c *SlotCoordinator) EnforceOnActivation(ctx context.Context, tx transaction.Tx, recipientID uuid.UUID) (bool, error) {
+	return c.poolAtOrAboveLimit(ctx, tx, recipientID)
+}
+
+// RecipientPoolFull reports whether the recipient's tariff pool (own active
+// properties plus active shared memberships across every owner) already
+// occupies every slot — used >= limit. It is the honest-refusal predicate of
+// the properties creation (D13, #1300 Q2): a full pool refuses the new object
+// with ErrLimitExceeded outright instead of silently suspending someone else's
+// active access — creation returns nothing, so there is nothing to displace.
+// The same predicate EnforceOnActivation asks for a new membership grant.
+func (c *SlotCoordinator) RecipientPoolFull(ctx context.Context, tx transaction.Tx, recipientID uuid.UUID) (bool, error) {
+	return c.poolAtOrAboveLimit(ctx, tx, recipientID)
+}
+
+// poolAtOrAboveLimit is the shared pre-growth predicate: no free slot exists
+// for anything new (a membership grant must be created suspended; a property
+// creation is refused).
+func (c *SlotCoordinator) poolAtOrAboveLimit(
+	ctx context.Context, tx transaction.Tx, recipientID uuid.UUID,
+) (bool, error) {
 	txMembers := c.members.WithTx(tx)
 
 	txLimiter, err := c.limiter.WithTx(tx)
@@ -214,6 +272,11 @@ func (c *SlotCoordinator) EnforceOnActivation(ctx context.Context, tx transactio
 	if err != nil {
 		return false, fmt.Errorf("recipient limit: %w", err)
 	}
+	// The package convention (SelectForEviction): a negative limit is an
+	// unlimited tariff — the pool is never full, nothing is ever refused.
+	if limit < 0 {
+		return false, nil
+	}
 
 	txOwned, err := c.ownedProps.WithTx(tx)
 	if err != nil {
@@ -223,7 +286,7 @@ func (c *SlotCoordinator) EnforceOnActivation(ctx context.Context, tx transactio
 	if err != nil {
 		return false, err
 	}
-	// Used >= limit means there is no free slot for the new membership.
+	// Used >= limit means there is no free slot for what comes next.
 	return used >= limit, nil
 }
 

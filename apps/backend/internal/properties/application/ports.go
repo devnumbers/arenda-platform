@@ -165,24 +165,33 @@ type RentalDeletionGuard interface {
 // no slot policy runs (pre-T4 behaviour). RecoverSuspendedForProperty is called
 // when the owner archives a shared object (a slot freed for each recipient);
 // EnforceOnUnarchiveForProperty is called when the owner unarchives a shared
-// object (the object re-enters the recipients' pool); RecoverAfterPropertyDelete
-// is called before the owner deletes a shared object (the memberships are
-// dropped and the freed slots recovered FIFO). RecoverSuspended is called when
-// an owner frees one of their OWN tariff slots (archive/delete of an own object,
-// or the billing auto-archive): the owner is never a member row of their own
-// object, so the per-property entries above do not visit them as a recipient —
-// this per-recipient entry reactivates the owner's own suspended shared queue
-// FIFO. The recoveries return the reactivated membership rows — the caller
-// may collect their access pairs for the realtime dispatch (карта #714,
-// #716; ADR 0062). EnforceOnUnarchiveForProperty returns the memberships it
-// suspended — the mirror image of the recoveries: a re-entered pool suspends
-// the over-limit legs, and the suspended legs dirty their objects'
-// participants views the same way. See issue #158 (T4).
+// object (the object re-enters the recipients' pool);
+// RecoverAfterPropertyDelete is called before the owner deletes a shared
+// object (the memberships are dropped and the freed slots recovered FIFO).
+// RecoverSuspended is called when an owner frees one of their OWN tariff slots
+// (archive/delete of an own object, or the billing auto-archive): the owner is
+// never a member row of their own object, so the per-property entries above do
+// not visit them as a recipient — this per-recipient entry reactivates the
+// owner's own suspended shared queue FIFO. EnforceRecipientPoolGrowth is the
+// per-recipient mirror on the growth side (D13, #1297): the recipient's own
+// object re-entered their pool (unarchive, grace restore), and the excess
+// shared memberships beyond the limit are suspended by the single eviction
+// rule — the oldest shared first, own candidates untouched. RecipientPoolFull
+// is the honest-refusal predicate of CreateProperty (#1300 Q2): the full pool
+// (own + shared) already occupies every slot, so the creation is refused
+// instead of silently suspending someone else's active access. The recoveries
+// and the growth enforcement return the affected membership rows — the caller
+// may collect their access pairs for the realtime dispatch (карта #714, #716;
+// ADR 0062). See issue #158 (T4).
 type RecipientSlotPolicy interface {
 	RecoverSuspendedForProperty(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) ([]accessdomain.Membership, error)
 	EnforceOnUnarchiveForProperty(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) ([]accessdomain.Membership, error)
 	RecoverAfterPropertyDelete(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) ([]accessdomain.Membership, error)
 	RecoverSuspended(ctx context.Context, tx transaction.Tx, recipientID uuid.UUID) ([]accessdomain.Membership, error)
+	EnforceRecipientPoolGrowth(
+		ctx context.Context, tx transaction.Tx, recipientID uuid.UUID, trigger string,
+	) ([]accessdomain.Membership, error)
+	RecipientPoolFull(ctx context.Context, tx transaction.Tx, recipientID uuid.UUID) (bool, error)
 }
 
 // SharedMembersDeleteMailer bridges the property deletion flow to the access

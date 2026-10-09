@@ -315,17 +315,8 @@ func (s *PropertyService) CreateProperty(ctx context.Context, actor uuid.UUID, c
 
 	var created domain.Property
 	err = s.runInTx(ctx, func(stores *txStores) error {
-		limit, err := stores.limiter.ActivePropertyLimit(ctx, actor)
-		if err != nil {
-			return fmt.Errorf("get active property limit: %w", err)
-		}
-
-		count, err := stores.repo.CountActiveByOwner(ctx, actor)
-		if err != nil {
-			return fmt.Errorf("count active properties: %w", err)
-		}
-		if count >= limit {
-			return ErrLimitExceeded
+		if err := s.ensureCreationSlot(ctx, stores, actor); err != nil {
+			return err
 		}
 
 		created, err = stores.repo.Create(ctx, actor, property)
@@ -1422,8 +1413,9 @@ func (s *PropertyService) ArchiveExcessProperties(
 // limit is unlimited. The ids restore in the given (restoration-priority)
 // order; an id gone or already active since the snapshot is skipped as
 // settled. Every restoration mirrors a manual unarchive: the audit entry
-// names the grace_restore trigger and the recipient slots are re-enforced for
-// the property. Returns the ids it could not restore — the debt remainder
+// names the grace_restore trigger, the recipient slots are re-enforced for
+// the property and the owner's own pool growth is re-enforced with the same
+// trigger (D13). Returns the ids it could not restore — the debt remainder
 // still archived beyond the limit, in the given order (nil when everything
 // settled).
 func (s *PropertyService) RestoreGraceArchivedProperties(
@@ -1479,6 +1471,14 @@ func (s *PropertyService) RestoreGraceArchivedProperties(
 		if s.slots != nil {
 			if _, err := s.slots.EnforceOnUnarchiveForProperty(ctx, tx, id); err != nil {
 				return nil, fmt.Errorf("enforce recipient slot on grace restore: %w", err)
+			}
+			// The owner's own pool grew too — the restored object re-entered it
+			// (D13, #1297): the full pool is re-enforced (the excess shared
+			// memberships suspended, the restored own objects stay). The legs
+			// are dropped for the same reason as above: a background billing
+			// phase publishes nothing.
+			if _, err := s.slots.EnforceRecipientPoolGrowth(ctx, tx, scope, "grace_restore"); err != nil {
+				return nil, fmt.Errorf("enforce recipient pool growth on grace restore: %w", err)
 			}
 		}
 	}
@@ -1541,6 +1541,19 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, actor, id uuid.
 				return fmt.Errorf("enforce recipient slot on unarchive: %w", err)
 			}
 			suspended = append(suspended, legs...)
+			// The actor's OWN pool grew too — the unarchived object re-entered it
+			// (D13, #1297): the owner is never a member row of their own object,
+			// so the per-property entry above does not visit them as a recipient.
+			// The full pool is re-enforced: the excess shared memberships beyond
+			// the limit are suspended (the oldest first, the returning own object
+			// stays), never the own candidates. The legs ride the same post-commit
+			// dispatch — a suspended shared object is exactly the blur-card state
+			// the recipient's clients must refetch.
+			legs, err = s.slots.EnforceRecipientPoolGrowth(ctx, stores.tx, actor, "unarchive")
+			if err != nil {
+				return fmt.Errorf("enforce recipient pool growth on unarchive: %w", err)
+			}
+			suspended = append(suspended, legs...)
 		}
 		return nil
 	})
@@ -1585,6 +1598,28 @@ func ensureActivePropertySlot(ctx context.Context, stores *txStores, owner uuid.
 		return fmt.Errorf("count active properties: %w", err)
 	}
 	if count >= limit {
+		return ErrLimitExceeded
+	}
+	return nil
+}
+
+// ensureCreationSlot is CreateProperty's limit gate — the honest refusal of
+// #1300 Q2 (D13): the budget is the recipient's FULL pool (own active objects
+// plus the active shared memberships they hold), and a full pool refuses the
+// creation outright with ErrLimitExceeded — creation returns nothing, so
+// silently suspending someone else's active access to fit the new object in is
+// less predictable than an honest «лимит превышен». The full-pool predicate
+// lives in the slot policy; without it wired (pre-T4 behaviour) the own-count
+// check is the fallback.
+func (s *PropertyService) ensureCreationSlot(ctx context.Context, stores *txStores, actor uuid.UUID) error {
+	if s.slots == nil {
+		return ensureActivePropertySlot(ctx, stores, actor)
+	}
+	full, err := s.slots.RecipientPoolFull(ctx, stores.tx, actor)
+	if err != nil {
+		return fmt.Errorf("check recipient pool: %w", err)
+	}
+	if full {
 		return ErrLimitExceeded
 	}
 	return nil

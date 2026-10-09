@@ -57,7 +57,7 @@ func TestHistory_PropertyMutationRows(t *testing.T) {
 	ctx := context.Background()
 
 	created, err := svc.CreateProperty(ctx, owner, CreatePropertyCommand{
-		Name: "Новая квартира", Address: renamedAddress, Type: "apartment",
+		Name: testNewPropertyName, Address: renamedAddress, Type: "apartment",
 	})
 	if err != nil {
 		t.Fatalf("CreateProperty: %v", err)
