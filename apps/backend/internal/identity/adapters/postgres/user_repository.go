@@ -38,6 +38,9 @@ func (r *UserRepository) WithTx(tx transaction.Tx) (application.UserRepository, 
 	return NewUserRepository(dbtx, r.enc), nil
 }
 
+// The adapter satisfies the consumer-declared port (CODING_STANDARDS).
+var _ application.SharedPropertyChecker = (*UserRepository)(nil)
+
 func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.User, error) {
 	row, err := r.q().GetUserByID(ctx, pgconv.UUIDToPgtype(id))
 	if err != nil {
@@ -58,6 +61,23 @@ func (r *UserRepository) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (do
 		return domain.User{}, fmt.Errorf("get user by id for update: %w", err)
 	}
 	return mapUser(ctx, r.enc, userSourceFromUser(row).toUserRow())
+}
+
+// ShareReadableProperty answers whether the two users are connected through
+// at least one property both sides can read (ADR 0028 derived read,
+// symmetric) — the gate of the foreign profile-photo reads (ADR 0065,
+// решение владельца #1286). Implements the application's
+// SharedPropertyChecker port; the verdict is one SQL query, no user rows
+// leave the database.
+func (r *UserRepository) ShareReadableProperty(ctx context.Context, viewerID, userID uuid.UUID) (bool, error) {
+	shared, err := r.q().UsersShareReadableProperty(ctx, pgen.UsersShareReadablePropertyParams{
+		ViewerID: pgconv.UUIDToPgtype(viewerID),
+		UserID:   pgconv.UUIDToPgtype(userID),
+	})
+	if err != nil {
+		return false, fmt.Errorf("check shared readable property: %w", err)
+	}
+	return shared, nil
 }
 
 func (r *UserRepository) GetByPhone(ctx context.Context, phone domain.Phone) (domain.User, error) {

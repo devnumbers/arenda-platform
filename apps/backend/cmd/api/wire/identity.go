@@ -167,7 +167,10 @@ func WireIdentity(
 		},
 	)
 
-	profileService := identityapp.NewProfileService(factory, photoStorage, p.Logger)
+	// The shared-property checker gates the foreign profile-photo reads
+	// (ADR 0065, решение #1286): the user repository answers the
+	// symmetric shared-readable-property query.
+	profileService := identityapp.NewProfileService(factory, photoStorage, userRepo, p.Logger)
 
 	logoutService := identityapp.NewLogoutService(
 		factory,

@@ -292,3 +292,25 @@ SET photo_key = $2,
     updated_at = now()
 WHERE id = $1
 RETURNING *;
+
+-- name: UsersShareReadableProperty :one
+-- The gate of the foreign profile-photo read (ADR 0065, решение владельца
+-- #1286 — «показ участникам»): the two users are connected when at least
+-- one property is readable by both sides (ADR 0028 derived read,
+-- symmetric). The candidate set is the target user's readable properties —
+-- owned, or held as an active member (suspended/revoked answers «нет»
+-- inside the canonical function); the viewer's side is the canonical SQL
+-- function actor_can_read_property (000142, #884) — the derived-read
+-- predicate is not re-encoded here, and EXISTS stops on the first shared
+-- property.
+SELECT EXISTS (
+    SELECT 1
+    FROM properties p
+    WHERE (p.owner_id = sqlc.arg('user_id')::uuid
+           OR EXISTS (
+               SELECT 1 FROM property_members m
+               WHERE m.property_id = p.id
+                 AND m.user_id = sqlc.arg('user_id')::uuid
+                 AND m.status = 'active'))
+      AND actor_can_read_property(p.id, sqlc.arg('viewer_id')::uuid)
+) AS shared;

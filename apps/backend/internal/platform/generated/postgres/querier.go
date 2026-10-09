@@ -947,6 +947,11 @@ type Querier interface {
 	// TestParticipantRepository_ManageScopePredicateMatrix runs the same actor
 	// verdict across all three queries and stays the gate: semantic drift of the
 	// function fails there instead of opening a silent privacy hole.
+	// The scope rows carry the leg avatar pair (решение #1286, остаток #1244
+	// п.3): the property type — the placeholder glyph's key — and the photo's
+	// same-origin streaming path (ADR 0065), so the participant read model's
+	// legs are self-sufficient and the client needs no /properties join (a cold
+	// cache no longer renders BoldHome).
 	ListParticipantScopeProperties(ctx context.Context, actorID pgtype.UUID) ([]ListParticipantScopePropertiesRow, error)
 	// One zone's auto-pay-executed operations as of the zone's today (#1169,
 	// карта #1162; решение владельца по гриллингу #1167): planned occurrences
@@ -1527,6 +1532,16 @@ type Querier interface {
 	// желаемое состояние явно, дефолт omitted-категорий — все ВКЛ. Мастер-состояние
 	// устройства — само существование строки: строка есть = включено.
 	UpsertPushSubscription(ctx context.Context, arg UpsertPushSubscriptionParams) (PushSubscription, error)
+	// The gate of the foreign profile-photo read (ADR 0065, решение владельца
+	// #1286 — «показ участникам»): the two users are connected when at least
+	// one property is readable by both sides (ADR 0028 derived read,
+	// symmetric). The candidate set is the target user's readable properties —
+	// owned, or held as an active member (suspended/revoked answers «нет»
+	// inside the canonical function); the viewer's side is the canonical SQL
+	// function actor_can_read_property (000142, #884) — the derived-read
+	// predicate is not re-encoded here, and EXISTS stops on the first shared
+	// property.
+	UsersShareReadableProperty(ctx context.Context, arg UsersShareReadablePropertyParams) (bool, error)
 }
 
 var _ Querier = (*Queries)(nil)

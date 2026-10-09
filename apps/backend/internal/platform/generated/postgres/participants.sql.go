@@ -177,7 +177,10 @@ func (q *Queries) ListParticipantMembershipsForRemoval(ctx context.Context, arg 
 
 const listParticipantScopeProperties = `-- name: ListParticipantScopeProperties :many
 
-SELECT p.id, p.owner_id, p.name AS title
+SELECT p.id, p.owner_id, p.name AS title, p.type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/v1/properties/' || p.id::text || '/photo'
+                     END, '')::text AS photo_path
 FROM properties p
 WHERE p.status <> 'archived'
   AND actor_can_manage(p.id, $1::uuid)
@@ -185,9 +188,11 @@ ORDER BY p.name ASC, p.id ASC
 `
 
 type ListParticipantScopePropertiesRow struct {
-	ID      pgtype.UUID `json:"id"`
-	OwnerID pgtype.UUID `json:"owner_id"`
-	Title   string      `json:"title"`
+	ID        pgtype.UUID `json:"id"`
+	OwnerID   pgtype.UUID `json:"owner_id"`
+	Title     string      `json:"title"`
+	Type      string      `json:"type"`
+	PhotoPath string      `json:"photo_path"`
 }
 
 // The «Участник (владельца)» read model (issue #693): an aggregate over
@@ -209,6 +214,11 @@ type ListParticipantScopePropertiesRow struct {
 // TestParticipantRepository_ManageScopePredicateMatrix runs the same actor
 // verdict across all three queries and stays the gate: semantic drift of the
 // function fails there instead of opening a silent privacy hole.
+// The scope rows carry the leg avatar pair (решение #1286, остаток #1244
+// п.3): the property type — the placeholder glyph's key — and the photo's
+// same-origin streaming path (ADR 0065), so the participant read model's
+// legs are self-sufficient and the client needs no /properties join (a cold
+// cache no longer renders BoldHome).
 func (q *Queries) ListParticipantScopeProperties(ctx context.Context, actorID pgtype.UUID) ([]ListParticipantScopePropertiesRow, error) {
 	rows, err := q.db.Query(ctx, listParticipantScopeProperties, actorID)
 	if err != nil {
@@ -218,7 +228,13 @@ func (q *Queries) ListParticipantScopeProperties(ctx context.Context, actorID pg
 	items := []ListParticipantScopePropertiesRow{}
 	for rows.Next() {
 		var i ListParticipantScopePropertiesRow
-		if err := rows.Scan(&i.ID, &i.OwnerID, &i.Title); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.Title,
+			&i.Type,
+			&i.PhotoPath,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

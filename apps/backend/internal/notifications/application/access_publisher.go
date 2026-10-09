@@ -25,10 +25,13 @@ type AccessPropertyView struct {
 // AccessUserProfile is the display snapshot of a user an access event names:
 // the display name (the access canon — the name, or the anonymous label
 // «Пользователь» when the profile has none; карта #1105, аменд #1123) and
-// the email the actor card shows (#745).
+// the email the actor card shows (#745), and the profile photo's streaming
+// path (ADR 0065, решение #1286) the actor circle renders; ” when the
+// profile has no photo.
 type AccessUserProfile struct {
 	DisplayName string
 	Email       string
+	Photo       string
 }
 
 // AccessEventViewSource resolves the display snapshots of the access
@@ -409,6 +412,7 @@ func accessPayload(
 			ID:    actorID,
 			Name:  actor.DisplayName,
 			Email: actor.Email,
+			Photo: actor.Photo,
 		}
 	}
 	return payload

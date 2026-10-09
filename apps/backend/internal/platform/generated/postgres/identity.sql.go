@@ -1404,3 +1404,38 @@ func (q *Queries) UpdateUserPhone(ctx context.Context, arg UpdateUserPhoneParams
 	)
 	return i, err
 }
+
+const usersShareReadableProperty = `-- name: UsersShareReadableProperty :one
+SELECT EXISTS (
+    SELECT 1
+    FROM properties p
+    WHERE (p.owner_id = $1::uuid
+           OR EXISTS (
+               SELECT 1 FROM property_members m
+               WHERE m.property_id = p.id
+                 AND m.user_id = $1::uuid
+                 AND m.status = 'active'))
+      AND actor_can_read_property(p.id, $2::uuid)
+) AS shared
+`
+
+type UsersShareReadablePropertyParams struct {
+	UserID   pgtype.UUID `json:"user_id"`
+	ViewerID pgtype.UUID `json:"viewer_id"`
+}
+
+// The gate of the foreign profile-photo read (ADR 0065, решение владельца
+// #1286 — «показ участникам»): the two users are connected when at least
+// one property is readable by both sides (ADR 0028 derived read,
+// symmetric). The candidate set is the target user's readable properties —
+// owned, or held as an active member (suspended/revoked answers «нет»
+// inside the canonical function); the viewer's side is the canonical SQL
+// function actor_can_read_property (000142, #884) — the derived-read
+// predicate is not re-encoded here, and EXISTS stops on the first shared
+// property.
+func (q *Queries) UsersShareReadableProperty(ctx context.Context, arg UsersShareReadablePropertyParams) (bool, error) {
+	row := q.db.QueryRow(ctx, usersShareReadableProperty, arg.UserID, arg.ViewerID)
+	var shared bool
+	err := row.Scan(&shared)
+	return shared, err
+}

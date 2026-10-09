@@ -211,7 +211,12 @@ func memberResponse(m accessapp.Member) openapi.PropertyAccessMemberResponse {
 	resp.Status = openapi.PropertyAccessMemberResponseStatus(m.Status.String())
 	resp.SuspendedAt = m.SuspendedAt
 	if m.DisplayName != "" {
-		resp.DisplayName = &m.DisplayName
+		displayName := m.DisplayName
+		resp.DisplayName = &displayName
+	}
+	if m.PhotoURL != "" {
+		photoURL := m.PhotoURL
+		resp.PhotoUrl = &photoURL
 	}
 	if !m.IsOwner {
 		id := m.ID

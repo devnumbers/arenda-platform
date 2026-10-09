@@ -47,9 +47,11 @@ func (r *ParticipantRepository) ListScopeProperties(
 	out := make([]application.ParticipantScopeProperty, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, application.ParticipantScopeProperty{
-			ID:      pgconv.UUIDFromPgtype(row.ID),
-			OwnerID: pgconv.UUIDFromPgtype(row.OwnerID),
-			Title:   row.Title,
+			ID:        pgconv.UUIDFromPgtype(row.ID),
+			OwnerID:   pgconv.UUIDFromPgtype(row.OwnerID),
+			Title:     row.Title,
+			Type:      row.Type,
+			PhotoPath: row.PhotoPath,
 		})
 	}
 	return out, nil

@@ -75,6 +75,7 @@ func (f *fakeAccessibleCounter) CountActiveByUser(ctx context.Context, userID uu
 type participantFixture struct {
 	svc    *ParticipantService
 	read   *fakeParticipantRead
+	users  *fakeParticipantUsers
 	scope  []ParticipantScopeProperty
 	owner  uuid.UUID
 	u1     uuid.UUID
@@ -117,12 +118,13 @@ func newParticipantFixture(t *testing.T) *participantFixture {
 	name := "Иван"
 	surname := "Иванов"
 	phone := "+79991234567" // The phone-only user's display name is «Пользователь» (карта #1105, аменд #1123).
+	f.users = &fakeParticipantUsers{users: map[uuid.UUID]MemberUser{
+		f.u1: {ID: f.u1, Name: &name, Surname: &surname},
+		f.u2: {ID: f.u2, Phone: phone},
+	}}
 	f.svc = NewParticipantService(
 		f.read,
-		&fakeParticipantUsers{users: map[uuid.UUID]MemberUser{
-			f.u1: {ID: f.u1, Name: &name, Surname: &surname},
-			f.u2: {ID: f.u2, Phone: phone},
-		}},
+		f.users,
 		&fakeParticipantEmails{emails: map[uuid.UUID]string{f.u1: "u1@x.ru"}},
 		&fakeAccessibleCounter{count: 1},
 		slog.New(slog.DiscardHandler),

@@ -178,7 +178,8 @@ func newIntegrationHarness(t *testing.T) *integrationHarness {
 			Hasher:     enc,
 			Logger:     logger,
 		}),
-		profile: identityapp.NewProfileService(factory, objectstorage.NewFakeStorage(), slog.New(slog.DiscardHandler)),
+		profile: identityapp.NewProfileService(factory, objectstorage.NewFakeStorage(),
+			staticSharedChecker(false), slog.New(slog.DiscardHandler)),
 		logout: identityapp.NewLogoutService(factory, identityapp.LogoutServiceConfig{
 			Hasher: enc,
 			Logger: slog.New(slog.DiscardHandler),
@@ -303,4 +304,12 @@ func (h *integrationHarness) userIDForPhone(t *testing.T, phone domain.Phone) uu
 		t.Fatalf("GetByPhone %s: %v", phone, err)
 	}
 	return user.ID
+}
+
+// staticSharedChecker is the SharedPropertyChecker double of the harness: a
+// canned verdict — false (no relation) unless a test opts in.
+type staticSharedChecker bool
+
+func (c staticSharedChecker) ShareReadableProperty(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
+	return bool(c), nil
 }

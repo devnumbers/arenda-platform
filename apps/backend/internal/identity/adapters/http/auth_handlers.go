@@ -5,7 +5,6 @@ package http
 import (
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 
@@ -130,12 +129,13 @@ type Profiler interface {
 }
 
 // ProfilePhotos serves the profile photo flows (ADR 0065): one image per
-// profile, uploaded and streamed through the backend, readable by the owner
-// only. The descriptor powers the serving ETag (the storage key hash) so a
-// 304 is answered without a storage read.
+// profile, uploaded and streamed through the backend. The viewer is gated in
+// the service: the owner reads their own photo, a foreign read needs a
+// readable shared property (решение #1286). The descriptor powers the serving
+// ETag (the storage key hash) so a 304 is answered without a storage read.
 type ProfilePhotos interface {
-	PhotoDescriptor(ctx context.Context, userID uuid.UUID) (key, contentType string, err error)
-	OpenPhoto(ctx context.Context, userID uuid.UUID) (body io.ReadCloser, size int64, contentType, key string, err error)
+	PhotoDescriptor(ctx context.Context, viewerID, userID uuid.UUID) (key, contentType string, err error)
+	OpenPhoto(ctx context.Context, viewerID, userID uuid.UUID) (application.OpenedPhoto, error)
 	SetProfilePhoto(ctx context.Context, userID uuid.UUID, processed photo.Processed) (domain.User, error)
 	DeleteProfilePhoto(ctx context.Context, userID uuid.UUID) (domain.User, error)
 }

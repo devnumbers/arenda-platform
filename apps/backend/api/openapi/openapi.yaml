@@ -194,6 +194,48 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+  /users/{userId}/photo:
+    get:
+      operationId: getUserPhoto
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: >
+            The profile photo bytes, streamed by the backend (ADR 0065;
+            решение владельца #1286 — то самое «показ участникам» из ADR
+            0065): читает сам пользователь и каждый, с кем их связывает
+            хотя бы один объект, читаемый обеими сторонами (ADR 0028,
+            derived read, симметрично). Нет связи или нет фото — один и тот
+            же 404: существование фото не раскрывается. Cookie-auth,
+            Cache-Control private, ETag — хеш ключа: совпавший
+            If-None-Match отвечает 304 без чтения хранилища.
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        '304':
+          description: The client's ETag still matches the current photo.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /me/phone/send-code:
     post:
       operationId: sendPhoneChangeCode
@@ -7679,6 +7721,17 @@ components:
             Participant display name (name and surname, or the anonymous
             label «Пользователь» — карта #1105, аменд #1123). Never a phone,
             never an email.
+        photo_url:
+          type: string
+          nullable: true
+          description: >
+            The participant's profile photo same-origin streaming path (ADR
+            0065, решение #1286): /api/v1/users/{userId}/photo — every reader
+            of the list shares this property with every listed participant.
+            Null for a pending row, the synthesized owner without a photo,
+            or a user without a photo; a suspended member's path answers 404
+            (suspended access sees nothing) and the client falls back to the
+            placeholder.
         status:
           type: string
           enum: [active, suspended, pending]
@@ -7773,6 +7826,15 @@ components:
             The person's display name (name and surname, or the anonymous
             label «Пользователь» — карта #1105, аменд #1123);
             null for a pending row (the email is the label).
+        photo_url:
+          type: string
+          nullable: true
+          description: >
+            The registered user's profile photo same-origin streaming path
+            (ADR 0065; решение владельца #1286): /api/v1/users/{userId}/photo,
+            readable while the reader shares a readable property with the
+            user; a revoked access answers 404 and the client falls back to
+            the placeholder. Null for a pending row or a user without a photo.
         aggregate_status:
           type: string
           enum: [all_properties, partial, limit_exceeded]
@@ -7794,7 +7856,7 @@ components:
 
     ParticipantPropertyResponse:
       type: object
-      required: [property_id, title, role, status]
+      required: [property_id, title, role, status, type, photo_url]
       properties:
         property_id:
           type: string
@@ -7810,6 +7872,16 @@ components:
           description: >
             The access lifecycle on this property: "active"/"suspended"
             memberships, "pending" email invitation.
+        type:
+          $ref: '#/components/schemas/PropertyType'
+        photo_url:
+          type: string
+          nullable: true
+          description: >
+            The property photo's same-origin streaming path (ADR 0065),
+            live at read; null when the property has no photo. The leg row
+            is self-sufficient — the client needs no /properties join for
+            the avatar (остаток #1244 п.3, решение #1286).
 
     ParticipantsSummaryResponse:
       type: object
@@ -8298,6 +8370,7 @@ components:
         - property_name
         - actor_name
         - actor_email
+        - actor_photo_url
         - actor_role
         - kind
         - action
@@ -8329,6 +8402,15 @@ components:
         actor_email:
           type: string
           description: Снимок почты актёра (видна всем участникам, решение 2026-09-20); '' — почты не было.
+        actor_photo_url:
+          type: string
+          nullable: true
+          description: >
+            Аватар актёра — same-origin путь стриминга фото профиля (ADR 0065,
+            решение #1286), живой на чтение; null — у актёра нет фото или
+            запись обезличена. Чтение эндпоинта регулируется связью по общему
+            объекту: у отозванного участника путь отвечает 404, строка
+            откатывается на заглушку.
         actor_role:
           type: string
           enum: [owner, full_access, viewer]
@@ -8423,7 +8505,7 @@ components:
         is_owner — замок владельца объектов (макет 2067-163528); role —
         иконка роли строки (макет 2184-94261): максимальный доступ в области,
         живое членство сильнее снимка журнала отозванного участника.
-      required: [id, name, email, first_name, is_owner, role]
+      required: [id, name, email, first_name, is_owner, photo_url, role]
       properties:
         id:
           type: string
@@ -8439,6 +8521,14 @@ components:
         is_owner:
           type: boolean
           description: Пользователь владеет хотя бы одним объектом области чтения.
+        photo_url:
+          type: string
+          nullable: true
+          description: >
+            Аватар участника — same-origin путь стриминга фото профиля
+            (ADR 0065, решение #1286), живой на чтение; null — фото нет.
+            Отозванный участник остаётся опцией фильтра: его путь отвечает
+            404, строка откатывается на заглушку.
         role:
           type: string
           enum: [owner, full_access, viewer]

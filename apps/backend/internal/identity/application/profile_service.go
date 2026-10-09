@@ -15,6 +15,14 @@ import (
 	storageshared "github.com/nambers/arenda-planform/apps/backend/internal/shared/storage"
 )
 
+// SharedPropertyChecker reports whether two users are connected through at
+// least one property both sides can read (ADR 0028 derived read, symmetric:
+// owner↔member and co-members). The gate of the shared profile-photo reads
+// (ADR 0065, решение владельца #1286); a checker outage fails closed.
+type SharedPropertyChecker interface {
+	ShareReadableProperty(ctx context.Context, viewerID, userID uuid.UUID) (bool, error)
+}
+
 // ProfileService provides read and update operations for the user's own profile.
 //
 // It embeds the identity txStoreFactory so UpdateProfile runs through runInTx
@@ -27,6 +35,10 @@ type ProfileService struct {
 	// private storage under a fresh UUID key, the serving endpoints open it
 	// back — no public URL ever exists.
 	photos storageshared.PhotoStorage
+	// The shared checker gates reading another user's photo (решение #1286):
+	// self-reads never consult it, foreign reads need a readable shared
+	// property and fail closed on a checker outage.
+	shared SharedPropertyChecker
 	// The logger reports the best-effort orphan cleanups.
 	logger *slog.Logger
 }
@@ -34,10 +46,13 @@ type ProfileService struct {
 // NewProfileService creates a ProfileService. It embeds the shared identity
 // txStoreFactory so UpdateProfile runs through runInTx; the repositories and
 // audit recorder are shared by every identity service (ADR 0033 γ-factory).
-// The photos port streams the profile photo (ADR 0065); the logger is the
+// The photos port streams the profile photo (ADR 0065); the shared checker
+// gates the foreign photo reads (решение #1286); the logger is the
 // orphan-cleanup channel.
-func NewProfileService(factory txStoreFactory, photos storageshared.PhotoStorage, logger *slog.Logger) *ProfileService {
-	return &ProfileService{txStoreFactory: factory, photos: photos, logger: logger}
+func NewProfileService(
+	factory txStoreFactory, photos storageshared.PhotoStorage, shared SharedPropertyChecker, logger *slog.Logger,
+) *ProfileService {
+	return &ProfileService{txStoreFactory: factory, photos: photos, shared: shared, logger: logger}
 }
 
 // Me returns the user profile.
@@ -86,12 +101,35 @@ func (s *ProfileService) UpdateProfile(ctx context.Context, userID uuid.UUID, cm
 	return updated, nil
 }
 
+// checkPhotoAccess gates the photo bytes (решение владельца #1286): the
+// owner reads their own photo without a relation query; everybody else needs
+// at least one property readable by both sides (ADR 0028, symmetric derived
+// read). No relation answers the same ErrPhotoNotFound as a missing photo —
+// existence is not disclosed (privacy-404, #152); a checker outage fails
+// closed with a wrapped error for the transport's 500.
+func (s *ProfileService) checkPhotoAccess(ctx context.Context, viewerID, userID uuid.UUID) error {
+	if viewerID == userID {
+		return nil
+	}
+	shared, err := s.shared.ShareReadableProperty(ctx, viewerID, userID)
+	if err != nil {
+		return fmt.Errorf("check shared property: %w", err)
+	}
+	if !shared {
+		return ErrPhotoNotFound
+	}
+	return nil
+}
+
 // PhotoDescriptor resolves the profile photo's identity for the serving
 // endpoint (ADR 0065): the key powers the ETag — a replacement mints a new
 // UUID key, so a 304 never lies about the bytes — and the content type
-// labels the response. The profile photo is readable by the owner only: the
-// session-scoped userID is the whole access check.
-func (s *ProfileService) PhotoDescriptor(ctx context.Context, userID uuid.UUID) (key, contentType string, err error) {
+// labels the response. The viewer is gated by checkPhotoAccess: self or a
+// shared-readable relation (решение #1286).
+func (s *ProfileService) PhotoDescriptor(ctx context.Context, viewerID, userID uuid.UUID) (key, contentType string, err error) {
+	if err := s.checkPhotoAccess(ctx, viewerID, userID); err != nil {
+		return "", "", err
+	}
 	user, err := s.users.GetByID(ctx, userID)
 	if err != nil {
 		return "", "", err
@@ -102,27 +140,37 @@ func (s *ProfileService) PhotoDescriptor(ctx context.Context, userID uuid.UUID) 
 	return *user.PhotoKey, derefString(user.PhotoContentType), nil
 }
 
-// OpenPhoto opens the profile photo object (ADR 0065): the body, its byte
-// size, the stored content type and the key (the ETag source). A column
-// key without an object is an orphan — the honest ErrPhotoNotFound.
-func (s *ProfileService) OpenPhoto(
-	ctx context.Context, userID uuid.UUID,
-) (body io.ReadCloser, size int64, contentType, key string, err error) {
+// OpenedPhoto is one streaming answer's payload: the body, its byte size,
+// the stored content type and the key (the ETag source).
+type OpenedPhoto struct {
+	Body        io.ReadCloser
+	Size        int64
+	ContentType string
+	Key         string
+}
+
+// OpenPhoto opens the profile photo object (ADR 0065). The viewer is gated
+// by checkPhotoAccess (решение #1286). A column key without an object is an
+// orphan — the honest ErrPhotoNotFound.
+func (s *ProfileService) OpenPhoto(ctx context.Context, viewerID, userID uuid.UUID) (OpenedPhoto, error) {
+	if err := s.checkPhotoAccess(ctx, viewerID, userID); err != nil {
+		return OpenedPhoto{}, err
+	}
 	user, err := s.users.GetByID(ctx, userID)
 	if err != nil {
-		return nil, 0, "", "", err
+		return OpenedPhoto{}, err
 	}
 	if user.PhotoKey == nil {
-		return nil, 0, "", "", ErrPhotoNotFound
+		return OpenedPhoto{}, ErrPhotoNotFound
 	}
-	body, size, contentType, err = s.photos.Open(ctx, *user.PhotoKey)
+	body, size, contentType, err := s.photos.Open(ctx, *user.PhotoKey)
 	if err != nil {
 		if errors.Is(err, storageshared.ErrNotFound) {
-			return nil, 0, "", "", ErrPhotoNotFound
+			return OpenedPhoto{}, ErrPhotoNotFound
 		}
-		return nil, 0, "", "", fmt.Errorf("open profile photo: %w", err)
+		return OpenedPhoto{}, fmt.Errorf("open profile photo: %w", err)
 	}
-	return body, size, contentType, *user.PhotoKey, nil
+	return OpenedPhoto{Body: body, Size: size, ContentType: contentType, Key: *user.PhotoKey}, nil
 }
 
 // SetProfilePhoto replaces the profile photo (ADR 0065, one image per

@@ -156,10 +156,13 @@ func (r *memInvitationsRepo) WithTx(transaction.Tx) InvitationRepository { retur
 // fakeLookup is a configurable UserLookup keyed by normalized email.
 type fakeLookup struct {
 	byEmail map[string]MemberUser
+	// ByID overrides GetByID for seeded ids; the fallback stays the anonymous
+	// «Member» row.
+	byID map[uuid.UUID]MemberUser
 }
 
 func newFakeLookup() *fakeLookup {
-	return &fakeLookup{byEmail: map[string]MemberUser{}}
+	return &fakeLookup{byEmail: map[string]MemberUser{}, byID: map[uuid.UUID]MemberUser{}}
 }
 
 func (f *fakeLookup) add(email string, userID uuid.UUID) {
@@ -167,6 +170,9 @@ func (f *fakeLookup) add(email string, userID uuid.UUID) {
 }
 
 func (f *fakeLookup) GetByID(_ context.Context, id uuid.UUID) (MemberUser, error) {
+	if u, ok := f.byID[id]; ok {
+		return u, nil
+	}
 	name := "Member"
 	return MemberUser{ID: id, Name: &name}, nil
 }

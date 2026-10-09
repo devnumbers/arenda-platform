@@ -12,6 +12,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/photo"
 )
 
 // AccessEventUserReader is the subset of the identity user repository the
@@ -24,10 +25,11 @@ type AccessEventUserReader interface {
 
 // AccessEventUser is the display-relevant projection of a registered user.
 type AccessEventUser struct {
-	Name    *string
-	Surname *string
-	Phone   string
-	Email   string
+	Name     *string
+	Surname  *string
+	Phone    string
+	Email    string
+	PhotoKey *string
 }
 
 // AccessViewStore answers the access events' display questions (#751) over
@@ -65,7 +67,7 @@ func (a *accessEventUserAdapter) GetByID(ctx context.Context, id uuid.UUID) (Acc
 	if u.Email != nil {
 		email = u.Email.String()
 	}
-	return AccessEventUser{Name: u.Name, Surname: u.Surname, Phone: u.Phone.String(), Email: email}, nil
+	return AccessEventUser{Name: u.Name, Surname: u.Surname, Phone: u.Phone.String(), Email: email, PhotoKey: u.PhotoKey}, nil
 }
 
 // The adapter satisfies the consumer-declared port (CODING_STANDARDS).
@@ -99,6 +101,7 @@ func (s *AccessViewStore) UserProfileView(ctx context.Context, userID uuid.UUID)
 	return application.AccessUserProfile{
 		DisplayName: accessEventDisplayName(u.Name, u.Surname),
 		Email:       u.Email,
+		Photo:       photo.UserPhotoPath(userID, u.PhotoKey),
 	}, nil
 }
 

@@ -65,6 +65,9 @@ SELECT aj.id,
        aj.actor_name,
        aj.actor_email,
        aj.actor_role,
+       COALESCE(CASE WHEN u.photo_key IS NOT NULL
+                     THEN '/api/v1/users/' || aj.actor_id::text || '/photo'
+                     END, '')::text AS actor_photo_url,
        aj.kind,
        aj.action,
        aj.base_action,
@@ -73,6 +76,7 @@ SELECT aj.id,
        aj.created_at
 FROM action_journal aj
 JOIN properties p ON p.id = aj.property_id
+LEFT JOIN users u ON u.id = aj.actor_id
 WHERE actor_can_read_property(aj.property_id, $1::uuid)
   AND ($2::text = ''
        OR aj.property_id = ANY(string_to_array($2::text, ',')::uuid[]))
@@ -128,19 +132,20 @@ type ListActionJournalParams struct {
 }
 
 type ListActionJournalRow struct {
-	ID           pgtype.UUID        `json:"id"`
-	PropertyID   pgtype.UUID        `json:"property_id"`
-	PropertyName string             `json:"property_name"`
-	ActorID      pgtype.UUID        `json:"actor_id"`
-	ActorName    string             `json:"actor_name"`
-	ActorEmail   string             `json:"actor_email"`
-	ActorRole    string             `json:"actor_role"`
-	Kind         string             `json:"kind"`
-	Action       string             `json:"action"`
-	BaseAction   string             `json:"base_action"`
-	Segments     []byte             `json:"segments"`
-	Context      []byte             `json:"context"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	ID            pgtype.UUID        `json:"id"`
+	PropertyID    pgtype.UUID        `json:"property_id"`
+	PropertyName  string             `json:"property_name"`
+	ActorID       pgtype.UUID        `json:"actor_id"`
+	ActorName     string             `json:"actor_name"`
+	ActorEmail    string             `json:"actor_email"`
+	ActorRole     string             `json:"actor_role"`
+	ActorPhotoUrl string             `json:"actor_photo_url"`
+	Kind          string             `json:"kind"`
+	Action        string             `json:"action"`
+	BaseAction    string             `json:"base_action"`
+	Segments      []byte             `json:"segments"`
+	Context       []byte             `json:"context"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 }
 
 // Чтение журнала (карта #704, тикет #708, ADR 0061 §7): страница ленты
@@ -201,6 +206,7 @@ func (q *Queries) ListActionJournal(ctx context.Context, arg ListActionJournalPa
 			&i.ActorName,
 			&i.ActorEmail,
 			&i.ActorRole,
+			&i.ActorPhotoUrl,
 			&i.Kind,
 			&i.Action,
 			&i.BaseAction,
@@ -226,6 +232,9 @@ SELECT aj.id,
        aj.actor_name,
        aj.actor_email,
        aj.actor_role,
+       COALESCE(CASE WHEN u.photo_key IS NOT NULL
+                     THEN '/api/v1/users/' || aj.actor_id::text || '/photo'
+                     END, '')::text AS actor_photo_url,
        aj.kind,
        aj.action,
        aj.base_action,
@@ -234,6 +243,7 @@ SELECT aj.id,
        aj.created_at
 FROM action_journal aj
 JOIN properties p ON p.id = aj.property_id
+LEFT JOIN users u ON u.id = aj.actor_id
 WHERE actor_can_read_property(aj.property_id, $1::uuid)
   AND ($2::text = ''
        OR aj.property_id = ANY(string_to_array($2::text, ',')::uuid[]))
@@ -282,19 +292,20 @@ type ListActionJournalAfterParams struct {
 }
 
 type ListActionJournalAfterRow struct {
-	ID           pgtype.UUID        `json:"id"`
-	PropertyID   pgtype.UUID        `json:"property_id"`
-	PropertyName string             `json:"property_name"`
-	ActorID      pgtype.UUID        `json:"actor_id"`
-	ActorName    string             `json:"actor_name"`
-	ActorEmail   string             `json:"actor_email"`
-	ActorRole    string             `json:"actor_role"`
-	Kind         string             `json:"kind"`
-	Action       string             `json:"action"`
-	BaseAction   string             `json:"base_action"`
-	Segments     []byte             `json:"segments"`
-	Context      []byte             `json:"context"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	ID            pgtype.UUID        `json:"id"`
+	PropertyID    pgtype.UUID        `json:"property_id"`
+	PropertyName  string             `json:"property_name"`
+	ActorID       pgtype.UUID        `json:"actor_id"`
+	ActorName     string             `json:"actor_name"`
+	ActorEmail    string             `json:"actor_email"`
+	ActorRole     string             `json:"actor_role"`
+	ActorPhotoUrl string             `json:"actor_photo_url"`
+	Kind          string             `json:"kind"`
+	Action        string             `json:"action"`
+	BaseAction    string             `json:"base_action"`
+	Segments      []byte             `json:"segments"`
+	Context       []byte             `json:"context"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 }
 
 // After-нога двустороннего курсора (prepend новых, «новые снизу» ленты):
@@ -337,6 +348,7 @@ func (q *Queries) ListActionJournalAfter(ctx context.Context, arg ListActionJour
 			&i.ActorName,
 			&i.ActorEmail,
 			&i.ActorRole,
+			&i.ActorPhotoUrl,
 			&i.Kind,
 			&i.Action,
 			&i.BaseAction,
@@ -439,6 +451,9 @@ WITH scope_participant(user_id, is_owner, role_rank) AS (
       AND aj.actor_id IS NOT NULL
 )
 SELECT u.id, u.name, u.surname, u.phone, u.email,
+       COALESCE(CASE WHEN u.photo_key IS NOT NULL
+                     THEN '/api/v1/users/' || u.id::text || '/photo'
+                     END, '')::text AS photo_path,
        COALESCE(u.name, '') AS first_name,
        bool_or(s.is_owner) AS is_owner,
        CASE WHEN bool_or(s.is_owner) THEN 'owner'
@@ -461,6 +476,7 @@ type ListHistoryFilterParticipantsRow struct {
 	Surname   pgtype.Text `json:"surname"`
 	Phone     string      `json:"phone"`
 	Email     pgtype.Text `json:"email"`
+	PhotoPath string      `json:"photo_path"`
 	FirstName string      `json:"first_name"`
 	IsOwner   bool        `json:"is_owner"`
 	Role      string      `json:"role"`
@@ -500,6 +516,7 @@ func (q *Queries) ListHistoryFilterParticipants(ctx context.Context, arg ListHis
 			&i.Surname,
 			&i.Phone,
 			&i.Email,
+			&i.PhotoPath,
 			&i.FirstName,
 			&i.IsOwner,
 			&i.Role,
