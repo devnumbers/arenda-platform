@@ -58,8 +58,8 @@ type MembershipGranted struct {
 	PropertyID   uuid.UUID
 	// RecipientID is the member the access was granted to.
 	RecipientID uuid.UUID
-	// ActorID is the granter (the inviting owner or full member) — the copy's
-	// subject and the actor-skip anchor.
+	// ActorID is the granter — the property's owner, the only member manager
+	// since D8 (issue #1304) — the copy's subject and the actor-skip anchor.
 	ActorID uuid.UUID
 }
 
@@ -88,10 +88,11 @@ type MembershipResumed struct {
 	ResumedAt    time.Time
 }
 
-// MembershipRevoked reports a manager deleting an active membership (issue
+// MembershipRevoked reports the deletion of an active membership (issue
 // #156, T3). RecipientID is the removed member; ActorID is the revoking
-// owner or full member. A suspended membership's revoke publishes nothing —
-// the object was already hidden from the recipient (issue #162, T6 canon).
+// owner — the only member manager since D8 (issue #1304). A suspended
+// membership's revoke publishes nothing — the object was already hidden from
+// the recipient (issue #162, T6 canon).
 type MembershipRevoked struct {
 	MembershipID uuid.UUID
 	PropertyID   uuid.UUID

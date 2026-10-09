@@ -16,8 +16,9 @@ const (
 	// RoleOwner means the actor is the data owner themselves.
 	RoleOwner Role = "owner"
 	// RoleFullAccess is the role of a property member with full access (issue
-	// #156, T3): all data operations and equal member management, but no
-	// lifecycle control.
+	// #156, T3): all in-object data operations. Since the D8 decision of the
+	// sharing effort (issue #1304) it no longer manages members — inviting,
+	// changing roles and revoking are the owner's prerogative.
 	RoleFullAccess Role = "full_access"
 	// RoleViewer is the role of a property member with view-only access (issue
 	// #156, T3): read-only of all object data, no exceptions.
@@ -64,10 +65,13 @@ func CanEdit(r Role) bool {
 	return r == RoleOwner || r == RoleFullAccess
 }
 
-// CanManageMembers reports whether the role may manage property members (invite,
-// change role, revoke).
+// CanManageMembers reports whether the role may manage property members
+// (invite, change role, revoke). Owner-only since the D8 decision of the
+// sharing effort (issue #1304): access to an object is managed by one person —
+// its owner. Self-exit is not member management and stays with every
+// participant (CanLeave semantics at the call sites).
 func CanManageMembers(r Role) bool {
-	return r == RoleOwner || r == RoleFullAccess
+	return r == RoleOwner
 }
 
 // CanLifecycle reports whether the role may change the property lifecycle

@@ -44,8 +44,8 @@ type memInvitationsRepo struct {
 	rows []domain.Invitation
 	// The manage-scope predicate for ListForRemovalByEmail (issue #694). The
 	// fixture wires it to the shared membership repo's inManageScope so the
-	// in-memory predicate matches the SQL one (owner or active full_access
-	// member, archived included).
+	// in-memory predicate matches the SQL one (owner-only since D8, issue
+	// #1304; archived included).
 	removalScope func(propertyID, actorID uuid.UUID) bool
 }
 

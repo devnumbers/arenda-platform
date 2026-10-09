@@ -65,7 +65,17 @@ exist and keeps the behavior identical to the pre-T2 single-owner world.
 The four capability functions already account for all planned roles:
 `CanView` returns true for owner, full_access, viewer; `CanEdit` and
 `CanManageMembers` for owner and full_access; `CanLifecycle`
-(archive/unarchive/delete) only for owner. The T2 policy (`OwnerOnlyPolicy`)
+(archive/unarchive/delete) only for owner. **Ревизия 2026-10-09** (решение D8
+спеки «Совместный доступ» #1302, тикет #1304): `CanManageMembers` становится
+owner-only — участниками управляет один человек, собственник объекта;
+full_access сохраняет все контентные права внутри объекта (`CanEdit`), но
+больше не приглашает, не меняет роли и не отзывает доступ. Правка одной
+функции закрывает все мутирующие эндпоинты участников; зеркалит её SQL
+предикат скоупа `actor_can_manage` (owner-only с миграции 000157) — за ним
+read-скоуп хаба «Ваши участники» и removal-листинги, так что полный доступ
+чужого объекта не видит ни его участников, ни их карточек (privacy-404).
+Самовыход — не member management, остаётся участникам. The T2 policy
+(`OwnerOnlyPolicy`)
 returns only `RoleOwner` or `RoleNone` — the member roles (`RoleFullAccess`,
 `RoleViewer`) are defined but not yet returned. T3 will replace the policy
 implementation with one that consults property membership; the capabilities and

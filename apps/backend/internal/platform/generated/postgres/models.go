@@ -613,10 +613,23 @@ type User struct {
 	PhotoContentType pgtype.Text        `json:"photo_content_type"`
 }
 
+type UserPaymentFavorite struct {
+	UserID        pgtype.UUID        `json:"user_id"`
+	PaymentID     pgtype.UUID        `json:"payment_id"`
+	FavoriteOrder pgtype.Int8        `json:"favorite_order"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
 type UserPopupView struct {
 	UserID   pgtype.UUID        `json:"user_id"`
 	PopupKey string             `json:"popup_key"`
 	SeenAt   pgtype.Timestamptz `json:"seen_at"`
+}
+
+type UserPropertyPin struct {
+	UserID     pgtype.UUID        `json:"user_id"`
+	PropertyID pgtype.UUID        `json:"property_id"`
+	PinnedAt   pgtype.Timestamptz `json:"pinned_at"`
 }
 
 type UserSubscription struct {

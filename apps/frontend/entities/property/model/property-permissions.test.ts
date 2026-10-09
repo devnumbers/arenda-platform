@@ -20,6 +20,7 @@ describe('propertyPermissions — центральные права из propert
   it('нет объекта (загрузка/ошибка) — все права закрыты', () => {
     expect(propertyPermissions(undefined)).toEqual({
       canEdit: false,
+      canMutate: false,
       canManageMembers: false,
       canLeave: false,
       canLifecycle: false,
@@ -30,46 +31,51 @@ describe('propertyPermissions — центральные права из propert
     const noAccess: Property = { ...property({ id: 'p1' }), access: undefined };
     expect(propertyPermissions(noAccess)).toEqual({
       canEdit: false,
+      canMutate: false,
       canManageMembers: false,
       canLeave: false,
       canLifecycle: false,
     });
   });
 
-  it('владелец живого объекта — правит, управляет доступом и жизненным циклом, не покидает свой объект', () => {
+  it('владелец живого объекта — правит, мутации, управляет участниками и жизненным циклом, не покидает свой объект', () => {
     const own = property({ id: 'p1', access: { role: 'owner' } });
     expect(propertyPermissions(own)).toEqual({
       canEdit: true,
+      canMutate: true,
       canManageMembers: true,
       canLeave: false,
       canLifecycle: true,
     });
   });
 
-  it('полный доступ — правит и управляет доступом, может покинуть; жизненный цикл владельческий (#757)', () => {
+  it('полный доступ — правит и мутации, но участниками управляет только собственник (D8 #1304); покинуть может; жизненный цикл владельческий (#757)', () => {
     const editor = property({ id: 'p1', access: { role: 'full_access', ownerName: 'Иван Иванов' } });
     expect(propertyPermissions(editor)).toEqual({
       canEdit: true,
-      canManageMembers: true,
-      canLeave: true,
-      canLifecycle: false,
-    });
-  });
-
-  it('зритель — читает: без правок, без управления доступом; покинуть может', () => {
-    const watcher = property({ id: 'p1', access: { role: 'viewer', ownerName: 'Иван Иванов' } });
-    expect(propertyPermissions(watcher)).toEqual({
-      canEdit: false,
+      canMutate: true,
       canManageMembers: false,
       canLeave: true,
       canLifecycle: false,
     });
   });
 
-  it('архив гасит правки, но не управление доступом и не выход (ADR 0028, #446)', () => {
+  it('зритель — читает: без правок, без мутаций, без управления доступом; покинуть может', () => {
+    const watcher = property({ id: 'p1', access: { role: 'viewer', ownerName: 'Иван Иванов' } });
+    expect(propertyPermissions(watcher)).toEqual({
+      canEdit: false,
+      canMutate: false,
+      canManageMembers: false,
+      canLeave: true,
+      canLifecycle: false,
+    });
+  });
+
+  it('архив гасит правки, но не ролевые мутации, управление участниками и выход (ADR 0028, #446)', () => {
     const archivedOwner = property({ id: 'p1', access: { role: 'owner' }, status: 'archived' });
     expect(propertyPermissions(archivedOwner)).toEqual({
       canEdit: false,
+      canMutate: true,
       canManageMembers: true,
       canLeave: false,
       canLifecycle: true,
@@ -82,7 +88,8 @@ describe('propertyPermissions — центральные права из propert
     });
     expect(propertyPermissions(archivedEditor)).toEqual({
       canEdit: false,
-      canManageMembers: true,
+      canMutate: true,
+      canManageMembers: false,
       canLeave: true,
       canLifecycle: false,
     });

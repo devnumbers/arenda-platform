@@ -51,11 +51,11 @@ type MembershipRepository interface {
 	// recipient's shared-property pool. See issue #158 (T4).
 	ListActiveByUser(ctx context.Context, userID uuid.UUID) ([]domain.Membership, error)
 	// ListForRemovalByUser returns the person's memberships (any status, with
-	// ids) on the properties the given actor manages — owner or active
-	// full_access member — including archived properties: revoking keeps
-	// working on archived objects (issue #163), so «Отозвать и удалить»
-	// (issue #694) must not leave archived legs behind. The scope predicate
-	// is the authorization (issue #693).
+	// ids) on the properties the given actor owns — owner-only since D8
+	// (issue #1304) — including archived properties: revoking keeps working
+	// on archived objects (issue #163), so «Отозвать и удалить» (issue #694)
+	// must not leave archived legs behind. The scope predicate is the
+	// authorization (issue #693).
 	ListForRemovalByUser(ctx context.Context, personID, actorID uuid.UUID) ([]domain.Membership, error)
 	// CreateWithStatus inserts a membership with an explicit status, used to
 	// create a suspended grant directly (so it can be activated later without
@@ -147,8 +147,8 @@ type InvitationRepository interface {
 	// FIFO.
 	ListPendingByEmail(ctx context.Context, email string) ([]domain.Invitation, error)
 	// ListForRemovalByEmail returns the pending invitations for the email on
-	// the properties the given actor manages — owner or active full_access
-	// member — including archived properties (issue #163): «Отозвать и
+	// the properties the given actor owns — owner-only since D8 (issue
+	// #1304) — including archived properties (issue #163): «Отозвать и
 	// удалить» (issue #694) removes every invitation leg in the actor's
 	// scope. The scope predicate is the authorization (issue #693).
 	ListForRemovalByEmail(ctx context.Context, email string, actorID uuid.UUID) ([]domain.Invitation, error)

@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"testing"
 	"time"
@@ -92,7 +93,7 @@ func TestParticipantRepository_OwnerScope(t *testing.T) {
 // TestParticipantRepository_ManageMemberScope checks the full_access member's
 // path: they are scoped to the one object they manage, while viewers and
 // outsiders hold no scope at all (viewers cannot manage members).
-func TestParticipantRepository_ManageMemberScope(t *testing.T) {
+func TestParticipantRepository_ScopeIsOwnerOnly(t *testing.T) {
 	t.Parallel()
 	pool := setupAccessDB(t)
 	ctx, tx, cleanup := beginAccessTx(t, pool)
@@ -101,12 +102,15 @@ func TestParticipantRepository_ManageMemberScope(t *testing.T) {
 	f := newParticipantScopeFixture(t, ctx, tx)
 	repo := NewParticipantRepository(tx)
 
+	// The full_access member is out of the hub scope since D8 (issue #1304):
+	// member management and the hub are the owner's, nobody sees other
+	// people's participants.
 	scope, err := repo.ListScopeProperties(ctx, f.member)
 	if err != nil {
 		t.Fatalf("member ListScopeProperties: %v", err)
 	}
-	if len(scope) != 1 || scope[0].ID != f.p1 {
-		t.Fatalf("member scope = %+v, want only p1", scope)
+	if len(scope) != 0 {
+		t.Fatalf("member scope = %+v, want empty", scope)
 	}
 
 	scope, err = repo.ListScopeProperties(ctx, f.outsider)
@@ -264,7 +268,8 @@ func TestParticipantRepository_ActiveAndSuspendedRows(t *testing.T) {
 
 // TestParticipantRepository_RemovalScopeMemberships checks the membership
 // removal listing: the actor's owned and archived properties are in, foreign
-// owners are out, and a full_access member is scoped to their one object.
+// owners are out — and since D8 (issue #1304) a full_access member is out like
+// everyone else: the scope is owner-only.
 func TestParticipantRepository_RemovalScopeMemberships(t *testing.T) {
 	t.Parallel()
 	pool := setupAccessDB(t)
@@ -283,10 +288,12 @@ func TestParticipantRepository_RemovalScopeMemberships(t *testing.T) {
 	// never the foreign one.
 	assertRemovalProps(t, rows, f.person, f.pActive, f.pArchived)
 
-	// The full_access manager is scoped to the one object they manage.
+	// The full_access manager is out of the removal scope since D8
+	// (issue #1304) — the person's leg on the object they hold full access to
+	// is the owner's to remove, not theirs.
 	rows, err = memberRepo.ListForRemovalByUser(ctx, f.person, f.manager)
-	if err != nil || len(rows) != 1 || rows[0].PropertyID != f.pActive {
-		t.Fatalf("manager rows = %+v, %v; want only pActive", rows, err)
+	if err != nil || len(rows) != 0 {
+		t.Fatalf("manager rows = %+v, %v; want empty", rows, err)
 	}
 
 	// A viewer manages nothing.
@@ -399,10 +406,11 @@ func TestParticipantRepository_RemovalScopeInvitations(t *testing.T) {
 		t.Fatalf("rows = %+v, want pActive+pArchived (archived included)", rows)
 	}
 
-	// The full_access manager: only the invitation on their object.
+	// The full_access manager: out of the removal scope since D8
+	// (issue #1304), same as the membership listing.
 	rows, err = invitationRepo.ListForRemovalByEmail(ctx, "gone@x.ru", f.manager)
-	if err != nil || len(rows) != 1 || rows[0].PropertyID != f.pActive {
-		t.Fatalf("manager rows = %+v, %v; want only pActive", rows, err)
+	if err != nil || len(rows) != 0 {
+		t.Fatalf("manager rows = %+v, %v; want empty", rows, err)
 	}
 }
 
@@ -461,7 +469,9 @@ func TestParticipantRepository_ManageScopePredicateMatrix(t *testing.T) {
 		want  bool
 	}{
 		{"owner", owner, true},
-		{"active full_access manager", activeManager, true},
+		// Owner-only since D8 (issue #1304): an active full_access manager is
+		// out of the manage scope like everyone else.
+		{"active full_access manager", activeManager, false},
 		{"suspended full_access manager", suspendedManager, false},
 		{"viewer", viewer, false},
 	}
@@ -492,5 +502,80 @@ func TestParticipantRepository_ManageScopePredicateMatrix(t *testing.T) {
 		if got := len(invitations) > 0; got != tc.want {
 			t.Errorf("%s: invitation removal scope = %v, want %v", tc.name, got, tc.want)
 		}
+	}
+}
+
+// anyIDLookup resolves every id to the anonymous «Member» row and no email —
+// the display data is not the seam under test here, the scope privacy is.
+type anyIDLookup struct{}
+
+func (anyIDLookup) GetByID(_ context.Context, id uuid.UUID) (application.MemberUser, error) {
+	name := "Member"
+	return application.MemberUser{ID: id, Name: &name}, nil
+}
+
+func (anyIDLookup) GetByEmail(_ context.Context, _ string) (application.MemberUser, error) {
+	return application.MemberUser{}, domain.ErrUserNotFound
+}
+
+// TestParticipantRepository_FullAccessSeesNoForeignParticipants is the D5/D14
+// isolation regression (issue #1304): the hub scope is owner-only, so a
+// full_access member of a foreign object builds no participant aggregates from
+// it — the owner's people stay invisible, the deep link on a foreign
+// participant answers the privacy-preserving not-found, and the summary counts
+// nothing. The test went red on the pre-D8 scope (owner OR active full_access),
+// where the member saw the owner's person.
+func TestParticipantRepository_FullAccessSeesNoForeignParticipants(t *testing.T) {
+	t.Parallel()
+	pool := setupAccessDB(t)
+	ctx, tx, cleanup := beginAccessTx(t, pool)
+	defer cleanup()
+
+	q := genpostgres.New(tx)
+	owner := createAccessTestUser(t, ctx, q)
+	member := createAccessTestUser(t, ctx, q)
+	person := createAccessTestUser(t, ctx, q)
+
+	prop := createAccessTestProperty(t, ctx, q, owner)
+	memberRepo := NewMembershipRepository(tx)
+	for _, m := range []domain.Membership{
+		{ID: newTestUUID(t), PropertyID: prop, UserID: member, Role: domain.RoleFullAccess, GrantedBy: owner},
+		{ID: newTestUUID(t), PropertyID: prop, UserID: person, Role: domain.RoleViewer, GrantedBy: owner},
+	} {
+		if _, err := memberRepo.Create(ctx, m); err != nil {
+			t.Fatalf("create membership: %v", err)
+		}
+	}
+
+	participants := NewParticipantRepository(tx)
+	svc := application.NewParticipantService(participants, anyIDLookup{}, nil, nil, nil)
+
+	// The owner's own view keeps both of their people (the full_access member
+	// is one of them).
+	own, err := svc.ListParticipants(ctx, owner)
+	if err != nil {
+		t.Fatalf("owner ListParticipants: %v", err)
+	}
+	if len(own) != 2 {
+		t.Fatalf("owner participants = %+v, want both people", own)
+	}
+
+	// The full_access member sees none of the owner's people.
+	foreign, err := svc.ListParticipants(ctx, member)
+	if err != nil {
+		t.Fatalf("member ListParticipants: %v", err)
+	}
+	if len(foreign) != 0 {
+		t.Fatalf("member participants = %+v, want none of the owner's people", foreign)
+	}
+	if _, err := svc.GetParticipant(ctx, member, person.String()); !errors.Is(err, domain.ErrParticipantNotFound) {
+		t.Errorf("member GetParticipant(foreign person): expected ErrParticipantNotFound, got %v", err)
+	}
+	summary, err := svc.Summary(ctx, member)
+	if err != nil {
+		t.Fatalf("member Summary: %v", err)
+	}
+	if summary.ParticipantsCount != 0 {
+		t.Errorf("member summary participants = %d, want 0", summary.ParticipantsCount)
 	}
 }

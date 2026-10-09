@@ -176,7 +176,8 @@ export type PropertyManageInput = {
    * Удалить, идёт → Завершить. */
   readonly rentalState: RentalActionState;
   readonly isPinned: boolean;
-  /** Мутационный доступ — ролевой canManageMembers (#703); архив его
+  /** Мутационный доступ — ролевой canMutate (#703; до D8 #1304 эту роль
+   * играл canManageMembers, пока тот не стал owner-only); архив его
    * не гасит, билдер ветвит архив сам. */
   readonly canMutate: boolean;
   /** «Основной объект» доступен тарифу (платный, канон резолюции #584). */

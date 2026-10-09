@@ -198,19 +198,21 @@ type ListParticipantScopePropertiesRow struct {
 // The «Участник (владельца)» read model (issue #693): an aggregate over
 // property_members ∪ property_member_invitations with no table of its own
 // (chart decision of map #692). The reading actor's scope is the set of
-// non-archived properties the actor owns or manages as an active full_access
-// member; archived properties stay invisible like everywhere else on the
-// platform (issue #163). The scope doubles as the authorization: rows outside
-// it never leave the database.
+// non-archived properties the actor owns; since the D8 decision of the
+// sharing effort (issue #1304) member management — and with it the hub — is
+// the owner's prerogative, so a full_access member of a foreign object sees
+// none of its owner's participants; archived properties stay invisible like
+// everywhere else on the platform (issue #163). The scope doubles as the
+// authorization: rows outside it never leave the database.
 //
-// THE MANAGE-SCOPE PREDICATE (the «actor_can_manage» canon): owner OR active
-// full_access is the authorization of the three scope queries in this file
-// (read scope + both removal listings; the two ByProperties listings filter
-// by the already-scoped id list). The predicate lives in one place — the SQL
-// function actor_can_manage
-// (migration 000135, issue #794) — which the queries below call; before #794
-// sqlc could not share the text between query bodies, so the predicate was
-// kept as three byte-identical copies pinned by the matrix test.
+// THE MANAGE-SCOPE PREDICATE (the «actor_can_manage» canon): owner-only
+// since D8 (issue #1304; migration 000157) is the authorization of the three
+// scope queries in this file (read scope + both removal listings; the two
+// ByProperties listings filter by the already-scoped id list). The predicate
+// lives in one place — the SQL function actor_can_manage (migration 000135,
+// issue #794) — which the queries below call; before #794 sqlc could not
+// share the text between query bodies, so the predicate was kept as three
+// byte-identical copies pinned by the matrix test.
 // TestParticipantRepository_ManageScopePredicateMatrix runs the same actor
 // verdict across all three queries and stays the gate: semantic drift of the
 // function fails there instead of opening a silent privacy hole.

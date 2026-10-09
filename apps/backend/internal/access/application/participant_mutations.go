@@ -548,21 +548,20 @@ func (s *ParticipantMutationService) listRemovalLegs(
 }
 
 // actorRoleOn attributes the audit entry to the actor's real role on the
-// property, like the single-property flows do. The «owner, else
-// full_access» verdict mirrors the SQL manage-scope predicate of
-// ListParticipantMembershipsForRemoval (db/queries/participants.sql): the
-// legs only got here because that predicate passed — this attribution
-// must evolve with it (the matrix test pins the predicate, not this
-// mirror).
+// property, like the single-property flows do. The verdict mirrors the
+// owner-only SQL manage-scope predicate (migration 000157, issue #1304): a
+// leg only got here because the actor owns the property, so the non-owner
+// case is the loud invariant breach — not a silent role fallback (the matrix
+// test pins the predicate, not this mirror).
 func (s *ParticipantMutationService) actorRoleOn(ctx context.Context, actor, propertyID uuid.UUID) (sharedpolicy.Role, error) {
 	ownerID, err := s.owners.GetOwnerID(ctx, propertyID)
 	if err != nil {
 		return "", fmt.Errorf("resolve owner: %w", err)
 	}
-	if ownerID == actor {
-		return sharedpolicy.RoleOwner, nil
+	if ownerID != actor {
+		return "", fmt.Errorf("actor %s does not own property %s: manage-scope predicate breach", actor, propertyID)
 	}
-	return sharedpolicy.RoleFullAccess, nil
+	return sharedpolicy.RoleOwner, nil
 }
 
 // removeMembershipLegs deletes the person's membership rows with an audit

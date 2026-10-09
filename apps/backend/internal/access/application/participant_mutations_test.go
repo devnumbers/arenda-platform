@@ -283,13 +283,16 @@ func TestParticipantMutation_Invite_SelfEmailRejected(t *testing.T) {
 	}
 }
 
-func TestParticipantMutation_Invite_ManagerTargetingOwnerSkipsAndSelfRejects(t *testing.T) {
+func TestParticipantMutation_Invite_ManagerOnForeignPropertyUnavailableAndSelfRejects(t *testing.T) {
 	t.Parallel()
 	f := newMutationFixture()
 	p := uuid.Must(uuid.NewV7())
 	other := uuid.Must(uuid.NewV7())
 	f.addProperty(p, other, testForeignTitle)
-	// The actor manages the object as an active full_access member.
+	// The actor holds full access on the foreign object — but member
+	// management is owner-only (issue #1304), so the object is out of their
+	// manage scope: the per-property outcome is the privacy-preserving
+	// skipped_unavailable, not a skip about the owner.
 	if _, err := f.repo.Create(t.Context(), domain.Membership{
 		ID: uuid.Must(uuid.NewV7()), PropertyID: p, UserID: f.owner,
 		Role: domain.RoleFullAccess, GrantedBy: other,
@@ -301,11 +304,13 @@ func TestParticipantMutation_Invite_ManagerTargetingOwnerSkipsAndSelfRejects(t *
 
 	results, err := f.svc.Invite(t.Context(), f.owner, testOwnerEmail, domain.RoleViewer, []uuid.UUID{p})
 	if err != nil {
-		t.Fatalf("invite owner: %v", err)
+		t.Fatalf("invite on foreign object: %v", err)
 	}
-	if results[0].Outcome != ParticipantGrantOwner {
-		t.Errorf("outcome = %q, want %q", results[0].Outcome, ParticipantGrantOwner)
+	if results[0].Outcome != ParticipantGrantUnavailable {
+		t.Errorf("outcome = %q, want %q", results[0].Outcome, ParticipantGrantUnavailable)
 	}
+	// The self-email rejection is argument validation, not a scope verdict —
+	// it fires before the per-property gates.
 	if _, err := f.svc.Invite(t.Context(), f.owner, testRecipientEmail, domain.RoleViewer,
 		[]uuid.UUID{p}); !errors.Is(err, domain.ErrCannotAddSelf) {
 		t.Errorf("manager self invite: expected ErrCannotAddSelf, got %v", err)
@@ -859,5 +864,46 @@ func TestParticipantMutation_Remove_PublishesRevokedForActiveLegsOnly(t *testing
 	}
 	if revoke.ActorID != f.owner {
 		t.Errorf("revoke actor = %s, want %s", revoke.ActorID, f.owner)
+	}
+}
+
+// TestParticipantMutation_HubMutationsOwnerOnly is the D8 role matrix of the
+// hub mutations (issue #1304): a full_access member of a foreign property is
+// not in the manage scope anymore — their batch comes back all
+// skipped_unavailable, and both person-targeted mutations answer the
+// privacy-preserving ErrParticipantNotFound.
+func TestParticipantMutation_HubMutationsOwnerOnly(t *testing.T) {
+	t.Parallel()
+	f := newMutationFixture()
+	p1 := uuid.Must(uuid.NewV7())
+	manager := uuid.Must(uuid.NewV7())
+	person := uuid.Must(uuid.NewV7())
+	f.addProperty(p1, f.owner, testFirstTitle)
+	f.limiter.set(manager, 5)
+
+	// The manager holds an active full_access leg on the foreign property and
+	// owns nothing; the person is the owner's participant there.
+	if _, err := f.access.AddMember(t.Context(), f.owner, p1, manager, domain.RoleFullAccess); err != nil {
+		t.Fatalf("AddMember manager: %v", err)
+	}
+	if _, err := f.access.AddMember(t.Context(), f.owner, p1, person, domain.RoleViewer); err != nil {
+		t.Fatalf("AddMember person: %v", err)
+	}
+
+	results, err := f.svc.Invite(t.Context(), manager, testNewUserEmail, domain.RoleViewer, []uuid.UUID{p1})
+	if err != nil {
+		t.Fatalf("Invite by manager: %v", err)
+	}
+	if len(results) != 1 || results[0].Outcome != ParticipantGrantUnavailable {
+		t.Fatalf("Invite by manager: outcomes %+v, want one skipped_unavailable", results)
+	}
+
+	if _, err := f.svc.AddProperties(t.Context(), manager, person.String(), domain.RoleViewer,
+		[]uuid.UUID{p1}); !errors.Is(err, domain.ErrParticipantNotFound) {
+		t.Errorf("AddProperties by manager: expected ErrParticipantNotFound, got %v", err)
+	}
+
+	if err := f.svc.Remove(t.Context(), manager, person.String()); !errors.Is(err, domain.ErrParticipantNotFound) {
+		t.Errorf("Remove by manager: expected ErrParticipantNotFound, got %v", err)
 	}
 }

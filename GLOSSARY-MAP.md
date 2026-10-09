@@ -51,8 +51,8 @@ Terms shared across contexts, documented once here:
 
 **Property access roles** (defined in shared/policy, consumed by Access + Properties + Billing):
 
-- **Property Owner / Владелец объекта** — the user a property belongs to; sole lifecycle control (archive, delete); access cannot be revoked by members.
-- **Full Access / Полный доступ** — member role: full data operations + member management.
+- **Property Owner / Владелец объекта** — the user a property belongs to; sole lifecycle control (archive, delete) and sole member management (invite, change role, revoke — D8 #1304); access cannot be revoked by members.
+- **Full Access / Полный доступ** — member role: full in-object data operations. Since D8 of the sharing effort (#1304) member management is the owner's: full access neither invites, nor changes roles, nor revokes.
 - **Viewer / Просмотр** — member role: read-only access to all property data.
 - **Suspended Access / Приостановленный доступ** — shared access hidden due to recipient tariff limit exhaustion.
 

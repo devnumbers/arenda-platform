@@ -4,7 +4,9 @@ import "testing"
 
 // TestCapabilityFunctions verifies the capability predicates across all five
 // roles (issue #156, T3; suspended added in T9): owner, full_access, viewer,
-// none, suspended.
+// none, suspended. Member management is owner-only since the D8 decision of
+// the sharing effort (issue #1304): full_access keeps every in-object
+// capability but loses invite/change-role/revoke.
 func TestCapabilityFunctions(t *testing.T) {
 	t.Parallel()
 
@@ -17,7 +19,7 @@ func TestCapabilityFunctions(t *testing.T) {
 		life bool
 	}{
 		{"owner", RoleOwner, true, true, true, true},
-		{"full_access", RoleFullAccess, true, true, true, false},
+		{"full_access", RoleFullAccess, true, true, false, false},
 		{"viewer", RoleViewer, true, false, false, false},
 		{"none", RoleNone, false, false, false, false},
 		// A suspended membership (tariff limit exceeded, issue #158 T4)

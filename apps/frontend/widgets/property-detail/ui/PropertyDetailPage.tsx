@@ -299,8 +299,10 @@ export function PropertyDetailPage(): JSX.Element {
     const emptySet = resolvePropertyDetailEmptySet(listQuery.data?.items.length ?? 1);
 
     // Центральные права объекта (#703): «Управление»/кебаб — ролевой
-    // canManageMembers (билдеры ветвят архив сами: архивный владелец
-    // видит «Вернуть из архива» и удаление), «Покинуть объект» — canLeave.
+    // canMutate (билдеры ветвят архив сами: архивный владелец видит
+    // «Вернуть из архива» и удаление), «Покинуть объект» — canLeave.
+    // canManageMembers — owner-only зеркало политики участников (D8
+    // #1304): у полного доступа пропадают только контролы участников.
     // Create-CTA пустых секций — шов propertySectionCta (#774): зритель
     // не видит их вовсе, архив глушит (#773).
     const permissions = propertyPermissions(
@@ -319,8 +321,8 @@ export function PropertyDetailPage(): JSX.Element {
             status: property.status,
             rentalState,
             isPinned,
-            canMutate: permissions.canManageMembers,
-            canPin: isPaid && permissions.canManageMembers,
+            canMutate: permissions.canMutate,
+            canPin: isPaid && permissions.canMutate,
             canLeave: permissions.canLeave,
             canLifecycle: permissions.canLifecycle,
         })
@@ -592,7 +594,7 @@ export function PropertyDetailPage(): JSX.Element {
                     status !== undefined && propertyErrorKind === null ? (
                         <PropertyDetailKebab
                             status={status}
-                            canMutate={permissions.canManageMembers}
+                            canMutate={permissions.canMutate}
                             onAction={handleAction}
                         />
                     ) : undefined
@@ -675,7 +677,7 @@ export function PropertyDetailPage(): JSX.Element {
                                         // шит с последующим 403 смотрителю не даёт
                                         // ничего (решение ревью #627).
                                         onComplete={
-                                            permissions.canManageMembers
+                                            permissions.canMutate
                                                 ? () => setCompleteSheetOpen(true)
                                                 : () => router.push(ROUTES.propertyRentalComplete(id))
                                         }

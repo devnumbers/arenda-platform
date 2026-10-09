@@ -13,11 +13,11 @@ import (
 )
 
 // ParticipantScopeProperty is one property of the reading actor's participant
-// scope (issue #693): a non-archived property the actor owns or manages as an
-// active full_access member. The scope is the authorization: every aggregate
+// scope (issue #693): a non-archived property the actor owns — owner-only
+// since D8 (issue #1304). The scope is the authorization: every aggregate
 // the participant read model returns is built exclusively from these rows, so
-// a full_access member of one object sees only the legs they manage and never
-// the rest of the owner's portfolio.
+// nobody — a full_access member of a foreign object included — ever sees
+// another owner's participants.
 type ParticipantScopeProperty struct {
 	ID      uuid.UUID
 	OwnerID uuid.UUID
