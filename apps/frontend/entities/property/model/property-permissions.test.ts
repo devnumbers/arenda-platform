@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Property } from '@/entities/property';
-import { propertyPermissions } from './property-permissions';
+import { filterEditableProperties, filterOwnedProperties, propertyPermissions } from './property-permissions';
 
 function property(partial: Partial<Property> & { readonly id: string }): Property {
   return {
@@ -105,5 +105,21 @@ describe('propertyPermissions — центральные права из propert
   it('объект на ремонте — правки не гасит (мутационный канон гасит только архив)', () => {
     const maintenance = property({ id: 'p1', access: { role: 'owner' }, status: 'maintenance' });
     expect(propertyPermissions(maintenance).canEdit).toBe(true);
+  });
+});
+
+describe('фильтры справочника объектов для пикеров', () => {
+  const own = property({ id: 'own', access: { role: 'owner' } });
+  const editable = property({ id: 'editable', access: { role: 'full_access', ownerName: 'Иван Иванов' } });
+  const watched = property({ id: 'watched', access: { role: 'viewer', ownerName: 'Иван Иванов' } });
+  const archivedOwn = property({ id: 'archived', access: { role: 'owner' }, status: 'archived' });
+  const book = [own, editable, watched, archivedOwn];
+
+  it('filterEditableProperties — полный доступ правит: своя и редактируемая, без зрительской и архивной (#703)', () => {
+    expect(filterEditableProperties(book).map((p) => p.id)).toEqual(['own', 'editable']);
+  });
+
+  it('filterOwnedProperties — только собственные живые: перепривязка — власть собственника (D10 #1309)', () => {
+    expect(filterOwnedProperties(book).map((p) => p.id)).toEqual(['own']);
   });
 });

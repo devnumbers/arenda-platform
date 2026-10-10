@@ -541,6 +541,21 @@ func TestContactsIntegration_MoveBetweenProperties(t *testing.T) {
 		t.Fatalf("move as member to viewer-gated target: want ErrForbidden, got %v", err)
 	}
 
+	// D10 (#1309): the rebind is the owner's structural power. The member
+	// upgrades to Full Access on BOTH ends and the move still fails
+	// forbidden — the target's edit capability no longer authorizes a move.
+	if _, err := h.pool.Exec(ctx,
+		`UPDATE property_members SET role = 'full_access' WHERE property_id = $1 AND user_id = $2`,
+		h.otherProp, h.member,
+	); err != nil {
+		t.Fatalf("upgrade membership: %v", err)
+	}
+	if _, err := h.svc.UpdateContact(ctx, h.member, created.ID, contactsapp.UpdateContactCommand{
+		PropertyID: &contactsapp.PropertyIDUpdate{Value: &h.otherProp},
+	}); !errors.Is(err, contactsapp.ErrForbidden) {
+		t.Fatalf("move as full access to editable target: want ErrForbidden (D10 #1309), got %v", err)
+	}
+
 	moved, err := h.svc.UpdateContact(ctx, h.owner, created.ID, contactsapp.UpdateContactCommand{
 		PropertyID: &contactsapp.PropertyIDUpdate{Value: &h.otherProp},
 	})
@@ -552,15 +567,28 @@ func TestContactsIntegration_MoveBetweenProperties(t *testing.T) {
 	}
 	mustEqual(t, "moved owner", moved.OwnerID, h.owner)
 
-	// Clearing the binding detaches the card into the owner-only book.
-	detached, err := h.svc.UpdateContact(ctx, h.owner, created.ID, contactsapp.UpdateContactCommand{
+	// Clearing is not a rebind: the full access member of the bound property
+	// keeps the detach (the card goes into the owner-only book).
+	detached, err := h.svc.UpdateContact(ctx, h.member, created.ID, contactsapp.UpdateContactCommand{
 		PropertyID: &contactsapp.PropertyIDUpdate{Value: nil},
 	})
 	if err != nil {
-		t.Fatalf("clear binding: %v", err)
+		t.Fatalf("clear binding as member: %v", err)
 	}
 	if detached.PropertyID != nil {
 		t.Fatalf("detached property: want nil, got %s", *detached.PropertyID)
+	}
+
+	// The owner rebinds the unbound card onto a property — the same
+	// owner-only move, and the only way back into the book.
+	bound, err := h.svc.UpdateContact(ctx, h.owner, created.ID, contactsapp.UpdateContactCommand{
+		PropertyID: &contactsapp.PropertyIDUpdate{Value: &h.property},
+	})
+	if err != nil {
+		t.Fatalf("bind as owner: %v", err)
+	}
+	if bound.PropertyID == nil || *bound.PropertyID != h.property {
+		t.Fatalf("bound property: want %s, got %v", h.property, bound.PropertyID)
 	}
 }
 
@@ -785,9 +813,9 @@ func TestContactsIntegration_FlatBookSort(t *testing.T) {
 }
 
 // TestContactsIntegration_PropertyScopeSpansBooks pins the binding-driven
-// visibility: a card moved onto a property is listed in that property's
-// slice and in the flat book of everyone who can view the property, whatever
-// book the card lives in (the book owner never changes on a move).
+// visibility: a card bound to a property is listed in that property's slice
+// and in the flat book of everyone who can view the property, whatever book
+// the card lives in (the book owner never changes on a bind).
 func TestContactsIntegration_PropertyScopeSpansBooks(t *testing.T) {
 	t.Parallel()
 
@@ -798,21 +826,17 @@ func TestContactsIntegration_PropertyScopeSpansBooks(t *testing.T) {
 	h.seedMembership(h.member, h.property, accessdomain.RoleFullAccess)
 	ctx := t.Context()
 
-	// The member's own card moves onto the owner's property: the book stays
-	// the member's, the binding now points at the owner's property.
-	memberCard, err := h.svc.CreateContact(ctx, h.member, contactsapp.CreateContactCommand{
-		FirstName: memberFirstName,
-	})
-	if err != nil {
-		t.Fatalf("create member card: %v", err)
+	// A card of the MEMBER's book bound to the owner's property — the
+	// cross-book shape. D10 (#1309) closed the move that used to produce it
+	// at runtime, so the row is seeded directly: the list contract spans
+	// books regardless of how the row came to be (legacy rows included).
+	memberCard := uuid.Must(uuid.NewV7())
+	if _, err := h.pool.Exec(ctx,
+		`INSERT INTO contacts (id, owner_id, property_id, first_name) VALUES ($1, $2, $3, $4)`,
+		memberCard, h.member, h.property, memberFirstName,
+	); err != nil {
+		t.Fatalf("seed member-book card: %v", err)
 	}
-	moved, err := h.svc.UpdateContact(ctx, h.member, memberCard.ID, contactsapp.UpdateContactCommand{
-		PropertyID: &contactsapp.PropertyIDUpdate{Value: &h.property},
-	})
-	if err != nil {
-		t.Fatalf("move member card: %v", err)
-	}
-	mustEqual(t, "moved book owner", moved.OwnerID, h.member)
 
 	t.Run("owner's property slice spans books", func(t *testing.T) {
 		t.Parallel()
@@ -823,8 +847,8 @@ func TestContactsIntegration_PropertyScopeSpansBooks(t *testing.T) {
 			t.Fatalf("property list: %v", err)
 		}
 		got := propertyPage.Items
-		if len(got) != 1 || got[0].Contact.ID != memberCard.ID {
-			t.Fatalf("listed = %v, want [%s]", got, memberCard.ID)
+		if len(got) != 1 || got[0].Contact.ID != memberCard {
+			t.Fatalf("listed = %v, want [%s]", got, memberCard)
 		}
 		mustEqual(t, "property name", got[0].PropertyName, flatPropertyName)
 	})
@@ -832,16 +856,16 @@ func TestContactsIntegration_PropertyScopeSpansBooks(t *testing.T) {
 	t.Run("the flat book of the property owner sees the foreign-book card", func(t *testing.T) {
 		t.Parallel()
 		ids, _ := listFlat(t, h.svc, h.owner, contactsapp.ListQuery{Scope: contactsapp.ListScopeAll})
-		if len(ids) != 1 || ids[0] != memberCard.ID {
-			t.Fatalf("listed ids = %v, want [%s]", ids, memberCard.ID)
+		if len(ids) != 1 || ids[0] != memberCard {
+			t.Fatalf("listed ids = %v, want [%s]", ids, memberCard)
 		}
 	})
 
 	t.Run("the card's owner still sees it in the flat book", func(t *testing.T) {
 		t.Parallel()
 		ids, _ := listFlat(t, h.svc, h.member, contactsapp.ListQuery{Scope: contactsapp.ListScopeAll})
-		if len(ids) != 1 || ids[0] != memberCard.ID {
-			t.Fatalf("listed ids = %v, want [%s]", ids, memberCard.ID)
+		if len(ids) != 1 || ids[0] != memberCard {
+			t.Fatalf("listed ids = %v, want [%s]", ids, memberCard)
 		}
 	})
 }

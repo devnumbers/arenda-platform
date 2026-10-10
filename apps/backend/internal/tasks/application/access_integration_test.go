@@ -104,6 +104,53 @@ func sameErrClass(got, want error) bool {
 	return errors.Is(got, want)
 }
 
+// TestTaskRuleCannotChangeProperty is the behavioral twin of the D10 unit
+// fixture (issue #1309): the rule update is scoped by (owner, property), so
+// addressing a rule through another property of the same owner is the
+// privacy 404 — no actor, the owner included, can move a rule between
+// objects. Should the PATCH command ever grow a property field, the unit
+// fixture (TestUpdateRuleCommandCarriesNoPropertyField) red-flags it before
+// the path ships without its owner-only gate (sharedpolicy.CanRebind).
+func TestTaskRuleCannotChangeProperty(t *testing.T) {
+	t.Parallel()
+
+	h := newTasksHarness(t).withOwner(taskMoscowTZ)
+	rule, err := h.rules.CreateRule(h.ctx(), h.owner, h.propID, h.createCmd())
+	if err != nil {
+		t.Fatalf("create rule: %v", err)
+	}
+
+	otherProp, err := uuid.NewV7()
+	if err != nil {
+		t.Fatalf("new property id: %v", err)
+	}
+	if _, err := h.pool.Exec(h.ctx(),
+		`INSERT INTO properties (id, owner_id, name, type, address, status)
+		 VALUES ($1, $2, 'Дача', 'house', 'Москва, Рублёвка 2', 'active')`,
+		otherProp, h.owner,
+	); err != nil {
+		t.Fatalf("seed second property: %v", err)
+	}
+
+	newTitle := "Перепривязка невозможна"
+	if _, err := h.rules.UpdateRule(h.ctx(), h.owner, otherProp, rule.ID,
+		application.UpdateRuleCommand{Title: &newTitle}); !errors.Is(err, application.ErrNotFound) {
+		t.Fatalf("update through another property = %v, want ErrNotFound (D10 #1309)", err)
+	}
+
+	// The rule stayed on its property, untouched by the denied move.
+	stored, err := h.rules.GetRule(h.ctx(), h.owner, h.propID, rule.ID)
+	if err != nil {
+		t.Fatalf("get rule: %v", err)
+	}
+	if stored.PropertyID == nil || *stored.PropertyID != h.propID {
+		t.Fatalf("rule property = %v, want %s", stored.PropertyID, h.propID)
+	}
+	if stored.Title == newTitle {
+		t.Fatalf("rule title = %q, the denied patch must not land", stored.Title)
+	}
+}
+
 func TestOwnerClock_ZoneSplit(t *testing.T) {
 	t.Parallel()
 

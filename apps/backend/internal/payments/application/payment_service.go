@@ -115,7 +115,7 @@ type PaymentService struct {
 	calendar  OwnerCalendar
 	writeGate gateFunc // Full Access+: create/edit/pause/resume.
 	favGate   gateFunc // View+: the personal favorite star (the cutover #1308, D12).
-	delGate   gateFunc // Owner alone: deletion.
+	delGate   gateFunc // Full Access+: deletion (D9 #1309; was owner alone).
 	// Realtime is the late-bound carrier the mutations' frames dispatch
 	// through after the commit (карта #714, #716; ADR 0062); nil keeps the
 	// pre-#716 silence.
@@ -134,7 +134,7 @@ func NewPaymentService(factory txStoreFactory, calendar OwnerCalendar, policy sh
 		calendar:       calendar,
 		writeGate:      newCapabilityGate(policy, sharedpolicy.CanEdit),
 		favGate:        newCapabilityGate(policy, sharedpolicy.CanView),
-		delGate:        newCapabilityGate(policy, sharedpolicy.CanLifecycle),
+		delGate:        newCapabilityGate(policy, sharedpolicy.CanEdit),
 	}
 }
 
@@ -373,9 +373,10 @@ func (s *PaymentService) UpdatePayment(
 // DeletePayment removes the rule. Planned operations from today on always go
 // with it; the overdue planned debt goes too when keepOverdue is false, and
 // paid operations stay in history marked «платёж удалён» (payment_id set to
-// NULL by the FK, origin unchanged — ticket #446). Deletion is Owner-only
-// (the ADR 0028 matrix) and its verdict states Tick=false explicitly: the
-// rule is gone and its plan was resolved by the change step itself.
+// NULL by the FK, origin unchanged — ticket #446). Deletion rides the edit
+// capability (the ADR 0028 matrix; D9 #1309) and its verdict states
+// Tick=false explicitly: the rule is gone and its plan was resolved by the
+// change step itself.
 func (s *PaymentService) DeletePayment(
 	ctx context.Context, actor, propertyID, paymentID uuid.UUID, keepOverdue bool,
 ) error {

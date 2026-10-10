@@ -82,3 +82,16 @@ export function filterEditableProperties<T extends Pick<Property, 'access' | 'st
 ): ReadonlyArray<T> {
   return properties.filter((property) => propertyPermissions(property).canEdit);
 }
+
+/** Строки справочника, где читатель — собственник: перепривязка сущности
+ * на другой объект (контакт, D10 #1309) — власть собственника, перенос
+ * не-собственником сервер отвечает 403. Живой архив гасится как в пикере
+ * правки — канон #589. */
+export function filterOwnedProperties<T extends Pick<Property, 'access' | 'status'>>(
+  properties: ReadonlyArray<T>,
+): ReadonlyArray<T> {
+  return properties.filter((property) => {
+    const permissions = propertyPermissions(property);
+    return permissions.canLifecycle && permissions.canEdit;
+  });
+}

@@ -1212,17 +1212,40 @@ func TestRoleMatrix(t *testing.T) {
 	h := newHarness(t)
 	h.svc.policy = fakePolicy{role: sharedpolicy.RoleViewer}
 	h.svc.writeGate = newCapabilityGate(h.svc.policy, sharedpolicy.CanEdit)
-	h.svc.delGate = newCapabilityGate(h.svc.policy, sharedpolicy.CanLifecycle)
+	h.svc.delGate = newCapabilityGate(h.svc.policy, sharedpolicy.CanEdit)
 
 	t.Run("viewer cannot create", func(t *testing.T) {
 		t.Parallel()
 		_, err := h.svc.CreateRental(t.Context(), h.owner, h.property, createCmd())
 		assert.ErrorIs(t, err, ErrForbidden)
 	})
+	// Deletion and completion ride the edit capability since D9 (#1309):
+	// a viewer still may not, full access does — the matrix below.
 	t.Run("viewer cannot delete", func(t *testing.T) {
 		t.Parallel()
 		err := h.svc.DeleteRental(t.Context(), h.owner, h.property, mustID(t))
 		assert.ErrorIs(t, err, ErrForbidden)
+	})
+	t.Run("viewer cannot complete", func(t *testing.T) {
+		t.Parallel()
+		_, err := h.svc.CompleteRental(t.Context(), h.owner, h.property, mustID(t),
+			CompleteRentalCommand{CompletedDate: today})
+		assert.ErrorIs(t, err, ErrForbidden)
+	})
+	t.Run("full access deletes and completes (D9 #1309)", func(t *testing.T) {
+		t.Parallel()
+		sub := newHarness(t)
+		sub.svc.policy = fakePolicy{role: sharedpolicy.RoleFullAccess}
+		sub.svc.writeGate = newCapabilityGate(sub.svc.policy, sharedpolicy.CanEdit)
+		sub.svc.delGate = newCapabilityGate(sub.svc.policy, sharedpolicy.CanEdit)
+		upcoming := sub.seedRental(func(r *domain.Rental) {
+			r.StartDate = today.AddDate(0, 0, 1)
+		})
+		require.NoError(t, sub.svc.DeleteRental(t.Context(), sub.owner, sub.property, upcoming))
+		active := sub.seedRental(nil)
+		_, err := sub.svc.CompleteRental(t.Context(), sub.owner, sub.property, active,
+			CompleteRentalCommand{CompletedDate: today})
+		require.NoError(t, err)
 	})
 	t.Run("stranger is the privacy 404", func(t *testing.T) {
 		t.Parallel()

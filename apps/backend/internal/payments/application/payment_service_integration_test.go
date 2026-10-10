@@ -462,6 +462,10 @@ func TestPaymentRoleMatrix(t *testing.T) {
 	if _, err := viewer.svc.CreatePayment(viewer.ctx(), member, viewer.propID, viewer.createCmd()); !errors.Is(err, paymentsapp.ErrForbidden) {
 		t.Fatalf("viewer create = %v, want ErrForbidden", err)
 	}
+	seeded := viewer.seedPayment("2026-09-01", `{"kind":"monthly","payment_day":1}`, false)
+	if err := viewer.svc.DeletePayment(viewer.ctx(), member, viewer.propID, seeded, true); !errors.Is(err, paymentsapp.ErrForbidden) {
+		t.Fatalf("viewer delete = %v, want ErrForbidden (D9 #1309: deletion rides the edit capability)", err)
+	}
 
 	full := newPaymentsHarnessWithPolicy(t, stubPropertyPolicy{role: sharedpolicy.RoleFullAccess}).withOwner("Europe/Moscow")
 	full.seedActor(member)
@@ -473,14 +477,18 @@ func TestPaymentRoleMatrix(t *testing.T) {
 	if created.OwnerID != full.owner {
 		t.Fatalf("created owner_id = %s, want the property owner's scope", created.OwnerID)
 	}
-	if err := full.svc.DeletePayment(full.ctx(), member, full.propID, created.ID, true); !errors.Is(err, paymentsapp.ErrForbidden) {
-		t.Fatalf("full access delete = %v, want ErrForbidden — deletion is the owner's alone", err)
+	// Deletion rides the edit capability: full access deletes without
+	// escalation to the owner (D9 #1309).
+	if err := full.svc.DeletePayment(full.ctx(), member, full.propID, created.ID, true); err != nil {
+		t.Fatalf("full access delete: %v", err)
 	}
-	// The member's action is attributed to the full_access actor, not masked
-	// as the owner's.
+	// The member's actions are attributed to the full_access actor, not
+	// masked as the owner's — the create and the delete alike (the delete
+	// rides the edit capability, D9 #1309).
 	var actorRole string
 	if err := full.pool.QueryRow(full.ctx(),
-		`SELECT actor_role FROM audit_log WHERE entity_type = 'payment' AND entity_id = $1`, created.ID,
+		`SELECT actor_role FROM audit_log WHERE entity_type = 'payment' AND entity_id = $1 AND action = 'payment.deleted'`,
+		created.ID,
 	).Scan(&actorRole); err != nil {
 		t.Fatalf("read audit actor role: %v", err)
 	}

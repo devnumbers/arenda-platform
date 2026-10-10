@@ -79,3 +79,14 @@ func CanManageMembers(r Role) bool {
 func CanLifecycle(r Role) bool {
 	return r == RoleOwner
 }
+
+// CanRebind reports whether the role may move an entity between properties —
+// rebinding a contact card onto another object. Owner-only since the D10
+// decision of the sharing effort (issue #1309): a cross-object move
+// restructures the owner's data graph, and the gate also protects the path
+// from ever appearing for tasks and payment rules (their PATCH commands
+// carry no property field). Clearing a binding is not a rebind — it stays
+// with the entity's own CanEdit gate.
+func CanRebind(r Role) bool {
+	return r == RoleOwner
+}
