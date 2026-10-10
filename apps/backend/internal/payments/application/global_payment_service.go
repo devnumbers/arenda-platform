@@ -10,8 +10,6 @@ import (
 	"github.com/google/uuid"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/payments/domain"
-	realtimeapp "github.com/nambers/arenda-planform/apps/backend/internal/realtime/application"
-	realtimedom "github.com/nambers/arenda-planform/apps/backend/internal/realtime/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
 
@@ -28,12 +26,15 @@ type GlobalPaymentItem struct {
 	AmountKopecks int64
 	Category      domain.CategoryRef
 	AutoPay       bool
-	IsFavorite    bool
-	// FavoriteOrder is the rule's manual favorite order (ticket #576): the
-	// 1-based position the favorites edit mode's save assigned, nil when
-	// the rule has never been in a saved order — favorites sort by it with
-	// nulls last (the new-favorite-at-the-end rule); the feed's own order
-	// is unchanged.
+	// IsFavorite is the reading actor's personal star (the cutover #1308,
+	// D12): the rule's row carries no favorite state — the actor's own row
+	// in user_payment_favorites answers it.
+	IsFavorite bool
+	// FavoriteOrder is the rule's position in the actor's personal favorite
+	// order (ticket #576): the 1-based position the favorites edit mode's
+	// save assigned, nil when the rule has never been in the actor's saved
+	// order — favorites sort by it with nulls last (the
+	// new-favorite-at-the-end rule); the feed's own order is unchanged.
 	FavoriteOrder *int64
 	// Today is the property owner's calendar date (ADR 0048) the row's
 	// schedule math ran against — the client renders «Сегодня»/«Завтра»
@@ -106,28 +107,19 @@ type GlobalPaymentObjectCard struct {
 // GlobalPaymentService serves the global payment rules surface (tickets
 // #575, #576): the merged «Платежи» feed with the main screen's counters,
 // the search with its matched-category chips, the «Объекты» stacks — and
-// the favorites manual order, the surface's first cross-property mutation.
-// The visibility predicate lives in the SQL of both sides (the actor-scoped
-// cross-property read, ticket #521); the owner→today map is resolved here
-// (ADR 0048) and threaded into every per-row schedule computation — the
-// merged feed mixes owners. The reads never tick; the order save writes
-// positions only, so it never ticks either.
+// the favorites manual order, the surface's first cross-property mutation,
+// a personal one since the cutover #1308 (D12). The visibility predicate
+// lives in the SQL of both sides (the actor-scoped cross-property read,
+// ticket #521); the owner→today map is resolved here (ADR 0048) and
+// threaded into every per-row schedule computation — the merged feed mixes
+// owners. The reads never tick; the order save writes positions only, so it
+// never ticks either. Personal states publish no realtime frames (D18) —
+// the order save and the star are frame-less, other tabs of the actor
+// re-read on their next load.
 type GlobalPaymentService struct {
 	reader   GlobalPaymentReader
 	calendar OwnerCalendar
 	factory  txStoreFactory
-	// Realtime is the late-bound carrier the favorites order save's frames
-	// dispatch through after the commit (карта #714, #716; ADR 0062); nil
-	// keeps the pre-#716 silence.
-	realtime realtimeapp.Publisher
-}
-
-// SetRealtimePublisher late-binds the realtime carrier (карта #714, #716;
-// ADR 0062): the frames of the committed mutations dispatch through it —
-// the grace-events canon, best-effort, a broken carrier never fails the
-// mutation.
-func (s *GlobalPaymentService) SetRealtimePublisher(p realtimeapp.Publisher) {
-	s.realtime = p
 }
 
 // NewGlobalPaymentService builds the global reads and the favorites order
@@ -346,22 +338,27 @@ func (s *GlobalPaymentService) ListGlobalPaymentObjects(
 }
 
 // SaveFavoriteOrder rebuilds the manual order of the actor's favorites
-// (PUT /payments/favorites/order, ticket #576): the submitted list is the
-// actor's visible favorite rules in their new order, and one transaction
-// locks the rows (the sorted ids being the deadlock-safe lock order) and
-// assigns dense 1-based positions in the list order. The save is a full
-// replacement: visible favorites OUTSIDE the list lose their positions and
-// fall to the end of the reading order — duplicate positions never survive
-// a save, an empty list resets the whole order. The visibility predicate
-// and the per-row role live in the lock's SQL: an unknown, foreign or
-// otherwise invisible id is the privacy-preserving ErrNotFound, a visible
-// non-favorite or a duplicate id is ErrInvalidInput, and the write
-// capability is the favorite star's (#461, Full Access+ via CanEdit) — a
-// viewer's ErrForbidden. A rule without a position (new and legacy
-// favorites, and whatever this save did not place) sorts last — the
-// new-favorite-at-the-end rule — and PUT favorite keeps that
-// null-when-unstarred invariant atomic. A pure order write: nothing
-// materializes, nothing ticks.
+// (PUT /payments/favorites/order, ticket #576; the personal cutover #1308,
+// D12): the submitted list is the actor's starred rules in their new order,
+// and one transaction locks the actor's rows (the sorted ids being the
+// deadlock-safe lock order) and assigns dense 1-based positions in the list
+// order. The save is a full replacement within the actor's personal set:
+// the actor's placed-outside favorites lose their positions and fall to the
+// end of the reading order — duplicate positions never survive a save, an
+// empty list resets the actor's whole visible order, and a favorite on an
+// archived property keeps its position through the save (D16). The lock
+// pass keeps the visibility and archive cuts (the feed's predicate): an id
+// that does not
+// come back — unknown, foreign, invisible, archived or simply not a
+// favorite of this actor, the old «visible non-favorite» case folded in —
+// is the privacy-preserving ErrNotFound, and a duplicate id is
+// ErrInvalidInput. The right to order the personal set is the star's own,
+// the view one (D12 — a viewer orders their favorites on par with the
+// owner and Full Access); the per-row role is resolved beside the data and
+// doubles as the audit role's raw material. A rule without a position (a
+// fresh favorite, and whatever this save did not place) sorts last — the
+// new-favorite-at-the-end rule. A pure order write: nothing materializes,
+// nothing ticks, and — D18 — no realtime frame is published.
 func (s *GlobalPaymentService) SaveFavoriteOrder(ctx context.Context, actor uuid.UUID, orderedIDs []uuid.UUID) error {
 	seen := make(map[uuid.UUID]struct{}, len(orderedIDs))
 	for _, id := range orderedIDs {
@@ -373,54 +370,55 @@ func (s *GlobalPaymentService) SaveFavoriteOrder(ctx context.Context, actor uuid
 	sorted := slices.Clone(orderedIDs)
 	slices.SortFunc(sorted, func(a, b uuid.UUID) int { return strings.Compare(a.String(), b.String()) })
 
-	locked, err := s.saveFavoriteOrderTx(ctx, actor, sorted, orderedIDs)
-	if err != nil {
-		return err
-	}
-	s.publishFavoriteOrderRealtime(ctx, actor, locked)
-	return nil
+	return s.saveFavoriteOrderTx(ctx, actor, sorted, orderedIDs)
 }
 
 // saveFavoriteOrderTx is the save's transactional body: the lock pass, the
-// full-replacement order write and the audit entry in one transaction; the
-// locked rows travel out for the post-commit realtime dispatch.
+// full-replacement order write and the audit entry in one transaction.
 func (s *GlobalPaymentService) saveFavoriteOrderTx(
 	ctx context.Context, actor uuid.UUID, sorted, orderedIDs []uuid.UUID,
-) ([]GlobalPaymentFavoriteLock, error) {
-	var locked []GlobalPaymentFavoriteLock
-	err := s.factory.runInTx(ctx, func(stores *txStores) error {
-		var err error
-		locked, err = stores.favoriteOrders.LockVisibleFavorites(ctx, actor, sorted)
+) error {
+	return s.factory.runInTx(ctx, func(stores *txStores) error {
+		locked, err := stores.favoriteOrders.LockVisibleFavorites(ctx, actor, sorted)
 		if err != nil {
 			return fmt.Errorf("lock visible favorites: %w", err)
 		}
 		if len(locked) < len(sorted) {
 			return ErrNotFound
 		}
-		allOwner := true
+		// The right is the star's own, the view one (D12): every row back
+		// from the lock must pass it — the SQL's visibility predicate makes
+		// the check unreachable today, the structure keeps the gate beside
+		// the data it guards.
 		for _, row := range locked {
-			if !row.IsFavorite {
-				return ErrInvalidInput
-			}
-			if !sharedpolicy.CanEdit(row.Role) {
+			if !sharedpolicy.CanView(row.Role) {
 				return ErrForbidden
 			}
-			allOwner = allOwner && row.Role == sharedpolicy.RoleOwner
 		}
 		if err := stores.favoriteOrders.ClearFavoriteOrdersOutside(ctx, actor, sorted); err != nil {
 			return fmt.Errorf("clear favorite orders outside the save: %w", err)
 		}
 		for position, id := range orderedIDs {
-			if err := stores.favoriteOrders.SaveFavoritePosition(ctx, id, int64(position+1)); err != nil {
+			if err := stores.favoriteOrders.SaveFavoritePosition(ctx, actor, id, int64(position+1)); err != nil {
 				return fmt.Errorf("save favorite position of %s: %w", id, err)
 			}
 		}
-		// The save's audit role is the actor's own scope when every placed
-		// rule is theirs; any shared rule makes the acting role the
-		// membership's (Full Access — a viewer cannot reach here).
+		// The save's audit role is the actor's uniform acting role when every
+		// placed rule carries the same one; a mixed submission — the actor
+		// holds different roles on the touched properties — acts in the
+		// shared leg's Full Access bucket, the order save's historical
+		// convention (a viewer actor can only produce a uniform viewer set:
+		// their lock returns their viewer rows alone). An empty reset acts
+		// in the actor's own scope.
 		auditRole := sharedpolicy.RoleOwner
-		if !allOwner {
-			auditRole = sharedpolicy.RoleFullAccess
+		if len(locked) > 0 {
+			auditRole = locked[0].Role
+			for _, row := range locked[1:] {
+				if row.Role != auditRole {
+					auditRole = sharedpolicy.RoleFullAccess
+					break
+				}
+			}
 		}
 		return recordAudit(ctx, stores, actor, auditRole, auditdomain.ActionPaymentUpdated,
 			auditdomain.EntityPayment, nil, map[string]any{
@@ -428,22 +426,6 @@ func (s *GlobalPaymentService) saveFavoriteOrderTx(
 				"count":        len(orderedIDs),
 			})
 	})
-	return locked, err
-}
-
-// publishFavoriteOrderRealtime hands the save's frames to the realtime
-// carrier through the shared post-commit tail (карта #714, #716; ADR 0062):
-// the save dirties the `payments` view of every touched rule's property —
-// the carrier's per-transaction dedup collapses the repeated pairs into one
-// frame per property.
-func (s *GlobalPaymentService) publishFavoriteOrderRealtime(
-	ctx context.Context, actor uuid.UUID, locked []GlobalPaymentFavoriteLock,
-) {
-	changed := make([]realtimedom.Change, 0, len(locked))
-	for _, row := range locked {
-		changed = append(changed, realtimedom.On(realtimedom.EntityPayments, row.PropertyID))
-	}
-	realtimeapp.Dispatch(ctx, s.realtime, actor, changed)
 }
 
 // ownerTodays resolves the calendar date per distinct data owner of the

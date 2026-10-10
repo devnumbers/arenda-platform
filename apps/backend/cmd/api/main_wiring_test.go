@@ -65,7 +65,10 @@ func TestRealtimeCarrierWiring(t *testing.T) {
 	}{
 		{"payments.PaymentService", paymentsMod.PaymentService},
 		{"payments.OperationService", paymentsMod.OperationService},
-		{"payments.GlobalPayments", paymentsMod.GlobalPayments},
+		// The payments.GlobalPayments service binds no carrier (D18, the
+		// cutover #1308): the favorites star and order are personal states
+		// that publish no frames — the service carries no realtime field at
+		// all.
 		{"tasks.RuleService", tasksMod.RuleService},
 		{"tasks.TaskService", tasksMod.TaskService},
 		{"contacts.ContactService", contactsMod.ContactService},

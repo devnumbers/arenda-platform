@@ -63,7 +63,10 @@ func (h *paymentsHarness) globalSvc() *paymentsapp.GlobalPaymentService {
 }
 
 // seedGlobalRule inserts a payment rule on any property with any owner —
-// the row-level twin of seedGlobalProperty for multi-book fixtures.
+// the row-level twin of seedGlobalProperty for multi-book fixtures. The
+// isFavorite flag seeds the owner's personal favorite row (the cutover
+// #1308: the frozen payments column is neither read nor written; a starred
+// fixture is a user_payment_favorites row of the owner).
 func (h *paymentsHarness) seedGlobalRule(
 	propertyID, ownerID uuid.UUID,
 	title, typ string, amountKopecks int64,
@@ -80,13 +83,30 @@ func (h *paymentsHarness) seedGlobalRule(
 	}
 	if _, err := h.pool.Exec(h.ctx(),
 		`INSERT INTO payments (id, owner_id, property_id, type, title, amount_kopecks,
-		                       recurrence, since, auto_pay, category_slug, user_category_id, is_favorite)
-		 VALUES ($1, $2, $3, $4, $5, $6, '{"kind":"monthly","daysOfMonth":[1]}'::jsonb, '2026-07-01', $7, $8, $9, $10)`,
-		id, ownerID, propertyID, typ, title, amountKopecks, autoPay, slugArg, userCategoryID, isFavorite,
+		                       recurrence, since, auto_pay, category_slug, user_category_id)
+		 VALUES ($1, $2, $3, $4, $5, $6, '{"kind":"monthly","daysOfMonth":[1]}'::jsonb, '2026-07-01', $7, $8, $9)`,
+		id, ownerID, propertyID, typ, title, amountKopecks, autoPay, slugArg, userCategoryID,
 	); err != nil {
 		h.t.Fatalf("seed rule %s: %v", title, err)
 	}
+	if isFavorite {
+		h.seedFavorite(ownerID, id, nil)
+	}
 	return id
+}
+
+// seedFavorite inserts one personal favorite row of the given actor — the
+// starred fixture with its manual order position (nil = the end of the
+// order).
+func (h *paymentsHarness) seedFavorite(userID, paymentID uuid.UUID, order *int64) {
+	h.t.Helper()
+	if _, err := h.pool.Exec(h.ctx(),
+		`INSERT INTO user_payment_favorites (user_id, payment_id, favorite_order)
+		 VALUES ($1, $2, $3)`,
+		userID, paymentID, order,
+	); err != nil {
+		h.t.Fatalf("seed favorite of user %s for payment %s: %v", userID, paymentID, err)
+	}
 }
 
 // seedRuleOperation inserts one operation bound to a rule on any property —

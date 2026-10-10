@@ -42,11 +42,15 @@ type Querier interface {
 	// not-found: отменённая операция для всех чтений больше не существует.
 	CancelOperationByID(ctx context.Context, arg CancelOperationByIDParams) (int64, error)
 	CleanupExpiredIdempotencyKeys(ctx context.Context) (int64, error)
-	// The favorites order save's full-replacement pass (ticket #576): the
-	// visible favorites OUTSIDE the submitted list lose their positions —
-	// they fall to the end of the reading order («новое избранное — в конец»),
-	// so duplicate positions never survive a save. '' keeps the empty list
-	// working (a save of nothing clears the whole visible order).
+	// The favorites order save's full-replacement pass (ticket #576; the
+	// personal cutover #1308): the actor's favorites OUTSIDE the submitted list
+	// lose their positions — they fall to the end of the reading order («новое
+	// избранное — в конец»), so duplicate positions never survive a save. The
+	// pass only ever touches the actor's own rows (the personal set, D12) and
+	// keeps the feed's visibility and archive cuts: a favorite on an archived
+	// property keeps its position through the save — unarchiving returns the
+	// rule with its order intact (D16). '' keeps the empty list working (a save
+	// of nothing clears the whole visible personal order).
 	ClearGlobalPaymentFavoriteOrders(ctx context.Context, arg ClearGlobalPaymentFavoriteOrdersParams) (int64, error)
 	// Resume: close the open interval with today's date (the resume day is
 	// already outside the pause, [from, to)).
@@ -270,6 +274,10 @@ type Querier interface {
 	// origin='payment' AND payment_id IS NULL (ticket #446). Planned operations
 	// are removed by the caller per keep_overdue before this runs.
 	DeletePayment(ctx context.Context, arg DeletePaymentParams) (int64, error)
+	// Unfavoriting (the cutover #1308): the actor's row goes — the order
+	// position leaves with it, a re-star lands at the end (a fresh NULL row).
+	// An absent row deletes nothing and succeeds.
+	DeletePaymentFavorite(ctx context.Context, arg DeletePaymentFavoriteParams) error
 	// The edit invalidation of the future planned (date > today, strictly): the
 	// mutation deletes it and the in-transaction tick stands it again with fresh
 	// snapshots (spec: "правка пересоздаёт будущее planned"). Today's occurrence
@@ -402,12 +410,16 @@ type Querier interface {
 	// calendar date in the property owner's timezone. NOT NULL with the
 	// 'Europe/Moscow' default (migration 000088); IANA-validated on write.
 	GetOwnerTimezone(ctx context.Context, id pgtype.UUID) (string, error)
-	// Payments context queries: payment rule CRUD, pause/resume and the favorite
-	// flag (ADR 0049 §4; tickets #457, #461). Reads and writes are scoped by the
-	// data owner (ADR 0028: SQL filters by scope, the policy port has already
-	// resolved the actor's role); the nested path payment→property is enforced in
-	// the WHERE clause. The materialization tick lives in payments_tick.sql,
-	// operations in payments_operations.sql.
+	// Payments context queries: payment rule CRUD and pause/resume (ADR 0049 §4;
+	// tickets #457, #461). Reads and writes are scoped by the data owner (ADR
+	// 0028: SQL filters by scope, the policy port has already resolved the
+	// actor's role); the nested path payment→property is enforced in the WHERE
+	// clause. The materialization tick lives in payments_tick.sql, operations in
+	// payments_operations.sql. The favorite star is a personal state (the
+	// cutover #1308, D12): it lives in user_payment_favorites, the frozen
+	// payments.is_favorite/favorite_order columns are never read or written
+	// here — the actor's rows overlay the actor-facing reads, the star writes
+	// are this file's insert/delete pair.
 	// One rule by id within the owner's scope on the given property, with the
 	// user category's current name resolved for the CategoryView.
 	GetPaymentByID(ctx context.Context, arg GetPaymentByIDParams) (GetPaymentByIDRow, error)
@@ -660,6 +672,15 @@ type Querier interface {
 	// created_at is the database's. Empty changes (pause/resume) travel as the
 	// literal [] — the application layer normalizes nil.
 	InsertPaymentChangeLog(ctx context.Context, arg InsertPaymentChangeLogParams) error
+	// The personal favorite star (PUT favorite, the cutover #1308, D12): one
+	// row of the actor's user_payment_favorites — «строка есть = состояние».
+	// The atomic insert (no read-modify-write): a re-star keeps the stored row
+	// (the order position among the actor's favorites never shifts), a fresh
+	// star takes a NULL position — the new-favorite-at-the-end rule (ticket
+	// #576). created_at is the row's bookkeeping stamp (the schema default,
+	// nothing reads it today). Existence is already proven inside the same
+	// transaction under the property lock.
+	InsertPaymentFavorite(ctx context.Context, arg InsertPaymentFavoriteParams) error
 	// The open-ended pause [from, ∞): exactly one may exist per rule — the
 	// partial unique index (to_date IS NULL) makes a double pause a constraint
 	// violation even past the application check.
@@ -868,6 +889,9 @@ type Querier interface {
 	// loads never duplicate or drop. The property name is deliberately not a
 	// sort key — a rename would move rows across the window. Both cursor args
 	// travel together; NULL (no cursor) reads from the beginning.
+	// The actor's personal favorite (the cutover #1308, D12): the star and the
+	// order position are the reading actor's own — a join, not the frozen
+	// payments columns; absent row = not a favorite of this actor.
 	ListGlobalPaymentRules(ctx context.Context, arg ListGlobalPaymentRulesParams) ([]ListGlobalPaymentRulesRow, error)
 	// Объекты области для шита фильтров: те же свойства, что отдаёт лента,
 	// плюс фото-аватар карточки (канон #582). С приватными фото (ADR 0065,
@@ -1311,15 +1335,20 @@ type Querier interface {
 	// rentals responses report.
 	ListUnfinishedRentalsByPropertyIDs(ctx context.Context, propertyIds []pgtype.UUID) ([]ListUnfinishedRentalsByPropertyIDsRow, error)
 	ListUsersAdmin(ctx context.Context, arg ListUsersAdminParams) ([]ListUsersAdminRow, error)
-	// The favorites order save's lock pass (ticket #576): FOR UPDATE row locks
-	// on the submitted rules — the caller passes the ids sorted, the ORDER BY
-	// keeping the lock order deadlock-safe — restricted to the actor's visible
-	// non-archived rules (the feed's visibility predicate). An id that does not
-	// come back is unknown, foreign or invisible; the application layer folds
-	// the three into one privacy-preserving 404. Every row carries the actor's
-	// role on the rule's property — the save's write gate is the favorite
-	// star's (#461, Full Access+), resolved per row beside the data. Ids
-	// travel as the file's csv list; an empty list never reaches the query.
+	// The favorites order save's lock pass (ticket #576; the personal cutover
+	// #1308): FOR UPDATE row locks on the submitted ids' rows of the ACTOR —
+	// the caller passes the ids sorted, the ORDER BY keeping the lock order
+	// deadlock-safe — restricted to the actor's visible non-archived rules (the
+	// feed's visibility predicate). The lock runs on both the actor's
+	// user_payment_favorites row (the pass's write target) and the payment row
+	// (the archive/delete serialization the global mutations share). An id that
+	// does not come back is unknown, foreign, invisible, archived or simply not
+	// a favorite of this actor — the personal rows fold the old «visible
+	// non-favorite» case into the same privacy-preserving 404 the application
+	// layer answers. Every row carries the actor's role on the rule's property
+	// — resolved per row beside the data (the star's right is the view one,
+	// D12). Ids travel as the file's csv list; an empty list never reaches the
+	// query.
 	// The role's row only — the visibility is the function call in the WHERE:
 	// the join's active-status condition is the membership snapshot's, not a
 	// second copy of the predicate.
@@ -1388,6 +1417,11 @@ type Querier interface {
 	// гриллингу #1167): «автоплатёж исполнен» смотрит только на тиковые
 	// гашения — ручная оплата молчит.
 	PayOperationDueToday(ctx context.Context, arg PayOperationDueTodayParams) (int64, error)
+	// The subset of the listed rules the actor has starred — the personal-state
+	// overlay of the actor-facing reads (the property pin's ActorPins
+	// precedent): the rule rows carry no favorite column (frozen, #1308), the
+	// actor's rows travel beside them and the application layer folds them in.
+	PaymentFavoriteIDs(ctx context.Context, arg PaymentFavoriteIDsParams) ([]pgtype.UUID, error)
 	// The horizon leg of «Удалить все выполненные» (ADR 0051 as amended
 	// 2026-10-01): every live rule of the property with completed rows about to
 	// be cleared gets its history horizon raised to max(deleted due)+1 — the
@@ -1442,16 +1476,10 @@ type Querier interface {
 	// UpdateContact field. Existence and the edit capability are proven by the
 	// caller; the scope is the book owner (ADR 0028).
 	SetContactPhoto(ctx context.Context, arg SetContactPhotoParams) (Contact, error)
-	// Atomic PUT favorite (no read-modify-write): the flag is set in one UPDATE.
-	// Existence is already proven inside the same transaction under the property
-	// lock; :execrows keeps the store honest independently of that ordering.
-	// Unfavoriting clears the manual order with the flag — the schema CHECK
-	// (favorite_order IS NULL OR is_favorite) demands it, and re-favoriting
-	// lands at the end (NULL, ticket #576).
-	SetPaymentFavorite(ctx context.Context, arg SetPaymentFavoriteParams) (int64, error)
-	// One rule's 1-based favorite position (ticket #576); the id match alone is
-	// the guard — the lock pass has already proven existence and visibility in
-	// the same transaction. :execrows keeps that ordering honest.
+	// One rule's 1-based favorite position in the actor's personal order
+	// (ticket #576; the cutover #1308); the id match alone is the guard — the
+	// lock pass has already proven the actor's row and its visibility in the
+	// same transaction. :execrows keeps that ordering honest.
 	SetPaymentFavoriteOrder(ctx context.Context, arg SetPaymentFavoriteOrderParams) (int64, error)
 	// The object photo write (ADR 0065, ticket #1227): the key and the sniffed
 	// content type move together; a NULL key clears the photo — one image per
@@ -1471,10 +1499,13 @@ type Querier interface {
 	// before the shift.
 	ShiftSubscriptionPaymentsCreatedAt(ctx context.Context, arg ShiftSubscriptionPaymentsCreatedAtParams) (int64, error)
 	// The main screen's two counters over the whole visible scope (ticket
-	// #575): the favorite rules — the «Все избранные (N)» card — and the
+	// #575): the actor's favorite rules — the «Все избранные (N)» card, the
+	// personal set of the reading actor (the cutover #1308, D12) — and the
 	// overdue operations summed across the feed's rules — the «Все
 	// просроченные (N)» card. Neither is narrowed by a search: the counters
 	// describe the scope, the search screens' rows are the feed query's.
+	// The personal favorite join (the cutover #1308): COUNT over the actor's
+	// joined rows — a stranger's star never lands in the actor's counter.
 	SumGlobalPaymentCounters(ctx context.Context, arg SumGlobalPaymentCountersParams) (SumGlobalPaymentCountersRow, error)
 	// The matched categories of the payment rules search (ticket #575): one
 	// row per category present among the matched rules — the search screen's
@@ -1536,7 +1567,8 @@ type Querier interface {
 	UpdateEmailChangeGrantEmail(ctx context.Context, arg UpdateEmailChangeGrantEmailParams) error
 	// Partial PATCH is resolved by the application layer; the statement always
 	// writes the full editable set (since is never among it — server-set,
-	// prototype decision №17). The favorite star has its own atomic UPDATE.
+	// prototype decision №17). The favorite star is a personal state (the
+	// cutover #1308) with its own insert/delete pair.
 	UpdatePayment(ctx context.Context, arg UpdatePaymentParams) error
 	UpdatePaymentMethodActiveByID(ctx context.Context, arg UpdatePaymentMethodActiveByIDParams) (PaymentMethod, error)
 	UpdateProperty(ctx context.Context, arg UpdatePropertyParams) (Property, error)

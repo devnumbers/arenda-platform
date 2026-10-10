@@ -105,22 +105,32 @@ func newGlobalVisibilityHarness(t *testing.T) *globalVisibilityHarness {
 		require.NoError(t, err)
 	}
 
-	seedRule := func(t *testing.T, prop uuid.UUID, favorite bool, order int64) uuid.UUID {
+	// The seedRule closure inserts the rule and, when the caller stars it,
+	// the given actor's personal favorite row (the cutover #1308: the
+	// frozen payments columns are neither read nor written; a favorite
+	// fixture is a user_payment_favorites row).
+	seedRule := func(t *testing.T, prop, userID uuid.UUID, order int64) uuid.UUID {
 		t.Helper()
 		id := uuid.Must(uuid.NewV7())
 		_, err := pool.Exec(ctx,
 			`INSERT INTO payments (id, owner_id, property_id, type, title, amount_kopecks,
-			                       recurrence, since, auto_pay, category_slug,
-			                       is_favorite, favorite_order)
+			                       recurrence, since, auto_pay, category_slug)
 			 VALUES ($1, $2, $3, 'expense', 'ЖКУ', 500000, '{"kind":"daily"}'::jsonb, $4,
-			         false, 'utilities', $5, NULLIF($6, 0))`,
-			id, owner, prop, time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC), favorite, order)
+			         false, 'utilities')`,
+			id, owner, prop, time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC))
 		require.NoError(t, err)
+		if order > 0 {
+			_, err = pool.Exec(ctx,
+				`INSERT INTO user_payment_favorites (user_id, payment_id, favorite_order)
+				 VALUES ($1, $2, $3)`,
+				userID, id, order)
+			require.NoError(t, err)
+		}
 		return id
 	}
-	ruleA := seedRule(t, propA, true, 1)
-	ruleB := seedRule(t, propB, true, 2)
-	ruleD := seedRule(t, propD, true, 3)
+	ruleA := seedRule(t, propA, owner, 1)
+	ruleB := seedRule(t, propB, member, 2)
+	ruleD := seedRule(t, propD, member, 3)
 
 	return &globalVisibilityHarness{
 		t: t, pool: pool, store: paymentspg.NewGlobalPaymentStore(pool),
@@ -207,17 +217,23 @@ func TestGlobalPaymentStore_VisibilityPredicateMatrix(t *testing.T) {
 		assert.Equal(t, sharedpolicy.RoleOwner, ownerLocks[0].Role)
 	})
 
-	t.Run("the favorites clear pass touches visible favorites only", func(t *testing.T) {
+	t.Run("the favorites clear pass touches the actor's visible favorites only", func(t *testing.T) {
 		t.Parallel()
 		err := h.store.ClearFavoriteOrdersOutside(ctx, h.member, nil)
 		require.NoError(t, err)
 
-		var bOrder, dOrder *int64
+		var bOrder, dOrder, aOrder *int64
 		require.NoError(t, h.pool.QueryRow(ctx,
-			`SELECT favorite_order FROM payments WHERE id = $1`, h.ruleB).Scan(&bOrder))
+			`SELECT favorite_order FROM user_payment_favorites WHERE user_id = $1 AND payment_id = $2`,
+			h.member, h.ruleB).Scan(&bOrder))
 		require.NoError(t, h.pool.QueryRow(ctx,
-			`SELECT favorite_order FROM payments WHERE id = $1`, h.ruleD).Scan(&dOrder))
-		assert.Nil(t, bOrder, "the visible favorite loses its position")
-		assert.NotNil(t, dOrder, "the archived property's favorite is invisible — its position survives")
+			`SELECT favorite_order FROM user_payment_favorites WHERE user_id = $1 AND payment_id = $2`,
+			h.member, h.ruleD).Scan(&dOrder))
+		require.NoError(t, h.pool.QueryRow(ctx,
+			`SELECT favorite_order FROM user_payment_favorites WHERE user_id = $1 AND payment_id = $2`,
+			h.owner, h.ruleA).Scan(&aOrder))
+		assert.Nil(t, bOrder, "the member's visible favorite loses its position")
+		assert.NotNil(t, dOrder, "the archived property's favorite is invisible to the save — its position survives (D16)")
+		assert.NotNil(t, aOrder, "the member's save never touches the owner's personal set (D12)")
 	})
 }

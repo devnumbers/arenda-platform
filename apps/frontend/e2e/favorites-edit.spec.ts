@@ -15,6 +15,10 @@ import {
 
 const FAVORITES_URL = '/payments/favorites';
 
+/** Подзапрос id владельца сида — звезда личная, строки keyed по пользователю
+ * (личный cutover #1308); тот же паттерн, что OWNER_SQL в rental-спеках. */
+const OWNER_SQL = `(SELECT id FROM users WHERE email = '${process.env.E2E_USER_EMAIL}')`;
+
 // Три платежа сида на квартире: аренда (в сиде уже в избранном),
 // электричество и домофон — их звезды другие спеки не трогают
 // (payment-detail переключает только страхование …552).
@@ -24,27 +28,31 @@ const INTERCOM_ID = '55555555-5555-4555-8555-555555555554';
 const FAVORITE_IDS = [RENT_ID, ELECTRICITY_ID, INTERCOM_ID];
 
 async function seedFavorites(): Promise<void> {
-  // Плотный сброс ровно троих: is_favorite без позиции = конец списка;
-  // стартовый порядок — порядок ленты, читаем его из DOM, а не угадываем.
+  // Плотный сброс ровно троих личных строк владельца: строка без позиции =
+  // конец списка; стартовый порядок — порядок ленты, читаем его из DOM,
+  // а не угадываем.
   await execE2eSql(
-    `UPDATE payments SET is_favorite = FALSE, favorite_order = NULL
-     WHERE id IN ('${FAVORITE_IDS.join("','")}');`,
+    `DELETE FROM user_payment_favorites
+     WHERE user_id = ${OWNER_SQL}
+       AND payment_id IN ('${FAVORITE_IDS.join("','")}');`,
   );
   await execE2eSql(
-    `UPDATE payments SET is_favorite = TRUE, favorite_order = NULL
+    `INSERT INTO user_payment_favorites (user_id, payment_id)
+     SELECT ${OWNER_SQL}, id FROM payments
      WHERE id IN ('${FAVORITE_IDS.join("','")}');`,
   );
 }
 
 async function restoreSeedFavorites(): Promise<void> {
-  // Возврат к сиду: в избранном только аренда, без позиции.
+  // Возврат к сиду: в избранном владельца только аренда, без позиции.
   await execE2eSql(
-    `UPDATE payments SET is_favorite = FALSE, favorite_order = NULL
-     WHERE id IN ('${ELECTRICITY_ID}', '${INTERCOM_ID}');`,
+    `DELETE FROM user_payment_favorites
+     WHERE user_id = ${OWNER_SQL}
+       AND payment_id IN ('${FAVORITE_IDS.join("','")}');`,
   );
   await execE2eSql(
-    `UPDATE payments SET is_favorite = TRUE, favorite_order = NULL
-     WHERE id = '${RENT_ID}';`,
+    `INSERT INTO user_payment_favorites (user_id, payment_id)
+     VALUES (${OWNER_SQL}, '${RENT_ID}');`,
   );
 }
 
@@ -60,12 +68,14 @@ async function editRowIds(page: Page): Promise<string[]> {
   return ids;
 }
 
-/** Серверная правда сохранения: favorite_order в БД — плотные 1..N
- * ровно в ожидаемом порядке (positions строит PUT /favorites/order). */
+/** Серверная правда сохранения: favorite_order в личных строках владельца —
+ * плотные 1..N ровно в ожидаемом порядке (positions строит PUT
+ * /favorites/order; NULL-позиции сортируются в конец — NULLS LAST). */
 async function expectServerOrder(expectedIds: string[]): Promise<void> {
   const dbOrder = await execE2eSql(
-    `SELECT id FROM payments
-     WHERE id IN ('${FAVORITE_IDS.join("','")}') AND is_favorite
+    `SELECT payment_id FROM user_payment_favorites
+     WHERE user_id = ${OWNER_SQL}
+       AND payment_id IN ('${FAVORITE_IDS.join("','")}')
      ORDER BY favorite_order;`,
   );
   expect(dbOrder.split('\n')).toEqual(expectedIds);
@@ -551,7 +561,9 @@ test.describe('правка избранного: выделение и удал
     await expect(page.getByTestId('favorites-save')).toHaveCount(0);
 
     const favoriteRows = await execE2eSql(
-      `SELECT id FROM payments WHERE id IN ('${FAVORITE_IDS.join("','")}') AND is_favorite;`,
+      `SELECT payment_id FROM user_payment_favorites
+       WHERE user_id = ${OWNER_SQL}
+         AND payment_id IN ('${FAVORITE_IDS.join("','")}');`,
     );
     expect(favoriteRows).toBe('');
   });

@@ -151,7 +151,7 @@ func runMutation[T any](
 	if out.RereadPaymentID == nil {
 		return out.Response, nil
 	}
-	return rereadPayment[T](g, ctx, scope, propertyID, *out.RereadPaymentID)
+	return rereadPayment[T](g, ctx, actor, scope, propertyID, *out.RereadPaymentID)
 }
 
 // recordTrailEntries writes the outcome's action journal row (ADR 0061) and
@@ -186,18 +186,25 @@ func historyAnchors[T any](out mutationOutcome[T], propertyID uuid.UUID) []uuid.
 }
 
 // rereadPayment re-reads the stored rule after commit so the response carries
-// persisted timestamps, pauses and category view. A re-read always yields a
-// payment; only payment-shaped outcomes ask for one, so the assertion holds
-// by construction.
+// persisted timestamps, pauses and category view — plus the acting reader's
+// personal favorite state (the cutover #1308, D12: the rule rows carry no
+// favorite column, the actor's row overlays the read — the shared
+// overlayActorFavorites helper). A re-read always yields a payment; only
+// payment-shaped outcomes ask for one, so the assertion holds by construction.
 func rereadPayment[T any](
 	g mutationGates,
-	ctx context.Context, scope, propertyID, ruleID uuid.UUID,
+	ctx context.Context, actor, scope, propertyID, ruleID uuid.UUID,
 ) (T, error) {
 	var zero T
 	stored, err := g.factory.payments.Get(ctx, ruleID, scope, propertyID)
 	if err != nil {
 		return zero, err
 	}
+	overlaid := []domain.Payment{stored}
+	if err := overlayActorFavorites(ctx, g.factory.payments, actor, overlaid); err != nil {
+		return zero, err
+	}
+	stored = overlaid[0]
 	resp, ok := any(stored).(T)
 	if !ok {
 		return zero, errors.New("payments conveyor: reread requires a payment-shaped response")

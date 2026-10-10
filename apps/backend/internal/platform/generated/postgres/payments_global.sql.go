@@ -12,30 +12,35 @@ import (
 )
 
 const clearGlobalPaymentFavoriteOrders = `-- name: ClearGlobalPaymentFavoriteOrders :execrows
-UPDATE payments pay
+UPDATE user_payment_favorites upf
 SET favorite_order = NULL
-FROM properties p
-WHERE pay.property_id = p.id
-  AND pay.is_favorite
-  AND pay.favorite_order IS NOT NULL
-  AND ($1::text = ''
-       OR pay.id <> ALL(string_to_array($1::text, ',')::uuid[]))
-  AND actor_can_read_property(pay.property_id, $2::uuid)
+FROM payments pay
+JOIN properties p ON p.id = pay.property_id
+WHERE upf.payment_id = pay.id
+  AND upf.user_id = $1::uuid
+  AND upf.favorite_order IS NOT NULL
+  AND ($2::text = ''
+       OR upf.payment_id <> ALL(string_to_array($2::text, ',')::uuid[]))
+  AND actor_can_read_property(pay.property_id, $1::uuid)
   AND p.status != 'archived'
 `
 
 type ClearGlobalPaymentFavoriteOrdersParams struct {
-	KeepIds string      `json:"keep_ids"`
 	Actor   pgtype.UUID `json:"actor"`
+	KeepIds string      `json:"keep_ids"`
 }
 
-// The favorites order save's full-replacement pass (ticket #576): the
-// visible favorites OUTSIDE the submitted list lose their positions —
-// they fall to the end of the reading order («новое избранное — в конец»),
-// so duplicate positions never survive a save. ” keeps the empty list
-// working (a save of nothing clears the whole visible order).
+// The favorites order save's full-replacement pass (ticket #576; the
+// personal cutover #1308): the actor's favorites OUTSIDE the submitted list
+// lose their positions — they fall to the end of the reading order («новое
+// избранное — в конец»), so duplicate positions never survive a save. The
+// pass only ever touches the actor's own rows (the personal set, D12) and
+// keeps the feed's visibility and archive cuts: a favorite on an archived
+// property keeps its position through the save — unarchiving returns the
+// rule with its order intact (D16). ” keeps the empty list working (a save
+// of nothing clears the whole visible personal order).
 func (q *Queries) ClearGlobalPaymentFavoriteOrders(ctx context.Context, arg ClearGlobalPaymentFavoriteOrdersParams) (int64, error) {
-	result, err := q.db.Exec(ctx, clearGlobalPaymentFavoriteOrders, arg.KeepIds, arg.Actor)
+	result, err := q.db.Exec(ctx, clearGlobalPaymentFavoriteOrders, arg.Actor, arg.KeepIds)
 	if err != nil {
 		return 0, err
 	}
@@ -276,8 +281,8 @@ SELECT pay.id,
        pay.title,
        pay.amount_kopecks,
        pay.auto_pay,
-       pay.is_favorite,
-       pay.favorite_order,
+       (upf.payment_id IS NOT NULL)::bool AS is_favorite,
+       upf.favorite_order,
        pay.category_slug,
        pay.user_category_id,
        pay.created_at,
@@ -290,9 +295,12 @@ SELECT pay.id,
        oldest.oldest_overdue_operation_id
 FROM payments pay
 JOIN properties p ON p.id = pay.property_id
+LEFT JOIN user_payment_favorites upf
+       ON upf.payment_id = pay.id
+      AND upf.user_id = $1::uuid
 JOIN (
-       SELECT unnest(string_to_array($1::text, ',')::uuid[]) AS owner_id,
-              unnest(string_to_array($2::text, ',')::date[]) AS today
+       SELECT unnest(string_to_array($2::text, ',')::uuid[]) AS owner_id,
+              unnest(string_to_array($3::text, ',')::date[]) AS today
      ) AS t ON t.owner_id = pay.owner_id
 LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
 LEFT JOIN LATERAL (
@@ -312,7 +320,7 @@ LEFT JOIN LATERAL (
     ORDER BY op.date ASC, op.id ASC
     LIMIT 1
 ) oldest ON true
-WHERE actor_can_read_property(pay.property_id, $3::uuid)
+WHERE actor_can_read_property(pay.property_id, $1::uuid)
   AND p.status != 'archived'
   AND ($4::text = ''
        OR pay.title ILIKE '%' || $4::text || '%' ESCAPE '\'
@@ -333,9 +341,9 @@ LIMIT CASE WHEN $10::int = 0 THEN NULL::bigint
 `
 
 type ListGlobalPaymentRulesParams struct {
+	Actor          pgtype.UUID        `json:"actor"`
 	OwnerIds       string             `json:"owner_ids"`
 	Todays         string             `json:"todays"`
-	Actor          pgtype.UUID        `json:"actor"`
 	Search         string             `json:"search"`
 	CategorySlugs  string             `json:"category_slugs"`
 	CategoryFilter string             `json:"category_filter"`
@@ -387,11 +395,14 @@ type ListGlobalPaymentRulesRow struct {
 // loads never duplicate or drop. The property name is deliberately not a
 // sort key — a rename would move rows across the window. Both cursor args
 // travel together; NULL (no cursor) reads from the beginning.
+// The actor's personal favorite (the cutover #1308, D12): the star and the
+// order position are the reading actor's own — a join, not the frozen
+// payments columns; absent row = not a favorite of this actor.
 func (q *Queries) ListGlobalPaymentRules(ctx context.Context, arg ListGlobalPaymentRulesParams) ([]ListGlobalPaymentRulesRow, error) {
 	rows, err := q.db.Query(ctx, listGlobalPaymentRules,
+		arg.Actor,
 		arg.OwnerIds,
 		arg.Todays,
-		arg.Actor,
 		arg.Search,
 		arg.CategorySlugs,
 		arg.CategoryFilter,
@@ -440,19 +451,19 @@ func (q *Queries) ListGlobalPaymentRules(ctx context.Context, arg ListGlobalPaym
 
 const lockGlobalPaymentFavorites = `-- name: LockGlobalPaymentFavorites :many
 SELECT pay.id,
-       pay.property_id,
-       pay.is_favorite,
        CASE WHEN pay.owner_id = $1 THEN 'owner' ELSE pm.role END::text AS actor_role
-FROM payments pay
+FROM user_payment_favorites upf
+JOIN payments pay ON pay.id = upf.payment_id
 JOIN properties p ON p.id = pay.property_id
 LEFT JOIN property_members pm ON pm.property_id = pay.property_id
      AND pm.user_id = $1
      AND pm.status = 'active'
-WHERE pay.id = ANY(string_to_array($2::text, ',')::uuid[])
+WHERE upf.user_id = $1::uuid
+  AND pay.id = ANY(string_to_array($2::text, ',')::uuid[])
   AND actor_can_read_property(pay.property_id, $1::uuid)
   AND p.status != 'archived'
 ORDER BY pay.id
-FOR UPDATE OF pay
+FOR UPDATE OF upf, pay
 `
 
 type LockGlobalPaymentFavoritesParams struct {
@@ -461,21 +472,24 @@ type LockGlobalPaymentFavoritesParams struct {
 }
 
 type LockGlobalPaymentFavoritesRow struct {
-	ID         pgtype.UUID `json:"id"`
-	PropertyID pgtype.UUID `json:"property_id"`
-	IsFavorite bool        `json:"is_favorite"`
-	ActorRole  string      `json:"actor_role"`
+	ID        pgtype.UUID `json:"id"`
+	ActorRole string      `json:"actor_role"`
 }
 
-// The favorites order save's lock pass (ticket #576): FOR UPDATE row locks
-// on the submitted rules — the caller passes the ids sorted, the ORDER BY
-// keeping the lock order deadlock-safe — restricted to the actor's visible
-// non-archived rules (the feed's visibility predicate). An id that does not
-// come back is unknown, foreign or invisible; the application layer folds
-// the three into one privacy-preserving 404. Every row carries the actor's
-// role on the rule's property — the save's write gate is the favorite
-// star's (#461, Full Access+), resolved per row beside the data. Ids
-// travel as the file's csv list; an empty list never reaches the query.
+// The favorites order save's lock pass (ticket #576; the personal cutover
+// #1308): FOR UPDATE row locks on the submitted ids' rows of the ACTOR —
+// the caller passes the ids sorted, the ORDER BY keeping the lock order
+// deadlock-safe — restricted to the actor's visible non-archived rules (the
+// feed's visibility predicate). The lock runs on both the actor's
+// user_payment_favorites row (the pass's write target) and the payment row
+// (the archive/delete serialization the global mutations share). An id that
+// does not come back is unknown, foreign, invisible, archived or simply not
+// a favorite of this actor — the personal rows fold the old «visible
+// non-favorite» case into the same privacy-preserving 404 the application
+// layer answers. Every row carries the actor's role on the rule's property
+// — resolved per row beside the data (the star's right is the view one,
+// D12). Ids travel as the file's csv list; an empty list never reaches the
+// query.
 // The role's row only — the visibility is the function call in the WHERE:
 // the join's active-status condition is the membership snapshot's, not a
 // second copy of the predicate.
@@ -488,12 +502,7 @@ func (q *Queries) LockGlobalPaymentFavorites(ctx context.Context, arg LockGlobal
 	items := []LockGlobalPaymentFavoritesRow{}
 	for rows.Next() {
 		var i LockGlobalPaymentFavoritesRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.PropertyID,
-			&i.IsFavorite,
-			&i.ActorRole,
-		); err != nil {
+		if err := rows.Scan(&i.ID, &i.ActorRole); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -505,20 +514,23 @@ func (q *Queries) LockGlobalPaymentFavorites(ctx context.Context, arg LockGlobal
 }
 
 const setPaymentFavoriteOrder = `-- name: SetPaymentFavoriteOrder :execrows
-UPDATE payments SET favorite_order = $2
-WHERE id = $1
+UPDATE user_payment_favorites
+SET favorite_order = $3
+WHERE user_id = $1 AND payment_id = $2
 `
 
 type SetPaymentFavoriteOrderParams struct {
-	ID            pgtype.UUID `json:"id"`
+	UserID        pgtype.UUID `json:"user_id"`
+	PaymentID     pgtype.UUID `json:"payment_id"`
 	FavoriteOrder pgtype.Int8 `json:"favorite_order"`
 }
 
-// One rule's 1-based favorite position (ticket #576); the id match alone is
-// the guard — the lock pass has already proven existence and visibility in
-// the same transaction. :execrows keeps that ordering honest.
+// One rule's 1-based favorite position in the actor's personal order
+// (ticket #576; the cutover #1308); the id match alone is the guard — the
+// lock pass has already proven the actor's row and its visibility in the
+// same transaction. :execrows keeps that ordering honest.
 func (q *Queries) SetPaymentFavoriteOrder(ctx context.Context, arg SetPaymentFavoriteOrderParams) (int64, error) {
-	result, err := q.db.Exec(ctx, setPaymentFavoriteOrder, arg.ID, arg.FavoriteOrder)
+	result, err := q.db.Exec(ctx, setPaymentFavoriteOrder, arg.UserID, arg.PaymentID, arg.FavoriteOrder)
 	if err != nil {
 		return 0, err
 	}
@@ -526,7 +538,7 @@ func (q *Queries) SetPaymentFavoriteOrder(ctx context.Context, arg SetPaymentFav
 }
 
 const sumGlobalPaymentCounters = `-- name: SumGlobalPaymentCounters :one
-SELECT COUNT(*) FILTER (WHERE pay.is_favorite)::bigint AS favorite_count,
+SELECT COUNT(upf.payment_id)::bigint AS favorite_count,
        COALESCE(SUM(agg.overdue_count), 0)::bigint AS overdue_operations_count
 FROM payments pay
 JOIN properties p ON p.id = pay.property_id
@@ -541,6 +553,9 @@ LEFT JOIN LATERAL (
       AND op.status = 'planned'
       AND op.date < t.today
 ) agg ON true
+LEFT JOIN user_payment_favorites upf
+       ON upf.payment_id = pay.id
+      AND upf.user_id = $3::uuid
 WHERE actor_can_read_property(pay.property_id, $3::uuid)
   AND p.status != 'archived'
 `
@@ -557,10 +572,13 @@ type SumGlobalPaymentCountersRow struct {
 }
 
 // The main screen's two counters over the whole visible scope (ticket
-// #575): the favorite rules — the «Все избранные (N)» card — and the
+// #575): the actor's favorite rules — the «Все избранные (N)» card, the
+// personal set of the reading actor (the cutover #1308, D12) — and the
 // overdue operations summed across the feed's rules — the «Все
 // просроченные (N)» card. Neither is narrowed by a search: the counters
 // describe the scope, the search screens' rows are the feed query's.
+// The personal favorite join (the cutover #1308): COUNT over the actor's
+// joined rows — a stranger's star never lands in the actor's counter.
 func (q *Queries) SumGlobalPaymentCounters(ctx context.Context, arg SumGlobalPaymentCountersParams) (SumGlobalPaymentCountersRow, error) {
 	row := q.db.QueryRow(ctx, sumGlobalPaymentCounters, arg.OwnerIds, arg.Todays, arg.Actor)
 	var i SumGlobalPaymentCountersRow

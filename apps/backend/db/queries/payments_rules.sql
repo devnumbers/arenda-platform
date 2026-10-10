@@ -1,9 +1,13 @@
--- Payments context queries: payment rule CRUD, pause/resume and the favorite
--- flag (ADR 0049 §4; tickets #457, #461). Reads and writes are scoped by the
--- data owner (ADR 0028: SQL filters by scope, the policy port has already
--- resolved the actor's role); the nested path payment→property is enforced in
--- the WHERE clause. The materialization tick lives in payments_tick.sql,
--- operations in payments_operations.sql.
+-- Payments context queries: payment rule CRUD and pause/resume (ADR 0049 §4;
+-- tickets #457, #461). Reads and writes are scoped by the data owner (ADR
+-- 0028: SQL filters by scope, the policy port has already resolved the
+-- actor's role); the nested path payment→property is enforced in the WHERE
+-- clause. The materialization tick lives in payments_tick.sql, operations in
+-- payments_operations.sql. The favorite star is a personal state (the
+-- cutover #1308, D12): it lives in user_payment_favorites, the frozen
+-- payments.is_favorite/favorite_order columns are never read or written
+-- here — the actor's rows overlay the actor-facing reads, the star writes
+-- are this file's insert/delete pair.
 
 -- name: GetPaymentByID :one
 -- One rule by id within the owner's scope on the given property, with the
@@ -22,7 +26,6 @@ SELECT pay.id,
        pay.reminder_offset_days,
        pay.category_slug,
        pay.user_category_id,
-       pay.is_favorite,
        pay.title_is_manual,
        pay.created_at,
        pay.updated_at,
@@ -49,7 +52,6 @@ SELECT pay.id,
        pay.reminder_offset_days,
        pay.category_slug,
        pay.user_category_id,
-       pay.is_favorite,
        pay.title_is_manual,
        pay.created_at,
        pay.updated_at,
@@ -77,7 +79,8 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
 -- name: UpdatePayment :exec
 -- Partial PATCH is resolved by the application layer; the statement always
 -- writes the full editable set (since is never among it — server-set,
--- prototype decision №17). The favorite star has its own atomic UPDATE.
+-- prototype decision №17). The favorite star is a personal state (the
+-- cutover #1308) with its own insert/delete pair.
 UPDATE payments
 SET type = $3,
     title = $4,
@@ -98,15 +101,35 @@ WHERE id = $1 AND owner_id = $2;
 -- are removed by the caller per keep_overdue before this runs.
 DELETE FROM payments WHERE id = $1 AND owner_id = $2;
 
--- name: SetPaymentFavorite :execrows
--- Atomic PUT favorite (no read-modify-write): the flag is set in one UPDATE.
--- Existence is already proven inside the same transaction under the property
--- lock; :execrows keeps the store honest independently of that ordering.
--- Unfavoriting clears the manual order with the flag — the schema CHECK
--- (favorite_order IS NULL OR is_favorite) demands it, and re-favoriting
--- lands at the end (NULL, ticket #576).
-UPDATE payments SET is_favorite = $3, favorite_order = NULL
-WHERE id = $1 AND owner_id = $2;
+-- name: InsertPaymentFavorite :exec
+-- The personal favorite star (PUT favorite, the cutover #1308, D12): one
+-- row of the actor's user_payment_favorites — «строка есть = состояние».
+-- The atomic insert (no read-modify-write): a re-star keeps the stored row
+-- (the order position among the actor's favorites never shifts), a fresh
+-- star takes a NULL position — the new-favorite-at-the-end rule (ticket
+-- #576). created_at is the row's bookkeeping stamp (the schema default,
+-- nothing reads it today). Existence is already proven inside the same
+-- transaction under the property lock.
+INSERT INTO user_payment_favorites (user_id, payment_id, favorite_order)
+VALUES ($1, $2, NULL)
+ON CONFLICT (user_id, payment_id) DO NOTHING;
+
+-- name: DeletePaymentFavorite :exec
+-- Unfavoriting (the cutover #1308): the actor's row goes — the order
+-- position leaves with it, a re-star lands at the end (a fresh NULL row).
+-- An absent row deletes nothing and succeeds.
+DELETE FROM user_payment_favorites
+WHERE user_id = $1 AND payment_id = $2;
+
+-- name: PaymentFavoriteIDs :many
+-- The subset of the listed rules the actor has starred — the personal-state
+-- overlay of the actor-facing reads (the property pin's ActorPins
+-- precedent): the rule rows carry no favorite column (frozen, #1308), the
+-- actor's rows travel beside them and the application layer folds them in.
+SELECT payment_id
+FROM user_payment_favorites
+WHERE user_id = $1
+  AND payment_id = ANY(string_to_array(sqlc.arg('payment_ids')::text, ',')::uuid[]);
 
 -- name: InsertPaymentPause :exec
 -- The open-ended pause [from, ∞): exactly one may exist per rule — the
