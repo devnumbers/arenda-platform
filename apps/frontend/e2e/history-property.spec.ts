@@ -122,7 +122,7 @@ test('поиск ищет в пределах объекта, чужой объ�
   await captureScreen(page, testInfo, 'history-property-search');
 });
 
-test('фильтры переиспользуются, «Объекты» прибита серым; «в ноль» — пусто без запроса', async ({ page, seededUser }, testInfo) => {
+test('фильтры переиспользуются, «Объект» прибит серым; «в ноль» — пусто без запроса', async ({ page, seededUser }, testInfo) => {
   await seedPropertyJournal(seededUser);
   const properties = await trackHistoryScope(page);
   await openCabinetWithSeededSession(page, seededUser);
@@ -134,13 +134,15 @@ test('фильтры переиспользуются, «Объекты» при
   await expect(dialog.getByText('Основные действия')).toBeVisible();
   await expect(dialog.getByText('Участники')).toBeVisible();
 
-  // Группа «Объекты» показывает только прибитый объект — 1/1, серым и
-  // незабираемым (#840, макет 2184-94176, решение владельца 24.09).
-  await expect(dialog.getByText('Объекты')).toBeVisible();
+  // Группа «Объект» — только прибитый объект, 1/1, серым и незабираемым
+  // (#840, макет 2184-94176, решение владельца 24.09; подпись прибитой
+  // группы в единственном числе — решение владельца 10.10.2026,
+  // доработка #1321).
+  await expect(dialog.getByText('Объект', { exact: true })).toBeVisible();
   await expect(dialog.getByText('1/1')).toBeVisible();
-  const master = dialog.getByRole('checkbox', { name: 'Выбрать все: Объекты' });
+  const master = dialog.getByRole('checkbox', { name: 'Выбрать все: Объект' });
   await expect(master).toBeDisabled();
-  await dialog.getByRole('button', { name: /Объекты/ }).click();
+  await dialog.getByRole('button', { name: /Объект/ }).click();
   const pinned = dialog.getByRole('checkbox', { name: 'Квартира на Ленина' });
   await expect(pinned).toBeChecked();
   await expect(pinned).toBeDisabled();

@@ -143,7 +143,7 @@ test('поиск переиспользуется: сужает действия
   await captureScreen(page, testInfo, 'history-member-search');
 });
 
-test('фильтры переиспользуются, «Участники» прибит серым; «в ноль» — пусто без запроса', async ({ page, seededUser }, testInfo) => {
+test('фильтры переиспользуются, «Участник» прибит серым; «в ноль» — пусто без запроса', async ({ page, seededUser }, testInfo) => {
   await seedMemberJournal(seededUser);
   const actors = await trackHistoryScope(page);
   await openCabinetWithSeededSession(page, seededUser);
@@ -155,13 +155,15 @@ test('фильтры переиспользуются, «Участники» п
   await expect(dialog.getByText('Виды действий')).toBeVisible();
   await expect(dialog.getByText('Объекты')).toBeVisible();
 
-  // Группа «Участники» показывает только прибитого человека — 1/1, серым
-  // и незабираемым (#712, макет 2184-92510, решение владельца 23.09).
-  await expect(dialog.getByText('Участники')).toBeVisible();
+  // Группа «Участник» — только прибитый человек, 1/1, серым и
+  // незабираемым (#712, макет 2184-92510, решение владельца 23.09;
+  // подпись прибитой группы в единственном числе — решение владельца
+  // 10.10.2026, доработка #1321).
+  await expect(dialog.getByText('Участник', { exact: true })).toBeVisible();
   await expect(dialog.getByText('1/1')).toBeVisible();
-  const master = dialog.getByRole('checkbox', { name: 'Выбрать все: Участники' });
+  const master = dialog.getByRole('checkbox', { name: 'Выбрать все: Участник' });
   await expect(master).toBeDisabled();
-  await dialog.getByRole('button', { name: /Участники/ }).click();
+  await dialog.getByRole('button', { name: /Участник/ }).click();
   const pinned = dialog.getByRole('checkbox', { name: 'Мария Петрова' });
   await expect(pinned).toBeChecked();
   await expect(pinned).toBeDisabled();

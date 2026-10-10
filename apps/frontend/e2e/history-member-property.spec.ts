@@ -85,7 +85,7 @@ test('вход с «Прав участника»: лента прибита к 
   await captureScreen(page, testInfo, 'history-member-property-feed');
 });
 
-test('шит: «Участники» и «Объекты» обе прибиты серым «1/1»; «в ноль» без запроса, пины не пишутся в адрес', async ({ page, seededUser }, testInfo) => {
+test('шит: «Участник» и «Объект» обе прибиты серым «1/1»; «в ноль» без запроса, пины не пишутся в адрес', async ({ page, seededUser }, testInfo) => {
   await seedPairJournal(seededUser);
   const memberUuid = await execE2eSql(MEMBER_UUID_SQL);
   const scope = await trackHistoryScope(page);
@@ -95,21 +95,23 @@ test('шит: «Участники» и «Объекты» обе прибиты
 
   await page.getByRole('button', { name: 'Настройки' }).click();
   const dialog = page.getByRole('dialog', { name: 'Фильтры истории' });
-  await expect(dialog.getByText('Участники')).toBeVisible();
+  await expect(dialog.getByText('Участник', { exact: true })).toBeVisible();
 
   // Обе группы прибиты: счётчик «1/1» у каждой, мастер-чекбоксы серые
-  // (решение владельца 24.09 — зеркала #712/#840).
+  // (решение владельца 24.09 — зеркала #712/#840); подписи прибитых
+  // групп в единственном числе — «Участник» и «Объект» (решение
+  // владельца 10.10.2026, доработка #1321).
   await expect(dialog.getByText('1/1')).toHaveCount(2);
-  await expect(dialog.getByRole('checkbox', { name: 'Выбрать все: Участники' })).toBeDisabled();
-  await expect(dialog.getByRole('checkbox', { name: 'Выбрать все: Объекты' })).toBeDisabled();
+  await expect(dialog.getByRole('checkbox', { name: 'Выбрать все: Участник' })).toBeDisabled();
+  await expect(dialog.getByRole('checkbox', { name: 'Выбрать все: Объект' })).toBeDisabled();
 
   // Внутри групп — по одному прибитому: участница и квартира, оба
   // выбраны и незабираемы.
-  await dialog.getByRole('button', { name: /Участники/ }).click();
+  await dialog.getByRole('button', { name: /Участник/ }).click();
   const pinnedMember = dialog.getByRole('checkbox', { name: 'Мария Петрова' });
   await expect(pinnedMember).toBeChecked();
   await expect(pinnedMember).toBeDisabled();
-  await dialog.getByRole('button', { name: /Объекты/ }).click();
+  await dialog.getByRole('button', { name: /Объект/ }).click();
   const pinnedProperty = dialog.getByRole('checkbox', { name: 'Квартира на Ленина' });
   await expect(pinnedProperty).toBeChecked();
   await expect(pinnedProperty).toBeDisabled();
