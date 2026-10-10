@@ -3,6 +3,7 @@ import {
   DEFAULT_HISTORY_FILTERS,
   historyFeedScope,
   historyFiltersParams,
+  historyParticipantSections,
   historyParticipantTitle,
   historyPeriodChipLabel,
   isDefaultHistoryFilters,
@@ -313,6 +314,47 @@ describe('historyParticipantTitle', () => {
     expect(historyParticipantTitle({ name: 'Пользователь', firstName: '' }, true)).toBe(
       'Пользователь',
     );
+  });
+
+  it('себе без имени при голой фамилии в серверном name — «Пользователь», фамилия не подмешивается (D4)', () => {
+    expect(historyParticipantTitle({ name: 'Смирнов', firstName: '' }, true)).toBe('Пользователь');
+  });
+});
+
+describe('historyParticipantSections', () => {
+  const base = {
+    email: 'x@example.com',
+    firstName: '',
+    photoUrl: null,
+    isOwner: false,
+    role: 'viewer',
+  } as const;
+  const ivan = { id: 'ivan', name: 'Иван Иванов', status: 'current', ...base } as const;
+  const maria = { id: 'maria', name: 'Мария Петрова', status: 'current', ...base } as const;
+  const pavel = { id: 'pavel', name: 'Павел Удалён', status: 'removed', ...base } as const;
+  const oleg = { id: 'oleg', name: 'Ольга Удалён', status: 'removed', ...base } as const;
+
+  it('есть удалённые — две секции по D6: «Текущие» (порядок опций сохранён), затем «Удалённые»', () => {
+    expect(historyParticipantSections([ivan, pavel, maria, oleg])).toEqual([
+      { title: 'Текущие', participants: [ivan, maria] },
+      { title: 'Удалённые', participants: [pavel, oleg] },
+    ]);
+  });
+
+  it('удалённых нет — разделения нет (parent #1294: появляется только после удаления), одна секция без подписи', () => {
+    expect(historyParticipantSections([ivan, maria])).toEqual([
+      { title: undefined, participants: [ivan, maria] },
+    ]);
+  });
+
+  it('только удалённые (прибитая строка отозванного #712, оборонительный случай) — секция без подписи: подписи живут только при настоящем разделении', () => {
+    expect(historyParticipantSections([pavel, oleg])).toEqual([
+      { title: undefined, participants: [pavel, oleg] },
+    ]);
+  });
+
+  it('пустой список — пустой список секций', () => {
+    expect(historyParticipantSections([])).toEqual([]);
   });
 });
 

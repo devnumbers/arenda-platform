@@ -17,6 +17,7 @@ export { groupHistoryByDay, type HistoryActorGroup } from './lib/feed-groups';
 export {
   DEFAULT_HISTORY_FILTERS,
   historyFeedScope,
+  historyParticipantSections,
   historyParticipantTitle,
   historyPeriodChipLabel,
   isDefaultHistoryFilters,
