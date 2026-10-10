@@ -11,6 +11,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
+	historytest "github.com/nambers/arenda-planform/apps/backend/internal/history/historytest"
 	realtimetest "github.com/nambers/arenda-planform/apps/backend/internal/realtime/realtimetest"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
@@ -60,6 +61,12 @@ type mutationFixture struct {
 	clk         *fixedClock
 	limiter     *fakeRecipientLimiter
 	audit       *capturingRecorder
+	// Scope is the «Отозвать доступ всем» gate double: the fixture default
+	// speaks owner so the non-RevokeAll tests skip the gate.
+	scope *fakeRevokeAllScope
+	// History is the action-journal recorder the factory hands to every
+	// transactional core — the journal assertions read it back.
+	history *historytest.CapturingRecorder
 	// Realtime is the recording carrier both services dispatch their frames
 	// through — the realtime seam's test double (карта #714, #716); the
 	// participant service publishes through the access service's carrier.
@@ -83,14 +90,17 @@ func newMutationFixture() *mutationFixture {
 	clk := &fixedClock{now: time.Now()}
 	limiter := newFakeRecipientLimiter()
 	audit := &capturingRecorder{}
+	history := &historytest.CapturingRecorder{}
+	scope := &fakeRevokeAllScope{owns: true}
 	coordinator := NewSlotCoordinator(repo, owners, limiter, newFakeOwnedProps(),
 		events, audit, noopBeginner{}, clk, nil)
 	realtime := &realtimetest.RecordingPublisher{}
+	factory := NewTxStoreFactory(repo, invitations, audit, history, fakeUoW{beginner: noopBeginner{}})
 	access := NewAccessService(repo, owners, statuses, lookup, policy, coordinator,
-		events, newTestFactory(repo, invitations, audit), nil)
+		events, factory, nil)
 	access.SetRealtimePublisher(realtime)
 	svc := NewParticipantMutationService(access, owners, statuses, lookup, emails, policy,
-		coordinator, mailer, events, titles, newTestFactory(repo, invitations, audit), clk, nil)
+		scope, coordinator, mailer, events, titles, factory, clk, nil)
 	return &mutationFixture{
 		repo:        repo,
 		invitations: invitations,
@@ -104,6 +114,8 @@ func newMutationFixture() *mutationFixture {
 		clk:         clk,
 		limiter:     limiter,
 		audit:       audit,
+		scope:       scope,
+		history:     history,
 		realtime:    realtime,
 		owner:       uuid.Must(uuid.NewV7()),
 		svc:         svc,

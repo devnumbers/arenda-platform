@@ -912,7 +912,7 @@ export interface paths {
         get?: never;
         /**
          * Save the manual order of the actor's favorite payment rules
-         * @description The favorites edit mode's «Сохранить» (map #573, ticket #576): the request lists the actor's visible favorite rules in their new order and the server rebuilds the stored positions in one transaction — dense 1-based positions in the list order. The save is a full replacement: favorites outside the list lose their positions and fall to the end of the reading order, so an empty list resets the whole order. Every listed id must be a favorite rule visible to the actor (own plus active-membership properties, archived excluded): an unknown, foreign or otherwise invisible id is the privacy-preserving 404, a visible non-favorite or a duplicate id is a 400. The write capability is the favorite star's (PUT favorite, Full Access and Owner) — a viewer's 403. A rule without a position — new and legacy favorites, their favoriteOrder is null — sorts last (new-favorite-at-the-end), and PUT favorite maintains that invariant atomically: unfavoriting clears the position, re-favoriting lands at the end. The manual order is the favorites screens' sort key (the feed's own order is unchanged); a pure order write — nothing ticks.
+         * @description The favorites edit mode's «Сохранить» (map #573, ticket #576; the personal cutover #1308): the request lists the actor's favorite rules in their new order and the server rebuilds the positions in one transaction — dense 1-based positions in the list order. The favorites are personal (D12): the star and the order are the acting user's own working set, one user's save never moves another user's rows. The save is a full replacement within the actor's set: favorites outside the list lose their positions and fall to the end of the reading order, so an empty list resets the actor's whole order (a favorite on an archived property keeps its position — unarchiving returns the rule with its order intact). Every listed id must be a rule the actor has starred on a property visible to them (own plus active-membership properties, archived excluded): any degenerate id — unknown, foreign, invisible, archived or simply not starred by this actor — is the privacy-preserving 404, a duplicate id is a 400. The right to order the personal set is the favorite star's, the view capability (D12 — a viewer orders their favorites on par with Full Access and Owner). A rule without a position — a fresh favorite, its favoriteOrder is null — sorts last (new-favorite-at-the-end), and PUT favorite maintains that invariant atomically: unfavoriting removes the actor's row (the position with it), re-favoriting lands at the end. The manual order is the favorites screens' sort key (the feed's own order is unchanged); a pure order write — nothing ticks, and no realtime frame is published (D18, personal state).
          */
         put: operations["saveGlobalPaymentFavoritesOrder"];
         post?: never;
@@ -1165,7 +1165,11 @@ export interface paths {
         get: operations["listParticipants"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Revoke shared access from every participant of the actor's properties
+         * @description The global «Отозвать доступ всем» action of the «Участники» section (issue #1310): one call removes every membership and cancels every pending invitation across all properties the reading actor owns — archived ones included — with a per-row audit entry and journal record, the revocation notification per removed active membership and FIFO recovery of each affected recipient's suspended accesses. No lifecycle emails are sent; legs on other owners' properties stay untouched. Idempotent: an owner with nothing left in scope succeeds as a no-op. An actor owning no property is refused: a participant of foreign objects with 403, a stranger with a privacy-preserving 404.
+         */
+        delete: operations["revokeAllParticipants"];
         options?: never;
         head?: never;
         patch?: never;
@@ -3112,7 +3116,7 @@ export interface components {
              * @enum {integer|null}
              */
             reminderOffsetDays?: 1 | 3 | 7 | null;
-            /** @description The rule's favorite star (PUT favorite); returned in the reads and the lists. */
+            /** @description The reading actor's personal favorite star (PUT favorite; the personal cutover #1308, D12) — returned in the reads and the lists; another user's star never lands in this actor's read. */
             isFavorite: boolean;
             /** @description Server-computed settlement view of the rule (CONTEXT.md, «Завершённый платёж»): no planned operations — overdue included — and no occurrence beyond the last materialized date of any status. Never stored, never written by the client; derived on every read like the operation's overdue. */
             isCompleted: boolean;
@@ -3217,9 +3221,9 @@ export interface components {
             type: "income" | "expense";
             category: components["schemas"]["CategoryView"];
             autoPay: boolean;
-            /** @description The rule's favorite star (PUT favorite). */
+            /** @description The reading actor's personal favorite star (PUT favorite; the personal cutover #1308, D12). */
             isFavorite: boolean;
-            /** @description The rule's manual favorite order (ticket #576): the 1-based position the favorites edit mode's save assigned. Null when the rule has never been in a saved order — the favorites screens sort by favoriteOrder with nulls last (the new-favorite-at-the-end rule); the feed's own order is unchanged. */
+            /** @description The rule's position in the reading actor's personal favorite order (ticket #576; the personal cutover #1308, D12): the 1-based position the favorites edit mode's save assigned. Null when the actor has never placed the rule in their saved order — the favorites screens sort by favoriteOrder with nulls last (the new-favorite-at-the-end rule); the feed's own order is unchanged. */
             favoriteOrder: number | null;
             /**
              * Format: date
@@ -3244,7 +3248,7 @@ export interface components {
         /** @description The global «Платежи» feed (ticket #575) with the main screen's counters. Money is integer kopecks (ADR 0008). */
         PaymentsGlobalResponse: {
             items: components["schemas"]["PaymentGlobalItem"][];
-            /** @description The favorite rules of the whole visible scope — the «Все избранные (N)» card; never narrowed by a search. */
+            /** @description The reading actor's favorite rules across the whole visible scope — the «Все избранные (N)» card; never narrowed by a search (the personal cutover #1308, D12). */
             favoriteCount: number;
             /** @description The overdue operations summed across the whole visible scope — the «Все просроченные (N)» card; never narrowed by a search. */
             overdueOperationsCount: number;
@@ -6830,6 +6834,27 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    revokeAllParticipants: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The actor's sharing is closed — every leg revoked, or nothing left to revoke (the idempotent no-op). */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     getParticipantsSummary: {

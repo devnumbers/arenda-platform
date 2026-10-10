@@ -56,7 +56,8 @@ type fakeParticipantMutations struct {
 		role domain.Role, ids []uuid.UUID) ([]accessapp.ParticipantGrantResult, error)
 	addProperties func(ctx context.Context, actor uuid.UUID, id string,
 		role domain.Role, ids []uuid.UUID) ([]accessapp.ParticipantGrantResult, error)
-	remove func(ctx context.Context, actor uuid.UUID, id string) error
+	remove    func(ctx context.Context, actor uuid.UUID, id string) error
+	revokeAll func(ctx context.Context, actor uuid.UUID) error
 }
 
 func (f *fakeParticipantMutations) Invite(
@@ -82,6 +83,13 @@ func (f *fakeParticipantMutations) Remove(ctx context.Context, actor uuid.UUID, 
 		return errors.New("unexpected Remove call")
 	}
 	return f.remove(ctx, actor, id)
+}
+
+func (f *fakeParticipantMutations) RevokeAll(ctx context.Context, actor uuid.UUID) error {
+	if f.revokeAll == nil {
+		return errors.New("unexpected RevokeAll call")
+	}
+	return f.revokeAll(ctx, actor)
 }
 
 // participantFixtureUser is the registered-user fixture of the wire tests.
@@ -442,5 +450,50 @@ func TestDeleteParticipantHandler(t *testing.T) {
 	w = httptest.NewRecorder()
 	h.DeleteParticipant(w, newParticipantMutationRequest(t, http.MethodDelete,
 		"/participants/"+participantID, nil, nil), participantID)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+// TestRevokeAllParticipantsHandler pins the HTTP contract of the global
+// «Отозвать доступ всем» (issue #1310): success is a bare 204 (including the
+// idempotent no-op), the non-owner participant gets the loud 403, the
+// stranger the privacy-preserving 404, and the session is required.
+func TestRevokeAllParticipantsHandler(t *testing.T) {
+	t.Parallel()
+
+	actor := uuid.Must(uuid.NewV7())
+	mutations := &fakeParticipantMutations{
+		revokeAll: func(ctx context.Context, got uuid.UUID) error {
+			assert.Equal(t, actor, got)
+			return nil
+		},
+	}
+	h := NewParticipantHandlers(&fakeParticipantsManager{}, mutations, slog.New(slog.DiscardHandler))
+
+	w := httptest.NewRecorder()
+	h.RevokeAllParticipants(w, newParticipantMutationRequest(t, http.MethodDelete,
+		"/participants", &actor, nil))
+	assert.Equal(t, http.StatusNoContent, w.Code)
+
+	notOwner := &fakeParticipantMutations{
+		revokeAll: func(context.Context, uuid.UUID) error { return domain.ErrNotPropertyOwner },
+	}
+	h2 := NewParticipantHandlers(&fakeParticipantsManager{}, notOwner, slog.New(slog.DiscardHandler))
+	w = httptest.NewRecorder()
+	h2.RevokeAllParticipants(w, newParticipantMutationRequest(t, http.MethodDelete,
+		"/participants", &actor, nil))
+	assert.Equal(t, http.StatusForbidden, w.Code)
+
+	stranger := &fakeParticipantMutations{
+		revokeAll: func(context.Context, uuid.UUID) error { return domain.ErrParticipantNotFound },
+	}
+	h3 := NewParticipantHandlers(&fakeParticipantsManager{}, stranger, slog.New(slog.DiscardHandler))
+	w = httptest.NewRecorder()
+	h3.RevokeAllParticipants(w, newParticipantMutationRequest(t, http.MethodDelete,
+		"/participants", &actor, nil))
+	assert.Equal(t, http.StatusNotFound, w.Code)
+
+	w = httptest.NewRecorder()
+	h.RevokeAllParticipants(w, newParticipantMutationRequest(t, http.MethodDelete,
+		"/participants", nil, nil))
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }

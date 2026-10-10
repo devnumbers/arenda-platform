@@ -233,6 +233,22 @@ func (r *memRepo) ListForRemovalByUser(_ context.Context, personID, actorID uuid
 	return out, nil
 }
 
+// ListForRemovalByOwner mirrors the SQL owner-wide removal scope (issue
+// #1310): every membership (any status, archived included) on properties
+// the actor owns.
+func (r *memRepo) ListForRemovalByOwner(_ context.Context, actorID uuid.UUID) ([]domain.Membership, error) {
+	var out []domain.Membership
+	for _, m := range r.rows {
+		if r.inManageScope(m.PropertyID, actorID) {
+			out = append(out, m)
+		}
+	}
+	slices.SortFunc(out, func(a, b domain.Membership) int {
+		return a.CreatedAt.Compare(b.CreatedAt)
+	})
+	return out, nil
+}
+
 // inManageScope is the in-memory twin of the SQL manage-scope predicate:
 // owner-only since the D8 decision (issue #1304) — the actor owns the
 // property. Member management is the owner's prerogative; a full_access

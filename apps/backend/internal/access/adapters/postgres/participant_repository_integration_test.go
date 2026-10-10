@@ -415,12 +415,13 @@ func TestParticipantRepository_RemovalScopeInvitations(t *testing.T) {
 }
 
 // TestParticipantRepository_ManageScopePredicateMatrix pins the manage-scope
-// predicate ACROSS all three queries that carry it (the read scope and the two
-// removal listings): the same actor must get the same verdict everywhere. The
-// predicate is one SQL function now (actor_can_manage, migration 000135,
-// issue #794) that all three queries call — this matrix turns any semantic
-// drift of the function (a dropped status='active', a role typo) into a loud
-// failure instead of a silent privacy hole.
+// predicate ACROSS all the queries that carry it (the read scope, the two
+// per-person removal listings and the two owner-wide removal listings of the
+// global revoke, issue #1310): the same actor must get the same verdict
+// everywhere. The predicate is one SQL function now (actor_can_manage,
+// migration 000135, issue #794) that every query calls — this matrix turns
+// any semantic drift of the function (a dropped status='active', a role
+// typo) into a loud failure instead of a silent privacy hole.
 func TestParticipantRepository_ManageScopePredicateMatrix(t *testing.T) {
 	t.Parallel()
 	pool := setupAccessDB(t)
@@ -479,29 +480,65 @@ func TestParticipantRepository_ManageScopePredicateMatrix(t *testing.T) {
 	// not safe for concurrent queries), and the paralleltest linter reads
 	// subtest parallelism into the matrix otherwise.
 	for _, tc := range cases {
-		props, err := participants.ListScopeProperties(ctx, tc.actor)
-		if err != nil {
-			t.Fatalf("%s: ListScopeProperties: %v", tc.name, err)
-		}
-		if got := slices.ContainsFunc(props, func(p application.ParticipantScopeProperty) bool { return p.ID == prop }); got != tc.want {
-			t.Errorf("%s: read scope = %v, want %v", tc.name, got, tc.want)
-		}
+		assertManageScopeVerdict(t, ctx, participants, memberRepo, invitationRepo, tc.actor, prop, person, tc.want)
+	}
+}
 
-		memberships, err := memberRepo.ListForRemovalByUser(ctx, person, tc.actor)
-		if err != nil {
-			t.Fatalf("%s: ListForRemovalByUser: %v", tc.name, err)
-		}
-		if got := len(memberships) > 0; got != tc.want {
-			t.Errorf("%s: membership removal scope = %v, want %v", tc.name, got, tc.want)
-		}
+// assertManageScopeVerdict runs all five scope queries for one actor and
+// checks they agree on the verdict: the read scope, the two per-person
+// removal listings and the two owner-wide removal listings of the global
+// revoke (issue #1310) — one predicate everywhere.
+func assertManageScopeVerdict(
+	t *testing.T,
+	ctx context.Context,
+	participants *ParticipantRepository,
+	memberRepo *MembershipRepository,
+	invitationRepo *InvitationRepository,
+	actor, prop, person uuid.UUID,
+	want bool,
+) {
+	t.Helper()
 
-		invitations, err := invitationRepo.ListForRemovalByEmail(ctx, "matrix@x.ru", tc.actor)
-		if err != nil {
-			t.Fatalf("%s: ListForRemovalByEmail: %v", tc.name, err)
-		}
-		if got := len(invitations) > 0; got != tc.want {
-			t.Errorf("%s: invitation removal scope = %v, want %v", tc.name, got, tc.want)
-		}
+	props, err := participants.ListScopeProperties(ctx, actor)
+	if err != nil {
+		t.Fatalf("ListScopeProperties: %v", err)
+	}
+	if got := slices.ContainsFunc(props, func(p application.ParticipantScopeProperty) bool { return p.ID == prop }); got != want {
+		t.Errorf("read scope = %v, want %v", got, want)
+	}
+
+	memberships, err := memberRepo.ListForRemovalByUser(ctx, person, actor)
+	if err != nil {
+		t.Fatalf("ListForRemovalByUser: %v", err)
+	}
+	if got := len(memberships) > 0; got != want {
+		t.Errorf("membership removal scope = %v, want %v", got, want)
+	}
+
+	invitations, err := invitationRepo.ListForRemovalByEmail(ctx, "matrix@x.ru", actor)
+	if err != nil {
+		t.Fatalf("ListForRemovalByEmail: %v", err)
+	}
+	if got := len(invitations) > 0; got != want {
+		t.Errorf("invitation removal scope = %v, want %v", got, want)
+	}
+
+	// The owner-wide listings of the global revoke (issue #1310) carry
+	// the same predicate — the same verdict everywhere.
+	ownerMemberships, err := memberRepo.ListForRemovalByOwner(ctx, actor)
+	if err != nil {
+		t.Fatalf("ListForRemovalByOwner: %v", err)
+	}
+	if got := len(ownerMemberships) > 0; got != want {
+		t.Errorf("owner-wide membership removal scope = %v, want %v", got, want)
+	}
+
+	ownerInvitations, err := invitationRepo.ListForRemovalByOwner(ctx, actor)
+	if err != nil {
+		t.Fatalf("ListForRemovalByOwner: %v", err)
+	}
+	if got := len(ownerInvitations) > 0; got != want {
+		t.Errorf("owner-wide invitation removal scope = %v, want %v", got, want)
 	}
 }
 

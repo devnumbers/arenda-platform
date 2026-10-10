@@ -133,6 +133,7 @@ type accessLifecycleFixture struct {
 	access     *accessapp.AccessService
 	invites    *accessapp.InvitationService
 	slots      *accessapp.SlotCoordinator
+	mutations  *accessapp.ParticipantMutationService
 	userRepo   *identitypg.UserRepository
 }
 
@@ -180,11 +181,15 @@ func newAccessLifecycleFixture(t *testing.T) *accessLifecycleFixture {
 	access := accessapp.NewAccessService(memberRepo, ownerResolver, ownerResolver, userLookup, policy, slots, nil, factory, nil)
 	invites := accessapp.NewInvitationService(access, memberRepo, invitationRepo, ownerResolver, ownerResolver,
 		userLookup, policy, slots, nil, nil, ownerResolver, factory, nil, nil, emailResolver)
+	// The mutation side with the real SQL revoke-scope gate (issue #1310);
+	// no mailer/events — the integration tests assert state, not publications.
+	mutations := accessapp.NewParticipantMutationService(access, ownerResolver, ownerResolver, userLookup,
+		emailResolver, policy, NewRevokeAllScope(tx), slots, nil, nil, ownerResolver, factory, nil, nil)
 
 	return &accessLifecycleFixture{
 		tx: tx, q: genpostgres.New(tx),
 		limiter: limiter, ownedProps: ownedProps, nonce: nonce.String(),
-		access: access, invites: invites, slots: slots,
+		access: access, invites: invites, slots: slots, mutations: mutations,
 		userRepo: userRepo,
 	}
 }

@@ -995,6 +995,7 @@ type Querier interface {
 	ListPaidOperationsGlobal(ctx context.Context, arg ListPaidOperationsGlobalParams) ([]ListPaidOperationsGlobalRow, error)
 	ListParticipantInvitationsByProperties(ctx context.Context, propertyIds string) ([]ListParticipantInvitationsByPropertiesRow, error)
 	ListParticipantInvitationsForRemoval(ctx context.Context, arg ListParticipantInvitationsForRemovalParams) ([]ListParticipantInvitationsForRemovalRow, error)
+	ListParticipantInvitationsForRemovalByOwner(ctx context.Context, actorID pgtype.UUID) ([]ListParticipantInvitationsForRemovalByOwnerRow, error)
 	ListParticipantMembershipsByProperties(ctx context.Context, propertyIds string) ([]ListParticipantMembershipsByPropertiesRow, error)
 	// The mutation side of the owner's participant aggregate (issue #694):
 	// «Отозвать и удалить» enumerates one person's legs within the acting
@@ -1004,6 +1005,12 @@ type Querier interface {
 	// would silently reappear on unarchive. The scope predicate is the
 	// authorization: rows outside it never leave the database.
 	ListParticipantMembershipsForRemoval(ctx context.Context, arg ListParticipantMembershipsForRemovalParams) ([]ListParticipantMembershipsForRemovalRow, error)
+	// The global «Отозвать доступ всем» (issue #1310) walks the same removal
+	// scope without the per-person filter: every membership and every pending
+	// invitation on the acting owner's properties, archived included (issue
+	// #163). The scope predicate stays the authorization: rows outside it never
+	// leave the database.
+	ListParticipantMembershipsForRemovalByOwner(ctx context.Context, actorID pgtype.UUID) ([]ListParticipantMembershipsForRemovalByOwnerRow, error)
 	// The «Участник (владельца)» read model (issue #693): an aggregate over
 	// property_members ∪ property_member_invitations with no table of its own
 	// (chart decision of map #692). The reading actor's scope is the set of
@@ -1015,15 +1022,16 @@ type Querier interface {
 	// authorization: rows outside it never leave the database.
 	//
 	// THE MANAGE-SCOPE PREDICATE (the «actor_can_manage» canon): owner-only
-	// since D8 (issue #1304; migration 000157) is the authorization of the three
-	// scope queries in this file (read scope + both removal listings; the two
+	// since D8 (issue #1304; migration 000157) is the authorization of the five
+	// scope queries in this file (read scope, both per-person removal listings,
+	// both owner-wide removal listings of the global revoke #1310; the two
 	// ByProperties listings filter by the already-scoped id list). The predicate
 	// lives in one place — the SQL function actor_can_manage (migration 000135,
 	// issue #794) — which the queries below call; before #794 sqlc could not
 	// share the text between query bodies, so the predicate was kept as three
 	// byte-identical copies pinned by the matrix test.
 	// TestParticipantRepository_ManageScopePredicateMatrix runs the same actor
-	// verdict across all three queries and stays the gate: semantic drift of the
+	// verdict across these queries and stays the gate: semantic drift of the
 	// function fails there instead of opening a silent privacy hole.
 	// The scope rows carry the leg avatar pair (решение #1286, остаток #1244
 	// п.3): the property type — the placeholder glyph's key — and the photo's
@@ -1406,6 +1414,12 @@ type Querier interface {
 	// nils. The nested payment→property path is enforced in the WHERE clause;
 	// an empty id list never reaches the query.
 	NearestDateInputsOfPayments(ctx context.Context, arg NearestDateInputsOfPaymentsParams) ([]NearestDateInputsOfPaymentsRow, error)
+	// The gate probes of the global revoke (issue #1310): with no target id the
+	// endpoint conditions on bare existence. The ownership probe counts any
+	// status — archived objects still hold revocable legs; the membership probe
+	// splits the non-owner refusal into the participant's loud 403 and the
+	// stranger's privacy-404.
+	OwnerOwnsAnyProperty(ctx context.Context, ownerID pgtype.UUID) (bool, error)
 	// «Оплатить сейчас» (planned → paid, paid_date = today in the owner's
 	// timezone). The planned guard is belt-and-suspenders over the application's
 	// loaded check: rows affected = 0 means already paid or gone.
@@ -1626,6 +1640,7 @@ type Querier interface {
 	// желаемое состояние явно, дефолт omitted-категорий — все ВКЛ. Мастер-состояние
 	// устройства — само существование строки: строка есть = включено.
 	UpsertPushSubscription(ctx context.Context, arg UpsertPushSubscriptionParams) (PushSubscription, error)
+	UserHoldsAnyMembership(ctx context.Context, userID pgtype.UUID) (bool, error)
 	// The gate of the foreign profile-photo read (ADR 0065, решение владельца
 	// #1286 — «показ участникам»): the two users are connected when at least
 	// one property is readable by both sides (ADR 0028 derived read,

@@ -121,6 +121,22 @@ func (r *memInvitationsRepo) ListForRemovalByEmail(_ context.Context, email stri
 	return out, nil
 }
 
+// ListForRemovalByOwner mirrors the SQL owner-wide removal scope (issue
+// #1310): every pending invitation on properties inside the actor's manage
+// scope, oldest first.
+func (r *memInvitationsRepo) ListForRemovalByOwner(_ context.Context, actorID uuid.UUID) ([]domain.Invitation, error) {
+	var out []domain.Invitation
+	for _, e := range r.rows {
+		if r.removalScope == nil || r.removalScope(e.PropertyID, actorID) {
+			out = append(out, e)
+		}
+	}
+	slices.SortFunc(out, func(a, b domain.Invitation) int {
+		return a.CreatedAt.Compare(b.CreatedAt)
+	})
+	return out, nil
+}
+
 func (r *memInvitationsRepo) UpdateRole(_ context.Context, id, propertyID uuid.UUID, role domain.Role) (domain.Invitation, error) {
 	for i := range r.rows {
 		if r.rows[i].ID == id && r.rows[i].PropertyID == propertyID {

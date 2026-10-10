@@ -79,6 +79,12 @@ type ParticipantMutations interface {
 	// one transaction, an audit entry per row, FIFO recovery of the person's
 	// suspended accesses, no emails.
 	Remove(ctx context.Context, actor uuid.UUID, participantID string) error
+	// RevokeAll revokes every membership and cancels every pending
+	// invitation across all the actor's own properties — the global
+	// «Отозвать доступ всем» (issue #1310) — one transaction with the
+	// per-item effects of the single revoke and the invitation cancellation.
+	// Idempotent: an owner with nothing in scope succeeds as a no-op.
+	RevokeAll(ctx context.Context, actor uuid.UUID) error
 }
 
 // grantTarget is the resolved person of a grant batch: a registered user's
@@ -107,12 +113,16 @@ type ParticipantMutationService struct {
 	users    UserLookup
 	emails   UserEmailResolver
 	policy   sharedpolicy.Policy
-	slots    *SlotCoordinator
-	mailer   AccessMailer
-	events   AccessEventPublisher
-	titles   PropertyTitleResolver
-	clock    clock.Clock
-	logger   *slog.Logger
+	// Scope is the «Отозвать доступ всем» gate (issue #1310): the two
+	// existence probes the targetless endpoint conditions on. Nil keeps the
+	// gate open for tests that don't exercise the global revoke.
+	scope  RevokeAllScope
+	slots  *SlotCoordinator
+	mailer AccessMailer
+	events AccessEventPublisher
+	titles PropertyTitleResolver
+	clock  clock.Clock
+	logger *slog.Logger
 }
 
 // NewParticipantMutationService creates a ParticipantMutationService. Statuses
@@ -120,7 +130,8 @@ type ParticipantMutationService struct {
 // dependency); slots may be nil to disable slot enforcement; mailer/titles may
 // be nil to skip the invite email; events may be nil to disable the
 // publications; emails may be nil (registered targets then resolve without
-// invitation-leg lookups).
+// invitation-leg lookups); scope may be nil (RevokeAll then treats every
+// actor as an owner — tests without the gate).
 func NewParticipantMutationService(
 	access *AccessService,
 	owners PropertyOwnerResolver,
@@ -128,6 +139,7 @@ func NewParticipantMutationService(
 	users UserLookup,
 	emails UserEmailResolver,
 	policy sharedpolicy.Policy,
+	scope RevokeAllScope,
 	slots *SlotCoordinator,
 	mailer AccessMailer,
 	events AccessEventPublisher,
@@ -150,6 +162,7 @@ func NewParticipantMutationService(
 		users:          users,
 		emails:         emails,
 		policy:         policy,
+		scope:          scope,
 		slots:          slots,
 		mailer:         mailer,
 		events:         events,
@@ -475,6 +488,163 @@ func (s *ParticipantMutationService) Remove(ctx context.Context, actor uuid.UUID
 	return nil
 }
 
+// RevokeAll closes the actor's whole sharing in one call («Отозвать доступ
+// всем», issue #1310): every membership and every pending invitation on all
+// of their properties — archived included (revoking keeps working on
+// archived objects, issue #163) — in one transaction. The effects are the
+// per-item ones, mechanically assembled: a «участник удалён» audit entry,
+// journal row and post-commit revocation event per removed membership
+// (active legs only — a suspended row publishes nothing, issue #162), a
+// «приглашение отменено» audit entry and journal row per cancelled
+// invitation, and the FIFO recovery of each affected recipient's suspended
+// accesses. No lifecycle emails are sent; no new notification kinds are
+// introduced. Legs on other owners' properties stay untouched (the SQL scope
+// is the authorization).
+//
+// Idempotent: an owner with nothing left in scope succeeds as a no-op. The
+// gate refuses the rest: an actor owning no property but holding accesses on
+// foreign ones is the loud ErrNotPropertyOwner; an actor with no relation to
+// sharing at all gets the privacy-preserving ErrParticipantNotFound.
+func (s *ParticipantMutationService) RevokeAll(ctx context.Context, actor uuid.UUID) error {
+	if err := s.revokeAllGate(ctx, actor); err != nil {
+		return err
+	}
+
+	var revokedActive []domain.Membership
+	var invitationLegs []domain.Invitation
+	var recovered []domain.Membership
+	err := s.runInTx(ctx, func(stores *txStores) error {
+		legs, err := stores.members.ListForRemovalByOwner(ctx, actor)
+		if err != nil {
+			return fmt.Errorf("list owner memberships: %w", err)
+		}
+		invitationLegs, err = stores.invitations.ListForRemovalByOwner(ctx, actor)
+		if err != nil {
+			return fmt.Errorf("list owner invitations: %w", err)
+		}
+		freedByUser, err := s.revokeAllMembershipLegsInTx(ctx, stores, actor, legs, &revokedActive)
+		if err != nil {
+			return err
+		}
+		for _, inv := range invitationLegs {
+			actorRole, err := s.actorRoleOn(ctx, actor, inv.PropertyID)
+			if err != nil {
+				return err
+			}
+			// The invitee is known by the invitation's email — the row
+			// survives the cancelled invitation (the single
+			// CancelInvitation's journal canon, ADR 0061).
+			if err := cancelInvitationLegInTx(ctx, stores, actor, actorRole, inv,
+				historydomain.MemberInvitationCancelled(inv.Email)); err != nil {
+				return err
+			}
+		}
+		recovered, err = s.recoverFreedRecipientsInTx(ctx, stores, freedByUser)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+
+	publishRevokedEvents(ctx, s.events, s.logger, actor, revokedActive)
+	s.publishRemovedRealtime(ctx, actor, revokedActive, invitationLegs, recovered)
+	return nil
+}
+
+// revokeAllGate decides who may call the targetless global revoke (issue
+// #1310). An owner of at least one property (any status — archived objects
+// still hold revocable legs) proceeds; a non-owner holding accesses on
+// foreign objects gets the loud ErrNotPropertyOwner; a stranger with no
+// relation to sharing at all gets the privacy-preserving
+// ErrParticipantNotFound. Pending invitations are deliberately not a probe:
+// a pending row grants its holder nothing — the invitee side of sharing
+// starts at activation, and the registration consumes the pending rows — so
+// a membership row is the only leg that makes an authenticated actor a
+// sharing participant. An invitation stranded by a failed activation (the
+// logged best-effort of the registration flow, issue #161) stays invisible
+// to its holder, so the privacy not-found it then receives is harmless. A
+// nil scope keeps the gate open for tests that don't exercise the global
+// revoke.
+func (s *ParticipantMutationService) revokeAllGate(ctx context.Context, actor uuid.UUID) error {
+	if s.scope == nil {
+		return nil
+	}
+	owns, err := s.scope.OwnsAnyProperty(ctx, actor)
+	if err != nil {
+		return fmt.Errorf("probe owned properties: %w", err)
+	}
+	if owns {
+		return nil
+	}
+	holds, err := s.scope.HoldsAnyMembership(ctx, actor)
+	if err != nil {
+		return fmt.Errorf("probe held memberships: %w", err)
+	}
+	if holds {
+		return domain.ErrNotPropertyOwner
+	}
+	return domain.ErrParticipantNotFound
+}
+
+// revokeAllMembershipLegsInTx removes the owner-wide membership legs over the
+// shared removeMembershipInTx core: an audited «участник удалён» row per leg
+// with the person's journal label resolved once per person (ADR 0061 §5).
+// Returns how many active (slot-occupying) legs were freed per recipient —
+// the recovery pass reads it after the removals.
+func (s *ParticipantMutationService) revokeAllMembershipLegsInTx(
+	ctx context.Context, stores *txStores, actor uuid.UUID, legs []domain.Membership, revokedActive *[]domain.Membership,
+) (map[uuid.UUID]int, error) {
+	labels := make(map[uuid.UUID]string, len(legs))
+	freedByUser := make(map[uuid.UUID]int)
+	for _, m := range legs {
+		actorRole, err := s.actorRoleOn(ctx, actor, m.PropertyID)
+		if err != nil {
+			return nil, err
+		}
+		label, ok := labels[m.UserID]
+		if !ok {
+			label, err = userLabel(ctx, s.users, m.UserID)
+			if err != nil {
+				return nil, err
+			}
+			labels[m.UserID] = label
+		}
+		if err := removeMembershipInTx(ctx, stores, actor, actorRole, m, revokedActive,
+			historydomain.MemberRemoved(label)); err != nil {
+			return nil, err
+		}
+		if !m.IsSuspended() {
+			freedByUser[m.UserID]++
+		}
+	}
+	return freedByUser, nil
+}
+
+// recoverFreedRecipientsInTx runs one FIFO recovery pass per recipient whose
+// active legs the revoke freed: every freed slot lets the oldest suspended
+// access of that person come back (the batch Remove's per-person rule,
+// issue #158, T4). A nil coordinator disables the recovery (tests without
+// the slot dependency).
+func (s *ParticipantMutationService) recoverFreedRecipientsInTx(
+	ctx context.Context, stores *txStores, freedByUser map[uuid.UUID]int,
+) ([]domain.Membership, error) {
+	if s.slots == nil {
+		return nil, nil
+	}
+	var recovered []domain.Membership
+	for userID, freed := range freedByUser {
+		if freed == 0 {
+			continue
+		}
+		legs, err := s.slots.RecoverSuspended(ctx, stores.tx, userID)
+		if err != nil {
+			return nil, fmt.Errorf("recover suspended after revoke-all: %w", err)
+		}
+		recovered = append(recovered, legs...)
+	}
+	return recovered, nil
+}
+
 // publishRemovedRealtime hands the whole removal transaction's frames to the
 // realtime carrier in one post-commit dispatch (карта #714, #716; ADR 0062):
 // every removed active leg dirties its object's participants view and
@@ -601,32 +771,51 @@ func (s *ParticipantMutationService) removeInvitationLegs(
 	ctx context.Context, stores *txStores, actor uuid.UUID, legs []domain.Invitation, targetLabel string,
 ) error {
 	for _, inv := range legs {
-		if err := stores.invitations.Delete(ctx, inv.ID, inv.PropertyID); err != nil {
-			return fmt.Errorf("delete invitation: %w", err)
-		}
 		actorRole, err := s.actorRoleOn(ctx, actor, inv.PropertyID)
 		if err != nil {
 			return err
 		}
-		if err := stores.audit.Record(ctx, auditdomain.Entry{
-			ActorID:    &actor,
-			ActorRole:  sharedpolicy.AuditActorRole(actorRole),
-			Action:     auditdomain.ActionPropertyMemberInvitationCancelled,
-			EntityType: auditdomain.EntityPropertyMemberInvitation,
-			EntityID:   &inv.ID,
-			Context: map[string]any{
-				auditKeyPropertyID: inv.PropertyID,
-			},
-		}); err != nil {
-			return fmt.Errorf("record audit: %w", err)
-		}
 		// The invitation leg of the bulk removal journals as the same user
 		// action — «участник удалён» per property (ADR 0061 §3).
-		if err := historyapp.RecordScoped(ctx, stores.history, inv.PropertyID, actor,
-			sharedpolicy.HistoryActorRole(actorRole),
+		if err := cancelInvitationLegInTx(ctx, stores, actor, actorRole, inv,
 			historydomain.MemberParticipantRemoved(targetLabel)); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// cancelInvitationLegInTx is the shared core of deleting one pending
+// invitation leg: the delete, the audited record and the action-journal row
+// — the audit shape lives here, not in the callers. The caller builds the
+// journal row: «участник удалён» for the bulk participant removal, «
+// приглашение отменено» for the single cancellation and the global revoke.
+func cancelInvitationLegInTx(
+	ctx context.Context,
+	stores *txStores,
+	actor uuid.UUID,
+	actorRole sharedpolicy.Role,
+	invitation domain.Invitation,
+	historyEntry historydomain.Entry,
+) error {
+	if err := stores.invitations.Delete(ctx, invitation.ID, invitation.PropertyID); err != nil {
+		return fmt.Errorf("delete invitation: %w", err)
+	}
+	if err := stores.audit.Record(ctx, auditdomain.Entry{
+		ActorID:    &actor,
+		ActorRole:  sharedpolicy.AuditActorRole(actorRole),
+		Action:     auditdomain.ActionPropertyMemberInvitationCancelled,
+		EntityType: auditdomain.EntityPropertyMemberInvitation,
+		EntityID:   &invitation.ID,
+		Context: map[string]any{
+			auditKeyPropertyID: invitation.PropertyID,
+		},
+	}); err != nil {
+		return fmt.Errorf("record audit: %w", err)
+	}
+	if err := historyapp.RecordScoped(ctx, stores.history, invitation.PropertyID, actor,
+		sharedpolicy.HistoryActorRole(actorRole), historyEntry); err != nil {
+		return err
 	}
 	return nil
 }

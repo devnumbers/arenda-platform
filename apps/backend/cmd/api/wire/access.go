@@ -169,7 +169,10 @@ func WireAccess(
 
 	// The mutation side of the participant aggregate (issue #694): the
 	// multi-object invite, «Пригласить в объект» и «Отозвать и удалить» —
-	// over the same per-property gates and the slot coordinator.
+	// over the same per-property gates and the slot coordinator. The
+	// revoke-scope gate (issue #1310) backs the targetless global «Отозвать
+	// доступ всем»: the two existence probes are read straight from SQL.
+	revokeAllScope := accesspg.NewRevokeAllScope(p.DB)
 	participantMutations := accessapp.NewParticipantMutationService(
 		accessService,
 		ownerResolver,
@@ -177,6 +180,7 @@ func WireAccess(
 		userLookup,
 		emailResolver,
 		policy,
+		revokeAllScope,
 		slotCoordinator,
 		accessMailer,
 		accessEventPublisher,

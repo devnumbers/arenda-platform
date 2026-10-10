@@ -344,6 +344,7 @@ func New(deps Deps) http.Handler {
 	// consumer of the group lives inside the gated section; the self-leave
 	// route above stays the only excluded access surface.
 	r.With(paidSections).Get("/participants", wrapper.ListParticipants)
+	r.With(paidSections).Delete("/participants", wrapper.RevokeAllParticipants)
 	r.With(paidSections).Post("/participants/invite", wrapper.InviteParticipant)
 	r.With(paidSections).Get("/participants/summary", wrapper.GetParticipantsSummary)
 	r.With(paidSections).Delete("/participants/{participantId}", wrapper.DeleteParticipant)

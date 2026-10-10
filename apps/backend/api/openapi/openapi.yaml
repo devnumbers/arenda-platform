@@ -2846,6 +2846,33 @@ paths:
                 $ref: '#/components/schemas/ParticipantsResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+    delete:
+      operationId: revokeAllParticipants
+      summary: Revoke shared access from every participant of the actor's properties
+      description: >
+        The global «Отозвать доступ всем» action of the «Участники» section
+        (issue #1310): one call removes every membership and cancels every
+        pending invitation across all properties the reading actor owns —
+        archived ones included — with a per-row audit entry and journal
+        record, the revocation notification per removed active membership and
+        FIFO recovery of each affected recipient's suspended accesses. No
+        lifecycle emails are sent; legs on other owners' properties stay
+        untouched. Idempotent: an owner with nothing left in scope succeeds
+        as a no-op. An actor owning no property is refused: a participant of
+        foreign objects with 403, a stranger with a privacy-preserving 404.
+      security:
+        - sessionCookie: []
+      responses:
+        '204':
+          description: >
+            The actor's sharing is closed — every leg revoked, or nothing
+            left to revoke (the idempotent no-op).
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /participants/summary:
     get:
       operationId: getParticipantsSummary

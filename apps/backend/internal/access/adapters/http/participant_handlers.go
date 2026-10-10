@@ -218,6 +218,21 @@ func (h *ParticipantHandlers) DeleteParticipant(w http.ResponseWriter, r *http.R
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// RevokeAllParticipants implements DELETE /participants — the global
+// «Отозвать доступ всем» (issue #1310).
+func (h *ParticipantHandlers) RevokeAllParticipants(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.mutationsActor(w, r)
+	if !ok {
+		return
+	}
+
+	if err := h.mutations.RevokeAll(r.Context(), actor); err != nil {
+		h.handleMutationError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // mutationsActor resolves the session user or writes the 401; ok=false means
 // the response is already written.
 func (h *ParticipantHandlers) mutationsActor(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
@@ -292,8 +307,15 @@ func (h *ParticipantHandlers) handleMutationError(w http.ResponseWriter, r *http
 	switch {
 	case errors.Is(err, domain.ErrParticipantNotFound):
 		// Privacy: one not-found for unknown identifiers, revoked access
-		// (the deep-link 404 policy) and lack of scope.
+		// (the deep-link 404 policy) and lack of scope — including the
+		// stranger branch of the global revoke's gate (issue #1310).
 		httpsupport.WriteProblem(r.Context(), w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", "Участник не найден"))
+	case errors.Is(err, domain.ErrNotPropertyOwner):
+		// The non-owner branch of the global revoke's gate (issue #1310): an
+		// actor holding accesses on foreign objects but owning none gets the
+		// loud refusal, not the privacy not-found.
+		httpsupport.WriteProblem(r.Context(), w, http.StatusForbidden,
+			httpsupport.Problem(r.Context(), "Forbidden", "Отозвать доступ всем может только собственник объектов"))
 	case errors.Is(err, domain.ErrCannotAddSelf):
 		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
 			httpsupport.Problem(r.Context(), "Bad request", "Нельзя добавить себя участником"))

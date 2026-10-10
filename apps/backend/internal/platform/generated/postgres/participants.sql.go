@@ -83,6 +83,39 @@ func (q *Queries) ListParticipantInvitationsForRemoval(ctx context.Context, arg 
 	return items, nil
 }
 
+const listParticipantInvitationsForRemovalByOwner = `-- name: ListParticipantInvitationsForRemovalByOwner :many
+SELECT i.id, i.property_id, i.email
+FROM property_member_invitations i
+WHERE actor_can_manage(i.property_id, $1::uuid)
+ORDER BY i.created_at ASC
+`
+
+type ListParticipantInvitationsForRemovalByOwnerRow struct {
+	ID         pgtype.UUID `json:"id"`
+	PropertyID pgtype.UUID `json:"property_id"`
+	Email      string      `json:"email"`
+}
+
+func (q *Queries) ListParticipantInvitationsForRemovalByOwner(ctx context.Context, actorID pgtype.UUID) ([]ListParticipantInvitationsForRemovalByOwnerRow, error) {
+	rows, err := q.db.Query(ctx, listParticipantInvitationsForRemovalByOwner, actorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListParticipantInvitationsForRemovalByOwnerRow{}
+	for rows.Next() {
+		var i ListParticipantInvitationsForRemovalByOwnerRow
+		if err := rows.Scan(&i.ID, &i.PropertyID, &i.Email); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listParticipantMembershipsByProperties = `-- name: ListParticipantMembershipsByProperties :many
 SELECT m.property_id, m.user_id, m.role, m.status
 FROM property_members m
@@ -175,6 +208,51 @@ func (q *Queries) ListParticipantMembershipsForRemoval(ctx context.Context, arg 
 	return items, nil
 }
 
+const listParticipantMembershipsForRemovalByOwner = `-- name: ListParticipantMembershipsForRemovalByOwner :many
+
+SELECT m.id, m.property_id, m.user_id, m.status
+FROM property_members m
+WHERE actor_can_manage(m.property_id, $1::uuid)
+ORDER BY m.created_at ASC
+`
+
+type ListParticipantMembershipsForRemovalByOwnerRow struct {
+	ID         pgtype.UUID `json:"id"`
+	PropertyID pgtype.UUID `json:"property_id"`
+	UserID     pgtype.UUID `json:"user_id"`
+	Status     string      `json:"status"`
+}
+
+// The global «Отозвать доступ всем» (issue #1310) walks the same removal
+// scope without the per-person filter: every membership and every pending
+// invitation on the acting owner's properties, archived included (issue
+// #163). The scope predicate stays the authorization: rows outside it never
+// leave the database.
+func (q *Queries) ListParticipantMembershipsForRemovalByOwner(ctx context.Context, actorID pgtype.UUID) ([]ListParticipantMembershipsForRemovalByOwnerRow, error) {
+	rows, err := q.db.Query(ctx, listParticipantMembershipsForRemovalByOwner, actorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListParticipantMembershipsForRemovalByOwnerRow{}
+	for rows.Next() {
+		var i ListParticipantMembershipsForRemovalByOwnerRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PropertyID,
+			&i.UserID,
+			&i.Status,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listParticipantScopeProperties = `-- name: ListParticipantScopeProperties :many
 
 SELECT p.id, p.owner_id, p.name AS title, p.type,
@@ -206,15 +284,16 @@ type ListParticipantScopePropertiesRow struct {
 // authorization: rows outside it never leave the database.
 //
 // THE MANAGE-SCOPE PREDICATE (the «actor_can_manage» canon): owner-only
-// since D8 (issue #1304; migration 000157) is the authorization of the three
-// scope queries in this file (read scope + both removal listings; the two
+// since D8 (issue #1304; migration 000157) is the authorization of the five
+// scope queries in this file (read scope, both per-person removal listings,
+// both owner-wide removal listings of the global revoke #1310; the two
 // ByProperties listings filter by the already-scoped id list). The predicate
 // lives in one place — the SQL function actor_can_manage (migration 000135,
 // issue #794) — which the queries below call; before #794 sqlc could not
 // share the text between query bodies, so the predicate was kept as three
 // byte-identical copies pinned by the matrix test.
 // TestParticipantRepository_ManageScopePredicateMatrix runs the same actor
-// verdict across all three queries and stays the gate: semantic drift of the
+// verdict across these queries and stays the gate: semantic drift of the
 // function fails there instead of opening a silent privacy hole.
 // The scope rows carry the leg avatar pair (решение #1286, остаток #1244
 // п.3): the property type — the placeholder glyph's key — and the photo's
@@ -245,4 +324,36 @@ func (q *Queries) ListParticipantScopeProperties(ctx context.Context, actorID pg
 		return nil, err
 	}
 	return items, nil
+}
+
+const ownerOwnsAnyProperty = `-- name: OwnerOwnsAnyProperty :one
+
+SELECT EXISTS (
+  SELECT 1 FROM properties WHERE owner_id = $1::uuid
+) AS owns
+`
+
+// The gate probes of the global revoke (issue #1310): with no target id the
+// endpoint conditions on bare existence. The ownership probe counts any
+// status — archived objects still hold revocable legs; the membership probe
+// splits the non-owner refusal into the participant's loud 403 and the
+// stranger's privacy-404.
+func (q *Queries) OwnerOwnsAnyProperty(ctx context.Context, ownerID pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, ownerOwnsAnyProperty, ownerID)
+	var owns bool
+	err := row.Scan(&owns)
+	return owns, err
+}
+
+const userHoldsAnyMembership = `-- name: UserHoldsAnyMembership :one
+SELECT EXISTS (
+  SELECT 1 FROM property_members WHERE user_id = $1::uuid
+) AS holds
+`
+
+func (q *Queries) UserHoldsAnyMembership(ctx context.Context, userID pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, userHoldsAnyMembership, userID)
+	var holds bool
+	err := row.Scan(&holds)
+	return holds, err
 }
